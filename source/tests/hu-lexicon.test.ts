@@ -84,3 +84,21 @@ test("review #228 (P2): a gyorsítótárból jövő csomag is megkapja a bővít
   const rebuilt = await buildLessonExperience({ ...lesson, experience: undefined }, concepts, { checkpoint: stripped, call: async () => { throw new Error("modellhívás a gyorsítótár helyett"); } });
   assert.ok(rebuilt.tasks.some((t) => t.required.some((g) => g.includes("magassága"))), "a bővítés a mentett csomagra is lefutott");
 });
+
+test("review #231 (P1): a tanítás ragozott egybeírt alakja is igazol", async () => {
+  const { spellingVariants: sv } = await import("../shared/hu-lexicon");
+  assert.deepEqual(sv("ásványi anyag", "Az ásványianyagok fontosak."), ["ásványianyag"]);
+});
+
+test("review #231 (P1): a korábbi verzió gépi egybeírt alakjai kitakarítva; az igazolt és az ember írta alak marad", async () => {
+  const { staleGeneratedForms } = await import("../shared/hu-lexicon");
+  assert.deepEqual(staleGeneratedForms(["tilos", "nem szabad", "nemszabad"], "Tilos a pincébe menni.", "Tilos."), ["nemszabad"]);
+  assert.deepEqual(staleGeneratedForms(["ligeti szőlő", "ligetiszolo"], "A ligeti szőlő kúszik.", "A ligeti szőlő."), ["ligetiszolo"]);
+  assert.deepEqual(staleGeneratedForms(["ásványi anyag", "asvanyianyag"], "A gyümölcs ásványianyag-tartalma magas.", ""), [], "a tanítás igazolja");
+  assert.deepEqual(staleGeneratedForms(["ásványi anyag", "ásványianyag"], "", ""), [], "ékezetes (ember/modell írta) alak marad");
+  assert.deepEqual(staleGeneratedForms(["kemeny szar", "kemenyszar"], "", ""), [], "ékezet nélküli tagból ember is így írhatta");
+  const packet = { methods: [], quiz: [], tasks: [{ id: "t1", sectionIndex: 0, coversConceptIds: ["c1"], q: "Szabad-e?", required: [["tilos", "nem szabad", "nemszabad"]], bonus: [], minWords: 1, needsSentence: false, sample: "Tilos.", mode: "written" }] };
+  const fixed = autofixBankPacket(packet, { sectionIndex: 0, allowedConceptIds: ["c1"], teachingText: "Tilos a pincébe menni." });
+  assert.deepEqual((fixed.packet as typeof packet).tasks[0].required, [["tilos", "nem szabad"]]);
+  assert.ok(fixed.fixes.some((f) => /gépi egybeírt alak kivéve \(nemszabad\)/.test(f)));
+});

@@ -30,8 +30,33 @@ export function spellingVariants(term: string, text?: string): string[] {
   if (parts.length < 2 || !text || parts.some((p) => NEGATION_WORDS.has(p))) return [];
   const joined = parts.join("");
   if (joined.length < 5) return [];
-  for (const raw of text.match(/[\p{L}\d]+/gu) ?? []) if (normalizeAnswer(raw) === joined) return [raw.toLocaleLowerCase("hu")];
-  return [];
+  // Review #231 (P1): a tanítás ragozott egybeírt alakja is igazol („ásványianyagok” → „ásványianyag”), a valódi toldalék-láncon át.
+  const out = new Set<string>();
+  for (const raw of text.match(/[\p{L}\d]+/gu) ?? []) {
+    const n = normalizeAnswer(raw);
+    if (n === joined) out.add(raw.toLocaleLowerCase("hu"));
+    else if (n.startsWith(joined) && isSuffixChain(n.slice(joined.length))) out.add(raw.toLocaleLowerCase("hu").slice(0, raw.length - (n.length - joined.length)));
+  }
+  return [...out];
+}
+
+/**
+ * Review #231 (P1): a korábbi T4′-verzió (2026-10-15 10:00–) által a gyorsítótárba mentett értelmetlen alakok célzott takarítása. Csak azt
+ * veszi ki, amit az a verzió gyártott: a csoport egy MÁSIK, többszavas tagjának ékezet nélküli egybeírt vagy szóközös normalizált alakja,
+ * amelyet sem a tanítás, sem a mintaválasz nem igazol, és a tag ékezetes vagy tagadást tartalmaz (különben ember is így írhatta).
+ */
+export function staleGeneratedForms(group: readonly string[], text: string | undefined, sample: string | undefined): string[] {
+  const attested = new Set(words(`${text ?? ""} ${sample ?? ""}`));
+  const stale: string[] = [];
+  for (const x of group) {
+    if (x !== normalizeAnswer(x) || attested.has(x.replace(/\s+/g, "")) && !x.includes(" ")) continue;
+    if (x.includes(" ") && words(x).every((w) => attested.has(w))) continue;
+    const source = group.find((m) => m !== x && words(m).length >= 2 && (words(m).join("") === x || words(m).join(" ") === x));
+    if (!source) continue;
+    const accented = source !== normalizeAnswer(source) && /[^\u0000-\u007f]/.test(source);
+    if (accented || words(source).some((w) => NEGATION_WORDS.has(w))) stale.push(x);
+  }
+  return stale;
 }
 const NEGATION_WORDS = new Set(["nem", "ne", "sem", "se"]);
 
