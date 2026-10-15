@@ -213,6 +213,14 @@ export async function workflowPhase(step: string): Promise<void> {
   await persist(ctx);
 }
 
+/** Review #222: a futás mentett checkpointja (ha van) — munka indítása nélkül; futáson kívül `undefined`. */
+export function workflowSavedCheckpoint<T>(name: string, input: unknown): T | undefined {
+  const ctx = context.getStore();
+  if (!ctx) return undefined;
+  const key = hash([WORKFLOW_VERSION, name, input]);
+  return Object.hasOwn(ctx.record.checkpoints, key) ? structuredClone(ctx.record.checkpoints[key]) as T : undefined;
+}
+
 /** Only completed JSON results are reused, inside this run and exact effective input. */
 export async function workflowCheckpoint<T>(name: string, input: unknown, work: () => Promise<T>): Promise<T> {
   const ctx = context.getStore();

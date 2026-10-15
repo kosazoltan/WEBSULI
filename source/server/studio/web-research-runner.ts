@@ -1,13 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import { effortFor, fallbackModelFor, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
+import { crossFamilyFallback, effortFor, fallbackModelFor, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
 import { createStudioProvider, createStudioStepProvider, crossFamilyFallbackOptions, STREAM_IDLE_MS, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { AIProviderQuotaError } from "../ai/AIProvider";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { verifyTeachingVisuals } from "../improve/verify-html-teaching";
-import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowRuntimeVersion, workflowSkillPrompt, workflowValidationFailure, workflowUsage } from "../workflows/engine";
+import { WorkflowConflict, workflowCheckpoint, workflowSavedCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowRuntimeVersion, workflowSkillPrompt, workflowValidationFailure, workflowUsage } from "../workflows/engine";
 import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { hasHtmlLessonData, readRawHtmlLessonData } from "../../shared/lesson-html-data";
 import { decideWebResearchGatherResult, decideWebResearchResult, extractGeneratedHtml, htmlLooksComplete, HTML_START, webResearchGatherParts, webLessonAuthorPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
@@ -19,6 +19,7 @@ import { StepModelError, stablePrefixChars, withRunbook } from "./run-step";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, type ExperienceCheckpoint } from "./experience-builder";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import { chatJsonWithFallback } from "./fallback-attempt";
+import { gatherWebSourcesGpt, gptGatherCheckpointInput, gptGatherRequest } from "./web-gather-gpt";
 import { withSupportSkill } from "./support-skills";
 import { cachedSystem } from "../ai/prompt-cache";
 import {
@@ -57,6 +58,10 @@ const PHASE_TIMEOUT_MS = 20 * 60_000;
 export const webResearchTurnKey = (input: WebResearchChatRequest, repairAttempts = 0, continuations = 0) => ({ input, method: LESSON_METHOD_VERSION, contract: "web-knowledge-2", repairAttempts, continuations });
 type ResearchTurn = { final: Anthropic.Message; content: string; sources: WebSource[] };
 export function hasSavedResearchTurn(record: WorkflowRecord, input: WebResearchChatRequest): boolean {
+  // Review #222: a sikeres tartalék-gyűjtés (GPT-forrás checkpoint) is folytatható alap.
+  const fallback = crossFamilyFallback(resolveLegacyModel("webResearch"));
+  const gpt = fallback ? savedWorkflowResult<FetchedTeachingSource[]>(record, "web-gather-gpt", gptGatherCheckpointInput(input, fallback)) : undefined;
+  if (Array.isArray(gpt) && gpt.length) return true;
   const turn = savedWorkflowResult<ResearchTurn>(record, "web-provider-turn", webResearchTurnKey(input));
   return !!turn && typeof turn.content === "string" && Array.isArray(turn.sources) && Array.isArray(turn.final?.content)
     && ["end_turn", "pause_turn"].includes(turn.final.stop_reason ?? "");
@@ -86,7 +91,38 @@ function lessonMetaFromHtml(html: string, fallback: { title: string; subject: st
  * Spec 2026-09-25 (webes Studio-átadás): search + fetch only — shared by the standalone HTML path and the
  * Studio hand-off. Own abort controller and timers (20 min phase, 120 s idle); maps failures to WebResearchFailure.
  */
-export async function gatherWebSources(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
+/**
+ * Spec 2026-10-15-tartalek-b4-webgyujtes (C1, tulajdonosi döntés): a Claude-gyűjtés bármely hibájánál (szolgáltatói, kimeneti,
+ * nincs letöltött forrás) — külső megszakítás kivételével — egyszer a GPT-6.1 Sol tartalék gyűjt (webes keresés + védett
+ * szerveroldali letöltés). Ha az is bukik, mindkét ok látszik.
+ */
+export async function gatherWebSources(input: WebResearchChatRequest, observer: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
+  const primary = resolveLegacyModel("webResearch");
+  const fallback = crossFamilyFallback(primary);
+  // Review #222: folytatáskor a már mentett tartalék-forrás nyer — új (fizetős) Claude-keresés előtt.
+  const savedGpt = fallback ? workflowSavedCheckpoint<FetchedTeachingSource[]>("web-gather-gpt", gptGatherCheckpointInput(input, fallback)) : undefined;
+  if (savedGpt?.length) return { downloaded: savedGpt, topicSeed: gptGatherRequest(input).topicSeed };
+  try {
+    return await gatherWebSourcesClaude(input, observer);
+  } catch (error) {
+    // Review #222: elveszett workflow-lease (WorkflowConflict) nem modellhiba — nincs fizetős tartalékhívás.
+    if (error instanceof WorkflowConflict) throw error;
+    if (observer.signal?.aborted || !fallback || !studioModelReady(fallback)) throw error;
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.warn(`[WEB-RESEARCH] A forrásgyűjtés (${primary}) hibázott — ${reason.slice(0, 200)} → tartalék: ${fallback}`);
+    observer.onEvent({ type: "status", message: `A forrásgyűjtés elsődleges modellje hibázott — tartalék: ${fallback}…` });
+    try {
+      const downloaded = await gatherWebSourcesGpt(input, { model: fallback, signal: observer.signal, onEvent: observer.onEvent });
+      return { downloaded, topicSeed: gptGatherRequest(input).topicSeed };
+    } catch (fallbackError) {
+      if (fallbackError instanceof WorkflowConflict) throw fallbackError;
+      if (observer.signal?.aborted) throw error;
+      throw new WebResearchFailure(`${reason} Tartalék (${fallback}): ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+    }
+  }
+}
+
+async function gatherWebSourcesClaude(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
   const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
   if (!key?.trim()) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva.");
   const controller = new AbortController();
@@ -224,7 +260,7 @@ export async function gatherWebSources(input: WebResearchChatRequest, { signal, 
     if (!downloaded.length) throw new WebResearchFailure("Nincs letöltött forrásszöveg. A web_fetch eszközzel olvasd el a forrásokat, majd készíts teljes tananyagot.");
     return { downloaded, topicSeed };
   } catch (error) {
-    if (error instanceof WebResearchFailure) throw error;
+    if (error instanceof WebResearchFailure || error instanceof WorkflowConflict) throw error;
     logger.error("[WEB-RESEARCH] gather failure", { name: error instanceof Error ? error.name : "unknown", message: error instanceof Error ? error.message.slice(0, 400) : String(error), timedOut });
     throw new WebResearchFailure(timedOut ? "Időtúllépés: a keresés nem fejeződött be az időkeretben."
       : controller.signal.aborted ? "A kérés megszakadt." : "AI hiba történt a webes keresés közben.");
@@ -259,12 +295,15 @@ export function webAuthorModelForAttempt(attempt: number, primary: string, fallb
 }
 
 export async function generateWebResearchLesson(input: WebResearchChatRequest, { signal, onEvent, onCandidate, bankCheckpoint, onBankCheckpoint }: ResearchObserver): Promise<ResearchArtifact> {
-  const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
-  if (!key?.trim()) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva.");
+  // Review #222: az előzetes kulcs-ellenőrzés a tartalékot is figyelembe veszi — elsődleges (Anthropic) kulcs nélkül is indulhat, ha a
+  // gyűjtés, a kivonatolás és a szerzés ellentétes családú tartaléka elérhető.
+  const ready = (model: string) => studioModelReady(model) || (() => { const f = crossFamilyFallback(model); return !!f && studioModelReady(f); })();
+  const gatherModel = resolveLegacyModel("webResearch");
+  if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY?.trim() && !ready(gatherModel)) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva, és a forrásgyűjtés tartaléka sem elérhető.");
   const extractModel = resolveStudioModel("extract");
   const authorModel = resolveWebResearchAuthorModel();
-  if (!studioModelReady(extractModel) || !studioModelReady(authorModel)) {
-    throw new WebResearchFailure("A Studio kivonatoló vagy szerző modell API-kulcsa nincs beállítva.");
+  if (!ready(extractModel) || !ready(authorModel)) {
+    throw new WebResearchFailure("A Studio kivonatoló vagy szerző modell API-kulcsa nincs beállítva (tartalékkal sem).");
   }
   // Spec 2026-09-29 (PR #131 review, R1): the rollback HTML path also uses the author's fallback when its key is set.
   // Review #216: a tartalék a tényleges (env-vel felülírható) szerző-elsődlegesből képzett ellentétes család.
