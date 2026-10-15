@@ -1,6 +1,6 @@
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../../../shared/lesson-experience-score";
 import type { OpenTask } from "../../../shared/lesson-experience";
-import { inflectedForms, spellingVariants, synonymsOf } from "../../../shared/hu-lexicon";
+import { inflectedForms, spellingVariants, staleGeneratedForms, synonymsOf } from "../../../shared/hu-lexicon";
 
 /**
  * Eszköz (tulajdonosi kérés 2026-09-19): determinisztikus bankcsomag-javítás MODELLHÍVÁS NÉLKÜL.
@@ -74,11 +74,14 @@ function fixTask(task: Obj, fixes: string[], teachingText?: string): void {
   // Tételgyár T4′ (D2): a tanítás saját szóalakja, az írásmód-változat és a kézzel ellenőrzött rokon értelmű kifejezés a csoportba —
   // csak HOZZÁAD (a pontozó így a nem szó szerint egyező, de a tanítással azonos helyes választ is elfogadja); a minWords változatlan.
   for (const group of required) {
+    // Review #231 (P1): a korábbi verzió értelmetlen, a tanítás által nem igazolt egybeírt alakjai ki (gyorsítótárból jövő csomagban is).
+    const stale = staleGeneratedForms(group, teachingText, typeof task.sample === "string" ? task.sample : undefined);
+    if (stale.length) { for (const x of stale) group.splice(group.indexOf(x), 1); fixes.push(`${id}: a tanítás által nem igazolt, gépi egybeírt alak kivéve (${stale.join(", ")})`); }
     const known = new Set(group.map((g) => normalizeAnswer(g)));
     const added: string[] = [];
     const add = (v: string) => { const n = normalizeAnswer(v); if (n && !known.has(n)) { known.add(n); added.push(v); } };
     for (const term of [...group]) {
-      for (const v of spellingVariants(term)) { add(v); for (const f of inflectedForms(v, teachingText)) add(f); }
+      for (const v of spellingVariants(term, teachingText)) { add(v); for (const f of inflectedForms(v, teachingText)) add(f); }
       for (const f of inflectedForms(term, teachingText)) add(f);
       for (const s of synonymsOf(term)) add(s);
     }
