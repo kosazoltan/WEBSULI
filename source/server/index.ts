@@ -383,6 +383,15 @@ const ttsLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Tételgyár T7.1 (tulajdonosi döntés 2026-10-15): a döntőbíró IP-nként 60 kérés / 15 perc (a napi 2000-es fizetett plafon a szolgáltatásban).
+const arbiterLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: "Túl sok ellenőrzési kérés. Próbáld újra később!",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Rate limiter for public write endpoints (comments, likes, push subscriptions).
 // These are unauthenticated and write to the database — throttle spam/flooding.
 const publicWriteLimiter = rateLimit({
@@ -405,6 +414,7 @@ app.use("/api/push/unsubscribe", publicWriteLimiter);
 // LS-3a: a Próba-beküldés és a kupon-műveletek publikus írások, és valódi jutalmat
 // (képernyőidőt) osztanak — a szórásos újrapróbálkozást itt is fojtjuk. A GET
 // /coupons/active minden HUD-frissítéskor lefut, ezért az kimarad.
+app.use("/api/lessons/arbiter", arbiterLimiter);
 app.use("/api/lessons", (req, res, next) => {
   const isSafeMethod =
     req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS";
