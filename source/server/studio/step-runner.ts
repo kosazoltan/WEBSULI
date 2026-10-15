@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import { subjectKeyOf } from "../../shared/subject-key";
@@ -58,7 +58,9 @@ import {
   type OwnerContext,
   parseLektorResponse,
   LEKTOR_SOLUTIONS_MAX,
+  canonicalJson,
 } from "./step-io";
+import { createHash } from "node:crypto";
 import { correctionNotes, type SourceCorrection } from "./source-corrections";
 import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
 import { pickVisualWorld, visualWorld, harmoniseSectionEmojis, type VisualWorldId, designFromInstruction } from "../../shared/lesson-visuals";
@@ -94,7 +96,7 @@ import { supportSkillVersion, withSupportSkill } from "./support-skills";
 import { FIGURE_CHECK_VERSION, figureCheck } from "./figure-check";
 import { targetedRepairSections, parseSectionPatch, parseMisconceptionsPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
 import { canReuseLessonVisuals } from "./visual-reuse";
-import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError, workflowPinnedPrompt, workflowNotePromptHash } from "../workflows/engine";
+import { workflowAllowResumeEdge, workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError, workflowPinnedPrompt, workflowNotePromptHash } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef, misconceptionPath, misconceptionRef, type BankItemRef } from "../../shared/bank-item-ref";
@@ -134,6 +136,45 @@ export function lektorCheckerVersions() {
 }
 export function lektorReviewHash(input: unknown, round: number): string {
   return computeStepHash("lektor", LEKTOR_REVIEW_VERSION, { input, checker: lektorCheckerVersions() }, round);
+}
+
+/**
+ * Spec 2026-10-15-tetelgyar T0.2 (mért: job 416ad01d — „a lektorált bemenet eltér a mostanitól”, a komponens utólag nem volt
+ * megállapítható): a lektor-bizonyíték komponensenként is mentődik — tanítás, tételek (bank:id szerint), térkép, fogalmak (id szerint
+ * rendezve), előző blokkolók —, így az eltérés megnevezhető, és a csak munkakörnyezeti (blokkoló) eltérés nem buktat.
+ */
+export type LektorEvidenceInput = { lesson: Lesson; map: unknown; concepts: Array<{ id?: string }>; previousBlockers?: unknown[] };
+export type LektorEvidence = { version: 1; full?: string; teaching: string; items: Record<string, string>; map: string; concepts: string; blockers: string; checker: string };
+const evidenceHash = (value: unknown) => createHash("sha256").update(canonicalJson(value ?? null)).digest("hex");
+export function lektorEvidenceOf(input: LektorEvidenceInput, full?: string): LektorEvidence {
+  const { experience, ...teaching } = input.lesson;
+  const items: Record<string, string> = {};
+  for (const bank of ["quiz", "tasks", "methods"] as const) {
+    for (const item of (experience?.[bank] ?? []) as Array<{ id?: string }>) items[`${bank}:${String(item.id)}`] = evidenceHash(item);
+  }
+  const rest = experience ? Object.fromEntries(Object.entries(experience).filter(([k]) => !["quiz", "tasks", "methods"].includes(k))) : null;
+  const concepts = [...input.concepts].sort((a, b) => String(a.id ?? "").localeCompare(String(b.id ?? "")));
+  return { version: 1, ...(full ? { full } : {}), teaching: evidenceHash({ teaching, experienceRest: rest }), items, map: evidenceHash(input.map), concepts: evidenceHash(concepts),
+    blockers: evidenceHash(input.previousBlockers ?? []), checker: evidenceHash({ version: LEKTOR_REVIEW_VERSION, checker: lektorCheckerVersions() }) };
+}
+/**
+ * T0.2: az eltérő komponensek (magyarul); a csak-blokkoló eltérés `["előző blokkolók"]`. A komponens-bizonyíték csak a VELE EGYÜTT mentett
+ * teljes lenyomattal együtt érvényes (`storedFull`): hiányzó vagy más (pl. régebbi verziójú) teljes lenyomat mellett nem fogadható el.
+ */
+export function evidenceDiff(stored: unknown, current: LektorEvidence, storedFull?: unknown): string[] {
+  const s = stored as Partial<LektorEvidence> | null | undefined;
+  if (!s || s.version !== 1 || typeof s.items !== "object" || !s.items) return ["nincs komponensenkénti bizonyíték"];
+  if (typeof storedFull !== "string" || !s.full || s.full !== storedFull) return ["a bizonyíték nem a mentett lektori lenyomathoz kötött"];
+  const storedItems = s.items;
+  const out: string[] = [];
+  if (s.checker !== current.checker) out.push("ellenőrző-verzió");
+  if (s.teaching !== current.teaching) out.push("tanítás");
+  const keys = [...new Set([...Object.keys(storedItems), ...Object.keys(current.items)])].filter((k) => storedItems[k] !== current.items[k]);
+  out.push(...keys.slice(0, 5).map((k) => `banktétel: ${k}`), ...(keys.length > 5 ? [`további ${keys.length - 5} banktétel`] : []));
+  if (s.map !== current.map) out.push("térkép");
+  if (s.concepts !== current.concepts) out.push("fogalmak");
+  if (s.blockers !== current.blockers) out.push("előző blokkolók");
+  return out;
 }
 
 export const NO_OPENROUTER_KEY_MESSAGE =
@@ -299,7 +340,9 @@ const BANK_RESUMABLE_ERRORS = [
 ];
 /** Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3): a kapu bank-eredetű megállása a mentett leckéből a kapu újrafuttatásával folytatható. */
 export const GATE_RESUMABLE_ERRORS = [/^Hibás banktétel maradt a limiten/, /^Egyválasztós hiba maradt a bankban/];
-export type ResumeKind = "bank" | "lektor" | "gate";
+export type ResumeKind = "bank" | "lektor" | "gate" | "review";
+/** Spec 2026-10-15-tetelgyar T0.4: a lektor-bizonyíték eltérése a lektor újrafuttatásával (a mostani leckén) folytatható. */
+const REVIEW_EVIDENCE_ERROR = /^A 7\.4 végkapuhoz [\s\S]*a lektorált bemenet eltér a mostanitól/;
 
 /**
  * Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3): a folytathatóság EGY szabálya — a `resume` útvonal és a futásnézet
@@ -311,7 +354,7 @@ export function resumeKindOf(input: { step: string; status: string; error: strin
   if (input.step !== "error" || input.status !== "error" || !input.hasLesson || input.htmlFileId || input.published || !error) return null;
   const visitMatches = !!visit && visit.state === "error" && visit.error === redactWorkflowError(new Error(error));
   if (visit?.step === "animator") return visitMatches && BANK_RESUMABLE_ERRORS.some((re) => re.test(error)) ? "bank" : null;
-  if (visit?.step === "gate") return visitMatches && GATE_RESUMABLE_ERRORS.some((re) => re.test(error)) ? "gate" : null;
+  if (visit?.step === "gate") return !visitMatches ? null : GATE_RESUMABLE_ERRORS.some((re) => re.test(error)) ? "gate" : REVIEW_EVIDENCE_ERROR.test(error) ? "review" : null;
   return error.startsWith('A(z) "lektor" lépés modellhívása hibára futott:') && /timed out|timeout/i.test(error) ? "lektor" : null;
 }
 
@@ -345,11 +388,16 @@ export async function retryFailedGate(jobId: string, visit: { step: string; stat
   const job = await store.loadJob(jobId);
   if (!job) throw new Error("A job nem található.");
   if (job.step !== "error") return;
-  if (resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!job.output?.lesson, htmlFileId: job.output?.htmlFileId, visit }) !== "gate") {
+  const kind = resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!job.output?.lesson, htmlFileId: job.output?.htmlFileId, visit });
+  if (kind !== "gate" && kind !== "review") {
     throw new Error("Csak naplóval igazolt, mentett és még nem publikált kapuhiba folytatható.");
   }
   const attempt = recoveryAttempt(job.output?.gateRecoveryAttempt, "kapufolytatási");
-  await store.saveStep(jobId, { step: "gate", status: "pending", error: null, finishedAt: null,
+  if (kind === "review" && !await workflowAllowResumeEdge("gate", "lektor", "kapu: a lektor-bizonyíték eltér — a lektor a mostani leckén újrafut")) {
+    throw new Error("A lektor újrafuttatása csak a kapunál megállt futás kifejezett folytatásaként engedélyezett.");
+  }
+  // T0.4: bizonyíték-eltérésnél a lektor újrafut a mostani leckén (a kör nem nő); bank-eredetű kapuhibánál a kapu fut újra.
+  await store.saveStep(jobId, { step: kind === "review" ? "lektor" : "gate", status: "pending", error: null, finishedAt: null,
     output: { ...job.output, previousGateError: job.error, gateRecoveryAttempt: attempt } });
 }
 
@@ -1520,7 +1568,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             logger.warn(`[STUDIO] Tényhiba a tanításban a körlimiten (${job.id}), célzott szerzői javítás: fejezet ${targets.map((i) => i + 1).join(", ")}`);
             await store.saveStep(job.id, successPatch({
               ...spendRepair(job.output, "targetedLektor", job.round + 1), report: parsed.data, reportRound: job.round,
-              reviewInputHash: lektorReviewHash(input, job.round),
+              reviewInputHash: lektorReviewHash(input, job.round), reviewEvidence: lektorEvidenceOf(input as LektorEvidenceInput, lektorReviewHash(input, job.round)),
               blockers,
             }));
             return { ok: true, next: { step: "author", round: job.round + 1 } };
@@ -1551,7 +1599,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             ...spendRepair(job.output, gateBankRound ? "gateBank" : "bankOnly", transition.round),
             report: parsed.data,
             reportRound: job.round,
-            reviewInputHash: lektorReviewHash(input, job.round),
+            reviewInputHash: lektorReviewHash(input, job.round), reviewEvidence: lektorEvidenceOf(input as LektorEvidenceInput, lektorReviewHash(input, job.round)),
             blockers,
             bankReview: { round: transition.round, feedback },
           }),
@@ -1591,7 +1639,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           ...job.output,
           report: parsed.data,
           reportRound: job.round,
-          reviewInputHash: lektorReviewHash(input, job.round),
+          reviewInputHash: lektorReviewHash(input, job.round), reviewEvidence: lektorEvidenceOf(input as LektorEvidenceInput, lektorReviewHash(input, job.round)),
           blockers,
           ...(carriedNotes !== undefined ? { qualityNotes: carriedNotes } : {}),
         }),
@@ -2049,12 +2097,16 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     const reviewNotes = report.success
       ? downgradeAtLimit(classifyReviewNotes(report.data.notes, gatePriorBlockers, job.round), job.round >= MAX_AUTHOR_ROUNDS && job.output?.limitDowngrade === true, reviewed.data)
       : [];
+    // Spec 2026-10-15-tetelgyar T0.3: a teljes lenyomat VAGY a komponensenkénti bizonyíték, ahol legfeljebb az előző blokkolók térnek el.
+    const evidenceChanges = job.output?.reviewInputHash === expectedReviewHash ? [] : evidenceDiff(job.output?.reviewEvidence, lektorEvidenceOf({
+      lesson: rawLesson as Lesson, map: mapInputOf(map), concepts: map.concepts, ...(gatePriorBlockers.length ? { previousBlockers: gatePriorBlockers } : {}) }), job.output?.reviewInputHash);
+    const evidenceOk = evidenceChanges.every((c) => c === "előző blokkolók");
     if (!report.success || reviewNotes.some(unresolvedBlocker)
-      || job.output?.reportRound !== job.round || job.output?.reviewInputHash !== expectedReviewHash) {
+      || job.output?.reportRound !== job.round || !evidenceOk) {
       // A pontos ok a naplóba és az admin elé (melyik feltétel / blokkoló maradt nyitva) — a kezdő szöveg változatlan (mérés).
       const open = reviewNotes.filter(unresolvedBlocker).map((n) => `${n.blockPath ?? "—"}: ${String(n.message).slice(0, 160)}`);
       const why = !report.success ? "nincs érvényes lektori jelentés" : job.output?.reportRound !== job.round ? "a lektori jelentés más körből való"
-        : job.output?.reviewInputHash !== expectedReviewHash ? "a lektorált bemenet eltér a mostanitól" : `nyitott blokkoló: ${open.join(" | ")}`;
+        : !evidenceOk ? `a lektorált bemenet eltér a mostanitól: ${evidenceChanges.join(", ")}` : `nyitott blokkoló: ${open.join(" | ")}`;
       return fail(store, job, `A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges. (${why})`);
     }
   }
@@ -2361,7 +2413,10 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
         // Spec 2026-09-19: only source-verified concepts are taught. A manually approved
         // map never holds `pending` (canApprove); an autonomously approved one may — those
         // stay visible in the map but do not reach the pedagogue/author.
-        .where(and(eq(kmConcepts.mapId, mapId), inArray(kmConcepts.reviewState, TAUGHT_REVIEW_STATES)));
+        .where(and(eq(kmConcepts.mapId, mapId), inArray(kmConcepts.reviewState, TAUGHT_REVIEW_STATES)))
+        // Spec 2026-10-15-tetelgyar T0.1: a fogalmak a lektor-bizonyíték és a lépés-lenyomatok bemenete — determinisztikus sorrend
+        // (mérve: a rendezetlen lekérdezés sorrendje eltért a rendezettől).
+        .orderBy(asc(kmConcepts.orderIndex), asc(kmConcepts.id));
 
       return {
         // Spec 2026-09-24: a forrásszöveg a vak megoldóhoz kell (élő mérés: nélküle a vak megoldó nem futott).
@@ -2395,7 +2450,9 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
             eq(lektorNotes.severity, "blocker"),
             eq(lektorNotes.round, round),
           ),
-        );
+        )
+        // Spec 2026-10-15-tetelgyar T0.1: az előző kör blokkolói a lektor-bizonyíték bemenete — determinisztikus sorrend.
+        .orderBy(asc(lektorNotes.createdAt), asc(lektorNotes.id));
       return rows.map((r) => ({
         kind: r.kind as RawNote["kind"],
         subkind: r.subkind ?? undefined,
@@ -2593,7 +2650,8 @@ export async function fixConceptOnLesson(
       examWeight: kmConcepts.examWeight,
     })
     .from(kmConcepts)
-    .where(and(eq(kmConcepts.mapId, mapId), inArray(kmConcepts.reviewState, TAUGHT_REVIEW_STATES)));
+    .where(and(eq(kmConcepts.mapId, mapId), inArray(kmConcepts.reviewState, TAUGHT_REVIEW_STATES)))
+    .orderBy(asc(kmConcepts.orderIndex), asc(kmConcepts.id));
 
   const provider = providerFactory(model);
 

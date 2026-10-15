@@ -39,3 +39,13 @@ test("a meglévő bank- és lektor-folytatás szabálya változatlan", () => {
   assert.equal(resumeKindOf({ ...base, error: timeout, visit: visit("lektor", timeout) }), "lektor");
   assert.equal(resumeKindOf({ ...base, error: "A lektor 1 tartalmi javítást kér.", visit: visit("lektor", "A lektor 1 tartalmi javítást kér.") }), null);
 });
+
+test("T0.4: a lektor-bizonyíték eltérése → review (a lektor újrafut); más végkapu-ok (nyitott blokkoló) nem folytatható", () => {
+  const evidence = "A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges. (a lektorált bemenet eltér a mostanitól: tanítás)";
+  assert.equal(resumeKindOf({ ...base, error: evidence, visit: visit("gate", evidence) }), "review");
+  const legacy = "A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges. (a lektorált bemenet eltér a mostanitól)";
+  assert.equal(resumeKindOf({ ...base, error: legacy, visit: visit("gate", legacy) }), "review", "a régi (komponens nélküli) üzenet is (mért: job 416ad01d)");
+  const open = "A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges. (nyitott blokkoló: x)";
+  assert.equal(resumeKindOf({ ...base, error: open, visit: visit("gate", open) }), null);
+  assert.equal(resumeKindOf({ ...base, error: evidence, visit: visit("lektor", evidence) }), null, "csak kapu-látogatásból");
+});
