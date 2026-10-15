@@ -69,3 +69,24 @@ test("T5.2 mérés valódi lelete: zárójel nélküli műveletsor rossz kulccsa
   const r = singleChoiceProblems(item("A teljes példa mintájára számold ki: mennyi a 60 – 42 : 7 · 5 + 4 kifejezés értéke?", ["86", "58", "90"], 0));
   assert.match(r.join(), /0 opció egyenlő a kiszámolt eredménnyel \(60 – 42 : 7 · 5 \+ 4 = 34\)/);
 });
+
+test("review #244: a tartomány („6–8 éves”) nem kivonás", () => {
+  assert.deepEqual(singleChoiceProblems(item("A 6–8 éves csoportban mennyi az átlagéletkor?", ["7", "6", "8"], 0)), []);
+});
+
+test("review #244: az eredménykérés a kérdő mondathoz kötött", () => {
+  assert.deepEqual(singleChoiceProblems(item("A 3 + 4 kifejezés eredménye 7. Melyik szám páros?", ["4", "5", "7"], 0)), []);
+  assert.match(singleChoiceProblems(item("Gondolj a szabályra. Mennyi a 3 + 4 kifejezés eredménye?", ["7", "8"], 1)).join(), /a kulcs „8”, de csak „7”/);
+});
+
+test("review #244: a fordított forma csak konkrét célértékkel fut (tulajdonságra kérdezve hallgat)", () => {
+  assert.deepEqual(singleChoiceProblems(item("Melyik kifejezés eredménye osztható 6-tal?", ["6 + 6", "5 + 2", "8 + 3"], 0)), []);
+  assert.deepEqual(singleChoiceProblems(item("Melyik kifejezés eredménye 6, ha a tanult szabályt alkalmazod?", ["3 + 3", "2 + 2"], 0)), []);
+  assert.match(singleChoiceProblems(item("Melyik kifejezés értéke 10?", ["5 + 5", "2 · 5", "12 - 3"], 0)).join(), /2 opció értéke 10/);
+});
+
+test("review #244: az előjeles zárójel szorzás és osztás után is", () => {
+  assert.match(singleChoiceProblems(item("Mennyi a 3 · (-4) kifejezés értéke?", ["12", "-12", "-7"], 0)).join(), /a kulcs „12”, de csak „-12”/);
+  assert.deepEqual(singleChoiceProblems(item("Mennyi a 3 · (-4) kifejezés értéke?", ["12", "-12", "-7"], 1)), []);
+  assert.match(singleChoiceProblems(item("Mennyi a -12 : (-4) kifejezés értéke?", ["-3", "3"], 0)).join(), /a kulcs „-3”, de csak „3”/);
+});

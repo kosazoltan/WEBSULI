@@ -1,4 +1,4 @@
-import { ATOM, EXPR, SIGN, evaluateExpression, normalizeSignedParens } from "./arithmetic-expression";
+import { ATOM, EXPR, SIGN, atomValue, evaluateExpression, normalizeSignedParens } from "./arithmetic-expression";
 
 /**
  * Spec 2026-09-29 (docs/specs/2026-09-29-egy-helyes-valasz.md), döntés 1: determinisztikus egy-helyes-válasz őr.
@@ -140,7 +140,13 @@ const EMBEDDED_EXPR = new RegExp(`(?<![\\p{L}\\d.,/])(?:[\\-−–](?=\\s*[\\d(]
 const ASKS_RESULT = /(?<!\p{L})(?:eredmény\p{L}*|érték\p{L}*|mennyi|egyenlő|tartozik|kapjuk|kapod|lesz)(?!\p{L})/u;
 // T5.2 mérés (`docs/measurements/2026-10-15-t5-szamolos-kulcs.json`): a RÉSZeredményre kérdező tétel („az osztás részeredménye”, „közbülső
 // eredmény”, „az első eredmény”) nem a teljes kifejezés értékét kéri — hallgatunk.
-const NOT_COMPUTABLE = /(?<!\p{L})(?:nem|ha|nagyobb|kisebb|között|legalább|legfeljebb|kerekít\p{L}*|becsül\p{L}*|közelít\p{L}*|hány\s+(?:szám|opció|lépés)|részeredmény\p{L}*|közbülső|közbenső|első|először|utolsó|lépés\p{L}*)(?!\p{L})/u;
+// Review #244 (P1): az eredmény TULAJDONSÁGÁRA kérdező tétel („osztható 6-tal”, „páros”) sem a pontos értéket kéri — hallgatunk.
+const NOT_COMPUTABLE = /(?<!\p{L})(?:nem|ha|nagyobb|kisebb|között|legalább|legfeljebb|kerekít\p{L}*|becsül\p{L}*|közelít\p{L}*|hány\s+(?:szám|opció|lépés)|részeredmény\p{L}*|közbülső|közbenső|első|először|utolsó|lépés\p{L}*|oszthat\p{L}*|páros|páratlan|prím\p{L}*|négyzetszám\p{L}*|többszörös\p{L}*|osztó\p{L}*)(?!\p{L})/u;
+/** Review #244 (P1): a kérdő mondat (az utolsó „?”-es mondat, különben az utolsó) — az eredménykérésnek ehhez kell kötődnie. */
+function questionSentence(prompt: string): string {
+  const sentences = prompt.normalize("NFC").split(/(?<=[.!?])\s+/u).map((s) => s.trim()).filter(Boolean);
+  return [...sentences].reverse().find((s) => s.includes("?")) ?? sentences.at(-1) ?? "";
+}
 /**
  * T5.2 mérés: a CSOPORTOSÍTÓ zárójel („(148 + 6) · 8”, „9 + [(12 – 8) · 3]”) mellett a kereső csak a zárójel belsejét látná — hallgatunk.
  * Csak az előjeles szám zárójele („(-6)”, „(+8)”) megengedett; ha az összevonás után zárójel marad, az csoportosító.
@@ -149,26 +155,66 @@ function hasGroupingBrackets(text: string): boolean {
   return /[()[\]]/.test(text.normalize("NFC").replace(/\(\s*[+\-−–]?\s*\d+(?:[.,]\d+)?\s*\)/g, ""));
 }
 
-/** Kiszámolt érték az előjeles zárójel összevonásával; `null`, ha nem biztosan kiszámolható. */
+const SIGNED_TOKEN = new RegExp(`\\(\\s*([+\\-−–]?)\\s*((?:${ATOM}))\\s*\\)|((?:${ATOM}))|([+\\-−–·×*:÷])|(\\S)`, "gu");
+/**
+ * Kiszámolt érték; az előjeles szám zárójele BÁRMELY művelet után állhat (review #244 P2: „3 · (-4)”), a · : erősebben köt, a vezető mínusz
+ * az első tagé. Csoportosító zárójel vagy ismeretlen jel → `null` (nem biztosan kiszámolható).
+ */
 function signedExpressionValue(expr: string): number | null {
-  const flat = normalizeSignedParens(expr.normalize("NFC").trim()).replace(/^\s*\+\s*/, "");
-  if (/[()[\]]/.test(flat)) return null;
-  return evaluateExpression(flat);
+  const text = expr.normalize("NFC").trim().replace(/^\+\s*/, "");
+  if (hasGroupingBrackets(text)) return null;
+  const values: number[] = [];
+  const ops: string[] = [];
+  let expectNumber = true;
+  let leadingSign = 1;
+  for (const m of text.matchAll(SIGNED_TOKEN)) {
+    if (m[5]) return null;
+    if (m[4]) {
+      if (expectNumber) {
+        if (/[\-−–]/.test(m[4]) && !values.length && leadingSign === 1) { leadingSign = -1; continue; }
+        return null;
+      }
+      ops.push(m[4]); expectNumber = true; continue;
+    }
+    if (!expectNumber) return null;
+    const value = m[2] !== undefined ? (/[\-−–]/.test(m[1]) ? -1 : 1) * atomValue(m[2]) : atomValue(m[3]);
+    if (!Number.isFinite(value)) return null;
+    values.push(values.length ? value : leadingSign * value);
+    expectNumber = false;
+  }
+  if (expectNumber || !values.length) return null;
+  const terms = [values[0]];
+  const addOps: string[] = [];
+  for (let i = 0; i < ops.length; i++) {
+    const v = values[i + 1];
+    if (/[·×*]/.test(ops[i])) terms[terms.length - 1] *= v;
+    else if (/[:÷]/.test(ops[i])) { if (v === 0) return null; terms[terms.length - 1] /= v; }
+    else { terms.push(v); addOps.push(ops[i]); }
+  }
+  let result = terms[0];
+  for (let i = 0; i < addOps.length; i++) result = addOps[i] === "+" ? result + terms[i + 1] : result - terms[i + 1];
+  return Math.round(result * 1e6) / 1e6;
 }
 /** Számopció „+6” alakban is. */
 function signedNumberOf(option: string): number | null {
   return numberOf(option.normalize("NFC").trim().replace(/^\+\s*(?=\d)/, ""));
 }
 function expressionsIn(text: string): string[] {
-  return [...text.normalize("NFC").matchAll(EMBEDDED_EXPR)].map((m) => m[0].trim()).filter((e) => new RegExp(`\\d\\s*\\)?\\s*[+\\-−–·×*:÷]\\s*\\(?\\s*[+\\-−–]?\\s*\\d`).test(e));
+  const t = text.normalize("NFC");
+  return [...t.matchAll(EMBEDDED_EXPR)]
+    // Review #244 (P1): a szóköz nélküli kötőjeles számpár, amely után szó áll („6–8 éves”), TARTOMÁNY, nem kivonás.
+    .filter((m) => !(/^\d+(?:[.,]\d+)?[\-−–]\d+(?:[.,]\d+)?$/.test(m[0].trim()) && /^\s+\p{L}/u.test(t.slice(m.index! + m[0].length))))
+    .map((m) => m[0].trim()).filter((e) => new RegExp(`\\d\\s*\\)?\\s*[+\\-−–·×*:÷]\\s*\\(?\\s*[+\\-−–]?\\s*\\d`).test(e));
 }
 
 /** E1: a kérdésben pontosan egy kiszámolható kifejezés, az eredményére kérdez, a válaszok számok. */
 function embeddedArithmeticProblems(item: SingleChoiceItem): string[] {
   const p = norm(item.prompt);
-  if (!ASKS_RESULT.test(p) || NOT_COMPUTABLE.test(p) || hasGroupingBrackets(item.prompt)) return [];
+  const question = questionSentence(item.prompt);
+  // Review #244 (P1): az eredménykérés és a kifejezés a KÉRDŐ mondatban áll („A 3 + 4 eredménye 7. Melyik szám páros?” → hallgat).
+  if (!ASKS_RESULT.test(norm(question)) || NOT_COMPUTABLE.test(p) || hasGroupingBrackets(item.prompt)) return [];
   const exprs = expressionsIn(item.prompt);
-  if (exprs.length !== 1) return [];
+  if (exprs.length !== 1 || expressionsIn(question).length !== 1) return [];
   const result = signedExpressionValue(exprs[0]);
   if (result === null) return [];
   const values = item.options.map(signedNumberOf);
@@ -183,6 +229,8 @@ function reverseArithmeticProblems(item: SingleChoiceItem): string[] {
   if (!/(?<!\p{L})melyik\s+(?:kifejezés|művelet|számítás|kivonás|összeadás|szorzás|osztás)/u.test(p) || !ASKS_RESULT.test(p) || NOT_COMPUTABLE.test(p) || hasGroupingBrackets(item.prompt) || item.options.some(hasGroupingBrackets)) return [];
   const numbers = [...item.prompt.normalize("NFC").matchAll(new RegExp(`(?<![\\p{L}\\d])([+\\-−–]?)\\s*((?:${ATOM}))(?![\\d/])`, "gu"))];
   if (numbers.length !== 1 || expressionsIn(item.prompt).length) return [];
+  // Review #244 (P1): csak KONKRÉT célérték — az eredménykérő szó közvetlenül a szám előtt, a kérdő mondat végén („… eredménye +6?”).
+  if (!/(?:eredmény\p{L}*|érték\p{L}*|egyenlő|adja)\s*(?:az?\s+)?[+\-−–]?\s*\d[\d\s.,/]*\s*\??\s*$/u.test(questionSentence(item.prompt))) return [];
   const target = (/[\-−–]/.test(numbers[0][1]) ? -1 : 1) * (evaluateExpression(numbers[0][2]) ?? NaN);
   if (!Number.isFinite(target)) return [];
   const values = item.options.map((o) => (expressionsIn(o).length === 1 && expressionsIn(o)[0].replace(/\s/g, "") === o.normalize("NFC").trim().replace(/[.!?]+$/u, "").replace(/\s/g, "") ? signedExpressionValue(o.replace(/[.!?]+$/u, "")) : null));

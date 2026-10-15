@@ -18,3 +18,7 @@ Terv: `docs/specs/2026-10-15-tetelgyar-t5-szamolas-programbol.md`. Ág: `feat/te
 
 ## Ellenőrzés
 Célzott tesztek, `check`, `lint`, `check:test`, `build`, teljes `npm test`.
+
+## Review #244 javításai
+Tartomány („6–8 éves”) nem kivonás; az eredménykérés a kérdő mondathoz kötött; a fordított forma csak konkrét célértékkel (a tulajdonságra
+kérdező — osztható, páros, prím — hallgat); az előjeles zárójel szorzás/osztás után is (saját kiértékelő). Újramérve: 5 valódi lelet, 0 téves.
