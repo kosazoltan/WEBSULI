@@ -133,4 +133,8 @@ Ajánlott sorrend: **T0 → T1 → T4 → T2 → T6 → T5 → T3** (a gyors, bi
     a nyelvi memória és a tanítás saját szóalakjainak ellenőrzése.
   - **Mérés:** promptváltozás csak a próbaharnessel (alapvonal vs. változat): a lektor blokkolóinak száma, a hamis blokkolók aránya
     (amit a T2/T7 helyesnek ítél), és a tényhibák kiszűrése nem romolhat (a meglévő tényhiba-esetek visszajátszása).
+- **D5 — Folytatási keret** (2026-10-15, job `416ad01d`: az eredeti futás + 3 folytatás elfogyasztotta a 4-es végrehajtási keretet, a felület
+  mégis „folytatható”-t mutatott): a tulajdonos GOMBBAL indított, kifejezett folytatása futásonként legfeljebb **6** végrehajtásig mehet
+  (`WORKFLOW_EXPLICIT_RESUME_BUDGET`, `server/workflows/engine.ts`), az automatikus újrapróbálásé **4** marad; a futásnézet `resumable`
+  mezője ugyanezt a keretet nézi. Teszt: `tests/lesson-workflow.test.ts`.
 - **Módosított sorrend:** **T0 → T1 → T4′ → T8 → T2 → T7 → T6 → T5 → T3** (a nyelvi adatbank és a lektor-memória egymásra épül).
