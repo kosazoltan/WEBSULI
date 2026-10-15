@@ -342,11 +342,11 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
       .leftJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, run.jobId)).limit(1);
     draft = draftSummaryOf(job?.output, !!job?.publishedAt);
     const { visits, executions } = await workflowVisitsOf(runId);
-    const output = (job?.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown };
+    const output = (job?.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown; gateRecoveryAttempt?: unknown };
     stop = {
       // Tulajdonosi döntés 2026-10-15: a gomb a kifejezett folytatás végrehajtási keretét is nézi (a szerver ugyanezzel utasít el).
       resumable: !!job && executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
-        htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1) }) !== null,
+        htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1), gateRecoveryAttempt: output.gateRecoveryAttempt }) !== null,
       stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
     };
   }

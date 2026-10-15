@@ -93,6 +93,24 @@ test("review #225 (P2): elfogyott lektor-kerettel is működik a kapu → lektor
   assert.equal(done.visits.filter((v) => v.step === "lektor").length, 5);
 });
 
+test("T1b: gate → animator → lektor → gate visszaél elfogyott animator/lektor/gate kerettel is lefut", async () => {
+  const { store } = memoryWorkflows();
+  const input = { id: "edge-rebuild", owner: "o", mode: "upload" as const };
+  await assert.rejects(executeWorkflow(store, input, async () => {
+    for (const step of ["source", "scope", "knowledge", "sourceCheck", "pedagogue", "author"]) await workflowPhase(step);
+    for (let k = 0; k < 4; k++) { await workflowPhase("animator"); await workflowPhase("lektor"); }
+    await workflowPhase("gate");
+    throw new Error("kapu hiba");
+  }), /kapu hiba/);
+  const done = await executeWorkflow(store, { ...input, retry: true, continuation: true }, async () => {
+    assert.equal(await workflowAllowResumeEdge("gate", "animator", "teszt", ["lektor", "gate"]), true);
+    await workflowPhase("animator"); await workflowPhase("lektor"); await workflowPhase("gate"); await workflowPhase("readback");
+    return { kind: "material" as const, id: "ok" };
+  });
+  assert.equal(done.state, "done");
+  assert.deepEqual(done.resumeEdges?.map((e) => `${e.from}→${e.to}`), ["gate→animator"]);
+});
+
 test("review #229 (P2): elfogyott lektor- ÉS kapukerettel is végigmegy a gate → lektor → gate folytatás", async () => {
   const { store } = memoryWorkflows();
   const input = { id: "edge-gate-budget", owner: "o", mode: "upload" as const };

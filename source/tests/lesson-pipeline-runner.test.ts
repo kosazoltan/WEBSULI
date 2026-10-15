@@ -116,6 +116,21 @@ test("spec 2026-10-15-tetelgyar T0.4: a lektor-bizonyíték eltérése a lektor 
   assert.equal(deps.calls.length, 0);
 });
 
+test("Tételgyár T1b: az ismételt bank-eredetű kapuhiba a bankot újraépíti (animator/pending, a tanítás és a kör változatlan)", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[7]: x (kivétel után: c4: hiányzó recall kvíz.)";
+  const output = { lesson: standardFusionFixture(), gateRecoveryAttempt: 1, experienceCheckpoint: { hash: "fusion-7.4-4", parts: { old: { preserved: true } } } };
+  deps.store.seed({ id: "rebuild", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: structuredClone(output) });
+  await retryFailedGate("rebuild", { step: "gate", state: "error", error }, deps);
+  const job = deps.store.jobs.get("rebuild")!;
+  assert.equal(job.step, "animator"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
+  const { experience: _old, ...teaching } = output.lesson;
+  // Review #230 (P1): a régi bank és a csomag-gyorsítótár érvénytelenítve — az animátor nem hozhatja vissza ugyanazt a bankot.
+  assert.deepEqual(job.output, { lesson: teaching, previousGateError: error, gateRecoveryAttempt: 2, bankRebuild: true });
+  assert.deepEqual((job.output!.lesson as { sections: unknown }).sections, output.lesson.sections, "a tanítás megmarad");
+  assert.equal(deps.calls.length, 0);
+});
+
 test("bank resume recognizes redacted long errors but rejects malformed retry state", async () => {
   const deps = makeDeps("{}");
   const error = 'A(z) "author" lépés modellhívása hibára futott: https://example.invalid/request ' + "provider detail ".repeat(200);
@@ -146,6 +161,21 @@ test("bank resume reaches the provider with a new request while keeping teaching
   assert.equal(messages.length, 1);
   assert.match(String(messages[0][1].content), /Explicit bankfolytatás: 2/);
   assert.deepEqual(deps.store.jobs.get("bank-fresh")!.output, saved);
+});
+
+test("review #230 (P1): újraépítés után az animátor valóban a modelltől kér bankot (nem a gyorsítótárból hozza vissza a régit)", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[7]: x";
+  deps.store.seed({ id: "rebuild-call", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error,
+    output: { lesson, methodVersion: "fusion-7.4-4", gateRecoveryAttempt: 1 } });
+  await retryFailedGate("rebuild-call", { step: "gate", state: "error", error }, deps);
+  const messages: AIMessage[][] = [];
+  deps.providerFactory = () => ({ name: "stub", model: "stub", isAvailable: async () => true,
+    chat: async (input: AIMessage[]) => { messages.push(input); throw new Error("provider unavailable"); },
+  } as unknown as IAIProvider);
+  await runPipelineStep("rebuild-call", deps);
+  assert.ok(messages.length >= 1, "a bank újraépítése modellhívással indul");
 });
 
 test("mért hiba 2026-09-19 (run 45233b4b): hosszkorlátos bankválasz után a következő kísérlet fut, nem hal meg a lépés", async () => {
