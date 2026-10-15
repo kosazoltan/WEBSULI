@@ -19,3 +19,8 @@ Terv: `docs/specs/2026-10-15-review-247-248.md`.
    - `tests/bank-repair.test.ts`: azonos tétel, jogos és jogosulatlan mező együtt;
    - `tests/lesson-draft-db.integration.ts`: gazda, kérés-egyezés, félretevés hatóköre, újraindítás utáni nyitva hagyás (a fixtúrák a fájl végén törlődnek);
    - `tests/studio-generation-recovery.spec.ts`: fájl nélküli gombfelirat, dupla kattintás → 1 kérés.
+
+## Review #250 (második kör)
+5. A futásnézet (`oneStepRunView`) hiba- és draft-ágon visszaadja a job eredeti tanári kérését (`ownerInstruction`). Oldalfrissítés után a
+   kliens ezt visszatölti az üres kérésmezőbe, így az újragyártás az eredeti kéréssel indul (R6 kiegészítés).
+6. A függő újragyártás (`remakeAfterPick`) törlődik a fájlválasztó `cancel` eseményére, és akkor is, ha egy fájl sem olvasható be.

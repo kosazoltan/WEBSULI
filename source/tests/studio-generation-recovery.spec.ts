@@ -160,12 +160,17 @@ test("megszakadt piszkozatnál három külön gomb: folytatás, újragyártás, 
   await page.route("**/api/studio/jobs/job-old/resume",route=>{resumed++;return route.fulfill({status:202,json:{jobId:"job-old"}});});
   await page.route("**/api/studio/lessons/one-step/old-run",route=>route.fulfill({json:{phase:"animator",error:null,detail:"Folytatás a mentett részeredményekből.",mapId:"plant",jobId:"job-old",lessonId:"draft"}}));
   await page.route("**/api/studio/lessons/one-step/draft-run",route=>route.fulfill({json:{phase:"draft",error:null,detail:"Ebből a forrásból van megszakadt piszkozat — folytatható vagy újragyártható.",mapId:"plant",jobId:"job-old",lessonId:null,
-    draft:{teachingSections:9,savedBankPackets:4},resumable:true,stoppedAt:"animator",resumeKind:"restart",draftRunId:"old-run"}}));
+    draft:{teachingSections:9,savedBankPackets:4},resumable:true,stoppedAt:"animator",resumeKind:"restart",draftRunId:"old-run",ownerInstruction:"Csak a gyümölcsökről, 5. osztályos szinten."}}));
   await page.goto("/__studio-panel-probe");
   await expect(page.getByTestId("one-step-progress")).toContainText("Ebből a forrásból van megszakadt piszkozat");
   await expect(page.getByTestId("one-step-draft")).toContainText("9 fejezetnyi tananyag, 4 kész gyakorlócsomag");
   // Review #248 (P2): újratöltés után nincs fájl — az újragyártás akkor is elérhető, a forrás újraválasztásával.
   await expect(page.getByTestId("one-step-remake")).toHaveText("Újragyártás (a forrás újraválasztásával)");
+  // Review #250 (P1): oldalfrissítés után az eredeti tanári kérés visszakerül az űrlapba.
+  await expect(page.getByTestId("extract-instructions")).toHaveValue("Csak a gyümölcsökről, 5. osztályos szinten.");
+  // Review #250 (P2): a választó megszakítása után egy sima fájlválasztás NEM indít újragyártást.
+  await page.getByTestId("one-step-remake").click();
+  await page.getByTestId("extract-file-input").dispatchEvent("cancel");
   await page.getByTestId("extract-file-input").setInputFiles({name:"plants.txt",mimeType:"text/plain",buffer:Buffer.from("A szár szállítja a tápanyagokat.")});
   for (const id of ["one-step-resume","one-step-remake","one-step-new"]) await expect(page.getByTestId(id)).toBeVisible();
   for (const size of [{width:390,height:844},{width:1366,height:900}]) {
@@ -177,11 +182,14 @@ test("megszakadt piszkozatnál három külön gomb: folytatás, újragyártás, 
   }
   // Újragyártás: ugyanaz a kérés, kifejezett forceNew jelzővel.
   // Review #248 (P1): a dupla kattintás egyetlen újragyártási kérés.
+  await page.waitForTimeout(300);
+  expect(bodies.length,"megszakítás után nincs automatikus újragyártás").toBe(0);
   await page.getByTestId("one-step-remake").dblclick();
   await expect.poll(()=>bodies.length).toBe(1);
   await page.waitForTimeout(300);
   expect(bodies.length).toBe(1);
   expect(bodies[0].forceNew).toBe(true);
+  expect(bodies[0].instructions).toBe("Csak a gyümölcsökről, 5. osztályos szinten.");
   await expect(page.getByTestId("one-step-progress")).toContainText("Forrás feldolgozása");
   // Folytatás: a piszkozat jobja folytatódik, és a felület a piszkozat saját futását követi.
   await page.evaluate(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","draft-run"));

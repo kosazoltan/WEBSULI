@@ -363,6 +363,8 @@ export type OneStepRunView = {
   nextRecovery?: { strategy: string; reason: string };
   /** docs/specs/2026-10-15-hiba-gombok.md (E2): a piszkozat saját feltöltéses futása — folytatáskor a felület ezt követi. */
   draftRunId?: string;
+  /** Review #250 (P1): a megállt job eredeti tanári kérése — oldalfrissítés után az újragyártás ezzel indul (nem kérés nélkül). */
+  ownerInstruction?: string;
 };
 
 /**
@@ -422,6 +424,7 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
   let stop: { resumable: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string } } | null = null;
   // A piszkozat-választásnál (draft) ugyanaz a nézet, mint hibánál: mentett részek, folytathatóság, a piszkozat saját futása.
   let draftRunId: string | undefined;
+  let ownerInstruction: string | undefined;
   if (run.phase === "draft" && run.jobId) {
     const [other] = await db.select({ id: oneStepRuns.id }).from(oneStepRuns).where(and(eq(oneStepRuns.jobId, run.jobId), ne(oneStepRuns.id, runId))).orderBy(desc(oneStepRuns.updatedAt)).limit(1);
     draftRunId = other?.id;
@@ -439,6 +442,8 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
         lessonId, htmlFileId: published?.htmlFileId ?? null, ...(draftRunId ? { draftRunId } : {}) };
     }
     draft = draftSummaryOf(job?.output, !!job?.publishedAt);
+    const instructionOfJob = (job?.output as { ownerInstruction?: unknown } | null)?.ownerInstruction;
+    if (typeof instructionOfJob === "string" && instructionOfJob.trim()) ownerInstruction = instructionOfJob;
     // A piszkozat-választásnál a piszkozat jobjának saját workflow-ja számít (az új futásnak még nincs gyártási naplója).
     const { visits, executions } = run.phase === "draft" ? await workflowVisitsOfJob(run.jobId) : await workflowVisitsOf(runId);
     const output = (job?.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown; gateRecoveryAttempt?: unknown };
@@ -463,7 +468,7 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     };
   }
   return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}),
-    ...(draftRunId ? { draftRunId } : {}),
+    ...(draftRunId ? { draftRunId } : {}), ...(ownerInstruction ? { ownerInstruction } : {}),
     ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.resumeKind ? { resumeKind: stop.resumeKind } : {}),
       ...(stop.nextRecovery ? { nextRecovery: stop.nextRecovery } : {}) } : {}) };
 }
