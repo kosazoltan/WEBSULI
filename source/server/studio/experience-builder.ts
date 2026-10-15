@@ -292,17 +292,21 @@ export function salvagePacket<P extends { methods: Array<{ id: string }>; tasks:
 }
 
 
-/** Tételgyár T4′: a fejezet tanításának olvasható szövege (szöveges értékek; azonosító, típusnév, fogalomkötés és hash nélkül). */
+/**
+ * Tételgyár T4′: a fejezet TANÍTÁSÁNAK szövege — csak az `explain` (text) és az `example` (problem, steps, answer) blokkokból.
+ * Review #228 (P1): a `check`/`try`/`recap` blokkok szándékosan hibás opciói és visszajelzései nem lehetnek elfogadott szóalak forrásai.
+ */
 export function teachingTextOf(section: unknown): string {
-  const skip = new Set(["kind", "id", "coversConceptIds", "sourceHash", "conceptId", "icon", "theme"]);
+  const blocks = (section as { blocks?: unknown } | undefined)?.blocks;
+  if (!Array.isArray(blocks)) return "";
   const out: string[] = [];
-  const walk = (v: unknown, key?: string) => {
-    if (key && skip.has(key)) return;
-    if (typeof v === "string") out.push(v);
-    else if (Array.isArray(v)) v.forEach((x) => walk(x));
-    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) walk(x, k);
-  };
-  walk(section);
+  for (const b of blocks as Array<Record<string, unknown>>) {
+    if (b?.kind === "explain" && typeof b.text === "string") out.push(b.text);
+    if (b?.kind === "example") {
+      for (const v of [b.problem, b.answer]) if (typeof v === "string") out.push(v);
+      if (Array.isArray(b.steps)) out.push(...b.steps.filter((x): x is string => typeof x === "string"));
+    }
+  }
   return out.join(" ");
 }
 
@@ -437,7 +441,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     } : undefined;
     let packet: Packet | undefined;
     let openIssues: string[] = [];
-    for (const saved of [checkpoint.parts[hash], fromPrevious]) {
+    const autofixContext = { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds, teachingText: teachingTextOf(withoutFigures(lesson.sections[unit.sectionIndex])) };
+    // Review #228 (P2): a mentett (gyorsítótárból jövő) csomag is megkapja a determinisztikus rubrika-bővítést — modellhívás nélkül.
+    const fixSaved = (saved: unknown) => { if (!saved) return saved; try { return (deps.autofix ?? autofixBankPacket)(saved, autofixContext).packet; } catch { return saved; } };
+    for (const saved of [fixSaved(checkpoint.parts[hash]), fixSaved(fromPrevious)]) {
       const parsed = packetSchema.safeParse(saved);
       if (parsed.success && validate(parsed.data).length === 0) { packet = parsed.data; break; }
     }
@@ -500,7 +507,6 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         continue;
       }
       let candidate = response;
-      const autofixContext = { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds, teachingText: teachingTextOf(withoutFigures(lesson.sections[unit.sectionIndex])) };
       if (repairBase) {
         // Tételgyár T4′: a javítóválasz is megkapja a determinisztikus rubrika-bővítést az összefésülés ELŐTT — a korábbi körben
         // az eszköz által hozzáadott alakot a modell nem ismeri; enélkül a szóalak-megőrző őr hamis „törlést” látna.

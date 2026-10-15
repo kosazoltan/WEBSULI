@@ -41,11 +41,36 @@ function oppositeDirection(a: string, b: string): boolean {
     (from.some((s) => a.endsWith(s)) && to.some((s) => b.endsWith(s))) || (to.some((s) => a.endsWith(s)) && from.some((s) => b.endsWith(s))));
 }
 const NEGATIONS = new Set(["nem", "ne", "sem", "se"]);
-const commonPrefix = (a: string, b: string) => { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return i; };
 
 /**
- * A `text` (a fejezet tanítása) azon szóalakjai, amelyek a kifejezés UTOLSÓ szavával közös tövűek: a közös előtag ≥ 5 betű, és mindkét
- * oldalon legfeljebb 4 betű a toldalék; irányrag-ellentét és tagadószó kizárva. Többszavas kifejezésnél az előző szavak változatlanok.
+ * Review #228 (P1): közös előtag helyett VALÓDI toldalékolás — a „tanítás” és a „tanítvány” közös előtagja `tanit`, de a „vány” nem toldalék.
+ * Normalizált (ékezet nélküli) magyar inflexiós toldalékok: többes jel, birtokos személyjel, esetragok. A szótő a kifejezésből legfeljebb két
+ * toldalék levágásával áll elő (≥ 4 betűs tő), a jelölt alak = tő + legfeljebb két toldalék.
+ */
+const SUFFIXES = [
+  "ok", "ek", "ak", "k", "ot", "et", "at", "t", "a", "e", "ja", "je", "i", "ai", "ei", "jai", "jei", "uk", "juk", "unk", "om", "em", "am", "od", "ed", "ad",
+  "nak", "nek", "ban", "ben", "ba", "be", "bol", "rol", "tol", "ra", "re", "hoz", "hez", "nal", "nel", "val", "vel", "on", "en", "n", "ig", "ert", "kent", "ul",
+].sort((a, b) => b.length - a.length);
+function stripSuffixes(word: string, max = 2): string[] {
+  const roots = [word];
+  let current = [word];
+  for (let k = 0; k < max; k++) {
+    const next: string[] = [];
+    for (const w of current) for (const s of SUFFIXES) if (w.endsWith(s) && w.length - s.length >= 4) next.push(w.slice(0, -s.length));
+    roots.push(...next);
+    current = next;
+  }
+  return [...new Set(roots)];
+}
+function isSuffixChain(rest: string, max = 2): boolean {
+  if (rest === "") return true;
+  if (max === 0) return false;
+  return SUFFIXES.some((s) => rest.startsWith(s) && isSuffixChain(rest.slice(s.length), max - 1));
+}
+
+/**
+ * A `text` (a fejezet tanítása) azon szóalakjai, amelyek a kifejezés UTOLSÓ szavának toldalékolt alakjai: közös szótő (≥ 4 betű) + legfeljebb
+ * két valódi toldalék; irányrag-ellentét és tagadószó kizárva. Többszavas kifejezésnél az előző szavak változatlanok.
  */
 export function inflectedForms(term: string, text: string | undefined): string[] {
   if (!text) return [];
@@ -59,11 +84,11 @@ export function inflectedForms(term: string, text: string | undefined): string[]
     const n = normalizeAnswer(raw);
     if (n && !original.has(n)) original.set(n, raw.toLocaleLowerCase("hu"));
   }
+  const roots = stripSuffixes(last);
   const out = new Set<string>();
   for (const token of new Set(words(text))) {
     if (token === last || NEGATIONS.has(token) || /\d/.test(token)) continue;
-    const p = commonPrefix(token, last);
-    if (p < 5 || last.length - p > 4 || token.length - p > 4) continue;
+    if (!roots.some((root) => token.startsWith(root) && isSuffixChain(token.slice(root.length)))) continue;
     if (oppositeDirection(last, token)) continue;
     const shown = original.get(token) ?? token;
     out.add(head ? `${head} ${shown}` : shown);

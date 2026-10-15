@@ -45,3 +45,39 @@ test("autofix: csak hozzáad — a meglévő csoporttag és a minWords változat
   assert.deepEqual(fixed.tasks[0].required, [["termőjére"]]);
   assert.equal(fixed.tasks[0].minWords, 3);
 });
+
+test("review #228 (P1): valódi toldalékolás — a „tanítvány” nem a „tanítás” alakja; a „termőjére” → „termőre” igen", () => {
+  assert.deepEqual(inflectedForms("tanítás", "A tanítvány figyel."), []);
+  assert.deepEqual(inflectedForms("tanítás", "A tanítást a tanár végzi."), ["tanítást"]);
+  assert.deepEqual(inflectedForms("termőjére", "A virágpor a termőre kerül."), ["termőre"]);
+  assert.deepEqual(inflectedForms("magasság", "A háromszög magassága 4 cm."), ["magassága"]);
+});
+
+test("review #228 (P1): a tanításszöveg csak explain/example blokkból — a check blokk hibás opciója nem forrás", async () => {
+  const { teachingTextOf } = await import("../server/studio/experience-builder");
+  const text = teachingTextOf({ blocks: [
+    { kind: "explain", text: "A virágpor a termőre kerül." },
+    { kind: "example", problem: "Hová kerül?", steps: ["A bibére."], answer: "A termőre." },
+    { kind: "check", question: "Hová?", options: ["termésre", "termőre"], feedback: "termésre nem" },
+  ] });
+  assert.match(text, /termőre/);
+  assert.doesNotMatch(text, /termésre|Hová\?/);
+});
+
+test("review #228 (P2): a gyorsítótárból jövő csomag is megkapja a bővítést, modellhívás nélkül", async () => {
+  const { buildLessonExperience } = await import("../server/studio/experience-builder");
+  const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const concepts = [{ localId: "area", term: "Terület", definition: "A szorzat fele", quote: "T = a · m / 2", examWeight: "core" as const }];
+  let checkpoint: import("../server/studio/experience-builder").ExperienceCheckpoint | undefined;
+  await buildLessonExperience({ ...lesson, experience: undefined }, concepts, { call: async () => standardFusionFixture().experience!, save: async (cp) => { checkpoint = structuredClone(cp); } });
+  assert.ok(checkpoint);
+  const stripped = structuredClone(checkpoint!);
+  let removed = 0;
+  for (const part of Object.values(stripped.parts) as Array<{ tasks?: Array<{ required: string[][] }> }>) {
+    for (const t of part.tasks ?? []) t.required = t.required.map((g) => { const keep = g.filter((x) => !/^magasság(a|ot)$/.test(x)); removed += g.length - keep.length; return keep; });
+  }
+  assert.ok(removed > 0, "a fixture-ben volt automatikusan hozzáadott alak");
+  const rebuilt = await buildLessonExperience({ ...lesson, experience: undefined }, concepts, { checkpoint: stripped, call: async () => { throw new Error("modellhívás a gyorsítótár helyett"); } });
+  assert.ok(rebuilt.tasks.some((t) => t.required.some((g) => g.includes("magassága"))), "a bővítés a mentett csomagra is lefutott");
+});
