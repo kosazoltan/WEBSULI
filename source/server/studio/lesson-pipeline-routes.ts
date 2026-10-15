@@ -337,6 +337,8 @@ export type OneStepRunView = {
   resumeKind?: string;
   /** Elakadás-vezérlő V1: a program következő lépése (a döntési lépcső szerint). */
   nextRecovery?: { strategy: string; reason: string };
+  /** docs/specs/2026-10-15-hiba-gombok.md (E2): a piszkozat saját feltöltéses futása — folytatáskor a felület ezt követi. */
+  draftRunId?: string;
 };
 
 /**
@@ -348,6 +350,25 @@ export function draftSummaryOf(output: unknown, lessonPublished = false): OneSte
   if (lessonPublished || !o.lesson || !Array.isArray(o.lesson.sections) || o.htmlFileId) return null;
   const parts = o.experienceCheckpoint?.parts;
   return { teachingSections: o.lesson.sections.length, savedBankPackets: parts && typeof parts === "object" ? Object.keys(parts).length : 0 };
+}
+
+/**
+ * docs/specs/2026-10-15-hiba-gombok.md (E1): a térkép legújabb folytatható piszkozata — mentett lecke, nem publikált, nem sikeresen lezárt,
+ * nem félretett, 7 napon belüli, és ugyanaz a tanári kérés. `null`, ha nincs.
+ */
+export async function resumableDraftFor(mapId: string, instruction: string | undefined): Promise<string | null> {
+  const { rows } = await db.execute(sql`SELECT j.id, j.output->>'ownerInstruction' AS instruction FROM studio_jobs j LEFT JOIN lessons l ON l.id = j.lesson_id
+    WHERE j.map_id = ${mapId} AND j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND j.created_at > now() - interval '7 days'
+      AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing')
+    ORDER BY j.created_at DESC LIMIT 1`);
+  const row = rows[0] as { id: string; instruction: string | null } | undefined;
+  return row && (row.instruction ?? undefined) === (instruction || undefined) ? String(row.id) : null;
+}
+
+/** E3: kifejezett újragyártásnál a forrás régi, befejezetlen piszkozatai félreteszve (a vezérlő és a söprés nem folytatja őket). */
+export async function supersedeDraftsOf(mapId: string): Promise<void> {
+  await db.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb) || '{"recoveryState":"superseded"}'::jsonb
+    WHERE map_id = ${mapId} AND status <> 'ok' AND output ? 'lesson'`);
 }
 
 /** The progress poll's view of a run, or null when it is unknown or expired. */
@@ -367,12 +388,27 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
   }
   let draft: OneStepDraft | null = null;
   let stop: { resumable: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string } } | null = null;
-  if (run.phase === "error" && run.jobId) {
+  // A piszkozat-választásnál (draft) ugyanaz a nézet, mint hibánál: mentett részek, folytathatóság, a piszkozat saját futása.
+  let draftRunId: string | undefined;
+  if (run.phase === "draft" && run.jobId) {
+    const [other] = await db.select({ id: oneStepRuns.id }).from(oneStepRuns).where(and(eq(oneStepRuns.jobId, run.jobId), ne(oneStepRuns.id, runId))).orderBy(desc(oneStepRuns.updatedAt)).limit(1);
+    draftRunId = other?.id;
+  }
+  if ((run.phase === "error" || run.phase === "draft") && run.jobId) {
     const [job] = await db.select({ output: studioJobs.output, publishedAt: lessons.publishedAt, step: studioJobs.step, status: studioJobs.status,
       error: studioJobs.error, lessonId: studioJobs.lessonId }).from(studioJobs)
       .leftJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, run.jobId)).limit(1);
+    // E2 tartalék: ha a piszkozat jobja (a folytatás után) már halad vagy elkészült, a választó futás a job állapotát mutatja —
+    // akkor is, ha a régi futás sora (draftRunId) már nincs meg; így a felület nem ragad a választásnál.
+    if (run.phase === "draft" && job && job.status !== "error" && job.step !== "error") {
+      const lessonId = job.step === "done" ? job.lessonId : null;
+      const [published] = lessonId ? await db.select({ htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, lessonId)).limit(1) : [];
+      return { phase: (job.step === "done" ? "done" : job.step) as OneStepPhase, detail: "Folytatás a mentett részeredményekből.", error: null, mapId: run.mapId, jobId: run.jobId,
+        lessonId, htmlFileId: published?.htmlFileId ?? null, ...(draftRunId ? { draftRunId } : {}) };
+    }
     draft = draftSummaryOf(job?.output, !!job?.publishedAt);
-    const { visits, executions } = await workflowVisitsOf(runId);
+    // A piszkozat-választásnál a piszkozat jobjának saját workflow-ja számít (az új futásnak még nincs gyártási naplója).
+    const { visits, executions } = run.phase === "draft" ? await workflowVisitsOfJob(run.jobId) : await workflowVisitsOf(runId);
     const output = (job?.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown; gateRecoveryAttempt?: unknown };
     // Review #233/#234: a felület ugyanazzal a (régi mezőkből is visszafejtett) történettel tervez, mint a végrehajtás; a gomb csak akkor
     // látszik, ha a következő fok a mentett részekből tényleg végrehajtható.
@@ -395,6 +431,7 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     };
   }
   return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}),
+    ...(draftRunId ? { draftRunId } : {}),
     ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.resumeKind ? { resumeKind: stop.resumeKind } : {}),
       ...(stop.nextRecovery ? { nextRecovery: stop.nextRecovery } : {}) } : {}) };
 }
@@ -405,6 +442,13 @@ async function workflowVisitsOf(runId: string): Promise<{ visits: Array<{ step: 
   const row = result.rows[0] as { visits?: unknown; executions?: unknown } | undefined;
   const visits = Array.isArray(row?.visits) ? row!.visits.filter((v): v is { step: string; state: string; error?: string } => !!v && typeof v.step === "string" && typeof v.state === "string") : [];
   return { visits, executions: typeof row?.executions === "number" ? row.executions : 0 };
+}
+
+/** A job legutóbbi workflow-futásának látogatásai és végrehajtásszáma (a piszkozat-választás nézetéhez). */
+async function workflowVisitsOfJob(jobId: string): Promise<{ visits: Array<{ step: string; state: string; error?: string }>; executions: number }> {
+  const result = await db.execute(sql`SELECT id FROM lesson_workflow_runs WHERE id = ${jobId} OR snapshot->>'resourceId' = ${jobId} ORDER BY created_at DESC LIMIT 1`);
+  const row = result.rows[0] as { id?: string } | undefined;
+  return row?.id ? workflowVisitsOf(String(row.id)) : { visits: [], executions: 0 };
 }
 
 /** GET /api/studio/lessons/one-step/:runId — the progress poll. */
@@ -604,6 +648,19 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
       }
       gapNote = curated.note;
     }
+  }
+
+  // 2b′) docs/specs/2026-10-15-hiba-gombok.md (tulajdonosi javaslat): a program soha nem kezd újra észrevétlenül — ha ugyanabból a
+  // forrásból (ugyanazzal a kéréssel) folytatható piszkozat van, a gyártás nem indul, a felület választást kér (folytatás / újragyártás / új).
+  if (!data.forceNew) {
+    const draft = await resumableDraftFor(mapId, instruction);
+    if (draft) {
+      updateRun(runId, { phase: "draft", mapId, jobId: draft, detail: "Ebből a forrásból van megszakadt piszkozat — folytatható vagy újragyártható." });
+      return;
+    }
+  } else {
+    // E3: kifejezett újragyártás — a régi piszkozatok félreteszve (a vezérlő és a söprés nem folytatja őket: nincs dupla gyártás).
+    await supersedeDraftsOf(mapId);
   }
 
   // 2c) Spec 2026-09-23: documented source corrections (teacher's request / photo misreads) before planning.

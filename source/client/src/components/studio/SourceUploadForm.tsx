@@ -170,13 +170,14 @@ export function SourceUploadForm({
     } catch { /* The live status remains available without browser storage. */ }
   }, [runId, persistRun]);
   const oneStep = useMutation({
-    mutationFn: () =>
+    // docs/specs/2026-10-15-hiba-gombok.md (E3): `forceNew` = kifejezett újragyártás ugyanabból a forrásból (a megszakadt piszkozat helyett).
+    mutationFn: (opts?: { forceNew?: boolean }) =>
       apiRequest<{ runId: string }>(
         "POST",
         "/api/studio/lessons/one-step",
         // The source determines subject and grade; the author supplies files/title and an optional request
         // (spec 2026-09-23: an explicit grade in the request wins over the source estimate).
-        { ...(title.trim() !== "" ? { title: title.trim() } : {}), ...(instructions.trim() !== "" ? { instructions: instructions.trim() } : {}), files },
+        { ...(title.trim() !== "" ? { title: title.trim() } : {}), ...(instructions.trim() !== "" ? { instructions: instructions.trim() } : {}), files, ...(opts?.forceNew ? { forceNew: true } : {}) },
       ),
     onSuccess: (r) => {
       prevFinished.current = false;
@@ -199,24 +200,25 @@ export function SourceUploadForm({
     stoppedAt?: string;
     resumeKind?: string;
     nextRecovery?: { strategy: string; reason: string };
+    draftRunId?: string;
   }>({
     queryKey: ["/api/studio/lessons/one-step", runId],
     queryFn: async () => {
-      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string } }>("GET", `/api/studio/lessons/one-step/${runId}`);
+      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string }; draftRunId?: string }>("GET", `/api/studio/lessons/one-step/${runId}`);
       if (result.phase === "done" && !result.htmlFileId) throw new Error("A futás lezárult, de nincs elérhető, közzétett tananyag. A készítést ellenőrizni kell.");
       return result;
     },
     enabled: runId !== null,
     refetchInterval: (query) => {
       const phase = query.state.data?.phase;
-      return phase === "done" || phase === "error" || phase === "parked" ? false : 2500;
+      return phase === "done" || phase === "error" || phase === "parked" || phase === "draft" ? false : 2500;
     },
     // #166 — a poll háttér-fülben/fókuszvesztéskor is fusson: e nélkül a jelző
     // "befagyott" (OCR 8/10), miközben a szerver rég továbbhaladt.
     refetchIntervalInBackground: true,
   });
 
-  const runFinished = run.data?.phase === "done" || run.data?.phase === "error" || run.data?.phase === "parked";
+  const runFinished = run.data?.phase === "done" || run.data?.phase === "error" || run.data?.phase === "parked" || run.data?.phase === "draft";
   const prevFinished = useRef(false);
   useEffect(() => {
     if (runFinished && !prevFinished.current) {
@@ -227,6 +229,8 @@ export function SourceUploadForm({
         setTitle("");
         setInstructions("");
         if (run.data.mapId) onCreated?.(run.data.mapId);
+      } else if (run.data?.phase === "draft") {
+        toast({ title: "Ebből a forrásból van megszakadt piszkozat", description: "Válassz: folytatás a megszakadt ponttól, újragyártás, vagy új tananyag." });
       } else {
         toast({ title: "Az új tananyag még nem készült el", description: run.data?.error ?? run.data?.detail ?? "A gyártás megállt.", variant: "destructive" });
       }
@@ -242,6 +246,8 @@ export function SourceUploadForm({
     mutationFn: (jobId: string) => apiRequest("POST", `/api/studio/jobs/${jobId}/resume`),
     onSuccess: async () => {
       toast({ title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább." });
+      // E2: a piszkozat-választásból indított folytatás a piszkozat saját futását követi (ott frissül a haladásjelző).
+      if (run.data?.phase === "draft" && run.data.draftRunId) { prevFinished.current = false; setRunId(run.data.draftRunId); return; }
       // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D7): a hibánál leállt folyamatábra-lekérdezés újraindul.
       void queryClient.invalidateQueries({ queryKey: ["/api/studio/workflows", runId] });
       await run.refetch();
@@ -344,7 +350,7 @@ export function SourceUploadForm({
           <Button
             className="min-h-11 gap-1"
             disabled={oneStepBlocked !== null || busy}
-            onClick={() => oneStep.mutate()}
+            onClick={() => oneStep.mutate({})}
             data-testid="one-step-submit"
           >
             {oneStep.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
@@ -387,6 +393,8 @@ export function SourceUploadForm({
             <p className="text-sm font-medium">
               {run.data.phase === "done"
                 ? "A tananyag elkészült ✔"
+                : run.data.phase === "draft"
+                  ? "Ebből a forrásból van megszakadt piszkozat"
                 : run.data.phase === "error"
                   ? "A gyártás megállt hibával"
                   : run.data.phase === "parked"
@@ -394,7 +402,7 @@ export function SourceUploadForm({
                     : "Tananyag készül…"}
             </p>
             <CreationProgress run={run.data} />
-            {run.data.phase === "error" && run.data.draft && (
+            {(run.data.phase === "error" || run.data.phase === "draft") && run.data.draft && (
               <p className="text-sm text-muted-foreground" data-testid="one-step-draft">
                 Mentett piszkozat: {run.data.draft.teachingSections} fejezetnyi tananyag, {run.data.draft.savedBankPackets} kész gyakorlócsomag.
                 {run.data.jobId && run.data.resumable ? ` ${RESUME_TEXT[run.data.resumeKind ?? ""] ?? RESUME_TEXT.bank}` : ""}
@@ -406,17 +414,30 @@ export function SourceUploadForm({
                 A program következő lépése: {run.data.nextRecovery.reason}.
               </p>
             )}
-            {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked") && (
-              <div className="flex flex-wrap items-center gap-2 mt-1">
+            {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked" || run.data.phase === "draft") && (
+              <div className="flex flex-wrap items-center gap-2 mt-1" data-testid="one-step-actions">
                 {run.data.phase === "done" && run.data.htmlFileId && (
                   <Button asChild size="sm" data-testid="one-step-open-lesson">
                     <a href={`/preview/${run.data.htmlFileId}`}>Lecke megnyitása</a>
                   </Button>
                 )}
-                {run.data.phase === "error" && run.data.jobId && run.data.resumable && (
+                {/* docs/specs/2026-10-15-hiba-gombok.md (tulajdonosi javaslat): három külön döntés — soha nem kezd újra észrevétlenül. */}
+                {(run.data.phase === "error" || run.data.phase === "draft") && run.data.jobId && run.data.resumable && (
                   <Button size="sm" className="min-h-11" data-testid="one-step-resume" disabled={resume.isPending}
                     onClick={() => startResume(run.data!.jobId!)}>
-                    {resume.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Folytatás a mentett részekből"}
+                    {resume.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Folytatás a megszakadt ponttól"}
+                  </Button>
+                )}
+                {(run.data.phase === "error" || run.data.phase === "draft") && files.length > 0 && (
+                  <Button size="sm" variant="secondary" className="min-h-11" data-testid="one-step-remake" disabled={oneStep.isPending}
+                    onClick={() => oneStep.mutate({ forceNew: true })}>
+                    Újragyártás ugyanabból a forrásból
+                  </Button>
+                )}
+                {(run.data.phase === "error" || run.data.phase === "draft") && (
+                  <Button size="sm" variant="outline" className="min-h-11" data-testid="one-step-new"
+                    onClick={() => { setRunId(null); setFiles([]); setTitle(""); setInstructions(""); }}>
+                    Új tananyag
                   </Button>
                 )}
                 {(run.data.phase === "parked" || run.data.phase === "error") && run.data.mapId && onReview && <Button variant="outline" size="sm" data-testid="one-step-review-source" onClick={() => onReview(run.data!.mapId!)}>
