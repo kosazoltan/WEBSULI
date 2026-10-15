@@ -61,3 +61,41 @@ test("a HTML-modernizálás minden nem-túlterheléses szolgáltatói hibánál 
   const improve = readFileSync(new URL("../server/improveAsync.ts", import.meta.url), "utf8");
   assert.match(improve, /if \(!controller\.signal\.aborted && currentModelIndex < MODEL_CHAIN\.length - 1 && attempt < MAX_ATTEMPTS\) \{\s*currentModelIndex\+\+;\s*improveProvider = createProvider\(currentModelIndex\);/);
 });
+
+// Tulajdonosi döntés 2026-10-15: a HTML-okosítás érvénytelen kimenete egyszer a tartalékon újragenerálódik.
+test("html workflow: a szerző a kapu után vagy önmaga után még egyszer jöhet (legfeljebb 2), harmadszor nem; más mód változatlan", async () => {
+  const { workflowDefinition } = await import("../shared/lesson-workflow");
+  const html = workflowDefinition("html");
+  const author = html.steps.find((s) => s.id === "author")!;
+  assert.deepEqual(author.after, ["source", "author", "gate"]);
+  assert.equal(author.maxVisits, 2);
+  assert.equal(html.steps.find((s) => s.id === "gate")!.maxVisits, 2);
+  assert.equal(workflowDefinition("apply").steps.find((s) => s.id === "author")?.maxVisits ?? 1, 1);
+
+  const { executeWorkflow, workflowPhase } = await import("../server/workflows/engine");
+  const { memoryWorkflows } = await import("./helpers/workflow-store");
+  const { store } = memoryWorkflows();
+  const view = await executeWorkflow(store, { id: "html-retry", owner: "a", mode: "html" }, async () => {
+    await workflowPhase("source"); await workflowPhase("author"); await workflowPhase("gate");
+    await workflowPhase("author"); await workflowPhase("gate"); await workflowPhase("save"); await workflowPhase("readback");
+    return { kind: "candidate" as const, id: "ok" };
+  });
+  assert.equal(view.state, "ready");
+  const { store: store2 } = memoryWorkflows();
+  const failed = await executeWorkflow(store2, { id: "html-third", owner: "a", mode: "html" }, async () => {
+    await workflowPhase("source"); await workflowPhase("author"); await workflowPhase("author"); await workflowPhase("author");
+    return { kind: "candidate" as const, id: "x" };
+  }).catch((e: Error) => e);
+  assert.match(String((failed as { error?: string }).error ?? (failed as Error).message), /keret|Nem megengedett/);
+});
+
+test("improve: az érvénytelen kimenet (üres, rövid, nem HTML, záró kapu) ImproveOutputError, és a futtató egyszer a tartalékon újragenerál", () => {
+  // Az improve-folyamat adatbázist és élő modellt ér el — a bekötés forrás-szinten rögzítve (meglévő R1-minta).
+  const src = readFileSync(new URL("../server/improveAsync.ts", import.meta.url), "utf8");
+  for (const msg of ["Az AI nem adott vissza választ", "A generált HTML túl rövid vagy üres", "A generált válasz nem tartalmaz érvényes HTML struktúrát"]) {
+    assert.ok(src.includes(`throw outputError('${msg}')`), msg);
+  }
+  assert.match(src, /throw outputError\(`A javított tananyag nem ment át a záró ellenőrzésen/);
+  assert.match(src, /if \(!\(error instanceof ImproveOutputError\) \|\| !error\.canFallback\) throw error;[\s\S]{0,300}startModelIndex: error\.modelIndex \+ 1, isOutputRetry: true/);
+  assert.match(src, /if \(error instanceof ImproveOutputError && error\.canFallback && opts\.retryOnOutputFailure\) throw error;/, "újrapróba előtt a rekord nem kerül hibaállapotba");
+});
