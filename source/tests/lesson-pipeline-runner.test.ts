@@ -104,6 +104,18 @@ test("spec 2026-10-15 (D4): a kapu bank-eredetű megállása a mentett leckébő
   await assert.rejects(retryFailedGate("gate-retry", visit, deps), /sorszám/);
 });
 
+test("spec 2026-10-15-tetelgyar T0.4: a lektor-bizonyíték eltérése a lektor újrafuttatásával folytatható (a kör nem nő)", async () => {
+  const deps = makeDeps("{}");
+  const error = "A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges. (a lektorált bemenet eltér a mostanitól)";
+  const output = { lesson: standardFusionFixture() };
+  deps.store.seed({ id: "review-retry", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: structuredClone(output) });
+  await retryFailedGate("review-retry", { step: "gate", state: "error", error }, deps);
+  const job = deps.store.jobs.get("review-retry")!;
+  assert.equal(job.step, "lektor"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
+  assert.deepEqual(job.output, { ...output, previousGateError: error, gateRecoveryAttempt: 1 });
+  assert.equal(deps.calls.length, 0);
+});
+
 test("bank resume recognizes redacted long errors but rejects malformed retry state", async () => {
   const deps = makeDeps("{}");
   const error = 'A(z) "author" lépés modellhívása hibára futott: https://example.invalid/request ' + "provider detail ".repeat(200);

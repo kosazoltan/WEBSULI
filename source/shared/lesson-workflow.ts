@@ -74,6 +74,10 @@ export type WorkflowView = {
   result?: { kind: "candidate" | "material" | "proposal" | "map"; id: string }; revision: number;
   executions?: number;
   resourceId?: string;
+  /** Spec 2026-10-15-tetelgyar T0.4b: kifejezett folytatás egyszer használatos visszaéle (a hibás látogatás hibaként marad a naplóban). */
+  resumeEdge?: { from: string; to: string; reason: string; at: number };
+  /** T0.4b: a felhasznált kifejezett folytatási visszaélek (audit: az utóellenőrzés ezeket elfogadja, a napló igazolja). */
+  resumeEdges?: Array<{ from: string; to: string; reason: string; at: number }>;
   skill?: SkillSnapshot;
   skillFindings?: SkillFinding[];
   /** Spec 2026-09-30 (B8, H11): az „unknown” osztályú hibák redaktált szövegmintája a FUTÁS naplójában (emberi átnézésre); a tanult skillbe nem kerül. */
@@ -96,7 +100,8 @@ export function assertWorkflowStep(run: WorkflowView, id: string): WorkflowStep 
   if (run.state !== "running") throw new Error("Csak aktív futás léptethető tovább.");
   const step = run.definition.steps.find(s => s.id === id);
   const last = run.visits.at(-1);
-  if (last && (last.state === "error" || last.state === "waiting")) throw new Error("Befejezetlen lépés után csak annak kifejezett folytatása megengedett.");
+  const explicitResume = last?.state === "error" && run.resumeEdge?.from === last.step && run.resumeEdge.to === id;
+  if (last && (last.state === "error" || last.state === "waiting") && !explicitResume) throw new Error("Befejezetlen lépés után csak annak kifejezett folytatása megengedett.");
   const previous = run.visits.at(-1)?.step ?? "start";
   if (!step || !step.after.includes(previous)) throw new Error(`Nem megengedett folyamatlépés: ${previous} → ${id}.`);
   if (workflowVisitsLeft(run, id) <= 0) throw new Error(`Elfogyott a lépés javítási kerete: ${step.label}.`);

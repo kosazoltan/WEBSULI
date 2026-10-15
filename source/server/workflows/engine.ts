@@ -63,6 +63,25 @@ export async function workflowEnsureRepairBudget(reason: string): Promise<boolea
   logger.warn(`[WORKFLOW] Dinamikus javítási keret (${view.id}): +1 látogatás (${exhausted.join(", ")}) — ${reason}; ${view.repairGrants.length}/${REPAIR_BUDGET_GRANTS}`);
   return REPAIR_PATH.every((id) => workflowVisitsLeft(view, id) > 0);
 }
+/**
+ * Spec 2026-10-15-tetelgyar T0.4: kifejezett folytatásnál a hibával megállt lépésből EGY visszaél engedélyezhető (pl. kapu → lektor,
+ * amikor a lektor-bizonyíték eltér) — a definíció a futásban mentődik és naplózódik, mint a dinamikus javítási keret. Csak folytatásban,
+ * csak ha az utolsó látogatás a `from` lépés hibája; különben false (a hívó a régi szabály szerint dönt). Futáson kívül: true.
+ */
+export async function workflowAllowResumeEdge(from: string, to: string, reason: string): Promise<boolean> {
+  const ctx = context.getStore();
+  if (!ctx) return true;
+  const view = ctx.record.view;
+  const last = view.visits.at(-1);
+  if (!ctx.continuation || last?.step !== from || last.state !== "error") return false;
+  if (!view.definition.steps.find((s) => s.id === to)?.after.includes(from)) {
+    view.definition = { ...view.definition, steps: view.definition.steps.map((step) => step.id === to ? { ...step, after: [...step.after, from] } : step) };
+  }
+  view.resumeEdge = { from, to, reason, at: Date.now() };
+  await persist(ctx);
+  logger.warn(`[WORKFLOW] Folytatási visszaél (${view.id}): ${from} → ${to} — ${reason}`);
+  return true;
+}
 export const workflowSkillVersion = () => context.getStore()?.record.view.skill?.version ?? preparationSkill.getStore()?.snapshot.version;
 /** Spec 2026-09-30 (B0): a futás pillanatképében rögzített utasításcsomag-verzió; azon kívül undefined (= élő). */
 export const workflowRuntimeVersion = () => context.getStore()?.record.view.skill?.runtimeVersion ?? preparationSkill.getStore()?.snapshot.runtimeVersion;
@@ -207,6 +226,12 @@ export async function workflowPhase(step: string): Promise<void> {
   const resuming = ctx.continuation && previous?.step === step && previous.state !== "done";
   if (!resuming) assertWorkflowStep(ctx.record.view, step);
   ctx.continuation = false;
+  // T0.4b: a kifejezett folytatási visszaél egyszer használatos.
+  const edge = ctx.record.view.resumeEdge;
+  if (edge) {
+    if (previous?.step === edge.from && step === edge.to) ctx.record.view.resumeEdges = [...(ctx.record.view.resumeEdges ?? []), edge];
+    delete ctx.record.view.resumeEdge;
+  }
   if (previous?.state === "running") { previous.state = "done"; previous.finishedAt = Date.now(); }
   ctx.record.view.visits.push({ step, attempt: ctx.record.view.visits.filter(v => v.step === step).length + 1,
     startedAt: Date.now(), state: "running", cacheHits: 0 });
