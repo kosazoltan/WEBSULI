@@ -110,3 +110,16 @@ export function answerKeysFor(ctx: AnswerKeyContext, call: AnswerKeyCaller, warn
     return out;
   };
 }
+
+export type AnswerKeyReportEntry = { sectionIndex: number; itemId: string; calibration: string[]; correctFails: string[] };
+
+/**
+ * Review #239 (P2): a job jelentése a VÉGLEGES bankhoz igazodik. A most újraépített tételek bejegyzése az új; a checkpointból átvett
+ * (most nem tesztelt) tételek korábbi bejegyzése megmarad; a már nem létező tételeké kiesik.
+ */
+export function mergeAnswerKeyReport(prior: unknown, fresh: AnswerKeyReportEntry[], finalTaskIds: readonly string[]): AnswerKeyReportEntry[] {
+  const final = new Set(finalTaskIds);
+  const rebuilt = new Set(fresh.map((r) => r.itemId));
+  const old = Array.isArray(prior) ? (prior as AnswerKeyReportEntry[]).filter((r) => r && typeof r.itemId === "string") : [];
+  return [...old.filter((r) => final.has(r.itemId) && !rebuilt.has(r.itemId)), ...fresh.filter((r) => final.has(r.itemId))];
+}

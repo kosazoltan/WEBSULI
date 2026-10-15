@@ -80,3 +80,12 @@ test("E3: a tesztíró hibája nem állítja meg a csomagot; a workflow-lízing 
   assert.match(warnings[0], /tesztíró hívása hibázott/);
   await assert.rejects(writeAnswerKeys([task()], { concepts: [] }, async () => { throw new WorkflowConflict("lízing"); }, new Map()), WorkflowConflict);
 });
+
+test("review #239: a jelentés a végleges bankhoz igazodik (átvett megmarad, újraépített friss, megszűnt kiesik)", async () => {
+  const { mergeAnswerKeyReport } = await import("../server/studio/answer-key-writer");
+  const e = (itemId: string, tag: string) => ({ sectionIndex: 0, itemId, calibration: [tag], correctFails: [] });
+  const prior = [e("kept", "régi"), e("rebuilt", "régi"), e("gone", "régi")];
+  const merged = mergeAnswerKeyReport(prior, [e("rebuilt", "új"), e("trimmed", "új")], ["kept", "rebuilt", "other"]);
+  assert.deepEqual(merged.map((r) => `${r.itemId}:${r.calibration[0]}`), ["kept:régi", "rebuilt:új"]);
+  assert.deepEqual(mergeAnswerKeyReport("nem tömb", [], ["x"]), []);
+});
