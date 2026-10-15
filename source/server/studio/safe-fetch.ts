@@ -67,12 +67,16 @@ export function isPublicAddress(ip: string): boolean {
   if (h.slice(0, 5).every((x) => x === 0) && (h[5] === 0xffff || h[5] === 0)) {
     return isPublicV4(`${h[6] >> 8}.${h[6] & 0xff}.${h[7] >> 8}.${h[7] & 0xff}`);
   }
-  if ((h[0] & 0xfe00) === 0xfc00) return false; // fc00::/7 egyedi helyi
-  if ((h[0] & 0xffc0) === 0xfe80) return false; // fe80::/10 link-local
-  if ((h[0] & 0xff00) === 0xff00) return false; // ff00::/8 multicast
+  // Review #222: csak a globális unicast (2000::/3) engedett — ez kizárja a site-local fec0::/10, az egyedi helyi fc00::/7, a
+  // link-local fe80::/10, a multicast ff00::/8, a NAT64 64:ff9b::/96 és a discard 100::/64 tartományt is.
+  if ((h[0] & 0xe000) !== 0x2000) return false;
+  if (h[0] === 0x2001 && h[1] === 0x0000) return false; // 2001::/32 Teredo (beágyazott IPv4)
+  if (h[0] === 0x2001 && h[1] === 0x0002 && h[2] === 0x0000) return false; // 2001:2::/48 benchmark
+  if (h[0] === 0x2001 && (h[1] & 0xfff0) === 0x0010) return false; // 2001:10::/28 ORCHID
+  if (h[0] === 0x2001 && (h[1] & 0xfff0) === 0x0020) return false; // 2001:20::/28 ORCHIDv2
   if (h[0] === 0x2001 && h[1] === 0x0db8) return false; // 2001:db8::/32 dokumentációs
-  if (h[0] === 0x0064 && h[1] === 0xff9b) return false; // 64:ff9b::/96 NAT64 (beágyazott IPv4 — biztonságból tiltva)
-  if (h[0] === 0x0100 && h[1] === 0 && h[2] === 0 && h[3] === 0) return false; // 100::/64 discard
+  if (h[0] === 0x2002) return false; // 2002::/16 6to4 (beágyazott IPv4)
+  if (h[0] === 0x3fff && (h[1] & 0xf000) === 0x0000) return false; // 3fff::/20 dokumentációs
   return true;
 }
 
@@ -154,13 +158,23 @@ export async function fetchPublicPage(raw: string, opts: {
 } = {}): Promise<PublicPage> {
   const timeoutMs = opts.timeoutMs ?? 10_000, maxBytes = opts.maxBytes ?? 2_000_000, maxRedirects = opts.maxRedirects ?? 3;
   const lookup = opts.lookup ?? defaultLookup, request = opts.request ?? defaultRequest;
+  // Review #222: ABSZOLÚT határidő a teljes műveletre (DNS + minden átirányítás + törzsolvasás) — a socket-tétlenségi időkorlát
+  // egy lassan csepegtető oldalnál nem véd; lejáratkor a várakozás és az aktív kérés is megszakad.
+  const deadline = AbortSignal.timeout(timeoutMs);
+  const signal = opts.signal ? AbortSignal.any([opts.signal, deadline]) : deadline;
+  const abortable = <T>(promise: Promise<T>) => new Promise<T>((resolve, reject) => {
+    if (signal.aborted) { reject(signal.reason ?? new Error("Megszakítva.")); return; }
+    const onAbort = () => reject(signal.reason ?? new Error("Megszakítva."));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then((value) => { signal.removeEventListener("abort", onAbort); resolve(value); }, (error) => { signal.removeEventListener("abort", onAbort); reject(error); });
+  });
   let current = raw;
   for (let redirects = 0; ; redirects++) {
     const url = checkFetchUrl(current);
     const host = url.hostname.replace(/^\[|\]$/g, "");
-    const addresses = await lookup(host);
+    const addresses = await abortable(lookup(host));
     if (!addresses.length || addresses.some((a) => !isPublicAddress(a.address))) throw new Error(`Nem nyilvános címre oldódik fel: ${host}`);
-    const response = await request(url, addresses[0], timeoutMs, opts.signal);
+    const response = await abortable(request(url, addresses[0], timeoutMs, signal));
     if (response.status >= 300 && response.status < 400) {
       response.destroy();
       const location = response.headers.location;
@@ -178,6 +192,7 @@ export async function fetchPublicPage(raw: string, opts: {
     const chunks: Uint8Array[] = [];
     let size = 0;
     for await (const chunk of response.body) {
+      if (signal.aborted) { response.destroy(); throw new Error(`Időtúllépés (${timeoutMs} ms): ${url.href}`); }
       size += chunk.byteLength;
       if (size > maxBytes) { response.destroy(); throw new Error(`Túl nagy oldal (> ${maxBytes} bájt): ${url.href}`); }
       chunks.push(chunk);

@@ -105,6 +105,70 @@ test("gatherWebSources: a Claude-gyűjtés hibájánál (külső megszakítás �
   // A Claude-gyűjtés élő SDK-útja nem mockolható hálózat nélkül — a feltételek forrás-szinten rögzítve (meglévő R1-minta).
   const src = readFileSync(new URL("../server/studio/web-research-runner.ts", import.meta.url), "utf8");
   assert.match(src, /return await gatherWebSourcesClaude\(input, observer\);/);
-  assert.match(src, /const fallback = crossFamilyFallback\(primary\);\s*if \(observer\.signal\?\.aborted \|\| !fallback \|\| !studioModelReady\(fallback\)\) throw error;/);
+  // Review #222: a lease-hiba (WorkflowConflict) nem indít tartalékot; a kulcs és a külső megszakítás feltétele marad.
+  assert.match(src, /if \(error instanceof WorkflowConflict\) throw error;\s*if \(observer\.signal\?\.aborted \|\| !fallback \|\| !studioModelReady\(fallback\)\) throw error;/);
+  assert.match(src, /if \(error instanceof WebResearchFailure \|\| error instanceof WorkflowConflict\) throw error;/, "a Claude-út nem fedi el a lease-hibát");
   assert.match(src, /gatherWebSourcesGpt\(input, \{ model: fallback, signal: observer\.signal, onEvent: observer\.onEvent \}\)/);
+});
+
+// ---------------- Review #222 ----------------
+test("review #222: IPv6 — csak globális unicast; site-local, dokumentációs (3fff::/20), benchmark, Teredo, 6to4, ORCHID tiltva", () => {
+  for (const ip of ["2606:4700:4700::1111", "2a00:1450:4001:82a::200e", "2001:4860:4860::8888"]) assert.equal(isPublicAddress(ip), true, ip);
+  for (const ip of ["fec0::1", "3fff::1", "3fff:0fff::1", "2001:2::1", "2001::1", "2002:a00:1::1", "2001:10::1", "2001:20::1", "4000::1", "1000::1"]) {
+    assert.equal(isPublicAddress(ip), false, ip);
+  }
+});
+
+test("review #222: site-local címre oldódó gépnév és átirányítás is elutasítva", async () => {
+  const request: RawRequest = async (url) => url.pathname === "/ugras" ? response(302, { location: "https://belso6.example.org/" }) : response(200, { "content-type": "text/html" }, "<p>x</p>");
+  const lookup = async (host: string) => host.startsWith("belso6") ? [{ address: "fec0::10", family: 6 }] : [{ address: "93.184.216.34", family: 4 }];
+  await assert.rejects(fetchPublicPage("https://belso6.example.org/", { lookup, request }), /Nem nyilvános/);
+  await assert.rejects(fetchPublicPage("https://www.nkp.hu/ugras", { lookup, request }), /Nem nyilvános/);
+});
+
+test("review #222: abszolút határidő — lassan csepegtető törzs és lefagyó DNS is megszakad", async () => {
+  const slowBody: RawResponse = {
+    status: 200, headers: { "content-type": "text/html" }, destroy: () => undefined,
+    body: (async function* () { for (let i = 0; i < 100; i++) { await new Promise((r) => setTimeout(r, 20)); yield new TextEncoder().encode("<p>x</p>"); } })(),
+  };
+  const started = Date.now();
+  await assert.rejects(fetchPublicPage("https://www.nkp.hu/lassu", { timeoutMs: 150, lookup: publicLookup, request: async () => slowBody }), /Időtúllépés|abort|timeout/i);
+  assert.ok(Date.now() - started < 1500, "a határidő a teljes műveletre vonatkozik");
+  await assert.rejects(fetchPublicPage("https://www.nkp.hu/dns", { timeoutMs: 100, lookup: () => new Promise(() => undefined), request: async () => slowBody }), /abort|timeout|Időtúllépés/i);
+});
+
+test("review #222: a GPT-keresés az előzmény első témáját és a kéréseket kapja; a checkpoint-kulcs beszélgetésenként eltér", async () => {
+  const { gptGatherRequest, gptGatherCheckpointInput } = await import("../server/studio/web-gather-gpt");
+  const input = { message: "igen, készítsd el", classroom: 5, conversationHistory: [{ role: "user", content: "Törtek összeadása 5. osztály" }, { role: "assistant", content: "Rendben" }] } as never;
+  const req = gptGatherRequest(input);
+  assert.equal(req.topicSeed, "Törtek összeadása 5. osztály");
+  assert.match(req.request, /Törtek összeadása 5\. osztály[\s\S]*igen, készítsd el/);
+  const other = gptGatherCheckpointInput({ message: "igen, készítsd el", classroom: 5, conversationHistory: [{ role: "user", content: "Fotoszintézis" }] } as never, "gpt-6.1-sol");
+  assert.notDeepEqual(gptGatherCheckpointInput(input, "gpt-6.1-sol"), other);
+});
+
+test("review #222: folytatáskor a mentett GPT-forrás nyer (nincs új hálózati hívás), és a futás folytatható", async (t) => {
+  const { executeWorkflow, workflowPhase } = await import("../server/workflows/engine");
+  const { memoryWorkflows } = await import("./helpers/workflow-store");
+  const { gatherWebSources, hasSavedResearchTurn } = await import("../server/studio/web-research-runner");
+  const before = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  process.env.AI_INTEGRATIONS_OPENAI_API_KEY = "test-placeholder";
+  t.after(() => { if (before === undefined) delete process.env.AI_INTEGRATIONS_OPENAI_API_KEY; else process.env.AI_INTEGRATIONS_OPENAI_API_KEY = before; });
+  let fetches = 0;
+  t.mock.method(globalThis, "fetch", async () => { fetches++; return new Response("{}", { status: 500 }); });
+  const { store } = memoryWorkflows();
+  const input = { message: "törtek összeadása", classroom: 5 } as never;
+  const long = "A törtek összeadásakor a nevezőket közös nevezőre hozzuk, majd a számlálókat összeadjuk. ".repeat(3);
+  let result: { downloaded: Array<{ url: string }> } | undefined;
+  await executeWorkflow(store, { id: "web-resume", owner: "a", mode: "web" }, async () => {
+    await workflowPhase("generate");
+    await gatherWebSourcesGpt(input, { model: "gpt-6.1-sol", search: async () => ({ output: [{ action: { sources: [{ url: "https://s.hu/" }] } }] }), download: async (url) => ({ url, title: "T", text: long }) });
+    result = await gatherWebSources(input, { onEvent: () => undefined });
+    await workflowPhase("knowledge"); await workflowPhase("author"); await workflowPhase("gate"); await workflowPhase("publish"); await workflowPhase("readback");
+    return { kind: "material" as const, id: "ok" };
+  });
+  assert.deepEqual(result?.downloaded.map((s) => s.url), ["https://s.hu/"]);
+  assert.equal(fetches, 0, "a mentett tartalék-forrás mellett nincs új Claude-/GPT-hívás");
+  const record = await store.read("web-resume", "a");
+  assert.equal(hasSavedResearchTurn(record!, input), true);
 });

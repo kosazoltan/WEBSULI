@@ -71,6 +71,23 @@ export const openAiWebSearch: GptSearch = async ({ model, system, user, signal }
   return response;
 };
 
+/**
+ * Review #222: a keresés témája ugyanaz, mint a Claude-úton — az előzmény első felhasználói üzenete (vagy az aktuális), és a
+ * releváns előzmény is a kérésbe kerül (követő válasz, pl. „igen, készítsd el”, nem viheti el a keresést). A checkpoint-kulcs az
+ * előzményt is tartalmazza, hogy eltérő beszélgetések ne használják ugyanazt a mentett eredményt.
+ */
+export function gptGatherRequest(input: WebResearchChatRequest): { topicSeed: string; history: string; request: string } {
+  const users = (input.conversationHistory ?? []).filter((m) => m.role === "user" && typeof m.content === "string").map((m) => m.content as string);
+  const topicSeed = (users[0] ?? input.message).slice(0, 200);
+  const history = [...users, input.message].map((m) => m.trim()).filter(Boolean).slice(-6).map((m) => `- ${m.slice(0, 300)}`).join("\n");
+  const parts = webResearchGatherParts(input.classroom, input.title, topicSeed);
+  return { topicSeed, history, request: `${parts.request}\nA felhasználó kérései (a téma ezekből, legelső a fő téma):\n${history}` };
+}
+export function gptGatherCheckpointInput(input: WebResearchChatRequest, model: string) {
+  const { request } = gptGatherRequest(input);
+  return { model, request, contract: "web-gather-gpt-2" };
+}
+
 export async function gatherWebSourcesGpt(input: WebResearchChatRequest, opts: {
   model: string;
   signal?: AbortSignal;
@@ -78,16 +95,15 @@ export async function gatherWebSourcesGpt(input: WebResearchChatRequest, opts: {
   search?: GptSearch;
   download?: (url: string, signal?: AbortSignal) => Promise<PublicPage>;
 }): Promise<FetchedTeachingSource[]> {
-  const topicSeed = input.message.slice(0, 200);
-  const parts = webResearchGatherParts(input.classroom, input.title, topicSeed);
+  const gather = gptGatherRequest(input);
   const system = [
     "Te a WEBSULI forrásgyűjtő ügynöke vagy. A feladatod KERESÉS: magyar tantervi, tankönyvi vagy NAT/OFI-hoz illő oldalakat keresel a kért témához.",
     `Keress legalább ${GPT_GATHER_MAX_SOURCES} különböző, a témához tartozó, nyilvánosan olvasható oldalt, és a válaszban sorold fel a legjobbakat (cím + URL).`,
     "Tananyagot, HTML-t, összefoglalót NE írj — az oldalak szövegét a program tölti le.",
   ].join("\n");
-  return workflowCheckpoint("web-gather-gpt", { model: opts.model, request: parts.request, message: input.message, contract: "web-gather-gpt-1" }, async () => {
+  return workflowCheckpoint("web-gather-gpt", gptGatherCheckpointInput(input, opts.model), async () => {
     opts.onEvent?.({ type: "status", message: "Tartalék forrásgyűjtés (GPT-6.1 Sol): keresés az interneten…" });
-    const response = await (opts.search ?? openAiWebSearch)({ model: opts.model, system, user: `${parts.request}\nKért téma: ${input.message}`, signal: opts.signal });
+    const response = await (opts.search ?? openAiWebSearch)({ model: opts.model, system, user: gather.request, signal: opts.signal });
     await workflowUsage({ input_tokens: response.usage?.input_tokens, output_tokens: response.usage?.output_tokens });
     const candidates = candidateUrls(response.output);
     opts.onEvent?.({ type: "status", message: `Tartalék forrásgyűjtés: ${candidates.length} találat letöltése…` });
