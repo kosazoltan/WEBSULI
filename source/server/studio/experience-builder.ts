@@ -24,6 +24,7 @@ import { unitCatalog, unitCatalogBlock, unitCatalogVersion, type CatalogPool, ty
 import { memoryBlockVersion } from "../memory/subject-memory";
 import { answerKeyProblems, type AnswerKeyCases } from "../../shared/answer-key-tests";
 import { calibrateRubric } from "../../shared/answer-key-calibrate";
+import type { QuizBlindItem } from "./quiz-blind-check";
 import type { OpenTask } from "../../shared/lesson-experience";
 
 export type ExperienceCheckpoint = { hash: string; parts: Record<string, unknown>; reviewedHashes?: Record<string, string> };
@@ -96,6 +97,11 @@ export type ExperienceBuildDeps = {
    * tétel-azonosítóval — a hívó a job kimenetébe menti; a gyerek valódi válaszát a T7 döntőbíró ítéli meg.
    */
   onAnswerKeyReport?(report: { sectionIndex: number; itemId: string; calibration: string[]; correctFails: string[] }): void;
+  /**
+   * Tételgyár T6.1 (tulajdonosi döntés 2026-10-15, kapcsolós): a kvíz gyártáskori vak előszűrője — tétel-id → a bukás oka. A bukott tétel
+   * javítókör nélkül kiesik a tartalék terhére; hiba → üres térkép (a csomag a T6 előtti szabályok szerint épül).
+   */
+  quizBlind?(quiz: QuizBlindItem[], sectionIndex: number): Promise<Map<string, string>>;
 };
 
 /**
@@ -474,13 +480,17 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // Review #228 (P2): a mentett (gyorsítótárból jövő) csomag is megkapja a determinisztikus rubrika-bővítést — modellhívás nélkül.
     const fixSaved = (saved: unknown) => { if (!saved) return saved; try { return (deps.autofix ?? autofixBankPacket)(saved, autofixContext).packet; } catch { return saved; } };
     for (const saved of [fixSaved(checkpoint.parts[hash]), fixSaved(fromPrevious)]) {
-      const parsed = packetSchema.safeParse(saved);
+      // Review #245 (P2): a mentett csomag a tartalék terhére szűkülhetett (előszűrő, T2-kivétel, salvage) — az elfogadási minimummal olvassuk
+      // vissza, különben folytatáskor fizetős teljes újragyártás jönne az ellenőrzött tételek helyett.
+      const parsed = salvageSchema.safeParse(saved);
       if (parsed.success && validate(parsed.data).length === 0) { packet = parsed.data; break; }
     }
+    // T6.1: az újrahasznált (gyorsítótárból / korábbi bankból jövő) csomag már átment az előszűrőn — nem kér új modellhívást.
+    const reusedPacket = !!packet;
     // If teaching is unchanged, preserve the entire reviewed packet and replace
     // only its criticized IDs. This also retains fixes from preceding rounds.
     const priorHash = checkpoint.reviewedHashes?.[baseHash] ?? baseHash;
-    const prior = packetSchema.safeParse(checkpoint.parts[priorHash]);
+    const prior = salvageSchema.safeParse(checkpoint.parts[priorHash]);
     const reviewedIds = new Set(reviewFeedback.map(f => (f.previousItem as { id?: string } | undefined)?.id));
     const known = prior.success ? new Set([...prior.data.methods, ...prior.data.tasks, ...prior.data.quiz].map(i => i.id)) : new Set<string>();
     const reviewBase = reviewFeedback.length && prior.success && validate(prior.data).length === 0
@@ -621,6 +631,26 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       }
     }
     if (!packet) throw new Error(`A ${unit.sectionIndex + 1}. fejezet bankcsomagja a javító kör után sem megfelelő: ${errors}`, lastError instanceof Error ? { cause: lastError } : undefined);
+    // Tételgyár T6.1: a kész csomag kvízének vak előszűrője — a bukott tétel egyenként kiesik, amíg a padló és a teljes ellenőrzés engedi
+    // (fogalmanként felidéző + alkalmazó kérdés stb.); ami így nem vehető ki, figyelmeztetéssel bent marad (a lektor-lépés Opusa úgyis ítél).
+    if (deps.quizBlind && !reusedPacket && packet.quiz.length) {
+      const failed = await deps.quizBlind(packet.quiz, unit.sectionIndex);
+      if (failed.size) {
+        const stillValid = (candidate: Packet) => {
+          const quota = salvageSchema.safeParse(structuredClone(candidate));
+          return quota.success && validate(quota.data).length === 0;
+        };
+        const removed: string[] = [];
+        const kept: string[] = [];
+        let current: Packet = packet;
+        for (const id of current.quiz.map((q) => q.id).filter((id) => failed.has(id))) {
+          const next: Packet = { ...current, quiz: current.quiz.filter((q) => q.id !== id) };
+          if (next.quiz.length >= quizCount && stillValid(next)) { current = next; removed.push(id); } else kept.push(id);
+        }
+        packet = current;
+        deps.onToolFix?.("quiz-blind", [`${unit.sectionIndex + 1}. fejezet: ${removed.length} kvíztétel kivéve a vak előszűrő szerint (${removed.map((id) => failed.get(id)!).join(" | ").slice(0, 600)})${kept.length ? `; ${kept.length} a padló / a csomagszabályok miatt bent maradt` : ""}`]);
+      }
+    }
     // H52: a nyitott aritmetikai lelet a VÉGLEGES azonosítóval jut a hívóhoz (a modell azonosítója lent lecserélődik).
     const originalIds = { methods: packet.methods.map(i => i.id), tasks: packet.tasks.map(i => i.id), quiz: packet.quiz.map(i => i.id) };
     // IDs are scoped to the exact source/teaching version; reused packets retain them.

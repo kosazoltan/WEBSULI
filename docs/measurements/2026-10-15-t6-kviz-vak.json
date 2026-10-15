@@ -1,0 +1,830 @@
+{
+ "models": [
+  "minimax/minimax-m3",
+  "gpt-6.1-sol"
+ ],
+ "jobs": [
+  "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+  "06f5e6ae-cc15-4361-b968-892a71d461f3",
+  "e880571c-43be-49a5-8ab7-ece8d3f1b7f7",
+  "d6f5d4bc-62f6-4f71-9900-3743e0d7f0c5"
+ ],
+ "summary": {
+  "minimax/minimax-m3": {
+   "items": 324,
+   "judged": 324,
+   "flagged": 4,
+   "opusFlagged": 41,
+   "bothFlagged": 3,
+   "onlyModel": 1,
+   "onlyOpus": 38,
+   "seconds": 585,
+   "calls": 46,
+   "failedCalls": 0,
+   "reasoningTokens": 79248
+  },
+  "gpt-6.1-sol": {
+   "items": 324,
+   "judged": 324,
+   "flagged": 12,
+   "opusFlagged": 41,
+   "bothFlagged": 7,
+   "onlyModel": 5,
+   "onlyOpus": 34,
+   "seconds": 212,
+   "calls": 46,
+   "failedCalls": 0,
+   "reasoningTokens": 0
+  }
+ },
+ "rows": [
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-427c563f7f8533c4500a6bea-7",
+   "question": "A megadott eredményt is figyelembe véve melyik állítás illik a 9-(-6) kifejezéshez?",
+   "options": [
+    "A zárójelben (-6) áll, a megadott eredmény +3.",
+    "A zárójelben (+6) áll, a megadott eredmény -3.",
+    "A zárójelben (+3) áll, nincs külön megadott eredmény."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: az 1. opció szerint a 9-(-6) eredménye +3, és egyik opció sem igaz. | Bizonyíték: 9-(-6)=9"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-2dca26d8d157c1c6fd65c8ad-2",
+   "question": "Melyik kifejezéshez tartozik a megadott -2 eredmény?",
+   "options": [
+    "-8-6",
+    "-8-(+6)",
+    "-8-(-6)"
+   ],
+   "key": 1,
+   "truths": [
+    false,
+    true,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: a független ítélet szerint egyedül „-8-(-6)” igaz, ez nem a kulcs („-8-(+6)”). Javítás iránya: a kulcs vagy az opciók javítása."
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-2dca26d8d157c1c6fd65c8ad-3",
+   "question": "Melyik kifejezést kell választani, ha a 6 előjellel, (+6) alakban, zárójelben áll, és a megadott eredmény -2?",
+   "options": [
+    "-8-6",
+    "-8-(+6)",
+    "-8-(-6)"
+   ],
+   "key": 1,
+   "truths": [
+    false,
+    true,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: a kérdés adatai ellentmondók, mert (+6) mellé -2 eredményt ad, így egyik opció sem helyes."
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-2dca26d8d157c1c6fd65c8ad-5",
+   "question": "Melyik teljes leolvasás helyes, ha a kivonásjel után (-6) áll zárójelben?",
+   "options": [
+    "-8-6=-14",
+    "-8-(+6)=-2",
+    "-8-(-6)=-14"
+   ],
+   "key": 2,
+   "truths": [
+    false,
+    false,
+    true
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: a »-8-(-6)=-14« opció hamis egyenlőség, ezért nincs helyes opció; a »-8-(+6)=-2« is hamis."
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-2dca26d8d157c1c6fd65c8ad-8",
+   "question": "Melyik eredmény tartozik a -8-(-6) kifejezéshez?",
+   "options": [
+    "-14",
+    "-2",
+    "6"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: a független ítélet szerint egyedül „-2” igaz, ez nem a kulcs („-14”). Javítás iránya: a kulcs vagy az opciók javítása."
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f7a7543c55808fa813cce54b-0",
+   "question": "Melyik eredményalak tartozik a -2-8 kifejezéshez?",
+   "options": [
+    "-+6",
+    "+10",
+    "+6"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: egyik opció sem helyes | Bizonyíték: -2-8=-10, ez nincs az opciók között | Javítás iránya:"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f7a7543c55808fa813cce54b-1",
+   "question": "Egy tanuló ezt írta: -2-8=+10. Melyik javítás követi a megadott alakokat?",
+   "options": [
+    "-2-8=-+6",
+    "-2-8=+10",
+    "-2-8=+6"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: mindhárom javítás hamis egyenlőség | Bizonyíték: -2-8=-10 | Javítás iránya: a helyes opció"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f7a7543c55808fa813cce54b-3",
+   "question": "Melyik eredményalakot kell a -2-(-8) kifejezés mellé írni?",
+   "options": [
+    "-+6",
+    "+10",
+    "+6"
+   ],
+   "key": 1,
+   "truths": [
+    false,
+    true,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: a független ítélet szerint egyedül „+6” igaz, ez nem a kulcs („+10”). Javítás iránya: a kulcs vagy az opciók javítása."
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f7a7543c55808fa813cce54b-4",
+   "question": "Melyik kifejezés megadott eredménye +6?",
+   "options": [
+    "-2-8",
+    "-2-(-8)",
+    "-2-(+8)"
+   ],
+   "key": 2,
+   "truths": [
+    false,
+    false,
+    true
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: a független ítélet szerint egyedül „-2-(-8)” igaz, ez nem a kulcs („-2-(+8)”). Javítás iránya: a kulcs vagy az opciók javítása."
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f7a7543c55808fa813cce54b-5",
+   "question": "Melyik sort választod, ha a kifejezésben (+8) áll zárójelben?",
+   "options": [
+    "-2-8=-+6",
+    "-2-(-8)=+10",
+    "-2-(+8)=+6"
+   ],
+   "key": 2,
+   "truths": [
+    false,
+    false,
+    true
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: mindhárom sor hamis egyenlőség, a -2-(+8)=+6 is | Bizonyíték: -2-(+8)=-2-8=-10; -2-8=-10; "
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f7a7543c55808fa813cce54b-6",
+   "question": "Melyik állítás írja le helyesen a -2-8 kifejezést?",
+   "options": [
+    "A 8 zárójel nélkül áll, a megadott alak -+6.",
+    "A (-8) zárójelben áll, a megadott eredmény +10.",
+    "A (+8) zárójelben áll, a megadott eredmény +6."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: az 1. opció -+6 alakja; a 2. és a 3. opció nem a -2-8-ról szól | Bizonyíték: -2-8=-10 | Ja"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f7a7543c55808fa813cce54b-7",
+   "question": "Egy párosításban a -2-(-8) kifejezéshez kell eredményt választani. Melyiket jelöld?",
+   "options": [
+    "-+6",
+    "+10",
+    "+6"
+   ],
+   "key": 1,
+   "truths": [
+    false,
+    true,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: a független ítélet szerint egyedül „+6” igaz, ez nem a kulcs („+10”). Javítás iránya: a kulcs vagy az opciók javítása."
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f7a7543c55808fa813cce54b-8",
+   "question": "Melyik mondat kapcsolja össze helyesen a zárójelet és az eredményalakot?",
+   "options": [
+    "A -2-8-ban (+8) áll zárójelben, és az eredmény +6.",
+    "A -2-(-8)-ban (-8) áll zárójelben, és az eredmény +10.",
+    "A -2-(+8)-ban nincs zárójel, és az alak -+6."
+   ],
+   "key": 1,
+   "truths": [
+    false,
+    true,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: egyik mondat sem igaz; a 2. opció +10-et állít | Bizonyíték: -2-(-8)=-2+8=6 | Javítás irán"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f7a7543c55808fa813cce54b-9",
+   "question": "Melyik teljes párosításban szerepel helyesen a -2-(+8) kifejezés?",
+   "options": [
+    "-2-(+8)=-+6",
+    "-2-(+8)=+10",
+    "-2-(+8)=+6"
+   ],
+   "key": 2,
+   "truths": [
+    false,
+    false,
+    true
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: mindhárom párosítás hamis | Bizonyíték: -2-(+8)=-2-8=-10 | Javítás iránya: a helyes opció "
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-065046dfe3774fb915f7fa8e-4",
+   "question": "Melyik teljes leolvasás tartozik a -5-(+8) kifejezéshez?",
+   "options": [
+    "-5-(+8)=+3",
+    "-5-(-8)=+3",
+    "-5-(+8)=-3"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: egyik opció sem helyes leolvasás a -5-(+8) kifejezéshez. | Bizonyíték: -5-(+8) = -13; az o"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-065046dfe3774fb915f7fa8e-5",
+   "question": "A megadott eredményt is figyelembe véve melyik sort válaszd a -5-(+8) kifejezéshez?",
+   "options": [
+    "A kivonandó (+8), a megadott eredmény +3.",
+    "A kivonandó (-8), a megadott eredmény +3.",
+    "A kivonandó (+8), a megadott eredmény -3."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: nincs helyes opció; a szánt „(+8), +3” sor eredménye hamis. | Bizonyíték: -5-(+8) = -5-8 ="
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-b06c47b05c4a1df641e4321a-8",
+   "question": "Melyik eredményalak tartozik a -2-(-8) kifejezéshez?",
+   "options": [
+    "+10",
+    "-+6",
+    "+6"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: a független ítélet szerint egyedül „+6” igaz, ez nem a kulcs („+10”). Javítás iránya: a kulcs vagy az opciók javítása. | Mi hamis: a szándékolt válasz +10 | Bizonyíték: -2-(-8)=-2+8=6; a +6 opció a helyes, a +10 hamis | Javítás iránya: a helyes válasz +6; a -+6 opci"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-b06c47b05c4a1df641e4321a-9",
+   "question": "Egy párosításban a (-8) zárójeles alakhoz kell eredményt kapcsolni. Melyik pár helyes?",
+   "options": [
+    "-2-(-8)=+10",
+    "-2-8=-+6",
+    "-2-(+8)=+6"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: mindhárom pár hamis | Bizonyíték: -2-(-8)=6, nem +10; -2-8=-10; -2-(+8)=-10 | Javítás irán"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-b06c47b05c4a1df641e4321a-11",
+   "question": "Melyik teljes párt jelöld, ha a 8 pozitív előjellel, zárójelben áll, és a megadott eredményalak +6?",
+   "options": [
+    "-2-(+8)=+6",
+    "-2-(-8)=+10",
+    "-2-8=-+6"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: a kérdés és mindhárom opció hamis egyenlőséget tartalmaz | Bizonyíték: -2-(+8)=-10; -2-(-8"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-b06c47b05c4a1df641e4321a-12",
+   "question": "Melyik megadott eredmény kapcsolódik ahhoz az alakhoz, amelyben (+6) áll zárójelben?",
+   "options": [
+    "-2",
+    "-14",
+    "+10"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: a független ítélet szerint egyedül „-14” igaz, ez nem a kulcs („-2”). Javítás iránya: a kulcs vagy az opciók javítása. | Mi hamis: a szándékolt válasz -2 | Bizonyíték: -8-(+6)=-14, ezért a -14 a helyes; a -2 hamis | Javítás iránya: a helyes válasz -14"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-b06c47b05c4a1df641e4321a-13",
+   "question": "Melyik sor tartalmazza a (+8) zárójeles alakot és a hozzá megadott eredményalakot?",
+   "options": [
+    "-2-(+8)=+6",
+    "-2-(-8)=+10",
+    "-2-8=-+6"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: mindhárom sor hamis egyenlőség | Bizonyíték: -2-(+8)=-10; -2-(-8)=6; -2-8=-10 | Javítás ir"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f4ab1eb373a36dcdddd1ca9f-3",
+   "question": "A 9-(-6) kifejezés leolvasásakor melyik párosítást kell választani?",
+   "options": [
+    "(-6) a zárójelben, +3 megadott eredménnyel.",
+    "(+6) a zárójelben, +3 megadott eredménnyel.",
+    "(-6) a zárójelben, -3 megadott eredménnyel.",
+    "(+3) a zárójelben, -6 megadott eredménnyel."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: egyik opció sem helyes, mert mindegyik +3, -3 vagy -6 eredményt párosít | Bizonyíték: 9-(-"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f4ab1eb373a36dcdddd1ca9f-4",
+   "question": "Mi a -5-(+8) kifejezéshez megadott eredmény?",
+   "options": [
+    "+3",
+    "-13",
+    "+8"
+   ],
+   "key": 0,
+   "truths": [
+    false,
+    true,
+    false
+   ],
+   "modelVerdict": "a független ítélet szerint egyedül „-13” igaz, ez nem a kulcs („+3”). Javítás iránya: a kulcs vagy az opciók javítása.",
+   "opus": "Bank-ellenőr: Egyválasztós tétel: a független ítélet szerint egyedül „-13” igaz, ez nem a kulcs („+3”). Javítás iránya: a kulcs vagy az opciók javítása."
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f4ab1eb373a36dcdddd1ca9f-5",
+   "question": "Ellenőrzéskor melyik teljes leolvasás illik a -5-(+8) példához?",
+   "options": [
+    "Első szám -5, a zárójelben (+8), a megadott eredmény +3.",
+    "Első szám -5, a zárójelben (-8), a megadott eredmény +3.",
+    "Első szám +5, a zárójelben (+8), a megadott eredmény -3.",
+    "Első szám -5, a zárójelben (+8), a megadott eredmény -3."
+   ],
+   "key": 0,
+   "truths": [
+    false,
+    false,
+    false,
+    true
+   ],
+   "modelVerdict": "a független ítélet szerint egyedül „Első szám -5, a zárójelben (+8), a megadott eredmény -3.” igaz, ez nem a kulcs („Első szám -5, a zárójelben (+8), a megadott eredmény +3.”). Javítás iránya: a kulcs vagy az opciók javítása.",
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: egyik opció sem helyes, mert az eredmény mindenhol +3 vagy -3 | Bizonyíték: -5-(+8)=-5-8=-"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "9f2087ef-3cac-4c09-9afe-52e6b9f4ad3f",
+   "itemId": "q-f4ab1eb373a36dcdddd1ca9f-13",
+   "question": "Melyik eredmény van a 9-(-6) kifejezéshez rendelve?",
+   "options": [
+    "+3",
+    "-6",
+    "+6"
+   ],
+   "key": 0,
+   "truths": [
+    false,
+    false,
+    false
+   ],
+   "modelVerdict": "0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni.",
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: egyik opció sem helyes (+3, -6, +6) | Bizonyíték: 9-(-6)=9+6=15 (vak megoldás: 15) | Javít"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "06f5e6ae-cc15-4361-b968-892a71d461f3",
+   "itemId": "q-7411b7ff988d4c8fdecca4e4-2",
+   "question": "Hogyan kapjuk meg az utolsó két helyiértékből képzett kétjegyű számot?",
+   "options": [
+    "A tízesek és az egyesek számjegyét sorrendben összeolvassuk.",
+    "A szám első két számjegyét összeadjuk.",
+    "Az egyesek számjegyét írjuk előre, utána a tízesek számjegyét, így fordított sorrendben olvassuk össze."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a független ítélet szerint („A tízesek és az egyesek számjegyét sorrendben összeolvassuk.”, „Az egyesek és a tízesek számjegyét fordított sorrendben olvassuk.”) — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vag"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "06f5e6ae-cc15-4361-b968-892a71d461f3",
+   "itemId": "q-7411b7ff988d4c8fdecca4e4-5",
+   "question": "Egy 7643-mal végződő számnál csak az utolsó két helyiértéket szeretnéd leolvasni. Melyik eljárást kell követned?",
+   "options": [
+    "A 7-et és a 6-ot kell összeolvasni.",
+    "A 4-et és a 3-at kell sorrendben összeolvasni.",
+    "A 3-at kell a tízesek helyére, a 4-et pedig az egyesek helyére írni, így 34-et kapunk."
+   ],
+   "key": 1,
+   "truths": [
+    false,
+    true,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a független ítélet szerint („A 4-et és a 3-at kell sorrendben összeolvasni.”, „A 3-at és a 4-et kell fordított sorrendben összeolvasni.”) — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelműv"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "06f5e6ae-cc15-4361-b968-892a71d461f3",
+   "itemId": "q-c1faffed28ef222d21a9b034-5",
+   "question": "Miért nem következik abból, hogy a 132 osztható 4-gyel, hogy a közvetlenül utána következő 133 is osztható 4-gyel?",
+   "options": [
+    "Mert külön kell megvizsgálni az utolsó két számjegyeket: a 132-nél 32, a 133-nál 33 a vizsgált szám.",
+    "Mert a 133-nak nincs utolsó két számjegye.",
+    "Mert csak a 132-höz hasonló páros számok oszthatók 4-gyel."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a független ítélet szerint („Mert külön kell megvizsgálni az utolsó két számjegyeket: a 132-nél 32, a 133-nál 33 a vizsgált szám.”, „Mert csak a 132-höz hasonló páros számok oszthatók 4-gyel.”) — pontosan egy helyes opció kell. Javítás iránya: a diszt"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "06f5e6ae-cc15-4361-b968-892a71d461f3",
+   "itemId": "q-7bb50aee79da996ae5bc62b4-7",
+   "question": "Az 50-nel való oszthatóság szabálya szerint melyik szám osztható 50-nel?",
+   "options": [
+    "650",
+    "620",
+    "735",
+    "845"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: egyik opció sem osztható 50-nel, nincs helyes válasz | Bizonyíték: 610:50=12,2; 625:50=12,"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "06f5e6ae-cc15-4361-b968-892a71d461f3",
+   "itemId": "q-7bb50aee79da996ae5bc62b4-8",
+   "question": "Melyik szám felel meg az 50-nel való oszthatóság szabályának?",
+   "options": [
+    "750",
+    "720",
+    "735",
+    "765"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: egyik opció sem osztható 50-nel, nincs helyes válasz. | Bizonyíték: 720→20, 735→35, 765→65"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "06f5e6ae-cc15-4361-b968-892a71d461f3",
+   "itemId": "q-c4c36ad7f2121b8b3cb85908-0",
+   "question": "Mikor osztható egy természetes szám 3-mal?",
+   "options": [
+    "Ha az utolsó számjegye páros.",
+    "Ha a számjegyeinek összege osztható 3-mal.",
+    "Ha az utolsó két számjegy összege osztható 4-gyel.",
+    "Ha a számjegyeinek összege 9."
+   ],
+   "key": 1,
+   "truths": [
+    false,
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a független ítélet szerint („Ha a számjegyeinek összege osztható 3-mal.”, „Ha a számjegyeinek összege 9.”) — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: a 4. opció"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "e880571c-43be-49a5-8ab7-ece8d3f1b7f7",
+   "itemId": "q-cdefaa2256dd75b65c15763e-1",
+   "question": "A 132 = 100 + 32 felbontás alapján miért osztható a 132 4-gyel?",
+   "options": [
+    "Mert a 100 és a 32 is osztható 4-gyel.",
+    "Mert csak a 100 osztható 4-gyel, a 32 nem.",
+    "Mert a 132 páratlan számjegyekből áll."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 2 helyes opció („Mert a 100 és a 32 is osztható 4-gyel.”, „Mert minden 132-re végződő szám osztható 4-gyel.”). | Bizonyíték: utolsó két jegy 32 = 8·4, pl. 1132 = 4·283 | Javítás iránya: cseréld valóban hamisra, pl. „Mert a 132 páratlan számjegyekből áll.”"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "e880571c-43be-49a5-8ab7-ece8d3f1b7f7",
+   "itemId": "q-f4d692144387b3d3197d706f-1",
+   "question": "Osztható-e a 675 25-tel? Melyik indoklás helyes?",
+   "options": [
+    "Igen, mert a 675 utolsó két számjegye 75, és a 75 megengedett végződés.",
+    "Nem, mert a 675 utolsó két számjegye 75, és a 75 nem megengedett végződés.",
+    "Igen, mert minden 5-re végződő szám osztható 25-tel.",
+    "Nem, mert csak a 00-ra végződő számok oszthatók 25-tel."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: a kérdés fordítva kérdez: „Osztható-e 675-tel 25?” | Bizonyíték: 25 : 675 nem egész, mert "
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "e880571c-43be-49a5-8ab7-ece8d3f1b7f7",
+   "itemId": "q-fc5675c0ac43908487a951a9-3",
+   "question": "Melyik szám osztható 4-gyel?",
+   "options": [
+    "5720",
+    "5730",
+    "5742"
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 3 helyes opció a független ítélet szerint („5720”, „572”, „57”) — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: több opció is helyes. | Bizonyíték: 100 osztható 4-gyel, 20-szal, 25"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "e880571c-43be-49a5-8ab7-ece8d3f1b7f7",
+   "itemId": "q-e0e477c85afb32aeef4f4708-3",
+   "question": "Egy tanuló ezt írta: 84, 88, 92, 95, 96. Melyik javítás helyes?",
+   "options": [
+    "A 95-öt törölni kell, mert a 92 után 96 következik.",
+    "A 95 helyett 96-ot kell írni, mert a sorban mindig 4-et lépünk.",
+    "A 92 helyett 93-at kell írni, mert a sorban mindig 3-at lépünk."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció. | Mi hamis: a „95 helyett 96” javítás után a sor 84, 88, 92, 96, 96 lesz | Bizonyíték: a 92 után 92+4=96, a 96 már szerepel | Javítás iránya: a helyes opció: „A 95-öt törölni kell”, így a sor 84, 88, 92, 96"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "e880571c-43be-49a5-8ab7-ece8d3f1b7f7",
+   "itemId": "q-d066386aba48dce46e8c151f-0",
+   "question": "Melyik megfogalmazás adja meg helyesen a 4-gyel való oszthatóság szabályát?",
+   "options": [
+    "Egy szám akkor osztható 4-gyel, ha az utolsó két számjegyéből képzett szám osztható 4-gyel.",
+    "Egy szám akkor osztható 4-gyel, ha az első két számjegye osztható 4-gyel.",
+    "Egy szám akkor osztható 4-gyel, ha minden számjegye páros.",
+    "Egy szám akkor osztható 4-gyel, ha az utolsó számjegye 4."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 0 helyes opció a független ítélet szerint — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: egyik opció sem helyes; a B szerint a 418 osztható 4-gyel. | Bizonyíték: 18 = 4·4 + 2 és 1"
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "d6f5d4bc-62f6-4f71-9900-3743e0d7f0c5",
+   "itemId": "q-04d844d7c61065f8def3acf8-3",
+   "question": "Melyik következtetés helyes a 133-ról a tanult példa alapján?",
+   "options": [
+    "A 133 nem osztható 4-gyel, mert az utolsó két számjegye 33, és a 33 nem osztható 4-gyel.",
+    "A 133 osztható 4-gyel, mert az utolsó számjegye 3.",
+    "A 133 osztható 4-gyel, mert háromjegyű szám.",
+    "A 133 osztható 4-gyel, mert a számjegyeinek összege 7."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a független ítélet szerint („A 133 nem osztható 4-gyel, mert az utolsó két számjegye 33, és a 33 nem osztható 4-gyel.”, „A 133 nem osztható 4-gyel, mert páratlan szám.”) — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell "
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "d6f5d4bc-62f6-4f71-9900-3743e0d7f0c5",
+   "itemId": "q-cef6f868267644b443ee4be5-2",
+   "question": "Mikor osztható egy természetes szám 25-tel?",
+   "options": [
+    "Ha az utolsó két helyiértékén álló kétjegyű szám osztható 25-tel.",
+    "Ha az egyesek helyén 0 áll.",
+    "Ha az utolsó számjegye 5.",
+    "Ha a tízesek helyén páros szám áll."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a független ítélet szerint („Ha az utolsó két helyiértékén álló kétjegyű szám osztható 25-tel.”, „Ha az utolsó három helyiértékén álló szám osztható 25-tel.”) — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy "
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "d6f5d4bc-62f6-4f71-9900-3743e0d7f0c5",
+   "itemId": "q-cef6f868267644b443ee4be5-4",
+   "question": "Mi a 100-zal való oszthatóság szabálya?",
+   "options": [
+    "A két utolsó helyiértékén 0 áll.",
+    "Az egyesek helyén 0, a tízesek helyén páros szám áll.",
+    "Az egyesek helyén 0, a tízesek helyén 0 vagy 5 áll.",
+    "Az utolsó számjegye 0."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a független ítélet szerint („A két utolsó helyiértékén 0 áll.”, „Az utolsó három helyiértékén álló szám osztható 100-zal.”) — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi "
+  },
+  {
+   "model": "minimax/minimax-m3",
+   "jobId": "d6f5d4bc-62f6-4f71-9900-3743e0d7f0c5",
+   "itemId": "q-cef6f868267644b443ee4be5-6",
+   "question": "Melyik feltétel tartozik a 20-szal való oszthatósághoz?",
+   "options": [
+    "Az egyesek helyén 0, a tízesek helyén páros szám áll.",
+    "Az egyesek helyén 0, a tízesek helyén 0 vagy 5 áll.",
+    "A két utolsó helyiértékén 0 áll.",
+    "Az utolsó számjegye páros."
+   ],
+   "key": 0,
+   "truths": [
+    true,
+    false,
+    false,
+    false
+   ],
+   "modelVerdict": null,
+   "opus": "Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a független ítélet szerint („Az egyesek helyén 0, a tízesek helyén páros szám áll.”, „Az utolsó három helyiértékén álló szám osztható 20-szal.”) — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyé"
+  }
+ ],
+ "notes": [
+  "Az Opus-leletek korábbi körökből valók: a mentett tétel azóta változhatott (elavult lelet), és az Opus is tévedett (650 osztható 50-nel).",
+  "A 4 job leckéje nem publikált (a lektor/kapu megfogta) — gyerekhez nem jutott hibás kulcs.",
+  "A „Negatív számok kivonása” kvízei a forrás „megadott eredményeire” kérdeznek: a hibás forrás-eredmény a valódi alapprobléma (T5 terület).",
+  "MiniMax M3: OpenRouter, xhigh, MiniMax-szolgáltató; Sol: gpt-6.1-sol, low effort (arbiter szabályzat)."
+ ]
+}
