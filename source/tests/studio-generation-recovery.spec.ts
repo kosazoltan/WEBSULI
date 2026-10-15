@@ -57,7 +57,9 @@ test("a hibával megállt gyártás a mentett részekből folytatható, egyetlen
   await page.route("**/api/studio/jobs/job-7/resume",async route=>{resumed++;await new Promise(r=>setTimeout(r,300));await route.fulfill({status:202,json:{jobId:"job-7"}});});
   await page.route("**/api/studio/lessons/one-step/stopped-run",route=>route.fulfill({json:resumed
     ?{phase:"animator",error:null,detail:"Folytatás a mentett részeredményekből.",mapId:"plant",jobId:"job-7",lessonId:"draft"}
-    :{phase:"error",error:'A(z) "animator" lépés modellhívása hibára futott: a szolgáltató hibát jelzett ([OpenAI] 500)',detail:null,mapId:"plant",jobId:"job-7",lessonId:"draft",draft:{teachingSections:12,savedBankPackets:3}}}));
+    :{phase:"error",error:'A(z) "animator" lépés modellhívása hibára futott: a szolgáltató hibát jelzett ([OpenAI] 500)',detail:null,mapId:"plant",jobId:"job-7",lessonId:"draft",draft:{teachingSections:12,savedBankPackets:3},
+      // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3, dokumentált szerződésváltozás): a szerver a folytathatóságot és a megállás lépését is megadja.
+      resumable:true,stoppedAt:"animator"}}));
   await page.goto("/__studio-panel-probe");
   await expect(page.getByTestId("one-step-progress")).toContainText("A gyártás megállt hibával");
   await expect(page.getByTestId("one-step-draft")).toContainText("Mentett piszkozat: 12 fejezetnyi tananyag, 3 kész gyakorlócsomag");
@@ -75,6 +77,30 @@ test("a hibával megállt gyártás a mentett részekből folytatható, egyetlen
   expect(resumed).toBe(1);
   await expect(page.getByTestId("one-step-resume")).toHaveCount(0);
   await expect(page.getByTestId("one-step-draft")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+// Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3, D5; élő: a gomb megjelent, a szerver 409-cel elutasította).
+test("nem folytatható megállásnál nincs Folytatás gomb, van magyarázat, és a megállás szakasza „Megállt”",async({page})=>{
+  const errors:string[]=[];
+  page.on("pageerror",error=>errors.push(error.message));
+  await page.addInitScript(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","dead-run"));
+  await page.route("**/api/studio/maps",route=>route.fulfill({json:{maps:[]}}));
+  await page.route("**/api/studio/lessons/one-step/dead-run",route=>route.fulfill({json:{phase:"error",error:"A fúziós módszer kapuja elutasította a leckét: x",detail:null,mapId:"plant",jobId:"job-9",lessonId:"draft",
+    draft:{teachingSections:12,savedBankPackets:27},resumable:false,stoppedAt:"gate"}}));
+  await page.goto("/__studio-panel-probe");
+  await expect(page.getByTestId("one-step-draft")).toContainText("nem folytatható");
+  await expect(page.getByTestId("one-step-resume")).toHaveCount(0);
+  await expect(page.getByTestId("one-step-review-source")).toBeVisible();
+  const stages=page.getByTestId("creation-progress").locator("li");
+  await expect(stages.nth(0)).toHaveAttribute("data-state","done");
+  await expect(stages.nth(1)).toHaveAttribute("data-state","done");
+  await expect(stages.nth(2)).toHaveAttribute("data-state","error");
+  for (const size of [{width:360,height:800},{width:1280,height:900}]) {
+    await page.setViewportSize(size);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    await page.screenshot({path:`tests/screenshots/generation-not-resumable-${size.width}.png`,fullPage:true});
+  }
   expect(errors).toEqual([]);
 });
 
