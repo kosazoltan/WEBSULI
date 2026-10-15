@@ -39,15 +39,20 @@ for (const [width, height] of [[390, 844], [1366, 900]]) {
     await expect(panel).toContainText("A nem teljes pontos válaszokat egy mesterséges intelligencia is átnézi.");
     const first = panel.locator("[data-task-id]").first();
     await first.locator("textarea").fill(OWN_WORDS);
+    // Review #242 (P1): több függő válasznál sincs duplikált kérés (az ítéletek egymás után érkeznek).
+    await panel.locator("[data-task-id]").nth(1).locator("textarea").fill(`${OWN_WORDS} Második válasz.`);
+    await panel.locator("[data-task-id]").nth(2).locator("textarea").fill(`${OWN_WORDS} Harmadik válasz.`);
     await panel.getByRole("button", { name: "Feladatok kiértékelése", exact: true }).click();
     const close = page.getByRole("button", { name: "Lezárom a kihagyásokkal", exact: true });
     if (await close.isVisible().catch(() => false)) await close.click();
     await expect(first.getByTestId("arbiter-note")).toHaveText("A döntőbíró elfogadta a saját megfogalmazásodat.");
     await expect(first.locator(".fusion-verdict")).toHaveAttribute("data-state", "ok");
     await expect(first.locator(".fusion-verdict strong")).toContainText("Elfogadva · 1 pont");
-    await expect(panel.locator(".fusion-result")).toContainText("1 / ");
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toEqual({ source: { kind: "lesson", htmlFileId: "arbiter-fixture" }, taskId: await first.getAttribute("data-task-id"), answer: OWN_WORDS });
+    await expect(panel.locator(".fusion-result")).toContainText("3 / ");
+    await expect(panel.getByTestId("arbiter-note")).toHaveCount(3);
+    expect(sent).toHaveLength(3);
+    expect(new Set(sent.map((x) => x.taskId)).size).toBe(3);
+    expect(sent.find((x) => x.answer === OWN_WORDS)).toEqual({ source: { kind: "lesson", htmlFileId: "arbiter-fixture" }, taskId: await first.getAttribute("data-task-id"), answer: OWN_WORDS });
     await noOverflow(page);
     const box = await first.getByTestId("arbiter-note").boundingBox();
     expect(box && box.x >= 0 && box.x + box.width <= width).toBe(true);
@@ -57,7 +62,7 @@ for (const [width, height] of [[390, 844], [1366, 900]]) {
     await page.reload();
     await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
     await expect(page.getByRole("tabpanel", { name: "Feladatok", exact: true }).locator("[data-task-id]").first().getByTestId("arbiter-note")).toBeVisible();
-    expect(sent).toHaveLength(1);
+    expect(sent).toHaveLength(3);
   });
 
   test(`HTML-lecke (/dev/:id): a döntőbíró emeli a saját szavas választ (${width}px)`, async ({ page }) => {
