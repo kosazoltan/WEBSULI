@@ -93,3 +93,16 @@ bukás NEM blokkol.
 A tesztíró saját szerepet (`answer-key-writer`, `shared/instruction-bundles/roles.ts`) és támogató skillt kap (`server/studio/support-skills.ts`,
 `withSupportSkill("answer-key-writer", …)`) — a korábbi `blind-solver` szerep skillje a forrásfeladatok vak megoldásáról szól, nem illik ide
 (`docs/specs/2026-09-23-role-skills-everywhere.md`: minden szerepnek saját skillje van).
+
+## T2.3 — tulajdonosi döntés (2026-10-15): a tesztíró MiniMax M3, max efforttal
+- A GLM 5.3 Flash helyett a tesztíró elsődleges modellje a **`minimax/minimax-m3`** (OpenRouter), **xhigh (max) efforttal**; tartaléka
+  változatlanul a `deepseek/deepseek-v4-flash` (a `gateHelper` szerep elsődlegese).
+- Élő OpenRouter-próba (2026-10-15): a MiniMax saját szolgáltatóján `reasoning: { effort: "xhigh", enabled: true }` mellett ténylegesen
+  gondolkodik (127–162 reasoning-token, helyes ítélet, 3–5 s); a Together-útvonalon a gondolkodás 0 tokenes volt.
+- Megvalósítás:
+  1. `server/ai/models.ts`: `ANSWER_KEY_MODEL = "minimax/minimax-m3"` és `OPENROUTER_MODEL_ROUTING` (modellenként: effort `xhigh`,
+     szolgáltató-sorrend `["Minimax"]`, tartalékkal).
+  2. `server/ai/OpenRouterProvider.ts`: ha a modellnek van útválasztási bejegyzése, a kérés `reasoning: { effort, enabled: true }` és
+     `provider: { order, allow_fallbacks: true }` mezőt kap (sima és streamelt út is); a többi modell kérése bájtra változatlan.
+  3. `server/studio/answer-key-writer.ts` / `step-runner.ts`: a lánc `[ANSWER_KEY_MODEL, gateHelper-elsődleges]`; a mérőszkript ugyanígy.
+  4. Tesztek: a kérés törzse (fetch-mock) MiniMaxnál tartalmazza az xhigh effortot, az `enabled`-et és a szolgáltató-sorrendet; más modellnél nem.
