@@ -26,6 +26,8 @@ export type OneStepPhase =
   | "gate"
   | "done"
   | "parked"
+  /** docs/specs/2026-10-15-hiba-gombok.md (E1): ugyanabból a forrásból folytatható piszkozat van — gyártás nem indult, választás kell. */
+  | "draft"
   | "error";
 
 export type OneStepRun = {
@@ -105,7 +107,7 @@ export async function getRun(id: string, load?: LoadRunFn): Promise<OneStepRun |
   }
 }
 
-const FINISHED: ReadonlySet<OneStepPhase> = new Set(["done", "parked", "error"]);
+const FINISHED: ReadonlySet<OneStepPhase> = new Set(["done", "parked", "error", "draft"]);
 
 /**
  * #168 — boot-time sweep: every persisted run that is not finished belonged to

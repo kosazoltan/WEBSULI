@@ -97,4 +97,7 @@ test("spec 2026-10-15 (D5): hibánál a szerver által rögzített megállási l
   assert.deepEqual(lessonCreationStages({ phase: "error", detail: null, error: "x", stoppedAt: "source" }).map(r => r.state), ["error", "pending", "pending"]);
   assert.ok(lessonCreationStages({ phase: "error", detail: null, error: "x", stoppedAt: "ismeretlen" }).every(r => r.state === "pending"), "ismeretlen lépés: nem találunk ki szakaszt");
   assert.deepEqual(lessonCreationStages({ phase: "lektor", detail: null, error: null, stoppedAt: "author" }).map(r => r.state), ["done", "done", "active"], "futás közben a stoppedAt nem számít");
+  // docs/specs/2026-10-15-hiba-gombok.md: a megszakadt piszkozat (draft) a régi gyártás megállási pontját mutatja.
+  assert.deepEqual(lessonCreationStages({ phase: "draft", detail: null, error: null, stoppedAt: "animator" }).map(r => r.state), ["done", "error", "pending"]);
+  assert.ok(lessonCreationStages({ phase: "draft", detail: null, error: null }).every(r => r.state === "pending"), "megállási lépés nélkül nem találunk ki szakaszt");
 });

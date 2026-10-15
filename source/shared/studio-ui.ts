@@ -398,7 +398,8 @@ const STAGE_OF_STEP: Record<string, number> = {
 };
 
 export function lessonCreationStages(run: OneStepRunView) {
-  const stopped = run.phase === "error" || run.phase === "parked";
+  // A megszakadt piszkozat (draft) ugyanott áll, ahol a régi gyártás megállt (docs/specs/2026-10-15-hiba-gombok.md).
+  const stopped = run.phase === "error" || run.phase === "parked" || run.phase === "draft";
   // error/parked alone do not identify the failed phase. Do not invent completed stages — only the server's recorded stop step does.
   const failed = stopped && run.stoppedAt !== undefined ? STAGE_OF_STEP[run.stoppedAt] ?? -1 : -1;
   const current = failed >= 0 ? failed : LESSON_CREATION_STAGES.findIndex(s => (s.phases as readonly string[]).includes(run.phase));

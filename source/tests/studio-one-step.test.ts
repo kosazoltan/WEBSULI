@@ -23,6 +23,16 @@ test("parseOneStepRequest: scope elhagyható, files kötelező", () => {
   assert.equal(noFiles.ok, false);
 });
 
+// docs/specs/2026-10-15-hiba-gombok.md (E3): a kifejezett újragyártás jelzője átjut az ellenőrzésen, hibás típus nem.
+test("parseOneStepRequest: forceNew opcionális logikai jelző", () => {
+  const files = [{ name: "a.txt", kind: "text", content: "A szár szállít." }];
+  const forced = parseOneStepRequest({ files, forceNew: true });
+  assert.ok(forced.ok && forced.data.forceNew === true);
+  const plain = parseOneStepRequest({ files });
+  assert.ok(plain.ok && plain.data.forceNew === undefined);
+  assert.equal(parseOneStepRequest({ files, forceNew: "igen" }).ok, false);
+});
+
 test("decideOneStepAction: author-parkolás vázlattal → approve; approvedOutline után → continue", () => {
   assert.equal(
     decideOneStepAction({ step: "author", status: "ok", output: { outline: { sections: [] } } }),

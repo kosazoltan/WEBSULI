@@ -39,6 +39,8 @@ export const oneStepRequestSchema = z.object({
   // Spec 2026-09-23: the teacher's free-text request to the agent (normalised by normalizeOwnerInstruction).
   instructions: z.string().max(4000).optional(),
   scope: scopeSchema.optional(), // legacy metadata accepted; never used to select grade
+  // docs/specs/2026-10-15-hiba-gombok.md (E3): kifejezett újragyártás — a megszakadt piszkozat helyett új gyártás (a régi félretéve).
+  forceNew: z.boolean().optional(),
   files: z
     .array(
       z.object({

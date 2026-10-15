@@ -145,3 +145,51 @@ test("csak a közzétett lecke kész; hálózati hiba újraellenőrizhető, újr
   await page.reload();
   await expect(page.getByTestId("one-step-open-lesson")).toHaveAttribute("href","/preview/new-plant");
 });
+
+// docs/specs/2026-10-15-hiba-gombok.md (tulajdonosi javaslat): megszakadt piszkozatnál három külön döntés — soha nem kezd újra észrevétlenül.
+test("megszakadt piszkozatnál három külön gomb: folytatás, újragyártás, új tananyag",async({page})=>{
+  const errors:string[]=[];
+  page.on("pageerror",error=>errors.push(error.message));
+  await page.addInitScript(()=>{ if(!sessionStorage.getItem("websuli.studio.oneStepRunId")) sessionStorage.setItem("websuli.studio.oneStepRunId","draft-run"); });
+  const bodies:Array<Record<string,unknown>>=[];
+  let resumed=0;
+  await page.route("**/api/csrf-token",route=>route.fulfill({json:{csrfToken:"test"}}));
+  await page.route("**/api/studio/maps",route=>route.fulfill({json:{maps:[]}}));
+  await page.route("**/api/studio/lessons/one-step",route=>{bodies.push(route.request().postDataJSON());return route.fulfill({status:202,json:{runId:"remake-run"}});});
+  await page.route("**/api/studio/lessons/one-step/remake-run",route=>route.fulfill({json:{phase:"extract",error:null,detail:"Forrás feldolgozása",mapId:"plant",lessonId:null}}));
+  await page.route("**/api/studio/jobs/job-old/resume",route=>{resumed++;return route.fulfill({status:202,json:{jobId:"job-old"}});});
+  await page.route("**/api/studio/lessons/one-step/old-run",route=>route.fulfill({json:{phase:"animator",error:null,detail:"Folytatás a mentett részeredményekből.",mapId:"plant",jobId:"job-old",lessonId:"draft"}}));
+  await page.route("**/api/studio/lessons/one-step/draft-run",route=>route.fulfill({json:{phase:"draft",error:null,detail:"Ebből a forrásból van megszakadt piszkozat — folytatható vagy újragyártható.",mapId:"plant",jobId:"job-old",lessonId:null,
+    draft:{teachingSections:9,savedBankPackets:4},resumable:true,stoppedAt:"animator",resumeKind:"restart",draftRunId:"old-run"}}));
+  await page.goto("/__studio-panel-probe");
+  await expect(page.getByTestId("one-step-progress")).toContainText("Ebből a forrásból van megszakadt piszkozat");
+  await expect(page.getByTestId("one-step-draft")).toContainText("9 fejezetnyi tananyag, 4 kész gyakorlócsomag");
+  await page.getByTestId("extract-file-input").setInputFiles({name:"plants.txt",mimeType:"text/plain",buffer:Buffer.from("A szár szállítja a tápanyagokat.")});
+  for (const id of ["one-step-resume","one-step-remake","one-step-new"]) await expect(page.getByTestId(id)).toBeVisible();
+  for (const size of [{width:390,height:844},{width:1366,height:900}]) {
+    await page.setViewportSize(size);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    for (const id of ["one-step-resume","one-step-remake","one-step-new"])
+      expect(await page.getByTestId(id).evaluate(el=>el.scrollWidth>el.clientWidth+1),id).toBe(false);
+    await page.screenshot({path:`tests/screenshots/generation-draft-choice-${size.width}.png`,fullPage:true});
+  }
+  // Újragyártás: ugyanaz a kérés, kifejezett forceNew jelzővel.
+  await page.getByTestId("one-step-remake").click();
+  await expect.poll(()=>bodies.length).toBe(1);
+  expect(bodies[0].forceNew).toBe(true);
+  await expect(page.getByTestId("one-step-progress")).toContainText("Forrás feldolgozása");
+  // Folytatás: a piszkozat jobja folytatódik, és a felület a piszkozat saját futását követi.
+  await page.evaluate(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","draft-run"));
+  await page.reload();
+  await page.getByTestId("one-step-resume").click();
+  await expect(page.getByTestId("one-step-progress")).toContainText("Tananyag készül");
+  expect(resumed).toBe(1);
+  expect(await page.evaluate(()=>sessionStorage.getItem("websuli.studio.oneStepRunId"))).toBe("old-run");
+  // Új tananyag: az űrlap üres, nincs futás.
+  await page.evaluate(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","draft-run"));
+  await page.reload();
+  await page.getByTestId("one-step-new").click();
+  await expect(page.getByTestId("one-step-progress")).toHaveCount(0);
+  expect(await page.evaluate(()=>sessionStorage.getItem("websuli.studio.oneStepRunId"))).toBeNull();
+  expect(errors).toEqual([]);
+});
