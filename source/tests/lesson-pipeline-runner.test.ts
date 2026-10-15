@@ -95,7 +95,10 @@ test("spec 2026-10-15 (D4): a kapu bank-eredetű megállása a mentett leckébő
   await retryFailedGate("gate-retry", visit, deps);
   const job = deps.store.jobs.get("gate-retry")!;
   assert.equal(job.step, "gate"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
-  assert.deepEqual(job.output, { ...output, previousGateError: error, gateRecoveryAttempt: 1 }, "a lecke és a kész csomagok változatlanok");
+  // Elakadás-vezérlő V3 (dokumentált változás): a kimenet a vezérlő naplóját is viszi.
+  const { recovery: gateLog, ...gateRest } = job.output as Record<string, unknown>;
+  assert.deepEqual(gateRest, { ...output, previousGateError: error, gateRecoveryAttempt: 1 }, "a lecke és a kész csomagok változatlanok");
+  assert.deepEqual((gateLog as Array<{ strategy: string }>).map((h) => h.strategy), ["gate"]);
   job.step = "error"; job.status = "error"; job.error = error;
   await retryFailedGate("gate-retry", visit, deps);
   assert.equal(job.output!.gateRecoveryAttempt, 2);
@@ -112,7 +115,9 @@ test("spec 2026-10-15-tetelgyar T0.4: a lektor-bizonyíték eltérése a lektor 
   await retryFailedGate("review-retry", { step: "gate", state: "error", error }, deps);
   const job = deps.store.jobs.get("review-retry")!;
   assert.equal(job.step, "lektor"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
-  assert.deepEqual(job.output, { ...output, previousGateError: error, gateRecoveryAttempt: 1 });
+  const { recovery: reviewLog, ...reviewRest } = job.output as Record<string, unknown>;
+  assert.deepEqual(reviewRest, { ...output, previousGateError: error, gateRecoveryAttempt: 1 });
+  assert.deepEqual((reviewLog as Array<{ strategy: string }>).map((h) => h.strategy), ["review"], "a vezérlő naplója (V3)");
   assert.equal(deps.calls.length, 0);
 });
 
@@ -121,14 +126,47 @@ test("Tételgyár T1b: az ismételt bank-eredetű kapuhiba a bankot újraépíti
   const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[7]: x (kivétel után: c4: hiányzó recall kvíz.)";
   const output = { lesson: standardFusionFixture(), gateRecoveryAttempt: 1, experienceCheckpoint: { hash: "fusion-7.4-4", parts: { old: { preserved: true } } } };
   deps.store.seed({ id: "rebuild", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: structuredClone(output) });
-  await retryFailedGate("rebuild", { step: "gate", state: "error", error }, deps);
+  // Elakadás-vezérlő V3: a teljes újraépítés kifejezett stratégiával (a tervező a lépcsőn előbb a célzottat választaná — lent külön teszt).
+  await retryFailedGate("rebuild", { step: "gate", state: "error", error }, deps, "rebuild-full");
   const job = deps.store.jobs.get("rebuild")!;
   assert.equal(job.step, "animator"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
   const { experience: _old, ...teaching } = output.lesson;
   // Review #230 (P1): a régi bank és a csomag-gyorsítótár érvénytelenítve — az animátor nem hozhatja vissza ugyanazt a bankot.
-  assert.deepEqual(job.output, { lesson: teaching, previousGateError: error, gateRecoveryAttempt: 2, bankRebuild: true });
+  const { recovery: rebuildLog, ...rebuildRest } = job.output as Record<string, unknown>;
+  assert.deepEqual(rebuildRest, { lesson: teaching, previousGateError: error, gateRecoveryAttempt: 2, bankRebuild: true });
+  assert.deepEqual((rebuildLog as Array<{ strategy: string }>).map((h) => h.strategy), ["gate", "rebuild-full"], "a régi mezőkből visszafejtett kapu + az új lépés");
   assert.deepEqual((job.output!.lesson as { sections: unknown }).sections, output.lesson.sections, "a tanítás megmarad");
   assert.equal(deps.calls.length, 0);
+});
+
+test("elakadás-vezérlő V2: a tervező a kapu után a CÉLZOTT újraépítést választja — csak a hibás fejezet csomagja kerül ki", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture();
+  const t0 = lesson.experience!.tasks[0] as { sectionIndex: number };
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[0]: x";
+  const parts = { bad: { tasks: [{ sectionIndex: t0.sectionIndex }] }, good: { tasks: [{ sectionIndex: t0.sectionIndex + 100 }] } };
+  deps.store.seed({ id: "targeted", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error,
+    output: { lesson, gateRecoveryAttempt: 1, experienceCheckpoint: { hash: "fusion-7.4-4", parts }, choiceFlags: [{ path: "experience.tasks[0]", message: "régi" }] } });
+  await retryFailedGate("targeted", { step: "gate", state: "error", error }, deps);
+  const job = deps.store.jobs.get("targeted")!;
+  const out = job.output as Record<string, unknown>;
+  assert.equal(job.step, "animator");
+  assert.equal(out.bankRebuild, "targeted");
+  assert.deepEqual(out.rebuiltSections, [t0.sectionIndex]);
+  assert.deepEqual(Object.keys((out.experienceCheckpoint as { parts: object }).parts), ["good"], "a jó fejezet csomagja megmarad");
+  assert.equal(out.choiceFlags, undefined, "a régi sorszámú jelzések törlődnek");
+  assert.equal((out.lesson as { experience?: unknown }).experience, undefined);
+  assert.deepEqual((out.recovery as Array<{ strategy: string }>).map((h) => h.strategy), ["gate", "rebuild-targeted"]);
+});
+
+test("review #234 (P1): kimerült lépcsőnél a kézi folytatás elutasít — nem alakítja át tulajdonosi döntést újraépítéssé", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[0]: x";
+  const key = "bank-floor|tasks[0]|";
+  const used = ["gate", "rebuild-targeted", "rebuild-full", "author-repair", "remanufacture"].map((strategy) => ({ strategy, fingerprint: key, failing: 1, at: 0 }));
+  deps.store.seed({ id: "exhausted", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: { lesson: standardFusionFixture(), recovery: used } });
+  await assert.rejects(retryFailedGate("exhausted", { step: "gate", state: "error", error }, deps), /nem a mentett részekből indul: a program minden saját megoldást kipróbált/);
+  assert.equal(deps.store.jobs.get("exhausted")!.step, "error", "a job érintetlen");
 });
 
 test("bank resume recognizes redacted long errors but rejects malformed retry state", async () => {

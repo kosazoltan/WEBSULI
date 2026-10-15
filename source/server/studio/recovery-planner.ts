@@ -34,8 +34,11 @@ export function failureFingerprint(error: string): { cls: FailureClass; key: str
   for (const m of error.matchAll(/experience\.(tasks|quiz|methods)\[(\d+)\]/g)) paths.add(`${m[1]}[${m[2]}]`);
   for (const m of error.matchAll(/sections\[(\d+)\]/g)) paths.add(`sections[${m[1]}]`);
   for (const m of error.matchAll(/A (\d+)\. fejezet/g)) paths.add(`fejezet ${m[1]}`);
+  // Review #234 (P2): a szolgáltatói hibánál a megállt lépés (szerző / animátor / lektor) is az ujjlenyomat része.
+  if (cls === "provider") for (const m of error.matchAll(/"(\w+)" lépés/g)) paths.add(`lépés ${m[1]}`);
   const floor = new Set<string>();
-  for (const m of error.matchAll(/(\w+): hiányzó (recall|apply) kvíz/g)) floor.add(`${m[1]}:${m[2]}`);
+  // Review #233 (P2): a teljes fogalomazonosító (a kötőjeles is, pl. „kor-kerulete”).
+  for (const m of error.matchAll(/([^\s:;,()]+): hiányzó (recall|apply) kvíz/g)) floor.add(`${m[1]}:${m[2]}`);
   if (/Legalább 45 szöveges feladat és 75 kvízkérdés/.test(error)) floor.add("45/75");
   const sortedPaths = [...paths].sort(), sortedFloor = [...floor].sort();
   return { cls, key: `${cls}|${sortedPaths.join(",")}|${sortedFloor.join(",")}`, failing: sortedPaths.length };
@@ -57,22 +60,29 @@ export const recoveryReason = (strategy: RecoveryStrategy) => REASONS[strategy];
  * A következő lépés. Egy stratégia osztályonként egyszer (a lépcsőben kétszer szereplő `retry-provider` kétszer) — kivéve, ha az utolsó lépés
  * HATOTT (ugyanaz az osztály, kevesebb hibás útvonal): akkor az egyszer még megismételhető (a `remanufacture` soha).
  */
+/**
+ * A következő lépés. Review #234 (P2): a fok az ADOTT ujjlenyomatra számít felhasználtnak — egy új hibára (más tételek) az olcsó fok újra
+ * elérhető. Hogy a lépcső véges maradjon: osztályonként egy fok legfeljebb (a lépcsőbeli előfordulása + 1)-szer fut (a hatásos lépés így
+ * egyszer megismételhető), a teljes újragyártás legfeljebb egyszer; ha elfogy: tulajdonosi döntés pontos indoklással.
+ */
 export function planRecovery(input: { error: string; history: readonly RecoveryStep[] }): RecoveryPlan {
   const fp = failureFingerprint(input.error);
   const ladder = RECOVERY_LADDER[fp.cls];
-  const used = input.history.filter((h) => h.fingerprint.startsWith(`${fp.cls}|`));
-  const last = used.at(-1);
-  if (last && last.strategy !== "remanufacture" && last.strategy !== "ask-owner" && fp.failing < last.failing) {
-    const repeats = used.filter((h) => h.strategy === last.strategy).length;
-    const allowed = ladder.filter((s) => s === last.strategy).length + 1;
-    if (repeats < allowed) return { strategy: last.strategy, reason: `${REASONS[last.strategy]} (az előző lépés hatott: ${last.failing} → ${fp.failing} hibás tétel)`, fingerprint: fp.key, cls: fp.cls };
+  const inClass = input.history.filter((h) => h.fingerprint.startsWith(`${fp.cls}|`));
+  const count = (list: readonly RecoveryStep[], strategy: RecoveryStrategy) => list.filter((h) => h.strategy === strategy).length;
+  const sameKey = inClass.filter((h) => h.fingerprint === fp.key);
+  for (const strategy of new Set(ladder)) {
+    const occurrences = ladder.filter((s) => s === strategy).length;
+    const classLimit = strategy === "remanufacture" ? 1 : occurrences + 1;
+    if (count(sameKey, strategy) >= occurrences || count(inClass, strategy) >= classLimit) continue;
+    const last = inClass.at(-1);
+    const reason = last && last.strategy === strategy && fp.failing < last.failing
+      ? `${REASONS[strategy]} (az előző lépés hatott: ${last.failing} → ${fp.failing} hibás tétel)` : REASONS[strategy];
+    return { strategy, reason, fingerprint: fp.key, cls: fp.cls };
   }
-  const remaining = [...ladder];
-  for (const h of used) { const i = remaining.indexOf(h.strategy); if (i >= 0) remaining.splice(i, 1); }
-  const next = remaining[0];
-  if (!next) {
-    const detail = fp.failing ? ` — a megmaradt hiba: ${fp.key.split("|").slice(1).filter(Boolean).join("; ")}` : "";
-    return { strategy: "ask-owner", reason: `${REASONS["ask-owner"]}${detail}`, fingerprint: fp.key, cls: fp.cls };
-  }
-  return { strategy: next, reason: REASONS[next], fingerprint: fp.key, cls: fp.cls };
+  const detail = fp.failing ? ` — a megmaradt hiba: ${fp.key.split("|").slice(1).filter(Boolean).join("; ")}` : "";
+  return { strategy: "ask-owner", reason: `${REASONS["ask-owner"]}${detail}`, fingerprint: fp.key, cls: fp.cls };
 }
+
+/** A mentett részekből (a „Folytatás” gombbal / a vezérlővel) NEM indítható fokok: V4-ig, illetve tulajdonosi döntés. */
+export const NOT_RESUMABLE_STRATEGIES: readonly RecoveryStrategy[] = ["author-repair", "remanufacture", "ask-owner"];

@@ -96,6 +96,7 @@ import { supportSkillVersion, withSupportSkill } from "./support-skills";
 import { FIGURE_CHECK_VERSION, figureCheck } from "./figure-check";
 import { targetedRepairSections, parseSectionPatch, parseMisconceptionsPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
 import { canReuseLessonVisuals } from "./visual-reuse";
+import { failureFingerprint, planRecovery, recoveryReason, type RecoveryStep } from "./recovery-planner";
 import { workflowAllowResumeEdge, workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError, workflowPinnedPrompt, workflowNotePromptHash } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
@@ -389,7 +390,8 @@ export async function retryFailedBankBuild(jobId: string, visit: { step: string;
  * Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D4, mért: job 416ad01d): a kapu bank-eredetű megállása a mentett leckéből a kapu
  * újrafuttatásával folytatható (a kapu részleges javítással és a változatlan padló-ellenőrzéssel dönt) — újragyártás nélkül.
  */
-export async function retryFailedGate(jobId: string, visit: { step: string; state: string; error?: string } | undefined, deps: PipelineDeps = {}): Promise<void> {
+export type GateStrategy = "gate" | "review" | "rebuild-targeted" | "rebuild-full";
+export async function retryFailedGate(jobId: string, visit: { step: string; state: string; error?: string } | undefined, deps: PipelineDeps = {}, strategy?: GateStrategy): Promise<void> {
   const { store } = await resolveDeps(deps);
   const job = await store.loadJob(jobId);
   if (!job) throw new Error("A job nem található.");
@@ -400,16 +402,29 @@ export async function retryFailedGate(jobId: string, visit: { step: string; stat
     throw new Error("Csak naplóval igazolt, mentett és még nem publikált kapuhiba folytatható.");
   }
   const attempt = recoveryAttempt(job.output?.gateRecoveryAttempt, "kapufolytatási");
+  // Elakadás-vezérlő V3 (egy szabály): a stratégiát a tervező adja (a kézi gomb és a vezérlő ugyanígy); a bizonyíték-eltérés mindig `review`.
+  const history = recoveryHistoryOf(job.output, job.error);
+  const planned = strategy ?? (kind === "review" ? "review" : planRecovery({ error: job.error ?? "", history }).strategy);
+  // Review #234 (P1): a tervező nem végrehajtható foka (szerzői javítás, teljes újragyártás, tulajdonosi döntés) NEM alakul át újraépítéssé.
+  if (kind !== "review" && planned !== "gate" && planned !== "rebuild-targeted" && planned !== "rebuild-full") {
+    throw new Error(`A program következő lépése most nem a mentett részekből indul: ${recoveryReason(planned)}.`);
+  }
+  const chosen: GateStrategy = kind === "review" ? "review" : planned as GateStrategy;
+  const rebuild = chosen === "rebuild-targeted" || chosen === "rebuild-full";
+  const fp = failureFingerprint(job.error ?? "");
+  const step: RecoveryStep = { strategy: chosen, fingerprint: fp.key, failing: fp.failing, at: Date.now() };
   if (kind === "review" && !await workflowAllowResumeEdge("gate", "lektor", "kapu: a lektor-bizonyíték eltér — a lektor a mostani leckén újrafut", ["gate"])) {
     throw new Error("A lektor újrafuttatása csak a kapunál megállt futás kifejezett folytatásaként engedélyezett.");
   }
-  if (kind === "rebuild" && !await workflowAllowResumeEdge("gate", "animator", "kapu: a bank a padló alá esne — újraépítés a T1 tartalékával", ["lektor", "gate"])) {
+  if (rebuild && !await workflowAllowResumeEdge("gate", "animator", "kapu: a bank a padló alá esne — újraépítés a T1 tartalékával", ["lektor", "gate"])) {
     throw new Error("A bank újraépítése csak a kapunál megállt futás kifejezett folytatásaként engedélyezett.");
   }
   // T0.4: bizonyíték-eltérésnél a lektor újrafut a mostani leckén (a kör nem nő); bank-eredetű kapuhibánál a kapu fut újra;
   // T1b: ismételt bank-eredetű kapuhibánál a bank újraépül (az animátor a T1 kvótáival; a régi csomagok lenyomata nem egyezik).
-  await store.saveStep(jobId, { step: kind === "review" ? "lektor" : kind === "rebuild" ? "animator" : "gate", status: "pending", error: null, finishedAt: null,
-    output: kind === "rebuild" ? rebuildOutput(job.output, job.error, attempt) : { ...job.output, previousGateError: job.error, gateRecoveryAttempt: attempt } });
+  const nextOutput = chosen === "rebuild-targeted" ? targetedRebuildOutput(job.output, job.error, attempt) : chosen === "rebuild-full" ? rebuildOutput(job.output, job.error, attempt)
+    : { ...job.output, previousGateError: job.error, gateRecoveryAttempt: attempt };
+  await store.saveStep(jobId, { step: chosen === "review" ? "lektor" : rebuild ? "animator" : "gate", status: "pending", error: null, finishedAt: null,
+    output: { ...nextOutput, recovery: [...history, step] } });
 }
 
 /**
@@ -418,10 +433,46 @@ export async function retryFailedGate(jobId: string, visit: { step: string; stat
  * és ugyanaz a bank kerülne a kapura. A tanítás (szakaszok, ábrák) és a kör változatlan.
  */
 function rebuildOutput(output: JobView["output"], error: string | null | undefined, attempt: number): JobView["output"] {
-  const { experienceCheckpoint: _checkpoint, ...rest } = (output ?? {}) as Record<string, unknown>;
+  // Elakadás-vezérlő V3: a régi sorszámú jelzések is kikerülnek — az új bank azonos sorszámú tételeire nem vonatkozhatnak.
+  const { experienceCheckpoint: _checkpoint, choiceFlags: _flags, bankOpenFindings: _open, gateRepairs: _repairs, choiceGate: _gate, ...rest } = (output ?? {}) as Record<string, unknown>;
   const lesson = rest.lesson as Record<string, unknown> | undefined;
   const { experience: _experience, ...teaching } = lesson ?? {};
   return { ...rest, ...(lesson ? { lesson: teaching } : {}), previousGateError: error, gateRecoveryAttempt: attempt, bankRebuild: true } as JobView["output"];
+}
+
+/**
+ * Elakadás-vezérlő V2: CÉLZOTT újraépítés — csak a hibaüzenetben megnevezett tételek fejezeteinek csomagjai épülnek újra; a többi mentett
+ * csomag megmarad (az animátor a gyorsítótárból veszi). Ha nincs azonosítható fejezet, a teljes újraépítés.
+ */
+export function targetedRebuildOutput(output: JobView["output"], error: string | null | undefined, attempt: number): JobView["output"] {
+  const experience = ((output?.lesson ?? {}) as { experience?: Record<string, Array<{ sectionIndex?: number }>> }).experience;
+  const sections = new Set<number>();
+  for (const m of String(error ?? "").matchAll(/experience\.(tasks|quiz|methods)\[(\d+)\]/g)) {
+    const s = experience?.[m[1]]?.[Number(m[2])]?.sectionIndex;
+    if (typeof s === "number") sections.add(s);
+  }
+  const checkpoint = output?.experienceCheckpoint as { parts?: Record<string, { methods?: Array<{ sectionIndex?: number }>; tasks?: Array<{ sectionIndex?: number }>; quiz?: Array<{ sectionIndex?: number }> }> } | undefined;
+  if (!sections.size || !checkpoint?.parts) return rebuildOutput(output, error, attempt);
+  const touches = (part: NonNullable<typeof checkpoint.parts>[string]) => [...(part.methods ?? []), ...(part.tasks ?? []), ...(part.quiz ?? [])].some((i) => typeof i.sectionIndex === "number" && sections.has(i.sectionIndex));
+  const kept = Object.fromEntries(Object.entries(checkpoint.parts).filter(([, part]) => !touches(part)));
+  const full = rebuildOutput(output, error, attempt) as Record<string, unknown>;
+  return { ...full, experienceCheckpoint: { ...checkpoint, parts: kept }, bankRebuild: "targeted", rebuiltSections: [...sections].sort((a, b) => a - b) } as JobView["output"];
+}
+
+/** Elakadás-vezérlő V3: a vezérlő eddigi lépései — az `output.recovery[]` és a régi mezőkből visszafejtve (a régi jobok történetéhez). */
+export function recoveryHistoryOf(output: JobView["output"], currentError?: string | null): RecoveryStep[] {
+  const o = (output ?? {}) as { recovery?: unknown; gateRecoveryAttempt?: unknown; bankRebuild?: unknown; previousGateError?: unknown };
+  const history = Array.isArray(o.recovery) ? (o.recovery as RecoveryStep[]).filter((h) => h && typeof h.strategy === "string" && typeof h.fingerprint === "string") : [];
+  if (history.length) return history;
+  const legacy: RecoveryStep[] = [];
+  // Ha a korábbi hibaszöveg nincs elmentve, a jelenlegi hibához kötjük (különben „új hibának” látszana, és a fok újraindulna).
+  const source = typeof o.previousGateError === "string" ? o.previousGateError : currentError ?? null;
+  const prev = source ? failureFingerprint(source) : null;
+  const base = { fingerprint: prev?.key ?? "bank-floor|", failing: prev?.failing ?? 0, at: 0 };
+  if (typeof o.gateRecoveryAttempt === "number" && o.gateRecoveryAttempt >= 1) legacy.push({ strategy: "gate", ...base });
+  if (o.bankRebuild === true) legacy.push({ strategy: "rebuild-full", ...base });
+  if (o.bankRebuild === "targeted") legacy.push({ strategy: "rebuild-targeted", ...base });
+  return legacy;
 }
 
 /** Called only by explicit resume inside the owner-checked workflow lease. */

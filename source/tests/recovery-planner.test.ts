@@ -64,3 +64,24 @@ test("véges: bármely osztályban legfeljebb a lépcső hossza + 1 lépés utá
     while (planRecovery({ error: err, history }).strategy !== "ask-owner") { history.push(step(planRecovery({ error: err, history }).strategy, err)); n++; assert.ok(n <= ladder.length, `${cls}: véges`); }
   }
 });
+
+test("review #233: a kötőjeles fogalomazonosító nem csonkul, két különböző hiány nem olvad össze", () => {
+  const fp = failureFingerprint("Hibás banktétel maradt a limiten: x (kivétel után: kor-kerulete: hiányzó recall kvíz.; haromszog-kerulete: hiányzó recall kvíz.)");
+  assert.match(fp.key, /haromszog-kerulete:recall,kor-kerulete:recall/);
+});
+
+test("review #234: a szolgáltatói hibánál a megállt lépés az ujjlenyomat része — az animátor újrapróbái nem fogyasztják el a lektoréit", () => {
+  const anim = 'A(z) "animator" lépés modellhívása hibára futott: [OpenAI] 500';
+  const lektor = 'A(z) "lektor" lépés modellhívása hibára futott: Request timed out';
+  assert.notEqual(failureFingerprint(anim).key, failureFingerprint(lektor).key);
+  const history = [step("retry-provider", anim)];
+  assert.equal(planRecovery({ error: lektor, history }).strategy, "retry-provider");
+});
+
+test("review #234: új hibára (más tételek) az olcsó kapu-fok újra elérhető; osztályonként legfeljebb kétszer (véges)", () => {
+  const e1 = "Hibás banktétel maradt a limiten: experience.tasks[1]: x";
+  const e2 = "Hibás banktétel maradt a limiten: experience.tasks[2]: x";
+  const e3 = "Hibás banktétel maradt a limiten: experience.tasks[3]: x";
+  assert.equal(planRecovery({ error: e2, history: [step("gate", e1)] }).strategy, "gate", "új hiba: a kapu még egyszer");
+  assert.equal(planRecovery({ error: e3, history: [step("gate", e1), step("gate", e2)] }).strategy, "rebuild-targeted", "a kapu osztályonként kétszer futott");
+});
