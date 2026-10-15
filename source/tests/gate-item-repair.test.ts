@@ -174,3 +174,52 @@ test("S11/6 + S9/7 (mért: job 8953db4b, 6 cél NÉMÁN kimaradt): 6 cél → 2 
   }).deps });
   assert.equal(failing, null, "a 2. adag bukása a régi hibaút (az 1. adag javítása sem kerül vissza)");
 });
+
+/* Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D1, mért: job 416ad01d — egy javíthatatlan tétel miatt a másik három javítása is
+   elmaradt, a négy kivétel a 45-ös padló alá vitte a bankot): a kapu részleges módja. Az alapértelmezés (fent) változatlan. */
+function brokenPair() {
+  const { lesson } = setup();
+  const good0 = lesson.experience!.tasks[0] as Record<string, unknown>;
+  const broken = structuredClone(lesson);
+  (broken.experience!.tasks[0] as Record<string, unknown>).sample = "zzz";
+  (broken.experience!.tasks[1] as Record<string, unknown>).sample = "zzz";
+  const flags = [{ path: "experience.tasks[0]", message: "mintaválasz hibás" }, { path: "experience.tasks[1]", message: "mintaválasz hibás" }];
+  const callBank = async (_s: string, user: string) => {
+    const id = JSON.parse(user).tetel.id;
+    return id === good0.id ? { ...good0, q: `${String(good0.q)} (javítva)` } : { ...(broken.experience!.tasks[1] as Record<string, unknown>), q: "még mindig rossz" };
+  };
+  return { broken, flags, callBank };
+}
+
+test("D1 részleges mód: egy javíthatatlan cél nem viszi el a többi javítását — a javíthatatlan az unrepaired listába kerül", async () => {
+  const { broken, flags, callBank } = brokenPair();
+  const res = await repairFlaggedBankItems({ lesson: broken, flags, round: 3, partial: true, deps: setup({ callBank }).deps });
+  assert.ok(res, "a javítható cél eredménye megmarad");
+  assert.deepEqual(res.repaired, ["experience.tasks[0]"]);
+  assert.deepEqual(res.unrepaired, ["experience.tasks[1]"]);
+  assert.match(String((res.lesson.experience!.tasks[0] as { q: string }).q), /\(javítva\)$/);
+  assert.equal((res.lesson.experience!.tasks[1] as { sample: string }).sample, "zzz", "a javítatlan tétel változatlan (a kapu veszi ki)");
+});
+
+test("D1 részleges mód nélkül ugyanez a bemenet a régi szerződés szerint null", async () => {
+  const { broken, flags, callBank } = brokenPair();
+  assert.equal(await repairFlaggedBankItems({ lesson: broken, flags, round: 3, deps: setup({ callBank }).deps }), null);
+});
+
+test("D1 részleges mód: ha egyetlen cél sem javítható → null (a régi hibaút)", async () => {
+  const { lesson, deps } = setup({ verify: async () => ["még mindig két helyes opció"] });
+  assert.equal(await repairFlaggedBankItems({ lesson, flags: [flag], round: 3, partial: true, deps }), null);
+});
+
+test("D1 részleges mód: minden cél javítható → mind a repaired listában, unrepaired üres (az alapmóddal azonos eredmény)", async () => {
+  const { lesson } = setup();
+  const q0 = lesson.experience!.quiz[0] as Record<string, unknown>;
+  const q1 = lesson.experience!.quiz[1] as Record<string, unknown>;
+  const flags = [{ path: "experience.quiz[0]", message: "2 helyes opció" }, { path: "experience.quiz[1]", message: "2 helyes opció" }];
+  const res = await repairFlaggedBankItems({ lesson, flags, round: 3, partial: true, deps: setup({
+    callBank: async (_s, user) => { const id = JSON.parse(user).tetel.id; return id === q0.id ? { ...q0, question: `${String(q0.question)} (javítva)` } : { ...q1, question: `${String(q1.question)} (javítva)` }; },
+  }).deps });
+  assert.ok(res);
+  assert.deepEqual(res.repaired, ["experience.quiz[0]", "experience.quiz[1]"], "hibátlan javítások megmaradnak");
+  assert.deepEqual(res.unrepaired, []);
+});

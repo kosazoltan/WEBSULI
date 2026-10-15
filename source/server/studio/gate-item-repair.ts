@@ -118,8 +118,13 @@ export function gateRepairBatches<T>(targets: T[]): T[][] | null {
  * Spec S11/6 + S9/7: a célok legfeljebb 5-ös ADAGOKBAN (legfeljebb 2 adag); tételenként a meglévő ellenőrzés, adagonként a bank
  * új / az adag tételeit megnevező hibáinak ellenőrzése, az összes után teljes validálás. Minden kihagyás és bukás okkal naplózva.
  * Részleges eredmény nincs: bármely bukás → `null` (a régi hibaút).
+ *
+ * Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D1, mért: job 416ad01d — egy javíthatatlan tétel miatt a másik három javítása is
+ * elmaradt, és a négy kivétel a padló alá vitte a bankot): `partial: true` mellett egy cél bukása nem állítja meg a többit; a javítatlan
+ * célok az `unrepaired` listába kerülnek (a kapu a meglévő kivételi szabállyal, padló-ellenőrzéssel veszi ki őket). Az alapértelmezés változatlan.
  */
-export async function repairFlaggedBankItems(args: { lesson: Lesson; flags: Flag[]; round: number; subject?: string; deps: GateRepairDeps }): Promise<{ lesson: Lesson; repaired: string[]; batches: number } | null> {
+export async function repairFlaggedBankItems(args: { lesson: Lesson; flags: Flag[]; round: number; subject?: string; deps: GateRepairDeps; partial?: boolean }): Promise<{ lesson: Lesson; repaired: string[]; unrepaired: string[]; batches: number } | null> {
+  if (args.partial) return repairFlaggedBankItemsPartial(args);
   let lesson = args.lesson;
   const repaired: string[] = [];
   const { targets, checkOnly, skipped } = planGateRepair(args.lesson, args.flags);
@@ -149,7 +154,54 @@ export async function repairFlaggedBankItems(args: { lesson: Lesson; flags: Flag
     const remaining = bankProblems(lesson);
     if (remaining.length) { logger.warn(`[ORKESZTRÁTOR] kapu: a javított bank teljes ellenőrzése bukott (${remaining.slice(0, 3).join(" | ")}) — a régi hibaút.`); return null; }
   }
-  return { lesson, repaired, batches: batches.length };
+  return { lesson, repaired, unrepaired: [], batches: batches.length };
+}
+
+/** D1: a részleges mód — a javítható célok javítva, a javíthatatlanok (és a bukott adag tételei) az `unrepaired` listában. */
+async function repairFlaggedBankItemsPartial(args: { lesson: Lesson; flags: Flag[]; round: number; subject?: string; deps: GateRepairDeps }): Promise<{ lesson: Lesson; repaired: string[]; unrepaired: string[]; batches: number } | null> {
+  let lesson = args.lesson;
+  const repaired: string[] = [];
+  const repairedRefs: BankItemRef[] = [];
+  const unrepaired: string[] = [];
+  const { targets, checkOnly, skipped } = planGateRepair(args.lesson, args.flags);
+  for (const path of skipped) logger.warn(`[ORKESZTRÁTOR] kapu: a(z) ${path} jelzés nem banktételre mutat (nem bank-útvonal / nincs ilyen tétel) — kapu-javítás nélkül.`);
+  if (!targets.length) {
+    logger.warn(`[ORKESZTRÁTOR] kapu: nincs javítható banktétel-cél (${args.flags.length} jelzés) — a régi hibaút.`);
+    return null;
+  }
+  const batches = gateRepairBatches(targets);
+  if (!batches) {
+    logger.warn(`[ORKESZTRÁTOR] kapu: ${targets.length} javítási cél > a futásonkénti keret (${GATE_REPAIR_MAX_BATCHES} adag × ${GATE_REPAIR_MAX_ITEMS} tétel) — a kapu-javítás kimarad, a régi hibaút.`);
+    return null;
+  }
+  const initial = new Set(bankProblems(args.lesson));
+  for (const [b, batch] of batches.entries()) {
+    logger.info(`[ORKESZTRÁTOR] kapu: ${b + 1}/${batches.length}. adag (${batch.length} tétel, részleges mód): ${batch.map((t) => t.path).join(", ")}.`);
+    const before = lesson;
+    const batchBaseline = new Set(bankProblems(lesson));
+    const batchRepaired: GateRepairTarget[] = [];
+    for (const t of batch) {
+      const done: string[] = [];
+      const next = await repairOneTarget(lesson, t, checkOnly.has(bankItemPath(t.ref)), args, done);
+      if (!next) { unrepaired.push(t.path); logger.warn(`[ORKESZTRÁTOR] kapu: ${t.path} nem javítható (${b + 1}/${batches.length}. adag) — javítatlan, a kapu kivételi szabálya dönt.`); continue; }
+      lesson = next;
+      batchRepaired.push(t);
+    }
+    // Az adag nem hozhat új bankhibát, és a JAVÍTOTT tételeit megnevező hiba sem maradhat; bukáskor az adag visszaáll (javítatlan).
+    const fresh = bankProblems(lesson).filter((p) => !batchBaseline.has(p) || batchRepaired.some((t) => mentionsItem(p, t.ref, itemOf(lesson, t.ref)?.id)));
+    if (fresh.length) {
+      logger.warn(`[ORKESZTRÁTOR] kapu: a(z) ${b + 1}. adag utáni ellenőrzés bukott (${fresh.slice(0, 3).join(" | ")}) — az adag javítatlan marad.`);
+      lesson = before;
+      unrepaired.push(...batchRepaired.map((t) => t.path));
+      continue;
+    }
+    repaired.push(...batchRepaired.map((t) => t.path));
+    repairedRefs.push(...batchRepaired.map((t) => t.ref));
+  }
+  if (!repaired.length) { logger.warn(`[ORKESZTRÁTOR] kapu: egyetlen cél sem javítható (${unrepaired.join(", ")}) — a régi hibaút.`); return null; }
+  const remaining = bankProblems(lesson).filter((p) => !initial.has(p) || repairedRefs.some((r) => mentionsItem(p, r, itemOf(lesson, r)?.id)));
+  if (remaining.length) { logger.warn(`[ORKESZTRÁTOR] kapu: a javított bank teljes ellenőrzése bukott (${remaining.slice(0, 3).join(" | ")}) — a régi hibaút.`); return null; }
+  return { lesson, repaired, unrepaired, batches: batches.length };
 }
 
 /** Egy cél javítása a meglévő tételenkénti ellenőrzéssel: a javított lecke, vagy `null`. Sikernél a `repaired` listába ír. */

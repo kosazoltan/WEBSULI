@@ -25,6 +25,8 @@ import {
   runPipelineStep,
   retryTimedOutLektor,
   retryFailedBankBuild,
+  retryFailedGate,
+  resumeKindOf,
   startJobFromMap,
 } from "./step-runner";
 import { COUPON_GAME_IDS, conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
@@ -302,6 +304,8 @@ export type OneStepRunView = {
   phase: OneStepPhase; detail: string | null; error: string | null;
   mapId: string | null; jobId: string | null; lessonId: string | null; htmlFileId: string | null;
   draft?: OneStepDraft;
+  /** Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3, D5): csak hibánál — folytatható-e, és melyik workflow-lépésnél állt meg. */
+  resumable?: boolean; stoppedAt?: string;
 };
 
 /**
@@ -331,12 +335,29 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     htmlFileId = lesson?.htmlFileId ?? null;
   }
   let draft: OneStepDraft | null = null;
+  let stop: { resumable: boolean; stoppedAt?: string } | null = null;
   if (run.phase === "error" && run.jobId) {
-    const [job] = await db.select({ output: studioJobs.output, publishedAt: lessons.publishedAt }).from(studioJobs)
+    const [job] = await db.select({ output: studioJobs.output, publishedAt: lessons.publishedAt, step: studioJobs.step, status: studioJobs.status,
+      error: studioJobs.error, lessonId: studioJobs.lessonId }).from(studioJobs)
       .leftJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, run.jobId)).limit(1);
     draft = draftSummaryOf(job?.output, !!job?.publishedAt);
+    const visits = await workflowVisitsOf(runId);
+    const output = (job?.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown };
+    stop = {
+      resumable: !!job && resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
+        htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1) }) !== null,
+      stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
+    };
   }
-  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}) };
+  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}),
+    ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}) } : {}) };
+}
+
+/** A futás workflow-látogatásai (csak olvasás; workflow-napló nélküli futásnál üres). */
+async function workflowVisitsOf(runId: string): Promise<Array<{ step: string; state: string; error?: string }>> {
+  const result = await db.execute(sql`SELECT snapshot->'visits' AS visits FROM lesson_workflow_runs WHERE id = ${runId} LIMIT 1`);
+  const visits = (result.rows[0] as { visits?: unknown } | undefined)?.visits;
+  return Array.isArray(visits) ? visits.filter((v): v is { step: string; state: string; error?: string } => !!v && typeof v.step === "string" && typeof v.state === "string") : [];
 }
 
 /** GET /api/studio/lessons/one-step/:runId — the progress poll. */
@@ -867,7 +888,7 @@ export async function driveOneStep(runId: string, jobId: string, gapNote: string
 }
 
 /** POST /api/studio/lessons/from-map/:mapId — start a new lesson pipeline. */
-async function guardedDrive(jobId: string) {
+async function guardedDrive(jobId: string, onStep?: (step: string, round: number) => void) {
   const store = await createDrizzlePipelineStore();
   return guardResumedDrive(jobId, {
     loadJob: store.loadJob,
@@ -879,7 +900,7 @@ async function guardedDrive(jobId: string) {
         await workflowFence(tx);
       });
     },
-  }, () => drive(jobId));
+  }, () => drive(jobId, onStep));
 }
 
 /** A haladásjelző (one-step progress) azonosítója a workflow-é: a feltöltéses és (spec s7) a webes Studio-futásnál. */
@@ -907,7 +928,12 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
         updateRun(id, { phase: job.step as OneStepPhase, error: null, detail: "Folytatás a mentett részeredményekből." });
       }
       onAccepted?.();
-      await guardedDrive(jobId);
+      // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D6, élő: a fázis „animator”-on ragadt, miközben a lektor/kapu futott):
+      // a követett folytatás ugyanúgy frissíti a haladásjelzőt, mint az első futás (driveOneStep).
+      await guardedDrive(jobId, tracksProgress(previous?.view.definition.mode) ? (step, round) => {
+        if (!["pedagogue", "author", "animator", "lektor", "gate"].includes(step)) return;
+        void getRun(id).then(() => updateRun(id, { phase: step as OneStepPhase, detail: round > 0 ? `${round + 1}. kör` : "Folytatás a mentett részeredményekből." }));
+      } : undefined);
       const [job] = await db.select().from(studioJobs).where(eq(studioJobs.id, jobId));
       if (job?.step === "done" && job.lessonId) return previous?.view.definition.mode === "webStudio" ? finishWebStudio(id, owner, job.lessonId) : readPublishedLesson(job.lessonId);
       if (!job || job.step === "error" || job.status === "error") throw new Error(job?.error ?? "A készítés megállt.");
@@ -1047,11 +1073,13 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
 
   await respondToResume(res, req.params.id, accepted =>
     driveTracked(req.params.id, req.user!.id, false, async visit => {
-      if (visit?.step !== "animator") return retryTimedOutLektor(req.params.id);
+      if (visit?.step !== "animator" && visit?.step !== "gate") return retryTimedOutLektor(req.params.id);
       const [draft] = await db.select({ publishedAt: lessons.publishedAt }).from(studioJobs)
         .innerJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, req.params.id));
       if (!draft || draft.publishedAt) throw new WorkflowConflict("Csak meglévő, még nem publikált bankjelölt folytatható.");
-      await retryFailedBankBuild(req.params.id, visit);
+      // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D4): a kapu bank-eredetű megállása a kapu újrafuttatásával folytatható.
+      if (visit.step === "gate") await retryFailedGate(req.params.id, visit);
+      else await retryFailedBankBuild(req.params.id, visit);
     }, accepted));
 });
 
