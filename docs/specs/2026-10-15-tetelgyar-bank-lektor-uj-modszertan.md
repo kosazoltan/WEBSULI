@@ -151,3 +151,8 @@ Ajánlott sorrend: **T0 → T1 → T4 → T2 → T6 → T5 → T3** (a gyors, bi
 - **Döntés: gépi kalibráció** — a tesztesetekből a program modellhívás nélkül igazítja a rubrikát (alakok felvétele; a helyes válaszok
   többségéből hiányzó kötelező csoport bónusszá válik, ha utána egyik hibás válasz sem kap teljes pontot és a minta igen); csak a maradék
   bukás megy javítókörbe / kivételre. Végrehajtás: `docs/specs/2026-10-15-tetelgyar-t2-valaszkulcs-tesztek-vegrehajtas.md` (T2.1b).
+- **Második döntés (a kalibráció mérése után, 2026-10-15):** a kalibráció (modellhívás nélkül) a bukott helyes eseteket 643 → 316-ra csökkenti
+  (≥ 2 helyesből hiányzó csoport → bónusz), hibás válasz egyik változatnál sem jut át (18 → 18). **A maradék helyes-eset bukás NEM blokkol**:
+  naplózódik és a job kimenetébe mentődik (`answerKeyReport`); a gyerek valódi válaszát a T7 döntőbíró ítéli meg. Javítókörbe / kivételre
+  csak a **túl megengedő** rubrika megy (hibás válasz teljes pontot kap). Küszöb: **legalább 2 helyes esetből hiányzik** (egy zajos tesztválasz
+  nem minősíthet vissza lényeges fogalmat).

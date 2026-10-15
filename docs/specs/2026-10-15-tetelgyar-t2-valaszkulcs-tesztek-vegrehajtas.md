@@ -68,7 +68,8 @@ harness felismeri és külön rögzíti (a bank-ellenőr mintájára) — a tesz
 sem `ok` — ha az őr sérül, az adott lépés visszavonódik.
 1. **Alakfelvétel:** a helyes válasz egy szava egy hiányzó csoportba kerül, ha a csoport valamely elemével igazoltan rokon: a nyelvi adatbank
    (`hu-lexicon`: ragozott alak, írásváltozat, rokon értelmű szó) vagy közös szótő (közös kezdet ≥ 5 betű és ≥ a rövidebb szó hossza − 3).
-2. **Bónuszba sorolás:** a kötelező csoport, amelyet a helyes esetek többsége (> 50%) a felvétel után sem tartalmaz, a `bonus`-ba kerül —
+2. **Bónuszba sorolás:** a kötelező csoport, amelyet legalább 2 helyes eset a felvétel után sem tartalmaz (második döntés; a mérésen a
+   többségi szabály is szerepel), a `bonus`-ba kerül —
    egyenként, a legritkábban teljesülővel kezdve; legalább egy kötelező csoport mindig marad.
 3. **Mondatfeltétel:** ha a helyes eset csak a kötőszó hiánya miatt nem `ok`, `needsSentence = false` (a minta meglévő szabályának mintájára).
 4. **Szóminimum:** ha a helyes eset csak a szóminimum miatt bukik, `minWords` = a legrövidebb helyes eset szószáma (alsó korlát 1).
@@ -76,3 +77,14 @@ A kalibrált csomag újra átmegy a teljes `validate`-en; a maradék bukás a T2
 Mérés (modellhívás nélkül, a T2.0 eseteivel): a kalibráció után bukó feladatok száma, a bónuszba sorolt csoportok száma, és hogy hibás válasz
 nem kap teljes pontot. Tesztek: `tests/answer-key-calibrate.test.ts` (alakfelvétel szótővel / adatbankkal; bónuszba sorolás többségi
 szabállyal; az őr visszavon, ha hibás válasz átmenne; legalább egy kötelező csoport marad; a régi leckék pontozása változatlan).
+
+## T2.1c — a maradék kezelése (második tulajdonosi döntés)
+Mérés (`docs/measurements/2026-10-15-t2-valaszkulcs.json`, kalibráció modellhívás nélkül, a T2.0 eseteivel): többség 175 bukó feladat / 461 eset;
+≥ 2 helyesből 148 / 316; bármelyikből 101 / 225; hibás válasz mindháromnál 18 marad (az őr tart). Döntés: küszöb ≥ 2; a maradék helyes-eset
+bukás NEM blokkol.
+- `experience-builder.ts`: a kulcsok után minden feladat kalibrálódik (`calibrateRubric`), a csomag újra átmegy a `validate`-en (ha ez bukna, a
+  kalibráció visszavonódik és az eredeti csomag megy tovább); blokkoló `issues` csak a „hibás … teljes pontot kap” üzenet. A maradék helyes-eset
+  bukás és a kalibráció változásai a végleges tétel-azonosítóval a `deps.onAnswerKeyReport`-on át a hívóhoz jutnak.
+- `step-runner.ts`: a jelentés a job kimenetébe kerül (`answerKeyReport`), összesítés a naplóba.
+- Tesztek: a T2.1 bekötési tesztje a túl megengedő rubrikára (javítókör, utolsó kísérletnél kivétel); új: a helyes-eset bukás nem indít javítókört,
+  a jelentésbe kerül; a kalibrált rubrika a gyerek helyes válaszát teljes ponttal fogadja.
