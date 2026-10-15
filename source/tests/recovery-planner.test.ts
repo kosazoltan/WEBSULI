@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { failureFingerprint, planRecovery, RECOVERY_LADDER, type RecoveryStep } from "../server/studio/recovery-planner";
+import { failureFingerprint, NOT_RESUMABLE_STRATEGIES, planRecovery, RECOVERY_LADDER, type RecoveryStep } from "../server/studio/recovery-planner";
 
 /* Elakadás-vezérlő V1 (docs/specs/2026-10-15-elakadas-vezerlo.md). */
 
@@ -84,4 +84,8 @@ test("review #234: új hibára (más tételek) az olcsó kapu-fok újra elérhet
   const e3 = "Hibás banktétel maradt a limiten: experience.tasks[3]: x";
   assert.equal(planRecovery({ error: e2, history: [step("gate", e1)] }).strategy, "gate", "új hiba: a kapu még egyszer");
   assert.equal(planRecovery({ error: e3, history: [step("gate", e1), step("gate", e2)] }).strategy, "rebuild-targeted", "a kapu osztályonként kétszer futott");
+});
+
+test("V4: a szerzői javítás és az újragyártás is végrehajtható fok; csak a tulajdonosi döntés nem", () => {
+  assert.deepEqual(NOT_RESUMABLE_STRATEGIES, ["ask-owner"]);
 });

@@ -84,5 +84,5 @@ export function planRecovery(input: { error: string; history: readonly RecoveryS
   return { strategy: "ask-owner", reason: `${REASONS["ask-owner"]}${detail}`, fingerprint: fp.key, cls: fp.cls };
 }
 
-/** A mentett részekből (a „Folytatás” gombbal / a vezérlővel) NEM indítható fokok: V4-ig, illetve tulajdonosi döntés. */
-export const NOT_RESUMABLE_STRATEGIES: readonly RecoveryStrategy[] = ["author-repair", "remanufacture", "ask-owner"];
+/** A mentett részekből (a „Folytatás” gombbal / a vezérlővel) NEM indítható fok: a tulajdonosi döntés (V4 óta minden más fok végrehajtható). */
+export const NOT_RESUMABLE_STRATEGIES: readonly RecoveryStrategy[] = ["ask-owner"];

@@ -459,6 +459,58 @@ export function targetedRebuildOutput(output: JobView["output"], error: string |
   return { ...full, experienceCheckpoint: { ...checkpoint, parts: kept }, bankRebuild: "targeted", rebuiltSections: [...sections].sort((a, b) => a - b) } as JobView["output"];
 }
 
+/**
+ * Elakadás-vezérlő V4 (tulajdonosi döntés 2026-10-15): a hibás banktételek és a padló alá eső fogalmak TANÍTÓ fejezetei — a szerzői javítás célja.
+ * Üres, ha nincs fejezethez köthető hiba (akkor a fok nem végrehajtható).
+ */
+export function authorRepairTargets(output: JobView["output"], error: string | null | undefined): { sections: number[]; reasons: Map<number, string[]> } {
+  const lesson = (output?.lesson ?? {}) as { sections?: Array<{ blocks?: Array<{ kind?: string; coversConceptIds?: string[] }> }>; experience?: Record<string, Array<{ sectionIndex?: number }>> };
+  const reasons = new Map<number, string[]>();
+  const add = (s: unknown, why: string) => {
+    if (typeof s !== "number" || s < 0 || s >= (lesson.sections?.length ?? 0)) return;
+    reasons.set(s, [...(reasons.get(s) ?? []), why]);
+  };
+  const text = String(error ?? "");
+  const parts = text.split(/;\s*(?=experience\.)/);
+  for (const part of parts) {
+    const m = /experience\.(tasks|quiz|methods)\[(\d+)\]:?\s*(.*)/s.exec(part);
+    if (m) add(lesson.experience?.[m[1]]?.[Number(m[2])]?.sectionIndex, m[3].replace(/\s*\(kivétel után:[\s\S]*$/, "").trim().slice(0, 400));
+  }
+  for (const m of text.matchAll(/([^\s:;,()]+): hiányzó (recall|apply) kvíz/g)) {
+    const idx = (lesson.sections ?? []).findIndex((s) => (s.blocks ?? []).some((b) => b.kind === "explain" && (b.coversConceptIds ?? []).includes(m[1])));
+    add(idx, `a(z) ${m[1]} fogalomhoz nem készíthető helyes ${m[2] === "recall" ? "felidéző" : "alkalmazó"} kvíz — a tanítás legyen ehhez elég konkrét`);
+  }
+  return { sections: [...reasons.keys()].sort((a, b) => a - b), reasons };
+}
+
+/**
+ * Elakadás-vezérlő V4.1: célzott SZERZŐI javítás a kapu meglévő útján (`targetedGate` + `output.gate`) — csak a hibás fejezetek tanítása íródik újra,
+ * utána a bank (a régi bank és a gyorsítótár kikerül), a lektor és a kapu ugyanazzal a mércével.
+ */
+export async function retryWithAuthorRepair(jobId: string, visit: { step: string; state: string; error?: string } | undefined, deps: PipelineDeps = {}): Promise<void> {
+  const { store } = await resolveDeps(deps);
+  const job = await store.loadJob(jobId);
+  if (!job) throw new Error("A job nem található.");
+  if (job.step !== "error") return;
+  const kind = resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!job.output?.lesson, htmlFileId: job.output?.htmlFileId, visit,
+    gateRecoveryAttempt: job.output?.gateRecoveryAttempt });
+  if (kind !== "gate" && kind !== "rebuild") throw new Error("Csak naplóval igazolt, mentett és még nem publikált kapuhiba folytatható szerzői javítással.");
+  const targets = authorRepairTargets(job.output, job.error);
+  if (!targets.sections.length) throw new Error("A szerzői javításhoz nincs fejezethez köthető hiba.");
+  if (!await workflowAllowResumeEdge("gate", "author", "vezérlő: célzott szerzői javítás a hibás fejezetekre", ["animator", "lektor", "gate"])) {
+    throw new Error("A szerzői javítás csak a kapunál megállt futás kifejezett folytatásaként engedélyezett.");
+  }
+  const gate = { ok: false, arc: targets.sections.map((sectionIdx) => ({ sectionIdx })),
+    reasons: targets.sections.map((s) => `A(z) ${s + 1}. fejezet tanítása alapján a gyakorlóbank nem építhető fel hibátlanul: ${(targets.reasons.get(s) ?? []).join(" | ")}. Tedd a tanítást egyértelművé és teljessé ezekre a pontokra; a többi fejezet változatlan.`) };
+  const history = recoveryHistoryOf(job.output, job.error);
+  const fp = failureFingerprint(job.error ?? "");
+  const step: RecoveryStep = { strategy: "author-repair", fingerprint: fp.key, failing: fp.failing, at: Date.now() };
+  const attempt = recoveryAttempt(job.output?.gateRecoveryAttempt, "kapufolytatási");
+  const base = rebuildOutput(job.output, job.error, attempt) as Record<string, unknown>;
+  await store.saveStep(jobId, { step: "author", status: "pending", round: job.round + 1, error: null, finishedAt: null,
+    output: { ...spendRepair(base, "targetedGate", job.round + 1), gate, authorRepairSections: targets.sections, recovery: [...history, step] } });
+}
+
 /** Elakadás-vezérlő V3: a vezérlő eddigi lépései — az `output.recovery[]` és a régi mezőkből visszafejtve (a régi jobok történetéhez). */
 export function recoveryHistoryOf(output: JobView["output"], currentError?: string | null): RecoveryStep[] {
   const o = (output ?? {}) as { recovery?: unknown; gateRecoveryAttempt?: unknown; bankRebuild?: unknown; previousGateError?: unknown };

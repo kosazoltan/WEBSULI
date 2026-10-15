@@ -26,6 +26,7 @@ import {
   retryTimedOutLektor,
   retryFailedBankBuild,
   retryFailedGate,
+  retryWithAuthorRepair,
   resumeKindOf,
   recoveryHistoryOf,
   startJobFromMap,
@@ -355,7 +356,10 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     const output = (job?.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown; gateRecoveryAttempt?: unknown };
     // Review #233/#234: a felület ugyanazzal a (régi mezőkből is visszafejtett) történettel tervez, mint a végrehajtás; a gomb csak akkor
     // látszik, ha a következő fok a mentett részekből tényleg végrehajtható.
-    const plan = job?.error ? planRecovery({ error: job.error, history: recoveryHistoryOf(job.output as never, job.error) }) : null;
+    const remanufacturedAs = (job?.output as { remanufacturedAs?: unknown } | null)?.remanufacturedAs;
+    const plan = typeof remanufacturedAs === "string"
+      ? { strategy: "ask-owner" as const, reason: `új gyártás indult ugyanabból a forrásból (${remanufacturedAs.slice(0, 8)}) — a Tananyagkészítési futások között követhető`, cls: "other" as const, fingerprint: "" }
+      : job?.error ? planRecovery({ error: job.error, history: recoveryHistoryOf(job.output as never, job.error) }) : null;
     const executable = !plan || !NOT_RESUMABLE_STRATEGIES.includes(plan.strategy);
     const kind = job ? resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
       htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1), gateRecoveryAttempt: output.gateRecoveryAttempt }) : null;
@@ -1099,6 +1103,13 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
     .limit(1);
   if (!exists) return res.status(404).json({ message: "A job nem található." });
 
+  // Elakadás-vezérlő V4 (egy szabály): ha a tervező következő foka a teljes újragyártás, a kézi gomb is azt indítja (új job).
+  const [stopped] = await db.select({ output: studioJobs.output, error: studioJobs.error, status: studioJobs.status }).from(studioJobs).where(eq(studioJobs.id, req.params.id));
+  if (stopped?.status === "error" && stopped.error
+    && planRecovery({ error: stopped.error, history: recoveryHistoryOf(stopped.output as never, stopped.error) }).strategy === "remanufacture") {
+    try { const jobId = await remanufactureFromMap(req.params.id, req.user!.id, stopped.error); return res.status(202).json({ jobId, remanufactured: true }); }
+    catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." }); }
+  }
   await respondToResume(res, req.params.id, accepted =>
     driveTracked(req.params.id, req.user!.id, false, (visit) => applyResume(req.params.id, visit), accepted, true));
 });
@@ -1113,8 +1124,40 @@ async function applyResume(jobId: string, visit: import("../../shared/lesson-wor
     .innerJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, jobId));
   if (!draft || draft.publishedAt) throw new WorkflowConflict("Csak meglévő, még nem publikált bankjelölt folytatható.");
   // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D4): a kapu bank-eredetű megállása a kapu újrafuttatásával folytatható.
-  if (visit.step === "gate") await retryFailedGate(jobId, visit);
-  else await retryFailedBankBuild(jobId, visit);
+  // Elakadás-vezérlő V4: a tervező `author-repair` fokánál célzott szerzői javítás (a többi fok a `retryFailedGate`-ben).
+  if (visit.step === "gate") {
+    const [job] = await db.select({ output: studioJobs.output, error: studioJobs.error }).from(studioJobs).where(eq(studioJobs.id, jobId));
+    const plan = planRecovery({ error: job?.error ?? "", history: recoveryHistoryOf(job?.output as never, job?.error) });
+    if (plan.strategy === "author-repair") await retryWithAuthorRepair(jobId, visit);
+    else await retryFailedGate(jobId, visit);
+  } else await retryFailedBankBuild(jobId, visit);
+}
+
+/**
+ * Elakadás-vezérlő V4.2: a lépcső utolsó végrehajtható foka — teljes újragyártás ugyanabból a térképből (új job, új workflow); a régi piszkozat
+ * megmarad, a kimenete az újra hivatkozik (`remanufacturedAs`), és a vezérlő nem veszi fel újra. Futásonként egyszer (a tervező szerint).
+ */
+async function remanufactureFromMap(jobId: string, owner: string, error: string): Promise<string> {
+  const [job] = await db.select({ mapId: studioJobs.mapId, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId));
+  if (!job?.mapId) throw new WorkflowConflict("A teljes újragyártáshoz nincs forrástérkép.");
+  const out = (job.output ?? {}) as { ownerInstruction?: string; sourceCorrections?: SourceCorrection[]; topicFocus?: TopicFocus | null };
+  const started = await startJobFromMap(job.mapId, undefined, {}, {
+    ...(typeof out.ownerInstruction === "string" ? { instruction: out.ownerInstruction } : {}),
+    ...(Array.isArray(out.sourceCorrections) && out.sourceCorrections.length ? { corrections: out.sourceCorrections } : {}),
+    ...(out.topicFocus ? { topicFocus: out.topicFocus } : {}),
+  });
+  if (!started.ok) throw new WorkflowConflict(`A teljes újragyártás nem indítható: ${started.reason}`);
+  const fp = failureFingerprint(error);
+  const history = recoveryHistoryOf(job.output as never, error);
+  const step: RecoveryStep = { strategy: "remanufacture", fingerprint: fp.key, failing: fp.failing, at: Date.now() };
+  await db.execute(sql`UPDATE studio_jobs SET output = output || ${JSON.stringify({ remanufacturedAs: started.jobId, recoveryState: "remanufactured", recovery: [...history, step] })}::jsonb
+    WHERE id = ${jobId}`);
+  logger.warn(`[VEZÉRLŐ] ${jobId}: teljes újragyártás indult ugyanabból a forrásból → ${started.jobId}`);
+  void driveTracked(started.jobId, owner, true).catch((e) => {
+    if (e instanceof WorkflowConflict) { logger.warn(`[VEZÉRLŐ] Újragyártás átadva (${started.jobId}): ${e.message}`); return; }
+    logger.error(`[VEZÉRLŐ] Az újragyártás megállt (${started.jobId})`, e);
+  });
+  return started.jobId;
 }
 
 /**
@@ -1151,15 +1194,19 @@ export async function sweepFailedStudioJobs(now = Date.now()): Promise<number> {
       published: row.published, visit: lastVisit, gateRecoveryAttempt: (job?.output as { gateRecoveryAttempt?: unknown } | null)?.gateRecoveryAttempt }) !== null;
     const planned = planRecovery({ error: row.error!, history });
     const plan = eligible ? planned : { ...planned, strategy: "ask-owner" as const, reason: `${recoveryReason("ask-owner")} — ez a megállás a mentett részekből nem folytatható` };
-    if (plan.strategy === "ask-owner" || plan.strategy === "author-repair" || plan.strategy === "remanufacture") {
-      // V4 előtt a két utolsó fok nem hajtható végre: naplózott kihagyás → a tervező továbblép; a végén tulajdonosi döntés.
+    if (plan.strategy === "remanufacture") {
+      await remanufactureFromMap(row.id, row.owner!, row.error!).catch((e) => logger.error(`[VEZÉRLŐ] ${row.id}: a teljes újragyártás nem indult`, e));
+      return 1;
+    }
+    if (plan.strategy === "ask-owner") {
+      // A lépcső végén (vagy nem folytatható hibánál): tulajdonosi döntés — egyszer naplózva, a felület a pontos okot mutatja.
       const fp = failureFingerprint(row.error!);
       const step: RecoveryStep = { strategy: plan.strategy, fingerprint: fp.key, failing: fp.failing, at: now };
-      const done = plan.strategy === "ask-owner" || planRecovery({ error: row.error!, history: [...history, step] }).strategy === "ask-owner";
+      const done = true;
       const nextHistory = JSON.stringify([...history, step]);
       await db.execute(sql`UPDATE studio_jobs SET output = jsonb_set(jsonb_set(output, '{recovery}', ${nextHistory}::jsonb),
         '{recoveryState}', ${JSON.stringify(done ? "ask-owner" : "running")}::jsonb) WHERE id = ${row.id} AND status = 'error'`);
-      logger.warn(`[VEZÉRLŐ] ${row.id}: ${plan.strategy} — ${done ? "tulajdonosi döntés szükséges" : "a fok még nem végrehajtható (V4), továbblépés"}: ${plan.reason}`);
+      logger.warn(`[VEZÉRLŐ] ${row.id}: tulajdonosi döntés szükséges — ${plan.reason}`);
       continue;
     }
     if (plan.strategy === "retry-provider") {
