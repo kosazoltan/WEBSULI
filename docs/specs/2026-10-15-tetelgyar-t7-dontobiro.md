@@ -53,3 +53,10 @@ alapján eldönti, hogy a válasz tartalmilag helyes-e — a T2 mérése szerint
 - E4: Azonos feladat + normalizált válasz → a második kérés gyorsítótárból (modellhívás nélkül).
 - E5: A szolgáltatóhoz küldött tartalomban nincs tanuló-azonosító, ujjlenyomat, e-mail/telefonszám.
 - E6: Nem publikált lecke / ismeretlen feladat → 404; túl hosszú válasz → 400; korlát → 429.
+
+## Tulajdonosi döntések (2026-10-15)
+1. **Adatvédelem:** igen, adatminimalizálással (csak a válasz szövege és a feladat tartalma; azonosító / ujjlenyomat / IP nem; e-mail és
+   telefonszám kitakarva; legfeljebb 1000 karakter; a válasz nem tárolódik gyerekhez kötve).
+2. **Gyorsítótár:** adatbázis-tábla (migráció; kulcs-hash → ítélet, a válasz szövege nélkül).
+3. **Korlátok:** napi 2000 fizetett döntőbíró-hívás összesen; IP-nként 60 kérés / 15 perc.
+4. **Hatókör:** a Studio (React) és a HTML-leckék (iframe, `/dev/:id`) egyszerre.
