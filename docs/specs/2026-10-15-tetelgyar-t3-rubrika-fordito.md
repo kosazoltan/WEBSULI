@@ -67,3 +67,8 @@ ennek csak bizonyított igény esetén van értelme.
 - E1: HA a kulcsgondolat-prompt él, AKKOR a próbakészleten a bukó helyes tesztválaszok száma ≥ 30%-kal kevesebb, mint 298.
 - E2: A „hibás átmegy” szám nem nő a 18-hoz képest.
 - E3: A régi leckék pontozása változatlan (v1 paritás-tesztek zöldek).
+
+## Tulajdonosi döntés (2026-10-15)
+- **A — a T3 lezárva, mért eredménnyel.** Nincs termékkód. A szemantikai parafrázist a T7 döntőbíró viszi.
+- Visszamérés 1–2 hét múlva: a döntőbíró élő hívásszáma (`arbiter_daily_usage`) és válaszideje. Ha drága vagy lassú, a B (kulcsgondolat-prompt mérése) indul.
+- A mérőeszköz (`source/scripts/measure/rubric-gap.mts`) a repóban marad, hogy a visszamérés megismételhető legyen.
