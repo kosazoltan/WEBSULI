@@ -1,0 +1,324 @@
+{
+  "date": "2026-10-15",
+  "source": "answer-key-trial.json",
+  "tested": 188,
+  "failingTasks": 144,
+  "failingCorrect": 298,
+  "avgRequiredGroups": {
+    "before": 5.26,
+    "afterCalibration": 4.11
+  },
+  "missingGroupClasses": {
+    "nincs rokon": 166,
+    "összetétel": 95,
+    "toldalék": 18,
+    "közös tő": 10,
+    "kifejezés-rész": 28
+  },
+  "otherReasons": {
+    "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést.": 19,
+    "A válasz még túl rövid.": 5
+  },
+  "simulations": {
+    "–": {
+      "failingCorrect": 298,
+      "wrongPass": 18,
+      "compiledTasks": 0,
+      "reverted": 0
+    },
+    "R1": {
+      "failingCorrect": 295,
+      "wrongPass": 18,
+      "compiledTasks": 69,
+      "reverted": 2
+    },
+    "R1+R2": {
+      "failingCorrect": 293,
+      "wrongPass": 18,
+      "compiledTasks": 69,
+      "reverted": 3
+    },
+    "R1+R3": {
+      "failingCorrect": 291,
+      "wrongPass": 18,
+      "compiledTasks": 102,
+      "reverted": 4
+    },
+    "R1+R3+R5": {
+      "failingCorrect": 291,
+      "wrongPass": 18,
+      "compiledTasks": 109,
+      "reverted": 5
+    },
+    "R1+R2+R3+R5": {
+      "failingCorrect": 289,
+      "wrongPass": 18,
+      "compiledTasks": 108,
+      "reverted": 6
+    },
+    "pontozó: összetétel-felismerés": {
+      "failingCorrect": 290,
+      "wrongPass": 23,
+      "compiledTasks": 0,
+      "reverted": 0
+    }
+  },
+  "sample": [
+    {
+      "taskId": "t-c661ed0b57be7864427857da-0",
+      "q": "Írd le, milyen hasznos anyagokat tartalmaznak a gyümölcsök, és hogyan segítik ezek a szervezetet!",
+      "groups": 6,
+      "failingCorrect": 1,
+      "classes": [
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-c661ed0b57be7864427857da-1",
+      "q": "Szóban magyarázd el, miért hasznos gyümölcsöt enni!",
+      "groups": 7,
+      "failingCorrect": 2,
+      "classes": [
+        "összetétel",
+        "toldalék"
+      ]
+    },
+    {
+      "taskId": "t-c661ed0b57be7864427857da-2",
+      "q": "Miért évelő növény a gyümölcsfa és a szőlő?",
+      "groups": 5,
+      "failingCorrect": 3,
+      "classes": [
+        "összetétel",
+        "nincs rokon",
+        "nincs rokon",
+        "nincs rokon",
+        "összetétel"
+      ]
+    },
+    {
+      "taskId": "t-c661ed0b57be7864427857da-3",
+      "q": "Hogyan ismered fel a fás szárat? Írd le a tulajdonságát, és nevezz meg egy ide tartozó növényt!",
+      "groups": 4,
+      "failingCorrect": 3,
+      "classes": [
+        "összetétel",
+        "nincs rokon",
+        "nincs rokon",
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-c661ed0b57be7864427857da-4",
+      "q": "Mit jelent a gyümölcsfa fogalma, és hogyan kapcsolódik a fás szárhoz?",
+      "groups": 3,
+      "failingCorrect": 2,
+      "classes": [
+        "egyéb: A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést.",
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-c661ed0b57be7864427857da-5",
+      "q": "Egy szőlő több éven át él, és a szára kemény, nehezen törik. Írd le, milyen két tulajdonságot állapíthatsz meg róla!",
+      "groups": 5,
+      "failingCorrect": 2,
+      "classes": [
+        "összetétel",
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-938d1a12cf6b171fabfd1d88-0",
+      "q": "Nevezd meg, milyen része van az almafának a talajból történő víz- és ásványianyag-felvételben, és írd le ezt a két feladatát!",
+      "groups": 3,
+      "failingCorrect": 1,
+      "classes": [
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-938d1a12cf6b171fabfd1d88-3",
+      "q": "Sorold fel a levéltől a törzsig növekvő sorrendben az almafa fás szárának részeit, és nevezd meg azt a feladatukat is, hogy mit juttatnak el a növény szerveihez",
+      "groups": 6,
+      "failingCorrect": 4,
+      "classes": [
+        "nincs rokon",
+        "közös tő",
+        "nincs rokon",
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-1e2fd9d9c873a0b197db3e04-1",
+      "q": "Milyen éghajlatot és talajt kedvel az almafa, ha bő termést szeretnénk?",
+      "groups": 5,
+      "failingCorrect": 1,
+      "classes": [
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-1e2fd9d9c873a0b197db3e04-3",
+      "q": "Két magyarországi kert közül az egyik hűvösebb, a másik melegebb vidéken van. Mindkettő talaja nyirkos és tápanyagban gazdag. Melyik kertben hozhat bő termést a",
+      "groups": 1,
+      "failingCorrect": 1,
+      "classes": [
+        "egyéb: A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést."
+      ]
+    },
+    {
+      "taskId": "t-56c74c2c7f2d9e123e76cba5-0",
+      "q": "Magyarázd el, mi a rovarbeporzás, és hogyan jut el a virágpor egyik virágtól a másikig!",
+      "groups": 5,
+      "failingCorrect": 1,
+      "classes": [
+        "toldalék"
+      ]
+    },
+    {
+      "taskId": "t-56c74c2c7f2d9e123e76cba5-1",
+      "q": "Írd le, milyenek az almafa virágai, és mikor nyílnak!",
+      "groups": 4,
+      "failingCorrect": 2,
+      "classes": [
+        "nincs rokon",
+        "összetétel"
+      ]
+    },
+    {
+      "taskId": "t-56c74c2c7f2d9e123e76cba5-2",
+      "q": "Egy méh először az A, majd a B almavirágra száll. Az A virágon virágpor kerül a testére. Magyarázd el, mikor történik rovarbeporzás, és miért nem az A virágon!",
+      "groups": 6,
+      "failingCorrect": 1,
+      "classes": [
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-0bb919b6129765057d35b2b6-0",
+      "q": "Miért nevezzük az alma termését áltermésnek?",
+      "groups": 1,
+      "failingCorrect": 3,
+      "classes": [
+        "egyéb: A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést.",
+        "egyéb: A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést.",
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-0bb919b6129765057d35b2b6-1",
+      "q": "Miből ismerhető fel az almatermés? Nevezd meg a kettévágott alma belsejének és a külsejének jellegzetességét is!",
+      "groups": 4,
+      "failingCorrect": 1,
+      "classes": [
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-0bb919b6129765057d35b2b6-2",
+      "q": "Magyarázd el, hogyan állapítod meg egy alma vizsgálatával, hogy almatermés és egyben áltermés!",
+      "groups": 7,
+      "failingCorrect": 3,
+      "classes": [
+        "nincs rokon",
+        "nincs rokon",
+        "közös tő",
+        "egyéb: A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést.",
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-527d953ce5de765f1be4402b-0",
+      "q": "Miért kevésbé igényes a szilvafa, mint az őszibarackfa?",
+      "groups": 5,
+      "failingCorrect": 2,
+      "classes": [
+        "nincs rokon",
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-527d953ce5de765f1be4402b-1",
+      "q": "Hasonlítsd össze az őszibarackfa és a szilvafa levelét! Írd le a közös jellemzőket és a fontos különbséget.",
+      "groups": 6,
+      "failingCorrect": 1,
+      "classes": [
+        "összetétel"
+      ]
+    },
+    {
+      "taskId": "t-527d953ce5de765f1be4402b-4",
+      "q": "Egy kosárban egy őszibarackfa- és egy szilvalevél van. Magyarázd el, hogyan különíted el a leveleket, és melyik fát könnyebb hűvösebb vidéken termeszteni!",
+      "groups": 8,
+      "failingCorrect": 2,
+      "classes": [
+        "nincs rokon",
+        "közös tő"
+      ]
+    },
+    {
+      "taskId": "t-cd0320ed5375297425e07307-0",
+      "q": "Írd le, mikor nyílnak az őszibarackfa és a szilvafa virágai, és hasonlítsd össze a virágaik színét!",
+      "groups": 3,
+      "failingCorrect": 1,
+      "classes": [
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-cd0320ed5375297425e07307-2",
+      "q": "Melyik virágrészből fejlődik ki az őszibarack és a szilva termése, és miben tér el ez az almától?",
+      "groups": 2,
+      "failingCorrect": 4,
+      "classes": [
+        "összetétel",
+        "egyéb: A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést.",
+        "összetétel",
+        "összetétel"
+      ]
+    },
+    {
+      "taskId": "t-c3b102033efd950b2a55e9d1-2",
+      "q": "Egy szilvát kívülről befelé vizsgálsz. Nevezd meg a három réteget a helyes sorrendben, és írd le, hol található a mag!",
+      "groups": 6,
+      "failingCorrect": 5,
+      "classes": [
+        "nincs rokon",
+        "nincs rokon",
+        "nincs rokon",
+        "nincs rokon",
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-d8913873ced2cb56675434fc-0",
+      "q": "Miért összetett a diófa levele? Fogalmazd meg írásban a levélnyél és a levéllemezek kapcsolatát!",
+      "groups": 4,
+      "failingCorrect": 1,
+      "classes": [
+        "kifejezés-rész"
+      ]
+    },
+    {
+      "taskId": "t-d8913873ced2cb56675434fc-1",
+      "q": "Szóban mutasd be a diófa törzsét és kérgét! Térj ki arra is, mit jelez az idős korban repedezett kéreg.",
+      "groups": 4,
+      "failingCorrect": 1,
+      "classes": [
+        "nincs rokon"
+      ]
+    },
+    {
+      "taskId": "t-d8913873ced2cb56675434fc-2",
+      "q": "Írd le, hogyan növekszik a diófa, és meddig élhet!",
+      "groups": 4,
+      "failingCorrect": 2,
+      "classes": [
+        "összetétel",
+        "nincs rokon",
+        "összetétel"
+      ]
+    }
+  ]
+}
