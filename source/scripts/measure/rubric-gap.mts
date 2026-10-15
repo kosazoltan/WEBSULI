@@ -12,7 +12,7 @@ import { teachingTextOf } from "../../server/studio/experience-builder";
 const [trialFile, outFile] = process.argv.slice(2);
 if (!trialFile || !outFile) throw new Error("Használat: rubric-gap.mts <answer-key-trial.json> <kimeneti json>");
 const trial = JSON.parse(readFileSync(trialFile, "utf8")) as { rows: Array<{ jobId: string; taskId: string; cases: AnswerKeyCases | null }> };
-const casesOf = new Map(trial.rows.filter((r) => r.cases).map((r) => [r.taskId, r.cases!]));
+const casesOf = new Map(trial.rows.filter((r) => r.cases).map((r) => [`${r.jobId}:${r.taskId}`, r.cases!]));
 const jobIds = [...new Set(trial.rows.map((r) => r.jobId))];
 if (jobIds.length > 4) throw new Error("Költségkorlát: legfeljebb 4 job.");
 
@@ -73,7 +73,7 @@ for (const variant of ["–", "R1", "R1+R2", "R1+R3", "R1+R3+R5", "R1+R2+R3+R5"]
   const rules = new Set(variant.split("+"));
   let fc = 0, wp = 0, compiledTasks = 0, reverted = 0;
   for (const task of tasks) {
-    const cases = casesOf.get(task.id);
+    const cases = casesOf.get(`${task.jobId}:${task.id}`);
     if (!cases) continue;
     let base: OpenTask = task;
     if (variant !== "–") {
@@ -112,7 +112,7 @@ const otherReasons: Record<string, number> = {};
 const perTask: Array<{ taskId: string; q: string; groups: number; failingCorrect: number; classes: string[] }> = [];
 let tested = 0, failingCorrect = 0, failingTasks = 0, groupsBefore = 0, groupsAfter = 0;
 for (const task of tasks) {
-  const cases = casesOf.get(task.id);
+  const cases = casesOf.get(`${task.jobId}:${task.id}`);
   if (!cases) continue;
   tested++;
   const cal = calibrateRubric(task, cases).task;
@@ -134,7 +134,7 @@ for (const task of tasks) {
    A v1 illesztése + a válasz szava a rubrika ≥ 5 betűs szavát összetétel-tagként tartalmazza (eleje: ≥ 5 betűs tag + legalább 3 betűs
    folytatás; vége: a válaszszó a taggal végződik / a tag + toldalék). Tagadás és szám soha nem illeszkedik így. */
 function compoundHit(token: string, word: string): boolean {
-  if (/\d/.test(token + word) || ["nem", "ne", "sem", "nincs"].includes(word) || word.length < 5 || token.length < word.length + 2) return false;
+  if (/\d/.test(token + word) || ["nem", "ne", "sem", "nincs"].includes(word) || word.length < 5 || token.length < word.length + 3) return false;
   if (token.startsWith(word)) return true;
   const i = token.indexOf(word);
   return i >= 3 && SUFFIX_RE.test(token.slice(i + word.length));
@@ -157,7 +157,7 @@ function evalCompound(answer: string, task: OpenTask): "ok" | "other" {
 {
   let fc = 0, wp = 0;
   for (const task of tasks) {
-    const cases = casesOf.get(task.id);
+    const cases = casesOf.get(`${task.jobId}:${task.id}`);
     if (!cases) continue;
     const cal = calibrateRubric(task, cases).task;
     fc += cases.correct.filter((a) => evalCompound(a, cal) !== "ok").length;
