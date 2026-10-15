@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fusionFixture, compactFusionFixture, standardFusionFixture } from "../shared/fixtures/lesson-fusion";
-import { experienceSchema, experienceTheme, publicationBankProblems, METHOD_KINDS } from "../shared/lesson-experience";
+import { experienceSchema, experienceTheme, publicationBankProblems, METHOD_KINDS, LESSON_BANK_RESERVE, LESSON_BANK_SIZES } from "../shared/lesson-experience";
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer, sampleIds, sampleTaskIds, scoreSummary } from "../shared/lesson-experience-score";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { lessonSchema } from "../shared/lesson-schema";
@@ -129,9 +129,9 @@ test("builder uses one coverage packet for a small source, retains evidence and 
   const parts = [{ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }];
   const concepts = [{ localId: "area", term: "Terület", definition: "A szorzat fele", quote: "T = a · m / 2", examWeight: "core" as const }];
   const actual = await buildLessonExperience(lesson, concepts, { call: async (system) => { assert.ok(system.includes(concepts[0].quote)); assert.ok(system.includes(concepts[0].definition)); return parts[calls++]; }, save: async cp => { checkpoint = structuredClone(cp); } });
-  // Spec 2026-10-04-bank-tartalek-es-elojel: a csomag a tartalékos darabszámmal (45+3 / 75+5) fogadható el.
-  assert.equal(calls, 1); assert.equal(actual.tasks.length, 48);
-  assert.equal(actual.quiz.length, 80); assert.equal(actual.quiz[1].options.length, 4);
+  // Spec 2026-10-04-bank-tartalek-es-elojel: a csomag a tartalékos darabszámmal fogadható el; Tételgyár T1 (D1): a tartalék 130%, a konstansból.
+  assert.equal(calls, 1); assert.equal(actual.tasks.length, LESSON_BANK_SIZES.tasks + LESSON_BANK_RESERVE.tasks);
+  assert.equal(actual.quiz.length, LESSON_BANK_SIZES.quiz + LESSON_BANK_RESERVE.quiz); assert.equal(actual.quiz[1].options.length, 4);
   await buildLessonExperience(lesson, concepts, { checkpoint, call: async () => { throw new Error("cache miss"); } });
   const reused = await buildLessonExperience(lesson, concepts, { previous: actual, call: async () => { throw new Error("unchanged packet rewritten"); } });
   assert.deepEqual(reused.quiz, actual.quiz);
