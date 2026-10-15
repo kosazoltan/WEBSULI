@@ -24,6 +24,15 @@ import { withSupportSkill } from "./studio/support-skills";
 /**
  * Run the AI improvement in background and update the DATABASE record
  */
+/**
+ * Tulajdonosi döntés 2026-10-15 (spec 2026-10-14-tartalek-b-szelet, B3): a sikeres futás ÉRVÉNYTELEN kimenete (üres, túl rövid,
+ * nem HTML, záró kapun elbukott) kimeneti hiba — egyszer a lánc ellentétes családú tartalékán újragenerálódik.
+ */
+export class ImproveOutputError extends Error {
+  override readonly name = "ImproveOutputError";
+  constructor(message: string, readonly modelIndex: number, readonly canFallback: boolean) { super(message); }
+}
+
 async function processImprovementJob(
   dbRecordId: string,
   originalFile: HtmlFile,
@@ -32,7 +41,13 @@ async function processImprovementJob(
   anthropicKey: string
 ) {
   return executeWorkflow(workflowStore, { id: dbRecordId, owner: userId, mode: originalFile.contentType === 'lesson' ? 'repair' : 'html', request: { original: originalFile, customPrompt } }, async () => {
-    await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey);
+    try {
+      await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey, { retryOnOutputFailure: true });
+    } catch (error) {
+      if (!(error instanceof ImproveOutputError) || !error.canFallback) throw error;
+      logger.warn(`[IMPROVE] Record ${dbRecordId}: a kimenet érvénytelen (${error.message.slice(0, 200)}) — újragenerálás a tartalék modellen.`);
+      await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey, { startModelIndex: error.modelIndex + 1, isOutputRetry: true });
+    }
     await workflowPhase("readback");
     const saved = await storage.getImprovedHtmlFile(dbRecordId);
     if (saved?.status !== 'pending' || !saved.content || saved.content.includes('<!-- Feldolgozás alatt... -->')) throw new Error(saved?.improvementNotes || 'A javított jelölt nem készült el.');
@@ -40,7 +55,8 @@ async function processImprovementJob(
   });
 }
 
-async function processImprovementCore(dbRecordId: string, originalFile: HtmlFile, customPrompt: string | undefined, userId: string, anthropicKey: string) {
+async function processImprovementCore(dbRecordId: string, originalFile: HtmlFile, customPrompt: string | undefined, userId: string, anthropicKey: string,
+  opts: { startModelIndex?: number; isOutputRetry?: boolean; retryOnOutputFailure?: boolean } = {}) {
   const contentSizeKB = Buffer.byteLength(originalFile.content, 'utf8') / 1024;
   // AUDIT 2026-09-01: a 15 perces abort-timer azonosítója a catch-ágban is elérhető legyen
   let abortTimeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -54,7 +70,8 @@ async function processImprovementCore(dbRecordId: string, originalFile: HtmlFile
       return;
     }
     // Build prompts — v7.4 (2026-09-09): a közös spec-modul adja a technikai szerződést.
-    await workflowPhase("source");
+    // Kimeneti újrapróbánál a forrás-fázis már lefutott (a workflow a kapu után csak a szerzőt engedi).
+    if (!opts.isOutputRetry) await workflowPhase("source");
     if (!originalFile.content?.trim()) throw new Error("Az eredeti tananyag üres.");
     await workflowPhase("author");
     // Spec 2026-10-03-gpt61-sol-kv-cache: a statikus spec a (cache-elt) rendszerpromptban, a leckénként változó téma külön.
@@ -159,7 +176,7 @@ ${originalFile.content}
     // regularly overloaded, so the runner walks down the list — but WHICH models those
     // are must be tunable in one place (LS-0d).
     const MODEL_CHAIN = LEGACY_MODELS.improve;
-    let currentModelIndex = 0;
+    let currentModelIndex = Math.min(opts.startModelIndex ?? 0, MODEL_CHAIN.length - 1);
 
     /**
      * Build the provider that serves this rung of the chain.
@@ -182,7 +199,7 @@ ${originalFile.content}
       });
     };
 
-    let improveProvider = createProvider(0);
+    let improveProvider = createProvider(currentModelIndex);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 900000); // 15 min max (safety net)
@@ -318,8 +335,9 @@ ${originalFile.content}
 
     const aiResponse = { content: fullContent };
 
+    const outputError = (message: string) => new ImproveOutputError(message, currentModelIndex, currentModelIndex < MODEL_CHAIN.length - 1);
     if (!aiResponse || !aiResponse.content) {
-      throw new Error('Az AI nem adott vissza választ');
+      throw outputError('Az AI nem adott vissza választ');
     }
 
     // Extract and clean HTML
@@ -357,10 +375,10 @@ ${originalFile.content}
 
     // Validate HTML structure
     if (!improvedHtml || improvedHtml.length < 100) {
-      throw new Error('A generált HTML túl rövid vagy üres');
+      throw outputError('A generált HTML túl rövid vagy üres');
     }
     if (!improvedHtml.includes('<html') && !improvedHtml.includes('<!DOCTYPE')) {
-      throw new Error('A generált válasz nem tartalmaz érvényes HTML struktúrát');
+      throw outputError('A generált válasz nem tartalmaz érvényes HTML struktúrát');
     }
 
     // ✅ CRITICAL: JavaScript validation and auto-repair
@@ -511,9 +529,7 @@ ${originalFile.content}
       logger.error(
         `[IMPROVE] Record ${dbRecordId}: ❌ Verification gate rejected the output: ${verification.problems.join(' | ')}`,
       );
-      throw new Error(
-        `A javított tananyag nem ment át a záró ellenőrzésen: ${verification.problems.join(' ')}`,
-      );
+      throw outputError(`A javított tananyag nem ment át a záró ellenőrzésen: ${verification.problems.join(' ')}`);
     }
     logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ Verification gate passed (${verification.problems.length} problem)`);
 
@@ -528,6 +544,8 @@ ${originalFile.content}
   } catch (error: unknown) {
     // AUDIT 2026-09-01: a 15 perces abort-timer a hibaágon eddig nem törlődött (szivárgott).
     if (abortTimeoutId) clearTimeout(abortTimeoutId);
+    // Kimeneti hibánál, ha a hívó tartalékon újragenerál, a rekord NEM kerül hibaállapotba (a jelölt még elkészülhet).
+    if (error instanceof ImproveOutputError && error.canFallback && opts.retryOnOutputFailure) throw error;
     const err = error instanceof Error ? error : new Error(String(error));
     logger.error(`[IMPROVE] Record ${dbRecordId}: Error:`, err.message);
 

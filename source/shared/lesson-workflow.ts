@@ -52,6 +52,13 @@ export function workflowDefinition(mode: WorkflowMode): WorkflowDefinition {
       ? { ...step, after: step.id === "animator" ? [...step.after, "lektor"] : step.after, maxVisits: 4 }
     : PRODUCTION_MODES.includes(mode) && step.id === "pedagogue"
       ? { ...step, after: [...step.after, "pedagogue"], maxVisits: 3 }
+    // Tulajdonosi döntés 2026-10-15 (spec 2026-10-14-tartalek-b-szelet, B3): a HTML-okosítás kész, de a záró kapun elbukó
+    // kimenete EGYSZER a lánc ellentétes családú tartalékán újragenerálódik — a szerző (a kapu előtti kimeneti hibánál önmaga után,
+    // a kapu után) még egyszer jöhet.
+    : mode === "html" && step.id === "author"
+      ? { ...step, after: [...step.after, "author", "gate"], maxVisits: 2 }
+    : mode === "html" && step.id === "gate"
+      ? { ...step, maxVisits: 2 }
       : step) };
 }
 export type WorkflowVisit = {
