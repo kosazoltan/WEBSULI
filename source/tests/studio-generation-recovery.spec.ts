@@ -201,8 +201,14 @@ test("megszakadt piszkozatnál három külön gomb: folytatás, újragyártás, 
   // Új tananyag: az űrlap üres, nincs futás.
   await page.evaluate(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","draft-run"));
   await page.reload();
+  // Review #251 (P2): függő újragyártás (fájl nélküli kattintás), majd „Új tananyag” — a későbbi sima fájlválasztás nem indít gyártást.
+  const before = bodies.length;
+  await page.getByTestId("one-step-remake").click();
   await page.getByTestId("one-step-new").click();
   await expect(page.getByTestId("one-step-progress")).toHaveCount(0);
+  await page.getByTestId("extract-file-input").setInputFiles({name:"uj.txt",mimeType:"text/plain",buffer:Buffer.from("Új forrás.")});
+  await page.waitForTimeout(300);
+  expect(bodies.length,"az Új tananyag után nincs automatikus újragyártás").toBe(before);
   expect(await page.evaluate(()=>sessionStorage.getItem("websuli.studio.oneStepRunId"))).toBeNull();
   expect(errors).toEqual([]);
 });

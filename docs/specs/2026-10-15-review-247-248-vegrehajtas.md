@@ -24,3 +24,4 @@ Terv: `docs/specs/2026-10-15-review-247-248.md`.
 5. A futásnézet (`oneStepRunView`) hiba- és draft-ágon visszaadja a job eredeti tanári kérését (`ownerInstruction`). Oldalfrissítés után a
    kliens ezt visszatölti az üres kérésmezőbe, így az újragyártás az eredeti kéréssel indul (R6 kiegészítés).
 6. A függő újragyártás (`remakeAfterPick`) törlődik a fájlválasztó `cancel` eseményére, és akkor is, ha egy fájl sem olvasható be.
+7. Review #251: a függő újragyártás a futás bármilyen váltásakor (`runId`: Bezárás, Új tananyag, új futás) törlődik.
