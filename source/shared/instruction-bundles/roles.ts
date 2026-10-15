@@ -18,6 +18,8 @@ export const PROMPT_ROLES = [
   "catalog-classifier",
   // Tételgyár T2.1: a válaszkulcs-tesztíró (a rubrikát nem látja) — csak a mindenkire érvényes szabályokat kapja.
   "answer-key-writer",
+  // Tételgyár T7.1: a gyerek nyílt válaszának döntőbírója (kérésidőben, a nyilvános végponton) — csak a mindenkire érvényes szabályokat kapja.
+  "arbiter",
 ] as const;
 export type PromptRole = (typeof PROMPT_ROLES)[number];
 

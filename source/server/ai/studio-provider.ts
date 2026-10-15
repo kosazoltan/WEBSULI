@@ -154,6 +154,8 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   catalogClassify: { timeoutMs: 120_000, maxTokens: 8_000, reasoningEffort: "high", jsonMode: true },
   // Spec 2026-10-05-s9 (terv-ellenőrzés): az orkesztrátor saját szabálya — rövid elemzés + javító prompt, JSON-mód, stream.
   orchestrator: { timeoutMs: 120_000, maxTokens: 4_000, reasoningEffort: "low", jsonMode: true },
+  // Tételgyár T7.1: a döntőbíró egy rövid ítélet a gyerek válaszáról — a gyerek vár rá, ezért rövid határidő; a gondolkodással együtt 4k elég.
+  arbiter: { timeoutMs: 25_000, maxTokens: 4_000, reasoningEffort: "low", jsonMode: true },
 };
 
 /**

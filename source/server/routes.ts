@@ -46,6 +46,7 @@ import { lessonHtmlSpecParts } from "./ai/lesson-html-spec";
 import { cachedSystem } from "./ai/prompt-cache";
 import { abortOnClientClose, analyzeFallbackBudget, crossFamilyComplete, isCompleteFinish, legacyFallbackFor, parseFileAnalysis, type FileAnalysis } from "./ai/legacy-fallback";
 import { lessonPublicRouter } from "./studio/lesson-routes";
+import { createArbiterRouter } from "./arbiter/routes";
 import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
 import { ViewDedup } from "./lib/view-dedup";
@@ -783,6 +784,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (path === '/api/material-result') {
       return enforceOriginAllowlist(req, res, next);
     }
+    // Tételgyár T7.1: a döntőbíró nyilvános, munkamenet-jogosultságot nem használ (a HTML-lecke iframe-je token nélkül hívja) —
+    // CSRF helyett az Origin/Referer allowlist (+ same-origin) és a saját IP-korlát őrzi.
+    if (path === '/api/lessons/arbiter') {
+      return enforceOriginAllowlist(req, res, next);
+    }
 
     // Apply CSRF protection to all other mutating requests
     csrfSynchronisedProtection(req, res, next);
@@ -819,6 +825,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // LS-2: a lecke olvasó oldala PUBLIKUS (ezt tölti a gyerek böngészője), és csak
   // publikált, sémára újraellenőrzött leckét ad ki.
+  app.use("/api/lessons", createArbiterRouter());
   app.use("/api/lessons", lessonPublicRouter);
 
   // Spec 2026-10-05-s3-katalogus-bank: a tantárgyi katalógus-bankok csak olvasó admin-nézete.
