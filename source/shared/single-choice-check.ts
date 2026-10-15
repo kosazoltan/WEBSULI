@@ -129,12 +129,77 @@ function arithmeticProblems(item: SingleChoiceItem): string[] {
   return exactlyOne(item, satisfying, `egyenlő a helyes eredménnyel (${m[1].trim()} = ${result})`);
 }
 
+/**
+ * Tételgyár T5 (docs/specs/2026-10-15-tetelgyar-t5-szamolas-programbol-vegrehajtas.md): a mondatba ágyazott és az előjeles zárójeles kifejezés.
+ * Mért (T6.0): „Melyik eredmény tartozik a -8-(-6) kifejezéshez?” kulcs -14 (helyes -2) — a tiszta-forma őr nem ismerte fel.
+ */
+// Az ATOM legfelső szinten alternáció („a|b”) — csoportba kell zárni, különben a zárójeles ág szétesik.
+const SIGNED_TERM = `(?:\\(\\s*[+\\-−–]?\\s*(?:${ATOM})\\s*\\)|(?:${ATOM}))`;
+const EMBEDDED_EXPR = new RegExp(`(?<![\\p{L}\\d.,/])(?:[\\-−–](?=\\s*[\\d(]))?\\s*${SIGNED_TERM}(?:\\s*[+\\-−–·×*:÷]\\s*${SIGNED_TERM})+(?![\\p{L}\\d]|\\s*-\\s*\\p{L})`, "gu");
+/** Az eredményre kérdez — és nem feltételes / összehasonlító / tagadó kérdés (akkor hallgatunk). */
+const ASKS_RESULT = /(?<!\p{L})(?:eredmény\p{L}*|érték\p{L}*|mennyi|egyenlő|tartozik|kapjuk|kapod|lesz)(?!\p{L})/u;
+// T5.2 mérés (`docs/measurements/2026-10-15-t5-szamolos-kulcs.json`): a RÉSZeredményre kérdező tétel („az osztás részeredménye”, „közbülső
+// eredmény”, „az első eredmény”) nem a teljes kifejezés értékét kéri — hallgatunk.
+const NOT_COMPUTABLE = /(?<!\p{L})(?:nem|ha|nagyobb|kisebb|között|legalább|legfeljebb|kerekít\p{L}*|becsül\p{L}*|közelít\p{L}*|hány\s+(?:szám|opció|lépés)|részeredmény\p{L}*|közbülső|közbenső|első|először|utolsó|lépés\p{L}*)(?!\p{L})/u;
+/**
+ * T5.2 mérés: a CSOPORTOSÍTÓ zárójel („(148 + 6) · 8”, „9 + [(12 – 8) · 3]”) mellett a kereső csak a zárójel belsejét látná — hallgatunk.
+ * Csak az előjeles szám zárójele („(-6)”, „(+8)”) megengedett; ha az összevonás után zárójel marad, az csoportosító.
+ */
+function hasGroupingBrackets(text: string): boolean {
+  return /[()[\]]/.test(text.normalize("NFC").replace(/\(\s*[+\-−–]?\s*\d+(?:[.,]\d+)?\s*\)/g, ""));
+}
+
+/** Kiszámolt érték az előjeles zárójel összevonásával; `null`, ha nem biztosan kiszámolható. */
+function signedExpressionValue(expr: string): number | null {
+  const flat = normalizeSignedParens(expr.normalize("NFC").trim()).replace(/^\s*\+\s*/, "");
+  if (/[()[\]]/.test(flat)) return null;
+  return evaluateExpression(flat);
+}
+/** Számopció „+6” alakban is. */
+function signedNumberOf(option: string): number | null {
+  return numberOf(option.normalize("NFC").trim().replace(/^\+\s*(?=\d)/, ""));
+}
+function expressionsIn(text: string): string[] {
+  return [...text.normalize("NFC").matchAll(EMBEDDED_EXPR)].map((m) => m[0].trim()).filter((e) => new RegExp(`\\d\\s*\\)?\\s*[+\\-−–·×*:÷]\\s*\\(?\\s*[+\\-−–]?\\s*\\d`).test(e));
+}
+
+/** E1: a kérdésben pontosan egy kiszámolható kifejezés, az eredményére kérdez, a válaszok számok. */
+function embeddedArithmeticProblems(item: SingleChoiceItem): string[] {
+  const p = norm(item.prompt);
+  if (!ASKS_RESULT.test(p) || NOT_COMPUTABLE.test(p) || hasGroupingBrackets(item.prompt)) return [];
+  const exprs = expressionsIn(item.prompt);
+  if (exprs.length !== 1) return [];
+  const result = signedExpressionValue(exprs[0]);
+  if (result === null) return [];
+  const values = item.options.map(signedNumberOf);
+  if (values.some((v) => v === null)) return [];
+  const satisfying = values.flatMap((v, i) => (Math.abs(v! - result) < 1e-6 ? [i] : []));
+  return exactlyOne(item, satisfying, `egyenlő a kiszámolt eredménnyel (${exprs[0]} = ${result})`);
+}
+
+/** E2: a válaszok kifejezések, a kérdés egy eredményre kérdez („Melyik kifejezés … eredménye +6?”). */
+function reverseArithmeticProblems(item: SingleChoiceItem): string[] {
+  const p = norm(item.prompt);
+  if (!/(?<!\p{L})melyik\s+(?:kifejezés|művelet|számítás|kivonás|összeadás|szorzás|osztás)/u.test(p) || !ASKS_RESULT.test(p) || NOT_COMPUTABLE.test(p) || hasGroupingBrackets(item.prompt) || item.options.some(hasGroupingBrackets)) return [];
+  const numbers = [...item.prompt.normalize("NFC").matchAll(new RegExp(`(?<![\\p{L}\\d])([+\\-−–]?)\\s*((?:${ATOM}))(?![\\d/])`, "gu"))];
+  if (numbers.length !== 1 || expressionsIn(item.prompt).length) return [];
+  const target = (/[\-−–]/.test(numbers[0][1]) ? -1 : 1) * (evaluateExpression(numbers[0][2]) ?? NaN);
+  if (!Number.isFinite(target)) return [];
+  const values = item.options.map((o) => (expressionsIn(o).length === 1 && expressionsIn(o)[0].replace(/\s/g, "") === o.normalize("NFC").trim().replace(/[.!?]+$/u, "").replace(/\s/g, "") ? signedExpressionValue(o.replace(/[.!?]+$/u, "")) : null));
+  if (values.some((v) => v === null)) return [];
+  const satisfying = values.flatMap((v, i) => (Math.abs(v! - target) < 1e-6 ? [i] : []));
+  return exactlyOne(item, satisfying, `értéke ${target}`);
+}
+
 /** Every provable violation of "exactly one option is true and it is the key"; [] when not computable. */
 export function singleChoiceProblems(item: SingleChoiceItem): string[] {
   if (typeof item.prompt !== "string" || !Array.isArray(item.options) || !item.options.every((o) => typeof o === "string")) return [];
   const duplicates = duplicateProblems(item.prompt, item.options);
   if (duplicates.length) return duplicates.map((d) => `Egyválasztós tétel: ${d}`);
-  return [...divisibilityProblems(item), ...arithmeticProblems(item)].map((d) => `Egyválasztós tétel: ${d}`);
+  // T5: a tiszta forma előnyt élvez — ha az ítél, a beágyazott/fordított nem ad második leletet.
+  const pure = arithmeticProblems(item);
+  const arithmetic = pure.length || item.prompt.normalize("NFC").trim().match(ARITHMETIC) ? pure : [...embeddedArithmeticProblems(item), ...reverseArithmeticProblems(item)];
+  return [...divisibilityProblems(item), ...arithmetic].map((d) => `Egyválasztós tétel: ${d}`);
 }
 
 type ChoiceLike = { id?: string; question?: string; prompt?: string; options?: unknown; correctIndex?: unknown };

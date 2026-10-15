@@ -1,0 +1,111 @@
+{
+ "date": "2026-10-15",
+ "spec": "docs/specs/2026-10-15-tetelgyar-t5-szamolas-programbol-vegrehajtas.md (T5.2)",
+ "method": "az új számolós kulcs-ellenőrzés a 60 napon belüli 73 lecke (23 publikált) 4703 kvíztételén, DB-írás nélkül",
+ "firstRun": {
+  "summary": {
+   "lessons": 73,
+   "published": 23,
+   "quizzes": 4703,
+   "findings": 24,
+   "inPublished": 2
+  },
+  "note": "24 lelet, ebből 18 téves riasztás (csoportosító zárójel, részeredményre kérdező tétel) — köztük 2 publikált; javítva"
+ },
+ "final": {
+  "summary": {
+   "lessons": 73,
+   "published": 23,
+   "quizzes": 4703,
+   "findings": 6,
+   "inPublished": 0
+  },
+  "findings": [
+   {
+    "lesson": "Negatív számok kivonása",
+    "published": false,
+    "question": "Melyik kifejezéshez tartozik a megadott -2 eredmény?",
+    "options": [
+     "-8-6",
+     "-8-(+6)",
+     "-8-(-6)"
+    ],
+    "key": 1,
+    "problems": [
+     "Egyválasztós tétel: a kulcs „-8-(+6)”, de csak „-8-(-6)” értéke -2."
+    ]
+   },
+   {
+    "lesson": "Negatív számok kivonása",
+    "published": false,
+    "question": "Melyik eredmény tartozik a -8-(-6) kifejezéshez?",
+    "options": [
+     "-14",
+     "-2",
+     "6"
+    ],
+    "key": 0,
+    "problems": [
+     "Egyválasztós tétel: a kulcs „-14”, de csak „-2” egyenlő a kiszámolt eredménnyel (-8-(-6) = -2)."
+    ]
+   },
+   {
+    "lesson": "Negatív számok kivonása",
+    "published": false,
+    "question": "Melyik kifejezés megadott eredménye +6?",
+    "options": [
+     "-2-8",
+     "-2-(-8)",
+     "-2-(+8)"
+    ],
+    "key": 2,
+    "problems": [
+     "Egyválasztós tétel: a kulcs „-2-(+8)”, de csak „-2-(-8)” értéke 6."
+    ]
+   },
+   {
+    "lesson": "Negatív számok kivonása",
+    "published": false,
+    "question": "Mi a -5-(+8) kifejezéshez megadott eredmény?",
+    "options": [
+     "+3",
+     "-13",
+     "+8"
+    ],
+    "key": 0,
+    "problems": [
+     "Egyválasztós tétel: a kulcs „+3”, de csak „-13” egyenlő a kiszámolt eredménnyel (-5-(+8) = -13)."
+    ]
+   },
+   {
+    "lesson": "Negatív számok kivonása",
+    "published": false,
+    "question": "Melyik eredmény van a 9-(-6) kifejezéshez rendelve?",
+    "options": [
+     "+3",
+     "-6",
+     "+6"
+    ],
+    "key": 0,
+    "problems": [
+     "Egyválasztós tétel: 0 opció egyenlő a kiszámolt eredménnyel (9-(-6) = 15) — pontosan egy helyes opció kell."
+    ]
+   },
+   {
+    "lesson": "Műveleti sorrend tanulása",
+    "published": false,
+    "question": "A teljes példa mintájára számold ki: mennyi a 60 – 42 : 7 · 5 + 4 kifejezés értéke?",
+    "options": [
+     "86",
+     "58",
+     "90"
+    ],
+    "key": 0,
+    "problems": [
+     "Egyválasztós tétel: 0 opció egyenlő a kiszámolt eredménnyel (60 – 42 : 7 · 5 + 4 = 34) — pontosan egy helyes opció kell."
+    ]
+   }
+  ]
+ },
+ "manualReview": "A végső 6 lelet mind valódi rossz kulcs (kézzel kiszámolva); publikált leckében 0; téves riasztás 0."
+}
