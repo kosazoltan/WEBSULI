@@ -76,3 +76,8 @@ stratégia + ujjlenyomat + idő + token). Kimenet: a következő stratégia vagy
 - E3: A célzott újraépítés csak a hibás fejezetek csomagjainak modellhívását indítja (a többi csomag gyorsítótárból).
 - E4: A kapuk mércéje változatlan (a meglévő kapu-tesztek zöldek, új teszt: a vezérlő hibás tételt nem publikál).
 - E5 (élő): egy szándékosan nehéz forráson a gyártás emberi beavatkozás nélkül végigér vagy `ask-owner`-rel áll meg.
+
+## 7. Tulajdonosi döntések (2026-10-15, a V3 élesítése után)
+- **V4 — mindkét fok automatikusan:** a lépcső végén előbb célzott szerzői javítás a hibás fejezetekre, ha az sem segít, egyszer teljes
+  újragyártás ugyanabból a forrásból; csak ezután tulajdonosi döntés. Futásonként egyszer, naplózva.
+- **Folyamat:** a háromfázisú rend (terv → végrehajtási utasítás → kód) a CI-ban kikényszerítve (a #227 és a #232 sérülése után).
