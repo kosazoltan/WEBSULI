@@ -480,7 +480,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // Review #228 (P2): a mentett (gyorsítótárból jövő) csomag is megkapja a determinisztikus rubrika-bővítést — modellhívás nélkül.
     const fixSaved = (saved: unknown) => { if (!saved) return saved; try { return (deps.autofix ?? autofixBankPacket)(saved, autofixContext).packet; } catch { return saved; } };
     for (const saved of [fixSaved(checkpoint.parts[hash]), fixSaved(fromPrevious)]) {
-      const parsed = packetSchema.safeParse(saved);
+      // Review #245 (P2): a mentett csomag a tartalék terhére szűkülhetett (előszűrő, T2-kivétel, salvage) — az elfogadási minimummal olvassuk
+      // vissza, különben folytatáskor fizetős teljes újragyártás jönne az ellenőrzött tételek helyett.
+      const parsed = salvageSchema.safeParse(saved);
       if (parsed.success && validate(parsed.data).length === 0) { packet = parsed.data; break; }
     }
     // T6.1: az újrahasznált (gyorsítótárból / korábbi bankból jövő) csomag már átment az előszűrőn — nem kér új modellhívást.
@@ -488,7 +490,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // If teaching is unchanged, preserve the entire reviewed packet and replace
     // only its criticized IDs. This also retains fixes from preceding rounds.
     const priorHash = checkpoint.reviewedHashes?.[baseHash] ?? baseHash;
-    const prior = packetSchema.safeParse(checkpoint.parts[priorHash]);
+    const prior = salvageSchema.safeParse(checkpoint.parts[priorHash]);
     const reviewedIds = new Set(reviewFeedback.map(f => (f.previousItem as { id?: string } | undefined)?.id));
     const known = prior.success ? new Set([...prior.data.methods, ...prior.data.tasks, ...prior.data.quiz].map(i => i.id)) : new Set<string>();
     const reviewBase = reviewFeedback.length && prior.success && validate(prior.data).length === 0

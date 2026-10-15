@@ -84,3 +84,24 @@ test("újrahasznált (gyorsítótárból jövő) csomagnál nincs előszűrő-h�
   });
   assert.equal(blindCalls, 0);
 });
+
+test("review #245: az előszűrővel szűkült, mentett csomag folytatáskor újrahasznosul (nincs fizetős újragyártás)", async () => {
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const concepts = [{ localId: "area", term: "háromszög területe", examWeight: "core" } as MapConcept];
+  const withExtra = () => {
+    const e = structuredClone(standardFusionFixture().experience!);
+    e.quiz.push({ ...e.quiz[0], id: "extra-quiz", question: `${e.quiz[0].question} (tartalék)` });
+    return e;
+  };
+  let checkpoint: import("../server/studio/experience-builder").ExperienceCheckpoint | undefined;
+  const first = await buildLessonExperience({ ...lesson, experience: undefined }, concepts, {
+    call: async () => withExtra(), save: async (cp) => { checkpoint = structuredClone(cp); },
+    quizBlind: async (quiz) => new Map(quiz.filter((x) => x.question.endsWith("(tartalék)")).map((x) => [x.id, "teszt"] as const)),
+  });
+  let calls = 0;
+  const again = await buildLessonExperience({ ...lesson, experience: undefined }, concepts, {
+    checkpoint, call: async () => { calls++; return withExtra(); },
+  });
+  assert.equal(calls, 0, "a szűkült csomag a checkpointból jön");
+  assert.deepEqual(again.quiz.map((x) => x.id), first.quiz.map((x) => x.id));
+});
