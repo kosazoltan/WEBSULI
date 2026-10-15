@@ -60,3 +60,29 @@ test("piszkozat nélkül a blokk nem jelenik meg", async ({ page }) => {
   await expect(page.getByTestId("button-toggle-view")).toBeVisible();
   await expect(page.getByTestId("draft-lessons")).toHaveCount(0);
 });
+
+// Review #251 (P2): ha a következő fok a teljes újragyártás, a gomb nem ígér „folytatást”, és megerősítést kér.
+test("teljes újragyártásnál külön felirat és megerősítés, utána egyetlen kérés", async ({ page }) => {
+  let resumed = 0;
+  const remake = { ...drafts[0], jobId: "job-remake", nextRecovery: { strategy: "remanufacture", reason: "teljes újragyártás ugyanabból a forrásból" } };
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/studio/jobs/job-remake/resume") { resumed++; return route.fulfill({ status: 202, json: { jobId: "new-job", remanufactured: true } }); }
+    let data: unknown = [];
+    if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] };
+    if (path === "/api/studio/drafts") data = { drafts: [remake] };
+    if (path === "/api/csrf-token") data = { csrfToken: "test" };
+    await route.fulfill({ json: data });
+  });
+  await page.goto("/admin");
+  await expect(page.getByTestId("draft-resume-job-remake")).toHaveCount(0);
+  await page.getByTestId("draft-remake-job-remake").click();
+  expect(resumed, "az első kattintás csak megerősítést kér").toBe(0);
+  await expect(page.getByTestId("draft-remake-confirm-job-remake")).toContainText("teljes, új gyártás indul");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  await page.getByTestId("draft-remake-yes-job-remake").dblclick();
+  await expect.poll(() => resumed).toBe(1);
+  await page.waitForTimeout(300);
+  expect(resumed).toBe(1);
+});

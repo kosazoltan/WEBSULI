@@ -35,3 +35,6 @@ Terv: `docs/specs/2026-10-15-admin-tananyag-draft.md`.
   - jelvény, gomb, egy kérés dupla kattintásra;
   - futó draft gomb nélkül;
   - 390 és 1366 px overflow-ellenőrzés.
+
+## Review #251
+- Ha a tervező következő foka `remanufacture` (a resume végpont ÚJ jobot indít), a kártyán „Újragyártás ugyanabból a forrásból” gomb van, megerősítő lépéssel; „Folytatás” felirat nem jelenik meg.

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -31,14 +31,19 @@ export default function DraftLessons() {
   });
   // A4: a dupla kattintás egyetlen folytatás (az `isPending` csak a következő renderben tiltana).
   const lock = useRef(false);
+  // Review #251 (P2): ha a tervező következő foka a teljes újragyártás (a resume végpont ÚJ jobot indít), a gomb ezt mondja, és megerősítést kér.
+  const [confirmRemake, setConfirmRemake] = useState<string | null>(null);
   const resume = useMutation({
     mutationFn: (jobId: string) => apiRequest("POST", `/api/studio/jobs/${jobId}/resume`),
-    onSuccess: () => toast({ title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább — a kész szakaszok megmaradnak." }),
+    onSuccess: (_data, jobId) => toast(list.find((d) => d.jobId === jobId)?.nextRecovery?.strategy === "remanufacture"
+      ? { title: "Újragyártás elindult", description: "Ugyanabból a forrásból új gyártás indult; a régi piszkozat megmarad." }
+      : { title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább — a kész szakaszok megmaradnak." }),
     onError: (e: Error) => toast({ title: "Nem sikerült folytatni", description: e.message, variant: "destructive" }),
     onSettled: () => { lock.current = false; void queryClient.invalidateQueries({ queryKey: DRAFTS_KEY }); },
   });
   const start = (jobId: string) => {
     if (lock.current) return;
+    setConfirmRemake(null);
     lock.current = true;
     resume.mutate(jobId);
   };
@@ -71,7 +76,21 @@ export default function DraftLessons() {
                 {/* Az újraindulás szerveroldali üzenete egy másik felület „Újra” gombjára utal — itt a tény elég. */}
                 {d.error && <p className="text-sm break-words">Megállt: {d.nextRecovery?.strategy === "restart" ? "a szerver újraindult a gyártás közben." : d.error.length > 220 ? `${d.error.slice(0, 220)}…` : d.error}</p>}
                 {d.nextRecovery && <p className="text-sm text-muted-foreground break-words">A program következő lépése: {d.nextRecovery.reason}</p>}
-                {d.resumable ? (
+                {d.resumable && d.nextRecovery?.strategy === "remanufacture" ? (
+                  confirmRemake === d.jobId ? (
+                    <div className="flex flex-wrap items-center gap-2" data-testid={`draft-remake-confirm-${d.jobId}`}>
+                      <p className="text-sm basis-full">A mentett részekből nem folytatható: ugyanabból a forrásból teljes, új gyártás indul (modellköltséggel). A régi piszkozat megmarad.</p>
+                      <Button size="sm" className="min-h-11" data-testid={`draft-remake-yes-${d.jobId}`} disabled={resume.isPending} onClick={() => start(d.jobId)}>
+                        {resume.isPending && resume.variables === d.jobId ? <Loader2 className="w-4 h-4 animate-spin" /> : "Igen, újragyártás"}
+                      </Button>
+                      <Button size="sm" variant="outline" className="min-h-11" onClick={() => setConfirmRemake(null)}>Mégse</Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="secondary" className="min-h-11" data-testid={`draft-remake-${d.jobId}`} onClick={() => setConfirmRemake(d.jobId)}>
+                      Újragyártás ugyanabból a forrásból
+                    </Button>
+                  )
+                ) : d.resumable ? (
                   <Button size="sm" className="min-h-11" data-testid={`draft-resume-${d.jobId}`} disabled={resume.isPending} onClick={() => start(d.jobId)}>
                     {resume.isPending && resume.variables === d.jobId ? <Loader2 className="w-4 h-4 animate-spin" /> : "Folytatás a megszakadt ponttól"}
                   </Button>
