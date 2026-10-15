@@ -944,10 +944,16 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
       }
       drove = true;
       // Élő megfigyelés (job 416ad01d, 11:05): a vezérlő folytatásánál a fázis „error”-on maradt — a kézi gombhoz hasonlóan ott is frissül.
+      // Review #235: a haladásjelző frissítése best-effort — a hibája nem szakíthatja meg a már elindított folytatást (különben a job
+      // „pending”-ben ragadna, ahonnan sem a vezérlő, sem a söprés nem vinné tovább).
       if ((onAccepted || recoveryResume) && tracksProgress(previous?.view.definition.mode)) {
-        const [job] = await db.select({ step: studioJobs.step }).from(studioJobs).where(eq(studioJobs.id, jobId));
-        await getRun(id);
-        updateRun(id, { phase: job.step as OneStepPhase, error: null, detail: "Folytatás a mentett részeredményekből." });
+        try {
+          const [job] = await db.select({ step: studioJobs.step }).from(studioJobs).where(eq(studioJobs.id, jobId));
+          await getRun(id);
+          if (job) updateRun(id, { phase: job.step as OneStepPhase, error: null, detail: "Folytatás a mentett részeredményekből." });
+        } catch (error) {
+          logger.warn(`[STUDIO] A haladásjelző frissítése elmaradt (${jobId}): ${error instanceof Error ? error.message : String(error)} — a folytatás megy tovább.`);
+        }
       }
       onAccepted?.();
       // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D6, élő: a fázis „animator”-on ragadt, miközben a lektor/kapu futott):
