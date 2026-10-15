@@ -112,6 +112,7 @@ export function SourceUploadForm({
 
   const addFiles = async (list: FileList | null) => {
     if (!list) return;
+    let added = 0;
     for (const file of Array.from(list)) {
       try {
         const content = await readFileFor(file);
@@ -128,12 +129,19 @@ export function SourceUploadForm({
         const finalSource =
           source.kind === "image" ? { ...source, content: await downscaleImage(source.content) } : source;
         setFiles((prev) => [...prev.filter((f) => f.name !== finalSource.name), finalSource]);
+        added++;
       } catch (e) {
         toast({ title: "Beolvasási hiba", description: (e as Error).message, variant: "destructive" });
       }
     }
     if (fileInput.current) fileInput.current.value = "";
+    // Review #250 (P2): ha egy fájl sem olvasható be, a függő újragyártás megszűnik (egy későbbi sima választás nem indíthatja el).
+    if (!added) remakeAfterPick.current = false;
+    setPicked((n) => n + 1);
   };
+  // Review #248 (P2): oldalfrissítés után a fájlok nincsenek meg — az újragyártás a forrás újraválasztásával indul (a választás végén magától).
+  const [picked, setPicked] = useState(0);
+  const remakeAfterPick = useRef(false);
 
   const extract = useMutation({
     mutationFn: () =>
@@ -201,10 +209,11 @@ export function SourceUploadForm({
     resumeKind?: string;
     nextRecovery?: { strategy: string; reason: string };
     draftRunId?: string;
+    ownerInstruction?: string;
   }>({
     queryKey: ["/api/studio/lessons/one-step", runId],
     queryFn: async () => {
-      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string }; draftRunId?: string }>("GET", `/api/studio/lessons/one-step/${runId}`);
+      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string }; draftRunId?: string; ownerInstruction?: string }>("GET", `/api/studio/lessons/one-step/${runId}`);
       if (result.phase === "done" && !result.htmlFileId) throw new Error("A futás lezárult, de nincs elérhető, közzétett tananyag. A készítést ellenőrizni kell.");
       return result;
     },
@@ -255,6 +264,44 @@ export function SourceUploadForm({
     onError: (e: Error) => toast({ title: "Nem sikerült folytatni", description: e.message, variant: "destructive" }),
     onSettled: () => { resumeLock.current = false; },
   });
+  // Review #248 (P1): a dupla kattintás nem indíthat két újragyártást (az `isPending` csak a következő renderben tilt) — szinkron zár.
+  const remakeLock = useRef(false);
+  const startRemake = () => {
+    if (remakeLock.current) return;
+    if (files.length === 0) {
+      remakeAfterPick.current = true;
+      toast({ title: "Válaszd ki újra a forrásfájlokat", description: "A kiválasztás után az újragyártás magától elindul." });
+      fileInput.current?.click();
+      return;
+    }
+    remakeLock.current = true;
+    oneStep.mutate({ forceNew: true }, { onSettled: () => { remakeLock.current = false; } });
+  };
+  // Review #251 (P2): a futás bármilyen váltása (Bezárás, Új tananyag, új futás) törli a függő újragyártást — egy későbbi, más célú
+  // fájlválasztás nem indíthat észrevétlenül forceNew gyártást.
+  useEffect(() => { remakeAfterPick.current = false; }, [runId]);
+  // Review #250 (P2): a fájlválasztó megszakítása is törli a függő újragyártást.
+  useEffect(() => {
+    const el = fileInput.current;
+    const onCancel = () => { remakeAfterPick.current = false; };
+    el?.addEventListener("cancel", onCancel);
+    return () => el?.removeEventListener("cancel", onCancel);
+  }, []);
+  // Review #250 (P1): oldalfrissítés után az űrlap üres — a megállt gyártás eredeti tanári kérése visszakerül (látható, javítható),
+  // így az újragyártás nem kérés nélkül indul, és a szerver ugyanazt a piszkozatot teszi félre.
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    const owner = run.data?.ownerInstruction;
+    if (!runId || !owner || restoredFor.current === runId || (run.data?.phase !== "error" && run.data?.phase !== "draft")) return;
+    restoredFor.current = runId;
+    setInstructions((current) => (current.trim() === "" ? owner.slice(0, 2000) : current));
+  }, [runId, run.data?.ownerInstruction, run.data?.phase]);
+  useEffect(() => {
+    if (!remakeAfterPick.current || files.length === 0) return;
+    remakeAfterPick.current = false;
+    startRemake();
+    // A kiválasztás befejezése (picked) indít; a startRemake a friss fájllistával fut.
+  }, [picked]);
   const startResume = (jobId: string) => {
     if (resumeLock.current) return;
     resumeLock.current = true;
@@ -428,10 +475,10 @@ export function SourceUploadForm({
                     {resume.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Folytatás a megszakadt ponttól"}
                   </Button>
                 )}
-                {(run.data.phase === "error" || run.data.phase === "draft") && files.length > 0 && (
+                {(run.data.phase === "error" || run.data.phase === "draft") && (
                   <Button size="sm" variant="secondary" className="min-h-11" data-testid="one-step-remake" disabled={oneStep.isPending}
-                    onClick={() => oneStep.mutate({ forceNew: true })}>
-                    Újragyártás ugyanabból a forrásból
+                    onClick={startRemake}>
+                    {files.length > 0 ? "Újragyártás ugyanabból a forrásból" : "Újragyártás (a forrás újraválasztásával)"}
                   </Button>
                 )}
                 {(run.data.phase === "error" || run.data.phase === "draft") && (

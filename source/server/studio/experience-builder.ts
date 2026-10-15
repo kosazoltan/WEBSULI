@@ -244,7 +244,12 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
         if (!fields) { ignore(item.id, `a javítási jogosultságon kívüli tétel nem módosítható (engedélyezett: ${[...permissions.keys()].join(", ")})`); continue; }
         if (fields !== "*") {
           const extra = changedFields(before as Record<string, unknown>, item as Record<string, unknown>, canonicalJson).filter(f => !fields.includes(f));
-          if (extra.length) { ignore(item.id, `a javítás csak ezeket a mezőket cserélheti: ${fields.join(", ")} (megváltozott: ${extra.join(", ")})`); continue; }
+          // Review #247 (P1): csak a jogosulatlan MEZŐ áll vissza az eredetire — ugyanabban a tételben a jogos mezőjavítás érvényes marad.
+          if (extra.length) {
+            const target = item as Record<string, unknown>;
+            for (const f of extra) { const old = (before as Record<string, unknown>)[f]; if (old === undefined) delete target[f]; else target[f] = old; }
+            onIgnored?.(`${item.id}: a javítás csak ezeket a mezőket cserélheti: ${fields.join(", ")} (megváltozott: ${extra.join(", ")}) — ezek változása figyelmen kívül maradt, a jogos mezők javítása érvényes.`);
+          }
         }
       }
     }
