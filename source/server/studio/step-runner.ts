@@ -409,7 +409,19 @@ export async function retryFailedGate(jobId: string, visit: { step: string; stat
   // T0.4: bizonyíték-eltérésnél a lektor újrafut a mostani leckén (a kör nem nő); bank-eredetű kapuhibánál a kapu fut újra;
   // T1b: ismételt bank-eredetű kapuhibánál a bank újraépül (az animátor a T1 kvótáival; a régi csomagok lenyomata nem egyezik).
   await store.saveStep(jobId, { step: kind === "review" ? "lektor" : kind === "rebuild" ? "animator" : "gate", status: "pending", error: null, finishedAt: null,
-    output: { ...job.output, previousGateError: job.error, gateRecoveryAttempt: attempt, ...(kind === "rebuild" ? { bankRebuild: true } : {}) } });
+    output: kind === "rebuild" ? rebuildOutput(job.output, job.error, attempt) : { ...job.output, previousGateError: job.error, gateRecoveryAttempt: attempt } });
+}
+
+/**
+ * Tételgyár T1b + review #230 (P1): újraépítéskor a mentett bankcsomagok (`experienceCheckpoint`) és a lecke régi bankja
+ * (`lesson.experience`) ÉRVÉNYTELENÍTVE — különben az animátor az azonos lenyomatú, validálható csomagot modellhívás nélkül visszahozná,
+ * és ugyanaz a bank kerülne a kapura. A tanítás (szakaszok, ábrák) és a kör változatlan.
+ */
+function rebuildOutput(output: JobView["output"], error: string | null | undefined, attempt: number): JobView["output"] {
+  const { experienceCheckpoint: _checkpoint, ...rest } = (output ?? {}) as Record<string, unknown>;
+  const lesson = rest.lesson as Record<string, unknown> | undefined;
+  const { experience: _experience, ...teaching } = lesson ?? {};
+  return { ...rest, ...(lesson ? { lesson: teaching } : {}), previousGateError: error, gateRecoveryAttempt: attempt, bankRebuild: true } as JobView["output"];
 }
 
 /** Called only by explicit resume inside the owner-checked workflow lease. */
