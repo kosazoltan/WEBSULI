@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import { subjectKeyOf } from "../../shared/subject-key";
 import type { IAIProvider } from "../ai/AIProvider";
-import { BANK_RESCUE_MODEL, FALLBACK_MODELS, SECOND_FALLBACK_MODELS, fallbackModelFor, keyNameForModel, lektorChainFor, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
+import { ANSWER_KEY_MODEL, BANK_RESCUE_MODEL, SECOND_FALLBACK_MODELS, fallbackModelFor, keyNameForModel, lektorChainFor, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
@@ -1519,9 +1519,9 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             ...(answerKeyTestsEnabled() ? {
               answerKeys: answerKeysFor(
                 { classroom: map.meta.classroom, concepts: map.concepts.map((c) => ({ id: c.localId, term: c.term, definition: (c as { definition?: string }).definition })) },
-                chainedAnswerKeyCaller(answerKeyModels(resolveStudioModel("gateHelper"), FALLBACK_MODELS.gateHelper).filter((m) => keyConfigured(m)),
+                chainedAnswerKeyCaller(answerKeyModels(ANSWER_KEY_MODEL, resolveStudioModel("gateHelper")).filter((m) => keyConfigured(m)),
                   async (model, system, user) => {
-                    const result = await callStepModel(providerFactory(model, "gateHelper"), { step: "animator", policy: "gateHelper", role: "answer-key-writer", model, system: withSupportSkill("answer-key-writer", system), user });
+                    const result = await callStepModel(providerFactory(model, "answerKey"), { step: "animator", policy: "answerKey", role: "answer-key-writer", model, system: withSupportSkill("answer-key-writer", system), user });
                     // Review #239 (P2): a tesztíró tokenjei is a lépés összesítésébe kerülnek.
                     if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
                     return result.json;

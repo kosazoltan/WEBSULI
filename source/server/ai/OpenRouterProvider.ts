@@ -15,6 +15,7 @@ import {
   type ChatCallOptions,
 } from './AIProvider';
 import { collectStream, idleAbortSignal, withIdleStart, type StreamEvent } from './stream-collect';
+import { OPENROUTER_MODEL_ROUTING } from './models';
 
 /**
  * OpenRouter provider (LS-0d).
@@ -75,6 +76,16 @@ export class OpenRouterProvider implements IAIProvider {
   /** Spec §7o: provider-enforced JSON serialisation for the bulk-JSON steps. */
   private jsonMode?: boolean;
 
+  /**
+   * T2.3 (tulajdonosi döntés 2026-10-15): a modellenkénti útválasztási bejegyzés (`OPENROUTER_MODEL_ROUTING`) rögzített effortot, bekapcsolt
+   * gondolkodást és szolgáltató-sorrendet ad; bejegyzés nélkül a régi `reasoning.effort` mező (bájtra változatlan kérés).
+   */
+  private routingFields(): Record<string, unknown> {
+    const routing = OPENROUTER_MODEL_ROUTING[this.model];
+    if (routing) return { reasoning: { effort: routing.effort, enabled: true }, provider: { order: [...routing.providerOrder], allow_fallbacks: true } };
+    return this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {};
+  }
+
   constructor(config: AIProviderConfig) {
     this.model = config.model;
     this.maxTokens = config.maxTokens;
@@ -112,7 +123,7 @@ export class OpenRouterProvider implements IAIProvider {
           model: this.model,
           messages: messages.map(msg => ({ role: msg.role, content: msg.content })),
           ...(outputBudget ? { max_completion_tokens: outputBudget } : {}),
-          ...(this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {}),
+          ...this.routingFields(),
           ...(this.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
           temperature: 0.7,
         },
@@ -156,7 +167,7 @@ export class OpenRouterProvider implements IAIProvider {
           model: this.model,
           messages: messages.map(msg => ({ role: msg.role, content: msg.content })),
           ...(outputBudget ? { max_completion_tokens: outputBudget } : {}),
-          ...(this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {}),
+          ...this.routingFields(),
           ...(this.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
           temperature: 0.7,
           stream: true,

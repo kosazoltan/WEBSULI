@@ -76,11 +76,11 @@ export async function writeAnswerKeys(
 export const answerKeyTestsEnabled = (env: Record<string, string | undefined> = process.env) => env.STUDIO_ANSWER_KEY_TESTS !== "0";
 
 /**
- * A tesztíró modellsorrendje: a `gateHelper` szerep két olcsó modellje, a glm elöl (mérve a témafókusznál: a deepseek-v4-flash 5-ből
- * 1-szer adott választ, a glm-5.3-flash 5/5; a T2.0 mérésen ugyanez — docs/measurements/2026-10-15-t2-valaszkulcs.json).
+ * A tesztíró modellsorrendje: elöl a választott tesztíró (T2.3, tulajdonosi döntés 2026-10-15: MiniMax M3 max efforttal, a GLM 5.3 Flash
+ * helyett), utána a tartalék (a `gateHelper` szerep elsődlegese). Az azonos modell egyszer szerepel.
  */
 export function answerKeyModels(primary: string, fallback: string | undefined): string[] {
-  return [...new Set([fallback, primary].filter((m): m is string => !!m))];
+  return [...new Set([primary, fallback].filter((m): m is string => !!m))];
 }
 
 /** Láncolt hívó: modellenként sorban; a workflow-lízing hibája azonnal továbbmegy, a többi hiba a következő modellre lép. */

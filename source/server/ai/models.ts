@@ -242,6 +242,22 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
  * „maximum efforttal”; a `high` a konfigurációs típus és az OpenRouter dokumentált felső foka).
  * Tulajdonosi döntés 2026-10-14: a harmadik családú lektor (Qwen 3.8 Max 0902) high efforton.
  */
+/**
+ * Tulajdonosi döntés 2026-10-15 (docs/specs/2026-10-15-tetelgyar-t2-valaszkulcs-tesztek-vegrehajtas.md, T2.3): a válaszkulcs-tesztíró
+ * elsődleges modellje a MiniMax M3, max (xhigh) efforttal — a GLM 5.3 Flash helyett.
+ */
+export const ANSWER_KEY_MODEL = "minimax/minimax-m3";
+
+/**
+ * Modellenkénti OpenRouter-útválasztás (T2.3). Élő próba 2026-10-15: a MiniMax M3 a saját szolgáltatóján `reasoning: { effort: "xhigh",
+ * enabled: true }` mellett ténylegesen gondolkodik (127–162 reasoning-token); a Together-útvonalon a gondolkodás 0 tokenes volt. Ezért a
+ * bejegyzéses modell kérése rögzített effortot, bekapcsolt gondolkodást és szolgáltató-sorrendet kap (tartalékkal) — felülírva a lépés
+ * szabályzatának effortját. A bejegyzés nélküli modellek kérése változatlan.
+ */
+export const OPENROUTER_MODEL_ROUTING: Readonly<Record<string, { effort: "xhigh" | "high"; providerOrder: readonly string[] }>> = {
+  [ANSWER_KEY_MODEL]: { effort: "xhigh", providerOrder: ["Minimax"] },
+};
+
 export const MODEL_REASONING_EFFORT: Readonly<Record<string, "low" | "medium" | "high">> = {
   "qwen/qwen3.8-max-prime": "high",
   [LEKTOR_THIRD_FAMILY_MODEL]: "high",

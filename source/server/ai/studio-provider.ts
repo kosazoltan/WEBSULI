@@ -146,6 +146,8 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   // Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés pontjainak mérése a kész leckén.
   instructionCheck: { timeoutMs: 180_000, maxTokens: 12_000, reasoningEffort: "medium" },
   gateHelper: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
+  // T2.3 (2026-10-15): a tesztíró MiniMax M3 max efforttal — élő próbán 24k-nál egy hívás csonkult (a gondolkodás is a keretből fogy).
+  answerKey: { timeoutMs: 240_000, maxTokens: 48_000, reasoningEffort: "low", jsonMode: true },
   // Spec 2026-09-29 (tanári témafókusz, 2. kör): mérve 13–18 s egy döntés; élesben egyszer 180 s-ig akadt.
   // Rövid saját határidő, hogy akadásnál a tartalék modell még időben dönthessen; JSON-mód (deepseek-v4-flash-en a
   // bank óta használt). A kimenet néhány azonosító, a gondolkodással együtt 8k bőven elég.
@@ -173,7 +175,7 @@ export const STREAM_IDLE_MS = 120_000;
 export const STREAM_CEILING_FACTOR = 2;
 /** Review #190: szabályzati határidő nélküli streamelt lépés (szerző) felső plafonja. */
 export const STREAM_DEFAULT_CEILING_MS = 30 * 60_000;
-const STREAMED_STEPS: ReadonlySet<string> = new Set(["lektor", "author", "pedagogue", "animator", "bank", "visuals", "visualDesigner", "textFix", "instructionCheck", "gateHelper", "quizPolish", "orchestrator"]);
+const STREAMED_STEPS: ReadonlySet<string> = new Set(["lektor", "author", "pedagogue", "animator", "bank", "visuals", "visualDesigner", "textFix", "instructionCheck", "gateHelper", "answerKey", "quizPolish", "orchestrator"]);
 export function stepStreamIdleMs(step: string): number | undefined {
   return STREAMED_STEPS.has(step) ? STREAM_IDLE_MS : undefined;
 }
