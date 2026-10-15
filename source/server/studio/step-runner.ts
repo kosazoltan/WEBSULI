@@ -496,7 +496,16 @@ export async function retryWithAuthorRepair(jobId: string, visit: { step: string
     gateRecoveryAttempt: job.output?.gateRecoveryAttempt });
   if (kind !== "gate" && kind !== "rebuild") throw new Error("Csak naplóval igazolt, mentett és még nem publikált kapuhiba folytatható szerzői javítással.");
   const targets = authorRepairTargets(job.output, job.error);
-  if (!targets.sections.length) throw new Error("A szerzői javításhoz nincs fejezethez köthető hiba.");
+  if (!targets.sections.length) {
+    // Review #237 (P1): a nem végrehajtható fok felhasználtként naplózódik (a hiba ujjlenyomatára) — különben a vezérlő söprésenként
+    // ugyanezt tervezné, és a lépcső soha nem jutna a következő fokig. A job hibás állapotú marad.
+    const fp = failureFingerprint(job.error ?? "");
+    const skipped: RecoveryStep = { strategy: "author-repair", fingerprint: fp.key, failing: fp.failing, at: Date.now() };
+    const recovery = [...recoveryHistoryOf(job.output, job.error), skipped];
+    await store.saveStep(jobId, { output: { ...(job.output ?? {}), recovery } as never });
+    const next = planRecovery({ error: job.error ?? "", history: recovery });
+    throw new Error(`A szerzői javításhoz nincs fejezethez köthető hiba — a fok kimarad; a következő lépés: ${next.reason}.`);
+  }
   if (!await workflowAllowResumeEdge("gate", "author", "vezérlő: célzott szerzői javítás a hibás fejezetekre", ["animator", "lektor", "gate"])) {
     throw new Error("A szerzői javítás csak a kapunál megállt futás kifejezett folytatásaként engedélyezett.");
   }

@@ -18,6 +18,7 @@ import {
   type PipelineStore,
 } from "../server/studio/step-runner";
 import { draftSummaryOf, recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
+import { failureFingerprint, planRecovery, type RecoveryStep } from "../server/studio/recovery-planner";
 import { computeStepHash, MAX_AUTHOR_ROUNDS, MAX_BANK_ONLY_ROUNDS } from "../server/studio/pipeline";
 import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
 import { withRoleSkill } from "../server/studio/role-skills";
@@ -197,6 +198,23 @@ test("elakadás-vezérlő V4.1: fejezethez nem köthető hibánál a szerzői ja
   const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: (kivétel után: Legalább 45 szöveges feladat és 75 kvízkérdés szükséges.)";
   deps.store.seed({ id: "author-none", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: { lesson: standardFusionFixture() } });
   await assert.rejects(retryWithAuthorRepair("author-none", { step: "gate", state: "error", error }, deps), /nincs fejezethez köthető hiba/);
+});
+
+test("review #237: a nem végrehajtható szerzői javítás felhasználtként naplózódik, a tervező a következő fokra lép", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: (kivétel után: Legalább 45 szöveges feladat és 75 kvízkérdés szükséges.)";
+  const fp = failureFingerprint(error);
+  const earlier = (["gate", "rebuild-targeted", "rebuild-full"] as const).map((strategy) => ({ strategy, fingerprint: fp.key, failing: fp.failing, at: 0 }));
+  assert.equal(planRecovery({ error, history: earlier }).strategy, "author-repair", "a lépcső a szerzői javításnál tart");
+  deps.store.seed({ id: "author-skip", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: { lesson: standardFusionFixture(), recovery: earlier } });
+  await assert.rejects(retryWithAuthorRepair("author-skip", { step: "gate", state: "error", error }, deps), /a fok kimarad; a következő lépés: a tananyag ugyanabból a forrásból teljesen újra készül/);
+  const job = await deps.store.loadJob("author-skip");
+  assert.equal(job?.status, "error", "a job hibás állapotú marad");
+  assert.ok(job?.output?.lesson, "a mentett lecke megmarad");
+  const recovery = (job?.output as { recovery?: RecoveryStep[] }).recovery ?? [];
+  assert.equal(recovery.at(-1)?.strategy, "author-repair");
+  assert.equal(planRecovery({ error, history: recovery }).strategy, "remanufacture");
+  assert.equal(deps.calls.length, 0);
 });
 
 test("bank resume recognizes redacted long errors but rejects malformed retry state", async () => {

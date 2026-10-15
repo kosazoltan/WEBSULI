@@ -22,6 +22,7 @@ test("jelölt: a hibás, mentett, nem publikált, workflow-naplós job a türelm
   assert.equal(recoveryCandidate({ ...base, leaseUntil: new Date(now + 60_000) }, now), "élő lízing");
   assert.equal(recoveryCandidate({ ...base, recoveryState: "ask-owner" }, now), "tulajdonosi döntésre vár");
   assert.equal(recoveryCandidate({ ...base, recoveryState: "remanufactured" }, now), "újragyártva (új job viszi tovább)", "V4.2: az újragyártott jobot nem veszi fel újra");
+  assert.equal(recoveryCandidate({ ...base, recoveryState: "remanufacturing" }, now), "újragyártás folyamatban", "review #237: a foglalt jobot sem");
   assert.equal(recoveryCandidate({ ...base, status: "ok", step: "done" }, now), "nem hibás");
 });
 

@@ -86,6 +86,20 @@ test("review #234: új hibára (más tételek) az olcsó kapu-fok újra elérhet
   assert.equal(planRecovery({ error: e3, history: [step("gate", e1), step("gate", e2)] }).strategy, "rebuild-targeted", "a kapu osztályonként kétszer futott");
 });
 
+test("review #237: az örökölt újragyártás után (más osztályú hibánál is) nincs újabb újragyártás — tulajdonosi döntés", () => {
+  const inherited = [step("remanufacture", real416)];
+  const providerError = 'A(z) "author" lépés modellhívása hibára futott: timeout';
+  const seen: string[] = [];
+  const history = [...inherited];
+  for (let i = 0; i < 5; i++) {
+    const plan = planRecovery({ error: providerError, history });
+    seen.push(plan.strategy);
+    if (plan.strategy === "ask-owner") break;
+    history.push(step(plan.strategy, providerError));
+  }
+  assert.deepEqual(seen, ["retry-provider", "retry-provider", "ask-owner"]);
+});
+
 test("V4: a szerzői javítás és az újragyártás is végrehajtható fok; csak a tulajdonosi döntés nem", () => {
   assert.deepEqual(NOT_RESUMABLE_STRATEGIES, ["ask-owner"]);
 });

@@ -1138,18 +1138,33 @@ async function applyResume(jobId: string, visit: import("../../shared/lesson-wor
  * megmarad, a kimenete az újra hivatkozik (`remanufacturedAs`), és a vezérlő nem veszi fel újra. Futásonként egyszer (a tervező szerint).
  */
 async function remanufactureFromMap(jobId: string, owner: string, error: string): Promise<string> {
-  const [job] = await db.select({ mapId: studioJobs.mapId, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId));
-  if (!job?.mapId) throw new WorkflowConflict("A teljes újragyártáshoz nincs forrástérkép.");
-  const out = (job.output ?? {}) as { ownerInstruction?: string; sourceCorrections?: SourceCorrection[]; topicFocus?: TopicFocus | null };
-  const started = await startJobFromMap(job.mapId, undefined, {}, {
-    ...(typeof out.ownerInstruction === "string" ? { instruction: out.ownerInstruction } : {}),
-    ...(Array.isArray(out.sourceCorrections) && out.sourceCorrections.length ? { corrections: out.sourceCorrections } : {}),
-    ...(out.topicFocus ? { topicFocus: out.topicFocus } : {}),
-  });
-  if (!started.ok) throw new WorkflowConflict(`A teljes újragyártás nem indítható: ${started.reason}`);
+  // Review #237 (P1): atomi foglalás a job létrehozása ELŐTT — két párhuzamos kérés (dupla kattintás, söprő + gomb) nem indíthat két gyártást.
+  const claim = await db.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb) || '{"recoveryState":"remanufacturing"}'::jsonb
+    WHERE id = ${jobId} AND status = 'error' AND coalesce(output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured') RETURNING id`);
+  if (!(claim.rows as unknown[]).length) throw new WorkflowConflict("A teljes újragyártás már elindult (vagy a job már nem hibás állapotú).");
+  const release = () => db.execute(sql`UPDATE studio_jobs SET output = output - 'recoveryState' WHERE id = ${jobId} AND output->>'recoveryState' = 'remanufacturing'`);
+  let started: Awaited<ReturnType<typeof startJobFromMap>>;
+  let job: { mapId: string | null; output: unknown } | undefined;
+  try {
+    [job] = await db.select({ mapId: studioJobs.mapId, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId));
+    if (!job?.mapId) throw new WorkflowConflict("A teljes újragyártáshoz nincs forrástérkép.");
+    const out = (job.output ?? {}) as { ownerInstruction?: string; sourceCorrections?: SourceCorrection[]; topicFocus?: TopicFocus | null };
+    started = await startJobFromMap(job.mapId, undefined, {}, {
+      ...(typeof out.ownerInstruction === "string" ? { instruction: out.ownerInstruction } : {}),
+      ...(Array.isArray(out.sourceCorrections) && out.sourceCorrections.length ? { corrections: out.sourceCorrections } : {}),
+      ...(out.topicFocus ? { topicFocus: out.topicFocus } : {}),
+    });
+    if (!started.ok) throw new WorkflowConflict(`A teljes újragyártás nem indítható: ${started.reason}`);
+  } catch (e) {
+    await release();
+    throw e;
+  }
   const fp = failureFingerprint(error);
   const history = recoveryHistoryOf(job.output as never, error);
   const step: RecoveryStep = { strategy: "remanufacture", fingerprint: fp.key, failing: fp.failing, at: Date.now() };
+  // Review #237 (P1): az új job örökli az újragyártási lépést — ha ugyanígy megáll, a tervező nem gyárt újra (tulajdonosi döntés).
+  await db.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb) || ${JSON.stringify({ remanufacturedFrom: jobId, recovery: [step] })}::jsonb
+    WHERE id = ${started.jobId}`);
   await db.execute(sql`UPDATE studio_jobs SET output = output || ${JSON.stringify({ remanufacturedAs: started.jobId, recoveryState: "remanufactured", recovery: [...history, step] })}::jsonb
     WHERE id = ${jobId}`);
   logger.warn(`[VEZÉRLŐ] ${jobId}: teljes újragyártás indult ugyanabból a forrásból → ${started.jobId}`);
