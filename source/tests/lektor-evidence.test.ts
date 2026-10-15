@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { evidenceDiff, lektorEvidenceOf } from "../server/studio/step-runner";
-import { executeWorkflow, workflowAllowResumeEdge, workflowPhase } from "../server/workflows/engine";
+import { executeWorkflow, workflowAllowResumeEdge, workflowEnsureRepairBudget, workflowPhase } from "../server/workflows/engine";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import type { Lesson } from "../shared/lesson-schema";
 import { memoryWorkflows } from "./helpers/workflow-store";
@@ -109,4 +109,26 @@ test("T1b: gate → animator → lektor → gate visszaél elfogyott animator/le
   });
   assert.equal(done.state, "done");
   assert.deepEqual(done.resumeEdges?.map((e) => `${e.from}→${e.to}`), ["gate→animator"]);
+});
+
+test("review #229 (P2): elfogyott lektor- ÉS kapukerettel is végigmegy a gate → lektor → gate folytatás", async () => {
+  const { store } = memoryWorkflows();
+  const input = { id: "edge-gate-budget", owner: "o", mode: "upload" as const };
+  await assert.rejects(executeWorkflow(store, input, async () => {
+    for (const step of ["source", "scope", "knowledge", "sourceCheck", "pedagogue", "author", "animator"]) await workflowPhase(step);
+    // A 4. kapulátogatás csak dinamikus javítási kerettel érhető el (a szerző 3 látogatása után) — mint a reviewer forgatókönyvében.
+    for (let k = 0; k < 4; k++) {
+      await workflowPhase("lektor"); await workflowPhase("gate");
+      if (k === 2) await workflowEnsureRepairBudget("teszt: dinamikus keret");
+      if (k < 3) { await workflowPhase("author"); await workflowPhase("animator"); }
+    }
+    throw new Error("kapu hiba");
+  }), /kapu hiba/);
+  const done = await executeWorkflow(store, { ...input, retry: true, continuation: true }, async () => {
+    assert.equal(await workflowAllowResumeEdge("gate", "lektor", "teszt", ["gate"]), true);
+    await workflowPhase("lektor"); await workflowPhase("gate"); await workflowPhase("readback");
+    return { kind: "material" as const, id: "ok" };
+  });
+  assert.equal(done.state, "done");
+  assert.equal(done.visits.filter((v) => v.step === "gate").length, 5);
 });

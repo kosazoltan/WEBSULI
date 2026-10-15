@@ -85,8 +85,8 @@ export async function workflowAllowResumeEdge(from: string, to: string, reason: 
   if (!view.definition.steps.find((s) => s.id === to)?.after.includes(from)) {
     view.definition = { ...view.definition, steps: view.definition.steps.map((step) => step.id === to ? { ...step, after: [...step.after, from] } : step) };
   }
-  // Review #225 (P2): elfogyott látogatási keretnél a visszaél önmagában nem elég — a cél-lépés (és T1b: a folytatás további lépései)
-  // egyszeri +1 látogatást kap.
+  // Review #225 (P2) + #229 (P2): elfogyott látogatási keretnél a visszaél önmagában nem elég — a cél-lépés és a folytatás további lépései
+  // (pl. a visszatérő kapu) egyszeri +1 látogatást kapnak.
   const exhausted = [to, ...alsoGrant].filter((id) => workflowVisitsLeft(view, id) <= 0);
   if (exhausted.length) {
     view.definition = { ...view.definition, steps: view.definition.steps.map((step) => exhausted.includes(step.id) ? { ...step, maxVisits: step.maxVisits + 1 } : step) };
