@@ -152,7 +152,7 @@ ${originalFile.content}
 ⚠️ EMLÉKEZTETŐ: A válaszod CSAK a teljes, javított HTML kód legyen - semmi szöveg előtte vagy utána!`;
 
     const { ClaudeProvider } = await import('./ai/ClaudeProvider');
-    const { createStudioProvider } = await import('./ai/studio-provider');
+    const { createStudioProvider, crossFamilyFallbackOptions } = await import('./ai/studio-provider');
     const { LEGACY_MODELS, providerForModel } = await import('./ai/models');
 
     // Model priority comes from models.ts, not from a literal here: the primary is
@@ -171,7 +171,8 @@ ${originalFile.content}
     const createProvider = (modelIndex: number) => {
       const model = MODEL_CHAIN[modelIndex];
       if (providerForModel(model) !== 'anthropic') {
-        return createStudioProvider(model, 900000, 64000);
+        // Spec 2026-10-14-tartalek-b-szelet (B3): a lánc tartalék-foka az ellentétes családú modell medium efforttal.
+        return createStudioProvider(model, 900000, 64000, crossFamilyFallbackOptions(model, modelIndex > 0));
       }
       return new ClaudeProvider({
         apiKey: anthropicKey,
@@ -263,6 +264,15 @@ ${originalFile.content}
           continue; // One more try with fallback
         }
         
+        // Review #219 (tulajdonosi döntés: tartalék minden szolgáltatói hibára): a nem túlterheléses hiba (időtúllépés, más 5xx,
+        // stream-hiba) is AZONNAL a lánc ellentétes családú tartalékára vált, ha még nem azon fut (megszakítás után nem).
+        if (!controller.signal.aborted && currentModelIndex < MODEL_CHAIN.length - 1 && attempt < MAX_ATTEMPTS) {
+          currentModelIndex++;
+          improveProvider = createProvider(currentModelIndex);
+          logger.warn(`[IMPROVE] Record ${dbRecordId}: ${retryErrorTyped.message.slice(0, 200)} — ⚡ tartalék: ${MODEL_CHAIN[currentModelIndex]}`);
+          continue;
+        }
+
         // Not retryable or out of retries - re-throw
         throw retryError;
       }

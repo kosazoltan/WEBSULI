@@ -276,8 +276,11 @@ export const LEGACY_MODELS = {
   chatgptChat: "gpt-6.1-sol",
   /** Enhanced Creator Claude HTML generation stream (routes.ts ~2417) */
   claudeHtml: "claude-opus-5",
-  /** HTML modernisation: Anthropic primary, direct OpenAI Terra fallback. */
-  improve: ["claude-opus-5", "gpt-5.6-terra"],
+  /**
+   * HTML modernisation: Anthropic primary, direct OpenAI fallback. Tulajdonosi döntés 2026-10-14
+   * (docs/specs/2026-10-14-tartalek-b-szelet.md, B3): a tartalék az ellentétes családú GPT-6.1 Sol, medium efforttal (korábban Terra).
+   */
+  improve: ["claude-opus-5", "gpt-6.1-sol"],
   /** Quiz item generation from a material (gameQuizGeneratorService.ts) */
   quizGenerator: "claude-opus-5",
   /**

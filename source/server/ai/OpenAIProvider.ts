@@ -183,6 +183,8 @@ export class OpenAIProvider implements IAIProvider {
             content: msg.content,
           })),
           ...(this.maxTokens ? { max_completion_tokens: this.maxTokens } : {}),
+          // Spec 2026-10-14-tartalek-b-szelet (B3): a régi stream-úton is kimegy az effort, ha a hívó kérte (`chatReasoningEffort`).
+          ...(this.chatEffort() ? { reasoning_effort: this.chatEffort() } : {}),
           stream: true,
         },
         { signal }
