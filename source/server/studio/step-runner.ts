@@ -393,7 +393,7 @@ export async function retryFailedGate(jobId: string, visit: { step: string; stat
     throw new Error("Csak naplóval igazolt, mentett és még nem publikált kapuhiba folytatható.");
   }
   const attempt = recoveryAttempt(job.output?.gateRecoveryAttempt, "kapufolytatási");
-  if (kind === "review" && !await workflowAllowResumeEdge("gate", "lektor", "kapu: a lektor-bizonyíték eltér — a lektor a mostani leckén újrafut")) {
+  if (kind === "review" && !await workflowAllowResumeEdge("gate", "lektor", "kapu: a lektor-bizonyíték eltér — a lektor a mostani leckén újrafut", ["gate"])) {
     throw new Error("A lektor újrafuttatása csak a kapunál megállt futás kifejezett folytatásaként engedélyezett.");
   }
   // T0.4: bizonyíték-eltérésnél a lektor újrafut a mostani leckén (a kör nem nő); bank-eredetű kapuhibánál a kapu fut újra.

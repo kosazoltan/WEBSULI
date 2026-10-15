@@ -91,8 +91,9 @@ export const experiencePacketSchema = z.object({
   // Spec 2026-09-24: lecke-szintű különlegességek (kód választja, a modell nem írja).
   flair: z.array(z.enum(LESSON_FLAIRS)).max(4).optional(),
   methods: z.array(methodSchema).min(1).max(160),
-  tasks: z.array(openTaskSchema).min(1).max(480),
-  quiz: z.array(experienceQuizSchema).min(2).max(960),
+  // Review #226 (P2): a 130%-os tartalék a legnagyobb tervnél (80 egység × 6 fogalom) 624 / 1248 — a korlát ehhez emelve (régi leckék érvényesek).
+  tasks: z.array(openTaskSchema).min(1).max(640),
+  quiz: z.array(experienceQuizSchema).min(2).max(1280),
   bankPlan: bankPlanSchema.optional(),
   language: z.string().regex(/^[a-z]{2}-[A-Z]{2}$/).optional(),
   glossary: z.array(glossaryEntrySchema).max(100).default([]),

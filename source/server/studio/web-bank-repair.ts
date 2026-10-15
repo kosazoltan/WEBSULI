@@ -14,8 +14,8 @@ const rawBank = z.object({ experience: z.object({
 }).passthrough() }).passthrough();
 const patchSchema = z.object({
   methods: z.array(methodSchema).max(160).optional(),
-  tasks: z.array(openTaskSchema).max(480).optional(),
-  quiz: z.array(experienceQuizSchema).max(960).optional(),
+  tasks: z.array(openTaskSchema).max(640).optional(),
+  quiz: z.array(experienceQuizSchema).max(1280).optional(),
 }).strict();
 
 /** DOM locations exclude script-like text in comments and preserve every other HTML byte. */
