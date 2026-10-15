@@ -56,3 +56,23 @@ Terv: `docs/specs/2026-10-15-tetelgyar-bank-lektor-uj-modszertan.md` (3. fejezet
 - E3: HA a tesztíró hívása hibázik, AKKOR a csomag a T2 előtti szabályok szerint épül (figyelmeztetéssel).
 - E4: A régi leckék pontozása változatlan (a pontozó nem módosul); a gyerekfelület nem változik.
 - Ellenőrzés: célzott tesztek, `check`, `lint`, `check:test`, `build`, teljes `npm test`; a T2.0 mérés és a T2.1 utáni lecke-próba.
+
+## T2.0 eredménye és a döntés (2026-10-15)
+Lásd a terv 9. fejezetét: 188/193 feladat bukik helyes parafrázison, 18 hibás válasz teljes pontot kap, a lektor rubrika-blokkolóinak 23/23-át
+elkapja. Kézi átnézés (6 tétel): döntően valódi rubrikahiány. Tulajdonosi döntés: **gépi kalibráció** (T2.1b), a szigorú javítókör helyett.
+A meglévő hívásszámláló tesztek (`tests/lesson-pipeline-runner.test.ts`) a bankkísérleteket számolják: a tesztíró dokumentált, külön hívását a
+harness felismeri és külön rögzíti (a bank-ellenőr mintájára) — a tesztek szándéka változatlan.
+
+## T2.1b — gépi rubrika-kalibráció (`shared/answer-key-calibrate.ts`, tiszta)
+`calibrateRubric(task, cases) → { task, changes[] }`, modellhívás nélkül, sorrendben; minden lépés után ŐR: a minta `ok`, és egyik hibás eset
+sem `ok` — ha az őr sérül, az adott lépés visszavonódik.
+1. **Alakfelvétel:** a helyes válasz egy szava egy hiányzó csoportba kerül, ha a csoport valamely elemével igazoltan rokon: a nyelvi adatbank
+   (`hu-lexicon`: ragozott alak, írásváltozat, rokon értelmű szó) vagy közös szótő (közös kezdet ≥ 5 betű és ≥ a rövidebb szó hossza − 3).
+2. **Bónuszba sorolás:** a kötelező csoport, amelyet a helyes esetek többsége (> 50%) a felvétel után sem tartalmaz, a `bonus`-ba kerül —
+   egyenként, a legritkábban teljesülővel kezdve; legalább egy kötelező csoport mindig marad.
+3. **Mondatfeltétel:** ha a helyes eset csak a kötőszó hiánya miatt nem `ok`, `needsSentence = false` (a minta meglévő szabályának mintájára).
+4. **Szóminimum:** ha a helyes eset csak a szóminimum miatt bukik, `minWords` = a legrövidebb helyes eset szószáma (alsó korlát 1).
+A kalibrált csomag újra átmegy a teljes `validate`-en; a maradék bukás a T2.1 útján (javítókör / kivétel a tartalék terhére).
+Mérés (modellhívás nélkül, a T2.0 eseteivel): a kalibráció után bukó feladatok száma, a bónuszba sorolt csoportok száma, és hogy hibás válasz
+nem kap teljes pontot. Tesztek: `tests/answer-key-calibrate.test.ts` (alakfelvétel szótővel / adatbankkal; bónuszba sorolás többségi
+szabállyal; az őr visszavon, ha hibás válasz átmenne; legalább egy kötelező csoport marad; a régi leckék pontozása változatlan).
