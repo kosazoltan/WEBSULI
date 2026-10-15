@@ -135,8 +135,8 @@ export async function completeWithinBudget<R extends { choices: Array<{ finish_r
   throw new Error("A forrásfeldolgozás válasza nem teljes; csonkolt jegyzék nem menthető.");
 }
 
-/** Ask the extractor model for a structured reading of the uploaded sources. */
-async function callExtractorModel(
+/** Ask the extractor model for a structured reading of the uploaded sources. Review #221: exportálva a tartalék-teszthez. */
+export async function callExtractorModel(
   files: ExtractorFile[],
   scope: ExtractorScope,
   systemPrompt: string,
@@ -177,7 +177,9 @@ async function callExtractorModel(
       ],
       response_format: { type: "json_object" },
       max_completion_tokens: maxTokens,
-      ...(effort ? { reasoning_effort: effort } : {}),
+      // Review #220: kimerült OpenAI-keretnél (OpenRouter-átállás) az OpenRouter saját alakja megy (`reasoning.effort`), nem a közvetlen
+      // OpenAI `reasoning_effort` mezője — ugyanaz a szétválasztás, mint az `ocrVendorRequest`-ben.
+      ...(effort ? (connection.vendor === "openrouter" ? { reasoning: { effort } } : { reasoning_effort: effort }) : {}),
     })));
     return response.choices[0]?.message?.content ?? "{}";
   };
@@ -186,17 +188,22 @@ async function callExtractorModel(
   const callVendor = (m: string, effort?: "medium") => providerForModel(m) === "anthropic"
     ? callClaudeParts({ model: m, system: systemPrompt, parts: content, maxTokens: EXTRACTION_TOKEN_BUDGETS[1] + 8_192, timeoutMs: 300_000, ...(effort ? { effort } : {}) })
     : callOpenAi(m, effort);
-  let text: string;
+  // Review #218: a parse és az alakellenőrzés próbálkozásonként, a tartalék-határon BELÜL — hibás JSON vagy fogalomlista nélküli
+  // elsődleges válasz is tartalékot indít.
+  const attempt = async (m: string, effort?: "medium") => {
+    const result = JSON.parse(stripJsonFences(await callVendor(m, effort)) || "{}") as { title?: unknown; concepts?: unknown };
+    if (!Array.isArray(result.concepts)) throw new Error("A forrásfeldolgozás nem adott fogalomlistát.");
+    return result as { title?: unknown; concepts: unknown[] };
+  };
+  let parsed: { title?: unknown; concepts: unknown[] };
   try {
-    text = await callVendor(model);
+    parsed = await attempt(model);
   } catch (error) {
     const fallback = crossFamilyFallback(model);
     if (!fallback || !studioModelReady(fallback)) throw error;
     logger.warn(`[STUDIO] Kivonatoló (${model}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`);
-    text = await callVendor(fallback, CROSS_FAMILY_FALLBACK_EFFORT);
+    parsed = await attempt(fallback, CROSS_FAMILY_FALLBACK_EFFORT);
   }
-  const parsed = JSON.parse(stripJsonFences(text) || "{}");
-  if (!Array.isArray(parsed.concepts)) throw new Error("A forrásfeldolgozás nem adott fogalomlistát.");
   return {
     title: typeof parsed.title === "string" ? parsed.title : "",
     concepts: Array.isArray(parsed.concepts) ? parsed.concepts : [],
