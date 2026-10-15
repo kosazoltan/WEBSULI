@@ -4,7 +4,7 @@
 // A korábbi eredmény(ek) eseteit újrahasznosítja (modellhívás nélkül), és a T2.1b gépi kalibráció utáni állapotot is méri.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { withReadOnlyDb } from "../lib/read-only-db";
-import { FALLBACK_MODELS, resolveStudioModel } from "../../server/ai/models";
+import { ANSWER_KEY_MODEL, resolveStudioModel } from "../../server/ai/models";
 import { createStudioStepProvider } from "../../server/ai/studio-provider";
 import { callStepModel } from "../../server/studio/run-step";
 import { withSupportSkill } from "../../server/studio/support-skills";
@@ -42,11 +42,12 @@ const inputs: Input[] = await withReadOnlyDb(async (q) => {
   return out;
 });
 
-const models = [...new Set([FALLBACK_MODELS.gateHelper, resolveStudioModel("gateHelper")].filter((m): m is string => !!m))];
+// T2.3 (tulajdonosi döntés 2026-10-15): a tesztíró MiniMax M3 max efforttal, tartaléka a gateHelper elsődlegese — mint élesben.
+const models = [...new Set([ANSWER_KEY_MODEL, resolveStudioModel("gateHelper")].filter((m): m is string => !!m))];
 const call = async (system: string, user: string) => {
   let last: unknown;
   for (const model of models) {
-    try { return (await callStepModel(createStudioStepProvider(model, "gateHelper"), { step: "animator", policy: "gateHelper", role: "answer-key-writer", model, system: withSupportSkill("answer-key-writer", system), user })).json; }
+    try { return (await callStepModel(createStudioStepProvider(model, "answerKey"), { step: "animator", policy: "answerKey", role: "answer-key-writer", model, system: withSupportSkill("answer-key-writer", system), user })).json; }
     catch (error) { last = error; console.warn(`[mérés] ${model} hibázott: ${(error instanceof Error ? error.message : String(error)).slice(0, 160)}`); }
   }
   throw last;

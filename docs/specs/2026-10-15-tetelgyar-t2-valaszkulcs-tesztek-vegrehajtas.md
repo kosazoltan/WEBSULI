@@ -106,3 +106,6 @@ A tesztíró saját szerepet (`answer-key-writer`, `shared/instruction-bundles/r
      `provider: { order, allow_fallbacks: true }` mezőt kap (sima és streamelt út is); a többi modell kérése bájtra változatlan.
   3. `server/studio/answer-key-writer.ts` / `step-runner.ts`: a lánc `[ANSWER_KEY_MODEL, gateHelper-elsődleges]`; a mérőszkript ugyanígy.
   4. Tesztek: a kérés törzse (fetch-mock) MiniMaxnál tartalmazza az xhigh effortot, az `enabled`-et és a szolgáltató-sorrendet; más modellnél nem.
+  5. Élő próba az éles kódúton (e2fa job, 43 feladat): a MiniMax M3 megírta a teszteket, hibás válasz egyszer sem kapott teljes pontot; egy hívás
+     a 24k-s kimeneti keretnél csonkult (a xhigh gondolkodás is a keretből fogy) → a tesztíró saját szabályzatot kap: `answerKey` (240 s, 48k,
+     JSON-mód; az effortot a modell útválasztási bejegyzése adja: xhigh).
