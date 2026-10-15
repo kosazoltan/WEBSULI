@@ -16,6 +16,8 @@ export const PROMPT_ROLES = [
   "topic-focus", "gate-helper", "quiz-polish", "orchestrator",
   // Spec 2026-10-05-s2-tartalom-besorolas: a tantárgyi katalógus tartalom alapú besorolója (saját skill-szöveggel).
   "catalog-classifier",
+  // Tételgyár T2.1: a válaszkulcs-tesztíró (a rubrikát nem látja) — csak a mindenkire érvényes szabályokat kapja.
+  "answer-key-writer",
 ] as const;
 export type PromptRole = (typeof PROMPT_ROLES)[number];
 

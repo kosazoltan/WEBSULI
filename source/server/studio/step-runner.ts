@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import { subjectKeyOf } from "../../shared/subject-key";
 import type { IAIProvider } from "../ai/AIProvider";
-import { BANK_RESCUE_MODEL, SECOND_FALLBACK_MODELS, fallbackModelFor, keyNameForModel, lektorChainFor, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
+import { BANK_RESCUE_MODEL, FALLBACK_MODELS, SECOND_FALLBACK_MODELS, fallbackModelFor, keyNameForModel, lektorChainFor, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
@@ -35,6 +35,7 @@ import {
 } from "./pipeline";
 import { callStepModel, callStepModelWithFallback, StepModelError } from "./run-step";
 import { applyTopicFocus, type TopicFocus } from "./topic-focus";
+import { answerKeyModels, answerKeysFor, answerKeyTestsEnabled, chainedAnswerKeyCaller, mergeAnswerKeyReport } from "./answer-key-writer";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import {
   buildAnimatorPrompt,
@@ -1489,12 +1490,14 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
         const memoryBlock = subjectMemoryEnabled() ? snapshotPromptBlock(await ensureSubjectMemory(job, map, store), "bank") : "";
         try {
           const bankOpenFindings: Array<{ sectionIndex: number; itemId: string; message: string }> = [];
+          const answerKeyReport: Array<{ sectionIndex: number; itemId: string; calibration: string[]; correctFails: string[] }> = [];
           const experience = await buildLessonExperience(completedLesson, map.concepts, {
             checkpoint,
             previous: original.experience,
             ...(catalogPool ? { catalog: catalogPool } : {}),
             ...(memoryBlock ? { memory: memoryBlock } : {}),
             onOpenFinding: (finding) => bankOpenFindings.push(finding),
+            onAnswerKeyReport: (report) => answerKeyReport.push(report),
             theme: visualWorld((job.output?.visual as { world?: string } | undefined)?.world)?.id,
             reviewFeedback: bankReview?.feedback,
             onToolFix: (tool, fixes) => logger.info(`[STUDIO] ${tool} (${job.id}): ${fixes.join("; ").slice(0, 400)}`),
@@ -1512,6 +1515,20 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
               },
             } : {}),
             concurrency: PACKET_CONCURRENCY,
+            // Tételgyár T2.1: válaszkulcs-tesztek a csomag nyílt feladataira (olcsó modell; kulcs nélkül / hibánál nincs ítélet).
+            ...(answerKeyTestsEnabled() ? {
+              answerKeys: answerKeysFor(
+                { classroom: map.meta.classroom, concepts: map.concepts.map((c) => ({ id: c.localId, term: c.term, definition: (c as { definition?: string }).definition })) },
+                chainedAnswerKeyCaller(answerKeyModels(resolveStudioModel("gateHelper"), FALLBACK_MODELS.gateHelper).filter((m) => keyConfigured(m)),
+                  async (model, system, user) => {
+                    const result = await callStepModel(providerFactory(model, "gateHelper"), { step: "animator", policy: "gateHelper", role: "answer-key-writer", model, system: withSupportSkill("answer-key-writer", system), user });
+                    // Review #239 (P2): a tesztíró tokenjei is a lépés összesítésébe kerülnek.
+                    if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
+                    return result.json;
+                  }),
+                (w) => logger.warn(`[STUDIO] Válaszkulcs-teszt (${job.id}): ${w}`),
+              ),
+            } : {}),
             call: async (bankSystem, user, attempt, extra) => {
               // Spec 2026-09-19 / 2026-09-25: bank model per attempt (primary → fallback → rescue), shared with the web path.
               const bankModel = bankModelForAttempt(attempt);
@@ -1535,7 +1552,13 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           });
           completedLesson = { ...completedLesson, experience };
           // Spec 2026-09-30 (U2, H52): a nyitott aritmetikai leletek a jobban maradnak; a kapu kivehető tételként kapja őket.
-          job.output = { ...job.output, bankOpenFindings };
+          // Review #239 (P2): a jelentés a VÉGLEGES bankhoz igazodik — a checkpointból átvett (most nem tesztelt) csomagok korábbi bejegyzései
+          // megmaradnak, a már nem létező tételeké kiesik, az újraépítetteké az új bejegyzés.
+          const mergedReport = mergeAnswerKeyReport(job.output?.answerKeyReport, answerKeyReport, experience.tasks.map((t) => t.id));
+          const { answerKeyReport: _staleReport, ...outputWithoutReport } = (job.output ?? {}) as Record<string, unknown>;
+          job.output = { ...outputWithoutReport, bankOpenFindings, ...(mergedReport.length ? { answerKeyReport: mergedReport } : {}) };
+          // Tételgyár T2.1c: a kalibráció és a maradék (nem blokkoló) helyes-eset bukás összesítése.
+          if (answerKeyReport.length) logger.info(`[STUDIO] Válaszkulcs-teszt (${job.id}): ${answerKeyReport.filter((r) => r.calibration.length).length} feladat rubrikája kalibrálva, ${answerKeyReport.filter((r) => r.correctFails.length).length} feladatnál marad helyes-eset bukás (a T7 döntőbíró kezeli).`);
           if (bankOpenFindings.length) logger.warn(`[STUDIO] Nyitott aritmetikai lelet a kapunak (${job.id}): ${bankOpenFindings.map((f) => f.itemId).join(", ")}`);
         } catch (error) {
           return fail(store, job, describeStepError(error));

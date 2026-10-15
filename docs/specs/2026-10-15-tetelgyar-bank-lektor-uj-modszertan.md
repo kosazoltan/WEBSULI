@@ -143,3 +143,16 @@ Ajánlott sorrend: **T0 → T1 → T4 → T2 → T6 → T5 → T3** (a gyors, bi
 - **T8:** mérés 4 mentett leckén (köztük 2 ismert tényhibás), legfeljebb 8 lektorhívás; élesítés csak ha a megfogalmazás/rubrika-eredetű
   blokkolók ≥ 40%-kal csökkennek ÉS a valódi tényhibák továbbra is fennakadnak.
 - **A további szeletek sorrendje (hatás szerint):** T2 → T7 → T6 → T5 → T3, mindegyik külön PR, méréssel.
+
+## 9. Tulajdonosi döntés (2026-10-15, a T2.0 mérés után)
+- Mérés (`docs/measurements/2026-10-15-t2-valaszkulcs.json`, 4 job, 193 nyílt feladat): 188 feladatnál a helyes, saját szavas válasz sem kap
+  teljes pontot (643 bukott helyes eset), 18 hibás válasz teljes pontot kap; a lektor 23 rubrika-blokkolóját a teszt mind elkapja. Ok: túl sok,
+  szó szerinti kötelező csoport és szótő-hiány (G1). A szigorú T2 csomagonként +3 bankkísérletet okozna kevés javulással.
+- **Döntés: gépi kalibráció** — a tesztesetekből a program modellhívás nélkül igazítja a rubrikát (alakok felvétele; a helyes válaszok
+  többségéből hiányzó kötelező csoport bónusszá válik, ha utána egyik hibás válasz sem kap teljes pontot és a minta igen); csak a maradék
+  bukás megy javítókörbe / kivételre. Végrehajtás: `docs/specs/2026-10-15-tetelgyar-t2-valaszkulcs-tesztek-vegrehajtas.md` (T2.1b).
+- **Második döntés (a kalibráció mérése után, 2026-10-15):** a kalibráció (modellhívás nélkül) a bukott helyes eseteket 643 → 316-ra csökkenti
+  (≥ 2 helyesből hiányzó csoport → bónusz), hibás válasz egyik változatnál sem jut át (18 → 18). **A maradék helyes-eset bukás NEM blokkol**:
+  naplózódik és a job kimenetébe mentődik (`answerKeyReport`); a gyerek valódi válaszát a T7 döntőbíró ítéli meg. Javítókörbe / kivételre
+  csak a **túl megengedő** rubrika megy (hibás válasz teljes pontot kap). Küszöb: **legalább 2 helyes esetből hiányzik** (egy zajos tesztválasz
+  nem minősíthet vissza lényeges fogalmat).

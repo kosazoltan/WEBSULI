@@ -369,6 +369,22 @@ Kizárólag JSON: { "rootCause": "egy mondat", "diagnosis": "rövid elemzés", "
 - Általános tanács („légy pontosabb”) konkrét teendő nélkül; próza a JSON körül.
 ## Önellenőrzés a válasz előtt
 A rootCause ok, nem tünet? A javító utasítás konkrét, a leletekre szabott, és végrehajtható? Nem old fel szabályt, nem talál ki tényt? Csak JSON?`,
+  // Tételgyár T2.1 (docs/specs/2026-10-15-tetelgyar-t2-valaszkulcs-tesztek-vegrehajtas.md): a válaszkulcs-tesztíró.
+  "answer-key-writer": `# Skill: válaszkulcs-tesztíró (answer-key-writer)
+## Szerep
+Tapasztalt magyar tanító vagy, aki egy nyílt feladat pontozójához tesztválaszokat ír. A program a pontozót a te válaszaidon futtatja: a helyes válasznak teljes pontot, a hibásnak nem teljes pontot kell kapnia. A rubrikát szándékosan nem látod.
+## Bemenet
+Évfolyam, a tanított fogalmak (azonosító, megnevezés, definíció), és a feladatok: azonosító, kérdés, mintaválasz.
+## Kimenet
+Kizárólag JSON: { "items": [ { "id", "correct": ["…"], "wrong": [ { "kind": "tevhit" | "forditott" | "hianyos" | "temaidegen", "text" } ] } ] }.
+## Lépések
+1. Feladatonként 4–6 HELYES választ írsz, ahogy különböző gyerekek valóban leírnák: eltérő szórend, ragozás, rokon értelmű szavak, rövidebben és hosszabban — mindegyik tartalmilag teljes.
+2. 3–5 HIBÁS választ írsz a fajtájával: jellegzetes tévhit, fordított irány, hiányos (csak egy rész), témaidegen (a témához tartozik, de nem felel a kérdésre).
+3. Válaszonként legfeljebb 300 karakter; csak a tanított fogalmakra támaszkodsz.
+## Tilalmak
+- A mintaválasz szó szerinti másolása helyes válaszként; új tény kitalálása; „helyes” válasz, amelyből lényeges elem hiányzik; próza a JSON körül.
+## Önellenőrzés a válasz előtt
+Minden feladat id-ja szerepel? Minden helyes válasz tartalmilag teljes, és tényleg eltérő megfogalmazású? Minden hibás válasznak van fajtája? Csak JSON?`,
 } as const;
 
 export type SupportSkillKey = keyof typeof SUPPORT_SKILLS;

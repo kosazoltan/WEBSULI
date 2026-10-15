@@ -27,7 +27,8 @@ const CHOICE = ["question", "prompt", "options", "correctIndex", "feedbackPerOpt
 
 /** A hiba fajtája → cserélhető mezők (a program saját üzenetei alapján). A tétel címkéi (id, sectionIndex, coversConceptIds) sosem. */
 function fieldsFor(message: string, bank: BankName): string[] | "*" {
-  if (/a mintaválasz nem teljes pont|hibás referencia|referenciaértéke|köztes alakja|előjel-kétértelmű rubrika/.test(message)) return TASK_RUBRIC;
+  // Tételgyár T2.1: a válaszkulcs-teszt bukása rubrikahiba — a kérdés, a minta és a rubrika együtt javítható.
+  if (/a mintaválasz nem teljes pont|hibás referencia|referenciaértéke|köztes alakja|előjel-kétértelmű rubrika|válaszkulcs-teszt/.test(message)) return TASK_RUBRIC;
   if (/correctIndex|opció ugyanazt jelenti|helyes opció|igaz opció|Egyválasztós tétel/.test(message)) return bank === "tasks" ? "*" : CHOICE;
   if (/ábrára hivatkozik/.test(message)) return bank === "tasks" ? ["q", "sample"] : bank === "quiz" ? ["question", "options", "feedbackPerOption"] : ["prompt", "answer", "options", "steps"];
   return "*";
