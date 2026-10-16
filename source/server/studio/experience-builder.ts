@@ -73,7 +73,7 @@ export type ExperienceBuildDeps = {
    * Spec 2026-10-16-gyartas-haladas: a bank haladása a felületnek — kész / összes egység, és amelyik épp készül (fejezet-index). A hívó
    * hibája a bankot nem állítja meg.
    */
-  onProgress?(progress: { done: number; total: number; current?: number }): void;
+  onProgress?(progress: { done: number; total: number; current?: number; building?: number[] }): void;
   /** Spec 2026-09-20: a lecke vizuális világa (a tervező választása) — a bank témája ez, nem hash. */
   theme?: LessonExperience["theme"];
   /** Spec 2026-09-24: lecke-szintű különlegességek; alapból a korábbi, különben leckénként választott. */
@@ -693,10 +693,10 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
   // csomag után determinisztikus keresztellenőrzés fut (ismétlődő kérdés, kapu-kérdés), és az
   // ütköző csomag sorosan újraépül a már kész csomagok ismeretében. A sorrend és a hash változatlan.
   const concurrency = Math.max(1, Math.floor(deps.concurrency ?? 1));
-  const progress = (p: { done: number; total: number; current?: number }) => { try { deps.onProgress?.(p); } catch { /* haladásjelzés — a bank megy tovább */ } };
+  const progress = (p: { done: number; total: number; current?: number; building?: number[] }) => { try { deps.onProgress?.(p); } catch { /* haladásjelzés — a bank megy tovább */ } };
   for (let start = 0; start < plan.units.length; start += concurrency) {
     const chunk = plan.units.slice(start, start + concurrency);
-    progress({ done: start, total: plan.units.length, current: chunk[0].sectionIndex });
+    progress({ done: start, total: plan.units.length, current: chunk[0].sectionIndex, building: chunk.map((u) => u.sectionIndex) });
     const snapshot: Prior = { methods: [...methods], tasks: [...tasks], quiz: [...quiz] };
     const built = await Promise.all(chunk.map((unit, i) => buildUnit(start + i, unit, snapshot)));
     for (const [i, result] of built.entries()) {
