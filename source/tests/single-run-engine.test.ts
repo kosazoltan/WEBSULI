@@ -512,7 +512,24 @@ test("haladásjelzés: a gyakorlóbank fejezetenként (kész / összes), a javí
   await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, { ...deps(client, memoryStore()), onPhase: (p, d) => details.push([p, d]) });
   const texts = details.map(([p, d]) => `${p}|${d}`);
   assert.ok(texts.includes("pedagogue|Tananyagterv: javító forduló (1.)…"), "az állomás javító fordulója: " + JSON.stringify(texts));
-  assert.ok(texts.includes("animator|Gyakorlóbank: 0/1 fejezet kész — a 1. készül…"), JSON.stringify(texts));
-  assert.ok(texts.some((t) => /^animator\|Gyakorlóbank: 0\/1 fejezet kész — a 1\. fejezet javító kísérlete \(2\.\)…$/.test(t)), "a javító kísérlet: " + JSON.stringify(texts));
-  assert.ok(texts.includes("animator|Gyakorlóbank: 1/1 fejezet kész…"));
+  assert.ok(texts.includes("animator|Gyakorlóbank: 0/1 csomag kész — a 1. fejezet csomagja készül…"), JSON.stringify(texts));
+  assert.ok(texts.includes("animator|Gyakorlóbank: 0/1 csomag kész — a 1. fejezet csomagjának javító kísérlete (2.)…"), "a javító kísérlet: " + JSON.stringify(texts));
+  assert.ok(texts.includes("animator|Gyakorlóbank: 1/1 csomag kész…"));
+});
+
+// Review #264: az utolsó bukás után nem jelzünk nem létező javító fordulót / bankkísérletet.
+test("haladásjelzés: az utolsó javító forduló és az utolsó bankkísérlet után nincs ígért újabb kísérlet", async () => {
+  const bad = { sections: [] };
+  const planTexts: string[] = [];
+  await assert.rejects(runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" },
+    { ...deps(scriptedClient({ outline: [bad, bad, bad, bad] }), memoryStore()), onPhase: (_p, d) => { if (d) planTexts.push(d); } }));
+  assert.ok(planTexts.includes("Tananyagterv: javító forduló (3.)…"), JSON.stringify(planTexts));
+  assert.ok(!planTexts.some((t) => t.includes("javító forduló (4.)")), "nincs 4. javító forduló: " + JSON.stringify(planTexts));
+
+  const bankTexts: string[] = [];
+  const failing = withOverride(scriptedClient(), (station) => (station === "5" ? "nem JSON" : null));
+  await assert.rejects(runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" },
+    { ...deps(failing, memoryStore()), onPhase: (_p, d) => { if (d) bankTexts.push(d); } }));
+  assert.ok(bankTexts.some((t) => t.includes("javító kísérlete (4.)")), JSON.stringify(bankTexts));
+  assert.ok(!bankTexts.some((t) => t.includes("javító kísérlete (5.)")), "az utolsó kísérlet után nincs ígért újabb: " + JSON.stringify(bankTexts));
 });

@@ -20,7 +20,7 @@ import { autofixOutline } from "../tools/outline-autofix";
 import { applyVisualPatch } from "../visual-patch";
 import { stripUngroundedAnimateLabels } from "../grounding";
 import { ensureSectionVisuals } from "../section-visuals";
-import { buildLessonExperience, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceCheckpoint } from "../experience-builder";
+import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceCheckpoint } from "../experience-builder";
 import { answerKeysFor, answerKeyTestsEnabled } from "../answer-key-writer";
 import { answerKeyNotes } from "../../../shared/answer-key-tests";
 import { quizBlindProblems } from "../quiz-blind-check";
@@ -153,7 +153,8 @@ export async function runStation<T>(deps: StationDeps, name: string, request: Tu
         problems = result.problems;
       }
     }
-    deps.onFix?.(name, round + 1);
+    // Review #264: csak valóban következő javító fordulót jelzünk (az utolsó bukás után nincs több kísérlet).
+    if (round < SINGLE_RUN_FIX_ROUNDS) deps.onFix?.(name, round + 1);
     deps.log?.(`[EGYFUTÁS] ${name}: ${round + 1}. ellenőrzés hibás (${problems.length}): ${problems.slice(0, 3).join(" | ").slice(0, 400)}`);
     blocks = [text(`A PROGRAM ELLENŐRZÉSE (${name}) ezeket a hibákat találta:\n- ${problems.slice(0, 40).join("\n- ")}\nJavítsd mindet, és add vissza a TELJES kért JSON-t újra.`)];
   }
@@ -513,7 +514,8 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     return buildLessonExperience(base, concepts, {
       onProgress: (p) => {
         progress = { done: p.done, total: p.total };
-        phase(currentPhase, `${label}: ${p.done}/${p.total} fejezet kész${p.current !== undefined ? ` — a ${p.current + 1}. készül` : ""}…`);
+        // Review #264: a számláló bankcsomagot számol (egy sok fogalmas fejezet több csomag is lehet), a készülőnél a fejezetet nevezzük meg.
+        phase(currentPhase, `${label}: ${p.done}/${p.total} csomag kész${p.current !== undefined ? ` — a ${p.current + 1}. fejezet csomagja készül` : ""}…`);
       },
       call: freshBankCall(deps.fresh, telemetry),
       concurrency: 1,
@@ -537,7 +539,8 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
         log(`[EGYFUTÁS] ${tool}: ${fixes.join("; ").slice(0, 300)}`);
       },
       onAttemptFailure: (section, attempt, reason) => {
-        phase(currentPhase, `${label}: ${progress.done}/${progress.total} fejezet kész — a ${section + 1}. fejezet javító kísérlete (${attempt + 2}.)…`);
+        // Review #264: az utolsó (mentő) kísérlet után nincs újabb — akkor nem ígérünk javító kísérletet.
+        if (attempt + 1 < PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS) phase(currentPhase, `${label}: ${progress.done}/${progress.total} csomag kész — a ${section + 1}. fejezet csomagjának javító kísérlete (${attempt + 2}.)…`);
         telemetry.gates.answerKeyFails += reason.split("válaszkulcs-teszt: a hibás").length - 1;
         log(`[EGYFUTÁS] bankcsomag ${section + 1}. fejezet, ${attempt + 1}. kísérlet: ${reason.slice(0, 300)}`);
       },
