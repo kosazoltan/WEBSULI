@@ -137,6 +137,10 @@
 
 /* ---------- fülek (a referencia `switch` mintája: kiválasztva főszín keret és halvány háttér) ---------- */
 [data-ws-theme] .fusion-tabs { background: var(--lesson-surface); border-color: var(--lesson-line); border-radius: var(--lesson-radius); }
+/* A fülek száma a lecke tartalmától függ (az „Ismétlés” csak kártyákkal jelenik meg): egy sorban, egyenlő szélességgel. */
+[data-ws-theme] .fusion-tabs { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+[data-ws-theme] .fusion-tabs button { font-size: clamp(13px, 1.8vw, 16px); }
+[data-ws-theme] .fusion-tabs button > span { min-width: 0; overflow-wrap: anywhere; text-align: center; }
 [data-ws-theme] .fusion-tabs button { color: var(--lesson-muted); border-radius: 12px; box-shadow: inset 0 0 0 2px transparent; }
 [data-ws-theme] .fusion-tabs button[aria-selected="true"] {
   background: var(--ws-soft); color: var(--ws-title); box-shadow: inset 0 0 0 2px var(--ws-accent);
@@ -166,3 +170,26 @@
 /* A borítóábra a téma színeit viseli; a régi évfolyamréteg kifakítása (lesson-grade.css) a témás leckén nem érvényes —
    a referencia a nagyobbaknál is a főszínnel rajzolt ábrát mutat. */
 [data-band][data-experience][data-ws-theme] .lesson-cover-art { filter: none; }
+
+/* ---------- memóriakártya (a referencia „Memorizálókártya” csempéje: .flash, .actionrow, .result; §3/§6) ---------- */
+[data-ws-theme] .ws-flash {
+  width: 100%; min-height: 153px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px;
+  padding: 18px 14px; border: 1px dashed var(--ws-line); border-radius: 14px; cursor: pointer;
+  background: linear-gradient(140deg, var(--ws-panel), var(--ws-soft)); color: var(--ws-title); text-align: center;
+}
+[data-ws-theme] .ws-flash[aria-pressed="true"] { border-style: solid; border-color: var(--ws-accent); }
+[data-ws-theme] .ws-flash small { font-size: 13px; font-weight: 700; letter-spacing: .02em; color: var(--ws-muted); }
+[data-ws-theme] .ws-flash .ws-flash-text { font-size: max(24px, var(--grade-size)); font-weight: 800; line-height: 1.3; overflow-wrap: anywhere; }
+[data-ws-theme] .ws-flash .ws-flash-question { font-weight: 500; }
+[data-ws-theme] .ws-review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+[data-ws-theme] .ws-review-actions button { min-height: 44px; padding: 10px 16px; }
+[data-ws-theme] .ws-review-status { min-height: 22px; margin-top: 10px; font-weight: 650; color: var(--ws-title); }
+[data-ws-theme] .ws-review-status[data-tone="error"] { color: var(--lesson-error); }
+/* Haladássáv a referencia `pbar` mintájára (sín és főszín-kitöltés), a natív szürke helyett; a szöveges érték mellette áll (§3). */
+[data-ws-theme] .ws-review-progress { width: 100%; height: 10px; appearance: none; border: 0; border-radius: 6px; overflow: hidden; background: var(--ws-track); }
+[data-ws-theme] .ws-review-progress::-webkit-progress-bar { background: var(--ws-track); }
+[data-ws-theme] .ws-review-progress::-webkit-progress-value { background: var(--ws-accent); }
+[data-ws-theme] .ws-review-progress::-moz-progress-bar { background: var(--ws-accent); }
+/* A kísérő szöveg (számláló, vendégjelzés) kiegészítő felirat, nem tananyag: olvasható 16px, nem a kártya mérete. */
+[data-band][data-experience][data-ws-theme] .ws-review :is(.fusion-round-head p, .ws-review-guest) { font-size: 16px; }
+[data-ws-theme] .ws-review-guest { color: var(--ws-muted); }
