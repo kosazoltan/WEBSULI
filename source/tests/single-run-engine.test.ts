@@ -114,3 +114,30 @@ test("a lektor tanítási tényhibája a második körben is → megáll (tényh
     (e: unknown) => e instanceof SingleRunError && e.station === "lektorálás");
   assert.equal(mem.published(), 0);
 });
+
+// Review #260
+test("megoldáseltérés blokkoló jegyzet nélkül → javító forduló a lektornak (nem minősül tisztának)", async () => {
+  const contradictory = { solutions: [{ task: "1. feladat", own: "12", lesson: "10", match: false }], notes: [], reviewedAll: true };
+  const client = scriptedClient({ lektor: [contradictory] });
+  const mem = memoryStore();
+  const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, mem));
+  assert.equal(result.htmlFileId, "html1");
+  assert.ok(client.calls.includes("lektorálás"), "az önellentmondó jelentés javító fordulóba megy: " + JSON.stringify(client.calls));
+});
+
+test("az utolsó javító kör bankváltozását egy ellenőrző kör újralektorálja; ott blokkoló → megáll, nincs közzététel", async () => {
+  const bankNote = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.sections.0.tasks.0", message: "Hibás válaszkulcs." };
+  const report = { solutions: [], notes: [bankNote], reviewedAll: true };
+  const stopped = scriptedClient({ lektor: [report, report, report] });
+  const mem = memoryStore();
+  await assert.rejects(runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(stopped, mem)),
+    (e: unknown) => e instanceof SingleRunError && e.station === "lektorálás");
+  assert.equal(mem.published(), 0);
+  assert.equal(stopped.calls.filter((c) => c === "6").length, 3, "2 javító + 1 ellenőrző lektori kör");
+
+  const verified = scriptedClient({ lektor: [report, report] });
+  const mem2 = memoryStore();
+  const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(verified, mem2));
+  assert.equal(result.htmlFileId, "html1");
+  assert.equal(verified.calls.filter((c) => c === "6").length, 3, "a tiszta ellenőrző kör után publikál");
+});

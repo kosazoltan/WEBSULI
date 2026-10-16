@@ -114,3 +114,12 @@ háromfázis-kapu) zárul.
   - bemenet 578 473, ebből **403 669 gyorsítótárból** (70%), friss bemenet 174 804;
   - kimenet 85 371.
 - Más modell nem hívódott.
+
+## S3 — review #260
+- **Job-tulajdonos:** a `store.createJob` után `workflowResource(jobId)` (mint a régi útvonalon), így a hibás egyfutásos job
+  a futás gazdájához kötött piszkozat marad (`manageableBy`), és a lízing a jobhoz kapcsolódik.
+- **Utolsó kör utáni lektorálás:** ha az utolsó javító körben a bank megváltozott (kivétel vagy újraépítés), egy további,
+  csak ellenőrző lektori kör fut; abban bármely blokkoló → megállás (`lektorálás`), publikálás nincs. Tanítási hiba az utolsó
+  javító körben továbbra is megállás.
+- **Önellentmondó lektori jelentés:** a `match: false` megoldáseltérés blokkoló jegyzet nélkül alaki hiba — a jelentés a
+  beszélgetésben visszamegy (javító forduló), a lektornak jegyzettel kell jeleznie vagy a megoldást helyesbítenie.

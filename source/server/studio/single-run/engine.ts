@@ -25,7 +25,7 @@ import { resolveChoiceGate, type JobPatch, type PipelineStore } from "../step-ru
 import { conceptIdResolver, exportQuizItemsForPublish } from "../quiz-export";
 import { parseModelJson } from "../run-step";
 import { roleSkillBlock } from "../role-skills";
-import { workflowPhase } from "../../workflows/engine";
+import { workflowPhase, workflowResource } from "../../workflows/engine";
 import type { ExtractorFile } from "../extractor";
 import type { LessonConversation, TurnBlock } from "./conversation";
 
@@ -169,6 +169,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const concepts: MapConcept[] = map.concepts;
   const promptMap = { title: map.meta.title, subject: map.meta.subject, classroom: map.meta.classroom, concepts };
   const jobId = await store.createJob({ mapId, step: "pedagogue", status: "running", model: conversation.model, promptVersion: SINGLE_RUN_VERSION, inputHash: `${SINGLE_RUN_VERSION}:${mapId}` });
+  await workflowResource(jobId); // review #260: a job a futás gazdájához kötött (piszkozatkezelés, lízing)
   const save = async (step: Exclude<SingleRunPhase, "extract"> | "error", output: Record<string, unknown>, extra: JobPatch = {}) =>
     store.saveStep(jobId, { step, ...extra, output: { ...output, singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } });
   deps.onJob?.(jobId, mapId);
@@ -241,16 +242,26 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   output = { ...output, lesson, experienceCheckpoint: checkpoint };
   await save("lektor", output);
 
-  // 6. Lektorálás és belső javítás (legfeljebb SINGLE_RUN_REVIEW_ROUNDS kör). Tanítási hiba → javított lecke; banktétel-hiba → kivétel,
-  // ha a padló megmarad, különben a banképítő javító köre a lektori visszajelzéssel.
+  // 6. Lektorálás és belső javítás (legfeljebb SINGLE_RUN_REVIEW_ROUNDS javító kör). Tanítási hiba → javított lecke; banktétel-hiba →
+  // kivétel, ha a padló megmarad, különben a banképítő javító köre a lektori visszajelzéssel. Az utolsó javító kör változását egy
+  // csak ellenőrző kör lektorálja újra (review #260): lektorálatlan javítás nem kerül közzétételre.
   await workflowPhase("lektor");
   const warnings: string[] = [];
-  for (let round = 0; round < SINGLE_RUN_REVIEW_ROUNDS; round++) {
+  for (let round = 0; round <= SINGLE_RUN_REVIEW_ROUNDS; round++) {
     phase("lektor", `Lektorálás (${round + 1}. kör)…`);
     const report = await station(deps, "lektorálás", [text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, [], owner)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)],
-      (json) => { const r = parseLektorResponse(json); return r.ok ? { ok: true, value: r.report } : { ok: false, problems: [r.reason] }; });
+      (json) => {
+        const r = parseLektorResponse(json);
+        if (!r.ok) return { ok: false, problems: [r.reason] };
+        // Review #260: megoldáseltérés blokkoló jegyzet nélkül önellentmondó jelentés — a lektor jelezze jegyzettel, vagy helyesbítsen.
+        const mismatches = (r.report.solutions ?? []).filter((sol) => !sol.match);
+        if (mismatches.length && !classifyNotes(r.report.notes).some((n) => n.blocking))
+          return { ok: false, problems: mismatches.map((m) => `${m.task}: a saját megoldásod (${m.own}) eltér a leckétől (${m.lesson}), de nincs hozzá blokkoló jegyzet — adj blokkoló jegyzetet a hibás blokk útvonalával, vagy helyesbítsd a match értékét, ha mégis egyezik.`) };
+        return { ok: true, value: r.report };
+      });
     const blocking = classifyNotes(report.notes).filter((n) => n.blocking);
     if (!blocking.length) break;
+    if (round === SINGLE_RUN_REVIEW_ROUNDS) throw new SingleRunError("lektorálás", blocking.map((n) => `${n.blockPath ?? "—"}: ${n.message}`));
     const bankNotes = blocking.filter((n) => /^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
     const teachingNotes = blocking.filter((n) => !/^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
     if (teachingNotes.length) {
