@@ -15,6 +15,7 @@ export type ArbiterDeps = {
   cachePut(key: string, verdict: ArbiterVerdict): Promise<void>;
   /** Atomi foglalás a napi keretből; `false` = a plafon elfogyott. */
   reserveDailyCall(): Promise<boolean>;
+  /** A modell JSON-válasza; `{ json, model }` alakban a ténylegesen válaszoló modell neve is (az elsődleges vagy a tartalék). */
   callModel(system: string, user: string): Promise<unknown>;
 };
 
@@ -35,7 +36,10 @@ async function verdictFor(key: string, input: { task: OpenTask; teaching: string
       logger.warn("[DÖNTŐBÍRÓ] A napi keret elfogyott — a determinisztikus ítélet marad.");
       return null;
     }
-    const verdict = parseArbiterVerdict(await deps.callModel(ARBITER_SYSTEM, buildArbiterUserMessage(input.task, input.teaching, input.answer)));
+    const raw = await deps.callModel(ARBITER_SYSTEM, buildArbiterUserMessage(input.task, input.teaching, input.answer));
+    const answered = raw && typeof raw === "object" && "json" in raw && "model" in raw ? raw as { json: unknown; model: string } : { json: raw, model: undefined };
+    const parsed = parseArbiterVerdict(answered.json);
+    const verdict = parsed && answered.model ? { ...parsed, model: answered.model } : parsed;
     if (!verdict) { logger.warn("[DÖNTŐBÍRÓ] A modell válasza nem értelmezhető — a determinisztikus ítélet marad."); return null; }
     await deps.cachePut(key, verdict).catch((e) => logger.warn(`[DÖNTŐBÍRÓ] A gyorsítótár írása nem sikerült: ${e instanceof Error ? e.message.slice(0, 120) : "ismeretlen"}`));
     return verdict;

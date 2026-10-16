@@ -16,7 +16,7 @@ import { callStepModel } from "../studio/run-step";
 import { teachingTextOf } from "../studio/experience-builder";
 import { withSupportSkill } from "../studio/support-skills";
 import { logger } from "../lib/logger";
-import { ARBITER_ANSWER_MAX, ARBITER_DAILY_LIMIT, ARBITER_MODEL } from "./arbiter";
+import { ARBITER_ANSWER_MAX, ARBITER_DAILY_LIMIT, ARBITER_FALLBACK_MODEL, ARBITER_MODEL } from "./arbiter";
 import { judgeOpenAnswer, type ArbiterDeps } from "./service";
 
 export const arbiterBodySchema = z.object({
@@ -56,7 +56,7 @@ export const liveArbiterDeps: ArbiterDeps = {
     return row && (row.state === "ok" || row.state === "partial" || row.state === "fail") ? { state: row.state, reason: row.reason } : null;
   },
   async cachePut(key, verdict) {
-    await db.insert(arbiterVerdicts).values({ cacheKey: key, state: verdict.state, score: verdict.state === "ok" ? 1 : verdict.state === "partial" ? 0.5 : 0, reason: verdict.reason, model: ARBITER_MODEL })
+    await db.insert(arbiterVerdicts).values({ cacheKey: key, state: verdict.state, score: verdict.state === "ok" ? 1 : verdict.state === "partial" ? 0.5 : 0, reason: verdict.reason, model: verdict.model ?? ARBITER_MODEL })
       .onConflictDoNothing();
   },
   async reserveDailyCall() {
@@ -65,10 +65,22 @@ export const liveArbiterDeps: ArbiterDeps = {
     return (rows as unknown[]).length > 0;
   },
   async callModel(system, user) {
-    if (!studioModelReady(ARBITER_MODEL)) throw new Error("A döntőbíró modellje nincs beállítva.");
-    return (await callStepModel(createStudioStepProvider(ARBITER_MODEL, "arbiter"), { step: "lektor", policy: "arbiter", role: "arbiter", model: ARBITER_MODEL, system: withSupportSkill("arbiter", system), user })).json;
+    // docs/specs/2026-10-16-egy-futas.md (C): Opus 5.5 medium, akadályoztatásakor GPT-6.1 Sol medium.
+    return callArbiterModels(system, user, (model) => studioModelReady(model),
+      async (model) => (await callStepModel(createStudioStepProvider(model, "arbiter"), { step: "lektor", policy: "arbiter", role: "arbiter", model, system: withSupportSkill("arbiter", system), user })).json);
   },
 };
+
+/** Az elsődleges, majd a tartalék döntőbíró-modell; a ténylegesen válaszoló modell nevével. Ha egyik sem válaszol, a hiba továbbmegy. */
+export async function callArbiterModels(system: string, user: string, ready: (model: string) => boolean, call: (model: string) => Promise<unknown>): Promise<{ json: unknown; model: string }> {
+  let last: unknown = new Error("A döntőbíró modellje nincs beállítva.");
+  for (const model of [ARBITER_MODEL, ARBITER_FALLBACK_MODEL]) {
+    if (!ready(model)) continue;
+    try { return { json: await call(model), model }; }
+    catch (error) { last = error; logger.warn(`[DÖNTŐBÍRÓ] ${model} nem válaszolt: ${error instanceof Error ? error.message.slice(0, 160) : "ismeretlen"}`); }
+  }
+  throw last;
+}
 
 export function createArbiterRouter(deps: { load: typeof loadArbiterTask; arbiter: ArbiterDeps } = { load: loadArbiterTask, arbiter: liveArbiterDeps }) {
   const router = express.Router();

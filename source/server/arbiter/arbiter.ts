@@ -7,7 +7,10 @@ import type { OpenTask } from "../../shared/lesson-experience";
 import { normalizeAnswerV2, type AnswerScore } from "../../shared/lesson-experience-score";
 
 export const ARBITER_VERSION = "arbiter-1";
-export const ARBITER_MODEL = "gpt-6.1-sol";
+// Tulajdonosi döntés 2026-10-16 (docs/specs/2026-10-16-egy-futas.md, C): a szöveges válaszok helyességéről Opus 5.5 (medium) dönt,
+// akadályoztatása esetén GPT-6.1 Sol (medium). Ha mindkettő kiesik, a determinisztikus ítélet marad.
+export const ARBITER_MODEL = "claude-opus-5-5";
+export const ARBITER_FALLBACK_MODEL = "gpt-6.1-sol";
 /** Tulajdonosi döntés 2026-10-15: napi 2000 fizetett döntőbíró-hívás összesen. */
 export const ARBITER_DAILY_LIMIT = 2000;
 /** Tulajdonosi döntés 2026-10-15: a szolgáltatóhoz legfeljebb 1000 karakter megy a válaszból. */
@@ -59,7 +62,7 @@ export function buildArbiterUserMessage(task: Pick<OpenTask, "q" | "sample" | "r
   ].join("\n");
 }
 
-export type ArbiterVerdict = { state: AnswerScore["state"]; reason: string };
+export type ArbiterVerdict = { state: AnswerScore["state"]; reason: string; /** A ténylegesen ítélő modell (elsődleges vagy tartalék). */ model?: string };
 const SCORE: Record<AnswerScore["state"], number> = { ok: 1, partial: 0.5, fail: 0 };
 
 export function parseArbiterVerdict(raw: unknown): ArbiterVerdict | null {
