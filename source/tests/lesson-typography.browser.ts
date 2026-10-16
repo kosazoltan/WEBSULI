@@ -13,6 +13,8 @@ test("lesson theme cannot replace the age-appropriate Hungarian font", async ({ 
     const cssName = (name: string) => name.includes(" ") ? `"${name}"` : name;
     await expect(page.locator("[data-band]")).toHaveCSS("font-family", `${cssName(body)}, "Noto Sans", sans-serif`);
     await expect(page.locator("h1")).toHaveCSS("font-family", `${cssName(heading)}, "Noto Sans", sans-serif`);
+    // Review #266: a feliratok (chip) sem kevernek régi családot — a sáv-réteg a lecke fontját használja.
+    await expect(page.locator(".lesson-chip").first()).toHaveCSS("font-family", `${cssName(body)}, "Noto Sans", sans-serif`);
   }
 });
 

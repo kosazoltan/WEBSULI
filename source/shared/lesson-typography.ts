@@ -8,7 +8,9 @@ export type LessonFont = typeof LESSON_FONTS[number];
 /** Minden helyben kiszolgált család (client/public/fonts/lesson-fonts.css) — a régi HTML-témák leíró mezőihez. */
 export type BundledFont = LessonFont | "Nunito" | "Source Sans 3" | "Source Serif 4";
 export const HUNGARIAN_FONT_PROBE = "Árvíztűrő tükörfúrógép · ÁÉÍÓÖŐÚÜŰ áéíóöőúüű";
-export const LESSON_FONT_CSS = "/fonts/lesson-fonts.css";
+// Review #266: a stíluslap URL-je verziózott — a /fonts útvonal hosszú (immutable) gyorsítótárazást kap, a régi, Inter / Nunito Sans
+// nélküli CSS nem maradhat a visszatérő böngészőben. Az index.html előtöltése ugyanezt a címet használja (teszt őrzi).
+export const LESSON_FONT_CSS = "/fonts/lesson-fonts.css?v=hu-2";
 export const LESSON_FONT_VERSION = "hu-2";
 /** A design-leírás tartaléklánca: a saját font után Noto Sans, majd rendszer sans-serif. */
 export const LESSON_FONT_FALLBACK = '"Noto Sans", sans-serif';
@@ -19,15 +21,28 @@ export function lessonFontPair(classroom: number, _subject = ""): { body: Lesson
   return { body: font, heading: font };
 }
 
+/** Gépi hivatkozás (azonosító, hash): változatlan marad — a szerver pontos egyezéssel keresi (review #266: pl. a döntőbíró a feladat id-jét). */
+const TECHNICAL_KEY = /^(id|mapId|sourceHash|hash)$|Ids?$|Hash$/;
+
 /**
- * Websuli Design (§2.4: tilos a hiányzó glifa pótlása): a lecke szövegei NFC-alakban jelennek meg — a felbontott (NFD) ő/ű is az
- * előre összetett glifát kapja a saját fontból (az Interben a kombinálható U+030B nincs, lásd client/public/fonts/manifest.json).
+ * Websuli Design (§2.4: tilos a hiányzó glifa pótlása): a lecke MEGJELENÍTETT szövegei NFC-alakban jelennek meg — a felbontott (NFD)
+ * ő/ű is az előre összetett glifát kapja a saját fontból (az Interben a kombinálható U+030B nincs, lásd client/public/fonts/manifest.json).
+ * Az azonosítók és a gépi hivatkozások (id, …Id, …Ids, …Hash) változatlanok.
  */
 export function nfcDeep<T>(value: T): T {
   if (typeof value === "string") return value.normalize("NFC") as T;
   if (Array.isArray(value)) return value.map((v) => nfcDeep(v)) as T;
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, nfcDeep(v)])) as T;
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, TECHNICAL_KEY.test(k) ? v : nfcDeep(v)])) as T;
   return value;
+}
+
+/**
+ * Review #266: a HTML-ben csak a megjelenített SZÖVEG kerül NFC-be — a szkript- és stílusblokkok, a tagok (attribútumok, id-k,
+ * erőforráscímek) bájtra változatlanok, így a szerzői JavaScript nyers és escape-elt hivatkozásai továbbra is egyeznek.
+ */
+export function nfcHtmlText(html: string): string {
+  return html.split(/(<script\b[\s\S]*?<\/script\s*>|<style\b[\s\S]*?<\/style\s*>|<!--[\s\S]*?-->|<[^>]*>)/i)
+    .map((part, i) => (i % 2 === 1 ? part : part.normalize("NFC"))).join("");
 }
 
 /** Preview and published HTML share this adapter; stored originals stay intact.
@@ -35,8 +50,9 @@ export function nfcDeep<T>(value: T): T {
  */
 export function withLessonTypography(html: string, classroom = 7, subject = "", assetOrigin = ""): string {
   if (!html.trim()) return html;
-  // Websuli Design (§2.4): NFC — a felbontott ő/ű is a lecke saját fontjának előre összetett glifáját kapja (nem tartalékfontot).
-  html = html.normalize("NFC");
+  // Websuli Design (§2.4): NFC a megjelenített szövegen — a felbontott ő/ű is a saját font előre összetett glifáját kapja; a szkriptek,
+  // a tagok és az attribútumok változatlanok (review #266).
+  html = nfcHtmlText(html);
   const { body, heading } = lessonFontPair(classroom, subject);
   // Only a caller-provided HTTP(S) origin, never an arbitrary HTML/CSS fragment.
   const origin = assetOrigin ? new URL(assetOrigin).origin : "";

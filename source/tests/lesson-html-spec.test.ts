@@ -82,7 +82,7 @@ test("a tantárgy és a korosztály irányítja a téma-jelölteket", () => {
 test("a téma-prompt csak a mért helyi magyar fontokat kéri (jóváhagyott tipográfiai szerződésváltás)", () => {
   for (const theme of LESSON_THEMES) {
     const link = lessonFontsLink();
-    assert.equal(link, "/fonts/lesson-fonts.css");
+    assert.equal(link, "/fonts/lesson-fonts.css?v=hu-2", "verziózott stíluslap (review #266: immutable gyorsítótár)");
     const p = lessonThemePrompt(theme, 5);
     assert.ok(p.includes(link));
     assert.match(p, /Nunito Sans/);
