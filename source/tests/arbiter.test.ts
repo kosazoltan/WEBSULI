@@ -173,3 +173,17 @@ test("döntőbíró: a gyorsítótárba a ténylegesen ítélő (tartalék) mode
   assert.equal(judged.state, "ok");
   assert.equal(puts[0]?.model, "gpt-6.1-sol");
 });
+
+// Review #258: sémahibás elsődleges válasz → tartalék; a tartalék külön napi keretet foglal (elfogyott keretnél nincs hívás); új cache-verzió.
+test("döntőbíró-lánc: séma-ellenőrzés modellenként és a tartalék keretfoglalása", async () => {
+  const { callArbiterModels } = await import("../server/arbiter/routes");
+  const { ARBITER_VERSION } = await import("../server/arbiter/arbiter");
+  assert.equal(ARBITER_VERSION, "arbiter-2", "a modellváltás érvényteleníti a régi gyorsítótárat");
+  const calls: string[] = [];
+  const invalidPrimary = await callArbiterModels("s", "u", () => true, async (m) => { calls.push(m); return m === "claude-opus-5-5" ? { state: "talán" } : { state: "ok", reason: "jó" }; }, async () => true);
+  assert.equal(invalidPrimary.model, "gpt-6.1-sol");
+  assert.deepEqual(calls, ["claude-opus-5-5", "gpt-6.1-sol"]);
+  calls.length = 0;
+  await assert.rejects(callArbiterModels("s", "u", () => true, async (m) => { calls.push(m); throw new Error("down"); }, async () => false), /down/);
+  assert.deepEqual(calls, ["claude-opus-5-5"], "elfogyott keretnél a tartalék nem hívódik");
+});

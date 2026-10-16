@@ -114,3 +114,26 @@ test("OpenAI-kliens (tartalék): Responses API, medium effort, a forráskép inp
   assert.equal((input[0].content as Array<{ type: string }>)[0].type, "input_image");
   assert.equal(input[1].content, "térkép");
 });
+
+// Review #259
+test("a tartalék failed állapotú válasza hiba (nem üres forduló); az onUsage hibája nem rontja az átiratot; üres kulcs = hiányzó", async () => {
+  const failing = openAIClient({ client: { responses: { create: async () => ({ output_text: "", status: "failed" }) } } });
+  await assert.rejects(failing.complete("R", [{ role: "user", blocks: [{ type: "text", text: "x" }] }]), /failed/);
+  const primary = fakeClient("claude-opus-5-5", ["egy", "kettő"]);
+  const conv = new LessonConversation("R", primary, null, { onUsage: () => { throw new Error("metrika"); } });
+  await conv.send([{ type: "text", text: "1" }]);
+  await conv.send([{ type: "text", text: "2" }]);
+  assert.deepEqual(conv.state().turns.map((t) => t.role), ["user", "assistant", "user", "assistant"]);
+  const { createLessonConversation } = await import("../server/studio/single-run/conversation");
+  assert.equal(createLessonConversation("R", {}, { AI_INTEGRATIONS_ANTHROPIC_API_KEY: "  ", AI_INTEGRATIONS_OPENAI_API_KEY: "", OPENAI_API_KEY: "x" }).model, "gpt-6.1-sol");
+});
+
+test("docx: a kinyert szöveg megy a modellnek, nem a base64 tartalom", async () => {
+  let params: Record<string, unknown> | undefined;
+  const client = anthropicClient({ client: { messages: { stream: (p) => { params = p as unknown as Record<string, unknown>; return { finalMessage: async () => ({
+    content: [{ type: "text", text: "{}" }], stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 } }) as never }; } } } });
+  await client.complete("R", [{ role: "user", blocks: [{ type: "source", file: { name: "a.docx", kind: "docx", content: "data:application/zip;base64,UEsDBA==", extractedText: "A docx szövege." } }] }]);
+  const text = (params?.messages as Array<{ content: Array<{ text?: string }> }>)[0].content[0].text ?? "";
+  assert.match(text, /A docx szövege\./);
+  assert.doesNotMatch(text, /UEsDBA/);
+});

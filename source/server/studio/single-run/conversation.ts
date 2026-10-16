@@ -22,7 +22,7 @@ export type TurnBlock = { type: "text"; text: string } | { type: "source"; file:
 export type Turn = { role: "user" | "assistant"; blocks: TurnBlock[] };
 /** Kép / PDF natív tartalomblokk (data URL); minden más forrás már kinyert szöveg — szövegként megy. */
 const isBinarySource = (file: ExtractorFile) => /^data:[^;,]+;base64,/.test(file.content) && (file.kind === "image" || file.kind === "pdf");
-// A determinisztikusan kinyert szöveg (docx / szöveges PDF) elsőbbséget élvez a nyers tartalommal szemben.
+// Review #259 (P1): a determinisztikusan kinyert szöveg (docx / szöveges PDF) megy, nem a nyers (base64) tartalom.
 const sourceAsText = (file: ExtractorFile) => `FORRÁS (${file.name}):
 ${file.extractedText ?? file.content}`;
 
@@ -91,6 +91,10 @@ export function openAIClient(opts: { apiKey?: string; model?: string; client?: O
           return b.file.kind === "image" ? { type: "input_image", image_url: b.file.content } : { type: "input_file", filename: b.file.name, file_data: b.file.content };
         }) });
       const response = await client.responses.create({ model, instructions: system, input, store: false, max_output_tokens: SINGLE_RUN_MAX_TOKENS, reasoning: { effort: SINGLE_RUN_EFFORT } }, { signal });
+      // Review #259: csak a `completed` (és a csonka `incomplete`) eredmény válasz — a `failed` / `cancelled` hiba, nem üres forduló.
+      if (response.status && response.status !== "completed" && response.status !== "incomplete") {
+        throw Object.assign(new Error(`A tartalék modell válasza ${response.status} állapotú.`), { status: 502 });
+      }
       return { text: response.output_text ?? "", model, truncated: response.status === "incomplete",
         ...(response.usage ? { usage: { input: response.usage.input_tokens, output: response.usage.output_tokens, cachedInput: response.usage.input_tokens_details?.cached_tokens ?? 0 } } : {}) };
     },
@@ -126,16 +130,19 @@ export class LessonConversation {
   state(): ConversationState { return { model: this.current.model, switchedToFallback: this.switched, turns: structuredClone(this.turns) }; }
 
   async send(blocks: TurnBlock[], signal?: AbortSignal): Promise<ModelReply> {
+    const before = this.turns.length;
     this.turns.push({ role: "user", blocks });
+    let reply: ModelReply;
     try {
-      const reply = await this.completeWithFallback(signal);
-      this.turns.push({ role: "assistant", blocks: [{ type: "text", text: reply.text }] });
-      this.opts.onUsage?.(reply);
-      return reply;
+      reply = await this.completeWithFallback(signal);
     } catch (error) {
-      this.turns.pop(); // a sikertelen forduló nem marad a beszélgetésben — újraküldhető
+      this.turns.length = before; // a sikertelen forduló teljesen kikerül — újraküldhető
       throw error;
     }
+    this.turns.push({ role: "assistant", blocks: [{ type: "text", text: reply.text }] });
+    // Review #259: a használat-napló hibája nem ronthatja el a már sikeres fordulót (és az átiratot).
+    try { this.opts.onUsage?.(reply); } catch { /* telemetria — a gyártás megy tovább */ }
+    return reply;
   }
 
   private async completeWithFallback(signal?: AbortSignal): Promise<ModelReply> {
@@ -161,7 +168,9 @@ export class LessonConversation {
 
 /** Az éles beszélgetés a környezet kulcsaival: Opus 5.5 elsődleges, GPT-6.1 Sol tartalék (kulcs nélküli modell kimarad). */
 export function createLessonConversation(system: string, opts: ConstructorParameters<typeof LessonConversation>[3] = {}, env: NodeJS.ProcessEnv = process.env): LessonConversation {
-  const anthropicKey = env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
-  const openaiKey = env.AI_INTEGRATIONS_OPENAI_API_KEY ?? env.OPENAI_API_KEY;
+  // Review #259: az üres / csak szóközös kulcs hiányzó kulcs (mint a studio-provider.ts-ben).
+  const key = (...values: Array<string | undefined>) => values.map((v) => v?.trim()).find((v) => !!v);
+  const anthropicKey = key(env.AI_INTEGRATIONS_ANTHROPIC_API_KEY);
+  const openaiKey = key(env.AI_INTEGRATIONS_OPENAI_API_KEY, env.OPENAI_API_KEY);
   return new LessonConversation(system, anthropicKey ? anthropicClient({ apiKey: anthropicKey }) : null, openaiKey ? openAIClient({ apiKey: openaiKey }) : null, opts);
 }
