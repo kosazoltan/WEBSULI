@@ -86,3 +86,26 @@ külön szeletként készül.
   - a megszakadt egyfutásos gyártás a mentett részekből folytatható (terv, tananyag, bank-ellenőrzőpont, beszélgetés) az utolsó lezárt
     állomás után;
   - a szókeret túllépése egy rövidítő javító fordulót kap.
+
+## Mérés a javítások után (2026-10-16, `scripts/measure/single-run-measure.mts`, eldobható DB, valódi Opus 5.5)
+Ugyanaz a történelem-forrás (`030a27c0`, Ókori Egyiptom), amelyen a javítások előtt a gyártás a 6. fejezet bankjánál elbukott.
+
+| | Előtte | Utána (J1–J5) |
+|---|---|---|
+| Eredmény | elbukott (6. fejezet bankja) | **közzétéve** (7 fejezet, 55 feladat, 98 kvíz, 18 módszer) |
+| Idő | 1269 s (a bukásig) | 1898 s |
+| Bemenet / gyorsítótár / kimenet (token) | 3,59 M / 90% / 110 e | **0,64 M** / 20% / 214 e |
+| Bank (bemenet, forduló) | 3,41 M, 15 | 0,22 M, 11 (friss beszélgetésben) |
+| Lektor (bemenet, forduló) | — | 0,22 M, 3 (friss beszélgetésben) |
+| Kötelező tények / fogalmak a leckében | — | 97% / 91% |
+| Kapuk | — | 7 blokkoló válaszkulcs-bukás javítókörben, 2 nem blokkoló, 4 banktételt a lektor kivett |
+
+Tartalékváltás nem volt; a szókeret nem lépett túl.
+
+**Értékelés:**
+- A J1 a bukás okát megszüntette: a megkülönböztethetetlen próba csak tájékoztató, a valóban túl megengedő rubrika továbbra is
+  javítókört kap.
+- A J2 a bemeneti tokent kb. hatodára csökkentette: a friss beszélgetés nem viszi a teljes gyártást minden fordulóban.
+- A gyorsítótár-arány alacsonyabb, mert a friss beszélgetések kevés közös előtagot osztanak. A kimenet nagyobb, mert minden friss
+  hívás teljes JSON-t ad.
+- Az idő nőtt, mert a kulcsmentes ellenőrzés (23 hívás, 573 s) és a bank egymás után fut.

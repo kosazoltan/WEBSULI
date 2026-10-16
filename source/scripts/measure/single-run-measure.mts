@@ -89,6 +89,9 @@ try {
     out.metrics = measureLesson(lesson, { sourceText: sourceText || map.source_text, concepts });
   }
   await pool.end();
+  // Az alkalmazás saját kapcsolata (server/db) is lezárul a konténer eltávolítása előtt — különben a kilépéskor kezeletlen hibát dob.
+  const { dbPool } = await import("../../server/db");
+  await dbPool.end().catch(() => undefined);
 } finally {
   try { cmd(docker, ["rm", "-f", id]); } catch { /* már leállt */ }
 }
