@@ -86,3 +86,9 @@ háromfázis-kapu) zárul.
 - **Séma:** a válasz modellenként a döntőbíró sémáján is ellenőrződik (`parseArbiterVerdict`); hibánál a tartalék jön.
 - **Napi keret:** a tartalék második fizetett hívása előtt külön atomi napi keretfoglalás; elfogyott keretnél nincs hívás.
 - **Gyorsítótár:** `ARBITER_VERSION` arbiter-1 → arbiter-2 (a modellváltás a régi ítéleteket érvényteleníti).
+
+## S2 — review #259
+- **Szöveges forrás:** a modell a kinyert szöveget (`extractedText`, pl. docx) kapja, nem a nyers base64 tartalmat.
+- **Tartalékválasz:** a `failed` / `cancelled` állapotú tartalékválasz hiba (nem üres forduló).
+- **Hibás forduló:** sikertelen forduló után az átirat a hívás előtti hosszra áll vissza; a használat-napló (`onUsage`) hibája nem rontja a sikeres fordulót.
+- **Kulcsok:** az üres vagy csak szóközt tartalmazó kulcs hiányzó kulcsnak számít.
