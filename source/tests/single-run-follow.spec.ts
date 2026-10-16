@@ -88,3 +88,36 @@ test("S4a: a tervre váró régi job jóváhagyása egyfutásos újragyártást 
   expect(approved).toBe(1);
   expect(errors).toEqual([]);
 });
+
+test("review #262: a követett futás újratöltés után is követhető, amíg a jobja létre nem jön", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", (e) => errors.push(e.message));
+  let jobReady = false;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let data: unknown = [];
+    if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] };
+    if (path === "/api/csrf-token") data = { csrfToken: "test" };
+    if (path === "/api/studio/maps") data = { maps: [{ id: "map-1", title: "A víz körforgása", subject: "Természettudomány", classroom: 5, status: "approved" }] };
+    if (path === "/api/studio/lessons/from-map/map-1") return route.fulfill({ status: 202, json: { runId: "run-r" } });
+    if (path === "/api/studio/lessons/one-step/run-r") data = jobReady ? { phase: "pedagogue", jobId: "job-r", error: null } : { phase: "extract", jobId: null, error: null };
+    if (path === "/api/studio/jobs/job-r") data = { job: { id: "job-r", step: "author", status: "running", round: 0, error: null }, produced: {} };
+    await route.fulfill({ json: data });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin?tab=knowledge-maps");
+  await page.evaluate(() => sessionStorage.clear());
+  await page.reload();
+  const advanced = page.getByTestId("studio-advanced-body");
+  await advanced.getByTestId("lesson-map-select").click();
+  await page.getByRole("option", { name: /A víz körforgása/ }).click();
+  await advanced.getByTestId("start-lesson").click();
+  await expect(page.getByTestId("following-run")).toBeVisible();
+  // Újratöltés, mielőtt a futás jobja létrejönne: a követés megmarad.
+  await page.reload();
+  await expect(page.getByTestId("following-run")).toBeVisible({ timeout: 15_000 });
+  jobReady = true;
+  await expect(page.getByTestId("job-monitor")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("following-run")).toHaveCount(0);
+  expect(await page.evaluate(() => sessionStorage.getItem("websuli.studio.followRunId"))).toBeNull();
+  expect(errors).toEqual([]);
+});

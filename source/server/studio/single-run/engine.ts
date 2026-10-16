@@ -23,7 +23,7 @@ import { answerKeysFor, answerKeyTestsEnabled } from "../answer-key-writer";
 import { quizBlindProblems } from "../quiz-blind-check";
 import { lessonLengthBudget } from "../../../shared/lesson-length";
 import { lessonVisibleText, words } from "../lesson-metrics";
-import { arithmeticSourceCorrections, correctionAuditText, correctionReasonCode, type SourceCorrection } from "../source-corrections";
+import { applySourceCorrections, arithmeticSourceCorrections, correctionAuditText, correctionReasonCode, type SourceCorrection } from "../source-corrections";
 import { classifyNotes } from "../lektor";
 import { splitLimitBlockers } from "../limit-policy";
 import { openBankFindingFlags, resolveChoiceGate } from "../choice-gate";
@@ -64,6 +64,11 @@ export type SingleRunDeps = {
   /** A job és a térkép azonosítója, amint létrejöttek (a felület követéséhez és a piszkozathoz). */
   onJob?(jobId: string, mapId: string): void;
   log?(message: string): void;
+  /**
+   * Review #262: FRISS, előzmény nélküli beszélgetés (ugyanaz a modellpár) a kulcsmentes ellenőrzésekhez — a kvíz vak előszűrője és a
+   * válaszkulcs-tesztíró nem láthatja a gyártó beszélgetés korábbi fordulóiban a kulcsot / a rubrikát. Ha nincs megadva, a két kapu nem fut.
+   */
+  checkConversation?(): LessonConversation;
 };
 
 /** A gyártás teljes módszertana EGY rendszerpromptban (a szerep-skillek egyszer, gyorsítótárazva). */
@@ -142,12 +147,25 @@ export function conversationBankCall(conversation: LessonConversation) {
  * Egy JSON-kérés a beszélgetésben (a banképítő minőségkapuinak: válaszkulcs-teszt, kvíz vak előszűrő). A hívó a hibát kezeli: ezeknél a
  * kapuknál a hívás- vagy alakhiba csak az adott tétel ítéletét hagyja ki (nincs megállás).
  */
-function conversationJsonCall(conversation: LessonConversation, label: string) {
+function freshJsonCall(fresh: () => LessonConversation, label: string) {
   return async (system: string, user: string): Promise<unknown> => {
-    const reply = await conversation.send([text(`${label}\n${system}\n\n${user}`)]);
+    // Hívásonként új beszélgetés: az ellenőr csak ezt a kérést látja (nincs korábbi kulcs / rubrika a kontextusban).
+    const reply = await fresh().send([text(`${label}\n${system}\n\n${user}`)]);
     if (reply.truncated) throw new Error("A válasz elérte a kimeneti keretet és levágódott.");
     return parseModelJson(reply.text).json;
   };
+}
+
+/**
+ * Review #262: a tanár által jóváhagyott vázlat átvétele modellhívás nélkül — ugyanazok a determinisztikus ellenőrzések, mint a modell
+ * terve (séma, kötelező fogalmak fedése); a sorrend, a címek és a kiosztás változatlan. Hibás vázlat → megállás pontos okkal.
+ */
+export function approvedOutlineOf(raw: unknown, concepts: MapConcept[]) {
+  const parsed = outlineSchema.safeParse(raw);
+  if (!parsed.success) throw new SingleRunError("jóváhagyott terv", parsed.error.issues.slice(0, 10).map((i) => `${i.path.join(".")}: ${i.message}`));
+  const covers = outlineCoversMap(parsed.data.sections, concepts);
+  if (!covers.ok) throw new SingleRunError("jóváhagyott terv", [`A jóváhagyott vázlat nem fedi le a kötelező fogalmakat: ${JSON.stringify(covers).slice(0, 600)}`]);
+  return parsed.data;
 }
 
 function ownerContextOf(instruction?: string, corrections: SourceCorrection[] = []): OwnerContext | undefined {
@@ -224,7 +242,12 @@ export async function readSourceStation(deps: Pick<SingleRunDeps, "conversation"
   });
 }
 
-export type SingleRunInput = { files: ExtractorFile[]; instruction?: string; title?: string; ownerId: string };
+/**
+ * `files`: új gyártás a feltöltött forrásból. `mapId` (review #262): gyártás a MEGLÉVŐ, gondozott térképről (újragyártás, térképről
+ * indítás) — a tudásbank-állomás kimarad, a fogalomazonosítók stabilak; `approvedOutline`: a tanár által jóváhagyott vázlat (a
+ * terv-állomás ezt veszi át, nem kér új tervet).
+ */
+export type SingleRunInput = { files: ExtractorFile[]; instruction?: string; title?: string; ownerId: string; mapId?: string; approvedOutline?: unknown };
 export type SingleRunResult = { mapId: string; jobId: string; lessonId: string; htmlFileId: string; model: string; warnings: string[] };
 
 /**
@@ -236,24 +259,33 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const log = (m: string) => deps.log?.(m);
   const phase = (p: SingleRunPhase, detail: string | null) => deps.onPhase?.(p, detail);
 
-  // 1. Forrás + tudásbank.
+  // 1. Forrás + tudásbank (review #262: meglévő térképnél a gondozott térkép, stabil fogalomazonosítókkal).
   await workflowPhase("source"); await workflowPhase("scope");
-  phase("extract", "A forrás beolvasása és megértése…");
-  const read = await readSourceStation(deps, input.files, input.instruction);
-  const owner = ownerContextOf(input.instruction, read.corrections);
-  await workflowPhase("knowledge");
-  const mapId = await deps.saveMap({ ...read, title: input.title?.trim() || read.title }, input.files);
+  let mapId: string;
+  if (input.mapId) {
+    phase("extract", "A meglévő tudásbank betöltése…");
+    await workflowPhase("knowledge");
+    mapId = input.mapId;
+  } else {
+    phase("extract", "A forrás beolvasása és megértése…");
+    const read = await readSourceStation(deps, input.files, input.instruction);
+    await workflowPhase("knowledge");
+    mapId = await deps.saveMap({ ...read, title: input.title?.trim() || read.title }, input.files);
+  }
   await workflowPhase("sourceCheck");
   const map = await store.loadMap(mapId);
-  if (!map || !map.concepts.length) throw new SingleRunError("tudásbank", ["A mentett tudásbankban nincs fogalom."]);
-  const concepts: MapConcept[] = map.concepts;
+  if (!map || !map.concepts.length) throw new SingleRunError("tudásbank", ["A tudásbankban nincs tanítható fogalom."]);
+  // A forrás hamis egyenlőségének helyesbítése a tanított fogalmakon (új térképnél már a mentés előtt megtörtént — ott ugyanaz az eredmény).
+  const corrections: SourceCorrection[] = arithmeticSourceCorrections(map.concepts.map((c) => ({ localId: c.localId, term: c.term, definition: c.definition, quote: c.quote })));
+  const concepts: MapConcept[] = applySourceCorrections(map.concepts, corrections);
+  const owner = ownerContextOf(input.instruction, corrections);
   const promptMap = { title: map.meta.title, subject: map.meta.subject, classroom: map.meta.classroom, concepts };
   const jobId = await store.createJob({ mapId, step: "pedagogue", status: "running", model: conversation.model, promptVersion: SINGLE_RUN_VERSION, inputHash: `${SINGLE_RUN_VERSION}:${mapId}` });
   await workflowResource(jobId); // review #260: a job a futás gazdájához kötött (piszkozatkezelés, lízing)
   const save = async (step: Exclude<SingleRunPhase, "extract"> | "error", output: Record<string, unknown>, extra: JobPatch = {}) =>
     store.saveStep(jobId, { step, ...extra, output: { ...output, singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } });
   deps.onJob?.(jobId, mapId);
-  let output: Record<string, unknown> = { ...(input.instruction ? { ownerInstruction: input.instruction } : {}), ...(read.corrections.length ? { sourceCorrections: read.corrections } : {}) };
+  let output: Record<string, unknown> = { ...(input.instruction ? { ownerInstruction: input.instruction } : {}), ...(corrections.length ? { sourceCorrections: corrections } : {}) };
   await save("pedagogue", output);
   try {
     return await produce();
@@ -267,8 +299,8 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   async function produce(): Promise<SingleRunResult> {
   // 2. Tananyagterv.
   await workflowPhase("pedagogue");
-  phase("pedagogue", "A tananyagterv készül…");
-  const outline = await runStation(deps, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${buildPedagoguePrompt(promptMap, undefined, owner)}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
+  phase("pedagogue", input.approvedOutline ? "A jóváhagyott tanulási terv ellenőrzése…" : "A tananyagterv készül…");
+  const outline = input.approvedOutline !== undefined ? approvedOutlineOf(input.approvedOutline, concepts) : await runStation(deps, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${buildPedagoguePrompt(promptMap, undefined, owner)}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
     const fixed = autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline;
     const parsed = outlineSchema.safeParse(fixed);
     if (!parsed.success) return { ok: false, problems: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
@@ -331,17 +363,17 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
       // A régi útról áthozott, alapból bekapcsolt minőségkapuk — UGYANEBBEN a beszélgetésben, a döntés a kódé:
       // válaszkulcs-tesztek (helyes és hibás próbaválaszok a valódi pontozón; vészfék: STUDIO_ANSWER_KEY_TESTS=0) és a kvíz vak
       // előszűrője (kulcs nélküli, opciónkénti ítélet; vészfék: STUDIO_QUIZ_BLIND=0).
-      ...(answerKeyTestsEnabled() ? {
+      ...(deps.checkConversation && answerKeyTestsEnabled() ? {
         answerKeys: answerKeysFor(
           { classroom: promptMap.classroom, concepts: concepts.map((c) => ({ id: c.localId, term: c.term, definition: (c as { definition?: string }).definition })) },
-          conversationJsonCall(conversation, "5. ÁLLOMÁS — VÁLASZKULCS-TESZTEK (a pontozó próbája; a rubrikát ne idézd)."),
+          freshJsonCall(deps.checkConversation, "VÁLASZKULCS-TESZTEK (a pontozó próbája)."),
           (w) => log(`[EGYFUTÁS] Válaszkulcs-teszt: ${w}`),
         ),
       } : {}),
-      ...(process.env.STUDIO_QUIZ_BLIND !== "0" ? {
+      ...(deps.checkConversation && process.env.STUDIO_QUIZ_BLIND !== "0" ? {
         quizBlind: (quiz: Array<{ id: string; question: string; options: string[]; correctIndex: number }>, sectionIndex: number) =>
           quizBlindProblems(quiz, teachingTextOf(base.sections[sectionIndex]),
-            conversationJsonCall(conversation, "5. ÁLLOMÁS — KVÍZ VAK ELLENŐRZÉSE (a kulcsot szándékosan nem kapod; opciónként ítélj)."),
+            freshJsonCall(deps.checkConversation!, "KVÍZ VAK ELLENŐRZÉSE (a kulcsot szándékosan nem kapod; opciónként ítélj)."),
             quizBlindCache, (w) => log(`[EGYFUTÁS] Kvíz-előszűrő ${sectionIndex + 1}. fejezet: ${w}`)),
       } : {}),
       ...(checkpoint ? { checkpoint } : {}),

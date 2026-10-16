@@ -585,8 +585,9 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
 }
 
 /**
- * POST /api/studio/lessons/from-map/:mapId — egyfutásos gyártás a térkép mentett forrásátiratából (review #260); a kliens a visszaadott
- * futást (`runId`) követi. #180: az üres törzs a térkép saját tantárgyát / évfolyamát jelenti; a megadott hatókörnek egyeznie kell vele.
+ * POST /api/studio/lessons/from-map/:mapId — egyfutásos gyártás a JÓVÁHAGYOTT, gondozott térképről (review #262: nincs újrakinyerés, a
+ * fogalomazonosítók stabilak); a kliens a visszaadott futást (`runId`) követi. #180: az üres törzs a térkép saját tantárgyát / évfolyamát
+ * jelenti; a megadott hatókörnek egyeznie kell vele.
  */
 lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: Response) => {
   const parsed = fromMapBody.safeParse(req.body);
@@ -596,13 +597,13 @@ lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: 
       .json({ message: "Hibás kérés.", issues: parsed.error.issues.map((i) => i.message) });
   }
   const scope = parsed.data && "subject" in parsed.data ? parsed.data : undefined;
-  const [map] = await db.select({ title: knowledgeMaps.title, subject: knowledgeMaps.subject, classroom: knowledgeMaps.classroom, sourceText: knowledgeMaps.sourceText })
+  const [map] = await db.select({ subject: knowledgeMaps.subject, classroom: knowledgeMaps.classroom, status: knowledgeMaps.status })
     .from(knowledgeMaps).where(eq(knowledgeMaps.id, req.params.mapId)).limit(1);
   if (!map) return res.status(404).json({ message: "A térkép nem található." });
+  if (map.status !== "approved") return res.status(409).json({ message: "A tudástár még nincs jóváhagyva — előbb nézd át és hagyd jóvá." });
   if (scope && (scope.subject !== map.subject || scope.classroom !== map.classroom)) return res.status(409).json({ message: "A megadott tantárgy / évfolyam nem egyezik a térképével." });
-  if (!map.sourceText?.trim()) return res.status(409).json({ message: "Ehhez a térképhez nincs mentett forrásszöveg — töltsd fel újra a forrást." });
-  const runId = startOneStepRun({ title: map.title, files: [{ name: "forras-atirat.txt", kind: "text", content: map.sourceText }] } as OneStepRequest, req.user!.id);
-  return res.status(202).json({ runId });
+  if (!(await hasTaughtConcepts(req.params.mapId))) return res.status(409).json({ message: "A tudástárban nincs tanítható (jóváhagyott) fogalom." });
+  return res.status(202).json({ runId: startMapRun(req.params.mapId, req.user!.id) });
 });
 
 /** GET /api/studio/jobs/:id — pollable job state plus what the pipeline produced. */
@@ -672,14 +673,14 @@ lessonPipelineRouter.get("/jobs/:id/notes", async (req: Request, res: Response) 
 lessonPipelineRouter.post("/jobs/:id/approve-outline", async (req: Request, res: Response) => {
   const trackedId = (await workflowStore.related(req.params.id, req.user!.id)) ?? req.params.id;
   if (await workflowStore.exists(req.params.id) && !await workflowStore.read(trackedId, req.user!.id)) return res.status(404).json({ message: "A futás nem található." });
-  // Review #261: a tanár által jóváhagyott (átrendezett) vázlat kötelező tervként utazik az újragyártásba.
+  // Review #261/#262: a tanár által jóváhagyott (átrendezett) vázlat SZERKEZETILEG utazik az újragyártásba — a terv-állomás ezt veszi át.
   const outline = req.body?.outline === undefined ? undefined : outlineSchema.safeParse(req.body.outline);
   if (outline && !outline.success) return res.status(400).json({ message: "A vázlat alakilag hibás.", issues: outline.error.issues.slice(0, 10).map((i) => `${i.path.join(".")}: ${i.message}`) });
-  try { return res.status(202).json({ jobId: req.params.id, runId: await remakeAsSingleRun(req.params.id, req.user!.id, outline?.success ? { outline: outline.data } : {}), remanufactured: true }); }
+  try { return res.status(202).json({ jobId: req.params.id, runId: await remakeAsSingleRun(req.params.id, req.user!.id, outline?.success ? { approvedOutline: outline.data } : {}), remanufactured: true }); }
   catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." }); }
 });
 
-/** POST /api/studio/jobs/:id/resume — a megállt gyártás egyfutásos újragyártása a mentett forrásból (a piszkozat megmarad). */
+/** POST /api/studio/jobs/:id/resume — a megállt gyártás egyfutásos újragyártása a gondozott térképről (a piszkozat megmarad). */
 lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response) => {
   const [exists] = await db
     .select({ id: studioJobs.id })
@@ -691,17 +692,44 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
   catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." }); }
 });
 
-/**
- * docs/specs/2026-10-16-egy-futas.md (D): az újragyártás / folytatás új EGYFUTÁSOS gyártás a térkép mentett forrásátiratából.
- * A régi job atomikusan „újragyártott” lesz (dupla kattintás sem indít kettőt); csak saját / gazdátlan, épp nem vitt job foglalható.
- */
-/** Review #261: a jóváhagyott vázlat kötelező tervként, a tanári kérés részeként (fejezetsorrend, fogalomkiosztás). */
-export function approvedOutlineInstruction(outline: { sections: Array<{ heading: string; conceptIds: string[] }> }): string {
-  return ["A TANÁR ÁLTAL JÓVÁHAGYOTT TANULÁSI TERV — kötelező: ebben a sorrendben, ezekkel a fejezetcímekkel és fogalomkiosztással tervezz:",
-    ...outline.sections.map((s, i) => `${i + 1}. ${s.heading} — fogalmak: ${s.conceptIds.join(", ") || "—"}`)].join("\n");
+/** A térkép tanítható (megtartott / szerkesztett) fogalmainak száma > 0 — nélküle a gyártás nem indul (nincs fizetős, biztosan bukó futás). */
+async function hasTaughtConcepts(mapId: string): Promise<boolean> {
+  const { rows } = await db.execute(sql`SELECT 1 FROM km_concepts WHERE map_id = ${mapId} AND review_state IN ('kept', 'edited') LIMIT 1`);
+  return rows.length > 0;
 }
 
-export async function remakeAsSingleRun(jobId: string, owner: string, extra: { outline?: { sections: Array<{ heading: string; conceptIds: string[] }> } } = {}): Promise<string> {
+/**
+ * Review #262: egyfutásos gyártás a MEGLÉVŐ térképről, saját futással és workflow-val (a haladásjelző és a felület ugyanúgy követi, mint a
+ * feltöltést). `approvedOutline`: a tanár által jóváhagyott vázlat — a terv-állomás ezt veszi át.
+ */
+export function startMapRun(mapId: string, owner: string, extra: { instruction?: string; approvedOutline?: unknown } = {}): string {
+  const runId = createRun();
+  updateRun(runId, { phase: "extract", mapId, detail: "A meglévő tudásbank betöltése…" });
+  void executeWorkflow(workflowStore, { id: runId, owner, mode: "upload", request: { mapId, ...(extra.instruction ? { instruction: extra.instruction } : {}), approvedOutline: extra.approvedOutline !== undefined } }, async () => {
+    const { runSingleFromMap } = await import("./single-run/live");
+    try {
+      const result = await runSingleFromMap({ mapId, ownerId: owner, ...(extra.instruction ? { instruction: extra.instruction } : {}), ...(extra.approvedOutline !== undefined ? { approvedOutline: extra.approvedOutline } : {}) },
+        (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }));
+      updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });
+      return readPublishedLesson(result.lessonId);
+    } catch (error) {
+      logger.error(`[EGYFUTÁS] A gyártás megállt (${runId}): ${error instanceof Error ? error.message : String(error)}`);
+      updateRun(runId, { phase: "error", error: error instanceof Error ? error.message.slice(0, 1500) : "Az egyfutásos gyártás megállt." });
+      throw error;
+    }
+  }).catch((error) => {
+    if (error instanceof WorkflowWaiting) return;
+    void recordOneStepFailure(runId, error);
+  });
+  return runId;
+}
+
+/**
+ * docs/specs/2026-10-16-egy-futas.md (D) + review #262: az újragyártás / folytatás új EGYFUTÁSOS gyártás a job GONDOZOTT térképéről (nincs
+ * újrakinyerés), az eredeti tanári kéréssel; jóváhagyott vázlatnál azzal. A régi job atomikusan „újragyártott” lesz (dupla kattintás sem
+ * indít kettőt); csak saját / gazdátlan, épp nem vitt job foglalható. Tanítható fogalom nélküli térképnél a foglalás visszaáll.
+ */
+export async function remakeAsSingleRun(jobId: string, owner: string, extra: { approvedOutline?: unknown } = {}): Promise<string> {
   const claim = await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb) || '{"recoveryState":"remanufactured"}'::jsonb
     WHERE j.id = ${jobId} AND coalesce(j.output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured', 'discarded')
       AND j.status IN ('error', 'ok') AND j.step <> 'done'
@@ -709,16 +737,13 @@ export async function remakeAsSingleRun(jobId: string, owner: string, extra: { o
     RETURNING j.map_id, j.output->>'ownerInstruction' AS instruction`);
   const row = claim.rows[0] as { map_id: string; instruction: string | null } | undefined;
   if (!row) throw new WorkflowConflict("Az újragyártás már elindult, a piszkozat törölve, épp fut, vagy nem a tiéd.");
-  const [map] = await db.select({ title: knowledgeMaps.title, sourceText: knowledgeMaps.sourceText }).from(knowledgeMaps).where(eq(knowledgeMaps.id, row.map_id)).limit(1);
-  if (!map?.sourceText?.trim()) {
+  if (!(await hasTaughtConcepts(row.map_id))) {
     await db.execute(sql`UPDATE studio_jobs SET output = output - 'recoveryState' WHERE id = ${jobId}`);
-    throw new WorkflowConflict("Ehhez a piszkozathoz nincs mentett forrásszöveg — töltsd fel újra a forrást.");
+    throw new WorkflowConflict("Ehhez a piszkozathoz a tudástárban nincs tanítható fogalom — töltsd fel újra a forrást.");
   }
-  const instructions = [row.instruction ?? "", extra.outline ? approvedOutlineInstruction(extra.outline) : ""].filter((t) => t.trim()).join("\n\n");
-  const runId = startOneStepRun({ title: map.title, ...(instructions ? { instructions } : {}),
-    files: [{ name: "forras-atirat.txt", kind: "text", content: map.sourceText }] } as OneStepRequest, owner);
+  const runId = startMapRun(row.map_id, owner, { ...(row.instruction ? { instruction: row.instruction } : {}), ...(extra.approvedOutline !== undefined ? { approvedOutline: extra.approvedOutline } : {}) });
   await db.execute(sql`UPDATE studio_jobs SET output = output || ${JSON.stringify({ remanufacturedAs: `single-run:${runId}` })}::jsonb WHERE id = ${jobId}`);
-  logger.warn(`[EGYFUTÁS] ${jobId}: újragyártás egyfutásos motoron a mentett forrásátiratból → futás ${runId}`);
+  logger.warn(`[EGYFUTÁS] ${jobId}: újragyártás egyfutásos motoron a gondozott térképről → futás ${runId}`);
   return runId;
 }
 

@@ -212,8 +212,9 @@ test("review #260: az egyfutásos újragyártás foglalása csak saját / gazdá
     await dbPool.query("UPDATE lesson_workflow_runs SET lease_until = now() + interval '1 minute' WHERE id=$1", [leased.id]);
     await assert.rejects(remakeAsSingleRun(foreign.id, "draft-owner"), /nem a tiéd/);
     await assert.rejects(remakeAsSingleRun(leased.id, "draft-owner"), /épp fut/);
-    // A saját job foglalása sikerül; forrásszöveg nélkül a foglalás visszaáll (nem indul fizetős gyártás).
-    await assert.rejects(remakeAsSingleRun(mine.id, "draft-owner"), /nincs mentett forrásszöveg/);
+    // A saját job foglalása sikerül; tanítható fogalom nélkül a foglalás visszaáll (nem indul fizetős gyártás). Review #262: az újragyártás
+    // a gondozott térképről indul (nem a forrásszövegből), ezért a feltétel a tanítható fogalom.
+    await assert.rejects(remakeAsSingleRun(mine.id, "draft-owner"), /nincs tanítható fogalom/);
     const states = (await dbPool.query("SELECT id, output->>'recoveryState' AS s FROM studio_jobs WHERE id = ANY($1)", [[foreign.id, leased.id, mine.id]])).rows;
     for (const row of states) assert.equal(row.s, null, `${row.id}: érintetlen / visszaállt`);
   } finally {

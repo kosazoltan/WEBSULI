@@ -116,8 +116,9 @@ test("a korábban workflow nélküli utak a kijelölt módban futnak (H, I, J, K
     ["server/routes.ts", "post", "/api/admin/materials/:id/generate-quiz", /generateMaterialQuiz\(id, countRaw, req\.user!\.id\)/],
     ["server/studio/routes.ts", "post", "/maps/extract", /runToolWorkflow\(\{ mode: "map"/],
     ["server/studio/routes.ts", "post", "/maps/:id/recheck", /runToolWorkflow\(\{ mode: "mapCheck"/],
-    // S4b (docs/specs/2026-10-16-egy-futas.md): a térképről indítás egyfutásos gyártás (startOneStepRun → runOneStep, `upload` módú workflow).
-    ["server/studio/lesson-pipeline-routes.ts", "post", "/lessons/from-map/:mapId", /startOneStepRun\(/],
+    // S4b + review #262 (docs/specs/2026-10-16-egy-futas.md): a térképről indítás egyfutásos gyártás a gondozott térképről
+    // (startMapRun → executeWorkflow, `upload` módú workflow).
+    ["server/studio/lesson-pipeline-routes.ts", "post", "/lessons/from-map/:mapId", /startMapRun\(/],
   ];
   for (const [file, method, path, pattern] of expectations) {
     const handler = routeHandlerText(units, file, method, path);

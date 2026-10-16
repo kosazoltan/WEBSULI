@@ -48,22 +48,28 @@ function memoryStore() {
   const steps: JobPatch[] = [];
   let published = 0;
   const lessons = new Map<string, unknown>();
+  // Mint az éles adattár: a mentett térkép fogalmai töltődnek vissza (mentés nélkül a statikus fixtúra-fogalmak).
+  let saved: MapConcept[] | null = null;
   const store = {
-    async loadMap(id: string) { return id === "m1" ? { meta: { id: "m1", title: "Terület", subject: fixture.subject, classroom: fixture.classroom }, concepts } : null; },
+    async loadMap(id: string) { return id === "m1" ? { meta: { id: "m1", title: "Terület", subject: fixture.subject, classroom: fixture.classroom }, concepts: saved ?? concepts } : null; },
     async createJob() { return "job1"; },
     async saveStep(_id: string, patch: JobPatch) { steps.push(structuredClone(patch)); },
     async upsertLesson(_lessonId: string | null, _mapId: string, json: unknown) { lessons.set("lesson1", json); return "lesson1"; },
     async publishLesson() { published++; return { htmlFileId: "html1", exportedQuizItems: 3 }; },
     async loadJob() { return null; }, async loadBlockerNotes() { return []; }, async saveNotes() {},
   } as unknown as PipelineStore;
-  return { store, steps, lessons, published: () => published };
+  return { store, steps, lessons, published: () => published, saveConcepts: (c: MapConcept[]) => { saved = c; } };
 }
 
 function deps(client: ModelClient, mem: ReturnType<typeof memoryStore>, maps: SingleRunMap[] = []): SingleRunDeps {
   return {
     conversation: new LessonConversation(singleRunSystemPrompt(), client, null),
     store: mem.store,
-    async saveMap(map) { maps.push(map); return "m1"; },
+    async saveMap(map) {
+      maps.push(map);
+      mem.saveConcepts(map.concepts.map((c) => ({ localId: c.id, examWeight: c.examWeight, term: c.term, definition: c.definition, quote: c.quote })));
+      return "m1";
+    },
   };
 }
 
@@ -215,11 +221,15 @@ test("S4b: a forrás hamis egyenlősége determinisztikusan helyesbítve (térk�
   assert.match(plannerRequest, /-13/, "a helyesbítés (helyes érték) a tananyagterv kérésébe is bekerül");
 });
 
-test("S4b: a válaszkulcs-teszt és a kvíz vak előszűrője ugyanabban a beszélgetésben fut; a vak ítélet a kód döntésével jut a bankba", async () => {
+test("review #262: a válaszkulcs-teszt és a kvíz vak előszűrője FRISS, előzmény nélküli beszélgetésben fut; a vak ítélet a kód döntésével jut a bankba", async () => {
   const labels: string[] = [];
   const logs: string[] = [];
-  const client = withOverride(scriptedClient(), (_station, turns) => {
+  const historyLengths: number[] = [];
+  const main = scriptedClient();
+  const checker: ModelClient = { model: "claude-opus-5-5", async complete(_system, turns) {
+    historyLengths.push(turns.length);
     const t = lastUserText(turns);
+    const json = ((): unknown => {
     if (/VÁLASZKULCS-TESZTEK/.test(t)) { labels.push("answer-key"); return JSON.stringify({ items: [] }); }
     if (/KVÍZ VAK ELLENŐRZÉSE/.test(t)) {
       labels.push("quiz-blind");
@@ -229,13 +239,17 @@ test("S4b: a válaszkulcs-teszt és a kvíz vak előszűrője ugyanabban a besz�
       // Minden kérdésnél MINDEN opció igaz (kétértelmű) → a kód (choiceVerdictProblem) minden tételt elutasít.
       return JSON.stringify({ choices: ids.map((id, i) => ({ id, truths: Array.from({ length: options[i] }, () => true) })) });
     }
-    return null;
-  });
+    return "{}";
+    })();
+    return { text: typeof json === "string" ? json : JSON.stringify(json), model: "claude-opus-5-5", truncated: false };
+  } };
   const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" },
-    { ...deps(client, memoryStore()), log: (m) => logs.push(m) });
+    { ...deps(main, memoryStore()), log: (m) => logs.push(m), checkConversation: () => new LessonConversation("ELLENŐR", checker, null) });
   assert.equal(result.htmlFileId, "html1");
-  assert.ok(labels.includes("answer-key"), "a válaszkulcs-teszt a beszélgetésben fut (a fixtúrában nyílt feladatok vannak)");
-  assert.ok(labels.includes("quiz-blind"), "a kvíz vak előszűrője a beszélgetésben fut: " + JSON.stringify(labels));
+  assert.ok(labels.includes("answer-key"), "a válaszkulcs-teszt lefut (a fixtúrában nyílt feladatok vannak)");
+  assert.ok(labels.includes("quiz-blind"), "a kvíz vak előszűrője lefut: " + JSON.stringify(labels));
+  assert.ok(historyLengths.length > 0 && historyLengths.every((n) => n === 1), "minden ellenőrzés előzmény nélküli (a gyártó beszélgetés kulcsát / rubrikáját nem látja)");
+  assert.ok(!main.calls.includes("?"), "a gyártó beszélgetés nem kapja meg az ellenőrző kéréseket");
   assert.ok(logs.some((m) => /quiz-blind: .*vak előszűrő szerint/.test(m)), "a vak ítélet a banképítő döntésébe jut: " + JSON.stringify(logs.filter((m) => /quiz|kvíz/i.test(m))));
 });
 
@@ -274,11 +288,25 @@ test("review #261: a különálló kinyerés lenyomata egyértelmű (a fájlhat�
   assert.notEqual(one, two);
 });
 
-test("review #261: a jóváhagyott vázlat kötelező tervként kerül a tanári kérésbe", async () => {
-  const { approvedOutlineInstruction } = await import("../server/studio/lesson-pipeline-routes");
-  const text = approvedOutlineInstruction({ sections: [{ heading: "B fejezet", conceptIds: ["c2"] }, { heading: "A fejezet", conceptIds: ["c1", "c3"] }] });
-  assert.match(text, /JÓVÁHAGYOTT TANULÁSI TERV — kötelező/);
-  assert.match(text, /1\. B fejezet — fogalmak: c2\n2\. A fejezet — fogalmak: c1, c3/);
+test("review #262: meglévő térképről, jóváhagyott tervvel — nincs tudásbank- és terv-kérés, a jóváhagyott terv változatlanul megy tovább", async () => {
+  const client = scriptedClient();
+  const mem = memoryStore();
+  const maps: SingleRunMap[] = [];
+  const approved = { sections: [{ heading: "A tanár sorrendje", conceptIds: ["area"], plannedBlocks: ["explain", "example", "animate", "recap"], animationSuggestions: [] }], misconceptions: [] };
+  const result = await runSingleLesson({ files: [], mapId: "m1", approvedOutline: approved, ownerId: "u1" }, deps(client, mem, maps));
+  assert.equal(result.htmlFileId, "html1");
+  assert.equal(result.mapId, "m1", "a meglévő térkép (stabil fogalomazonosítók)");
+  assert.equal(maps.length, 0, "nincs új tudásbank");
+  assert.ok(!client.calls.includes("1") && !client.calls.includes("2"), "nincs tudásbank- és terv-kérés: " + JSON.stringify(client.calls));
+  const saved = mem.steps.find((st) => (st.output as { approvedOutline?: unknown } | undefined)?.approvedOutline)!.output as { approvedOutline: { sections: Array<{ heading: string }> } };
+  assert.equal(saved.approvedOutline.sections[0].heading, "A tanár sorrendje");
+});
+
+test("review #262: a hibás jóváhagyott terv pontos okkal megállít (nincs csendes új terv)", async () => {
+  const client = scriptedClient();
+  await assert.rejects(runSingleLesson({ files: [], mapId: "m1", approvedOutline: { sections: [] }, ownerId: "u1" }, deps(client, memoryStore())),
+    (e: unknown) => e instanceof SingleRunError && e.station === "jóváhagyott terv");
+  assert.ok(!client.calls.includes("2"), "nem kér helyette új tervet");
 });
 
 test("a rendszerprompt ép: a pontozó szabálya egy darabban, szó szerint; nincs egybetűs (szétszórt) sor", async () => {

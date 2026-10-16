@@ -51,12 +51,31 @@ type JobResponse = {
 };
 
 const JOB_STORAGE_KEY = "websuli.studio.jobId";
+/** Review #262: a követett futás (amíg a jobja létre nem jön) újratöltés után is követhető marad. */
+const RUN_STORAGE_KEY = "websuli.studio.followRunId";
 
 function readPersistedJobId(): string | null {
   try {
     return window.sessionStorage.getItem(JOB_STORAGE_KEY);
   } catch {
     return null; // private mode / storage disabled — behave like a fresh panel
+  }
+}
+
+function readPersistedRunId(): string | null {
+  try {
+    return window.sessionStorage.getItem(RUN_STORAGE_KEY);
+  } catch {
+    return null; // private mode / storage disabled — behave like a fresh panel
+  }
+}
+
+function persistRunId(runId: string | null): void {
+  try {
+    if (runId) window.sessionStorage.setItem(RUN_STORAGE_KEY, runId);
+    else window.sessionStorage.removeItem(RUN_STORAGE_KEY);
+  } catch {
+    // storage unavailable: the run is still followed for this session
   }
 }
 
@@ -80,7 +99,8 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
   const [studioMode, setStudioMode] = useState<"upload" | "web">("upload");
   useEffect(() => persistJobId(jobId), [jobId]);
   // Review #260: egyfutásos módban a térképről indítás és a folytatás futást (`runId`) ad; a futás jobja a tudásbank után jön létre.
-  const [followRunId, setFollowRunId] = useState<string | null>(null);
+  const [followRunId, setFollowRunId] = useState<string | null>(() => readPersistedRunId());
+  useEffect(() => persistRunId(followRunId), [followRunId]);
   const { data: followedRun } = useQuery<{ phase: string; jobId: string | null; error: string | null }>({
     queryKey: ["/api/studio/lessons/one-step", followRunId],
     queryFn: () => apiRequest("GET", `/api/studio/lessons/one-step/${followRunId}`),

@@ -92,7 +92,10 @@ test("forrás-ellenőrzés: a lecke-indítás kérés és fotó nélkül is lefu
   const station = engine.slice(engine.indexOf("export async function readSourceStation("), engine.indexOf("export type SingleRunInput"));
   assert.ok(station.includes("const corrections = arithmeticSourceCorrections(checked.map("), "a helyesbítés az 1. állomáson fut");
   assert.ok(!/if \(!instruction[^)]*\)\s*return/.test(station), "nincs kéréstől / fotótól függő korai visszatérés");
-  assert.ok(engine.includes("ownerContextOf(input.instruction, read.corrections)"), "a helyesbítés a promptokba is eljut");
+  // Review #262: a helyesbítés a BETÖLTÖTT térkép fogalmain is lefut (meglévő térképről indított gyártásnál is), és a promptokba jut.
+  const run = engine.slice(engine.indexOf("export async function runSingleLesson("));
+  assert.ok(run.includes("const corrections: SourceCorrection[] = arithmeticSourceCorrections(map.concepts.map("), "a betöltött térképen is fut");
+  assert.ok(run.includes("const owner = ownerContextOf(input.instruction, corrections);"), "a helyesbítés a promptokba is eljut");
   const improve = readFileSync(new URL("../server/studio/structured-improvement.ts", import.meta.url), "utf8");
   assert.ok(improve.includes("mergeCorrections(arithmeticSourceCorrections(source.concepts), proposal.corrections)"));
   const schema = readFileSync(new URL("../shared/lesson-repair.ts", import.meta.url), "utf8");

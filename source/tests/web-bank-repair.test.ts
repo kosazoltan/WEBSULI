@@ -13,7 +13,13 @@ test("new publication rejects raw angle brackets and commented-out banks, while 
   const html = htmlFor(original);
   assert.doesNotThrow(() => readHtmlLessonData(html));
   assert.match(verifyLessonMethodHtml(html).problems.join("; "), /Unicode escape/);
-  // S4b (docs/specs/2026-10-16-egy-futas.md): applyWebBankPatch (web-bank-repair.ts) removed with the web bank repair; the escaped-republish and commented-bank assertions built on its output went with it.
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a webes bankjavító (applyWebBankPatch) kivezetve — az escape-elt adatot itt helyben állítjuk elő
+  // (ugyanaz a szerializálás: a „<” \u003c-ként); a megmaradó publikálási kapu állításai változatlanok (review #262).
+  const escaped = html.replace(JSON.stringify(original), JSON.stringify(original).replace(/</g, "\\u003c"));
+  assert.notEqual(escaped, html, "az escape-elt bemenet valóban más");
+  assert.equal(verifyLessonMethodHtml(escaped).ok, true);
+  const commented = escaped.replace(/(<script type="application\/json"[^]*?<\/script>)/, '<!--$1-->');
+  assert.match(verifyLessonMethodHtml(commented).problems.join("; "), /valódi, inert/);
 });
 
 test("coverage errors do not conceal sample errors from the same repair round", () => {
