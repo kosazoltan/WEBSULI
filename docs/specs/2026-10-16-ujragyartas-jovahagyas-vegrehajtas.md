@@ -38,3 +38,5 @@ Terv: `docs/specs/2026-10-16-ujragyartas-jovahagyas.md`.
 - A tiszta ciklus külön modulba került (`server/studio/remade-drive.ts`, `driveRemadeWith`), egységteszttel (`tests/remade-drive.test.ts`). A teszt hamis `drive`-ja a valódihoz hasonlóan elnyeli a várakozást.
 - Ellenpróba: a régi „visszatérés után kilép” logikával 4 teszt bukik.
 - Sikertelen gépi jóváhagyásnál a ciklus megáll (nem pörög a lépés-határig).
+- Review #256 (P2): a futó jobok listaablaka 2 → 7 nap (a folytatás 7 napig engedélyezett — utána nem tűnhet el a listából).
+- Review #256 (P2): a gépi jóváhagyás a lízing alatt friss állapotból ellenőrzi az elvetést (mint az `applyResume`) — a közben törölt piszkozat nem indul tovább.

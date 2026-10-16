@@ -531,7 +531,7 @@ export async function ownerDraftTotal(owner: string): Promise<number> {
     LEFT JOIN LATERAL (SELECT w.owner_id FROM lesson_workflow_runs w WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1) wr ON true
     WHERE coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
       AND ((j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
-        OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '2 days' AND wr.owner_id = ${owner})
+        OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '7 days' AND wr.owner_id = ${owner})
         OR (j.status = 'ok' AND j.step = 'author' AND j.output ? 'outline' AND NOT j.output ? 'approvedOutline' AND j.created_at > now() - interval '7 days' AND wr.owner_id = ${owner}))`);
   return Number((rows[0] as { n?: number } | undefined)?.n ?? 0);
 }
@@ -549,7 +549,7 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
     WHERE coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
       AND (
         (j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
-        OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '2 days' AND wr.owner_id = ${owner})
+        OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '7 days' AND wr.owner_id = ${owner})
         -- J2: a saját, tanulási terv jóváhagyására váró job (pl. a javítás előtti újragyártás) — látszik és folytatható.
         OR (j.status = 'ok' AND j.step = 'author' AND j.output ? 'outline' AND NOT j.output ? 'approvedOutline' AND j.created_at > now() - interval '7 days' AND wr.owner_id = ${owner})
       )
@@ -1213,7 +1213,12 @@ export async function driveRemade(jobId: string, owner: string, start = true): P
       const [job] = await db.select({ step: studioJobs.step, status: studioJobs.status, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId)).limit(1);
       return !!job && decideOneStepAction({ step: job.step, status: job.status, output: (job.output ?? null) as Record<string, unknown> | null }) === "approve";
     },
-    approve: () => autoApproveOutline(jobId),
+    // Review #256 (P2): a lízing alatt, friss állapotból — a közben törölt (elvetett) piszkozat nem hagyható jóvá és nem indul tovább.
+    approve: async () => {
+      const [job] = await db.select({ output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId)).limit(1);
+      if ((job?.output as { recoveryState?: unknown } | null)?.recoveryState === "discarded") return { outcome: "failed" as const, reason: "A piszkozatot törölték." };
+      return autoApproveOutline(jobId);
+    },
     maxRounds: MAX_CHAIN,
   }, start);
   if (outcome !== "done") logger.warn(`[STUDIO] Az újragyártás megállt (${jobId}): ${outcome === "approval-failed" ? "a terv gépi jóváhagyása nem sikerült" : "a lépés-határ elfogyott"}.`);

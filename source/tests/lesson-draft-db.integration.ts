@@ -233,6 +233,11 @@ test("újragyártás jóváhagyása (J2): a tervre váró saját job látszik, f
     assert.ok(!list.some((d) => d.jobId === approvedAlready), "a már jóváhagyott (nem váró, nem futó) nem jelenik meg ebben az ágban");
     assert.ok(!list.some((d) => d.jobId === foreign), "másik admin jobja nem látszik");
     assert.equal(await discardDraft(foreign, "draft-appr"), false);
+    // Review #256 (P2): a folytatott, két napnál régebbi job futás közben sem tűnik el a listából (7 napos ablak).
+    const older = (await dbPool.query(`INSERT INTO studio_jobs(map_id,step,status,input_hash,output,created_at) VALUES ($1,'author','running','h','{}'::jsonb, now() - interval '3 days') RETURNING id`, [map])).rows[0].id as string;
+    created.push(older);
+    await dbPool.query("INSERT INTO lesson_workflow_runs(id,owner_id,state,snapshot) VALUES ($1,'draft-appr','running','{}'::jsonb)", [older]);
+    assert.equal((await ownerDrafts("draft-appr")).find((d) => d.jobId === older)?.running, true, "3 napos futó job látszik");
     assert.equal(await discardDraft(waiting, "draft-appr"), true, "a tervre váró saját job törölhető");
     assert.ok(!(await ownerDrafts("draft-appr")).some((d) => d.jobId === waiting));
   } finally {
