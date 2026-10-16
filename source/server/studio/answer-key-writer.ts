@@ -20,6 +20,9 @@ export const ANSWER_KEY_SYSTEM = [
   `- ${ANSWER_KEY_LIMITS.wrongMin + 1}–${ANSWER_KEY_LIMITS.wrongMax} HIBÁS választ, mindegyiknél a fajtájával: "tevhit" (jellegzetes tévhit), "forditott" (fordított irány /`,
   "  felcserélt ok-okozat), \"hianyos\" (csak a válasz egy része), \"temaidegen\" (a témához tartozó, de a kérdésre nem felelő állítás).",
   "A mintaválasz csak tájékoztat: a helyes válaszok NE legyenek a minta szó szerinti másolatai.",
+  "A pontozó szócsoportokat keres, a szórendet és a viszonyt NEM méri. Ezért minden hibás válasz tartalmazzon legalább egy olyan tartalmi",
+  "szót, amely egyik helyes válaszban sincs (a helyes szavak puszta felcserélése nem hibás próba): a „forditott” a fogalmat vagy az irányt",
+  "jelölő SZÓT cserélje (pl. „csökken” a „nő” helyett), ne csak a sorrendet.",
   `Egy válasz legfeljebb ${ANSWER_KEY_LIMITS.textMax} karakter. Csak a tanított fogalmakra támaszkodj; ne találj ki új tényt.`,
   'Válaszolj kizárólag ilyen JSON-nal: { "items": [ { "id": "<feladat id>", "correct": ["…"], "wrong": [ { "kind": "tevhit", "text": "…" } ] } ] }',
 ].join("\n");

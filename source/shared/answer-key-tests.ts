@@ -4,7 +4,7 @@
  * Tiszta modul: a pontozó nem változik, csak futtatjuk.
  */
 import type { OpenTask } from "./lesson-experience";
-import { evaluateOpenAnswer, isTypedTask, missingAnswerConcepts } from "./lesson-experience-score";
+import { answerTokensCover, evaluateOpenAnswer, isTypedTask, missingAnswerConcepts } from "./lesson-experience-score";
 
 export const WRONG_KINDS = ["tevhit", "forditott", "hianyos", "temaidegen"] as const;
 export type WrongKind = (typeof WRONG_KINDS)[number];
@@ -36,6 +36,7 @@ export function sanitizeAnswerKeyCases(raw: unknown): AnswerKeyCases | null {
 export function answerKeyProblems(task: OpenTask, cases: AnswerKeyCases | null): string[] {
   if (!cases || isTypedTask(task)) return [];
   const problems: string[] = [];
+  const fullCorrect = cases.correct.filter((answer) => evaluateOpenAnswer(answer, task).state === "ok");
   for (const answer of cases.correct) {
     const score = evaluateOpenAnswer(answer, task);
     if (score.state !== "ok") {
@@ -43,9 +44,23 @@ export function answerKeyProblems(task: OpenTask, cases: AnswerKeyCases | null):
     }
   }
   for (const wrong of cases.wrong) {
+    // J1: a pontozóval elvben megkülönböztethetetlen hibás próba (egy teljes pontos helyes válasz minden szavát tartalmazza) nem blokkol —
+    // ezt semmilyen szócsoport-rubrika nem utasíthatja el; `answerKeyNotes` jelenti tájékoztatásként.
+    if (fullCorrect.some((answer) => answerTokensCover(wrong.text, answer))) continue;
     if (evaluateOpenAnswer(wrong.text, task).state === "ok") {
       problems.push(`${task.id}: válaszkulcs-teszt: a hibás (${KIND_HU[wrong.kind]}) válasz ${quote(wrong.text)} teljes pontot kap — a rubrika túl megengedő; tegyél kötelező csoportba olyan elemet, amely a helyes választ megkülönbözteti.`);
     }
   }
   return problems;
+}
+
+/**
+ * J1: a szócsoport-pontozóval elvben megkülönböztethetetlen hibás próbák (tájékoztatás, nem blokkoló): a hibás válasz egy teljes pontos
+ * helyes válasz minden szavát tartalmazza (pl. felcserélt viszony ugyanazokkal a szavakkal).
+ */
+export function answerKeyNotes(task: OpenTask, cases: AnswerKeyCases | null): string[] {
+  if (!cases || isTypedTask(task)) return [];
+  const fullCorrect = cases.correct.filter((answer) => evaluateOpenAnswer(answer, task).state === "ok");
+  return cases.wrong.filter((wrong) => evaluateOpenAnswer(wrong.text, task).state === "ok" && fullCorrect.some((answer) => answerTokensCover(wrong.text, answer)))
+    .map((wrong) => `${task.id}: a(z) ${KIND_HU[wrong.kind]} próba ${quote(wrong.text)} a helyes válasz minden szavát tartalmazza — a szócsoport-pontozó elvben sem különböztetheti meg (nem blokkoló).`);
 }

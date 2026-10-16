@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { answerKeyProblems, sanitizeAnswerKeyCases, type AnswerKeyCases } from "../shared/answer-key-tests";
+import { answerKeyNotes, answerKeyProblems, sanitizeAnswerKeyCases, type AnswerKeyCases } from "../shared/answer-key-tests";
 import { answerKeyCacheKey, writeAnswerKeys } from "../server/studio/answer-key-writer";
 import { WorkflowConflict } from "../server/workflows/engine";
 import type { OpenTask } from "../shared/lesson-experience";
@@ -79,4 +79,25 @@ test("E3: a tesztíró hibája nem állítja meg a csomagot; a workflow-lízing 
   assert.equal(out.size, 0);
   assert.match(warnings[0], /tesztíró hívása hibázott/);
   await assert.rejects(writeAnswerKeys([task()], { concepts: [] }, async () => { throw new WorkflowConflict("lízing"); }, new Map()), WorkflowConflict);
+});
+
+// J1 (docs/specs/2026-10-16-egyfutas-atvilagitas.md, L1): a mért élő futások esetei.
+test("J1: a helyes válasz minden szavát tartalmazó (felcserélt viszonyú) hibás próba nem blokkol — tájékoztatás", () => {
+  const egypt = task({ id: "s5-t1", q: "Hol fekszik Felső- és Alsó-Egyiptom?", required: [["Felső-Egyiptom"], ["délen", "déli"], ["Alsó-Egyiptom"], ["északon", "északi"]],
+    sample: "Felső-Egyiptom délen, Alsó-Egyiptom északon fekszik.", minWords: 3 });
+  const c: AnswerKeyCases = {
+    correct: ["Felső-Egyiptom délen, Alsó-Egyiptom északon fekszik.", "Délen Felső-Egyiptom, északon Alsó-Egyiptom terül el.", "Alsó-Egyiptom északon van, Felső-Egyiptom délen."],
+    wrong: [{ kind: "forditott", text: "Felső-Egyiptom északon, Alsó-Egyiptom délen fekszik." }, { kind: "temaidegen", text: "A piramisokat fáraók építtették." }],
+  };
+  assert.deepEqual(answerKeyProblems(egypt, c), [], "a pontozó elvben sem különbözteti meg — nem blokkoló");
+  const notes = answerKeyNotes(egypt, c);
+  assert.equal(notes.length, 1);
+  assert.match(notes[0], /fordított irány próba .*nem blokkoló/);
+});
+
+test("J1: a valóban túl megengedő rubrika továbbra is blokkol (a hibás próba új tartalmi szót hoz)", () => {
+  const loose = task({ required: [["víz", "vizet", "vízhez"]] });
+  const problems = answerKeyProblems(loose, cases({ wrong: [{ kind: "tevhit", text: "Ősszel a fák vizet gyűjtenek a gyökerükbe, ezért ledobják a leveleiket." }, { kind: "temaidegen", text: "Tavasszal a fák kirügyeznek." }] }));
+  assert.ok(problems.some((p) => /túl megengedő/.test(p)), JSON.stringify(problems));
+  assert.deepEqual(answerKeyNotes(loose, cases()), []);
 });

@@ -52,6 +52,17 @@ function wordHit(token: string, word: string): boolean {
   if (Math.min(token.length, word.length) < 5) return false;
   return distance(token, word) <= (Math.max(token.length, word.length) > 8 ? 2 : 1);
 }
+/**
+ * J1 (docs/specs/2026-10-16-egyfutas-atvilagitas.md): a `candidate` válasz tokenjei lefedik-e a `covered` válasz MINDEN tokenjét a pontozó
+ * saját szóillesztésével (`wordHit`: azonos alak, szótő, elütés). Ha igen, egy szócsoport-rubrika — amely a `covered` választ teljes
+ * ponttal elfogadja — a `candidate`-et sem utasíthatja el: a szórendet és a viszonyt a pontozó nem méri. A pontozást nem változtatja.
+ */
+export function answerTokensCover(candidate: string, covered: string): boolean {
+  const have = tokensOf(candidate);
+  const need = tokensOf(covered);
+  return need.length > 0 && need.every((word) => have.some((token) => wordHit(token, word)));
+}
+
 function conceptHit(tokens: string[], alternatives: readonly string[], tokenize: (s: string) => string[] = tokensOf): boolean {
   return alternatives.some(phrase => tokenize(phrase).every(word => tokens.some(token => wordHit(token, word))));
 }
