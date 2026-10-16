@@ -182,6 +182,8 @@ test("a tanulási terv jóváhagyására váró job látszik, és egyetlen kér�
   await expect(item.getByTestId("draft-awaiting-approval")).toBeVisible();
   // K4: a tervre váró tétel NEM fut — nincs aktív (forgó) szakasz.
   await expect(item.getByTestId("creation-progress").locator('li[data-state="active"]')).toHaveCount(0);
+  // Review #257 (P2): a lenyitott részletek sem állítják, hogy fut — a várakozás saját szövegével.
+  await expect(item.getByTestId("creation-progress-details")).toContainText("döntésre vár");
   await expect(item.getByTestId("draft-discard-job-wait")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);

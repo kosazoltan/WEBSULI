@@ -16,3 +16,7 @@ Terv: `docs/specs/2026-10-16-bankhiba-kivetel.md`.
    - Új teszt (K1/K2).
    - `tests/studio-one-step-progress.test.ts`: a `waiting` fázis (K4).
    - Böngésző: a tervre váró tételen nincs `data-state="active"` szakasz.
+
+## Review #257
+- A `bankRemoval` csak akkor igaz, ha a `splitLimitBlockers` szerint MINDEN blokkoló kivehető (nincs `factual` / `incomplete`). Más `experience.*` útvonalnál a régi csak-bank kör marad, nem szerzői kör (K1b teszt).
+- `CreationProgress`: a `waiting` fázis saját részletszöveget kap („döntésre vár … jelenleg nem fut”).

@@ -2018,6 +2018,23 @@ test("K1: minden blokkoló banktétel → a kapuhoz kivételre (nincs csak-bank 
   assert.ok(!tasks.some((t) => t.id === packet.tasks[0].id), "a hibás tétel kikerült a bankból");
 });
 
+// Review #257 (P2): nem kivehető experience-útvonal (pl. tartományon kívüli index) mellett a csak-bank kör NEM tiltódik le — nincs szerzői kör.
+test("K1b: nem kivehető experience-blokkolónál a régi csak-bank kör marad (nem szerzői újraírás)", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const blocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.999", message: "Nem létező tétel." };
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [blocker] }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "bank-nonremovable", mapId: "m1", step: "lektor", round: 0, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  const first = await runPipelineStep("bank-nonremovable", deps);
+  assert.ok(first.ok, JSON.stringify(first));
+  assert.deepEqual(first.ok && first.next, { step: "animator", round: 1 }, "csak-bank kör, nem szerző és nem kapu");
+});
+
 test("K2: tanítási blokkoló mellett a régi út marad (nincs kivétel a kapunál, szerzői javítás)", async () => {
   const lesson = standardFusionFixture();
   lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";

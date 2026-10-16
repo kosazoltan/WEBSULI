@@ -22,7 +22,9 @@ export function CreationProgress({ run }: { run: OneStepRunView }) {
     </p>}
     <details className="text-xs text-muted-foreground" data-testid="creation-progress-details">
       <summary className="flex min-h-11 cursor-pointer items-center">Feldolgozási részletek</summary>
-      <p>{ONE_STEP_PHASES.find(p => p.key === run.phase)?.label ?? (run.phase === "done" ? "A lecke elkészült." : stopped ? "A folyamat megállt. A részletes ok fent olvasható." : "A forrás fogadása folyamatban.")}</p>
+      <p>{ONE_STEP_PHASES.find(p => p.key === run.phase)?.label ?? (run.phase === "done" ? "A lecke elkészült." : stopped ? "A folyamat megállt. A részletes ok fent olvasható."
+        // Review #257 (P2): a döntésre váró gyártás nem fut — nem „forrásfogadás”.
+        : run.phase === "waiting" ? "A gyártás döntésre vár (például a tanulási terv jóváhagyására); jelenleg nem fut." : "A forrás fogadása folyamatban.")}</p>
     </details>
   </div>;
 }

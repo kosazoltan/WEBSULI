@@ -1730,7 +1730,12 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       // docs/specs/2026-10-16-bankhiba-kivetel.md (Tételgyár T1, D1: „kivétel javítás helyett”). Mért (job 61977256, 2026-10-16): a csak-bank
       // javító kör a teljes csomagokat újragyártotta, és sémahibán pörgött. Ha minden blokkoló kivehető banktétel, a kapu veszi ki őket
       // (tartalékból / célzott javítással tartja a padlót) — csak-bank újragyártás nincs. Vészfék: STUDIO_BANK_ONLY_REPAIR=1 (régi út).
-      const bankRemoval = bankOnly && fusion && !!(job.output?.lesson as Lesson | undefined)?.experience && process.env.STUDIO_BANK_ONLY_REPAIR !== "1";
+      // Review #257 (P2): a csak-bank kör CSAK akkor marad el, ha minden blokkoló ténylegesen kivehető banktétel (létező tasks/quiz/methods
+      // elem) — más `experience.*` útvonal (pl. szószedet, tartományon kívüli index) a régi úton marad, nem esik szerzői körbe.
+      const bankRemovalSplit = bankOnly ? splitLimitBlockers(job.output?.lesson as Lesson | undefined, convergedBlocking) : null;
+      const bankRemoval = !!bankRemovalSplit && fusion && !!(job.output?.lesson as Lesson | undefined)?.experience
+        && process.env.STUDIO_BANK_ONLY_REPAIR !== "1"
+        && !bankRemovalSplit.factual.length && !bankRemovalSplit.incomplete.length && bankRemovalSplit.removable.length > 0;
       const bankOnlyRepair = bankRepairPossible && bankOnly && !bankRemoval;
       // Spec 2026-09-30-nem-elakado-kozzetetel (D2): a limiten a hiány-jellegű tanítási blokkoló figyelmeztetés — a kapu
       // ugyanezt a szabályt használja (limit-policy), így a kettő nem dönthet eltérően.
