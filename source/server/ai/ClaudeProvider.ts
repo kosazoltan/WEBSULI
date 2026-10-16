@@ -14,6 +14,38 @@ import {
 } from './AIProvider';
 import { collectStream, idleAbortSignal, type StreamEvent } from './stream-collect';
 
+/**
+ * Spec 2026-10-14-claude-stream-gondolkodas-eletjel: a streamelt kérés látható gondolkodás-összefoglalót kér. Az 5-ös család
+ * alapértelmezése `display: "omitted"` — hosszú gondolkodás alatt egyetlen delta sem jön (a `ping`-et az SDK eldobja,
+ * `core/streaming.js`), és a tétlenségi őr az egészséges szerzőhívást is megölte. A `display` csak a láthatóságot állítja.
+ * Az 5-ös család `thinking` nélkül is adaptívan gondolkodik; régi modellnél nem küldünk `thinking`-et.
+ */
+function streamThinking(model: string, thinking: Anthropic.MessageCreateParamsNonStreaming['thinking']): Anthropic.ThinkingConfigParam | undefined {
+  if (thinking?.type === 'adaptive') return { ...thinking, display: 'summarized' };
+  // Review #212: minden alapból néma gondolkodású 5-ös család (a Haiku 5.5 és a Mythos 5/5.1 is `omitted` alapértelmezésű).
+  if (!thinking && /^claude-(opus|sonnet|fable|haiku|mythos)-5/.test(model)) return { type: 'adaptive', display: 'summarized' };
+  return undefined;
+}
+
+/**
+ * A gondolkodás modell által kibocsátott állapotjelei (blokk-kezdet, összefoglaló, aláírás, blokk-vég) haladásnak számítanak.
+ * Review #212: a `content_block_stop` nem hordoz blokktípust — csak a `content_block_start`-ban gondolkodásként megnyitott
+ * blokk vége haladás; üres szöveg- vagy eszközblokkok ismételt lezárása nem tarthatja életben a valóban elakadt streamet.
+ */
+function thinkingProgressTracker(): (ev: Anthropic.MessageStreamEvent) => boolean {
+  const thinkingBlocks = new Set<number>();
+  return (ev) => {
+    if (ev.type === 'content_block_delta') return ev.delta.type === 'thinking_delta' || ev.delta.type === 'signature_delta';
+    if (ev.type === 'content_block_start') {
+      const thinking = ev.content_block.type === 'thinking' || ev.content_block.type === 'redacted_thinking';
+      if (thinking) thinkingBlocks.add(ev.index);
+      return thinking;
+    }
+    if (ev.type === 'content_block_stop') return thinkingBlocks.delete(ev.index);
+    return false;
+  };
+}
+
 export class ClaudeProvider implements IAIProvider {
   readonly name = 'Claude';
   readonly model: string;
@@ -104,13 +136,15 @@ export class ClaudeProvider implements IAIProvider {
     const idle = idleAbortSignal(signal);
     let partial = '';
     const provider = this.name;
+    const thinking = streamThinking(params.model, params.thinking);
+    const isThinkingProgress = thinkingProgressTracker();
     try {
-      const stream = this.client.messages.stream(params, { signal: idle.signal });
+      const stream = this.client.messages.stream(thinking ? { ...params, thinking } : params, { signal: idle.signal });
       const events = (async function* (): AsyncGenerator<StreamEvent> {
         for await (const ev of stream) {
           if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') { partial += ev.delta.text; yield { text: ev.delta.text }; continue; }
-          // Review #190: csak a gondolkodás-delta haladás.
-          yield ev.type === 'content_block_delta' && ev.delta.type === 'thinking_delta' ? { activity: true } : {};
+          // Review #190: metaadat nem haladás; spec 2026-10-14: a gondolkodás állapotjelei igen.
+          yield isThinkingProgress(ev) ? { activity: true } : {};
         }
         const msg = await stream.finalMessage();
         const u = msg.usage;

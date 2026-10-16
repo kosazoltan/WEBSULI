@@ -24,6 +24,7 @@ export class OpenAIProvider implements IAIProvider {
   private apiMode?: AIProviderConfig['apiMode'];
   private reasoningEffort?: AIProviderConfig['reasoningEffort'];
   private jsonMode?: boolean;
+  private chatReasoningEffort?: boolean;
   get maxOutputTokens(): number | undefined { return this.maxTokens; }
   readonly supportsStreamingChat = true;
 
@@ -33,6 +34,7 @@ export class OpenAIProvider implements IAIProvider {
     this.jsonMode = config.jsonMode;
     this.apiMode = config.apiMode;
     this.reasoningEffort = config.reasoningEffort;
+    this.chatReasoningEffort = config.chatReasoningEffort;
     this.model = config.model;
     this.timeout = config.timeout || 60000; // Default 60s
     this.client = new OpenAI({
@@ -41,6 +43,11 @@ export class OpenAIProvider implements IAIProvider {
       timeout: this.timeout,
       ...(config.maxRetries !== undefined ? { maxRetries: config.maxRetries } : {}),
     });
+  }
+
+  /** Tulajdonosi döntés 2026-10-14: a chat úton csak kifejezett kérésre (`chatReasoningEffort`) megy ki az effort. */
+  private chatEffort(): AIProviderConfig['reasoningEffort'] | undefined {
+    return this.chatReasoningEffort ? this.reasoningEffort : undefined;
   }
 
   async chat(messages: AIMessage[], signal?: AbortSignal, options?: ChatCallOptions): Promise<AIResponse> {
@@ -65,6 +72,7 @@ export class OpenAIProvider implements IAIProvider {
             content: msg.content,
           })),
           ...((options?.maxTokens ?? this.maxTokens) ? { max_completion_tokens: options?.maxTokens ?? this.maxTokens } : {}),
+          ...(this.chatEffort() ? { reasoning_effort: this.chatEffort() } : {}),
           // Spec 2026-09-30 (U2/C8): hívásonkénti szigorú séma, ha a hívó adja; különben a lépés JSON-módja (ha van).
           ...(options?.responseFormat ? { response_format: options.responseFormat as never } : this.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
         },
@@ -132,6 +140,7 @@ export class OpenAIProvider implements IAIProvider {
             model: this.model,
             messages: messages.map(msg => ({ role: msg.role, content: msg.content })),
             ...(outputBudget ? { max_completion_tokens: outputBudget } : {}),
+            ...(this.chatEffort() ? { reasoning_effort: this.chatEffort() } : {}),
             ...(options.responseFormat ? { response_format: options.responseFormat as never } : this.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
             stream: true,
             stream_options: { include_usage: true },
@@ -174,6 +183,8 @@ export class OpenAIProvider implements IAIProvider {
             content: msg.content,
           })),
           ...(this.maxTokens ? { max_completion_tokens: this.maxTokens } : {}),
+          // Spec 2026-10-14-tartalek-b-szelet (B3): a régi stream-úton is kimegy az effort, ha a hívó kérte (`chatReasoningEffort`).
+          ...(this.chatEffort() ? { reasoning_effort: this.chatEffort() } : {}),
           stream: true,
         },
         { signal }

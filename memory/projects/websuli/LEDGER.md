@@ -722,3 +722,19 @@ feladó → 403, új → 200; éles POST /api/material-result → 200 delivered:
 legutóbbi ≥3 küldés mind failed. Spec: `docs/specs/2026-10-13-resend-sandbox-or(.md, -vegrehajtas.md)`.
 Unit 2203/2203, check/check:test/eslint 0, build OK, Playwright render 390/1366.
 
+
+## 2026-10-14 — scope-modell OpenAI-ra, Claude-stream életjel, tömörebb leckék (Claude Code)
+**Mért (éles DB, csak olvasás):** 4 egylépéses futás `error`: „404 Qwen3 VL 32B Instruct was deprecated on Oct 9, 2026” — a
+tantárgy/évfolyam-felismerés az `ocr` lépés OpenRouter-modelljén futott. A kért „GPT-6.1 Luna” nem létezik (/v1/models + 404).
+**#209:** saját `scope` lépés, `gpt-6-luna` közvetlen OpenAI (high effort, 8000 keret); katalógus-besoroló Luna → 6.1 Sol → 6 Sol.
+Mérve 56 jóváhagyott forráson: tantárgy 102/112, évfolyam ±1 93/112; Haiku 5.5 high: 94/112, 55/112, drágább → Luna marad.
+**#212:** a szerző (Opus 5.5) csendes gondolkodását a 120 s-os stream-őr megölte (`AIProviderIdleTimeoutError`, 4 hívás);
+javítás: `thinking.display=summarized` + csak a gondolkodási blokk jelei életjel.
+**#210 + #213 (szülői panasz: túl hosszú, hiányos):** mérve 36 tárolt leckén: medián 2394,5 látható szó ≈ 20 perc, a hossz nem
+függ a forrástól (r = −0,09), kis forrásból 49× lecke; nagy forrásnál 16,5% forrás-lefedettség. A v7.5 skill nem rövidebb, de
+közepes/nagy forrásnál +10…+19 pont lefedettség (a teljes forrást olvassa). Javítás: terjedelmi keret (fogalom × évfolyam),
+feltételes sablon-fejezetek, TÉNYVÉDELEM, Próba csak ≥ 5 kérdésnél. Végső mérés (éles prompt-feloldással): Mezopotámia
+2530→792, Oszthatóság 3891→954, Egyiptom 4259→3395, Zöldségek 3771→3154 szó; kötelező tények változatlanok.
+Specek: `docs/specs/2026-10-14-*`. Élesítés: Render 8851d41, 1071a1b, 31b9747 — élő ellenőrzés 200/401.
+**Nyitott:** S3–S4 (nagy forrás lefedettsége), `ocr` lépés cseréje (mérés kell), titok-rotáció (session-szivárgás), OpenRouter
+kvóta-átállás, `/maps/extract` térkép-újrahasznosítás. Kanban: WEBSULI #6–#11.

@@ -61,6 +61,11 @@ export interface AIProviderConfig {
   apiMode?: 'chat' | 'responses';
   reasoningEffort?: 'low' | 'medium' | 'high';
   /**
+   * Tulajdonosi döntés 2026-10-14 (ellentétes családú tartalék): az OpenAI chat-completions úton is elküldi a
+   * `reasoning_effort`-ot. Alapból ki — a meglévő hívások kérése bájtra változatlan (ott az effort ma nem megy ki).
+   */
+  chatReasoningEffort?: boolean;
+  /**
    * Spec §7o (mérve 2026-09-20): a szolgáltató szintaktikailag érvényes JSON-t ad vissza
    * (`response_format: json_object`). A kért tartalmat nem befolyásolja, csak a sorosítást.
    */

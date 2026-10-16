@@ -63,6 +63,42 @@ export async function workflowEnsureRepairBudget(reason: string): Promise<boolea
   logger.warn(`[WORKFLOW] Dinamikus javítási keret (${view.id}): +1 látogatás (${exhausted.join(", ")}) — ${reason}; ${view.repairGrants.length}/${REPAIR_BUDGET_GRANTS}`);
   return REPAIR_PATH.every((id) => workflowVisitsLeft(view, id) > 0);
 }
+/**
+ * Tulajdonosi döntés 2026-10-15 (job 416ad01d: az eredeti futás + 3 folytatás elfogyasztotta a 4-es keretet): a végrehajtási keret
+ * futásonként 4; a tulajdonos GOMBBAL indított, kifejezett folytatása (`POST /jobs/:id/resume`) legfeljebb 6-ig mehet — a költség emberi
+ * kattintáshoz kötött, az automatikus újrapróbálás kerete változatlan.
+ */
+export const WORKFLOW_EXECUTION_BUDGET = 4;
+export const WORKFLOW_EXPLICIT_RESUME_BUDGET = 6;
+/** Elakadás-vezérlő V3: a vezérlő folytatásai a lépcső hosszáig (8 fok) mehetnek túl a kézi kereten — a valódi korlát a haladás-őr. */
+export const WORKFLOW_RECOVERY_BUDGET = WORKFLOW_EXPLICIT_RESUME_BUDGET + 8;
+export const workflowExecutionBudget = (explicitResume?: boolean, recoveryResume?: boolean) =>
+  recoveryResume ? WORKFLOW_RECOVERY_BUDGET : explicitResume ? WORKFLOW_EXPLICIT_RESUME_BUDGET : WORKFLOW_EXECUTION_BUDGET;
+/**
+ * Spec 2026-10-15-tetelgyar T0.4: kifejezett folytatásnál a hibával megállt lépésből EGY visszaél engedélyezhető (pl. kapu → lektor,
+ * amikor a lektor-bizonyíték eltér) — a definíció a futásban mentődik és naplózódik, mint a dinamikus javítási keret. Csak folytatásban,
+ * csak ha az utolsó látogatás a `from` lépés hibája; különben false (a hívó a régi szabály szerint dönt). Futáson kívül: true.
+ */
+export async function workflowAllowResumeEdge(from: string, to: string, reason: string, alsoGrant: readonly string[] = []): Promise<boolean> {
+  const ctx = context.getStore();
+  if (!ctx) return true;
+  const view = ctx.record.view;
+  const last = view.visits.at(-1);
+  if (!ctx.continuation || last?.step !== from || last.state !== "error") return false;
+  if (!view.definition.steps.find((s) => s.id === to)?.after.includes(from)) {
+    view.definition = { ...view.definition, steps: view.definition.steps.map((step) => step.id === to ? { ...step, after: [...step.after, from] } : step) };
+  }
+  // Review #225 (P2) + #229 (P2): elfogyott látogatási keretnél a visszaél önmagában nem elég — a cél-lépés és a folytatás további lépései
+  // (pl. a visszatérő kapu) egyszeri +1 látogatást kapnak.
+  const exhausted = [to, ...alsoGrant].filter((id) => workflowVisitsLeft(view, id) <= 0);
+  if (exhausted.length) {
+    view.definition = { ...view.definition, steps: view.definition.steps.map((step) => exhausted.includes(step.id) ? { ...step, maxVisits: step.maxVisits + 1 } : step) };
+  }
+  view.resumeEdge = { from, to, reason, at: Date.now() };
+  await persist(ctx);
+  logger.warn(`[WORKFLOW] Folytatási visszaél (${view.id}): ${from} → ${to} — ${reason}`);
+  return true;
+}
 export const workflowSkillVersion = () => context.getStore()?.record.view.skill?.version ?? preparationSkill.getStore()?.snapshot.version;
 /** Spec 2026-09-30 (B0): a futás pillanatképében rögzített utasításcsomag-verzió; azon kívül undefined (= élő). */
 export const workflowRuntimeVersion = () => context.getStore()?.record.view.skill?.runtimeVersion ?? preparationSkill.getStore()?.snapshot.runtimeVersion;
@@ -135,7 +171,11 @@ export async function workflowValidationFailure(error: unknown) {
 export async function workflowOrchestratorAllow(point: string, perPoint = 2, perRun = 8): Promise<boolean> {
   const ctx = context.getStore();
   if (!ctx) return true;
-  const o = (ctx.record.view.orchestrator ??= { calls: 0, byPoint: {} });
+  // Elakadás-vezérlő V3 (mért: job 416ad01d — a folytatások és a bank-újraépítés után az új tételek a régi, elfogyott keretet örökölték):
+  // a keret VÉGREHAJTÁSONKÉNT; a végrehajtások számát a vezérlő haladás-alapú lépcsője korlátozza.
+  const execution = ctx.record.view.executions ?? 0;
+  if (ctx.record.view.orchestrator && ctx.record.view.orchestrator.execution !== execution) ctx.record.view.orchestrator = { calls: 0, byPoint: {}, execution };
+  const o = (ctx.record.view.orchestrator ??= { calls: 0, byPoint: {}, execution });
   if (o.calls >= perRun || (o.byPoint[point] ?? 0) >= perPoint) return false;
   o.calls++;
   o.byPoint[point] = (o.byPoint[point] ?? 0) + 1;
@@ -171,7 +211,8 @@ export function redactWorkflowError(error: unknown): string {
   return (error instanceof Error ? error.message : "A művelet hibával megállt.")
     .replace(/https?:\/\/\S+/gi, "[hivatkozás]")
     .replace(/Minden javítandó címkézés[\s\S]*/i, "A részletes tartalmi eltérés a javítóellenőrzésben található.")
-    .replace(/(?:sk-|Bearer\s+)[\w.-]+/gi, "[titkos érték]").slice(0, 1600);
+    // Mért hiba 2026-10-15: a szó közepén is illeszkedett („t3-task-12” → „t3-ta[titkos érték]”) — csak szóelején (kulcs: sk-…, Bearer …).
+    .replace(/(?<![\w-])(?:sk-|Bearer\s+)[\w.-]+/gi, "[titkos érték]").slice(0, 1600);
 }
 /**
  * Spec 2026-09-19 (párhuzamos bankcsomagok): a mentés optimista revíziószámmal fut, ezért két
@@ -207,10 +248,24 @@ export async function workflowPhase(step: string): Promise<void> {
   const resuming = ctx.continuation && previous?.step === step && previous.state !== "done";
   if (!resuming) assertWorkflowStep(ctx.record.view, step);
   ctx.continuation = false;
+  // T0.4b: a kifejezett folytatási visszaél egyszer használatos.
+  const edge = ctx.record.view.resumeEdge;
+  if (edge) {
+    if (previous?.step === edge.from && step === edge.to) ctx.record.view.resumeEdges = [...(ctx.record.view.resumeEdges ?? []), edge];
+    delete ctx.record.view.resumeEdge;
+  }
   if (previous?.state === "running") { previous.state = "done"; previous.finishedAt = Date.now(); }
   ctx.record.view.visits.push({ step, attempt: ctx.record.view.visits.filter(v => v.step === step).length + 1,
     startedAt: Date.now(), state: "running", cacheHits: 0 });
   await persist(ctx);
+}
+
+/** Review #222: a futás mentett checkpointja (ha van) — munka indítása nélkül; futáson kívül `undefined`. */
+export function workflowSavedCheckpoint<T>(name: string, input: unknown): T | undefined {
+  const ctx = context.getStore();
+  if (!ctx) return undefined;
+  const key = hash([WORKFLOW_VERSION, name, input]);
+  return Object.hasOwn(ctx.record.checkpoints, key) ? structuredClone(ctx.record.checkpoints[key]) as T : undefined;
 }
 
 /** Only completed JSON results are reused, inside this run and exact effective input. */
@@ -248,7 +303,7 @@ export async function workflowUsage(usage: { prompt_tokens?: number; completion_
 }
 
 export async function executeWorkflow<T extends WorkflowView["result"]>(
-  store: WorkflowStore, input: { id: string; owner: string; mode: WorkflowMode; retry?: boolean; continuation?: boolean; request?: unknown },
+  store: WorkflowStore, input: { id: string; owner: string; mode: WorkflowMode; retry?: boolean; continuation?: boolean; request?: unknown; explicitResume?: boolean; recoveryResume?: boolean },
   work: () => Promise<T>,
 ): Promise<WorkflowView> {
   const now = Date.now();
@@ -260,7 +315,7 @@ export async function executeWorkflow<T extends WorkflowView["result"]>(
   if (!(input.continuation && input.request === undefined) && record.checkpoints.requestHash !== requestHash) throw new WorkflowConflict("Megváltozott bemenettel új futást kell indítani.");
   if (["done", "ready"].includes(record.view.state)) return record.view;
   if (["error", "interrupted", "waiting"].includes(record.view.state) && !input.retry) throw new WorkflowConflict("Ez a futás megállt; külön folytatási művelet szükséges.");
-  if ((record.view.executions ?? 0) >= 4) throw new WorkflowConflict("A futás folytatási kerete elfogyott. Ellenőrizd a hibát új készítés előtt.");
+  if ((record.view.executions ?? 0) >= workflowExecutionBudget(input.explicitResume, input.recoveryResume)) throw new WorkflowConflict("A futás folytatási kerete elfogyott. Ellenőrizd a hibát új készítés előtt.");
   const token = randomUUID();
   if (!await store.claim(input.id, input.owner, token)) throw new WorkflowConflict("Ez a futás már folyamatban van.");
   const fresh = await store.read(input.id, input.owner);

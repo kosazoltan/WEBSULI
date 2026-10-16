@@ -1,0 +1,50 @@
+[
+  {
+    "forrás": "Az időszámítás és az emberis",
+    "forrásSzó": 239,
+    "7.5 szó": 2725,
+    "7.5 fejezet": 73,
+    "7.5 forrás→tanít%": 90,
+    "7.5 nem-forrás%": 83,
+    "pipe szó": 3807,
+    "pipe szakasz": 12,
+    "pipe forrás→tanít%": 93,
+    "pipe nem-forrás%": 78,
+    "7.5 kimenet tok": 20704,
+    "7.5 USD": 0.49,
+    "7.5 perc": 3.2,
+    "stop": "end_turn"
+  },
+  {
+    "forrás": "Hunyadi János, a kormányzó",
+    "forrásSzó": 8194,
+    "7.5 szó": 3183,
+    "7.5 fejezet": 25,
+    "7.5 forrás→tanít%": 32,
+    "7.5 nem-forrás%": 32,
+    "pipe szó": 3595,
+    "pipe szakasz": 12,
+    "pipe forrás→tanít%": 22,
+    "pipe nem-forrás%": 33,
+    "7.5 kimenet tok": 23260,
+    "7.5 USD": 0.66,
+    "7.5 perc": 3.4,
+    "stop": "end_turn"
+  },
+  {
+    "forrás": "Zöldségek növényi szervei és",
+    "forrásSzó": 1352,
+    "7.5 szó": 2826,
+    "7.5 fejezet": 22,
+    "7.5 forrás→tanít%": 87,
+    "7.5 nem-forrás%": 35,
+    "pipe szó": 2142,
+    "pipe szakasz": 12,
+    "pipe forrás→tanít%": 68,
+    "pipe nem-forrás%": 34,
+    "7.5 kimenet tok": 28973,
+    "7.5 USD": 0.67,
+    "7.5 perc": 3.9,
+    "stop": "end_turn"
+  }
+]

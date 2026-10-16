@@ -7,6 +7,24 @@ on:
     branches: [main]
 
 jobs:
+  # Tulajdonosi döntés 2026-10-15 (docs/specs/2026-10-15-haromfazis-ci-ellenorzes.md): terv → végrehajtási utasítás → kód, kikényszerítve.
+  three-phase:
+    name: Háromfázisú rend
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Unit test (az ellenőrző saját tesztje)
+        run: node --test scripts/qa/three-phase-check.test.mjs
+      - name: Háromfázisú rend ellenőrzése
+        run: node scripts/qa/three-phase-check.mjs --base origin/${{ github.base_ref }}
+
   lint-typecheck:
     name: Lint & Typecheck
     runs-on: ubuntu-latest
@@ -20,7 +38,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: source/package-lock.json
 
@@ -50,7 +68,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: source/package-lock.json
 
@@ -98,7 +116,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: source/package-lock.json
 
@@ -124,6 +142,9 @@ jobs:
 
       - name: Verify scored HTML banks and reload persistence
         run: npx playwright test --config playwright.html-persistence.config.ts
+
+      - name: Verify the open-answer arbiter in both lesson players (T7.2)
+        run: npx playwright test --config playwright.lesson-arbiter.config.ts
 
       - name: Upload Playwright report on failure
         if: failure()

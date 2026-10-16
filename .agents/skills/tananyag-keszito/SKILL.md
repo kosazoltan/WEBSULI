@@ -9,6 +9,24 @@ description: Feltöltött forrásból vagy internetes keresésből készülő HT
 
 Először olvasd el a [közös, forrásalapú módszert](../../../docs/lesson-improvement.md), majd a feladathoz szükséges [v7.4 referenciarészeket](../../../docs/specs/tananyag-keszito-SKILL-v7_4.md). A feltöltött v7.4 tudása kötelező minimum (tulajdonosi utasítás, 2026-09-12). A közös szerződés a biztonságos pontozást, automatikus besorolást és technikai formátumokat pontosítja, a pedagógiai minimumot nem csökkentheti.
 
+## v7.5 kiegészítés (2026-10-14, tulajdonosi utasítás)
+
+- A kiadott HTML-ben **nulla `console.*` hívás és `debugger`** – debug csak a build-szkriptben lehet. Az alkalmazás kapuja (`source/server/improve/verify-html.ts`) ezt elutasítja.
+- **Asztali reszponzivitás kötelező**, a keskeny mobil-oszlop asztalon hiba:
+  - ≥1200 px: oldalsó tartalomjegyzék a Tananyag lapon; a Módszerek, a Feladatok és a Kvíz 2 oszlopos.
+  - ≥1500 px: kéthasábos fejezetek.
+  - ≥2000 px: 3 oszlop.
+  - A fő konténer `max-width` értéke ≥ 1800 px, a bekezdés legfeljebb 90ch.
+- Szerződés és referencia-CSS: [v7.5 kiegészítés](../../../docs/specs/tananyag-keszito-SKILL-v7_5-kiegeszites.md).
+- Standalone HTML átadása előtt mindkét szkript 0-val lépjen ki: `scripts/tananyag/tananyag_verify.py` és `scripts/tananyag/tananyag_browser_test.py` (lásd [README](../../../scripts/tananyag/README.md)).
+
+## Terjedelem (2026-10-14, mért, élesben)
+
+A Studio-lecke Tananyag lapjának terjedelme a tanítandó fogalmakból és az évfolyamból jön (`source/shared/lesson-length.ts`:
+fejezetszám ≈ fogalom/3, 70/90/110/130 szó/fogalom), nem fix 12 fejezetes sablonból. Tömör ÉS teljes: minden kötelező fogalom
+egyszer, kidolgozott példával; a rövidítés csak töltelékre és ismétlésre vonatkozik, tényt nem vághat (TÉNYVÉDELEM). A túllépést a
+program `length_over_budget` jelzésként rögzíti. Mérés és indoklás: `docs/specs/2026-10-14-tananyag-tomorseg-lefedettseg.md`.
+
 ## Kötelező menet
 
 A [futó skill-tanulási eljárás](../../../docs/runtime-skill-learning.md) is része a készítésnek. A program minden végrehajtás után mentett utóellenőrzést készít, a kijavított hibákat is megőrzi, és a saját aktív módszertani kiegészítéseit a következő modellhívásokhoz betölti. Az aktuális alkalmazás-SKILL.md az admin Futások felületéről tölthető le. Új hibafajta kötelező megfigyelés, nem szabad szöveges utasítás; a kapuk és a 45/75 minimum ettől nem lazulhatnak.

@@ -6,9 +6,10 @@ emlékezetből soha ne jelents státuszt, mindig a `list` kimenetét idézd.
 
 ## Hol van a tábla
 
-- **Adatbázis:** `%LOCALAPPDATA%\Hermes\kanban.db` (felülírható a `KANBAN_DB` env-vel)
-- **CLI:** `D:\Hermes\skills\software-development\hermes-kanban-workflow\scripts\kanban.mjs`
-- **Státuszok:** `backlog → doing → review → done`, plusz `blocked`
+- **Adatbázis:** `%LOCALAPPDATA%\hermes\kanban.db` (a `HERMES_HOME`; felülírható a `KANBAN_DB` env-vel)
+- **CLI:** `D:\repo\Hermes-agent\skills\software-development\hermes-kanban-workflow\scripts\kanban.mjs`
+  (2026-10-14: a korábbi `D:\Hermes\…` útvonal nem létezik ezen a gépen — ellenőrizve)
+- **Státuszok (a CLI szerint):** `todo → in_progress → in_review → done`, plusz `blocked`; `reopen` → `todo`
 
 > **Ne keverd össze** a gyári `hermes kanban` CLI-vel: az egy több-profilos
 > diszpécser-sor, gyakran üres. Egy üres gyári lista **nem** jelenti, hogy semmi
@@ -17,7 +18,7 @@ emlékezetből soha ne jelents státuszt, mindig a `list` kimenetét idézd.
 ## Alapparancsok
 
 ```bash
-cd "D:/Hermes/skills/software-development/hermes-kanban-workflow/scripts"
+cd "D:/repo/Hermes-agent/skills/software-development/hermes-kanban-workflow/scripts"
 
 node --no-warnings kanban.mjs list --repo WEBSULI      # tábla lekérdezése
 node --no-warnings kanban.mjs add --repo WEBSULI --title "BUG(...): rövid leírás"

@@ -1,4 +1,8 @@
-import { withQuotaFailover, studioConnection } from "../ai/studio-provider";
+import { withQuotaFailover, studioConnection, studioModelReady } from "../ai/studio-provider";
+import { CROSS_FAMILY_FALLBACK_EFFORT, crossFamilyFallback, providerForModel, SCOPE_EFFORT, type OcrEffort } from "../ai/models";
+import { callClaudeParts } from "./claude-vision";
+import { logger } from "../lib/logger";
+import { ocrVendorRequest } from "./ocr";
 import { withSupportSkill } from "./support-skills";
 import { workflowSkillPrompt } from "../workflows/engine";
 /**
@@ -35,6 +39,8 @@ export const oneStepRequestSchema = z.object({
   // Spec 2026-09-23: the teacher's free-text request to the agent (normalised by normalizeOwnerInstruction).
   instructions: z.string().max(4000).optional(),
   scope: scopeSchema.optional(), // legacy metadata accepted; never used to select grade
+  // docs/specs/2026-10-15-hiba-gombok.md (E3): kifejezett újragyártás — a megszakadt piszkozat helyett új gyártás (a régi félretéve).
+  forceNew: z.boolean().optional(),
   files: z
     .array(
       z.object({
@@ -179,33 +185,75 @@ export async function scopeContentParts(
  * pontosan itt volt: a glm-flash osztálynál a reasoning kötelező, és a szűk
  * (300) token-keretet teljesen elette (finish=length, content=null). Mérve:
  * effort:low + 2000 keret mellett a válasz stabilan megjön.
+ * Spec 2026-10-14 (gpt-6-luna, high): a kimenet max 2448 token volt, ezért a low-nál mélyebb effort 8000-es keretet kap.
  */
-export function scopeRequestParams(model: string, parts: ScopeContentPart[]) {
+export function scopeRequestParams(model: string, parts: ScopeContentPart[], effort: OcrEffort = "low") {
   return {
     model,
     messages: [
       { role: "system" as const, content: withSupportSkill("scope", SCOPE_PROMPT) + workflowSkillPrompt("scope") },
       { role: "user" as const, content: parts },
     ],
-    max_completion_tokens: 2000,
-    reasoning: { effort: "low" as const },
+    max_completion_tokens: effort === "low" ? 2000 : 8000,
+    reasoning: { effort },
   };
 }
 
-/** Default scope model call: one cheap vision call over all sources. */
-export async function callScopeModel(files: ExtractorFile[], model: string): Promise<string> {
-  const OpenAI = (await import("openai")).default;
+/**
+ * Default scope model call: one vision call over all sources (the `scope` step model, spec 2026-10-14). Spec 2026-10-14-tartalek-b-szelet
+ * (B2): az elsődleges hibájánál egyszer az ellentétes családú tartalék (OpenAI → Opus 5.5 Claude-képolvasással; Anthropic →
+ * GPT-6.1 Sol), medium efforttal — ugyanazokkal a forrásrészekkel.
+ */
+export async function callScopeModel(files: ExtractorFile[], model: string, effort: OcrEffort = SCOPE_EFFORT): Promise<string> {
   const parts = await scopeContentParts(files);
+  // Review #218: a kimeneti hiba (csonka, JSON nélküli, tantárgy/osztály nélküli válasz) is a tartalék-határon BELÜL — különben a
+  // tartalék el sem indulna, és az `inferScope` utólag utasítaná el a választ.
+  const attempt = async (m: string, e: OcrEffort) => {
+    const answer = await callScopeVendor(parts, m, e);
+    if (!scopeAnswerUsable(answer)) throw new Error(`A(z) ${m} tantárgy-felismerési válasza nem használható (nincs tantárgy/osztály JSON).`);
+    return answer;
+  };
+  try {
+    return await attempt(model, effort);
+  } catch (error) {
+    const fallback = crossFamilyFallback(model);
+    if (!fallback || !studioModelReady(fallback)) throw error;
+    logger.warn(`[STUDIO] Tantárgy-felismerés (${model}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`);
+    return attempt(fallback, CROSS_FAMILY_FALLBACK_EFFORT);
+  }
+}
+
+/** Review #218: ugyanaz a minimum, amit az `inferScope` megkövetel — JSON, nem üres tantárgy, szám osztály. */
+export function scopeAnswerUsable(answer: string): boolean {
+  const match = answer.match(/\{[\s\S]*\}/);
+  if (!match) return false;
+  try {
+    const parsed = JSON.parse(match[0]) as { subject?: unknown; classroom?: unknown };
+    return typeof parsed.subject === "string" && parsed.subject.trim() !== "" && typeof parsed.classroom === "number" && Number.isFinite(parsed.classroom);
+  } catch {
+    return false;
+  }
+}
+
+async function callScopeVendor(parts: ScopeContentPart[], model: string, effort: OcrEffort): Promise<string> {
+  if (providerForModel(model) === "anthropic") {
+    const system = withSupportSkill("scope", SCOPE_PROMPT) + workflowSkillPrompt("scope");
+    return callClaudeParts({ model, system, parts, maxTokens: 16_000, timeoutMs: 120_000, effort });
+  }
+  const OpenAI = (await import("openai")).default;
   // Spec 2026-10-01-gyokerok-egyben (2.3): kimerült OpenAI-keretnél ugyanaz a modell az OpenRouteren át.
   return withQuotaFailover(studioConnection(model), async (connection) => {
+    // high effortnál a mért p95 19 s, max 28 s — a 120 s-os határ marad.
     const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000, maxRetries: 1 });
-    const params = scopeRequestParams(connection.model, parts);
-    const request = connection.vendor === "openrouter" ? params : (({ reasoning: _reasoning, ...rest }) => rest)(params);
-    // The reasoning extension is only sent to OpenRouter.
+    const params = scopeRequestParams(connection.model, parts, effort);
+    // OpenRouter: `reasoning`; közvetlen OpenAI: `reasoning_effort` (nélküle az alap effort viszi a keretet); más: egyik sem.
+    const request = ocrVendorRequest(connection.vendor, params);
     const response = await client.chat.completions.create(
       request as unknown as Parameters<typeof client.chat.completions.create>[0],
     );
-    if ("choices" in response) return response.choices[0]?.message?.content ?? "";
-    return "";
+    if (!("choices" in response)) return "";
+    // Review #218: a csonka válasz kimeneti hiba (a tartalék-határon belül kezelve).
+    if (response.choices[0]?.finish_reason === "length") throw new Error(`A(z) ${model} tantárgy-felismerési válasza elérte a hosszkorlátot.`);
+    return response.choices[0]?.message?.content ?? "";
   });
 }

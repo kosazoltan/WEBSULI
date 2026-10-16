@@ -1,13 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import { effortFor, FALLBACK_MODELS, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
-import { createStudioProvider, createStudioStepProvider, STREAM_IDLE_MS, studioModelReady } from "../ai/studio-provider";
+import { crossFamilyFallback, effortFor, fallbackModelFor, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
+import { createStudioProvider, createStudioStepProvider, crossFamilyFallbackOptions, STREAM_IDLE_MS, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { AIProviderQuotaError } from "../ai/AIProvider";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { verifyTeachingVisuals } from "../improve/verify-html-teaching";
-import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowRuntimeVersion, workflowSkillPrompt, workflowValidationFailure, workflowUsage } from "../workflows/engine";
+import { WorkflowConflict, workflowCheckpoint, workflowSavedCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowRuntimeVersion, workflowSkillPrompt, workflowValidationFailure, workflowUsage } from "../workflows/engine";
 import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { hasHtmlLessonData, readRawHtmlLessonData } from "../../shared/lesson-html-data";
 import { decideWebResearchGatherResult, decideWebResearchResult, extractGeneratedHtml, htmlLooksComplete, HTML_START, webResearchGatherParts, webLessonAuthorPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
@@ -18,6 +18,8 @@ import { stripJsonFences } from "../ai/OpenRouterProvider";
 import { StepModelError, stablePrefixChars, withRunbook } from "./run-step";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, type ExperienceCheckpoint } from "./experience-builder";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
+import { chatJsonWithFallback } from "./fallback-attempt";
+import { gatherWebSourcesGpt, gptGatherCheckpointInput, gptGatherRequest } from "./web-gather-gpt";
 import { withSupportSkill } from "./support-skills";
 import { cachedSystem } from "../ai/prompt-cache";
 import {
@@ -56,6 +58,10 @@ const PHASE_TIMEOUT_MS = 20 * 60_000;
 export const webResearchTurnKey = (input: WebResearchChatRequest, repairAttempts = 0, continuations = 0) => ({ input, method: LESSON_METHOD_VERSION, contract: "web-knowledge-2", repairAttempts, continuations });
 type ResearchTurn = { final: Anthropic.Message; content: string; sources: WebSource[] };
 export function hasSavedResearchTurn(record: WorkflowRecord, input: WebResearchChatRequest): boolean {
+  // Review #222: a sikeres tartalék-gyűjtés (GPT-forrás checkpoint) is folytatható alap.
+  const fallback = crossFamilyFallback(resolveLegacyModel("webResearch"));
+  const gpt = fallback ? savedWorkflowResult<FetchedTeachingSource[]>(record, "web-gather-gpt", gptGatherCheckpointInput(input, fallback)) : undefined;
+  if (Array.isArray(gpt) && gpt.length) return true;
   const turn = savedWorkflowResult<ResearchTurn>(record, "web-provider-turn", webResearchTurnKey(input));
   return !!turn && typeof turn.content === "string" && Array.isArray(turn.sources) && Array.isArray(turn.final?.content)
     && ["end_turn", "pause_turn"].includes(turn.final.stop_reason ?? "");
@@ -85,7 +91,38 @@ function lessonMetaFromHtml(html: string, fallback: { title: string; subject: st
  * Spec 2026-09-25 (webes Studio-átadás): search + fetch only — shared by the standalone HTML path and the
  * Studio hand-off. Own abort controller and timers (20 min phase, 120 s idle); maps failures to WebResearchFailure.
  */
-export async function gatherWebSources(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
+/**
+ * Spec 2026-10-15-tartalek-b4-webgyujtes (C1, tulajdonosi döntés): a Claude-gyűjtés bármely hibájánál (szolgáltatói, kimeneti,
+ * nincs letöltött forrás) — külső megszakítás kivételével — egyszer a GPT-6.1 Sol tartalék gyűjt (webes keresés + védett
+ * szerveroldali letöltés). Ha az is bukik, mindkét ok látszik.
+ */
+export async function gatherWebSources(input: WebResearchChatRequest, observer: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
+  const primary = resolveLegacyModel("webResearch");
+  const fallback = crossFamilyFallback(primary);
+  // Review #222: folytatáskor a már mentett tartalék-forrás nyer — új (fizetős) Claude-keresés előtt.
+  const savedGpt = fallback ? workflowSavedCheckpoint<FetchedTeachingSource[]>("web-gather-gpt", gptGatherCheckpointInput(input, fallback)) : undefined;
+  if (savedGpt?.length) return { downloaded: savedGpt, topicSeed: gptGatherRequest(input).topicSeed };
+  try {
+    return await gatherWebSourcesClaude(input, observer);
+  } catch (error) {
+    // Review #222: elveszett workflow-lease (WorkflowConflict) nem modellhiba — nincs fizetős tartalékhívás.
+    if (error instanceof WorkflowConflict) throw error;
+    if (observer.signal?.aborted || !fallback || !studioModelReady(fallback)) throw error;
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.warn(`[WEB-RESEARCH] A forrásgyűjtés (${primary}) hibázott — ${reason.slice(0, 200)} → tartalék: ${fallback}`);
+    observer.onEvent({ type: "status", message: `A forrásgyűjtés elsődleges modellje hibázott — tartalék: ${fallback}…` });
+    try {
+      const downloaded = await gatherWebSourcesGpt(input, { model: fallback, signal: observer.signal, onEvent: observer.onEvent });
+      return { downloaded, topicSeed: gptGatherRequest(input).topicSeed };
+    } catch (fallbackError) {
+      if (fallbackError instanceof WorkflowConflict) throw fallbackError;
+      if (observer.signal?.aborted) throw error;
+      throw new WebResearchFailure(`${reason} Tartalék (${fallback}): ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+    }
+  }
+}
+
+async function gatherWebSourcesClaude(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
   const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
   if (!key?.trim()) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva.");
   const controller = new AbortController();
@@ -223,7 +260,7 @@ export async function gatherWebSources(input: WebResearchChatRequest, { signal, 
     if (!downloaded.length) throw new WebResearchFailure("Nincs letöltött forrásszöveg. A web_fetch eszközzel olvasd el a forrásokat, majd készíts teljes tananyagot.");
     return { downloaded, topicSeed };
   } catch (error) {
-    if (error instanceof WebResearchFailure) throw error;
+    if (error instanceof WebResearchFailure || error instanceof WorkflowConflict) throw error;
     logger.error("[WEB-RESEARCH] gather failure", { name: error instanceof Error ? error.name : "unknown", message: error instanceof Error ? error.message.slice(0, 400) : String(error), timedOut });
     throw new WebResearchFailure(timedOut ? "Időtúllépés: a keresés nem fejeződött be az időkeretben."
       : controller.signal.aborted ? "A kérés megszakadt." : "AI hiba történt a webes keresés közben.");
@@ -232,6 +269,20 @@ export async function gatherWebSources(input: WebResearchChatRequest, { signal, 
     if (idleTimer) clearTimeout(idleTimer);
     signal?.removeEventListener("abort", abort);
   }
+}
+
+/** Review #218/#221: a webes forrásjegyzék-válasz minimális ellenőrzése (hosszkorlát, JSON, cím, fogalomlista) — tisztán, tesztelhetően. */
+export function checkWebExtractionResponse(response: { content?: string | null; finishReason?: string }): unknown {
+  if (response.finishReason === "length" || response.finishReason === "max_tokens") {
+    throw new WebResearchFailure("A forrásjegyzék válasza elérte a hosszkorlátot. Csonka jegyzék nem menthető.");
+  }
+  let parsed: { title?: unknown; concepts?: unknown };
+  try { parsed = JSON.parse(stripJsonFences(response.content ?? "").trim()); }
+  catch { throw new WebResearchFailure("A forrásjegyzék nem érvényes JSON. A tananyag nem írható."); }
+  if (typeof parsed?.title !== "string" || !parsed.title || !Array.isArray(parsed.concepts)) {
+    throw new WebResearchFailure("A forrásjegyzékből hiányzik a cím vagy a fogalomlista. A tananyag nem írható.");
+  }
+  return parsed;
 }
 
 /** Runs independently of HTTP; only the legacy stream supplies a client abort signal. */
@@ -244,15 +295,20 @@ export function webAuthorModelForAttempt(attempt: number, primary: string, fallb
 }
 
 export async function generateWebResearchLesson(input: WebResearchChatRequest, { signal, onEvent, onCandidate, bankCheckpoint, onBankCheckpoint }: ResearchObserver): Promise<ResearchArtifact> {
-  const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
-  if (!key?.trim()) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva.");
+  // Review #222: az előzetes kulcs-ellenőrzés a tartalékot is figyelembe veszi — elsődleges (Anthropic) kulcs nélkül is indulhat, ha a
+  // gyűjtés, a kivonatolás és a szerzés ellentétes családú tartaléka elérhető.
+  const ready = (model: string) => studioModelReady(model) || (() => { const f = crossFamilyFallback(model); return !!f && studioModelReady(f); })();
+  const gatherModel = resolveLegacyModel("webResearch");
+  if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY?.trim() && !ready(gatherModel)) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva, és a forrásgyűjtés tartaléka sem elérhető.");
   const extractModel = resolveStudioModel("extract");
   const authorModel = resolveWebResearchAuthorModel();
-  if (!studioModelReady(extractModel) || !studioModelReady(authorModel)) {
-    throw new WebResearchFailure("A Studio kivonatoló vagy szerző modell API-kulcsa nincs beállítva.");
+  if (!ready(extractModel) || !ready(authorModel)) {
+    throw new WebResearchFailure("A Studio kivonatoló vagy szerző modell API-kulcsa nincs beállítva (tartalékkal sem).");
   }
   // Spec 2026-09-29 (PR #131 review, R1): the rollback HTML path also uses the author's fallback when its key is set.
-  const authorFallback = FALLBACK_MODELS.author && studioModelReady(FALLBACK_MODELS.author) ? FALLBACK_MODELS.author : undefined;
+  // Review #216: a tartalék a tényleges (env-vel felülírható) szerző-elsődlegesből képzett ellentétes család.
+  const webAuthorFallback = fallbackModelFor("author");
+  const authorFallback = webAuthorFallback && studioModelReady(webAuthorFallback) ? webAuthorFallback : undefined;
   // Spec 2026-09-25: the bank runs on the bank role — a missing key is reported before any paid call.
   const bankModel = resolveStudioModel("bank");
   if (!studioModelReady(bankModel)) throw new WebResearchFailure(`A gyakorlóbank modelljének API-kulcsa nincs beállítva (${keyNameForModel(bankModel)}).`);
@@ -282,22 +338,26 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     onEvent({ type: "status", message: "Forrásjegyzék készítése a letöltött szövegekből…" });
     const files = fetchedSourcesToExtractorFiles(downloaded);
     const extraction = await workflowCheckpoint("web-extract", { input, method: LESSON_METHOD_VERSION, contract: "web-extract-1", urls: downloaded.map(s => s.url) }, () => extractWebConcepts(files, { subject: input.title?.trim() || "tananyag", classroom: input.classroom }, async (system, user) => {
-      const provider = createStudioProvider(extractModel, 180_000, 12_000);
       // Review #164 (U6, C10): runtime-3-ban a runbook elöl és a stabil előtag gyorsítótár-jelölést kap, mint a
       // `callStepModel` útján; a befagyasztott futás a régi sorrendet és jelölés nélküli hívást kapja.
       const extractSystem = withRunbook(withSupportSkill(isFrozenBundle(workflowRuntimeVersion()) ? "web-research" : "web-extract", system), "web-extract");
       const cachePrefixChars = isFrozenBundle(workflowRuntimeVersion()) ? 0 : stablePrefixChars(extractSystem);
-      const response = await provider.chat([
-        { role: "system", content: extractSystem },
-        { role: "user", content: user },
-      ], controller.signal, cachePrefixChars > 0 ? { cachePrefixChars } : undefined);
-      await workflowUsage(response.usage);
-      if (response.finishReason === "length" || response.finishReason === "max_tokens") {
-        throw new WebResearchFailure("A forrásjegyzék válasza elérte a hosszkorlátot. Csonka jegyzék nem menthető.");
-      }
-      const text = stripJsonFences(response.content ?? "").trim();
-      try { return JSON.parse(text) as unknown; }
-      catch { throw new WebResearchFailure("A forrásjegyzék nem érvényes JSON. A tananyag nem írható."); }
+      const messages = [
+        { role: "system" as const, content: extractSystem },
+        { role: "user" as const, content: user },
+      ];
+      const chatOptions = cachePrefixChars > 0 ? { cachePrefixChars } : undefined;
+      // Spec 2026-10-14-tartalek-b-szelet (B2) + review #218/#221: próbálkozásonként a hosszkorlát, a JSON és a minimális alak (cím,
+      // fogalomlista) is ellenőrzött — a szolgáltatói ÉS a kimeneti hiba is egyszer az ellentétes családú tartalékot indítja (medium);
+      // a felhasználás könyvelése a tartalék-határon KÍVÜL (persist-hiba nem indít fizetős tartalékot).
+      return chatJsonWithFallback({
+        primary: extractModel,
+        call: (m, fallback) => createStudioProvider(m, 180_000, 12_000, crossFamilyFallbackOptions(m, fallback)).chat(messages, controller.signal, chatOptions),
+        book: (usage) => workflowUsage(usage),
+        check: checkWebExtractionResponse,
+        signal: controller.signal,
+        onFallback: (fallback, error) => logger.warn(`[WEB-RESEARCH] A kivonatoló (${extractModel}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`),
+      });
     }));
     const taught = teachableConcepts(extraction.concepts);
     if (!taught.length) throw new WebResearchFailure("A letöltött szövegekből nem készült idézetellenőrzött fogalomjegyzék. A tananyag nem írható.");
@@ -315,21 +375,25 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       { role: "user", content: authorUser },
     ];
     // Review #190: a webes szerző-út is streamel (tétlenségi őrrel), és a modellenkénti effortot kapja (Qwen-tartalék: high).
+    // Tulajdonosi döntés 2026-10-14: a szerző ellentétes családú tartaléka (GPT-6.1 Sol) medium efforttal fut.
     const webAuthorCall = (m: string) => {
-      const provider = createStudioProvider(m, PHASE_TIMEOUT_MS, MAX_TOKENS, MODEL_REASONING_EFFORT[m] ? { reasoningEffort: MODEL_REASONING_EFFORT[m] } : {});
+      const provider = createStudioProvider(m, PHASE_TIMEOUT_MS, MAX_TOKENS, { ...(MODEL_REASONING_EFFORT[m] ? { reasoningEffort: MODEL_REASONING_EFFORT[m] } : {}), ...crossFamilyFallbackOptions(m, m !== authorModel) });
       return provider.chat(authorMessages, controller.signal, provider.supportsStreamingChat ? { stream: { idleMs: STREAM_IDLE_MS } } : undefined);
     };
-    html = await workflowCheckpoint("web-author-html", { input, method: LESSON_METHOD_VERSION, contract: "web-author-html-1", conceptIds }, async () => {
+    // Tulajdonosi döntés 2026-10-14 (ellentétes családú tartalék): a checkpoint a HTML-t író modellt is őrzi (`-2` szerződés) —
+    // a webes lektor-lánc a tényleges szerzőség szerint választ. A régi (`-1`) checkpoint nem használható újra (szerző nélküli).
+    const authored = await workflowCheckpoint("web-author-html", { input, method: LESSON_METHOD_VERSION, contract: "web-author-html-2", conceptIds }, async () => {
       let attempts = 0;
       for (;;) {
         let response: Awaited<ReturnType<ReturnType<typeof createStudioProvider>["chat"]>>;
-        const model = webAuthorModelForAttempt(attempts, authorModel, authorFallback);
+        let model = webAuthorModelForAttempt(attempts, authorModel, authorFallback);
         try {
           response = await webAuthorCall(model);
         } catch (error) {
           // The primary's provider failed (not its content): the same attempt runs once on the fallback.
           if (controller.signal.aborted || model !== authorModel || !authorFallback || authorFallback === authorModel) throw error;
           response = await webAuthorCall(authorFallback);
+          model = authorFallback;
         }
         await workflowUsage({ promptTokens: response.usage?.promptTokens, completionTokens: response.usage?.completionTokens });
         if (response.finishReason === "length" || response.finishReason === "max_tokens") {
@@ -350,7 +414,8 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
           // chapter visual is repaired now and not discovered after the bank is built.
           problems.push(...verifyTeachingVisuals(produced));
         }
-        if (!problems.length) return produced;
+        // Minden kör a TELJES HTML-t írja újra: a kész HTML szerzője a sikeres kör modellje.
+        if (!problems.length) return { html: produced, authorModel: model };
         const reason = problems.join("; ");
         if (attempts >= 2) throw new WebResearchFailure(`A tananyag az automatikus javítás után sem készült el: ${reason}`);
         attempts += 1;
@@ -365,6 +430,10 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
         onEvent({ type: "status", message: `A tanítás javítása (${attempts}/2)…` });
       }
     });
+    html = authored.html;
+    // Review #216: kezdetben csak a HTML szerzője; a tartalmi javító (`callTeachingRepair`) csak TÉNYLEGESEN alkalmazott folt
+    // után számít szerzőnek (`reviewAndRepairWebTeaching` bővíti a listát).
+    const webAuthorModels = [authored.authorModel];
     await onCandidate?.(html, { stopReason: "end_turn", elapsedMs: Date.now() - startedAt });
 
     restartPhaseTimer();
@@ -395,7 +464,8 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
         const model = bankModelForAttempt(attempt);
         if (!studioModelReady(model)) throw new WebResearchFailure(`A gyakorlóbank modelljének API-kulcsa nincs beállítva (${keyNameForModel(model)}).`);
         if (attempt >= PACKET_ATTEMPTS - 1) logger.warn(`[WEB-RESEARCH] Bankcsomag ${bankProviderStep(attempt) === "author" ? "mentőkör" : "tartalék modell"}: ${model}, ${attempt} bukott kísérlet után.`);
-        return (await callBankPacketModel(createStudioStepProvider(model, bankProviderStep(attempt)), model, system, user, controller.signal, extra)).json;
+        // Tulajdonosi döntés 2026-10-14: az első tartalék (PACKET_ATTEMPTS - 1) az ellentétes család, medium efforttal.
+        return (await callBankPacketModel(createStudioStepProvider(model, bankProviderStep(attempt), { fallback: attempt === PACKET_ATTEMPTS - 1 }), model, system, user, controller.signal, extra)).json;
       },
     }).catch((error: unknown) => {
       // An exhausted packet is a plain Error with the validator's reason — name it instead of "AI hiba".
@@ -423,7 +493,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     if (result.type === "ready") {
       onEvent({ type: "status", message: "A teljes tananyag összevetése a letöltött forrásokkal…" });
       const corrected = await reviewAndRepairWebTeaching(result.html, downloaded, {
-        signal: controller.signal, requestedTopic: input.message,
+        signal: controller.signal, requestedTopic: input.message, authorModels: webAuthorModels,
         onReview: (next, review) => onCandidate?.(next, { teachingReview: review }) ?? Promise.resolve(),
         async onProblem(problem, next) {
           await workflowValidationFailure(problem);

@@ -25,6 +25,11 @@ import {
   runPipelineStep,
   retryTimedOutLektor,
   retryFailedBankBuild,
+  retryFailedGate,
+  retryWithAuthorRepair,
+  retryAfterRestart,
+  resumeKindOf,
+  recoveryHistoryOf,
   startJobFromMap,
 } from "./step-runner";
 import { COUPON_GAME_IDS, conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
@@ -45,7 +50,9 @@ import { UNCERTAIN_MARK } from "./ocr";
 import { quoteTouchesUncertain } from "../../shared/transcript-marks";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
-import { executeWorkflow, workflowFinding, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
+import { NOT_RESUMABLE_STRATEGIES, failureFingerprint, planRecovery, recoveryReason, type RecoveryStep } from "./recovery-planner";
+import { recoveryCandidate, type RecoveryRow } from "./recovery-sweep";
+import { WORKFLOW_EXPLICIT_RESUME_BUDGET, executeWorkflow, workflowFinding, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
 import { runToolWorkflow } from "../workflows/tool-run";
 import { htmlFiles } from "../../shared/schema";
@@ -110,15 +117,56 @@ const updateRun = (id: string, patch: Parameters<typeof updateRunBase>[1]) =>
   updateRunBase(id, patch, persistRun);
 const getRun = (id: string) => getRunBase(id, loadRun);
 
+/** A haladásjelző szövege, amíg a job-söprés a megszakadt gyártást folytatja (a futás nem zárul hibára). */
+/**
+ * Review #247 (P2): „ugyanabból a forrásból újabb gyártás van” — csak UGYANANNAK a tulajdonosnak az újabb jobja számít (a térképek globálisan
+ * újrahasznosíthatók; másik admin gyártása nem teheti félre ennek a piszkozatát). Feltétel: a lekérdezésben `j` a job, `r.owner_id` a gazdája.
+ */
+const HAS_NEWER_SAME_OWNER = sql.raw(`EXISTS (SELECT 1 FROM studio_jobs n JOIN lesson_workflow_runs nw ON (nw.id = n.id OR nw.snapshot->>'resourceId' = n.id)
+  WHERE n.map_id = j.map_id AND n.created_at > j.created_at AND nw.owner_id = r.owner_id)`);
+
+export const ONE_STEP_RESUMING_DETAIL = "A szerver újraindult — a gyártás magától folytatódik a mentett részekből (nem kell újra feltölteni).";
+
 /**
  * #168 — boot-sweep: a folyamat halálakor árván maradt futások explicit hibára
  * záródnak, hogy a kliens jelzője ne ragadjon be. Induláskor egyszer fut.
  */
 export async function closeOrphanedOneStepRuns(): Promise<number> {
   const open = await db
-    .select({ id: oneStepRuns.id, phase: oneStepRuns.phase })
+    .select({ id: oneStepRuns.id, phase: oneStepRuns.phase, jobId: oneStepRuns.jobId })
     .from(oneStepRuns);
-  const orphans = markOrphanedRuns(open);
+  // Mért hiba 2026-10-15 (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md): az „indítsd újra a feltöltést” üzenet új, elölről induló
+  // gyártásra terelte a tulajdonost, holott a piszkozat (tanítás, kész bankcsomagok) megvolt. Ha a futás jobja mentett, nem publikált
+  // leckével áll, a futás NEM zárul le: a job-söprés a megszakadt lépéstől folytatja, és ez a haladásjelzőt is frissíti.
+  const resumable = new Set<string>();
+  const jobIds = open.filter((r) => r.jobId).map((r) => r.jobId!);
+  if (jobIds.length) {
+    // Review #247 (P1): csak az a futás marad nyitva, amelynek jobját a job-söprés TÉNYLEG folytatja (ugyanaz a döntés: `sweepDecision`,
+    // nem hibás/kész job, nincs ugyanattól a tulajdonostól újabb gyártás) — különben a kliens örökké „magától folytatódik”-ot pollozna.
+    const { rows } = await db.execute(sql`
+      SELECT j.id, j.status, r.id AS run_id, r.owner_id, r.state AS run_state, r.lease_until,
+             COALESCE((r.snapshot->>'executions')::int, 0) AS executions, ${HAS_NEWER_SAME_OWNER} AS has_newer,
+             (j.output ? 'lesson') AS has_lesson, (l.published_at IS NOT NULL) AS published
+      FROM studio_jobs j
+      LEFT JOIN lessons l ON l.id = j.lesson_id
+      LEFT JOIN LATERAL (
+        SELECT w.id, w.owner_id, w.state, w.lease_until, w.snapshot FROM lesson_workflow_runs w
+        WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
+      ) r ON true
+      WHERE j.id IN (${sql.join(jobIds.map((id) => sql`${id}`), sql`, `)}) AND j.status NOT IN ('ok', 'error')`);
+    const now = Date.now();
+    for (const raw of rows as Array<Record<string, unknown>>) {
+      if (raw.has_lesson !== true || raw.published === true || raw.has_newer === true) continue;
+      const row: SweepRow = { id: String(raw.id), status: String(raw.status), runId: (raw.run_id as string | null) ?? null, owner: (raw.owner_id as string | null) ?? null,
+        runState: (raw.run_state as string | null) ?? null, leaseUntil: raw.lease_until ? new Date(String(raw.lease_until)) : null, executions: Number(raw.executions ?? 0) };
+      if (sweepDecision(row, now, true) !== "close") resumable.add(row.id);
+    }
+  }
+  const orphans = markOrphanedRuns(open.filter((r) => !(r.jobId && resumable.has(r.jobId))));
+  for (const r of open.filter((x) => x.jobId && resumable.has(x.jobId) && markOrphanedRuns([x]).length)) {
+    await db.update(oneStepRuns).set({ detail: ONE_STEP_RESUMING_DETAIL, error: null, updatedAt: new Date() }).where(eq(oneStepRuns.id, r.id));
+    logger.warn(`[STUDIO/1STEP] ${r.id}: szerver-újraindulás — a gyártás a mentett részekből folytatódik (job ${r.jobId}).`);
+  }
   for (const o of orphans) {
     await db
       .update(oneStepRuns)
@@ -150,7 +198,8 @@ export async function closeOrphanedStudioJobs(): Promise<number> {
 export async function sweepStudioJobs(boot: boolean): Promise<number> {
   const { rows } = await db.execute(sql`
     SELECT j.id, j.status, r.id AS run_id, r.owner_id, r.state AS run_state, r.lease_until,
-           COALESCE((r.snapshot->>'executions')::int, 0) AS executions
+           COALESCE((r.snapshot->>'executions')::int, 0) AS executions,
+           ${HAS_NEWER_SAME_OWNER} AS has_newer
     FROM studio_jobs j
     LEFT JOIN LATERAL (
       SELECT w.id, w.owner_id, w.state, w.lease_until, w.snapshot FROM lesson_workflow_runs w
@@ -164,7 +213,8 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
       id: String(raw.id), status: String(raw.status), runId: (raw.run_id as string | null) ?? null, owner: (raw.owner_id as string | null) ?? null,
       runState: (raw.run_state as string | null) ?? null, leaseUntil: raw.lease_until ? new Date(String(raw.lease_until)) : null, executions: Number(raw.executions ?? 0),
     };
-    const decision = sweepDecision(row, now, boot);
+    // Ugyanabból a forrásból újabb gyártás van: a régi, gazdátlan job NEM folytatódik (dupla, fizetős gyártás ellen) — lezárul.
+    const decision = raw.has_newer === true && sweepDecision(row, now, boot) === "resume" ? "close" : sweepDecision(row, now, boot);
     if (decision === "leave") continue;
     acted++;
     if (decision === "close") {
@@ -187,7 +237,10 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
 export const STUDIO_SWEEP_INTERVAL_MS = 100_000;
 /** Időszakos söprés (a lejárt lízingű futások folytatása); a folyamat leállását nem tartja fel. */
 export function startStudioJobSweeper(): void {
-  setInterval(() => { void sweepStudioJobs(false).catch((error) => logger.warn(`[STUDIO] Időszakos söprés hibája: ${error instanceof Error ? error.message : String(error)}`)); }, STUDIO_SWEEP_INTERVAL_MS).unref();
+  setInterval(() => {
+    void sweepStudioJobs(false).catch((error) => logger.warn(`[STUDIO] Időszakos söprés hibája: ${error instanceof Error ? error.message : String(error)}`));
+    void sweepFailedStudioJobs().catch((error) => logger.warn(`[VEZÉRLŐ] Söprés hibája: ${error instanceof Error ? error.message : String(error)}`));
+  }, STUDIO_SWEEP_INTERVAL_MS).unref();
 }
 import { computeInputHash, extractionSignature, ExtractionShapeError, type ExtractorFile } from "./extractor";
 import { knowledgeMaps } from "../../shared/schema";
@@ -267,7 +320,7 @@ async function drive(jobId: string, onStep?: (step: string, round: number) => vo
 export async function recordOneStepFailure(runId: string, error: unknown): Promise<void> {
   const current = await getRun(runId);
   if (!current) return;
-  if (current.phase === "done" || current.phase === "parked" || current.phase === "error") return;
+  if (current.phase === "done" || current.phase === "parked" || current.phase === "error" || current.phase === "draft") return;
   logger.error(`[STUDIO/1STEP] Váratlan hiba: ${error instanceof Error ? error.message : String(error)}`);
   updateRun(runId, { phase: "error", error: "Váratlan hiba történt. Próbáld újra." });
 }
@@ -295,10 +348,62 @@ export function startOneStepRun(data: OneStepRequest, userId: string | undefined
   return runId;
 }
 
+/** Spec 2026-10-14-folytatas-mentett-reszekbol: a megállt gyártás mentett piszkozata (csak darabszámok, tartalom nem). */
+export type OneStepDraft = { teachingSections: number; savedBankPackets: number };
+
 export type OneStepRunView = {
   phase: OneStepPhase; detail: string | null; error: string | null;
   mapId: string | null; jobId: string | null; lessonId: string | null; htmlFileId: string | null;
+  draft?: OneStepDraft;
+  /** Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3, D5): csak hibánál — folytatható-e, és melyik workflow-lépésnél állt meg. */
+  resumable?: boolean; stoppedAt?: string;
+  /** A folytatás fajtája (a felület szövege ehhez igazodik): bank | gate | review | rebuild | lektor. */
+  resumeKind?: string;
+  /** Elakadás-vezérlő V1: a program következő lépése (a döntési lépcső szerint). */
+  nextRecovery?: { strategy: string; reason: string };
+  /** docs/specs/2026-10-15-hiba-gombok.md (E2): a piszkozat saját feltöltéses futása — folytatáskor a felület ezt követi. */
+  draftRunId?: string;
+  /** Review #250 (P1): a megállt job eredeti tanári kérése — oldalfrissítés után az újragyártás ezzel indul (nem kérés nélkül). */
+  ownerInstruction?: string;
 };
+
+/**
+ * A job eredményéből: van-e nem publikált, mentett tananyag, és hány bankcsomag kész belőle. Review #215: a publikálás a
+ * `lessons` sort előbb commitolja, mint a job-output `htmlFileId`-ját — a hívó a lecke `publishedAt`-ját is átadja.
+ */
+export function draftSummaryOf(output: unknown, lessonPublished = false): OneStepDraft | null {
+  const o = (output ?? {}) as { lesson?: { sections?: unknown }; htmlFileId?: unknown; experienceCheckpoint?: { parts?: unknown } };
+  if (lessonPublished || !o.lesson || !Array.isArray(o.lesson.sections) || o.htmlFileId) return null;
+  const parts = o.experienceCheckpoint?.parts;
+  return { teachingSections: o.lesson.sections.length, savedBankPackets: parts && typeof parts === "object" ? Object.keys(parts).length : 0 };
+}
+
+/**
+ * docs/specs/2026-10-15-hiba-gombok.md (E1): a térkép legújabb folytatható piszkozata — mentett lecke, nem publikált, nem sikeresen lezárt,
+ * nem félretett, 7 napon belüli, és ugyanaz a tanári kérés. `null`, ha nincs.
+ */
+export async function resumableDraftFor(mapId: string, instruction: string | undefined, owner: string): Promise<string | null> {
+  // Review #248: a kérés-egyezés a lekérdezésben szűr (egy újabb, más kérésű változat nem takarja el a régebbi egyezőt), és csak a SAJÁT piszkozat
+  // ajánlható fel (a térkép globálisan újrahasznosítható) — a gazdát a job workflow-ja adja.
+  const { rows } = await db.execute(sql`SELECT j.id FROM studio_jobs j LEFT JOIN lessons l ON l.id = j.lesson_id
+    WHERE j.map_id = ${mapId} AND j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND j.created_at > now() - interval '7 days'
+      AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
+      AND coalesce(j.output->>'ownerInstruction', '') = ${instruction || ""}
+      AND EXISTS (SELECT 1 FROM lesson_workflow_runs w WHERE (w.id = j.id OR w.snapshot->>'resourceId' = j.id) AND w.owner_id = ${owner})
+    ORDER BY j.created_at DESC LIMIT 1`);
+  const row = rows[0] as { id: string } | undefined;
+  return row ? String(row.id) : null;
+}
+
+/**
+ * E3: kifejezett újragyártásnál a forrás régi, MEGÁLLT piszkozatai félreteszve (a vezérlő nem folytatja őket). Review #248 (P1): csak az
+ * ugyanazzal a kéréssel, ugyanattól a gazdától megállt (`error`) jobok — más kérésű változat és futó job nem érintett (azt a job-söprés kezeli).
+ */
+export async function supersedeDraftsOf(mapId: string, instruction: string | undefined, owner: string): Promise<void> {
+  await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb) || '{"recoveryState":"superseded"}'::jsonb
+    WHERE j.map_id = ${mapId} AND j.status = 'error' AND j.output ? 'lesson' AND coalesce(j.output->>'ownerInstruction', '') = ${instruction || ""}
+      AND EXISTS (SELECT 1 FROM lesson_workflow_runs w WHERE (w.id = j.id OR w.snapshot->>'resourceId' = j.id) AND w.owner_id = ${owner})`);
+}
 
 /** The progress poll's view of a run, or null when it is unknown or expired. */
 export async function oneStepRunView(runId: string): Promise<OneStepRunView | null> {
@@ -315,8 +420,233 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
       .limit(1);
     htmlFileId = lesson?.htmlFileId ?? null;
   }
-  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId };
+  let draft: OneStepDraft | null = null;
+  let stop: { resumable: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string } } | null = null;
+  // A piszkozat-választásnál (draft) ugyanaz a nézet, mint hibánál: mentett részek, folytathatóság, a piszkozat saját futása.
+  let draftRunId: string | undefined;
+  let ownerInstruction: string | undefined;
+  if (run.phase === "draft" && run.jobId) {
+    const [other] = await db.select({ id: oneStepRuns.id }).from(oneStepRuns).where(and(eq(oneStepRuns.jobId, run.jobId), ne(oneStepRuns.id, runId))).orderBy(desc(oneStepRuns.updatedAt)).limit(1);
+    draftRunId = other?.id;
+  }
+  if ((run.phase === "error" || run.phase === "draft") && run.jobId) {
+    const [job] = await db.select({ output: studioJobs.output, publishedAt: lessons.publishedAt, step: studioJobs.step, status: studioJobs.status,
+      error: studioJobs.error, lessonId: studioJobs.lessonId }).from(studioJobs)
+      .leftJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, run.jobId)).limit(1);
+    // E2 tartalék: ha a piszkozat jobja (a folytatás után) már halad vagy elkészült, a választó futás a job állapotát mutatja —
+    // akkor is, ha a régi futás sora (draftRunId) már nincs meg; így a felület nem ragad a választásnál.
+    if (run.phase === "draft" && job && job.status !== "error" && job.step !== "error") {
+      const lessonId = job.step === "done" ? job.lessonId : null;
+      const [published] = lessonId ? await db.select({ htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, lessonId)).limit(1) : [];
+      return { phase: (job.step === "done" ? "done" : job.step) as OneStepPhase, detail: "Folytatás a mentett részeredményekből.", error: null, mapId: run.mapId, jobId: run.jobId,
+        lessonId, htmlFileId: published?.htmlFileId ?? null, ...(draftRunId ? { draftRunId } : {}) };
+    }
+    draft = draftSummaryOf(job?.output, !!job?.publishedAt);
+    const instructionOfJob = (job?.output as { ownerInstruction?: unknown } | null)?.ownerInstruction;
+    if (typeof instructionOfJob === "string" && instructionOfJob.trim()) ownerInstruction = instructionOfJob;
+    // A piszkozat-választásnál a piszkozat jobjának saját workflow-ja számít (az új futásnak még nincs gyártási naplója).
+    const { visits, executions } = run.phase === "draft" ? await workflowVisitsOfJob(run.jobId) : await workflowVisitsOf(runId);
+    stop = job ? jobStopInfo(job, visits, executions) : { resumable: false, stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step };
+  }
+  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}),
+    ...(draftRunId ? { draftRunId } : {}), ...(ownerInstruction ? { ownerInstruction } : {}),
+    ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.resumeKind ? { resumeKind: stop.resumeKind } : {}),
+      ...(stop.nextRecovery ? { nextRecovery: stop.nextRecovery } : {}) } : {}) };
 }
+
+/** A megállt job folytathatósága — EGY szabály a futásnézetnek és az admin piszkozatlistának (docs/specs/2026-10-15-admin-tananyag-draft.md). */
+export type JobStopInfo = { resumable: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string } };
+function jobStopInfo(job: { output: unknown; publishedAt: Date | null; step: string; status: string; error: string | null; lessonId: string | null },
+  visits: Array<{ step: string; state: string; error?: string }>, executions: number): JobStopInfo {
+  const output = (job.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown; gateRecoveryAttempt?: unknown };
+  // Review #233/#234: a felület ugyanazzal a (régi mezőkből is visszafejtett) történettel tervez, mint a végrehajtás; a gomb csak akkor
+  // látszik, ha a következő fok a mentett részekből tényleg végrehajtható.
+  const remanufacturedAs = (job.output as { remanufacturedAs?: unknown } | null)?.remanufacturedAs;
+  const plan = typeof remanufacturedAs === "string"
+    ? { strategy: "ask-owner" as const, reason: `új gyártás indult ugyanabból a forrásból (${remanufacturedAs.slice(0, 8)}) — a Tananyagkészítési futások között követhető`, cls: "other" as const, fingerprint: "" }
+    // Újraindulás utáni folytatás: nem a tervező lépcsője, hanem a megszakadt lépés folytatása (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md).
+    : job.error === ORPHAN_JOB_ERROR ? { strategy: "restart" as const, reason: recoveryReason("restart"), cls: "other" as const, fingerprint: "" }
+    : job.error ? planRecovery({ error: job.error, history: recoveryHistoryOf(job.output as never, job.error) }) : null;
+  const executable = !plan || !NOT_RESUMABLE_STRATEGIES.includes(plan.strategy);
+  const kind = resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
+    htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1), gateRecoveryAttempt: output.gateRecoveryAttempt });
+  return {
+    // Tulajdonosi döntés 2026-10-15: a gomb a kifejezett folytatás végrehajtási keretét is nézi (a szerver ugyanezzel utasít el).
+    resumable: executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && kind !== null && executable,
+    stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
+    // A felület szövege a TÉNYLEGESEN végrehajtandó lépést mondja: kapuhibánál a tervező dönt (kapu / újraépítés), nem a régi számláló.
+    ...(kind ? { resumeKind: (kind === "gate" || kind === "rebuild") && plan ? (plan.strategy === "gate" ? "gate" : plan.strategy.startsWith("rebuild") ? "rebuild" : kind) : kind } : {}),
+    ...(plan ? { nextRecovery: { strategy: plan.strategy, reason: plan.reason } } : {}),
+  };
+}
+
+/** A futás workflow-látogatásai és végrehajtásszáma (csak olvasás; workflow-napló nélküli futásnál üres / 0). */
+async function workflowVisitsOf(runId: string): Promise<{ visits: Array<{ step: string; state: string; error?: string }>; executions: number }> {
+  const result = await db.execute(sql`SELECT snapshot->'visits' AS visits, snapshot->'executions' AS executions FROM lesson_workflow_runs WHERE id = ${runId} LIMIT 1`);
+  return parseWorkflowVisits(result.rows[0] as { visits?: unknown; executions?: unknown } | undefined);
+}
+
+/** A workflow-pillanatkép látogatásai és végrehajtásszáma — egy értelmezés a futásnézetnek és a kötegelt piszkozatlistának. */
+function parseWorkflowVisits(row: { visits?: unknown; executions?: unknown } | undefined): { visits: Array<{ step: string; state: string; error?: string }>; executions: number } {
+  const visits = Array.isArray(row?.visits) ? row!.visits.filter((v): v is { step: string; state: string; error?: string } => !!v && typeof v.step === "string" && typeof v.state === "string") : [];
+  return { visits, executions: typeof row?.executions === "number" ? row.executions : 0 };
+}
+
+/** A job legutóbbi workflow-futásának látogatásai és végrehajtásszáma (a piszkozat-választás nézetéhez). */
+async function workflowVisitsOfJob(jobId: string): Promise<{ visits: Array<{ step: string; state: string; error?: string }>; executions: number }> {
+  const result = await db.execute(sql`SELECT id FROM lesson_workflow_runs WHERE id = ${jobId} OR snapshot->>'resourceId' = ${jobId} ORDER BY created_at DESC LIMIT 1`);
+  const row = result.rows[0] as { id?: string } | undefined;
+  return row?.id ? workflowVisitsOf(String(row.id)) : { visits: [], executions: 0 };
+}
+
+/** docs/specs/2026-10-15-admin-tananyag-draft.md + 2026-10-16-draft-kezeles.md: az admin „Tananyag draft” listájának egy tétele. */
+export type OwnerDraft = { jobId: string; title: string; subject: string; classroom: number; draft: OneStepDraft | null; running: boolean;
+  error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean } & JobStopInfo;
+
+/**
+ * docs/specs/2026-10-16-draft-kezeles.md: a belépett admin által kezelhető job — nincs olyan workflow-sora, amelynek MÁS a gazdája
+ * (saját vagy gazdátlan). Feltétel: a lekérdezésben `j` a job.
+ */
+const manageableBy = (owner: string) => sql`NOT EXISTS (SELECT 1 FROM lesson_workflow_runs ow WHERE (ow.id = j.id OR ow.snapshot->>'resourceId' = j.id) AND ow.owner_id <> ${owner})`;
+
+/**
+ * Review #255 (P2): elvetni csak olyan jobot lehet, amelyet épp senki nem visz (nincs élő workflow-lízing, nincs folyamatban lévő újragyártás) —
+ * a folytatás a lízing alatt újraellenőrzi az elvetést, így a kettő atomikusan kizárja egymást.
+ */
+const notBeingDriven = sql`NOT EXISTS (SELECT 1 FROM lesson_workflow_runs lw WHERE (lw.id = j.id OR lw.snapshot->>'resourceId' = j.id) AND lw.lease_until > now())
+  AND coalesce(j.output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured')`;
+
+/**
+ * A1/A2 + D1–D4: a kezelhető (saját vagy gazdátlan) megállt piszkozatok — mentett, nem publikált lecke; nem sikeres, nem félretett, nem elvetett
+ * job — ÉS a saját, éppen futó gyártások (2 napon belül, lecke nélkül is), hogy a folytatás/újragyártás haladása látsszon.
+ * A folytathatóság ugyanaz a döntés, mint a futásnézeté (`jobStopInfo`). Csak olvas.
+ */
+/** Review #255 (P2): a lista felső korlátja — a túlcsordulást a válasz `total` mezője jelzi (nem rejt el észrevétlenül). */
+export const DRAFT_LIST_LIMIT = 200;
+
+/** A kezelhető tételek teljes száma (a lista feltételével, korlát nélkül). */
+export async function ownerDraftTotal(owner: string): Promise<number> {
+  const { rows } = await db.execute(sql`SELECT count(*)::int AS n FROM studio_jobs j LEFT JOIN lessons l ON l.id = j.lesson_id
+    LEFT JOIN LATERAL (SELECT w.owner_id FROM lesson_workflow_runs w WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1) wr ON true
+    WHERE coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
+      AND ((j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
+        OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '2 days' AND wr.owner_id = ${owner}))`);
+  return Number((rows[0] as { n?: number } | undefined)?.n ?? 0);
+}
+
+export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
+  const { rows } = await db.execute(sql`SELECT j.id, j.step, j.status, j.error, j.lesson_id, j.output, coalesce(j.finished_at, j.created_at) AS updated_at,
+      m.title AS map_title, m.subject, m.classroom, wr.visits AS wf_visits, wr.executions AS wf_executions, wr.owner_id AS wf_owner,
+      EXISTS (SELECT 1 FROM lessons p WHERE p.map_id = j.map_id AND p.published_at IS NOT NULL) AS has_published
+    FROM studio_jobs j LEFT JOIN lessons l ON l.id = j.lesson_id JOIN knowledge_maps m ON m.id = j.map_id
+    -- Review #253 (P2): a job legutóbbi workflow-pillanatképe ugyanebben a lekérdezésben (nincs tételenkénti 2 körút).
+    LEFT JOIN LATERAL (
+      SELECT w.owner_id, w.snapshot->'visits' AS visits, w.snapshot->'executions' AS executions FROM lesson_workflow_runs w
+      WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
+    ) wr ON true
+    WHERE coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
+      AND (
+        (j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
+        OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '2 days' AND wr.owner_id = ${owner})
+      )
+    ORDER BY (j.status IN ('pending', 'running')) DESC, j.created_at DESC LIMIT ${DRAFT_LIST_LIMIT}`);
+  const out: OwnerDraft[] = [];
+  for (const raw of rows as Array<Record<string, unknown>>) {
+    const job = { output: raw.output, publishedAt: null, step: String(raw.step), status: String(raw.status), error: (raw.error as string | null) ?? null,
+      lessonId: (raw.lesson_id as string | null) ?? null };
+    const running = job.status !== "error" && job.step !== "error";
+    const { visits, executions } = parseWorkflowVisits({ visits: raw.wf_visits, executions: raw.wf_executions });
+    const lessonTitle = (raw.output as { lesson?: { title?: unknown } } | null)?.lesson?.title;
+    const ownerless = !raw.wf_owner;
+    const stop = running ? { resumable: false } : jobStopInfo(job, visits, executions);
+    out.push({
+      jobId: String(raw.id), title: typeof lessonTitle === "string" && lessonTitle.trim() ? lessonTitle : String(raw.map_title ?? "Névtelen tananyag"),
+      subject: String(raw.subject ?? ""), classroom: Number(raw.classroom ?? 0), draft: draftSummaryOf(raw.output), running,
+      error: running ? null : job.error, updatedAt: new Date(String(raw.updated_at)).toISOString(), step: job.step,
+      ownerless, hasPublished: raw.has_published === true,
+      // A gazdátlan job workflow-napló nélkül a mentett részekből nem folytatható (driveTracked) — nála csak újragyártás és törlés van.
+      ...stop, ...(ownerless ? { resumable: false } : {}),
+    });
+  }
+  return out;
+}
+
+/** D1: egy kezelhető, megállt, nem publikált piszkozat elvetése (visszaállítható: csak `recoveryState`). `true`, ha elvetette. */
+export async function discardDraft(jobId: string, owner: string): Promise<boolean> {
+  const { rows } = await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb)
+      || jsonb_build_object('recoveryState', 'discarded', 'discardedAt', now()::text, 'discardedBy', ${owner}::text)
+    WHERE j.id = ${jobId} AND j.status = 'error' AND ${notBeingDriven}
+      AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL)
+      AND ${manageableBy(owner)} RETURNING j.id`);
+  return (rows as unknown[]).length > 0;
+}
+
+/** D2 — a kötegelt törlés halmaza: kész (publikált) párral rendelkező, kezelhető, megállt, épp nem vitt piszkozat. Feltétel `j`-re. */
+const redundantDraft = (owner: string) => sql`j.status = 'error' AND j.output ? 'lesson'
+  AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded') AND ${notBeingDriven}
+  AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL)
+  AND EXISTS (SELECT 1 FROM lessons p WHERE p.map_id = j.map_id AND p.published_at IS NOT NULL)
+  AND ${manageableBy(owner)}`;
+
+/** Review #255 (P2): a megerősítésben mutatott darabszám a szerver UGYANAZON feltételéből — a lista csonkolása nem téveszti meg. */
+export async function redundantDraftCount(owner: string): Promise<number> {
+  const { rows } = await db.execute(sql`SELECT count(*)::int AS n FROM studio_jobs j WHERE ${redundantDraft(owner)}`);
+  return Number((rows[0] as { n?: number } | undefined)?.n ?? 0);
+}
+
+/**
+ * D2: a kész párral rendelkező piszkozatok elvetése. Review #255: a felület a megerősített darabszámot is elküldi (`expected`); ha a halmaz
+ * közben megváltozott, nincs törlés (409), a felület friss számmal újra kérdez.
+ */
+export async function discardDraftsWithPublished(owner: string, expected?: number): Promise<number | null> {
+  return db.transaction(async (tx) => {
+    const { rows } = await tx.execute(sql`SELECT j.id FROM studio_jobs j WHERE ${redundantDraft(owner)} FOR UPDATE OF j`);
+    const ids = (rows as Array<{ id: string }>).map((r) => r.id);
+    if (expected !== undefined && expected !== ids.length) return null;
+    if (!ids.length) return 0;
+    await tx.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb)
+        || jsonb_build_object('recoveryState', 'discarded', 'discardedAt', now()::text, 'discardedBy', ${owner}::text)
+      WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`);
+    return ids.length;
+  });
+}
+
+/** GET /api/studio/drafts — a belépett admin kezelhető „Tananyag draft” listája és futó gyártásai (a router admin-védett). */
+lessonPipelineRouter.get("/drafts", async (req: Request, res: Response) => {
+  const owner = req.user!.id;
+  const [drafts, total, redundant] = await Promise.all([ownerDrafts(owner), ownerDraftTotal(owner), redundantDraftCount(owner)]);
+  res.json({ drafts, total, redundant });
+});
+
+/** D1: POST /api/studio/drafts/:jobId/discard — elvetés (megerősítés a felületen). */
+lessonPipelineRouter.post("/drafts/:jobId/discard", async (req: Request, res: Response) => {
+  if (!(await discardDraft(req.params.jobId, req.user!.id))) {
+    return res.status(409).json({ message: "Ez a piszkozat nem törölhető (fut, publikált, már törölt, vagy másik készítőhöz tartozik)." });
+  }
+  res.json({ discarded: true });
+});
+
+/** D2: POST /api/studio/drafts/discard-published — a kész tananyaggal rendelkező piszkozatok kötegelt elvetése. */
+lessonPipelineRouter.post("/drafts/discard-published", async (req: Request, res: Response) => {
+  const expected = typeof req.body?.expected === "number" ? req.body.expected : undefined;
+  const discarded = await discardDraftsWithPublished(req.user!.id, expected);
+  if (discarded === null) return res.status(409).json({ message: "A törlendő piszkozatok köre közben megváltozott — nézd át újra a listát." });
+  res.json({ discarded });
+});
+
+/** D3: POST /api/studio/drafts/:jobId/remake — teljes újragyártás ugyanabból a forrásból (a nem folytatható és a gazdátlan piszkozatnál is). */
+lessonPipelineRouter.post("/drafts/:jobId/remake", async (req: Request, res: Response) => {
+  const owner = req.user!.id;
+  const { rows } = await db.execute(sql`SELECT j.error FROM studio_jobs j WHERE j.id = ${req.params.jobId} AND j.status = 'error'
+    AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL) AND ${manageableBy(owner)}`);
+  const row = rows[0] as { error: string | null } | undefined;
+  if (!row) return res.status(409).json({ message: "Ez a piszkozat nem gyártható újra (fut, publikált, vagy másik készítőhöz tartozik)." });
+  try {
+    res.status(202).json({ jobId: await remanufactureFromMap(req.params.jobId, owner, row.error ?? "Kézi újragyártás az adminfelületről.") });
+  } catch (error) {
+    res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." });
+  }
+});
 
 /** GET /api/studio/lessons/one-step/:runId — the progress poll. */
 lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: Response) => {
@@ -344,9 +674,11 @@ export async function runOneStep(
 ): Promise<void> {
   if (!userId) throw new Error("A futáshoz hitelesített készítő szükséges.");
   await executeWorkflow(workflowStore, { id: runId, owner: userId, mode: "upload", request: data }, async () => {
-    await runOneStepCore(runId, data, userId);
+    await runOneStepCore(runId, data, userId, { offerDraft: true });
     const run = await getRun(runId);
     if (run?.phase === "parked") throw new WorkflowWaiting(run.detail ?? "Forrásellenőrzés szükséges.");
+    // Review #248 (P1): a piszkozat-választás szabályos várakozás (a tanár dönt), nem hiba.
+    if (run?.phase === "draft") throw new WorkflowWaiting(run.detail ?? "Ebből a forrásból van megszakadt piszkozat.");
     if (run?.phase !== "done" || !run.lessonId) throw new Error(run?.error ?? "A készítés nem adott vissza teljes leckét.");
     return readPublishedLesson(run.lessonId);
   });
@@ -392,7 +724,7 @@ async function readPublishedLesson(lessonId: string) {
   return { kind: "material" as const, id: row.id };
 }
 
-async function runOneStepCore(runId: string, data: OneStepRequest, userId: string) {
+async function runOneStepCore(runId: string, data: OneStepRequest, userId: string, options: { offerDraft?: boolean } = {}) {
   await workflowPhase("source");
   const { title } = data;
   const instruction = normalizeOwnerInstruction(data.instructions);
@@ -407,8 +739,9 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
   {
     await workflowPhase("scope");
     updateRun(runId, { phase: "ocr", detail: "Tantárgy és osztály felismerése…" });
+    // Spec 2026-10-14: saját `scope` lépés (gpt-6-luna, közvetlen OpenAI) — az `ocr` modellje (qwen, OpenRouter) 404-et adott.
     const inferred = await inferOneStepScope({ ...data, files }, (f) =>
-      callScopeModel(f, resolveStudioModel("ocr")),
+      callScopeModel(f, resolveStudioModel("scope")),
     );
     if (!inferred.ok) {
       // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg).
@@ -514,6 +847,21 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
       }
       gapNote = curated.note;
     }
+  }
+
+  // 2b′) docs/specs/2026-10-15-hiba-gombok.md (tulajdonosi javaslat): a program soha nem kezd újra észrevétlenül — ha ugyanabból a
+  // forrásból (ugyanazzal a kéréssel) folytatható piszkozat van, a gyártás nem indul, a felület választást kér (folytatás / újragyártás / új).
+  if (!options.offerDraft) {
+    // A webes (internetes) út nem kínál választást (nincs hozzá felület) — ott a régi viselkedés marad.
+  } else if (!data.forceNew) {
+    const draft = await resumableDraftFor(mapId, instruction, userId);
+    if (draft) {
+      updateRun(runId, { phase: "draft", mapId, jobId: draft, detail: "Ebből a forrásból van megszakadt piszkozat — folytatható vagy újragyártható." });
+      return;
+    }
+  } else {
+    // E3: kifejezett újragyártás — a régi piszkozatok félreteszve (a vezérlő és a söprés nem folytatja őket: nincs dupla gyártás).
+    await supersedeDraftsOf(mapId, instruction, userId);
   }
 
   // 2c) Spec 2026-09-23: documented source corrections (teacher's request / photo misreads) before planning.
@@ -845,7 +1193,7 @@ export async function driveOneStep(runId: string, jobId: string, gapNote: string
 }
 
 /** POST /api/studio/lessons/from-map/:mapId — start a new lesson pipeline. */
-async function guardedDrive(jobId: string) {
+async function guardedDrive(jobId: string, onStep?: (step: string, round: number) => void) {
   const store = await createDrizzlePipelineStore();
   return guardResumedDrive(jobId, {
     loadJob: store.loadJob,
@@ -857,13 +1205,13 @@ async function guardedDrive(jobId: string) {
         await workflowFence(tx);
       });
     },
-  }, () => drive(jobId));
+  }, () => drive(jobId, onStep));
 }
 
 /** A haladásjelző (one-step progress) azonosítója a workflow-é: a feltöltéses és (spec s7) a webes Studio-futásnál. */
 const tracksProgress = (mode: string | undefined) => mode === "upload" || mode === "webStudio";
 
-async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: (visit?: import("../../shared/lesson-workflow").WorkflowVisit) => Promise<void>, onAccepted?: () => void) {
+async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: (visit?: import("../../shared/lesson-workflow").WorkflowVisit) => Promise<void>, onAccepted?: () => void, explicitResume = false, recoveryResume = false) {
   const id = (await workflowStore.related(jobId, owner)) ?? jobId;
   const previous = await workflowStore.read(id, owner);
   if (!start && !previous) {
@@ -873,19 +1221,31 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
   }
   let drove = false;
   try {
-    const completed = await executeWorkflow(workflowStore, { id, owner, mode: previous?.view.definition.mode ?? "studio", retry: !start, continuation: !start }, async () => {
+    const completed = await executeWorkflow(workflowStore, { id, owner, mode: previous?.view.definition.mode ?? "studio", retry: !start, continuation: !start, ...(explicitResume ? { explicitResume: true } : {}), ...(recoveryResume ? { recoveryResume: true } : {}) }, async () => {
       if (beforeDrive) {
         const current = await workflowStore.read(id, owner);
         await beforeDrive(current?.view.visits.at(-1));
       }
       drove = true;
-      if (onAccepted && tracksProgress(previous?.view.definition.mode)) {
-        const [job] = await db.select({ step: studioJobs.step }).from(studioJobs).where(eq(studioJobs.id, jobId));
-        await getRun(id);
-        updateRun(id, { phase: job.step as OneStepPhase, error: null, detail: "Folytatás a mentett részeredményekből." });
+      // Élő megfigyelés (job 416ad01d, 11:05): a vezérlő folytatásánál a fázis „error”-on maradt — a kézi gombhoz hasonlóan ott is frissül.
+      // Review #235: a haladásjelző frissítése best-effort — a hibája nem szakíthatja meg a már elindított folytatást (különben a job
+      // „pending”-ben ragadna, ahonnan sem a vezérlő, sem a söprés nem vinné tovább).
+      if ((onAccepted || recoveryResume) && tracksProgress(previous?.view.definition.mode)) {
+        try {
+          const [job] = await db.select({ step: studioJobs.step }).from(studioJobs).where(eq(studioJobs.id, jobId));
+          await getRun(id);
+          if (job) updateRun(id, { phase: job.step as OneStepPhase, error: null, detail: "Folytatás a mentett részeredményekből." });
+        } catch (error) {
+          logger.warn(`[STUDIO] A haladásjelző frissítése elmaradt (${jobId}): ${error instanceof Error ? error.message : String(error)} — a folytatás megy tovább.`);
+        }
       }
       onAccepted?.();
-      await guardedDrive(jobId);
+      // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D6, élő: a fázis „animator”-on ragadt, miközben a lektor/kapu futott):
+      // a követett folytatás ugyanúgy frissíti a haladásjelzőt, mint az első futás (driveOneStep).
+      await guardedDrive(jobId, tracksProgress(previous?.view.definition.mode) ? (step, round) => {
+        if (!["pedagogue", "author", "animator", "lektor", "gate"].includes(step)) return;
+        void getRun(id).then(() => updateRun(id, { phase: step as OneStepPhase, detail: round > 0 ? `${round + 1}. kör` : "Folytatás a mentett részeredményekből." }));
+      } : undefined);
       const [job] = await db.select().from(studioJobs).where(eq(studioJobs.id, jobId));
       if (job?.step === "done" && job.lessonId) return previous?.view.definition.mode === "webStudio" ? finishWebStudio(id, owner, job.lessonId) : readPublishedLesson(job.lessonId);
       if (!job || job.step === "error" || job.status === "error") throw new Error(job?.error ?? "A készítés megállt.");
@@ -1023,15 +1383,174 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
     .limit(1);
   if (!exists) return res.status(404).json({ message: "A job nem található." });
 
+  // Elakadás-vezérlő V4 (egy szabály): ha a tervező következő foka a teljes újragyártás, a kézi gomb is azt indítja (új job).
+  const [stopped] = await db.select({ output: studioJobs.output, error: studioJobs.error, status: studioJobs.status }).from(studioJobs).where(eq(studioJobs.id, req.params.id));
+  if (stopped?.status === "error" && stopped.error
+    && planRecovery({ error: stopped.error, history: recoveryHistoryOf(stopped.output as never, stopped.error) }).strategy === "remanufacture") {
+    try { const jobId = await remanufactureFromMap(req.params.id, req.user!.id, stopped.error); return res.status(202).json({ jobId, remanufactured: true }); }
+    catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." }); }
+  }
   await respondToResume(res, req.params.id, accepted =>
-    driveTracked(req.params.id, req.user!.id, false, async visit => {
-      if (visit?.step !== "animator") return retryTimedOutLektor(req.params.id);
-      const [draft] = await db.select({ publishedAt: lessons.publishedAt }).from(studioJobs)
-        .innerJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, req.params.id));
-      if (!draft || draft.publishedAt) throw new WorkflowConflict("Csak meglévő, még nem publikált bankjelölt folytatható.");
-      await retryFailedBankBuild(req.params.id, visit);
-    }, accepted));
+    driveTracked(req.params.id, req.user!.id, false, (visit) => applyResume(req.params.id, visit), accepted, true));
 });
+
+/**
+ * Egy szabály (elakadás-vezérlő V3): a kézi „Folytatás” gomb és az automatikus vezérlő ugyanezt hívja a lízing alatt.
+ * Kapuhibánál a stratégiát a tervező adja (`retryFailedGate` → `planRecovery`); bank/lektor ágon a meglévő célzott folytatás.
+ */
+async function applyResume(jobId: string, visit: import("../../shared/lesson-workflow").WorkflowVisit | undefined): Promise<void> {
+  // Újraindulás utáni folytatás (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md, E2): a megszakadt lépéstől, a mentett részekkel.
+  const [stopped] = await db.select({ error: studioJobs.error, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId));
+  // Review #255 (P2): a workflow-lízing ALATT friss állapotból — a törölt (elvetett) piszkozat nem folytatódik (a söprés régi olvasata sem viszi
+  // tovább). Az elvetés élő lízing mellett nem lehetséges (`discardDraft`), így a kettő nem fut át egymáson.
+  if ((stopped?.output as { recoveryState?: unknown } | null)?.recoveryState === "discarded") throw new WorkflowConflict("A piszkozatot törölték — nem folytatható.");
+  if (stopped?.error === ORPHAN_JOB_ERROR) {
+    // Review #247 (P2): a publikáltságot a lecke sora dönti el (a publikálás commitja után, a job-kimenet mentése előtt is megállhatott).
+    const [lesson] = await db.select({ publishedAt: lessons.publishedAt }).from(studioJobs).innerJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, jobId));
+    if (lesson?.publishedAt) throw new WorkflowConflict("A lecke már publikált — a megszakadt lépés nem futtatható újra.");
+    return retryAfterRestart(jobId, visit);
+  }
+  if (visit?.step !== "animator" && visit?.step !== "gate") return retryTimedOutLektor(jobId);
+  const [draft] = await db.select({ publishedAt: lessons.publishedAt }).from(studioJobs)
+    .innerJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, jobId));
+  if (!draft || draft.publishedAt) throw new WorkflowConflict("Csak meglévő, még nem publikált bankjelölt folytatható.");
+  // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D4): a kapu bank-eredetű megállása a kapu újrafuttatásával folytatható.
+  // Elakadás-vezérlő V4: a tervező `author-repair` fokánál célzott szerzői javítás (a többi fok a `retryFailedGate`-ben).
+  if (visit.step === "gate") {
+    const [job] = await db.select({ output: studioJobs.output, error: studioJobs.error }).from(studioJobs).where(eq(studioJobs.id, jobId));
+    const plan = planRecovery({ error: job?.error ?? "", history: recoveryHistoryOf(job?.output as never, job?.error) });
+    if (plan.strategy === "author-repair") await retryWithAuthorRepair(jobId, visit);
+    else await retryFailedGate(jobId, visit);
+  } else await retryFailedBankBuild(jobId, visit);
+}
+
+/**
+ * Elakadás-vezérlő V4.2: a lépcső utolsó végrehajtható foka — teljes újragyártás ugyanabból a térképből (új job, új workflow); a régi piszkozat
+ * megmarad, a kimenete az újra hivatkozik (`remanufacturedAs`), és a vezérlő nem veszi fel újra. Futásonként egyszer (a tervező szerint).
+ */
+async function remanufactureFromMap(jobId: string, owner: string, error: string): Promise<string> {
+  // Review #237 (P1): atomi foglalás a job létrehozása ELŐTT — két párhuzamos kérés (dupla kattintás, söprő + gomb) nem indíthat két gyártást.
+  const claim = await db.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb) || '{"recoveryState":"remanufacturing"}'::jsonb
+    WHERE id = ${jobId} AND status = 'error' AND coalesce(output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured', 'discarded') RETURNING id`);
+  if (!(claim.rows as unknown[]).length) throw new WorkflowConflict("A teljes újragyártás már elindult (vagy a job már nem hibás állapotú).");
+  const release = () => db.execute(sql`UPDATE studio_jobs SET output = output - 'recoveryState' WHERE id = ${jobId} AND output->>'recoveryState' = 'remanufacturing'`);
+  let started: Awaited<ReturnType<typeof startJobFromMap>>;
+  let job: { mapId: string | null; output: unknown } | undefined;
+  try {
+    [job] = await db.select({ mapId: studioJobs.mapId, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId));
+    if (!job?.mapId) throw new WorkflowConflict("A teljes újragyártáshoz nincs forrástérkép.");
+    const out = (job.output ?? {}) as { ownerInstruction?: string; sourceCorrections?: SourceCorrection[]; topicFocus?: TopicFocus | null };
+    started = await startJobFromMap(job.mapId, undefined, {}, {
+      ...(typeof out.ownerInstruction === "string" ? { instruction: out.ownerInstruction } : {}),
+      ...(Array.isArray(out.sourceCorrections) && out.sourceCorrections.length ? { corrections: out.sourceCorrections } : {}),
+      ...(out.topicFocus ? { topicFocus: out.topicFocus } : {}),
+    });
+    if (!started.ok) throw new WorkflowConflict(`A teljes újragyártás nem indítható: ${started.reason}`);
+  } catch (e) {
+    await release();
+    throw e;
+  }
+  const fp = failureFingerprint(error);
+  const history = recoveryHistoryOf(job.output as never, error);
+  const step: RecoveryStep = { strategy: "remanufacture", fingerprint: fp.key, failing: fp.failing, at: Date.now() };
+  // Review #237 (P1): az új job örökli az újragyártási lépést — ha ugyanígy megáll, a tervező nem gyárt újra (tulajdonosi döntés).
+  await db.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb) || ${JSON.stringify({ remanufacturedFrom: jobId, recovery: [step] })}::jsonb
+    WHERE id = ${started.jobId}`);
+  await db.execute(sql`UPDATE studio_jobs SET output = output || ${JSON.stringify({ remanufacturedAs: started.jobId, recoveryState: "remanufactured", recovery: [...history, step] })}::jsonb
+    WHERE id = ${jobId}`);
+  logger.warn(`[VEZÉRLŐ] ${jobId}: teljes újragyártás indult ugyanabból a forrásból → ${started.jobId}`);
+  void driveTracked(started.jobId, owner, true).catch((e) => {
+    if (e instanceof WorkflowConflict) { logger.warn(`[VEZÉRLŐ] Újragyártás átadva (${started.jobId}): ${e.message}`); return; }
+    logger.error(`[VEZÉRLŐ] Az újragyártás megállt (${started.jobId})`, e);
+  });
+  return started.jobId;
+}
+
+/**
+ * Elakadás-vezérlő V3: a hibával megállt, mentett, nem publikált jobok automatikus továbbvitele a tervező lépcsője szerint — söprésenként
+ * legfeljebb egy. A végre nem hajtható fokot (V4: szerzői javítás, teljes újragyártás) kihagyottként naplózza, hogy a tervező továbblépjen;
+ * a lépcső végén `recoveryState = "ask-owner"` (a felület a pontos okot mutatja), további automatikus lépés nincs.
+ */
+export async function sweepFailedStudioJobs(now = Date.now()): Promise<number> {
+  const { rows } = await db.execute(sql`
+    SELECT j.id, j.status, j.step, j.error, j.finished_at, j.output ? 'lesson' AS has_lesson, (l.published_at IS NOT NULL) AS published,
+           j.output->>'recoveryState' AS recovery_state, r.id AS run_id, r.owner_id, r.state AS run_state, r.lease_until,
+           r.snapshot->'visits'->-1 AS last_visit, j.output->>'htmlFileId' AS html_file_id,
+           ${HAS_NEWER_SAME_OWNER} AS has_newer
+    FROM studio_jobs j
+    LEFT JOIN lessons l ON l.id = j.lesson_id
+    LEFT JOIN LATERAL (
+      SELECT w.id, w.owner_id, w.state, w.lease_until, w.snapshot FROM lesson_workflow_runs w
+      WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
+    ) r ON true
+    WHERE j.status = 'error' AND j.finished_at > now() - interval '7 days'
+    ORDER BY j.finished_at ASC LIMIT 50`);
+  for (const raw of rows as Array<Record<string, unknown>>) {
+    const row: RecoveryRow = {
+      id: String(raw.id), status: String(raw.status), step: String(raw.step), error: (raw.error as string | null) ?? null,
+      finishedAt: raw.finished_at ? new Date(String(raw.finished_at)) : null, hasLesson: raw.has_lesson === true, published: raw.published === true,
+      runId: (raw.run_id as string | null) ?? null, owner: (raw.owner_id as string | null) ?? null, runState: (raw.run_state as string | null) ?? null,
+      leaseUntil: raw.lease_until ? new Date(String(raw.lease_until)) : null, recoveryState: (raw.recovery_state as string | null) ?? null,
+    };
+    if (recoveryCandidate(row, now) !== null) continue;
+    const [job] = await db.select({ output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, row.id));
+    const history = recoveryHistoryOf(job?.output as never, row.error);
+    const lastVisit = (raw.last_visit ?? undefined) as { step: string; state: string; error?: string } | undefined;
+    // Újraindulás utáni folytatás (E2): a tervező lépcsője helyett a megszakadt lépés folytatása — forrásonként csak a LEGÚJABB job (a régebbi
+    // duplikátum nem indít második gyártást), legfeljebb kétszer (crash-loop ellen).
+    if (row.error === ORPHAN_JOB_ERROR) {
+      if (raw.has_newer === true) {
+        await db.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb) || '{"recoveryState":"superseded"}'::jsonb WHERE id = ${row.id} AND status = 'error'`);
+        logger.warn(`[VEZÉRLŐ] ${row.id}: ugyanabból a forrásból újabb gyártás van — ez a megszakadt job nem folytatódik.`);
+        continue;
+      }
+      const restarts = history.filter((h) => h.strategy === "restart").length;
+      if (restarts >= 2 || resumeKindOf({ step: row.step, status: row.status, error: row.error, hasLesson: row.hasLesson, htmlFileId: raw.html_file_id, published: row.published, visit: lastVisit }) !== "restart") continue;
+      const fp = failureFingerprint(row.error);
+      const nextHistory = JSON.stringify([...history, { strategy: "restart", fingerprint: fp.key, failing: fp.failing, at: now }]);
+      await db.execute(sql`UPDATE studio_jobs SET output = jsonb_set(coalesce(output, '{}'::jsonb), '{recovery}', ${nextHistory}::jsonb) WHERE id = ${row.id} AND status = 'error'`);
+      logger.warn(`[VEZÉRLŐ] ${row.id}: szerver-újraindulás után folytatás a megszakadt lépéstől (${lastVisit?.step}), a mentett részekkel.`);
+      void driveTracked(row.id, row.owner!, false, (visit) => applyResume(row.id, visit), undefined, false, true).catch((error) => {
+        if (error instanceof WorkflowConflict) { logger.warn(`[VEZÉRLŐ] ${row.id}: kihagyva — ${error.message}`); return; }
+        logger.error(`[VEZÉRLŐ] ${row.id}: az újraindulás utáni folytatás megállt`, error);
+      });
+      return 1;
+    }
+    // Ugyanaz a jogosultsági szabály, mint a kézi gombé: nem folytatható hibát a vezérlő nem hajt (különben söprésenként újra bukna).
+    const eligible = resumeKindOf({ step: row.step, status: row.status, error: row.error, hasLesson: row.hasLesson, htmlFileId: raw.html_file_id,
+      published: row.published, visit: lastVisit, gateRecoveryAttempt: (job?.output as { gateRecoveryAttempt?: unknown } | null)?.gateRecoveryAttempt }) !== null;
+    const planned = planRecovery({ error: row.error!, history });
+    const plan = eligible ? planned : { ...planned, strategy: "ask-owner" as const, reason: `${recoveryReason("ask-owner")} — ez a megállás a mentett részekből nem folytatható` };
+    if (plan.strategy === "remanufacture") {
+      await remanufactureFromMap(row.id, row.owner!, row.error!).catch((e) => logger.error(`[VEZÉRLŐ] ${row.id}: a teljes újragyártás nem indult`, e));
+      return 1;
+    }
+    if (plan.strategy === "ask-owner") {
+      // A lépcső végén (vagy nem folytatható hibánál): tulajdonosi döntés — egyszer naplózva, a felület a pontos okot mutatja.
+      const fp = failureFingerprint(row.error!);
+      const step: RecoveryStep = { strategy: plan.strategy, fingerprint: fp.key, failing: fp.failing, at: now };
+      const done = true;
+      const nextHistory = JSON.stringify([...history, step]);
+      await db.execute(sql`UPDATE studio_jobs SET output = jsonb_set(jsonb_set(output, '{recovery}', ${nextHistory}::jsonb),
+        '{recoveryState}', ${JSON.stringify(done ? "ask-owner" : "running")}::jsonb) WHERE id = ${row.id} AND status = 'error'`);
+      logger.warn(`[VEZÉRLŐ] ${row.id}: tulajdonosi döntés szükséges — ${plan.reason}`);
+      continue;
+    }
+    if (plan.strategy === "retry-provider") {
+      // A szolgáltatói újrapróba a végrehajtás ELŐTT a naplóba kerül (a tervező így legfeljebb kétszer választja ugyanarra a hibára).
+      const fp = failureFingerprint(row.error!);
+      const nextHistory = JSON.stringify([...history, { strategy: plan.strategy, fingerprint: fp.key, failing: fp.failing, at: now }]);
+      await db.execute(sql`UPDATE studio_jobs SET output = jsonb_set(output, '{recovery}', ${nextHistory}::jsonb) WHERE id = ${row.id} AND status = 'error'`);
+    }
+    logger.warn(`[VEZÉRLŐ] ${row.id}: automatikus folytatás — ${plan.strategy}: ${plan.reason}`);
+    void driveTracked(row.id, row.owner!, false, (visit) => applyResume(row.id, visit), undefined, false, true).catch((error) => {
+      if (error instanceof WorkflowConflict) { logger.warn(`[VEZÉRLŐ] ${row.id}: kihagyva — ${error.message}`); return; }
+      logger.error(`[VEZÉRLŐ] ${row.id}: az automatikus folytatás megállt`, error);
+    });
+    return 1; // söprésenként legfeljebb egy
+  }
+  return 0;
+}
 
 /* ------------------------------------------------------------------ *
  * LS-5 — feedback loop: concept stats, fix-concept, quiz export

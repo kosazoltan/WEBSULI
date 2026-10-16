@@ -2,7 +2,7 @@ import { stripJsonFences } from "../ai/OpenRouterProvider";
 import { AIProviderTimeoutError, type AIResponse, type IAIProvider } from "../ai/AIProvider";
 import type { StudioStep } from "./pipeline";
 import { createHash } from "node:crypto";
-import { LEKTOR_TIMEOUT_MS, STREAM_CEILING_FACTOR, STREAM_DEFAULT_CEILING_MS, STUDIO_STEP_POLICY, stepStreamIdleMs } from "../ai/studio-provider";
+import { LEKTOR_TIMEOUT_MS, STREAM_CEILING_FACTOR, STREAM_DEFAULT_CEILING_MS, STUDIO_STEP_POLICY, stepStreamIdleMs, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 
 /**
@@ -78,7 +78,7 @@ export function stepDeadlineMs(step: string): number | undefined {
 }
 import { workflowCheckpoint, workflowRuntimeVersion, workflowUsage, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
 import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
-import { maxOutputForModel } from "../ai/models";
+import { independentFallbackFor, maxOutputForModel } from "../ai/models";
 import type { PromptRole } from "../../shared/instruction-bundles/roles";
 import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
 
@@ -162,6 +162,33 @@ export async function callStepModel(
     return result;
   });
 }
+/**
+ * Spec 2026-10-14-tartalek-b-szelet (tulajdonosi döntés): egy támogató hívás egyszeri ellentétes családú tartalékkal — csak
+ * `StepModelError`-ra (szolgáltatói / kimeneti hiba), megszakítás nélkül, és csak ha a tartalék kulcsa be van állítva. Ellenőrző
+ * szerepnél a `checkedModels` családja kizárt (→ harmadik család). A válasz a TÉNYLEGESEN használt modellt is hordozza.
+ */
+export async function callStepModelWithFallback(
+  input: StepCallInput,
+  opts: {
+    providerFactory: (model: string, step?: string, options?: { fallback?: boolean }) => IAIProvider;
+    providerStep?: string;
+    keyConfigured?: (model: string) => boolean;
+    checkedModels?: readonly string[];
+    signal?: AbortSignal;
+  },
+): Promise<StepCallResult & { model: string }> {
+  try {
+    return { ...(await callStepModel(opts.providerFactory(input.model, opts.providerStep), input, opts.signal)), model: input.model };
+  } catch (error) {
+    if (!(error instanceof StepModelError) || opts.signal?.aborted) throw error;
+    const fallback = independentFallbackFor(input.model, opts.checkedModels);
+    if (!fallback || !(opts.keyConfigured ?? studioModelReady)(fallback)) throw error;
+    logger.warn(`[STUDIO] ${input.role} (${input.model}) hibázott — ${error.message.slice(0, 200)} → tartalék: ${fallback}`);
+    const result = await callStepModel(opts.providerFactory(fallback, opts.providerStep, { fallback: true }), { ...input, model: fallback }, opts.signal);
+    return { ...result, model: fallback };
+  }
+}
+
 /**
  * Spec 2026-09-30 (U6, C10): a szerep runbookja a rendszerutasítás ELEJÉN (stabil előtag); a befagyasztott (runtime-2)
  * futás a régi, bájtra azonos sorrendet kapja (runbook a végén). Review #164: a közvetlen szolgáltatói hívások (pl. a webes

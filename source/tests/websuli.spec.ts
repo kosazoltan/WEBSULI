@@ -105,7 +105,8 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
             await expect(cta).toBeVisible({ timeout: 15000 });
             const box = await cta.boundingBox();
             expect(box, 'a CTA-nak van elrendezési doboza').not.toBeNull();
-            // WCAG 2.5.5 / iOS HIG: min. 44x44 CSS px érintőfelület.
+            // WCAG 2.5.5 / iOS HIG: min. 44x44 CSS px érintőfelület. A kapu kerekítés nélkül marad; a gomb 46 px-es (HeroSection),
+            // mert a tört pozíción megálló rugós animáció alatt a 44 px-es doboz 43.999996-nak mérődött (run 38747068157).
             expect(box!.height).toBeGreaterThanOrEqual(44);
             expect(box!.width).toBeGreaterThanOrEqual(44);
             // A felirat NEM lehet elrejtve: legyen nem üres, látható szöveg.

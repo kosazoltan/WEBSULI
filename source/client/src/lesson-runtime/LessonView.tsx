@@ -76,7 +76,7 @@ export function LessonView({ material }: { material: { id: string; title?: strin
   }
 
   // The lesson id (not the html_files id) is what the Próba endpoint keys on.
-  return <LessonRuntime lesson={parsed.data} lessonId={data?.lessonId} />;
+  return <LessonRuntime lesson={parsed.data} lessonId={data?.lessonId} arbiterSource={{ kind: "lesson", htmlFileId: material.id }} />;
 }
 
 /** Spec 2026-09-24: egy olvashatatlan lecke gyakran csak régi, memóriában maradt alkalmazáskód — egyszer frissítünk. */

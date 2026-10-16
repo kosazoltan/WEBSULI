@@ -10,6 +10,7 @@ import { LearningMode, LearningPager, useLearningPreference } from "./LearningCo
 import "./lesson-experience.css";
 import { PracticeAccess } from "./SavedLessonQuiz";
 import { FinishPracticeButton } from "./FinishPracticeButton";
+import { bestVerdict, useArbiterVerdicts, type ArbiterSource } from "./arbiter";
 
 const TABS = [{ id: "teaching", label: "Tananyag", icon: BookOpen }, { id: "methods", label: "Módszerek", icon: Brain }, { id: "tasks", label: "Feladatok", icon: PencilLine }, { id: "quiz", label: "Kvíz", icon: Trophy }] as const;
 type Tab = typeof TABS[number]["id"];
@@ -26,7 +27,7 @@ function Result({ title, points, total, seconds, answers }: { title: string; poi
   </section>;
 }
 
-export function LessonExperienceView({ experience: e, storageKey, headings, lessonId, children }: { experience: LessonExperience; storageKey: string; headings: string[]; lessonId?: string; children: (section: number | null) => ReactNode }) {
+export function LessonExperienceView({ experience: e, storageKey, headings, lessonId, arbiterSource, children }: { experience: LessonExperience; storageKey: string; headings: string[]; lessonId?: string; arbiterSource?: ArbiterSource; children: (section: number | null) => ReactNode }) {
   const prefix = useId();
   const [tab, setTab] = useState<Tab>("teaching");
   const changeTab = (next: Tab) => { setTab(next); requestAnimationFrame(() => document.getElementById(`${prefix}-fusion-tab-${next}`)?.closest(".fusion-view")?.scrollIntoView({ block: "start", behavior: "instant" })); };
@@ -49,7 +50,11 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
   }, [tab, taskState.round.startedAt, quizState.round.startedAt]);
   const tasks = taskState.round.ids.map(id => e.tasks.find(t => t.id === id)!);
   const quiz = quizState.round.ids.map(id => e.quiz.find(q => q.id === id)!);
-  const taskPoints = tasks.reduce((sum, t) => sum + evaluateOpenAnswer(taskState.round.answers[t.id] ?? "", t).score, 0);
+  // Tételgyár T7.2: kiértékelés után a nem teljes pontos válaszokat a döntőbíró is átnézi; az ítélet csak emelhet.
+  const taskChecks = tasks.map(t => ({ id: t.id, answer: taskState.round.answers[t.id] ?? "", det: evaluateOpenAnswer(taskState.round.answers[t.id] ?? "", t) }));
+  const arbiter = useArbiterVerdicts(`${storageKey}:tasks:arbiter:${taskState.round.startedAt}:${taskState.round.finishedAt ?? 0}`, arbiterSource, !!taskState.round.finishedAt, taskChecks);
+  const finalVerdict = (id: string) => { const check = taskChecks.find(c => c.id === id)!; return bestVerdict(check.det, arbiter.verdicts[id]); };
+  const taskPoints = tasks.reduce((sum, t) => sum + finalVerdict(t.id).score, 0);
   const quizPoints = quiz.filter(q => quizState.round.picks[q.id] === q.correctIndex).length;
   useEffect(() => () => { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }, [tab]);
   const seconds = (round: typeof taskState.round) => Math.max(0, Math.floor(((round.finishedAt ?? Date.now()) - round.startedAt) / 1000));
@@ -76,15 +81,17 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
     <div role="tabpanel" id={`${prefix}-fusion-panel-methods`} aria-labelledby={`${prefix}-fusion-tab-methods`} hidden={tab !== "methods"} className="fusion-panel"><CognitiveMethods methods={e.methods} /></div>
     <div role="tabpanel" id={`${prefix}-fusion-panel-tasks`} aria-labelledby={`${prefix}-fusion-tab-tasks`} hidden={tab !== "tasks"} className="fusion-panel">
       <div className="fusion-round-head"><div><span className="fusion-eyebrow">Fogalmazd meg a saját szavaiddal</span><h2>Feladatok</h2><p>{taskRound} feladat a {e.tasks.length}-ből · írásban és szóban</p></div><button className="lesson-outline-btn" onClick={() => setResetTarget("tasks")}><RotateCcw size={17} /> Új feladatsor</button></div>
-      <p className="fusion-intro">A szóbeli feladatot először mondd el, majd írd vagy diktáld be a válaszod. Az automatikus ellenőrzés fogalmakat keres; a mintaválasz segít megítélni a jelentést.</p>
+      <p className="fusion-intro">A szóbeli feladatot először mondd el, majd írd vagy diktáld be a válaszod. Az automatikus ellenőrzés fogalmakat keres; a mintaválasz segít megítélni a jelentést.{arbiterSource && " A nem teljes pontos válaszokat egy mesterséges intelligencia is átnézi."}</p>
       {tasks.map((t, index) => {
         const graded = !!taskState.round.finishedAt;
-        const verdict = evaluateOpenAnswer(taskState.round.answers[t.id] ?? "", t);
+        const verdict = finalVerdict(t.id);
         return <section className="lesson-block fusion-task" key={t.id} data-task-id={t.id} tabIndex={-1} ref={element => { if (element) taskElements.current.set(t.id, element); else taskElements.current.delete(t.id); }}>
           <span className="fusion-eyebrow">{index + 1}. feladat {t.mode === "oral" && <><Mic size={14} /> Szóbeli gyakorlás</>}</span><h3>{t.q}</h3>
           <label className="fusion-label">A válaszod<textarea maxLength={4000} value={taskState.round.answers[t.id] ?? ""} disabled={graded} onChange={ev => taskState.setRound(old => ({ ...old, answers: { ...old.answers, [t.id]: ev.target.value } }))} /></label>
           {!graded && <DictationButton active={tab === "tasks" && !resetTarget} onText={text => taskState.setRound(old => ({ ...old, answers: { ...old.answers, [t.id]: `${old.answers[t.id] ?? ""} ${text}`.trim().slice(0, 4000) } }))} />}
-          {graded && <div className="fusion-verdict" data-state={verdict.state}><strong>{verdict.state === "ok" ? "Elfogadva" : verdict.state === "partial" ? "Részben jó" : "Hiányos"} · {verdict.score} pont</strong><p>{verdict.reason}</p></div>}
+          {graded && <div className="fusion-verdict" data-state={verdict.state}><strong>{verdict.state === "ok" ? "Elfogadva" : verdict.state === "partial" ? "Részben jó" : "Hiányos"} · {verdict.score} pont</strong><p>{verdict.reason}</p>
+            {verdict.arbiter && <p className="fusion-arbiter" data-testid="arbiter-note">A döntőbíró {verdict.state === "ok" ? "elfogadta" : "részben elfogadta"} a saját megfogalmazásodat.</p>}
+            {arbiter.pending.has(t.id) && <p className="fusion-arbiter" role="status">A válaszodat egy tanári segéd is átnézi…</p>}</div>}
           {(graded || t.mode === "oral") && <button className="lesson-outline-btn" onClick={() => { setSamples(old => old.includes(t.id) ? old.filter(id => id !== t.id) : [...old, t.id]); taskState.setRound(old => ({ ...old, sampleViewed: [...new Set([...old.sampleViewed, t.id])] })); }}>Mintaválasz {samples.includes(t.id) ? "elrejtése" : "megnézése"}</button>}
           {samples.includes(t.id) && <p className="lesson-answer">{t.sample}</p>}
           <button className="lesson-ghost-btn fusion-source-link" onClick={() => jumpToTeaching(t.sectionIndex)}>Vissza a magyarázathoz</button>
@@ -94,7 +101,7 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
         const task = tasks.find(task => !taskState.round.answers[task.id]?.trim());
         const element = task && taskElements.current.get(task.id);
         element?.scrollIntoView({ block: "center" }); element?.querySelector("textarea")?.focus({ preventScroll: true });
-      }} onFinish={() => taskState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Feladatok kiértékelése</FinishPracticeButton> : <Result title="Feladatok" points={taskPoints} total={tasks.length} seconds={seconds(taskState.round)} answers={tasks.map(t => ({ question: t.q, answer: taskState.round.answers[t.id] ?? "", ...evaluateOpenAnswer(taskState.round.answers[t.id] ?? "", t), sampleViewed: taskState.round.sampleViewed.includes(t.id) }))} />}
+      }} onFinish={() => taskState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Feladatok kiértékelése</FinishPracticeButton> : <Result title="Feladatok" points={taskPoints} total={tasks.length} seconds={seconds(taskState.round)} answers={tasks.map(t => ({ question: t.q, answer: taskState.round.answers[t.id] ?? "", ...finalVerdict(t.id), sampleViewed: taskState.round.sampleViewed.includes(t.id) }))} />}
     </div>
     <div role="tabpanel" id={`${prefix}-fusion-panel-quiz`} aria-labelledby={`${prefix}-fusion-tab-quiz`} hidden={tab !== "quiz"} className="fusion-panel fusion-panel-quiz" data-overview={true} data-finished={savedFinished ?? !!quizState.round.finishedAt}>
       <PracticeAccess lessonId={lessonId} enabled={tab === "quiz"} onFinished={setSavedFinished} onReview={id => jumpToTeaching(e.quiz.find(q => q.id === id)?.sectionIndex ?? 0)}>

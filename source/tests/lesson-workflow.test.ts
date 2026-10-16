@@ -121,3 +121,16 @@ test("workflowStepDisplay: a korábbi kör befejezett lektor/kapu lépése új k
   const finished = { ...run, state: "done" as const, visits: [...run.visits.slice(0, -1), visit("animator", "done", 11, 12), visit("lektor", "done", 12, 13), visit("gate", "done", 13, 14), visit("readback", "done", 14, 15)] };
   assert.equal(workflowStepDisplay(finished, "lektor").label, "Befejezett");
 });
+
+// Tulajdonosi döntés 2026-10-15 (job 416ad01d): a gombbal indított, kifejezett folytatás kerete 6; az automatikus újrapróbálásé 4 marad.
+test("a kifejezett tulajdonosi folytatás legfeljebb 6 végrehajtásig mehet, az automatikus újrapróbálás 4-ig", async () => {
+  const work = async () => { await workflowPhase("generate"); throw new Error("hiba"); };
+  const auto = memoryWorkflows(); const a = { id: "auto", owner: "a", mode: "web" as const, retry: true };
+  for (let n = 0; n < 4; n++) await assert.rejects(executeWorkflow(auto.store, a, work), /hiba/);
+  await assert.rejects(executeWorkflow(auto.store, a, work), /kerete elfogyott/);
+  const owner = memoryWorkflows(); const o = { id: "owner", owner: "a", mode: "web" as const, retry: true };
+  for (let n = 0; n < 4; n++) await assert.rejects(executeWorkflow(owner.store, o, work), /hiba/);
+  for (let n = 0; n < 2; n++) await assert.rejects(executeWorkflow(owner.store, { ...o, explicitResume: true }, work), /hiba/);
+  await assert.rejects(executeWorkflow(owner.store, { ...o, explicitResume: true }, work), /kerete elfogyott/);
+  await assert.rejects(executeWorkflow(owner.store, o, work), /kerete elfogyott/, "automatikusan sem indul újra");
+});

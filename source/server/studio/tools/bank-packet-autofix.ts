@@ -1,5 +1,6 @@
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../../../shared/lesson-experience-score";
 import type { OpenTask } from "../../../shared/lesson-experience";
+import { inflectedForms, spellingVariants, staleGeneratedForms, synonymsOf } from "../../../shared/hu-lexicon";
 
 /**
  * Eszköz (tulajdonosi kérés 2026-09-19): determinisztikus bankcsomag-javítás MODELLHÍVÁS NÉLKÜL.
@@ -15,7 +16,7 @@ import type { OpenTask } from "../../../shared/lesson-experience";
  */
 
 /** Kept for the call site and the CLI; binding (sectionIndex, coversConceptIds) is CONTENT and is never touched here. */
-export type BankAutofixContext = { sectionIndex: number; allowedConceptIds: readonly string[] };
+export type BankAutofixContext = { sectionIndex: number; allowedConceptIds: readonly string[]; /** Tételgyár T4′: a fejezet tanításának szövege. */ teachingText?: string };
 export type BankAutofixResult = { packet: unknown; fixes: string[] };
 
 type Obj = Record<string, unknown>;
@@ -47,7 +48,7 @@ function dedupeOptions(item: Obj, minOptions: number, fixes: string[]): void {
   fixes.push(`${id}: ismétlődő válaszlehetőség elhagyva`);
 }
 
-function fixTask(task: Obj, fixes: string[]): void {
+function fixTask(task: Obj, fixes: string[], teachingText?: string): void {
   const id = typeof task.id === "string" ? task.id : "task[?]";
   if (typeof task.sample !== "string" || !Array.isArray(task.required)) return;
   // minWords is NEVER lowered here: a short sample means the model must write a fuller sample
@@ -69,6 +70,22 @@ function fixTask(task: Obj, fixes: string[]): void {
     if (missingAnswerConcepts(task.sample, { required: trial }).length < missingAnswerConcepts(task.sample, probe).length) {
       group.push(...added); fixes.push(`${id}: a minta szóalakja a rubrikába került (${[...added].join(", ")})`);
     }
+  }
+  // Tételgyár T4′ (D2): a tanítás saját szóalakja, az írásmód-változat és a kézzel ellenőrzött rokon értelmű kifejezés a csoportba —
+  // csak HOZZÁAD (a pontozó így a nem szó szerint egyező, de a tanítással azonos helyes választ is elfogadja); a minWords változatlan.
+  for (const group of required) {
+    // Review #231 (P1): a korábbi verzió értelmetlen, a tanítás által nem igazolt egybeírt alakjai ki (gyorsítótárból jövő csomagban is).
+    const stale = staleGeneratedForms(group, teachingText, typeof task.sample === "string" ? task.sample : undefined);
+    if (stale.length) { for (const x of stale) group.splice(group.indexOf(x), 1); fixes.push(`${id}: a tanítás által nem igazolt, gépi egybeírt alak kivéve (${stale.join(", ")})`); }
+    const known = new Set(group.map((g) => normalizeAnswer(g)));
+    const added: string[] = [];
+    const add = (v: string) => { const n = normalizeAnswer(v); if (n && !known.has(n)) { known.add(n); added.push(v); } };
+    for (const term of [...group]) {
+      for (const v of spellingVariants(term, teachingText)) { add(v); for (const f of inflectedForms(v, teachingText)) add(f); }
+      for (const f of inflectedForms(term, teachingText)) add(f);
+      for (const s of synonymsOf(term)) add(s);
+    }
+    if (added.length) { group.push(...added); fixes.push(`${id}: a tanítás szóalakja / írásmód-változat / rokon értelmű kifejezés a rubrikába került (${added.join(", ")})`); }
   }
   task.required = required;
   // Spec 2026-10-01-gyokerok-egyben (2.2a): a pontozó csak alakhelyes adaton fut — a nyers modell-JSON típushibája (pl. szám a
@@ -106,7 +123,7 @@ export function autofixBankPacket(candidate: unknown, _ctx: BankAutofixContext):
       if (!isObj(item)) continue;
       if (bank === "quiz") dedupeOptions(item, 3, fixes);
       if (bank === "methods") dedupeOptions(item, 2, fixes);
-      if (bank === "tasks") fixTask(item, fixes);
+      if (bank === "tasks") fixTask(item, fixes, _ctx.teachingText);
     }
     if (bank === "quiz") fixQuizIntent(items.filter(isObj), fixes);
   }

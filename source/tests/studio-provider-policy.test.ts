@@ -44,7 +44,8 @@ test("a pedagógus a közvetlen Anthropic API-n fut: claude-opus-5, adaptív gon
   const result = await callStepModel(provider, { step: "pedagogue", role: "pedagogue", model: provider.model, system: "Terv", user: "Csak JSON" });
   assert.deepEqual(result.json, { sections: [] }, "a thinking blokk után a text blokk a válasz");
   assert.equal(captured?.model, "claude-opus-5");
-  assert.deepEqual(captured?.thinking, { type: "adaptive" });
+  // Spec 2026-10-14-claude-stream-gondolkodas-eletjel (dokumentált változás): a streamelt kérés látható összefoglalót kér.
+  assert.deepEqual(captured?.thinking, { type: "adaptive", display: "summarized" });
   assert.deepEqual(captured?.output_config, { effort: "medium" });
   assert.equal(captured?.max_tokens, STUDIO_STEP_POLICY.pedagogue.maxTokens);
   assert.equal(STUDIO_STEP_POLICY.pedagogue.maxTokens, 16_000);

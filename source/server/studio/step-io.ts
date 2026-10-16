@@ -8,6 +8,8 @@ import { SUPPORTING_THRESHOLD } from "./coverage";
 import { ANIM_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson, LESSON_TEXT_LIMITS } from "../../shared/lesson-schema";
 import { VISUAL_PARAMS_CONTRACT } from "../../shared/lesson-visual-params";
 import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
+import { lessonLengthBudget } from "../../shared/lesson-length";
+import { DEFAULT_REWARD_POLICY } from "../../shared/reward-policy";
 import { bandRegisterForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
@@ -323,15 +325,20 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     "- Minden szakaszhoz tervezz blokkokat (plannedBlocks) a megengedett típusokból: explain, example, check, recap, animate, try.",
     "- Ahol animáció segítene, írd be az animationSuggestions mezőbe.",
     "",
-    // Spec 2026-09-19 — the target lesson pattern the owner set as the end goal.
-    "CÉL-TANANYAG MINTA (a vázlat ezt kövesse, ahol a forrás tartalma engedi):",
-    "- Nyitó fejezet: miért kell ez a tudás / mi a probléma (motiváció), csak utána a szabályok.",
-    "- Szabályonként vagy fogalomcsoportonként külön fejezet: explain → example (lépésről lépésre) → check.",
-    "- Ha a forrás gyakorlófeladatot tartalmaz: külön fejezet „A feladat megoldva lépésről lépésre” (plannedBlocks: explain, example, example…, recap), a forrás feladataival.",
+    // Spec 2026-10-14-tananyag-tomorseg-lefedettseg (S2): a terjedelem a tanítandó fogalmakból jön. Mérve: a fix sablon
+    // (motiváló nyitás + fogalom-fejezetek + „feladat megoldva” + „leggyakoribb hibák” + „Ellenőrzés”) forrástól függetlenül
+    // 10–12 fejezetet és medián 2210 látható szót adott; a 46 szavas forrásból 2756 szavas lecke lett.
+    ...terjedelmiKeretLines(map),
+    "",
+    // Spec 2026-09-19 — the target lesson pattern the owner set as the end goal (2026-10-14 óta a sablon-fejezetek feltételesek).
+    "CÉL-TANANYAG MINTA (feltételes — egy elem CSAK akkor kerül a vázlatba, ha a forrás tartalma indokolja):",
+    "- A motiváció (miért kell ez a tudás) az első fogalom-fejezet explain blokkjának 1–2 mondata, NEM külön fejezet.",
+    "- Fogalomcsoportonként egy fejezet: explain → example (lépésről lépésre) → check, a végén legfeljebb egy rövid recap.",
+    "- „A feladat megoldva lépésről lépésre” külön fejezet CSAK ha a forrásban gyakorlófeladat van (plannedBlocks: explain, example, example…, recap), a forrás feladataival.",
     // Mérve (run 8, job c3f5265b): explain→check tervnél a kapu ívszabálya („kérdés előtt mutasd meg,
     // hogyan kell megoldani") szerzői kört kért — a hibás és a helyes út összevetése példaként előzi meg a kérdést.
-    "- Zárás előtt „A leggyakoribb hibák” fejezet: a misconceptions listából (legalább 3, ha a forrás alapján van ennyi), plannedBlocks: explain, example (a hibás és a helyes megoldási út összevetése a forrás egy feladatán), check, recap.",
-    "- Utolsó fejezet „Ellenőrzés – hogyan légy biztos magadban?”: a teljes eljárás számozott lépései és önellenőrző kérdések, plannedBlocks: explain, animate, recap.",
+    "- „A leggyakoribb hibák” záró fejezet CSAK ha legalább 3, a forrásból levezethető tévhit van (plannedBlocks: explain, example — a hibás és a helyes út összevetése a forrás egy feladatán —, check, recap); kevesebb tévhitnél azok a saját fogalom-fejezetük check blokkjában jelennek meg.",
+    "- „Ellenőrzés – hogyan légy biztos magadban?” záró fejezet CSAK ha a forrás többlépéses eljárást tanít (pl. számolási szabály): a lépések számozva és önellenőrző kérdések (plannedBlocks: explain, animate, recap); leíró tananyagnál elmarad.",
     "- Minden fejezet animationSuggestions mezője legalább egy konkrét, a fejezet tanításából rajzolható ábrát nevezzen meg (folyamat lépései, számegyenes, idővonal, térkép…).",
     "",
     LESSON_ARC_CONTRACT,
@@ -418,7 +425,7 @@ export function buildSchemaRetryUser(zodIssues: string, repair?: { targetSection
     "",
     // U4 (C4/H5): célzott módban az újrakérés is folt-alakot kér — a „teljes leckét” kérés ↔ folt-egyesítés ellentmondás megszűnt.
     repair
-      ? `Írd újra CSAK a(z) ${repair.targetSections.map((i) => i + 1).join(", ")}. fejezetet FOLT-ALAKBAN: { "sections": { "<0-tól számozott index>": { "heading": string, "probaEnabled": true, "blocks": [...] } } } (index: ${repair.targetSections.join(", ")}). Más fejezetet, title/subject mezőt NE küldj — teljes lecke itt hiba. Válaszolj CSAK JSON-nal.`
+      ? `Írd újra CSAK a(z) ${repair.targetSections.map((i) => i + 1).join(", ")}. fejezetet FOLT-ALAKBAN: { "sections": { "<0-tól számozott index>": { "heading": string, "probaEnabled": boolean, "blocks": [...] } } } (index: ${repair.targetSections.join(", ")}). Más fejezetet, title/subject mezőt NE küldj — teljes lecke itt hiba. Válaszolj CSAK JSON-nal.`
       : "Írd újra a TELJES leckét úgy, hogy minden blokk a fenti hat kind egyike legyen. Válaszolj CSAK JSON-nal.",
   ].join("\n");
 }
@@ -437,6 +444,18 @@ export const TEACHING_CONTRACT = [
   "5. title, subject, classroom, mapId: a program a saját, forrásból mért értékét írja be — add vissza a vázlat/térkép szerinti értéket, ne találj ki újat; sourceOnly mindig true. Minden check blokkban pontosan annyi feedbackPerOption, ahány opció.",
   "6. Ha gateFeedback érkezik: a felsorolt blokkokat a previousLesson-ben javítod, a lektori jegyzetekkel együtt; a fogalmat látható szövegben tanítod meg — nem rejtett kulcsszót fűzöl hozzá, és nem törlöd a tanítását.",
 ].join("\n");
+
+/**
+ * Spec 2026-10-14-tananyag-tomorseg-lefedettseg (S2): a tervező és a szerző UGYANAZT a mért terjedelmi keretet kapja
+ * (`shared/lesson-length.ts`): fejezetszám a tanítandó fogalmakból, szókeret évfolyamonként.
+ */
+function terjedelmiKeretLines(map: Pick<PromptMap, "classroom" | "concepts">): string[] {
+  const b = lessonLengthBudget(map);
+  return [
+    `TERJEDELMI KERET (a program a fejezetszámot kikényszeríti — a túllépő fejezet az utolsóba olvad —, a szókeret túllépését minőségi jelzésként rögzíti): ${b.requiredConcepts} tanítandó fogalom → legfeljebb ${b.maxSections} fejezet (kb. 3 fogalom fejezetenként); a teljes Tananyag lap kb. ${b.targetWords} látható szó (legfeljebb ${b.maxWords}).`,
+    "Rövid forrásból rövid lecke: ami nincs a térképen, azt nem bővíted általános tudással, érdekességgel vagy ismétléssel.",
+  ];
+}
 
 export function buildAuthorPrompt(
   sections: OutlineSection[],
@@ -470,7 +489,18 @@ export function buildAuthorPrompt(
     "",
     LESSON_ARC_CONTRACT,
     LESSON_METHOD_CONTRACT,
-    "Most kizárólag a részletes Tananyag lapot írd a sections tömbbe a hat megengedett blokktípussal. Ne rövidítsd vázlattá a bankok kedvéért: az experience bankokat külön lépés gyártja. Ha previousLesson experience mezőt tartalmaz, a bankszöveget nem kell újra kiírnod; a javított tanításból frissül.",
+    // Spec 2026-10-14-tananyag-tomorseg-lefedettseg (S2): a korábbi „Ne rövidítsd vázlattá a bankok kedvéért” a hosszítás felé
+    // tolt (mérve: medián 2210 látható szó); a tömörség és a teljesség együtt a mérce.
+    "Most kizárólag a Tananyag lapot írd a sections tömbbe a hat megengedett blokktípussal. Az experience bankokat külön lépés gyártja; ha previousLesson experience mezőt tartalmaz, a bankszöveget nem kell újra kiírnod; a javított tanításból frissül.",
+    `TÖMÖR ÉS TELJES (a program méri, túllépésnél jelzést rögzít): a teljes Tananyag lap kb. ${lessonLengthBudget(map).targetWords} látható szó (legfeljebb ${lessonLengthBudget(map).maxWords}). Minden kötelező fogalmat EGYSZER tanítasz meg, a legrövidebb érthető magyarázattal és egy kidolgozott példával; amit egy blokk már elmondott, azt a következő nem ismétli; a recap 2–3 pont; kitöltő általánosság és forráson kívüli érdekesség nem kell. A tömörség nem vázlatosság: a hogyan és a miért lépései megmaradnak.`,
+    // Kalibrálva (próbaharness 2026-10-14): tényvédelem nélkül a rövidítés a kötelező fogalmak tartalmát is vágta (−9…−17 pont).
+    // Mérve (próbaharness, Hunyadi): a minta `"probaEnabled": true`-ja miatt a tömör (1 kérdéses) fejezetek Próbája elérhetetlen
+    // lett → ív-hiba → szerzői javítókör, amely a kérdések pótlásával a leckét újra hosszítja. Az ív-szerződés választást enged.
+    `PRÓBA: a fejezet probaEnabled értéke CSAK akkor true, ha a fejezetben legalább ${DEFAULT_REWARD_POLICY.minCorrectForCoupon} check blokk van; tömör, kevés kérdéses fejezetnél false. Kérdést nem a Próba kedvéért adsz hozzá.`,
+    // Mérve (próbaharness S2c): a tömörítés két meglévő kapu-szabályt sértett — Mezopotámia: „leggyakoribb hibák” fejezetben
+    // check előtte example nélkül (ív); Időszámítás: a „Kr. e. / i.e.” fogalom neve nem állt szó szerint a blokkban (megalapozás).
+    "A TÖMÖRÍTÉS NEM BONT KAPUT: minden check előtt marad egy example ugyanabban a fejezetben (a „leggyakoribb hibák” fejezetben is); a coversConceptIds-ben megnevezett fogalom NEVÉT (term) a blokk szövege pontosan, szó szerint tartalmazza — rövidítés vagy átfogalmazás helyett.",
+    "TÉNYVÉDELEM: a rövidítés CSAK töltelékre és ismétlésre vonatkozik — minden kötelező fogalom definíciójának és idézetének minden tényét (név, szám, évszám, ok, lépés) kimondod a lecke látható szövegében; ha a keret szűk, a magyarázat lesz rövidebb, nem a tény marad ki.",
     "",
   ];
 
@@ -504,13 +534,13 @@ export function buildAuthorPrompt(
           // Spec 2026-09-19 §6 (mérve: a teljes újraírás után a bank szinte teljesen újraépült).
           `CÉLZOTT JAVÍTÁS: kizárólag a(z) ${repair.targetSections.map((i) => i + 1).join(", ")}. fejezetet írd újra (0-tól számozott index: ${repair.targetSections.join(", ")}). A többi fejezetet a program változatlanul megőrzi — azokat NE küldd vissza, és a javított fejezetben is csak a kifogásolt részt változtasd.`,
           "A válasz CSAK JSON legyen, ebben az alakban (a kulcs a fejezet 0-tól számozott indexe):",
-          '{ "sections": { "<index>": { "heading": string, "probaEnabled": true, "blocks": [...] } } }',
+          '{ "sections": { "<index>": { "heading": string, "probaEnabled": boolean, "blocks": [...] } } }',
           // Spec 2026-10-05-s9 (S9/6): a tévhit-lista hibája is javítható a foltban.
           'Ha a lektor a tévhit-listát (misconceptions) kifogásolja, a folt mellé a TELJES javított listát is add vissza: "misconceptions": [{ "conceptId": string, "text": string }] — csak a forrásból igazolható tévhit maradhat.',
         ]
       : [
           "A válasz CSAK JSON legyen, a Lesson sémának megfelelően:",
-          '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": true, "blocks": [...] }], "misconceptions": [{ "conceptId": string, "text": string }], "sourceOnly": true }',
+          '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": boolean, "blocks": [...] }], "misconceptions": [{ "conceptId": string, "text": string }], "sourceOnly": true }',
         ]),
     "",
     "Vázlat:",

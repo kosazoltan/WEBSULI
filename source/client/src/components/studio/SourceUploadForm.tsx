@@ -8,6 +8,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
+
+/** A folytatás fajtája szerinti, a valóságnak megfelelő tájékoztatás (spec 2026-10-15-folytatas-szoveg). */
+const RESUME_TEXT: Record<string, string> = {
+  bank: "A folytatás innen halad tovább, a kész részeket nem gyártja újra.",
+  gate: "A folytatás innen halad tovább, a kész részeket nem gyártja újra.",
+  review: "A folytatás a tananyagot megtartja, és a lektori ellenőrzést futtatja újra.",
+  rebuild: "A folytatás a tanítást megtartja, a gyakorlóbankot új tartalékkal újraépíti.",
+  lektor: "A folytatás a lektori ellenőrzést futtatja újra.",
+  restart: "A szerver újraindult; a folytatás a megszakadt lépéstől halad tovább, a kész részeket nem gyártja újra.",
+};
 import { useToast } from "@/hooks/use-toast";
 import {
   downscaleTargetOf,
@@ -102,6 +112,7 @@ export function SourceUploadForm({
 
   const addFiles = async (list: FileList | null) => {
     if (!list) return;
+    let added = 0;
     for (const file of Array.from(list)) {
       try {
         const content = await readFileFor(file);
@@ -118,12 +129,19 @@ export function SourceUploadForm({
         const finalSource =
           source.kind === "image" ? { ...source, content: await downscaleImage(source.content) } : source;
         setFiles((prev) => [...prev.filter((f) => f.name !== finalSource.name), finalSource]);
+        added++;
       } catch (e) {
         toast({ title: "Beolvasási hiba", description: (e as Error).message, variant: "destructive" });
       }
     }
     if (fileInput.current) fileInput.current.value = "";
+    // Review #250 (P2): ha egy fájl sem olvasható be, a függő újragyártás megszűnik (egy későbbi sima választás nem indíthatja el).
+    if (!added) remakeAfterPick.current = false;
+    setPicked((n) => n + 1);
   };
+  // Review #248 (P2): oldalfrissítés után a fájlok nincsenek meg — az újragyártás a forrás újraválasztásával indul (a választás végén magától).
+  const [picked, setPicked] = useState(0);
+  const remakeAfterPick = useRef(false);
 
   const extract = useMutation({
     mutationFn: () =>
@@ -160,13 +178,14 @@ export function SourceUploadForm({
     } catch { /* The live status remains available without browser storage. */ }
   }, [runId, persistRun]);
   const oneStep = useMutation({
-    mutationFn: () =>
+    // docs/specs/2026-10-15-hiba-gombok.md (E3): `forceNew` = kifejezett újragyártás ugyanabból a forrásból (a megszakadt piszkozat helyett).
+    mutationFn: (opts?: { forceNew?: boolean }) =>
       apiRequest<{ runId: string }>(
         "POST",
         "/api/studio/lessons/one-step",
         // The source determines subject and grade; the author supplies files/title and an optional request
         // (spec 2026-09-23: an explicit grade in the request wins over the source estimate).
-        { ...(title.trim() !== "" ? { title: title.trim() } : {}), ...(instructions.trim() !== "" ? { instructions: instructions.trim() } : {}), files },
+        { ...(title.trim() !== "" ? { title: title.trim() } : {}), ...(instructions.trim() !== "" ? { instructions: instructions.trim() } : {}), files, ...(opts?.forceNew ? { forceNew: true } : {}) },
       ),
     onSuccess: (r) => {
       prevFinished.current = false;
@@ -181,26 +200,34 @@ export function SourceUploadForm({
     detail: string | null;
     error: string | null;
     mapId: string | null;
+    jobId?: string | null;
     lessonId: string | null;
     htmlFileId?: string | null;
+    draft?: { teachingSections: number; savedBankPackets: number };
+    resumable?: boolean;
+    stoppedAt?: string;
+    resumeKind?: string;
+    nextRecovery?: { strategy: string; reason: string };
+    draftRunId?: string;
+    ownerInstruction?: string;
   }>({
     queryKey: ["/api/studio/lessons/one-step", runId],
     queryFn: async () => {
-      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; lessonId: string | null; htmlFileId?: string | null }>("GET", `/api/studio/lessons/one-step/${runId}`);
+      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string }; draftRunId?: string; ownerInstruction?: string }>("GET", `/api/studio/lessons/one-step/${runId}`);
       if (result.phase === "done" && !result.htmlFileId) throw new Error("A futás lezárult, de nincs elérhető, közzétett tananyag. A készítést ellenőrizni kell.");
       return result;
     },
     enabled: runId !== null,
     refetchInterval: (query) => {
       const phase = query.state.data?.phase;
-      return phase === "done" || phase === "error" || phase === "parked" ? false : 2500;
+      return phase === "done" || phase === "error" || phase === "parked" || phase === "draft" ? false : 2500;
     },
     // #166 — a poll háttér-fülben/fókuszvesztéskor is fusson: e nélkül a jelző
     // "befagyott" (OCR 8/10), miközben a szerver rég továbbhaladt.
     refetchIntervalInBackground: true,
   });
 
-  const runFinished = run.data?.phase === "done" || run.data?.phase === "error" || run.data?.phase === "parked";
+  const runFinished = run.data?.phase === "done" || run.data?.phase === "error" || run.data?.phase === "parked" || run.data?.phase === "draft";
   const prevFinished = useRef(false);
   useEffect(() => {
     if (runFinished && !prevFinished.current) {
@@ -211,12 +238,75 @@ export function SourceUploadForm({
         setTitle("");
         setInstructions("");
         if (run.data.mapId) onCreated?.(run.data.mapId);
+      } else if (run.data?.phase === "draft") {
+        toast({ title: "Ebből a forrásból van megszakadt piszkozat", description: "Válassz: folytatás a megszakadt ponttól, újragyártás, vagy új tananyag." });
       } else {
         toast({ title: "Az új tananyag még nem készült el", description: run.data?.error ?? run.data?.detail ?? "A gyártás megállt.", variant: "destructive" });
       }
     }
     prevFinished.current = runFinished;
   }, [runFinished, run.data, queryClient, onCreated, toast]);
+
+  // Spec 2026-10-14-folytatas-mentett-reszekbol: a megállt gyártás a mentett részekből folytatódik (lecke, kész
+  // bankcsomagok, modellhívás-napló) — a szerver dönti el, folytatható-e; elutasításkor az üzenetét mutatjuk.
+  // Szinkron zár: az `isPending` csak a következő renderben frissül — a gyors dupla kattintás két folytatást indítana (mért, e2e).
+  const resumeLock = useRef(false);
+  const resume = useMutation({
+    mutationFn: (jobId: string) => apiRequest("POST", `/api/studio/jobs/${jobId}/resume`),
+    onSuccess: async () => {
+      toast({ title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább." });
+      // E2: a piszkozat-választásból indított folytatás a piszkozat saját futását követi (ott frissül a haladásjelző).
+      if (run.data?.phase === "draft" && run.data.draftRunId) { prevFinished.current = false; setRunId(run.data.draftRunId); return; }
+      // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D7): a hibánál leállt folyamatábra-lekérdezés újraindul.
+      void queryClient.invalidateQueries({ queryKey: ["/api/studio/workflows", runId] });
+      await run.refetch();
+    },
+    onError: (e: Error) => toast({ title: "Nem sikerült folytatni", description: e.message, variant: "destructive" }),
+    onSettled: () => { resumeLock.current = false; },
+  });
+  // Review #248 (P1): a dupla kattintás nem indíthat két újragyártást (az `isPending` csak a következő renderben tilt) — szinkron zár.
+  const remakeLock = useRef(false);
+  const startRemake = () => {
+    if (remakeLock.current) return;
+    if (files.length === 0) {
+      remakeAfterPick.current = true;
+      toast({ title: "Válaszd ki újra a forrásfájlokat", description: "A kiválasztás után az újragyártás magától elindul." });
+      fileInput.current?.click();
+      return;
+    }
+    remakeLock.current = true;
+    oneStep.mutate({ forceNew: true }, { onSettled: () => { remakeLock.current = false; } });
+  };
+  // Review #251 (P2): a futás bármilyen váltása (Bezárás, Új tananyag, új futás) törli a függő újragyártást — egy későbbi, más célú
+  // fájlválasztás nem indíthat észrevétlenül forceNew gyártást.
+  useEffect(() => { remakeAfterPick.current = false; }, [runId]);
+  // Review #250 (P2): a fájlválasztó megszakítása is törli a függő újragyártást.
+  useEffect(() => {
+    const el = fileInput.current;
+    const onCancel = () => { remakeAfterPick.current = false; };
+    el?.addEventListener("cancel", onCancel);
+    return () => el?.removeEventListener("cancel", onCancel);
+  }, []);
+  // Review #250 (P1): oldalfrissítés után az űrlap üres — a megállt gyártás eredeti tanári kérése visszakerül (látható, javítható),
+  // így az újragyártás nem kérés nélkül indul, és a szerver ugyanazt a piszkozatot teszi félre.
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    const owner = run.data?.ownerInstruction;
+    if (!runId || !owner || restoredFor.current === runId || (run.data?.phase !== "error" && run.data?.phase !== "draft")) return;
+    restoredFor.current = runId;
+    setInstructions((current) => (current.trim() === "" ? owner.slice(0, 2000) : current));
+  }, [runId, run.data?.ownerInstruction, run.data?.phase]);
+  useEffect(() => {
+    if (!remakeAfterPick.current || files.length === 0) return;
+    remakeAfterPick.current = false;
+    startRemake();
+    // A kiválasztás befejezése (picked) indít; a startRemake a friss fájllistával fut.
+  }, [picked]);
+  const startResume = (jobId: string) => {
+    if (resumeLock.current) return;
+    resumeLock.current = true;
+    resume.mutate(jobId);
+  };
 
   const blocked = oneStepSubmitDisabledReason("", Number.NaN, files.length);
   const oneStepBlocked = oneStepSubmitDisabledReason("", Number.NaN, files.length);
@@ -307,7 +397,7 @@ export function SourceUploadForm({
           <Button
             className="min-h-11 gap-1"
             disabled={oneStepBlocked !== null || busy}
-            onClick={() => oneStep.mutate()}
+            onClick={() => oneStep.mutate({})}
             data-testid="one-step-submit"
           >
             {oneStep.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
@@ -350,6 +440,8 @@ export function SourceUploadForm({
             <p className="text-sm font-medium">
               {run.data.phase === "done"
                 ? "A tananyag elkészült ✔"
+                : run.data.phase === "draft"
+                  ? "Ebből a forrásból van megszakadt piszkozat"
                 : run.data.phase === "error"
                   ? "A gyártás megállt hibával"
                   : run.data.phase === "parked"
@@ -357,11 +449,42 @@ export function SourceUploadForm({
                     : "Tananyag készül…"}
             </p>
             <CreationProgress run={run.data} />
-            {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked") && (
-              <div className="flex flex-wrap items-center gap-2 mt-1">
+            {(run.data.phase === "error" || run.data.phase === "draft") && run.data.draft && (
+              <p className="text-sm text-muted-foreground" data-testid="one-step-draft">
+                Mentett piszkozat: {run.data.draft.teachingSections} fejezetnyi tananyag, {run.data.draft.savedBankPackets} kész gyakorlócsomag.
+                {run.data.jobId && run.data.resumable ? ` ${RESUME_TEXT[run.data.resumeKind ?? ""] ?? RESUME_TEXT.bank}` : ""}
+                {run.data.jobId && !run.data.resumable ? " Ez a megállás a mentett részekből nem folytatható; a forrásellenőrzésből új készítés indítható." : ""}
+              </p>
+            )}
+            {run.data.phase === "error" && run.data.nextRecovery && (
+              <p className="text-sm text-muted-foreground" data-testid="one-step-next-recovery">
+                A program következő lépése: {run.data.nextRecovery.reason}.
+              </p>
+            )}
+            {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked" || run.data.phase === "draft") && (
+              <div className="flex flex-wrap items-center gap-2 mt-1" data-testid="one-step-actions">
                 {run.data.phase === "done" && run.data.htmlFileId && (
                   <Button asChild size="sm" data-testid="one-step-open-lesson">
                     <a href={`/preview/${run.data.htmlFileId}`}>Lecke megnyitása</a>
+                  </Button>
+                )}
+                {/* docs/specs/2026-10-15-hiba-gombok.md (tulajdonosi javaslat): három külön döntés — soha nem kezd újra észrevétlenül. */}
+                {(run.data.phase === "error" || run.data.phase === "draft") && run.data.jobId && run.data.resumable && (
+                  <Button size="sm" className="min-h-11" data-testid="one-step-resume" disabled={resume.isPending}
+                    onClick={() => startResume(run.data!.jobId!)}>
+                    {resume.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Folytatás a megszakadt ponttól"}
+                  </Button>
+                )}
+                {(run.data.phase === "error" || run.data.phase === "draft") && (
+                  <Button size="sm" variant="secondary" className="min-h-11" data-testid="one-step-remake" disabled={oneStep.isPending}
+                    onClick={startRemake}>
+                    {files.length > 0 ? "Újragyártás ugyanabból a forrásból" : "Újragyártás (a forrás újraválasztásával)"}
+                  </Button>
+                )}
+                {(run.data.phase === "error" || run.data.phase === "draft") && (
+                  <Button size="sm" variant="outline" className="min-h-11" data-testid="one-step-new"
+                    onClick={() => { setRunId(null); setFiles([]); setTitle(""); setInstructions(""); }}>
+                    Új tananyag
                   </Button>
                 )}
                 {(run.data.phase === "parked" || run.data.phase === "error") && run.data.mapId && onReview && <Button variant="outline" size="sm" data-testid="one-step-review-source" onClick={() => onReview(run.data!.mapId!)}>

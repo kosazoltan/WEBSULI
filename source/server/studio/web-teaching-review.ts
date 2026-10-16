@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { LESSON_QUALITY_CONTRACT } from "../../shared/lesson-quality";
 import { readHtmlLessonData } from "../../shared/lesson-html-data";
 import { callStepModel, StepModelError } from "./run-step";
-import { createStudioStepProvider } from "../ai/studio-provider";
-import { FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
+import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
+import { lektorChainFor } from "../ai/models";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { workflowValidationFailure } from "../workflows/engine";
 import { withSupportSkill } from "./support-skills";
@@ -137,28 +137,36 @@ export function assertTeachingReviewEvidence(html: string, sources: { url: strin
     throw new Error("A teljes tananyaghoz és forrásaihoz kötött sikeres tartalmi lektorálás hiányzik vagy elavult.");
   }
 }
-export const callTeachingReviewer = async (system: string, user: string, signal?: AbortSignal) => {
-  const model = resolveStudioModel("lektor");
-  try {
-    return (await callStepModel(createStudioStepProvider(model, "lektor"), { step: "lektor", role: "web-lektor", model, system: withSupportSkill("web-lektor", system), user }, signal)).json;
-  } catch (primaryError) {
-    // Spec 2026-09-19: the same lektor fallback as the Studio runner — only on a provider
-    // failure (timeout, 5xx, bad JSON), never on a content verdict, never after an abort.
-    const fallback = FALLBACK_MODELS.lektor;
-    if (!(primaryError instanceof StepModelError) || !fallback || fallback === model || signal?.aborted) throw primaryError;
-    const reason = (error: unknown) => {
-      const cause = error instanceof StepModelError ? error.cause : error;
-      return (cause instanceof Error ? cause.message : String(cause)).slice(0, 300);
-    };
-    logger.warn(`[WEB-RESEARCH] A lektor (${model}) hibázott: ${reason(primaryError)} → tartalék: ${fallback}`);
+/**
+ * Spec 2026-09-19: the same lektor fallback as the Studio runner — only on a provider failure (timeout, 5xx, bad JSON), never on
+ * a content verdict, never after an abort. Tulajdonosi döntés 2026-10-14: a lánc a HTML tényleges szerzői szerint (`lektorChainFor`)
+ * — a lektor családja egyik szerzőével sem egyezhet; kulcs nélküli tag kimarad. Szerzőség nélkül a konfigurált szerző számít.
+ */
+export const callTeachingReviewer = async (system: string, user: string, signal?: AbortSignal, authorModels?: readonly string[]) => {
+  const chain = lektorChainFor(authorModels).filter((m) => studioModelReady(m));
+  if (!chain.length) throw new StepModelError("lektor", "a szolgáltató hibát jelzett", { cause: new Error(`A lektor-lánc egyik modelljéhez sincs kulcs (${lektorChainFor(authorModels).join(", ")}).`) });
+  const reason = (error: unknown) => {
+    const cause = error instanceof StepModelError ? error.cause : error;
+    return (cause instanceof Error ? cause.message : String(cause)).slice(0, 300);
+  };
+  const failures: string[] = [];
+  for (const [index, model] of chain.entries()) {
     try {
-      return (await callStepModel(createStudioStepProvider(fallback, "lektor"), { step: "lektor", role: "web-lektor", model: fallback, system: withSupportSkill("web-lektor", system), user }, signal)).json;
-    } catch (fallbackError) {
-      // Spec 2026-09-25 (élő futás f8c62334): a tartalék hibája eddig elveszett, csak az elsődlegesé látszott.
-      logger.error(`[WEB-RESEARCH] A tartalék lektor (${fallback}) is hibázott: ${reason(fallbackError)}`);
-      throw new StepModelError("lektor", "a szolgáltató hibát jelzett", { cause: new Error(`${model}: ${reason(primaryError)}; tartalék ${fallback}: ${reason(fallbackError)}`) });
+      return (await callStepModel(createStudioStepProvider(model, "lektor"), { step: "lektor", role: "web-lektor", model, system: withSupportSkill("web-lektor", system), user }, signal)).json;
+    } catch (error) {
+      if (!(error instanceof StepModelError) || signal?.aborted) throw error;
+      failures.push(`${index === 0 ? "" : "tartalék "}${model}: ${reason(error)}`);
+      if (index + 1 < chain.length) {
+        logger.warn(`[WEB-RESEARCH] A lektor (${model}) hibázott: ${reason(error)} → tartalék: ${chain[index + 1]}`);
+        continue;
+      }
+      // Spec 2026-09-25 (élő futás f8c62334): a tartalék hibája eddig elveszett — minden tag hibája látszik.
+      if (index === 0) throw error;
+      logger.error(`[WEB-RESEARCH] A tartalék lektor (${model}) is hibázott: ${reason(error)}`);
+      throw new StepModelError("lektor", "a szolgáltató hibát jelzett", { cause: new Error(failures.join("; ")) });
     }
   }
+  throw new StepModelError("lektor", "a szolgáltató hibát jelzett", { cause: new Error("A lektor-lánc üres.") });
 };
 /** Spec 2026-09-19: on a re-review the previous verdict is input; subjective criteria must converge. */
 export const REVIEW_CONVERGENCE_RULE = `KONVERGENCIA-SZABÁLY (javítókör utáni újraellenőrzés): a previousReview a megelőző lektorálás ugyanerre a tananyagra. Előbb ellenőrizd, hogy az ott felsorolt hibajegyek javítva vannak-e; a javítottakat ne emeld újra, a javítatlant ugyanazzal a hibajeggyel jelezd. ÚJ hibajegyet csak tényhiba (factual_error), forrásellentmondás (source_conflict), nem igazolható állítás (unsupported_claim), a kért téma hiányzó tanítása (missing_teaching) vagy tanítatlan tudásra épülő kérdés (question_grounding) miatt emelj. Korábban nem jelzett explanation_depth vagy age_and_added_value kifogást ne vezess be olyan fejezetre, amelyet az előző kör nem kifogásolt: a mélység és a pedagógiai többlet megítélése nem változhat körönként. Ha minden korábbi hibajegy javítva van és nincs új blokkoló tényhiba, minden check passed=true.`;

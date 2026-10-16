@@ -224,7 +224,7 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
   const outcome = await runToolWorkflow({ mode: "map", owner: req.user!.id, request: { files: parsed.data.files.map((f) => [f.name, f.kind, f.content.length]), title: parsed.data.title ?? null } }, async () => {
   await workflowPhase("source");
   await workflowPhase("scope");
-  const inferred=await inferOneStepScope(parsed.data,files=>callScopeModel(files,resolveStudioModel("ocr")));
+  const inferred=await inferOneStepScope(parsed.data,files=>callScopeModel(files,resolveStudioModel("scope")));
   if(!inferred.ok){
     await workflowFinding("scope_classification");
     throw new ScopeNotRecognized();

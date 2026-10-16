@@ -49,6 +49,10 @@ const SERVER_ORIGIN_GUARDED: { prefix: string; why: string }[] = [
     prefix: "/api/material-result",
     why: "a tananyag-iframe-ből jön, nincs tokenje",
   },
+  {
+    prefix: "/api/lessons/arbiter",
+    why: "Tételgyár T7: nyilvános döntőbíró, munkamenet-jogosultság nélkül; a HTML-lecke iframe-je is hívja (routes.ts Origin-allowlist + saját IP-korlát)",
+  },
 ];
 
 function walk(dir: string): string[] {

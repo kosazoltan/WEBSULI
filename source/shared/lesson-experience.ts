@@ -10,8 +10,13 @@ export const COMPACT_LESSON_METHOD_VERSION = "fusion-7.4-3" as const;
 export const LESSON_METHOD_VERSION = "fusion-7.4-4" as const;
 export const isFusionMethodVersion = (value: unknown) => value === LESSON_METHOD_VERSION || value === COMPACT_LESSON_METHOD_VERSION || value === PREVIOUS_LESSON_METHOD_VERSION || value === LEGACY_LESSON_METHOD_VERSION;
 export const LESSON_BANK_SIZES = { tasks: 45, taskRound: 15, quiz: 75, quizRound: 25 } as const;
-/** Spec 2026-09-29-limit-banktetel-kivetel (5. döntés): tartalék, hogy a kapu a hibás tételt a minimum megsértése nélkül kivehesse. */
-export const LESSON_BANK_RESERVE = { tasks: 3, quiz: 5 } as const;
+/**
+ * Spec 2026-09-29-limit-banktetel-kivetel (5. döntés): tartalék, hogy a kapu a hibás tételt a minimum megsértése nélkül kivehesse.
+ * Tulajdonosi döntés 2026-10-15 (Tételgyár T1, D1): 130% — a tartalék a TÉNYLEGES minimum 30%-a, legalább ennyi (45 × 0,3 → 14; 75 × 0,3 → 23);
+ * a hibás tétel kivétel útján esik ki (csomagnál a mentő kivétel, a kapunál a limit-kivétel), javítókör nélkül.
+ */
+export const LESSON_BANK_RESERVE = { tasks: 14, quiz: 23 } as const;
+export const LESSON_BANK_RESERVE_RATIO = 0.3;
 export const METHOD_KINDS = ["prediction", "gate", "myth", "sorting", "causeEffect", "conflict", "selfCheck", "popup", "timeline", "analogy"] as const;
 // Spec 2026-09-20 (színes tananyag): a 8 vizuális világ (shared/lesson-visuals.ts) a témák közé
 // került; a régi 6 a már közzétett leckék miatt marad.
@@ -86,8 +91,9 @@ export const experiencePacketSchema = z.object({
   // Spec 2026-09-24: lecke-szintű különlegességek (kód választja, a modell nem írja).
   flair: z.array(z.enum(LESSON_FLAIRS)).max(4).optional(),
   methods: z.array(methodSchema).min(1).max(160),
-  tasks: z.array(openTaskSchema).min(1).max(480),
-  quiz: z.array(experienceQuizSchema).min(2).max(960),
+  // Review #226 (P2): a 130%-os tartalék a legnagyobb tervnél (80 egység × 6 fogalom) 624 / 1248 — a korlát ehhez emelve (régi leckék érvényesek).
+  tasks: z.array(openTaskSchema).min(1).max(640),
+  quiz: z.array(experienceQuizSchema).min(2).max(1280),
   bankPlan: bankPlanSchema.optional(),
   language: z.string().regex(/^[a-z]{2}-[A-Z]{2}$/).optional(),
   glossary: z.array(glossaryEntrySchema).max(100).default([]),
@@ -259,7 +265,7 @@ export const LESSON_METHOD_CONTRACT = `KÖZÖS TANANYAGMÓDSZER: ${LESSON_METHOD
 ${LESSON_QUALITY_CONTRACT}
 Minden készítési és javítási út ugyanazt a pedagógiai élményt adja:
 Kötelező 7.4 minimum: legalább 45 különböző, pontozott szöveges feladat és 75 kvízkérdés, körönként 15 feladat és 25 kvíz. Mind a tíz kognitív módszertípus és legalább két különböző kapukérdés szerepeljen. Rövid forrásnál a tanított tartalom érdemben különböző alkalmazásait kérdezd; új tényt, sorszámozott ismétlést vagy tanítatlan tölteléket ne találj ki. Elégtelen forrás esetén jelezd a konkrét hiányt.
-1. Tananyag: a teljes forrás mély, érthető feldolgozása látható fejezetkártyákon; definíció, levezetett példa, fejezetenként összefoglalás és legalább egy érdemi ábra.
+1. Tananyag: a témához tartozó teljes forrás tömör, érthető feldolgozása látható fejezetkártyákon (minden fogalom egyszer, töltelék és ismétlés nélkül); definíció, levezetett példa, fejezetenként rövid összefoglalás és legalább egy érdemi ábra.
 2. Bankterv: fejezetenként a ténylegesen tanított fogalmak, ábécé szerint rendezett ID-kkel, legfeljebb hatfogalmas csomagokban. Csomagonként legalább két különböző módszer; a teljes leckében mind a tíz kötelező: prediction, gate, myth, sorting, causeEffect, conflict, selfCheck, popup, timeline, analogy. Csak valódi interakcióval, saját kérdéssel és magyarázattal. A kapukérdés a módszeren belül vezessen tovább; a teljes tanítás elérhető maradjon.
 3. Feladatok: csomagonként fogalmanként egy nyílt kérdés, de legalább kettő; az összes fogalmat fedje. Legalább egy szóbeli és egy írásos. required szinonimacsoportok, bonus, minWords, needsSentence, sample. Minden saját mintaválasz teljes pontot érjen; üres válasz nulla, részválasz fél pont. Nem kulcsszóvadászat.
 4. Kvíz: fogalmanként legalább egy felidéző (intent=recall) és egy alkalmazó (intent=apply) kérdés; kérdésenként egy fogalom. 3 vagy 4 különböző válasz, egy helyes és mindegyikhez magyarázat. Első válasz pontozása, válaszcserével nem szerezhető új pont. A teljes bank elérhető; bankPlan: {units:[{sectionIndex,conceptIds}],taskRound:15,quizRound:25}. A fiatalabbaknál egy kérdés látszik egyszerre, de a teljes 15/25 kör elérhető marad.

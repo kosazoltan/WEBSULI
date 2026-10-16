@@ -4,8 +4,8 @@ import { HTML_LESSON_DATA_ID, HTML_LESSON_DATA_CONTRACT } from "../../shared/les
 import { methodSchema, openTaskSchema, experienceQuizSchema, scoringVersionFor } from "../../shared/lesson-experience";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { resolveStudioModel } from "../ai/models";
-import { createStudioProvider } from "../ai/studio-provider";
-import { callStepModel } from "./run-step";
+import { createStudioProvider, crossFamilyFallbackOptions } from "../ai/studio-provider";
+import { callStepModelWithFallback } from "./run-step";
 import { withSupportSkill } from "./support-skills";
 
 const item = z.object({ id: z.string().min(1) }).passthrough();
@@ -14,8 +14,8 @@ const rawBank = z.object({ experience: z.object({
 }).passthrough() }).passthrough();
 const patchSchema = z.object({
   methods: z.array(methodSchema).max(160).optional(),
-  tasks: z.array(openTaskSchema).max(480).optional(),
-  quiz: z.array(experienceQuizSchema).max(960).optional(),
+  tasks: z.array(openTaskSchema).max(640).optional(),
+  quiz: z.array(experienceQuizSchema).max(1280).optional(),
 }).strict();
 
 /** DOM locations exclude script-like text in comments and preserve every other HTML byte. */
@@ -54,10 +54,14 @@ export function applyWebBankPatch(html: string, patch: unknown): string {
   return html.slice(0, start) + JSON.stringify(data).replace(/</g, "\\u003c") + html.slice(end);
 }
 
+/** Spec 2026-10-14-tartalek-b-szelet: a webes bankjavító ellentétes családú tartalékkal (medium). */
 const repairCall = async (system: string, user: string, signal?: AbortSignal) => {
   const model = resolveStudioModel("author");
   const deadline = AbortSignal.timeout(180_000);
-  return (await callStepModel(createStudioProvider(model, 180_000, 12_000), { step: "author", role: "web-repair", model, system: withSupportSkill("web-repair", system), user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
+  return (await callStepModelWithFallback({ step: "author", role: "web-repair", model, system: withSupportSkill("web-repair", system), user }, {
+    providerFactory: (m, _step, o) => createStudioProvider(m, 180_000, 12_000, crossFamilyFallbackOptions(m, o?.fallback)),
+    signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+  })).json;
 };
 export async function repairWebLessonBank(html: string, options: {
   call?: typeof repairCall; signal?: AbortSignal;

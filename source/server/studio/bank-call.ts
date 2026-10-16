@@ -1,5 +1,5 @@
-import { AIProviderTimeoutError, type IAIProvider, type ResponseFormatJsonSchema } from "../ai/AIProvider";
-import { BANK_RESCUE_MODEL, FALLBACK_MODELS, providerForModel, resolveStudioModel } from "../ai/models";
+import { AIProviderError, AIProviderTimeoutError, type IAIProvider, type ResponseFormatJsonSchema } from "../ai/AIProvider";
+import { BANK_RESCUE_MODEL, fallbackModelFor, providerForModel, resolveStudioModel } from "../ai/models";
 import { PACKET_ATTEMPTS, RetryableBankCallError } from "./experience-builder";
 import { callStepModel, StepModelError, type StepCallResult } from "./run-step";
 
@@ -15,7 +15,7 @@ import { callStepModel, StepModelError, type StepCallResult } from "./run-step";
  */
 export function bankModelForAttempt(attempt: number): string {
   return attempt >= PACKET_ATTEMPTS ? BANK_RESCUE_MODEL
-    : attempt === PACKET_ATTEMPTS - 1 ? (FALLBACK_MODELS.bank ?? resolveStudioModel("bank"))
+    : attempt === PACKET_ATTEMPTS - 1 ? (fallbackModelFor("bank") ?? resolveStudioModel("bank"))
     : resolveStudioModel("bank");
 }
 
@@ -25,9 +25,20 @@ export function bankProviderStep(attempt: number): "author" | "bank" {
 }
 
 /**
+ * Spec 2026-10-14-folytatas-mentett-reszekbol: a szolgáltató átmeneti szerverhibája (HTTP 5xx) — a hiba saját `status`
+ * mezője vagy az `AIProviderError.originalError` státusza.
+ */
+function isServerError(cause: unknown): boolean {
+  const statusOf = (value: unknown) => (value && typeof value === "object" ? (value as { status?: unknown }).status : undefined);
+  const status = statusOf(cause) ?? (cause instanceof AIProviderError ? statusOf(cause.originalError) : undefined);
+  return typeof status === "number" && status >= 500 && status <= 599;
+}
+
+/**
  * Model-output failure (length limit / empty / not JSON: no provider cause) → the next attempt on the
  * next model. Mérve (4. mérés): an időtúllépés a modell lassúsága (elfajult, 24k-ig futó válasz) — ez is a
- * következő kísérleté. Other provider failures (429/5xx/key) keep their cause and fail the run once (resume path).
+ * következő kísérleté. Spec 2026-10-14 (élő: [OpenAI] 500): az átmeneti 5xx is a következő kísérleté. Other provider
+ * failures (429/quota/key/status-less) keep their cause and fail the run once (resume path).
  */
 export async function callBankPacketModel(provider: IAIProvider, model: string, system: string, user: string, signal?: AbortSignal, extra?: { responseFormat?: ResponseFormatJsonSchema }): Promise<StepCallResult> {
   try {
@@ -37,8 +48,9 @@ export async function callBankPacketModel(provider: IAIProvider, model: string, 
     return await callStepModel(provider, { step: "animator", role: "bank", model, system, user, ...(responseFormat ? { responseFormat } : {}) }, signal);
   } catch (error) {
     const timedOut = error instanceof StepModelError && error.cause instanceof AIProviderTimeoutError;
-    if (error instanceof StepModelError && (!error.cause || timedOut)) {
-      throw new RetryableBankCallError(`${model}: ${error.message}${timedOut ? " (időtúllépés)" : ""}`, { cause: error });
+    const serverError = error instanceof StepModelError && isServerError(error.cause);
+    if (error instanceof StepModelError && (!error.cause || timedOut || serverError)) {
+      throw new RetryableBankCallError(`${model}: ${error.message}${timedOut ? " (időtúllépés)" : serverError ? " (szolgáltatói 5xx)" : ""}`, { cause: error });
     }
     throw error;
   }

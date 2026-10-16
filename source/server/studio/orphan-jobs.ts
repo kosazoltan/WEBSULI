@@ -62,10 +62,13 @@ export type SweepDecision = "leave" | "resume" | "close";
 export function sweepDecision(row: SweepRow, now: number, boot: boolean): SweepDecision {
   if (TERMINAL_STATUSES.has(row.status)) return "leave";
   if (row.leaseUntil && row.leaseUntil.getTime() > now) return "leave";
-  if (row.runId && row.owner && row.runState === "running" && row.executions < AUTO_RESUME_MAX_EXECUTIONS) return "resume";
+  // Mért hiba 2026-10-15 (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md, térkép 3f39ab9b): a halott folyamat futása a tárban
+  // `interrupted` (running + lejárt lízing) — ezt is folytatni kell, különben induláskor lezárás, futás közben örök `running` lett belőle.
+  const resumable = row.runState === "running" || row.runState === "interrupted";
+  if (row.runId && row.owner && resumable && row.executions < AUTO_RESUME_MAX_EXECUTIONS) return "resume";
   // Review #191 (spec-változás): lejárt lízing + futó workflow + elfogyott keret → senki nem hajtja (a heartbeat halott),
   // ezért futás közben is lezárjuk — különben a job örökre `running` maradna.
-  if (row.runId && row.runState === "running" && row.executions >= AUTO_RESUME_MAX_EXECUTIONS) return "close";
+  if (row.runId && resumable && row.executions >= AUTO_RESUME_MAX_EXECUTIONS) return "close";
   // Nem folytatható (nincs futás, megállt, várakozik): induláskor a régi lezárás (különben a #183-as örök poll
   // visszatérne); futás közben nem nyúlunk hozzá — élő folyamat hajthatja.
   return boot ? "close" : "leave";

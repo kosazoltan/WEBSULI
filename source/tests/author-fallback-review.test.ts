@@ -22,7 +22,11 @@ test("R1: a webes szerzői kísérlet modellje — első az elsődleges, a javí
 test("R1: a webes HTML-út a szerzői providert a kísérlet szerinti modellel hozza létre", () => {
   const src = readFileSync(new URL("../server/studio/web-research-runner.ts", import.meta.url), "utf8");
   // Review #190 (dokumentált változás): a hívás streamelt és modellenkénti effortot kap (webAuthorCall); a kísérlet-függő modell marad.
-  assert.match(src, /const model = webAuthorModelForAttempt\(attempts, authorModel, authorFallback\);[\s\S]{0,200}webAuthorCall\(model\)/, "a szerzői hívás a kísérlet-függő modellt használja");
+  // Spec-változás 2026-10-14 (ellentétes családú tartalék): `let` — tartalékválasznál a változó a ténylegesen író modellt veszi fel
+  // (a webes lektor-lánc a HTML szerzője szerint választ); a kísérlet-függő hívás változatlan.
+  assert.match(src, /let model = webAuthorModelForAttempt\(attempts, authorModel, authorFallback\);[\s\S]{0,200}webAuthorCall\(model\)/, "a szerzői hívás a kísérlet-függő modellt használja");
+  assert.match(src, /response = await webAuthorCall\(authorFallback\);\s*model = authorFallback;/, "tartalékválasznál a szerző a tartalék");
+  assert.match(src, /return \{ html: produced, authorModel: model \}/, "a kész HTML a szerzőjével kerül a checkpointba");
   assert.match(src, /const webAuthorCall = \(m: string\) => \{\s*const provider = createStudioProvider\(m, PHASE_TIMEOUT_MS, MAX_TOKENS,/, "a provider a kapott (kísérlet-függő) modellel készül");
   assert.doesNotMatch(src, /createStudioProvider\(authorModel, PHASE_TIMEOUT_MS, MAX_TOKENS\)/, "nincs rögzített szerzőmodell");
 });

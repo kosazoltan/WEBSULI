@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ANSWER_KEY_SYSTEM } from "../server/studio/answer-key-writer";
+import { QUIZ_BLIND_SYSTEM } from "../server/studio/quiz-blind-check";
 
 import {
   PIPELINE_PROMPT_VERSION,
@@ -9,19 +11,23 @@ import {
   runPipelineStep,
   retryTimedOutLektor,
   retryFailedBankBuild,
+  retryFailedGate,
+  retryWithAuthorRepair,
+  retryAfterRestart,
   startJobFromMap,
   type JobPatch,
   type JobView,
   type MapMeta,
   type PipelineStore,
 } from "../server/studio/step-runner";
-import { recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
+import { draftSummaryOf, recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
+import { failureFingerprint, planRecovery, type RecoveryStep } from "../server/studio/recovery-planner";
 import { computeStepHash, MAX_AUTHOR_ROUNDS, MAX_BANK_ONLY_ROUNDS } from "../server/studio/pipeline";
 import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
 import { withRoleSkill } from "../server/studio/role-skills";
 import { visualWorld } from "../shared/lesson-visuals";
 import { fromMapBody } from "../server/studio/from-map-body";
-import { AIProviderTimeoutError, type AIMessage, type IAIProvider } from "../server/ai/AIProvider";
+import { AIProviderError, AIProviderTimeoutError, type AIMessage, type IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
 import { lessonSchema, type Block, type Lesson } from "../shared/lesson-schema";
 import { experienceProblems } from "../shared/lesson-experience-validation";
@@ -72,6 +78,148 @@ test("bank resume requires the exact failed workflow visit and retains checkpoin
   assert.equal(job.step, "done");
 });
 
+test("spec 2026-10-15 (D4): a kapu bank-eredetű megállása a mentett leckéből a kapu újrafuttatásával folytatható", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[7]: Mi hamis: a rubrika nem ellenőrzi a sorrendet.";
+  const output = { lesson: standardFusionFixture(), experienceCheckpoint: { hash: "fusion-7.4-4", parts: { complete: { preserved: true } } } };
+  const seed = () => deps.store.seed({ id: "gate-retry", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: structuredClone(output) });
+  const visit = { step: "gate", state: "error", error };
+  for (const invalid of [undefined, { ...visit, step: "lektor" }, { ...visit, step: "animator" }, { ...visit, state: "running" }, { ...visit, error: "different" }]) {
+    seed();
+    await assert.rejects(retryFailedGate("gate-retry", invalid, deps), /kapuhiba folytatható/);
+    assert.equal(deps.store.jobs.get("gate-retry")!.step, "error");
+  }
+  seed();
+  deps.store.jobs.get("gate-retry")!.output!.htmlFileId = "published";
+  await assert.rejects(retryFailedGate("gate-retry", visit, deps), /nem publikált/);
+  seed();
+  const other = "A fúziós módszer kapuja elutasította a leckét: x";
+  deps.store.jobs.get("gate-retry")!.error = other;
+  await assert.rejects(retryFailedGate("gate-retry", { ...visit, error: other }, deps), /kapuhiba/);
+  seed();
+  await retryFailedGate("gate-retry", visit, deps);
+  const job = deps.store.jobs.get("gate-retry")!;
+  assert.equal(job.step, "gate"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
+  // Elakadás-vezérlő V3 (dokumentált változás): a kimenet a vezérlő naplóját is viszi.
+  const { recovery: gateLog, ...gateRest } = job.output as Record<string, unknown>;
+  assert.deepEqual(gateRest, { ...output, previousGateError: error, gateRecoveryAttempt: 1 }, "a lecke és a kész csomagok változatlanok");
+  assert.deepEqual((gateLog as Array<{ strategy: string }>).map((h) => h.strategy), ["gate"]);
+  job.step = "error"; job.status = "error"; job.error = error;
+  await retryFailedGate("gate-retry", visit, deps);
+  assert.equal(job.output!.gateRecoveryAttempt, 2);
+  assert.equal(deps.calls.length, 0, "a folytatás előkészítése modellhívás nélkül");
+  job.output!.gateRecoveryAttempt = -1; job.step = "error"; job.status = "error"; job.error = error;
+  await assert.rejects(retryFailedGate("gate-retry", visit, deps), /sorszám/);
+});
+
+test("spec 2026-10-15-tetelgyar T0.4: a lektor-bizonyíték eltérése a lektor újrafuttatásával folytatható (a kör nem nő)", async () => {
+  const deps = makeDeps("{}");
+  const error = "A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges. (a lektorált bemenet eltér a mostanitól)";
+  const output = { lesson: standardFusionFixture() };
+  deps.store.seed({ id: "review-retry", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: structuredClone(output) });
+  await retryFailedGate("review-retry", { step: "gate", state: "error", error }, deps);
+  const job = deps.store.jobs.get("review-retry")!;
+  assert.equal(job.step, "lektor"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
+  const { recovery: reviewLog, ...reviewRest } = job.output as Record<string, unknown>;
+  assert.deepEqual(reviewRest, { ...output, previousGateError: error, gateRecoveryAttempt: 1 });
+  assert.deepEqual((reviewLog as Array<{ strategy: string }>).map((h) => h.strategy), ["review"], "a vezérlő naplója (V3)");
+  assert.equal(deps.calls.length, 0);
+});
+
+test("Tételgyár T1b: az ismételt bank-eredetű kapuhiba a bankot újraépíti (animator/pending, a tanítás és a kör változatlan)", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[7]: x (kivétel után: c4: hiányzó recall kvíz.)";
+  const output = { lesson: standardFusionFixture(), gateRecoveryAttempt: 1, experienceCheckpoint: { hash: "fusion-7.4-4", parts: { old: { preserved: true } } } };
+  deps.store.seed({ id: "rebuild", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: structuredClone(output) });
+  // Elakadás-vezérlő V3: a teljes újraépítés kifejezett stratégiával (a tervező a lépcsőn előbb a célzottat választaná — lent külön teszt).
+  await retryFailedGate("rebuild", { step: "gate", state: "error", error }, deps, "rebuild-full");
+  const job = deps.store.jobs.get("rebuild")!;
+  assert.equal(job.step, "animator"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
+  const { experience: _old, ...teaching } = output.lesson;
+  // Review #230 (P1): a régi bank és a csomag-gyorsítótár érvénytelenítve — az animátor nem hozhatja vissza ugyanazt a bankot.
+  const { recovery: rebuildLog, ...rebuildRest } = job.output as Record<string, unknown>;
+  assert.deepEqual(rebuildRest, { lesson: teaching, previousGateError: error, gateRecoveryAttempt: 2, bankRebuild: true });
+  assert.deepEqual((rebuildLog as Array<{ strategy: string }>).map((h) => h.strategy), ["gate", "rebuild-full"], "a régi mezőkből visszafejtett kapu + az új lépés");
+  assert.deepEqual((job.output!.lesson as { sections: unknown }).sections, output.lesson.sections, "a tanítás megmarad");
+  assert.equal(deps.calls.length, 0);
+});
+
+test("elakadás-vezérlő V2: a tervező a kapu után a CÉLZOTT újraépítést választja — csak a hibás fejezet csomagja kerül ki", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture();
+  const t0 = lesson.experience!.tasks[0] as { sectionIndex: number };
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[0]: x";
+  const parts = { bad: { tasks: [{ sectionIndex: t0.sectionIndex }] }, good: { tasks: [{ sectionIndex: t0.sectionIndex + 100 }] } };
+  deps.store.seed({ id: "targeted", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error,
+    output: { lesson, gateRecoveryAttempt: 1, experienceCheckpoint: { hash: "fusion-7.4-4", parts }, choiceFlags: [{ path: "experience.tasks[0]", message: "régi" }] } });
+  await retryFailedGate("targeted", { step: "gate", state: "error", error }, deps);
+  const job = deps.store.jobs.get("targeted")!;
+  const out = job.output as Record<string, unknown>;
+  assert.equal(job.step, "animator");
+  assert.equal(out.bankRebuild, "targeted");
+  assert.deepEqual(out.rebuiltSections, [t0.sectionIndex]);
+  assert.deepEqual(Object.keys((out.experienceCheckpoint as { parts: object }).parts), ["good"], "a jó fejezet csomagja megmarad");
+  assert.equal(out.choiceFlags, undefined, "a régi sorszámú jelzések törlődnek");
+  assert.equal((out.lesson as { experience?: unknown }).experience, undefined);
+  assert.deepEqual((out.recovery as Array<{ strategy: string }>).map((h) => h.strategy), ["gate", "rebuild-targeted"]);
+});
+
+test("review #234 (P1): kimerült lépcsőnél a kézi folytatás elutasít — nem alakítja át tulajdonosi döntést újraépítéssé", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[0]: x";
+  const key = "bank-floor|tasks[0]|";
+  const used = ["gate", "rebuild-targeted", "rebuild-full", "author-repair", "remanufacture"].map((strategy) => ({ strategy, fingerprint: key, failing: 1, at: 0 }));
+  deps.store.seed({ id: "exhausted", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: { lesson: standardFusionFixture(), recovery: used } });
+  await assert.rejects(retryFailedGate("exhausted", { step: "gate", state: "error", error }, deps), /nem a mentett részekből indul: a program minden saját megoldást kipróbált/);
+  assert.equal(deps.store.jobs.get("exhausted")!.step, "error", "a job érintetlen");
+});
+
+test("elakadás-vezérlő V4.1: célzott szerzői javítás — csak a hibás fejezetek, a kapu meglévő útján (targetedGate + output.gate)", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture();
+  const t0 = lesson.experience!.tasks[0] as { sectionIndex: number };
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[0]: Mi hamis: a rubrika nem ellenőrzi a sorrendet. (kivétel után: x)";
+  deps.store.seed({ id: "author-fix", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error,
+    output: { lesson, experienceCheckpoint: { hash: "h", parts: { p: {} } }, choiceFlags: [{ path: "experience.tasks[0]", message: "régi" }] } });
+  await retryWithAuthorRepair("author-fix", { step: "gate", state: "error", error }, deps);
+  const job = deps.store.jobs.get("author-fix")!;
+  const out = job.output as Record<string, unknown> & { gate: { ok: boolean; arc: Array<{ sectionIdx: number }>; reasons: string[] } };
+  assert.equal(job.step, "author"); assert.equal(job.status, "pending"); assert.equal(job.round, 3, "a következő (javító) kör");
+  assert.equal(out.gate.ok, false);
+  assert.deepEqual(out.gate.arc, [{ sectionIdx: t0.sectionIndex }]);
+  assert.match(out.gate.reasons[0], /tanítása alapján a gyakorlóbank nem építhető fel hibátlanul: Mi hamis: a rubrika nem ellenőrzi a sorrendet\./);
+  assert.doesNotMatch(out.gate.reasons[0], /kivétel után/);
+  assert.ok((out.repairLedger as { targetedGate?: { used: number } }).targetedGate?.used === 1, "a javítás a kapu főkönyvéből");
+  assert.equal(out.experienceCheckpoint, undefined, "a bank úgyis újraépül");
+  assert.equal(out.choiceFlags, undefined);
+  assert.deepEqual((out.recovery as Array<{ strategy: string }>).map((h) => h.strategy), ["author-repair"]);
+  assert.equal(deps.calls.length, 0);
+});
+
+test("elakadás-vezérlő V4.1: fejezethez nem köthető hibánál a szerzői javítás elutasít", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: (kivétel után: Legalább 45 szöveges feladat és 75 kvízkérdés szükséges.)";
+  deps.store.seed({ id: "author-none", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: { lesson: standardFusionFixture() } });
+  await assert.rejects(retryWithAuthorRepair("author-none", { step: "gate", state: "error", error }, deps), /nincs fejezethez köthető hiba/);
+});
+
+test("review #237: a nem végrehajtható szerzői javítás felhasználtként naplózódik, a tervező a következő fokra lép", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: (kivétel után: Legalább 45 szöveges feladat és 75 kvízkérdés szükséges.)";
+  const fp = failureFingerprint(error);
+  const earlier = (["gate", "rebuild-targeted", "rebuild-full"] as const).map((strategy) => ({ strategy, fingerprint: fp.key, failing: fp.failing, at: 0 }));
+  assert.equal(planRecovery({ error, history: earlier }).strategy, "author-repair", "a lépcső a szerzői javításnál tart");
+  deps.store.seed({ id: "author-skip", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: { lesson: standardFusionFixture(), recovery: earlier } });
+  await assert.rejects(retryWithAuthorRepair("author-skip", { step: "gate", state: "error", error }, deps), /a fok kimarad; a következő lépés: a tananyag ugyanabból a forrásból teljesen újra készül/);
+  const job = await deps.store.loadJob("author-skip");
+  assert.equal(job?.status, "error", "a job hibás állapotú marad");
+  assert.ok(job?.output?.lesson, "a mentett lecke megmarad");
+  const recovery = (job?.output as { recovery?: RecoveryStep[] }).recovery ?? [];
+  assert.equal(recovery.at(-1)?.strategy, "author-repair");
+  assert.equal(planRecovery({ error, history: recovery }).strategy, "remanufacture");
+  assert.equal(deps.calls.length, 0);
+});
+
 test("bank resume recognizes redacted long errors but rejects malformed retry state", async () => {
   const deps = makeDeps("{}");
   const error = 'A(z) "author" lépés modellhívása hibára futott: https://example.invalid/request ' + "provider detail ".repeat(200);
@@ -104,6 +252,21 @@ test("bank resume reaches the provider with a new request while keeping teaching
   assert.deepEqual(deps.store.jobs.get("bank-fresh")!.output, saved);
 });
 
+test("review #230 (P1): újraépítés után az animátor valóban a modelltől kér bankot (nem a gyorsítótárból hozza vissza a régit)", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[7]: x";
+  deps.store.seed({ id: "rebuild-call", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error,
+    output: { lesson, methodVersion: "fusion-7.4-4", gateRecoveryAttempt: 1 } });
+  await retryFailedGate("rebuild-call", { step: "gate", state: "error", error }, deps);
+  const messages: AIMessage[][] = [];
+  deps.providerFactory = () => ({ name: "stub", model: "stub", isAvailable: async () => true,
+    chat: async (input: AIMessage[]) => { messages.push(input); throw new Error("provider unavailable"); },
+  } as unknown as IAIProvider);
+  await runPipelineStep("rebuild-call", deps);
+  assert.ok(messages.length >= 1, "a bank újraépítése modellhívással indul");
+});
+
 test("mért hiba 2026-09-19 (run 45233b4b): hosszkorlátos bankválasz után a következő kísérlet fut, nem hal meg a lépés", async () => {
   const deps = makeDeps("{}");
   const lesson = standardFusionFixture(); lesson.mapId = "m1";
@@ -112,7 +275,8 @@ test("mért hiba 2026-09-19 (run 45233b4b): hosszkorlátos bankválasz után a k
   deps.store.seed({ id: "bank-length", mapId: "m1", step: "animator", status: "pending", output: { lesson: teaching, methodVersion: "fusion-7.4-4" } });
   const models: string[] = [];
   deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
-    chat: async () => {
+    chat: async (messages: AIMessage[]) => {
+      if (isAnswerKeyCall(messages)) return { content: '{"items":[],"choices":[]}', finishReason: "stop" };
       models.push(model);
       if (models.length === 1) return { content: '{"methods":[', finishReason: "length", usage: { promptTokens: 1, completionTokens: 24000, totalTokens: 24001 } };
       return { content: JSON.stringify({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }), finishReason: "stop" };
@@ -144,6 +308,53 @@ test("bank provider failure preserves its cause and the saved teaching without p
   assert.match(deps.store.jobs.get("bank-provider-failure")!.error!, /Request timed out after 180000ms/);
   assert.deepEqual(deps.store.jobs.get("bank-provider-failure")!.output, saved);
   assert.equal(publications, 0);
+});
+
+// Spec 2026-10-14-folytatas-mentett-reszekbol (élő hiba: job 416ad01d, [OpenAI] 500): a szolgáltatói 5xx bukott kísérlet,
+// a következő kísérlet fut — a futás nem áll meg egyetlen átmeneti szerverhibán.
+test("bank 5xx is a failed attempt: the next attempt builds the packet and the step succeeds", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const e = lesson.experience!;
+  deps.store.seed({ id: "bank-5xx", mapId: "m1", step: "animator", status: "pending", output: { lesson: { ...lesson, experience: undefined }, methodVersion: "fusion-7.4-4" } });
+  const models: string[] = [];
+  deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
+    chat: async (messages: AIMessage[]) => {
+      if (isAnswerKeyCall(messages)) return { content: '{"items":[],"choices":[]}', finishReason: "stop" };
+      models.push(model);
+      if (models.length === 1) throw new AIProviderError("OpenAI", "500 The server had an error processing your request.", true, Object.assign(new Error("server error"), { status: 500 }));
+      return { content: JSON.stringify({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }), finishReason: "stop" };
+    },
+  } as unknown as IAIProvider);
+  const result = await runPipelineStep("bank-5xx", deps);
+  assert.equal(result.ok, true, JSON.stringify(deps.store.jobs.get("bank-5xx")!.error));
+  assert.equal(models.length, 2, "az 5xx után egy új kísérlet");
+  assert.ok((deps.store.jobs.get("bank-5xx")!.output as { lesson: { experience?: unknown } }).lesson.experience, "a bank elkészült");
+});
+
+test("bank resume accepts a saved, unpublished lesson stopped by an animator provider failure", async () => {
+  const deps = makeDeps("{}");
+  const error = 'A(z) "animator" lépés modellhívása hibára futott: a szolgáltató hibát jelzett ([OpenAI] 500 The server had an error processing your request.)';
+  const output = { lesson: standardFusionFixture(), experienceCheckpoint: { hash: "fusion-7.4-4", parts: { done: { preserved: true } } } };
+  const visit = { step: "animator", state: "error", error: redactWorkflowError(new Error(error)) };
+  deps.store.seed({ id: "anim-provider", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 1, error, output: structuredClone(output) });
+  await retryFailedBankBuild("anim-provider", visit, deps);
+  const job = deps.store.jobs.get("anim-provider")!;
+  assert.equal(job.step, "animator"); assert.equal(job.status, "pending"); assert.equal(job.round, 1);
+  assert.deepEqual(job.output, { ...output, previousBankError: error, bankRecoveryAttempt: 1 });
+  assert.equal(deps.calls.length, 0, "a folytatás előkészítése nem hív modellt");
+  deps.store.seed({ id: "anim-published", mapId: "m1", lessonId: "draft", step: "error", status: "error", error, output: { ...structuredClone(output), htmlFileId: "published" } });
+  await assert.rejects(retryFailedBankBuild("anim-published", visit, deps), /nem publikált/);
+});
+
+test("one-step draft summary: saved unpublished teaching with its finished bank packets, nothing once published", () => {
+  const lesson = standardFusionFixture();
+  assert.deepEqual(draftSummaryOf({ lesson, experienceCheckpoint: { hash: "h", parts: { a: {}, b: {} } } }), { teachingSections: lesson.sections.length, savedBankPackets: 2 });
+  assert.deepEqual(draftSummaryOf({ lesson }), { teachingSections: lesson.sections.length, savedBankPackets: 0 });
+  assert.equal(draftSummaryOf({ lesson, htmlFileId: "published" }), null);
+  assert.equal(draftSummaryOf({ lesson }, true), null, "a lessons-sor már publikált, a job-output még nem tudja");
+  assert.equal(draftSummaryOf({ outline: {} }), null);
+  assert.equal(draftSummaryOf(null), null);
 });
 
 // Spec §7o (mérve, 4. mérés): a bank-hívás időtúllépése a modell lassúsága → a következő kísérlet/modell
@@ -230,7 +441,9 @@ test("teljes Studio futás: valós lépésvezérlő, jóváhagyás, bank, kapu �
   // válaszlista (és a 3 lépéshívás) a többi lépésé marad.
   let verifierCalls = 0;
   deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
-    chat: async (messages: AIMessage[]) => (messages[0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")
+    // Tételgyár T2.1 / T6.1: a bankgyártás támogató hívásai (tesztíró, kvíz-előszűrő) nem fogyasztják a sorrendi válaszlistát.
+    chat: async (messages: AIMessage[]) => isAnswerKeyCall(messages) ? { content: '{"items":[],"choices":[]}', usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } }
+      : (messages[0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")
       ? (verifierCalls++, { content: JSON.stringify({ errors: [], choices: keyedChoices(lesson), verified: openPaths(lesson) }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } })
       : { content: JSON.stringify(answers[calls++]), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } },
   } as unknown as IAIProvider);
@@ -503,10 +716,13 @@ function makeDeps(cannedResponse: string) {
   };
 
   const calls: Array<{ model: string; system: string; user: string }> = [];
+  const answerKeyCalls: string[] = [];
   const providerFactory = (model: string): IAIProvider => ({
     name: "stub",
     model,
     chat: async (messages: AIMessage[]) => {
+      // Tételgyár T2.1: a válaszkulcs-tesztíró külön (dokumentált) olcsó hívás — külön rögzítve, a `calls` a pipeline-hívásokat számolja.
+      if (isAnswerKeyCall(messages)) { answerKeyCalls.push(model); return { content: '{"items":[],"choices":[]}', usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } }; }
       calls.push({ model, system: messages[0]?.content ?? "", user: messages[1]?.content ?? "" });
       // Review R1(c) (spec „Review-javítás 2026-09-29”): az ítélet nélküli egyválasztós tétel mindig kapu-jelzés, ezért
       // a bank-ellenőr hívására a stub a helyes modell viselkedését adja: a lektorált lecke kulcsa szerinti ítéletet.
@@ -521,8 +737,14 @@ function makeDeps(cannedResponse: string) {
     isAvailable: async () => true,
   } as unknown as IAIProvider);
 
-  return { store, calls, promptNames, promptLookup, providerFactory, keyConfigured: () => true };
+  return { store, calls, answerKeyCalls, promptNames, promptLookup, providerFactory, keyConfigured: () => true };
 }
+
+/**
+ * Tételgyár T2.1 / T6.1: a bankgyártás dokumentált, külön támogató hívásai — a válaszkulcs-tesztíró és a kvíz vak előszűrője (a rendszerprompt
+ * első sora alapján, mint a bank-ellenőrnél). A stub üres eredményt ad (nincs ítélet), és a hívás nem számít bank-hívásnak.
+ */
+const isAnswerKeyCall = (messages: AIMessage[]) => [ANSWER_KEY_SYSTEM, QUIZ_BLIND_SYSTEM].some((system) => (messages[0]?.content ?? "").includes(system.split("\n")[0]));
 
 for (const repair of ["valid", "unknown-id", "invalid-schema", "provider-error"] as const) {
   test(`author concept-id repair: ${repair}`, async () => {
@@ -1322,7 +1544,7 @@ test("(q) fromMapBody: az üres törzs érvényes (a scope opcionális), a hián
  * 2026-09-09 — éles hiba: az animátor OpenRouter 429-en (rate limit) végleg elhalt,
  * pedig a FALLBACK_MODELS csak dokumentálva volt, a runner nem használta.
  * ------------------------------------------------------------------ */
-import { FALLBACK_MODELS, SECOND_FALLBACK_MODELS, modelFamily, providerForModel, resolveStudioModel } from "../server/ai/models";
+import { FALLBACK_MODELS, SECOND_FALLBACK_MODELS, lektorChainFor, modelFamily, providerForModel, resolveStudioModel } from "../server/ai/models";
 import { lektorReportSchema } from "../server/studio/step-io";
 
 function makeFailoverDeps(opts: { failModels: Set<string>; cannedResponse: string }) {
@@ -1512,9 +1734,9 @@ test("(o) author hiba esetén nincs külső modellre visszaesés", async () => {
   const primary = resolveStudioModel("author");
   const fallback = FALLBACK_MODELS.author!;
   assert.ok(fallback, "a szerzőnek van tartaléka");
-  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): a szerző tartaléka Qwen 3.8 (más család, mint a szerzőé) — a 2026-09-29-es szabály célja,
-  // a lektor függetlensége, változatlanul áll: a tartalék nem esik a lektor családjába.
-  assert.notEqual(modelFamily(fallback), modelFamily(resolveStudioModel("lektor")), "a szerző tartaléka nem a lektor családja");
+  // Spec-változás 2026-10-14 (docs/specs/2026-10-14-ellentetes-csalad-tartalek.md, tulajdonosi döntés): a szerző tartaléka GPT-6.1 Sol —
+  // a lektor függetlensége (2026-09-29) a tényleges szerzőség szerinti láncon áll: GPT-szerzőnél a lektor nem OpenAI.
+  for (const l of lektorChainFor([fallback])) assert.notEqual(modelFamily(fallback), modelFamily(l), "a szerző tartaléka nem a lektor családja");
   const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
     failModels: new Set([primary, fallback]),
     cannedResponse: CANNED_AUTHOR,
@@ -1529,9 +1751,11 @@ test("(o) author hiba esetén nincs külső modellre visszaesés", async () => {
   assert.match(outcome.reason, /Rate limit exceeded/);
 });
 
-test("(p) spec 2026-09-19 — lektor: az elsődleges modell időtúllépése után a FALLBACK_MODELS.lektor modellen fut le", async () => {
-  const primary = resolveStudioModel("lektor");
-  const fallback = FALLBACK_MODELS.lektor!;
+test("(p) spec 2026-09-19 — lektor: az elsődleges modell időtúllépése után a lektor-lánc tartalékán fut le", async () => {
+  // Spec-változás 2026-10-14: a lektor a tényleges szerzőség szerinti láncon fut; szerzőségi adat nélküli (régi) jobnál a
+  // konfigurált szerző (Claude) számít szerzőnek → gpt-6.1-sol, majd a harmadik család (Qwen).
+  const [primary, fallback] = lektorChainFor(undefined);
+  assert.equal(primary, resolveStudioModel("lektor"));
   assert.notEqual(primary, fallback);
   const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
     failModels: new Set([primary]),
@@ -2136,17 +2360,40 @@ test("review R4: telepítés előtti (skill-7.4-review-1) lektor-bizonyítékkal
 /* Spec 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md, tulajdonosi döntés): a szerző elsődleges
  * modellje GPT-6 Luna, tartaléka GPT-5.6 Terra. Élesben mérve: egyetlen érvénytelen szerzői JSON az egész
  * gyártást leállította, mert a szerzőnek nem volt tartaléka. */
+// Review #216: ha a tartalék válaszolt, a lépés további (séma-javító) újrakérése is tartalékhívás — medium effort.
+test("review #216: a szerző-tartalék séma-javító újrakérése is { fallback: true }-val megy", async () => {
+  const base = makeDeps(CANNED_AUTHOR);
+  const seen: Array<[string, boolean | undefined]> = [];
+  let solCalls = 0;
+  const providerFactory = (model: string, _step?: string, opts?: { fallback?: boolean }): IAIProvider => ({
+    name: "stub", model, isAvailable: async () => true,
+    chat: async () => {
+      seen.push([model, opts?.fallback]);
+      if (model === "claude-opus-5-5") throw new Error("[Claude] 529 overloaded");
+      solCalls += 1;
+      return { content: solCalls === 1 ? '{"title":"csak cím"}' : CANNED_AUTHOR, finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } };
+    },
+  } as unknown as IAIProvider);
+  base.store.seed({ id: "author-fallback-retry", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  const outcome = await runPipelineStep("author-fallback-retry", { ...base, providerFactory });
+  assert.equal(outcome.ok, true, JSON.stringify(outcome));
+  assert.deepEqual(seen, [["claude-opus-5-5", undefined], ["gpt-6.1-sol", true], ["gpt-6.1-sol", true]]);
+});
+
 test("spec 2026-09-29: author — GPT-6 Luna elsődleges; érvénytelen JSON után a GPT-5.6 Terra tartalék írja meg", async () => {
-  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): szerző Claude Opus 5.5, tartaléka Qwen 3.8 max-prime — a tartalék-viselkedés mércéje változatlan.
+  // Spec-változás 2026-10-14 (docs/specs/2026-10-14-ellentetes-csalad-tartalek.md): szerző Claude Opus 5.5, tartaléka GPT-6.1 Sol (medium,
+  // `{ fallback: true }`) — a tartalék-viselkedés mércéje változatlan; a lecke tényleges szerzője a jobban marad (authorModels).
   assert.equal(resolveStudioModel("author", {}), "claude-opus-5-5");
-  assert.equal(FALLBACK_MODELS.author, "qwen/qwen3.8-max-prime");
+  assert.equal(FALLBACK_MODELS.author, "gpt-6.1-sol");
   const base = makeDeps(CANNED_AUTHOR);
   const calls: string[] = [];
-  const providerFactory = (model: string): IAIProvider => ({
+  const flags: Array<boolean | undefined> = [];
+  const providerFactory = (model: string, _step?: string, opts?: { fallback?: boolean }): IAIProvider => ({
     name: "stub",
     model,
     chat: async () => {
       calls.push(model);
+      flags.push(opts?.fallback);
       const content = model === "claude-opus-5-5" ? '{"title": "Oszthatóság", "sections": [' : CANNED_AUTHOR;
       return { content, finishReason: "stop", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
     },
@@ -2157,9 +2404,12 @@ test("spec 2026-09-29: author — GPT-6 Luna elsődleges; érvénytelen JSON ut�
   const outcome = await runPipelineStep("author-fallback", { ...base, providerFactory });
 
   assert.equal(outcome.ok, true, JSON.stringify(outcome));
-  assert.deepEqual(calls, ["claude-opus-5-5", "qwen/qwen3.8-max-prime"], "előbb a szerző, érvénytelen JSON után a tartalék");
+  assert.deepEqual(calls, ["claude-opus-5-5", "gpt-6.1-sol"], "előbb a szerző, érvénytelen JSON után a tartalék");
+  assert.deepEqual(flags, [undefined, true], "csak a tartalékhívás kéri a tartalék-effortot");
   const job = await base.store.loadJob("author-fallback");
-  assert.equal((job as { model?: string | null })?.model, "qwen/qwen3.8-max-prime", "a job a ténylegesen használt modellt rögzíti");
+  assert.equal((job as { model?: string | null })?.model, "gpt-6.1-sol", "a job a ténylegesen használt modellt rögzíti");
+  assert.deepEqual(job?.output?.authorModels, ["gpt-6.1-sol"], "a lecke tényleges szerzője megmarad a lektornak");
+  assert.equal(lektorChainFor(job?.output?.authorModels as string[])[0], "qwen/qwen3.8-max-0902", "GPT-szerzőnél a lektor a harmadik család");
 });
 
 /* Spec 2026-09-29 (docs/specs/2026-09-29-tanari-temafokusz.md): a fókuszált job a kéréshez nem tartozó
@@ -2825,11 +3075,13 @@ test("review #177 (2.2b): ha a vak megoldó újrakérése hibázik, a részleges
   delete (job.output as Record<string, unknown>).blindSolutions;
   const inner = deps.providerFactory;
   let blindCalls = 0;
+  const blindModels: string[] = [];
   const providerFactory = (model: string): IAIProvider => {
     const provider = inner(model);
     return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
       if ((args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: blind-solver")) {
         blindCalls++;
+        blindModels.push(model);
         if (blindCalls === 1) return { content: JSON.stringify({ solutions: "nem tömb" }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
         throw new Error("szolgáltatói hiba az újrakérésnél");
       }
@@ -2838,12 +3090,15 @@ test("review #177 (2.2b): ha a vak megoldó újrakérése hibázik, a részleges
   };
   const run = async () => { job.step = "lektor"; job.status = "running"; await runPipelineStep("blind-retry-fail", { ...deps, providerFactory }); };
   await run(); await run();
-  assert.equal(blindCalls, 2, "részleges → egy újrakérés (ami hibázik)");
+  // Spec-változás 2026-10-14 (docs/specs/2026-10-14-tartalek-b-szelet.md): az egyetlen újrakérés az elsődlegesen, majd hibájánál
+  // a független tartalékon (a bank családján kívül: Qwen) fut — ez EGY próbálkozás két hívással.
+  assert.equal(blindCalls, 3, "részleges → egy újrakérés (ami az elsődlegesen és a tartalékon is hibázik)");
+  assert.deepEqual(blindModels, ["claude-opus-5-5", "claude-opus-5-5", "qwen/qwen3.8-max-0902"]);
   const cached = job.output?.blindSolutions as { partial?: boolean; retried?: boolean };
   assert.equal(cached.partial, true, "a részleges eredmény megmarad");
   assert.equal(cached.retried, true, "a próbálkozás ténye tartós");
   await run();
-  assert.equal(blindCalls, 2, "hibás újrakérés után nincs újabb fizetett próba");
+  assert.equal(blindCalls, 3, "hibás újrakérés után nincs újabb fizetett próba");
 });
 
 /* Spec 2026-10-05-s9-prompt-javito-orkesztrator (tulajdonosi tervezés): a modell-lánc validálási bukása után (mind a három modell
@@ -2958,4 +3213,19 @@ test("S9/4: kapcsoló KI → a szerző javító köre változatlan (nincs orkesz
   await runPipelineStep("lektor-off", deps);
   assert.ok(deps.calls.every((c) => !c.model.startsWith("deepseek/")));
   assert.ok(deps.calls.every((c) => !c.system.includes("ORKESZTRÁTOR JAVÍTÓ UTASÍTÁS")));
+});
+
+test("újraindulás utáni folytatás (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md, E2): a megszakadt lépésre áll vissza, a mentett részek megmaradnak", async () => {
+  const deps = makeDeps("{}");
+  const { ORPHAN_JOB_ERROR } = await import("../server/studio/orphan-jobs");
+  const output = { lesson: standardFusionFixture(), experienceCheckpoint: { parts: { a: { methods: [], tasks: [], quiz: [], glossary: [] } }, reviewedHashes: {} } };
+  deps.store.seed({ id: "restart", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 1, error: ORPHAN_JOB_ERROR, output });
+  await retryAfterRestart("restart", { step: "animator", state: "error" }, deps);
+  const job = deps.store.jobs.get("restart")!;
+  assert.deepEqual([job.step, job.status, job.error, job.round], ["animator", "pending", null, 1]);
+  assert.deepEqual(job.output!.experienceCheckpoint, output.experienceCheckpoint, "a kész bankcsomagok megmaradnak");
+  assert.deepEqual(job.output!.lesson, output.lesson, "a tanítás megmarad");
+  assert.equal(deps.calls.length, 0);
+  job.step = "error"; job.status = "error"; job.error = "más hiba";
+  await assert.rejects(retryAfterRestart("restart", { step: "animator", state: "error" }, deps), /Csak szerver-újraindulás miatt/);
 });

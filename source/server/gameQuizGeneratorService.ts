@@ -16,7 +16,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { and, eq } from "drizzle-orm";
 import { db } from "./db";
 import { gameQuizItems, htmlFiles } from "@shared/schema";
-import { resolveLegacyModel } from "./ai/models";
+import { crossFamilyFallback, resolveLegacyModel } from "./ai/models";
+import { logger } from "./lib/logger";
+import { createStudioProvider, crossFamilyFallbackOptions, studioModelReady } from "./ai/studio-provider";
 import { withSupportSkill } from "./studio/support-skills";
 import { cachedSystem } from "./ai/prompt-cache";
 import { validateGeneratedQuizItems } from "./gameQuizValidation";
@@ -129,40 +131,33 @@ ${truncated}
 
 Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb tudásmagjából. Csak a JSON tömböt add vissza.`;
 
-  const response = await client.messages.create({
-    model: ANTHROPIC_MODEL,
-    max_tokens: maxTokens,
-    system: cachedSystem(withSupportSkill("quiz-generator", SYSTEM_PROMPT)), // Spec 2026-10-03-gpt61-sol-kv-cache
-    messages: [{ role: "user", content: userPrompt }],
-  });
-
+  // Spec 2026-10-14-tartalek-b-szelet (B3) + review #219: a Claude-hívás szolgáltatói VAGY kimeneti hibájánál (csonka, nem JSON,
+  // nem tömb) egyszer az ellentétes családú tartalék (GPT-6.1 Sol, medium), ugyanazzal a rendszer- és felhasználói prompttal.
+  const fallbackModel = crossFamilyFallback(ANTHROPIC_MODEL);
+  const parsed = await quizItemsWithFallback(
+    async () => {
+      const response = await client.messages.create({
+        model: ANTHROPIC_MODEL,
+        max_tokens: maxTokens,
+        system: cachedSystem(withSupportSkill("quiz-generator", SYSTEM_PROMPT)), // Spec 2026-10-03-gpt61-sol-kv-cache
+        messages: [{ role: "user", content: userPrompt }],
+      });
+      if (response.stop_reason === "max_tokens") throw new Error("A Claude-válasz elérte a hosszkorlátot.");
+      const block = response.content[0];
+      if (!block || block.type !== "text") throw new Error("Claude nem adott szöveges választ.");
+      return block.text;
+    },
+    fallbackModel && studioModelReady(fallbackModel) ? async () => {
+      const response = await createStudioProvider(fallbackModel, 90_000, maxTokens, crossFamilyFallbackOptions(fallbackModel, true)).chat([
+        { role: "system", content: withSupportSkill("quiz-generator", SYSTEM_PROMPT) },
+        { role: "user", content: userPrompt },
+      ]);
+      if (response.finishReason === "length") throw new Error("A tartalék modell válasza elérte a hosszkorlátot.");
+      return response.content ?? "";
+    } : undefined,
+    (error) => logger.warn(`[QUIZ-GEN] ${ANTHROPIC_MODEL} hibázott (${error instanceof Error ? error.message.slice(0, 200) : String(error)}) → tartalék: ${fallbackModel}`),
+  );
   await workflowPhase("gate");
-  const block = response.content[0];
-  if (!block || block.type !== "text") {
-    throw new Error("Claude nem adott szöveges választ.");
-  }
-  let raw = block.text.trim();
-  // Markdown code-fence eltávolítása ha van
-  raw = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-  // Az első '[' és utolsó ']' közötti rész kiszedése (extra tartalom esetére)
-  const firstBracket = raw.indexOf("[");
-  const lastBracket = raw.lastIndexOf("]");
-  if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
-    raw = raw.slice(firstBracket, lastBracket + 1);
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    throw new Error(
-      `Claude válasz JSON-parse hiba: ${e instanceof Error ? e.message : "?"} — első 200 char: ${raw.slice(0, 200)}`,
-      { cause: e },
-    );
-  }
-  if (!Array.isArray(parsed)) {
-    throw new Error("Claude válasz nem tömb.");
-  }
 
   // 4 + 5. DEDUP + INSERT tranzakcióba csomagolva: ha bármelyik insert dob,
   // az egész rollbackel — nem maradhat deaktivált régi kvízkészlet új nélkül.
@@ -222,4 +217,39 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
   }
   return { value: result, result: { kind: "material" as const, id: materialId } };
   });
+}
+
+/** Review #219: a modellválasz kvíz-tömbbé (kerítés és körítő szöveg nélkül); hibás / nem tömb / üres → hiba. */
+export function parseQuizJsonArray(text: string): unknown[] {
+  let raw = text.trim().replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+  const firstBracket = raw.indexOf("[");
+  const lastBracket = raw.lastIndexOf("]");
+  if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) raw = raw.slice(firstBracket, lastBracket + 1);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`A kvíz-válasz JSON-parse hibás: ${e instanceof Error ? e.message : "?"} — első 200 char: ${raw.slice(0, 200)}`, { cause: e });
+  }
+  if (!Array.isArray(parsed)) throw new Error("A kvíz-válasz nem tömb.");
+  if (!parsed.length) throw new Error("A kvíz-válasz üres tömb.");
+  return parsed;
+}
+
+/**
+ * Review #219: a tartalék-határon belül a szolgáltatói ÉS a kimeneti hiba (csonka, nem JSON, nem tömb) is — a tartalék csak egyszer,
+ * és csak ha van (kulccsal). Adatbázistól független, futtatott teszttel ellenőrizve.
+ */
+export async function quizItemsWithFallback(
+  primary: () => Promise<string>,
+  fallback: (() => Promise<string>) | undefined,
+  onFallback?: (error: unknown) => void,
+): Promise<unknown[]> {
+  try {
+    return parseQuizJsonArray(await primary());
+  } catch (error) {
+    if (!fallback) throw error;
+    onFallback?.(error);
+    return parseQuizJsonArray(await fallback());
+  }
 }

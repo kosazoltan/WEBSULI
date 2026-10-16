@@ -80,7 +80,9 @@ export function auditWorkflow(view: WorkflowView): SkillAudit {
       && view.visits.every((visit, index) => {
         const step = definition.steps.find(s => s.id === visit.step);
         const previous = view.visits[index - 1];
-        return Boolean(step && (step.after.includes(previous?.step ?? "start") || (previous?.step === visit.step && previous.state !== "done")));
+        return Boolean(step && (step.after.includes(previous?.step ?? "start") || (previous?.step === visit.step && previous.state !== "done")
+          // Spec 2026-10-15-tetelgyar T0.4b: a naplózott, kifejezett folytatási visszaél (pl. kapu → lektor) igazolt átmenet.
+          || (previous?.state === "error" && (view.resumeEdges ?? []).some(e => e.from === previous.step && e.to === visit.step))));
       }),
     gate: view.visits.some(v => v.step === "gate" && v.state === "done"),
     readback: Boolean(view.result?.id && view.visits.at(-1)?.step === "readback" && view.visits.at(-1)?.state === "done"),

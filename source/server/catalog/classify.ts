@@ -42,8 +42,11 @@ export type Classification = z.infer<typeof classificationSchema>;
  * Mért (pilot): a glm-5.3-flash 4/10-szer adott használhatatlan választ (érvénytelen JSON, ill. `{"answer": {...}}` burok), a
  * deepseek-v4-flash 1/10-szer szolgáltatói hibát. A konszenzus-pár a glm-5.3-flash és az újabb deepseek-v4.1-flash
  * (OpenRouteren 2026-09-10 óta elérhető, élő listával ellenőrizve); a deepseek-v4-flash harmadik tartalék.
+ * Tulajdonosi döntés 2026-10-14 (docs/specs/2026-10-14-forras-besorolo-openai-luna.md): OpenRouter helyett saját OpenAI-kulcs.
+ * Első a gpt-6-luna (mérve high efforttal a 10 leckés kézi pilot-mércén: tantárgy 20/20, évfolyam 19/20, 0,0005 USD/hívás); a
+ * független második vélemény a gpt-6.1-sol, eltérő tantárgynál a döntő a gpt-6-sol — mind közvetlen OpenAI, mind különböző modell.
  */
-export const CLASSIFIER_MODELS = ["z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-flash"] as const;
+export const CLASSIFIER_MODELS = ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-sol"] as const;
 
 const TEXT_BUDGET = 2500;
 const SAMPLE_ITEMS = 12;

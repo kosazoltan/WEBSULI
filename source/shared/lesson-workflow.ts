@@ -52,6 +52,13 @@ export function workflowDefinition(mode: WorkflowMode): WorkflowDefinition {
       ? { ...step, after: step.id === "animator" ? [...step.after, "lektor"] : step.after, maxVisits: 4 }
     : PRODUCTION_MODES.includes(mode) && step.id === "pedagogue"
       ? { ...step, after: [...step.after, "pedagogue"], maxVisits: 3 }
+    // Tulajdonosi döntés 2026-10-15 (spec 2026-10-14-tartalek-b-szelet, B3): a HTML-okosítás kész, de a záró kapun elbukó
+    // kimenete EGYSZER a lánc ellentétes családú tartalékán újragenerálódik — a szerző (a kapu előtti kimeneti hibánál önmaga után,
+    // a kapu után) még egyszer jöhet.
+    : mode === "html" && step.id === "author"
+      ? { ...step, after: [...step.after, "author", "gate"], maxVisits: 2 }
+    : mode === "html" && step.id === "gate"
+      ? { ...step, maxVisits: 2 }
       : step) };
 }
 export type WorkflowVisit = {
@@ -67,12 +74,16 @@ export type WorkflowView = {
   result?: { kind: "candidate" | "material" | "proposal" | "map"; id: string }; revision: number;
   executions?: number;
   resourceId?: string;
+  /** Spec 2026-10-15-tetelgyar T0.4b: kifejezett folytatás egyszer használatos visszaéle (a hibás látogatás hibaként marad a naplóban). */
+  resumeEdge?: { from: string; to: string; reason: string; at: number };
+  /** T0.4b: a felhasznált kifejezett folytatási visszaélek (audit: az utóellenőrzés ezeket elfogadja, a napló igazolja). */
+  resumeEdges?: Array<{ from: string; to: string; reason: string; at: number }>;
   skill?: SkillSnapshot;
   skillFindings?: SkillFinding[];
   /** Spec 2026-09-30 (B8, H11): az „unknown” osztályú hibák redaktált szövegmintája a FUTÁS naplójában (emberi átnézésre); a tanult skillbe nem kerül. */
   unknownFindingSamples?: Array<{ step: string; fingerprint: string; text: string }>;
   /** Spec 2026-10-05-s9: a prompt-javító orkesztrátor saját kerete (pontonként és futásonként; NEM a javító kör kerete). */
-  orchestrator?: { calls: number; byPoint: Record<string, number> };
+  orchestrator?: { calls: number; byPoint: Record<string, number>; execution?: number };
   /** Spec 2026-10-05-s9 (rögzítő szelet): a bukott kísérletek kivonata (≤ 50) — az ingyenes diagnózis-próba és az A/B mérés adata. */
   failures?: Array<{ at: number; step: string; point: string; kind: string; reasons: string[]; outputHash?: string; orchestrated?: { rootCause: string; outcome: "ok" | "failed" | "skipped" } }>;
   skillAudit?: SkillAudit;
@@ -89,7 +100,8 @@ export function assertWorkflowStep(run: WorkflowView, id: string): WorkflowStep 
   if (run.state !== "running") throw new Error("Csak aktív futás léptethető tovább.");
   const step = run.definition.steps.find(s => s.id === id);
   const last = run.visits.at(-1);
-  if (last && (last.state === "error" || last.state === "waiting")) throw new Error("Befejezetlen lépés után csak annak kifejezett folytatása megengedett.");
+  const explicitResume = last?.state === "error" && run.resumeEdge?.from === last.step && run.resumeEdge.to === id;
+  if (last && (last.state === "error" || last.state === "waiting") && !explicitResume) throw new Error("Befejezetlen lépés után csak annak kifejezett folytatása megengedett.");
   const previous = run.visits.at(-1)?.step ?? "start";
   if (!step || !step.after.includes(previous)) throw new Error(`Nem megengedett folyamatlépés: ${previous} → ${id}.`);
   if (workflowVisitsLeft(run, id) <= 0) throw new Error(`Elfogyott a lépés javítási kerete: ${step.label}.`);

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, text, integer, index, uniqueIndex, boolean, timestamp, jsonb, real, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, integer, index, uniqueIndex, boolean, timestamp, jsonb, real, primaryKey, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -704,6 +704,25 @@ export type InsertLessonRow = typeof lessons.$inferInsert;
 /**
  * #170 — OCR átirat-cache (tartalom-hash + modell). Lásd server/studio/ocr.ts.
  */
+/**
+ * Tételgyár T7.1 (docs/specs/2026-10-15-tetelgyar-t7-dontobiro-vegrehajtas.md): a döntőbíró gyorsítótára — kulcs-hash → ítélet.
+ * A gyerek válaszának szövege NEM tárolódik (adatminimalizálás, tulajdonosi döntés 2026-10-15).
+ */
+export const arbiterVerdicts = pgTable("arbiter_verdicts", {
+  cacheKey: varchar("cache_key", { length: 64 }).primaryKey(),
+  state: varchar("state", { length: 8 }).notNull(),
+  score: real("score").notNull(),
+  reason: text("reason").notNull(),
+  model: varchar("model", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Tételgyár T7.1: a döntőbíró napi hívásszámlálója (a napi plafon atomi foglalásához). */
+export const arbiterDailyUsage = pgTable("arbiter_daily_usage", {
+  day: date("day").primaryKey(),
+  calls: integer("calls").notNull().default(0),
+});
+
 export const ocrTranscripts = pgTable("ocr_transcripts", {
   cacheKey: varchar("cache_key", { length: 64 }).primaryKey(),
   text: text("text").notNull(),

@@ -29,7 +29,8 @@ const targets = mode === "pilot"
   : [...byLesson.keys()];
 
 const call: ClassifyCall = async (model, system, user) => {
-  const res = await callStepModel(createStudioStepProvider(model, "topicFocus"), { step: "pedagogue", policy: "topicFocus", role: "catalog-classifier", model, system, user });
+  // review #209: a mért (high effort) beállítás saját szabályzattal — a topicFocus low effortot adott volna
+  const res = await callStepModel(createStudioStepProvider(model, "catalogClassify"), { step: "pedagogue", policy: "catalogClassify", role: "catalog-classifier", model, system, user });
   return { json: res.json, usage: { promptTokens: res.usage?.promptTokens ?? 0, completionTokens: res.usage?.completionTokens ?? 0 } };
 };
 const models = [...CLASSIFIER_MODELS];

@@ -1,0 +1,931 @@
+{
+ "date": "2026-10-15",
+ "spec": "docs/specs/2026-10-15-tetelgyar-t2-valaszkulcs-tesztek-vegrehajtas.md (T2.0)",
+ "method": "mentett bankok nyílt feladatai, tesztíró: z-ai/glm-5.3-flash (a rubrikát nem látja), valódi pontozó (evaluateOpenAnswer); DB-írás nélkül",
+ "summary": {
+  "416ad01d-271f-49ff-b860-3e32c6635dfb": {
+   "tasks": 57,
+   "tested": 57,
+   "t2Fail": 56,
+   "correctFail": 179,
+   "wrongPass": 4,
+   "lektorRubric": 8,
+   "both": 8,
+   "onlyT2": 48,
+   "onlyLektor": 0
+  },
+  "b3a7ecad-e815-4b3d-aa96-2358397b126d": {
+   "tasks": 48,
+   "tested": 48,
+   "t2Fail": 45,
+   "correctFail": 144,
+   "wrongPass": 10,
+   "lektorRubric": 5,
+   "both": 5,
+   "onlyT2": 40,
+   "onlyLektor": 0
+  },
+  "d6f5d4bc-62f6-4f71-9900-3743e0d7f0c5": {
+   "tasks": 45,
+   "tested": 45,
+   "t2Fail": 44,
+   "correctFail": 177,
+   "wrongPass": 2,
+   "lektorRubric": 9,
+   "both": 9,
+   "onlyT2": 35,
+   "onlyLektor": 0
+  },
+  "e2facc3f-051e-412a-8ea9-fe97929e85f1": {
+   "tasks": 43,
+   "tested": 43,
+   "t2Fail": 43,
+   "correctFail": 143,
+   "wrongPass": 2,
+   "lektorRubric": 1,
+   "both": 1,
+   "onlyT2": 42,
+   "onlyLektor": 0
+  }
+ },
+ "totals": {
+  "tasks": 193,
+  "tested": 193,
+  "t2Fail": 188,
+  "correctFail": 643,
+  "wrongPass": 18,
+  "lektorRubric": 23,
+  "both": 23,
+  "onlyT2": 165,
+  "onlyLektor": 0
+ },
+ "manualReview": "6 véletlen bukott tétel kézi átnézése: 5-6 valódi rubrikahiány (túl sok kötelező csoport — pl. 7 csoport, Tigris ÉS Eufrátesz külön; szó szerinti kifejezés kötelező, pl. „Egy szám osztói”; szótő-hiány: nemesítés/nemesítették, magokkal), ritka tesztíró-zaj (csonka/értelmetlen szó).",
+ "rows": [
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-c661ed0b57be7864427857da-0",
+   "q": "Írd le, milyen hasznos anyagokat tartalmaznak a gyümölcsök, és hogyan segítik ezek a szervezetet!",
+   "required": [
+    [
+     "gyümölcsök",
+     "gyümölcs"
+    ],
+    [
+     "cukortartalom",
+     "cukortartalma",
+     "cukor",
+     "cukrot",
+     "cukortartalmuk"
+    ],
+    [
+     "energia",
+     "energiát"
+    ],
+    [
+     "vitamin",
+     "vitaminok"
+    ],
+    [
+     "ásványianyag",
+     "ásványianyagok",
+     "ásványi anyag",
+     "ásványi anyagok",
+     "ásványianyag-tartalom",
+     "asvanyianyagtartalom"
+    ],
+    [
+     "rost",
+     "rostok",
+     "rosttartalmuk"
+    ],
+    [
+     "egészség",
+     "egészséget",
+     "egészségünket"
+    ]
+   ],
+   "problems": [
+    "t-c661ed0b57be7864427857da-0: válaszkulcs-teszt: a helyes válasz „A gyümölcs lédús termés, cukortartalma energiát biztosít, vitamin- és ásványianyag-tartalma meg egészségvédelmi szerepű.” nem kap teljes pontot (Részben jó. Még 2 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"rost\",\"rostok\",\"rosttartalmuk\"],[\"egészség\",\"egészséget\",\"egészségünket\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-c661ed0b57be7864427857da-0: válaszkulcs-teszt: a helyes válasz „A gyümölcs lédús termés. Cukortartalma energiát ad, rostja és vitaminjai, ásványi anyagai az egészségvédelmet biztosí…” nem kap teljes pontot (Részben jó. Még 3 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"vitamin\",\"vitaminok\"],[\"ásványianyag\",\"ásványianyagok\",\"ásványi anyag\",\"ásványi anyagok\",\"ásványianyag-tartalom\",\"asvanyianyagtartalom\"],[\"egészség\",\"egészséget\",\"egészségünket\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-c661ed0b57be7864427857da-1",
+   "q": "Szóban magyarázd el, miért hasznos gyümölcsöt enni!",
+   "required": [
+    [
+     "gyümölcsöt",
+     "gyümölcs",
+     "gyümölcsök"
+    ],
+    [
+     "cukor",
+     "cukrot",
+     "cukortartalom",
+     "cukortartalmuk"
+    ],
+    [
+     "energia",
+     "energiát"
+    ],
+    [
+     "vitamin",
+     "vitaminok"
+    ],
+    [
+     "ásványi anyag",
+     "ásványi anyagok",
+     "ásványianyag-tartalom",
+     "asvanyianyag",
+     "asvanyianyagok",
+     "asvanyianyagtartalom"
+    ],
+    [
+     "rost",
+     "rosttartalmuk"
+    ],
+    [
+     "egészség",
+     "egészségünket",
+     "egészségét"
+    ]
+   ],
+   "problems": [
+    "t-c661ed0b57be7864427857da-1: válaszkulcs-teszt: a helyes válasz „A gyümölcsökben lévő cukor energiát ad a testnek, a bennük lévő vitaminok, ásványi anyagok és rostok pedig egészségvé…” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"egészség\",\"egészségünket\",\"egészségét\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-c661ed0b57be7864427857da-1: válaszkulcs-teszt: a helyes válasz „Mert a gyümölcs lédús termés, amely cukortartalmával energiát ad, vitaminjai, ásványi anyagai és rostjai pedig az egé…” nem kap teljes pontot (A lényegi fogalmak még hiányoznak.; a rubrika fel nem ismert csoportjai: [[\"cukor\",\"cukrot\",\"cukortartalom\",\"cukortartalmuk\"],[\"vitamin\",\"vitaminok\"],[\"ásványi anyag\",\"ásványi anyagok\",\"ásványianyag-tartalom\",\"asvanyianyag\",\"asvanyianyagok\",\"asvanyianyagtartalom\"],[\"rost\",\"rosttartalmuk\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-c661ed0b57be7864427857da-2",
+   "q": "Miért évelő növény a gyümölcsfa és a szőlő?",
+   "required": [
+    [
+     "évelő",
+     "évelő növény",
+     "évelők",
+     "evelonoveny",
+     "evelo növények"
+    ],
+    [
+     "több",
+     "több éven",
+     "tobbeven"
+    ],
+    [
+     "él",
+     "élnek"
+    ],
+    [
+     "virág",
+     "virágot"
+    ],
+    [
+     "termés",
+     "termést",
+     "termések",
+     "termésüket",
+     "termésük"
+    ]
+   ],
+   "problems": [
+    "t-c661ed0b57be7864427857da-2: válaszkulcs-teszt: a helyes válasz „Évelő, mert nem egy évig él, hanem több éven át, és közben minden évben virágzik és terem.” nem kap teljes pontot (Részben jó. Még 2 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"virág\",\"virágot\"],[\"termés\",\"termést\",\"termések\",\"termésüket\",\"termésük\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-c661ed0b57be7864427857da-2: válaszkulcs-teszt: a helyes válasz „Azért évelő a gyümölcsfa és a szőlő, mert évről évre él, és virágot, valamint termést hoz.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"több\",\"több éven\",\"tobbeven\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-c661ed0b57be7864427857da-2: válaszkulcs-teszt: a helyes válasz „Mert több évig él és nem pusztul el egy szezon után, s közben virágzik és termést hoz.” nem kap teljes pontot (Részben jó. Még 2 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"évelő\",\"évelő növény\",\"évelők\",\"evelonoveny\",\"evelo növények\"],[\"virág\",\"virágot\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-c661ed0b57be7864427857da-3",
+   "q": "Hogyan ismered fel a fás szárat? Írd le a tulajdonságát, és nevezz meg egy ide tartozó növényt!",
+   "required": [
+    [
+     "fás szár",
+     "fás szárú",
+     "fasszar",
+     "fasszaru",
+     "fas szárukat"
+    ],
+    [
+     "kemény",
+     "keménység"
+    ],
+    [
+     "nehezen törik",
+     "nehezen törhető",
+     "nehezentorik",
+     "nehezentorheto"
+    ],
+    [
+     "gyümölcsfa",
+     "gyümölcsfák",
+     "szőlő",
+     "gyümölcsfákról",
+     "szőlőről",
+     "szőlőt"
+    ]
+   ],
+   "problems": [
+    "t-c661ed0b57be7864427857da-3: válaszkulcs-teszt: a helyes válasz „A fás szárú növény szára kemény, nem törik könnyen. Példa rá az almafa.” nem kap teljes pontot (Részben jó. Még 2 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"nehezen törik\",\"nehezen törhető\",\"nehezentorik\",\"nehezentorheto\"],[\"gyümölcsfa\",\"gyümölcsfák\",\"szőlő\",\"gyümölcsfákról\",\"szőlőről\",\"szőlőt\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-c661ed0b57be7864427857da-3: válaszkulcs-teszt: a helyes válasz „A fás szár tulajdonsága, hogy kemény, ezért nehezen törik. Ilyen növény a körtefa.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"gyümölcsfa\",\"gyümölcsfák\",\"szőlő\",\"gyümölcsfákról\",\"szőlőről\",\"szőlőt\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-c661ed0b57be7864427857da-3: válaszkulcs-teszt: a helyes válasz „Fás szárú növénynek kemény a szára, és nehezen törik. Például a cseresznyefa ilyen.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"gyümölcsfa\",\"gyümölcsfák\",\"szőlő\",\"gyümölcsfákról\",\"szőlőről\",\"szőlőt\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": [
+    "Bank-ellenőr: Mi hamis: a növényt kérő kötelező csoport elutasítja a tanított helyes válaszokat (almafa, szilvafa). | Bizonyíték: a tanítás szerint az almafa és a szilvafa fás szárú gyümölcsfa, de a csoport csak a gyümölcsfa és a szőlő alakjait fogadja el. | Javítás iránya: a 4. csoportba kerüljön b"
+   ]
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-c661ed0b57be7864427857da-4",
+   "q": "Mit jelent a gyümölcsfa fogalma, és hogyan kapcsolódik a fás szárhoz?",
+   "required": [
+    [
+     "gyümölcsfa",
+     "gyümölcsfák",
+     "gyümölcsfákról"
+    ],
+    [
+     "fás szárú",
+     "fás szár",
+     "fasszaru",
+     "fas szárukat",
+     "fasszar"
+    ],
+    [
+     "növény",
+     "növények"
+    ]
+   ],
+   "problems": [
+    "t-c661ed0b57be7864427857da-4: válaszkulcs-teszt: a helyes válasz „A gyümölcsfa egy fás szárú növény, aminek a szára kemény, nem törik könnyen.” nem kap teljes pontot (A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést.; a rubrika fel nem ismert csoportjai: []). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-c661ed0b57be7864427857da-4: válaszkulcs-teszt: a helyes válasz „A gyümölcsfa fás szárú, vagyis kemény, nehezen törő szára van.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"növény\",\"növények\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-c661ed0b57be7864427857da-5",
+   "q": "Egy szőlő több éven át él, és a szára kemény, nehezen törik. Írd le, milyen két tulajdonságot állapíthatsz meg róla!",
+   "required": [
+    [
+     "évelő",
+     "évelő növény",
+     "evelonoveny",
+     "evelo növények"
+    ],
+    [
+     "fás szár",
+     "fás szárú",
+     "fasszar",
+     "fasszaru",
+     "fas szárukat"
+    ],
+    [
+     "több éven",
+     "több évig",
+     "tobbeven",
+     "tobbevig"
+    ],
+    [
+     "kemény"
+    ],
+    [
+     "nehezen törik",
+     "nehezentorik"
+    ]
+   ],
+   "problems": [
+    "t-c661ed0b57be7864427857da-5: válaszkulcs-teszt: a helyes válasz „A szőlő évelő, hiszen több éven keresztül él, és fás szárú, mert a szára kemény és nem törik el könnyen.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"nehezen törik\",\"nehezentorik\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-c661ed0b57be7864427857da-5: válaszkulcs-teszt: a helyes válasz „Évelő, mert évről évre él, és fás szárú, mert a szára kemény, nehezen törik.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"több éven\",\"több évig\",\"tobbeven\",\"tobbevig\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-938d1a12cf6b171fabfd1d88-0",
+   "q": "Nevezd meg, milyen része van az almafának a talajból történő víz- és ásványianyag-felvételben, és írd le ezt a két feladatát!",
+   "required": [
+    [
+     "szerteágazó",
+     "főgyökérzet",
+     "főgyökérzete"
+    ],
+    [
+     "vizet",
+     "víz"
+    ],
+    [
+     "ásványi",
+     "ásványianyag"
+    ],
+    [
+     "felveszi",
+     "felvétel",
+     "felvétele"
+    ]
+   ],
+   "problems": [
+    "t-938d1a12cf6b171fabfd1d88-0: válaszkulcs-teszt: a helyes válasz „Az almafa főgyökérzete veszi fel a talajból a vizet és az oldott ásványi anyagokat.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"felveszi\",\"felvétel\",\"felvétele\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-938d1a12cf6b171fabfd1d88-0: válaszkulcs-teszt: a helyes válasz „A talaj alatti része a főgyökérzet, ez szívja fel a vizet és a benne lévő ásványi sókat.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"felveszi\",\"felvétel\",\"felvétele\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-938d1a12cf6b171fabfd1d88-0: válaszkulcs-teszt: a helyes válasz „A szerteágazó gyökérzet a föld alatti rész, amelyen keresztül a fa vizet és ásványi anyagokat vesz fel.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"felveszi\",\"felvétel\",\"felvétele\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-938d1a12cf6b171fabfd1d88-1",
+   "q": "Írd le egyetlen nyílláncban, pontos sorrendben a levélben képződött szerves tápanyag útját a gyökérig! A lánc minden egymást követő része szerepeljen benne.",
+   "required": [
+    [
+     "levélből",
+     "vesszőbe",
+     "levél",
+     "levelei",
+     "levelekben",
+     "levélben",
+     "vesszők",
+     "vesszőjén",
+     "vessző",
+     "vesszőből"
+    ],
+    [
+     "vesszőből",
+     "gallyba",
+     "vesszők",
+     "vesszőjén",
+     "vessző",
+     "gallyak",
+     "gally",
+     "vesszőbe",
+     "gallyból"
+    ],
+    [
+     "gallyból",
+     "ágba",
+     "gallyak",
+     "gally",
+     "gallyba"
+    ],
+    [
+     "ágból",
+     "törzsbe",
+     "törzs",
+     "törzsből"
+    ],
+    [
+     "törzsből",
+     "gyökérhez",
+     "törzs",
+     "gyökér",
+     "gyökérig",
+     "törzsbe"
+    ]
+   ],
+   "problems": [
+    "t-938d1a12cf6b171fabfd1d88-1: válaszkulcs-teszt: a hibás (fordított irány) válasz „Levélből → törzsbe → ágba → gallyba → vesszőbe → gyökérhez.” teljes pontot kap — a rubrika túl megengedő; tegyél kötelező csoportba olyan elemet, amely a helyes választ megkülönbözteti.",
+    "t-938d1a12cf6b171fabfd1d88-1: válaszkulcs-teszt: a hibás (tévhit) válasz „Levélből → gyökérbe → törzsbe → ágba → gallyba → vesszőbe.” teljes pontot kap — a rubrika túl megengedő; tegyél kötelező csoportba olyan elemet, amely a helyes választ megkülönbözteti."
+   ],
+   "lektor": [
+    "Mi hamis: a rubrika továbbra sem ellenőrzi a sorrendet. | Bizonyíték: „gyökérhez → törzsbe → ágba → gallyba → vesszőbe → levélből” minden csoportot teljesít. | Javítás iránya: kizárólag a levél → vessző → gally → ág → törzs → gyökér rendezett láncot fogadja el.",
+    "Mi hamis: a rubrika továbbra sem ellenőrzi a sorrendet. | Bizonyíték: „Gyökér → törzs → ág → gally → vessző → levél” minden required-csoportot teljesít. | Javítás iránya: kizárólag a levél → vessző → gally → ág → törzs → gyökér rendezett láncot fogadja el, ragos alakokkal is.",
+    "Mi hamis: a rubrika továbbra sem ellenőrzi a sorrendet. | Bizonyíték: „gyökérhez → törzsbe → ágba → gallyba → vesszőbe → levélből” minden csoportot teljesít. | Javítás iránya: kizárólag a levél → vessző → gally → ág → törzs → gyökér rendezett láncot fogadja el.",
+    "Bank-ellenőr: Mi hamis: a csoportok elfogadják az ág nélküli láncot. | Bizonyíték: „levél → vessző → gally → törzs → gyökér” minden csoportot kielégít (g3: gally, g4–g5: törzs), az ág pedig sehol sem kötelező. | Javítás iránya: legyen külön kötelező csoport [ág, ágba, ágból], és a csoportok ne fedjé",
+    "Mi hamis: a rubrika továbbra sem ellenőrzi a sorrendet és mind a hat részt. | Bizonyíték: „gyökérhez → törzsbe → ágba → gallyba → vesszőbe → levélből” teljesíti a csoportokat. | Javítás iránya: kizárólag levél → vessző → gally → ág → törzs → gyökér rendezett lánc fogadható el, ragos alakokkal is."
+   ]
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-938d1a12cf6b171fabfd1d88-2",
+   "q": "Milyen két jellegzetessége van az almafa levelének, és mi képződik benne? Válaszolj egy teljes mondattal.",
+   "required": [
+    [
+     "főeres"
+    ],
+    [
+     "fűrészes",
+     "fűrészes szélű",
+     "fureszesszelu"
+    ],
+    [
+     "szerves",
+     "tápanyag",
+     "tápanyagok",
+     "tápanyagot"
+    ],
+    [
+     "képződik",
+     "képződnek",
+     "képződött"
+    ]
+   ],
+   "problems": [
+    "t-938d1a12cf6b171fabfd1d88-2: válaszkulcs-teszt: a helyes válasz „Az almafa levél jellegzetessége, hogy főeres, széle pedig fűrészes; a levélben készülnek a szerves tápanyagok.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"képződik\",\"képződnek\",\"képződött\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-938d1a12cf6b171fabfd1d88-2: válaszkulcs-teszt: a helyes válasz „A levél főeres, a széle fűrészes, benne pedig szerves tápanyag keletkezik.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"képződik\",\"képződnek\",\"képződött\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-938d1a12cf6b171fabfd1d88-2: válaszkulcs-teszt: a helyes válasz „Az almafa levelének főerezete van, fűrészes a széle, és ebben a levélben termelődnek a szerves tápanyagok.” nem kap teljes pontot (Részben jó. Még 2 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"főeres\"],[\"képződik\",\"képződnek\",\"képződött\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-938d1a12cf6b171fabfd1d88-3",
+   "q": "Sorold fel a levéltől a törzsig növekvő sorrendben az almafa fás szárának részeit, és nevezd meg azt a feladatukat is, hogy mit juttatnak el a növény szerveihez!",
+   "required": [
+    [
+     "vesszők",
+     "vessző",
+     "vesszőjén",
+     "vesszőbe",
+     "vesszőből"
+    ],
+    [
+     "gallyak",
+     "gally",
+     "gallyba",
+     "gallyból"
+    ],
+    [
+     "ágak",
+     "ág"
+    ],
+    [
+     "törzs",
+     "törzsbe",
+     "törzsből"
+    ],
+    [
+     "szerves",
+     "tápanyag",
+     "tápanyagok",
+     "tápanyagot"
+    ],
+    [
+     "eljutnak",
+     "jutnak"
+    ]
+   ],
+   "problems": [
+    "t-938d1a12cf6b171fabfd1d88-3: válaszkulcs-teszt: a helyes válasz „A fás szár részei a levéltől a törzsig: vessző, gally, ág, törzs. Ezeken jut el a szerves tápanyag a növény szerveihez.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"eljutnak\",\"jutnak\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-938d1a12cf6b171fabfd1d88-3: válaszkulcs-teszt: a helyes válasz „Levéltől kifelé növekvő sorrendben: vesszők, gallyak, ágak, törzs; feladatuk a szerves tápanyagok eljuttatása a növén…” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"eljutnak\",\"jutnak\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-938d1a12cf6b171fabfd1d88-3: válaszkulcs-teszt: a helyes válasz „Az almafa fás szárának részei: a vessző, a gally, az ág és a törzs. Ezeken keresztül szállítódik a szerves tápanyag a…” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"eljutnak\",\"jutnak\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-1e2fd9d9c873a0b197db3e04-0",
+   "q": "Honnan származik az almafa sok fajtája, és mióta termesztik az almafát Európában?",
+   "required": [
+    [
+     "több ezer éve",
+     "tobbezereve"
+    ],
+    [
+     "vadalma",
+     "vadalmából"
+    ],
+    [
+     "nemesítették",
+     "nemesítettek"
+    ]
+   ],
+   "problems": [
+    "t-1e2fd9d9c873a0b197db3e04-0: válaszkulcs-teszt: a helyes válasz „Az almafát Európában már több ezer éve termesztik, és a sok fajtája a vadalmából lett nemesítve.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"nemesítették\",\"nemesítettek\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-1e2fd9d9c873a0b197db3e04-1",
+   "q": "Milyen éghajlatot és talajt kedvel az almafa, ha bő termést szeretnénk?",
+   "required": [
+    [
+     "hűvösebb"
+    ],
+    [
+     "melegebb"
+    ],
+    [
+     "nyirkos"
+    ],
+    [
+     "tápanyagban gazdag",
+     "tapanyagbangazdag"
+    ],
+    [
+     "bő termést",
+     "bő termést hoz",
+     "botermest",
+     "bo terméshez",
+     "botermesthoz"
+    ]
+   ],
+   "problems": [
+    "t-1e2fd9d9c873a0b197db3e04-1: válaszkulcs-teszt: a helyes válasz „Az almafa nem válogatós az éghajlatban, a hűvösebbet és a melegebbet is elviseli, de a talaja legyen nyirkos és tápan…” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"bő termést\",\"bő termést hoz\",\"botermest\",\"bo terméshez\",\"botermesthoz\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-1e2fd9d9c873a0b197db3e04-1: válaszkulcs-teszt: a helyes válasz „Ha bő termést akarunk, tápanyagban gazdag, nyirkos talajba ültessük; az éghajlat lehet hűvös vagy melegebb is.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"hűvösebb\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-1e2fd9d9c873a0b197db3e04-2",
+   "q": "Mondd el saját szavaiddal, hogyan jött létre az almafa sokféle fajtája!",
+   "required": [
+    [
+     "sok fajtája",
+     "sokféle fajtája",
+     "sokfajtaja",
+     "sokfelefajtaja"
+    ],
+    [
+     "vadalmából",
+     "vadalma"
+    ],
+    [
+     "nemesítették",
+     "nemesítették őket",
+     "nemesitettekoket"
+    ]
+   ],
+   "problems": [
+    "t-1e2fd9d9c873a0b197db3e04-2: válaszkulcs-teszt: a helyes válasz „Az almafa sok fajtája a vadalmából nemesítés útján jött létre.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"nemesítették\",\"nemesítették őket\",\"nemesitettekoket\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-1e2fd9d9c873a0b197db3e04-2: válaszkulcs-teszt: a helyes válasz „Régen az emberek a vadalmából kinevelték, nemesítették a ma ismert sokféle almafajtát.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"sok fajtája\",\"sokféle fajtája\",\"sokfajtaja\",\"sokfelefajtaja\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-1e2fd9d9c873a0b197db3e04-2: válaszkulcs-teszt: a helyes válasz „A vadalmából nemesítették az almafa különböző fajtáit, ezért van belőle sokféle.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"sok fajtája\",\"sokféle fajtája\",\"sokfajtaja\",\"sokfelefajtaja\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-1e2fd9d9c873a0b197db3e04-3",
+   "q": "Két magyarországi kert közül az egyik hűvösebb, a másik melegebb vidéken van. Mindkettő talaja nyirkos és tápanyagban gazdag. Melyik kertben hozhat bő termést az almafa, és miért?",
+   "required": [
+    [
+     "mindkét kertben",
+     "mindkét kert",
+     "mindketkertben",
+     "mindket kertet",
+     "mindketkert",
+     "mindkét"
+    ],
+    [
+     "hűvösebb"
+    ],
+    [
+     "melegebb"
+    ],
+    [
+     "nyirkos"
+    ],
+    [
+     "tápanyagban gazdag",
+     "tapanyagbangazdag"
+    ],
+    [
+     "elviseli"
+    ]
+   ],
+   "problems": [
+    "t-1e2fd9d9c873a0b197db3e04-3: válaszkulcs-teszt: a helyes válasz „Mindkettőben, mert az almafa a hűvösebb és melegebb éghajlatot is tűri, a nyirkos, tápanyagban gazdag talaj pedig min…” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"elviseli\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-1e2fd9d9c873a0b197db3e04-3: válaszkulcs-teszt: a helyes válasz „Az almafa mindkét kertben bőven teremhet, mert nem érzékeny az éghajlatra, és a talaj is mindkét helyen megfelelő neki.” nem kap teljes pontot (A válasz még túl rövid.; a rubrika fel nem ismert csoportjai: [[\"hűvösebb\"],[\"melegebb\"],[\"nyirkos\"],[\"tápanyagban gazdag\",\"tapanyagbangazdag\"],[\"elviseli\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-1e2fd9d9c873a0b197db3e04-3: válaszkulcs-teszt: a helyes válasz „Mindkét kertben megterem bőven, mert az almafa hűvösebb és melegebb vidéken is megél, és a talajjuk is jó neki.” nem kap teljes pontot (A válasz még túl rövid.; a rubrika fel nem ismert csoportjai: [[\"nyirkos\"],[\"tápanyagban gazdag\",\"tapanyagbangazdag\"],[\"elviseli\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-56c74c2c7f2d9e123e76cba5-0",
+   "q": "Magyarázd el, mi a rovarbeporzás, és hogyan jut el a virágpor egyik virágtól a másikig!",
+   "required": [
+    [
+     "rovarbeporzás",
+     "rovarbeporzáshoz"
+    ],
+    [
+     "virágpor",
+     "virágpornak",
+     "virágport"
+    ],
+    [
+     "rovar testéről",
+     "rovar testere",
+     "rovartesterol",
+     "rovar testén",
+     "rovartestere"
+    ],
+    [
+     "másik virág",
+     "masik virag",
+     "masikvirag",
+     "masik virágai",
+     "masik virágok",
+     "masik virágból",
+     "masik virágra",
+     "masik virágról",
+     "masik virágon",
+     "masik virágnál"
+    ],
+    [
+     "termőjére",
+     "termore"
+    ]
+   ],
+   "problems": [
+    "t-56c74c2c7f2d9e123e76cba5-0: válaszkulcs-teszt: a helyes válasz „Rovarbeporzásnak azt hívjuk, amikor a virágpor nem a széllel, hanem rovarokkal jut el a virágok közül egyikről a mási…” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"rovar testéről\",\"rovar testere\",\"rovartesterol\",\"rovar testén\",\"rovartestere\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-56c74c2c7f2d9e123e76cba5-1",
+   "q": "Írd le, milyenek az almafa virágai, és mikor nyílnak!",
+   "required": [
+    [
+     "almafa virágai",
+     "almafa viragai",
+     "almafaviragai",
+     "almafa virágok",
+     "almafa virágból",
+     "almafa virágra",
+     "almafa virágról",
+     "almafa virágon",
+     "almafa virágnál",
+     "almafa virág"
+    ],
+    [
+     "fehér",
+     "feher"
+    ],
+    [
+     "rózsaszín",
+     "rozsaszin"
+    ],
+    [
+     "sziromlevelűek",
+     "sziromleveluek"
+    ],
+    [
+     "lombfakadással egy időben",
+     "lombfakadassal egy idoben",
+     "lombfakadassalegyidoben"
+    ]
+   ],
+   "problems": [
+    "t-56c74c2c7f2d9e123e76cba5-1: válaszkulcs-teszt: a helyes válasz „Az almafa virágai fehér és rózsaszín színű sziromlevelekkel rendelkeznek, és akkor nyílnak, amikor a lombfakadás is e…” nem kap teljes pontot (Részben jó. Még 2 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"sziromlevelűek\",\"sziromleveluek\"],[\"lombfakadással egy időben\",\"lombfakadassal egy idoben\",\"lombfakadassalegyidoben\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-56c74c2c7f2d9e123e76cba5-1: válaszkulcs-teszt: a helyes válasz „Az almafa virágainak szirmai fehérek vagy rózsaszínűek. A virágok nem korábban, hanem a lombfakadással egy időben nyí…” nem kap teljes pontot (Részben jó. Még 2 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"rózsaszín\",\"rozsaszin\"],[\"sziromlevelűek\",\"sziromleveluek\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-56c74c2c7f2d9e123e76cba5-1: válaszkulcs-teszt: a helyes válasz „Az almafa virágain fehér és rózsaszín színűk a sziromlevelek. Akkor bújnak ki, amikor a fa lombja is fakadni kezd, te…” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"lombfakadással egy időben\",\"lombfakadassal egy idoben\",\"lombfakadassalegyidoben\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-56c74c2c7f2d9e123e76cba5-2",
+   "q": "Egy méh először az A, majd a B almavirágra száll. Az A virágon virágpor kerül a testére. Magyarázd el, mikor történik rovarbeporzás, és miért nem az A virágon!",
+   "required": [
+    [
+     "rovarbeporzás",
+     "rovarbeporzáshoz"
+    ],
+    [
+     "A virágon",
+     "A viragon",
+     "aviragon",
+     "a virágai",
+     "a virágok",
+     "a virágból",
+     "a virágra",
+     "a virágról",
+     "a virágnál",
+     "a virág"
+    ],
+    [
+     "virágpor",
+     "viragpor",
+     "virágpornak",
+     "virágport"
+    ],
+    [
+     "testére",
+     "testere",
+     "testén"
+    ],
+    [
+     "B virág",
+     "B virag",
+     "bvirag",
+     "b virágai",
+     "b virágok",
+     "b virágból",
+     "b virágra",
+     "b virágról",
+     "b virágon",
+     "b virágnál"
+    ],
+    [
+     "termőjére",
+     "termore"
+    ]
+   ],
+   "problems": [
+    "t-56c74c2c7f2d9e123e76cba5-2: válaszkulcs-teszt: a helyes válasz „Az A virágon még nem történik meg a beporzás, mert csak a méh kapott virágport, nem a termő. A rovarbeporzás akkor le…” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"testére\",\"testere\",\"testén\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-0bb919b6129765057d35b2b6-0",
+   "q": "Miért nevezzük az alma termését áltermésnek?",
+   "required": [
+    [
+     "áltermés",
+     "áltermésnek"
+    ],
+    [
+     "nemcsak",
+     "nem csak"
+    ],
+    [
+     "termőből",
+     "termő"
+    ],
+    [
+     "virág",
+     "virágból"
+    ],
+    [
+     "többi részéből",
+     "virág többi részéből",
+     "tobbireszebol",
+     "tobbi részén",
+     "tobbi része",
+     "viragtobbireszebol",
+     "virag tobbi részén",
+     "virag tobbi része"
+    ],
+    [
+     "fejlődik",
+     "fejlődött"
+    ]
+   ],
+   "problems": [
+    "t-0bb919b6129765057d35b2b6-0: válaszkulcs-teszt: a helyes válasz „Azért áltermés, mert nem csak a termőből fejlődik, hanem a virág más részei is részt vesznek benne.” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"többi részéből\",\"virág többi részéből\",\"tobbireszebol\",\"tobbi részén\",\"tobbi része\",\"viragtobbireszebol\",\"virag tobbi részén\",\"virag tobbi része\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-0bb919b6129765057d35b2b6-0: válaszkulcs-teszt: a helyes válasz „Az alma fejlődésekor nemcsak a termő, hanem a virágtakaró részei is benövik a termést, ezért áltermés.” nem kap teljes pontot (Részben jó. Még 3 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"virág\",\"virágból\"],[\"többi részéből\",\"virág többi részéből\",\"tobbireszebol\",\"tobbi részén\",\"tobbi része\",\"viragtobbireszebol\",\"virag tobbi részén\",\"virag tobbi része\"],[\"fejlődik\",\"fejlődött\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-0bb919b6129765057d35b2b6-0: válaszkulcs-teszt: a helyes válasz „Mert a vacok és a lepel is fejlődik a termésben, nem csak a magház.” nem kap teljes pontot (A lényegi fogalmak még hiányoznak.; a rubrika fel nem ismert csoportjai: [[\"áltermés\",\"áltermésnek\"],[\"termőből\",\"termő\"],[\"virág\",\"virágból\"],[\"többi részéből\",\"virág többi részéből\",\"tobbireszebol\",\"tobbi részén\",\"tobbi része\",\"viragtobbireszebol\",\"virag tobbi részén\",\"virag tobbi része\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-0bb919b6129765057d35b2b6-1",
+   "q": "Miből ismerhető fel az almatermés? Nevezd meg a kettévágott alma belsejének és a külsejének jellegzetességét is!",
+   "required": [
+    [
+     "öt",
+     "5"
+    ],
+    [
+     "hártyás"
+    ],
+    [
+     "rekesz",
+     "rekeszben",
+     "rekeszt"
+    ],
+    [
+     "magok",
+     "mag"
+    ],
+    [
+     "kocsánnyal ellentétes",
+     "kocsánnyal szemközti",
+     "kocsannyalellentetes",
+     "kocsannyalszemkozti"
+    ],
+    [
+     "virágmaradványai",
+     "virág maradványai",
+     "virágmaradvány",
+     "virag maradványait"
+    ]
+   ],
+   "problems": [
+    "t-0bb919b6129765057d35b2b6-1: válaszkulcs-teszt: a helyes válasz „Felfelnek álló részén öt hártyás rekesz van a magokkal, az alján pedig láthatók a csésze és a lepel nyomai.” nem kap teljes pontot (Részben jó. Még 3 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"magok\",\"mag\"],[\"kocsánnyal ellentétes\",\"kocsánnyal szemközti\",\"kocsannyalellentetes\",\"kocsannyalszemkozti\"],[\"virágmaradványai\",\"virág maradványai\",\"virágmaradvány\",\"virag maradványait\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-0bb919b6129765057d35b2b6-1: válaszkulcs-teszt: a helyes válasz „A magok öt, hártyás falú rekeszben helyezkednek el, és a virágmaradványok a termés azon oldalán vannak, ahol a kocsán…” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"kocsánnyal ellentétes\",\"kocsánnyal szemközti\",\"kocsannyalellentetes\",\"kocsannyalszemkozti\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-0bb919b6129765057d35b2b6-1: válaszkulcs-teszt: a helyes válasz „Belül t everydayöbb kamrára, pontosabban öt hártyás falú rekeszre találunk, amelyeket magok töltenek meg, a kocsány t…” nem kap teljes pontot (Részben jó. Még 1 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"kocsánnyal ellentétes\",\"kocsánnyal szemközti\",\"kocsannyalellentetes\",\"kocsannyalszemkozti\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  },
+  {
+   "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+   "taskId": "t-0bb919b6129765057d35b2b6-2",
+   "q": "Magyarázd el, hogyan állapítod meg egy alma vizsgálatával, hogy almatermés és egyben áltermés!",
+   "required": [
+    [
+     "öt",
+     "5"
+    ],
+    [
+     "hártyás"
+    ],
+    [
+     "rekesz",
+     "rekeszben",
+     "rekeszt"
+    ],
+    [
+     "magok",
+     "mag",
+     "magokkal"
+    ],
+    [
+     "kocsánnyal ellentétes",
+     "kocsánnyal szemközti",
+     "kocsannyalellentetes",
+     "kocsannyalszemkozti"
+    ],
+    [
+     "virágmaradványai",
+     "virág maradványai",
+     "virágmaradvány",
+     "virag maradványait"
+    ],
+    [
+     "nemcsak",
+     "nem csak"
+    ],
+    [
+     "termőből",
+     "termő"
+    ],
+    [
+     "virág",
+     "virágból"
+    ],
+    [
+     "többi részéből",
+     "virág többi részéből",
+     "tobbireszebol",
+     "tobbi részén",
+     "tobbi része",
+     "viragtobbireszebol",
+     "virag tobbi részén",
+     "virag tobbi része"
+    ],
+    [
+     "áltermés",
+     "áltermésnek"
+    ]
+   ],
+   "problems": [
+    "t-0bb919b6129765057d35b2b6-2: válaszkulcs-teszt: a helyes válasz „Először kettévágom az almát, erre belül öt hártyás falú rekeszt látok a magokkal. Ez almatermés. A kocsánnyal ellenté…” nem kap teljes pontot (Részben jó. Még 3 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"virágmaradványai\",\"virág maradványai\",\"virágmaradvány\",\"virag maradványait\"],[\"nemcsak\",\"nem csak\"],[\"termőből\",\"termő\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-0bb919b6129765057d35b2b6-2: válaszkulcs-teszt: a helyes válasz „Kettévágva az almát ellenőrzöm, hogy öt hártyás magfészek van-e benne. Ez jelzi az almatermést. Ezután a kocsány túls…” nem kap teljes pontot (A lényegi fogalmak még hiányoznak.; a rubrika fel nem ismert csoportjai: [[\"rekesz\",\"rekeszben\",\"rekeszt\"],[\"magok\",\"mag\",\"magokkal\"],[\"kocsánnyal ellentétes\",\"kocsánnyal szemközti\",\"kocsannyalellentetes\",\"kocsannyalszemkozti\"],[\"virágmaradványai\",\"virág maradványai\",\"virágmaradvány\",\"virag maradványait\"],[\"nemcsak\",\"nem csak\"],[\"termőből\",\"termő\"],[\"többi részéből\",\"virág többi részéből\",\"tobbireszebol\",\"tobbi részén\",\"tobbi része\",\"viragtobbireszebol\",\"virag tobbi részén\",\"virag tobbi része\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.",
+    "t-0bb919b6129765057d35b2b6-2: válaszkulcs-teszt: a helyes válasz „Az almát hosszában elvágom; a belsejében öt hártyás falú rekeszben a magok ülnek, ez mutatja az almatermést. A kocsán…” nem kap teljes pontot (Részben jó. Még 4 kötelező fogalom hiányzik.; a rubrika fel nem ismert csoportjai: [[\"virágmaradványai\",\"virág maradványai\",\"virágmaradvány\",\"virag maradványait\"],[\"termőből\",\"termő\"],[\"virág\",\"virágból\"],[\"többi részéből\",\"virág többi részéből\",\"tobbireszebol\",\"tobbi részén\",\"tobbi része\",\"viragtobbireszebol\",\"virag tobbi részén\",\"virag tobbi része\"]]). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé."
+   ],
+   "lektor": []
+  }
+ ],
+ "models": [
+  "z-ai/glm-5.3-flash",
+  "deepseek/deepseek-v4-flash"
+ ],
+ "calibration": {
+  "method": "T2.1b gépi kalibráció a T2.0 eseteivel, modellhívás nélkül (scripts/measure/answer-key-trial.mts, korábbi eredmény újrahasznosítva)",
+  "variants": {
+   "majority": {
+    "afterFail": 175,
+    "afterCorrectFail": 461,
+    "afterWrongPass": 18,
+    "demoted": 96
+   },
+   "atLeastTwo": {
+    "afterFail": 148,
+    "afterCorrectFail": 316,
+    "afterWrongPass": 18,
+    "demoted": 217
+   },
+   "any": {
+    "afterFail": 101,
+    "afterCorrectFail": 225,
+    "afterWrongPass": 18,
+    "demoted": 340
+   }
+  },
+  "chosen": "atLeastTwo (második tulajdonosi döntés)",
+  "final": {
+   "tested": 188,
+   "afterFail": 148,
+   "afterCorrectFail": 316,
+   "afterWrongPass": 18,
+   "demoted": 217,
+   "formAdds": 123,
+   "minWordsLowered": 12,
+   "sentenceOff": 0,
+   "calibrated": 143
+  },
+  "blockingTasksAfter": 16,
+  "note": "Élesben blokkoló csak a túl megengedő rubrika (hibás válasz teljes pontot kap); a maradék helyes-eset bukás jelentés (answerKeyReport), a gyerek válaszát a T7 ítéli."
+ },
+ "rowsNote": "188 sorból az első 20 (a teljes nyers adat a mérés futtatásával újra előállítható)."
+}

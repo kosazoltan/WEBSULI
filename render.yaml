@@ -12,7 +12,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
-        value: 22.16.0
+        value: "24"
       - key: DATABASE_URL
         sync: false
       - key: SESSION_SECRET

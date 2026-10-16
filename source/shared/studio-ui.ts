@@ -376,6 +376,8 @@ export type OneStepRunView = {
   phase: string;
   detail: string | null;
   error: string | null;
+  /** Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D5): hibánál a workflow-lépés, ahol a futás megállt. */
+  stoppedAt?: string;
 };
 
 export const LESSON_CREATION_STAGES = [
@@ -388,13 +390,23 @@ export function lessonCreationStageLabel(phase: string): string {
   return phase === "done" ? "Kész" : LESSON_CREATION_STAGES.find(s => (s.phases as readonly string[]).includes(phase))?.label ?? "Folyamat állapota";
 }
 
+/** D5: a workflow-lépés → a három emberi szakasz egyike (ismeretlen lépésnél nincs szakasz). */
+const STAGE_OF_STEP: Record<string, number> = {
+  source: 0, scope: 0, knowledge: 0, sourceCheck: 0, indul: 0, ocr: 0, extract: 0,
+  pedagogue: 1, author: 1, animator: 1,
+  lektor: 2, gate: 2, publish: 2, readback: 2,
+};
+
 export function lessonCreationStages(run: OneStepRunView) {
-  const current = LESSON_CREATION_STAGES.findIndex(s => (s.phases as readonly string[]).includes(run.phase));
+  // A megszakadt piszkozat (draft) ugyanott áll, ahol a régi gyártás megállt (docs/specs/2026-10-15-hiba-gombok.md).
+  const stopped = run.phase === "error" || run.phase === "parked" || run.phase === "draft";
+  // error/parked alone do not identify the failed phase. Do not invent completed stages — only the server's recorded stop step does.
+  const failed = stopped && run.stoppedAt !== undefined ? STAGE_OF_STEP[run.stoppedAt] ?? -1 : -1;
+  const current = failed >= 0 ? failed : LESSON_CREATION_STAGES.findIndex(s => (s.phases as readonly string[]).includes(run.phase));
   return LESSON_CREATION_STAGES.map((stage, index) => ({
     key: stage.key, label: stage.label,
-    // error/parked do not identify the failed phase. Do not invent completed stages.
     state: run.phase === "done" || (current >= 0 && index < current) ? "done" as const
-      : index === current ? "active" as const : "pending" as const,
+      : index === current ? (failed >= 0 ? "error" as const : "active" as const) : "pending" as const,
   }));
 }
 
