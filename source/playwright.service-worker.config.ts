@@ -4,7 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 // no database, no app build. Real Chrome service workers are required here.
 export default defineConfig({
   testDir: "./tests",
-  testMatch: "service-worker-install.spec.ts",
+  testMatch: "service-worker-install.browser.ts",
   workers: 1,
   use: {
     ...devices["Desktop Chrome"],
