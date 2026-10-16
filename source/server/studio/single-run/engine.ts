@@ -282,19 +282,35 @@ export type SingleRunInput = { files: ExtractorFile[]; instruction?: string; tit
   resume?: { jobId: string; output: Record<string, unknown> } };
 
 /** J5: a mentett kimenetből folytatandó állomás — az utolsó lezárt állomás utáni. */
-export type ResumeStage = "plan" | "author" | "animator" | "bank" | "lektor";
+export type ResumeStage = "plan" | "author" | "animator" | "bank" | "lektor" | "bankRepair";
+
+/**
+ * Review #263: a lektori kör utáni, folyamatban lévő bankjavítás mentett állapota — a javítás alapja a mentett lecke (`output.lesson`),
+ * a többi a banképítő bemenete. Folytatáskor előbb ez a javítás fejeződik be (a kész csomagok az ellenőrzőpontból), utána a következő
+ * lektori kör jön, az előző kör blokkolóival.
+ */
+export type PendingBankRepair = { round: number; previous?: Lesson["experience"]; reviewFeedback: ReturnType<typeof resolveBankReview>; blockers: ReturnType<typeof classifyNotes> };
+
+function pendingBankRepairOf(raw: unknown): PendingBankRepair | null {
+  const r = raw as Partial<PendingBankRepair> | null | undefined;
+  if (!r || typeof r !== "object" || !Number.isInteger(r.round) || (r.round as number) < 0 || (r.round as number) >= SINGLE_RUN_REVIEW_ROUNDS) return null;
+  if (!Array.isArray(r.reviewFeedback) || !Array.isArray(r.blockers) || (r.previous !== undefined && (typeof r.previous !== "object" || r.previous === null))) return null;
+  return r as PendingBankRepair;
+}
 
 /**
  * J5: a megszakadt egyfutásos job mentett részei és a folytatás helye. Kész bank (a lecke `experience` mezővel) → lektorálás; mentett
  * bank-ellenőrzőpont (a lecke az ábrák utáni) → a bank folytatása; mentett tananyag → ábrák; mentett terv → tananyag; különben terv.
  * Az alakilag hibás mentett rész nem számít (onnan újra készül).
  */
-export function resumePointOf(output: Record<string, unknown> | null | undefined): { stage: ResumeStage; outline?: unknown; lesson?: Lesson; checkpoint?: ExperienceCheckpoint } {
+export function resumePointOf(output: Record<string, unknown> | null | undefined): { stage: ResumeStage; outline?: unknown; lesson?: Lesson; checkpoint?: ExperienceCheckpoint; bankRepair?: PendingBankRepair } {
   const o = output ?? {};
   const lesson = o.lesson === undefined ? null : lessonSchema.safeParse(o.lesson);
   const outline = outlineSchema.safeParse(o.outline).success ? o.outline : undefined;
   const checkpoint = o.experienceCheckpoint && typeof o.experienceCheckpoint === "object" ? o.experienceCheckpoint as ExperienceCheckpoint : undefined;
   if (lesson?.success && outline) {
+    const repair = pendingBankRepairOf(o.bankRepair);
+    if (repair) return { stage: "bankRepair", outline, lesson: lesson.data, bankRepair: repair, ...(checkpoint ? { checkpoint } : {}) };
     if (lesson.data.experience) return { stage: "lektor", outline, lesson: lesson.data, ...(checkpoint ? { checkpoint } : {}) };
     if (checkpoint) return { stage: "bank", outline, lesson: lesson.data, checkpoint };
     return { stage: "animator", outline, lesson: lesson.data };
@@ -357,7 +373,10 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   // J5: folytatásnál a mentett kimenet megmarad (a helyreállítási jelzők és a régi pillanatképek nélkül); a job újra fut.
   const { recoveryState: _recovery, remanufacturedAs: _remade, singleRun: _run, telemetry: _telemetry, ...kept } = input.resume?.output ?? {};
   let output: Record<string, unknown> = { ...kept, ...(input.instruction ? { ownerInstruction: input.instruction } : {}), ...(corrections.length ? { sourceCorrections: corrections } : {}) };
-  const resumeStep = { plan: "pedagogue", author: "author", animator: "animator", bank: "animator", lektor: "lektor" } as const;
+  const resumeStep = { plan: "pedagogue", author: "author", animator: "animator", bank: "animator", lektor: "lektor", bankRepair: "lektor" } as const;
+  // A mentett bank (és benne az ábrák) már kész: a lektorálás vagy a félkész lektori bankjavítás folytatódik.
+  const pastBank = resumed?.stage === "lektor" || resumed?.stage === "bankRepair";
+  const pastAnimator = pastBank || resumed?.stage === "bank";
   if (resumed) log(`[EGYFUTÁS] Folytatás (${jobId}): ${resumed.stage} állomástól, a mentett beszélgetéssel (${conversation.state().turns.length} forduló)`);
   await save(resumed ? resumeStep[resumed.stage] : "pedagogue", output, resumed ? { status: "running", error: null, finishedAt: null } : {});
   try {
@@ -449,7 +468,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   // ellenőrzőpont vagy kész bank mellett az ábrák már a mentett leckében vannak.
   await workflowPhase("animator");
   phase("animator", "Ábrák és gyakorlóbank készül…");
-  if (resumed?.stage !== "bank" && resumed?.stage !== "lektor") try {
+  if (!pastAnimator) try {
     const request = withRoleRunbook([text(`4. ÁLLOMÁS — ÁBRÁK.\n${buildAnimatorPrompt(lesson, promptMap)}\nVálaszolj kizárólag az ábrafolt JSON-jával.`)], "animator");
     const reply = await timed(telemetry, "ábrák", () => conversation.send(request));
     const patched = applyVisualPatch(lesson, parseModelJson(reply.text).json, concepts);
@@ -457,7 +476,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     if (patched && checked?.success && checkAnimatorResult(lesson, checked.data).ok) lesson = checked.data;
     else log("[EGYFUTÁS] Az ábrafolt nem illeszthető — az eredeti tanítás megy tovább.");
   } catch (error) { log(`[EGYFUTÁS] Az ábra-forduló elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
-  if (resumed?.stage !== "bank" && resumed?.stage !== "lektor") lesson = ensureSectionVisuals(stripUngroundedAnimateLabels(lesson, concepts).lesson, concepts).lesson;
+  if (!pastAnimator) lesson = ensureSectionVisuals(stripUngroundedAnimateLabels(lesson, concepts).lesson, concepts).lesson;
 
   // 5. Gyakorlóbank — a meglévő banképítő (kvóta, autofix, séma, javító kísérletek); J2: minden csomag FRISS beszélgetésben.
   let checkpoint: ExperienceCheckpoint | undefined = resumed?.checkpoint;
@@ -509,7 +528,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
         log(`[EGYFUTÁS] bankcsomag ${section + 1}. fejezet, ${attempt + 1}. kísérlet: ${reason.slice(0, 300)}`);
       },
     });
-  if (resumed?.stage !== "lektor") {
+  if (!pastBank) {
     lesson = { ...lesson, experience: await buildBank(lesson) };
     output = { ...output, lesson, experienceCheckpoint: checkpoint };
     await save("lektor", output);
@@ -524,7 +543,25 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const warnings: string[] = [];
   const sourceBlock = sourceText ? [text(`A FORRÁS ÁTIRATA (adat, a mérce):\n${sourceText}`)] : [];
   let previousBlockers: ReturnType<typeof classifyNotes> = [];
-  for (let round = 0; round <= SINGLE_RUN_REVIEW_ROUNDS; round++) {
+  /** Review #263: a lektori bankjavítás a kezdete előtt mentett jelzővel fut (folytatáskor onnan fejeződik be), a végén a jelző törlődik. */
+  const repairBank = async (base: Lesson, repair: PendingBankRepair): Promise<Lesson> => {
+    output = { ...output, lesson: base, bankRepair: repair, experienceCheckpoint: checkpoint };
+    await save("lektor", output);
+    const experience = await buildBank(base, { ...(repair.previous ? { previous: repair.previous } : {}), ...(repair.reviewFeedback.length ? { reviewFeedback: repair.reviewFeedback } : {}) });
+    const { bankRepair: _done, ...rest } = output;
+    output = rest;
+    return { ...base, experience };
+  };
+  let startRound = 0;
+  if (resumed?.stage === "bankRepair" && resumed.bankRepair) {
+    phase("lektor", "A félbeszakadt bankjavítás folytatása…");
+    previousBlockers = resumed.bankRepair.blockers;
+    lesson = await repairBank(lesson, resumed.bankRepair);
+    output = { ...output, lesson, experienceCheckpoint: checkpoint };
+    await save("lektor", output);
+    startRound = resumed.bankRepair.round + 1;
+  }
+  for (let round = startRound; round <= SINGLE_RUN_REVIEW_ROUNDS; round++) {
     phase("lektor", `Lektorálás (${round + 1}. kör)…`);
     const reviewer: StationDeps = { conversation: deps.fresh(freshSystemPrompt("lektor")), log: deps.log, telemetry };
     const report = await runStation(reviewer, "lektorálás", withRoleRunbook([...sourceBlock, text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, previousBlockers, owner)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)], "lektor"),
@@ -550,12 +587,12 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
       // (a régi indexek nem alkalmazhatók az újraépített bankra).
       const bankFeedback = bankNotes.length ? resolveBankReview(lesson, bankNotes) : [];
       const fixed = await runStation(station, "javított tananyag", authorRequest(teachingNotes), validateLesson);
-      lesson = { ...fixed, experience: await buildBank(fixed, { previous: lesson.experience, ...(bankFeedback.length ? { reviewFeedback: bankFeedback } : {}) }) };
+      lesson = await repairBank(fixed, { round, ...(lesson.experience ? { previous: lesson.experience } : {}), reviewFeedback: bankFeedback, blockers: blocking });
     } else if (bankNotes.length) {
       const split = splitLimitBlockers(lesson, bankNotes);
       const removal = split.removable.length && !split.factual.length && !split.incomplete.length ? resolveChoiceGate(lesson, split.removable) : { error: "nem kivehető" };
       if (!("error" in removal)) { lesson = removal.lesson; telemetry.gates.lektorRemoved += removal.removed.length; warnings.push(`Lektor szerint hibás banktétel kivéve: ${removal.removed.join(", ")}`); }
-      else lesson = { ...lesson, experience: await buildBank(lesson, { previous: lesson.experience, reviewFeedback: resolveBankReview(lesson, bankNotes) }) };
+      else lesson = await repairBank(lesson, { round, ...(lesson.experience ? { previous: lesson.experience } : {}), reviewFeedback: resolveBankReview(lesson, bankNotes), blockers: blocking });
     }
     output = { ...output, lesson, experienceCheckpoint: checkpoint };
     await save("lektor", output);

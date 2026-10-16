@@ -473,3 +473,33 @@ test("J5 (review #263): a mentett nyitott banklelet a folytatás végkapujáig e
     .then((r) => r.warnings.join(" | ")).catch((e: Error) => e.message);
   assert.match(outcome, /A végkapu kivette: experience\.quiz\[0\]/, "a végkapu a mentett leletet kezeli: " + outcome);
 });
+
+// Review #263: a lektori kör utáni, félbeszakadt bankjavítás folytatáskor befejeződik, és a KÖVETKEZŐ lektori kör ítél róla.
+test("J5 (review #263): a félbeszakadt lektori bankjavítás folytatáskor befejeződik, utána a következő lektori kör jön az előző blokkolókkal", async () => {
+  const bankNote = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.sections.0.tasks.0", message: "Hibás válaszkulcs." };
+  let lektorSeen = false;
+  const failing = withOverride(scriptedClient({ lektor: [{ solutions: [], notes: [bankNote], reviewedAll: true }] }), (station) => {
+    if (station === "6") lektorSeen = true;
+    return station === "5" && lektorSeen ? "nem JSON" : null; // a lektori bankjavítás közben megszakad
+  });
+  const mem = memoryStore();
+  await assert.rejects(runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(failing, mem)));
+  const saved = mem.steps.at(-1)!.output as SavedOutput & { bankRepair?: { round: number; reviewFeedback: unknown[] } };
+  assert.equal(saved.bankRepair?.round, 0, "a folyamatban lévő bankjavítás jelzője mentve");
+  assert.ok(saved.bankRepair!.reviewFeedback.length >= 1, "a lektori visszajelzéssel");
+  assert.equal(resumePointOf(saved).stage, "bankRepair");
+
+  const lektorRequests: string[] = [];
+  const base = scriptedClient();
+  const client = withOverride(base, (station, turns) => { if (station === "6") lektorRequests.push(lastUserText(turns)); return null; });
+  const mem2 = memoryStore();
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, resumeDeps(client, mem2, saved));
+  assert.equal(result.htmlFileId, "html1");
+  const calls = base.calls.filter((c) => c !== "?");
+  assert.ok(!calls.some((c) => ["1", "2", "3", "4"].includes(c)), "nincs új tudásbank, terv, tananyag, ábra: " + JSON.stringify(calls));
+  assert.equal(calls[0], "5", "előbb a félkész bankjavítás fejeződik be");
+  assert.equal(lektorRequests.length, 1, "utána egy (a következő) lektori kör");
+  assert.match(lektorRequests[0], /LEKTORÁLÁS \(2\. kör\)/);
+  assert.match(lektorRequests[0], /previousBlockers: .*Hibás válaszkulcs/, "az előző kör blokkolóival");
+  assert.equal((mem2.steps.at(-1)!.output as { bankRepair?: unknown }).bankRepair, undefined, "a jelző a javítás végén törlődik");
+});
