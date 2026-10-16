@@ -34,8 +34,6 @@
 }
 
 [data-band="kid"] {
-  --lesson-font-heading: "Nunito", sans-serif;
-  --lesson-font-body: "Nunito", sans-serif;
   --lesson-bg: #12224a;
   --lesson-surface: #1b2f63;
   --lesson-ink: #f4f7ff;
@@ -54,8 +52,6 @@
 }
 
 [data-band="teen"] {
-  --lesson-font-heading: "Source Sans 3", sans-serif;
-  --lesson-font-body: "Source Sans 3", sans-serif;
   --lesson-bg: #0b1220;
   --lesson-surface: #121b2e;
   --lesson-ink: #e6edf7;
@@ -74,8 +70,6 @@
 }
 
 [data-band="senior"] {
-  --lesson-font-heading: "Source Sans 3", sans-serif;
-  --lesson-font-body: "Source Sans 3", sans-serif;
   --lesson-bg: #111418;
   --lesson-surface: #181c22;
   --lesson-ink: #e7ebf0;
@@ -143,7 +137,7 @@
 [data-band="teen"] .lesson-block-head,
 [data-band="senior"] .lesson-block-head,
 [data-band="senior"] .lesson-progress {
-  font-family: "Source Sans 3", sans-serif;
+  font-family: var(--lesson-font-body);
   text-transform: none;
   letter-spacing: 0;
 }

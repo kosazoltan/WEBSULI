@@ -294,9 +294,12 @@ export function LabeledShapeAnim({ params, caption }: AnimProps) {
   if (!p) return null;
   const stroke = "currentColor";
   const tag = (x: number, y: number, text: string, anchor: "start" | "middle" | "end" = "middle") =>
-    text ? <text x={x} y={y} textAnchor={anchor} fontSize="14" fontWeight="700" fill="currentColor">{text}</text> : null;
+    // A bővített nézetdobozban 16 egység: kis kijelzőn (360 px) is ≥ 12 px marad.
+    text ? <text x={x} y={y} textAnchor={anchor} fontSize="16" fontWeight="700" fill="currentColor">{text}</text> : null;
   let body: ReactNode;
-  let view = "0 0 320 240";
+  // Websuli Design: az alakzat melletti feliratoknak (pl. a téglatest „6 egység” magassága) mindkét oldalon 36 egység hely jut —
+  // a feliratok az évfolyam fontjával (Inter / Nunito Sans) is a nézetdobozon belül maradnak (mérve: Interrel a bal szélen kilógott).
+  let view = "-36 0 392 240";
   if (p.shape === "circle") {
     const r = 80;
     body = (
@@ -331,7 +334,7 @@ export function LabeledShapeAnim({ params, caption }: AnimProps) {
     const top = `${x0},${y0 - h} ${x0 + w},${y0 - h} ${x0 + w + dx},${y0 - h - dy} ${x0 + dx},${y0 - h - dy}`;
     const side = `${x0 + w},${y0} ${x0 + w + dx},${y0 - dy} ${x0 + w + dx},${y0 - h - dy} ${x0 + w},${y0 - h}`;
     const layers = p.layers ?? 0;
-    view = "0 0 320 250";
+    view = "-36 0 392 250";
     body = (
       <g strokeLinejoin="round">
         <polygon points={front} fill={ACCENT} fillOpacity="0.16" stroke={stroke} strokeWidth="2.5" />

@@ -36,7 +36,8 @@ for (const [width, height] of [[320, 568], [390, 844], [844, 390], [1440, 900]])
     const dialog = page.getByRole("dialog", { name: "Háromszög-labor" });
     await expect(dialog).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    await expect(dialog).toHaveCSS("font-family", '"Source Sans 3", sans-serif');
+    // Websuli Design: 7. évfolyam → Inter, Noto Sans tartalékkal.
+    await expect(dialog).toHaveCSS("font-family", 'Inter, "Noto Sans", sans-serif');
     const next = dialog.getByRole("button", { name: "Megvizsgálom", exact: true });
     await expect(next).toBeDisabled();
     for (const button of await dialog.getByRole("button").all()) await fullyVisible(button, width, height);

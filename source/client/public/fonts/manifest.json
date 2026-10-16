@@ -1,5 +1,6 @@
 {
-  "requiredCharacters": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÁÉÍÓÖŐÚÜŰáéíóöőúüű́̈̋",
+  "requiredCharacters": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÁÉÍÓÖŐÚÜŰáéíóöőúüű",
+  "combiningMarks": "́̈̋",
   "fonts": [
     {
       "family": "Nunito",
@@ -102,6 +103,82 @@
       ],
       "internalFamily": "Source Serif 4",
       "postScriptName": "SourceSerif4Roman-Regular"
+    },
+    {
+      "family": "Nunito Sans",
+      "style": "italic",
+      "file": "nunitosans-italic.woff2",
+      "revision": "8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5",
+      "source": "https://raw.githubusercontent.com/google/fonts/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/nunitosans/NunitoSans-Italic%5BYTLC%2Copsz%2Cwdth%2Cwght%5D.ttf",
+      "sourceSha256": "d9d5db18f3c11221a4fbb553cbc709391c1179964c7eaa4466ef43c78aa4492f",
+      "sha256": "6833f81d0fb9bd9afd0635508b154f991c0ffcfeda02cd1ab676100d0477faae",
+      "glyphCount": 939,
+      "hungarianVerified": true,
+      "combiningMissing": [],
+      "internalFamily": "Nunito Sans 12pt ExtraLight",
+      "postScriptName": "NunitoSans-12ptExtraLightItalic",
+      "weight": [
+        200.0,
+        1000.0
+      ]
+    },
+    {
+      "family": "Nunito Sans",
+      "style": "normal",
+      "file": "nunitosans-normal.woff2",
+      "revision": "8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5",
+      "source": "https://raw.githubusercontent.com/google/fonts/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/nunitosans/NunitoSans%5BYTLC%2Copsz%2Cwdth%2Cwght%5D.ttf",
+      "sourceSha256": "f934d7142fb4784bf828da485b7dcbd90c0c80d514e9d49a5da0ed3a1ae2491d",
+      "sha256": "883f24fcbfc93f9a53aa66710fd1898b59b6f88500a7098ae86e7b3049beeca5",
+      "glyphCount": 939,
+      "hungarianVerified": true,
+      "combiningMissing": [],
+      "internalFamily": "Nunito Sans 12pt ExtraLight",
+      "postScriptName": "NunitoSans-12ptExtraLight",
+      "weight": [
+        200.0,
+        1000.0
+      ]
+    },
+    {
+      "family": "Inter",
+      "style": "italic",
+      "file": "inter-italic.woff2",
+      "revision": "0b58fb370093f9a9f4ff785d94405710b79de67c",
+      "source": "https://raw.githubusercontent.com/google/fonts/0b58fb370093f9a9f4ff785d94405710b79de67c/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf",
+      "sourceSha256": "acd98e64795781b2058f07b18475e0ecee2a0fe2b42a49e2f9e37d0d6bf66ce6",
+      "sha256": "0ada205191e5c3adbbc410eaf443fbb9ca002342c81ff8b9537ecb73f0b8fa14",
+      "glyphCount": 2813,
+      "hungarianVerified": true,
+      "combiningMissing": [
+        "U+030B"
+      ],
+      "internalFamily": "Inter",
+      "postScriptName": "Inter-Italic",
+      "weight": [
+        100.0,
+        900.0
+      ]
+    },
+    {
+      "family": "Inter",
+      "style": "normal",
+      "file": "inter-normal.woff2",
+      "revision": "0b58fb370093f9a9f4ff785d94405710b79de67c",
+      "source": "https://raw.githubusercontent.com/google/fonts/0b58fb370093f9a9f4ff785d94405710b79de67c/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf",
+      "sourceSha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+      "sha256": "c0329201e22a32e2e217297927a8ad41f69fc29873de1df66c6f8b725da097b9",
+      "glyphCount": 2849,
+      "hungarianVerified": true,
+      "combiningMissing": [
+        "U+030B"
+      ],
+      "internalFamily": "Inter",
+      "postScriptName": "Inter-Regular",
+      "weight": [
+        100.0,
+        900.0
+      ]
     }
   ]
 }

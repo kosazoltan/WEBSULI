@@ -24,7 +24,7 @@ export const SKILL_RULES = {
   review_evidence: ["Lektori bizonyíték", "A hibajegyhez pontos meglévő tananyaghely és ellenőrizhető indok kell. A nem igazolt állítás nem bizonyított tényhiba; irodalmi értelmezést ne követelj kötelező tényként. Ellenőrizd az idézetet, majd a konkrét javítás után a teljes jelöltet újra lektoráld. Hiányzó vagy ellentmondó bizonyítékot korrigálj, minőségkaput ne lazíts."],
   html_complete: ["Teljes tananyag", "Keresési összefoglaló vagy ígéret helyett a teljes kért tananyagot add vissza, lezárt HTML-lel, működő négy lappal és a teljes JSON-bankkal."],
   citations: ["Felhasznált források", "A ténylegesen feldolgozott internetes forrás kattintható hivatkozása a tananyagban is jelenjen meg; a találati lista nem pótolja a tanítást."],
-  typography: ["Magyar megjelenítés", "Őrizd meg a magyar ékezeteket minden látható szövegben. Kizárólag a helyi Nunito, Source Sans 3, Source Serif 4 és /fonts/lesson-fonts.css használható."],
+  typography: ["Magyar megjelenítés", "Őrizd meg a magyar ékezeteket minden látható szövegben. Kizárólag a helyi, évfolyamhoz rendelt Nunito Sans (1–5.) vagy Inter (6–12.) és a /fonts/lesson-fonts.css használható."],
   repair_scope: ["Javítás hatóköre", "A célzott javítás csak az érintett tételazonosítókat változtathatja. A jó tanítást és az érintetlen kérdéseket őrizd meg; ne törölj követelményt a hiba elfedésére."],
   // Spec 2026-10-06-s7 (§4/9): a támogató szerepek saját lelet-kódjai — a hibájuk nem csak a közös osztályozón át tanul.
   scope_classification: ["Besorolás", "Tantárgyat és évfolyamot a forrás minden fájljából dönts; bizonytalanul évfolyam-tartományt adj."],

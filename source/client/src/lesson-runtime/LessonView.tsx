@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, RotateCw } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { dropUnknownAnimateBlocks, lessonSchema } from "@shared/lesson-schema";
 import { tolerantLessonInput } from "@shared/lesson-experience";
+import { nfcDeep } from "@shared/lesson-typography";
 import { reloadIfNewerBuild } from "@/lib/app-version";
 import { LessonRuntime } from "./LessonRuntime";
 
@@ -56,7 +57,8 @@ export function LessonView({ material }: { material: { id: string; title?: strin
     );
   }
 
-  const parsed = lessonSchema.safeParse(dropUnknownAnimateBlocks(tolerantLessonInput(data?.lesson)));
+  // Websuli Design (§2.4): NFC — minden ő/ű az előre összetett glifát kapja a lecke saját fontjából.
+  const parsed = lessonSchema.safeParse(dropUnknownAnimateBlocks(tolerantLessonInput(nfcDeep(data?.lesson))));
 
   if (!parsed.success) {
     return (

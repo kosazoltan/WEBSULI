@@ -1,4 +1,4 @@
-import { LESSON_FONT_CSS, LESSON_TYPOGRAPHY_CONTRACT, lessonFontPair, type LessonFont } from "../../shared/lesson-typography";
+import { LESSON_FONT_CSS, LESSON_FONT_FALLBACK, LESSON_TYPOGRAPHY_CONTRACT, lessonFontPair, type BundledFont } from "../../shared/lesson-typography";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 import { HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 import { HTML_INTERACTION_CONTRACT } from "../../shared/lesson-interactions";
@@ -22,9 +22,10 @@ export type LessonTheme = {
   id: string;
   name: string;
   mood: string;
-  bodyFont: LessonFont;
-  headingFont: LessonFont;
-  displayFont?: LessonFont;
+  /** Leíró mező; a tényleges tananyagfontot az évfolyam adja (`lessonFontPair`, Websuli Design). */
+  bodyFont: BundledFont;
+  headingFont: BundledFont;
+  displayFont?: BundledFont;
   primary: string;
   accent: string;
   background: string;
@@ -217,9 +218,10 @@ function ageBand(classroom: number): string {
 
 /** A kiválasztott téma promptba illő leírása (a modell ettől indokolt esetben eltérhet). */
 export function lessonThemePrompt(theme: LessonTheme, classroom: number): string {
-  const pair = lessonFontPair(classroom, theme.headingFont === "Source Serif 4" ? "irodalom" : "");
-  const body = `'${pair.body}',sans-serif`;
-  const heading = `'${pair.heading}',${pair.heading === "Source Serif 4" ? "serif" : "sans-serif"}`;
+  // Websuli Design: a font az évfolyamból (1–5. Nunito Sans, 0. és 6–12. Inter), a témától függetlenül.
+  const pair = lessonFontPair(classroom);
+  const body = `'${pair.body}',${LESSON_FONT_FALLBACK}`;
+  const heading = `'${pair.heading}',${LESSON_FONT_FALLBACK}`;
   return [
     "## MEGJELENÍTÉSI TÉMA (ehhez a tananyaghoz kiválasztva — kövesd, hogy a tananyagok változatosak legyenek)",
     `- Téma: **${theme.name}** (${theme.mood}). CSS prefix: \`${theme.prefix}-\` (ha ütközne, válts 2–3 betűs másikra).`,
@@ -256,7 +258,7 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
 
 ## OLDAL 1 – TANANYAG
 - Folyamatos, érthetően tagolt szöveg — NEM vázlat. Teljes anyag fejezetekre bontva; definíciók, példák, felsorolások, összefoglalók.
-- Korosztály: 1–2. évf. egy rövid utasítás egyszerre; 3–4. évf. szemléletes példák és önálló próbálkozás; 5–6. évf. analógiák, hétköznapi alkalmazás; 7–8. évf. ok-okozat, elvont fogalmak. 1–4. évf. Nunito; később Source Sans 3 törzs, irodalmi/történelmi címsorhoz Source Serif 4.
+- Korosztály: 1–2. évf. egy rövid utasítás egyszerre; 3–4. évf. szemléletes példák és önálló próbálkozás; 5–6. évf. analógiák, hétköznapi alkalmazás; 7–8. évf. ok-okozat, elvont fogalmak. 1–5. évf. Nunito Sans; a 6. évfolyamtól Inter (törzs és címsor).
 - Info-boxok (érdekesség, figyelem, összefoglalás). Vizuális kártyák SZÖVEGES tartalommal (NEM emoji állatképek). Legalább 1 ciklus-diagram / folyamatábra / kártyasor CSS-ből vagy inline SVG-ből.
 - Fejezetek KÁRTYÁKON, alapból minden tanítási fejezet látható, természetesen görgethető. A fejezet tanítása látható, a releváns kiegészítő módszer külön megnyitható. Minden fejezet végén mini-összefoglaló box.
 - Az 1. oldal végén „Források" blokk a felhasznált URL-ekkel (ha voltak).
@@ -463,7 +465,7 @@ A <head> elején: <meta charset="utf-8"> és <meta http-equiv="Content-Type" con
 ## ÖNELLENŐRZÉS A HTML LEZÁRÁSA ELŐTT
 - 4 oldal, témához illő kognitív elemek, dragdrop touch + ujjkövetés, feladatok az 1. oldalból, háromrétegű motor + háromállapotú kimenet + mintaválasz gomb, Újragenerálás TETEJÉN / Kiértékelés ALJÁN, fél pontok, fogalomfedő kvízbank és bankPlan szerinti kör.
 - Nincs alert/confirm/prompt, nincs console.*/debugger, asztalon (≥1200px) többoszlopos, nem keskeny az elrendezés, a tanítás teljes áttekintése elérhető, minden interaktív elem 44px, prefix mindenhol, IIFE + 'use strict'.
-- Kizárólag a három engedélyezett, helyben kiszolgált font, UTF-8 és lang="hu"; tényleges ő/Ő/ű/Ű renderpróba.
+- Kizárólag az évfolyamhoz rendelt, helyben kiszolgált font (Nunito Sans vagy Inter), UTF-8 és lang="hu"; tényleges ő/Ő/ű/Ű renderpróba.
 - A dokumentum <!DOCTYPE html>-lel kezdődik és </html>-lel zárul, a <script> blokkok lezártak.`;
 
 export type LessonSpecPromptOptions = {

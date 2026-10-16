@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { lessonSchema } from "../shared/lesson-schema";
+import { lessonFontPair } from "../shared/lesson-typography";
 import { experienceRoundSizes } from "../shared/lesson-experience";
 const candidatePath = process.env.LESSON_CURRENT_BANK === "1" ? "../../tmp/lesson-bank-v2/candidate.json" : "../../tmp/lesson-fusion/candidate.json";
 const lesson = lessonSchema.parse(JSON.parse(readFileSync(new URL(candidatePath, import.meta.url), "utf8")));
@@ -13,7 +14,9 @@ for (const [width, height] of [[390, 844], [844, 390], [1440, 900]]) {
     await page.goto("/__lesson-runtime-probe?candidate=1");
     await expect(page.getByRole("heading", { name: lesson.title, exact: true })).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    await expect(page.locator("[data-band]")).toHaveCSS("font-family", '"Source Sans 3", sans-serif');
+    // Websuli Design: a font az évfolyamból (1–5. Nunito Sans, 0. és 6–12. Inter), Noto Sans tartalékkal.
+    const font = lessonFontPair(lesson.classroom).body;
+    await expect(page.locator("[data-band]")).toHaveCSS("font-family", `${font.includes(" ") ? `"${font}"` : font}, "Noto Sans", sans-serif`);
     for (const tab of ["Tananyag", "Módszerek", "Feladatok", "Kvíz"]) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
       // A short, gated Methods page can fit without scrolling on desktop. Clamp the
