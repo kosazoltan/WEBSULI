@@ -192,3 +192,33 @@ háromfázis-kapu) zárul.
 - A térkép-kinyerés: draft állapot, idempotens lenyomat (DB-teszt).
 - approve-outline: e2e mock — a felület a futást követi.
 - `grep`: a `LEGACY_MODELS`-ben nincs `claude-opus-5"`.
+
+## S4b — kivezetés (terv: `2026-10-16-egy-futas.md`, „S4b”)
+Ág: `feat/egy-futas-s4b-kivezetes` (az S4a-ra építve). Sorrend:
+
+1. **Kapcsoló vége:** `single-run/switch.ts` törlése. Minden `singleRunEnabled()` elágazásból csak az egyfutásos ág marad.
+   - Érintett fájlok: `lesson-pipeline-routes.ts`, `studio/routes.ts`, `structured-improvement.ts`, `live.ts`.
+2. **Régi lépésgép a route-fájlban:** törlődik
+   - `drive`, `guardedDrive`, `driveTracked`, `driveOneStep`, `driveRemade`;
+   - `autoApproveOutline`, `applyResume`, a régi `runOneStepCore`-törzs;
+   - `focusForInstruction`, `correctMapInWorkflow`, `seedSourceGapNote`;
+   - a `remanufactureFromMap` régi ága, a `sweepFailedStudioJobs` és ütemezése;
+   - a `sweepStudioJobs` folytató ága (a lezárás marad).
+
+   A piszkozatlista, az elvetés, a `remakeAsSingleRun`, a futásnézet és a felület-szerződések (`/jobs/:id`, `/drafts`, `/lessons/one-step/:runId`)
+   változatlanok.
+3. **Elérhetetlen modulok:** importgráf-elemzés a szerver belépési pontjaiból (`server/index.ts`, `scripts/**`, a kliens). Ami nem
+   érhető el, törlődik, a csak azt importáló tesztekkel együtt.
+   - Az egyfutásos motor által használt determinisztikus segédek (`resolveChoiceGate`, `openBankFindingFlags`, `createDrizzlePipelineStore`
+     és típusaik) a `step-runner.ts` megmaradó részében maradnak (nincs áthelyezés, ha nem szükséges).
+4. **`models.ts`:** megmarad
+   - a két modell (`claude-opus-5-5`, `gpt-6.1-sol`);
+   - a kulcs-/szolgáltató-feloldás, `LEGACY_MODELS`, `TASK_EFFORT`, `crossFamilyFallback`;
+   - a `resolveStudioModel` csak a ténylegesen hívott lépésekre.
+
+   Törlődik minden más modellkonstans (OCR, scope, bank, rescue, lektor-lánc, harmadik család, válaszkulcs, kvíz-vak, orkesztrátor,
+   OpenRouter-útválasztás), valamint az `assertDistinctFamilies` és az indításkori hívása.
+5. **Ellenőrzés:**
+   - `tsc`, lint, teljes teszt, DB-teszt, build, e2e;
+   - `grep` a modell-azonosítókra: a `server`, `shared`, `client/src` és `scripts` alatt csak `claude-opus-5-5` és `gpt-6.1-sol` (a megjegyzések
+     és a történeti dokumentáció kivétel).
