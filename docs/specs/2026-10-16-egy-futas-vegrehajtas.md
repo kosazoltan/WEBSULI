@@ -92,3 +92,51 @@ háromfázis-kapu) zárul.
 - **Tartalékválasz:** a `failed` / `cancelled` állapotú tartalékválasz hiba (nem üres forduló).
 - **Hibás forduló:** sikertelen forduló után az átirat a hívás előtti hosszra áll vissza; a használat-napló (`onUsage`) hibája nem rontja a sikeres fordulót.
 - **Kulcsok:** az üres vagy csak szóközt tartalmazó kulcs hiányzó kulcsnak számít.
+## S3 — végrehajtás közbeni pontosítások (dokumentált)
+- **Kapcsoló:** `server/studio/single-run/switch.ts` (`STUDIO_SINGLE_RUN=0` = vészfék, alapból egyfutás).
+- **Feltöltés és webes út:** a `runOneStepCore` elején `runSingleUpload` (`single-run/live.ts`).
+  - A forrás modell nélkül készül elő: docx → szöveg, szöveges PDF → kinyert szöveg; a kép és a szkennelt PDF natív blokkként megy.
+  - A térkép jóváhagyottként kerül mentésre, a szó szerint igazolt fogalmak „kept” állapotban; a bemeneti lenyomat gyártásonként egyedi.
+- **Újragyártás, folytatás, kifejezett resume** (régi és új jobra egyaránt):
+  - új egyfutásos gyártás a térkép mentett forrásátiratából (`remakeAsSingleRun` → `startOneStepRun`);
+  - a régi job atomikusan „újragyártott” lesz; futó vagy kész jobot nem fog el.
+  - A beszélgetés közepéről való folytatás (mentett átiratból) külön szelet: az S3 után következik.
+- **Automatikus továbbvitel:** egyfutásos módban a hibás jobok automatikus, fizetős vezérlője (`sweepFailedStudioJobs`) nem fut.
+  Az árvajob-söprés a régi lépésgép jobját nem folytatja, hanem lezárja; a piszkozat megmarad, a döntés a felhasználóé.
+- **Hibakezelés:** a motor bármely állomásának megállásakor a job `error` állapotba kerül a pontos okkal, és a mentett beszélgetés (piszkozat)
+  megmarad.
+
+## S3 — élő próba (2026-10-16, eldobható helyi Postgres, valódi Opus 5.5)
+- **Forrás:** rövid szöveges forrás („A víz körforgása”).
+- **Eredmény:** **közzétett lecke**, 3 fejezet, 59 feladat, 98 kvízkérdés, `html_files` sor; idő: 705 s.
+- **8 forduló, egyetlen beszélgetésben.** Javító forduló és sikertelen bankkísérlet nem kellett; a lektor első köre blokkoló nélkül zárt.
+- **Token:**
+  - bemenet 578 473, ebből **403 669 gyorsítótárból** (70%), friss bemenet 174 804;
+  - kimenet 85 371.
+- Más modell nem hívódott.
+
+## S3 — review #260
+- **Job-tulajdonos:** a `store.createJob` után `workflowResource(jobId)` (mint a régi útvonalon), így a hibás egyfutásos job
+  a futás gazdájához kötött piszkozat marad (`manageableBy`), és a lízing a jobhoz kapcsolódik.
+- **Utolsó kör utáni lektorálás:** ha az utolsó javító körben a bank megváltozott (kivétel vagy újraépítés), egy további,
+  csak ellenőrző lektori kör fut; abban bármely blokkoló → megállás (`lektorálás`), publikálás nincs. Tanítási hiba az utolsó
+  javító körben továbbra is megállás.
+- **Önellentmondó lektori jelentés:** a `match: false` megoldáseltérés blokkoló jegyzet nélkül alaki hiba — a jelentés a
+  beszélgetésben visszamegy (javító forduló), a lektornak jegyzettel kell jeleznie vagy a megoldást helyesbítenie.
+
+## S3 — review #260, 2. kör (Copilot)
+- **Jogosultság:** a `remakeAsSingleRun` atomi foglalása a `manageableBy(owner)` és a `notBeingDriven` feltétellel fut (másik admin
+  jobja és élő lízing alatti job nem foglalható).
+- **Piszkozat:** a bankcsomag-checkpoint mentése a közös `output`-ot is frissíti (a hibaág nem írja vissza a régit).
+- **Nyitott aritmetikai leletek + választásos kapu:** az `onOpenFinding` leleteit a motor gyűjti (`output.bankOpenFindings`); a végkapu
+  előtt MINDIG fut a `resolveChoiceGate(lesson, openBankFindingFlags(...))` a teljes leckén (tanítási check-blokkok is); hibánál megállás.
+- **Vegyes lektori jelentés:** a bankleleteket a lektorált leckén oldjuk fel (`resolveBankReview`), és tanításjavításnál ezt adjuk át
+  a bank-újraépítésnek; a régi indexeket nem alkalmazzuk az új bankra.
+- **Vázlat-keret:** `autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections)`.
+- **Bankhívás:** a csonkolt / üres / nem JSON válasz `RetryableBankCallError` (a banképítő javító köre kezeli); szolgáltatói hiba változatlan.
+- **Tanításon mérhető kapuk korábban:** a fedettségi kapu és a tananyagív a 3. állomás validátorában is fut (javító forduló jár rá).
+- **Többfájlos forrás:** 2+ fájlnál az 1. állomás fájlonkénti átiratot (`fileTranscripts`) és fogalmonként `sourceFile`-t ad; az idézet a
+  saját fájl átiratán mérődik, a mentés a valódi fájlt és a fájlonkénti átiratot tárolja. Egy fájlnál a mostani alak érvényes.
+- **Belépési pontok és kliens:** a `/lessons/from-map/:mapId` egyfutásos módban a térkép mentett forrásából egyfutásos gyártást indít
+  (`202 { runId }`); a kliensek (`LessonStudioPanel`, `SourceUploadForm`, `JobMonitor`) a visszaadott `runId`-t követik
+  (a futás `jobId`-ja, amint megvan).

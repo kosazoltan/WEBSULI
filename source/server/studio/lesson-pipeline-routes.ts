@@ -47,6 +47,7 @@ import {
 } from "./one-step-progress";
 import { ORPHAN_JOB_ERROR, sweepDecision, type SweepRow } from "./orphan-jobs";
 import { driveRemadeWith } from "./remade-drive";
+import { singleRunEnabled } from "./single-run/switch";
 import { UNCERTAIN_MARK } from "./ocr";
 import { quoteTouchesUncertain } from "../../shared/transcript-marks";
 import { autonomousDecision } from "./autonomous";
@@ -215,7 +216,9 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
       runState: (raw.run_state as string | null) ?? null, leaseUntil: raw.lease_until ? new Date(String(raw.lease_until)) : null, executions: Number(raw.executions ?? 0),
     };
     // Ugyanabból a forrásból újabb gyártás van: a régi, gazdátlan job NEM folytatódik (dupla, fizetős gyártás ellen) — lezárul.
-    const decision = raw.has_newer === true && sweepDecision(row, now, boot) === "resume" ? "close" : sweepDecision(row, now, boot);
+    const raw0 = raw.has_newer === true && sweepDecision(row, now, boot) === "resume" ? "close" : sweepDecision(row, now, boot);
+    // docs/specs/2026-10-16-egy-futas.md (D): egyfutásos módban a régi lépésgép jobja nem folytatódik automatikusan — lezárul (piszkozat marad).
+    const decision = singleRunEnabled() && raw0 === "resume" ? "close" : raw0;
     if (decision === "leave") continue;
     acted++;
     if (decision === "close") {
@@ -647,6 +650,10 @@ lessonPipelineRouter.post("/drafts/:jobId/continue", async (req: Request, res: R
     LEFT JOIN LATERAL (SELECT w.owner_id FROM lesson_workflow_runs w WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1) wr ON true
     WHERE j.id = ${req.params.jobId} AND ${notBeingDriven} AND coalesce(j.output->>'recoveryState', '') <> 'discarded' AND (j.status = 'ok' AND j.step = 'author' AND j.output ? 'outline' AND NOT j.output ? 'approvedOutline' AND j.created_at > now() - interval '7 days' AND wr.owner_id = ${owner})`);
   if (!rows.length) return res.status(409).json({ message: "Ez a job nem vár a tanulási terv jóváhagyására (vagy másik készítőhöz tartozik)." });
+  if (singleRunEnabled()) {
+    try { return res.status(202).json({ jobId: req.params.jobId, runId: await remakeAsSingleRun(req.params.jobId, owner) }); }
+    catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "A folytatás nem indítható." }); }
+  }
   void driveRemade(req.params.jobId, owner, false).catch((e) => logger.warn(`[STUDIO] A folytatás megállt (${req.params.jobId}): ${e instanceof Error ? e.message : String(e)}`));
   res.status(202).json({ jobId: req.params.jobId });
 });
@@ -659,6 +666,8 @@ lessonPipelineRouter.post("/drafts/:jobId/remake", async (req: Request, res: Res
   const row = rows[0] as { error: string | null } | undefined;
   if (!row) return res.status(409).json({ message: "Ez a piszkozat nem gyártható újra (fut, publikált, vagy másik készítőhöz tartozik)." });
   try {
+    // Review #260: egyfutásos módban az újragyártás futást ad (`runId`), nem jobot — a válasz ezt külön mezőben adja.
+    if (singleRunEnabled()) return res.status(202).json({ jobId: req.params.jobId, runId: await remakeAsSingleRun(req.params.jobId, owner), remanufactured: true });
     res.status(202).json({ jobId: await remanufactureFromMap(req.params.jobId, owner, row.error ?? "Kézi újragyártás az adminfelületről.") });
   } catch (error) {
     res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." });
@@ -742,6 +751,22 @@ async function readPublishedLesson(lessonId: string) {
 }
 
 async function runOneStepCore(runId: string, data: OneStepRequest, userId: string, options: { offerDraft?: boolean } = {}) {
+  // docs/specs/2026-10-16-egy-futas.md (tulajdonosi döntés 2026-10-16): minden új gyártás az egyfutásos motoron — Opus 5.5 (medium) egy
+  // beszélgetésben a forrástól a közzétételig, tartalék GPT-6.1 Sol. Vészfék az átállás idejére: STUDIO_SINGLE_RUN=0 (a régi lépésgép).
+  const { singleRunEnabled, runSingleUpload } = await import("./single-run/live");
+  if (singleRunEnabled()) {
+    try {
+      const result = await runSingleUpload(
+        { files: data.files as ExtractorFile[], instruction: normalizeOwnerInstruction(data.instructions), title: data.title, ownerId: userId },
+        (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }),
+      );
+      updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });
+    } catch (error) {
+      logger.error(`[EGYFUTÁS] A gyártás megállt (${runId}): ${error instanceof Error ? error.message : String(error)}`);
+      updateRun(runId, { phase: "error", error: error instanceof Error ? error.message.slice(0, 1500) : "Az egyfutásos gyártás megállt." });
+    }
+    return;
+  }
   await workflowPhase("source");
   const { title } = data;
   const instruction = normalizeOwnerInstruction(data.instructions);
@@ -1309,6 +1334,17 @@ lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: 
 
   // #180: `{}` (the Studio panel's body) means "the map's own scope".
   const scope = parsed.data && "subject" in parsed.data ? parsed.data : undefined;
+  // docs/specs/2026-10-16-egy-futas.md (D, review #260): egyfutásos módban a térképről indítás is egyfutásos gyártás a térkép mentett
+  // forrásátiratából; a kliens a visszaadott futást (`runId`) követi.
+  if (singleRunEnabled()) {
+    const [map] = await db.select({ title: knowledgeMaps.title, subject: knowledgeMaps.subject, classroom: knowledgeMaps.classroom, sourceText: knowledgeMaps.sourceText })
+      .from(knowledgeMaps).where(eq(knowledgeMaps.id, req.params.mapId)).limit(1);
+    if (!map) return res.status(404).json({ message: "A térkép nem található." });
+    if (scope && (scope.subject !== map.subject || scope.classroom !== map.classroom)) return res.status(409).json({ message: "A megadott tantárgy / évfolyam nem egyezik a térképével." });
+    if (!map.sourceText?.trim()) return res.status(409).json({ message: "Ehhez a térképhez nincs mentett forrásszöveg — töltsd fel újra a forrást." });
+    const runId = startOneStepRun({ title: map.title, files: [{ name: "forras-atirat.txt", kind: "text", content: map.sourceText }] } as OneStepRequest, req.user!.id);
+    return res.status(202).json({ runId });
+  }
   // Spec 2026-10-03-forras-aritmetika-helyesbites: a meglévő térképről indított (újraindított) lecke is a determinisztikus
   // helyesbítésen megy át (kérés/fotó nélkül nincs modellhívás) — különben a hamis forrás-egyenlőség újra tényként tanítódna.
   // A helyesbítés hibája (a futás sem igazolja) sosem állítja meg a készítést — helyesbítés nélkül megy tovább, mint eddig.
@@ -1415,6 +1451,11 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
     .limit(1);
   if (!exists) return res.status(404).json({ message: "A job nem található." });
 
+  // docs/specs/2026-10-16-egy-futas.md (D): egyfutásos módban a régi lépésgép nem folytatódik — a mentett forrásból egyfutásos újragyártás.
+  if (singleRunEnabled()) {
+    try { return res.status(202).json({ jobId: req.params.id, runId: await remakeAsSingleRun(req.params.id, req.user!.id), remanufactured: true }); }
+    catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." }); }
+  }
   // Elakadás-vezérlő V4 (egy szabály): ha a tervező következő foka a teljes újragyártás, a kézi gomb is azt indítja (új job).
   const [stopped] = await db.select({ output: studioJobs.output, error: studioJobs.error, status: studioJobs.status }).from(studioJobs).where(eq(studioJobs.id, req.params.id));
   if (stopped?.status === "error" && stopped.error
@@ -1460,7 +1501,32 @@ async function applyResume(jobId: string, visit: import("../../shared/lesson-wor
  * Elakadás-vezérlő V4.2: a lépcső utolsó végrehajtható foka — teljes újragyártás ugyanabból a térképből (új job, új workflow); a régi piszkozat
  * megmarad, a kimenete az újra hivatkozik (`remanufacturedAs`), és a vezérlő nem veszi fel újra. Futásonként egyszer (a tervező szerint).
  */
+/**
+ * docs/specs/2026-10-16-egy-futas.md (D): egyfutásos módban az újragyártás / folytatás új EGYFUTÁSOS gyártás a térkép mentett
+ * forrásátiratából (a régi lépésgép nem indul). A régi job atomikusan „újragyártott” lesz (dupla kattintás sem indít kettőt).
+ */
+export async function remakeAsSingleRun(jobId: string, owner: string): Promise<string> {
+  const claim = await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb) || '{"recoveryState":"remanufactured"}'::jsonb
+    WHERE j.id = ${jobId} AND coalesce(j.output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured', 'discarded')
+      AND j.status IN ('error', 'ok') AND j.step <> 'done'
+      AND ${notBeingDriven} AND ${manageableBy(owner)}
+    RETURNING j.map_id, j.output->>'ownerInstruction' AS instruction`);
+  const row = claim.rows[0] as { map_id: string; instruction: string | null } | undefined;
+  if (!row) throw new WorkflowConflict("Az újragyártás már elindult, a piszkozat törölve, épp fut, vagy nem a tiéd.");
+  const [map] = await db.select({ title: knowledgeMaps.title, sourceText: knowledgeMaps.sourceText }).from(knowledgeMaps).where(eq(knowledgeMaps.id, row.map_id)).limit(1);
+  if (!map?.sourceText?.trim()) {
+    await db.execute(sql`UPDATE studio_jobs SET output = output - 'recoveryState' WHERE id = ${jobId}`);
+    throw new WorkflowConflict("Ehhez a piszkozathoz nincs mentett forrásszöveg — töltsd fel újra a forrást.");
+  }
+  const runId = startOneStepRun({ title: map.title, ...(row.instruction ? { instructions: row.instruction } : {}),
+    files: [{ name: "forras-atirat.txt", kind: "text", content: map.sourceText }] } as OneStepRequest, owner);
+  await db.execute(sql`UPDATE studio_jobs SET output = output || ${JSON.stringify({ remanufacturedAs: `single-run:${runId}` })}::jsonb WHERE id = ${jobId}`);
+  logger.warn(`[EGYFUTÁS] ${jobId}: újragyártás egyfutásos motoron a mentett forrásátiratból → futás ${runId}`);
+  return runId;
+}
+
 async function remanufactureFromMap(jobId: string, owner: string, error: string): Promise<string> {
+  if (singleRunEnabled()) return remakeAsSingleRun(jobId, owner);
   // Review #237 (P1): atomi foglalás a job létrehozása ELŐTT — két párhuzamos kérés (dupla kattintás, söprő + gomb) nem indíthat két gyártást.
   const claim = await db.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb) || '{"recoveryState":"remanufacturing"}'::jsonb
     WHERE id = ${jobId} AND status = 'error' AND coalesce(output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured', 'discarded') RETURNING id`);
@@ -1505,6 +1571,8 @@ async function remanufactureFromMap(jobId: string, owner: string, error: string)
  * a lépcső végén `recoveryState = "ask-owner"` (a felület a pontos okot mutatja), további automatikus lépés nincs.
  */
 export async function sweepFailedStudioJobs(now = Date.now()): Promise<number> {
+  // docs/specs/2026-10-16-egy-futas.md (D): egyfutásos módban nincs automatikus (fizetős) továbbvitel — a döntés a felhasználóé (draftlista).
+  if (singleRunEnabled()) return 0;
   const { rows } = await db.execute(sql`
     SELECT j.id, j.status, j.step, j.error, j.finished_at, j.output ? 'lesson' AS has_lesson, (l.published_at IS NOT NULL) AS published,
            j.output->>'recoveryState' AS recovery_state, r.id AS run_id, r.owner_id, r.state AS run_state, r.lease_until,

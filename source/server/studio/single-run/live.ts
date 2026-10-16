@@ -1,0 +1,68 @@
+/**
+ * Egyfutásos tananyaggyártás — éles bekötés (docs/specs/2026-10-16-egy-futas.md, D; végrehajtás: S3).
+ * A térkép mentése ugyanazzal a tranzakciós beszúrással, mint a régi kinyerés (`run-extraction.ts`); a gyártás a `runSingleLesson`-nel.
+ */
+import { createHash, randomUUID } from "node:crypto";
+import { db } from "../../db";
+import { knowledgeMaps, kmConcepts } from "../../../shared/schema";
+import { workflowFence } from "../../workflows/engine";
+import { logger } from "../../lib/logger";
+import type { ExtractorFile } from "../extractor";
+import { createDrizzlePipelineStore } from "../step-runner";
+import { createLessonConversation } from "./conversation";
+import { runSingleLesson, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
+
+export { singleRunEnabled } from "./switch";
+
+/** A tudásbank mentése: jóváhagyott térkép, a szó szerint igazolt fogalmak „kept” állapotban (egy tranzakció, workflow-fence-szel). */
+export async function saveSingleRunMap(map: SingleRunMap, files: ExtractorFile[], ownerId: string, model: string): Promise<string> {
+  // Egyedi bemeneti lenyomat (a tábla `input_hash` egyedi): az egyfutásos térkép gyártásonként új.
+  const inputHash = createHash("sha256").update(`single-run:${randomUUID()}`).digest("hex");
+  return db.transaction(async (tx) => {
+    await workflowFence(tx);
+    const [row] = await tx.insert(knowledgeMaps).values({
+      title: map.title, subject: map.subject, classroom: map.classroom, status: "approved",
+      // Review #260: fájlonként a modell betűhű átirata (kép / szkennelt PDF is) — a későbbi idézetellenőrzés a saját fájlján mér.
+      sourceFiles: files.map((f) => { const text = map.fileTranscripts[f.name] ?? f.extractedText; return { name: f.name, kind: f.kind, ...(text ? { extractedText: text } : {}) }; }),
+      sourceText: map.transcript, inputHash, model, createdBy: ownerId, approvedBy: ownerId, approvedAt: new Date(),
+    }).returning({ id: knowledgeMaps.id });
+    await tx.insert(kmConcepts).values(map.concepts.map((c, index) => ({
+      mapId: row.id, localId: c.id, term: c.term, definition: c.definition, quote: c.quote, sourceRef: { file: c.sourceFile },
+      type: c.type, examWeight: c.examWeight, relatedIds: c.relatedIds, verbatimOk: c.verbatimOk, verbatimReason: null, reviewState: "kept" as const, orderIndex: index,
+    })));
+    await workflowFence(tx);
+    return row.id;
+  });
+}
+
+/** A feltöltött forrás előkészítése modell nélkül: docx → szöveg, szöveges PDF → kinyert szöveg; kép / szkennelt PDF natívan megy. */
+async function prepareFiles(files: ExtractorFile[]): Promise<ExtractorFile[]> {
+  const { normalizeDocumentSources } = await import("../document-source");
+  const out: ExtractorFile[] = [];
+  for (const file of files) {
+    try { out.push(...await normalizeDocumentSources([file])); }
+    catch { out.push(file); } // olvashatatlan PDF: az Opus natívan olvassa (dokumentumblokk)
+  }
+  return out;
+}
+
+export type SingleRunProgress = { phase: SingleRunPhase | "ocr" | "error"; detail?: string | null; error?: string; mapId?: string; jobId?: string; lessonId?: string };
+
+/** Egy feltöltés teljes gyártása egy beszélgetésben (a hívó workflow-ján belül). */
+export async function runSingleUpload(input: { files: ExtractorFile[]; instruction?: string; title?: string; ownerId: string }, progress: (p: SingleRunProgress) => void): Promise<SingleRunResult> {
+  progress({ phase: "ocr", detail: "A forrás előkészítése…" });
+  const files = await prepareFiles(input.files);
+  const conversation = createLessonConversation(singleRunSystemPrompt(), {
+    onFallback: (reason) => { logger.warn(`[EGYFUTÁS] Tartalékmodell: ${reason}`); progress({ phase: "extract", detail: `Tartalékmodell: ${reason}`.slice(0, 300) }); },
+    onUsage: (r) => logger.info(`[EGYFUTÁS] ${r.model}: be ${r.usage?.input ?? "?"} (gyorsítótár ${r.usage?.cachedInput ?? 0}), ki ${r.usage?.output ?? "?"} token`),
+  });
+  logger.info(`[EGYFUTÁS] Indul: ${conversation.model}, ${files.length} forrásfájl`);
+  return runSingleLesson({ ...input, files }, {
+    conversation,
+    store: await createDrizzlePipelineStore(),
+    saveMap: (map, f) => saveSingleRunMap(map, f, input.ownerId, conversation.model),
+    onPhase: (phase, detail) => progress({ phase, detail }),
+    onJob: (jobId, mapId) => progress({ phase: "pedagogue", jobId, mapId, detail: "A tananyagterv készül…" }),
+    log: (m) => logger.info(m),
+  });
+}

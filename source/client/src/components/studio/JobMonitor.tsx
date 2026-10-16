@@ -24,9 +24,11 @@ export type JobMonitorProps = {
   jobId: string;
   /** Called once when the job reaches a state the client can stop watching. */
   onDone?: (job: JobSummary) => void;
+  /** Review #260: a folytatás új (egyfutásos) futást indított — a hívó ezt a futást követi tovább. */
+  onFollowRun?: (runId: string) => void;
 };
 
-export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
+export function JobMonitor({ jobId, onDone, onFollowRun }: JobMonitorProps) {
   const { data, isError, error } = useQuery<{
     job: JobSummary;
     produced: {
@@ -131,7 +133,7 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
               {data.job.error ?? "Ismeretlen hiba."}
             </p>
-            <ResumeButton jobId={jobId} />
+            <ResumeButton jobId={jobId} onFollowRun={onFollowRun} />
           </div>
         )}
 
@@ -187,7 +189,7 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
 }
 
 /** Retry button for a failed job — POST /jobs/:id/resume is input-hash idempotent. */
-function ResumeButton({ jobId }: { jobId: string }) {
+function ResumeButton({ jobId, onFollowRun }: { jobId: string; onFollowRun?: (runId: string) => void }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
@@ -196,7 +198,13 @@ function ResumeButton({ jobId }: { jobId: string }) {
     if (pending) return; // audit 2026-09-05 (E): no double POST on a slow restart
     setPending(true);
     try {
-      await apiRequest("POST", `/api/studio/jobs/${jobId}/resume`);
+      const started = await apiRequest<{ runId?: string } | undefined>("POST", `/api/studio/jobs/${jobId}/resume`);
+      // Review #260: egyfutásos módban a folytatás új futás — a felület azt követi, nem a régi (hibás) jobot.
+      if (started?.runId && onFollowRun) {
+        onFollowRun(started.runId);
+        toast({ title: "Újragyártás elindult", description: "A mentett forrásból új gyártás indult; a haladás itt követhető." });
+        return;
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/studio/jobs", jobId] }),
         queryClient.invalidateQueries({ queryKey: ["/api/studio/workflows"] }),

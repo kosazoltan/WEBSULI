@@ -79,6 +79,21 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
   const [jobId, setJobId] = useState<string | null>(() => readPersistedJobId());
   const [studioMode, setStudioMode] = useState<"upload" | "web">("upload");
   useEffect(() => persistJobId(jobId), [jobId]);
+  // Review #260: egyfutásos módban a térképről indítás és a folytatás futást (`runId`) ad; a futás jobja a tudásbank után jön létre.
+  const [followRunId, setFollowRunId] = useState<string | null>(null);
+  const { data: followedRun } = useQuery<{ phase: string; jobId: string | null; error: string | null }>({
+    queryKey: ["/api/studio/lessons/one-step", followRunId],
+    queryFn: () => apiRequest("GET", `/api/studio/lessons/one-step/${followRunId}`),
+    enabled: followRunId !== null,
+    refetchInterval: (query) => (query.state.data?.jobId || query.state.data?.phase === "error" ? false : 3_000),
+  });
+  useEffect(() => {
+    if (followedRun?.jobId) { setJobId(followedRun.jobId); setFollowRunId(null); }
+    else if (followedRun?.phase === "error") {
+      toast({ title: "A gyártás megállt", description: followedRun.error ?? "Ismeretlen hiba.", variant: "destructive" });
+      setFollowRunId(null);
+    }
+  }, [followedRun, toast]);
 
   const { data: mapsData, isLoading: mapsLoading } = useQuery<{ maps: MapListItem[] }>({
     queryKey: ["/api/studio/maps"],
@@ -93,8 +108,11 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
   });
 
   const start = useMutation({
-    mutationFn: (id: string) => apiRequest<{ jobId: string }>("POST", `/api/studio/lessons/from-map/${id}`, {}),
-    onSuccess: (r) => setJobId(r.jobId),
+    mutationFn: (id: string) => apiRequest<{ jobId?: string; runId?: string }>("POST", `/api/studio/lessons/from-map/${id}`, {}),
+    onSuccess: (r) => {
+      if (r.jobId) setJobId(r.jobId);
+      else if (r.runId) { setJobId(null); setFollowRunId(r.runId); toast({ title: "A gyártás elindult", description: "A tudásbank és a terv elkészülte után itt követhető." }); }
+    },
     onError: (e: Error) =>
       toast({ title: "Nem indítható a lecke-készítés", description: e.message, variant: "destructive" }),
   });
@@ -162,7 +180,12 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
       </Card>
       )}
 
-      {jobId && <JobMonitor jobId={jobId} />}
+      {followRunId && !jobId && (
+        <p className="text-sm text-muted-foreground flex items-center gap-2" data-testid="following-run">
+          <Loader2 className="w-4 h-4 animate-spin" /> A gyártás elindult — a forrás feldolgozása folyik…
+        </p>
+      )}
+      {jobId && <JobMonitor jobId={jobId} onFollowRun={(runId) => { setJobId(null); setFollowRunId(runId); }} />}
 
       {jobId && outlineReady && selectedMap && (advancedOpen || !jobData?.produced.approvedOutline) && (
         <OutlineReview jobId={jobId} mapId={selectedMap.id} />

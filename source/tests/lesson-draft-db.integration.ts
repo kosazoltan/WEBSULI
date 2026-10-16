@@ -246,3 +246,21 @@ test("újragyártás jóváhagyása (J2): a tervre váró saját job látszik, f
     await dbPool.query("DELETE FROM users WHERE id = 'draft-appr'");
   }
 });
+
+test("review #260: az egyfutásos újragyártás foglalása csak saját / gazdátlan, épp nem vitt jobra hat", async () => {
+  const { remakeAsSingleRun } = await import("../server/studio/lesson-pipeline-routes");
+  const foreign = await mapWithJob({ owner: "draft-other" });
+  const leased = await mapWithJob({ owner: "draft-owner" });
+  const mine = await mapWithJob({ owner: "draft-owner" });
+  try {
+    await dbPool.query("UPDATE lesson_workflow_runs SET lease_until = now() + interval '1 minute' WHERE id=$1", [leased.id]);
+    await assert.rejects(remakeAsSingleRun(foreign.id, "draft-owner"), /nem a tiéd/);
+    await assert.rejects(remakeAsSingleRun(leased.id, "draft-owner"), /épp fut/);
+    // A saját job foglalása sikerül; forrásszöveg nélkül a foglalás visszaáll (nem indul fizetős gyártás).
+    await assert.rejects(remakeAsSingleRun(mine.id, "draft-owner"), /nincs mentett forrásszöveg/);
+    const states = (await dbPool.query("SELECT id, output->>'recoveryState' AS s FROM studio_jobs WHERE id = ANY($1)", [[foreign.id, leased.id, mine.id]])).rows;
+    for (const row of states) assert.equal(row.s, null, `${row.id}: érintetlen / visszaállt`);
+  } finally {
+    await dbPool.query("DELETE FROM studio_jobs WHERE id = ANY($1)", [[foreign.id, leased.id, mine.id]]);
+  }
+});
