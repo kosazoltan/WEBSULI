@@ -280,3 +280,11 @@ test("review #261: a jóváhagyott vázlat kötelező tervként kerül a tanári
   assert.match(text, /JÓVÁHAGYOTT TANULÁSI TERV — kötelező/);
   assert.match(text, /1\. B fejezet — fogalmak: c2\n2\. A fejezet — fogalmak: c1, c3/);
 });
+
+test("a rendszerprompt ép: a pontozó szabálya egy darabban, szó szerint; nincs egybetűs (szétszórt) sor", async () => {
+  const { OPEN_ANSWER_RULES_HU } = await import("../shared/lesson-experience-score");
+  const system = singleRunSystemPrompt();
+  assert.ok(system.includes(OPEN_ANSWER_RULES_HU), "a pontozó szabálya szó szerint, egy darabban");
+  const singleCharLines = system.split("\n").filter((l) => l.trim().length === 1);
+  assert.deepEqual(singleCharLines, [], "nincs betűnként szétszórt szöveg a rendszerpromptban");
+});

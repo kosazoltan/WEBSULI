@@ -75,7 +75,7 @@ export function singleRunSystemPrompt(): string {
     "Csak a forrás tényei taníthatók; amit a forrás nem igazol, azt ne állítsd.",
     "",
     "A SZÖVEGES FELADATOK PONTOZÁSI SZABÁLYAI (a program ezt futtatja):",
-    ...OPEN_ANSWER_RULES_HU,
+    OPEN_ANSWER_RULES_HU,
     "",
     ...(["pedagogue", "author", "animator", "bank", "lektor"] as const).map((role) => roleSkillBlock(role)).filter(Boolean),
   ].join("\n");

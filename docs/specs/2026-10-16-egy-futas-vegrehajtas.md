@@ -235,3 +235,9 @@ háromfázis-kapu) zárul.
   (állomásonként; a rendszerprompt — és így a gyorsítótár — változatlan).
 - **Leckejavítás:** a nem bank jellegű válasz csonkolása / JSON-hibája javító fordulót kap ugyanabban a beszélgetésben
   (legfeljebb `SINGLE_RUN_FIX_ROUNDS`).
+
+## S4b — mért hiba a rendszerpromptban (2026-10-16, átvilágítás közben)
+- **Lelet:** a `singleRunSystemPrompt()` a pontozó szabályát (`OPEN_ANSWER_RULES_HU`, egy összefűzött SZÖVEG) tömbként szórta szét
+  (`...OPEN_ANSWER_RULES_HU`). Mérve: 2372 sorból 2182 egybetűs sor — a modell a nyílt feladatok pontozási szabályait betűnként kapta.
+- **Javítás:** a szabály egyetlen blokként kerül a rendszerpromptba.
+- **Regressziós teszt:** a rendszerpromptban nincs egybetűs sor, és a pontozó szabálya szó szerint, egy darabban szerepel.
