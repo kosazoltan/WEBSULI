@@ -80,3 +80,9 @@ háromfázis-kapu) zárul.
   - `grep` a régi modellnevekre: 0 találat a tananyaggyártásban;
   - teljes tesztkészlet zöld;
   - élő futás.
+
+## S1 — review #258
+- **Időkeret:** modellenként 30 s; a kliens 70 s-ig vár (a teljes elsődleges + tartalék lánc).
+- **Séma:** a válasz modellenként a döntőbíró sémáján is ellenőrződik (`parseArbiterVerdict`); hibánál a tartalék jön.
+- **Napi keret:** a tartalék második fizetett hívása előtt külön atomi napi keretfoglalás; elfogyott keretnél nincs hívás.
+- **Gyorsítótár:** `ARBITER_VERSION` arbiter-1 → arbiter-2 (a modellváltás a régi ítéleteket érvényteleníti).

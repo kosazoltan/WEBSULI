@@ -16,7 +16,7 @@ import { callStepModel } from "../studio/run-step";
 import { teachingTextOf } from "../studio/experience-builder";
 import { withSupportSkill } from "../studio/support-skills";
 import { logger } from "../lib/logger";
-import { ARBITER_ANSWER_MAX, ARBITER_DAILY_LIMIT, ARBITER_FALLBACK_MODEL, ARBITER_MODEL } from "./arbiter";
+import { ARBITER_ANSWER_MAX, ARBITER_DAILY_LIMIT, ARBITER_FALLBACK_MODEL, ARBITER_MODEL, parseArbiterVerdict } from "./arbiter";
 import { judgeOpenAnswer, type ArbiterDeps } from "./service";
 
 export const arbiterBodySchema = z.object({
@@ -67,17 +67,30 @@ export const liveArbiterDeps: ArbiterDeps = {
   async callModel(system, user) {
     // docs/specs/2026-10-16-egy-futas.md (C): Opus 5.5 medium, akadályoztatásakor GPT-6.1 Sol medium.
     return callArbiterModels(system, user, (model) => studioModelReady(model),
-      async (model) => (await callStepModel(createStudioStepProvider(model, "arbiter"), { step: "lektor", policy: "arbiter", role: "arbiter", model, system: withSupportSkill("arbiter", system), user })).json);
+      async (model) => (await callStepModel(createStudioStepProvider(model, "arbiter"), { step: "lektor", policy: "arbiter", role: "arbiter", model, system: withSupportSkill("arbiter", system), user })).json,
+      // Review #258 (P1): a tartalék második fizetett hívás — külön napi keretfoglalás; elfogyott keretnél nincs új hívás.
+      () => liveArbiterDeps.reserveDailyCall());
   },
 };
 
-/** Az elsődleges, majd a tartalék döntőbíró-modell; a ténylegesen válaszoló modell nevével. Ha egyik sem válaszol, a hiba továbbmegy. */
-export async function callArbiterModels(system: string, user: string, ready: (model: string) => boolean, call: (model: string) => Promise<unknown>): Promise<{ json: unknown; model: string }> {
+/**
+ * Az elsődleges, majd a tartalék döntőbíró-modell; a ténylegesen válaszoló modell nevével. Review #258:
+ * - a válasz a döntőbíró sémáján is át kell menjen (`parseArbiterVerdict`), különben a tartalék jön;
+ * - a második (tartalék) fizetett hívás előtt külön napi keretfoglalás (`reserveExtra`) — elfogyott keretnél nincs hívás.
+ * Ha egyik sem ad érvényes ítéletet, a hiba továbbmegy (a hívó a determinisztikus ítéletet tartja meg).
+ */
+export async function callArbiterModels(system: string, user: string, ready: (model: string) => boolean, call: (model: string) => Promise<unknown>, reserveExtra?: () => Promise<boolean>): Promise<{ json: unknown; model: string }> {
   let last: unknown = new Error("A döntőbíró modellje nincs beállítva.");
+  let attempted = 0;
   for (const model of [ARBITER_MODEL, ARBITER_FALLBACK_MODEL]) {
     if (!ready(model)) continue;
-    try { return { json: await call(model), model }; }
-    catch (error) { last = error; logger.warn(`[DÖNTŐBÍRÓ] ${model} nem válaszolt: ${error instanceof Error ? error.message.slice(0, 160) : "ismeretlen"}`); }
+    if (attempted > 0 && reserveExtra && !(await reserveExtra())) { logger.warn("[DÖNTŐBÍRÓ] A napi keret elfogyott — a tartalék nem hívódik."); break; }
+    attempted++;
+    try {
+      const json = await call(model);
+      if (!parseArbiterVerdict(json)) throw new Error("a válasz nem felel meg a döntőbíró sémájának");
+      return { json, model };
+    } catch (error) { last = error; logger.warn(`[DÖNTŐBÍRÓ] ${model} nem adott érvényes ítéletet: ${error instanceof Error ? error.message.slice(0, 160) : "ismeretlen"}`); }
   }
   throw last;
 }

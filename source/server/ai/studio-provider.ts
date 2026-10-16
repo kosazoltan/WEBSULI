@@ -162,7 +162,8 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   orchestrator: { timeoutMs: 120_000, maxTokens: 4_000, reasoningEffort: "low", jsonMode: true },
   // Tételgyár T7.1: a döntőbíró egy rövid ítélet a gyerek válaszáról — a gyerek vár rá, ezért rövid határidő; a gondolkodással együtt 4k elég.
   // Tulajdonosi döntés 2026-10-16: medium effort (Opus 5.5 / GPT-6.1 Sol); a gondolkodás miatt bővebb időkeret.
-  arbiter: { timeoutMs: 45_000, maxTokens: 8_000, reasoningEffort: "medium", jsonMode: true, chatEffort: true },
+  // Review #258: modellenként 30 s — az elsődleges + tartalék lánc (60 s) a kliens 70 s-os keretén belül marad.
+  arbiter: { timeoutMs: 30_000, maxTokens: 8_000, reasoningEffort: "medium", jsonMode: true, chatEffort: true },
 };
 
 /**
