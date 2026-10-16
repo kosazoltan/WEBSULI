@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  TEACHING_CONTRACT, OUTLINE_LIMITS, buildAuthorPrompt, buildPedagoguePrompt, buildSchemaRetryUser, checkAnimatorResult,
+  TEACHING_CONTRACT, OUTLINE_LIMITS, buildAnimatorPrompt, buildAuthorPrompt, buildConceptFixPrompt, buildLektorPrompt, buildPedagoguePrompt, buildSchemaRetryUser, checkAnimatorResult,
   dropClampedKeyPhrases, outlineClamps, outlineSchema,
 } from "../server/studio/step-io";
 import { LESSON_TEXT_LIMITS, lessonSchema, type Lesson } from "../shared/lesson-schema";
@@ -55,7 +55,8 @@ test("H13/B4: a szerzői prompt magyar, a TANÍTÁSI SZERZŐDÉS a séma számai
   const map = { title: "T", subject: "matek", classroom: 6, concepts: [{ localId: "c1", examWeight: "core" as const, term: "terület" }] };
   const sections = [{ heading: "H", conceptIds: ["c1"], plannedBlocks: ["explain" as const], animationSuggestions: [] as string[] }];
   const prompt = buildAuthorPrompt(sections, map, []);
-  assert.match(prompt, /^Te vagy a SZERZŐ/);
+  // J4 (dokumentált spec-változás, 2026-10-16-egyfutas-atvilagitas.md): magyar állomás-fejléc, persona és átadás-szöveg nélkül.
+  assert.match(prompt, /^A FELADAT: a vázlatból teljes, magyar nyelvű lecke/);
   assert.match(prompt, /Korosztály: /);
   assert.doesNotMatch(prompt, /You are the lesson author|Hard rules|Age band/);
   assert.equal(prompt.split("TANÍTÁSI SZERZŐDÉS").length - 1, 1, "a tanítási szerződés pontosan egyszer");
@@ -94,4 +95,20 @@ test("review #162: a hint a szerződésben; a megalapozási szabály a kapu szer
   assert.match(TEACHING_CONTRACT, /UGYANABBAN a fejezetben egy MÁSIK blokk \(bármely fajtájú/);
   const clamped = outlineSchema.parse({ sections: [{ heading: "A", conceptIds: ["c1"], plannedBlocks: ["explain"], animationSuggestions: ["x".repeat(OUTLINE_LIMITS.animationSuggestion + 9)], emoji: "🙂".repeat(9) }], misconceptions: [] });
   assert.equal(clamped.sections[0].animationSuggestions[0].length, OUTLINE_LIMITS.animationSuggestion, "a séma a közös korlátot használja");
+});
+
+// J4 (átvilágítás L5): minden állomás-kérés egyetlen feladatot ad, magyar fejléccel; nincs persona és más szerepre utaló átadás-szöveg.
+test("J4: az állomás-kérések magyar fejléccel, persona és átadás-szöveg nélkül", () => {
+  const map = { title: "T", subject: "matek", classroom: 6, concepts: [{ localId: "c1", examWeight: "core" as const, term: "terület" }] };
+  const sections = [{ heading: "H", conceptIds: ["c1"], plannedBlocks: ["explain" as const], animationSuggestions: [] as string[] }];
+  const lesson = standardFusionFixture();
+  const prompts = {
+    pedagogue: buildPedagoguePrompt(map), author: buildAuthorPrompt(sections, map, []), animator: buildAnimatorPrompt(lesson, map),
+    lektor: buildLektorPrompt(lesson, map), conceptFix: buildConceptFixPrompt(lesson, map, "c1"),
+  };
+  for (const [name, prompt] of Object.entries(prompts)) {
+    assert.doesNotMatch(prompt, /Te vagy a |You are the /, `${name}: nincs persona`);
+    assert.match(prompt, /A FELADAT: /, `${name}: magyar állomás-fejléc`);
+  }
+  assert.doesNotMatch(prompts.pedagogue, /a szerző, az ábrakészítő és a lektor munkáját|a szerzőnek nem kell|a lektor pedig ehhez/, "a terv kérése nem utal más szerepek munkájára");
 });
