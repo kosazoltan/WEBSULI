@@ -132,7 +132,8 @@ test("review #241: azonos párhuzamos kérések egy modellhívást és egy napi 
   assert.equal(reserved(), 1);
 });
 
-test("review #241: a döntőbíró low effortja az OpenAI chat-úton ténylegesen kimegy", async (t: TestContext) => {
+// Dokumentált szerződésváltozás (docs/specs/2026-10-16-egy-futas.md, C — tulajdonosi döntés 2026-10-16): medium effort (eddig low).
+test("review #241: a döntőbíró effortja (medium) az OpenAI chat-úton ténylegesen kimegy", async (t: TestContext) => {
   const before = { OPENAI_API_KEY: process.env.OPENAI_API_KEY, AI_INTEGRATIONS_OPENAI_API_KEY: process.env.AI_INTEGRATIONS_OPENAI_API_KEY, OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY };
   process.env.AI_INTEGRATIONS_OPENAI_API_KEY = "test-placeholder"; delete process.env.OPENROUTER_API_KEY;
   t.after(() => { for (const [k, v] of Object.entries(before)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
@@ -142,5 +143,47 @@ test("review #241: a döntőbíró low effortja az OpenAI chat-úton ténylegese
     return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "{}" }, finish_reason: "stop" }] }), { headers: { "Content-Type": "application/json" } });
   });
   await createStudioStepProvider("gpt-6.1-sol", "arbiter").chat([{ role: "user", content: "x" }]);
-  assert.equal(body?.reasoning_effort, "low");
+  assert.equal(body?.reasoning_effort, "medium");
+});
+
+// docs/specs/2026-10-16-egy-futas.md (C, F5): Opus 5.5 medium, akadályoztatásakor GPT-6.1 Sol medium; a ténylegesen ítélő modell rögzül.
+test("döntőbíró: elsődleges Opus 5.5, hibánál GPT-6.1 Sol; mindkét hibánál a hiba továbbmegy", async () => {
+  const { callArbiterModels } = await import("../server/arbiter/routes");
+  const { ARBITER_MODEL, ARBITER_FALLBACK_MODEL } = await import("../server/arbiter/arbiter");
+  assert.equal(ARBITER_MODEL, "claude-opus-5-5");
+  assert.equal(ARBITER_FALLBACK_MODEL, "gpt-6.1-sol");
+  const calls: string[] = [];
+  const ok = await callArbiterModels("s", "u", () => true, async (m) => { calls.push(m); return { state: "ok", reason: m }; });
+  assert.deepEqual(ok.model, "claude-opus-5-5"); assert.deepEqual(calls, ["claude-opus-5-5"]);
+  calls.length = 0;
+  const fb = await callArbiterModels("s", "u", () => true, async (m) => { calls.push(m); if (m === "claude-opus-5-5") throw new Error("529 overloaded"); return { state: "ok", reason: m }; });
+  assert.equal(fb.model, "gpt-6.1-sol"); assert.deepEqual(calls, ["claude-opus-5-5", "gpt-6.1-sol"]);
+  const notReady = await callArbiterModels("s", "u", (m) => m !== "claude-opus-5-5", async (m) => ({ state: "ok", reason: m }));
+  assert.equal(notReady.model, "gpt-6.1-sol", "kulcs nélküli elsődlegesnél a tartalék");
+  await assert.rejects(callArbiterModels("s", "u", () => true, async () => { throw new Error("down"); }), /down/);
+});
+
+test("döntőbíró: a gyorsítótárba a ténylegesen ítélő (tartalék) modell neve kerül", async () => {
+  const puts: Array<{ model?: string }> = [];
+  const deps: ArbiterDeps = {
+    cacheGet: async () => null, cachePut: async (_k, v) => { puts.push(v); }, reserveDailyCall: async () => true,
+    callModel: async () => ({ json: { state: "ok", reason: "Ugyanazt mondja más szavakkal." }, model: "gpt-6.1-sol" }),
+  };
+  const judged = await judgeOpenAnswer({ task, teaching: "", answer: "Egészen más megfogalmazás a tartalék modell ellenőrzéséhez" }, deps);
+  assert.equal(judged.state, "ok");
+  assert.equal(puts[0]?.model, "gpt-6.1-sol");
+});
+
+// Review #258: sémahibás elsődleges válasz → tartalék; a tartalék külön napi keretet foglal (elfogyott keretnél nincs hívás); új cache-verzió.
+test("döntőbíró-lánc: séma-ellenőrzés modellenként és a tartalék keretfoglalása", async () => {
+  const { callArbiterModels } = await import("../server/arbiter/routes");
+  const { ARBITER_VERSION } = await import("../server/arbiter/arbiter");
+  assert.equal(ARBITER_VERSION, "arbiter-2", "a modellváltás érvényteleníti a régi gyorsítótárat");
+  const calls: string[] = [];
+  const invalidPrimary = await callArbiterModels("s", "u", () => true, async (m) => { calls.push(m); return m === "claude-opus-5-5" ? { state: "talán" } : { state: "ok", reason: "jó" }; }, async () => true);
+  assert.equal(invalidPrimary.model, "gpt-6.1-sol");
+  assert.deepEqual(calls, ["claude-opus-5-5", "gpt-6.1-sol"]);
+  calls.length = 0;
+  await assert.rejects(callArbiterModels("s", "u", () => true, async (m) => { calls.push(m); throw new Error("down"); }, async () => false), /down/);
+  assert.deepEqual(calls, ["claude-opus-5-5"], "elfogyott keretnél a tartalék nem hívódik");
 });
