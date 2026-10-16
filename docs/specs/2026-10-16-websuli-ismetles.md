@@ -52,11 +52,22 @@ A vizuális minta a `docs/design/Websuli_Design.html` „Memorizálókártya” 
   - teszt: `tests/lesson-flashcards.spec.ts`.
 
 ## Rögzített döntések
-- **Kulcs:** `lessons.id` (a mentett gyakorlókör mintájára, `lesson_attempts`). Új leckeverzió új állapotot jelent.
+- **Kulcs:** `lessons.id` és a **tartalomhoz kötött kártya-azonosító**. Review #268, mérve: a javítás ugyanazt a `lessons.id`
+  sort írja felül, és csak a `version` nő.
+  - Kvízkártya: `q:<kvízazonosító>:<lenyomat>`; szószedetkártya: `g:<lenyomat>`. A lenyomat a cyrb53, az előlapból és a
+    hátlapból képezve.
+  - A megváltozott kérdés vagy válasz új kártya, saját állapottal. A változatlan kártya megtartja az ütemezését.
+  - A régi oldalról érkező, elavult azonosító 409: „A lecke időközben frissült.”
 - **Jogosultság:** a szerver csak publikált leckét fogad el. A kártya-azonosítót a lecke JSON-jából újraszámolja; ismeretlen
   azonosító 400. Más tanuló állapota nem olvasható (minden lekérdezés `user_id`-re szűr).
 - **Adattakarékosság (§7):** csak azonosítók, értékelés (`again` | `known`) és időpontok. Szöveget nem tárol.
 - **Párhuzamosság:** tanuló × lecke advisory lock, egy tranzakcióban esemény és állapot.
+- **Idempotencia (review #268):** minden értékelés egyedi `requestId`-t kap, újrapróbáláskor ugyanazt.
+  - `review_events (user_id, request_id)` egyedi. Az ismételt beküldés az eredeti eredményt (`result`) kapja, újabb
+    léptetés nélkül.
+  - Más kártyára vagy értékelésre ugyanazzal a `requestId`-val: 409.
+- **Keret (review #268):** az ismétlés kimarad a közös, IP-alapú `/api/lessons` írási keretből. Helyette tanulónként 600
+  értékelés / 15 perc.
 - **Sorrend:**
   - először az esedékes kártyák (`dueAt <= most`), a legkorábbi elöl;
   - utána az új kártyák a lecke sorrendjében;
@@ -78,6 +89,7 @@ A vizuális minta a `docs/design/Websuli_Design.html` „Memorizálókártya” 
 - HA a mentés hibázik, AKKOR a felület hibát és újrapróbálást mutat, és nem ír ki mentett állapotot.
 - HA vendég értékel, AKKOR szerverkérés nincs, és a felület kiírja, hogy az ismétlés csak ezen az eszközön marad meg.
 - `nextReview` egységtesztje a §7 képletét fedi (10 perc, 1 → 2 → 4 … ≤ 60 nap, `again` nullázás).
-- Ismeretlen kártya, publikálatlan lecke vagy más tanuló adata: 400 / 404, a DB-tesztben valódi Postgresszel.
+- Ismeretlen vagy elavult kártya 409, publikálatlan lecke 404. Más tanuló adata nem látszik. Az ismételt `requestId` egy
+  esemény és egy lépés. A DB-tesztben valódi Postgresszel.
 - Mind az öt témában, 390 / 768 / 1440 px-en: nincs kilógás, a kártya szövege ≥ a téma minimuma, a gombok kontrasztja
   ≥ 4,5:1.

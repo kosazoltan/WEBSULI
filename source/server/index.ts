@@ -419,6 +419,8 @@ app.use("/api/lessons", (req, res, next) => {
   const isSafeMethod =
     req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS";
   if (isSafeMethod) return next();
+  // Review #268: a bejelentkezett tanuló ismétlése saját, tanulónkénti keretet kap (server/rewards/review-router.ts).
+  if (req.path.startsWith("/review/")) return next();
   return publicWriteLimiter(req, res, next);
 });
 

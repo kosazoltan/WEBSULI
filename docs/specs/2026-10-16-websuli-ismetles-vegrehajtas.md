@@ -73,3 +73,8 @@ adat és szerver**, **D — felület**. A parancsok a `source/` mappából futna
   - unit 2036/2036, valódi Postgres DB 38/38 (a 0027-es migráció kétszer fut le);
   - tsc, check:test, lint: tiszta.
   - A kliens állapotot nem küldhet: a `dueAt` mező 400-at ad (HTTP-teszt).
+- **C — review #268 (javítva, mérve):**
+  - a kártya-azonosító a tartalomhoz kötött; helyben javított lecke DB-teszttel;
+  - idempotens újrapróbálás (`requestId`, `review_events.result`, egyedi index);
+  - tanulónkénti keret a közös IP-keret helyett;
+  - DB 40/40.

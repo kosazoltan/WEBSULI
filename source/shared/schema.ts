@@ -1088,7 +1088,14 @@ export const reviewEvents = pgTable(
     lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
     cardId: varchar("card_id", { length: 80 }).notNull(),
     rating: varchar("rating", { length: 8 }).notNull().$type<import("./review-schedule").ReviewRating>(),
+    /** Review #268: értékelésenként egyedi, újrapróbáláskor változatlan kliensazonosító (idempotencia). */
+    requestId: varchar("request_id", { length: 64 }).notNull(),
+    /** Az értékelés eredeti eredménye: az ismételt beküldés ezt kapja vissza, újabb léptetés nélkül. */
+    result: jsonb("result").notNull().$type<import("./review-schedule").ReviewState>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => ({ learnerIdx: index("review_events_learner_idx").on(table.userId, table.lessonId, table.createdAt) }),
+  (table) => ({
+    learnerIdx: index("review_events_learner_idx").on(table.userId, table.lessonId, table.createdAt),
+    requestUnique: uniqueIndex("review_events_request_unique").on(table.userId, table.requestId),
+  }),
 );

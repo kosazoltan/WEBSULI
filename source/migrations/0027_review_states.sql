@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS review_events (
   lesson_id varchar NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
   card_id varchar(80) NOT NULL,
   rating varchar(8) NOT NULL CHECK (rating IN ('again', 'known')),
+  -- Review #268: a kliens értékelésenként egyedi, újrapróbáláskor változatlan azonosítója; ugyanarra az eredeti eredmény jár.
+  request_id varchar(64) NOT NULL,
+  result jsonb NOT NULL,
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS review_events_learner_idx ON review_events(user_id, lesson_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS review_events_request_unique ON review_events(user_id, request_id);

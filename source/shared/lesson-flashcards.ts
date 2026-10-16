@@ -9,12 +9,30 @@ import type { Lesson } from "./lesson-schema";
 export type Flashcard = { id: string; front: string; back: string; kind: "quiz" | "glossary" };
 export const FLASHCARD_ID_MAX = 80;
 
+/**
+ * Review #268: a kártya-azonosító a tartalomhoz kötött. A javítás ugyanazt a `lessons.id` sort írja felül (csak a verzió nő), ezért
+ * a megváltozott kérdés vagy szószedetelem új azonosítót és így új ütemezést kap; a változatlan kártya megtartja a sajátját, a régi
+ * oldalról érkező, elavult azonosítót a szerver elutasítja. cyrb53 (53 bites, szinkron, böngészőben és Node-ban is), 36-os alapon.
+ */
+export function contentKey(front: string, back: string): string {
+  const text = `${front}\u0000${back}`;
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
 export function lessonFlashcards(lesson: Pick<Lesson, "experience">): Flashcard[] {
   const e = lesson.experience;
   if (!e) return [];
   const cards: Flashcard[] = e.quiz
     .filter(q => q.intent !== "apply")
-    .map(q => ({ id: `q:${q.id}`, front: q.question, back: q.options[q.correctIndex], kind: "quiz" as const }));
-  if (e.language) e.glossary.forEach((g, i) => cards.push({ id: `g:${i}`, front: g.word, back: g.translation, kind: "glossary" }));
-  return cards.filter(c => c.id.length <= FLASHCARD_ID_MAX && c.front.trim() && c.back?.trim());
+    .map(q => ({ id: `q:${q.id}:${contentKey(q.question, q.options[q.correctIndex] ?? "")}`, front: q.question, back: q.options[q.correctIndex], kind: "quiz" as const }));
+  if (e.language) e.glossary.forEach(g => cards.push({ id: `g:${contentKey(g.word, g.translation)}`, front: g.word, back: g.translation, kind: "glossary" }));
+  // Egyforma szószedetelem kétszer nem lesz kártya (azonos tartalom → azonos azonosító).
+  return cards.filter((c, i) => c.id.length <= FLASHCARD_ID_MAX && c.front.trim() && c.back?.trim() && cards.findIndex(o => o.id === c.id) === i);
 }

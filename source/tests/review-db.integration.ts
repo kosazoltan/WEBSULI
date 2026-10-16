@@ -32,12 +32,12 @@ before(async () => {
 
 test("valódi DB: az értékelés eseményt és a §7 szerinti állapotot ment; a szerver órája számít", async () => {
   const t0 = new Date("2026-10-16T08:00:00.000Z");
-  const first = await rateCard("review-a", "review-published", card.id, "known", t0);
+  const first = await rateCard("review-a", "review-published", card.id, "known", "req-a-0001", t0);
   assert.deepEqual(first.state, { intervalDays: 1, repetitions: 1, dueAt: new Date(t0.getTime() + DAY).toISOString() });
   const t1 = new Date(t0.getTime() + DAY);
-  const second = await rateCard("review-a", "review-published", card.id, "known", t1);
+  const second = await rateCard("review-a", "review-published", card.id, "known", "req-a-0002", t1);
   assert.equal(second.state.intervalDays, 2);
-  const again = await rateCard("review-a", "review-published", card.id, "again", t1);
+  const again = await rateCard("review-a", "review-published", card.id, "again", "req-a-0003", t1);
   assert.deepEqual(again.state, { intervalDays: 0, repetitions: 0, dueAt: new Date(t1.getTime() + 10 * 60_000).toISOString() });
   const events = await db.select().from(reviewEvents).where(and(eq(reviewEvents.userId, "review-a"), eq(reviewEvents.cardId, card.id)));
   assert.deepEqual(events.map(e => e.rating).sort(), ["again", "known", "known"]);
@@ -46,11 +46,11 @@ test("valódi DB: az értékelés eseményt és a §7 szerinti állapotot ment; 
   assert.deepEqual((await readReview("review-a", "review-published")).states, { [card.id]: again.state });
 });
 
-test("valódi DB: ismeretlen kártya 400, publikálatlan vagy nem létező lecke 404; a tanulók nem látják egymást", async () => {
-  await assert.rejects(rateCard("review-a", "review-published", "q:nincs-ilyen", "known"), (e: unknown) => e instanceof ReviewError && e.status === 400);
-  await assert.rejects(rateCard("review-a", "review-draft", card.id, "known"), (e: unknown) => e instanceof ReviewError && e.status === 404);
+test("valódi DB: ismeretlen (elavult) kártya 409, publikálatlan vagy nem létező lecke 404; a tanulók nem látják egymást", async () => {
+  await assert.rejects(rateCard("review-a", "review-published", "q:nincs-ilyen", "known", "req-a-0004"), (e: unknown) => e instanceof ReviewError && e.status === 409);
+  await assert.rejects(rateCard("review-a", "review-draft", card.id, "known", "req-a-0005"), (e: unknown) => e instanceof ReviewError && e.status === 404);
   await assert.rejects(readReview("review-a", "nincs-ilyen-lecke"), (e: unknown) => e instanceof ReviewError && e.status === 404);
-  await rateCard("review-b", "review-published", other.id, "known");
+  await rateCard("review-b", "review-published", other.id, "known", "req-b-0001");
   assert.deepEqual(Object.keys((await readReview("review-b", "review-published")).states), [other.id]);
   assert.ok(!(other.id in (await readReview("review-a", "review-published")).states));
   assert.equal((await db.select().from(reviewEvents).where(eq(reviewEvents.lessonId, "review-draft"))).length, 0);
@@ -58,7 +58,7 @@ test("valódi DB: ismeretlen kártya 400, publikálatlan vagy nem létező lecke
 
 test("valódi DB: párhuzamos értékelések mind eseményként mentődnek, az állapot sorosítva lép", async () => {
   const now = new Date("2026-10-16T09:00:00.000Z");
-  await Promise.all(Array.from({ length: 5 }, () => rateCard("review-race", "review-published", card.id, "known", now)));
+  await Promise.all(Array.from({ length: 5 }, (_, i) => rateCard("review-race", "review-published", card.id, "known", `req-race-000${i}`, now)));
   const events = await db.select().from(reviewEvents).where(eq(reviewEvents.userId, "review-race"));
   assert.equal(events.length, 5);
   const [state] = await db.select().from(reviewStates).where(eq(reviewStates.userId, "review-race"));
@@ -79,14 +79,51 @@ test("HTTP/DB: vendégnek 401, hibás vagy ismeretlen mezős értékelés 400, a
   const headers = { "Content-Type": "application/json", "X-Test-Session": "on" };
   try {
     assert.equal((await fetch(base)).status, 401);
-    assert.equal((await fetch(`${base}/rate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id, rating: "known" }) })).status, 401);
-    assert.equal((await fetch(`${base}/rate`, { method: "POST", headers, body: JSON.stringify({ cardId: card.id, rating: "perfect" }) })).status, 400);
-    assert.equal((await fetch(`${base}/rate`, { method: "POST", headers, body: JSON.stringify({ cardId: card.id, rating: "known", dueAt: "2099-01-01T00:00:00Z" }) })).status, 400);
-    const ok = await fetch(`${base}/rate`, { method: "POST", headers, body: JSON.stringify({ cardId: card.id, rating: "known" }) });
+    assert.equal((await fetch(`${base}/rate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id, rating: "known", requestId: "req-http-0001" }) })).status, 401);
+    assert.equal((await fetch(`${base}/rate`, { method: "POST", headers, body: JSON.stringify({ cardId: card.id, rating: "perfect", requestId: "req-http-0002" }) })).status, 400);
+    assert.equal((await fetch(`${base}/rate`, { method: "POST", headers, body: JSON.stringify({ cardId: card.id, rating: "known" }) })).status, 400, "requestId nélkül nincs mentés");
+    assert.equal((await fetch(`${base}/rate`, { method: "POST", headers, body: JSON.stringify({ cardId: card.id, rating: "known", requestId: "req-http-0003", dueAt: "2099-01-01T00:00:00Z" }) })).status, 400);
+    const ok = await fetch(`${base}/rate`, { method: "POST", headers, body: JSON.stringify({ cardId: card.id, rating: "known", requestId: "req-http-0004" }) });
     assert.equal(ok.status, 200);
+    // Review #268: tanulónkénti keret (nem a közös IP-keret).
+    assert.equal(ok.headers.get("ratelimit-limit"), "600");
     const saved = await ok.json() as { cardId: string; state: { intervalDays: number } };
     assert.equal(saved.state.intervalDays, 1);
     const view = await (await fetch(base, { headers })).json() as { states: Record<string, unknown> };
     assert.deepEqual(Object.keys(view.states).sort(), [card.id, other.id].sort());
   } finally { server.close(); }
+});
+
+// Review #268: ha a mentés sikerült, de a válasz elveszett, az újrapróbálás (ugyanaz a requestId) nem lépteti újra az állapotot.
+test("valódi DB: az újrapróbálás idempotens — egy esemény és egy lépés; két külön értékelés két lépés", async () => {
+  await db.insert(users).values({ id: "review-retry" });
+  const t = new Date("2026-10-16T10:00:00.000Z");
+  const first = await rateCard("review-retry", "review-published", card.id, "known", "req-retry-0001", t);
+  const replay = await Promise.all([1, 2, 3].map(() => rateCard("review-retry", "review-published", card.id, "known", "req-retry-0001", new Date(t.getTime() + DAY))));
+  for (const r of replay) assert.deepEqual(r.state, first.state, "az eredeti eredmény jön vissza");
+  assert.equal((await db.select().from(reviewEvents).where(eq(reviewEvents.userId, "review-retry"))).length, 1);
+  const [state] = await db.select().from(reviewStates).where(eq(reviewStates.userId, "review-retry"));
+  assert.equal(state.repetitions, 1);
+  await assert.rejects(rateCard("review-retry", "review-published", other.id, "known", "req-retry-0001", t), (e: unknown) => e instanceof ReviewError && e.status === 409);
+  const second = await rateCard("review-retry", "review-published", card.id, "known", "req-retry-0002", new Date(t.getTime() + DAY));
+  assert.equal(second.state.repetitions, 2);
+  assert.equal(second.state.intervalDays, 2);
+});
+
+// Review #268: a helyben (ugyanazon lessons.id alatt) javított lecke megváltozott kártyája új állapotot kap; a régi oldal értékelése 409.
+test("valódi DB: helyben javított lecke — a módosított kártya új, a változatlan megtartja az ütemezését, az elavult azonosító 409", async () => {
+  await db.insert(users).values({ id: "review-edit" });
+  await db.insert(lessons).values({ id: "review-edited", mapId: "review-map", json: lesson, version: 1, publishedAt: new Date() });
+  const t = new Date("2026-10-16T11:00:00.000Z");
+  await rateCard("review-edit", "review-edited", card.id, "known", "req-edit-0001", t);
+  await rateCard("review-edit", "review-edited", other.id, "known", "req-edit-0002", t);
+  const edited = structuredClone(lesson);
+  edited.experience!.quiz[0].question = `${edited.experience!.quiz[0].question} (javítva)`;
+  await db.update(lessons).set({ json: edited, version: 2 }).where(eq(lessons.id, "review-edited"));
+  const [editedCard] = lessonFlashcards(edited);
+  assert.notEqual(editedCard.id, card.id);
+  const view = await readReview("review-edit", "review-edited");
+  assert.deepEqual(Object.keys(view.states), [other.id], "a módosított kártya régi állapota nem öröklődik");
+  await assert.rejects(rateCard("review-edit", "review-edited", card.id, "known", "req-edit-0003", t), (e: unknown) => e instanceof ReviewError && e.status === 409);
+  assert.equal((await rateCard("review-edit", "review-edited", editedCard.id, "known", "req-edit-0004", t)).state.repetitions, 1);
 });
