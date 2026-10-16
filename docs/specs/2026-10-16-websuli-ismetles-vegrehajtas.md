@@ -78,3 +78,25 @@ adat és szerver**, **D — felület**. A parancsok a `source/` mappából futna
   - idempotens újrapróbálás (`requestId`, `review_events.result`, egyedi index);
   - tanulónkénti keret a közös IP-keret helyett;
   - DB 40/40.
+- **D — kész, mérve:**
+  - Ötödik fül „Ismétlés”, kártyafordítás (kattintás, Enter, Space), „Még gyakorlom” / „Már tudom”.
+  - Bejelentkezve `apiRequest` (CSRF-token; mérve: a nyers `fetch` miatt a `client-csrf-guard` teszt bukott). A
+    `requestId` újrapróbáláskor változatlan. 409-nél újratöltésre kér, nincs újrapróbálás.
+  - Vendégként helyi tárolás, kiírt figyelmeztetéssel, szerverkérés nélkül. Mentés közbeni 401: vendég módra vált, és kiírja,
+    hogy az értékelés nem mentődött (a terv szélső esete, önellenőrzésben pótolva).
+  - A fülsor a fülek számából dolgozik, és mobilon sem lóg ki. A haladássáv a referencia sínje és főszíne.
+  - Mérés:
+    - unit 2038/2038; tsc, check:test, lint: tiszta;
+    - e2e: lesson-flashcards 9/9, lesson-design 8/8;
+    - a lesson-fusion és lesson-band-visual a szóbeli tesztek nélkül 19/19 elindult, hibajelzés nem volt, de a futás
+      Windowson nem zárult le (ismert kilépési lefagyás), ezért ez nem bizonyíték; a teljes futást a CI végzi (Linux).
+- **D — review #269 (javítva, mérve):**
+  - Sikertelen mentés után az értékelőgombok tiltva, csak az „Újrapróbálás” küld, ugyanazzal a `requestId`-val.
+  - A vendégállapot kulcsa a stabil leckekulcs (`persistId ?? lessonId ?? mapId`), nem az experience-lenyomat. Így a változatlan
+    kártyák javítás után is megtartják az ütemezésüket.
+  - A betöltéskori 401 is vendég módra vált, és nem hivatkozik meg nem történt értékelésre.
+  - A sikeres mentés a lekérés gyorsítótárát is frissíti.
+  - A kártya leírása (`aria-describedby`) az aktuális szöveg; fordításkor a válasz be is jelentődik.
+  - A `contentKey` NFC-re normalizál: a kliens a megjelenítéshez NFC-re hozott leckéből, a szerver a tárolt JSON-ból számol, és
+    NFD-s regressziós teszt bizonyítja az egyezést.
+  - Az e2e órája rögzített. Mérés: lesson-flashcards 10/10.

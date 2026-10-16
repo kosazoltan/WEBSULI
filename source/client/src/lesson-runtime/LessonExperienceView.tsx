@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Brain, PencilLine, Trophy, Download, RotateCcw, Mic, Leaf } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { BookOpen, Brain, PencilLine, Trophy, Download, RotateCcw, Mic, Leaf, Layers } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { experienceRoundSizes, type LessonExperience } from "@shared/lesson-experience";
 import { evaluateOpenAnswer, scoreSummary, sampleTaskIds } from "@shared/lesson-experience-score";
@@ -11,8 +11,11 @@ import "./lesson-experience.css";
 import { PracticeAccess } from "./SavedLessonQuiz";
 import { FinishPracticeButton } from "./FinishPracticeButton";
 import { bestVerdict, useArbiterVerdicts, type ArbiterSource } from "./arbiter";
+import { lessonFlashcards } from "@shared/lesson-flashcards";
+import { FlashcardReview } from "./FlashcardReview";
 
-const TABS = [{ id: "teaching", label: "Tananyag", icon: BookOpen }, { id: "methods", label: "Módszerek", icon: Brain }, { id: "tasks", label: "Feladatok", icon: PencilLine }, { id: "quiz", label: "Kvíz", icon: Trophy }] as const;
+// Websuli Design §3/§6: az ötödik fül a memóriakártya-ismétlés (docs/specs/2026-10-16-websuli-ismetles.md) — csak ha van kártya.
+const TABS = [{ id: "teaching", label: "Tananyag", icon: BookOpen }, { id: "methods", label: "Módszerek", icon: Brain }, { id: "tasks", label: "Feladatok", icon: PencilLine }, { id: "quiz", label: "Kvíz", icon: Trophy }, { id: "review", label: "Ismétlés", icon: Layers }] as const;
 type Tab = typeof TABS[number]["id"];
 function Result({ title, points, total, seconds, answers }: { title: string; points: number; total: number; seconds: number; answers: unknown }) {
   const score = scoreSummary(points, total);
@@ -27,8 +30,10 @@ function Result({ title, points, total, seconds, answers }: { title: string; poi
   </section>;
 }
 
-export function LessonExperienceView({ experience: e, storageKey, headings, lessonId, arbiterSource, children }: { experience: LessonExperience; storageKey: string; headings: string[]; lessonId?: string; arbiterSource?: ArbiterSource; children: (section: number | null) => ReactNode }) {
+export function LessonExperienceView({ experience: e, storageKey, reviewKey, headings, lessonId, arbiterSource, children }: { experience: LessonExperience; storageKey: string; reviewKey?: string; headings: string[]; lessonId?: string; arbiterSource?: ArbiterSource; children: (section: number | null) => ReactNode }) {
   const prefix = useId();
+  const cards = useMemo(() => lessonFlashcards({ experience: e }), [e]);
+  const tabs = TABS.filter(t => t.id !== "review" || cards.length > 0);
   const [tab, setTab] = useState<Tab>("teaching");
   const changeTab = (next: Tab) => { setTab(next); requestAnimationFrame(() => document.getElementById(`${prefix}-fusion-tab-${next}`)?.closest(".fusion-view")?.scrollIntoView({ block: "start", behavior: "instant" })); };
   const [resetTarget, setResetTarget] = useState<"tasks" | "quiz" | null>(null);
@@ -59,11 +64,11 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
   useEffect(() => () => { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }, [tab]);
   const seconds = (round: typeof taskState.round) => Math.max(0, Math.floor(((round.finishedAt ?? Date.now()) - round.startedAt) / 1000));
   return <div className="fusion-view" data-quiet={quiet} data-quiz-guided={false}>
-    <nav className="fusion-tabs" role="tablist" aria-label="A tananyag négy oldala">{TABS.map(({ id, label, icon: Icon }, i) => <button key={id} id={`${prefix}-fusion-tab-${id}`} role="tab" aria-selected={tab === id} aria-controls={`${prefix}-fusion-panel-${id}`} tabIndex={tab === id ? 0 : -1} onClick={() => changeTab(id)} onKeyDown={event => {
+    <nav className="fusion-tabs" role="tablist" aria-label="A tananyag oldalai">{tabs.map(({ id, label, icon: Icon }, i) => <button key={id} id={`${prefix}-fusion-tab-${id}`} role="tab" aria-selected={tab === id} aria-controls={`${prefix}-fusion-panel-${id}`} tabIndex={tab === id ? 0 : -1} onClick={() => changeTab(id)} onKeyDown={event => {
       if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) {
         event.preventDefault();
-        const next = event.key === "Home" ? 0 : event.key === "End" ? 3 : (i + (event.key === "ArrowRight" ? 1 : 3)) % 4;
-        changeTab(TABS[next].id); document.getElementById(`${prefix}-fusion-tab-${TABS[next].id}`)?.focus();
+        const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (i + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length;
+        changeTab(tabs[next].id); document.getElementById(`${prefix}-fusion-tab-${tabs[next].id}`)?.focus();
       }
     }}><Icon size={19} /><span>{label}</span></button>)}</nav>
     <div className="learning-toolbar"><span className="fusion-eyebrow">Egy lépés, egy új felismerés</span><button className="lesson-ghost-btn learning-quiet" aria-pressed={quiet} onClick={() => setQuiet(!quiet)}><Leaf size={16} /> Csendes nézet</button></div>
@@ -120,6 +125,11 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
       }} onFinish={() => quizState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Kvíz kiértékelése</FinishPracticeButton> : <Result title="Kvíz" points={quizPoints} total={quiz.length} seconds={seconds(quizState.round)} answers={quiz.map(q => ({ question: q.question, pickedIndex: quizState.round.picks[q.id] ?? null, correctIndex: q.correctIndex }))} />}
       </PracticeAccess>
     </div>
+    {cards.length > 0 && <div role="tabpanel" id={`${prefix}-fusion-panel-review`} aria-labelledby={`${prefix}-fusion-tab-review`} hidden={tab !== "review"} className="fusion-panel">
+      {/* Review #269: a vendégállapot a stabil leckekulcs alatt él (nem a teljes experience-lenyomat alatt), így a lecke javítása után
+          a változatlan, tartalomhoz kötött azonosítójú kártyák megtartják az ütemezésüket. */}
+      <FlashcardReview cards={cards} lessonId={lessonId} storageKey={reviewKey ?? storageKey} active={tab === "review"} />
+    </div>}
     <Dialog open={resetTarget !== null} onOpenChange={open => { if (!open) setResetTarget(null); }}><DialogContent className="fusion-dialog"><DialogTitle>Új gyakorlókör?</DialogTitle><DialogDescription>A mostani válaszokat új feladatsor váltja fel. Ha szeretnéd megőrizni az eredményt, előbb töltsd le.</DialogDescription><div className="flex gap-3 flex-wrap"><button onClick={() => setResetTarget(null)}>Mégse</button><button onClick={() => { if (resetTarget === "tasks") { taskState.reset(); setSamples([]); } else { quizState.reset(); } setResetTarget(null); }}>Új kör indítása</button></div></DialogContent></Dialog>
   </div>;
 }
