@@ -393,8 +393,15 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const jobId = input.resume ? input.resume.jobId
     : await store.createJob({ mapId, step: "pedagogue", status: "running", model: conversation.model, promptVersion: SINGLE_RUN_VERSION, inputHash: `${SINGLE_RUN_VERSION}:${mapId}` });
   await workflowResource(jobId); // review #260: a job a futás gazdájához kötött (piszkozatkezelés, lízing)
-  const save = async (step: Exclude<SingleRunPhase, "extract"> | "error", output: Record<string, unknown>, extra: JobPatch = {}) =>
-    store.saveStep(jobId, { step, ...extra, output: { ...output, telemetry: telemetry.snapshot(conversation.model), singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } });
+  // Review #265: a párhuzamos bankcsomagok mentései sorba állítva — a pillanatkép a hívás pillanatában készül, és a hívás sorrendjében
+  // íródik ki (egy korábbi pillanatkép nem írhatja felül egy újabbat). Egy mentés hibája csak a saját hívóját éri.
+  let saveQueue: Promise<unknown> = Promise.resolve();
+  const save = (step: Exclude<SingleRunPhase, "extract"> | "error", output: Record<string, unknown>, extra: JobPatch = {}): Promise<void> => {
+    const patch: JobPatch = { step, ...extra, output: { ...output, telemetry: telemetry.snapshot(conversation.model), singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } };
+    const write = saveQueue.catch(() => undefined).then(() => store.saveStep(jobId, patch));
+    saveQueue = write;
+    return write;
+  };
   deps.onJob?.(jobId, mapId);
   // J5: folytatásnál a mentett kimenet megmarad (a helyreállítási jelzők és a régi pillanatképek nélkül); a job újra fut.
   const { recoveryState: _recovery, remanufacturedAs: _remade, singleRun: _run, telemetry: _telemetry, ...kept } = input.resume?.output ?? {};

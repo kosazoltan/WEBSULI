@@ -549,6 +549,7 @@ test("párhuzamos bank: kétfejezetes leckénél a két bankcsomag egyszerre ké
     const saved = process.env.STUDIO_BANK_CONCURRENCY;
     if (env === undefined) delete process.env.STUDIO_BANK_CONCURRENCY; else process.env.STUDIO_BANK_CONCURRENCY = env;
     let inFlight = 0, maxInFlight = 0;
+    let savesInFlight = 0, maxSavesInFlight = 0, savesSeen = 0;
     const base = scriptedClient();
     const client: ModelClient = { model: base.model, async complete(system, turns) {
       const t = lastUserText(turns);
@@ -562,8 +563,18 @@ test("párhuzamos bank: kétfejezetes leckénél a két bankcsomag egyszerre ké
       return base.complete(system, turns);
     } };
     try {
-      const result = await runSingleLesson({ files: [], mapId: "m1", approvedOutline: approved, ownerId: "u1" }, deps(client, memoryStore()));
+      const mem = memoryStore();
+      // Review #265: a mentések sorosan íródnak (a lassú adattár mellett sem fut két mentés egyszerre).
+      const slowStore = { ...mem.store, async saveStep(id: string, patch: JobPatch) {
+        savesInFlight++; savesSeen++; maxSavesInFlight = Math.max(maxSavesInFlight, savesInFlight);
+        await new Promise((r) => setTimeout(r, 3));
+        savesInFlight--;
+        return mem.store.saveStep(id, patch);
+      } } as PipelineStore;
+      const result = await runSingleLesson({ files: [], mapId: "m1", approvedOutline: approved, ownerId: "u1" }, { ...deps(client, mem), store: slowStore });
       assert.equal(result.htmlFileId, "html1");
+      assert.ok(savesSeen > 3);
+      assert.equal(maxSavesInFlight, 1, "egyszerre legfeljebb egy mentés");
     } finally { if (saved === undefined) delete process.env.STUDIO_BANK_CONCURRENCY; else process.env.STUDIO_BANK_CONCURRENCY = saved; }
     return maxInFlight;
   };
