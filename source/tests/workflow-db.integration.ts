@@ -253,3 +253,31 @@ test("valódi admin API: csak saját napló, nincs prompt és ellenőrzőpont a 
     assert.deepEqual(await other.json(), { run: null });
   } finally { server.closeAllConnections(); await new Promise<void>((r, reject) => server.close(e => e ? reject(e) : r())); }
 });
+
+// Review #265: párhuzamos bankcsomagoknál a workflow-mentés (revízió-növelés) és a kerített job-mentés egyidejűleg fut — közös sorban
+// az érvényes végrehajtó nem kaphat hamis „elavult végrehajtó” hibát.
+test("párhuzamos workflow-mentés és kerített jobmentés: nincs hamis konfliktus", async () => {
+  const { createDrizzlePipelineStore } = await import("../server/studio/pipeline-store");
+  const { workflowValidationFailure } = await import("../server/workflows/engine");
+  const store2 = await createDrizzlePipelineStore();
+  const map = (await dbPool.query("INSERT INTO knowledge_maps(title,subject,classroom,source_files,input_hash) VALUES ('P','matematika',5,'[]'::jsonb,'parallel-save-map') RETURNING id")).rows[0].id as string;
+  const job = (await dbPool.query("INSERT INTO studio_jobs(map_id,step,status,input_hash,output) VALUES ($1,'animator','running','h','{}'::jsonb) RETURNING id", [map])).rows[0].id as string;
+  try {
+    await executeWorkflow(store, { id: "parallel-save", owner: "workflow-owner", mode: "web" }, async () => {
+      await workflowPhase("generate");
+      const work: Array<Promise<unknown>> = [];
+      for (let i = 0; i < 12; i++) {
+        work.push(workflowValidationFailure(new Error(`bankcsomag ${i}: a csomag alakja hibás`)));
+        work.push(store2.saveStep(job, { output: { mark: i } }));
+      }
+      await Promise.all(work);
+      for (const step of ["knowledge", "author", "gate", "publish"]) await workflowPhase(step);
+      await workflowPhase("readback");
+      return { kind: "material", id: "fenced-material" };
+    });
+    assert.equal((await dbPool.query("SELECT output->>'mark' AS m FROM studio_jobs WHERE id=$1", [job])).rows[0].m, "11", "a mentések a hívás sorrendjében");
+  } finally {
+    await dbPool.query("DELETE FROM studio_jobs WHERE id=$1", [job]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE id=$1", [map]);
+  }
+});

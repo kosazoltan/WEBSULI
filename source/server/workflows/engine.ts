@@ -225,6 +225,18 @@ function persist(ctx: Context): Promise<void> {
   ctx.persistQueue = next.catch(() => undefined);
   return next;
 }
+/**
+ * Review #265 (párhuzamos bank): a futás kerített domain-írása (pl. a job checkpoint-mentése) UGYANABBA a sorba áll, mint a
+ * workflow-mentések — így a kerítés nem olvashat egy épp commitoló mentés előtti revíziót (hamis „elavult végrehajtó”).
+ * A munka nem hívhat `persist`-et (önmagára várna). Workflow-kontextuson kívül azonnal fut.
+ */
+export function workflowSerialized<T>(work: () => Promise<T>): Promise<T> {
+  const ctx = context.getStore();
+  if (!ctx) return work();
+  const next = ctx.persistQueue.then(work, work);
+  ctx.persistQueue = next.then(() => undefined, () => undefined);
+  return next;
+}
 async function persistNow(ctx: Context) {
   if (ctx.lostLease) throw new WorkflowConflict("A futást már másik végrehajtó kezeli.");
   ctx.record.view.updatedAt = Date.now();

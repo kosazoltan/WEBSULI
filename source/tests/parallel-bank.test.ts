@@ -43,3 +43,44 @@ test("a banképítő haladása a párhuzamosan készülő egységeket adja (buil
   assert.deepEqual(progress[0], { done: 0, total: 2, current: 0, building: [0, 1] });
   assert.deepEqual(progress.at(-1), { done: 2, total: 2 });
 });
+
+// Review #265
+const twoSectionLesson = () => {
+  const base = standardFusionFixture();
+  return { e: base.experience!, lesson: lessonSchema.parse({ ...base, experience: undefined, sections: [base.sections[0], { ...base.sections[0], heading: "Második fejezet ugyanarról" }] }) };
+};
+
+test("review #265: a haladás a valóban futó egységeket követi — eltérő befejezési sorrendnél és ütköző csomag soros újraépítésénél is", async () => {
+  const { e, lesson } = twoSectionLesson();
+  const calls: number[] = [];
+  const progress: Array<{ done: number; total: number; current?: number; building?: number[] }> = [];
+  await buildLessonExperience(lesson, [], { concurrency: 3, onProgress: (p) => progress.push(p), call: async (_s, user) => {
+    const sectionIndex = Number(/sectionIndex=(\d+)/.exec(user)![1]);
+    calls.push(sectionIndex);
+    await new Promise((r) => setTimeout(r, sectionIndex === 0 ? 30 : 5)); // a 2. egység (index 1) végez előbb
+    const rebuild = calls.filter((s) => s === sectionIndex).length > 1;
+    const suffix = rebuild ? " (második változat)" : "";
+    // Első körben ugyanazok a kérdések → ütközés → a 2. egység sorosan újraépül.
+    return { methods: e.methods.map((m) => ({ ...m, sectionIndex, title: m.title + suffix, prompt: m.prompt + suffix })), tasks: e.tasks.map((t) => ({ ...t, sectionIndex, q: t.q + suffix })),
+      quiz: e.quiz.map((q) => ({ ...q, sectionIndex, question: q.question + suffix })), glossary: [] };
+  } });
+  assert.deepEqual(progress[0], { done: 0, total: 2, current: 0, building: [0, 1] });
+  assert.deepEqual(progress[1], { done: 1, total: 2, current: 0, building: [0] }, "az elsőként végző egység kikerül a készülők közül");
+  assert.ok(progress.some((p) => p.done === 1 && p.building?.length === 1 && p.building[0] === 1), "az ütköző csomag soros újraépítése is jelzés: " + JSON.stringify(progress));
+  assert.deepEqual(progress.at(-1), { done: 2, total: 2 });
+});
+
+test("review #265: az egyik egység hibája után is megvárja a többit és a checkpoint-mentésüket (a kifizetett csomag nem vész el)", async () => {
+  const { e, lesson } = twoSectionLesson();
+  const saved: number[] = [];
+  let doneAtReject = -1;
+  await assert.rejects(buildLessonExperience(lesson, [], { concurrency: 3,
+    save: async (cp) => { saved.push(Object.keys(cp.parts).length); },
+    call: async (_s, user) => {
+      const sectionIndex = Number(/sectionIndex=(\d+)/.exec(user)![1]);
+      if (sectionIndex === 0) throw new Error("szolgáltatói hiba (nem javítható)");
+      await new Promise((r) => setTimeout(r, 20));
+      return { methods: e.methods.map((m) => ({ ...m, sectionIndex })), tasks: e.tasks.map((t) => ({ ...t, sectionIndex })), quiz: e.quiz.map((q) => ({ ...q, sectionIndex })), glossary: [] };
+    } }).catch((error) => { doneAtReject = saved.length; throw error; }), /szolgáltatói hiba/);
+  assert.equal(doneAtReject, 1, "a hiba csak a késleltetett, sikeres csomag mentése UTÁN megy tovább");
+});

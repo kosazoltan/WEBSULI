@@ -7,7 +7,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lessons, studioJobs, type InsertGameQuizItem } from "../../shared/schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
-import { workflowFence } from "../workflows/engine";
+import { workflowFence, workflowSerialized } from "../workflows/engine";
 import type { Coverage, MapConcept } from "./coverage";
 import type { StudioStep } from "./pipeline";
 
@@ -131,10 +131,11 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
     async saveStep(jobId, patch) {
       // Review #263: a folytatás ugyanazt a jobot írja — a lejárt lízingű (elavult) végrehajtó nem írhatja felül az új futás mentését.
       // Workflow-kontextuson kívül a kerítés nem vizsgál.
-      await db.transaction(async (tx) => {
+      // Review #265: a workflow-mentésekkel közös sorban (párhuzamos bankcsomagok mellett sincs revízió-verseny).
+      await workflowSerialized(() => db.transaction(async (tx) => {
         await workflowFence(tx);
         await tx.update(studioJobs).set(patch).where(eq(studioJobs.id, jobId));
-      });
+      }));
     },
 
     async publishLesson(input) {
