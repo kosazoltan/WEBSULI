@@ -53,14 +53,15 @@ function wordHit(token: string, word: string): boolean {
   return distance(token, word) <= (Math.max(token.length, word.length) > 8 ? 2 : 1);
 }
 /**
- * J1 (docs/specs/2026-10-16-egyfutas-atvilagitas.md): a `candidate` válasz tokenjei lefedik-e a `covered` válasz MINDEN tokenjét a pontozó
- * saját szóillesztésével (`wordHit`: azonos alak, szótő, elütés). Ha igen, egy szócsoport-rubrika — amely a `covered` választ teljes
- * ponttal elfogadja — a `candidate`-et sem utasíthatja el: a szórendet és a viszonyt a pontozó nem méri. A pontozást nem változtatja.
+ * J1 (docs/specs/2026-10-16-egyfutas-atvilagitas.md): a `candidate` válasz normalizált tokenjei között szerepel-e a `covered` válasz
+ * MINDEN normalizált tokenje, PONTOSAN. Ha igen, egy szócsoport-rubrika — amely a `covered` választ teljes ponttal elfogadja — a
+ * `candidate`-et sem utasíthatja el: a szórendet és a viszonyt a pontozó nem méri. Review #263: csak pontos azonosság bizonyít — a pontozó
+ * elütés- és szótő-tűrése nem tranzitív (a „porta” / „torta” esetet egy további csoport szétválasztaná). A pontozást nem változtatja.
  */
 export function answerTokensCover(candidate: string, covered: string): boolean {
-  const have = tokensOf(candidate);
+  const have = new Set(tokensOf(candidate));
   const need = tokensOf(covered);
-  return need.length > 0 && need.every((word) => have.some((token) => wordHit(token, word)));
+  return need.length > 0 && need.every((word) => have.has(word));
 }
 
 function conceptHit(tokens: string[], alternatives: readonly string[], tokenize: (s: string) => string[] = tokensOf): boolean {

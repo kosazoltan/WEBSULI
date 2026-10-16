@@ -163,9 +163,10 @@ export async function runStation<T>(deps: StationDeps, name: string, request: Tu
  * változatlanul kilép.
  */
 export function freshBankCall(fresh: (system: string) => LessonConversation, telemetry?: TelemetryRecorder) {
-  return async (system: string, user: string): Promise<unknown> => {
+  return async (system: string, user: string, attempt = 0): Promise<unknown> => {
     const blocks = withRoleRunbook([text(`5. ÁLLOMÁS — GYAKORLÓBANK (egy fejezet csomagja).\n${system}\n\n${user}`)], "bank");
-    const reply = await timed(telemetry, "gyakorlóbank", () => fresh(freshSystemPrompt("bank")).send(blocks), { fresh: true });
+    // Review #263: az első utáni bankkísérlet javító forduló a telemetriában.
+    const reply = await timed(telemetry, "gyakorlóbank", () => fresh(freshSystemPrompt("bank")).send(blocks), { fresh: true, fix: attempt > 0 });
     if (reply.truncated) throw new RetryableBankCallError("A bankcsomag válasza elérte a kimeneti keretet és levágódott.");
     try { return parseModelJson(reply.text).json; }
     catch (error) { throw new RetryableBankCallError(`A bankcsomag válasza nem értelmezhető JSON: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
@@ -477,7 +478,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     return keys;
   };
   // Review #260: a banképítő utolsó kísérletének nyitott aritmetikai leletei — a végkapu előtt a választásos kapu kezeli őket.
-  const openFindings: Array<{ sectionIndex: number; itemId: string; message: string }> = [];
+  // Review #263: folytatáskor a mentett nyitott leletek is (kész banknál a banképítés kimarad; a végkapu a már nem létező tételt figyelmen kívül hagyja).
+  const savedFindings = Array.isArray(output.bankOpenFindings) ? output.bankOpenFindings as Array<{ sectionIndex: number; itemId: string; message: string }> : [];
+  const openFindings: Array<{ sectionIndex: number; itemId: string; message: string }> = resumed ? [...savedFindings] : [];
   const buildBank = async (base: Lesson, extra: { reviewFeedback?: ReturnType<typeof resolveBankReview>; previous?: Lesson["experience"] } = {}) =>
     buildLessonExperience(base, concepts, {
       call: freshBankCall(deps.fresh, telemetry),

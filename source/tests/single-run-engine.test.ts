@@ -179,9 +179,13 @@ test("review #260: több forrásfájlnál fájlonkénti átirat és valódi sour
 test("review #260: a nem JSON bankválasz a banképítő javító körébe megy (nem állítja le a gyártást)", async () => {
   let bankCalls = 0;
   const client = withOverride(scriptedClient(), (station) => (station === "5" && bankCalls++ === 0 ? "ez nem JSON" : null));
-  const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, memoryStore()));
+  const mem = memoryStore();
+  const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, mem));
   assert.equal(result.htmlFileId, "html1");
   assert.ok(bankCalls >= 2, "a hibás válasz után új bankkísérlet jött");
+  // Review #263: az első utáni bankkísérlet javító forduló a telemetriában.
+  const t = (mem.steps.at(-1)!.output as { telemetry: RunTelemetry }).telemetry;
+  assert.ok(t.stations["gyakorlóbank"].fixTurns >= 1, JSON.stringify(t.stations["gyakorlóbank"]));
 });
 
 test("S4b: a szókeret túllépése minőségi jelzés (length_over_budget) a jobon, a gyártás nem áll meg", async () => {
@@ -454,4 +458,18 @@ test("J5: a nem rövidebb rövidítés elvetve — az eredeti lecke marad a jelz
   assert.deepEqual(out.qualityNotes?.map((n) => n.reason), ["length_over_budget"]);
   assert.equal(out.telemetry.gates.lengthShortened, false);
   assert.equal(out.telemetry.gates.lengthOverBudget, true);
+});
+
+// Review #263: folytatáskor a mentett nyitott bankleletek is a végkapuhoz jutnak (kész banknál a banképítés kimarad).
+test("J5 (review #263): a mentett nyitott banklelet a folytatás végkapujáig eljut", async () => {
+  const note = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tényhiba a tanításban." };
+  const failing = scriptedClient({ lektor: [{ solutions: [], notes: [note], reviewedAll: true }, { solutions: [], notes: [note], reviewedAll: true }] });
+  const mem = memoryStore();
+  await assert.rejects(runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(failing, mem)));
+  const saved = mem.steps.at(-1)!.output as SavedOutput & { lesson: { experience: { quiz: Array<{ id: string }> } } };
+  const itemId = saved.lesson.experience.quiz[0].id;
+  const withFinding = { ...saved, bankOpenFindings: [{ sectionIndex: 0, itemId, message: "hibás számítás: 2 + 2 = 5" }] };
+  const outcome = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: withFinding } }, resumeDeps(scriptedClient(), memoryStore(), withFinding))
+    .then((r) => r.warnings.join(" | ")).catch((e: Error) => e.message);
+  assert.match(outcome, /A végkapu kivette: experience\.quiz\[0\]/, "a végkapu a mentett leletet kezeli: " + outcome);
 });

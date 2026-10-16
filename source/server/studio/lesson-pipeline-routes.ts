@@ -32,7 +32,7 @@ import {
   type OneStepRun,
 } from "./one-step-progress";
 import { ORPHAN_JOB_ERROR, sweepDecision, type SweepRow } from "./orphan-jobs";
-import { executeWorkflow, workflowPhase, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
+import { executeWorkflow, workflowFence, workflowPhase, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { telemetryOf } from "./single-run/telemetry";
@@ -718,7 +718,11 @@ export async function resumeSingleRun(jobId: string, owner: string): Promise<str
   if (!row) throw new WorkflowConflict("A folytatás már elindult, a piszkozat törölve, épp fut, vagy nem a tiéd.");
   const runId = createRun();
   updateRun(runId, { phase: "pedagogue", mapId: row.map_id, jobId, detail: "Folytatás a mentett részeredményekből…" });
+  const message = (error: unknown) => error instanceof Error ? error.message.slice(0, 1500) : "A folytatás megállt.";
+  const release = (error: unknown) => sql`UPDATE studio_jobs SET status = 'error', error = ${message(error)}, finished_at = now() WHERE id = ${jobId} AND status = 'running'`;
+  let started = false;
   void executeWorkflow(workflowStore, { id: runId, owner, mode: "upload", request: { mapId: row.map_id, resumeJobId: jobId } }, async () => {
+    started = true;
     const { runSingleResume } = await import("./single-run/live");
     try {
       const result = await runSingleResume({ jobId, ownerId: owner },
@@ -729,12 +733,15 @@ export async function resumeSingleRun(jobId: string, owner: string): Promise<str
       logger.error(`[EGYFUTÁS] A folytatás megállt (${runId}, job ${jobId}): ${error instanceof Error ? error.message : String(error)}`);
       updateRun(runId, { phase: "error", jobId, error: error instanceof Error ? error.message.slice(0, 1500) : "A folytatás megállt." });
       // A motor a saját hibáját a jobra írja; ha a motor el sem indult, a foglalás itt áll vissza (a job nem ragad „fut” állapotban).
-      await db.execute(sql`UPDATE studio_jobs SET status = 'error', error = ${error instanceof Error ? error.message.slice(0, 1500) : "A folytatás megállt."}, finished_at = now()
-        WHERE id = ${jobId} AND status = 'running'`).catch(() => undefined);
+      // Review #263: csak az érvényes lízingű végrehajtó állíthatja vissza (egy későbbi folytatás futását nem zárhatja le).
+      await db.transaction(async (tx) => { await workflowFence(tx); await tx.execute(release(error)); }).catch(() => undefined);
       throw error;
     }
-  }).catch((error) => {
+  }).catch(async (error) => {
     if (error instanceof WorkflowWaiting) return;
+    // Review #263: ha a workflow a callback előtt hibázott (sor létrehozása / foglalása), a foglalás itt áll vissza. Ha a callback
+    // elindult, a visszaállítás már a kerítés mögött megtörtént — itt nem írunk (egy újabb folytatás futását nem zárhatjuk le).
+    if (!started) await db.execute(release(error)).catch(() => undefined);
     void recordOneStepFailure(runId, error);
   });
   logger.warn(`[EGYFUTÁS] ${jobId}: folytatás a mentett részekből → futás ${runId}`);

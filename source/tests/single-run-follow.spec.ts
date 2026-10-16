@@ -133,6 +133,7 @@ test("J3/J5: a futás mérőszámai a JobMonitorban; a folytatás a mentett rés
     fresh: { calls: 14, input: 760_000, cached: 530_000, output: 90_000 },
     gates: { answerKeyNotes: 2, answerKeyFails: 1, quizBlindRemoved: 3, lektorRemoved: 0, lengthOverBudget: false, lengthShortened: true } };
   let resumed = 0;
+  // Review #263: a folytatás UGYANAZT a jobot viszi tovább — a felület nem ragadhat a gyorsítótárazott hibás állapotnál.
   await page.addInitScript(() => { try { sessionStorage.setItem("websuli.studio.jobId", "job-t"); } catch { /* tároló nélkül is fut */ } });
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -140,10 +141,11 @@ test("J3/J5: a futás mérőszámai a JobMonitorban; a folytatás a mentett rés
     if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] };
     if (path === "/api/csrf-token") data = { csrfToken: "test" };
     if (path === "/api/studio/maps") data = { maps: [] };
-    if (path === "/api/studio/jobs/job-t") data = { job: { id: "job-t", step: "error", status: "error", round: 0, error: "lektorálás: tényhiba maradt." }, produced: { telemetry } };
+    if (path === "/api/studio/jobs/job-t") data = resumed
+      ? { job: { id: "job-t", step: "lektor", status: "running", round: 0, error: null }, produced: { telemetry } }
+      : { job: { id: "job-t", step: "error", status: "error", round: 0, error: "lektorálás: tényhiba maradt." }, produced: { telemetry } };
     if (path === "/api/studio/jobs/job-t/resume") { resumed++; return route.fulfill({ status: 202, json: { jobId: "job-t", runId: "run-t", resumed: true } }); }
-    if (path === "/api/studio/lessons/one-step/run-t") data = { phase: "lektor", jobId: "job-t2", error: null };
-    if (path === "/api/studio/jobs/job-t2") data = { job: { id: "job-t2", step: "lektor", status: "running", round: 0, error: null }, produced: { telemetry } };
+    if (path === "/api/studio/lessons/one-step/run-t") data = { phase: "lektor", jobId: "job-t", error: null };
     await route.fulfill({ json: data });
   });
   await page.setViewportSize({ width: 390, height: 844 });

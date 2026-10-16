@@ -231,6 +231,8 @@ function ResumeButton({ jobId, onFollowRun }: { jobId: string; onFollowRun?: (ru
       const started = await apiRequest<{ runId?: string; resumed?: boolean } | undefined>("POST", `/api/studio/jobs/${jobId}/resume`);
       // Review #260: a folytatás / újragyártás saját futás — a felület azt követi, nem a régi (hibás) jobot.
       if (started?.runId && onFollowRun) {
+        // Review #263 (J5): a folytatás UGYANAZT a jobot viszi tovább — a gyorsítótárazott hibás állapot nem maradhat (a polling leállna).
+        if (started.resumed) await queryClient.invalidateQueries({ queryKey: ["/api/studio/jobs", jobId] });
         onFollowRun(started.runId);
         toast(started.resumed
           ? { title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább; a kész részeket nem gyártja újra." }

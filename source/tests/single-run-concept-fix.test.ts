@@ -22,7 +22,7 @@ function client(opts: { firstFix?: unknown; lektor?: unknown }): ModelClient & {
     let json: unknown = {};
     if (/^FOGALOMJAVÍTÁS|A PROGRAM ELLENŐRZÉSE \(fogalomjavítás\)/.test(t)) { calls.push("fix"); json = fixes++ === 0 && opts.firstFix ? opts.firstFix : teaching; }
     else if (/5\. ÁLLOMÁS/.test(t)) { calls.push("bank"); json = structuredClone(fixture.experience); }
-    else if (/^LEKTORÁLÁS|A PROGRAM ELLENŐRZÉSE \(a javítás lektorálása\)/.test(t)) { calls.push("lektor"); json = opts.lektor ?? { solutions: [], notes: [], reviewedAll: true }; }
+    else if (/(^|\n)LEKTORÁLÁS|A PROGRAM ELLENŐRZÉSE \(a javítás lektorálása\)/.test(t)) { calls.push("lektor"); json = opts.lektor ?? { solutions: [], notes: [], reviewedAll: true }; }
     else calls.push("?");
     return { text: JSON.stringify(json), model: "claude-opus-5-5", truncated: false };
   } };
@@ -42,6 +42,21 @@ test("fogalomjavítás egy beszélgetésben: a célfogalmon túllépő javítás
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.deepEqual(fake.calls.filter((c, i, a) => c !== a[i - 1]), ["fix", "bank", "lektor"]);
   assert.equal(fake.calls.filter((c) => c === "fix").length, 2, "a túllépő javításra javító forduló jött");
+});
+
+// Review #263: a fogalomjavítás friss lektora a forrás átiratát is kapja (mint a gyártásban).
+test("fogalomjavítás: a friss lektor a forrás átiratát kapja", async () => {
+  const fake = client({});
+  const lektorRequests: string[] = [];
+  const spy: ModelClient = { model: fake.model, async complete(system, turns) {
+    const t = turns.at(-1)!.blocks.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+    if (system === freshSystemPrompt("lektor")) lektorRequests.push(t);
+    return fake.complete(system, turns);
+  } };
+  const result = await fixConceptInConversation({ original: fixture, source, conceptId: "area", conversation: new LessonConversation(singleRunSystemPrompt(), spy, null),
+    fresh: (s) => new LessonConversation(s, spy, null), sourceText: "A téglalap területe az oldalak szorzata." });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.ok(lektorRequests.length === 1 && lektorRequests.every((t) => t.startsWith("A FORRÁS ÁTIRATA (adat, a mérce):\nA téglalap területe az oldalak szorzata.")), JSON.stringify(lektorRequests.map((t) => t.slice(0, 80))));
 });
 
 test("fogalomjavítás: blokkoló lektori jegyzetnél nincs elfogadás (az eredeti érintetlen)", async () => {

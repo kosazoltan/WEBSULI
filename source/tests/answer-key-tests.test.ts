@@ -101,3 +101,13 @@ test("J1: a valóban túl megengedő rubrika továbbra is blokkol (a hibás pró
   assert.ok(problems.some((p) => /túl megengedő/.test(p)), JSON.stringify(problems));
   assert.deepEqual(answerKeyNotes(loose, cases()), []);
 });
+
+// Review #263: a lefedés pontos normalizált token-azonosság — az elütéstűrés nem tranzitív, nem bizonyít megkülönböztethetetlenséget.
+test("J1 (review #263): az elütéssel „lefedő” hibás próba (porta / torta) továbbra is blokkol, ha a rubrika teljes pontot ad rá", async () => {
+  const { answerTokensCover } = await import("../shared/lesson-experience-score");
+  assert.equal(answerTokensCover("A porta.", "A torta."), false);
+  assert.equal(answerTokensCover("Felső-Egyiptom északon, Alsó-Egyiptom délen fekszik.", "Felső-Egyiptom délen, Alsó-Egyiptom északon fekszik."), true);
+  const t = task({ id: "pt", q: "Mit sütött a nagymama?", required: [["torta", "porta"]], minWords: 2, sample: "A nagymama tortát sütött." });
+  const problems = answerKeyProblems(t, { correct: ["A torta.", "Torta volt.", "Egy torta."], wrong: [{ kind: "tevhit", text: "A porta." }, { kind: "temaidegen", text: "Esett az eső." }] });
+  assert.ok(problems.some((p) => /túl megengedő/.test(p)), JSON.stringify(problems));
+});
