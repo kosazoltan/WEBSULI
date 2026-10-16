@@ -34,7 +34,8 @@ test("a v7.4 spec a skill kötelező elemeit tartalmazza", () => {
   assert.match(s, /window\.self !== window\.top/);
   // ékezetek / Android
   assert.match(s, /fonts\/lesson-fonts\.css/);
-  assert.match(s, /Nunito, Source Sans 3, Source Serif 4/);
+  // Websuli Design (dokumentált spec-változás, docs/specs/2026-10-16-websuli-design.md): Nunito Sans (1–5.) és Inter (6–12.).
+  assert.match(s, /Nunito Sans \(1–5\. évfolyam\) és Inter \(6–12\. évfolyam\)/);
   assert.match(s, /http-equiv="Content-Type"/);
   assert.match(s, /Ne tölts be Google Fonts vagy más külső fontot/);
   // mennyiségek és szerkezet
@@ -84,16 +85,17 @@ test("a téma-prompt csak a mért helyi magyar fontokat kéri (jóváhagyott tip
     assert.equal(link, "/fonts/lesson-fonts.css");
     const p = lessonThemePrompt(theme, 5);
     assert.ok(p.includes(link));
-    assert.match(p, /Source Sans 3/);
+    assert.match(p, /Nunito Sans/);
     assert.doesNotMatch(p, /system-ui/);
     assert.match(p, new RegExp(`\\\`${theme.prefix}-\\\``));
   }
   assert.match(lessonThemePrompt(LESSON_THEMES[0], 2), /1–2\. évfolyam/);
   assert.match(lessonThemePrompt(LESSON_THEMES[0], 4), /3–4\. évfolyam/);
   for (const theme of LESSON_THEMES) {
-    assert.match(lessonThemePrompt(theme, 2), /font-family címsor: 'Nunito',sans-serif/);
-    assert.match(lessonThemePrompt(theme, 4), /font-family törzs: 'Nunito',sans-serif/);
-    assert.match(lessonThemePrompt(theme, 7), /font-family törzs: 'Source Sans 3',sans-serif/);
+    assert.match(lessonThemePrompt(theme, 2), /font-family címsor: 'Nunito Sans',"Noto Sans", sans-serif/);
+    assert.match(lessonThemePrompt(theme, 4), /font-family törzs: 'Nunito Sans',"Noto Sans", sans-serif/);
+    assert.match(lessonThemePrompt(theme, 7), /font-family törzs: 'Inter',"Noto Sans", sans-serif/);
+    assert.doesNotMatch(lessonThemePrompt(theme, 7), /Source Serif 4/, "a téma nem írhatja felül az évfolyam fontját");
   }
   assert.match(lessonThemePrompt(LESSON_THEMES[0], 0), /programozási alapismeretek/);
 });

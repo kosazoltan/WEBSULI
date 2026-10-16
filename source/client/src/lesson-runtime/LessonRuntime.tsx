@@ -23,7 +23,7 @@ import {
   type Section,
 } from "@shared/lesson-schema";
 import { BAND_THEME, learningAgeGroup } from "@shared/lesson-band";
-import { lessonFontPair } from "@shared/lesson-typography";
+import { LESSON_FONT_FALLBACK, lessonFontPair } from "@shared/lesson-typography";
 
 import { SectionProba } from "./SectionProba";
 import { ANIMATE_REGISTRY } from "./blocks/animate-blocks";
@@ -456,11 +456,11 @@ export function LessonRuntime({
 }) {
   const band = ageBandForClassroom(lesson.classroom);
   const theme = BAND_THEME[band];
+  // Websuli Design: a lecke fontja az évfolyamból (1–5. Nunito Sans, 0. és 6–12. Inter), téma szerinti kivétel nélkül.
   const fonts = lessonFontPair(lesson.classroom, lesson.subject);
-  const headingFont = lesson.experience?.theme === "paper" && lesson.classroom > 4 ? "Source Serif 4" : fonts.heading;
   const typography = {
-    "--lesson-font-body": `"${fonts.body}", sans-serif`,
-    "--lesson-font-heading": `"${headingFont}", ${headingFont === "Source Serif 4" ? "serif" : "sans-serif"}`,
+    "--lesson-font-body": `"${fonts.body}", ${LESSON_FONT_FALLBACK}`,
+    "--lesson-font-heading": `"${fonts.heading}", ${LESSON_FONT_FALLBACK}`,
   } as CSSProperties;
   // B7: persist under htmlFileId when present; probe uses persistId for reload round-trips.
   const progress = useLessonProgress(persistId ?? lessonId);
