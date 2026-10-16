@@ -1727,7 +1727,19 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       // tanítást újraírta, és 6 változatlan tartalmú csomag épült újra. Ha MINDEN blokkoló
       // banktétel, a tanítás nem hibás → bármelyik körben a csak-bank javítás jön (jobonként
       // egyszer); a szerzői újraírás csak tanítási blokkolóra jár.
-      const bankOnlyRepair = bankRepairPossible && bankOnly;
+      // docs/specs/2026-10-16-bankhiba-kivetel.md (Tételgyár T1, D1: „kivétel javítás helyett”). Mért (job 61977256, 2026-10-16): a csak-bank
+      // javító kör a teljes csomagokat újragyártotta, és sémahibán pörgött. Ha minden blokkoló kivehető banktétel, a kapu veszi ki őket
+      // (tartalékból / célzott javítással tartja a padlót) — csak-bank újragyártás nincs. Vészfék: STUDIO_BANK_ONLY_REPAIR=1 (régi út).
+      // Review #257 (P2): a csak-bank kör CSAK akkor marad el, ha minden blokkoló ténylegesen kivehető banktétel (létező tasks/quiz/methods
+      // elem) — más `experience.*` útvonal (pl. szószedet, tartományon kívüli index) a régi úton marad, nem esik szerzői körbe.
+      const bankRemovalSplit = bankOnly ? splitLimitBlockers(job.output?.lesson as Lesson | undefined, convergedBlocking) : null;
+      const bankRemoval = !!bankRemovalSplit && fusion && !!(job.output?.lesson as Lesson | undefined)?.experience
+        && process.env.STUDIO_BANK_ONLY_REPAIR !== "1"
+        && !bankRemovalSplit.factual.length && !bankRemovalSplit.incomplete.length && bankRemovalSplit.removable.length > 0
+        // Review #257 (P2): csak ha a kapu el is fogadná a kivételt (a publikálási minimum megmarad) — különben a régi célzott
+        // csak-bank javítás jár, nem egy biztos kapubukás (orkesztrátor nélkül a kapu nem javít).
+        && !("error" in resolveChoiceGate(job.output!.lesson as Lesson, [...(Array.isArray(job.output?.choiceFlags) ? job.output!.choiceFlags as ChoiceFlag[] : []), ...bankRemovalSplit.removable]));
+      const bankOnlyRepair = bankRepairPossible && bankOnly && !bankRemoval;
       // Spec 2026-09-30-nem-elakado-kozzetetel (D2): a limiten a hiány-jellegű tanítási blokkoló figyelmeztetés — a kapu
       // ugyanezt a szabályt használja (limit-policy), így a kettő nem dönthet eltérően.
       const atLimit = job.round >= MAX_AUTHOR_ROUNDS && fusion && !bankOnlyRepair;
@@ -1779,7 +1791,22 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
         job.output = { ...job.output, choiceFlags: merged };
         logger.warn(`[STUDIO] Körlimiten maradt banktétel-hiba a kapunak kivételre (${job.id}, ${job.round}. kör): ${limitFlags.map((f) => f.path).join(", ")}`);
       }
-      const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers, bankOnlyRepair });
+      // K1: a lektor (és a bank-ellenőr) bankhibái kivételre a kapunál — a kivett tételre mutató blokkolót a kapu megoldottnak tekinti.
+      let gateBlockers = blockers;
+      if (bankRemoval && blockers > 0 && !atLimit) {
+        const split = splitLimitBlockers(job.output?.lesson as Lesson | undefined, blockingNotes);
+        if (!split.factual.length && !split.incomplete.length && split.removable.length) {
+          const existing = Array.isArray(job.output?.choiceFlags) ? job.output!.choiceFlags as ChoiceFlag[] : [];
+          const paths = new Set(split.removable.map((f) => f.path));
+          job.output = { ...job.output, choiceFlags: [
+            ...existing.map((e) => (paths.has(e.path) ? { ...e, origin: "limit" as const } : e)),
+            ...split.removable.filter((f) => !existing.some((e) => e.path === f.path)),
+          ] };
+          logger.warn(`[STUDIO] Lektor bankhibái kivételre a kapunál (${job.id}, ${job.round}. kör): ${split.removable.length} tétel — csak-bank újragyártás nincs`);
+          gateBlockers = 0;
+        }
+      }
+      const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers: gateBlockers, bankOnlyRepair });
       if (bankOnlyRepair && transition.step === "animator") {
         // Same note set the author path forwards (every non-admin note, so a language note on a
         // sample reaches the bank builder too); resolveBankReview keeps the experience.* ones.
@@ -1832,7 +1859,8 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           report: parsed.data,
           reportRound: job.round,
           reviewInputHash: lektorReviewHash(input, job.round), reviewEvidence: lektorEvidenceOf(input as LektorEvidenceInput, lektorReviewHash(input, job.round)),
-          blockers,
+          // Review #257 (P2): a `cachedNext` ebből dönt — a TÉNYLEGES átmeneti döntés (kivételnél 0 → kapu); a lektor saját száma külön.
+          blockers: gateBlockers, lektorBlockers: blockers,
           ...(carriedNotes !== undefined ? { qualityNotes: carriedNotes } : {}),
         }),
       );

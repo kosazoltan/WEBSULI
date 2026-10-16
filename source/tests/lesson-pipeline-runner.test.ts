@@ -46,6 +46,16 @@ import { memoryWorkflows } from "./helpers/workflow-store";
 
 import { __resetRunsForTest, createRun, getRun, updateRun } from "../server/studio/one-step-progress";
 
+/**
+ * Dokumentált szerződésváltozás (docs/specs/2026-10-16-bankhiba-kivetel.md, Tételgyár T1/D1): alapból a lektor bankhibái kivételre mennek a
+ * kapuhoz (nincs csak-bank újragyártás). A régi csak-bank út a STUDIO_BANK_ONLY_REPAIR=1 vészfék mögött él tovább — ezek a tesztek azt őrzik.
+ */
+function bankOnlyRepairSwitch(t: { after: (fn: () => void) => void }) {
+  const before = process.env.STUDIO_BANK_ONLY_REPAIR;
+  process.env.STUDIO_BANK_ONLY_REPAIR = "1";
+  t.after(() => { if (before === undefined) delete process.env.STUDIO_BANK_ONLY_REPAIR; else process.env.STUDIO_BANK_ONLY_REPAIR = before; });
+}
+
 test("bank resume requires the exact failed workflow visit and retains checkpoints and round", async () => {
   const deps = makeDeps("{}");
   const error = "A 2. fejezet bankcsomagja a javító kör után sem megfelelő: Bankterven kívüli tétel.";
@@ -909,7 +919,8 @@ test("hibás vagy helyőrző ábra, tanítatlan fogalom, hiányzó szakaszábra 
 
 // Spec §7o (mérve, 5. mérés, run a0eb2bed): csak-bank körben az ábra-modellhívás újra lefutott (glm 609 s +
 // deepseek 113 s, mindkettő hosszkorlát) és semmit nem adott — a lektorált szöveg és ábrái változatlanok maradnak.
-test("csak-bank körben nincs ábra-modellhívás akkor sem, ha az ábrák nem újrahasznosíthatók", async () => {
+test("csak-bank körben nincs ábra-modellhívás akkor sem, ha az ábrák nem újrahasznosíthatók", async (t) => {
+  bankOnlyRepairSwitch(t);
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);
   const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
@@ -936,7 +947,8 @@ test("csak-bank körben nincs ábra-modellhívás akkor sem, ha az ábrák nem �
   assert.deepEqual(after && after.kind === "animate" ? after.params : null, { steps: ["egyetlen lépés"] }, "a szöveg és az ábrák változatlanok");
 });
 
-test("lektori bankhiba közvetlenül a banképítőhöz jut (csak-bank kör); a nyelvi javítás sem vész el", async () => {
+test("lektori bankhiba közvetlenül a banképítőhöz jut (csak-bank kör); a nyelvi javítás sem vész el", async (t) => {
+  bankOnlyRepairSwitch(t);
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);
   const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
@@ -1773,7 +1785,8 @@ test("(p) spec 2026-09-19 — lektor: az elsődleges modell időtúllépése ut�
 });
 
 /* Spec 2026-09-19 — bank-only lektor blockers at the round limit get one targeted bank round. */
-test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjavító kör, utána a lektor dönt", async () => {
+test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjavító kör, utána a lektor dönt", async (t) => {
+  bankOnlyRepairSwitch(t);
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);
   const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
@@ -1815,7 +1828,8 @@ test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjaví
   assert.deepEqual((deps.store.jobs.get("bank-only")!.output?.choiceFlags as Array<{ path: string }>).map((f) => f.path), ["experience.quiz[3]"]);
 });
 
-test("spec 2026-10-01-kapu-javitas-bankkor: a célzott kapu-javítás körében elfogyott csak-bank körök mellett EGY saját bankkör jár", async () => {
+test("spec 2026-10-01-kapu-javitas-bankkor: a célzott kapu-javítás körében elfogyott csak-bank körök mellett EGY saját bankkör jár", async (t) => {
+  bankOnlyRepairSwitch(t);
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);
   const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
@@ -1914,7 +1928,8 @@ async function gateBankDeadZoneCase(id: string, grantsUsed: number) {
   return { next, round, output: deps.store.jobs.get(id)!.output };
 }
 
-test("spec 2026-10-04-kapu-bankkor-holtzona: csak-bank limit maradt, de látogatás nincs → a kapu-bankkör jár (dinamikus kerettel)", async () => {
+test("spec 2026-10-04-kapu-bankkor-holtzona: csak-bank limit maradt, de látogatás nincs → a kapu-bankkör jár (dinamikus kerettel)", async (t) => {
+  bankOnlyRepairSwitch(t);
   const { next, round, output } = await gateBankDeadZoneCase("gate-bank-deadzone", 1);
   assert.deepEqual(next, { step: "animator", round: round + 1 }, JSON.stringify(next));
   assert.equal(output?.gateBankRepairUsed, true, "a kapu-bankkör költődött");
@@ -1955,7 +1970,8 @@ test("(q3) élő mérés 2026-09-24 (run 29a13b45): elfogyott workflow-keretnél
   assert.match((job.output?.choiceFlags as Array<{ message: string }>)[0].message, /273/);
 });
 
-test("(q2) mérve run b5d07f3d: már az első körben is csak-bank javítás jön, ha minden blokkoló banktétel — nincs szerzői újraírás", async () => {
+test("(q2) mérve run b5d07f3d: már az első körben is csak-bank javítás jön, ha minden blokkoló banktétel — nincs szerzői újraírás", async (t) => {
+  bankOnlyRepairSwitch(t);
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);
   const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
@@ -1972,6 +1988,91 @@ test("(q2) mérve run b5d07f3d: már az első körben is csak-bank javítás jö
   const job = deps.store.jobs.get("bank-only-early")!;
   assert.equal(job.output?.bankOnlyRepairRound, 1);
   assert.equal((job.output?.bankReview as { feedback: unknown[] }).feedback.length, 1);
+});
+
+// docs/specs/2026-10-16-bankhiba-kivetel.md (K1/K2; mért: job 61977256 a csak-bank körben pörgött). Alapból a lektor bankhibája
+// kivételre megy a kapuhoz: a következő lépés a kapu, a tétel kivételre jelölt, csak-bank újragyártás (bankReview) nincs.
+test("K1: minden blokkoló banktétel → a kapuhoz kivételre (nincs csak-bank újragyártás, nincs szerzői újraírás)", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.0", message: "A mintaválasz jobbról balra halad." };
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "bank-removal", mapId: "m1", lessonId: "lesson-k1", step: "lektor", round: 0, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  deps.store.lessons.set("lesson-k1", { id: "lesson-k1", mapId: "m1", json: lesson });
+  const first = await runPipelineStep("bank-removal", deps);
+  assert.ok(first.ok, JSON.stringify(first));
+  assert.deepEqual(first.ok && first.next, { step: "gate", round: 0 }, "a kapu jön, nem bank-kör és nem szerző");
+  const job = deps.store.jobs.get("bank-removal")!;
+  assert.equal(job.output?.bankReview, undefined, "nincs csak-bank újragyártás");
+  const flags = job.output?.choiceFlags as Array<{ path: string; origin?: string }>;
+  assert.ok(flags.some((f) => f.path === "experience.tasks[0]" && f.origin === "limit"), JSON.stringify(flags));
+  // Review #257 (P2): az ismételt (gyorsítótárazott) lektorhívás is a kapuhoz jut.
+  const again = await runPipelineStep("bank-removal", deps);
+  assert.deepEqual(again.ok && again.next, { step: "gate", round: 0 }, `gyorsítótárból is kapu: ${JSON.stringify(again)}`);
+  // Review #257 (P2): a kapu VALÓBAN fut (advanceJob), kiveszi a jelölt tételt, a kivett tételre mutató blokkolót megoldottnak veszi, és publikál.
+  const removedId = (deps.store.jobs.get("bank-removal")!.output?.lesson as { experience: { tasks: Array<{ id: string }> } }).experience.tasks[0].id;
+  await advanceJob("bank-removal", first.ok ? first.next : { step: "gate", round: 0 }, { status: "running" }, deps);
+  let publications = 0;
+  deps.store.publishLesson = async () => { publications++; return { htmlFileId: "published-k1", exportedQuizItems: 1 }; };
+  const gated = await runPipelineStep("bank-removal", deps);
+  const after = deps.store.jobs.get("bank-removal")!;
+  assert.ok(gated.ok, `a kapu átenged: ${JSON.stringify(gated)} ${after.error ?? ""}`);
+  assert.equal(publications, 1, "publikált");
+  // A publikált lecke a leckesorban (upsertLesson) — a kapu ide menti a kivétel utáni bankot.
+  const tasks = (deps.store.lessons.get("lesson-k1")!.json as { experience?: { tasks: Array<{ id: string }> } }).experience?.tasks ?? [];
+  assert.ok(tasks.length > 0 && !tasks.some((t) => t.id === removedId), `a hibás tétel (${removedId}) kikerült a publikált bankból`);
+});
+
+// Review #257 (P2): nem kivehető experience-útvonal (pl. tartományon kívüli index) mellett a csak-bank kör NEM tiltódik le — nincs szerzői kör.
+test("K1b: nem kivehető experience-blokkolónál a régi csak-bank kör marad (nem szerzői újraírás)", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const blocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.999", message: "Nem létező tétel." };
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [blocker] }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "bank-nonremovable", mapId: "m1", step: "lektor", round: 0, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  const first = await runPipelineStep("bank-nonremovable", deps);
+  assert.ok(first.ok, JSON.stringify(first));
+  assert.deepEqual(first.ok && first.next, { step: "animator", round: 1 }, "csak-bank kör, nem szerző és nem kapu");
+});
+
+// Review #257 (P2): ha a kivétel a publikálási minimum alá vinné a bankot (a kapu elutasítaná), a régi célzott csak-bank javítás jár.
+test("K1c: minimumot sértő kivétel helyett a csak-bank javítás marad", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const notes = lesson.experience.tasks.map((_, i) => ({ kind: "source_conflict", subkind: "contradicts_source", blockPath: `experience.tasks.${i}`, message: "Hibás feladat." }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "bank-floor", mapId: "m1", step: "lektor", round: 0, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  const first = await runPipelineStep("bank-floor", deps);
+  assert.ok(first.ok, JSON.stringify(first));
+  assert.deepEqual(first.ok && first.next, { step: "animator", round: 1 }, "a padló alá vivő kivétel helyett célzott csak-bank javítás");
+});
+
+test("K2: tanítási blokkoló mellett a régi út marad (nincs kivétel a kapunál, szerzői javítás)", async () => {
+  const lesson = standardFusionFixture();
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  const notes = [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tanítási tényhiba." },
+    { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.1", message: "Bankhiba." }];
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "area", examWeight: "core" }] });
+  deps.store.seed({ id: "teaching-blocker", mapId: "m1", step: "lektor", round: 0, output: { lesson, methodVersion: lesson.experience!.version } });
+  const first = await runPipelineStep("teaching-blocker", deps);
+  assert.ok(first.ok, JSON.stringify(first));
+  assert.deepEqual(first.ok && first.next, { step: "author", round: 1 }, "tanítási blokkolónál szerzői kör");
 });
 
 // Spec-változás 2026-09-30 (docs/specs/2026-09-30-nem-elakado-kozzetetel.md, D2, tulajdonosi döntés): a limiten maradt
@@ -2174,7 +2275,8 @@ async function bankVerifierSetup(id: string, extraOutput: Record<string, unknown
 const verifierCallsOf = (calls: Array<{ system: string }>) => calls.filter((c) => c.system.includes("TÁMOGATÓ SKILL: bank-verifier"));
 const QUIZ_ERROR = { path: "experience.quiz[3]", message: "Mi hamis: két igaz opció | Bizonyíték: 12 + 9 − 17 = 4 | Javítás iránya: 4" };
 
-test("bank-ellenőr: a lektor mellett fut; a talált banktétel-hiba csak-bank javító kört indít, kitalált útvonal nélkül", async () => {
+test("bank-ellenőr: a lektor mellett fut; a talált banktétel-hiba csak-bank javító kört indít, kitalált útvonal nélkül", async (t) => {
+  bankOnlyRepairSwitch(t);
   const { deps, store, calls, lesson } = await bankVerifierSetup("bv-repair", {}, [QUIZ_ERROR, { path: "experience.quiz[9999]", message: "kitalált" }]);
   const result = await runPipelineStep("bv-repair", deps);
   assert.deepEqual(result.ok && result.next, { step: "animator", round: 1 }, JSON.stringify(result));
@@ -2228,7 +2330,8 @@ const published = (store: MemoryStore) => {
   return log;
 };
 
-test("spec 2026-09-29 (E3): több helyes opció az opciónkénti ítéletben → blokkoló jegyzet a csak-bank javító körbe", async () => {
+test("spec 2026-09-29 (E3): több helyes opció az opciónkénti ítéletben → blokkoló jegyzet a csak-bank javító körbe", async (t) => {
+  bankOnlyRepairSwitch(t);
   const { deps, store } = await bankVerifierSetup("bv-choice-repair", {}, [], ALL_TRUE);
   const result = await runPipelineStep("bv-choice-repair", deps);
   assert.deepEqual(result.ok && result.next, { step: "animator", round: 1 }, JSON.stringify(result));
