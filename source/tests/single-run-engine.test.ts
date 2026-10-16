@@ -174,3 +174,29 @@ test("review #260: a nem JSON bankválasz a banképítő javító körébe megy 
   assert.equal(result.htmlFileId, "html1");
   assert.ok(bankCalls >= 2, "a hibás válasz után új bankkísérlet jött");
 });
+
+// Review #261
+test("review #261: szöveges forrásnál a VALÓDI szöveg a mérce — a modell átiratából kitalált idézet javító fordulót kap", async () => {
+  const invented = { title: "Terület", subject: fixture.subject, classroom: fixture.classroom, transcript: "Kitalált átirat: a terület mindig piros.",
+    concepts: [{ id: "area", term: "terület", definition: "x", quote: "a terület mindig piros", type: "concept", examWeight: "core", relatedIds: [] }] };
+  const correct = { ...invented, transcript: TRANSCRIPT, concepts: [{ ...invented.concepts[0], quote: "A téglalap területe az oldalak szorzata." }] };
+  const client = withOverride(scriptedClient(), (station) => (station === "1" ? JSON.stringify(invented) : station === "forrás és tudásbank" ? JSON.stringify(correct) : null));
+  const maps: SingleRunMap[] = [];
+  await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, memoryStore(), maps));
+  assert.ok(client.calls.includes("forrás és tudásbank"), "a valódi szövegben nem szereplő idézet javító fordulót kapott");
+  assert.equal(maps[0].transcript, TRANSCRIPT, "a mentett átirat a valódi forrásszöveg");
+});
+
+test("review #261: a különálló kinyerés lenyomata egyértelmű (a fájlhatár nem csúszhat el)", async () => {
+  const { singleRunMapHash } = await import("../server/studio/single-run/live");
+  const one = singleRunMapHash([{ name: "a.txt", kind: "text", content: "first\nb.txt\ntext\nsecond" }]);
+  const two = singleRunMapHash([{ name: "a.txt", kind: "text", content: "first" }, { name: "b.txt", kind: "text", content: "second" }]);
+  assert.notEqual(one, two);
+});
+
+test("review #261: a jóváhagyott vázlat kötelező tervként kerül a tanári kérésbe", async () => {
+  const { approvedOutlineInstruction } = await import("../server/studio/lesson-pipeline-routes");
+  const text = approvedOutlineInstruction({ sections: [{ heading: "B fejezet", conceptIds: ["c2"] }, { heading: "A fejezet", conceptIds: ["c1", "c3"] }] });
+  assert.match(text, /JÓVÁHAGYOTT TANULÁSI TERV — kötelező/);
+  assert.match(text, /1\. B fejezet — fogalmak: c2\n2\. A fejezet — fogalmak: c1, c3/);
+});

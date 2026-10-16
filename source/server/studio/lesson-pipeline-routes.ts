@@ -36,6 +36,7 @@ import { COUPON_GAME_IDS, conceptIdResolver, exportQuizItemsFromChecks } from ".
 import { canonicalLessonQuiz } from "./canonical-quiz-bank";
 import { MAX_CHAIN_STEPS } from "./pipeline";
 import { fromMapBody } from "./from-map-body";
+import { outlineSchema } from "./step-io";
 import { callScopeModel, decideOneStepAction, inferOneStepScope, parseOneStepRequest, type OneStepRequest } from "./one-step";
 import {
   createRun as createRunBase,
@@ -1435,7 +1436,10 @@ lessonPipelineRouter.post("/jobs/:id/approve-outline", async (req: Request, res:
   if (await workflowStore.exists(req.params.id) && !await workflowStore.read(trackedId, req.user!.id)) return res.status(404).json({ message: "A futás nem található." });
   // docs/specs/2026-10-16-egy-futas.md (S4a): egyfutásos módban a tervre váró régi job egyfutásos újragyártása a mentett forrásból.
   if (singleRunEnabled()) {
-    try { return res.status(202).json({ jobId: req.params.id, runId: await remakeAsSingleRun(req.params.id, req.user!.id), remanufactured: true }); }
+    // Review #261: a tanár által jóváhagyott (átrendezett) vázlat kötelező tervként utazik az újragyártásba.
+    const outline = req.body?.outline === undefined ? undefined : outlineSchema.safeParse(req.body.outline);
+    if (outline && !outline.success) return res.status(400).json({ message: "A vázlat alakilag hibás.", issues: outline.error.issues.slice(0, 10).map((i) => `${i.path.join(".")}: ${i.message}`) });
+    try { return res.status(202).json({ jobId: req.params.id, runId: await remakeAsSingleRun(req.params.id, req.user!.id, outline?.success ? { outline: outline.data } : {}), remanufactured: true }); }
     catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." }); }
   }
   try {
@@ -1510,7 +1514,13 @@ async function applyResume(jobId: string, visit: import("../../shared/lesson-wor
  * docs/specs/2026-10-16-egy-futas.md (D): egyfutásos módban az újragyártás / folytatás új EGYFUTÁSOS gyártás a térkép mentett
  * forrásátiratából (a régi lépésgép nem indul). A régi job atomikusan „újragyártott” lesz (dupla kattintás sem indít kettőt).
  */
-export async function remakeAsSingleRun(jobId: string, owner: string): Promise<string> {
+/** Review #261: a jóváhagyott vázlat kötelező tervként, a tanári kérés részeként (fejezetsorrend, fogalomkiosztás). */
+export function approvedOutlineInstruction(outline: { sections: Array<{ heading: string; conceptIds: string[] }> }): string {
+  return ["A TANÁR ÁLTAL JÓVÁHAGYOTT TANULÁSI TERV — kötelező: ebben a sorrendben, ezekkel a fejezetcímekkel és fogalomkiosztással tervezz:",
+    ...outline.sections.map((s, i) => `${i + 1}. ${s.heading} — fogalmak: ${s.conceptIds.join(", ") || "—"}`)].join("\n");
+}
+
+export async function remakeAsSingleRun(jobId: string, owner: string, extra: { outline?: { sections: Array<{ heading: string; conceptIds: string[] }> } } = {}): Promise<string> {
   const claim = await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb) || '{"recoveryState":"remanufactured"}'::jsonb
     WHERE j.id = ${jobId} AND coalesce(j.output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured', 'discarded')
       AND j.status IN ('error', 'ok') AND j.step <> 'done'
@@ -1523,7 +1533,8 @@ export async function remakeAsSingleRun(jobId: string, owner: string): Promise<s
     await db.execute(sql`UPDATE studio_jobs SET output = output - 'recoveryState' WHERE id = ${jobId}`);
     throw new WorkflowConflict("Ehhez a piszkozathoz nincs mentett forrásszöveg — töltsd fel újra a forrást.");
   }
-  const runId = startOneStepRun({ title: map.title, ...(row.instruction ? { instructions: row.instruction } : {}),
+  const instructions = [row.instruction ?? "", extra.outline ? approvedOutlineInstruction(extra.outline) : ""].filter((t) => t.trim()).join("\n\n");
+  const runId = startOneStepRun({ title: map.title, ...(instructions ? { instructions } : {}),
     files: [{ name: "forras-atirat.txt", kind: "text", content: map.sourceText }] } as OneStepRequest, owner);
   await db.execute(sql`UPDATE studio_jobs SET output = output || ${JSON.stringify({ remanufacturedAs: `single-run:${runId}` })}::jsonb WHERE id = ${jobId}`);
   logger.warn(`[EGYFUTÁS] ${jobId}: újragyártás egyfutásos motoron a mentett forrásátiratból → futás ${runId}`);

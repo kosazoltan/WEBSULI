@@ -65,3 +65,27 @@ test("leckejavítás: minden szerep ugyanabba a beszélgetésbe megy; a hibás b
   await assert.rejects(call("author", "BANK", "kérés", "bank"), (e: unknown) => (e as Error).name === "RetryableBankCallError");
   assert.equal(conversation.state().turns.length, 6, "három forduló, egyetlen beszélgetésben");
 });
+
+// Review #261
+test("review #261: a fogalomjavítás önellentmondó lektori jelentése javító fordulót kap (nem minősül tisztának)", async () => {
+  const contradictory = { solutions: [{ task: "1. feladat", own: "12", lesson: "10", match: false }], notes: [], reviewedAll: true };
+  const lektors = [contradictory, { solutions: [], notes: [], reviewedAll: true }];
+  const base = client({});
+  const fake: ModelClient & { calls: string[] } = { ...base, async complete(system, turns) {
+    const t = lastText(turns);
+    if (/^LEKTORÁLÁS|A PROGRAM ELLENŐRZÉSE \(a javítás lektorálása\)/.test(t)) { base.calls.push("lektor"); return { text: JSON.stringify(lektors.shift()), model: "claude-opus-5-5", truncated: false }; }
+    return base.complete(system, turns);
+  } };
+  const result = await fixConceptInConversation({ original: fixture, source, conceptId: "area", conversation: new LessonConversation(singleRunSystemPrompt(), fake, null) });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(base.calls.filter((c) => c === "lektor").length, 2, "az önellentmondó jelentésre javító forduló jött");
+});
+
+test("review #261: a leckejavítás nem JSON válasza javító fordulót kap ugyanabban a beszélgetésben", async () => {
+  const replies = ["ez nem JSON", "{\"ok\":true}"];
+  const fake: ModelClient = { model: "claude-opus-5-5", async complete() { return { text: replies.shift()!, model: "claude-opus-5-5", truncated: false }; } };
+  const conversation = new LessonConversation("R", fake, null);
+  const call = await singleRunRepairCall(conversation);
+  assert.deepEqual(await call("author", "SZERZŐ", "kérés", "repair"), { ok: true });
+  assert.equal(conversation.state().turns.length, 4, "egy javító forduló, ugyanabban a beszélgetésben");
+});
