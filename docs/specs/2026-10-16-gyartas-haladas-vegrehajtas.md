@@ -23,7 +23,9 @@ Terv: `docs/specs/2026-10-16-gyartas-haladas.md`. Ág: `feat/gyartas-haladas`. K
 5. **Felület:**
    - `CreationProgress` a részlet alatt kiírja a `progressTimingText`-et (`data-testid="creation-progress-timing"`).
    - `DraftLessons` futó tételénél a `progress.detail` megy a `CreationProgress`-be, az idők is.
-6. **Tesztek:**
+6. **Index (review #264):** `one_step_runs (job_id, updated_at DESC)` index (`migrations/0026_one_step_runs_job_idx.sql` + séma),
+   mert a draftlista futás közben 5 másodpercenként keresi a job legutóbbi futását.
+7. **Tesztek:**
    - unit: `progressTimingText`; a motor haladásszövegei (bank d/N, javító kísérlet, javító forduló);
    - `experience-builder` `onProgress`;
    - DB: a draftlista futó tételének `progress` mezője;
