@@ -63,3 +63,8 @@ A javaslat lehetséges folytatásai (tulajdonosi döntés):
 - **(2) Tanulás a döntőbírótól:** a „helyes” ítéletnél a normalizált válasz és a feladat elmentése, tantárgyhoz kötve, kézi jóváhagyással a szótárba.
   Ez adatkezelési döntés: a T7 most szándékosan nem tárol választ.
 - **(3) Gondozott szótár:** tantárgyanként egyszeri, modell által javasolt, ember által jóváhagyott szinonimacsoportok a `HU_SYNONYM_GROUPS`-ba. Ezt külön mérni kell.
+
+## Tulajdonosi döntés (2026-10-16)
+- **(1) Halasztás.** Most nincs építés.
+- Újramérés, amikor tantárgyanként legalább 5–10 gyártás összegyűlt. Eszköz: `source/scripts/measure/synonym-bank-trial.mts`, friss T2-esetekkel.
+- A (2) és a (3) csak az újramérés eredménye alapján kerül újra napirendre.
