@@ -666,6 +666,8 @@ lessonPipelineRouter.post("/drafts/:jobId/remake", async (req: Request, res: Res
   const row = rows[0] as { error: string | null } | undefined;
   if (!row) return res.status(409).json({ message: "Ez a piszkozat nem gyártható újra (fut, publikált, vagy másik készítőhöz tartozik)." });
   try {
+    // Review #260: egyfutásos módban az újragyártás futást ad (`runId`), nem jobot — a válasz ezt külön mezőben adja.
+    if (singleRunEnabled()) return res.status(202).json({ jobId: req.params.jobId, runId: await remakeAsSingleRun(req.params.jobId, owner), remanufactured: true });
     res.status(202).json({ jobId: await remanufactureFromMap(req.params.jobId, owner, row.error ?? "Kézi újragyártás az adminfelületről.") });
   } catch (error) {
     res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." });
@@ -1332,6 +1334,17 @@ lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: 
 
   // #180: `{}` (the Studio panel's body) means "the map's own scope".
   const scope = parsed.data && "subject" in parsed.data ? parsed.data : undefined;
+  // docs/specs/2026-10-16-egy-futas.md (D, review #260): egyfutásos módban a térképről indítás is egyfutásos gyártás a térkép mentett
+  // forrásátiratából; a kliens a visszaadott futást (`runId`) követi.
+  if (singleRunEnabled()) {
+    const [map] = await db.select({ title: knowledgeMaps.title, subject: knowledgeMaps.subject, classroom: knowledgeMaps.classroom, sourceText: knowledgeMaps.sourceText })
+      .from(knowledgeMaps).where(eq(knowledgeMaps.id, req.params.mapId)).limit(1);
+    if (!map) return res.status(404).json({ message: "A térkép nem található." });
+    if (scope && (scope.subject !== map.subject || scope.classroom !== map.classroom)) return res.status(409).json({ message: "A megadott tantárgy / évfolyam nem egyezik a térképével." });
+    if (!map.sourceText?.trim()) return res.status(409).json({ message: "Ehhez a térképhez nincs mentett forrásszöveg — töltsd fel újra a forrást." });
+    const runId = startOneStepRun({ title: map.title, files: [{ name: "forras-atirat.txt", kind: "text", content: map.sourceText }] } as OneStepRequest, req.user!.id);
+    return res.status(202).json({ runId });
+  }
   // Spec 2026-10-03-forras-aritmetika-helyesbites: a meglévő térképről indított (újraindított) lecke is a determinisztikus
   // helyesbítésen megy át (kérés/fotó nélkül nincs modellhívás) — különben a hamis forrás-egyenlőség újra tényként tanítódna.
   // A helyesbítés hibája (a futás sem igazolja) sosem állítja meg a készítést — helyesbítés nélkül megy tovább, mint eddig.
@@ -1492,13 +1505,14 @@ async function applyResume(jobId: string, visit: import("../../shared/lesson-wor
  * docs/specs/2026-10-16-egy-futas.md (D): egyfutásos módban az újragyártás / folytatás új EGYFUTÁSOS gyártás a térkép mentett
  * forrásátiratából (a régi lépésgép nem indul). A régi job atomikusan „újragyártott” lesz (dupla kattintás sem indít kettőt).
  */
-async function remakeAsSingleRun(jobId: string, owner: string): Promise<string> {
+export async function remakeAsSingleRun(jobId: string, owner: string): Promise<string> {
   const claim = await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb) || '{"recoveryState":"remanufactured"}'::jsonb
     WHERE j.id = ${jobId} AND coalesce(j.output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured', 'discarded')
       AND j.status IN ('error', 'ok') AND j.step <> 'done'
+      AND ${notBeingDriven} AND ${manageableBy(owner)}
     RETURNING j.map_id, j.output->>'ownerInstruction' AS instruction`);
   const row = claim.rows[0] as { map_id: string; instruction: string | null } | undefined;
-  if (!row) throw new WorkflowConflict("Az újragyártás már elindult (vagy a piszkozat törölve).");
+  if (!row) throw new WorkflowConflict("Az újragyártás már elindult, a piszkozat törölve, épp fut, vagy nem a tiéd.");
   const [map] = await db.select({ title: knowledgeMaps.title, sourceText: knowledgeMaps.sourceText }).from(knowledgeMaps).where(eq(knowledgeMaps.id, row.map_id)).limit(1);
   if (!map?.sourceText?.trim()) {
     await db.execute(sql`UPDATE studio_jobs SET output = output - 'recoveryState' WHERE id = ${jobId}`);

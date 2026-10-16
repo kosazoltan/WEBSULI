@@ -141,3 +141,36 @@ test("az utolsó javító kör bankváltozását egy ellenőrző kör újralekto
   assert.equal(result.htmlFileId, "html1");
   assert.equal(verified.calls.filter((c) => c === "6").length, 3, "a tiszta ellenőrző kör után publikál");
 });
+
+/** A forgatókönyves kliens egyes válaszainak felülírása (a többi állomás változatlan). */
+function withOverride(base: ModelClient & { calls: string[] }, override: (station: string, turns: Turn[]) => string | null): ModelClient & { calls: string[] } {
+  return { ...base, async complete(system, turns) {
+    const t = lastUserText(turns);
+    const station = /(\d)\. ÁLLOMÁS/.exec(t)?.[1] ?? (/A PROGRAM ELLENŐRZÉSE \((.+?)\)/.exec(t)?.[1] ?? "?");
+    const replaced = override(station, turns);
+    if (replaced !== null) { base.calls.push(station); return { text: replaced, model: base.model, truncated: false }; }
+    return base.complete(system, turns);
+  } };
+}
+
+test("review #260: több forrásfájlnál fájlonkénti átirat és valódi sourceFile kell; hiányánál javító forduló, a fogalom a saját fájljára mutat", async () => {
+  const files = [{ name: "a.txt", kind: "text" as const, content: "A téglalap területe az oldalak szorzata." }, { name: "b.txt", kind: "text" as const, content: "A terület mértékegysége a négyzetcentiméter." }];
+  const concept = { id: "area", term: "terület", definition: "A síkidom által lefedett rész nagysága.", quote: "A terület mértékegysége a négyzetcentiméter.", type: "concept", examWeight: "core", relatedIds: [] };
+  const base = { title: "Terület", subject: fixture.subject, classroom: fixture.classroom, transcript: TRANSCRIPT, concepts: [concept] };
+  const replies = [base, { ...base, fileTranscripts: [{ name: "a.txt", text: files[0].content }, { name: "b.txt", text: files[1].content }], concepts: [{ ...concept, sourceFile: "b.txt" }] }];
+  const client = withOverride(scriptedClient(), (station) => (station === "1" || station === "forrás és tudásbank" ? JSON.stringify(replies.shift()) : null));
+  const maps: SingleRunMap[] = [];
+  const result = await runSingleLesson({ files, ownerId: "u1" }, deps(client, memoryStore(), maps));
+  assert.equal(result.htmlFileId, "html1");
+  assert.deepEqual(client.calls.slice(0, 2), ["1", "forrás és tudásbank"], "a hiányzó fájlonkénti átirat javító fordulót kap");
+  assert.equal(maps[0].concepts[0].sourceFile, "b.txt");
+  assert.equal(maps[0].fileTranscripts["a.txt"], files[0].content);
+});
+
+test("review #260: a nem JSON bankválasz a banképítő javító körébe megy (nem állítja le a gyártást)", async () => {
+  let bankCalls = 0;
+  const client = withOverride(scriptedClient(), (station) => (station === "5" && bankCalls++ === 0 ? "ez nem JSON" : null));
+  const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, memoryStore()));
+  assert.equal(result.htmlFileId, "html1");
+  assert.ok(bankCalls >= 2, "a hibás válasz után új bankkísérlet jött");
+});

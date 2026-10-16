@@ -123,3 +123,20 @@ háromfázis-kapu) zárul.
   javító körben továbbra is megállás.
 - **Önellentmondó lektori jelentés:** a `match: false` megoldáseltérés blokkoló jegyzet nélkül alaki hiba — a jelentés a
   beszélgetésben visszamegy (javító forduló), a lektornak jegyzettel kell jeleznie vagy a megoldást helyesbítenie.
+
+## S3 — review #260, 2. kör (Copilot)
+- **Jogosultság:** a `remakeAsSingleRun` atomi foglalása a `manageableBy(owner)` és a `notBeingDriven` feltétellel fut (másik admin
+  jobja és élő lízing alatti job nem foglalható).
+- **Piszkozat:** a bankcsomag-checkpoint mentése a közös `output`-ot is frissíti (a hibaág nem írja vissza a régit).
+- **Nyitott aritmetikai leletek + választásos kapu:** az `onOpenFinding` leleteit a motor gyűjti (`output.bankOpenFindings`); a végkapu
+  előtt MINDIG fut a `resolveChoiceGate(lesson, openBankFindingFlags(...))` a teljes leckén (tanítási check-blokkok is); hibánál megállás.
+- **Vegyes lektori jelentés:** a bankleleteket a lektorált leckén oldjuk fel (`resolveBankReview`), és tanításjavításnál ezt adjuk át
+  a bank-újraépítésnek; a régi indexeket nem alkalmazzuk az új bankra.
+- **Vázlat-keret:** `autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections)`.
+- **Bankhívás:** a csonkolt / üres / nem JSON válasz `RetryableBankCallError` (a banképítő javító köre kezeli); szolgáltatói hiba változatlan.
+- **Tanításon mérhető kapuk korábban:** a fedettségi kapu és a tananyagív a 3. állomás validátorában is fut (javító forduló jár rá).
+- **Többfájlos forrás:** 2+ fájlnál az 1. állomás fájlonkénti átiratot (`fileTranscripts`) és fogalmonként `sourceFile`-t ad; az idézet a
+  saját fájl átiratán mérődik, a mentés a valódi fájlt és a fájlonkénti átiratot tárolja. Egy fájlnál a mostani alak érvényes.
+- **Belépési pontok és kliens:** a `/lessons/from-map/:mapId` egyfutásos módban a térkép mentett forrásából egyfutásos gyártást indít
+  (`202 { runId }`); a kliensek (`LessonStudioPanel`, `SourceUploadForm`, `JobMonitor`) a visszaadott `runId`-t követik
+  (a futás `jobId`-ja, amint megvan).

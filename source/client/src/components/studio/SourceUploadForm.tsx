@@ -252,8 +252,13 @@ export function SourceUploadForm({
   // Szinkron zár: az `isPending` csak a következő renderben frissül — a gyors dupla kattintás két folytatást indítana (mért, e2e).
   const resumeLock = useRef(false);
   const resume = useMutation({
-    mutationFn: (jobId: string) => apiRequest("POST", `/api/studio/jobs/${jobId}/resume`),
-    onSuccess: async () => {
+    mutationFn: (jobId: string) => apiRequest<{ runId?: string } | undefined>("POST", `/api/studio/jobs/${jobId}/resume`),
+    onSuccess: async (started) => {
+      // Review #260: egyfutásos módban a folytatás új futást indít (`runId`) — a haladásjelző ezt követi.
+      if (started?.runId) {
+        toast({ title: "Újragyártás elindult", description: "A mentett forrásból új gyártás indult." });
+        prevFinished.current = false; setRunId(started.runId); return;
+      }
       toast({ title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább." });
       // E2: a piszkozat-választásból indított folytatás a piszkozat saját futását követi (ott frissül a haladásjelző).
       if (run.data?.phase === "draft" && run.data.draftRunId) { prevFinished.current = false; setRunId(run.data.draftRunId); return; }

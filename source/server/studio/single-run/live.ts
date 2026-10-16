@@ -22,11 +22,12 @@ export async function saveSingleRunMap(map: SingleRunMap, files: ExtractorFile[]
     await workflowFence(tx);
     const [row] = await tx.insert(knowledgeMaps).values({
       title: map.title, subject: map.subject, classroom: map.classroom, status: "approved",
-      sourceFiles: files.map((f) => ({ name: f.name, kind: f.kind, ...(f.extractedText ? { extractedText: f.extractedText } : {}) })),
+      // Review #260: fájlonként a modell betűhű átirata (kép / szkennelt PDF is) — a későbbi idézetellenőrzés a saját fájlján mér.
+      sourceFiles: files.map((f) => { const text = map.fileTranscripts[f.name] ?? f.extractedText; return { name: f.name, kind: f.kind, ...(text ? { extractedText: text } : {}) }; }),
       sourceText: map.transcript, inputHash, model, createdBy: ownerId, approvedBy: ownerId, approvedAt: new Date(),
     }).returning({ id: knowledgeMaps.id });
     await tx.insert(kmConcepts).values(map.concepts.map((c, index) => ({
-      mapId: row.id, localId: c.id, term: c.term, definition: c.definition, quote: c.quote, sourceRef: { file: files[0]?.name ?? "forrás" },
+      mapId: row.id, localId: c.id, term: c.term, definition: c.definition, quote: c.quote, sourceRef: { file: c.sourceFile },
       type: c.type, examWeight: c.examWeight, relatedIds: c.relatedIds, verbatimOk: c.verbatimOk, verbatimReason: null, reviewState: "kept" as const, orderIndex: index,
     })));
     await workflowFence(tx);
