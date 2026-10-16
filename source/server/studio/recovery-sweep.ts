@@ -22,6 +22,8 @@ export function recoveryCandidate(row: RecoveryRow, now: number): string | null 
   if (row.recoveryState === "remanufactured") return "újragyártva (új job viszi tovább)";
   if (row.recoveryState === "remanufacturing") return "újragyártás folyamatban";
   if (row.recoveryState === "superseded") return "ugyanabból a forrásból újabb gyártás fut";
+  // docs/specs/2026-10-16-draft-kezeles.md (D1): a felhasználó által törölt (elvetett) piszkozat nem folytatódik automatikusan.
+  if (row.recoveryState === "discarded") return "elvetve (törölt piszkozat)";
   if (row.leaseUntil && row.leaseUntil.getTime() > now) return "élő lízing";
   if (!row.finishedAt || now - row.finishedAt.getTime() < RECOVERY_GRACE_MS) return "türelmi idő";
   if (!row.error) return "nincs hibaszöveg";

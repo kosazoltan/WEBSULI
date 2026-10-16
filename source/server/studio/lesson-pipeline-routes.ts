@@ -387,7 +387,7 @@ export async function resumableDraftFor(mapId: string, instruction: string | und
   // ajánlható fel (a térkép globálisan újrahasznosítható) — a gazdát a job workflow-ja adja.
   const { rows } = await db.execute(sql`SELECT j.id FROM studio_jobs j LEFT JOIN lessons l ON l.id = j.lesson_id
     WHERE j.map_id = ${mapId} AND j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND j.created_at > now() - interval '7 days'
-      AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing')
+      AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
       AND coalesce(j.output->>'ownerInstruction', '') = ${instruction || ""}
       AND EXISTS (SELECT 1 FROM lesson_workflow_runs w WHERE (w.id = j.id OR w.snapshot->>'resourceId' = j.id) AND w.owner_id = ${owner})
     ORDER BY j.created_at DESC LIMIT 1`);
@@ -499,27 +499,37 @@ async function workflowVisitsOfJob(jobId: string): Promise<{ visits: Array<{ ste
   return row?.id ? workflowVisitsOf(String(row.id)) : { visits: [], executions: 0 };
 }
 
-/** docs/specs/2026-10-15-admin-tananyag-draft.md: az admin „Tananyag draft” listájának egy tétele. */
+/** docs/specs/2026-10-15-admin-tananyag-draft.md + 2026-10-16-draft-kezeles.md: az admin „Tananyag draft” listájának egy tétele. */
 export type OwnerDraft = { jobId: string; title: string; subject: string; classroom: number; draft: OneStepDraft | null; running: boolean;
-  error: string | null; updatedAt: string } & JobStopInfo;
+  error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean } & JobStopInfo;
 
 /**
- * A1/A2: a gazda megszakadt piszkozatai — mentett, nem publikált lecke; nem sikeres, nem félretett job; a gazdát a job workflow-ja adja.
+ * docs/specs/2026-10-16-draft-kezeles.md: a belépett admin által kezelhető job — nincs olyan workflow-sora, amelynek MÁS a gazdája
+ * (saját vagy gazdátlan). Feltétel: a lekérdezésben `j` a job.
+ */
+const manageableBy = (owner: string) => sql`NOT EXISTS (SELECT 1 FROM lesson_workflow_runs ow WHERE (ow.id = j.id OR ow.snapshot->>'resourceId' = j.id) AND ow.owner_id <> ${owner})`;
+
+/**
+ * A1/A2 + D1–D4: a kezelhető (saját vagy gazdátlan) megállt piszkozatok — mentett, nem publikált lecke; nem sikeres, nem félretett, nem elvetett
+ * job — ÉS a saját, éppen futó gyártások (2 napon belül, lecke nélkül is), hogy a folytatás/újragyártás haladása látsszon.
  * A folytathatóság ugyanaz a döntés, mint a futásnézeté (`jobStopInfo`). Csak olvas.
  */
 export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
-  const { rows } = await db.execute(sql`SELECT j.id, j.step, j.status, j.error, j.lesson_id, j.output, l.published_at, coalesce(j.finished_at, j.created_at) AS updated_at,
-      m.title AS map_title, m.subject, m.classroom, wr.visits AS wf_visits, wr.executions AS wf_executions
-    FROM studio_jobs j JOIN lessons l ON l.id = j.lesson_id JOIN knowledge_maps m ON m.id = j.map_id
+  const { rows } = await db.execute(sql`SELECT j.id, j.step, j.status, j.error, j.lesson_id, j.output, coalesce(j.finished_at, j.created_at) AS updated_at,
+      m.title AS map_title, m.subject, m.classroom, wr.visits AS wf_visits, wr.executions AS wf_executions, wr.owner_id AS wf_owner,
+      EXISTS (SELECT 1 FROM lessons p WHERE p.map_id = j.map_id AND p.published_at IS NOT NULL) AS has_published
+    FROM studio_jobs j LEFT JOIN lessons l ON l.id = j.lesson_id JOIN knowledge_maps m ON m.id = j.map_id
     -- Review #253 (P2): a job legutóbbi workflow-pillanatképe ugyanebben a lekérdezésben (nincs tételenkénti 2 körút).
     LEFT JOIN LATERAL (
-      SELECT w.snapshot->'visits' AS visits, w.snapshot->'executions' AS executions FROM lesson_workflow_runs w
+      SELECT w.owner_id, w.snapshot->'visits' AS visits, w.snapshot->'executions' AS executions FROM lesson_workflow_runs w
       WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
     ) wr ON true
-    WHERE j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok'
-      AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing')
-      AND EXISTS (SELECT 1 FROM lesson_workflow_runs w WHERE (w.id = j.id OR w.snapshot->>'resourceId' = j.id) AND w.owner_id = ${owner})
-    ORDER BY j.created_at DESC LIMIT 50`);
+    WHERE coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
+      AND (
+        (j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
+        OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '2 days' AND wr.owner_id = ${owner})
+      )
+    ORDER BY (j.status IN ('pending', 'running')) DESC, j.created_at DESC LIMIT 80`);
   const out: OwnerDraft[] = [];
   for (const raw of rows as Array<Record<string, unknown>>) {
     const job = { output: raw.output, publishedAt: null, step: String(raw.step), status: String(raw.status), error: (raw.error as string | null) ?? null,
@@ -527,19 +537,72 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
     const running = job.status !== "error" && job.step !== "error";
     const { visits, executions } = parseWorkflowVisits({ visits: raw.wf_visits, executions: raw.wf_executions });
     const lessonTitle = (raw.output as { lesson?: { title?: unknown } } | null)?.lesson?.title;
+    const ownerless = !raw.wf_owner;
+    const stop = running ? { resumable: false } : jobStopInfo(job, visits, executions);
     out.push({
       jobId: String(raw.id), title: typeof lessonTitle === "string" && lessonTitle.trim() ? lessonTitle : String(raw.map_title ?? "Névtelen tananyag"),
       subject: String(raw.subject ?? ""), classroom: Number(raw.classroom ?? 0), draft: draftSummaryOf(raw.output), running,
-      error: running ? null : job.error, updatedAt: new Date(String(raw.updated_at)).toISOString(),
-      ...(running ? { resumable: false } : jobStopInfo(job, visits, executions)),
+      error: running ? null : job.error, updatedAt: new Date(String(raw.updated_at)).toISOString(), step: job.step,
+      ownerless, hasPublished: raw.has_published === true,
+      // A gazdátlan job workflow-napló nélkül a mentett részekből nem folytatható (driveTracked) — nála csak újragyártás és törlés van.
+      ...stop, ...(ownerless ? { resumable: false } : {}),
     });
   }
   return out;
 }
 
-/** GET /api/studio/drafts — a belépett admin saját „Tananyag draft” listája (a router admin-védett). */
+/** D1: egy kezelhető, megállt, nem publikált piszkozat elvetése (visszaállítható: csak `recoveryState`). `true`, ha elvetette. */
+export async function discardDraft(jobId: string, owner: string): Promise<boolean> {
+  const { rows } = await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb)
+      || jsonb_build_object('recoveryState', 'discarded', 'discardedAt', now()::text, 'discardedBy', ${owner}::text)
+    WHERE j.id = ${jobId} AND j.status = 'error'
+      AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL)
+      AND ${manageableBy(owner)} RETURNING j.id`);
+  return (rows as unknown[]).length > 0;
+}
+
+/** D2: a kész (publikált) párral rendelkező, kezelhető, megállt piszkozatok elvetése. Az elvetettek száma. */
+export async function discardDraftsWithPublished(owner: string): Promise<number> {
+  const { rows } = await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb)
+      || jsonb_build_object('recoveryState', 'discarded', 'discardedAt', now()::text, 'discardedBy', ${owner}::text)
+    WHERE j.status = 'error' AND j.output ? 'lesson'
+      AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
+      AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL)
+      AND EXISTS (SELECT 1 FROM lessons p WHERE p.map_id = j.map_id AND p.published_at IS NOT NULL)
+      AND ${manageableBy(owner)} RETURNING j.id`);
+  return (rows as unknown[]).length;
+}
+
+/** GET /api/studio/drafts — a belépett admin kezelhető „Tananyag draft” listája és futó gyártásai (a router admin-védett). */
 lessonPipelineRouter.get("/drafts", async (req: Request, res: Response) => {
   res.json({ drafts: await ownerDrafts(req.user!.id) });
+});
+
+/** D1: POST /api/studio/drafts/:jobId/discard — elvetés (megerősítés a felületen). */
+lessonPipelineRouter.post("/drafts/:jobId/discard", async (req: Request, res: Response) => {
+  if (!(await discardDraft(req.params.jobId, req.user!.id))) {
+    return res.status(409).json({ message: "Ez a piszkozat nem törölhető (fut, publikált, már törölt, vagy másik készítőhöz tartozik)." });
+  }
+  res.json({ discarded: true });
+});
+
+/** D2: POST /api/studio/drafts/discard-published — a kész tananyaggal rendelkező piszkozatok kötegelt elvetése. */
+lessonPipelineRouter.post("/drafts/discard-published", async (req: Request, res: Response) => {
+  res.json({ discarded: await discardDraftsWithPublished(req.user!.id) });
+});
+
+/** D3: POST /api/studio/drafts/:jobId/remake — teljes újragyártás ugyanabból a forrásból (a nem folytatható és a gazdátlan piszkozatnál is). */
+lessonPipelineRouter.post("/drafts/:jobId/remake", async (req: Request, res: Response) => {
+  const owner = req.user!.id;
+  const { rows } = await db.execute(sql`SELECT j.error FROM studio_jobs j WHERE j.id = ${req.params.jobId} AND j.status = 'error'
+    AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL) AND ${manageableBy(owner)}`);
+  const row = rows[0] as { error: string | null } | undefined;
+  if (!row) return res.status(409).json({ message: "Ez a piszkozat nem gyártható újra (fut, publikált, vagy másik készítőhöz tartozik)." });
+  try {
+    res.status(202).json({ jobId: await remanufactureFromMap(req.params.jobId, owner, row.error ?? "Kézi újragyártás az adminfelületről.") });
+  } catch (error) {
+    res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." });
+  }
 });
 
 /** GET /api/studio/lessons/one-step/:runId — the progress poll. */

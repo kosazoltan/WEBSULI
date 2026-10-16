@@ -1,107 +1,152 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { CreationProgress } from "./CreationProgress";
 
-/** docs/specs/2026-10-15-admin-tananyag-draft.md — a szerver `OwnerDraft` típusának kliensoldali tükre. */
+/** docs/specs/2026-10-15-admin-tananyag-draft.md + 2026-10-16-draft-kezeles.md — a szerver `OwnerDraft` típusának kliensoldali tükre. */
 type OwnerDraft = {
   jobId: string; title: string; subject: string; classroom: number;
   draft: { teachingSections: number; savedBankPackets: number } | null;
-  running: boolean; error: string | null; updatedAt: string;
+  running: boolean; error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean;
   resumable: boolean; stoppedAt?: string; nextRecovery?: { strategy: string; reason: string };
 };
 
+type Action = "resume" | "remake" | "discard" | "discard-published";
 const DRAFTS_KEY = ["/api/studio/drafts"];
 
+/** D3: a megállt piszkozat továbblépése — a mentett részekből folytatható → Folytatás; különben (vagy gazdátlanul) → teljes újragyártás. */
+const nextStepOf = (d: OwnerDraft): "resume" | "remake" =>
+  d.resumable && !d.ownerless && d.nextRecovery?.strategy !== "remanufacture" ? "resume" : "remake";
+
+const CONFIRM_TEXT: Record<Exclude<Action, "resume">, string> = {
+  remake: "Ugyanabból a forrásból teljes, új gyártás indul (modellköltséggel). A régi piszkozat megmarad, de a listából kikerül.",
+  discard: "A piszkozat törlődik a listából, és a program sem folytatja. (Az adat visszaállítható, nem végleges törlés.)",
+  "discard-published": "Minden olyan piszkozat törlődik, amelynek forrásából már van kész, közzétett tananyag.",
+};
+
 /**
- * Tulajdonosi kérés (2026-10-15): a megszakadt gyártás addig elkészült tananyaga az adminfelületen „Tananyag draft” jelzéssel látszik
- * (az éles oldalra nem kerül ki — nincs `html_files` sora), és innen bármikor folytatható a mentett részekből.
+ * Tulajdonosi kérések (2026-10-15, 2026-10-16): a megszakadt gyártás tananyaga az adminfelületen „Tananyag draft” jelzéssel látszik (az éles
+ * oldalra nem kerül ki), minden piszkozat törölhető és továbbvihető (folytatás vagy újragyártás), és a futó gyártás haladása a három készítési
+ * szakasszal látszik.
  */
 export default function DraftLessons() {
   const { toast } = useToast();
   const drafts = useQuery<{ drafts: OwnerDraft[] }>({
     queryKey: DRAFTS_KEY,
     queryFn: () => apiRequest<{ drafts: OwnerDraft[] }>("GET", "/api/studio/drafts"),
-    // Futó piszkozatnál a lista magától frissül (a folytatás haladása látszik); különben nem pollozunk.
-    // Hibatűrő: váratlan alakú válasznál (pl. üres tömb) nincs kivétel és nincs pollozás.
-    refetchInterval: (query) => (Array.isArray(query.state.data?.drafts) && query.state.data.drafts.some((d) => d.running) ? 10_000 : false),
+    // D4: amíg van futó tétel, a lista 5 másodpercenként frissül (a szakaszjelző halad). Hibatűrő: váratlan alakú válasznál nincs pollozás.
+    refetchInterval: (query) => (Array.isArray(query.state.data?.drafts) && query.state.data.drafts.some((d) => d.running) ? 5_000 : false),
   });
-  // A4: a dupla kattintás egyetlen folytatás (az `isPending` csak a következő renderben tiltana).
+  // A dupla kattintás egyetlen kérés (az `isPending` csak a következő renderben tiltana).
   const lock = useRef(false);
-  // Review #251 (P2): ha a tervező következő foka a teljes újragyártás (a resume végpont ÚJ jobot indít), a gomb ezt mondja, és megerősítést kér.
-  const [confirmRemake, setConfirmRemake] = useState<string | null>(null);
-  const resume = useMutation({
-    mutationFn: (jobId: string) => apiRequest("POST", `/api/studio/jobs/${jobId}/resume`),
-    onSuccess: (_data, jobId) => toast(list.find((d) => d.jobId === jobId)?.nextRecovery?.strategy === "remanufacture"
-      ? { title: "Újragyártás elindult", description: "Ugyanabból a forrásból új gyártás indult; a régi piszkozat megmarad." }
-      : { title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább — a kész szakaszok megmaradnak." }),
-    onError: (e: Error) => toast({ title: "Nem sikerült folytatni", description: e.message, variant: "destructive" }),
+  const [confirm, setConfirm] = useState<{ jobId: string; action: Exclude<Action, "resume"> } | null>(null);
+  const act = useMutation({
+    mutationFn: ({ jobId, action }: { jobId: string; action: Action }) =>
+      action === "resume" ? apiRequest("POST", `/api/studio/jobs/${jobId}/resume`)
+        : action === "discard-published" ? apiRequest<{ discarded: number }>("POST", "/api/studio/drafts/discard-published")
+          : apiRequest("POST", `/api/studio/drafts/${jobId}/${action}`),
+    onSuccess: (data, { action }) => toast(
+      action === "resume" ? { title: "Folytatás elindult", description: "A gyártás a megszakadt ponttól halad tovább — a kész szakaszok megmaradnak." }
+        : action === "remake" ? { title: "Újragyártás elindult", description: "A haladás a lista tetején, a készítési szakaszoknál követhető." }
+          : action === "discard" ? { title: "Piszkozat törölve" }
+            : { title: "Felesleges piszkozatok törölve", description: `${(data as { discarded?: number } | undefined)?.discarded ?? 0} piszkozat.` }),
+    onError: (e: Error) => toast({ title: "A művelet nem sikerült", description: e.message, variant: "destructive" }),
     onSettled: () => { lock.current = false; void queryClient.invalidateQueries({ queryKey: DRAFTS_KEY }); },
   });
-  const start = (jobId: string) => {
+  const run = (jobId: string, action: Action) => {
     if (lock.current) return;
-    setConfirmRemake(null);
     lock.current = true;
-    resume.mutate(jobId);
+    setConfirm(null);
+    act.mutate({ jobId, action });
   };
+  const busy = (jobId: string) => act.isPending && act.variables?.jobId === jobId;
 
   const list = Array.isArray(drafts.data?.drafts) ? drafts.data.drafts : [];
   if (!list.length) return null;
+  const redundant = list.filter((d) => d.hasPublished && !d.running).length;
+
+  const confirmBox = (jobId: string, action: Exclude<Action, "resume">, yes: string) => (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 dark:bg-amber-950" data-testid={`draft-confirm-${action}-${jobId}`}>
+      <p className="text-sm basis-full break-words">{CONFIRM_TEXT[action]}</p>
+      <Button size="sm" className="min-h-11" variant={action === "remake" ? "default" : "destructive"} data-testid={`draft-confirm-yes-${action}-${jobId}`}
+        disabled={act.isPending} onClick={() => run(jobId, action)}>
+        {busy(jobId) ? <Loader2 className="w-4 h-4 animate-spin" /> : yes}
+      </Button>
+      <Button size="sm" variant="outline" className="min-h-11" onClick={() => setConfirm(null)}>Mégse</Button>
+    </div>
+  );
+
   return (
     <Card data-testid="draft-lessons">
       <CardHeader>
         <CardTitle className="text-lg">Tananyag draftok</CardTitle>
-        <CardDescription>Megszakadt gyártások mentett tananyaga. Nem publikált, az éles oldalon nem látszik; a megszakadt ponttól folytatható.</CardDescription>
+        <CardDescription>
+          Megszakadt gyártások mentett tananyaga és a futó gyártások. Nem publikált, az éles oldalon nem látszik; folytatható, újragyártható vagy törölhető.
+        </CardDescription>
+        {redundant > 0 && (confirm?.action === "discard-published"
+          ? confirmBox("all", "discard-published", `Igen, ${redundant} törlése`)
+          : (
+            <Button size="sm" variant="outline" className="min-h-11 self-start gap-1" data-testid="draft-discard-published"
+              onClick={() => setConfirm({ jobId: "all", action: "discard-published" })}>
+              <Trash2 className="w-4 h-4" /> Kész tananyaggal rendelkező piszkozatok törlése ({redundant})
+            </Button>
+          ))}
       </CardHeader>
       <CardContent className="space-y-3">
-        {list.map((d) => (
-          <div key={d.jobId} className="rounded-lg border p-3 space-y-2 min-w-0" data-testid={`draft-item-${d.jobId}`}>
-            <div className="flex flex-wrap items-center gap-2 min-w-0">
-              <Badge variant="secondary" data-testid="draft-badge">Tananyag draft</Badge>
-              <span className="font-medium break-words min-w-0">{d.title}</span>
-              <span className="text-sm text-muted-foreground">{d.subject}{d.classroom ? ` · ${d.classroom}. osztály` : ""}</span>
-            </div>
-            {d.draft && (
-              <p className="text-sm text-muted-foreground">
-                Mentett: {d.draft.teachingSections} fejezetnyi tananyag, {d.draft.savedBankPackets} kész gyakorlócsomag.
-              </p>
-            )}
-            {d.running ? (
-              <p className="text-sm flex items-center gap-2" data-testid="draft-running"><Loader2 className="w-4 h-4 animate-spin" /> Folyamatban — a gyártás halad.</p>
-            ) : (
-              <>
-                {/* Az újraindulás szerveroldali üzenete egy másik felület „Újra” gombjára utal — itt a tény elég. */}
-                {d.error && <p className="text-sm break-words">Megállt: {d.nextRecovery?.strategy === "restart" ? "a szerver újraindult a gyártás közben." : d.error.length > 220 ? `${d.error.slice(0, 220)}…` : d.error}</p>}
-                {d.nextRecovery && <p className="text-sm text-muted-foreground break-words">A program következő lépése: {d.nextRecovery.reason}</p>}
-                {d.resumable && d.nextRecovery?.strategy === "remanufacture" ? (
-                  confirmRemake === d.jobId ? (
-                    <div className="flex flex-wrap items-center gap-2" data-testid={`draft-remake-confirm-${d.jobId}`}>
-                      <p className="text-sm basis-full">A mentett részekből nem folytatható: ugyanabból a forrásból teljes, új gyártás indul (modellköltséggel). A régi piszkozat megmarad.</p>
-                      <Button size="sm" className="min-h-11" data-testid={`draft-remake-yes-${d.jobId}`} disabled={resume.isPending} onClick={() => start(d.jobId)}>
-                        {resume.isPending && resume.variables === d.jobId ? <Loader2 className="w-4 h-4 animate-spin" /> : "Igen, újragyártás"}
+        {list.map((d) => {
+          const next = nextStepOf(d);
+          return (
+            <div key={d.jobId} className="rounded-lg border p-3 space-y-2 min-w-0" data-testid={`draft-item-${d.jobId}`}>
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <Badge variant="secondary" data-testid="draft-badge">{d.running ? "Gyártás folyamatban" : "Tananyag draft"}</Badge>
+                {d.hasPublished && !d.running && <Badge variant="outline" data-testid="draft-has-published">Kész tananyag már van</Badge>}
+                {d.ownerless && <Badge variant="outline" data-testid="draft-ownerless">Gazdátlan</Badge>}
+                <span className="font-medium break-words min-w-0">{d.title}</span>
+                <span className="text-sm text-muted-foreground">{d.subject}{d.classroom ? ` · ${d.classroom}. osztály` : ""}</span>
+              </div>
+              {d.draft && (
+                <p className="text-sm text-muted-foreground">
+                  Mentett: {d.draft.teachingSections} fejezetnyi tananyag, {d.draft.savedBankPackets} kész gyakorlócsomag.
+                </p>
+              )}
+              {/* D4: a három készítési szakasz — futásnál a mostani lépés, megállásnál a megállás helye. */}
+              <CreationProgress run={d.running ? { phase: d.step, detail: null, error: null } : { phase: "error", detail: null, error: null, ...(d.stoppedAt ? { stoppedAt: d.stoppedAt } : {}) }} />
+              {d.running ? (
+                <p className="text-sm flex items-center gap-2" data-testid="draft-running" role="status"><Loader2 className="w-4 h-4 animate-spin" /> Folyamatban — a lista magától frissül.</p>
+              ) : (
+                <>
+                  {/* Az újraindulás szerveroldali üzenete egy másik felület „Újra” gombjára utal — itt a tény elég. */}
+                  {d.error && <p className="text-sm break-words">Megállt: {d.nextRecovery?.strategy === "restart" ? "a szerver újraindult a gyártás közben." : d.error.length > 220 ? `${d.error.slice(0, 220)}…` : d.error}</p>}
+                  {next === "resume" && d.nextRecovery && <p className="text-sm text-muted-foreground break-words">A program következő lépése: {d.nextRecovery.reason}</p>}
+                  {next === "remake" && <p className="text-sm text-muted-foreground break-words" data-testid="draft-remake-why">
+                    {d.ownerless ? "Régi, napló nélküli gyártás: csak újragyártható." : "A mentett részekből nem folytatható: újragyártható ugyanabból a forrásból."}
+                  </p>}
+                  {confirm?.jobId === d.jobId ? confirmBox(d.jobId, confirm.action, confirm.action === "remake" ? "Igen, újragyártás" : "Igen, törlés") : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {next === "resume" ? (
+                        <Button size="sm" className="min-h-11" data-testid={`draft-resume-${d.jobId}`} disabled={act.isPending} onClick={() => run(d.jobId, "resume")}>
+                          {busy(d.jobId) ? <Loader2 className="w-4 h-4 animate-spin" /> : "Folytatás a megszakadt ponttól"}
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="secondary" className="min-h-11" data-testid={`draft-remake-${d.jobId}`} onClick={() => setConfirm({ jobId: d.jobId, action: "remake" })}>
+                          Újragyártás ugyanabból a forrásból
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" className="min-h-11 gap-1" data-testid={`draft-discard-${d.jobId}`} onClick={() => setConfirm({ jobId: d.jobId, action: "discard" })}>
+                        <Trash2 className="w-4 h-4" /> Törlés
                       </Button>
-                      <Button size="sm" variant="outline" className="min-h-11" onClick={() => setConfirmRemake(null)}>Mégse</Button>
                     </div>
-                  ) : (
-                    <Button size="sm" variant="secondary" className="min-h-11" data-testid={`draft-remake-${d.jobId}`} onClick={() => setConfirmRemake(d.jobId)}>
-                      Újragyártás ugyanabból a forrásból
-                    </Button>
-                  )
-                ) : d.resumable ? (
-                  <Button size="sm" className="min-h-11" data-testid={`draft-resume-${d.jobId}`} disabled={resume.isPending} onClick={() => start(d.jobId)}>
-                    {resume.isPending && resume.variables === d.jobId ? <Loader2 className="w-4 h-4 animate-spin" /> : "Folytatás a megszakadt ponttól"}
-                  </Button>
-                ) : (
-                  <p className="text-sm text-muted-foreground" data-testid="draft-not-resumable">Ez a piszkozat a mentett részekből nem folytatható.</p>
-                )}
-              </>
-            )}
-          </div>
-        ))}
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </CardContent>
     </Card>
   );
