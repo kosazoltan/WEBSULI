@@ -140,3 +140,55 @@ háromfázis-kapu) zárul.
 - **Belépési pontok és kliens:** a `/lessons/from-map/:mapId` egyfutásos módban a térkép mentett forrásából egyfutásos gyártást indít
   (`202 { runId }`); a kliensek (`LessonStudioPanel`, `SourceUploadForm`, `JobMonitor`) a visszaadott `runId`-t követik
   (a futás `jobId`-ja, amint megvan).
+
+## S4a — élő útvonalak átállítása (terv: `2026-10-16-egy-futas.md`, „S4 — részletes terv”)
+Ág: `feat/egy-futas-s4a-utvonalak` (a `main`-ből, az S3 merge után).
+
+### Vázlat jóváhagyása
+- **Szerver:** `POST /jobs/:id/approve-outline` egyfutásos módban `remakeAsSingleRun(jobId, owner)` → `202 { jobId, runId, remanufactured: true }`.
+  - A tulajdonos- és lízingfeltétel a foglalásban már benne van.
+  - A régi ág csak `STUDIO_SINGLE_RUN=0` mellett fut.
+- **Kliens:** az `OutlineReview` `onFollowRun?(runId)` propot kap.
+  - Ha a válasz `runId`-t ad, azt hívja, és a toast szövege: „A terv alapján új gyártás indult”.
+  - A `LessonStudioPanel` a `JobMonitor`-ral azonos módon követi.
+
+### Fogalomjavítás — `server/studio/single-run/concept-fix.ts`
+- `fixConceptSingleRun(lessonId, conceptId, actorId, deps?)` → `FixConceptResult` (ugyanaz a szerződés).
+- **Adatbetöltés:** ugyanaz, mint a `fixConceptOnLesson`-ban.
+- **Beszélgetés:** `createLessonConversation(singleRunSystemPrompt())`.
+  1. **Szerzői javítás:** a szerzői forduló a `buildConceptFixPrompt` szövegével megy, `station` mintára.
+     - Validátor: `lessonSchema` + `checkConceptFixResult`.
+     - Javító fordulóból legfeljebb `SINGLE_RUN_FIX_ROUNDS`.
+  2. **Bank:** `buildLessonExperience` a beszélgetésbe kötött `call`-lal; a `RetryableBankCallError` szabály ugyanaz, mint a motorban.
+  3. **Lektor:** `buildLektorPrompt` + `parseLektorResponse`; blokkolónál `{ ok: false }`, mentés nélkül.
+  4. **Mentés:** `assertRepairCandidate` → `improvedHtmlFiles` → `applyStructuredImprovement`.
+- **Megosztott kód:** a `station` és a bankhívó kötés a motorból exportálva (`runStation`, `conversationBankCall`), hogy ne legyen
+  másolat.
+- **Bekötés:** a route (`/lessons/:id/fix-concept`) egyfutásos módban ezt hívja.
+
+### Leckejavítás
+- A `generateStructuredImprovement` `call(step, system, user)`-ja egyfutásos módban egyetlen `LessonConversation`-be kötve (minden szerep).
+  - A forduló szövege: `${step.toUpperCase()} — ${system}\n\n${user}`.
+  - JSON: `parseModelJson`.
+  - A bank `responseFormat` nélkül (a beszélgetés JSON-t kér).
+- A régi lánc csak `STUDIO_SINGLE_RUN=0` mellett.
+
+### Különálló tudástár-kinyerés
+- **`single-run/live.ts`:** `extractMapSingleRun({ files, title, ownerId })`.
+  - Lépések: `prepareFiles` → beszélgetés → `readSourceStation` (a motor 1. állomása, exportálva) → `saveSingleRunMap(..., { status: "draft" })`.
+  - A `saveSingleRunMap` opciója: draft térkép, a fogalmak alapértelmezett (jóváhagyásra váró) állapotban, `approvedBy` nélkül.
+  - Idempotencia: a lenyomat `sha256(single-run-map-1 + fájlnév/fajta/tartalom)`; ha van ilyen térkép, azt adja vissza.
+- **Route** (`/maps/extract`): egyfutásos módban ezt hívja a `map` workflow-ban. A besorolás a modell `subject` / `classroom` mezőjéből jön;
+  a 422-es ág megszűnik, mert a station validál.
+
+### Régi AI-funkciók és katalógus
+- **`models.ts` `LEGACY_MODELS`:** minden `claude-opus-5` → `claude-opus-5-5`. A `crossFamilyFallback` tartaléka így is GPT-6.1 Sol.
+  - A `MAX_OUTPUT_BY_MODEL`-ben ellenőrizni kell az opus-5-5 keretét.
+- **`catalog/classify.ts`:** `CLASSIFIER_MODELS = ["gpt-6.1-sol", "claude-opus-5-5"]`; a teszt elvárása a spec-változás szerint frissül.
+
+### Tesztek
+- concept-fix: siker hamis beszélgetéssel; túllépő javítás → javító forduló; lektor-blokkoló → nincs mentés.
+- Leckejavítás: a `call` egy beszélgetésen megy át (fordulók száma > 1, egy kliens).
+- A térkép-kinyerés: draft állapot, idempotens lenyomat (DB-teszt).
+- approve-outline: e2e mock — a felület a futást követi.
+- `grep`: a `LEGACY_MODELS`-ben nincs `claude-opus-5"`.
