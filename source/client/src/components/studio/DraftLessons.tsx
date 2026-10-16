@@ -12,18 +12,18 @@ import { CreationProgress } from "./CreationProgress";
 type OwnerDraft = {
   jobId: string; title: string; subject: string; classroom: number;
   draft: { teachingSections: number; savedBankPackets: number } | null;
-  running: boolean; error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean;
+  running: boolean; error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean; awaitingApproval?: boolean;
   resumable: boolean; stoppedAt?: string; nextRecovery?: { strategy: string; reason: string };
 };
 
-type Action = "resume" | "remake" | "discard" | "discard-published";
+type Action = "resume" | "continue" | "remake" | "discard" | "discard-published";
 const DRAFTS_KEY = ["/api/studio/drafts"];
 
 /** D3: a megállt piszkozat továbblépése — a mentett részekből folytatható → Folytatás; különben (vagy gazdátlanul) → teljes újragyártás. */
 const nextStepOf = (d: OwnerDraft): "resume" | "remake" =>
   d.resumable && !d.ownerless && d.nextRecovery?.strategy !== "remanufacture" ? "resume" : "remake";
 
-const CONFIRM_TEXT: Record<Exclude<Action, "resume">, string> = {
+const CONFIRM_TEXT: Record<Exclude<Action, "resume" | "continue">, string> = {
   remake: "Ugyanabból a forrásból teljes, új gyártás indul (modellköltséggel). A régi piszkozat megmarad, de a listából kikerül.",
   discard: "A piszkozat törlődik a listából, és a program sem folytatja. (Az adat visszaállítható, nem végleges törlés.)",
   "discard-published": "Minden olyan piszkozat törlődik, amelynek forrásából már van kész, közzétett tananyag.",
@@ -53,16 +53,17 @@ export default function DraftLessons() {
   });
   // A dupla kattintás egyetlen kérés (az `isPending` csak a következő renderben tiltana).
   const lock = useRef(false);
-  const [confirm, setConfirm] = useState<{ jobId: string; action: Exclude<Action, "resume"> } | null>(null);
+  const [confirm, setConfirm] = useState<{ jobId: string; action: Exclude<Action, "resume" | "continue"> } | null>(null);
   const act = useMutation({
     mutationFn: ({ jobId, action }: { jobId: string; action: Action }) =>
       action === "resume" ? apiRequest("POST", `/api/studio/jobs/${jobId}/resume`)
         : action === "discard-published" ? apiRequest<{ discarded: number }>("POST", "/api/studio/drafts/discard-published", { expected: redundant })
           : apiRequest("POST", `/api/studio/drafts/${jobId}/${action}`),
     onSuccess: (data, { action }) => {
-      if (action === "resume" || action === "remake") setFollowUntil(Date.now() + 60_000);
+      if (action === "resume" || action === "remake" || action === "continue") setFollowUntil(Date.now() + 60_000);
       toast(
       action === "resume" ? { title: "Folytatás elindult", description: "A gyártás a megszakadt ponttól halad tovább — a kész szakaszok megmaradnak." }
+        : action === "continue" ? { title: "Folytatás elindult", description: "A tanulási terv jóváhagyva, a tananyag írása halad — a haladás a lista tetején látszik." }
         : action === "remake" ? { title: "Újragyártás elindult", description: "A haladás a lista tetején, a készítési szakaszoknál követhető." }
           : action === "discard" ? { title: "Piszkozat törölve" }
             : { title: "Felesleges piszkozatok törölve", description: `${(data as { discarded?: number } | undefined)?.discarded ?? 0} piszkozat.` });
@@ -84,7 +85,7 @@ export default function DraftLessons() {
   const redundant = typeof drafts.data?.redundant === "number" ? drafts.data.redundant : list.filter((d) => d.hasPublished && !d.running).length;
   const hidden = typeof drafts.data?.total === "number" ? Math.max(0, drafts.data.total - list.length) : 0;
 
-  const confirmBox = (jobId: string, action: Exclude<Action, "resume">, yes: string) => (
+  const confirmBox = (jobId: string, action: Exclude<Action, "resume" | "continue">, yes: string) => (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 dark:bg-amber-950" data-testid={`draft-confirm-${action}-${jobId}`}>
       <p className="text-sm basis-full break-words">{CONFIRM_TEXT[action]}</p>
       <Button size="sm" className="min-h-11" variant={action === "remake" ? "default" : "destructive"} data-testid={`draft-confirm-yes-${action}-${jobId}`}
@@ -120,7 +121,7 @@ export default function DraftLessons() {
           return (
             <div key={d.jobId} className="rounded-lg border p-3 space-y-2 min-w-0" data-testid={`draft-item-${d.jobId}`}>
               <div className="flex flex-wrap items-center gap-2 min-w-0">
-                <Badge variant="secondary" data-testid="draft-badge">{d.running ? "Gyártás folyamatban" : "Tananyag draft"}</Badge>
+                <Badge variant="secondary" data-testid="draft-badge">{d.running ? "Gyártás folyamatban" : d.awaitingApproval ? "A tanulási terv jóváhagyására vár" : "Tananyag draft"}</Badge>
                 {d.hasPublished && !d.running && <Badge variant="outline" data-testid="draft-has-published">Kész tananyag már van</Badge>}
                 {d.ownerless && <Badge variant="outline" data-testid="draft-ownerless">Gazdátlan</Badge>}
                 <span className="font-medium break-words min-w-0">{d.title}</span>
@@ -132,9 +133,24 @@ export default function DraftLessons() {
                 </p>
               )}
               {/* D4: a három készítési szakasz — futásnál a mostani lépés, megállásnál a megállás helye. */}
-              <CreationProgress run={d.running ? { phase: d.step, detail: null, error: null } : { phase: "error", detail: null, error: null, ...(d.stoppedAt ? { stoppedAt: d.stoppedAt } : {}) }} />
+              <CreationProgress run={d.running || d.awaitingApproval ? { phase: d.step, detail: null, error: null } : { phase: "error", detail: null, error: null, ...(d.stoppedAt ? { stoppedAt: d.stoppedAt } : {}) }} />
               {d.running ? (
                 <p className="text-sm flex items-center gap-2" data-testid="draft-running" role="status"><Loader2 className="w-4 h-4 animate-spin" /> Folyamatban — a lista magától frissül.</p>
+              ) : d.awaitingApproval ? (
+                // docs/specs/2026-10-16-ujragyartas-jovahagyas.md (J2): a terv elkészült, de a gyártás a jóváhagyásra várva megállt.
+                confirm?.jobId === d.jobId ? confirmBox(d.jobId, confirm.action, "Igen, törlés") : (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground break-words" data-testid="draft-awaiting-approval">A tanulási terv elkészült; a folytatás gépileg jóváhagyja, és megírja a tananyagot.</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button size="sm" className="min-h-11" data-testid={`draft-continue-${d.jobId}`} disabled={act.isPending} onClick={() => run(d.jobId, "continue")}>
+                        {busy(d.jobId) ? <Loader2 className="w-4 h-4 animate-spin" /> : "Folytatás (a terv jóváhagyásával)"}
+                      </Button>
+                      <Button size="sm" variant="outline" className="min-h-11 gap-1" data-testid={`draft-discard-${d.jobId}`} onClick={() => setConfirm({ jobId: d.jobId, action: "discard" })}>
+                        <Trash2 className="w-4 h-4" /> Törlés
+                      </Button>
+                    </div>
+                  </div>
+                )
               ) : (
                 <>
                   {/* Az újraindulás szerveroldali üzenete egy másik felület „Újra” gombjára utal — itt a tény elég. */}

@@ -160,3 +160,32 @@ test("törlés megerősítéssel, gazdátlan újragyártás, kötegelt törlés 
   expect(bodies[1], "a megerősített darabszám a kéréssel megy (szerveroldali ellenőrzés)").toEqual({ expected: 1 });
   expect(errors).toEqual([]);
 });
+
+// docs/specs/2026-10-16-ujragyartas-jovahagyas.md (J2/J3, mért hiba: 3 újragyártás author/ok-ban, láthatatlanul).
+test("a tanulási terv jóváhagyására váró job látszik, és egyetlen kéréssel folytatható", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
+  const calls: string[] = [];
+  const waiting = { jobId: "job-wait", title: "Újragyártott lecke", subject: "Matematika", classroom: 6, draft: null, running: false, error: null,
+    updatedAt: "2026-10-16T08:02:46.000Z", step: "author", ownerless: false, hasPublished: false, awaitingApproval: true, resumable: false };
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() === "POST" && path.startsWith("/api/studio/drafts/")) { calls.push(path); return route.fulfill({ status: 202, json: { jobId: "job-wait" } }); }
+    let data: unknown = [];
+    if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] };
+    if (path === "/api/studio/drafts") data = { drafts: [waiting], total: 1, redundant: 0 };
+    if (path === "/api/csrf-token") data = { csrfToken: "test" };
+    await route.fulfill({ json: data });
+  });
+  await page.goto("/admin");
+  const item = page.getByTestId("draft-item-job-wait");
+  await expect(item.getByTestId("draft-badge")).toHaveText("A tanulási terv jóváhagyására vár");
+  await expect(item.getByTestId("draft-awaiting-approval")).toBeVisible();
+  await expect(item.getByTestId("draft-discard-job-wait")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  await page.getByTestId("draft-continue-job-wait").dblclick();
+  await expect.poll(() => calls.length).toBe(1);
+  await page.waitForTimeout(300);
+  expect(calls).toEqual(["/api/studio/drafts/job-wait/continue"]);
+  expect(errors).toEqual([]);
+});
