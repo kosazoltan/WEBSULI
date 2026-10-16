@@ -241,3 +241,18 @@ háromfázis-kapu) zárul.
   (`...OPEN_ANSWER_RULES_HU`). Mérve: 2372 sorból 2182 egybetűs sor — a modell a nyílt feladatok pontozási szabályait betűnként kapta.
 - **Javítás:** a szabály egyetlen blokként kerül a rendszerpromptba.
 - **Regressziós teszt:** a rendszerpromptban nincs egybetűs sor, és a pontozó szabálya szó szerint, egy darabban szerepel.
+
+## S4b — review #262
+- **Kulcsmentes ellenőrzések:** a kvíz vak előszűrője és a válaszkulcs-tesztíró FRISS, előzmény nélküli beszélgetést kap (ugyanaz a
+  modellpár, `deps.checkConversation()`), mert a gyártó beszélgetés előző fordulója tartalmazza a kulcsot / a rubrikát. Ha a motor nem kap
+  ilyen gyárat (tesztek), a két kapu nem fut (nincs „vak”-nak hazudott, kulcsot látó ellenőrzés).
+- **Meglévő térképről gyártás:** `runSingleLesson` új bemenete `mapId` (+ opcionálisan `approvedOutline`):
+  - a tudásbank-állomás kimarad, a gondozott térkép a store-ból töltődik (stabil fogalomazonosítók); a forrás aritmetikai helyesbítése
+    a betöltött fogalmakon fut;
+  - jóváhagyott vázlatnál a terv-állomás nem kér új tervet: a vázlat `autofixOutline` + `outlineSchema` + `outlineCoversMap` ellenőrzés után
+    változatlanul (sorrend, címek, kiosztás) a tananyag-állomás bemenete; hibás vázlat → 400 a route-on.
+  - A `/lessons/from-map/:mapId`, az `approve-outline`, a `/drafts/:id/continue|remake` és a `/jobs/:id/resume` a job / térkép `mapId`-jával
+    indít (`startMapRun`), nem a forrásszöveg újrakinyerésével.
+- **Követés újratöltés után:** a `LessonStudioPanel` a követett `runId`-t is sessionStorage-be menti; a job átvételekor / hibánál törli.
+- **Mérőszkript:** a régi lépésgép körszám-mérője (`scripts/studio/baseline-metrics.mts`) kivezetve.
+- **Teszt:** a HTML-publikálási kapu (`verifyLessonMethodHtml`, kikommentelt bank elutasítása) állításai helyben előállított bemenettel vissza.
