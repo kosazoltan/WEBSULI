@@ -71,3 +71,25 @@ Kapuk mindkét PR-nél:
      - a gyökér-attribútumot olvasó `lesson-band-theme.test.ts`.
 6. **Böngészős ellenőrzés:** a mind az öt témáról készült képernyőkép összevetése a referencia élő előnézetével (felső sáv,
    címsor, csempék, gombok).
+
+## Állapot és megvalósítási pontosítások (2026-10-16)
+- **A — fontok:** PR #266.
+- **B — arculat, mérésből adódó pontosítások:**
+  - **A régi évfolyamréteg felülírása:** a `lesson-experience.css` közvetlenül a blokkra írt betűméretet (1,2 / 1,1 / 1rem). A téma
+    minimumát ezért a `.lesson-block` kapja, 3 attribútumos szelektorral. A gyökérre nem kerül betűméret, mert az SVG-feliratok
+    öröklik.
+  - **A másodlagos gomb a teljes leckén:** a `.lesson-outline-btn` a négyfüles nézeten kívül is a téma másodlagos gombja. Mérve: a
+    11–12. évfolyam sötét témáján a régi átlátszó gomb 3,11:1 volt.
+  - **A borítóábra nem fakul:** a régi évfolyamréteg `saturate(.35)`-je a témás leckén nem érvényes.
+  - **`labeledShape`:** 36 egység oldalsó hely, 16 egységes felirat. Mérve: az Inter szélesebb betűképével a téglatest
+    magasság-felirata a bal szélen kilógott. Ugyanez a javítás az A PR-ba is bekerül.
+  - **Mozgás:** a tananyag blokkjai nem animálnak (a fúziós réteg eddig is kikapcsolta, most minden leckén így van, §2.7).
+  - **Próbaoldal:** a `?fusion=1&classroom=N` mind az öt témát mutatja.
+- **Review #267 (javítva, mérve):**
+  - A fejezetsorszám a kimért `strong` / `strongInk` párt kapja. A nyers főszínen a fehér szöveg 3,88:1 (adventure), illetve 3,75:1 (future) volt.
+  - A `future` téma haladássínje `#233956` (a csempe színe). A kitöltés kontrasztja így 3,13:1; a régi `#3B5267` sínnel 2,17:1 volt.
+  - A Csendes nézet a `--ws-*` tokeneket is felülírja: minden témán világos, halk palettára vált.
+  - A tananyagszöveg is a téma minimumán jelenik meg: bekezdés, lista, összefoglaló kártya, kérdéscím (a sáv `text-*` osztálya és a régi rem-méretek ezt nem írják felül).
+  - Borítóábra nélküli leckén (`data-cover` nincs) a fejléc kétoszlopos (embléma és cím), nem marad üres oszlop.
+  - A 9–10. o. háttérátmenete nem ismétlődik 32 px-enként: `background-size: auto`, `no-repeat`.
+  - A felső sáv kontrasztját a tömör hátterű `.ws-topbar`-on mérjük.

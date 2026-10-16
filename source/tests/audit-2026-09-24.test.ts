@@ -54,5 +54,6 @@ test("design a kérésből: a mért hamis triggerek nem váltanak világot vagy 
     assert.equal(designFromInstruction(text), undefined, text);
   }
   assert.equal(designFromInstruction("Rózsaszín legyen, de effektek nélkül")?.flair, undefined);
-  assert.equal(designFromInstruction("rózsaszín, kislánynak, csillogó effektekkel")?.world, "princess");
+  // Websuli Design (dokumentált spec-változás): unisex — nemi szavak nem választanak világot.
+  assert.equal(designFromInstruction("rózsaszín, kislánynak, csillogó effektekkel")?.world, undefined);
 });

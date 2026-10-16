@@ -27,16 +27,18 @@ test("EARS 2: leckénként determinisztikus, leckék között eltérő, ismétl�
   assert.ok(distinct.size >= 3, `a leckék ne legyenek egyformák (${distinct.size} különböző)`);
 });
 
-test("EARS 3: a tanár kérése választ világot és effekteket; semleges kérésnél nincs design-változás", () => {
+// Websuli Design (dokumentált spec-változás, docs/specs/2026-10-16-websuli-design.md): unisex — a nemi szavak nem választanak világot.
+test("EARS 3: a tanár kérése nemi szavakból NEM választ világot (unisex); effekt-kérésnél a régi effektlista; semleges kérésnél nincs változás", () => {
   const d = designFromInstruction("Legyen fiatalos, rózsaszín, 5-ös kislánynak figyelemfelhívó, effektekkel.", "seed");
-  assert.equal(d?.world, "princess");
+  assert.equal(d?.world, undefined);
+  for (const gendered of ["rózsaszín legyen", "kislánynak szóljon", "hercegnős téma", "lányos legyen", "pink színű"]) assert.equal(designFromInstruction(gendered), undefined, gendered);
   for (const f of ["sparkles", "shimmer-keys", "pop-correct"] as const) assert.ok(d?.flair?.includes(f), f);
   assert.ok((d?.flair?.length ?? 0) <= 4);
   assert.equal(designFromInstruction("Rövidítsd le a tananyagot."), undefined);
   assert.equal(designFromInstruction(undefined), undefined);
 });
 
-test("EARS 4: a javító út a kért világot és különlegességeket adja a jelöltnek; a séma elfogadja", async () => {
+test("EARS 4: a javító út nemi kérésre nem ad hercegnő-világot (a szerző promptjába sem kerül); a séma elfogadja", async () => {
   const original = fusionFixture(); const e = standardFusionFixture().experience!;
   let authorCalls = 0; let authorSystem = ""; let authorUser = "";
   const result = await buildStructuredImprovement(original, { subject: original.subject, classroom: original.classroom, concepts: [{ localId: "area", term: "terület", definition: "Az alap és a magasság szorzatának fele.", examWeight: "core" as const }] },
@@ -46,9 +48,9 @@ test("EARS 4: a javító út a kért világot és különlegességeket adja a je
       if (authorCalls++ === 0) { authorSystem = system; authorUser = user; return original; }
       return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
     }, "Rózsaszín, kislánynak szóló, csillogó effektekkel.");
-  assert.equal(result.candidate.experience?.theme, "princess");
-  assert.ok(result.candidate.experience?.flair?.includes("sparkles"));
-  assert.match(authorUser, /Hercegnő-kastély/);
+  assert.notEqual(result.candidate.experience?.theme, "princess");
+  // A tanár saját kérése szó szerint átmegy; a PROGRAM nem tesz hozzá hercegnő-világot.
+  assert.doesNotMatch(authorUser, /Hercegnő-kastély|princess/);
   assert.match(authorSystem, /TANANYAGJAVÍTÓ SKILL/);
   assert.doesNotThrow(() => experienceSchema.parse(result.candidate.experience));
   assert.throws(() => experienceSchema.parse({ ...result.candidate.experience, flair: ["kitalált"] }), "a modell nem írhat kitalált effektet");

@@ -66,7 +66,8 @@ test("cognitive gates unlock methods, sorting works with accessible controls, th
   await sort.getByRole("button", { name: "Összeszorzom az alapot és a magasságot. feljebb", exact: true }).click();
   await sort.getByRole("button", { name: "Sorrend ellenőrzése", exact: true }).click();
   await expect(sort.getByRole("status")).toContainText("Helyes sorrend");
-  await page.goto("/__lesson-runtime-probe?fusion=1&theme=cosmos");
+  // Websuli Design (dokumentált spec-változás): a színvilágot az évfolyamsáv adja, nem az élménytéma — más évfolyam, más arculat.
+  await page.goto("/__lesson-runtime-probe?fusion=1&classroom=11");
   expect(await page.locator('[data-experience]').evaluate(e => getComputedStyle(e).backgroundColor)).not.toBe(ocean);
 });
 
@@ -93,10 +94,12 @@ test("foreign-language glossary starts speech only on request, with the correct 
 });
 
 
-test("all six palettes keep readable ink and complete worked examples", async ({ page }) => {
+// Websuli Design (dokumentált spec-változás, docs/specs/2026-10-16-websuli-design.md): az öt évfolyamsávos arculat mind olvasható
+// tintát ad és teljes kidolgozott példát mutat; az öt arculat színe különböző.
+test("all five grade-band designs keep readable ink and complete worked examples", async ({ page }) => {
   const colors = new Set<string>();
-  for (const theme of ["ocean", "forest", "sunset", "cosmos", "paper", "berry"]) {
-    await page.goto(`/__lesson-runtime-probe?fusion=1&theme=${theme}`);
+  for (const classroom of [1, 4, 7, 9, 11]) {
+    await page.goto(`/__lesson-runtime-probe?fusion=1&classroom=${classroom}`);
     await expect(page.getByText("Eredmény: 12 cm²", { exact: true })).toBeVisible();
     const palette = await page.locator("[data-experience]").evaluate(el => {
       const s = getComputedStyle(el);
@@ -110,7 +113,7 @@ test("all six palettes keep readable ink and complete worked examples", async ({
     expect(palette.contrast).toBeGreaterThanOrEqual(4.5);
     colors.add(palette.color);
   }
-  expect(colors.size).toBe(6);
+  expect(colors.size).toBe(5);
 });
 
 test("continuous oral tasks keep one dictation session and reject stale results", async ({ page }) => {

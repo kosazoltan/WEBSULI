@@ -200,6 +200,9 @@ function probeLesson(search: string): Lesson {
     const lesson = fusionFixture();
     const theme = EXPERIENCE_THEMES.find(t => t === q.get("theme"));
     if (theme) lesson.experience!.theme = theme;
+    // Websuli Design: a fúziós lecke is kipróbálható mind az öt évfolyamsávban (`?fusion=1&classroom=N`).
+    const grade = Number(q.get("classroom"));
+    if (q.has("classroom") && Number.isInteger(grade) && grade >= 0 && grade <= 12) lesson.classroom = grade;
     return lesson;
   }
   const classroom = Number(q.get("classroom"));
