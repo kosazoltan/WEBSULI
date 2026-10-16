@@ -121,3 +121,48 @@ test("review #262: a követett futás újratöltés után is követhető, amíg 
   expect(await page.evaluate(() => sessionStorage.getItem("websuli.studio.followRunId"))).toBeNull();
   expect(errors).toEqual([]);
 });
+
+// J3 (docs/specs/2026-10-16-egyfutas-atvilagitas.md): a futás mérőszámai a JobMonitorban — kompakt tábla, a kapuesemények; telefonon sincs
+// vízszintes kilógás. J5: a mentett részekből induló folytatás „Folytatás elindult” jelzést ad, és az új futást követi.
+test("J3/J5: a futás mérőszámai a JobMonitorban; a folytatás a mentett részekből indul és az új futást követi", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", (e) => errors.push(e.message));
+  const telemetry = { version: 1, model: "claude-opus-5-5", fallback: false, models: ["claude-opus-5-5"], totalMs: 1_569_000,
+    stations: { "tananyag": { turns: 2, fixTurns: 1, input: 120_000, cached: 90_000, output: 30_000, ms: 300_000 },
+      "gyakorlóbank": { turns: 12, fixTurns: 0, input: 600_000, cached: 450_000, output: 70_000, ms: 700_000 },
+      "lektorálás": { turns: 2, fixTurns: 0, input: 160_000, cached: 80_000, output: 20_000, ms: 200_000 } },
+    fresh: { calls: 14, input: 760_000, cached: 530_000, output: 90_000 },
+    gates: { answerKeyNotes: 2, answerKeyFails: 1, quizBlindRemoved: 3, lektorRemoved: 0, lengthOverBudget: false, lengthShortened: true } };
+  let resumed = 0;
+  // Review #263: a folytatás UGYANAZT a jobot viszi tovább — a felület nem ragadhat a gyorsítótárazott hibás állapotnál.
+  await page.addInitScript(() => { try { sessionStorage.setItem("websuli.studio.jobId", "job-t"); } catch { /* tároló nélkül is fut */ } });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let data: unknown = [];
+    if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] };
+    if (path === "/api/csrf-token") data = { csrfToken: "test" };
+    if (path === "/api/studio/maps") data = { maps: [] };
+    if (path === "/api/studio/jobs/job-t") data = resumed
+      ? { job: { id: "job-t", step: "lektor", status: "running", round: 0, error: null }, produced: { telemetry } }
+      : { job: { id: "job-t", step: "error", status: "error", round: 0, error: "lektorálás: tényhiba maradt." }, produced: { telemetry } };
+    if (path === "/api/studio/jobs/job-t/resume") { resumed++; return route.fulfill({ status: 202, json: { jobId: "job-t", runId: "run-t", resumed: true } }); }
+    if (path === "/api/studio/lessons/one-step/run-t") data = { phase: "lektor", jobId: "job-t", error: null };
+    await route.fulfill({ json: data });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin?tab=knowledge-maps");
+  const metrics = page.getByTestId("studio-run-telemetry");
+  await expect(metrics).toBeVisible({ timeout: 15_000 });
+  await expect(metrics).toContainText("claude-opus-5-5 · 1569 s · 16 forduló (14 friss)");
+  await metrics.locator("summary").click();
+  await expect(metrics.locator("tbody tr")).toHaveCount(3);
+  await expect(metrics).toContainText("2 (1 javító)");
+  await expect(metrics).toContainText("Kvíz vak előszűrő kivett: 3");
+  await expect(metrics).toContainText("A szókeret-túllépés rövidítő fordulóval javítva");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: test.info().outputPath("single-run-telemetry-390.png"), fullPage: true });
+  await page.getByTestId("job-monitor").getByRole("button", { name: "Újra" }).click();
+  await expect(page.getByText("Folytatás elindult").first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("job-monitor")).not.toContainText("lektorálás: tényhiba maradt.", { timeout: 15_000 });
+  expect(resumed).toBe(1);
+  expect(errors).toEqual([]);
+});

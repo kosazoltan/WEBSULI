@@ -88,17 +88,19 @@ export async function generateStructuredImprovement(fileId: string, instruction?
 }
 
 /**
- * A javítás minden modellhívása egyetlen beszélgetésbe kötve.
- * A bankcsomag hibás kimenete a banképítő javító körébe megy (`RetryableBankCallError`), mint a gyártásban.
+ * A javítás modellhívásai: a szerzői szerepek egyetlen beszélgetésbe kötve; J2: a bank csomagonként és a lektor hívásonként FRISS
+ * beszélgetésben (ugyanaz a modellpár). A bankcsomag hibás kimenete a banképítő javító körébe megy (`RetryableBankCallError`), mint a gyártásban.
  */
-export async function singleRunRepairCall(conversation?: import("./single-run/conversation").LessonConversation) {
+export async function singleRunRepairCall(conversation?: import("./single-run/conversation").LessonConversation, fresh?: (system: string) => import("./single-run/conversation").LessonConversation) {
   const { createLessonConversation } = await import("./single-run/conversation");
-  const { conversationBankCall, singleRunSystemPrompt, withRoleRunbook, SINGLE_RUN_FIX_ROUNDS } = await import("./single-run/engine");
+  const { freshBankCall, freshSystemPrompt, singleRunSystemPrompt, withRoleRunbook, SINGLE_RUN_FIX_ROUNDS } = await import("./single-run/engine");
   const { parseModelJson } = await import("./run-step");
-  const conv = conversation ?? createLessonConversation(singleRunSystemPrompt());
-  const bank = conversationBankCall(conv);
+  const main = conversation ?? createLessonConversation(singleRunSystemPrompt());
+  const newConversation = fresh ?? ((system: string) => createLessonConversation(system));
+  const bank = freshBankCall(newConversation);
   return async (step: RepairStep, system: string, user: string, role: PromptRole): Promise<unknown> => {
     if (role === "bank") return bank(system, user);
+    const conv = role === "lektor" ? newConversation(freshSystemPrompt("lektor")) : main;
     // Review #261: a csonkolt / nem JSON válasz javító fordulót kap ugyanabban a beszélgetésben (legfeljebb SINGLE_RUN_FIX_ROUNDS).
     let blocks = withRoleRunbook([{ type: "text", text: `JAVÍTÁS — ${role} (${step}).\n${system}\n\n${user}\nVálaszolj kizárólag a kért JSON-nal.` }], role);
     let problem = "";

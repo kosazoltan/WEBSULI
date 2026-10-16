@@ -103,6 +103,30 @@ test("lejárt vagy átvett workflow-engedély a domain tranzakció írását is 
   }
 });
 
+// Review #263 (J5): a folytatás ugyanazt a jobot írja — az átvett lízingű (elavult) végrehajtó jobmentése visszautasítva, a job érintetlen.
+test("elavult végrehajtó nem írhatja a gyártási job mentését (saveStep a workflow-kerítés mögött)", async () => {
+  const { createDrizzlePipelineStore } = await import("../server/studio/pipeline-store");
+  const store2 = await createDrizzlePipelineStore();
+  const map = (await dbPool.query("INSERT INTO knowledge_maps(title,subject,classroom,source_files,input_hash) VALUES ('F','matematika',5,'[]'::jsonb,'fence-job-map') RETURNING id")).rows[0].id as string;
+  const job = (await dbPool.query("INSERT INTO studio_jobs(map_id,step,status,input_hash,output) VALUES ($1,'lektor','running','h','{\"mark\":\"original\"}'::jsonb) RETURNING id", [map])).rows[0].id as string;
+  try {
+    const id = "fence-job-save";
+    await executeWorkflow(store, { id, owner: "workflow-owner", mode: "web" }, async () => {
+      await workflowPhase("generate");
+      await store2.saveStep(job, { output: { mark: "live" } });
+      await dbPool.query("UPDATE lesson_workflow_runs SET lease_token='replacement' WHERE id=$1", [id]);
+      await assert.rejects(store2.saveStep(job, { status: "error", output: { mark: "stale" } }), WorkflowConflict);
+      throw new WorkflowConflict("vége");
+    }).catch((e) => { if (!(e instanceof WorkflowConflict)) throw e; });
+    const row = (await dbPool.query("SELECT status, output FROM studio_jobs WHERE id=$1", [job])).rows[0];
+    assert.equal(row.output.mark, "live", "az érvényes végrehajtó mentése megtörtént, az elavulté nem");
+    assert.equal(row.status, "running");
+  } finally {
+    await dbPool.query("DELETE FROM studio_jobs WHERE id=$1", [job]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE id=$1", [map]);
+  }
+});
+
 test("új HTML-jelölt nem írhatja felül a készítése után módosított eredetit", async () => {
   const { storage } = await import("../server/storage");
   const { htmlBaselineHash } = await import("../server/improve/html-baseline");

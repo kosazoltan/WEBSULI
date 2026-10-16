@@ -247,3 +247,48 @@ test("S4a: a különálló kinyerés draft térképet ment (jóváhagyásra vár
     await dbPool.query("DELETE FROM knowledge_maps WHERE id=$1", [mapId]);
   }
 });
+
+// J5 (docs/specs/2026-10-16-egyfutas-atvilagitas.md): a megállt egyfutásos job a mentett részeiből folytatható, ugyanazon a jobon.
+test("J5: a megállt egyfutásos piszkozat folytatható; a foglalás saját / nem vitt jobra hat; ha a motor el sem indul, a job nem ragad „fut” állapotban", async () => {
+  const { resumeSingleRun } = await import("../server/studio/lesson-pipeline-routes");
+  const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+  const { experience: _bank, ...teaching } = standardFusionFixture();
+  const outline = { sections: [{ heading: teaching.sections[0].heading, conceptIds: ["area"], plannedBlocks: ["explain"], animationSuggestions: [] }], misconceptions: [] };
+  const output = { outline, lesson: teaching, singleRun: { version: "single-run-1", conversation: { model: "claude-opus-5-5", switchedToFallback: false, turns: [] } } };
+  const mine = await mapWithJob({ owner: "draft-owner", output });
+  const foreign = await mapWithJob({ owner: "draft-other", output });
+  const legacy = await mapWithJob({ owner: "draft-owner" });
+  // Fizetős hívás nem indulhat: modellkulcs nélkül a motor nem indul el.
+  const keys = ["AI_INTEGRATIONS_ANTHROPIC_API_KEY", "AI_INTEGRATIONS_OPENAI_API_KEY", "OPENAI_API_KEY"] as const;
+  const savedKeys = keys.map((k) => process.env[k]);
+  for (const k of keys) process.env[k] = "";
+  try {
+    const drafts = await ownerDrafts("draft-owner");
+    const byId = (id: string) => drafts.find((d) => d.jobId === id)!;
+    assert.equal(byId(mine.id).resumable, true, "egyfutásos, mentett tanítással: folytatható");
+    assert.equal(byId(mine.id).resumeKind, "bank");
+    assert.equal(byId(legacy.id).resumable, false, "régi lépésgép jobja: újragyártás");
+    await assert.rejects(resumeSingleRun(foreign.id, "draft-owner"), /nem a tiéd/);
+    const runId = await resumeSingleRun(mine.id, "draft-owner");
+    assert.ok(runId);
+    await assert.rejects(resumeSingleRun(mine.id, "draft-owner"), /már elindult|épp fut/, "dupla kattintás nem indít kettőt");
+    let row: { status: string; error: string | null } | undefined;
+    for (let i = 0; i < 100; i++) {
+      row = (await dbPool.query("SELECT status, error FROM studio_jobs WHERE id=$1", [mine.id])).rows[0];
+      if (row?.status === "error") break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.equal(row?.status, "error", "a motor nem indult (nincs kulcs) — a foglalás visszaállt");
+    assert.match(row?.error ?? "", /modell/);
+  } finally {
+    keys.forEach((k, i) => { if (savedKeys[i] === undefined) delete process.env[k]; else process.env[k] = savedKeys[i]; });
+    // A folytatás workflow-ja a háttérben zárul — megvárjuk, mielőtt a sorokat töröljük.
+    for (let i = 0; i < 100; i++) {
+      const open = (await dbPool.query("SELECT 1 FROM lesson_workflow_runs WHERE snapshot->>'resourceId' = $1 AND lease_until > now()", [mine.id])).rows.length;
+      if (!open) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    await dbPool.query("DELETE FROM lesson_workflow_runs WHERE id IN (SELECT id FROM lesson_workflow_runs WHERE snapshot->'request'->>'resumeJobId' = $1)", [mine.id]);
+    await dbPool.query("DELETE FROM studio_jobs WHERE id = ANY($1)", [[mine.id, foreign.id, legacy.id]]);
+  }
+});

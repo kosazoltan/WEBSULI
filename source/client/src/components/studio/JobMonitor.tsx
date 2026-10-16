@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { jobMonitorView, lessonCreationStageLabel, type JobSummary } from "@shared/studio-ui";
+import { telemetryView, type RunTelemetry } from "@shared/run-telemetry";
 import { WorkflowMonitor } from "./WorkflowMonitor";
 
 /**
@@ -35,6 +36,7 @@ export function JobMonitor({ jobId, onDone, onFollowRun }: JobMonitorProps) {
       approvedOutline?: boolean;
       qualityNotes?: Array<{ reason?: string; note?: string; round?: number }>;
       gaps?: Array<{ id: string; point: string; reason: string }>;
+      telemetry?: RunTelemetry | null;
     };
   }>({
     queryKey: ["/api/studio/jobs", jobId],
@@ -121,6 +123,7 @@ export function JobMonitor({ jobId, onDone, onFollowRun }: JobMonitorProps) {
           <summary className="flex min-h-11 cursor-pointer items-center">Feldolgozási részletek</summary>
           <p>{view.stepLabel}{view.roundLabel ? ` · ${view.roundLabel}` : ""}</p>
         </details>
+        {data.produced.telemetry && <TelemetryTable telemetry={data.produced.telemetry} />}
         {view.waitingApproval && (
           <p className="text-sm text-amber-700 dark:text-amber-400">
             A vázlat jóváhagyásra vár — a lenti vázlatot átnézve folytathatod.
@@ -188,6 +191,33 @@ export function JobMonitor({ jobId, onDone, onFollowRun }: JobMonitorProps) {
   );
 }
 
+/** J3: a futás mérőszámai (állomásonként forduló, token, gyorsítótár, idő; kapuesemények) — összecsukva, kompakt táblában. */
+function TelemetryTable({ telemetry }: { telemetry: RunTelemetry }) {
+  const view = telemetryView(telemetry);
+  return (
+    <details className="text-xs text-muted-foreground" data-testid="studio-run-telemetry">
+      <summary className="flex min-h-11 cursor-pointer items-center">Mérőszámok: {view.summary}</summary>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left tabular-nums">
+          <thead>
+            <tr><th className="pr-2">Állomás</th><th className="pr-2">Forduló</th><th className="pr-2">Bemenet</th><th className="pr-2">Gyors.</th><th className="pr-2">Kimenet</th><th>Idő</th></tr>
+          </thead>
+          <tbody>
+            {view.rows.map((r) => (
+              <tr key={r.station}><td className="pr-2">{r.station}</td><td className="pr-2">{r.turns}</td><td className="pr-2">{r.input}</td><td className="pr-2">{r.cachedPct}</td><td className="pr-2">{r.output}</td><td>{r.time}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {view.gates.length > 0 && (
+        <ul className="list-disc list-inside mt-1">
+          {view.gates.map((g) => <li key={g}>{g}</li>)}
+        </ul>
+      )}
+    </details>
+  );
+}
+
 /** Retry button for a failed job — POST /jobs/:id/resume is input-hash idempotent. */
 function ResumeButton({ jobId, onFollowRun }: { jobId: string; onFollowRun?: (runId: string) => void }) {
   const { toast } = useToast();
@@ -198,11 +228,15 @@ function ResumeButton({ jobId, onFollowRun }: { jobId: string; onFollowRun?: (ru
     if (pending) return; // audit 2026-09-05 (E): no double POST on a slow restart
     setPending(true);
     try {
-      const started = await apiRequest<{ runId?: string } | undefined>("POST", `/api/studio/jobs/${jobId}/resume`);
-      // Review #260: egyfutásos módban a folytatás új futás — a felület azt követi, nem a régi (hibás) jobot.
+      const started = await apiRequest<{ runId?: string; resumed?: boolean } | undefined>("POST", `/api/studio/jobs/${jobId}/resume`);
+      // Review #260: a folytatás / újragyártás saját futás — a felület azt követi, nem a régi (hibás) jobot.
       if (started?.runId && onFollowRun) {
+        // Review #263 (J5): a folytatás UGYANAZT a jobot viszi tovább — a gyorsítótárazott hibás állapot nem maradhat (a polling leállna).
+        if (started.resumed) await queryClient.invalidateQueries({ queryKey: ["/api/studio/jobs", jobId] });
         onFollowRun(started.runId);
-        toast({ title: "Újragyártás elindult", description: "A mentett forrásból új gyártás indult; a haladás itt követhető." });
+        toast(started.resumed
+          ? { title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább; a kész részeket nem gyártja újra." }
+          : { title: "Újragyártás elindult", description: "A mentett forrásból új gyártás indult; a haladás itt követhető." });
         return;
       }
       await Promise.all([

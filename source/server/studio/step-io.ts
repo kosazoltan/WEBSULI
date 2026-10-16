@@ -304,7 +304,8 @@ function outlineShape(visual: boolean, inventory: boolean): string {
 }
 export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner?: OwnerContext): string {
   return [
-    "Te vagy a pedagógus (tervkészítő). A kurált fogalomtérképből készíts lecke-vázlatot: ez a terv szabja meg a szerző, az ábrakészítő és a lektor munkáját, ezért pontos, tömör és teljes legyen.",
+    // J4 (átvilágítás L5): egyetlen feladat, magyar állomás-fejléc — más szerepekre / átadásra utaló szöveg nélkül.
+    "A FELADAT: tananyagterv (lecke-vázlat) a kurált fogalomtérképből. A lecke ezt a tervet követi, ezért pontos, tömör és teljes legyen.",
     "",
     // Spec 2026-09-19 §5 — guardrails the code also enforces (outlineSchema, outlineCoversMap).
     "TILALMAK (a program ellenőrzi, megszegésük a terv elutasítását jelenti):",
@@ -317,7 +318,7 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     `- Korlátok (a program a túllépést vágja vagy elhagyja, és a jobban jelzi — ne lépd túl): emoji legfeljebb ${OUTLINE_LIMITS.emoji} karakter; keyPhrases legfeljebb ${OUTLINE_LIMITS.keyPhrases} elem, elemenként ${OUTLINE_LIMITS.keyPhrase} karakter; fejezetcím ${LESSON_TEXT_LIMITS.heading} karakter.`,
     "- Semmi próza, magyarázat, kódblokk-jelölés vagy bevezető: a válasz kizárólag az előírt JSON.",
     "",
-    "A körpazarlás elkerülése: fejezetenként add meg a tanítási sorrendet (explain → example lépésekkel → check), az ábra fajtáját és a forrás melyik feladata tartozik oda — így a szerzőnek nem kell szerkezetet kitalálnia, a lektor pedig ehhez a tervhez mér.",
+    "A körpazarlás elkerülése: fejezetenként add meg a tanítási sorrendet (explain → example lépésekkel → check), az ábra fajtáját és a forrás melyik feladata tartozik oda — így a lecke írásakor nem kell szerkezetet kitalálni, és az ellenőrzés ehhez a tervhez mér.",
     "",
     "Követelmények:",
     "- Minden `core` fogalom és legalább 90%-a a `supporting` fogalmaknak szerepeljen a vázlat valamelyik szakaszában (conceptIds).",
@@ -470,7 +471,7 @@ export function buildAuthorPrompt(
   const band = ageBandForClassroom(map.classroom);
 
   const parts = [
-    "Te vagy a SZERZŐ: a vázlatból teljes, magyar nyelvű leckét írsz, a tanuló korosztályának megfelelő nyelven és mélységben.",
+    "A FELADAT: a vázlatból teljes, magyar nyelvű lecke, a tanuló korosztályának megfelelő nyelven és mélységben.",
     // LS-9: a korosztályt nem az osztályszám sejteti, hanem néven nevezve, leírt regiszterrel (spec §3).
     `Korosztály: ${band} (${map.classroom}. osztály). ${bandRegisterForPrompt(band)}`,
     "",
@@ -598,7 +599,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
       `previousBlockers: ${JSON.stringify(previousBlockers)}`,
     ] : []),
     "Ha a lecke experience mezőt tartalmaz, a methods/tasks/quiz tételeit és a szószedetet is vizsgáld: valóban a Tananyag lapról kérdez-e, helyes-e minden megoldás és mintaválasz, van-e érdemi változatosság. Hiányos vagy hibás bank source_conflict/contradicts_source, a blockPath mezőben experience.tasks.N vagy experience.quiz.N útvonallal.",
-    "You are the Lektor. Re-read the lesson against the curated concept map and report problems. You NEVER rewrite the lesson.",
+    "A FELADAT: lektorálás — olvasd újra a leckét a kurált fogalomtérképhez (és ha megkaptad, a forrás átiratához) mérve, és jelentsd a hibákat. A leckét SOHA nem írod át.",
     "",
     // Tulajdonosi utasítás 2026-09-20 (kutatás: LLM-as-judge — szemantikus egyezés, kimondott
     // „nem kicsinyes" politika, bináris blokkoló-döntés horgonyokkal, indoklás a döntés előtt):
@@ -662,7 +663,7 @@ export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
     blocks: section.blocks.map((block, i) => ({ i, ...block })),
   }));
   return [
-    "You are the Animator (ábrakészítő): you design EXPLANATORY figures for an already-written Hungarian lesson.",
+    "A FELADAT: MAGYARÁZÓ ábrák egy már megírt magyar leckéhez (a lenti szabályok szerint, csak ábra-folt).",
     "",
     D1_RULE_TEXT,
     LESSON_QUALITY_CONTRACT,
@@ -872,7 +873,7 @@ export function checkConceptFixResult(
  */
 export function buildConceptFixPrompt(lesson: Lesson, map: PromptMap, conceptId: string): string {
   return [
-    "You are the Lesson Author, running a SCOPED fix for ONE weak concept.",
+    "A FELADAT: CÉLZOTT javítás EGYETLEN gyenge fogalomra (a lecke többi része érintetlen).",
     "",
     D1_RULE_TEXT,
     LESSON_QUALITY_CONTRACT,

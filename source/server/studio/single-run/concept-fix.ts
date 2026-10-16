@@ -13,7 +13,7 @@ import { buildLessonExperience } from "../experience-builder";
 import { classifyNotes } from "../lektor";
 import { buildConceptFixPrompt, buildLektorPrompt, checkConceptFixResult, parseLektorResponse, type LektorReport } from "../step-io";
 import { createLessonConversation, type LessonConversation } from "./conversation";
-import { conversationBankCall, runStation, singleRunSystemPrompt, withRoleRunbook } from "./engine";
+import { freshBankCall, freshSystemPrompt, runStation, singleRunSystemPrompt, withRoleRunbook } from "./engine";
 
 export type FixConceptResult = { ok: true; message: string } | { ok: false; error: string };
 export type ConceptFixSource = { subject: string; classroom: number; concepts: Array<{ id: string; localId: string; term: string; definition: string; quote: string; examWeight: ExamWeight }> };
@@ -22,11 +22,15 @@ export type ConceptFixSource = { subject: string; classroom: number; concepts: A
 const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
 
 /**
- * A javítás magja (adatbázis nélkül, tesztelhető): szerzői javítás → bank → lektor → kapu, egy beszélgetésben.
+ * A javítás magja (adatbázis nélkül, tesztelhető): szerzői javítás (a beszélgetésben) → bank → lektor (friss beszélgetésben) → kapu.
  * Hibánál `{ ok: false }` az okkal; siker esetén a jelölt és a lektor jegyzetei (a mentést a hívó végzi).
  */
 export async function fixConceptInConversation(input: {
   original: Lesson; source: ConceptFixSource; conceptId: string; conversation: LessonConversation; log?: (m: string) => void;
+  /** J2: friss, előzmény nélküli beszélgetés (bank, lektor) — ugyanaz a modellpár. */
+  fresh: (system: string) => LessonConversation;
+  /** Review #263: a forrás átirata (a térkép `sourceText`-je) — a friss lektor ehhez is mér, mint a gyártásban. */
+  sourceText?: string | null;
 }): Promise<{ ok: true; candidate: Lesson; report: LektorReport } | { ok: false; error: string }> {
   const { original, source, conceptId, conversation } = input;
   const deps = { conversation, log: input.log };
@@ -47,10 +51,12 @@ export async function fixConceptInConversation(input: {
       return { ok: true, value: parsed.data };
     });
     await workflowPhase("banks");
-    candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: conversationBankCall(conversation), concurrency: 1 });
+    candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: freshBankCall(input.fresh), concurrency: 1 });
     assertRepairCandidate(original, candidate, source);
     await workflowPhase("lektor");
-    const report = await runStation(deps, "a javítás lektorálása", withRoleRunbook([{ type: "text", text: `LEKTORÁLÁS — a javított tanítás és a friss bankok, a forráshoz mérve.\n${buildLektorPrompt(candidate, source)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.` }], "lektor"),
+    // J2: a lektor friss beszélgetésben, a javítás menetétől függetlenül ítél.
+    const sourceBlock = input.sourceText?.trim() ? [{ type: "text" as const, text: `A FORRÁS ÁTIRATA (adat, a mérce):\n${input.sourceText.trim()}` }] : [];
+    const report = await runStation({ conversation: input.fresh(freshSystemPrompt("lektor")), log: input.log }, "a javítás lektorálása", withRoleRunbook([...sourceBlock, { type: "text", text: `LEKTORÁLÁS — a javított tanítás és a friss bankok, a forráshoz mérve.\n${buildLektorPrompt(candidate, source)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.` }], "lektor"),
       (json) => {
         const r = parseLektorResponse(json);
         if (!r.ok) return { ok: false, problems: [r.reason] };
@@ -81,16 +87,17 @@ export async function fixConceptSingleRun(lessonId: string, conceptId: string, a
   const [originalMaterial] = await db.select().from(htmlFiles).where(eq(htmlFiles.id, row.htmlFileId));
   if (!originalMaterial) return { ok: false, error: "Az eredeti tananyag metaadatai nem találhatók." };
   const original = lessonSchema.parse(row.json);
-  const [mapRow] = await db.select({ subject: knowledgeMaps.subject, classroom: knowledgeMaps.classroom }).from(knowledgeMaps).where(eq(knowledgeMaps.id, row.mapId)).limit(1);
+  const [mapRow] = await db.select({ subject: knowledgeMaps.subject, classroom: knowledgeMaps.classroom, sourceText: knowledgeMaps.sourceText }).from(knowledgeMaps).where(eq(knowledgeMaps.id, row.mapId)).limit(1);
   if (!mapRow) return { ok: false, error: "A lecke fogalomtérképe nem található." };
   const conceptRows = await db.select({ id: kmConcepts.id, localId: kmConcepts.localId, term: kmConcepts.term, definition: kmConcepts.definition, quote: kmConcepts.quote, examWeight: kmConcepts.examWeight })
     .from(kmConcepts).where(and(eq(kmConcepts.mapId, row.mapId), inArray(kmConcepts.reviewState, TAUGHT_REVIEW_STATES))).orderBy(asc(kmConcepts.orderIndex), asc(kmConcepts.id));
-  const source: ConceptFixSource = { ...mapRow, concepts: conceptRows.map((c) => ({ ...c, examWeight: c.examWeight as ExamWeight })).sort((a, b) => a.localId.localeCompare(b.localId)) };
+  const { sourceText, ...mapMeta } = mapRow;
+  const source: ConceptFixSource = { ...mapMeta, concepts: conceptRows.map((c) => ({ ...c, examWeight: c.examWeight as ExamWeight })).sort((a, b) => a.localId.localeCompare(b.localId)) };
 
   let conversation: LessonConversation;
   try { conversation = createLessonConversation(singleRunSystemPrompt()); }
   catch (error) { return { ok: false, error: error instanceof Error ? error.message : "Nincs beállított modellkulcs." }; }
-  const fixed = await fixConceptInConversation({ original, source, conceptId, conversation });
+  const fixed = await fixConceptInConversation({ original, source, conceptId, conversation, fresh: (system) => createLessonConversation(system), sourceText });
   if (!fixed.ok) return fixed;
   try {
     const { repairHash, materialHash, applyStructuredImprovement } = await import("../structured-improvement");

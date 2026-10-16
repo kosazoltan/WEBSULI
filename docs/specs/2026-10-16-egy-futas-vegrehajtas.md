@@ -256,3 +256,53 @@ háromfázis-kapu) zárul.
 - **Követés újratöltés után:** a `LessonStudioPanel` a követett `runId`-t is sessionStorage-be menti; a job átvételekor / hibánál törli.
 - **Mérőszkript:** a régi lépésgép körszám-mérője (`scripts/studio/baseline-metrics.mts`) kivezetve.
 - **Teszt:** a HTML-publikálási kapu (`verifyLessonMethodHtml`, kikommentelt bank elutasítása) állításai helyben előállított bemenettel vissza.
+
+## Átvilágítás utáni javítások (J1–J5) — terv: `2026-10-16-egyfutas-atvilagitas.md`
+Ág: `feat/egyfutas-javitasok`. Szeletenként commit; kapuk: tsc, check:test, lint, test, DB-test, build, e2e.
+
+### J1 — válaszkulcs-teszt a pontozó korlátja szerint (`shared/answer-key-tests.ts`, `server/studio/answer-key-writer.ts`)
+- `wrongIndistinguishable(task, wrong, correct)`: igaz, ha a hibás válasz pontozó-tokenjei (a pontozó normalizálása + szótövezése)
+  lefedik egy TELJES pontos helyes válasz összes tokenjét → semmilyen szócsoport-rubrika nem utasíthatja el.
+- `answerKeyProblems` ezt a hibás esetet nem jelenti blokkolóként; `answerKeyNotes` adja vissza tájékoztatásként (napló, telemetria).
+- `ANSWER_KEY_SYSTEM`: minden hibás válasz tartalmazzon legalább egy olyan tartalmi szót, amely egyik helyes válaszban sincs (különben a
+  pontozó nem tudja megkülönböztetni); a „fordított” fajta a fogalmat cserélje, ne csak a sorrendet.
+- Tesztek: a mért példák (Felső/Alsó-Egyiptom, fordított osztó) nem blokkolnak; valódi túl megengedő rubrika továbbra is blokkol.
+
+### J2 — friss, célzott beszélgetések (`single-run/engine.ts`, `live.ts`, `concept-fix.ts`, `structured-improvement.ts`)
+- `SingleRunDeps.fresh(system)`: új, előzmény nélküli `LessonConversation` (ugyanaz a modellpár). A `checkConversation` ebbe olvad.
+- Bank: a `buildLessonExperience` `call`-ja hívásonként friss beszélgetés (`BANK_SYSTEM_PROMPT`; a csomag kérése önálló). A
+  `RetryableBankCallError` szabály változatlan.
+- Lektor: körönként friss beszélgetés: a forrás átirata (a térkép `sourceText`-je), a lektor-kérés (`buildLektorPrompt`, az előző kör
+  blokkolóival), a szerep runbookja. A lektori tanítás-javítás a fő beszélgetésben marad.
+- Fogalom- és leckejavítás: a bank és a lektor szerepe ugyanígy friss beszélgetésben.
+
+### J3 — telemetria (`single-run/telemetry.ts`, engine, `/jobs/:id`, `JobMonitor`, `scripts/measure/single-run-measure.mts`)
+- `RunTelemetry`: állomásonként `{ turns, fixTurns, input, cached, output, ms }`; `fresh: { calls, input, cached, output }`;
+  `gates: { answerKeyNotes, answerKeyFails, quizBlindRemoved, lektorRemoved, lengthOverBudget }`; `fallback`; `totalMs`; `model`.
+- Minden mentéskor és a végén `output.telemetry`; a `GET /jobs/:id` `produced.telemetry`-ként adja; a JobMonitor kompakt táblában mutatja.
+- A mérőszkript a telemetriából és a `measureLesson`-ből ír JSON-t (eldobható DB, éles DB-t csak olvas).
+
+### J4 — egyszerűsített állomás-kérések (`server/studio/step-io.ts`)
+- „Te vagy a pedagógus …”, „Te vagy a SZERZŐ …”, „You are the Animator …” → állomás-fejléc magyarul, egyetlen szerepre; a más szerepekre
+  (szerző / ábrakészítő / lektor munkája) utaló átadás-szöveg kikerül. Tartalmi szabály nem változik.
+
+### J5 — folytatás és szókeret
+- `runSingleLesson` `resume: { jobId }`: a job mentett `output`-jából (terv, lecke, bank-ellenőrzőpont, beszélgetés-állapot) az utolsó
+  lezárt állomás után indul, ugyanazzal a jobbal. A `/jobs/:id/resume` és a draft „Folytatás” egyfutásos jobnál ezt hívja (a
+  `jobStopInfo.resumable` igaz, ha van mentett tanítás és nincs közzétéve); régi jobnál marad az újragyártás.
+- Szókeret: túllépésnél egy rövidítő javító forduló a fő beszélgetésben; ha az eredmény érvényes és rövidebb, az megy tovább, különben
+  az eredeti marad a jelzéssel.
+
+### Állapot (2026-10-16)
+- J1 `40e7acb`, J2+J3 `aa8a5f4`, J4 `6bdc60c`, J5 `3463b03`.
+- Megvalósítási pontosítások:
+  - J2: a szerzői rendszerprompt csak a terv-, a szerző- és az ábra-skillt hordozza; a bank és a lektor a saját friss promptját kapja
+    (`freshSystemPrompt`). A lektor minden kör előtt friss beszélgetést kap, az előző kör blokkolóival.
+  - J3: a telemetria típusa és a felület nézete a `shared/run-telemetry.ts`-ben van.
+  - J5: a folytatás pontját a mentett kimenet adja (`resumePointOf`); a foglalás atomikus (`resumeSingleRun`). Ha a motor el sem
+    indul, a job visszaáll hibás állapotba.
+- Ellenőrzés:
+  - unit: 2006/2006;
+  - DB: 31/31;
+  - célzott Playwright (workers=1): 18/18;
+  - tsc, check:test, lint: tiszta.
