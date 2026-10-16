@@ -45,18 +45,24 @@ Termékkód, pontozó- vagy promptváltozás. Ez csak mérés.
 ## Eredmény (2026-10-16)
 Adat: `docs/measurements/2026-10-16-szinonimaszotar.json`. 188 feladat, 4 job, 4 különböző tantárgy (biológia, történelem, matematika, környezetismeret).
 
-| Változat | Bukó helyes (alap: 298) | Hibás átmegy (alap: 18) | Alkalmazva / őr elutasította |
-|---|---:|---:|---|
-| (a) más jobokból tanult szótár | 298 | 18 | 4 / 0 feladat |
-| (b) csak azonos tantárgy | 298 | 18 | 0 (nincs azonos tárgyú másik job) |
-| (c) felső becslés: ugyanannak a jobnak más feladatai | 291 (−2,3%) | 18 | 42 / 26 feladat |
+Review #254 után újramérve. Az őr BEJEGYZÉSENKÉNT dönt: egy veszélyes szó nem veti el a többit. A szótárméret változatonként szerepel.
+
+| Változat | Bukó helyes (alap: 298) | Hibás átmegy (alap: 18) | Alkalmazva / őr elutasított | Szótárméret |
+|---|---:|---:|---|---:|
+| (a) más jobokból tanult szótár | 298 | 18 | 4 / 0 feladat | 18 (foldonként 9–17) |
+| (b) csak azonos tantárgy | **eldönthetetlen** | — | 0: nincs azonos tárgyú másik job | 0 |
+| (c) felső becslés: ugyanannak a jobnak más feladatai | 282 (−5,4%) | 18 | 59 / 26 feladat | 18 |
 
 - **Lecke-közi átvitel nincs.** Más tantárgyból tanult szó nem segít, azonos tárgyú tanulóadat pedig most nincs.
 - **A tanulás zajos.** 188 feladatból 18 bejegyzés lett, ezek egy része téves. Ilyen a „növény” ↔ „törő” és az „élén” ↔ „voltak”; az őr 26 feladatnál utasította el őket.
   A helyes válasz több szóban tér el a rubrikától, ezért egyetlen szópár ritkán javítja.
 - **Döntőbírói forrás:** az `arbiter_verdicts` táblában élesben 1 „helyes” ítélet van. A tábla az adatminimalizálás miatt (T7) a válasz szövegét nem tárolja, így jelen formájában nem tanulási forrás.
 
-**Következtetés:** a döntési küszöböt (a (b) változat ≥ 15%-os javulása) egyik változat sem éri el. Automatikusan bányászott szótárt most nem érdemes építeni.
+**Következtetés (review #254 után pontosítva):**
+- **A döntő (b) változat a mostani adaton NEM mérhető.** Üres szótárral futott, így a 298 alapvonal, nem mért nulla hatás.
+- A lecke-közi átvitel (a) más tantárgy között nincs.
+- A (c) felső becslés −5,4%, a hibás átengedés nem nő. Ez jelzi, hogy azonos témában lehet haszon, de jóval a 15%-os küszöb alatt.
+- A szótár építéséről tehát a mostani adat nem dönt. Azonos tantárgyú, külön leckékből származó jobok kellenek: ezt kéri a halasztási döntés is.
 
 A javaslat lehetséges folytatásai (tulajdonosi döntés):
 - **(1) Halasztás:** újramérés, amikor tantárgyanként legalább 5–10 gyártás összegyűlt (a mérőeszköz kész).

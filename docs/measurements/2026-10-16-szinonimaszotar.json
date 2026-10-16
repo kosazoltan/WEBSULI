@@ -13,6 +13,7 @@
     "wrongPass": 18,
     "appliedTasks": 0,
     "guardRejected": 0,
+    "entries": 0,
     "avgEntriesPerTask": 0
   },
   "variants": {
@@ -21,6 +22,7 @@
       "wrongPass": 18,
       "appliedTasks": 4,
       "guardRejected": 0,
+      "entries": 18,
       "avgEntriesPerTask": 13.7
     },
     "sameSubject": {
@@ -28,17 +30,25 @@
       "wrongPass": 18,
       "appliedTasks": 0,
       "guardRejected": 0,
+      "entries": 0,
       "avgEntriesPerTask": 0
     },
     "sameJobOtherTasks": {
-      "failingCorrect": 291,
+      "failingCorrect": 282,
       "wrongPass": 18,
-      "appliedTasks": 42,
+      "appliedTasks": 59,
       "guardRejected": 26,
+      "entries": 18,
       "avgEntriesPerTask": 4.2
     }
   },
   "learnedEntries": 18,
+  "foldEntries": {
+    "416ad01d": 17,
+    "b3a7ecad": 13,
+    "d6f5d4bc": 9,
+    "e2facc3f": 15
+  },
   "examples": [
     {
       "subject": "Biológia",

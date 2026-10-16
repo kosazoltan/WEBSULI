@@ -54,30 +54,39 @@ function learn(from: Item[]): Entry[] {
 
 const guardOk = (t: OpenTask, c: AnswerKeyCases) => evaluateOpenAnswer(t.sample, t).state === "ok" && c.wrong.every((w) => evaluateOpenAnswer(w.text, t).state !== "ok");
 
-/** A szótár alkalmazása egy feladatra: a hiányzó csoport kiegészül a válasz szótárbeli szavával (ha a csoport egy tagjának tövére van bejegyzés). */
+/**
+ * A szótár alkalmazása egy feladatra, BEJEGYZÉSENKÉNT (review #254): minden jelölt szó külön kerül a hiányzó csoportba, és csak akkor marad,
+ * ha az őr (minta ok, egyik hibás eset sem ok) vele együtt is teljesül — egy veszélyes szó nem veti el a többi, biztonságos bejegyzést.
+ */
 function apply(it: Item, bank: Entry[]): { task: OpenTask; applied: boolean; rejected: boolean } {
-  const wordsFor = (group: readonly string[]) => {
+  let task = it.task;
+  let applied = false, rejected = false;
+  task.required.forEach((group, index) => {
     const stems = new Set(group.flatMap(words).map(stem));
-    return [...new Set(bank.filter((e) => e.groupStems.some((s) => stems.has(s))).map((e) => e.word))];
-  };
-  const required = it.task.required.map((g) => { const extra = wordsFor(g).filter((w) => !g.includes(w)); return extra.length ? [...g, ...extra] : g; });
-  if (JSON.stringify(required) === JSON.stringify(it.task.required)) return { task: it.task, applied: false, rejected: false };
-  const next = { ...it.task, required };
-  return guardOk(next, it.cases) ? { task: next, applied: true, rejected: false } : { task: it.task, applied: false, rejected: true };
+    const candidates = [...new Set(bank.filter((e) => e.groupStems.some((st) => stems.has(st))).map((e) => e.word))].filter((w) => !group.includes(w));
+    for (const word of candidates) {
+      const next = { ...task, required: task.required.map((g, i) => (i === index ? [...g, word] : g)) };
+      if (guardOk(next, it.cases)) { task = next; applied = true; } else rejected = true;
+    }
+  });
+  return { task, applied, rejected };
 }
 
 function measure(bankFor: (it: Item) => Entry[]) {
   let failingCorrect = 0, wrongPass = 0, appliedTasks = 0, guardRejected = 0, entries = 0;
+  const distinct = new Set<string>();
   for (const it of items) {
     const bank = bankFor(it);
     entries += bank.length;
+    for (const e of bank) distinct.add(`${e.jobId}:${e.taskId}:${e.word}`);
     const r = apply(it, bank);
     if (r.applied) appliedTasks++;
     if (r.rejected) guardRejected++;
     failingCorrect += it.cases.correct.filter((a) => evaluateOpenAnswer(a, r.task).state !== "ok").length;
     wrongPass += it.cases.wrong.filter((w) => evaluateOpenAnswer(w.text, r.task).state === "ok").length;
   }
-  return { failingCorrect, wrongPass, appliedTasks, guardRejected, avgEntriesPerTask: +(entries / items.length).toFixed(1) };
+  // Review #254: a szerződés szerinti szótárméret (a változat összes különböző bejegyzése) az átlag mellett.
+  return { failingCorrect, wrongPass, appliedTasks, guardRejected, entries: distinct.size, avgEntriesPerTask: +(entries / items.length).toFixed(1) };
 }
 
 const byJob = new Map(jobIds.map((id) => [id, learn(items.filter((i) => i.jobId !== id))]));
@@ -93,6 +102,7 @@ const result = {
     sameJobOtherTasks: measure((it) => allEntries.filter((e) => e.jobId === it.jobId && e.taskId !== it.task.id)),
   },
   learnedEntries: allEntries.length,
+  foldEntries: Object.fromEntries([...byJob].map(([id, b]) => [id.slice(0, 8), b.length])),
   examples: allEntries.slice(0, 15).map((e) => ({ subject: e.subject, group: e.groupStems.slice(0, 4), word: e.word })),
   arbiterCorrectVerdicts,
 };
