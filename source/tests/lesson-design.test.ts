@@ -44,6 +44,14 @@ test("a CSS ugyanazokat az értékeket adja ki, mint a TS-tokenek (egy forrás, 
   }
 });
 
+const tokenBlock = (sel: string) => { const at = css.indexOf(sel); assert.ok(at >= 0, sel); return css.slice(at, css.indexOf("}", at)); };
+const cssToken = (id: DesignThemeId, prop: string) => {
+  const pick = (block: string) => new RegExp(`${prop}:\\s*(#[0-9A-Fa-f]{6})`).exec(block)?.[1];
+  const v = pick(tokenBlock(`[data-band][data-experience][data-ws-theme="${id}"] {`)) ?? pick(tokenBlock("[data-band][data-experience][data-ws-theme] {"));
+  assert.ok(v, `${id}: ${prop}`);
+  return v!;
+};
+
 const secondaryOf = (id: DesignThemeId): Array<[string, string]> => {
   const blockOf = (sel: string) => { const at = css.indexOf(sel); return css.slice(at, css.indexOf("}", at)); };
   const pick = (block: string, prop: string) => new RegExp(`${prop}:\\s*(#[0-9A-Fa-f]{6})`).exec(block)?.[1];
@@ -67,6 +75,8 @@ test("minden téma minden szövegpárja ≥ 4,5:1, a grafikus főszín ≥ 3:1 (
       [t.accent, t.panel, "főszín grafika a csempén", 3],
       // A másodlagos gomb a CSS-ből (mérve élesben: a 11–12. o. sötét témáján a régi átlátszó gomb 3,11:1 volt).
       ...secondaryOf(id).map(([fg, bg]) => [fg, bg, "másodlagos gomb", 4.5] as [string, string, string, number]),
+      // Review #267: a haladássáv kitöltése a sínen (grafikus állapotjelző) — a sín a CSS-ből.
+      [t.accent, cssToken(id, "--ws-track"), "haladássáv kitöltése a sínen", 3],
     ];
     for (const [fg, bg, what, min] of pairs) {
       const r = contrastRatio(fg, bg);
@@ -88,4 +98,23 @@ test("a törzsszöveg legkisebb mérete a mesterutasítás szerint (§2.5): 1–
 test("a témás lecke nem animál, és a fókusz a referencia 3px-es borostyán kerete", () => {
   assert.doesNotMatch(css, /animation\s*:/);
   assert.match(css, /:focus-visible \{\s*outline: 3px solid #F4AB37; outline-offset: 3px;/);
+});
+
+// Review #267: a fejezetsorszám (1rem-es szöveg) a kimért fő gombpárt kapja, nem a nyers főszínen fehéret.
+test("a fejezetsorszám a kontrasztos fő gombpárral jelenik meg", () => {
+  assert.match(css, /\.lesson-section-no \{ background: var\(--ws-strong\); color: var\(--ws-strong-ink\);/);
+});
+
+// Review #267: a Csendes nézet a témás leckén is tompít — a kapcsoló a --ws-* tokeneket írja felül, és a párjai olvashatók.
+test("a Csendes nézet a témás tokeneket is felülírja, és a halk paletta szövegpárjai ≥ 4,5:1", () => {
+  const block = tokenBlock('[data-band][data-experience][data-ws-theme]:has(.fusion-view[data-quiet="true"]) {');
+  const tok = (prop: string) => { const v = new RegExp(`${prop}:\\s*(#[0-9A-Fa-f]{6})`).exec(block)?.[1]; assert.ok(v, prop); return v!; };
+  const problems: string[] = [];
+  for (const [fg, bg, min] of [["--ws-ink", "--ws-surface", 4.5], ["--ws-ink", "--ws-panel", 4.5], ["--ws-muted", "--ws-panel", 4.5], ["--ws-strong-ink", "--ws-strong", 4.5],
+    ["--ws-secondary-ink", "--ws-secondary-bg", 4.5], ["--ws-deep", "--ws-soft", 4.5], ["--ws-accent", "--ws-track", 3]] as Array<[string, string, number]>) {
+    const r = contrastRatio(tok(fg), tok(bg));
+    if (r < min) problems.push(`${fg} / ${bg} = ${r.toFixed(2)}`);
+  }
+  assert.deepEqual(problems, []);
+  assert.match(block, /background-image: none;/);
 });

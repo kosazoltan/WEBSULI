@@ -38,8 +38,13 @@ for (const t of THEMES) {
       // A törzsszöveg a téma minimuma (a tananyag-blokk számított mérete).
       const bodyPx = await page.locator(".lesson-block").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
       expect(bodyPx).toBeGreaterThanOrEqual(t.minPx);
+      // Review #267: a tényleges tananyagszöveg (bekezdések, összefoglaló kártyák, kérdéscím) is legalább a téma minimuma.
+      const smallest = await page.evaluate(() => Math.min(...[...document.querySelectorAll(".lesson-block p:not(.fusion-eyebrow), .lesson-block li, .lesson-recap-card, .fusion-view h3")]
+        .filter((el) => (el as HTMLElement).offsetParent !== null).map((el) => parseFloat(getComputedStyle(el).fontSize))));
+      expect(smallest).toBeGreaterThanOrEqual(t.minPx);
       // A kiválasztott fül és a felső sáv szövege a mért színekből ≥ 4,5:1.
-      expect(await contrastOf(page, ".ws-topbar strong")).toBeGreaterThanOrEqual(4.5);
+      // Review #267: a sávot a saját tömör hátterével mérjük (a <strong> háttere átlátszó lenne).
+      expect(await contrastOf(page, ".ws-topbar")).toBeGreaterThanOrEqual(4.5);
       expect(await contrastOf(page, '.fusion-tabs button[aria-selected="true"]')).toBeGreaterThanOrEqual(4.5);
       // Magyar ő/ű a lecke saját fontjával (nincs tartalékfont-csere a címsorban).
       await expect(page.locator("h1")).toContainText(/[őű]/);
@@ -60,4 +65,28 @@ test("a régi élménytéma és díszítőeffekt nem jelenik meg (az arculatot a
   await expect(page.locator("[data-experience]")).toHaveAttribute("data-experience", "websuli");
   await expect(page.locator(".lesson-sparkles")).toHaveCount(0);
   await expect(page.locator("[data-flair]")).toHaveCount(0);
+});
+
+// Review #267: élmény (borítóábra) nélküli leckén a fejléc nem hagy üres oszlopot, az embléma látszik.
+test("borítóábra nélküli lecke: nincs üres második fejlécoszlop, az embléma látható", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/__lesson-runtime-probe?classroom=7");
+  await expect(page.locator(".lesson-cover-art")).toHaveCount(0);
+  await expect(page.locator(".lesson-hero > .lesson-emblem")).toBeVisible();
+  const cols = await page.locator(".lesson-hero").evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
+  expect(cols).toBe(2);
+  const h1w = await page.locator(".lesson-hero h1").evaluate((el) => el.getBoundingClientRect().width);
+  const herow = await page.locator(".lesson-hero").evaluate((el) => el.getBoundingClientRect().width);
+  expect(h1w).toBeGreaterThan(herow * 0.6);
+});
+
+// Review #267: a Csendes nézet a témás leckén is tompít (a sötét 11–12. o. téma is világos, halk felületre vált).
+test("Csendes nézet: a témás lecke a halk palettára vált", async ({ page }) => {
+  await page.goto("/__lesson-runtime-probe?fusion=1&classroom=11");
+  const root = page.locator("[data-ws-theme]");
+  const before = await root.evaluate((el) => getComputedStyle(el).backgroundColor);
+  await page.locator(".learning-quiet").first().click();
+  await expect(page.locator('.fusion-view[data-quiet="true"]')).toHaveCount(1);
+  await expect(root).toHaveCSS("background-color", "rgb(247, 246, 242)");
+  expect(before).not.toBe("rgb(247, 246, 242)");
 });

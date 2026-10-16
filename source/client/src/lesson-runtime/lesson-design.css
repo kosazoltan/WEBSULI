@@ -28,6 +28,8 @@
   --fusion-secondary: var(--ws-accent);
   background-color: var(--ws-surface);
   background-image: linear-gradient(150deg, var(--ws-surface) 0%, color-mix(in srgb, var(--ws-surface) 40%, #FFFFFF) 70%);
+  /* A 9–10. o. régi senior sávja 32px-es vonalazott papírt rajzolt (lesson-theme.css) — az átmenet a teljes felületet tölti ki. */
+  background-size: auto; background-repeat: no-repeat;
   color: var(--ws-ink);
 }
 
@@ -53,10 +55,22 @@
   --ws-surface: #132540; --ws-accent: #0C929C; --ws-ink: #EFF8FF; --ws-panel: #233956; --ws-soft: #1B3150; --ws-deep: #0B1A2E;
   --ws-muted: #BCD0E4; --ws-line: #35506E; --ws-strong: #0C929C; --ws-strong-ink: #061A22; --grade-size: 16px;
   --ws-title: var(--ws-ink);
-  --ws-secondary-bg: #2C4566; --ws-secondary-ink: #EFF8FF; --ws-track: #3B5267;
+  /* A sín a csempe színe: a főszín-kitöltés rajta 3,13:1 (a grafikus állapotjelző minimuma 3:1, §2.6). */
+  --ws-secondary-bg: #2C4566; --ws-secondary-ink: #EFF8FF; --ws-track: #233956;
   --lesson-ok-bg: #12291B; --lesson-ok-bg-ink: #D9FFE4; --lesson-ok: #86EFAC; --lesson-ok-ink: #062A1C;
   --lesson-warn-bg: #3A2A08; --lesson-warn-ink: #FFE4A8; --lesson-error: #FDA4AF;
   --lesson-check-head: #FBBF24; --lesson-check-head-ink: #1A1400;
+  background-image: none;
+}
+
+/* Csendes nézet: a tompított paletta a témás tokeneken is érvényes (a terv megőrzi a kapcsolót). Minden témán világos, halk. */
+[data-band][data-experience][data-ws-theme]:has(.fusion-view[data-quiet="true"]) {
+  --ws-surface: #F7F6F2; --ws-panel: #FFFEFA; --ws-ink: #28313A; --ws-muted: #535D68; --ws-line: #D5D8D8; --ws-soft: #EEEFEA;
+  --ws-accent: #384F68; --ws-deep: #384F68; --ws-strong: #384F68; --ws-strong-ink: #FFFFFF; --ws-title: var(--ws-deep);
+  --ws-secondary-bg: #EAF0F6; --ws-secondary-ink: #24435D; --ws-track: #DCE6ED;
+  --lesson-ok-bg: #E0F6EC; --lesson-ok-bg-ink: #145537; --lesson-ok: #146B44; --lesson-ok-ink: #FFFFFF;
+  --lesson-warn-bg: #FFF3CF; --lesson-warn-ink: #6D4800; --lesson-error: #9C213A;
+  --lesson-check-head: #B5521A; --lesson-check-head-ink: #FFFFFF;
   background-image: none;
 }
 
@@ -78,6 +92,9 @@
 [data-band][data-experience][data-ws-theme] .lesson-hero::after { content: none; }
 [data-ws-theme] .lesson-hero h1 { color: var(--ws-title); font-weight: 850; letter-spacing: -0.02em; }
 [data-band][data-experience][data-ws-theme] .lesson-emblem { background: var(--ws-accent); color: #FFFFFF; box-shadow: none; }
+/* Borítóábra (élmény) nélküli lecke: a fejléc nem hagy üres második oszlopot, és az embléma látszik. */
+[data-band][data-experience][data-ws-theme] .lesson-hero:not([data-cover]) { grid-template-columns: auto minmax(0, 1fr); min-height: 0; }
+[data-band][data-experience][data-ws-theme] .lesson-hero:not([data-cover]) > .lesson-emblem { display: grid; }
 [data-ws-theme] .lesson-chip {
   font-size: 13px; font-weight: 700; border-radius: 11px; padding: 5px 11px;
   background: var(--ws-soft); color: var(--ws-title); font-family: var(--lesson-font-body);
@@ -92,13 +109,18 @@
 }
 /* A régi évfolyamréteg (lesson-experience.css) közvetlenül a blokkra ír méretet — a téma minimuma ezt felülírja (§2.5). */
 [data-band][data-experience][data-ws-theme] .lesson-block { font-size: var(--grade-size); --lesson-radius: 16px; }
+/* A saját méretű tananyagszöveg (a sáv `text-*` osztálya, az összefoglaló kártya, a kérdés címe) sem marad a téma minimuma alatt. */
+[data-band][data-experience][data-ws-theme] .lesson-block :is(p, li):not(.fusion-eyebrow),
+[data-band][data-experience][data-ws-theme] .lesson-recap-card { font-size: var(--grade-size); }
+[data-band][data-experience][data-ws-theme] .fusion-view h3 { font-size: max(var(--grade-size), 1.08rem); }
 [data-band][data-experience][data-ws-theme] .lesson-block[data-block="recap"] { background: var(--ws-soft); }
 [data-band][data-experience][data-ws-theme] .lesson-block-head {
   background: transparent; color: var(--ws-title); padding: 0; border-radius: 0;
   font-size: 15px; font-weight: 700; letter-spacing: 0; text-transform: none; font-family: var(--lesson-font-body);
 }
 [data-band][data-experience][data-ws-theme] .lesson-block[data-block="check"] .lesson-block-head { background: transparent; color: var(--ws-title); }
-[data-ws-theme] .lesson-section-no { background: var(--ws-accent); color: #FFFFFF; box-shadow: none; }
+/* A sorszám 1rem-es szöveg: a kimért fő gombpár (a nyers főszínen a fehér a 3–5. és 11–12. o. témáján 4,5:1 alatti). */
+[data-ws-theme] .lesson-section-no { background: var(--ws-strong); color: var(--ws-strong-ink); box-shadow: none; }
 
 /* ---------- gombok (a referencia `btn` / `btn.secondary` mintája) ---------- */
 [data-ws-theme] .fusion-primary {

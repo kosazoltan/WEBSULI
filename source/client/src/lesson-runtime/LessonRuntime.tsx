@@ -509,7 +509,7 @@ export function LessonRuntime({
           <strong>✦ Websuli / {DESIGN_THEMES[designTheme].name}</strong>
           <span>{DESIGN_TOPBAR_TAGLINE}</span>
         </div>
-        <header className="lesson-hero">
+        <header className="lesson-hero" data-cover={lesson.experience ? "art" : undefined}>
           <div className="lesson-emblem" aria-hidden>
             <Leaf className="w-7 h-7" />
           </div>
