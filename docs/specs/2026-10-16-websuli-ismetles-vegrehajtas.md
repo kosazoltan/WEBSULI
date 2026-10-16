@@ -67,3 +67,9 @@ adat és szerver**, **D — felület**. A parancsok a `source/` mappából futna
    - bejelentkezve (`page.route` mock): a „Mentve” csak 200 után látszik; 500-nál újrapróbálás;
    - mind az öt téma 390 / 768 / 1440 px-en: nincs kilógás, kontraszt, képernyőkép a `test-results/websuli-design/`-ba.
 5. **Kapuk:** tsc, lint, unit, célzott Playwright (workers=1), képernyőkép-ellenőrzés.
+
+## Állapot (2026-10-16)
+- **C — kész, mérve:**
+  - unit 2036/2036, valódi Postgres DB 38/38 (a 0027-es migráció kétszer fut le);
+  - tsc, check:test, lint: tiszta.
+  - A kliens állapotot nem küldhet: a `dueAt` mező 400-at ad (HTTP-teszt).
