@@ -133,7 +133,10 @@ export default function DraftLessons() {
                 </p>
               )}
               {/* D4: a három készítési szakasz — futásnál a mostani lépés, megállásnál a megállás helye. */}
-              <CreationProgress run={d.running || d.awaitingApproval ? { phase: d.step, detail: null, error: null } : { phase: "error", detail: null, error: null, ...(d.stoppedAt ? { stoppedAt: d.stoppedAt } : {}) }} />
+              {/* K4: a tervre váró tétel NEM fut — a szakaszjelző „várakozik” (nem forgó, nem aktív). */}
+              <CreationProgress run={d.running ? { phase: d.step, detail: null, error: null }
+                : d.awaitingApproval ? { phase: "waiting", detail: null, error: null, stoppedAt: d.step }
+                : { phase: "error", detail: null, error: null, ...(d.stoppedAt ? { stoppedAt: d.stoppedAt } : {}) }} />
               {d.running ? (
                 <p className="text-sm flex items-center gap-2" data-testid="draft-running" role="status"><Loader2 className="w-4 h-4 animate-spin" /> Folyamatban — a lista magától frissül.</p>
               ) : d.awaitingApproval ? (

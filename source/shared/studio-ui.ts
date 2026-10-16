@@ -400,13 +400,15 @@ const STAGE_OF_STEP: Record<string, number> = {
 export function lessonCreationStages(run: OneStepRunView) {
   // A megszakadt piszkozat (draft) ugyanott áll, ahol a régi gyártás megállt (docs/specs/2026-10-15-hiba-gombok.md).
   const stopped = run.phase === "error" || run.phase === "parked" || run.phase === "draft";
+  // docs/specs/2026-10-16-bankhiba-kivetel.md (K4): a döntésre (pl. tervjóváhagyásra) váró gyártás NEM fut — a szakasza „pending”.
+  const waiting = run.phase === "waiting";
   // error/parked alone do not identify the failed phase. Do not invent completed stages — only the server's recorded stop step does.
-  const failed = stopped && run.stoppedAt !== undefined ? STAGE_OF_STEP[run.stoppedAt] ?? -1 : -1;
+  const failed = (stopped || waiting) && run.stoppedAt !== undefined ? STAGE_OF_STEP[run.stoppedAt] ?? -1 : -1;
   const current = failed >= 0 ? failed : LESSON_CREATION_STAGES.findIndex(s => (s.phases as readonly string[]).includes(run.phase));
   return LESSON_CREATION_STAGES.map((stage, index) => ({
     key: stage.key, label: stage.label,
     state: run.phase === "done" || (current >= 0 && index < current) ? "done" as const
-      : index === current ? (failed >= 0 ? "error" as const : "active" as const) : "pending" as const,
+      : index === current ? (waiting ? "pending" as const : failed >= 0 ? "error" as const : "active" as const) : "pending" as const,
   }));
 }
 

@@ -180,6 +180,8 @@ test("a tanulási terv jóváhagyására váró job látszik, és egyetlen kér�
   const item = page.getByTestId("draft-item-job-wait");
   await expect(item.getByTestId("draft-badge")).toHaveText("A tanulási terv jóváhagyására vár");
   await expect(item.getByTestId("draft-awaiting-approval")).toBeVisible();
+  // K4: a tervre váró tétel NEM fut — nincs aktív (forgó) szakasz.
+  await expect(item.getByTestId("creation-progress").locator('li[data-state="active"]')).toHaveCount(0);
   await expect(item.getByTestId("draft-discard-job-wait")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
