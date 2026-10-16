@@ -208,3 +208,36 @@ test("draft-kezelés (D1–D5): törlés, kötegelt törlés, gazdátlan és ké
     if (ownerless.length) await dbPool.query("DELETE FROM studio_jobs WHERE map_id IN (SELECT map_id FROM studio_jobs WHERE id = ANY($1))", [ownerless]);
   }
 });
+
+test("újragyártás jóváhagyása (J2): a tervre váró saját job látszik, folytatható jelzéssel és törölhető; másé nem látszik", async () => {
+  await dbPool.query("DELETE FROM users WHERE id = 'draft-appr'");
+  await dbPool.query("INSERT INTO users(id,email,is_admin) VALUES ('draft-appr','appr@test.invalid',true)");
+  const created: string[] = [];
+  try {
+    const map = (await dbPool.query("INSERT INTO knowledge_maps(title,subject,classroom,source_files,input_hash) VALUES ('Terv','matematika',6,'[]'::jsonb,'appr-hash') RETURNING id")).rows[0].id as string;
+    const job = async (owner: string, output: object) => {
+      const id = (await dbPool.query(`INSERT INTO studio_jobs(map_id,step,status,input_hash,output) VALUES ($1,'author','ok','h',$2::jsonb) RETURNING id`, [map, JSON.stringify(output)])).rows[0].id as string;
+      await dbPool.query("INSERT INTO lesson_workflow_runs(id,owner_id,state,snapshot) VALUES ($1,$2,'waiting','{}'::jsonb)", [id, owner]);
+      created.push(id);
+      return id;
+    };
+    const waiting = await job("draft-appr", { outline: { sections: [] }, remanufacturedFrom: "x" });
+    const approvedAlready = await job("draft-appr", { outline: { sections: [] }, approvedOutline: { sections: [] } });
+    const foreign = await job("draft-other", { outline: { sections: [] } });
+    const list = await ownerDrafts("draft-appr");
+    const w = list.find((d) => d.jobId === waiting);
+    assert.ok(w, "a tervre váró job a listában");
+    assert.equal(w!.awaitingApproval, true);
+    assert.equal(w!.running, false);
+    assert.equal(w!.title, "Terv");
+    assert.ok(!list.some((d) => d.jobId === approvedAlready), "a már jóváhagyott (nem váró, nem futó) nem jelenik meg ebben az ágban");
+    assert.ok(!list.some((d) => d.jobId === foreign), "másik admin jobja nem látszik");
+    assert.equal(await discardDraft(foreign, "draft-appr"), false);
+    assert.equal(await discardDraft(waiting, "draft-appr"), true, "a tervre váró saját job törölhető");
+    assert.ok(!(await ownerDrafts("draft-appr")).some((d) => d.jobId === waiting));
+  } finally {
+    await dbPool.query("DELETE FROM studio_jobs WHERE id = ANY($1)", [created]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE input_hash = 'appr-hash'");
+    await dbPool.query("DELETE FROM users WHERE id = 'draft-appr'");
+  }
+});

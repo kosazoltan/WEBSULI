@@ -501,7 +501,7 @@ async function workflowVisitsOfJob(jobId: string): Promise<{ visits: Array<{ ste
 
 /** docs/specs/2026-10-15-admin-tananyag-draft.md + 2026-10-16-draft-kezeles.md: az admin „Tananyag draft” listájának egy tétele. */
 export type OwnerDraft = { jobId: string; title: string; subject: string; classroom: number; draft: OneStepDraft | null; running: boolean;
-  error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean } & JobStopInfo;
+  error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean; awaitingApproval: boolean } & JobStopInfo;
 
 /**
  * docs/specs/2026-10-16-draft-kezeles.md: a belépett admin által kezelhető job — nincs olyan workflow-sora, amelynek MÁS a gazdája
@@ -530,7 +530,8 @@ export async function ownerDraftTotal(owner: string): Promise<number> {
     LEFT JOIN LATERAL (SELECT w.owner_id FROM lesson_workflow_runs w WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1) wr ON true
     WHERE coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
       AND ((j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
-        OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '2 days' AND wr.owner_id = ${owner}))`);
+        OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '2 days' AND wr.owner_id = ${owner})
+        OR (j.status = 'ok' AND j.step = 'author' AND j.output ? 'outline' AND NOT j.output ? 'approvedOutline' AND j.created_at > now() - interval '7 days' AND wr.owner_id = ${owner}))`);
   return Number((rows[0] as { n?: number } | undefined)?.n ?? 0);
 }
 
@@ -548,22 +549,25 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
       AND (
         (j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
         OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '2 days' AND wr.owner_id = ${owner})
+        -- J2: a saját, tanulási terv jóváhagyására váró job (pl. a javítás előtti újragyártás) — látszik és folytatható.
+        OR (j.status = 'ok' AND j.step = 'author' AND j.output ? 'outline' AND NOT j.output ? 'approvedOutline' AND j.created_at > now() - interval '7 days' AND wr.owner_id = ${owner})
       )
     ORDER BY (j.status IN ('pending', 'running')) DESC, j.created_at DESC LIMIT ${DRAFT_LIST_LIMIT}`);
   const out: OwnerDraft[] = [];
   for (const raw of rows as Array<Record<string, unknown>>) {
     const job = { output: raw.output, publishedAt: null, step: String(raw.step), status: String(raw.status), error: (raw.error as string | null) ?? null,
       lessonId: (raw.lesson_id as string | null) ?? null };
-    const running = job.status !== "error" && job.step !== "error";
+    const awaitingApproval = decideOneStepAction({ step: job.step, status: job.status, output: (raw.output ?? null) as Record<string, unknown> | null }) === "approve";
+    const running = job.status !== "error" && job.step !== "error" && !awaitingApproval;
     const { visits, executions } = parseWorkflowVisits({ visits: raw.wf_visits, executions: raw.wf_executions });
     const lessonTitle = (raw.output as { lesson?: { title?: unknown } } | null)?.lesson?.title;
     const ownerless = !raw.wf_owner;
-    const stop = running ? { resumable: false } : jobStopInfo(job, visits, executions);
+    const stop = running || awaitingApproval ? { resumable: false } : jobStopInfo(job, visits, executions);
     out.push({
       jobId: String(raw.id), title: typeof lessonTitle === "string" && lessonTitle.trim() ? lessonTitle : String(raw.map_title ?? "Névtelen tananyag"),
       subject: String(raw.subject ?? ""), classroom: Number(raw.classroom ?? 0), draft: draftSummaryOf(raw.output), running,
       error: running ? null : job.error, updatedAt: new Date(String(raw.updated_at)).toISOString(), step: job.step,
-      ownerless, hasPublished: raw.has_published === true,
+      ownerless, hasPublished: raw.has_published === true, awaitingApproval,
       // A gazdátlan job workflow-napló nélkül a mentett részekből nem folytatható (driveTracked) — nála csak újragyártás és törlés van.
       ...stop, ...(ownerless ? { resumable: false } : {}),
     });
@@ -575,7 +579,8 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
 export async function discardDraft(jobId: string, owner: string): Promise<boolean> {
   const { rows } = await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb)
       || jsonb_build_object('recoveryState', 'discarded', 'discardedAt', now()::text, 'discardedBy', ${owner}::text)
-    WHERE j.id = ${jobId} AND j.status = 'error' AND ${notBeingDriven}
+    WHERE j.id = ${jobId} AND ${notBeingDriven}
+      AND (j.status = 'error' OR (j.status = 'ok' AND j.step = 'author' AND j.output ? 'outline' AND NOT j.output ? 'approvedOutline'))
       AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL)
       AND ${manageableBy(owner)} RETURNING j.id`);
   return (rows as unknown[]).length > 0;
@@ -632,6 +637,17 @@ lessonPipelineRouter.post("/drafts/discard-published", async (req: Request, res:
   const discarded = await discardDraftsWithPublished(req.user!.id, expected);
   if (discarded === null) return res.status(409).json({ message: "A törlendő piszkozatok köre közben megváltozott — nézd át újra a listát." });
   res.json({ discarded });
+});
+
+/** J2/J3: POST /api/studio/drafts/:jobId/continue — a saját, tervre váró job folytatása a terv gépi jóváhagyásával. */
+lessonPipelineRouter.post("/drafts/:jobId/continue", async (req: Request, res: Response) => {
+  const owner = req.user!.id;
+  const { rows } = await db.execute(sql`SELECT j.id FROM studio_jobs j
+    LEFT JOIN LATERAL (SELECT w.owner_id FROM lesson_workflow_runs w WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1) wr ON true
+    WHERE j.id = ${req.params.jobId} AND ${notBeingDriven} AND coalesce(j.output->>'recoveryState', '') <> 'discarded' AND (j.status = 'ok' AND j.step = 'author' AND j.output ? 'outline' AND NOT j.output ? 'approvedOutline' AND j.created_at > now() - interval '7 days' AND wr.owner_id = ${owner})`);
+  if (!rows.length) return res.status(409).json({ message: "Ez a job nem vár a tanulási terv jóváhagyására (vagy másik készítőhöz tartozik)." });
+  void driveRemade(req.params.jobId, owner, false).catch((e) => logger.warn(`[STUDIO] A folytatás megállt (${req.params.jobId}): ${e instanceof Error ? e.message : String(e)}`));
+  res.status(202).json({ jobId: req.params.jobId });
 });
 
 /** D3: POST /api/studio/drafts/:jobId/remake — teljes újragyártás ugyanabból a forrásból (a nem folytatható és a gazdátlan piszkozatnál is). */
@@ -1147,49 +1163,64 @@ export async function driveOneStep(runId: string, jobId: string, gapNote: string
       return;
     }
     if (action === "approve") {
-      const outline = (job.output as { outline?: unknown } | null)?.outline;
-      const approved = await approveOutline(jobId, outline);
-      if (!approved.ok) {
-        // LS-7 (#189): a fedettségi hiány NEM parkol emberre. A gép javító kört
-        // fut; ha a kör-limitet is kimerítette, a vázlatot a mért hiánnyal
-        // ELFOGADJUK — a tananyag elkészül, a hiány jelzés lesz. (Mérve: a
-        // tulajdonos képernyőképén itt állt meg "Nem hagyható jóvá" hibával.)
-        const decision = autonomousDecision({
-          reason: "coverage",
-          round: job.round,
-          detail: approved.reason,
-        });
-        if (decision.action === "retry") {
-          logger.warn(
-            `[STUDIO/1STEP] Fedettségi hiány, gépi javító kör ${decision.nextRound}: ${approved.reason}`,
-          );
-          updateRun(runId, {
-            phase: "pedagogue",
-            detail: `Gépi javítás (${decision.nextRound}. kör): ${approved.reason}`,
-          });
-          const retried = await retryOutlineRound(jobId, decision.nextRound ?? job.round + 1);
-          if (!retried) {
-            updateRun(runId, { phase: "error", error: `A javító kör nem indult el: ${approved.reason}` });
-            return;
-          }
-          continue;
-        }
-        logger.warn(`[STUDIO/1STEP] Fedettségi hiány elfogadva jelzéssel: ${approved.reason}`);
-        const forced = await forceApproveOutline(jobId, outline, {
-          reason: "coverage",
-          note: decision.note ?? "A vázlat fedettsége hiányos.",
-          round: job.round,
-        });
-        if (!forced) {
-          updateRun(runId, { phase: "error", error: `A vázlat nem menthető: ${approved.reason}` });
-          return;
-        }
+      const result = await autoApproveOutline(jobId, (detail) => updateRun(runId, { phase: "pedagogue", detail }));
+      if (result.outcome === "retry") continue;
+      if (result.outcome === "failed") {
+        updateRun(runId, { phase: "error", error: result.reason });
+        return;
       }
       updateRun(runId, { phase: "author" });
     }
     // action === "continue": loop back into drive()
   }
   updateRun(runId, { phase: "error", error: "A pipeline-lánc nem ért véget a lépés-határon belül." });
+}
+
+/**
+ * LS-7 (#189) + docs/specs/2026-10-16-ujragyartas-jovahagyas.md: a tanulási terv GÉPI jóváhagyása — egy szabály a feltöltéses útnak és az
+ * újragyártásnak. A fedettségi hiány NEM parkol emberre: a gép javító kört fut (`retry` — a pedagógus újra dolgozik); ha a kör-limitet is
+ * kimerítette, a vázlatot a mért hiánnyal ELFOGADJA (a tananyag elkészül, a hiány jelzés lesz).
+ */
+async function autoApproveOutline(jobId: string, onRetry?: (detail: string) => void): Promise<{ outcome: "approved" | "retry" | "failed"; reason: string }> {
+  const [job] = await db.select({ round: studioJobs.round, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId)).limit(1);
+  if (!job) return { outcome: "failed", reason: "A job nem található." };
+  const outline = (job.output as { outline?: unknown } | null)?.outline;
+  const approved = await approveOutline(jobId, outline);
+  if (approved.ok) return { outcome: "approved", reason: "" };
+  const decision = autonomousDecision({ reason: "coverage", round: job.round, detail: approved.reason });
+  if (decision.action === "retry") {
+    logger.warn(`[STUDIO/1STEP] Fedettségi hiány, gépi javító kör ${decision.nextRound}: ${approved.reason}`);
+    onRetry?.(`Gépi javítás (${decision.nextRound}. kör): ${approved.reason}`);
+    const retried = await retryOutlineRound(jobId, decision.nextRound ?? job.round + 1);
+    return retried ? { outcome: "retry", reason: approved.reason } : { outcome: "failed", reason: `A javító kör nem indult el: ${approved.reason}` };
+  }
+  logger.warn(`[STUDIO/1STEP] Fedettségi hiány elfogadva jelzéssel: ${approved.reason}`);
+  const forced = await forceApproveOutline(jobId, outline, { reason: "coverage", note: decision.note ?? "A vázlat fedettsége hiányos.", round: job.round });
+  return forced ? { outcome: "approved", reason: "" } : { outcome: "failed", reason: `A vázlat nem menthető: ${approved.reason}` };
+}
+
+/**
+ * docs/specs/2026-10-16-ujragyartas-jovahagyas.md (J1): az újragyártott (vagy tervre váró) job végigvitele a lízinges `driveTracked`-del —
+ * ha a terv jóváhagyására vár, a lízing alatt gépileg jóváhagy és folytat (mint a `/approve-outline` út). Mért hiba: e nélkül 3 újragyártás
+ * `author/ok`-ban állt meg, láthatatlanul.
+ */
+export async function driveRemade(jobId: string, owner: string, start = true): Promise<void> {
+  let first = start;
+  for (let i = 0; i < MAX_CHAIN; i++) {
+    try {
+      await driveTracked(jobId, owner, first, first ? undefined : async () => {
+        const result = await autoApproveOutline(jobId);
+        if (result.outcome === "failed") throw new WorkflowWaiting(result.reason, true);
+      });
+      return;
+    } catch (error) {
+      if (!(error instanceof WorkflowWaiting)) throw error;
+      first = false;
+      const [job] = await db.select({ step: studioJobs.step, status: studioJobs.status, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId)).limit(1);
+      // Csak a terv-jóváhagyásnál lépünk tovább; más várakozás (pl. forrásellenőrzés) emberi döntés marad.
+      if (!job || decideOneStepAction({ step: job.step, status: job.status, output: (job.output ?? null) as Record<string, unknown> | null }) !== "approve") throw error;
+    }
+  }
 }
 
 /** POST /api/studio/lessons/from-map/:mapId — start a new lesson pipeline. */
@@ -1459,8 +1490,9 @@ async function remanufactureFromMap(jobId: string, owner: string, error: string)
   await db.execute(sql`UPDATE studio_jobs SET output = output || ${JSON.stringify({ remanufacturedAs: started.jobId, recoveryState: "remanufactured", recovery: [...history, step] })}::jsonb
     WHERE id = ${jobId}`);
   logger.warn(`[VEZÉRLŐ] ${jobId}: teljes újragyártás indult ugyanabból a forrásból → ${started.jobId}`);
-  void driveTracked(started.jobId, owner, true).catch((e) => {
+  void driveRemade(started.jobId, owner).catch((e) => {
     if (e instanceof WorkflowConflict) { logger.warn(`[VEZÉRLŐ] Újragyártás átadva (${started.jobId}): ${e.message}`); return; }
+    if (e instanceof WorkflowWaiting) { logger.warn(`[VEZÉRLŐ] Az újragyártás döntésre vár (${started.jobId}): ${e.message}`); return; }
     logger.error(`[VEZÉRLŐ] Az újragyártás megállt (${started.jobId})`, e);
   });
   return started.jobId;
