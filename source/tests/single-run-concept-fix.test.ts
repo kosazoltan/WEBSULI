@@ -86,6 +86,7 @@ test("review #261: a leckejavítás nem JSON válasza javító fordulót kap ugy
   const fake: ModelClient = { model: "claude-opus-5-5", async complete() { return { text: replies.shift()!, model: "claude-opus-5-5", truncated: false }; } };
   const conversation = new LessonConversation("R", fake, null);
   const call = await singleRunRepairCall(conversation);
+  assert.ok(call);
   assert.deepEqual(await call("author", "SZERZŐ", "kérés", "repair"), { ok: true });
   assert.equal(conversation.state().turns.length, 4, "egy javító forduló, ugyanabban a beszélgetésben");
 });
