@@ -39,3 +39,20 @@ A katalógus bekötése, a modell, a promptok, a kvóták.
 - HA `STUDIO_BANK_CONCURRENCY=1`, AKKOR a gyártás soros (a korábbi viselkedés).
 - A haladásjelzés a párhuzamosan készülő csomagok fejezeteit nevezi meg.
 - Élő mérés ugyanazon a forráson: közzétett lecke, és rövidebb bankidő, mint a soros alapvonal (771 s).
+
+## Mért eredmény (2026-10-16, élő mérés, `scripts/measure/single-run-measure.mts`, eldobható DB, valódi Opus 5.5)
+Ugyanaz a forrás (`030a27c0`, Ókori Egyiptom), csak a bank párhuzamossága változott (soros → 3).
+
+| | Soros (J1–J5 után) | Párhuzamos (3) |
+|---|---|---|
+| Eredmény | közzétéve | közzétéve |
+| **Teljes idő** | 1898 s | **1022 s (−46%)** |
+| Bemenet / kimenet (token) | 642 e / 214 e | 621 e / 220 e |
+| Bank: hívások / javító kísérlet / összegzett hívásidő | 11 / – / 771 s | 13 / 7 / 856 s |
+| Ellenőrzés (hívások / összegzett hívásidő) | 23 / 573 s | 31 / 643 s |
+| Lektor kivett banktétel | 4 | 2 |
+| Kötelező tények / fogalmak a leckében | 97% / 91% | 100% / 93% |
+
+Tartalékváltás nem volt. Az összegzett hívásidő a párhuzamos hívások összege; a falióra-időt a teljes idő mutatja. A költség
+(token) gyakorlatilag változatlan; a gyorsulás tisztán a párhuzamosságból jön. A soros futás telemetriája még a javító-kísérlet
+jelölése előtt készült (ott a bank „javító” értéke nem mért). Egy-egy futás: a szóródást a későbbi futások telemetriája mutatja.
