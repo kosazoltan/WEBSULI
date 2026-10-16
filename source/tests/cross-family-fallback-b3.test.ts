@@ -16,7 +16,8 @@ function withEnv(t: TestContext, values: Record<string, string>) {
 }
 
 test("a HTML-modernizálás láncának tartaléka GPT-6.1 Sol, és a régi streamChat-út medium effortot küld", async t => {
-  assert.deepEqual([...LEGACY_MODELS.improve], ["claude-opus-5", "gpt-6.1-sol"]);
+  // Spec-változás 2026-10-16 (docs/specs/2026-10-16-egy-futas.md, S4a, tulajdonosi döntés): csak Opus 5.5 és GPT-6.1 Sol marad. A tartalék továbbra is az ellentétes családú GPT-6.1 Sol.
+  assert.deepEqual([...LEGACY_MODELS.improve], ["claude-opus-5-5", "gpt-6.1-sol"]);
   withEnv(t, { AI_INTEGRATIONS_OPENAI_API_KEY: "test-placeholder" });
   const bodies: Record<string, unknown>[] = [];
   t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {

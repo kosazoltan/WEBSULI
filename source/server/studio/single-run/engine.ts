@@ -78,7 +78,7 @@ const text = (t: string): TurnBlock => ({ type: "text", text: t });
  * Egy állomás: kérés → JSON → determinisztikus ellenőrzés → (hiba esetén) visszajelzés ugyanabban a beszélgetésben, legfeljebb
  * SINGLE_RUN_FIX_ROUNDS javító fordulóval. A végén vagy az elfogadott érték, vagy SingleRunError a pontos okokkal.
  */
-async function station<T>(deps: SingleRunDeps, name: string, request: TurnBlock[], validate: (json: unknown) => { ok: true; value: T } | { ok: false; problems: string[] }): Promise<T> {
+export async function runStation<T>(deps: Pick<SingleRunDeps, "conversation" | "log">, name: string, request: TurnBlock[], validate: (json: unknown) => { ok: true; value: T } | { ok: false; problems: string[] }): Promise<T> {
   let blocks = request;
   let problems: string[] = [];
   for (let round = 0; round <= SINGLE_RUN_FIX_ROUNDS; round++) {
@@ -101,12 +101,25 @@ async function station<T>(deps: SingleRunDeps, name: string, request: TurnBlock[
   throw new SingleRunError(name, problems);
 }
 
+/**
+ * A banképítő modellhívása UGYANABBA a beszélgetésbe kötve. Review #260: a modell kimenetének hibája (csonkolt, üres, nem JSON) a
+ * banképítő javító körébe megy (`RetryableBankCallError`); a szolgáltatói hiba változatlanul kilép.
+ */
+export function conversationBankCall(conversation: LessonConversation) {
+  return async (system: string, user: string): Promise<unknown> => {
+    const reply = await conversation.send([text(`5. ÁLLOMÁS — GYAKORLÓBANK (egy fejezet csomagja).\n${system}\n\n${user}`)]);
+    if (reply.truncated) throw new RetryableBankCallError("A bankcsomag válasza elérte a kimeneti keretet és levágódott.");
+    try { return parseModelJson(reply.text).json; }
+    catch (error) { throw new RetryableBankCallError(`A bankcsomag válasza nem értelmezhető JSON: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
+  };
+}
+
 function ownerContextOf(instruction?: string): OwnerContext | undefined {
   return instruction ? { instruction } : undefined;
 }
 
 /** 1. állomás — a forrás beolvasása, megértése, tudásbank (fogalmak szó szerinti idézettel; az idézetet a program az átiraton méri). */
-async function readSource(deps: SingleRunDeps, files: ExtractorFile[], instruction?: string): Promise<SingleRunMap> {
+export async function readSourceStation(deps: Pick<SingleRunDeps, "conversation" | "log">, files: ExtractorFile[], instruction?: string): Promise<SingleRunMap> {
   const request: TurnBlock[] = [
     ...files.map((file): TurnBlock => ({ type: "source", file })),
     text([
@@ -124,7 +137,7 @@ async function readSource(deps: SingleRunDeps, files: ExtractorFile[], instructi
     ].filter(Boolean).join("\n")),
   ];
   const names = files.map((f) => f.name);
-  return station(deps, "forrás és tudásbank", request, (json) => {
+  return runStation(deps, "forrás és tudásbank", request, (json) => {
     const raw = json as Partial<Omit<SingleRunMap, "fileTranscripts">> & { concepts?: Array<Partial<SourceConcept>>; fileTranscripts?: unknown };
     const problems: string[] = [];
     if (!raw || typeof raw !== "object") return { ok: false, problems: ["A válasz nem objektum."] };
@@ -179,7 +192,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   // 1. Forrás + tudásbank.
   await workflowPhase("source"); await workflowPhase("scope");
   phase("extract", "A forrás beolvasása és megértése…");
-  const read = await readSource(deps, input.files, input.instruction);
+  const read = await readSourceStation(deps, input.files, input.instruction);
   await workflowPhase("knowledge");
   const mapId = await deps.saveMap({ ...read, title: input.title?.trim() || read.title }, input.files);
   await workflowPhase("sourceCheck");
@@ -207,7 +220,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   // 2. Tananyagterv.
   await workflowPhase("pedagogue");
   phase("pedagogue", "A tananyagterv készül…");
-  const outline = await station(deps, "tananyagterv", [text(`2. ÁLLOMÁS — TANANYAGTERV.\n${buildPedagoguePrompt(promptMap, undefined, owner)}\nVálaszolj kizárólag a vázlat JSON-jával.`)], (json) => {
+  const outline = await runStation(deps, "tananyagterv", [text(`2. ÁLLOMÁS — TANANYAGTERV.\n${buildPedagoguePrompt(promptMap, undefined, owner)}\nVálaszolj kizárólag a vázlat JSON-jával.`)], (json) => {
     const fixed = autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline;
     const parsed = outlineSchema.safeParse(fixed);
     if (!parsed.success) return { ok: false, problems: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
@@ -233,7 +246,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons)];
     return problems.length ? { ok: false, problems } : { ok: true, value: parsed.data };
   };
-  let lesson = await station(deps, "tananyag", authorRequest([]), validateLesson);
+  let lesson = await runStation(deps, "tananyag", authorRequest([]), validateLesson);
   output = { ...output, lesson };
   await save("animator", output);
 
@@ -255,13 +268,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const openFindings: Array<{ sectionIndex: number; itemId: string; message: string }> = [];
   const buildBank = async (base: Lesson, extra: { reviewFeedback?: ReturnType<typeof resolveBankReview>; previous?: Lesson["experience"] } = {}) =>
     buildLessonExperience(base, concepts, {
-      call: async (system, user) => {
-        const reply = await conversation.send([text(`5. ÁLLOMÁS — GYAKORLÓBANK (egy fejezet csomagja).\n${system}\n\n${user}`)]);
-        // Review #260: a modell kimenetének hibája (csonkolt, üres, nem JSON) a banképítő javító körébe megy; a szolgáltatói hiba változatlan.
-        if (reply.truncated) throw new RetryableBankCallError("A bankcsomag válasza elérte a kimeneti keretet és levágódott.");
-        try { return parseModelJson(reply.text).json; }
-        catch (error) { throw new RetryableBankCallError(`A bankcsomag válasza nem értelmezhető JSON: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
-      },
+      call: conversationBankCall(conversation),
       concurrency: 1,
       ...(checkpoint ? { checkpoint } : {}),
       ...(extra.previous ? { previous: extra.previous } : {}),
@@ -282,7 +289,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const warnings: string[] = [];
   for (let round = 0; round <= SINGLE_RUN_REVIEW_ROUNDS; round++) {
     phase("lektor", `Lektorálás (${round + 1}. kör)…`);
-    const report = await station(deps, "lektorálás", [text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, [], owner)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)],
+    const report = await runStation(deps, "lektorálás", [text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, [], owner)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)],
       (json) => {
         const r = parseLektorResponse(json);
         if (!r.ok) return { ok: false, problems: [r.reason] };
@@ -303,7 +310,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
       // Review #260: a bankleletek a LEKTORÁLT leckén oldódnak fel, és a tanításjavítás utáni banképítés kapja meg őket
       // (a régi indexek nem alkalmazhatók az újraépített bankra).
       const bankFeedback = bankNotes.length ? resolveBankReview(lesson, bankNotes) : [];
-      const fixed = await station(deps, "javított tananyag", authorRequest(teachingNotes), validateLesson);
+      const fixed = await runStation(deps, "javított tananyag", authorRequest(teachingNotes), validateLesson);
       lesson = { ...fixed, experience: await buildBank(fixed, { previous: lesson.experience, ...(bankFeedback.length ? { reviewFeedback: bankFeedback } : {}) }) };
     } else if (bankNotes.length) {
       const split = splitLimitBlockers(lesson, bankNotes);

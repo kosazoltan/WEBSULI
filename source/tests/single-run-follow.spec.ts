@@ -53,3 +53,38 @@ test("térképről indítás → futáskövetés → job-monitor; a hibás job f
   expect(resumed).toBe(2);
   expect(errors).toEqual([]);
 });
+
+test("S4a: a tervre váró régi job jóváhagyása egyfutásos újragyártást indít, és a felület az új futást követi", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", (e) => errors.push(e.message));
+  let approved = 0;
+  const outline = { sections: [{ heading: "A víz útja", conceptIds: ["parolgas"], plannedBlocks: ["explain", "recap"], animationSuggestions: [] }], misconceptions: [] };
+  await page.addInitScript(() => { try { sessionStorage.setItem("websuli.studio.jobId", "job-wait"); } catch { /* tároló nélkül is fut */ } });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let data: unknown = [];
+    if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] };
+    if (path === "/api/csrf-token") data = { csrfToken: "test" };
+    if (path === "/api/studio/maps") data = { maps: [{ id: "map-1", title: "A víz körforgása", subject: "Természettudomány", classroom: 5, status: "approved" }] };
+    if (path === "/api/studio/maps/map-1") data = { map: { id: "map-1" }, concepts: [{ localId: "parolgas", term: "párolgás", examWeight: "core" }] };
+    if (path === "/api/studio/jobs/job-wait") data = { job: { id: "job-wait", step: "author", status: "ok", round: 0, error: null }, produced: { outline, approvedOutline: false } };
+    if (path === "/api/studio/jobs/job-wait/approve-outline") { approved++; return route.fulfill({ status: 202, json: { jobId: "job-wait", runId: "run-3", remanufactured: true } }); }
+    if (path === "/api/studio/lessons/one-step/run-3") data = { phase: "pedagogue", jobId: "job-new", error: null };
+    if (path === "/api/studio/jobs/job-new") data = { job: { id: "job-new", step: "author", status: "running", round: 0, error: null }, produced: {} };
+    await route.fulfill({ json: data });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin?tab=knowledge-maps");
+  const advanced = page.getByTestId("studio-advanced-body");
+  await advanced.getByTestId("lesson-map-select").click();
+  await page.getByRole("option", { name: /A víz körforgása/ }).click();
+  await expect(page.getByTestId("outline-review")).toBeVisible();
+  await page.getByTestId("approve-outline").click();
+  // A régi (tervre váró) job helyett az új futás jobja látszik; a tervnézet eltűnik (az új job még nem ad vázlatot).
+  await expect(page.getByTestId("outline-review")).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId("job-monitor")).toBeVisible({ timeout: 15_000 });
+  expect(await page.evaluate(() => sessionStorage.getItem("websuli.studio.jobId"))).toBe("job-new");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: test.info().outputPath("single-run-approve-follow-390.png"), fullPage: true });
+  expect(approved).toBe(1);
+  expect(errors).toEqual([]);
+});

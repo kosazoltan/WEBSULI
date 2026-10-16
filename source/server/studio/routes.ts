@@ -222,6 +222,17 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
   // Spec 2026-10-06-s7 (K): a kézi kivonatolás `map` workflow-ban fut (forrás → besorolás → tudástár → kapu → visszaolvasás);
   // a futás pillanatképe adja a skillt (korábban: withPreparationSkill, tanulás nélkül).
   const outcome = await runToolWorkflow({ mode: "map", owner: req.user!.id, request: { files: parsed.data.files.map((f) => [f.name, f.kind, f.content.length]), title: parsed.data.title ?? null } }, async () => {
+  // docs/specs/2026-10-16-egy-futas.md (S4a): egyfutásos módban az 1. állomás (forrás és tudásbank) EGY beszélgetésben — a besorolás
+  // és a fogalmak ugyanabból a válaszból; draft térkép a tanári jóváhagyáshoz.
+  const { singleRunEnabled, extractMapSingleRun } = await import("./single-run/live");
+  if (singleRunEnabled()) {
+    await workflowPhase("source"); await workflowPhase("scope"); await workflowPhase("knowledge");
+    const made = await extractMapSingleRun({ files: parsed.data.files as ExtractorFile[], title: parsed.data.title, ownerId: req.user!.id });
+    await workflowPhase("gate"); await workflowPhase("readback");
+    const [saved] = await db.select({ id: knowledgeMaps.id }).from(knowledgeMaps).where(eq(knowledgeMaps.id, made.mapId)).limit(1);
+    if (!saved) throw new Error("A tudástár nem olvasható vissza.");
+    return { value: made, result: { kind: "map" as const, id: made.mapId } };
+  }
   await workflowPhase("source");
   await workflowPhase("scope");
   const inferred=await inferOneStepScope(parsed.data,files=>callScopeModel(files,resolveStudioModel("scope")));

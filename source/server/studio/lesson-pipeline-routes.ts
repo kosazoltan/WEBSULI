@@ -1433,6 +1433,11 @@ lessonPipelineRouter.get("/jobs/:id/notes", async (req: Request, res: Response) 
 lessonPipelineRouter.post("/jobs/:id/approve-outline", async (req: Request, res: Response) => {
   const trackedId = (await workflowStore.related(req.params.id, req.user!.id)) ?? req.params.id;
   if (await workflowStore.exists(req.params.id) && !await workflowStore.read(trackedId, req.user!.id)) return res.status(404).json({ message: "A futás nem található." });
+  // docs/specs/2026-10-16-egy-futas.md (S4a): egyfutásos módban a tervre váró régi job egyfutásos újragyártása a mentett forrásból.
+  if (singleRunEnabled()) {
+    try { return res.status(202).json({ jobId: req.params.id, runId: await remakeAsSingleRun(req.params.id, req.user!.id), remanufactured: true }); }
+    catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." }); }
+  }
   try {
     await driveTracked(req.params.id, req.user!.id, false, async () => {
       const approved = await approveOutline(req.params.id, req.body?.outline);
@@ -1679,7 +1684,10 @@ lessonPipelineRouter.post("/lessons/:id/fix-concept", async (req: Request, res: 
   res.status(202).json({ runId, lessonId });
   // Seven bank calls must not keep an HTTP request open across proxy timeouts.
   void executeWorkflow(workflowStore, { id: runId, owner: actorId, mode: "concept", request: { lessonId, conceptId: body.data.conceptId } }, async () => {
-    const result = await fixConceptOnLesson(lessonId, body.data.conceptId, {}, actorId);
+    // docs/specs/2026-10-16-egy-futas.md (S4a): egyfutásos módban a javítás egy beszélgetésben (Opus 5.5, tartalék GPT-6.1 Sol).
+    const result = singleRunEnabled()
+      ? await (await import("./single-run/concept-fix")).fixConceptSingleRun(lessonId, body.data.conceptId, actorId)
+      : await fixConceptOnLesson(lessonId, body.data.conceptId, {}, actorId);
     if (!result.ok) throw new Error(result.error);
     return readPublishedLesson(lessonId);
   }).then(() => {
