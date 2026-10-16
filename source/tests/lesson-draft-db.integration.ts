@@ -8,7 +8,7 @@ assert.equal(url.hostname, "127.0.0.1");
 assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 const { dbPool } = await import("../server/db");
-const { resumableDraftFor, supersedeDraftsOf, oneStepRunView, closeOrphanedOneStepRuns, ONE_STEP_RESUMING_DETAIL, ownerDrafts, discardDraft, discardDraftsWithPublished } = await import("../server/studio/lesson-pipeline-routes");
+const { resumableDraftFor, supersedeDraftsOf, oneStepRunView, closeOrphanedOneStepRuns, ONE_STEP_RESUMING_DETAIL, ownerDrafts, discardDraft, discardDraftsWithPublished, redundantDraftCount, ownerDraftTotal } = await import("../server/studio/lesson-pipeline-routes");
 
 let n = 0;
 async function mapWithJob(job: { status?: string; published?: boolean; output?: Record<string, unknown>; age?: string; owner?: string | null; map?: string }) {
@@ -183,11 +183,23 @@ test("draft-kezelés (D1–D5): törlés, kötegelt törlés, gazdátlan és ké
     assert.equal(await discardDraft(mine.id, "draft-mgr"), true, "ismételt elvetés: idempotens (az állapot marad)");
     assert.equal(await discardDraft(orphan.id, "draft-mgr"), true);
     assert.equal(await resumableDraftFor(mine.map, undefined, "draft-mgr"), null);
-    // D2: a kötegelt törlés csak a kész párral rendelkezőkre hat (saját + gazdátlan).
-    assert.equal(await discardDraftsWithPublished("draft-mgr"), 2);
+    // D2: a kötegelt törlés csak a kész párral rendelkezőkre hat (saját + gazdátlan). Review #255: a felület által megerősített szám
+    // ellenőrzés — eltérésnél nincs törlés; a szerver összesítése ugyanazt a halmazt számolja.
+    assert.equal(await redundantDraftCount("draft-mgr"), 2);
+    assert.equal(await discardDraftsWithPublished("draft-mgr", 1), null, "eltérő megerősített szám → nincs törlés");
+    assert.equal(await redundantDraftCount("draft-mgr"), 2);
+    assert.equal(await discardDraftsWithPublished("draft-mgr", 2), 2);
     const after = (await ownerDrafts("draft-mgr")).map((d) => d.jobId);
     for (const id of [mine.id, orphan.id, dup.id, orphanDup.id]) assert.ok(!after.includes(id), `eltűnt: ${id}`);
     assert.ok(after.includes(running.id) && after.includes(fresh));
+    assert.equal(await ownerDraftTotal("draft-mgr"), after.length, "a teljes szám a lista feltételével (itt nincs csonkolás)");
+    // Review #255 (P2): élő workflow-lízing (épp viszik) mellett nem vethető el — a folytatás a lízing alatt újraellenőriz.
+    const leased = await mapWithJob({ owner: "draft-mgr" });
+    ownerless.push(leased.id);
+    await dbPool.query("UPDATE lesson_workflow_runs SET lease_until = now() + interval '1 minute' WHERE id=$1", [leased.id]);
+    assert.equal(await discardDraft(leased.id, "draft-mgr"), false, "élő lízing mellett nincs elvetés");
+    await dbPool.query("UPDATE lesson_workflow_runs SET lease_until = now() - interval '1 minute' WHERE id=$1", [leased.id]);
+    assert.equal(await discardDraft(leased.id, "draft-mgr"), true, "lejárt lízing után elvethető");
     const state = (await dbPool.query("SELECT output->>'recoveryState' AS s, output->>'discardedBy' AS b FROM studio_jobs WHERE id=$1", [mine.id])).rows[0];
     assert.deepEqual(state, { s: "discarded", b: "draft-mgr" }, "visszaállítható elvetés, a törlő azonosítójával");
   } finally {

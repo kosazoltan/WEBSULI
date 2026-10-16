@@ -107,6 +107,7 @@ test("váratlan alakú piszkozat-válasz mellett az admin oldal stabil (nincs ki
 test("törlés megerősítéssel, gazdátlan újragyártás, kötegelt törlés és futó gyártás szakaszjelzővel", async ({ page }) => {
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
   const calls: string[] = [];
+  const bodies: unknown[] = [];
   const list = [
     { jobId: "job-run", title: "Újragyártott lecke", subject: "Matematika", classroom: 6, draft: null, running: true, error: null, updatedAt: "2026-10-16T05:00:00.000Z",
       step: "author", ownerless: false, hasPublished: false, resumable: false },
@@ -116,14 +117,16 @@ test("törlés megerősítéssel, gazdátlan újragyártás, kötegelt törlés 
   ];
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
-    if (route.request().method() === "POST" && path.startsWith("/api/studio/drafts/")) { calls.push(path); return route.fulfill({ json: path.endsWith("discard-published") ? { discarded: 1 } : { discarded: true } }); }
+    if (route.request().method() === "POST" && path.startsWith("/api/studio/drafts/")) { calls.push(path); bodies.push(route.request().postDataJSON()); return route.fulfill({ json: path.endsWith("discard-published") ? { discarded: 1 } : { discarded: true } }); }
     let data: unknown = [];
     if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] };
-    if (path === "/api/studio/drafts") data = { drafts: list };
+    // Review #255: a szerver összesítése (total, redundant) — a lista csonkolhat, a darabszám nem.
+    if (path === "/api/studio/drafts") data = { drafts: list, total: 5, redundant: 1 };
     if (path === "/api/csrf-token") data = { csrfToken: "test" };
     await route.fulfill({ json: data });
   });
   await page.goto("/admin");
+  await expect(page.getByTestId("draft-hidden")).toContainText("További 2");
   // Futó gyártás: a szakaszjelző a „Tananyag készítése” szakaszt aktívnak mutatja, gomb nincs.
   const runItem = page.getByTestId("draft-item-job-run");
   await expect(runItem.getByTestId("draft-running")).toBeVisible();
@@ -154,5 +157,6 @@ test("törlés megerősítéssel, gazdátlan újragyártás, kötegelt törlés 
   await page.getByTestId("draft-confirm-yes-discard-published-all").click();
   await expect.poll(() => calls.length).toBe(2);
   expect(calls[1]).toBe("/api/studio/drafts/discard-published");
+  expect(bodies[1], "a megerősített darabszám a kéréssel megy (szerveroldali ellenőrzés)").toEqual({ expected: 1 });
   expect(errors).toEqual([]);
 });

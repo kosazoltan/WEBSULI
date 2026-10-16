@@ -39,3 +39,8 @@ Terv: `docs/specs/2026-10-16-draft-kezeles.md`.
   - kötegelt törlés;
   - futó tétel szakaszjelzővel;
   - 390 és 1366 px.
+
+## Review #255
+- Atomikus elvetés: a `discardDraft` csak élő workflow-lízing és folyamatban lévő újragyártás nélkül vet el; az `applyResume` a lízing alatt friss állapotból elutasítja az elvetettet; az újragyártás foglalása kizárja a `discarded` állapotot.
+- A folytatás vagy újragyártás után a kliens 60 másodpercig akkor is frissít, ha még nem látszik futó tétel (az új workflow a 202-es válasz után jön létre).
+- A lista korlátja 200. A válasz `total` (teljes szám) és `redundant` (a kötegelt törlés halmaza a szerver feltételéből) mezőt is ad. A kötegelt törlés a megerősített darabszámot küldi (`expected`); eltérésnél nincs törlés (409).

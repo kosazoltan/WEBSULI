@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -36,11 +36,20 @@ const CONFIRM_TEXT: Record<Exclude<Action, "resume">, string> = {
  */
 export default function DraftLessons() {
   const { toast } = useToast();
-  const drafts = useQuery<{ drafts: OwnerDraft[] }>({
+  // Review #255 (P2): folytatás / újragyártás után az új futás workflow-ja a 202-es válasz UTÁN jön létre — egy rövid ablakig akkor is
+  // frissítünk, ha még nem látszik futó tétel (különben a haladás csak kézi frissítéssel jelenne meg).
+  const [followUntil, setFollowUntil] = useState(0);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (followUntil <= Date.now()) return;
+    const t = setTimeout(() => setTick((n) => n + 1), followUntil - Date.now() + 50);
+    return () => clearTimeout(t);
+  }, [followUntil]);
+  const drafts = useQuery<{ drafts: OwnerDraft[]; total?: number; redundant?: number }>({
     queryKey: DRAFTS_KEY,
-    queryFn: () => apiRequest<{ drafts: OwnerDraft[] }>("GET", "/api/studio/drafts"),
-    // D4: amíg van futó tétel, a lista 5 másodpercenként frissül (a szakaszjelző halad). Hibatűrő: váratlan alakú válasznál nincs pollozás.
-    refetchInterval: (query) => (Array.isArray(query.state.data?.drafts) && query.state.data.drafts.some((d) => d.running) ? 5_000 : false),
+    queryFn: () => apiRequest<{ drafts: OwnerDraft[]; total?: number; redundant?: number }>("GET", "/api/studio/drafts"),
+    // D4: amíg van futó tétel (vagy egy indítás utáni követési ablak tart), a lista 5 másodpercenként frissül. Hibatűrő: váratlan alakú válasznál nincs pollozás.
+    refetchInterval: (query) => (followUntil > Date.now() || (Array.isArray(query.state.data?.drafts) && query.state.data.drafts.some((d) => d.running)) ? 5_000 : false),
   });
   // A dupla kattintás egyetlen kérés (az `isPending` csak a következő renderben tiltana).
   const lock = useRef(false);
@@ -48,13 +57,16 @@ export default function DraftLessons() {
   const act = useMutation({
     mutationFn: ({ jobId, action }: { jobId: string; action: Action }) =>
       action === "resume" ? apiRequest("POST", `/api/studio/jobs/${jobId}/resume`)
-        : action === "discard-published" ? apiRequest<{ discarded: number }>("POST", "/api/studio/drafts/discard-published")
+        : action === "discard-published" ? apiRequest<{ discarded: number }>("POST", "/api/studio/drafts/discard-published", { expected: redundant })
           : apiRequest("POST", `/api/studio/drafts/${jobId}/${action}`),
-    onSuccess: (data, { action }) => toast(
+    onSuccess: (data, { action }) => {
+      if (action === "resume" || action === "remake") setFollowUntil(Date.now() + 60_000);
+      toast(
       action === "resume" ? { title: "Folytatás elindult", description: "A gyártás a megszakadt ponttól halad tovább — a kész szakaszok megmaradnak." }
         : action === "remake" ? { title: "Újragyártás elindult", description: "A haladás a lista tetején, a készítési szakaszoknál követhető." }
           : action === "discard" ? { title: "Piszkozat törölve" }
-            : { title: "Felesleges piszkozatok törölve", description: `${(data as { discarded?: number } | undefined)?.discarded ?? 0} piszkozat.` }),
+            : { title: "Felesleges piszkozatok törölve", description: `${(data as { discarded?: number } | undefined)?.discarded ?? 0} piszkozat.` });
+    },
     onError: (e: Error) => toast({ title: "A művelet nem sikerült", description: e.message, variant: "destructive" }),
     onSettled: () => { lock.current = false; void queryClient.invalidateQueries({ queryKey: DRAFTS_KEY }); },
   });
@@ -68,7 +80,9 @@ export default function DraftLessons() {
 
   const list = Array.isArray(drafts.data?.drafts) ? drafts.data.drafts : [];
   if (!list.length) return null;
-  const redundant = list.filter((d) => d.hasPublished && !d.running).length;
+  // Review #255 (P2): a darabszám a szerver összesítése (a lista csonkolhatja), és a törlés ugyanezt a számot küldi vissza ellenőrzésre.
+  const redundant = typeof drafts.data?.redundant === "number" ? drafts.data.redundant : list.filter((d) => d.hasPublished && !d.running).length;
+  const hidden = typeof drafts.data?.total === "number" ? Math.max(0, drafts.data.total - list.length) : 0;
 
   const confirmBox = (jobId: string, action: Exclude<Action, "resume">, yes: string) => (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 dark:bg-amber-950" data-testid={`draft-confirm-${action}-${jobId}`}>
@@ -98,6 +112,9 @@ export default function DraftLessons() {
           ))}
       </CardHeader>
       <CardContent className="space-y-3">
+        {hidden > 0 && <p className="text-sm text-amber-900 dark:text-amber-200" data-testid="draft-hidden">
+          További {hidden} régebbi tétel nem fér a listába — töröld a feleslegeseket, és a többi megjelenik.
+        </p>}
         {list.map((d) => {
           const next = nextStepOf(d);
           return (

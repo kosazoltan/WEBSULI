@@ -510,10 +510,30 @@ export type OwnerDraft = { jobId: string; title: string; subject: string; classr
 const manageableBy = (owner: string) => sql`NOT EXISTS (SELECT 1 FROM lesson_workflow_runs ow WHERE (ow.id = j.id OR ow.snapshot->>'resourceId' = j.id) AND ow.owner_id <> ${owner})`;
 
 /**
+ * Review #255 (P2): elvetni csak olyan jobot lehet, amelyet épp senki nem visz (nincs élő workflow-lízing, nincs folyamatban lévő újragyártás) —
+ * a folytatás a lízing alatt újraellenőrzi az elvetést, így a kettő atomikusan kizárja egymást.
+ */
+const notBeingDriven = sql`NOT EXISTS (SELECT 1 FROM lesson_workflow_runs lw WHERE (lw.id = j.id OR lw.snapshot->>'resourceId' = j.id) AND lw.lease_until > now())
+  AND coalesce(j.output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured')`;
+
+/**
  * A1/A2 + D1–D4: a kezelhető (saját vagy gazdátlan) megállt piszkozatok — mentett, nem publikált lecke; nem sikeres, nem félretett, nem elvetett
  * job — ÉS a saját, éppen futó gyártások (2 napon belül, lecke nélkül is), hogy a folytatás/újragyártás haladása látsszon.
  * A folytathatóság ugyanaz a döntés, mint a futásnézeté (`jobStopInfo`). Csak olvas.
  */
+/** Review #255 (P2): a lista felső korlátja — a túlcsordulást a válasz `total` mezője jelzi (nem rejt el észrevétlenül). */
+export const DRAFT_LIST_LIMIT = 200;
+
+/** A kezelhető tételek teljes száma (a lista feltételével, korlát nélkül). */
+export async function ownerDraftTotal(owner: string): Promise<number> {
+  const { rows } = await db.execute(sql`SELECT count(*)::int AS n FROM studio_jobs j LEFT JOIN lessons l ON l.id = j.lesson_id
+    LEFT JOIN LATERAL (SELECT w.owner_id FROM lesson_workflow_runs w WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1) wr ON true
+    WHERE coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
+      AND ((j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
+        OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '2 days' AND wr.owner_id = ${owner}))`);
+  return Number((rows[0] as { n?: number } | undefined)?.n ?? 0);
+}
+
 export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
   const { rows } = await db.execute(sql`SELECT j.id, j.step, j.status, j.error, j.lesson_id, j.output, coalesce(j.finished_at, j.created_at) AS updated_at,
       m.title AS map_title, m.subject, m.classroom, wr.visits AS wf_visits, wr.executions AS wf_executions, wr.owner_id AS wf_owner,
@@ -529,7 +549,7 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
         (j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
         OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '2 days' AND wr.owner_id = ${owner})
       )
-    ORDER BY (j.status IN ('pending', 'running')) DESC, j.created_at DESC LIMIT 80`);
+    ORDER BY (j.status IN ('pending', 'running')) DESC, j.created_at DESC LIMIT ${DRAFT_LIST_LIMIT}`);
   const out: OwnerDraft[] = [];
   for (const raw of rows as Array<Record<string, unknown>>) {
     const job = { output: raw.output, publishedAt: null, step: String(raw.step), status: String(raw.status), error: (raw.error as string | null) ?? null,
@@ -555,27 +575,47 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
 export async function discardDraft(jobId: string, owner: string): Promise<boolean> {
   const { rows } = await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb)
       || jsonb_build_object('recoveryState', 'discarded', 'discardedAt', now()::text, 'discardedBy', ${owner}::text)
-    WHERE j.id = ${jobId} AND j.status = 'error'
+    WHERE j.id = ${jobId} AND j.status = 'error' AND ${notBeingDriven}
       AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL)
       AND ${manageableBy(owner)} RETURNING j.id`);
   return (rows as unknown[]).length > 0;
 }
 
-/** D2: a kész (publikált) párral rendelkező, kezelhető, megállt piszkozatok elvetése. Az elvetettek száma. */
-export async function discardDraftsWithPublished(owner: string): Promise<number> {
-  const { rows } = await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb)
-      || jsonb_build_object('recoveryState', 'discarded', 'discardedAt', now()::text, 'discardedBy', ${owner}::text)
-    WHERE j.status = 'error' AND j.output ? 'lesson'
-      AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
-      AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL)
-      AND EXISTS (SELECT 1 FROM lessons p WHERE p.map_id = j.map_id AND p.published_at IS NOT NULL)
-      AND ${manageableBy(owner)} RETURNING j.id`);
-  return (rows as unknown[]).length;
+/** D2 — a kötegelt törlés halmaza: kész (publikált) párral rendelkező, kezelhető, megállt, épp nem vitt piszkozat. Feltétel `j`-re. */
+const redundantDraft = (owner: string) => sql`j.status = 'error' AND j.output ? 'lesson'
+  AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded') AND ${notBeingDriven}
+  AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL)
+  AND EXISTS (SELECT 1 FROM lessons p WHERE p.map_id = j.map_id AND p.published_at IS NOT NULL)
+  AND ${manageableBy(owner)}`;
+
+/** Review #255 (P2): a megerősítésben mutatott darabszám a szerver UGYANAZON feltételéből — a lista csonkolása nem téveszti meg. */
+export async function redundantDraftCount(owner: string): Promise<number> {
+  const { rows } = await db.execute(sql`SELECT count(*)::int AS n FROM studio_jobs j WHERE ${redundantDraft(owner)}`);
+  return Number((rows[0] as { n?: number } | undefined)?.n ?? 0);
+}
+
+/**
+ * D2: a kész párral rendelkező piszkozatok elvetése. Review #255: a felület a megerősített darabszámot is elküldi (`expected`); ha a halmaz
+ * közben megváltozott, nincs törlés (409), a felület friss számmal újra kérdez.
+ */
+export async function discardDraftsWithPublished(owner: string, expected?: number): Promise<number | null> {
+  return db.transaction(async (tx) => {
+    const { rows } = await tx.execute(sql`SELECT j.id FROM studio_jobs j WHERE ${redundantDraft(owner)} FOR UPDATE OF j`);
+    const ids = (rows as Array<{ id: string }>).map((r) => r.id);
+    if (expected !== undefined && expected !== ids.length) return null;
+    if (!ids.length) return 0;
+    await tx.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb)
+        || jsonb_build_object('recoveryState', 'discarded', 'discardedAt', now()::text, 'discardedBy', ${owner}::text)
+      WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`);
+    return ids.length;
+  });
 }
 
 /** GET /api/studio/drafts — a belépett admin kezelhető „Tananyag draft” listája és futó gyártásai (a router admin-védett). */
 lessonPipelineRouter.get("/drafts", async (req: Request, res: Response) => {
-  res.json({ drafts: await ownerDrafts(req.user!.id) });
+  const owner = req.user!.id;
+  const [drafts, total, redundant] = await Promise.all([ownerDrafts(owner), ownerDraftTotal(owner), redundantDraftCount(owner)]);
+  res.json({ drafts, total, redundant });
 });
 
 /** D1: POST /api/studio/drafts/:jobId/discard — elvetés (megerősítés a felületen). */
@@ -588,7 +628,10 @@ lessonPipelineRouter.post("/drafts/:jobId/discard", async (req: Request, res: Re
 
 /** D2: POST /api/studio/drafts/discard-published — a kész tananyaggal rendelkező piszkozatok kötegelt elvetése. */
 lessonPipelineRouter.post("/drafts/discard-published", async (req: Request, res: Response) => {
-  res.json({ discarded: await discardDraftsWithPublished(req.user!.id) });
+  const expected = typeof req.body?.expected === "number" ? req.body.expected : undefined;
+  const discarded = await discardDraftsWithPublished(req.user!.id, expected);
+  if (discarded === null) return res.status(409).json({ message: "A törlendő piszkozatok köre közben megváltozott — nézd át újra a listát." });
+  res.json({ discarded });
 });
 
 /** D3: POST /api/studio/drafts/:jobId/remake — teljes újragyártás ugyanabból a forrásból (a nem folytatható és a gazdátlan piszkozatnál is). */
@@ -1357,7 +1400,10 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
  */
 async function applyResume(jobId: string, visit: import("../../shared/lesson-workflow").WorkflowVisit | undefined): Promise<void> {
   // Újraindulás utáni folytatás (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md, E2): a megszakadt lépéstől, a mentett részekkel.
-  const [stopped] = await db.select({ error: studioJobs.error }).from(studioJobs).where(eq(studioJobs.id, jobId));
+  const [stopped] = await db.select({ error: studioJobs.error, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId));
+  // Review #255 (P2): a workflow-lízing ALATT friss állapotból — a törölt (elvetett) piszkozat nem folytatódik (a söprés régi olvasata sem viszi
+  // tovább). Az elvetés élő lízing mellett nem lehetséges (`discardDraft`), így a kettő nem fut át egymáson.
+  if ((stopped?.output as { recoveryState?: unknown } | null)?.recoveryState === "discarded") throw new WorkflowConflict("A piszkozatot törölték — nem folytatható.");
   if (stopped?.error === ORPHAN_JOB_ERROR) {
     // Review #247 (P2): a publikáltságot a lecke sora dönti el (a publikálás commitja után, a job-kimenet mentése előtt is megállhatott).
     const [lesson] = await db.select({ publishedAt: lessons.publishedAt }).from(studioJobs).innerJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, jobId));
@@ -1385,7 +1431,7 @@ async function applyResume(jobId: string, visit: import("../../shared/lesson-wor
 async function remanufactureFromMap(jobId: string, owner: string, error: string): Promise<string> {
   // Review #237 (P1): atomi foglalás a job létrehozása ELŐTT — két párhuzamos kérés (dupla kattintás, söprő + gomb) nem indíthat két gyártást.
   const claim = await db.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb) || '{"recoveryState":"remanufacturing"}'::jsonb
-    WHERE id = ${jobId} AND status = 'error' AND coalesce(output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured') RETURNING id`);
+    WHERE id = ${jobId} AND status = 'error' AND coalesce(output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured', 'discarded') RETURNING id`);
   if (!(claim.rows as unknown[]).length) throw new WorkflowConflict("A teljes újragyártás már elindult (vagy a job már nem hibás állapotú).");
   const release = () => db.execute(sql`UPDATE studio_jobs SET output = output - 'recoveryState' WHERE id = ${jobId} AND output->>'recoveryState' = 'remanufacturing'`);
   let started: Awaited<ReturnType<typeof startJobFromMap>>;
