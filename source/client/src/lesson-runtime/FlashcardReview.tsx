@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Flashcard } from "@shared/lesson-flashcards";
@@ -31,8 +31,8 @@ function newRequestId(): string {
 type Pending = { rating: ReviewRating; requestId: string; retryable: boolean };
 
 export function FlashcardReview({ cards, lessonId, storageKey, active }: { cards: Flashcard[]; lessonId?: string; storageKey: string; active: boolean }) {
-  // A terv szélső esete: ha mentés közben lejár a bejelentkezés (401), vendég módra váltunk, és ezt ki is írjuk.
-  const [expired, setExpired] = useState(false);
+  // A terv szélső esete: ha lejár a bejelentkezés (401), vendég módra váltunk, és ezt ki is írjuk — betöltéskor és mentéskor is.
+  const [expired, setExpired] = useState<Expired>(null);
   const auth = useQuery<{ id: string } | null>({
     queryKey: ["/api/auth/user"], enabled: !!lessonId && active, retry: false,
     queryFn: async () => {
@@ -45,19 +45,25 @@ export function FlashcardReview({ cards, lessonId, storageKey, active }: { cards
   if (!lessonId || (!auth.isPending && !auth.isError && !auth.data)) return <ReviewDeck cards={cards} expired={expired} mode={{ kind: "guest", key: `websuli:review:guest:${storageKey}` }} />;
   if (auth.isPending) return <p role="status">Ismétlés betöltése…</p>;
   if (auth.isError) return <div role="alert">Az azonosítás nem sikerült. <button className="lesson-outline-btn" onClick={() => void auth.refetch()}>Újra</button></div>;
-  return <SavedDeck key={`${auth.data!.id}:${lessonId}`} cards={cards} lessonId={lessonId} onExpired={() => { setExpired(true); queryClient.setQueryData(["/api/auth/user"], null); }} />;
+  return <SavedDeck key={`${auth.data!.id}:${lessonId}`} cards={cards} lessonId={lessonId} onExpired={when => { setExpired(when); queryClient.setQueryData(["/api/auth/user"], null); }} />;
 }
 
-function SavedDeck({ cards, lessonId, onExpired }: { cards: Flashcard[]; lessonId: string; onExpired: () => void }) {
+type Expired = "load" | "rate" | null;
+
+function SavedDeck({ cards, lessonId, onExpired }: { cards: Flashcard[]; lessonId: string; onExpired: (when: Exclude<Expired, null>) => void }) {
   const url = `/api/lessons/review/${encodeURIComponent(lessonId)}`;
   const view = useQuery<{ states: States }>({
     queryKey: [url], retry: false,
     queryFn: async () => {
       const response = await fetch(url, { credentials: "include" });
-      if (!response.ok) throw new Error("Az ismétlés betöltése nem sikerült.");
+      if (!response.ok) throw Object.assign(new Error("Az ismétlés betöltése nem sikerült."), { status: response.status });
       return response.json();
     },
   });
+  // Review #269: a betöltéskori 401 (lejárt munkamenet, de még bejelentkezettnek látszó gyorsítótár) is vendég módra vált.
+  const unauthorized = (view.error as { status?: number } | null)?.status === 401;
+  useEffect(() => { if (unauthorized) onExpired("load"); }, [unauthorized, onExpired]);
+  if (unauthorized) return <p role="status">Ismétlés betöltése…</p>;
   if (view.isPending) return <p role="status">Ismétlés betöltése…</p>;
   if (view.isError) return <div role="alert">Az ismétlés betöltése nem sikerült. <button className="lesson-outline-btn" onClick={() => void view.refetch()}>Újra</button></div>;
   return <ReviewDeck cards={cards} initial={view.data.states} mode={{ kind: "saved", url }} onExpired={onExpired} />;
@@ -65,7 +71,8 @@ function SavedDeck({ cards, lessonId, onExpired }: { cards: Flashcard[]; lessonI
 
 type Mode = { kind: "guest"; key: string } | { kind: "saved"; url: string };
 
-function ReviewDeck({ cards, mode, initial, expired, onExpired }: { cards: Flashcard[]; mode: Mode; initial?: States; expired?: boolean; onExpired?: () => void }) {
+function ReviewDeck({ cards, mode, initial, expired, onExpired }: { cards: Flashcard[]; mode: Mode; initial?: States; expired?: Expired; onExpired?: (when: "rate") => void }) {
+  const textId = useId();
   const [states, setStates] = useState<States>(() => initial ?? (mode.kind === "guest" ? readGuest(mode.key) : {}));
   const [flipped, setFlipped] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -95,10 +102,12 @@ function ReviewDeck({ cards, mode, initial, expired, onExpired }: { cards: Flash
         // apiRequest: CSRF-token a mutáló kérésen (a nyers fetch élesben 403-at kapna); írásnál nincs automatikus ismétlés.
         state = (await apiRequest<{ state: ReviewState }>("POST", `${mode.url}/rate`, { cardId: card.id, rating, requestId })).state;
         setStates(old => ({ ...old, [card.id]: state }));
+        // Review #269: a lekérés gyorsítótára is a mentett állapotot tartja (visszanavigáláskor nem látszik újra esedékesnek).
+        queryClient.setQueryData<{ states: States }>([mode.url], old => ({ states: { ...(old?.states ?? {}), [card.id]: state } }));
       } catch (error) {
         // 409: a lecke időközben frissült (a kártya elavult) — újrapróbálás helyett újratöltés kell.
         const status = (error as { status?: number }).status;
-        if (status === 401 && onExpired) { onExpired(); return; }
+        if (status === 401 && onExpired) { onExpired("rate"); return; }
         const stale = status === 409;
         setFailed({ rating, requestId, retryable: !stale });
         setNote({ tone: "error", text: stale ? "A lecke időközben frissült. Töltsd újra az oldalt, és folytasd az ismétlést!" : "Nem sikerült menteni. Az értékelésed nem veszett el: próbáld újra!" });
@@ -118,13 +127,15 @@ function ReviewDeck({ cards, mode, initial, expired, onExpired }: { cards: Flash
     <div className="fusion-round-head"><div><span className="fusion-eyebrow">{mode.kind === "saved" ? "Mentett ismétlés" : "Helyi ismétlés"}</span><h2>Memorizálókártya</h2>
       <p>{queue.due.length} esedékes · {queue.fresh.length} új · {doneCount} / {cards.length} kártya mára kész</p></div></div>
     <progress className="ws-review-progress" max={cards.length} value={doneCount} aria-label={`${doneCount} / ${cards.length} kártya mára kész`} />
-    {mode.kind === "guest" && <p className="ws-review-guest">{expired && <strong>Lejárt a bejelentkezésed, ez az értékelés nem mentődött. </strong>}Vendégként gyakorolsz: az ismétlés csak ezen az eszközön, ebben a böngészőben marad meg.</p>}
+    {mode.kind === "guest" && <p className="ws-review-guest">{expired === "rate" && <strong>Lejárt a bejelentkezésed, ez az értékelés nem mentődött. </strong>}{expired === "load" && <strong>Lejárt a bejelentkezésed. </strong>}Vendégként gyakorolsz: az ismétlés csak ezen az eszközön, ebben a böngészőben marad meg.</p>}
     {card ? <>
-      <button type="button" className="ws-flash" aria-pressed={flipped} aria-label={flipped ? "Válasz visszafordítása" : "Válasz megjelenítése"} onClick={() => setFlipped(v => !v)}>
+      {/* Review #269: a gomb neve a művelet, a leírása az aktuális kártyaszöveg; fordításkor a válasz be is jelentődik. */}
+      <button type="button" className="ws-flash" aria-pressed={flipped} aria-label={flipped ? "Válasz visszafordítása" : "Válasz megjelenítése"} aria-describedby={textId} onClick={() => setFlipped(v => !v)}>
         <small>{flipped ? "HELYES VÁLASZ · KOPPINTS A VISSZAFORDÍTÁSHOZ" : "KÉRDÉS · KOPPINTS A FORDÍTÁSHOZ"}</small>
-        <span className="ws-flash-text">{flipped ? card.back : card.front}</span>
+        <span className="ws-flash-text" id={textId}>{flipped ? card.back : card.front}</span>
         {flipped && <small className="ws-flash-question">{card.front}</small>}
       </button>
+      <span className="sr-only" aria-live="polite">{flipped ? `Helyes válasz: ${card.back}` : ""}</span>
       <div className="ws-review-actions">
         {/* Review #269: sikertelen mentés után csak az „Újrapróbálás” (ugyanazzal a requestId-val) küldhet — egy új értékelés új
             azonosítóval kétszer léptetné az ütemezést, ha az első mentés a szerveren mégis sikerült. */}

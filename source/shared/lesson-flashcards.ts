@@ -15,7 +15,8 @@ export const FLASHCARD_ID_MAX = 80;
  * oldalról érkező, elavult azonosítót a szerver elutasítja. cyrb53 (53 bites, szinkron, böngészőben és Node-ban is), 36-os alapon.
  */
 export function contentKey(front: string, back: string): string {
-  const text = `${front}\u0000${back}`;
+  // Review #269: NFC előtt — a kliens a megjelenítéshez NFC-re normalizált leckéből, a szerver a tárolt (akár NFD) JSON-ból számol.
+  const text = `${front}\u0000${back}`.normalize("NFC");
   let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
   for (let i = 0; i < text.length; i++) {
     const ch = text.charCodeAt(i);

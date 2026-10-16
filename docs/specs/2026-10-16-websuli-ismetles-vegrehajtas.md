@@ -94,3 +94,9 @@ adat és szerver**, **D — felület**. A parancsok a `source/` mappából futna
   - Sikertelen mentés után az értékelőgombok tiltva, csak az „Újrapróbálás” küld, ugyanazzal a `requestId`-val.
   - A vendégállapot kulcsa a stabil leckekulcs (`persistId ?? lessonId ?? mapId`), nem az experience-lenyomat. Így a változatlan
     kártyák javítás után is megtartják az ütemezésüket.
+  - A betöltéskori 401 is vendég módra vált, és nem hivatkozik meg nem történt értékelésre.
+  - A sikeres mentés a lekérés gyorsítótárát is frissíti.
+  - A kártya leírása (`aria-describedby`) az aktuális szöveg; fordításkor a válasz be is jelentődik.
+  - A `contentKey` NFC-re normalizál: a kliens a megjelenítéshez NFC-re hozott leckéből, a szerver a tárolt JSON-ból számol, és
+    NFD-s regressziós teszt bizonyítja az egyezést.
+  - Az e2e órája rögzített. Mérés: lesson-flashcards 10/10.

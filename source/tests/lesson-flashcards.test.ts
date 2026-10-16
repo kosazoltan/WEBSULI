@@ -50,4 +50,11 @@ test("a kártya-azonosító a tartalomhoz kötött: módosított kérdés vagy h
   // A leghosszabb kvízazonosítóval (64) is belefér a 80 karakteres oszlopba.
   assert.ok(`q:${"x".repeat(64)}:${contentKey("a".repeat(500), "b".repeat(500))}`.length <= FLASHCARD_ID_MAX);
   assert.notEqual(contentKey("ab", "c"), contentKey("a", "bc"), "az elválasztó miatt a határ számít");
+  // Review #269: a kliens NFC-re normalizált leckéből, a szerver a tárolt (akár NFD) JSON-ból számol — az azonosító egyezik.
+  assert.equal(contentKey("tűzoltó".normalize("NFD"), "ő".normalize("NFD")), contentKey("tűzoltó", "ő"));
+  const nfd = structuredClone(base);
+  nfd.experience!.quiz[0].question = `${nfd.experience!.quiz[0].question} – tűzoltó`.normalize("NFD");
+  const nfc = structuredClone(nfd);
+  nfc.experience!.quiz[0].question = nfc.experience!.quiz[0].question.normalize("NFC");
+  assert.equal(lessonFlashcards(nfd)[0].id, lessonFlashcards(nfc)[0].id);
 });

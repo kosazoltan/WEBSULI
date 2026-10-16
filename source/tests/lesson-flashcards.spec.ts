@@ -29,9 +29,12 @@ test("vendég: kattintás, Enter és Space fordít; az értékelés továbblép,
   await expect(page.getByText("Vendégként gyakorolsz: az ismétlés csak ezen az eszközön, ebben a böngészőben marad meg.")).toBeVisible();
   await expect(card).toHaveAttribute("aria-pressed", "false");
   await expect(card).toContainText(first.front);
+  // Review #269: a gomb leírása az aktuális kártyaszöveg mindkét állapotban.
+  await expect(card).toHaveAccessibleDescription(first.front);
   await card.click();
   await expect(card).toHaveAttribute("aria-pressed", "true");
   await expect(card).toHaveAccessibleName("Válasz visszafordítása");
+  await expect(card).toHaveAccessibleDescription(first.back);
   await expect(card).toContainText(first.back);
   await card.focus(); await page.keyboard.press("Enter");
   await expect(card).toHaveAttribute("aria-pressed", "false");
@@ -65,6 +68,8 @@ test("bejelentkezve: a „Mentve” csak sikeres válasz után; hibánál a kár
     await new Promise<void>(resolve => { release = resolve; });
     return r.fulfill({ json: { cardId: first.id, state: { intervalDays: 1, repetitions: 1, dueAt: "2026-10-18T10:00:00.000Z" } } });
   });
+  // Review #269: determinisztikus óra — a mock esedékessége (okt. 18.) a böngésző „most”-ja után van.
+  await page.clock.setFixedTime(new Date("2026-10-17T09:00:00.000Z"));
   const card = await openReview(page, "practice=1&classroom=9");
   await expect(page.getByText("Mentett ismétlés")).toBeVisible();
   await expect(page.getByText(/Vendégként gyakorolsz/)).toHaveCount(0);
@@ -99,6 +104,17 @@ test("bejelentkezve: ha mentés közben lejár a bejelentkezés (401), vendég m
   await expect(page.getByText("Lejárt a bejelentkezésed, ez az értékelés nem mentődött.")).toBeVisible();
   await expect(page.getByText("Helyi ismétlés")).toBeVisible();
   await expect(page.getByText(/Mentve\./)).toHaveCount(0);
+});
+
+// Review #269: a lejárt munkamenet a betöltéskor is vendég módra vált (nem ragad hibaképernyőn), értékelésre nem hivatkozik.
+test("bejelentkezettnek látszó, de lejárt munkamenet: a betöltő 401 vendég módra vált", async ({ page }) => {
+  await page.route("**/api/auth/user", r => r.fulfill({ json: { id: "tanulo-1" } }));
+  await page.route("**/api/lessons/review/practice-probe", r => r.fulfill({ status: 401, json: { message: "A mentett ismétléshez jelentkezz be." } }));
+  await openReview(page, "practice=1&classroom=7");
+  await expect(page.getByText("Lejárt a bejelentkezésed.")).toBeVisible();
+  await expect(page.getByText("Helyi ismétlés")).toBeVisible();
+  await expect(page.getByText(/nem mentődött/)).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
 test("bejelentkezve: ha a lecke időközben frissült (409), nincs újrapróbálás, hanem újratöltésre kér", async ({ page }) => {
