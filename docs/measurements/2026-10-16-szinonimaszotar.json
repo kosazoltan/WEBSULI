@@ -1,0 +1,189 @@
+{
+  "date": "2026-10-16",
+  "source": "answer-key-trial.json",
+  "tasks": 188,
+  "subjects": [
+    "Biológia",
+    "Történelem",
+    "Matematika",
+    "Környezetismeret"
+  ],
+  "baseline": {
+    "failingCorrect": 298,
+    "wrongPass": 18,
+    "appliedTasks": 0,
+    "guardRejected": 0,
+    "entries": 0,
+    "avgEntriesPerTask": 0
+  },
+  "variants": {
+    "all": {
+      "failingCorrect": 298,
+      "wrongPass": 18,
+      "appliedTasks": 4,
+      "guardRejected": 0,
+      "entries": 18,
+      "avgEntriesPerTask": 13.7
+    },
+    "sameSubject": {
+      "failingCorrect": 298,
+      "wrongPass": 18,
+      "appliedTasks": 0,
+      "guardRejected": 0,
+      "entries": 0,
+      "avgEntriesPerTask": 0
+    },
+    "sameJobOtherTasks": {
+      "failingCorrect": 282,
+      "wrongPass": 18,
+      "appliedTasks": 59,
+      "guardRejected": 26,
+      "entries": 18,
+      "avgEntriesPerTask": 4.2
+    }
+  },
+  "learnedEntries": 18,
+  "foldEntries": {
+    "416ad01d": 17,
+    "b3a7ecad": 13,
+    "d6f5d4bc": 9,
+    "e2facc3f": 15
+  },
+  "examples": [
+    {
+      "subject": "Biológia",
+      "group": [
+        "noveny"
+      ],
+      "word": "toro"
+    },
+    {
+      "subject": "Történelem",
+      "group": [
+        "tisztseg",
+        "szerep"
+      ],
+      "word": "szemelyben"
+    },
+    {
+      "subject": "Történelem",
+      "group": [
+        "vezett",
+        "vezetoi"
+      ],
+      "word": "iranyitottak"
+    },
+    {
+      "subject": "Történelem",
+      "group": [
+        "mezopotamia"
+      ],
+      "word": "elukon"
+    },
+    {
+      "subject": "Történelem",
+      "group": [
+        "folyokoz"
+      ],
+      "word": "terulet"
+    },
+    {
+      "subject": "Történelem",
+      "group": [
+        "elen"
+      ],
+      "word": "voltak"
+    },
+    {
+      "subject": "Matematika",
+      "group": [
+        "utolso",
+        "ket",
+        "helyiert",
+        "helyierteke"
+      ],
+      "word": "szamjegye"
+    },
+    {
+      "subject": "Matematika",
+      "group": [
+        "25",
+        "tel",
+        "valo",
+        "oszthatosag"
+      ],
+      "word": "szamjegye"
+    },
+    {
+      "subject": "Matematika",
+      "group": [
+        "4",
+        "gyel",
+        "20",
+        "szal"
+      ],
+      "word": "osztoval"
+    },
+    {
+      "subject": "Matematika",
+      "group": [
+        "3",
+        "mal",
+        "valo",
+        "oszthatosag"
+      ],
+      "word": "szam"
+    },
+    {
+      "subject": "Matematika",
+      "group": [
+        "9",
+        "cel",
+        "valo",
+        "oszthatosag"
+      ],
+      "word": "megnezni"
+    },
+    {
+      "subject": "Matematika",
+      "group": [
+        "9",
+        "cel",
+        "valo",
+        "oszthatosag"
+      ],
+      "word": "szam"
+    },
+    {
+      "subject": "Matematika",
+      "group": [
+        "25",
+        "tel",
+        "valo",
+        "oszthatosag"
+      ],
+      "word": "szamjegye"
+    },
+    {
+      "subject": "Matematika",
+      "group": [
+        "25",
+        "tel",
+        "valo",
+        "oszthatosag"
+      ],
+      "word": "megvizsgalom"
+    },
+    {
+      "subject": "Matematika",
+      "group": [
+        "25",
+        "tel",
+        "valo",
+        "oszthatosag"
+      ],
+      "word": "nezni"
+    }
+  ],
+  "arbiterCorrectVerdicts": 1
+}
