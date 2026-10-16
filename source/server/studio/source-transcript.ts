@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { Concept } from "../../shared/knowledge-map-schema";
 import type { ExtractorFile, CheckedConcept } from "./extractor";
-import type { OcrResult } from "./ocr";
+/** Egy forrásfájl átirata (fájlnév → szöveg); S4b: a kivezetett OCR-modultól független típus. */
+type OcrResult = { name: string; text: string };
 import { checkVerbatim, relocateQuote } from "./verbatim";
 
 /** The writer and verifier must see the same transcript, not two independent OCR readings. */

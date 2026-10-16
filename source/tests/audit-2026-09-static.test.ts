@@ -68,7 +68,8 @@ test("EnhancedMaterialCreator: az AI-generált előnézet iframe nem kap allow-s
 });
 
 test("studio publishLesson invalidálja a html-files listacache-t", () => {
-  const src = read("server/studio/step-runner.ts");
+  // S4b: a közzététel adattára a régi lépésgépből a pipeline-store.ts-be költözött (változatlan lekérdezésekkel).
+  const src = read("server/studio/pipeline-store.ts");
   assert.match(src, /getHtmlFilesCache/);
   assert.match(src, /invalidate\(\)/);
 });

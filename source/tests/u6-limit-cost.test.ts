@@ -8,7 +8,6 @@ import { buildStructuredImprovement } from "../server/studio/structured-improvem
 import { callStepModel, stablePrefixChars } from "../server/studio/run-step";
 import { ClaudeProvider } from "../server/ai/ClaudeProvider";
 import { maxOutputForModel } from "../server/ai/models";
-import { filesForQuoteRepair } from "../server/studio/run-extraction";
 import { VISUAL_PARAMS_CONTRACT } from "../shared/lesson-visual-params";
 import { ROLE_SKILLS } from "../server/studio/role-skills";
 import { SUPPORT_SKILLS } from "../server/studio/support-skills";
@@ -124,8 +123,9 @@ test("C16: a javító út a jelöltet a javító-lektorral dönteti el — „ig
 test("review #164 (C11): a nagyobb keretű újrapróba FRISS kérésenkénti határidőt kap, a külső megszakítás mindkét kérésre él", async () => {
   const signals: Array<AbortSignal | undefined> = [];
   const outer = new AbortController();
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a stub modell a kivezetett gpt-6-luna helyett a megmaradó gpt-6.1-sol (azonos, 128 000-es plafon) — a mért mechanizmus változatlan.
   const provider: IAIProvider = {
-    name: "stub", model: "gpt-6-luna", maxOutputTokens: 24_000, isAvailable: async () => true,
+    name: "stub", model: "gpt-6.1-sol", maxOutputTokens: 24_000, isAvailable: async () => true,
     async chat(_m: AIMessage[], signal?: AbortSignal) {
       signals.push(signal);
       return signals.length === 1 ? { content: '{"a":', finishReason: "length" } : { content: '{"ok":true}', finishReason: "stop" };
@@ -133,7 +133,7 @@ test("review #164 (C11): a nagyobb keretű újrapróba FRISS kérésenkénti hat
     async *streamChat() { yield { type: "done" as const }; },
   };
   // a lektor lépésnek szabályzati határideje van (LEKTOR_TIMEOUT_MS)
-  await callStepModel(provider, { step: "lektor", role: "lektor", model: "gpt-6-luna", system: "S", user: "U" }, outer.signal);
+  await callStepModel(provider, { step: "lektor", role: "lektor", model: "gpt-6.1-sol", system: "S", user: "U" }, outer.signal);
   assert.equal(signals.length, 2);
   assert.ok(signals[0] && signals[1] && signals[0] !== signals[1], "két külön kérésenkénti jel (a második határideje újraindul)");
   assert.equal(signals[1]!.aborted, false);
@@ -151,16 +151,15 @@ test("C11: hosszkorlát → EGYSZER nagyobb keret a modell plafonjáig; ismeretl
     },
     async *streamChat() { yield { type: "done" as const }; },
   });
-  const result = await callStepModel(provider("gpt-6-luna"), { step: "author", role: "author", model: "gpt-6-luna", system: "S", user: "U" });
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a stub modell a kivezetett gpt-6-luna helyett a megmaradó gpt-6.1-sol (azonos, 128 000-es plafon) — a mért mechanizmus változatlan.
+  const result = await callStepModel(provider("gpt-6.1-sol"), { step: "author", role: "author", model: "gpt-6.1-sol", system: "S", user: "U" });
   assert.deepEqual(result.json, { ok: true });
   assert.deepEqual(budgets, [undefined, 48_000], "egyszer, a kétszeres keret (≤ 128 000 plafon)");
   budgets.length = 0;
   await assert.rejects(callStepModel(provider("ismeretlen-modell"), { step: "author", role: "author", model: "ismeretlen-modell", system: "S", user: "U" }), /hosszkorlát/);
   assert.equal(budgets.length, 1, "ismeretlen plafon: nincs újrapróba");
-  assert.equal(maxOutputForModel("openai/gpt-5.6-terra"), 128_000);
-  assert.equal(maxOutputForModel("gpt-5.6-terra"), 128_000);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a kivezetett modellek kimeneti plafonja (gpt-5.6-terra, qwen3-vl-32b) törölve a táblából — az ellenőrzésük törölve.
   assert.equal(maxOutputForModel("anthropic/claude-opus-5.5"), maxOutputForModel("claude-opus-5-5"));
-  assert.equal(maxOutputForModel("qwen/qwen3-vl-32b-instruct"), 32_768);
 });
 
 test("C10: a stabil előtag (skill-blokk vége) jelölve; az Anthropic-kérés a előtagot cache_control-lal küldi, a gyorsítótár-tokenek naplózhatók", async () => {
@@ -184,14 +183,6 @@ test("C10: a stabil előtag (skill-blokk vége) jelölve; az Anthropic-kérés a
   assert.equal(body.max_tokens, 32_000, "a hívásonkénti keret felülírja a beállítottat");
   assert.deepEqual(response.usage, { promptTokens: 950, completionTokens: 5, totalTokens: 955, cachedTokens: 900, cacheWriteTokens: 40 });
   assert.equal(claude.maxOutputTokens, 16_000);
-});
-
-test("C7: a quote-javítókör csak a hibás fogalmak saját forrásfájlját kapja", () => {
-  const files = [{ name: "a.pdf" }, { name: "b.jpg" }, { name: "c.txt" }];
-  assert.deepEqual(filesForQuoteRepair(files, [{ sourceRef: { file: "b.jpg" } }]).map((f) => f.name), ["b.jpg"]);
-  assert.deepEqual(filesForQuoteRepair(files, [{ sourceRef: { file: "ismeretlen" } }]).map((f) => f.name), ["a.pdf", "b.jpg", "c.txt"], "azonosítatlan hivatkozás → minden fájl");
-  assert.deepEqual(filesForQuoteRepair(files, [{ sourceRef: { file: "b.jpg" } }, { sourceRef: { file: "ismeretlen" } }]).map((f) => f.name), ["a.pdf", "b.jpg", "c.txt"], "review #164: vegyes halmaz (egy azonosítatlan) → minden fájl");
-  assert.deepEqual(filesForQuoteRepair(files, [{ sourceRef: { file: "b.jpg" } }, {}]).map((f) => f.name), ["a.pdf", "b.jpg", "c.txt"], "hivatkozás nélküli fogalom → minden fájl");
 });
 
 test("B1/B2 (H14): az ábra-szerződés 800×520-at mond, a skill legfeljebb 2 ábrát; az OCR a program oldalcímkéjét; külön webes kivonatoló skill", () => {

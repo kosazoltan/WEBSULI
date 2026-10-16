@@ -2,7 +2,8 @@ import express, { type Request, type Response } from "express";
 import { z } from "zod";
 import { isAuthenticatedAdmin } from "../auth";
 import { webResearchChatSchema, type WebResearchEvent } from "./web-research-agent";
-import { gatherWebSources, generateWebResearchLesson, WebResearchFailure } from "./web-research-runner";
+import { gatherWebSources, WebResearchFailure, type ResearchObserver } from "./web-research-runner";
+import type { WebResearchChatRequest } from "./web-research-agent";
 import { generateWebStudioLesson } from "./web-studio-handoff";
 import { oneStepRunView, runOneStepInWorkflow } from "./lesson-pipeline-routes";
 import { createResearchJobs, publicResearchJob, ResearchJobConflict } from "./web-research-jobs";
@@ -12,15 +13,13 @@ import { WorkflowConflict } from "../workflows/engine";
 
 export const webResearchRouter = express.Router();
 webResearchRouter.use(isAuthenticatedAdmin);
-// Spec 2026-09-25 (webes Studio-átadás, tulajdonosi döntés): the downloaded pages go to the one-step Studio
-// manufacture. WEB_RESEARCH_PIPELINE=html restores the standalone HTML path (rollback without a deploy of code).
+// Spec 2026-09-25 (webes Studio-átadás, tulajdonosi döntés): the downloaded pages go to the one-step Studio manufacture.
 // Spec 2026-10-06-s7 (C egy futásban): the manufacture runs inside the web job's own `webStudio` workflow.
-const studioPipeline = process.env.WEB_RESEARCH_PIPELINE !== "html";
-const generate = studioPipeline
-  ? (input: Parameters<typeof generateWebResearchLesson>[0], observer: Parameters<typeof generateWebResearchLesson>[1]) =>
-    generateWebStudioLesson(input, observer, { gather: gatherWebSources, manufacture: runOneStepInWorkflow, read: oneStepRunView })
-  : generateWebResearchLesson;
-const jobs = createResearchJobs(researchJobStore, generate, workflowStore, { mode: studioPipeline ? "webStudio" : "web" });
+// docs/specs/2026-10-16-egy-futas.md (S4b): the standalone multi-model HTML path (WEB_RESEARCH_PIPELINE=html) is removed — the
+// manufacture is the single-run engine (Opus 5.5, fallback GPT-6.1 Sol).
+const generate = (input: WebResearchChatRequest, observer: ResearchObserver) =>
+  generateWebStudioLesson(input, observer, { gather: gatherWebSources, manufacture: runOneStepInWorkflow, read: oneStepRunView });
+const jobs = createResearchJobs(researchJobStore, generate, workflowStore, { mode: "webStudio" });
 const startSchema = webResearchChatSchema.extend({ id: z.string().uuid() });
 const idSchema = z.string().uuid();
 const routeError = (res: Response, error: unknown) => res.status(error instanceof ResearchJobConflict || error instanceof WorkflowConflict ? 409 : 500).json({ message:

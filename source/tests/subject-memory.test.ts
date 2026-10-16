@@ -7,10 +7,8 @@ import {
 } from "../server/memory/subject-memory";
 import { applyEvidence, cardFromRow, recordSubjectMemory, type Query } from "../server/memory/store";
 import { buildLessonExperience } from "../server/studio/experience-builder";
-import { runPipelineStep, type JobPatch, type JobView, type MapMeta, type PipelineStore } from "../server/studio/step-runner";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import type { MapConcept } from "../server/studio/coverage";
-import type { IAIProvider } from "../server/ai/AIProvider";
 import type { WorkflowView } from "../shared/lesson-workflow";
 
 /* Spec 2026-10-06-s5-tantargyi-memoria: kártya-képzés, dedup/idempotencia, lecsengés, prompt-korlát, kapcsoló, tantárgy-elszigetelés. */
@@ -225,65 +223,4 @@ test("banképítő: memória nélkül a rendszerprompt bájtra azonos; memóriá
   const withMemory = await run(block);
   assert.ok(withMemory[0].includes(block));
   assert.notEqual(withMemory[0], base[0]);
-});
-
-const MAP_META: MapMeta = { id: "m1", title: "Műveleti sorrend tanulása", subject: "Matematika", classroom: 5 };
-const MAP_CONCEPTS: MapConcept[] = [{ localId: "sorrend", term: "műveleti sorrend", definition: "Először a szorzást és az osztást végezzük el.", examWeight: "core" }];
-function fakeStore(withLoader: boolean) {
-  const jobs = new Map<string, JobView>();
-  const loads: string[] = [];
-  const store: PipelineStore = {
-    loadJob: async (id) => jobs.get(id) ?? null,
-    loadMap: async () => ({ meta: MAP_META, concepts: MAP_CONCEPTS }),
-    loadBlockerNotes: async () => [],
-    saveStep: async (id, patch: JobPatch) => { Object.assign(jobs.get(id)!, patch); },
-    saveNotes: async () => undefined,
-    upsertLesson: async () => "lesson-1",
-    publishLesson: async () => { throw new Error("nem fut"); },
-    createJob: async () => "job-1",
-    ...(withLoader ? { loadSubjectMemory: async (subject: string) => {
-      loads.push(subject);
-      // A betöltő hibásan más tantárgyat is visszaad — a pillanatkép (kettős őr) eldobja.
-      return [card({ code: "coverage", step: "knowledge", lastSeen: Date.now() - DAY }), card({ subject: "tortenelem", code: "teaching_depth", step: "author", lastSeen: Date.now() - DAY })];
-    } } : {}),
-  };
-  jobs.set("job-1", { id: "job-1", lessonId: null, mapId: "m1", step: "pedagogue", status: "pending", round: 0, inputHash: "", output: { visual: { world: "jungle" } }, error: null });
-  return { store, jobs, loads };
-}
-async function pedagogueSystem(withLoader: boolean) {
-  const { store, jobs, loads } = fakeStore(withLoader);
-  const systems: string[] = [];
-  const providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
-    chat: async (messages: Array<{ content: string }>) => { systems.push(messages[0]?.content ?? ""); return { content: "{}", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } }; } } as unknown as IAIProvider);
-  await runPipelineStep("job-1", { store, providerFactory, keyConfigured: () => true, promptLookup: async (_n, fallback) => fallback });
-  return { system: systems[0] ?? "", job: jobs.get("job-1")!, loads };
-}
-const withEnv = async <T,>(value: string | undefined, fn: () => Promise<T>) => {
-  const saved = process.env.STUDIO_SUBJECT_MEMORY;
-  if (value === undefined) delete process.env.STUDIO_SUBJECT_MEMORY; else process.env.STUDIO_SUBJECT_MEMORY = value;
-  try { return await fn(); } finally { if (saved === undefined) delete process.env.STUDIO_SUBJECT_MEMORY; else process.env.STUDIO_SUBJECT_MEMORY = saved; }
-};
-
-test("lépés-futtató: kikapcsolva nincs lekérés, nincs pillanatkép, a tervezői prompt bájtra azonos a betöltő nélkülivel", async () => {
-  await withEnv(undefined, async () => {
-    const off = await pedagogueSystem(true);
-    const none = await pedagogueSystem(false);
-    assert.ok(off.system.length > 0);
-    assert.equal(off.system, none.system);
-    assert.deepEqual(off.loads, []);
-    assert.doesNotMatch(off.system, /TANTÁRGYI MEMÓRIA/);
-    assert.equal(off.job.output?.subjectMemory, undefined);
-  });
-});
-
-test("lépés-futtató: bekapcsolva a tervező a saját tantárgy nyitott kártyáit kapja; más tantárgy kártyája nem szivárog", async () => {
-  await withEnv("1", async () => {
-    const on = await pedagogueSystem(true);
-    assert.deepEqual(on.loads, ["matematika"]);
-    assert.match(on.system, /TANTÁRGYI MEMÓRIA \(matematika\)[\s\S]*Tanítás és fogalomfedettség \(3 futásban; lépés: knowledge\)/);
-    assert.doesNotMatch(on.system, /Tanítási mélység/);
-    const snap = on.job.output?.subjectMemory as { subject: string; cards: MemoryCard[] };
-    assert.equal(snap.subject, "matematika");
-    assert.ok(snap.cards.every((c) => c.subject === "matematika"));
-  });
 });

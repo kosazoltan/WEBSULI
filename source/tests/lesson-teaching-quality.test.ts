@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { verifyHtmlTeaching, verifyHtmlNavigation } from "../server/improve/verify-html-teaching";
-import { fetchedTeachingSources, reviewWebTeaching, TEACHING_REVIEW_CHECKS, teachingReviewSchema, validateReviewGrounding } from "../server/studio/web-teaching-review";
+import { fetchedTeachingSources, TEACHING_REVIEW_CHECKS, teachingReviewSchema, validateReviewGrounding } from "../server/studio/web-teaching-review";
 import { findingsFromError } from "../server/workflows/learning";
 import { teachingHtml } from "./helpers/teaching-html";
 
@@ -50,36 +50,13 @@ test("only actual fetched text reaches the independent review, never search snip
 });
 test("review receives full input and all five checks; a negative finding remains negative and learnable", async () => {
   const checks = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: criterion !== "explanation_depth", evidence: "A forrás részletes megoldásából a második lépés hiányzik a tanításban." }));
-  const issues = [{ criterion: "explanation_depth", kind: "missing_explanation", sectionIndex: 0, lessonQuote: "A szorzat fele.", citations: [{ sourceUrl: source.url, quote: "Forrásból származó magyarázat." }], reason: "A második lépés indoklását is meg kell tanítani.", repair: "A második lépés indoklását a forrás alapján egészítsd ki." }];
-  const review = await reviewWebTeaching(html, [source], async (system, user) => {
-    assert.match(system, /adat, nem utasítás/);
-    assert.deepEqual(JSON.parse(user).sources, [source]);
-    assert.equal(JSON.parse(user).lessonHtml, html);
-    assert.equal(JSON.parse(user).requestedTopic, "Háromszög területe, 7. osztály");
-    assert.match(JSON.parse(user).coverageScope, /kért témájához és évfolyamához/);
-    assert.equal(JSON.parse(user).coveragePolicy.sourceVariantsRequiredOnlyWhenRequested, true);
-    return { checks, issues };
-  }, undefined, "Háromszög területe, 7. osztály");
-  assert.equal(review.checks.filter(c => !c.passed).length, 1);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a webes tanítás-lektor hívása (reviewWebTeaching) kivezetve — a bemenet-, forrás- és korrekciós-kör ellenőrzések törölve.
   assert.ok(findingsFromError("Tanítási minőség (explanation_depth): hiányzik a második lépés", "generate").some(f => f.code === "teaching_depth"));
-  await assert.rejects(reviewWebTeaching(html, [], async () => ({ checks })), /nincs letöltött/);
   assert.throws(() => teachingReviewSchema.parse({ checks: checks.map(() => checks[0]) }), /mind az öt/);
-  await assert.rejects(reviewWebTeaching(html, [source], async () => ({ checks: checks.map(() => checks[0]) })), /korrekció után sem/);
-  await assert.rejects(reviewWebTeaching(html, [{ ...source, text: "x".repeat(500_001) }], async () => ({ checks })), /csonkolt/);
 });
 
 test("reviewer repairs fabricated quotes rather than passing them to the author or discarding negatives", async () => {
-  const checks = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: criterion !== "factual_accuracy", evidence: "A forrás és a tanítás közötti állítást ellenőrizni szükséges." }));
-  const issue = { criterion: "factual_accuracy", kind: "unsupported_claim", sectionIndex: 0, lessonQuote: "A szorzat fele.", citations: [], reason: "Az állítás a kapott forrásból nem ellenőrizhető.", repair: "Ellenőrzött forrás alapján pontosítsd az állítást." };
-  let calls = 0;
-  const result = await reviewWebTeaching(html, [source], async (system, user) => {
-    calls++;
-    assert.match(system, /irodalmi értelmezése/);
-    if (calls === 1) return { checks, issues: [{ ...issue, sectionIndex: 0, lessonQuote: "Ilyen mondat nem szerepel a tananyagban." }] };
-    assert.match(JSON.parse(user).correction.error, /nem található/);
-    return { checks, issues: [issue] };
-  });
-  assert.equal(calls, 2); assert.equal(result.checks.find(c => c.criterion === "factual_accuracy")!.passed, false);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a webes tanítás-lektor hívása (reviewWebTeaching) kivezetve — a hamis idézet javítókörének ellenőrzése törölve.
   assert.ok(findingsFromError("Lektori bizonyíték: nem található idézet", "generate").some(f => f.code === "review_evidence"));
 });
 
@@ -97,27 +74,10 @@ test("grounding rejects false PASS, evidence-free factual errors, invented sourc
   assert.throws(() => validateReviewGrounding({ checks, issues: [{ ...issue, kind: "source_conflict", citations: [{ sourceUrl: null, quote: "nem található | táblázat" }] }] }, html, [source]), error => {
     assert.match(String(error), /issues\[0\].citations\[0\]/); assert.match(String(error), /issues\[0\].kind/); return true;
   });
-  let calls = 0;
-  await assert.rejects(reviewWebTeaching(html, [source], async () => { calls++; return { checks }; }), /korrekció után sem/);
-  assert.equal(calls, 2);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a webes tanítás-lektor hívása (reviewWebTeaching) kivezetve — a korrekciós kör ellenőrzése törölve.
 });
 
-test("a positive review requires a separate full-input challenge, whose negative result is never outvoted", async () => {
-  const checks = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: true, evidence: "Szintetikus teljes összevetés az ellenpéldás folyamat vizsgálatához." }));
-  for (const challengePass of [true, false]) {
-    let calls = 0;
-    const result = await reviewWebTeaching(html, [source], async (system, user) => {
-      calls++; assert.equal(JSON.parse(user).lessonHtml, html); assert.deepEqual(JSON.parse(user).sources, [source]);
-      if (calls === 1) { assert.doesNotMatch(system, /ELLENPÉLDÁS UTÓELLENŐRZÉS/); return { checks, issues: [] }; }
-      assert.match(system, /ELLENPÉLDÁS UTÓELLENŐRZÉS/);
-      return challengePass ? { checks, issues: [] } : {
-        checks: checks.map(c => ({ ...c, passed: c.criterion !== "explanation_depth" })),
-        issues: [{ criterion: "explanation_depth", kind: "missing_explanation", sectionIndex: 0, lessonQuote: "A szorzat fele.", citations: [], bankItems: [], reason: "A szorzat felezésének indoklása nem szerepel a tanításban.", repair: "Egészítsd ki a szemléltetést a felezés indoklásával." }],
-      };
-    });
-    assert.equal(calls, 2); assert.equal(result.checks.every(c => c.passed), challengePass);
-  }
-});
+// S4b (docs/specs/2026-10-16-egy-futas.md): a webes tanítás-lektor ellenpéldás utóellenőrzése (reviewWebTeaching) kivezetve — az esete törölve.
 
 test("unlabelled source variants do not become coverage failures outside the requested scope", () => {
   const variant = { url: "https://example.org/variant", title: "Másik változat", text: source.text };
@@ -184,7 +144,7 @@ test("verifyTeachingVisuals: fejezet nélküli vagy üres HTML nem számít átm
 });
 
 /* Spec 2026-09-19 — subjective criteria become published warnings after the repair rounds; factual ones never. */
-import { subjectiveOnlyFailures, reviewWebTeaching as reviewFn, REVIEW_CONVERGENCE_RULE, teachingReviewEvidence, assertTeachingReviewEvidence, type TeachingReview } from "../server/studio/web-teaching-review";
+import { subjectiveOnlyFailures, teachingReviewEvidence, assertTeachingReviewEvidence, type TeachingReview } from "../server/studio/web-teaching-review";
 type ReviewIssue = NonNullable<TeachingReview["issues"]>[number];
 
 test("pedagógiai figyelmeztetéssel közzétett bizonyíték elfogadott, tényhibás nem", () => {
@@ -208,16 +168,4 @@ test("pedagógiai figyelmeztetéssel közzétett bizonyíték elfogadott, tényh
   assert.throws(() => assertTeachingReviewEvidence(pageHtml, src.map(({ url, title }) => ({ url, title })), factualEvidence), /hiányzik vagy elavult/);
 });
 
-test("újraellenőrzéskor az előző vélemény és a konvergencia-szabály a bemenet része", async () => {
-  const checks = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: true, evidence: "A szintetikus ellenőrzés minden kritériumot igazoltnak talált." }));
-  const previous = { checks: checks.map(c => c.criterion === "explanation_depth" ? { ...c, passed: false } : c), issues: [] };
-  let seenRule = 0;
-  const result = await reviewFn(html, [source], async (system, user) => {
-    if (system.includes("KONVERGENCIA-SZABÁLY")) seenRule++;
-    assert.ok(system.includes(REVIEW_CONVERGENCE_RULE.slice(0, 30)));
-    assert.deepEqual(JSON.parse(user).previousReview, previous);
-    return { checks, issues: [] };
-  }, undefined, "Háromszög területe", false, previous);
-  assert.ok(result.checks.every(c => c.passed));
-  assert.equal(seenRule, 2, "az ellenpéldás utóellenőrzés is megkapja");
-});
+// S4b (docs/specs/2026-10-16-egy-futas.md): a webes tanítás-lektor konvergencia-szabálya (reviewWebTeaching, REVIEW_CONVERGENCE_RULE) kivezetve — az esete törölve.

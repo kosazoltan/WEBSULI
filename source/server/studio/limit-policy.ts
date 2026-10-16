@@ -1,7 +1,7 @@
 import type { Lesson } from "../../shared/lesson-schema";
 import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef, misconceptionPath, misconceptionRef } from "../../shared/bank-item-ref";
 import { applyLektorConvergence, classifyNotes, type LektorNote, type RawNote } from "./lektor";
-import type { ChoiceFlag } from "./bank-verifier";
+import type { ChoiceFlag } from "./choice-gate";
 import { computeCoverage, type CoverageGateResult, type MapConcept } from "./coverage";
 import { planLessonBank } from "../../shared/lesson-bank-plan";
 

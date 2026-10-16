@@ -5,7 +5,7 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { knowledgeMaps, kmConcepts } from "../../shared/schema";
 import { isAuthenticatedAdmin } from "../auth";
-import { workflowFence, workflowFinding, workflowPhase } from "../workflows/engine";
+import { workflowFence, workflowPhase } from "../workflows/engine";
 import { runToolWorkflow } from "../workflows/tool-run";
 import { logger } from "../lib/logger";
 import { practiceReport } from "../rewards/lesson-attempts";
@@ -16,29 +16,23 @@ import {
 import {
   applyVerbatimChecks,
   canApprove,
-  computeInputHash,
-  extractionSignature,
-  ExtractionShapeError,
   type ExtractorFile,
 } from "./extractor";
 import {
   buildConceptUpdate,
   parseConceptPatch,
 } from "./request";
-import { parseOneStepRequest, inferOneStepScope, callScopeModel } from "./one-step";
+import { parseOneStepRequest } from "./one-step";
 import {
   LEGACY_MODELS,
-  STUDIO_STEPS,
+  LESSON_MODELS,
   aiKeyStatus,
-  assertDistinctFamilies,
   effortFor,
   modelFamily,
   providerForModel,
   requiredKeyFor,
   keyNameForModel,
   resolveLegacyModel,
-  resolveStudioModel,
-  studioModelMap,
 } from "../ai/models";
 
 /**
@@ -53,10 +47,6 @@ import {
 
 export const studioRouter = express.Router();
 
-/** Spec 2026-10-06-s7 (K): a besorolás sikertelensége a futásban lelet, a kliens a korábbi 422-es választ kapja. */
-class ScopeNotRecognized extends Error {
-  constructor() { super("A forrásból nem sikerült felismerni a tantárgyat és az osztályt."); }
-}
 
 studioRouter.use(isAuthenticatedAdmin);
 studioRouter.get("/lessons/:lessonId/learning-report", async (req: Request, res: Response) => {
@@ -113,16 +103,6 @@ function toClientConcept(row: typeof kmConcepts.$inferSelect) {
  */
 studioRouter.get("/ai-status", async (_req: Request, res: Response) => {
   const keys = aiKeyStatus();
-  const studio = studioModelMap();
-
-  let d1Independent = true;
-  let d1Message = "";
-  try {
-    assertDistinctFamilies();
-  } catch (error) {
-    d1Independent = false;
-    d1Message = (error as Error).message;
-  }
 
   res.json({
     keys,
@@ -137,15 +117,15 @@ studioRouter.get("/ai-status", async (_req: Request, res: Response) => {
         ready: keys[providerForModel(resolveLegacyModel(task))].configured,
       };
     }),
-    studioSteps: STUDIO_STEPS.map((step) => ({
-      step,
-      model: studio[step],
-      family: modelFamily(studio[step]),
-      provider: providerForModel(studio[step]),
-      requiredKey: keyNameForModel(studio[step]),
-      ready: keys[providerForModel(studio[step])].configured,
+    // docs/specs/2026-10-16-egy-futas.md (S4b): a tananyaggyártás modellpárja (egy beszélgetés; a tartalék a teljes átirattal viszi tovább).
+    lessonModels: (Object.entries(LESSON_MODELS) as Array<[keyof typeof LESSON_MODELS, string]>).map(([role, model]) => ({
+      role,
+      model,
+      family: modelFamily(model),
+      provider: providerForModel(model),
+      requiredKey: keyNameForModel(model),
+      ready: keys[providerForModel(model)].configured,
     })),
-    d1: { independentLektor: d1Independent, message: d1Message },
   });
 });
 
@@ -222,65 +202,24 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
   // Spec 2026-10-06-s7 (K): a kézi kivonatolás `map` workflow-ban fut (forrás → besorolás → tudástár → kapu → visszaolvasás);
   // a futás pillanatképe adja a skillt (korábban: withPreparationSkill, tanulás nélkül).
   const outcome = await runToolWorkflow({ mode: "map", owner: req.user!.id, request: { files: parsed.data.files.map((f) => [f.name, f.kind, f.content.length]), title: parsed.data.title ?? null } }, async () => {
-  // docs/specs/2026-10-16-egy-futas.md (S4a): egyfutásos módban az 1. állomás (forrás és tudásbank) EGY beszélgetésben — a besorolás
-  // és a fogalmak ugyanabból a válaszból; draft térkép a tanári jóváhagyáshoz.
-  const { singleRunEnabled, extractMapSingleRun } = await import("./single-run/live");
-  if (singleRunEnabled()) {
-    await workflowPhase("source"); await workflowPhase("scope"); await workflowPhase("knowledge");
-    const made = await extractMapSingleRun({ files: parsed.data.files as ExtractorFile[], title: parsed.data.title, ownerId: req.user!.id });
-    await workflowPhase("gate"); await workflowPhase("readback");
-    const [saved] = await db.select({ id: knowledgeMaps.id }).from(knowledgeMaps).where(eq(knowledgeMaps.id, made.mapId)).limit(1);
-    if (!saved) throw new Error("A tudástár nem olvasható vissza.");
-    return { value: made, result: { kind: "map" as const, id: made.mapId } };
-  }
-  await workflowPhase("source");
-  await workflowPhase("scope");
-  const inferred=await inferOneStepScope(parsed.data,files=>callScopeModel(files,resolveStudioModel("scope")));
-  if(!inferred.ok){
-    await workflowFinding("scope_classification");
-    throw new ScopeNotRecognized();
-  }
-  await workflowPhase("knowledge");
-  const { files } = parsed.data;
-  const scope=inferred.scope;
-  const title=parsed.data.title ?? inferred.title;
-  const { runExtraction, loadExtractionConfig } = await import("./run-extraction");
-  const config = await loadExtractionConfig();
-  const inputHash = computeInputHash(files, scope, extractionSignature(config));
-
-  const [existing] = await db
-    .select({ id: knowledgeMaps.id })
-    .from(knowledgeMaps)
-    .where(eq(knowledgeMaps.inputHash, inputHash))
-    .limit(1);
-
-  let mapId: string;
-  if (existing) {
-    logger.info(`[STUDIO] Kivonatolás gyorsítótárból: ${existing.id}`);
-    mapId = existing.id;
-  } else {
-    mapId = await runExtraction({
-      files: files as ExtractorFile[],
-      scope,
-      title,
-      inputHash,
-      config,
-      userId: (req.user as { id?: string } | undefined)?.id,
-    });
-  }
-  await workflowPhase("gate");
-  await workflowPhase("readback");
-  const [saved] = await db.select({ id: knowledgeMaps.id }).from(knowledgeMaps).where(eq(knowledgeMaps.id, mapId)).limit(1);
+  // docs/specs/2026-10-16-egy-futas.md (S4a/S4b): az egyfutásos 1. állomás (forrás és tudásbank) EGY beszélgetésben — a besorolás és a
+  // fogalmak ugyanabból a válaszból; draft térkép a tanári jóváhagyáshoz, tartalmi lenyomaton idempotens.
+  const { extractMapSingleRun } = await import("./single-run/live");
+  await workflowPhase("source"); await workflowPhase("scope"); await workflowPhase("knowledge");
+  const made = await extractMapSingleRun({ files: parsed.data.files as ExtractorFile[], title: parsed.data.title, ownerId: req.user!.id });
+  await workflowPhase("gate"); await workflowPhase("readback");
+  const [saved] = await db.select({ id: knowledgeMaps.id }).from(knowledgeMaps).where(eq(knowledgeMaps.id, made.mapId)).limit(1);
   if (!saved) throw new Error("A tudástár nem olvasható vissza.");
-  return { value: { mapId, cached: !!existing }, result: { kind: "map" as const, id: mapId } };
+  return { value: made, result: { kind: "map" as const, id: made.mapId } };
   });
   return outcome.cached ? res.json(outcome) : res.status(201).json(outcome);
   } catch (error) {
-    if (error instanceof ScopeNotRecognized) return res.status(422).json({ message: "A forrásból nem sikerült felismerni a tantárgyat és az osztályt. Próbáld újra olvashatóbb forrással." });
     logger.error(
       `[STUDIO] Kivonatolás hiba: ${error instanceof Error ? error.message : String(error)}`,
     );
-    res.status(502).json({ message: error instanceof ExtractionShapeError ? error.message : "A kivonatolás nem sikerült. Próbáld újra." });
+    // A forrás-állomás pontos oka (SingleRunError) a felületnek szól; minden más hibánál általános üzenet.
+    const { SingleRunError } = await import("./single-run/engine");
+    res.status(502).json({ message: error instanceof SingleRunError ? `A forrás feldolgozása nem sikerült: ${error.message}` : "A kivonatolás nem sikerült. Próbáld újra." });
   }
 });
 

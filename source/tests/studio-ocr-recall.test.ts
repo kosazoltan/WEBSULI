@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { resolveStudioModel } from "../server/ai/models";
 import { keyTokenRecall, normalizeForRecall } from "../server/studio/ocr-recall";
 
 /**
@@ -56,26 +55,7 @@ test("hiányzó tokent nem néz el (negatív kontroll)", () => {
   assert.deepEqual(missing, ["trapez|Tr", "tizedestort"]);
 });
 
-test("a beállított OCR-modell a mért mezőny legjobbja", () => {
-  const configured = resolveStudioModel("ocr");
-  const ranked = Object.keys(fx.transcripts).sort((a, b) => meanRecall(b) - meanRecall(a));
-  assert.equal(
-    configured,
-    ranked[0],
-    `a beállított modell (${configured}) nem a legjobb; mért sorrend: ${ranked
-      .map((m) => `${m}=${(meanRecall(m) * 100).toFixed(1)}%`)
-      .join(", ")}`,
-  );
-});
-
-test("az OCR-modell verte a leváltott glm-et, és nem csúszik vissza alá", () => {
-  const now = meanRecall(resolveStudioModel("ocr"));
-  const old = meanRecall("z-ai/glm-5.3-flash");
-  assert.ok(now > old, `a váltásnak nyernie kell: ${now.toFixed(3)} vs ${old.toFixed(3)}`);
-  // A rögzített 92,6% NEM éri el a #190 célját (>=95%) — a küszöb a MÉRT
-  // értéket őrzi a visszacsúszástól, nem a vágyott célt állítja késznek.
-  assert.ok(now >= 0.9, `visszaesés a mért 92,6%-ról: ${(now * 100).toFixed(1)}%`);
-});
+// S4b (docs/specs/2026-10-16-egy-futas.md): a lépésenkénti OCR-modell (resolveStudioModel("ocr")) kivezetve — a beállított OCR-modell két esete törölve.
 
 test("a fixture rögzített pontszámai megegyeznek az újraszámolttal", () => {
   for (const [model, expected] of Object.entries(fx.measured)) {

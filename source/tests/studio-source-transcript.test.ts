@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { conceptSchema } from "../shared/knowledge-map-schema";
 import { attachSourceTranscripts, checkSourceQuotes, repairSourceQuotes, sourceTextForReference } from "../server/studio/source-transcript";
-import { parseOneStepRequest, scopeContentParts } from "../server/studio/one-step";
+import { parseOneStepRequest } from "../server/studio/one-step";
 import { buildConceptUpdate } from "../server/studio/request";
 import { applyVerbatimChecks } from "../server/studio/extractor";
 
@@ -12,7 +12,7 @@ const files = attachSourceTranscripts([{name:"plant.jpg",kind:"image",content:"d
 const concept = conceptSchema.parse({ id:"stem",term:"szár",definition:exact,quote:paraphrase,sourceRef:{file:"plant.jpg"},type:"fact",examWeight:"core" });
 
 test("a kivonatoló ugyanazt a képátiratot kapja, mint az idézetellenőr", async () => {
-  assert.deepEqual(await scopeContentParts(files), [{type:"text",text:exact}]);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a külön besoroló-modellhívás (scopeContentParts) kivezetve — az idézetellenőrzés marad.
   assert.equal(checkSourceQuotes([concept], files)[0].verbatimOk,false);
   const checked = await repairSourceQuotes([concept], files, async failed => {
     assert.deepEqual(failed.map(c=>c.id), ["stem"]);

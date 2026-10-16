@@ -25,12 +25,10 @@ config({ path: resolve(__dirname, "../../.env") });
 
 const {
   LEGACY_MODELS,
-  STUDIO_STEPS,
+  LESSON_MODELS,
   aiKeyStatus,
-  assertDistinctFamilies,
   modelFamily,
   resolveLegacyModel,
-  studioModelMap,
 } = await import("../ai/models");
 
 type LegacyTask = keyof typeof LEGACY_MODELS;
@@ -75,18 +73,9 @@ for (const task of Object.keys(LEGACY_MODELS) as LegacyTask[]) {
   logger.info(`   ${label(task).padEnd(38)} ${model}`);
 }
 
-logger.info("\n🎓 Lesson Studio lépések → modell:\n");
-const studio = studioModelMap();
-for (const step of STUDIO_STEPS) {
-  logger.info(`   ${step.padEnd(14)} ${studio[step].padEnd(26)} (${modelFamily(studio[step])})`);
-}
-
-logger.info("\n🔒 D1 független lektorálás:");
-try {
-  assertDistinctFamilies();
-  logger.info(`   ✅ a Szerző (${modelFamily(studio.author)}) és a Lektor (${modelFamily(studio.lektor)}) más családból van`);
-} catch (error) {
-  logger.info(`   ❌ ${(error as Error).message}`);
+logger.info("\n🎓 Tananyaggyártás (docs/specs/2026-10-16-egy-futas.md (S4b): egy beszélgetés, két modell):\n");
+for (const [role, model] of Object.entries(LESSON_MODELS)) {
+  logger.info(`   ${(role === "primary" ? "elsődleges" : "tartalék").padEnd(14)} ${model.padEnd(26)} (${modelFamily(model)})`);
 }
 
 const blocked = Object.values(status)

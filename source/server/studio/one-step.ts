@@ -1,30 +1,11 @@
-import { withQuotaFailover, studioConnection, studioModelReady } from "../ai/studio-provider";
-import { CROSS_FAMILY_FALLBACK_EFFORT, crossFamilyFallback, providerForModel, SCOPE_EFFORT, type OcrEffort } from "../ai/models";
-import { callClaudeParts } from "./claude-vision";
-import { logger } from "../lib/logger";
-import { ocrVendorRequest } from "./ocr";
-import { withSupportSkill } from "./support-skills";
-import { workflowSkillPrompt } from "../workflows/engine";
 /**
- * LS-6 (#164) — one-step lesson manufacturing (owner decision, 2026-09-05).
- *
- * The two-step flow (build a map, then separately start a lesson) exists for
- * governance, not for the teacher's benefit. This module keeps every REAL gate
- * (verbatim check, coverage check, lektor) and removes only the manual clicks:
- *
- *   upload → infer scope from source → extraction (existing, hash-idempotent)
- *          → lesson job starts immediately → outline auto-approved IFF the
- *            mechanical coverage check passes → author → animator → lektor.
- *
- * Pure decision logic lives here (unit-tested); the loop that applies it sits
- * in lesson-pipeline-routes.ts next to the existing drive().
+ * LS-6 (#164) — az egylépéses gyártás kérése (feltöltés → kész lecke) és a piszkozatlista döntése.
+ * docs/specs/2026-10-16-egy-futas.md (S4b): a tantárgy / évfolyam felismerése az egyfutásos motor 1. állomásán történik — a külön
+ * besoroló-modellhívás kivezetve.
  */
 
 import { z } from "zod";
-import { readDocxText } from "./document-source";
 import { SOURCE_KINDS } from "../../shared/knowledge-map-schema";
-import type { ExtractorFile, ExtractorScope } from "./extractor";
-import { scopeClassificationSchema, type ScopeClassification } from "../../shared/source-classification";
 
 /* ---------------------------- request schema ---------------------------- */
 
@@ -56,11 +37,6 @@ export const oneStepRequestSchema = z.object({
 });
 
 export type OneStepRequest = z.infer<typeof oneStepRequestSchema>;
-
-/** Owner policy: legacy caller metadata never determines a manufactured lesson's grade. */
-export function inferOneStepScope(data: OneStepRequest, callModel: ScopeModelFn): Promise<ScopeInference> {
-  return inferScope(data.files as ExtractorFile[], callModel);
-}
 
 export type ParseResult<T> =
   | { ok: true; data: T }
@@ -99,161 +75,4 @@ export function decideOneStepAction(job: OneStepJobSnapshot): OneStepAction {
     return output.outline !== undefined && job.status === "ok" ? "approve" : "stop";
   }
   return "continue";
-}
-
-/* ----------------------------- scope inference -------------------------- */
-
-export type ScopeInference =
-  | { ok: true; scope: ExtractorScope; title?: string; classification: ScopeClassification }
-  | { ok: false; reason: string };
-
-export type ScopeModelFn = (files: ExtractorFile[]) => Promise<string>;
-
-
-const SCOPE_PROMPT = [
-  "You are given a Hungarian primary/secondary school teaching source (text and/or images).",
-  'Answer with a single JSON object, nothing else: {"subject": "<tantárgy magyarul>",',
-  '"classroom": <0-12 integer>, "title": "<rövid magyar cím>", "classification": {"reason": "<magyar indoklás konkrét forrásbeli témákkal>", "confidence": "low|medium|high", "gradeRange": [<min>, <max>], "mixedContent": <boolean>}}.',
-  // #196 (mérve élesben): a korábbi „Pick the classroom the material is most
-  // likely written for" találgatásra hívott. A 8. osztályos geometria-forrásra
-  // (háromszög területe, kör kerülete, körgyűrű, (n-2)·180°) a modell 4-et adott,
-  // és a lecke végig 4. osztályos szinten készült el.
-  // Spec 2026-09-30 (U6, B2): a besoroló skill 1. lépése a promptban is — minden fájl, a középsők is.
-  "Examine EVERY file from the first to the last; the topic of a middle page counts the same as the first.",
-  "Determine the classroom ONLY from the mathematical/technical content that is actually",
-  "visible in the source. Ignore handwriting quality and page layout — a messy page is not",
-  "a sign of a younger pupil.",
-  "Use the dominant learning goals, prerequisite knowledge and depth of actual exercises together.",
-  "A passing mention of an advanced word is not a requirement to assign the hardest grade.",
-  "Examples of Hungarian curriculum anchors (use these as evidence, not a rigid keyword rule):",
-  "  area/perimeter formulas with variables (T = a·m/2), π, circle area/circumference,",
-  "  Pythagoras, powers, irrational numbers → grades 7-8, NOT grade 3-4;",
-  "  place value, written addition/subtraction, simple fractions → grades 2-4.",
-  "When ambiguous, report a plausible grade range and lower confidence with a reason; do not automatically choose the higher grade.",
-  "Mark mixedContent when sources contain substantially different levels or subjects. Still choose the best supported main grade autonomously.",
-].join(" ");
-
-/** Parse the model's scope guess; clamp classroom; never throw. */
-export async function inferScope(files: ExtractorFile[], callModel: ScopeModelFn): Promise<ScopeInference> {
-  try {
-    const answer = await callModel(files);
-    const match = answer.match(/\{[\s\S]*\}/);
-    if (!match) return { ok: false, reason: "A modell válaszában nincs JSON." };
-    const parsed = JSON.parse(match[0]) as { subject?: unknown; classroom?: unknown; title?: unknown; classification?: unknown };
-    const subject = typeof parsed.subject === "string" ? parsed.subject.trim() : "";
-    const classroomRaw = typeof parsed.classroom === "number" ? Math.round(parsed.classroom) : NaN;
-    if (subject === "" || Number.isNaN(classroomRaw)) {
-      return { ok: false, reason: "A modell nem adott tantárgyat/osztályt." };
-    }
-    const classroom = Math.min(12, Math.max(0, classroomRaw));
-    const title = typeof parsed.title === "string" && parsed.title.trim() !== "" ? parsed.title.trim() : undefined;
-    const checked = scopeClassificationSchema.safeParse(parsed.classification);
-    const classification: ScopeClassification = checked.success && checked.data.gradeRange[0] <= classroom && classroom <= checked.data.gradeRange[1]
-      ? checked.data : { reason: "A besoroláshoz nem érkezett ellenőrizhető indoklás; bizonytalan gépi javaslat.", confidence: "low", gradeRange: [classroom, classroom], mixedContent: false };
-    return { ok: true, scope: { subject, classroom }, title, classification };
-  } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-type ScopeContentPart =
-  | { type: "text"; text: string }
-  | { type: "file"; file: { filename: string; file_data: string } }
-  | { type: "image_url"; image_url: { url: string; detail: "low" | "high" } };
-
-/** Classify document content, never a truncated base64 string. */
-export async function scopeContentParts(
-  files: ExtractorFile[],
-  readDocx: (content: string) => Promise<string> = readDocxText,
-): Promise<ScopeContentPart[]> {
-  const parts: ScopeContentPart[] = [];
-  for (const file of files) {
-    if (file.extractedText !== undefined) parts.push({ type: "text", text: file.extractedText });
-    else if (file.kind === "image") parts.push({ type: "image_url", image_url: { url: file.content, detail: "high" } });
-    else if (file.kind === "pdf" && file.content.startsWith("data:")) parts.push({ type: "file", file: { filename: file.name, file_data: file.content } });
-    else {
-      const text = file.kind === "docx" ? await readDocx(file.content) : file.content;
-      if (!text.trim()) throw new Error("A dokumentumból nem olvasható tananyagszöveg.");
-      parts.push({ type: "text", text });
-    }
-  }
-  return parts;
-}
-
-/**
- * A scope-hívás kérés-paraméterei — külön függvényben, mert a #165 gyökér-ok
- * pontosan itt volt: a glm-flash osztálynál a reasoning kötelező, és a szűk
- * (300) token-keretet teljesen elette (finish=length, content=null). Mérve:
- * effort:low + 2000 keret mellett a válasz stabilan megjön.
- * Spec 2026-10-14 (gpt-6-luna, high): a kimenet max 2448 token volt, ezért a low-nál mélyebb effort 8000-es keretet kap.
- */
-export function scopeRequestParams(model: string, parts: ScopeContentPart[], effort: OcrEffort = "low") {
-  return {
-    model,
-    messages: [
-      { role: "system" as const, content: withSupportSkill("scope", SCOPE_PROMPT) + workflowSkillPrompt("scope") },
-      { role: "user" as const, content: parts },
-    ],
-    max_completion_tokens: effort === "low" ? 2000 : 8000,
-    reasoning: { effort },
-  };
-}
-
-/**
- * Default scope model call: one vision call over all sources (the `scope` step model, spec 2026-10-14). Spec 2026-10-14-tartalek-b-szelet
- * (B2): az elsődleges hibájánál egyszer az ellentétes családú tartalék (OpenAI → Opus 5.5 Claude-képolvasással; Anthropic →
- * GPT-6.1 Sol), medium efforttal — ugyanazokkal a forrásrészekkel.
- */
-export async function callScopeModel(files: ExtractorFile[], model: string, effort: OcrEffort = SCOPE_EFFORT): Promise<string> {
-  const parts = await scopeContentParts(files);
-  // Review #218: a kimeneti hiba (csonka, JSON nélküli, tantárgy/osztály nélküli válasz) is a tartalék-határon BELÜL — különben a
-  // tartalék el sem indulna, és az `inferScope` utólag utasítaná el a választ.
-  const attempt = async (m: string, e: OcrEffort) => {
-    const answer = await callScopeVendor(parts, m, e);
-    if (!scopeAnswerUsable(answer)) throw new Error(`A(z) ${m} tantárgy-felismerési válasza nem használható (nincs tantárgy/osztály JSON).`);
-    return answer;
-  };
-  try {
-    return await attempt(model, effort);
-  } catch (error) {
-    const fallback = crossFamilyFallback(model);
-    if (!fallback || !studioModelReady(fallback)) throw error;
-    logger.warn(`[STUDIO] Tantárgy-felismerés (${model}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`);
-    return attempt(fallback, CROSS_FAMILY_FALLBACK_EFFORT);
-  }
-}
-
-/** Review #218: ugyanaz a minimum, amit az `inferScope` megkövetel — JSON, nem üres tantárgy, szám osztály. */
-export function scopeAnswerUsable(answer: string): boolean {
-  const match = answer.match(/\{[\s\S]*\}/);
-  if (!match) return false;
-  try {
-    const parsed = JSON.parse(match[0]) as { subject?: unknown; classroom?: unknown };
-    return typeof parsed.subject === "string" && parsed.subject.trim() !== "" && typeof parsed.classroom === "number" && Number.isFinite(parsed.classroom);
-  } catch {
-    return false;
-  }
-}
-
-async function callScopeVendor(parts: ScopeContentPart[], model: string, effort: OcrEffort): Promise<string> {
-  if (providerForModel(model) === "anthropic") {
-    const system = withSupportSkill("scope", SCOPE_PROMPT) + workflowSkillPrompt("scope");
-    return callClaudeParts({ model, system, parts, maxTokens: 16_000, timeoutMs: 120_000, effort });
-  }
-  const OpenAI = (await import("openai")).default;
-  // Spec 2026-10-01-gyokerok-egyben (2.3): kimerült OpenAI-keretnél ugyanaz a modell az OpenRouteren át.
-  return withQuotaFailover(studioConnection(model), async (connection) => {
-    // high effortnál a mért p95 19 s, max 28 s — a 120 s-os határ marad.
-    const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000, maxRetries: 1 });
-    const params = scopeRequestParams(connection.model, parts, effort);
-    // OpenRouter: `reasoning`; közvetlen OpenAI: `reasoning_effort` (nélküle az alap effort viszi a keretet); más: egyik sem.
-    const request = ocrVendorRequest(connection.vendor, params);
-    const response = await client.chat.completions.create(
-      request as unknown as Parameters<typeof client.chat.completions.create>[0],
-    );
-    if (!("choices" in response)) return "";
-    // Review #218: a csonka válasz kimeneti hiba (a tartalék-határon belül kezelve).
-    if (response.choices[0]?.finish_reason === "length") throw new Error(`A(z) ${model} tantárgy-felismerési válasza elérte a hosszkorlátot.`);
-    return response.choices[0]?.message?.content ?? "";
-  });
 }

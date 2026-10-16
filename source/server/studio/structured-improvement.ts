@@ -13,9 +13,6 @@ import { buildAuthorPrompt, buildLektorPrompt, canonicalJson, lektorReportSchema
 import { classifyNotes } from "./lektor";
 import { lektorSkillCodes } from "../workflows/learning";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
-import { callStepModel, callStepModelWithFallback, StepModelError } from "./run-step";
-import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
-import { lektorChainFor, providerForModel, resolveStudioModel } from "../ai/models";
 import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, workflowFinding } from "../workflows/engine";
@@ -75,33 +72,9 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const [material] = await db.select().from(htmlFiles).where(eq(htmlFiles.id, fileId));
   if (!material) throw new Error("Az eredeti tananyag metaadatai nem találhatók.");
   const source = await loadSource(row.mapId);
-  // Spec 2026-10-14-tartalek-b-szelet: a szerző/tervező ellentétes családú tartalékkal; a lektor a tanítás TÉNYLEGES szerzőjének
-  // családján kívüli láncon fut (D1). Review #217: minden javítókör a TELJES tanítást írja újra, és mindig a legutóbbi kör kimenete
-  // kerül ellenőrzésre/elfogadásra — ezért a szerző a legutóbbi tanítás-író („repair”) hívás modellje; az elutasított korábbi kör és
-  // a bankhívás (a fő gyártásban sem) nem szerző.
-  let teachingAuthor: string | undefined;
-  // docs/specs/2026-10-16-egy-futas.md (S4a): egyfutásos módban minden szerep EGY beszélgetésben (Opus 5.5 medium, tartalék GPT-6.1 Sol).
+  // docs/specs/2026-10-16-egy-futas.md (S4a/S4b): minden szerep EGY beszélgetésben (Opus 5.5 medium, tartalék GPT-6.1 Sol).
   const conversationCall = await singleRunRepairCall();
-  const call = async (step: RepairStep, system: string, user: string, role: PromptRole = requireRoleForStep(step), extra?: { responseFormat?: ResponseFormatJsonSchema }) => {
-    if (conversationCall) return conversationCall(step, system, user, role);
-    // Review #160 (U2/C8): szigorú séma csak a közvetlen OpenAI-úton; tartalék úton JSON-mód + helyi validálás.
-    const formatFor = (model: string) => extra?.responseFormat && providerForModel(model) === "openai" ? { responseFormat: extra.responseFormat } : {};
-    if (step === "lektor") {
-      const chain = lektorChainFor(teachingAuthor ? [teachingAuthor] : undefined).filter((m) => studioModelReady(m));
-      for (const [index, model] of chain.entries()) {
-        try {
-          return (await callStepModel(createStudioStepProvider(model, step), { step, role, model, system, user, ...formatFor(model) })).json;
-        } catch (error) {
-          if (!(error instanceof StepModelError) || index + 1 === chain.length) throw error;
-        }
-      }
-      throw new Error("A lektor-lánc egyik modelljéhez sincs kulcs.");
-    }
-    const model = resolveStudioModel(step);
-    const result = await callStepModelWithFallback({ step, role, model, system, user, ...formatFor(model) }, { providerFactory: createStudioStepProvider, providerStep: step });
-    if (step === "author" && role === "repair") teachingAuthor = result.model;
-    return result.json;
-  };
+  const call: RepairCall = (step, system, user, role = requireRoleForStep(step)) => conversationCall(step, system, user, role);
   const ownerInstruction = normalizeOwnerInstruction(instruction);
   const { sourceFiles, ...hashedSource } = source;
   const transcript = Array.isArray(sourceFiles) && sourceFiles.some((f) => (f as { kind?: string } | null)?.kind === "image");
@@ -115,12 +88,10 @@ export async function generateStructuredImprovement(fileId: string, instruction?
 }
 
 /**
- * Egyfutásos módban a javítás minden modellhívása egyetlen beszélgetésbe kötve (null, ha a vészfék a régi láncot kéri).
+ * A javítás minden modellhívása egyetlen beszélgetésbe kötve.
  * A bankcsomag hibás kimenete a banképítő javító körébe megy (`RetryableBankCallError`), mint a gyártásban.
  */
 export async function singleRunRepairCall(conversation?: import("./single-run/conversation").LessonConversation) {
-  const { singleRunEnabled } = await import("./single-run/switch");
-  if (!conversation && !singleRunEnabled()) return null;
   const { createLessonConversation } = await import("./single-run/conversation");
   const { conversationBankCall, singleRunSystemPrompt, withRoleRunbook, SINGLE_RUN_FIX_ROUNDS } = await import("./single-run/engine");
   const { parseModelJson } = await import("./run-step");

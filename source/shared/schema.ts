@@ -702,7 +702,7 @@ export type InsertLessonRow = typeof lessons.$inferInsert;
  * követhető, és a kliens ezt kérdezi le (ugyanaz a minta, mint az improveAsync.ts).
  */
 /**
- * #170 — OCR átirat-cache (tartalom-hash + modell). Lásd server/studio/ocr.ts.
+ * #170 — OCR átirat-cache (tartalom-hash + modell). A régi OCR-olvasó (server/studio/ocr.ts) az S4b-ben kivezetve; a tábla adatai megmaradnak.
  */
 /**
  * Tételgyár T7.1 (docs/specs/2026-10-15-tetelgyar-t7-dontobiro-vegrehajtas.md): a döntőbíró gyorsítótára — kulcs-hash → ítélet.

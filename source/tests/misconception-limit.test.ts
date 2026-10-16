@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { misconceptionRef, misconceptionPath } from "../shared/bank-item-ref";
 import { removablePath, splitLimitBlockers } from "../server/studio/limit-policy";
-import { mergeSectionPatches, parseMisconceptionsPatch, targetedRepairSections } from "../server/studio/section-patch";
-import { resolveChoiceGate } from "../server/studio/step-runner";
+import { resolveChoiceGate } from "../server/studio/choice-gate";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import type { Lesson } from "../shared/lesson-schema";
 import type { LektorNote } from "../server/studio/lektor";
@@ -45,10 +44,3 @@ test("kapu: a limit-eredetű tévhit-jelzés az elemet kiveszi, a többi tévhit
   assert.deepEqual(res.lesson.sections, l.sections);
 });
 
-test("folt: a tévhit-jegyzet nem kényszerít teljes újraírást; a folt a javított tévhit-listát is hozhatja", () => {
-  const l = lesson();
-  assert.deepEqual(targetedRepairSections(l, [note("misconceptions[1]"), { ...note("0.0") }], null), [0]);
-  const merged = mergeSectionPatches(l, new Map([[0, l.sections[0]]]), [0], parseMisconceptionsPatch({ sections: { "0": l.sections[0] }, misconceptions: [l.misconceptions[0]] }));
-  assert.deepEqual(merged.misconceptions, [l.misconceptions[0]]);
-  assert.deepEqual(mergeSectionPatches(l, new Map([[0, l.sections[0]]]), [0]).misconceptions, l.misconceptions, "lista nélkül változatlan");
-});

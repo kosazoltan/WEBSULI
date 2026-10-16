@@ -3,6 +3,7 @@
  * prompt, ítélet-értelmezés és az ítéletek összevetése. Alapelv: a döntőbíró a determinisztikus ítéletet csak EMELHETI.
  */
 import { createHash } from "node:crypto";
+import { LESSON_MODELS } from "../ai/models";
 import type { OpenTask } from "../../shared/lesson-experience";
 import { normalizeAnswerV2, type AnswerScore } from "../../shared/lesson-experience-score";
 
@@ -10,8 +11,8 @@ import { normalizeAnswerV2, type AnswerScore } from "../../shared/lesson-experie
 export const ARBITER_VERSION = "arbiter-2";
 // Tulajdonosi döntés 2026-10-16 (docs/specs/2026-10-16-egy-futas.md, C): a szöveges válaszok helyességéről Opus 5.5 (medium) dönt,
 // akadályoztatása esetén GPT-6.1 Sol (medium). Ha mindkettő kiesik, a determinisztikus ítélet marad.
-export const ARBITER_MODEL = "claude-opus-5-5";
-export const ARBITER_FALLBACK_MODEL = "gpt-6.1-sol";
+export const ARBITER_MODEL = LESSON_MODELS.primary;
+export const ARBITER_FALLBACK_MODEL = LESSON_MODELS.fallback;
 /** Tulajdonosi döntés 2026-10-15: napi 2000 fizetett döntőbíró-hívás összesen. */
 export const ARBITER_DAILY_LIMIT = 2000;
 /** Tulajdonosi döntés 2026-10-15: a szolgáltatóhoz legfeljebb 1000 karakter megy a válaszból. */

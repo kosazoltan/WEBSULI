@@ -2,8 +2,7 @@ import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { createStudioStepProvider, crossFamilyFallbackOptions } from "../server/ai/studio-provider";
 import { ClaudeProvider } from "../server/ai/ClaudeProvider";
-import { OpenRouterProvider } from "../server/ai/OpenRouterProvider";
-import { CROSS_FAMILY_FALLBACK, crossFamilyFallback, FALLBACK_MODELS, fallbackModelFor, LEKTOR_THIRD_FAMILY_MODEL, lektorChainFor, MODEL_REASONING_EFFORT, maxOutputForModel } from "../server/ai/models";
+import { CROSS_FAMILY_FALLBACK, crossFamilyFallback } from "../server/ai/models";
 import { callStepModel } from "../server/studio/run-step";
 
 /*
@@ -27,10 +26,7 @@ test("a tábla: OpenAI → claude-opus-5-5, Anthropic → gpt-6.1-sol, más csal
   assert.equal(crossFamilyFallback("claude-opus-5"), "gpt-6.1-sol");
   assert.equal(crossFamilyFallback("qwen/qwen3.8-max-0902"), undefined);
   assert.equal(crossFamilyFallback("z-ai/glm-5.3-flash"), undefined);
-  for (const step of ["pedagogue", "author", "animator"] as const) assert.equal(FALLBACK_MODELS[step], "gpt-6.1-sol", step);
-  assert.equal(FALLBACK_MODELS.bank, "claude-opus-5-5");
-  assert.equal(MODEL_REASONING_EFFORT[LEKTOR_THIRD_FAMILY_MODEL], "high");
-  assert.equal(maxOutputForModel(LEKTOR_THIRD_FAMILY_MODEL), 131_072);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a lépésenkénti tartaléktábla (FALLBACK_MODELS), a harmadik családú lektor (Qwen 0902) effortja és kimeneti plafonja kivezetve — két modell maradt.
 });
 
 test("crossFamilyFallbackOptions: csak tartalékhívásra és csak az ellentétes családú modellre", () => {
@@ -88,40 +84,8 @@ test("lektor-lánc tagjai: Opus 5.5 medium (Anthropic), Qwen 3.8 Max 0902 high (
     return String(url).includes("anthropic") ? anthropicJson() : openAiJson();
   });
   await createStudioStepProvider("claude-opus-5-5", "lektor").chat([{ role: "user", content: "x" }]);
-  const qwen = createStudioStepProvider(LEKTOR_THIRD_FAMILY_MODEL, "lektor");
-  assert.ok(qwen instanceof OpenRouterProvider);
-  await qwen.chat([{ role: "user", content: "x" }]);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a harmadik családú Qwen lektor (LEKTOR_THIRD_FAMILY_MODEL, high effort) kivezetve — csak az Opus/GPT pár marad.
   assert.deepEqual(seen[0].body.output_config, { effort: "medium" });
-  assert.equal(seen[1].body.model, "qwen/qwen3.8-max-0902");
-  assert.deepEqual(seen[1].body.reasoning, { effort: "high" });
 });
 
-test("webes lektor-lánc: Claude-szerzőnél Sol → (500) → Qwen; vegyes (Claude + GPT) szerzőségnél egyből Qwen", async t => {
-  withEnv(t, KEYS);
-  const { callTeachingReviewer } = await import("../server/studio/web-teaching-review");
-  const urls: string[] = [];
-  t.mock.method(globalThis, "fetch", async (url: unknown) => {
-    urls.push(String(url));
-    if (String(url).includes("api.openai.com")) return new Response(JSON.stringify({ error: { message: "server error" } }), { status: 500, headers: { "Content-Type": "application/json" } });
-    const chunk = (o: object) => `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model: "qwen/qwen3.8-max-0902", ...o })}\n\n`;
-    return new Response(chunk({ choices: [{ index: 0, delta: { content: '{"checks":[]}' }, finish_reason: "stop" }] }) + chunk({ choices: [], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }) + "data: [DONE]\n\n",
-      { headers: { "Content-Type": "text/event-stream" } });
-  });
-  assert.deepEqual(await callTeachingReviewer("S", "U", undefined, ["claude-opus-5-5"]), { checks: [] });
-  assert.equal(urls.length, 2);
-  assert.match(urls[0], /api\.openai\.com/);
-  assert.match(urls[1], /openrouter\.ai/);
-  urls.length = 0;
-  assert.deepEqual(await callTeachingReviewer("S", "U", undefined, ["gpt-6.1-sol", "claude-opus-5-5"]), { checks: [] });
-  assert.equal(urls.length, 1, "vegyes szerzőségnél csak a harmadik család lektorál");
-  assert.match(urls[0], /openrouter\.ai/);
-});
-
-test("review #216: a tartalék a TÉNYLEGES (env-vel felülírt) elsődlegesből képződik; más családnál a tábla marad", () => {
-  assert.equal(fallbackModelFor("pedagogue", {}), "gpt-6.1-sol");
-  assert.equal(fallbackModelFor("pedagogue", { STUDIO_MODEL_PEDAGOGUE: "gpt-6-luna" }), "claude-opus-5-5");
-  assert.equal(fallbackModelFor("bank", { STUDIO_MODEL_BANK: "claude-opus-5" }), "gpt-6.1-sol");
-  assert.equal(fallbackModelFor("gateHelper", {}), FALLBACK_MODELS.gateHelper, "deepseek elsődleges: a korábbi útvonal");
-  // Claude-ra felülírt lektor: a tartaléka GPT; GPT-szerzőnél a lánc kiszűri.
-  assert.deepEqual(lektorChainFor(["gpt-6.1-sol"], { STUDIO_MODEL_LEKTOR: "claude-opus-5" }), ["qwen/qwen3.8-max-0902", "claude-opus-5"]);
-});
+// S4b (docs/specs/2026-10-16-egy-futas.md): a webes lektor-lánc (callTeachingReviewer) és a lépésenkénti tartalékválasztás (fallbackModelFor, lektorChainFor) kivezetve — az esetei törölve.

@@ -40,7 +40,8 @@ test("review #191: lejárt lízing + futó workflow + elfogyott keret → az id�
     assert.equal(sweepDecision(row({ executions, leaseUntil: new Date(now + 30_000) }), now, false), "leave", "élő lízing");
   }
   const routes = readFileSync(new URL("../server/studio/lesson-pipeline-routes.ts", import.meta.url), "utf8");
-  assert.match(routes, /if \(decision === "close"\) \{\s*await db\.update\(studioJobs\)[^\n]*\.where\(and\(eq\(studioJobs\.id, row\.id\), ne\(studioJobs\.status, "ok"\)\)\)/, "a lezárás nem írja felül a kész jobot");
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a söprés minden nem-„leave” döntésnél lezár; a feltétel ugyanaz — a kész job nem íródik felül.
+  assert.match(routes, /if \(sweepDecision\(row, now, boot\) === "leave"\) continue;[\s\S]*?await db\.update\(studioJobs\)[^\n]*\.where\(and\(eq\(studioJobs\.id, row\.id\), ne\(studioJobs\.status, "ok"\)\)\)/, "a lezárás nem írja felül a kész jobot");
 });
 
 test("lezárt job → mindig érintetlen", () => {
@@ -51,8 +52,8 @@ test("bekötés: induláskor és időszakosan fut; a lízing-ütközés nem zár
   const routes = readFileSync(new URL("../server/studio/lesson-pipeline-routes.ts", import.meta.url), "utf8");
   const index = readFileSync(new URL("../server/index.ts", import.meta.url), "utf8");
   assert.match(index, /await closeOrphanedStudioJobs\(\);\s*\/\/[^\n]*\n\s*startStudioJobSweeper\(\);/);
-  assert.match(routes, /if \(error instanceof WorkflowConflict\) \{ logger\.warn\(`\[STUDIO\] Automatikus folytatás kihagyva/);
-  assert.match(routes, /if \(error instanceof WorkflowConflict\) \{ logger\.warn\(`\[STUDIO\] Követett készítés átadva/);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): automatikus folytatás és követett régi gyártás nincs — a söprés csak lezár (a piszkozat megmarad, újragyártható).
+  assert.doesNotMatch(routes, /driveTracked\(|Automatikus folytatás/);
 });
 
 test("mért hiba 2026-10-15 (térkép 3f39ab9b): a halott folyamat `interrupted` futása is folytatódik — induláskor és később is; élő lízingnél érintetlen", () => {

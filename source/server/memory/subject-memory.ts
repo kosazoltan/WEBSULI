@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { SKILL_RULES, type SkillCode } from "../../shared/lesson-skill";
 import type { WorkflowView } from "../../shared/lesson-workflow";
-import { redactSecrets } from "../workflows/orchestrator";
+import { redactSecrets } from "../workflows/redact";
 
 /**
  * Spec 2026-10-06-s5-tantargyi-memoria: a tantárgyi memória TISZTA magja (DB és modell nélkül). Kártya = egy tantárgy visszatérő

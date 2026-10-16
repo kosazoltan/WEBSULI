@@ -108,21 +108,3 @@ test("támogató szerepek saját lelet-kódjai: szabályszöveg és csak az elk�
   }
 });
 
-test("témafókusz: saját támogató skill a hívás elején; a modell hibája a futásban topic_focus lelet (§4/8–9)", async () => {
-  const { decideTopicFocus } = await import("../server/studio/topic-focus");
-  const { store, records } = memoryWorkflows();
-  const systems: string[] = [];
-  const concepts = [{ localId: "c1", term: "Oszthatóság 3-mal", definition: "", quote: "", examWeight: "core" }];
-  await runToolWorkflow({ mode: "map", owner: "admin", request: {}, id: "map:tf", store }, async () => {
-    await workflowPhase("source");
-    await workflowPhase("scope");
-    const focus = await decideTopicFocus("Csak a 3-mal való oszthatóságot tanítsd.", concepts as never, [
-      async (system) => { systems.push(system); throw new Error("szolgáltató leállt"); },
-    ]);
-    assert.equal(focus, null);
-    for (const step of ["knowledge", "gate", "readback"]) await workflowPhase(step);
-    return { value: undefined, result: { kind: "map", id: "m1" } };
-  });
-  assert.ok(systems[0].startsWith("=== TÁMOGATÓ SKILL: topic-focus "), systems[0].slice(0, 60));
-  assert.ok(records.get("map:tf")!.view.skillAudit!.findings.some((f) => f.code === "topic_focus" && f.step === "scope"));
-});

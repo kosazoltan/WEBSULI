@@ -121,8 +121,7 @@ test("a route kezeli a pause_turn-t és a stop_reason-t, nincs abszolút 180 s-o
   const src = readFileSync(new URL("../server/studio/web-research-runner.ts", import.meta.url), "utf8");
   assert.match(src, /pause_turn/);
   assert.match(src, /stop_reason/);
-  // Completion moved to a tested pure decision; the route must call that decision.
-  assert.match(src, /decideWebResearchResult\(\{ stopReason, fullContent, repairAttempts, sources \}/);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a különálló webes HTML-gyártás (generateWebResearchLesson → decideWebResearchResult hívás) kivezetve a runnerből — az ellenőrzése törölve.
   const completion = readFileSync(new URL("../server/studio/web-research-agent.ts", import.meta.url), "utf8");
   assert.match(completion, /max_tokens"/);
   assert.match(completion, /htmlLooksComplete\(html\)/);

@@ -1,35 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { IAIProvider } from "../server/ai/AIProvider";
 import { callStepModel, StepModelError } from "../server/studio/run-step";
-import { webAuthorModelForAttempt } from "../server/studio/web-research-runner";
 import { executeWorkflow, workflowPhase } from "../server/workflows/engine";
 import { memoryWorkflows } from "./helpers/workflow-store";
 
 /* Spec 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md, „Review-kör”): R1 — a régi webes HTML-út is
  * használja a szerző tartalékát; R2 — a bukott (érvénytelen JSON-os) hívás tokenje is a workflow-ba kerül. */
-
-test("R1: a webes szerzői kísérlet modellje — első az elsődleges, a javítókör a tartalék", () => {
-  assert.equal(webAuthorModelForAttempt(0, "gpt-6-luna", "gpt-5.6-terra"), "gpt-6-luna");
-  assert.equal(webAuthorModelForAttempt(1, "gpt-6-luna", "gpt-5.6-terra"), "gpt-5.6-terra");
-  assert.equal(webAuthorModelForAttempt(2, "gpt-6-luna", "gpt-5.6-terra"), "gpt-5.6-terra");
-  assert.equal(webAuthorModelForAttempt(1, "gpt-6-luna", undefined), "gpt-6-luna", "tartalék nélkül az elsődleges marad");
-  assert.equal(webAuthorModelForAttempt(1, "gpt-6-luna", "gpt-6-luna"), "gpt-6-luna");
-});
-
-test("R1: a webes HTML-út a szerzői providert a kísérlet szerinti modellel hozza létre", () => {
-  const src = readFileSync(new URL("../server/studio/web-research-runner.ts", import.meta.url), "utf8");
-  // Review #190 (dokumentált változás): a hívás streamelt és modellenkénti effortot kap (webAuthorCall); a kísérlet-függő modell marad.
-  // Spec-változás 2026-10-14 (ellentétes családú tartalék): `let` — tartalékválasznál a változó a ténylegesen író modellt veszi fel
-  // (a webes lektor-lánc a HTML szerzője szerint választ); a kísérlet-függő hívás változatlan.
-  assert.match(src, /let model = webAuthorModelForAttempt\(attempts, authorModel, authorFallback\);[\s\S]{0,200}webAuthorCall\(model\)/, "a szerzői hívás a kísérlet-függő modellt használja");
-  assert.match(src, /response = await webAuthorCall\(authorFallback\);\s*model = authorFallback;/, "tartalékválasznál a szerző a tartalék");
-  assert.match(src, /return \{ html: produced, authorModel: model \}/, "a kész HTML a szerzőjével kerül a checkpointba");
-  assert.match(src, /const webAuthorCall = \(m: string\) => \{\s*const provider = createStudioProvider\(m, PHASE_TIMEOUT_MS, MAX_TOKENS,/, "a provider a kapott (kísérlet-függő) modellel készül");
-  assert.doesNotMatch(src, /createStudioProvider\(authorModel, PHASE_TIMEOUT_MS, MAX_TOKENS\)/, "nincs rögzített szerzőmodell");
-});
 
 test("R2: a workflow a bukott (érvénytelen JSON-os) modellhívás tokenjét is elszámolja", async () => {
   const { store } = memoryWorkflows();

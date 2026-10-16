@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import JSZip from "jszip";
 import { normalizeDocumentSources } from "../server/studio/document-source";
 import { sourceTextOf, computeInputHash } from "../server/studio/extractor";
-import { inferScope, scopeContentParts } from "../server/studio/one-step";
 
 function pdf(text: string) {
   const stream = `BT /F1 14 Tf 50 750 Td (${text}) Tj ET`;
@@ -22,7 +21,7 @@ test("real DOCX preserves Hungarian source text across scope, extraction and con
   assert.equal(sourceTextOf([file]), "");
   const normalized = await normalizeDocumentSources([file]);
   assert.match(sourceTextOf(normalized), /Árvíztűrő tükörfúrógép/);
-  assert.deepEqual(await scopeContentParts(normalized), [{ type: "text", text: normalized[0].extractedText }]);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a tantárgy-felismerő hívás bemenete (scopeContentParts) kivezetve a one-step.ts-ből.
   assert.equal(computeInputHash([file], { subject: "x", classroom: 7 }), computeInputHash(normalized, { subject: "x", classroom: 7 }));
 });
 
@@ -30,19 +29,14 @@ test("real PDF text is searchable; scanned/empty page cannot silently disappear"
   const original = { name: "source.pdf", kind: "pdf" as const, content: pdf("Triangle area = base x height / 2") };
   const normalized = await normalizeDocumentSources([original]);
   assert.match(sourceTextOf(normalized), /Triangle area = base x height \/ 2/);
-  assert.equal((await scopeContentParts(normalized))[0].type, "text");
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a tantárgy-felismerő hívás bemenete (scopeContentParts) kivezetve a one-step.ts-ből.
   const scan = { ...original, content: pdf("") };
   await assert.rejects(normalizeDocumentSources([scan]), /átírás szükséges/);
   const ocr = await normalizeDocumentSources([scan], async () => "[1. oldal] Terület = alap × magasság / 2");
   assert.match(sourceTextOf(ocr), /Terület/);
 });
 
-test("classification preserves reasoning, uncertainty and mixed level evidence", async () => {
-  const classification = { reason: "Az alapképletek dominálnak; a körgyűrű kiegészítő példa.", confidence: "medium", gradeRange: [7, 8], mixedContent: true };
-  const result = await inferScope([], async () => JSON.stringify({ classroom: 7, subject: "Matematika", classification }));
-  assert.equal(result.ok, true);
-  if (result.ok) assert.deepEqual(result.classification, classification);
-});
+// S4b (docs/specs/2026-10-16-egy-futas.md): a különálló tantárgy-felismerés (inferScope) kivezetve — a besorolás-indoklás esete törölve.
 
 /* ------------------------------------------------------------------------- *
  * Spec 2026-09-19 — a bájtok döntenek, nem a kiterjesztés; a pdfjs-hiba nem

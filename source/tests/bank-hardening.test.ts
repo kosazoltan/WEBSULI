@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { experiencePacketSchema, gateQuestionProblems, hasFigureReference, questionKey } from "../shared/lesson-experience";
 import { lessonSchema } from "../shared/lesson-schema";
 import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
-import { openBankFindingFlags } from "../server/studio/step-runner";
+import { openBankFindingFlags } from "../server/studio/choice-gate";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 
 /* Spec 2026-09-30-utasitasrendszer-rendbetetel (U2a): H19, H35, H44, H52 determinisztikus része. */

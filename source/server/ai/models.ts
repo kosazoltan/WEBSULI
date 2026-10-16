@@ -1,147 +1,22 @@
 /**
- * Central model routing for the Lesson Studio pipeline (LS-0d).
+ * A modell-útválasztás egyetlen helye (LS-0d).
  *
- * Why this file exists: model ids used to be string literals inside routes.ts, so
- * changing a model meant editing request handlers, and nothing could check that two
- * pipeline steps were not accidentally the same model.
- *
- * The D1 rule ("the source always wins") is enforced by a Lektor that re-reads the
- * Author's lesson against the KnowledgeMap. If both run on the same model family the
- * review is worthless — a model rarely catches its own fabrication. `assertDistinctFamilies`
- * makes that a startup error rather than a silent quality loss.
- *
- * Owner decision 2026-09-04: no local models. The workstation GPU is dead, so every id
- * here is hosted; Terra and Grok use direct vendor APIs (2026-09-11).
+ * docs/specs/2026-10-16-egy-futas.md (S4b, tulajdonosi döntés 2026-10-16): a rendszerben KÉT modell van — Claude Opus 5.5 (elsődleges)
+ * és GPT-6.1 Sol (tartalék), mindkettő medium efforttal. A tananyaggyártás és -javítás egy beszélgetésben fut (`single-run/`), a
+ * döntőbíró ugyanezt a párt használja (`arbiter/arbiter.ts`), a régi AI-funkciók pedig a `LEGACY_MODELS` táblát. Az alügynök-modellek
+ * (OCR-olvasók, besoroló, kinyerő, bank-, lektor-, tesztíró-, kvíz- és orkesztrátor-modellek) kivezetve.
  */
 
-export const STUDIO_STEPS = [
-  "extract",
-  "ocr",
-  // Spec 2026-10-14-forras-besorolo-openai-luna: a tantárgy/évfolyam-felismerés saját lépés (korábban az `ocr` modelljén futott).
-  "scope",
-  "pedagogue",
-  "author",
-  "animator",
-  // Spec 2026-09-19: the 45/75 practice bank is its own role (bulk JSON on a cheap model),
-  // still built inside the animator step but routed and budgeted separately.
-  "bank",
-  "lektor",
-  "gateHelper",
-  "quizPolish",
-] as const;
-
-export type StudioStep = (typeof STUDIO_STEPS)[number];
-
-/** Environment-variable name that overrides a step, e.g. STUDIO_MODEL_AUTHOR. */
-function envVarName(step: StudioStep): string {
-  return `STUDIO_MODEL_${step.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}`;
-}
+/** A tananyaggyártás modellpárja (az egyfutásos beszélgetés és a döntőbíró ezt használja). */
+export const LESSON_MODELS = { primary: "claude-opus-5-5", fallback: "gpt-6.1-sol" } as const;
 
 /**
- * Terra/Grok direct access verified 2026-09-11; OCR retains OpenRouter routing.
- * Fallbacks live in FALLBACK_MODELS and are used by the provider factory on failure.
- */
-const DEFAULT_MODELS: Record<StudioStep, string> = {
-  extract: "gpt-5.6-terra", // vision + verbatim quoting
-  // #190 (mérve 2026-09-06, 3 valódi kézírásos matek-lapon, kulcs-token recall;
-  //  a mérés REPRODUKÁLHATÓ: tests/studio-ocr-recall.test.ts a rögzített
-  //  átiratokból számol újra, hálózat nélkül):
-  //   qwen3-vl-32b-instruct  92.6%   <- ez
-  //   gemini-3.1-flash-lite  90.2%
-  //   glm-5.3-flash          86.8%   (a korábbi elsődleges)
-  // A tulajdonos kézírásos jegyzeteket is feltölt, és >=95% felismerést kért:
-  // ez a cél a mezőnyben NINCS elérve, a legjobb elérhető opciót választjuk.
-  // A glm az `r`-t rendszeresen `m`-nek olvasta (r=4cm -> m=4cm), ami a
-  // fogalmak idézet-ellenőrzését is elbuktatta.
-  // Újramérve 2026-09-23 ugyanezen a 3 valódi lapon, a „Magyar kézírás” OCR-skillel (tulajdonosi döntés
-  // a mérés után: qwen marad, GLM az ellenőrző):
-  //   qwen3-vl-32b-instruct  95.4%  <- ez (nem gondolkodó modell)
-  //   glm-5.3-flash          89.1%  (a kettős olvasás második olvasója, FALLBACK_MODELS.ocr)
-  //   gpt-5.6-luna           87.3%  (átfogalmaz: „ezerév” -> „évezred” — verbatim OCR-re alkalmatlan)
-  //   deepseek-v4.1-flash     0.0%  (hibrid gondolkodás: az effort=low-t figyelmen kívül hagyja, a 6000
-  //                                  tokenes keretből 5998 gondolkodás, minden válasz csonkolt)
-  ocr: "qwen/qwen3-vl-32b-instruct",
-  // Tulajdonosi döntés 2026-10-14 (docs/specs/2026-10-14-forras-besorolo-openai-luna.md): a qwen3-vl-32b-t az OpenRouter
-  // 2026-10-09-én kivezette (404), és a tantárgy/évfolyam-felismerés ezen állt meg (4 élő futás). Saját OpenAI-kulcs, GPT-6 Luna
-  // („GPT-6.1 Luna” nem létezik: /v1/models + 404). Mérve high efforttal 56 jóváhagyott forráson: tantárgy 102/112, évfolyam
-  // ±1-en belül 93/112; a 10 leckés kézi pilot-besoroláson 20/20; 0,001 USD/hívás.
-  scope: "gpt-6-luna",
-  // Spec 2026-09-19 (tulajdonosi döntés): a tervkészítő a közvetlen Anthropic API-n futó
-  // Opus 5, medium efforttal — a terv minősége dönti el a további körök számát.
-  pedagogue: "claude-opus-5",
-  // Tulajdonosi döntés 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md): GPT-6 Luna, tartaléka
-  // GPT-5.6 Terra. Mérve ugyanazon a webes jobon: Luna 2/2 érvényes, sémát teljesítő lecke (84 s, 96 s);
-  // a Terra élesben egyszer érvénytelen JSON-t adott, és tartalék híján az egész gyártás leállt.
-  // Tulajdonosi döntés 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): a szerző Claude Opus 5.5 (a lektor
-  // OpenAI-ra került, a D1-független lektor szabálya így marad teljesítve); tartaléka Qwen 3.8 max-prime (OpenRouter, high).
-  author: "claude-opus-5-5", // long structured Hungarian output
-  // Spec 2026-09-19 (mérve, két 46–49 fogalmas futás): az animátor+bank a lecke költségének
-  // 3/4-e volt Terrán (~3 USD). A glm-5.3-flash 6,3 s alatt, 0 gondolkodó tokennel, érvényes
-  // magyar bankcsomag-JSON-t adott (0,09/0,30 USD/M); a rubrikát determinisztikus kód ellenőrzi.
-  // Tulajdonosi döntés 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md): az ábrákat Claude Opus 5.5
-  // tervezi (a glm-flash rajzi/téri feladatra gyenge volt — „csak egy kört rajzolt”). A kimenet csak ábra-folt,
-  // nem a teljes lecke, így a kimeneti tokenszám kicsi. Élő próbahívás: HTTP 200 (2026-09-24).
-  animator: "claude-opus-5-5",
-  // Spec 2026-09-24 (docs/specs/2026-09-24-bankmodell-valasztas.md, tulajdonosi utasítás): ugyanazon a leckén,
-  // a termelési banképítő úton, a kész bankot a bank-ellenőr mérte: glm-5.3-flash 653 s, 9 bukott kísérlet,
-  // 22/146 hiba; gpt-5.6-luna 130/143 s, 5/4 bukott, 9/144 hiba (két futás), 0,09 USD; terra 8/144, 0,71 USD;
-  // sonnet-5 17/146; glm-5.3 építési hiba. A glm javító köre nem konvergált (újraépítve 16/106 hiba).
-  bank: "gpt-5.6-luna",
-  // 2026-09-09 (tulajdonosi döntés): a `qwen/qwen3.8-max` id eltűnt az OpenRouter nyilvános
-  // /models listájából (csak `qwen3.8-max-0902` maradt), ezért a lektor Grok 4.6-ra vált.
-  // x-ai és openai külön család; a szerző tartaléka is openai (spec 2026-09-29), így a lektor független marad.
-  // Tulajdonosi döntés 2026-10-05: a grok-4.6 helyett GPT-6.1 Sol — „képes hosszú futásokra, nem akad el” (mérve élesben:
-  // „[xAI] Request timed out.”, és üres grok-válasz a Mezopotámia-futáson). Responses API, medium effort, streamelve.
-  lektor: "gpt-6.1-sol", // MUST differ in family from author
-  gateHelper: "deepseek/deepseek-v4-flash", // cheap classification (0,04/0,08 USD/M)
-  quizPolish: "deepseek/deepseek-v4-flash",
-};
-
-/**
- * Spec 2026-09-19: the bank packet's rescue model — after PACKET_ATTEMPTS failed attempts on the
- * cheap primary/fallback the packet is rebuilt once on the strong author-class model.
- */
-export const BANK_RESCUE_MODEL = "gpt-5.6-terra";
-
-/**
- * Spec 2026-10-05-s11/2 (tulajdonosi döntés): a vitatott OCR-helyek harmadik, erős, független olvasója (2 a 3-ból). Mért a
- * Mezopotámia-füzetfotón: gpt-6.1-sol 8,3 s alatt szinte hibátlan olvasat (a két alap-olvasó 11 helyen eltért).
- */
-export const OCR_THIRD_READER_MODEL = "gpt-6.1-sol";
-
-/** Az OCR-olvasó gondolkodási mélysége (OpenAI: `reasoning_effort`, OpenRouter: `reasoning`, Anthropic: `output_config.effort`). */
-export type OcrEffort = "low" | "medium" | "high";
-
-/**
- * Spec 2026-10-14-forras-besorolo-openai-luna: a `scope` lépés gondolkodási mélysége — ezzel mérve (gpt-6-luna). A kimenet
- * high mellett p95 1475, max 2448 token; a kérés kerete ehhez igazodik (`scopeRequestParams`).
- */
-export const SCOPE_EFFORT: OcrEffort = "high";
-export type OcrReaderSpec = { readonly model: string; readonly effort: OcrEffort };
-
-/**
- * Spec 2026-10-05-s11/7 (tulajdonosi döntés a friss 4-lapos futás után, map d344e889): a studió forrás-OCR-je KÉT ERŐS, független
- * olvasóval fut (A = gpt-6.1-sol high, B = claude-opus-5-5 medium), a döntő a fúziójuk. Az A az összerakás alapja.
- */
-export const OCR_FUSION_READERS = [
-  { model: "gpt-6.1-sol", effort: "high" },
-  { model: "claude-opus-5-5", effort: "medium" },
-] as const satisfies readonly [OcrReaderSpec, OcrReaderSpec];
-
-/** Spec S11/7: a fúziós lépés (csak választ vitánként: A | B | own) — a végső szöveget a kód rakja össze. */
-export const OCR_FUSION_DECIDER: OcrReaderSpec = { model: "gpt-6.1-sol", effort: "high" };
-
-/**
- * Spec 2026-09-30 (U6, C11): modellenkénti kimeneti plafon a hosszkorlát utáni EGYSZERI nagyobb kerethez. Forrás: az
- * OpenRouter /models lista `top_provider.max_completion_tokens` mezője, 2026-09-30-án lekérve
- * (`docs/specs/2026-09-30-utasitasrendszer-rendbetetel-astra/evidence-models-raw.json`). Ismeretlen modellnél nincs
- * újrapróba (a régi viselkedés: a csonka válasz hiba). Kulcs: a gyártó-előtag és a pont/kötőjel különbség nélkül.
+ * Spec 2026-09-30 (U6, C11): modellenkénti kimeneti plafon a hosszkorlát utáni EGYSZERI nagyobb kerethez. Ismeretlen modellnél nincs
+ * újrapróba (a csonka válasz hiba). Kulcs: a gyártó-előtag és a pont/kötőjel különbség nélkül.
  */
 const MAX_OUTPUT_BY_MODEL: Record<string, number> = {
-  "gpt-6-luna": 128_000, "gpt-6-astra": 128_000, "gpt-5-6-terra": 128_000, "gpt-6-1-sol": 128_000,
-  "claude-opus-5-5": 128_000, "claude-opus-5": 128_000, "claude-sonnet-5": 128_000,
-  "qwen3-8-max-prime": 131_072, "qwen3-8-max-0902": 131_072, // 0902: OpenRouter /models + /endpoints, 2026-10-14
-  "glm-5-3-flash": 943_717, "grok-4-6": 450_000, "deepseek-v4-flash": 384_000, "qwen3-vl-32b-instruct": 32_768,
+  "gpt-6-1-sol": 128_000,
+  "claude-opus-5-5": 128_000,
 };
 export function maxOutputForModel(modelId: string): number | undefined {
   const key = modelId.replace(/^[^/]+\//, "").replace(/\./g, "-").toLowerCase();
@@ -149,24 +24,12 @@ export function maxOutputForModel(modelId: string): number | undefined {
 }
 
 /**
- * Spec 2026-09-30-nem-elakado-kozzetetel (4. szelet): a második tartalék, csak modellhívás-hibára. A SZERZŐ szándékosan
- * nincs benne: tulajdonosi döntés 2026-09-29 (szerzomodell-gpt6-luna) — a szerző nem eshet ki a saját (openai)
- * családjából, hogy a lektor független maradjon. A lektor második tartaléka ezért sem openai.
- */
-export const SECOND_FALLBACK_MODELS = {
-  pedagogue: "gpt-5.6-terra",
-  // Tulajdonosi döntés 2026-10-05: a lektor lánca gpt-6.1-sol → gpt-5.6-terra; a korábbi második tartalék (claude-opus-5-5)
-  // a szerző (anthropic) családjába esne, ezért megszűnt.
-} as const satisfies Partial<Record<StudioStep, string>>;
-
-/**
  * Tulajdonosi döntés 2026-10-14 (docs/specs/2026-10-14-ellentetes-csalad-tartalek.md): minden OpenAI GPT elsődleges tartaléka
- * az Anthropic Opus 5.5, minden Anthropic elsődlegesé az OpenAI GPT-6.1 Sol — mindkettő medium efforttal (a hívó
- * `{ fallback: true }`-val kéri, lásd `createStudioStepProvider`). Más családú elsődleges (qwen, glm, deepseek, grok) változatlan.
+ * az Anthropic Opus 5.5, minden Anthropic elsődlegesé az OpenAI GPT-6.1 Sol — mindkettő medium efforttal.
  */
 export const CROSS_FAMILY_FALLBACK: Readonly<Record<"openai" | "anthropic", string>> = {
-  openai: "claude-opus-5-5",
-  anthropic: "gpt-6.1-sol",
+  openai: LESSON_MODELS.primary,
+  anthropic: LESSON_MODELS.fallback,
 };
 export const CROSS_FAMILY_FALLBACK_EFFORT = "medium" as const;
 /** Az elsődleges modell ellentétes családú tartaléka; OpenAI/Anthropic családon kívül `undefined`. */
@@ -178,92 +41,6 @@ export function crossFamilyFallback(model: string): string | undefined {
 export function isCrossFamilyFallbackModel(model: string): boolean {
   return Object.values(CROSS_FAMILY_FALLBACK).includes(model);
 }
-/**
- * Review #216: a lépés TÉNYLEGES (env-vel felülírható) elsődlegeséből képzett tartalék — OpenAI/Anthropic elsődlegesnél az
- * ellentétes család, más családnál a `FALLBACK_MODELS` tábla (a korábbi útvonal). Így `STUDIO_MODEL_PEDAGOGUE=gpt-6-luna`
- * mellett a tartalék Opus 5.5, nem ugyanaz a család.
- */
-export function fallbackModelFor(
-  step: StudioStep,
-  env: EnvLike = process.env,
-  table: Partial<Record<StudioStep, string>> = FALLBACK_MODELS,
-): string | undefined {
-  return crossFamilyFallback(resolveStudioModel(step, env)) ?? table[step];
-}
-
-/**
- * Spec 2026-10-14-tartalek-b-szelet (tulajdonosi döntés): egy hívás ellentétes családú tartaléka; ELLENŐRZŐ szerepnél
- * (`checkedModels` = az ellenőrzött tartalom modelljei) ha a tartalék azok családjába esne, a harmadik család (Qwen 0902) —
- * a lektorral azonos elv. Ha az is ütközik, nincs tartalék.
- */
-export function independentFallbackFor(model: string, checkedModels: readonly string[] = []): string | undefined {
-  const fallback = crossFamilyFallback(model);
-  if (!fallback) return undefined;
-  const checked = new Set(checkedModels.map(modelFamily));
-  if (!checked.has(modelFamily(fallback))) return fallback;
-  return checked.has(modelFamily(LEKTOR_THIRD_FAMILY_MODEL)) ? undefined : LEKTOR_THIRD_FAMILY_MODEL;
-}
-
-/**
- * Tulajdonosi döntés 2026-10-14: ha a leckébe GPT (a szerző tartaléka) írt, a lektor harmadik családra vált — Qwen 3.8 Max 0902,
- * OpenRouteren, high efforttal (`MODEL_REASONING_EFFORT`). Az OpenRouter /models listáján ellenőrizve 2026-10-14.
- */
-export const LEKTOR_THIRD_FAMILY_MODEL = "qwen/qwen3.8-max-0902";
-
-export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
-  extract: "grok-4.6",
-  // Tulajdonosi döntés 2026-09-23: Gemini nem használható. Az OCR tartaléka és a kettős olvasás második,
-  // független olvasója a GLM 5.3 Flash (mért 89.1%, más család; a Luna átfogalmazott, 87.3%).
-  ocr: "z-ai/glm-5.3-flash",
-  // Tulajdonosi döntés 2026-10-14: ellentétes családú tartalék (a korábbi grok-4.6 helyett); a második tartalék (terra) marad.
-  pedagogue: CROSS_FAMILY_FALLBACK.anthropic,
-  // Tulajdonosi döntés 2026-10-14: a szerző tartaléka GPT-6.1 Sol (a korábbi Qwen 3.8 max-prime helyett). A D1-független
-  // lektor ezért a tényleges szerzőség szerint választ (`lektorChainFor`): GPT-szerzőnél Qwen 3.8 Max 0902.
-  author: CROSS_FAMILY_FALLBACK.anthropic,
-  // Tulajdonosi döntés 2026-10-14: ellentétes családú tartalék (a korábbi gpt-5.6-terra helyett, medium efforttal).
-  animator: CROSS_FAMILY_FALLBACK.anthropic,
-  // Tulajdonosi döntés 2026-10-14: a bank (gpt-5.6-luna) első tartaléka az ellentétes család, Opus 5.5; a mentőkör
-  // (BANK_RESCUE_MODEL) változatlan. (Korábban: mérve 2026-09-20, a tartalék egyből az erős mentőmodell volt.)
-  bank: CROSS_FAMILY_FALLBACK.openai,
-  gateHelper: "z-ai/glm-5.3-flash",
-  quizPolish: "z-ai/glm-5.3-flash",
-  // Spec 2026-09-19 (mérve élesben): a grok-4.6 lektor 480 s után időtúllépett és a
-  // gyártás generikus hibával állt meg. A tartalék OpenRouteren futó Anthropic-modell —
-  // az „anthropic" család különbözik a szerző „openai" családjától, így az
-  // `assertDistinctFamilies` őr a tartalékra is teljesül. Létezése és válasza az
-  // OpenRouter /models listán és egy valódi hívással ellenőrizve (2026-09-19).
-  // Tulajdonosi döntés 2026-10-14: a lektor (gpt-6.1-sol) ellentétes tartaléka Opus 5.5 — de a futás a tényleges szerzőség
-  // szerinti láncot használja (`lektorChainFor`), amely a szerzők családját kiszűri (Claude-szerzőnél ez a tag kiesik → Qwen).
-  lektor: CROSS_FAMILY_FALLBACK.openai,
-};
-
-/**
- * Tulajdonosi döntés 2026-10-05: modellenkénti gondolkodási effort, ha a lépés szabályzata nem ad meg (a szerző-tartalék Qwen
- * „maximum efforttal”; a `high` a konfigurációs típus és az OpenRouter dokumentált felső foka).
- * Tulajdonosi döntés 2026-10-14: a harmadik családú lektor (Qwen 3.8 Max 0902) high efforton.
- */
-/**
- * Tulajdonosi döntés 2026-10-15 (docs/specs/2026-10-15-tetelgyar-t2-valaszkulcs-tesztek-vegrehajtas.md, T2.3): a válaszkulcs-tesztíró
- * elsődleges modellje a MiniMax M3, max (xhigh) efforttal — a GLM 5.3 Flash helyett.
- */
-export const ANSWER_KEY_MODEL = "minimax/minimax-m3";
-/** Tételgyár T6.1 (tulajdonosi döntés 2026-10-15): a kvíz gyártáskori vak előszűrője — ugyanaz a MiniMax M3, max efforttal (a T2.3 útválasztásával). */
-export const QUIZ_BLIND_MODEL = ANSWER_KEY_MODEL;
-
-/**
- * Modellenkénti OpenRouter-útválasztás (T2.3). Élő próba 2026-10-15: a MiniMax M3 a saját szolgáltatóján `reasoning: { effort: "xhigh",
- * enabled: true }` mellett ténylegesen gondolkodik (127–162 reasoning-token); a Together-útvonalon a gondolkodás 0 tokenes volt. Ezért a
- * bejegyzéses modell kérése rögzített effortot, bekapcsolt gondolkodást és szolgáltató-sorrendet kap (tartalékkal) — felülírva a lépés
- * szabályzatának effortját. A bejegyzés nélküli modellek kérése változatlan.
- */
-export const OPENROUTER_MODEL_ROUTING: Readonly<Record<string, { effort: "xhigh" | "high"; providerOrder: readonly string[] }>> = {
-  [ANSWER_KEY_MODEL]: { effort: "xhigh", providerOrder: ["Minimax"] },
-};
-
-export const MODEL_REASONING_EFFORT: Readonly<Record<string, "low" | "medium" | "high">> = {
-  "qwen/qwen3.8-max-prime": "high",
-  [LEKTOR_THIRD_FAMILY_MODEL]: "high",
-};
 
 /**
  * Model ids the pre-Studio routes already used.
@@ -301,11 +78,7 @@ export const LEGACY_MODELS = {
   improve: ["claude-opus-5-5", "gpt-6.1-sol"],
   /** Quiz item generation from a material (gameQuizGeneratorService.ts) */
   quizGenerator: "claude-opus-5-5",
-  /**
-   * Internetes tananyag — csak a forrásgyűjtés (web_search + web_fetch).
-   * A szerzői HTML és a 45/75 bank a Studio `author` modellt használja
-   * (`resolveStudioModel("author")`), nem ezt az azonosítót.
-   */
+  /** Internetes tananyag — csak a forrásgyűjtés (web_search + web_fetch); a gyártás az egyfutásos motoron megy. */
   webResearch: "claude-opus-5-5",
 } as const;
 
@@ -318,7 +91,7 @@ export type LegacyTask = keyof typeof LEGACY_MODELS;
  * would have produced a 400 in production:
  *
  *  - OpenAI (`gpt-6.1-sol`, tulajdonosi döntés 2026-10-03 a gpt-5.6-sol helyett): top-level `reasoning_effort: "medium"`.
- *  - Anthropic (`claude-opus-5`): `output_config: { effort: "medium" }`. The older
+ *  - Anthropic (`claude-opus-5-5`): `output_config: { effort: "medium" }`. The older
  *    `thinking: {type:"enabled"}` shape is rejected by this model — the API itself
  *    replied "use thinking.type.adaptive and output_config.effort".
  *
@@ -437,7 +210,8 @@ export function aiKeyStatus(env: EnvLike = process.env): AIKeyStatus {
 
   const featuresOf = (vendor: AIVendor): string[] => {
     return [...(Object.keys(TASK_KEYS) as LegacyTask[]).filter((t) => TASK_KEYS[t] === vendor),
-      ...STUDIO_STEPS.filter(step => providerForModel(resolveStudioModel(step, env)) === vendor)];
+      ...(Object.entries(LESSON_MODELS) as Array<[keyof typeof LESSON_MODELS, string]>)
+        .filter(([, model]) => providerForModel(model) === vendor).map(([role]) => `tananyaggyártás (${role === "primary" ? "elsődleges" : "tartalék"})`)];
   };
 
   return Object.fromEntries(
@@ -451,85 +225,8 @@ export function aiKeyStatus(env: EnvLike = process.env): AIKeyStatus {
 
 type EnvLike = Record<string, string | undefined>;
 
-/** Resolves the model for a step, honouring a non-blank environment override. */
-export function resolveStudioModel(step: StudioStep, env: EnvLike = process.env): string {
-  const override = env[envVarName(step)];
-  if (typeof override === "string" && override.trim().length > 0) {
-    return override.trim();
-  }
-  return DEFAULT_MODELS[step];
-}
-
-/** Internetes tananyag szerzői HTML és bank: mindig a Studio author, ne hardcode-olt vendor-id. */
-export function resolveWebResearchAuthorModel(env: EnvLike = process.env): string {
-  return resolveStudioModel("author", env);
-}
-
 /** Vendor prefix of an OpenRouter id (`openai/gpt-5` → `openai`). */
 export function modelFamily(modelId: string): string {
   const slash = modelId.indexOf("/");
   return slash === -1 ? (modelId.startsWith("gpt-") ? "openai" : modelId.startsWith("grok-") ? "x-ai" : modelId.startsWith("claude") ? "anthropic" : modelId) : modelId.slice(0, slash);
-}
-
-/**
- * Tulajdonosi döntés 2026-10-14 (docs/specs/2026-10-14-ellentetes-csalad-tartalek.md): a lektor-lánc a lecke TÉNYLEGES
- * szerzői (minden modell, amely a leckébe írt) szerint. A lektor családja egyik szerzőével sem egyezhet (D1). Ha GPT írt a
- * leckébe, az első lektor a harmadik család (Qwen 3.8 Max 0902); különben a konfigurált lektor, majd az ellentétes tartaléka,
- * végül a Qwen. Ismeretlen szerzőség (a 2026-10-14 előtt írt job): a konfigurált szerző-elsődleges számít szerzőnek — a régi
- * szerző-tartalék Qwen volt, GPT nem írhatott bele, ezért a konzervatív „tartalék is” feltevés indokolatlanul Qwen-re vinné a lektort.
- */
-export function lektorChainFor(
-  authorModels: readonly string[] | undefined,
-  env: EnvLike = process.env,
-  fallbacks: Partial<Record<StudioStep, string>> = FALLBACK_MODELS,
-): string[] {
-  const authors = authorModels?.length ? authorModels : [resolveStudioModel("author", env)];
-  const authorFamilies = new Set(authors.map(modelFamily));
-  const primary = resolveStudioModel("lektor", env);
-  const fallback = fallbackModelFor("lektor", env, fallbacks);
-  const ordered = authorFamilies.has("openai")
-    ? [LEKTOR_THIRD_FAMILY_MODEL, primary, fallback]
-    : [primary, fallback, LEKTOR_THIRD_FAMILY_MODEL];
-  return [...new Set(ordered.filter((m): m is string => !!m && !authorFamilies.has(modelFamily(m))))];
-}
-
-/**
- * Fails fast when the Author and the Lektor would run on the same vendor family,
- * which would silently disable the independent D1 source-fidelity review.
- *
- * Audit 2026-09-05 (D): a failover must not collapse the two roles onto one vendor. Tulajdonosi döntés 2026-10-14: a lektor
- * a tényleges szerzőség szerint választ (`lektorChainFor`), ezért az őr (1) a konfigurált lektor-elsődleges és
- * szerző-elsődleges családját veti össze (konfigurációs hiba), és (2) minden lehetséges szerzői családhalmazra (csak az
- * elsődleges, csak a tartalék, mindkettő) ellenőrzi, hogy marad-e lektor.
- */
-export function assertDistinctFamilies(
-  env: EnvLike = process.env,
-  fallbacks: Partial<Record<StudioStep, string>> = FALLBACK_MODELS,
-): void {
-  const author = resolveStudioModel("author", env);
-  const lektor = resolveStudioModel("lektor", env);
-  if (modelFamily(author) === modelFamily(lektor)) {
-    throw new Error(
-      `Studio model routing: author (${author}) and lektor (${lektor}) resolve to the ` +
-        `same model family "${modelFamily(author)}". The Lektor is the independent ` +
-        `source-fidelity check (D1) and must come from a different vendor family. ` +
-        `Set STUDIO_MODEL_LEKTOR or STUDIO_MODEL_AUTHOR to fix.`,
-    );
-  }
-  const candidates = [author, fallbackModelFor("author", env, fallbacks)].filter((m): m is string => !!m);
-  for (const authors of [[author], ...(candidates.length > 1 ? [[candidates[1]], candidates] : [])]) {
-    if (lektorChainFor(authors, env, fallbacks).length === 0) {
-      throw new Error(
-        `Studio model routing: no lektor model outside the author families (${authors.join(", ")}). ` +
-          `The Lektor is the independent source-fidelity check (D1). Set STUDIO_MODEL_LEKTOR to fix.`,
-      );
-    }
-  }
-}
-
-/** All resolved step→model pairs; used by the Studio UI and by startup logging. */
-export function studioModelMap(env: EnvLike = process.env): Record<StudioStep, string> {
-  return Object.fromEntries(
-    STUDIO_STEPS.map((step) => [step, resolveStudioModel(step, env)]),
-  ) as Record<StudioStep, string>;
 }

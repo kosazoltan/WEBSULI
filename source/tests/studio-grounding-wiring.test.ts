@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { checkCoverageGate, type MapConcept } from "../server/studio/coverage";
-import { scopeRequestParams } from "../server/studio/one-step";
 import type { Lesson } from "../shared/lesson-schema";
 
 /**
@@ -94,7 +93,8 @@ test("egy pár szavas blokk nem alapozhat meg fogalmat (rövid-blokk szűrő él
 test("a fogalom megnevezése BETÖLTŐDIK a térkép-lekérdezésekben", () => {
   // Statikus kötés: a `term` nélkül a kapu némán nem mérne semmit — ez a
   // csendes kikapcsolás legvalószínűbb útja egy későbbi refaktorban.
-  const src = readFileSync(new URL("../server/studio/step-runner.ts", import.meta.url), "utf8");
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a fogalom-lekérdezések a pipeline-store.ts (térkép) és a concept-fix.ts (fogalomjavítás) modulban vannak.
+  const src = ["../server/studio/pipeline-store.ts", "../server/studio/single-run/concept-fix.ts"].map((f) => readFileSync(new URL(f, import.meta.url), "utf8")).join("\n");
   const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const selects = code.match(/localId:\s*kmConcepts\.localId/g) ?? [];
   const terms = code.match(/term:\s*kmConcepts\.term/g) ?? [];
@@ -106,19 +106,4 @@ test("a fogalom megnevezése BETÖLTŐDIK a térkép-lekérdezésekben", () => {
   );
 });
 
-test("a scope-hívás képei NAGY felbontással mennek (a szint a tartalomból jön)", () => {
-  const params = scopeRequestParams("m", [
-    { type: "image_url", image_url: { url: "data:image/jpeg;base64,AA", detail: "high" } },
-  ]);
-  const content = params.messages[1].content as Array<{ type: string; image_url?: { detail: string } }>;
-  assert.equal(content.find((p) => p.type === "image_url")?.image_url?.detail, "high");
-
-  // És a hívó tényleg `high`-t ad át — különben a fenti csak önmagát bizonyítja.
-  const src = readFileSync(new URL("../server/studio/one-step.ts", import.meta.url), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  assert.match(
-    code,
-    /image_url:\s*\{\s*url:\s*file\.content,\s*detail:\s*"high"\s*\}/,
-    "a callScopeModel nem eshet vissza low felbontásra",
-  );
-});
+// S4b (docs/specs/2026-10-16-egy-futas.md): a tantárgy-felismerő hívás (callScopeModel / scopeRequestParams) kivezetve a one-step.ts-ből — a képfelbontás-esete törölve.

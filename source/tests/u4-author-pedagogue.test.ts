@@ -1,8 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { introducesNewProperNoun, rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences } from "../server/studio/source-reference";
-import { groundingReport } from "../server/studio/grounding";
-import { targetedRepairSections } from "../server/studio/section-patch";
 import {
   TEACHING_CONTRACT, OUTLINE_LIMITS, buildAuthorPrompt, buildPedagoguePrompt, buildSchemaRetryUser, checkAnimatorResult,
   dropClampedKeyPhrases, outlineClamps, outlineSchema,
@@ -10,7 +7,7 @@ import {
 import { LESSON_TEXT_LIMITS, lessonSchema, type Lesson } from "../shared/lesson-schema";
 import { LESSON_QUALITY_CONTRACT } from "../shared/lesson-quality";
 import { ROLE_SKILLS } from "../server/studio/role-skills";
-import { SUPPORT_SKILLS } from "../server/studio/support-skills";
+import { groundingReport } from "../server/studio/grounding";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 
 /* Spec 2026-09-30-utasitasrendszer-rendbetetel (U4): C3/H20/H33, C4/H5, H6 sectionIdx, H39, H50, H12, H13. */
@@ -19,45 +16,6 @@ const lessonWith = (explain: string): Lesson => ({
   title: "Mezopotámia", subject: "történelem", classroom: 5, mapId: "m1", sourceOnly: true, misconceptions: [],
   sections: [{ heading: "Babilon", probaEnabled: false, blocks: [{ kind: "explain", text: explain, depth: "core", readAloud: true, coversConceptIds: ["c1"] }] }],
 } as unknown as Lesson);
-
-test("H33 (C3): jelentésőrző átírás — a hivatkozó keret törlése átmegy, az új tulajdonnév vagy a needsSource-jelzett mondat az eredeti marad", async () => {
-  // regressziós mondatpárok: (eredeti, javasolt átírás, elfogadható?)
-  const pairs: Array<[string, string, boolean]> = [
-    ["A forrás Istárt a szerelem istenének nevezi.", "Istár a szerelem istene.", true],
-    ["A füzet szerint a Nílus évente árad.", "A Nílus évente árad.", true],
-    ["Babilon városa Kr. e. 2500 körül szerepel a füzetben.", "Babilon városát Kr. e. 2500 körül Hammurapi alapította.", false], // új tulajdonnév = új tény
-    ["A forrás szerint a piramisokat rabszolgák építették.", "A piramisokat 20 000 munkás építette.", false],                      // új szám
-  ];
-  for (const [before, after, ok] of pairs) {
-    const L = lessonWith(before);
-    const result = await rewriteSourceReferences(L, async () => ({ items: [{ path: "sections[0].blocks[0].text", text: after }] }));
-    assert.equal((result.lesson.sections[0].blocks[0] as { text: string }).text, ok ? after : before, `${before} → ${after}`);
-    assert.deepEqual([result.rewritten, result.rejected], ok ? [1, 0] : [0, 1], before);
-  }
-  assert.equal(introducesNewProperNoun("A forrás Istárt a szerelem istenének nevezi.", "Istár a szerelem istene."), false, "ragozott alak az eredetiben");
-  assert.equal(introducesNewProperNoun("Babilon városa szerepel a füzetben.", "Babilon városát Hammurapi alapította."), true);
-  // needsSource: a modell jelzi, hogy a hivatkozás maga az állítmány — az eredeti marad, külön számolva
-  const kept = await rewriteSourceReferences(lessonWith("Babilon városa Kr. e. 2500 körül szerepel a füzetben."), async () => ({ items: [{ path: "sections[0].blocks[0].text", text: "Babilon városa Kr. e. 2500 körül szerepel a füzetben.", needsSource: true }] }));
-  assert.equal((kept.lesson.sections[0].blocks[0] as { text: string }).text, "Babilon városa Kr. e. 2500 körül szerepel a füzetben.");
-  assert.deepEqual([kept.rewritten, kept.rejected, kept.needsSource], [0, 0, 1]);
-  for (const must of ["needsSource", "Csak a hivatkozó tagmondatot", "Új igét, évszámot, okot NEM találsz ki"]) assert.ok(SUPPORT_SKILLS["kid-text-fixer"].includes(must), must);
-  assert.doesNotMatch(SUPPORT_SKILLS["kid-text-fixer"], /„Babilon városa Kr\. e\. 2500 körül szerepel a füzetben” → „Babilon városa Kr\. e\. 2500 körül jött létre”/, "a H33 hibás példa (új tény) törölve");
-});
-
-test("H6 (C4): a megalapozatlan címke lelete fejezettel érkezik (sectionIdx), és a célzott javítás abból dolgozik", () => {
-  const concepts = [{ localId: "c1", examWeight: "core" as const, term: "háromszög területe", definition: "x", quote: "y" }];
-  const blocks = [
-    { kind: "explain", text: "A négyzet kerülete négyszer az oldal.", coversConceptIds: ["c1"] },
-    { kind: "explain", text: "A háromszög területe az alap és a magasság szorzatának fele.", coversConceptIds: ["c1"] },
-  ];
-  const report = groundingReport(blocks, concepts, [0, 1]);
-  assert.equal(report.ungrounded.length, 1);
-  assert.equal(report.ungrounded[0].sectionIdx, 0);
-  assert.equal(groundingReport(blocks, concepts).ungrounded[0].sectionIdx, undefined, "fejezetlista nélkül nincs sectionIdx (régi hívó)");
-  const previous = { sections: [{ blocks: [{}] }, { blocks: [{}, {}] }] } as unknown as Lesson;
-  assert.deepEqual(targetedRepairSections(previous, [], { ok: false, reasons: ["x"], ungrounded: [{ blockIndex: 99, sectionIdx: 1, conceptId: "c1" }] } as never), [1], "a sectionIdx erősebb a lapított indexnél");
-  assert.deepEqual(targetedRepairSections(previous, [], { ok: false, reasons: ["x"], ungrounded: [{ blockIndex: 2, conceptId: "c1" }] } as never), [1], "régi kapujelentés: lapított indexből");
-});
 
 test("H39: az ábratervező hatókör-őre a fejezetcímet, a Próbát, az emojit és a tévhitlistát is méri", () => {
   const original = standardFusionFixture();
@@ -117,16 +75,21 @@ test("H13/B4: a szerzői prompt magyar, a TANÍTÁSI SZERZŐDÉS a séma számai
   assert.match(ROLE_SKILLS.author, /teljes lecke ott hiba/);
 });
 
-test("review #162: mondatkezdő új tulajdonnév is elutasítva; a bank-tisztítás csak az experience részt érinti; a hint a szerződésben; a megalapozási szabály a kapu szerinti", () => {
-  assert.equal(introducesNewProperNoun("A forrás Istárt a szerelem istenének nevezi.", "Hammurapi Istárt a szerelem istenének nevezi."), true, "mondat elején álló új név");
-  assert.equal(introducesNewProperNoun("A forrás Istárt a szerelem istenének nevezi.", "Istár a szerelem istene."), false);
-  const lesson = standardFusionFixture();
-  lesson.sections[0].blocks[0] = { ...(lesson.sections[0].blocks[0] as object), text: "A forrás szerint a terület fontos." } as never;
-  lesson.experience!.tasks[0] = { ...lesson.experience!.tasks[0], q: "A forrás szerint mekkora a terület?" };
-  assert.deepEqual(sourceReferenceFindings(lesson, { experienceOnly: true }).map((f) => f.path), ["experience.tasks[0].q"]);
-  const stripped = stripSourceReferences(lesson, { experienceOnly: true });
-  assert.equal(stripped.lesson.experience!.tasks[0].q, "Mekkora a terület?");
-  assert.equal((stripped.lesson.sections[0].blocks[0] as { text: string }).text, "A forrás szerint a terület fontos.", "a tanítás a bank után nem módosul");
+// S4b (docs/specs/2026-10-16-egy-futas.md): a régi lépésgép törölt moduljaira épülő esetből a MEGMARADÓ modulok állításai, szó szerint.
+test("H6 (C4): a megalapozatlan címke lelete fejezettel érkezik (sectionIdx)", () => {
+  const concepts = [{ localId: "c1", examWeight: "core" as const, term: "háromszög területe", definition: "x", quote: "y" }];
+  const blocks = [
+    { kind: "explain", text: "A négyzet kerülete négyszer az oldal.", coversConceptIds: ["c1"] },
+    { kind: "explain", text: "A háromszög területe az alap és a magasság szorzatának fele.", coversConceptIds: ["c1"] },
+  ];
+  const report = groundingReport(blocks, concepts, [0, 1]);
+  assert.equal(report.ungrounded.length, 1);
+  assert.equal(report.ungrounded[0].sectionIdx, 0);
+  assert.equal(groundingReport(blocks, concepts).ungrounded[0].sectionIdx, undefined, "fejezetlista nélkül nincs sectionIdx (régi hívó)");
+});
+
+// S4b (docs/specs/2026-10-16-egy-futas.md): a régi lépésgép törölt moduljaira épülő esetből a MEGMARADÓ modulok állításai, szó szerint.
+test("review #162: a hint a szerződésben; a megalapozási szabály a kapu szerinti; a vázlat a közös korlátot használja", () => {
   assert.match(TEACHING_CONTRACT, new RegExp(`hint ${LESSON_TEXT_LIMITS.hint}`));
   assert.match(TEACHING_CONTRACT, /UGYANABBAN a fejezetben egy MÁSIK blokk \(bármely fajtájú/);
   const clamped = outlineSchema.parse({ sections: [{ heading: "A", conceptIds: ["c1"], plannedBlocks: ["explain"], animationSuggestions: ["x".repeat(OUTLINE_LIMITS.animationSuggestion + 9)], emoji: "🙂".repeat(9) }], misconceptions: [] });

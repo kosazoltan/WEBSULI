@@ -15,7 +15,6 @@ import {
   type ChatCallOptions,
 } from './AIProvider';
 import { collectStream, idleAbortSignal, withIdleStart, type StreamEvent } from './stream-collect';
-import { OPENROUTER_MODEL_ROUTING } from './models';
 
 /**
  * OpenRouter provider (LS-0d).
@@ -77,12 +76,10 @@ export class OpenRouterProvider implements IAIProvider {
   private jsonMode?: boolean;
 
   /**
-   * T2.3 (tulajdonosi döntés 2026-10-15): a modellenkénti útválasztási bejegyzés (`OPENROUTER_MODEL_ROUTING`) rögzített effortot, bekapcsolt
-   * gondolkodást és szolgáltató-sorrendet ad; bejegyzés nélkül a régi `reasoning.effort` mező (bájtra változatlan kérés).
+   * A kért effort a `reasoning.effort` mezőben. docs/specs/2026-10-16-egy-futas.md (S4b): a modellenkénti útválasztó tábla (a kivezetett tesztíró-modellé) megszűnt; az
+   * OpenRouter már csak a GPT-6.1 Sol kvóta-tartalék útja.
    */
   private routingFields(): Record<string, unknown> {
-    const routing = OPENROUTER_MODEL_ROUTING[this.model];
-    if (routing) return { reasoning: { effort: routing.effort, enabled: true }, provider: { order: [...routing.providerOrder], allow_fallbacks: true } };
     return this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {};
   }
 
