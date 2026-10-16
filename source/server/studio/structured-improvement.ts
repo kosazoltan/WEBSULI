@@ -80,7 +80,10 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   // kerül ellenőrzésre/elfogadásra — ezért a szerző a legutóbbi tanítás-író („repair”) hívás modellje; az elutasított korábbi kör és
   // a bankhívás (a fő gyártásban sem) nem szerző.
   let teachingAuthor: string | undefined;
+  // docs/specs/2026-10-16-egy-futas.md (S4a): egyfutásos módban minden szerep EGY beszélgetésben (Opus 5.5 medium, tartalék GPT-6.1 Sol).
+  const conversationCall = await singleRunRepairCall();
   const call = async (step: RepairStep, system: string, user: string, role: PromptRole = requireRoleForStep(step), extra?: { responseFormat?: ResponseFormatJsonSchema }) => {
+    if (conversationCall) return conversationCall(step, system, user, role);
     // Review #160 (U2/C8): szigorú séma csak a közvetlen OpenAI-úton; tartalék úton JSON-mód + helyi validálás.
     const formatFor = (model: string) => extra?.responseFormat && providerForModel(model) === "openai" ? { responseFormat: extra.responseFormat } : {};
     if (step === "lektor") {
@@ -109,6 +112,36 @@ export async function generateStructuredImprovement(fileId: string, instruction?
     // Review #164: az eldöntetlen régi-alak jelöltek a javítás-artefaktumban maradnak (admin-nézet), nem csak a naplóban.
     ...(staleWarnings?.length ? { staleWarnings } : {}),
   });
+}
+
+/**
+ * Egyfutásos módban a javítás minden modellhívása egyetlen beszélgetésbe kötve (null, ha a vészfék a régi láncot kéri).
+ * A bankcsomag hibás kimenete a banképítő javító körébe megy (`RetryableBankCallError`), mint a gyártásban.
+ */
+export async function singleRunRepairCall(conversation?: import("./single-run/conversation").LessonConversation) {
+  const { singleRunEnabled } = await import("./single-run/switch");
+  if (!conversation && !singleRunEnabled()) return null;
+  const { createLessonConversation } = await import("./single-run/conversation");
+  const { conversationBankCall, singleRunSystemPrompt, withRoleRunbook, SINGLE_RUN_FIX_ROUNDS } = await import("./single-run/engine");
+  const { parseModelJson } = await import("./run-step");
+  const conv = conversation ?? createLessonConversation(singleRunSystemPrompt());
+  const bank = conversationBankCall(conv);
+  return async (step: RepairStep, system: string, user: string, role: PromptRole): Promise<unknown> => {
+    if (role === "bank") return bank(system, user);
+    // Review #261: a csonkolt / nem JSON válasz javító fordulót kap ugyanabban a beszélgetésben (legfeljebb SINGLE_RUN_FIX_ROUNDS).
+    let blocks = withRoleRunbook([{ type: "text", text: `JAVÍTÁS — ${role} (${step}).\n${system}\n\n${user}\nVálaszolj kizárólag a kért JSON-nal.` }], role);
+    let problem = "";
+    for (let round = 0; round <= SINGLE_RUN_FIX_ROUNDS; round++) {
+      const reply = await conv.send(blocks);
+      if (reply.truncated) problem = "A válasz elérte a kimeneti keretet és levágódott.";
+      else {
+        try { return parseModelJson(reply.text).json; }
+        catch (error) { problem = `A válasz nem értelmezhető JSON: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`; }
+      }
+      blocks = [{ type: "text", text: `A PROGRAM ELLENŐRZÉSE (javítás — ${role}): ${problem}\nAdd vissza a TELJES kért JSON-t újra, rövidebben, ha kell.` }];
+    }
+    throw new Error(problem);
+  };
 }
 
 /** Shared generation path: also executable against read-only source with local artifacts. */

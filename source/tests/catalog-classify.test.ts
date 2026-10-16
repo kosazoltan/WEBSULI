@@ -66,12 +66,13 @@ test("konszenzus (pilot-lelet: futásonként eltérő tantárgy): egyező → ag
   assert.ok(third.status === "agreed" && third.models.join(",") === "a,c");
 });
 
-test("pilot-lelet: a `{\"answer\": {...}}` burok determinisztikusan kibontva; a modell-lista közvetlen OpenAI (Luna → 6.1 Sol → 6 Sol)", () => {
+test("pilot-lelet: a `{\"answer\": {...}}` burok determinisztikusan kibontva; a modell-lista GPT-6.1 Sol → Opus 5.5", () => {
   assert.equal(parseClassification({ answer: good }, input).subject, "fizika");
   assert.throws(() => parseClassification({ answer: good, extra: 1 }, input), "csak egykulcsos burok bontható ki");
   // Spec-változás 2026-10-14 (docs/specs/2026-10-14-forras-besorolo-openai-luna.md, tulajdonosi döntés): OpenRouter helyett
   // közvetlen OpenAI — Luna az első, a 6.1 Sol a független második vélemény, a 6 Sol a döntő. A három modell továbbra is különböző.
-  assert.deepEqual([...CLASSIFIER_MODELS], ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-sol"]);
+  // Spec-változás 2026-10-16 (docs/specs/2026-10-16-egy-futas.md, S4a, tulajdonosi döntés): csak Opus 5.5 és GPT-6.1 Sol marad.
+  assert.deepEqual([...CLASSIFIER_MODELS], ["gpt-6.1-sol", "claude-opus-5-5"]);
 });
 
 test("bemenet: a tétel-minta a lecke egészéből (eleje, közepe, vége), a fejezetcímek egyediek", () => {

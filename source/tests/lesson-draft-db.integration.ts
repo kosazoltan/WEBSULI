@@ -264,3 +264,29 @@ test("review #260: az egyfutásos újragyártás foglalása csak saját / gazdá
     await dbPool.query("DELETE FROM studio_jobs WHERE id = ANY($1)", [[foreign.id, leased.id, mine.id]]);
   }
 });
+
+test("S4a: a különálló kinyerés draft térképet ment (jóváhagyásra váró fogalmak), és a tartalmi lenyomaton idempotens", async () => {
+  const { saveSingleRunMap, singleRunMapHash, extractMapSingleRun } = await import("../server/studio/single-run/live");
+  const files = [{ name: "lap.txt", kind: "text" as const, content: "A víz körforgása: párolgás, lecsapódás, csapadék." }];
+  const hash = singleRunMapHash(files, "Víz");
+  assert.equal(hash, singleRunMapHash(files, "Víz"), "determinisztikus lenyomat");
+  assert.notEqual(hash, singleRunMapHash(files, "Más cím"));
+  const map = { title: "Víz", subject: "természettudomány", classroom: 5, transcript: files[0].content, fileTranscripts: { "lap.txt": files[0].content },
+    concepts: [{ id: "parolgas", term: "párolgás", definition: "A víz gőzzé válása.", quote: "párolgás", type: "concept", examWeight: "core" as const, relatedIds: [], verbatimOk: true, sourceFile: "lap.txt" }] };
+  const mapId = await saveSingleRunMap(map, files, "draft-owner", "claude-opus-5-5", { draft: true, inputHash: hash });
+  try {
+    const row = (await dbPool.query("SELECT status, approved_by, source_text, source_files FROM knowledge_maps WHERE id=$1", [mapId])).rows[0];
+    assert.equal(row.status, "draft");
+    assert.equal(row.approved_by, null);
+    assert.equal(row.source_text, files[0].content);
+    assert.equal(row.source_files[0].extractedText, files[0].content);
+    const concept = (await dbPool.query("SELECT review_state, source_ref FROM km_concepts WHERE map_id=$1", [mapId])).rows[0];
+    assert.equal(concept.review_state, "pending", "a fogalom a tanári jóváhagyásra vár");
+    assert.deepEqual(concept.source_ref, { file: "lap.txt" });
+    // Ugyanaz a tartalom: a meglévő térkép jön vissza, modellhívás nélkül.
+    assert.deepEqual(await extractMapSingleRun({ files, title: "Víz", ownerId: "draft-owner" }), { mapId, cached: true });
+  } finally {
+    await dbPool.query("DELETE FROM km_concepts WHERE map_id=$1", [mapId]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE id=$1", [mapId]);
+  }
+});

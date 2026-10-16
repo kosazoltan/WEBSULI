@@ -281,32 +281,32 @@ export const MODEL_REASONING_EFFORT: Readonly<Record<string, "low" | "medium" | 
  */
 export const LEGACY_MODELS = {
   /** adminRouter POST /html-fix/errors — Claude JSON HTML repair (routes.ts ~1226) */
-  htmlFix: "claude-opus-5",
+  htmlFix: "claude-opus-5-5",
   /** adminRouter POST /html-fix/theme — Claude JSON theme rewrite (routes.ts ~1316) */
-  htmlTheme: "claude-opus-5",
+  htmlTheme: "claude-opus-5-5",
   /** Enhanced Creator SSE two-phase OpenAI HTML fix (routes.ts ~1479, ~1508) */
   htmlFixStream: "gpt-6.1-sol",
   /** Enhanced Creator Claude chat stream, full HTML generation (routes.ts ~1790) */
-  claudeChat: "claude-opus-5",
+  claudeChat: "claude-opus-5-5",
   /** Vision analysis of uploaded files (routes.ts ~1942 multi, ~2055 single) */
   analyzeFiles: "gpt-6.1-sol",
   /** Enhanced Creator ChatGPT chat stream (routes.ts ~2212) */
   chatgptChat: "gpt-6.1-sol",
   /** Enhanced Creator Claude HTML generation stream (routes.ts ~2417) */
-  claudeHtml: "claude-opus-5",
+  claudeHtml: "claude-opus-5-5",
   /**
    * HTML modernisation: Anthropic primary, direct OpenAI fallback. Tulajdonosi döntés 2026-10-14
    * (docs/specs/2026-10-14-tartalek-b-szelet.md, B3): a tartalék az ellentétes családú GPT-6.1 Sol, medium efforttal (korábban Terra).
    */
-  improve: ["claude-opus-5", "gpt-6.1-sol"],
+  improve: ["claude-opus-5-5", "gpt-6.1-sol"],
   /** Quiz item generation from a material (gameQuizGeneratorService.ts) */
-  quizGenerator: "claude-opus-5",
+  quizGenerator: "claude-opus-5-5",
   /**
    * Internetes tananyag — csak a forrásgyűjtés (web_search + web_fetch).
    * A szerzői HTML és a 45/75 bank a Studio `author` modellt használja
    * (`resolveStudioModel("author")`), nem ezt az azonosítót.
    */
-  webResearch: "claude-opus-5",
+  webResearch: "claude-opus-5-5",
 } as const;
 
 export type LegacyTask = keyof typeof LEGACY_MODELS;

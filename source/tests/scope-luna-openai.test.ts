@@ -57,11 +57,11 @@ test("E1: mindkét scope-hívóhely a `scope` lépés modelljét használja (kom
   }
 });
 
-test("E4: a besoroló gpt-6-lunával kezd, két különböző közvetlen OpenAI-modell + döntő", () => {
-  assert.equal(CLASSIFIER_MODELS[0], "gpt-6-luna");
+test("E4: a besoroló két különböző modell egyezése (GPT-6.1 Sol + Opus 5.5), közvetlen szolgáltatókon", () => {
+  // Spec-változás 2026-10-16 (docs/specs/2026-10-16-egy-futas.md, S4a, tulajdonosi döntés): csak Opus 5.5 és GPT-6.1 Sol marad. A harmadik döntő megszűnt: eltérő tantárgynál a lecke emberi átnézésre megy.
+  assert.deepEqual([...CLASSIFIER_MODELS], ["gpt-6.1-sol", "claude-opus-5-5"]);
   assert.equal(new Set(CLASSIFIER_MODELS).size, CLASSIFIER_MODELS.length, "a konszenzushoz különböző modellek kellenek");
-  assert.ok(CLASSIFIER_MODELS.length >= 3, "eltérő tantárgynál döntő kell (2 a 3-ból)");
-  for (const m of CLASSIFIER_MODELS) assert.equal(providerForModel(m), "openai", `${m}: közvetlen OpenAI, nem OpenRouter`);
+  assert.deepEqual(CLASSIFIER_MODELS.map((m) => providerForModel(m)), ["openai", "anthropic"], "közvetlen szolgáltatók, nem OpenRouter");
 });
 
 test("review #209: a katalógus-besoroló a MÉRT high effort szabályzaton fut, nem a topicFocus (low) szabályzaton", () => {

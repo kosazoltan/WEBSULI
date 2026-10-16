@@ -146,10 +146,13 @@ export function OutlineReview({
   jobId,
   mapId,
   onApproved,
+  onFollowRun,
 }: {
   jobId: string;
   mapId: string;
   onApproved?: () => void;
+  /** S4a: egyfutásos módban a jóváhagyás a terv alapján új gyártást indít (`runId`) — a hívó ezt követi. */
+  onFollowRun?: (runId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -195,12 +198,18 @@ export function OutlineReview({
   const approve = useMutation({
     mutationFn: (approvedSections: OutlineSection[]) => {
       if (!outline) throw new Error("Nincs mit jóváhagyni.");
-      return apiRequest("POST", `/api/studio/jobs/${jobId}/approve-outline`, {
+      return apiRequest<{ runId?: string } | undefined>("POST", `/api/studio/jobs/${jobId}/approve-outline`, {
         outline: { sections: approvedSections, misconceptions: outline.misconceptions },
       });
     },
-    onSuccess: () => {
+    onSuccess: (started) => {
       queryClient.invalidateQueries({ queryKey: ["/api/studio/jobs", jobId] });
+      if (started?.runId && onFollowRun) {
+        toast({ title: "A terv alapján új gyártás indult", description: "A mentett forrásból egy beszélgetésben készül el; a haladás itt követhető." });
+        onFollowRun(started.runId);
+        onApproved?.();
+        return;
+      }
       toast({ title: "Vázlat jóváhagyva", description: "A szerző megkezdi a lecke írását." });
       onApproved?.();
     },

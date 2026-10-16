@@ -45,8 +45,10 @@ export type Classification = z.infer<typeof classificationSchema>;
  * Tulajdonosi döntés 2026-10-14 (docs/specs/2026-10-14-forras-besorolo-openai-luna.md): OpenRouter helyett saját OpenAI-kulcs.
  * Első a gpt-6-luna (mérve high efforttal a 10 leckés kézi pilot-mércén: tantárgy 20/20, évfolyam 19/20, 0,0005 USD/hívás); a
  * független második vélemény a gpt-6.1-sol, eltérő tantárgynál a döntő a gpt-6-sol — mind közvetlen OpenAI, mind különböző modell.
+ * Tulajdonosi döntés 2026-10-16 (docs/specs/2026-10-16-egy-futas.md, S4a): a rendszerben csak két modell marad — a besorolás két
+ * különböző modell egyezése (GPT-6.1 Sol + Opus 5.5); eltérő tantárgynál nincs harmadik döntő, a lecke emberi átnézésre megy.
  */
-export const CLASSIFIER_MODELS = ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-sol"] as const;
+export const CLASSIFIER_MODELS = ["gpt-6.1-sol", "claude-opus-5-5"] as const;
 
 const TEXT_BUDGET = 2500;
 const SAMPLE_ITEMS = 12;

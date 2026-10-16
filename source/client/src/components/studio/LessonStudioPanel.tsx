@@ -188,7 +188,7 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
       {jobId && <JobMonitor jobId={jobId} onFollowRun={(runId) => { setJobId(null); setFollowRunId(runId); }} />}
 
       {jobId && outlineReady && selectedMap && (advancedOpen || !jobData?.produced.approvedOutline) && (
-        <OutlineReview jobId={jobId} mapId={selectedMap.id} />
+        <OutlineReview jobId={jobId} mapId={selectedMap.id} onFollowRun={(runId) => { setJobId(null); setFollowRunId(runId); }} />
       )}
 
       {jobId && notesReady && <LektorNotes jobId={jobId} />}

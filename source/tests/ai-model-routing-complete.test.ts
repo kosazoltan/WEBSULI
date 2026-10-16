@@ -90,7 +90,8 @@ test("a render.yaml deklarálja mind a három AI-kulcsot", () => {
 test("az okosítás modelljei a models.ts-ből jönnek", () => {
   assert.ok(Array.isArray(LEGACY_MODELS.improve), "az improve egy sorrendezett lista");
   assert.ok(LEGACY_MODELS.improve.length >= 2, "van tartalék modell is");
-  assert.equal(LEGACY_MODELS.improve[0], "claude-opus-5");
+  // Spec-változás 2026-10-16 (docs/specs/2026-10-16-egy-futas.md, S4a, tulajdonosi döntés): csak Opus 5.5 és GPT-6.1 Sol marad.
+  assert.equal(LEGACY_MODELS.improve[0], "claude-opus-5-5");
 });
 
 test("az okosítás tartalék modellje MÁS szolgáltatónál van", () => {
@@ -177,8 +178,9 @@ test("a hosszú generáló feladatok medium reasoning efforttal futnak", () => {
   }
 });
 
-test("a webes tananyag-ügynök Opus 5 low efforton fut", () => {
-  assert.equal(resolveLegacyModel("webResearch"), "claude-opus-5");
+test("a webes tananyag-ügynök Opus 5.5 low efforton fut", () => {
+  // Spec-változás 2026-10-16 (docs/specs/2026-10-16-egy-futas.md, S4a, tulajdonosi döntés): csak Opus 5.5 és GPT-6.1 Sol marad.
+  assert.equal(resolveLegacyModel("webResearch"), "claude-opus-5-5");
   assert.equal(effortFor("webResearch"), "low");
   assert.equal(providerForModel(LEGACY_MODELS.webResearch), "anthropic");
   assert.equal(requiredKeyFor("webResearch"), "AI_INTEGRATIONS_ANTHROPIC_API_KEY");
