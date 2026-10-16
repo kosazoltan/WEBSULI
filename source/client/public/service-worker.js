@@ -2,7 +2,8 @@
 // Anyagok Profiknak Platform
 // Version: 4.0.0 - SVG background implementation - FORCE UPDATE
 
-const CACHE_VERSION = '4.3.0'; // FORCE UPDATE - robot app icons (2026-10-13)
+// Minden worker-kiadás ÚJ verziót kap (review #207): azonos név mellett a frissítés a régi cache-t és benne az elavult válaszokat használná tovább.
+const CACHE_VERSION = '4.4.0'; // install: csak az új cache töltődik, a régi az activate-ben törlődik (2026-10-16)
 const CACHE_NAME = `anyagok-profiknak-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
@@ -17,27 +18,20 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  console.log('[SW] Service Worker installing - clearing ALL caches...');
+  console.log('[SW] Service Worker installing - populating', CACHE_NAME);
+  // Populate ONLY the new versioned cache; old caches are removed in `activate`.
+  // If any asset fails here, install aborts and the previous worker keeps its
+  // cache (incl. /offline.html) intact.
   event.waitUntil(
-    // First, delete ALL existing caches
-    caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => {
-            console.log('[SW] Deleting cache:', cacheName);
-            return caches.delete(cacheName);
-          })
-        );
-      })
-      .then(() => {
-        // Then create new cache with minimal assets
-        return caches.open(CACHE_NAME);
-      })
-      .then((cache) => {
-        console.log('[SW] Caching minimal static assets');
-        return cache.addAll(STATIC_ASSETS);
-      })
-      .then(() => self.skipWaiting())
+    caches.has(CACHE_NAME).then((existed) =>
+      caches.open(CACHE_NAME)
+        .then((cache) => {
+          console.log('[SW] Caching minimal static assets');
+          return cache.addAll(STATIC_ASSETS);
+        })
+        // Review #207: a sikertelen telepítés ne hagyjon elhagyott jelölt-cache-t — de a már meglévőhöz (lehet az aktívé) nem nyúlunk.
+        .catch((error) => (existed ? Promise.reject(error) : caches.delete(CACHE_NAME).then(() => Promise.reject(error))))
+    ).then(() => self.skipWaiting())
   );
 });
 
