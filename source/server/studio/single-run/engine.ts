@@ -20,7 +20,7 @@ import { autofixOutline } from "../tools/outline-autofix";
 import { applyVisualPatch } from "../visual-patch";
 import { stripUngroundedAnimateLabels } from "../grounding";
 import { ensureSectionVisuals } from "../section-visuals";
-import { buildLessonExperience, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceCheckpoint } from "../experience-builder";
+import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceCheckpoint } from "../experience-builder";
 import { answerKeysFor, answerKeyTestsEnabled } from "../answer-key-writer";
 import { answerKeyNotes } from "../../../shared/answer-key-tests";
 import { quizBlindProblems } from "../quiz-blind-check";
@@ -77,7 +77,9 @@ export type SingleRunDeps = {
 };
 
 /** Az állomás-futtató függősége: a beszélgetés, a napló és (ha van) a telemetria gyűjtője. */
-export type StationDeps = Pick<SingleRunDeps, "conversation" | "log"> & { telemetry?: TelemetryRecorder };
+export type StationDeps = Pick<SingleRunDeps, "conversation" | "log"> & { telemetry?: TelemetryRecorder;
+  /** Spec 2026-10-16-gyartas-haladas: a javító forduló a felületnek is jelzés (az állomás neve, a forduló sorszáma 1-től). */
+  onFix?(name: string, round: number): void };
 
 /** A gyártás teljes módszertana EGY rendszerpromptban (a szerep-skillek egyszer, gyorsítótárazva). */
 export function singleRunSystemPrompt(): string {
@@ -151,6 +153,8 @@ export async function runStation<T>(deps: StationDeps, name: string, request: Tu
         problems = result.problems;
       }
     }
+    // Review #264: csak valóban következő javító fordulót jelzünk (az utolsó bukás után nincs több kísérlet).
+    if (round < SINGLE_RUN_FIX_ROUNDS) deps.onFix?.(name, round + 1);
     deps.log?.(`[EGYFUTÁS] ${name}: ${round + 1}. ellenőrzés hibás (${problems.length}): ${problems.slice(0, 3).join(" | ").slice(0, 400)}`);
     blocks = [text(`A PROGRAM ELLENŐRZÉSE (${name}) ezeket a hibákat találta:\n- ${problems.slice(0, 40).join("\n- ")}\nJavítsd mindet, és add vissza a TELJES kért JSON-t újra.`)];
   }
@@ -334,13 +338,16 @@ export type SingleRunResult = { mapId: string; jobId: string; lessonId: string; 
 export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps): Promise<SingleRunResult> {
   const { conversation, store } = deps;
   const log = (m: string) => deps.log?.(m);
-  const phase = (p: SingleRunPhase, detail: string | null) => deps.onPhase?.(p, detail);
+  // Spec 2026-10-16-gyartas-haladas: az utolsó fázis megjegyezve — a bank és a javító forduló részletes jelzése ehhez tartozik.
+  let currentPhase: SingleRunPhase = "extract";
+  const phase = (p: SingleRunPhase, detail: string | null) => { currentPhase = p; deps.onPhase?.(p, detail); };
+  const onFix = (name: string, round: number) => phase(currentPhase, `${name[0].toUpperCase()}${name.slice(1)}: javító forduló (${round}.)…`);
   // J3: futásonkénti telemetria (állomásonként forduló, token, idő; friss hívások; kapuk) — minden mentéskor a jobra kerül; folytatásnál
   // a megszakadt futás mentett telemetriája folytatódik.
   const telemetry = new TelemetryRecorder(input.resume ? telemetryOf(input.resume.output) : null);
   const resumed = input.resume ? resumePointOf(input.resume.output) : null;
   if (input.resume && !input.mapId) throw new SingleRunError("folytatás", ["A folytatáshoz a job térképe szükséges."]);
-  const station: StationDeps = { conversation, log: deps.log, telemetry };
+  const station: StationDeps = { conversation, log: deps.log, telemetry, onFix };
 
   // 1. Forrás + tudásbank (review #262: meglévő térképnél a gondozott térkép, stabil fogalomazonosítókkal).
   await workflowPhase("source"); await workflowPhase("scope");
@@ -500,8 +507,16 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   // Review #263: folytatáskor a mentett nyitott leletek is (kész banknál a banképítés kimarad; a végkapu a már nem létező tételt figyelmen kívül hagyja).
   const savedFindings = Array.isArray(output.bankOpenFindings) ? output.bankOpenFindings as Array<{ sectionIndex: number; itemId: string; message: string }> : [];
   const openFindings: Array<{ sectionIndex: number; itemId: string; message: string }> = resumed ? [...savedFindings] : [];
-  const buildBank = async (base: Lesson, extra: { reviewFeedback?: ReturnType<typeof resolveBankReview>; previous?: Lesson["experience"] } = {}) =>
-    buildLessonExperience(base, concepts, {
+  const buildBank = async (base: Lesson, extra: { reviewFeedback?: ReturnType<typeof resolveBankReview>; previous?: Lesson["experience"] } = {}) => {
+    // Spec 2026-10-16-gyartas-haladas: a bank a leghosszabb szakasz — egységenként és javító kísérletenként jelez a felületnek.
+    const label = extra.reviewFeedback?.length ? "Bankjavítás a lektor jelzései alapján" : "Gyakorlóbank";
+    let progress = { done: 0, total: base.sections.length };
+    return buildLessonExperience(base, concepts, {
+      onProgress: (p) => {
+        progress = { done: p.done, total: p.total };
+        // Review #264: a számláló bankcsomagot számol (egy sok fogalmas fejezet több csomag is lehet), a készülőnél a fejezetet nevezzük meg.
+        phase(currentPhase, `${label}: ${p.done}/${p.total} csomag kész${p.current !== undefined ? ` — a ${p.current + 1}. fejezet csomagja készül` : ""}…`);
+      },
       call: freshBankCall(deps.fresh, telemetry),
       concurrency: 1,
       // A régi útról áthozott, alapból bekapcsolt minőségkapuk — kulcsmentes, friss beszélgetésben, a döntés a kódé:
@@ -524,10 +539,13 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
         log(`[EGYFUTÁS] ${tool}: ${fixes.join("; ").slice(0, 300)}`);
       },
       onAttemptFailure: (section, attempt, reason) => {
+        // Review #264: az utolsó (mentő) kísérlet után nincs újabb — akkor nem ígérünk javító kísérletet.
+        if (attempt + 1 < PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS) phase(currentPhase, `${label}: ${progress.done}/${progress.total} csomag kész — a ${section + 1}. fejezet csomagjának javító kísérlete (${attempt + 2}.)…`);
         telemetry.gates.answerKeyFails += reason.split("válaszkulcs-teszt: a hibás").length - 1;
         log(`[EGYFUTÁS] bankcsomag ${section + 1}. fejezet, ${attempt + 1}. kísérlet: ${reason.slice(0, 300)}`);
       },
     });
+  };
   if (!pastBank) {
     lesson = { ...lesson, experience: await buildBank(lesson) };
     output = { ...output, lesson, experienceCheckpoint: checkpoint };
@@ -563,7 +581,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   }
   for (let round = startRound; round <= SINGLE_RUN_REVIEW_ROUNDS; round++) {
     phase("lektor", `Lektorálás (${round + 1}. kör)…`);
-    const reviewer: StationDeps = { conversation: deps.fresh(freshSystemPrompt("lektor")), log: deps.log, telemetry };
+    const reviewer: StationDeps = { conversation: deps.fresh(freshSystemPrompt("lektor")), log: deps.log, telemetry, onFix };
     const report = await runStation(reviewer, "lektorálás", withRoleRunbook([...sourceBlock, text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, previousBlockers, owner)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)], "lektor"),
       (json) => {
         const r = parseLektorResponse(json);

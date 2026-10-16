@@ -378,7 +378,26 @@ export type OneStepRunView = {
   error: string | null;
   /** Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D5): hibánál a workflow-lépés, ahol a futás megállt. */
   stoppedAt?: string;
-};
+} & RunTiming;
+
+/**
+ * Spec 2026-10-16-gyartas-haladas: a futó gyártás ideje a szerver órája szerint (másodperc) — az indulás óta, az utolsó haladásjelzés
+ * óta, és él-e a háttérfolyamat (workflow-lízing). Csak futó fázisnál van értéke.
+ */
+export type RunTiming = { elapsedSec?: number; sinceUpdateSec?: number; alive?: boolean };
+
+const duration = (sec: number) => (sec < 60 ? `${Math.max(0, Math.round(sec))} mp` : sec < 3600 ? `${Math.floor(sec / 60)} perc` : `${Math.floor(sec / 3600)} óra ${Math.floor((sec % 3600) / 60)} perc`);
+const ago = (sec: number) => (sec < 60 ? `${Math.max(0, Math.round(sec))} másodperce` : sec < 3600 ? `${Math.floor(sec / 60)} perce` : `${Math.floor(sec / 3600)} órája`);
+
+/** A futó gyártás időjelzése: „Eltelt idő: 18 perc · utolsó jelzés: 1 perce · a háttérfolyamat él”; időadat nélkül null. */
+export function progressTimingText(t: RunTiming): string | null {
+  if (typeof t.elapsedSec !== "number") return null;
+  return [
+    `Eltelt idő: ${duration(t.elapsedSec)}`,
+    ...(typeof t.sinceUpdateSec === "number" ? [`utolsó jelzés: ${ago(t.sinceUpdateSec)}`] : []),
+    ...(t.alive === true ? ["a háttérfolyamat él"] : t.alive === false ? ["a háttérfolyamat nem jelez"] : []),
+  ].join(" · ");
+}
 
 export const LESSON_CREATION_STAGES = [
   { key: "source", label: "Forrás feldolgozása", phases: ["indul", "ocr", "extract"] },

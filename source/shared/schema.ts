@@ -750,6 +750,8 @@ export const oneStepRuns = pgTable(
   },
   (table) => ({
     updatedIdx: index("one_step_runs_updated_idx").on(table.updatedAt),
+    // Spec 2026-10-16-gyartas-haladas (review #264): a job legutóbbi futása (draftlista haladásjelzés).
+    jobUpdatedIdx: index("one_step_runs_job_updated_idx").on(table.jobId, table.updatedAt.desc()),
   }),
 );
 

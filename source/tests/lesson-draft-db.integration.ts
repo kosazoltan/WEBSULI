@@ -292,3 +292,25 @@ test("J5: a megállt egyfutásos piszkozat folytatható; a foglalás saját / ne
     await dbPool.query("DELETE FROM studio_jobs WHERE id = ANY($1)", [[mine.id, foreign.id, legacy.id]]);
   }
 });
+
+// Spec 2026-10-16-gyartas-haladas: a draftlista futó tétele a futás részletét, idejét és a háttérfolyamat élő voltát mutatja.
+test("haladásjelzés: a futó tétel a legutóbbi futás részletét, eltelt idejét és a lízinget adja (a szerver órája szerint)", async () => {
+  const running = await mapWithJob({ owner: "draft-owner", status: "running", age: "5 minutes" });
+  const runId = `progress-run-${running.id.slice(0, 8)}`;
+  try {
+    await dbPool.query("UPDATE studio_jobs SET step='animator' WHERE id=$1", [running.id]);
+    await dbPool.query("UPDATE lesson_workflow_runs SET owner_id='draft-owner' WHERE id=$1", [running.id]);
+    await dbPool.query("INSERT INTO one_step_runs(id,phase,detail,job_id,started_at,updated_at) VALUES ($1,'animator','Gyakorlóbank: 2/5 csomag kész — a 3. fejezet csomagja készül…',$2, now() - interval '18 minutes', now() - interval '75 seconds')", [runId, running.id]);
+    await dbPool.query("INSERT INTO lesson_workflow_runs(id,owner_id,state,snapshot,lease_until) VALUES ($1,'draft-owner','running','{}'::jsonb, now() + interval '2 minutes')", [runId]);
+    const item = (await ownerDrafts("draft-owner")).find((d) => d.jobId === running.id)!;
+    assert.equal(item.running, true);
+    assert.equal(item.progress?.detail, "Gyakorlóbank: 2/5 csomag kész — a 3. fejezet csomagja készül…");
+    assert.ok(Math.abs((item.progress?.elapsedSec ?? 0) - 1080) <= 5, String(item.progress?.elapsedSec));
+    assert.ok(Math.abs((item.progress?.sinceUpdateSec ?? 0) - 75) <= 5, String(item.progress?.sinceUpdateSec));
+    assert.equal(item.progress?.alive, true);
+  } finally {
+    await dbPool.query("DELETE FROM lesson_workflow_runs WHERE id=$1", [runId]);
+    await dbPool.query("DELETE FROM one_step_runs WHERE id=$1", [runId]);
+    await dbPool.query("DELETE FROM studio_jobs WHERE id=$1", [running.id]);
+  }
+});
