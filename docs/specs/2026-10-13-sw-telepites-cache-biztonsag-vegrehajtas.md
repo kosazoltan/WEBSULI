@@ -43,3 +43,12 @@ a törlő ág és a „clearing ALL caches” log kikerül. `activate` változat
 - `npx playwright test -c playwright.service-worker.config.ts` → 2 passed.
 - `npm test` célzottan nem érintett; `npx tsc --noEmit` (ha a config/spec típus-ellenőrzött).
 - Branch `fix/sw-install-cache-safety`, PR a `main`-re; merge csak kifejezett kérésre.
+
+## Kiegészítés 2026-10-16 (a PR CI-hibája)
+- **Hiba:** a fő `playwright.config.ts` minden `*.spec.ts` fájlt futtat, így a SW-tesztet is a saját statikus szervere nélkül. Ott az `update()` nem hoz új workert, ezért a teszt szükségszerűen bukik.
+- **Javítás:**
+  - A tesztfájl új neve `tests/service-worker-install.browser.ts` (a `lesson-arbiter.browser.ts` mintájára). A fő futás nem veszi fel.
+  - A `playwright.service-worker.config.ts` `testMatch`-e ezt a fájlt nézi.
+  - A `channel: "chrome"` helyett a CI-ben telepített beépített Chromium fut (`npx playwright install chromium`).
+  - Új CI-lépés: `npx playwright test --config playwright.service-worker.config.ts`.
+- A `main` 2026-10-16-i állapotán a hiba még fennáll: az `install` minden cache-t töröl.
