@@ -73,7 +73,7 @@ export type ExperienceBuildDeps = {
    * Spec 2026-10-16-gyartas-haladas: a bank haladása a felületnek — kész / összes egység, és amelyik épp készül (fejezet-index). A hívó
    * hibája a bankot nem állítja meg.
    */
-  onProgress?(progress: { done: number; total: number; current?: number }): void;
+  onProgress?(progress: { done: number; total: number; current?: number; building?: number[] }): void;
   /** Spec 2026-09-20: a lecke vizuális világa (a tervező választása) — a bank témája ez, nem hash. */
   theme?: LessonExperience["theme"];
   /** Spec 2026-09-24: lecke-szintű különlegességek; alapból a korábbi, különben leckénként választott. */
@@ -693,15 +693,28 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
   // csomag után determinisztikus keresztellenőrzés fut (ismétlődő kérdés, kapu-kérdés), és az
   // ütköző csomag sorosan újraépül a már kész csomagok ismeretében. A sorrend és a hash változatlan.
   const concurrency = Math.max(1, Math.floor(deps.concurrency ?? 1));
-  const progress = (p: { done: number; total: number; current?: number }) => { try { deps.onProgress?.(p); } catch { /* haladásjelzés — a bank megy tovább */ } };
+  const progress = (p: { done: number; total: number; current?: number; building?: number[] }) => { try { deps.onProgress?.(p); } catch { /* haladásjelzés — a bank megy tovább */ } };
   for (let start = 0; start < plan.units.length; start += concurrency) {
     const chunk = plan.units.slice(start, start + concurrency);
-    progress({ done: start, total: plan.units.length, current: chunk[0].sectionIndex });
+    // Review #265: a haladásjelzés a valóban futó egységeket követi (befejezéskor és a soros újraépítéskor is frissül); a kész darab
+    // csak a sikeresen elkészült csomagokat számolja.
+    const active = new Map(chunk.map((unit, i) => [start + i, unit.sectionIndex] as const));
+    let finished = 0;
+    const report = () => { const building = [...active.values()]; progress({ done: start + finished, total: plan.units.length, ...(building.length ? { current: building[0], building } : {}) }); };
+    report();
     const snapshot: Prior = { methods: [...methods], tasks: [...tasks], quiz: [...quiz] };
-    const built = await Promise.all(chunk.map((unit, i) => buildUnit(start + i, unit, snapshot)));
+    // Review #265: az ELSŐ hiba után is megvárjuk az összes elindított egységet (és a checkpoint-mentésüket) — a kifizetett csomag
+    // nem vész el a folytatáshoz, és nincs késői, a hiba utáni haladásjelzés. Utána az első hiba megy tovább.
+    const settled = await Promise.allSettled(chunk.map((unit, i) => buildUnit(start + i, unit, snapshot).then(
+      (result) => { active.delete(start + i); finished++; if (active.size) report(); return result; },
+      (error: unknown) => { active.delete(start + i); throw error; })));
+    const failed = settled.find((s): s is PromiseRejectedResult => s.status === "rejected");
+    if (failed) throw failed.reason;
+    const built = settled.map((s) => (s as PromiseFulfilledResult<Awaited<ReturnType<typeof buildUnit>>>).value);
     for (const [i, result] of built.entries()) {
       let { packet } = result;
       if (i > 0 && crossProblems(packet, { methods, tasks, quiz }).length) {
+        progress({ done: start + i, total: plan.units.length, current: chunk[i].sectionIndex, building: [chunk[i].sectionIndex] });
         delete checkpoint.parts[result.hash];
         ({ packet } = await buildUnit(start + i, chunk[i], { methods: [...methods], tasks: [...tasks], quiz: [...quiz] }));
       }

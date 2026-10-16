@@ -43,6 +43,25 @@ import { TelemetryRecorder, telemetryOf, timed } from "./telemetry";
 export const SINGLE_RUN_VERSION = "single-run-1";
 /** Állomásonként ennyi javító forduló jár a determinisztikus visszajelzés után. */
 export const SINGLE_RUN_FIX_ROUNDS = 3;
+/**
+ * Spec 2026-10-16-parhuzamos-bank: ennyi bankegység épül egyszerre (friss beszélgetésenként). Mért a régi úton: soros 1795 s, 3 párhuzamos
+ * 681–1134 s. A `STUDIO_BANK_CONCURRENCY` (1–5) felülírja; érvénytelen érték → az alap.
+ */
+export const SINGLE_RUN_BANK_CONCURRENCY = 3;
+export function singleRunBankConcurrency(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.STUDIO_BANK_CONCURRENCY?.trim();
+  const n = raw && /^\d+$/.test(raw) ? Number(raw) : NaN;
+  return Number.isInteger(n) && n >= 1 && n <= 5 ? n : SINGLE_RUN_BANK_CONCURRENCY;
+}
+/**
+ * Spec 2026-10-16-gyartas-haladas + parhuzamos-bank: a bank haladása a felületnek — kész / összes csomag, és a készülő csomagok
+ * fejezetei (több párhuzamos csomagnál mind, ismétlődő fejezet nélkül).
+ */
+export function bankProgressText(label: string, p: { done: number; total: number; current?: number; building?: number[] }): string {
+  const building = [...new Set(p.building ?? (p.current !== undefined ? [p.current] : []))].map((i) => `${i + 1}.`);
+  return `${label}: ${p.done}/${p.total} csomag kész${building.length === 1 ? ` — a ${building[0]} fejezet csomagja készül`
+    : building.length > 1 ? ` — a ${building.join(", ")} fejezet csomagjai készülnek` : ""}…`;
+}
 /** A lektorálás legfeljebb ennyi kör (lektor → javítás → újra lektor). */
 export const SINGLE_RUN_REVIEW_ROUNDS = 2;
 
@@ -374,8 +393,15 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const jobId = input.resume ? input.resume.jobId
     : await store.createJob({ mapId, step: "pedagogue", status: "running", model: conversation.model, promptVersion: SINGLE_RUN_VERSION, inputHash: `${SINGLE_RUN_VERSION}:${mapId}` });
   await workflowResource(jobId); // review #260: a job a futás gazdájához kötött (piszkozatkezelés, lízing)
-  const save = async (step: Exclude<SingleRunPhase, "extract"> | "error", output: Record<string, unknown>, extra: JobPatch = {}) =>
-    store.saveStep(jobId, { step, ...extra, output: { ...output, telemetry: telemetry.snapshot(conversation.model), singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } });
+  // Review #265: a párhuzamos bankcsomagok mentései sorba állítva — a pillanatkép a hívás pillanatában készül, és a hívás sorrendjében
+  // íródik ki (egy korábbi pillanatkép nem írhatja felül egy újabbat). Egy mentés hibája csak a saját hívóját éri.
+  let saveQueue: Promise<unknown> = Promise.resolve();
+  const save = (step: Exclude<SingleRunPhase, "extract"> | "error", output: Record<string, unknown>, extra: JobPatch = {}): Promise<void> => {
+    const patch: JobPatch = { step, ...extra, output: { ...output, telemetry: telemetry.snapshot(conversation.model), singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } };
+    const write = saveQueue.catch(() => undefined).then(() => store.saveStep(jobId, patch));
+    saveQueue = write;
+    return write;
+  };
   deps.onJob?.(jobId, mapId);
   // J5: folytatásnál a mentett kimenet megmarad (a helyreállítási jelzők és a régi pillanatképek nélkül); a job újra fut.
   const { recoveryState: _recovery, remanufacturedAs: _remade, singleRun: _run, telemetry: _telemetry, ...kept } = input.resume?.output ?? {};
@@ -515,10 +541,11 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
       onProgress: (p) => {
         progress = { done: p.done, total: p.total };
         // Review #264: a számláló bankcsomagot számol (egy sok fogalmas fejezet több csomag is lehet), a készülőnél a fejezetet nevezzük meg.
-        phase(currentPhase, `${label}: ${p.done}/${p.total} csomag kész${p.current !== undefined ? ` — a ${p.current + 1}. fejezet csomagja készül` : ""}…`);
+        phase(currentPhase, bankProgressText(label, p));
       },
       call: freshBankCall(deps.fresh, telemetry),
-      concurrency: 1,
+      // Spec 2026-10-16-parhuzamos-bank: az egységek párhuzamosan (a builder kereszt-ellenőrzése az ütközőt sorosan újraépíti).
+      concurrency: singleRunBankConcurrency(),
       // A régi útról áthozott, alapból bekapcsolt minőségkapuk — kulcsmentes, friss beszélgetésben, a döntés a kódé:
       // válaszkulcs-tesztek (helyes és hibás próbaválaszok a valódi pontozón; vészfék: STUDIO_ANSWER_KEY_TESTS=0) és a kvíz vak
       // előszűrője (kulcs nélküli, opciónkénti ítélet; vészfék: STUDIO_QUIZ_BLIND=0).
