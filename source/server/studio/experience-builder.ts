@@ -69,6 +69,11 @@ export type ExperienceBuildDeps = {
   onOpenFinding?(finding: { sectionIndex: number; itemId: string; message: string }): void;
   /** Egyszerre épülő csomagok száma (alapból 1 = soros; a runner PACKET_CONCURRENCY-t ad). */
   concurrency?: number;
+  /**
+   * Spec 2026-10-16-gyartas-haladas: a bank haladása a felületnek — kész / összes egység, és amelyik épp készül (fejezet-index). A hívó
+   * hibája a bankot nem állítja meg.
+   */
+  onProgress?(progress: { done: number; total: number; current?: number }): void;
   /** Spec 2026-09-20: a lecke vizuális világa (a tervező választása) — a bank témája ez, nem hash. */
   theme?: LessonExperience["theme"];
   /** Spec 2026-09-24: lecke-szintű különlegességek; alapból a korábbi, különben leckénként választott. */
@@ -688,8 +693,10 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
   // csomag után determinisztikus keresztellenőrzés fut (ismétlődő kérdés, kapu-kérdés), és az
   // ütköző csomag sorosan újraépül a már kész csomagok ismeretében. A sorrend és a hash változatlan.
   const concurrency = Math.max(1, Math.floor(deps.concurrency ?? 1));
+  const progress = (p: { done: number; total: number; current?: number }) => { try { deps.onProgress?.(p); } catch { /* haladásjelzés — a bank megy tovább */ } };
   for (let start = 0; start < plan.units.length; start += concurrency) {
     const chunk = plan.units.slice(start, start + concurrency);
+    progress({ done: start, total: plan.units.length, current: chunk[0].sectionIndex });
     const snapshot: Prior = { methods: [...methods], tasks: [...tasks], quiz: [...quiz] };
     const built = await Promise.all(chunk.map((unit, i) => buildUnit(start + i, unit, snapshot)));
     for (const [i, result] of built.entries()) {
@@ -700,6 +707,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       }
       methods.push(...packet.methods); tasks.push(...packet.tasks); quiz.push(...packet.quiz); glossary.push(...packet.glossary);
     }
+    progress({ done: Math.min(start + chunk.length, plan.units.length), total: plan.units.length });
   }
   const experience = experienceSchema.parse({ version: LESSON_METHOD_VERSION, scoringVersion: scoringVersionFor(tasks, deps.previous?.scoringVersion), theme: deps.theme ?? deps.previous?.theme ?? experienceTheme(`${lesson.subject}:${lesson.title}`), flair: deps.flair ?? deps.previous?.flair ?? pickLessonFlair(`${lesson.subject}:${lesson.title}:${lesson.mapId}`), methods, tasks, quiz, language, bankPlan: plan, glossary: glossary.filter((g, i) => glossary.findIndex(other => other.word === g.word && other.translation === g.translation) === i) });
   const problems = experienceProblems(lesson, experience);

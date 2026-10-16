@@ -35,6 +35,7 @@ import { ORPHAN_JOB_ERROR, sweepDecision, type SweepRow } from "./orphan-jobs";
 import { executeWorkflow, workflowFence, workflowPhase, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
+import type { RunTiming } from "../../shared/studio-ui";
 import { telemetryOf } from "./single-run/telemetry";
 import { resumePointOf, singleRunResumable, SINGLE_RUN_VERSION } from "./single-run/engine";
 import type { ExtractorFile } from "./extractor";
@@ -256,7 +257,7 @@ export type OneStepRunView = {
   draftRunId?: string;
   /** Review #250 (P1): a megállt job eredeti tanári kérése — oldalfrissítés után az újragyártás ezzel indul (nem kérés nélkül). */
   ownerInstruction?: string;
-};
+} & RunTiming;
 
 /**
  * A job eredményéből: van-e nem publikált, mentett tananyag, és hány bankcsomag kész belőle. Review #215: a publikálás a
@@ -312,7 +313,15 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     const { visits } = run.phase === "draft" ? await workflowVisitsOfJob(run.jobId) : await workflowVisitsOf(runId);
     stop = job ? jobStopInfo(job, visits) : { resumable: false, stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step };
   }
-  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}),
+  // Spec 2026-10-16-gyartas-haladas: futó fázisnál az idők (a szerver órája szerint) és a háttérfolyamat élő volta (workflow-lízing).
+  let timing: RunTiming = {};
+  if (!["done", "error", "parked", "draft", "waiting"].includes(run.phase)) {
+    const now = Date.now();
+    const lease = await db.execute(sql`SELECT lease_until > now() AS alive FROM lesson_workflow_runs WHERE id = ${runId} LIMIT 1`).catch(() => ({ rows: [] }));
+    const alive = (lease.rows[0] as { alive?: boolean | null } | undefined)?.alive;
+    timing = { elapsedSec: Math.max(0, Math.round((now - run.startedAt) / 1000)), sinceUpdateSec: Math.max(0, Math.round((now - run.updatedAt) / 1000)), ...(typeof alive === "boolean" ? { alive } : {}) };
+  }
+  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...timing, ...(draft ? { draft } : {}),
     ...(draftRunId ? { draftRunId } : {}), ...(ownerInstruction ? { ownerInstruction } : {}),
     ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.resumeKind ? { resumeKind: stop.resumeKind } : {}),
       ...(stop.nextRecovery ? { nextRecovery: stop.nextRecovery } : {}) } : {}) };
@@ -358,7 +367,9 @@ async function workflowVisitsOfJob(jobId: string): Promise<{ visits: Array<{ ste
 
 /** docs/specs/2026-10-15-admin-tananyag-draft.md + 2026-10-16-draft-kezeles.md: az admin „Tananyag draft” listájának egy tétele. */
 export type OwnerDraft = { jobId: string; title: string; subject: string; classroom: number; draft: OneStepDraft | null; running: boolean;
-  error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean; awaitingApproval: boolean } & JobStopInfo;
+  error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean; awaitingApproval: boolean;
+  /** Spec 2026-10-16-gyartas-haladas: futó tételnél a job legutóbbi futásának részlete és ideje. */
+  progress?: { detail: string | null } & RunTiming } & JobStopInfo;
 
 /**
  * docs/specs/2026-10-16-draft-kezeles.md: a belépett admin által kezelhető job — nincs olyan workflow-sora, amelynek MÁS a gazdája
@@ -395,6 +406,7 @@ export async function ownerDraftTotal(owner: string): Promise<number> {
 export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
   const { rows } = await db.execute(sql`SELECT j.id, j.step, j.status, j.error, j.lesson_id, j.output, coalesce(j.finished_at, j.created_at) AS updated_at,
       m.title AS map_title, m.subject, m.classroom, wr.visits AS wf_visits, wr.executions AS wf_executions, wr.owner_id AS wf_owner,
+      osr.detail AS run_detail, osr.elapsed AS run_elapsed, osr.since AS run_since, osr.alive AS run_alive,
       EXISTS (SELECT 1 FROM lessons p WHERE p.map_id = j.map_id AND p.published_at IS NOT NULL) AS has_published
     FROM studio_jobs j LEFT JOIN lessons l ON l.id = j.lesson_id JOIN knowledge_maps m ON m.id = j.map_id
     -- Review #253 (P2): a job legutóbbi workflow-pillanatképe ugyanebben a lekérdezésben (nincs tételenkénti 2 körút).
@@ -402,6 +414,12 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
       SELECT w.owner_id, w.snapshot->'visits' AS visits, w.snapshot->'executions' AS executions FROM lesson_workflow_runs w
       WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
     ) wr ON true
+    -- Spec 2026-10-16-gyartas-haladas: a job legutóbbi futásának részlete, ideje (a szerver órája szerint) és a háttérfolyamat lízingje.
+    LEFT JOIN LATERAL (
+      SELECT r.detail, extract(epoch FROM now() - r.started_at)::int AS elapsed, extract(epoch FROM now() - r.updated_at)::int AS since,
+        (SELECT w.lease_until > now() FROM lesson_workflow_runs w WHERE w.id = r.id) AS alive
+      FROM one_step_runs r WHERE r.job_id = j.id ORDER BY r.updated_at DESC LIMIT 1
+    ) osr ON true
     WHERE coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
       AND (
         (j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
@@ -425,6 +443,8 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
       subject: String(raw.subject ?? ""), classroom: Number(raw.classroom ?? 0), draft: draftSummaryOf(raw.output), running,
       error: running ? null : job.error, updatedAt: new Date(String(raw.updated_at)).toISOString(), step: job.step,
       ownerless, hasPublished: raw.has_published === true, awaitingApproval,
+      ...(running && typeof raw.run_elapsed === "number" ? { progress: { detail: (raw.run_detail as string | null) ?? null, elapsedSec: Math.max(0, raw.run_elapsed),
+        ...(typeof raw.run_since === "number" ? { sinceUpdateSec: Math.max(0, raw.run_since) } : {}), ...(typeof raw.run_alive === "boolean" ? { alive: raw.run_alive } : {}) } } : {}),
       ...stop, ...(ownerless ? { resumable: false } : {}),
     });
   }

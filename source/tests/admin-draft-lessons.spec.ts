@@ -110,7 +110,8 @@ test("törlés megerősítéssel, gazdátlan újragyártás, kötegelt törlés 
   const bodies: unknown[] = [];
   const list = [
     { jobId: "job-run", title: "Újragyártott lecke", subject: "Matematika", classroom: 6, draft: null, running: true, error: null, updatedAt: "2026-10-16T05:00:00.000Z",
-      step: "author", ownerless: false, hasPublished: false, resumable: false },
+      step: "animator", ownerless: false, hasPublished: false, resumable: false,
+      progress: { detail: "Gyakorlóbank: 2/5 fejezet kész — a 3. készül…", elapsedSec: 1080, sinceUpdateSec: 75, alive: true } },
     { ...drafts[0], jobId: "job-dup", step: "error", ownerless: false, hasPublished: true, resumable: false, stoppedAt: "gate",
       error: "Hibás banktétel maradt a limiten — nem publikálható.", nextRecovery: { strategy: "ask-owner", reason: "tulajdonosi döntés kell" } },
     { ...drafts[0], jobId: "job-orphan", step: "error", ownerless: true, hasPublished: false, resumable: false, error: "Ismeretlen hiba.", nextRecovery: undefined },
@@ -131,6 +132,14 @@ test("törlés megerősítéssel, gazdátlan újragyártás, kötegelt törlés 
   const runItem = page.getByTestId("draft-item-job-run");
   await expect(runItem.getByTestId("draft-running")).toBeVisible();
   await expect(runItem.getByTestId("creation-progress").locator("li").nth(1)).toHaveAttribute("data-state", "active");
+  // Spec 2026-10-16-gyartas-haladas: a futó tétel a bank haladását, az eltelt időt és a háttérfolyamat élő voltát mutatja.
+  await expect(runItem.getByTestId("creation-progress")).toContainText("Gyakorlóbank: 2/5 fejezet kész — a 3. készül…");
+  await expect(runItem.getByTestId("creation-progress-timing")).toHaveText("Eltelt idő: 18 perc · utolsó jelzés: 1 perce · a háttérfolyamat él");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(runItem.getByTestId("creation-progress-timing")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  await runItem.screenshot({ path: test.info().outputPath("draft-running-progress-390.png") });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await expect(runItem.getByRole("button", { name: /Folytatás|Újragyártás|Törlés/ })).toHaveCount(0);
   // Kész párral rendelkező és gazdátlan: jelvény + mindig van továbblépés (itt újragyártás) és törlés.
   await expect(page.getByTestId("draft-item-job-dup").getByTestId("draft-has-published")).toBeVisible();

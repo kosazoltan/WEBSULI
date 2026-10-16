@@ -14,6 +14,8 @@ type OwnerDraft = {
   draft: { teachingSections: number; savedBankPackets: number } | null;
   running: boolean; error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean; awaitingApproval?: boolean;
   resumable: boolean; stoppedAt?: string; nextRecovery?: { strategy: string; reason: string };
+  /** Spec 2026-10-16-gyartas-haladas: futó tételnél a futás részlete és ideje. */
+  progress?: { detail: string | null; elapsedSec?: number; sinceUpdateSec?: number; alive?: boolean };
 };
 
 type Action = "resume" | "continue" | "remake" | "discard" | "discard-published";
@@ -134,7 +136,7 @@ export default function DraftLessons() {
               )}
               {/* D4: a három készítési szakasz — futásnál a mostani lépés, megállásnál a megállás helye. */}
               {/* K4: a tervre váró tétel NEM fut — a szakaszjelző „várakozik” (nem forgó, nem aktív). */}
-              <CreationProgress run={d.running ? { phase: d.step, detail: null, error: null }
+              <CreationProgress run={d.running ? { phase: d.step, error: null, ...d.progress, detail: d.progress?.detail ?? null }
                 : d.awaitingApproval ? { phase: "waiting", detail: null, error: null, stoppedAt: d.step }
                 : { phase: "error", detail: null, error: null, ...(d.stoppedAt ? { stoppedAt: d.stoppedAt } : {}) }} />
               {d.running ? (

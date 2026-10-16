@@ -503,3 +503,16 @@ test("J5 (review #263): a félbeszakadt lektori bankjavítás folytatáskor befe
   assert.match(lektorRequests[0], /previousBlockers: .*Hibás válaszkulcs/, "az előző kör blokkolóival");
   assert.equal((mem2.steps.at(-1)!.output as { bankRepair?: unknown }).bankRepair, undefined, "a jelző a javítás végén törlődik");
 });
+
+// Spec 2026-10-16-gyartas-haladas: a bank és a javító forduló a felületnek is haladást jelez.
+test("haladásjelzés: a gyakorlóbank fejezetenként (kész / összes), a javító kísérlet és az állomás javító fordulója is jelzés", async () => {
+  let bankCalls = 0;
+  const client = withOverride(scriptedClient({ outline: [{ sections: [] }] }), (station) => (station === "5" && bankCalls++ === 0 ? "nem JSON" : null));
+  const details: Array<[string, string | null]> = [];
+  await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, { ...deps(client, memoryStore()), onPhase: (p, d) => details.push([p, d]) });
+  const texts = details.map(([p, d]) => `${p}|${d}`);
+  assert.ok(texts.includes("pedagogue|Tananyagterv: javító forduló (1.)…"), "az állomás javító fordulója: " + JSON.stringify(texts));
+  assert.ok(texts.includes("animator|Gyakorlóbank: 0/1 fejezet kész — a 1. készül…"), JSON.stringify(texts));
+  assert.ok(texts.some((t) => /^animator\|Gyakorlóbank: 0\/1 fejezet kész — a 1\. fejezet javító kísérlete \(2\.\)…$/.test(t)), "a javító kísérlet: " + JSON.stringify(texts));
+  assert.ok(texts.includes("animator|Gyakorlóbank: 1/1 fejezet kész…"));
+});

@@ -1,9 +1,11 @@
 import { Check, CircleDashed, Loader2, TriangleAlert } from "lucide-react";
-import { lessonCreationStages, ONE_STEP_PHASES, type OneStepRunView } from "@shared/studio-ui";
+import { lessonCreationStages, ONE_STEP_PHASES, progressTimingText, type OneStepRunView } from "@shared/studio-ui";
 
 /** Three human stages; diagnostics remain accessible without obscuring an error. */
 export function CreationProgress({ run }: { run: OneStepRunView }) {
   const stopped = run.phase === "error" || run.phase === "parked";
+  // Spec 2026-10-16-gyartas-haladas: a futó gyártás ideje és a háttérfolyamat élő volta (a hosszú szakasz nem tűnik elakadásnak).
+  const timing = stopped ? null : progressTimingText(run);
   return <div className="space-y-3" data-testid="creation-progress">
     <ol className="grid gap-2 sm:grid-cols-3" aria-label="A tananyagkészítés három fázisa">
       {lessonCreationStages(run).map((stage, index) => <li key={stage.key}
@@ -20,6 +22,7 @@ export function CreationProgress({ run }: { run: OneStepRunView }) {
       className={`break-words text-sm ${stopped ? "font-medium text-amber-900 dark:text-amber-200" : "text-muted-foreground"}`}>
       {run.error ?? run.detail}
     </p>}
+    {timing && <p className={`text-xs ${run.alive === false ? "text-amber-800 dark:text-amber-300" : "text-muted-foreground"}`} data-testid="creation-progress-timing">{timing}</p>}
     <details className="text-xs text-muted-foreground" data-testid="creation-progress-details">
       <summary className="flex min-h-11 cursor-pointer items-center">Feldolgozási részletek</summary>
       <p>{ONE_STEP_PHASES.find(p => p.key === run.phase)?.label ?? (run.phase === "done" ? "A lecke elkészült." : stopped ? "A folyamat megállt. A részletes ok fent olvasható."
