@@ -70,9 +70,10 @@ test("szerző: tömör és teljes, a keret a promptban; a „ne rövidítsd váz
 });
 
 test("review #213: a keret az éles úton is érvényes — a vázlat-autofix a számolt fejezetkeretet kapja, a szókeret túllépése jelzés", () => {
+  // S4b (docs/specs/2026-10-16-egy-futas.md): az éles út az egyfutásos motor — ugyanaz a három invariáns, ott mérve.
   const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  const runner = strip(readFileSync(new URL("../server/studio/step-runner.ts", import.meta.url), "utf8"));
-  assert.match(runner, /autofixOutline\(json,\s*map\.concepts,\s*lessonLengthBudget\(promptMapOf\(map\)\)\.maxSections\)/);
+  const runner = strip(readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8"));
+  assert.match(runner, /autofixOutline\(json,\s*concepts,\s*lessonLengthBudget\(promptMap\)\.maxSections\)/);
   assert.match(runner, /reason:\s*"length_over_budget"/);
   assert.match(runner, /visibleWords > lengthBudget\.maxWords/);
 });

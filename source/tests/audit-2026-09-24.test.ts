@@ -56,19 +56,3 @@ test("design a kérésből: a mért hamis triggerek nem váltanak világot vagy 
   assert.equal(designFromInstruction("Rózsaszín legyen, de effektek nélkül")?.flair, undefined);
   assert.equal(designFromInstruction("rózsaszín, kislánynak, csillogó effektekkel")?.world, "princess");
 });
-
-test("kettős OCR: a leromlott eredmény nem kerül a gyorsítótárba, a teljes igen", async () => {
-  const { dualReadOcr, withOcrCache } = await import("../server/studio/ocr");
-  const image = { name: "a.jpg", kind: "image" as const, content: "data:image/jpeg;base64,AA" };
-  const stored: string[] = [];
-  const store = { get: async () => null, put: async (_k: string, t: string) => { stored.push(t); } };
-  const down = dualReadOcr(async () => "első", async () => { throw new Error("429"); }, async () => "x");
-  await withOcrCache(down, "k", store, (f) => !down.degraded(f))(image);
-  assert.deepEqual(stored, [], "a második olvasó hibája után nincs cache");
-  const ok = dualReadOcr(async () => "azonos szöveg", async () => "azonos szöveg", async () => "x");
-  await withOcrCache(ok, "k", store, (f) => !ok.degraded(f))(image);
-  assert.deepEqual(stored, ["azonos szöveg"]);
-  const judgeDown = dualReadOcr(async () => "kódex bézzel", async () => "kódex kézzel", async () => { throw new Error("timeout"); });
-  await withOcrCache(judgeDown, "k", store, (f) => !judgeDown.degraded(f))(image);
-  assert.equal(stored.length, 1, "a döntés hibája után sincs cache");
-});

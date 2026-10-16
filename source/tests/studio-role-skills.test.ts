@@ -4,7 +4,6 @@ import {
   ROLE_SKILLS, ROLE_SOULS, ROLE_SKILL_ROLES, ROLE_SKILL_REQUIRED_HEADINGS, roleSkillBlock, roleSkillVersion,
   withRoleSkill, roleForPromptName, skilledPromptLookup,
 } from "../server/studio/role-skills";
-import { OCR_SYSTEM_PROMPT, ocrCacheKeyOf } from "../server/studio/ocr";
 import { buildLessonExperience } from "../server/studio/experience-builder";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 
@@ -68,12 +67,6 @@ test("a tervező lelke a pedagógus skill-blokk elején áll, tömör, és a ver
   assert.ok(block.indexOf("# Lélek: a tervező") < block.indexOf("# Skill: tervkészítő"), "előbb a lélek, aztán az eljárás");
   assert.equal(ROLE_SOULS.bank, undefined, "csak a tervezőnek van lelke");
   assert.ok(!roleSkillBlock("bank").includes("# Lélek"));
-});
-
-test("az OCR prompt a saját skilljével indul, és a cache-kulcs a promptot tartalmazza", () => {
-  assert.ok(OCR_SYSTEM_PROMPT.startsWith("=== SZAKASZ-SKILL: ocr "));
-  assert.match(OCR_SYSTEM_PROMPT, /Output plain text only\.$/);
-  assert.notEqual(ocrCacheKeyOf("img", "m"), ocrCacheKeyOf("img", "m", "más prompt"));
 });
 
 test("a bankcsomag rendszerutasítása a bank skilljével indul", async () => {

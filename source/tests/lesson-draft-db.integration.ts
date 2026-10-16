@@ -8,7 +8,7 @@ assert.equal(url.hostname, "127.0.0.1");
 assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 const { dbPool } = await import("../server/db");
-const { resumableDraftFor, supersedeDraftsOf, oneStepRunView, closeOrphanedOneStepRuns, ONE_STEP_RESUMING_DETAIL, ownerDrafts, discardDraft, discardDraftsWithPublished, redundantDraftCount, ownerDraftTotal } = await import("../server/studio/lesson-pipeline-routes");
+const { oneStepRunView, closeOrphanedOneStepRuns, ownerDrafts, discardDraft, discardDraftsWithPublished, redundantDraftCount, ownerDraftTotal } = await import("../server/studio/lesson-pipeline-routes");
 
 let n = 0;
 async function mapWithJob(job: { status?: string; published?: boolean; output?: Record<string, unknown>; age?: string; owner?: string | null; map?: string }) {
@@ -28,35 +28,6 @@ before(async () => { await dbPool.query("INSERT INTO users(id,email,is_admin) VA
 // A workflow-sorok fixtúrák (nincs teljes pillanatképük): a fájl végén eltűnnek, hogy a minden sort átfésülő tesztek (lesson-skill) ne lássák.
 after(async () => { await dbPool.query("DELETE FROM users WHERE id IN ('draft-owner','draft-other')"); await dbPool.end(); });
 
-test("E1: ugyanabból a forrásból, ugyanazzal a kéréssel a befejezetlen piszkozat megtalálható", async () => {
-  const { map, id } = await mapWithJob({});
-  assert.equal(await resumableDraftFor(map, undefined, "draft-owner"), id);
-  assert.equal(await resumableDraftFor(map, "", "draft-owner"), id, "az üres kérés = nincs kérés");
-});
-
-test("E1: más tanári kérés, publikált, kész, félretett vagy 7 napnál régebbi piszkozat nem ajánlható fel", async () => {
-  const withInstruction = await mapWithJob({ output: { lesson: {}, ownerInstruction: "csak a törtek" } });
-  assert.equal(await resumableDraftFor(withInstruction.map, "csak a törtek", "draft-owner"), withInstruction.id);
-  assert.equal(await resumableDraftFor(withInstruction.map, "csak a tizedes törtek", "draft-owner"), null);
-  assert.equal(await resumableDraftFor(withInstruction.map, undefined, "draft-owner"), null);
-  assert.equal(await resumableDraftFor((await mapWithJob({ published: true })).map, undefined, "draft-owner"), null);
-  assert.equal(await resumableDraftFor((await mapWithJob({ status: "ok" })).map, undefined, "draft-owner"), null);
-  assert.equal(await resumableDraftFor((await mapWithJob({ output: { title: "nincs lecke" } })).map, undefined, "draft-owner"), null);
-  for (const recoveryState of ["superseded", "remanufactured", "remanufacturing"])
-    assert.equal(await resumableDraftFor((await mapWithJob({ output: { lesson: {}, recoveryState } })).map, undefined, "draft-owner"), null, recoveryState);
-  assert.equal(await resumableDraftFor((await mapWithJob({ age: "8 days" })).map, undefined, "draft-owner"), null);
-});
-
-test("E3: a kifejezett újragyártás után a régi piszkozat már nem ajánlható fel, a kész job érintetlen", async () => {
-  const { map, id } = await mapWithJob({});
-  const done = (await dbPool.query(`INSERT INTO studio_jobs(map_id,step,status,input_hash,output) VALUES ($1,'done','ok','h','{"lesson":{}}'::jsonb) RETURNING id`, [map])).rows[0].id;
-  await supersedeDraftsOf(map, undefined, "draft-owner");
-  assert.equal(await resumableDraftFor(map, undefined, "draft-owner"), null);
-  const rows = (await dbPool.query("SELECT id, output->>'recoveryState' AS state FROM studio_jobs WHERE map_id = $1", [map])).rows;
-  assert.equal(rows.find((r) => r.id === id)?.state, "superseded");
-  assert.equal(rows.find((r) => r.id === done)?.state, null);
-});
-
 test("E2: a választó futás a piszkozat régi futására mutat; folytatás után a job valódi állapotát mutatja (régi futás nélkül is)", async () => {
   const { map, id } = await mapWithJob({ output: { lesson: { title: "P" }, teaching: [] } });
   await dbPool.query("INSERT INTO one_step_runs(id,phase,map_id,job_id) VALUES ('old-run-1','error',$1,$2),('choice-run-1','draft',$1,$2)", [map, id]);
@@ -72,35 +43,20 @@ test("E2: a választó futás a piszkozat régi futására mutat; folytatás ut�
   assert.equal(progressing?.error, null);
 });
 
-test("review #248: más gazda piszkozata nem ajánlható fel; az újabb, más kérésű változat nem takarja el az egyezőt", async () => {
-  const mine = await mapWithJob({});
-  assert.equal(await resumableDraftFor(mine.map, undefined, "draft-other"), null, "másik admin nem kapja meg");
-  const newer = await mapWithJob({ map: mine.map, output: { lesson: {}, ownerInstruction: "csak a törtek" }, age: "1 minute" });
-  assert.equal(await resumableDraftFor(mine.map, undefined, "draft-owner"), mine.id, "a régebbi, egyező kérésű piszkozat");
-  assert.equal(await resumableDraftFor(mine.map, "csak a törtek", "draft-owner"), newer.id);
-});
-
-test("review #248: az újragyártás csak a saját, egyező kérésű, megállt piszkozatot teszi félre", async () => {
-  const stopped = await mapWithJob({});
-  const other = await mapWithJob({ map: stopped.map, output: { lesson: {}, ownerInstruction: "más kérés" } });
-  const running = await mapWithJob({ map: stopped.map, status: "running" });
-  const foreign = await mapWithJob({ map: stopped.map, owner: "draft-other" });
-  await supersedeDraftsOf(stopped.map, undefined, "draft-owner");
-  const state = async (id: string) => (await dbPool.query("SELECT output->>'recoveryState' AS s FROM studio_jobs WHERE id=$1", [id])).rows[0].s;
-  assert.equal(await state(stopped.id), "superseded");
-  assert.equal(await state(other.id), null, "más kérésű változat érintetlen");
-  assert.equal(await state(running.id), null, "futó job érintetlen");
-  assert.equal(await state(foreign.id), null, "más gazda érintetlen");
-});
-
-test("review #247: újraindításkor csak a ténylegesen folytatódó job futása marad nyitva; a hibás jobé lezárul", async () => {
-  const live = await mapWithJob({ status: "running" });
-  await dbPool.query("UPDATE lesson_workflow_runs SET state='running', lease_until = now() - interval '1 minute', snapshot='{\"executions\":1}'::jsonb WHERE id=$1", [live.id]);
+test("review #247 / S4b (docs/specs/2026-10-16-egy-futas.md): újraindításkor csak az ÉPP MÁSHOL vitt job futása marad nyitva; a többi lezárul (nincs automatikus folytatás)", async () => {
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a régi lépésgép automatikus folytatása megszűnt — a lejárt lízingű, félbemaradt job futása is lezárul (a piszkozat megmarad,
+  // újragyártható); csak az élő lízingű (egy másik folyamat által épp vitt) job futása marad nyitva.
+  const expired = await mapWithJob({ status: "running" });
+  await dbPool.query("UPDATE lesson_workflow_runs SET state='running', lease_until = now() - interval '1 minute', snapshot='{\"executions\":1}'::jsonb WHERE id=$1", [expired.id]);
+  const driven = await mapWithJob({ status: "running" });
+  await dbPool.query("UPDATE lesson_workflow_runs SET state='running', lease_until = now() + interval '1 minute', snapshot='{\"executions\":1}'::jsonb WHERE id=$1", [driven.id]);
   const failed = await mapWithJob({ status: "error" });
-  await dbPool.query("INSERT INTO one_step_runs(id,phase,map_id,job_id) VALUES ('boot-live','animator',$1,$2),('boot-failed','animator',$3,$4)", [live.map, live.id, failed.map, failed.id]);
+  await dbPool.query("INSERT INTO one_step_runs(id,phase,map_id,job_id) VALUES ('boot-expired','animator',$1,$2),('boot-driven','animator',$3,$4),('boot-failed','animator',$5,$6)",
+    [expired.map, expired.id, driven.map, driven.id, failed.map, failed.id]);
   await closeOrphanedOneStepRuns();
-  const run = async (id: string) => (await dbPool.query("SELECT phase, detail FROM one_step_runs WHERE id=$1", [id])).rows[0];
-  assert.deepEqual(await run("boot-live"), { phase: "animator", detail: ONE_STEP_RESUMING_DETAIL });
+  const run = async (id: string) => (await dbPool.query("SELECT phase FROM one_step_runs WHERE id=$1", [id])).rows[0];
+  assert.equal((await run("boot-expired")).phase, "error", "lejárt lízing: nincs automatikus folytatás, a futás lezárul");
+  assert.equal((await run("boot-driven")).phase, "animator", "élő lízing: egy másik folyamat viszi, a futás nyitva marad");
   assert.equal((await run("boot-failed")).phase, "error", "nem folytatható job futása nem pollozhat örökké");
 });
 
@@ -182,7 +138,7 @@ test("draft-kezelés (D1–D5): törlés, kötegelt törlés, gazdátlan és ké
     assert.equal(await discardDraft(mine.id, "draft-mgr"), true);
     assert.equal(await discardDraft(mine.id, "draft-mgr"), true, "ismételt elvetés: idempotens (az állapot marad)");
     assert.equal(await discardDraft(orphan.id, "draft-mgr"), true);
-    assert.equal(await resumableDraftFor(mine.map, undefined, "draft-mgr"), null);
+    // S4b (docs/specs/2026-10-16-egy-futas.md): a feltöltési piszkozat-felajánlás (resumableDraftFor) a régi lépésgéppel együtt megszűnt.
     // D2: a kötegelt törlés csak a kész párral rendelkezőkre hat (saját + gazdátlan). Review #255: a felület által megerősített szám
     // ellenőrzés — eltérésnél nincs törlés; a szerver összesítése ugyanazt a halmazt számolja.
     assert.equal(await redundantDraftCount("draft-mgr"), 2);

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { LessonConversation, type ModelClient, type Turn } from "../server/studio/single-run/conversation";
 import { runSingleLesson, SingleRunError, singleRunSystemPrompt, type SingleRunDeps, type SingleRunMap } from "../server/studio/single-run/engine";
-import type { PipelineStore, JobPatch } from "../server/studio/step-runner";
+import type { PipelineStore, JobPatch } from "../server/studio/pipeline-store";
 import type { MapConcept } from "../server/studio/coverage";
 
 /* docs/specs/2026-10-16-egy-futas.md (B, S3): egy modell, egy beszélgetés — forrás → tudásbank → terv → tananyag → ábra → bank → lektor →
@@ -173,4 +173,84 @@ test("review #260: a nem JSON bankválasz a banképítő javító körébe megy 
   const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, memoryStore()));
   assert.equal(result.htmlFileId, "html1");
   assert.ok(bankCalls >= 2, "a hibás válasz után új bankkísérlet jött");
+});
+
+test("S4b: a szókeret túllépése minőségi jelzés (length_over_budget) a jobon, a gyártás nem áll meg", async () => {
+  const long = withOverride(scriptedClient(), (station) => {
+    if (station !== "3") return null;
+    const { experience: _bank, ...teaching } = structuredClone(fixture);
+    const explain = teaching.sections[0].blocks.find((b) => b.kind === "explain") as { text: string };
+    explain.text = `${explain.text} ${"A terület a síkidom által lefedett rész nagysága. ".repeat(60)}`.trim(); // ~480 szó, a 4000 karakteres mezőkorláton belül
+    return JSON.stringify(teaching);
+  });
+  const mem = memoryStore();
+  const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(long, mem));
+  assert.equal(result.htmlFileId, "html1", "a jelzés nem állítja meg a gyártást");
+  const notes = (mem.steps.at(-1)!.output as { qualityNotes?: Array<{ reason: string }> }).qualityNotes ?? [];
+  assert.deepEqual(notes.map((n) => n.reason), ["length_over_budget"]);
+});
+
+test("S4b: a forrás hamis egyenlősége determinisztikusan helyesbítve (térkép + a tananyagterv kérése), a helyes sor érintetlen", async () => {
+  const transcript = "Kivonás: -5-(+8)=+3 és -5-(-8)=+3 a füzetben.";
+  const read = { title: "Kivonás", subject: fixture.subject, classroom: fixture.classroom, transcript,
+    concepts: [
+      { id: "area", term: "kivonás", definition: "A tanuló megoldása.", quote: "-5-(+8)=+3", type: "concept", examWeight: "core", relatedIds: [] },
+      { id: "ok", term: "ellentett", definition: "Helyes sor.", quote: "-5-(-8)=+3", type: "concept", examWeight: "supporting", relatedIds: [] },
+    ] };
+  let plannerRequest = "";
+  const client = withOverride(scriptedClient(), (station, turns) => {
+    if (station === "1") return JSON.stringify(read);
+    if (station === "2") plannerRequest = lastUserText(turns);
+    return null;
+  });
+  const maps: SingleRunMap[] = [];
+  const mem = memoryStore();
+  await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: transcript }], ownerId: "u1" }, deps(client, mem, maps)).catch(() => undefined);
+  const [fixed, untouched] = maps[0].concepts;
+  assert.equal(maps[0].corrections.length, 1, "csak a hamis sor");
+  assert.notEqual(fixed.definition, "A tanuló megoldása.", "a hamis egyenlőség definíciója helyesbítve");
+  assert.ok(fixed.correction, "a helyesbítés kódja a térképre kerül");
+  assert.equal(untouched.definition, "Helyes sor.");
+  assert.equal(untouched.correction, undefined);
+  assert.match(plannerRequest, /-13/, "a helyesbítés (helyes érték) a tananyagterv kérésébe is bekerül");
+});
+
+test("S4b: a válaszkulcs-teszt és a kvíz vak előszűrője ugyanabban a beszélgetésben fut; a vak ítélet a kód döntésével jut a bankba", async () => {
+  const labels: string[] = [];
+  const logs: string[] = [];
+  const client = withOverride(scriptedClient(), (_station, turns) => {
+    const t = lastUserText(turns);
+    if (/VÁLASZKULCS-TESZTEK/.test(t)) { labels.push("answer-key"); return JSON.stringify({ items: [] }); }
+    if (/KVÍZ VAK ELLENŐRZÉSE/.test(t)) {
+      labels.push("quiz-blind");
+      assert.doesNotMatch(t, /correctIndex/, "a vak ellenőr a kulcsot nem kapja meg");
+      const ids = [...t.matchAll(/"id":"([^"]+)"/g)].map((m) => m[1]);
+      const options = [...t.matchAll(/"options":\[([^\]]*)\]/g)].map((m) => m[1].split(",").length);
+      // Minden kérdésnél MINDEN opció igaz (kétértelmű) → a kód (choiceVerdictProblem) minden tételt elutasít.
+      return JSON.stringify({ choices: ids.map((id, i) => ({ id, truths: Array.from({ length: options[i] }, () => true) })) });
+    }
+    return null;
+  });
+  const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" },
+    { ...deps(client, memoryStore()), log: (m) => logs.push(m) });
+  assert.equal(result.htmlFileId, "html1");
+  assert.ok(labels.includes("answer-key"), "a válaszkulcs-teszt a beszélgetésben fut (a fixtúrában nyílt feladatok vannak)");
+  assert.ok(labels.includes("quiz-blind"), "a kvíz vak előszűrője a beszélgetésben fut: " + JSON.stringify(labels));
+  assert.ok(logs.some((m) => /quiz-blind: .*vak előszűrő szerint/.test(m)), "a vak ítélet a banképítő döntésébe jut: " + JSON.stringify(logs.filter((m) => /quiz|kvíz/i.test(m))));
+});
+
+test("S4b: az évfolyam a forrásból jön — hiányzó vagy érvénytelen classroom nincs alapértékkel pótolva, javító fordulót kap", async () => {
+  const noGrade = { title: "Terület", subject: fixture.subject, transcript: TRANSCRIPT,
+    concepts: [{ id: "area", term: "terület", definition: "x", quote: "A téglalap területe az oldalak szorzata.", type: "concept", examWeight: "core", relatedIds: [] }] };
+  const fixed = { ...noGrade, classroom: fixture.classroom };
+  const requests: string[] = [];
+  const client = withOverride(scriptedClient(), (station, turns) => {
+    if (station === "1") return JSON.stringify(noGrade);
+    if (station === "forrás és tudásbank") { requests.push(lastUserText(turns)); return JSON.stringify(fixed); }
+    return null;
+  });
+  const maps: SingleRunMap[] = [];
+  await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, memoryStore(), maps));
+  assert.match(requests[0] ?? "", /A classroom 0 és 12 közötti egész legyen\./, "a hiányzó évfolyam a modellhez megy vissza");
+  assert.equal(maps[0].classroom, fixture.classroom, "csak a forrásból megállapított évfolyam kerül a térképre");
 });

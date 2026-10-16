@@ -8,12 +8,11 @@ import { knowledgeMaps, kmConcepts } from "../../../shared/schema";
 import { workflowFence } from "../../workflows/engine";
 import { logger } from "../../lib/logger";
 import type { ExtractorFile } from "../extractor";
-import { createDrizzlePipelineStore } from "../step-runner";
+import { createDrizzlePipelineStore } from "../pipeline-store";
 import { createLessonConversation } from "./conversation";
 import { readSourceStation, runSingleLesson, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
 import { eq } from "drizzle-orm";
 
-export { singleRunEnabled } from "./switch";
 
 /**
  * A tudásbank mentése (egy tranzakció, workflow-fence-szel). Gyártásnál jóváhagyott térkép, a szó szerint igazolt fogalmak „kept”
@@ -32,7 +31,9 @@ export async function saveSingleRunMap(map: SingleRunMap, files: ExtractorFile[]
     }).returning({ id: knowledgeMaps.id });
     await tx.insert(kmConcepts).values(map.concepts.map((c, index) => ({
       mapId: row.id, localId: c.id, term: c.term, definition: c.definition, quote: c.quote, sourceRef: { file: c.sourceFile },
-      type: c.type, examWeight: c.examWeight, relatedIds: c.relatedIds, verbatimOk: c.verbatimOk, verbatimReason: null, ...(opts.draft ? {} : { reviewState: "kept" as const }), orderIndex: index,
+      type: c.type, examWeight: c.examWeight, relatedIds: c.relatedIds, verbatimOk: c.verbatimOk, verbatimReason: c.correction ?? null,
+      // A helyesbített fogalom „edited” (mint a régi helyesbítésnél); a draft térkép fogalmai a tanári jóváhagyásra várnak.
+      ...(opts.draft ? {} : { reviewState: c.correction ? "edited" as const : "kept" as const }), orderIndex: index,
     })));
     await workflowFence(tx);
     return row.id;

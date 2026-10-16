@@ -6,7 +6,6 @@ import { ROLE_SKILLS, ROLE_SKILL_ROLES, ROLE_SKILL_REQUIRED_HEADINGS } from "../
 import { SUPPORT_SKILLS, withSupportSkill, supportSkillVersion, type SupportSkillKey } from "../server/studio/support-skills";
 import { REPAIR_SKILL } from "../server/studio/repair-skill";
 import { buildCorrectionPrompt } from "../server/studio/source-corrections";
-import { scopeRequestParams } from "../server/studio/one-step";
 
 /** Spec 2026-09-23 (docs/specs/2026-09-23-role-skills-everywhere.md): every role has a runbook skill. */
 
@@ -16,8 +15,6 @@ const SKILL_HELPER = /withRoleSkill\(|roleSkillBlock\(|withSupportSkill\(|withRe
 /** Files whose call receives a system prompt that another module already skilled (checked below). */
 const DELEGATED: Record<string, { file: string; helper: RegExp }> = {
   "server/studio/lesson-pipeline-routes.ts": { file: "server/studio/source-corrections.ts", helper: /withSupportSkill\("corrector"/ },
-  // Spec 2026-09-25: the shared bank call receives the packet system prompt built by the experience builder.
-  "server/studio/bank-call.ts": { file: "server/studio/experience-builder.ts", helper: /roleSkillBlock\("bank"\)/ },
 };
 /** Provider plumbing, not a role: the prompt arrives already built by the caller. */
 const PLUMBING = new Set(["server/studio/run-step.ts"]);
@@ -70,6 +67,6 @@ test("a támogató skill a rendszerutasítás elejére kerül, idempotens, és b
   const once = withSupportSkill("scope", "X");
   assert.ok(once.startsWith(`=== TÁMOGATÓ SKILL: scope (v${supportSkillVersion("scope")})`));
   assert.equal(withSupportSkill("scope", once), once);
-  assert.ok(String(scopeRequestParams("m", []).messages[0].content).startsWith("=== TÁMOGATÓ SKILL: scope "));
+  // S4b (docs/specs/2026-10-16-egy-futas.md): scopeRequestParams (one-step.ts) removed with the scope model call; its wiring assertion went with it.
   assert.ok(buildCorrectionPrompt([], undefined, true).startsWith("=== TÁMOGATÓ SKILL: corrector "));
 });

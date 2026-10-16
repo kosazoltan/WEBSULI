@@ -1,39 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { studioConnection } from "../server/ai/studio-provider";
-import { callOcrModel } from "../server/studio/ocr";
-import { callScopeModel } from "../server/studio/one-step";
-import { aiKeyStatus, studioModelMap, FALLBACK_MODELS, LEGACY_MODELS, assertDistinctFamilies, lektorChainFor, modelFamily } from "../server/ai/models";
-
-test("OCR and scope use the selected vendor even when router credentials exist", async (t) => {
-  const names = ["AI_INTEGRATIONS_OPENAI_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY"];
-  const before = names.map(name => process.env[name]);
-  const calls: { url: string; body: Record<string, unknown> }[] = [];
-  t.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
-    calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
-    // Spec-változás 2026-10-14 (review #218): a scope-válasznak használhatónak kell lennie (tantárgy + osztály JSON) — a stub a
-    // scope-hívásra (xAI) valódi alakú választ ad; a teszt mércéje, a gyártó szerinti útválasztás, változatlan.
-    const content = new URL(String(url)).hostname === "api.x.ai" ? '{"subject":"Matematika","classroom":5}' : "ok";
-    return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
-  });
-  try {
-    for (const name of names) process.env[name] = "test-placeholder";
-    const file = { kind: "image" as const, name: "test.png", content: "data:image/png;base64,AA==" };
-    assert.equal(await callOcrModel(file, "openai/gpt-5.6-terra"), "ok");
-    assert.equal(await callScopeModel([file], "x-ai/grok-4.6"), '{"subject":"Matematika","classroom":5}');
-    assert.equal(new URL(calls[0].url).hostname, "api.openai.com");
-    assert.equal(new URL(calls[1].url).hostname, "api.x.ai");
-    assert.equal(calls[0].body.model, "gpt-5.6-terra");
-    assert.equal(calls[1].body.model, "grok-4.6");
-    assert.ok(calls.every(call => !("reasoning" in call.body)));
-    delete process.env.OPENROUTER_API_KEY;
-    await assert.rejects(callOcrModel(file, "qwen/qwen3-vl-32b-instruct"), /OPENROUTER_API_KEY/);
-    await assert.rejects(callScopeModel([file], "qwen/qwen3-vl-32b-instruct"), /OPENROUTER_API_KEY/);
-    assert.equal(calls.length, 2, "missing router key must not send to OpenAI");
-  } finally {
-    names.forEach((name, index) => { if (before[index] === undefined) delete process.env[name]; else process.env[name] = before[index]; });
-  }
-});
+import { aiKeyStatus } from "../server/ai/models";
 
 test("own keys route native and historical model ids to direct hosts", () => {
   const env = { OPENAI_API_KEY: "test-openai", XAI_API_KEY: "test-xai", OPENROUTER_API_KEY: "test-router" };
@@ -60,26 +28,3 @@ test("router credentials never substitute for missing own credentials", () => {
   assert.equal(aiKeyStatus({ OPENAI_API_KEY: "test" }).openai.configured, true);
 });
 
-test("spec 2026-09-19: cheap OpenRouter helpers, no GLM in the legacy routes, independent Grok review", () => {
-  const map = studioModelMap({});
-  assert.equal(map.gateHelper, "deepseek/deepseek-v4-flash");
-  assert.equal(map.quizPolish, "deepseek/deepseek-v4-flash");
-  // The OCR measurement (#190) still rules GLM out of the legacy/admin routes.
-  assert.doesNotMatch(JSON.stringify(LEGACY_MODELS), /glm/i);
-  assert.equal(map.ocr, "qwen/qwen3-vl-32b-instruct");
-  // Spec 2026-10-14-forras-besorolo-openai-luna: a tantárgy/évfolyam-felismerés saját lépés, közvetlen OpenAI.
-  assert.equal(map.scope, "gpt-6-luna");
-  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md, tulajdonosi döntés): szerző Claude Opus 5.5, tartaléka Qwen 3.8 max-prime; lektor
-  // GPT-6.1 Sol, tartaléka GPT-5.6 Terra. A cél változatlan: a szerző egyik modellje sem eshet a lektor egyik modelljének
-  // családjába (D1-független lektor).
-  // Spec-változás 2026-10-14 (docs/specs/2026-10-14-ellentetes-csalad-tartalek.md): ellentétes családú tartalékok (szerző → gpt-6.1-sol,
-  // lektor → claude-opus-5-5); a D1-független lektort a tényleges szerzőség szerinti lánc (`lektorChainFor`) garantálja.
-  assert.equal(map.author, "claude-opus-5-5");
-  assert.equal(FALLBACK_MODELS.author, "gpt-6.1-sol");
-  assert.equal(map.lektor, "gpt-6.1-sol");
-  assert.equal(FALLBACK_MODELS.lektor, "claude-opus-5-5");
-  for (const authors of [[map.author], [FALLBACK_MODELS.author!], [map.author, FALLBACK_MODELS.author!]]) {
-    for (const l of lektorChainFor(authors, {})) for (const a of authors) assert.notEqual(modelFamily(a), modelFamily(l), `${a} × ${l}`);
-  }
-  assert.doesNotThrow(() => assertDistinctFamilies({}));
-});

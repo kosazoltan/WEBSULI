@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { applySourceCorrections, explicitClassroomOf, filterSourceCorrections, acceptedClassroom, correctionPromptLines } from "../server/studio/source-corrections";
 import { buildAuthorPrompt, buildLektorPrompt, buildPedagoguePrompt, D1_RULE_TEXT, TRANSCRIPTION_RULE_TEXT } from "../server/studio/step-io";
 import { normalizeOwnerInstruction } from "../shared/owner-instruction";
-import { adjudicationStaysInDispute, dualReadOcr, ocrDisagreements } from "../server/studio/ocr";
 import { ROLE_SKILLS } from "../server/studio/role-skills";
 import { buildStructuredImprovement } from "../server/studio/structured-improvement";
 import { fusionFixture, standardFusionFixture } from "../shared/fixtures/lesson-fusion";
@@ -95,26 +94,6 @@ test("EARS 5: javításnál a kérés helyesbítést és évfolyamot hoz, és mi
   assert.ok(seen.author[0].includes(instruction) && seen.lektor[0].includes(instruction));
   // Kérés nélkül az évfolyam változatlan marad (a régi szerződés).
   await assert.rejects(buildStructuredImprovement(original, source, async (step) => step === "lektor" ? { notes: [] } : { ...original, classroom: grade }), /bankgyártás nem indult/);
-});
-
-test("kettős OCR: szószintű eltérés, a döntés csak a vitatott helyen változtathat", async () => {
-  const first = "kódex: bézzel írt, latin nyelvű könyv";
-  const second = "kódex: kézzel írt, latin nyelvű könyv";
-  const disputes = ocrDisagreements(first, second);
-  assert.deepEqual(disputes, [{ first: "bézzel", second: "kézzel" }]);
-  assert.equal(adjudicationStaysInDispute(first, second, disputes), true);
-  assert.equal(adjudicationStaysInDispute(first, "kódex: kézzel írt, görög nyelvű könyv", disputes), false, "vitán kívüli átírás tilos");
-  const image = { name: "a.jpg", kind: "image" as const, content: "data:image/jpeg;base64,AA" };
-  let adjudicated = 0;
-  const dual = dualReadOcr(async () => first, async () => second, async () => { adjudicated++; return second; });
-  assert.equal(await dual(image), second);
-  assert.equal(adjudicated, 1);
-  const rogue = dualReadOcr(async () => first, async () => second, async () => "teljesen más szöveg");
-  assert.equal(await rogue(image), first, "a vitán kívül változtató döntés helyett az első olvasat marad");
-  const agree = dualReadOcr(async () => first, async () => first, async () => { throw new Error("nem hívható"); });
-  assert.equal(await agree(image), first, "egyező olvasatnál nincs döntő hívás");
-  const secondDown = dualReadOcr(async () => first, async () => { throw new Error("429"); }, async () => second);
-  assert.equal(await secondDown(image), first, "a második olvasó hibája nem állítja meg az OCR-t");
 });
 
 test("tananyagjavító skill: elöl a skill, a kérés végén az ellenőrzés, a bennmaradt régi alak javító kört vált ki", async () => {

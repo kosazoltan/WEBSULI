@@ -7,11 +7,12 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import { claudeSourceBlock } from "../ocr";
+import { claudeSourceBlock } from "../source-block";
+import { LESSON_MODELS } from "../../ai/models";
 import type { ExtractorFile } from "../extractor";
 
-export const SINGLE_RUN_PRIMARY_MODEL = "claude-opus-5-5";
-export const SINGLE_RUN_FALLBACK_MODEL = "gpt-6.1-sol";
+export const SINGLE_RUN_PRIMARY_MODEL = LESSON_MODELS.primary;
+export const SINGLE_RUN_FALLBACK_MODEL = LESSON_MODELS.fallback;
 export const SINGLE_RUN_EFFORT = "medium" as const;
 /** Egy forduló kimeneti kerete (a teljes tanítás vagy egy fejezet bankja is ebbe fér; csak a használt token fizetendő). */
 export const SINGLE_RUN_MAX_TOKENS = 64_000;

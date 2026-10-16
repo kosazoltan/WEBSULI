@@ -1,12 +1,33 @@
 /**
  * Tételgyár T6.1 (docs/specs/2026-10-15-tetelgyar-t6-kviz-vak-megoldas-vegrehajtas.md; tulajdonosi döntés 2026-10-15): a kvíz gyártáskori
- * vak előszűrője. Egy olcsó modell (MiniMax M3, max effort) kulcs és visszajelzés NÉLKÜL opciónként ítél; a döntés a meglévő
- * `choiceVerdictProblem` (pontosan egy igaz, és az a kulcs). Hívás- vagy alakhiba → nincs ítélet (a tétel marad). Az Opus végső ellenőrzése
- * (lektor lépés) változatlanul fut.
+ * vak előszűrője: a kérdést kulcs és visszajelzés NÉLKÜL kapja a modell, opciónként ítél; a döntés a kódé (`choiceVerdictProblem`:
+ * pontosan egy igaz, és az a kulcs). Hívás- vagy alakhiba → nincs ítélet (a tétel marad). docs/specs/2026-10-16-egy-futas.md (S4b): a hívás
+ * az egyfutásos beszélgetésben megy; a döntésfüggvény a kivezetett bank-ellenőrből ide került.
  */
 import { createHash } from "node:crypto";
-import { choiceVerdictProblem } from "./bank-verifier";
 import { WorkflowConflict, WorkflowWaiting } from "../workflows/engine";
+
+type ChoiceKey = { options: string[]; correctIndex: number };
+const quoted = (options: string[], indexes: number[]) => indexes.map((i) => `„${options[i]}”`).join(", ");
+
+export type ChoiceVerdict = { kind: "error"; message: string } | { kind: "undecidable"; reason: string } | null;
+/**
+ * A KÓD döntése az opciónkénti ítéletből; `null`, ha pontosan a kulcs az egyetlen igaz.
+ * U5 (H32): a hibás hosszúságú ítélet ELLENŐRZŐ-hiba (eldöntetlen, újraellenőrzés), nem a tétel tartalmi hibája.
+ */
+export function choiceVerdictProblem(key: ChoiceKey, truths: boolean[]): ChoiceVerdict {
+  if (truths.length !== key.options.length) {
+    return { kind: "undecidable", reason: `az opciónkénti ítélet ${truths.length} opcióra szól, a tételben ${key.options.length} van — az ítélet nem értékelhető.` };
+  }
+  const trueIndexes = truths.flatMap((t, i) => (t ? [i] : []));
+  if (trueIndexes.length !== 1) {
+    return { kind: "error", message: `${trueIndexes.length} helyes opció a független ítélet szerint${trueIndexes.length ? ` (${quoted(key.options, trueIndexes)})` : ""} — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni.` };
+  }
+  if (trueIndexes[0] !== key.correctIndex) {
+    return { kind: "error", message: `a független ítélet szerint egyedül ${quoted(key.options, trueIndexes)} igaz, ez nem a kulcs (${quoted(key.options, [key.correctIndex])}). Javítás iránya: a kulcs vagy az opciók javítása.` };
+  }
+  return null;
+}
 
 export type QuizBlindItem = { id: string; question: string; options: string[]; correctIndex: number };
 export type QuizBlindCaller = (system: string, user: string) => Promise<unknown>;

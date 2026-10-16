@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { quizBlindProblems, QUIZ_BLIND_SYSTEM, type QuizBlindItem } from "../server/studio/quiz-blind-check";
+import { choiceVerdictProblem, quizBlindProblems, QUIZ_BLIND_SYSTEM, type QuizBlindItem } from "../server/studio/quiz-blind-check";
 import { WorkflowConflict } from "../server/workflows/engine";
 import { buildLessonExperience } from "../server/studio/experience-builder";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
@@ -104,4 +104,10 @@ test("review #245: az előszűrővel szűkült, mentett csomag folytatáskor új
   });
   assert.equal(calls, 0, "a szűkült csomag a checkpointból jön");
   assert.deepEqual(again.quiz.map((x) => x.id), first.quiz.map((x) => x.id));
+});
+
+// S4b (docs/specs/2026-10-16-egy-futas.md): a döntésfüggvény a kivezetett bank-ellenőrből ide költözött — a korábbi (u5 H32) állításai szó szerint.
+test("choiceVerdictProblem: a hibás hosszúságú ítélet eldöntetlen; a kulcs mint egyetlen igaz → nincs hiba", () => {
+  assert.deepEqual(choiceVerdictProblem({ options: ["a", "b"], correctIndex: 0 }, [true]), { kind: "undecidable", reason: "az opciónkénti ítélet 1 opcióra szól, a tételben 2 van — az ítélet nem értékelhető." });
+  assert.equal(choiceVerdictProblem({ options: ["a", "b"], correctIndex: 0 }, [true, false]), null);
 });

@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { OCR_THIRD_READER_MODEL } from "../server/ai/models";
 import { keyTokenRecall } from "../server/studio/ocr-recall";
 
 /* Spec 2026-10-05-s11/5 (pótló mérés): 5 valódi kézírásos történelem-füzetlap, 3 olvasó, rögzített nyers átiratokból újraszámolva
@@ -15,14 +14,7 @@ test("S11/5: a rögzített pontszámok megegyeznek az újraszámolttal", () => {
   for (const [model, expected] of Object.entries(fx.measured)) assert.ok(Math.abs(mean(model) - expected) < 0.005, `${model}: ${expected} vs ${mean(model).toFixed(4)}`);
 });
 
-// Spec S11/7 (dokumentált spec-változás): a forrás-OCR eredménye a FÚZIÓ, nem egyetlen olvasó — a régi „egyetlen olvasó a legjobb”
-// állítás helyett az S11/7 elfogadási feltétele (lent): fúzió ≥ A-olvasat, ≥ gyenge olvasók, ≥ 95%.
-test("S11/5→S11/7: az erős olvasók (sol, opus) a kézírásos lapokon a gyenge olvasók (qwen, glm) fölött, legalább 95%-on", () => {
-  for (const strong of [OCR_THIRD_READER_MODEL, "claude-opus-5-5"]) {
-    assert.ok(mean(strong) >= 0.95, `${strong}: ${(mean(strong) * 100).toFixed(1)}%`);
-    for (const weak of ["qwen/qwen3-vl-32b-instruct", "z-ai/glm-5.3-flash"]) assert.ok(mean(strong) > mean(weak), `${strong} > ${weak}`);
-  }
-});
+// S4b (docs/specs/2026-10-16-egy-futas.md): a forrás-OCR olvasói (OCR_THIRD_READER_MODEL) kivezetve — a beállított erős olvasó esete törölve.
 
 /* Spec 2026-10-05-s11/7: a forrás-OCR eredménye a két erős olvasó (A = gpt-6.1-sol high, B = claude-opus-5-5 medium) fúziója. */
 type FusionBlock = { readerA: { model: string; effort: string; transcripts: Record<string, string>; measured: number }; transcripts: Record<string, string>; measured: number };

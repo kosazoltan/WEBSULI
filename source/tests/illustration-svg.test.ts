@@ -68,8 +68,7 @@ test("elrendezés (élő mérés: 11,1 px-es betű telefonon): kicsi betű, egym
   assert.match(illustrationLayoutProblems(svg('<text x="100" y="40" font-size="18">pergamen</text><text x="110" y="44" font-size="18">állatbőr</text>')).join(), /egymásra csúszó felirat: „pergamen” × „állatbőr”/);
   assert.match(illustrationLayoutProblems(svg('<text x="380" y="40" font-size="18">latin nyelvű kódex</text>')).join(), /kilógó felirat: latin nyelvű kódex/);
   assert.deepEqual(illustrationLayoutProblems(svg('<g transform="rotate(30)"><text x="380" y="40" font-size="10">x</text></g>')), [], "transzformált feliratot nem ítél meg");
-  const { weakVisualsInstruction } = await import("../server/studio/visual-quality");
-  assert.match(weakVisualsInstruction([], ["4. fejezet 1. ábra (illustration): illustration.svg: túl kicsi betű"]), /ELUTASÍTOTTA[^]*túl kicsi betű/);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a gyenge-ábra javító utasítás (visual-quality) a régi lépésgéppel együtt megszűnt.
 });
 
 /** Spec 2026-10-05 (docs/specs/2026-10-05-illusztracio-szam-attributum.md): élesen `<rect y="+">` (Mezopotámia, 1. fejezet). */

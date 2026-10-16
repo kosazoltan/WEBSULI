@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { experienceSchema } from "../shared/lesson-experience";
 import { experienceProblems } from "../shared/lesson-experience-validation";
-import { resolveChoiceGate } from "../server/studio/step-runner";
+import { resolveChoiceGate } from "../server/studio/choice-gate";
 import { reconcileBankWithTeaching, withTrimmedSections } from "../server/studio/limit-policy";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { planLessonBank } from "../shared/lesson-bank-plan";

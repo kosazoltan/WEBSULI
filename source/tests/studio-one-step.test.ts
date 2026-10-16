@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   decideOneStepAction,
-  inferScope,
   parseOneStepRequest,
 } from "../server/studio/one-step";
 
@@ -54,30 +53,7 @@ test("decideOneStepAction: hiba és kész állapot megáll; vázlat nélküli pa
   assert.equal(decideOneStepAction({ step: "author", status: "ok", output: {} }), "stop");
 });
 
-test("inferScope: a modell JSON-jából tantárgy+osztály, osztály 0-12 közé szorítva", async () => {
-  const out = await inferScope(
-    [{ name: "a.txt", kind: "text", content: "A kert élővilága" }],
-    async () => '{"subject":"Természetismeret","classroom":4,"title":"Kert és park"}',
-  );
-  assert.deepEqual(out, {
-    ok: true,
-    scope: { subject: "Természetismeret", classroom: 4 },
-    title: "Kert és park",
-    classification: { reason: "A besoroláshoz nem érkezett ellenőrizhető indoklás; bizonytalan gépi javaslat.", confidence: "low", gradeRange: [4, 4], mixedContent: false },
-  });
-  const clamped = await inferScope([], async () => '{"subject":"X","classroom":99}');
-  assert.equal(clamped.ok, true);
-  if (clamped.ok) assert.equal(clamped.scope.classroom, 12);
-});
-
-test("inferScope: értelmezhetetlen modellválasz → ok:false, nem dob", async () => {
-  const bad = await inferScope([], async () => "nem json");
-  assert.equal(bad.ok, false);
-  const thrown = await inferScope([], async () => {
-    throw new Error("model down");
-  });
-  assert.equal(thrown.ok, false);
-});
+// S4b (docs/specs/2026-10-16-egy-futas.md): a különálló tantárgy-felismerés (inferScope) kivezetve a one-step.ts-ből — a két esete törölve.
 
 // Audit 2026-09-05 (szelet A): a kapu determinisztikus lépés, a driver átmegy rajta.
 test("decideOneStepAction: gate lépésen → continue (a determinisztikus kapu a driverben fut le)", () => {

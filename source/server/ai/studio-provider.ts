@@ -1,7 +1,7 @@
 import { OpenAIProvider } from "./OpenAIProvider";
 import { OpenRouterProvider } from "./OpenRouterProvider";
 import { ClaudeProvider } from "./ClaudeProvider";
-import { AI_KEY_NAMES, aiKeyStatus, CROSS_FAMILY_FALLBACK_EFFORT, isCrossFamilyFallbackModel, keyNameForModel, providerForModel, MODEL_REASONING_EFFORT } from "./models";
+import { AI_KEY_NAMES, aiKeyStatus, CROSS_FAMILY_FALLBACK_EFFORT, isCrossFamilyFallbackModel, keyNameForModel, providerForModel } from "./models";
 import { AIProviderQuotaError, isQuotaExhausted, type AIMessage, type AIProviderConfig, type AIResponse, type AIStreamChunk, type ChatCallOptions, type IAIProvider } from "./AIProvider";
 import { logger } from "../lib/logger";
 
@@ -190,8 +190,7 @@ export function stepStreamIdleMs(step: string): number | undefined {
  */
 export function crossFamilyFallbackOptions(model: string, fallback: boolean | undefined): Pick<AIProviderConfig, "reasoningEffort" | "chatReasoningEffort"> {
   if (!fallback) return {};
-  // Spec 2026-10-14-tartalek-b-szelet: a harmadik családú tartalék (Qwen 0902) a saját effortján (high) fut, nem a lépés szabályzatán.
-  if (!isCrossFamilyFallbackModel(model)) return MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {};
+  if (!isCrossFamilyFallbackModel(model)) return {};
   return { reasoningEffort: CROSS_FAMILY_FALLBACK_EFFORT, ...(providerForModel(model) === "openai" ? { chatReasoningEffort: true } : {}) };
 }
 
@@ -207,17 +206,16 @@ export function createStudioStepProvider(model: string, step?: string, opts: { f
       // használt token kerül pénzbe, így a nagyobb keret a kis leckéknél nem drágít.
       // Tulajdonosi döntés 2026-10-05: a lektor OpenAI-n (gpt-6.1-sol / gpt-5.6-terra) is a Responses API-n fut, medium efforttal.
       ...(vendor === "xai" || vendor === "openai" ? { apiMode: "responses", reasoningEffort: "medium" } : {}),
-      // Tulajdonosi döntés 2026-10-14: a lektor-lánc Anthropic tagja (Opus 5.5) medium, a harmadik családú Qwen high efforton.
+      // Tulajdonosi döntés 2026-10-14: az Anthropic tag (Opus 5.5) medium.
       ...(vendor === "anthropic" ? { reasoningEffort: CROSS_FAMILY_FALLBACK_EFFORT } : {}),
-      ...(vendor === "openrouter" && MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {}),
     });
   }
   const policy = step ? STUDIO_STEP_POLICY[step] : undefined;
   const fallbackOptions = crossFamilyFallbackOptions(model, opts.fallback);
   // Tulajdonosi döntés 2026-10-05 (élő próba, job c1f9d12a): mindkét szerzőmodell (Opus 5.5, Qwen 3.8) 24k fölött írt — az első hívás
   // kárba ment, utána 48k-s újrapróba jött. A szerző ezért rögtön 48k kerettel indul (csak a ténylegesen használt token fizetendő).
-  if (step === "author") return createStudioProvider(model, undefined, AUTHOR_MAX_TOKENS, { ...(MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {}), ...fallbackOptions });
-  if (!policy) return createStudioProvider(model, undefined, undefined, { ...(MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {}), ...fallbackOptions });
+  if (step === "author") return createStudioProvider(model, undefined, AUTHOR_MAX_TOKENS, { ...fallbackOptions });
+  if (!policy) return createStudioProvider(model, undefined, undefined, { ...fallbackOptions });
   return createStudioProvider(model, policy.timeoutMs, policy.maxTokens, {
     reasoningEffort: policy.reasoningEffort,
     ...fallbackOptions,

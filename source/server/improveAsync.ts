@@ -1,5 +1,5 @@
 import { studioModelReady } from "./ai/studio-provider";
-import { resolveStudioModel } from "./ai/models";
+import { LESSON_MODELS } from "./ai/models";
 /**
  * Async Material Improvement Module
  * 
@@ -603,7 +603,8 @@ export function registerImprovementRoutes(adminRouter: Router) {
       }
 
       const anthropicKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
-      if (originalFile.contentType === 'lesson' ? !['author', 'lektor'].every(step => studioModelReady(resolveStudioModel(step as 'author' | 'lektor'))) : !anthropicKey) {
+      // docs/specs/2026-10-16-egy-futas.md (S4b): a lecke-javítás egy beszélgetésben fut (Opus 5.5, tartalék GPT-6.1 Sol) — elég, ha a pár egyikének van kulcsa.
+      if (originalFile.contentType === 'lesson' ? !Object.values(LESSON_MODELS).some((model) => studioModelReady(model)) : !anthropicKey) {
         return res.status(500).json({ 
           message: 'AI API kulcs nincs beállítva.' 
         });

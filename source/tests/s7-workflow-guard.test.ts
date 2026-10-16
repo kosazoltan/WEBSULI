@@ -20,7 +20,8 @@ type Allowed = { category: Category; reason: string; proof?: Proof[] };
 
 /** The web-research production wiring: the job runner always has the workflow store; run() executes runWork in a workflow. */
 const WEB_WIRING: Proof[] = [
-  { file: "server/studio/web-research-routes.ts", pattern: /createResearchJobs\(researchJobStore, generate, workflowStore, \{ mode: studioPipeline \? "webStudio" : "web" \}\)/ },
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a webes HTML-út kivezetve — a futtató ugyanúgy a workflow-tárral épül, egyetlen (webStudio) módban.
+  { file: "server/studio/web-research-routes.ts", pattern: /createResearchJobs\(researchJobStore, generate, workflowStore, \{ mode: "webStudio" \}\)/ },
   { file: "server/studio/web-research-jobs.ts", runner: "executeWorkflow", pattern: /return runWork\(job, onStarted\);/ },
   { file: "server/studio/web-research-jobs.ts", pattern: /if \(workflows\) throw new WebResearchFailure\("Ehhez a készítéshez nincs workflow-napló/ },
 ];
@@ -56,7 +57,7 @@ const ALLOWLIST: Record<string, Allowed> = {
   // ── Hívó nélküli kód.
   "unreferenced:deleteUser@server/storage.ts": { category: "dead-code", reason: "Nincs hívója; felhasználó-törlésnél csak az anyag tulajdonosát nullázná, tartalmat nem." },
   // ── Termelési összerakás: függvényérték, amelyet a workflow-n belül hívnak (gépi bizonyítékkal).
-  "route:POST /web-research/jobs@server/studio/web-research-routes.ts": { category: "dispatch", reason: "A HTML-út (rollback) írása a jobs.run → executeWorkflow → runWork láncon fut; a futtató mindig workflow-tárolóval épül.", proof: WEB_WIRING },
+  "route:POST /web-research/jobs@server/studio/web-research-routes.ts": { category: "dispatch", reason: "A webes gyártás (webStudio) a jobs.run → executeWorkflow → runWork láncon fut; a futtató mindig workflow-tárolóval épül.", proof: WEB_WIRING },
   "route:POST /web-research/jobs/:id/publish@server/studio/web-research-routes.ts": { category: "dispatch", reason: "Folytatás csak workflow-ban (run → executeWorkflow); napló nélküli job workflow-tárolóval nem publikálható.", proof: WEB_WIRING },
   "route:POST /web-research/chat@server/studio/web-research-routes.ts": { category: "dispatch", reason: "A régi stream-kliens is a jobs.start → run → executeWorkflow úton indít; közvetlen írás nincs.", proof: WEB_WIRING },
   "value:publish@server/studio/web-research-jobs.ts": { category: "dispatch", reason: "A jobs objektum publish metódusa: nyomon követett jobnál run → executeWorkflow, különben workflow-tárolóval hiba.", proof: WEB_WIRING },
@@ -115,7 +116,8 @@ test("a korábban workflow nélküli utak a kijelölt módban futnak (H, I, J, K
     ["server/routes.ts", "post", "/api/admin/materials/:id/generate-quiz", /generateMaterialQuiz\(id, countRaw, req\.user!\.id\)/],
     ["server/studio/routes.ts", "post", "/maps/extract", /runToolWorkflow\(\{ mode: "map"/],
     ["server/studio/routes.ts", "post", "/maps/:id/recheck", /runToolWorkflow\(\{ mode: "mapCheck"/],
-    ["server/studio/lesson-pipeline-routes.ts", "post", "/lessons/from-map/:mapId", /correctMapInWorkflow\(/],
+    // S4b (docs/specs/2026-10-16-egy-futas.md): a térképről indítás egyfutásos gyártás (startOneStepRun → runOneStep, `upload` módú workflow).
+    ["server/studio/lesson-pipeline-routes.ts", "post", "/lessons/from-map/:mapId", /startOneStepRun\(/],
   ];
   for (const [file, method, path, pattern] of expectations) {
     const handler = routeHandlerText(units, file, method, path);
@@ -123,7 +125,6 @@ test("a korábban workflow nélküli utak a kijelölt módban futnak (H, I, J, K
     assert.match(handler, pattern, `${path}: nem a kijelölt workflow-módban fut`);
   }
   assert.ok(invokedInside(units, "server/gameQuizGeneratorService.ts", "runToolWorkflow", /workflowPhase\("save"\)/), "J: a mentés a quiz futás save lépésében");
-  assert.ok(invokedInside(units, "server/studio/lesson-pipeline-routes.ts", "runToolWorkflow", /correctMapFromOwner\(mapId, undefined, false\)/), "B: a helyesbítés mapCheck futásban");
 });
 
 test("C egy futásban: nincs külön indított upload-futás és nincs utólag kitöltött lépés a webes Studio-úton", () => {
@@ -134,13 +135,6 @@ test("C egy futásban: nincs külön indított upload-futás és nincs utólag k
   const studioBranch = jobs.slice(jobs.indexOf('if (mode === "webStudio") {'), jobs.indexOf('const artifact = await workflowCheckpoint("web-result"'));
   assert.ok(studioBranch.length > 0);
   assert.doesNotMatch(studioBranch, /workflowPhase\("(knowledge|author|gate|publish)"\)/, "a webStudio ág nem tölt ki lépést utólag");
-});
-
-test("B′: workflow-napló nélküli job folytatása nem hajt lecke-írást (WorkflowConflict)", () => {
-  const routes = readFileSync(join(ROOT, "server/studio/lesson-pipeline-routes.ts"), "utf8");
-  const branch = routes.slice(routes.indexOf("if (!start && !previous) {"), routes.indexOf("let drove = false;"));
-  assert.match(branch, /throw new WorkflowConflict\("Ehhez a készítéshez nincs workflow-napló/);
-  assert.doesNotMatch(branch, /guardedDrive\(/);
 });
 
 test("negatív kontroll: a szkenner a workflow nélküli írást jelzi, a workflow-n belülit nem", () => {

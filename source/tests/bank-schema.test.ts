@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { bankResponseFormat, normalizeStrictPacket, strictPacketSchema, strictPatchSchema } from "../server/studio/bank-schema";
 import { experiencePacketSchema, openTaskSchema } from "../shared/lesson-experience";
 import { callStepModel } from "../server/studio/run-step";
-import { callBankPacketModel } from "../server/studio/bank-call";
 import type { IAIProvider, AIMessage } from "../server/ai/AIProvider";
 import { fusionFixture, standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildStructuredImprovement } from "../server/studio/structured-improvement";
@@ -59,10 +58,7 @@ test("a response_format eljut a szolgáltatóhoz: callStepModel a chat 3. param�
   await callStepModel(provider, { step: "animator", role: "bank", model: "gpt-6-luna", system: "S", user: "U" });
   assert.equal((seen[0] as { type: string }).type, "json_schema");
   assert.equal(seen[1], null);
-  await callBankPacketModel(provider, "gpt-6-luna", "S", "U", undefined, { responseFormat: rf });
-  await callBankPacketModel(provider, "z-ai/glm-5.3-flash", "S", "U", undefined, { responseFormat: rf });
-  assert.equal((seen[2] as { type: string }).type, "json_schema", "közvetlen OpenAI: megy a szigorú séma");
-  assert.equal(seen[3], null, "OpenRouter-út: nincs szigorú séma (nem igazolt), marad a JSON-mód + helyi validálás");
+  // S4b (docs/specs/2026-10-16-egy-futas.md): callBankPacketModel (bank-call.ts) removed with the old bank step; its OpenAI/OpenRouter responseFormat routing assertions went with it.
 });
 
 test("review #160: a javító út (buildStructuredImprovement) bankhívása is megkapja a szigorú sémát (extra.responseFormat)", async () => {

@@ -227,13 +227,14 @@ test("emptyExtractionReason: 0 nyers vagy 0 érvényes fogalom → ok-szöveg; k
   assert.equal(emptyExtractionReason(7, 3), null);
 });
 
-test("run-extraction.ts: a térkép és a fogalmak EGY tranzakcióban mentődnek, az üres-őr a mentés előtt fut", async () => {
+test("tudástár-mentés: a térkép és a fogalmak EGY tranzakcióban mentődnek, az üres-őr a mentés előtt fut", async () => {
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a tudástárat az egyfutásos 1. állomás menti — az üres-őr az állomás validátora (fogalom nélkül nincs elfogadott térkép),
+  // a mentés a saveSingleRunMap egyetlen tranzakciója.
   const { readFileSync } = await import("node:fs");
-  const src = readFileSync(new URL("../server/studio/run-extraction.ts", import.meta.url), "utf8");
-  const guardAt = src.indexOf("emptyExtractionReason(");
-  const txAt = src.indexOf("db.transaction(");
-  assert.ok(guardAt > 0 && txAt > 0);
-  assert.ok(guardAt < txAt, "az üres-őr a tranzakció ELŐTT áll");
+  const engine = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
+  assert.match(engine, /if \(!concepts\.length\) problems\.push\("Nincs egyetlen fogalom sem \(concepts\)\."\);/);
+  const src = readFileSync(new URL("../server/studio/single-run/live.ts", import.meta.url), "utf8");
+  assert.match(src, /db\.transaction\(/);
   assert.match(src, /tx\s*\.insert\(knowledgeMaps\)/);
   assert.match(src, /tx\.insert\(kmConcepts\)/);
   assert.doesNotMatch(src, /\bdb\s*\.insert\(knowledgeMaps\)/, "térkép-insert csak tranzakcióban");

@@ -1,8 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { arithmeticSourceCorrections, correctionApplied, correctionAuditText, correctionNotes, correctionPromptLines, mergeCorrections, normalizeSignedParens, sourceArithmeticClaim, studentErrorPromptLines, studentErrors, type SourceCorrection } from "../server/studio/source-corrections";
-import { buildBankVerifierPrompt, verifierContext } from "../server/studio/bank-verifier";
+import { arithmeticSourceCorrections, correctionApplied, correctionAuditText, correctionPromptLines, mergeCorrections, normalizeSignedParens, sourceArithmeticClaim, studentErrorPromptLines, studentErrors, type SourceCorrection } from "../server/studio/source-corrections";
 import { buildAuthorPrompt, buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 
@@ -82,37 +81,20 @@ test("EARS 2: a tervező/szerző/lektor prompt-sorok és a bank-ellenőr prompt 
     assert.ok(prompt.includes("9-(-6) = 15"));
   }
   assert.ok(buildAuthorPrompt(map.concepts.map((c) => ({ heading: c.term, conceptIds: [c.localId], plannedBlocks: ["explain"] })) as never, map as never, [], undefined, owner).includes("9-(-6) = 15"));
-  // bank-ellenőr: az idézet mellett a helyesbítés a mérce
-  const notes = correctionNotes(fixes);
-  const vconcepts = map.concepts.map((c) => ({ localId: c.localId, term: c.term, quote: c.quote, ...(notes.has(c.localId) ? { correction: notes.get(c.localId) } : {}) }));
-  const lesson = { title: "T", classroom: 5, sections: [{ heading: "H", blocks: [] }] } as never;
-  const chunk = { sectionIndex: 0, items: [{ path: "experience.quiz[0]", conceptIds: ["c2", "c1"], hash: "h", view: {} }] } as never;
-  const prompt = buildBankVerifierPrompt(chunk, undefined, lesson, vconcepts);
-  assert.match(prompt, /c2 \(9-\(-6\)\): „9-\(-6\)=\+3”\n {2}⚠ HELYESBÍTVE .*a tanuló hibás megoldása a forrásban \(negatív példa\): „9-\(-6\) = \+3” HIBÁS, helyesen 9-\(-6\) = 15; .*helyes válaszként vagy kulcsként SOHA/);
-  assert.ok(!/c1 \(9-\(\+6\)\): „9-\(\+6\)=\+3 ✓”\n {2}⚠/.test(prompt), "a helyes sor nem kap jelölést");
-  assert.match(prompt, /a HELYESBÍTVE jelölt sornál a helyesbítés/);
-  // a „cleared”-kulcs a helyesbítéstől is függ
-  const plain = map.concepts.map((c) => ({ localId: c.localId, quote: c.quote }));
-  assert.notEqual(verifierContext(lesson, undefined, vconcepts, "v")(0), verifierContext(lesson, undefined, plain, "v")(0));
+  // S4b (docs/specs/2026-10-16-egy-futas.md): bank-verifier.ts (buildBankVerifierPrompt, verifierContext) removed with the old bank-check step; its prompt and cleared-key assertions went with it.
 });
 
 test("forrás-ellenőrzés: a lecke-indítás kérés és fotó nélkül is lefuttatja az aritmetikai helyesbítést; a javítási út is", () => {
-  const routes = readFileSync(new URL("../server/studio/lesson-pipeline-routes.ts", import.meta.url), "utf8");
-  const fn = routes.slice(routes.indexOf("export async function correctMapFromOwner("));
-  assert.ok(!/^\s*if \(!instruction && !transcript\) return \[\];/m.test(fn.slice(0, 400)), "nincs korai visszatérés az aritmetikai kör előtt");
-  assert.ok(fn.includes("arithmeticSourceCorrections(concepts)") && fn.includes("mergeCorrections(arithmetic, result.corrections)"));
-  // Spec-változás 2026-10-06-s7 (§4/6, docs/specs/2026-10-06-s7-workflow-rendbetetel.md): a térképről indított lecke helyesbítése
-  // saját mapCheck futásban megy — a védett tulajdonság (kérés és fotó nélküli aritmetikai kör) ugyanaz, a hívás egy szinttel lejjebb.
-  assert.ok(routes.includes("const corrections = await correctMapInWorkflow(req.params.mapId, req.user!.id)"), "a térképről (újra)indított lecke is helyesbített");
-  const inWorkflow = routes.slice(routes.indexOf("async function correctMapInWorkflow("), routes.indexOf("export async function correctMapFromOwner("));
-  assert.ok(inWorkflow.includes("const corrections = await correctMapFromOwner(mapId, undefined, false);"), "a mapCheck futás kérés és fotó nélkül helyesbít");
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a gyártás az egyfutásos motoron fut — a helyesbítés az 1. állomás eredményén, kérés és
+  // fotó nélkül, feltétel nélkül (a viselkedést a single-run-engine teszt méri); a javítási út és a séma változatlan.
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const engine = strip(readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8"));
+  const station = engine.slice(engine.indexOf("export async function readSourceStation("), engine.indexOf("export type SingleRunInput"));
+  assert.ok(station.includes("const corrections = arithmeticSourceCorrections(checked.map("), "a helyesbítés az 1. állomáson fut");
+  assert.ok(!/if \(!instruction[^)]*\)\s*return/.test(station), "nincs kéréstől / fotótól függő korai visszatérés");
+  assert.ok(engine.includes("ownerContextOf(input.instruction, read.corrections)"), "a helyesbítés a promptokba is eljut");
   const improve = readFileSync(new URL("../server/studio/structured-improvement.ts", import.meta.url), "utf8");
   assert.ok(improve.includes("mergeCorrections(arithmeticSourceCorrections(source.concepts), proposal.corrections)"));
-  assert.ok(fn.includes("if (!pending.length) return corrections;") && fn.includes("for (const fix of pending) {"), "review #181: a már érvényben lévő helyesbítés nem íródik újra, de visszaadott");
   const schema = readFileSync(new URL("../shared/lesson-repair.ts", import.meta.url), "utf8");
   assert.ok(schema.includes('z.enum(["owner", "transcription", "arithmetic"])') && schema.includes("studentError:"), "review #181: a javítási séma ismeri az arithmetic alapot");
-  const runner = readFileSync(new URL("../server/studio/step-runner.ts", import.meta.url), "utf8");
-  // Spec-változás 2026-10-05-s9 (S9/3, docs/specs/2026-10-05-s9-prompt-javito-orkesztrator-vegrehajtas.md): a kapu tétel-javítása
-  // negyedik bank-ellenőr-indítás — ez is a helyesbített fogalmakat adja át (a teszt által őrzött tulajdonság).
-  assert.equal((runner.match(/verifierConceptsOf\(map, job\)/g) ?? []).length, 4, "bank-ellenőr indítás + két cleared-kontextus + a kapu tétel-javítása");
 });

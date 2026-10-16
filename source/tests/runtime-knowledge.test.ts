@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { runtimeKnowledge, runtimePrompt } from "../shared/runtime-knowledge";
 import { skillSnapshot, findingsFromError, auditWorkflow, lektorSkillCodes } from "../server/workflows/learning";
 import { executeWorkflow, workflowPhase, workflowSkillPrompt, withPreparationSkill, workflowSkillVersion } from "../server/workflows/engine";
-import { scopeRequestParams } from "../server/studio/one-step";
 import { skillRuleText, type SkillLesson } from "../shared/lesson-skill";
 import { WORKFLOW_MODES, WORKFLOW_RESULT_KIND, workflowDefinition } from "../shared/lesson-workflow";
 import { memoryWorkflows } from "./helpers/workflow-store";
@@ -66,11 +65,7 @@ test("kézi kivonatolási kontextus izolált és a besoroló tényleges kérés�
   const snapshots = [skillSnapshot("upload", ["coverage"]), skillSnapshot("upload", ["schema"])];
   await Promise.all(snapshots.map(snapshot => withPreparationSkill(snapshot, async () => {
     await Promise.resolve();
-    const params = scopeRequestParams("fixture", []);
-    const system = params.messages[0].content;
-    assert.equal(typeof system, "string");
-    assert.ok(String(system).includes(snapshot.version));
-    assert.match(String(system), /SAJÁT RUNBOOK/);
+    // S4b (docs/specs/2026-10-16-egy-futas.md): a besoroló (scopeRequestParams) kivezetve a one-step.ts-ből — a kérésébe épülő skill-prompt ellenőrzése törölve.
     assert.equal(workflowSkillVersion(), snapshot.version);
   })));
   assert.equal(workflowSkillPrompt(), "");

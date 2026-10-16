@@ -32,7 +32,7 @@ import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail } from "./lib/material-result";
-import { assertDistinctFamilies, effortFor, resolveLegacyModel } from "./ai/models";
+import { effortFor, resolveLegacyModel } from "./ai/models";
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { callClaudeParts } from "./studio/claude-vision";
 import { studioRouter } from "./studio/routes";
@@ -802,13 +802,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Continue anyway but log warning
   }
 
-  // LS-0d: a Studio modell-útvonalak épségének ellenőrzése induláskor.
-  // Ha a Szerző és a Lektor ugyanabba a modellcsaládba esik, a forrás-hűség (D1)
-  // független ellenőrzése némán megszűnik — ezért ez HIBA, nem figyelmeztetés.
-  assertDistinctFamilies();
+  // docs/specs/2026-10-16-egy-futas.md (S4b): a tananyaggyártás egy beszélgetésben fut (Opus 5.5, tartalék GPT-6.1 Sol) — a régi szerző/lektor családőr megszűnt.
   if (!isOpenRouterConfigured()) {
     logger.warn(
-      '[AI] OPENROUTER_API_KEY nincs beállítva — a Qwen/Gemini OCR nem elérhető.',
+      '[AI] OPENROUTER_API_KEY nincs beállítva — az OpenAI-kvóta kimerülésekor nincs OpenRouter-tartalékút a GPT-6.1 Solhoz.',
     );
   }
 

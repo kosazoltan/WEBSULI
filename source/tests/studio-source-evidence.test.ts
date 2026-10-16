@@ -13,7 +13,8 @@ test('a forráspélda a szerző, lektor és célzott javító promptban is megma
 });
 
 test('mindkét adatbázisos fogalomlekérdezés továbbítja a definíciót és idézetet',()=>{
- const src=readFileSync(new URL('../server/studio/step-runner.ts',import.meta.url),'utf8');
+ // S4b (docs/specs/2026-10-16-egy-futas.md): a két adatbázisos fogalomlekérdezés a pipeline-store.ts és a concept-fix.ts modulban van.
+ const src=['../server/studio/pipeline-store.ts','../server/studio/single-run/concept-fix.ts'].map(f=>readFileSync(new URL(f,import.meta.url),'utf8')).join('\n');
  const queries=src.match(/\.select\(\{[\s\S]*?\}\)\s*\.from\(kmConcepts\)/g)??[];
  assert.equal(queries.length,2);
  for(const query of queries){assert.match(query,/definition:\s*kmConcepts.definition/);assert.match(query,/quote:\s*kmConcepts.quote/);}

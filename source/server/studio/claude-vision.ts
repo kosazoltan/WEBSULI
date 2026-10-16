@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { studioConnection } from "../ai/studio-provider";
 import { CROSS_FAMILY_FALLBACK_EFFORT } from "../ai/models";
-import { claudeSourceBlock } from "./ocr";
+import { claudeSourceBlock } from "./source-block";
 
 /**
  * Spec 2026-10-14-tartalek-b-szelet (B2, tulajdonosi döntés): az OpenAI-formátumú (chat-completions) tartalomrészek — szöveg,

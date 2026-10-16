@@ -62,16 +62,16 @@ test("review #203: a forrás-helyesbítés modell-/parse-hibája is source_corre
   assert.equal(correctionFindingNeeded(failed), true);
   assert.equal(correctionFindingNeeded({ corrections: [], rejected: ["x: elvetve"] }), true);
   assert.equal(correctionFindingNeeded({ corrections: [], rejected: [] }), false);
-  const routes = readFileSync(join(ROOT, "server/studio/lesson-pipeline-routes.ts"), "utf8");
-  assert.match(routes, /if \(correctionFindingNeeded\(result\)\) await workflowFinding\("source_correction"\)/);
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a térképről indított gyártás modell-alapú helyesbítő köre (correctMapFromOwner) a régi lépésgéppel együtt megszűnt.
 });
 
-test("review #203: a runExtraction tudástár-tranzakciója az elején és a végén lízing-kapus (workflowFence)", () => {
-  const file = join(ROOT, "server/studio/run-extraction.ts");
+test("review #203: a tudástár-mentés tranzakciója az elején és a végén lízing-kapus (workflowFence)", () => {
+  // S4b (docs/specs/2026-10-16-egy-futas.md): a tudástárat az egyfutásos 1. állomás menti (saveSingleRunMap) — ugyanaz a szerkezet.
+  const file = join(ROOT, "server/studio/single-run/live.ts");
   const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
   let checked = 0;
   const visit = (node: ts.Node) => {
-    if (ts.isFunctionDeclaration(node) && node.name?.text === "runExtraction") {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "saveSingleRunMap") {
       const findTx = (n: ts.Node) => {
         if (ts.isCallExpression(n) && n.expression.getText(source) === "db.transaction") {
           const fn = n.arguments[0];
@@ -92,10 +92,3 @@ test("review #203: a runExtraction tudástár-tranzakciója az elején és a vé
   assert.equal(checked, 1);
 });
 
-test("review #203: a tanári helyesbítés km_concepts-írása lízing-zár alatt, és a zár-ütközés nem nyelődik el", async () => {
-  const { readFileSync } = await import("node:fs");
-  const src = readFileSync(new URL("../server/studio/lesson-pipeline-routes.ts", import.meta.url), "utf8");
-  const body = src.slice(src.indexOf("export async function correctMapFromOwner"), src.indexOf("\nexport ", src.indexOf("export async function correctMapFromOwner") + 10));
-  assert.equal((body.match(/await workflowFence\(tx\)/g) ?? []).length, 2, "zár a tranzakció elején és végén");
-  assert.match(body, /if \(error instanceof WorkflowConflict\) throw error;/);
-});

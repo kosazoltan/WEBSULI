@@ -1,7 +1,7 @@
 /**
- * Tételgyár T2.1 (docs/specs/2026-10-15-tetelgyar-t2-valaszkulcs-tesztek-vegrehajtas.md): a válaszkulcs-tesztek írója. Csomagonként egy
- * olcsó modellhívás; a tesztíró a RUBRIKÁT NEM látja (különben a rubrikához igazítaná a választ) — csak a kérdést, a mintaválaszt,
- * a fogalmak definícióját és az évfolyamot. Hibánál nincs ítélet (a csomag a T2 előtti szabályok szerint épül).
+ * Tételgyár T2.1 (docs/specs/2026-10-15-tetelgyar-t2-valaszkulcs-tesztek-vegrehajtas.md): a válaszkulcs-tesztek írója. A kérés a rubrikát
+ * NEM tartalmazza — csak a kérdést, a mintaválaszt, a fogalmak definícióját és az évfolyamot. Hibánál nincs ítélet (a csomag a T2 előtti
+ * szabályok szerint épül). docs/specs/2026-10-16-egy-futas.md (S4b): a hívás az egyfutásos beszélgetésben megy (nincs külön tesztíró-modell).
  */
 import { createHash } from "node:crypto";
 import { sanitizeAnswerKeyCases, ANSWER_KEY_LIMITS, type AnswerKeyCases } from "../../shared/answer-key-tests";
@@ -75,29 +75,6 @@ export async function writeAnswerKeys(
 /** Vészfék: `STUDIO_ANSWER_KEY_TESTS=0` kikapcsolja a válaszkulcs-teszteket (alapból bekapcsolva). */
 export const answerKeyTestsEnabled = (env: Record<string, string | undefined> = process.env) => env.STUDIO_ANSWER_KEY_TESTS !== "0";
 
-/**
- * A tesztíró modellsorrendje: elöl a választott tesztíró (T2.3, tulajdonosi döntés 2026-10-15: MiniMax M3 max efforttal, a GLM 5.3 Flash
- * helyett), utána a tartalék (a `gateHelper` szerep elsődlegese). Az azonos modell egyszer szerepel.
- */
-export function answerKeyModels(primary: string, fallback: string | undefined): string[] {
-  return [...new Set([primary, fallback].filter((m): m is string => !!m))];
-}
-
-/** Láncolt hívó: modellenként sorban; a workflow-lízing hibája azonnal továbbmegy, a többi hiba a következő modellre lép. */
-export function chainedAnswerKeyCaller(models: string[], callOne: (model: string, system: string, user: string) => Promise<unknown>): AnswerKeyCaller {
-  return async (system, user) => {
-    let last: unknown = new Error("nincs elérhető tesztíró modell");
-    for (const model of models) {
-      try { return await callOne(model, system, user); }
-      catch (error) {
-        if (error instanceof WorkflowConflict || error instanceof WorkflowWaiting) throw error;
-        last = error;
-      }
-    }
-    throw last;
-  };
-}
-
 /** A bankgyártás `answerKeys` függősége: 8 feladatos darabokban, egy futáson belüli gyorsítótárral. */
 export function answerKeysFor(ctx: AnswerKeyContext, call: AnswerKeyCaller, warn: (message: string) => void) {
   const cache = new Map<string, AnswerKeyCases>();
@@ -109,17 +86,4 @@ export function answerKeysFor(ctx: AnswerKeyContext, call: AnswerKeyCaller, warn
     }
     return out;
   };
-}
-
-export type AnswerKeyReportEntry = { sectionIndex: number; itemId: string; calibration: string[]; correctFails: string[] };
-
-/**
- * Review #239 (P2): a job jelentése a VÉGLEGES bankhoz igazodik. A most újraépített tételek bejegyzése az új; a checkpointból átvett
- * (most nem tesztelt) tételek korábbi bejegyzése megmarad; a már nem létező tételeké kiesik.
- */
-export function mergeAnswerKeyReport(prior: unknown, fresh: AnswerKeyReportEntry[], finalTaskIds: readonly string[]): AnswerKeyReportEntry[] {
-  const final = new Set(finalTaskIds);
-  const rebuilt = new Set(fresh.map((r) => r.itemId));
-  const old = Array.isArray(prior) ? (prior as AnswerKeyReportEntry[]).filter((r) => r && typeof r.itemId === "string") : [];
-  return [...old.filter((r) => final.has(r.itemId) && !rebuilt.has(r.itemId)), ...fresh.filter((r) => final.has(r.itemId))];
 }
