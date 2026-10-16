@@ -228,7 +228,7 @@ test("S4a: a különálló kinyerés draft térképet ment (jóváhagyásra vár
   assert.equal(hash, singleRunMapHash(files, "Víz"), "determinisztikus lenyomat");
   assert.notEqual(hash, singleRunMapHash(files, "Más cím"));
   const map = { title: "Víz", subject: "természettudomány", classroom: 5, transcript: files[0].content, fileTranscripts: { "lap.txt": files[0].content },
-    concepts: [{ id: "parolgas", term: "párolgás", definition: "A víz gőzzé válása.", quote: "párolgás", type: "concept", examWeight: "core" as const, relatedIds: [], verbatimOk: true, sourceFile: "lap.txt" }] };
+    concepts: [{ id: "parolgas", term: "párolgás", definition: "A víz gőzzé válása.", quote: "párolgás", type: "concept", examWeight: "core" as const, relatedIds: [], verbatimOk: true, sourceFile: "lap.txt" }], corrections: [] };
   const mapId = await saveSingleRunMap(map, files, "draft-owner", "claude-opus-5-5", { draft: true, inputHash: hash });
   try {
     const row = (await dbPool.query("SELECT status, approved_by, source_text, source_files FROM knowledge_maps WHERE id=$1", [mapId])).rows[0];
