@@ -8,10 +8,10 @@ assert.equal(url.hostname, "127.0.0.1");
 assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 const { dbPool } = await import("../server/db");
-const { resumableDraftFor, supersedeDraftsOf, oneStepRunView, closeOrphanedOneStepRuns, ONE_STEP_RESUMING_DETAIL, ownerDrafts } = await import("../server/studio/lesson-pipeline-routes");
+const { resumableDraftFor, supersedeDraftsOf, oneStepRunView, closeOrphanedOneStepRuns, ONE_STEP_RESUMING_DETAIL, ownerDrafts, discardDraft, discardDraftsWithPublished, redundantDraftCount, ownerDraftTotal } = await import("../server/studio/lesson-pipeline-routes");
 
 let n = 0;
-async function mapWithJob(job: { status?: string; published?: boolean; output?: Record<string, unknown>; age?: string; owner?: string; map?: string }) {
+async function mapWithJob(job: { status?: string; published?: boolean; output?: Record<string, unknown>; age?: string; owner?: string | null; map?: string }) {
   n += 1;
   const map = job.map ?? (await dbPool.query("INSERT INTO knowledge_maps(title,subject,classroom,source_files,input_hash) VALUES ('T','matematika',5,'[]'::jsonb,$1) RETURNING id", [`draft-hash-${n}`])).rows[0].id as string;
   const lesson = (await dbPool.query("INSERT INTO lessons(map_id,json,published_at) VALUES ($1,'{}'::jsonb,$2) RETURNING id", [map, job.published ? new Date() : null])).rows[0].id as string;
@@ -19,7 +19,8 @@ async function mapWithJob(job: { status?: string; published?: boolean; output?: 
   const id = (await dbPool.query(`INSERT INTO studio_jobs(lesson_id,map_id,step,status,input_hash,output,created_at) VALUES ($1,$2,'author',$3,'h',$4::jsonb, now() - $5::interval) RETURNING id`,
     [lesson, map, job.status ?? "error", JSON.stringify(output), job.age ?? "1 hour"])).rows[0].id as string;
   // A job gazdája a workflow-ja (review #248: csak a saját piszkozat ajánlható fel / tehető félre).
-  await dbPool.query("INSERT INTO lesson_workflow_runs(id,owner_id,state,snapshot) VALUES ($1,$2,'error','{}'::jsonb)", [id, job.owner ?? "draft-owner"]);
+  // owner: null → gazdátlan job (régi, workflow nélküli futás).
+  if (job.owner !== null) await dbPool.query("INSERT INTO lesson_workflow_runs(id,owner_id,state,snapshot) VALUES ($1,$2,'error','{}'::jsonb)", [id, job.owner ?? "draft-owner"]);
   return { map, id };
 }
 
@@ -138,4 +139,72 @@ test("review #250: a megállt futás nézete visszaadja az eredeti tanári kér�
   const { map, id } = await mapWithJob({ output: { lesson: { sections: [{}] }, ownerInstruction: "csak a törtek" } });
   await dbPool.query("INSERT INTO one_step_runs(id,phase,map_id,job_id,error) VALUES ('instr-run-1','error',$1,$2,'x')", [map, id]);
   assert.equal((await oneStepRunView("instr-run-1"))?.ownerInstruction, "csak a törtek");
+});
+
+test("draft-kezelés (D1–D5): törlés, kötegelt törlés, gazdátlan és kész párral rendelkező jelzés, futó gyártás", async () => {
+  await dbPool.query("DELETE FROM users WHERE id = 'draft-mgr'");
+  await dbPool.query("INSERT INTO users(id,email,is_admin) VALUES ('draft-mgr','mgr@test.invalid',true)");
+  // A teszt összes jobja (takarításhoz).
+  const ownerless: string[] = [];
+  try {
+    const mine = await mapWithJob({ owner: "draft-mgr" });
+    const orphan = await mapWithJob({ owner: null });
+    ownerless.push(orphan.id);
+    const foreign = await mapWithJob({ owner: "draft-other" });
+    const running = await mapWithJob({ owner: "draft-mgr", status: "running" });
+    // Kész pár: ugyanabból a térképből publikált lecke van.
+    const dup = await mapWithJob({ owner: "draft-mgr" });
+    await dbPool.query("INSERT INTO lessons(map_id,json,published_at) VALUES ($1,'{}'::jsonb,now())", [dup.map]);
+    const orphanDup = await mapWithJob({ owner: null, map: dup.map });
+    ownerless.push(orphanDup.id);
+    // Futó gyártás lecke nélkül (újragyártás eleje): a listában, futóként.
+    const fresh = (await dbPool.query(`INSERT INTO studio_jobs(map_id,step,status,input_hash,output) VALUES ($1,'pedagogue','running','h','{}'::jsonb) RETURNING id`, [mine.map])).rows[0].id as string;
+    await dbPool.query("INSERT INTO lesson_workflow_runs(id,owner_id,state,snapshot) VALUES ($1,'draft-mgr','running','{}'::jsonb)", [fresh]);
+    ownerless.push(mine.id, foreign.id, running.id, dup.id, fresh);
+
+    const list = await ownerDrafts("draft-mgr");
+    const ids = list.map((d) => d.jobId);
+    for (const id of [mine.id, orphan.id, running.id, dup.id, orphanDup.id, fresh]) assert.ok(ids.includes(id), id);
+    assert.ok(!ids.includes(foreign.id), "másik admin piszkozata nem látszik");
+    assert.equal(list[0].running, true, "a futó tételek elöl");
+    const byId = (id: string) => list.find((d) => d.jobId === id)!;
+    assert.equal(byId(orphan.id).ownerless, true);
+    assert.equal(byId(orphan.id).resumable, false, "gazdátlan: nincs folytatás (csak újragyártás / törlés)");
+    assert.equal(byId(dup.id).hasPublished, true);
+    assert.equal(byId(mine.id).hasPublished, false);
+    assert.equal(byId(fresh).running, true);
+    assert.equal(byId(fresh).step, "pedagogue");
+
+    // D5: másik admin és futó job nem törölhető.
+    assert.equal(await discardDraft(foreign.id, "draft-mgr"), false);
+    assert.equal(await discardDraft(running.id, "draft-mgr"), false);
+    // D1: saját és gazdátlan törölhető; utána nem látszik, és a feltöltési piszkozat-felismerés sem adja vissza.
+    assert.equal(await discardDraft(mine.id, "draft-mgr"), true);
+    assert.equal(await discardDraft(mine.id, "draft-mgr"), true, "ismételt elvetés: idempotens (az állapot marad)");
+    assert.equal(await discardDraft(orphan.id, "draft-mgr"), true);
+    assert.equal(await resumableDraftFor(mine.map, undefined, "draft-mgr"), null);
+    // D2: a kötegelt törlés csak a kész párral rendelkezőkre hat (saját + gazdátlan). Review #255: a felület által megerősített szám
+    // ellenőrzés — eltérésnél nincs törlés; a szerver összesítése ugyanazt a halmazt számolja.
+    assert.equal(await redundantDraftCount("draft-mgr"), 2);
+    assert.equal(await discardDraftsWithPublished("draft-mgr", 1), null, "eltérő megerősített szám → nincs törlés");
+    assert.equal(await redundantDraftCount("draft-mgr"), 2);
+    assert.equal(await discardDraftsWithPublished("draft-mgr", 2), 2);
+    const after = (await ownerDrafts("draft-mgr")).map((d) => d.jobId);
+    for (const id of [mine.id, orphan.id, dup.id, orphanDup.id]) assert.ok(!after.includes(id), `eltűnt: ${id}`);
+    assert.ok(after.includes(running.id) && after.includes(fresh));
+    assert.equal(await ownerDraftTotal("draft-mgr"), after.length, "a teljes szám a lista feltételével (itt nincs csonkolás)");
+    // Review #255 (P2): élő workflow-lízing (épp viszik) mellett nem vethető el — a folytatás a lízing alatt újraellenőriz.
+    const leased = await mapWithJob({ owner: "draft-mgr" });
+    ownerless.push(leased.id);
+    await dbPool.query("UPDATE lesson_workflow_runs SET lease_until = now() + interval '1 minute' WHERE id=$1", [leased.id]);
+    assert.equal(await discardDraft(leased.id, "draft-mgr"), false, "élő lízing mellett nincs elvetés");
+    await dbPool.query("UPDATE lesson_workflow_runs SET lease_until = now() - interval '1 minute' WHERE id=$1", [leased.id]);
+    assert.equal(await discardDraft(leased.id, "draft-mgr"), true, "lejárt lízing után elvethető");
+    const state = (await dbPool.query("SELECT output->>'recoveryState' AS s, output->>'discardedBy' AS b FROM studio_jobs WHERE id=$1", [mine.id])).rows[0];
+    assert.deepEqual(state, { s: "discarded", b: "draft-mgr" }, "visszaállítható elvetés, a törlő azonosítójával");
+  } finally {
+    await dbPool.query("DELETE FROM users WHERE id = 'draft-mgr'");
+    // A teszt jobjai (a gazda törlése után gazdátlanná válnának) nem jelenhetnek meg más tesztek listájában: az eldobható DB-ből törlődnek.
+    if (ownerless.length) await dbPool.query("DELETE FROM studio_jobs WHERE map_id IN (SELECT map_id FROM studio_jobs WHERE id = ANY($1))", [ownerless]);
+  }
 });
