@@ -9,7 +9,8 @@ import type { AnswerScore } from "@shared/lesson-experience-score";
 export type ArbiterSource = { kind: "lesson"; htmlFileId: string } | { kind: "html"; materialId: string };
 export type ArbiterResult = AnswerScore & { source: "pontozó" | "döntőbíró" | "gyorsítótár" };
 
-const TIMEOUT_MS = 30_000;
+// Review #258: a szerver modellenként 30 s-ot enged (Opus 5.5, majd tartalék GPT-6.1 Sol) — a kliens a teljes láncot kivárja.
+const TIMEOUT_MS = 70_000;
 const PARALLEL = 3;
 
 /** A `/dev/:id` HTML-lecke azonosítója a lap útvonalából; más útvonalon nincs döntőbíró. */

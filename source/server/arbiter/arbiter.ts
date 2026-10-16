@@ -6,7 +6,8 @@ import { createHash } from "node:crypto";
 import type { OpenTask } from "../../shared/lesson-experience";
 import { normalizeAnswerV2, type AnswerScore } from "../../shared/lesson-experience-score";
 
-export const ARBITER_VERSION = "arbiter-1";
+// Review #258 (P2): a modellváltás (GPT → Opus) a gyorsítótár-kulcsot is érvényteleníti — a régi ítéletek nem öröklődnek.
+export const ARBITER_VERSION = "arbiter-2";
 // Tulajdonosi döntés 2026-10-16 (docs/specs/2026-10-16-egy-futas.md, C): a szöveges válaszok helyességéről Opus 5.5 (medium) dönt,
 // akadályoztatása esetén GPT-6.1 Sol (medium). Ha mindkettő kiesik, a determinisztikus ítélet marad.
 export const ARBITER_MODEL = "claude-opus-5-5";
