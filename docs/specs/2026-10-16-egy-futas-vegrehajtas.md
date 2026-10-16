@@ -222,3 +222,16 @@ háromfázis-kapu) zárul.
    - `tsc`, lint, teljes teszt, DB-teszt, build, e2e;
    - `grep` a modell-azonosítókra: a `server`, `shared`, `client/src` és `scripts` alatt csak `claude-opus-5-5` és `gpt-6.1-sol` (a megjegyzések
      és a történeti dokumentáció kivétel).
+
+## S4a — review #261
+- **Jóváhagyott terv (régi job):** az `approve-outline` a beküldött (átrendezett) vázlatot a tanári kérés részeként adja tovább az
+  újragyártásnak (`remakeAsSingleRun(jobId, owner, { outline })`): a fejezetsorrend és a fogalmak kiosztása kötelező a terv-állomáson.
+- **Fogalomjavítás:** a lektori jelentés önellentmondása (`match: false` blokkoló jegyzet nélkül) alaki hiba → javító forduló (mint a
+  motorban). A tanítás kapui (`assertRepairTeaching`: fedettség, megalapozottság, ív) már a szerzői állomás validátorában futnak.
+- **Forráshű idézet:** ahol a valódi forrásszöveg elérhető (szöveges fájl, kinyert PDF/DOCX), az 1. állomás az idézetet ezen méri, és
+  ezt menti átiratként; a modell átirata csak képnél / szkennelt PDF-nél számít.
+- **Lenyomat:** a különálló kinyerés lenyomata a fájlok egyértelmű (JSON) kódolásából készül (nincs fájlhatár-ütközés).
+- **Runbook:** a beszélgetéses kérések a futás szerepre szűrt runbookját (`workflowSkillPrompt(szerep)`) a kérés végén kapják
+  (állomásonként; a rendszerprompt — és így a gyorsítótár — változatlan).
+- **Leckejavítás:** a nem bank jellegű válasz csonkolása / JSON-hibája javító fordulót kap ugyanabban a beszélgetésben
+  (legfeljebb `SINGLE_RUN_FIX_ROUNDS`).

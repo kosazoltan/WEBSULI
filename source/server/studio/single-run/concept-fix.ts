@@ -13,7 +13,7 @@ import { buildLessonExperience } from "../experience-builder";
 import { classifyNotes } from "../lektor";
 import { buildConceptFixPrompt, buildLektorPrompt, checkConceptFixResult, parseLektorResponse, type LektorReport } from "../step-io";
 import { createLessonConversation, type LessonConversation } from "./conversation";
-import { conversationBankCall, runStation, singleRunSystemPrompt } from "./engine";
+import { conversationBankCall, runStation, singleRunSystemPrompt, withRoleRunbook } from "./engine";
 
 export type FixConceptResult = { ok: true; message: string } | { ok: false; error: string };
 export type ConceptFixSource = { subject: string; classroom: number; concepts: Array<{ id: string; localId: string; term: string; definition: string; quote: string; examWeight: ExamWeight }> };
@@ -32,22 +32,34 @@ export async function fixConceptInConversation(input: {
   const deps = { conversation, log: input.log };
   // A szűk szerző csak a tanítást szerkeszti; a bank a javított tanításból újraépül, és újra lektorálódik.
   const teaching = { ...original, experience: undefined };
-  const { assertRepairCandidate } = await import("../structured-improvement");
+  const { assertRepairCandidate, assertRepairTeaching } = await import("../structured-improvement");
   try {
     await workflowPhase("author");
     const prompt = buildConceptFixPrompt(teaching, source, conceptId);
-    const candidate = await runStation(deps, "fogalomjavítás", [{ type: "text", text: `FOGALOMJAVÍTÁS (${conceptId}).\n${prompt}\nVálaszolj kizárólag a teljes lecke JSON-jával.` }], (json) => {
+    const candidate = await runStation(deps, "fogalomjavítás", withRoleRunbook([{ type: "text", text: `FOGALOMJAVÍTÁS (${conceptId}).\n${prompt}\nVálaszolj kizárólag a teljes lecke JSON-jával.` }], "author"), (json) => {
       const parsed = lessonSchema.safeParse(json);
       if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
       const check = checkConceptFixResult(teaching, { ...parsed.data, experience: undefined }, conceptId);
-      return check.ok ? { ok: true, value: parsed.data } : { ok: false, problems: check.reasons.map((r) => `A javítás túllépett a célfogalmon: ${r}`) };
+      if (!check.ok) return { ok: false, problems: check.reasons.map((r) => `A javítás túllépett a célfogalmon: ${r}`) };
+      // Review #261: a tanítás kapui (fedettség, megalapozottság, ív) már itt — javító forduló jár rájuk, nem a bank után derülnek ki.
+      try { assertRepairTeaching(original, { ...parsed.data, experience: undefined }, source); }
+      catch (error) { return { ok: false, problems: [error instanceof Error ? error.message : String(error)] }; }
+      return { ok: true, value: parsed.data };
     });
     await workflowPhase("banks");
     candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: conversationBankCall(conversation), concurrency: 1 });
     assertRepairCandidate(original, candidate, source);
     await workflowPhase("lektor");
-    const report = await runStation(deps, "a javítás lektorálása", [{ type: "text", text: `LEKTORÁLÁS — a javított tanítás és a friss bankok, a forráshoz mérve.\n${buildLektorPrompt(candidate, source)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.` }],
-      (json) => { const r = parseLektorResponse(json); return r.ok ? { ok: true, value: r.report } : { ok: false, problems: [r.reason] }; });
+    const report = await runStation(deps, "a javítás lektorálása", withRoleRunbook([{ type: "text", text: `LEKTORÁLÁS — a javított tanítás és a friss bankok, a forráshoz mérve.\n${buildLektorPrompt(candidate, source)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.` }], "lektor"),
+      (json) => {
+        const r = parseLektorResponse(json);
+        if (!r.ok) return { ok: false, problems: [r.reason] };
+        // Review #261: megoldáseltérés blokkoló jegyzet nélkül önellentmondó jelentés (mint a gyártásban) — jelezze jegyzettel, vagy helyesbítsen.
+        const mismatches = (r.report.solutions ?? []).filter((sol) => !sol.match);
+        if (mismatches.length && !classifyNotes(r.report.notes).some((n) => n.blocking))
+          return { ok: false, problems: mismatches.map((m) => `${m.task}: a saját megoldásod (${m.own}) eltér a leckétől (${m.lesson}), de nincs hozzá blokkoló jegyzet — adj blokkoló jegyzetet a hibás blokk útvonalával, vagy helyesbítsd a match értékét, ha mégis egyezik.`) };
+        return { ok: true, value: r.report };
+      });
     if (classifyNotes(report.notes).some((n) => n.blocking)) return { ok: false, error: "A lektor még hibát talált, az eredeti lecke érintetlen." };
     await workflowPhase("gate");
     assertRepairCandidate(original, candidate, source);

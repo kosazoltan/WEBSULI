@@ -31,7 +31,8 @@ import type { JobPatch, PipelineStore } from "../pipeline-store";
 import { conceptIdResolver, exportQuizItemsForPublish } from "../quiz-export";
 import { parseModelJson } from "../run-step";
 import { roleSkillBlock } from "../role-skills";
-import { workflowPhase, workflowResource } from "../../workflows/engine";
+import { workflowPhase, workflowResource, workflowSkillPrompt } from "../../workflows/engine";
+import type { PromptRole } from "../../../shared/instruction-bundles/roles";
 import type { ExtractorFile } from "../extractor";
 import type { LessonConversation, TurnBlock } from "./conversation";
 
@@ -83,6 +84,21 @@ export function singleRunSystemPrompt(): string {
 const text = (t: string): TurnBlock => ({ type: "text", text: t });
 
 /**
+ * Review #261: a futás szerepre szűrt runbookja és tanult szabályai (`workflowSkillPrompt`) a KÉRÉS végén — a rendszerprompt (és így a
+ * gyorsítótár) változatlan. Workflow-kontextuson kívül üres (nincs blokk).
+ */
+export function withRoleRunbook(blocks: TurnBlock[], role: PromptRole): TurnBlock[] {
+  const runbook = workflowSkillPrompt(role).trim();
+  return runbook ? [...blocks, text(`A FUTÁS RUNBOOKJA ÉS TANULT SZABÁLYAI ehhez a szerephez (${role}):\n${runbook}`)] : blocks;
+}
+
+/** Review #261: a feltöltött fájl valódi szövege (szöveges fájl, kinyert PDF/DOCX) — ennél a modell átirata nem lehet a mérce. */
+function realSourceText(file: ExtractorFile): string | undefined {
+  if (file.extractedText?.trim()) return file.extractedText;
+  return file.kind === "text" && !file.content.startsWith("data:") && file.content.trim() ? file.content : undefined;
+}
+
+/**
  * Egy állomás: kérés → JSON → determinisztikus ellenőrzés → (hiba esetén) visszajelzés ugyanabban a beszélgetésben, legfeljebb
  * SINGLE_RUN_FIX_ROUNDS javító fordulóval. A végén vagy az elfogadott érték, vagy SingleRunError a pontos okokkal.
  */
@@ -115,7 +131,7 @@ export async function runStation<T>(deps: Pick<SingleRunDeps, "conversation" | "
  */
 export function conversationBankCall(conversation: LessonConversation) {
   return async (system: string, user: string): Promise<unknown> => {
-    const reply = await conversation.send([text(`5. ÁLLOMÁS — GYAKORLÓBANK (egy fejezet csomagja).\n${system}\n\n${user}`)]);
+    const reply = await conversation.send(withRoleRunbook([text(`5. ÁLLOMÁS — GYAKORLÓBANK (egy fejezet csomagja).\n${system}\n\n${user}`)], "bank"));
     if (reply.truncated) throw new RetryableBankCallError("A bankcsomag válasza elérte a kimeneti keretet és levágódott.");
     try { return parseModelJson(reply.text).json; }
     catch (error) { throw new RetryableBankCallError(`A bankcsomag válasza nem értelmezhető JSON: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
@@ -150,6 +166,7 @@ export async function readSourceStation(deps: Pick<SingleRunDeps, "conversation"
       ' "concepts": [{"id": string (rövid, egyedi), "term": string, "definition": string (a forrás alapján), "quote": string (SZÓ SZERINT az átiratból),',
       '  "type": string, "examWeight": "core" | "supporting" | "extra", "relatedIds": string[]}]}',
       "A forrás minden tanítandó fogalma szerepeljen; a quote betűre egyezzen az átirat egy részével.",
+      files.some((f) => realSourceText(f)) ? "A szöveges (vagy már kinyert szövegű) forrásfájlnál a program a VALÓDI szöveget használja mércének: az idézet abból legyen, betűre." : "",
       files.length > 1 ? [
         `TÖBB FORRÁSFÁJL (${files.map((f) => f.name).join(", ")}): adj meg fájlonkénti átiratot is: "fileTranscripts": [{"name": fájlnév, "text": a fájl betűhű átirata}]`,
         '(minden fájlhoz egyet), és minden fogalomnál "sourceFile": a fájl neve, amelyből az idézet származik — a quote ennek a fájlnak az átiratából, szó szerint.',
@@ -157,23 +174,26 @@ export async function readSourceStation(deps: Pick<SingleRunDeps, "conversation"
     ].filter(Boolean).join("\n")),
   ];
   const names = files.map((f) => f.name);
-  return runStation(deps, "forrás és tudásbank", request, (json) => {
+  const real = new Map(files.flatMap((f) => { const t = realSourceText(f); return t ? [[f.name, t] as const] : []; }));
+  return runStation(deps, "forrás és tudásbank", withRoleRunbook(request, "extract"), (json) => {
     const raw = json as Partial<Omit<SingleRunMap, "fileTranscripts">> & { concepts?: Array<Partial<SourceConcept>>; fileTranscripts?: unknown };
     const problems: string[] = [];
     if (!raw || typeof raw !== "object") return { ok: false, problems: ["A válasz nem objektum."] };
-    if (typeof raw.transcript !== "string" || raw.transcript.trim().length < 20) problems.push("Hiányzik a forrás átirata (transcript).");
+    if (real.size < names.length && (typeof raw.transcript !== "string" || raw.transcript.trim().length < 20)) problems.push("Hiányzik a forrás átirata (transcript).");
     if (typeof raw.subject !== "string" || !raw.subject.trim()) problems.push("Hiányzik a tantárgy (subject).");
     if (!Number.isInteger(raw.classroom) || (raw.classroom as number) < 0 || (raw.classroom as number) > 12) problems.push("A classroom 0 és 12 közötti egész legyen.");
     // Fájlonkénti átirat: egy fájlnál maga az átirat; több fájlnál a modell fájlonkénti átirata (minden fájlhoz pontosan egy).
+    // Review #261: ahol a valódi szöveg elérhető, az a mérce és a mentett átirat — a modell átirata csak képnél / szkennelt PDF-nél számít.
     const perFile: Record<string, string> = {};
     if (names.length === 1) { if (typeof raw.transcript === "string") perFile[names[0]] = raw.transcript; }
     else {
       for (const t of Array.isArray(raw.fileTranscripts) ? raw.fileTranscripts as Array<{ name?: unknown; text?: unknown }> : []) {
         if (typeof t?.name === "string" && names.includes(t.name) && typeof t.text === "string" && t.text.trim()) perFile[t.name] = t.text;
       }
-      const missing = names.filter((n) => !perFile[n]);
-      if (missing.length) problems.push(`Hiányzik a fájlonkénti átirat (fileTranscripts): ${missing.join(", ")}.`);
     }
+    for (const [name, t] of real) perFile[name] = t;
+    const missing = names.filter((n) => !perFile[n]);
+    if (names.length > 1 && missing.length) problems.push(`Hiányzik a fájlonkénti átirat (fileTranscripts): ${missing.join(", ")}.`);
     const concepts = Array.isArray(raw.concepts) ? raw.concepts : [];
     if (!concepts.length) problems.push("Nincs egyetlen fogalom sem (concepts).");
     const ids = new Set<string>();
@@ -200,7 +220,7 @@ export async function readSourceStation(deps: Pick<SingleRunDeps, "conversation"
       return fix ? { ...c, ...(fix.term !== undefined ? { term: fix.term } : {}), ...(fix.definition !== undefined ? { definition: fix.definition } : {}), correction: correctionReasonCode(fix) } : c;
     });
     for (const fix of corrections) deps.log?.(`[EGYFUTÁS] Forrás-helyesbítés ${fix.localId}: ${correctionAuditText(fix)}`);
-    return { ok: true, value: { title: (raw.title ?? "").trim() || "Névtelen tananyag", subject: raw.subject!.trim(), classroom: raw.classroom as number, transcript: raw.transcript!, fileTranscripts: perFile, concepts: corrected, corrections } };
+    return { ok: true, value: { title: (raw.title ?? "").trim() || "Névtelen tananyag", subject: raw.subject!.trim(), classroom: raw.classroom as number, transcript: names.length === 1 ? perFile[names[0]] : names.map((n) => perFile[n]).join("\n\n"), fileTranscripts: perFile, concepts: corrected, corrections } };
   });
 }
 
@@ -248,7 +268,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   // 2. Tananyagterv.
   await workflowPhase("pedagogue");
   phase("pedagogue", "A tananyagterv készül…");
-  const outline = await runStation(deps, "tananyagterv", [text(`2. ÁLLOMÁS — TANANYAGTERV.\n${buildPedagoguePrompt(promptMap, undefined, owner)}\nVálaszolj kizárólag a vázlat JSON-jával.`)], (json) => {
+  const outline = await runStation(deps, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${buildPedagoguePrompt(promptMap, undefined, owner)}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
     const fixed = autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline;
     const parsed = outlineSchema.safeParse(fixed);
     if (!parsed.success) return { ok: false, problems: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
@@ -262,7 +282,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   await workflowPhase("author");
   phase("author", "A tananyag készül…");
   const authorRequest = (notes: Parameters<typeof buildAuthorPrompt>[2]) =>
-    [text(`3. ÁLLOMÁS — TANANYAG.\n${buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)];
+    withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
   const validateLesson = (json: unknown): { ok: true; value: Lesson } | { ok: false; problems: string[] } => {
     const parsed = lessonSchema.safeParse({ ...(json as object), mapId, sourceOnly: true });
     if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
@@ -290,7 +310,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   await workflowPhase("animator");
   phase("animator", "Ábrák és gyakorlóbank készül…");
   try {
-    const reply = await conversation.send([text(`4. ÁLLOMÁS — ÁBRÁK.\n${buildAnimatorPrompt(lesson, promptMap)}\nVálaszolj kizárólag az ábrafolt JSON-jával.`)]);
+    const reply = await conversation.send(withRoleRunbook([text(`4. ÁLLOMÁS — ÁBRÁK.\n${buildAnimatorPrompt(lesson, promptMap)}\nVálaszolj kizárólag az ábrafolt JSON-jával.`)], "animator"));
     const patched = applyVisualPatch(lesson, parseModelJson(reply.text).json, concepts);
     const checked = patched ? lessonSchema.safeParse(patched.lesson) : null;
     if (patched && checked?.success && checkAnimatorResult(lesson, checked.data).ok) lesson = checked.data;
@@ -343,7 +363,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const warnings: string[] = [];
   for (let round = 0; round <= SINGLE_RUN_REVIEW_ROUNDS; round++) {
     phase("lektor", `Lektorálás (${round + 1}. kör)…`);
-    const report = await runStation(deps, "lektorálás", [text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, [], owner)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)],
+    const report = await runStation(deps, "lektorálás", withRoleRunbook([text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, [], owner)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)], "lektor"),
       (json) => {
         const r = parseLektorResponse(json);
         if (!r.ok) return { ok: false, problems: [r.reason] };

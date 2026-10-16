@@ -93,15 +93,25 @@ export async function generateStructuredImprovement(fileId: string, instruction?
  */
 export async function singleRunRepairCall(conversation?: import("./single-run/conversation").LessonConversation) {
   const { createLessonConversation } = await import("./single-run/conversation");
-  const { conversationBankCall, singleRunSystemPrompt } = await import("./single-run/engine");
+  const { conversationBankCall, singleRunSystemPrompt, withRoleRunbook, SINGLE_RUN_FIX_ROUNDS } = await import("./single-run/engine");
   const { parseModelJson } = await import("./run-step");
   const conv = conversation ?? createLessonConversation(singleRunSystemPrompt());
   const bank = conversationBankCall(conv);
   return async (step: RepairStep, system: string, user: string, role: PromptRole): Promise<unknown> => {
     if (role === "bank") return bank(system, user);
-    const reply = await conv.send([{ type: "text", text: `JAVÍTÁS — ${role} (${step}).\n${system}\n\n${user}\nVálaszolj kizárólag a kért JSON-nal.` }]);
-    if (reply.truncated) throw new Error("A válasz elérte a kimeneti keretet és levágódott.");
-    return parseModelJson(reply.text).json;
+    // Review #261: a csonkolt / nem JSON válasz javító fordulót kap ugyanabban a beszélgetésben (legfeljebb SINGLE_RUN_FIX_ROUNDS).
+    let blocks = withRoleRunbook([{ type: "text", text: `JAVÍTÁS — ${role} (${step}).\n${system}\n\n${user}\nVálaszolj kizárólag a kért JSON-nal.` }], role);
+    let problem = "";
+    for (let round = 0; round <= SINGLE_RUN_FIX_ROUNDS; round++) {
+      const reply = await conv.send(blocks);
+      if (reply.truncated) problem = "A válasz elérte a kimeneti keretet és levágódott.";
+      else {
+        try { return parseModelJson(reply.text).json; }
+        catch (error) { problem = `A válasz nem értelmezhető JSON: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`; }
+      }
+      blocks = [{ type: "text", text: `A PROGRAM ELLENŐRZÉSE (javítás — ${role}): ${problem}\nAdd vissza a TELJES kért JSON-t újra, rövidebben, ha kell.` }];
+    }
+    throw new Error(problem);
   };
 }
 

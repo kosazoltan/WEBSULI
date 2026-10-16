@@ -53,9 +53,8 @@ async function prepareFiles(files: ExtractorFile[]): Promise<ExtractorFile[]> {
 
 /** A különálló kinyerés tartalmi lenyomata: ugyanazok a fájlok ugyanazt a térképet adják vissza (nincs második modellhívás). */
 export function singleRunMapHash(files: ExtractorFile[], title?: string): string {
-  const hash = createHash("sha256").update("single-run-map-1\n").update(title?.trim() ?? "");
-  for (const f of files) hash.update(`\n${f.name}\n${f.kind}\n`).update(f.content);
-  return hash.digest("hex");
+  // Review #261: egyértelmű (JSON) kódolás — a fájlhatár nem csúszhat el (egy fájl tartalma nem utánozhat két fájlt).
+  return createHash("sha256").update(JSON.stringify(["single-run-map-2", title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content])])).digest("hex");
 }
 
 /**
