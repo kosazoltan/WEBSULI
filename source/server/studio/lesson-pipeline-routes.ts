@@ -35,6 +35,7 @@ import { ORPHAN_JOB_ERROR, sweepDecision, type SweepRow } from "./orphan-jobs";
 import { executeWorkflow, workflowPhase, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
+import { telemetryOf } from "./single-run/telemetry";
 import type { ExtractorFile } from "./extractor";
 
 /*
@@ -639,6 +640,8 @@ lessonPipelineRouter.get("/jobs/:id", async (req: Request, res: Response) => {
       qualityNotes: Array.isArray(output?.qualityNotes) ? output.qualityNotes : [],
       // U3 (C14): a tanár kérésének nem igazolható pontjai — a panel jelzi, nem néma kihagyás.
       gaps: Array.isArray(output?.gaps) ? output.gaps : [],
+      // J3: az egyfutásos gyártás telemetriája (állomásonként forduló, token, idő; friss hívások; kapuk) — régi jobnál null.
+      telemetry: telemetryOf(output),
     },
   });
 });

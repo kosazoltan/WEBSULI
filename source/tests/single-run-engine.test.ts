@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { LessonConversation, type ModelClient, type Turn } from "../server/studio/single-run/conversation";
-import { runSingleLesson, SingleRunError, singleRunSystemPrompt, type SingleRunDeps, type SingleRunMap } from "../server/studio/single-run/engine";
+import { freshSystemPrompt, runSingleLesson, SingleRunError, singleRunSystemPrompt, type SingleRunDeps, type SingleRunMap } from "../server/studio/single-run/engine";
+import type { RunTelemetry } from "../server/studio/single-run/telemetry";
 import type { PipelineStore, JobPatch } from "../server/studio/pipeline-store";
 import type { MapConcept } from "../server/studio/coverage";
 
@@ -39,7 +40,7 @@ function scriptedClient(overrides: { outline?: Array<unknown>; lektor?: Array<un
       else if (station === "5") json = structuredClone(fixture.experience);
       else if (station === "6" || station === "lektorálás") json = lektors.length ? lektors.shift() : { solutions: [], notes: [], reviewedAll: true };
       else json = {};
-      return { text: JSON.stringify(json), model: "claude-opus-5-5", truncated: false };
+      return { text: JSON.stringify(json), model: "claude-opus-5-5", truncated: false, usage: { input: 1000, cachedInput: 600, output: 100 } };
     },
   };
 }
@@ -51,7 +52,7 @@ function memoryStore() {
   // Mint az éles adattár: a mentett térkép fogalmai töltődnek vissza (mentés nélkül a statikus fixtúra-fogalmak).
   let saved: MapConcept[] | null = null;
   const store = {
-    async loadMap(id: string) { return id === "m1" ? { meta: { id: "m1", title: "Terület", subject: fixture.subject, classroom: fixture.classroom }, concepts: saved ?? concepts } : null; },
+    async loadMap(id: string) { return id === "m1" ? { meta: { id: "m1", title: "Terület", subject: fixture.subject, classroom: fixture.classroom, sourceText: TRANSCRIPT }, concepts: saved ?? concepts } : null; },
     async createJob() { return "job1"; },
     async saveStep(_id: string, patch: JobPatch) { steps.push(structuredClone(patch)); },
     async upsertLesson(_lessonId: string | null, _mapId: string, json: unknown) { lessons.set("lesson1", json); return "lesson1"; },
@@ -64,6 +65,8 @@ function memoryStore() {
 function deps(client: ModelClient, mem: ReturnType<typeof memoryStore>, maps: SingleRunMap[] = []): SingleRunDeps {
   return {
     conversation: new LessonConversation(singleRunSystemPrompt(), client, null),
+    // J2: a friss beszélgetés ugyanazzal a (forgatókönyves) modellel, előzmény nélkül.
+    fresh: (system) => new LessonConversation(system, client, null),
     store: mem.store,
     async saveMap(map) {
       maps.push(map);
@@ -82,13 +85,13 @@ test("teljes futás egy beszélgetésben: forrás → … → közzététel, egy
   assert.equal(mem.published(), 1, "egyszer publikál");
   assert.equal(result.model, "claude-opus-5-5");
   assert.equal(maps[0].concepts[0].verbatimOk, true, "az idézet az átiraton mérve");
-  // A pipeline sorrendje: 1 → 2 → 3 → 4 → 5 (fejezetenként) → 6.
-  const order = client.calls.filter((c, i, a) => i === 0 || c !== a[i - 1]);
+  // A pipeline sorrendje: 1 → 2 → 3 → 4 → 5 (fejezetenként) → 6 (a „?” a kulcsmentes ellenőrzések friss hívása).
+  const order = client.calls.filter((c) => c !== "?").filter((c, i, a) => i === 0 || c !== a[i - 1]);
   assert.deepEqual(order, ["1", "2", "3", "4", "5", "6"], JSON.stringify(client.calls));
   const stepsSeen = mem.steps.map((s) => s.step).filter((s, i, a) => s && s !== a[i - 1]);
   assert.deepEqual(stepsSeen, ["pedagogue", "author", "animator", "lektor", "done"]);
   const last = mem.steps.at(-1)!.output as { singleRun: { conversation: { turns: unknown[]; model: string } } };
-  assert.ok(last.singleRun.conversation.turns.length >= 12, "a teljes beszélgetés mentve (folytatáshoz)");
+  assert.equal(last.singleRun.conversation.turns.length, 8, "a szerzői beszélgetés (1–4. állomás) mentve (folytatáshoz)");
 });
 
 test("a determinisztikus ellenőrzés ugyanabban a beszélgetésben megy vissza, és a modell ott javít", async () => {
@@ -244,7 +247,7 @@ test("review #262: a válaszkulcs-teszt és a kvíz vak előszűrője FRISS, el�
     return { text: typeof json === "string" ? json : JSON.stringify(json), model: "claude-opus-5-5", truncated: false };
   } };
   const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" },
-    { ...deps(main, memoryStore()), log: (m) => logs.push(m), checkConversation: () => new LessonConversation("ELLENŐR", checker, null) });
+    { ...deps(main, memoryStore()), log: (m) => logs.push(m), fresh: (system) => new LessonConversation(system, system === freshSystemPrompt("check") ? checker : main, null) });
   assert.equal(result.htmlFileId, "html1");
   assert.ok(labels.includes("answer-key"), "a válaszkulcs-teszt lefut (a fixtúrában nyílt feladatok vannak)");
   assert.ok(labels.includes("quiz-blind"), "a kvíz vak előszűrője lefut: " + JSON.stringify(labels));
@@ -315,4 +318,50 @@ test("a rendszerprompt ép: a pontozó szabálya egy darabban, szó szerint; nin
   assert.ok(system.includes(OPEN_ANSWER_RULES_HU), "a pontozó szabálya szó szerint, egy darabban");
   const singleCharLines = system.split("\n").filter((l) => l.trim().length === 1);
   assert.deepEqual(singleCharLines, [], "nincs betűnként szétszórt szöveg a rendszerpromptban");
+});
+
+// J2 (átvilágítás L2/L3): a bank és a lektor friss, célzott beszélgetésben; a szerzői beszélgetés nem nő tőlük.
+test("J2: a bankcsomag és a lektor minden köre FRISS beszélgetésben fut; a lektor a forrás átiratát kapja; a szerzői beszélgetésben nincs 5./6. állomás", async () => {
+  const fresh: Array<{ system: string; turns: number; text: string }> = [];
+  const main = scriptedClient({ lektor: [{ solutions: [], notes: [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tényhiba a tanításban." }], reviewedAll: true }] });
+  const spy: ModelClient = { model: main.model, async complete(system, turns) {
+    if (system !== singleRunSystemPrompt()) fresh.push({ system, turns: turns.length, text: lastUserText(turns) });
+    return main.complete(system, turns);
+  } };
+  const mem = memoryStore();
+  const d = deps(spy, mem);
+  const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, d);
+  assert.equal(result.htmlFileId, "html1");
+  const bank = fresh.filter((f) => /5\. ÁLLOMÁS/.test(f.text));
+  const lektor = fresh.filter((f) => /6\. ÁLLOMÁS/.test(f.text));
+  assert.ok(bank.length >= 1 && bank.every((f) => f.turns === 1 && f.system === freshSystemPrompt("bank")), "minden bankcsomag előzmény nélkül");
+  assert.equal(lektor.length, 2, "két lektori kör (blokkoló → javítás → újra)");
+  assert.ok(lektor.every((f) => f.turns === 1 && f.system === freshSystemPrompt("lektor")), "minden lektori kör előzmény nélkül");
+  assert.ok(lektor.every((f) => f.text.includes(`A FORRÁS ÁTIRATA (adat, a mérce):\n${TRANSCRIPT}`)), "a lektor a forrás átiratát kapja");
+  assert.match(lektor[1].text, /previousBlockers: .*Tényhiba a tanításban/, "a második kör az előző kör blokkolóit kapja");
+  const saved = mem.steps.at(-1)!.output as { singleRun: { conversation: { turns: Array<{ role: string; blocks: Array<{ type: string; text?: string }> }> } } };
+  const mainText = saved.singleRun.conversation.turns.flatMap((t) => t.blocks.map((b) => b.text ?? "")).join("\n");
+  assert.doesNotMatch(mainText, /5\. ÁLLOMÁS|6\. ÁLLOMÁS/, "a bank és a lektor nem a szerzői beszélgetésben fut");
+  assert.match(mainText, /3\. ÁLLOMÁS[\s\S]*A PROGRAM ELLENŐRZÉSE|3\. ÁLLOMÁS/, "a lektori tanítás-javítás a szerzői beszélgetésben");
+  assert.ok(!singleRunSystemPrompt().includes("=== SZAKASZ-SKILL: bank") && freshSystemPrompt("bank").includes("=== SZAKASZ-SKILL: bank"), "a bank skillje a bank friss promptjában, a szerzőiben nem");
+  assert.ok(!singleRunSystemPrompt().includes("=== SZAKASZ-SKILL: lektor") && freshSystemPrompt("lektor").includes("=== SZAKASZ-SKILL: lektor"), "a lektor skillje a lektor friss promptjában");
+});
+
+// J3: futásonkénti telemetria a jobon.
+test("J3: a job telemetriája állomásonként fordulót, javító fordulót, tokent és időt ad; a friss hívások és a kapuk külön", async () => {
+  const client = scriptedClient({ outline: [{ sections: [] }] });
+  const mem = memoryStore();
+  await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, mem));
+  const t = (mem.steps.at(-1)!.output as { telemetry: RunTelemetry }).telemetry;
+  assert.equal(t.version, 1);
+  assert.equal(t.model, "claude-opus-5-5");
+  assert.equal(t.fallback, false);
+  assert.deepEqual(t.stations["tananyagterv"], { turns: 2, fixTurns: 1, input: 2000, cached: 1200, output: 200, ms: t.stations["tananyagterv"].ms });
+  for (const name of ["forrás és tudásbank", "tananyag", "ábrák", "gyakorlóbank", "lektorálás", "ellenőrzés"]) assert.ok(t.stations[name]?.turns >= 1, `${name}: ${JSON.stringify(t.stations)}`);
+  const freshTurns = t.stations["gyakorlóbank"].turns + t.stations["lektorálás"].turns + t.stations["ellenőrzés"].turns;
+  assert.equal(t.fresh.calls, freshTurns, "a friss hívások: bank + lektor + ellenőrzés");
+  assert.equal(t.fresh.input, freshTurns * 1000);
+  assert.equal(t.gates.lengthOverBudget, false);
+  assert.ok(t.totalMs >= 0);
+  assert.ok(mem.steps.every((s) => (s.output as { telemetry?: unknown } | undefined)?.telemetry), "minden mentéskor a jobon");
 });

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { LessonConversation, type ModelClient, type Turn } from "../server/studio/single-run/conversation";
-import { singleRunSystemPrompt } from "../server/studio/single-run/engine";
+import { freshSystemPrompt, singleRunSystemPrompt } from "../server/studio/single-run/engine";
 import { fixConceptInConversation, type ConceptFixSource } from "../server/studio/single-run/concept-fix";
 import { singleRunRepairCall } from "../server/studio/structured-improvement";
 
@@ -38,7 +38,7 @@ test("fogalomjavítás egy beszélgetésben: a célfogalmon túllépő javítás
   assert.equal(target.kind, "recap", "a fixtúra nem célzott blokkja az összefoglaló");
   target.bullets = ["Átírt, nem célzott összefoglaló."];
   const fake = client({ firstFix: overreach });
-  const result = await fixConceptInConversation({ original: fixture, source, conceptId: "area", conversation: new LessonConversation(singleRunSystemPrompt(), fake, null) });
+  const result = await fixConceptInConversation({ original: fixture, source, conceptId: "area", conversation: new LessonConversation(singleRunSystemPrompt(), fake, null), fresh: (s) => new LessonConversation(s, fake, null) });
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.deepEqual(fake.calls.filter((c, i, a) => c !== a[i - 1]), ["fix", "bank", "lektor"]);
   assert.equal(fake.calls.filter((c) => c === "fix").length, 2, "a túllépő javításra javító forduló jött");
@@ -47,23 +47,25 @@ test("fogalomjavítás egy beszélgetésben: a célfogalmon túllépő javítás
 test("fogalomjavítás: blokkoló lektori jegyzetnél nincs elfogadás (az eredeti érintetlen)", async () => {
   const note = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tényhiba." };
   const fake = client({ lektor: { solutions: [], notes: [note], reviewedAll: true } });
-  const result = await fixConceptInConversation({ original: fixture, source, conceptId: "area", conversation: new LessonConversation(singleRunSystemPrompt(), fake, null) });
+  const result = await fixConceptInConversation({ original: fixture, source, conceptId: "area", conversation: new LessonConversation(singleRunSystemPrompt(), fake, null), fresh: (s) => new LessonConversation(s, fake, null) });
   assert.deepEqual(result, { ok: false, error: "A lektor még hibát talált, az eredeti lecke érintetlen." });
 });
 
-test("leckejavítás: minden szerep ugyanabba a beszélgetésbe megy; a hibás bankválasz a banképítő javító körébe", async () => {
-  const seen: string[] = [];
-  const fake: ModelClient = { model: "claude-opus-5-5", async complete(_s, turns) {
-    const t = lastText(turns); seen.push(t.slice(0, 40));
-    return { text: /5\. ÁLLOMÁS/.test(t) ? "nem JSON" : "{\"ok\":true}", model: "claude-opus-5-5", truncated: false };
+// J2 (dokumentált spec-változás, 2026-10-16-egyfutas-atvilagitas.md): a szerzői szerepek egy beszélgetésben, a lektor és a bank friss beszélgetésben.
+test("leckejavítás: a szerzői szerep a beszélgetésben, a lektor és a bank FRISS beszélgetésben; a hibás bankválasz a banképítő javító körébe", async () => {
+  const fresh: Array<{ system: string; turns: number }> = [];
+  const fake: ModelClient = { model: "claude-opus-5-5", async complete(system, turns) {
+    if (system !== "R") fresh.push({ system, turns: turns.length });
+    return { text: /5\. ÁLLOMÁS/.test(lastText(turns)) ? "nem JSON" : "{\"ok\":true}", model: "claude-opus-5-5", truncated: false };
   } };
   const conversation = new LessonConversation("R", fake, null);
-  const call = await singleRunRepairCall(conversation);
+  const call = await singleRunRepairCall(conversation, (s) => new LessonConversation(s, fake, null));
   assert.ok(call);
   assert.deepEqual(await call("author", "SZERZŐ", "kérés", "repair"), { ok: true });
   assert.deepEqual(await call("lektor", "LEKTOR", "kérés", "lektor"), { ok: true });
   await assert.rejects(call("author", "BANK", "kérés", "bank"), (e: unknown) => (e as Error).name === "RetryableBankCallError");
-  assert.equal(conversation.state().turns.length, 6, "három forduló, egyetlen beszélgetésben");
+  assert.equal(conversation.state().turns.length, 2, "csak a szerzői forduló a beszélgetésben");
+  assert.deepEqual(fresh.map((f) => [f.system === freshSystemPrompt("lektor") ? "lektor" : f.system === freshSystemPrompt("bank") ? "bank" : "?", f.turns]), [["lektor", 1], ["bank", 1]]);
 });
 
 // Review #261
@@ -76,7 +78,7 @@ test("review #261: a fogalomjavítás önellentmondó lektori jelentése javít�
     if (/^LEKTORÁLÁS|A PROGRAM ELLENŐRZÉSE \(a javítás lektorálása\)/.test(t)) { base.calls.push("lektor"); return { text: JSON.stringify(lektors.shift()), model: "claude-opus-5-5", truncated: false }; }
     return base.complete(system, turns);
   } };
-  const result = await fixConceptInConversation({ original: fixture, source, conceptId: "area", conversation: new LessonConversation(singleRunSystemPrompt(), fake, null) });
+  const result = await fixConceptInConversation({ original: fixture, source, conceptId: "area", conversation: new LessonConversation(singleRunSystemPrompt(), fake, null), fresh: (s) => new LessonConversation(s, fake, null) });
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(base.calls.filter((c) => c === "lektor").length, 2, "az önellentmondó jelentésre javító forduló jött");
 });
