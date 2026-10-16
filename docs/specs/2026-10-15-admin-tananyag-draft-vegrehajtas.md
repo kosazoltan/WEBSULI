@@ -38,3 +38,6 @@ Terv: `docs/specs/2026-10-15-admin-tananyag-draft.md`.
 
 ## Review #251
 - Ha a tervező következő foka `remanufacture` (a resume végpont ÚJ jobot indít), a kártyán „Újragyártás ugyanabból a forrásból” gomb van, megerősítő lépéssel; „Folytatás” felirat nem jelenik meg.
+
+## Review #253
+- Az `ownerDrafts` a job legutóbbi workflow-pillanatképét (látogatások, végrehajtásszám) LATERAL JOIN-nal, ugyanabban a lekérdezésben tölti be (közös `parseWorkflowVisits`): 50 piszkozatnál sincs tételenkénti DB-körút.

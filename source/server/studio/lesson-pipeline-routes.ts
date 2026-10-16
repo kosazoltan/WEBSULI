@@ -483,7 +483,11 @@ function jobStopInfo(job: { output: unknown; publishedAt: Date | null; step: str
 /** A futás workflow-látogatásai és végrehajtásszáma (csak olvasás; workflow-napló nélküli futásnál üres / 0). */
 async function workflowVisitsOf(runId: string): Promise<{ visits: Array<{ step: string; state: string; error?: string }>; executions: number }> {
   const result = await db.execute(sql`SELECT snapshot->'visits' AS visits, snapshot->'executions' AS executions FROM lesson_workflow_runs WHERE id = ${runId} LIMIT 1`);
-  const row = result.rows[0] as { visits?: unknown; executions?: unknown } | undefined;
+  return parseWorkflowVisits(result.rows[0] as { visits?: unknown; executions?: unknown } | undefined);
+}
+
+/** A workflow-pillanatkép látogatásai és végrehajtásszáma — egy értelmezés a futásnézetnek és a kötegelt piszkozatlistának. */
+function parseWorkflowVisits(row: { visits?: unknown; executions?: unknown } | undefined): { visits: Array<{ step: string; state: string; error?: string }>; executions: number } {
   const visits = Array.isArray(row?.visits) ? row!.visits.filter((v): v is { step: string; state: string; error?: string } => !!v && typeof v.step === "string" && typeof v.state === "string") : [];
   return { visits, executions: typeof row?.executions === "number" ? row.executions : 0 };
 }
@@ -505,8 +509,13 @@ export type OwnerDraft = { jobId: string; title: string; subject: string; classr
  */
 export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
   const { rows } = await db.execute(sql`SELECT j.id, j.step, j.status, j.error, j.lesson_id, j.output, l.published_at, coalesce(j.finished_at, j.created_at) AS updated_at,
-      m.title AS map_title, m.subject, m.classroom
+      m.title AS map_title, m.subject, m.classroom, wr.visits AS wf_visits, wr.executions AS wf_executions
     FROM studio_jobs j JOIN lessons l ON l.id = j.lesson_id JOIN knowledge_maps m ON m.id = j.map_id
+    -- Review #253 (P2): a job legutóbbi workflow-pillanatképe ugyanebben a lekérdezésben (nincs tételenkénti 2 körút).
+    LEFT JOIN LATERAL (
+      SELECT w.snapshot->'visits' AS visits, w.snapshot->'executions' AS executions FROM lesson_workflow_runs w
+      WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
+    ) wr ON true
     WHERE j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok'
       AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing')
       AND EXISTS (SELECT 1 FROM lesson_workflow_runs w WHERE (w.id = j.id OR w.snapshot->>'resourceId' = j.id) AND w.owner_id = ${owner})
@@ -516,7 +525,7 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
     const job = { output: raw.output, publishedAt: null, step: String(raw.step), status: String(raw.status), error: (raw.error as string | null) ?? null,
       lessonId: (raw.lesson_id as string | null) ?? null };
     const running = job.status !== "error" && job.step !== "error";
-    const { visits, executions } = await workflowVisitsOfJob(String(raw.id));
+    const { visits, executions } = parseWorkflowVisits({ visits: raw.wf_visits, executions: raw.wf_executions });
     const lessonTitle = (raw.output as { lesson?: { title?: unknown } } | null)?.lesson?.title;
     out.push({
       jobId: String(raw.id), title: typeof lessonTitle === "string" && lessonTitle.trim() ? lessonTitle : String(raw.map_title ?? "Névtelen tananyag"),

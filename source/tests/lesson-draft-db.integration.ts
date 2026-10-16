@@ -115,6 +115,8 @@ test("admin „Tananyag draft” (A1/A2): a saját megállt és futó piszkozat 
     await mapWithJob({ owner: "draft-lister", output: { lesson: {}, recoveryState: "superseded" } });
     await mapWithJob({ owner: "draft-lister", output: { title: "nincs lecke" } });
     await mapWithJob({ owner: "draft-other" });
+    // Review #253: a workflow-pillanatkép a kötegelt lekérdezésből jön (megállási lépés + végrehajtásszám).
+    await dbPool.query(`UPDATE lesson_workflow_runs SET snapshot = '{"visits":[{"step":"author","state":"done"},{"step":"gate","state":"error"}],"executions":1}'::jsonb WHERE id=$1`, [stopped.id]);
     const list = await ownerDrafts("draft-lister");
     assert.deepEqual(list.map((d) => d.jobId).sort(), [stopped.id, running.id].sort());
     const s = list.find((d) => d.jobId === stopped.id)!;
@@ -122,6 +124,7 @@ test("admin „Tananyag draft” (A1/A2): a saját megállt és futó piszkozat 
     assert.deepEqual(s.draft, { teachingSections: 3, savedBankPackets: 2 });
     assert.equal(s.running, false);
     assert.equal(typeof s.resumable, "boolean");
+    assert.equal(s.stoppedAt, "gate", "a megállási lépés a workflow-pillanatképből");
     const r = list.find((d) => d.jobId === running.id)!;
     assert.equal(r.running, true);
     assert.equal(r.resumable, false, "futó jobnál nincs folytatás gomb");
