@@ -292,3 +292,17 @@ háromfázis-kapu) zárul.
   `jobStopInfo.resumable` igaz, ha van mentett tanítás és nincs közzétéve); régi jobnál marad az újragyártás.
 - Szókeret: túllépésnél egy rövidítő javító forduló a fő beszélgetésben; ha az eredmény érvényes és rövidebb, az megy tovább, különben
   az eredeti marad a jelzéssel.
+
+### Állapot (2026-10-16)
+- J1 `40e7acb`, J2+J3 `aa8a5f4`, J4 `6bdc60c`, J5 `3463b03`.
+- Megvalósítási pontosítások:
+  - J2: a szerzői rendszerprompt csak a terv-, a szerző- és az ábra-skillt hordozza; a bank és a lektor a saját friss promptját kapja
+    (`freshSystemPrompt`). A lektor minden kör előtt friss beszélgetést kap, az előző kör blokkolóival.
+  - J3: a telemetria típusa és a felület nézete a `shared/run-telemetry.ts`-ben van.
+  - J5: a folytatás pontját a mentett kimenet adja (`resumePointOf`); a foglalás atomikus (`resumeSingleRun`). Ha a motor el sem
+    indul, a job visszaáll hibás állapotba.
+- Ellenőrzés:
+  - unit: 2006/2006;
+  - DB: 31/31;
+  - célzott Playwright (workers=1): 18/18;
+  - tsc, check:test, lint: tiszta.
