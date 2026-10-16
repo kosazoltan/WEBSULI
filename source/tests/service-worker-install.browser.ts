@@ -31,9 +31,13 @@ async function updateWorker(page: Page): Promise<string> {
   return page.evaluate(async () => {
     const reg = await navigator.serviceWorker.getRegistration();
     if (!reg) throw new Error("no registration");
-    await reg.update();
-    const worker = reg.installing ?? reg.waiting;
-    if (!worker) throw new Error("update() did not produce a new worker");
+    // Review #207: az új workert az `updatefound` eseményből vesszük, amelyet az update() ELŐTT kezdünk figyelni — a gyorsan aktiválódó
+    // worker így sem csúszik ki az installing/waiting résekből (téves bukás).
+    const worker = await new Promise<ServiceWorker>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("update() did not produce a new worker")), 15_000);
+      reg.addEventListener("updatefound", () => { const w = reg.installing ?? reg.waiting; if (w) { clearTimeout(timer); resolve(w); } }, { once: true });
+      reg.update().catch((e) => { clearTimeout(timer); reject(e); });
+    });
     return new Promise<string>((resolve) => {
       const check = () => {
         if (worker.state === "activated" || worker.state === "redundant") resolve(worker.state);
@@ -69,8 +73,9 @@ test("failed install keeps the previous cache and offline fallback intact", asyn
 
   expect(await updateWorker(page)).toBe("redundant");
 
+  // Review #207: pontosan a régi cache marad — a sikertelen jelölt cache-e nem halmozódik.
   const keys = await page.evaluate(() => caches.keys());
-  expect(keys).toContain(oldCache);
+  expect(keys).toEqual([oldCache]);
   expect(await cacheHasOffline(page, oldCache)).toBe(true);
   const activeScript = await page.evaluate(async () => {
     const reg = await navigator.serviceWorker.getRegistration();
