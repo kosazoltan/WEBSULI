@@ -46,6 +46,7 @@ import {
   type OneStepRun,
 } from "./one-step-progress";
 import { ORPHAN_JOB_ERROR, sweepDecision, type SweepRow } from "./orphan-jobs";
+import { driveRemadeWith } from "./remade-drive";
 import { UNCERTAIN_MARK } from "./ocr";
 import { quoteTouchesUncertain } from "../../shared/transcript-marks";
 import { autonomousDecision } from "./autonomous";
@@ -1202,25 +1203,20 @@ async function autoApproveOutline(jobId: string, onRetry?: (detail: string) => v
 /**
  * docs/specs/2026-10-16-ujragyartas-jovahagyas.md (J1): az újragyártott (vagy tervre váró) job végigvitele a lízinges `driveTracked`-del —
  * ha a terv jóváhagyására vár, a lízing alatt gépileg jóváhagy és folytat (mint a `/approve-outline` út). Mért hiba: e nélkül 3 újragyártás
- * `author/ok`-ban állt meg, láthatatlanul.
+ * `author/ok`-ban állt meg, láthatatlanul. Review #256 (P1): a `driveTracked` a várakozást (`WorkflowWaiting`) ELNYELI és normálisan tér
+ * vissza — ezért a ciklus minden kör után a job TÉNYLEGES állapotából dönt, nem a kivételből.
  */
 export async function driveRemade(jobId: string, owner: string, start = true): Promise<void> {
-  let first = start;
-  for (let i = 0; i < MAX_CHAIN; i++) {
-    try {
-      await driveTracked(jobId, owner, first, first ? undefined : async () => {
-        const result = await autoApproveOutline(jobId);
-        if (result.outcome === "failed") throw new WorkflowWaiting(result.reason, true);
-      });
-      return;
-    } catch (error) {
-      if (!(error instanceof WorkflowWaiting)) throw error;
-      first = false;
+  const outcome = await driveRemadeWith({
+    drive: (first, beforeDrive) => driveTracked(jobId, owner, first, beforeDrive),
+    awaitingApproval: async () => {
       const [job] = await db.select({ step: studioJobs.step, status: studioJobs.status, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId)).limit(1);
-      // Csak a terv-jóváhagyásnál lépünk tovább; más várakozás (pl. forrásellenőrzés) emberi döntés marad.
-      if (!job || decideOneStepAction({ step: job.step, status: job.status, output: (job.output ?? null) as Record<string, unknown> | null }) !== "approve") throw error;
-    }
-  }
+      return !!job && decideOneStepAction({ step: job.step, status: job.status, output: (job.output ?? null) as Record<string, unknown> | null }) === "approve";
+    },
+    approve: () => autoApproveOutline(jobId),
+    maxRounds: MAX_CHAIN,
+  }, start);
+  if (outcome !== "done") logger.warn(`[STUDIO] Az újragyártás megállt (${jobId}): ${outcome === "approval-failed" ? "a terv gépi jóváhagyása nem sikerült" : "a lépés-határ elfogyott"}.`);
 }
 
 /** POST /api/studio/lessons/from-map/:mapId — start a new lesson pipeline. */

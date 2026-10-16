@@ -32,3 +32,9 @@ Terv: `docs/specs/2026-10-16-ujragyartas-jovahagyas.md`.
   - a `continue` jogosultsági feltétele.
 - Egység: az `autoApproveOutline` döntése mockolt approve-eredményekkel. Ha nehezen izolálható, a `driveOneStep` meglévő tesztjei maradnak zöldek.
 - Böngésző: a tervre váró tétel jelvénye és gombja, egy kérés.
+
+## Review #256 (P1)
+- A `driveTracked` a várakozást (`WorkflowWaiting`) elnyeli, és normálisan tér vissza. Ezért a `driveRemade` minden kör után a job TÉNYLEGES állapotából dönt (`awaitingApproval`), nem a kivételből.
+- A tiszta ciklus külön modulba került (`server/studio/remade-drive.ts`, `driveRemadeWith`), egységteszttel (`tests/remade-drive.test.ts`). A teszt hamis `drive`-ja a valódihoz hasonlóan elnyeli a várakozást.
+- Ellenpróba: a régi „visszatérés után kilép” logikával 4 teszt bukik.
+- Sikertelen gépi jóváhagyásnál a ciklus megáll (nem pörög a lépés-határig).
