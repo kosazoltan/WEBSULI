@@ -80,3 +80,26 @@ háromfázis-kapu) zárul.
   - `grep` a régi modellnevekre: 0 találat a tananyaggyártásban;
   - teljes tesztkészlet zöld;
   - élő futás.
+
+## S3 — végrehajtás közbeni pontosítások (dokumentált)
+- **Kapcsoló:** `server/studio/single-run/switch.ts` (`STUDIO_SINGLE_RUN=0` = vészfék, alapból egyfutás).
+- **Feltöltés és webes út:** a `runOneStepCore` elején `runSingleUpload` (`single-run/live.ts`).
+  - A forrás modell nélkül készül elő: docx → szöveg, szöveges PDF → kinyert szöveg; a kép és a szkennelt PDF natív blokkként megy.
+  - A térkép jóváhagyottként kerül mentésre, a szó szerint igazolt fogalmak „kept” állapotban; a bemeneti lenyomat gyártásonként egyedi.
+- **Újragyártás, folytatás, kifejezett resume** (régi és új jobra egyaránt):
+  - új egyfutásos gyártás a térkép mentett forrásátiratából (`remakeAsSingleRun` → `startOneStepRun`);
+  - a régi job atomikusan „újragyártott” lesz; futó vagy kész jobot nem fog el.
+  - A beszélgetés közepéről való folytatás (mentett átiratból) külön szelet: az S3 után következik.
+- **Automatikus továbbvitel:** egyfutásos módban a hibás jobok automatikus, fizetős vezérlője (`sweepFailedStudioJobs`) nem fut.
+  Az árvajob-söprés a régi lépésgép jobját nem folytatja, hanem lezárja; a piszkozat megmarad, a döntés a felhasználóé.
+- **Hibakezelés:** a motor bármely állomásának megállásakor a job `error` állapotba kerül a pontos okkal, és a mentett beszélgetés (piszkozat)
+  megmarad.
+
+## S3 — élő próba (2026-10-16, eldobható helyi Postgres, valódi Opus 5.5)
+- **Forrás:** rövid szöveges forrás („A víz körforgása”).
+- **Eredmény:** **közzétett lecke**, 3 fejezet, 59 feladat, 98 kvízkérdés, `html_files` sor; idő: 705 s.
+- **8 forduló, egyetlen beszélgetésben.** Javító forduló és sikertelen bankkísérlet nem kellett; a lektor első köre blokkoló nélkül zárt.
+- **Token:**
+  - bemenet 578 473, ebből **403 669 gyorsítótárból** (70%), friss bemenet 174 804;
+  - kimenet 85 371.
+- Más modell nem hívódott.

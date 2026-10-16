@@ -22,8 +22,9 @@ export type TurnBlock = { type: "text"; text: string } | { type: "source"; file:
 export type Turn = { role: "user" | "assistant"; blocks: TurnBlock[] };
 /** Kép / PDF natív tartalomblokk (data URL); minden más forrás már kinyert szöveg — szövegként megy. */
 const isBinarySource = (file: ExtractorFile) => /^data:[^;,]+;base64,/.test(file.content) && (file.kind === "image" || file.kind === "pdf");
+// A determinisztikusan kinyert szöveg (docx / szöveges PDF) elsőbbséget élvez a nyers tartalommal szemben.
 const sourceAsText = (file: ExtractorFile) => `FORRÁS (${file.name}):
-${file.content}`;
+${file.extractedText ?? file.content}`;
 
 export type ModelReply = { text: string; model: string; truncated: boolean; usage?: { input: number; output: number; cachedInput?: number } };
 
