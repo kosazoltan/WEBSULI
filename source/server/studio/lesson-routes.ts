@@ -23,6 +23,7 @@ import {
 } from "../rewards/store";
 import { computeCoupon } from "../../shared/reward-policy";
 import { practiceRouter } from "../rewards/practice-router";
+import { reviewRouter } from "../rewards/review-router";
 
 /**
  * Public read side of the Lesson Studio (LS-2).
@@ -36,6 +37,8 @@ import { practiceRouter } from "../rewards/practice-router";
 
 export const lessonPublicRouter = express.Router();
 lessonPublicRouter.use("/practice", practiceRouter);
+// Websuli Design §7: memóriakártya-ismétlés (docs/specs/2026-10-16-websuli-ismetles.md).
+lessonPublicRouter.use("/review", reviewRouter);
 
 /** GET /api/lessons/by-file/:htmlFileId — the lesson behind a `contentType:'lesson'` material. */
 lessonPublicRouter.get("/by-file/:htmlFileId", async (req: Request, res: Response) => {

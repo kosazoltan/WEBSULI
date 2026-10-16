@@ -1061,3 +1061,41 @@ export const subjectMemoryEvents = pgTable(
 );
 
 export type SubjectMemoryCardRow = typeof subjectMemoryCards.$inferSelect;
+
+/**
+ * Websuli Design §7 — memóriakártya-ismétlés (migrations/0027_review_states.sql). Tanuló × lecke × kártya aktuális állapota és
+ * minden értékelés tanulási eseményként. Szöveget nem tárol, csak azonosítót, értékelést és időpontot.
+ */
+export const reviewStates = pgTable(
+  "review_states",
+  {
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+    cardId: varchar("card_id", { length: 80 }).notNull(),
+    intervalDays: integer("interval_days").notNull(),
+    repetitions: integer("repetitions").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ pk: primaryKey({ columns: [table.userId, table.lessonId, table.cardId] }) }),
+);
+
+export const reviewEvents = pgTable(
+  "review_events",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+    cardId: varchar("card_id", { length: 80 }).notNull(),
+    rating: varchar("rating", { length: 8 }).notNull().$type<import("./review-schedule").ReviewRating>(),
+    /** Review #268: értékelésenként egyedi, újrapróbáláskor változatlan kliensazonosító (idempotencia). */
+    requestId: varchar("request_id", { length: 64 }).notNull(),
+    /** Az értékelés eredeti eredménye: az ismételt beküldés ezt kapja vissza, újabb léptetés nélkül. */
+    result: jsonb("result").notNull().$type<import("./review-schedule").ReviewState>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    learnerIdx: index("review_events_learner_idx").on(table.userId, table.lessonId, table.createdAt),
+    requestUnique: uniqueIndex("review_events_request_unique").on(table.userId, table.requestId),
+  }),
+);
