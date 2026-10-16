@@ -100,12 +100,15 @@ test("prefers-reduced-motion: reduce → 0 animált elem", async ({ page }) => {
     expect(n).toBe(0);
 });
 
-test("no-preference → legalább 1 animált elem (VAN animáció, és kapuzott)", async ({ page }) => {
+// Websuli Design (dokumentált spec-változás, docs/specs/2026-10-16-websuli-design.md §2.7): nincs kötelező animáció — a tananyag
+// blokkjai és címsora mozgáscsökkentés nélkül is nyugodtak (a referencia sem animál); a mozgáskaput a lesson-band-theme egységteszt
+// a CSS-forráson ellenőrzi.
+test("no-preference → a tananyag blokkjai és címsora nem animál (nyugodt felület)", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await openProbe(page, 2);
     const n = await page.evaluate(() =>
-      [...document.querySelectorAll('[data-testid="lesson-runtime"] *')].filter((e) => getComputedStyle(e).animationName !== "none").length);
-    expect(n).toBeGreaterThan(0);
+      [...document.querySelectorAll('[data-testid="lesson-runtime"] .lesson-block, [data-testid="lesson-runtime"] .lesson-hero')].filter((e) => getComputedStyle(e).animationName !== "none").length);
+    expect(n).toBe(0);
 });
 
 /**
@@ -114,7 +117,9 @@ test("no-preference → legalább 1 animált elem (VAN animáció, és kapuzott)
  * narancs a fehéren olvasható), csak a szem látta. Ez a kapu a színpad minden látható
  * dobozának hátterét méri: a C·divergens irányban egyik sem lehet világos.
  */
-for (const { classroom, band } of BANDS) {
+// Websuli Design (dokumentált spec-változás): sötét színpad csak a 11–12. évfolyamon van (Jövőtervező); a világos témák minden
+// szövegét a lesson-contrast spec méri (WCAG AA).
+for (const { classroom, band } of BANDS.filter((b) => b.classroom >= 11)) {
   test(`${band}: egyetlen elem sem hoz világos hátteret a sötét színpadra`, async ({ page }) => {
     await openProbe(page, classroom);
     const leaks = await page.evaluate(() => {

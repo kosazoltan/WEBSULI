@@ -137,7 +137,7 @@
 [data-band="teen"] .lesson-block-head,
 [data-band="senior"] .lesson-block-head,
 [data-band="senior"] .lesson-progress {
-  font-family: "Source Sans 3", sans-serif;
+  font-family: var(--lesson-font-body);
   text-transform: none;
   letter-spacing: 0;
 }

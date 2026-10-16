@@ -34,7 +34,7 @@ import {
   type TrySnapshot,
 } from "./useLessonProgress";
 import "./lesson-theme.css";
-import { splitEmphasis, stripEmphasis, visualWorld } from "@shared/lesson-visuals";
+import { splitEmphasis, stripEmphasis } from "@shared/lesson-visuals";
 import "./triangle-lab.css";
 import "./decision-story.css";
 import { LessonExperienceView } from "./LessonExperienceView";
@@ -42,6 +42,10 @@ import type { ArbiterSource } from "./arbiter";
 import "./lesson-grade.css";
 import { LessonCoverArt } from "./LessonCoverArt";
 import { experienceFingerprint } from "./useExperienceRound";
+// Websuli Design (docs/specs/2026-10-16-websuli-design.md): az öt évfolyamsávos arculat — a többi lecke-CSS UTÁN, hogy az azonos
+// specificitású szabályoknál is ez érvényesüljön.
+import "./lesson-design.css";
+import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom } from "@shared/lesson-design";
 
 /**
  * The Lesson Runtime: one audited renderer for every lesson.
@@ -456,6 +460,7 @@ export function LessonRuntime({
 }) {
   const band = ageBandForClassroom(lesson.classroom);
   const theme = BAND_THEME[band];
+  const designTheme = designThemeForClassroom(lesson.classroom);
   // Websuli Design: a lecke fontja az évfolyamból (1–5. Nunito Sans, 0. és 6–12. Inter), téma szerinti kivétel nélkül.
   const fonts = lessonFontPair(lesson.classroom, lesson.subject);
   const typography = {
@@ -493,13 +498,15 @@ export function LessonRuntime({
     // (lesson-theme.css). Measured live before #197: inheriting the app foreground gave
     // 67/115 text elements a 1.00–1.05 contrast in both app modes. The band root pairs
     // every background with its ink, so the app theme cannot break it.
-    <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience={lesson.experience?.theme} data-flair={lesson.experience?.flair?.join(" ") || undefined} style={typography}>
+    // Websuli Design: a színvilágot kizárólag az évfolyamsáv adja (`data-ws-theme`); a régi élménytéma, vizuális világ és díszítőeffekt
+    // nem jelenik meg (tulajdonosi döntés 2026-10-16) — a `data-experience` állandó, így a régi téma- és világszabályok nem illeszkednek.
+    <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
       <article className="max-w-3xl mx-auto px-4 py-6 space-y-6" data-testid="lesson-runtime">
+        <div className="ws-topbar" data-testid="ws-topbar">
+          <strong>✦ Websuli / {DESIGN_THEMES[designTheme].name}</strong>
+          <span>{DESIGN_TOPBAR_TAGLINE}</span>
+        </div>
         <header className="lesson-hero">
-          {/* Spec 2026-09-24: díszítő csillogás a lecke világának emojijaiból (csak a „sparkles” különlegességnél). */}
-          {lesson.experience?.flair?.includes("sparkles") && <div className="lesson-sparkles" aria-hidden>
-            {(visualWorld(lesson.experience.theme)?.emojis ?? ["✨", "⭐", "✨", "💫", "⭐"]).slice(0, 5).map((e, i) => <span key={i}>{e}</span>)}
-          </div>}
           <div className="lesson-emblem" aria-hidden>
             <Leaf className="w-7 h-7" />
           </div>

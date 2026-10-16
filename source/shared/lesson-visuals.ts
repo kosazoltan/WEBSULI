@@ -88,8 +88,9 @@ export function designFromInstruction(text: string | undefined, seed = ""): { wo
     }
     return false;
   };
-  const world: VisualWorldId | undefined = said("rózsaszín|pink|kislány|lányos|hercegnő|királylány") ? "princess"
-    : said("varázsvilág|varázslatos világ|varázs témá") ? "magic" : undefined;
+  // Websuli Design (tulajdonosi döntés 2026-10-16, unisex arculat): nemi szavak („rózsaszín, kislánynak, hercegnő”) nem
+  // választanak világot — sem színt, sem a szerzői promptba kerülő témát. A lecke színvilágát az évfolyamsáv adja.
+  const world: VisualWorldId | undefined = said("varázsvilág|varázslatos világ|varázs témá") ? "magic" : undefined;
   const wantsEffects = said("effekt(?!ív)|csillog|animáci|figyelemfelkelt|figyelemfelhív|látványos");
   if (!world && !wantsEffects) return undefined;
   const base = pickLessonFlair(seed || text);

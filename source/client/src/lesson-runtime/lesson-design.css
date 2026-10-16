@@ -1,0 +1,146 @@
+/*
+ * Websuli Design — az öt évfolyamsávos arculat a tananyag-lejátszóban (docs/specs/2026-10-16-websuli-design.md; forrás:
+ * docs/design/Websuli_Design.html és a mesterutasítás). Az értékek a shared/lesson-design.ts tokenjei —
+ * tests/lesson-design.test.ts egyezteti a kettőt és méri a kontrasztot.
+ *
+ * Kulcs: a gyökér `data-ws-theme` (a lecke évfolyamából). A szelektor 3 attribútumos ([data-band][data-experience]
+ * [data-ws-theme]), így a régi 2 attribútumos sáv-, évfolyam- és alapréteg fölött áll; a régi téma- és világszabályok
+ * nem illeszkednek (a gyökér data-experience értéke állandó „websuli”).
+ * Mozgás nincs (a referencia sem animál); a fókusz a referencia 3px-es borostyán kerete.
+ */
+
+[data-band][data-experience][data-ws-theme] {
+  --lesson-radius: 16px;
+  --lesson-glow: none;
+  --lesson-ok-bg: #E0F6EC; --lesson-ok-bg-ink: #145537; --lesson-ok: #146B44; --lesson-ok-ink: #FFFFFF;
+  --lesson-warn-bg: #FFF3CF; --lesson-warn-ink: #6D4800; --lesson-error: #9C213A;
+  --lesson-check-head: #B5521A; --lesson-check-head-ink: #FFFFFF;
+  --ws-secondary-bg: #EAF0F6; --ws-secondary-ink: #24435D; --ws-track: #DCE6ED;
+  --ws-title: var(--ws-deep);
+  --lesson-bg: var(--ws-surface);
+  --lesson-surface: var(--ws-panel);
+  --lesson-ink: var(--ws-ink);
+  --lesson-muted: var(--ws-muted);
+  --lesson-line: var(--ws-line);
+  --lesson-accent: var(--ws-strong);
+  --lesson-accent-ink: var(--ws-strong-ink);
+  --fusion-soft: var(--ws-soft);
+  --fusion-secondary: var(--ws-accent);
+  background-color: var(--ws-surface);
+  background-image: linear-gradient(150deg, var(--ws-surface) 0%, color-mix(in srgb, var(--ws-surface) 40%, #FFFFFF) 70%);
+  color: var(--ws-ink);
+}
+
+[data-band][data-experience][data-ws-theme="explorer"] {
+  --ws-surface: #E9F9E9; --ws-accent: #17865F; --ws-ink: #174A39; --ws-panel: #FFFFFF; --ws-soft: #E5F8ED; --ws-deep: #225842;
+  --ws-muted: #3D6352; --ws-line: #CFE3D6; --ws-strong: #157A57; --ws-strong-ink: #FFFFFF; --grade-size: 22px;
+}
+[data-band][data-experience][data-ws-theme="adventure"] {
+  --ws-surface: #FFF0D2; --ws-accent: #C36A28; --ws-ink: #703C1B; --ws-panel: #FFFFFF; --ws-soft: #FFF3DF; --ws-deep: #754520;
+  --ws-muted: #6E4A2E; --ws-line: #F0D9B5; --ws-strong: #A4561D; --ws-strong-ink: #FFFFFF; --grade-size: 19px;
+  --lesson-check-head: #8E4417;
+}
+[data-band][data-experience][data-ws-theme="studio"] {
+  --ws-surface: #EFEFFF; --ws-accent: #5159A8; --ws-ink: #292F62; --ws-panel: #FFFFFF; --ws-soft: #EFEFFE; --ws-deep: #2B356B;
+  --ws-muted: #4C5378; --ws-line: #D9DBF2; --ws-strong: #5159A8; --ws-strong-ink: #FFFFFF; --grade-size: 17px;
+}
+[data-band][data-experience][data-ws-theme="laboratory"] {
+  --ws-surface: #E6F3FF; --ws-accent: #226493; --ws-ink: #143B62; --ws-panel: #FFFFFF; --ws-soft: #E6F3FC; --ws-deep: #173C62;
+  --ws-muted: #3D5873; --ws-line: #CFE1F0; --ws-strong: #226493; --ws-strong-ink: #FFFFFF; --grade-size: 16px;
+}
+/* 11–12.: sötét felület, sötét panelek világos szöveggel (§8: sötét háttéren világos szöveg). */
+[data-band][data-experience][data-ws-theme="future"] {
+  --ws-surface: #132540; --ws-accent: #0C929C; --ws-ink: #EFF8FF; --ws-panel: #233956; --ws-soft: #1B3150; --ws-deep: #0B1A2E;
+  --ws-muted: #BCD0E4; --ws-line: #35506E; --ws-strong: #0C929C; --ws-strong-ink: #061A22; --grade-size: 16px;
+  --ws-title: var(--ws-ink);
+  --ws-secondary-bg: #2C4566; --ws-secondary-ink: #EFF8FF; --ws-track: #3B5267;
+  --lesson-ok-bg: #12291B; --lesson-ok-bg-ink: #D9FFE4; --lesson-ok: #86EFAC; --lesson-ok-ink: #062A1C;
+  --lesson-warn-bg: #3A2A08; --lesson-warn-ink: #FFE4A8; --lesson-error: #FDA4AF;
+  --lesson-check-head: #FBBF24; --lesson-check-head-ink: #1A1400;
+  background-image: none;
+}
+
+/* ---------- felső sáv (a referencia `pvbar` mintája) ---------- */
+[data-ws-theme] .ws-topbar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  padding: 14px 19px; border-radius: var(--lesson-radius);
+  background: var(--ws-deep); color: #FFFFFF;
+}
+[data-ws-theme] .ws-topbar strong { font-size: 15px; font-weight: 800; }
+[data-ws-theme] .ws-topbar span { font-size: 13px; color: #FFFFFF; }
+
+/* ---------- címsor-kártya ---------- */
+[data-band][data-experience][data-ws-theme] .lesson-hero {
+  background: var(--lesson-surface); color: var(--lesson-ink);
+  border: 1px solid var(--lesson-line); border-bottom: 1px solid var(--lesson-line); border-radius: var(--lesson-radius);
+  box-shadow: 0 5px 15px #1837540A;
+}
+[data-band][data-experience][data-ws-theme] .lesson-hero::after { content: none; }
+[data-ws-theme] .lesson-hero h1 { color: var(--ws-title); font-weight: 850; letter-spacing: -0.02em; }
+[data-band][data-experience][data-ws-theme] .lesson-emblem { background: var(--ws-accent); color: #FFFFFF; box-shadow: none; }
+[data-ws-theme] .lesson-chip {
+  font-size: 13px; font-weight: 700; border-radius: 11px; padding: 5px 11px;
+  background: var(--ws-soft); color: var(--ws-title); font-family: var(--lesson-font-body);
+}
+
+/* ---------- csempék (a referencia `tile` mintája) ---------- */
+[data-band][data-experience][data-ws-theme] .lesson-block,
+[data-band][data-experience][data-ws-theme] .fusion-task,
+[data-band][data-experience][data-ws-theme] .fusion-method {
+  background: var(--lesson-surface); color: var(--lesson-ink);
+  border: 1px solid var(--lesson-line); border-radius: var(--lesson-radius); box-shadow: 0 5px 15px #1837540A;
+}
+/* A régi évfolyamréteg (lesson-experience.css) közvetlenül a blokkra ír méretet — a téma minimuma ezt felülírja (§2.5). */
+[data-band][data-experience][data-ws-theme] .lesson-block { font-size: var(--grade-size); --lesson-radius: 16px; }
+[data-band][data-experience][data-ws-theme] .lesson-block[data-block="recap"] { background: var(--ws-soft); }
+[data-band][data-experience][data-ws-theme] .lesson-block-head {
+  background: transparent; color: var(--ws-title); padding: 0; border-radius: 0;
+  font-size: 15px; font-weight: 700; letter-spacing: 0; text-transform: none; font-family: var(--lesson-font-body);
+}
+[data-band][data-experience][data-ws-theme] .lesson-block[data-block="check"] .lesson-block-head { background: transparent; color: var(--ws-title); }
+[data-ws-theme] .lesson-section-no { background: var(--ws-accent); color: #FFFFFF; box-shadow: none; }
+
+/* ---------- gombok (a referencia `btn` / `btn.secondary` mintája) ---------- */
+[data-ws-theme] .fusion-primary {
+  border: 0; border-radius: 10px; font-weight: 750;
+  background: var(--ws-strong); color: var(--ws-strong-ink);
+}
+/* A lecke saját másodlagos gombjai (példa lépései, felolvasás, lapozás) a négyfüles nézeten kívül is (mérve: a 11–12. o.
+   sötét témáján a régi átlátszó gomb 3,11:1 volt). */
+[data-band][data-experience][data-ws-theme] .lesson-outline-btn {
+  border: 0; border-radius: 10px; font-weight: 750;
+  background: var(--ws-secondary-bg); color: var(--ws-secondary-ink);
+}
+[data-band][data-experience][data-ws-theme] .lesson-outline-btn:hover { background: var(--ws-strong); color: var(--ws-strong-ink); }
+
+/* ---------- fülek (a referencia `switch` mintája: kiválasztva főszín keret és halvány háttér) ---------- */
+[data-ws-theme] .fusion-tabs { background: var(--lesson-surface); border-color: var(--lesson-line); border-radius: var(--lesson-radius); }
+[data-ws-theme] .fusion-tabs button { color: var(--lesson-muted); border-radius: 12px; box-shadow: inset 0 0 0 2px transparent; }
+[data-ws-theme] .fusion-tabs button[aria-selected="true"] {
+  background: var(--ws-soft); color: var(--ws-title); box-shadow: inset 0 0 0 2px var(--ws-accent);
+}
+
+/* ---------- haladás (a referencia `pbar` mintája) ---------- */
+[data-ws-theme] .lesson-progress { background: transparent; font-size: 13px; }
+[data-ws-theme] .lesson-progress-step::before { background: var(--ws-track); }
+[data-ws-theme] .lesson-progress-step::after { background: var(--ws-accent); box-shadow: none; }
+[data-ws-theme] .fusion-result progress { accent-color: var(--ws-accent); }
+
+/* ---------- olvashatóság: a kiegészítő felirat sem 12px alatti; a tananyagszöveg a téma mérete (§2.5, §8) ---------- */
+[data-ws-theme] .fusion-eyebrow,
+[data-ws-theme] .lesson-option-key,
+[data-ws-theme] .fusion-source-link,
+[data-ws-theme] .practice-finish > p { font-size: 13px; }
+[data-ws-theme] .fusion-view,
+[data-ws-theme] .fusion-label,
+[data-ws-theme] .lesson-feedback,
+[data-ws-theme] .fusion-intro { font-size: max(1em, 16px); }
+
+/* ---------- fókusz (a referencia: 3px borostyán keret) ---------- */
+[data-ws-theme] :is(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 3px solid #F4AB37; outline-offset: 3px;
+}
+
+/* A borítóábra a téma színeit viseli; a régi évfolyamréteg kifakítása (lesson-grade.css) a témás leckén nem érvényes —
+   a referencia a nagyobbaknál is a főszínnel rajzolt ábrát mutat. */
+[data-band][data-experience][data-ws-theme] .lesson-cover-art { filter: none; }
