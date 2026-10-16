@@ -52,3 +52,10 @@ a törlő ág és a „clearing ALL caches” log kikerül. `activate` változat
   - A `channel: "chrome"` helyett a CI-ben telepített beépített Chromium fut (`npx playwright install chromium`).
   - Új CI-lépés: `npx playwright test --config playwright.service-worker.config.ts`.
 - A `main` 2026-10-16-i állapotán a hiba még fennáll: az `install` minden cache-t töröl.
+
+## Kiegészítés 2026-10-16 (review #207)
+- **`CACHE_VERSION` 4.3.0 → 4.4.0.** Új cache-név nélkül a frissítés a régi, azonos nevű cache-t használná tovább, benne elavult futásidejű válaszokkal.
+  Szabály: minden worker-kiadás új verziót kap.
+- **Sikertelen telepítés:** ha a jelölt cache a telepítés előtt nem létezett, törlődik, így nem halmozódnak az elhagyott cache-ek. A meglévő (aktív) cache-hez nem nyúl.
+- **Teszt:** az `updatefound` figyelése a `registration.update()` ELŐTT indul, így a gyorsan aktiválódó worker sem okoz téves bukást.
+  A sikertelen ágban a cache-lista pontosan a régi cache (nincs elhagyott jelölt).
