@@ -2002,7 +2002,8 @@ test("K1: minden blokkoló banktétel → a kapuhoz kivételre (nincs csak-bank 
   const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.0", message: "A mintaválasz jobbról balra halad." };
   const deps = makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] }));
   deps.store.maps.set("m1", { meta: MAP_META, concepts });
-  deps.store.seed({ id: "bank-removal", mapId: "m1", step: "lektor", round: 0, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  deps.store.seed({ id: "bank-removal", mapId: "m1", lessonId: "lesson-k1", step: "lektor", round: 0, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  deps.store.lessons.set("lesson-k1", { id: "lesson-k1", mapId: "m1", json: lesson });
   const first = await runPipelineStep("bank-removal", deps);
   assert.ok(first.ok, JSON.stringify(first));
   assert.deepEqual(first.ok && first.next, { step: "gate", round: 0 }, "a kapu jön, nem bank-kör és nem szerző");
@@ -2010,12 +2011,21 @@ test("K1: minden blokkoló banktétel → a kapuhoz kivételre (nincs csak-bank 
   assert.equal(job.output?.bankReview, undefined, "nincs csak-bank újragyártás");
   const flags = job.output?.choiceFlags as Array<{ path: string; origin?: string }>;
   assert.ok(flags.some((f) => f.path === "experience.tasks[0]" && f.origin === "limit"), JSON.stringify(flags));
-  // A kapu kiveszi a jelölt tételt, és a kivett tételre mutató lektor-blokkolót megoldottnak tekinti.
-  const gate = await runPipelineStep("bank-removal", deps);
+  // Review #257 (P2): az ismételt (gyorsítótárazott) lektorhívás is a kapuhoz jut.
+  const again = await runPipelineStep("bank-removal", deps);
+  assert.deepEqual(again.ok && again.next, { step: "gate", round: 0 }, `gyorsítótárból is kapu: ${JSON.stringify(again)}`);
+  // Review #257 (P2): a kapu VALÓBAN fut (advanceJob), kiveszi a jelölt tételt, a kivett tételre mutató blokkolót megoldottnak veszi, és publikál.
+  const removedId = (deps.store.jobs.get("bank-removal")!.output?.lesson as { experience: { tasks: Array<{ id: string }> } }).experience.tasks[0].id;
+  await advanceJob("bank-removal", first.ok ? first.next : { step: "gate", round: 0 }, { status: "running" }, deps);
+  let publications = 0;
+  deps.store.publishLesson = async () => { publications++; return { htmlFileId: "published-k1", exportedQuizItems: 1 }; };
+  const gated = await runPipelineStep("bank-removal", deps);
   const after = deps.store.jobs.get("bank-removal")!;
-  assert.notEqual(after.step, "error", `a kapu nem buktat a kivett tétel miatt: ${after.error ?? JSON.stringify(gate)}`);
-  const tasks = (after.output?.lesson as { experience?: { tasks: Array<{ id: string }> } } | undefined)?.experience?.tasks ?? [];
-  assert.ok(!tasks.some((t) => t.id === packet.tasks[0].id), "a hibás tétel kikerült a bankból");
+  assert.ok(gated.ok, `a kapu átenged: ${JSON.stringify(gated)} ${after.error ?? ""}`);
+  assert.equal(publications, 1, "publikált");
+  // A publikált lecke a leckesorban (upsertLesson) — a kapu ide menti a kivétel utáni bankot.
+  const tasks = (deps.store.lessons.get("lesson-k1")!.json as { experience?: { tasks: Array<{ id: string }> } }).experience?.tasks ?? [];
+  assert.ok(tasks.length > 0 && !tasks.some((t) => t.id === removedId), `a hibás tétel (${removedId}) kikerült a publikált bankból`);
 });
 
 // Review #257 (P2): nem kivehető experience-útvonal (pl. tartományon kívüli index) mellett a csak-bank kör NEM tiltódik le — nincs szerzői kör.
@@ -2033,6 +2043,23 @@ test("K1b: nem kivehető experience-blokkolónál a régi csak-bank kör marad (
   const first = await runPipelineStep("bank-nonremovable", deps);
   assert.ok(first.ok, JSON.stringify(first));
   assert.deepEqual(first.ok && first.next, { step: "animator", round: 1 }, "csak-bank kör, nem szerző és nem kapu");
+});
+
+// Review #257 (P2): ha a kivétel a publikálási minimum alá vinné a bankot (a kapu elutasítaná), a régi célzott csak-bank javítás jár.
+test("K1c: minimumot sértő kivétel helyett a csak-bank javítás marad", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const notes = lesson.experience.tasks.map((_, i) => ({ kind: "source_conflict", subkind: "contradicts_source", blockPath: `experience.tasks.${i}`, message: "Hibás feladat." }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "bank-floor", mapId: "m1", step: "lektor", round: 0, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  const first = await runPipelineStep("bank-floor", deps);
+  assert.ok(first.ok, JSON.stringify(first));
+  assert.deepEqual(first.ok && first.next, { step: "animator", round: 1 }, "a padló alá vivő kivétel helyett célzott csak-bank javítás");
 });
 
 test("K2: tanítási blokkoló mellett a régi út marad (nincs kivétel a kapunál, szerzői javítás)", async () => {

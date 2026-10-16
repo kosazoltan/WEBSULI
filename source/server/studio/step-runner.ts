@@ -1735,7 +1735,10 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       const bankRemovalSplit = bankOnly ? splitLimitBlockers(job.output?.lesson as Lesson | undefined, convergedBlocking) : null;
       const bankRemoval = !!bankRemovalSplit && fusion && !!(job.output?.lesson as Lesson | undefined)?.experience
         && process.env.STUDIO_BANK_ONLY_REPAIR !== "1"
-        && !bankRemovalSplit.factual.length && !bankRemovalSplit.incomplete.length && bankRemovalSplit.removable.length > 0;
+        && !bankRemovalSplit.factual.length && !bankRemovalSplit.incomplete.length && bankRemovalSplit.removable.length > 0
+        // Review #257 (P2): csak ha a kapu el is fogadná a kivételt (a publikálási minimum megmarad) — különben a régi célzott
+        // csak-bank javítás jár, nem egy biztos kapubukás (orkesztrátor nélkül a kapu nem javít).
+        && !("error" in resolveChoiceGate(job.output!.lesson as Lesson, [...(Array.isArray(job.output?.choiceFlags) ? job.output!.choiceFlags as ChoiceFlag[] : []), ...bankRemovalSplit.removable]));
       const bankOnlyRepair = bankRepairPossible && bankOnly && !bankRemoval;
       // Spec 2026-09-30-nem-elakado-kozzetetel (D2): a limiten a hiány-jellegű tanítási blokkoló figyelmeztetés — a kapu
       // ugyanezt a szabályt használja (limit-policy), így a kettő nem dönthet eltérően.
@@ -1856,7 +1859,8 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           report: parsed.data,
           reportRound: job.round,
           reviewInputHash: lektorReviewHash(input, job.round), reviewEvidence: lektorEvidenceOf(input as LektorEvidenceInput, lektorReviewHash(input, job.round)),
-          blockers,
+          // Review #257 (P2): a `cachedNext` ebből dönt — a TÉNYLEGES átmeneti döntés (kivételnél 0 → kapu); a lektor saját száma külön.
+          blockers: gateBlockers, lektorBlockers: blockers,
           ...(carriedNotes !== undefined ? { qualityNotes: carriedNotes } : {}),
         }),
       );

@@ -20,3 +20,7 @@ Terv: `docs/specs/2026-10-16-bankhiba-kivetel.md`.
 ## Review #257
 - A `bankRemoval` csak akkor igaz, ha a `splitLimitBlockers` szerint MINDEN blokkoló kivehető (nincs `factual` / `incomplete`). Más `experience.*` útvonalnál a régi csak-bank kör marad, nem szerzői kör (K1b teszt).
 - `CreationProgress`: a `waiting` fázis saját részletszöveget kap („döntésre vár … jelenleg nem fut”).
+- Review #257 (2. kör):
+  - (a) a kivétel csak akkor jár, ha a kapu el is fogadná (`resolveChoiceGate` nem ad hibát, megmarad a publikálási minimum); különben a régi célzott csak-bank javítás marad (K1c teszt, ellenpróbával);
+  - (b) a lektor a TÉNYLEGES átmeneti döntést menti (`blockers: gateBlockers`, a lektor saját száma `lektorBlockers`), így a gyorsítótárazott `cachedNext` is a kapuhoz visz;
+  - (c) a K1 teszt valóban végigfuttatja a kaput (`advanceJob`): a hibás tétel kikerül a publikált leckéből, a publikálás egyszer fut.
