@@ -34,11 +34,11 @@ import type { JobPatch, PipelineStore } from "../pipeline-store";
 import { conceptIdResolver, exportQuizItemsForPublish } from "../quiz-export";
 import { parseModelJson } from "../run-step";
 import { roleSkillBlock } from "../role-skills";
-import { workflowPhase, workflowResource, workflowSkillPrompt } from "../../workflows/engine";
+import { WorkflowConflict, WorkflowWaiting, workflowPhase, workflowResource, workflowSkillPrompt } from "../../workflows/engine";
 import type { PromptRole } from "../../../shared/instruction-bundles/roles";
 import type { ExtractorFile } from "../extractor";
 import type { LessonConversation, TurnBlock } from "./conversation";
-import { TelemetryRecorder, timed } from "./telemetry";
+import { TelemetryRecorder, telemetryOf, timed } from "./telemetry";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
 /** Állomásonként ennyi javító forduló jár a determinisztikus visszajelzés után. */
@@ -276,7 +276,38 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
  * indítás) — a tudásbank-állomás kimarad, a fogalomazonosítók stabilak; `approvedOutline`: a tanár által jóváhagyott vázlat (a
  * terv-állomás ezt veszi át, nem kér új tervet).
  */
-export type SingleRunInput = { files: ExtractorFile[]; instruction?: string; title?: string; ownerId: string; mapId?: string; approvedOutline?: unknown };
+export type SingleRunInput = { files: ExtractorFile[]; instruction?: string; title?: string; ownerId: string; mapId?: string; approvedOutline?: unknown;
+  /** J5: a megszakadt egyfutásos job folytatása a mentett kimenetéből (a hívó a beszélgetést a mentett állapotból állítja vissza). */
+  resume?: { jobId: string; output: Record<string, unknown> } };
+
+/** J5: a mentett kimenetből folytatandó állomás — az utolsó lezárt állomás utáni. */
+export type ResumeStage = "plan" | "author" | "animator" | "bank" | "lektor";
+
+/**
+ * J5: a megszakadt egyfutásos job mentett részei és a folytatás helye. Kész bank (a lecke `experience` mezővel) → lektorálás; mentett
+ * bank-ellenőrzőpont (a lecke az ábrák utáni) → a bank folytatása; mentett tananyag → ábrák; mentett terv → tananyag; különben terv.
+ * Az alakilag hibás mentett rész nem számít (onnan újra készül).
+ */
+export function resumePointOf(output: Record<string, unknown> | null | undefined): { stage: ResumeStage; outline?: unknown; lesson?: Lesson; checkpoint?: ExperienceCheckpoint } {
+  const o = output ?? {};
+  const lesson = o.lesson === undefined ? null : lessonSchema.safeParse(o.lesson);
+  const outline = outlineSchema.safeParse(o.outline).success ? o.outline : undefined;
+  const checkpoint = o.experienceCheckpoint && typeof o.experienceCheckpoint === "object" ? o.experienceCheckpoint as ExperienceCheckpoint : undefined;
+  if (lesson?.success && outline) {
+    if (lesson.data.experience) return { stage: "lektor", outline, lesson: lesson.data, ...(checkpoint ? { checkpoint } : {}) };
+    if (checkpoint) return { stage: "bank", outline, lesson: lesson.data, checkpoint };
+    return { stage: "animator", outline, lesson: lesson.data };
+  }
+  return outline ? { stage: "author", outline } : { stage: "plan" };
+}
+
+/** J5: folytatható-e a job a mentett részeiből (egyfutásos, van mentett tananyagterv vagy tanítás, nincs közzétéve). */
+export function singleRunResumable(output: unknown): boolean {
+  const o = (output ?? {}) as Record<string, unknown>;
+  const run = o.singleRun as { version?: unknown; conversation?: { turns?: unknown } } | undefined;
+  if (run?.version !== SINGLE_RUN_VERSION || !Array.isArray(run.conversation?.turns) || o.htmlFileId) return false;
+  return resumePointOf(o).stage !== "plan";
+}
 export type SingleRunResult = { mapId: string; jobId: string; lessonId: string; htmlFileId: string; model: string; warnings: string[] };
 
 /**
@@ -287,15 +318,18 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const { conversation, store } = deps;
   const log = (m: string) => deps.log?.(m);
   const phase = (p: SingleRunPhase, detail: string | null) => deps.onPhase?.(p, detail);
-  // J3: futásonkénti telemetria (állomásonként forduló, token, idő; friss hívások; kapuk) — minden mentéskor a jobra kerül.
-  const telemetry = new TelemetryRecorder();
+  // J3: futásonkénti telemetria (állomásonként forduló, token, idő; friss hívások; kapuk) — minden mentéskor a jobra kerül; folytatásnál
+  // a megszakadt futás mentett telemetriája folytatódik.
+  const telemetry = new TelemetryRecorder(input.resume ? telemetryOf(input.resume.output) : null);
+  const resumed = input.resume ? resumePointOf(input.resume.output) : null;
+  if (input.resume && !input.mapId) throw new SingleRunError("folytatás", ["A folytatáshoz a job térképe szükséges."]);
   const station: StationDeps = { conversation, log: deps.log, telemetry };
 
   // 1. Forrás + tudásbank (review #262: meglévő térképnél a gondozott térkép, stabil fogalomazonosítókkal).
   await workflowPhase("source"); await workflowPhase("scope");
   let mapId: string;
   if (input.mapId) {
-    phase("extract", "A meglévő tudásbank betöltése…");
+    phase("extract", input.resume ? "A mentett piszkozat betöltése…" : "A meglévő tudásbank betöltése…");
     await workflowPhase("knowledge");
     mapId = input.mapId;
   } else {
@@ -313,13 +347,18 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const concepts: MapConcept[] = applySourceCorrections(map.concepts, corrections);
   const owner = ownerContextOf(input.instruction, corrections);
   const promptMap = { title: map.meta.title, subject: map.meta.subject, classroom: map.meta.classroom, concepts };
-  const jobId = await store.createJob({ mapId, step: "pedagogue", status: "running", model: conversation.model, promptVersion: SINGLE_RUN_VERSION, inputHash: `${SINGLE_RUN_VERSION}:${mapId}` });
+  const jobId = input.resume ? input.resume.jobId
+    : await store.createJob({ mapId, step: "pedagogue", status: "running", model: conversation.model, promptVersion: SINGLE_RUN_VERSION, inputHash: `${SINGLE_RUN_VERSION}:${mapId}` });
   await workflowResource(jobId); // review #260: a job a futás gazdájához kötött (piszkozatkezelés, lízing)
   const save = async (step: Exclude<SingleRunPhase, "extract"> | "error", output: Record<string, unknown>, extra: JobPatch = {}) =>
     store.saveStep(jobId, { step, ...extra, output: { ...output, telemetry: telemetry.snapshot(conversation.model), singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } });
   deps.onJob?.(jobId, mapId);
-  let output: Record<string, unknown> = { ...(input.instruction ? { ownerInstruction: input.instruction } : {}), ...(corrections.length ? { sourceCorrections: corrections } : {}) };
-  await save("pedagogue", output);
+  // J5: folytatásnál a mentett kimenet megmarad (a helyreállítási jelzők és a régi pillanatképek nélkül); a job újra fut.
+  const { recoveryState: _recovery, remanufacturedAs: _remade, singleRun: _run, telemetry: _telemetry, ...kept } = input.resume?.output ?? {};
+  let output: Record<string, unknown> = { ...kept, ...(input.instruction ? { ownerInstruction: input.instruction } : {}), ...(corrections.length ? { sourceCorrections: corrections } : {}) };
+  const resumeStep = { plan: "pedagogue", author: "author", animator: "animator", bank: "animator", lektor: "lektor" } as const;
+  if (resumed) log(`[EGYFUTÁS] Folytatás (${jobId}): ${resumed.stage} állomástól, a mentett beszélgetéssel (${conversation.state().turns.length} forduló)`);
+  await save(resumed ? resumeStep[resumed.stage] : "pedagogue", output, resumed ? { status: "running", error: null, finishedAt: null } : {});
   try {
     return await produce();
   } catch (error) {
@@ -332,8 +371,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   async function produce(): Promise<SingleRunResult> {
   // 2. Tananyagterv.
   await workflowPhase("pedagogue");
-  phase("pedagogue", input.approvedOutline ? "A jóváhagyott tanulási terv ellenőrzése…" : "A tananyagterv készül…");
-  const outline = input.approvedOutline !== undefined ? approvedOutlineOf(input.approvedOutline, concepts) : await runStation(station, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${buildPedagoguePrompt(promptMap, undefined, owner)}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
+  phase("pedagogue", resumed?.outline ? "A mentett tananyagterv ellenőrzése…" : input.approvedOutline ? "A jóváhagyott tanulási terv ellenőrzése…" : "A tananyagterv készül…");
+  const planned = resumed?.outline ?? input.approvedOutline;
+  const outline = planned !== undefined ? approvedOutlineOf(planned, concepts) : await runStation(station, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${buildPedagoguePrompt(promptMap, undefined, owner)}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
     const fixed = autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline;
     const parsed = outlineSchema.safeParse(fixed);
     if (!parsed.success) return { ok: false, problems: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
@@ -341,7 +381,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     return covers.ok ? { ok: true, value: parsed.data } : { ok: false, problems: [`A vázlat nem fedi le a kötelező fogalmakat: ${JSON.stringify(covers).slice(0, 600)}`] };
   });
   output = { ...output, outline, approvedOutline: outline };
-  await save("author", output);
+  if (!resumed?.lesson) await save("author", output);
 
   // 3. Tananyag (tanítás).
   await workflowPhase("author");
@@ -359,23 +399,56 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons)];
     return problems.length ? { ok: false, problems } : { ok: true, value: parsed.data };
   };
-  let lesson = await runStation(station, "tananyag", authorRequest([]), validateLesson);
-  // Review #213 (a régi útról áthozva): a terjedelmi keret az éles úton is érvényes — a szókeret túllépése minőségi jelzés (a JobMonitor
-  // mutatja), nem csendes elfogadás és nem megállás.
-  const lengthBudget = lessonLengthBudget(promptMap);
-  const visibleWords = words(lessonVisibleText(lesson)).length;
-  const qualityNotes = visibleWords > lengthBudget.maxWords
-    ? [{ reason: "length_over_budget", note: `A Tananyag lap ${visibleWords} látható szó — a terjedelmi keret legfeljebb ${lengthBudget.maxWords} (cél ${lengthBudget.targetWords}, ${lengthBudget.requiredConcepts} tanítandó fogalom).`, round: 0 }]
-    : [];
-  if (qualityNotes.length) log(`[EGYFUTÁS] Terjedelmi keret túllépve: ${visibleWords} > ${lengthBudget.maxWords} látható szó`);
-  telemetry.gates.lengthOverBudget = qualityNotes.length > 0;
-  output = { ...output, lesson, ...(qualityNotes.length ? { qualityNotes } : {}) };
-  await save("animator", output);
+  /** J5: egyetlen rövidítő forduló — érvénytelen vagy nem rövidebb válasznál az eredeti lecke marad (nincs további javító kör). */
+  async function shortenLesson(base: Lesson, baseWords: number, budget: ReturnType<typeof lessonLengthBudget>, validate: typeof validateLesson, count: (l: Lesson) => number): Promise<Lesson> {
+    const request = withRoleRunbook([text([
+      `A PROGRAM ELLENŐRZÉSE (szókeret): a Tananyag lap ${baseWords} látható szó, a keret legfeljebb ${budget.maxWords} (cél ${budget.targetWords}).`,
+      "Rövidítsd a leckét a keretre: az ismétlést, a díszítő mondatokat és a fölösleges kifejtést hagyd el; minden tanítandó fogalom, a tények,",
+      "a példák megoldása és a szerkezet (fejezetek, blokkfajták, azonosítók) maradjon. Add vissza a TELJES lecke JSON-t (gyakorlóbank nélkül).",
+    ].join("\n"))], "author");
+    try {
+      const reply = await timed(telemetry, "szókeret", () => conversation.send(request), { fix: true });
+      if (reply.truncated) { log("[EGYFUTÁS] A rövidítő forduló levágódott — az eredeti lecke marad."); return base; }
+      const checked = validate(parseModelJson(reply.text).json);
+      if (!checked.ok) { log(`[EGYFUTÁS] A rövidített lecke hibás (${checked.problems.slice(0, 3).join(" | ").slice(0, 300)}) — az eredeti marad.`); return base; }
+      const shorter = count(checked.value);
+      if (shorter >= baseWords) { log(`[EGYFUTÁS] A rövidítés nem lett rövidebb (${shorter} szó) — az eredeti marad.`); return base; }
+      log(`[EGYFUTÁS] Rövidítve: ${baseWords} → ${shorter} látható szó`);
+      telemetry.gates.lengthShortened = true;
+      return checked.value;
+    } catch (error) {
+      if (error instanceof WorkflowConflict || error instanceof WorkflowWaiting) throw error;
+      log(`[EGYFUTÁS] A rövidítő forduló elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)} — az eredeti marad.`);
+      return base;
+    }
+  }
+  let lesson: Lesson;
+  if (resumed?.lesson) lesson = resumed.lesson;
+  else {
+    lesson = await runStation(station, "tananyag", authorRequest([]), validateLesson);
+    // Review #213: a terjedelmi keret az éles úton is érvényes. J5 (L7): túllépésnél EGY rövidítő forduló a szerzői beszélgetésben; ha
+    // az eredmény érvényes és rövidebb, az megy tovább, különben az eredeti marad. A megmaradó túllépés minőségi jelzés (nem megállás).
+    const lengthBudget = lessonLengthBudget(promptMap);
+    const countWords = (l: Lesson) => words(lessonVisibleText(l)).length;
+    const firstWords = countWords(lesson);
+    if (firstWords > lengthBudget.maxWords) {
+      log(`[EGYFUTÁS] Terjedelmi keret túllépve: ${firstWords} > ${lengthBudget.maxWords} látható szó — rövidítő forduló`);
+      lesson = await shortenLesson(lesson, firstWords, lengthBudget, validateLesson, countWords);
+    }
+    const visibleWords = countWords(lesson);
+    const qualityNotes = visibleWords > lengthBudget.maxWords
+      ? [{ reason: "length_over_budget", note: `A Tananyag lap ${visibleWords} látható szó — a terjedelmi keret legfeljebb ${lengthBudget.maxWords} (cél ${lengthBudget.targetWords}, ${lengthBudget.requiredConcepts} tanítandó fogalom).`, round: 0 }]
+      : [];
+    telemetry.gates.lengthOverBudget = qualityNotes.length > 0;
+    output = { ...output, lesson, ...(qualityNotes.length ? { qualityNotes } : {}) };
+    await save("animator", output);
+  }
 
-  // 4. Ábrák (a tanítás szerkezete érintetlen; hibás ábrafolt esetén az eredeti tanítás megy tovább).
+  // 4. Ábrák (a tanítás szerkezete érintetlen; hibás ábrafolt esetén az eredeti tanítás megy tovább). Folytatásnál a mentett bank-
+  // ellenőrzőpont vagy kész bank mellett az ábrák már a mentett leckében vannak.
   await workflowPhase("animator");
   phase("animator", "Ábrák és gyakorlóbank készül…");
-  try {
+  if (resumed?.stage !== "bank" && resumed?.stage !== "lektor") try {
     const request = withRoleRunbook([text(`4. ÁLLOMÁS — ÁBRÁK.\n${buildAnimatorPrompt(lesson, promptMap)}\nVálaszolj kizárólag az ábrafolt JSON-jával.`)], "animator");
     const reply = await timed(telemetry, "ábrák", () => conversation.send(request));
     const patched = applyVisualPatch(lesson, parseModelJson(reply.text).json, concepts);
@@ -383,10 +456,10 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     if (patched && checked?.success && checkAnimatorResult(lesson, checked.data).ok) lesson = checked.data;
     else log("[EGYFUTÁS] Az ábrafolt nem illeszthető — az eredeti tanítás megy tovább.");
   } catch (error) { log(`[EGYFUTÁS] Az ábra-forduló elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
-  lesson = ensureSectionVisuals(stripUngroundedAnimateLabels(lesson, concepts).lesson, concepts).lesson;
+  if (resumed?.stage !== "bank" && resumed?.stage !== "lektor") lesson = ensureSectionVisuals(stripUngroundedAnimateLabels(lesson, concepts).lesson, concepts).lesson;
 
   // 5. Gyakorlóbank — a meglévő banképítő (kvóta, autofix, séma, javító kísérletek); J2: minden csomag FRISS beszélgetésben.
-  let checkpoint: ExperienceCheckpoint | undefined;
+  let checkpoint: ExperienceCheckpoint | undefined = resumed?.checkpoint;
   // A kvíz-előszűrő ítéletei tétel-tartalom szerint újrahasznosulnak (a javítókörben a változatlan tétel nem kerül újra kérdésre).
   const quizBlindCache = new Map<string, string | null>();
   // J1/J3: a válaszkulcs-tesztek kulcsmentes, friss beszélgetésben; a pontozóval elvben megkülönböztethetetlen hibás próbák (nem blokkolók)
@@ -433,9 +506,11 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
         log(`[EGYFUTÁS] bankcsomag ${section + 1}. fejezet, ${attempt + 1}. kísérlet: ${reason.slice(0, 300)}`);
       },
     });
-  lesson = { ...lesson, experience: await buildBank(lesson) };
-  output = { ...output, lesson, experienceCheckpoint: checkpoint };
-  await save("lektor", output);
+  if (resumed?.stage !== "lektor") {
+    lesson = { ...lesson, experience: await buildBank(lesson) };
+    output = { ...output, lesson, experienceCheckpoint: checkpoint };
+    await save("lektor", output);
+  }
 
   // 6. Lektorálás és belső javítás (legfeljebb SINGLE_RUN_REVIEW_ROUNDS javító kör). Tanítási hiba → javított lecke; banktétel-hiba →
   // kivétel, ha a padló megmarad, különben a banképítő javító köre a lektori visszajelzéssel. Az utolsó javító kör változását egy

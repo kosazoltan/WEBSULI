@@ -36,6 +36,7 @@ import { executeWorkflow, workflowPhase, WorkflowWaiting, WorkflowConflict } fro
 import { workflowStore } from "../workflows/store";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { telemetryOf } from "./single-run/telemetry";
+import { resumePointOf, singleRunResumable, SINGLE_RUN_VERSION } from "./single-run/engine";
 import type { ExtractorFile } from "./extractor";
 
 /*
@@ -320,13 +321,15 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
 /** A megállt job nézete — EGY szabály a futásnézetnek és az admin piszkozatlistának (docs/specs/2026-10-15-admin-tananyag-draft.md). */
 export type JobStopInfo = { resumable: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string } };
 /**
- * S4b: a megállt gyártás a piszkozatából nem folytatható (a régi lépésgép kivezetve) — a teendő az újragyártás a mentett forrásból
- * vagy az elvetés; ezért `resumable` mindig hamis. Ha már indult új gyártás, a nézet erre utal.
+ * J5: a megállt EGYFUTÁSOS gyártás a mentett részeiből (terv, tananyag, bank-ellenőrzőpont, beszélgetés) folytatható, ha nincs közzétéve és
+ * nem indult helyette új gyártás. A régi lépésgép jobja nem folytatható (S4b): ott a teendő az újragyártás vagy az elvetés.
  */
 function jobStopInfo(job: { output: unknown }, visits: Array<{ step: string; state: string; error?: string }>): JobStopInfo {
   const remanufacturedAs = (job.output as { remanufacturedAs?: unknown } | null)?.remanufacturedAs;
+  const resumable = typeof remanufacturedAs !== "string" && singleRunResumable(job.output);
   return {
-    resumable: false,
+    resumable,
+    ...(resumable ? { resumeKind: resumePointOf(job.output as Record<string, unknown>).stage === "lektor" ? "lektor" : "bank" } : {}),
     stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
     ...(typeof remanufacturedAs === "string"
       ? { nextRecovery: { strategy: "ask-owner", reason: `új gyártás indult ugyanabból a forrásból (${remanufacturedAs.slice(0, 8)}) — a Tananyagkészítési futások között követhető` } }
@@ -683,17 +686,60 @@ lessonPipelineRouter.post("/jobs/:id/approve-outline", async (req: Request, res:
   catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." }); }
 });
 
-/** POST /api/studio/jobs/:id/resume — a megállt gyártás egyfutásos újragyártása a gondozott térképről (a piszkozat megmarad). */
+/**
+ * POST /api/studio/jobs/:id/resume — J5: a megállt egyfutásos gyártás folytatása a mentett részeiből, ugyanazon a jobon; a régi lépésgép
+ * jobja (vagy a mentett rész nélküli megállás) egyfutásos újragyártás a gondozott térképről (a piszkozat megmarad).
+ */
 lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response) => {
-  const [exists] = await db
-    .select({ id: studioJobs.id })
+  const [job] = await db
+    .select({ id: studioJobs.id, output: studioJobs.output })
     .from(studioJobs)
     .where(eq(studioJobs.id, req.params.id))
     .limit(1);
-  if (!exists) return res.status(404).json({ message: "A job nem található." });
-  try { return res.status(202).json({ jobId: req.params.id, runId: await remakeAsSingleRun(req.params.id, req.user!.id), remanufactured: true }); }
-  catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." }); }
+  if (!job) return res.status(404).json({ message: "A job nem található." });
+  try {
+    if (jobStopInfo(job, []).resumable) return res.status(202).json({ jobId: req.params.id, runId: await resumeSingleRun(req.params.id, req.user!.id), resumed: true });
+    return res.status(202).json({ jobId: req.params.id, runId: await remakeAsSingleRun(req.params.id, req.user!.id), remanufactured: true });
+  } catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "A folytatás nem indítható." }); }
 });
+
+/**
+ * J5: a megállt egyfutásos job atomikus foglalása (hibás → fut; dupla kattintás sem indít kettőt; csak saját / gazdátlan, épp nem vitt,
+ * nem közzétett job) és a folytatás indítása saját futással és workflow-val (a felület ugyanúgy követi, mint a gyártást).
+ */
+export async function resumeSingleRun(jobId: string, owner: string): Promise<string> {
+  const claim = await db.execute(sql`UPDATE studio_jobs j SET status = 'running', error = NULL, finished_at = NULL
+    WHERE j.id = ${jobId} AND j.status = 'error' AND j.output->'singleRun'->>'version' = ${SINGLE_RUN_VERSION}
+      AND coalesce(j.output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured', 'discarded') AND NOT j.output ? 'remanufacturedAs'
+      AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL)
+      AND ${notBeingDriven} AND ${manageableBy(owner)}
+    RETURNING j.map_id`);
+  const row = claim.rows[0] as { map_id: string } | undefined;
+  if (!row) throw new WorkflowConflict("A folytatás már elindult, a piszkozat törölve, épp fut, vagy nem a tiéd.");
+  const runId = createRun();
+  updateRun(runId, { phase: "pedagogue", mapId: row.map_id, jobId, detail: "Folytatás a mentett részeredményekből…" });
+  void executeWorkflow(workflowStore, { id: runId, owner, mode: "upload", request: { mapId: row.map_id, resumeJobId: jobId } }, async () => {
+    const { runSingleResume } = await import("./single-run/live");
+    try {
+      const result = await runSingleResume({ jobId, ownerId: owner },
+        (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }));
+      updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });
+      return readPublishedLesson(result.lessonId);
+    } catch (error) {
+      logger.error(`[EGYFUTÁS] A folytatás megállt (${runId}, job ${jobId}): ${error instanceof Error ? error.message : String(error)}`);
+      updateRun(runId, { phase: "error", jobId, error: error instanceof Error ? error.message.slice(0, 1500) : "A folytatás megállt." });
+      // A motor a saját hibáját a jobra írja; ha a motor el sem indult, a foglalás itt áll vissza (a job nem ragad „fut” állapotban).
+      await db.execute(sql`UPDATE studio_jobs SET status = 'error', error = ${error instanceof Error ? error.message.slice(0, 1500) : "A folytatás megállt."}, finished_at = now()
+        WHERE id = ${jobId} AND status = 'running'`).catch(() => undefined);
+      throw error;
+    }
+  }).catch((error) => {
+    if (error instanceof WorkflowWaiting) return;
+    void recordOneStepFailure(runId, error);
+  });
+  logger.warn(`[EGYFUTÁS] ${jobId}: folytatás a mentett részekből → futás ${runId}`);
+  return runId;
+}
 
 /** A térkép tanítható (megtartott / szerkesztett) fogalmainak száma > 0 — nélküle a gyártás nem indul (nincs fizetős, biztosan bukó futás). */
 async function hasTaughtConcepts(mapId: string): Promise<boolean> {

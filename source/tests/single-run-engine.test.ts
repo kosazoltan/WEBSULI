@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { LessonConversation, type ModelClient, type Turn } from "../server/studio/single-run/conversation";
-import { freshSystemPrompt, runSingleLesson, SingleRunError, singleRunSystemPrompt, type SingleRunDeps, type SingleRunMap } from "../server/studio/single-run/engine";
+import { freshSystemPrompt, resumePointOf, runSingleLesson, SingleRunError, singleRunResumable, singleRunSystemPrompt, type SingleRunDeps, type SingleRunMap } from "../server/studio/single-run/engine";
 import type { RunTelemetry } from "../server/studio/single-run/telemetry";
 import type { PipelineStore, JobPatch } from "../server/studio/pipeline-store";
 import type { MapConcept } from "../server/studio/coverage";
@@ -364,4 +364,94 @@ test("J3: a job telemetriája állomásonként fordulót, javító fordulót, to
   assert.equal(t.gates.lengthOverBudget, false);
   assert.ok(t.totalMs >= 0);
   assert.ok(mem.steps.every((s) => (s.output as { telemetry?: unknown } | undefined)?.telemetry), "minden mentéskor a jobon");
+});
+
+// J5 (átvilágítás L6): a megszakadt futás a mentett részekből folytatható, ugyanazon a jobon, a mentett beszélgetéssel és telemetriával.
+type SavedOutput = Record<string, unknown> & { singleRun: { conversation: { model: string; switchedToFallback: boolean; turns: Turn[] } }; telemetry: RunTelemetry };
+function resumeDeps(client: ModelClient, mem: ReturnType<typeof memoryStore>, saved: SavedOutput): SingleRunDeps {
+  return { ...deps(client, mem), conversation: new LessonConversation(singleRunSystemPrompt(), client, null, { state: saved.singleRun.conversation }) };
+}
+
+test("J5: a lektornál megállt futás a lektorálástól folytatódik — tudásbank, terv, tananyag, ábra és bank nem készül újra", async () => {
+  const note = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tényhiba a tanításban." };
+  const failing = scriptedClient({ lektor: [{ solutions: [], notes: [note], reviewedAll: true }, { solutions: [], notes: [note], reviewedAll: true }] });
+  const mem = memoryStore();
+  await assert.rejects(runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(failing, mem)));
+  const saved = mem.steps.at(-1)!.output as SavedOutput;
+  assert.equal(resumePointOf(saved).stage, "lektor");
+  assert.equal(singleRunResumable(saved), true);
+  const savedTurns = saved.singleRun.conversation.turns.length;
+
+  const client = scriptedClient();
+  const mem2 = memoryStore();
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, resumeDeps(client, mem2, saved));
+  assert.equal(result.htmlFileId, "html1");
+  assert.equal(result.jobId, "job1", "ugyanaz a job");
+  assert.deepEqual(client.calls.filter((c) => c !== "?"), ["6"], "csak a lektorálás fut újra: " + JSON.stringify(client.calls));
+  assert.deepEqual({ step: mem2.steps[0].step, status: mem2.steps[0].status, error: mem2.steps[0].error }, { step: "lektor", status: "running", error: null }, "a job újra fut, a hiba törölve");
+  const done = mem2.steps.at(-1)!.output as SavedOutput;
+  assert.equal(done.singleRun.conversation.turns.length, savedTurns, "a mentett szerzői beszélgetés folytatódik (a lektor friss beszélgetésben)");
+  assert.equal(done.telemetry.stations["tananyag"].turns, saved.telemetry.stations["tananyag"].turns, "a telemetria a megszakadt futásé + a folytatásé");
+  assert.ok(done.telemetry.stations["lektorálás"].turns > saved.telemetry.stations["lektorálás"].turns);
+});
+
+test("J5: a bankban megállt futás az ábráktól folytatódik (a tananyagterv és a tananyag a mentett), és közzétesz", async () => {
+  const failing = withOverride(scriptedClient(), (station) => (station === "5" ? "nem JSON" : null));
+  const mem = memoryStore();
+  await assert.rejects(runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(failing, mem)));
+  const saved = mem.steps.at(-1)!.output as SavedOutput;
+  assert.ok(["animator", "bank"].includes(resumePointOf(saved).stage), resumePointOf(saved).stage);
+  const client = scriptedClient();
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, resumeDeps(client, memoryStore(), saved));
+  assert.equal(result.htmlFileId, "html1");
+  const calls = client.calls.filter((c) => c !== "?");
+  assert.ok(!calls.includes("1") && !calls.includes("2") && !calls.includes("3"), "nincs új tudásbank, terv, tananyag: " + JSON.stringify(calls));
+  assert.ok(calls.includes("5") && calls.includes("6"));
+});
+
+test("J5: a folytatási pont a mentett részekből; a régi (nem egyfutásos) és a közzétett job nem folytatható", () => {
+  const { experience, ...teaching } = structuredClone(fixture);
+  const run = { singleRun: { version: "single-run-1", conversation: { model: "m", switchedToFallback: false, turns: [] } } };
+  assert.equal(resumePointOf({}).stage, "plan");
+  assert.equal(resumePointOf({ outline }).stage, "author");
+  assert.equal(resumePointOf({ outline, lesson: teaching }).stage, "animator");
+  assert.equal(resumePointOf({ outline, lesson: teaching, experienceCheckpoint: { hash: "x", parts: {} } }).stage, "bank");
+  assert.equal(resumePointOf({ outline, lesson: { ...teaching, experience } }).stage, "lektor");
+  assert.equal(resumePointOf({ outline, lesson: { title: "hibás" } }).stage, "author", "az alakilag hibás mentett lecke nem számít");
+  assert.equal(singleRunResumable({ ...run, outline, lesson: teaching }), true);
+  assert.equal(singleRunResumable({ ...run }), false, "mentett rész nélkül újragyártás");
+  assert.equal(singleRunResumable({ outline, lesson: teaching }), false, "régi lépésgép jobja");
+  assert.equal(singleRunResumable({ ...run, outline, lesson: teaching, htmlFileId: "h" }), false, "közzétett");
+});
+
+// J5 (L7): a szókeret túllépése egy rövidítő fordulót kap.
+test("J5: szókeret-túllépésnél egy rövidítő forduló; az érvényes, rövidebb lecke megy tovább, a jelzés elmarad", async () => {
+  const { experience: _bank, ...teaching } = structuredClone(fixture);
+  const long = structuredClone(teaching);
+  const explain = long.sections[0].blocks.find((b) => b.kind === "explain") as { text: string };
+  explain.text = `${explain.text} ${"A terület a síkidom által lefedett rész nagysága. ".repeat(60)}`.trim();
+  const client = withOverride(scriptedClient(), (station) => (station === "3" ? JSON.stringify(long) : station === "szókeret" ? JSON.stringify(teaching) : null));
+  const mem = memoryStore();
+  const result = await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, mem));
+  assert.equal(result.htmlFileId, "html1");
+  assert.equal(client.calls.filter((c) => c === "szókeret").length, 1, "pontosan egy rövidítő forduló");
+  const out = mem.steps.at(-1)!.output as { qualityNotes?: unknown[]; telemetry: RunTelemetry; lesson: { sections: Array<{ blocks: Array<{ kind: string; text?: string }> }> } };
+  assert.equal(out.qualityNotes, undefined, "a rövidített lecke a kereten belül — nincs jelzés");
+  assert.equal(out.telemetry.gates.lengthShortened, true);
+  assert.equal(out.telemetry.gates.lengthOverBudget, false);
+  assert.ok(!out.lesson.sections[0].blocks.some((b) => b.kind === "explain" && (b.text ?? "").includes("lefedett rész nagysága. A terület")), "a rövidített változat ment tovább");
+});
+
+test("J5: a nem rövidebb rövidítés elvetve — az eredeti lecke marad a jelzéssel", async () => {
+  const { experience: _bank, ...teaching } = structuredClone(fixture);
+  const long = structuredClone(teaching);
+  const explain = long.sections[0].blocks.find((b) => b.kind === "explain") as { text: string };
+  explain.text = `${explain.text} ${"A terület a síkidom által lefedett rész nagysága. ".repeat(60)}`.trim();
+  const client = withOverride(scriptedClient(), (station) => (station === "3" || station === "szókeret" ? JSON.stringify(long) : null));
+  const mem = memoryStore();
+  await runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, mem));
+  const out = mem.steps.at(-1)!.output as { qualityNotes?: Array<{ reason: string }>; telemetry: RunTelemetry };
+  assert.deepEqual(out.qualityNotes?.map((n) => n.reason), ["length_over_budget"]);
+  assert.equal(out.telemetry.gates.lengthShortened, false);
+  assert.equal(out.telemetry.gates.lengthOverBudget, true);
 });

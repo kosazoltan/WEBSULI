@@ -228,11 +228,13 @@ function ResumeButton({ jobId, onFollowRun }: { jobId: string; onFollowRun?: (ru
     if (pending) return; // audit 2026-09-05 (E): no double POST on a slow restart
     setPending(true);
     try {
-      const started = await apiRequest<{ runId?: string } | undefined>("POST", `/api/studio/jobs/${jobId}/resume`);
-      // Review #260: egyfutásos módban a folytatás új futás — a felület azt követi, nem a régi (hibás) jobot.
+      const started = await apiRequest<{ runId?: string; resumed?: boolean } | undefined>("POST", `/api/studio/jobs/${jobId}/resume`);
+      // Review #260: a folytatás / újragyártás saját futás — a felület azt követi, nem a régi (hibás) jobot.
       if (started?.runId && onFollowRun) {
         onFollowRun(started.runId);
-        toast({ title: "Újragyártás elindult", description: "A mentett forrásból új gyártás indult; a haladás itt követhető." });
+        toast(started.resumed
+          ? { title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább; a kész részeket nem gyártja újra." }
+          : { title: "Újragyártás elindult", description: "A mentett forrásból új gyártás indult; a haladás itt követhető." });
         return;
       }
       await Promise.all([
