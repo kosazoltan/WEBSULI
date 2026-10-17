@@ -31,6 +31,23 @@ export function assetFilePath(asset: Pick<DesignAsset, "src">, roots = [path.res
 
 export type SyncReport = { written: number; unchanged: number; missing: string[] };
 
+/**
+ * Review #277: az induló szinkron ígérete. A mentéskori arculatválasztás megvárja (legfeljebb `SYNC_WAIT_MS`-ig), különben a deploy
+ * utáni első percekben mentett lecke a még be nem töltött borító helyett végleges tartalékképet rögzítene (nincs utólagos pótlás).
+ */
+let initialSync: Promise<SyncReport> | null = null;
+export const SYNC_WAIT_MS = 60_000;
+export function startDesignAssetSync(run: () => Promise<SyncReport> = () => syncDesignAssets()): Promise<SyncReport> {
+  initialSync = run();
+  return initialSync;
+}
+async function initialSyncSettled(ms = SYNC_WAIT_MS): Promise<void> {
+  if (!initialSync) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([initialSync.then(() => undefined, () => undefined), new Promise<void>(r => { timer = setTimeout(r, ms); })]);
+  if (timer) clearTimeout(timer);
+}
+
 /** Idempotens: a már azonos lenyomatú képet nem írja újra; a hiányzó fájlt naplózza, a többit betölti. */
 export async function syncDesignAssets(catalog: readonly DesignAsset[] = DESIGN_ASSET_CATALOG, roots?: string[]): Promise<SyncReport> {
   const existing = new Map((await db.select({ id: designAssets.id, sha256: designAssets.sha256 }).from(designAssets)).map(r => [r.id, r.sha256]));
@@ -64,6 +81,7 @@ export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typ
   const lesson = json as Record<string, unknown>;
   if (typeof lesson.subject !== "string" || typeof lesson.classroom !== "number" || typeof lesson.title !== "string") return json;
   const { art: _previous, ...rest } = lesson;
+  await initialSyncSettled();
   try {
     const stored = new Set((await executor.select({ id: designAssets.id }).from(designAssets)).map(r => r.id));
     const catalog = DESIGN_ASSET_CATALOG.filter(a => stored.has(a.id));

@@ -23,7 +23,7 @@ test("a taxonómia csak tanított párokat tartalmaz, mind a 72 párnak 2–6 t�
   }
 });
 
-test("témakör-besorolás: katalógus-témakör, cím, ismeretlen, nem tanított pár; a leghosszabb kulcsszó nyer", () => {
+test("témakör-besorolás: katalógus-témakör, cím, ismeretlen, nem tanított pár", () => {
   assert.equal(topicKeyOf({ subject: "Környezetismeret", classroom: 4, title: "A víz körforgása" })?.key, "viz");
   assert.equal(topicKeyOf({ subject: "Matematika", classroom: 5, title: "Törtek összeadása" })?.key, "tortek");
   assert.equal(topicKeyOf({ subject: "Fizika", classroom: 8, title: "Áramkörök", topicArea: "Elektromosságtan" })?.key, "elektromossag");
@@ -32,6 +32,21 @@ test("témakör-besorolás: katalógus-témakör, cím, ismeretlen, nem tanítot
   assert.equal(topicKeyOf({ subject: "constructor", classroom: 7, title: "x" }), null);
   // A katalógus-témakör elsőbbséget kap a címmel szemben.
   assert.equal(topicKeyOf({ subject: "Matematika", classroom: 5, title: "Törtek", topicArea: "Geometria és kerület" })?.key, "geometria");
+});
+
+test("review #277: minden témakör a saját címkéjével besorolható (regresszió mind a 238-ra)", async () => {
+  const { SUBJECT_LABELS } = await import("../shared/catalog-taxonomy");
+  const grade = { explorer: 1, adventure: 4, studio: 7, laboratory: 9, future: 11 } as const;
+  for (const t of TOPICS) assert.equal(topicKeyOf({ subject: SUBJECT_LABELS[t.subject], classroom: grade[t.band], title: t.label })?.key, t.key, `${t.subject}/${t.band}: „${t.label}”`);
+});
+
+test("review #277: címke elsőbbsége, csak szóelejes kulcsszó, több témakörös cím → nincs témakör", () => {
+  assert.equal(topicKeyOf({ subject: "Fizika", classroom: 8, title: "Hőtan" })?.key, "hotan");
+  assert.equal(topicKeyOf({ subject: "Matematika", classroom: 7, title: "Síkgeometria" })?.key, "sikgeometria");
+  assert.equal(topicKeyOf({ subject: "Földrajz", classroom: 7, title: "A földfelszín" })?.key, "foldfelszin");
+  assert.equal(topicKeyOf({ subject: "Matematika", classroom: 9, title: "Másodfokú egyenletek" })?.key, "masodfoku", "a közös kulcsszó nem viszi a lista első témájára");
+  assert.equal(topicKeyOf({ subject: "Magyar nyelvtan", classroom: 7, title: "Összetett mondat elemzése" })?.key, "osszetett-mondat", "a „mondat” nem illeszkedik a hosszabb „mondatresz” kulcsszóra");
+  assert.equal(topicKeyOf({ subject: "Matematika", classroom: 5, title: "Törtek, geometria és mértékegységek témazáró" }), null, "több témakör → a sáv hőse");
 });
 
 test("a témakör borítója nyer, de csak a lecke sávjában; a témaköri borító nem kerül az általános rotációba", () => {

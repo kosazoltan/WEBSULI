@@ -34,7 +34,7 @@ export function AuthStatus() {
           variant="outline"
           size="sm"
           onClick={handleLogin}
-          className="h-7 px-2 text-xs gap-1 border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-900/30"
+          className="h-11 min-w-11 lg:h-7 lg:min-w-0 px-2 text-xs gap-1 border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-900/30"
           data-testid="button-login"
         >
           <LogIn className="h-3 w-3" />
@@ -72,7 +72,7 @@ export function AuthStatus() {
       )}
 
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-orange-100 border border-orange-300 dark:bg-orange-950/40 dark:border-orange-700 transition-colors">
-         <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-[10px] font-bold text-white">
+         <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-orange-700 to-amber-700 flex items-center justify-center text-[11px] font-bold text-white">
             {getDisplayName().charAt(0)}
          </div>
          <span className="text-xs font-medium text-orange-800 dark:text-orange-200 hidden sm:inline-block">
@@ -80,7 +80,7 @@ export function AuthStatus() {
          </span>
          <button
             onClick={handleLogout}
-            className="ml-0.5 p-0.5 hover:bg-orange-200 dark:hover:bg-orange-800 rounded text-orange-500 hover:text-red-500 transition-colors"
+            className="ml-0.5 inline-flex items-center justify-center h-11 w-11 lg:h-auto lg:w-auto p-0.5 hover:bg-orange-200 dark:hover:bg-orange-800 rounded text-orange-500 hover:text-red-500 transition-colors"
             title="Kijelentkezés"
          >
             <LogOut className="w-3 h-3" />

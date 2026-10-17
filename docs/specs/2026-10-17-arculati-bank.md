@@ -67,7 +67,13 @@ Előzmény: az ikonkészlet (#274, 72 tantárgy × sáv ikon) és a mentéskori 
 
 ## Szélső esetek
 - **Ismeretlen témakör:** a mai rotáció (sávhős vagy tantárgyi borító).
-- **Több témakör illik:** a katalógus-témakör nyer, utána a leghosszabb kulcsszó-egyezés; döntetlennél a taxonómia sorrendje.
+- **Több témakör illik** (review #277 szerint pontosítva):
+  - a katalógus-témakör nyer;
+  - a címben a témakör saját címkéje elsőbbséget kap;
+  - ha több címke illik, nincs témakör (összefoglaló esetén a sáv hőse jön);
+  - a kulcsszó csak akkor dönt, ha minden találat ugyanarra a témakörre mutat;
+  - csak a bemeneti szó kezdődhet a kulcsszóval.
+- **Deploy utáni első percek** (review #277): a mentéskori választás megvárja az induló szinkront (legfeljebb 60 s).
 - **Témazáró (több témakör):** a sáv hős-képe.
 - **Hiányzó kép az adatbázisban:** a választás csak létező azonosítót ír; a lejátszó hibánál katalógus-tartalékra vált.
 - **DB-méret:** ≈ 406 kép, becslés szerint ≈ 25–40 MB WebP-ben. A Neon-csomag kerete UNVERIFIED; az S1 előtt a valós

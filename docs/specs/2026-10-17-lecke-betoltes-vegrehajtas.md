@@ -50,3 +50,12 @@ Terv: `docs/specs/2026-10-17-lecke-betoltes.md`. Ág: `fix/lecke-betoltes`. A pa
    - A meglévő `lesson-responsive`, `lesson-design` és `subject-icon` csomag zöld.
 10. **Kapuk:** tsc, check:test, lint, unit, `test:learning-db`, a célzott Playwright, build. Merge és deploy után élő
    visszamérés ugyanazzal a felvevő szkripttel.
+
+## Utólagos pont (élő visszamérés a #275 után, 2026-10-17)
+11. **Az első képkocka sötétkék (≈ 1,1 s):** a CSS már betöltött, de a React még nem rajzolt, ezért a `body` szándékos sötétkékje
+    látszik. Ez a kezdőlap dizájnja (`index.css`).
+    - `client/index.html`: egy beágyazott szkript a `<head>`-ben `/preview/` útvonalon `ws-lesson-route` osztályt tesz a `<html>`-re.
+      A CSP engedi: `script-src 'unsafe-inline'`.
+    - `index.css`: `html.ws-lesson-route body` → `hsl(var(--background))` háttér és a hozzá tartozó előtérszín.
+    - `App.tsx`: útvonal-váltáskor az osztály ki-be kapcsol, így a kezdőlapra visszalépve a sötétkék megmarad.
+    - E2e (`lesson-loading.spec`): a `/preview/` első festésekor a `body` nem sötétkék; a kezdőlapra lépve újra az.

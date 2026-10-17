@@ -445,23 +445,40 @@ export const topicCoverId = (t: Pick<Topic, "subject" | "band" | "key">) => `cov
 const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
 /**
- * A lecke témaköre: előbb a katalógus-témakör, aztán a cím kulcsszavai alapján (ékezettűrő, szóelejes egyezés).
- * Döntetlennél a leghosszabb kulcsszó, utána a lista sorrendje. Nem tanított pár vagy nincs egyezés: null.
+ * A lecke témaköre: előbb a katalógus-témakör, aztán a cím alapján (ékezettűrő). Review #277:
+ * - a témakör saját CÍMKÉJE elsőbbséget kap (a cím szavai sorban, szóelejesen tartalmazzák: „Síkgeometria”, „Másodfokú egyenletek”);
+ * - ha több témakör címkéje is illik (pl. „Törtek, geometria és mértékegységek témazáró”), nincs témakör — a lecke a sáv hősét
+ *   kapja (terv: a több témakörös összefoglaló nem kap témaköri borítót);
+ * - különben a kulcsszavak, de csak ha mind ugyanarra a témakörre mutatnak; csak a bemeneti szó kezdődhet a kulcsszóval
+ *   (a fordított egyezés a „mondat” szót a hosszabb „mondatresz” kulcsszóra illesztette).
+ * Nem tanított pár vagy nincs egyezés: null.
  */
+const STOP = new Set(["a", "az", "es", "egy", "the", "and"]);
+const words = (text: string) => fold(text).split(/[^a-z0-9]+/).filter(w => w && !STOP.has(w));
+function labelHit(textWords: string[], label: string): boolean {
+  const lw = words(label);
+  if (!lw.length) return false;
+  for (let i = 0; i + lw.length <= textWords.length; i++) if (lw.every((w, j) => textWords[i + j].startsWith(w))) return true;
+  return false;
+}
 export function topicKeyOf(input: { subject: string; classroom: number; title: string; topicArea?: string | null }): Topic | null {
   const subject = subjectKeyOf(input.subject);
   if (!subject) return null;
   const band = designThemeForClassroom(input.classroom);
   if (!Object.hasOwn(SUBJECT_BANDS, subject) || !SUBJECT_BANDS[subject].includes(band)) return null;
   const candidates = TOPICS.filter(t => t.subject === subject && t.band === band);
-  const best = (text: string | null | undefined): Topic | null => {
-    if (!text) return null;
-    const words = fold(text).split(/[^a-z0-9]+/).filter(w => w.length >= 3);
-    let found: Topic | null = null; let score = 0;
-    for (const t of candidates) for (const k of t.keywords) {
-      if (k.length >= 3 && words.some(w => w.startsWith(k) || (k.length >= 5 && k.startsWith(w) && w.length >= 5)) && k.length > score) { found = t; score = k.length; }
-    }
-    return found;
+  const classify = (text: string | null | undefined): Topic | null | undefined => {
+    if (!text) return undefined;
+    const tw = words(text);
+    const labelled = candidates.filter(t => labelHit(tw, t.label));
+    if (labelled.length === 1) return labelled[0];
+    if (labelled.length > 1) return null; // több témakör — összefoglaló
+    const keyed = candidates.filter(t => t.keywords.some(k => k.length >= 3 && tw.some(w => w.startsWith(k))));
+    if (keyed.length === 1) return keyed[0];
+    return keyed.length > 1 ? null : undefined;
   };
-  return best(input.topicArea) ?? best(input.title);
+  // A katalógus-témakör (ha van és egyértelmű) nyer; különben a cím. A „több témakör” döntés (null) is végleges.
+  const fromArea = classify(input.topicArea);
+  if (fromArea !== undefined) return fromArea;
+  return classify(input.title) ?? null;
 }

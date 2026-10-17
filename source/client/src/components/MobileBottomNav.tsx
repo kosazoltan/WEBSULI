@@ -111,7 +111,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
                     flex flex-col items-center justify-center flex-1 min-h-[48px] gap-1
                     transition-colors hover-elevate active-elevate-2 rounded-lg
                     ${isActive
-                      ? "text-primary"
+                      ? "text-orange-700 dark:text-orange-400"
                       : "text-muted-foreground"
                     }
                   `}
