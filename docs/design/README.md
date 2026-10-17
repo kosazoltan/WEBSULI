@@ -5,7 +5,7 @@
 | `Websuli_Design_AI_Implementacios_Utasitas.md` | A mesterutasítás (öt évfolyamtéma, tipográfia, komponensek, ütemezés). | Forrás |
 | `Websuli_Design.html` | A design-csomag vizuális referenciája (offline prototípus). | Forrás |
 | `Websuli_Koncepcio_Egy_Platform.png` | A jóváhagyott koncepciókép: „Egy platform. Minden korosztálynak.” (öt évfolyamsáv, teljes alkalmazás-képernyők). | Forrás (2026-10-17) |
-| `Websuli_Grafikai_Szabalyterv.md` | A jóváhagyott koncepciókép („Egy platform. Minden korosztálynak.”) részletes elemzése és a belőle levezetett grafikai szabályok: tokenek, tipográfia, képi nyelv, komponensek. | **Terv, jóváhagyásra vár** (2026-10-17) |
+| `Websuli_Grafikai_Szabalyterv.md` | A jóváhagyott koncepciókép („Egy platform. Minden korosztálynak.”) részletes elemzése és a belőle levezetett grafikai szabályok: tokenek, tipográfia, képi nyelv, komponensek. | **Terv, a döntések rögzítve** (2026-10-17) |
 | `Websuli_Tanuloi_Keret_Minta.html` | A mesterutasítás tanulói keretének mintája: irányítópult, tantárgykártyák, tanulási terv, ismétlés, haladás; az öt témában, példaadattal. | **Minta, nem alkalmazott** (tulajdonosi döntés, 2026-10-17) |
 
 ## Ami az alkalmazásban él

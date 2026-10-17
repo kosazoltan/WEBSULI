@@ -10,7 +10,8 @@ elemzése**, és a belőle levezetett, kódba ültethető **grafikai szabályok*
 - Ez a terv a „jóváhagyott vizuális koncepciót” teszi mérhetővé. Ott, ahol a mostani megvalósítás (#267) ettől eltért, ez a
   dokumentum az irányadó.
 
-**Állapot:** terv, jóváhagyásra vár. Kód még nem készült.
+**Állapot:** a tulajdonos 2026-10-17-én döntött a nyitott kérdésekről (4. pont). A szeletek a háromfázisú rend szerint
+indulnak.
 
 ---
 
@@ -192,18 +193,17 @@ Nem vesszük át a leckébe: ecsetvonásos matrica, lábléc-szalag, jellemzős�
 - A képkészlet minden eleméhez van licenc, alt szöveg és sávjelölés; a pipeline csak a készletből választ.
 - 390 / 768 / 1440 px-en nincs kilógás. Mind az öt sávról képernyőkép, összevetve ezzel a dokumentummal.
 
-## 4. Nyitott döntések a tulajdonosnak
-1. **Képbeszerzés:**
-   - (a) mesterséges intelligenciával generált, kurált saját képkészlet;
-   - (b) licencelt stock-fotó és -illusztráció;
-   - (c) a kettő vegyesen.
+## 4. Tulajdonosi döntések (2026-10-17)
+1. **Képbeszerzés: MI-generált, kurált saját képkészlet.** A kabala, a sávonkénti tájképek és fotószerű képek, valamint a tárgyikonok egységes
+   stílusban, általunk generálva. Minden képet ember hagy jóvá. Tárolás metaadatokkal: sáv, tárgykör, kulcsszavak, eredet
+   („MI-generált, saját”), alt szöveg. Nincs stock és nincs külső, ismeretlen forrású kép.
+2. **Kabala: egy közös, nemtől független állatfigura** (a koncepciókép szerint róka) az 1–5. évfolyamra. Az 1–2. sávban játékosabb,
+   a 3–5. sávban expedíciós felszereléssel jelenik meg. A 6–12. sávban nincs kabala.
+3. **Hatókör: előbb a lecke-lejátszó** (2.6). A tanulói keret (irányítópult) utána, külön szeletben.
+4. **Kézírásos betű: igen, de csak marketingfelületre** (kezdőlap, márkafelület). Önhostolt, és a ő/ű-fedettségét ellenőrizni kell.
+   A leckében nem jelenik meg.
 
-   Ettől függ a minőség, a költség és a jogtisztaság.
-2. **Kabala:** egy közös kabala minden sávra (a 1–5. sávban), vagy sávonként más állat?
-3. **Hatókör:** csak a lecke-lejátszó (2.6), vagy vele együtt a tanulói keret is (irányítópult, `Websuli_Tanuloi_Keret_Minta.html`)?
-4. **Kézírásos betű a marketingfelületre:** kell-e, és melyik (ő/ű-fedettséggel)?
-
-## 5. Javasolt szeletek (a háromfázisú rend szerint, a 4. döntései után)
+## 5. Szeletek (a háromfázisú rend szerint)
 1. **Tokenek és tipográfia** (2.1, 2.2): bővített sávszínek, súlyok, skála, kontraszttesztek.
 2. **Képkészlet és borítóválasztás** (2.3): a készlet szerkezete, az első képcsomag (sávonként hős-képek, tárgykörönként
    borítók), a pipeline választó lépése; kiváltja a `LessonCoverArt`-ot.
