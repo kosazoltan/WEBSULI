@@ -39,16 +39,13 @@ def subject_of(fname):
     return None
 
 
-def grades_of(fname, page_grade):
-    m = re.search(r"OH[-_][A-Z]{3}(\d{2})(\d{2})?", fname)
-    if m and m.group(2):
-        a, b = int(m.group(1)), int(m.group(2))
-        if b == a + 1:
-            return [a, b]
-    m = re.search(r"(\d{1,2})-(\d{1,2})", fname)
-    if m and int(m.group(2)) == int(m.group(1)) + 1:
-        return [int(m.group(1)), int(m.group(2))]
-    return [page_grade]
+def grades_of(pages):
+    """Review #282: a tankönyvkód (pl. OH-FIZ0910TA, OH-MAT1112BE) nem a dokumentum évfolyama. Egy tanmenet akkor kétéves,
+    ha két szomszédos évfolyam listaoldalán is szerepel (pl. Kémia 7–8.); egyébként a listaoldal évfolyamáé."""
+    ps = sorted(set(pages))
+    if len(ps) == 2 and ps[1] == ps[0] + 1:
+        return ps
+    return [ps[0]]
 
 
 MONTH = re.compile(r"^(szeptember|október|november|december|január|február|március|április|május|június)", re.I)
@@ -101,15 +98,21 @@ def parse(tables):
 
 def main(src, dst):
     data = json.load(open(src, encoding="utf-8"))
-    out, empty = [], []
+    out, empty, done = [], [], set()
+    pages = {}
+    for fname in data:
+        pages.setdefault(fname.split("__", 1)[1], []).append(int(re.match(r"g(\d+)__", fname).group(1)))
     for fname, tables in data.items():
         page_grade = int(re.match(r"g(\d+)__", fname).group(1))
         base = fname.split("__", 1)[1]
+        grades = grades_of(pages[base])
+        if len(grades) == 2 and base in done:  # a kétéves tanmenet mindkét listaoldalon szerepel: egyszer dolgozzuk fel
+            continue
+        done.add(base)
         lessons = parse(tables)
         if len(lessons) < 10:
             empty.append((fname, len(lessons)))
             continue
-        grades = grades_of(base, page_grade)
         if len(grades) == 2:
             marked = [l for l in lessons if l["grade"] in grades]
             if len(marked) >= len(lessons) * 0.8:

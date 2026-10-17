@@ -20,7 +20,7 @@ const STOP = new Set([
   // tantárgynevek: a tantárgyat a nyers címből ismerjük fel, a pontozásban nem számítanak
   "matematika", "matek", "nyelvtan", "irodalom", "irodalmi", "termeszetismeret", "termeszettudomany", "termeszettan", "kornyezetismeret",
   "foldrajz", "fizika", "kemia", "biologia", "tortenelem", "angol", "angolul", "english", "magyar", "nyelv", "digitalis", "kultura",
-  "informatika", "enek", "zene",
+  "informatika", "enek", "zene", "nagy", "kis", "kicsi", "uj",
 ]);
 
 const fold = (s: string) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -50,25 +50,43 @@ const SUBJECT_PATTERNS: Array<[RegExp, string[]]> = [
   [/\b(tortenel|okor|okori|kozepkor|kiraly|kiralyok|honfoglal|egyiptom|mezopotam|hellasz|gorog|arpad|hunyadi|karoly|emberre valas|idoszamit|civiliz|kereszteny|iszlam|brankovic|identitas)/, ["tortenelem", "tarsadalmi-ismeretek"]],
   [/\b(biologia|termeszettud|termeszetism|kornyezetism|noveny|allat|test|szerv|legzes|taplalk|anyagforgalom|sejt|eloleny|erdo|mezo|ret\b|vizpart|talaj|kert|meh\b|zoldseg|gyumolcs|betegseg|egeszseg|viz korforgas|elobel)/, ["biologia", "termeszetismeret", "kornyezetismeret"]],
   [/\b(nyelvtan|helyesiras|szofaj|fonev|igek?\b|igekot|mellekn|hatarozo|mondat|elvalasztas|betur|szoalkot|osszetett szav|tulajdonsag|kommunikacio|szamot, mennyiseget)/, ["magyar-nyelvtan", "magyar-nyelv-es-irodalom"]],
-  [/\b(irodalom|vers|mese|nepmese|regeny|arany janos|petofi|jokai|pal utcai|abigel|ady|nyugat|lira|novella|odysseus|csaladi kor|green war)/, ["magyar-irodalom", "magyar-nyelv-es-irodalom"]],
+  [/\b(irodalom|vers(ek|e|ei)?\b|mese|nepmese|regeny|arany janos|petofi|jokai|pal utcai|abigel|ady|nyugat|lira|novella|odysseus|csaladi kor|green war)/, ["magyar-irodalom", "magyar-nyelv-es-irodalom"]],
   [/\b(matek|matematik|szorzas|osztas|osszeadas|kivonas|tort|szamkor|geometri|egyenlet|szog|terulet|kerulet|mertek|szamol|romai szam|negativ|pitagor|koordinat|algebra|halmaz|hatvany|oszthat|szazalek|aranyossag|statisztik|fuggveny|hozzarendel|transzform|terfogat|felszin|alakzat|becsles|muveleti sorrend|hossz|urmertek|tomeg)/, ["matematika"]],
+];
+/** Review #282: a címben kimondott tantárgynév elsőbbséget kap a témaszavakkal szemben („Matematika – Testek felszíne”). */
+const EXPLICIT_SUBJECTS: Array<[RegExp, string[]]> = [
+  [/\b(matek|matematika)/, ["matematika"]],
+  [/\b(angol|english)/, ["angol"]],
+  [/\b(francia|french)\b/, ["francia"]], // „Franciaország” (földrajz) nem francia nyelv
+  [/\b(nyelvtan|magyar nyelv\b)/, ["magyar-nyelvtan", "magyar-nyelv-es-irodalom"]],
+  [/\birodalom/, ["magyar-irodalom", "magyar-nyelv-es-irodalom"]],
+  [/\btortenelem/, ["tortenelem", "tarsadalmi-ismeretek"]],
+  [/\bfizika/, ["fizika", "termeszetismeret"]],
+  [/\bkemia/, ["kemia", "termeszetismeret"]],
+  [/\bbiologia/, ["biologia", "termeszetismeret"]],
+  [/\bfoldrajz/, ["foldrajz", "termeszetismeret", "kornyezetismeret"]],
+  [/\b(kornyezetismeret|termeszetismeret|termeszettudomany|termeszettan)/, ["termeszetismeret", "kornyezetismeret", "biologia"]],
+  [/\b(digitalis kultura|informatika)/, ["informatika"]],
+  [/\b(enek-zene|enekzene)/, ["enek-zene"]],
 ];
 export function subjectsOfTitle(title: string): string[] | null {
   const t = fold(title);
+  for (const [re, subjects] of EXPLICIT_SUBJECTS) if (re.test(t)) return subjects;
   for (const [re, subjects] of SUBJECT_PATTERNS) if (re.test(t)) return subjects;
   return null;
 }
 
 /** Rögzített időpontú témák (hónapnév, ünnep) — elsősorban a nyelvi anyagokra; a 2026/2027-es tanév napjaira vetítve. */
+// Review #282: a konkrét ünnep a hónapnév ELŐTT (különben „Október 23.” az „október” általános helyére kerülne).
 const SEASONAL: Array<[RegExp, string, string]> = [
+  [/marcius 15|1848/, "2027-03-12", "március 15."], [/oktober 23|1956/, "2026-10-21", "október 23."],
+  [/halloween/, "2026-10-21", "Halloween"], [/christmas|karacsony|advent|snowman|hoember|mikulas/, "2026-12-09", "karácsony"],
+  [/easter|husvet/, "2027-03-22", "húsvét"], [/valentin/, "2027-02-12", "Valentin-nap"], [/farsang|carnival/, "2027-02-08", "farsang"],
+  [/anyak napja|mother.?s day/, "2027-04-30", "anyák napja"],
   [/\bszeptember/, "2026-09-15", "szeptember"], [/\boktober(i)?\b/, "2026-10-14", "október"], [/\bnovember/, "2026-11-16", "november"],
   [/\bdecember/, "2026-12-09", "december"], [/\bjanuar/, "2027-01-18", "január"], [/\bfebruar/, "2027-02-15", "február"],
   [/\bmarcius\b/, "2027-03-10", "március"], [/\baprilis/, "2027-04-14", "április"], [/\bmajus/, "2027-05-14", "május"],
   [/\bjunius/, "2027-06-07", "június"],
-  [/halloween/, "2026-10-21", "Halloween"], [/christmas|karacsony|advent|snowman|hoember|mikulas/, "2026-12-09", "karácsony"],
-  [/easter|husvet/, "2027-03-22", "húsvét"], [/valentin/, "2027-02-12", "Valentin-nap"], [/farsang|carnival/, "2027-02-08", "farsang"],
-  [/anyak napja|mother.?s day/, "2027-04-30", "anyák napja"], [/marcius 15|1848/, "2027-03-12", "március 15."],
-  [/oktober 23|1956/, "2026-10-21", "október 23."],
 ];
 export function seasonalMatch(title: string): CurriculumMatch | null {
   const t = fold(title);
@@ -108,12 +126,13 @@ function tokenScore(word: string, lesson: IndexedLesson, idf: Map<string, number
 }
 
 /** A küszöb a 207 éles anyag kézi átnézésével hangolva (lásd a PR mérését). */
-export const MIN_SCORE = 5;
+export const MIN_SCORE = 4.75;
 
 export function matchMaterial(input: { title: string; classroom: number }, index: CurriculumIndex): CurriculumMatch | null {
+  // Review #282: évfolyam nélküli anyag semmilyen pozíciót nem kap (ünnepit sem) — a lista végén marad.
+  if (!input.classroom) return null;
   const seasonal = seasonalMatch(input.title);
   if (seasonal) return seasonal;
-  if (!input.classroom) return null;
   const words = [...new Set(normalizeTokens(input.title))];
   if (!words.length) return null;
   const subjects = subjectsOfTitle(input.title);

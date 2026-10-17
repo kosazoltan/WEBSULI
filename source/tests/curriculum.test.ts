@@ -79,3 +79,30 @@ test("rendezés: a mai témához legközelebbi elöl, a jövő előnyt kap a mú
   assert.equal(isCurrent({ pos: today + NOW_WINDOW * 1.5, label: "" }, today), false);
   assert.equal(isCurrent(null, today), false);
 });
+
+test("review #282: évfolyam nélküli anyag ünnepi címmel sem kap pozíciót; konkrét ünnep a hónapnév előtt; kimondott tantárgynév elsőbbsége", () => {
+  assert.equal(matchMaterial({ title: "Halloween", classroom: 0 }, index), null);
+  assert.equal(seasonalMatch("Október 23. – megemlékezés")?.label, "október 23.");
+  assert.equal(seasonalMatch("Március 15. – 1848 hősei")?.label, "március 15.");
+  assert.deepEqual(subjectsOfTitle("Matematika – Testek felszíne és térfogata"), ["matematika"]);
+  assert.deepEqual(subjectsOfTitle("Matematika verseny 5. osztály"), ["matematika"]);
+  assert.notDeepEqual(subjectsOfTitle("Matek verseny"), ["magyar-irodalom", "magyar-nyelv-es-irodalom"]);
+});
+
+test("review #282: a tanmenet évfolyama a dokumentumé, nem a tankönyvkódé; a kétéves tanmenet egyszer, két félre bontva", () => {
+  const plans = (tanmenet as TanmenetData).plans;
+  const of = (frag: string) => plans.filter(p => p.source.includes(frag));
+  const fiz10 = of("OH-FIZ0910TA_II_fizika_10");
+  assert.deepEqual(fiz10.map(p => p.grade), [10], "a 10.-es fizika nem darabolódik 9/10-re");
+  const mat11 = of("OH-MAT1112BE_tanmenet_emelt_matematika_11");
+  assert.deepEqual(mat11.map(p => p.grade), [11]);
+  const kem78 = of("OH-KEM78TB_kemia_7_8_tanmenet_hat_evfolyamos_heti_masfel");
+  assert.deepEqual(kem78.map(p => p.grade).sort(), [7, 8], "a 7–8. kémia egyszer, 7. és 8. félre bontva");
+  const keys = plans.map(p => `${p.grade}|${p.source}`);
+  assert.equal(new Set(keys).size, keys.length, "nincs duplikált tanmenet");
+});
+
+test("review #282: „Franciaország” földrajz, nem francia nyelv", () => {
+  assert.deepEqual(subjectsOfTitle("Nagy-Britannia és Franciaország – 8. osztályos földrajz"), ["foldrajz", "termeszetismeret", "kornyezetismeret"]);
+  assert.deepEqual(subjectsOfTitle("🇫🇷 8. Osztályos Francia Témazáró"), ["francia"]);
+});

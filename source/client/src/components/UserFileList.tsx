@@ -108,7 +108,8 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   }, []);
 
   // Filter by search query AND selected classroom
-  const today = useMemo(() => todayPosition(), []);
+  // Review #282: renderenként számolva — a nyitva hagyott lista a percenkénti frissítéssel a napváltást is követi.
+  const today = todayPosition();
   const filteredFiles = useMemo(() => {
     const filtered = files
       .filter((file) => {

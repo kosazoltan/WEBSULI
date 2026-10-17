@@ -60,10 +60,11 @@ export default function Preview() {
   // Combined loading state — a leckéhez a config nem kell (az csak a megosztási linkhez és az iframe-hez).
   const isLoading = materialLoading || (!lessonExpected && configLoading);
   // Tanmenet-rendezés (docs/specs/2026-10-17-tanmenet-rendezes.md): az előző/következő az évfolyam listájának sorrendjében.
+  const today = todayPosition();
   const ordered = useMemo(() => {
     const sameGrade = listed?.classroom != null ? allFiles.filter((f) => f.classroom === listed.classroom) : allFiles;
-    return curriculumSort(sameGrade, todayPosition());
-  }, [allFiles, listed?.classroom]);
+    return curriculumSort(sameGrade, today);
+  }, [allFiles, listed?.classroom, today]);
   const neighbours = params?.id ? lessonNeighbours(ordered, params.id) : { prev: null, next: null };
   const openFile = (file: { id: string; contentType?: string }) => setLocation(file.contentType === "pdf" ? `/materials/pdf/${file.id}` : `/preview/${file.id}`);
   
