@@ -10,9 +10,10 @@ import { lessonByFileQuery } from "@/lesson-runtime/lesson-query";
  * Leckekészítő stúdió (docs/specs/2026-10-17-studio-ui.md): a kész lecke tárolt arculata — sáv, tantárgyikon, hős- vagy
  * borítókép, kabala (1–5.), témakör —, az adatbázisból (a lejátszóval azonos forrásból, újraszámolás nélkül).
  */
-export function LessonArtSummary({ lessonId }: { lessonId: string }) {
-  const material = useQuery<{ htmlFileId: string }>({ queryKey: [`/api/lessons/${lessonId}/material`], retry: 1 });
-  const fileId = material.data?.htmlFileId;
+export function LessonArtSummary({ lessonId, htmlFileId }: { lessonId?: string; htmlFileId?: string }) {
+  // Review #278: a feltöltési útvonal a közzétett anyag azonosítóját ismeri, a haladó ág a leckéét.
+  const material = useQuery<{ htmlFileId: string }>({ queryKey: [`/api/lessons/${lessonId}/material`], retry: 1, enabled: !htmlFileId && !!lessonId });
+  const fileId = htmlFileId ?? material.data?.htmlFileId;
   const lesson = useQuery({ ...lessonByFileQuery(fileId ?? ""), enabled: !!fileId });
   const data = lesson.data?.lesson as { classroom?: number; art?: StoredLessonArt } | undefined;
   if (!data || typeof data.classroom !== "number") return null;

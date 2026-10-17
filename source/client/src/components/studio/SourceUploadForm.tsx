@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
+import { LessonArtSummary } from "@/components/studio/LessonArtSummary";
 
 /** A folytatás fajtája szerinti, a valóságnak megfelelő tájékoztatás (spec 2026-10-15-folytatas-szoveg). */
 const RESUME_TEXT: Record<string, string> = {
@@ -468,6 +469,8 @@ export function SourceUploadForm({
                 A program következő lépése: {run.data.nextRecovery.reason}.
               </p>
             )}
+            {/* Review #278 (P1): az arculat a fő feltöltési útvonal kész futásánál is látszik (nem csak a haladó ágon). */}
+            {run.data.phase === "done" && run.data.htmlFileId && <LessonArtSummary htmlFileId={run.data.htmlFileId} />}
             {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked" || run.data.phase === "draft") && (
               <div className="flex flex-wrap items-center gap-2 mt-1" data-testid="one-step-actions">
                 {run.data.phase === "done" && run.data.htmlFileId && (

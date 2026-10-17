@@ -18,14 +18,19 @@
   .ws-studio :is(button, a[href], [role="tab"], [role="combobox"], summary, select, textarea,
     input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])) { min-height: 44px; }
   .ws-studio :is(button, a[href], [role="combobox"], summary) { min-width: 44px; }
+  /* Review #278: a min-height az inline linkre nem hat — a stúdió linkjei mobilon méretezhető dobozok. */
+  .ws-studio a[href] { display: inline-flex; align-items: center; }
+  /* Review #278: a portálban renderelt legördülő (Radix Select) kívül esik a .ws-studio-n — saját osztályt kap. */
+  .ws-studio-portal [role="option"] { min-height: 44px; }
   /* A nagyobb betűvel a helyőrző (pl. a kérés mintája) 3 sorban levágódott — a mező legalább 5 sornyi. */
   .ws-studio textarea { min-height: 7.75em; }
 }
 /* A nagyobb betűvel a nowrap gombfelirat kilógott a gombból (studio-generation-recovery mérte): a stúdióban a felirat sort törhet,
    a gomb magassága a tartalomhoz igazodik. */
 .ws-studio button { white-space: normal; height: auto; padding-block: 0.5rem; text-align: center; overflow-wrap: anywhere; }
-/* A segédszöveg 13 px alá nem mehet (mérve: 10–12 px volt). */
-.ws-studio .text-xs { font-size: 13px; line-height: 1.45; }
+/* A segédszöveg 13 px alá nem mehet (mérve: 10–12 px volt) — review #278: az explicit 10/11 px-es osztályok is. */
+.ws-studio :is(.text-xs, .text-\[10px\], .text-\[11px\]) { font-size: 13px; line-height: 1.45; }
+.ws-studio-portal { font-family: "Inter", "Noto Sans", Roboto, Arial, sans-serif; font-size: 15px; }
 /* Letiltott gomb: tömör, halk felület, mért kontrasztú szöveg — 50%-os átlátszóság helyett (olvashatatlan volt). */
 .ws-studio button:disabled { opacity: 1; background: #E2E8F0; color: #334155; border-color: #CBD5E1; box-shadow: none; }
 .dark .ws-studio button:disabled { background: #1E293B; color: #CBD5E1; border-color: #334155; }

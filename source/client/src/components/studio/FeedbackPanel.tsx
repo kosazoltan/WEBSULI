@@ -150,7 +150,7 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
             <SelectTrigger className="min-h-11 w-56" data-testid="quiz-export-game">
               <SelectValue placeholder="Válassz játékot…" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="ws-studio-portal">
               {(gamesData ?? []).map((g) => (
                 <SelectItem key={g.id} value={g.id}>
                   {g.title}

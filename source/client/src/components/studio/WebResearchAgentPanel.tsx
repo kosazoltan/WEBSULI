@@ -195,7 +195,7 @@ export function WebResearchAgentPanel() {
               <SelectTrigger id="web-research-classroom" className="min-h-11" data-testid="web-research-classroom">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="ws-studio-portal">
                 {CLASSROOMS.map((c) => (
                   <SelectItem key={c.value} value={String(c.value)}>
                     {c.label}

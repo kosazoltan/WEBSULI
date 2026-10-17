@@ -51,7 +51,7 @@ async function contrastProblems(page: Page): Promise<string[]> {
       const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
       if (r.width < 4 || r.height < 4 || s.visibility === "hidden" || r.bottom < 0 || r.top > innerHeight || el.closest("[aria-hidden=true]")) continue;
       let op = 1; for (let e: HTMLElement | null = el; e; e = e.parentElement) op *= Number(getComputedStyle(e).opacity);
-      const fs = parseFloat(s.fontSize); const big = fs >= 18.66 || (fs >= 14 && Number(s.fontWeight) >= 700);
+      const fs = parseFloat(s.fontSize); const big = fs >= 24 || (fs >= 18.66 && Number(s.fontWeight) >= 700); // WCAG: 18 pt, illetve 14 pt félkövér
       out.push({ x: r.left, y: r.top, w: r.width, h: r.height, color: `${s.color}|${op}`, big, label: `${el.tagName} "${el.textContent!.trim().slice(0, 30)}"` });
     }
     return out;
@@ -93,7 +93,7 @@ async function measure(page: Page, width: number) {
 }
 
 for (const scheme of ["light", "dark"] as const) {
-  test(`stúdió (${scheme}): érintés ≥ 44 px 1024 alatt, pixelalapú AA kontraszt, nincs kilógás — üres állapot`, async ({ page }) => {
+  test(`stúdió (OS ${scheme} preferencia — az appnak nincs .dark témája): érintés ≥ 44 px 1024 alatt, pixelalapú AA kontraszt, nincs kilógás — üres állapot`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     for (const [w, h] of SIZES) {
       await page.setViewportSize({ width: w, height: h });
@@ -136,3 +136,40 @@ test("kész lecke: a stúdió mutatja a tárolt arculatot (ikon, kép, kabala, t
   }
   expect(errors, "oldalhiba").toEqual([]);
 });
+
+test("review #278: a fő feltöltési útvonal kész futásánál is látszik az arculat (nem csak a haladó ágon)", async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.setItem("websuli.studio.oneStepRunId", "done-run"));
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    let data: unknown = [];
+    if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt" };
+    if (path === "/api/studio/maps") data = { maps: [] };
+    if (path === "/api/studio/lessons/one-step/done-run") data = { phase: "done", error: null, detail: null, mapId: "m", lessonId: "lesson-1", htmlFileId: "file-1" };
+    if (path === "/api/lessons/by-file/file-1") data = { lessonId: "lesson-1", version: 1, lesson: { ...compactFusionFixture(), subject: "Környezetismeret", classroom: 4, title: "A víz körforgása", art: { subjectIcon: "icon-kornyezetismeret-adventure", picture: "hero-adventure", mascot: "mascot-hello", topic: "viz" } } };
+    if (path.startsWith("/api/design-assets/")) return route.fulfill({ status: 404, json: { message: "nincs" } });
+    await route.fulfill({ json: data });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin?tab=lesson-studio");
+  const summary = page.getByTestId("lesson-art-summary");
+  await expect(summary).toBeVisible({ timeout: 15000 });
+  await expect(summary).toContainText("Tudás kalandjai");
+  await expect(summary.locator("img")).toHaveCount(3);
+});
+
+test("review #278: a portálban nyíló legördülő opciói is ≥ 44 px-esek 1024 px alatt (internetes készítés)", async ({ page }) => {
+  await mockStudio(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin?tab=lesson-studio");
+  await page.getByRole("button", { name: /Internetes keresés/ }).click();
+  const combo = page.getByRole("combobox").first();
+  await expect(combo).toBeVisible();
+  await combo.click();
+  const options = page.getByRole("option");
+  await expect(options.first()).toBeVisible();
+  // Elrendezési magasság (offsetHeight): a menü `zoom-in-95` animációval nyílik, a getBoundingClientRect közben 0,95-ös méretet adna.
+  const heights = await options.evaluateAll(els => els.map(e => (e as HTMLElement).offsetHeight));
+  expect(heights.length).toBeGreaterThan(0);
+  expect(heights.filter(h => h < 44), "44 px alatti opció").toEqual([]);
+});
+

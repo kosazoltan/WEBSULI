@@ -250,7 +250,7 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
                 <SelectTrigger className="min-h-11" data-testid="lesson-map-select">
                   <SelectValue placeholder={mapsLoading ? "Források betöltése…" : "Válassz forrásjegyzéket…"} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="ws-studio-portal">
                   {(mapsData?.maps ?? []).map((m) => (
                     <SelectItem key={m.id} value={m.id} disabled={m.status !== "approved"}>
                       {m.title} · {m.subject} · {m.classroom}. o.
