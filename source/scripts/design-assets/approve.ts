@@ -13,7 +13,7 @@ import type { DesignAsset } from "../../shared/design-assets";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const CANDIDATES = path.join(ROOT, "design-assets", "candidates");
-const CATALOG = path.join(ROOT, "shared", "design-assets.json");
+const CATALOG = path.join(ROOT, "shared", "design-asset-catalog.ts");
 const WIDTH: Record<string, number> = { hero: 1600, cover: 1200, icon: 512, mascot: 512 };
 
 const selectionFile = process.argv[2];
@@ -21,7 +21,8 @@ if (!selectionFile) throw new Error("Add meg a kiválasztás JSON-fájlját.");
 const selection = JSON.parse(readFileSync(selectionFile, "utf8")) as Record<string, string>;
 const manifest = JSON.parse(readFileSync(path.join(ROOT, "design-assets", "prompts.json"), "utf8")) as AssetManifest;
 const style = loadStyle(readFileSync(path.join(ROOT, "design-assets", "style.md"), "utf8"));
-const catalog: DesignAsset[] = existsSync(CATALOG) ? JSON.parse(readFileSync(CATALOG, "utf8")) : [];
+// A katalógus TS-modul (a tsconfig nem importál JSON-t); a tömb a „= ” utáni JSON-literál.
+const catalog: DesignAsset[] = existsSync(CATALOG) ? JSON.parse(readFileSync(CATALOG, "utf8").replace(/^[\s\S]*?= /, "").replace(/;\s*$/, "")) : [];
 
 // A tsx alatt feloldott Playwright-build böngészője hiányozhat (mérve, 2026-10-17): ekkor a telepített Chrome.
 const browser = await chromium.launch().catch(() => chromium.launch({ channel: "chrome" }));
@@ -53,5 +54,5 @@ for (const [id, rel] of Object.entries(selection)) {
 }
 await browser.close();
 catalog.sort((a, b) => a.id.localeCompare(b.id));
-writeFileSync(CATALOG, JSON.stringify(catalog, null, 2) + "\n");
+writeFileSync(CATALOG, `/** GENERÁLT FÁJL — scripts/design-assets/approve.ts. A jóváhagyott, MI-generált saját képek katalógusa. */\nimport type { DesignAsset } from "./design-assets";\n\nexport const DESIGN_ASSET_CATALOG: DesignAsset[] = ${JSON.stringify(catalog, null, 2)};\n`);
 console.log(`Katalógus: ${catalog.length} kép (${path.relative(ROOT, CATALOG)}).`);

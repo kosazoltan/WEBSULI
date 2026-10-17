@@ -1,4 +1,7 @@
-[
+/** GENERÁLT FÁJL — scripts/design-assets/approve.ts. A jóváhagyott, MI-generált saját képek katalógusa. */
+import type { DesignAsset } from "./design-assets";
+
+export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
   {
     "id": "cover-sejt",
     "kind": "cover",
@@ -103,4 +106,4 @@
     "promptHash": "ac5a00af47fdb891",
     "approvedAt": "2026-10-17T05:57:38.911Z"
   }
-]
+];

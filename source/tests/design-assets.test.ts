@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { buildImageRequest, composePrompt, estimateUsd, loadStyle, redact, type AssetManifest } from "../scripts/design-assets/lib";
 import { designAssetSchema } from "../shared/design-assets";
+import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
 
 // Websuli képkészlet (docs/specs/2026-10-17-websuli-kepkeszlet.md).
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
@@ -42,9 +43,37 @@ test("a becsült ár az OpenRouter 2026-10-17-i ára: 2K kép 0,09 USD, referenc
 });
 
 test("a katalógus minden eleme séma szerinti, MI-generált saját kép, és a fájl létezik", () => {
-  const catalog = JSON.parse(read("shared/design-assets.json")) as unknown[];
-  for (const raw of catalog) {
+  for (const raw of DESIGN_ASSET_CATALOG) {
     const asset = designAssetSchema.parse(raw);
     assert.ok(existsSync(new URL(`../client/public${asset.src}`, import.meta.url)), `${asset.id}: fájl`);
   }
+});
+
+// Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a választás szabályai, rögzített mintakatalóguson.
+test("pickLessonArt: kulcsszavas borító, sávhős, kabala csak 1–5., ékezettűrő tárgyikon (-young a fiataloknak)", async () => {
+  const { pickLessonArt, foldText } = await import("../shared/design-assets");
+  const a = (id: string, kind: "mascot" | "hero" | "icon" | "cover", band: "explorer" | "adventure" | "studio" | "laboratory" | "future", subjects: string[], keywords: string[]) =>
+    ({ id, kind, band, subjects, keywords, alt: "Minta kép leírása", src: `/design/${band}/${id}.webp`, origin: "MI-generált, saját (Seedream 5.0 Pro)", model: "m", promptHash: "0123456789abcdef", approvedAt: "2026-10-17" });
+  const catalog = [
+    a("cover-sejt", "cover", "laboratory", ["biológia"], ["sejt", "sejtmag"]),
+    a("hero-studio", "hero", "studio", [], ["Föld"]), a("hero-explorer", "hero", "explorer", [], []),
+    a("mascot-hello", "mascot", "explorer", [], ["kabala"]),
+    a("icon-kornyezet-young", "icon", "explorer", ["kornyezet"], []), a("icon-biologia", "icon", "laboratory", ["biologia"], []),
+    a("icon-matematika-young", "icon", "explorer", ["matematika"], []), a("icon-matematika", "icon", "laboratory", ["matematika"], []),
+  ];
+  assert.equal(foldText("Természetismeret"), "termeszetismeret");
+  const bio = pickLessonArt({ subject: "Biológia", title: "Sejtmembrán, transzport, sejtmag" }, "laboratory", catalog);
+  assert.equal(bio.cover?.id, "cover-sejt");
+  assert.equal(bio.mascot, undefined, "9–10. évfolyamon nincs kabala");
+  assert.equal(bio.subjectIcon?.id, "icon-biologia");
+  const math7 = pickLessonArt({ subject: "Matematika", title: "Medve Szabadtéri Csapatverseny" }, "studio", catalog);
+  assert.equal(math7.cover, undefined, "kulcsszó nélkül nincs borító");
+  assert.equal(math7.hero?.id, "hero-studio");
+  assert.equal(math7.subjectIcon?.id, "icon-matematika");
+  const env2 = pickLessonArt({ subject: "Környezetismeret", title: "Az évszakok" }, "explorer", catalog);
+  assert.equal(env2.hero?.id, "hero-explorer");
+  assert.equal(env2.mascot?.id, "mascot-hello");
+  assert.equal(env2.subjectIcon?.id, "icon-kornyezet-young");
+  assert.equal(pickLessonArt({ subject: "Matematika", title: "Törtek" }, "adventure", catalog).subjectIcon?.id, "icon-matematika-young");
+  assert.deepEqual(pickLessonArt({ subject: "Kémia", title: "Oldatok" }, "future", catalog), {});
 });

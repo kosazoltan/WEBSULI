@@ -7,11 +7,11 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 const THEMES = [
-  { classroom: 1, id: "explorer", name: "Felfedező világ", minPx: 22 },
-  { classroom: 4, id: "adventure", name: "Tudás kalandjai", minPx: 19 },
-  { classroom: 7, id: "studio", name: "Kreatív stúdió", minPx: 17 },
-  { classroom: 9, id: "laboratory", name: "Digitális tudáslabor", minPx: 16 },
-  { classroom: 11, id: "future", name: "Jövőtervező", minPx: 16 },
+  { classroom: 1, id: "explorer", name: "Felfedező világ", minPx: 22, motto: "Kíváncsiság • Játék • Alapok" },
+  { classroom: 4, id: "adventure", name: "Tudás kalandjai", minPx: 19, motto: "Fedezz fel • Próbáld ki • Fejlődj" },
+  { classroom: 7, id: "studio", name: "Kreatív stúdió", minPx: 17, motto: "Gondolkodj • Alkoss • Oldj meg" },
+  { classroom: 9, id: "laboratory", name: "Digitális tudáslabor", minPx: 16, motto: "Elemezz • Kísérletezz • Valósítsd meg" },
+  { classroom: 11, id: "future", name: "Jövőtervező", minPx: 16, motto: "Tudás • Célok • Lehetőségek" },
 ] as const;
 
 async function contrastOf(page: Page, selector: string) {
@@ -34,7 +34,9 @@ for (const t of THEMES) {
       await page.evaluate(() => document.fonts.ready);
       const root = page.locator("[data-ws-theme]");
       await expect(root).toHaveAttribute("data-ws-theme", t.id);
-      await expect(page.getByTestId("ws-topbar")).toContainText(`Websuli / ${t.name}`);
+      // Dokumentált spec-változás (docs/specs/2026-10-17-websuli-lecke-hos.md): a felső sáv helyett sávfejléc — téma neve és mottó.
+      await expect(page.getByTestId("ws-bandhead")).toContainText(t.name);
+      await expect(page.getByTestId("ws-bandhead")).toContainText(t.motto);
       // A törzsszöveg a téma minimuma (a tananyag-blokk számított mérete).
       const bodyPx = await page.locator(".lesson-block").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
       expect(bodyPx).toBeGreaterThanOrEqual(t.minPx);
@@ -44,7 +46,7 @@ for (const t of THEMES) {
       expect(smallest).toBeGreaterThanOrEqual(t.minPx);
       // A kiválasztott fül és a felső sáv szövege a mért színekből ≥ 4,5:1.
       // Review #267: a sávot a saját tömör hátterével mérjük (a <strong> háttere átlátszó lenne).
-      expect(await contrastOf(page, ".ws-topbar")).toBeGreaterThanOrEqual(4.5);
+      // A sávfejléc háttere színátmenet: a cím–háttér párokat (title/soft, title/panel) a lesson-design.test.ts méri.
       expect(await contrastOf(page, '.fusion-tabs button[aria-selected="true"]')).toBeGreaterThanOrEqual(4.5);
       // Magyar ő/ű a lecke saját fontjával (nincs tartalékfont-csere a címsorban).
       await expect(page.locator("h1")).toContainText(/[őű]/);
@@ -71,10 +73,14 @@ test("a régi élménytéma és díszítőeffekt nem jelenik meg (az arculatot a
 test("borítóábra nélküli lecke: nincs üres második fejlécoszlop, az embléma látható", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto("/__lesson-runtime-probe?classroom=7");
-  await expect(page.locator(".lesson-cover-art")).toHaveCount(0);
-  await expect(page.locator(".lesson-hero > .lesson-emblem")).toBeVisible();
+  // Dokumentált spec-változás (docs/specs/2026-10-17-websuli-lecke-hos.md): az élmény nélküli lecke is kaphat képet a katalógusból.
+  // A review #267 védelme marad: nincs üres fejlécoszlop — vagy a kép, vagy az embléma látszik, és a cím kitölti a kártyát.
+  await page.locator(".lesson-hero h1").waitFor();
+  const hasArt = await page.locator(".lesson-hero .ws-art").count();
+  if (hasArt) await expect(page.locator(".lesson-hero .ws-art > img")).toBeVisible();
+  else await expect(page.locator(".lesson-hero > .lesson-emblem")).toBeVisible();
   const cols = await page.locator(".lesson-hero").evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
-  expect(cols).toBe(2);
+  expect(cols).toBe(hasArt ? 1 : 2);
   const h1w = await page.locator(".lesson-hero h1").evaluate((el) => el.getBoundingClientRect().width);
   const herow = await page.locator(".lesson-hero").evaluate((el) => el.getBoundingClientRect().width);
   expect(h1w).toBeGreaterThan(herow * 0.6);
@@ -90,3 +96,21 @@ test("Csendes nézet: a témás lecke a halk palettára vált", async ({ page })
   await expect(root).toHaveCSS("background-color", "rgb(247, 246, 242)");
   expect(before).not.toBe("rgb(247, 246, 242)");
 });
+
+// Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a katalógusból választott kép betölt, alt szöveggel; kabala csak 1–5.
+for (const t of THEMES) {
+  test(`${t.classroom}. évfolyam → ${t.id}: a lecke-hős képe a katalógusból, a kabala csak 1–5. évfolyamon`, async ({ page }) => {
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/__lesson-runtime-probe?fusion=1&classroom=${t.classroom}`);
+      const art = page.locator(".ws-art > img, .lesson-cover-art").first();
+      await expect(art).toBeVisible();
+      const loaded = await page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>(".ws-art img")].every(i => i.complete && i.naturalWidth > 0 && i.closest(".ws-mascot") ? true : i.complete && i.naturalWidth > 0 && i.alt.length > 0));
+      expect(loaded).toBe(true);
+      const mascot = await page.locator(".ws-mascot").count();
+      if (t.classroom <= 5 && await page.locator(".ws-art").count()) expect(mascot).toBe(1); else expect(mascot).toBe(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+      await page.screenshot({ path: `test-results/websuli-design/hero-${t.id}-${width}.png` });
+    }
+  });
+}
