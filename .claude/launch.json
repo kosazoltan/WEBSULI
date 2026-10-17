@@ -40,6 +40,20 @@
       ],
       "port": 5189,
       "cwd": "source"
+    },
+    {
+      "name": "websuli-kepvalogato",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5577",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "source/design-assets/candidates"
+      ],
+      "port": 5577
     }
   ]
 }

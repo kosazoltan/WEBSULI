@@ -1,1 +1,106 @@
-[]
+[
+  {
+    "id": "cover-sejt",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "biológia"
+    ],
+    "keywords": [
+      "sejt",
+      "sejthártya",
+      "sejtmag"
+    ],
+    "alt": "Állati sejt térhatású modellje: sejthártya, sejtplazma és sejtmag.",
+    "src": "/design/laboratory/cover-sejt.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "add7cc6cc3b7da48",
+    "approvedAt": "2026-10-17T05:57:39.346Z"
+  },
+  {
+    "id": "hero-adventure",
+    "kind": "hero",
+    "band": "adventure",
+    "subjects": [],
+    "keywords": [
+      "hegy",
+      "zászló",
+      "expedíció"
+    ],
+    "alt": "Festett hegyvidék, a csúcson narancssárga zászló, kanyargó ösvény vezet fel.",
+    "src": "/design/adventure/hero-adventure.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "c458203cc2a70279",
+    "approvedAt": "2026-10-17T05:57:39.033Z"
+  },
+  {
+    "id": "hero-future",
+    "kind": "hero",
+    "band": "future",
+    "subjects": [],
+    "keywords": [
+      "csúcs",
+      "cél",
+      "jövő"
+    ],
+    "alt": "Túrázó hátulról egy hegycsúcson, előtte naplementés hegyvonulatok.",
+    "src": "/design/future/hero-future.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "128fa5f14142f27a",
+    "approvedAt": "2026-10-17T05:57:39.238Z"
+  },
+  {
+    "id": "hero-studio",
+    "kind": "hero",
+    "band": "studio",
+    "subjects": [],
+    "keywords": [
+      "Föld",
+      "űr",
+      "kérdések"
+    ],
+    "alt": "A Föld az űrből, a horizonton felkelő nap fényével.",
+    "src": "/design/studio/hero-studio.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "5e7cef406d24aba2",
+    "approvedAt": "2026-10-17T05:57:39.126Z"
+  },
+  {
+    "id": "icon-fizika",
+    "kind": "icon",
+    "band": "laboratory",
+    "subjects": [
+      "fizika"
+    ],
+    "keywords": [
+      "atom",
+      "mozgás"
+    ],
+    "alt": "Fizika: atommodell elektronpályákkal.",
+    "src": "/design/laboratory/icon-fizika.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "7933176e2d9ef438",
+    "approvedAt": "2026-10-17T05:57:39.274Z"
+  },
+  {
+    "id": "mascot-hello",
+    "kind": "mascot",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "kabala",
+      "köszön"
+    ],
+    "alt": "A Websuli rókája integet és köszön.",
+    "src": "/design/explorer/mascot-hello.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ac5a00af47fdb891",
+    "approvedAt": "2026-10-17T05:57:38.911Z"
+  }
+]

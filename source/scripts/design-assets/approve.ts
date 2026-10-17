@@ -23,7 +23,8 @@ const manifest = JSON.parse(readFileSync(path.join(ROOT, "design-assets", "promp
 const style = loadStyle(readFileSync(path.join(ROOT, "design-assets", "style.md"), "utf8"));
 const catalog: DesignAsset[] = existsSync(CATALOG) ? JSON.parse(readFileSync(CATALOG, "utf8")) : [];
 
-const browser = await chromium.launch();
+// A tsx alatt feloldott Playwright-build böngészője hiányozhat (mérve, 2026-10-17): ekkor a telepített Chrome.
+const browser = await chromium.launch().catch(() => chromium.launch({ channel: "chrome" }));
 const page = await browser.newPage();
 for (const [id, rel] of Object.entries(selection)) {
   const item = manifest.items.find(i => i.id === id);
