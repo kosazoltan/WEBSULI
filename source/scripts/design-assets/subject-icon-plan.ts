@@ -22,7 +22,7 @@ export const BAND_ICON_STYLE: Record<Band, { style: string; reference: string }>
 /** Korosztályonként érő motívum: [1–2., 3–5., 6–8., 9–10., 11–12.]; a nem tanított sáv motívuma nem használt. */
 export const SUBJECT_MOTIFS: Record<CatalogSubject, [string, string, string, string, string]> = {
   matematika: ["colorful counting blocks", "a wooden abacus with a ruler", "a protractor with a set square triangle", "a smooth function curve on grid paper with a pencil", "a 3D coordinate surface model"],
-  "magyar-nyelvtan": ["colorful alphabet building blocks without readable letters, just shapes", "a notebook with a pencil and colorful sticky tabs", "puzzle pieces fitting together like parts of a sentence", "a tree diagram of connected nodes, like sentence structure", "an elegant fountain pen over a structured page with brackets"],
+  "magyar-nyelvtan": ["a big friendly crayon beside a small open notebook with wavy practice lines", "a notebook with a pencil and colorful sticky tabs", "puzzle pieces fitting together like parts of a sentence", "a tree diagram of connected nodes, like sentence structure", "an elegant fountain pen over a structured page with brackets"],
   "magyar-irodalom": ["an open storybook with a ribbon bookmark", "a storybook with a small paper castle popping out", "a stack of books with a feather quill", "a classic leather-bound book with a theatre mask", "an open poetry book with a feather quill and an inkwell"],
   kornyezetismeret: ["a little house, a tree and the sun together", "a small globe with a green leaf and a ladybug", "", "", ""],
   termeszetismeret: ["", "a magnifying glass over a leaf and a ladybug", "a microscope beside a leaf and a small flask", "", ""],
@@ -32,7 +32,7 @@ export const SUBJECT_MOTIFS: Record<CatalogSubject, [string, string, string, str
   kemia: ["", "", "a laboratory flask with colorful liquid bubbles", "a laboratory flask holding an atom model", "a molecule ball-and-stick model with a test tube"],
   fizika: ["", "", "a magnet attracting small metal balls", "an atom with elliptical electron orbits", "a pendulum with a wave graph and a lightning bolt"],
   foldrajz: ["", "", "a globe on a stand with a map pin", "a globe with latitude lines and a map pin", "a topographic relief map tile with a compass"],
-  angol: ["two colorful speech bubbles", "two speech bubbles with a small red-white-blue ribbon", "a book with two speech bubbles and a small globe", "a globe with two speech bubbles", "a passport-like booklet with a globe and speech bubble"],
+  angol: ["two colorful speech bubbles", "two speech bubbles beside a small red double-decker bus toy", "a book with two speech bubbles and a small globe", "a globe with two speech bubbles", "a passport-like booklet with a globe and speech bubble"],
   nemet: ["", "two speech bubbles with a small black-red-gold ribbon", "a book with two speech bubbles and a small black-red-gold ribbon", "a globe with speech bubbles and a black-red-gold ribbon", "a travel booklet with speech bubbles and a black-red-gold ribbon"],
   francia: ["", "two speech bubbles with a small blue-white-red ribbon", "a book with two speech bubbles and a small blue-white-red ribbon", "a globe with speech bubbles and a blue-white-red ribbon", "a travel booklet with speech bubbles and a blue-white-red ribbon"],
   informatika: ["", "a friendly little robot with a tablet", "a laptop with colorful code blocks shown only as shapes", "a laptop with a small circuit-chip symbol", "a circuit chip with glowing connection lines"],

@@ -112,12 +112,13 @@ test("rotáció: azonosítónként stabil, leckék között változatos, és a k
   assert.equal(pickLessonArt({ subject: "Biológia", title: "A sejt felépítése", seed: "x" }, "laboratory", DESIGN_ASSET_CATALOG).cover?.id, "cover-sejt");
 });
 
-// A 6–8. évfolyam „Természettudomány” tantárgya a lombikos-atomos ikont kapja (a kémia és a fizika jelképe együtt); a fiatalabbak a sajátjukat.
-test("tárgyikon a valódi katalógusból: Természettudomány 6–8. → icon-kemia, Természetismeret 1–5. → icon-termeszet-young", async () => {
+// Ikonkészlet (2026-10-17-websuli-ikonkeszlet, dokumentált specváltozás): minden tantárgy × sáv a saját ikonját kapja; a 6–8.
+// „Természettudomány” korábbi icon-kemia ikonja helyett a saját icon-termeszetismeret-studio jár.
+test("tárgyikon a valódi katalógusból: a tantárgy × sáv saját ikonja", async () => {
   const { pickLessonArt } = await import("../shared/design-assets");
-  assert.equal(pickLessonArt({ subject: "Természettudomány", title: "Az anyag részecskéi", seed: "t" }, "studio", DESIGN_ASSET_CATALOG).subjectIcon?.id, "icon-kemia");
-  assert.equal(pickLessonArt({ subject: "Természetismeret", title: "Az évszakok", seed: "t" }, "adventure", DESIGN_ASSET_CATALOG).subjectIcon?.id, "icon-termeszet-young");
-  assert.equal(pickLessonArt({ subject: "Kémia", title: "Oldatok", seed: "t" }, "laboratory", DESIGN_ASSET_CATALOG).subjectIcon?.id, "icon-kemia");
+  assert.equal(pickLessonArt({ subject: "Természettudomány", title: "Az anyag részecskéi", seed: "t" }, "studio", DESIGN_ASSET_CATALOG).subjectIcon?.id, "icon-termeszetismeret-studio");
+  assert.equal(pickLessonArt({ subject: "Természetismeret", title: "Az évszakok", seed: "t" }, "adventure", DESIGN_ASSET_CATALOG).subjectIcon?.id, "icon-termeszetismeret-adventure");
+  assert.equal(pickLessonArt({ subject: "Kémia", title: "Oldatok", seed: "t" }, "laboratory", DESIGN_ASSET_CATALOG).subjectIcon?.id, "icon-kemia-laboratory");
 });
 
 // Review #273: a kulcsszavas borítóhoz a tantárgy is kell; a --max csak nemnegatív egész; az eredet a kiválasztott fájl naplójából.

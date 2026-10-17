@@ -721,7 +721,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "Subject of the icon: colorful alphabet building blocks without readable letters, just shapes. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a big friendly crayon beside a small open notebook with wavy practice lines. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-nyelvtan-adventure",
@@ -1333,7 +1333,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "Subject of the icon: two speech bubbles with a small red-white-blue ribbon. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: two speech bubbles beside a small red double-decker bus toy. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-angol-studio",

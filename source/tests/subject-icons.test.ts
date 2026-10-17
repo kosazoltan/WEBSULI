@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { CATALOG_SUBJECTS } from "../shared/catalog-taxonomy";
 import { pickLessonArt, type DesignAsset } from "../shared/design-assets";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
@@ -46,4 +46,14 @@ test("a lejátszó a sáv saját ikonját választja; ha az még nincs a kataló
   // A 3–5. sáv saját ikonja itt hiányzik: a korosztályos régi ikon jön, nem egy másik sáv band-ikonja.
   const fallback = pickLessonArt({ subject: "Matematika", title: "Szorzás" }, "adventure", catalog).subjectIcon;
   assert.ok(fallback && !/-(explorer|adventure|studio|laboratory|future)$/.test(fallback.id), `régi ikon: ${fallback?.id}`);
+});
+
+test("a mátrix minden párjához van jóváhagyott katalógusikon, a saját sávjában, létező fájllal", () => {
+  for (const id of allSubjectIconIds()) {
+    const asset = DESIGN_ASSET_CATALOG.find(a => a.id === id);
+    assert.ok(asset, `jóváhagyott ikon: ${id}`);
+    assert.equal(asset.kind, "icon");
+    assert.ok(id.endsWith(`-${asset.band}`), `${id}: sáv`);
+    assert.ok(existsSync(new URL(`../client/public${asset.src}`, import.meta.url)), `${id}: fájl`);
+  }
 });

@@ -34,7 +34,14 @@ Terv: `docs/specs/2026-10-17-websuli-ikonkeszlet.md`. Ág: `feat/websuli-ikonkes
    - **`server/studio/pipeline-store.ts` `upsertLesson`:** mentés előtt a `json.art.subjectIcon` értéke a
      `withSubjectIcon(json)` eredménye. A tantárgy és az évfolyam ekkor ismert. Hiba esetén ikon nélkül ment.
 8. **`shared/design-assets.ts` `pickLessonArt`:** a tantárgyikon elsőként a sáv saját `icon-<tantárgy>-<sáv>` katalógustétele;
-   ha nincs, a korábbi, sáv-utótag nélküli korosztályos ikon (a 6–8. Természettudomány `icon-kemia` döntése így megmarad).
+   ha nincs, a korábbi, sáv-utótag nélküli korosztályos ikon.
+   - **Dokumentált specváltozás (2026-10-17):** a 72 ikon jóváhagyása után a 6–8. „Természettudomány” (kulcsa `termeszetismeret`)
+     a saját `icon-termeszetismeret-studio` ikonját kapja az eddigi `icon-kemia` helyett, a „minden tantárgynak és korosztálynak
+     külön ikon” tulajdonosi kérés szerint. A `tests/design-assets.test.ts` régi elvárása ennek megfelelően módosul.
+   - **Gyártási tapasztalat:** a stílusreferencia tárgyát (abakusz, atom) a modell átvette. A prompt ezért a tárgyat helyezi előre,
+     a referenciát csak stílusként engedi. Az önellenőrzés két ütköző motívumot cserélt: a nyelvtan 1–2. ikonja zsírkréta füzettel,
+     az angol 3–5. ikonja emeletes busz.
+   - **Évfolyam-őr:** a lejátszó a mentett ikont csak akkor használja, ha a lecke mostani sávjáé (a javítás évfolyamot válthat).
 9. **Lejátszó (`LessonArt` / `LessonRuntime`):** ha van `lesson.art.subjectIcon`, a címke ikonja a
    `/api/design-assets/<id>`, különben a mai katalógus-választás.
 10. **Tesztek:**
