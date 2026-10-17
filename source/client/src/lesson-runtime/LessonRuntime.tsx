@@ -471,7 +471,8 @@ export function LessonRuntime({
   const band = ageBandForClassroom(lesson.classroom);
   const theme = BAND_THEME[band];
   const designTheme = designThemeForClassroom(lesson.classroom);
-  const art = useMemo(() => lessonArtFor(lesson, designTheme), [lesson, designTheme]);
+  // Változatos képválasztás: a lecke azonosítója szerint rotál (ugyanaz a lecke mindig ugyanazt kapja).
+  const art = useMemo(() => lessonArtFor({ ...lesson, seed: lessonId ?? persistId ?? lesson.title }, designTheme), [lesson, designTheme, lessonId, persistId]);
   // Websuli Design: a lecke fontja az évfolyamból (1–5. Nunito Sans, 0. és 6–12. Inter), téma szerinti kivétel nélkül.
   const fonts = lessonFontPair(lesson.classroom, lesson.subject);
   const typography = {

@@ -108,7 +108,9 @@ for (const t of THEMES) {
       const loaded = await page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>(".ws-art img")].every(i => i.complete && i.naturalWidth > 0 && i.closest(".ws-mascot") ? true : i.complete && i.naturalWidth > 0 && i.alt.length > 0));
       expect(loaded).toBe(true);
       const mascot = await page.locator(".ws-mascot").count();
-      if (t.classroom <= 5 && await page.locator(".ws-art").count()) expect(mascot).toBe(1); else expect(mascot).toBe(0);
+      // A portré nem ismétli a rókát, ha a kép maga is a kabalát mutatja (data-kabala).
+      const kabalaInPicture = await page.locator(".ws-art[data-kabala]").count();
+      if (t.classroom <= 5 && await page.locator(".ws-art").count() && !kabalaInPicture) expect(mascot).toBe(1); else expect(mascot).toBe(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
       await page.screenshot({ path: `test-results/websuli-design/hero-${t.id}-${width}.png` });
     }

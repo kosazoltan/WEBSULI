@@ -8,7 +8,7 @@ import { LessonCoverArt } from "./LessonCoverArt";
  * az 1–5. évfolyamon a kabalával és a sáv szóbuborékával. Szöveg nincs a képen, a cím a kártyán áll (mért tokenek).
  * Ha a sávhoz még nincs jóváhagyott kép, a régi rajzos tartalék (LessonCoverArt) jelenik meg.
  */
-export function lessonArtFor(lesson: { subject: string; title: string }, theme: DesignThemeId): Art {
+export function lessonArtFor(lesson: { subject: string; title: string; seed?: string }, theme: DesignThemeId): Art {
   return pickLessonArt(lesson, theme, DESIGN_ASSET_CATALOG);
 }
 
@@ -16,7 +16,7 @@ export function LessonArt({ art, theme, subject }: { art: Art; theme: DesignThem
   const image = art.cover ?? art.hero;
   const bubble = DESIGN_THEMES[theme].bubble;
   if (!image) return <LessonCoverArt subject={subject} />;
-  return <figure className="ws-art" data-art={art.cover ? "cover" : "hero"}>
+  return <figure className="ws-art" data-art={art.cover ? "cover" : "hero"} data-kabala={image.keywords.includes("kabala") || undefined}>
     <img src={image.src} alt={image.alt} loading="eager" decoding="async" />
     {art.mascot && bubble && <div className="ws-mascot">
       <img src={art.mascot.src} alt="" aria-hidden="true" decoding="async" />

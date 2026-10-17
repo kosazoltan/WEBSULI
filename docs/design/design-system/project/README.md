@@ -31,8 +31,8 @@ Grade 0 (programming basics) uses `studio`. The band follows the lesson's grade,
 - Only approved pictures from the Websuli catalogue (`source/shared/design-asset-catalog.ts`): MI-generated (Seedream 5.0 Pro) from the versioned prompts in `source/design-assets/`, each approved by the owner.
 - Never text, letters or numbers inside a picture; the title stays on the card.
 - Gender-neutral and stereotype-free; no recognisable real person; older bands show people only from behind or far away.
-- The lesson picture is chosen by `pickLessonArt`: a topic cover whose subject and keywords match, else the band hero.
-- The fox mascot appears only in `explorer` and `adventure`, always the same character, in a white `bubble` with `on-bubble` text.
+- The lesson picture is chosen by `pickLessonArt` and rotates, so lessons look varied: a topic cover whose keywords match the title; otherwise the band hero (double weight), the other heroes of the same age group and the same-subject covers of that age group. The choice is seeded by the lesson id, so one lesson always shows the same picture; the 1–5. and 6–12. age groups never mix.
+- The fox mascot appears only in `explorer` and `adventure`, always the same character; its pose rotates per lesson, in a white `bubble` with `on-bubble` text. No mascot portrait over a picture that already shows the fox (`hero-explorer`).
 
 ## Icons
 - Subject icons come from the catalogue: glossy 3D toy-like objects for the 1–5. bands (`-young`), clean soft 3D in the reference atom style for the 6–12. bands.

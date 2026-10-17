@@ -75,5 +75,36 @@ test("pickLessonArt: kulcsszavas borító, sávhős, kabala csak 1–5., ékezet
   assert.equal(env2.mascot?.id, "mascot-hello");
   assert.equal(env2.subjectIcon?.id, "icon-kornyezet-young");
   assert.equal(pickLessonArt({ subject: "Matematika", title: "Törtek" }, "adventure", catalog).subjectIcon?.id, "icon-matematika-young");
-  assert.deepEqual(pickLessonArt({ subject: "Kémia", title: "Oldatok" }, "future", catalog), {});
+  // Dokumentált spec-változás (változatos képválasztás): saját sávhős nélkül a korosztály másik sávhőse jön, nem üres hős.
+  const chem = pickLessonArt({ subject: "Kémia", title: "Oldatok" }, "future", catalog);
+  assert.equal(chem.hero?.id, "hero-studio");
+  assert.equal(chem.cover, undefined);
+  assert.equal(chem.mascot, undefined);
+});
+
+// Változatos képválasztás (docs/specs/2026-10-17-websuli-lecke-hos.md kiegészítés), a valódi, jóváhagyott katalógussal.
+test("rotáció: azonosítónként stabil, leckék között változatos, és a kép a lecke korosztályához tartozik", async () => {
+  const { pickLessonArt } = await import("../shared/design-assets");
+  const young = new Set(["explorer", "adventure"]);
+  const lesson = { subject: "Matematika", title: "Gyakorló feladatsor" };
+  const first = pickLessonArt({ ...lesson, seed: "lecke-1" }, "studio", DESIGN_ASSET_CATALOG);
+  assert.deepEqual(pickLessonArt({ ...lesson, seed: "lecke-1" }, "studio", DESIGN_ASSET_CATALOG), first, "ugyanarra az azonosítóra stabil");
+  for (const [band, isYoung] of [["explorer", true], ["adventure", true], ["studio", false], ["laboratory", false], ["future", false]] as const) {
+    const seen = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      const art = pickLessonArt({ ...lesson, seed: `lecke-${i}` }, band, DESIGN_ASSET_CATALOG);
+      const pic = art.cover ?? art.hero;
+      assert.ok(pic, `${band}: van kép`);
+      assert.equal(young.has(pic!.band), isYoung, `${band}: korosztályhoz illő kép (${pic!.id})`);
+      seen.add(pic!.id);
+      // A kabala-portré csak 1–5. évfolyamon, és nem ismétli a rókát, ha a kép maga is a kabalát mutatja („kabala” kulcsszó).
+      if (isYoung && !pic!.keywords.includes("kabala")) assert.ok(art.mascot && young.has(art.mascot.band), `${band}: kabala`);
+      else assert.equal(art.mascot, undefined, `${band}: nincs kabala-portré (${pic!.id})`);
+    }
+    assert.ok(seen.size >= 2, `${band}: 20 lecke legalább 2 különböző képet kap (${[...seen].join(", ")})`);
+  }
+  const mascots = new Set(Array.from({ length: 20 }, (_, i) => pickLessonArt({ ...lesson, seed: `m-${i}` }, "explorer", DESIGN_ASSET_CATALOG).mascot?.id));
+  assert.ok(mascots.size >= 2, "a kabala pózai is rotálnak");
+  // Kulcsszavas borító: a cím szerint a témához illő kép (a sejt-borító a biológia-leckén).
+  assert.equal(pickLessonArt({ subject: "Biológia", title: "A sejt felépítése", seed: "x" }, "laboratory", DESIGN_ASSET_CATALOG).cover?.id, "cover-sejt");
 });

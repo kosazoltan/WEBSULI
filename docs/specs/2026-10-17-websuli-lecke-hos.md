@@ -68,7 +68,8 @@ képet.
   kulcsszavas borító csak a másik korosztályból van, azt is használhatja.
 - **Kép:**
   - ha van kulcsszavas borító, az illeszkedő borítók közül rotál;
-  - különben a sáv hős-képe és az azonos korosztályú, azonos tárgyú borítók közül.
+  - különben a sáv hős-képe (kétszeres súllyal), az azonos korosztály többi sávhőse és az azonos korosztályú, azonos tárgyú
+    borítók közül. Mérve: az 1–2. évfolyam matematikájához csak egy kép illett, ezért a korosztály hős-képei is a készletbe kerültek.
 - **Kabala:** az 1–5. évfolyamon a kabala pózai közül rotál, a 3–5. évfolyamon a felfedező pózzal együtt.
 - **Elfogadás:**
   - ugyanarra az azonosítóra a választás stabil;
