@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- MINTA, NEM ALKALMAZOTT (tulajdonosi döntés 2026-10-17): a Websuli Design mesterutasítás tanulói keretének (§3, §8) vizuális mintája,
+     példaadattal. Nem része az alkalmazásnak; bevezetése külön terv + végrehajtási utasítás után történhet. Lásd docs/design/README.md. -->
+<title>Websuli tanulói keret</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;650;800&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,800&display=swap">
+<style>
+/* Elrendezés: a Websuli_Design.html mintája — felül évfolyamválasztó, alatta az éles keret (felső sáv, oldalsáv, irányítópult-csempék),
+   végül a jelmagyarázat, mely komponens melyik mesterutasítás-pontból jön. Az öt téma tokenjei a WEBSULI shared/lesson-design.ts értékei. */
+:root {
+  color-scheme: light;
+  --page: #F1F5FB; --page-ink: #10233C; --page-muted: #4F6278; --page-line: #DCE4EE; --page-card: #FFFFFF;
+  --ui: "Inter", "Noto Sans", system-ui, sans-serif;
+}
+.ws[data-theme-id="explorer"]   { --surface:#E9F9E9; --accent:#17865F; --ink:#174A39; --panel:#FFFFFF; --soft:#E5F8ED; --deep:#225842; --muted:#3D6352; --line:#CFE3D6; --strong:#157A57; --strong-ink:#FFFFFF; --size:22px; --font:"Nunito Sans","Noto Sans",sans-serif; --title:var(--deep); --sec-bg:#EAF0F6; --sec-ink:#24435D; --track:#DCE6ED; }
+.ws[data-theme-id="adventure"]  { --surface:#FFF0D2; --accent:#C36A28; --ink:#703C1B; --panel:#FFFFFF; --soft:#FFF3DF; --deep:#754520; --muted:#6E4A2E; --line:#F0D9B5; --strong:#A4561D; --strong-ink:#FFFFFF; --size:19px; --font:"Nunito Sans","Noto Sans",sans-serif; --title:var(--deep); --sec-bg:#EAF0F6; --sec-ink:#24435D; --track:#DCE6ED; }
+.ws[data-theme-id="studio"]     { --surface:#EFEFFF; --accent:#5159A8; --ink:#292F62; --panel:#FFFFFF; --soft:#EFEFFE; --deep:#2B356B; --muted:#4C5378; --line:#D9DBF2; --strong:#5159A8; --strong-ink:#FFFFFF; --size:17px; --font:"Inter","Noto Sans",sans-serif; --title:var(--deep); --sec-bg:#EAF0F6; --sec-ink:#24435D; --track:#DCE6ED; }
+.ws[data-theme-id="laboratory"] { --surface:#E6F3FF; --accent:#226493; --ink:#143B62; --panel:#FFFFFF; --soft:#E6F3FC; --deep:#173C62; --muted:#3D5873; --line:#CFE1F0; --strong:#226493; --strong-ink:#FFFFFF; --size:16px; --font:"Inter","Noto Sans",sans-serif; --title:var(--deep); --sec-bg:#EAF0F6; --sec-ink:#24435D; --track:#DCE6ED; }
+.ws[data-theme-id="future"]     { --surface:#132540; --accent:#0C929C; --ink:#EFF8FF; --panel:#233956; --soft:#1B3150; --deep:#0B1A2E; --muted:#BCD0E4; --line:#35506E; --strong:#0C929C; --strong-ink:#061A22; --size:16px; --font:"Inter","Noto Sans",sans-serif; --title:var(--ink); --sec-bg:#2C4566; --sec-ink:#EFF8FF; --track:#132540; }
+
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--page-ink); font: 15px/1.55 var(--ui); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 48px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 22px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+button { font: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid #F4AB37; outline-offset: 3px; box-shadow: 0 0 0 3px #10233C; } /* kétszínű: a sötét belső gyűrű világos háttéren is >= 3:1, a borostyán a referencia színe */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
+
+/* ---------- a minta fejléce ---------- */
+.intro { display: grid; gap: 8px; max-width: 72ch; }
+.eyebrow { font-size: 12.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #2D6A8E; }
+.intro h1 { font-size: clamp(24px, 3.2vw, 34px); font-weight: 800; letter-spacing: -.02em; }
+.intro p { margin: 0; color: var(--page-muted); }
+.demo-flag { display: inline-flex; gap: 8px; align-items: center; width: fit-content; padding: 6px 12px; border-radius: 999px; background: #FFF3CF; color: #6D4800; font-weight: 700; font-size: 13.5px; }
+
+/* évfolyamválasztó: a referencia .switch mintája (tablist) */
+.switches { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.switch { display: grid; gap: 2px; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--page-line); background: var(--page-card); color: var(--page-ink); min-height: 44px; }
+.switch small { color: var(--page-muted); font-size: 13px; }
+.switch strong { font-size: 15px; }
+.switch[aria-selected="true"] { box-shadow: inset 0 0 0 2px var(--sw); background: var(--sw-soft); }
+.switch .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--sw); }
+@media (max-width: 760px) { .switches { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); } }
+
+/* ---------- az éles keret (AppShell) ---------- */
+.ws { font-family: var(--font); background: linear-gradient(150deg, var(--surface) 0%, color-mix(in srgb, var(--surface) 40%, #FFFFFF) 70%); color: var(--ink); border-radius: 22px; border: 1px solid var(--page-line); overflow: hidden; }
+.ws[data-theme-id="future"] { background: var(--surface); }
+.topbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 14px 20px; background: var(--deep); color: #FFFFFF; }
+.topbar strong { font-size: 16px; font-weight: 800; }
+.topbar .who { font-size: 13.5px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.topbar .who span { padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, #FFFFFF 16%, transparent); }
+.shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+nav.side { padding: 18px 14px; border-right: 1px solid var(--line); display: grid; gap: 4px; align-content: start; }
+nav.side a { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 10px 12px; border-radius: 12px; color: var(--ink); text-decoration: none; font-weight: 650; font-size: 15px; }
+nav.side a[aria-current="page"] { background: var(--soft); color: var(--title); box-shadow: inset 0 0 0 2px var(--accent); }
+nav.side .count { min-width: 26px; text-align: center; padding: 2px 8px; border-radius: 999px; background: var(--strong); color: var(--strong-ink); font-size: 13px; font-weight: 800; }
+main.board { padding: 22px; display: grid; gap: 16px; min-width: 0; font-size: var(--size); }
+
+.hero { display: grid; gap: 10px; }
+.hero h2 { font-size: clamp(26px, 3vw, 36px); font-weight: 800; color: var(--title); letter-spacing: -.02em; line-height: 1.2; }
+.hero p { margin: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn { border: 0; border-radius: 10px; min-height: 44px; padding: 10px 16px; font-weight: 750; font-size: 15px; background: var(--strong); color: var(--strong-ink); }
+.btn.secondary { background: var(--sec-bg); color: var(--sec-ink); }
+
+.tiles { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+.tile { grid-column: span 6; min-width: 0; border: 1px solid var(--line); border-radius: 16px; padding: 18px; background: var(--panel); box-shadow: 0 5px 15px #1837540A; display: grid; gap: 12px; align-content: start; }
+.tile.wide { grid-column: span 12; }
+.tile.third { grid-column: span 4; }
+.tile h3 { font-size: 15px; font-weight: 800; color: var(--title); display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.tile h3 small { font-weight: 600; color: var(--muted); font-size: 13px; }
+.note { font-size: 13.5px; color: var(--muted); margin: 0; }
+
+/* SubjectCard: tantárgykártya, mindig szöveges értékkel a sáv mellett (§3) */
+.subjects { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.subject { display: grid; gap: 10px; text-align: left; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--soft); color: var(--ink); min-height: 44px; }
+.subject .ico { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; background: var(--accent); color: #FFFFFF; font-size: 18px; font-weight: 800; }
+.subject strong { font-size: 16px; color: var(--title); }
+.subject .meta { font-size: 14px; color: var(--muted); }
+.bar { height: 10px; border-radius: 6px; background: var(--track); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
+.ws[data-theme-id="future"] .subject .bar { background: #0B1A2E; }
+
+/* StudyPlan */
+.plan { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.plan label { display: flex; gap: 12px; align-items: center; min-height: 44px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); font-size: 15px; }
+.plan input { width: 20px; height: 20px; accent-color: var(--accent); }
+.plan .min { margin-left: auto; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* FlashCard + ReviewQueue: a referencia .flash / .actionrow / .result mintája */
+.flash { width: 100%; min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 16px; border: 1px dashed var(--line); border-radius: 14px; background: linear-gradient(140deg, var(--panel), var(--soft)); color: var(--title); text-align: center; }
+.flash[aria-pressed="true"] { border: 1px solid var(--accent); }
+.flash small { font-size: 13px; font-weight: 700; letter-spacing: .02em; color: var(--muted); }
+.flash .big { font-size: max(22px, var(--size)); font-weight: 800; line-height: 1.3; }
+.result { min-height: 22px; font-size: 14px; font-weight: 650; color: var(--title); }
+.queue { display: flex; gap: 8px; flex-wrap: wrap; }
+.pill { padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--soft); color: var(--title); border: 1px solid var(--line); }
+.pill.due { background: var(--strong); color: var(--strong-ink); border-color: transparent; }
+
+/* LearningProgress: heti percek, szám a sáv fölött */
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; height: 150px; }
+.day { display: grid; gap: 6px; justify-items: center; align-content: end; height: 100%; font-variant-numeric: tabular-nums; }
+.day b { font-size: 13px; color: var(--title); }
+.day i { width: 100%; max-width: 34px; border-radius: 8px 8px 4px 4px; background: var(--accent); }
+.day i.zero { background: var(--track); height: 4px; }
+.day span { font-size: 13px; color: var(--muted); }
+
+/* AchievementBadge */
+.badges { display: grid; gap: 10px; }
+.badge { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; }
+.badge .mark { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; background: var(--soft); color: var(--title); border: 2px solid var(--accent); font-size: 15px; }
+.badge.locked .mark { border-style: dashed; border-color: var(--line); color: var(--muted); }
+.badge strong { display: block; font-size: 15px; color: var(--title); }
+.badge span { font-size: 13.5px; color: var(--muted); }
+
+.foot { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: space-between; padding: 14px 22px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--muted); }
+
+/* ---------- jelmagyarázat ---------- */
+.legend { background: var(--page-card); border: 1px solid var(--page-line); border-radius: 18px; padding: 22px; display: grid; gap: 14px; }
+.legend h2 { font-size: 20px; font-weight: 800; }
+.legend-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 22px; }
+.legend-grid div { display: grid; gap: 2px; min-width: 0; }
+.legend-grid code { font: 700 13.5px/1.4 ui-monospace, "Cascadia Code", Consolas, monospace; color: #2D6A8E; }
+.legend-grid span { font-size: 14px; color: var(--page-muted); }
+.legend .diff { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--page-ink); max-width: 90ch; }
+
+/* reszponzív: §8 — <640 egyoszlopos, 640–1023 egyszerűsített oldalsáv, ≥1024 teljes oldalsáv */
+@media (max-width: 1023px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  nav.side { border-right: 0; border-bottom: 1px solid var(--line); grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); overflow-x: auto; padding: 10px; }
+  nav.side a { justify-content: center; font-size: 14px; white-space: nowrap; }
+  .tile.third { grid-column: span 6; }
+  .subjects { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .legend-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 639px) {
+  nav.side { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  nav.side a { justify-content: space-between; }
+  main.board { padding: 16px; }
+  .tile, .tile.third { grid-column: span 12; }
+  .subjects, .legend-grid { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="intro">
+    <span class="eyebrow">Websuli Design · mesterutasítás §3, §8, §12</span>
+    <h1>Így nézne ki a tanulói keret</h1>
+    <p>A terv „tanulói keret” része: belépés után ez a tanuló kezdőoldala. Rajta van a felső sáv, a navigáció, az irányítópult, a tantárgykártyák, a mai tanulási terv, az esedékes memóriakártyák, a heti haladás és az elért eredmények. A lecke-lejátszó, ami már élesben van, ebből a keretből nyílik.</p>
+    <span class="demo-flag">Mintaoldal · minden szám példaadat, semmi nem mentődik</span>
+  </header>
+
+  <div class="switches" role="tablist" aria-label="Évfolyamsáv (a mintában választható; élesben a tanuló profiljából jön)">
+    <button class="switch" role="tab" data-theme="explorer" style="--sw:#17865F;--sw-soft:#E9F9E9"><span class="dot"></span><strong>Felfedező világ</strong><small>1–2. osztály</small></button>
+    <button class="switch" role="tab" data-theme="adventure" style="--sw:#C36A28;--sw-soft:#FFF0D2"><span class="dot"></span><strong>Tudás kalandjai</strong><small>3–5. osztály</small></button>
+    <button class="switch" role="tab" data-theme="studio" style="--sw:#5159A8;--sw-soft:#EFEFFF"><span class="dot"></span><strong>Kreatív stúdió</strong><small>6–8. osztály</small></button>
+    <button class="switch" role="tab" data-theme="laboratory" style="--sw:#226493;--sw-soft:#E6F3FF"><span class="dot"></span><strong>Digitális tudáslabor</strong><small>9–10. osztály</small></button>
+    <button class="switch" role="tab" data-theme="future" style="--sw:#0C929C;--sw-soft:#E3F4F5"><span class="dot"></span><strong>Jövőtervező</strong><small>11–12. osztály</small></button>
+  </div>
+
+  <section class="ws" id="app" role="tabpanel" data-theme-id="studio" aria-label="A tanulói keret mintája">
+    <div class="topbar">
+      <strong>✦ Websuli <span id="brand">/ Kreatív stúdió</span></strong>
+      <div class="who"><span>Tanulás · Gyakorlás · Eredmények</span><span id="grade">7. osztály · minta tanuló</span></div>
+    </div>
+    <div class="shell">
+      <nav class="side" aria-label="Fő navigáció">
+        <a href="#app" aria-current="page">Kezdőlap</a>
+        <a href="#subjects">Tantárgyak</a>
+        <a href="#review">Ismétlés <span class="count" id="dueCount">6</span></a>
+        <a href="#progress">Eredmények</a>
+        <a href="#plan">Tanulási terv</a>
+      </nav>
+      <main class="board">
+        <div class="hero">
+          <h2 id="title">Szia! Folytasd a felfedezést.</h2>
+          <p id="sub">Ma új feladatok és gondolkodtató kérdések várnak.</p>
+          <div class="actions">
+            <button class="btn" type="button" data-say="continue">Folytatás: <span id="lastLesson">Háromszögek területe</span></button>
+            <button class="btn secondary" type="button" data-say="plan">Mai terv megnyitása</button>
+          </div>
+          <p class="result" id="heroMsg" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="tiles">
+          <section class="tile wide" id="subjects" aria-labelledby="subjectsTitle">
+            <h3 id="subjectsTitle">Tantárgyaid <small>a haladás mellett mindig szöveges érték</small></h3>
+            <div class="subjects" id="subjectList"></div>
+          </section>
+
+          <section class="tile" id="plan" aria-labelledby="planTitle">
+            <h3 id="planTitle">Mai tanulási terv <small id="planDone">0 / 3 kész</small></h3>
+            <p class="note" id="planText">Rövid ismétlés, egy projektfeladat és ellenőrző kérdések.</p>
+            <ul class="plan" id="planList"></ul>
+            <div class="bar" aria-hidden="true"><i id="planBar" style="width:0%"></i></div>
+          </section>
+
+          <section class="tile" id="review" aria-labelledby="reviewTitle">
+            <h3 id="reviewTitle">Memorizálókártya · Magyar helyesírás <small>esedékes ismétlés</small></h3>
+            <div class="queue"><span class="pill due" id="duePill">6 esedékes</span><span class="pill">12 új</span><span class="pill">41 mára kész</span></div>
+            <button id="flash" class="flash" type="button" aria-pressed="false" aria-label="Válasz megjelenítése" aria-describedby="flashText">
+              <small id="flashLabel">KÉRDÉS · KOPPINTS A FORDÍTÁSHOZ</small>
+              <span class="big" id="flashText">Melyik a helyes: tűzoltó vagy tüzoltó?</span>
+            </button>
+            <div class="actions">
+              <button class="btn secondary" type="button" id="again">Még gyakorlom</button>
+              <button class="btn" type="button" id="known">Már tudom</button>
+            </div>
+            <p class="result" id="feedback" role="status" aria-live="polite"></p>
+          </section>
+
+          <section class="tile third" id="progress" aria-labelledby="weekTitle">
+            <h3 id="weekTitle">Heti tanulási idő <small>perc</small></h3>
+            <div class="week" id="week"></div>
+            <p class="note" id="weekSum"></p>
+          </section>
+
+          <section class="tile third" aria-labelledby="resultTitle">
+            <h3 id="resultTitle">Kvízeredmények <small>utolsó 5</small></h3>
+            <div class="badges" id="quizList"></div>
+          </section>
+
+          <section class="tile third" aria-labelledby="badgeTitle">
+            <h3 id="badgeTitle">Elért eredmények</h3>
+            <div class="badges" id="badgeList"></div>
+          </section>
+        </div>
+      </main>
+    </div>
+    <div class="foot"><span>Példaadat, nem mentett eredmény.</span><span><b>Árvíztűrő tükörfúrógép</b> · á é í ó ö ő ú ü ű · Á É Í Ó Ö Ő Ú Ü Ű</span></div>
+  </section>
+
+  <section class="legend" aria-labelledby="legendTitle">
+    <h2 id="legendTitle">Melyik rész mi a mesterutasításban</h2>
+    <div class="legend-grid">
+      <div><code>AppShell</code><span>A teljes keret: felső sáv, navigáció, tartalom. Egy közös komponensrendszer, öt téma (§3, §5).</span></div>
+      <div><code>GradeThemeSelector</code><span>A fenti öt fül. Csak a megjelenést és a sűrűséget váltja, a tananyaghoz hozzáférést a profil adja (§3).</span></div>
+      <div><code>SidebarNavigation</code><span>1024 px fölött oldalsáv, 640–1023 px között sávos, mobilon két oszlop, 44 px-es célterületek (§8).</span></div>
+      <div><code>DashboardHero</code><span>Köszöntés, a mai cél és a „Folytatás” a legutóbbi leckéhez.</span></div>
+      <div><code>SubjectCard</code><span>Tantárgyoldalra navigál; a haladássáv mellett mindig szám áll (§3).</span></div>
+      <div><code>StudyPlan</code><span>Mai tanulási terv pipálható lépésekkel és összesített haladással.</span></div>
+      <div><code>FlashCard</code> · <code>ReviewQueue</code><span>Az esedékes kártyák, a §7 ütemezése szerint. Élesben a már elkészült ismétlés-funkció adataiból.</span></div>
+      <div><code>LearningProgress</code> · <code>QuizCard</code><span>Heti tanulási idő és a legutóbbi kvízek eredménye.</span></div>
+      <div><code>AchievementBadge</code><span>Elért és még zárolt eredmények, nemtől független megfogalmazással (§1).</span></div>
+    </div>
+    <h2>Mi lenne más az éles rendszerben</h2>
+    <ul class="diff">
+      <li>Az évfolyamtémát a bejelentkezett tanuló profilja adja, nem a fenti választó.</li>
+      <li>A számok valódi adatból jönnének. A heti időt, a kvízeredményeket és a tantárgyi haladást ma még nem gyűjtjük így összesítve; ehhez új adatforrás kell.</li>
+      <li>A tantárgykártya és a „Folytatás” valódi oldalra visz. A mintában csak kiírja, hova vinne.</li>
+      <li>Az ismétléskártyák a már működő „Ismétlés” fül mentett állapotából jönnének, minden leckéből összegyűjtve.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+const THEMES = {
+  explorer:   { name: "Felfedező világ", grade: "2. osztály", title: "Szia! Ma új dolgokat fedezünk fel.", sub: "Nézd meg a kártyát, és próbáld megválaszolni!", plan: "Olvasás, számolás és egy rövid képes játék.", last: "Betűk és hangok",
+    subjects: [["Aa", "Olvasás", 7, 12], ["12", "Számolás", 9, 14], ["☘", "Környezetismeret", 4, 10], ["✎", "Írás", 5, 11]],
+    steps: [["Olvass el egy rövid mesét", 10], ["Számolj 10-ig párokban", 8], ["Képes játék: évszakok", 7]] },
+  adventure:  { name: "Tudás kalandjai", grade: "4. osztály", title: "Új kihívások várnak rád!", sub: "Gyűjts tudást, és haladj a saját tempódban.", plan: "Egy küldetés, három memóriakártya és rövid gyakorlás.", last: "Törtek a pizzán",
+    subjects: [["Aa", "Magyar", 11, 18], ["∑", "Matematika", 13, 20], ["⚛", "Természetismeret", 6, 14], ["En", "Angol", 8, 16]],
+    steps: [["Küldetés: a víz körforgása", 15], ["Három memóriakártya", 5], ["Szorzás gyakorlás", 10]] },
+  studio:     { name: "Kreatív stúdió", grade: "7. osztály", title: "Szia! Folytasd a felfedezést.", sub: "Ma új feladatok és gondolkodtató kérdések várnak.", plan: "Rövid ismétlés, egy projektfeladat és ellenőrző kérdések.", last: "Háromszögek területe",
+    subjects: [["Aa", "Magyar", 14, 22], ["∑", "Matematika", 17, 24], ["⚛", "Természettudomány", 9, 20], ["◉", "Projektek", 2, 5]],
+    steps: [["Rövid ismétlés: 6 esedékes kártya", 8], ["Projektfeladat: saját grafikon", 25], ["Ellenőrző kérdések", 12]] },
+  laboratory: { name: "Digitális tudáslabor", grade: "9. osztály", title: "Üdv a digitális tudáslaborban!", sub: "Elemezz, kísérletezz és alkalmazd a tudásodat.", plan: "Elméleti áttekintés, számításos feladat és ellenőrző teszt.", last: "Egyenes vonalú mozgás",
+    subjects: [["F", "Fizika", 10, 18], ["Ch", "Kémia", 7, 16], ["∑", "Matematika", 15, 22], ["Tö", "Történelem", 12, 19]],
+    steps: [["Elméleti áttekintés: mozgások", 15], ["Számításos feladat: átlagsebesség", 20], ["Ellenőrző teszt", 15]] },
+  future:     { name: "Jövőtervező", grade: "11. osztály", title: "Tervezd a következő lépést!", sub: "A tudásból lehetőségeket építhetsz.", plan: "Érettségi ismétlés, vizsgafeladat és haladási áttekintés.", last: "Exponenciális egyenletek",
+    subjects: [["∑", "Matematika (érettségi)", 21, 30], ["Ir", "Magyar irodalom", 16, 26], ["Tö", "Történelem", 18, 28], ["◇", "Portfólió", 3, 6]],
+    steps: [["Érettségi ismétlés: logaritmus", 20], ["Vizsgafeladat időre", 30], ["Haladási áttekintés", 5]] },
+};
+const WEEK = [["H", 25], ["K", 40], ["Sze", 0], ["Cs", 35], ["P", 20], ["Szo", 15], ["V", 30]];
+const QUIZ = [["Háromszögek területe", 9, 10], ["Törtek összeadása", 7, 10], ["Szófajok", 8, 10], ["Mértékegységek", 10, 10], ["A víz körforgása", 6, 10]];
+const BADGES = [["5", "5 napos sorozat", "Öt egymást követő napon tanultál.", false], ["50", "Első 50 kártya", "Ötven kártyát jelöltél „Már tudom”-nak.", false], ["10", "Hibátlan kvíz", "Egy kvízben minden válaszod helyes volt.", false], ["?", "Projektmester", "Még zárolt: fejezz be három projektet.", true]];
+
+const $ = id => document.getElementById(id);
+const app = $("app");
+let flipped = false, due = 6, planState = [false, false, false];
+
+function nextReview(prev, rating, now) {
+  // Websuli Design §7 — ugyanaz a képlet, mint az éles ütemezőben (shared/review-schedule.ts).
+  const p = prev ?? { intervalDays: 0, repetitions: 0 };
+  const days = rating === "again" ? 0 : p.intervalDays === 0 ? 1 : Math.min(p.intervalDays * 2, 60);
+  return { intervalDays: days, dueAt: new Date(now.getTime() + (rating === "again" ? 10 * 60000 : days * 86400000)) };
+}
+const fmt = d => new Intl.DateTimeFormat("hu-HU", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
+
+function render(id) {
+  const t = THEMES[id];
+  app.dataset.themeId = id;
+  document.querySelectorAll(".switch").forEach(b => { const on = b.dataset.theme === id; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; });
+  $("brand").textContent = "/ " + t.name; $("grade").textContent = t.grade + " · minta tanuló";
+  $("title").textContent = t.title; $("sub").textContent = t.sub; $("planText").textContent = t.plan; $("lastLesson").textContent = t.last;
+  $("subjectList").innerHTML = t.subjects.map(([ico, name, done, all]) => {
+    const pct = Math.round(done / all * 100);
+    return `<button class="subject" type="button" data-subject="${name}"><span class="ico" aria-hidden="true">${ico}</span><strong>${name}</strong><span class="bar" aria-hidden="true"><i style="width:${pct}%"></i></span><span class="meta">${pct}% · ${done} / ${all} lecke kész</span></button>`;
+  }).join("");
+  planState = [false, false, false];
+  $("planList").innerHTML = t.steps.map(([label, min], i) => `<li><label for="step${i}"><input type="checkbox" id="step${i}" data-step="${i}">${label}<span class="min">${min} perc</span></label></li>`).join("");
+  updatePlan();
+  $("heroMsg").textContent = ""; $("feedback").textContent = ""; flipped = false; due = 6; drawCard();
+}
+function updatePlan() {
+  const done = planState.filter(Boolean).length;
+  $("planDone").textContent = `${done} / 3 kész`; $("planBar").style.width = `${Math.round(done / 3 * 100)}%`;
+}
+function drawCard() {
+  const f = $("flash");
+  f.setAttribute("aria-pressed", String(flipped));
+  f.setAttribute("aria-label", flipped ? "Válasz visszafordítása" : "Válasz megjelenítése");
+  $("flashLabel").textContent = flipped ? "HELYES VÁLASZ · KOPPINTS A VISSZAFORDÍTÁSHOZ" : "KÉRDÉS · KOPPINTS A FORDÍTÁSHOZ";
+  $("flashText").textContent = flipped ? "tűzoltó – hosszú ű" : "Melyik a helyes: tűzoltó vagy tüzoltó?";
+  $("duePill").textContent = `${due} esedékes`; $("dueCount").textContent = String(due);
+}
+
+$("flash").addEventListener("click", () => { flipped = !flipped; drawCard(); });
+$("again").addEventListener("click", () => { const r = nextReview(null, "again", new Date()); flipped = false; drawCard(); $("feedback").textContent = `Ismétlésre jelölve: ${fmt(r.dueAt)}-kor újra előkerül. (Minta, nem mentődik.)`; });
+$("known").addEventListener("click", () => { const r = nextReview(null, "known", new Date()); due = Math.max(0, due - 1); flipped = false; drawCard(); $("feedback").textContent = `Szép munka! Következő ismétlés: ${fmt(r.dueAt)}. (Minta, nem mentődik.)`; });
+$("planList").addEventListener("change", e => { const i = Number(e.target.dataset.step); if (Number.isInteger(i)) { planState[i] = e.target.checked; updatePlan(); } });
+$("subjectList").addEventListener("click", e => { const b = e.target.closest("[data-subject]"); if (b) $("heroMsg").textContent = `Élesben itt nyílna meg a(z) ${b.dataset.subject} tantárgyoldala.`; });
+document.querySelectorAll("[data-say]").forEach(b => b.addEventListener("click", () => {
+  $("heroMsg").textContent = b.dataset.say === "continue" ? `Élesben itt nyílna meg a „${$("lastLesson").textContent}” lecke ott, ahol abbahagytad.` : "Élesben a mai terv lépései nyílnának meg sorban.";
+}));
+const tabs = [...document.querySelectorAll(".switch")];
+tabs.forEach((b, i) => {
+  b.addEventListener("click", () => render(b.dataset.theme));
+  b.addEventListener("keydown", e => {
+    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const n = e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length;
+    tabs[n].focus(); render(tabs[n].dataset.theme);
+  });
+});
+
+const max = Math.max(...WEEK.map(d => d[1]));
+$("week").innerHTML = WEEK.map(([d, m]) => `<div class="day"><b>${m}</b>${m ? `<i style="height:${Math.round(m / max * 100)}px"></i>` : `<i class="zero"></i>`}<span>${d}</span></div>`).join("");
+$("weekSum").textContent = `Összesen ${WEEK.reduce((s, d) => s + d[1], 0)} perc ezen a héten · cél: 150 perc`;
+$("quizList").innerHTML = QUIZ.map(([n, p, a]) => `<div class="badge"><span class="mark">${p}/${a}</span><div><strong>${n}</strong><span>${Math.round(p / a * 100)}% · ${p === a ? "hibátlan" : p / a >= .8 ? "jó" : "érdemes ismételni"}</span></div></div>`).join("");
+$("badgeList").innerHTML = BADGES.map(([m, n, d, locked]) => `<div class="badge${locked ? " locked" : ""}"><span class="mark" aria-hidden="true">${m}</span><div><strong>${n}</strong><span>${d}</span></div></div>`).join("");
+render("studio");
+</script>
+</body>
+</html>
