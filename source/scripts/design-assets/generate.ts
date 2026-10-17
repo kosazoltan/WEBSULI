@@ -43,8 +43,11 @@ function referenceDataUrl(item: AssetItem, manifest: AssetManifest): string | nu
   if (existsSync(approved)) return `data:image/webp;base64,${readFileSync(approved).toString("base64")}`;
   const dir = path.join(CANDIDATES, ref.id);
   if (!existsSync(dir)) return null;
-  const latest = readdirSync(dir).filter(f => f.endsWith(".png")).sort().at(-1);
-  return latest ? `data:image/png;base64,${readFileSync(path.join(dir, latest)).toString("base64")}` : null;
+  // A modell JPG-t ad vissza (mérve, 2026-10-17); minden képtípust elfogadunk.
+  const latest = readdirSync(dir).filter(f => /\.(png|jpe?g|webp)$/.test(f)).sort().at(-1);
+  if (!latest) return null;
+  const mime = latest.endsWith(".png") ? "image/png" : latest.endsWith(".webp") ? "image/webp" : "image/jpeg";
+  return `data:${mime};base64,${readFileSync(path.join(dir, latest)).toString("base64")}`;
 }
 
 async function main() {

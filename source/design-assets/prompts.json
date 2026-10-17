@@ -1,29 +1,196 @@
 {
   "model": "bytedance-seed/seedream-5-0-pro",
   "items": [
-    { "id": "mascot-base", "kind": "mascot", "band": "explorer", "subjects": [], "keywords": ["kabala", "róka"], "alt": "A Websuli kabalája: mosolygó, barátságos kis róka.", "aspect_ratio": "1:1", "trial": true,
-      "prompt": "The fox stands relaxed, facing the viewer, a tiny green leaf-shaped backpack strap over one shoulder." },
-    { "id": "mascot-hello", "kind": "mascot", "band": "explorer", "subjects": [], "keywords": ["kabala", "köszön"], "alt": "A Websuli rókája integet és köszön.", "aspect_ratio": "1:1", "trial": true, "references": ["mascot-base"],
-      "prompt": "The same fox waves one paw cheerfully hello, happy open smile." },
-    { "id": "hero-explorer", "kind": "hero", "band": "explorer", "subjects": [], "keywords": ["erdő", "felfedezés"], "alt": "Napfényes, mesés erdő a mosolygó rókával.", "aspect_ratio": "16:9", "trial": true, "references": ["mascot-base"],
-      "prompt": "A sunny storybook forest clearing with rolling green hills, round trees, a few flowers and a bright sun; the same Websuli fox sits happily on the right side." },
-    { "id": "hero-adventure", "kind": "hero", "band": "adventure", "subjects": [], "keywords": ["hegy", "zászló", "expedíció"], "alt": "Festett hegyvidék, a csúcson narancssárga zászló, kanyargó ösvény vezet fel.", "aspect_ratio": "16:9", "trial": true,
-      "prompt": "Painterly mountain landscape at golden hour, a winding trail leading up to a summit with a small orange flag, soft clouds, sense of an achievable adventure." },
-    { "id": "hero-studio", "kind": "hero", "band": "studio", "subjects": [], "keywords": ["Föld", "űr", "kérdések"], "alt": "A Föld az űrből, a horizonton felkelő nap fényével.", "aspect_ratio": "16:9", "trial": true,
-      "prompt": "Planet Earth seen from space with a glowing sunrise on the horizon, deep indigo starry sky, awe-inspiring and calm." },
-    { "id": "hero-laboratory", "kind": "hero", "band": "laboratory", "subjects": ["fizika"], "keywords": ["híd", "mérnöki", "fizika"], "alt": "Függőhíd naplementében, a tartókábelek íve jól látszik.", "aspect_ratio": "16:9", "trial": true,
-      "prompt": "A large suspension bridge photographed at dusk, cables and towers clearly visible, cool blue sky with a warm horizon, precise engineering atmosphere." },
-    { "id": "hero-future", "kind": "hero", "band": "future", "subjects": [], "keywords": ["csúcs", "cél", "jövő"], "alt": "Túrázó hátulról egy hegycsúcson, előtte naplementés hegyvonulatok.", "aspect_ratio": "16:9", "trial": true,
-      "prompt": "A hiker with a backpack seen from behind standing on a mountain summit, looking at layered mountain ranges in a dramatic sunset, deep navy and warm orange light, cinematic." },
-    { "id": "icon-matematika-young", "kind": "icon", "band": "explorer", "subjects": ["matematika"], "keywords": ["számolás"], "alt": "Matematika: színes számkockák.", "aspect_ratio": "1:1", "trial": true,
-      "prompt": "Glossy soft 3D toy-like counting blocks in cheerful colors stacked playfully, for young learners. No digits or symbols printed on them." },
-    { "id": "icon-fizika", "kind": "icon", "band": "laboratory", "subjects": ["fizika"], "keywords": ["atom", "mozgás"], "alt": "Fizika: atommodell elektronpályákkal.", "aspect_ratio": "1:1", "trial": true,
-      "prompt": "Flat clean duotone icon of an atom with elliptical electron orbits, blue and teal, for older learners." },
-    { "id": "cover-ismetlodes", "kind": "cover", "band": "studio", "subjects": ["matematika"], "keywords": ["ismétlődő minta", "füzér", "osztás maradékkal"], "alt": "Füzér, amelyen sütőtökök és csontváz-díszek ismétlődő mintában sorakoznak.", "aspect_ratio": "3:2", "trial": true,
-      "prompt": "A festive garland strung across the image with a repeating pattern of one small carved pumpkin followed by two cute friendly skeleton ornaments, repeating several times, playful not scary, clear rhythm of the repeating unit." },
-    { "id": "cover-sejt", "kind": "cover", "band": "laboratory", "subjects": ["biológia"], "keywords": ["sejt", "sejthártya", "sejtmag"], "alt": "Állati sejt térhatású modellje: sejthártya, sejtplazma és sejtmag.", "aspect_ratio": "3:2", "trial": true,
-      "prompt": "A clean scientific 3D model of an animal cell cut open, showing the cell membrane, cytoplasm and nucleus, cool blue and teal palette, educational and precise." },
-    { "id": "icon-magyar-young", "kind": "icon", "band": "adventure", "subjects": ["magyar"], "keywords": ["olvasás", "könyv"], "alt": "Magyar: nyitott mesekönyv.", "aspect_ratio": "1:1", "trial": true,
-      "prompt": "Glossy soft 3D toy-like open storybook with colorful pages and a ribbon bookmark, for young learners. No readable letters." }
+    {
+      "id": "mascot-base",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala",
+        "róka"
+      ],
+      "alt": "A Websuli kabalája: mosolygó, barátságos kis róka.",
+      "aspect_ratio": "1:1",
+      "trial": true,
+      "prompt": "The fox stands relaxed, facing the viewer, a tiny green leaf-shaped backpack strap over one shoulder."
+    },
+    {
+      "id": "mascot-hello",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala",
+        "köszön"
+      ],
+      "alt": "A Websuli rókája integet és köszön.",
+      "aspect_ratio": "1:1",
+      "trial": true,
+      "references": [
+        "mascot-base"
+      ],
+      "prompt": "The same fox waves one paw cheerfully hello, happy open smile."
+    },
+    {
+      "id": "hero-explorer",
+      "kind": "hero",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "erdő",
+        "felfedezés"
+      ],
+      "alt": "Napfényes, mesés erdő a mosolygó rókával.",
+      "aspect_ratio": "16:9",
+      "trial": true,
+      "references": [
+        "mascot-base"
+      ],
+      "prompt": "A sunny storybook forest clearing with rolling green hills, round trees, a few flowers and a bright sun; the same Websuli fox sits happily on the right side."
+    },
+    {
+      "id": "hero-adventure",
+      "kind": "hero",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "hegy",
+        "zászló",
+        "expedíció"
+      ],
+      "alt": "Festett hegyvidék, a csúcson narancssárga zászló, kanyargó ösvény vezet fel.",
+      "aspect_ratio": "16:9",
+      "trial": true,
+      "prompt": "Painterly mountain landscape at golden hour, a winding trail leading up to a summit with a small orange flag, soft clouds, sense of an achievable adventure."
+    },
+    {
+      "id": "hero-studio",
+      "kind": "hero",
+      "band": "studio",
+      "subjects": [],
+      "keywords": [
+        "Föld",
+        "űr",
+        "kérdések"
+      ],
+      "alt": "A Föld az űrből, a horizonton felkelő nap fényével.",
+      "aspect_ratio": "16:9",
+      "trial": true,
+      "prompt": "Planet Earth seen from space with a glowing sunrise on the horizon, deep indigo starry sky, awe-inspiring and calm."
+    },
+    {
+      "id": "hero-laboratory",
+      "kind": "hero",
+      "band": "laboratory",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "híd",
+        "mérnöki",
+        "fizika"
+      ],
+      "alt": "Függőhíd naplementében, a tartókábelek íve jól látszik.",
+      "aspect_ratio": "16:9",
+      "trial": true,
+      "prompt": "A large suspension bridge photographed at dusk, cables and towers clearly visible, cool blue sky with a warm horizon, precise engineering atmosphere."
+    },
+    {
+      "id": "hero-future",
+      "kind": "hero",
+      "band": "future",
+      "subjects": [],
+      "keywords": [
+        "csúcs",
+        "cél",
+        "jövő"
+      ],
+      "alt": "Túrázó hátulról egy hegycsúcson, előtte naplementés hegyvonulatok.",
+      "aspect_ratio": "16:9",
+      "trial": true,
+      "prompt": "A hiker with a backpack seen from behind standing on a mountain summit, looking at layered mountain ranges in a dramatic sunset, deep navy and warm orange light, cinematic."
+    },
+    {
+      "id": "icon-matematika-young",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "számolás"
+      ],
+      "alt": "Matematika: színes számkockák.",
+      "aspect_ratio": "1:1",
+      "trial": true,
+      "prompt": "Glossy soft 3D toy-like counting blocks in cheerful colors stacked playfully, for young learners. No digits or symbols printed on them."
+    },
+    {
+      "id": "icon-fizika",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "atom",
+        "mozgás"
+      ],
+      "alt": "Fizika: atommodell elektronpályákkal.",
+      "aspect_ratio": "1:1",
+      "trial": true,
+      "prompt": "Flat clean duotone icon of an atom with elliptical electron orbits, blue and teal, for older learners."
+    },
+    {
+      "id": "cover-ismetlodes",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "ismétlődő minta",
+        "füzér",
+        "osztás maradékkal"
+      ],
+      "alt": "Füzér, amelyen sütőtökök és csontváz-díszek ismétlődő mintában sorakoznak.",
+      "aspect_ratio": "3:2",
+      "trial": true,
+      "prompt": "A simple festive garland hanging in a gentle curve across the image. The ornaments follow one strict repeating unit from left to right: exactly one small carved pumpkin, then exactly two cute friendly skeleton ornaments, then again one pumpkin and two skeletons, repeated exactly three times (9 ornaments: pumpkin, skeleton, skeleton, pumpkin, skeleton, skeleton, pumpkin, skeleton, skeleton). Evenly spaced, nothing else on the string, no other objects anywhere in the picture, plain softly lit background, playful and not scary."
+    },
+    {
+      "id": "cover-sejt",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "biológia"
+      ],
+      "keywords": [
+        "sejt",
+        "sejthártya",
+        "sejtmag"
+      ],
+      "alt": "Állati sejt térhatású modellje: sejthártya, sejtplazma és sejtmag.",
+      "aspect_ratio": "3:2",
+      "trial": true,
+      "prompt": "A clean scientific 3D model of an animal cell cut open, showing the cell membrane, cytoplasm and nucleus, cool blue and teal palette, educational and precise."
+    },
+    {
+      "id": "icon-magyar-young",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "magyar"
+      ],
+      "keywords": [
+        "olvasás",
+        "könyv"
+      ],
+      "alt": "Magyar: nyitott mesekönyv.",
+      "aspect_ratio": "1:1",
+      "trial": true,
+      "prompt": "Glossy soft 3D toy-like open storybook with colorful pages and a ribbon bookmark, for young learners. No readable letters."
+    }
   ]
 }
