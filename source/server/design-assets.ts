@@ -54,9 +54,9 @@ export async function syncDesignAssets(catalog: readonly DesignAsset[] = DESIGN_
 
 /**
  * Mentés előtti ikonválasztás: a lecke tantárgyából és évfolyamából az `icon-<tantárgy>-<sáv>` azonosító, ha a kép az
- * adatbázisban megvan. Ismeretlen tantárgy, nem tanított pár vagy hiányzó kép: a lecke ikon nélkül ment (régi `art` törölve).
+ * adatbázisban megvan (review #274: a javítás közvetlen mentése is ezen megy át, a saját tranzakciójában). Ismeretlen tantárgy, nem tanított pár vagy hiányzó kép: a lecke ikon nélkül ment (régi `art` törölve).
  */
-export async function withSubjectIcon<T>(json: T): Promise<T> {
+export async function withSubjectIcon<T>(json: T, executor: Pick<typeof db, "select"> = db): Promise<T> {
   if (!json || typeof json !== "object" || Array.isArray(json)) return json;
   const lesson = json as Record<string, unknown>;
   if (typeof lesson.subject !== "string" || typeof lesson.classroom !== "number") return json;
@@ -64,7 +64,7 @@ export async function withSubjectIcon<T>(json: T): Promise<T> {
   const id = subjectIconId(lesson.subject, lesson.classroom);
   if (!id) return rest as T;
   try {
-    const [row] = await db.select({ id: designAssets.id }).from(designAssets).where(eq(designAssets.id, id));
+    const [row] = await executor.select({ id: designAssets.id }).from(designAssets).where(eq(designAssets.id, id));
     return (row ? { ...rest, art: { subjectIcon: row.id } } : rest) as T;
   } catch (error) {
     logger.warn("[design-assets] Az ikon nem kereshető, a lecke ikon nélkül ment:", error);

@@ -87,3 +87,9 @@ test("valódi DB: mentéskor a lecke a tantárgy × sáv ikonját kapja; hiányz
   const [updated] = await db.select({ json: lessons.json }).from(lessons).where(eq(lessons.id, id));
   assert.deepEqual((updated.json as { art?: unknown }).art, { subjectIcon: "icon-matematika-future" });
 });
+
+test("valódi DB (review #274): a javítás tranzakciójában is az új sáv ikonja kerül a leckébe", async () => {
+  const lesson = { ...fusionFixture(), subject: "Matematika", classroom: 7, art: { subjectIcon: "icon-matematika-studio" } };
+  const moved = await db.transaction(async tx => withSubjectIcon({ ...lesson, classroom: 11 }, tx)) as { art?: unknown };
+  assert.deepEqual(moved.art, { subjectIcon: "icon-matematika-future" }, "a 11. évfolyamra áthelyezett lecke a 11–12. sáv ikonját kapja");
+});
