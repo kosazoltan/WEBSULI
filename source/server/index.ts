@@ -525,7 +525,7 @@ app.use((req, res, next) => {
 
     // Ikonkészlet (2026-10-17-websuli-ikonkeszlet): a jóváhagyott képek az adatbázisba. Háttérben fut, nem késlelteti az indulást;
     // hiba esetén a lejátszó a statikus katalógusképeket használja tovább.
-    void import("./design-assets").then(({ syncDesignAssets }) => syncDesignAssets()).then(
+    void import("./design-assets").then(({ startDesignAssetSync }) => startDesignAssetSync()).then(
       (r) => log(`[design-assets] ${r.written} kép írva, ${r.unchanged} változatlan, ${r.missing.length} hiányzó fájl`),
       (error) => logger.error("[STARTUP] A képkészlet szinkronja nem sikerült:", error),
     );

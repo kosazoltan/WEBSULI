@@ -17,7 +17,7 @@ assert.equal(url.hostname, "127.0.0.1");
 assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 const { db, dbPool } = await import("../server/db");
-const { designAssetsRouter, syncDesignAssets, withLessonArt } = await import("../server/design-assets");
+const { designAssetsRouter, startDesignAssetSync, syncDesignAssets, withLessonArt } = await import("../server/design-assets");
 const { createDrizzlePipelineStore } = await import("../server/studio/pipeline-store");
 
 const asset = (id: string, band: DesignAsset["band"]): DesignAsset => ({
@@ -122,4 +122,15 @@ test("valódi DB (arculati bank): a lecke témakörének borítója és a témak
   const art = (await withLessonArt(lesson, "seed") as { art?: { picture?: string; topic?: string } }).art;
   assert.equal(art?.picture, "cover-kornyezetismeret-adventure-viz");
   assert.equal(art?.topic, "viz");
+});
+
+test("valódi DB (review #277): a mentés megvárja az induló szinkront — a közben mentett lecke is a témakör borítóját kapja", async () => {
+  await mkdir(path.join(root, "design", "adventure"), { recursive: true });
+  await writeFile(path.join(root, "design", "adventure", "cover-matematika-adventure-tortek.webp"), Buffer.from("RIFF-tortek"));
+  const cover: DesignAsset = { ...asset("cover-matematika-adventure-tortek", "adventure"), kind: "cover", subjects: ["matematika"], keywords: ["Törtek", "tort"], topic: "tortek", alt: "Matematika — Törtek: témaköri borítókép.", src: "/design/adventure/cover-matematika-adventure-tortek.webp" };
+  // Késleltetett induló szinkron (mint a deploy utáni első percekben): a borító csak 300 ms múlva kerül a táblába.
+  void startDesignAssetSync(() => new Promise(resolve => setTimeout(() => resolve(syncDesignAssets([cover], [root])), 300)));
+  const art = (await withLessonArt({ ...fusionFixture(), subject: "Matematika", classroom: 4, title: "Törtek összeadása" }, "seed") as { art?: { picture?: string; topic?: string } }).art;
+  assert.equal(art?.topic, "tortek");
+  assert.equal(art?.picture, "cover-matematika-adventure-tortek", "a mentés a szinkron után választott");
 });
