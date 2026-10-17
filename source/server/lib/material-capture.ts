@@ -161,7 +161,11 @@ export const MATERIAL_CAPTURE_SCRIPT = `
       var RESULT_NAME = /result|eredmeny|eredmény|score|pontszam|pontszám/i;
       var SKIP_NAME = /gate|drag|dd-|myth|pred|self|slider|timeline|websuli/i;
       var PERCENT = /\\d+(?:[.,]\\d+)?\\s*%/;
-      var RESULT_WORD = /eredm|pont|helyes|jegy|osztályzat|osztalyzat|score|jeles|közepes|elégséges|elégtelen/i;
+      var FRACTION = /\\d+\\s*\\/\\s*\\d+/;
+      var GRADE = /jeles|közepes|elégséges|elégtelen|osztályzat|érdemjegy|jegy\\s*:/i;
+      // a „helyes” / „pontosság” szó önmagában nem elég: az élő haladásjelzők (pl. „Kvíz … 8%”) ne menjenek ki
+      var RESULT_WORD = /eredm|pontsz|jegy|osztályzat|osztalyzat|score|jeles|közepes|elégséges|elégtelen/i;
+      var EVAL_CLICK = /[ée]rt[ée]kel|ellen[őo]r|eredm[ée]ny|bek[üu]ld|bead|befejez|k[ée]sz|v[ée]ge|submit|check|evaluat|finish|result|score|grade/i;
       var SKIP_TAG = /^(SCRIPT|STYLE|TEXTAREA|INPUT|BUTTON|SELECT|OPTION|NOSCRIPT|TEMPLATE)$/;
       var seen = {};
 
@@ -177,13 +181,14 @@ export const MATERIAL_CAPTURE_SCRIPT = `
       function candidates() {
         var picked = [], all, i, el, w, node, t, up;
         if (!document.body) { return picked; }
-        // (a) név szerint eredményelem (id/class), benne százalék
+        // (a) név szerint eredményelem (id/class)
         all = document.body.getElementsByTagName('*');
         for (i = 0; i < all.length; i++) {
           el = all[i];
           if (SKIP_TAG.test(el.tagName) || !RESULT_NAME.test(nameOf(el))) { continue; }
           t = textOf(el);
-          if (t && t.length <= 3000 && PERCENT.test(t) && !skipped(el)) { picked.push(el); }
+          // százalék, vagy pontszám (x / y) osztályzattal — a futó számláló (pl. „3/25”) önmagában nem eredmény
+          if (t && t.length <= 3000 && (PERCENT.test(t) || (FRACTION.test(t) && GRADE.test(t))) && !skipped(el)) { picked.push(el); }
         }
         // (b) név nélküli eredménydoboz: százalékot tartalmazó szöveg, a legközelebbi rövid blokk eredményszóval
         w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
@@ -229,15 +234,17 @@ export const MATERIAL_CAPTURE_SCRIPT = `
         }
         return out;
       }
-      function scan(baseline) {
+      // mode: 'baseline' (betöltés), 'eval' (kiértékelő jellegű kattintás után), 'other' (bármely más kattintás után).
+      // Minden látott szöveg megjelölődik; más kattintás után csak az osztályzatot is tartalmazó eredmény megy ki.
+      function scan(mode) {
         var found = candidates(), fresh = [], i, t, k;
         for (i = 0; i < found.length; i++) {
           t = clip(textOf(found[i]), 1500);
           k = hash(t);
-          if (!seen[k]) { seen[k] = true; fresh.push(t); }
+          if (!seen[k]) { seen[k] = true; if (mode === 'eval' || GRADE.test(t)) { fresh.push(t); } }
         }
         // a tananyag maga küldi az eredményt (sendResultEmail / mailto) → nincs második, automatikus levél
-        if (baseline || !fresh.length || window.__websuliExplicitResult) { return; }
+        if (mode === 'baseline' || !fresh.length || window.__websuliExplicitResult) { return; }
         var title = clip((document.title || (document.querySelector('h1') || {}).textContent || 'Tananyag').trim(), 120);
         var name = learnerName();
         var ans = answers();
@@ -248,12 +255,22 @@ export const MATERIAL_CAPTURE_SCRIPT = `
           (ans.length ? '\\n\\nSzöveges válaszok:\\n' + ans.join('\\n') : '');
         post(title + ' — eredmény', clip(body, 4900), true);
       }
-      var timer = null;
-      document.addEventListener('click', function () {
+      function isEvalClick(target) {
+        var el = target && target.closest ? target.closest('button, input[type="button"], input[type="submit"], a, [onclick], [role="button"]') : null;
+        if (!el) { return false; }
+        return EVAL_CLICK.test((el.value || el.textContent || '') + ' ' + (el.getAttribute('onclick') || '') + ' ' + (el.id || ''));
+      }
+      var timer = null, pendingEval = false;
+      document.addEventListener('click', function (ev) {
+        pendingEval = pendingEval || isEvalClick(ev.target);
         if (timer) { clearTimeout(timer); }
-        timer = setTimeout(function () { timer = null; try { scan(false); } catch (e) { /* a beolvasás nem zavarhatja a tananyagot */ } }, 1500);
+        timer = setTimeout(function () {
+          var mode = pendingEval ? 'eval' : 'other';
+          timer = null; pendingEval = false;
+          try { scan(mode); } catch (e) { /* a beolvasás nem zavarhatja a tananyagot */ }
+        }, 1500);
       }, true);
-      function baseline() { try { scan(true); } catch (e) { /* lásd fent */ } }
+      function baseline() { try { scan('baseline'); } catch (e) { /* lásd fent */ } }
       if (document.readyState === 'complete') { setTimeout(baseline, 500); } else { window.addEventListener('load', function () { setTimeout(baseline, 500); }); }
     })();
     </script>`;

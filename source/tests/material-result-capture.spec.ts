@@ -54,8 +54,8 @@ test("mailto-s régi anyag: a levelező nem nyílik meg, az eredmény a szerverh
 const EVAL_MATERIAL = `<!DOCTYPE html><html><head><title>Törtek – 5. osztály</title></head><body>
 <label for="nev">Neved</label><input id="nev" type="text" placeholder="Név" value="Kiss Anna">
 <div class="task"><p>1. Mit jelent a tört számlálója?</p><textarea id="t1"></textarea></div>
-<div id="counter">Pont: 0</div>
-<button id="opt" onclick="document.getElementById('counter').textContent='Pont: 1'">B) válasz</button>
+<div class="quiz-head"><p>Pontszám: 0 helyes (0%)</p></div>
+<button id="opt" onclick="document.querySelector('.quiz-head p').textContent='Pontszám: 1 helyes (10%)'">B) válasz</button>
 <button id="eval" onclick="evaluateQuiz()">✅ Kiértékelés</button>
 <div id="quiz-result"><p>Eredmény: még nincs (0%)</p></div>
 <script>
@@ -68,7 +68,7 @@ function evaluateQuiz() {
 
 test("küldés nélküli régi anyag: a kiértékelés után az új eredmény és a válaszok automatikusan mennek; azonos eredmény nem megy újra", async ({ page }) => {
   const { posts } = await open(page, "regi-kiertekelo", EVAL_MATERIAL);
-  await page.click("#opt"); // zaj: futó számláló (nincs százalék) → nem küld
+  await page.click("#opt"); // zaj: élő haladásjelző (százalékkal, de osztályzat nélkül), nem kiértékelő kattintás → nem küld
   await page.waitForTimeout(1800);
   expect(posts).toEqual([]);
 
@@ -83,6 +83,7 @@ test("küldés nélküli régi anyag: a kiértékelés után az új eredmény é
   expect(first.body).toContain("Mit jelent a tört számlálója?");
   expect(first.body).toContain("→ A számláló megmutatja, hány részt veszünk.");
   expect(first.body).not.toContain("még nincs");
+  expect(first.body).not.toContain("Pontszám: 1 helyes (10%)"); // a már látott haladásjelző nem kerül a levélbe
   await expect(page.getByRole("status")).toHaveCount(0); // az automatikus beküldés csendes
 
   await page.click("#eval"); // ugyanaz az eredmény

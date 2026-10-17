@@ -58,6 +58,10 @@ test("a beinjektált futásidejű szkript érvényes JS, nem tartalmaz e-mail c�
   assert.ok(!/[\w.+-]+@[\w-]+\.[\w.]+/.test(code), "nincs e-mail cím literál");
   assert.ok(code.includes("/api/material-result"));
   assert.ok(code.includes("window.__websuliLoc = loc"));
+  // a sablonsztringben a \d / \s escape-elve kell legyen — különben a kiadott szkriptben „d” / „s” lesz belőle
+  assert.ok(code.includes(String.raw`var PERCENT = /\d+(?:[.,]\d+)?\s*%/;`));
+  assert.ok(code.includes(String.raw`var FRACTION = /\d+\s*\/\s*\d+/;`));
+  assert.ok(code.includes(String.raw`jegy\s*:/i;`));
 });
 
 test("a végpont: az auto jelölés opcionális logikai érték; a tárgy végén jelölve, legfeljebb 200 karakter", () => {
