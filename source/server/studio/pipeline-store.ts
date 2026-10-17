@@ -10,7 +10,7 @@ import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { workflowFence, workflowSerialized } from "../workflows/engine";
 import type { Coverage, MapConcept } from "./coverage";
 import type { StudioStep } from "./pipeline";
-import { withSubjectIcon } from "../design-assets";
+import { withLessonArt } from "../design-assets";
 
 /** Spec 2026-09-19: csak a forrásból igazolt (megtartott / szerkesztett) fogalmak taníthatók. */
 export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
@@ -210,8 +210,10 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
     },
 
     async upsertLesson(lessonId, mapId, input) {
-      // Ikonkészlet: a tantárgy és az évfolyam ekkor ismert — az ikon azonosítója az adatbázisból kerül a leckébe.
-      const json = await withSubjectIcon(input);
+      // Ikonkészlet + lecke megnyitása: a tantárgy és az évfolyam ekkor ismert — az arculat (ikon, kép, kabala) az adatbázisból
+      // kerül a leckébe, a lejátszó már nem számolja. Új leckénél a seed a térkép és a cím (az azonosító még nincs meg).
+      const title = (input as { title?: unknown } | null)?.title;
+      const json = await withLessonArt(input, lessonId ?? `${mapId}:${typeof title === "string" ? title : ""}`);
       if (lessonId) {
         await db.update(lessons).set({ json: json as never, updatedAt: new Date() }).where(eq(lessons.id, lessonId));
         return lessonId;

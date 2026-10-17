@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { AlertTriangle, Loader2, RotateCw } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { AlertTriangle, RotateCw } from "lucide-react";
 
-import { apiRequest } from "@/lib/queryClient";
+import { lessonByFileQuery } from "./lesson-query";
+import { LessonLoading } from "./LessonLoading";
 import { dropUnknownAnimateBlocks, lessonSchema } from "@shared/lesson-schema";
 import { tolerantLessonInput } from "@shared/lesson-experience";
 import { nfcDeep } from "@shared/lesson-typography";
@@ -18,22 +19,22 @@ import { LessonRuntime } from "./LessonRuntime";
  * Failing visibly is the correct behaviour for teaching material: a child cannot tell
  * that a section is absent, and a teacher can.
  */
-export function LessonView({ material }: { material: { id: string; title?: string } }) {
-  const { data, isLoading, error, refetch, isFetching } = useQuery<{ lesson: unknown; lessonId?: string }>({
-    queryKey: ["/api/lessons/by-file", material.id],
-    queryFn: () => apiRequest("GET", `/api/lessons/by-file/${material.id}`),
-    // Audit 2026-09-24: mobilon egy pillanatnyi hálózati hiba eddig zsákutca volt (az alapbeállítás retry:false).
-    retry: 2,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
-  });
+type Material = { id: string; title?: string; classroom?: number | null };
 
-  if (isLoading) {
-    return (
-      <div className="w-full flex items-center justify-center gap-2 py-20 text-muted-foreground">
-        <Loader2 className="w-4 h-4 animate-spin" /> Lecke betöltése…
-      </div>
-    );
-  }
+/**
+ * Lecke megnyitása (docs/specs/2026-10-17-lecke-betoltes.md): a lábléc (az admin-javítópanel) csak a lezárult betöltés után
+ * jelenik meg — sikeres vagy hibás leckénél is, betöltés közben soha. Ugyanaz a gyorsítótár-bejegyzés, külön kérés nélkül.
+ */
+export function LessonView({ material, footer = null }: { material: Material; footer?: ReactNode }) {
+  const { isLoading } = useQuery(lessonByFileQuery(material.id));
+  return <>{<LessonViewBody material={material} />}{!isLoading && footer}</>;
+}
+
+function LessonViewBody({ material }: { material: Material }) {
+  // Lecke megnyitása (2026-10-17): ugyanaz a lekérdezés, amit a Preview az anyag-metaadattal párhuzamosan már elindított.
+  const { data, isLoading, error, refetch, isFetching } = useQuery(lessonByFileQuery(material.id));
+
+  if (isLoading) return <LessonLoading classroom={material.classroom} />;
 
   if (error) {
     // Spec 2026-09-30 (U1, §C-V/1): a 409 a pontozó-verzió kapuja — a régi oldal nem pontozhat némán rosszul; a

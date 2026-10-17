@@ -20,7 +20,7 @@ import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { designFromInstruction, visualWorld, type LessonFlair, type VisualWorldId } from "../../shared/lesson-visuals";
 import { buildStaleJudgePrompt, parseStaleVerdicts, repairChecklistTail, sourceWordSet, staleFormCandidates, staleFormProblems, withRepairSkill, type StaleWarning } from "./repair-skill";
 import { logger } from "../lib/logger";
-import { withSubjectIcon } from "../design-assets";
+import { withLessonArt } from "../design-assets";
 import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
 import { applySourceCorrections, arithmeticSourceCorrections, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
@@ -242,8 +242,8 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     const corrections = repair.sourceCorrections ?? [];
     const reviewed = { ...source, ...(repair.classroom !== undefined ? { classroom: repair.classroom } : {}), concepts: applySourceCorrections(source.concepts, corrections) };
     const coverage = assertRepairCandidate(lessonSchema.parse(current.json), repair.candidate, reviewed, repair.classroom ?? lessonSchema.parse(current.json).classroom);
-    // Review #274: az évfolyamot váltó javítás az új sáv adatbázis-ikonját kapja (ugyanaz a normalizálás, mint az upsertLesson-ben).
-    const candidate = await withSubjectIcon(repair.candidate, tx);
+    // Review #274: az évfolyamot váltó javítás az új sáv arculatát kapja (ugyanaz a normalizálás, mint az upsertLesson-ben).
+    const candidate = await withLessonArt(repair.candidate, current.id, tx);
     if (workflowMode() === "apply") await workflowPhase("apply");
     await workflowFence(tx);
     const quiz = await tx.select().from(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));

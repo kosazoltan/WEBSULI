@@ -1,12 +1,14 @@
 import { useRoute, useLocation } from "wouter";
 import { ArrowLeft, Share2, Copy, Check, ExternalLink, RotateCw, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { HtmlFile } from "@shared/schema";
 import { useConfig } from "@/lib/useConfig";
 import { LessonView } from "@/lesson-runtime/LessonView";
+import { LessonLoading } from "@/lesson-runtime/LessonLoading";
+import { lessonByFileQuery } from "@/lesson-runtime/lesson-query";
 import { homeFilesQueryOptions, lessonNeighbours } from "@/lib/home-files-query";
 import { useAuth } from "@/hooks/useAuth";
 import { LessonRepairPanel } from "@/components/LessonRepairPanel";
@@ -32,15 +34,30 @@ export default function Preview() {
   // Full URL for sharing/copying (absolute URL with baseUrl)
   const fullUrl = `${baseUrl}/preview/${params?.id}`;
   
-  // Combined loading state
-  const isLoading = configLoading || materialLoading;
-  
+  // Spec 2026-09-20: előző/következő tananyag a lista sorrendje szerint — könnyű váltás mobilon is.
+  const { data: allFiles = [] } = useQuery<Array<{ id: string; contentType?: string; title?: string; classroom?: number | null }>>(homeFilesQueryOptions());
+  // Lecke megnyitása (docs/specs/2026-10-17-lecke-betoltes.md): a lista már tudja a típust és az évfolyamot.
+  const listed = params?.id ? allFiles.find((f) => f.id === params.id) : undefined;
+
   // Determine content type
   const isPdf = material?.contentType === 'pdf';
   // LS-2: a strukturált lecke saját futtatót kap az iframe helyett.
   const isLesson = material?.contentType === 'lesson';
-  // Spec 2026-09-20: előző/következő tananyag a lista sorrendje szerint — könnyű váltás mobilon is.
-  const { data: allFiles = [] } = useQuery<Array<{ id: string; contentType?: string; title?: string }>>(homeFilesQueryOptions());
+  const lessonExpected = isLesson || (!material && listed?.contentType === 'lesson');
+  // Review #275 (P1): hideg, közvetlen megnyitáskor a típus még ismeretlen — ilyenkor is a közös (semleges) lecke-töltő látszik,
+  // nem a régi „Betöltés…”; csak az ismerten nem lecke anyag (HTML/PDF) kapja a régi töltőt.
+  const showLessonLoader = isLesson || (!material && (!listed?.contentType || listed.contentType === 'lesson'));
+
+  // A lecke kérése az anyag-metaadattal PÁRHUZAMOSAN indul (nem utána); ismeretlen típusnál is, mert a lecke a gyakori eset.
+  // Nem lecke anyagnál a 404 csendes: a lejátszó nem jelenik meg, az eredményt senki sem olvassa.
+  useEffect(() => {
+    if (!params?.id || (listed?.contentType && listed.contentType !== 'lesson') || (material && !isLesson)) return;
+    // Review #275: az újrapróbálás a lekérdezésé (átmeneti hibára 2×, a 404-re nem) — a LessonView ehhez a kéréshez csatlakozik.
+    void queryClient.prefetchQuery(lessonByFileQuery(params.id));
+  }, [params?.id, listed?.contentType, material, isLesson, queryClient]);
+
+  // Combined loading state — a leckéhez a config nem kell (az csak a megosztási linkhez és az iframe-hez).
+  const isLoading = materialLoading || (!lessonExpected && configLoading);
   const neighbours = params?.id ? lessonNeighbours(allFiles, params.id) : { prev: null, next: null };
   const openFile = (file: { id: string; contentType?: string }) => setLocation(file.contentType === "pdf" ? `/materials/pdf/${file.id}` : `/preview/${file.id}`);
   
@@ -224,17 +241,20 @@ export default function Preview() {
       {/* Responsive container - optimized for all screen sizes including Samsung Z Fold */}
       <div className={isLesson ? "w-full" : "w-full flex-1 min-h-0"}>
         {isLoading ? (
+          showLessonLoader ? <LessonLoading classroom={listed?.classroom} /> : (
           <div className="w-full h-full flex items-center justify-center py-20">
             <p className="text-muted-foreground">Betöltés…</p>
           </div>
+          )
         ) : isLesson ? (
           // LS-2: a strukturált lecke NEM iframe-ben fut. A tartalom a saját sémánk
           // szerinti JSON, amit a saját futtatónk renderel — így nincs idegen script,
           // egységes a mobil/érintés-viselkedés, és a /dev CSP-lazítás sem kell ide.
           <>
-            <LessonView material={material} />
-            {/* Spec 2026-09-23: a kész lecke alatt az admin javítási utasítást adhat a készítő ügynöknek. */}
-            {isAdmin && material?.id && <LessonRepairPanel fileId={material.id} isLesson />}
+            {/* Spec 2026-09-23: a kész lecke alatt az admin javítási utasítást adhat a készítő ügynöknek. Lecke megnyitása (2026-10-17):
+                a LessonView láblécében, csak a lezárult betöltés után (hibás leckénél is), csukott gombként — betöltés közben ne
+                látsszon „javításnak”. */}
+            <LessonView material={material} footer={isAdmin && material?.id ? <LessonRepairPanel fileId={material.id} isLesson collapsed /> : null} />
           </>
         ) : (
           // Unified iframe rendering for both HTML and PDF
