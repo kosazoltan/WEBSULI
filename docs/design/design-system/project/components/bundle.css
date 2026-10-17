@@ -1,0 +1,61 @@
+/* Websuli lesson components — every colour, radius and shadow is a tokens.css variable (source: source/client/src/lesson-runtime/lesson-design.css). */
+.ws { font-family: var(--font-lesson); color: var(--ink); }
+[data-theme="explorer"] .ws, [data-theme="adventure"] .ws { font-family: var(--font-young); }
+.ws *, .ws *::before, .ws *::after { box-sizing: border-box; }
+.ws :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; box-shadow: 0 0 0 3px var(--focus-inner); }
+.ws-stage { background: var(--surface); padding: var(--space-4); }
+
+.ws-bandhead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; padding: 16px 20px; border-radius: var(--radius-xl); border: 1px solid var(--line); background: linear-gradient(135deg, var(--soft), var(--panel)); }
+.ws-bandhead p { margin: 0; }
+.ws-badge { width: 56px; height: 56px; border-radius: var(--radius-pill); display: grid; place-items: center; background: var(--accent); color: var(--on-accent); }
+.ws-badge svg { width: 28px; height: 28px; }
+.ws-grade { font-size: 20px; font-weight: 900; line-height: 1.2; color: var(--title); }
+.ws-band-name { font-size: 24px; font-weight: 900; line-height: 1.2; letter-spacing: -0.02em; color: var(--title); }
+.ws-motto { font-size: 14px; font-weight: 600; color: var(--title); }
+.ws-brand { display: grid; justify-items: end; gap: 2px; font-size: 13px; color: var(--muted); text-align: right; }
+.ws-brand strong { font-size: 15px; font-weight: 900; color: var(--title); }
+
+.ws-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); border-radius: var(--radius-lg); overflow: hidden; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-card); }
+.ws-hero-text { padding: var(--space-6); display: grid; gap: 12px; align-content: center; }
+.ws-hero h1 { margin: 0; font-size: 40px; line-height: 1.12; font-weight: 900; letter-spacing: -0.025em; color: var(--title); }
+.ws-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ws-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 11px; background: var(--soft); color: var(--title); font-size: 13px; font-weight: 700; }
+.ws-chip img { width: 22px; height: 22px; border-radius: 6px; object-fit: cover; }
+.ws-art { position: relative; margin: 0; min-height: 260px; }
+.ws-art > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.ws-mascot { position: absolute; left: 12px; bottom: 12px; right: 12px; display: flex; align-items: flex-end; gap: 8px; }
+.ws-mascot img { width: 88px; height: 88px; border-radius: var(--radius-pill); object-fit: cover; background: var(--bubble); border: 3px solid var(--bubble); box-shadow: var(--shadow-lift); }
+.ws-bubble { margin: 0 0 30px; max-width: 220px; padding: 10px 14px; border-radius: 16px 16px 16px 4px; background: var(--bubble); color: var(--on-bubble); font-size: 15px; font-weight: 800; line-height: 1.35; box-shadow: var(--shadow-lift); }
+
+.ws-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; padding: 6px; border-radius: var(--radius-lg); background: var(--panel); border: 1px solid var(--line); }
+.ws-tab { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 54px; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted); font: inherit; font-size: 15px; font-weight: 800; }
+.ws-tab svg { width: 20px; height: 20px; }
+.ws-tab[aria-selected="true"] { background: var(--soft); color: var(--title); box-shadow: inset 0 0 0 2px var(--accent); }
+
+.ws-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--shadow-card); display: grid; gap: 12px; }
+.ws-card p { margin: 0; line-height: 1.65; }
+.ws-card-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; color: var(--title); margin: 0; }
+.ws-key { background: color-mix(in srgb, var(--accent-2) 22%, transparent); padding: 0 .2em; border-radius: 6px; font-weight: 800; }
+.ws-section { display: flex; gap: 14px; align-items: center; }
+.ws-medal { width: 44px; height: 44px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--strong); color: var(--on-strong); font-weight: 900; font-size: 18px; }
+.ws-section h2 { margin: 0; font-size: 24px; line-height: 1.25; font-weight: 900; color: var(--title); }
+
+.ws-steps { list-style: none; margin: 0; padding: 0; counter-reset: s; display: grid; }
+.ws-steps li { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; padding-bottom: 14px; counter-increment: s; }
+.ws-steps li::before { content: counter(s); width: 34px; height: 34px; border-radius: var(--radius-pill); display: grid; place-items: center; background: var(--accent-3); color: var(--on-accent); font-weight: 900; z-index: 1; }
+.ws-steps li::after { content: ""; position: absolute; left: 16px; top: 34px; bottom: 0; width: 2px; background: var(--line); }
+.ws-steps li:last-child::after { display: none; }
+.ws-result { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 12px; background: var(--success-bg); color: var(--on-success-bg); font-weight: 900; }
+.ws-watch { padding: 14px 16px; border-radius: var(--radius-lg); background: var(--warning-bg); color: var(--on-warning-bg); }
+.ws-watch strong { display: block; }
+
+.ws-flash { width: 100%; min-height: 153px; display: grid; place-items: center; gap: 9px; padding: 18px 14px; border: 1px dashed var(--line); border-radius: var(--radius-md); background: linear-gradient(140deg, var(--panel), var(--soft)); color: var(--title); text-align: center; font: inherit; }
+.ws-flash[aria-pressed="true"] { border: 1px solid var(--accent); }
+.ws-flash small { font-size: 13px; font-weight: 700; letter-spacing: .02em; color: var(--muted); }
+.ws-flash b { font-size: 24px; font-weight: 800; line-height: 1.3; }
+.ws-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ws-btn { min-height: 44px; padding: 10px 16px; border: 0; border-radius: var(--radius-sm); font: inherit; font-size: 15px; font-weight: 750; background: var(--strong); color: var(--on-strong); }
+.ws-btn.secondary { background: var(--secondary); color: var(--on-secondary); }
+.ws-progress { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.ws-rail { height: 10px; border-radius: var(--radius-pill); background: var(--track); overflow: hidden; }
+.ws-rail > i { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--accent); }

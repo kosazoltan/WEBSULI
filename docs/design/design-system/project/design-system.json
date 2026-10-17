@@ -1,0 +1,77 @@
+{
+  "v": 3,
+  "layout": "files",
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-17T06:40:00Z"
+  },
+  "title": "Websuli Design System",
+  "namespace": "Websuli",
+  "libraries": [],
+  "sections": {},
+  "groups": [
+    "Pictures"
+  ],
+  "assetGroups": {
+    "Pictures": {
+      "name": "Pictures",
+      "tile": "m",
+      "order": [
+        "mascot-hello.webp",
+        "hero-adventure.webp",
+        "hero-studio.webp",
+        "hero-future.webp",
+        "cover-sejt.webp",
+        "icon-fizika.webp"
+      ],
+      "files": {
+        "mascot-hello.webp": {
+          "name": "mascot-hello.webp",
+          "blob": "7200f645bb29f921d5ef829524d20e73",
+          "size": 13500,
+          "type": "image/webp"
+        },
+        "hero-adventure.webp": {
+          "name": "hero-adventure.webp",
+          "blob": "89761f89487ff425092cfdcae137fcfa",
+          "size": 152160,
+          "type": "image/webp"
+        },
+        "hero-studio.webp": {
+          "name": "hero-studio.webp",
+          "blob": "3118dcfab89d25a1499f06ba29332b46",
+          "size": 55288,
+          "type": "image/webp"
+        },
+        "hero-future.webp": {
+          "name": "hero-future.webp",
+          "blob": "021a25e09d3d8edd18c4fcf9931d64fa",
+          "size": 134546,
+          "type": "image/webp"
+        },
+        "cover-sejt.webp": {
+          "name": "cover-sejt.webp",
+          "blob": "2d4995c6669cf13add4f6e6157e78c86",
+          "size": 43634,
+          "type": "image/webp"
+        },
+        "icon-fizika.webp": {
+          "name": "icon-fizika.webp",
+          "blob": "d7fed5eabe81762cc6a98a3c4c4e9ab5",
+          "size": 16308,
+          "type": "image/webp"
+        }
+      }
+    }
+  },
+  "blobs": {},
+  "docs": {
+    "sections": []
+  },
+  "lastChange": {
+    "by": "Kósa Zoltán",
+    "at": "2026-10-17T06:40:00Z",
+    "via": "Claude Code · kosazoltan/WEBSULI@feat/websuli-kepkeszlet",
+    "note": "Első változat a repó tokenjeiből, betűiből, komponenseiből és a jóváhagyott képekből."
+  }
+}
