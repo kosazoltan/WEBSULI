@@ -22,22 +22,26 @@ Terv: `docs/specs/2026-10-17-websuli-ikonkeszlet.md`. Ág: `feat/websuli-ikonkes
 5. **`server/design-assets.ts`:**
    - `syncDesignAssets()`: a `DESIGN_ASSET_CATALOG` minden eleméhez beolvassa a WebP-t (`dist/public/design`, ennek hiányában
      `client/public/design`), és upsertel. Csak akkor ír, ha az sha256 eltér. A hiányzó fájlt naplózza, nem áll le.
-   - `lessonArtFor(json)`: a `subjectIconId` szerinti azonosítót csak akkor adja, ha az a táblában létezik.
+   - `withSubjectIcon(json)`: a `subjectIconId` szerinti azonosítót csak akkor írja a leckébe, ha az a táblában létezik;
+     különben a régi `art` mezőt is elhagyja.
    - `GET /api/design-assets/:id`:
-     - siker: bájtok, `Content-Type` a `mime` szerint, `Cache-Control: public, max-age=31536000, immutable`, `ETag` az sha256;
+     - siker: bájtok, `Content-Type` a `mime` szerint, `Cache-Control: public, max-age=86400`, `ETag` az sha256, `If-None-Match` egyezésre 304
+       (nem `immutable`: az azonosító stabil, egy újra jóváhagyott kép így egy napon belül frissül);
      - hibás azonosító: 400; nem létező: 404.
 6. **`server/index.ts`:** az induláskor a migráció-ellenőrzés után `syncDesignAssets()` fut. Hiba esetén figyelmeztet, a szerver
    indul tovább.
 7. **`shared/lesson-schema.ts`:** `art: z.object({ subjectIcon: z.string().regex(/^[a-z0-9-]{3,64}$/).optional() }).strict().optional()`.
    - **`server/studio/pipeline-store.ts` `upsertLesson`:** mentés előtt a `json.art.subjectIcon` értéke a
-     `lessonArtFor(json)` eredménye. A tantárgy és az évfolyam ekkor ismert. Hiba esetén ikon nélkül ment.
-8. **Lejátszó (`LessonArt` / `LessonRuntime`):** ha van `lesson.art.subjectIcon`, a címke ikonja a
+     `withSubjectIcon(json)` eredménye. A tantárgy és az évfolyam ekkor ismert. Hiba esetén ikon nélkül ment.
+8. **`shared/design-assets.ts` `pickLessonArt`:** a tantárgyikon elsőként a sáv saját `icon-<tantárgy>-<sáv>` katalógustétele;
+   ha nincs, a korábbi, sáv-utótag nélküli korosztályos ikon (a 6–8. Természettudomány `icon-kemia` döntése így megmarad).
+9. **Lejátszó (`LessonArt` / `LessonRuntime`):** ha van `lesson.art.subjectIcon`, a címke ikonja a
    `/api/design-assets/<id>`, különben a mai katalógus-választás.
-9. **Tesztek:**
+10. **Tesztek:**
    - unit: `subjectIconId` (kulcs, sáv, ismeretlen, nem tanított pár); a mátrix minden párjához van jóváhagyott katalógustétel;
    - DB (eldobható Postgres, `tests/design-assets-db.integration.ts`, a `0028` kétszer):
      - a szinkron idempotens;
      - a végpont 200 / 404 / 400;
      - `upsertLesson` beírja az `art.subjectIcon`-t;
    - e2e: a lejátszó a `art.subjectIcon` ikont mutatja.
-10. **Kapuk:** tsc, check:test, lint, unit, `test:learning-db`, célzott Playwright.
+11. **Kapuk:** tsc, check:test, lint, unit, `test:learning-db`, célzott Playwright.
