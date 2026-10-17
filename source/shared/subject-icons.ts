@@ -34,7 +34,8 @@ export const SUBJECT_BANDS: Record<CatalogSubject, DesignBand[]> = {
 /** A sáv ikonja a tantárgy szövegéből; ismeretlen tantárgy vagy a sávban nem tanított tantárgy: null (nincs ikon). */
 export function subjectIconIdForBand(subject: string | null | undefined, band: DesignBand): string | null {
   const key = subjectKeyOf(subject);
-  if (!key || !SUBJECT_BANDS[key].includes(band)) return null;
+  // Review #274: csak a mátrix saját kulcsa számít (az örökölt objektumtulajdonság, pl. „constructor”, nem tantárgy).
+  if (!key || !Object.hasOwn(SUBJECT_BANDS, key) || !SUBJECT_BANDS[key].includes(band)) return null;
   return `icon-${key}-${band}`;
 }
 

@@ -42,7 +42,7 @@ const BY_KEY = new Map<string, CatalogSubject>([
   ...CATALOG_SUBJECTS.map((s) => [normalize(s.replace(/-/g, " ")), s] as const),
 ]);
 
-const lookup = (key: string): CatalogSubject | null | undefined => (key in SYNONYMS ? SYNONYMS[key] : BY_KEY.get(key));
+const lookup = (key: string): CatalogSubject | null | undefined => (Object.hasOwn(SYNONYMS, key) ? SYNONYMS[key] : BY_KEY.get(key));
 
 export function subjectKeyOf(text: string | null | undefined): CatalogSubject | null {
   if (!text) return null;

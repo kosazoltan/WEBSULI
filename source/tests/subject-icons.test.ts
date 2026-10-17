@@ -24,6 +24,8 @@ test("ismeretlen tantárgy vagy a sávban nem tanított tantárgy: nincs ikon", 
   assert.equal(subjectIconId(undefined, 5), null);
   assert.equal(subjectIconId("Fizika", 2), null, "fizika az 1–2. sávban nem tanított");
   assert.equal(subjectIconId("Környezetismeret", 9), null);
+  // Review #274: az örökölt objektumtulajdonság nem tantárgy, és nem dob kivételt.
+  for (const name of ["constructor", "toString", "__proto__", "hasOwnProperty"]) assert.equal(subjectIconId(name, 7), null, name);
 });
 
 test("a mátrix minden tantárgyat lefed, és minden párjához van gyártási tétel a promptkészletben", () => {

@@ -46,3 +46,17 @@ test("más sávú mentett ikon (az évfolyam a mentés óta változott) nem töl
   await expect(page.locator(".lesson-chip .ws-subject-ico")).toHaveAttribute("src", /^\/design\//);
   expect(hits).toBe(0);
 });
+
+test("review #274: ha a végpont hibát ad, a címke egyszer a katalógusképre vált (nem marad törött ikon)", async ({ page }) => {
+  let hits = 0;
+  await page.route("**/api/design-assets/**", route => { hits++; return route.fulfill({ status: 500, body: "" }); });
+  await page.goto("/__lesson-runtime-probe?fusion=1&classroom=7&icon=icon-matematika-studio");
+  const icon = page.locator(".lesson-chip .ws-subject-ico");
+  await expect(icon).toHaveAttribute("src", /^\/design\//);
+  await expect.poll(() => icon.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true);
+  // A váltás után nincs újabb kérés (nincs hibára újrapróbáló hurok).
+  expect(hits).toBeGreaterThanOrEqual(1);
+  const settled = hits;
+  await page.waitForTimeout(600);
+  expect(hits).toBe(settled);
+});

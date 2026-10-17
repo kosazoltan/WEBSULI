@@ -61,9 +61,9 @@ export async function withSubjectIcon<T>(json: T, executor: Pick<typeof db, "sel
   const lesson = json as Record<string, unknown>;
   if (typeof lesson.subject !== "string" || typeof lesson.classroom !== "number") return json;
   const { art: _previous, ...rest } = lesson;
-  const id = subjectIconId(lesson.subject, lesson.classroom);
-  if (!id) return rest as T;
   try {
+    const id = subjectIconId(lesson.subject, lesson.classroom);
+    if (!id) return rest as T;
     const [row] = await executor.select({ id: designAssets.id }).from(designAssets).where(eq(designAssets.id, id));
     return (row ? { ...rest, art: { subjectIcon: row.id } } : rest) as T;
   } catch (error) {
