@@ -175,8 +175,9 @@
 /* A fülfelirat szó közben nem törik (mérve: 390 px-en a „Módszere/k”); keskeny kijelzőn szűkebb térköz és betűköz. */
 [data-ws-theme] .fusion-tabs button > span { min-width: 0; overflow-wrap: normal; word-break: keep-all; text-align: center; }
 @media (max-width: 480px) {
-  [data-ws-theme] .fusion-tabs { gap: 2px; padding: 4px; }
-  [data-ws-theme] .fusion-tabs button { padding-inline: 0; font-size: 13px; letter-spacing: -0.02em; }
+  /* 360 px-en az egyforma oszlopban a „Módszerek” nem fért el: a fül a tartalma szerint széles, a maradék hely köztük oszlik el. */
+  [data-ws-theme] .fusion-tabs { gap: 2px; padding: 4px; grid-auto-columns: auto; justify-content: space-between; }
+  [data-ws-theme] .fusion-tabs button { padding-inline: 4px; font-size: 13px; letter-spacing: -0.02em; }
 }
 [data-ws-theme] .fusion-tabs button { color: var(--lesson-muted); border-radius: 12px; box-shadow: inset 0 0 0 2px transparent; }
 [data-ws-theme] .fusion-tabs button[aria-selected="true"] {

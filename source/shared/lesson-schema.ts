@@ -310,6 +310,8 @@ export const lessonSchema = z.object({
    * anything beyond the curated source.
    */
   sourceOnly: z.literal(true),
+  /** Ikonkészlet (2026-10-17-websuli-ikonkeszlet): mentéskor a szerver írja; a tantárgy × sáv ikon a design_assets táblából. */
+  art: z.object({ subjectIcon: z.string().regex(/^[a-z0-9-]{3,64}$/).optional() }).strict().optional(),
 });
 
 export type Block = z.infer<typeof blockSchema>;

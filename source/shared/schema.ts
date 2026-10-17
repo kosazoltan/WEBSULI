@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, text, integer, index, uniqueIndex, boolean, timestamp, jsonb, real, primaryKey, date } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, integer, index, uniqueIndex, boolean, timestamp, jsonb, real, primaryKey, date, char, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1098,4 +1098,30 @@ export const reviewEvents = pgTable(
     learnerIdx: index("review_events_learner_idx").on(table.userId, table.lessonId, table.createdAt),
     requestUnique: uniqueIndex("review_events_request_unique").on(table.userId, table.requestId),
   }),
+);
+
+/**
+ * Websuli ikonkészlet (migrations/0028_design_assets.sql, docs/specs/2026-10-17-websuli-ikonkeszlet.md): a jóváhagyott,
+ * MI-generált saját képek bájtjai és metaadatai. A szerver induláskor a verziókezelt katalógusból tölti (server/design-assets.ts).
+ */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+export const designAssets = pgTable(
+  "design_assets",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    band: varchar("band", { length: 16 }).notNull(),
+    subjects: text("subjects").array().notNull().default(sql`'{}'`),
+    keywords: text("keywords").array().notNull().default(sql`'{}'`),
+    alt: text("alt").notNull(),
+    mime: varchar("mime", { length: 32 }).notNull(),
+    sha256: char("sha256", { length: 64 }).notNull(),
+    bytes: bytea("bytes").notNull(),
+    origin: text("origin").notNull(),
+    model: varchar("model", { length: 80 }).notNull(),
+    promptHash: varchar("prompt_hash", { length: 16 }).notNull(),
+    approvedAt: timestamp("approved_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ kindBandIdx: index("design_assets_kind_band_idx").on(table.kind, table.band) }),
 );

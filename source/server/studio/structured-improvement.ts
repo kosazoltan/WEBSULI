@@ -20,6 +20,7 @@ import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { designFromInstruction, visualWorld, type LessonFlair, type VisualWorldId } from "../../shared/lesson-visuals";
 import { buildStaleJudgePrompt, parseStaleVerdicts, repairChecklistTail, sourceWordSet, staleFormCandidates, staleFormProblems, withRepairSkill, type StaleWarning } from "./repair-skill";
 import { logger } from "../lib/logger";
+import { withSubjectIcon } from "../design-assets";
 import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
 import { applySourceCorrections, arithmeticSourceCorrections, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
@@ -241,10 +242,12 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     const corrections = repair.sourceCorrections ?? [];
     const reviewed = { ...source, ...(repair.classroom !== undefined ? { classroom: repair.classroom } : {}), concepts: applySourceCorrections(source.concepts, corrections) };
     const coverage = assertRepairCandidate(lessonSchema.parse(current.json), repair.candidate, reviewed, repair.classroom ?? lessonSchema.parse(current.json).classroom);
+    // Review #274: az évfolyamot váltó javítás az új sáv adatbázis-ikonját kapja (ugyanaz a normalizálás, mint az upsertLesson-ben).
+    const candidate = await withSubjectIcon(repair.candidate, tx);
     if (workflowMode() === "apply") await workflowPhase("apply");
     await workflowFence(tx);
     const quiz = await tx.select().from(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));
-    const backupData = { ...original, structuredLesson: current, quizItems: quiz, expectedCurrentHash: repairHash(repair.candidate), expectedCurrentVersion: current.version + 1 };
+    const backupData = { ...original, structuredLesson: current, quizItems: quiz, expectedCurrentHash: repairHash(candidate), expectedCurrentVersion: current.version + 1 };
     const [backup] = await tx.insert(materialImprovementBackups).values({ originalFileId: original.id, improvedFileId: improved.id, createdBy: userId, notes: notes ?? "Fúziós lecke alkalmazása előtti teljes mentés", backupData }).returning();
     // Spec 2026-09-23: documented curation reaches the map only with the reviewed candidate (quote untouched).
     for (const fix of corrections) {
@@ -253,10 +256,10 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
       await tx.update(kmConcepts).set({ ...(fix.term !== undefined ? { term: fix.term } : {}), ...(fix.definition !== undefined ? { definition: fix.definition } : {}), ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}), verbatimReason: correctionReasonCode(fix), updatedAt: new Date() }).where(eq(kmConcepts.id, row.id));
     }
     if (repair.classroom !== undefined) await tx.update(knowledgeMaps).set({ classroom: repair.classroom, updatedAt: new Date() }).where(eq(knowledgeMaps.id, current.mapId));
-    const [written] = await tx.update(lessons).set({ json: repair.candidate, coverage, version: current.version + 1, updatedAt: new Date() }).where(eq(lessons.id, current.id)).returning();
-    if (repairHash(written.json) !== repairHash(repair.candidate)) throw new Error("A lecke visszaolvasása eltérést mutat.");
+    const [written] = await tx.update(lessons).set({ json: candidate, coverage, version: current.version + 1, updatedAt: new Date() }).where(eq(lessons.id, current.id)).returning();
+    if (repairHash(written.json) !== repairHash(candidate)) throw new Error("A lecke visszaolvasása eltérést mutat.");
     await tx.delete(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));
-    const exports = exportQuizItemsForPublish(repair.candidate, current.id, conceptIdResolver(source.concepts));
+    const exports = exportQuizItemsForPublish(candidate, current.id, conceptIdResolver(source.concepts));
     const inserted = exports.length ? await tx.insert(gameQuizItems).values(exports.map(item => ({ ...item, sourceMaterialId: original.id }))).returning() : [];
     if (inserted.length !== exports.length) throw new Error("Hiányos kvízexport; a művelet visszaáll.");
     const [updated] = await tx.update(htmlFiles).set({ title: repair.candidate.title, ...(repair.classroom !== undefined ? { classroom: repair.classroom } : {}) }).where(eq(htmlFiles.id, original.id)).returning();
