@@ -239,5 +239,10 @@
 [data-ws-theme] .ws-divider { display: flex; justify-content: center; margin: 4px 0 -4px; }
 [data-ws-theme] .ws-divider img { width: 40px; height: 40px; border-radius: 12px; object-fit: cover; }
 [data-ws-theme] .ws-section-mascot { margin-left: auto; flex: none; display: inline-flex; }
-[data-ws-theme] .ws-section-mascot img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+[data-ws-theme] .ws-section-mascot img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+/* Review #279: keskeny kijelzőn a kabala külön sorban a fejezetcím fölött áll (nem veszi el a cím helyét). */
+@media (max-width: 480px) {
+  [data-ws-theme] .lesson-heading:has(.ws-section-mascot) { flex-wrap: wrap; }
+  [data-ws-theme] .ws-section-mascot { order: -1; flex-basis: 100%; margin-left: 0; }
+}
 [data-ws-theme]:not([data-ws-theme="future"]) :is(.ws-block-marker, .ws-divider img) { mix-blend-mode: multiply; }

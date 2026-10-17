@@ -33,3 +33,12 @@ test("lefedettség: 6 × 5 blokkjelző, sávonként 2 fejezetdísz és 6 kabalap
     assert.ok(existsSync(new URL(`../client/public${asset.src}`, import.meta.url)), `${id}: fájl`);
   }
 });
+
+test("review #279: a blokkpózok nem kerülnek az általános fejléc-kabalarotációba", async () => {
+  const { pickLessonArt } = await import("../shared/design-assets");
+  const { DESIGN_ASSET_CATALOG } = await import("../shared/design-asset-catalog");
+  for (const seed of ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]) {
+    const id = pickLessonArt({ subject: "Matematika", title: "Szorzás", seed }, "adventure", DESIGN_ASSET_CATALOG).mascot?.id ?? "";
+    assert.doesNotMatch(id, /^mascot-(explain|example|try|check|recap|animate)$/, seed);
+  }
+});

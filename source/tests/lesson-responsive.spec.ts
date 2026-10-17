@@ -29,7 +29,7 @@ for (const classroom of CLASSROOMS) {
       await page.setViewportSize({ width: d.width, height: d.height });
       await page.goto(`/__lesson-runtime-probe?fusion=1&classroom=${classroom}`);
       await expect(page.locator(".lesson-hero h1").first()).toBeVisible();
-      await page.evaluate(async () => { await document.fonts.ready; await Promise.all([...document.images].map(i => i.decode().catch(() => undefined))); });
+      await page.evaluate(async () => { await document.fonts.ready; await Promise.all([...document.images].map(i => Promise.race([i.decode().catch(() => undefined), new Promise(r => setTimeout(r, 3000))]))); /* a nézeten kívüli lazy kép decode()-ja nem zárul le */ });
       const report = await page.evaluate(() => {
         const vw = document.documentElement.clientWidth;
         const overflowX = document.documentElement.scrollWidth - vw;

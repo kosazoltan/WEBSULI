@@ -1,21 +1,5 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import {
-  BookOpen,
-  CheckCircle2,
-  ChevronRight,
-  HelpCircle,
-  Leaf,
-  Compass,
-  Brain,
-  FlaskConical,
-  TrendingUp,
-  Lightbulb,
-  ListChecks,
-  Sparkles,
-  Target,
-  Volume2,
-  XCircle,
-} from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronRight, HelpCircle, Leaf, Compass, Brain, FlaskConical, TrendingUp, Lightbulb, ListChecks, Sparkles, Target, Volume2, XCircle, PlayCircle, Hand } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -306,11 +290,12 @@ export function LessonBlock({
       return <RecapBlock block={block} band={band} />;
     case "animate": {
       const Anim = ANIMATE_REGISTRY[block.animKind];
-      return <Anim params={block.params} caption={block.caption} />;
+      // Review #279: a mozgókép és a próba blokk is blokkfejlécet kap (a sáv jelzőjével), mint a többi négy típus.
+      return <div className="space-y-2"><BlockHead icon={PlayCircle} label="Mozgókép" kind="animate" /><Anim params={block.params} caption={block.caption} /></div>;
     }
     case "try": {
       const Try = TRY_REGISTRY[block.tryKind];
-      return <Try spec={block.spec} persisted={tryPersisted} onPersist={onTryPersist} />;
+      return <div className="space-y-2"><BlockHead icon={Hand} label="Próbáld ki" kind="try" /><Try spec={block.spec} persisted={tryPersisted} onPersist={onTryPersist} /></div>;
     }
   }
 }

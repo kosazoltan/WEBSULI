@@ -23,19 +23,20 @@ function BankImage({ asset, size, fallback = null, className }: { asset: DesignA
 export function BlockMarker({ kind, fallback }: { kind: string; fallback: ReactNode }) {
   const band = useDesignBand();
   const asset = band ? blockMarker(kind, band, DESIGN_ASSET_CATALOG) : undefined;
-  return asset ? <BankImage asset={asset} size={22} fallback={fallback} className="ws-block-marker" /> : <>{fallback}</>;
+  // Review #279: a hibaállapot a képhez kötött (key) — új kép esetén a betöltési lánc elölről indul.
+  return asset ? <BankImage key={asset.id} asset={asset} size={22} fallback={fallback} className="ws-block-marker" /> : <>{fallback}</>;
 }
 
 /** Fejezetdísz a második fejezettől (a fejezetek között). */
 export function SectionDivider({ index }: { index: number }) {
   const band = useDesignBand();
   const asset = band && index > 0 ? sectionDivider(band, index, DESIGN_ASSET_CATALOG) : undefined;
-  return asset ? <div className="ws-divider" role="presentation"><BankImage asset={asset} size={40} /></div> : null;
+  return asset ? <div className="ws-divider" role="presentation"><BankImage key={asset.id} asset={asset} size={40} /></div> : null;
 }
 
 /** Az 1–5. évfolyamon a fejezet első blokkjának típusához illő kabalapóz a fejezetcím mellett. */
 export function SectionMascot({ firstKind }: { firstKind: string | undefined }) {
   const band = useDesignBand();
   const asset = band && firstKind ? blockMascot(firstKind, band, DESIGN_ASSET_CATALOG) : undefined;
-  return asset ? <span className="ws-section-mascot"><BankImage asset={asset} size={44} /></span> : null;
+  return asset ? <span className="ws-section-mascot"><BankImage key={asset.id} asset={asset} size={64} /></span> : null;
 }
