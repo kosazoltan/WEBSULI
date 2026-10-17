@@ -316,6 +316,8 @@ export const lessonSchema = z.object({
     /** Lecke megnyitása (2026-10-17-lecke-betoltes): a mentéskor választott hős- vagy borítókép és kabala. */
     picture: z.string().regex(/^[a-z0-9-]{3,64}$/).optional(),
     mascot: z.string().regex(/^[a-z0-9-]{3,64}$/).optional(),
+    /** Arculati bank (2026-10-17-arculati-bank): a lecke témakörkulcsa (shared/topic-taxonomy.ts). */
+    topic: z.string().regex(/^[a-z0-9-]{2,64}$/).optional(),
   }).strict().optional(),
 });
 

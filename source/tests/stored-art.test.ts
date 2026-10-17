@@ -42,3 +42,15 @@ test("a leckeséma elfogadja a tárolt arculatot, és elutasítja az ismeretlen 
   assert.equal(lessonSchema.safeParse({ ...base, art: { picture: "../x" } }).success, false);
   assert.equal(lessonSchema.safeParse({ ...base, art: { src: "https://evil.example/x.png" } }).success, false);
 });
+
+test("stúdió (2026-10-17-studio-ui): az arculat-összefoglaló a tárolt adatból áll elő; régi leckénél jelzi, hogy nincs tárolt arculat", async () => {
+  const { artSummary } = await import("../shared/design-assets");
+  const stored = artSummary({ subjectIcon: "icon-kornyezetismeret-adventure", picture: "hero-adventure", mascot: "mascot-hello", topic: "viz" }, "adventure", C);
+  assert.equal(stored.legacy, false);
+  assert.equal(stored.topic, "viz");
+  assert.equal(stored.art?.hero?.id, "hero-adventure");
+  assert.equal(stored.art?.mascot?.id, "mascot-hello");
+  const legacy = artSummary(undefined, "studio", C);
+  assert.equal(legacy.legacy, true);
+  assert.equal(legacy.art, null);
+});

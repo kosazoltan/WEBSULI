@@ -85,7 +85,7 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
 }
 
 /** A leckébe mentett arculat (docs/specs/2026-10-17-lecke-betoltes.md): csak azonosítók; a választás mentéskor dől el. */
-export type StoredLessonArt = { subjectIcon?: string; picture?: string; mascot?: string };
+export type StoredLessonArt = { subjectIcon?: string; picture?: string; mascot?: string; topic?: string };
 export function lessonArtIds(art: LessonArt): StoredLessonArt {
   const picture = art.cover ?? art.hero;
   return { ...(art.subjectIcon ? { subjectIcon: art.subjectIcon.id } : {}), ...(picture ? { picture: picture.id } : {}), ...(art.mascot ? { mascot: art.mascot.id } : {}) };
@@ -108,4 +108,14 @@ export function resolveStoredArt(stored: StoredLessonArt | undefined, band: (typ
   const icon = byId(stored.subjectIcon, ["icon"]);
   const subjectIcon = icon && (icon.id.endsWith(`-${band}`) || (!BAND_SUFFIX.test(icon.id) && icon.id.endsWith("-young") === young)) ? icon : undefined;
   return { ...(picture.kind === "cover" ? { cover: picture } : { hero: picture }), ...(mascot ? { mascot } : {}), ...(subjectIcon ? { subjectIcon } : {}) };
+}
+
+/**
+ * Leckekészítő stúdió (docs/specs/2026-10-17-studio-ui.md): a tárolt arculat megjelenítendő összefoglalója — a stúdió a kész
+ * leckénél ebből mutatja a sávot, az ikont, a képet, a kabalát és a témakört. `legacy`: régi, tárolt arculat nélküli lecke.
+ */
+export type ArtSummary = { band: (typeof DESIGN_ASSET_BANDS)[number]; legacy: boolean; art: LessonArt | null; topic?: string };
+export function artSummary(stored: StoredLessonArt | undefined, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): ArtSummary {
+  const art = resolveStoredArt(stored, band, catalog);
+  return { band, legacy: !art, art, ...(stored?.topic ? { topic: stored.topic } : {}) };
 }

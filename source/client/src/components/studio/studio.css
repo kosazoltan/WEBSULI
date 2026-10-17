@@ -1,0 +1,28 @@
+/*
+ * Leckekészítő stúdió — Websuli Design (docs/specs/2026-10-17-studio-ui.md).
+ * Mért kiindulás: 360–768 px-en 12 db 44 px alatti érintési célpont, 10–12 px-es szövegek, régi betűtípus, 1400 px-es sorok.
+ */
+.ws-studio {
+  font-family: "Inter", "Noto Sans", Roboto, "Droid Sans", "DejaVu Sans", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  max-width: 1100px;
+  margin-inline: auto;
+}
+/* Tulajdonosi döntés (2026-10-17): a 80%-os nagyítás (CREATOR_PAGE_SCALE) CSAK asztalon — kevés görgetés ott, ahol egér van;
+   telefonon, tableten és összehajtható kijelzőn 100% (44 px-es érintés, olvasható betű). A szélesség a nagyítással arányos. */
+@media (min-width: 1024px) {
+  .ws-studio { zoom: var(--creator-scale, 1); max-width: calc(1100px / var(--creator-scale, 1)); }
+}
+@media (max-width: 1023.98px) {
+  .ws-studio :is(button, a[href], [role="tab"], [role="combobox"], summary, select, textarea,
+    input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])) { min-height: 44px; }
+  .ws-studio :is(button, a[href], [role="combobox"], summary) { min-width: 44px; }
+  /* A nagyobb betűvel a helyőrző (pl. a kérés mintája) 3 sorban levágódott — a mező legalább 5 sornyi. */
+  .ws-studio textarea { min-height: 7.75em; }
+}
+/* A segédszöveg 13 px alá nem mehet (mérve: 10–12 px volt). */
+.ws-studio .text-xs { font-size: 13px; line-height: 1.45; }
+/* Letiltott gomb: tömör, halk felület, mért kontrasztú szöveg — 50%-os átlátszóság helyett (olvashatatlan volt). */
+.ws-studio button:disabled { opacity: 1; background: #E2E8F0; color: #334155; border-color: #CBD5E1; box-shadow: none; }
+.dark .ws-studio button:disabled { background: #1E293B; color: #CBD5E1; border-color: #334155; }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { BookOpen, ChevronDown, ChevronRight, Globe, Loader2, Sparkles, Upload } from "lucide-react";
 
@@ -22,6 +22,8 @@ import { SourceUploadForm } from "@/components/studio/SourceUploadForm";
 import { WebResearchAgentPanel } from "@/components/studio/WebResearchAgentPanel";
 import { KnowledgeMapEditor, KnowledgeMapPanel } from "@/components/studio/KnowledgeMapEditor";
 import { CREATOR_PAGE_SCALE, feedbackPanelVisible, lessonStudioView } from "@shared/studio-ui";
+import "./studio.css";
+import { LessonArtSummary } from "@/components/studio/LessonArtSummary";
 
 /**
  * LS-8 (#191) — a tananyagkészítés EGY menüpont, és önmagában elég.
@@ -144,10 +146,11 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
   const notesReady = step === "lektor" || step === "gate" || step === "done";
 
   return (
+    // Leckekészítő stúdió (2026-10-17-studio-ui): Websuli Design hatókör; a CREATOR_PAGE_SCALE nagyítás csak asztalon (studio.css).
     <div
-      className="space-y-4 origin-top-left"
+      className="ws-studio space-y-4 origin-top-left"
       data-testid="creator-page-scale"
-      style={{ zoom: CREATOR_PAGE_SCALE }}
+      style={{ "--creator-scale": CREATOR_PAGE_SCALE } as CSSProperties}
     >
       <div className="flex flex-wrap gap-2">
         <Button
@@ -213,6 +216,9 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
 
       {jobId && notesReady && <LektorNotes jobId={jobId} />}
 
+      {jobData && feedbackPanelVisible(jobData.job.step, jobData.produced.lessonId) && (
+        <LessonArtSummary lessonId={jobData.produced.lessonId as string} />
+      )}
       {jobData && feedbackPanelVisible(jobData.job.step, jobData.produced.lessonId) && (
         <FeedbackPanel lessonId={jobData.produced.lessonId as string} />
       )}
