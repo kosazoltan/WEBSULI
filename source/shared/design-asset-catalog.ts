@@ -5211,6 +5211,156 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "approvedAt": "2026-10-17T11:23:34.186Z"
   },
   {
+    "id": "divider-adventure-1",
+    "kind": "divider",
+    "band": "adventure",
+    "subjects": [],
+    "keywords": [
+      "divider"
+    ],
+    "alt": "Fejezetdísz (3–5. osztály).",
+    "src": "/design/adventure/divider-adventure-1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "33219ac76f043b31",
+    "approvedAt": "2026-10-17T12:58:05.208Z"
+  },
+  {
+    "id": "divider-adventure-2",
+    "kind": "divider",
+    "band": "adventure",
+    "subjects": [],
+    "keywords": [
+      "divider"
+    ],
+    "alt": "Fejezetdísz (3–5. osztály).",
+    "src": "/design/adventure/divider-adventure-2.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "1e31ce3deb77eeb1",
+    "approvedAt": "2026-10-17T12:58:05.233Z"
+  },
+  {
+    "id": "divider-explorer-1",
+    "kind": "divider",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "divider"
+    ],
+    "alt": "Fejezetdísz (1–2. osztály).",
+    "src": "/design/explorer/divider-explorer-1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a8c8e63b4e2f3136",
+    "approvedAt": "2026-10-17T12:58:05.152Z"
+  },
+  {
+    "id": "divider-explorer-2",
+    "kind": "divider",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "divider"
+    ],
+    "alt": "Fejezetdísz (1–2. osztály).",
+    "src": "/design/explorer/divider-explorer-2.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "cf111c96f323368e",
+    "approvedAt": "2026-10-17T12:58:05.178Z"
+  },
+  {
+    "id": "divider-future-1",
+    "kind": "divider",
+    "band": "future",
+    "subjects": [],
+    "keywords": [
+      "divider"
+    ],
+    "alt": "Fejezetdísz (11–12. osztály).",
+    "src": "/design/future/divider-future-1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "6ffea9deba2b2f8f",
+    "approvedAt": "2026-10-17T12:58:05.369Z"
+  },
+  {
+    "id": "divider-future-2",
+    "kind": "divider",
+    "band": "future",
+    "subjects": [],
+    "keywords": [
+      "divider"
+    ],
+    "alt": "Fejezetdísz (11–12. osztály).",
+    "src": "/design/future/divider-future-2.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "58e771eb3e61228e",
+    "approvedAt": "2026-10-17T12:58:05.401Z"
+  },
+  {
+    "id": "divider-laboratory-1",
+    "kind": "divider",
+    "band": "laboratory",
+    "subjects": [],
+    "keywords": [
+      "divider"
+    ],
+    "alt": "Fejezetdísz (9–10. osztály).",
+    "src": "/design/laboratory/divider-laboratory-1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "5a8501d0ed7ec406",
+    "approvedAt": "2026-10-17T12:58:05.318Z"
+  },
+  {
+    "id": "divider-laboratory-2",
+    "kind": "divider",
+    "band": "laboratory",
+    "subjects": [],
+    "keywords": [
+      "divider"
+    ],
+    "alt": "Fejezetdísz (9–10. osztály).",
+    "src": "/design/laboratory/divider-laboratory-2.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "54c1846ba1260ced",
+    "approvedAt": "2026-10-17T12:58:05.343Z"
+  },
+  {
+    "id": "divider-studio-1",
+    "kind": "divider",
+    "band": "studio",
+    "subjects": [],
+    "keywords": [
+      "divider"
+    ],
+    "alt": "Fejezetdísz (6–8. osztály).",
+    "src": "/design/studio/divider-studio-1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "5d1dd8684f42cc72",
+    "approvedAt": "2026-10-17T12:58:05.260Z"
+  },
+  {
+    "id": "divider-studio-2",
+    "kind": "divider",
+    "band": "studio",
+    "subjects": [],
+    "keywords": [
+      "divider"
+    ],
+    "alt": "Fejezetdísz (6–8. osztály).",
+    "src": "/design/studio/divider-studio-2.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "254b4d1c89f4b96c",
+    "approvedAt": "2026-10-17T12:58:05.290Z"
+  },
+  {
     "id": "hero-adventure",
     "kind": "hero",
     "band": "adventure",
@@ -6813,6 +6963,472 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "approvedAt": "2026-10-17T08:34:20.411Z"
   },
   {
+    "id": "marker-animate-adventure",
+    "kind": "marker",
+    "band": "adventure",
+    "subjects": [],
+    "keywords": [
+      "animate"
+    ],
+    "alt": "Mozgókép — blokkjelző (3–5. osztály).",
+    "src": "/design/adventure/marker-animate-adventure.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "7f63dc9359c53b8d",
+    "approvedAt": "2026-10-17T12:58:05.051Z"
+  },
+  {
+    "id": "marker-animate-explorer",
+    "kind": "marker",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "animate"
+    ],
+    "alt": "Mozgókép — blokkjelző (1–2. osztály).",
+    "src": "/design/explorer/marker-animate-explorer.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "697ce9a217d959db",
+    "approvedAt": "2026-10-17T12:58:05.022Z"
+  },
+  {
+    "id": "marker-animate-future",
+    "kind": "marker",
+    "band": "future",
+    "subjects": [],
+    "keywords": [
+      "animate"
+    ],
+    "alt": "Mozgókép — blokkjelző (11–12. osztály).",
+    "src": "/design/future/marker-animate-future.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "156aa0cdf358abca",
+    "approvedAt": "2026-10-17T12:58:05.127Z"
+  },
+  {
+    "id": "marker-animate-laboratory",
+    "kind": "marker",
+    "band": "laboratory",
+    "subjects": [],
+    "keywords": [
+      "animate"
+    ],
+    "alt": "Mozgókép — blokkjelző (9–10. osztály).",
+    "src": "/design/laboratory/marker-animate-laboratory.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "4e9fb043907079b7",
+    "approvedAt": "2026-10-17T12:58:05.102Z"
+  },
+  {
+    "id": "marker-animate-studio",
+    "kind": "marker",
+    "band": "studio",
+    "subjects": [],
+    "keywords": [
+      "animate"
+    ],
+    "alt": "Mozgókép — blokkjelző (6–8. osztály).",
+    "src": "/design/studio/marker-animate-studio.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "6437e83520de90e7",
+    "approvedAt": "2026-10-17T12:58:05.075Z"
+  },
+  {
+    "id": "marker-check-adventure",
+    "kind": "marker",
+    "band": "adventure",
+    "subjects": [],
+    "keywords": [
+      "check"
+    ],
+    "alt": "Ellenőrzés — blokkjelző (3–5. osztály).",
+    "src": "/design/adventure/marker-check-adventure.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "28667f6b4092b990",
+    "approvedAt": "2026-10-17T12:58:04.799Z"
+  },
+  {
+    "id": "marker-check-explorer",
+    "kind": "marker",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "check"
+    ],
+    "alt": "Ellenőrzés — blokkjelző (1–2. osztály).",
+    "src": "/design/explorer/marker-check-explorer.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f2e706332c3b2fd8",
+    "approvedAt": "2026-10-17T12:58:04.767Z"
+  },
+  {
+    "id": "marker-check-future",
+    "kind": "marker",
+    "band": "future",
+    "subjects": [],
+    "keywords": [
+      "check"
+    ],
+    "alt": "Ellenőrzés — blokkjelző (11–12. osztály).",
+    "src": "/design/future/marker-check-future.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "d1913aac804565b7",
+    "approvedAt": "2026-10-17T12:58:04.878Z"
+  },
+  {
+    "id": "marker-check-laboratory",
+    "kind": "marker",
+    "band": "laboratory",
+    "subjects": [],
+    "keywords": [
+      "check"
+    ],
+    "alt": "Ellenőrzés — blokkjelző (9–10. osztály).",
+    "src": "/design/laboratory/marker-check-laboratory.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "54c217ffc8a9fe09",
+    "approvedAt": "2026-10-17T12:58:04.852Z"
+  },
+  {
+    "id": "marker-check-studio",
+    "kind": "marker",
+    "band": "studio",
+    "subjects": [],
+    "keywords": [
+      "check"
+    ],
+    "alt": "Ellenőrzés — blokkjelző (6–8. osztály).",
+    "src": "/design/studio/marker-check-studio.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "1cafc954dfcf6cfe",
+    "approvedAt": "2026-10-17T12:58:04.824Z"
+  },
+  {
+    "id": "marker-example-adventure",
+    "kind": "marker",
+    "band": "adventure",
+    "subjects": [],
+    "keywords": [
+      "example"
+    ],
+    "alt": "Példa — blokkjelző (3–5. osztály).",
+    "src": "/design/adventure/marker-example-adventure.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "4abbf80b8cac23f8",
+    "approvedAt": "2026-10-17T12:58:04.495Z"
+  },
+  {
+    "id": "marker-example-explorer",
+    "kind": "marker",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "example"
+    ],
+    "alt": "Példa — blokkjelző (1–2. osztály).",
+    "src": "/design/explorer/marker-example-explorer.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "0cfe2f2c0ca980e1",
+    "approvedAt": "2026-10-17T12:58:04.469Z"
+  },
+  {
+    "id": "marker-example-future",
+    "kind": "marker",
+    "band": "future",
+    "subjects": [],
+    "keywords": [
+      "example"
+    ],
+    "alt": "Példa — blokkjelző (11–12. osztály).",
+    "src": "/design/future/marker-example-future.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "1ae556ce764bb3d2",
+    "approvedAt": "2026-10-17T12:58:04.570Z"
+  },
+  {
+    "id": "marker-example-laboratory",
+    "kind": "marker",
+    "band": "laboratory",
+    "subjects": [],
+    "keywords": [
+      "example"
+    ],
+    "alt": "Példa — blokkjelző (9–10. osztály).",
+    "src": "/design/laboratory/marker-example-laboratory.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "4466a62e8f730d1d",
+    "approvedAt": "2026-10-17T12:58:04.543Z"
+  },
+  {
+    "id": "marker-example-studio",
+    "kind": "marker",
+    "band": "studio",
+    "subjects": [],
+    "keywords": [
+      "example"
+    ],
+    "alt": "Példa — blokkjelző (6–8. osztály).",
+    "src": "/design/studio/marker-example-studio.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a209448c3b6c300d",
+    "approvedAt": "2026-10-17T12:58:04.518Z"
+  },
+  {
+    "id": "marker-explain-adventure",
+    "kind": "marker",
+    "band": "adventure",
+    "subjects": [],
+    "keywords": [
+      "explain"
+    ],
+    "alt": "Magyarázat — blokkjelző (3–5. osztály).",
+    "src": "/design/adventure/marker-explain-adventure.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ae1932f91d6c768a",
+    "approvedAt": "2026-10-17T12:58:04.364Z"
+  },
+  {
+    "id": "marker-explain-explorer",
+    "kind": "marker",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "explain"
+    ],
+    "alt": "Magyarázat — blokkjelző (1–2. osztály).",
+    "src": "/design/explorer/marker-explain-explorer.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "192edd7a9f78b21c",
+    "approvedAt": "2026-10-17T12:58:04.292Z"
+  },
+  {
+    "id": "marker-explain-future",
+    "kind": "marker",
+    "band": "future",
+    "subjects": [],
+    "keywords": [
+      "explain"
+    ],
+    "alt": "Magyarázat — blokkjelző (11–12. osztály).",
+    "src": "/design/future/marker-explain-future.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "09e00ebca77baaa8",
+    "approvedAt": "2026-10-17T12:58:04.448Z"
+  },
+  {
+    "id": "marker-explain-laboratory",
+    "kind": "marker",
+    "band": "laboratory",
+    "subjects": [],
+    "keywords": [
+      "explain"
+    ],
+    "alt": "Magyarázat — blokkjelző (9–10. osztály).",
+    "src": "/design/laboratory/marker-explain-laboratory.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "1ea33e5e5dae4035",
+    "approvedAt": "2026-10-17T12:58:04.419Z"
+  },
+  {
+    "id": "marker-explain-studio",
+    "kind": "marker",
+    "band": "studio",
+    "subjects": [],
+    "keywords": [
+      "explain"
+    ],
+    "alt": "Magyarázat — blokkjelző (6–8. osztály).",
+    "src": "/design/studio/marker-explain-studio.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "6ae01f1b54058d81",
+    "approvedAt": "2026-10-17T12:58:04.389Z"
+  },
+  {
+    "id": "marker-recap-adventure",
+    "kind": "marker",
+    "band": "adventure",
+    "subjects": [],
+    "keywords": [
+      "recap"
+    ],
+    "alt": "Összefoglalás — blokkjelző (3–5. osztály).",
+    "src": "/design/adventure/marker-recap-adventure.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "4a3f8e40ae5309da",
+    "approvedAt": "2026-10-17T12:58:04.926Z"
+  },
+  {
+    "id": "marker-recap-explorer",
+    "kind": "marker",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "recap"
+    ],
+    "alt": "Összefoglalás — blokkjelző (1–2. osztály).",
+    "src": "/design/explorer/marker-recap-explorer.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "7c932f6b305b5745",
+    "approvedAt": "2026-10-17T12:58:04.903Z"
+  },
+  {
+    "id": "marker-recap-future",
+    "kind": "marker",
+    "band": "future",
+    "subjects": [],
+    "keywords": [
+      "recap"
+    ],
+    "alt": "Összefoglalás — blokkjelző (11–12. osztály).",
+    "src": "/design/future/marker-recap-future.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "46e2168a754f613e",
+    "approvedAt": "2026-10-17T12:58:04.998Z"
+  },
+  {
+    "id": "marker-recap-laboratory",
+    "kind": "marker",
+    "band": "laboratory",
+    "subjects": [],
+    "keywords": [
+      "recap"
+    ],
+    "alt": "Összefoglalás — blokkjelző (9–10. osztály).",
+    "src": "/design/laboratory/marker-recap-laboratory.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "da2808e87746aca5",
+    "approvedAt": "2026-10-17T12:58:04.974Z"
+  },
+  {
+    "id": "marker-recap-studio",
+    "kind": "marker",
+    "band": "studio",
+    "subjects": [],
+    "keywords": [
+      "recap"
+    ],
+    "alt": "Összefoglalás — blokkjelző (6–8. osztály).",
+    "src": "/design/studio/marker-recap-studio.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "9643b1a5e0a7c676",
+    "approvedAt": "2026-10-17T12:58:04.949Z"
+  },
+  {
+    "id": "marker-try-adventure",
+    "kind": "marker",
+    "band": "adventure",
+    "subjects": [],
+    "keywords": [
+      "try"
+    ],
+    "alt": "Próbáld ki — blokkjelző (3–5. osztály).",
+    "src": "/design/adventure/marker-try-adventure.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "8e4310edd5ab1bb4",
+    "approvedAt": "2026-10-17T12:58:04.642Z"
+  },
+  {
+    "id": "marker-try-explorer",
+    "kind": "marker",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "try"
+    ],
+    "alt": "Próbáld ki — blokkjelző (1–2. osztály).",
+    "src": "/design/explorer/marker-try-explorer.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "6c2561271d2dfe3c",
+    "approvedAt": "2026-10-17T12:58:04.595Z"
+  },
+  {
+    "id": "marker-try-future",
+    "kind": "marker",
+    "band": "future",
+    "subjects": [],
+    "keywords": [
+      "try"
+    ],
+    "alt": "Próbáld ki — blokkjelző (11–12. osztály).",
+    "src": "/design/future/marker-try-future.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f8f40fa0c1215353",
+    "approvedAt": "2026-10-17T12:58:04.739Z"
+  },
+  {
+    "id": "marker-try-laboratory",
+    "kind": "marker",
+    "band": "laboratory",
+    "subjects": [],
+    "keywords": [
+      "try"
+    ],
+    "alt": "Próbáld ki — blokkjelző (9–10. osztály).",
+    "src": "/design/laboratory/marker-try-laboratory.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "31e80944fe7c1d32",
+    "approvedAt": "2026-10-17T12:58:04.712Z"
+  },
+  {
+    "id": "marker-try-studio",
+    "kind": "marker",
+    "band": "studio",
+    "subjects": [],
+    "keywords": [
+      "try"
+    ],
+    "alt": "Próbáld ki — blokkjelző (6–8. osztály).",
+    "src": "/design/studio/marker-try-studio.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a4076706da45e5e6",
+    "approvedAt": "2026-10-17T12:58:04.687Z"
+  },
+  {
+    "id": "mascot-animate",
+    "kind": "mascot",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "kabala",
+      "animate"
+    ],
+    "alt": "A Websuli rókája — Mozgókép.",
+    "src": "/design/explorer/mascot-animate.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "79bc5924351c829c",
+    "approvedAt": "2026-10-17T12:58:05.697Z"
+  },
+  {
     "id": "mascot-base",
     "kind": "mascot",
     "band": "explorer",
@@ -6829,6 +7445,22 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "approvedAt": "2026-10-17T06:52:58.562Z"
   },
   {
+    "id": "mascot-check",
+    "kind": "mascot",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "kabala",
+      "check"
+    ],
+    "alt": "A Websuli rókája — Ellenőrzés.",
+    "src": "/design/explorer/mascot-check.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "cabe4b1621b38770",
+    "approvedAt": "2026-10-17T12:58:05.581Z"
+  },
+  {
     "id": "mascot-cheer",
     "kind": "mascot",
     "band": "explorer",
@@ -6842,6 +7474,38 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "model": "bytedance-seed/seedream-5-0-pro",
     "promptHash": "768156edf1e38868",
     "approvedAt": "2026-10-17T06:52:59.456Z"
+  },
+  {
+    "id": "mascot-example",
+    "kind": "mascot",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "kabala",
+      "example"
+    ],
+    "alt": "A Websuli rókája — Példa.",
+    "src": "/design/explorer/mascot-example.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "5c2f32ff5defa8e3",
+    "approvedAt": "2026-10-17T12:58:05.490Z"
+  },
+  {
+    "id": "mascot-explain",
+    "kind": "mascot",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "kabala",
+      "explain"
+    ],
+    "alt": "A Websuli rókája — Magyarázat.",
+    "src": "/design/explorer/mascot-explain.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a30ab2be8510713a",
+    "approvedAt": "2026-10-17T12:58:05.446Z"
   },
   {
     "id": "mascot-explorer",
@@ -6890,6 +7554,22 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "approvedAt": "2026-10-17T06:52:59.420Z"
   },
   {
+    "id": "mascot-recap",
+    "kind": "mascot",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "kabala",
+      "recap"
+    ],
+    "alt": "A Websuli rókája — Összefoglalás.",
+    "src": "/design/explorer/mascot-recap.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "b42cd6e5b9b6e209",
+    "approvedAt": "2026-10-17T12:58:05.655Z"
+  },
+  {
     "id": "mascot-think",
     "kind": "mascot",
     "band": "explorer",
@@ -6903,5 +7583,21 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "model": "bytedance-seed/seedream-5-0-pro",
     "promptHash": "4055b66ab19520f2",
     "approvedAt": "2026-10-17T06:52:59.496Z"
+  },
+  {
+    "id": "mascot-try",
+    "kind": "mascot",
+    "band": "explorer",
+    "subjects": [],
+    "keywords": [
+      "kabala",
+      "try"
+    ],
+    "alt": "A Websuli rókája — Próbáld ki.",
+    "src": "/design/explorer/mascot-try.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "e44f56aefc0b3fbb",
+    "approvedAt": "2026-10-17T12:58:05.531Z"
   }
 ];

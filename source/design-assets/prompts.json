@@ -6502,6 +6502,628 @@
       "aspect_ratio": "3:2",
       "batch": 3,
       "prompt": "Subject of the illustration: a bicycle and a city bus. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "marker-explain-explorer",
+      "kind": "marker",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "explain"
+      ],
+      "alt": "Magyarázat — blokkjelző (1–2. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: an open book with a small glowing lightbulb above it. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-explain-adventure",
+      "kind": "marker",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "explain"
+      ],
+      "alt": "Magyarázat — blokkjelző (3–5. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: an open book with a small glowing lightbulb above it. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-explain-studio",
+      "kind": "marker",
+      "band": "studio",
+      "subjects": [],
+      "keywords": [
+        "explain"
+      ],
+      "alt": "Magyarázat — blokkjelző (6–8. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: an open book with a small glowing lightbulb above it. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-explain-laboratory",
+      "kind": "marker",
+      "band": "laboratory",
+      "subjects": [],
+      "keywords": [
+        "explain"
+      ],
+      "alt": "Magyarázat — blokkjelző (9–10. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: an open book with a small glowing lightbulb above it. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-explain-future",
+      "kind": "marker",
+      "band": "future",
+      "subjects": [],
+      "keywords": [
+        "explain"
+      ],
+      "alt": "Magyarázat — blokkjelző (11–12. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: an open book with a small glowing lightbulb above it. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-example-explorer",
+      "kind": "marker",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "example"
+      ],
+      "alt": "Példa — blokkjelző (1–2. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a magnifying glass over a small sheet with simple shapes. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-example-adventure",
+      "kind": "marker",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "example"
+      ],
+      "alt": "Példa — blokkjelző (3–5. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a magnifying glass over a small sheet with simple shapes. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-example-studio",
+      "kind": "marker",
+      "band": "studio",
+      "subjects": [],
+      "keywords": [
+        "example"
+      ],
+      "alt": "Példa — blokkjelző (6–8. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a magnifying glass over a small sheet with simple shapes. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-example-laboratory",
+      "kind": "marker",
+      "band": "laboratory",
+      "subjects": [],
+      "keywords": [
+        "example"
+      ],
+      "alt": "Példa — blokkjelző (9–10. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a magnifying glass over a small sheet with simple shapes. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-example-future",
+      "kind": "marker",
+      "band": "future",
+      "subjects": [],
+      "keywords": [
+        "example"
+      ],
+      "alt": "Példa — blokkjelző (11–12. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a magnifying glass over a small sheet with simple shapes. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-try-explorer",
+      "kind": "marker",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "try"
+      ],
+      "alt": "Próbáld ki — blokkjelző (1–2. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a single pencil drawing a short curved line that ends in a small target dot, the pencil is an object (no face, no arms). Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-try-adventure",
+      "kind": "marker",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "try"
+      ],
+      "alt": "Próbáld ki — blokkjelző (3–5. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a single pencil drawing a short curved line that ends in a small target dot, the pencil is an object (no face, no arms). Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-try-studio",
+      "kind": "marker",
+      "band": "studio",
+      "subjects": [],
+      "keywords": [
+        "try"
+      ],
+      "alt": "Próbáld ki — blokkjelző (6–8. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a single pencil drawing a short curved line that ends in a small target dot, the pencil is an object (no face, no arms). Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-try-laboratory",
+      "kind": "marker",
+      "band": "laboratory",
+      "subjects": [],
+      "keywords": [
+        "try"
+      ],
+      "alt": "Próbáld ki — blokkjelző (9–10. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a single pencil drawing a short curved line that ends in a small target dot, the pencil is an object (no face, no arms). Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-try-future",
+      "kind": "marker",
+      "band": "future",
+      "subjects": [],
+      "keywords": [
+        "try"
+      ],
+      "alt": "Próbáld ki — blokkjelző (11–12. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a single pencil drawing a short curved line that ends in a small target dot, the pencil is an object (no face, no arms). Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-check-explorer",
+      "kind": "marker",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "check"
+      ],
+      "alt": "Ellenőrzés — blokkjelző (1–2. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a round badge with a bold check mark. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-check-adventure",
+      "kind": "marker",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "check"
+      ],
+      "alt": "Ellenőrzés — blokkjelző (3–5. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a round badge with a bold check mark. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-check-studio",
+      "kind": "marker",
+      "band": "studio",
+      "subjects": [],
+      "keywords": [
+        "check"
+      ],
+      "alt": "Ellenőrzés — blokkjelző (6–8. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a round badge with a bold check mark. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-check-laboratory",
+      "kind": "marker",
+      "band": "laboratory",
+      "subjects": [],
+      "keywords": [
+        "check"
+      ],
+      "alt": "Ellenőrzés — blokkjelző (9–10. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a round badge with a bold check mark. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-check-future",
+      "kind": "marker",
+      "band": "future",
+      "subjects": [],
+      "keywords": [
+        "check"
+      ],
+      "alt": "Ellenőrzés — blokkjelző (11–12. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a round badge with a bold check mark. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-recap-explorer",
+      "kind": "marker",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "recap"
+      ],
+      "alt": "Összefoglalás — blokkjelző (1–2. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a neat stack of index cards with a pin. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-recap-adventure",
+      "kind": "marker",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "recap"
+      ],
+      "alt": "Összefoglalás — blokkjelző (3–5. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a neat stack of index cards with a pin. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-recap-studio",
+      "kind": "marker",
+      "band": "studio",
+      "subjects": [],
+      "keywords": [
+        "recap"
+      ],
+      "alt": "Összefoglalás — blokkjelző (6–8. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a neat stack of index cards with a pin. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-recap-laboratory",
+      "kind": "marker",
+      "band": "laboratory",
+      "subjects": [],
+      "keywords": [
+        "recap"
+      ],
+      "alt": "Összefoglalás — blokkjelző (9–10. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a neat stack of index cards with a pin. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-recap-future",
+      "kind": "marker",
+      "band": "future",
+      "subjects": [],
+      "keywords": [
+        "recap"
+      ],
+      "alt": "Összefoglalás — blokkjelző (11–12. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a neat stack of index cards with a pin. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-animate-explorer",
+      "kind": "marker",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "animate"
+      ],
+      "alt": "Mozgókép — blokkjelző (1–2. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a rounded play button with small motion lines. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-animate-adventure",
+      "kind": "marker",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "animate"
+      ],
+      "alt": "Mozgókép — blokkjelző (3–5. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a rounded play button with small motion lines. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-animate-studio",
+      "kind": "marker",
+      "band": "studio",
+      "subjects": [],
+      "keywords": [
+        "animate"
+      ],
+      "alt": "Mozgókép — blokkjelző (6–8. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a rounded play button with small motion lines. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-animate-laboratory",
+      "kind": "marker",
+      "band": "laboratory",
+      "subjects": [],
+      "keywords": [
+        "animate"
+      ],
+      "alt": "Mozgókép — blokkjelző (9–10. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a rounded play button with small motion lines. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "marker-animate-future",
+      "kind": "marker",
+      "band": "future",
+      "subjects": [],
+      "keywords": [
+        "animate"
+      ],
+      "alt": "Mozgókép — blokkjelző (11–12. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the icon: a rounded play button with small motion lines. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. ISOLATED single object only: no scenery, no landscape, no clouds, no background elements at all, plain flat very light background, bold simple silhouette that stays recognisable at 24 pixels. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "divider-explorer-1",
+      "kind": "divider",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "divider"
+      ],
+      "alt": "Fejezetdísz (1–2. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the ornament: two small leaves and a tiny daisy, symmetrical. ISOLATED small ornament only: no scenery, no landscape, no photograph, no people, plain flat very light empty background around it. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "divider-explorer-2",
+      "kind": "divider",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "divider"
+      ],
+      "alt": "Fejezetdísz (1–2. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the ornament: a small rainbow arc with two tiny clouds. ISOLATED small ornament only: no scenery, no landscape, no photograph, no people, plain flat very light empty background around it. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "divider-adventure-1",
+      "kind": "divider",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "divider"
+      ],
+      "alt": "Fejezetdísz (3–5. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the ornament: a small compass rose with two tiny flags. ISOLATED small ornament only: no scenery, no landscape, no photograph, no people, plain flat very light empty background around it. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "divider-adventure-2",
+      "kind": "divider",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "divider"
+      ],
+      "alt": "Fejezetdísz (3–5. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the ornament: a small mountain peak with a tiny path line. ISOLATED small ornament only: no scenery, no landscape, no photograph, no people, plain flat very light empty background around it. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "divider-studio-1",
+      "kind": "divider",
+      "band": "studio",
+      "subjects": [],
+      "keywords": [
+        "divider"
+      ],
+      "alt": "Fejezetdísz (6–8. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the ornament: a small geometric star made of overlapping triangles. ISOLATED small ornament only: no scenery, no landscape, no photograph, no people, plain flat very light empty background around it. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "divider-studio-2",
+      "kind": "divider",
+      "band": "studio",
+      "subjects": [],
+      "keywords": [
+        "divider"
+      ],
+      "alt": "Fejezetdísz (6–8. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the ornament: a small spiral of glowing dots. ISOLATED small ornament only: no scenery, no landscape, no photograph, no people, plain flat very light empty background around it. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "divider-laboratory-1",
+      "kind": "divider",
+      "band": "laboratory",
+      "subjects": [],
+      "keywords": [
+        "divider"
+      ],
+      "alt": "Fejezetdísz (9–10. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the ornament: a small hexagon with a tiny atom inside. ISOLATED small ornament only: no scenery, no landscape, no photograph, no people, plain flat very light empty background around it. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "divider-laboratory-2",
+      "kind": "divider",
+      "band": "laboratory",
+      "subjects": [],
+      "keywords": [
+        "divider"
+      ],
+      "alt": "Fejezetdísz (9–10. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the ornament: a thin wave line with a dot at its centre. ISOLATED small ornament only: no scenery, no landscape, no photograph, no people, plain flat very light empty background around it. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "divider-future-1",
+      "kind": "divider",
+      "band": "future",
+      "subjects": [],
+      "keywords": [
+        "divider"
+      ],
+      "alt": "Fejezetdísz (11–12. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the ornament: a thin horizon line with a small rising sun. ISOLATED small ornament only: no scenery, no landscape, no photograph, no people, plain flat very light empty background around it. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "divider-future-2",
+      "kind": "divider",
+      "band": "future",
+      "subjects": [],
+      "keywords": [
+        "divider"
+      ],
+      "alt": "Fejezetdísz (11–12. osztály).",
+      "aspect_ratio": "1:1",
+      "batch": 4,
+      "prompt": "Subject of the ornament: a small abstract light streak with a star. ISOLATED small ornament only: no scenery, no landscape, no photograph, no people, plain flat very light empty background around it. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "mascot-explain",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala",
+        "explain"
+      ],
+      "alt": "A Websuli rókája — Magyarázat.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "mascot-base"
+      ],
+      "batch": 4,
+      "prompt": "Subject: the fox pointing at a small blank chalkboard, explaining kindly. Exactly the same fox character as in the reference image (same fur colors, eyes, proportions and little backpack). Full body, centered. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "mascot-example",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala",
+        "example"
+      ],
+      "alt": "A Websuli rókája — Példa.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "mascot-base"
+      ],
+      "batch": 4,
+      "prompt": "Subject: the fox holding a magnifying glass, curious. Exactly the same fox character as in the reference image (same fur colors, eyes, proportions and little backpack). Full body, centered. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "mascot-try",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala",
+        "try"
+      ],
+      "alt": "A Websuli rókája — Próbáld ki.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "mascot-base"
+      ],
+      "batch": 4,
+      "prompt": "Subject: the fox writing eagerly with a big pencil. Exactly the same fox character as in the reference image (same fur colors, eyes, proportions and little backpack). Full body, centered. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "mascot-check",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala",
+        "check"
+      ],
+      "alt": "A Websuli rókája — Ellenőrzés.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "mascot-base"
+      ],
+      "batch": 4,
+      "prompt": "Subject: the fox giving a cheerful thumbs up. Exactly the same fox character as in the reference image (same fur colors, eyes, proportions and little backpack). Full body, centered. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "mascot-recap",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala",
+        "recap"
+      ],
+      "alt": "A Websuli rókája — Összefoglalás.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "mascot-base"
+      ],
+      "batch": 4,
+      "prompt": "Subject: the fox holding a small stack of cards, satisfied. Exactly the same fox character as in the reference image (same fur colors, eyes, proportions and little backpack). Full body, centered. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "mascot-animate",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala",
+        "animate"
+      ],
+      "alt": "A Websuli rókája — Mozgókép.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "mascot-base"
+      ],
+      "batch": 4,
+      "prompt": "Subject: the fox watching a small floating play button with wonder. Exactly the same fox character as in the reference image (same fur colors, eyes, proportions and little backpack). Full body, centered. No letters, digits, words or symbols with text."
     }
   ]
 }

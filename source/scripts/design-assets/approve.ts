@@ -13,7 +13,7 @@ import type { DesignAsset } from "../../shared/design-assets";
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const CANDIDATES = path.join(ROOT, "design-assets", "candidates");
 const CATALOG = path.join(ROOT, "shared", "design-asset-catalog.ts");
-const WIDTH: Record<string, number> = { hero: 1600, cover: 1200, icon: 512, mascot: 512 };
+const WIDTH: Record<string, number> = { hero: 1600, cover: 1200, icon: 512, mascot: 512, marker: 256, divider: 256 };
 
 const selectionFile = process.argv[2];
 if (!selectionFile) throw new Error("Add meg a kiválasztás JSON-fájlját.");

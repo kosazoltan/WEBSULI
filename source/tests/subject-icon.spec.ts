@@ -6,6 +6,9 @@ import { expect, test } from "@playwright/test";
  * adatbázis-végpontról tölti; ha a leckében nincs ilyen mező, a katalógus-választás marad. Valódi render, 390 és 1440 px.
  */
 test.use({ serviceWorkers: "block" });
+// Arculati bank S2 (dokumentált specváltozás): a blokkjelző és a fejezetdísz is a /api/design-assets-ről jön — a „nincs
+// adatbázis-kérés” elvárás a tantárgyIKONRA vonatkozik, ezért csak az ikon-kéréseket számoljuk.
+const isIcon = (route: { request(): { url(): string } }) => new URL(route.request().url()).pathname.startsWith("/api/design-assets/icon-");
 const webp = readFileSync(new URL("../client/public/design/studio/cover-egyenlet.webp", import.meta.url));
 
 test("a lecke saját ikonja az /api/design-assets végpontról töltődik be a tantárgy-címkében", async ({ page }) => {
@@ -29,7 +32,7 @@ test("a lecke saját ikonja az /api/design-assets végpontról töltődik be a t
 
 test("art mező nélküli (régi) leckénél nincs adatbázis-kérés, a katalógus-ikon marad", async ({ page }) => {
   let hits = 0;
-  await page.route("**/api/design-assets/**", route => { hits++; return route.abort(); });
+  await page.route("**/api/design-assets/**", route => { if (isIcon(route)) hits++; return route.abort(); });
   await page.goto("/__lesson-runtime-probe?fusion=1&classroom=7");
   await expect(page.locator(".lesson-chip").first()).toBeVisible();
   const icons = page.locator(".lesson-chip .ws-subject-ico");
@@ -40,7 +43,7 @@ test("art mező nélküli (régi) leckénél nincs adatbázis-kérés, a kataló
 
 test("más sávú mentett ikon (az évfolyam a mentés óta változott) nem töltődik be", async ({ page }) => {
   let hits = 0;
-  await page.route("**/api/design-assets/**", route => { hits++; return route.abort(); });
+  await page.route("**/api/design-assets/**", route => { if (isIcon(route)) hits++; return route.abort(); });
   await page.goto("/__lesson-runtime-probe?fusion=1&classroom=7&icon=icon-matematika-future");
   await expect(page.locator(".lesson-chip").first()).toBeVisible();
   await expect(page.locator(".lesson-chip .ws-subject-ico")).toHaveAttribute("src", /^\/design\//);
@@ -49,7 +52,7 @@ test("más sávú mentett ikon (az évfolyam a mentés óta változott) nem töl
 
 test("review #274: ha a végpont hibát ad, a címke egyszer a katalógusképre vált (nem marad törött ikon)", async ({ page }) => {
   let hits = 0;
-  await page.route("**/api/design-assets/**", route => { hits++; return route.fulfill({ status: 500, body: "" }); });
+  await page.route("**/api/design-assets/**", route => { if (isIcon(route)) hits++; return route.fulfill({ status: 500, body: "" }); });
   await page.goto("/__lesson-runtime-probe?fusion=1&classroom=7&icon=icon-matematika-studio");
   const icon = page.locator(".lesson-chip .ws-subject-ico");
   await expect(icon).toHaveAttribute("src", /^\/design\//);

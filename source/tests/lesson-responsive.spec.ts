@@ -6,6 +6,10 @@ import { expect, test } from "@playwright/test";
  * kilógás, a fejléc-, fül- és címkeszöveg nincs levágva, a kép betölt. Képernyőkép: test-results/websuli-responsive/.
  */
 test.use({ serviceWorkers: "block" });
+// Arculati bank S2: a lejátszó képei az /api/design-assets-ről jönnek. A teszt ne függjön a (helyben éles) adatbázistól: azonnali
+// 404 → a lejátszó a katalógus statikus fájljára vált (ugyanaz a kép), így a mérés gyors és determinisztikus.
+test.beforeEach(async ({ page }) => { await page.route("**/api/design-assets/**", route => route.fulfill({ status: 404, json: { message: "teszt" } })); });
+
 
 const DEVICES = [
   { name: "telefon-kicsi", width: 360, height: 740 },

@@ -231,3 +231,13 @@
 /* A kísérő szöveg (számláló, vendégjelzés) kiegészítő felirat, nem tananyag: olvasható 16px, nem a kártya mérete. */
 [data-band][data-experience][data-ws-theme] .ws-review :is(.fusion-round-head p, .ws-review-guest) { font-size: 16px; }
 [data-ws-theme] .ws-review-guest { color: var(--ws-muted); }
+
+/* Arculati bank S2–S3 (docs/specs/2026-10-17-arculati-bank-s2-vegrehajtas.md): blokkjelző, fejezetdísz, kabalapóz.
+   A képek háttere világos (nem átlátszó): a világos sávokon `multiply` keveréssel a felületbe olvadnak; a sötét 11–12. sávon
+   lekerekített csempeként állnak. */
+[data-ws-theme] .ws-block-marker { width: 22px; height: 22px; flex: none; border-radius: 6px; object-fit: cover; }
+[data-ws-theme] .ws-divider { display: flex; justify-content: center; margin: 4px 0 -4px; }
+[data-ws-theme] .ws-divider img { width: 40px; height: 40px; border-radius: 12px; object-fit: cover; }
+[data-ws-theme] .ws-section-mascot { margin-left: auto; flex: none; display: inline-flex; }
+[data-ws-theme] .ws-section-mascot img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+[data-ws-theme]:not([data-ws-theme="future"]) :is(.ws-block-marker, .ws-divider img) { mix-blend-mode: multiply; }

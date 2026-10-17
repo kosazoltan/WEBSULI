@@ -6,6 +6,11 @@ import { expect, test, type Page } from "@playwright/test";
  * Képernyőkép témánként és szélességenként a test-results/websuli-design/ alá (a képet meg is kell nézni).
  */
 
+test.use({ serviceWorkers: "block" });
+// Arculati bank S2: a lejátszó képei az /api/design-assets-ről jönnek. A teszt ne függjön a (helyben éles) adatbázistól: azonnali
+// 404 → a lejátszó a katalógus statikus fájljára vált (ugyanaz a kép), így a mérés gyors és determinisztikus.
+test.beforeEach(async ({ page }) => { await page.route("**/api/design-assets/**", route => route.fulfill({ status: 404, json: { message: "teszt" } })); });
+
 const THEMES = [
   { classroom: 1, id: "explorer", name: "Felfedező világ", minPx: 22, motto: "Kíváncsiság • Játék • Alapok" },
   { classroom: 4, id: "adventure", name: "Tudás kalandjai", minPx: 19, motto: "Fedezz fel • Próbáld ki • Fejlődj" },
