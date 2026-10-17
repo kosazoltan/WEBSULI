@@ -44,12 +44,16 @@ export default function Preview() {
   // LS-2: a strukturált lecke saját futtatót kap az iframe helyett.
   const isLesson = material?.contentType === 'lesson';
   const lessonExpected = isLesson || (!material && listed?.contentType === 'lesson');
+  // Review #275 (P1): hideg, közvetlen megnyitáskor a típus még ismeretlen — ilyenkor is a közös (semleges) lecke-töltő látszik,
+  // nem a régi „Betöltés…”; csak az ismerten nem lecke anyag (HTML/PDF) kapja a régi töltőt.
+  const showLessonLoader = isLesson || (!material && (!listed?.contentType || listed.contentType === 'lesson'));
 
   // A lecke kérése az anyag-metaadattal PÁRHUZAMOSAN indul (nem utána); ismeretlen típusnál is, mert a lecke a gyakori eset.
   // Nem lecke anyagnál a 404 csendes: a lejátszó nem jelenik meg, az eredményt senki sem olvassa.
   useEffect(() => {
     if (!params?.id || (listed?.contentType && listed.contentType !== 'lesson') || (material && !isLesson)) return;
-    void queryClient.prefetchQuery({ ...lessonByFileQuery(params.id), retry: 0 });
+    // Review #275: az újrapróbálás a lekérdezésé (átmeneti hibára 2×, a 404-re nem) — a LessonView ehhez a kéréshez csatlakozik.
+    void queryClient.prefetchQuery(lessonByFileQuery(params.id));
   }, [params?.id, listed?.contentType, material, isLesson, queryClient]);
 
   // Combined loading state — a leckéhez a config nem kell (az csak a megosztási linkhez és az iframe-hez).
@@ -237,7 +241,7 @@ export default function Preview() {
       {/* Responsive container - optimized for all screen sizes including Samsung Z Fold */}
       <div className={isLesson ? "w-full" : "w-full flex-1 min-h-0"}>
         {isLoading ? (
-          lessonExpected ? <LessonLoading classroom={listed?.classroom} /> : (
+          showLessonLoader ? <LessonLoading classroom={listed?.classroom} /> : (
           <div className="w-full h-full flex items-center justify-center py-20">
             <p className="text-muted-foreground">Betöltés…</p>
           </div>

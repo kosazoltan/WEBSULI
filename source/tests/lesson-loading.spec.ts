@@ -80,3 +80,48 @@ test("tárolt arculat: a hős az adatbázis-végpontról jön, újraszámolás n
   await expect(img).toHaveAttribute("src", "/design/studio/hero-studio.webp");
   await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true);
 });
+
+test("review #275: hideg, közvetlen megnyitáskor (ismeretlen típus) sem jelenik meg a régi „Betöltés…”", async ({ page }) => {
+  await mockApi(page);
+  const seen: string[] = [];
+  await page.exposeFunction("__seen", (t: string) => { seen.push(t); });
+  await page.addInitScript(() => {
+    const report = () => { const t = document.body?.innerText ?? ""; if (t.includes("Betöltés…")) (window as unknown as { __seen: (t: string) => void }).__seen("Betöltés…"); };
+    new MutationObserver(report).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+  await page.goto("/preview/load-fixture");
+  await expect(page.locator(".lesson-hero h1").first()).toBeVisible({ timeout: 15000 });
+  expect(seen).toEqual([]);
+});
+
+test("review #275: nem lecke anyag közvetlen linkjénél a lecke-kérés 404-re nem próbálkozik újra", async ({ page }) => {
+  let byFile = 0;
+  await page.route("**/api/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/config") return route.fulfill({ json: { baseUrl: "http://localhost", materialOrigin: "" } });
+    if (path === "/api/html-files/html-fixture") return route.fulfill({ json: { id: "html-fixture", title: "HTML anyag", contentType: "html" } });
+    if (path === "/api/lessons/by-file/html-fixture") { byFile++; return route.fulfill({ status: 404, json: { message: "Ehhez a tananyaghoz nincs lecke." } }); }
+    return route.fulfill({ json: [] });
+  });
+  await page.goto("/preview/html-fixture");
+  await expect(page.getByTestId("iframe-preview")).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(3000);
+  expect(byFile).toBeLessThanOrEqual(1);
+});
+
+test("review #275: a töltő háttere sosem a body sötétkékje (a kezdőlap dizájnja), a megnyitás elejétől sem", async ({ page }) => {
+  await mockApi(page);
+  const dark: string[] = [];
+  await page.exposeFunction("__dark", (c: string) => { dark.push(c); });
+  await page.addInitScript(() => {
+    const check = () => {
+      const el = document.querySelector("[data-testid=lesson-loading]") as HTMLElement | null;
+      if (el) { const bg = getComputedStyle(el).backgroundColor; if (bg === "rgb(10, 14, 39)" || bg === "rgba(0, 0, 0, 0)") (window as unknown as { __dark: (c: string) => void }).__dark(bg); }
+    };
+    new MutationObserver(check).observe(document, { subtree: true, childList: true });
+  });
+  await page.goto("/preview/load-fixture");
+  await expect(page.locator(".lesson-hero h1").first()).toBeVisible({ timeout: 15000 });
+  expect(dark).toEqual([]);
+});
+

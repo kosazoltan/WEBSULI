@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import { lazy, Suspense } from "react";
+import { LessonLoading } from "@/lesson-runtime/LessonLoading";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // LS-2: lazy, hogy a mérőoldal kódja ne kerüljön a fő bundle-be.
@@ -37,6 +38,9 @@ const TornadoHunter200 = lazy(() => import("@/pages/TornadoHunter200"));
 const Profile = lazy(() => import("@/pages/Profile"));
 
 function LoadingSpinner() {
+  // Review #275 (lecke megnyitása): a /preview/ oldal kódjának letöltése alatt is a közös lecke-töltő látszik — így a megnyitás
+  // végig egyetlen töltőképernyő (nem „Betöltés…” → „Lecke betöltése…”). HTML/PDF anyagnál a Preview utána a sajátját mutatja.
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/preview/")) return <LessonLoading fullScreen />;
   return (
     <div className="flex items-center justify-center min-h-screen">
       <div className="text-center">

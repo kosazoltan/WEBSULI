@@ -13,7 +13,8 @@ export function lessonByFileQuery(fileId: string) {
     // Audit 2026-09-24: mobilon egy pillanatnyi hálózati hiba eddig zsákutca volt (az alapbeállítás retry:false).
     // A Preview előtöltése és a lejátszó ugyanazt a választ használja (nem kér újra azonnal).
     staleTime: 60_000,
-    retry: 2,
+    // Review #275: a 404 végleges (nem lecke anyag, vagy nincs publikálva) — arra nincs újrapróbálás; átmeneti hibára 2×.
+    retry: (failures: number, error: Error) => (error as Error & { status?: number }).status !== 404 && failures < 2,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 4000),
   };
 }
