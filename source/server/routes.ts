@@ -32,6 +32,7 @@ import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail } from "./lib/material-result";
+import { lessonResultsRouter } from "./lesson-result-email";
 import { effortFor, resolveLegacyModel } from "./ai/models";
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { callClaudeParts } from "./studio/claude-vision";
@@ -823,6 +824,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // LS-2: a lecke olvasó oldala PUBLIKUS (ezt tölti a gyerek böngészője), és csak
   // publikált, sémára újraellenőrzött leckét ad ki.
   app.use("/api/lessons", createArbiterRouter());
+  // Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — CSRF-fel, mint a Próba (vendég is).
+  app.use("/api/lessons", lessonResultsRouter);
   app.use("/api/lessons", lessonPublicRouter);
 
   // Spec 2026-10-05-s3-katalogus-bank: a tantárgyi katalógus-bankok csak olvasó admin-nézete.
