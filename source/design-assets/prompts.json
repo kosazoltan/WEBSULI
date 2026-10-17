@@ -1910,6 +1910,4598 @@
       ],
       "batch": 2,
       "prompt": "Subject of the icon: gears with a ruler and a pencil, like a design plan. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-explorer-szamok-20",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Számok 20-ig",
+        "szamok",
+        "szamolas",
+        "szamkor",
+        "szomszed",
+        "sorrend"
+      ],
+      "topic": "szamok-20",
+      "alt": "Matematika, 1–2. osztály — Számok 20-ig: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: colorful counting beads and number blocks arranged in a gentle row. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-explorer-osszeadas-kivonas",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Összeadás és kivonás",
+        "osszeadas",
+        "kivonas",
+        "potlas",
+        "bontas"
+      ],
+      "topic": "osszeadas-kivonas",
+      "alt": "Matematika, 1–2. osztály — Összeadás és kivonás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: two baskets of apples being combined on a picnic blanket. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-explorer-formak",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Síkidomok és formák",
+        "forma",
+        "alakzat",
+        "haromszog",
+        "kor",
+        "negyzet",
+        "teglalap",
+        "sikidom"
+      ],
+      "topic": "formak",
+      "alt": "Matematika, 1–2. osztály — Síkidomok és formák: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: big friendly geometric toy shapes on a meadow. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-explorer-meres",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Mérés és összehasonlítás",
+        "meres",
+        "hosszabb",
+        "rovidebb",
+        "nehezebb",
+        "merleg"
+      ],
+      "topic": "meres",
+      "alt": "Matematika, 1–2. osztály — Mérés és összehasonlítás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a toy balance scale with fruits on a wooden table. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-adventure-szamkor-1000",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Számok ezres körben",
+        "ezres",
+        "szazas",
+        "helyiertek",
+        "kerekites",
+        "szamegyenes"
+      ],
+      "topic": "szamkor-1000",
+      "alt": "Matematika, 3–5. osztály — Számok ezres körben: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an adventure path made of numbered stepping stones up a hill. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-adventure-szorzas-osztas",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Szorzás és osztás",
+        "szorzas",
+        "osztas",
+        "szorzotabla",
+        "maradek"
+      ],
+      "topic": "szorzas-osztas",
+      "alt": "Matematika, 3–5. osztály — Szorzás és osztás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: neat rows of seedlings planted in a garden grid. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-adventure-tortek",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Törtek",
+        "tort",
+        "tortek",
+        "nevezo",
+        "szamlalo",
+        "resz",
+        "egesz"
+      ],
+      "topic": "tortek",
+      "alt": "Matematika, 3–5. osztály — Törtek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a round pizza and a chocolate bar divided into equal pieces. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-adventure-geometria",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Geometria és kerület",
+        "kerulet",
+        "terulet",
+        "szog",
+        "test",
+        "kocka",
+        "teglatest",
+        "geometria"
+      ],
+      "topic": "geometria",
+      "alt": "Matematika, 3–5. osztály — Geometria és kerület: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: wooden building blocks forming cubes and prisms on a desk. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-adventure-mertekegysegek",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Mértékegységek",
+        "mertekegyseg",
+        "meter",
+        "liter",
+        "kilogramm",
+        "ido",
+        "ora",
+        "atvaltas"
+      ],
+      "topic": "mertekegysegek",
+      "alt": "Matematika, 3–5. osztály — Mértékegységek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a ruler, a measuring jug and a clock on a workbench. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-adventure-szoveges-feladatok",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Szöveges feladatok",
+        "szoveges",
+        "feladat",
+        "problemamegoldas",
+        "logika"
+      ],
+      "topic": "szoveges-feladatok",
+      "alt": "Matematika, 3–5. osztály — Szöveges feladatok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a treasure map with footprints leading to a chest. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-studio-racionalis-szamok",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Racionális számok",
+        "egesz",
+        "negativ",
+        "racionalis",
+        "tizedes",
+        "szamegyenes"
+      ],
+      "topic": "racionalis-szamok",
+      "alt": "Matematika, 6–8. osztály — Racionális számok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a number line bridge stretching across a calm valley. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-studio-egyenletek",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Egyenletek és algebra",
+        "egyenlet",
+        "algebra",
+        "kifejezes",
+        "ismeretlen"
+      ],
+      "topic": "egyenletek",
+      "alt": "Matematika, 6–8. osztály — Egyenletek és algebra: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a perfectly balanced scale with weights and cubes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-studio-aranyossag",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Arányosság és százalék",
+        "arany",
+        "aranyossag",
+        "szazalek",
+        "kamat"
+      ],
+      "topic": "aranyossag",
+      "alt": "Matematika, 6–8. osztály — Arányosság és százalék: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a pie chart garden with flower beds of different sizes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-studio-sikgeometria",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Síkgeometria",
+        "haromszog",
+        "sokszog",
+        "szog",
+        "szerkesztes",
+        "pitagorasz",
+        "terulet"
+      ],
+      "topic": "sikgeometria",
+      "alt": "Matematika, 6–8. osztály — Síkgeometria: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a compass and ruler drawing elegant triangles on paper. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-studio-statisztika",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Statisztika és valószínűség",
+        "statisztika",
+        "diagram",
+        "atlag",
+        "valoszinuseg"
+      ],
+      "topic": "statisztika",
+      "alt": "Matematika, 6–8. osztály — Statisztika és valószínűség: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: colorful bar chart blocks and dice on a desk. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-laboratory-fuggvenyek",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Függvények",
+        "fuggveny",
+        "grafikon",
+        "linearis",
+        "masodfoku"
+      ],
+      "topic": "fuggvenyek",
+      "alt": "Matematika, 9–10. osztály — Függvények: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: smooth glowing function curves over a grid landscape. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-laboratory-masodfoku",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Másodfokú egyenletek",
+        "masodfoku",
+        "egyenlet",
+        "diszkriminans",
+        "parabola"
+      ],
+      "topic": "masodfoku",
+      "alt": "Matematika, 9–10. osztály — Másodfokú egyenletek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a fountain jet forming a perfect parabola. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-laboratory-geometria-bizonyitas",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Geometria és bizonyítás",
+        "bizonyitas",
+        "hasonlosag",
+        "kor",
+        "szog",
+        "terulet"
+      ],
+      "topic": "geometria-bizonyitas",
+      "alt": "Matematika, 9–10. osztály — Geometria és bizonyítás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a compass drawing a circle inscribed in a triangle with tangent lines on clean white paper, a precise geometric construction. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-laboratory-kombinatorika",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Kombinatorika és valószínűség",
+        "kombinatorika",
+        "valoszinuseg",
+        "permutacio"
+      ],
+      "topic": "kombinatorika",
+      "alt": "Matematika, 9–10. osztály — Kombinatorika és valószínűség: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a tree diagram of branching paths made of light. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-future-sorozatok",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Sorozatok",
+        "sorozat",
+        "szamtani",
+        "mertani"
+      ],
+      "topic": "sorozatok",
+      "alt": "Matematika, 11–12. osztály — Sorozatok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a spiral staircase of growing steps. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-future-exponencialis-logaritmus",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Exponenciális és logaritmus",
+        "exponencialis",
+        "logaritmus",
+        "hatvany"
+      ],
+      "topic": "exponencialis-logaritmus",
+      "alt": "Matematika, 11–12. osztály — Exponenciális és logaritmus: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a steep rising curve over a city skyline at dawn. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-future-trigonometria",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Trigonometria",
+        "trigonometria",
+        "szinusz",
+        "koszinusz",
+        "szog"
+      ],
+      "topic": "trigonometria",
+      "alt": "Matematika, 11–12. osztály — Trigonometria: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a lighthouse beam sweeping a unit circle over the sea. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-future-koordinatageometria",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Koordinátageometria és vektorok",
+        "koordinata",
+        "vektor",
+        "egyenes",
+        "kor",
+        "egyenlete"
+      ],
+      "topic": "koordinatageometria",
+      "alt": "Matematika, 11–12. osztály — Koordinátageometria és vektorok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: glowing vectors on a 3D coordinate grid. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-matematika-future-erettsegi",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "Érettségi felkészülés",
+        "erettsegi",
+        "felkeszules",
+        "ismetles",
+        "feladatsor"
+      ],
+      "topic": "erettsegi",
+      "alt": "Matematika, 11–12. osztály — Érettségi felkészülés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an organised study desk with neat notes and a calculator at dawn. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-explorer-betuk-hangok",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Betűk és hangok",
+        "betu",
+        "hang",
+        "abc",
+        "olvasas",
+        "iras"
+      ],
+      "topic": "betuk-hangok",
+      "alt": "Magyar nyelvtan, 1–2. osztály — Betűk és hangok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: colorful toy blocks and a friendly open notebook with wavy lines. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-explorer-szavak",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Szavak és mondatok",
+        "szo",
+        "mondat",
+        "szotag"
+      ],
+      "topic": "szavak",
+      "alt": "Magyar nyelvtan, 1–2. osztály — Szavak és mondatok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a little train whose wagons carry blank word cards. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-explorer-helyesiras-alap",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Helyesírás alapjai",
+        "helyesiras",
+        "hosszu",
+        "rovid"
+      ],
+      "topic": "helyesiras-alap",
+      "alt": "Magyar nyelvtan, 1–2. osztály — Helyesírás alapjai: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a pencil and eraser tidying a page of practice lines. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-adventure-szofajok",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Szófajok",
+        "szofaj",
+        "fonev",
+        "ige",
+        "melleknev",
+        "szamnev",
+        "nevmas"
+      ],
+      "topic": "szofajok",
+      "alt": "Magyar nyelvtan, 3–5. osztály — Szófajok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a sorting cabinet with colored drawers and blank cards. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-adventure-helyesiras",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Helyesírás",
+        "helyesiras",
+        "egybeiras",
+        "kulonirasa"
+      ],
+      "topic": "helyesiras",
+      "alt": "Magyar nyelvtan, 3–5. osztály — Helyesírás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a magnifying glass over a neatly written blank page. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-adventure-mondatfajtak",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Mondatfajták",
+        "mondatfajta",
+        "kijelento",
+        "kerdo",
+        "felkialto"
+      ],
+      "topic": "mondatfajtak",
+      "alt": "Magyar nyelvtan, 3–5. osztály — Mondatfajták: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: speech bubbles of different shapes floating above a playground. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-adventure-szoalkotas",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Szóalkotás és toldalékok",
+        "toldalek",
+        "kepzo",
+        "jel",
+        "rag",
+        "szoto",
+        "osszetett"
+      ],
+      "topic": "szoalkotas",
+      "alt": "Magyar nyelvtan, 3–5. osztály — Szóalkotás és toldalékok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: building bricks snapping together into longer chains. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-studio-mondatreszek",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Mondatrészek",
+        "mondatresz",
+        "alany",
+        "allitmany",
+        "targy",
+        "hatarozo",
+        "jelzo"
+      ],
+      "topic": "mondatreszek",
+      "alt": "Magyar nyelvtan, 6–8. osztály — Mondatrészek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a mobile sculpture of connected shapes in balance. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-studio-szoszerkezetek",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Szószerkezetek",
+        "szoszerkezet",
+        "alarendelo",
+        "melleerendelo"
+      ],
+      "topic": "szoszerkezetek",
+      "alt": "Magyar nyelvtan, 6–8. osztály — Szószerkezetek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: puzzle pieces fitting into a larger structure. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-studio-osszetett-mondat",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Összetett mondat",
+        "osszetett",
+        "mondat",
+        "kotoszo",
+        "tagmondat"
+      ],
+      "topic": "osszetett-mondat",
+      "alt": "Magyar nyelvtan, 6–8. osztály — Összetett mondat: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: two bridges joining into one road. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-studio-kommunikacio",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Kommunikáció",
+        "kommunikacio",
+        "uzenet",
+        "csatorna",
+        "szovegertes"
+      ],
+      "topic": "kommunikacio",
+      "alt": "Magyar nyelvtan, 6–8. osztály — Kommunikáció: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a paper airplane carrying a message between two windows. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-laboratory-szoveg-tan",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Szövegtan",
+        "szoveg",
+        "szovegtan",
+        "koherencia",
+        "bekezdes"
+      ],
+      "topic": "szoveg-tan",
+      "alt": "Magyar nyelvtan, 9–10. osztály — Szövegtan: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a well-organised bookshelf with labelled blank spines. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-laboratory-stilisztika",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Stílus és retorika",
+        "stilus",
+        "stilisztika",
+        "retorika",
+        "erveles"
+      ],
+      "topic": "stilisztika",
+      "alt": "Magyar nyelvtan, 9–10. osztály — Stílus és retorika: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a speaker's podium in an empty elegant hall. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-laboratory-nyelvvaltozatok",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Nyelvváltozatok",
+        "nyelvvaltozat",
+        "tajnyelv",
+        "szleng",
+        "regiszter"
+      ],
+      "topic": "nyelvvaltozatok",
+      "alt": "Magyar nyelvtan, 9–10. osztály — Nyelvváltozatok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a map with many small houses and speech bubbles. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-future-nyelvtortenet",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Nyelvtörténet",
+        "nyelvtortenet",
+        "nyelvemlek",
+        "nyelvcsalad"
+      ],
+      "topic": "nyelvtortenet",
+      "alt": "Magyar nyelvtan, 11–12. osztály — Nyelvtörténet: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an ancient parchment beside a modern tablet. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-future-erveles",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Érvelés és vita",
+        "erveles",
+        "vita",
+        "erv",
+        "cafolat"
+      ],
+      "topic": "erveles",
+      "alt": "Magyar nyelvtan, 11–12. osztály — Érvelés és vita: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: two balanced scales on a debate stage. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-nyelvtan-future-erettsegi-nyelv",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "Érettségi felkészülés",
+        "erettsegi",
+        "felkeszules",
+        "szovegalkotas"
+      ],
+      "topic": "erettsegi-nyelv",
+      "alt": "Magyar nyelvtan, 11–12. osztály — Érettségi felkészülés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a fountain pen over a structured blank essay page. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-explorer-mesek",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Mesék",
+        "mese",
+        "mesek",
+        "kiralylany",
+        "sarkany"
+      ],
+      "topic": "mesek",
+      "alt": "Magyar irodalom, 1–2. osztály — Mesék: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an open storybook with a tiny castle and a friendly dragon. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-explorer-versek-mondokak",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Versek és mondókák",
+        "vers",
+        "mondoka",
+        "rim",
+        "ritmus"
+      ],
+      "topic": "versek-mondokak",
+      "alt": "Magyar irodalom, 1–2. osztály — Versek és mondókák: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: musical notes and leaves dancing above an open book. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-explorer-allatos-tortenetek",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Állatos történetek",
+        "allat",
+        "allatok",
+        "tortenet"
+      ],
+      "topic": "allatos-tortenetek",
+      "alt": "Magyar irodalom, 1–2. osztály — Állatos történetek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: forest animals gathered around an open picture book. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-adventure-nepmesek",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Népmesék és mondák",
+        "nepmese",
+        "monda",
+        "legenda"
+      ],
+      "topic": "nepmesek",
+      "alt": "Magyar irodalom, 3–5. osztály — Népmesék és mondák: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a folk-art painted chest with a story scroll. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-adventure-regenyek",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Gyerekregények",
+        "regeny",
+        "regenyek",
+        "fiuk",
+        "kalandregeny"
+      ],
+      "topic": "regenyek",
+      "alt": "Magyar irodalom, 3–5. osztály — Gyerekregények: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a stack of adventure books with a compass. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-adventure-versek",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Versek",
+        "vers",
+        "kolto",
+        "koltemeny",
+        "strofa"
+      ],
+      "topic": "versek",
+      "alt": "Magyar irodalom, 3–5. osztály — Versek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a feather quill writing on a page under a moonlit window. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-adventure-mitologia",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Mitológia",
+        "mitologia",
+        "gorog",
+        "istenek",
+        "hos"
+      ],
+      "topic": "mitologia",
+      "alt": "Magyar irodalom, 3–5. osztály — Mitológia: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a classical temple on a hill with a laurel wreath. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-studio-epika",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Epika és novella",
+        "epika",
+        "novella",
+        "elbeszeles"
+      ],
+      "topic": "epika",
+      "alt": "Magyar irodalom, 6–8. osztály — Epika és novella: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a winding road leading into a storybook landscape. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-studio-lira",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Líra",
+        "lira",
+        "vers",
+        "kolto",
+        "kepiseg"
+      ],
+      "topic": "lira",
+      "alt": "Magyar irodalom, 6–8. osztály — Líra: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a lone tree with falling leaves at sunset. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-studio-drama",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Dráma",
+        "drama",
+        "szinhaz",
+        "jelenet"
+      ],
+      "topic": "drama",
+      "alt": "Magyar irodalom, 6–8. osztály — Dráma: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a theatre stage with red curtains and a spotlight. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-studio-nemzeti-irodalom",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Nemzeti irodalom",
+        "petofi",
+        "arany",
+        "toldi",
+        "janos",
+        "vitez"
+      ],
+      "topic": "nemzeti-irodalom",
+      "alt": "Magyar irodalom, 6–8. osztály — Nemzeti irodalom: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a hussar's hat and a quill beside an old book. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-laboratory-antikvitas-kozepkor",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Antikvitás és középkor",
+        "antik",
+        "kozepkor",
+        "biblia",
+        "homerosz"
+      ],
+      "topic": "antikvitas-kozepkor",
+      "alt": "Magyar irodalom, 9–10. osztály — Antikvitás és középkor: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a classical column and a medieval codex. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-laboratory-reneszansz-barokk",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Reneszánsz és barokk",
+        "reneszansz",
+        "barokk",
+        "balassi",
+        "zrinyi"
+      ],
+      "topic": "reneszansz-barokk",
+      "alt": "Magyar irodalom, 9–10. osztály — Reneszánsz és barokk: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an ornate renaissance window with a lute. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-laboratory-felvilagosodas-romantika",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Felvilágosodás és romantika",
+        "felvilagosodas",
+        "romantika",
+        "vorosmarty"
+      ],
+      "topic": "felvilagosodas-romantika",
+      "alt": "Magyar irodalom, 9–10. osztály — Felvilágosodás és romantika: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a candle-lit study with an open letter. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-future-realizmus",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Realizmus",
+        "realizmus",
+        "mikszath",
+        "jokai"
+      ],
+      "topic": "realizmus",
+      "alt": "Magyar irodalom, 11–12. osztály — Realizmus: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a 19th century village street in soft light. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-future-nyugat",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "A Nyugat költői",
+        "nyugat",
+        "ady",
+        "babits",
+        "kosztolanyi"
+      ],
+      "topic": "nyugat",
+      "alt": "Magyar irodalom, 11–12. osztály — A Nyugat költői: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an elegant early 20th century café table with a journal. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-future-xx-szazad",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "XX. századi irodalom",
+        "jozsef",
+        "attila",
+        "radnoti",
+        "ortkeny"
+      ],
+      "topic": "xx-szazad",
+      "alt": "Magyar irodalom, 11–12. osztály — XX. századi irodalom: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a train window looking out on a changing landscape. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-magyar-irodalom-future-kortars",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "Kortárs irodalom",
+        "kortars",
+        "mai",
+        "irodalom"
+      ],
+      "topic": "kortars",
+      "alt": "Magyar irodalom, 11–12. osztály — Kortárs irodalom: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a modern reading nook with a lamp and books. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kornyezetismeret-explorer-evszakok",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "Évszakok és időjárás",
+        "evszak",
+        "idojaras",
+        "tel",
+        "tavasz",
+        "nyar",
+        "osz"
+      ],
+      "topic": "evszakok",
+      "alt": "Környezetismeret, 1–2. osztály — Évszakok és időjárás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: one tree shown in four seasons side by side. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kornyezetismeret-explorer-allatok-novenyek",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "Állatok és növények",
+        "allat",
+        "noveny",
+        "haziallat",
+        "virag"
+      ],
+      "topic": "allatok-novenyek",
+      "alt": "Környezetismeret, 1–2. osztály — Állatok és növények: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a farmyard with friendly animals and flowers. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kornyezetismeret-explorer-testunk",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "Testünk és egészségünk",
+        "test",
+        "egeszseg",
+        "tisztalkodas",
+        "taplalkozas"
+      ],
+      "topic": "testunk",
+      "alt": "Környezetismeret, 1–2. osztály — Testünk és egészségünk: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: healthy fruit, a toothbrush and a smiling sun. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kornyezetismeret-explorer-kozlekedes",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "Közlekedés",
+        "kozlekedes",
+        "jarmu",
+        "zebra",
+        "lampa"
+      ],
+      "topic": "kozlekedes",
+      "alt": "Környezetismeret, 1–2. osztály — Közlekedés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a toy town crossroad with a zebra crossing. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kornyezetismeret-adventure-viz",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "A víz",
+        "viz",
+        "korforgas",
+        "halmazallapot",
+        "csapadek"
+      ],
+      "topic": "viz",
+      "alt": "Környezetismeret, 3–5. osztály — A víz: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a river, clouds and rain in a gentle water cycle. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kornyezetismeret-adventure-eletkozossegek",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "Életközösségek",
+        "erdo",
+        "mezo",
+        "eletkozosseg"
+      ],
+      "topic": "eletkozossegek",
+      "alt": "Környezetismeret, 3–5. osztály — Életközösségek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a cross-section of a forest with animals and plants. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kornyezetismeret-adventure-emberi-test",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "Az emberi test",
+        "emberi",
+        "test",
+        "szervek",
+        "csontvaz",
+        "izom"
+      ],
+      "topic": "emberi-test",
+      "alt": "Környezetismeret, 3–5. osztály — Az emberi test: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a friendly anatomy model with simple organs. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kornyezetismeret-adventure-tajekozodas",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "Tájékozódás és térkép",
+        "terkep",
+        "iranyok",
+        "tajekozodas",
+        "iranytu"
+      ],
+      "topic": "tajekozodas",
+      "alt": "Környezetismeret, 3–5. osztály — Tájékozódás és térkép: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a compass on a colorful map of hills and rivers. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kornyezetismeret-adventure-anyagok",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "Anyagok és tulajdonságaik",
+        "anyag",
+        "tulajdonsag",
+        "kemeny",
+        "lagy",
+        "oldodas"
+      ],
+      "topic": "anyagok",
+      "alt": "Környezetismeret, 3–5. osztály — Anyagok és tulajdonságaik: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: jars of sand, water and stones on a shelf. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-termeszetismeret-adventure-novenyek",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "Növények",
+        "noveny",
+        "gyoker",
+        "szar",
+        "level",
+        "virag",
+        "termes"
+      ],
+      "topic": "novenyek",
+      "alt": "Természettudomány / természetismeret, 3–5. osztály — Növények: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a sprouting seed growing into a flowering plant. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-termeszetismeret-adventure-allatok",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "Állatok",
+        "allat",
+        "gerinces",
+        "rovar",
+        "emlos",
+        "madar"
+      ],
+      "topic": "allatok",
+      "alt": "Természettudomány / természetismeret, 3–5. osztály — Állatok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a meadow with birds, insects and a hedgehog. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-termeszetismeret-adventure-kert-gyumolcsos",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "Kert és gyümölcsös",
+        "kert",
+        "gyumolcsos",
+        "szolo",
+        "zoldseg"
+      ],
+      "topic": "kert-gyumolcsos",
+      "alt": "Természettudomány / természetismeret, 3–5. osztály — Kert és gyümölcsös: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a sunny orchard with apple trees and grapevines. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-termeszetismeret-adventure-anyag-energia",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "Anyag és energia",
+        "anyag",
+        "energia",
+        "halmazallapot"
+      ],
+      "topic": "anyag-energia",
+      "alt": "Természettudomány / természetismeret, 3–5. osztály — Anyag és energia: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a kettle steaming and ice cubes melting side by side. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-termeszetismeret-adventure-fold-urben",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "A Föld és a Naprendszer",
+        "fold",
+        "nap",
+        "hold",
+        "bolygo",
+        "naprendszer"
+      ],
+      "topic": "fold-urben",
+      "alt": "Természettudomány / természetismeret, 3–5. osztály — A Föld és a Naprendszer: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: the Sun and planets in a gentle orbit. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-termeszetismeret-studio-termeszettudomanyos-vizsgalat",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "Természettudományos vizsgálat",
+        "kiserlet",
+        "megfigyeles",
+        "vizsgalat",
+        "meres"
+      ],
+      "topic": "termeszettudomanyos-vizsgalat",
+      "alt": "Természettudomány / természetismeret, 6–8. osztály — Természettudományos vizsgálat: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a microscope, a flask and a notebook on a lab bench. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-termeszetismeret-studio-eloviltag",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "Az élővilág",
+        "eloviltag",
+        "sejt",
+        "eloleny",
+        "okoszisztema"
+      ],
+      "topic": "eloviltag",
+      "alt": "Természettudomány / természetismeret, 6–8. osztály — Az élővilág: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a lush ecosystem with a leaf in close-up. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-termeszetismeret-studio-anyagok-studio",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "Anyagok és változások",
+        "anyag",
+        "keverek",
+        "oldat",
+        "valtozas"
+      ],
+      "topic": "anyagok-studio",
+      "alt": "Természettudomány / természetismeret, 6–8. osztály — Anyagok és változások: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: colorful liquids mixing in glass beakers. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-termeszetismeret-studio-fold-studio",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "A Föld bolygó",
+        "fold",
+        "kozet",
+        "legkor",
+        "vizburok"
+      ],
+      "topic": "fold-studio",
+      "alt": "Természettudomány / természetismeret, 6–8. osztály — A Föld bolygó: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a cut-away globe showing layers of the Earth. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-adventure-oskor",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Őskor",
+        "oskor",
+        "ember",
+        "barlang",
+        "vadasz"
+      ],
+      "topic": "oskor",
+      "alt": "Történelem, 3–5. osztály — Őskor: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a prehistoric cave entrance with simple tools. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-adventure-okor",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Az ókor",
+        "okor",
+        "egyiptom",
+        "gorog",
+        "romai",
+        "piramis"
+      ],
+      "topic": "okor",
+      "alt": "Történelem, 3–5. osztály — Az ókor: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: pyramids and a Greek temple on a sunny horizon. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-adventure-magyar-ostortenet",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Magyar őstörténet",
+        "honfoglalas",
+        "ostortenet",
+        "magyar",
+        "torzsek",
+        "arpad"
+      ],
+      "topic": "magyar-ostortenet",
+      "alt": "Történelem, 3–5. osztály — Magyar őstörténet: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: horse riders crossing a wide grassland. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-adventure-kozepkor-adv",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "A középkor",
+        "kozepkor",
+        "lovag",
+        "var",
+        "kiraly"
+      ],
+      "topic": "kozepkor-adv",
+      "alt": "Történelem, 3–5. osztály — A középkor: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a medieval castle with flags on a hill. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-adventure-csaladom-lakohelyem",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Családom és lakóhelyem",
+        "csalad",
+        "lakohely",
+        "helytortenet"
+      ],
+      "topic": "csaladom-lakohelyem",
+      "alt": "Történelem, 3–5. osztály — Családom és lakóhelyem: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a cosy village street with old houses. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-studio-okor-studio",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Ókori civilizációk",
+        "okori",
+        "gorog",
+        "romai",
+        "athen",
+        "roma"
+      ],
+      "topic": "okor-studio",
+      "alt": "Történelem, 6–8. osztály — Ókori civilizációk: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a Roman aqueduct and a Greek amphitheatre. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-studio-kozepkor-studio",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Középkor és Árpád-kor",
+        "kozepkor",
+        "arpad",
+        "szent",
+        "istvan",
+        "kereszteny"
+      ],
+      "topic": "kozepkor-studio",
+      "alt": "Történelem, 6–8. osztály — Középkor és Árpád-kor: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a medieval crown and a parchment charter. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-studio-ujkor",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Újkor és felfedezések",
+        "felfedezes",
+        "ujkor",
+        "reformacio",
+        "torok"
+      ],
+      "topic": "ujkor",
+      "alt": "Történelem, 6–8. osztály — Újkor és felfedezések: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a sailing ship on a vast ocean with a map. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-studio-forradalmak",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Forradalmak",
+        "forradalom",
+        "1848",
+        "szabadsagharc"
+      ],
+      "topic": "forradalmak",
+      "alt": "Történelem, 6–8. osztály — Forradalmak: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a cockade and a flag blowing in the wind. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-studio-vilaghaboruk",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "A világháborúk kora",
+        "vilaghaboru",
+        "haboru",
+        "trianon"
+      ],
+      "topic": "vilaghaboruk",
+      "alt": "Történelem, 6–8. osztály — A világháborúk kora: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a quiet memorial with poppies. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-laboratory-xix-szazad",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "A XIX. század",
+        "ipari",
+        "forradalom",
+        "dualizmus",
+        "reformkor"
+      ],
+      "topic": "xix-szazad",
+      "alt": "Történelem, 9–10. osztály — A XIX. század: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a steam locomotive crossing an iron bridge. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-laboratory-xx-szazad-elso-fele",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "A XX. század első fele",
+        "vilaghaboru",
+        "diktatura",
+        "totalitarizmus"
+      ],
+      "topic": "xx-szazad-elso-fele",
+      "alt": "Történelem, 9–10. osztály — A XX. század első fele: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an old radio and newspapers on a table. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-laboratory-hideghaboru",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Hidegháború és 1956",
+        "hideghaboru",
+        "1956",
+        "forradalom"
+      ],
+      "topic": "hideghaboru",
+      "alt": "Történelem, 9–10. osztály — Hidegháború és 1956: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a broken wall with a candle. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-future-rendszervaltas",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Rendszerváltás",
+        "rendszervaltas",
+        "demokracia",
+        "1989"
+      ],
+      "topic": "rendszervaltas",
+      "alt": "Történelem, 11–12. osztály — Rendszerváltás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a ballot box in a sunny public square. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-future-europa-integracio",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Európai integráció",
+        "europai",
+        "unio",
+        "integracio"
+      ],
+      "topic": "europa-integracio",
+      "alt": "Történelem, 11–12. osztály — Európai integráció: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a circle of stars over a modern city. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-future-globalis-vilag",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "A globális világ",
+        "globalizacio",
+        "digitalis",
+        "vilag"
+      ],
+      "topic": "globalis-vilag",
+      "alt": "Történelem, 11–12. osztály — A globális világ: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a glowing globe connected by light trails. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tortenelem-future-erettsegi-tortenelem",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "Érettségi felkészülés",
+        "erettsegi",
+        "felkeszules",
+        "forraselemzes"
+      ],
+      "topic": "erettsegi-tortenelem",
+      "alt": "Történelem, 11–12. osztály — Érettségi felkészülés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an archive desk with old maps and a magnifier. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tarsadalmi-ismeretek-studio-kozosseg",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "Közösség és szabályok",
+        "kozosseg",
+        "szabaly",
+        "egyuttmukodes"
+      ],
+      "topic": "kozosseg",
+      "alt": "Társadalmi és állampolgári ismeretek, 6–8. osztály — Közösség és szabályok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: people around a round table building a puzzle together. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tarsadalmi-ismeretek-studio-jogok",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "Jogok és kötelességek",
+        "jog",
+        "kotelesseg",
+        "gyermekjog"
+      ],
+      "topic": "jogok",
+      "alt": "Társadalmi és állampolgári ismeretek, 6–8. osztály — Jogok és kötelességek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a balance scale beside an open rulebook. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tarsadalmi-ismeretek-studio-penzugyek",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "Pénzügyi alapok",
+        "penz",
+        "zsebpenz",
+        "megtakaritas"
+      ],
+      "topic": "penzugyek",
+      "alt": "Társadalmi és állampolgári ismeretek, 6–8. osztály — Pénzügyi alapok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a piggy bank and coins on a desk. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tarsadalmi-ismeretek-laboratory-allam",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "Az állam működése",
+        "allam",
+        "alkotmany",
+        "parlament"
+      ],
+      "topic": "allam",
+      "alt": "Társadalmi és állampolgári ismeretek, 9–10. osztály — Az állam működése: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a parliament dome under a clear sky. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tarsadalmi-ismeretek-laboratory-gazdasag",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "Gazdaság",
+        "gazdasag",
+        "piac",
+        "kereslet",
+        "kinalat"
+      ],
+      "topic": "gazdasag",
+      "alt": "Társadalmi és állampolgári ismeretek, 9–10. osztály — Gazdaság: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a busy market stall with balanced scales. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tarsadalmi-ismeretek-laboratory-media",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "Média és információ",
+        "media",
+        "hir",
+        "informacio",
+        "alhir"
+      ],
+      "topic": "media",
+      "alt": "Társadalmi és állampolgári ismeretek, 9–10. osztály — Média és információ: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a smartphone with floating news cards. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tarsadalmi-ismeretek-future-allampolgarsag",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "Állampolgárság",
+        "allampolgar",
+        "valasztas",
+        "demokracia"
+      ],
+      "topic": "allampolgarsag",
+      "alt": "Társadalmi és állampolgári ismeretek, 11–12. osztály — Állampolgárság: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a ballot box and a voter card. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tarsadalmi-ismeretek-future-munka-vilaga",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "A munka világa",
+        "munka",
+        "palyavalasztas",
+        "karrier"
+      ],
+      "topic": "munka-vilaga",
+      "alt": "Társadalmi és állampolgári ismeretek, 11–12. osztály — A munka világa: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a crossroads signpost pointing to different careers. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-tarsadalmi-ismeretek-future-fenntarthatosag-tarsadalom",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "Fenntarthatóság és társadalom",
+        "fenntarthatosag",
+        "felelosseg",
+        "kornyezet"
+      ],
+      "topic": "fenntarthatosag-tarsadalom",
+      "alt": "Társadalmi és állampolgári ismeretek, 11–12. osztály — Fenntarthatóság és társadalom: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a city with green rooftops and solar panels. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-biologia-studio-sejt",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "A sejt",
+        "sejt",
+        "sejtmag",
+        "sejtfal"
+      ],
+      "topic": "sejt",
+      "alt": "Biológia, 6–8. osztály — A sejt: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a stylised plant cell with organelles. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-biologia-studio-noveny-allatvilag",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "Növény- és állatvilág",
+        "noveny",
+        "allat",
+        "rendszertan"
+      ],
+      "topic": "noveny-allatvilag",
+      "alt": "Biológia, 6–8. osztály — Növény- és állatvilág: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a forest with diverse plants and animals. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-biologia-studio-emberi-test-bio",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "Az emberi test",
+        "ember",
+        "test",
+        "szerv",
+        "keringes",
+        "legzes"
+      ],
+      "topic": "emberi-test-bio",
+      "alt": "Biológia, 6–8. osztály — Az emberi test: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a stylised human silhouette with organ systems. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-biologia-studio-okologia",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "Ökológia",
+        "okologia",
+        "taplaleklanc",
+        "eletkozosseg"
+      ],
+      "topic": "okologia",
+      "alt": "Biológia, 6–8. osztály — Ökológia: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a food chain from leaf to fox in a meadow. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-biologia-laboratory-oroklodes",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "Öröklődés és genetika",
+        "oroklodes",
+        "gen",
+        "dns",
+        "genetika"
+      ],
+      "topic": "oroklodes",
+      "alt": "Biológia, 9–10. osztály — Öröklődés és genetika: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a glowing DNA double helix. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-biologia-laboratory-evolucio",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "Evolúció",
+        "evolucio",
+        "alkalmazkodas",
+        "fajok"
+      ],
+      "topic": "evolucio",
+      "alt": "Biológia, 9–10. osztály — Evolúció: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a branching tree of life with animals. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-biologia-laboratory-elettan",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "Élettan",
+        "elettan",
+        "idegrendszer",
+        "hormon"
+      ],
+      "topic": "elettan",
+      "alt": "Biológia, 9–10. osztály — Élettan: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a stylised neuron network glowing softly. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-biologia-future-molekularis",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "Molekuláris biológia",
+        "feherje",
+        "enzim",
+        "molekula"
+      ],
+      "topic": "molekularis",
+      "alt": "Biológia, 11–12. osztály — Molekuláris biológia: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a protein molecule model in soft light. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-biologia-future-immunrendszer",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "Immunrendszer és egészség",
+        "immun",
+        "betegseg",
+        "egeszseg"
+      ],
+      "topic": "immunrendszer",
+      "alt": "Biológia, 11–12. osztály — Immunrendszer és egészség: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a shield-like cell defending against small particles. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-biologia-future-erettsegi-bio",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "Érettségi felkészülés",
+        "erettsegi",
+        "felkeszules"
+      ],
+      "topic": "erettsegi-bio",
+      "alt": "Biológia, 11–12. osztály — Érettségi felkészülés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a microscope beside neat study notes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kemia-studio-anyagok-kemia",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "Anyagok és keverékek",
+        "anyag",
+        "keverek",
+        "oldat",
+        "szetvalasztas"
+      ],
+      "topic": "anyagok-kemia",
+      "alt": "Kémia, 6–8. osztály — Anyagok és keverékek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: beakers with layered colorful liquids. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kemia-studio-atomok",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "Atomok és molekulák",
+        "atom",
+        "molekula",
+        "elem",
+        "periodusos"
+      ],
+      "topic": "atomok",
+      "alt": "Kémia, 6–8. osztály — Atomok és molekulák: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: ball-and-stick molecule models on a lab bench. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kemia-studio-reakciok",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "Kémiai reakciók",
+        "reakcio",
+        "egyenlet",
+        "egeses"
+      ],
+      "topic": "reakciok",
+      "alt": "Kémia, 6–8. osztály — Kémiai reakciók: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a flask bubbling gently with a soft glow. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kemia-laboratory-periodusos-rendszer",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "Periódusos rendszer",
+        "periodusos",
+        "rendszer",
+        "elem"
+      ],
+      "topic": "periodusos-rendszer",
+      "alt": "Kémia, 9–10. osztály — Periódusos rendszer: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a grid of glowing glass element tiles without letters. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kemia-laboratory-kotesek",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "Kémiai kötések",
+        "kotes",
+        "ionos",
+        "kovalens"
+      ],
+      "topic": "kotesek",
+      "alt": "Kémia, 9–10. osztály — Kémiai kötések: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: two atoms sharing a glowing bond. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kemia-laboratory-sav-bazis",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "Savak és bázisok",
+        "sav",
+        "bazis",
+        "indikator"
+      ],
+      "topic": "sav-bazis",
+      "alt": "Kémia, 9–10. osztály — Savak és bázisok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: test tubes in a gradient of indicator colors. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kemia-future-szerves-kemia",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "Szerves kémia",
+        "szerves",
+        "szenhidrogen"
+      ],
+      "topic": "szerves-kemia",
+      "alt": "Kémia, 11–12. osztály — Szerves kémia: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a hexagonal benzene-like ring model. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kemia-future-elektrokemia",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "Elektrokémia",
+        "elektrokemia",
+        "elem",
+        "elektrolizis"
+      ],
+      "topic": "elektrokemia",
+      "alt": "Kémia, 11–12. osztály — Elektrokémia: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a lemon battery lighting a small bulb. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-kemia-future-erettsegi-kemia",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "Érettségi felkészülés",
+        "erettsegi",
+        "felkeszules"
+      ],
+      "topic": "erettsegi-kemia",
+      "alt": "Kémia, 11–12. osztály — Érettségi felkészülés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a lab notebook beside glassware. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-fizika-studio-mozgas",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "Mozgás és erő",
+        "mozgas",
+        "sebesseg",
+        "ero",
+        "gyorsulas"
+      ],
+      "topic": "mozgas",
+      "alt": "Fizika, 6–8. osztály — Mozgás és erő: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a toy car rolling down a ramp. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-fizika-studio-energia",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "Energia",
+        "energia",
+        "munka",
+        "teljesitmeny"
+      ],
+      "topic": "energia",
+      "alt": "Fizika, 6–8. osztály — Energia: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a windmill and a solar panel in a field. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-fizika-studio-elektromossag",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "Elektromosság",
+        "elektromossag",
+        "aram",
+        "aramkor",
+        "feszultseg"
+      ],
+      "topic": "elektromossag",
+      "alt": "Fizika, 6–8. osztály — Elektromosság: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a simple circuit with a battery and a glowing bulb. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-fizika-studio-hotan",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "Hőtan",
+        "homerseklet",
+        "hotagulas"
+      ],
+      "topic": "hotan",
+      "alt": "Fizika, 6–8. osztály — Hőtan: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a thermometer beside a steaming mug. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-fizika-laboratory-mechanika",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "Mechanika",
+        "mechanika",
+        "newton",
+        "lendulet"
+      ],
+      "topic": "mechanika",
+      "alt": "Fizika, 9–10. osztály — Mechanika: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a Newton's cradle in motion. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-fizika-laboratory-hullamok",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "Rezgések és hullámok",
+        "rezges",
+        "hullam",
+        "hang"
+      ],
+      "topic": "hullamok",
+      "alt": "Fizika, 9–10. osztály — Rezgések és hullámok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: concentric ripples spreading on water. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-fizika-laboratory-optika",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "Optika",
+        "optika",
+        "feny",
+        "lencse",
+        "tukor"
+      ],
+      "topic": "optika",
+      "alt": "Fizika, 9–10. osztály — Optika: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a prism splitting light into a rainbow. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-fizika-future-elektromagnesseg",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "Elektromágnesség",
+        "magnes",
+        "elektromagneses",
+        "indukcio"
+      ],
+      "topic": "elektromagnesseg",
+      "alt": "Fizika, 11–12. osztály — Elektromágnesség: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a coil and magnet with glowing field lines. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-fizika-future-modern-fizika",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "Modern fizika",
+        "atom",
+        "kvantum",
+        "relativitas"
+      ],
+      "topic": "modern-fizika",
+      "alt": "Fizika, 11–12. osztály — Modern fizika: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an atom with elliptical orbits and soft glow. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-fizika-future-csillagaszat",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "Csillagászat",
+        "csillag",
+        "galaxis",
+        "univerzum"
+      ],
+      "topic": "csillagaszat",
+      "alt": "Fizika, 11–12. osztály — Csillagászat: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a spiral galaxy above a telescope. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-foldrajz-studio-terkep",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "Térkép és tájékozódás",
+        "terkep",
+        "leptek",
+        "fokhalozat",
+        "tajekozodas"
+      ],
+      "topic": "terkep",
+      "alt": "Földrajz, 6–8. osztály — Térkép és tájékozódás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a globe on a stand with a map pin. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-foldrajz-studio-foldfelszin",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "A földfelszín",
+        "hegy",
+        "volgy",
+        "folyo",
+        "felszin"
+      ],
+      "topic": "foldfelszin",
+      "alt": "Földrajz, 6–8. osztály — A földfelszín: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: mountains and a river valley in cross-section. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-foldrajz-studio-eghajlat",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "Időjárás és éghajlat",
+        "eghajlat",
+        "idojaras",
+        "ovezet"
+      ],
+      "topic": "eghajlat",
+      "alt": "Földrajz, 6–8. osztály — Időjárás és éghajlat: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: climate zones from desert to snowy peaks. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-foldrajz-studio-magyarorszag",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "Magyarország földrajza",
+        "magyarorszag",
+        "alfold",
+        "balaton",
+        "duna"
+      ],
+      "topic": "magyarorszag",
+      "alt": "Földrajz, 6–8. osztály — Magyarország földrajza: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a gentle landscape with a lake and rolling hills. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-foldrajz-laboratory-kontinensek",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "Kontinensek",
+        "kontinens",
+        "europa",
+        "azsia",
+        "afrika",
+        "amerika"
+      ],
+      "topic": "kontinensek",
+      "alt": "Földrajz, 9–10. osztály — Kontinensek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a world map of continents in soft colors. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-foldrajz-laboratory-nepesseg",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "Népesség és települések",
+        "nepesseg",
+        "varos",
+        "falu"
+      ],
+      "topic": "nepesseg",
+      "alt": "Földrajz, 9–10. osztály — Népesség és települések: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a city and a village connected by a road. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-foldrajz-laboratory-gazdasagfoldrajz",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "Gazdaságföldrajz",
+        "gazdasag",
+        "ipar",
+        "mezogazdasag"
+      ],
+      "topic": "gazdasagfoldrajz",
+      "alt": "Földrajz, 9–10. osztály — Gazdaságföldrajz: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: fields, factories and a harbour on a map tile. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-foldrajz-future-globalis-problemak",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "Globális problémák",
+        "globalis",
+        "klimavaltozas",
+        "fenntarthatosag"
+      ],
+      "topic": "globalis-problemak",
+      "alt": "Földrajz, 11–12. osztály — Globális problémák: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a melting glacier beside a green forest. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-foldrajz-future-vilaggazdasag",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "Világgazdaság",
+        "vilaggazdasag",
+        "kereskedelem"
+      ],
+      "topic": "vilaggazdasag",
+      "alt": "Földrajz, 11–12. osztály — Világgazdaság: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: cargo ships and trade routes on a globe. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-foldrajz-future-erettsegi-foldrajz",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "Érettségi felkészülés",
+        "erettsegi",
+        "felkeszules"
+      ],
+      "topic": "erettsegi-foldrajz",
+      "alt": "Földrajz, 11–12. osztály — Érettségi felkészülés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an atlas and a compass on a desk. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-explorer-koszones",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Köszönés és bemutatkozás",
+        "hello",
+        "koszones",
+        "bemutatkozas"
+      ],
+      "topic": "koszones",
+      "alt": "Angol nyelv, 1–2. osztály — Köszönés és bemutatkozás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: two friendly speech bubbles and a waving hand. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-explorer-szinek-szamok",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Színek és számok",
+        "szinek",
+        "colours",
+        "numbers",
+        "szamok"
+      ],
+      "topic": "szinek-szamok",
+      "alt": "Angol nyelv, 1–2. osztály — Színek és számok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: colorful paint pots and number blocks. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-explorer-allatok-angol",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Állatok",
+        "animals",
+        "allatok"
+      ],
+      "topic": "allatok-angol",
+      "alt": "Angol nyelv, 1–2. osztály — Állatok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: toy animals in a row on a rug. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-adventure-csalad-otthon",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Család és otthon",
+        "family",
+        "home",
+        "csalad",
+        "otthon"
+      ],
+      "topic": "csalad-otthon",
+      "alt": "Angol nyelv, 3–5. osztály — Család és otthon: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a cosy house with lit windows. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-adventure-iskola-angol",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Iskola",
+        "school",
+        "iskola",
+        "classroom"
+      ],
+      "topic": "iskola-angol",
+      "alt": "Angol nyelv, 3–5. osztály — Iskola: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a school bag with books and a pencil case. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-adventure-etel",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Étel és ital",
+        "food",
+        "drink",
+        "etel",
+        "ital"
+      ],
+      "topic": "etel",
+      "alt": "Angol nyelv, 3–5. osztály — Étel és ital: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a breakfast table with fruit and juice. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-adventure-szabadido",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Szabadidő és hobbik",
+        "hobby",
+        "hobbi",
+        "szabadido",
+        "sport"
+      ],
+      "topic": "szabadido",
+      "alt": "Angol nyelv, 3–5. osztály — Szabadidő és hobbik: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a football, a guitar and a kite. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-adventure-nyelvtan-angol",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Alap nyelvtan",
+        "grammar",
+        "nyelvtan",
+        "present",
+        "simple"
+      ],
+      "topic": "nyelvtan-angol",
+      "alt": "Angol nyelv, 3–5. osztály — Alap nyelvtan: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: puzzle blocks forming a sentence shape. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-studio-utazas",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Utazás",
+        "travel",
+        "utazas",
+        "holiday"
+      ],
+      "topic": "utazas",
+      "alt": "Angol nyelv, 6–8. osztály — Utazás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a suitcase with a map and a passport. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-studio-igeidok",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Igeidők",
+        "tense",
+        "igeido",
+        "past",
+        "present"
+      ],
+      "topic": "igeidok",
+      "alt": "Angol nyelv, 6–8. osztály — Igeidők: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a clock and an arrow timeline. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-studio-kultura-angol",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Angol nyelvű országok",
+        "britain",
+        "usa",
+        "london"
+      ],
+      "topic": "kultura-angol",
+      "alt": "Angol nyelv, 6–8. osztály — Angol nyelvű országok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a red double-decker bus and a clock tower. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-laboratory-kommunikacio-angol",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Kommunikáció",
+        "communication",
+        "kommunikacio",
+        "levelezes",
+        "email"
+      ],
+      "topic": "kommunikacio-angol",
+      "alt": "Angol nyelv, 9–10. osztály — Kommunikáció: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a laptop with chat bubbles. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-laboratory-media-angol",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Média és technológia",
+        "media",
+        "technology",
+        "technologia"
+      ],
+      "topic": "media-angol",
+      "alt": "Angol nyelv, 9–10. osztály — Média és technológia: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a smartphone and headphones. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-laboratory-kornyezet-angol",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Környezet",
+        "environment",
+        "kornyezet"
+      ],
+      "topic": "kornyezet-angol",
+      "alt": "Angol nyelv, 9–10. osztály — Környezet: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a green city park with colorful recycling bins, a bicycle and young trees. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-future-erettsegi-angol",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Érettségi felkészülés",
+        "exam",
+        "erettsegi"
+      ],
+      "topic": "erettsegi-angol",
+      "alt": "Angol nyelv, 11–12. osztály — Érettségi felkészülés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an exam desk with a dictionary. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-future-munka-angol",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Munka és jövő",
+        "work",
+        "career",
+        "munka",
+        "jovo"
+      ],
+      "topic": "munka-angol",
+      "alt": "Angol nyelv, 11–12. osztály — Munka és jövő: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: an office desk with a globe and a plant. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-angol-future-globalis-angol",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "Globális témák",
+        "global",
+        "globalis",
+        "issues"
+      ],
+      "topic": "globalis-angol",
+      "alt": "Angol nyelv, 11–12. osztály — Globális témák: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a globe with speech bubbles. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-adventure-alapok-nemet",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Alapok",
+        "hallo",
+        "grundlagen",
+        "alap"
+      ],
+      "topic": "alapok-nemet",
+      "alt": "Német nyelv, 3–5. osztály — Alapok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: two speech bubbles with a small black-red-gold ribbon. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-adventure-csalad-nemet",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Család és otthon",
+        "familie",
+        "csalad",
+        "otthon"
+      ],
+      "topic": "csalad-nemet",
+      "alt": "Német nyelv, 3–5. osztály — Család és otthon: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a cosy alpine house with a garden. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-adventure-iskola-nemet",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Iskola",
+        "schule",
+        "iskola"
+      ],
+      "topic": "iskola-nemet",
+      "alt": "Német nyelv, 3–5. osztály — Iskola: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a school bag and a pretzel. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-studio-szabadido-nemet",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Szabadidő",
+        "freizeit",
+        "szabadido"
+      ],
+      "topic": "szabadido-nemet",
+      "alt": "Német nyelv, 6–8. osztály — Szabadidő: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a bicycle beside a lake. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-studio-nyelvtan-nemet",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Nyelvtan",
+        "grammatik",
+        "nyelvtan",
+        "nevelo"
+      ],
+      "topic": "nyelvtan-nemet",
+      "alt": "Német nyelv, 6–8. osztály — Nyelvtan: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: colored building blocks in three groups. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-studio-kultura-nemet",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Német nyelvű országok",
+        "deutschland",
+        "osterreich",
+        "berlin"
+      ],
+      "topic": "kultura-nemet",
+      "alt": "Német nyelv, 6–8. osztály — Német nyelvű országok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a city gate and a river boat. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-laboratory-utazas-nemet",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Utazás",
+        "reisen",
+        "utazas"
+      ],
+      "topic": "utazas-nemet",
+      "alt": "Német nyelv, 9–10. osztály — Utazás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a train in a mountain valley. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-laboratory-media-nemet",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Média",
+        "medien",
+        "media"
+      ],
+      "topic": "media-nemet",
+      "alt": "Német nyelv, 9–10. osztály — Média: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a tablet with news cards. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-laboratory-kornyezet-nemet",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Környezet",
+        "umwelt",
+        "kornyezet"
+      ],
+      "topic": "kornyezet-nemet",
+      "alt": "Német nyelv, 9–10. osztály — Környezet: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a forest path with recycling bins. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-future-erettsegi-nemet",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Érettségi felkészülés",
+        "prufung",
+        "erettsegi"
+      ],
+      "topic": "erettsegi-nemet",
+      "alt": "Német nyelv, 11–12. osztály — Érettségi felkészülés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a desk with a dictionary and notes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-future-munka-nemet",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Munka és tanulás",
+        "arbeit",
+        "studium",
+        "munka"
+      ],
+      "topic": "munka-nemet",
+      "alt": "Német nyelv, 11–12. osztály — Munka és tanulás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a university building and a briefcase. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-nemet-future-tarsadalom-nemet",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "Társadalom",
+        "gesellschaft",
+        "tarsadalom"
+      ],
+      "topic": "tarsadalom-nemet",
+      "alt": "Német nyelv, 11–12. osztály — Társadalom: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a town square with people silhouettes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-adventure-alapok-francia",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Alapok",
+        "bonjour",
+        "alap"
+      ],
+      "topic": "alapok-francia",
+      "alt": "Francia nyelv, 3–5. osztály — Alapok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: two speech bubbles with a small blue-white-red ribbon. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-adventure-csalad-francia",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Család és otthon",
+        "famille",
+        "csalad"
+      ],
+      "topic": "csalad-francia",
+      "alt": "Francia nyelv, 3–5. osztály — Család és otthon: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a house with blue shutters and flowers. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-adventure-iskola-francia",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Iskola",
+        "ecole",
+        "iskola"
+      ],
+      "topic": "iskola-francia",
+      "alt": "Francia nyelv, 3–5. osztály — Iskola: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a school bag and a croissant. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-studio-szabadido-francia",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Szabadidő",
+        "loisirs",
+        "szabadido"
+      ],
+      "topic": "szabadido-francia",
+      "alt": "Francia nyelv, 6–8. osztály — Szabadidő: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a bicycle with a baguette basket. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-studio-nyelvtan-francia",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Nyelvtan",
+        "grammaire",
+        "nyelvtan"
+      ],
+      "topic": "nyelvtan-francia",
+      "alt": "Francia nyelv, 6–8. osztály — Nyelvtan: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: colored blocks forming two groups. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-studio-kultura-francia",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Francia nyelvű országok",
+        "france",
+        "paris"
+      ],
+      "topic": "kultura-francia",
+      "alt": "Francia nyelv, 6–8. osztály — Francia nyelvű országok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a café terrace and a tall iron tower in the distance. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-laboratory-utazas-francia",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Utazás",
+        "voyage",
+        "utazas"
+      ],
+      "topic": "utazas-francia",
+      "alt": "Francia nyelv, 9–10. osztály — Utazás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a sunny coast with a sailboat. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-laboratory-media-francia",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Média",
+        "medias",
+        "media"
+      ],
+      "topic": "media-francia",
+      "alt": "Francia nyelv, 9–10. osztály — Média: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a laptop with news cards. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-laboratory-kornyezet-francia",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Környezet",
+        "environnement",
+        "kornyezet"
+      ],
+      "topic": "kornyezet-francia",
+      "alt": "Francia nyelv, 9–10. osztály — Környezet: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: lavender fields beside a small solar panel and colorful recycling bins. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-future-erettsegi-francia",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Érettségi felkészülés",
+        "examen",
+        "erettsegi"
+      ],
+      "topic": "erettsegi-francia",
+      "alt": "Francia nyelv, 11–12. osztály — Érettségi felkészülés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a desk with a dictionary. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-future-munka-francia",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Munka és tanulás",
+        "travail",
+        "etudes"
+      ],
+      "topic": "munka-francia",
+      "alt": "Francia nyelv, 11–12. osztály — Munka és tanulás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a briefcase and a university building. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-francia-future-tarsadalom-francia",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "Társadalom",
+        "societe",
+        "tarsadalom"
+      ],
+      "topic": "tarsadalom-francia",
+      "alt": "Francia nyelv, 11–12. osztály — Társadalom: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a town square with silhouettes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-adventure-digitalis-eszkozok",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Digitális eszközök",
+        "eszkoz",
+        "tablet",
+        "szamitogep"
+      ],
+      "topic": "digitalis-eszkozok",
+      "alt": "Informatika / digitális kultúra, 3–5. osztály — Digitális eszközök: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a friendly robot holding a tablet. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-adventure-algoritmus-adv",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Algoritmusok",
+        "algoritmus",
+        "lepes",
+        "utasitas"
+      ],
+      "topic": "algoritmus-adv",
+      "alt": "Informatika / digitális kultúra, 3–5. osztály — Algoritmusok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a robot following arrows on a grid. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-adventure-biztonsag-adv",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Biztonság az interneten",
+        "internet",
+        "biztonsag",
+        "jelszo"
+      ],
+      "topic": "biztonsag-adv",
+      "alt": "Informatika / digitális kultúra, 3–5. osztály — Biztonság az interneten: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a padlock shield over a tablet. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-studio-programozas",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Programozás",
+        "programozas",
+        "kod",
+        "blokk",
+        "ciklus"
+      ],
+      "topic": "programozas",
+      "alt": "Informatika / digitális kultúra, 6–8. osztály — Programozás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: colorful code blocks snapping together. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-studio-adatok",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Adatok és táblázatok",
+        "adat",
+        "tablazat",
+        "diagram"
+      ],
+      "topic": "adatok",
+      "alt": "Informatika / digitális kultúra, 6–8. osztály — Adatok és táblázatok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a spreadsheet grid with bar charts. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-studio-halozat",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Hálózat és internet",
+        "halozat",
+        "internet"
+      ],
+      "topic": "halozat",
+      "alt": "Informatika / digitális kultúra, 6–8. osztály — Hálózat és internet: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: connected devices with glowing links. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-laboratory-algoritmizalas",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Algoritmizálás",
+        "algoritmus",
+        "rendezes",
+        "kereses"
+      ],
+      "topic": "algoritmizalas",
+      "alt": "Informatika / digitális kultúra, 9–10. osztály — Algoritmizálás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: sorted bars rising like a staircase. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-laboratory-adatbazis",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Adatbázisok",
+        "adatbazis",
+        "tabla",
+        "lekerdezes"
+      ],
+      "topic": "adatbazis",
+      "alt": "Informatika / digitális kultúra, 9–10. osztály — Adatbázisok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: stacked database cylinders glowing. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-laboratory-mi-alapok",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Mesterséges intelligencia",
+        "mesterseges",
+        "intelligencia"
+      ],
+      "topic": "mi-alapok",
+      "alt": "Informatika / digitális kultúra, 9–10. osztály — Mesterséges intelligencia: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a stylised neural network of glowing nodes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-future-szoftverfejlesztes",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Szoftverfejlesztés",
+        "szoftver",
+        "fejlesztes",
+        "projekt"
+      ],
+      "topic": "szoftverfejlesztes",
+      "alt": "Informatika / digitális kultúra, 11–12. osztály — Szoftverfejlesztés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a laptop with abstract code blocks and a coffee cup. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-future-kiberbiztonsag",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Kiberbiztonság",
+        "kiberbiztonsag",
+        "titkositas"
+      ],
+      "topic": "kiberbiztonsag",
+      "alt": "Informatika / digitális kultúra, 11–12. osztály — Kiberbiztonság: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a glowing shield over a circuit board. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-future-mi-hasznalat",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "MI-használat",
+        "hasznalat",
+        "chatbot"
+      ],
+      "topic": "mi-hasznalat",
+      "alt": "Informatika / digitális kultúra, 11–12. osztály — MI-használat: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a friendly abstract assistant interface with nodes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-informatika-future-erettsegi-info",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "Érettségi felkészülés",
+        "erettsegi",
+        "felkeszules"
+      ],
+      "topic": "erettsegi-info",
+      "alt": "Informatika / digitális kultúra, 11–12. osztály — Érettségi felkészülés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a desk with a laptop and notes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-explorer-dalok",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Dalok és mondókák",
+        "dal",
+        "mondoka",
+        "enek"
+      ],
+      "topic": "dalok",
+      "alt": "Ének-zene, 1–2. osztály — Dalok és mondókák: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: music notes floating above a meadow. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-explorer-ritmus",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Ritmus",
+        "ritmus",
+        "taps",
+        "dob"
+      ],
+      "topic": "ritmus",
+      "alt": "Ének-zene, 1–2. osztály — Ritmus: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a small drum and clapping hands shapes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-explorer-hangszerek-exp",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Hangszerek",
+        "hangszer",
+        "csorgo",
+        "furulya"
+      ],
+      "topic": "hangszerek-exp",
+      "alt": "Ének-zene, 1–2. osztály — Hangszerek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: toy instruments on a rug. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-adventure-nepdalok",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Népdalok",
+        "nepdal",
+        "nepzene"
+      ],
+      "topic": "nepdalok",
+      "alt": "Ének-zene, 3–5. osztály — Népdalok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a folk-art pattern with music notes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-adventure-hangjegyek",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Hangjegyek",
+        "hangjegy",
+        "kotta",
+        "szolmizacio"
+      ],
+      "topic": "hangjegyek",
+      "alt": "Ének-zene, 3–5. osztály — Hangjegyek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: big friendly notes on a staff without letters. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-adventure-hangszerek-adv",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Hangszerek",
+        "hangszer",
+        "xilofon"
+      ],
+      "topic": "hangszerek-adv",
+      "alt": "Ének-zene, 3–5. osztály — Hangszerek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a xylophone and a recorder. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-studio-zenetortenet",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Zenetörténet",
+        "zenetortenet",
+        "barokk",
+        "klasszikus"
+      ],
+      "topic": "zenetortenet",
+      "alt": "Ének-zene, 6–8. osztály — Zenetörténet: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a harpsichord in an elegant room. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-studio-zenei-formak",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Zenei formák",
+        "zenei",
+        "forma",
+        "rondo"
+      ],
+      "topic": "zenei-formak",
+      "alt": "Ének-zene, 6–8. osztály — Zenei formák: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a spiral of musical notes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-studio-mai-zene",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Mai zene",
+        "pop",
+        "rock",
+        "mai",
+        "zene"
+      ],
+      "topic": "mai-zene",
+      "alt": "Ének-zene, 6–8. osztály — Mai zene: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: headphones and a guitar. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-laboratory-romantika-zene",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Romantika",
+        "romantika",
+        "liszt",
+        "chopin"
+      ],
+      "topic": "romantika-zene",
+      "alt": "Ének-zene, 9–10. osztály — Romantika: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a grand piano by a window. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-laboratory-xx-szazadi-zene",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "XX. századi zene",
+        "bartok",
+        "kodaly"
+      ],
+      "topic": "xx-szazadi-zene",
+      "alt": "Ének-zene, 9–10. osztály — XX. századi zene: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a folk instrument beside a modern score. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-enek-zene-laboratory-filmzene",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "Filmzene és média",
+        "filmzene",
+        "media"
+      ],
+      "topic": "filmzene",
+      "alt": "Ének-zene, 9–10. osztály — Filmzene és média: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a film reel with music notes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-explorer-szeretet",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Szeretet és barátság",
+        "szeretet",
+        "baratsag"
+      ],
+      "topic": "szeretet",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 1–2. osztály — Szeretet és barátság: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: two hands holding a small heart. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-explorer-csalad-hit",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Család",
+        "csalad"
+      ],
+      "topic": "csalad-hit",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 1–2. osztály — Család: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a warm home with a lit window. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-adventure-ertekek",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Értékek",
+        "ertek",
+        "becsulet"
+      ],
+      "topic": "ertekek",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 3–5. osztály — Értékek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a dove with an olive branch. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-adventure-kozosseg-hit",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Közösség",
+        "kozosseg",
+        "segitseg"
+      ],
+      "topic": "kozosseg-hit",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 3–5. osztály — Közösség: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: people holding hands in a circle. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-adventure-unnepek",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Ünnepek",
+        "unnep",
+        "karacsony",
+        "husvet"
+      ],
+      "topic": "unnepek",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 3–5. osztály — Ünnepek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a candle and a wreath. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-studio-etika",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Etika",
+        "etika",
+        "rossz",
+        "dontes"
+      ],
+      "topic": "etika",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 6–8. osztály — Etika: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a wooden signpost at a sunny forest crossroads with two paths and a small lantern. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-studio-vallasok",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Világvallások",
+        "vallas",
+        "vilagvallas"
+      ],
+      "topic": "vallasok",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 6–8. osztály — Világvallások: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: several different sacred buildings on a hill. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-studio-felelosseg",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Felelősség",
+        "felelosseg",
+        "dontes"
+      ],
+      "topic": "felelosseg",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 6–8. osztály — Felelősség: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a lantern lighting a path. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-laboratory-emberi-meltosag",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Emberi méltóság",
+        "meltosag",
+        "jog"
+      ],
+      "topic": "emberi-meltosag",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 9–10. osztály — Emberi méltóság: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a balance with a heart. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-laboratory-kapcsolatok",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Kapcsolatok",
+        "kapcsolat",
+        "baratsag",
+        "szerelem"
+      ],
+      "topic": "kapcsolatok",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 9–10. osztály — Kapcsolatok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: two paths joining under a tree. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-future-filozofia",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Filozófiai kérdések",
+        "filozofia",
+        "ertelem"
+      ],
+      "topic": "filozofia",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 11–12. osztály — Filozófiai kérdések: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a thinker's bench under a starry sky. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-hit-es-erkolcstan-future-tarsadalmi-etika",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "Társadalmi etika",
+        "tarsadalom",
+        "igazsagossag"
+      ],
+      "topic": "tarsadalmi-etika",
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 11–12. osztály — Társadalmi etika: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a scale with a book and a heart. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-explorer-szinek",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Színek",
+        "szin",
+        "festes"
+      ],
+      "topic": "szinek",
+      "alt": "Vizuális kultúra, 1–2. osztály — Színek: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a painter palette with bright colors. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-explorer-formak-vk",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Formák és rajz",
+        "rajz",
+        "forma",
+        "vonal"
+      ],
+      "topic": "formak-vk",
+      "alt": "Vizuális kultúra, 1–2. osztály — Formák és rajz: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: crayons drawing loops on paper. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-adventure-festes",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Festés",
+        "festes",
+        "ecset"
+      ],
+      "topic": "festes",
+      "alt": "Vizuális kultúra, 3–5. osztály — Festés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: brushes in a jar with color splashes. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-adventure-kezmuves",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Kézműves munka",
+        "kezmuves",
+        "agyag",
+        "papir"
+      ],
+      "topic": "kezmuves",
+      "alt": "Vizuális kultúra, 3–5. osztály — Kézműves munka: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: clay figures and paper crafts on a table. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-adventure-muveszettortenet-adv",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Művészet régen",
+        "muveszet",
+        "barlangrajz"
+      ],
+      "topic": "muveszettortenet-adv",
+      "alt": "Vizuális kultúra, 3–5. osztály — Művészet régen: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: cave paintings beside a modern easel. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-studio-terabrazolas",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Térábrázolás",
+        "perspektiva",
+        "ter"
+      ],
+      "topic": "terabrazolas",
+      "alt": "Vizuális kultúra, 6–8. osztály — Térábrázolás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a drawing tablet showing a perspective grid. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-studio-design",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Tervezés és design",
+        "design",
+        "tervezes",
+        "plakat"
+      ],
+      "topic": "design",
+      "alt": "Vizuális kultúra, 6–8. osztály — Tervezés és design: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a designer's desk with swatches. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-studio-fotografia",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Fotó és mozgókép",
+        "foto",
+        "film"
+      ],
+      "topic": "fotografia",
+      "alt": "Vizuális kultúra, 6–8. osztály — Fotó és mozgókép: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a camera beside a color wheel. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-laboratory-muveszettortenet",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Művészettörténet",
+        "muveszettortenet",
+        "reneszansz"
+      ],
+      "topic": "muveszettortenet",
+      "alt": "Vizuális kultúra, 9–10. osztály — Művészettörténet: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a classical sculpture in a gallery. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-laboratory-media-vk",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Média",
+        "media",
+        "kep"
+      ],
+      "topic": "media-vk",
+      "alt": "Vizuális kultúra, 9–10. osztály — Média: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a camera and a laptop with an image. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-future-kortars-muveszet",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Kortárs művészet",
+        "kortars",
+        "installacio"
+      ],
+      "topic": "kortars-muveszet",
+      "alt": "Vizuális kultúra, 11–12. osztály — Kortárs művészet: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a modern gallery with an abstract sculpture. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-vizualis-kultura-future-epiteszet",
+      "kind": "cover",
+      "band": "future",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "Építészet",
+        "epiteszet",
+        "epulet"
+      ],
+      "topic": "epiteszet",
+      "alt": "Vizuális kultúra, 11–12. osztály — Építészet: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: modern and classical buildings side by side. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-technika-explorer-epites",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "technika"
+      ],
+      "keywords": [
+        "Építés",
+        "epites",
+        "kocka"
+      ],
+      "topic": "epites",
+      "alt": "Technika és tervezés, 1–2. osztály — Építés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: toy building bricks and a small hammer. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-technika-explorer-anyagok-tech",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "technika"
+      ],
+      "keywords": [
+        "Anyagok",
+        "papir",
+        "anyag"
+      ],
+      "topic": "anyagok-tech",
+      "alt": "Technika és tervezés, 1–2. osztály — Anyagok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: paper, wood and fabric samples. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-technika-adventure-szerszamok",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "technika"
+      ],
+      "keywords": [
+        "Szerszámok",
+        "szerszam",
+        "csavarhuzo"
+      ],
+      "topic": "szerszamok",
+      "alt": "Technika és tervezés, 3–5. osztály — Szerszámok: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a toy screwdriver, gears and a wrench. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-technika-adventure-haztartas",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "technika"
+      ],
+      "keywords": [
+        "Háztartás",
+        "haztartas",
+        "fozes"
+      ],
+      "topic": "haztartas",
+      "alt": "Technika és tervezés, 3–5. osztály — Háztartás: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a tidy kitchen with simple tools. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-technika-studio-tervezes-tech",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "technika"
+      ],
+      "keywords": [
+        "Tervezés",
+        "tervezes",
+        "rajz",
+        "terv"
+      ],
+      "topic": "tervezes-tech",
+      "alt": "Technika és tervezés, 6–8. osztály — Tervezés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: gears with a ruler and a pencil like a design plan. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "cover-technika-studio-kozlekedes-tech",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "technika"
+      ],
+      "keywords": [
+        "Közlekedés",
+        "kozlekedes",
+        "jarmu"
+      ],
+      "topic": "kozlekedes-tech",
+      "alt": "Technika és tervezés, 6–8. osztály — Közlekedés: témaköri borítókép.",
+      "aspect_ratio": "3:2",
+      "batch": 3,
+      "prompt": "Subject of the illustration: a bicycle and a city bus. The subject fills the scene clearly and is easy to recognise. Wide scene with calm space, no people's faces in close-up. No letters, digits, words or flags with text."
     }
   ]
 }

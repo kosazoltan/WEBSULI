@@ -8,12 +8,14 @@ import { subjectIconIdForBand } from "./subject-icons";
 export const DESIGN_ASSET_BANDS = ["explorer", "adventure", "studio", "laboratory", "future"] as const;
 export const designAssetSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]{3,64}$/),
-  kind: z.enum(["mascot", "hero", "icon", "cover"]),
+  kind: z.enum(["mascot", "hero", "icon", "cover", "marker", "divider"]),
   band: z.enum(DESIGN_ASSET_BANDS),
   subjects: z.array(z.string()),
   keywords: z.array(z.string()),
   alt: z.string().min(8),
   src: z.string().regex(/^\/design\/[a-z]+\/[a-z0-9-]+\.webp$/),
+  /** Arculati bank (2026-10-17-arculati-bank): a témaköri borító témakörkulcsa (shared/topic-taxonomy.ts). */
+  topic: z.string().regex(/^[a-z0-9-]{2,64}$/).optional(),
   origin: z.string().startsWith("MI-generált, saját"),
   model: z.string(),
   promptHash: z.string().regex(/^[a-f0-9]{16}$/),
@@ -49,7 +51,7 @@ const BAND_SUFFIX = new RegExp(`-(${DESIGN_ASSET_BANDS.join("|")})$`);
  *   korosztályú, azonos tárgyú borítók közül.
  * - Kabala csak 1–5.: a pózok közül rotál (a 3–5. sávban a felfedező pózzal együtt). Tárgyikon: a korosztálynak megfelelő változat.
  */
-export function pickLessonArt(lesson: { subject: string; title: string; seed?: string }, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): LessonArt {
+export function pickLessonArt(lesson: { subject: string; title: string; seed?: string; topicCoverId?: string | null }, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): LessonArt {
   const subject = foldText(lesson.subject);
   const title = foldText(lesson.title);
   const seed = lesson.seed || lesson.title;
@@ -57,13 +59,17 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
   const sameAge = (a: DesignAsset) => YOUNG_BANDS.has(a.band) === young;
   const subjectHit = (a: DesignAsset) => a.subjects.some(s => { const f = foldText(s); return f.length >= 4 && (subject.includes(f) || f.includes(subject.slice(0, Math.max(4, Math.min(subject.length, 8))))); });
   const keywordHit = (a: DesignAsset) => a.keywords.some(k => { const f = foldText(k); return f.length >= 4 && title.includes(f); });
-  const covers = catalog.filter(a => a.kind === "cover");
+  // A témaköri borítók csak a saját témakörükhöz járnak (nem kerülnek az általános rotációba és a kulcsszavas készletbe).
+  const covers = catalog.filter(a => a.kind === "cover" && !a.topic);
   // Review #273: a kulcsszavas borítóhoz a tantárgynak is egyeznie kell (a „Sejtések” matematika-lecke ne kapjon sejt-borítót).
   const keyed = covers.filter(a => keywordHit(a) && subjectHit(a));
   const keyedPool = keyed.filter(sameAge).length ? keyed.filter(sameAge) : keyed;
   let cover: DesignAsset | undefined;
   let hero: DesignAsset | undefined;
-  if (keyedPool.length) cover = rotate(keyedPool, seed, "cover");
+  // Arculati bank: a lecke témakörének borítója nyer (a hívó a topicKeyOf-ból adja; csak a lecke sávjáé).
+  const topical = lesson.topicCoverId ? catalog.find(a => a.id === lesson.topicCoverId && a.kind === "cover" && a.band === band) : undefined;
+  if (topical) cover = topical;
+  else if (keyedPool.length) cover = rotate(keyedPool, seed, "cover");
   else {
     // A sáv saját hős-képe kétszeres súllyal; mellette az azonos korosztály többi sávhőse és az azonos tárgyú borítók.
     const heroes = catalog.filter(a => a.kind === "hero" && sameAge(a));
@@ -85,7 +91,7 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
 }
 
 /** A leckébe mentett arculat (docs/specs/2026-10-17-lecke-betoltes.md): csak azonosítók; a választás mentéskor dől el. */
-export type StoredLessonArt = { subjectIcon?: string; picture?: string; mascot?: string };
+export type StoredLessonArt = { subjectIcon?: string; picture?: string; mascot?: string; topic?: string };
 export function lessonArtIds(art: LessonArt): StoredLessonArt {
   const picture = art.cover ?? art.hero;
   return { ...(art.subjectIcon ? { subjectIcon: art.subjectIcon.id } : {}), ...(picture ? { picture: picture.id } : {}), ...(art.mascot ? { mascot: art.mascot.id } : {}) };

@@ -7,7 +7,8 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { designAssets } from "../shared/schema";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
-import { lessonArtIds, pickLessonArt, type DesignAsset } from "../shared/design-assets";
+import { lessonArtIds, pickLessonArt, type DesignAsset, type StoredLessonArt } from "../shared/design-assets";
+import { topicCoverId, topicKeyOf } from "../shared/topic-taxonomy";
 import { designThemeForClassroom } from "../shared/lesson-design";
 import { logger } from "./lib/logger";
 
@@ -41,7 +42,7 @@ export async function syncDesignAssets(catalog: readonly DesignAsset[] = DESIGN_
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     if (existing.get(asset.id) === sha256) { report.unchanged++; continue; }
     const row = {
-      kind: asset.kind, band: asset.band, subjects: asset.subjects, keywords: asset.keywords, alt: asset.alt, mime: "image/webp",
+      kind: asset.kind, band: asset.band, subjects: asset.subjects, keywords: asset.keywords, topic: asset.topic ?? null, alt: asset.alt, mime: "image/webp",
       sha256, bytes, origin: asset.origin, model: asset.model, promptHash: asset.promptHash, approvedAt: new Date(asset.approvedAt),
       updatedAt: new Date(),
     };
@@ -66,7 +67,10 @@ export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typ
   try {
     const stored = new Set((await executor.select({ id: designAssets.id }).from(designAssets)).map(r => r.id));
     const catalog = DESIGN_ASSET_CATALOG.filter(a => stored.has(a.id));
-    const art = lessonArtIds(pickLessonArt({ subject: lesson.subject, title: lesson.title, seed }, designThemeForClassroom(lesson.classroom), catalog));
+    // Arculati bank (S1): a lecke témaköre (tantárgy, évfolyam, cím) → a témakör borítója, ha az a táblában megvan.
+    const topic = topicKeyOf({ subject: lesson.subject, classroom: lesson.classroom, title: lesson.title });
+    const art: StoredLessonArt & { topic?: string } = lessonArtIds(pickLessonArt({ subject: lesson.subject, title: lesson.title, seed, topicCoverId: topic ? topicCoverId(topic) : null }, designThemeForClassroom(lesson.classroom), catalog));
+    if (topic) art.topic = topic.key;
     return (Object.keys(art).length ? { ...rest, art } : rest) as T;
   } catch (error) {
     logger.warn("[design-assets] Az arculat nem választható, a lecke art nélkül ment:", error);

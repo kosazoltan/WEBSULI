@@ -1113,6 +1113,8 @@ export const designAssets = pgTable(
     band: varchar("band", { length: 16 }).notNull(),
     subjects: text("subjects").array().notNull().default(sql`'{}'`),
     keywords: text("keywords").array().notNull().default(sql`'{}'`),
+    /** Arculati bank (migrations/0029): a témaköri borító témakörkulcsa. */
+    topic: varchar("topic", { length: 64 }),
     alt: text("alt").notNull(),
     mime: varchar("mime", { length: 32 }).notNull(),
     sha256: char("sha256", { length: 64 }).notNull(),
