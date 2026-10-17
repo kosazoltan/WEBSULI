@@ -37,3 +37,12 @@ test("art mező nélküli (régi) leckénél nincs adatbázis-kérés, a kataló
   await expect(icons).toHaveAttribute("src", /^\/design\//);
   expect(hits).toBe(0);
 });
+
+test("más sávú mentett ikon (az évfolyam a mentés óta változott) nem töltődik be", async ({ page }) => {
+  let hits = 0;
+  await page.route("**/api/design-assets/**", route => { hits++; return route.abort(); });
+  await page.goto("/__lesson-runtime-probe?fusion=1&classroom=7&icon=icon-matematika-future");
+  await expect(page.locator(".lesson-chip").first()).toBeVisible();
+  await expect(page.locator(".lesson-chip .ws-subject-ico")).toHaveAttribute("src", /^\/design\//);
+  expect(hits).toBe(0);
+});

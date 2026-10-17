@@ -474,7 +474,9 @@ export function LessonRuntime({
   // Változatos képválasztás: a lecke azonosítója szerint rotál (ugyanaz a lecke mindig ugyanazt kapja).
   const art = useMemo(() => lessonArtFor({ ...lesson, seed: lessonId ?? persistId ?? lesson.title }, designTheme), [lesson, designTheme, lessonId, persistId]);
   // Ikonkészlet: a mentéskor az adatbázisból rendelt ikon elsőbbséget kap; régi leckénél a katalógus-választás marad.
-  const subjectIconSrc = lesson.art?.subjectIcon ? `/api/design-assets/${lesson.art.subjectIcon}` : art.subjectIcon?.src;
+  // Ha a lecke évfolyama a mentés óta megváltozott (javítás), a más sávú ikon nem jelenik meg.
+  const dbIcon = lesson.art?.subjectIcon?.endsWith(`-${designTheme}`) ? lesson.art.subjectIcon : undefined;
+  const subjectIconSrc = dbIcon ? `/api/design-assets/${dbIcon}` : art.subjectIcon?.src;
   // Websuli Design: a lecke fontja az évfolyamból (1–5. Nunito Sans, 0. és 6–12. Inter), téma szerinti kivétel nélkül.
   const fonts = lessonFontPair(lesson.classroom, lesson.subject);
   const typography = {
