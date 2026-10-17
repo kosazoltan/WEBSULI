@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * BACKLOG T1 (2026-09-02) — tananyag-eredmény beküldés szerver-oldalon.
  *
@@ -11,11 +13,24 @@
 export const MAX_SUBJECT_LENGTH = 200;
 export const MAX_BODY_LENGTH = 5000;
 export const MAX_MATERIAL_ID_LENGTH = 64;
+const AUTO_SUFFIX = ' — automatikus';
+
+/**
+ * Ismétlésvédelem kulcsa: azonos anyag + kliens + törzs 10 percen belül csak egyszer küld. A kliens az oldalbetöltésenkénti
+ * `clientId` (review #281: egy iskolai NAT mögötti két tanuló azonos eredménye nem duplikátum); hiányában az IP.
+ */
+export function materialResultDedupKey(payload: MaterialResultPayload, clientIp: string): string {
+  return createHash('sha256').update(`${payload.materialId}|${clientIp}|${payload.clientId ?? ''}|${payload.subject}|${payload.body}`).digest('hex');
+}
 
 export interface MaterialResultPayload {
   materialId: string;
   subject: string;
   body: string;
+  /** Régi anyag automatikus beolvasása (docs/specs/2026-10-17-regi-anyag-eredmeny.md) — a tárgyban jelölve. */
+  auto?: boolean;
+  /** Oldalbetöltésenkénti véletlen azonosító (nem személyes adat) — csak az ismétlésvédelemhez. */
+  clientId?: string;
 }
 
 export type MaterialResultValidation =
@@ -48,7 +63,13 @@ export function normalizeMaterialResult(raw: unknown): MaterialResultValidation 
   if (body.length > MAX_BODY_LENGTH) {
     return { ok: false, error: `Az üzenet legfeljebb ${MAX_BODY_LENGTH} karakter lehet` };
   }
-  return { ok: true, value: { materialId, subject, body } };
+  if (r.auto !== undefined && typeof r.auto !== 'boolean') {
+    return { ok: false, error: 'Érvénytelen jelölés' };
+  }
+  if (r.clientId !== undefined && (typeof r.clientId !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(r.clientId))) {
+    return { ok: false, error: 'Érvénytelen kliensazonosító' };
+  }
+  return { ok: true, value: { materialId, subject, body, ...(r.auto ? { auto: true } : {}), ...(typeof r.clientId === 'string' ? { clientId: r.clientId } : {}) } };
 }
 
 /** ADMIN_EMAILS (vesszővel elválasztva) vagy ADMIN_EMAIL → egyedi, érvényes címek. */
@@ -91,5 +112,40 @@ export function buildMaterialResultEmail(
     `<p style="color:#666;font-size:12px">Forrás: <a href="${escapeHtml(previewUrl)}">${escapeHtml(previewUrl)}</a></p>`,
     '</div>',
   ].join('');
-  return { subject: `[WebSuli eredmény] ${payload.subject}`, html };
+  const subject = `[WebSuli eredmény] ${payload.subject}`.slice(0, payload.auto ? 200 - AUTO_SUFFIX.length : 200);
+  return { subject: payload.auto ? subject + AUTO_SUFFIX : subject, html };
+}
+
+/**
+ * Címzettenkénti kézbesítés ismétlésvédelemmel (review #281): a már értesített admin nem kap újra; a kimaradt címzett egyszeri
+ * pótlása a `scheduleRetry`-ban fut, és ha az is hibázik, a kulcsa törlődik — így egy ismételt beküldés csak neki küld, és nem
+ * kap hamis „duplicate” választ.
+ */
+export async function deliverToRecipients(opts: {
+  recipients: readonly string[];
+  baseKey: string;
+  dedup: { shouldRecord(key: string): boolean; forget(key: string): void };
+  send: (to: string) => Promise<boolean>;
+  scheduleRetry: (run: () => Promise<void>) => void;
+  onRetryDone?: (stillFailed: number) => void;
+}): Promise<{ duplicate: true } | { duplicate: false; delivered: number; failed: string[] }> {
+  const keyOf = (to: string) => `${opts.baseKey}|${to}`;
+  const pending = opts.recipients.filter((to) => opts.dedup.shouldRecord(keyOf(to)));
+  if (pending.length === 0) return { duplicate: true };
+  const sendAll = async (list: readonly string[]) => {
+    const settled = await Promise.allSettled(list.map((to) => opts.send(to)));
+    return list.filter((_, i) => !(settled[i].status === 'fulfilled' && settled[i].value));
+  };
+  const failed = await sendAll(pending);
+  const delivered = pending.length - failed.length;
+  if (delivered === 0) {
+    failed.forEach((to) => opts.dedup.forget(keyOf(to)));
+  } else if (failed.length > 0) {
+    opts.scheduleRetry(async () => {
+      const stillFailed = await sendAll(failed);
+      stillFailed.forEach((to) => opts.dedup.forget(keyOf(to)));
+      opts.onRetryDone?.(stillFailed.length);
+    });
+  }
+  return { duplicate: false, delivered, failed };
 }
