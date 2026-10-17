@@ -1,7 +1,7 @@
 # Websuli grafikai szabályterv
 
-**Forrás:** a tulajdonos által 2026-10-17-én csatolt „Egy platform. Minden korosztálynak.” koncepciókép (öt oszlopos tábla). A képet
-nem a repó tárolja; javasolt elmentése: `docs/design/Websuli_Koncepcio_Egy_Platform.png`. Ez a dokumentum a kép **részletes
+**Forrás:** a tulajdonos által 2026-10-17-én csatolt „Egy platform. Minden korosztálynak.” koncepciókép (öt oszlopos tábla). A kép a repóban:
+`docs/design/Websuli_Koncepcio_Egy_Platform.png`. Ez a dokumentum a kép **részletes
 elemzése**, és a belőle levezetett, kódba ültethető **grafikai szabályok**.
 
 **Viszony a mesterutasításhoz:** `Websuli_Design_AI_Implementacios_Utasitas.md`.
