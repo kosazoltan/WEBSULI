@@ -32,3 +32,7 @@ nélkül a hős nem ellenőrizhető). A parancsok a `source/` mappából futnak.
      - nincs kilógás;
      - képernyőkép.
 7. **Kapuk:** tsc, check:test, lint, unit, célzott Playwright (workers=1); képernyőképek összevetése a koncepcióképpel.
+8. **Kiegészítés, változatos választás:**
+   - `pickLessonArt(lesson, band, catalog)`: `lesson.seed` (azonosító) és FNV-1a alapú rotáció a terv kiegészítése szerint.
+   - `LessonRuntime`: `seed = lessonId ?? persistId ?? title`.
+   - Tesztek: stabilitás, változatosság, korosztály-elválasztás.

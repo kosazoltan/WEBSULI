@@ -57,3 +57,20 @@ A lecke teteje a koncepciókép oszlopfejének és hős-kártyájának mintájá
 - HA az évfolyam 1–5, AKKOR a kabala és a sáv buboréka látszik; 6–12-nél nem.
 - A sávfejléc mutatja: ikonjelvény, évfolyam, téma neve, hármas mottó. Minden szövege ≥ 4,5:1 a ténylegesen mért háttéren.
 - Mind az öt sávban, 390 / 768 / 1440 px-en: nincs kilógás, a kép betöltődik (`naturalWidth > 0`), képernyőkép készül.
+
+## Kiegészítés (2026-10-17): változatos képválasztás
+**Tulajdonosi döntés:** mind a 36 kép jóváhagyva. A leckék a tárgyukhoz és a korosztályukhoz illő képek közül változatosan kapjanak
+képet.
+
+- **Determinisztikus választás:** a lecke azonosítója alapján történik (FNV-1a lenyomat, ha nincs azonosító, akkor a cím). Ugyanaz a
+  lecke mindig ugyanazt a képet mutatja; különböző leckék között a képek rotálnak.
+- **Korosztály:** a fiatal (`explorer`, `adventure`) és az idősebb (`studio`, `laboratory`, `future`) sávok képei nem keverednek. Ha a
+  kulcsszavas borító csak a másik korosztályból van, azt is használhatja.
+- **Kép:**
+  - ha van kulcsszavas borító, az illeszkedő borítók közül rotál;
+  - különben a sáv hős-képe és az azonos korosztályú, azonos tárgyú borítók közül.
+- **Kabala:** az 1–5. évfolyamon a kabala pózai közül rotál, a 3–5. évfolyamon a felfedező pózzal együtt.
+- **Elfogadás:**
+  - ugyanarra az azonosítóra a választás stabil;
+  - 20 különböző azonosító legalább 2 különböző képet ad egy tárgyra;
+  - a választott kép mindig a lecke korosztályához tartozik, kivéve a kulcsszavas, csak a másik korosztályban meglévő borítót.
