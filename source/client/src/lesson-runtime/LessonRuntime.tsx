@@ -524,7 +524,7 @@ export function LessonRuntime({
           </div>
           <p className="ws-brand"><strong>✦ Websuli</strong><span>{DESIGN_TOPBAR_TAGLINE}</span></p>
         </div>
-        <header className="lesson-hero" data-cover={art.cover || art.hero || lesson.experience ? "art" : undefined}>
+        <header className="lesson-hero" data-cover="art">
           <div className="lesson-emblem" aria-hidden>
             <Leaf className="w-7 h-7" />
           </div>
@@ -536,7 +536,8 @@ export function LessonRuntime({
               <span className="lesson-chip">{lesson.classroom}. osztály</span>
             </div>
           </div>
-          {(art.cover || art.hero || lesson.experience) && <LessonArt art={art} theme={designTheme} subject={lesson.subject} />}
+          {/* Review #273: mindig renderel — kép híján a LessonArt a rajzos tartalékot (LessonCoverArt) adja. */}
+          <LessonArt art={art} theme={designTheme} subject={lesson.subject} />
         </header>
 
         {lesson.experience ? <LessonExperienceView key={experienceKey} experience={lesson.experience} lessonId={lessonId} arbiterSource={arbiterSource} headings={lesson.sections.map(s => s.heading)} storageKey={`websuli:fusion:${experienceKey}`} reviewKey={persistId ?? lessonId ?? lesson.mapId}>

@@ -36,3 +36,6 @@ nélkül a hős nem ellenőrizhető). A parancsok a `source/` mappából futnak.
    - `pickLessonArt(lesson, band, catalog)`: `lesson.seed` (azonosító) és FNV-1a alapú rotáció a terv kiegészítése szerint.
    - `LessonRuntime`: `seed = lessonId ?? persistId ?? title`.
    - Tesztek: stabilitás, változatosság, korosztály-elválasztás.
+9. **Review #273:**
+   - A tárgyikon csak a korosztálynak megfelelő változat lehet, a másik korosztályé helyett nincs ikon.
+   - A `LessonArt` mindig renderel, kép híján a rajzos tartalékot (`LessonCoverArt`) adja.

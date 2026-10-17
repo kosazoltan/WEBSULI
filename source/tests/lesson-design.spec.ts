@@ -78,9 +78,10 @@ test("borítóábra nélküli lecke: nincs üres második fejlécoszlop, az embl
   await page.locator(".lesson-hero h1").waitFor();
   const hasArt = await page.locator(".lesson-hero .ws-art").count();
   if (hasArt) await expect(page.locator(".lesson-hero .ws-art > img")).toBeVisible();
-  else await expect(page.locator(".lesson-hero > .lesson-emblem")).toBeVisible();
+  // Review #273: kép híján a rajzos tartalék (LessonCoverArt) áll a kép helyén — üres oszlop sosem marad.
+  else await expect(page.locator(".lesson-hero .lesson-cover-art")).toBeVisible();
   const cols = await page.locator(".lesson-hero").evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
-  expect(cols).toBe(hasArt ? 1 : 2);
+  expect(cols).toBe(1);
   const h1w = await page.locator(".lesson-hero h1").evaluate((el) => el.getBoundingClientRect().width);
   const herow = await page.locator(".lesson-hero").evaluate((el) => el.getBoundingClientRect().width);
   expect(h1w).toBeGreaterThan(herow * 0.6);

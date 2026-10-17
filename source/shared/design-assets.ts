@@ -74,6 +74,7 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
   const picture = cover ?? hero;
   const mascot = young && !picture?.keywords.includes("kabala") ? rotate(mascots, seed, "mascot") : undefined;
   const icons = catalog.filter(a => a.kind === "icon" && subjectHit(a));
-  const subjectIcon = icons.find(a => a.id.endsWith("-young") === young) ?? icons[0];
+  // Review #273: csak a korosztálynak megfelelő változat; a másik korosztály ikonja helyett nincs ikon.
+  const subjectIcon = icons.find(a => a.id.endsWith("-young") === young);
   return { ...(cover ? { cover } : {}), ...(hero ? { hero } : {}), ...(mascot ? { mascot } : {}), ...(subjectIcon ? { subjectIcon } : {}) };
 }

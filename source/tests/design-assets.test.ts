@@ -75,6 +75,9 @@ test("pickLessonArt: kulcsszavas borító, sávhős, kabala csak 1–5., ékezet
   assert.equal(env2.mascot?.id, "mascot-hello");
   assert.equal(env2.subjectIcon?.id, "icon-kornyezet-young");
   assert.equal(pickLessonArt({ subject: "Matematika", title: "Törtek" }, "adventure", catalog).subjectIcon?.id, "icon-matematika-young");
+  // Review #273: csak a másik korosztály ikonja létezik → nincs ikon (nem kerül kisiskolás ikon a 9–10. évfolyamra, sem fordítva).
+  assert.equal(pickLessonArt({ subject: "Környezetismeret", title: "Az évszakok" }, "laboratory", catalog).subjectIcon, undefined);
+  assert.equal(pickLessonArt({ subject: "Biológia", title: "Növények" }, "explorer", catalog).subjectIcon, undefined);
   // Dokumentált spec-változás (változatos képválasztás): saját sávhős nélkül a korosztály másik sávhőse jön, nem üres hős.
   const chem = pickLessonArt({ subject: "Kémia", title: "Oldatok" }, "future", catalog);
   assert.equal(chem.hero?.id, "hero-studio");
