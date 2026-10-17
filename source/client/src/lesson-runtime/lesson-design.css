@@ -103,6 +103,8 @@
 [data-ws-theme] .ws-mascot img { width: 88px; height: 88px; flex: none; border-radius: 50%; object-fit: cover; background: #FFFFFF; border: 3px solid #FFFFFF; box-shadow: 0 8px 18px #0000002e; }
 [data-ws-theme] .ws-bubble { margin: 0 0 30px; max-width: 220px; padding: 10px 14px; border-radius: 16px 16px 16px 4px; background: #FFFFFF; color: #1B2B3A; font-size: 15px; font-weight: 800; line-height: 1.35; box-shadow: 0 8px 18px #0000002e; }
 [data-ws-theme] .lesson-chip:has(> .ws-subject-ico) { display: inline-flex; align-items: center; gap: 6px; }
+/* Review #273: a Csendes nézet a hős-képet is halványítja (mint a régi .lesson-cover-art-ot); a kabala-buborék olvasható marad. */
+[data-ws-theme]:has(.fusion-view[data-quiet="true"]) .ws-art > img { opacity: .25; }
 [data-ws-theme] .ws-subject-ico { width: 22px; height: 22px; flex: none; border-radius: 6px; object-fit: cover; }
 @media (max-width: 650px) {
   [data-band][data-experience][data-ws-theme] .lesson-hero[data-cover] { grid-template-columns: minmax(0, 1fr); }

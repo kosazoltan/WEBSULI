@@ -41,6 +41,31 @@ export function estimateUsd(images: number, references: number): number {
   return images * 0.09 + references * 0.003;
 }
 
+/** Review #273: a fizetős hívások darabkorlátja csak nemnegatív, biztonságos egész lehet; hiányzó érték esetén az alapértelmezés. */
+export function parseMax(raw: string | undefined, fallback = 12): number {
+  if (raw === undefined) return fallback;
+  if (!/^\d+$/.test(raw.trim())) throw new Error(`Hibás --max érték: ${raw} (nemnegatív egész kell).`);
+  const n = Number(raw.trim());
+  if (!Number.isSafeInteger(n)) throw new Error(`Hibás --max érték: ${raw}.`);
+  return n;
+}
+
+export type GenerationRecord = { model: string; promptHash: string };
+/**
+ * Review #273: a kiválasztott fájl eredete a SAJÁT sikeres generálási naplóbejegyzéséből (log.jsonl), nem az aktuális manifestből —
+ * ha a prompt vagy a stílus azóta változott, a katalógus akkor is a kép valódi eredetét rögzíti. Hiányzó bejegyzés: hiba.
+ */
+export function provenanceFor(logText: string, relFile: string): GenerationRecord {
+  const want = relFile.replace(/\\/g, "/");
+  for (const line of logText.split(/\r?\n/).reverse()) {
+    if (!line.trim()) continue;
+    let row: { status?: string; file?: string; model?: string; promptHash?: string };
+    try { row = JSON.parse(line); } catch { continue; } // sérült sor: kihagyjuk, a keresés folytatódik
+    if (row.status === "ok" && row.file?.replace(/\\/g, "/") === want && row.model && row.promptHash) return { model: row.model, promptHash: row.promptHash };
+  }
+  throw new Error(`Nincs sikeres generálási naplóbejegyzés ehhez a fájlhoz: ${relFile}`);
+}
+
 /** A kulcs és bármely Bearer-token kitakarása szöveges hibából vagy naplóból. */
 export function redact(text: string, key: string): string {
   let out = key ? text.split(key).join("[kulcs]") : text;

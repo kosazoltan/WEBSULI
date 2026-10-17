@@ -39,3 +39,9 @@ nélkül a hős nem ellenőrizhető). A parancsok a `source/` mappából futnak.
 9. **Review #273:**
    - A tárgyikon csak a korosztálynak megfelelő változat lehet, a másik korosztályé helyett nincs ikon.
    - A `LessonArt` mindig renderel, kép híján a rajzos tartalékot (`LessonCoverArt`) adja.
+10. **Review #273, második kör:**
+    - A kulcsszavas borítóhoz a tantárgy is kell.
+    - A Csendes nézet a hős-képet is halványítja.
+    - A `--max` csak nemnegatív egész lehet.
+    - A katalógus eredete a kiválasztott fájl saját naplóbejegyzéséből jön (`provenanceFor`), hiányzó bejegyzésnél még a kimenet
+      előtt hiba.

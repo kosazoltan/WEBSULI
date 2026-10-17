@@ -119,3 +119,24 @@ test("tárgyikon a valódi katalógusból: Természettudomány 6–8. → icon-k
   assert.equal(pickLessonArt({ subject: "Természetismeret", title: "Az évszakok", seed: "t" }, "adventure", DESIGN_ASSET_CATALOG).subjectIcon?.id, "icon-termeszet-young");
   assert.equal(pickLessonArt({ subject: "Kémia", title: "Oldatok", seed: "t" }, "laboratory", DESIGN_ASSET_CATALOG).subjectIcon?.id, "icon-kemia");
 });
+
+// Review #273: a kulcsszavas borítóhoz a tantárgy is kell; a --max csak nemnegatív egész; az eredet a kiválasztott fájl naplójából.
+test("review #273: tantárgy nélküli kulcsszó-egyezés nem ad borítót; --max ellenőrzés; eredet a naplóból", async () => {
+  const { pickLessonArt } = await import("../shared/design-assets");
+  const { parseMax, provenanceFor } = await import("../scripts/design-assets/lib");
+  assert.notEqual(pickLessonArt({ subject: "Matematika", title: "Sejtések és bizonyítások", seed: "s" }, "laboratory", DESIGN_ASSET_CATALOG).cover?.id, "cover-sejt");
+  assert.equal(parseMax(undefined), 12);
+  assert.equal(parseMax("30"), 30);
+  for (const bad of ["bogus", "-1", "", "1.5", "99999999999999999999"]) assert.throws(() => parseMax(bad), `--max ${bad}`);
+  const log = [
+    JSON.stringify({ id: "a", status: "ok", file: "a\\1.jpg", model: "m-old", promptHash: "1111111111111111" }),
+    "nem json",
+    JSON.stringify({ id: "a", status: "error", file: "a\\2.jpg" }),
+    JSON.stringify({ id: "a", status: "ok", file: "a\\3.jpg", model: "m-new", promptHash: "3333333333333333" }),
+  ].join("\n");
+  assert.deepEqual(provenanceFor(log, "a/1.jpg"), { model: "m-old", promptHash: "1111111111111111" }, "a régebbi kép a saját eredetét kapja");
+  assert.deepEqual(provenanceFor(log, "a/3.jpg"), { model: "m-new", promptHash: "3333333333333333" });
+  assert.throws(() => provenanceFor(log, "a/2.jpg"), /Nincs sikeres/);
+  // A jelenlegi katalógus minden promptlenyomata egy sikeres generálási bejegyzésből való (a generate.ts sha256-ja, 16 hexa).
+  for (const a of DESIGN_ASSET_CATALOG) assert.match(a.promptHash, /^[a-f0-9]{16}$/);
+});

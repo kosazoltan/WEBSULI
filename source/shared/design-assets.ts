@@ -56,7 +56,8 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
   const subjectHit = (a: DesignAsset) => a.subjects.some(s => { const f = foldText(s); return f.length >= 4 && (subject.includes(f) || f.includes(subject.slice(0, Math.max(4, Math.min(subject.length, 8))))); });
   const keywordHit = (a: DesignAsset) => a.keywords.some(k => { const f = foldText(k); return f.length >= 4 && title.includes(f); });
   const covers = catalog.filter(a => a.kind === "cover");
-  const keyed = covers.filter(keywordHit);
+  // Review #273: a kulcsszavas borítóhoz a tantárgynak is egyeznie kell (a „Sejtések” matematika-lecke ne kapjon sejt-borítót).
+  const keyed = covers.filter(a => keywordHit(a) && subjectHit(a));
   const keyedPool = keyed.filter(sameAge).length ? keyed.filter(sameAge) : keyed;
   let cover: DesignAsset | undefined;
   let hero: DesignAsset | undefined;

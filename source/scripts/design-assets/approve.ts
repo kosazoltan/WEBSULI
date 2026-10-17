@@ -3,12 +3,11 @@
  * a client/public/design/<sáv>/<id>.webp alá, és bejegyzés a shared/design-assets.json katalógusba.
  * Terv: docs/specs/2026-10-17-websuli-kepkeszlet.md. Használat: npx tsx scripts/design-assets/approve.ts kivalasztas.json
  */
-import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
-import { composePrompt, loadStyle, type AssetManifest } from "./lib";
+import { provenanceFor, type AssetManifest } from "./lib";
 import type { DesignAsset } from "../../shared/design-assets";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -20,7 +19,10 @@ const selectionFile = process.argv[2];
 if (!selectionFile) throw new Error("Add meg a kiválasztás JSON-fájlját.");
 const selection = JSON.parse(readFileSync(selectionFile, "utf8")) as Record<string, string>;
 const manifest = JSON.parse(readFileSync(path.join(ROOT, "design-assets", "prompts.json"), "utf8")) as AssetManifest;
-const style = loadStyle(readFileSync(path.join(ROOT, "design-assets", "style.md"), "utf8"));
+// Review #273: az eredet (modell, promptlenyomat) a kiválasztott fájl saját naplóbejegyzéséből; MINDEN kiválasztásra ellenőrizve,
+// mielőtt bármilyen kimenet íródna.
+const logText = existsSync(path.join(CANDIDATES, "log.jsonl")) ? readFileSync(path.join(CANDIDATES, "log.jsonl"), "utf8") : "";
+const origins = Object.fromEntries(Object.entries(selection).map(([id, rel]) => [id, provenanceFor(logText, rel)]));
 // A katalógus TS-modul (a tsconfig nem importál JSON-t); a tömb a „= ” utáni JSON-literál.
 const catalog: DesignAsset[] = existsSync(CATALOG) ? JSON.parse(readFileSync(CATALOG, "utf8").replace(/^[\s\S]*?= /, "").replace(/;\s*$/, "")) : [];
 
@@ -45,8 +47,8 @@ for (const [id, rel] of Object.entries(selection)) {
   writeFileSync(path.join(outDir, `${id}.webp`), Buffer.from(webp.split(",")[1], "base64"));
   const entry: DesignAsset = {
     id, kind: item.kind, band: item.band, subjects: item.subjects, keywords: item.keywords, alt: item.alt,
-    src: `/design/${item.band}/${id}.webp`, origin: "MI-generált, saját (Seedream 5.0 Pro)", model: manifest.model,
-    promptHash: createHash("sha256").update(composePrompt(item, style)).digest("hex").slice(0, 16), approvedAt: new Date().toISOString(),
+    src: `/design/${item.band}/${id}.webp`, origin: "MI-generált, saját (Seedream 5.0 Pro)", model: origins[id].model,
+    promptHash: origins[id].promptHash, approvedAt: new Date().toISOString(),
   };
   const at = catalog.findIndex(a => a.id === id);
   if (at >= 0) catalog[at] = entry; else catalog.push(entry);

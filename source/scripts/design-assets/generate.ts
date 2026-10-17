@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildImageRequest, composePrompt, estimateUsd, loadStyle, redact, type AssetItem, type AssetManifest } from "./lib";
+import { buildImageRequest, composePrompt, estimateUsd, loadStyle, parseMax, redact, type AssetItem, type AssetManifest } from "./lib";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const ASSETS = path.join(ROOT, "design-assets");
@@ -54,7 +54,7 @@ async function main() {
   const manifest = JSON.parse(readFileSync(path.join(ASSETS, "prompts.json"), "utf8")) as AssetManifest;
   const style = loadStyle(readFileSync(path.join(ASSETS, "style.md"), "utf8"));
   const only = arg("only")?.split(",").map(s => s.trim()).filter(Boolean);
-  const max = Number(arg("max") ?? 12);
+  const max = parseMax(process.argv.includes("--max") ? (arg("max") ?? "") : undefined);
   let items = manifest.items.filter(i => (only ? only.includes(i.id) : flag("trial") ? i.trial : true));
   if (items.length > max) { console.log(`Csak az első ${max} tétel fut (--max).`); items = items.slice(0, max); }
   const refsCount = items.reduce((n, i) => n + (i.references?.length ?? 0), 0);
