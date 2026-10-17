@@ -439,12 +439,13 @@
       "kind": "icon",
       "band": "laboratory",
       "subjects": [
-        "kemia"
+        "kemia",
+        "termeszettudomany"
       ],
       "keywords": [
         "kemia"
       ],
-      "alt": "Kémia: lombik molekulamodellel.",
+      "alt": "Kémia és természettudomány: lombik, benne atommodell.",
       "aspect_ratio": "1:1",
       "references": [
         "icon-fizika"

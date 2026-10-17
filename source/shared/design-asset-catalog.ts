@@ -354,12 +354,13 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "kind": "icon",
     "band": "laboratory",
     "subjects": [
-      "kemia"
+      "kemia",
+      "termeszettudomany"
     ],
     "keywords": [
       "kemia"
     ],
-    "alt": "Kémia: lombik molekulamodellel.",
+    "alt": "Kémia és természettudomány: lombik, benne atommodell.",
     "src": "/design/laboratory/icon-kemia.webp",
     "origin": "MI-generált, saját (Seedream 5.0 Pro)",
     "model": "bytedance-seed/seedream-5-0-pro",
