@@ -156,3 +156,36 @@ test("review #281: ha a mailto-ból indított közvetlen küldés elbukik, az au
   expect(posts[1]).toMatchObject({ auto: true });
   expect(posts[1].body).toContain("70% (Közepes)");
 });
+
+const FLIP_MATERIAL = `<!DOCTYPE html><html><head><title>Visszaváltó kvíz</title></head><body>
+<div class="task"><p>Mi a tört?</p><textarea id="t1"></textarea></div>
+<button id="e80" onclick="document.getElementById('quiz-result').textContent='Eredmény: 80% (Jó)'">✅ Kiértékelés A</button>
+<button id="e90" onclick="document.getElementById('quiz-result').textContent='Eredmény: 90% (Jeles)'">✅ Kiértékelés B</button>
+<div id="quiz-result"></div>
+</body></html>`;
+
+test("review #281: utolsó állapot eredményhelyenként, válasz-pillanatkép, korlátozott újrapróba hibánál, kilépés 1,5 mp-en belül, kliensazonosító", async ({ page }) => {
+  // 1. küldés 502, a többi 200
+  const { posts } = await open(page, "regi-visszavalto", FLIP_MATERIAL, n => (n === 1 ? 502 : 200));
+  await page.fill("#t1", "Első válasz");
+  for (const id of ["#e80", "#e90", "#e80"]) { await page.click(id); await page.clock.runFor(1600); }
+  await page.fill("#t1", "Később átírt válasz"); // a pontszám után átírt szöveg nem kerül a levélbe
+  await page.clock.runFor(30_000);
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
+  expect(posts[0].body).toContain("Eredmény: 80% (Jó)");
+  expect(posts[0].body).not.toContain("90%");
+  expect(posts[0].body).toContain("→ Első válasz");
+  expect(posts[0].body).not.toContain("Később átírt");
+  expect((posts[0] as Post & { clientId?: string }).clientId).toMatch(/^[0-9a-f]{24}$/);
+  // a 502 után ugyanaz a pillanatkép újra megy
+  await page.clock.runFor(31_000);
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(2);
+  expect(posts[1].body).toBe(posts[0].body);
+
+  // kilépés 1,5 mp-en belül a kiértékelés után: a függő beolvasás lefut és azonnal küld
+  await page.click("#e90");
+  await page.clock.runFor(200);
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(3);
+  expect(posts[2].body).toContain("Eredmény: 90% (Jeles)");
+});

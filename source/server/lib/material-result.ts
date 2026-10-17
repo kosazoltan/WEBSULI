@@ -15,9 +15,12 @@ export const MAX_BODY_LENGTH = 5000;
 export const MAX_MATERIAL_ID_LENGTH = 64;
 const AUTO_SUFFIX = ' — automatikus';
 
-/** Ismétlésvédelem kulcsa: azonos anyag + kliens + törzs 10 percen belül csak egyszer küld. */
+/**
+ * Ismétlésvédelem kulcsa: azonos anyag + kliens + törzs 10 percen belül csak egyszer küld. A kliens az oldalbetöltésenkénti
+ * `clientId` (review #281: egy iskolai NAT mögötti két tanuló azonos eredménye nem duplikátum); hiányában az IP.
+ */
 export function materialResultDedupKey(payload: MaterialResultPayload, clientIp: string): string {
-  return createHash('sha256').update(`${payload.materialId}|${clientIp}|${payload.subject}|${payload.body}`).digest('hex');
+  return createHash('sha256').update(`${payload.materialId}|${clientIp}|${payload.clientId ?? ''}|${payload.subject}|${payload.body}`).digest('hex');
 }
 
 export interface MaterialResultPayload {
@@ -26,6 +29,8 @@ export interface MaterialResultPayload {
   body: string;
   /** Régi anyag automatikus beolvasása (docs/specs/2026-10-17-regi-anyag-eredmeny.md) — a tárgyban jelölve. */
   auto?: boolean;
+  /** Oldalbetöltésenkénti véletlen azonosító (nem személyes adat) — csak az ismétlésvédelemhez. */
+  clientId?: string;
 }
 
 export type MaterialResultValidation =
@@ -61,7 +66,10 @@ export function normalizeMaterialResult(raw: unknown): MaterialResultValidation 
   if (r.auto !== undefined && typeof r.auto !== 'boolean') {
     return { ok: false, error: 'Érvénytelen jelölés' };
   }
-  return { ok: true, value: { materialId, subject, body, ...(r.auto ? { auto: true } : {}) } };
+  if (r.clientId !== undefined && (typeof r.clientId !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(r.clientId))) {
+    return { ok: false, error: 'Érvénytelen kliensazonosító' };
+  }
+  return { ok: true, value: { materialId, subject, body, ...(r.auto ? { auto: true } : {}), ...(typeof r.clientId === 'string' ? { clientId: r.clientId } : {}) } };
 }
 
 /** ADMIN_EMAILS (vesszővel elválasztva) vagy ADMIN_EMAIL → egyedi, érvényes címek. */

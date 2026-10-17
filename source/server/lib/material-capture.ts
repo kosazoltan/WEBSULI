@@ -92,20 +92,31 @@ export const MATERIAL_CAPTURE_SCRIPT = `
           setTimeout(function () { if (el.parentNode) { el.parentNode.removeChild(el); } }, 4500);
         } catch (e) { /* a visszajelzés nem kritikus */ }
       }
+      // Oldalbetöltésenkénti kliensazonosító (review #281): az egy iskolai NAT mögötti tanulók azonos eredménye sem „duplikátum”,
+      // az ugyanazon oldalbetöltés ismétlése viszont igen.
+      var clientId = (function () {
+        try {
+          var a = new Uint8Array(12);
+          window.crypto.getRandomValues(a);
+          return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+        } catch (e) { return (String(Math.random()).slice(2) + String(Date.now())).slice(0, 32); }
+      })();
+      window.__websuliClientId = clientId;
       function post(subject, body, auto) {
         if (!materialId || typeof fetch !== 'function') { return Promise.resolve(false); }
         var key = hash(subject + '\\n' + body);
         if (sent[key]) { return Promise.resolve(true); }
         if (auto) { if (autoCount >= MAX_AUTO) { return Promise.resolve(false); } autoCount++; }
         sent[key] = true;
+        function failed() { delete sent[key]; if (auto) { autoCount--; } return false; }
         return fetch('/api/material-result', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'omit',
           keepalive: true,
-          body: JSON.stringify({ materialId: materialId, subject: clip(subject, 180), body: clip(body, 4900), auto: !!auto })
-        }).then(function (r) { if (!r.ok) { delete sent[key]; } return r.ok; })
-          .catch(function () { delete sent[key]; return false; });
+          body: JSON.stringify({ materialId: materialId, subject: clip(subject, 180), body: clip(body, 4900), auto: !!auto, clientId: clientId })
+        }).then(function (r) { return r.ok ? true : failed(); })
+          .catch(failed);
       }
 
       // ---- 1. mailto: elfogása ------------------------------------------------------------------------------------
@@ -169,7 +180,6 @@ export const MATERIAL_CAPTURE_SCRIPT = `
       var RESULT_WORD = /eredm|pontsz|jegy|osztályzat|osztalyzat|score|jeles|közepes|elégséges|elégtelen/i;
       var EVAL_CLICK = /[ée]rt[ée]kel|ellen[őo]r|eredm[ée]ny|bek[üu]ld|bead|befejez|k[ée]sz|v[ée]ge|submit|check|evaluat|finish|result|score|grade/i;
       var SKIP_TAG = /^(SCRIPT|STYLE|TEXTAREA|INPUT|BUTTON|SELECT|OPTION|NOSCRIPT|TEMPLATE)$/;
-      var seen = {};
 
       function textOf(el) { return String(el.innerText || el.textContent || '').replace(/[ \\t\\r]+/g, ' ').replace(/\\s*\\n\\s*/g, '\\n').replace(/\\n{2,}/g, '\\n').trim(); }
       function nameOf(el) { return (el.id || '') + ' ' + (typeof el.className === 'string' ? el.className : ''); }
@@ -241,23 +251,29 @@ export const MATERIAL_CAPTURE_SCRIPT = `
       // Rendezett beküldés: az új eredmény a „pending”-be kerül (eredményhelyenként a legfrissebb), és az utolsó új eredmény után
       // SETTLE_MS nyugalommal, vagy az oldal elhagyásakor (pagehide / rejtett lap) EGY levélben megy ki. Így a feladatonkénti
       // „Ellenőrzés” futó statisztikája (pl. „Megoldott feladatok: 1 / 15”) nem küld minden lépésnél külön levelet.
+      // Review #281: eredményhelyenként az UTOLSÓ látott állapotot vetjük össze (80% → 90% → 80% esetén a 80% megy); a tanuló neve
+      // és válaszai a pontszámmal EGY pillanatban rögzülnek; a sikertelen automatikus küldés korlátozottan újrapróbál.
       var SETTLE_MS = 30000;
-      var pending = null, settleTimer = null;
+      var RETRY_MAX = 3;
+      var pending = null, settleTimer = null, lastBySlot = {};
       function scan(mode) {
-        var found = candidates(), fresh = 0, i, t, k, slot;
+        var found = candidates(), fresh = 0, i, t, slot;
         for (i = 0; i < found.length; i++) {
           t = clip(textOf(found[i]), 1500);
-          k = hash(t);
-          if (seen[k]) { continue; }
-          seen[k] = true;
-          if (mode === 'baseline' || !(mode === 'eval' || GRADE.test(t))) { continue; }
           slot = (found[i].id || nameOf(found[i]).trim() || 'blokk') + '#' + i;
-          if (!pending) { pending = { order: [], texts: {} }; }
+          if (lastBySlot[slot] === t) { continue; }
+          lastBySlot[slot] = t;
+          if (mode === 'baseline' || !(mode === 'eval' || GRADE.test(t))) { continue; }
+          if (!pending) { pending = { order: [], texts: {}, attempts: 0 }; }
           if (!pending.texts.hasOwnProperty(slot)) { pending.order.push(slot); }
           pending.texts[slot] = t;
           fresh++;
         }
         if (fresh) {
+          // pillanatkép: a levélben a pontszámhoz tartozó név és válaszok szerepelnek, nem a későbbi átírások
+          pending.name = learnerName();
+          pending.answers = answers();
+          pending.picks = document.querySelectorAll('input[type="radio"]:checked').length;
           if (settleTimer) { clearTimeout(settleTimer); }
           settleTimer = setTimeout(flushSafely, SETTLE_MS);
         }
@@ -271,24 +287,38 @@ export const MATERIAL_CAPTURE_SCRIPT = `
         var texts = [], i;
         for (i = 0; i < p.order.length; i++) { texts.push(p.texts[p.order[i]]); }
         var title = clip((document.title || (document.querySelector('h1') || {}).textContent || 'Tananyag').trim(), 120);
-        var name = learnerName();
-        var ans = answers();
-        var picks = document.querySelectorAll('input[type="radio"]:checked').length;
         var body = 'Automatikusan beolvasott eredmény (a tanuló kiértékelte a tananyagot).\\n' +
-          (name ? 'Tanuló: ' + name + '\\n' : '') + '\\nEredmény:\\n' + texts.join('\\n---\\n') +
-          (picks ? '\\n\\nBejelölt választások: ' + picks : '') +
-          (ans.length ? '\\n\\nSzöveges válaszok:\\n' + ans.join('\\n') : '');
-        post(title + ' — eredmény', clip(body, 4900), true);
+          (p.name ? 'Tanuló: ' + p.name + '\\n' : '') + '\\nEredmény:\\n' + texts.join('\\n---\\n') +
+          (p.picks ? '\\n\\nBejelölt választások: ' + p.picks : '') +
+          (p.answers.length ? '\\n\\nSzöveges válaszok:\\n' + p.answers.join('\\n') : '');
+        post(title + ' — eredmény', clip(body, 4900), true).then(function (ok) {
+          // sikertelen küldés: a pillanatkép visszakerül (ha közben nem jött újabb eredmény), korlátozott újrapróbával
+          if (ok || pending || p.attempts + 1 >= RETRY_MAX) { return; }
+          p.attempts++;
+          pending = p;
+          settleTimer = setTimeout(flushSafely, SETTLE_MS);
+        });
       }
       function flushSafely() { try { flush(); } catch (e) { /* a beolvasás nem zavarhatja a tananyagot */ } }
-      window.addEventListener('pagehide', flushSafely);
-      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') { flushSafely(); } });
+      var timer = null, pendingEval = false;
+      // Kilépéskor (pagehide / rejtett lap) előbb a még időzített beolvasás fut le a megőrzött móddal, utána a küldés.
+      function leave() {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+          var mode = pendingEval ? 'eval' : 'other';
+          pendingEval = false;
+          try { scan(mode); } catch (e) { /* lásd fent */ }
+        }
+        flushSafely();
+      }
+      window.addEventListener('pagehide', leave);
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') { leave(); } });
       function isEvalClick(target) {
         var el = target && target.closest ? target.closest('button, input[type="button"], input[type="submit"], a, [onclick], [role="button"]') : null;
         if (!el) { return false; }
         return EVAL_CLICK.test((el.value || el.textContent || '') + ' ' + (el.getAttribute('onclick') || '') + ' ' + (el.id || ''));
       }
-      var timer = null, pendingEval = false;
       document.addEventListener('click', function (ev) {
         pendingEval = pendingEval || isEvalClick(ev.target);
         if (timer) { clearTimeout(timer); }

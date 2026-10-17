@@ -275,6 +275,7 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
         window.__websuliExplicitResult = true;
         var payload = {
           materialId: __websuliMaterialId,
+          clientId: window.__websuliClientId || undefined,
           subject: String(subject || 'Tananyag eredmény'),
           body: String(body || '')
         };

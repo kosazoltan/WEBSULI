@@ -130,3 +130,13 @@ test("review #281: címzettenkénti kézbesítés — részleges hibánál a kim
   const ok = await deliverToRecipients({ ...base, baseKey: "k2", dedup: d2, send: async () => true });
   assert.deepEqual(ok, { duplicate: false, delivered: 2, failed: [] });
 });
+
+test("review #281: a clientId opcionális, formátumellenőrzött; két tanuló ugyanazon IP mögött azonos eredménnyel különböző kulcsot kap", () => {
+  assert.equal(normalizeMaterialResult({ materialId: "abc-1", subject: "K", body: "80%", clientId: "a1b2c3d4e5f6" }).ok, true);
+  assert.equal(normalizeMaterialResult({ materialId: "abc-1", subject: "K", body: "80%", clientId: "x" }).ok, false);
+  assert.equal(normalizeMaterialResult({ materialId: "abc-1", subject: "K", body: "80%", clientId: "<script>alert(1)</script>" }).ok, false);
+  const a = { materialId: "abc-1", subject: "K", body: "80%", clientId: "aaaaaaaa1111" };
+  const b = { ...a, clientId: "bbbbbbbb2222" };
+  assert.notEqual(materialResultDedupKey(a, "1.1.1.1"), materialResultDedupKey(b, "1.1.1.1"));
+  assert.equal(materialResultDedupKey(a, "1.1.1.1"), materialResultDedupKey({ ...a }, "1.1.1.1"), "ugyanaz az oldalbetöltés ismétlése duplikátum marad");
+});
