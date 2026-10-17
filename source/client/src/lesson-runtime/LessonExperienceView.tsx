@@ -52,8 +52,6 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   const quizState = useExperienceRound(e.quiz, quizRound, `${storageKey}:quiz`);
   // Tanulói eredmény e-mailben (2026-10-17-eredmeny-email): a kiértékelés után a háttérben, egyszer. A szerveres (bejelentkezett)
   // kvízt a szerver maga küldi; a helyi kvíz csak vendégnél él, ezért annak lezárása küld.
-  useResultReport(lessonId, "tasks", taskState.round, storageKey);
-  useResultReport(lessonId, "quiz", quizState.round, storageKey);
   useEffect(() => {
     if (tab === "tasks") taskState.setRound(old => old.startedAt ? old : { ...old, startedAt: Date.now() });
     if (tab === "quiz") quizState.setRound(old => old.startedAt ? old : { ...old, startedAt: Date.now() });
@@ -65,6 +63,12 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   const arbiter = useArbiterVerdicts(`${storageKey}:tasks:arbiter:${taskState.round.startedAt}:${taskState.round.finishedAt ?? 0}`, arbiterSource, !!taskState.round.finishedAt, taskChecks);
   const finalVerdict = (id: string) => { const check = taskChecks.find(c => c.id === id)!; return bestVerdict(check.det, arbiter.verdicts[id]); };
   const taskPoints = tasks.reduce((sum, t) => sum + finalVerdict(t.id).score, 0);
+  // Tanulói eredmény e-mailben (2026-10-17-eredmeny-email): a kiértékelés után a háttérben, egyszer. Review #280: a feladatok csak akkor,
+  // ha minden döntőbíróra jogosult válasz ítéletet kapott (a szerver addigra a gyorsítótárában tartja). A szerveres (bejelentkezett)
+  // kvízt a szerver maga küldi; a helyi kvíz csak vendégnél él, ezért annak lezárása küld.
+  const arbiterSettled = !arbiterSource || taskChecks.every(c => c.det.state === "ok" || !c.answer.trim() || !!arbiter.verdicts[c.id]);
+  useResultReport(lessonId, "tasks", taskState.round, storageKey, arbiterSettled);
+  useResultReport(lessonId, "quiz", quizState.round, storageKey);
   const quizPoints = quiz.filter(q => quizState.round.picks[q.id] === q.correctIndex).length;
   useEffect(() => () => { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }, [tab]);
   const seconds = (round: typeof taskState.round) => Math.max(0, Math.floor(((round.finishedAt ?? Date.now()) - round.startedAt) / 1000));

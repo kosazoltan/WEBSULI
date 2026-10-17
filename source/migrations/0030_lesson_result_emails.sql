@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS lesson_result_emails (
   kind varchar(8) NOT NULL CHECK (kind IN ('tasks', 'quiz')),
   round_key char(64) NOT NULL,
   percent integer NOT NULL,
-  sent integer NOT NULL DEFAULT 0,
+  -- Review #280: címzettenkénti kézbesítés — a meghiúsult címzett később pótolható (nem vész el a „mindkét admin” követelmény).
+  delivered text[] NOT NULL DEFAULT '{}',
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS lesson_result_emails_round_unique ON lesson_result_emails(lesson_id, kind, round_key);

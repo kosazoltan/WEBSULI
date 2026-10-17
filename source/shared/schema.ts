@@ -1137,7 +1137,8 @@ export const lessonResultEmails = pgTable(
     kind: varchar("kind", { length: 8 }).notNull().$type<"tasks" | "quiz">(),
     roundKey: char("round_key", { length: 64 }).notNull(),
     percent: integer("percent").notNull(),
-    sent: integer("sent").notNull().default(0),
+    /** Review #280: címzettenkénti kézbesítés (a hiányzó címzett pótolható). */
+    delivered: text("delivered").array().notNull().default(sql`'{}'`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({ roundUnique: uniqueIndex("lesson_result_emails_round_unique").on(table.lessonId, table.kind, table.roundKey) }),

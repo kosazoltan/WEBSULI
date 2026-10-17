@@ -51,7 +51,7 @@ test("valódi DB: egy kör egyszer küld, mindkét adminnak; a második azonos k
   assert.deepEqual(again, { sent: 0, duplicate: true });
   assert.equal(sent.length, 2);
   const rows = await db.select().from(lessonResultEmails).where(eq(lessonResultEmails.lessonId, "result-published"));
-  assert.equal(rows.length, 1); assert.equal(rows[0].sent, 2); assert.equal(rows[0].percent, 100);
+  assert.equal(rows.length, 1); assert.deepEqual([...rows[0].delivered].sort(), ["admin-a@example.test", "admin-b@example.test"]); assert.equal(rows[0].percent, 100);
 });
 
 test("valódi HTTP: a feladatok beküldése 202, a szerver újrapontoz és a háttérben küld; publikálatlan lecke 404, hibás kérés 400", async () => {
@@ -82,4 +82,21 @@ test("valódi DB: a bejelentkezett tanuló szerveres kvíze a kör pillanatkép�
   assert.equal(sent.length, 2);
   assert.match(sent[0].subject, /— Kvíz — 0% \(Elégtelen\)/);
   assert.match(sent[0].html, /helyes: /);
+});
+
+test("valódi DB (review #280): a meghiúsult címzett pótolható — a második hívás csak neki küld, a kézbesítettnek nem", async () => {
+  sent.length = 0;
+  let failB = true;
+  setResultSender(async (subject, html, to) => { if (to === "admin-b@example.test" && failB) throw new Error("átmeneti hiba"); sent.push({ subject, html, to }); });
+  const q = lesson.experience!.quiz;
+  const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+  const first = await sendLessonResult({ lessonId: "result-published", roundKey: roundKeyOf("t", "quiz", "round-retry"), learner: "Vendég tanuló", graded }, false);
+  assert.deepEqual(first, { sent: 1, duplicate: false });
+  failB = false;
+  const second = await sendLessonResult({ lessonId: "result-published", roundKey: roundKeyOf("t", "quiz", "round-retry"), learner: "Vendég tanuló", graded }, false);
+  assert.deepEqual(second, { sent: 1, duplicate: false });
+  assert.deepEqual(sent.map(s => s.to), ["admin-a@example.test", "admin-b@example.test"]);
+  const third = await sendLessonResult({ lessonId: "result-published", roundKey: roundKeyOf("t", "quiz", "round-retry"), learner: "Vendég tanuló", graded }, false);
+  assert.deepEqual(third, { sent: 0, duplicate: true });
+  setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); });
 });

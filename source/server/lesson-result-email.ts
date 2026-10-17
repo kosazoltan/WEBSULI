@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { Router, type Request, type Response } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
 import { lessonSchema } from "../shared/lesson-schema";
@@ -31,25 +31,35 @@ async function send(subject: string, html: string, to: string) {
 
 export const roundKeyOf = (...parts: string[]) => createHash("sha256").update(parts.join("|")).digest("hex");
 
-/** Küldés a címzettlistának; ugyanaz a kör (lecke, fajta, roundKey) csak egyszer. Sosem dob — a hiba a naplóba megy. */
-export async function sendLessonResult(input: { lessonId: string; roundKey: string; learner: string; graded: GradedTasks | GradedQuiz }): Promise<{ sent: number; duplicate: boolean }> {
+/**
+ * Küldés a címzettlistának; körönként (lecke, fajta, roundKey) egy levél címzettenként. Review #280: a kézbesítés címzettenként
+ * nyilvántartott (`delivered`) — a meghiúsult címzett a következő azonos hívással és egy 60 s-os automatikus újrapróbálással pótolódik,
+ * a már kézbesített nem kap másodikat. Sosem dob — a hiba a naplóba megy.
+ */
+export async function sendLessonResult(input: { lessonId: string; roundKey: string; learner: string; graded: GradedTasks | GradedQuiz }, retry = true): Promise<{ sent: number; duplicate: boolean }> {
   try {
     const [row] = await db.select({ json: lessons.json, htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, input.lessonId));
     const lesson = row ? lessonSchema.safeParse(row.json) : null;
     if (!row || !lesson?.success) return { sent: 0, duplicate: false };
-    const [claimed] = await db.insert(lessonResultEmails)
+    await db.insert(lessonResultEmails)
       .values({ lessonId: input.lessonId, kind: input.graded.kind, roundKey: input.roundKey, percent: input.graded.summary.percent })
-      .onConflictDoNothing().returning({ id: lessonResultEmails.id });
-    if (!claimed) return { sent: 0, duplicate: true };
+      .onConflictDoNothing();
+    const [claim] = await db.select({ id: lessonResultEmails.id, delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
+      .where(and(eq(lessonResultEmails.lessonId, input.lessonId), eq(lessonResultEmails.kind, input.graded.kind), eq(lessonResultEmails.roundKey, input.roundKey)));
     const recipients = resolveAdminRecipients({ ADMIN_EMAILS: process.env.ADMIN_EMAILS, ADMIN_EMAIL: process.env.ADMIN_EMAIL });
     if (!recipients.length) { logger.warn("[LESSON-RESULT] nincs címzett (ADMIN_EMAILS)"); return { sent: 0, duplicate: false }; }
+    const missing = recipients.filter(r => !claim.delivered.includes(r));
+    if (!missing.length) return { sent: 0, duplicate: true };
     const mail = buildResultEmail({ lessonTitle: lesson.data.title, classroom: lesson.data.classroom, learner: input.learner,
       url: row.htmlFileId ? getMaterialPreviewUrl(row.htmlFileId) : "", graded: input.graded });
-    const results = await Promise.allSettled(recipients.map(to => send(mail.subject, mail.html, to)));
-    const sent = results.filter(r => r.status === "fulfilled").length;
-    await db.update(lessonResultEmails).set({ sent }).where(eq(lessonResultEmails.id, claimed.id));
-    if (sent < recipients.length) logger.warn(`[LESSON-RESULT] ${recipients.length - sent} címzettnek nem ment el.`);
-    return { sent, duplicate: false };
+    const results = await Promise.allSettled(missing.map(to => send(mail.subject, mail.html, to)));
+    const ok = missing.filter((_, i) => results[i].status === "fulfilled");
+    if (ok.length) await db.update(lessonResultEmails).set({ delivered: [...new Set([...claim.delivered, ...ok])] }).where(eq(lessonResultEmails.id, claim.id));
+    if (ok.length < missing.length) {
+      logger.warn(`[LESSON-RESULT] ${missing.length - ok.length} címzettnek nem ment el${retry ? " — 60 s múlva újrapróbálja" : ""}.`);
+      if (retry) setTimeout(() => { void sendLessonResult(input, false); }, 60_000).unref?.();
+    }
+    return { sent: ok.length, duplicate: false };
   } catch (error) {
     logger.error("[LESSON-RESULT] a küldés nem sikerült:", error);
     return { sent: 0, duplicate: false };
@@ -67,7 +77,9 @@ export const resultLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, st
 
 /** POST /api/lessons/:lessonId/results — a feladatok / a helyi kvíz befejezésekor (vendég is). Mindig 202, ha a kérés érvényes. */
 export const lessonResultsRouter = Router();
-lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Request, res: Response) => {
+lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  // Review #280: az Express 4 nem továbbítja az async hibát — a handler maga adja át (next).
+  try {
   const parsed = resultRequestSchema.safeParse(req.body);
   if (!parsed.success || !/^[A-Za-z0-9_-]{1,64}$/.test(req.params.lessonId)) return res.status(400).json({ message: "Érvénytelen beküldés." });
   const [row] = await db.select({ json: lessons.json, publishedAt: lessons.publishedAt }).from(lessons).where(eq(lessons.id, req.params.lessonId));
@@ -93,8 +105,10 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
   }
   const who = userId ?? `guest:${body.fingerprint ?? req.ip ?? "?"}`;
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
-  void learnerName(userId).then(learner => sendLessonResult({ lessonId: req.params.lessonId, roundKey: roundKeyOf(who, body.kind, body.roundId), learner, graded }));
+  void learnerName(userId).then(learner => sendLessonResult({ lessonId: req.params.lessonId, roundKey: roundKeyOf(who, body.kind, body.roundId), learner, graded }))
+    .catch(error => logger.error("[LESSON-RESULT] háttérküldés hiba:", error));
   return res.status(202).json({ queued: true });
+  } catch (error) { next(error); }
 });
 
 /**
@@ -103,6 +117,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
  */
 export async function sendPracticeResult(input: { userId: string; attemptId: string; lessonId: string; questions: AttemptQuestion[]; answers: Record<string, AttemptAnswer> }) {
   const quiz = input.questions.map(q => ({ id: q.id, question: q.prompt, options: q.options, correctIndex: q.correctIndex }));
-  const picks = Object.fromEntries(input.questions.filter(q => input.answers[q.id]).map(q => [q.id, input.answers[q.id].pickedIndex]));
+  // Review #280: a kör minden kérdése számít; a megválaszolatlan -1 (nulla pont, a hibásak között).
+  const picks = Object.fromEntries(input.questions.map(q => [q.id, input.answers[q.id]?.pickedIndex ?? -1]));
   await sendLessonResult({ lessonId: input.lessonId, roundKey: roundKeyOf("practice", input.attemptId), learner: await learnerName(input.userId), graded: gradeQuiz(quiz, picks) });
 }

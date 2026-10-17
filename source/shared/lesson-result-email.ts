@@ -8,8 +8,8 @@ import { evaluateOpenAnswer, scoreSummary, type AnswerScore } from "./lesson-exp
 const roundId = z.string().regex(/^[a-z0-9-]{4,64}$/);
 const id = z.string().min(1).max(80);
 export const resultRequestSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("tasks"), roundId, answers: z.record(id, z.string().max(2000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional() }).strict(),
-  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(0).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional() }).strict(),
+  z.object({ kind: z.literal("tasks"), roundId, answers: z.record(id, z.string().max(4000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional() }).strict(),
+  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional() }).strict(),
 ]);
 export type ResultRequest = z.infer<typeof resultRequestSchema>;
 
@@ -35,9 +35,13 @@ export function gradeTasks(tasks: readonly OpenTask[], answers: Record<string, s
   return { kind: "tasks", rows, summary: scoreSummary(rows.reduce((s, r) => s + r.score, 0), rows.length) };
 }
 
+/**
+ * A kör ÖSSZES kérdését kapja; a kihagyott kérdés jele -1 (review #280: különben 1 helyes + 24 kihagyás 100%-ot adna a képernyő 4%-a
+ * helyett). A kihagyás nulla pont, és a hibás kérdések között „nincs válasz”-ként szerepel.
+ */
 export function gradeQuiz(quiz: readonly QuizItem[], picks: Record<string, number>): GradedQuiz {
   const asked = Object.entries(picks).map(([qid, pick]) => ({ item: quiz.find(q => q.id === qid), pick })).filter((x): x is { item: QuizItem; pick: number } => !!x.item);
-  const wrong = asked.filter(x => x.pick !== x.item.correctIndex).map(x => ({ question: x.item.question, picked: x.item.options[x.pick] ?? null, correct: x.item.options[x.item.correctIndex] }));
+  const wrong = asked.filter(x => x.pick !== x.item.correctIndex).map(x => ({ question: x.item.question, picked: x.pick >= 0 ? x.item.options[x.pick] ?? null : null, correct: x.item.options[x.item.correctIndex] }));
   return { kind: "quiz", wrong, summary: scoreSummary(asked.length - wrong.length, asked.length) };
 }
 

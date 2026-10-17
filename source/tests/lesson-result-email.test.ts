@@ -10,7 +10,9 @@ test("a beküldés sémája: csak a két ismert alak; ismeretlen mező, túl hos
   assert.ok(resultRequestSchema.safeParse({ kind: "tasks", roundId: "round-abc", answers: { t1: "válasz" } }).success);
   assert.ok(resultRequestSchema.safeParse({ kind: "quiz", roundId: "round-abc", picks: { q1: 2 }, fingerprint: "fp" }).success);
   assert.equal(resultRequestSchema.safeParse({ kind: "tasks", roundId: "round-abc", answers: {}, score: 100 }).success, false, "a kliens pontszámát nem fogadjuk");
-  assert.equal(resultRequestSchema.safeParse({ kind: "tasks", roundId: "round-abc", answers: { t1: "x".repeat(2001) } }).success, false);
+  assert.ok(resultRequestSchema.safeParse({ kind: "tasks", roundId: "round-abc", answers: { t1: "x".repeat(4000) } }).success, "review #280: a felület 4000 karaktert enged");
+  assert.equal(resultRequestSchema.safeParse({ kind: "tasks", roundId: "round-abc", answers: { t1: "x".repeat(4001) } }).success, false);
+  assert.ok(resultRequestSchema.safeParse({ kind: "quiz", roundId: "round-abc", picks: { q1: -1 } }).success, "kihagyott kérdés: -1");
   assert.equal(resultRequestSchema.safeParse({ kind: "quiz", roundId: "round-abc", picks: { q1: 9 } }).success, false);
   assert.equal(resultRequestSchema.safeParse({ kind: "quiz", roundId: "../x", picks: {} }).success, false);
 });
@@ -44,3 +46,15 @@ test("a levél: tárgy a lecke címével, részével és százalékkal; minden t
   assert.match(mail.html, /Törtek &lt;b&gt;/);
   assert.match(mail.html, /Vendég tanuló/);
 });
+
+test("review #280: a kihagyott kvízkérdés (-1) nulla pont és a hibásak között szerepel — 1 helyes + 24 kihagyás = 4%", () => {
+  const quiz = e.quiz.slice(0, 25);
+  const picks = Object.fromEntries(quiz.map((q, i) => [q.id, i === 0 ? q.correctIndex : -1]));
+  const g = gradeQuiz(quiz, picks);
+  assert.equal(g.summary.total, quiz.length);
+  assert.equal(g.summary.points, 1);
+  assert.equal(g.summary.percent, Math.round(100 / quiz.length));
+  assert.equal(g.wrong.length, quiz.length - 1);
+  assert.equal(g.wrong[0].picked, null);
+});
+
