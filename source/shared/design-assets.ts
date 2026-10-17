@@ -115,3 +115,13 @@ export function resolveStoredArt(stored: StoredLessonArt | undefined, band: (typ
   const subjectIcon = icon && (icon.id.endsWith(`-${band}`) || (!BAND_SUFFIX.test(icon.id) && icon.id.endsWith("-young") === young)) ? icon : undefined;
   return { ...(picture.kind === "cover" ? { cover: picture } : { hero: picture }), ...(mascot ? { mascot } : {}), ...(subjectIcon ? { subjectIcon } : {}) };
 }
+
+/**
+ * Leckekészítő stúdió (docs/specs/2026-10-17-studio-ui.md): a tárolt arculat megjelenítendő összefoglalója — a stúdió a kész
+ * leckénél ebből mutatja a sávot, az ikont, a képet, a kabalát és a témakört. `legacy`: régi, tárolt arculat nélküli lecke.
+ */
+export type ArtSummary = { band: (typeof DESIGN_ASSET_BANDS)[number]; legacy: boolean; art: LessonArt | null; topic?: string };
+export function artSummary(stored: StoredLessonArt | undefined, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): ArtSummary {
+  const art = resolveStoredArt(stored, band, catalog);
+  return { band, legacy: !art, art, ...(stored?.topic ? { topic: stored.topic } : {}) };
+}

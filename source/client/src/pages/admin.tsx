@@ -663,7 +663,7 @@ export default function Admin() {
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-1 h-7 px-2 text-xs border-orange-300 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30"
+                className="gap-1 h-11 min-w-11 lg:h-7 lg:min-w-0 px-2 text-xs border-orange-300 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30"
                 data-testid="button-back-to-home"
               >
                 <ArrowLeft className="h-3 w-3" />
@@ -676,7 +676,7 @@ export default function Admin() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1 h-7 px-2 text-xs border-orange-300 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30"
+              className="gap-1 h-11 min-w-11 lg:h-7 lg:min-w-0 px-2 text-xs border-orange-300 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30"
               data-testid="button-download-source"
               onClick={async () => {
                 try {
@@ -720,7 +720,7 @@ export default function Admin() {
               <span className="hidden sm:inline">Forrás</span>
             </Button>
             <Link href="/admin/help">
-              <Button variant="outline" size="sm" className="gap-1 h-7 px-2 text-xs border-orange-300 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30" data-testid="button-help">
+              <Button variant="outline" size="sm" className="gap-1 h-11 min-w-11 lg:h-7 lg:min-w-0 px-2 text-xs border-orange-300 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30" data-testid="button-help">
                 <HelpCircle className="h-3 w-3" />
               </Button>
             </Link>
@@ -730,64 +730,64 @@ export default function Admin() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className={`flex flex-wrap gap-0.5 h-auto p-0.5 mb-2 bg-orange-100/50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 ${isMobile ? 'hidden' : ''}`}>
-            <TabsTrigger value="files" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-files">
+            <TabsTrigger value="files" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-files">
               <FolderOpen className="h-3 w-3" />
               Fájlok
             </TabsTrigger>
-            <TabsTrigger value="users" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-users">
+            <TabsTrigger value="users" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-users">
               <Users className="h-3 w-3" />
               Felhasználók
             </TabsTrigger>
-            <TabsTrigger value="enhanced" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-enhanced">
+            <TabsTrigger value="enhanced" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-enhanced">
               <Wand2 className="h-3 w-3" />
               AI
             </TabsTrigger>
-            <TabsTrigger value="pdf-upload" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-pdf-upload">
+            <TabsTrigger value="pdf-upload" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-pdf-upload">
               <FileText className="h-3 w-3" />
               PDF
             </TabsTrigger>
-            <TabsTrigger value="tags" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-tags">
+            <TabsTrigger value="tags" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-tags">
               <Tag className="h-3 w-3" />
               Címkék
             </TabsTrigger>
-            <TabsTrigger value="backup" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-backup">
+            <TabsTrigger value="backup" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-backup">
               <Database className="h-3 w-3" />
               Másolat
             </TabsTrigger>
-            <TabsTrigger value="material-views" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-material-views">
+            <TabsTrigger value="material-views" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-material-views">
               <Eye className="h-3 w-3" />
               Nézetek
             </TabsTrigger>
-            <TabsTrigger value="emails" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-emails">
+            <TabsTrigger value="emails" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-emails">
               <Mail className="h-3 w-3" />
               E-mail
             </TabsTrigger>
-            <TabsTrigger value="email-debug" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-cyan-500 data-[state=active]:text-white text-cyan-700 dark:text-cyan-400" data-testid="tab-email-debug">
+            <TabsTrigger value="email-debug" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-cyan-700 data-[state=active]:text-white text-cyan-700 dark:text-cyan-400" data-testid="tab-email-debug">
               <Activity className="h-3 w-3" />
               Email diag
             </TabsTrigger>
-            <TabsTrigger value="parent-dashboard" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-700 dark:text-purple-400" data-testid="tab-parent-dashboard">
+            <TabsTrigger value="parent-dashboard" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-purple-700 data-[state=active]:text-white text-purple-700 dark:text-purple-400" data-testid="tab-parent-dashboard">
               <GraduationCap className="h-3 w-3" />
               Szülő-dash
             </TabsTrigger>
-            <TabsTrigger value="lesson-studio" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white text-emerald-700 dark:text-emerald-400" data-testid="tab-lesson-studio">
+            <TabsTrigger value="lesson-studio" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-emerald-700 data-[state=active]:text-white text-emerald-700 dark:text-emerald-400" data-testid="tab-lesson-studio">
               <Sparkles className="h-3 w-3" />
               Tananyag készítése
             </TabsTrigger>
-            <TabsTrigger value="workflows" className="flex items-center gap-1 text-[11px] h-6 px-2" data-testid="tab-workflows">Futások</TabsTrigger>
-            <TabsTrigger value="database" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-database">
+            <TabsTrigger value="workflows" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2" data-testid="tab-workflows">Futások</TabsTrigger>
+            <TabsTrigger value="database" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-database">
               <Database className="h-3 w-3" />
               Adatbázis
             </TabsTrigger>
-            <TabsTrigger value="improve-materials" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-600 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-improve-materials">
+            <TabsTrigger value="improve-materials" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-700 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-improve-materials">
               <Sparkles className="h-3 w-3" />
               Okosítás
             </TabsTrigger>
-            <TabsTrigger value="lesson-repair" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-600 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-lesson-repair">
+            <TabsTrigger value="lesson-repair" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-700 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-lesson-repair">
               <Wrench className="h-3 w-3" />
               Tananyagjavító
             </TabsTrigger>
-            <TabsTrigger value="improvement-backups" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-600 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-improvement-backups">
+            <TabsTrigger value="improvement-backups" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-700 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-improvement-backups">
               <Database className="h-3 w-3" />
               Okos mentések
             </TabsTrigger>
