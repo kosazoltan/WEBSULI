@@ -125,3 +125,39 @@ for (const t of THEMES) {
     }
   });
 }
+
+// docs/specs/2026-10-17-fokuszgyuru-ketszinu.md: billentyűs fókuszban kétszínű gyűrű; a világos témán a sötét belső gyűrű,
+// a sötét 11–12. o. témán a borostyán viszi a ≥ 3:1 kontrasztot. Képernyőkép: test-results/websuli-design/focus-<id>.png.
+for (const t of [THEMES[0], THEMES[4]]) {
+  test(`billentyűs fókusz (${t.id}): kétszínű gyűrű, legalább az egyik szín ≥ 3:1 a háttérhez`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/__lesson-runtime-probe?fusion=1&classroom=${t.classroom}`);
+    await page.evaluate(() => document.fonts.ready);
+    const selected = '.fusion-tabs button[aria-selected="true"]';
+    for (let i = 0; i < 60 && !(await page.evaluate((sel) => document.activeElement?.matches(sel) ?? false, selected)); i++) await page.keyboard.press("Tab");
+    const ring = await page.evaluate((sel) => {
+      const el = document.activeElement as HTMLElement;
+      const st = getComputedStyle(el);
+      return { isSelected: el.matches(sel), focusVisible: el.matches(":focus-visible"), outlineColor: st.outlineColor, outlineWidth: st.outlineWidth,
+        outlineOffset: st.outlineOffset, boxShadow: st.boxShadow,
+        rootBg: getComputedStyle(document.querySelector("[data-ws-theme]")!).backgroundColor,
+        tabsBg: getComputedStyle(el.closest(".fusion-tabs")!).backgroundColor };
+    }, selected);
+    expect(ring.isSelected).toBe(true);
+    expect(ring.focusVisible).toBe(true);
+    expect([ring.outlineColor, ring.outlineWidth, ring.outlineOffset]).toEqual(["rgb(244, 171, 55)", "3px", "3px"]);
+    expect(ring.boxShadow).toContain("rgb(16, 35, 60) 0px 0px 0px 3px");
+    expect(ring.boxShadow).toMatch(/inset/);
+    const ratio = await page.evaluate(({ colors, backgrounds }) => {
+      const rgb = (s: string) => (s.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+      const lum = ([r, g, b]: number[]) => { const c = [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+      const cr = (a: string, b: string) => { const [x, y] = [lum(rgb(a)), lum(rgb(b))]; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      return Math.min(...backgrounds.map((bg) => Math.max(...colors.map((c) => cr(c, bg)))));
+    }, { colors: ["rgb(244, 171, 55)", "rgb(16, 35, 60)"], backgrounds: [ring.rootBg, ring.tabsBg] });
+    expect(ratio).toBeGreaterThanOrEqual(3);
+    const box = await page.locator(".fusion-tabs").boundingBox();
+    expect(box).not.toBeNull();
+    await page.screenshot({ path: `test-results/websuli-design/focus-${t.id}.png`,
+      clip: { x: Math.max(0, box!.x - 24), y: Math.max(0, box!.y - 24), width: Math.min(1440, box!.width + 48), height: box!.height + 48 } });
+  });
+}
