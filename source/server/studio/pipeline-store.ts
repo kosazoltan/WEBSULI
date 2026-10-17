@@ -10,6 +10,7 @@ import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { workflowFence, workflowSerialized } from "../workflows/engine";
 import type { Coverage, MapConcept } from "./coverage";
 import type { StudioStep } from "./pipeline";
+import { withSubjectIcon } from "../design-assets";
 
 /** Spec 2026-09-19: csak a forrásból igazolt (megtartott / szerkesztett) fogalmak taníthatók. */
 export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
@@ -208,7 +209,9 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       return result;
     },
 
-    async upsertLesson(lessonId, mapId, json) {
+    async upsertLesson(lessonId, mapId, input) {
+      // Ikonkészlet: a tantárgy és az évfolyam ekkor ismert — az ikon azonosítója az adatbázisból kerül a leckébe.
+      const json = await withSubjectIcon(input);
       if (lessonId) {
         await db.update(lessons).set({ json: json as never, updatedAt: new Date() }).where(eq(lessons.id, lessonId));
         return lessonId;

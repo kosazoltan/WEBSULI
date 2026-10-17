@@ -15,6 +15,7 @@ import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
 import { setupAuth } from "./auth";
 import { runMigrations } from "./migrate";
+import { designAssetsRouter } from "./design-assets";
 import { startSkillLearningAudit } from "./workflows/learning-worker";
 import { requestIdMiddleware } from "./middleware/request-id";
 import errorReportRouter from "./routes/error-report";
@@ -522,6 +523,13 @@ app.use((req, res, next) => {
       // Don't crash - the server can still run if tables already exist
     }
 
+    // Ikonkészlet (2026-10-17-websuli-ikonkeszlet): a jóváhagyott képek az adatbázisba. Háttérben fut, nem késlelteti az indulást;
+    // hiba esetén a lejátszó a statikus katalógusképeket használja tovább.
+    void import("./design-assets").then(({ syncDesignAssets }) => syncDesignAssets()).then(
+      (r) => log(`[design-assets] ${r.written} kép írva, ${r.unchanged} változatlan, ${r.missing.length} hiányzó fájl`),
+      (error) => logger.error("[STARTUP] A képkészlet szinkronja nem sikerült:", error),
+    );
+
     // #168 — az előző folyamat halálakor árván maradt one-step futások hibára
     // zárása, hogy a kliens állapotjelzője ne ragadjon be némán.
     // #183 — ugyanez a studio_jobs sorokra: a JobMonitor a 'running' státuszt
@@ -555,6 +563,7 @@ app.use((req, res, next) => {
     // Universal Error Logger routes
     app.use("/api/error-report", errorReportRouter);
     app.use("/api/static-audit", staticAuditRouter);
+    app.use("/api/design-assets", designAssetsRouter);
 
     const server = await registerRoutes(app);
     const stopSkillLearningAudit = startSkillLearningAudit();

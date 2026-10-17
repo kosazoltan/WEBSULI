@@ -203,6 +203,9 @@ function probeLesson(search: string): Lesson {
     // Websuli Design: a fúziós lecke is kipróbálható mind az öt évfolyamsávban (`?fusion=1&classroom=N`).
     const grade = Number(q.get("classroom"));
     if (q.has("classroom") && Number.isInteger(grade) && grade >= 0 && grade <= 12) lesson.classroom = grade;
+    // Ikonkészlet: a mentéskor rendelt adatbázis-ikon kipróbálása (`&icon=<azonosító>`).
+    const icon = q.get("icon");
+    if (icon && /^[a-z0-9-]{3,64}$/.test(icon)) lesson.art = { subjectIcon: icon };
     return lesson;
   }
   const classroom = Number(q.get("classroom"));

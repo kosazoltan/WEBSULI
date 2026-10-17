@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { subjectIconIdForBand } from "./subject-icons";
 
 /**
  * Websuli képkészlet katalógusa (shared/design-assets.json) — MI-generált, kurált saját képek a szabályterv 2.3 szerint
@@ -38,6 +39,7 @@ function rotate<T>(pool: readonly T[], seed: string, salt: string): T | undefine
   return pool.length ? pool[fnv1a(`${salt}:${seed}`) % pool.length] : undefined;
 }
 const YOUNG_BANDS = new Set(["explorer", "adventure"]);
+const BAND_SUFFIX = new RegExp(`-(${DESIGN_ASSET_BANDS.join("|")})$`);
 
 /**
  * Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md, a „változatos képválasztás” kiegészítéssel): tiszta függvény.
@@ -74,8 +76,10 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
   // Ha a választott kép maga is a kabalát mutatja („kabala” kulcsszó), a portré nem ismétli meg.
   const picture = cover ?? hero;
   const mascot = young && !picture?.keywords.includes("kabala") ? rotate(mascots, seed, "mascot") : undefined;
-  const icons = catalog.filter(a => a.kind === "icon" && subjectHit(a));
-  // Review #273: csak a korosztálynak megfelelő változat; a másik korosztály ikonja helyett nincs ikon.
-  const subjectIcon = icons.find(a => a.id.endsWith("-young") === young);
+  // Ikonkészlet (2026-10-17-websuli-ikonkeszlet): a tantárgy saját sávjának ikonja. Ha az még nincs a katalógusban, a korábbi
+  // korosztályos ikonok (sáv-utótag nélküliek) közül választ. Review #273: a másik korosztály ikonja helyett nincs ikon.
+  const ownId = subjectIconIdForBand(lesson.subject, band);
+  const legacy = catalog.filter(a => a.kind === "icon" && !BAND_SUFFIX.test(a.id) && subjectHit(a));
+  const subjectIcon = (ownId ? catalog.find(a => a.id === ownId) : undefined) ?? legacy.find(a => a.id.endsWith("-young") === young);
   return { ...(cover ? { cover } : {}), ...(hero ? { hero } : {}), ...(mascot ? { mascot } : {}), ...(subjectIcon ? { subjectIcon } : {}) };
 }

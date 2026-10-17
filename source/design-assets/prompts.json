@@ -614,6 +614,1302 @@
       ],
       "prompt": "Clean educational 3D cover illustration in the same calm, polished style and soft lighting as the reference image (but with the color palette of its own topic): a topographic relief map with mountains, rivers and contour lines. Uncluttered background.",
       "batch": 1
+    },
+    {
+      "id": "icon-matematika-explorer",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "matematika"
+      ],
+      "alt": "Matematika, 1–2. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: colorful counting blocks. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-matematika-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "matematika"
+      ],
+      "alt": "Matematika, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a wooden abacus with a ruler. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-matematika-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "matematika"
+      ],
+      "alt": "Matematika, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a protractor with a set square triangle. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-matematika-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "matematika"
+      ],
+      "alt": "Matematika, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a smooth function curve on grid paper with a pencil. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-matematika-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "matematika"
+      ],
+      "alt": "Matematika, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a 3D coordinate surface model. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-magyar-nyelvtan-explorer",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "magyar-nyelvtan"
+      ],
+      "alt": "Magyar nyelvtan, 1–2. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: colorful alphabet building blocks without readable letters, just shapes. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-magyar-nyelvtan-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "magyar-nyelvtan"
+      ],
+      "alt": "Magyar nyelvtan, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a notebook with a pencil and colorful sticky tabs. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-magyar-nyelvtan-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "magyar-nyelvtan"
+      ],
+      "alt": "Magyar nyelvtan, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: puzzle pieces fitting together like parts of a sentence. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-magyar-nyelvtan-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "magyar-nyelvtan"
+      ],
+      "alt": "Magyar nyelvtan, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a tree diagram of connected nodes, like sentence structure. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-magyar-nyelvtan-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "magyar-nyelvtan"
+      ],
+      "keywords": [
+        "magyar-nyelvtan"
+      ],
+      "alt": "Magyar nyelvtan, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: an elegant fountain pen over a structured page with brackets. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-magyar-irodalom-explorer",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "magyar-irodalom"
+      ],
+      "alt": "Magyar irodalom, 1–2. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: an open storybook with a ribbon bookmark. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-magyar-irodalom-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "magyar-irodalom"
+      ],
+      "alt": "Magyar irodalom, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a storybook with a small paper castle popping out. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-magyar-irodalom-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "magyar-irodalom"
+      ],
+      "alt": "Magyar irodalom, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a stack of books with a feather quill. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-magyar-irodalom-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "magyar-irodalom"
+      ],
+      "alt": "Magyar irodalom, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a classic leather-bound book with a theatre mask. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-magyar-irodalom-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "magyar-irodalom"
+      ],
+      "keywords": [
+        "magyar-irodalom"
+      ],
+      "alt": "Magyar irodalom, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: an open poetry book with a feather quill and an inkwell. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-kornyezetismeret-explorer",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "kornyezetismeret"
+      ],
+      "alt": "Környezetismeret, 1–2. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: a little house, a tree and the sun together. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-kornyezetismeret-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "kornyezetismeret"
+      ],
+      "keywords": [
+        "kornyezetismeret"
+      ],
+      "alt": "Környezetismeret, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a small globe with a green leaf and a ladybug. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-termeszetismeret-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "termeszetismeret"
+      ],
+      "alt": "Természettudomány / természetismeret, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a magnifying glass over a leaf and a ladybug. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-termeszetismeret-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "termeszetismeret"
+      ],
+      "keywords": [
+        "termeszetismeret"
+      ],
+      "alt": "Természettudomány / természetismeret, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a microscope beside a leaf and a small flask. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-tortenelem-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "tortenelem"
+      ],
+      "alt": "Történelem, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a small castle tower with a flag. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-tortenelem-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "tortenelem"
+      ],
+      "alt": "Történelem, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a knight's helmet and a parchment scroll. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-tortenelem-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "tortenelem"
+      ],
+      "alt": "Történelem, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a classical column with an hourglass. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-tortenelem-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "tortenelem"
+      ],
+      "alt": "Történelem, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: an antique map scroll with a compass rose. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-tarsadalmi-ismeretek-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "tarsadalmi-ismeretek"
+      ],
+      "alt": "Társadalmi és állampolgári ismeretek, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: three connected people silhouettes around a round table. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-tarsadalmi-ismeretek-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "tarsadalmi-ismeretek"
+      ],
+      "alt": "Társadalmi és állampolgári ismeretek, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a balance scale of justice. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-tarsadalmi-ismeretek-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "tarsadalmi-ismeretek"
+      ],
+      "keywords": [
+        "tarsadalmi-ismeretek"
+      ],
+      "alt": "Társadalmi és állampolgári ismeretek, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a parliament dome with a ballot box. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-biologia-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "biologia"
+      ],
+      "alt": "Biológia, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a leaf with a ladybug under a magnifying glass. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-biologia-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "biologia"
+      ],
+      "alt": "Biológia, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a DNA double helix with a leaf. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-biologia-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "biologia"
+      ],
+      "alt": "Biológia, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a stylised cell with a DNA strand. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-kemia-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "kemia"
+      ],
+      "alt": "Kémia, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a laboratory flask with colorful liquid bubbles. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-kemia-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "kemia"
+      ],
+      "alt": "Kémia, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a laboratory flask holding an atom model. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-kemia-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "kemia"
+      ],
+      "keywords": [
+        "kemia"
+      ],
+      "alt": "Kémia, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a molecule ball-and-stick model with a test tube. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-fizika-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "fizika"
+      ],
+      "alt": "Fizika, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a magnet attracting small metal balls. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-fizika-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "fizika"
+      ],
+      "alt": "Fizika, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: an atom with elliptical electron orbits. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-fizika-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "fizika"
+      ],
+      "alt": "Fizika, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a pendulum with a wave graph and a lightning bolt. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-foldrajz-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "foldrajz"
+      ],
+      "alt": "Földrajz, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a globe on a stand with a map pin. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-foldrajz-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "foldrajz"
+      ],
+      "alt": "Földrajz, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a globe with latitude lines and a map pin. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-foldrajz-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "foldrajz"
+      ],
+      "alt": "Földrajz, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a topographic relief map tile with a compass. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-angol-explorer",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "angol"
+      ],
+      "alt": "Angol nyelv, 1–2. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: two colorful speech bubbles. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-angol-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "angol"
+      ],
+      "alt": "Angol nyelv, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: two speech bubbles with a small red-white-blue ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-angol-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "angol"
+      ],
+      "alt": "Angol nyelv, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a book with two speech bubbles and a small globe. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-angol-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "angol"
+      ],
+      "alt": "Angol nyelv, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a globe with two speech bubbles. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-angol-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "angol"
+      ],
+      "alt": "Angol nyelv, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a passport-like booklet with a globe and speech bubble. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-nemet-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "nemet"
+      ],
+      "alt": "Német nyelv, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: two speech bubbles with a small black-red-gold ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-nemet-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "nemet"
+      ],
+      "alt": "Német nyelv, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a book with two speech bubbles and a small black-red-gold ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-nemet-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "nemet"
+      ],
+      "alt": "Német nyelv, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a globe with speech bubbles and a black-red-gold ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-nemet-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "nemet"
+      ],
+      "keywords": [
+        "nemet"
+      ],
+      "alt": "Német nyelv, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a travel booklet with speech bubbles and a black-red-gold ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-francia-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "francia"
+      ],
+      "alt": "Francia nyelv, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: two speech bubbles with a small blue-white-red ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-francia-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "francia"
+      ],
+      "alt": "Francia nyelv, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a book with two speech bubbles and a small blue-white-red ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-francia-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "francia"
+      ],
+      "alt": "Francia nyelv, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a globe with speech bubbles and a blue-white-red ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-francia-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "francia"
+      ],
+      "keywords": [
+        "francia"
+      ],
+      "alt": "Francia nyelv, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a travel booklet with speech bubbles and a blue-white-red ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-informatika-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "informatika"
+      ],
+      "alt": "Informatika / digitális kultúra, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a friendly little robot with a tablet. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-informatika-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "informatika"
+      ],
+      "alt": "Informatika / digitális kultúra, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a laptop with colorful code blocks shown only as shapes. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-informatika-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "informatika"
+      ],
+      "alt": "Informatika / digitális kultúra, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a laptop with a small circuit-chip symbol. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-informatika-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "informatika"
+      ],
+      "alt": "Informatika / digitális kultúra, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a circuit chip with glowing connection lines. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-enek-zene-explorer",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "enek-zene"
+      ],
+      "alt": "Ének-zene, 1–2. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: a musical note and a small drum. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-enek-zene-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "enek-zene"
+      ],
+      "alt": "Ének-zene, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a xylophone with a musical note. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-enek-zene-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "enek-zene"
+      ],
+      "alt": "Ének-zene, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: headphones with musical notes. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-enek-zene-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "enek-zene"
+      ],
+      "keywords": [
+        "enek-zene"
+      ],
+      "alt": "Ének-zene, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a violin with a musical note. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-hit-es-erkolcstan-explorer",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "hit-es-erkolcstan"
+      ],
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 1–2. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: two hands holding a small heart. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-hit-es-erkolcstan-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "hit-es-erkolcstan"
+      ],
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a dove carrying a small olive branch. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-hit-es-erkolcstan-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "hit-es-erkolcstan"
+      ],
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: an open book with a soft glowing heart. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-hit-es-erkolcstan-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "hit-es-erkolcstan"
+      ],
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a lantern with a gentle light. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-hit-es-erkolcstan-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "hit-es-erkolcstan"
+      ],
+      "keywords": [
+        "hit-es-erkolcstan"
+      ],
+      "alt": "Hit- és erkölcstan / bibliaismeret / etika, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a scale with a heart and a book. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-vizualis-kultura-explorer",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "vizualis-kultura"
+      ],
+      "alt": "Vizuális kultúra, 1–2. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: a painter palette with brushes. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-vizualis-kultura-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "vizualis-kultura"
+      ],
+      "alt": "Vizuális kultúra, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: paint brushes in a jar with color splashes. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-vizualis-kultura-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "vizualis-kultura"
+      ],
+      "alt": "Vizuális kultúra, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a drawing tablet with a stylus and color swatches. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-vizualis-kultura-laboratory",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "vizualis-kultura"
+      ],
+      "alt": "Vizuális kultúra, 9–10. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a camera beside a color wheel. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-vizualis-kultura-future",
+      "kind": "icon",
+      "band": "future",
+      "subjects": [
+        "vizualis-kultura"
+      ],
+      "keywords": [
+        "vizualis-kultura"
+      ],
+      "alt": "Vizuális kultúra, 11–12. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a film clapper with a color wheel. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-technika-explorer",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "technika"
+      ],
+      "keywords": [
+        "technika"
+      ],
+      "alt": "Technika és tervezés, 1–2. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: toy building bricks with a small hammer. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-technika-adventure",
+      "kind": "icon",
+      "band": "adventure",
+      "subjects": [
+        "technika"
+      ],
+      "keywords": [
+        "technika"
+      ],
+      "alt": "Technika és tervezés, 3–5. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-matematika-young"
+      ],
+      "batch": 2,
+      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a toy screwdriver, gears and a small wrench. Centered single object, plain very light background. No letters, digits, words or flags with text."
+    },
+    {
+      "id": "icon-technika-studio",
+      "kind": "icon",
+      "band": "studio",
+      "subjects": [
+        "technika"
+      ],
+      "keywords": [
+        "technika"
+      ],
+      "alt": "Technika és tervezés, 6–8. osztály: tantárgyikon.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "batch": 2,
+      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: gears with a ruler and a pencil, like a design plan. Centered single object, plain very light background. No letters, digits, words or flags with text."
     }
   ]
 }

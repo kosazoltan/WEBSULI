@@ -473,6 +473,8 @@ export function LessonRuntime({
   const designTheme = designThemeForClassroom(lesson.classroom);
   // Változatos képválasztás: a lecke azonosítója szerint rotál (ugyanaz a lecke mindig ugyanazt kapja).
   const art = useMemo(() => lessonArtFor({ ...lesson, seed: lessonId ?? persistId ?? lesson.title }, designTheme), [lesson, designTheme, lessonId, persistId]);
+  // Ikonkészlet: a mentéskor az adatbázisból rendelt ikon elsőbbséget kap; régi leckénél a katalógus-választás marad.
+  const subjectIconSrc = lesson.art?.subjectIcon ? `/api/design-assets/${lesson.art.subjectIcon}` : art.subjectIcon?.src;
   // Websuli Design: a lecke fontja az évfolyamból (1–5. Nunito Sans, 0. és 6–12. Inter), téma szerinti kivétel nélkül.
   const fonts = lessonFontPair(lesson.classroom, lesson.subject);
   const typography = {
@@ -532,7 +534,7 @@ export function LessonRuntime({
             {lesson.experience && <p className="fusion-eyebrow">Felfedezésből tudás</p>}
             <h1 className={cn("lesson-heading leading-tight break-words", theme.heading)}>{lesson.title}</h1>
             <div className="flex flex-wrap gap-2 mt-1.5">
-              <span className="lesson-chip">{art.subjectIcon && <img className="ws-subject-ico" src={art.subjectIcon.src} alt="" aria-hidden="true" decoding="async" />}{lesson.subject}</span>
+              <span className="lesson-chip">{subjectIconSrc && <img className="ws-subject-ico" src={subjectIconSrc} alt="" aria-hidden="true" decoding="async" />}{lesson.subject}</span>
               <span className="lesson-chip">{lesson.classroom}. osztály</span>
             </div>
           </div>

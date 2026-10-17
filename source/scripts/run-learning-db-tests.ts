@@ -61,11 +61,16 @@ try {
   const reviewMigration = await readFile(new URL("../migrations/0027_review_states.sql", import.meta.url), "utf8");
   await pool.query(reviewMigration);
   await pool.query(reviewMigration);
+  // Ikonkészlet: the design_assets table from the migration file itself (not the schema export), twice.
+  await pool.query("DROP TABLE design_assets");
+  const designMigration = await readFile(new URL("../migrations/0028_design_assets.sql", import.meta.url), "utf8");
+  await pool.query(designMigration);
+  await pool.query(designMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {
     // The reconciler intentionally scans all workflow rows; isolate suite-owned lifecycle tests.
-    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts"], {
+    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts"], {
       cwd, env: { ...env, DATABASE_URL: databaseUrl, NODE_ENV: "test", WEBSULI_DISPOSABLE_DB: name },
       windowsHide: true, stdio: "inherit",
     });
