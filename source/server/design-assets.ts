@@ -7,7 +7,8 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { designAssets } from "../shared/schema";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
-import { lessonArtIds, pickLessonArt, type DesignAsset } from "../shared/design-assets";
+import { lessonArtIds, pickLessonArt, type DesignAsset, type StoredLessonArt } from "../shared/design-assets";
+import { topicCoverId, topicKeyOf } from "../shared/topic-taxonomy";
 import { designThemeForClassroom } from "../shared/lesson-design";
 import { logger } from "./lib/logger";
 
@@ -30,6 +31,23 @@ export function assetFilePath(asset: Pick<DesignAsset, "src">, roots = [path.res
 
 export type SyncReport = { written: number; unchanged: number; missing: string[] };
 
+/**
+ * Review #277: az induló szinkron ígérete. A mentéskori arculatválasztás megvárja (legfeljebb `SYNC_WAIT_MS`-ig), különben a deploy
+ * utáni első percekben mentett lecke a még be nem töltött borító helyett végleges tartalékképet rögzítene (nincs utólagos pótlás).
+ */
+let initialSync: Promise<SyncReport> | null = null;
+export const SYNC_WAIT_MS = 60_000;
+export function startDesignAssetSync(run: () => Promise<SyncReport> = () => syncDesignAssets()): Promise<SyncReport> {
+  initialSync = run();
+  return initialSync;
+}
+async function initialSyncSettled(ms = SYNC_WAIT_MS): Promise<void> {
+  if (!initialSync) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([initialSync.then(() => undefined, () => undefined), new Promise<void>(r => { timer = setTimeout(r, ms); })]);
+  if (timer) clearTimeout(timer);
+}
+
 /** Idempotens: a már azonos lenyomatú képet nem írja újra; a hiányzó fájlt naplózza, a többit betölti. */
 export async function syncDesignAssets(catalog: readonly DesignAsset[] = DESIGN_ASSET_CATALOG, roots?: string[]): Promise<SyncReport> {
   const existing = new Map((await db.select({ id: designAssets.id, sha256: designAssets.sha256 }).from(designAssets)).map(r => [r.id, r.sha256]));
@@ -41,7 +59,7 @@ export async function syncDesignAssets(catalog: readonly DesignAsset[] = DESIGN_
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     if (existing.get(asset.id) === sha256) { report.unchanged++; continue; }
     const row = {
-      kind: asset.kind, band: asset.band, subjects: asset.subjects, keywords: asset.keywords, alt: asset.alt, mime: "image/webp",
+      kind: asset.kind, band: asset.band, subjects: asset.subjects, keywords: asset.keywords, topic: asset.topic ?? null, alt: asset.alt, mime: "image/webp",
       sha256, bytes, origin: asset.origin, model: asset.model, promptHash: asset.promptHash, approvedAt: new Date(asset.approvedAt),
       updatedAt: new Date(),
     };
@@ -63,10 +81,14 @@ export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typ
   const lesson = json as Record<string, unknown>;
   if (typeof lesson.subject !== "string" || typeof lesson.classroom !== "number" || typeof lesson.title !== "string") return json;
   const { art: _previous, ...rest } = lesson;
+  await initialSyncSettled();
   try {
     const stored = new Set((await executor.select({ id: designAssets.id }).from(designAssets)).map(r => r.id));
     const catalog = DESIGN_ASSET_CATALOG.filter(a => stored.has(a.id));
-    const art = lessonArtIds(pickLessonArt({ subject: lesson.subject, title: lesson.title, seed }, designThemeForClassroom(lesson.classroom), catalog));
+    // Arculati bank (S1): a lecke témaköre (tantárgy, évfolyam, cím) → a témakör borítója, ha az a táblában megvan.
+    const topic = topicKeyOf({ subject: lesson.subject, classroom: lesson.classroom, title: lesson.title });
+    const art: StoredLessonArt & { topic?: string } = lessonArtIds(pickLessonArt({ subject: lesson.subject, title: lesson.title, seed, topicCoverId: topic ? topicCoverId(topic) : null }, designThemeForClassroom(lesson.classroom), catalog));
+    if (topic) art.topic = topic.key;
     return (Object.keys(art).length ? { ...rest, art } : rest) as T;
   } catch (error) {
     logger.warn("[design-assets] Az arculat nem választható, a lecke art nélkül ment:", error);

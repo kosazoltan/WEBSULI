@@ -47,6 +47,7 @@ for (const [id, rel] of Object.entries(selection)) {
   writeFileSync(path.join(outDir, `${id}.webp`), Buffer.from(webp.split(",")[1], "base64"));
   const entry: DesignAsset = {
     id, kind: item.kind, band: item.band, subjects: item.subjects, keywords: item.keywords, alt: item.alt,
+    ...((item as { topic?: string }).topic ? { topic: (item as { topic?: string }).topic } : {}),
     src: `/design/${item.band}/${id}.webp`, origin: "MI-generált, saját (Seedream 5.0 Pro)", model: origins[id].model,
     promptHash: origins[id].promptHash, approvedAt: new Date().toISOString(),
   };

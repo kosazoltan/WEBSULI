@@ -66,6 +66,10 @@ try {
   const designMigration = await readFile(new URL("../migrations/0028_design_assets.sql", import.meta.url), "utf8");
   await pool.query(designMigration);
   await pool.query(designMigration);
+  // Arculati bank: 0029 (topic + bővített kind CHECK) a 0028 után, kétszer — idempotens.
+  const topicMigration = await readFile(new URL("../migrations/0029_design_assets_topic.sql", import.meta.url), "utf8");
+  await pool.query(topicMigration);
+  await pool.query(topicMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {
