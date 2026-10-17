@@ -1,7 +1,7 @@
 import { useRoute, useLocation } from "wouter";
 import { ArrowLeft, Share2, Copy, Check, ExternalLink, RotateCw, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { HtmlFile } from "@shared/schema";
@@ -10,6 +10,7 @@ import { LessonView } from "@/lesson-runtime/LessonView";
 import { LessonLoading } from "@/lesson-runtime/LessonLoading";
 import { lessonByFileQuery } from "@/lesson-runtime/lesson-query";
 import { homeFilesQueryOptions, lessonNeighbours } from "@/lib/home-files-query";
+import { curriculumSort, todayPosition, type CurriculumHint } from "@/lib/curriculum-order";
 import { useAuth } from "@/hooks/useAuth";
 import { LessonRepairPanel } from "@/components/LessonRepairPanel";
 
@@ -35,7 +36,7 @@ export default function Preview() {
   const fullUrl = `${baseUrl}/preview/${params?.id}`;
   
   // Spec 2026-09-20: előző/következő tananyag a lista sorrendje szerint — könnyű váltás mobilon is.
-  const { data: allFiles = [] } = useQuery<Array<{ id: string; contentType?: string; title?: string; classroom?: number | null }>>(homeFilesQueryOptions());
+  const { data: allFiles = [] } = useQuery<Array<{ id: string; contentType?: string; title?: string; classroom?: number | null; createdAt?: string; curriculum?: CurriculumHint }>>(homeFilesQueryOptions());
   // Lecke megnyitása (docs/specs/2026-10-17-lecke-betoltes.md): a lista már tudja a típust és az évfolyamot.
   const listed = params?.id ? allFiles.find((f) => f.id === params.id) : undefined;
 
@@ -58,7 +59,12 @@ export default function Preview() {
 
   // Combined loading state — a leckéhez a config nem kell (az csak a megosztási linkhez és az iframe-hez).
   const isLoading = materialLoading || (!lessonExpected && configLoading);
-  const neighbours = params?.id ? lessonNeighbours(allFiles, params.id) : { prev: null, next: null };
+  // Tanmenet-rendezés (docs/specs/2026-10-17-tanmenet-rendezes.md): az előző/következő az évfolyam listájának sorrendjében.
+  const ordered = useMemo(() => {
+    const sameGrade = listed?.classroom != null ? allFiles.filter((f) => f.classroom === listed.classroom) : allFiles;
+    return curriculumSort(sameGrade, todayPosition());
+  }, [allFiles, listed?.classroom]);
+  const neighbours = params?.id ? lessonNeighbours(ordered, params.id) : { prev: null, next: null };
   const openFile = (file: { id: string; contentType?: string }) => setLocation(file.contentType === "pdf" ? `/materials/pdf/${file.id}` : `/preview/${file.id}`);
   
   // BACKLOG T4 (2026-09-02): a tananyag a saját, elszigetelt originjéről töltődik

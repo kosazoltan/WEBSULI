@@ -69,3 +69,19 @@ hasznosulnak.
 - HA az anyag nem illeszthető, AKKOR a lista végére kerül, a mai sorrendben.
 - HA a dátum a tanév szünetére esik, AKKOR a szünet előtti / utáni tanítási nap pozíciója számít.
 - A 207 éles anyagból legalább 60% illeszthető, és a szúrópróbában nincs nyilvánvalóan téves illesztés.
+
+## Mérés (2026-10-17, éles adatbázis, csak olvasás)
+- **Illeszkedés:** 135 / 208 anyag (65%), küszöb `MIN_SCORE = 5`.
+- **Nem illeszkedik:**
+  - 10 évfolyam nélküli (0) informatikai anyag;
+  - a legtöbb angol és francia anyag, mert nincs OH nyelvi tanmenet; az ünnepi és a hónapnévvel jelölt anyagok viszont
+    illeszkednek;
+  - néhány általános című anyag („6. osztályos matematika gyakorló feladatlap”).
+- **Kézi szúrópróba:**
+  - helyükre kerülnek: kivonás, szorzás, írásbeli műveletek (3–4.); környezetismeret (testrészek, légzés, Alföld,
+    középhegységek); római számok, törtek, műveleti sorrend (5.); Pál utcai fiúk, Családi kör; Egyiptom, Árpád-kor, Hunyadi;
+    légzőrendszer, elektromosság, Európa országai, Pitagorasz-tétel (8.); sejt (9.);
+  - **finomítások a mérés alapján:** szigorúbb tőegyezés; a tantárgynevek nem pontoznak; az ismétlő órák 0,6-os súlyt kapnak;
+    angol felismerése.
+- **Ismert határ:** néhány gyenge illesztés közelítő („Összetett szavak” → az összetett mondat; „Hangközök” → az ének-zene év
+  végi összefoglalása).
