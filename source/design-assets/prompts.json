@@ -1,0 +1,619 @@
+{
+  "model": "bytedance-seed/seedream-5-0-pro",
+  "items": [
+    {
+      "id": "mascot-base",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala",
+        "róka"
+      ],
+      "alt": "A Websuli kabalája: mosolygó, barátságos kis róka.",
+      "aspect_ratio": "1:1",
+      "trial": true,
+      "prompt": "The fox stands relaxed, facing the viewer, a tiny green leaf-shaped backpack strap over one shoulder.",
+      "references": [
+        "mascot-hello"
+      ],
+      "batch": 1
+    },
+    {
+      "id": "mascot-hello",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala",
+        "köszön"
+      ],
+      "alt": "A Websuli rókája integet és köszön.",
+      "aspect_ratio": "1:1",
+      "trial": true,
+      "references": [
+        "mascot-base"
+      ],
+      "prompt": "The same fox waves one paw cheerfully hello, happy open smile."
+    },
+    {
+      "id": "hero-explorer",
+      "kind": "hero",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "erdő",
+        "felfedezés",
+        "kabala"
+      ],
+      "alt": "Napfényes, mesés erdő a mosolygó rókával.",
+      "aspect_ratio": "16:9",
+      "trial": true,
+      "references": [
+        "mascot-hello",
+        "hero-adventure"
+      ],
+      "prompt": "A sunny storybook forest clearing with rolling green hills, round trees, a few flowers and a bright sun; the same Websuli fox sits happily on the right side.",
+      "batch": 1
+    },
+    {
+      "id": "hero-adventure",
+      "kind": "hero",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "hegy",
+        "zászló",
+        "expedíció"
+      ],
+      "alt": "Festett hegyvidék, a csúcson narancssárga zászló, kanyargó ösvény vezet fel.",
+      "aspect_ratio": "16:9",
+      "trial": true,
+      "prompt": "Painterly mountain landscape at golden hour, a winding trail leading up to a summit with a small orange flag, soft clouds, sense of an achievable adventure."
+    },
+    {
+      "id": "hero-studio",
+      "kind": "hero",
+      "band": "studio",
+      "subjects": [],
+      "keywords": [
+        "Föld",
+        "űr",
+        "kérdések"
+      ],
+      "alt": "A Föld az űrből, a horizonton felkelő nap fényével.",
+      "aspect_ratio": "16:9",
+      "trial": true,
+      "prompt": "Planet Earth seen from space with a glowing sunrise on the horizon, deep indigo starry sky, awe-inspiring and calm."
+    },
+    {
+      "id": "hero-laboratory",
+      "kind": "hero",
+      "band": "laboratory",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "híd",
+        "mérnöki",
+        "fizika"
+      ],
+      "alt": "Függőhíd naplementében, a tartókábelek íve jól látszik.",
+      "aspect_ratio": "16:9",
+      "trial": true,
+      "prompt": "A large suspension bridge photographed at dusk, cables and towers clearly visible, cool blue sky with a warm horizon, precise engineering atmosphere.",
+      "references": [
+        "hero-future"
+      ],
+      "batch": 1
+    },
+    {
+      "id": "hero-future",
+      "kind": "hero",
+      "band": "future",
+      "subjects": [],
+      "keywords": [
+        "csúcs",
+        "cél",
+        "jövő"
+      ],
+      "alt": "Túrázó hátulról egy hegycsúcson, előtte naplementés hegyvonulatok.",
+      "aspect_ratio": "16:9",
+      "trial": true,
+      "prompt": "A hiker with a backpack seen from behind standing on a mountain summit, looking at layered mountain ranges in a dramatic sunset, deep navy and warm orange light, cinematic."
+    },
+    {
+      "id": "icon-matematika-young",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "matematika"
+      ],
+      "alt": "Matematika: színes számolókockák.",
+      "aspect_ratio": "1:1",
+      "trial": true,
+      "prompt": "Glossy soft 3D toy-like colorful counting blocks and a small abacus, cheerful colors, for young learners. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-fizika",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "fizika"
+      ],
+      "keywords": [
+        "atom",
+        "mozgás"
+      ],
+      "alt": "Fizika: atommodell elektronpályákkal.",
+      "aspect_ratio": "1:1",
+      "trial": true,
+      "prompt": "Flat clean duotone icon of an atom with elliptical electron orbits, blue and teal, for older learners."
+    },
+    {
+      "id": "cover-ismetlodes",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "ismétlődő minta",
+        "füzér",
+        "osztás maradékkal"
+      ],
+      "alt": "Füzér, amelyen sütőtökök és csontváz-díszek ismétlődő mintában sorakoznak.",
+      "aspect_ratio": "3:2",
+      "trial": true,
+      "prompt": "A simple festive garland hanging in a gentle curve across the image. The ornaments follow one strict repeating unit from left to right: exactly one small carved pumpkin, then exactly two cute friendly skeleton ornaments, then again one pumpkin and two skeletons, repeated exactly three times (9 ornaments: pumpkin, skeleton, skeleton, pumpkin, skeleton, skeleton, pumpkin, skeleton, skeleton). Evenly spaced, nothing else on the string, no other objects anywhere in the picture, plain softly lit background, playful and not scary.",
+      "references": [
+        "cover-sejt"
+      ],
+      "batch": 1
+    },
+    {
+      "id": "cover-sejt",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "biológia"
+      ],
+      "keywords": [
+        "sejt",
+        "sejthártya",
+        "sejtmag"
+      ],
+      "alt": "Állati sejt térhatású modellje: sejthártya, sejtplazma és sejtmag.",
+      "aspect_ratio": "3:2",
+      "trial": true,
+      "prompt": "A clean scientific 3D model of an animal cell cut open, showing the cell membrane, cytoplasm and nucleus, cool blue and teal palette, educational and precise."
+    },
+    {
+      "id": "icon-magyar-young",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "magyar"
+      ],
+      "keywords": [
+        "magyar"
+      ],
+      "alt": "Magyar: nyitott mesekönyv.",
+      "aspect_ratio": "1:1",
+      "trial": true,
+      "prompt": "Glossy soft 3D toy-like an open storybook with a ribbon bookmark, cheerful colors, for young learners. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "mascot-point",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala"
+      ],
+      "alt": "A Websuli rókája mutat valamire.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "mascot-hello"
+      ],
+      "prompt": "The same fox exactly as in the reference image (same plush 3D look, same green leaf backpack) points with one paw to the side as if showing something interesting, curious smile.",
+      "batch": 1
+    },
+    {
+      "id": "mascot-cheer",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala"
+      ],
+      "alt": "A Websuli rókája ünnepel.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "mascot-hello"
+      ],
+      "prompt": "The same fox exactly as in the reference image (same plush 3D look, same green leaf backpack) jumps happily with both paws up celebrating success, a few small stars around.",
+      "batch": 1
+    },
+    {
+      "id": "mascot-think",
+      "kind": "mascot",
+      "band": "explorer",
+      "subjects": [],
+      "keywords": [
+        "kabala"
+      ],
+      "alt": "A Websuli rókája gondolkodik.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "mascot-hello"
+      ],
+      "prompt": "The same fox exactly as in the reference image (same plush 3D look, same green leaf backpack) sits and thinks with one paw on its chin, thoughtful look.",
+      "batch": 1
+    },
+    {
+      "id": "mascot-explorer",
+      "kind": "mascot",
+      "band": "adventure",
+      "subjects": [],
+      "keywords": [
+        "kabala"
+      ],
+      "alt": "A Websuli rókája felfedezőkalapban, térképpel.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "mascot-hello"
+      ],
+      "prompt": "The same fox exactly as in the reference image (same plush 3D look, same green leaf backpack) wears a small explorer hat and holds a folded paper map, ready for an expedition.",
+      "batch": 1
+    },
+    {
+      "id": "icon-kornyezet-young",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "kornyezet"
+      ],
+      "keywords": [
+        "kornyezet"
+      ],
+      "alt": "Környezetismeret: kis földgömb levéllel.",
+      "aspect_ratio": "1:1",
+      "prompt": "Glossy soft 3D toy-like a small globe with a green leaf, cheerful colors, for young learners. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-termeszet-young",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "termeszet"
+      ],
+      "keywords": [
+        "termeszet"
+      ],
+      "alt": "Természetismeret: nagyító levéllel és katicával.",
+      "aspect_ratio": "1:1",
+      "prompt": "Glossy soft 3D toy-like a magnifying glass over a leaf and a ladybug, cheerful colors, for young learners. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-angol-young",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "angol"
+      ],
+      "alt": "Angol: két színes szövegbuborék.",
+      "aspect_ratio": "1:1",
+      "prompt": "Glossy soft 3D toy-like two colorful speech bubbles, no letters, cheerful colors, for young learners. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-enek-young",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "enek"
+      ],
+      "keywords": [
+        "enek"
+      ],
+      "alt": "Ének-zene: hangjegy és kis dob.",
+      "aspect_ratio": "1:1",
+      "prompt": "Glossy soft 3D toy-like a musical note and a small drum, cheerful colors, for young learners. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-rajz-young",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "rajz"
+      ],
+      "keywords": [
+        "rajz"
+      ],
+      "alt": "Vizuális kultúra: festőpaletta ecsetekkel.",
+      "aspect_ratio": "1:1",
+      "prompt": "Glossy soft 3D toy-like a painter palette with brushes, cheerful colors, for young learners. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-tortenelem-young",
+      "kind": "icon",
+      "band": "explorer",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "tortenelem"
+      ],
+      "alt": "Történelem: kis vártorony zászlóval.",
+      "aspect_ratio": "1:1",
+      "prompt": "Glossy soft 3D toy-like a small castle tower with a flag, cheerful colors, for young learners. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-matematika",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "matematika"
+      ],
+      "alt": "Matematika: körző és vonalzó.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "prompt": "Clean soft 3D icon in exactly the same style, palette and lighting as the reference atom icon: a compass and a ruler forming a geometric shape. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-magyar",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "magyar"
+      ],
+      "keywords": [
+        "magyar"
+      ],
+      "alt": "Magyar nyelv és irodalom: nyitott könyv töltőtollal.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "prompt": "Clean soft 3D icon in exactly the same style, palette and lighting as the reference atom icon: an open book with a fountain pen. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-tortenelem",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "tortenelem"
+      ],
+      "keywords": [
+        "tortenelem"
+      ],
+      "alt": "Történelem: oszlop és tekercs.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "prompt": "Clean soft 3D icon in exactly the same style, palette and lighting as the reference atom icon: a classical column with a scroll. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-biologia",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "biologia"
+      ],
+      "keywords": [
+        "biologia"
+      ],
+      "alt": "Biológia: DNS-spirál levéllel.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "prompt": "Clean soft 3D icon in exactly the same style, palette and lighting as the reference atom icon: a DNA double helix with a leaf. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-kemia",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "kemia",
+        "termeszettudomany"
+      ],
+      "keywords": [
+        "kemia"
+      ],
+      "alt": "Kémia és természettudomány: lombik, benne atommodell.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "prompt": "Clean soft 3D icon in exactly the same style, palette and lighting as the reference atom icon: a laboratory flask with a molecule model. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-foldrajz",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "foldrajz"
+      ],
+      "keywords": [
+        "foldrajz"
+      ],
+      "alt": "Földrajz: földgömb térképtűvel.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "prompt": "Clean soft 3D icon in exactly the same style, palette and lighting as the reference atom icon: a globe with latitude lines and a map pin. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-informatika",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "informatika"
+      ],
+      "keywords": [
+        "informatika"
+      ],
+      "alt": "Informatika: laptop áramköri chippel.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "prompt": "Clean soft 3D icon in exactly the same style, palette and lighting as the reference atom icon: a laptop with a small circuit-chip symbol. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "icon-angol",
+      "kind": "icon",
+      "band": "laboratory",
+      "subjects": [
+        "angol"
+      ],
+      "keywords": [
+        "angol"
+      ],
+      "alt": "Angol nyelv: földgömb szövegbuborékokkal.",
+      "aspect_ratio": "1:1",
+      "references": [
+        "icon-fizika"
+      ],
+      "prompt": "Clean soft 3D icon in exactly the same style, palette and lighting as the reference atom icon: a globe with two speech bubbles. No letters or digits.",
+      "batch": 1
+    },
+    {
+      "id": "cover-tortek",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "matematika"
+      ],
+      "alt": "Törtek: egyenlő szeletekre vágott torta.",
+      "aspect_ratio": "3:2",
+      "references": [
+        "cover-sejt"
+      ],
+      "prompt": "Clean educational 3D cover illustration in the same calm, polished style and soft lighting as the reference image (but with the color palette of its own topic): a round cake cut into equal colorful slices showing fractions. Uncluttered background.",
+      "batch": 1
+    },
+    {
+      "id": "cover-egyenlet",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "matematika"
+      ],
+      "keywords": [
+        "matematika"
+      ],
+      "alt": "Egyenletek: egyensúlyban lévő mérleg kockákkal.",
+      "aspect_ratio": "3:2",
+      "references": [
+        "cover-sejt"
+      ],
+      "prompt": "Clean educational 3D cover illustration in the same calm, polished style and soft lighting as the reference image (but with the color palette of its own topic): a balance scale with colorful blocks on both sides in equilibrium. Uncluttered background.",
+      "batch": 1
+    },
+    {
+      "id": "cover-viz-korforgasa",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "természetismeret"
+      ],
+      "keywords": [
+        "természetismeret"
+      ],
+      "alt": "A víz körforgása: tenger, nap, felhő, eső és folyó.",
+      "aspect_ratio": "3:2",
+      "references": [
+        "cover-sejt"
+      ],
+      "prompt": "Clean educational 3D cover illustration in the same calm, polished style and soft lighting as the reference image (but with the color palette of its own topic): the water cycle: sea, sun, rising vapor, a cloud and rain falling on a mountain, river flowing back. Uncluttered background.",
+      "batch": 1
+    },
+    {
+      "id": "cover-noveny",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "környezetismeret"
+      ],
+      "keywords": [
+        "környezetismeret"
+      ],
+      "alt": "A növény részei: kicsírázó növény gyökérrel.",
+      "aspect_ratio": "3:2",
+      "references": [
+        "cover-sejt"
+      ],
+      "prompt": "Clean educational 3D cover illustration in the same calm, polished style and soft lighting as the reference image (but with the color palette of its own topic): a young plant sprouting from soil with roots, sun and a watering can. Uncluttered background.",
+      "batch": 1
+    },
+    {
+      "id": "cover-varak",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "történelem"
+      ],
+      "keywords": [
+        "történelem"
+      ],
+      "alt": "A középkor: vár a dombon napkeltekor.",
+      "aspect_ratio": "3:2",
+      "references": [
+        "cover-sejt"
+      ],
+      "prompt": "Clean educational 3D cover illustration in the same calm, polished style and soft lighting as the reference image (but with the color palette of its own topic): a medieval castle on a hill at sunrise. Uncluttered background.",
+      "batch": 1
+    },
+    {
+      "id": "cover-terkep",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "földrajz"
+      ],
+      "keywords": [
+        "földrajz"
+      ],
+      "alt": "Földrajz: domborzati térkép folyókkal.",
+      "aspect_ratio": "3:2",
+      "references": [
+        "cover-sejt"
+      ],
+      "prompt": "Clean educational 3D cover illustration in the same calm, polished style and soft lighting as the reference image (but with the color palette of its own topic): a topographic relief map with mountains, rivers and contour lines. Uncluttered background.",
+      "batch": 1
+    }
+  ]
+}

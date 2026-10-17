@@ -30,19 +30,23 @@ export type DesignTheme = {
   strongInk: string;
   /** Törzsszöveg legkisebb mérete px-ben (§2.5: 1–2. o. 20–24, 3–5. o. 18–20, egyébként ≥ 16). */
   minBodyPx: number;
+  /** A koncepciókép sávmottója (docs/design/Websuli_Grafikai_Szabalyterv.md 1.2). */
+  motto: string;
+  /** A kabala szóbuboréka — csak az 1–5. évfolyamon van kabala (szabályterv 4/2). */
+  bubble?: string;
 };
 
 export const DESIGN_THEMES: Record<DesignThemeId, DesignTheme> = {
   explorer: { id: "explorer", grades: "1–2.", name: "Felfedező világ", surface: "#E9F9E9", accent: "#17865F", ink: "#174A39", font: "Nunito Sans",
-    panel: "#FFFFFF", soft: "#E5F8ED", deep: "#225842", muted: "#3D6352", line: "#CFE3D6", strong: "#157A57", strongInk: "#FFFFFF", minBodyPx: 22 },
+    panel: "#FFFFFF", soft: "#E5F8ED", deep: "#225842", muted: "#3D6352", line: "#CFE3D6", strong: "#157A57", strongInk: "#FFFFFF", minBodyPx: 22, motto: "Kíváncsiság • Játék • Alapok", bubble: "Szia! Ma is felfedezünk valami újat!" },
   adventure: { id: "adventure", grades: "3–5.", name: "Tudás kalandjai", surface: "#FFF0D2", accent: "#C36A28", ink: "#703C1B", font: "Nunito Sans",
-    panel: "#FFFFFF", soft: "#FFF3DF", deep: "#754520", muted: "#6E4A2E", line: "#F0D9B5", strong: "#A4561D", strongInk: "#FFFFFF", minBodyPx: 19 },
+    panel: "#FFFFFF", soft: "#FFF3DF", deep: "#754520", muted: "#6E4A2E", line: "#F0D9B5", strong: "#A4561D", strongInk: "#FFFFFF", minBodyPx: 19, motto: "Fedezz fel • Próbáld ki • Fejlődj", bubble: "Minden lépés egy új felfedezés!" },
   studio: { id: "studio", grades: "6–8.", name: "Kreatív stúdió", surface: "#EFEFFF", accent: "#5159A8", ink: "#292F62", font: "Inter",
-    panel: "#FFFFFF", soft: "#EFEFFE", deep: "#2B356B", muted: "#4C5378", line: "#D9DBF2", strong: "#5159A8", strongInk: "#FFFFFF", minBodyPx: 17 },
+    panel: "#FFFFFF", soft: "#EFEFFE", deep: "#2B356B", muted: "#4C5378", line: "#D9DBF2", strong: "#5159A8", strongInk: "#FFFFFF", minBodyPx: 17, motto: "Gondolkodj • Alkoss • Oldj meg" },
   laboratory: { id: "laboratory", grades: "9–10.", name: "Digitális tudáslabor", surface: "#E6F3FF", accent: "#226493", ink: "#143B62", font: "Inter",
-    panel: "#FFFFFF", soft: "#E6F3FC", deep: "#173C62", muted: "#3D5873", line: "#CFE1F0", strong: "#226493", strongInk: "#FFFFFF", minBodyPx: 16 },
+    panel: "#FFFFFF", soft: "#E6F3FC", deep: "#173C62", muted: "#3D5873", line: "#CFE1F0", strong: "#226493", strongInk: "#FFFFFF", minBodyPx: 16, motto: "Elemezz • Kísérletezz • Valósítsd meg" },
   future: { id: "future", grades: "11–12.", name: "Jövőtervező", surface: "#132540", accent: "#0C929C", ink: "#EFF8FF", font: "Inter",
-    panel: "#233956", soft: "#1B3150", deep: "#0B1A2E", muted: "#BCD0E4", line: "#35506E", strong: "#0C929C", strongInk: "#061A22", minBodyPx: 16 },
+    panel: "#233956", soft: "#1B3150", deep: "#0B1A2E", muted: "#BCD0E4", line: "#35506E", strong: "#0C929C", strongInk: "#061A22", minBodyPx: 16, motto: "Tudás • Célok • Lehetőségek" },
 };
 
 /**

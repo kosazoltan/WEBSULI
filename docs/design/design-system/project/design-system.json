@@ -1,0 +1,314 @@
+{
+  "v": 3,
+  "layout": "files",
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-17T06:40:00Z"
+  },
+  "title": "Websuli Design System",
+  "namespace": "Websuli",
+  "libraries": [],
+  "sections": {},
+  "groups": [
+    "Mascot",
+    "Heroes",
+    "Covers",
+    "Icons"
+  ],
+  "assetGroups": {
+    "Mascot": {
+      "name": "Mascot",
+      "tile": "m",
+      "order": [
+        "mascot-base.webp",
+        "mascot-hello.webp",
+        "mascot-point.webp",
+        "mascot-cheer.webp",
+        "mascot-think.webp",
+        "mascot-explorer.webp"
+      ],
+      "files": {
+        "mascot-base.webp": {
+          "name": "mascot-base.webp",
+          "blob": "67d93cbaed4d5740d1b739780fcbb3a9",
+          "size": 14176,
+          "type": "image/webp"
+        },
+        "mascot-hello.webp": {
+          "name": "mascot-hello.webp",
+          "blob": "7200f645bb29f921d5ef829524d20e73",
+          "size": 13500,
+          "type": "image/webp"
+        },
+        "mascot-point.webp": {
+          "name": "mascot-point.webp",
+          "blob": "2a767fabcbd384798755e7fac37d59cb",
+          "size": 15510,
+          "type": "image/webp"
+        },
+        "mascot-cheer.webp": {
+          "name": "mascot-cheer.webp",
+          "blob": "fde68d6571749b61b77d729f0bd44e30",
+          "size": 15216,
+          "type": "image/webp"
+        },
+        "mascot-think.webp": {
+          "name": "mascot-think.webp",
+          "blob": "ac47b151c5be447fc4995716ca3fa563",
+          "size": 17592,
+          "type": "image/webp"
+        },
+        "mascot-explorer.webp": {
+          "name": "mascot-explorer.webp",
+          "blob": "a145312db23ef85a8788d84bfd90b8c3",
+          "size": 25640,
+          "type": "image/webp"
+        }
+      }
+    },
+    "Heroes": {
+      "name": "Heroes",
+      "tile": "l",
+      "order": [
+        "hero-explorer.webp",
+        "hero-adventure.webp",
+        "hero-studio.webp",
+        "hero-laboratory.webp",
+        "hero-future.webp"
+      ],
+      "files": {
+        "hero-explorer.webp": {
+          "name": "hero-explorer.webp",
+          "blob": "a8e1cd8b719eaa7448a1f9c23794b34b",
+          "size": 96362,
+          "type": "image/webp"
+        },
+        "hero-adventure.webp": {
+          "name": "hero-adventure.webp",
+          "blob": "89761f89487ff425092cfdcae137fcfa",
+          "size": 152160,
+          "type": "image/webp"
+        },
+        "hero-studio.webp": {
+          "name": "hero-studio.webp",
+          "blob": "3118dcfab89d25a1499f06ba29332b46",
+          "size": 55288,
+          "type": "image/webp"
+        },
+        "hero-laboratory.webp": {
+          "name": "hero-laboratory.webp",
+          "blob": "077a4262ef776aa231ce2566ad47fda3",
+          "size": 174334,
+          "type": "image/webp"
+        },
+        "hero-future.webp": {
+          "name": "hero-future.webp",
+          "blob": "021a25e09d3d8edd18c4fcf9931d64fa",
+          "size": 134546,
+          "type": "image/webp"
+        }
+      }
+    },
+    "Covers": {
+      "name": "Covers",
+      "tile": "l",
+      "order": [
+        "cover-egyenlet.webp",
+        "cover-ismetlodes.webp",
+        "cover-noveny.webp",
+        "cover-sejt.webp",
+        "cover-terkep.webp",
+        "cover-tortek.webp",
+        "cover-varak.webp",
+        "cover-viz-korforgasa.webp"
+      ],
+      "files": {
+        "cover-egyenlet.webp": {
+          "name": "cover-egyenlet.webp",
+          "blob": "ed223d5359032175457c36423038828c",
+          "size": 32730,
+          "type": "image/webp"
+        },
+        "cover-ismetlodes.webp": {
+          "name": "cover-ismetlodes.webp",
+          "blob": "d8cf7cc8048b24b8cc9df29a0282df85",
+          "size": 55436,
+          "type": "image/webp"
+        },
+        "cover-noveny.webp": {
+          "name": "cover-noveny.webp",
+          "blob": "1a5d55b07f853bc68cb0c5f7e4f79909",
+          "size": 63220,
+          "type": "image/webp"
+        },
+        "cover-sejt.webp": {
+          "name": "cover-sejt.webp",
+          "blob": "2d4995c6669cf13add4f6e6157e78c86",
+          "size": 43634,
+          "type": "image/webp"
+        },
+        "cover-terkep.webp": {
+          "name": "cover-terkep.webp",
+          "blob": "6448a19ca6cbf28dec46c2c6bf9ff237",
+          "size": 103614,
+          "type": "image/webp"
+        },
+        "cover-tortek.webp": {
+          "name": "cover-tortek.webp",
+          "blob": "8c50054ed1ee7981e88864cf94bb63f2",
+          "size": 36420,
+          "type": "image/webp"
+        },
+        "cover-varak.webp": {
+          "name": "cover-varak.webp",
+          "blob": "45f14fcc83b0ea7313e8f1eb80951b04",
+          "size": 107072,
+          "type": "image/webp"
+        },
+        "cover-viz-korforgasa.webp": {
+          "name": "cover-viz-korforgasa.webp",
+          "blob": "0ab2b9363acfaf3983cef5d7fbd56773",
+          "size": 54910,
+          "type": "image/webp"
+        }
+      }
+    },
+    "Icons": {
+      "name": "Icons",
+      "tile": "s",
+      "order": [
+        "icon-angol.webp",
+        "icon-angol-young.webp",
+        "icon-biologia.webp",
+        "icon-enek-young.webp",
+        "icon-fizika.webp",
+        "icon-foldrajz.webp",
+        "icon-informatika.webp",
+        "icon-kemia.webp",
+        "icon-kornyezet-young.webp",
+        "icon-magyar.webp",
+        "icon-magyar-young.webp",
+        "icon-matematika.webp",
+        "icon-matematika-young.webp",
+        "icon-rajz-young.webp",
+        "icon-termeszet-young.webp",
+        "icon-tortenelem.webp",
+        "icon-tortenelem-young.webp"
+      ],
+      "files": {
+        "icon-angol.webp": {
+          "name": "icon-angol.webp",
+          "blob": "e21e6c8e4bbffa2a292dfe0611eaecea",
+          "size": 13566,
+          "type": "image/webp"
+        },
+        "icon-angol-young.webp": {
+          "name": "icon-angol-young.webp",
+          "blob": "be358879a3ce36b981f4836a7a1e0424",
+          "size": 7418,
+          "type": "image/webp"
+        },
+        "icon-biologia.webp": {
+          "name": "icon-biologia.webp",
+          "blob": "e18faf5353a14cd5171cb91cdf12f5fe",
+          "size": 13120,
+          "type": "image/webp"
+        },
+        "icon-enek-young.webp": {
+          "name": "icon-enek-young.webp",
+          "blob": "00dc2b08c2bf24840f8ac9f8aa53b1bf",
+          "size": 9250,
+          "type": "image/webp"
+        },
+        "icon-fizika.webp": {
+          "name": "icon-fizika.webp",
+          "blob": "d7fed5eabe81762cc6a98a3c4c4e9ab5",
+          "size": 16308,
+          "type": "image/webp"
+        },
+        "icon-foldrajz.webp": {
+          "name": "icon-foldrajz.webp",
+          "blob": "0d6a1713c1c8cce90e14c503a554f1af",
+          "size": 15502,
+          "type": "image/webp"
+        },
+        "icon-informatika.webp": {
+          "name": "icon-informatika.webp",
+          "blob": "dd43c436f35461b875353a8ea8156dad",
+          "size": 12980,
+          "type": "image/webp"
+        },
+        "icon-kemia.webp": {
+          "name": "icon-kemia.webp",
+          "blob": "fdaa1560b9b2b82b9608a9df06d00d84",
+          "size": 11606,
+          "type": "image/webp"
+        },
+        "icon-kornyezet-young.webp": {
+          "name": "icon-kornyezet-young.webp",
+          "blob": "2a31514e6e8b7662c184d4ba7b801f42",
+          "size": 13458,
+          "type": "image/webp"
+        },
+        "icon-magyar.webp": {
+          "name": "icon-magyar.webp",
+          "blob": "8e44e7016ff2381f97bf6a9a72e82a38",
+          "size": 14788,
+          "type": "image/webp"
+        },
+        "icon-magyar-young.webp": {
+          "name": "icon-magyar-young.webp",
+          "blob": "f51598a3e1de19f59552f31e0dd055d0",
+          "size": 10740,
+          "type": "image/webp"
+        },
+        "icon-matematika.webp": {
+          "name": "icon-matematika.webp",
+          "blob": "61808fd25264493e4eccc8499d13ec5f",
+          "size": 12300,
+          "type": "image/webp"
+        },
+        "icon-matematika-young.webp": {
+          "name": "icon-matematika-young.webp",
+          "blob": "e4978d2bf693d434ffb434962ddb4543",
+          "size": 13244,
+          "type": "image/webp"
+        },
+        "icon-rajz-young.webp": {
+          "name": "icon-rajz-young.webp",
+          "blob": "d07e08a3e78e3e2b01ab2122388899ef",
+          "size": 11092,
+          "type": "image/webp"
+        },
+        "icon-termeszet-young.webp": {
+          "name": "icon-termeszet-young.webp",
+          "blob": "5c2d95596ade99e004594376370468d6",
+          "size": 13986,
+          "type": "image/webp"
+        },
+        "icon-tortenelem.webp": {
+          "name": "icon-tortenelem.webp",
+          "blob": "5b6364cfb886ef1cd3d4816e241da52e",
+          "size": 11740,
+          "type": "image/webp"
+        },
+        "icon-tortenelem-young.webp": {
+          "name": "icon-tortenelem-young.webp",
+          "blob": "7b494552b4436ee80f74fdc783c29ec3",
+          "size": 8858,
+          "type": "image/webp"
+        }
+      }
+    }
+  },
+  "blobs": {},
+  "docs": {
+    "sections": []
+  },
+  "lastChange": {
+    "by": "Kósa Zoltán",
+    "at": "2026-10-17T07:30:00Z",
+    "via": "Claude Code · kosazoltan/WEBSULI@feat/websuli-kepkeszlet",
+    "note": "36 jóváhagyott kép négy csoportban (kabala, sávhősök, borítók, ikonok); változatos képválasztás a brand bookban."
+  }
+}

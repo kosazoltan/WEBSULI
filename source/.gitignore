@@ -1,2 +1,5 @@
 playwright-report/
 .vercel
+
+# Websuli képkészlet: a generált jelöltek nem kerülnek gitbe (docs/specs/2026-10-17-websuli-kepkeszlet.md)
+design-assets/candidates/

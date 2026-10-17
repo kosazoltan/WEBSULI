@@ -1,0 +1,1 @@
+The Websuli fox (MI-generated, own, owner-approved): one gender-neutral character in six poses. Only in the 1–5. bands. Never redraw it; ask for a new pose through `source/design-assets/prompts.json` with `mascot-hello` as the reference.

@@ -5,6 +5,10 @@ import {
   ChevronRight,
   HelpCircle,
   Leaf,
+  Compass,
+  Brain,
+  FlaskConical,
+  TrendingUp,
   Lightbulb,
   ListChecks,
   Sparkles,
@@ -40,12 +44,15 @@ import "./decision-story.css";
 import { LessonExperienceView } from "./LessonExperienceView";
 import type { ArbiterSource } from "./arbiter";
 import "./lesson-grade.css";
-import { LessonCoverArt } from "./LessonCoverArt";
+import { LessonArt, lessonArtFor } from "./LessonArt";
 import { experienceFingerprint } from "./useExperienceRound";
 // Websuli Design (docs/specs/2026-10-16-websuli-design.md): az öt évfolyamsávos arculat — a többi lecke-CSS UTÁN, hogy az azonos
 // specificitású szabályoknál is ez érvényesüljön.
 import "./lesson-design.css";
-import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom } from "@shared/lesson-design";
+import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom, type DesignThemeId } from "@shared/lesson-design";
+
+/** A koncepciókép sávjelvényei: levél · iránytű · agy · lombik · emelkedő grafikon (szabályterv 1.2). */
+const BAND_ICON: Record<DesignThemeId, typeof Leaf> = { explorer: Leaf, adventure: Compass, studio: Brain, laboratory: FlaskConical, future: TrendingUp };
 
 /**
  * The Lesson Runtime: one audited renderer for every lesson.
@@ -464,6 +471,8 @@ export function LessonRuntime({
   const band = ageBandForClassroom(lesson.classroom);
   const theme = BAND_THEME[band];
   const designTheme = designThemeForClassroom(lesson.classroom);
+  // Változatos képválasztás: a lecke azonosítója szerint rotál (ugyanaz a lecke mindig ugyanazt kapja).
+  const art = useMemo(() => lessonArtFor({ ...lesson, seed: lessonId ?? persistId ?? lesson.title }, designTheme), [lesson, designTheme, lessonId, persistId]);
   // Websuli Design: a lecke fontja az évfolyamból (1–5. Nunito Sans, 0. és 6–12. Inter), téma szerinti kivétel nélkül.
   const fonts = lessonFontPair(lesson.classroom, lesson.subject);
   const typography = {
@@ -505,11 +514,17 @@ export function LessonRuntime({
     // nem jelenik meg (tulajdonosi döntés 2026-10-16) — a `data-experience` állandó, így a régi téma- és világszabályok nem illeszkednek.
     <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
       <article className="max-w-3xl mx-auto px-4 py-6 space-y-6" data-testid="lesson-runtime">
-        <div className="ws-topbar" data-testid="ws-topbar">
-          <strong>✦ Websuli / {DESIGN_THEMES[designTheme].name}</strong>
-          <span>{DESIGN_TOPBAR_TAGLINE}</span>
+        {/* Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a koncepciókép sávfejléce — jelvény, évfolyam, téma, mottó. */}
+        <div className="ws-bandhead" data-testid="ws-bandhead">
+          <span className="ws-badge" aria-hidden>{(() => { const Icon = BAND_ICON[designTheme]; return <Icon className="w-7 h-7" />; })()}</span>
+          <div className="min-w-0">
+            <p className="ws-grade">{DESIGN_THEMES[designTheme].grades} osztály</p>
+            <p className="ws-band-name">{DESIGN_THEMES[designTheme].name}</p>
+            <p className="ws-motto">{DESIGN_THEMES[designTheme].motto}</p>
+          </div>
+          <p className="ws-brand"><strong>✦ Websuli</strong><span>{DESIGN_TOPBAR_TAGLINE}</span></p>
         </div>
-        <header className="lesson-hero" data-cover={lesson.experience ? "art" : undefined}>
+        <header className="lesson-hero" data-cover="art">
           <div className="lesson-emblem" aria-hidden>
             <Leaf className="w-7 h-7" />
           </div>
@@ -517,11 +532,12 @@ export function LessonRuntime({
             {lesson.experience && <p className="fusion-eyebrow">Felfedezésből tudás</p>}
             <h1 className={cn("lesson-heading leading-tight break-words", theme.heading)}>{lesson.title}</h1>
             <div className="flex flex-wrap gap-2 mt-1.5">
-              <span className="lesson-chip">{lesson.subject}</span>
+              <span className="lesson-chip">{art.subjectIcon && <img className="ws-subject-ico" src={art.subjectIcon.src} alt="" aria-hidden="true" decoding="async" />}{lesson.subject}</span>
               <span className="lesson-chip">{lesson.classroom}. osztály</span>
             </div>
           </div>
-          {lesson.experience && <LessonCoverArt subject={lesson.subject} />}
+          {/* Review #273: mindig renderel — kép híján a LessonArt a rajzos tartalékot (LessonCoverArt) adja. */}
+          <LessonArt art={art} theme={designTheme} subject={lesson.subject} />
         </header>
 
         {lesson.experience ? <LessonExperienceView key={experienceKey} experience={lesson.experience} lessonId={lessonId} arbiterSource={arbiterSource} headings={lesson.sections.map(s => s.heading)} storageKey={`websuli:fusion:${experienceKey}`} reviewKey={persistId ?? lessonId ?? lesson.mapId}>

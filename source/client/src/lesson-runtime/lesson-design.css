@@ -74,14 +74,46 @@
   background-image: none;
 }
 
-/* ---------- felső sáv (a referencia `pvbar` mintája) ---------- */
-[data-ws-theme] .ws-topbar {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
-  padding: 14px 19px; border-radius: var(--lesson-radius);
-  background: var(--ws-deep); color: #FFFFFF;
+/* ---------- sávfejléc (a koncepciókép oszlopfeje: jelvény · évfolyam · téma · mottó; docs/specs/2026-10-17-websuli-lecke-hos.md) ---------- */
+[data-ws-theme] .ws-bandhead {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px 16px; align-items: center;
+  padding: 16px 20px; border-radius: 20px; border: 1px solid var(--lesson-line);
+  background: linear-gradient(135deg, var(--ws-soft), var(--lesson-surface));
 }
-[data-ws-theme] .ws-topbar strong { font-size: 15px; font-weight: 800; }
-[data-ws-theme] .ws-topbar span { font-size: 13px; color: #FFFFFF; }
+/* A sötét 11–12. sávban tömör csempeszín: a sötét színpadra nem kerül színátmenet (lesson-band-visual.spec.ts). */
+[data-ws-theme="future"] .ws-bandhead { background: var(--lesson-surface); }
+[data-ws-theme] .ws-bandhead p { margin: 0; }
+[data-ws-theme] .ws-badge { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--ws-accent); color: #FFFFFF; box-shadow: 0 8px 18px color-mix(in srgb, var(--ws-accent) 30%, transparent); }
+[data-ws-theme] .ws-grade { font-size: 20px; font-weight: 900; line-height: 1.2; color: var(--ws-title); }
+[data-ws-theme] .ws-band-name { font-size: 24px; font-weight: 900; line-height: 1.2; letter-spacing: -0.02em; color: var(--ws-title); }
+[data-ws-theme] .ws-motto { font-size: 14px; font-weight: 600; color: var(--ws-title); }
+[data-ws-theme] .ws-brand { display: grid; justify-items: end; gap: 2px; text-align: right; font-size: 13px; color: var(--ws-muted); }
+[data-ws-theme] .ws-brand strong { font-size: 15px; font-weight: 900; color: var(--ws-title); }
+@media (max-width: 650px) {
+  [data-ws-theme] .ws-bandhead { grid-template-columns: auto minmax(0, 1fr); padding: 14px; }
+  [data-ws-theme] .ws-brand { grid-column: 1 / -1; justify-items: start; text-align: left; grid-auto-flow: column; justify-content: space-between; }
+  [data-ws-theme] .ws-band-name { font-size: 21px; }
+}
+
+/* ---------- lecke-hős kép (a katalógusból; nincs szöveg a képen, a cím a kártyán áll) ---------- */
+[data-band][data-experience][data-ws-theme] .lesson-hero[data-cover] { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 0; padding: 0; overflow: hidden; min-height: 0; align-items: stretch; }
+[data-band][data-experience][data-ws-theme] .lesson-hero[data-cover] > .min-w-0 { padding: clamp(20px, 3vw, 32px); align-self: center; }
+[data-band][data-experience][data-ws-theme] .lesson-hero[data-cover] > .lesson-cover-art { padding: 16px; align-self: center; }
+[data-ws-theme] .ws-art { position: relative; margin: 0; min-height: 260px; }
+[data-ws-theme] .ws-art > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+[data-ws-theme] .ws-mascot { position: absolute; left: 12px; bottom: 12px; right: 12px; display: flex; align-items: flex-end; gap: 8px; }
+[data-ws-theme] .ws-mascot img { width: 88px; height: 88px; flex: none; border-radius: 50%; object-fit: cover; background: #FFFFFF; border: 3px solid #FFFFFF; box-shadow: 0 8px 18px #0000002e; }
+[data-ws-theme] .ws-bubble { margin: 0 0 30px; max-width: 220px; padding: 10px 14px; border-radius: 16px 16px 16px 4px; background: #FFFFFF; color: #1B2B3A; font-size: 15px; font-weight: 800; line-height: 1.35; box-shadow: 0 8px 18px #0000002e; }
+[data-ws-theme] .lesson-chip:has(> .ws-subject-ico) { display: inline-flex; align-items: center; gap: 6px; }
+/* Review #273: a Csendes nézet a hős-képet is halványítja (mint a régi .lesson-cover-art-ot); a kabala-buborék olvasható marad. */
+[data-ws-theme]:has(.fusion-view[data-quiet="true"]) .ws-art > img { opacity: .25; }
+[data-ws-theme] .ws-subject-ico { width: 22px; height: 22px; flex: none; border-radius: 6px; object-fit: cover; }
+@media (max-width: 650px) {
+  [data-band][data-experience][data-ws-theme] .lesson-hero[data-cover] { grid-template-columns: minmax(0, 1fr); }
+  [data-ws-theme] .ws-art { order: -1; min-height: 0; aspect-ratio: 16 / 9; }
+  [data-ws-theme] .ws-mascot img { width: 64px; height: 64px; }
+  [data-ws-theme] .ws-bubble { font-size: 14px; margin-bottom: 18px; }
+}
 
 /* ---------- címsor-kártya ---------- */
 [data-band][data-experience][data-ws-theme] .lesson-hero {
@@ -140,7 +172,12 @@
 /* A fülek száma a lecke tartalmától függ (az „Ismétlés” csak kártyákkal jelenik meg): egy sorban, egyenlő szélességgel. */
 [data-ws-theme] .fusion-tabs { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
 [data-ws-theme] .fusion-tabs button { font-size: clamp(13px, 1.8vw, 16px); }
-[data-ws-theme] .fusion-tabs button > span { min-width: 0; overflow-wrap: anywhere; text-align: center; }
+/* A fülfelirat szó közben nem törik (mérve: 390 px-en a „Módszere/k”); keskeny kijelzőn szűkebb térköz és betűköz. */
+[data-ws-theme] .fusion-tabs button > span { min-width: 0; overflow-wrap: normal; word-break: keep-all; text-align: center; }
+@media (max-width: 480px) {
+  [data-ws-theme] .fusion-tabs { gap: 2px; padding: 4px; }
+  [data-ws-theme] .fusion-tabs button { padding-inline: 0; font-size: 13px; letter-spacing: -0.02em; }
+}
 [data-ws-theme] .fusion-tabs button { color: var(--lesson-muted); border-radius: 12px; box-shadow: inset 0 0 0 2px transparent; }
 [data-ws-theme] .fusion-tabs button[aria-selected="true"] {
   background: var(--ws-soft); color: var(--ws-title); box-shadow: inset 0 0 0 2px var(--ws-accent);
