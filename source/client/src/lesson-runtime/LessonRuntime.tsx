@@ -1,21 +1,5 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import {
-  BookOpen,
-  CheckCircle2,
-  ChevronRight,
-  HelpCircle,
-  Leaf,
-  Compass,
-  Brain,
-  FlaskConical,
-  TrendingUp,
-  Lightbulb,
-  ListChecks,
-  Sparkles,
-  Target,
-  Volume2,
-  XCircle,
-} from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronRight, HelpCircle, Leaf, Compass, Brain, FlaskConical, TrendingUp, Lightbulb, ListChecks, Sparkles, Target, Volume2, XCircle, PlayCircle, Hand } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -45,6 +29,7 @@ import { LessonExperienceView } from "./LessonExperienceView";
 import type { ArbiterSource } from "./arbiter";
 import "./lesson-grade.css";
 import { LessonArt, lessonArtFor } from "./LessonArt";
+import { BlockMarker, DesignBandContext, SectionDivider, SectionMascot } from "./BlockArt";
 import { experienceFingerprint } from "./useExperienceRound";
 // Websuli Design (docs/specs/2026-10-16-websuli-design.md): az öt évfolyamsávos arculat — a többi lecke-CSS UTÁN, hogy az azonos
 // specificitású szabályoknál is ez érvényesüljön.
@@ -76,10 +61,12 @@ const BAND_ICON: Record<DesignThemeId, typeof Leaf> = { explorer: Leaf, adventur
 const FullTeachingContext = createContext(false);
 const OPTION_KEYS = "ABCDEFGH";
 
-function BlockHead({ icon: Icon, label }: { icon: typeof BookOpen; label: string }) {
+function BlockHead({ icon: Icon, label, kind }: { icon: typeof BookOpen; label: string; kind?: string }) {
+  // Arculati bank S2: a sáv blokkjelzője a lucide ikon helyett (ha nincs vagy nem töltődik be, a lucide marad).
+  const fallback = <Icon className="w-3.5 h-3.5" aria-hidden />;
   return (
     <span className="lesson-block-head">
-      <Icon className="w-3.5 h-3.5" aria-hidden />
+      {kind ? <BlockMarker kind={kind} fallback={fallback} /> : fallback}
       {label}
     </span>
   );
@@ -110,7 +97,7 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
 
   return (
     <div className={cn("lesson-block space-y-1", theme.body)} data-block="explain" data-depth={block.depth}>
-      <BlockHead icon={BookOpen} label={theme.labels.explain} />
+      <BlockHead icon={BookOpen} label={theme.labels.explain} kind="explain" />
       {block.depth !== "core" && (
         <span className="lesson-muted inline-flex items-center gap-1 text-xs">
           <Lightbulb className="w-3 h-3" />
@@ -141,7 +128,7 @@ function ExampleBlock({ block, band }: { block: Extract<Block, { kind: "example"
 
   return (
     <div className="lesson-block space-y-3" data-block="example">
-      <BlockHead icon={Sparkles} label={theme.labels.example} />
+      <BlockHead icon={Sparkles} label={theme.labels.example} kind="example" />
       <p className={cn("font-medium", theme.body)}>{block.problem}</p>
 
       {/* Spec 2026-09-29: számozott lépés-körök teljes méretű szöveggel (a `text-sm` lista apró volt). */}
@@ -195,7 +182,7 @@ function CheckBlock({
 
   return (
     <div className="lesson-block space-y-3" data-block="check">
-      <BlockHead icon={HelpCircle} label={theme.labels.check} />
+      <BlockHead icon={HelpCircle} label={theme.labels.check} kind="check" />
       <p className={cn("font-medium", theme.body)}>{block.question}</p>
 
       <div className="grid gap-2">
@@ -262,7 +249,7 @@ function RecapBlock({ block, band }: { block: Extract<Block, { kind: "recap" }>;
   const theme = BAND_THEME[band];
   return (
     <div className="lesson-block" data-block="recap">
-      <BlockHead icon={ListChecks} label={theme.labels.recap} />
+      <BlockHead icon={ListChecks} label={theme.labels.recap} kind="recap" />
       <div className="lesson-recap-cards">
         {block.bullets.map((b, i) => (
           <div key={i} className="lesson-recap-card" data-recap-item>
@@ -303,11 +290,12 @@ export function LessonBlock({
       return <RecapBlock block={block} band={band} />;
     case "animate": {
       const Anim = ANIMATE_REGISTRY[block.animKind];
-      return <Anim params={block.params} caption={block.caption} />;
+      // Review #279: a mozgókép és a próba blokk is blokkfejlécet kap (a sáv jelzőjével), mint a többi négy típus.
+      return <div className="space-y-2"><BlockHead icon={PlayCircle} label="Mozgókép" kind="animate" /><Anim params={block.params} caption={block.caption} /></div>;
     }
     case "try": {
       const Try = TRY_REGISTRY[block.tryKind];
-      return <Try spec={block.spec} persisted={tryPersisted} onPersist={onTryPersist} />;
+      return <div className="space-y-2"><BlockHead icon={Hand} label="Próbáld ki" kind="try" /><Try spec={block.spec} persisted={tryPersisted} onPersist={onTryPersist} /></div>;
     }
   }
 }
@@ -365,6 +353,7 @@ function LessonSection({
       id={`section-${sectionIdx + 1}`}
       data-testid={`lesson-section-${sectionIdx}`}
     >
+      <SectionDivider index={sectionIdx} />
       <h2 className={cn("lesson-heading flex items-center gap-3", theme.heading)}>
         <span className="lesson-section-no" aria-hidden>
           {sectionIdx + 1}
@@ -375,6 +364,7 @@ function LessonSection({
           </span>
         )}
         <span className="lesson-chapter-title">{section.heading}</span>
+        <SectionMascot firstKind={section.blocks[0]?.kind} />
       </h2>
       {section.blocks.map((block, bi) => (
         <LessonBlock
@@ -519,6 +509,7 @@ export function LessonRuntime({
     // every background with its ink, so the app theme cannot break it.
     // Websuli Design: a színvilágot kizárólag az évfolyamsáv adja (`data-ws-theme`); a régi élménytéma, vizuális világ és díszítőeffekt
     // nem jelenik meg (tulajdonosi döntés 2026-10-16) — a `data-experience` állandó, így a régi téma- és világszabályok nem illeszkednek.
+    <DesignBandContext.Provider value={designTheme}>
     <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
       <article className="max-w-3xl mx-auto px-4 py-6 space-y-6" data-testid="lesson-runtime">
         {/* Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a koncepciókép sávfejléce — jelvény, évfolyam, téma, mottó. */}
@@ -583,5 +574,6 @@ export function LessonRuntime({
         </>}
       </article>
     </div>
+    </DesignBandContext.Provider>
   );
 }

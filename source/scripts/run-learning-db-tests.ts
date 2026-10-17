@@ -70,11 +70,16 @@ try {
   const topicMigration = await readFile(new URL("../migrations/0029_design_assets_topic.sql", import.meta.url), "utf8");
   await pool.query(topicMigration);
   await pool.query(topicMigration);
+  // Tanulói eredmény e-mail: 0030 a migrációs fájlból (nem a séma-exportból), kétszer — idempotens.
+  await pool.query("DROP TABLE lesson_result_emails");
+  const resultMigration = await readFile(new URL("../migrations/0030_lesson_result_emails.sql", import.meta.url), "utf8");
+  await pool.query(resultMigration);
+  await pool.query(resultMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {
     // The reconciler intentionally scans all workflow rows; isolate suite-owned lifecycle tests.
-    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts"], {
+    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts"], {
       cwd, env: { ...env, DATABASE_URL: databaseUrl, NODE_ENV: "test", WEBSULI_DISPOSABLE_DB: name },
       windowsHide: true, stdio: "inherit",
     });

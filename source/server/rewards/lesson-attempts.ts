@@ -115,7 +115,9 @@ export async function markPracticeHint(userId: string, id: string, questionId: s
 }
 export async function finishPractice(userId: string, id: string, now = new Date()) {
   const policy = await loadRewardPolicy();
-  return withAttempt(userId, id, async (tx, row) => {
+  // Tanulói eredmény e-mail (2026-10-17-eredmeny-email): csak az ELSŐ lezárás után, a tranzakción kívül, várakozás nélkül.
+  let finished: typeof lessonAttempts.$inferSelect | null = null;
+  const view = await withAttempt(userId, id, async (tx, row) => {
     await checkCurrent(tx, row, now);
     if (row.result) return viewOf(row);
     const correctCount = row.questions.filter(q => row.answers[q.id]?.correct).length;
@@ -141,8 +143,13 @@ export async function finishPractice(userId: string, id: string, now = new Date(
     try { await tx.transaction(sp => recordRoundOutcomes(sp, row)); }
     catch (error) { logger.warn(`[PRACTICE] A katalógus-eredmény számlálója nem frissült (a kör lezárása sikeres): ${error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300)}`); }
     const [saved] = await tx.update(lessonAttempts).set({ status: "completed", result, finishedAt: now }).where(eq(lessonAttempts.id, id)).returning();
+    finished = saved;
     return viewOf(saved);
   });
+  const done = finished as typeof lessonAttempts.$inferSelect | null;
+  if (done) void import("../lesson-result-email").then(m => m.sendPracticeResult({ userId, attemptId: done.id, lessonId: done.lessonId, questions: done.questions, answers: done.answers }))
+    .catch(error => logger.warn(`[PRACTICE] Az eredmény-e-mail nem indult: ${error instanceof Error ? error.message : String(error)}`));
+  return view;
 }
 export async function practiceReport(lessonId: string, now = new Date()) {
   const rows = await db.select().from(lessonAttempts).where(and(eq(lessonAttempts.lessonId, lessonId), eq(lessonAttempts.status, "completed"))).orderBy(desc(lessonAttempts.finishedAt)).limit(1000);

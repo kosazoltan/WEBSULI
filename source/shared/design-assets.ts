@@ -41,6 +41,7 @@ function rotate<T>(pool: readonly T[], seed: string, salt: string): T | undefine
   return pool.length ? pool[fnv1a(`${salt}:${seed}`) % pool.length] : undefined;
 }
 const YOUNG_BANDS = new Set(["explorer", "adventure"]);
+const BLOCK_POSE = /^mascot-(explain|example|try|check|recap|animate)$/;
 const BAND_SUFFIX = new RegExp(`-(${DESIGN_ASSET_BANDS.join("|")})$`);
 
 /**
@@ -78,7 +79,8 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
     const chosen = rotate(pool, seed, "art");
     if (chosen?.kind === "cover") cover = chosen; else hero = chosen;
   }
-  const mascots = catalog.filter(a => a.kind === "mascot" && (band === "explorer" ? a.band === "explorer" : YOUNG_BANDS.has(a.band)));
+  // Review #279: a blokktípushoz kötött pózok (mascot-explain…) a fejezetcímhez valók, nem az általános fejléc-rotációba.
+  const mascots = catalog.filter(a => a.kind === "mascot" && !BLOCK_POSE.test(a.id) && (band === "explorer" ? a.band === "explorer" : YOUNG_BANDS.has(a.band)));
   // Ha a választott kép maga is a kabalát mutatja („kabala” kulcsszó), a portré nem ismétli meg.
   const picture = cover ?? hero;
   const mascot = young && !picture?.keywords.includes("kabala") ? rotate(mascots, seed, "mascot") : undefined;
