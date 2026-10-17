@@ -28,6 +28,9 @@ Egy sötétkék első képkockát a felvétel mutatott, de a forrása nem igazol
 UNVERIFIED, nem része a javításnak.
 
 ## Gyökérok
+0. **(A tulajdonos képernyőképe igazolta.)** Adminnak a betöltés alatt azonnal megjelenik a nyitott „Tananyag javítása” űrlap
+   („A lecke és a gyakorlóbankok újragyártódnak…”). A betöltött lecke ezt lejjebb tolja. A látvány olyan, mintha a megnyitás
+   javítást indítana, pedig nem fut semmi.
 1. **Betöltési vízesés két külön töltőképernyővel:** a lecke kérése az anyag-metaadat után indul, és a config-kérésre is vár,
    pedig a leckéhez nem kell.
 2. **Semleges (fehér) töltőképernyő:** a lecke sávja már az anyag-metaadatból (`classroom`) ismert, mégis fehér a háttér,

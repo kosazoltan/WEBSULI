@@ -32,15 +32,21 @@ Terv: `docs/specs/2026-10-17-lecke-betoltes.md`. Ág: `fix/lecke-betoltes`. A pa
    - Ha a leckének van érvényes tárolt `art`-ja, a `resolveStoredArt` adja a képeket, egyébként a mai `lessonArtFor`.
    - A tárolt elemek forrása `/api/design-assets/<id>`. Hibánál (`onError`) egyszer a katalógus `src`-re vált.
    - A hős-kép `fetchPriority="high"`.
-8. **Tesztek:**
+8. **Admin-javítópanel (tulajdonosi képernyőkép, 2026-10-17):** betöltés közben a „Lecke betöltése…” alatt azonnal megjelent
+   a nyitott „Tananyag javítása” űrlap („A lecke és a gyakorlóbankok újragyártódnak…”). Ez volt a „valamit javít / újragenerál”
+   látvány.
+   - A `Preview` csak a lezárult betöltés után mutatja (hibás leckénél is, hogy a sérült lecke javítható maradjon).
+   - A `LessonRepairPanel` `collapsed` módban egy „Tananyag javítása…” gombként indul; futó javításnál nyitva marad.
+   - A Javítóműhely beágyazott nézete változatlan.
+9. **Tesztek:**
    - unit: `resolveStoredArt` (sávszűrés, kabala-szabály, ismeretlen id); `lessonArtIds`; séma-elfogadás.
    - DB (`tests/design-assets-db.integration.ts`): az `upsertLesson` a teljes `art`-ot írja, csak létező azonosítókkal; a
      javítás útvonala is ezt teszi.
-   - e2e (`tests/lesson-loading.spec.ts`):
+   - e2e (`tests/lesson-loading.spec.ts`), a javítópanel betöltés alatti hiányával együtt:
      - késleltetett API mellett egyetlen töltőképernyő, a sáv felületének színével;
      - a `by-file` kérés nem az anyag válasza után indul;
      - tárolt `art` esetén a hős az `/api/design-assets/`-ről jön;
      - 500-as válasznál katalógus-tartalék.
    - A meglévő `lesson-responsive`, `lesson-design` és `subject-icon` csomag zöld.
-9. **Kapuk:** tsc, check:test, lint, unit, `test:learning-db`, a célzott Playwright, build. Merge és deploy után élő
+10. **Kapuk:** tsc, check:test, lint, unit, `test:learning-db`, a célzott Playwright, build. Merge és deploy után élő
    visszamérés ugyanazzal a felvevő szkripttel.

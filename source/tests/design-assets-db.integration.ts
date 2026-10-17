@@ -17,7 +17,7 @@ assert.equal(url.hostname, "127.0.0.1");
 assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 const { db, dbPool } = await import("../server/db");
-const { designAssetsRouter, syncDesignAssets, withSubjectIcon } = await import("../server/design-assets");
+const { designAssetsRouter, syncDesignAssets, withLessonArt } = await import("../server/design-assets");
 const { createDrizzlePipelineStore } = await import("../server/studio/pipeline-store");
 
 const asset = (id: string, band: DesignAsset["band"]): DesignAsset => ({
@@ -73,10 +73,10 @@ test("valódi DB: a végpont a bájtokat ETaggel adja; egyező ETagre 304, ismer
 
 test("valódi DB: mentéskor a lecke a tantárgy × sáv ikonját kapja; hiányzó kép vagy nem tanított pár esetén nincs ikon", async () => {
   const lesson = { ...fusionFixture(), subject: "Matematika", classroom: 7 };
-  assert.deepEqual((await withSubjectIcon(lesson) as { art?: unknown }).art, { subjectIcon: "icon-matematika-studio" });
-  const laboratory = await withSubjectIcon({ ...lesson, classroom: 9, art: { subjectIcon: "icon-regi" } }) as { art?: unknown };
+  assert.deepEqual((await withLessonArt(lesson, "seed") as { art?: unknown }).art, { subjectIcon: "icon-matematika-studio" });
+  const laboratory = await withLessonArt({ ...lesson, classroom: 9, art: { subjectIcon: "icon-regi" } }, "seed") as { art?: unknown };
   assert.equal(laboratory.art, undefined, "a 9–10. sáv képe nincs a táblában: a régi érték sem marad");
-  assert.equal((await withSubjectIcon({ ...lesson, subject: "Fizika", classroom: 2 }) as { art?: unknown }).art, undefined);
+  assert.equal((await withLessonArt({ ...lesson, subject: "Fizika", classroom: 2 }, "seed") as { art?: unknown }).art, undefined);
 
   await db.insert(knowledgeMaps).values({ id: "icon-map", title: "Ikon próba", subject: "matematika", classroom: 7, sourceFiles: [], inputHash: "icon-integration-only" });
   const store = await createDrizzlePipelineStore();
@@ -90,6 +90,20 @@ test("valódi DB: mentéskor a lecke a tantárgy × sáv ikonját kapja; hiányz
 
 test("valódi DB (review #274): a javítás tranzakciójában is az új sáv ikonja kerül a leckébe", async () => {
   const lesson = { ...fusionFixture(), subject: "Matematika", classroom: 7, art: { subjectIcon: "icon-matematika-studio" } };
-  const moved = await db.transaction(async tx => withSubjectIcon({ ...lesson, classroom: 11 }, tx)) as { art?: unknown };
+  const moved = await db.transaction(async tx => withLessonArt({ ...lesson, classroom: 11 }, "seed", tx)) as { art?: unknown };
   assert.deepEqual(moved.art, { subjectIcon: "icon-matematika-future" }, "a 11. évfolyamra áthelyezett lecke a 11–12. sáv ikonját kapja");
+});
+
+test("valódi DB (lecke megnyitása): a mentés a teljes arculatot rögzíti — ikon és a sáv képe, csak az adatbázisban létezőkből", async () => {
+  await writeFile(path.join(root, "design", "studio", "hero-studio.webp"), Buffer.from("RIFF-hero-studio"));
+  const hero: DesignAsset = { ...asset("hero-studio", "studio"), kind: "hero", subjects: [], keywords: [], alt: "Kreatív stúdió: sávhős.", src: "/design/studio/hero-studio.webp" };
+  assert.equal((await syncDesignAssets([hero], [root])).written, 1);
+  const lesson = { ...fusionFixture(), subject: "Matematika", classroom: 7 };
+  assert.deepEqual((await withLessonArt(lesson, "seed") as { art?: unknown }).art, { subjectIcon: "icon-matematika-studio", picture: "hero-studio" });
+  // A 3–5. sávhoz nincs kép és ikon a táblában: nincs art (a lejátszó a régi számolásra vált).
+  assert.equal((await withLessonArt({ ...lesson, classroom: 4 }, "seed") as { art?: unknown }).art, undefined);
+  const store = await createDrizzlePipelineStore();
+  const id = await store.upsertLesson(null, "icon-map", lesson);
+  const [saved] = await db.select({ json: lessons.json }).from(lessons).where(eq(lessons.id, id));
+  assert.deepEqual((saved.json as { art?: unknown }).art, { subjectIcon: "icon-matematika-studio", picture: "hero-studio" });
 });

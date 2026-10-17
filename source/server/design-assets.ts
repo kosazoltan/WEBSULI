@@ -7,8 +7,8 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { designAssets } from "../shared/schema";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
-import type { DesignAsset } from "../shared/design-assets";
-import { subjectIconId } from "../shared/subject-icons";
+import { lessonArtIds, pickLessonArt, type DesignAsset } from "../shared/design-assets";
+import { designThemeForClassroom } from "../shared/lesson-design";
 import { logger } from "./lib/logger";
 
 /**
@@ -53,21 +53,23 @@ export async function syncDesignAssets(catalog: readonly DesignAsset[] = DESIGN_
 }
 
 /**
- * Mentés előtti ikonválasztás: a lecke tantárgyából és évfolyamából az `icon-<tantárgy>-<sáv>` azonosító, ha a kép az
- * adatbázisban megvan (review #274: a javítás közvetlen mentése is ezen megy át, a saját tranzakciójában). Ismeretlen tantárgy, nem tanított pár vagy hiányzó kép: a lecke ikon nélkül ment (régi `art` törölve).
+ * Mentés előtti arculat (docs/specs/2026-10-17-lecke-betoltes.md; az ikon a 2026-10-17-websuli-ikonkeszlet szerint): a lecke
+ * a sáv ikonját, a rotációval választott hős- vagy borítóképet és (1–5. évfolyamon) a kabalát kapja — csak az adatbázisban
+ * megvan elemekből. A lejátszó ezt olvassa, megjelenítéskor nem számol. Review #274: a javítás közvetlen mentése is ezen megy
+ * át, a saját tranzakciójában. Ismeretlen tantárgy vagy nem tanított pár: ikon nélkül; hiba esetén a lecke `art` nélkül ment.
  */
-export async function withSubjectIcon<T>(json: T, executor: Pick<typeof db, "select"> = db): Promise<T> {
+export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typeof db, "select"> = db): Promise<T> {
   if (!json || typeof json !== "object" || Array.isArray(json)) return json;
   const lesson = json as Record<string, unknown>;
-  if (typeof lesson.subject !== "string" || typeof lesson.classroom !== "number") return json;
+  if (typeof lesson.subject !== "string" || typeof lesson.classroom !== "number" || typeof lesson.title !== "string") return json;
   const { art: _previous, ...rest } = lesson;
   try {
-    const id = subjectIconId(lesson.subject, lesson.classroom);
-    if (!id) return rest as T;
-    const [row] = await executor.select({ id: designAssets.id }).from(designAssets).where(eq(designAssets.id, id));
-    return (row ? { ...rest, art: { subjectIcon: row.id } } : rest) as T;
+    const stored = new Set((await executor.select({ id: designAssets.id }).from(designAssets)).map(r => r.id));
+    const catalog = DESIGN_ASSET_CATALOG.filter(a => stored.has(a.id));
+    const art = lessonArtIds(pickLessonArt({ subject: lesson.subject, title: lesson.title, seed }, designThemeForClassroom(lesson.classroom), catalog));
+    return (Object.keys(art).length ? { ...rest, art } : rest) as T;
   } catch (error) {
-    logger.warn("[design-assets] Az ikon nem kereshető, a lecke ikon nélkül ment:", error);
+    logger.warn("[design-assets] Az arculat nem választható, a lecke art nélkül ment:", error);
     return rest as T;
   }
 }

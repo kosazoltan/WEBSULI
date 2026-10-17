@@ -27,12 +27,17 @@ function writeJob(fileId: string, jobId: string | null) {
 
 export type RepairPreset = { label: string; text: string };
 
-export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = false }: { fileId: string; isLesson: boolean; presets?: RepairPreset[]; embedded?: boolean }) {
+/**
+ * `collapsed`: a lecke alatt (Preview) csukott gombként indul — a nyitott űrlap a „Lecke betöltése…” mellett úgy látszott,
+ * mintha a megnyitás javítást indítana (tulajdonosi bejelentés, 2026-10-17). Futó javításnál nyitva marad.
+ */
+export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = false, collapsed = false }: { fileId: string; isLesson: boolean; presets?: RepairPreset[]; embedded?: boolean; collapsed?: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [instruction, setInstruction] = useState("");
   const [jobId, setJobId] = useState<string | null>(() => readJob(fileId));
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
   useEffect(() => { setJobId(readJob(fileId)); }, [fileId]);
   useEffect(() => { writeJob(fileId, jobId); }, [fileId, jobId]);
 
@@ -88,6 +93,15 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
   };
 
   const s = status.data?.status;
+  if (collapsed && !open && !jobId) {
+    return (
+      <div className={embedded ? "" : "max-w-3xl mx-auto my-8 px-4"} data-testid="lesson-repair-panel">
+        <Button variant="outline" onClick={() => setOpen(true)} className="min-h-11" data-testid="lesson-repair-open">
+          <Wrench className="w-4 h-4 mr-2" /> Tananyag javítása…
+        </Button>
+      </div>
+    );
+  }
   return (
     <section className={embedded ? "" : "max-w-3xl mx-auto my-8 px-4"} data-testid="lesson-repair-panel" aria-labelledby="lesson-repair-title">
       <div className="rounded-xl border bg-card text-card-foreground p-4 space-y-3 shadow-sm">

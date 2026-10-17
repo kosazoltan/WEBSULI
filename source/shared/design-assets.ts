@@ -83,3 +83,27 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
   const subjectIcon = (ownId ? catalog.find(a => a.id === ownId) : undefined) ?? legacy.find(a => a.id.endsWith("-young") === young);
   return { ...(cover ? { cover } : {}), ...(hero ? { hero } : {}), ...(mascot ? { mascot } : {}), ...(subjectIcon ? { subjectIcon } : {}) };
 }
+
+/** A leckébe mentett arculat (docs/specs/2026-10-17-lecke-betoltes.md): csak azonosítók; a választás mentéskor dől el. */
+export type StoredLessonArt = { subjectIcon?: string; picture?: string; mascot?: string };
+export function lessonArtIds(art: LessonArt): StoredLessonArt {
+  const picture = art.cover ?? art.hero;
+  return { ...(art.subjectIcon ? { subjectIcon: art.subjectIcon.id } : {}), ...(picture ? { picture: picture.id } : {}), ...(art.mascot ? { mascot: art.mascot.id } : {}) };
+}
+
+/**
+ * A tárolt azonosítókból a lejátszó arculata — újraszámolás nélkül. Csak a lecke mostani sávjának megfelelő elem marad
+ * (az évfolyam a mentés óta változhatott): az ikon sáv-utótagja egyezik, a kép a korosztályé, kabala csak 1–5. évfolyamon.
+ * Ha a tárolt kép nem érvényes, `null`: a hívó a mai számolásra (`pickLessonArt`) vált.
+ */
+export function resolveStoredArt(stored: StoredLessonArt | undefined, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): LessonArt | null {
+  if (!stored?.picture) return null;
+  const byId = (id: string | undefined, kind: DesignAsset["kind"][]) => (id ? catalog.find(a => a.id === id && kind.includes(a.kind)) : undefined);
+  const young = YOUNG_BANDS.has(band);
+  const picture = byId(stored.picture, ["hero", "cover"]);
+  if (!picture || YOUNG_BANDS.has(picture.band) !== young) return null;
+  const mascot = young ? byId(stored.mascot, ["mascot"]) : undefined;
+  const icon = byId(stored.subjectIcon, ["icon"]);
+  const subjectIcon = icon && (icon.id.endsWith(`-${band}`) || (!BAND_SUFFIX.test(icon.id) && icon.id.endsWith("-young") === young)) ? icon : undefined;
+  return { ...(picture.kind === "cover" ? { cover: picture } : { hero: picture }), ...(mascot ? { mascot } : {}), ...(subjectIcon ? { subjectIcon } : {}) };
+}

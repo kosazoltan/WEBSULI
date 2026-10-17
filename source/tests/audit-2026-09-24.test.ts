@@ -16,7 +16,10 @@ test("a főoldal like-kötegei a szerver korlátján belül maradnak (mérve: 18
 
 test("a lecke-betöltés hálózati hibánál újrapróbál és gombot ad (nem zsákutca)", () => {
   const view = readFileSync(new URL("../client/src/lesson-runtime/LessonView.tsx", import.meta.url), "utf8");
-  assert.match(view, /retry: 2/);
+  // Lecke megnyitása (2026-10-17-lecke-betoltes): a lekérdezés a közös lesson-query.ts-be költözött (a Preview is ezt használja).
+  const query = readFileSync(new URL("../client/src/lesson-runtime/lesson-query.ts", import.meta.url), "utf8");
+  assert.match(view, /useQuery\(lessonByFileQuery\(material\.id\)\)/);
+  assert.match(query, /retry: 2/);
   assert.match(view, /data-testid="lesson-retry"/);
 });
 

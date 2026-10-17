@@ -475,7 +475,8 @@ export function LessonRuntime({
   const art = useMemo(() => lessonArtFor({ ...lesson, seed: lessonId ?? persistId ?? lesson.title }, designTheme), [lesson, designTheme, lessonId, persistId]);
   // Ikonkészlet: a mentéskor az adatbázisból rendelt ikon elsőbbséget kap; régi leckénél a katalógus-választás marad.
   // Ha a lecke évfolyama a mentés óta megváltozott (javítás), a más sávú ikon nem jelenik meg.
-  const dbIcon = lesson.art?.subjectIcon?.endsWith(`-${designTheme}`) ? lesson.art.subjectIcon : undefined;
+  // Lecke megnyitása (2026-10-17): tárolt arculatnál az ikon is onnan jön (a sávszűrést a resolveStoredArt végezte).
+  const dbIcon = art.fromDb ? art.subjectIcon?.id : lesson.art?.subjectIcon?.endsWith(`-${designTheme}`) ? lesson.art.subjectIcon : undefined;
   // Review #274: ha a végpont nem adja a képet (404/500/hálózat), egyszer a katalógusképre vált, nem marad törött ikon.
   const [failedDbIcon, setFailedDbIcon] = useState<string | null>(null);
   const subjectIconSrc = dbIcon && failedDbIcon !== dbIcon ? `/api/design-assets/${dbIcon}` : art.subjectIcon?.src;

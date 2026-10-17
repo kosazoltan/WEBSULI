@@ -311,7 +311,12 @@ export const lessonSchema = z.object({
    */
   sourceOnly: z.literal(true),
   /** Ikonkészlet (2026-10-17-websuli-ikonkeszlet): mentéskor a szerver írja; a tantárgy × sáv ikon a design_assets táblából. */
-  art: z.object({ subjectIcon: z.string().regex(/^[a-z0-9-]{3,64}$/).optional() }).strict().optional(),
+  art: z.object({
+    subjectIcon: z.string().regex(/^[a-z0-9-]{3,64}$/).optional(),
+    /** Lecke megnyitása (2026-10-17-lecke-betoltes): a mentéskor választott hős- vagy borítókép és kabala. */
+    picture: z.string().regex(/^[a-z0-9-]{3,64}$/).optional(),
+    mascot: z.string().regex(/^[a-z0-9-]{3,64}$/).optional(),
+  }).strict().optional(),
 });
 
 export type Block = z.infer<typeof blockSchema>;

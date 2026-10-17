@@ -27,6 +27,9 @@ for (const mode of ["light", "dark"] as const) {
       return route.fulfill({ json: [] });
     });
     await page.goto("/preview/repair-fixture");
+    // Lecke megnyitása (docs/specs/2026-10-17-lecke-betoltes.md, dokumentált specváltozás): a panel csukott gombként indul;
+    // a cím olvashatóságát a kinyitott panelen mérjük, a mérce változatlan.
+    await page.getByTestId("lesson-repair-open").click();
     const title = page.locator("#lesson-repair-title");
     await expect(title).toBeVisible();
     await title.scrollIntoViewIfNeeded();
