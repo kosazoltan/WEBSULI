@@ -631,7 +631,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: colorful counting blocks. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: colorful counting blocks. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-matematika-adventure",
@@ -649,7 +649,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a wooden abacus with a ruler. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a wooden abacus with a ruler. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-matematika-studio",
@@ -667,7 +667,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a protractor with a set square triangle. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a protractor with a set square triangle. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-matematika-laboratory",
@@ -685,7 +685,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a smooth function curve on grid paper with a pencil. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a smooth function curve on grid paper with a pencil. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-matematika-future",
@@ -703,7 +703,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a 3D coordinate surface model. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a 3D coordinate surface model. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-nyelvtan-explorer",
@@ -721,7 +721,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: colorful alphabet building blocks without readable letters, just shapes. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: colorful alphabet building blocks without readable letters, just shapes. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-nyelvtan-adventure",
@@ -739,7 +739,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a notebook with a pencil and colorful sticky tabs. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a notebook with a pencil and colorful sticky tabs. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-nyelvtan-studio",
@@ -757,7 +757,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: puzzle pieces fitting together like parts of a sentence. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: puzzle pieces fitting together like parts of a sentence. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-nyelvtan-laboratory",
@@ -775,7 +775,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a tree diagram of connected nodes, like sentence structure. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a tree diagram of connected nodes, like sentence structure. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-nyelvtan-future",
@@ -793,7 +793,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: an elegant fountain pen over a structured page with brackets. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: an elegant fountain pen over a structured page with brackets. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-irodalom-explorer",
@@ -811,7 +811,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: an open storybook with a ribbon bookmark. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: an open storybook with a ribbon bookmark. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-irodalom-adventure",
@@ -829,7 +829,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a storybook with a small paper castle popping out. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a storybook with a small paper castle popping out. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-irodalom-studio",
@@ -847,7 +847,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a stack of books with a feather quill. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a stack of books with a feather quill. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-irodalom-laboratory",
@@ -865,7 +865,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a classic leather-bound book with a theatre mask. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a classic leather-bound book with a theatre mask. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-magyar-irodalom-future",
@@ -883,7 +883,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: an open poetry book with a feather quill and an inkwell. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: an open poetry book with a feather quill and an inkwell. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-kornyezetismeret-explorer",
@@ -901,7 +901,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: a little house, a tree and the sun together. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a little house, a tree and the sun together. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-kornyezetismeret-adventure",
@@ -919,7 +919,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a small globe with a green leaf and a ladybug. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a small globe with a green leaf and a ladybug. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-termeszetismeret-adventure",
@@ -937,7 +937,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a magnifying glass over a leaf and a ladybug. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a magnifying glass over a leaf and a ladybug. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-termeszetismeret-studio",
@@ -955,7 +955,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a microscope beside a leaf and a small flask. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a microscope beside a leaf and a small flask. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-tortenelem-adventure",
@@ -973,7 +973,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a small castle tower with a flag. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a small castle tower with a flag. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-tortenelem-studio",
@@ -991,7 +991,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a knight's helmet and a parchment scroll. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a knight's helmet and a parchment scroll. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-tortenelem-laboratory",
@@ -1009,7 +1009,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a classical column with an hourglass. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a classical column with an hourglass. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-tortenelem-future",
@@ -1027,7 +1027,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: an antique map scroll with a compass rose. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: an antique map scroll with a compass rose. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-tarsadalmi-ismeretek-studio",
@@ -1045,7 +1045,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: three connected people silhouettes around a round table. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: three connected people silhouettes around a round table. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-tarsadalmi-ismeretek-laboratory",
@@ -1063,7 +1063,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a balance scale of justice. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a balance scale of justice. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-tarsadalmi-ismeretek-future",
@@ -1081,7 +1081,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a parliament dome with a ballot box. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a parliament dome with a ballot box. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-biologia-studio",
@@ -1099,7 +1099,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a leaf with a ladybug under a magnifying glass. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a leaf with a ladybug under a magnifying glass. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-biologia-laboratory",
@@ -1117,7 +1117,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a DNA double helix with a leaf. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a DNA double helix with a leaf. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-biologia-future",
@@ -1135,7 +1135,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a stylised cell with a DNA strand. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a stylised cell with a DNA strand. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-kemia-studio",
@@ -1153,7 +1153,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a laboratory flask with colorful liquid bubbles. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a laboratory flask with colorful liquid bubbles. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-kemia-laboratory",
@@ -1171,7 +1171,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a laboratory flask holding an atom model. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a laboratory flask holding an atom model. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-kemia-future",
@@ -1189,7 +1189,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a molecule ball-and-stick model with a test tube. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a molecule ball-and-stick model with a test tube. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-fizika-studio",
@@ -1207,7 +1207,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a magnet attracting small metal balls. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a magnet attracting small metal balls. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-fizika-laboratory",
@@ -1225,7 +1225,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: an atom with elliptical electron orbits. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: an atom with elliptical electron orbits. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-fizika-future",
@@ -1243,7 +1243,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a pendulum with a wave graph and a lightning bolt. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a pendulum with a wave graph and a lightning bolt. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-foldrajz-studio",
@@ -1261,7 +1261,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a globe on a stand with a map pin. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a globe on a stand with a map pin. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-foldrajz-laboratory",
@@ -1279,7 +1279,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a globe with latitude lines and a map pin. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a globe with latitude lines and a map pin. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-foldrajz-future",
@@ -1297,7 +1297,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a topographic relief map tile with a compass. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a topographic relief map tile with a compass. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-angol-explorer",
@@ -1315,7 +1315,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: two colorful speech bubbles. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: two colorful speech bubbles. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-angol-adventure",
@@ -1333,7 +1333,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: two speech bubbles with a small red-white-blue ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: two speech bubbles with a small red-white-blue ribbon. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-angol-studio",
@@ -1351,7 +1351,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a book with two speech bubbles and a small globe. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a book with two speech bubbles and a small globe. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-angol-laboratory",
@@ -1369,7 +1369,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a globe with two speech bubbles. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a globe with two speech bubbles. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-angol-future",
@@ -1387,7 +1387,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a passport-like booklet with a globe and speech bubble. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a passport-like booklet with a globe and speech bubble. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-nemet-adventure",
@@ -1405,7 +1405,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: two speech bubbles with a small black-red-gold ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: two speech bubbles with a small black-red-gold ribbon. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-nemet-studio",
@@ -1423,7 +1423,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a book with two speech bubbles and a small black-red-gold ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a book with two speech bubbles and a small black-red-gold ribbon. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-nemet-laboratory",
@@ -1441,7 +1441,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a globe with speech bubbles and a black-red-gold ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a globe with speech bubbles and a black-red-gold ribbon. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-nemet-future",
@@ -1459,7 +1459,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a travel booklet with speech bubbles and a black-red-gold ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a travel booklet with speech bubbles and a black-red-gold ribbon. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-francia-adventure",
@@ -1477,7 +1477,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: two speech bubbles with a small blue-white-red ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: two speech bubbles with a small blue-white-red ribbon. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-francia-studio",
@@ -1495,7 +1495,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a book with two speech bubbles and a small blue-white-red ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a book with two speech bubbles and a small blue-white-red ribbon. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-francia-laboratory",
@@ -1513,7 +1513,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a globe with speech bubbles and a blue-white-red ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a globe with speech bubbles and a blue-white-red ribbon. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-francia-future",
@@ -1531,7 +1531,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a travel booklet with speech bubbles and a blue-white-red ribbon. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a travel booklet with speech bubbles and a blue-white-red ribbon. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-informatika-adventure",
@@ -1549,7 +1549,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a friendly little robot with a tablet. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a friendly little robot with a tablet. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-informatika-studio",
@@ -1567,7 +1567,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a laptop with colorful code blocks shown only as shapes. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a laptop with colorful code blocks shown only as shapes. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-informatika-laboratory",
@@ -1585,7 +1585,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a laptop with a small circuit-chip symbol. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a laptop with a small circuit-chip symbol. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-informatika-future",
@@ -1603,7 +1603,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a circuit chip with glowing connection lines. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a circuit chip with glowing connection lines. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-enek-zene-explorer",
@@ -1621,7 +1621,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: a musical note and a small drum. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a musical note and a small drum. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-enek-zene-adventure",
@@ -1639,7 +1639,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a xylophone with a musical note. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a xylophone with a musical note. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-enek-zene-studio",
@@ -1657,7 +1657,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: headphones with musical notes. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: headphones with musical notes. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-enek-zene-laboratory",
@@ -1675,7 +1675,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a violin with a musical note. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a violin with a musical note. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-hit-es-erkolcstan-explorer",
@@ -1693,7 +1693,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: two hands holding a small heart. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: two hands holding a small heart. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-hit-es-erkolcstan-adventure",
@@ -1711,7 +1711,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a dove carrying a small olive branch. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a dove carrying a small olive branch. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-hit-es-erkolcstan-studio",
@@ -1729,7 +1729,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: an open book with a soft glowing heart. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: an open book with a soft glowing heart. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-hit-es-erkolcstan-laboratory",
@@ -1747,7 +1747,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a lantern with a gentle light. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a lantern with a gentle light. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-hit-es-erkolcstan-future",
@@ -1765,7 +1765,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a scale with a heart and a book. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a scale with a heart and a book. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-vizualis-kultura-explorer",
@@ -1783,7 +1783,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: a painter palette with brushes. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a painter palette with brushes. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-vizualis-kultura-adventure",
@@ -1801,7 +1801,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: paint brushes in a jar with color splashes. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: paint brushes in a jar with color splashes. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-vizualis-kultura-studio",
@@ -1819,7 +1819,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: a drawing tablet with a stylus and color swatches. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a drawing tablet with a stylus and color swatches. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-vizualis-kultura-laboratory",
@@ -1837,7 +1837,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise: a camera beside a color wheel. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a camera beside a color wheel. Render it as a clean soft 3D object in exactly the same style, palette and lighting as the reference atom icon, cool blues, precise. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-vizualis-kultura-future",
@@ -1855,7 +1855,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds: a film clapper with a color wheel. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a film clapper with a color wheel. Render it as a sleek premium soft 3D object, deep navy and teal with subtle glass highlights, sophisticated, for 17–18 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-technika-explorer",
@@ -1873,7 +1873,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds: toy building bricks with a small hammer. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: toy building bricks with a small hammer. Render it as a chunky glossy soft 3D toy-like object, bright cheerful colors, very simple rounded shapes for 6–8 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-technika-adventure",
@@ -1891,7 +1891,7 @@
         "icon-matematika-young"
       ],
       "batch": 2,
-      "prompt": "glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds: a toy screwdriver, gears and a small wrench. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: a toy screwdriver, gears and a small wrench. Render it as a glossy soft 3D object with a playful adventurous feel, warm orange, sand and turquoise accents, for 9–11 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     },
     {
       "id": "icon-technika-studio",
@@ -1909,7 +1909,7 @@
         "icon-fizika"
       ],
       "batch": 2,
-      "prompt": "clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds: gears with a ruler and a pencil, like a design plan. Centered single object, plain very light background. No letters, digits, words or flags with text."
+      "prompt": "Subject of the icon: gears with a ruler and a pencil, like a design plan. Render it as a clean soft 3D object with a matte finish, indigo, violet and teal palette, mature but friendly, for 12–14 year olds. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text."
     }
   ]
 }

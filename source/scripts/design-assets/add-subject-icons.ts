@@ -22,7 +22,8 @@ for (const subject of Object.keys(SUBJECT_BANDS) as CatalogSubject[]) {
     const item = {
       id: `icon-${subject}-${band}`, kind: "icon" as const, band, subjects: [subject], keywords: [subject],
       alt: `${label}, ${GRADES[band]} osztály: tantárgyikon.`, aspect_ratio: "1:1", references: [BAND_ICON_STYLE[band].reference], batch: 2,
-      prompt: `${BAND_ICON_STYLE[band].style}: ${motif}. Centered single object, plain very light background. No letters, digits, words or flags with text.`,
+      // A referencia csak a megjelenítési stílust adja: a modell a 12 elemes próbában a referencia tárgyát (abakusz, atom) másolta.
+      prompt: `Subject of the icon: ${motif}. Render it as a ${BAND_ICON_STYLE[band].style}. The reference image is ONLY a guide for rendering style, material, lighting and palette — do NOT reproduce its object (no abacus, no atom, no orbits unless the subject above asks for them). Centered single object, plain very light background. No letters, digits, words or flags with text.`,
     };
     const at = manifest.items.findIndex(i => i.id === item.id);
     if (at >= 0) manifest.items[at] = item; else { manifest.items.push(item); added++; }
