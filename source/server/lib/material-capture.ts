@@ -236,25 +236,51 @@ export const MATERIAL_CAPTURE_SCRIPT = `
       }
       // mode: 'baseline' (betöltés), 'eval' (kiértékelő jellegű kattintás után), 'other' (bármely más kattintás után).
       // Minden látott szöveg megjelölődik; más kattintás után csak az osztályzatot is tartalmazó eredmény megy ki.
+      // Rendezett beküldés: az új eredmény a „pending”-be kerül (eredményhelyenként a legfrissebb), és az utolsó új eredmény után
+      // SETTLE_MS nyugalommal, vagy az oldal elhagyásakor (pagehide / rejtett lap) EGY levélben megy ki. Így a feladatonkénti
+      // „Ellenőrzés” futó statisztikája (pl. „Megoldott feladatok: 1 / 15”) nem küld minden lépésnél külön levelet.
+      var SETTLE_MS = 30000;
+      var pending = null, settleTimer = null;
       function scan(mode) {
-        var found = candidates(), fresh = [], i, t, k;
+        var found = candidates(), fresh = 0, i, t, k, slot;
         for (i = 0; i < found.length; i++) {
           t = clip(textOf(found[i]), 1500);
           k = hash(t);
-          if (!seen[k]) { seen[k] = true; if (mode === 'eval' || GRADE.test(t)) { fresh.push(t); } }
+          if (seen[k]) { continue; }
+          seen[k] = true;
+          if (mode === 'baseline' || !(mode === 'eval' || GRADE.test(t))) { continue; }
+          slot = (found[i].id || nameOf(found[i]).trim() || 'blokk') + '#' + i;
+          if (!pending) { pending = { order: [], texts: {} }; }
+          if (!pending.texts.hasOwnProperty(slot)) { pending.order.push(slot); }
+          pending.texts[slot] = t;
+          fresh++;
         }
+        if (fresh) {
+          if (settleTimer) { clearTimeout(settleTimer); }
+          settleTimer = setTimeout(flushSafely, SETTLE_MS);
+        }
+      }
+      function flush() {
+        if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+        var p = pending;
+        pending = null;
         // a tananyag maga küldi az eredményt (sendResultEmail / mailto) → nincs második, automatikus levél
-        if (mode === 'baseline' || !fresh.length || window.__websuliExplicitResult) { return; }
+        if (!p || window.__websuliExplicitResult) { return; }
+        var texts = [], i;
+        for (i = 0; i < p.order.length; i++) { texts.push(p.texts[p.order[i]]); }
         var title = clip((document.title || (document.querySelector('h1') || {}).textContent || 'Tananyag').trim(), 120);
         var name = learnerName();
         var ans = answers();
         var picks = document.querySelectorAll('input[type="radio"]:checked').length;
         var body = 'Automatikusan beolvasott eredmény (a tanuló kiértékelte a tananyagot).\\n' +
-          (name ? 'Tanuló: ' + name + '\\n' : '') + '\\nEredmény:\\n' + fresh.join('\\n---\\n') +
+          (name ? 'Tanuló: ' + name + '\\n' : '') + '\\nEredmény:\\n' + texts.join('\\n---\\n') +
           (picks ? '\\n\\nBejelölt választások: ' + picks : '') +
           (ans.length ? '\\n\\nSzöveges válaszok:\\n' + ans.join('\\n') : '');
         post(title + ' — eredmény', clip(body, 4900), true);
       }
+      function flushSafely() { try { flush(); } catch (e) { /* a beolvasás nem zavarhatja a tananyagot */ } }
+      window.addEventListener('pagehide', flushSafely);
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') { flushSafely(); } });
       function isEvalClick(target) {
         var el = target && target.closest ? target.closest('button, input[type="button"], input[type="submit"], a, [onclick], [role="button"]') : null;
         if (!el) { return false; }

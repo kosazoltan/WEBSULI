@@ -33,6 +33,12 @@ is beolvassa, és mindkét adminnak elküldje, amikor a tanuló kitölti őket.�
      score, pont) szövegét, a tanuló válaszait (szövegmezők a kérdésükkel, a bejelölt választások száma) és az anyag címét;
    - mindezt egy levélbe teszi (legfeljebb 5000 karakter), és beküldi.
    - Ugyanaz az eredmény nem megy kétszer: kliensoldali lenyomat oldalbetöltésenként, és szerveroldali ismétlésvédelem.
+   - **Kalibráció mind a 183 éles anyagon (2026-10-17, böngésző):**
+     - **Élő haladásjelzők:** a válaszkattintásra frissülő sávok (pl. „Kvíz … 8%”, „Pontosság: 100%”) zajt okoztak.
+       Ezért kiértékelő jellegű kattintás után a százalékos (vagy osztályzattal ellátott „x / y”) új eredmény megy; más
+       kattintás után csak az osztályzatot is tartalmazó. A látott szöveg minden beolvasáskor megjelölődik.
+     - **Feladatonkénti „Ellenőrzés” futó statisztikával:** rendezett beküldés. Az eredményhelyenként legfrissebb állapot az
+       utolsó új eredmény után 30 mp nyugalommal, vagy az oldal elhagyásakor (`pagehide` / rejtett lap) egy levélben megy.
 3. **Szerver (`/api/material-result`):**
    - a korlát 10 helyett 60 / 15 perc / IP, mert egy iskolai hálózatban sok tanuló ugyanazon az IP-n van;
    - az azonos (anyag, IP, törzs-lenyomat) 10 percen belül nem küld újra;

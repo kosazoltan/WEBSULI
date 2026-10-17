@@ -3,6 +3,7 @@ import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments } from "../server/l
 
 // Régi (HTML) tananyagok eredménye e-mailben (docs/specs/2026-10-17-regi-anyag-eredmeny.md): a beinjektált szkript valódi böngészőben.
 // Az anyagot a /dev/:id kiszolgálással azonos módon alakítjuk (átírás + elfogó a fejben és a törzs végén); a beküldés mockolva.
+// Virtuális óra: a kattintás utáni beolvasás 1,5 mp, a rendezett beküldés 30 mp nyugalom után megy.
 type Post = { materialId: string; subject: string; body: string; auto?: boolean };
 
 function serve(stored: string): string {
@@ -19,8 +20,9 @@ async function open(page: Page, id: string, stored: string) {
     posts.push(JSON.parse(route.request().postData() ?? "{}"));
     return route.fulfill({ status: 200, contentType: "application/json", body: '{"success":true}' });
   });
+  await page.clock.install();
   await page.goto(`http://websuli.test/dev/${id}`);
-  await page.waitForTimeout(700); // az alapállapot rögzítése (load + 500 ms)
+  await page.clock.runFor(700); // az alapállapot rögzítése (load + 500 ms)
   return { posts, mailtoNavigations };
 }
 
@@ -45,7 +47,7 @@ test("mailto-s régi anyag: a levelező nem nyílik meg, az eredmény a szerverh
   await page.click("#link");
   await expect.poll(() => posts.length).toBe(2);
   expect(posts[1]).toMatchObject({ subject: "Linkes eredmény", body: "Pont: 3/4", auto: false });
-  await page.waitForTimeout(1800); // a kattintás utáni beolvasás sem küld (nincs százalékos eredménydoboz)
+  await page.clock.runFor(32_000); // a kattintás utáni beolvasás sem küld (nincs eredménydoboz), és a mailto után nincs második levél
   expect(posts.length).toBe(2);
   expect(mailtoNavigations).toEqual([]);
   expect(page.url()).toBe("http://websuli.test/dev/regi-mailto");
@@ -69,11 +71,14 @@ function evaluateQuiz() {
 test("küldés nélküli régi anyag: a kiértékelés után az új eredmény és a válaszok automatikusan mennek; azonos eredmény nem megy újra", async ({ page }) => {
   const { posts } = await open(page, "regi-kiertekelo", EVAL_MATERIAL);
   await page.click("#opt"); // zaj: élő haladásjelző (százalékkal, de osztályzat nélkül), nem kiértékelő kattintás → nem küld
-  await page.waitForTimeout(1800);
+  await page.clock.runFor(32_000);
   expect(posts).toEqual([]);
 
   await page.fill("#t1", "A számláló megmutatja, hány részt veszünk.");
   await page.click("#eval");
+  await page.clock.runFor(1600);
+  expect(posts).toEqual([]); // rendezett beküldés: még vár
+  await page.clock.runFor(30_000);
   await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
   const first = posts[0];
   expect(first.auto).toBe(true);
@@ -87,11 +92,47 @@ test("küldés nélküli régi anyag: a kiértékelés után az új eredmény é
   await expect(page.getByRole("status")).toHaveCount(0); // az automatikus beküldés csendes
 
   await page.click("#eval"); // ugyanaz az eredmény
-  await page.waitForTimeout(2000);
+  await page.clock.runFor(32_000);
   expect(posts.length).toBe(1);
 
   await page.fill("#t1", "A számláló megmutatja, hogy az egészből hány egyenlő részt veszünk figyelembe.");
   await page.click("#eval"); // új eredmény → új levél
+  await page.clock.runFor(32_000);
   await expect.poll(() => posts.length, { timeout: 5000 }).toBe(2);
   expect(posts[1].body).toContain("90% (Jeles)");
+});
+
+const STEP_MATERIAL = `<!DOCTYPE html><html><head><title>Telling the Time</title></head><body>
+<div class="task"><p>1. Hány óra van?</p><textarea id="a1"></textarea><button onclick="checkTask(1)">Ellenőrzés</button></div>
+<div class="task"><p>2. Mikor kelsz?</p><textarea id="a2"></textarea><button onclick="checkTask(2)">Ellenőrzés</button></div>
+<div class="task"><p>3. Mikor fekszel?</p><textarea id="a3"></textarea><button onclick="checkTask(3)">Ellenőrzés</button></div>
+<div id="task-results">Megoldott feladatok: 0 / 3 | Pontosság: 0%</div>
+<script>
+var done = 0;
+function checkTask(n) { done++; document.getElementById('task-results').textContent = 'Megoldott feladatok: ' + done + ' / 3 | Pontosság: ' + Math.round(done / 3 * 100) + '%'; }
+</script></body></html>`;
+
+test("feladatonkénti ellenőrzés: a futó statisztika lépésenként nem küld — egy levél a legfrissebb állapottal; az oldal elhagyása azonnal küld", async ({ page }) => {
+  const { posts } = await open(page, "regi-lepesenkent", STEP_MATERIAL);
+  for (const n of [1, 2, 3]) {
+    await page.fill(`#a${n}`, `Válasz ${n}`);
+    await page.click(`.task:nth-of-type(${n}) button`);
+    await page.clock.runFor(10_000); // tíz mp gondolkodás feladatonként — a 30 mp-es nyugalom nem telik le
+  }
+  expect(posts).toEqual([]);
+  await page.clock.runFor(30_000);
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
+  expect(posts[0].body).toContain("Megoldott feladatok: 3 / 3 | Pontosság: 100%");
+  expect(posts[0].body).not.toContain("1 / 3");
+  expect(posts[0].body).toContain("→ Válasz 3");
+
+  // új eredmény, majd a tanuló azonnal elhagyja az oldalt → nem vész el
+  await page.evaluate(() => { (window as unknown as { checkTask: (n: number) => void }).checkTask(4); });
+  await page.click("#a1"); // kattintás → beolvasás
+  await page.click(".task:nth-of-type(1) button");
+  await page.clock.runFor(1600);
+  expect(posts.length).toBe(1);
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(2);
+  expect(posts[1].body).toContain("Megoldott feladatok: 5 / 3");
 });
