@@ -6,7 +6,8 @@
  * Kulcs: a gyökér `data-ws-theme` (a lecke évfolyamából). A szelektor 3 attribútumos ([data-band][data-experience]
  * [data-ws-theme]), így a régi 2 attribútumos sáv-, évfolyam- és alapréteg fölött áll; a régi téma- és világszabályok
  * nem illeszkednek (a gyökér data-experience értéke állandó „websuli”).
- * Mozgás nincs (a referencia sem animál); a fókusz a referencia 3px-es borostyán kerete.
+ * Mozgás nincs (a referencia sem animál); a fókusz kétszínű gyűrű: a referencia 3px-es borostyán körvonala és egy sötét
+ * belső gyűrű (világos felületen is ≥ 3:1, §2.6).
  */
 
 [data-band][data-experience][data-ws-theme] {
@@ -162,9 +163,15 @@
 [data-ws-theme] .lesson-feedback,
 [data-ws-theme] .fusion-intro { font-size: max(1em, 16px); }
 
-/* ---------- fókusz (a referencia: 3px borostyán keret) ---------- */
-[data-ws-theme] :is(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
-  outline: 3px solid #F4AB37; outline-offset: 3px;
+/* ---------- fókusz (a referencia 3px borostyán kerete + sötét belső gyűrű; docs/specs/2026-10-17-fokuszgyuru-ketszinu.md) ----------
+   A borostyán a világos felületeken csak ~1,7–1,96:1, a sötét #10233C ott ≥ 13,6:1; a 11–12. o. sötét témáján fordítva
+   (borostyán ≥ 5,99:1). A szelektor 5 attribútumos, hogy a témás elemek saját árnyéka ne nyomja el a gyűrűt. */
+[data-band][data-experience][data-ws-theme] :is(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 3px solid #F4AB37; outline-offset: 3px; box-shadow: 0 0 0 3px #10233C;
+}
+/* A kiválasztott fül főszínű belső kerete fókuszban is megmarad. */
+[data-band][data-experience][data-ws-theme] .fusion-tabs button[aria-selected="true"]:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ws-accent), 0 0 0 3px #10233C;
 }
 
 /* A borítóábra a téma színeit viseli; a régi évfolyamréteg kifakítása (lesson-grade.css) a témás leckén nem érvényes —
