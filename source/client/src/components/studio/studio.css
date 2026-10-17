@@ -21,6 +21,9 @@
   /* A nagyobb betűvel a helyőrző (pl. a kérés mintája) 3 sorban levágódott — a mező legalább 5 sornyi. */
   .ws-studio textarea { min-height: 7.75em; }
 }
+/* A nagyobb betűvel a nowrap gombfelirat kilógott a gombból (studio-generation-recovery mérte): a stúdióban a felirat sort törhet,
+   a gomb magassága a tartalomhoz igazodik. */
+.ws-studio button { white-space: normal; height: auto; padding-block: 0.5rem; text-align: center; overflow-wrap: anywhere; }
 /* A segédszöveg 13 px alá nem mehet (mérve: 10–12 px volt). */
 .ws-studio .text-xs { font-size: 13px; line-height: 1.45; }
 /* Letiltott gomb: tömör, halk felület, mért kontrasztú szöveg — 50%-os átlátszóság helyett (olvashatatlan volt). */
