@@ -400,13 +400,23 @@ function ee_evaluate(answer, task){
   return {state:'fail', score:0, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'A lényegi fogalmak még hiányoznak.'};
 }
 \`\`\`
-- UI a 3. oldalon: TETEJÉN 🔄 Újragenerálás (új, bankPlan szerinti kör) konfirmációs HTML modallal; ALJÁN ✅ Kiértékelés; feladatonként ✅/🟡/❌ + indok + „📖 Mintaválasz" gomb a 🟡/❌ eseteknél; eredmény az oldalon (NEM alert); osztályzat 90%=5 Jeles, 75%=4 Jó, 60%=3 Közepes, 40%=2 Elégséges, <40%=1 Elégtelen; JSON eredmény-export (Blob + createObjectURL, addEventListener), localStorage név/e-mail mentés, mailto link.
+- UI a 3. oldalon: TETEJÉN 🔄 Újragenerálás (új, bankPlan szerinti kör) konfirmációs HTML modallal; ALJÁN ✅ Kiértékelés; feladatonként ✅/🟡/❌ + indok + „📖 Mintaválasz" gomb a 🟡/❌ eseteknél; eredmény az oldalon (NEM alert); osztályzat 90%=5 Jeles, 75%=4 Jó, 60%=3 Közepes, 40%=2 Elégséges, <40%=1 Elégtelen; JSON eredmény-export (Blob + createObjectURL, addEventListener), localStorage névmentés; a Kiértékelés az eredményt e-mailben elküldi (lásd: EREDMÉNYKÜLDÉS).
 - ÖNTESZT (kötelező, a build részeként gondold végig): minden feladat \`sample\` mintaválasza a SAJÁT feladatára ✅-t adjon; üres válasz mindenhol ❌.
 
 ## OLDAL 4 – KVÍZ
 - Fogalomfedő bank; körméret a bankPlan.quizRound szerint; 3 vagy 4 válasz. A közös JSON-adatszerződés mezőneveit használd.
 - Azonnali helyes/helytelen visszajelzés; pontszám = helyes/körméret×100 %; ugyanaz az osztályzási skála.
-- TETEJÉN 🔄 Újragenerálás (konfirmációs modallal), ALJÁN ✅ Kiértékelés; eredmény az oldalon.
+- TETEJÉN 🔄 Újragenerálás (konfirmációs modallal), ALJÁN ✅ Kiértékelés; eredmény az oldalon; a Kiértékelés az eredményt e-mailben elküldi (lásd: EREDMÉNYKÜLDÉS).
+
+## EREDMÉNYKÜLDÉS E-MAILBEN (KÖTELEZŐ — a szöveges feladatok ÉS a kvíz)
+- A WebSuli a tananyagba egy \`window.sendResultEmail(subject, body)\` függvényt injektál: a szerver mindkét adminnak (a tanároknak) elküldi. A tananyagban NINCS e-mail-cím, NINCS e-mail-cím beviteli mező, és TILOS a \`mailto:\` (sem link, sem \`location.href\`).
+- A 3. oldal (Feladatok) és a 4. oldal (Kvíz) ✅ Kiértékelés gombja a kiértékelés UTÁN automatikusan hívja (külön gomb nem kell), egyszer körönként:
+\`\`\`javascript
+function sendResults(part, text){
+  if (typeof window.sendResultEmail === 'function') { window.sendResultEmail(document.title + ' — ' + part, text); }
+}
+\`\`\`
+- A törzs (sima szöveg, sortörésekkel, legfeljebb 4500 karakter): a tanuló neve, ha megadta; az összpontszám, a százalék és az osztályzat; Feladatoknál MINDEN feladat kérdése, a tanuló válasza és az állapota (✅/🟡/❌ + pont); Kvíznél a hibás és a kihagyott kérdések a tanuló válaszával és a helyes válasszal.
 
 ## TEXT-TO-SPEECH (IDEGEN NYELVI LECKÉNÉL KÖTELEZŐ)
 - Web Speech API (SpeechSynthesis), külső függőség nélkül; a nyelvhez illő \`lang\` (angol en-GB/en-US, német de-DE…).

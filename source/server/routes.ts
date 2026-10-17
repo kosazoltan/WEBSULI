@@ -31,7 +31,8 @@ import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
-import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail } from "./lib/material-result";
+import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey } from "./lib/material-result";
+import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments } from "./lib/material-capture";
 import { effortFor, resolveLegacyModel } from "./ai/models";
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { callClaudeParts } from "./studio/claude-vision";
@@ -147,7 +148,9 @@ const htmlFixChatSchema = z.object({
 // Ensures all uploaded HTML materials work across all screen sizes (280px - 1920px+)
 // Cross-browser compatible: Opera, Edge (Chromium), Safari (WebKit)
 // IMPORTANT: Detects full HTML documents and only injects helper scripts without wrapper duplication
-function wrapHtmlWithResponsiveContainer(userHtml: string): string {
+function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
+  // Régi anyagok eredménye (docs/specs/2026-10-17-regi-anyag-eredmeny.md): a location-értékadás az elfogón át megy
+  const userHtml = rewriteLocationAssignments(storedHtml).html;
   // Check if user HTML is already a complete HTML document
   // More robust detection: DOCTYPE OR (<html> AND <body> tags both present)
   const hasDoctype = /<!DOCTYPE\s+html/i.test(userHtml);
@@ -266,6 +269,8 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
       }
 
       window.sendResultEmail = function(subject, body) {
+        // a tananyag maga küld → az automatikus beolvasás (material-capture) nem küld mellé másodikat
+        window.__websuliExplicitResult = true;
         var payload = {
           materialId: __websuliMaterialId,
           subject: String(subject || 'Tananyag eredmény'),
@@ -491,13 +496,13 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
 
     if (headOpenIndex !== -1) {
       const insertPosition = headOpenIndex + '<head>'.length;
-      htmlWithFix = userHtml.slice(0, insertPosition) + sandboxLocalStorageFix + userHtml.slice(insertPosition);
+      htmlWithFix = userHtml.slice(0, insertPosition) + sandboxLocalStorageFix + MATERIAL_CAPTURE_SCRIPT + userHtml.slice(insertPosition);
     } else {
       // No <head> found - create one and inject fix
       const htmlTagIndex = userHtml.toLowerCase().indexOf('<html');
       if (htmlTagIndex !== -1) {
         const htmlTagEnd = userHtml.indexOf('>', htmlTagIndex) + 1;
-        htmlWithFix = userHtml.slice(0, htmlTagEnd) + '<head>' + sandboxLocalStorageFix + '</head>' + userHtml.slice(htmlTagEnd);
+        htmlWithFix = userHtml.slice(0, htmlTagEnd) + '<head>' + sandboxLocalStorageFix + MATERIAL_CAPTURE_SCRIPT + '</head>' + userHtml.slice(htmlTagEnd);
       }
     }
 
@@ -526,10 +531,10 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
     // (load order: fix → CSP → user scripts → email script → speech-to-text)
     const bodyCloseIndex = htmlWithCSP.toLowerCase().lastIndexOf('</body>');
     if (bodyCloseIndex !== -1) {
-      return htmlWithCSP.slice(0, bodyCloseIndex) + globalEmailScript + speechToTextScript + htmlWithCSP.slice(bodyCloseIndex);
+      return htmlWithCSP.slice(0, bodyCloseIndex) + globalEmailScript + MATERIAL_CAPTURE_SCRIPT + speechToTextScript + htmlWithCSP.slice(bodyCloseIndex);
     }
     // Fallback: if no </body> found, append at the end
-    return htmlWithCSP + globalEmailScript + speechToTextScript;
+    return htmlWithCSP + globalEmailScript + MATERIAL_CAPTURE_SCRIPT + speechToTextScript;
   }
 
   // If user HTML is just a fragment (no full HTML structure), wrap it
@@ -664,6 +669,7 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
       }
     }
   </style>
+  ${MATERIAL_CAPTURE_SCRIPT}
 </head>
 <body>
   <div class="responsive-container">
@@ -906,9 +912,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // BACKLOG T1 (2026-09-02): tananyag-eredmény beküldés — a címzetteket a szerver oldja fel,
   // a publikus HTML-ben nincs e-mail cím. Publikus, Origin-allowlist őr + saját rate-limit.
+  // Régi anyagok (docs/specs/2026-10-17-regi-anyag-eredmeny.md): egy iskolai hálózat sok tanulója egy IP-n van → 60 / 15 perc,
+  // az azonos eredményt pedig az ismétlésvédelem szűri (10 perc).
+  const materialResultDedup = new ViewDedup(10 * 60 * 1000, 5000);
   const materialResultLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10,
+    max: 60,
     message: { message: "Túl sok eredményküldés. Próbáld újra később!" },
     standardHeaders: true,
     legacyHeaders: false,
@@ -930,12 +939,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.warn('[MATERIAL-RESULT] nincs konfigurált küldő/címzett', { resend: resendStatus.reason, recipients: recipients.length });
         return res.status(503).json({ message: "Az eredményküldés jelenleg nem elérhető." });
       }
+      const dedupKey = materialResultDedupKey(value, req.ip ?? '');
+      if (!materialResultDedup.shouldRecord(dedupKey)) {
+        return res.json({ success: true, duplicate: true });
+      }
       const mail = buildMaterialResultEmail(value, file.title, getMaterialPreviewUrl(file.id));
       const results = await Promise.allSettled(
         recipients.map((to) => sendAdminNotification(mail.subject, mail.html, to)),
       );
-      const delivered = results.filter((r) => r.status === 'fulfilled' && (r.value as { success?: boolean } | undefined)?.success !== false).length;
+      const okAt = (r: PromiseSettledResult<unknown>) => r.status === 'fulfilled' && (r.value as { success?: boolean } | undefined)?.success !== false;
+      const delivered = results.filter(okAt).length;
+      const failed = recipients.filter((_, i) => !okAt(results[i]));
+      if (delivered > 0 && failed.length > 0) {
+        // mindkét adminnak meg kell kapnia: a kimaradt címzett egyszeri pótlása a háttérben
+        setTimeout(() => {
+          void Promise.allSettled(failed.map((to) => sendAdminNotification(mail.subject, mail.html, to)))
+            .then((retry) => logger.warn('[MATERIAL-RESULT] pótlás', { retried: failed.length, delivered: retry.filter(okAt).length }));
+        }, 60_000).unref();
+      }
       if (delivered === 0) {
+        materialResultDedup.forget(dedupKey);
         return res.status(502).json({ message: "Az eredményt nem sikerült elküldeni." });
       }
       res.json({ success: true, delivered });

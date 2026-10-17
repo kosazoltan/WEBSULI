@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * BACKLOG T1 (2026-09-02) — tananyag-eredmény beküldés szerver-oldalon.
  *
@@ -11,11 +13,19 @@
 export const MAX_SUBJECT_LENGTH = 200;
 export const MAX_BODY_LENGTH = 5000;
 export const MAX_MATERIAL_ID_LENGTH = 64;
+const AUTO_SUFFIX = ' — automatikus';
+
+/** Ismétlésvédelem kulcsa: azonos anyag + kliens + törzs 10 percen belül csak egyszer küld. */
+export function materialResultDedupKey(payload: MaterialResultPayload, clientIp: string): string {
+  return createHash('sha256').update(`${payload.materialId}|${clientIp}|${payload.subject}|${payload.body}`).digest('hex');
+}
 
 export interface MaterialResultPayload {
   materialId: string;
   subject: string;
   body: string;
+  /** Régi anyag automatikus beolvasása (docs/specs/2026-10-17-regi-anyag-eredmeny.md) — a tárgyban jelölve. */
+  auto?: boolean;
 }
 
 export type MaterialResultValidation =
@@ -48,7 +58,10 @@ export function normalizeMaterialResult(raw: unknown): MaterialResultValidation 
   if (body.length > MAX_BODY_LENGTH) {
     return { ok: false, error: `Az üzenet legfeljebb ${MAX_BODY_LENGTH} karakter lehet` };
   }
-  return { ok: true, value: { materialId, subject, body } };
+  if (r.auto !== undefined && typeof r.auto !== 'boolean') {
+    return { ok: false, error: 'Érvénytelen jelölés' };
+  }
+  return { ok: true, value: { materialId, subject, body, ...(r.auto ? { auto: true } : {}) } };
 }
 
 /** ADMIN_EMAILS (vesszővel elválasztva) vagy ADMIN_EMAIL → egyedi, érvényes címek. */
@@ -91,5 +104,6 @@ export function buildMaterialResultEmail(
     `<p style="color:#666;font-size:12px">Forrás: <a href="${escapeHtml(previewUrl)}">${escapeHtml(previewUrl)}</a></p>`,
     '</div>',
   ].join('');
-  return { subject: `[WebSuli eredmény] ${payload.subject}`, html };
+  const subject = `[WebSuli eredmény] ${payload.subject}`.slice(0, payload.auto ? 200 - AUTO_SUFFIX.length : 200);
+  return { subject: payload.auto ? subject + AUTO_SUFFIX : subject, html };
 }

@@ -29,6 +29,11 @@ export class ViewDedup {
     return true;
   }
 
+  /** A rögzítés visszavonása (pl. a kulcshoz tartozó küldés meghiúsult → újrapróbálható). */
+  forget(key: string): void {
+    this.seen.delete(key);
+  }
+
   get size(): number {
     return this.seen.size;
   }

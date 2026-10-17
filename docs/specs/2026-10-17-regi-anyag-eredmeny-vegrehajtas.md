@@ -41,5 +41,11 @@ Terv: `docs/specs/2026-10-17-regi-anyag-eredmeny.md`. Ág: `feat/regi-anyag-ered
      - a `/api/material-result` kérés mockolva;
      - ellenőrzés: egy kérés megy a helyes törzzsel, a levelező nem nyílik meg, és ismételt kiértékelésnél azonos eredményre
        nincs második kérés.
-6. **Kapuk:** tsc, check:test, lint, unit, a célzott Playwright és a build. Élő ellenőrzés a deploy után egy éles anyagon:
+6. **Tananyaggyártó (terv 5. pont):**
+   - `server/ai/lesson-html-spec.ts`: új „EREDMÉNYKÜLDÉS E-MAILBEN” szakasz; a „mailto link” előírás kikerül;
+   - a `globalEmailScript` `sendResultEmail`-je és a `mailto`-elfogó beállítja a `window.__websuliExplicitResult` jelzőt, így az
+     automatikus beolvasás nem küld mellé;
+   - unit teszt a specifikáció szövegére;
+   - a helyi skill (`tananyag-keszito/SKILL.md`, a repón kívül) azonos szakaszt kap, előtte mentés a munkamappába.
+7. **Kapuk:** tsc, check:test, lint, unit, a célzott Playwright és a build. Élő ellenőrzés a deploy után egy éles anyagon:
    a tulajdonos postafiókja kapja.

@@ -39,6 +39,15 @@ is beolvassa, és mindkét adminnak elküldje, amikor a tanuló kitölti őket.�
    - az automatikus beküldés jelölése (`auto: true`) a tárgyban: `[WebSuli eredmény] <anyag> — automatikus`.
 4. **A tanuló felülete:** az automatikus beküldés csendes. A kézi `sendResultEmail` hívás visszajelzése (✅) marad.
 
+5. **A tananyaggyártó (tulajdonosi kérés, 2026-10-17: „Mentsd el a tananyag készítő tudatába is, hogy emailben küldhető szöveges
+   és teszt eredményeket kell generálni.”):**
+   - a webes leckegenerátor kötelező specifikációja (`server/ai/lesson-html-spec.ts`) a `mailto` link helyett előírja:
+     a Feladatok és a Kvíz Kiértékelése után a `window.sendResultEmail(subject, body)` automatikusan elküldi az eredményt
+     (a tanuló válaszaival); a tananyagban nincs e-mail-cím és `mailto:`;
+   - a helyi `tananyag-keszito` skill ugyanezt kapja;
+   - ha a tananyag maga küld (`sendResultEmail` vagy `mailto`), az automatikus beolvasás nem küld mellé második levelet.
+   A strukturált leckéknél ezt a futtatókörnyezet végzi (#280), ott a generálásnak nincs teendője.
+
 ## Nem-cél
 - A tárolt HTML tartalmak módosítása.
 - Eredményküldés a kiértékelés nélküli anyagokhoz (2 db).
