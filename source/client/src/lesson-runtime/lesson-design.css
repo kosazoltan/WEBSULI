@@ -80,6 +80,8 @@
   padding: 16px 20px; border-radius: 20px; border: 1px solid var(--lesson-line);
   background: linear-gradient(135deg, var(--ws-soft), var(--lesson-surface));
 }
+/* A sötét 11–12. sávban tömör csempeszín: a sötét színpadra nem kerül színátmenet (lesson-band-visual.spec.ts). */
+[data-ws-theme="future"] .ws-bandhead { background: var(--lesson-surface); }
 [data-ws-theme] .ws-bandhead p { margin: 0; }
 [data-ws-theme] .ws-badge { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--ws-accent); color: #FFFFFF; box-shadow: 0 8px 18px color-mix(in srgb, var(--ws-accent) 30%, transparent); }
 [data-ws-theme] .ws-grade { font-size: 20px; font-weight: 900; line-height: 1.2; color: var(--ws-title); }
