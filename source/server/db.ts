@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from "@shared/schema";
 import { logger } from "./lib/logger";
+import { assertE2eDatabaseUrl, isE2eMode } from "./lib/e2e-mode";
 
 const { Pool } = pg;
 
@@ -20,6 +21,10 @@ if (isDevelopment && process.env.DEV_DATABASE_URL) {
   logger.warn('DATABASE_URL environment variable is not set. Database connection will fail.');
   DATABASE_URL = "postgres://postgres:postgres@localhost:5432/websuli"; // Default fallback
 }
+
+// docs/specs/2026-10-17-e2e-eldobhato-adatbazis.md: in e2e mode refuse to start before any pool exists unless the
+// database is a literal loopback address (the disposable test container), never production.
+if (isE2eMode()) assertE2eDatabaseUrl(DATABASE_URL);
 
 // Create PG Pool with proper configuration
 // SSL: Auto-detect Neon/Render/Supabase URLs OR sslmode= param in connection string

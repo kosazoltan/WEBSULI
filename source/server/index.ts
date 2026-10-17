@@ -1,4 +1,5 @@
-import "dotenv/config";
+// Must stay the first import: it decides whether source/.env is loaded before ./db reads DATABASE_URL.
+import "./lib/load-env";
 import { randomBytes } from "node:crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
@@ -26,6 +27,7 @@ import { getAllowedOrigins, isOriginAllowed, isSameOriginRequest } from "./lib/a
 import { logger } from "./lib/logger";
 import { isLessonRoute, lessonCspDirectives } from "./lib/csp-profiles";
 import { needsLargeBody } from "./lib/body-limits";
+import { describeE2eDatabase, isE2eMode } from "./lib/e2e-mode";
 
 const app = express();
 
@@ -495,6 +497,9 @@ app.use((req, res, next) => {
     log(`Starting server in ${app.get("env")} mode`);
     log(`Port: ${process.env.PORT || "5000"}`);
     log(`Database: Neon PostgreSQL (${isDev ? "DEV" : "PRODUCTION"})`);
+    // docs/specs/2026-10-17-e2e-eldobhato-adatbazis.md: db.ts already refused any non-loopback URL in e2e mode.
+    const e2e = isE2eMode();
+    if (e2e) log(`[E2E] eldobható adatbázis: ${describeE2eDatabase(process.env.DATABASE_URL)}; induláskori írások és háttérjobok kihagyva`);
 
     // Run pending database migrations before starting the server
     // This ensures all tables exist (e.g. improved_html_files, material_improvement_backups)
@@ -524,28 +529,31 @@ app.use((req, res, next) => {
       // Don't crash - the server can still run if tables already exist
     }
 
-    // Ikonkészlet (2026-10-17-websuli-ikonkeszlet): a jóváhagyott képek az adatbázisba. Háttérben fut, nem késlelteti az indulást;
-    // hiba esetén a lejátszó a statikus katalógusképeket használja tovább.
-    void import("./design-assets").then(({ startDesignAssetSync }) => startDesignAssetSync()).then(
-      (r) => log(`[design-assets] ${r.written} kép írva, ${r.unchanged} változatlan, ${r.missing.length} hiányzó fájl`),
-      (error) => logger.error("[STARTUP] A képkészlet szinkronja nem sikerült:", error),
-    );
-
-    // #168 — az előző folyamat halálakor árván maradt one-step futások hibára
-    // zárása, hogy a kliens állapotjelzője ne ragadjon be némán.
-    // #183 — ugyanez a studio_jobs sorokra: a JobMonitor a 'running' státuszt
-    // 2 másodpercenként pollozza, így egy árva sor örök pollt hajtott.
-    try {
-      const { closeOrphanedOneStepRuns, closeOrphanedStudioJobs, startStudioJobSweeper } = await import(
-        "./studio/lesson-pipeline-routes"
+    // E2E: no startup writes (design-asset sync, orphan closing, sweeper) — see e2e-mode.ts.
+    if (!e2e) {
+      // Ikonkészlet (2026-10-17-websuli-ikonkeszlet): a jóváhagyott képek az adatbázisba. Háttérben fut, nem késlelteti az indulást;
+      // hiba esetén a lejátszó a statikus katalógusképeket használja tovább.
+      void import("./design-assets").then(({ startDesignAssetSync }) => startDesignAssetSync()).then(
+        (r) => log(`[design-assets] ${r.written} kép írva, ${r.unchanged} változatlan, ${r.missing.length} hiányzó fájl`),
+        (error) => logger.error("[STARTUP] A képkészlet szinkronja nem sikerült:", error),
       );
-      await closeOrphanedOneStepRuns();
-      await closeOrphanedStudioJobs();
-      // Spec 2026-10-05-s10: deploykor a régi példány még tartja a lízinget — annak lejárta után a futás magától folytatódik.
-      startStudioJobSweeper();
-    } catch (sweepError) {
-      logger.error("[STARTUP] Az árva futások/jobok zárása nem sikerült:", sweepError);
-      // Nem végzetes: a poll 404-et ad az ismeretlen futásra.
+
+      // #168 — az előző folyamat halálakor árván maradt one-step futások hibára
+      // zárása, hogy a kliens állapotjelzője ne ragadjon be némán.
+      // #183 — ugyanez a studio_jobs sorokra: a JobMonitor a 'running' státuszt
+      // 2 másodpercenként pollozza, így egy árva sor örök pollt hajtott.
+      try {
+        const { closeOrphanedOneStepRuns, closeOrphanedStudioJobs, startStudioJobSweeper } = await import(
+          "./studio/lesson-pipeline-routes"
+        );
+        await closeOrphanedOneStepRuns();
+        await closeOrphanedStudioJobs();
+        // Spec 2026-10-05-s10: deploykor a régi példány még tartja a lízinget — annak lejárta után a futás magától folytatódik.
+        startStudioJobSweeper();
+      } catch (sweepError) {
+        logger.error("[STARTUP] Az árva futások/jobok zárása nem sikerült:", sweepError);
+        // Nem végzetes: a poll 404-et ad az ismeretlen futásra.
+      }
     }
 
     // CRITICAL: Serve PDF.js files BEFORE Vite routing
@@ -567,21 +575,24 @@ app.use((req, res, next) => {
     app.use("/api/design-assets", designAssetsRouter);
 
     const server = await registerRoutes(app);
-    const stopSkillLearningAudit = startSkillLearningAudit();
+    // E2E: no background jobs (they write, send e-mail or make backups).
+    const stopSkillLearningAudit = e2e ? () => {} : startSkillLearningAudit();
 
-    // Phase 8: Start scheduled publishing cron job
-    setupScheduledPublishing();
+    if (!e2e) {
+      // Phase 8: Start scheduled publishing cron job
+      setupScheduledPublishing();
 
-    // Phase 9: Start daily view summary email (runs at 20:00 daily)
-    setupDailyViewSummary();
-    // Napi tananyag-emlékeztető a regisztrált tanulóknak (docs/specs/2026-10-18-napi-emlekezteto.md)
-    setupDailyReminders();
+      // Phase 9: Start daily view summary email (runs at 20:00 daily)
+      setupDailyViewSummary();
+      // Napi tananyag-emlékeztető a regisztrált tanulóknak (docs/specs/2026-10-18-napi-emlekezteto.md) — E2E-ben nem (levél!)
+      setupDailyReminders();
 
-    // Phase 10: Start automatic backup system (daily + event-driven)
-    startAutoBackupJob();
+      // Phase 10: Start automatic backup system (daily + event-driven)
+      startAutoBackupJob();
 
-    // Phase 11: Start cleanup job for old applied improved files (daily at midnight)
-    setupCleanupImprovedFiles();
+      // Phase 11: Start cleanup job for old applied improved files (daily at midnight)
+      setupCleanupImprovedFiles();
+    }
 
     // Express error handler (4 params required for Express to identify it as error middleware)
     app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
