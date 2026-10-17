@@ -6,6 +6,7 @@ import { evaluateOpenAnswer, scoreSummary, sampleTaskIds } from "@shared/lesson-
 import { CognitiveMethods } from "./CognitiveMethods";
 import { DictationButton, SpeakButton } from "./ExperienceSpeech";
 import { useExperienceRound } from "./useExperienceRound";
+import { useResultReport } from "./resultReport";
 import { LearningMode, LearningPager, useLearningPreference } from "./LearningControls";
 import "./lesson-experience.css";
 import { PracticeAccess } from "./SavedLessonQuiz";
@@ -49,6 +50,10 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   const { taskRound, quizRound } = experienceRoundSizes(e);
   const taskState = useExperienceRound(e.tasks, taskRound, `${storageKey}:tasks`, () => sampleTaskIds(e.tasks, taskRound));
   const quizState = useExperienceRound(e.quiz, quizRound, `${storageKey}:quiz`);
+  // Tanulói eredmény e-mailben (2026-10-17-eredmeny-email): a kiértékelés után a háttérben, egyszer. A szerveres (bejelentkezett)
+  // kvízt a szerver maga küldi; a helyi kvíz csak vendégnél él, ezért annak lezárása küld.
+  useResultReport(lessonId, "tasks", taskState.round, storageKey);
+  useResultReport(lessonId, "quiz", quizState.round, storageKey);
   useEffect(() => {
     if (tab === "tasks") taskState.setRound(old => old.startedAt ? old : { ...old, startedAt: Date.now() });
     if (tab === "quiz") quizState.setRound(old => old.startedAt ? old : { ...old, startedAt: Date.now() });

@@ -1127,3 +1127,18 @@ export const designAssets = pgTable(
   },
   (table) => ({ kindBandIdx: index("design_assets_kind_band_idx").on(table.kind, table.band) }),
 );
+
+/** Tanulói eredmény e-mailben (migrations/0030): körönként egy levél — a (lecke, fajta, kör) egyedi. Tanulói szöveget nem tárol. */
+export const lessonResultEmails = pgTable(
+  "lesson_result_emails",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 8 }).notNull().$type<"tasks" | "quiz">(),
+    roundKey: char("round_key", { length: 64 }).notNull(),
+    percent: integer("percent").notNull(),
+    sent: integer("sent").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ roundUnique: uniqueIndex("lesson_result_emails_round_unique").on(table.lessonId, table.kind, table.roundKey) }),
+);
