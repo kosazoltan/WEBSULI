@@ -38,7 +38,8 @@ indulnak.
 
 **A sávfejléc mindenhol azonos szerkezetű:**
 - **Ikonjelvény:** nagy, kör alakú, teli főszínnel, benne fehér jelkép. Sávonként: levél, iránytű, agy, lombik, emelkedő grafikon.
-- **Évfolyam:** „N–M. osztály” főszínnel, vastagon.
+- **Évfolyam:** „N–M. osztály” vastagon. A képen főszínű, de a megvalósításban a mért címszín (`--ws-title`) kell. A 3–5.
+  sáv főszíne a saját alapfelületén csak 3,45:1, a fehéren 3,88:1.
 - **A téma neve** mély színnel, extra vastagon.
 - **Hármas mottó** • elválasztóval, például „Kíváncsiság • Játék • Alapok”.
 - **Két kis ikon a jobb felső sarokban:** menü, keresés vagy értesítés.
@@ -75,7 +76,8 @@ idézetek, jutalmazó elemek) nem. Ezért lett sivár.
 - **Kártyák:** fehér, illetve sötét témán sötét panel. Sarok 16–20 px, nagyon lágy árnyék, keret nincs vagy hajszálvékony.
 - **Kártyafejléc:** vastag cím balra, jobbra „Összes →” vagy egy ikon (hangszóró, könyvjelző, nyíl). Mindig van címe.
 - **Haladás:** lekerekített sáv sínnel, mellette **mindig szám** (3/5, 4/10, 72%).
-- **Cselekvés-gomb:** teli főszín, fehér szöveg, jobbra nyíl. Kör alakú nyílgomb a képes kártyákon.
+- **Cselekvés-gomb:** teli főszín, fehér szöveg, jobbra nyíl. Kör alakú nyílgomb a képes kártyákon. A fehér felirat a képen nem
+  minden sávban éri el a 4,5:1-et (3–5.: 3,88:1; 11–12.: 3,75:1), ezért a megvalósítás a 2.4 szerinti mért gombpárt használja.
 - **Pirula-címkék:** kitüntetett állapot vagy fül.
 - **Kép a kártyában:** kitölti a kártya felső részét. A képre írt szöveg alatt sötét áttűnés teszi olvashatóvá.
 - **Alsó navigáció:** 4–5 ikon felirattal. Az aktív elem a sáv főszínét kapja.
@@ -97,15 +99,26 @@ idézetek, jutalmazó elemek) nem. Ezért lett sivár.
 ### 2.1 Sávonkénti token-készlet (bővítés)
 A főszín, az alapfelület és a mély szöveg a mesterutasítás táblázata, nem változik. Mellé minden sáv kap:
 
-**`--ws-accent-2` és `--ws-accent-3`:** két társszín a kép alapján, kontrasztra mérve.
+**`--ws-accent-2` és `--ws-accent-3`:** két társszín a kép alapján, konkrét értékkel és mért párokkal. A mérés a WCAG relatív
+fénysűrűségével történt, 2026-10-17.
 
-| Sáv | `--ws-accent-2` | `--ws-accent-3` |
-|---|---|---|
-| 1–2. | napsárga | égkék |
-| 3–5. | türkiz | mély bordó |
-| 6–8. | lila | égkék |
-| 9–10. | türkiz | grafit |
-| 11–12. | lila | arany |
+| Sáv | `--ws-accent-2` | `--ws-accent-3` | Felirat rajtuk (teli kitöltésnél) |
+|---|---|---|---|
+| 1–2. | `#9A6A00` mézsárga | `#1F6FA8` égkék | `#FFFFFF` (4,73 / 5,39) |
+| 3–5. | `#0B7C71` türkiz | `#9B2C3F` mély bordó | `#FFFFFF` (5,08 / 7,43) |
+| 6–8. | `#6D3FD8` lila | `#1F6FA8` égkék | `#FFFFFF` (6,26 / 5,39) |
+| 9–10. | `#0B7480` türkiz | `#3F4A5A` grafit | `#FFFFFF` (5,49 / 8,98) |
+| 11–12. | `#B9A6FF` lila | `#F5B841` arany | `#061A22` (8,45 / 10,02) |
+
+Engedélyezett párok (minden ≥ 4,5:1, mérve):
+- **szövegként a csempén** (`--ws-panel`): mind a tíz szín;
+  - 1–2.: 4,73 / 5,39; 3–5.: 5,08 / 7,43; 6–8.: 6,26 / 5,39; 9–10.: 5,49 / 8,98;
+  - 11–12. (a sötét `#233956` panelen): 5,56 / 6,60;
+- **szövegként az alapfelületen** (`--ws-surface`): mind, **kivéve** az 1–2. sáv `--ws-accent-2`-jét (4,33:1). Ezt ott csak kitöltésre
+  vagy grafikai jelölőre szabad használni;
+- **teli kitöltésként** a fenti táblázat feliratszínével.
+
+Grafikai jelölőként (sáv, gyűrű, ikon) minden társszín ≥ 3:1 a saját csempéjén és alapfelületén.
 
 **Egyéb új tokenek:**
 - `--ws-hero-from`, `--ws-hero-to`: a háttér-színátmenet két végpontja (1.2 „Háttér” sor);
@@ -144,7 +157,9 @@ mintájára.
 Közös szabályok:
 - **Unisex:** a kabala állat, nem fiú vagy lány. A fotókon a szereplők nemtől függetlenek vagy hátulról látszanak (a kép
   túrázója is ilyen).
-- **Képre írt szöveg:** csak mért sötétítő réteggel, és a szöveg-háttér kontraszt a réteg nélküli legrosszabb pixelen is ≥ 4,5:1.
+- **Képre írt szöveg:** csak sötétítő réteggel (scrim). A kontrasztot a **ténylegesen megjelenő háttéren** kell mérni: a képkivágás
+  és a réteg rákomponálása után, a szöveg alatti terület legrosszabb képpontján ≥ 4,5:1. Például fehér háttér fölött 60%-os fekete
+  réteggel a fehér szöveg 5,74:1. A nyers fotót nem mérjük.
 - **Forrás:** kizárólag jogtiszta, saját vagy licencelt kép (mesterutasítás §1). Kurált **képkészlet** a repóban vagy a
   tárhelyen, metaadatokkal: sáv, tárgykör, kulcsszavak, licenc, alt szöveg.
 - **Leckeszinten:** a lecke borítója a készletből, a tárgykör és a kulcsszavak alapján választott kép. A pipeline csak választ,
@@ -153,14 +168,14 @@ Közös szabályok:
 ### 2.4 Komponensszabályok
 | Komponens | Szabály |
 |---|---|
-| **Sávfejléc** | Ikonjelvény (56 px kör, főszín, fehér jelkép) · évfolyam főszínnel · téma neve · hármas mottó. Mobilon is egy sorban az ikon és a két cím. |
+| **Sávfejléc** | Ikonjelvény (56 px kör, főszín kitöltés, fehér jelkép; grafikai elem, ≥ 3:1) · évfolyam a mért címszínnel (`--ws-title`, nem a nyers főszínnel) · téma neve · hármas mottó. Mobilon is egy sorban az ikon és a két cím. |
 | **Hős-kártya** | Kép kitöltéssel, 16–20 px sarok, a kép alján vagy oldalán szöveg. 1–5.: szóbuborék, fehér, sötét szöveggel. 6–12.: idézet vagy kiemelt cím a képen, sötétítő réteggel, kör alakú nyílgomb. |
 | **Cél- és haladás-kártya** | Cím + sáv + szám + jutalomikon (⭐, láda, gyűrű). A szám mindig ott van. |
 | **Tantárgy-csempe** | Négyzetes fehér csempe, ikon fent, felirat lent (≥ 13 px). 1–5.: 2×2, 6–8.: 4×2 rács. 44 px-nél nagyobb célterület. |
 | **Tanulókártya / memóriakártya** | Kép vagy ikon balra, cím és egymondatos magyarázat jobbra; hangszóró-gomb; lapozó-nyilak és pontok. A fordítókártya „?” hátlappal. |
 | **Tudáspróba** | Rádiógombos válaszok kártyaként, a kijelölt teli kerettel; teli „Ellenőrzés” gomb. A visszajelzés szöveges pirula: „Ügyes vagy!” vagy „Nézd meg újra”, nem csak szín. |
 | **Statisztika** | Gyűrű középen %-kal, jelmagyarázat színponttal **és szöveggel**. |
-| **Cselekvés-gomb** | Teli főszín, nyíllal; másodlagos: halvány sávszín. Sarok 12 px, magasság ≥ 44 px. |
+| **Cselekvés-gomb** | A mért gombpár: `--ws-strong` háttér, `--ws-strong-ink` felirat (`shared/lesson-design.ts`). A nyers főszín fehér felirattal nem elég: 3–5.: 3,88:1; 11–12.: 3,75:1. A gombon nyíl. A másodlagos gomb a mért `--ws-secondary-bg` / `--ws-secondary-ink` pár. Sarok 12 px, magasság ≥ 44 px. |
 | **Idézet-kártya** | Kis „Inspiráció” fejléc ikonnal, idézet 17–18 px, szerző jobbra. A 6–12. sávban. |
 | **Lábléc-szalag** | Teli `--ws-footer`, fehér vonalas ikon, kétsoros nagybetűs sávszlogen. Csak a tanulói kereten (irányítópult), a leckében nincs. |
 
