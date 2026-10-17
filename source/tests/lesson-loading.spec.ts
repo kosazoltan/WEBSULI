@@ -127,13 +127,21 @@ test("review #275: a töltő háttere sosem a body sötétkékje (a kezdőlap di
 
 test("11.: a /preview/ első festésekor sem a kezdőlap sötétkékje látszik; a kezdőlapra lépve az visszatér", async ({ page }) => {
   await mockApi(page);
-  await page.addInitScript(() => {
-    document.addEventListener("DOMContentLoaded", () => {
-      (window as unknown as { __firstBg: string }).__firstBg = getComputedStyle(document.body).backgroundColor;
-    });
-  });
-  await page.goto("/preview/load-fixture");
-  expect(await page.evaluate(() => (window as unknown as { __firstBg: string }).__firstBg)).not.toBe("rgb(10, 14, 39)");
+  // Review #276: a React ELŐTTI állapotot mérjük — a JS-modulok kérését visszatartjuk, amíg a CSS betöltött és a #root üres;
+  // így csak a <head> beágyazott szkriptje állíthatja a világos alapot. A kérések a mérés után (bukásnál is) továbbmennek.
+  let release!: () => void;
+  const gate = new Promise<void>(r => { release = r; });
+  await page.route(/\/assets\/.*\.js(\?|$)/, async route => { await gate; await route.continue(); });
+  try {
+    await page.goto("/preview/load-fixture", { waitUntil: "commit" });
+    await page.waitForFunction(() => document.styleSheets.length > 0 && [...document.styleSheets].some(s => { try { return s.cssRules.length > 0; } catch { return false; } }));
+    const before = await page.evaluate(() => ({ root: document.getElementById("root")?.childElementCount ?? -1, flag: document.documentElement.classList.contains("ws-lesson-route"), bg: getComputedStyle(document.body).backgroundColor }));
+    expect(before.root, "a React még nem rajzolt").toBe(0);
+    expect(before.flag, "a <head> szkript beállította a jelzőt").toBe(true);
+    expect(before.bg).not.toBe("rgb(10, 14, 39)");
+  } finally {
+    release();
+  }
   await expect(page.locator(".lesson-hero h1").first()).toBeVisible({ timeout: 15000 });
   await page.evaluate(() => { history.pushState(null, "", "/"); dispatchEvent(new PopStateEvent("popstate")); });
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(10, 14, 39)");
