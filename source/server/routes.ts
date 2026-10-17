@@ -31,7 +31,7 @@ import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
-import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey } from "./lib/material-result";
+import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients } from "./lib/material-result";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments } from "./lib/material-capture";
 import { lessonResultsRouter } from "./lesson-result-email";
 
@@ -289,10 +289,12 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
               __websuliShowNotice('✅ Az eredményt elküldtük a tanárnak.', false);
               return true;
             }
+            window.__websuliExplicitResult = false; // sikertelen → az automatikus beolvasás maradjon tartalék
             __websuliShowNotice('⚠️ ' + (data && data.message ? data.message : 'Az eredményt nem sikerült elküldeni.'), true);
             return false;
           });
         }).catch(function () {
+          window.__websuliExplicitResult = false;
           __websuliShowNotice('⚠️ Nincs hálózat — az eredményt nem sikerült elküldeni.', true);
           return false;
         });
@@ -943,29 +945,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.warn('[MATERIAL-RESULT] nincs konfigurált küldő/címzett', { resend: resendStatus.reason, recipients: recipients.length });
         return res.status(503).json({ message: "Az eredményküldés jelenleg nem elérhető." });
       }
-      const dedupKey = materialResultDedupKey(value, req.ip ?? '');
-      if (!materialResultDedup.shouldRecord(dedupKey)) {
+      // Ismétlésvédelem CÍMZETTENKÉNT (review #281): a már értesített admin nem kap újra, a kimaradt pótolható.
+      const mail = buildMaterialResultEmail(value, file.title, getMaterialPreviewUrl(file.id));
+      const outcome = await deliverToRecipients({
+        recipients,
+        baseKey: materialResultDedupKey(value, req.ip ?? ''),
+        dedup: materialResultDedup,
+        send: async (to) => ((await sendAdminNotification(mail.subject, mail.html, to)) as { success?: boolean } | undefined)?.success !== false,
+        scheduleRetry: (run) => { setTimeout(() => { void run().catch((e: unknown) => logger.warn('[MATERIAL-RESULT] pótlás hiba', { error: String(e) })); }, 60_000).unref(); },
+        onRetryDone: (stillFailed) => logger.warn('[MATERIAL-RESULT] pótlás kész', { stillFailed }),
+      });
+      if (outcome.duplicate) {
         return res.json({ success: true, duplicate: true });
       }
-      const mail = buildMaterialResultEmail(value, file.title, getMaterialPreviewUrl(file.id));
-      const results = await Promise.allSettled(
-        recipients.map((to) => sendAdminNotification(mail.subject, mail.html, to)),
-      );
-      const okAt = (r: PromiseSettledResult<unknown>) => r.status === 'fulfilled' && (r.value as { success?: boolean } | undefined)?.success !== false;
-      const delivered = results.filter(okAt).length;
-      const failed = recipients.filter((_, i) => !okAt(results[i]));
-      if (delivered > 0 && failed.length > 0) {
-        // mindkét adminnak meg kell kapnia: a kimaradt címzett egyszeri pótlása a háttérben
-        setTimeout(() => {
-          void Promise.allSettled(failed.map((to) => sendAdminNotification(mail.subject, mail.html, to)))
-            .then((retry) => logger.warn('[MATERIAL-RESULT] pótlás', { retried: failed.length, delivered: retry.filter(okAt).length }));
-        }, 60_000).unref();
-      }
-      if (delivered === 0) {
-        materialResultDedup.forget(dedupKey);
+      if (outcome.delivered === 0) {
         return res.status(502).json({ message: "Az eredményt nem sikerült elküldeni." });
       }
-      res.json({ success: true, delivered });
+      res.json({ success: true, delivered: outcome.delivered });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error('[MATERIAL-RESULT] hiba:', err.message);

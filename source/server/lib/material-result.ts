@@ -107,3 +107,37 @@ export function buildMaterialResultEmail(
   const subject = `[WebSuli eredmény] ${payload.subject}`.slice(0, payload.auto ? 200 - AUTO_SUFFIX.length : 200);
   return { subject: payload.auto ? subject + AUTO_SUFFIX : subject, html };
 }
+
+/**
+ * Címzettenkénti kézbesítés ismétlésvédelemmel (review #281): a már értesített admin nem kap újra; a kimaradt címzett egyszeri
+ * pótlása a `scheduleRetry`-ban fut, és ha az is hibázik, a kulcsa törlődik — így egy ismételt beküldés csak neki küld, és nem
+ * kap hamis „duplicate” választ.
+ */
+export async function deliverToRecipients(opts: {
+  recipients: readonly string[];
+  baseKey: string;
+  dedup: { shouldRecord(key: string): boolean; forget(key: string): void };
+  send: (to: string) => Promise<boolean>;
+  scheduleRetry: (run: () => Promise<void>) => void;
+  onRetryDone?: (stillFailed: number) => void;
+}): Promise<{ duplicate: true } | { duplicate: false; delivered: number; failed: string[] }> {
+  const keyOf = (to: string) => `${opts.baseKey}|${to}`;
+  const pending = opts.recipients.filter((to) => opts.dedup.shouldRecord(keyOf(to)));
+  if (pending.length === 0) return { duplicate: true };
+  const sendAll = async (list: readonly string[]) => {
+    const settled = await Promise.allSettled(list.map((to) => opts.send(to)));
+    return list.filter((_, i) => !(settled[i].status === 'fulfilled' && settled[i].value));
+  };
+  const failed = await sendAll(pending);
+  const delivered = pending.length - failed.length;
+  if (delivered === 0) {
+    failed.forEach((to) => opts.dedup.forget(keyOf(to)));
+  } else if (failed.length > 0) {
+    opts.scheduleRetry(async () => {
+      const stillFailed = await sendAll(failed);
+      stillFailed.forEach((to) => opts.dedup.forget(keyOf(to)));
+      opts.onRetryDone?.(stillFailed.length);
+    });
+  }
+  return { duplicate: false, delivered, failed };
+}

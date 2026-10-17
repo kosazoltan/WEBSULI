@@ -101,3 +101,32 @@ test("a tananyaggyártó specifikációja (tulajdonosi kérés 2026-10-17): a fe
   assert.match(LESSON_HTML_SPEC_V74, /TILOS a `mailto:`/);
   assert.ok(!/mailto link/.test(LESSON_HTML_SPEC_V74), "a régi „mailto link” előírás kikerült");
 });
+
+test("review #281: címzettenkénti kézbesítés — részleges hibánál a kimaradt pótolható, a már értesített nem kap újra, és nincs hamis duplicate", async () => {
+  const { deliverToRecipients } = await import("../server/lib/material-result");
+  const dedup = new ViewDedup(10 * 60 * 1000, 5000);
+  const sent: string[] = [];
+  let failB = true;
+  const send = async (to: string) => { if (to === "b@x.test" && failB) return false; sent.push(to); return true; };
+  const retries: Array<() => Promise<void>> = [];
+  const base = { recipients: ["a@x.test", "b@x.test"], baseKey: "k1", dedup, send, scheduleRetry: (run: () => Promise<void>) => { retries.push(run); } };
+
+  const first = await deliverToRecipients(base);
+  assert.deepEqual(first, { duplicate: false, delivered: 1, failed: ["b@x.test"] });
+  assert.equal(retries.length, 1, "a kimaradt címzett pótlása ütemezve");
+  // a pótlás is hibázik → b kulcsa törlődik
+  await retries[0]();
+  // ismételt beküldés: csak b-nek megy, a-nak nem, és nem „duplicate”
+  failB = false;
+  const again = await deliverToRecipients(base);
+  assert.deepEqual(again, { duplicate: false, delivered: 1, failed: [] });
+  assert.deepEqual(sent, ["a@x.test", "b@x.test"]);
+  assert.deepEqual(await deliverToRecipients(base), { duplicate: true });
+
+  // teljes hiba: minden kulcs törlődik, az ismétlés mindkettőnek küld
+  const d2 = new ViewDedup(10 * 60 * 1000, 5000);
+  const none = await deliverToRecipients({ ...base, baseKey: "k2", dedup: d2, send: async () => false });
+  assert.deepEqual(none, { duplicate: false, delivered: 0, failed: ["a@x.test", "b@x.test"] });
+  const ok = await deliverToRecipients({ ...base, baseKey: "k2", dedup: d2, send: async () => true });
+  assert.deepEqual(ok, { duplicate: false, delivered: 2, failed: [] });
+});

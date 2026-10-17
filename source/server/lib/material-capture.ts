@@ -128,6 +128,8 @@ export const MATERIAL_CAPTURE_SCRIPT = `
         var m = parseMailto(url);
         window.__websuliExplicitResult = true;
         post(m.subject || document.title || 'Tananyag eredmény', m.body, false).then(function (ok) {
+          // sikertelen közvetlen küldés → az automatikus beolvasás maradjon tartalék (review #281)
+          if (!ok) { window.__websuliExplicitResult = false; }
           notice(ok ? '\\u2705 Az eredményt elküldtük a tanárnak.' : '\\u26a0\\ufe0f Az eredményt nem sikerült elküldeni.', !ok);
         });
       }

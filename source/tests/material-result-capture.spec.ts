@@ -11,14 +11,15 @@ function serve(stored: string): string {
   return html.replace("</body>", MATERIAL_CAPTURE_SCRIPT + "</body>");
 }
 
-async function open(page: Page, id: string, stored: string) {
+async function open(page: Page, id: string, stored: string, statusOf: (n: number) => number = () => 200) {
   const posts: Post[] = [];
   const mailtoNavigations: string[] = [];
   page.on("request", r => { if (r.url().startsWith("mailto:")) mailtoNavigations.push(r.url()); });
   await page.route(`http://websuli.test/dev/${id}`, route => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: serve(stored) }));
   await page.route("http://websuli.test/api/material-result", route => {
     posts.push(JSON.parse(route.request().postData() ?? "{}"));
-    return route.fulfill({ status: 200, contentType: "application/json", body: '{"success":true}' });
+    const status = statusOf(posts.length);
+    return route.fulfill({ status, contentType: "application/json", body: status === 200 ? '{"success":true}' : '{"message":"hiba"}' });
   });
   await page.clock.install();
   await page.goto(`http://websuli.test/dev/${id}`);
@@ -135,4 +136,23 @@ test("feladatonkénti ellenőrzés: a futó statisztika lépésenként nem küld
   await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
   await expect.poll(() => posts.length, { timeout: 5000 }).toBe(2);
   expect(posts[1].body).toContain("Megoldott feladatok: 5 / 3");
+});
+
+const MAILTO_AND_RESULT = `<!DOCTYPE html><html><head><title>Vegyes régi anyag</title></head><body>
+<button id="eval" onclick="document.getElementById('quiz-result').textContent='Eredmény: 7 / 10 — 70% (Közepes)'">✅ Kiértékelés</button>
+<div id="quiz-result"></div>
+<button id="send" onclick="window.location.href='mailto:?subject=Kvíz&body=' + encodeURIComponent('70%')">📧 Eredmény elküldése</button>
+</body></html>`;
+
+test("review #281: ha a mailto-ból indított közvetlen küldés elbukik, az automatikus beolvasás tartalékként elküldi az eredményt", async ({ page }) => {
+  const { posts } = await open(page, "regi-vegyes", MAILTO_AND_RESULT, n => (n === 1 ? 502 : 200));
+  await page.click("#eval");
+  await page.clock.runFor(1600);
+  await page.click("#send"); // közvetlen küldés → 502
+  await expect(page.getByRole("status")).toContainText("nem sikerült");
+  expect(posts[0]).toMatchObject({ subject: "Kvíz", auto: false });
+  await page.clock.runFor(32_000);
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(2);
+  expect(posts[1]).toMatchObject({ auto: true });
+  expect(posts[1].body).toContain("70% (Közepes)");
 });
