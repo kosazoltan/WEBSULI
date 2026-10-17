@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { curriculumSort, isCurrent, todayPosition, type CurriculumHint } from "@/lib/curriculum-order";
 import { getFileIcon } from "@/lib/iconUtils";
 import { LIGHT_MOTION_QUERIES, prefersLightMotionNow } from "@/lib/light-motion";
 import LikeButton from "@/components/LikeButton";
@@ -27,6 +28,8 @@ interface HtmlFileApi {
   description: string | null;
   classroom: number;
   createdAt: string;
+  /** Tanmenet-rendezés (docs/specs/2026-10-17-tanmenet-rendezes.md): tanévbeli pozíció a NAT 2020 mintatanmenet szerint. */
+  curriculum?: CurriculumHint;
 }
 
 interface UserFileListProps {
@@ -105,17 +108,20 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   }, []);
 
   // Filter by search query AND selected classroom
+  // Review #282: renderenként számolva — a nyitva hagyott lista a percenkénti frissítéssel a napváltást is követi.
+  const today = todayPosition();
   const filteredFiles = useMemo(() => {
-    return files
+    const filtered = files
       .filter((file) => {
         const matchesSearch =
           file.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (file.description || "").toLowerCase().includes(searchQuery.toLowerCase());
         const matchesClassroom = selectedClassroom === null || file.classroom === selectedClassroom;
         return matchesSearch && matchesClassroom;
-      })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [files, searchQuery, selectedClassroom]);
+      });
+    // A mai tananyag elöl (NAT 2020 mintatanmenet), a tanmenethez nem illeszthető anyag hátul, legújabb elöl.
+    return curriculumSort(filtered, today);
+  }, [files, searchQuery, selectedClassroom, today]);
 
   // Batch fetch likes for all visible files
   const materialIds = useMemo(() => filteredFiles.map((f) => f.id), [filteredFiles]);
@@ -370,6 +376,15 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                           {getClassroomLabel(classroom, true)}
                         </Badge>
                       </div>
+                      {isCurrent(file.curriculum, today) && (
+                        <span
+                          className="self-start mb-1 inline-flex items-center rounded-full bg-emerald-700 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+                          title={file.curriculum?.label}
+                          data-testid={`badge-current-${file.id}`}
+                        >
+                          Most tanuljuk
+                        </span>
+                      )}
 
                       {/* Content */}
                       <div className="flex-1 mb-1.5">
