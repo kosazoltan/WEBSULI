@@ -17,3 +17,5 @@ COMMON: Original artwork for a Hungarian children's learning platform. Friendly,
 - hero: KIND_HERO: Wide landscape hero illustration for the top of a learning page, main subject on the right third, calmer area on the left third for overlaid text.
 - icon: KIND_ICON: A single subject icon object, centered, glossy soft 3D toy-like rendering for young learners (or flat clean duotone for older learners when stated), plain very light background, no shadow clutter.
 - cover: KIND_COVER: Topic cover illustration for a lesson card, one clear central motif representing the topic, uncluttered background.
+- marker: KIND_MARKER: A tiny, very simple block-type badge icon for a lesson section header, one bold readable shape, centered on a plain very light background, must stay recognisable at 24 pixels.
+- divider: KIND_DIVIDER: A small decorative ornament placed between lesson chapters, symmetrical and calm, centered on a plain very light empty background, no frame.

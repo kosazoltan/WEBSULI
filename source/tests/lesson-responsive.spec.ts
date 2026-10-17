@@ -6,6 +6,10 @@ import { expect, test } from "@playwright/test";
  * kilógás, a fejléc-, fül- és címkeszöveg nincs levágva, a kép betölt. Képernyőkép: test-results/websuli-responsive/.
  */
 test.use({ serviceWorkers: "block" });
+// Arculati bank S2: a lejátszó képei az /api/design-assets-ről jönnek. A teszt ne függjön a (helyben éles) adatbázistól: azonnali
+// 404 → a lejátszó a katalógus statikus fájljára vált (ugyanaz a kép), így a mérés gyors és determinisztikus.
+test.beforeEach(async ({ page }) => { await page.route("**/api/design-assets/**", route => route.fulfill({ status: 404, json: { message: "teszt" } })); });
+
 
 const DEVICES = [
   { name: "telefon-kicsi", width: 360, height: 740 },
@@ -25,7 +29,7 @@ for (const classroom of CLASSROOMS) {
       await page.setViewportSize({ width: d.width, height: d.height });
       await page.goto(`/__lesson-runtime-probe?fusion=1&classroom=${classroom}`);
       await expect(page.locator(".lesson-hero h1").first()).toBeVisible();
-      await page.evaluate(async () => { await document.fonts.ready; await Promise.all([...document.images].map(i => i.decode().catch(() => undefined))); });
+      await page.evaluate(async () => { await document.fonts.ready; await Promise.all([...document.images].map(i => Promise.race([i.decode().catch(() => undefined), new Promise(r => setTimeout(r, 3000))]))); /* a nézeten kívüli lazy kép decode()-ja nem zárul le */ });
       const report = await page.evaluate(() => {
         const vw = document.documentElement.clientWidth;
         const overflowX = document.documentElement.scrollWidth - vw;
