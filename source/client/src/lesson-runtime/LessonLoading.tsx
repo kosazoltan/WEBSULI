@@ -6,15 +6,19 @@ import { DESIGN_THEMES, designThemeForClassroom } from "@shared/lesson-design";
  * hős helyén váz. Így a fehér → sávszín váltás és a két egymást követő töltőszöveg („Betöltés…”, „Lecke betöltése…”)
  * nem látszik „újragenerálásnak”. A színek a mért tokenekből jönnek (a lejátszó CSS-e ekkor még nem töltődött be).
  */
-export function LessonLoading({ classroom }: { classroom?: number | null }) {
+/**
+ * `fullScreen`: a route-szintű betöltéskor (App Suspense) — a body háttere szándékosan sötétkék (a kezdőlap dizájnja), ezért a
+ * töltő saját világos, teljes képernyős hátteret ad; különben a megnyitás sötétkék villanással kezdődne (mérve, 2026-10-17).
+ */
+export function LessonLoading({ classroom, fullScreen = false }: { classroom?: number | null; fullScreen?: boolean }) {
   const theme = typeof classroom === "number" ? DESIGN_THEMES[designThemeForClassroom(classroom)] : null;
-  const surface = theme?.surface ?? "transparent";
+  const surface = theme?.surface ?? "hsl(var(--background))";
   const panel = theme?.panel ?? "hsl(var(--muted))";
   const line = theme?.line ?? "hsl(var(--border))";
   const ink = theme?.muted ?? "hsl(var(--muted-foreground))";
   const block = { background: panel, border: `1px solid ${line}`, borderRadius: 24 } as const;
   return (
-    <div className="w-full min-h-[70vh] px-4 py-4 sm:px-6" style={{ background: surface }} data-testid="lesson-loading" data-ws-loading={theme?.id ?? "neutral"}>
+    <div className={`w-full ${fullScreen ? "min-h-screen" : "min-h-[70vh]"} px-4 py-4 sm:px-6`} style={{ background: surface }} data-testid="lesson-loading" data-ws-loading={theme?.id ?? "neutral"}>
       <div className="mx-auto w-full max-w-[1100px] flex flex-col gap-4">
         <div aria-hidden="true" style={{ ...block, height: 96 }} />
         <div aria-hidden="true" style={{ ...block, aspectRatio: "16 / 6", minHeight: 180 }} />

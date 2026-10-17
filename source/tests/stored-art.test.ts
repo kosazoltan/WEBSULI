@@ -31,6 +31,9 @@ test("a tárolt elem csak a lecke mostani sávjában érvényes; kabala csak 1�
   assert.equal(young.mascot?.id, "mascot-hello");
   assert.equal(young.subjectIcon?.id, "icon-matematika-adventure");
   assert.equal(resolveStoredArt({ picture: "icon-matematika-studio" }, "studio", C), null, "ikon nem lehet kép");
+  // Review #275: a kulcsszavas borító szándékosan lehet a másik korosztályé (a választó is ezt adja) — a tárolt is érvényes.
+  const crossAge = C.find(a => a.kind === "cover" && a.band === "studio")!;
+  assert.equal(resolveStoredArt({ picture: crossAge.id }, "adventure", C)?.cover?.id, crossAge.id);
 });
 
 test("a leckeséma elfogadja a tárolt arculatot, és elutasítja az ismeretlen mezőt vagy a hibás azonosítót", () => {

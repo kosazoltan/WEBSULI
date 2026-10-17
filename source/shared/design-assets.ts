@@ -101,7 +101,9 @@ export function resolveStoredArt(stored: StoredLessonArt | undefined, band: (typ
   const byId = (id: string | undefined, kind: DesignAsset["kind"][]) => (id ? catalog.find(a => a.id === id && kind.includes(a.kind)) : undefined);
   const young = YOUNG_BANDS.has(band);
   const picture = byId(stored.picture, ["hero", "cover"]);
-  if (!picture || YOUNG_BANDS.has(picture.band) !== young) return null;
+  // Review #275: a kulcsszavas borító szándékosan lehet a másik korosztályé (a pickLessonArt is ezt választja, ha csak ott van);
+  // a sávhős viszont csak a saját korosztályé lehet (a más korosztályú tárolt hős az évfolyam megváltozását jelzi).
+  if (!picture || (picture.kind === "hero" && YOUNG_BANDS.has(picture.band) !== young)) return null;
   const mascot = young ? byId(stored.mascot, ["mascot"]) : undefined;
   const icon = byId(stored.subjectIcon, ["icon"]);
   const subjectIcon = icon && (icon.id.endsWith(`-${band}`) || (!BAND_SUFFIX.test(icon.id) && icon.id.endsWith("-young") === young)) ? icon : undefined;
