@@ -193,7 +193,79 @@
         "icon-rajz-young.webp",
         "icon-termeszet-young.webp",
         "icon-tortenelem.webp",
-        "icon-tortenelem-young.webp"
+        "icon-tortenelem-young.webp",
+        "icon-angol-explorer.webp",
+        "icon-angol-adventure.webp",
+        "icon-angol-studio.webp",
+        "icon-angol-laboratory.webp",
+        "icon-angol-future.webp",
+        "icon-biologia-studio.webp",
+        "icon-biologia-laboratory.webp",
+        "icon-biologia-future.webp",
+        "icon-enek-zene-explorer.webp",
+        "icon-enek-zene-adventure.webp",
+        "icon-enek-zene-studio.webp",
+        "icon-enek-zene-laboratory.webp",
+        "icon-fizika-studio.webp",
+        "icon-fizika-laboratory.webp",
+        "icon-fizika-future.webp",
+        "icon-foldrajz-studio.webp",
+        "icon-foldrajz-laboratory.webp",
+        "icon-foldrajz-future.webp",
+        "icon-francia-adventure.webp",
+        "icon-francia-studio.webp",
+        "icon-francia-laboratory.webp",
+        "icon-francia-future.webp",
+        "icon-hit-es-erkolcstan-explorer.webp",
+        "icon-hit-es-erkolcstan-adventure.webp",
+        "icon-hit-es-erkolcstan-studio.webp",
+        "icon-hit-es-erkolcstan-laboratory.webp",
+        "icon-hit-es-erkolcstan-future.webp",
+        "icon-informatika-adventure.webp",
+        "icon-informatika-studio.webp",
+        "icon-informatika-laboratory.webp",
+        "icon-informatika-future.webp",
+        "icon-kemia-studio.webp",
+        "icon-kemia-laboratory.webp",
+        "icon-kemia-future.webp",
+        "icon-kornyezetismeret-explorer.webp",
+        "icon-kornyezetismeret-adventure.webp",
+        "icon-magyar-irodalom-explorer.webp",
+        "icon-magyar-irodalom-adventure.webp",
+        "icon-magyar-irodalom-studio.webp",
+        "icon-magyar-irodalom-laboratory.webp",
+        "icon-magyar-irodalom-future.webp",
+        "icon-magyar-nyelvtan-explorer.webp",
+        "icon-magyar-nyelvtan-adventure.webp",
+        "icon-magyar-nyelvtan-studio.webp",
+        "icon-magyar-nyelvtan-laboratory.webp",
+        "icon-magyar-nyelvtan-future.webp",
+        "icon-matematika-explorer.webp",
+        "icon-matematika-adventure.webp",
+        "icon-matematika-studio.webp",
+        "icon-matematika-laboratory.webp",
+        "icon-matematika-future.webp",
+        "icon-nemet-adventure.webp",
+        "icon-nemet-studio.webp",
+        "icon-nemet-laboratory.webp",
+        "icon-nemet-future.webp",
+        "icon-tarsadalmi-ismeretek-studio.webp",
+        "icon-tarsadalmi-ismeretek-laboratory.webp",
+        "icon-tarsadalmi-ismeretek-future.webp",
+        "icon-technika-explorer.webp",
+        "icon-technika-adventure.webp",
+        "icon-technika-studio.webp",
+        "icon-termeszetismeret-adventure.webp",
+        "icon-termeszetismeret-studio.webp",
+        "icon-tortenelem-adventure.webp",
+        "icon-tortenelem-studio.webp",
+        "icon-tortenelem-laboratory.webp",
+        "icon-tortenelem-future.webp",
+        "icon-vizualis-kultura-explorer.webp",
+        "icon-vizualis-kultura-adventure.webp",
+        "icon-vizualis-kultura-studio.webp",
+        "icon-vizualis-kultura-laboratory.webp",
+        "icon-vizualis-kultura-future.webp"
       ],
       "files": {
         "icon-angol.webp": {
@@ -296,6 +368,438 @@
           "name": "icon-tortenelem-young.webp",
           "blob": "7b494552b4436ee80f74fdc783c29ec3",
           "size": 8858,
+          "type": "image/webp"
+        },
+        "icon-angol-explorer.webp": {
+          "name": "icon-angol-explorer.webp",
+          "blob": "a368a0269dc4bbc5185218895b5c8d4f",
+          "size": 7214,
+          "type": "image/webp"
+        },
+        "icon-angol-adventure.webp": {
+          "name": "icon-angol-adventure.webp",
+          "blob": "47b4cd5e0199294f7842059fe779d49f",
+          "size": 14148,
+          "type": "image/webp"
+        },
+        "icon-angol-studio.webp": {
+          "name": "icon-angol-studio.webp",
+          "blob": "00a5f00e3829f85afe68c803fe3e035d",
+          "size": 13088,
+          "type": "image/webp"
+        },
+        "icon-angol-laboratory.webp": {
+          "name": "icon-angol-laboratory.webp",
+          "blob": "49dcaa0544415532d55e6610269435b7",
+          "size": 14872,
+          "type": "image/webp"
+        },
+        "icon-angol-future.webp": {
+          "name": "icon-angol-future.webp",
+          "blob": "79374353aec957fa8de81cc1062b3207",
+          "size": 16698,
+          "type": "image/webp"
+        },
+        "icon-biologia-studio.webp": {
+          "name": "icon-biologia-studio.webp",
+          "blob": "899c0848e26d7d0f6648c230b37dff46",
+          "size": 12184,
+          "type": "image/webp"
+        },
+        "icon-biologia-laboratory.webp": {
+          "name": "icon-biologia-laboratory.webp",
+          "blob": "df4aa9eade7c2022eef2c8bb79622a19",
+          "size": 12396,
+          "type": "image/webp"
+        },
+        "icon-biologia-future.webp": {
+          "name": "icon-biologia-future.webp",
+          "blob": "0c6fd55009bbf87603bd707b9e59cd27",
+          "size": 15516,
+          "type": "image/webp"
+        },
+        "icon-enek-zene-explorer.webp": {
+          "name": "icon-enek-zene-explorer.webp",
+          "blob": "86f717b510791e5ccf451a53196d5c38",
+          "size": 9934,
+          "type": "image/webp"
+        },
+        "icon-enek-zene-adventure.webp": {
+          "name": "icon-enek-zene-adventure.webp",
+          "blob": "1501e9bf4c4208a3cfd50ac617339746",
+          "size": 16646,
+          "type": "image/webp"
+        },
+        "icon-enek-zene-studio.webp": {
+          "name": "icon-enek-zene-studio.webp",
+          "blob": "d5497ecf7ea1ab44b196d6871bbbcbb3",
+          "size": 11982,
+          "type": "image/webp"
+        },
+        "icon-enek-zene-laboratory.webp": {
+          "name": "icon-enek-zene-laboratory.webp",
+          "blob": "440066c353c28252d56976ba4966a404",
+          "size": 15798,
+          "type": "image/webp"
+        },
+        "icon-fizika-studio.webp": {
+          "name": "icon-fizika-studio.webp",
+          "blob": "f1caef1329b2d512ea857b301ce02595",
+          "size": 9788,
+          "type": "image/webp"
+        },
+        "icon-fizika-laboratory.webp": {
+          "name": "icon-fizika-laboratory.webp",
+          "blob": "43949895dc80e51b63cc0217de80600c",
+          "size": 19040,
+          "type": "image/webp"
+        },
+        "icon-fizika-future.webp": {
+          "name": "icon-fizika-future.webp",
+          "blob": "2f15a0d546c15c60b94ebbcce53be248",
+          "size": 10702,
+          "type": "image/webp"
+        },
+        "icon-foldrajz-studio.webp": {
+          "name": "icon-foldrajz-studio.webp",
+          "blob": "c1cd8c8214e7270766c0d42ba2909ead",
+          "size": 13806,
+          "type": "image/webp"
+        },
+        "icon-foldrajz-laboratory.webp": {
+          "name": "icon-foldrajz-laboratory.webp",
+          "blob": "558db9b706e25c8f1c83f4e75e4d618d",
+          "size": 20448,
+          "type": "image/webp"
+        },
+        "icon-foldrajz-future.webp": {
+          "name": "icon-foldrajz-future.webp",
+          "blob": "392c29c8bfd730aafb3bea8f6dd914ae",
+          "size": 22830,
+          "type": "image/webp"
+        },
+        "icon-francia-adventure.webp": {
+          "name": "icon-francia-adventure.webp",
+          "blob": "ba3b3fff2a1b23f62ba7ec7ef48dbebe",
+          "size": 9172,
+          "type": "image/webp"
+        },
+        "icon-francia-studio.webp": {
+          "name": "icon-francia-studio.webp",
+          "blob": "f32dc77e400eaad4fe28fe5756cb21e3",
+          "size": 10652,
+          "type": "image/webp"
+        },
+        "icon-francia-laboratory.webp": {
+          "name": "icon-francia-laboratory.webp",
+          "blob": "b295de9e97b639485ecab953ea804c2d",
+          "size": 16834,
+          "type": "image/webp"
+        },
+        "icon-francia-future.webp": {
+          "name": "icon-francia-future.webp",
+          "blob": "01b3007d7ed9d2c87173ae6f0c5acc78",
+          "size": 19678,
+          "type": "image/webp"
+        },
+        "icon-hit-es-erkolcstan-explorer.webp": {
+          "name": "icon-hit-es-erkolcstan-explorer.webp",
+          "blob": "d07aac058a3e7a69bef58b40bc1988e9",
+          "size": 11696,
+          "type": "image/webp"
+        },
+        "icon-hit-es-erkolcstan-adventure.webp": {
+          "name": "icon-hit-es-erkolcstan-adventure.webp",
+          "blob": "a743af3f8548fb143fc5d4e35c3a9a97",
+          "size": 15320,
+          "type": "image/webp"
+        },
+        "icon-hit-es-erkolcstan-studio.webp": {
+          "name": "icon-hit-es-erkolcstan-studio.webp",
+          "blob": "7bc1d2ac2e3f9baf97fb21141d501685",
+          "size": 15966,
+          "type": "image/webp"
+        },
+        "icon-hit-es-erkolcstan-laboratory.webp": {
+          "name": "icon-hit-es-erkolcstan-laboratory.webp",
+          "blob": "7da1e4379cd457f7b2adeb9ab6e51d5d",
+          "size": 7790,
+          "type": "image/webp"
+        },
+        "icon-hit-es-erkolcstan-future.webp": {
+          "name": "icon-hit-es-erkolcstan-future.webp",
+          "blob": "3c4f1fe19c823840b999538388227350",
+          "size": 16424,
+          "type": "image/webp"
+        },
+        "icon-informatika-adventure.webp": {
+          "name": "icon-informatika-adventure.webp",
+          "blob": "cbd1907225ed37e5ea05341b19a1b67c",
+          "size": 16226,
+          "type": "image/webp"
+        },
+        "icon-informatika-studio.webp": {
+          "name": "icon-informatika-studio.webp",
+          "blob": "288c1a144a97605119335d26a1d9d248",
+          "size": 18074,
+          "type": "image/webp"
+        },
+        "icon-informatika-laboratory.webp": {
+          "name": "icon-informatika-laboratory.webp",
+          "blob": "c550031ad92a185314ae58d2f5825598",
+          "size": 17876,
+          "type": "image/webp"
+        },
+        "icon-informatika-future.webp": {
+          "name": "icon-informatika-future.webp",
+          "blob": "0f55cdf9298c2dec64a92404c6baa240",
+          "size": 19028,
+          "type": "image/webp"
+        },
+        "icon-kemia-studio.webp": {
+          "name": "icon-kemia-studio.webp",
+          "blob": "1ead77cacf9a0d683829b24956e9b0e1",
+          "size": 12702,
+          "type": "image/webp"
+        },
+        "icon-kemia-laboratory.webp": {
+          "name": "icon-kemia-laboratory.webp",
+          "blob": "77709910c891c5ad7806eba8f1c34974",
+          "size": 13166,
+          "type": "image/webp"
+        },
+        "icon-kemia-future.webp": {
+          "name": "icon-kemia-future.webp",
+          "blob": "e98d66ed29e41a1edccf65c310d9ccc4",
+          "size": 14334,
+          "type": "image/webp"
+        },
+        "icon-kornyezetismeret-explorer.webp": {
+          "name": "icon-kornyezetismeret-explorer.webp",
+          "blob": "53a1d3e7ca1783b336ee1c745edc25e7",
+          "size": 12478,
+          "type": "image/webp"
+        },
+        "icon-kornyezetismeret-adventure.webp": {
+          "name": "icon-kornyezetismeret-adventure.webp",
+          "blob": "b3b63ad8124ccf8a26a680886671135e",
+          "size": 21204,
+          "type": "image/webp"
+        },
+        "icon-magyar-irodalom-explorer.webp": {
+          "name": "icon-magyar-irodalom-explorer.webp",
+          "blob": "a71a1694697cd10c3caad563387f7159",
+          "size": 13858,
+          "type": "image/webp"
+        },
+        "icon-magyar-irodalom-adventure.webp": {
+          "name": "icon-magyar-irodalom-adventure.webp",
+          "blob": "04443e47d389b57fc593a07b4a5df2b2",
+          "size": 19992,
+          "type": "image/webp"
+        },
+        "icon-magyar-irodalom-studio.webp": {
+          "name": "icon-magyar-irodalom-studio.webp",
+          "blob": "786e6fb1d7db3bd8703db67d3838e63f",
+          "size": 14926,
+          "type": "image/webp"
+        },
+        "icon-magyar-irodalom-laboratory.webp": {
+          "name": "icon-magyar-irodalom-laboratory.webp",
+          "blob": "9f7a0750e01a788532cfa0b63748a63a",
+          "size": 21946,
+          "type": "image/webp"
+        },
+        "icon-magyar-irodalom-future.webp": {
+          "name": "icon-magyar-irodalom-future.webp",
+          "blob": "67a5ab5d637d172edcec9fef768ebd23",
+          "size": 13504,
+          "type": "image/webp"
+        },
+        "icon-magyar-nyelvtan-explorer.webp": {
+          "name": "icon-magyar-nyelvtan-explorer.webp",
+          "blob": "345ba0fe78e63c98a3dcc19d4a9c1edc",
+          "size": 14056,
+          "type": "image/webp"
+        },
+        "icon-magyar-nyelvtan-adventure.webp": {
+          "name": "icon-magyar-nyelvtan-adventure.webp",
+          "blob": "ba157816d7b8e1fa4f8a733b532b324f",
+          "size": 18510,
+          "type": "image/webp"
+        },
+        "icon-magyar-nyelvtan-studio.webp": {
+          "name": "icon-magyar-nyelvtan-studio.webp",
+          "blob": "6a161ca282f14f85ee31a5b21eebe3f6",
+          "size": 9456,
+          "type": "image/webp"
+        },
+        "icon-magyar-nyelvtan-laboratory.webp": {
+          "name": "icon-magyar-nyelvtan-laboratory.webp",
+          "blob": "06fcde16b5c9a3463a945b90cfdd3b46",
+          "size": 18924,
+          "type": "image/webp"
+        },
+        "icon-magyar-nyelvtan-future.webp": {
+          "name": "icon-magyar-nyelvtan-future.webp",
+          "blob": "50dccdfa94ce399361c7d4ed233ea6fa",
+          "size": 15632,
+          "type": "image/webp"
+        },
+        "icon-matematika-explorer.webp": {
+          "name": "icon-matematika-explorer.webp",
+          "blob": "328ad203a207d4dba93e71e3c692bd5b",
+          "size": 9150,
+          "type": "image/webp"
+        },
+        "icon-matematika-adventure.webp": {
+          "name": "icon-matematika-adventure.webp",
+          "blob": "c83e3a918b982cc302d592ea6b626a89",
+          "size": 19692,
+          "type": "image/webp"
+        },
+        "icon-matematika-studio.webp": {
+          "name": "icon-matematika-studio.webp",
+          "blob": "2f9ade7faad56b7d76cee725557693a5",
+          "size": 8500,
+          "type": "image/webp"
+        },
+        "icon-matematika-laboratory.webp": {
+          "name": "icon-matematika-laboratory.webp",
+          "blob": "b5a7af804d482ae5b3bac575ecc7c173",
+          "size": 12532,
+          "type": "image/webp"
+        },
+        "icon-matematika-future.webp": {
+          "name": "icon-matematika-future.webp",
+          "blob": "537d7ac930fbccb28bf3075b8882b7d5",
+          "size": 23086,
+          "type": "image/webp"
+        },
+        "icon-nemet-adventure.webp": {
+          "name": "icon-nemet-adventure.webp",
+          "blob": "96cb13c4063686e95de84ddd620a515d",
+          "size": 12668,
+          "type": "image/webp"
+        },
+        "icon-nemet-studio.webp": {
+          "name": "icon-nemet-studio.webp",
+          "blob": "09f44e244ed7e8bddfc510fb6bb8a88a",
+          "size": 7956,
+          "type": "image/webp"
+        },
+        "icon-nemet-laboratory.webp": {
+          "name": "icon-nemet-laboratory.webp",
+          "blob": "50e863fca9c2daba9f57ad62ca95d691",
+          "size": 18268,
+          "type": "image/webp"
+        },
+        "icon-nemet-future.webp": {
+          "name": "icon-nemet-future.webp",
+          "blob": "e4574979c57997123b4e279cd9b076bb",
+          "size": 16716,
+          "type": "image/webp"
+        },
+        "icon-tarsadalmi-ismeretek-studio.webp": {
+          "name": "icon-tarsadalmi-ismeretek-studio.webp",
+          "blob": "f80a4b1f1a12e6c671a442f32a086952",
+          "size": 14070,
+          "type": "image/webp"
+        },
+        "icon-tarsadalmi-ismeretek-laboratory.webp": {
+          "name": "icon-tarsadalmi-ismeretek-laboratory.webp",
+          "blob": "36df3c81ec5ea55cdca25df1ccfff75b",
+          "size": 16296,
+          "type": "image/webp"
+        },
+        "icon-tarsadalmi-ismeretek-future.webp": {
+          "name": "icon-tarsadalmi-ismeretek-future.webp",
+          "blob": "3ef32ca1154fe8bd44da37ffcbd4437b",
+          "size": 12088,
+          "type": "image/webp"
+        },
+        "icon-technika-explorer.webp": {
+          "name": "icon-technika-explorer.webp",
+          "blob": "b7c1b52d318936d7da0c8786db7d34b2",
+          "size": 14308,
+          "type": "image/webp"
+        },
+        "icon-technika-adventure.webp": {
+          "name": "icon-technika-adventure.webp",
+          "blob": "7299bdf355850875df131fc65fdcd82c",
+          "size": 15502,
+          "type": "image/webp"
+        },
+        "icon-technika-studio.webp": {
+          "name": "icon-technika-studio.webp",
+          "blob": "9b0307eb8753d0f2fc8969dd5d09d874",
+          "size": 16598,
+          "type": "image/webp"
+        },
+        "icon-termeszetismeret-adventure.webp": {
+          "name": "icon-termeszetismeret-adventure.webp",
+          "blob": "f1c13c16e96bf97d4702b3723b51d9e2",
+          "size": 14322,
+          "type": "image/webp"
+        },
+        "icon-termeszetismeret-studio.webp": {
+          "name": "icon-termeszetismeret-studio.webp",
+          "blob": "fdad772fd81a5293f202859564f3523e",
+          "size": 15118,
+          "type": "image/webp"
+        },
+        "icon-tortenelem-adventure.webp": {
+          "name": "icon-tortenelem-adventure.webp",
+          "blob": "9093fcdf5498195561633f2a40350dc2",
+          "size": 14420,
+          "type": "image/webp"
+        },
+        "icon-tortenelem-studio.webp": {
+          "name": "icon-tortenelem-studio.webp",
+          "blob": "1a95e9314921a62890a3b7072605612c",
+          "size": 13922,
+          "type": "image/webp"
+        },
+        "icon-tortenelem-laboratory.webp": {
+          "name": "icon-tortenelem-laboratory.webp",
+          "blob": "ded1c5e0f9c87dd836e477a8abbe5ca0",
+          "size": 10626,
+          "type": "image/webp"
+        },
+        "icon-tortenelem-future.webp": {
+          "name": "icon-tortenelem-future.webp",
+          "blob": "119950ea125580f3f1679a1c05b0eeb5",
+          "size": 21454,
+          "type": "image/webp"
+        },
+        "icon-vizualis-kultura-explorer.webp": {
+          "name": "icon-vizualis-kultura-explorer.webp",
+          "blob": "ffe1270e7108eb4ef8c3f7c5dbc1b7c6",
+          "size": 13080,
+          "type": "image/webp"
+        },
+        "icon-vizualis-kultura-adventure.webp": {
+          "name": "icon-vizualis-kultura-adventure.webp",
+          "blob": "f6f8db7fb3416f21b1f7237f08a5bb38",
+          "size": 20340,
+          "type": "image/webp"
+        },
+        "icon-vizualis-kultura-studio.webp": {
+          "name": "icon-vizualis-kultura-studio.webp",
+          "blob": "ddd4446effbd481f90fbf6b1e997a6d4",
+          "size": 11938,
+          "type": "image/webp"
+        },
+        "icon-vizualis-kultura-laboratory.webp": {
+          "name": "icon-vizualis-kultura-laboratory.webp",
+          "blob": "1322bbd228f908f540b0527a7b19670e",
+          "size": 13996,
+          "type": "image/webp"
+        },
+        "icon-vizualis-kultura-future.webp": {
+          "name": "icon-vizualis-kultura-future.webp",
+          "blob": "4bb31b7ac74a6ffc2f6699dede9e1308",
+          "size": 18006,
           "type": "image/webp"
         }
       }
