@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { LessonLoading } from "@/lesson-runtime/LessonLoading";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
@@ -52,6 +52,9 @@ function LoadingSpinner() {
 }
 
 function Router() {
+  // Lecke megnyitása (2026-10-17-lecke-betoltes, 11.): a világos alap csak a lecke útvonalán; a kezdőlap sötétkékje visszatér.
+  const [location] = useLocation();
+  useEffect(() => { document.documentElement.classList.toggle("ws-lesson-route", location.startsWith("/preview/")); }, [location]);
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <Switch>

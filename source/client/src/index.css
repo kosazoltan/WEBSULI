@@ -332,6 +332,13 @@
     color: hsl(210 40% 98%); /* a sötét háttérhez tartozó VILÁGOS szövegszín */
   }
 
+  /* Lecke megnyitása (2026-10-17-lecke-betoltes, 11.): a lecke útvonalán a body világos alap — különben a JS letöltése alatt
+     a kezdőlap sötétkékje villan fel (élő mérés). A háttérhez a hozzá tartozó előtérszín is jár (#197 tanulsága). */
+  html.ws-lesson-route body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
   /* Korcsoport-specifikus CSS változók */
   :root {
     /* Alsó tagozat (6-10 év) - Játékos Felfedező */

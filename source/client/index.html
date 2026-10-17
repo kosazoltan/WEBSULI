@@ -2,6 +2,9 @@
 <html lang="hu">
   <head>
     <meta charset="UTF-8">
+    <!-- Lecke megnyitása (docs/specs/2026-10-17-lecke-betoltes.md, 11.): /preview/ alatt az első festés is világos alap, nem a
+         kezdőlap sötétkékje (a React az útvonal-váltáskor kezeli tovább, App.tsx). -->
+    <script>if (location.pathname.indexOf("/preview/") === 0) document.documentElement.classList.add("ws-lesson-route");</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
 
     <!-- Primary Meta Tags -->

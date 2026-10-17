@@ -125,3 +125,17 @@ test("review #275: a töltő háttere sosem a body sötétkékje (a kezdőlap di
   expect(dark).toEqual([]);
 });
 
+test("11.: a /preview/ első festésekor sem a kezdőlap sötétkékje látszik; a kezdőlapra lépve az visszatér", async ({ page }) => {
+  await mockApi(page);
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      (window as unknown as { __firstBg: string }).__firstBg = getComputedStyle(document.body).backgroundColor;
+    });
+  });
+  await page.goto("/preview/load-fixture");
+  expect(await page.evaluate(() => (window as unknown as { __firstBg: string }).__firstBg)).not.toBe("rgb(10, 14, 39)");
+  await expect(page.locator(".lesson-hero h1").first()).toBeVisible({ timeout: 15000 });
+  await page.evaluate(() => { history.pushState(null, "", "/"); dispatchEvent(new PopStateEvent("popstate")); });
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(10, 14, 39)");
+});
+
