@@ -1,14 +1,14 @@
 import cron from "node-cron";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
-import { dailyReminderEmails, learners } from "../shared/schema";
+import { dailyReminderEmails, learnerActivity, learners } from "../shared/schema";
 import { learnerTokenFor } from "./learners";
 import { storage } from "./storage";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { getMaterialPreviewUrl } from "./utils/config";
 import { isSchoolDay, schoolYearPosition } from "../shared/school-calendar";
-import { displayTopic, firstNameOf, pickDailyMaterial, reminderHtml, reminderSubject } from "../shared/daily-reminder";
+import { displayTopic, firstNameOf, learnerHistoryFrom, pickSmartMaterial, reminderHtml, reminderSubject } from "../shared/daily-reminder";
 import { motivationFor } from "../shared/motivation";
 import { logger } from "./lib/logger";
 
@@ -58,7 +58,7 @@ export function personalUrl(url: string, token: string | null): string {
   return u.toString();
 }
 
-export type PlannedReminder = { email: string; studentName: string; grade: number; materialId: string; title: string; topic: string | null; url: string };
+export type PlannedReminder = { email: string; studentName: string; grade: number; materialId: string; title: string; topic: string | null; url: string; repeatPercent?: number };
 
 /** A mai tervezett levelek (küldés nélkül) — az admin előnézet és a küldés közös alapja. */
 export async function planDailyReminders(now: Date): Promise<PlannedReminder[]> {
@@ -76,13 +76,19 @@ export async function planDailyReminders(now: Date): Promise<PlannedReminder[]> 
   // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S1): a link személyes (?t=…) — a megnyitó eszköz a tanulóhoz párosul.
   const learnerIds = [...new Set(recipients.map(r => r.learnerId).filter((id): id is string => Boolean(id)))];
   const versions = new Map(learnerIds.length ? (await db.select({ id: learners.id, tokenVersion: learners.tokenVersion }).from(learners).where(inArray(learners.id, learnerIds))).map(l => [l.id, l.tokenVersion]) : []);
+  // S5: a tanuló naplója — a még meg nem nyitott anyag és a 70% alatti eredmény ismétlése elsőbbséget kap.
+  const activity = learnerIds.length ? await db.select({ learnerId: learnerActivity.learnerId, materialId: learnerActivity.materialId, kind: learnerActivity.kind, percent: learnerActivity.percent, createdAt: learnerActivity.createdAt })
+    .from(learnerActivity).where(and(inArray(learnerActivity.learnerId, learnerIds), gte(learnerActivity.createdAt, new Date(now.getTime() - 365 * 86_400_000)))) : [];
   const out: PlannedReminder[] = [];
   for (const r of recipients) {
     const grade = r.classrooms[0];
     const recent = new Set(recentRows.filter(x => x.email === r.email).map(x => x.materialId));
-    const pick = pickDailyMaterial(files, grade, today, recent);
-    if (!pick) continue;
-    out.push({ email: r.email, studentName: r.studentName!.trim(), grade, materialId: pick.id, title: pick.title, topic: displayTopic(pick.curriculum?.label), url: personalUrl(getMaterialPreviewUrl(pick.id), r.learnerId && versions.has(r.learnerId) ? learnerTokenFor(r.learnerId, versions.get(r.learnerId)!) : null) });
+    const history = r.learnerId ? learnerHistoryFrom(activity.filter(a => a.learnerId === r.learnerId), now) : null;
+    const chosen = pickSmartMaterial(files, grade, today, recent, history);
+    if (!chosen) continue;
+    const pick = chosen.file;
+    out.push({ email: r.email, studentName: r.studentName!.trim(), grade, materialId: pick.id, title: pick.title, topic: displayTopic(pick.curriculum?.label), url: personalUrl(getMaterialPreviewUrl(pick.id), r.learnerId && versions.has(r.learnerId) ? learnerTokenFor(r.learnerId, versions.get(r.learnerId)!) : null),
+      ...(chosen.repeatPercent !== undefined ? { repeatPercent: chosen.repeatPercent } : {}) });
   }
   return out;
 }
@@ -111,7 +117,7 @@ export async function runDailyReminders(now: Date, opts: { pauseMs?: number } = 
       const first = firstNameOf(p.studentName);
       const claimId = claimed[0].id;
       try {
-        await send(reminderSubject(first, p.title), reminderHtml({ first, title: p.title, topic: p.topic, url: p.url, motivation: motivationFor(first, motivationDate) }), p.email);
+        await send(reminderSubject(first, p.title, p.repeatPercent !== undefined), reminderHtml({ first, title: p.title, topic: p.topic, url: p.url, motivation: motivationFor(first, motivationDate), repeatPercent: p.repeatPercent }), p.email);
       } catch (error) {
         // A részletek az adatbázisba kerülnek; a naplóba csak a foglalás azonosítója (review #292: nincs név/cím a naplóban).
         const message = error instanceof Error ? error.message : String(error);
