@@ -12,6 +12,7 @@ import LikeButton from "@/components/LikeButton";
 import HeroSection from "@/components/HeroSection";
 import HomePracticeGames from "@/components/HomePracticeGames";
 import WelcomeCard from "@/components/WelcomeCard";
+import { displayTopic } from "@shared/daily-reminder";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
@@ -389,7 +390,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                       {isCurrent(file.curriculum, today) && (
                         <span
                           className="self-start mb-1 inline-flex items-center rounded-full bg-emerald-700 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white"
-                          title={file.curriculum?.label}
+                          title={displayTopic(file.curriculum?.label) ?? undefined}
                           data-testid={`badge-current-${file.id}`}
                         >
                           Most tanuljuk
