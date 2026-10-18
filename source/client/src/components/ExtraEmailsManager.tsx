@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import DailyReminderCard from "@/components/DailyReminderCard";
 
 interface ExtraEmail {
   id: string;
@@ -30,6 +31,8 @@ interface ExtraEmail {
   classrooms: number[];
   addedBy: string | null;
   isActive: boolean;
+  /** Napi emlékeztető (docs/specs/2026-10-18-napi-emlekezteto.md): a nevesített cím egy tanulóé, és napi tananyag-levelet kap. */
+  studentName?: string | null;
   createdAt: string;
 }
 
@@ -40,6 +43,20 @@ export default function ExtraEmailsManager() {
   const [deleteEmailId, setDeleteEmailId] = useState<string | null>(null);
   const [editingClassroomId, setEditingClassroomId] = useState<string | null>(null);
   const [editClassroomsValue, setEditClassroomsValue] = useState<number[]>([]);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [editNameValue, setEditNameValue] = useState("");
+
+  const updateNameMutation = useMutation({
+    mutationFn: async ({ id, studentName }: { id: string; studentName: string | null }) =>
+      apiRequest("PATCH", `/api/extra-emails/${id}/student`, { studentName }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/extra-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/daily-reminders/preview"] });
+      setEditingNameId(null);
+      toast({ title: "Tanulónév mentve", description: "A nevesített cím minden tanítási reggel kap egy aktuális tananyagot." });
+    },
+    onError: (error: Error) => toast({ title: "Hiba", description: error.message || "Nem sikerült menteni a nevet", variant: "destructive" }),
+  });
 
   // Lekérjük az extra email címeket
   const { data: extraEmails, isLoading, refetch } = useQuery<ExtraEmail[]>({
@@ -316,6 +333,43 @@ export default function ExtraEmailsManager() {
                       <Mail className="h-4 w-4 text-muted-foreground" />
                       <div className="flex-1">
                         <p className="font-medium">{email.email}</p>
+                        {editingNameId === email.id ? (
+                          <form
+                            className="mt-1 flex flex-wrap items-center gap-2"
+                            onSubmit={(e) => { e.preventDefault(); updateNameMutation.mutate({ id: email.id, studentName: editNameValue.trim() || null }); }}
+                          >
+                            <Input
+                              value={editNameValue}
+                              onChange={(e) => setEditNameValue(e.target.value)}
+                              maxLength={80}
+                              placeholder="A tanuló teljes neve (üresen: nem tanuló)"
+                              aria-label="A tanuló neve"
+                              className="h-8 max-w-xs"
+                              data-testid={`input-student-name-${email.id}`}
+                            />
+                            <Button size="sm" type="submit" disabled={updateNameMutation.isPending} data-testid={`button-save-student-name-${email.id}`}>Mentés</Button>
+                            <Button size="sm" type="button" variant="ghost" onClick={() => setEditingNameId(null)}>Mégse</Button>
+                          </form>
+                        ) : (
+                          <p className="text-sm flex items-center gap-1.5 mt-0.5">
+                            <GraduationCap className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                            {email.studentName ? (
+                              <span className="font-semibold" data-testid={`student-name-${email.id}`}>{email.studentName}</span>
+                            ) : (
+                              <span className="text-muted-foreground">Nincs tanulónév (nem kap napi emlékeztetőt)</span>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={() => { setEditingNameId(email.id); setEditNameValue(email.studentName ?? ""); }}
+                              aria-label="Tanulónév szerkesztése"
+                              data-testid={`button-edit-student-name-${email.id}`}
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                          </p>
+                        )}
                         <p className="text-xs text-muted-foreground flex items-center gap-2">
                           <Calendar className="h-3 w-3" />
                           {formatDate(email.createdAt)}
@@ -407,6 +461,8 @@ export default function ExtraEmailsManager() {
           </div>
         </CardContent>
       </Card>
+
+      <DailyReminderCard />
 
       <AlertDialog open={!!deleteEmailId} onOpenChange={() => setDeleteEmailId(null)}>
         <AlertDialogContent>

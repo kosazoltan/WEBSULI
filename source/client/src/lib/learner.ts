@@ -66,22 +66,8 @@ export function clearLearnerName(): void {
   }
 }
 
-export const MOTIVATION_LINES = [
-  "Ma is egy lépéssel okosabb leszel — kezdjük!",
-  "Minden nagy tudás egy kis kíváncsisággal kezdődik.",
-  "Tíz figyelmes perc többet ér egy fáradt órányinál. Hajrá!",
-  "A hibák a tanulás lépcsőfokai — bátran próbálkozz!",
-  "Ami ma nehéz, holnap már könnyen megy.",
-  "Nézd meg az újdonságokat, és szerezz egy kis sikerélményt!",
-  "Lépésről lépésre — és egyszer csak érteni fogod.",
-  "Büszke lehetsz magadra, hogy itt vagy. Folytassuk!",
-] as const;
-
-/** Naponta rögzített (determinisztikus) lelkesítő mondat — egy napon belül nem változik újratöltésre. */
-export function motivationFor(name: string, date: Date): string {
-  const day = Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000);
-  return MOTIVATION_LINES[(day + name.length) % MOTIVATION_LINES.length];
-}
+// A lelkesítő mondatok a közös modulban (a napi e-mail is ezt használja — docs/specs/2026-10-18-napi-emlekezteto.md).
+export { MOTIVATION_LINES, motivationFor } from "@shared/motivation";
 
 export const NEW_WINDOW_DAYS = 30;
 type Dated = { classroom: number; createdAt: string };

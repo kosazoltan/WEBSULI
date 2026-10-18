@@ -85,6 +85,8 @@ export interface IStorage {
   // Extra email operations
   addExtraEmail(email: string, classrooms: number[], addedBy: string | null): Promise<ExtraEmail>;
   updateExtraEmailClassrooms(id: string, classrooms: number[]): Promise<ExtraEmail | null>;
+  /** Napi emlékeztető: a cím tanulójának neve (null = nem tanuló / nem kap napi levelet). */
+  updateExtraEmailStudentName(id: string, studentName: string | null): Promise<ExtraEmail | null>;
   getActiveExtraEmails(): Promise<ExtraEmail[]>;
   deleteExtraEmail(id: string): Promise<boolean>;
   /** Új tanév — minden aktív extra-email osztályait egyel feljebb lépteti (max 12). */
@@ -647,6 +649,15 @@ export class DatabaseStorage implements IStorage {
       .where(eq(extraEmailAddresses.id, id))
       .returning();
 
+    return updated || null;
+  }
+
+  async updateExtraEmailStudentName(id: string, studentName: string | null): Promise<ExtraEmail | null> {
+    const [updated] = await db
+      .update(extraEmailAddresses)
+      .set({ studentName, updatedAt: new Date() })
+      .where(eq(extraEmailAddresses.id, id))
+      .returning();
     return updated || null;
   }
 

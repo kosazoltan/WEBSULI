@@ -103,6 +103,8 @@ export const extraEmailAddresses = pgTable("extra_email_addresses", {
   classrooms: integer("classrooms").array().notNull().default(sql`ARRAY[1]`),
   addedBy: varchar("added_by").references(() => users.id),
   isActive: boolean("is_active").default(true).notNull(),
+  /** Napi emlékeztető (docs/specs/2026-10-18-napi-emlekezteto.md): a nevesített cím egy tanulóé, és napi tananyag-levelet kap. */
+  studentName: varchar("student_name", { length: 80 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1142,4 +1144,21 @@ export const lessonResultEmails = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({ roundUnique: uniqueIndex("lesson_result_emails_round_unique").on(table.lessonId, table.kind, table.roundKey) }),
+);
+
+/** Napi tananyag-emlékeztető ismétlésvédelme (migrations/0031): címenként naponta legfeljebb egy levél. */
+export const dailyReminderEmails = pgTable(
+  "daily_reminder_emails",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    email: varchar("email").notNull(),
+    day: date("day").notNull(),
+    materialId: varchar("material_id").notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("pending").$type<"pending" | "sent" | "failed">(),
+    attempts: integer("attempts").notNull().default(0),
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ emailDay: uniqueIndex("daily_reminder_emails_email_day_unique").on(table.email, table.day) }),
 );
