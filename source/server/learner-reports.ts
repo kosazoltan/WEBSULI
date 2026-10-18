@@ -18,13 +18,13 @@ const schoolDayIso = (iso: string) => {
   return isSchoolDay(new Date(y, m - 1, d));
 };
 
-export type LearnerOverview = { id: string; name: string; grade: number; tokenVersion: number; emails: number; lastActiveAt: Date | null; alertKey: string | null; alertedTo: string[]; report: LearnerReport };
+export type LearnerOverview = { id: string; name: string; grade: number; tokenVersion: number; createdAt: Date; emails: number; lastActiveAt: Date | null; alertKey: string | null; alertedTo: string[]; report: LearnerReport };
 
 export async function buildLearnerReports(now = new Date()): Promise<LearnerOverview[]> {
   // Review #304: a „7 nap” a budapesti naptár 7 napja (ma és az előző 6), nem 168 óra.
   const weekStart = dayOf(new Date(now.getTime() - 6 * 86_400_000));
-  const rows = await db.execute<{ id: string; name: string; grade: number; token_version: number; alert_key: string | null; alerted_to: string[] | null; last_at: Date | null; active7: number; views7: number; emails: number }>(sql`
-    SELECT l.id, l.name, l.grade, l.token_version, l.inactivity_alert_key AS alert_key, l.inactivity_alerted_to AS alerted_to,
+  const rows = await db.execute<{ id: string; name: string; grade: number; token_version: number; created_at: Date; alert_key: string | null; alerted_to: string[] | null; last_at: Date | null; active7: number; views7: number; emails: number }>(sql`
+    SELECT l.id, l.name, l.grade, l.token_version, l.created_at, l.inactivity_alert_key AS alert_key, l.inactivity_alerted_to AS alerted_to,
       (SELECT max(a.created_at) FROM learner_activity a WHERE a.learner_id = l.id) AS last_at,
       (SELECT count(DISTINCT (a.created_at AT TIME ZONE 'Europe/Budapest')::date)::int FROM learner_activity a WHERE a.learner_id = l.id AND (a.created_at AT TIME ZONE 'Europe/Budapest')::date >= ${weekStart}::date) AS active7,
       (SELECT count(*)::int FROM learner_activity a WHERE a.learner_id = l.id AND a.kind = 'view' AND (a.created_at AT TIME ZONE 'Europe/Budapest')::date >= ${weekStart}::date) AS views7,
@@ -41,7 +41,7 @@ export async function buildLearnerReports(now = new Date()): Promise<LearnerOver
   return rows.rows.map((r) => {
     const lastActiveAt = r.last_at ? new Date(r.last_at) : null;
     return {
-      id: r.id, name: r.name, grade: r.grade, tokenVersion: r.token_version, emails: r.emails, lastActiveAt, alertKey: r.alert_key, alertedTo: r.alerted_to ?? [],
+      id: r.id, name: r.name, grade: r.grade, tokenVersion: r.token_version, createdAt: new Date(r.created_at), emails: r.emails, lastActiveAt, alertKey: r.alert_key, alertedTo: r.alerted_to ?? [],
       report: {
         name: r.name, grade: r.grade, lastActive: lastActiveAt ? dayOf(lastActiveAt) : null, activeDays7: r.active7, views7: r.views7,
         results: results.filter((x) => x.learnerId === r.id).slice(0, 10).map((x) => ({ title: x.summary ?? "Tananyag", percent: x.percent, at: dayOf(x.createdAt) })),
@@ -84,7 +84,9 @@ export async function runInactivityAlerts(now = new Date(), send: Send = default
   if (!schoolDayIso(today)) return { alerted: 0 };
   let alerted = 0;
   for (const o of (await buildLearnerReports(now)).filter((x) => x.emails > 0)) {
-    if (!isInactive(o.report.lastActive, today, schoolDayIso)) continue;
+    // Átfogó review: új tanulónál / bevezetéskor a felvétel napja számít kezdőpontnak — nincs riasztás 3 tanítási nap előtt.
+    const since = [o.report.lastActive, dayOf(o.createdAt)].filter((d): d is string => Boolean(d)).sort().pop() ?? null;
+    if (!isInactive(since, today, schoolDayIso)) continue;
     const key = alertPeriodKey(o.lastActiveAt);
     const list = recipients();
     const pending = pendingAlertRecipients(list, key, { key: o.alertKey, to: o.alertedTo });

@@ -254,7 +254,7 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
           materialId: __websuliMaterialId,
           clientId: window.__websuliClientId || undefined,
           // Tanulói profil (S2): a párosított eszköz tanulójának tokenje (a /dev/:id injektálja), ha van
-          learner: window.__websuliLearner || undefined,
+          learner: window.__websuliLearner || (function () { try { return sessionStorage.getItem('websuli.lt') || undefined; } catch (e) { return undefined; } })(),
           subject: String(subject || 'Tananyag eredmény'),
           body: String(body || '')
         };
@@ -934,7 +934,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       recipients: q.recipients,
       baseKey: materialResultDedupKey(q.value, q.ip),
       dedup: materialResultDedup,
-      send: async (to) => ((await sendAdminNotification(mail.subject, mail.html, to)) as { success?: boolean } | undefined)?.success !== false,
+      // Átfogó review: a tárgy a tanuló keresztnevét tartalmazhatja — csendes küldés, a név és a cím nem kerül a naplóba.
+      send: async (to) => ((await sendAdminNotification(mail.subject, mail.html, to, { quiet: true })) as { success?: boolean } | undefined)?.success !== false,
       scheduleRetry: (run) => { setTimeout(() => { void run().catch((e: unknown) => logger.warn('[MATERIAL-RESULT] pótlás hiba', { error: String(e) })); }, 60_000).unref(); },
       onRetryDone: (stillFailed) => logger.warn('[MATERIAL-RESULT] pótlás kész', { stillFailed }),
     });
@@ -943,9 +944,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Review #300: false → a coalescer korlátozottan újrapróbál (a frissebb állapotot nem írja felül).
     deliver: async (q) => {
       try {
+        // Átfogó review: a tanuló naplója a levéltől függetlenül (a saját ismétlésvédelme miatt az újrapróba nem duplikál).
+        await recordMaterialResult(q);
         const outcome = await deliverMaterialResult(q);
         if (!outcome.duplicate && outcome.delivered === 0) { logger.warn('[MATERIAL-RESULT] az összevárt eredményt nem sikerült elküldeni (újrapróba)'); return false; }
-        if (!outcome.duplicate) await recordMaterialResult(q);
         return true;
       } catch (e: unknown) {
         logger.error('[MATERIAL-RESULT] összevárt küldés hiba:', e instanceof Error ? e.message : String(e));
@@ -987,19 +989,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tananyag nem található" });
       }
       const recipients = resolveAdminRecipients({ ADMIN_EMAILS: process.env.ADMIN_EMAILS, ADMIN_EMAIL: process.env.ADMIN_EMAIL });
+      const learner = value.learner ? await resolveLearner(value.learner).catch(() => null) : null;
       const resendStatus = isResendConfigured();
       if (!resendStatus.ok || recipients.length === 0) {
         logger.warn('[MATERIAL-RESULT] nincs konfigurált küldő/címzett', { resend: resendStatus.reason, recipients: recipients.length });
+        // Átfogó review: e-mail-kiesésnél is a tanuló naplójába kerül az eredmény (riport, ismétlés).
+        if (!value.auto) await recordMaterialResult({ value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients, learner });
         return res.status(503).json({ message: "Az eredményküldés jelenleg nem elérhető." });
       }
       // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: az automatikus beolvasás minden új állapotot azonnal küld; a levél
       // kulcsonként (anyag + kliens) összevárva megy, a legutolsó állapottal.
-      const learner = value.learner ? await resolveLearner(value.learner).catch(() => null) : null;
       if (value.auto) {
         const queued = materialResultCoalescer.submit(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`, { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients, learner });
         return res.status(202).json({ success: true, queued });
       }
       const direct: QueuedMaterialResult = { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients, learner };
+      await recordMaterialResult(direct);
       const outcome = await deliverMaterialResult(direct);
       if (outcome.duplicate) {
         return res.json({ success: true, duplicate: true });
@@ -1010,7 +1015,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // a tanuló maga küldte el (mailto) → az ugyanazon oldalbetöltés automatikus levele nem megy ki: a függő törlődik, és a
       // később beérkező automatikus beküldés sem kerül sorba (review #300)
       materialResultCoalescer.suppress(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`);
-      await recordMaterialResult(direct);
       res.json({ success: true, delivered: outcome.delivered });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -1020,7 +1024,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S1): a párosított eszköz tanulója — csak keresztnév és évfolyam.
-  const learnerMeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false });
+  // Átfogó review: egy iskolai NAT mögötti osztály tabletjei is beleférjenek (fókusz + 5 perces frissítés + megnyitások).
+  const learnerMeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1500, standardHeaders: true, legacyHeaders: false });
   app.get('/api/learner/me', learnerMeLimiter, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     let learner: ResolvedLearner | null;
@@ -1985,7 +1990,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { isSchoolDay } = await import("../shared/school-calendar");
       const now = new Date();
       const plan = await planDailyReminders(now);
-      res.json({ day: budapestDay(now).iso, schoolDay: isSchoolDay(budapestDay(now).date), items: plan });
+      // Átfogó review (S1–S5): az admin előnézet linkje token nélküli — különben az admin böngészője a tanulóhoz párosulna.
+      const { getMaterialPreviewUrl: previewUrl } = await import("./utils/config");
+      res.json({ day: budapestDay(now).iso, schoolDay: isSchoolDay(budapestDay(now).date), items: plan.map(p => ({ ...p, url: previewUrl(p.materialId) })) });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       res.status(500).json({ message: err.message });
