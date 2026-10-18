@@ -17,8 +17,14 @@ test("a kártyák mintája statikus és nincs homályosítás (backdrop-filter) 
 test("a kártyák nem JS-animáltak és nincs rajtuk homályosítás", () => {
   const src = read("client/src/components/UserFileList.tsx");
   assert.doesNotMatch(src, /from "framer-motion"/);
-  assert.match(src, /className="material-card-cell"/);
-  const card = src.slice(src.indexOf('className="material-card-cell"'), src.indexOf("</Card>"));
+  // Review #297: a containment magán a kártyán (a burkolón levágná az árnyékot és a hover-emelést); a vizsgált tartomány a
+  // tananyagkártya, a kezdőindextől keresve, és nem lehet üres.
+  const start = src.indexOf("glass-card material-card-cell");
+  assert.ok(start > 0, "a tananyagkártyán van content-visibility");
+  const end = src.indexOf("</Card>", start);
+  assert.ok(end > start, "megvan a tananyagkártya vége");
+  const card = src.slice(src.lastIndexOf("<Card", start), end);
+  assert.ok(card.length > 200);
   assert.doesNotMatch(card, /backdrop-blur/);
 });
 

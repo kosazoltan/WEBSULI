@@ -315,10 +315,10 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
 
               return (
                 // Spec 2026-10-18-nyilvanos-oldal-sebesseg: sima elem (nem framer-motion elem) — a hover-emelést a .glass-card CSS adja;
-                // a képernyőn kívüli kártya nem renderelődik (content-visibility).
-                <div key={file.id} className="material-card-cell">
+                // a képernyőn kívüli kártya nem renderelődik (content-visibility a kártyán: review #297 — a burkolón levágná az árnyékot és a hover-emelést).
+                <div key={file.id}>
                   <Card
-                    className={`group cursor-pointer glass-card h-full ${themeClasses}`}
+                    className={`group cursor-pointer glass-card material-card-cell h-full ${themeClasses}`}
                     onClick={() => onViewFile(file)}
                     data-testid={`link-file-${file.id}`}
                   >
