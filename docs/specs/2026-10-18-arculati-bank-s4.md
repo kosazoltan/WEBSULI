@@ -35,3 +35,13 @@ Tulajdonosi indítás: 2026-10-18 („csináld meg”).
 - HA a tanuló választ, AKKOR a visszajelzés ítélete a szótár szövege, utána a modell indoklása előtag nélkül (dupla „Helyes” nincs).
 - HA egy új lecke készül, AKKOR nincs `experience.flair`.
 - A régi `flair`-es leckék hiba nélkül nyílnak meg.
+
+## Pontosítás a review #285 alapján (dokumentált spec-változás)
+- **Csak ítéletből álló visszajelzés** („Igen.”, „Nem.”, „Helyes.”): üres maradék, az ítéletet a kód adja — nincs „Helyes! Igen.”.
+- **Előjel:** a számhoz tapadó mínusz nem elválasztó („Helyes:-3 …” → „-3 …”; „Nem -5, hanem -3.” változatlan).
+- **Kis- és nagybetű:** levágás után csak prózai szó kap nagy kezdőbetűt (csupa kisbetűs, legalább 4 betűs szó vagy gyakori
+  névelő / kötőszó, utána nincs egyenlőség- vagy műveleti jel); a jelölés változatlan („pH = 7”, „x = 2 esetén”).
+- **Szerep-skill rövid alakjai:** a pedagógus szerep-skillje „a feladat megoldva”, „leggyakoribb hibák”, „Ellenőrzés” néven
+  hivatkozik a sablonos fejezetekre; ezeket a lejátszó szerep-aliasként ismeri fel, és a szótár címét mutatja. A skill szövege
+  bájtra marad (a módosítása a szerepkészség-verziót és a futó checkpointokat érvénytelenítené).
+- **LS-2 próba:** a helyes válasz visszajelzése a szótár „Helyes!” ítélete, az indoklás (kloroplasztiszok) megmarad.

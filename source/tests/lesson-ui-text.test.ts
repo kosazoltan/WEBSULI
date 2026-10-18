@@ -12,8 +12,29 @@ test("ítélet-előtag levágása: a mért nyitások mind; írásjel nélküli s
     ["Így van, a víz körforgása.", "A víz körforgása."], ["Nem, ez túl sok.", "Ez túl sok."], ["Téves: 48 nem jó.", "48 nem jó."], ["Pontosan! 45.", "45."],
   ];
   for (const [input, expected] of cases) assert.equal(stripVerdictPrefix(input), expected, input);
-  for (const keep of ["Nem minden szám osztható 3-mal.", "Igenis fontos a sorrend.", "Helyesírás szerint így írjuk.", "Helyes."]) assert.equal(stripVerdictPrefix(keep), keep, keep);
+  for (const keep of ["Nem minden szám osztható 3-mal.", "Igenis fontos a sorrend.", "Helyesírás szerint így írjuk.", "Nem -5, hanem -3."]) assert.equal(stripVerdictPrefix(keep), keep, keep);
   assert.deepEqual(VERDICT_TEXT, { right: "Helyes!", wrong: "Még nem helyes." });
+});
+
+// Review #285 (dokumentált spec-pontosítás, docs/specs/2026-10-18-arculati-bank-s4.md).
+test("review #285: a csak ítéletből álló szöveg üres; az előjel és a jelölés kis-nagybetűje megmarad", () => {
+  for (const only of ["Igen.", "Nem.", "Helyes.", "Nem helyes!", "Pontosan!"]) assert.equal(stripVerdictPrefix(only), "", only);
+  const cases: Array<[string, string]> = [
+    ["Helyes:-3 az eredmény.", "-3 az eredmény."], ["Helyes: –3 az eredmény.", "–3 az eredmény."], ["Helyes:–3 az eredmény.", "–3 az eredmény."],
+    ["Helyes: pH = 7, ezért semleges.", "pH = 7, ezért semleges."], ["Nem helyes: x = 2 esetén 6.", "x = 2 esetén 6."],
+    ["Helyes: cm-ben mérjük.", "cm-ben mérjük."], ["Helyes: a = 5, b = 3.", "a = 5, b = 3."], ["Helyes – 45.", "45."],
+  ];
+  for (const [input, expected] of cases) assert.equal(stripVerdictPrefix(input), expected, input);
+  assert.equal(stripMethodPrefix("Kapukérdés: x = 2 esetén mennyi 3x?", "gate"), "x = 2 esetén mennyi 3x?");
+  assert.equal(stripMethodPrefix("Jósolj: pH változás savban", "prediction"), "pH változás savban");
+});
+
+test("review #285: a szerep-skill rövid fejezetnevei szerep-aliasok (a lejátszó a szótár címét mutatja)", () => {
+  assert.equal(sectionRoleOf("Ellenőrzés"), "selfCheck");
+  assert.equal(sectionRoleOf("Leggyakoribb hibák"), "mistakes");
+  assert.equal(sectionRoleOf("A feladat megoldva"), "workedSolution");
+  assert.equal(displayHeading("Ellenőrzés"), SECTION_ROLE_HEADING.selfCheck);
+  assert.equal(sectionRoleOf("Ellenőrzés a gyakorlatban"), null);
 });
 
 test("sablonos fejezetcím: szerep a szövegből (írásjel-, kis-nagybetű- és kötőjel-tűrés), a megjelenített cím a szótárból", () => {

@@ -153,9 +153,11 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
         await expect(feedback).toBeVisible();
         await expect(feedback).toHaveText(/nem a gyökér/i);
 
-        // 4. A helyes válasz után a visszajelzés is változik.
+        // 4. A helyes válasz után a visszajelzés is változik. Arculati bank S4 (dokumentált spec-változás, review #285):
+        // az ítélet a kódszótár „Helyes!” szövege, a modell „Így van!” előtagja kimarad, az indoklás megmarad.
         await options.nth(0).click();
-        await expect(feedback).toHaveText(/így van/i);
+        await expect(feedback).toHaveText(/^Helyes!\s+A zöld színtestek, a kloroplasztiszok/);
+        await expect(feedback).not.toHaveText(/így van/i);
 
         // 5. A példa lépésenként nyílik, nem zúdítja rá a megoldást.
         const nextStep = page.getByTestId('example-next-step');

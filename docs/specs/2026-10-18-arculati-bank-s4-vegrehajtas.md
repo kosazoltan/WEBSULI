@@ -14,7 +14,7 @@ Terv: `docs/specs/2026-10-18-arculati-bank-s4.md`. Ág: `feat/arculat-s4`. A par
    - `SavedLessonQuiz` (élő és áttekintő);
    - `HtmlLessonQuiz` (a dupla előtag megszűnik);
    - `CognitiveMethods`: a `METHOD_LABEL` és a `stripMethodPrefix` a címen.
-3. **Prompt:** a `step-io.ts` és a `role-skills.ts` sablonos fejezetcímei a `SECTION_ROLE_HEADING`-ből (bájtra azonos szöveg).
+3. **Prompt:** a `step-io.ts` sablonos fejezetcímei a `SECTION_ROLE_HEADING`-ből (bájtra azonos szöveg); a `role-skills.ts` rövid alakjai szerep-aliasként (review #285, a skill szövege bájtra marad).
 4. **`flair`:**
    - az `experience-builder` nem állítja;
    - a `structured-improvement` nem viszi tovább;
