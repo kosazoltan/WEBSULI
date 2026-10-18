@@ -13,6 +13,8 @@ import { computeLessonArt } from "../../shared/lesson-art-compute";
 
 type Row = { id: string; json: Record<string, unknown> };
 const [mode, file] = process.argv.slice(2);
+/** Kulcssorrendtől független összehasonlítás (a jsonb nem őrzi a kulcsok sorrendjét). */
+const stableJson = (v: unknown): string => JSON.stringify(v, (_k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x));
 
 async function plan(query: <R>(sql: string, params?: unknown[]) => Promise<R[]>) {
   const stored = new Set((await query<{ id: string }>("SELECT id FROM design_assets")).map(r => r.id));
@@ -24,9 +26,17 @@ async function plan(query: <R>(sql: string, params?: unknown[]) => Promise<R[]>)
 if (mode === "--restore") {
   if (!file) throw new Error("--restore <mentés.json>");
   const backup = JSON.parse(readFileSync(file, "utf8")) as Row[];
+  // Review #283: csak akkor állítunk vissza, ha a sor az `art` kulcson kívül változatlan (különben egy azóta javított leckét
+  // írnánk felül); bármely eltérés vagy hiányzó sor az egész tranzakciót leállítja.
   const n = await withWriteTransaction(async q => {
     let done = 0;
-    for (const r of backup) done += (await q("UPDATE lessons SET json = $1 WHERE id = $2 RETURNING id", [JSON.stringify(r.json), r.id])).length;
+    for (const r of backup) {
+      const [cur] = await q<{ json: Record<string, unknown> }>("SELECT json FROM lessons WHERE id = $1 FOR UPDATE", [r.id]);
+      if (!cur) throw new Error(`hiányzó lecke: ${r.id} — a visszaállítás leállt, semmi sem íródott`);
+      const { art: _art, ...rest } = cur.json;
+      if (stableJson(rest) !== stableJson(r.json)) throw new Error(`a lecke azóta változott: ${r.id} — a visszaállítás leállt, semmi sem íródott`);
+      done += (await q("UPDATE lessons SET json = $1 WHERE id = $2 RETURNING id", [JSON.stringify(r.json), r.id])).length;
+    }
     return done;
   });
   console.log(`visszaállítva: ${n}/${backup.length}`);
@@ -36,7 +46,8 @@ if (mode === "--restore") {
   // írás előtt kerül lemezre (hiba esetén a tranzakció visszagördül).
   const n = await withWriteTransaction(async q => {
     const items = await plan(q);
-    writeFileSync(file, JSON.stringify(items.map(x => x.row)), "utf8");
+    // Review #283: kizárólagos létrehozás — meglévő mentést nem írunk felül (egy ismételt futás üres listája törölné a pontot).
+    writeFileSync(file, JSON.stringify(items.map(x => x.row)), { encoding: "utf8", flag: "wx" });
     console.log(`mentés: ${items.length} lecke → ${file}`);
     let done = 0;
     for (const { row, art } of items) {
