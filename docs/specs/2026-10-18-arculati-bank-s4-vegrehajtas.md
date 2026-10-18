@@ -6,6 +6,13 @@ Terv: `docs/specs/2026-10-18-arculati-bank-s4.md`. Ág: `feat/arculat-s4`. A par
    - `VERDICT_TEXT = { right, wrong }`;
    - `stripVerdictPrefix(text)`: a nyitó „Helyes”, „Nem helyes”, „Téves”, „Igen”, „Nem”, „Így van”, „Pontosan”, „Jó válasz”,
      „Rossz válasz” levágása, ha utána `.`, `:`, `,`, `!` vagy gondolatjel áll; a szöveg nagybetűvel folytatódik;
+   - éles mérés után (2026-10-18, PR #286) a negatív szótár bővül: „Nem jó”, „Nem így van”, „Ez téves”, „Hibás”, „Helytelen”;
+   - `stripVerdictPrefix(text, right?)` az ítélet irányához igazodik:
+     - pozitív szavak („Helyes”, „Igen”, „Így van”, „Pontosan”, „Jó válasz”) csak `right !== false` esetén vágódnak;
+     - negatív szavak csak `right !== true` esetén vágódnak;
+     - így egy „Melyik állítás hibás?” kérdés helyes válaszának „Hibás.” indoklása megmarad;
+     - `right` nélkül mindkét irány vágódik (a korábbi viselkedés);
+   - a `VerdictFeedback` átadja a `right` értéket; a „Nem válaszoltál” sor a helyes opció szövegét `right = true`-val vágja;
    - `SECTION_ROLE_HEADING`, `sectionRoleOf(heading)`;
    - `METHOD_LABEL` (a `CognitiveMethods` `LABELS`-e), `stripMethodPrefix(title, kind)`.
 2. **Lejátszó:** egy `VerdictFeedback` komponens (ítélet a szótárból + levágott szöveg). Bekötés:

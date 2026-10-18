@@ -40,6 +40,19 @@ test("ítélet-előtag: az élesen mért további nyitások is levágódnak; a t
   for (const keep of ["Hibás lépés: a zárójelet kihagytad.", "Hibás számítás: 3·4 = 12.", "Nem jól számoltál."]) assert.equal(stripVerdictPrefix(keep), keep, keep);
 });
 
+test("review #286: a levágás az ítélet irányához igazodik — a helyes válasz „Hibás.” indoklása tartalom", () => {
+  assert.equal(stripVerdictPrefix("Hibás.", true), "Hibás.");
+  assert.equal(stripVerdictPrefix("Helytelen: a 3 nem páros.", true), "Helytelen: a 3 nem páros.");
+  assert.equal(stripVerdictPrefix("Helyes: 45.", true), "45.");
+  assert.equal(stripVerdictPrefix("Hibás: ez a kivonás.", false), "Ez a kivonás.");
+  assert.equal(stripVerdictPrefix("Nem jó. A párolgás hőt igényel.", false), "A párolgás hőt igényel.");
+  assert.equal(stripVerdictPrefix("Helyes állítás, de nem ez a kérdés.", false), "Helyes állítás, de nem ez a kérdés.");
+  assert.equal(stripVerdictPrefix("Igen, ez a jó út.", false), "Igen, ez a jó út.");
+  // irány nélkül mindkét fajta vágódik (korábbi viselkedés)
+  assert.equal(stripVerdictPrefix("Nem helyes: előbb szorzunk."), "Előbb szorzunk.");
+  assert.equal(stripVerdictPrefix("Helyes: 45."), "45.");
+});
+
 test("review #285: a szerep-skill rövid fejezetnevei szerep-aliasok (a lejátszó a szótár címét mutatja)", () => {
   assert.equal(sectionRoleOf("Ellenőrzés"), "selfCheck");
   assert.equal(sectionRoleOf("Leggyakoribb hibák"), "mistakes");
