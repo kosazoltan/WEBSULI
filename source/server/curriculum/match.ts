@@ -51,7 +51,7 @@ const SUBJECT_PATTERNS: Array<[RegExp, string[]]> = [
   [/\b(biologia|termeszettud|termeszetism|kornyezetism|noveny|allat|test|szerv|legzes|taplalk|anyagforgalom|sejt|eloleny|erdo|mezo|ret\b|vizpart|talaj|kert|meh\b|zoldseg|gyumolcs|betegseg|egeszseg|viz korforgas|elobel)/, ["biologia", "termeszetismeret", "kornyezetismeret"]],
   [/\b(nyelvtan|helyesiras|szofaj|fonev|igek?\b|igekot|mellekn|hatarozo|mondat|elvalasztas|betur|szoalkot|osszetett szav|tulajdonsag|kommunikacio|szamot, mennyiseget)/, ["magyar-nyelvtan", "magyar-nyelv-es-irodalom"]],
   [/\b(irodalom|vers(ek|e|ei)?\b|mese|nepmese|regeny|arany janos|petofi|jokai|pal utcai|abigel|ady|nyugat|lira|novella|odysseus|csaladi kor|green war)/, ["magyar-irodalom", "magyar-nyelv-es-irodalom"]],
-  [/\b(matek|matematik|szorzas|osztas|osszeadas|kivonas|tort|szamkor|geometri|egyenlet|szog|terulet|kerulet|mertek|szamol|romai szam|negativ|pitagor|koordinat|algebra|halmaz|hatvany|oszthat|szazalek|aranyossag|statisztik|fuggveny|hozzarendel|transzform|terfogat|felszin|alakzat|becsles|muveleti sorrend|hossz|urmertek|tomeg)/, ["matematika"]],
+  [/\b(matek|matematik|szorzas|osztas|osszeadas|kivonas|tort|szamkor|geometri|egyenlet|szog|terulet|kerulet|mertek|szamol|romai szam|negativ|pitagor|koordinat|algebra|halmaz(ok|a|ba)?\b|hatvany|oszthat|szazalek|aranyossag|statisztik|fuggveny|hozzarendel|transzform|terfogat|felszin|alakzat|becsles|muveleti sorrend|hossz|urmertek|tomeg)/, ["matematika"]],
 ];
 /** Review #282: a címben kimondott tantárgynév elsőbbséget kap a témaszavakkal szemben („Matematika – Testek felszíne”). */
 const EXPLICIT_SUBJECTS: Array<[RegExp, string[]]> = [
@@ -98,7 +98,11 @@ type IndexedLesson = { topic: string[]; section: string[]; label: string; weight
 /** Ismétlő / összefoglaló / felmérő óra: a valódi témaóra elé ne kerüljön. */
 const REVIEW = /ismetl|osszefoglal|felmer|ev vegi|ev eleji|szamonker|dolgozat|temazaro|gyakorlas|ertekel/;
 type IndexedPlan = { grade: number; subject: string; title: string; lessons: IndexedLesson[] };
-export type CurriculumIndex = { plans: IndexedPlan[]; idf: Map<string, number> };
+/**
+ * `vocab`: évfolyamonként és tantárgyanként a hivatalos (OH, NAT 2020) mintatanmenetek szókincse — ebből ismerhető fel a tantárgy,
+ * ha a cím nem mondja ki (tulajdonosi kérés 2026-10-18: „a hivatalos NAT 2020 tanterv alapján minden tantárgy felismerhető lesz”).
+ */
+export type CurriculumIndex = { plans: IndexedPlan[]; idf: Map<string, number>; vocab: Map<string, Map<string, Set<string>>> };
 
 export function buildIndex(data: TanmenetData): CurriculumIndex {
   const df = new Map<string, number>();
@@ -114,7 +118,36 @@ export function buildIndex(data: TanmenetData): CurriculumIndex {
   }));
   const idf = new Map<string, number>();
   for (const [t, n] of df) idf.set(t, Math.log(1 + docs / n));
-  return { plans, idf };
+  const vocab = new Map<string, Map<string, Set<string>>>();
+  for (const p of plans) {
+    const bySubject = vocab.get(String(p.grade)) ?? new Map<string, Set<string>>();
+    const set = bySubject.get(p.subject) ?? new Set<string>();
+    for (const l of p.lessons) for (const t of [...l.topic, ...l.section]) set.add(t);
+    bySubject.set(p.subject, set);
+    vocab.set(String(p.grade), bySubject);
+  }
+  return { plans, idf, vocab };
+}
+
+/** A tantárgy a tanmenet-szókincs alapján: az évfolyam azon tantárgya, amelyhez a szavak legerősebben (egyértelmű előnnyel) illenek. */
+export const VOCAB_MIN_SCORE = 4;
+export function subjectByVocabulary(words: readonly string[], grade: number, index: CurriculumIndex): string[] | null {
+  const bySubject = index.vocab.get(String(grade));
+  if (!bySubject || !words.length) return null;
+  const scores: Array<[string, number]> = [];
+  for (const [subject, set] of bySubject) {
+    let score = 0;
+    for (const w of words) {
+      let best = 0;
+      for (const t of set) if (sameStem(w, t)) best = Math.max(best, index.idf.get(t) ?? 0);
+      score += best;
+    }
+    scores.push([subject, score]);
+  }
+  scores.sort((a, b) => b[1] - a[1]);
+  const [first, second] = scores;
+  if (!first || first[1] < VOCAB_MIN_SCORE || (second && first[1] < 1.5 * second[1])) return null;
+  return [first[0]];
 }
 
 /** Egy cím-szó legjobb súlya az óra szavai között (tőegyezés; a témakör-fejléc 0,7-es súllyal). */
@@ -128,21 +161,52 @@ function tokenScore(word: string, lesson: IndexedLesson, idf: Map<string, number
 /** A küszöb a 207 éles anyag kézi átnézésével hangolva (lásd a PR mérését). */
 export const MIN_SCORE = 4.75;
 
-export function matchMaterial(input: { title: string; classroom: number }, index: CurriculumIndex): CurriculumMatch | null {
-  // Review #282: évfolyam nélküli anyag semmilyen pozíciót nem kap (ünnepit sem) — a lista végén marad.
+/** A tartalomjelzős (második) kör küszöbe: több szó → több véletlen egyezés, ezért szigorúbb (a mérés alapján hangolva). */
+export const HINT_MIN_SCORE = 12;
+const HINT_WEIGHT = 0.5;
+
+function bestLesson(index: CurriculumIndex, words: string[], hintWords: string[], accept: (plan: IndexedPlan) => boolean): CurriculumMatch | null {
+  let best: CurriculumMatch | null = null;
+  // Ha a cím legalább két tartalmas szót ad, a tartalomjelzők csak olyan órát választhatnak, amelyhez a cím is hozzájárul
+  // (különben pl. „Igekötők és igék” a sok közös címsorszó miatt a „Mondatfajták” órához kerülne).
+  const titleMustHit = hintWords.length > 0 && words.length >= 2;
+  for (const plan of index.plans) {
+    if (!accept(plan)) continue;
+    plan.lessons.forEach((lesson, i) => {
+      const base = words.reduce((s, w) => s + tokenScore(w, lesson, index.idf), 0);
+      if (titleMustHit && base === 0) return;
+      const extra = hintWords.reduce((s, w) => s + tokenScore(w, lesson, index.idf), 0);
+      const score = lesson.weight * (base + HINT_WEIGHT * extra);
+      if (score > (best?.score ?? 0)) best = { pos: (i + 0.5) / plan.lessons.length, label: `${plan.title}: ${lesson.label}`, kind: "tanmenet", score };
+    });
+  }
+  return best;
+}
+
+/**
+ * `hints`: a tartalom címsorai / kulcsfogalmai (docs/specs/2026-10-18-tanmenet-kiegeszites.md) — csak akkor számítanak, ha a cím
+ * önmagában nem illeszthető; ilyenkor csak az elsődleges tantárgy tanmeneteiben, szigorúbb küszöbbel.
+ */
+export function matchMaterial(input: { title: string; classroom: number; hints?: readonly string[] }, index: CurriculumIndex): CurriculumMatch | null {
+  // Évfolyam nélküli (0) anyag semmilyen pozíciót nem kap: ezek a külön informatikai mappa anyagai (tulajdonosi döntés 2026-10-18).
   if (!input.classroom) return null;
   const seasonal = seasonalMatch(input.title);
   if (seasonal) return seasonal;
   const words = [...new Set(normalizeTokens(input.title))];
-  if (!words.length) return null;
-  const subjects = subjectsOfTitle(input.title);
-  let best: CurriculumMatch | null = null;
-  for (const plan of index.plans) {
-    if (plan.grade !== input.classroom || (subjects && !subjects.includes(plan.subject))) continue;
-    plan.lessons.forEach((lesson, i) => {
-      const score = lesson.weight * words.reduce((s, w) => s + tokenScore(w, lesson, index.idf), 0);
-      if (score > (best?.score ?? 0)) best = { pos: (i + 0.5) / plan.lessons.length, label: `${plan.title}: ${lesson.label}`, kind: "tanmenet", score };
-    });
+  const hintWords = [...new Set((input.hints ?? []).flatMap(h => normalizeTokens(h)))].filter(w => !words.includes(w)).slice(0, 60);
+  // Tantárgy: kimondott név / ismert kulcsszó a címben → a cím a tanmenet-szókincs alapján → ugyanez a tartalomból.
+  const subjects = subjectsOfTitle(input.title)
+    ?? subjectByVocabulary(words, input.classroom, index)
+    ?? subjectsOfTitle((input.hints ?? []).join(" "))
+    ?? subjectByVocabulary(hintWords, input.classroom, index);
+  const accept = (plan: IndexedPlan) => plan.grade === input.classroom && (!subjects || subjects.includes(plan.subject));
+  if (words.length) {
+    const byTitle = bestLesson(index, words, [], accept);
+    if (byTitle && byTitle.score >= MIN_SCORE) return byTitle;
   }
-  return best && (best as CurriculumMatch).score >= MIN_SCORE ? best : null;
+  if (!hintWords.length) return null;
+  // A tartalmi kör csak az elsődleges tantárgyban keres (pl. történelem ≠ hon- és népismeret).
+  const primary = subjects?.[0];
+  const byContent = bestLesson(index, words, hintWords, plan => accept(plan) && (!primary || plan.subject === primary));
+  return byContent && byContent.score >= HINT_MIN_SCORE ? byContent : null;
 }

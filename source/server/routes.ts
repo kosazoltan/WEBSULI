@@ -32,7 +32,8 @@ import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients } from "./lib/material-result";
-import { withCurriculum } from "./curriculum";
+import { clearCurriculumHints, withCurriculum } from "./curriculum";
+import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments } from "./lib/material-capture";
 import { lessonResultsRouter } from "./lesson-result-email";
 
@@ -3073,6 +3074,7 @@ ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; 
     try {
       const cache = getHtmlFilesCache();
       cache.invalidate();
+      clearCurriculumHints();
     } catch (error) {
       // Cache module might not be available, ignore
       logger.warn("[CACHE] Failed to invalidate cache:", error);
@@ -3094,7 +3096,7 @@ ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; 
 
       // Cache miss - fetch from database
       // Tanmenet-rendezés (docs/specs/2026-10-17-tanmenet-rendezes.md): anyagonként a NAT 2020 mintatanmenet szerinti pozíció
-      const files = withCurriculum(await storage.getAllHtmlFiles());
+      const files = await withCurriculum(await storage.getAllHtmlFiles(), loadCurriculumContent);
 
       // Store in cache
       cache.set(files);
