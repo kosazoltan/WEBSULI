@@ -24,3 +24,11 @@ test("üzenetek", () => {
   assert.equal(streakMessage({ days: 5, today: true }), "5 napja tanulsz egymás után!");
   assert.equal(streakMessage({ days: 3, today: false }), "3 napos sorozatod van — ma is folytasd!");
 });
+
+test("review #303: a profil (sorozat) nem ragad be — rövid frissesség, fókuszra és látható lapon 5 percenként újralekérés", async () => {
+  const { LEARNER_PROFILE_QUERY_OPTIONS } = await import("../client/src/lib/learnerProfile");
+  assert.ok(LEARNER_PROFILE_QUERY_OPTIONS.staleTime <= 60_000);
+  assert.equal(LEARNER_PROFILE_QUERY_OPTIONS.refetchOnWindowFocus, true);
+  assert.ok(LEARNER_PROFILE_QUERY_OPTIONS.refetchInterval <= 5 * 60_000, "a budapesti napváltás legkésőbb 5 perc múlva látszik");
+  assert.equal(LEARNER_PROFILE_QUERY_OPTIONS.refetchIntervalInBackground, false);
+});

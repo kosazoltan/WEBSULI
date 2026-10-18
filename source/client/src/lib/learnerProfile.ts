@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 /**
  * Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S1): a napi emlékeztető személyes linkje (`?t=…`) ezt az eszközt a
@@ -55,7 +56,26 @@ export function captureLearnerTokenFromUrl(): void {
   }
 }
 
+/** Review #302: a megnyitott anyag jelzése a párosított tanulónak (a Stúdió-lecke és a PDF nem a /dev/:id-n át nyílik). */
+export function useRecordLearnerView(materialId: string | null | undefined): void {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const token = getLearnerToken();
+    if (!token || !materialId) return;
+    void fetch(`/api/learner/view/${encodeURIComponent(materialId)}`, { headers: { "X-Learner-Token": token }, credentials: "same-origin" })
+      // Review #303: a megnyitás után a sorozat (profil) friss legyen, amikor a tanuló visszatér a kezdőlapra.
+      .then(() => queryClient.invalidateQueries({ queryKey: ["learner-profile"] }))
+      .catch(() => undefined);
+  }, [materialId, queryClient]);
+}
+
 export type LearnerProfile = { firstName: string; grade: number; streak?: { days: number; today: boolean } };
+
+/**
+ * Review #303: a profil (és vele a napi sorozat) ne ragadjon be — rövid frissességi idő, újralekérés fókuszra és látható lapon
+ * 5 percenként (a budapesti napváltás így legkésőbb 5 perc múlva megjelenik).
+ */
+export const LEARNER_PROFILE_QUERY_OPTIONS = { staleTime: 60_000, refetchOnWindowFocus: true, refetchInterval: 5 * 60_000, refetchIntervalInBackground: false } as const;
 
 /** A párosított eszköz tanulója; érvénytelen (hamis / visszavont) tokennél a token törlődik, és a tanuló névtelen. */
 export function useLearnerProfile(): LearnerProfile | null {
@@ -63,7 +83,7 @@ export function useLearnerProfile(): LearnerProfile | null {
   const { data } = useQuery({
     queryKey: ["learner-profile", token],
     enabled: Boolean(token),
-    staleTime: 10 * 60_000,
+    ...LEARNER_PROFILE_QUERY_OPTIONS,
     retry: false,
     queryFn: async (): Promise<LearnerProfile | null> => {
       const res = await fetch("/api/learner/me", { headers: { "X-Learner-Token": token! }, credentials: "same-origin" });
