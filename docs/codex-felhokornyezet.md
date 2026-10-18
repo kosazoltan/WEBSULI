@@ -36,7 +36,9 @@ Mind a `source/` alatt:
 - **Repó:** a beállítás a repó követett fájljait nem módosította. A telepítő- és indítószkript a felhős gép munkaterületén
   (`/workspace/...`) fut, minden feladatnál a GitHubról frissen klónozott kódon.
 - **Folyamatok:** a közzététel / visszaállítás után nem maradnak meg; az indítás a mentett indítókészség szerint történik.
-- **Hálózat:** internet-hozzáférés csak a csomagkezelők felé („Csomagkezelők” domainlista).
+- **Hálózat:** internet-hozzáférés a csomagkezelők felé („Csomagkezelők” domainlista), valamint a fenti „Mit állít be”
+  részben külön felsorolt további tartományok felé, ha vannak. Újralétrehozáskor ezeket is engedélyezni kell, különben a
+  telepítés elakad.
 - **Adatvédelem:** „Csak én” — a környezetet csak a tulajdonos fiókja használhatja.
 - **Titkok:** egyetlen éles titok sincs a környezetben. Ha mégis kell (pl. teljes szerverindításhoz), a környezet beállításainál a
   „Környezeti változók → Kezelés” alatt add meg, soha ne a repóban vagy a chatben.
@@ -49,6 +51,8 @@ Mind a `source/` alatt:
 4. A végén: „Környezet szerkesztése” → ellenőrzés → „Piszkozat mentése” → „Közzététel”.
 
 ## Mire jó
-- A PR-okon a Codex-review és a `@codex …` feladatok tényleg le tudják futtatni a buildet és a teszteket, nem csak a diffet
-  olvassák.
-- A változás hatása a program más részeire így ellenőrizhető (átfogó review).
+- **Cloud-feladatok:** a Codexben ezzel a környezettel indított feladatok le tudják futtatni a buildet és a teszteket, nem
+  csak a kódot olvassák. Így egy változás hatása a program más részeire is ellenőrizhető.
+- **PR-review:** a GitHubról indított Codex-review (`@codex review`, automatikus review) a Codex Code Review saját
+  beállítása szerint fut, nem garantáltan ebben a környezetben. A review eredményét ezért ne tekintsd az itt felsorolt
+  ellenőrzések lefuttatásának.
