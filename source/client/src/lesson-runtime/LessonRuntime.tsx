@@ -35,6 +35,8 @@ import { experienceFingerprint } from "./useExperienceRound";
 // specificitású szabályoknál is ez érvényesüljön.
 import "./lesson-design.css";
 import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom, type DesignThemeId } from "@shared/lesson-design";
+import { VerdictFeedback } from "./VerdictFeedback";
+import { displayHeading } from "@shared/lesson-ui-text";
 
 /** A koncepciókép sávjelvényei: levél · iránytű · agy · lombik · emelkedő grafikon (szabályterv 1.2). */
 const BAND_ICON: Record<DesignThemeId, typeof Leaf> = { explorer: Leaf, adventure: Compass, studio: Brain, laboratory: FlaskConical, future: TrendingUp };
@@ -218,9 +220,7 @@ function CheckBlock({
 
       {/* Feedback is written per option, so a wrong pick teaches instead of just failing. */}
       {picked !== null && (
-        <p className="lesson-feedback" data-state={correct ? "right" : "wrong"} data-testid="check-feedback">
-          {block.feedbackPerOption[picked]}
-        </p>
+        <VerdictFeedback right={picked === block.correctIndex} text={block.feedbackPerOption[picked]} testId="check-feedback" />
       )}
 
       {block.hint && !correct && (
@@ -363,7 +363,7 @@ function LessonSection({
             {section.emoji}
           </span>
         )}
-        <span className="lesson-chapter-title">{section.heading}</span>
+        <span className="lesson-chapter-title">{displayHeading(section.heading)}</span>
         <SectionMascot firstKind={section.blocks[0]?.kind} />
       </h2>
       {section.blocks.map((block, bi) => (
@@ -413,8 +413,8 @@ function LessonProgress({ sections, band, current }: { sections: Section[]; band
             className="lesson-progress-step"
             data-progress-step
             data-state={i < current ? "done" : i === current ? "now" : "todo"}
-            title={s.heading}
-            aria-label={s.heading}
+            title={displayHeading(s.heading)}
+            aria-label={displayHeading(s.heading)}
             data-emoji={s.emoji}
           />
         ))}

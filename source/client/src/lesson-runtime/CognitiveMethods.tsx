@@ -2,8 +2,10 @@ import { useState, type PointerEvent } from "react";
 import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import type { CognitiveMethod } from "@shared/lesson-experience";
+import { METHOD_LABEL, stripMethodPrefix } from "@shared/lesson-ui-text";
 
-const LABELS: Record<CognitiveMethod["kind"], string> = { prediction: "Jósolj!", gate: "Kapukérdés", myth: "Tévhitvadász", sorting: "Rendezd sorba!", causeEffect: "Ok és következmény", conflict: "Gondold újra!", selfCheck: "Önértékelés", popup: "Villámkérdés", timeline: "Lépésről lépésre", analogy: "Kapcsold össze!" };
+// Arculati bank S4: a módszercímke a kódszótárból; a címből a címkét ismétlő előtag megjelenítéskor kimarad.
+const LABELS: Record<CognitiveMethod["kind"], string> = METHOD_LABEL;
 function SortSteps({ steps, onDone }: { steps: string[]; onDone(): void }) {
   const [order, setOrder] = useState(() => steps.map((_, i) => i).reverse());
   const [ghost, setGhost] = useState<{ index: number; x: number; y: number } | null>(null);
@@ -41,7 +43,7 @@ function MethodCard({ method: m, onGatePassed, embedded }: { method: CognitiveMe
   const [popup, setPopup] = useState(false);
   const choice = <div className="fusion-choices">{m.options?.map((option, i) => <button className="lesson-option" key={option} onClick={() => { setPicked(i); if (i === m.correctIndex) { setRevealed(true); onGatePassed(m.id); } }}>{option}</button>)}{picked !== null && <p role="status">{picked === m.correctIndex ? m.answer : "Próbáld újra! Keresd meg a magyarázatot a Tananyag lapon."}</p>}</div>;
   return <section className="fusion-method lesson-block" data-method={m.kind}>
-    <span className="fusion-eyebrow">{LABELS[m.kind]}</span><h3>{m.title}</h3><p>{m.prompt}</p>
+    <span className="fusion-eyebrow">{LABELS[m.kind]}</span><h3>{stripMethodPrefix(m.title, m.kind)}</h3><p>{m.prompt}</p>
     {m.kind === "prediction" && <><label className="fusion-label">Az én feltevésem<textarea value={answer} onChange={e => setAnswer(e.target.value)} maxLength={2000} /></label><button className="lesson-outline-btn" disabled={!answer.trim()} onClick={() => setRevealed(true)}>Összevetem a magyarázattal</button></>}
     {(m.kind === "gate" || m.kind === "myth") && choice}
     {m.kind === "sorting" && m.steps && <SortSteps steps={m.steps} onDone={() => setRevealed(true)} />}

@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { PracticeView } from "@shared/lesson-attempt";
 import { scoreSummary } from "@shared/lesson-experience-score";
 import { FinishPracticeButton } from "./FinishPracticeButton";
+import { VerdictFeedback } from "./VerdictFeedback";
 
 export function PracticeAccess({ lessonId, enabled, onFinished, onReview, children }: {
   lessonId?: string; enabled: boolean; onFinished: (finished: boolean | null) => void; onReview: (questionId: string) => void; children: ReactNode;
@@ -78,14 +79,14 @@ function SavedLessonQuiz({ userId, lessonId, enabled, onFinished, onReview }: {
       }}>Eredmény letöltése</button>
       <details><summary className="lesson-ghost-btn">A kör válaszainak áttekintése</summary>{round.questions.map(question => <article key={question.id} className="lesson-block">
         <h4>{question.prompt}</h4><p>{question.answer ? `A válaszod: ${question.options[question.answer.pickedIndex]}` : "Erre a kérdésre nem válaszoltál."}</p>
-        {question.answer && <p>{question.answer.feedback}</p>}{(question.hintUsed || question.answer?.usedHint) && <p>Segítséget kértél.</p>}
+        {question.answer && <VerdictFeedback right={question.answer.correct} text={question.answer.feedback} />}{(question.hintUsed || question.answer?.usedHint) && <p>Segítséget kértél.</p>}
         <button className="lesson-outline-btn" onClick={() => onReview(question.questionId)}>Kapcsolódó magyarázat</button>
       </article>)}</details>
       {!!result.weakConceptIds.length && <button className="lesson-outline-btn" onClick={() => onReview(round.questions.find(q => q.coversConceptIds.some(id => result.weakConceptIds.includes(id)))!.questionId)}>Átnézem a magyarázatot</button>}
       <p>A következő körben a még nem látott, hibás és esedékes kérdések kerülnek előre.</p><button className="lesson-outline-btn" disabled={busy} onClick={() => void run(begin)}>Új kvíz indítása</button>
     </section> : <>
       {round.questions.map((q, questionIndex) => <section key={q.id} ref={element => { if (element) questionElements.current.set(q.id, element); else questionElements.current.delete(q.id); }} tabIndex={-1} className="lesson-block fusion-quiz" data-quiz-id={q.questionId}><span className="fusion-eyebrow">{questionIndex + 1}. kérdés</span><h3>{q.prompt}</h3><div className="fusion-choices">{q.options.map((option, pickedIndex) => <button key={pickedIndex} className="lesson-option" disabled={busy || !!q.answer || !!error} aria-pressed={q.answer?.pickedIndex === pickedIndex} data-state={q.answer?.pickedIndex === pickedIndex ? q.answer.correct ? "right" : "wrong" : undefined} onClick={() => void run(() => apiRequest("POST", `/api/lessons/practice/${round.id}/answer`, { questionId: q.id, pickedIndex, usedHint: q.hintUsed }))}><span className="lesson-option-key">{"ABCD"[pickedIndex]}</span>{option}</button>)}</div>
-        {q.answer ? <p className="lesson-feedback" data-state={q.answer.correct ? "right" : "wrong"}>{q.answer.feedback}{q.answer.usedHint ? " · Segítséggel megoldva" : ""}</p> : <button className="lesson-ghost-btn" disabled={busy || !!error} onClick={() => void run(async () => { const saved = await apiRequest<PracticeView>("POST", `/api/lessons/practice/${round.id}/hint`, { questionId: q.id }); onReview(q.questionId); return saved; })}>Segítség: vissza a magyarázathoz</button>}
+        {q.answer ? <VerdictFeedback right={q.answer.correct} text={q.answer.feedback}>{q.answer.usedHint ? " · Segítséggel megoldva" : ""}</VerdictFeedback> : <button className="lesson-ghost-btn" disabled={busy || !!error} onClick={() => void run(async () => { const saved = await apiRequest<PracticeView>("POST", `/api/lessons/practice/${round.id}/hint`, { questionId: q.id }); onReview(q.questionId); return saved; })}>Segítség: vissza a magyarázathoz</button>}
       </section>)}
       <FinishPracticeButton className="fusion-primary" total={round.questions.length} unanswered={round.questions.length - answered} disabled={busy || !!error} onContinue={() => {
         const question = round.questions.find(question => !question.answer);

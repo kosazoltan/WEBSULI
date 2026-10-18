@@ -57,7 +57,8 @@ test("design a kérésből: a mért hamis triggerek nem váltanak világot vagy 
   for (const text of ["Magyarázd egyszerűbben a sűrűség fogalmát", "Szűrd ki a felesleges részeket", "Legyen szó az állatok testfelépítéséről is", "A mesés elemeket hagyd ki", "ne legyen rózsaszín", "Adj változatos feladatokat", "effektívebb gyakorlás"]) {
     assert.equal(designFromInstruction(text), undefined, text);
   }
-  assert.equal(designFromInstruction("Rózsaszín legyen, de effektek nélkül")?.flair, undefined);
+  // Arculati bank S4 (docs/specs/2026-10-18-arculati-bank-s4.md): a flair kivezetve — a kérés semmilyen dizájnt nem ad.
+  assert.equal(designFromInstruction("Rózsaszín legyen, de effektek nélkül"), undefined);
   // Websuli Design (dokumentált spec-változás): unisex — nemi szavak nem választanak világot.
   assert.equal(designFromInstruction("rózsaszín, kislánynak, csillogó effektekkel")?.world, undefined);
 });

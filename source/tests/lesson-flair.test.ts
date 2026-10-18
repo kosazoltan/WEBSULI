@@ -2,38 +2,29 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { LESSON_FLAIRS, VISUAL_WORLD_IDS, designFromInstruction, pickLessonFlair, visualWorld } from "../shared/lesson-visuals";
+import { VISUAL_WORLD_IDS, designFromInstruction, visualWorld } from "../shared/lesson-visuals";
 import { EXPERIENCE_THEMES, experienceSchema } from "../shared/lesson-experience";
 import { buildStructuredImprovement } from "../server/studio/structured-improvement";
 import { fusionFixture, standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 
-/** Spec 2026-09-24 (docs/specs/2026-09-24-lesson-flair-princess.md). */
+/** Spec 2026-09-24 (docs/specs/2026-09-24-lesson-flair-princess.md); a flair kivezetése dokumentált spec-változás:
+ * docs/specs/2026-10-18-arculati-bank-s4.md (a gyártás nem ad flair-t, a lejátszó nem rendereli, a régi adat olvasható). */
 
-test("EARS 1: a princess világ a világok, a témák és a CSS között szinkronban, és minden különlegességnek van CSS-e", () => {
+test("EARS 1: a princess világ a világok és a témák között szinkronban; a kivezetett flair-nek nincs CSS-e (S4)", () => {
   assert.ok((VISUAL_WORLD_IDS as readonly string[]).includes("princess"));
   assert.ok((EXPERIENCE_THEMES as readonly string[]).includes("princess"));
   const css = fs.readFileSync(path.resolve("client/src/lesson-runtime/lesson-experience.css"), "utf8");
-  for (const flair of LESSON_FLAIRS) assert.ok(css.includes(`[data-flair~="${flair}"]`), flair);
-  assert.match(css, /@media \(prefers-reduced-motion: no-preference\)[\s\S]*lesson-twinkle/, "animáció csak mozgáscsökkentés nélkül");
+  assert.doesNotMatch(css, /\[data-flair~=/, "a halott [data-flair] szabályok kikerültek");
+  assert.match(css, /@keyframes lesson-pop/, "a helyes-válasz animáció (lesson-theme.css) megmaradt");
   assert.equal(visualWorld("princess")?.emojis.length, 8);
 });
 
-test("EARS 2: leckénként determinisztikus, leckék között eltérő, ismétlés nélküli különlegességek", () => {
-  const a = pickLessonFlair("Történelem:Az időszámítás");
-  assert.deepEqual(a, pickLessonFlair("Történelem:Az időszámítás"));
-  assert.equal(a.length, 3);
-  assert.equal(new Set(a).size, 3);
-  const distinct = new Set(["Matek:Törtek", "Biológia:Sejt", "Magyar:Mese", "Földrajz:Víz", "Történelem:Kódex", "Angol:Colours"].map((s) => pickLessonFlair(s).join()));
-  assert.ok(distinct.size >= 3, `a leckék ne legyenek egyformák (${distinct.size} különböző)`);
-});
-
 // Websuli Design (dokumentált spec-változás, docs/specs/2026-10-16-websuli-design.md): unisex — a nemi szavak nem választanak világot.
-test("EARS 3: a tanár kérése nemi szavakból NEM választ világot (unisex); effekt-kérésnél a régi effektlista; semleges kérésnél nincs változás", () => {
+test("EARS 3: a tanár kérése nemi szavakból NEM választ világot (unisex); effekt-kérés sem ad flair-t (S4); semleges kérésnél nincs változás", () => {
   const d = designFromInstruction("Legyen fiatalos, rózsaszín, 5-ös kislánynak figyelemfelhívó, effektekkel.", "seed");
-  assert.equal(d?.world, undefined);
+  assert.equal(d, undefined, "sem világ, sem flair");
   for (const gendered of ["rózsaszín legyen", "kislánynak szóljon", "hercegnős téma", "lányos legyen", "pink színű"]) assert.equal(designFromInstruction(gendered), undefined, gendered);
-  for (const f of ["sparkles", "shimmer-keys", "pop-correct"] as const) assert.ok(d?.flair?.includes(f), f);
-  assert.ok((d?.flair?.length ?? 0) <= 4);
+  assert.deepEqual(designFromInstruction("Legyen varázsvilág témájú."), { world: "magic" });
   assert.equal(designFromInstruction("Rövidítsd le a tananyagot."), undefined);
   assert.equal(designFromInstruction(undefined), undefined);
 });
@@ -49,6 +40,7 @@ test("EARS 4: a javító út nemi kérésre nem ad hercegnő-világot (a szerző
       return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
     }, "Rózsaszín, kislánynak szóló, csillogó effektekkel.");
   assert.notEqual(result.candidate.experience?.theme, "princess");
+  assert.equal(result.candidate.experience?.flair, undefined, "S4: a javított lecke sem kap flair-t");
   // A tanár saját kérése szó szerint átmegy; a PROGRAM nem tesz hozzá hercegnő-világot.
   assert.doesNotMatch(authorUser, /Hercegnő-kastély|princess/);
   assert.match(authorSystem, /TANANYAGJAVÍTÓ SKILL/);
