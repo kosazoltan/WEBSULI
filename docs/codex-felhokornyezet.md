@@ -18,8 +18,8 @@ Mind a `source/` alatt:
 - `npm run lint`;
 - `npm test`;
 - `npm run build`;
-- `npm run test:learning-db`: eldobható Postgresen.
-  - Ugyanabban az adatbázisban, ahol a próba-tananyagok vannak, a napi emlékeztető egy tesztje eltérő anyagot választhat. Helyben, saját eldobható adatbázison mind az 57 teszt zöld (2026-10-18).
+- `npm run test:learning-db`: a szkript saját, eldobható `postgres:17` Docker-konténert indít, a környezet adatbázisát nem
+  használja (a `DATABASE_URL`-t törli), ezért Docker kell hozzá. Helyben mind az 57 teszt zöld (2026-10-18).
 
 **A beállításkor mért eredmény:**
 - a build, a típusellenőrzés és a lint: PASS;
@@ -28,7 +28,10 @@ Mind a `source/` alatt:
 
 ## Nem része
 - **Külső integrációk:** az Anthropic / OpenAI AI-kulcsok, a Resend levelezés, a Google-belépés.
-- **A teljes E2E-csomag:** az a GitHub CI-ben fut.
+- **A böngészős (Playwright) tesztek:**
+  - a GitHub CI az alapkonfigurációt (`playwright.config.ts`, `*.spec.ts`) és három külön konfigurációt futtat:
+    `html-persistence`, `lesson-arbiter`, `service-worker`;
+  - a többi `playwright.*.config.ts` csak kézzel fut.
 
 ## Hol él, és mit kell tudni róla
 A működés a jelenlegi Codex cloud environments dokumentáció szerint (ellenőrizve 2026-10-18), nem a Codex Cloud (Legacy)
