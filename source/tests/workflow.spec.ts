@@ -85,7 +85,9 @@ for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900]])
 test("mobil menüből is elérhető a futásnapló", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/admin");
-  await page.getByRole("button", { name: "Anyagok menü megnyitása" }).click();
+  // Spec 2026-10-18-admin-korszerusites (dokumentált spec-változás): a Futások a „Készítés és javítás” csoportban van
+  // (mobilon „Készítés”); a mobil menü a közös lib/admin-tabs.ts-ből épül.
+  await page.getByRole("button", { name: "Készítés menü megnyitása" }).click();
   await page.getByTestId("sheet-tab-workflows").click();
   await expect(page.getByTestId("workflow-history")).toBeVisible();
 });

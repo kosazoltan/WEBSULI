@@ -26,14 +26,14 @@ test("every internal path the coupon HUD navigates to is a declared App route", 
   }
 });
 
-test("admin.tsx: every TabsTrigger value is in validTabs (deep link ?tab= works)", () => {
+test("admin.tsx: every menu tab is a valid deep link and has content (?tab= works)", async () => {
+  // Spec 2026-10-18-admin-korszerusites (dokumentált spec-változás): a fülsor a közös lib/admin-tabs.ts-ből renderel; a deep linket a resolveAdminTab dönti el.
+  const { ADMIN_TAB_VALUES, resolveAdminTab } = await import("../client/src/lib/admin-tabs");
   const admin = read("client/src/pages/admin.tsx");
-  const validMatch = admin.match(/const validTabs = \[([^\]]+)\]/);
-  assert.ok(validMatch, "validTabs lista megtalálható");
-  const valid = [...validMatch![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  const triggers = [...admin.matchAll(/<TabsTrigger[^>]*value="([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(triggers.length >= 10);
-  for (const t of new Set(triggers)) {
-    assert.ok(valid.includes(t), `a "${t}" fül renderelődik, de validTabs nem tartalmazza`);
+  assert.match(admin, /resolveAdminTab\(new URLSearchParams\(window\.location\.search\)\.get\("tab"\)\)/);
+  assert.ok(ADMIN_TAB_VALUES.length >= 10);
+  for (const t of ADMIN_TAB_VALUES) {
+    assert.equal(resolveAdminTab(t), t, `a "${t}" fül deep linkje nem a saját fülére visz`);
+    assert.match(admin, new RegExp(`<TabsContent value="${t}"`), `a "${t}" fülnek nincs tartalma`);
   }
 });

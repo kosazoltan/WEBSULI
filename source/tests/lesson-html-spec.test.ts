@@ -128,14 +128,10 @@ test("a webes gyűjtő prompt nem tartalmazza a v7.4 JS-dumpot; a szerzői a fú
   assert.doesNotMatch(author, /KIMENET-TAKARÉKOSSÁG/);
 });
 
-test("routes.ts mindkét készítő promptja és az Okosítás a közös specet fűzi be", () => {
+test("az Okosítás a közös specet fűzi be; a routes.ts-ben nem maradt régi font-szabály", () => {
   const routes = read("server/routes.ts");
-  // Spec 2026-10-03-gpt61-sol-kv-cache: a közös spec két részben (statikus spec a cache-töréspont előtt, téma utána) — mindkettő
-  // ugyanúgy bekerül a kérésbe.
-  assert.match(routes, /import \{ lessonHtmlSpecParts \} from "\.\/ai\/lesson-html-spec"/);
-  assert.ok((routes.match(/lessonHtmlSpecParts\(\{/g) ?? []).length >= 2, "két készítő route");
-  assert.ok((routes.match(/const dynamicPrompt = `\$\{themeBlock\}/g) ?? []).length >= 2, "a téma mindkét készítő route kérésébe bekerül");
-  assert.match(routes, /\$\{customPrompt\.prompt\}\\n\\n\$\{specBlock\}/, "a DB-s egyedi prompt mellé is hozzáfűződik");
+  // Spec 2026-10-18-admin-korszerusites (dokumentált spec-változás): a két régi készítő route (material-creator/chat,
+  // enhanced-creator/claude-chat) halott kódként megszűnt — a közös spec (2026-10-03-gpt61-sol-kv-cache) az Okosításban marad.
   assert.doesNotMatch(routes, /SOHA @font-face vagy Google Fonts/);
   assert.doesNotMatch(routes, /Segoe UI, Noto Sans, system-ui/);
   const improve = read("server/improveAsync.ts");
@@ -149,11 +145,10 @@ test("routes.ts mindkét készítő promptja és az Okosítás a közös specet 
   assert.doesNotMatch(improve, /Google Fonts latin-ext \+|Cél: 75 kérdés|Cél: 45 feladat/);
 });
 
-test("a készítő route-on nincs 60 s-os abszolút korlát, és 64K a kimenet", () => {
+test("a készítő úton nincs 60 s-os abszolút korlát, és 64K a kimenet", () => {
   const routes = read("server/routes.ts");
+  // Spec 2026-10-18-admin-korszerusites (dokumentált spec-változás): a régi készítő route megszűnt; a webes készítő 64K-s kerete marad.
   assert.doesNotMatch(routes, /Request timeout \(60s\)/);
-  assert.match(routes, /touchClaude\(\)/);
-  assert.match(routes, /max_tokens: 64000/);
   assert.match(read("server/studio/web-research-runner.ts"), /MAX_TOKENS = 64_000/);
 });
 

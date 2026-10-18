@@ -19,6 +19,7 @@ const CouponHudProbe = lazy(() =>
 // LS-8 (#191): a tananyagkészítés panel böngészős mérőoldala. Lazy import, hogy
 // soha ne kerüljön a fő bundle-be (repo-szabály a mérő/próba oldalakra).
 const StudioPanelProbe = lazy(() => import("@/components/studio/StudioPanelProbe"));
+const AdminTabsProbe = lazy(() => import("@/pages/AdminTabsProbe"));
 
 // Lazy load heavy components for better code splitting
 const Preview = lazy(() => import("@/pages/Preview"));
@@ -71,6 +72,9 @@ function Router() {
         )}
         {import.meta.env.VITE_ENABLE_RUNTIME_PROBE === "1" && (
           <Route path="/__studio-panel-probe" component={StudioPanelProbe} />
+        )}
+        {import.meta.env.VITE_ENABLE_RUNTIME_PROBE === "1" && (
+          <Route path="/__admin-tabs-probe" component={AdminTabsProbe} />
         )}
         <Route path="/preview/:id" component={Preview} />
         <Route path="/lesson/:id" component={LessonRedirect} />

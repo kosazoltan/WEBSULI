@@ -54,8 +54,8 @@ const ALLOWLIST: Record<string, Allowed> = {
   "module@server/updateClassroom0Titles.ts": { category: "cli-script", reason: "Egyszeri címfrissítő parancssori szkript; a szerver nem hívja." },
   // ── Ütemezett, tartalmat nem érintő írás.
   "value:runScheduledPublishingCheck@server/scheduledPublishing.ts": { category: "scheduled", reason: "Ütemezett közzététel: csak a tulajdonos (user_id) áll be a láthatósághoz, a tartalom nem változik." },
-  // ── Hívó nélküli kód.
-  "unreferenced:deleteUser@server/storage.ts": { category: "dead-code", reason: "Nincs hívója; felhasználó-törlésnél csak az anyag tulajdonosát nullázná, tartalmat nem." },
+  // Spec 2026-10-18-admin-korszerusites: a deleteUser-nek mostantól hívója van (Felhasználók fül) — kézi admin-művelet.
+  "route:DELETE /users/:id@server/admin-users.ts": { category: "manual-admin", reason: "Kézi felhasználótörlés az admin felületről; az anyagok tulajdonosát nullázza, a tartalom nem változik." },
   // ── Termelési összerakás: függvényérték, amelyet a workflow-n belül hívnak (gépi bizonyítékkal).
   "route:POST /web-research/jobs@server/studio/web-research-routes.ts": { category: "dispatch", reason: "A webes gyártás (webStudio) a jobs.run → executeWorkflow → runWork láncon fut; a futtató mindig workflow-tárolóval épül.", proof: WEB_WIRING },
   "route:POST /web-research/jobs/:id/publish@server/studio/web-research-routes.ts": { category: "dispatch", reason: "Folytatás csak workflow-ban (run → executeWorkflow); napló nélküli job workflow-tárolóval nem publikálható.", proof: WEB_WIRING },
@@ -103,16 +103,8 @@ test("minden engedély kategorizált és indokolt; a dispatch-elemek bizonyíté
 });
 
 test("a korábban workflow nélküli utak a kijelölt módban futnak (H, I, J, K, B)", () => {
+  // Spec 2026-10-18-admin-korszerusites: a html-fix, material-creator és enhanced-creator utak megszűntek (halott kód, a kliens nem hívta).
   const expectations: Array<[string, string, string, RegExp]> = [
-    ["server/routes.ts", "post", "/html-fix/errors", /runToolWorkflow\(\{ mode: "htmlAssist"/],
-    ["server/routes.ts", "post", "/html-fix/theme", /runToolWorkflow\(\{ mode: "htmlAssist"/],
-    ["server/routes.ts", "post", "/html-fix/chat", /runToolWorkflow\(\{ mode: "htmlAssist"/],
-    ["server/routes.ts", "post", "/html-fix/apply", /runToolWorkflow\(\{ mode: "apply"/],
-    ["server/routes.ts", "post", "/material-creator/chat", /runToolWorkflow\(\{ mode: "creator"/],
-    ["server/routes.ts", "post", "/api/ai/enhanced-creator/analyze-files", /runToolWorkflow\(\{ mode: "creator"/],
-    ["server/routes.ts", "post", "/api/ai/enhanced-creator/analyze-file", /runToolWorkflow\(\{ mode: "creator"/],
-    ["server/routes.ts", "post", "/api/ai/enhanced-creator/chatgpt-chat", /runToolWorkflow\(\{ mode: "creator"/],
-    ["server/routes.ts", "post", "/api/ai/enhanced-creator/claude-chat", /runToolWorkflow\(\{ mode: "creator"/],
     ["server/routes.ts", "post", "/api/admin/materials/:id/generate-quiz", /generateMaterialQuiz\(id, countRaw, req\.user!\.id\)/],
     ["server/studio/routes.ts", "post", "/maps/extract", /runToolWorkflow\(\{ mode: "map"/],
     ["server/studio/routes.ts", "post", "/maps/:id/recheck", /runToolWorkflow\(\{ mode: "mapCheck"/],

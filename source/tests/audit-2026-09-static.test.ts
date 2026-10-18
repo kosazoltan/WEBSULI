@@ -58,26 +58,12 @@ test("migrate.ts: a TLS-tanúsítvány ellenőrzés prod-ban nincs kikapcsolva",
   assert.match(src, /rejectUnauthorized: process\.env\.NODE_ENV === 'production'/);
 });
 
-test("EnhancedMaterialCreator: az AI-generált előnézet iframe nem kap allow-same-origin-t", () => {
-  const src = read("client/src/components/EnhancedMaterialCreator.tsx");
-  const sandboxes = src.match(/sandbox="[^"]*"/g) ?? [];
-  assert.ok(sandboxes.length >= 2, "van előnézeti iframe");
-  for (const s of sandboxes) {
-    assert.ok(!s.includes("allow-same-origin"), `nincs allow-same-origin: ${s}`);
-  }
-});
-
+// Spec 2026-10-18-admin-korszerusites: az EnhancedMaterialCreator (és két statikus tesztje) megszűnt — sehonnan nem volt importálva.
 test("studio publishLesson invalidálja a html-files listacache-t", () => {
   // S4b: a közzététel adattára a régi lépésgépből a pipeline-store.ts-be költözött (változatlan lekérdezésekkel).
   const src = read("server/studio/pipeline-store.ts");
   assert.match(src, /getHtmlFilesCache/);
   assert.match(src, /invalidate\(\)/);
-});
-
-test("EnhancedMaterialCreator publikáláskor küldi a classroomot és a contentType-ot", () => {
-  const src = read("client/src/components/EnhancedMaterialCreator.tsx");
-  assert.match(src, /contentType:\s*["']html["']/);
-  assert.match(src, /classroom,/);
 });
 
 test("WebResearchAgentPanel előnézeti iframe nem kap allow-same-origin-t", () => {
