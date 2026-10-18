@@ -163,3 +163,15 @@ test("a lista a tanuló évfolyamára szűrve nyílik; „Mind” mindent mutat;
   await expect(page.getByTestId("button-filter-all")).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("link-file-r5-a")).toBeVisible();
 });
+
+test("review #293: tárolt évfolyammal, de név nélkül a választó a tárolt évfolyamot mutatja, és az marad meg", async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem("websuli.classroomGrade", "5"); } catch { /* nincs tárhely */ } });
+  await open(page);
+  await expect(page.getByTestId("welcome-ask")).toBeVisible();
+  await expect(page.getByTestId("welcome-grade")).toHaveValue("5");
+  await expect(page.getByTestId("welcome-grade").locator('option[value=""]')).toHaveCount(0);
+  await page.getByTestId("welcome-name").fill("Léna");
+  await page.getByTestId("welcome-save").click();
+  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 3 })).toHaveText("A legújabb tananyagaid (5. osztály)");
+  expect(await page.evaluate(() => localStorage.getItem("websuli.classroomGrade"))).toBe("5");
+});

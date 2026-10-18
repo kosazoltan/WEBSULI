@@ -94,7 +94,8 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
             data-testid="welcome-name"
           />
           <select
-            value={draftGrade}
+            // Review #293: üres draftnál a tárolt évfolyam látszik (a kijelzett és a mentett érték egyezik).
+            value={draftGrade || (grade != null ? String(grade) : "")}
             onChange={(e) => setDraftGrade(e.target.value)}
             aria-label="Évfolyamod"
             className="h-11 rounded-md bg-white/20 backdrop-blur-md border border-white/40 text-white px-2 text-sm [&>option]:text-slate-900"
