@@ -1,5 +1,6 @@
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../../../shared/lesson-experience-score";
 import type { OpenTask } from "../../../shared/lesson-experience";
+import { OPTIONAL_ARRAY_KEYS } from "../bank-schema";
 import { inflectedForms, spellingVariants, staleGeneratedForms, synonymsOf } from "../../../shared/hu-lexicon";
 
 /**
@@ -121,6 +122,13 @@ export function autofixBankPacket(candidate: unknown, _ctx: BankAutofixContext):
     if (!Array.isArray(items)) continue;
     for (const item of items) {
       if (!isObj(item)) continue;
+      // docs/specs/2026-10-18-bank-ures-lista.md: a választható lista üresen = hiányzik (mentett / gyorsítótárból jövő csomagon is).
+      if (bank !== "quiz") for (const key of OPTIONAL_ARRAY_KEYS[bank]) {
+        if (Array.isArray(item[key]) && (item[key] as unknown[]).length === 0) {
+          delete item[key];
+          fixes.push(`${typeof item.id === "string" ? item.id : `${bank}[?]`}: üres ${key} elhagyva (= nincs)`);
+        }
+      }
       if (bank === "quiz") dedupeOptions(item, 3, fixes);
       if (bank === "methods") dedupeOptions(item, 2, fixes);
       if (bank === "tasks") fixTask(item, fixes, _ctx.teachingText);
