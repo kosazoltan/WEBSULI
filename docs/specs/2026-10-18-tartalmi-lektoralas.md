@@ -31,7 +31,7 @@ javítsd őket. Nem kell a kinézetet … tartalmi lektorálást végezz a 2026.
    - helyesírási és nyelvtani hiba.
 
    Kinézet, stílus, átfogalmazás és bővítés nem; a szerkezet változatlan.
-2. **Hibakereső (Haiku 5.5, `effort: low`):**
+2. **Hibakereső (Haiku 5.5, `effort: medium`, a próbakör után emelve):**
    - **Bemenet:**
      - HTML-nél a nyers tartalom a `<style>`, a `<svg>` és a `data:` URI-k nélkül (a megmaradt részek betűhűek, így az idézet a
        forrásban pontosan megtalálható);
@@ -43,7 +43,7 @@ javítsd őket. Nem kell a kinézetet … tartalmi lektorálást végezz a 2026.
    - **Hossz:** ±50%-on belül.
    - **HTML-nél tiltott karakter:** nem vezethet be `" ' \` \\ < >` karaktert, amely a `quote`-ban nem volt (szkriptbe ágyazott szöveg
      épsége).
-4. **Ellenőrző (Opus 5.5, `effort: medium`):**
+4. **Ellenőrző (Opus 5.5, `effort: high`, a próbakör után emelve):**
    - anyagonként egy hívás; a tételek ±300 karakteres környezettel, a cím, a tantárgy és az évfolyam mellett;
    - tételenként `confirm | reject` + indok;
    - csak a `confirm` kerül be.

@@ -25,10 +25,10 @@ Terv: `docs/specs/2026-10-18-tartalmi-lektoralas.md`. Munkakönyvtár: `source/`
   - Olvasás: a kör anyagai (`created_at < 2026-10-01`, `content_type` html vagy lesson, PDF nélkül).
   - Lecke: a legutóbb publikált `lessons` sor.
 - **Anyagonként:**
-  - **Hibakereső:** Haiku 5.5 (`claude-haiku-5-5`, `output_config.effort: "low"`). A rendszerprompt magyar, csak tartalmi
+  - **Hibakereső:** Haiku 5.5 (`claude-haiku-5-5`, `output_config.effort: "medium"`). A rendszerprompt magyar, csak tartalmi
     hibát kér, JSON-t vár. A 100 000 karakternél hosszabb bemenet szeletekben megy.
   - **Szűrés:** `validateFinding`.
-  - **Ellenőrző:** Opus 5.5 (`claude-opus-5-5`, `effort: "medium"`), a tételek környezettel, JSON-ítélet.
+  - **Ellenőrző:** Opus 5.5 (`claude-opus-5-5`, `effort: "high"`), a tételek környezettel, JSON-ítélet. A rendszerprompt kifejezetten elutasíttatja a mutató névmást („…, az 15”) és a szándékos szerkezetek „javítását”.
   - **Alkalmazás**, ha nem `--dry-run` és van megerősített tétel:
     - **HTML:** a `pg` tranzakció: `SELECT … FOR UPDATE`, hash-egyezés, `INSERT material_improvement_backups`
       (`backup_data`: id, title, content, description, classroom, content_type, display_order, user_id, created_at;
@@ -40,6 +40,11 @@ Terv: `docs/specs/2026-10-18-tartalmi-lektoralas.md`. Munkakönyvtár: `source/`
     újraindításkor kimaradnak.
   - **Költség:** halmozódik; ha eléri a `--budget`-et, a futás megáll.
 - **Az admin azonosítója:** az első `is_admin` felhasználó `first_name = 'Kósa'` szerint (az e-mail nem kerül kiírásra).
+
+## 2a. Próbakör-tanulság (2026-10-18, írás nélküli 5 anyag)
+- **Költség:** 0,057 USD (kb. 0,011 USD/anyag), a teljes kör becslése kb. 2–3 USD.
+- **Téves megerősítés:** 2 db, az „az” mutató névmás névelőnek nézve.
+- **Változtatás:** a hibakereső `effort: "medium"`, az ellenőrző `effort: "high"`, és tételes névmás-szabály. A keret ezt bőven elbírja.
 
 ## 3. Futtatás
 1. `--limit 5 --dry-run`: minőség- és költségmérés. A találatok kézi átnézése.
