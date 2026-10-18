@@ -29,6 +29,18 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1366, height: 768 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, "nincs vízszintes túlcsordulás").toBeLessThanOrEqual(0);
 
+    // A csoportfeliratok is AA-kontrasztosak (a studio-ui.spec mérése 70%-os átlátszóságnál 4,19-et talált).
+    for (const id of ["materials", "authoring", "communication", "system"]) {
+      const label = page.getByTestId(`admin-tab-group-${id}`).locator("span").first();
+      const { fg, bgc } = await label.evaluate(el => {
+        let n: Element | null = el; let bgc = "rgba(0, 0, 0, 0)";
+        while (n && /rgba\(0, 0, 0, 0\)|transparent/.test(bgc)) { bgc = getComputedStyle(n).backgroundColor; n = n.parentElement; }
+        return { fg: getComputedStyle(el).color, bgc };
+      });
+      const [a, b] = [luminance(fg), luminance(bgc)].sort((x, y) => y - x);
+      expect((a + 0.05) / (b + 0.05), `${id} felirat kontrasztja ${fg} / ${bgc}`).toBeGreaterThanOrEqual(4.5);
+    }
+
     const search = page.getByTestId("probe-admin-search");
     await search.fill("fehérl");
     const { color, bg } = await search.evaluate(el => { const s = getComputedStyle(el); return { color: s.color, bg: s.backgroundColor }; });
