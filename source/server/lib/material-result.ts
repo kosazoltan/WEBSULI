@@ -154,51 +154,85 @@ export async function deliverToRecipients(opts: {
  * Szerveres összevárás (docs/specs/2026-10-18-regi-anyag-eredmeny-azonnal.md): a régi anyag minden új eredményállapotot azonnal
  * beküld (különben a keret eltávolításakor elveszne), a levél viszont kulcsonként (anyag + kliens) csak egyszer megy, a legutolsó
  * állapottal — `quietMs` nyugalom után, folyamatos tevékenységnél legkésőbb `maxWaitMs`-mal az első beküldés után.
+ * Review #300: a sikertelen kézbesítés (`deliver` → false vagy kivétel) korlátozottan újrapróbál, de a közben érkezett frissebb
+ * állapotot nem írja felül; a sikeres közvetlen küldés után a kulcs `suppressMs`-ig letiltva marad (a később beérkező automatikus
+ * beküldés sem küld második levelet); a leállítás a folyamatban lévő kézbesítéseket is megvárja.
  */
 export class ResultCoalescer<T> {
-  private readonly pending = new Map<string, { payload: T; first: number; timer: unknown }>();
+  private readonly pending = new Map<string, { payload: T; first: number; timer: unknown; attempts: number }>();
+  private readonly suppressed = new Map<string, number>();
+  private readonly inFlight = new Set<Promise<void>>();
 
   constructor(private readonly opts: {
-    deliver: (payload: T) => Promise<unknown>;
+    deliver: (payload: T) => Promise<boolean>;
     quietMs?: number;
     maxWaitMs?: number;
+    retryMs?: number;
+    maxAttempts?: number;
+    suppressMs?: number;
     now?: () => number;
     setTimer?: (run: () => void, ms: number) => unknown;
     clearTimer?: (timer: unknown) => void;
   }) {}
 
-  submit(key: string, payload: T): void {
-    const now = (this.opts.now ?? Date.now)();
+  private now(): number { return (this.opts.now ?? Date.now)(); }
+  private clear(timer: unknown): void { (this.opts.clearTimer ?? ((t: unknown) => clearTimeout(t as NodeJS.Timeout)))(timer); }
+  private schedule(run: () => void, ms: number): unknown {
+    return (this.opts.setTimer ?? ((r: () => void, d: number) => { const t = setTimeout(r, d); t.unref?.(); return t; }))(run, ms);
+  }
+
+  /** false: a kulcs letiltva (a tanuló közvetlenül már elküldte), a beküldés nem kerül sorba. */
+  submit(key: string, payload: T): boolean {
+    const now = this.now();
+    const until = this.suppressed.get(key);
+    if (until !== undefined && until > now) return false;
+    if (until !== undefined) this.suppressed.delete(key);
     const quiet = this.opts.quietMs ?? 30_000;
     const maxWait = this.opts.maxWaitMs ?? 180_000;
     const prev = this.pending.get(key);
-    if (prev) (this.opts.clearTimer ?? ((t: unknown) => clearTimeout(t as NodeJS.Timeout)))(prev.timer);
+    if (prev) this.clear(prev.timer);
     const first = prev?.first ?? now;
     const delay = Math.max(0, Math.min(quiet, first + maxWait - now));
-    const timer = (this.opts.setTimer ?? ((run: () => void, ms: number) => { const t = setTimeout(run, ms); t.unref?.(); return t; }))(() => { void this.fire(key); }, delay);
-    this.pending.set(key, { payload, first, timer });
+    const timer = this.schedule(() => { void this.fire(key); }, delay);
+    this.pending.set(key, { payload, first, timer, attempts: 0 });
+    return true;
   }
 
   get size(): number { return this.pending.size; }
 
-  /** A sikeres közvetlen (mailto) küldés után az ugyanahhoz a kulcshoz összevárt automatikus levél nem megy ki. */
-  cancel(key: string): boolean {
+  /** A sikeres közvetlen (mailto) küldés után: a függő automatikus levél törlődik, és a kulcs `suppressMs`-ig letiltva marad. */
+  suppress(key: string): void {
     const entry = this.pending.get(key);
-    if (!entry) return false;
-    (this.opts.clearTimer ?? ((t: unknown) => clearTimeout(t as NodeJS.Timeout)))(entry.timer);
-    return this.pending.delete(key);
+    if (entry) { this.clear(entry.timer); this.pending.delete(key); }
+    this.suppressed.set(key, this.now() + (this.opts.suppressMs ?? 10 * 60_000));
+    if (this.suppressed.size > 5000) {
+      const now = this.now();
+      for (const [k, until] of this.suppressed) if (until <= now) this.suppressed.delete(k);
+    }
   }
 
-  /** Minden függő levél azonnal (leállításkor). */
+  /** Minden függő levél azonnal, és a már folyamatban lévők megvárása (leállításkor). */
   async flushAll(): Promise<void> {
-    await Promise.all([...this.pending.keys()].map((key) => this.fire(key)));
+    const fired = [...this.pending.keys()].map((key) => this.fire(key, true));
+    await Promise.all([...fired, ...this.inFlight]);
   }
 
-  private async fire(key: string): Promise<void> {
+  private fire(key: string, final = false): Promise<void> {
     const entry = this.pending.get(key);
-    if (!entry) return;
-    (this.opts.clearTimer ?? ((t: unknown) => clearTimeout(t as NodeJS.Timeout)))(entry.timer);
+    if (!entry) return Promise.resolve();
+    this.clear(entry.timer);
     this.pending.delete(key);
-    await this.opts.deliver(entry.payload);
+    const run = (async () => {
+      const ok = await this.opts.deliver(entry.payload).catch(() => false);
+      // sikertelen kézbesítés: korlátozott újrapróba, ha közben nem jött frissebb állapot és a kulcs nem lett letiltva
+      if (ok || final || this.pending.has(key) || entry.attempts + 1 >= (this.opts.maxAttempts ?? 3)) return;
+      const until = this.suppressed.get(key);
+      if (until !== undefined && until > this.now()) return;
+      const timer = this.schedule(() => { void this.fire(key); }, this.opts.retryMs ?? 60_000);
+      this.pending.set(key, { ...entry, timer, attempts: entry.attempts + 1 });
+    })();
+    this.inFlight.add(run);
+    void run.finally(() => this.inFlight.delete(run));
+    return run;
   }
 }

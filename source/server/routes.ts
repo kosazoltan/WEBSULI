@@ -29,7 +29,7 @@ import { triggerEventBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, type MaterialResultPayload } from "./lib/material-result";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
@@ -928,25 +928,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   };
   const materialResultCoalescer = new ResultCoalescer<QueuedMaterialResult>({
+    // Review #300: false → a coalescer korlátozottan újrapróbál (a frissebb állapotot nem írja felül).
     deliver: async (q) => {
       try {
         const outcome = await deliverMaterialResult(q);
-        if (!outcome.duplicate && outcome.delivered === 0) logger.warn('[MATERIAL-RESULT] az összevárt eredményt nem sikerült elküldeni');
+        if (!outcome.duplicate && outcome.delivered === 0) { logger.warn('[MATERIAL-RESULT] az összevárt eredményt nem sikerült elküldeni (újrapróba)'); return false; }
+        return true;
       } catch (e: unknown) {
         logger.error('[MATERIAL-RESULT] összevárt küldés hiba:', e instanceof Error ? e.message : String(e));
+        return false;
       }
     },
   });
   // Deploy / leállítás: a függő (még összevárt) eredmények azonnal kimennek (index.ts gracefulShutdown, az adatbázis lezárása előtt).
   flushQueuedMaterialResults = () => materialResultCoalescer.flushAll();
-  const materialResultLimiter = rateLimit({
+  // Review #300: az azonnali beküldés miatt a keret kliensenkénti (oldalbetöltés), egy iskolai NAT mögötti osztály így nem fogy ki;
+  // a kliensazonosító a kliensé, ezért mellette egy tágabb IP-szintű keret véd a visszaélés ellen.
+  const materialResultClientLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 60,
+    keyGenerator: (req) => {
+      const clientId = (req.body as { clientId?: unknown } | undefined)?.clientId;
+      return typeof clientId === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(clientId) ? `c:${clientId}` : `ip:${ipKeyGenerator(req.ip ?? '')}`;
+    },
     message: { message: "Túl sok eredményküldés. Próbáld újra később!" },
     standardHeaders: true,
     legacyHeaders: false,
   });
-  app.post('/api/material-result', materialResultLimiter, async (req, res) => {
+  const materialResultIpLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 900,
+    message: { message: "Túl sok eredményküldés. Próbáld újra később!" },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.post('/api/material-result', materialResultIpLimiter, materialResultClientLimiter, async (req, res) => {
     try {
       const validated = normalizeMaterialResult(req.body);
       if (!validated.ok) {
@@ -966,8 +982,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: az automatikus beolvasás minden új állapotot azonnal küld; a levél
       // kulcsonként (anyag + kliens) összevárva megy, a legutolsó állapottal.
       if (value.auto) {
-        materialResultCoalescer.submit(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`, { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients });
-        return res.status(202).json({ success: true, queued: true });
+        const queued = materialResultCoalescer.submit(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`, { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients });
+        return res.status(202).json({ success: true, queued });
       }
       const outcome = await deliverMaterialResult({ value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients });
       if (outcome.duplicate) {
@@ -976,8 +992,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (outcome.delivered === 0) {
         return res.status(502).json({ message: "Az eredményt nem sikerült elküldeni." });
       }
-      // a tanuló maga küldte el (mailto) → az ugyanazon oldalbetöltés összevárt automatikus levele nem megy ki
-      materialResultCoalescer.cancel(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`);
+      // a tanuló maga küldte el (mailto) → az ugyanazon oldalbetöltés automatikus levele nem megy ki: a függő törlődik, és a
+      // később beérkező automatikus beküldés sem kerül sorba (review #300)
+      materialResultCoalescer.suppress(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`);
       res.json({ success: true, delivered: outcome.delivered });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));

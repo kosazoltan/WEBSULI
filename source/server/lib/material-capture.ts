@@ -72,7 +72,7 @@ export const MATERIAL_CAPTURE_SCRIPT = `
       if (window.__websuliCapture) { return; }
       window.__websuliCapture = true;
       var materialId = (window.location.pathname.match(/\\/dev\\/([A-Za-z0-9_-]+)/) || [])[1] || '';
-      var sent = {};
+      var sent = {}, lastAuto = '';
       var autoCount = 0;
       var MAX_AUTO = 30;
 
@@ -105,10 +105,11 @@ export const MATERIAL_CAPTURE_SCRIPT = `
       function post(subject, body, auto) {
         if (!materialId || typeof fetch !== 'function') { return Promise.resolve(false); }
         var key = hash(subject + '\\n' + body);
-        if (sent[key]) { return Promise.resolve(true); }
-        if (auto) { if (autoCount >= MAX_AUTO) { return Promise.resolve(false); } autoCount++; }
-        sent[key] = true;
-        function failed() { delete sent[key]; if (auto) { autoCount--; } return false; }
+        // Review #300: az automatikus beküldés csak az egymás után azonos állapotot szűri (80% → 90% → 80%: a végső 80% is megy,
+        // a szerver a legutolsót küldi); a közvetlen küldés továbbra is oldalbetöltésenként egyszer.
+        if (auto ? lastAuto === key : sent[key]) { return Promise.resolve(true); }
+        if (auto) { if (autoCount >= MAX_AUTO) { return Promise.resolve(false); } autoCount++; lastAuto = key; } else { sent[key] = true; }
+        function failed() { if (auto) { autoCount--; if (lastAuto === key) { lastAuto = ''; } } else { delete sent[key]; } return false; }
         return fetch('/api/material-result', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -317,7 +318,12 @@ export const MATERIAL_CAPTURE_SCRIPT = `
         return EVAL_CLICK.test((el.value || el.textContent || '') + ' ' + (el.getAttribute('onclick') || '') + ' ' + (el.id || ''));
       }
       document.addEventListener('click', function (ev) {
-        pendingEval = pendingEval || isEvalClick(ev.target);
+        var evalClick = isEvalClick(ev.target);
+        pendingEval = pendingEval || evalClick;
+        // Review #300: a kiértékelő kattintás után a beolvasás a tananyag saját (szinkron) kezelője után AZONNAL is lefut — a gyors
+        // visszalépés (a keret eltávolítása) az 1,5 mp-es beolvasást már nem várná meg. A késleltetett beolvasás a lassabb
+        // (aszinkron) kiértékelőkért marad; azonos állapotot nem küld újra.
+        if (evalClick) { setTimeout(function () { try { scan('eval'); } catch (e) { /* lásd fent */ } }, 0); }
         if (timer) { clearTimeout(timer); }
         timer = setTimeout(function () {
           var mode = pendingEval ? 'eval' : 'other';

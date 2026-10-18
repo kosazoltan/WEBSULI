@@ -139,17 +139,28 @@ test("feladatonkénti ellenőrzés: minden új állapot azonnal megy (a szerver 
   expect(posts[3].body).toContain("Megoldott feladatok: 5 / 3");
 });
 
-// A tulajdonosi jelzés (2026-10-18 17:29) esete: a kiértékelés után a tanuló azonnal visszalép a listára, a keret eltűnik —
-// a beküldésnek ekkorra már el kell indulnia (pagehide / unload a kerettörléskor nem fut).
-test("kiértékelés után azonnali kerettörlés: az eredmény a keret eltűnése előtt már a szerverhez indult", async ({ page }) => {
-  const { posts } = await open(page, "regi-visszalepes", EVAL_MATERIAL);
-  await page.click("#eval");
-  await page.clock.runFor(1600);
-  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
-  expect(posts[0].body).toContain("80% (Jó)");
-  await page.evaluate(() => document.documentElement.remove());
-  await page.clock.runFor(60_000);
+// A tulajdonosi jelzés (2026-10-18 17:29) esete: a kiértékelés után a tanuló azonnal visszalép a listára, a szülőoldal eltávolítja
+// a keretet — se pagehide, se unload nem fut. Review #300: valódi szülőoldal + iframe, a törlés az 1,5 mp-es beolvasáson belül.
+test("kiértékelés után azonnal a szülőoldal eltávolítja a keretet: az eredmény ekkorra már elindult, és megérkezik", async ({ page }) => {
+  const posts: Post[] = [];
+  await page.route("http://lista.test/", route => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8",
+    body: '<!DOCTYPE html><html><body><h1>Tananyagok</h1><iframe id="f" src="http://websuli.test/dev/regi-visszalepes" style="width:100%;height:600px"></iframe></body></html>' }));
+  await page.route("http://websuli.test/dev/regi-visszalepes", route => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: serve(EVAL_MATERIAL) }));
+  await page.route("http://websuli.test/api/material-result", route => { posts.push(JSON.parse(route.request().postData() ?? "{}")); return route.fulfill({ status: 202, contentType: "application/json", body: '{"success":true,"queued":true}' }); });
+  // valós idő (nem virtuális óra): az eltávolított keret időzítőit a virtuális óra tovább futtatná, a valódi böngésző nem
+  await page.goto("http://lista.test/"); // más eredet, mint az anyag (élesben websuli.vip ↔ onrender.com): a keret külön folyamatban fut
+  const frame = page.frameLocator("#f");
+  await expect(frame.locator("#eval")).toBeVisible();
+  await page.waitForTimeout(800); // az alapállapot rögzítése (load + 500 ms)
+  await frame.locator("#eval").click();
+  // A döntő tulajdonság: a kérés 1 mp-en belül elindul — élesben a keret külön folyamatban fut (websuli.vip ↔ onrender.com),
+  // eltávolításakor az időzítői megszűnnek, így a későbbi (1,5 mp-es vagy 30 mp-es) beolvasás már nem futna le.
+  await expect.poll(() => posts.length, { timeout: 1000, intervals: [50] }).toBe(1);
+  await page.evaluate(() => document.getElementById("f")!.remove()); // a tanuló azonnal visszalép
+  await page.waitForTimeout(2000);
   expect(posts.length).toBe(1);
+  expect(posts[0]).toMatchObject({ auto: true });
+  expect(posts[0].body).toContain("80% (Jó)");
 });
 
 const MAILTO_AND_RESULT = `<!DOCTYPE html><html><head><title>Vegyes régi anyag</title></head><body>
@@ -211,4 +222,15 @@ test("review #281: utolsó állapot eredményhelyenként, válasz-pillanatkép, 
   await expect.poll(() => posts.length, { timeout: 5000 }).toBe(4);
   expect(posts[3].body).toContain("Eredmény: 80% (Jó)");
   expect(posts[3].body).toContain("→ Később átírt válasz");
+});
+
+test("review #300: változatlan válaszokkal 80% → 90% → 80%: a végső 80% is elmegy (csak az egymás után azonos állapot szűrődik)", async ({ page }) => {
+  const { posts } = await open(page, "regi-visszavalto-2", FLIP_MATERIAL);
+  await page.fill("#t1", "Ugyanaz a válasz");
+  for (const id of ["#e80", "#e90", "#e80"]) { await page.click(id); await page.clock.runFor(1600); }
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(3);
+  expect(posts.map(p => /Eredmény: (\d+)%/.exec(p.body)?.[1])).toEqual(["80", "90", "80"]);
+  await page.click("#e80"); // ugyanaz az állapot még egyszer → nem megy
+  await page.clock.runFor(1600);
+  expect(posts.length).toBe(3);
 });

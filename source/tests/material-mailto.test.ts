@@ -154,7 +154,7 @@ function fakeClock() {
       for (;;) {
         const next = [...timers.entries()].filter(([, v]) => v.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
         if (!next) break;
-        now = next[1].at; timers.delete(next[0]); next[1].run(); await Promise.resolve();
+        now = next[1].at; timers.delete(next[0]); next[1].run(); await new Promise(r => setImmediate(r));
       }
       now = end;
     },
@@ -163,7 +163,7 @@ function fakeClock() {
 
 test("összevárás: 30 mp-en belüli beküldésekből egy levél a legutolsó állapottal; külön kulcs külön levél", async () => {
   const clock = fakeClock(); const sent: string[] = [];
-  const c = new ResultCoalescer<string>({ deliver: async p => { sent.push(p); }, ...clock });
+  const c = new ResultCoalescer<string>({ deliver: async p => { sent.push(p); return true; }, ...clock });
   c.submit("anyag|kliensA", "1 / 3"); await clock.advance(10_000);
   c.submit("anyag|kliensA", "2 / 3"); await clock.advance(10_000);
   c.submit("anyag|kliensA", "3 / 3");
@@ -177,7 +177,7 @@ test("összevárás: 30 mp-en belüli beküldésekből egy levél a legutolsó �
 
 test("összevárás: folyamatos tevékenységnél legkésőbb 3 perccel az első beküldés után megy; leállításkor azonnal", async () => {
   const clock = fakeClock(); const sent: string[] = [];
-  const c = new ResultCoalescer<string>({ deliver: async p => { sent.push(p); }, ...clock });
+  const c = new ResultCoalescer<string>({ deliver: async p => { sent.push(p); return true; }, ...clock });
   for (let i = 1; i <= 9; i++) { c.submit("k", `állapot ${i}`); await clock.advance(20_000); }
   assert.deepEqual(sent, ["állapot 9"]); // 9 × 20 mp = 180 mp: a felső korlát lejárt
   c.submit("k", "új sorozat");
@@ -187,13 +187,54 @@ test("összevárás: folyamatos tevékenységnél legkésőbb 3 perccel az első
   assert.equal(sent.length, 2, "a leállításkor elküldött nem megy újra");
 });
 
-test("összevárás: a sikeres közvetlen (mailto) küldés törli ugyanazon kulcs összevárt automatikus levelét", async () => {
+test("review #300: a sikeres közvetlen (mailto) küldés letiltja a kulcsot — a függő és a később beérkező automatikus levél sem megy", async () => {
   const clock = fakeClock(); const sent: string[] = [];
-  const c = new ResultCoalescer<string>({ deliver: async p => { sent.push(p); }, ...clock });
+  const c = new ResultCoalescer<string>({ deliver: async p => { sent.push(p); return true; }, ...clock });
   c.submit("anyag|kliensA", "automatikus 70%");
   c.submit("anyag|kliensB", "másik tanuló 80%");
-  assert.equal(c.cancel("anyag|kliensA"), true);
-  assert.equal(c.cancel("anyag|kliensA"), false);
+  c.suppress("anyag|kliensA");
+  assert.equal(c.submit("anyag|kliensA", "későn beérkező automatikus 70%"), false);
   await clock.advance(31_000);
   assert.deepEqual(sent, ["másik tanuló 80%"]);
+  await clock.advance(10 * 60_000);
+  assert.equal(c.submit("anyag|kliensA", "új oldalbetöltés"), true, "a letiltás lejár");
+});
+
+test("review #300: teljes kézbesítési hiba (false vagy kivétel) → korlátozott újrapróba; a frissebb állapotot nem írja felül", async () => {
+  const clock = fakeClock(); const tries: string[] = []; let failUntil = 2;
+  const c = new ResultCoalescer<string>({ deliver: async p => { tries.push(p); if (tries.length <= failUntil) { if (tries.length === 2) throw new Error("Resend 503"); return false; } return true; }, ...clock });
+  c.submit("k", "80%");
+  await clock.advance(30_000); // 1. próba: false
+  await clock.advance(60_000); // 2. próba: kivétel
+  await clock.advance(60_000); // 3. próba: siker
+  assert.deepEqual(tries, ["80%", "80%", "80%"]);
+  await clock.advance(10 * 60_000);
+  assert.equal(tries.length, 3);
+
+  tries.length = 0; failUntil = 1;
+  c.submit("k2", "régi 70%");
+  await clock.advance(30_000); // false → újrapróba ütemezve
+  c.submit("k2", "friss 90%"); // a közben érkezett frissebb állapot nyer
+  await clock.advance(30_000);
+  assert.deepEqual(tries, ["régi 70%", "friss 90%"]);
+  await clock.advance(5 * 60_000);
+  assert.equal(tries.length, 2, "a régi állapot nem megy újra");
+
+  tries.length = 0; failUntil = 99;
+  c.submit("k3", "mindig hibás");
+  await clock.advance(10 * 60_000);
+  assert.equal(tries.length, 3, "legfeljebb 3 próba");
+});
+
+test("review #300: a leállítás a folyamatban lévő kézbesítést is megvárja", async () => {
+  const clock = fakeClock(); let release: () => void = () => {}; let done = false;
+  const c = new ResultCoalescer<string>({ deliver: () => new Promise<boolean>(r => { release = () => { done = true; r(true); }; }), ...clock });
+  c.submit("k", "90%");
+  await clock.advance(30_000); // a kézbesítés elindult, még fut
+  let flushed = false;
+  const f = c.flushAll().then(() => { flushed = true; });
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(flushed, false);
+  release(); await f;
+  assert.equal(done && flushed, true);
 });
