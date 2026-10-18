@@ -5,7 +5,7 @@ export type Category = typeof CATEGORIES[number];
 export type Finding = { field?: string; quote: string; replacement: string; category: Category; reason: string };
 export type Usage = { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null };
 
-const MARK = "⁣";
+const MARK = "\u2063";
 
 /** Style, SVG and data: URIs carry no reviewable text; the rest stays byte-identical so every quote is findable in the original. */
 export function stripForReview(html: string): string {
@@ -33,21 +33,43 @@ export function chunkText(text: string, max: number): string[] {
 const SKIP_KEYS = new Set(["id", "kind", "mode", "intent", "theme", "world", "art", "src", "url", "mapId", "subject", "sourceOnly",
   "required", "bonus", "typedAnswers", "requiredDistinct", "coversConceptIds", "conceptIds", "conceptId", "icon", "color", "layout", "variant", "form", "unit", "value", "part"]);
 
-/** Reviewable string leaves of a structured lesson as `{ id: JSON path, text }`. */
+// Slugs / snake-case keys, colours and URLs are technical values; plain words, numbers and short options are learner content.
+const IDENTIFIER = /^(?:[a-z0-9]+(?:[_-][a-z0-9]+)+|#[0-9a-f]{3,8}|https?:\/\/\S+)$/i;
+
+/** Reviewable leaves of a structured lesson as `{ id: JSON path, text }`: every learner-facing string (short ones too) and the
+ *  numeric single-choice key (`correctIndex`, as its digits) so a wrong key is reviewable (review #299). */
 export function lessonTextFields(json: unknown): Array<{ id: string; text: string }> {
   const out: Array<{ id: string; text: string }> = [];
-  const walk = (node: unknown, path: string) => {
+  const walk = (node: unknown, path: string, key: string) => {
     if (typeof node === "string") {
-      if (node.length >= 3 && /\s/.test(node.trim())) out.push({ id: path, text: node });
+      if (node.trim() && !IDENTIFIER.test(node.trim())) out.push({ id: path, text: node });
       return;
     }
-    if (Array.isArray(node)) { node.forEach((v, i) => walk(v, `${path}.${i}`)); return; }
+    if (typeof node === "number") { if (key === "correctIndex") out.push({ id: path, text: String(node) }); return; }
+    if (Array.isArray(node)) { node.forEach((v, i) => walk(v, `${path}.${i}`, key)); return; }
     if (node && typeof node === "object") {
-      for (const [k, v] of Object.entries(node)) if (!SKIP_KEYS.has(k)) walk(v, path ? `${path}.${k}` : k);
+      for (const [k, v] of Object.entries(node)) if (!SKIP_KEYS.has(k)) walk(v, path ? `${path}.${k}` : k, k);
     }
   };
-  walk(json, "");
+  walk(json, "", "");
   return out;
+}
+
+/** One review line per field; line breaks become a visible mark so quotes spanning them stay verbatim (review #299). */
+export const NEWLINE_MARK = "\u23CE";
+export const toReviewLine = (text: string) => text.replace(/\n/g, NEWLINE_MARK);
+export const fromReviewLine = (text: string) => text.split(NEWLINE_MARK).join("\n");
+
+/** The nearest enclosing item (quiz question, task, method…) of a lesson field, for the verifier. */
+export function lessonParentContext(json: unknown, path: string, max = 2000): string {
+  const keys = path.split(".").filter(Boolean);
+  const chain: unknown[] = [json];
+  for (const k of keys) { const last = chain[chain.length - 1] as Record<string, unknown> | undefined; chain.push(last && typeof last === "object" ? last[k] : undefined); }
+  for (let i = chain.length - 2; i >= 0; i--) {
+    const node = chain[i] as Record<string, unknown> | undefined;
+    if (node && typeof node === "object" && !Array.isArray(node) && ("options" in node || "q" in node || "question" in node || "prompt" in node)) return JSON.stringify(node).slice(0, max);
+  }
+  return JSON.stringify(chain[chain.length - 2] ?? null).slice(0, max);
 }
 
 export function countOccurrences(haystack: string, needle: string): number {
@@ -57,8 +79,11 @@ export function countOccurrences(haystack: string, needle: string): number {
   return n;
 }
 
-const SCRIPT_UNSAFE = ["\"", "'", "`", "\\", "<", ">"];
-const stripAccents = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+/** The structural skeleton of an HTML/JS snippet: every quote, backslash and angle bracket in order, plus every tag verbatim. */
+export function structureOf(s: string): string {
+  return (s.match(/["'`\\<>]/g) ?? []).join("") + "|" + (s.match(/<[^>]*>/g) ?? []).join("");
+}
+const stripAccents = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 /** Whether `index` lies inside a <script> element of `html`. */
 export function insideScript(html: string, index: number): boolean {
@@ -74,12 +99,16 @@ export function validateFinding(f: Finding, target: string, kind: "html" | "less
   if (!(CATEGORIES as readonly string[]).includes(f.category)) return { ok: false, reason: "nem tartalmi kategória" };
   if (!f.quote.trim() || f.quote.length > 300) return { ok: false, reason: "üres vagy túl hosszú idézet" };
   if (f.quote === f.replacement) return { ok: false, reason: "nincs változás" };
+  if (kind === "lesson" && f.field?.endsWith(".correctIndex")) {
+    return /^\d$/.test(f.replacement) && target === f.quote ? { ok: true } : { ok: false, reason: "érvénytelen helyes-index csere" };
+  }
   const ratio = f.replacement.length / f.quote.length;
   if (ratio < 0.5 || ratio > 1.5) return { ok: false, reason: "aránytalan hosszváltozás" };
   const n = countOccurrences(target, f.quote);
   if (n !== 1) return { ok: false, reason: n === 0 ? "az idézet nem található" : "az idézet többször szerepel" };
   if (kind === "html") {
-    for (const ch of SCRIPT_UNSAFE) if (f.replacement.includes(ch) && !f.quote.includes(ch)) return { ok: false, reason: `új ${ch} karakter` };
+    // Review #299: presence of a character kind is not enough — the skeleton (quotes, escapes, tags) must be identical.
+    if (structureOf(f.quote) !== structureOf(f.replacement)) return { ok: false, reason: "a szerkezet (idézőjel, escape, tag) változna" };
     // Script data keeps ASCII-only variants on purpose (answer matching); an accent-only change there is not an error.
     if (insideScript(target, target.indexOf(f.quote)) && stripAccents(f.quote) === stripAccents(f.replacement)) return { ok: false, reason: "csak ékezet a szkriptben" };
   }
@@ -109,6 +138,11 @@ export function applyLessonPatches<T>(json: T, patches: Finding[]): { json: T; a
     let node = copy as Record<string, unknown> | undefined;
     for (const k of keys) node = node && typeof node === "object" ? node[k] as Record<string, unknown> : undefined;
     const value = node && last !== undefined ? node[last] : undefined;
+    if (typeof value === "number" && last === "correctIndex") {
+      const next = Number(p.replacement); const options = node!.options;
+      if (String(value) !== p.quote || !/^\d$/.test(p.replacement) || !Array.isArray(options) || next >= options.length) { dropped.push(p); continue; }
+      node![last] = next; applied.push(p); continue;
+    }
     if (typeof value !== "string" || countOccurrences(value, p.quote) !== 1) { dropped.push(p); continue; }
     node![last!] = value.replace(p.quote, () => p.replacement);
     applied.push(p);
@@ -141,4 +175,22 @@ export function contextOf(text: string, quote: string, radius = 300): string {
   const at = text.indexOf(quote);
   if (at === -1) return quote;
   return text.slice(Math.max(0, at - radius), at) + "⟦" + quote + "⟧" + text.slice(at + quote.length, at + quote.length + radius);
+}
+
+/** Script blocks that compiled before but not after a patch (inline JS compiled only, never run; JSON blocks parsed). */
+export async function brokenScripts(before: string, after: string): Promise<number[]> {
+  const { Script } = await import("node:vm");
+  const blocks = (html: string) => [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].map(m => ({ attrs: m[1], code: m[2] }));
+  const ok = (b: { attrs: string; code: string }) => {
+    if (/\bsrc=/i.test(b.attrs)) return true;
+    try {
+      if (/json/i.test(b.attrs)) JSON.parse(b.code);
+      else if (/type=["']?module/i.test(b.attrs)) return true;
+      else new Script(b.code);
+      return true;
+    } catch { return false; }
+  };
+  const a = blocks(before); const b = blocks(after);
+  if (a.length !== b.length) return [-1];
+  return b.flatMap((blk, i) => ok(a[i]) && !ok(blk) ? [i] : []);
 }

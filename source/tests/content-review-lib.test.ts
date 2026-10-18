@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyHtmlPatches, applyLessonPatches, chunkText, contextOf, costUsd, lessonTextFields, parseJsonReply, stripForReview, validateFinding, type Finding } from "../scripts/content-review/lib";
+import { applyHtmlPatches, applyLessonPatches, brokenScripts, chunkText, contextOf, costUsd, fromReviewLine, lessonParentContext, lessonTextFields, parseJsonReply, stripForReview, toReviewLine, validateFinding, type Finding } from "../scripts/content-review/lib";
 
 // docs/specs/2026-10-18-tartalmi-lektoralas.md
 const f = (quote: string, replacement: string, extra: Partial<Finding> = {}): Finding => ({ quote, replacement, category: "spelling", reason: "r", ...extra });
@@ -39,7 +39,7 @@ test("validateFinding: egyszeri pontos előfordulás, valódi és arányos vált
 test("validateFinding HTML-ben: nem vezethet be idézőjelet vagy csúcsos zárójelet; a szkriptbeli puszta ékezetcsere nem hiba", () => {
   const html = `<p>A viz forrpontja 100 fok.</p><script>var T=[{required:[["viz forr"]]}];</script>`;
   assert.equal(validateFinding(f("A viz forrpontja", "A víz forrpontja"), html, "html").ok, true);
-  assert.equal(validateFinding(f("forrpontja 100", "forrpontja \"100"), html, "html").reason, "új \" karakter");
+  assert.equal(validateFinding(f("forrpontja 100", "forrpontja \"100"), html, "html").reason, "a szerkezet (idézőjel, escape, tag) változna");
   assert.equal(validateFinding(f("100 fok.", "<b>100</b> fok."), html, "html").ok, false);
   assert.equal(validateFinding(f("[\"viz forr\"]", "[\"víz forr\"]"), html, "html").reason, "csak ékezet a szkriptben");
 });
@@ -73,4 +73,41 @@ test("parseJsonReply és contextOf", () => {
   assert.deepEqual(parseJsonReply<{ a: number }>("Íme:\n```json\n{\"a\":1}\n```"), { a: 1 });
   assert.deepEqual(parseJsonReply<{ a: number }>("{\"a\":2}"), { a: 2 });
   assert.equal(contextOf("abcXYZdef", "XYZ", 2), "bc⟦XYZ⟧de");
+});
+
+// Review #299 (Copilot): a karakterfajta jelenléte nem véd — a meglévő idézőjel mellé újabb kerülhet, vagy egy escape eltűnhet.
+test("review #299: szerkezetváltoztató HTML/JS-csere elutasítva (idézőjel, escape, tag), a szöveges csere átmegy", () => {
+  const html = `<script>var Q={"q":"A víz forráspontja 90 Celsius-fok.","s":"Azt mondta: \\"jó\\" válasz"};</script><p>Ez nevezik <b>fog</b> részének.</p>`;
+  assert.equal(validateFinding(f("A víz forráspontja 90 Celsius-fok.", "A víz forráspontja \"100\" Celsius-fok."), html, "html").ok, false);
+  assert.equal(validateFinding(f("Azt mondta: \\\"jó\\\" válasz", "Azt mondta: \"jó\" válasz"), html, "html").ok, false);
+  assert.equal(validateFinding(f("<p>Ez nevezik <b>fog</b>", "<p>Ezt nevezik <i>fog</i>"), html, "html").ok, false);
+  assert.equal(validateFinding(f("<p>Ez nevezik <b>fog</b>", "<p>Ezt nevezik <b>fog</b>"), html, "html").ok, true);
+  assert.equal(validateFinding(f("forráspontja 90 Celsius-fok.", "forráspontja 100 Celsius-fok."), html, "html").ok, true);
+});
+
+test("review #299: a fordulni nem tudó szkriptblokk kimutatható (csak fordítás, futtatás nélkül)", async () => {
+  const before = `<p>x</p><script>var a = "egy";</script><script type="application/json">{"a":1}</script>`;
+  assert.deepEqual(await brokenScripts(before, before.replace('"egy"', '"egy" "ketto"')), [0]);
+  assert.deepEqual(await brokenScripts(before, before.replace('{"a":1}', '{"a":1')), [1]);
+  assert.deepEqual(await brokenScripts(before, before.replace("egy", "kettő")), []);
+});
+
+test("review #299: lecke — rövid mezők, sortörés-jel oda-vissza, helyes-index csere tartományellenőrzéssel, teljes szülőtétel", () => {
+  const json = { title: "Fotoszintezis", sections: [{ blocks: [{ text: "A Duna Európa\nmásodik leghoszabb folyója." }] }],
+    experience: { quiz: [{ question: "Mennyi 2 + 2?", options: ["3", "4", "5"], correctIndex: 0, feedbackPerOption: ["Nem.", "Igen.", "Nem."] }] } };
+  const fields = lessonTextFields(json);
+  assert.ok(fields.some(x => x.id === "title" && x.text === "Fotoszintezis"));
+  assert.ok(fields.some(x => x.id === "experience.quiz.0.correctIndex" && x.text === "0"));
+  assert.ok(fields.some(x => x.id === "experience.quiz.0.options.1" && x.text === "4"));
+  const line = toReviewLine("A Duna Európa\nmásodik leghoszabb folyója.");
+  assert.ok(!line.includes("\n"));
+  const quote = fromReviewLine(line.slice(0, line.indexOf("leghoszabb")) + "leghoszabb");
+  const r = applyLessonPatches(json, [f(quote, quote.replace("leghoszabb", "leghosszabb"), { field: "sections.0.blocks.0.text" }),
+    f("0", "1", { field: "experience.quiz.0.correctIndex", category: "answer-key" })]);
+  assert.equal(r.json.sections[0].blocks[0].text, "A Duna Európa\nmásodik leghosszabb folyója.");
+  assert.equal(r.json.experience.quiz[0].correctIndex, 1);
+  assert.equal(validateFinding(f("0", "1", { field: "experience.quiz.0.correctIndex" }), "0", "lesson").ok, true);
+  assert.equal(validateFinding(f("0", "x", { field: "experience.quiz.0.correctIndex" }), "0", "lesson").ok, false);
+  assert.equal(applyLessonPatches(json, [f("0", "7", { field: "experience.quiz.0.correctIndex" })]).dropped.length, 1);
+  assert.match(lessonParentContext(json, "experience.quiz.0.options.1"), /"question":"Mennyi 2 \+ 2\?".*"correctIndex":0/);
 });
