@@ -34,3 +34,16 @@ test("legújabb anyagok: az évfolyamról, újak előnyben, tartalék az összes
   assert.deepEqual(r.files.map(x => x.id), ["b", "a"], "30 napon belüli híján a legfrissebbek");
   assert.equal(r.isNew(r.files[0]), false);
 });
+
+test("review #289: fióknál a kézi felülírás nyer, fiók nélkül a tárolt név; a tartalékág jelzi, hogy nem az évfolyamról jön", async () => {
+  const { resolveLearnerName } = await import("../client/src/lib/learner");
+  assert.equal(resolveLearnerName({ id: "u1", firstName: "Anna" }, "Bence", null), "Anna", "fióknév az elsődleges");
+  assert.equal(resolveLearnerName({ id: "u1", firstName: "Anna" }, "Bence", "Panni"), "Panni", "kézi felülírás nyer");
+  assert.equal(resolveLearnerName({ id: "u1", firstName: "  " }, "Bence", null), "Bence", "üres fióknévnél a tárolt");
+  assert.equal(resolveLearnerName(null, "Bence", "Panni"), "Bence", "fiók nélkül a felülírás nem számít");
+  const now = new Date("2026-10-18T10:00:00Z");
+  const files = [{ id: "a", classroom: 5, createdAt: now.toISOString() }];
+  assert.equal(newestMaterials(files, 5, now).fromGrade, true);
+  assert.equal(newestMaterials(files, 3, now).fromGrade, false);
+  assert.equal(newestMaterials(files, null, now).fromGrade, false);
+});

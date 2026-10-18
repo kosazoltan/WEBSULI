@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import { getClassroomLabel } from "@shared/classrooms";
-import { LEARNER_NAME_MAX, WELCOME_DISMISSED_KEY, loadLearnerName, motivationFor, newestMaterials, saveLearnerName } from "@/lib/learner";
+import { LEARNER_NAME_MAX, WELCOME_DISMISSED_KEY, loadLearnerName, loadNameOverride, motivationFor, newestMaterials, resolveLearnerName, saveLearnerName, saveNameOverride } from "@/lib/learner";
 
 type Material = { id: string; title: string; classroom: number; createdAt: string };
 
@@ -23,31 +23,41 @@ const sessionDismissed = () => {
  */
 export default function WelcomeCard<T extends Material>({ files, onViewFile }: { files: T[]; onViewFile: (file: T) => void }) {
   const { user } = useAuth();
-  const { grade, setGrade } = useClassroomGrade();
+  const { grade, setGrade, clearGrade } = useClassroomGrade();
   const [storedName, setStoredName] = useState<string | null>(() => loadLearnerName());
   const [editing, setEditing] = useState(false);
   const [dismissed, setDismissed] = useState(sessionDismissed);
   const [draftName, setDraftName] = useState("");
   const [draftGrade, setDraftGrade] = useState<string>("");
+  const [overrideTick, setOverrideTick] = useState(0);
 
-  const accountName = user?.firstName?.trim() || null;
-  const name = accountName ?? storedName;
+  const account = user ? { id: user.id, firstName: user.firstName } : null;
+  // review #289: bejelentkezve a kézi „Módosítás” fiókhoz kötött felülírás — fiókváltáskor nem öröklődik
+  const override = useMemo(() => (account ? loadNameOverride(account.id) : null), [account?.id, overrideTick]);
+  const name = resolveLearnerName(account, storedName, override);
   const today = new Date();
   const picks = useMemo(() => newestMaterials(files, grade, new Date()), [files, grade]);
 
   const startEdit = () => {
-    setDraftName(storedName ?? accountName ?? "");
+    setDraftName(name ?? "");
     setDraftGrade(grade ? String(grade) : "");
     setEditing(true);
   };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const saved = saveLearnerName(draftName);
-    if (!saved) return;
-    setStoredName(saved);
+    if (account) {
+      if (!saveNameOverride(account.id, draftName)) return;
+      setOverrideTick(t => t + 1);
+    } else {
+      const saved = saveLearnerName(draftName);
+      if (!saved) return;
+      setStoredName(saved);
+    }
+    // review #289: az üres választás törli a tárolt évfolyamot (vissza az évfolyam nélküli ajánláshoz)
     const g = Number(draftGrade);
-    if (Number.isInteger(g) && g >= 1 && g <= 12) setGrade(g);
+    if (draftGrade && Number.isInteger(g) && g >= 1 && g <= 12) setGrade(g);
+    else clearGrade();
     setEditing(false);
   };
 
@@ -92,7 +102,7 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
             <option value="">Évfolyam (nem kötelező)</option>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(g => <option key={g} value={g}>{getClassroomLabel(g)}</option>)}
           </select>
-          <Button type="submit" disabled={!draftName.trim()} className="h-11 px-5 rounded-full font-bold text-white border-0 bg-gradient-to-r from-[#FB923C] to-[#EAB308] shadow-md" data-testid="welcome-save">
+          <Button type="submit" disabled={!draftName.trim()} className="h-11 px-5 rounded-full font-bold text-slate-950 border-0 bg-gradient-to-r from-[#FB923C] to-[#EAB308] hover:from-[#FB923C] hover:to-[#EAB308] hover:brightness-110 shadow-md" data-testid="welcome-save">
             Mehet
           </Button>
           <Button type="button" variant="outline" onClick={name ? () => setEditing(false) : dismiss} className="h-11 rounded-full bg-white/20 border-white/40 text-white hover:bg-white/30" data-testid="welcome-dismiss">
@@ -107,7 +117,7 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
     <section className="glass-card rounded-2xl mx-auto mb-3 max-w-5xl p-3 sm:p-4 text-white" data-testid="welcome-greet" aria-labelledby="welcome-greet-title">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h2 id="welcome-greet-title" className="text-lg sm:text-xl font-extrabold">
-          Szia, <span className="animate-rainbow-spectrum">{name}</span>!
+          Szia, <span className="text-amber-200">{name}</span>!
         </h2>
         <button type="button" onClick={startEdit} className="min-h-11 text-sm text-white/85 underline underline-offset-2 hover:text-white" data-testid="welcome-edit">
           Nem te vagy? Módosítás
@@ -117,7 +127,7 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
       {picks.files.length > 0 && (
         <>
           <h3 className="mt-3 mb-1.5 text-sm font-bold text-amber-200">
-            {grade ? `A legújabb tananyagaid (${getClassroomLabel(grade)})` : "A legújabb tananyagok"}
+            {grade && picks.fromGrade ? `A legújabb tananyagaid (${getClassroomLabel(grade)})` : "A legújabb tananyagok"}
           </h3>
           <ul className="grid gap-2 sm:grid-cols-3">
             {picks.files.map(file => (

@@ -81,6 +81,55 @@ test("bejelentkezett tanuló: a fiók keresztnevével köszön, nem kérdez", as
   await expect(page.getByTestId("welcome-greet").locator('[data-testid^="welcome-pick-"]').first()).toHaveAttribute("data-testid", "welcome-pick-r8-a");
 });
 
+// Review #289
+const contrast = (fg: string, bg: string) => {
+  const lum = (c: string) => { const [r, g, b] = (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number).map(v => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+  return (a + 0.05) / (b + 0.05);
+};
+
+test("review #289: bejelentkezve a módosítás megmarad (fiókhoz kötve), fiókváltáskor nem öröklődik", async ({ page }) => {
+  await open(page, { id: "u1", firstName: "Anna", lastName: "Kiss", isAdmin: false });
+  await page.getByTestId("welcome-edit").click();
+  await expect(page.getByTestId("welcome-name")).toHaveValue("Anna");
+  await page.getByTestId("welcome-name").fill("Panni");
+  await page.getByTestId("welcome-save").click();
+  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 2 })).toHaveText("Szia, Panni!");
+  await page.reload();
+  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 2 })).toHaveText("Szia, Panni!");
+  // másik fiók: a saját keresztneve, nem Panni
+  await page.unroute("**/api/auth/user");
+  await page.route("**/api/auth/user", route => route.fulfill({ json: { id: "u2", firstName: "Dóri", lastName: "Nagy", isAdmin: false } }));
+  await page.reload();
+  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 2 })).toHaveText("Szia, Dóri!");
+});
+
+test("review #289: az üres évfolyam-választás törli a tárolt évfolyamot; a tartalékág nem ír évfolyamot; AA-kontraszt", async ({ page }) => {
+  await open(page);
+  await page.getByTestId("welcome-name").fill("Bence");
+  const save = page.getByTestId("welcome-save");
+  const { color, bg } = await save.evaluate(el => ({ color: getComputedStyle(el).color, bg: "rgb(251, 146, 60)" }));
+  expect(contrast(color, bg), "„Mehet” a gradiens narancs végén").toBeGreaterThanOrEqual(4.5);
+  expect(contrast(color, "rgb(234, 179, 8)"), "„Mehet” a gradiens sárga végén").toBeGreaterThanOrEqual(4.5);
+  await page.getByTestId("welcome-grade").selectOption("3");
+  await save.click();
+  const greet = page.getByTestId("welcome-greet");
+  // a 3. évfolyamon nincs anyag → mindből ajánl, és a cím nem állítja, hogy harmadikos
+  await expect(greet.getByRole("heading", { level: 3 })).toHaveText("A legújabb tananyagok");
+  const nameColor = await greet.getByRole("heading", { level: 2 }).locator("span").evaluate(el => getComputedStyle(el).color);
+  expect(contrast(nameColor, "rgb(15, 23, 42)"), "a név állandó, olvasható színű").toBeGreaterThanOrEqual(4.5);
+  await page.getByTestId("welcome-edit").click();
+  await page.getByTestId("welcome-grade").selectOption("5");
+  await page.getByTestId("welcome-save").click();
+  await expect(greet.getByRole("heading", { level: 3 })).toHaveText("A legújabb tananyagaid (5. osztály)");
+  await page.getByTestId("welcome-edit").click();
+  await page.getByTestId("welcome-grade").selectOption("");
+  await page.getByTestId("welcome-save").click();
+  await page.reload();
+  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 3 })).toHaveText("A legújabb tananyagok");
+  expect(await page.evaluate(() => localStorage.getItem("websuli.classroomGrade"))).toBeNull();
+});
+
 test("az üres évfolyamok jelvényei nem jelennek meg", async ({ page }) => {
   await open(page);
   await expect(page.getByTestId("button-filter-classroom-5")).toBeVisible();
