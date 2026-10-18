@@ -6,7 +6,7 @@ import rateLimit from "express-rate-limit";
 import compression from "compression";
 import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
-import { registerRoutes } from "./routes";
+import { flushPendingMaterialResults, registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
@@ -632,6 +632,8 @@ app.use((req, res, next) => {
         log("HTTP server closed");
 
         try {
+          // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: the still-coalesced material results go out before the pool closes (max 10 s).
+          await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
           // Close database pool
           await dbPool.end();
           log("Database pool closed");

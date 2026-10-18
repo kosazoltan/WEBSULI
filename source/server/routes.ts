@@ -29,8 +29,8 @@ import { triggerEventBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
-import rateLimit from "express-rate-limit";
-import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients } from "./lib/material-result";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, type MaterialResultPayload } from "./lib/material-result";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments } from "./lib/material-capture";
@@ -713,6 +713,10 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
 // AUDIT 2026-09-01: getRequestOrigin / enforceOriginAllowlist → server/lib/origin-guard.ts
 // (az auth.ts login/logout route-jai is ugyanazt az őrt használják, közvetlenül).
 
+let flushQueuedMaterialResults: () => Promise<void> = async () => {};
+/** Spec 2026-10-18-regi-anyag-eredmeny-azonnal: leállításkor a még összevárt régi-anyag eredmények kimennek. */
+export function flushPendingMaterialResults(): Promise<void> { return flushQueuedMaterialResults(); }
+
 export async function registerRoutes(app: Express): Promise<Server> {
   registerLessonFontAssets(app);
   // Auth setup is now handled in index.ts to ensure correct order
@@ -910,14 +914,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Régi anyagok (docs/specs/2026-10-17-regi-anyag-eredmeny.md): egy iskolai hálózat sok tanulója egy IP-n van → 60 / 15 perc,
   // az azonos eredményt pedig az ismétlésvédelem szűri (10 perc).
   const materialResultDedup = new ViewDedup(10 * 60 * 1000, 5000);
-  const materialResultLimiter = rateLimit({
+  type QueuedMaterialResult = { value: MaterialResultPayload; ip: string; title: string | null; fileId: string; recipients: string[] };
+  // Ismétlésvédelem CÍMZETTENKÉNT (review #281): a már értesített admin nem kap újra, a kimaradt pótolható.
+  const deliverMaterialResult = (q: QueuedMaterialResult) => {
+    const mail = buildMaterialResultEmail(q.value, q.title, getMaterialPreviewUrl(q.fileId));
+    return deliverToRecipients({
+      recipients: q.recipients,
+      baseKey: materialResultDedupKey(q.value, q.ip),
+      dedup: materialResultDedup,
+      send: async (to) => ((await sendAdminNotification(mail.subject, mail.html, to)) as { success?: boolean } | undefined)?.success !== false,
+      scheduleRetry: (run) => { setTimeout(() => { void run().catch((e: unknown) => logger.warn('[MATERIAL-RESULT] pótlás hiba', { error: String(e) })); }, 60_000).unref(); },
+      onRetryDone: (stillFailed) => logger.warn('[MATERIAL-RESULT] pótlás kész', { stillFailed }),
+    });
+  };
+  const materialResultCoalescer = new ResultCoalescer<QueuedMaterialResult>({
+    // Review #300: false → a coalescer korlátozottan újrapróbál (a frissebb állapotot nem írja felül).
+    deliver: async (q) => {
+      try {
+        const outcome = await deliverMaterialResult(q);
+        if (!outcome.duplicate && outcome.delivered === 0) { logger.warn('[MATERIAL-RESULT] az összevárt eredményt nem sikerült elküldeni (újrapróba)'); return false; }
+        return true;
+      } catch (e: unknown) {
+        logger.error('[MATERIAL-RESULT] összevárt küldés hiba:', e instanceof Error ? e.message : String(e));
+        return false;
+      }
+    },
+  });
+  // Deploy / leállítás: a függő (még összevárt) eredmények azonnal kimennek (index.ts gracefulShutdown, az adatbázis lezárása előtt).
+  flushQueuedMaterialResults = () => materialResultCoalescer.flushAll();
+  // Review #300: az azonnali beküldés miatt a keret kliensenkénti (oldalbetöltés), egy iskolai NAT mögötti osztály így nem fogy ki;
+  // a kliensazonosító a kliensé, ezért mellette egy tágabb IP-szintű keret véd a visszaélés ellen.
+  const materialResultClientLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 60,
+    keyGenerator: (req) => {
+      const clientId = (req.body as { clientId?: unknown } | undefined)?.clientId;
+      return typeof clientId === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(clientId) ? `c:${clientId}` : `ip:${ipKeyGenerator(req.ip ?? '')}`;
+    },
     message: { message: "Túl sok eredményküldés. Próbáld újra később!" },
     standardHeaders: true,
     legacyHeaders: false,
   });
-  app.post('/api/material-result', materialResultLimiter, async (req, res) => {
+  const materialResultIpLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 900,
+    message: { message: "Túl sok eredményküldés. Próbáld újra később!" },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.post('/api/material-result', materialResultIpLimiter, materialResultClientLimiter, async (req, res) => {
     try {
       const validated = normalizeMaterialResult(req.body);
       if (!validated.ok) {
@@ -934,22 +979,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.warn('[MATERIAL-RESULT] nincs konfigurált küldő/címzett', { resend: resendStatus.reason, recipients: recipients.length });
         return res.status(503).json({ message: "Az eredményküldés jelenleg nem elérhető." });
       }
-      // Ismétlésvédelem CÍMZETTENKÉNT (review #281): a már értesített admin nem kap újra, a kimaradt pótolható.
-      const mail = buildMaterialResultEmail(value, file.title, getMaterialPreviewUrl(file.id));
-      const outcome = await deliverToRecipients({
-        recipients,
-        baseKey: materialResultDedupKey(value, req.ip ?? ''),
-        dedup: materialResultDedup,
-        send: async (to) => ((await sendAdminNotification(mail.subject, mail.html, to)) as { success?: boolean } | undefined)?.success !== false,
-        scheduleRetry: (run) => { setTimeout(() => { void run().catch((e: unknown) => logger.warn('[MATERIAL-RESULT] pótlás hiba', { error: String(e) })); }, 60_000).unref(); },
-        onRetryDone: (stillFailed) => logger.warn('[MATERIAL-RESULT] pótlás kész', { stillFailed }),
-      });
+      // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: az automatikus beolvasás minden új állapotot azonnal küld; a levél
+      // kulcsonként (anyag + kliens) összevárva megy, a legutolsó állapottal.
+      if (value.auto) {
+        const queued = materialResultCoalescer.submit(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`, { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients });
+        return res.status(202).json({ success: true, queued });
+      }
+      const outcome = await deliverMaterialResult({ value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients });
       if (outcome.duplicate) {
         return res.json({ success: true, duplicate: true });
       }
       if (outcome.delivered === 0) {
         return res.status(502).json({ message: "Az eredményt nem sikerült elküldeni." });
       }
+      // a tanuló maga küldte el (mailto) → az ugyanazon oldalbetöltés automatikus levele nem megy ki: a függő törlődik, és a
+      // később beérkező automatikus beküldés sem kerül sorba (review #300)
+      materialResultCoalescer.suppress(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`);
       res.json({ success: true, delivered: outcome.delivered });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
