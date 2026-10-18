@@ -29,14 +29,36 @@ type UserStorage = {
   toggleUserAdmin(id: string, isAdmin: boolean): Promise<boolean>;
 };
 
-export function registerAdminUserRoutes(router: Router, storage: UserStorage): void {
+/**
+ * Az admin-műveletek zára (review #287): `acquire()` után az ellenőrzés és az írás között más admin-művelet nem futhat;
+ * a visszaadott függvény oldja fel. Élesben a `routes.ts` adatbázis-zárat ad (több példány esetén is sorosít).
+ */
+export type AdminLock = () => Promise<() => Promise<void>>;
+
+/** Folyamaton belüli zár (tesztekhez és fejlesztéshez). */
+export function createMemoryLock(): AdminLock {
+  let tail: Promise<void> = Promise.resolve();
+  return async () => {
+    let release!: () => void;
+    const prev = tail;
+    tail = new Promise<void>(r => { release = r; });
+    await prev;
+    return async () => release();
+  };
+}
+
+export type ActionOutcome = { status: number; message?: string };
+
+/** A friss lista beolvasása és az ellenőrzés — a hívó a zár alatt futtatja, és csak `null` eredménynél ír. */
+export async function checkAdminUserAction(storage: UserStorage, input: { actorId: string; targetId: string; action: AdminUserAction }): Promise<ActionOutcome | null> {
+  const users = await storage.getAllUsers();
+  if (!users.some(u => u.id === input.targetId)) return { status: 404, message: "A felhasználó nem található." };
+  const err = adminUserGuard({ ...input, users });
+  return err ? { status: 400, message: err } : null;
+}
+
+export function registerAdminUserRoutes(router: Router, storage: UserStorage, lock: AdminLock = createMemoryLock()): void {
   const actorOf = (req: { user?: unknown }) => (req.user as { id?: string } | undefined)?.id ?? "";
-  async function guarded(req: { params: { id: string }; user?: unknown }, action: AdminUserAction): Promise<{ status: number; message: string } | null> {
-    const users = await storage.getAllUsers();
-    if (!users.some(u => u.id === req.params.id)) return { status: 404, message: "A felhasználó nem található." };
-    const err = adminUserGuard({ actorId: actorOf(req), targetId: req.params.id, action, users });
-    return err ? { status: 400, message: err } : null;
-  }
 
   router.get("/users", async (_req, res) => {
     try {
@@ -47,39 +69,51 @@ export function registerAdminUserRoutes(router: Router, storage: UserStorage): v
   });
 
   router.delete("/users/:id", async (req, res) => {
+    let release: (() => Promise<void>) | undefined;
     try {
-      const fail = await guarded(req, "delete");
+      release = await lock();
+      const fail = await checkAdminUserAction(storage, { actorId: actorOf(req), targetId: req.params.id, action: "delete" });
       if (fail) return res.status(fail.status).json({ message: fail.message });
       await storage.deleteUser(req.params.id);
       res.json({ ok: true });
     } catch {
       res.status(500).json({ message: "Nem sikerült törölni a felhasználót." });
+    } finally {
+      await release?.();
     }
   });
 
   router.patch("/users/:id/ban", async (req, res) => {
     const banned = (req.body as { banned?: unknown } | undefined)?.banned;
     if (typeof banned !== "boolean") return res.status(400).json({ message: "A „banned” mező kötelező (igaz/hamis)." });
+    let release: (() => Promise<void>) | undefined;
     try {
-      const fail = await guarded(req, banned ? "ban" : "unban");
+      release = await lock();
+      const fail = await checkAdminUserAction(storage, { actorId: actorOf(req), targetId: req.params.id, action: banned ? "ban" : "unban" });
       if (fail) return res.status(fail.status).json({ message: fail.message });
       await storage.toggleUserBan(req.params.id, banned);
       res.json({ ok: true });
     } catch {
       res.status(500).json({ message: "Nem sikerült módosítani a tiltást." });
+    } finally {
+      await release?.();
     }
   });
 
   router.put("/users/:id/toggle-admin", async (req, res) => {
     const isAdmin = (req.body as { isAdmin?: unknown } | undefined)?.isAdmin;
     if (typeof isAdmin !== "boolean") return res.status(400).json({ message: "Az „isAdmin” mező kötelező (igaz/hamis)." });
+    let release: (() => Promise<void>) | undefined;
     try {
-      const fail = await guarded(req, isAdmin ? "grantAdmin" : "revokeAdmin");
+      release = await lock();
+      const fail = await checkAdminUserAction(storage, { actorId: actorOf(req), targetId: req.params.id, action: isAdmin ? "grantAdmin" : "revokeAdmin" });
       if (fail) return res.status(fail.status).json({ message: fail.message });
       await storage.toggleUserAdmin(req.params.id, isAdmin);
       res.json({ ok: true });
     } catch {
       res.status(500).json({ message: "Nem sikerült módosítani a jogosultságot." });
+    } finally {
+      await release?.();
     }
   });
 }

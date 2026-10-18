@@ -35,7 +35,7 @@ test("felhasználók: a saját fiók és az utolsó admin védett, más művelet
 });
 
 test("felhasználók: a végpontok az admin-routeren regisztráltak", () => {
-  assert.match(read("server/routes.ts"), /registerAdminUserRoutes\(adminRouter, storage\)/);
+  assert.match(read("server/routes.ts"), /registerAdminUserRoutes\(adminRouter, storage, /);
   const src = read("server/admin-users.ts");
   for (const r of [/router\.get\("\/users"/, /router\.delete\("\/users\/:id"/, /router\.patch\("\/users\/:id\/ban"/, /router\.put\("\/users\/:id\/toggle-admin"/]) assert.match(src, r);
 });
@@ -57,4 +57,50 @@ test("menü: 4 csoport, 15 fül, mindnek ikonja; a megszűnt fülek régi linkje
   const admin = read("client/src/pages/admin.tsx");
   assert.doesNotMatch(admin, /value="enhanced"/);
   for (const v of ADMIN_TAB_VALUES) assert.match(admin, new RegExp(`TabsContent value="${v}"`), v);
+});
+
+test("review #287: két egyidejű admin-jog megvonás / törlés sem hagyja admin nélkül a rendszert (zár alatt ellenőrzés + írás)", async () => {
+  const { checkAdminUserAction, createMemoryLock } = await import("../server/admin-users");
+  const rows = new Map([["a", { id: "a", isAdmin: true }], ["b", { id: "b", isAdmin: true }]]);
+  const tick = () => new Promise(r => setTimeout(r, 5));
+  const storage = {
+    getAllUsers: async () => { await tick(); return [...rows.values()].map(r => ({ ...r }) as unknown as User); },
+    deleteUser: async (id: string) => { await tick(); return rows.delete(id); },
+    toggleUserBan: async () => true,
+    toggleUserAdmin: async (id: string, isAdmin: boolean) => { await tick(); rows.get(id)!.isAdmin = isAdmin; return true; },
+  };
+  const lock = createMemoryLock();
+  // ugyanaz a sorrend, mint a végpontokban: zár → ellenőrzés → írás → feloldás
+  const act = async (actorId: string, targetId: string, action: "revokeAdmin" | "delete") => {
+    const release = await lock();
+    try {
+      const fail = await checkAdminUserAction(storage, { actorId, targetId, action });
+      if (fail) return fail.status;
+      if (action === "delete") await storage.deleteUser(targetId); else await storage.toggleUserAdmin(targetId, false);
+      return 200;
+    } finally { await release(); }
+  };
+  assert.deepEqual((await Promise.all([act("a", "b", "revokeAdmin"), act("b", "a", "revokeAdmin")])).sort(), [200, 400]);
+  assert.equal([...rows.values()].filter(r => r.isAdmin).length, 1, "pontosan egy admin marad");
+  rows.set("b", { id: "b", isAdmin: true }); rows.get("a")!.isAdmin = true;
+  await Promise.all([act("a", "b", "delete"), act("b", "a", "revokeAdmin")]);
+  assert.equal([...rows.values()].filter(r => r.isAdmin).length, 1);
+  // a zár nélkül ugyanez admin nélkül hagyná a rendszert (a teszt valóban a zárat méri)
+  rows.set("b", { id: "b", isAdmin: true }); rows.get("a")!.isAdmin = true;
+  const unlocked = async (actorId: string, targetId: string) => { if (!(await checkAdminUserAction(storage, { actorId, targetId, action: "revokeAdmin" }))) await storage.toggleUserAdmin(targetId, false); };
+  await Promise.all([unlocked("a", "b"), unlocked("b", "a")]);
+  assert.equal([...rows.values()].filter(r => r.isAdmin).length, 0, "negatív kontroll");
+  const src = read("server/admin-users.ts");
+  for (const route of ["delete(\"/users/:id\"", "patch(\"/users/:id/ban\"", "put(\"/users/:id/toggle-admin\""]) {
+    const start = src.indexOf(route);
+    const next = src.indexOf("router.", start + route.length);
+    const body = src.slice(start, next === -1 ? undefined : next);
+    assert.match(body, /release = await lock\(\);[\s\S]*checkAdminUserAction[\s\S]*await storage\./, route);
+    assert.match(body, /finally \{\s*await release\?\.\(\);/, route);
+  }
+  assert.match(read("server/routes.ts"), /pg_advisory_lock\(hashtext\('admin-users'\)\)/, "élesben adatbázis-zár sorosít");
+});
+
+test("review #287: a prototípus-kulcsok nem fül-azonosítók", () => {
+  for (const p of ["constructor", "__proto__", "toString", "hasOwnProperty"]) assert.equal(resolveAdminTab(p), "files", p);
 });

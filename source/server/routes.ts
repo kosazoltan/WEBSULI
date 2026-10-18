@@ -23,7 +23,7 @@ import * as gameQuizBankService from "./gameQuizBankService";
 import { generateMaterialQuiz, QuizMaterialNotFound } from "./gameQuizGeneratorService";
 // checkIsAdmin import removed
 
-import { db } from "./db";
+import { db, dbPool } from "./db";
 import { getMaterialPreviewUrl, getBaseUrl } from "./utils/config";
 import { triggerEventBackup, listBackups, readBackup, createAutoBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
@@ -819,7 +819,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create admin router with authentication middleware
   const adminRouter = express.Router();
   // Spec 2026-10-18-admin-korszerusites: a Felhasználók fül végpontjai (a kliens régóta hívta, a szerveren hiányoztak).
-  registerAdminUserRoutes(adminRouter, storage);
+  // Review #287: az ellenőrzés és az írás egy adatbázis-zár alatt fut (több példány esetén is sorosít).
+  registerAdminUserRoutes(adminRouter, storage, async () => {
+    const client = await dbPool.connect();
+    try {
+      await client.query("SELECT pg_advisory_lock(hashtext('admin-users'))");
+    } catch (error) {
+      client.release();
+      throw error;
+    }
+    return async () => {
+      // A feloldás hibájánál a kapcsolat eldobódik (release(true)) — a munkameneti zár így sem ragad a poolban.
+      try { await client.query("SELECT pg_advisory_unlock(hashtext('admin-users'))"); client.release(); } catch { client.release(true); }
+    };
+  });
 
   // Auth endpoint - Get current user session
   // PUBLIC endpoint - Returns user data if authenticated, null if not

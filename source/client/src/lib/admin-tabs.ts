@@ -39,10 +39,12 @@ export const ADMIN_TAB_GROUPS: AdminTabGroup[] = [
 export const ADMIN_TAB_VALUES: string[] = ADMIN_TAB_GROUPS.flatMap(g => g.tabs.map(t => t.value));
 
 /** Megszűnt fülek régi deep linkjei: a tudástérkép (LS-8) és a duplikált „AI” fül a tananyagkészítésbe került. */
-const LEGACY_TABS: Record<string, string> = { "knowledge-maps": "lesson-studio", enhanced: "lesson-studio" };
+const LEGACY_TABS = new Map<string, string>([["knowledge-maps", "lesson-studio"], ["enhanced", "lesson-studio"]]);
 
 export function resolveAdminTab(param: string | null | undefined): string {
   if (!param) return "files";
-  if (LEGACY_TABS[param]) return LEGACY_TABS[param];
+  // Review #287: Map — a `?tab=constructor` / `__proto__` nem örökölt prototípus-mezőt ad vissza.
+  const legacy = LEGACY_TABS.get(param);
+  if (legacy) return legacy;
   return ADMIN_TAB_VALUES.includes(param) ? param : "files";
 }
