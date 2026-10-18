@@ -11,6 +11,7 @@ import { LIGHT_MOTION_QUERIES, prefersLightMotionNow } from "@/lib/light-motion"
 import LikeButton from "@/components/LikeButton";
 import HeroSection from "@/components/HeroSection";
 import HomePracticeGames from "@/components/HomePracticeGames";
+import WelcomeCard from "@/components/WelcomeCard";
 import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -230,6 +231,9 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
           showEmailSubscribe={true}
         />
 
+        {/* Személyes üdvözlő ajánló (docs/specs/2026-10-18-nyilvanos-oldal-udvozlo.md) */}
+        <WelcomeCard files={files} onViewFile={onViewFile} />
+
         {/* Classroom Filter */}
         <div className="mb-3">
           <div className="flex flex-wrap gap-1.5 justify-center items-center">
@@ -247,33 +251,26 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
             >
               Mind
             </Button>
-            {CLASSROOM_VALUES.map((classroom) => {
-              const hasFiles = availableClassrooms.includes(classroom);
-              return (
-                <Badge
-                  key={classroom}
-                  variant={selectedClassroom === classroom ? "default" : "outline"}
-                  className={`cursor-pointer text-xs py-0.5 px-2 font-semibold backdrop-blur-sm ${
-                    selectedClassroom === classroom
-                      ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-md"
-                      : "bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-md"
-                  } ${
-                    !hasFiles ? "opacity-50 cursor-not-allowed" : ""
-                  } transition-all duration-200`}
-                  onClick={() => (hasFiles ? setSelectedClassroom(classroom) : null)}
-                  // a11y (2026-09-02): kattintható jelvény → gomb-szerep, toggle-állapot és
-                  // letiltottság gép által olvasható
-                  role="button"
-                  tabIndex={hasFiles ? 0 : -1}
-                  aria-pressed={selectedClassroom === classroom}
-                  aria-disabled={!hasFiles}
-                  data-testid={`button-filter-classroom-${classroom}`}
-                >
-                  {getClassroomLabel(classroom, true)}
-                  {!hasFiles && " (0)"}
-                </Badge>
-              );
-            })}
+            {/* Spec 2026-10-18-nyilvanos-oldal-udvozlo: csak az anyaggal bíró évfolyamok — a „(0)” jelvények zaja megszűnt. */}
+            {CLASSROOM_VALUES.filter((classroom) => availableClassrooms.includes(classroom)).map((classroom) => (
+              <Badge
+                key={classroom}
+                variant={selectedClassroom === classroom ? "default" : "outline"}
+                className={`cursor-pointer text-xs py-0.5 px-2 font-semibold backdrop-blur-sm ${
+                  selectedClassroom === classroom
+                    ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-md"
+                    : "bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-md"
+                } transition-all duration-200`}
+                onClick={() => setSelectedClassroom(classroom)}
+                // a11y (2026-09-02): kattintható jelvény → gomb-szerep és toggle-állapot gép által olvasható
+                role="button"
+                tabIndex={0}
+                aria-pressed={selectedClassroom === classroom}
+                data-testid={`button-filter-classroom-${classroom}`}
+              >
+                {getClassroomLabel(classroom, true)}
+              </Badge>
+            ))}
           </div>
         </div>
 
@@ -309,7 +306,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
         {filteredFiles.length > 0 ? (
           <>
             <h2
-              className="text-xs sm:text-sm font-extrabold text-white/90 tracking-wide mb-2 flex items-center gap-2"
+              className="text-base font-extrabold text-white/90 tracking-wide mb-2 flex items-center gap-2"
               id="content-start"
             >
               <BookOpen className="w-4 h-4 text-orange-300 shrink-0" />
@@ -371,14 +368,14 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                           <Icon className="w-4 h-4 text-white drop-shadow-lg" />
                         </div>
                         <Badge
-                          className="text-[9px] font-bold bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-sm border-0 px-1.5 py-0 h-4 group-hover:from-gray-900 group-hover:to-black transition-all duration-300"
+                          className="text-[11px] font-bold bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-sm border-0 px-1.5 py-0 h-5 group-hover:from-gray-900 group-hover:to-black transition-all duration-300"
                         >
                           {getClassroomLabel(classroom, true)}
                         </Badge>
                       </div>
                       {isCurrent(file.curriculum, today) && (
                         <span
-                          className="self-start mb-1 inline-flex items-center rounded-full bg-emerald-700 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+                          className="self-start mb-1 inline-flex items-center rounded-full bg-emerald-700 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white"
                           title={file.curriculum?.label}
                           data-testid={`badge-current-${file.id}`}
                         >
@@ -388,10 +385,10 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
 
                       {/* Content */}
                       <div className="flex-1 mb-1.5">
-                        <h3 className="text-xs font-bold text-orange-500 mb-0.5 line-clamp-2 group-hover:text-black transition-all duration-300 drop-shadow-lg leading-tight">
+                        <h3 className="text-sm font-bold text-orange-500 mb-0.5 line-clamp-2 group-hover:text-black transition-all duration-300 drop-shadow-lg leading-tight">
                           {file.title}
                         </h3>
-                        <p className="text-[10px] text-orange-400 font-medium line-clamp-2 group-hover:text-black transition-all duration-300 leading-tight">
+                        <p className="text-xs text-orange-400 font-medium line-clamp-2 group-hover:text-black transition-all duration-300 leading-tight">
                           {file.description || "Kattints a megtekintéshez"}
                         </p>
                       </div>
