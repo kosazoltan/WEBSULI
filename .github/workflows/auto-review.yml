@@ -75,6 +75,8 @@ jobs:
               '',
               '@codex review',
               '',
+              '@vercel run a review',
+              '',
               '---',
               '',
               '_Automatikus Bence trigger. Kovetkezo lepes: ha CI zold + mindket bot approved,',

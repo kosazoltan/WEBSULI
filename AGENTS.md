@@ -69,22 +69,6 @@ Code-review findinget csak fájl:sor hivatkozással és konkrét evidenciával a
 evidencia nélküli finding érvénytelen. Kritikus findingnál előbb próbáld megcáfolni
 (refuter-kör), csak megerősítés után jelentsd.
 
-### Review guidelines (AI-reviewerek: Codex, Copilot, Vercel Agent, Sourcery)
-Tulajdonosi kérés 2026-10-18 (`docs/specs/2026-10-18-atfogo-review.md`): a review ne csak a legutóbbi push diffjét nézze.
-- **Kör:** a TELJES PR és a diff által érintett programrészek (hívók, hívottak, közös adatszerkezetek).
-- **Szeletes funkciónál** (a PR leírásában „S1–Sn”): a funkció terve (`docs/specs/…`) és a már összevont szeletek is — a
-  folyamatot végponttól végpontig vizsgáld.
-- **Kötelező szempontok:**
-  - adatszerződés a lépések között (mezőnevek, formátumok, típusok);
-  - biztonság és adatvédelem: token / titok / személyes adat URL-ben, naplóban, linkben; CSRF / origin; mellékhatás GET-en;
-  - regresszió a meglévő folyamatokban: névtelen látogató, bejelentkezett felhasználó, régi anyag, Stúdió-lecke;
-  - időzóna és dátumhatár (Europe/Budapest);
-  - migráció ↔ Drizzle-séma;
-  - indítás / cron / leállítás és e2e-mód.
-- **Evidencia:** finding csak fájl:sor hivatkozással és konkrét hibaforgatókönyvvel.
-- **Szeletes funkció zárása:** az utolsó szelet összevonása ELŐTT az egész funkció átfogó reviewja kötelező; az eredménye
-  PR-kommentként kerül be.
-
 ### Evidence-before-completion
 A „kész / javítva / zöld" állítás CSAK futtatott parancs valódi kimenetével érvényes — a
 zöld teszt önmagában NEM bizonyíték. A megoldást a SPEC-hez mérd, ne a teszt szűk
@@ -108,6 +92,26 @@ A DENY-t parancs-átfogalmazással megkerülni TILOS. Repo-specifikus bővítés
 `scripts/qa/repo-rules.json`-ban további minták (deny/warn) definiálhatók a hook-kód
 módosítása nélkül — így minden repo a saját AGENTS.md-tiltásait kódolhatja.
 <!-- agentic-qa-kit:end -->
+
+## Review guidelines (AI-reviewerek: Codex, Copilot, Vercel Agent)
+Tulajdonosi kérés 2026-10-18 (`docs/specs/2026-10-18-atfogo-review.md`): a review ne csak a legutóbbi push diffjét nézze.
+- **Kör:** a TELJES PR és a diff által érintett programrészek (hívók, hívottak, közös adatszerkezetek).
+- **Szeletes funkciónál** (a PR leírásában „S1–Sn”): a funkció terve (`docs/specs/…`) és a már összevont szeletek is — a
+  folyamatot végponttól végpontig vizsgáld.
+- **Kötelező szempontok:**
+  - adatszerződés a lépések között (mezőnevek, formátumok, típusok);
+  - biztonság és adatvédelem: token / titok / személyes adat URL-ben, naplóban, linkben; CSRF / origin; mellékhatás GET-en;
+  - regresszió a meglévő folyamatokban: névtelen látogató, bejelentkezett felhasználó, régi anyag, Stúdió-lecke;
+  - időzóna és dátumhatár (Europe/Budapest);
+  - migráció ↔ Drizzle-séma;
+  - indítás / cron / leállítás és e2e-mód.
+- **Evidencia:** finding csak fájl:sor hivatkozással és konkrét hibaforgatókönyvvel.
+- **Szeletes funkció zárása:** az utolsó szelet összevonása ELŐTT az egész funkció átfogó reviewja kötelező; az eredménye
+  PR-kommentként kerül be.
+- A kezelt `agentic-qa-kit` blokkon KÍVÜL áll (review #306), hogy egy kitfrissítés ne írja felül.
+- A Sourcery nem ezt a szakaszt követi: a saját szabályai a Sourcery „Review Settings” felületén állíthatók (tulajdonosi teendő),
+  ezért az átfogó review teljesítőjének nem számít.
+
 
 ## Háromfázisú munka (kötelező, tulajdonosi utasítás 2026-09-09)
 

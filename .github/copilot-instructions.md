@@ -1,6 +1,6 @@
 # Copilot — review-utasítás (WEBSULI)
 
-Magyarul válaszolj. A részletes szabály az `AGENTS.md` „Review guidelines” szakasza (`docs/specs/2026-10-18-atfogo-review.md`).
+Magyarul válaszolj. A részletes szabály az `AGENTS.md` „Review guidelines” szakasza (a kezelt blokkon kívül) (`docs/specs/2026-10-18-atfogo-review.md`).
 
 - **Kör:** a review a TELJES PR-re és a diff által érintett programrészekre szól, nem csak a legutóbbi push diffjére.
 - **Szeletes funkció** (a PR leírásában „S1–Sn”): a funkció tervét (`docs/specs/…`) és a már összevont szeleteket is nézd,
