@@ -149,3 +149,56 @@ export async function deliverToRecipients(opts: {
   }
   return { duplicate: false, delivered, failed };
 }
+
+/**
+ * Szerveres összevárás (docs/specs/2026-10-18-regi-anyag-eredmeny-azonnal.md): a régi anyag minden új eredményállapotot azonnal
+ * beküld (különben a keret eltávolításakor elveszne), a levél viszont kulcsonként (anyag + kliens) csak egyszer megy, a legutolsó
+ * állapottal — `quietMs` nyugalom után, folyamatos tevékenységnél legkésőbb `maxWaitMs`-mal az első beküldés után.
+ */
+export class ResultCoalescer<T> {
+  private readonly pending = new Map<string, { payload: T; first: number; timer: unknown }>();
+
+  constructor(private readonly opts: {
+    deliver: (payload: T) => Promise<unknown>;
+    quietMs?: number;
+    maxWaitMs?: number;
+    now?: () => number;
+    setTimer?: (run: () => void, ms: number) => unknown;
+    clearTimer?: (timer: unknown) => void;
+  }) {}
+
+  submit(key: string, payload: T): void {
+    const now = (this.opts.now ?? Date.now)();
+    const quiet = this.opts.quietMs ?? 30_000;
+    const maxWait = this.opts.maxWaitMs ?? 180_000;
+    const prev = this.pending.get(key);
+    if (prev) (this.opts.clearTimer ?? ((t: unknown) => clearTimeout(t as NodeJS.Timeout)))(prev.timer);
+    const first = prev?.first ?? now;
+    const delay = Math.max(0, Math.min(quiet, first + maxWait - now));
+    const timer = (this.opts.setTimer ?? ((run: () => void, ms: number) => { const t = setTimeout(run, ms); t.unref?.(); return t; }))(() => { void this.fire(key); }, delay);
+    this.pending.set(key, { payload, first, timer });
+  }
+
+  get size(): number { return this.pending.size; }
+
+  /** A sikeres közvetlen (mailto) küldés után az ugyanahhoz a kulcshoz összevárt automatikus levél nem megy ki. */
+  cancel(key: string): boolean {
+    const entry = this.pending.get(key);
+    if (!entry) return false;
+    (this.opts.clearTimer ?? ((t: unknown) => clearTimeout(t as NodeJS.Timeout)))(entry.timer);
+    return this.pending.delete(key);
+  }
+
+  /** Minden függő levél azonnal (leállításkor). */
+  async flushAll(): Promise<void> {
+    await Promise.all([...this.pending.keys()].map((key) => this.fire(key)));
+  }
+
+  private async fire(key: string): Promise<void> {
+    const entry = this.pending.get(key);
+    if (!entry) return;
+    (this.opts.clearTimer ?? ((t: unknown) => clearTimeout(t as NodeJS.Timeout)))(entry.timer);
+    this.pending.delete(key);
+    await this.opts.deliver(entry.payload);
+  }
+}

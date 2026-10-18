@@ -74,7 +74,7 @@ export const MATERIAL_CAPTURE_SCRIPT = `
       var materialId = (window.location.pathname.match(/\\/dev\\/([A-Za-z0-9_-]+)/) || [])[1] || '';
       var sent = {};
       var autoCount = 0;
-      var MAX_AUTO = 5;
+      var MAX_AUTO = 30;
 
       function hash(s) { var h = 5381, i; for (i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return String(h); }
       function clip(s, n) { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n - 1) + '\\u2026' : s; }
@@ -248,14 +248,16 @@ export const MATERIAL_CAPTURE_SCRIPT = `
       }
       // mode: 'baseline' (betöltés), 'eval' (kiértékelő jellegű kattintás után), 'other' (bármely más kattintás után).
       // Minden látott szöveg megjelölődik; más kattintás után csak az osztályzatot is tartalmazó eredmény megy ki.
-      // Rendezett beküldés: az új eredmény a „pending”-be kerül (eredményhelyenként a legfrissebb), és az utolsó új eredmény után
-      // SETTLE_MS nyugalommal, vagy az oldal elhagyásakor (pagehide / rejtett lap) EGY levélben megy ki. Így a feladatonkénti
-      // „Ellenőrzés” futó statisztikája (pl. „Megoldott feladatok: 1 / 15”) nem küld minden lépésnél külön levelet.
+      // Azonnali beküldés (docs/specs/2026-10-18-regi-anyag-eredmeny-azonnal.md): a websuli.vip a visszalépéskor eltávolítja a keretet,
+      // ilyenkor se pagehide, se unload nem fut — a böngészőben várakozó eredmény elveszett. Ezért minden új állapot azonnal megy
+      // (a már elindított keepalive kérés túléli a keret eltávolítását), és az összevárást a SZERVER végzi: egy sorozatból
+      // (pl. a feladatonkénti „Ellenőrzés” futó statisztikája) 30 mp nyugalom után egy levél megy, a legutolsó állapottal.
+      // Minden beküldés a teljes eddigi képet viszi (eredményhelyenként a legfrissebb), így a szerver legutolsó állapota sem veszít.
       // Review #281: eredményhelyenként az UTOLSÓ látott állapotot vetjük össze (80% → 90% → 80% esetén a 80% megy); a tanuló neve
       // és válaszai a pontszámmal EGY pillanatban rögzülnek; a sikertelen automatikus küldés korlátozottan újrapróbál.
-      var SETTLE_MS = 30000;
+      var RETRY_MS = 30000;
       var RETRY_MAX = 3;
-      var pending = null, settleTimer = null, lastBySlot = {};
+      var report = { order: [], texts: {} }, snap = null, seq = 0, retryTimer = null, lastBySlot = {};
       function scan(mode) {
         var found = candidates(), fresh = 0, i, t, slot;
         for (i = 0; i < found.length; i++) {
@@ -264,39 +266,34 @@ export const MATERIAL_CAPTURE_SCRIPT = `
           if (lastBySlot[slot] === t) { continue; }
           lastBySlot[slot] = t;
           if (mode === 'baseline' || !(mode === 'eval' || GRADE.test(t))) { continue; }
-          if (!pending) { pending = { order: [], texts: {}, attempts: 0 }; }
-          if (!pending.texts.hasOwnProperty(slot)) { pending.order.push(slot); }
-          pending.texts[slot] = t;
+          if (!report.texts.hasOwnProperty(slot)) { report.order.push(slot); }
+          report.texts[slot] = t;
           fresh++;
         }
         if (fresh) {
           // pillanatkép: a levélben a pontszámhoz tartozó név és válaszok szerepelnek, nem a későbbi átírások
-          pending.name = learnerName();
-          pending.answers = answers();
-          pending.picks = document.querySelectorAll('input[type="radio"]:checked').length;
-          if (settleTimer) { clearTimeout(settleTimer); }
-          settleTimer = setTimeout(flushSafely, SETTLE_MS);
+          var texts = [];
+          for (i = 0; i < report.order.length; i++) { texts.push(report.texts[report.order[i]]); }
+          snap = { texts: texts, name: learnerName(), answers: answers(), picks: document.querySelectorAll('input[type="radio"]:checked').length, attempts: 0 };
+          flushSafely();
         }
       }
       function flush() {
-        if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
-        var p = pending;
-        pending = null;
+        if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+        var p = snap;
         // a tananyag maga küldi az eredményt (sendResultEmail / mailto) → nincs második, automatikus levél
         if (!p || window.__websuliExplicitResult) { return; }
-        var texts = [], i;
-        for (i = 0; i < p.order.length; i++) { texts.push(p.texts[p.order[i]]); }
+        var mine = ++seq;
         var title = clip((document.title || (document.querySelector('h1') || {}).textContent || 'Tananyag').trim(), 120);
         var body = 'Automatikusan beolvasott eredmény (a tanuló kiértékelte a tananyagot).\\n' +
-          (p.name ? 'Tanuló: ' + p.name + '\\n' : '') + '\\nEredmény:\\n' + texts.join('\\n---\\n') +
+          (p.name ? 'Tanuló: ' + p.name + '\\n' : '') + '\\nEredmény:\\n' + p.texts.join('\\n---\\n') +
           (p.picks ? '\\n\\nBejelölt választások: ' + p.picks : '') +
           (p.answers.length ? '\\n\\nSzöveges válaszok:\\n' + p.answers.join('\\n') : '');
         post(title + ' — eredmény', clip(body, 4900), true).then(function (ok) {
-          // sikertelen küldés: a pillanatkép visszakerül (ha közben nem jött újabb eredmény), korlátozott újrapróbával
-          if (ok || pending || p.attempts + 1 >= RETRY_MAX) { return; }
+          // sikertelen küldés: ugyanaz a pillanatkép korlátozottan újra megy, ha közben nem jött újabb állapot
+          if (ok || mine !== seq || p.attempts + 1 >= RETRY_MAX) { return; }
           p.attempts++;
-          pending = p;
-          settleTimer = setTimeout(flushSafely, SETTLE_MS);
+          retryTimer = setTimeout(flushSafely, RETRY_MS);
         });
       }
       function flushSafely() { try { flush(); } catch (e) { /* a beolvasás nem zavarhatja a tananyagot */ } }

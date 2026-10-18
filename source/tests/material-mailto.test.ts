@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Script } from "node:vm";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments } from "../server/lib/material-capture";
-import { buildMaterialResultEmail, materialResultDedupKey, normalizeMaterialResult } from "../server/lib/material-result";
+import { buildMaterialResultEmail, materialResultDedupKey, normalizeMaterialResult, ResultCoalescer } from "../server/lib/material-result";
 import { ViewDedup } from "../server/lib/view-dedup";
 
 // Régi (HTML) tananyagok eredménye e-mailben (docs/specs/2026-10-17-regi-anyag-eredmeny.md): a kiszolgáláskori átalakítás.
@@ -139,4 +139,61 @@ test("review #281: a clientId opcionális, formátumellenőrzött; két tanuló 
   const b = { ...a, clientId: "bbbbbbbb2222" };
   assert.notEqual(materialResultDedupKey(a, "1.1.1.1"), materialResultDedupKey(b, "1.1.1.1"));
   assert.equal(materialResultDedupKey(a, "1.1.1.1"), materialResultDedupKey({ ...a }, "1.1.1.1"), "ugyanaz az oldalbetöltés ismétlése duplikátum marad");
+});
+
+// docs/specs/2026-10-18-regi-anyag-eredmeny-azonnal.md: a kliens azonnal küld, a szerver kulcsonként összevár.
+function fakeClock() {
+  let now = 0; let id = 0;
+  const timers = new Map<number, { at: number; run: () => void }>();
+  return {
+    now: () => now,
+    setTimer: (run: () => void, ms: number) => { const t = ++id; timers.set(t, { at: now + ms, run }); return t; },
+    clearTimer: (t: unknown) => { timers.delete(t as number); },
+    async advance(ms: number) {
+      const end = now + ms;
+      for (;;) {
+        const next = [...timers.entries()].filter(([, v]) => v.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
+        if (!next) break;
+        now = next[1].at; timers.delete(next[0]); next[1].run(); await Promise.resolve();
+      }
+      now = end;
+    },
+  };
+}
+
+test("összevárás: 30 mp-en belüli beküldésekből egy levél a legutolsó állapottal; külön kulcs külön levél", async () => {
+  const clock = fakeClock(); const sent: string[] = [];
+  const c = new ResultCoalescer<string>({ deliver: async p => { sent.push(p); }, ...clock });
+  c.submit("anyag|kliensA", "1 / 3"); await clock.advance(10_000);
+  c.submit("anyag|kliensA", "2 / 3"); await clock.advance(10_000);
+  c.submit("anyag|kliensA", "3 / 3");
+  c.submit("anyag|kliensB", "Léna 90%");
+  await clock.advance(29_000);
+  assert.deepEqual(sent, []);
+  await clock.advance(1_000);
+  assert.deepEqual(sent.sort(), ["3 / 3", "Léna 90%"]);
+  assert.equal(c.size, 0);
+});
+
+test("összevárás: folyamatos tevékenységnél legkésőbb 3 perccel az első beküldés után megy; leállításkor azonnal", async () => {
+  const clock = fakeClock(); const sent: string[] = [];
+  const c = new ResultCoalescer<string>({ deliver: async p => { sent.push(p); }, ...clock });
+  for (let i = 1; i <= 9; i++) { c.submit("k", `állapot ${i}`); await clock.advance(20_000); }
+  assert.deepEqual(sent, ["állapot 9"]); // 9 × 20 mp = 180 mp: a felső korlát lejárt
+  c.submit("k", "új sorozat");
+  await c.flushAll();
+  assert.deepEqual(sent, ["állapot 9", "új sorozat"]);
+  await clock.advance(60_000);
+  assert.equal(sent.length, 2, "a leállításkor elküldött nem megy újra");
+});
+
+test("összevárás: a sikeres közvetlen (mailto) küldés törli ugyanazon kulcs összevárt automatikus levelét", async () => {
+  const clock = fakeClock(); const sent: string[] = [];
+  const c = new ResultCoalescer<string>({ deliver: async p => { sent.push(p); }, ...clock });
+  c.submit("anyag|kliensA", "automatikus 70%");
+  c.submit("anyag|kliensB", "másik tanuló 80%");
+  assert.equal(c.cancel("anyag|kliensA"), true);
+  assert.equal(c.cancel("anyag|kliensA"), false);
+  await clock.advance(31_000);
+  assert.deepEqual(sent, ["másik tanuló 80%"]);
 });

@@ -3,7 +3,8 @@ import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments } from "../server/l
 
 // Régi (HTML) tananyagok eredménye e-mailben (docs/specs/2026-10-17-regi-anyag-eredmeny.md): a beinjektált szkript valódi böngészőben.
 // Az anyagot a /dev/:id kiszolgálással azonos módon alakítjuk (átírás + elfogó a fejben és a törzs végén); a beküldés mockolva.
-// Virtuális óra: a kattintás utáni beolvasás 1,5 mp, a rendezett beküldés 30 mp nyugalom után megy.
+// Virtuális óra: a kattintás utáni beolvasás 1,5 mp; az új eredményállapot ezután azonnal megy, az összevárás a szerveren
+// történik (docs/specs/2026-10-18-regi-anyag-eredmeny-azonnal.md — a keret eltávolításakor a várakozó eredmény elveszett).
 type Post = { materialId: string; subject: string; body: string; auto?: boolean };
 
 function serve(stored: string): string {
@@ -78,9 +79,7 @@ test("küldés nélküli régi anyag: a kiértékelés után az új eredmény é
   await page.fill("#t1", "A számláló megmutatja, hány részt veszünk.");
   await page.click("#eval");
   await page.clock.runFor(1600);
-  expect(posts).toEqual([]); // rendezett beküldés: még vár
-  await page.clock.runFor(30_000);
-  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1); // azonnal megy — a szerver vár össze
   const first = posts[0];
   expect(first.auto).toBe(true);
   expect(first.subject).toBe("Törtek – 5. osztály — eredmény");
@@ -113,29 +112,44 @@ var done = 0;
 function checkTask(n) { done++; document.getElementById('task-results').textContent = 'Megoldott feladatok: ' + done + ' / 3 | Pontosság: ' + Math.round(done / 3 * 100) + '%'; }
 </script></body></html>`;
 
-test("feladatonkénti ellenőrzés: a futó statisztika lépésenként nem küld — egy levél a legfrissebb állapottal; az oldal elhagyása azonnal küld", async ({ page }) => {
+test("feladatonkénti ellenőrzés: minden új állapot azonnal megy (a szerver egy levélbe vonja össze), a legutolsó a teljes képpel; azonos állapot nem ismétlődik", async ({ page }) => {
   const { posts } = await open(page, "regi-lepesenkent", STEP_MATERIAL);
   for (const n of [1, 2, 3]) {
     await page.fill(`#a${n}`, `Válasz ${n}`);
     await page.click(`.task:nth-of-type(${n}) button`);
-    await page.clock.runFor(10_000); // tíz mp gondolkodás feladatonként — a 30 mp-es nyugalom nem telik le
+    await page.clock.runFor(1600);
+    await expect.poll(() => posts.length, { timeout: 5000 }).toBe(n);
   }
-  expect(posts).toEqual([]);
-  await page.clock.runFor(30_000);
-  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
-  expect(posts[0].body).toContain("Megoldott feladatok: 3 / 3 | Pontosság: 100%");
-  expect(posts[0].body).not.toContain("1 / 3");
-  expect(posts[0].body).toContain("→ Válasz 3");
+  expect(posts[0].body).toContain("Megoldott feladatok: 1 / 3");
+  expect(posts[2].body).toContain("Megoldott feladatok: 3 / 3 | Pontosság: 100%");
+  expect(posts[2].body).not.toContain("1 / 3");
+  expect(posts[2].body).toContain("→ Válasz 3");
+  expect(new Set(posts.map(p => (p as Post & { clientId?: string }).clientId)).size).toBe(1); // egy kulcs → egy levél a szerveren
 
-  // új eredmény, majd a tanuló azonnal elhagyja az oldalt → nem vész el
+  await page.click("#a1"); // nem változott semmi → nem megy újra
+  await page.clock.runFor(32_000);
+  expect(posts.length).toBe(3);
+
+  // új eredmény, majd a tanuló 1,5 mp-en belül elhagyja az oldalt → a függő beolvasás lefut, és azonnal küld
   await page.evaluate(() => { (window as unknown as { checkTask: (n: number) => void }).checkTask(4); });
-  await page.click("#a1"); // kattintás → beolvasás
   await page.click(".task:nth-of-type(1) button");
-  await page.clock.runFor(1600);
-  expect(posts.length).toBe(1);
+  await page.clock.runFor(200);
   await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
-  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(2);
-  expect(posts[1].body).toContain("Megoldott feladatok: 5 / 3");
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(4);
+  expect(posts[3].body).toContain("Megoldott feladatok: 5 / 3");
+});
+
+// A tulajdonosi jelzés (2026-10-18 17:29) esete: a kiértékelés után a tanuló azonnal visszalép a listára, a keret eltűnik —
+// a beküldésnek ekkorra már el kell indulnia (pagehide / unload a kerettörléskor nem fut).
+test("kiértékelés után azonnali kerettörlés: az eredmény a keret eltűnése előtt már a szerverhez indult", async ({ page }) => {
+  const { posts } = await open(page, "regi-visszalepes", EVAL_MATERIAL);
+  await page.click("#eval");
+  await page.clock.runFor(1600);
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
+  expect(posts[0].body).toContain("80% (Jó)");
+  await page.evaluate(() => document.documentElement.remove());
+  await page.clock.runFor(60_000);
+  expect(posts.length).toBe(1);
 });
 
 const MAILTO_AND_RESULT = `<!DOCTYPE html><html><head><title>Vegyes régi anyag</title></head><body>
@@ -144,17 +158,20 @@ const MAILTO_AND_RESULT = `<!DOCTYPE html><html><head><title>Vegyes régi anyag<
 <button id="send" onclick="window.location.href='mailto:?subject=Kvíz&body=' + encodeURIComponent('70%')">📧 Eredmény elküldése</button>
 </body></html>`;
 
-test("review #281: ha a mailto-ból indított közvetlen küldés elbukik, az automatikus beolvasás tartalékként elküldi az eredményt", async ({ page }) => {
-  const { posts } = await open(page, "regi-vegyes", MAILTO_AND_RESULT, n => (n === 1 ? 502 : 200));
+test("review #281: az automatikus beküldés azonnal megy; a sikertelen közvetlen (mailto) küldés után sem vész el az eredmény", async ({ page }) => {
+  // a sikeres közvetlen küldés a szerveren törli az összevárt automatikus levelet (tests/material-mailto.test.ts)
+  const { posts } = await open(page, "regi-vegyes", MAILTO_AND_RESULT, n => (n === 2 ? 502 : 200));
   await page.click("#eval");
   await page.clock.runFor(1600);
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
+  expect(posts[0]).toMatchObject({ auto: true });
+  expect(posts[0].body).toContain("70% (Közepes)");
   await page.click("#send"); // közvetlen küldés → 502
   await expect(page.getByRole("status")).toContainText("nem sikerült");
-  expect(posts[0]).toMatchObject({ subject: "Kvíz", auto: false });
+  expect(posts[1]).toMatchObject({ subject: "Kvíz", auto: false });
+  expect((posts[1] as Post & { clientId?: string }).clientId).toBe((posts[0] as Post & { clientId?: string }).clientId);
   await page.clock.runFor(32_000);
-  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(2);
-  expect(posts[1]).toMatchObject({ auto: true });
-  expect(posts[1].body).toContain("70% (Közepes)");
+  expect(posts.length).toBe(2); // az automatikus már a szerveren van, nem megy újra
 });
 
 const FLIP_MATERIAL = `<!DOCTYPE html><html><head><title>Visszaváltó kvíz</title></head><body>
@@ -168,24 +185,30 @@ test("review #281: utolsó állapot eredményhelyenként, válasz-pillanatkép, 
   // 1. küldés 502, a többi 200
   const { posts } = await open(page, "regi-visszavalto", FLIP_MATERIAL, n => (n === 1 ? 502 : 200));
   await page.fill("#t1", "Első válasz");
-  for (const id of ["#e80", "#e90", "#e80"]) { await page.click(id); await page.clock.runFor(1600); }
-  await page.fill("#t1", "Később átírt válasz"); // a pontszám után átírt szöveg nem kerül a levélbe
-  await page.clock.runFor(30_000);
+  await page.click("#e80");
+  await page.clock.runFor(1600);
   await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
   expect(posts[0].body).toContain("Eredmény: 80% (Jó)");
-  expect(posts[0].body).not.toContain("90%");
   expect(posts[0].body).toContain("→ Első válasz");
-  expect(posts[0].body).not.toContain("Később átírt");
   expect((posts[0] as Post & { clientId?: string }).clientId).toMatch(/^[0-9a-f]{24}$/);
   // a 502 után ugyanaz a pillanatkép újra megy
   await page.clock.runFor(31_000);
   await expect.poll(() => posts.length, { timeout: 5000 }).toBe(2);
   expect(posts[1].body).toBe(posts[0].body);
 
-  // kilépés 1,5 mp-en belül a kiértékelés után: a függő beolvasás lefut és azonnal küld
   await page.click("#e90");
+  await page.clock.runFor(1600);
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(3);
+  await page.fill("#t1", "Később átírt válasz"); // a pontszám után átírt szöveg nem kerül a már elküldött levélbe
+  expect(posts[2].body).toContain("Eredmény: 90% (Jeles)");
+  expect(posts[2].body).not.toContain("80%"); // eredményhelyenként a legutolsó állapot
+  expect(posts[2].body).not.toContain("Később átírt");
+
+  // kilépés 1,5 mp-en belül a kiértékelés után: a függő beolvasás lefut és azonnal küld
+  await page.click("#e80");
   await page.clock.runFor(200);
   await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
-  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(3);
-  expect(posts[2].body).toContain("Eredmény: 90% (Jeles)");
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(4);
+  expect(posts[3].body).toContain("Eredmény: 80% (Jó)");
+  expect(posts[3].body).toContain("→ Később átírt válasz");
 });
