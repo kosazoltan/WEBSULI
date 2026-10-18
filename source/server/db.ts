@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from "@shared/schema";
 import { logger } from "./lib/logger";
+import { assertE2eDatabaseUrl, isE2eMode } from "./lib/e2e-mode";
 
 const { Pool } = pg;
 
@@ -19,6 +20,15 @@ if (isDevelopment && process.env.DEV_DATABASE_URL) {
   // Warn but don't crash immediately, let the pool try to connect
   logger.warn('DATABASE_URL environment variable is not set. Database connection will fail.');
   DATABASE_URL = "postgres://postgres:postgres@localhost:5432/websuli"; // Default fallback
+}
+
+// docs/specs/2026-10-17-e2e-eldobhato-adatbazis.md: in e2e mode refuse to start before any pool exists unless the
+// database is a literal loopback address (the disposable test container), never production.
+if (isE2eMode()) {
+  assertE2eDatabaseUrl(DATABASE_URL);
+  // Review #296: a migrációs futtató a process.env.DATABASE_URL-t használja (fejlesztői módban a DEV_DATABASE_URL mellett is) —
+  // e2e-ben az is csak loopback lehet, különben egy örökölt éles URL-en migrálna.
+  if (process.env.DATABASE_URL) assertE2eDatabaseUrl(process.env.DATABASE_URL);
 }
 
 // Create PG Pool with proper configuration

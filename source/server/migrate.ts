@@ -10,6 +10,7 @@
  *   3. Manually: npx tsx server/migrate.ts
  */
 import pg from 'pg';
+import { assertE2eDatabaseUrl, isE2eMode } from "./lib/e2e-mode";
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -35,6 +36,8 @@ function isBlockCommentWrappedSchemaTemplate(raw: string): boolean {
  */
 export async function runMigrations(databaseUrl?: string): Promise<void> {
   const dbUrl = databaseUrl || process.env.DATABASE_URL;
+  // Review #296: e2e módban a migráció is csak az eldobható (loopback) adatbázison futhat.
+  if (isE2eMode()) assertE2eDatabaseUrl(dbUrl);
   
   if (!dbUrl) {
     logger.warn('[MIGRATE] ⚠️ No DATABASE_URL set - skipping migrations');

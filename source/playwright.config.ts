@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Az `npm run test:e2e` harness szabad portot ad (WEBSULI_E2E_PORT), hogy egy másik checkout 5000-es
+// szervere ne akadályozza a futást; közvetlen `playwright test` (CI) esetén marad az 5000.
+const port = process.env.WEBSULI_E2E_PORT || '5000';
+
 export default defineConfig({
     testDir: './tests',
     // Only the browser end-to-end suites are Playwright's.
@@ -14,7 +18,7 @@ export default defineConfig({
     workers: process.env.CI ? 1 : undefined,
     reporter: 'html',
     use: {
-        baseURL: 'http://localhost:5000',
+        baseURL: `http://localhost:${port}`,
         trace: 'on-first-retry',
         screenshot: 'on',
         video: 'on-first-retry',
@@ -44,20 +48,23 @@ export default defineConfig({
         // korábban milyen környezettel buildelt. Az éles build a kapcsoló nélkül fut,
         // ezért a mérőoldal a kiadott bundle-ben nincs benne (ellenőrizve: 0 találat).
         command: 'npm run build:e2e && node dist/index.js',
-        url: 'http://localhost:5000/api/health',
+        url: `http://localhost:${port}/api/health`,
         // Mindig SAJÁT szervert indít: ha az 5000-es port foglalt, a Playwright hibával
         // megáll, nem egy idegen (pl. más worktree régi buildjét futtató) szervert tesztel.
         reuseExistingServer: false,
         timeout: 180_000,
         stdout: 'pipe',
         stderr: 'pipe',
-        // A környezet változatlanul megy tovább: a CI-ben a job-szintű env adja a
-        // DATABASE_URL/SESSION_SECRET-et, helyben a szerver a saját .env-jét tölti be
-        // (dotenv/config) — itt NEM adunk alapértéket, mert az felülírná a .env-et.
+        // docs/specs/2026-10-17-e2e-eldobhato-adatbazis.md: WEBSULI_E2E=1 mellett a szerver a
+        // source/.env-et NEM tölti be (az éles Neon DATABASE_URL-t tartalmazza), csak 127.0.0.1/::1
+        // adatbázishoz kapcsolódik (különben nem indul), és kihagyja az induláskori írásokat és a
+        // háttérjobokat. A DATABASE_URL-t helyben az `npm run test:e2e` harness (saját postgres:17
+        // konténer), a CI-ben a job-szintű env (service-konténer) adja.
         env: {
             ...process.env,
             NODE_ENV: 'production',
-            PORT: '5000',
+            PORT: port,
+            WEBSULI_E2E: '1',
         },
     },
 });
