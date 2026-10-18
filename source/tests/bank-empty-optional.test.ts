@@ -45,3 +45,17 @@ test("a kötelező üres lista továbbra is hiba; a kitöltött típusos válasz
   assert.deepEqual(norm.tasks[1].typedAnswers, [{ part: "a", kind: "number", value: "12" }]);
   assert.equal(openTaskSchema.safeParse(norm.tasks[1]).success, true);
 });
+
+// Review #298: a mentett (ellenőrzőpontból jövő) csomag javításai is a naplóba kerülnek, modellhívás nélkül.
+test("review #298: a mentett csomag üres listájának javítása naplózva, fizetős hívás nélkül", async () => {
+  const { buildLessonExperience } = await import("../server/studio/experience-builder");
+  const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+  const lesson = standardFusionFixture(); const e = lesson.experience!;
+  let checkpoint: Parameters<typeof buildLessonExperience>[2]["checkpoint"];
+  await buildLessonExperience(lesson, [], { call: async () => ({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }), save: async cp => { checkpoint = structuredClone(cp); } });
+  assert.ok(checkpoint);
+  for (const part of Object.values(checkpoint!.parts) as Array<{ tasks?: Array<Record<string, unknown>> }>) part.tasks?.forEach(t => { if (!t.typedAnswers) t.typedAnswers = []; });
+  const logged: string[] = [];
+  await buildLessonExperience(lesson, [], { checkpoint, call: async () => { throw new Error("fizetős újragyártás"); }, onToolFix: (tool, fixes) => { if (tool === "bank-packet-autofix") logged.push(...fixes); } });
+  assert.ok(logged.some(f => /üres typedAnswers elhagyva/.test(f)), logged.join(" | "));
+});

@@ -490,12 +490,20 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     let openIssues: string[] = [];
     const autofixContext = { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds, teachingText: teachingTextOf(withoutFigures(lesson.sections[unit.sectionIndex])) };
     // Review #228 (P2): a mentett (gyorsítótárból jövő) csomag is megkapja a determinisztikus rubrika-bővítést — modellhívás nélkül.
-    const fixSaved = (saved: unknown) => { if (!saved) return saved; try { return (deps.autofix ?? autofixBankPacket)(saved, autofixContext).packet; } catch { return saved; } };
-    for (const saved of [fixSaved(checkpoint.parts[hash]), fixSaved(fromPrevious)]) {
+    // Review #298: a javításlista sem vész el — az elfogadott mentett csomagé a naplóba kerül (mint a modellválaszoknál).
+    const fixSaved = (saved: unknown): { packet: unknown; fixes: string[] } => {
+      if (!saved) return { packet: saved, fixes: [] };
+      try { return (deps.autofix ?? autofixBankPacket)(saved, autofixContext); } catch { return { packet: saved, fixes: [] }; }
+    };
+    for (const { packet: saved, fixes: savedFixes } of [fixSaved(checkpoint.parts[hash]), fixSaved(fromPrevious)]) {
       // Review #245 (P2): a mentett csomag a tartalék terhére szűkülhetett (előszűrő, T2-kivétel, salvage) — az elfogadási minimummal olvassuk
       // vissza, különben folytatáskor fizetős teljes újragyártás jönne az ellenőrzött tételek helyett.
       const parsed = salvageSchema.safeParse(saved);
-      if (parsed.success && validate(parsed.data).length === 0) { packet = parsed.data; break; }
+      if (parsed.success && validate(parsed.data).length === 0) {
+        packet = parsed.data;
+        if (savedFixes.length) deps.onToolFix?.("bank-packet-autofix", savedFixes);
+        break;
+      }
     }
     // T6.1: az újrahasznált (gyorsítótárból / korábbi bankból jövő) csomag már átment az előszűrőn — nem kér új modellhívást.
     const reusedPacket = !!packet;
