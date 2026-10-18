@@ -53,7 +53,9 @@ test("review #203: a séma-hibás modellválasz lelet + bukott futás (nem kész
   // Every model-answer schema check of the H/I paths stops the run (no bare finding-and-continue left).
   const routes = readFileSync(join(ROOT, "server/routes.ts"), "utf8");
   assert.doesNotMatch(routes, /workflowFinding\("schema"\)/);
-  assert.equal(routes.match(/await failOnSchemaInvalid\(/g)?.length, 6);
+  // Spec 2026-10-18-admin-korszerusites (dokumentált spec-változás): a hat sémaellenőrzés a megszűnt html-fix / készítő
+  // útvonalakon volt; a routes.ts-ben nem maradt modellválasz-feldolgozás. A failOnSchemaInvalid viselkedését a fenti futás ellenőrzi.
+  assert.equal(routes.match(/await failOnSchemaInvalid\(/g)?.length ?? 0, 0);
 });
 
 test("review #203: a forrás-helyesbítés modell-/parse-hibája is source_correction lelet", async () => {

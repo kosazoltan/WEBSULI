@@ -1,4 +1,5 @@
-import { FileText, Wand2, Settings, Database, Sparkles, Wrench } from "lucide-react";
+import { FileText, Settings, Sparkles, Mail, type LucideIcon } from "lucide-react";
+import { ADMIN_TAB_GROUPS } from "@/lib/admin-tabs";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import {
@@ -8,7 +9,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Users, Tag, Eye, Mail, Activity, GraduationCap } from "lucide-react";
 
 interface MobileBottomNavProps {
   onTabChange?: (tab: string) => void;
@@ -19,51 +19,15 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
   const [location, setLocation] = useLocation();
   const [openSheet, setOpenSheet] = useState<string | null>(null);
 
-  // Admin category navigation (4 fő kategória)
-  const adminCategories = [
-    { 
-      icon: Users, 
-      label: "Felhasználók", 
-      value: "users",
-      tabs: [
-        { value: "users", label: "Felhasználók listája", icon: Users },
-      ]
-    },
-    { 
-      icon: FileText, 
-      label: "Anyagok", 
-      value: "materials",
-      tabs: [
-        { value: "enhanced", label: "AI készítő", icon: Wand2 },
-        { value: "lesson-studio", label: "Tananyag készítése", icon: Sparkles },
-        { value: "workflows", label: "Tananyagkészítési futások", icon: Activity },
-        { value: "pdf-upload", label: "PDF feltöltés", icon: FileText },
-        { value: "improve-materials", label: "Okosítás", icon: Sparkles },
-        { value: "lesson-repair", label: "Tananyagjavító", icon: Wrench },
-      ]
-    },
-    { 
-      icon: Database, 
-      label: "Kezelés", 
-      value: "management",
-      tabs: [
-        { value: "tags", label: "Címkék", icon: Tag },
-        { value: "backup", label: "Másolat", icon: Database },
-        { value: "improvement-backups", label: "Okos mentések", icon: Database },
-      ]
-    },
-    { 
-      icon: Settings, 
-      label: "Beállítások", 
-      value: "settings",
-      tabs: [
-        { value: "material-views", label: "Megtekintések", icon: Eye },
-        { value: "emails", label: "E-mail címek", icon: Mail },
-        { value: "email-debug", label: "Email diagnosztika", icon: Activity },
-        { value: "parent-dashboard", label: "Szülő-dashboard", icon: GraduationCap },
-      ]
-    },
-  ];
+  // Admin kategóriák (4 fő csoport) — a közös admin-menüből (lib/admin-tabs.ts, spec 2026-10-18-admin-korszerusites).
+  const CATEGORY_ICON: Record<string, LucideIcon> = { materials: FileText, authoring: Sparkles, communication: Mail, system: Settings };
+  const SHORT_LABEL: Record<string, string> = { materials: "Anyagok", authoring: "Készítés", communication: "Üzenetek", system: "Rendszer" };
+  const adminCategories = ADMIN_TAB_GROUPS.map(group => ({
+    icon: CATEGORY_ICON[group.id] ?? Settings,
+    label: SHORT_LABEL[group.id] ?? group.label,
+    value: group.id,
+    tabs: group.tabs,
+  }));
 
   const handleCategoryClick = (category: typeof adminCategories[0]) => {
     // Ha nem az /admin oldalon vagyunk, átirányítunk oda

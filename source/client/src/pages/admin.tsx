@@ -23,18 +23,9 @@ import {
   MoreVertical,
   User as UserIcon,
   Users,
-  FileText,
-  Wand2,
-  Database,
   Eye,
-  Tag,
   HelpCircle,
-  Download,
-  FolderOpen,
-  Sparkles,
-  Activity,
-  GraduationCap,
-  Wrench
+  Download
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -62,7 +53,7 @@ import { format } from "date-fns";
 import { hu } from "date-fns/locale";
 import { Link } from "wouter";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { WorkflowHistory } from "@/components/studio/WorkflowMonitor";
 import ExtraEmailsManager from "@/components/ExtraEmailsManager";
 import EmailDiagnosticsPanel from "@/components/EmailDiagnosticsPanel";
@@ -75,6 +66,8 @@ import FileEditDialog from "@/components/FileEditDialog";
 import type { HtmlFileApi } from "@/components/AdminFileDashboard";
 import EmailSendDialog from "@/components/EmailSendDialog";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { resolveAdminTab } from "@/lib/admin-tabs";
+import { AdminTabBar } from "@/components/AdminTabBar";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { AuthStatus } from "@/components/AuthStatus";
 import { useAuth } from "@/hooks/useAuth";
@@ -358,16 +351,7 @@ export default function Admin() {
   }, [isAuthLoading, user, setLocation, toast]);
   
   // URL query paraméter kezelés: /admin?tab=emails
-  const [activeTab, setActiveTab] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tabParam = params.get("tab");
-    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "lesson-repair", "improvement-backups", "email-debug", "parent-dashboard", "lesson-studio", "knowledge-maps", "workflows"];
-    if (!tabParam || !validTabs.includes(tabParam)) return "files";
-    // LS-8 (#191): a tudás-térkép megszűnt önálló menüpontként — a tananyagkészítés
-    // fülön belüli „haladó" blokkba került. A régi deep link nem törhet el, ezért
-    // átirányítjuk (különben némán a 'files' fülre esne vissza).
-    return tabParam === "knowledge-maps" ? "lesson-studio" : tabParam;
-  });
+  const [activeTab, setActiveTab] = useState(() => resolveAdminTab(new URLSearchParams(window.location.search).get("tab")));
   // A ?tab=knowledge-maps hívás a haladó blokkot NYITVA nyissa meg.
   const [studioAdvancedInitial] = useState(
     () => new URLSearchParams(window.location.search).get("tab") === "knowledge-maps",
@@ -729,69 +713,8 @@ export default function Admin() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`flex flex-wrap gap-0.5 h-auto p-0.5 mb-2 bg-orange-100/50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 ${isMobile ? 'hidden' : ''}`}>
-            <TabsTrigger value="files" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-files">
-              <FolderOpen className="h-3 w-3" />
-              Fájlok
-            </TabsTrigger>
-            <TabsTrigger value="users" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-users">
-              <Users className="h-3 w-3" />
-              Felhasználók
-            </TabsTrigger>
-            <TabsTrigger value="enhanced" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-enhanced">
-              <Wand2 className="h-3 w-3" />
-              AI
-            </TabsTrigger>
-            <TabsTrigger value="pdf-upload" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-pdf-upload">
-              <FileText className="h-3 w-3" />
-              PDF
-            </TabsTrigger>
-            <TabsTrigger value="tags" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-tags">
-              <Tag className="h-3 w-3" />
-              Címkék
-            </TabsTrigger>
-            <TabsTrigger value="backup" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-backup">
-              <Database className="h-3 w-3" />
-              Másolat
-            </TabsTrigger>
-            <TabsTrigger value="material-views" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-material-views">
-              <Eye className="h-3 w-3" />
-              Nézetek
-            </TabsTrigger>
-            <TabsTrigger value="emails" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-emails">
-              <Mail className="h-3 w-3" />
-              E-mail
-            </TabsTrigger>
-            <TabsTrigger value="email-debug" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-cyan-700 data-[state=active]:text-white text-cyan-700 dark:text-cyan-400" data-testid="tab-email-debug">
-              <Activity className="h-3 w-3" />
-              Email diag
-            </TabsTrigger>
-            <TabsTrigger value="parent-dashboard" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-purple-700 data-[state=active]:text-white text-purple-700 dark:text-purple-400" data-testid="tab-parent-dashboard">
-              <GraduationCap className="h-3 w-3" />
-              Szülő-dash
-            </TabsTrigger>
-            <TabsTrigger value="lesson-studio" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-emerald-700 data-[state=active]:text-white text-emerald-700 dark:text-emerald-400" data-testid="tab-lesson-studio">
-              <Sparkles className="h-3 w-3" />
-              Tananyag készítése
-            </TabsTrigger>
-            <TabsTrigger value="workflows" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2" data-testid="tab-workflows">Futások</TabsTrigger>
-            <TabsTrigger value="database" className="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 h-6 px-2 data-[state=active]:bg-orange-700 data-[state=active]:text-white" data-testid="tab-database">
-              <Database className="h-3 w-3" />
-              Adatbázis
-            </TabsTrigger>
-            <TabsTrigger value="improve-materials" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-700 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-improve-materials">
-              <Sparkles className="h-3 w-3" />
-              Okosítás
-            </TabsTrigger>
-            <TabsTrigger value="lesson-repair" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-700 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-lesson-repair">
-              <Wrench className="h-3 w-3" />
-              Tananyagjavító
-            </TabsTrigger>
-            <TabsTrigger value="improvement-backups" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-700 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-improvement-backups">
-              <Database className="h-3 w-3" />
-              Okos mentések
-            </TabsTrigger>
-          </TabsList>
+          {/* Spec 2026-10-18-admin-korszerusites: csoportos menü egyetlen forrásból (lib/admin-tabs.ts). */}
+          <AdminTabBar hidden={isMobile} />
 
           <TabsContent value="files" className="space-y-2">
             {activeTab === "files" && <AdminFilesTab />}
@@ -912,26 +835,6 @@ export default function Admin() {
               </Card>
             )}
           </TabsContent>
-
-          <TabsContent value="enhanced" className="space-y-2">
-        {activeTab === "enhanced" && (
-          <Suspense fallback={
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-8 w-64" />
-                <Skeleton className="h-4 w-96 mt-2" />
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-48 w-full" />
-                <Skeleton className="h-12 w-32" />
-              </CardContent>
-            </Card>
-          }>
-            <LessonStudioPanel initialAdvanced={false} />
-          </Suspense>
-        )}
-      </TabsContent>
 
       <TabsContent value="pdf-upload" className="space-y-2">
         {activeTab === "pdf-upload" && (

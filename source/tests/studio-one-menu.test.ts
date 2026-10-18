@@ -79,16 +79,15 @@ test("az egylépéses gomb NEM követel tantárgyat/osztályt", () => {
   );
 });
 
-test("a ?tab=knowledge-maps deep link a tananyagkészítésre irányít, nem esik a 'files' fülre", () => {
+test("a ?tab=knowledge-maps deep link a tananyagkészítésre irányít, nem esik a 'files' fülre", async () => {
   // MÉRVE (m6 túlélő mutáció): enélkül a régi link némán a 'files' fülre esik
   // vissza — a repo ismert hiba-osztálya (validTabs-ból kihagyott érték).
   const admin = readFileSync(new URL("../client/src/pages/admin.tsx", import.meta.url), "utf8");
   const code = admin.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  assert.match(
-    code,
-    /tabParam\s*===\s*"knowledge-maps"\s*\?\s*"lesson-studio"/,
-    "a knowledge-maps deep linket a lesson-studio fülre kell fordítani",
-  );
+  // Spec 2026-10-18-admin-korszerusites (dokumentált spec-változás): az átirányítás a közös lib/admin-tabs.ts-ben van.
+  const { resolveAdminTab } = await import("../client/src/lib/admin-tabs");
+  assert.equal(resolveAdminTab("knowledge-maps"), "lesson-studio", "a knowledge-maps deep linket a lesson-studio fülre kell fordítani");
+  assert.match(code, /resolveAdminTab\(/);
   assert.match(
     code,
     /initialAdvanced=\{studioAdvancedInitial\}/,
@@ -129,11 +128,14 @@ test("a tananyagkészítésen van internetes keresés mód", () => {
   assert.match(code, /WebResearchAgentPanel/);
 });
 
-test("a mobil Anyagok menü tartalmazza a tananyagkészítést", () => {
+test("a mobil Anyagok menü tartalmazza a tananyagkészítést", async () => {
   const nav = readFileSync(
     new URL("../client/src/components/MobileBottomNav.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(nav, /lesson-studio/);
+  // Spec 2026-10-18-admin-korszerusites (dokumentált spec-változás): a mobil menü a közös lib/admin-tabs.ts-ből épül.
+  assert.match(nav, /ADMIN_TAB_GROUPS\.map/);
+  const { ADMIN_TAB_GROUPS } = await import("../client/src/lib/admin-tabs");
+  assert.ok(ADMIN_TAB_GROUPS.find(g => g.id === "authoring")?.tabs.some(t => t.value === "lesson-studio"));
 });
 

@@ -119,7 +119,7 @@ test("AC1 a szerver által mentesített útvonalak raw fetch-ei nem hibák", () 
   const samples = [
     `fetch("/api/login", { method: "POST", body: "{}" });`,
     `fetch("/api/logout", { method: "POST" });`,
-    `fetch("/api/ai/enhanced-creator/analyze-files", { method: "POST", body: "{}" });`,
+    `fetch("/api/ai/stream", { method: "POST", body: "{}" });`,
     `fetch("/api/admin/improve-material/x", { method: "POST" });`,
     `fetch("/api/admin/improved-files/x", { method: "POST" });`,
     `fetch("/api/material-result", { method: "POST", body: "{}" });`,
