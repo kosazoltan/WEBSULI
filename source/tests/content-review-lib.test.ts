@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { wellFormed } from "../scripts/content-review/lib";
 import { applyHtmlPatches, applyLessonPatches, brokenScripts, chunkText, contextOf, costUsd, fromReviewLine, lessonParentContext, lessonTextFields, parseJsonReply, stripForReview, toReviewLine, validateFinding, type Finding } from "../scripts/content-review/lib";
 
 // docs/specs/2026-10-18-tartalmi-lektoralas.md
@@ -110,4 +111,14 @@ test("review #299: lecke — rövid mezők, sortörés-jel oda-vissza, helyes-in
   assert.equal(validateFinding(f("0", "x", { field: "experience.quiz.0.correctIndex" }), "0", "lesson").ok, false);
   assert.equal(applyLessonPatches(json, [f("0", "7", { field: "experience.quiz.0.correctIndex" })]).dropped.length, 1);
   assert.match(lessonParentContext(json, "experience.quiz.0.options.1"), /"question":"Mennyi 2 \+ 2\?".*"correctIndex":0/);
+});
+
+// Élő bukás 2026-10-18: a szeletelés kettévágott egy emojit, az API a magányos surrogate-ot elutasította.
+test("wellFormed: a kettévágott emoji fele U+FFFD lesz, az ép emoji és a szöveg érintetlen", () => {
+  const emoji = "⚖️ mérleg 🏎️";
+  const cut = emoji.slice(0, emoji.length - 2);
+  assert.equal(wellFormed(emoji), emoji);
+  assert.ok(wellFormed(cut).endsWith(String.fromCharCode(0xfffd)));
+  assert.equal(wellFormed(String.fromCharCode(0xdc00) + "a"), String.fromCharCode(0xfffd) + "a");
+  assert.doesNotThrow(() => JSON.parse(JSON.stringify(wellFormed(cut))));
 });

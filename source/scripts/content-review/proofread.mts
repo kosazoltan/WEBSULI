@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { withReadOnlyDb, withWriteTransaction } from "../lib/read-only-db";
-import { applyHtmlPatches, applyLessonPatches, brokenScripts, chunkText, contextOf, costUsd, fromReviewLine, lessonParentContext, lessonTextFields, parseJsonReply, stripForReview, toReviewLine, validateFinding, type Finding } from "./lib";
+import { applyHtmlPatches, applyLessonPatches, brokenScripts, chunkText, contextOf, costUsd, fromReviewLine, lessonParentContext, lessonTextFields, parseJsonReply, stripForReview, toReviewLine, validateFinding, wellFormed, type Finding } from "./lib";
 
 const FINDER = "claude-haiku-5-5";
 const VERIFIER = "claude-opus-5-5";
@@ -76,7 +76,7 @@ function totalSpent() {
 async function call(model: string, system: string, user: string, schema: object, effort: "medium" | "high") {
   if (totalSpent() >= budget) throw new Error(`Keret elérve ($${totalSpent().toFixed(2)}); újabb fizetős hívás nem indul.`);
   const stream = client.messages.stream({
-    model, max_tokens: 16_000, system, messages: [{ role: "user", content: user }],
+    model, max_tokens: 16_000, system, messages: [{ role: "user", content: wellFormed(user) }],
     thinking: { type: "adaptive" }, output_config: { effort, format: { type: "json_schema", schema } },
   } as Anthropic.MessageStreamParams);
   const msg = await stream.finalMessage();

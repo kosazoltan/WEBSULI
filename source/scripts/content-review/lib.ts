@@ -170,6 +170,12 @@ export function parseJsonReply<T>(text: string): T {
   return JSON.parse(start > 0 ? body.slice(start) : body) as T;
 }
 
+/** Live failure 2026-10-18: a chunk or context cut can split an emoji's surrogate pair, and the API rejects the lone half
+ *  ("unexpected end of hex escape"). Lone surrogates become U+FFFD before any request. */
+export function wellFormed(text: string): string {
+  return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "�");
+}
+
 /** ±`radius` characters around the quote, for the verifier. */
 export function contextOf(text: string, quote: string, radius = 300): string {
   const at = text.indexOf(quote);
