@@ -17,6 +17,9 @@ const limit = Number(arg("limit") ?? Infinity);
 const budget = Number(arg("budget") ?? 20);
 const onlyIds = arg("ids")?.split(",").filter(Boolean);
 const logPath = arg("log");
+// Parallel runs: `--shard k/n` takes every n-th material (by stable order), `--prior a.jsonl,b.jsonl` skips materials already done there.
+const [shardK, shardN] = (arg("shard") ?? "0/1").split("/").map(Number);
+const priorLogs = arg("prior")?.split(",").filter(Boolean) ?? [];
 if (!logPath) throw new Error("--log <napló.jsonl> kötelező");
 if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY nincs beállítva");
 
@@ -31,6 +34,12 @@ if (existsSync(logPath)) for (const line of readFileSync(logPath, "utf8").split(
   if (!line.trim()) continue;
   const row = JSON.parse(line) as LogRow;
   spent += row.costUsd;
+  if (!row.error && row.dryRun === dryRun) done.add(row.id);
+}
+
+for (const prior of priorLogs) if (existsSync(prior)) for (const line of readFileSync(prior, "utf8").split("\n")) {
+  if (!line.trim()) continue;
+  const row = JSON.parse(line) as LogRow;
   if (!row.error && row.dryRun === dryRun) done.add(row.id);
 }
 
@@ -167,7 +176,7 @@ async function applyLesson(m: Material, fixes: Finding[], adminId: string) {
   return applied;
 }
 
-const materials = (await loadMaterials()).filter(m => !onlyIds || onlyIds.includes(m.id)).filter(m => !done.has(m.id)).slice(0, limit);
+const materials = (await loadMaterials()).filter(m => !onlyIds || onlyIds.includes(m.id)).filter((_, i) => i % shardN === shardK).filter(m => !done.has(m.id)).slice(0, limit);
 const [admin] = await withReadOnlyDb(q => q<{ id: string }>("SELECT id FROM users WHERE is_admin AND first_name = 'Kósa' ORDER BY created_at LIMIT 1"));
 if (!admin) throw new Error("Az admin felhasználó nem található.");
 console.log(`Anyagok: ${materials.length} (eddigi költség: $${spent.toFixed(4)}, keret: $${budget})${dryRun ? " — PRÓBA, írás nélkül" : ""}`);
