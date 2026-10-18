@@ -26,7 +26,8 @@ export function pickDailyMaterial<T extends ReminderMaterial>(files: readonly T[
 export function displayTopic(label: string | null | undefined): string | null {
   if (!label) return null;
   const out = label
-    .replace(/\s*\(OH-[A-Z0-9-]+\)/g, "")
+    // Review #294: a tárolt alakok mind: szóköz a zárójel előtt, „/” és „_”, hiányzó nyitó zárójel.
+    .replace(/\s*\(?\s*OH-[A-Za-z0-9_/-]+\s*\)/g, "")
     .replace(/—\s*\.\s*/g, "— ")
     .replace(/^\s*\.\s*/, "")
     .replace(/\s+/g, " ")

@@ -72,3 +72,15 @@ test("a tanmenet-téma emberi alakja: OH-kód és felesleges írásjelek nélkü
   assert.equal(displayTopic(null), null);
   assert.equal(displayTopic("  "), null);
 });
+
+test("review #294: a valódi tanmenet-adat egyik tervcímében sem marad OH-kód", async () => {
+  const { displayTopic } = await import("../shared/daily-reminder");
+  const data = JSON.parse(read("server/data/tanmenet-2020.json")) as { plans: Array<{ title: string }> };
+  const titles = data.plans.map(p => p.title).filter(t => t.includes("OH-"));
+  assert.ok(titles.length > 100);
+  const left = titles.map(t => displayTopic(`${t}: téma`)!).filter(t => /OH-/.test(t));
+  assert.deepEqual(left, []);
+  assert.equal(displayTopic("Etika 1. (OH-ETI01TA ): Én"), "Etika 1.: Én");
+  assert.equal(displayTopic("Földrajz 9-10. I. rész (OH-FOL910TA/I): Térkép"), "Földrajz 9-10. I. rész: Térkép");
+  assert.equal(displayTopic("Földrajz 10. (OH-FOL910TA_II): Gazdaság"), "Földrajz 10.: Gazdaság");
+});
