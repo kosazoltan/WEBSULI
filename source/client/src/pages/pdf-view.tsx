@@ -1,4 +1,5 @@
 import { useParams, useLocation } from "wouter";
+import { useRecordLearnerView } from "@/lib/learnerProfile";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Share2, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,8 @@ const CLASSROOM_COLORS = [
 
 export default function PdfView() {
   const { id } = useParams<{ id: string }>();
+  // Tanulói profil (review #302): a PDF megnyitása a párosított tanuló naplójába.
+  useRecordLearnerView(id);
   const [, setLocation] = useLocation();
 
   // Fetch material metadata

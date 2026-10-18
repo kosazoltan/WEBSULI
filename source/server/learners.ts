@@ -95,11 +95,14 @@ export function learnerTokenFor(id: string, version: number): string | null {
   return secret ? signLearnerToken(id, version, secret) : null;
 }
 
-/** A tanuló napi sorozata (S3): az elmúlt 60 nap budapesti tevékenységnapjaiból. */
+const budapestDayOf = (d: Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Budapest" }).format(d);
+
+/** A tanuló napi sorozata (S3): az elmúlt 60 nap budapesti tevékenységnapjaiból. Review #303: a határ teljes budapesti naptári nap. */
 export async function learnerStreak(id: string, now = new Date()): Promise<LearningStreak> {
   const rows = await db.execute<{ day: string }>(sql`SELECT DISTINCT to_char((created_at AT TIME ZONE 'Europe/Budapest')::date, 'YYYY-MM-DD') AS day
-    FROM learner_activity WHERE learner_id = ${id} AND created_at > ${new Date(now.getTime() - 60 * 86_400_000)}`);
-  const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Budapest" }).format(now);
+    FROM learner_activity WHERE learner_id = ${id}
+      AND (created_at AT TIME ZONE 'Europe/Budapest')::date >= ${budapestDayOf(new Date(now.getTime() - 60 * 86_400_000))}::date`);
+  const today = budapestDayOf(now);
   return learningStreak(rows.rows.map((r) => r.day), today);
 }
 

@@ -79,10 +79,11 @@ export function normalizeMaterialResult(raw: unknown): MaterialResultValidation 
 
 /** Az eredményszöveg első százaléka (0–100), a tanulói tevékenységnaplóhoz; nincs → null. */
 export function percentOf(body: string): number | null {
-  const m = /(\d{1,3}(?:[.,]\d+)?)\s*%/.exec(body);
+  // Review #302: a teljes, előjeles szám (nem a vége), a tartomány a kerekítés ELŐTT: -10% / 1100% / 100,4% → null.
+  const m = /(^|[^\d.,])(-?\d+(?:[.,]\d+)?)\s*%/.exec(body);
   if (!m) return null;
-  const n = Math.round(Number(m[1].replace(',', '.')));
-  return n >= 0 && n <= 100 ? n : null;
+  const n = Number(m[2].replace(',', '.'));
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? Math.round(n) : null;
 }
 
 /** A párosított tanuló eredménye: a tárgy a keresztnévvel kezdődik („Dominik – …”). */
