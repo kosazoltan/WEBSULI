@@ -49,3 +49,10 @@ test("levél: ismétlésnél jelölt tárgy és címke; a cím escape-elve", () 
   assert.ok(!html.includes("Igék <b>"));
   assert.match(reminderHtml({ first: "D", title: "T", url: "u", motivation: "m" }), /A MAI TANANYAGOD/);
 });
+
+test("review #305: más évfolyam gyenge eredménye nem kerül ismétlésre", () => {
+  const history = { seenIds: new Set(["x"]), weak: [{ materialId: "x", percent: 30 }] };
+  const r = pickSmartMaterial(files, 5, 0.5, new Set(), history);
+  assert.equal(r?.repeatPercent, undefined);
+  assert.equal(r?.file.classroom, 5);
+});

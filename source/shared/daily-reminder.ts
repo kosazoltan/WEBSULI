@@ -49,7 +49,8 @@ export function learnerHistoryFrom(rows: ReadonlyArray<{ materialId: string | nu
 export function pickSmartMaterial<T extends ReminderMaterial>(files: readonly T[], grade: number, today: number, recentIds: ReadonlySet<string>, learner?: LearnerHistory | null): { file: T; repeatPercent?: number } | null {
   if (learner) {
     for (const w of learner.weak) {
-      const file = files.find(f => f.id === w.materialId);
+      // Review #305: az ismétlés is a tanuló évfolyamán belül marad.
+      const file = files.find(f => f.id === w.materialId && f.classroom === grade);
       if (file && !recentIds.has(file.id)) return { file, repeatPercent: w.percent };
     }
     const fresh = curriculumSort(files.filter(f => f.classroom === grade), today).find(f => !recentIds.has(f.id) && !learner.seenIds.has(f.id));
