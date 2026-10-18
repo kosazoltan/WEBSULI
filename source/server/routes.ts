@@ -25,7 +25,7 @@ import { generateMaterialQuiz, QuizMaterialNotFound } from "./gameQuizGeneratorS
 
 import { db, dbPool } from "./db";
 import { getMaterialPreviewUrl, getBaseUrl } from "./utils/config";
-import { triggerEventBackup, listBackups, readBackup, createAutoBackup } from "./autoBackup";
+import { triggerEventBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
@@ -758,9 +758,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return enforceOriginAllowlist(req, res, next);
     }
 
-    // Skip CSRF for AI endpoints (Enhanced Material Creator uses direct API calls)
-    // These endpoints have their own authentication checks, but we still enforce Origin/Referer allowlist
-    if (path.startsWith('/api/ai/') || path.startsWith('/api/admin/improve-material/') || path.startsWith('/api/admin/improved-files/')) {
+    // The improvement endpoints are called directly (no CSRF token); the Origin/Referer allowlist still applies.
+    // Spec 2026-10-18-legacy-maradvanyok: the /api/ai/ exemption is gone with its last endpoint.
+    if (path.startsWith('/api/admin/improve-material/') || path.startsWith('/api/admin/improved-files/')) {
       return enforceOriginAllowlist(req, res, next);
     }
     // BACKLOG T1: a tananyag-iframe-ből hívott eredményküldés — nincs CSRF-tokenje,
@@ -2530,62 +2530,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ========== FILE-BASED BACKUP ENDPOINTS ==========
-  // List all file-based backups
-  adminRouter.get("/file-backups", async (req, res) => {
-    try {
-      const backupsList = await listBackups();
-      res.json(backupsList);
-    } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      logger.error('[FILE-BACKUP] Error listing backups:', error);
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  // Restore from file-based backup
-  adminRouter.post("/file-backups/restore/:filename", async (req, res) => {
-    try {
-      const { filename } = req.params;
-
-      logger.info(`[FILE-BACKUP] Restore requested for: ${filename}`);
-
-      // Read backup file
-      const backupData = await readBackup(filename);
-      if (!backupData) {
-        return res.status(404).json({ message: "Backup fájl nem található" });
-      }
-
-      // Validate backup structure (check for 'data' field from autoBackup.ts format)
-      const snapshotData = (backupData.data || backupData.snapshot) as
-        | Parameters<typeof storage.importBackupSnapshot>[0]
-        | undefined;
-      if (!snapshotData || !snapshotData.htmlFiles || !snapshotData.users) {
-        return res.status(400).json({ message: "Érvénytelen backup fájl formátum" });
-      }
-
-      // Create pre-restore backup automatically
-      logger.info('[FILE-BACKUP] Creating pre-restore backup...');
-      await createAutoBackup('pre-restore');
-
-      // Perform restore using transaction-safe import
-      logger.info('[FILE-BACKUP] Starting database restore...');
-      await storage.importBackupSnapshot(snapshotData);
-
-      res.json({
-        success: true,
-        message: `Backup sikeresen visszaállítva: ${filename}`,
-        materialsRestored: snapshotData.htmlFiles.length,
-      });
-    } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      logger.error('[FILE-BACKUP] Restore error:', error);
-      res.status(500).json({
-        message: `Backup visszaállítás sikertelen: ${err.message}`
-      });
-    }
-  });
-
   // ========== PRODUCTION → DEV DATABASE SYNC ==========
   // Sync production database to dev database (ADMIN ONLY)
   adminRouter.post("/sync-from-production", async (req, res) => {
@@ -2636,35 +2580,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           details: err.stack ? err.stack.split('\n').slice(0, 5).join('\n') : undefined
         })
       });
-    }
-  });
-
-  // Download file-based backup (streaming response)
-  adminRouter.get("/file-backups/download/:filename", async (req, res) => {
-    try {
-      const { filename } = req.params;
-
-      // Security: Validate filename
-      if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-        return res.status(400).json({ message: "Érvénytelen fájlnév" });
-      }
-
-      const backupData = await readBackup(filename);
-      if (!backupData) {
-        return res.status(404).json({ message: "Backup fájl nem található" });
-      }
-
-      // Set headers for download
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Cache-Control', 'no-cache');
-
-      // Send backup data
-      res.json(backupData);
-    } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      logger.error('[FILE-BACKUP] Download error:', error);
-      res.status(500).json({ message: err.message });
     }
   });
 

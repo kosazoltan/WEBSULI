@@ -40,7 +40,6 @@ const ALLOWLIST: Record<string, Allowed> = {
   // ── Mentés/visszaállítás/szinkron: katasztrófa-helyreállítás, korábbi állapot visszatöltése.
   "route:POST /backups/:id/restore@server/routes.ts": { category: "backup-restore", reason: "Adatbázis-mentés kézi visszaállítása; korábbi, már ellenőrzött állapot kerül vissza." },
   "route:POST /backups/import@server/routes.ts": { category: "backup-restore", reason: "Exportált mentés kézi importja; korábbi, már ellenőrzött állapot kerül vissza." },
-  "route:POST /file-backups/restore/:filename@server/routes.ts": { category: "backup-restore", reason: "Fájl-mentés kézi visszaállítása; korábbi, már ellenőrzött állapot kerül vissza." },
   "route:POST /improvement-backups/:id/restore@server/routes.ts": { category: "backup-restore", reason: "Javítás előtti mentés kézi visszaállítása (visszavonás); a javítás maga apply workflow-ban futott." },
   "route:POST /sync-from-production@server/routes.ts": { category: "backup-restore", reason: "Fejlesztői adatbázis szinkronja az élesből (admin); tartalmat nem állít elő." },
   // ── Parancssori szkriptek (nem a szerver kérés-útján futnak).

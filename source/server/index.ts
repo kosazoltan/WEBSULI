@@ -21,7 +21,6 @@ import { startSkillLearningAudit } from "./workflows/learning-worker";
 import { requestIdMiddleware } from "./middleware/request-id";
 import errorReportRouter from "./routes/error-report";
 import staticAuditRouter from "./routes/static-audit";
-import { aiPayloadGuard } from "./lib/ai-payload-guard";
 import { getAllowedOrigins, isOriginAllowed, isSameOriginRequest } from "./lib/allowed-origins";
 import { logger } from "./lib/logger";
 import { isLessonRoute, lessonCspDirectives } from "./lib/csp-profiles";
@@ -346,15 +345,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rate limiting ONLY for AI endpoints (expensive operations)
-const aiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // 50 AI requests per window (less than general API)
-  message: "Túl sok AI kérés, próbáld újra később!",
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 // Strict rate limiter for public email subscriptions (spam protection)
 const subscriptionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -405,8 +395,6 @@ const publicWriteLimiter = rateLimit({
 });
 
 // Apply rate limiting only to specific endpoints
-app.use("/api/ai/", aiLimiter); // All AI endpoints
-app.use("/api/ai/", aiPayloadGuard()); // C1: payload size + history limits
 app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
 app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection

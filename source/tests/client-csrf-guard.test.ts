@@ -36,7 +36,6 @@ const CLIENT_SRC = path.join(import.meta.dirname, "..", "client", "src");
 const SERVER_ORIGIN_GUARDED: { prefix: string; why: string }[] = [
   { prefix: "/api/login", why: "nincs még session, a tokent nem tudná hitelesíteni" },
   { prefix: "/api/logout", why: "kijelentkezés nem viselhet session-höz kötött tokent" },
-  { prefix: "/api/ai/", why: "SSE folyamok — a böngésző fetch-e nem tud fejlécet rakni rájuk" },
   {
     prefix: "/api/admin/improve-material/",
     why: "hosszú SSE folyam, a szerver Origin-allowlisttel őrzi",
@@ -119,7 +118,6 @@ test("AC1 a szerver által mentesített útvonalak raw fetch-ei nem hibák", () 
   const samples = [
     `fetch("/api/login", { method: "POST", body: "{}" });`,
     `fetch("/api/logout", { method: "POST" });`,
-    `fetch("/api/ai/stream", { method: "POST", body: "{}" });`,
     `fetch("/api/admin/improve-material/x", { method: "POST" });`,
     `fetch("/api/admin/improved-files/x", { method: "POST" });`,
     `fetch("/api/material-result", { method: "POST", body: "{}" });`,

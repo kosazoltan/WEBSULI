@@ -149,63 +149,6 @@ async function cleanOldBackups(): Promise<number> {
 }
 
 /**
- * Lists all available backups
- */
-export async function listBackups(): Promise<Array<{ filename: string; size: number; created: Date }>> {
-  try {
-    const files = await fs.readdir(BACKUP_DIR);
-    const backupFiles = files.filter(f => f.startsWith('backup_') && f.endsWith('.json'));
-
-    const backupInfoPromises = backupFiles.map(async (file) => {
-      // SECURITY: Use sanitized path even for readdir results
-      const filepath = getSafeBackupPath(file);
-      if (!filepath) {
-        return null; // Skip invalid filenames
-      }
-      const stats = await fs.stat(filepath);
-      return {
-        filename: file,
-        size: stats.size,
-        created: stats.mtime,
-      };
-    });
-
-    const backupInfos = (await Promise.all(backupInfoPromises)).filter(Boolean) as Array<{ filename: string; size: number; created: Date }>;
-    return backupInfos.sort((a, b) => b.created.getTime() - a.created.getTime());
-  } catch (error) {
-    logger.error('[AUTO-BACKUP] ❌ Failed to list backups:', error);
-    return [];
-  }
-}
-
-/**
- * Reads a specific backup file
- */
-export async function readBackup(filename: string): Promise<Record<string, unknown> | null> {
-  try {
-    // SECURITY: Use sanitized path helper to prevent path traversal
-    const filepath = getSafeBackupPath(filename);
-    if (!filepath) {
-      logger.error('[AUTO-BACKUP] ❌ Invalid filename rejected:', String(filename).substring(0, 50));
-      return null;
-    }
-    
-    try {
-      await fs.access(filepath);
-    } catch {
-      logger.error('[AUTO-BACKUP] ❌ Backup not found:', String(filename).substring(0, 50));
-      return null;
-    }
-
-    const content = await fs.readFile(filepath, 'utf-8');
-    return JSON.parse(content);
-  } catch (error) {
-    logger.error('[AUTO-BACKUP] ❌ Failed to read backup:', error);
-    return null;
-  }
-}
-
-/**
  * Debounced event-driven backup
  * Prevents backup spam during rapid CRUD operations
  */

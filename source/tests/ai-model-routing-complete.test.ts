@@ -128,13 +128,8 @@ test("nincs elavult modell-generáció a routingban", () => {
 });
 
 test("minden legacy feladat megmondja, melyik kulcs kell hozzá", () => {
+  // Spec 2026-10-18-legacy-maradvanyok: a régi admin-útvonalak kulcsai (htmlFix, chatgptChat, …) kivezetve.
   const tasks: LegacyTask[] = [
-    "htmlFix",
-    "htmlTheme",
-    "htmlFixStream",
-    "claudeChat",
-    "analyzeFiles",
-    "chatgptChat",
     "improve",
     "quizGenerator",
     "webResearch",
@@ -150,20 +145,20 @@ test("minden legacy feladat megmondja, melyik kulcs kell hozzá", () => {
   }
 
   assert.equal(requiredKeyFor("improve"), "AI_INTEGRATIONS_ANTHROPIC_API_KEY");
-  assert.equal(requiredKeyFor("chatgptChat"), "AI_INTEGRATIONS_OPENAI_API_KEY");
+  assert.equal(requiredKeyFor("quizGenerator"), "AI_INTEGRATIONS_ANTHROPIC_API_KEY");
 });
 
 test("resolveLegacyModel környezeti felülírást is elfogad", () => {
   // Tulajdonosi modellváltás 2026-10-03: a gpt-5.6-sol helyett gpt-6.1-sol (saját OpenAI-kulcs).
-  assert.equal(resolveLegacyModel("chatgptChat", {}), "gpt-6.1-sol");
+  assert.equal(resolveLegacyModel("quizGenerator", {}), "claude-opus-5-5");
   assert.equal(
-    resolveLegacyModel("chatgptChat", { LEGACY_MODEL_CHATGPT_CHAT: "gpt-5.6-luna" }),
+    resolveLegacyModel("quizGenerator", { LEGACY_MODEL_QUIZ_GENERATOR: "gpt-5.6-luna" }),
     "gpt-5.6-luna",
   );
   // Üres felülírás nem számít felülírásnak.
   assert.equal(
-    resolveLegacyModel("chatgptChat", { LEGACY_MODEL_CHATGPT_CHAT: "  " }),
-    "gpt-6.1-sol",
+    resolveLegacyModel("quizGenerator", { LEGACY_MODEL_QUIZ_GENERATOR: "  " }),
+    "claude-opus-5-5",
   );
 });
 
@@ -171,7 +166,7 @@ test("a hosszú generáló feladatok medium reasoning efforttal futnak", () => {
   // A két szolgáltató MÁSKÉNT nevezi ezt a paramétert; a route-ok a megfelelő alakot
   // küldik (OpenAI: reasoning_effort, Anthropic: output_config.effort) — mindkettő
   // élő hívással igazolva 2026-09-04.
-  for (const task of ["improve", "claudeHtml", "analyzeFiles", "chatgptChat"] as LegacyTask[]) {
+  for (const task of ["improve", "quizGenerator"] as LegacyTask[]) {
     assert.equal(effortFor(task), "medium", `${task} effortja nem medium`);
   }
 });

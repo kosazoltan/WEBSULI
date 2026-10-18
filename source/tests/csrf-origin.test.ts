@@ -14,7 +14,8 @@ import { isOriginAllowed, getAllowedOrigins, getSelfOrigin, isSameOriginRequest 
  * is not exported, but its decision function — isOriginAllowed() — now lives in
  * server/lib/allowed-origins.ts and IS imported here, so these tests exercise the real
  * production allowlist rather than a copy of it. Only the thin request-routing wrapper is
- * reproduced below.
+ * reproduced below. Spec 2026-10-18-legacy-maradvanyok: the /api/ai/ exemption is gone with its last endpoint, so the
+ * mechanism is exercised on the remaining /api/admin/improve-material/ prefix.
  */
 const ORIGIN_GUARDED_PATHS = [
   "/api/login",
@@ -27,7 +28,6 @@ function isOriginGuardedPath(path: string): boolean {
     // Mirrors routes.ts: read-only like lookups skip the token but keep the allowlist.
     path === "/api/materials/likes/batch" ||
     /^\/api\/materials\/[^/]+\/likes\/check$/.test(path) ||
-    path.startsWith("/api/ai/") ||
     path.startsWith("/api/admin/improve-material/") ||
     path.startsWith("/api/admin/improved-files/")
   );
@@ -74,8 +74,8 @@ async function withServer(run: (baseUrl: string) => Promise<void>): Promise<void
   app.use(express.json());
   app.use(originCsrfMiddleware);
   const ok = (_req: Request, res: Response) => res.status(200).json({ ok: true });
-  app.post("/api/ai/generate", ok);
-  app.get("/api/ai/generate", ok);
+  app.post("/api/admin/improve-material/generate", ok);
+  app.get("/api/admin/improve-material/generate", ok);
   app.post("/api/login", ok);
   app.post("/api/logout", ok);
   app.post("/api/materials/likes/batch", ok);
@@ -111,10 +111,10 @@ async function withEnv(
   }
 }
 
-test("allowed Origin on mutating /api/ai/ passes (not 403)", async () => {
+test("allowed Origin on mutating /api/admin/improve-material/ passes (not 403)", async () => {
   await withEnv({ ALLOWED_ORIGINS: "https://websuli.example", NODE_ENV: "production" }, async () => {
     await withServer(async (baseUrl) => {
-      const r = await fetch(`${baseUrl}/api/ai/generate`, {
+      const r = await fetch(`${baseUrl}/api/admin/improve-material/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Origin: "https://websuli.example" },
         body: JSON.stringify({ x: 1 }),
@@ -124,10 +124,10 @@ test("allowed Origin on mutating /api/ai/ passes (not 403)", async () => {
   });
 });
 
-test("foreign Origin on mutating /api/ai/ returns 403", async () => {
+test("foreign Origin on mutating /api/admin/improve-material/ returns 403", async () => {
   await withEnv({ ALLOWED_ORIGINS: "https://websuli.example", NODE_ENV: "production" }, async () => {
     await withServer(async (baseUrl) => {
-      const r = await fetch(`${baseUrl}/api/ai/generate`, {
+      const r = await fetch(`${baseUrl}/api/admin/improve-material/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
         body: JSON.stringify({ x: 1 }),
@@ -139,10 +139,10 @@ test("foreign Origin on mutating /api/ai/ returns 403", async () => {
   });
 });
 
-test("GET /api/ai/ is a safe method and is not Origin-blocked", async () => {
+test("GET /api/admin/improve-material/ is a safe method and is not Origin-blocked", async () => {
   await withEnv({ ALLOWED_ORIGINS: "https://websuli.example" }, async () => {
     await withServer(async (baseUrl) => {
-      const r = await fetch(`${baseUrl}/api/ai/generate`, {
+      const r = await fetch(`${baseUrl}/api/admin/improve-material/generate`, {
         method: "GET",
         headers: { Origin: "https://evil.example" },
       });
@@ -225,7 +225,7 @@ test("read-only material like POSTs skip the CSRF token but keep the Origin allo
 test("Referer is used as the origin when the Origin header is absent", async () => {
   await withEnv({ ALLOWED_ORIGINS: "https://websuli.example", NODE_ENV: "production" }, async () => {
     await withServer(async (baseUrl) => {
-      const r = await fetch(`${baseUrl}/api/ai/generate`, {
+      const r = await fetch(`${baseUrl}/api/admin/improve-material/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -35,13 +35,6 @@ type LegacyTask = keyof typeof LEGACY_MODELS;
 
 /** Magyar nevek a jelentéshez — a kulcshiány önmagában semmit nem mond a tulajdonosnak. */
 const FEATURE_LABELS: Record<string, string> = {
-  htmlFix: "HTML-hibajavítás (admin)",
-  htmlTheme: "Téma-átírás (admin)",
-  htmlFixStream: "SSE HTML-javítás (Fejlett Készítő)",
-  claudeChat: "Claude beszélgetés (Fejlett Készítő)",
-  claudeHtml: "Claude HTML-generálás (Fejlett Készítő)",
-  analyzeFiles: "Feltöltött fájlok elemzése (vision)",
-  chatgptChat: "ChatGPT beszélgetés (Fejlett Készítő)",
   improve: "Tananyag-okosítás",
   quizGenerator: "Kvíz-generálás tananyagból",
   studioExtract: "Tudás-térkép kinyerés (Stúdió)",
