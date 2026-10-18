@@ -55,7 +55,7 @@ export function captureLearnerTokenFromUrl(): void {
   }
 }
 
-export type LearnerProfile = { firstName: string; grade: number };
+export type LearnerProfile = { firstName: string; grade: number; streak?: { days: number; today: boolean } };
 
 /** A párosított eszköz tanulója; érvénytelen (hamis / visszavont) tokennél a token törlődik, és a tanuló névtelen. */
 export function useLearnerProfile(): LearnerProfile | null {

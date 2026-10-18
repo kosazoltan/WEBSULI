@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
 import { extraEmailAddresses, learnerActivity, learners, type Learner } from "../shared/schema";
 import { firstNameOf } from "../shared/daily-reminder";
+import { learningStreak, type LearningStreak } from "../shared/learner-streak";
 import { learnerLinkSecret, parseLearnerToken, signLearnerToken } from "./lib/learner-token";
 import { logger } from "./lib/logger";
 
@@ -92,6 +93,14 @@ export async function resolveLearner(token: unknown): Promise<ResolvedLearner | 
 export function learnerTokenFor(id: string, version: number): string | null {
   const secret = learnerLinkSecret();
   return secret ? signLearnerToken(id, version, secret) : null;
+}
+
+/** A tanuló napi sorozata (S3): az elmúlt 60 nap budapesti tevékenységnapjaiból. */
+export async function learnerStreak(id: string, now = new Date()): Promise<LearningStreak> {
+  const rows = await db.execute<{ day: string }>(sql`SELECT DISTINCT to_char((created_at AT TIME ZONE 'Europe/Budapest')::date, 'YYYY-MM-DD') AS day
+    FROM learner_activity WHERE learner_id = ${id} AND created_at > ${new Date(now.getTime() - 60 * 86_400_000)}`);
+  const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Budapest" }).format(now);
+  return learningStreak(rows.rows.map((r) => r.day), today);
 }
 
 /** Tevékenység (megtekintés / eredmény) a tanuló naplójába; sosem dob — a tanuló felülete nem függ tőle. */

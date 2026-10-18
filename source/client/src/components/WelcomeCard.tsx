@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import { getClassroomLabel } from "@shared/classrooms";
 import { useLearnerProfile } from "@/lib/learnerProfile";
+import { streakMessage } from "@shared/learner-streak";
 import { LEARNER_NAME_MAX, WELCOME_DISMISSED_KEY, loadLearnerName, loadNameOverride, motivationFor, newestMaterials, resolveLearnerName, saveLearnerName, saveNameOverride } from "@/lib/learner";
 
 type Material = { id: string; title: string; classroom: number; createdAt: string };
@@ -34,6 +35,8 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
   // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md): a profil évfolyamát és nevét a LearnerProfileSync szinkronizálja
   // (alkalmazásszinten); itt csak a megjelenített név elsőbbsége.
   const profile = useLearnerProfile();
+  // S3: a párosított tanuló napi sorozata
+  const streakText = streakMessage(profile?.streak);
 
   const account = user ? { id: user.id, firstName: user.firstName } : null;
   // review #289: bejelentkezve a kézi „Módosítás” fiókhoz kötött felülírás — fiókváltáskor nem öröklődik
@@ -131,6 +134,9 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
         </button>
       </div>
       <p className="text-sm sm:text-base text-white/90 mt-0.5" data-testid="welcome-motivation">{motivationFor(name, today)}</p>
+      {streakText && (
+        <p className="text-sm sm:text-base font-bold text-amber-200 mt-1" data-testid="welcome-streak">🔥 {streakText}</p>
+      )}
       {picks.files.length > 0 && (
         <>
           <h3 className="mt-3 mb-1.5 text-sm font-bold text-amber-200">

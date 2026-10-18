@@ -31,7 +31,7 @@ import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, percentOf, withLearnerSubject, type MaterialResultPayload } from "./lib/material-result";
-import { recordLearnerActivity, resolveLearner, syncLearners, type ResolvedLearner } from "./learners";
+import { learnerStreak, recordLearnerActivity, resolveLearner, syncLearners, type ResolvedLearner } from "./learners";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
@@ -1027,7 +1027,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(503).json({ message: "A tanulói profil átmenetileg nem érhető el." });
     }
     if (!learner) return res.status(401).json({ message: "A tanulói link érvénytelen vagy visszavonták." });
-    res.json({ firstName: learner.firstName, grade: learner.grade });
+    // S3: a napi sorozat — hibánál nélküle (a profil a fontosabb)
+    const streak = await learnerStreak(learner.id).catch(() => undefined);
+    res.json({ firstName: learner.firstName, grade: learner.grade, ...(streak ? { streak } : {}) });
   });
   // Az e-mail-címek minden sikeres módosítása után a tanulók és a címek kapcsolata újraszinkronizálódik.
   app.use(['/api/extra-emails', '/api/admin/extra-emails'], (req, res, next) => {
