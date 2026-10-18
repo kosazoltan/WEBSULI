@@ -104,7 +104,7 @@ test("review #289: bejelentkezve a módosítás megmarad (fiókhoz kötve), fió
   await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 2 })).toHaveText("Szia, Dóri!");
 });
 
-test("review #289: az üres évfolyam-választás törli a tárolt évfolyamot; a tartalékág nem ír évfolyamot; AA-kontraszt", async ({ page }) => {
+test("a megadott évfolyam nem törölhető (dokumentált spec-változás); a tartalékág nem ír évfolyamot; AA-kontraszt", async ({ page }) => {
   await open(page);
   await page.getByTestId("welcome-name").fill("Bence");
   const save = page.getByTestId("welcome-save");
@@ -122,12 +122,13 @@ test("review #289: az üres évfolyam-választás törli a tárolt évfolyamot; 
   await page.getByTestId("welcome-grade").selectOption("5");
   await page.getByTestId("welcome-save").click();
   await expect(greet.getByRole("heading", { level: 3 })).toHaveText("A legújabb tananyagaid (5. osztály)");
+  // Tulajdonosi kérés 2026-10-18 (docs/specs/2026-10-18-evfolyam-nem-torolheto.md): tárolt évfolyamnál nincs „nincs évfolyam”.
   await page.getByTestId("welcome-edit").click();
-  await page.getByTestId("welcome-grade").selectOption("");
+  await expect(page.getByTestId("welcome-grade").locator('option[value=""]')).toHaveCount(0);
   await page.getByTestId("welcome-save").click();
   await page.reload();
-  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 3 })).toHaveText("A legújabb tananyagok");
-  expect(await page.evaluate(() => localStorage.getItem("websuli.classroomGrade"))).toBeNull();
+  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 3 })).toHaveText("A legújabb tananyagaid (5. osztály)");
+  expect(await page.evaluate(() => localStorage.getItem("websuli.classroomGrade"))).toBe("5");
 });
 
 test("az üres évfolyamok jelvényei nem jelennek meg", async ({ page }) => {
@@ -153,16 +154,24 @@ test("a lista a tanuló évfolyamára szűrve nyílik; „Mind” mindent mutat;
   await page.getByTestId("welcome-save").click();
   await expect(page.getByTestId("button-filter-classroom-8")).toHaveAttribute("aria-pressed", "true");
   expect(await ids()).toEqual(["r8-a"]);
-  // Review #291: anyag nélküli évfolyamra váltva, majd az évfolyamot törölve „Mind” (nem ragad a 8. osztályon)
+  // Review #291: anyag nélküli évfolyamra váltva „Mind” (nem ragad a 8. osztályon). Az évfolyam törlése nem lehetséges
+  // (docs/specs/2026-10-18-evfolyam-nem-torolheto.md).
   await page.getByTestId("welcome-edit").click();
+  await expect(page.getByTestId("welcome-grade").locator('option[value=""]')).toHaveCount(0);
   await page.getByTestId("welcome-grade").selectOption("3");
   await page.getByTestId("welcome-save").click();
   await expect(page.getByTestId("button-filter-all")).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("link-file-r5-a")).toBeVisible();
-  await page.getByTestId("button-filter-classroom-8").click();
-  await page.getByTestId("welcome-edit").click();
-  await page.getByTestId("welcome-grade").selectOption("");
+});
+
+test("review #293: tárolt évfolyammal, de név nélkül a választó a tárolt évfolyamot mutatja, és az marad meg", async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem("websuli.classroomGrade", "5"); } catch { /* nincs tárhely */ } });
+  await open(page);
+  await expect(page.getByTestId("welcome-ask")).toBeVisible();
+  await expect(page.getByTestId("welcome-grade")).toHaveValue("5");
+  await expect(page.getByTestId("welcome-grade").locator('option[value=""]')).toHaveCount(0);
+  await page.getByTestId("welcome-name").fill("Léna");
   await page.getByTestId("welcome-save").click();
-  await expect(page.getByTestId("button-filter-all")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("link-file-r5-a")).toBeVisible();
+  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 3 })).toHaveText("A legújabb tananyagaid (5. osztály)");
+  expect(await page.evaluate(() => localStorage.getItem("websuli.classroomGrade"))).toBe("5");
 });

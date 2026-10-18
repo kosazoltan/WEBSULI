@@ -57,7 +57,8 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
     // review #289: az üres választás törli a tárolt évfolyamot (vissza az évfolyam nélküli ajánláshoz)
     const g = Number(draftGrade);
     if (draftGrade && Number.isInteger(g) && g >= 1 && g <= 12) setGrade(g);
-    else clearGrade();
+    // Tulajdonosi kérés 2026-10-18 (docs/specs/2026-10-18-evfolyam-nem-torolheto.md): a megadott évfolyam nem törölhető.
+    else if (grade == null) clearGrade();
     setEditing(false);
   };
 
@@ -93,13 +94,14 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
             data-testid="welcome-name"
           />
           <select
-            value={draftGrade}
+            // Review #293: üres draftnál a tárolt évfolyam látszik (a kijelzett és a mentett érték egyezik).
+            value={draftGrade || (grade != null ? String(grade) : "")}
             onChange={(e) => setDraftGrade(e.target.value)}
             aria-label="Évfolyamod"
             className="h-11 rounded-md bg-white/20 backdrop-blur-md border border-white/40 text-white px-2 text-sm [&>option]:text-slate-900"
             data-testid="welcome-grade"
           >
-            <option value="">Évfolyam (nem kötelező)</option>
+            {grade == null && <option value="">Évfolyam (nem kötelező)</option>}
             {Array.from({ length: 12 }, (_, i) => i + 1).map(g => <option key={g} value={g}>{getClassroomLabel(g)}</option>)}
           </select>
           <Button type="submit" disabled={!draftName.trim()} className="h-11 px-5 rounded-full font-bold text-slate-950 border-0 bg-gradient-to-r from-[#FB923C] to-[#EAB308] hover:from-[#FB923C] hover:to-[#EAB308] hover:brightness-110 shadow-md" data-testid="welcome-save">
