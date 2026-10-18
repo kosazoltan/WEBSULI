@@ -1,4 +1,5 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { getClassroomLabel } from "@shared/classrooms";
 import { BookOpen, CheckCircle2, ChevronRight, HelpCircle, Leaf, Compass, Brain, FlaskConical, TrendingUp, Lightbulb, ListChecks, Sparkles, Target, Volume2, XCircle, PlayCircle, Hand } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -516,7 +517,8 @@ export function LessonRuntime({
         <div className="ws-bandhead" data-testid="ws-bandhead">
           <span className="ws-badge" aria-hidden>{(() => { const Icon = BAND_ICON[designTheme]; return <Icon className="w-7 h-7" />; })()}</span>
           <div className="min-w-0">
-            <p className="ws-grade">{DESIGN_THEMES[designTheme].grades} osztály</p>
+            {/* Tulajdonosi kérés 2026-10-18 (docs/specs/2026-10-18-pontos-evfolyam.md): a pontos évfolyam, nem a sáv tartománya. */}
+            <p className="ws-grade">{getClassroomLabel(lesson.classroom)}</p>
             <p className="ws-band-name">{DESIGN_THEMES[designTheme].name}</p>
             <p className="ws-motto">{DESIGN_THEMES[designTheme].motto}</p>
           </div>
