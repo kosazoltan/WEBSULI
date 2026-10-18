@@ -23,6 +23,7 @@ import { designAssetsRouter } from "./design-assets";
 import { startSkillLearningAudit } from "./workflows/learning-worker";
 import { requestIdMiddleware } from "./middleware/request-id";
 import errorReportRouter from "./routes/error-report";
+import clientErrorRouter from "./routes/client-error";
 import staticAuditRouter from "./routes/static-audit";
 import { getAllowedOrigins, isOriginAllowed, isSameOriginRequest } from "./lib/allowed-origins";
 import { logger } from "./lib/logger";
@@ -561,6 +562,8 @@ app.use((req, res, next) => {
 
     // Universal Error Logger routes
     app.use("/api/error-report", errorReportRouter);
+    // Böngészős hibák: titok nélkül, eredet + korlátok őrzik (kanban #127)
+    app.use("/api/client-error", clientErrorRouter);
     app.use("/api/static-audit", staticAuditRouter);
     app.use("/api/design-assets", designAssetsRouter);
 
