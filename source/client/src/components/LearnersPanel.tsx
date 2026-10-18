@@ -19,7 +19,9 @@ export default function LearnersPanel() {
   const { data, isLoading, refetch, isFetching } = useQuery<LearnerRow[]>({ queryKey: ["/api/admin/learners"] });
   const rotate = useMutation({
     mutationFn: (id: string) => apiRequest<{ pairLink: string | null }>("POST", `/api/admin/learners/${id}/rotate`),
-    onSuccess: () => {
+    onSuccess: (res, id) => {
+      // Review #304: az új link azonnal a gyorsítótárba kerül — a másolás gomb ne a már érvénytelen linket adja.
+      queryClient.setQueryData<LearnerRow[]>(["/api/admin/learners"], (rows) => rows?.map(r => (r.id === id ? { ...r, pairLink: res.pairLink } : r)));
       void queryClient.invalidateQueries({ queryKey: ["/api/admin/learners"] });
       toast({ title: "Párosítás visszavonva", description: "A régi linkek és eszközök érvénytelenek; az új link másolható." });
     },
@@ -67,7 +69,7 @@ export default function LearnersPanel() {
                     <li key={i} className="flex justify-between gap-2"><span className="truncate">{r.at} — {r.title}</span><strong>{r.percent === null ? "—" : `${r.percent}%`}</strong></li>
                   ))}
                 </ul>
-              ) : <p className="text-sm text-muted-foreground">Az elmúlt 30 napban nincs beküldött eredmény.</p>}
+              ) : <p className="text-sm text-muted-foreground">Még nincs beküldött eredmény.</p>}
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => void copy(l.pairLink)} disabled={!l.pairLink}><Copy className="h-4 w-4 mr-1" /> Párosító link másolása</Button>
                 <Button variant="outline" size="sm" disabled={rotate.isPending}

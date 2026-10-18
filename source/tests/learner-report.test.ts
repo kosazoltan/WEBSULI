@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inactivityAlertEmail, isInactive, shouldAlert, weeklySummaryEmail, type LearnerReport } from "../shared/learner-report";
+import { alertPeriodKey, inactivityAlertEmail, isInactive, pendingAlertRecipients, weeklySummaryEmail, type LearnerReport } from "../shared/learner-report";
 
 // docs/specs/2026-10-18-tanuloi-profil.md (S4): inaktivitás tanítási napokon, egy riasztás időszakonként, escape-elt levelek.
 const weekdays = (iso: string) => { const d = new Date(`${iso}T12:00:00Z`).getUTCDay(); return d >= 1 && d <= 5; };
@@ -19,13 +19,16 @@ test("inaktivitás: szünetben (30 napon belül nincs 3 tanítási nap) nem rias
   assert.equal(isInactive(null, "2026-09-01", onlyTwo), false);
 });
 
-test("riasztás: időszakonként egyszer; közbeni tevékenység után újra élesedik", () => {
-  const t = (s: string) => new Date(s);
-  assert.equal(shouldAlert(t("2026-10-14T10:00:00Z"), null, true), true);
-  assert.equal(shouldAlert(t("2026-10-14T10:00:00Z"), t("2026-10-19T16:00:00Z"), true), false, "már riasztottunk");
-  assert.equal(shouldAlert(t("2026-10-20T10:00:00Z"), t("2026-10-19T16:00:00Z"), true), true, "azóta tanult, majd újra elmaradt");
-  assert.equal(shouldAlert(null, t("2026-10-19T16:00:00Z"), true), false);
-  assert.equal(shouldAlert(null, null, false), false);
+// Review #304: címzettenkénti állapot — a kimaradt admin pótlódik, a már értesített nem kap duplikátumot; új időszak újraindít.
+test("riasztás: időszakonként címzettenként egyszer; közbeni tevékenység után újra élesedik", () => {
+  const admins = ["a@x.test", "b@x.test"];
+  const period = alertPeriodKey(new Date("2026-10-14T10:00:00Z"));
+  assert.equal(alertPeriodKey(null), "never");
+  assert.deepEqual(pendingAlertRecipients(admins, period, { key: null, to: [] }), admins, "első riasztás: mindenki");
+  assert.deepEqual(pendingAlertRecipients(admins, period, { key: period, to: ["a@x.test"] }), ["b@x.test"], "részleges hiba: csak a kimaradt");
+  assert.deepEqual(pendingAlertRecipients(admins, period, { key: period, to: admins }), [], "már mindenki értesült");
+  const later = alertPeriodKey(new Date("2026-10-20T10:00:00Z"));
+  assert.deepEqual(pendingAlertRecipients(admins, later, { key: period, to: admins }), admins, "azóta tanult, majd újra elmaradt");
 });
 
 test("levelek: a név és a cím escape-elve; a tárgy névvel", () => {
