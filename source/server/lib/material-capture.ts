@@ -115,7 +115,7 @@ export const MATERIAL_CAPTURE_SCRIPT = `
           headers: { 'Content-Type': 'application/json' },
           credentials: 'omit',
           keepalive: true,
-          body: JSON.stringify({ materialId: materialId, subject: clip(subject, 180), body: clip(body, 4900), auto: !!auto, clientId: clientId, learner: window.__websuliLearner || undefined })
+          body: JSON.stringify({ materialId: materialId, subject: clip(subject, 180), body: clip(body, 4900), auto: !!auto, clientId: clientId, learner: window.__websuliLearner || (function () { try { return sessionStorage.getItem('websuli.lt') || undefined; } catch (e) { return undefined; } })() })
         }).then(function (r) { return r.ok ? true : failed(); })
           .catch(failed);
       }
@@ -343,7 +343,9 @@ export const MATERIAL_CAPTURE_SCRIPT = `
  */
 export function withLearnerScript(html: string, token: string): string {
   // Review #302: a token a keret címsorából (és az előzményből) is eltűnik — egy kimásolt / új lapon megnyitott cím ne vigye tovább.
-  const strip = "try{var u=new URL(location.href);if(u.searchParams.has('lt')){u.searchParams.delete('lt');history.replaceState(history.state,'',u.pathname+u.search+u.hash);}}catch(e){}";
+  // Átfogó review: a token a fül munkamenetében (sessionStorage) megmarad — az anyag újratöltése / belső navigációja után is a
+  // tanulóé az eredmény (a szerver minden beküldésnél újra ellenőrzi).
+  const strip = "try{sessionStorage.setItem('websuli.lt',window.__websuliLearner);}catch(e){}try{var u=new URL(location.href);if(u.searchParams.has('lt')){u.searchParams.delete('lt');history.replaceState(history.state,'',u.pathname+u.search+u.hash);}}catch(e){}";
   const tag = `<script>window.__websuliLearner=${JSON.stringify(token).replace(/</g, "\\u003c")};${strip}</script>`;
   const head = /<head\b[^>]*>/i.exec(html);
   return head ? html.slice(0, head.index + head[0].length) + tag + html.slice(head.index + head[0].length) : tag + html;

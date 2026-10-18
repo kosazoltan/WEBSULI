@@ -40,10 +40,10 @@ test("felhasználók: a végpontok az admin-routeren regisztráltak", () => {
   for (const r of [/router\.get\("\/users"/, /router\.delete\("\/users\/:id"/, /router\.patch\("\/users\/:id\/ban"/, /router\.put\("\/users\/:id\/toggle-admin"/]) assert.match(src, r);
 });
 
-test("menü: 4 csoport, 15 fül, mindnek ikonja; a megszűnt fülek régi linkjei a tananyagkészítésre visznek", () => {
+test("menü: 4 csoport, 16 fül (S4: Tanulók — docs/specs/2026-10-18-tanuloi-profil-s4-vegrehajtas.md), mindnek ikonja; a megszűnt fülek régi linkjei a tananyagkészítésre visznek", () => {
   assert.deepEqual(ADMIN_TAB_GROUPS.map(g => g.label), ["Tananyagok", "Készítés és javítás", "Kommunikáció", "Rendszer"]);
-  assert.equal(ADMIN_TAB_VALUES.length, 15);
-  assert.equal(new Set(ADMIN_TAB_VALUES).size, 15);
+  assert.equal(ADMIN_TAB_VALUES.length, 16);
+  assert.equal(new Set(ADMIN_TAB_VALUES).size, 16);
   assert.ok(!ADMIN_TAB_VALUES.includes("enhanced"));
   for (const t of ADMIN_TAB_GROUPS.flatMap(g => g.tabs)) {
     assert.ok(typeof t.icon === "function" || typeof t.icon === "object", t.value);

@@ -1172,6 +1172,11 @@ export const learners = pgTable("learners", {
   name: varchar("name", { length: 80 }).notNull(),
   grade: integer("grade").notNull(),
   tokenVersion: integer("token_version").notNull().default(1),
+  /** S4 (migrations/0033): egy inaktivitási időszakra egy riasztás. */
+  inactivityAlertedAt: timestamp("inactivity_alerted_at", { withTimezone: true }),
+  /** Review #304: az aktuális inaktivitási időszak kulcsa és a benne már értesített admin-címzettek. */
+  inactivityAlertKey: text("inactivity_alert_key"),
+  inactivityAlertedTo: text("inactivity_alerted_to").array().notNull().default(sql`'{}'::text[]`),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

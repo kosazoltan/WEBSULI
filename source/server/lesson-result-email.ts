@@ -27,7 +27,8 @@ async function send(subject: string, html: string, to: string) {
   // Biztonság: tesztfuttatásban (NODE_ENV=test) valódi levél sosem megy, csak a teszt által beállított küldőn át.
   if (process.env.NODE_ENV === "test") throw new Error("Tesztkörnyezetben nincs valódi e-mail-küldés.");
   const { sendAdminNotification } = await import("./resend");
-  return sendAdminNotification(subject, html, to);
+  // Átfogó review: a tárgy a tanuló keresztnevét tartalmazhatja — csendes küldés (a név nem kerül a naplóba).
+  return sendAdminNotification(subject, html, to, { quiet: true });
 }
 
 export const roundKeyOf = (...parts: string[]) => createHash("sha256").update(parts.join("|")).digest("hex");
@@ -109,12 +110,13 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
     if (!Object.keys(body.picks).length) return res.status(202).json({ queued: false });
     graded = gradeQuiz(experience.quiz, body.picks);
   }
-  // Tanulói profil (S2): bejelentkezés nélkül a párosított eszköz tanulója (ellenőrzött token) adja a nevet.
-  const paired = !userId && body.learner ? await resolveLearner(body.learner).catch(() => null) : null;
+  // Tanulói profil (S2): a párosított eszköz tanulója (ellenőrzött token). Átfogó review: bejelentkezve is a tanuló naplójába kerül
+  // (mint a régi anyagnál); a levél neve bejelentkezve a fiók neve marad.
+  const paired = body.learner ? await resolveLearner(body.learner).catch(() => null) : null;
   const who = userId ?? (paired ? `learner:${paired.id}` : `guest:${body.fingerprint ?? req.ip ?? "?"}`);
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
-  void (paired ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => sendLessonResult({ lessonId: req.params.lessonId, roundKey: roundKeyOf(who, body.kind, body.roundId), learner,
-    ...(paired ? { learnerFirst: paired.firstName, learnerId: paired.id } : {}), graded }))
+  void (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => sendLessonResult({ lessonId: req.params.lessonId, roundKey: roundKeyOf(who, body.kind, body.roundId), learner,
+    ...(paired ? { learnerId: paired.id, ...(!userId ? { learnerFirst: paired.firstName } : {}) } : {}), graded }))
     .catch(error => logger.error("[LESSON-RESULT] háttérküldés hiba:", error));
   return res.status(202).json({ queued: true });
   } catch (error) { next(error); }

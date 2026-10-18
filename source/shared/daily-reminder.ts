@@ -22,6 +22,44 @@ export function pickDailyMaterial<T extends ReminderMaterial>(files: readonly T[
   return ordered.find(f => !recentIds.has(f.id)) ?? ordered[0] ?? null;
 }
 
+/**
+ * Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S5): okos választás a párosított tanulónak — 1) a 70% alatti, 7–30 napos
+ * eredmény ismétlése (ha az elmúlt 14 napban nem ment ki), 2) a tanmenet szerint első, még meg nem nyitott anyag, 3) a régi választás.
+ */
+export type LearnerHistory = { seenIds: ReadonlySet<string>; weak: ReadonlyArray<{ materialId: string; percent: number }> };
+/** A tanuló naplójából: a látott anyagok, és az anyagonként legutolsó, 70% alatti, 7–30 napos eredmények (a legrégebbi elöl). */
+export function learnerHistoryFrom(rows: ReadonlyArray<{ materialId: string | null; kind: string; percent: number | null; createdAt: Date }>, now: Date): LearnerHistory {
+  const seenIds = new Set<string>();
+  const latest = new Map<string, { percent: number | null; at: Date }>();
+  for (const r of rows) {
+    if (!r.materialId) continue;
+    seenIds.add(r.materialId);
+    if (r.kind !== "result") continue;
+    const prev = latest.get(r.materialId);
+    if (!prev || r.createdAt > prev.at) latest.set(r.materialId, { percent: r.percent, at: r.createdAt });
+  }
+  const day = 86_400_000;
+  const weak = [...latest.entries()]
+    .filter(([, v]) => v.percent !== null && v.percent < 70 && now.getTime() - v.at.getTime() >= 7 * day && now.getTime() - v.at.getTime() <= 30 * day)
+    .sort((a, b) => a[1].at.getTime() - b[1].at.getTime())
+    .map(([materialId, v]) => ({ materialId, percent: v.percent! }));
+  return { seenIds, weak };
+}
+
+export function pickSmartMaterial<T extends ReminderMaterial>(files: readonly T[], grade: number, today: number, recentIds: ReadonlySet<string>, learner?: LearnerHistory | null): { file: T; repeatPercent?: number } | null {
+  if (learner) {
+    for (const w of learner.weak) {
+      // Review #305: az ismétlés is a tanuló évfolyamán belül marad.
+      const file = files.find(f => f.id === w.materialId && f.classroom === grade);
+      if (file && !recentIds.has(file.id)) return { file, repeatPercent: w.percent };
+    }
+    const fresh = curriculumSort(files.filter(f => f.classroom === grade), today).find(f => !recentIds.has(f.id) && !learner.seenIds.has(f.id));
+    if (fresh) return { file: fresh };
+  }
+  const file = pickDailyMaterial(files, grade, today, recentIds);
+  return file ? { file } : null;
+}
+
 /** A tanmenet-címke emberi alakja: a belső OH-kód és a felesleges írásjelek nélkül (docs/specs/2026-10-18-emlekezteto-probalevel.md). */
 export function displayTopic(label: string | null | undefined): string | null {
   if (!label) return null;
@@ -35,18 +73,19 @@ export function displayTopic(label: string | null | undefined): string | null {
   return out || null;
 }
 
-export const reminderSubject = (first: string, title: string) => `${first}, a mai tananyagod: ${title}`;
+export const reminderSubject = (first: string, title: string, repeat = false) => repeat ? `${first}, ismételjük: ${title}` : `${first}, a mai tananyagod: ${title}`;
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-export function reminderHtml(input: { first: string; title: string; topic?: string | null; url: string; motivation: string }): string {
-  const { first, title, topic, url, motivation } = input;
+export function reminderHtml(input: { first: string; title: string; topic?: string | null; url: string; motivation: string; repeatPercent?: number | null }): string {
+  const { first, title, topic, url, motivation, repeatPercent } = input;
+  const label = typeof repeatPercent === "number" ? `ISMÉTLÉS — MÚLTKOR ${Math.round(repeatPercent)}% LETT` : "A MAI TANANYAGOD";
   return `<!doctype html><html lang="hu"><body style="margin:0;background:#0A0E27;font-family:Arial,Helvetica,sans-serif;color:#f8fafc">
 <div style="max-width:560px;margin:0 auto;padding:24px">
 <p style="font-size:22px;font-weight:bold;margin:0 0 8px">Szia, ${esc(first)}!</p>
 <p style="font-size:16px;margin:0 0 20px;color:#e2e8f0">${esc(motivation)}</p>
 <div style="background:#1e1b4b;border:1px solid #fb923c;border-radius:16px;padding:20px">
-<p style="font-size:13px;margin:0 0 6px;color:#fcd34d;font-weight:bold">A MAI TANANYAGOD</p>
+<p style="font-size:13px;margin:0 0 6px;color:#fcd34d;font-weight:bold">${esc(label)}</p>
 <p style="font-size:20px;font-weight:bold;margin:0 0 6px;color:#fdba74">${esc(title)}</p>
 ${topic ? `<p style="font-size:14px;margin:0 0 16px;color:#cbd5e1">Ezt tanuljátok most: ${esc(topic)}</p>` : ""}
 <a href="${esc(url)}" style="display:inline-block;background:#fb923c;color:#0f172a;font-weight:bold;font-size:17px;text-decoration:none;padding:14px 24px;border-radius:999px">Megnyitom a tananyagot</a>
