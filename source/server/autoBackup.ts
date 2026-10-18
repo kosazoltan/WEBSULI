@@ -4,7 +4,7 @@ import fs from 'fs/promises'; // Async file I/O
 import fsSync from 'fs'; // For synchronous operations where needed
 import path from 'path';
 import { logger } from "./lib/logger";
-import { shouldBackupOnStartup, type BackupFileInfo } from "./lib/backup-startup";
+import { isCompleteBackupTail, shouldBackupOnStartup, type BackupFileInfo } from "./lib/backup-startup";
 
 // Backup configuration
 const BACKUP_DIR = path.join(process.cwd(), 'backups');
@@ -94,8 +94,16 @@ export async function createAutoBackup(reason: 'scheduled' | 'event' | 'pre-rest
       }
     };
 
-    // Write to file (async to avoid blocking event loop)
-    await fs.writeFile(filepath, JSON.stringify(backupData, null, 2), 'utf-8');
+    // Write to a temp file, then rename atomically: a crash mid-write never leaves a truncated backup_*.json
+    // that the startup check would mistake for a fresh backup (review #308).
+    const tmpPath = `${filepath}.tmp`;
+    try {
+      await fs.writeFile(tmpPath, JSON.stringify(backupData, null, 2), 'utf-8');
+      await fs.rename(tmpPath, filepath);
+    } catch (writeError) {
+      await fs.unlink(tmpPath).catch(() => undefined);
+      throw writeError;
+    }
 
     logger.info(`[AUTO-BACKUP] ✅ Backup created: ${filename} (${snapshotData.htmlFiles.length} materials)`);
 
@@ -179,6 +187,20 @@ export function triggerEventBackup() {
   }
 }
 
+/** A truncated (pre-atomic-write) backup does not end in `}` — it must not suppress the startup backup. */
+async function hasCompleteBackupTail(filepath: string, size: number): Promise<boolean> {
+  if (size <= 0) return false;
+  const handle = await fs.open(filepath, 'r');
+  try {
+    const length = Math.min(size, 64);
+    const buf = Buffer.alloc(length);
+    await handle.read(buf, 0, length, size - length);
+    return isCompleteBackupTail(buf.toString('utf-8'));
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
  * Start scheduled backup job
  */
@@ -199,7 +221,10 @@ export function startAutoBackupJob() {
     try {
       for (const name of await fs.readdir(BACKUP_DIR)) {
         const filepath = name.startsWith('backup_') ? getSafeBackupPath(name) : null;
-        if (filepath) files.push({ name, mtimeMs: (await fs.stat(filepath)).mtimeMs });
+        if (filepath) {
+          const { mtimeMs, size } = await fs.stat(filepath);
+          files.push({ name, mtimeMs, complete: await hasCompleteBackupTail(filepath, size) });
+        }
       }
     } catch (error) {
       // Unreadable directory → back up anyway (safer default)
