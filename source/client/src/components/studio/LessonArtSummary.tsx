@@ -1,3 +1,4 @@
+import { getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { Palette } from "lucide-react";
 import { DESIGN_ASSET_CATALOG } from "@shared/design-asset-catalog";
@@ -28,7 +29,7 @@ export function LessonArtSummary({ lessonId, htmlFileId }: { lessonId?: string; 
       </h3>
       <p className="flex flex-wrap items-center gap-2">
         <span className="inline-block w-3 h-3 rounded-full" style={{ background: theme.strong }} aria-hidden="true" />
-        <span>{theme.grades} osztály · {theme.name}</span>
+        <span>{getClassroomLabel(data.classroom)} · {theme.name}</span>
         {s.topic && <span className="rounded-md border px-2 py-0.5">Témakör: {s.topic}</span>}
       </p>
       {s.legacy ? (
