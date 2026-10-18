@@ -14,7 +14,7 @@ import { sendNewMaterialNotification as sendPushNewMaterial } from "./pushNotifi
 import { getAllAudioBase64 } from "google-tts-api";
 
 import { eq, sql, and, or, ilike, desc, inArray } from "drizzle-orm";
-import { htmlFiles, users, materialComments } from "@shared/schema";
+import { htmlFiles, users, materialComments, learners } from "@shared/schema";
 import { sanitizeText, sanitizeEmail } from "./utils/sanitize";
 // Admin authentication with hardcoded admin emails
 import { isAuthenticated, isAuthenticatedAdmin } from "./auth";
@@ -31,7 +31,8 @@ import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, percentOf, withLearnerSubject, type MaterialResultPayload } from "./lib/material-result";
-import { learnerStreak, recordLearnerActivity, resolveLearner, syncLearners, type ResolvedLearner } from "./learners";
+import { learnerStreak, learnerTokenFor, recordLearnerActivity, resolveLearner, rotateLearnerToken, syncLearners, type ResolvedLearner } from "./learners";
+import { buildLearnerReports, runWeeklySummary } from "./learner-reports";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
@@ -1292,6 +1293,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin extra email management routes (NO AUTH - user management removed)
+  // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S4): tanulónkénti összesítő, párosító link, visszavonás, heti próba.
+  const pairLinkOf = (id: string, version: number) => { const t = learnerTokenFor(id, version); return t ? `${getBaseUrl()}/?t=${t}` : null; };
+  adminRouter.get("/learners", async (_req, res) => {
+    try {
+      const list = await buildLearnerReports();
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(list.map(o => ({ id: o.id, name: o.name, grade: o.grade, emails: o.emails, report: o.report, pairLink: pairLinkOf(o.id, o.tokenVersion) })));
+    } catch (error: unknown) {
+      logger.error('[LEARNERS] összesítő hiba:', error instanceof Error ? error.message : String(error));
+      res.status(500).json({ message: "A tanulói összesítő nem érhető el." });
+    }
+  });
+  adminRouter.post("/learners/:id/rotate", async (req, res) => {
+    try {
+      await rotateLearnerToken(req.params.id);
+      const [row] = await db.select({ id: learners.id, tokenVersion: learners.tokenVersion }).from(learners).where(eq(learners.id, req.params.id));
+      if (!row) return res.status(404).json({ message: "A tanuló nem található." });
+      res.json({ pairLink: pairLinkOf(row.id, row.tokenVersion) });
+    } catch (error: unknown) {
+      logger.error('[LEARNERS] visszavonás hiba:', error instanceof Error ? error.message : String(error));
+      res.status(500).json({ message: "A visszavonás nem sikerült." });
+    }
+  });
+  adminRouter.post("/learners/weekly-summary", async (_req, res) => {
+    try {
+      res.json(await runWeeklySummary());
+    } catch (error: unknown) {
+      logger.error('[LEARNERS] heti összefoglaló hiba:', error instanceof Error ? error.message : String(error));
+      res.status(500).json({ message: "A heti összefoglaló nem ment el." });
+    }
+  });
+
   adminRouter.get("/extra-emails", async (_req, res) => {
     try {
       const extraEmails = await storage.getActiveExtraEmails();

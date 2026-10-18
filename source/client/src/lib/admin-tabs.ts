@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity, Database, Eye, FileUp, FolderOpen, GraduationCap, HardDriveDownload, History, ListChecks, Mail, Sparkles, Tag, Users, Wand2, Wrench,
+  Activity, Database, Eye, FileUp, FolderOpen, GraduationCap, HardDriveDownload, History, ListChecks, Mail, Sparkles, Tag, UserRound, Users, Wand2, Wrench,
 } from "lucide-react";
 
 /**
@@ -27,6 +27,8 @@ export const ADMIN_TAB_GROUPS: AdminTabGroup[] = [
     { value: "emails", label: "E-mail címzettek", icon: Mail },
     { value: "email-debug", label: "E-mail diagnosztika", icon: Activity },
     { value: "parent-dashboard", label: "Szülői összesítő", icon: GraduationCap },
+    // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S4)
+    { value: "learners", label: "Tanulók", icon: UserRound },
   ] },
   { id: "system", label: "Rendszer", tabs: [
     { value: "users", label: "Felhasználók", icon: Users },

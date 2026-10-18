@@ -58,6 +58,7 @@ import { WorkflowHistory } from "@/components/studio/WorkflowMonitor";
 import ExtraEmailsManager from "@/components/ExtraEmailsManager";
 import EmailDiagnosticsPanel from "@/components/EmailDiagnosticsPanel";
 import ParentDashboardPanel from "@/components/ParentDashboardPanel";
+import LearnersPanel from "@/components/LearnersPanel";
 import LessonStudioPanel from "@/components/studio/LessonStudioPanel";
 import DraftLessons from "@/components/studio/DraftLessons";
 import BackupManager from "@/components/BackupManager";
@@ -870,6 +871,10 @@ export default function Admin() {
 
       <TabsContent value="parent-dashboard" className="space-y-2">
         {activeTab === "parent-dashboard" && <ParentDashboardPanel />}
+      </TabsContent>
+
+      <TabsContent value="learners" className="space-y-2">
+        {activeTab === "learners" && <LearnersPanel />}
       </TabsContent>
 
       <TabsContent value="lesson-studio" className="space-y-2">

@@ -13,6 +13,7 @@ import { setupScheduledPublishing } from "./scheduledPublishing";
 import { setupDailyViewSummary } from "./dailyViewSummary";
 import { setupDailyReminders } from "./daily-reminder";
 import { syncLearners } from "./learners";
+import { setupLearnerReports } from "./learner-reports";
 // import { initializeDatabase } from "./initDb"; // Not needed for Neon PostgreSQL
 import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
@@ -577,6 +578,8 @@ app.use((req, res, next) => {
       setupDailyReminders();
       // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md): a nevesített címekből tanulók (idempotens, sosem dob).
       void syncLearners();
+      // S4: heti összefoglaló, inaktivitás-riasztás, 365 napos megőrzés (csak élesben)
+      setupLearnerReports();
 
       // Phase 10: Start automatic backup system (daily + event-driven)
       startAutoBackupJob();
