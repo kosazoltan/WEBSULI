@@ -77,20 +77,31 @@ export function bankResponseFormat(counts: BankPacketCounts, patch: boolean): Re
   return { type: "json_schema", json_schema: { name: rf.json_schema.name, strict: rf.json_schema.strict ?? true, schema: rf.json_schema.schema as Record<string, unknown> } };
 }
 
-/** A szigorú séma `null`-jai a helyi séma szempontjából hiányzó mezők: visszaalakítás a normál (optional) alakra. */
+/**
+ * Választható lista-mezők (a helyi sémában `optional`, jelen esetben legalább 1 elem): az üres lista a hiánnyal azonos
+ * (docs/specs/2026-10-18-bank-ures-lista.md — a szolgáltatói kimenet az elemszám-minimumot nem kényszeríti, a modell `[]`-t ad).
+ */
+export const OPTIONAL_ARRAY_KEYS: Readonly<Record<"methods" | "tasks", readonly string[]>> = { methods: ["options", "steps"], tasks: ["typedAnswers", "requiredDistinct"] };
+
+/** A szigorú séma `null`-jai (és a választható mezők üres listái) a helyi séma szempontjából hiányzó mezők. */
 export function normalizeStrictPacket(json: unknown): unknown {
   if (!json || typeof json !== "object" || Array.isArray(json)) return json;
-  const strip = (item: unknown): unknown => {
+  const strip = (item: unknown, optionalArrays: readonly string[] = []): unknown => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return item;
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(item as Record<string, unknown>)) {
       if (v === null) continue;
-      out[k] = k === "typedAnswers" && Array.isArray(v) ? v.map(strip) : v;
+      if (Array.isArray(v) && v.length === 0 && optionalArrays.includes(k)) continue;
+      out[k] = k === "typedAnswers" && Array.isArray(v) ? v.map(x => strip(x)) : v;
     }
     return out;
   };
   const p = json as Record<string, unknown>;
   const out: Record<string, unknown> = { ...p };
-  for (const bank of ["methods", "tasks", "quiz", "glossary"] as const) if (Array.isArray(p[bank])) out[bank] = (p[bank] as unknown[]).map(strip);
+  for (const bank of ["methods", "tasks", "quiz", "glossary"] as const) {
+    if (!Array.isArray(p[bank])) continue;
+    const optionalArrays = bank === "methods" || bank === "tasks" ? OPTIONAL_ARRAY_KEYS[bank] : [];
+    out[bank] = (p[bank] as unknown[]).map(item => strip(item, optionalArrays));
+  }
   return out;
 }
