@@ -126,7 +126,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
         const pick = quizState.round.picks[q.id];
         return <section className="lesson-block fusion-quiz" key={q.id} data-quiz-id={q.id} tabIndex={-1} ref={element => { if (element) quizElements.current.set(q.id, element); else quizElements.current.delete(q.id); }}><span className="fusion-eyebrow">{index + 1}. kérdés</span><h3>{q.question}</h3><div className="fusion-choices">{q.options.map((option, i) => <button className="lesson-option" key={i} disabled={pick !== undefined || !!quizState.round.finishedAt} aria-pressed={pick === i} data-state={pick === i ? i === q.correctIndex ? "right" : "wrong" : undefined} onClick={() => quizState.setRound(old => old.picks[q.id] !== undefined ? old : ({ ...old, picks: { ...old.picks, [q.id]: i } }))}><span className="lesson-option-key">{"ABCD"[i]}</span>{option}</button>)}</div>
           {pick !== undefined && <VerdictFeedback right={pick === q.correctIndex} text={q.feedbackPerOption[pick]} />}
-          {quizState.round.finishedAt && pick === undefined && <p>Nem válaszoltál · 0 pont. Helyes válasz: {q.options[q.correctIndex]}. {stripVerdictPrefix(q.feedbackPerOption[q.correctIndex])}</p>}
+          {quizState.round.finishedAt && pick === undefined && <p>Nem válaszoltál · 0 pont. Helyes válasz: {q.options[q.correctIndex]}. {stripVerdictPrefix(q.feedbackPerOption[q.correctIndex], true)}</p>}
         </section>;
       })}
       {!quizState.round.finishedAt ? <FinishPracticeButton className="fusion-primary" total={quiz.length} unanswered={quiz.filter(q => quizState.round.picks[q.id] === undefined).length} onContinue={() => {
