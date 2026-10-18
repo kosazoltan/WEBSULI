@@ -1,0 +1,2243 @@
+[
+  {
+    "subject": "angol",
+    "grade": 3,
+    "school": "Gárdonyi iskola, Kaposvár (gardonyi-kaposvar.edu.hu) – a teljes iskolanév a 3. évfolyamos részben nem szerepel: UNVERIFIED",
+    "source": "https://gardonyi-kaposvar.edu.hu/assets/documents/Gardonyi_helyi_tanterv.pdf",
+    "verified": true,
+    "textbook": "Smart 3 (a forrás szavaival: 'A Smart 3 tankönyv')",
+    "documentType": "helyi tanterv, témakör + óraszám (heti 1 óra, 36 óra/év)",
+    "notes": "Nincs hónap vagy hét. A 'lessons' az óraszámok összeadásával SZÁMOLT érték. A kulcsszavak a 'Smart 3 tankönyv' kommunikációs táblázatának soraiból valók; a sorokat sorrend és tartalom alapján rendeltük a témakörökhöz (7 sor = 7 témakör), a forrás ezt nem mondja ki. A forrás 'Összesen: 34' órát ír (7×4 + 6), bár az éves óraszám 36.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Iskola",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–4",
+        "keywords": [
+          "Introductions, greetings",
+          "Identifying colours and numbers",
+          "Identifying objects in the classroom and in the school",
+          "There is/there are …",
+          "This is/these are …",
+          "How many …  can you see?"
+        ],
+        "hours": 4
+      },
+      {
+        "order": 2,
+        "title": "Állatok",
+        "month": null,
+        "weeks": null,
+        "lessons": "5–8",
+        "keywords": [
+          "Questions & answers about animals",
+          "Introducing & describing our pets",
+          "Have you got a …? Yes/ No.",
+          "Do you like …? What is it like?"
+        ],
+        "hours": 4
+      },
+      {
+        "order": 3,
+        "title": "Sport",
+        "month": null,
+        "weeks": null,
+        "lessons": "9–12",
+        "keywords": [
+          "Introducing & describing common sports activities",
+          "What are you doing?",
+          "What can you do? I can/ can’t ..",
+          "How do you do it?"
+        ],
+        "hours": 4
+      },
+      {
+        "order": 4,
+        "title": "Testünk",
+        "month": null,
+        "weeks": null,
+        "lessons": "13–16",
+        "keywords": [
+          "Describing our looks",
+          "Telling our age",
+          "Describing our mood and the looks of our friends",
+          "What do you look like?",
+          "How old are you?",
+          "How do you feel?"
+        ],
+        "hours": 4
+      },
+      {
+        "order": 5,
+        "title": "Ételek",
+        "month": null,
+        "weeks": null,
+        "lessons": "17–20",
+        "keywords": [
+          "Our favourite dishes",
+          "Healthy eating",
+          "Polite requests & saying thank you",
+          "What do/don’t  you like?",
+          "Is it good/bad for you?",
+          "Will you…? Can I …? Thanks."
+        ],
+        "hours": 4
+      },
+      {
+        "order": 6,
+        "title": "Lakás, öltözködés, időjárás",
+        "month": null,
+        "weeks": null,
+        "lessons": "21–24",
+        "keywords": [
+          "Describing our house, flat and our room",
+          "Describing our clothes",
+          "There is a … in/on/near the …",
+          "What size/colour/brand is it?",
+          "What do you wear in/for …?"
+        ],
+        "hours": 4
+      },
+      {
+        "order": 7,
+        "title": "Szabadidő",
+        "month": null,
+        "weeks": null,
+        "lessons": "25–28",
+        "keywords": [
+          "Identifying our toys and other objects",
+          "Describing and playing musical instruments",
+          "Giving and following simple orders",
+          "I have got a/an…  I do/play …",
+          "Go/take/bring/turn …"
+        ],
+        "hours": 4
+      },
+      {
+        "order": 8,
+        "title": "Szabadon felhasználható (kiegészítő ismeretek / differenciálás, gyakorlás / projektmunkák)",
+        "month": null,
+        "weeks": null,
+        "lessons": "29–34",
+        "keywords": [],
+        "hours": 6
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 3,
+    "school": "Debreceni Egyetem Kossuth Lajos Gyakorló Gimnáziuma és Általános Iskolája – Arany János téri feladatellátási hely",
+    "source": "https://aranyalt.unideb.hu/sites/default/files/2026-03/helyi_tanterv_angol_2020.pdf",
+    "verified": true,
+    "textbook": "Smart Junior 3",
+    "documentType": "helyi tanterv 2020, témakör + óraszám (1 óra/hét, 36 óra/év)",
+    "notes": "Helyi tanterv 2020 (a 2020. évi kerettantervek alapján). Témakör + óraszám, nincs havi bontás; a sorrend a táblázat sorrendje. A 'lessons' tartományt az óraszámok sorrendi összeadásával SZÁMOLTUK, a forrásban nem szerepel. A PDF-szövegkinyerésnél a 'b' betű kiesett (pl. 'Sza adidő'); ezt 'Szabadidő'-re javítottuk, egyébként a címek szó szerintiek.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Iskola",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–15",
+        "keywords": [],
+        "hours": 15
+      },
+      {
+        "order": 2,
+        "title": "Állatok",
+        "month": null,
+        "weeks": null,
+        "lessons": "16–25",
+        "keywords": [],
+        "hours": 10
+      },
+      {
+        "order": 3,
+        "title": "Sport",
+        "month": null,
+        "weeks": null,
+        "lessons": "26–31",
+        "keywords": [],
+        "hours": 6
+      },
+      {
+        "order": 4,
+        "title": "Szabadon felhasználható (kiegészítő ismeretek / differenciálás, gyakorlás / projektmunkák)",
+        "month": null,
+        "weeks": null,
+        "lessons": "32–36",
+        "keywords": [],
+        "hours": 5
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 4,
+    "school": "Baracskai általános iskola (iskola.baracska.hu); a dokumentumban csak a tanár neve áll (Moharosné Benkő Ágnes), az iskolanév: UNVERIFIED",
+    "source": "https://iskola.baracska.hu/data/files/atk1.pdf",
+    "verified": true,
+    "textbook": "PROJECT 1 - Third edition",
+    "documentType": "tanmenet hónap + óraszám szerint (heti 3 óra, 106 óra)",
+    "notes": "Valódi tanmenet hónappal és óraszámmal. A tanév nincs feltüntetve; a Project 1 Third edition alapján valószínűleg a NAT 2020 előtti (UNVERIFIED). A II. félévben iskolai modulok (ME AND YOU, BOOKS, CAMP) is szerepelnek. Ahol a 'month' null, a forrás nem ad külön hónapfejlécet az adott sorhoz.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Ismerkedés a taneszközökkel; Unit 1 Introduction – Hello",
+        "month": "szeptember",
+        "weeks": null,
+        "lessons": "1–4",
+        "keywords": [
+          "Bemutatkozás",
+          "Köszönési formák"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 2,
+        "title": "In the classroom",
+        "month": "szeptember",
+        "weeks": null,
+        "lessons": "5–10",
+        "keywords": [
+          "Iskolai tárgyak megnevezése",
+          "Számok (1-100)",
+          "Színek",
+          "Utasítások",
+          "Főnevek (a/an)",
+          "Személyes névmások",
+          "Számnevek",
+          "Melléknevek",
+          "Felszólító mód"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 3,
+        "title": "How do you spell that?",
+        "month": "október",
+        "weeks": null,
+        "lessons": "11–15",
+        "keywords": [
+          "Betűzés kérése",
+          "Az abc",
+          "Főnevek többes száma",
+          "Testrészek",
+          "A főnevek szabályos és rendhagyó többes száma"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 4,
+        "title": "Képleírás; Revision; Progress Check, Test 1",
+        "month": null,
+        "weeks": null,
+        "lessons": "16–18",
+        "keywords": [
+          "elöljárók (in, on under).",
+          "There is…",
+          "There are…"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 5,
+        "title": "Culture – Nevek és Megszólítások; Maths – számtani műveletek",
+        "month": null,
+        "weeks": null,
+        "lessons": "19–21",
+        "keywords": [],
+        "semester": "I."
+      },
+      {
+        "order": 6,
+        "title": "Unit 2 Friends and family – Where are you from?",
+        "month": "november",
+        "weeks": null,
+        "lessons": "22–26",
+        "keywords": [
+          "Országok, nemzetiségek megnevezése",
+          "A létige (am, is, are) – kijelentés, tagadás."
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 7,
+        "title": "My family; Projectmunka: Magamról",
+        "month": null,
+        "weeks": null,
+        "lessons": "27–32",
+        "keywords": [
+          "Család bemutatása, családtagok.",
+          "Családfa készítése",
+          "A birtoklás kifejezése: ’s.",
+          "Birtokos névmások"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 8,
+        "title": "Mickey, Millie and Mut",
+        "month": "december",
+        "weeks": null,
+        "lessons": "33–36",
+        "keywords": [
+          "Információ kérése és nyújtása",
+          "A létige – kérdés, rövid válasz"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 9,
+        "title": "Culture – What’s your address?; The world",
+        "month": null,
+        "weeks": null,
+        "lessons": "37–39",
+        "keywords": [
+          "Címzés – boríték, képeslap",
+          "Képeslapok külföldről"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 10,
+        "title": "Christmas Time",
+        "month": null,
+        "weeks": null,
+        "lessons": "40–44",
+        "keywords": [
+          "Az én ajándékaim.",
+          "Karácsony Angliában és nálunk.",
+          "Karácsonyi dalok."
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 11,
+        "title": "What day is it today?",
+        "month": null,
+        "weeks": null,
+        "lessons": "45–50",
+        "keywords": [
+          "Napok",
+          "Wh- questions.",
+          "A létige használata."
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 12,
+        "title": "Revision – Ismétlés, gyakorlás; Test 2",
+        "month": null,
+        "weeks": null,
+        "lessons": "51–53",
+        "keywords": [],
+        "semester": "I."
+      },
+      {
+        "order": 13,
+        "title": "ME AND YOU modul (20 óra)",
+        "month": "február–március",
+        "weeks": null,
+        "lessons": "54–74",
+        "keywords": [],
+        "semester": "II."
+      },
+      {
+        "order": 14,
+        "title": "Unit 3 My world – I’ve got a computer",
+        "month": "március",
+        "weeks": null,
+        "lessons": "75–76",
+        "keywords": [
+          "Személyes tárgyak megnevezése.",
+          "have/has got – kijelentés, tagadás"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 15,
+        "title": "Have you got a pet?",
+        "month": null,
+        "weeks": null,
+        "lessons": "77–78",
+        "keywords": [
+          "Háziállatok",
+          "Have/has got – kérdések kérdőszó nélkül, rövid válasz.",
+          "Kérdőszavas kérdések."
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 16,
+        "title": "Mut’s present",
+        "month": null,
+        "weeks": null,
+        "lessons": "79–81",
+        "keywords": [
+          "Színek",
+          "Tulajdonságok.",
+          "melléknevek."
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 17,
+        "title": "BOOKS modul (8 óra)",
+        "month": "április",
+        "weeks": null,
+        "lessons": "82–89",
+        "keywords": [
+          "Angolszász kultúra"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 18,
+        "title": "My school; Culture – Iskolai élet Angliában és Walesben; Ismétlés, gyakorlás",
+        "month": null,
+        "weeks": null,
+        "lessons": "90–91",
+        "keywords": [
+          "Tantárgyak, napok, órarend (ideális, valós)",
+          "have/has got"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 19,
+        "title": "Unit 4 Time – What’s the time please?; My day; Free time",
+        "month": "május",
+        "weeks": null,
+        "lessons": "92–94",
+        "keywords": [
+          "Az idő kifejezése időpontok.",
+          "Napirend leírása",
+          "Szabadidős tevékenységek",
+          "az idő elöljárói (in, on, at).",
+          "Egyszerű jelen idő: kijelentés.",
+          "Egyszerű jelen idő: tagadás."
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 20,
+        "title": "CAMP modul (10 óra)",
+        "month": null,
+        "weeks": null,
+        "lessons": "95–104",
+        "keywords": [],
+        "semester": "II."
+      },
+      {
+        "order": 21,
+        "title": "Év végi ismétlés, rendszerezés. Játék",
+        "month": null,
+        "weeks": null,
+        "lessons": "105–106",
+        "keywords": [],
+        "semester": "II."
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 4,
+    "school": "Tamási Áron Általános Iskola, Gimnázium és Német Nemzetiségi Gimnázium",
+    "source": "https://tamasiaroniskola.hu/wp-content/uploads/2021/01/4_angol.pdf",
+    "verified": true,
+    "textbook": "PROJECT 1 Fourth edition, Oxford University Press",
+    "documentType": "féléves tananyag-beosztás (lecke-sorrend, hónap és óraszám nélkül)",
+    "notes": "A PDF metaadata szerint 2019. október 2-i, tehát a NAT 2020 előtti; a NAT 2020-hoz illeszkedése UNVERIFIED. A 4_angol_nat2020.pdf változat 404-et ad.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Unit 1 Introduction – Hello",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Bemutatkozás",
+          "Köszönési formák"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 2,
+        "title": "In the classroom; Numbers",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Iskolai tárgyak megnevezése",
+          "Utasítások",
+          "Számok (1-100)",
+          "Személyes névmások",
+          "Számnevek",
+          "Főnevek (a/an)",
+          "Felszólító mód"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 3,
+        "title": "How do you spell that?",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Betűzés kérése",
+          "Az abc",
+          "Képleírás",
+          "A főnevek szabályos és rendhagyó többes száma"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 4,
+        "title": "Culture – Nevek és megszólítások; Maths – számtani műveletek",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [],
+        "semester": "I."
+      },
+      {
+        "order": 5,
+        "title": "Unit 2 Friends and family – Where are you from?",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Országok, nemzetiségek megnevezése",
+          "A létige (am, is, are) – kijelentés, tagadás"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 6,
+        "title": "My family",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Család bemutatása, családtagok.",
+          "Birtokos jelzők",
+          "A birtoklás kifejezése: ’s"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 7,
+        "title": "Mickey, Millie and Mut",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Információ kérése, nyújtása",
+          "A kérdő mondat szerkezete"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 8,
+        "title": "What day is it today?",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Napok",
+          "Eldöntendő kérdés"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 9,
+        "title": "Culture – Címzés – boríték, képeslap; Geography: the world",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "A létige és a birtokos alakok használata",
+          "Képeslapok külföldről."
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 10,
+        "title": "Unit 3 My world – I’ve got a computer",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Személyes tárgyak megnevezése.",
+          "have/has got – kijelentés, tagadás"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 11,
+        "title": "Mut’s present",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Színek",
+          "Tulajdonságok",
+          "Képleírás",
+          "melléknevek"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 12,
+        "title": "Have you got a pet?",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Háziállatok",
+          "Kérdések kérdőszó nélkül ~ rövid válaszok.",
+          "Kérdőszavas kérdések"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 13,
+        "title": "My school; Christmas Time",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Tantárgyak",
+          "napok, órarend",
+          "Karácsony Angliában és nálunk",
+          "have/has got"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 14,
+        "title": "Culture – Iskolai élet Angliában és Walesben; Science – Mi és az állatok",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [],
+        "semester": "II."
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 4,
+    "school": "Debreceni Egyetem Kossuth Lajos Gyakorló Gimnáziuma és Általános Iskolája – Arany János téri feladatellátási hely",
+    "source": "https://aranyalt.unideb.hu/sites/default/files/2026-03/helyi_tanterv_angol_2020.pdf",
+    "verified": true,
+    "textbook": "Smart Junior 3 (a forrás a 4. évfolyamnál is ezt írja)",
+    "documentType": "helyi tanterv 2020, témakör + óraszám (2 óra/hét, 72 óra/év)",
+    "notes": "Helyi tanterv 2020 (a 2020. évi kerettantervek alapján). Témakör + óraszám, nincs havi bontás; a sorrend a táblázat sorrendje. A 'lessons' tartományt az óraszámok sorrendi összeadásával SZÁMOLTUK, a forrásban nem szerepel. A PDF-szövegkinyerésnél a 'b' betű kiesett (pl. 'Sza adidő'); ezt 'Szabadidő'-re javítottuk, egyébként a címek szó szerintiek.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Testünk",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–16",
+        "keywords": [],
+        "hours": 16
+      },
+      {
+        "order": 2,
+        "title": "Ételek",
+        "month": null,
+        "weeks": null,
+        "lessons": "17–32",
+        "keywords": [],
+        "hours": 16
+      },
+      {
+        "order": 3,
+        "title": "Lakás, öltözködés, időjárás",
+        "month": null,
+        "weeks": null,
+        "lessons": "33–48",
+        "keywords": [],
+        "hours": 16
+      },
+      {
+        "order": 4,
+        "title": "Szabadidő",
+        "month": null,
+        "weeks": null,
+        "lessons": "49–64",
+        "keywords": [],
+        "hours": 16
+      },
+      {
+        "order": 5,
+        "title": "Szabadon felhasználható (kiegészítő ismeretek / differenciálás, gyakorlás / projektmunkák)",
+        "month": null,
+        "weeks": null,
+        "lessons": "65–72",
+        "keywords": [],
+        "hours": 8
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 4,
+    "school": "Szent Piroska Görögkatolikus Általános Iskola Nyíracsád",
+    "source": "https://www.szentpiroskanyiracsad.hu/wp-content/uploads/2023/03/Angol-nyelv-4.-osztaly.pdf",
+    "verified": true,
+    "textbook": null,
+    "documentType": "helyi tanterv (az 5/2020. (I. 31.) Korm. rendelet szerinti kerettantervi ajánlások alapján), témakör + javasolt óraszám (heti 2 óra, 68 óra)",
+    "notes": "Kerettantervi témakörök, nem tanítási sorrend, és nincs hónap. A 'lessons' SZÁMOLT érték.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Personal topics and topics concerning immediate environment and nature",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–20",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 2,
+        "title": "Topics concerning classroom activities",
+        "month": null,
+        "weeks": null,
+        "lessons": "21–30",
+        "keywords": [],
+        "hours": 10
+      },
+      {
+        "order": 3,
+        "title": "Cross-curricular topics and activities",
+        "month": null,
+        "weeks": null,
+        "lessons": "31–38",
+        "keywords": [],
+        "hours": 8
+      },
+      {
+        "order": 4,
+        "title": "English and language learning",
+        "month": null,
+        "weeks": null,
+        "lessons": "39–43",
+        "keywords": [],
+        "hours": 5
+      },
+      {
+        "order": 5,
+        "title": "Intercultural topics",
+        "month": null,
+        "weeks": null,
+        "lessons": "44–49",
+        "keywords": [],
+        "hours": 6
+      },
+      {
+        "order": 6,
+        "title": "Playful learning",
+        "month": null,
+        "weeks": null,
+        "lessons": "50–59",
+        "keywords": [],
+        "hours": 10
+      },
+      {
+        "order": 7,
+        "title": "Entertainment",
+        "month": null,
+        "weeks": null,
+        "lessons": "60–65",
+        "keywords": [],
+        "hours": 6
+      },
+      {
+        "order": 8,
+        "title": "Gaining and sharing knowledge",
+        "month": null,
+        "weeks": null,
+        "lessons": "66–68",
+        "keywords": [],
+        "hours": 3
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 5,
+    "school": "Tamási Áron Általános Iskola, Gimnázium és Német Nemzetiségi Gimnázium",
+    "source": "https://tamasiaroniskola.hu/wp-content/uploads/2021/01/5_angol_nat2020.pdf",
+    "verified": true,
+    "textbook": "I. félév: PROJECT 1 Fourth edition; II. félév: PROJECT 2 Fourth edition (Oxford University Press)",
+    "documentType": "féléves tananyag-beosztás (a fájlnév NAT 2020-at jelöl, metaadat: 2021-01-16), hónap és óraszám nélkül",
+    "notes": "Csak félévenkénti sorrendet ad. A Project 1 Unit 4–6-tal indul, a Project 1 Unit 1–3 a 4. osztály anyaga.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Unit 4 Time – What’s the time please?",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Az idő kifejezése – időpontok.",
+          "az idő elöljárói (on, at)"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 2,
+        "title": "My day",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Napirend leírása",
+          "Egy diák napja itthon és más országokban",
+          "Egyszerű jelen idő – kijelentés, tagadás"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 3,
+        "title": "Free time",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Szabadidős tevékenységek",
+          "Egyszerű jelen idő – egyes szám 3. személy"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 4,
+        "title": "Mickey, Millie and Mut",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Sportok, hangszerek",
+          "Egyszerű jelen idő –kérdés"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 5,
+        "title": "Culture – Sportok; Music – Hangszerek",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "egyszerű jelen idő"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 6,
+        "title": "Unit 5 Places – My room",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Bútorok a lakásban",
+          "elöljárószavak, hely-meghatározás"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 7,
+        "title": "Our house",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Szobák, berendezési tárgyak",
+          "There’s / There’re"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 8,
+        "title": "Our town",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Épületek.",
+          "Tágabb környezetünk bemutatása.",
+          "Útbaigazítás",
+          "Térbeli viszonyok – kérdések"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 9,
+        "title": "Mickey, Millie and Mut",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Utasítások megértése, utasítások adása",
+          "Modalitás – can"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 10,
+        "title": "Culture – Egy angol város; History – Városok kialakulása",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Modalitás: can"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 11,
+        "title": "Unit 6 People – My friends",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Személyek bemutatása, leírása, külső tulajdonságok",
+          "jelzők helye a mondatban"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 12,
+        "title": "Saturday Morning",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "képleírás",
+          "Folyamatos jelen idő – kijelentés, tagadás"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 13,
+        "title": "Are we going to the shops?",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Állandósult szókapcsolatok (igék)",
+          "Folyamatos jelen idő – kérdés"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 14,
+        "title": "Clothes; The King’s New Clothes",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Ruhaneműk, árak, vásárlás",
+          "How much is this…?",
+          "How much are these…?"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 15,
+        "title": "Culture – Emberek a világ különböző részein; Art – Festmények",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Folyamatos jelen idő"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 16,
+        "title": "Unit 1 My life – My school; Birthdays",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Napirend, iskolai élet",
+          "Hónapok",
+          "egyszerű jelen idő (kijelentés, tagadás)",
+          "sorszámnevek.",
+          "Dátumok, elöljárók"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 17,
+        "title": "Mickey, Millie and Mut",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Szabadidős tevékenységek",
+          "egyszerű jelen idő (kérdés)"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 18,
+        "title": "Daily life; Science and Maths; Culture – Ünnepek Angliában",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Házimunka",
+          "Mérőeszközök, mérések",
+          "az időhatározószók szerepe, helye a mondatban"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 19,
+        "title": "Unit 2 Animals – Our school trip; Mickey’s model dinosaur",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Állakerti állatok",
+          "folyamatos jelen idő.",
+          "Kérdésszerkesztés"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 20,
+        "title": "My favourite animals",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Állatok, háziállatok",
+          "Folyamatos jelen idő és az egyszerű jelen idő"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 21,
+        "title": "The story of Chicken Licken; Culture – Az állatok élete",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Történetmesélés szókincse",
+          "személyes névmások tárgyesete.",
+          "Modalitás – must"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 22,
+        "title": "Biology – Állatfajok, Kedvenc állatom",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "egyszerű és folyamatos jelen idő.",
+          "Névmások tárgyesete.",
+          "Must, can"
+        ],
+        "semester": "II."
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 5,
+    "school": "Debreceni Egyetem Kossuth Lajos Gyakorló Gimnáziuma és Általános Iskolája – Arany János téri feladatellátási hely",
+    "source": "https://aranyalt.unideb.hu/sites/default/files/2026-03/helyi_tanterv_angol_2020.pdf",
+    "verified": true,
+    "textbook": "Get To the Top Revised 1",
+    "documentType": "helyi tanterv 2020, témakör + óraszám (3 óra/hét, 108 óra/év)",
+    "notes": "Helyi tanterv 2020 (a 2020. évi kerettantervek alapján). Témakör + óraszám, nincs havi bontás; a sorrend a táblázat sorrendje. A 'lessons' tartományt az óraszámok sorrendi összeadásával SZÁMOLTUK, a forrásban nem szerepel. A PDF-szövegkinyerésnél a 'b' betű kiesett (pl. 'Sza adidő'); ezt 'Szabadidő'-re javítottuk, egyébként a címek szó szerintiek. A kulcsszavak a forrás 'Az 5. évfolyamon tanított modulok' táblázatából valók. Az 5 sort sorrend és tartalom alapján rendeltük az 5 témakörhöz, a forrás ezt nem mondja ki.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Iskola",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–20",
+        "keywords": [
+          "Greetings, spelling our name",
+          "Reading & dictating telephone numbers",
+          "The colour of things",
+          "Understanding instructions in the classroom",
+          "többes szám",
+          "felszólító mód (Let’s ...)",
+          "the verb ’be’ in negatives and questions",
+          "Who?, What?"
+        ],
+        "hours": 20
+      },
+      {
+        "order": 2,
+        "title": "Emberek",
+        "month": null,
+        "weeks": null,
+        "lessons": "21–40",
+        "keywords": [
+          "Asking and answering about personal data",
+          "Expressing the time",
+          "Introducing family members",
+          "Describing the appearance of my friends",
+          "Describing my favourite things and pet animals",
+          "Possessive case",
+          "Possessive adjectives",
+          "the verb ’havegot’",
+          "These / those"
+        ],
+        "hours": 20
+      },
+      {
+        "order": 3,
+        "title": "Szabadidő",
+        "month": null,
+        "weeks": null,
+        "lessons": "41–60",
+        "keywords": [
+          "Describing free-time activities",
+          "Expressing opinions",
+          "Describing my favourite music and films",
+          "Present Simple",
+          "Prepositions of time",
+          "Present Simple negatives and questions",
+          "like, love, enjoy, hate + -ing",
+          "When? from always to never"
+        ],
+        "hours": 20
+      },
+      {
+        "order": 4,
+        "title": "Lakóhelyünk",
+        "month": null,
+        "weeks": null,
+        "lessons": "61–80",
+        "keywords": [
+          "Locating objects and settlements",
+          "Describing our place of living",
+          "Polite requests and asking for permission",
+          "Introducing famous places",
+          "Recommending programs",
+          "Prepositions of place",
+          "There is / there are",
+          "The verb ’can’",
+          "Let’s ..."
+        ],
+        "hours": 20
+      },
+      {
+        "order": 5,
+        "title": "Ételek",
+        "month": null,
+        "weeks": null,
+        "lessons": "81–100",
+        "keywords": [
+          "Ordering food",
+          "Asking for an offer",
+          "Accepting an offer or rejecting it",
+          "Recomending and offering food",
+          "Countables / Uncountables",
+          "Some / any",
+          "A / an & some",
+          "How many? / How much?",
+          "Object pronouns"
+        ],
+        "hours": 20
+      },
+      {
+        "order": 6,
+        "title": "Szabadon felhasználható (kiegészítő ismeretek / differenciálás, gyakorlás / projektmunkák)",
+        "month": null,
+        "weeks": null,
+        "lessons": "101–108",
+        "keywords": [],
+        "hours": 8
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 6,
+    "school": "Tamási Áron Általános Iskola, Gimnázium és Német Nemzetiségi Gimnázium",
+    "source": "https://tamasiaroniskola.hu/wp-content/uploads/2021/01/6_angol.pdf",
+    "verified": true,
+    "textbook": "PROJECT 2 Fourth edition, Oxford University Press",
+    "documentType": "féléves tananyag-beosztás, hónap és óraszám nélkül",
+    "notes": "PDF metaadat: 2019. szeptember 30., tehát a NAT 2020 előtti. Ellentmond az iskola 5. osztályos NAT 2020-as fájljának, ahol a Project 2 Unit 2 már az 5. osztály II. félévében szerepel. A 6_angol_nat2020.pdf változat 404-et ad, ezért csak óvatosan használható. A dokumentum a Unit 6 első leckéjével ér véget.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Unit 2 Animals – Our school trip; Mickey’s model dinosaur",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Állakerti állatok",
+          "folyamatos jelen idő.",
+          "Kérdésszerkesztés"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 2,
+        "title": "My favourite animals",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Állatok, háziállatok",
+          "Folyamatos jelen idő és az egyszerű jelen idő"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 3,
+        "title": "The story of Chicken Licken; Culture – Az állatok élete",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "személyes névmások tárgyesete.",
+          "Modalitás – must"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 4,
+        "title": "Biology – Állatfajok, Kedvenc állatom",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Must, can"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 5,
+        "title": "Unit 3 Holidays – Where were you last week?",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "A múlt eseményei",
+          "a létige múlt ideje.",
+          "Eldöntendő kérdések, rövid válaszok"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 6,
+        "title": "Our holiday",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Utazással kapcsolatos szókincs",
+          "az igék szabályos múlt ideje"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 7,
+        "title": "Problems",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Problémás nyaralások.",
+          "Képeslapírás szókincse",
+          "Egyszerű múlt idő – kijelentés, tagadás"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 8,
+        "title": "Mut’s holiday",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Múltra vonatkozó információ kérése, adása",
+          "Egyszerű múlt idő – kérdések, rövid válaszok"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 9,
+        "title": "Culture – Nyaralások; Last Christmas",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Jelen, múlt összehasonlítása"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 10,
+        "title": "History – Utazási eszközök története",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Egyszerű múlt idő"
+        ],
+        "semester": "I."
+      },
+      {
+        "order": 11,
+        "title": "Unit 4 Food – Food and drink",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Ételek, italok",
+          "A határozatlan névelő"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 12,
+        "title": "Stone soup",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "some, any használata"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 13,
+        "title": "Mut goes shopping",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Csomagolás.",
+          "Vásárlás",
+          "megszámlálható, megszámlálhatatlan főnevek.",
+          "How much, how many…?"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 14,
+        "title": "George’s apple crumble",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Receptek – hozzávalók",
+          "a határozott és határozatlan névelő.",
+          "(a) few, (a) little"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 15,
+        "title": "Alice’s Welsh rarebit; Culture – Étkezési szokások",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Utasítások",
+          "névelők"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 16,
+        "title": "Geography – Különleges ételek",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [],
+        "semester": "II."
+      },
+      {
+        "order": 17,
+        "title": "Unit 5 The world – My country",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Természeti képződmények",
+          "számok, mértékek.",
+          "Kérdések kiterjedésekre"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 18,
+        "title": "North and south",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Időjárás",
+          "Égtájak",
+          "Melléknevek",
+          "a melléknevek fokozása, középfok"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 19,
+        "title": "Record breakers",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Legek a világon",
+          "a melléknevek fokozása, felsőfok"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 20,
+        "title": "Mickey, Millie and Mut; Culture – Az Egyesült Államok",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Táborozás, sátorozás",
+          "Rendhagyó melléknevek fokozása.",
+          "Összehasonlítás."
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 21,
+        "title": "Geography – Meteorológia",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Melléknevek fokozása, hasonlítás"
+        ],
+        "semester": "II."
+      },
+      {
+        "order": 22,
+        "title": "Unit 6 Entertainment – TV programmes",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [
+          "Műsorok, programok a tévében",
+          "be going to",
+          "jövőbeni szándék, terv kifejezése"
+        ],
+        "semester": "II."
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 6,
+    "school": "Debreceni Egyetem Kossuth Lajos Gyakorló Gimnáziuma és Általános Iskolája – Arany János téri feladatellátási hely",
+    "source": "https://aranyalt.unideb.hu/sites/default/files/2026-03/helyi_tanterv_angol_2020.pdf",
+    "verified": true,
+    "textbook": "Get To the Top Revised 1-2",
+    "documentType": "helyi tanterv 2020, témakör + óraszám (6. k: 108 óra, heti 3 óra; 6. m: 126 óra, heti 3,5 óra)",
+    "notes": "Helyi tanterv 2020 (a 2020. évi kerettantervek alapján). Témakör + óraszám, nincs havi bontás; a sorrend a táblázat sorrendje. A 'lessons' tartományt az óraszámok sorrendi összeadásával SZÁMOLTUK, a forrásban nem szerepel. A PDF-szövegkinyerésnél a 'b' betű kiesett (pl. 'Sza adidő'); ezt 'Szabadidő'-re javítottuk, egyébként a címek szó szerintiek. A forrás számozása hibás ('2. Ünnepek', '3. Az én világom / Otthon', '3. Nyaralás' stb.); itt a táblázat sorrendjét követjük. Az óraszámok a 6. k (108 órás) változatéi; 'A városban' csak a 6. m csoportnál szerepel (20 óra). A 6. évfolyam modul-táblázata nem rendelhető egyértelműen a témakörökhöz, ezért kulcsszót nem adtunk meg.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Ünnepek",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–20",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 2,
+        "title": "Az én világom / Otthon",
+        "month": null,
+        "weeks": null,
+        "lessons": "21–40",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 3,
+        "title": "Nyaralás",
+        "month": null,
+        "weeks": null,
+        "lessons": "41–60",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 4,
+        "title": "Utazás",
+        "month": null,
+        "weeks": null,
+        "lessons": "61–80",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 5,
+        "title": "Fantázia és valóság",
+        "month": null,
+        "weeks": null,
+        "lessons": "81–100",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 6,
+        "title": "Szabadon felhasználható (kiegészítő ismeretek / differenciálás, gyakorlás / projektmunkák)",
+        "month": null,
+        "weeks": null,
+        "lessons": "101–108",
+        "keywords": [],
+        "hours": 8
+      },
+      {
+        "order": 7,
+        "title": "A városban (csak 6. m csoport)",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [],
+        "hours": 20
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 7,
+    "school": "Debreceni Egyetem Kossuth Lajos Gyakorló Gimnáziuma és Általános Iskolája – Arany János téri feladatellátási hely",
+    "source": "https://aranyalt.unideb.hu/sites/default/files/2026-03/helyi_tanterv_angol_2020.pdf",
+    "verified": true,
+    "textbook": "Get To the Top Revised 2-3",
+    "documentType": "helyi tanterv 2020, témakör + óraszám (108 óra/év)",
+    "notes": "Helyi tanterv 2020 (a 2020. évi kerettantervek alapján). Témakör + óraszám, nincs havi bontás; a sorrend a táblázat sorrendje. A 'lessons' tartományt az óraszámok sorrendi összeadásával SZÁMOLTUK, a forrásban nem szerepel. A PDF-szövegkinyerésnél a 'b' betű kiesett (pl. 'Sza adidő'); ezt 'Szabadidő'-re javítottuk, egyébként a címek szó szerintiek. A 7. k csoport óraszámai; az 'Egészség, betegség' csak a 7. m csoportnál szerepel.",
+    "units": [
+      {
+        "order": 1,
+        "title": "A városban",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–20",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 2,
+        "title": "Tudomány és technika",
+        "month": null,
+        "weeks": null,
+        "lessons": "21–40",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 3,
+        "title": "Barátok",
+        "month": null,
+        "weeks": null,
+        "lessons": "41–60",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 4,
+        "title": "Ember és természet",
+        "month": null,
+        "weeks": null,
+        "lessons": "61–80",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 5,
+        "title": "Szabadidő",
+        "month": null,
+        "weeks": null,
+        "lessons": "81–100",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 6,
+        "title": "Szabadon felhasználható (kiegészítő ismeretek / differenciálás, gyakorlás / projektmunkák)",
+        "month": null,
+        "weeks": null,
+        "lessons": "101–108",
+        "keywords": [],
+        "hours": 8
+      },
+      {
+        "order": 7,
+        "title": "Egészség, betegség (csak 7. m csoport)",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [],
+        "hours": 20
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 8,
+    "school": "Debreceni Egyetem Kossuth Lajos Gyakorló Gimnáziuma és Általános Iskolája – Arany János téri feladatellátási hely",
+    "source": "https://aranyalt.unideb.hu/sites/default/files/2026-03/helyi_tanterv_angol_2020.pdf",
+    "verified": true,
+    "textbook": "Get To the Top Revised 3-4",
+    "documentType": "helyi tanterv 2020, témakör + óraszám (108 óra/év)",
+    "notes": "Helyi tanterv 2020 (a 2020. évi kerettantervek alapján). Témakör + óraszám, nincs havi bontás; a sorrend a táblázat sorrendje. A 'lessons' tartományt az óraszámok sorrendi összeadásával SZÁMOLTUK, a forrásban nem szerepel. A PDF-szövegkinyerésnél a 'b' betű kiesett (pl. 'Sza adidő'); ezt 'Szabadidő'-re javítottuk, egyébként a címek szó szerintiek. A 8. k csoport óraszámai; a 'Modern kommunikáció' csak a 8. m csoportnál szerepel.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Egészség, betegség",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–20",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 2,
+        "title": "Szórakozás",
+        "month": null,
+        "weeks": null,
+        "lessons": "21–40",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 3,
+        "title": "Utazás",
+        "month": null,
+        "weeks": null,
+        "lessons": "41–60",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 4,
+        "title": "Szabadidő hasznos eltöltése",
+        "month": null,
+        "weeks": null,
+        "lessons": "61–80",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 5,
+        "title": "Fantázia és valóság",
+        "month": null,
+        "weeks": null,
+        "lessons": "81–100",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 6,
+        "title": "Szabadon felhasználható (kiegészítő ismeretek / differenciálás, gyakorlás / projektmunkák)",
+        "month": null,
+        "weeks": null,
+        "lessons": "101–108",
+        "keywords": [],
+        "hours": 8
+      },
+      {
+        "order": 7,
+        "title": "Modern kommunikáció (csak 8. m csoport)",
+        "month": null,
+        "weeks": null,
+        "lessons": null,
+        "keywords": [],
+        "hours": 20
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 7,
+    "school": "Miskolci Egyetem Földes Ferenc Gyakorló Gimnázium (Miskolc), hatévfolyamos képzés",
+    "source": "https://www.ffg.hu/dok/intdok2023/ht/FFG_ht_Elso_idegen_nyelv_6_os_angol.pdf",
+    "verified": true,
+    "textbook": "Solutions Pre-Intermediate Third edition",
+    "documentType": "helyi tanterv, témakör + óraszám, 136 óra (heti 4 óra)",
+    "notes": "Gimnáziumi 7. évfolyam. Kerettantervi témakörök, nem tanítási sorrend. A 'lessons' SZÁMOLT érték.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Personal topics and topics concerning immediate environment and nature",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–30",
+        "keywords": [],
+        "hours": 30
+      },
+      {
+        "order": 2,
+        "title": "Public matters",
+        "month": null,
+        "weeks": null,
+        "lessons": "31–50",
+        "keywords": [],
+        "hours": 20
+      },
+      {
+        "order": 3,
+        "title": "Topics concerning classroom activities",
+        "month": null,
+        "weeks": null,
+        "lessons": "51–83",
+        "keywords": [],
+        "hours": 33
+      },
+      {
+        "order": 4,
+        "title": "Cross-curricular topics and activities",
+        "month": null,
+        "weeks": null,
+        "lessons": "84–113",
+        "keywords": [],
+        "hours": 30
+      },
+      {
+        "order": 5,
+        "title": "English and language learning",
+        "month": null,
+        "weeks": null,
+        "lessons": "114–136",
+        "keywords": [],
+        "hours": 23
+      }
+    ]
+  },
+  {
+    "subject": "angol",
+    "grade": 8,
+    "school": "Miskolci Egyetem Földes Ferenc Gyakorló Gimnázium (Miskolc), hatévfolyamos képzés",
+    "source": "https://www.ffg.hu/dok/intdok2023/ht/FFG_ht_Elso_idegen_nyelv_6_os_angol.pdf",
+    "verified": true,
+    "textbook": "Solutions Pre-Intermediate Third edition/Solutions Intermediate Third edition",
+    "documentType": "helyi tanterv, témakör + óraszám, 136 óra",
+    "notes": "Az összesítő táblázat óraszámai (30/35/23/23/25) eltérnek a részletes témakör-fejlécekben szereplőktől (30/25/13/23/20). Ez a forrás belső ellentmondása; itt az összesítő táblázat számai szerepelnek. A 'lessons' SZÁMOLT érték.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Personal topics and topics concerning immediate environment and nature",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–30",
+        "keywords": [],
+        "hours": 30
+      },
+      {
+        "order": 2,
+        "title": "Intercultural topics",
+        "month": null,
+        "weeks": null,
+        "lessons": "31–65",
+        "keywords": [],
+        "hours": 35
+      },
+      {
+        "order": 3,
+        "title": "Current topics",
+        "month": null,
+        "weeks": null,
+        "lessons": "66–88",
+        "keywords": [],
+        "hours": 23
+      },
+      {
+        "order": 4,
+        "title": "Entertainment",
+        "month": null,
+        "weeks": null,
+        "lessons": "89–111",
+        "keywords": [],
+        "hours": 23
+      },
+      {
+        "order": 5,
+        "title": "Gaining and sharing knowledge",
+        "month": null,
+        "weeks": null,
+        "lessons": "112–136",
+        "keywords": [],
+        "hours": 25
+      }
+    ]
+  },
+  {
+    "subject": "francia",
+    "grade": 8,
+    "school": "Debreceni Egyetem Kossuth Lajos Gyakorló Gimnáziuma és Általános Iskolája (hatévfolyamos képzés, francia mint második idegen nyelv)",
+    "source": "https://kossuthgimn.unideb.hu/sites/default/files/upload_documents/francia_nyelv.pdf",
+    "verified": true,
+    "textbook": "A dokumentum tankönyvlistája évfolyamhoz rendelés nélkül: Talents 1–2 (Műszaki), France-Euro-Express 1–3 Nouveau (NTT)",
+    "documentType": "helyi tanterv (Debrecen, 2020. június; a 2. idegen nyelv 2020-as kerettanterve, 7–12.), témakör + órakeret, heti 2 óra, 72 óra",
+    "notes": "Nincs hónap vagy hét. A sorrend 'A témakörök áttekintő táblázata' szerinti. A 'lessons' SZÁMOLT érték. A forrás a 8. évfolyamra nyelvtani elemeket is felsorol, témakörhöz rendelés nélkül, pl. passé composé 'être, avoir' segédigével, visszaható igék, birtokos névmások, 'pouvoir', 'devoir', 'savoir', 'vouloir', ne…pas, pour+infinitif.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Személyes vonatkozások, család",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–8",
+        "keywords": [
+          "bemutatkozás, bemutatás",
+          "személyi adatok, életrajz, származás, nemzetiség",
+          "kapcsolatok a családban",
+          "foglalkozások",
+          "az ízlés kifejezése",
+          "ünnepek, ajándékozás."
+        ],
+        "hours": 8
+      },
+      {
+        "order": 2,
+        "title": "Ember és társadalom",
+        "month": null,
+        "weeks": null,
+        "lessons": "9–16",
+        "keywords": [
+          "emberek külső és belső jellemzése",
+          "ünnepek, ajándékozás.",
+          "öltözködés, ruhadarabok; színek."
+        ],
+        "hours": 8
+      },
+      {
+        "order": 3,
+        "title": "Környezetünk, aktualitások",
+        "month": null,
+        "weeks": null,
+        "lessons": "17–23",
+        "keywords": [
+          "a lakás és ház bemutatása, berendezése",
+          "közvetlen környezetünk, tájékozódás térben",
+          "növények és állatok a környezetünkben",
+          "aktuális témák"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 4,
+        "title": "Iskola, francia nyelv és nyelvtanulás, tantárgyköziség",
+        "month": null,
+        "weeks": null,
+        "lessons": "24–30",
+        "keywords": [
+          "tantárgyak, órarend",
+          "más nyelvek",
+          "hogyan tanuljunk nyelveket"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 5,
+        "title": "A munka világa, szolgáltatások",
+        "month": null,
+        "weeks": null,
+        "lessons": "31–37",
+        "keywords": [
+          "foglalkozások",
+          "étteremben, hotelben"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 6,
+        "title": "Életmód",
+        "month": null,
+        "weeks": null,
+        "lessons": "38–44",
+        "keywords": [
+          "Napirend, időbeosztás, óra, napszakok, napok, hónapok, évszakok; dátum.",
+          "mindennapi étkezési szokások",
+          "kedvenc ételek, sütés-főzés"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 7,
+        "title": "Szabadidő, művelődés, szórakozás",
+        "month": null,
+        "weeks": null,
+        "lessons": "45–51",
+        "keywords": [
+          "Szabadidős elfoglaltságok, hobbik",
+          "sportok"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 8,
+        "title": "Utazás, turizmus, más kultúrák",
+        "month": null,
+        "weeks": null,
+        "lessons": "52–58",
+        "keywords": [
+          "országnevek, nemzetiségek; útbaigazítás, közlekedési eszközök, közlekedés a városban",
+          "más kultúrák jellemzői"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 9,
+        "title": "Tudomány és technika, tudás megszerzése és tudásmegosztás",
+        "month": null,
+        "weeks": null,
+        "lessons": "59–65",
+        "keywords": [
+          "néhány gép és készülék megnevezése",
+          "könyvtár használata"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 10,
+        "title": "Gazdaság és pénzügyek",
+        "month": null,
+        "weeks": null,
+        "lessons": "66–72",
+        "keywords": [
+          "pénznemek, vásárlás, mennyiségek"
+        ],
+        "hours": 7
+      }
+    ]
+  },
+  {
+    "subject": "francia",
+    "grade": 7,
+    "school": "Debreceni Egyetem Kossuth Lajos Gyakorló Gimnáziuma és Általános Iskolája (hatévfolyamos képzés, francia mint második idegen nyelv)",
+    "source": "https://kossuthgimn.unideb.hu/sites/default/files/upload_documents/francia_nyelv.pdf",
+    "verified": true,
+    "textbook": "lásd a 8. évfolyamnál (évfolyamhoz nem rendelt tankönyvlista)",
+    "documentType": "helyi tanterv, témakör + órakeret, heti 2 óra, 72 óra",
+    "notes": "A 7. évfolyam táblázatát a PDF-szövegben az 'Utazás, turizmus, más kultúrák' sorig ellenőriztük. A további sorok (a 8. évfolyamnál: Tudomány és technika…, Gazdaság és pénzügyek) itt NEM ellenőrzöttek, ezért kimaradtak, így az összeg 58 óra, nem 72. A 'lessons' SZÁMOLT érték.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Személyes vonatkozások, család",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–8",
+        "keywords": [
+          "bemutatkozás, bemutatás",
+          "személyi adatok, életrajz, származás, nemzetiség",
+          "kapcsolatok a családban",
+          "foglalkozások",
+          "az ízlés kifejezése",
+          "ünnepek, ajándékozás."
+        ],
+        "hours": 8
+      },
+      {
+        "order": 2,
+        "title": "Ember és társadalom",
+        "month": null,
+        "weeks": null,
+        "lessons": "9–16",
+        "keywords": [
+          "emberek külső és belső jellemzése",
+          "ünnepek, ajándékozás.",
+          "ruhadarabok; színek."
+        ],
+        "hours": 8
+      },
+      {
+        "order": 3,
+        "title": "Környezetünk, aktualitások",
+        "month": null,
+        "weeks": null,
+        "lessons": "17–23",
+        "keywords": [
+          "a lakás és ház",
+          "közvetlen környezetünk, tájékozódás térben",
+          "növények és állatok a környezetünkben",
+          "aktuális témák"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 4,
+        "title": "Iskola, francia nyelv és nyelvtanulás, tantárgyköziség",
+        "month": null,
+        "weeks": null,
+        "lessons": "24–30",
+        "keywords": [
+          "tantárgyak, órarend",
+          "más nyelvek",
+          "hogyan tanuljunk nyelveket"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 5,
+        "title": "A munka világa, szolgáltatások",
+        "month": null,
+        "weeks": null,
+        "lessons": "31–37",
+        "keywords": [
+          "foglalkozások",
+          "étteremben, hotelben"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 6,
+        "title": "Életmód",
+        "month": null,
+        "weeks": null,
+        "lessons": "38–44",
+        "keywords": [
+          "napszakok, napok, hónapok, évszakok; dátum.",
+          "mindennapi étkezési szokások",
+          "kedvenc ételek, sütés-főzés"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 7,
+        "title": "Szabadidő, művelődés, szórakozás",
+        "month": null,
+        "weeks": null,
+        "lessons": "45–51",
+        "keywords": [
+          "Szabadidős elfoglaltságok, hobbik",
+          "sportok"
+        ],
+        "hours": 7
+      },
+      {
+        "order": 8,
+        "title": "Utazás, turizmus, más kultúrák",
+        "month": null,
+        "weeks": null,
+        "lessons": "52–58",
+        "keywords": [
+          "országnevek, nemzetiségek; közlekedési eszközök, közlekedés a városban",
+          "más kultúrák jellemzői"
+        ],
+        "hours": 7
+      }
+    ]
+  },
+  {
+    "subject": "francia",
+    "grade": 9,
+    "school": "Miskolci Egyetem Földes Ferenc Gyakorló Gimnázium (Miskolc)",
+    "source": "https://www.ffg.hu/dok/intdok2023/ht/FFG_ht_2_idegen_nyelv_francia.pdf",
+    "verified": true,
+    "textbook": "France euro express nouveau 1",
+    "documentType": "tanmenet óraszám-tartományokkal (heti 3, évi 108 óra; szint: A0–A1, kezdő)",
+    "notes": "Valódi órás tanmenet, hónap nélkül. A lecke-címke a PDF szövegében az adott sor előtt áll ('Lecon 0' → 7–13. óra, 'Leçon 1' → 14–20. óra stb.); ezt a 'Leçon 3 31-40 óra' sor is megerősíti. A forrás két leckét is 'Leçon 5'-nek nevez (55–64. és 64–73. óra, a 64. óra átfed); szó szerint átvettük. A szerver TLS-tanúsítványa hiányos, a WebFetch hibát ad; a szöveget curl -k-val olvastuk, lemezre mentés nélkül.",
+    "units": [
+      {
+        "order": 1,
+        "title": "Szóbeli kezdő szakasz",
+        "month": null,
+        "weeks": null,
+        "lessons": "1–6",
+        "keywords": [
+          "Üdvözlésformák",
+          "Bemutatkozó formulák",
+          "Hogylét kifejezése",
+          "Francia jövevényszavak gyűjtése",
+          "(Salut, Bonjour)",
+          "Comment tu t’appelles?",
+          "Comment vas-tu?",
+          "Ca va? Merci, je vais bien.",
+          "Hímnem, nőnem",
+          "Az être, s’appeler igék ragozása jelen időben"
+        ]
+      },
+      {
+        "order": 2,
+        "title": "Leçon 0 – Tanteremben használt utasítások",
+        "month": null,
+        "weeks": null,
+        "lessons": "7–13",
+        "keywords": [
+          "Iskolai tárgyak megnevezése",
+          "Hangok, betűk, kiejtés, intonáció",
+          "Ferme le livre !",
+          "Qu’est-ce que c’est ? C’est un / une...",
+          "Felszólító módú alakok",
+          "A határozatlan névelő",
+          "A főnév neme"
+        ]
+      },
+      {
+        "order": 3,
+        "title": "Leçon 1 – Bemutatás",
+        "month": null,
+        "weeks": null,
+        "lessons": "14–20",
+        "keywords": [
+          "Foglalkozás-nevek",
+          "Személyek bemutatása",
+          "Il est... ; Elle s’appelle… ; Il est professeur.",
+          "Az -er végű igék: parler, habiter",
+          "A személyes névmások",
+          "A határozott névelő"
+        ]
+      },
+      {
+        "order": 4,
+        "title": "Leçon 2 – Személyek külső-belső leírása",
+        "month": null,
+        "weeks": null,
+        "lessons": "21–30",
+        "keywords": [
+          "Comment est il ?",
+          "Est-ce que tu aimes…?",
+          "Eldöntendő kérdés",
+          "Kiegészítendő kérdés",
+          "Tagadás",
+          "Az avoir, connaître és a préférer ige ragozása",
+          "A főnevek többes száma",
+          "A melléknevek többes száma"
+        ]
+      },
+      {
+        "order": 5,
+        "title": "Leçon 3 – Tárgyak megnevezése",
+        "month": null,
+        "weeks": null,
+        "lessons": "31–40",
+        "keywords": [
+          "Vásárlási szándék kifejezése",
+          "Életkor kifejezése",
+          "C’est sympa !",
+          "Qu’est-ce que tu fais ? Je lis…",
+          "Számok 1-20-ig.",
+          "Melléknév helye.",
+          "A lire, faire, igék ragozása jelen időben",
+          "Prepozíciók (dans, sur, devant stb.)"
+        ]
+      },
+      {
+        "order": 6,
+        "title": "Lecon 4 – Ízlés kifejezése",
+        "month": null,
+        "weeks": null,
+        "lessons": "41–50",
+        "keywords": [
+          "Tantárgynevek",
+          "J’aime un peu, beaucoup, j’adore…",
+          "Tagadás",
+          "On általános alany",
+          "Háromalakú melléknevek",
+          "A comprendre ige ragozása",
+          "Határozott névelő többes száma."
+        ]
+      },
+      {
+        "order": 7,
+        "title": "Összefoglalás, rendszerezés; Témazáró dolgozat megírása",
+        "month": null,
+        "weeks": null,
+        "lessons": "51–54",
+        "keywords": []
+      },
+      {
+        "order": 8,
+        "title": "Leçon 5 – Országnevek / városnevek / nemzetiségek",
+        "month": null,
+        "weeks": null,
+        "lessons": "55–64",
+        "keywords": [
+          "Helyhatározót kifejező prepozíciók (à, de, au / en / aux)",
+          "A partir, aller, voyager igék ragozása jelen időben",
+          "Számok 20-60-ig"
+        ]
+      },
+      {
+        "order": 9,
+        "title": "Leçon 5 – Élelmiszernevek",
+        "month": null,
+        "weeks": null,
+        "lessons": "64–73",
+        "keywords": [
+          "Étkezéssel kapcsolatos szavak és kifejezések",
+          "Terítés",
+          "Je voudrais…",
+          "Tu veux...? Oui / Non, merci.",
+          "C’est délicieux.",
+          "Az anyagnévelő",
+          "Anyagnevek tagadása DE-vel",
+          "Acheter, vouloir igék ragozása"
+        ]
+      },
+      {
+        "order": 10,
+        "title": "Leçon 6 – Ház / lakás / bútorok; Családtagok bemutatása, jellemzése, családfa",
+        "month": null,
+        "weeks": null,
+        "lessons": "74–83",
+        "keywords": [
+          "Où est le lit ? Il est devant…",
+          "Le salon est en face de la cuisine.",
+          "Il y a…",
+          "Birtokviszony kifejezése",
+          "Birtokos névelő.",
+          "A személyes névmás mint tárgy",
+          "Összetett prepozíciók (au milieu de)",
+          "A venir, voir igék ragozása"
+        ]
+      },
+      {
+        "order": 11,
+        "title": "Összefoglalás, rendszerezés; Témazáró megírása",
+        "month": null,
+        "weeks": null,
+        "lessons": "84–87",
+        "keywords": []
+      },
+      {
+        "order": 12,
+        "title": "Leçon 7 – Parancsolás; Ruhaneműk, öltözködés; Színek",
+        "month": null,
+        "weeks": null,
+        "lessons": "88–100",
+        "keywords": [
+          "Ruhaneműk bemutatása, leírása",
+          "Számok 70-100-ig",
+          "Felszólító mód",
+          "Birtoklás kifejezése à-val",
+          "Birtokos névelő többes száma"
+        ]
+      },
+      {
+        "order": 13,
+        "title": "Év végi tematikus rendszerezés",
+        "month": null,
+        "weeks": null,
+        "lessons": "101–108",
+        "keywords": []
+      }
+    ]
+  }
+]

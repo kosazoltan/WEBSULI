@@ -1,4 +1,5 @@
 import tanmenet from "../data/tanmenet-2020.json";
+import nyelvi from "../data/nyelvi-tanmenet.json";
 import { buildIndex, matchMaterial, type CurriculumIndex, type CurriculumMatch, type TanmenetData } from "./match";
 import { hintsFromHtml, hintsFromLesson } from "./hints";
 
@@ -8,7 +9,9 @@ import { hintsFromHtml, hintsFromLesson } from "./hints";
  * Kiegészítés (docs/specs/2026-10-18-tanmenet-kiegeszites.md): ha a cím nem elég, a tartalom címsorai / kulcsfogalmai döntenek.
  */
 let index: CurriculumIndex | null = null;
-const getIndex = () => (index ??= buildIndex(tanmenet as TanmenetData));
+/** A NAT 2020 mintatanmenetek + az iskolai nyelvi tanmenetek (angol, francia — nincs hivatalos OH-tanmenet). */
+export const curriculumData = (): TanmenetData => ({ about: "NAT 2020 + iskolai nyelvi tanmenetek", plans: [...(tanmenet as TanmenetData).plans, ...(nyelvi as TanmenetData).plans] });
+const getIndex = () => (index ??= buildIndex(curriculumData()));
 
 export type CurriculumHint = { pos: number; label: string };
 type Item = { id: string; title: string; classroom: number; contentType?: string | null };

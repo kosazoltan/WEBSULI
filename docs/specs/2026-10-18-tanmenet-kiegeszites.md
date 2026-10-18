@@ -41,3 +41,29 @@
   kapja.
 - HA egy nyelvi anyag témája szerepel az iskolai tanmenetben, AKKOR a tanmenet szerinti pozíciót kapja.
 - Évfolyam nélküli anyag nem kap pozíciót.
+
+## Megvalósítás és mérés (2026-10-18)
+- **Nyelvi források** (évfolyamonként egy; a teljes kutatási lista: `source/scripts/curriculum/nyelvi-forrasok.json`):
+
+  | Nyelv, évfolyam | Iskola | Forma |
+  |---|---|---|
+  | angol 3. | Gárdonyi Ált. Isk., Kaposvár | 8 téma × 4 óra, kulcsszavakkal |
+  | angol 4. | Baracska | havi tanmenet, 106 óra |
+  | angol 5., 7., 8. | DE Kossuth Lajos Gyakorló (NAT 2020) | témák óraszámmal |
+  | angol 6. | Tamási Áron Ált. Isk. | 22 egység, nyelvtani kulcsszavakkal |
+  | francia 8. | DE Kossuth Lajos Gyakorló | 10 téma, kulcsszavakkal |
+
+  Havi bontású iskolai tanmenet csak az angol 4. évfolyamra volt nyilvános; a többinél a témák sorrendje és óraszáma adja a
+  pozíciót.
+- **Tantárgy-felismerés:**
+  1. kimondott név;
+  2. kulcsszó;
+  3. a hivatalos tanmenet szókincse (évfolyam × tantárgy, egyértelmű előnnyel).
+
+  Javítva: a „halmaz” csak önálló szóként matematika („Halmazállapot” nem).
+- **Éles mérés (csak olvasás):**
+  - cím alapján 143 / 209 (korábban 135);
+  - tartalommal együtt 149 / 209;
+  - a 10 évfolyam nélküli informatikai anyag szándékosan illesztés nélkül marad.
+- **Ismert határ:** az iskolai nyelvi tanmenetek témaszintűek; ahol a tananyag nyelvtani pontot tanít, amit a tanmenet nem nevez
+  meg, ott nem illeszkedik, vagy csak közelítően.
