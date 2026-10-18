@@ -1,7 +1,8 @@
 import cron from "node-cron";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
-import { dailyReminderEmails } from "../shared/schema";
+import { dailyReminderEmails, learners } from "../shared/schema";
+import { learnerTokenFor } from "./learners";
 import { storage } from "./storage";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
@@ -49,6 +50,14 @@ export function budapestDay(now: Date): { iso: string; date: Date } {
   return { iso, date: new Date(Number(parts.year), Number(parts.month) - 1, Number(parts.day)) };
 }
 
+/** A személyes link: a token a `t` paraméterben; token nélkül a link változatlan. */
+export function personalUrl(url: string, token: string | null): string {
+  if (!token) return url;
+  const u = new URL(url);
+  u.searchParams.set("t", token);
+  return u.toString();
+}
+
 export type PlannedReminder = { email: string; studentName: string; grade: number; materialId: string; title: string; topic: string | null; url: string };
 
 /** A mai tervezett levelek (küldés nélkül) — az admin előnézet és a küldés közös alapja. */
@@ -64,13 +73,16 @@ export async function planDailyReminders(now: Date): Promise<PlannedReminder[]> 
     // Review #292: csak a ténylegesen kiküldött anyag számít ismétlésnek (a sikertelen nem).
     .where(and(inArray(dailyReminderEmails.email, recipients.map(r => r.email)), gte(dailyReminderEmails.day, since), sql`${dailyReminderEmails.day} < ${iso}`, eq(dailyReminderEmails.status, "sent")));
   const today = schoolYearPosition(date);
+  // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S1): a link személyes (?t=…) — a megnyitó eszköz a tanulóhoz párosul.
+  const learnerIds = [...new Set(recipients.map(r => r.learnerId).filter((id): id is string => Boolean(id)))];
+  const versions = new Map(learnerIds.length ? (await db.select({ id: learners.id, tokenVersion: learners.tokenVersion }).from(learners).where(inArray(learners.id, learnerIds))).map(l => [l.id, l.tokenVersion]) : []);
   const out: PlannedReminder[] = [];
   for (const r of recipients) {
     const grade = r.classrooms[0];
     const recent = new Set(recentRows.filter(x => x.email === r.email).map(x => x.materialId));
     const pick = pickDailyMaterial(files, grade, today, recent);
     if (!pick) continue;
-    out.push({ email: r.email, studentName: r.studentName!.trim(), grade, materialId: pick.id, title: pick.title, topic: displayTopic(pick.curriculum?.label), url: getMaterialPreviewUrl(pick.id) });
+    out.push({ email: r.email, studentName: r.studentName!.trim(), grade, materialId: pick.id, title: pick.title, topic: displayTopic(pick.curriculum?.label), url: personalUrl(getMaterialPreviewUrl(pick.id), r.learnerId && versions.has(r.learnerId) ? learnerTokenFor(r.learnerId, versions.get(r.learnerId)!) : null) });
   }
   return out;
 }
@@ -135,7 +147,8 @@ export async function runDailyReminders(now: Date, opts: { pauseMs?: number } = 
 export async function sendTestReminder(to: string, now: Date): Promise<{ studentName: string; title: string }> {
   const { date } = budapestDay(now);
   const [first] = await planDailyReminders(now);
-  let sample = first ? { studentName: first.studentName, title: first.title, topic: first.topic, url: first.url } : null;
+  // Review #301: a próbalevél linkje token nélküli — különben az admin böngészője a tanulóhoz párosulna.
+  let sample = first ? { studentName: first.studentName, title: first.title, topic: first.topic, url: getMaterialPreviewUrl(first.materialId) } : null;
   if (!sample) {
     const newest = [...await storage.getAllHtmlFiles()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
     if (!newest) throw new Error("Nincs tananyag a próbalevélhez.");

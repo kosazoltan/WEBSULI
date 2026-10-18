@@ -105,6 +105,8 @@ export const extraEmailAddresses = pgTable("extra_email_addresses", {
   isActive: boolean("is_active").default(true).notNull(),
   /** Napi emlékeztető (docs/specs/2026-10-18-napi-emlekezteto.md): a nevesített cím egy tanulóé, és napi tananyag-levelet kap. */
   studentName: varchar("student_name", { length: 80 }),
+  /** Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md): a cím tanulója; a név szerint szinkronizált (server/learners.ts). */
+  learnerId: varchar("learner_id").references(() => learners.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -113,6 +115,7 @@ export const insertExtraEmailSchema = createInsertSchema(extraEmailAddresses).om
   id: true,
   createdAt: true,
   updatedAt: true,
+  learnerId: true,
 }).extend({
   classrooms: z.array(z.number().min(0).max(12)).min(1, "Legalább egy osztály kiválasztása kötelező"),
 });
@@ -1161,4 +1164,30 @@ export const dailyReminderEmails = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({ emailDay: uniqueIndex("daily_reminder_emails_email_day_unique").on(table.email, table.day) }),
+);
+
+/** Tanulói profil (migrations/0032): a tanuló egy sor; a személyes link tokenje a token_version-nel vonható vissza. */
+export const learners = pgTable("learners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 80 }).notNull(),
+  grade: integer("grade").notNull(),
+  tokenVersion: integer("token_version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export type Learner = typeof learners.$inferSelect;
+
+/** Megtekintés és eredmény tanulónként (migrations/0032); megőrzés 365 nap. */
+export const learnerActivity = pgTable(
+  "learner_activity",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    learnerId: varchar("learner_id").notNull().references(() => learners.id, { onDelete: "cascade" }),
+    materialId: varchar("material_id"),
+    kind: varchar("kind", { length: 16 }).notNull().$type<"view" | "result">(),
+    percent: integer("percent"),
+    summary: text("summary"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ learnerCreated: index("learner_activity_learner_created_idx").on(table.learnerId, table.createdAt) }),
 );

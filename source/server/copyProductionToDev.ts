@@ -331,7 +331,10 @@ export async function copyProductionToDev() {
     const extraEmails = await prodDb.select().from(schema.extraEmailAddresses);
     const extraEmailsFixed = extraEmails.map(e => ({
       ...e,
-      addedBy: e.addedBy && userIds.has(e.addedBy) ? e.addedBy : null
+      addedBy: e.addedBy && userIds.has(e.addedBy) ? e.addedBy : null,
+      // Review #301: a learners tábla nem másolódik (a gyerekek tevékenysége nem kerül a dev-be); a dev szerver induláskor a
+      // névből újraépíti a kapcsolatot (syncLearners), így itt nem maradhat a dev-ben nem létező tanulóra mutató FK.
+      learnerId: null,
     }));
     if (extraEmailsFixed.length > 0) {
       await devDb.insert(schema.extraEmailAddresses).values(extraEmailsFixed).onConflictDoNothing();

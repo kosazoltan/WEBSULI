@@ -3,6 +3,7 @@ import App from "./App";
 import "./index.css";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ErrorReporter } from "./components/ErrorReporter";
+import { captureLearnerTokenFromUrl } from "./lib/learnerProfile";
 
 // Register Service Worker for PWA functionality + Push Notifications
 if ('serviceWorker' in navigator) {
@@ -19,6 +20,9 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
+
+// Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md): a személyes link tokenje a router előtt kerül el a címsorból.
+captureLearnerTokenFromUrl();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
