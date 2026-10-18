@@ -4,6 +4,7 @@ import fs from 'fs/promises'; // Async file I/O
 import fsSync from 'fs'; // For synchronous operations where needed
 import path from 'path';
 import { logger } from "./lib/logger";
+import { isCompleteBackupTail, shouldBackupOnStartup, type BackupFileInfo } from "./lib/backup-startup";
 
 // Backup configuration
 const BACKUP_DIR = path.join(process.cwd(), 'backups');
@@ -93,8 +94,16 @@ export async function createAutoBackup(reason: 'scheduled' | 'event' | 'pre-rest
       }
     };
 
-    // Write to file (async to avoid blocking event loop)
-    await fs.writeFile(filepath, JSON.stringify(backupData, null, 2), 'utf-8');
+    // Write to a temp file, then rename atomically: a crash mid-write never leaves a truncated backup_*.json
+    // that the startup check would mistake for a fresh backup (review #308).
+    const tmpPath = `${filepath}.tmp`;
+    try {
+      await fs.writeFile(tmpPath, JSON.stringify(backupData, null, 2), 'utf-8');
+      await fs.rename(tmpPath, filepath);
+    } catch (writeError) {
+      await fs.unlink(tmpPath).catch(() => undefined);
+      throw writeError;
+    }
 
     logger.info(`[AUTO-BACKUP] ✅ Backup created: ${filename} (${snapshotData.htmlFiles.length} materials)`);
 
@@ -178,6 +187,20 @@ export function triggerEventBackup() {
   }
 }
 
+/** A truncated (pre-atomic-write) backup does not end in `}` — it must not suppress the startup backup. */
+async function hasCompleteBackupTail(filepath: string, size: number): Promise<boolean> {
+  if (size <= 0) return false;
+  const handle = await fs.open(filepath, 'r');
+  try {
+    const length = Math.min(size, 64);
+    const buf = Buffer.alloc(length);
+    await handle.read(buf, 0, length, size - length);
+    return isCompleteBackupTail(buf.toString('utf-8'));
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
  * Start scheduled backup job
  */
@@ -186,14 +209,32 @@ export function startAutoBackupJob() {
   cron.schedule(BACKUP_SCHEDULE, async () => {
     logger.info('[AUTO-BACKUP] 🕒 Running scheduled daily backup...');
     await createAutoBackup('scheduled');
-  });
+  }, { timezone: 'Europe/Budapest' });
 
   logger.info(`[AUTO-BACKUP] ✅ Scheduled backup job started (daily at 02:00)`);
   logger.info(`[AUTO-BACKUP] 📁 Backup directory: ${BACKUP_DIR}`);
   logger.info(`[AUTO-BACKUP] ♻️  Retention: ${MAX_BACKUP_AGE_DAYS} days`);
 
-  // Create initial backup on startup
+  // Initial backup on startup — only if no backup was made in the last 24 h (kanban #187)
   setTimeout(async () => {
+    const files: BackupFileInfo[] = [];
+    try {
+      for (const name of await fs.readdir(BACKUP_DIR)) {
+        const filepath = name.startsWith('backup_') ? getSafeBackupPath(name) : null;
+        if (filepath) {
+          const { mtimeMs, size } = await fs.stat(filepath);
+          files.push({ name, mtimeMs, complete: await hasCompleteBackupTail(filepath, size) });
+        }
+      }
+    } catch (error) {
+      // Unreadable directory → back up anyway (safer default)
+      logger.warn('[AUTO-BACKUP] Could not list backups, creating startup backup:', error);
+      files.length = 0;
+    }
+    if (!shouldBackupOnStartup(files, Date.now())) {
+      logger.info('[AUTO-BACKUP] Recent backup exists (< 24 h), skipping startup backup');
+      return;
+    }
     logger.info('[AUTO-BACKUP] Creating initial backup on startup...');
     await createAutoBackup('scheduled');
   }, 5000); // 5 second delay to ensure DB is ready
