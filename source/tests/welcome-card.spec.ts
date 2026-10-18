@@ -137,3 +137,32 @@ test("az üres évfolyamok jelvényei nem jelennek meg", async ({ page }) => {
   await expect(page.getByTestId("button-filter-classroom-3")).toHaveCount(0);
   await expect(page.getByText("(0)")).toHaveCount(0);
 });
+
+// Tulajdonosi jelzés 2026-10-18 (docs/specs/2026-10-18-tanulo-evfolyam-szuro.md): egy ötödikesnek ne 4. osztályos anyag álljon elöl.
+test("a lista a tanuló évfolyamára szűrve nyílik; „Mind” mindent mutat; évfolyamváltásra a lista is vált", async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem("websuli.classroomGrade", "5"); localStorage.setItem("websuli.learnerName", "Léna"); } catch { /* nincs tárhely */ } });
+  await open(page);
+  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 2 })).toHaveText("Szia, Léna!");
+  await expect(page.getByTestId("button-filter-classroom-5")).toHaveAttribute("aria-pressed", "true");
+  const ids = () => page.locator('[data-testid^="link-file-"]').evaluateAll(els => els.map(e => e.getAttribute("data-testid")!.replace("link-file-", "")));
+  expect((await ids()).every(id => id.startsWith("r5-")), "csak 5. osztályos anyag").toBe(true);
+  await page.getByTestId("button-filter-all").click();
+  await expect(page.getByTestId("link-file-r8-a")).toBeVisible();
+  await page.getByTestId("welcome-edit").click();
+  await page.getByTestId("welcome-grade").selectOption("8");
+  await page.getByTestId("welcome-save").click();
+  await expect(page.getByTestId("button-filter-classroom-8")).toHaveAttribute("aria-pressed", "true");
+  expect(await ids()).toEqual(["r8-a"]);
+  // Review #291: anyag nélküli évfolyamra váltva, majd az évfolyamot törölve „Mind” (nem ragad a 8. osztályon)
+  await page.getByTestId("welcome-edit").click();
+  await page.getByTestId("welcome-grade").selectOption("3");
+  await page.getByTestId("welcome-save").click();
+  await expect(page.getByTestId("button-filter-all")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("link-file-r5-a")).toBeVisible();
+  await page.getByTestId("button-filter-classroom-8").click();
+  await page.getByTestId("welcome-edit").click();
+  await page.getByTestId("welcome-grade").selectOption("");
+  await page.getByTestId("welcome-save").click();
+  await expect(page.getByTestId("button-filter-all")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("link-file-r5-a")).toBeVisible();
+});
