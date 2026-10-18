@@ -4,6 +4,8 @@
  */
 import { useEffect } from "react";
 
+import { buildClientErrorRequest } from "@/lib/client-error-body";
+
 // ============================================================
 // Breadcrumb ring buffer (max 50)
 // ============================================================
@@ -46,18 +48,20 @@ export async function reportError(payload: ErrorPayload): Promise<void> {
     // /api/client-error (kanban #127): a böngésző saját végpontja, titok nélkül — az eredet-allowlist, az IP-korlát és a
     // napi plafon őrzi. A HMAC-os /api/error-report a szerver–szerver út; annak titka nem kerülhet a böngészőbe.
     // Azonosság és környezet a szerverről jön, a kliens által küldöttet eldobja.
+    // Review #309: a törzs a szerver korlátaira vágva; 64 KiB fölött keepalive nélkül (különben a böngésző eldobja).
+    const { body, keepalive } = buildClientErrorRequest({
+      errorType: payload.errorType,
+      message: payload.message,
+      stack: payload.stack,
+      url: payload.url ?? window.location.href,
+      breadcrumbs: getBreadcrumbs(),
+    });
     await fetch("/api/client-error", {
       method: "POST",
       credentials: "same-origin",
-      keepalive: true,
+      keepalive,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        errorType: payload.errorType,
-        message: payload.message,
-        stack: payload.stack,
-        url: payload.url ?? window.location.href,
-        breadcrumbs: getBreadcrumbs(),
-      }),
+      body,
     });
   } catch {
     // Never throw from error reporter

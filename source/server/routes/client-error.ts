@@ -8,6 +8,7 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import type { ErrorReportPayload } from "../lib/error-mailer";
+import { redactCredentials } from "../lib/error-sanitize";
 import { logger } from "../lib/logger";
 import { enforceOriginAllowlist } from "../lib/origin-guard";
 import { MAX_LENGTHS } from "./error-report";
@@ -28,10 +29,26 @@ function clip(value: unknown, max: number): string | undefined {
   return typeof value === "string" ? value.substring(0, max) : undefined;
 }
 
+/** Review #309: credentials never reach the DB or the e-mail — the shared policy on every client-supplied string. */
+function redactDeep(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") return redactCredentials(value);
+  if (depth > 4 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v, depth + 1));
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redactDeep(v, depth + 1)]));
+}
+
+/** Review #309: the page URL may carry a pairing token (`?t=`) — only origin + path are kept. */
+export function stripUrlSecrets(url: string | undefined): string | undefined {
+  if (url === undefined) return undefined;
+  const cut = url.search(/[?#]/);
+  return cut === -1 ? url : url.slice(0, cut);
+}
+
 export function sanitizeBreadcrumbs(value: unknown): unknown[] | undefined {
   if (!Array.isArray(value)) return undefined;
   return value
     .slice(-MAX_BREADCRUMBS)
+    .map((crumb) => redactDeep(crumb))
     .filter((crumb) => {
       try {
         return (JSON.stringify(crumb) ?? "").length <= MAX_BREADCRUMB_JSON;
@@ -90,9 +107,9 @@ export function createClientErrorRouter({
     try {
       await reportSender({
         errorType: typeof body.errorType === "string" && ERROR_TYPE_RE.test(body.errorType) ? body.errorType : "ClientError",
-        message,
-        stack: clip(body.stack, MAX_LENGTHS.stack),
-        url: clip(body.url, MAX_LENGTHS.url),
+        message: redactCredentials(message),
+        stack: typeof body.stack === "string" ? redactCredentials(body.stack.substring(0, MAX_LENGTHS.stack)) : undefined,
+        url: stripUrlSecrets(clip(body.url, MAX_LENGTHS.url)),
         requestId: req.requestId?.substring(0, MAX_LENGTHS.requestId),
         browser: req.headers["user-agent"]?.substring(0, MAX_LENGTHS.browser),
         breadcrumbs: sanitizeBreadcrumbs(body.breadcrumbs),

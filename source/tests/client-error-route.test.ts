@@ -124,6 +124,26 @@ test("index.ts: a /api/client-error a routes.ts CSRF-őre előtt van bekötve (k
 
 test("a böngészős reportError az új végpontot hívja, a HMAC-osat nem", () => {
   const src = readFileSync(join(import.meta.dirname, "..", "client", "src", "components", "ErrorReporter.tsx"), "utf8");
-  assert.match(src, /fetch\("\/api\/client-error"/);
-  assert.doesNotMatch(src, /\/api\/error-report"/);
+  // Review #309: csak a ténylegesen hívott URL-eket nézzük (a megjegyzés említheti a régi végpontot).
+  const fetched = [...src.matchAll(/fetch\(\s*["'`]([^"'`]+)/g)].map((m) => m[1]);
+  assert.deepEqual(fetched, ["/api/client-error"]);
+});
+
+test("review #309: a hitelesítési adat és az URL-token nem jut el a küldőig", async () => {
+  await withServer({}, async (baseUrl, sent) => {
+    const res = await post(baseUrl, {
+      errorType: "UnhandledError",
+      message: "failed: token=abc123secret",
+      stack: "Error\n  Authorization: Bearer xyz789\n  at f (app.js:1:1)",
+      url: "https://websuli.vip/anyag/42?t=pairing-token-value#x",
+      breadcrumbs: [{ type: "error", message: "password=hunter2", data: { nested: "api_key=k-123" } }],
+    });
+    assert.equal(res.status, 202);
+    const dump = JSON.stringify(sent[0]);
+    for (const secret of ["abc123secret", "xyz789", "pairing-token-value", "hunter2", "k-123"]) {
+      assert.ok(!dump.includes(secret), `kiszivárgott: ${secret}`);
+    }
+    assert.equal(sent[0].url, "https://websuli.vip/anyag/42");
+    assert.match(sent[0].stack ?? "", /at f \(app\.js:1:1\)/);
+  });
 });
