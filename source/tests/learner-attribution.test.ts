@@ -56,3 +56,23 @@ test("Stúdió-lecke: a beküldés learner mezőt is fogadhat; a tárgy a keresz
   const guest = buildResultEmail({ lessonTitle: "Igék", classroom: 4, learner: "Vendég tanuló", url: "", graded });
   assert.match(guest.subject, /^\[WebSuli eredmény\] Igék — Kvíz/);
 });
+
+test("review #302: percentOf — előjeles és túl hosszú szám, a tartomány a kerekítés előtt", () => {
+  assert.equal(percentOf("Eredmény: -10%"), null);
+  assert.equal(percentOf("Eredmény: 1100%"), null);
+  assert.equal(percentOf("Eredmény: 100,4%"), null);
+  assert.equal(percentOf("Eredmény: 100%"), 100);
+  assert.equal(percentOf("Eredmény: 0 %"), 0);
+});
+
+test("review #302: a beinjektált szkript a keret címéből is eltávolítja az lt tokent", () => {
+  const out = withLearnerScript("<head></head>", TOKEN);
+  const code = /<script>([\s\S]*?)<\/script>/.exec(out)![1];
+  const replaced: string[] = [];
+  const ctx = { window: {} as { __websuliLearner?: string }, URL,
+    location: { href: `https://api.example/dev/abc?lt=${TOKEN}&x=1#k` },
+    history: { state: null, replaceState: (_s: unknown, _t: string, url: string) => { replaced.push(url); } } };
+  new Script(code).runInNewContext(ctx);
+  assert.equal(ctx.window.__websuliLearner, TOKEN);
+  assert.deepEqual(replaced, ["/dev/abc?x=1#k"]);
+});
