@@ -12,7 +12,7 @@ export const VERDICT_TEXT = { right: "Helyes!", wrong: "Még nem helyes." } as c
  * („Helyes:-3”, „Nem -5, hanem -3.”). A csak ítéletből álló szöveg („Igen.”) üres lesz — az ítéletet a kód adja. A mentett adat
  * nem változik: a minőségellenőrző (`quizCorrectIndexProblems`) az előtagra támaszkodik.
  */
-const VERDICT_PREFIX = /^\s*(?:nem\s+helyes|helyes|téves|igen|nem|így\s+van|pontosan|jó\s+válasz|rossz\s+válasz)\s*(?:[.:,!]|[–—-](?!\d))+\s*/i;
+const VERDICT_PREFIX = /^\s*(?:nem\s+helyes|nem\s+jó|nem\s+így\s+van|ez\s+téves|helytelen|hibás|helyes|téves|igen|nem|így\s+van|pontosan|jó\s+válasz|rossz\s+válasz)\s*(?:[.:,!]|[–—-](?!\d))+\s*/i;
 export function stripVerdictPrefix(text: string): string {
   const rest = text.replace(VERDICT_PREFIX, "");
   if (rest === text) return text;

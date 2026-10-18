@@ -45,3 +45,6 @@ Tulajdonosi indítás: 2026-10-18 („csináld meg”).
   hivatkozik a sablonos fejezetekre; ezeket a lejátszó szerep-aliasként ismeri fel, és a szótár címét mutatja. A skill szövege
   bájtra marad (a módosítása a szerepkészség-verziót és a futó checkpointokat érvénytelenítené).
 - **LS-2 próba:** a helyes válasz visszajelzése a szótár „Helyes!” ítélete, az indoklás (kloroplasztiszok) megmarad.
+- **Éles ellenőrzés után (2026-10-18):** a lejátszó élesben „Még nem helyes. Nem így van. …” szöveget mutatott. Mérés: 7 898
+  publikált visszajelzésből 4 884-ben vágódott az ítélet. Az ítélet-szótár bővült a „Nem jó”, „Nem így van”, „Ez téves”, „Hibás”
+  és „Helytelen” nyitással (írásjellel), így 5 902-ben vágódik. A tartalmi „Hibás lépés:” és „Hibás számítás:” változatlan.

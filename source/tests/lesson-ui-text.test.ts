@@ -29,6 +29,17 @@ test("review #285: a csak ítéletből álló szöveg üres; az előjel és a je
   assert.equal(stripMethodPrefix("Jósolj: pH változás savban", "prediction"), "pH változás savban");
 });
 
+// Éles mérés 2026-10-18 (7 898 visszajelzés): a „Nem jó.” (~390), „Ez téves:”, „Hibás:”, „Helytelen:”, „Nem így van.” nyitás is ítélet.
+test("ítélet-előtag: az élesen mért további nyitások is levágódnak; a tartalmi „Hibás lépés:” és „Hibás számítás:” marad", () => {
+  const cases: Array<[string, string]> = [
+    ["Nem jó. A párolgás hőt igényel.", "A párolgás hőt igényel."], ["Nem jó: az összeg 12.", "Az összeg 12."],
+    ["Nem így van. A víz nem fogy el.", "A víz nem fogy el."], ["Ez téves: a Nap csillag.", "A Nap csillag."],
+    ["Hibás: ez a kivonás.", "Ez a kivonás."], ["Helytelen: a tanult szabály más.", "A tanult szabály más."],
+  ];
+  for (const [input, expected] of cases) assert.equal(stripVerdictPrefix(input), expected, input);
+  for (const keep of ["Hibás lépés: a zárójelet kihagytad.", "Hibás számítás: 3·4 = 12.", "Nem jól számoltál."]) assert.equal(stripVerdictPrefix(keep), keep, keep);
+});
+
 test("review #285: a szerep-skill rövid fejezetnevei szerep-aliasok (a lejátszó a szótár címét mutatja)", () => {
   assert.equal(sectionRoleOf("Ellenőrzés"), "selfCheck");
   assert.equal(sectionRoleOf("Leggyakoribb hibák"), "mistakes");
