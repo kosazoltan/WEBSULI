@@ -47,31 +47,17 @@ export const VISUAL_WORLDS: readonly VisualWorld[] = [
 ];
 
 /**
- * Spec 2026-09-24 — lecke-szintű „különlegességek”: minden lecke 3 effektet kap a listából, hogy a
- * tananyagok ne legyenek egyformák. Tisztán CSS (lesson-experience.css), mozgáscsökkentésnél és
- * csendes módban kikapcsol. A modell nem írja: a kód választja (a séma enum), így nem hallucinálható.
+ * Spec 2026-09-24 — lecke-szintű „különlegességek”. Arculati bank S4 (docs/specs/2026-10-18-arculati-bank-s4.md): kivezetve —
+ * a gyártás nem ad flair-t, a lejátszó nem rendereli. Az enum a séma türelmes olvasásához marad (régi leckék).
  */
 export const LESSON_FLAIRS = ["sparkles", "shimmer-keys", "float-emoji", "sticker-headings", "glow-cards", "pop-correct"] as const;
 export type LessonFlair = (typeof LESSON_FLAIRS)[number];
-
-/** Deterministic per seed (the lesson), different across lessons; no repeats. */
-export function pickLessonFlair(seed: string, count = 3): LessonFlair[] {
-  let hash = 2166136261;
-  for (const c of seed) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
-  const pool = [...LESSON_FLAIRS];
-  const out: LessonFlair[] = [];
-  while (out.length < Math.min(count, LESSON_FLAIRS.length)) {
-    hash = Math.imul(hash ^ (hash >>> 13), 1274126177) >>> 0;
-    out.push(pool.splice(hash % pool.length, 1)[0]);
-  }
-  return out;
-}
 
 /**
  * The teacher's request may ask for a look („rózsaszín, kislánynak, effektekkel”). Deterministic keyword
  * match; undefined when the request says nothing about the look (the lesson keeps its own design).
  */
-export function designFromInstruction(text: string | undefined, seed = ""): { world?: VisualWorldId; flair?: LessonFlair[] } | undefined {
+export function designFromInstruction(text: string | undefined, _seed = ""): { world?: VisualWorldId } | undefined {
   if (!text) return undefined;
   const t = text.toLocaleLowerCase("hu");
   // Audit 2026-09-24 (mért hamis találatok): „sűrűség”/„szűrd” → űr, „állatok testfelépítése” → dzsungel,
@@ -91,11 +77,8 @@ export function designFromInstruction(text: string | undefined, seed = ""): { wo
   // Websuli Design (tulajdonosi döntés 2026-10-16, unisex arculat): nemi szavak („rózsaszín, kislánynak, hercegnő”) nem
   // választanak világot — sem színt, sem a szerzői promptba kerülő témát. A lecke színvilágát az évfolyamsáv adja.
   const world: VisualWorldId | undefined = said("varázsvilág|varázslatos világ|varázs témá") ? "magic" : undefined;
-  const wantsEffects = said("effekt(?!ív)|csillog|animáci|figyelemfelkelt|figyelemfelhív|látványos");
-  if (!world && !wantsEffects) return undefined;
-  const base = pickLessonFlair(seed || text);
-  const flair = wantsEffects ? [...new Set<LessonFlair>(["sparkles", "shimmer-keys", "pop-correct", ...base])].slice(0, 4) : undefined;
-  return { ...(world ? { world } : {}), ...(flair ? { flair } : {}) };
+  // Arculati bank S4: effektkérés („csillogó, effektekkel”) már nem ad lecke-szintű díszítést — az arculatot a bank adja.
+  return world ? { world } : undefined;
 }
 
 export function visualWorld(id: string | undefined): VisualWorld | undefined {

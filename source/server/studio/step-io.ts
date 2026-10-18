@@ -19,6 +19,7 @@ import { ownerInstructionPromptBlock, type OwnerInventory } from "../../shared/o
 import { lektorLessonView } from "./lektor-view";
 import { correctionPromptLines, type SourceCorrection } from "./source-corrections";
 import { blindSolutionsPromptBlock, type BlindSolutions } from "./blind-solver";
+import { SECTION_ROLE_HEADING } from "../../shared/lesson-ui-text";
 
 /**
  * LS-2c — schemas, validators and prompt builders for the model-driven steps.
@@ -335,11 +336,11 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     "CÉL-TANANYAG MINTA (feltételes — egy elem CSAK akkor kerül a vázlatba, ha a forrás tartalma indokolja):",
     "- A motiváció (miért kell ez a tudás) az első fogalom-fejezet explain blokkjának 1–2 mondata, NEM külön fejezet.",
     "- Fogalomcsoportonként egy fejezet: explain → example (lépésről lépésre) → check, a végén legfeljebb egy rövid recap.",
-    "- „A feladat megoldva lépésről lépésre” külön fejezet CSAK ha a forrásban gyakorlófeladat van (plannedBlocks: explain, example, example…, recap), a forrás feladataival.",
+    `- „${SECTION_ROLE_HEADING.workedSolution}” külön fejezet CSAK ha a forrásban gyakorlófeladat van (plannedBlocks: explain, example, example…, recap), a forrás feladataival.`,
     // Mérve (run 8, job c3f5265b): explain→check tervnél a kapu ívszabálya („kérdés előtt mutasd meg,
     // hogyan kell megoldani") szerzői kört kért — a hibás és a helyes út összevetése példaként előzi meg a kérdést.
-    "- „A leggyakoribb hibák” záró fejezet CSAK ha legalább 3, a forrásból levezethető tévhit van (plannedBlocks: explain, example — a hibás és a helyes út összevetése a forrás egy feladatán —, check, recap); kevesebb tévhitnél azok a saját fogalom-fejezetük check blokkjában jelennek meg.",
-    "- „Ellenőrzés – hogyan légy biztos magadban?” záró fejezet CSAK ha a forrás többlépéses eljárást tanít (pl. számolási szabály): a lépések számozva és önellenőrző kérdések (plannedBlocks: explain, animate, recap); leíró tananyagnál elmarad.",
+    `- „${SECTION_ROLE_HEADING.mistakes}” záró fejezet CSAK ha legalább 3, a forrásból levezethető tévhit van (plannedBlocks: explain, example — a hibás és a helyes út összevetése a forrás egy feladatán —, check, recap); kevesebb tévhitnél azok a saját fogalom-fejezetük check blokkjában jelennek meg.`,
+    `- „${SECTION_ROLE_HEADING.selfCheck}” záró fejezet CSAK ha a forrás többlépéses eljárást tanít (pl. számolási szabály): a lépések számozva és önellenőrző kérdések (plannedBlocks: explain, animate, recap); leíró tananyagnál elmarad.`,
     "- Minden fejezet animationSuggestions mezője legalább egy konkrét, a fejezet tanításából rajzolható ábrát nevezzen meg (folyamat lépései, számegyenes, idővonal, térkép…).",
     "",
     LESSON_ARC_CONTRACT,

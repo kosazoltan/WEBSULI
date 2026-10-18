@@ -179,36 +179,8 @@
 [data-experience] .lesson-section-emoji { font-size: 1.35em; line-height: 1; margin-right: .15em; }
 [data-experience] .lesson-progress-step[data-emoji]::after { content: attr(data-emoji); font-size: .8em; }
 
-/* Spec 2026-09-24 — lecke-szintű különlegességek ([data-flair], shared/lesson-visuals.ts LESSON_FLAIRS).
-   Leckénként 3 választódik, így a tananyagok nem egyformák. Tisztán díszítő: mozgáscsökkentésnél és
-   csendes módban (a fenti :has(.fusion-view[data-quiet]) szabály) nincs animáció. */
-.lesson-sparkles { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
-.lesson-sparkles span { position: absolute; font-size: clamp(14px, 2.4vw, 24px); opacity: 0; }
-/* Mérve élesben (2026-09-24, 375 px és 800 px): a szövegsávba tett csillogás rálógott a címre — ezért csak a jobb oldali
-   képsávban és a fejléc belső margójában (felső/alsó szél) jelenik meg, ahol nincs szöveg. */
-.lesson-sparkles span:nth-child(1) { right: 4%; top: 6%; } .lesson-sparkles span:nth-child(2) { left: 42%; top: 1%; }
-.lesson-sparkles span:nth-child(3) { right: 2%; bottom: 10%; } .lesson-sparkles span:nth-child(4) { left: 55%; bottom: 1%; }
-.lesson-sparkles span:nth-child(5) { right: 22%; top: 2%; }
-@media (max-width: 650px) { .lesson-sparkles span { font-size: 14px; } .lesson-sparkles span:nth-child(2), .lesson-sparkles span:nth-child(4) { display: none; } }
-[data-experience] .lesson-hero > :not(.lesson-sparkles) { position: relative; z-index: 1; }
-[data-flair~="sticker-headings"] .lesson-hero .lesson-heading { display: inline-block; background: var(--lesson-key, #fde68a); color: var(--lesson-key-ink, inherit); padding: .1em .45em; border-radius: .5em; transform: rotate(-1.2deg); box-shadow: 3px 3px 0 var(--lesson-accent); }
-/* Spec 2026-09-29: mérve a sáv a fehér cím alsó harmadát sárgára festette (mobilon csak az utolsó sort) — a matrica a jelvény. */
-[data-flair~="sticker-headings"] section[id^="section-"] > h2.lesson-heading .lesson-section-no { background: var(--lesson-key, #fde68a); color: var(--lesson-key-ink, #1f2937); transform: rotate(-4deg); box-shadow: 3px 3px 0 var(--lesson-accent); }
-[data-flair~="glow-cards"] .lesson-block { box-shadow: 0 0 0 2px var(--lesson-line), 0 8px 28px color-mix(in srgb, var(--lesson-accent) 22%, transparent); }
-@media (prefers-reduced-motion: no-preference) {
-  [data-flair~="sparkles"] .lesson-sparkles span { animation: lesson-twinkle 3.6s ease-in-out infinite; }
-  [data-flair~="sparkles"] .lesson-sparkles span:nth-child(2) { animation-delay: .7s; } [data-flair~="sparkles"] .lesson-sparkles span:nth-child(3) { animation-delay: 1.4s; }
-  [data-flair~="sparkles"] .lesson-sparkles span:nth-child(4) { animation-delay: 2.1s; } [data-flair~="sparkles"] .lesson-sparkles span:nth-child(5) { animation-delay: 2.8s; }
-  [data-flair~="shimmer-keys"] .lesson-key { background-image: linear-gradient(110deg, var(--lesson-key, #fde68a) 35%, #ffffffcc 50%, var(--lesson-key, #fde68a) 65%); background-size: 250% 100%; animation: lesson-shimmer 3.2s linear infinite; }
-  [data-flair~="float-emoji"] .lesson-section-emoji { display: inline-block; animation: lesson-float 2.8s ease-in-out infinite; }
-  [data-flair~="glow-cards"] .lesson-block { transition: transform .2s ease, box-shadow .2s ease; }
-  [data-flair~="glow-cards"] .lesson-block:hover { transform: translateY(-2px); }
-  [data-flair~="pop-correct"] .lesson-option[data-state="right"] { animation: lesson-pop .45s ease-out; }
-}
-[data-flair~="pop-correct"] .lesson-option[data-state="right"]::after { content: " 🎉"; }
-@keyframes lesson-twinkle { 0%, 100% { opacity: 0; transform: scale(.6) rotate(0); } 50% { opacity: .9; transform: scale(1.15) rotate(20deg); } }
-@keyframes lesson-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
-@keyframes lesson-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px) rotate(-6deg); } }
+/* Arculati bank S4 (docs/specs/2026-10-18-arculati-bank-s4.md): a lecke-szintű különlegességek ([data-flair]) kivezetve — a gyártás
+   nem ad flair-t, a lejátszó 2026-10-16 óta nem rendereli. A lesson-pop a lesson-theme.css helyes-válasz animációja miatt marad. */
 @keyframes lesson-pop { 0% { transform: scale(1); } 45% { transform: scale(1.06); } 100% { transform: scale(1); } }
 
 /* ---------------------------------------------------------------------------------------------
