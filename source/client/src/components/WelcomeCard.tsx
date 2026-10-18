@@ -1,10 +1,11 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import { getClassroomLabel } from "@shared/classrooms";
+import { useLearnerProfile } from "@/lib/learnerProfile";
 import { LEARNER_NAME_MAX, WELCOME_DISMISSED_KEY, loadLearnerName, loadNameOverride, motivationFor, newestMaterials, resolveLearnerName, saveLearnerName, saveNameOverride } from "@/lib/learner";
 
 type Material = { id: string; title: string; classroom: number; createdAt: string };
@@ -30,6 +31,13 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
   const [draftName, setDraftName] = useState("");
   const [draftGrade, setDraftGrade] = useState<string>("");
   const [overrideTick, setOverrideTick] = useState(0);
+  // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md): a párosított eszközön a profil neve és évfolyama az irányadó.
+  const profile = useLearnerProfile();
+  useEffect(() => {
+    if (!profile) return;
+    if (storedName !== profile.firstName) setStoredName(saveLearnerName(profile.firstName));
+    if (grade !== profile.grade && profile.grade >= 1 && profile.grade <= 12) setGrade(profile.grade as Parameters<typeof setGrade>[0]);
+  }, [profile?.firstName, profile?.grade]);
 
   const account = user ? { id: user.id, firstName: user.firstName } : null;
   // review #289: bejelentkezve a kézi „Módosítás” fiókhoz kötött felülírás — fiókváltáskor nem öröklődik
