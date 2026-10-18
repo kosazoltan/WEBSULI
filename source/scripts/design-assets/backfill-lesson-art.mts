@@ -17,7 +17,8 @@ const [mode, file] = process.argv.slice(2);
 async function plan(query: <R>(sql: string, params?: unknown[]) => Promise<R[]>) {
   const stored = new Set((await query<{ id: string }>("SELECT id FROM design_assets")).map(r => r.id));
   const rows = await query<Row>("SELECT id, json FROM lessons WHERE json->'art' IS NULL ORDER BY id");
-  return rows.map(r => ({ row: r, art: computeLessonArt(r.json, r.id, stored) })).filter(x => x.art && Object.keys(x.art).length);
+  // Review #283: kép nélküli eredményt (pl. csak `topic`) nem írunk — a lejátszó azt úgysem használná, és a sor retry-képes marad.
+  return rows.map(r => ({ row: r, art: computeLessonArt(r.json, r.id, stored) })).filter(x => !!x.art?.picture);
 }
 
 if (mode === "--restore") {
@@ -31,11 +32,12 @@ if (mode === "--restore") {
   console.log(`visszaállítva: ${n}/${backup.length}`);
 } else if (mode === "--write") {
   if (!file) throw new Error("--write <mentés.json>");
-  const before = await withReadOnlyDb(q => plan(q));
-  writeFileSync(file, JSON.stringify(before.map(x => x.row)), "utf8");
-  console.log(`mentés: ${before.length} lecke → ${file}`);
+  // Review #283: a mentés és az írás ugyanabból, az író tranzakcióban egyszer meghatározott sorhalmazból készül; a mentés az
+  // írás előtt kerül lemezre (hiba esetén a tranzakció visszagördül).
   const n = await withWriteTransaction(async q => {
     const items = await plan(q);
+    writeFileSync(file, JSON.stringify(items.map(x => x.row)), "utf8");
+    console.log(`mentés: ${items.length} lecke → ${file}`);
     let done = 0;
     for (const { row, art } of items) {
       done += (await q("UPDATE lessons SET json = $1 WHERE id = $2 AND json->'art' IS NULL RETURNING id", [JSON.stringify({ ...row.json, art }), row.id])).length;
