@@ -24,7 +24,12 @@ if (isDevelopment && process.env.DEV_DATABASE_URL) {
 
 // docs/specs/2026-10-17-e2e-eldobhato-adatbazis.md: in e2e mode refuse to start before any pool exists unless the
 // database is a literal loopback address (the disposable test container), never production.
-if (isE2eMode()) assertE2eDatabaseUrl(DATABASE_URL);
+if (isE2eMode()) {
+  assertE2eDatabaseUrl(DATABASE_URL);
+  // Review #296: a migrációs futtató a process.env.DATABASE_URL-t használja (fejlesztői módban a DEV_DATABASE_URL mellett is) —
+  // e2e-ben az is csak loopback lehet, különben egy örökölt éles URL-en migrálna.
+  if (process.env.DATABASE_URL) assertE2eDatabaseUrl(process.env.DATABASE_URL);
+}
 
 // Create PG Pool with proper configuration
 // SSL: Auto-detect Neon/Render/Supabase URLs OR sslmode= param in connection string

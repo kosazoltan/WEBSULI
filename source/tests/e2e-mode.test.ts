@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -82,4 +82,32 @@ test("e2e módban a .env nem töltődik be, enélkül igen", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// Review #296: fejlesztői módban a DEV_DATABASE_URL loopback, de az örökölt DATABASE_URL éles — a migráció azt használná.
+test("review #296: e2e + development, loopback DEV_DATABASE_URL mellett is kilép, ha az örökölt DATABASE_URL nem loopback", () => {
+  const dbModule = pathToFileURL(join(root, "server", "db.ts")).href;
+  const result = spawnSync(process.execPath, ["--import", tsx, "--input-type=module", "-e",
+    `await import(${JSON.stringify(dbModule)}); console.log("POOL_CREATED");`], {
+    cwd: root, encoding: "utf8", timeout: 60_000, windowsHide: true,
+    env: childEnv({ WEBSULI_E2E: "1", NODE_ENV: "development", DEV_DATABASE_URL: "postgresql://u:p@127.0.0.1:5999/dev", DATABASE_URL: REMOTE }),
+  });
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(output, /POOL_CREATED/);
+  assert.equal(output.includes(SECRET), false);
+});
+
+test("review #296: e2e módban a migrációs futtató nem-loopback URL-t megtagad; a harness jelre is leállítja a konténert", async () => {
+  const prev = process.env.WEBSULI_E2E;
+  process.env.WEBSULI_E2E = "1";
+  try {
+    const { runMigrations } = await import("../server/migrate");
+    await assert.rejects(runMigrations(REMOTE), /indulás megtagadva/);
+  } finally {
+    if (prev === undefined) delete process.env.WEBSULI_E2E; else process.env.WEBSULI_E2E = prev;
+  }
+  const harness = readFileSync(join(root, "scripts", "run-e2e-tests.ts"), "utf8");
+  assert.match(harness, /for \(const signal of \["SIGINT", "SIGTERM"\] as const\)/);
+  assert.match(harness, /process\.once\(signal, \(\) => \{[\s\S]*cleanup\(\);/);
 });

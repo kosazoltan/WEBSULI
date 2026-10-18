@@ -46,6 +46,24 @@ function freePort() {
 }
 let containerId = "";
 let pool: pg.Pool | undefined;
+let cleaned = false;
+/** Idempotent: a normal finish and a signal both end here, the container is stopped once. */
+function cleanup() {
+  if (cleaned) return;
+  cleaned = true;
+  if (/^[a-f0-9]{64}$/.test(containerId)) {
+    try { command(docker, ["stop", "--time", "2", containerId]); console.log("[E2E-HARNESS] Owned disposable database removed."); }
+    catch { console.error(`[E2E-HARNESS] A konténer leállítása nem sikerült: ${name}`); }
+  }
+}
+// Review #296: Ctrl+C / SIGTERM esetén a finally nem fut — a jelkezelő is leállítja a saját konténert.
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    console.error(`[E2E-HARNESS] ${signal} — a saját konténer leállítása…`);
+    cleanup();
+    process.exit(130);
+  });
+}
 try {
   containerId = command(docker, ["run", "--rm", "-d", "--name", name, "-e", "POSTGRES_PASSWORD", "-e", "POSTGRES_DB=websuli_e2e", "-p", "127.0.0.1::5432", "postgres:17"]);
   if (!/^[a-f0-9]{64}$/.test(containerId)) throw new Error("Unexpected container identity");
@@ -74,8 +92,5 @@ try {
   process.exitCode = 1;
 } finally {
   await pool?.end();
-  if (/^[a-f0-9]{64}$/.test(containerId)) {
-    command(docker, ["stop", "--time", "2", containerId]);
-    console.log("[E2E-HARNESS] Owned disposable database removed.");
-  }
+  cleanup();
 }
