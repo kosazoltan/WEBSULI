@@ -53,3 +53,13 @@ test("az ütemezés: tanítási napokon magyar idő szerint, csak éles környez
   assert.match(src, /if \(process\.env\.NODE_ENV !== "production"\) return;/);
   assert.match(read("server/index.ts"), /setupDailyReminders\(\);/);
 });
+
+test("review #292: a napló nem tartalmaz tanulónevet és címet; futásszintű hiba HTTP-hibaként jelenik meg", () => {
+  const src = read("server/daily-reminder.ts");
+  assert.match(src, /sendAdminNotification\(subject, html, to, \{ quiet: true \}\)/);
+  assert.doesNotMatch(src, /logger\.\w+\([^)]*(studentName|p\.email)/, "nincs név vagy cím a naplóhívásban");
+  assert.match(src, /eq\(dailyReminderEmails\.status, "sent"\)/, "csak a kiküldött anyag számít ismétlésnek");
+  const resend = read("server/resend.ts");
+  assert.match(resend, /if \(opts\.quiet\) logger\.info\('\[RESEND\] Értesítés küldése \(címzett és tárgy a naplóban elrejtve\)'\)/);
+  assert.match(read("server/routes.ts"), /res\.status\(result\.error \? 500 : 200\)/);
+});

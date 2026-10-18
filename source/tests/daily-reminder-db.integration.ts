@@ -10,7 +10,7 @@ assert.equal(url.hostname, "127.0.0.1");
 assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 const { db, dbPool } = await import("../server/db");
-const { runDailyReminders, planDailyReminders, setReminderSender } = await import("../server/daily-reminder");
+const { runDailyReminders, planDailyReminders, setReminderSender, setReminderMarkSentForTest } = await import("../server/daily-reminder");
 
 const sent: Array<{ subject: string; html: string; to: string }> = [];
 let failOnce = new Set<string>();
@@ -76,4 +76,35 @@ test("a sikertelen küldés aznap egyszer újrapróbálható, utána már nem du
   const retry = await runDailyReminders(wednesday, { pauseMs: 0 });
   assert.deepEqual({ sent: retry.sent, duplicate: retry.duplicate }, { sent: 1, duplicate: 1 });
   assert.deepEqual(sent.map(m => m.to).sort(), ["tanulo-egy@example.test", "tanulo-ketto@example.test"]);
+});
+
+test("review #292: sikeres küldés utáni mentési hiba nem vezet második levélhez (pótfutás)", async () => {
+  sent.length = 0;
+  const thursday = new Date("2026-10-22T05:00:00Z");
+  setReminderMarkSentForTest(async () => { throw new Error("átmeneti DB-hiba"); });
+  const first = await runDailyReminders(thursday, { pauseMs: 0 });
+  setReminderMarkSentForTest(null);
+  assert.equal(first.sent, 2);
+  const rows = await db.select().from(dailyReminderEmails).where(eq(dailyReminderEmails.day, "2026-10-22"));
+  assert.ok(rows.every(r => r.status === "pending"), "pending marad, nem failed");
+  const retry = await runDailyReminders(thursday, { pauseMs: 0 });
+  assert.deepEqual({ sent: retry.sent, duplicate: retry.duplicate }, { sent: 0, duplicate: 2 });
+  assert.equal(sent.length, 2, "nincs második levél");
+});
+
+test("review #292: a sikertelen küldés anyaga nem számít ismétlésnek — másnap újra ő jön", async () => {
+  sent.length = 0;
+  // 2026-11-03 (kedd) és 11-04: az őszi szünet utáni napok; mindkét próbálkozás meghiúsul az egyik címre.
+  const day1 = new Date("2026-11-03T06:00:00Z");
+  const day2 = new Date("2026-11-04T06:00:00Z");
+  failOnce = new Set(["tanulo-ketto@example.test"]);
+  await runDailyReminders(day1, { pauseMs: 0 });
+  failOnce = new Set(["tanulo-ketto@example.test"]);
+  await runDailyReminders(day1, { pauseMs: 0 });
+  const failedRow = (await db.select().from(dailyReminderEmails).where(eq(dailyReminderEmails.email, "tanulo-ketto@example.test"))).find(r => r.day === "2026-11-03")!;
+  assert.equal(failedRow.status, "failed");
+  sent.length = 0;
+  await runDailyReminders(day2, { pauseMs: 0 });
+  const anna = sent.find(m => m.to === "tanulo-ketto@example.test")!;
+  assert.ok(anna.html.includes(`/preview/${failedRow.materialId}`), "a meg nem kapott anyag nem marad ki");
 });

@@ -1866,7 +1866,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/daily-reminders/run", isAuthenticatedAdmin, async (_req: Request, res) => {
     const { runDailyReminders } = await import("./daily-reminder");
-    res.json(await runDailyReminders(new Date()));
+    const result = await runDailyReminders(new Date());
+    // Review #292: a futásszintű hiba HTTP-hibaként jelenik meg (a részleges számlálókkal együtt).
+    res.status(result.error ? 500 : 200).json(result.error ? { ...result, message: `A kiküldés megszakadt: ${result.error}` } : result);
   });
 
   // ADMIN-ONLY: Tömeges osztály-léptetés ("Új tanév" gomb).

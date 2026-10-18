@@ -24,7 +24,17 @@ async function send(subject: string, html: string, to: string) {
   if (sender) return sender(subject, html, to);
   if (process.env.NODE_ENV === "test") throw new Error("Tesztkörnyezetben nincs valódi e-mail-küldés.");
   const { sendAdminNotification } = await import("./resend");
-  return sendAdminNotification(subject, html, to);
+  return sendAdminNotification(subject, html, to, { quiet: true });
+}
+
+/** Állapotmentés a sikeres küldés után — tesztben hibáztatható (review #292). */
+let markSent = async (id: string, materialId: string) => {
+  await db.update(dailyReminderEmails).set({ status: "sent", sentAt: new Date(), materialId }).where(eq(dailyReminderEmails.id, id));
+};
+export function setReminderMarkSentForTest(fn: ((id: string, materialId: string) => Promise<void>) | null) {
+  markSent = fn ?? (async (id, materialId) => {
+    await db.update(dailyReminderEmails).set({ status: "sent", sentAt: new Date(), materialId }).where(eq(dailyReminderEmails.id, id));
+  });
 }
 
 export const REMINDER_TIMEZONE = "Europe/Budapest";
@@ -51,7 +61,8 @@ export async function planDailyReminders(now: Date): Promise<PlannedReminder[]> 
   const since = new Date(date.getTime() - RECENT_DAYS * 86_400_000).toISOString().slice(0, 10);
   const recentRows = await db.select({ email: dailyReminderEmails.email, materialId: dailyReminderEmails.materialId })
     .from(dailyReminderEmails)
-    .where(and(inArray(dailyReminderEmails.email, recipients.map(r => r.email)), gte(dailyReminderEmails.day, since), sql`${dailyReminderEmails.day} < ${iso}`));
+    // Review #292: csak a ténylegesen kiküldött anyag számít ismétlésnek (a sikertelen nem).
+    .where(and(inArray(dailyReminderEmails.email, recipients.map(r => r.email)), gte(dailyReminderEmails.day, since), sql`${dailyReminderEmails.day} < ${iso}`, eq(dailyReminderEmails.status, "sent")));
   const today = schoolYearPosition(date);
   const out: PlannedReminder[] = [];
   for (const r of recipients) {
@@ -64,7 +75,7 @@ export async function planDailyReminders(now: Date): Promise<PlannedReminder[]> 
   return out;
 }
 
-export type ReminderRun = { day: string; skipped?: string; sent: number; failed: number; duplicate: number };
+export type ReminderRun = { day: string; skipped?: string; sent: number; failed: number; duplicate: number; error?: string };
 
 /** A mai levelek kiküldése — címenként naponta egyszer (a sikertelen egyszer újrapróbálható). Sosem dob. */
 export async function runDailyReminders(now: Date, opts: { pauseMs?: number } = {}): Promise<ReminderRun> {
@@ -86,22 +97,33 @@ export async function runDailyReminders(now: Date, opts: { pauseMs?: number } = 
         .returning({ id: dailyReminderEmails.id, materialId: dailyReminderEmails.materialId });
       if (!claimed.length) { result.duplicate++; continue; }
       const first = firstNameOf(p.studentName);
+      const claimId = claimed[0].id;
       try {
         await send(reminderSubject(first, p.title), reminderHtml({ first, title: p.title, topic: p.topic, url: p.url, motivation: motivationFor(first, motivationDate) }), p.email);
-        await db.update(dailyReminderEmails).set({ status: "sent", sentAt: new Date(), materialId: p.materialId }).where(eq(dailyReminderEmails.id, claimed[0].id));
-        result.sent++;
       } catch (error) {
+        // A részletek az adatbázisba kerülnek; a naplóba csak a foglalás azonosítója (review #292: nincs név/cím a naplóban).
         const message = error instanceof Error ? error.message : String(error);
-        await db.update(dailyReminderEmails).set({ status: "failed", error: message.slice(0, 500) }).where(eq(dailyReminderEmails.id, claimed[0].id));
+        await db.update(dailyReminderEmails).set({ status: "failed", error: message.replaceAll(p.email, "[címzett]").slice(0, 500) }).where(eq(dailyReminderEmails.id, claimId));
         result.failed++;
-        logger.warn(`[DAILY-REMINDER] küldési hiba (${p.studentName}): ${message}`);
+        logger.warn(`[DAILY-REMINDER] küldési hiba, foglalás: ${claimId}`);
+        if (opts.pauseMs !== 0) await new Promise(r => setTimeout(r, opts.pauseMs ?? 600));
+        continue;
+      }
+      result.sent++;
+      // Review #292: a levél már elment — a mentés hibája nem teheti újrapróbálhatóvá (pending marad, nincs második levél).
+      try {
+        await markSent(claimId, p.materialId);
+      } catch (error) {
+        logger.error(`[DAILY-REMINDER] a kiküldés rögzítése nem sikerült (a foglalás pending marad, nem küld újra): ${claimId}`, error instanceof Error ? error.message : "");
       }
       // Resend: legfeljebb 2 kérés/másodperc.
       if (opts.pauseMs !== 0) await new Promise(r => setTimeout(r, opts.pauseMs ?? 600));
     }
     logger.info(`[DAILY-REMINDER] ${iso}: elküldve ${result.sent}, hiba ${result.failed}, már kiküldve ${result.duplicate}`);
   } catch (error) {
-    logger.error("[DAILY-REMINDER] a futás nem sikerült:", error);
+    // Review #292: futásszintű hiba — a végpont és az admin felület hibaként kezeli; a részleges számlálók megmaradnak.
+    result.error = error instanceof Error ? error.message : String(error);
+    logger.error("[DAILY-REMINDER] a futás nem sikerült:", result.error);
   }
   return result;
 }
