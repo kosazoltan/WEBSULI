@@ -2,6 +2,7 @@ import tanmenet from "../data/tanmenet-2020.json";
 import nyelvi from "../data/nyelvi-tanmenet.json";
 import { buildIndex, matchMaterial, type CurriculumIndex, type CurriculumMatch, type TanmenetData } from "./match";
 import { hintsFromHtml, hintsFromLesson } from "./hints";
+import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 
 /**
  * A NAT 2020 mintatanmenet-index (docs/specs/2026-10-17-tanmenet-rendezes.md): egyszer épül, a listához anyagonként pozíciót ad.
@@ -25,12 +26,14 @@ export function curriculumOf(file: { title: string; classroom: number; hints?: r
   return m ? round(m) : null;
 }
 
-/** A tartalomjelzők memóriája (anyag + cím + évfolyam szerint); a lista-gyorsítótár érvénytelenítésekor ürül. */
+/** A tartalomjelzők memóriája (anyag + cím + évfolyam szerint); a lista-gyorsítótár bármely invalidálásakor ürül. */
 const hintMemo = new Map<string, readonly string[]>();
 const memoKey = (f: Item) => `${f.id}|${f.title}|${f.classroom}`;
 export function clearCurriculumHints(): void {
   hintMemo.clear();
 }
+// Review #284: minden lista-invalidálás (Studio-publikálás, javítás alkalmazása, admin-műveletek) üríti — nem csak a routes.ts segédje.
+getHtmlFilesCache().onInvalidate(clearCurriculumHints);
 
 /**
  * A lista minden eleméhez hozzáadja a `curriculum` mezőt. A cím alapján nem illeszthető (évfolyammal rendelkező) anyagok tartalmát

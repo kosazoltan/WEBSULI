@@ -14,7 +14,8 @@ export const loadCurriculumContent: ContentLoader = async (items) => {
   const lessonRows = await db.select({ fileId: lessons.htmlFileId, json: lessons.json, publishedAt: lessons.publishedAt })
     .from(lessons).where(and(inArray(lessons.htmlFileId, ids), isNotNull(lessons.publishedAt))).orderBy(desc(lessons.publishedAt));
   for (const r of lessonRows) if (r.fileId && !out.has(r.fileId)) out.set(r.fileId, { lesson: r.json });
-  const htmlIds = ids.filter(id => !out.has(id));
+  // Review #284: PDF-nél nincs címsor, a (akár 100 MB-os) base64 tartalmat nem olvassuk be.
+  const htmlIds = items.filter(i => !out.has(i.id) && (i.contentType ?? "html") === "html").map(i => i.id);
   if (htmlIds.length) {
     const rows = await db.select({ id: htmlFiles.id, content: htmlFiles.content }).from(htmlFiles).where(inArray(htmlFiles.id, htmlIds));
     for (const r of rows) out.set(r.id, { html: r.content });

@@ -16,6 +16,8 @@ export class HtmlFilesCache {
   private cache: CacheEntry | null = null;
   private ttl: number; // milliseconds
   private readonly CACHE_KEY = 'html-files-list';
+  /** A listából származtatott memóriák (pl. tanmenet-tartalomjelzők) — minden invalidáláskor ürülnek. */
+  private readonly invalidateListeners = new Set<() => void>();
 
   constructor(ttlMinutes: number = 5) {
     this.ttl = ttlMinutes * 60 * 1000; // Convert minutes to milliseconds
@@ -56,6 +58,13 @@ export class HtmlFilesCache {
    */
   invalidate(): void {
     this.cache = null;
+    for (const listener of this.invalidateListeners) listener();
+  }
+
+  /** Feliratkozás az invalidálásra; a visszaadott függvény leiratkoztat. */
+  onInvalidate(listener: () => void): () => void {
+    this.invalidateListeners.add(listener);
+    return () => this.invalidateListeners.delete(listener);
   }
 
   /**

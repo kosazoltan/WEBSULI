@@ -48,6 +48,19 @@ test("withCurriculum: a betöltő csak a cím alapján nem illeszthető, évfoly
   assert.equal(calls, 1, "a második listázás a memóriából dolgozik");
 });
 
+test("review #284: bármely lista-invalidálás (Studio, javítás alkalmazása) üríti a tartalomjelzőket — az új tartalom újra beolvasódik", async () => {
+  const { getHtmlFilesCache } = await import("../server/cache/HtmlFilesCache");
+  let calls = 0;
+  const load = async () => { calls++; return new Map([["alg2", { html: ALGEBRA.map(h => `<h2>${h}</h2>`).join("") }]]); };
+  const files = [{ id: "alg2", title: "8. osztály algebra", classroom: 8 }];
+  await withCurriculum(files, load);
+  await withCurriculum(files, load);
+  assert.equal(calls, 1);
+  getHtmlFilesCache().invalidate();
+  await withCurriculum(files, load);
+  assert.equal(calls, 2, "a központi invalidate() után a memó üres");
+});
+
 test("tantárgy a hivatalos tanmenet szókincséből, ha a cím nem mondja ki; a „halmazállapot” nem matematika", async () => {
   const { subjectByVocabulary, subjectsOfTitle, normalizeTokens } = await import("../server/curriculum/match");
   assert.deepEqual(subjectByVocabulary(normalizeTokens("Fotoszintézis és sejtlégzés"), 9, index), ["biologia"]);

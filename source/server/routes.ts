@@ -32,7 +32,7 @@ import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients } from "./lib/material-result";
-import { clearCurriculumHints, withCurriculum } from "./curriculum";
+import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments } from "./lib/material-capture";
 import { lessonResultsRouter } from "./lesson-result-email";
@@ -3074,7 +3074,6 @@ ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; 
     try {
       const cache = getHtmlFilesCache();
       cache.invalidate();
-      clearCurriculumHints();
     } catch (error) {
       // Cache module might not be available, ignore
       logger.warn("[CACHE] Failed to invalidate cache:", error);
