@@ -54,6 +54,21 @@ node --no-warnings kanban.mjs stats                    # összesítő
 | `REGRESSZIO(#n):` | korábbi jegy visszaesése |
 | `STANDING(binding):` | tartós szabály, nem záródik le |
 
+## Állapot — 2026-10-18 (kódból ellenőrizve)
+
+A CLI `list --repo WEBSULI` 2026-10-18-án üres táblát adott, ezért az alábbiak a kódból és a git-történetből ellenőrzött
+állapotok. A 2026-10-05-i táblázat alatta történetként marad.
+
+| # | Állapot | Bizonyíték |
+|---|---|---|
+| 560 | kész | A webes út tudásbázissal épül: e91b501a (#66), az egyfutásos `webStudio` `knowledge` lépése (#203), az S4b a különálló webes HTML-utat törölte (d9e9c8e9) |
+| 187 | PR | #308: induló mentés csak 24 órán belüli mentés hiányában, budapesti cron |
+| 127 | PR | #309: böngészős hibajelentés a titok nélküli `/api/client-error`-on (eredet-allowlist, IP-korlát, napi plafon) |
+| 1119 | okafogyott | A PR #182 összevonva |
+| 1120 | beolvadt, részben | S8 #201, S6 #202, S7 #203, S5 #204. Az S4b óta az S5/S6 (katalógus, tantárgyi memória) nem jut el az egyfutásos gyártásig, és a fizetős A/B mérés nem futott: tulajdonosi döntés kell |
+| 1118 | nyitott | Tartalmi tétel; a „két függő fogalom” nincs leírva, a leckét az adminban kell megnézni |
+| 152 | STANDING | Tartós szabály |
+
 ## Állapot — 2026-10-05
 
 A CLI `list` a hiteles forrás; ez a pillanatkép a 2026-10-05-i higiéniai söprés után készült.

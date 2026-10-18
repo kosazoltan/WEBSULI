@@ -1,6 +1,6 @@
 # Tananyag tömörsége és forrás-lefedettsége: mérés, v7.5-összevetés, javítási terv (2026-10-14)
 
-Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-10-14). S1 kész (#210); S2 külön PR, mérés alatt.** Végrehajtás:
+Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-10-14). S1 kész (#210); S2 kész (#213, 31b97479).** Végrehajtás:
 `docs/specs/2026-10-14-tananyag-tomorseg-lefedettseg-vegrehajtas.md`.
 
 ## Kérés
