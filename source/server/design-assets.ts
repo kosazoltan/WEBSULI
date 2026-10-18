@@ -7,9 +7,8 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { designAssets } from "../shared/schema";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
-import { lessonArtIds, pickLessonArt, type DesignAsset, type StoredLessonArt } from "../shared/design-assets";
-import { topicCoverId, topicKeyOf } from "../shared/topic-taxonomy";
-import { designThemeForClassroom } from "../shared/lesson-design";
+import { type DesignAsset } from "../shared/design-assets";
+import { computeLessonArt } from "../shared/lesson-art-compute";
 import { logger } from "./lib/logger";
 
 /**
@@ -84,11 +83,9 @@ export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typ
   await initialSyncSettled();
   try {
     const stored = new Set((await executor.select({ id: designAssets.id }).from(designAssets)).map(r => r.id));
-    const catalog = DESIGN_ASSET_CATALOG.filter(a => stored.has(a.id));
     // Arculati bank (S1): a lecke témaköre (tantárgy, évfolyam, cím) → a témakör borítója, ha az a táblában megvan.
-    const topic = topicKeyOf({ subject: lesson.subject, classroom: lesson.classroom, title: lesson.title });
-    const art: StoredLessonArt & { topic?: string } = lessonArtIds(pickLessonArt({ subject: lesson.subject, title: lesson.title, seed, topicCoverId: topic ? topicCoverId(topic) : null }, designThemeForClassroom(lesson.classroom), catalog));
-    if (topic) art.topic = topic.key;
+    // A tiszta mag a backfill-szkripttel közös (docs/specs/2026-10-18-arculat-backfill.md).
+    const art = computeLessonArt(lesson, seed, stored) ?? {};
     return (Object.keys(art).length ? { ...rest, art } : rest) as T;
   } catch (error) {
     logger.warn("[design-assets] Az arculat nem választható, a lecke art nélkül ment:", error);
