@@ -93,3 +93,17 @@
 - HA a `?tab=enhanced` linket nyitják meg, AKKOR a „Tananyag készítése” fül nyílik.
 - A menü négy feliratos csoportban jelenik meg; minden fülnek van ikonja; 1366 px-en és 390 px-en nincs vízszintes túlcsordulás.
 - A törölt komponensekre és végpontokra nincs hivatkozás (`grep`), és a build zöld.
+
+## Megvalósítás (2026-10-18)
+- **Végpontok:** a törlés közben kiderült, hogy a `POST /api/ai/generate-material` végpontot sem hívja semmi, ezért az is
+  megszűnt (összesen 15 végpont).
+- **Csak a törölt útvonalak által használt modulok törölve, a tesztjeikkel együtt:**
+  - `server/ai/legacy-fallback.ts`;
+  - `server/studio/claude-vision.ts`;
+  - `server/lib/ai-provider-wrapper.ts`.
+- **Szándékosan meghagyva** (külön döntést igényel, vagy több teszt hivatkozik rá):
+  - a `LEGACY_MODELS` régi kulcsai (`server/ai/models.ts`);
+  - a `/api/ai/` útvonal-előtag köztes rétegei (limiter, payload-őr, CSRF-kivétel), amelyeknek már nincs végpontjuk;
+  - a `file-backups` végpontok.
+- **A régi forrásszöveg-tesztek** (validTabs, knowledge-maps átirányítás, mobil menü, prompt-cache, s7-őr) az új szerkezethez
+  igazítva, a szándékuk változatlan. A felhasználótörlés az s7-őr engedélylistáján kézi admin-műveletként szerepel.
