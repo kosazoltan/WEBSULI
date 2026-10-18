@@ -41,7 +41,9 @@ test("assertBackupFilesHaveContent: egyetlen üres content-ű fájl is megtagadj
 test("storage.ts: a backup-készítés nem a listanézet (üres content) lekérdezését használja", () => {
   const src = readFileSync(join(fileURLToPath(new URL("..", import.meta.url)), "server", "storage.ts"), "utf8");
   const createBackupBody = src.slice(src.indexOf("async createBackup("), src.indexOf("async getAllBackups("));
-  const exportBody = src.slice(src.indexOf("async exportBackupSnapshot("), src.indexOf("async importBackupSnapshot("));
+  // Spec 2026-10-18-legacy-maradvanyok: az importBackupSnapshot (csak a kivezetett fájlmentés-visszaállítás hívta) megszűnt.
+  const exportStart = src.indexOf("async exportBackupSnapshot(");
+  const exportBody = src.slice(exportStart, src.indexOf("\n  async ", exportStart + 10));
   assert.ok(createBackupBody.length > 0 && exportBody.length > 0, "a két metódus megtalálható");
   assert.ok(!createBackupBody.includes("getAllHtmlFiles()"), "createBackup ne használja getAllHtmlFiles()-t");
   assert.ok(!exportBody.includes("getAllHtmlFiles()"), "exportBackupSnapshot ne használja getAllHtmlFiles()-t");
@@ -50,6 +52,5 @@ test("storage.ts: a backup-készítés nem a listanézet (üres content) lekérd
   // a restore útvonalak kapuja
   const restoreBody = src.slice(src.indexOf("async restoreBackup("), src.indexOf("async createMaterialView("));
   assert.ok(restoreBody.includes("assertBackupFilesHaveContent("), "restoreBackup kapuzva");
-  const importBody = src.slice(src.indexOf("async importBackupSnapshot("));
-  assert.ok(importBody.includes("assertBackupFilesHaveContent("), "importBackupSnapshot kapuzva");
+  assert.ok(!src.includes("async importBackupSnapshot("), "a fájlmentés-import megszűnt (nincs kapu nélküli visszaállítási út)");
 });

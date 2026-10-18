@@ -17,7 +17,6 @@ import type { Request } from "express";
 
 export const LARGE_BODY_PREFIXES = [
   "/api/html-files", // admin material create/update (base64 PDF payloads)
-  "/api/ai/", // Enhanced Material Creator
   "/api/admin/", // backup import, improvement apply, ...
   "/api/studio/", // knowledge-map extraction: image/PDF sources as data URLs (#162)
 ] as const;

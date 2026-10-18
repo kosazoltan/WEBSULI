@@ -15,7 +15,6 @@ import {
   materialRatings,
   materialComments,
   scheduledJobs,
-  weeklyEmailReports,
   systemPrompts,
   improvedHtmlFiles,
   materialImprovementBackups,
@@ -137,17 +136,6 @@ export interface IStorage {
     emailLogs: EmailLog[];
   }>;
 
-  // Backup import operation (restore from file-based backup)
-  importBackupSnapshot(snapshotData: {
-    htmlFiles: HtmlFile[];
-    users: User[];
-    extraEmails: Array<Omit<ExtraEmail, 'classrooms'> & { classrooms: number[] }>;
-    materialViews?: MaterialView[];
-    emailSubscriptions?: Array<Omit<EmailSubscription, 'classrooms'> & { classrooms: number[] }>;
-    tags?: Tag[];
-    systemPrompts?: SystemPrompt[];
-    emailLogs?: EmailLog[];
-  }): Promise<void>;
 
   // Statistics operations
   getOverallStats(): Promise<{
@@ -1306,123 +1294,6 @@ export class DatabaseStorage implements IStorage {
       systemPrompts: systemPromptsData,
       emailLogs: emailLogsData,
     };
-  }
-
-  // Import complete backup snapshot (restore from file-based backup)
-  async importBackupSnapshot(snapshotData: {
-    htmlFiles: HtmlFile[];
-    users: User[];
-    extraEmails: Array<Omit<ExtraEmail, 'classrooms'> & { classrooms: number[] }>;
-    materialViews?: MaterialView[];
-    emailSubscriptions?: Array<Omit<EmailSubscription, 'classrooms'> & { classrooms: number[] }>;
-    tags?: Tag[];
-    systemPrompts?: SystemPrompt[];
-    emailLogs?: EmailLog[];
-  }): Promise<void> {
-    logger.info('[RESTORE] Starting backup restoration...');
-    logger.info('[RESTORE] Snapshot contents:', {
-      htmlFiles: snapshotData.htmlFiles.length,
-      users: snapshotData.users.length,
-      extraEmails: snapshotData.extraEmails.length,
-      materialViews: snapshotData.materialViews?.length || 0,
-      emailSubscriptions: snapshotData.emailSubscriptions?.length || 0,
-      tags: snapshotData.tags?.length || 0,
-      systemPrompts: snapshotData.systemPrompts?.length || 0,
-      emailLogs: snapshotData.emailLogs?.length || 0,
-    });
-
-    // Validate required fields
-    if (!snapshotData.htmlFiles || !snapshotData.users) {
-      throw new Error('Snapshot validation failed: htmlFiles and users are required');
-    }
-    // AUDIT 2026-09-01: üres content-ű snapshot (régi export) → restore megtagadva
-    assertBackupFilesHaveContent(snapshotData.htmlFiles);
-
-    // Single transaction for atomic restore
-    await db.transaction(async (tx) => {
-      logger.info('[RESTORE] Transaction started - deleting existing data...');
-
-      // Delete in reverse FK dependency order
-      await tx.delete(materialLikes);
-      await tx.delete(materialRatings);
-      await tx.delete(materialComments);
-      await tx.delete(materialTags);
-      await tx.delete(materialStats);
-      await tx.delete(materialViews);
-      await tx.delete(emailLogs);
-      await tx.delete(pushSubscriptions);
-      await tx.delete(aiGenerationRequests);
-      await tx.delete(backups);
-      await tx.delete(htmlFiles);
-      await tx.delete(extraEmailAddresses);
-      await tx.delete(emailSubscriptions);
-      await tx.delete(tags);
-      await tx.delete(systemPrompts);
-      await tx.delete(users);
-      await tx.delete(weeklyEmailReports);
-      await tx.delete(scheduledJobs);
-
-      logger.info('[RESTORE] All tables cleared');
-
-      // Insert parent tables first
-      logger.info('[RESTORE] Inserting users...');
-      if (snapshotData.users.length > 0) {
-        await tx.insert(users).values(snapshotData.users);
-      }
-
-      logger.info('[RESTORE] Inserting tags...');
-      if (snapshotData.tags && snapshotData.tags.length > 0) {
-        await tx.insert(tags).values(snapshotData.tags);
-      }
-
-      logger.info('[RESTORE] Inserting system prompts...');
-      if (snapshotData.systemPrompts && snapshotData.systemPrompts.length > 0) {
-        await tx.insert(systemPrompts).values(snapshotData.systemPrompts);
-      }
-
-      // Insert htmlFiles
-      logger.info('[RESTORE] Inserting htmlFiles...');
-      if (snapshotData.htmlFiles.length > 0) {
-        await tx.insert(htmlFiles).values(snapshotData.htmlFiles);
-      }
-
-      // Insert extra emails
-      logger.info('[RESTORE] Inserting extra emails...');
-      if (snapshotData.extraEmails && snapshotData.extraEmails.length > 0) {
-        await tx.insert(extraEmailAddresses).values(snapshotData.extraEmails);
-      }
-
-      // Insert email subscriptions
-      logger.info('[RESTORE] Inserting email subscriptions...');
-      if (snapshotData.emailSubscriptions && snapshotData.emailSubscriptions.length > 0) {
-        await tx.insert(emailSubscriptions).values(snapshotData.emailSubscriptions);
-      }
-
-      // Insert relation tables
-      logger.info('[RESTORE] Inserting material views...');
-      if (snapshotData.materialViews && snapshotData.materialViews.length > 0) {
-        // Chunk inserts for large datasets (200 rows per batch)
-        const chunkSize = 200;
-        for (let i = 0; i < snapshotData.materialViews.length; i += chunkSize) {
-          const chunk = snapshotData.materialViews.slice(i, i + chunkSize);
-          await tx.insert(materialViews).values(chunk);
-        }
-      }
-
-      logger.info('[RESTORE] Inserting email logs...');
-      if (snapshotData.emailLogs && snapshotData.emailLogs.length > 0) {
-        // Chunk inserts for large datasets
-        const chunkSize = 200;
-        for (let i = 0; i < snapshotData.emailLogs.length; i += chunkSize) {
-          const chunk = snapshotData.emailLogs.slice(i, i + chunkSize);
-          await tx.insert(emailLogs).values(chunk);
-        }
-      }
-
-      logger.info('[RESTORE] Transaction completed successfully');
-    });
-
-    logger.info('[RESTORE] ✅ Backup restoration complete!');
   }
 
   // ==================== Improved Files Operations ====================

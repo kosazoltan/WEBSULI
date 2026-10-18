@@ -65,8 +65,9 @@ test("the legacy route models are declared centrally", () => {
     }
   }
 
-  assert.equal(providerForModel(LEGACY_MODELS.htmlFix), "anthropic");
-  assert.equal(providerForModel(LEGACY_MODELS.analyzeFiles), "openai");
+  // Spec 2026-10-18-legacy-maradvanyok: a régi admin-útvonalak kulcsai kivezetve; a megmaradtak.
+  assert.equal(providerForModel(LEGACY_MODELS.quizGenerator), "anthropic");
+  assert.equal(providerForModel(LEGACY_MODELS.improve[1]), "openai");
 });
 
 // S4b (docs/specs/2026-10-16-egy-futas.md): a lektor-lánc és a családellenőrzés (lektorChainFor, LEKTOR_THIRD_FAMILY_MODEL, assertDistinctFamilies) kivezetve — három esete törölve.

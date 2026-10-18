@@ -57,20 +57,6 @@ export function isCrossFamilyFallbackModel(model: string): boolean {
  * model list and answered a real request before being written here.
  */
 export const LEGACY_MODELS = {
-  /** adminRouter POST /html-fix/errors — Claude JSON HTML repair (routes.ts ~1226) */
-  htmlFix: "claude-opus-5-5",
-  /** adminRouter POST /html-fix/theme — Claude JSON theme rewrite (routes.ts ~1316) */
-  htmlTheme: "claude-opus-5-5",
-  /** Enhanced Creator SSE two-phase OpenAI HTML fix (routes.ts ~1479, ~1508) */
-  htmlFixStream: "gpt-6.1-sol",
-  /** Enhanced Creator Claude chat stream, full HTML generation (routes.ts ~1790) */
-  claudeChat: "claude-opus-5-5",
-  /** Vision analysis of uploaded files (routes.ts ~1942 multi, ~2055 single) */
-  analyzeFiles: "gpt-6.1-sol",
-  /** Enhanced Creator ChatGPT chat stream (routes.ts ~2212) */
-  chatgptChat: "gpt-6.1-sol",
-  /** Enhanced Creator Claude HTML generation stream (routes.ts ~2417) */
-  claudeHtml: "claude-opus-5-5",
   /**
    * HTML modernisation: Anthropic primary, direct OpenAI fallback. Tulajdonosi döntés 2026-10-14
    * (docs/specs/2026-10-14-tartalek-b-szelet.md, B3): a tartalék az ellentétes családú GPT-6.1 Sol, medium efforttal (korábban Terra).
@@ -99,13 +85,6 @@ export type LegacyTask = keyof typeof LEGACY_MODELS;
  * output and high effort mostly buys latency.
  */
 export const TASK_EFFORT: Partial<Record<LegacyTask, "low" | "medium" | "high">> = {
-  htmlFix: "medium",
-  htmlTheme: "medium",
-  htmlFixStream: "medium",
-  claudeChat: "medium",
-  analyzeFiles: "medium",
-  chatgptChat: "medium",
-  claudeHtml: "medium",
   improve: "medium",
   quizGenerator: "medium",
   webResearch: "low",
@@ -139,13 +118,6 @@ export function keyNameForModel(modelId: string): string {
  * error instead of "nincs API kulcs".
  */
 const TASK_KEYS: Record<LegacyTask, "openai" | "anthropic"> = {
-  htmlFix: "anthropic",
-  htmlTheme: "anthropic",
-  htmlFixStream: "openai",
-  claudeChat: "anthropic",
-  analyzeFiles: "openai",
-  chatgptChat: "openai",
-  claudeHtml: "anthropic",
   improve: "anthropic",
   quizGenerator: "anthropic",
   webResearch: "anthropic",

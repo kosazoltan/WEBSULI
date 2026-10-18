@@ -26,9 +26,11 @@ test("a /api/studio/ session-süti NÉLKÜL standard limitet kap (DoS-védelem m
 });
 
 test("a korábbi nagy-body útvonalak változatlanul nagyok", () => {
-  for (const p of ["/api/html-files", "/api/ai/improve", "/api/admin/backup"]) {
+  for (const p of ["/api/html-files", "/api/admin/backup"]) {
     assert.equal(needsLargeBody(req(p, SID)), true, p);
   }
+  // Spec 2026-10-18-legacy-maradvanyok: a /api/ai/ alatt nincs végpont — nem kap nagy limitet.
+  assert.equal(needsLargeBody(req("/api/ai/improve", SID)), false);
 });
 
 test("publikus olcsó útvonal sütivel SEM kap nagy limitet", () => {
