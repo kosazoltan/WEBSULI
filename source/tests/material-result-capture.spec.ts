@@ -234,3 +234,13 @@ test("review #300: változatlan válaszokkal 80% → 90% → 80%: a végső 80% 
   await page.clock.runFor(1600);
   expect(posts.length).toBe(3);
 });
+
+// docs/specs/2026-10-18-tanuloi-profil.md (S2): a párosított eszközön a /dev/:id injektálta tanulói token a beküldésbe kerül.
+test("tanulói profil: a window.__websuliLearner tokenje az automatikus beküldésben is szerepel", async ({ page }) => {
+  const { posts } = await open(page, "regi-tanuloval", EVAL_MATERIAL);
+  await page.evaluate(() => { (window as unknown as { __websuliLearner?: string }).__websuliLearner = "tanulo-azonosito-1.1.abcdefghijklmnopqrstuv"; });
+  await page.click("#eval");
+  await page.clock.runFor(1600);
+  await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
+  expect((posts[0] as Post & { learner?: string }).learner).toBe("tanulo-azonosito-1.1.abcdefghijklmnopqrstuv");
+});

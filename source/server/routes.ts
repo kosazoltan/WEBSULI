@@ -30,11 +30,11 @@ import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
-import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, type MaterialResultPayload } from "./lib/material-result";
-import { resolveLearner, syncLearners, type ResolvedLearner } from "./learners";
+import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, percentOf, withLearnerSubject, type MaterialResultPayload } from "./lib/material-result";
+import { recordLearnerActivity, resolveLearner, syncLearners, type ResolvedLearner } from "./learners";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
-import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments } from "./lib/material-capture";
+import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
 import { lessonResultsRouter } from "./lesson-result-email";
 
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
@@ -53,6 +53,8 @@ import { prependWebLessonQualityNotice, webLessonQualityNotice } from "./lib/web
 
 // BACKLOG T2: /dev/:id megtekintés-dedup (ip|materialId, 1 óra)
 const materialViewDedup = new ViewDedup();
+// Tanulói profil (S2): tanuló + anyag megtekintése óránként egyszer, minden útvonalon (/dev/:id, Stúdió-lecke, PDF) közösen.
+const learnerViewDedup = new ViewDedup();
 import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
 import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
 import { hasHtmlLessonData } from "../shared/lesson-html-data";
@@ -250,6 +252,8 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
         var payload = {
           materialId: __websuliMaterialId,
           clientId: window.__websuliClientId || undefined,
+          // Tanulói profil (S2): a párosított eszköz tanulójának tokenje (a /dev/:id injektálja), ha van
+          learner: window.__websuliLearner || undefined,
           subject: String(subject || 'Tananyag eredmény'),
           body: String(body || '')
         };
@@ -915,10 +919,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Régi anyagok (docs/specs/2026-10-17-regi-anyag-eredmeny.md): egy iskolai hálózat sok tanulója egy IP-n van → 60 / 15 perc,
   // az azonos eredményt pedig az ismétlésvédelem szűri (10 perc).
   const materialResultDedup = new ViewDedup(10 * 60 * 1000, 5000);
-  type QueuedMaterialResult = { value: MaterialResultPayload; ip: string; title: string | null; fileId: string; recipients: string[] };
+  type QueuedMaterialResult = { value: MaterialResultPayload; ip: string; title: string | null; fileId: string; recipients: string[]; learner: ResolvedLearner | null };
+  // Tanulói profil (S2): a kézbesített eredmény a párosított tanuló tevékenységnaplójába is bekerül. Review #302: saját, tanuló +
+  // anyag + eredmény kulcsú ismétlésvédelem (10 perc) — egy címzett pótlása vagy egy ismételt beküldés nem ír második sort.
+  const learnerResultDedup = new ViewDedup(10 * 60 * 1000, 5000);
+  const recordMaterialResult = (q: QueuedMaterialResult) => q.learner && learnerResultDedup.shouldRecord(`${q.learner.id}|${q.fileId}|${materialResultDedupKey(q.value, '')}`)
+    ? recordLearnerActivity({ learnerId: q.learner.id, materialId: q.fileId, kind: 'result', percent: percentOf(q.value.body), summary: q.title ?? q.value.subject })
+    : Promise.resolve();
   // Ismétlésvédelem CÍMZETTENKÉNT (review #281): a már értesített admin nem kap újra, a kimaradt pótolható.
   const deliverMaterialResult = (q: QueuedMaterialResult) => {
-    const mail = buildMaterialResultEmail(q.value, q.title, getMaterialPreviewUrl(q.fileId));
+    const mail = buildMaterialResultEmail(withLearnerSubject(q.value, q.learner?.firstName), q.title, getMaterialPreviewUrl(q.fileId));
     return deliverToRecipients({
       recipients: q.recipients,
       baseKey: materialResultDedupKey(q.value, q.ip),
@@ -934,6 +944,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const outcome = await deliverMaterialResult(q);
         if (!outcome.duplicate && outcome.delivered === 0) { logger.warn('[MATERIAL-RESULT] az összevárt eredményt nem sikerült elküldeni (újrapróba)'); return false; }
+        if (!outcome.duplicate) await recordMaterialResult(q);
         return true;
       } catch (e: unknown) {
         logger.error('[MATERIAL-RESULT] összevárt küldés hiba:', e instanceof Error ? e.message : String(e));
@@ -982,11 +993,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: az automatikus beolvasás minden új állapotot azonnal küld; a levél
       // kulcsonként (anyag + kliens) összevárva megy, a legutolsó állapottal.
+      const learner = value.learner ? await resolveLearner(value.learner).catch(() => null) : null;
       if (value.auto) {
-        const queued = materialResultCoalescer.submit(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`, { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients });
+        const queued = materialResultCoalescer.submit(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`, { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients, learner });
         return res.status(202).json({ success: true, queued });
       }
-      const outcome = await deliverMaterialResult({ value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients });
+      const direct: QueuedMaterialResult = { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients, learner };
+      const outcome = await deliverMaterialResult(direct);
       if (outcome.duplicate) {
         return res.json({ success: true, duplicate: true });
       }
@@ -996,6 +1009,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // a tanuló maga küldte el (mailto) → az ugyanazon oldalbetöltés automatikus levele nem megy ki: a függő törlődik, és a
       // később beérkező automatikus beküldés sem kerül sorba (review #300)
       materialResultCoalescer.suppress(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`);
+      await recordMaterialResult(direct);
       res.json({ success: true, delivered: outcome.delivered });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -1018,6 +1032,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     if (!learner) return res.status(401).json({ message: "A tanulói link érvénytelen vagy visszavonták." });
     res.json({ firstName: learner.firstName, grade: learner.grade });
+  });
+  // Review #302: a Stúdió-lecke és a PDF-nézet nem a /dev/:id-n át nyílik — a kliens ezzel jelzi a megnyitást (ugyanaz a tanuló +
+  // anyag kulcsú, óránkénti ismétlésvédelem, mint a /dev/:id-nél). Mellékhatás GET-en: csak ellenőrzött tokennel, korlátozva.
+  app.get('/api/learner/view/:materialId', learnerMeLimiter, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(req.params.materialId)) return res.status(400).json({ message: "Érvénytelen anyag." });
+    const learner = await resolveLearner(req.get('x-learner-token')).catch(() => null);
+    if (!learner) return res.status(401).json({ message: "A tanulói link érvénytelen vagy visszavonták." });
+    const file = await storage.getHtmlFile(req.params.materialId);
+    if (!file) return res.status(404).json({ message: "Tananyag nem található" });
+    if (learnerViewDedup.shouldRecord(`${learner.id}|${file.id}`)) await recordLearnerActivity({ learnerId: learner.id, materialId: file.id, kind: 'view', summary: file.title });
+    res.status(204).end();
   });
   // Az e-mail-címek minden sikeres módosítása után a tanulók és a címek kapcsolata újraszinkronizálódik.
   app.use(['/api/extra-emails', '/api/admin/extra-emails'], (req, res, next) => {
@@ -2821,6 +2847,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).send("<html><body><h1>Fájl nem található</h1></body></html>");
       }
 
+      // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje (?lt=) — csak ellenőrzötten.
+      const learnerToken = typeof req.query.lt === 'string' ? req.query.lt : undefined;
+      const learner = learnerToken ? await resolveLearner(learnerToken).catch(() => null) : null;
+      if (learner && learnerViewDedup.shouldRecord(`${learner.id}|${file.id}`)) {
+        void recordLearnerActivity({ learnerId: learner.id, materialId: file.id, kind: 'view', summary: file.title });
+      }
+
       // Track material view (no authentication required)
       // Note: Daily summary email will be sent at 20:00 with all views
       try {
@@ -2895,12 +2928,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        res.send(pdfViewerHtml);
+        res.send(learner && learnerToken ? withLearnerScript(pdfViewerHtml, learnerToken) : pdfViewerHtml);
       } else {
         // HTML material: wrap with responsive container
         const notice = webLessonQualityNotice(file.content);
         const content = notice ? prependWebLessonQualityNotice(file.content, notice) : file.content;
-        const wrappedHtml = withLessonTypography(wrapHtmlWithResponsiveContainer(content), file.classroom, file.title);
+        const typographed = withLessonTypography(wrapHtmlWithResponsiveContainer(content), file.classroom, file.title);
+        const wrappedHtml = learner && learnerToken ? withLearnerScript(typographed, learnerToken) : typographed;
 
         // CRITICAL: No-cache headers to prevent Vercel/browser from serving stale content after Apply
         res.setHeader('Content-Type', 'text/html; charset=utf-8');

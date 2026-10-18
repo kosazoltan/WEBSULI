@@ -7,9 +7,11 @@ import { evaluateOpenAnswer, scoreSummary, type AnswerScore } from "./lesson-exp
  */
 const roundId = z.string().regex(/^[a-z0-9-]{4,64}$/);
 const id = z.string().min(1).max(80);
+// Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi.
+const learner = z.string().max(120).optional();
 export const resultRequestSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("tasks"), roundId, answers: z.record(id, z.string().max(4000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional() }).strict(),
-  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional() }).strict(),
+  z.object({ kind: z.literal("tasks"), roundId, answers: z.record(id, z.string().max(4000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional(), learner }).strict(),
+  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional(), learner }).strict(),
 ]);
 export type ResultRequest = z.infer<typeof resultRequestSchema>;
 
@@ -48,11 +50,11 @@ export function gradeQuiz(quiz: readonly QuizItem[], picks: Record<string, numbe
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const MARK = { ok: "✅", partial: "🟡", fail: "❌" } as const;
 
-export function buildResultEmail(input: { lessonTitle: string; classroom: number; learner: string; url: string; graded: GradedTasks | GradedQuiz }): { subject: string; html: string } {
+export function buildResultEmail(input: { lessonTitle: string; classroom: number; learner: string; learnerFirst?: string; url: string; graded: GradedTasks | GradedQuiz }): { subject: string; html: string } {
   const { graded } = input;
   const part = graded.kind === "tasks" ? "Feladatok" : "Kvíz";
   const s = graded.summary;
-  const subject = `[WebSuli eredmény] ${input.lessonTitle} — ${part} — ${s.percent}% (${s.label})`.slice(0, 200);
+  const subject = `[WebSuli eredmény] ${input.learnerFirst ? `${input.learnerFirst} – ` : ""}${input.lessonTitle} — ${part} — ${s.percent}% (${s.label})`.slice(0, 200);
   const head = `<h2>${esc(input.lessonTitle)} — ${part}</h2>
 <p><strong>Tanuló:</strong> ${esc(input.learner)}<br><strong>Évfolyam:</strong> ${input.classroom}. osztály<br>
 <strong>Eredmény:</strong> ${s.points} / ${s.total} pont — ${s.percent}% — ${s.grade} (${esc(s.label)})</p>`;

@@ -13,6 +13,7 @@ import { homeFilesQueryOptions, lessonNeighbours } from "@/lib/home-files-query"
 import { curriculumSort, todayPosition, type CurriculumHint } from "@/lib/curriculum-order";
 import { useAuth } from "@/hooks/useAuth";
 import { LessonRepairPanel } from "@/components/LessonRepairPanel";
+import { getLearnerToken, useRecordLearnerView } from "@/lib/learnerProfile";
 
 export default function Preview() {
   const [, params] = useRoute("/preview/:id");
@@ -72,7 +73,11 @@ export default function Preview() {
   // (prod: a Render szolgáltatás URL-je; dev: same-origin). Így az iframe
   // `allow-same-origin`-ja a tananyag originjét adja, nem az appét — a feltöltött HTML
   // scriptje nem éri el a websuli.vip sütijeit/localStorage-át/API-session-jét.
-  const renderUrl = `${materialOrigin}/dev/${params?.id}`;
+  // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje a keretnek (más eredetű, nem látja a localStorage-ot).
+  const learnerToken = getLearnerToken();
+  // Review #302: a megnyitás jelzése (a Stúdió-lecke nem a /dev/:id-n át nyílik); a szerver tanuló + anyag szerint óránként egyszer ír.
+  useRecordLearnerView(material ? params?.id : null);
+  const renderUrl = `${materialOrigin}/dev/${params?.id}${learnerToken ? `?lt=${encodeURIComponent(learnerToken)}` : ""}`;
   
   const handleReloadIframe = () => {
     if (isLesson) {

@@ -11,6 +11,7 @@ import { arbiterCacheKey } from "./arbiter/arbiter";
 import { getMaterialPreviewUrl } from "./utils/config";
 import type { AttemptAnswer, AttemptQuestion } from "../shared/lesson-attempt";
 import { logger } from "./lib/logger";
+import { recordLearnerActivity, resolveLearner } from "./learners";
 
 /**
  * Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — „motorháztető alatt”: a tanuló felülete
@@ -36,21 +37,26 @@ export const roundKeyOf = (...parts: string[]) => createHash("sha256").update(pa
  * nyilvántartott (`delivered`) — a meghiúsult címzett a következő azonos hívással és egy 60 s-os automatikus újrapróbálással pótolódik,
  * a már kézbesített nem kap másodikat. Sosem dob — a hiba a naplóba megy.
  */
-export async function sendLessonResult(input: { lessonId: string; roundKey: string; learner: string; graded: GradedTasks | GradedQuiz }, retry = true): Promise<{ sent: number; duplicate: boolean }> {
+export async function sendLessonResult(input: { lessonId: string; roundKey: string; learner: string; learnerFirst?: string; learnerId?: string; graded: GradedTasks | GradedQuiz }, retry = true): Promise<{ sent: number; duplicate: boolean }> {
   try {
     const [row] = await db.select({ json: lessons.json, htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, input.lessonId));
     const lesson = row ? lessonSchema.safeParse(row.json) : null;
     if (!row || !lesson?.success) return { sent: 0, duplicate: false };
-    await db.insert(lessonResultEmails)
+    const fresh = await db.insert(lessonResultEmails)
       .values({ lessonId: input.lessonId, kind: input.graded.kind, roundKey: input.roundKey, percent: input.graded.summary.percent })
-      .onConflictDoNothing();
+      .onConflictDoNothing().returning({ id: lessonResultEmails.id });
+    // Tanulói profil (S2): a kör első beküldésekor a párosított tanuló tevékenységnaplójába (az újrapróba nem duplikál).
+    if (fresh.length && input.learnerId) {
+      await recordLearnerActivity({ learnerId: input.learnerId, materialId: row.htmlFileId, kind: "result", percent: input.graded.summary.percent,
+        summary: `${lesson.data.title} — ${input.graded.kind === "tasks" ? "Feladatok" : "Kvíz"}` });
+    }
     const [claim] = await db.select({ id: lessonResultEmails.id, delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
       .where(and(eq(lessonResultEmails.lessonId, input.lessonId), eq(lessonResultEmails.kind, input.graded.kind), eq(lessonResultEmails.roundKey, input.roundKey)));
     const recipients = resolveAdminRecipients({ ADMIN_EMAILS: process.env.ADMIN_EMAILS, ADMIN_EMAIL: process.env.ADMIN_EMAIL });
     if (!recipients.length) { logger.warn("[LESSON-RESULT] nincs címzett (ADMIN_EMAILS)"); return { sent: 0, duplicate: false }; }
     const missing = recipients.filter(r => !claim.delivered.includes(r));
     if (!missing.length) return { sent: 0, duplicate: true };
-    const mail = buildResultEmail({ lessonTitle: lesson.data.title, classroom: lesson.data.classroom, learner: input.learner,
+    const mail = buildResultEmail({ lessonTitle: lesson.data.title, classroom: lesson.data.classroom, learner: input.learner, learnerFirst: input.learnerFirst,
       url: row.htmlFileId ? getMaterialPreviewUrl(row.htmlFileId) : "", graded: input.graded });
     const results = await Promise.allSettled(missing.map(to => send(mail.subject, mail.html, to)));
     const ok = missing.filter((_, i) => results[i].status === "fulfilled");
@@ -103,9 +109,12 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
     if (!Object.keys(body.picks).length) return res.status(202).json({ queued: false });
     graded = gradeQuiz(experience.quiz, body.picks);
   }
-  const who = userId ?? `guest:${body.fingerprint ?? req.ip ?? "?"}`;
+  // Tanulói profil (S2): bejelentkezés nélkül a párosított eszköz tanulója (ellenőrzött token) adja a nevet.
+  const paired = !userId && body.learner ? await resolveLearner(body.learner).catch(() => null) : null;
+  const who = userId ?? (paired ? `learner:${paired.id}` : `guest:${body.fingerprint ?? req.ip ?? "?"}`);
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
-  void learnerName(userId).then(learner => sendLessonResult({ lessonId: req.params.lessonId, roundKey: roundKeyOf(who, body.kind, body.roundId), learner, graded }))
+  void (paired ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => sendLessonResult({ lessonId: req.params.lessonId, roundKey: roundKeyOf(who, body.kind, body.roundId), learner,
+    ...(paired ? { learnerFirst: paired.firstName, learnerId: paired.id } : {}), graded }))
     .catch(error => logger.error("[LESSON-RESULT] háttérküldés hiba:", error));
   return res.status(202).json({ queued: true });
   } catch (error) { next(error); }
