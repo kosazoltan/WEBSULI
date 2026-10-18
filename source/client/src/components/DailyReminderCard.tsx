@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { BellRing, Send } from "lucide-react";
+import { BellRing, Mail, Send } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,11 @@ export default function DailyReminderCard() {
       toast({ title: r.skipped ? `Ma nincs küldés: ${r.skipped}` : "Emlékeztetők kiküldve", description: r.skipped ? undefined : `Elküldve: ${r.sent} · hiba: ${r.failed} · ma már korábban kiküldve: ${r.duplicate}` });
     },
     onError: (error: Error) => toast({ title: "Hiba", description: error.message, variant: "destructive" }),
+  });
+  const test = useMutation({
+    mutationFn: async () => apiRequest<{ ok: boolean; studentName: string; title: string }>("POST", "/api/admin/daily-reminders/test"),
+    onSuccess: (r) => toast({ title: "Próbalevél elküldve a címedre", description: `${r.studentName} mai levele: ${r.title}` }),
+    onError: (error: Error) => toast({ title: "A próbalevél nem ment el", description: error.message, variant: "destructive" }),
   });
   const data = preview.data;
 
@@ -61,6 +66,9 @@ export default function DailyReminderCard() {
               </ul>
             ) : <p className="text-sm text-muted-foreground">Nincs nevesített, aktív cím (vagy az évfolyamán nincs anyag).</p>}
             <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => test.mutate()} disabled={test.isPending} data-testid="button-daily-reminder-test">
+                <Mail className="h-4 w-4 mr-1.5" aria-hidden="true" /> {test.isPending ? "Küldés…" : "Próbalevél nekem"}
+              </Button>
               {confirm ? (
                 <>
                   <Button onClick={() => run.mutate()} disabled={run.isPending} data-testid="button-daily-reminder-confirm">

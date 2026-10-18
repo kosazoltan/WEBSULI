@@ -15,13 +15,14 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1366, height: 768 
   test(`tanulónév szerkesztése és a mai emlékeztetők előnézete ${viewport.width}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
-    let patched: unknown = null; let ran = 0;
+    let patched: unknown = null; let ran = 0; let tested = 0;
     await page.route("**/api/**", async route => {
       const req = route.request(); const path = new URL(req.url()).pathname;
       if (path === "/api/auth/user") return route.fulfill({ json: { id: "fixture", isAdmin: true, firstName: "Teszt" } });
       if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test" } });
       if (path === "/api/admin/extra-emails") return route.fulfill({ json: EMAILS });
       if (path === "/api/admin/daily-reminders/preview") return route.fulfill({ json: PREVIEW });
+      if (path === "/api/admin/daily-reminders/test" && req.method() === "POST") { tested++; return route.fulfill({ json: { ok: true, studentName: "Próba Léna Szonja", title: "Törtek" } }); }
       if (path === "/api/admin/daily-reminders/run" && req.method() === "POST") { ran++; return route.fulfill({ json: { day: "2026-10-19", sent: 1, failed: 0, duplicate: 0 } }); }
       if (path === "/api/extra-emails/e2/student" && req.method() === "PATCH") { patched = req.postDataJSON(); return route.fulfill({ json: { ...EMAILS[1], studentName: "Új Név" } }); }
       return route.fulfill({ json: [] });
@@ -39,6 +40,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1366, height: 768 
     await expect(card).toContainText("tanítási nap");
     await expect(page.getByTestId("daily-reminder-preview")).toContainText("Próba Léna Szonja");
     await expect(page.getByTestId("daily-reminder-preview")).toContainText("5. osztály");
+    await page.getByTestId("button-daily-reminder-test").click();
+    await expect.poll(() => tested).toBe(1);
+    await expect(page.getByText("Próbalevél elküldve a címedre").first()).toBeVisible();
     await page.getByTestId("button-daily-reminder-run").click();
     await page.getByTestId("button-daily-reminder-confirm").click();
     await expect.poll(() => ran).toBe(1);

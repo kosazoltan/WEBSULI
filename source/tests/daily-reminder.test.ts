@@ -63,3 +63,24 @@ test("review #292: a napló nem tartalmaz tanulónevet és címet; futásszintű
   assert.match(resend, /if \(opts\.quiet\) logger\.info\('\[RESEND\] Értesítés küldése \(címzett és tárgy a naplóban elrejtve\)'\)/);
   assert.match(read("server/routes.ts"), /res\.status\(result\.error \? 500 : 200\)/);
 });
+
+test("a tanmenet-téma emberi alakja: OH-kód és felesleges írásjelek nélkül", async () => {
+  const { displayTopic } = await import("../shared/daily-reminder");
+  assert.equal(displayTopic("Matematika 6. (OH-MAT06TA): EGÉSZ SZÁMOK — Összetett oszthatósági szabályok"), "Matematika 6.: EGÉSZ SZÁMOK — Összetett oszthatósági szabályok");
+  assert.equal(displayTopic("Biológia 9. (OH-BIO09TB): Sejtek — . Anyagforgalom a sejtmembránon"), "Biológia 9.: Sejtek — Anyagforgalom a sejtmembránon");
+  assert.equal(displayTopic("Történelem 5.: Az ókori Egyiptom világa"), "Történelem 5.: Az ókori Egyiptom világa");
+  assert.equal(displayTopic(null), null);
+  assert.equal(displayTopic("  "), null);
+});
+
+test("review #294: a valódi tanmenet-adat egyik tervcímében sem marad OH-kód", async () => {
+  const { displayTopic } = await import("../shared/daily-reminder");
+  const data = JSON.parse(read("server/data/tanmenet-2020.json")) as { plans: Array<{ title: string }> };
+  const titles = data.plans.map(p => p.title).filter(t => t.includes("OH-"));
+  assert.ok(titles.length > 100);
+  const left = titles.map(t => displayTopic(`${t}: téma`)!).filter(t => /OH-/.test(t));
+  assert.deepEqual(left, []);
+  assert.equal(displayTopic("Etika 1. (OH-ETI01TA ): Én"), "Etika 1.: Én");
+  assert.equal(displayTopic("Földrajz 9-10. I. rész (OH-FOL910TA/I): Térkép"), "Földrajz 9-10. I. rész: Térkép");
+  assert.equal(displayTopic("Földrajz 10. (OH-FOL910TA_II): Gazdaság"), "Földrajz 10.: Gazdaság");
+});
