@@ -6,7 +6,7 @@ Terv: `docs/specs/2026-10-18-nyilvanos-oldal-sebesseg.md`. Munkakönyvtár: `sou
    - a `.glass-card::before` és a `.honeycomb-bg` `animation` sora → `animation: none` (a `@keyframes` törlése, ha másutt nem
      használt — `grep`);
    - a `.glass-card` mindkét definíciójából (alap és mobil media query) a `backdrop-filter` / `-webkit-backdrop-filter` törlése;
-     a háttér alfa: asztali 0,5 → 0,62 és 0,3 → 0,48, mobil 0,6 → 0,74;
+     a háttér alfa: asztali 0,5 → 0,74 és 0,3 → 0,62, mobil 0,6 → 0,74;
    - új szabály: `.material-card-cell { content-visibility: auto; contain-intrinsic-size: auto 168px; }`.
 2. **`client/src/components/UserFileList.tsx`:**
    - a kártya-burkoló `motion.div` → `div className="material-card-cell"`; a `cardVariants`, a `whileHover` és a nyíl
@@ -27,3 +27,9 @@ Terv: `docs/specs/2026-10-18-nyilvanos-oldal-sebesseg.md`. Munkakönyvtár: `sou
    - `tsc`, `check:test`, `eslint`, `npm.cmd test`, `build`;
    - `playwright test tests/public-perf.spec.ts tests/welcome-card.spec.ts tests/curriculum-order.spec.ts tests/websuli.spec.ts`;
    - élesben a deploy után a `measure.mjs`.
+7. **Kiegészítés a mérés után** (az első A/B után maradt költség):
+   - a lájk-gomb (`ui/button` „outline” változat) és a szűrők / mezők `backdrop-blur` osztálya törlődik;
+   - a szivárvány-felirat animációja 2 ismétlés, a „Böngészés” nyíl `animate-bounce`-a 3 ismétlés után megáll (a színek
+     maradnak);
+   - a `lib/light-motion.ts` a kártya-animációval együtt megszűnik, a `tests/home-list-visibility.test.ts` ehhez igazodik
+     (dokumentált spec-változás).

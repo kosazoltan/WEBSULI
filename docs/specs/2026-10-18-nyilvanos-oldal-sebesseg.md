@@ -25,7 +25,7 @@ betöltődési idejét, latenciáját”.
 ## Döntések (a színek és a kinézet megmaradnak)
 1. **`index.css`:** a `honeycomb-shift` animáció kikerül a `.glass-card::before`-ról és a `.honeycomb-bg`-ről; a minta statikus
    marad.
-2. **`.glass-card`:** nincs `backdrop-filter`. A háttér kicsit fedőbb (asztali gradiens 0,5/0,3 → 0,62/0,48; mobil 0,6 → 0,74),
+2. **`.glass-card`:** nincs `backdrop-filter`. A háttér kicsit fedőbb (asztali gradiens 0,5/0,3 → 0,74/0,62; mobil 0,6 → 0,74),
    így a sötét kártya ugyanolyan olvasható.
 3. **`UserFileList`:**
    - a kártyák ikondobozán és jelvényén nincs `backdrop-blur`;
