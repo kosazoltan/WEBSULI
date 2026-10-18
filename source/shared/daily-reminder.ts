@@ -22,6 +22,18 @@ export function pickDailyMaterial<T extends ReminderMaterial>(files: readonly T[
   return ordered.find(f => !recentIds.has(f.id)) ?? ordered[0] ?? null;
 }
 
+/** A tanmenet-címke emberi alakja: a belső OH-kód és a felesleges írásjelek nélkül (docs/specs/2026-10-18-emlekezteto-probalevel.md). */
+export function displayTopic(label: string | null | undefined): string | null {
+  if (!label) return null;
+  const out = label
+    .replace(/\s*\(OH-[A-Z0-9-]+\)/g, "")
+    .replace(/—\s*\.\s*/g, "— ")
+    .replace(/^\s*\.\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return out || null;
+}
+
 export const reminderSubject = (first: string, title: string) => `${first}, a mai tananyagod: ${title}`;
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");

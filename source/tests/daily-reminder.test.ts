@@ -63,3 +63,12 @@ test("review #292: a napló nem tartalmaz tanulónevet és címet; futásszintű
   assert.match(resend, /if \(opts\.quiet\) logger\.info\('\[RESEND\] Értesítés küldése \(címzett és tárgy a naplóban elrejtve\)'\)/);
   assert.match(read("server/routes.ts"), /res\.status\(result\.error \? 500 : 200\)/);
 });
+
+test("a tanmenet-téma emberi alakja: OH-kód és felesleges írásjelek nélkül", async () => {
+  const { displayTopic } = await import("../shared/daily-reminder");
+  assert.equal(displayTopic("Matematika 6. (OH-MAT06TA): EGÉSZ SZÁMOK — Összetett oszthatósági szabályok"), "Matematika 6.: EGÉSZ SZÁMOK — Összetett oszthatósági szabályok");
+  assert.equal(displayTopic("Biológia 9. (OH-BIO09TB): Sejtek — . Anyagforgalom a sejtmembránon"), "Biológia 9.: Sejtek — Anyagforgalom a sejtmembránon");
+  assert.equal(displayTopic("Történelem 5.: Az ókori Egyiptom világa"), "Történelem 5.: Az ókori Egyiptom világa");
+  assert.equal(displayTopic(null), null);
+  assert.equal(displayTopic("  "), null);
+});

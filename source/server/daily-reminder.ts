@@ -7,7 +7,7 @@ import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { getMaterialPreviewUrl } from "./utils/config";
 import { isSchoolDay, schoolYearPosition } from "../shared/school-calendar";
-import { firstNameOf, pickDailyMaterial, reminderHtml, reminderSubject } from "../shared/daily-reminder";
+import { displayTopic, firstNameOf, pickDailyMaterial, reminderHtml, reminderSubject } from "../shared/daily-reminder";
 import { motivationFor } from "../shared/motivation";
 import { logger } from "./lib/logger";
 
@@ -70,7 +70,7 @@ export async function planDailyReminders(now: Date): Promise<PlannedReminder[]> 
     const recent = new Set(recentRows.filter(x => x.email === r.email).map(x => x.materialId));
     const pick = pickDailyMaterial(files, grade, today, recent);
     if (!pick) continue;
-    out.push({ email: r.email, studentName: r.studentName!.trim(), grade, materialId: pick.id, title: pick.title, topic: pick.curriculum?.label ?? null, url: getMaterialPreviewUrl(pick.id) });
+    out.push({ email: r.email, studentName: r.studentName!.trim(), grade, materialId: pick.id, title: pick.title, topic: displayTopic(pick.curriculum?.label), url: getMaterialPreviewUrl(pick.id) });
   }
   return out;
 }
@@ -126,6 +126,24 @@ export async function runDailyReminders(now: Date, opts: { pauseMs?: number } = 
     logger.error("[DAILY-REMINDER] a futás nem sikerült:", result.error);
   }
   return result;
+}
+
+/**
+ * Próbalevél az adminnak (docs/specs/2026-10-18-emlekezteto-probalevel.md): a mai terv első tétele a megadott címre, „[Próba]”
+ * előtaggal, bármely napon. A tanuló nem kap levelet, az ismétlésvédelmi tábla nem változik.
+ */
+export async function sendTestReminder(to: string, now: Date): Promise<{ studentName: string; title: string }> {
+  const { date } = budapestDay(now);
+  const [first] = await planDailyReminders(now);
+  let sample = first ? { studentName: first.studentName, title: first.title, topic: first.topic, url: first.url } : null;
+  if (!sample) {
+    const newest = [...await storage.getAllHtmlFiles()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    if (!newest) throw new Error("Nincs tananyag a próbalevélhez.");
+    sample = { studentName: "Próba Tanuló", title: newest.title, topic: null, url: getMaterialPreviewUrl(newest.id) };
+  }
+  const name = firstNameOf(sample.studentName);
+  await send(`[Próba] ${reminderSubject(name, sample.title)}`, reminderHtml({ first: name, title: sample.title, topic: sample.topic, url: sample.url, motivation: motivationFor(name, date) }), to);
+  return { studentName: sample.studentName, title: sample.title };
 }
 
 /** Minden tanítási nap 6:45-kor, magyar idő szerint; csak éles környezetben. Hiba esetén 7:15-kor egy pótfutás. */

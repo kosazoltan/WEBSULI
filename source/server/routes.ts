@@ -1864,6 +1864,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Próbalevél az adminnak (docs/specs/2026-10-18-emlekezteto-probalevel.md): a bejelentkezett admin saját címére.
+  app.post("/api/admin/daily-reminders/test", isAuthenticatedAdmin, async (req: Request, res) => {
+    const to = (req.user as { email?: string | null } | undefined)?.email;
+    if (!to) return res.status(400).json({ message: "A fiókodhoz nincs e-mail-cím." });
+    try {
+      const { sendTestReminder } = await import("./daily-reminder");
+      res.json({ ok: true, ...(await sendTestReminder(to, new Date())) });
+    } catch (error: unknown) {
+      res.status(500).json({ message: error instanceof Error ? error.message : "A próbalevél nem ment el." });
+    }
+  });
+
   app.post("/api/admin/daily-reminders/run", isAuthenticatedAdmin, async (_req: Request, res) => {
     const { runDailyReminders } = await import("./daily-reminder");
     const result = await runDailyReminders(new Date());

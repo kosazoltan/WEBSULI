@@ -10,7 +10,7 @@ assert.equal(url.hostname, "127.0.0.1");
 assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 const { db, dbPool } = await import("../server/db");
-const { runDailyReminders, planDailyReminders, setReminderSender, setReminderMarkSentForTest } = await import("../server/daily-reminder");
+const { runDailyReminders, planDailyReminders, setReminderSender, setReminderMarkSentForTest, sendTestReminder } = await import("../server/daily-reminder");
 
 const sent: Array<{ subject: string; html: string; to: string }> = [];
 let failOnce = new Set<string>();
@@ -107,4 +107,15 @@ test("review #292: a sikertelen küldés anyaga nem számít ismétlésnek — m
   await runDailyReminders(day2, { pauseMs: 0 });
   const anna = sent.find(m => m.to === "tanulo-ketto@example.test")!;
   assert.ok(anna.html.includes(`/preview/${failedRow.materialId}`), "a meg nem kapott anyag nem marad ki");
+});
+
+test("próbalevél: egy levél a megadott címre „[Próba]” tárggyal; a tanulók nem kapnak, a tábla nem változik", async () => {
+  sent.length = 0;
+  const before = (await db.select().from(dailyReminderEmails)).length;
+  const r = await sendTestReminder("admin@example.test", new Date("2026-10-24T08:00:00Z")); // szombat: a próba bármely napon megy
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, "admin@example.test");
+  assert.match(sent[0].subject, /^\[Próba\] /);
+  assert.ok(r.title);
+  assert.equal((await db.select().from(dailyReminderEmails)).length, before);
 });
