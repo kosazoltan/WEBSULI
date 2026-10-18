@@ -43,7 +43,7 @@ for (const t of THEMES) {
       await expect(page.getByTestId("ws-bandhead")).toContainText(t.name);
       await expect(page.getByTestId("ws-bandhead")).toContainText(t.motto);
       // Tulajdonosi kérés 2026-10-18 (docs/specs/2026-10-18-pontos-evfolyam.md): a pontos évfolyam, nem a sáv tartománya.
-      await expect(page.locator(".ws-grade")).toHaveText(t.classroom === 0 ? "Programozási alapismeretek" : `${t.classroom}. osztály`);
+      await expect(page.locator(".ws-grade")).toHaveText(`${t.classroom}. osztály`);
       await expect(page.getByTestId("ws-bandhead")).not.toContainText(/\d+\s*[–-]\s*\d+\./);
       // A törzsszöveg a téma minimuma (a tananyag-blokk számított mérete).
       const bodyPx = await page.locator(".lesson-block").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
