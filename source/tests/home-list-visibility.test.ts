@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { LIGHT_MOTION_QUERIES, prefersLightMotion } from "../client/src/lib/light-motion";
 
 /*
  * Spec 2026-09-20 — a főoldal tananyaglistája sosem tűnhet el.
@@ -20,22 +19,16 @@ const componentPath = path.resolve("client/src/components/UserFileList.tsx");
 const component = fs.readFileSync(componentPath, "utf8");
 const css = fs.readFileSync(path.resolve("client/src/index.css"), "utf8");
 
-test("a könnyített mozgás döntése tiszta függvény, és minden feltételre külön is igaz", () => {
-  assert.deepEqual([...LIGHT_MOTION_QUERIES], ["(hover: none)", "(pointer: coarse)", "(max-width: 1023px)", "(prefers-reduced-motion: reduce)"]);
-  for (const query of LIGHT_MOTION_QUERIES) {
-    assert.equal(prefersLightMotion((q) => q === query), true, `${query} önmagában is könnyített mód`);
-  }
-  assert.equal(prefersLightMotion(() => false), false, "asztali gépen teljes mozgás");
-  assert.equal(prefersLightMotion(() => true), true);
-});
-
-test("a döntés az ELSŐ renderelésben születik — nem billenhet át utólag, félbehagyott animációt hagyva", () => {
-  assert.match(component, /useState\(prefersLightMotionNow\)/, "lusta kezdőérték, nem effekt utáni setState");
-  assert.doesNotMatch(component, /useState\(false\);[\s\S]{0,400}?matchMedia\("\(hover: none\)"\)/, "nincs újra a régi, effekt-alapú felállás");
+// Spec 2026-10-18-nyilvanos-oldal-sebesseg (dokumentált spec-változás): a kártyákon nincs JS-animáció (framer-motion), így a
+// „könnyített mozgás” döntése (lib/light-motion) és vele a félbehagyott animációs állapot lehetősége is megszűnt.
+test("a listán nincs JS-animáció: sem framer-motion, sem utólag billenő mozgás-döntés", () => {
+  assert.doesNotMatch(component, /from "framer-motion"/);
+  assert.doesNotMatch(component, /motion\.div/);
+  assert.doesNotMatch(component, /lightMotion/);
 });
 
 test("a lista láthatósága nem függ animációtól: nincs rejtett kezdőállapot a konténeren", () => {
-  const container = /<motion\.div\s+([\s\S]*?)>\s*\{filteredFiles\.map/.exec(component);
+  const container = /<div\s+([\s\S]*?)>\s*\{filteredFiles\.map/.exec(component);
   assert.ok(container, "megvan a lista konténere");
   const props = container![1];
   assert.match(props, /data-testid="list-files"/);

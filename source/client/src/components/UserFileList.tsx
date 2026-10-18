@@ -7,7 +7,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { curriculumSort, isCurrent, todayPosition, type CurriculumHint } from "@/lib/curriculum-order";
 import { getFileIcon } from "@/lib/iconUtils";
-import { LIGHT_MOTION_QUERIES, prefersLightMotionNow } from "@/lib/light-motion";
 import LikeButton from "@/components/LikeButton";
 import HeroSection from "@/components/HeroSection";
 import HomePracticeGames from "@/components/HomePracticeGames";
@@ -18,7 +17,6 @@ import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
-import { motion } from "framer-motion";
 
 /** A /api/materials/likes/batch szerveroldali korlátja (server/lib/public-input.ts MAX_MATERIAL_ID_BATCH). */
 export const LIKES_BATCH_LIMIT = 100;
@@ -48,26 +46,9 @@ interface UserFileListProps {
 }
 
 /**
- * Framer Motion animációk — CSAK interakció (hover/tap).
- *
- * Mérve 2026-09-20 (tulajdonosi képernyőkép + reprodukció): a lista BEÚSZÁSA korábban
- * `initial="hidden"` → `animate="visible"` volt, ami azonnal `opacity: 0`-t írt a DOM-ba, és két
- * úton is ott ragadt: (a) mobilon a `lightMotion` az első renderelés UTÁN billent át, amivel eltűnt
- * az animációs cél; (b) rejtett fülön a rAF szünetel, így az animáció el sem indult. A beúszás
- * ezért CSS-be került (`.list-enter`, fill-mode NÉLKÜL): a nyugalmi állapot LÁTHATÓ, az animáció
- * pusztán díszítés — ha el sem indul, a tananyagok akkor is látszanak.
+ * Spec 2026-09-20: a lista beúszása CSS (`.list-enter`, fill-mode nélkül) — a nyugalmi állapot LÁTHATÓ.
+ * Spec 2026-10-18-nyilvanos-oldal-sebesseg: kártyánként nincs JS-animáció (framer-motion); a hover-emelés CSS.
  */
-const cardVariants = {
-  hover: {
-    scale: 1.03,
-    y: -5,
-    transition: {
-      type: "spring",
-      stiffness: 300,
-    },
-  },
-};
-
 function UserFileList({ files, isLoading, isError = false, isRetrying = false, onRetry, onRefresh, onViewFile, onToggleView }: UserFileListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   // Tulajdonosi jelzés 2026-10-18 (docs/specs/2026-10-18-tanulo-evfolyam-szuro.md): a tanuló évfolyamára szűrve nyílik —
@@ -84,42 +65,10 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
     setSelectedClassroom(learnerGrade != null && files.some((f) => (f.classroom ?? 1) === learnerGrade) ? learnerGrade : null);
   }, [learnerGrade, files]);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
-  // A döntés az ELSŐ renderelésben dől el (lásd lib/light-motion.ts): utólagos átbillenés nem
-  // hagyhat félbehagyott animációs értéket a DOM-ban.
-  const [lightMotion, setLightMotion] = useState(prefersLightMotionNow);
 
   // Load fingerprint once on mount
   useEffect(() => {
     getFingerprint().then(setFingerprint).catch(() => setFingerprint("anonymous"));
-  }, []);
-
-  // Mobilon és reduced-motion esetén könnyített animáció (kevesebb scroll lag).
-  useEffect(() => {
-    const mediaQueries = LIGHT_MOTION_QUERIES.map((query) => window.matchMedia(query));
-
-    const updateMotionMode = () => {
-      setLightMotion(mediaQueries.some((query) => query.matches));
-    };
-
-    updateMotionMode();
-
-    for (const query of mediaQueries) {
-      if (typeof query.addEventListener === "function") {
-        query.addEventListener("change", updateMotionMode);
-      } else {
-        query.addListener(updateMotionMode);
-      }
-    }
-
-    return () => {
-      for (const query of mediaQueries) {
-        if (typeof query.removeEventListener === "function") {
-          query.removeEventListener("change", updateMotionMode);
-        } else {
-          query.removeListener(updateMotionMode);
-        }
-      }
-    };
   }, []);
 
   // Filter by search query AND selected classroom
@@ -260,7 +209,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               className={`h-7 px-3 text-xs font-semibold ${
                 selectedClassroom === null
                   ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-md"
-                  : "bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-md"
+                  : "bg-white/20 hover:bg-white/30 text-white border-white/40"
               }`}
             >
               Mind
@@ -270,10 +219,10 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               <Badge
                 key={classroom}
                 variant={selectedClassroom === classroom ? "default" : "outline"}
-                className={`cursor-pointer text-xs py-0.5 px-2 font-semibold backdrop-blur-sm ${
+                className={`cursor-pointer text-xs py-0.5 px-2 font-semibold ${
                   selectedClassroom === classroom
                     ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-md"
-                    : "bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-md"
+                    : "bg-white/20 hover:bg-white/30 text-white border-white/40"
                 } transition-all duration-200`}
                 onClick={() => setSelectedClassroom(classroom)}
                 // a11y (2026-09-02): kattintható jelvény → gomb-szerep és toggle-állapot gép által olvasható
@@ -296,7 +245,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               placeholder="Keresés…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 h-8 text-xs bg-white/20 backdrop-blur-md border-white/40 text-white placeholder:text-white/60 focus:bg-white/30 focus:border-white/60 focus-visible:ring-white/50"
+              className="pl-8 h-8 text-xs bg-white/20 border-white/40 text-white placeholder:text-white/60 focus:bg-white/30 focus:border-white/60 focus-visible:ring-white/50"
               data-testid="input-search"
             />
           </div>
@@ -326,7 +275,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               <BookOpen className="w-4 h-4 text-orange-300 shrink-0" />
               Tananyagok
             </h2>
-            <motion.div
+            <div
               className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 auto-rows-fr list-enter"
               data-testid="list-files"
             >
@@ -365,11 +314,9 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                     };
 
               return (
-                <motion.div
-                  key={file.id}
-                  variants={lightMotion ? undefined : cardVariants}
-                  whileHover={lightMotion ? undefined : "hover"}
-                >
+                // Spec 2026-10-18-nyilvanos-oldal-sebesseg: sima elem (nem framer-motion elem) — a hover-emelést a .glass-card CSS adja;
+                // a képernyőn kívüli kártya nem renderelődik (content-visibility).
+                <div key={file.id} className="material-card-cell">
                   <Card
                     className={`group cursor-pointer glass-card h-full ${themeClasses}`}
                     onClick={() => onViewFile(file)}
@@ -378,7 +325,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                     <CardContent className="p-2.5 flex flex-col h-full">
                       {/* Header */}
                       <div className="flex justify-between items-start mb-1.5">
-                        <div className={`p-1.5 rounded-lg bg-gradient-to-br ${iconBg} backdrop-blur-md border ${iconBorder} shadow-md transition-all group-hover:scale-110 relative z-10`}>
+                        <div className={`p-1.5 rounded-lg bg-gradient-to-br ${iconBg} border ${iconBorder} shadow-md transition-all group-hover:scale-110 relative z-10`}>
                           <Icon className="w-4 h-4 text-white drop-shadow-lg" />
                         </div>
                         <Badge
@@ -414,20 +361,18 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                           initialLikeStatus={batchLikesData?.[file.id]}
                           suppressCheck={batchLikesLoading}
                         />
-                        <motion.div
-                          className={`w-6 h-6 rounded-full bg-gradient-to-r ${badgeGradient} flex items-center justify-center transition-all`}
-                          whileHover={lightMotion ? undefined : { scale: 1.15, rotate: 5 }}
-                          whileTap={lightMotion ? undefined : { scale: 0.95 }}
+                        <div
+                          className={`w-6 h-6 rounded-full bg-gradient-to-r ${badgeGradient} flex items-center justify-center transition-transform duration-200 group-hover:scale-110`}
                         >
                           <ArrowRight className="w-3 h-3 text-white" />
-                        </motion.div>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
-                </motion.div>
+                </div>
               );
             })}
-          </motion.div>
+          </div>
           <HomePracticeGames />
           </>
         ) : (

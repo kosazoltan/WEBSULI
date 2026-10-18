@@ -90,7 +90,7 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
             placeholder="Keresztneved"
             aria-label="Keresztneved"
             autoComplete="given-name"
-            className="h-11 flex-1 min-w-[10rem] bg-white/20 backdrop-blur-md border-white/40 text-white placeholder:text-white/70"
+            className="h-11 flex-1 min-w-[10rem] bg-white/20 border-white/40 text-white placeholder:text-white/70"
             data-testid="welcome-name"
           />
           <select
@@ -98,7 +98,7 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
             value={draftGrade || (grade != null ? String(grade) : "")}
             onChange={(e) => setDraftGrade(e.target.value)}
             aria-label="Évfolyamod"
-            className="h-11 rounded-md bg-white/20 backdrop-blur-md border border-white/40 text-white px-2 text-sm [&>option]:text-slate-900"
+            className="h-11 rounded-md bg-white/20 border border-white/40 text-white px-2 text-sm [&>option]:text-slate-900"
             data-testid="welcome-grade"
           >
             {grade == null && <option value="">Évfolyam (nem kötelező)</option>}

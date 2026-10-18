@@ -121,7 +121,7 @@ function HeroSection({
               data-testid="button-hero-browse"
             >
               <span>Böngészés</span>
-              <ChevronDown className="w-4 h-4 animate-bounce" />
+              <ChevronDown className="w-4 h-4 animate-bounce [animation-iteration-count:3]" />
             </Button>
             <div className="hidden sm:block">
               {showEmailSubscribe && <EmailSubscribeDialog />}

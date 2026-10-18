@@ -19,7 +19,7 @@ const buttonVariants = cva(
         destructive:
           "bg-gradient-to-r from-red-500 to-pink-600 text-white shadow-lg shadow-red-500/25 hover:shadow-red-500/40 hover:-translate-y-0.5 border border-red-400/20",
         outline:
-          "border border-orange-300 bg-white/80 hover:bg-orange-50 text-orange-700 hover:text-orange-800 shadow-sm backdrop-blur-sm dark:border-orange-700 dark:bg-gray-900/50 dark:text-orange-300 dark:hover:bg-orange-950/30 dark:hover:text-orange-200",
+          "border border-orange-300 bg-white/80 hover:bg-orange-50 text-orange-700 hover:text-orange-800 shadow-sm dark:border-orange-700 dark:bg-gray-900/50 dark:text-orange-300 dark:hover:bg-orange-950/30 dark:hover:text-orange-200",
         secondary:
           "bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:-translate-y-0.5 border border-amber-400/20",
         ghost: "hover:bg-orange-500/10 hover:text-orange-600 text-gray-600 dark:text-gray-300 dark:hover:text-orange-400",
