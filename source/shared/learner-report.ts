@@ -25,11 +25,16 @@ export function isInactive(lastActive: string | null, today: string, isSchoolDay
   return lastActive === null || lastActive < school[2];
 }
 
-/** Egy inaktivitási időszakra egy riasztás: újra csak egy közbeni tevékenység után. */
-export function shouldAlert(lastActiveAt: Date | null, alertedAt: Date | null, inactive: boolean): boolean {
-  if (!inactive) return false;
-  if (!alertedAt) return true;
-  return lastActiveAt !== null && lastActiveAt > alertedAt;
+/** Az inaktivitási időszak kulcsa: az utolsó tevékenység ideje (új tevékenység = új időszak), vagy 'never'. */
+export const alertPeriodKey = (lastActiveAt: Date | null) => (lastActiveAt ? lastActiveAt.toISOString() : "never");
+
+/**
+ * Review #304: időszakonként címzettenként egy riasztás — a már értesített admin nem kap újra, a kimaradt a következő futáskor
+ * pótlódik; új időszakban (közbeni tevékenység után) mindenki újra értesül.
+ */
+export function pendingAlertRecipients(recipients: readonly string[], periodKey: string, stored: { key: string | null; to: readonly string[] }): string[] {
+  const done = new Set(stored.key === periodKey ? stored.to : []);
+  return recipients.filter((r) => !done.has(r));
 }
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
