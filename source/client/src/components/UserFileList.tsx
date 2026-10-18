@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, memo } from "react";
+import { useState, useMemo, useEffect, useRef, memo } from "react";
 import { Search, FileCode, ShieldCheck, BookOpen, ArrowRight, Gamepad2, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import LikeButton from "@/components/LikeButton";
 import HeroSection from "@/components/HeroSection";
 import HomePracticeGames from "@/components/HomePracticeGames";
 import WelcomeCard from "@/components/WelcomeCard";
+import { useClassroomGrade } from "@/lib/classroomStore";
 import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -68,7 +69,18 @@ const cardVariants = {
 
 function UserFileList({ files, isLoading, isError = false, isRetrying = false, onRetry, onRefresh, onViewFile, onToggleView }: UserFileListProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedClassroom, setSelectedClassroom] = useState<number | null>(null);
+  // Tulajdonosi jelzés 2026-10-18 (docs/specs/2026-10-18-tanulo-evfolyam-szuro.md): a tanuló évfolyamára szűrve nyílik —
+  // különben a „Mind” nézet más évfolyamok mai anyagát tenné elé (egy ötödikesnek 4. osztályosat).
+  const { grade: learnerGrade } = useClassroomGrade();
+  const hasGrade = (g: number | null) => g != null && files.some((f) => (f.classroom ?? 1) === g);
+  const [selectedClassroom, setSelectedClassroom] = useState<number | null>(() => (hasGrade(learnerGrade) ? learnerGrade : null));
+  // Csak az évfolyam változására (és az első betöltésre) vált — a lista frissítése nem írja felül a tanuló „Mind” választását.
+  const appliedGrade = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (appliedGrade.current === learnerGrade || files.length === 0) return;
+    appliedGrade.current = learnerGrade;
+    if (learnerGrade != null && files.some((f) => (f.classroom ?? 1) === learnerGrade)) setSelectedClassroom(learnerGrade);
+  }, [learnerGrade, files]);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   // A döntés az ELSŐ renderelésben dől el (lásd lib/light-motion.ts): utólagos átbillenés nem
   // hagyhat félbehagyott animációs értéket a DOM-ban.
