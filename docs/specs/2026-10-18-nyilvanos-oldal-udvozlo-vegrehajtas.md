@@ -27,7 +27,7 @@ Terv: `docs/specs/2026-10-18-nyilvanos-oldal-udvozlo.md`. Munkakönyvtár: `sour
 - **Állapotok:**
   - **`ask`:**
     - `<form data-testid="welcome-ask">` név-input (`data-testid="welcome-name"`, `maxLength=40`, `aria-label="Keresztneved"`);
-    - évfolyam-select (`welcome-grade`; „Nem mondom meg”, 1–12, 0 = programozás);
+    - évfolyam-select (`welcome-grade`; „Nem mondom meg”, 1–12 — a `classroomStore` csak 1–12-t tárol);
     - „Mehet” (`welcome-save`) és „Most nem” (`welcome-dismiss`) gomb;
     - a „Most nem” a `sessionStorage` `websuli.welcomeDismissed` kulcsát írja.
   - **`greet`:**

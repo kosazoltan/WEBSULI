@@ -59,7 +59,8 @@
 - A név szóköz / üres → nem menthető; a 40 karakter feletti rész levágódik; a HTML-t a React escape-eli.
 - Ha a `localStorage` nem érhető el (privát mód), a kérdés csak az adott oldalbetöltésre él, és nincs hiba.
 - Ha a tanuló évfolyamán nincs anyag, a legújabbak az összes évfolyamból jönnek.
-- A program-alapismeretek (0. évfolyam) anyagai is ajánlhatók, ha a tanuló azt választja.
+- Évfolyamként 1–12 választható (a játékokkal közös `classroomStore` csak ezt tárolja); évfolyam nélkül minden évfolyam
+  legújabb anyaga ajánlható, a programozási alapismeretek is.
 
 ## Elfogadás (EARS)
 - HA a látogatónak nincs neve, AKKOR a lista fölött megjelenik a névkérő kártya; a lista végig használható.
