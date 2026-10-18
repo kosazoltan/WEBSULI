@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,18 +31,15 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
   const [draftName, setDraftName] = useState("");
   const [draftGrade, setDraftGrade] = useState<string>("");
   const [overrideTick, setOverrideTick] = useState(0);
-  // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md): a párosított eszközön a profil neve és évfolyama az irányadó.
+  // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md): a profil évfolyamát és nevét a LearnerProfileSync szinkronizálja
+  // (alkalmazásszinten); itt csak a megjelenített név elsőbbsége.
   const profile = useLearnerProfile();
-  useEffect(() => {
-    if (!profile) return;
-    if (storedName !== profile.firstName) setStoredName(saveLearnerName(profile.firstName));
-    if (grade !== profile.grade && profile.grade >= 1 && profile.grade <= 12) setGrade(profile.grade as Parameters<typeof setGrade>[0]);
-  }, [profile?.firstName, profile?.grade]);
 
   const account = user ? { id: user.id, firstName: user.firstName } : null;
   // review #289: bejelentkezve a kézi „Módosítás” fiókhoz kötött felülírás — fiókváltáskor nem öröklődik
   const override = useMemo(() => (account ? loadNameOverride(account.id) : null), [account?.id, overrideTick]);
-  const name = resolveLearnerName(account, storedName, override);
+  // Review #301: a párosított eszközön a profil neve az irányadó (bejelentkezett fiók mellett is).
+  const name = profile?.firstName ?? resolveLearnerName(account, storedName, override);
   const today = new Date();
   const picks = useMemo(() => newestMaterials(files, grade, new Date()), [files, grade]);
 

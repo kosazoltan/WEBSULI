@@ -1018,7 +1018,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const learnerMeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false });
   app.get('/api/learner/me', learnerMeLimiter, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    const learner = await resolveLearner(req.get('x-learner-token')).catch(() => null);
+    let learner: ResolvedLearner | null;
+    try {
+      learner = await resolveLearner(req.get('x-learner-token'));
+    } catch (error: unknown) {
+      // Review #301: átmeneti adatbázishiba nem 401 — a kliens csak érvénytelen / visszavont tokennél felejti el a párosítást.
+      logger.warn('[LEARNERS] profil-lekérdezési hiba', { error: error instanceof Error ? error.message : String(error) });
+      return res.status(503).json({ message: "A tanulói profil átmenetileg nem érhető el." });
+    }
     if (!learner) return res.status(401).json({ message: "A tanulói link érvénytelen vagy visszavonták." });
     res.json({ firstName: learner.firstName, grade: learner.grade });
   });

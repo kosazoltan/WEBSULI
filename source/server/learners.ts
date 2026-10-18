@@ -42,21 +42,35 @@ export function planLearnerSync(rows: readonly EmailRow[], existing: readonly Le
   return plan;
 }
 
+// Review #301: a szinkronok sorban futnak — folyamaton belül egy lánc, folyamatok (példányok) között tranzakciós tanácsadó zár; így egy
+// régebbi pillanatkép nem írhatja vissza egy frissebb futás eredményét.
+const SYNC_LOCK_KEY = 7_204_318;
+let syncChain: Promise<void> = Promise.resolve();
+
 /** A tanulók és a címek kapcsolatának szinkronja; minden e-mail-cím módosítás után és induláskor. Sosem dob. */
-export async function syncLearners(): Promise<void> {
+export function syncLearners(): Promise<void> {
+  const run = syncChain.then(syncOnce, syncOnce);
+  syncChain = run;
+  return run;
+}
+
+async function syncOnce(): Promise<void> {
   try {
-    const rows = await db.select({ id: extraEmailAddresses.id, studentName: extraEmailAddresses.studentName, classrooms: extraEmailAddresses.classrooms, isActive: extraEmailAddresses.isActive, updatedAt: extraEmailAddresses.updatedAt, learnerId: extraEmailAddresses.learnerId }).from(extraEmailAddresses);
-    const existing = await db.select({ id: learners.id, name: learners.name, grade: learners.grade }).from(learners);
-    const plan = planLearnerSync(rows, existing);
-    for (const c of plan.create) await db.insert(learners).values(c).onConflictDoNothing();
-    for (const g of plan.grade) await db.update(learners).set({ grade: g.grade, updatedAt: new Date() }).where(eq(learners.id, g.id));
-    const all = await db.select({ id: learners.id, name: learners.name }).from(learners);
-    const idByKey = new Map(all.map((l) => [keyOf(l.name), l.id]));
-    for (const l of plan.link) {
-      const learnerId = l.name ? idByKey.get(keyOf(l.name)) ?? null : null;
-      const row = rows.find((r) => r.id === l.emailId);
-      if (row && row.learnerId !== learnerId) await db.update(extraEmailAddresses).set({ learnerId }).where(eq(extraEmailAddresses.id, l.emailId));
-    }
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${SYNC_LOCK_KEY})`);
+      const rows = await tx.select({ id: extraEmailAddresses.id, studentName: extraEmailAddresses.studentName, classrooms: extraEmailAddresses.classrooms, isActive: extraEmailAddresses.isActive, updatedAt: extraEmailAddresses.updatedAt, learnerId: extraEmailAddresses.learnerId }).from(extraEmailAddresses);
+      const existing = await tx.select({ id: learners.id, name: learners.name, grade: learners.grade }).from(learners);
+      const plan = planLearnerSync(rows, existing);
+      for (const c of plan.create) await tx.insert(learners).values(c).onConflictDoNothing();
+      for (const g of plan.grade) await tx.update(learners).set({ grade: g.grade, updatedAt: new Date() }).where(eq(learners.id, g.id));
+      const all = await tx.select({ id: learners.id, name: learners.name }).from(learners);
+      const idByKey = new Map(all.map((l) => [keyOf(l.name), l.id]));
+      for (const l of plan.link) {
+        const learnerId = l.name ? idByKey.get(keyOf(l.name)) ?? null : null;
+        const row = rows.find((r) => r.id === l.emailId);
+        if (row && row.learnerId !== learnerId) await tx.update(extraEmailAddresses).set({ learnerId }).where(eq(extraEmailAddresses.id, l.emailId));
+      }
+    });
   } catch (error) {
     logger.warn("[LEARNERS] szinkron hiba", { error: error instanceof Error ? error.message : String(error) });
   }

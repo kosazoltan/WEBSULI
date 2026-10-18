@@ -63,3 +63,22 @@ test("napi emlékeztető: személyes link ?t= paraméterrel; token nélkül vál
   assert.equal(personalUrl("https://websuli.vip/preview/abc", null), "https://websuli.vip/preview/abc");
   assert.deepEqual(takeLearnerTokenFromUrl(personalUrl("https://websuli.vip/preview/abc", token)).token, token);
 });
+
+test("review #301: tárhelyhibánál is eltűnik a token a címsorból", async () => {
+  const { captureLearnerTokenFromUrl } = await import("../client/src/lib/learnerProfile");
+  const token = signLearnerToken(ID, 1, SECRET);
+  const replaced: string[] = [];
+  const g = globalThis as unknown as { window?: unknown };
+  const prev = g.window;
+  g.window = {
+    location: { href: `https://websuli.vip/preview/abc?t=${token}&x=1` },
+    localStorage: { setItem: () => { throw new Error("QuotaExceededError"); } },
+    history: { state: null, replaceState: (_s: unknown, _t: string, url: string) => { replaced.push(url); } },
+  };
+  try {
+    captureLearnerTokenFromUrl();
+  } finally {
+    g.window = prev;
+  }
+  assert.deepEqual(replaced, ["/preview/abc?x=1"]);
+});

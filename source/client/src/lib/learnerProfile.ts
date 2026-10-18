@@ -35,13 +35,23 @@ export function clearLearnerToken(): void {
 
 /** Induláskor: a link tokenje eltárolódik, és a címsorból (előzményből) eltűnik. */
 export function captureLearnerTokenFromUrl(): void {
+  let taken: ReturnType<typeof takeLearnerTokenFromUrl>;
   try {
-    const { token, cleanUrl } = takeLearnerTokenFromUrl(window.location.href);
-    if (cleanUrl === null) return;
-    if (token) window.localStorage.setItem(LEARNER_TOKEN_KEY, token);
-    window.history.replaceState(window.history.state, "", cleanUrl);
+    taken = takeLearnerTokenFromUrl(window.location.href);
   } catch {
-    // privát mód: a párosítás erre a látogatásra sem marad meg — a tanuló névtelen
+    return;
+  }
+  if (taken.cleanUrl === null) return;
+  try {
+    if (taken.token) window.localStorage.setItem(LEARNER_TOKEN_KEY, taken.token);
+  } catch {
+    // privát mód / tele tárhely: a párosítás nem marad meg — a tanuló névtelen
+  }
+  // Review #301: a címsor tisztítása a tárolástól függetlenül lefut — a token ne maradjon a címsorban és az előzményekben.
+  try {
+    window.history.replaceState(window.history.state, "", taken.cleanUrl);
+  } catch {
+    // nagyon régi böngésző: nincs mit tenni
   }
 }
 
