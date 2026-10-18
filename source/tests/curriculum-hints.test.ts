@@ -73,6 +73,12 @@ test("nyelvi tanmenet (iskolai, forrással): az angol és a francia anyag a nyel
   const plans = curriculumData().plans;
   assert.ok(plans.some(p => p.subject === "angol" && p.grade === 4 && /^https?:\/\//.test(p.source)), "forrás-URL-lel");
   assert.ok(!JSON.stringify(plans.filter(p => p.subject === "angol" || p.subject === "francia")).includes("UNVERIFIED"));
+  // Review #284: egy csoportváltozat — a DE Kossuth 5., 7., 8. évfolyamos terve a „k” csoport 108 órája, „csak m csoport” téma nélkül.
+  for (const g of [5, 7, 8]) {
+    const p = plans.find(x => x.subject === "angol" && x.grade === g)!;
+    assert.equal(p.lessons.length, 108, `angol ${g}. összóraszám`);
+    assert.ok(!JSON.stringify(p.lessons).includes("m csoport"), `angol ${g}.: csak egy csoport témái`);
+  }
   const some = curriculumOf({ title: "Angol 6. osztály – a / an / some / any", classroom: 6 });
   assert.ok(some && /some, any/i.test(some.label), JSON.stringify(some));
   const fr = curriculumOf({ title: "🇫🇷 8. Osztályos Francia Témazáró", classroom: 8, hints: ["L'école", "Iskola és tantárgyak", "Francia nyelvtanulás"] });

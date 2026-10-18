@@ -18,6 +18,9 @@ CHOICE = {  # (nyelv, évfolyam) -> a forrás URL-jének egyedi részlete
 }
 
 
+GROUP_ONLY = re.compile(r"\(\s*csak\s+\d+\.\s*m\s+csoport\s*\)", re.I)
+
+
 def span(unit):
     if unit.get("hours"):
         return int(unit["hours"])
@@ -35,6 +38,9 @@ def main(src, dst):
             continue
         lessons = []
         for u in sorted(entry["units"], key=lambda x: x.get("order") or 0):
+            # Review #284: egy csoportváltozat (a DE Kossuth tantervében a 108 órás „k” csoport) — a csak „m” csoportos téma kimarad.
+            if GROUP_ONLY.search(u.get("title") or ""):
+                continue
             topic = re.sub(r"^\s*UNVERIFIED:\s*", "", (u.get("title") or "")).strip()
             words = ", ".join(u.get("keywords") or [])
             for _ in range(max(1, span(u))):
