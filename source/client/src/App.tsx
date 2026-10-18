@@ -9,6 +9,7 @@ import Login from "@/pages/Login";
 import { lazy, Suspense, useEffect } from "react";
 import { LessonLoading } from "@/lesson-runtime/LessonLoading";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import LearnerProfileSync from "@/components/LearnerProfileSync";
 
 // LS-2: lazy, hogy a mérőoldal kódja ne kerüljön a fő bundle-be.
 const LessonRuntimeProbe = lazy(() => import("@/lesson-runtime/LessonRuntimeProbe"));
@@ -105,6 +106,7 @@ function App() {
         <TooltipProvider>
           <div className="min-h-screen supports-[height:100dvh]:min-h-dvh">
             <Toaster />
+            <LearnerProfileSync />
             <Router />
           </div>
         </TooltipProvider>
