@@ -54,3 +54,10 @@ export function schoolYearPosition(date: Date, years: readonly SchoolYear[] = SC
   const done = teachingDays(y, utc(y.firstDay), t);
   return total > 0 ? Math.min(1, Math.max(0, (done - 0.5) / total)) : 0;
 }
+
+/** Tanítási nap-e (tanéven belül, hétköznap, szünet nélkül) — a napi emlékeztető csak ilyenkor megy (docs/specs/2026-10-18-napi-emlekezteto.md). */
+export function isSchoolDay(date: Date, years: readonly SchoolYear[] = SCHOOL_YEARS): boolean {
+  const t = dayOf(date);
+  const y = years.find(s => t >= utc(s.firstDay) && t <= utc(s.lastDay));
+  return !!y && isTeachingDay(t, y);
+}

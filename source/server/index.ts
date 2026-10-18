@@ -10,6 +10,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
 import { setupDailyViewSummary } from "./dailyViewSummary";
+import { setupDailyReminders } from "./daily-reminder";
 // import { initializeDatabase } from "./initDb"; // Not needed for Neon PostgreSQL
 import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
@@ -573,6 +574,8 @@ app.use((req, res, next) => {
 
     // Phase 9: Start daily view summary email (runs at 20:00 daily)
     setupDailyViewSummary();
+    // Napi tananyag-emlékeztető a regisztrált tanulóknak (docs/specs/2026-10-18-napi-emlekezteto.md)
+    setupDailyReminders();
 
     // Phase 10: Start automatic backup system (daily + event-driven)
     startAutoBackupJob();

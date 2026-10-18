@@ -1836,6 +1836,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Napi emlékeztető (docs/specs/2026-10-18-napi-emlekezteto.md): a cím tanulójának neve — a nevesített cím kap napi levelet.
+  app.patch("/api/extra-emails/:id/student", isAuthenticatedAdmin, async (req: Request, res) => {
+    const raw = (req.body as { studentName?: unknown } | undefined)?.studentName;
+    if (raw !== null && typeof raw !== "string") return res.status(400).json({ message: "A „studentName” szöveg vagy null." });
+    const name = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+    try {
+      const updated = await storage.updateExtraEmailStudentName(req.params.id, name || null);
+      if (!updated) return res.status(404).json({ message: "Email cím nem található" });
+      res.json(updated);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/daily-reminders/preview", isAuthenticatedAdmin, async (_req: Request, res) => {
+    try {
+      const { planDailyReminders, budapestDay } = await import("./daily-reminder");
+      const { isSchoolDay } = await import("../shared/school-calendar");
+      const now = new Date();
+      const plan = await planDailyReminders(now);
+      res.json({ day: budapestDay(now).iso, schoolDay: isSchoolDay(budapestDay(now).date), items: plan });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/daily-reminders/run", isAuthenticatedAdmin, async (_req: Request, res) => {
+    const { runDailyReminders } = await import("./daily-reminder");
+    const result = await runDailyReminders(new Date());
+    // Review #292: a futásszintű hiba HTTP-hibaként jelenik meg (a részleges számlálókkal együtt).
+    res.status(result.error ? 500 : 200).json(result.error ? { ...result, message: `A kiküldés megszakadt: ${result.error}` } : result);
+  });
+
   // ADMIN-ONLY: Tömeges osztály-léptetés ("Új tanév" gomb).
   // Minden aktív extra-email rekord classrooms-ét egyel feljebb lépteti
   // (max 12). Visszaadja a frissített rekordok számát.

@@ -216,7 +216,9 @@ export async function sendNewMaterialNotification(
 export async function sendAdminNotification(
   subject: string,
   htmlBody: string,
-  adminEmail?: string
+  adminEmail?: string,
+  /** Review #292: a tanulói levél címzettje és tárgya (név) nem kerül az alkalmazásnaplóba — a részletek az adatbázisban. */
+  opts: { quiet?: boolean } = {},
 ) {
   const recipientEmail = adminEmail || process.env.ADMIN_EMAIL || 'admin@websuli.org';
   // Admin mails (daily view summary, material results) are logged too, so the diagnostics
@@ -233,7 +235,8 @@ export async function sendAdminNotification(
   try {
     const { client, fromEmail } = getResendClient();
 
-    logger.info(`[RESEND] Admin értesítés küldése: ${recipientEmail} (${subject})`);
+    if (opts.quiet) logger.info('[RESEND] Értesítés küldése (címzett és tárgy a naplóban elrejtve)');
+    else logger.info(`[RESEND] Admin értesítés küldése: ${recipientEmail} (${subject})`);
 
     result = await client.emails.send({
       from: fromEmail,
@@ -247,12 +250,13 @@ export async function sendAdminNotification(
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error('[RESEND] Admin értesítés küldési hiba:', error);
+    logger.error('[RESEND] Admin értesítés küldési hiba:', opts.quiet ? message.replaceAll(recipientEmail, '[címzett]') : error);
     await logOutcome({ status: 'failed', error: `admin: ${message}` });
     throw error;
   }
 
-  logger.info(`[RESEND] Admin értesítés sikeresen elküldve:`, result);
+  if (opts.quiet) logger.info('[RESEND] Értesítés elküldve');
+  else logger.info(`[RESEND] Admin értesítés sikeresen elküldve:`, result);
   await logOutcome({ status: 'sent', resendId: result.data?.id });
   return result;
 }
