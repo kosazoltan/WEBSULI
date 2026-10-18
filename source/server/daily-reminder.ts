@@ -154,14 +154,15 @@ export async function sendTestReminder(to: string, now: Date): Promise<{ student
   const { date } = budapestDay(now);
   const [first] = await planDailyReminders(now);
   // Review #301: a próbalevél linkje token nélküli — különben az admin böngészője a tanulóhoz párosulna.
-  let sample = first ? { studentName: first.studentName, title: first.title, topic: first.topic, url: getMaterialPreviewUrl(first.materialId) } : null;
+  // Review #305: a próbalevél a tanuló levelének hű előnézete — ismétlésnél a tárgy és a címke is jelölt.
+  let sample: { studentName: string; title: string; topic: string | null; url: string; repeatPercent?: number } | null = first ? { studentName: first.studentName, title: first.title, topic: first.topic, url: getMaterialPreviewUrl(first.materialId), repeatPercent: first.repeatPercent } : null;
   if (!sample) {
     const newest = [...await storage.getAllHtmlFiles()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
     if (!newest) throw new Error("Nincs tananyag a próbalevélhez.");
     sample = { studentName: "Próba Tanuló", title: newest.title, topic: null, url: getMaterialPreviewUrl(newest.id) };
   }
   const name = firstNameOf(sample.studentName);
-  await send(`[Próba] ${reminderSubject(name, sample.title)}`, reminderHtml({ first: name, title: sample.title, topic: sample.topic, url: sample.url, motivation: motivationFor(name, date) }), to);
+  await send(`[Próba] ${reminderSubject(name, sample.title, sample.repeatPercent !== undefined)}`, reminderHtml({ first: name, title: sample.title, topic: sample.topic, url: sample.url, motivation: motivationFor(name, date), repeatPercent: sample.repeatPercent }), to);
   return { studentName: sample.studentName, title: sample.title };
 }
 
