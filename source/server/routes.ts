@@ -30,11 +30,11 @@ import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
-import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, type MaterialResultPayload } from "./lib/material-result";
-import { resolveLearner, syncLearners } from "./learners";
+import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, percentOf, withLearnerSubject, type MaterialResultPayload } from "./lib/material-result";
+import { recordLearnerActivity, resolveLearner, syncLearners, type ResolvedLearner } from "./learners";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
-import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments } from "./lib/material-capture";
+import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
 import { lessonResultsRouter } from "./lesson-result-email";
 
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
@@ -250,6 +250,8 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
         var payload = {
           materialId: __websuliMaterialId,
           clientId: window.__websuliClientId || undefined,
+          // Tanulói profil (S2): a párosított eszköz tanulójának tokenje (a /dev/:id injektálja), ha van
+          learner: window.__websuliLearner || undefined,
           subject: String(subject || 'Tananyag eredmény'),
           body: String(body || '')
         };
@@ -915,10 +917,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Régi anyagok (docs/specs/2026-10-17-regi-anyag-eredmeny.md): egy iskolai hálózat sok tanulója egy IP-n van → 60 / 15 perc,
   // az azonos eredményt pedig az ismétlésvédelem szűri (10 perc).
   const materialResultDedup = new ViewDedup(10 * 60 * 1000, 5000);
-  type QueuedMaterialResult = { value: MaterialResultPayload; ip: string; title: string | null; fileId: string; recipients: string[] };
+  type QueuedMaterialResult = { value: MaterialResultPayload; ip: string; title: string | null; fileId: string; recipients: string[]; learner: ResolvedLearner | null };
+  // Tanulói profil (S2): a kézbesített eredmény a párosított tanuló tevékenységnaplójába is bekerül (egyszer, a kézbesítéskor).
+  const recordMaterialResult = (q: QueuedMaterialResult) => q.learner
+    ? recordLearnerActivity({ learnerId: q.learner.id, materialId: q.fileId, kind: 'result', percent: percentOf(q.value.body), summary: q.title ?? q.value.subject })
+    : Promise.resolve();
   // Ismétlésvédelem CÍMZETTENKÉNT (review #281): a már értesített admin nem kap újra, a kimaradt pótolható.
   const deliverMaterialResult = (q: QueuedMaterialResult) => {
-    const mail = buildMaterialResultEmail(q.value, q.title, getMaterialPreviewUrl(q.fileId));
+    const mail = buildMaterialResultEmail(withLearnerSubject(q.value, q.learner?.firstName), q.title, getMaterialPreviewUrl(q.fileId));
     return deliverToRecipients({
       recipients: q.recipients,
       baseKey: materialResultDedupKey(q.value, q.ip),
@@ -934,6 +940,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const outcome = await deliverMaterialResult(q);
         if (!outcome.duplicate && outcome.delivered === 0) { logger.warn('[MATERIAL-RESULT] az összevárt eredményt nem sikerült elküldeni (újrapróba)'); return false; }
+        if (!outcome.duplicate) await recordMaterialResult(q);
         return true;
       } catch (e: unknown) {
         logger.error('[MATERIAL-RESULT] összevárt küldés hiba:', e instanceof Error ? e.message : String(e));
@@ -982,11 +989,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: az automatikus beolvasás minden új állapotot azonnal küld; a levél
       // kulcsonként (anyag + kliens) összevárva megy, a legutolsó állapottal.
+      const learner = value.learner ? await resolveLearner(value.learner).catch(() => null) : null;
       if (value.auto) {
-        const queued = materialResultCoalescer.submit(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`, { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients });
+        const queued = materialResultCoalescer.submit(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`, { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients, learner });
         return res.status(202).json({ success: true, queued });
       }
-      const outcome = await deliverMaterialResult({ value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients });
+      const direct: QueuedMaterialResult = { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients, learner };
+      const outcome = await deliverMaterialResult(direct);
       if (outcome.duplicate) {
         return res.json({ success: true, duplicate: true });
       }
@@ -996,6 +1005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // a tanuló maga küldte el (mailto) → az ugyanazon oldalbetöltés automatikus levele nem megy ki: a függő törlődik, és a
       // később beérkező automatikus beküldés sem kerül sorba (review #300)
       materialResultCoalescer.suppress(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`);
+      await recordMaterialResult(direct);
       res.json({ success: true, delivered: outcome.delivered });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -2814,6 +2824,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).send("<html><body><h1>Fájl nem található</h1></body></html>");
       }
 
+      // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje (?lt=) — csak ellenőrzötten.
+      const learnerToken = typeof req.query.lt === 'string' ? req.query.lt : undefined;
+      const learner = learnerToken ? await resolveLearner(learnerToken).catch(() => null) : null;
+      if (learner && materialViewDedup.shouldRecord(`learner|${learner.id}|${file.id}`)) {
+        void recordLearnerActivity({ learnerId: learner.id, materialId: file.id, kind: 'view', summary: file.title });
+      }
+
       // Track material view (no authentication required)
       // Note: Daily summary email will be sent at 20:00 with all views
       try {
@@ -2893,7 +2910,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // HTML material: wrap with responsive container
         const notice = webLessonQualityNotice(file.content);
         const content = notice ? prependWebLessonQualityNotice(file.content, notice) : file.content;
-        const wrappedHtml = withLessonTypography(wrapHtmlWithResponsiveContainer(content), file.classroom, file.title);
+        const typographed = withLessonTypography(wrapHtmlWithResponsiveContainer(content), file.classroom, file.title);
+        const wrappedHtml = learner && learnerToken ? withLearnerScript(typographed, learnerToken) : typographed;
 
         // CRITICAL: No-cache headers to prevent Vercel/browser from serving stale content after Apply
         res.setHeader('Content-Type', 'text/html; charset=utf-8');

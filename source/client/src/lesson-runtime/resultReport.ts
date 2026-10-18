@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
+import { getLearnerToken } from "@/lib/learnerProfile";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
 /**
@@ -29,10 +30,12 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     void (async () => {
       try {
         const fingerprint = await getFingerprint().catch(() => undefined);
+        // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi.
+        const learner = getLearnerToken();
         const body = kind === "tasks"
-          ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}) }
+          ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) }
           // Review #280: a kör minden kérdése megy; a kihagyott -1 (nulla pont), különben a levél pontszáma eltérne a képernyőétől.
-          : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}) };
+          : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) };
         await apiRequest("POST", `/api/lessons/${lessonId}/results`, body);
         try { localStorage.setItem(flag, "1"); } catch { /* elég a szerver egyedi kulcsa */ }
       } catch { /* csendes: a tanuló felülete nem függ a levéltől */ }

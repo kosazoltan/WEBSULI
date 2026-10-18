@@ -31,6 +31,8 @@ export interface MaterialResultPayload {
   auto?: boolean;
   /** Oldalbetöltésenkénti véletlen azonosító (nem személyes adat) — csak az ismétlésvédelemhez. */
   clientId?: string;
+  /** Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi. */
+  learner?: string;
 }
 
 export type MaterialResultValidation =
@@ -69,7 +71,23 @@ export function normalizeMaterialResult(raw: unknown): MaterialResultValidation 
   if (r.clientId !== undefined && (typeof r.clientId !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(r.clientId))) {
     return { ok: false, error: 'Érvénytelen kliensazonosító' };
   }
-  return { ok: true, value: { materialId, subject, body, ...(r.auto ? { auto: true } : {}), ...(typeof r.clientId === 'string' ? { clientId: r.clientId } : {}) } };
+  if (r.learner !== undefined && (typeof r.learner !== 'string' || r.learner.length > 120)) {
+    return { ok: false, error: 'Érvénytelen tanulói azonosító' };
+  }
+  return { ok: true, value: { materialId, subject, body, ...(r.auto ? { auto: true } : {}), ...(typeof r.clientId === 'string' ? { clientId: r.clientId } : {}), ...(typeof r.learner === 'string' ? { learner: r.learner } : {}) } };
+}
+
+/** Az eredményszöveg első százaléka (0–100), a tanulói tevékenységnaplóhoz; nincs → null. */
+export function percentOf(body: string): number | null {
+  const m = /(\d{1,3}(?:[.,]\d+)?)\s*%/.exec(body);
+  if (!m) return null;
+  const n = Math.round(Number(m[1].replace(',', '.')));
+  return n >= 0 && n <= 100 ? n : null;
+}
+
+/** A párosított tanuló eredménye: a tárgy a keresztnévvel kezdődik („Dominik – …”). */
+export function withLearnerSubject<T extends { subject: string }>(payload: T, firstName: string | null | undefined): T {
+  return firstName ? { ...payload, subject: `${firstName} – ${payload.subject}`.slice(0, MAX_SUBJECT_LENGTH) } : payload;
 }
 
 /** ADMIN_EMAILS (vesszővel elválasztva) vagy ADMIN_EMAIL → egyedi, érvényes címek. */

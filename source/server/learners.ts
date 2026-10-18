@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
-import { extraEmailAddresses, learners, type Learner } from "../shared/schema";
+import { extraEmailAddresses, learnerActivity, learners, type Learner } from "../shared/schema";
 import { firstNameOf } from "../shared/daily-reminder";
 import { learnerLinkSecret, parseLearnerToken, signLearnerToken } from "./lib/learner-token";
 import { logger } from "./lib/logger";
@@ -78,6 +78,15 @@ export async function resolveLearner(token: unknown): Promise<ResolvedLearner | 
 export function learnerTokenFor(id: string, version: number): string | null {
   const secret = learnerLinkSecret();
   return secret ? signLearnerToken(id, version, secret) : null;
+}
+
+/** Tevékenység (megtekintés / eredmény) a tanuló naplójába; sosem dob — a tanuló felülete nem függ tőle. */
+export async function recordLearnerActivity(entry: { learnerId: string; materialId: string | null; kind: "view" | "result"; percent?: number | null; summary?: string | null }): Promise<void> {
+  try {
+    await db.insert(learnerActivity).values({ learnerId: entry.learnerId, materialId: entry.materialId, kind: entry.kind, percent: entry.percent ?? null, summary: entry.summary ? entry.summary.slice(0, 200) : null });
+  } catch (error) {
+    logger.warn("[LEARNERS] tevékenység rögzítési hiba", { error: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 /** Minden eszköz párosításának visszavonása (S4 admin). */

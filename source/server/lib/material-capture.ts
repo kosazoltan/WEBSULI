@@ -115,7 +115,7 @@ export const MATERIAL_CAPTURE_SCRIPT = `
           headers: { 'Content-Type': 'application/json' },
           credentials: 'omit',
           keepalive: true,
-          body: JSON.stringify({ materialId: materialId, subject: clip(subject, 180), body: clip(body, 4900), auto: !!auto, clientId: clientId })
+          body: JSON.stringify({ materialId: materialId, subject: clip(subject, 180), body: clip(body, 4900), auto: !!auto, clientId: clientId, learner: window.__websuliLearner || undefined })
         }).then(function (r) { return r.ok ? true : failed(); })
           .catch(failed);
       }
@@ -335,3 +335,14 @@ export const MATERIAL_CAPTURE_SCRIPT = `
       if (document.readyState === 'complete') { setTimeout(baseline, 500); } else { window.addEventListener('load', function () { setTimeout(baseline, 500); }); }
     })();
     </script>`;
+
+/**
+ * Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a szerver által ELLENŐRZÖTT tanulói token a `<head>` után
+ * (fej nélküli anyagnál az elejére) — az eredményküldő szkriptek ezt teszik a beküldésbe. A `<` escape-elve, így a szöveg nem
+ * zárhatja le a szkriptet.
+ */
+export function withLearnerScript(html: string, token: string): string {
+  const tag = `<script>window.__websuliLearner=${JSON.stringify(token).replace(/</g, "\\u003c")};</script>`;
+  const head = /<head\b[^>]*>/i.exec(html);
+  return head ? html.slice(0, head.index + head[0].length) + tag + html.slice(head.index + head[0].length) : tag + html;
+}
