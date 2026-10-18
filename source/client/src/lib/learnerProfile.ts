@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 /**
@@ -53,6 +54,15 @@ export function captureLearnerTokenFromUrl(): void {
   } catch {
     // nagyon régi böngésző: nincs mit tenni
   }
+}
+
+/** Review #302: a megnyitott anyag jelzése a párosított tanulónak (a Stúdió-lecke és a PDF nem a /dev/:id-n át nyílik). */
+export function useRecordLearnerView(materialId: string | null | undefined): void {
+  useEffect(() => {
+    const token = getLearnerToken();
+    if (!token || !materialId) return;
+    void fetch(`/api/learner/view/${encodeURIComponent(materialId)}`, { headers: { "X-Learner-Token": token }, credentials: "same-origin" }).catch(() => undefined);
+  }, [materialId]);
 }
 
 export type LearnerProfile = { firstName: string; grade: number };

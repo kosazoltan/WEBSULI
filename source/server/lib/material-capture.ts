@@ -342,7 +342,9 @@ export const MATERIAL_CAPTURE_SCRIPT = `
  * zárhatja le a szkriptet.
  */
 export function withLearnerScript(html: string, token: string): string {
-  const tag = `<script>window.__websuliLearner=${JSON.stringify(token).replace(/</g, "\\u003c")};</script>`;
+  // Review #302: a token a keret címsorából (és az előzményből) is eltűnik — egy kimásolt / új lapon megnyitott cím ne vigye tovább.
+  const strip = "try{var u=new URL(location.href);if(u.searchParams.has('lt')){u.searchParams.delete('lt');history.replaceState(history.state,'',u.pathname+u.search+u.hash);}}catch(e){}";
+  const tag = `<script>window.__websuliLearner=${JSON.stringify(token).replace(/</g, "\\u003c")};${strip}</script>`;
   const head = /<head\b[^>]*>/i.exec(html);
   return head ? html.slice(0, head.index + head[0].length) + tag + html.slice(head.index + head[0].length) : tag + html;
 }

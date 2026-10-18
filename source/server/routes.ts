@@ -53,6 +53,8 @@ import { prependWebLessonQualityNotice, webLessonQualityNotice } from "./lib/web
 
 // BACKLOG T2: /dev/:id megtekintés-dedup (ip|materialId, 1 óra)
 const materialViewDedup = new ViewDedup();
+// Tanulói profil (S2): tanuló + anyag megtekintése óránként egyszer, minden útvonalon (/dev/:id, Stúdió-lecke, PDF) közösen.
+const learnerViewDedup = new ViewDedup();
 import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
 import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
 import { hasHtmlLessonData } from "../shared/lesson-html-data";
@@ -918,8 +920,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // az azonos eredményt pedig az ismétlésvédelem szűri (10 perc).
   const materialResultDedup = new ViewDedup(10 * 60 * 1000, 5000);
   type QueuedMaterialResult = { value: MaterialResultPayload; ip: string; title: string | null; fileId: string; recipients: string[]; learner: ResolvedLearner | null };
-  // Tanulói profil (S2): a kézbesített eredmény a párosított tanuló tevékenységnaplójába is bekerül (egyszer, a kézbesítéskor).
-  const recordMaterialResult = (q: QueuedMaterialResult) => q.learner
+  // Tanulói profil (S2): a kézbesített eredmény a párosított tanuló tevékenységnaplójába is bekerül. Review #302: saját, tanuló +
+  // anyag + eredmény kulcsú ismétlésvédelem (10 perc) — egy címzett pótlása vagy egy ismételt beküldés nem ír második sort.
+  const learnerResultDedup = new ViewDedup(10 * 60 * 1000, 5000);
+  const recordMaterialResult = (q: QueuedMaterialResult) => q.learner && learnerResultDedup.shouldRecord(`${q.learner.id}|${q.fileId}|${materialResultDedupKey(q.value, '')}`)
     ? recordLearnerActivity({ learnerId: q.learner.id, materialId: q.fileId, kind: 'result', percent: percentOf(q.value.body), summary: q.title ?? q.value.subject })
     : Promise.resolve();
   // Ismétlésvédelem CÍMZETTENKÉNT (review #281): a már értesített admin nem kap újra, a kimaradt pótolható.
@@ -1028,6 +1032,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     if (!learner) return res.status(401).json({ message: "A tanulói link érvénytelen vagy visszavonták." });
     res.json({ firstName: learner.firstName, grade: learner.grade });
+  });
+  // Review #302: a Stúdió-lecke és a PDF-nézet nem a /dev/:id-n át nyílik — a kliens ezzel jelzi a megnyitást (ugyanaz a tanuló +
+  // anyag kulcsú, óránkénti ismétlésvédelem, mint a /dev/:id-nél). Mellékhatás GET-en: csak ellenőrzött tokennel, korlátozva.
+  app.get('/api/learner/view/:materialId', learnerMeLimiter, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(req.params.materialId)) return res.status(400).json({ message: "Érvénytelen anyag." });
+    const learner = await resolveLearner(req.get('x-learner-token')).catch(() => null);
+    if (!learner) return res.status(401).json({ message: "A tanulói link érvénytelen vagy visszavonták." });
+    const file = await storage.getHtmlFile(req.params.materialId);
+    if (!file) return res.status(404).json({ message: "Tananyag nem található" });
+    if (learnerViewDedup.shouldRecord(`${learner.id}|${file.id}`)) await recordLearnerActivity({ learnerId: learner.id, materialId: file.id, kind: 'view', summary: file.title });
+    res.status(204).end();
   });
   // Az e-mail-címek minden sikeres módosítása után a tanulók és a címek kapcsolata újraszinkronizálódik.
   app.use(['/api/extra-emails', '/api/admin/extra-emails'], (req, res, next) => {
@@ -2834,7 +2850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje (?lt=) — csak ellenőrzötten.
       const learnerToken = typeof req.query.lt === 'string' ? req.query.lt : undefined;
       const learner = learnerToken ? await resolveLearner(learnerToken).catch(() => null) : null;
-      if (learner && materialViewDedup.shouldRecord(`learner|${learner.id}|${file.id}`)) {
+      if (learner && learnerViewDedup.shouldRecord(`${learner.id}|${file.id}`)) {
         void recordLearnerActivity({ learnerId: learner.id, materialId: file.id, kind: 'view', summary: file.title });
       }
 
@@ -2912,7 +2928,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        res.send(pdfViewerHtml);
+        res.send(learner && learnerToken ? withLearnerScript(pdfViewerHtml, learnerToken) : pdfViewerHtml);
       } else {
         // HTML material: wrap with responsive container
         const notice = webLessonQualityNotice(file.content);
