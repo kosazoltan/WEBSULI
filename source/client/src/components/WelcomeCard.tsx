@@ -42,7 +42,8 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
   const account = user ? { id: user.id, firstName: user.firstName } : null;
   // review #289: bejelentkezve a kézi „Módosítás” fiókhoz kötött felülírás — fiókváltáskor nem öröklődik
   const override = useMemo(() => (account ? loadNameOverride(account.id) : null), [account?.id, overrideTick]);
-  const name = resolveLearnerName(account, storedName, override);
+  // Review #301: a párosított eszközön a profil neve az irányadó (bejelentkezett fiók mellett is).
+  const name = profile?.firstName ?? resolveLearnerName(account, storedName, override);
   const today = new Date();
   const picks = useMemo(() => newestMaterials(files, grade, new Date()), [files, grade]);
 

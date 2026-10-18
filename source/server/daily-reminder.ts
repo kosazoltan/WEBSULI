@@ -147,7 +147,8 @@ export async function runDailyReminders(now: Date, opts: { pauseMs?: number } = 
 export async function sendTestReminder(to: string, now: Date): Promise<{ studentName: string; title: string }> {
   const { date } = budapestDay(now);
   const [first] = await planDailyReminders(now);
-  let sample = first ? { studentName: first.studentName, title: first.title, topic: first.topic, url: first.url } : null;
+  // Review #301: a próbalevél linkje token nélküli — különben az admin böngészője a tanulóhoz párosulna.
+  let sample = first ? { studentName: first.studentName, title: first.title, topic: first.topic, url: getMaterialPreviewUrl(first.materialId) } : null;
   if (!sample) {
     const newest = [...await storage.getAllHtmlFiles()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
     if (!newest) throw new Error("Nincs tananyag a próbalevélhez.");
