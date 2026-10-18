@@ -79,7 +79,8 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   useEffect(() => {
     if (appliedGrade.current === learnerGrade || files.length === 0) return;
     appliedGrade.current = learnerGrade;
-    if (learnerGrade != null && files.some((f) => (f.classroom ?? 1) === learnerGrade)) setSelectedClassroom(learnerGrade);
+    // Review #291: törölt évfolyamnál vagy anyag nélküli évfolyamnál „Mind” (nem ragad az előző szűrőn).
+    setSelectedClassroom(learnerGrade != null && files.some((f) => (f.classroom ?? 1) === learnerGrade) ? learnerGrade : null);
   }, [learnerGrade, files]);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   // A döntés az ELSŐ renderelésben dől el (lásd lib/light-motion.ts): utólagos átbillenés nem

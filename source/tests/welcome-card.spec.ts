@@ -153,4 +153,16 @@ test("a lista a tanuló évfolyamára szűrve nyílik; „Mind” mindent mutat;
   await page.getByTestId("welcome-save").click();
   await expect(page.getByTestId("button-filter-classroom-8")).toHaveAttribute("aria-pressed", "true");
   expect(await ids()).toEqual(["r8-a"]);
+  // Review #291: anyag nélküli évfolyamra váltva, majd az évfolyamot törölve „Mind” (nem ragad a 8. osztályon)
+  await page.getByTestId("welcome-edit").click();
+  await page.getByTestId("welcome-grade").selectOption("3");
+  await page.getByTestId("welcome-save").click();
+  await expect(page.getByTestId("button-filter-all")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("link-file-r5-a")).toBeVisible();
+  await page.getByTestId("button-filter-classroom-8").click();
+  await page.getByTestId("welcome-edit").click();
+  await page.getByTestId("welcome-grade").selectOption("");
+  await page.getByTestId("welcome-save").click();
+  await expect(page.getByTestId("button-filter-all")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("link-file-r5-a")).toBeVisible();
 });
