@@ -21,16 +21,22 @@ const schoolDayIso = (iso: string) => {
 export type LearnerOverview = { id: string; name: string; grade: number; tokenVersion: number; emails: number; lastActiveAt: Date | null; alertedAt: Date | null; report: LearnerReport };
 
 export async function buildLearnerReports(now = new Date()): Promise<LearnerOverview[]> {
+  // Review #304: a „7 nap” a budapesti naptár 7 napja (ma és az előző 6), nem 168 óra.
+  const weekStart = dayOf(new Date(now.getTime() - 6 * 86_400_000));
   const rows = await db.execute<{ id: string; name: string; grade: number; token_version: number; alerted: Date | null; last_at: Date | null; active7: number; views7: number; emails: number }>(sql`
     SELECT l.id, l.name, l.grade, l.token_version, l.inactivity_alerted_at AS alerted,
       (SELECT max(a.created_at) FROM learner_activity a WHERE a.learner_id = l.id) AS last_at,
-      (SELECT count(DISTINCT (a.created_at AT TIME ZONE 'Europe/Budapest')::date)::int FROM learner_activity a WHERE a.learner_id = l.id AND a.created_at > ${new Date(now.getTime() - 7 * 86_400_000)}) AS active7,
-      (SELECT count(*)::int FROM learner_activity a WHERE a.learner_id = l.id AND a.kind = 'view' AND a.created_at > ${new Date(now.getTime() - 7 * 86_400_000)}) AS views7,
+      (SELECT count(DISTINCT (a.created_at AT TIME ZONE 'Europe/Budapest')::date)::int FROM learner_activity a WHERE a.learner_id = l.id AND (a.created_at AT TIME ZONE 'Europe/Budapest')::date >= ${weekStart}::date) AS active7,
+      (SELECT count(*)::int FROM learner_activity a WHERE a.learner_id = l.id AND a.kind = 'view' AND (a.created_at AT TIME ZONE 'Europe/Budapest')::date >= ${weekStart}::date) AS views7,
       (SELECT count(*)::int FROM extra_email_addresses e WHERE e.learner_id = l.id) AS emails
     FROM learners l ORDER BY l.grade DESC, l.name`);
-  const results = await db.select({ learnerId: learnerActivity.learnerId, summary: learnerActivity.summary, percent: learnerActivity.percent, createdAt: learnerActivity.createdAt })
-    .from(learnerActivity).where(sql`${learnerActivity.kind} = 'result' AND ${learnerActivity.createdAt} > ${new Date(now.getTime() - 30 * 86_400_000)}`)
-    .orderBy(sql`${learnerActivity.createdAt} DESC`);
+  // Review #304: tanulónként a valóban legutolsó 10 eredmény (a megőrzött 365 napból), időkorlát nélkül.
+  const resultRows = await db.execute<{ learner_id: string; summary: string | null; percent: number | null; created_at: Date }>(sql`
+    SELECT learner_id, summary, percent, created_at FROM (
+      SELECT learner_id, summary, percent, created_at, row_number() OVER (PARTITION BY learner_id ORDER BY created_at DESC) AS rn
+      FROM learner_activity WHERE kind = 'result') t
+    WHERE rn <= 10 ORDER BY created_at DESC`);
+  const results = resultRows.rows.map((x) => ({ learnerId: x.learner_id, summary: x.summary, percent: x.percent, createdAt: new Date(x.created_at) }));
   return rows.rows.filter((r) => r.emails > 0).map((r) => {
     const lastActiveAt = r.last_at ? new Date(r.last_at) : null;
     return {
@@ -66,9 +72,11 @@ export async function runInactivityAlerts(now = new Date(), send: Send = default
   for (const o of await buildLearnerReports(now)) {
     if (!shouldAlert(o.lastActiveAt, o.alertedAt, isInactive(o.report.lastActive, today, schoolDayIso))) continue;
     const mail = inactivityAlertEmail(o.report);
-    let ok = false;
-    for (const to of recipients()) { try { await send(mail.subject, mail.html, to); ok = true; } catch (e) { logger.warn("[LEARNER-REPORT] riasztás hiba", { error: String(e) }); } }
-    if (ok) { await db.update(learners).set({ inactivityAlertedAt: now }).where(eq(learners.id, o.id)); alerted++; }
+    // Review #304: csak akkor zárul le az időszak, ha minden admin megkapta — különben a következő futás pótolja.
+    const list = recipients();
+    let delivered = 0;
+    for (const to of list) { try { await send(mail.subject, mail.html, to); delivered++; } catch (e) { logger.warn("[LEARNER-REPORT] riasztás hiba", { error: String(e) }); } }
+    if (list.length > 0 && delivered === list.length) { await db.update(learners).set({ inactivityAlertedAt: now }).where(eq(learners.id, o.id)); alerted++; }
   }
   return { alerted };
 }
@@ -81,5 +89,7 @@ export function setupLearnerReports(): void {
   if (process.env.NODE_ENV !== "production") return;
   const safe = (name: string, run: () => Promise<unknown>) => () => { void run().catch((e: unknown) => logger.warn(`[LEARNER-REPORT] ${name} hiba`, { error: String(e) })); };
   cron.schedule("0 18 * * 0", safe("heti összefoglaló", () => runWeeklySummary()), { timezone: TZ });
-  cron.schedule("0 18 * * 1-5", safe("riasztás", async () => { await runInactivityAlerts(); await pruneLearnerActivity(); }), { timezone: TZ });
+  cron.schedule("0 18 * * 1-5", safe("riasztás", () => runInactivityAlerts()), { timezone: TZ });
+  // Review #304: a 365 napos megőrzés minden nap (hétvégén is) érvényesül.
+  cron.schedule("30 3 * * *", safe("törlés", () => pruneLearnerActivity()), { timezone: TZ });
 }
