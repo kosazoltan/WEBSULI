@@ -14,7 +14,8 @@ import { LessonCoverArt } from "./LessonCoverArt";
  */
 export type ShownArt = Art & { fromDb?: boolean };
 export function lessonArtFor(lesson: { subject: string; title: string; seed?: string; art?: StoredLessonArt }, theme: DesignThemeId): ShownArt {
-  const stored = resolveStoredArt(lesson.art, theme, DESIGN_ASSET_CATALOG);
+  // Spec 2026-10-19-hos-kep-sav: a tárolt kép csak akkor marad, ha az új szabály szerint is illik (különben friss választás).
+  const stored = resolveStoredArt(lesson.art, theme, DESIGN_ASSET_CATALOG, lesson);
   return stored ? { ...stored, fromDb: true } : pickLessonArt(lesson, theme, DESIGN_ASSET_CATALOG);
 }
 

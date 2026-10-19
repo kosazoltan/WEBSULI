@@ -85,8 +85,9 @@ test("pickLessonArt: kulcsszavas borító, sávhős, kabala csak 1–5., ékezet
   assert.equal(chem.mascot, undefined);
 });
 
-// Változatos képválasztás (docs/specs/2026-10-17-websuli-lecke-hos.md kiegészítés), a valódi, jóváhagyott katalógussal.
-test("rotáció: azonosítónként stabil, leckék között változatos, és a kép a lecke korosztályához tartozik", async () => {
+// Dokumentált specváltozás (docs/specs/2026-10-19-hos-kep-sav.md, tulajdonosi döntés 2026-10-19): a kulcsszó nélküli lecke a SÁV
+// SAJÁT hős-képét kapja (a 2026-10-17-i „változatos képválasztás” képrésze helyett); a kabala-rotáció és a stabilitás marad.
+test("sávkép: azonosítónként stabil, kulcsszó nélkül a sáv saját hős-képe, a kabala rotál", async () => {
   const { pickLessonArt } = await import("../shared/design-assets");
   const young = new Set(["explorer", "adventure"]);
   const lesson = { subject: "Matematika", title: "Gyakorló feladatsor" };
@@ -99,14 +100,16 @@ test("rotáció: azonosítónként stabil, leckék között változatos, és a k
       const pic = art.cover ?? art.hero;
       assert.ok(pic, `${band}: van kép`);
       assert.equal(young.has(pic!.band), isYoung, `${band}: korosztályhoz illő kép (${pic!.id})`);
+      assert.equal(pic!.id, `hero-${band}`, `${band}: a sáv saját hős-képe`);
       seen.add(pic!.id);
       // A kabala-portré csak 1–5. évfolyamon, és nem ismétli a rókát, ha a kép maga is a kabalát mutatja („kabala” kulcsszó).
       if (isYoung && !pic!.keywords.includes("kabala")) assert.ok(art.mascot && young.has(art.mascot.band), `${band}: kabala`);
       else assert.equal(art.mascot, undefined, `${band}: nincs kabala-portré (${pic!.id})`);
     }
-    assert.ok(seen.size >= 2, `${band}: 20 lecke legalább 2 különböző képet kap (${[...seen].join(", ")})`);
+    assert.deepEqual([...seen], [`hero-${band}`], `${band}: 20 kulcsszó nélküli lecke mind a sávképet kapja`);
   }
-  const mascots = new Set(Array.from({ length: 20 }, (_, i) => pickLessonArt({ ...lesson, seed: `m-${i}` }, "explorer", DESIGN_ASSET_CATALOG).mascot?.id));
+  // Az 1–2. sáv hős-képe maga a róka (nincs dupla kabala), ezért a pózrotációt a 3–5. sávon mérjük, ahol a portré megjelenik.
+  const mascots = new Set(Array.from({ length: 20 }, (_, i) => pickLessonArt({ ...lesson, seed: `m-${i}` }, "adventure", DESIGN_ASSET_CATALOG).mascot?.id));
   assert.ok(mascots.size >= 2, "a kabala pózai is rotálnak");
   // Kulcsszavas borító: a cím szerint a témához illő kép (a sejt-borító a biológia-leckén).
   assert.equal(pickLessonArt({ subject: "Biológia", title: "A sejt felépítése", seed: "x" }, "laboratory", DESIGN_ASSET_CATALOG).cover?.id, "cover-sejt");
@@ -140,4 +143,15 @@ test("review #273: tantárgy nélküli kulcsszó-egyezés nem ad borítót; --ma
   assert.throws(() => provenanceFor(log, "a/2.jpg"), /Nincs sikeres/);
   // A jelenlegi katalógus minden promptlenyomata egy sikeres generálási bejegyzésből való (a generate.ts sha256-ja, 16 hexa).
   for (const a of DESIGN_ASSET_CATALOG) assert.match(a.promptHash, /^[a-f0-9]{16}$/);
+});
+
+// Spec 2026-10-19-hos-kep-sav: a tulajdonos jelzése — halloweeni füzér a 9. o. matek-leckén, a Föld és a híd hiányzik.
+test("sávkép: 9. o. matek → híd, 6–8. o. → Föld; a halloweeni borító csak a saját sávjában, a kulcsszóra", async () => {
+  const { pickLessonArt } = await import("../shared/design-assets");
+  const pic = (subject: string, title: string, band: "studio" | "laboratory") => { const a = pickLessonArt({ subject, title, seed: "s" }, band, DESIGN_ASSET_CATALOG); return (a.cover ?? a.hero)?.id; };
+  assert.equal(pic("Matematika", "Kéttagú kifejezések négyzete – azonos kifejezések párosítása", "laboratory"), "hero-laboratory");
+  assert.equal(pic("Természettudomány", "A vulkánok – vulkáni működés", "studio"), "hero-studio");
+  for (let i = 0; i < 30; i++) assert.notEqual(pickLessonArt({ subject: "Matematika", title: `Feladatsor ${i}`, seed: `x${i}` }, "laboratory", DESIGN_ASSET_CATALOG).cover?.id, "cover-ismetlodes");
+  assert.notEqual(pic("Matematika", "Ismétlődő minta és füzér", "laboratory"), "cover-ismetlodes", "más sáv témaborítója nem jöhet");
+  assert.equal(pic("Matematika", "Ismétlődő minta és füzér", "studio"), "cover-ismetlodes", "a saját sávban a kulcsszóra igen");
 });
