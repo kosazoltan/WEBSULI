@@ -84,3 +84,36 @@ test("review #319: vegyes (betűs + számos) részeredményeknél egy közös so
   assert.equal(gradeTypedAnswers("a) x + 1 b) 5", parts).correct, 2);
   assert.equal(gradeTypedAnswers("5; x + 1", parts).correct, 1, "felcserélt sorrend: a szám a polinom ELŐTT áll");
 });
+
+test("review #319: a „^(n)” és a „^n” kitevő; a nyitó pár nélküli „)” nem nyelődik el", () => {
+  assert.ok(parsePolynomial("(x^2)"));
+  assert.ok(parsePolynomial("x^(2) + 1"));
+  assert.equal(parsePolynomial("x^2)"), null);
+  assert.equal(parsePolynomial("x^(2"), null);
+});
+
+test("review #319 (Vercel): a „(x + 5) (x + 5)” nem esik szét részfeladat-jelnél; a valódi „a)” jel igen", () => {
+  assert.equal(ok("(x + 5) (x + 5)", poly("(x+5)²", "factored")), true);
+  assert.equal(gradeTypedAnswers("a) x² + 1 b) x² - 1", [{ ...poly("x² + 1"), part: "a" }, { ...poly("x² - 1"), part: "b" }]).correct, 2);
+});
+
+test("review #319: az önálló betűs válasz („x”, „ab”) kifejezés; a névelő próza marad", () => {
+  assert.equal(ok("x", poly("x", "any")), true);
+  assert.equal(ok("ab", poly("ab", "any")), true);
+  assert.equal(ok("Az eredmény x", poly("x", "any")), true);
+  assert.equal(ok("ez a válasz", poly("a", "any")), false);
+});
+
+test("review #319: a szóközös implicit szorzás („2 x + 1”) egy jelölt — a levágott részlet nem ér pontot", () => {
+  assert.equal(ok("2 x + 1", poly("2x + 1")), true);
+  assert.equal(ok("2 x + 1", poly("x + 1")), false);
+});
+
+test("review #319: a polinom-rész mértékegysége kötelező", () => {
+  const a: TypedAnswer = { ...poly("2x"), unit: "cm²" };
+  assert.equal(ok("2x cm²", a), true);
+  assert.equal(ok("A terület 2x cm².", a), true);
+  assert.equal(ok("2x", a), false);
+  assert.equal(ok("2x m²", a), false);
+  assert.match(gradeTypedAnswers("2x", [a]).verdicts[0].reason, /mértékegység/);
+});

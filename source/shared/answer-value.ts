@@ -99,12 +99,23 @@ export function isValidReference(a: Pick<TypedAnswer, "kind" | "value" | "form">
   return a.form === "intermediate-step" ? isExpressionText(a.value) : referenceValue(a.value) !== null;
 }
 
+/** A `pos` pozíción (szóköz után) kezdődő mértékegység vége, vagy null (kis- és nagybetű, szóköz nem számít). */
+function unitAfter(answer: string, pos: number, unit: string): number | null {
+  const want = fold(unit).replace(/\s+/g, "");
+  const rest = answer.slice(pos);
+  const lead = rest.length - rest.trimStart().length;
+  let i = lead, got = "";
+  while (i < rest.length && got.length < want.length) { if (!/\s/.test(rest[i])) got += fold(rest[i]); i++; }
+  return got === want && !/[\p{L}\d]/u.test(rest[i] ?? "") ? pos + i : null;
+}
+
 /** Betűs végeredmény ítélete: a válasz polinom-jelöltjei közül a `from`-tól az első, értékazonos és a kért alakú. */
 function findPolynomial(answer: string, expected: TypedAnswer, from: number): { index: number; end: number; reason?: string } {
   const ref = parsePolynomial(expected.value);
   if (!ref) return { index: -1, end: from };
   const candidates = polynomialCandidates(answer);
   let sameValueWrongForm = false;
+  let wrongUnit = false;
   for (let i = 0; i < candidates.length; i++) {
     if (candidates[i].start < from) continue;
     const c = candidates[i].parsed;
@@ -113,8 +124,15 @@ function findPolynomial(answer: string, expected: TypedAnswer, from: number): { 
     const form = expected.form ?? "expanded";
     if (form === "expanded" && !isExpanded(c)) { sameValueWrongForm = true; continue; }
     if (form === "factored" && !isFactored(c, candidates[i].text)) { sameValueWrongForm = true; continue; }
+    // Review #319: a kért mértékegység a betűs eredmény után is kötelező („2x cm²”).
+    if (expected.unit) {
+      const unit = unitAfter(answer, candidates[i].end, expected.unit);
+      if (unit === null) { wrongUnit = true; continue; }
+      return { index: i, end: unit };
+    }
     return { index: i, end: candidates[i].end };
   }
+  if (wrongUnit && !sameValueWrongForm) return { index: -1, end: from, reason: `A(z) ${expected.part} rész eredménye a(z) ${expected.unit} mértékegységgel hiányzik vagy hibás.` };
   const wanted = (expected.form ?? "expanded") === "factored" ? "szorzattá alakított (zárójeles)" : "kifejtett, összevont";
   return { index: -1, end: from, reason: sameValueWrongForm ? `A(z) ${expected.part} részhez ${wanted} alakot várunk.` : undefined };
 }

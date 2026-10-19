@@ -40,9 +40,10 @@ function tokenize(text: string): Tok[] | null {
     if (/[/:÷]/.test(c)) { out.push({ t: "op", v: "/" }); i++; continue; }
     if (c in SUPERSCRIPT) { out.push({ t: "pow", v: SUPERSCRIPT[c] }); i++; continue; }
     if (c === "^") {
-      const m = /^\^\s*\(?\s*(\d+)\s*\)?/.exec(s.slice(i));
+      // Review #319: „^n” vagy „^(n)” — a nyitó pár nélküli „)” nem nyelődik el (a „(x^2)” értelmezhető, az „x^2)” nem).
+      const m = /^\^\s*(?:(\d+)|\(\s*(\d+)\s*\))/.exec(s.slice(i));
       if (!m) return null;
-      out.push({ t: "pow", v: Number(m[1]) }); i += m[0].length; continue;
+      out.push({ t: "pow", v: Number(m[1] ?? m[2]) }); i += m[0].length; continue;
     }
     if (c === "(" || c === "[") { out.push({ t: "(" }); i++; continue; }
     if (c === ")" || c === "]") { out.push({ t: ")" }); i++; continue; }
@@ -180,10 +181,24 @@ export function isExpanded(p: Parsed): boolean {
  * szóközzel követett vessző/kettőspont és a részfeladat-jel („a)”, „2)”) határol; a jelölt a TELJES szakasz (nem részlete —
  * a „x² + 10x + 25 + 1” nem lehet helyes egy részlete miatt).
  */
+/**
+ * Review #319: az önálló rövid betűs válasz („x”, „ab”, „Az eredmény x”) kifejezés, nem próza — a szakasz végén áll, és nem
+ * ASCII-szó előzi meg (az „ez a” névelője próza marad).
+ */
+const isolated = (prev: string, next: string, w: string) => /^[a-z]{1,3}[.,!?]?$/i.test(w) && !next && !/^[a-z]+$/i.test(prev);
+
 export function polynomialCandidates(text: string): Array<{ text: string; parsed: Parsed; start: number; end: number }> {
   // Hosszmegtartó jelölés: a jelölt pozíciója az eredeti szövegben marad (a pontozó közös sorrend-kurzora ezt követi — review #319).
   const marked = text
-    .replace(/(^|[\s,;])((?:[a-z]|\d{1,2})\))(?=\s)/gi, (_m, pre: string, label: string) => pre + "\n".repeat(label.length))
+    // Review #319 (Vercel): a „)” csak akkor részfeladat-jel, ha nem zár le nyitott zárójelet („(x + 5) (x + 5)” egyben marad).
+    .replace(/(^|[\s,;])((?:[a-z]|\d{1,2})\))(?=\s)/gi, (m: string, pre: string, label: string, offset: number) => {
+      let depth = 0;
+      for (let i = 0; i < offset + m.length - 1; i++) {
+        if (text[i] === "(" || text[i] === "[") depth++;
+        else if ((text[i] === ")" || text[i] === "]") && depth > 0) depth--;
+      }
+      return depth > 0 ? m : pre + "\n".repeat(label.length);
+    })
     // Review #319: a mondatzáró „?” és „!” is határ („Bontsd ki: (x+5)²!”).
     .replace(/[=;≠<>≤≥\n?!]|[,:](?=\s|$)|\.(?=\s|$)/g, "\n");
   const out: Array<{ text: string; parsed: Parsed; start: number; end: number }> = [];
@@ -209,10 +224,12 @@ export function polynomialCandidates(text: string): Array<{ text: string; parsed
       const next = words.slice(i + 1).find((x) => x && !/^\s+$/.test(x)) ?? "";
       const opNear = /[+\-−–·×*/^(]$/.test(prev) || /^[+\-−–·×*/^)²³]/.test(next);
       const prose = /[^ -~]/.test(w.replace(/[²³⁴⁵⁶·×−–⋅÷]/g, ""))
-        || (/^[a-z]{2,}[.,!?]?$/i.test(w) && !opNear)
-        || (/^[a-z][.,!?]?$/i.test(w) && !opNear && !/[\d)²³]$/.test(prev));
+        || (/^[a-z]{2,}[.,!?]?$/i.test(w) && !opNear && !isolated(prev, next, w))
+        || (/^[a-z][.,!?]?$/i.test(w) && !opNear && !/[\d)²³]$/.test(prev) && !isolated(prev, next, w));
       // Két, műveleti jel nélkül egymás mellé írt kifejezés két jelölt („x²+1 x²-1”); zárójel előtt nem vágunk („3 (x+1)”).
-      const glued = current.trim() && !/^[+\-−–·×*/^)²³(]/.test(w) && !/[+\-−–·×*/^(]$/.test(current.trim());
+      // Review #319: a csupasz szám utáni betű/zárójel szóközös implicit szorzás („2 x + 1”) — egyben marad.
+      const coefficient = /^\d+(?:[.,]\d+)?$/.test(current.trim()) && /^[a-z(]/i.test(w);
+      const glued = current.trim() && !coefficient && !/^[+\-−–·×*/^)²³(]/.test(w) && !/[+\-−–·×*/^(]$/.test(current.trim());
       if (prose) { flush(); continue; }
       if (glued) { flush(); currentStart = offset; }
       current += w;
