@@ -58,9 +58,11 @@ export function createWorkflowStore(getPool: () => Promise<Pool>): WorkflowStore
     },
     async list(owner) {
       const pool = await getPool();
-      const { rows } = await pool.query("SELECT owner_id,snapshot,lease_until FROM lesson_workflow_runs WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 50", [owner]);
+      // Spec 2026-10-19-eroforras-s2a + review #325: a lista a lépésnaplót már az SQL-ben elhagyja (Neon-kimenő forgalom); a teljes
+      // futást az egyes futás végpontja adja.
+      const { rows } = await pool.query("SELECT owner_id,snapshot - 'visits' - 'history' - 'skill' - 'skillFindings' - 'resumeEdges' AS snapshot,lease_until FROM lesson_workflow_runs WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 50", [owner]);
       return rows.map(row => {
-        const view = row.snapshot;
+        const view = { ...row.snapshot, visits: [] };
         if (view.state === "running" && (row.lease_until ? new Date(row.lease_until).getTime() < Date.now() : view.updatedAt < Date.now() - 90_000)) {
           view.state = "interrupted"; view.error = "A végrehajtó kapcsolata megszakadt. A mentett részeredmények megmaradtak.";
         }

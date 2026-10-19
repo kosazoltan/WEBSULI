@@ -104,9 +104,11 @@ designAssetsRouter.get("/:id", async (req, res) => {
     const etag = `"${meta.sha256}"`;
     res.set({ "Cache-Control": "public, max-age=86400", ETag: etag, "X-Content-Type-Options": "nosniff" });
     if (req.headers["if-none-match"] === etag) return res.status(304).end();
-    const [row] = await db.select({ bytes: designAssets.bytes }).from(designAssets).where(eq(designAssets.id, id));
+    // Review #325: a fejlécek a bájtokkal EGYÜTT olvasott lenyomatból jönnek (a közben futó háttérszinkron ne adjon régi ETaget).
+    const [row] = await db.select({ mime: designAssets.mime, sha256: designAssets.sha256, bytes: designAssets.bytes }).from(designAssets).where(eq(designAssets.id, id));
     if (!row) return res.status(404).json({ message: "Nincs ilyen kép." });
-    return res.type(meta.mime).send(row.bytes);
+    res.set("ETag", `"${row.sha256}"`);
+    return res.type(row.mime).send(row.bytes);
   } catch (error) {
     logger.error("[design-assets] A kép nem olvasható:", error);
     return res.status(500).json({ message: "A kép most nem érhető el." });

@@ -25,3 +25,12 @@ test("a lista content nélkül, a képvégpont 304-e bájtolvasás nélkül, a n
   assert.ok(assets.indexOf("status(304)") < assets.indexOf("bytes: designAssets.bytes"), "a 304 a bájtok olvasása előtt");
   for (const f of ["christmas-bg.jpg", "christmas-bg.png", "hero-video.mp4"]) assert.equal(fs.existsSync(`client/public/${f}`), false, f);
 });
+
+// Review #325: a futáslista a lépésnaplót már az SQL-ben elhagyja; a kép fejlécei a bájtokkal együtt olvasott lenyomatból jönnek.
+test("futáslista: SQL-szintű karcsúsítás; képvégpont: ETag a bájtokkal egy lekérdezésből", () => {
+  const store = fs.readFileSync("server/workflows/store.ts", "utf8");
+  assert.match(store, /snapshot - 'visits' - 'history'/);
+  const assets = fs.readFileSync("server/design-assets.ts", "utf8");
+  assert.match(assets, /sha256: designAssets\.sha256, bytes: designAssets\.bytes/);
+  assert.match(assets, /res\.set\("ETag", `"\$\{row\.sha256\}"`\)/);
+});
