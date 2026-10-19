@@ -233,19 +233,38 @@ export async function runNewsletters(now: Date, deps?: NewsletterDeps): Promise<
         const first = firstNameOf(learner.name);
         const delivered = new Set(claim.deliveredTo);
         let skippedNow = 0;
+        let sendFailures = 0;
+        let lastSendError = "";
         for (const a of to) {
           const key = addressKey(a.email);
           if (delivered.has(key)) continue;
+          // Review #314: a tulajdon a küldés ELŐTT is ellenőrizve — egy visszavett foglalásra a régi futó már nem küld.
+          const [stillMine] = await db.select({ id: learnerNewsletters.id }).from(learnerNewsletters).where(owned).limit(1);
+          if (!stillMine) throw new Error("a foglalást egy későbbi kör átvette");
           // Review #313: a kapcsoló és a cím közben kikapcsolhatott — küldés előtt friss ellenőrzés; review #314: a link a friss tokennel.
           const tokenVersion = await stillEligible(learner.id, a.email);
           if (tokenVersion === null) { skippedNow++; continue; }
           const materialUrl = material ? personalUrl(getMaterialPreviewUrl(material.id), learnerTokenFor(learner.id, tokenVersion)) : null;
-          await send(newsletterSubject(first, pick.title), newsletterHtml({ first, title: pick.title, teaser: pick.teaser, question: pick.question, articleUrl: pick.url, materialTitle: material?.title ?? null, materialUrl }), a.email);
+          try {
+            await send(newsletterSubject(first, pick.title), newsletterHtml({ first, title: pick.title, teaser: pick.teaser, question: pick.question, articleUrl: pick.url, materialTitle: material?.title ?? null, materialUrl }), a.email);
+          } catch (error) {
+            // Review #314: egy hibás cím nem akadályozza a többit; a foglalás a végén újrapróbálható marad.
+            sendFailures++;
+            lastSendError = error instanceof Error ? error.message : String(error);
+            continue;
+          }
           delivered.add(key);
-          const marked = await db.update(learnerNewsletters).set({ deliveredTo: sql`array_append(${learnerNewsletters.deliveredTo}, ${key})`, updatedAt: new Date() }).where(owned).returning({ id: learnerNewsletters.id });
+          // Review #314: a levél már elment — a rögzítés adatbázis-hibája nem tehet újraküldhetővé (csak naplózzuk); a tulajdon elvesztése megállít.
+          let marked: Array<{ id: string }> = [{ id: claimId }];
+          try {
+            marked = await db.update(learnerNewsletters).set({ deliveredTo: sql`array_append(${learnerNewsletters.deliveredTo}, ${key})`, updatedAt: new Date() }).where(owned).returning({ id: learnerNewsletters.id });
+          } catch {
+            logger.error(`[NEWSLETTER] a kézbesítés rögzítése nem sikerült, foglalás: ${claimId}`);
+          }
           if (!marked.length) throw new Error("a foglalást egy későbbi kör átvette");
           await new Promise((r) => setTimeout(r, 600)); // Resend: legfeljebb 2 kérés/másodperc
         }
+        if (sendFailures) throw new Error(`${sendFailures} címre a küldés nem sikerült (újrapróbálható); utolsó hiba: ${lastSendError}`);
         const reached = to.some((a) => delivered.has(addressKey(a.email)));
         await finish({ status: reached ? "sent" : "skipped", ...(reached ? {} : { error: skippedNow ? "a címzettek közben kikapcsoltak" : "nincs címzett" }) });
         if (reached) result.sent++; else result.skipped++;

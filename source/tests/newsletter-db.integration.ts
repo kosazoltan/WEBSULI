@@ -167,3 +167,20 @@ test("review #314: a visszavett foglalásra a régi futó nem írhat (tulajdon =
   assert.notEqual(row.status, "sent", "a régi futó nem írhatta „sent”-re");
   setNewsletterSender(async (subject, html, to) => { sent.push({ subject, html, to }); });
 });
+
+test("review #314: egy hibás cím nem akadályozza a többit; a foglalás újrapróbálható marad", async () => {
+  sent.length = 0;
+  const day = new Date("2026-10-28T14:00:00Z");
+  setNewsletterSender(async (subject, html, to) => {
+    if (to === "marci@example.test") throw new Error("visszapattant");
+    sent.push({ subject, html, to });
+  });
+  const r = await runNewsletters(day, fakeDeps({ url: "https://qubit.hu/hetedik", ageAppropriate: true, seen: [] }));
+  assert.equal(r.failed, 1, "a hibás cím miatt újrapróbálható");
+  assert.deepEqual(sent.map((m) => m.to), ["marci-masik@example.test"], "a működő cím megkapta");
+  setNewsletterSender(async (subject, html, to) => { sent.push({ subject, html, to }); });
+  const retry = await runNewsletters(day, fakeDeps({ url: "https://qubit.hu/masik", ageAppropriate: true, seen: [] }));
+  assert.equal(retry.sent, 1);
+  assert.deepEqual(sent.map((m) => m.to), ["marci-masik@example.test", "marci@example.test"], "a pótkör csak a hiányzó címre, ugyanazzal a cikkel");
+  assert.match(sent[1].html, /qubit\.hu\/hetedik/);
+});
