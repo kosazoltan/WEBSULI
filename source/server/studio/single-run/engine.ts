@@ -20,7 +20,7 @@ import { autofixOutline } from "../tools/outline-autofix";
 import { applyVisualPatch } from "../visual-patch";
 import { stripUngroundedAnimateLabels } from "../grounding";
 import { ensureSectionVisuals } from "../section-visuals";
-import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceCheckpoint } from "../experience-builder";
+import { bankStaticPrefix, buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceCheckpoint } from "../experience-builder";
 import { answerKeysFor, answerKeyTestsEnabled } from "../answer-key-writer";
 import { answerKeyNotes } from "../../../shared/answer-key-tests";
 import { quizBlindProblems } from "../quiz-blind-check";
@@ -154,8 +154,28 @@ const text = (t: string): TurnBlock => ({ type: "text", text: t });
  * gyorsítótár) változatlan. Workflow-kontextuson kívül üres (nincs blokk).
  */
 export function withRoleRunbook(blocks: TurnBlock[], role: PromptRole): TurnBlock[] {
+  const runbook = roleRunbookText(role);
+  return runbook ? [...blocks, text(runbook)] : blocks;
+}
+
+/** A szerep runbook-blokkjának szövege (üres, ha nincs). */
+function roleRunbookText(role: PromptRole): string {
   const runbook = workflowSkillPrompt(role).trim();
-  return runbook ? [...blocks, text(`A FUTÁS RUNBOOKJA ÉS TANULT SZABÁLYAI ehhez a szerephez (${role}):\n${runbook}`)] : blocks;
+  return runbook ? `A FUTÁS RUNBOOKJA ÉS TANULT SZABÁLYAI ehhez a szerephez (${role}):\n${runbook}` : "";
+}
+
+/**
+ * Spec 2026-10-19-eroforras-s3a: a bankkérés blokkjai. Ha a rendszerszöveg az állandó előtaggal kezdődik: [előtag, runbook (töréspont),
+ * csomagonkénti rész] — a csomagok és a javítókörök az előtagot gyorsítótárból olvassák. Különben a régi egyblokkos alak.
+ */
+export function bankRequestBlocks(system: string, user: string): TurnBlock[] {
+  const prefix = bankStaticPrefix();
+  const header = "5. ÁLLOMÁS — GYAKORLÓBANK (egy fejezet csomagja).";
+  if (!system.startsWith(prefix)) return withRoleRunbook([text(`${header}\n${system}\n\n${user}`)], "bank");
+  const runbook = roleRunbookText("bank");
+  const rest = system.slice(prefix.length).replace(/^\n/, "");
+  const head: TurnBlock[] = runbook ? [text(prefix), { type: "text", text: runbook, cache: true }] : [{ type: "text", text: prefix, cache: true }];
+  return [...head, text(`${header}\n${rest}\n\n${user}`)];
 }
 
 /** Review #261: a feltöltött fájl valódi szövege (szöveges fájl, kinyert PDF/DOCX) — ennél a modell átirata nem lehet a mérce. */
@@ -201,7 +221,7 @@ export async function runStation<T>(deps: StationDeps, name: string, request: Tu
  */
 export function freshBankCall(fresh: (system: string) => LessonConversation, telemetry?: TelemetryRecorder) {
   return async (system: string, user: string, attempt = 0): Promise<unknown> => {
-    const blocks = withRoleRunbook([text(`5. ÁLLOMÁS — GYAKORLÓBANK (egy fejezet csomagja).\n${system}\n\n${user}`)], "bank");
+    const blocks = bankRequestBlocks(system, user);
     // Review #263: az első utáni bankkísérlet javító forduló a telemetriában.
     const reply = await timed(telemetry, "gyakorlóbank", () => fresh(freshSystemPrompt("bank")).send(blocks), { fresh: true, fix: attempt > 0 });
     if (reply.truncated) throw new RetryableBankCallError("A bankcsomag válasza elérte a kimeneti keretet és levágódott.");
@@ -670,7 +690,8 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   // menetét nem; az előző kör blokkolói a kérésben. A tanítás javítása a fő beszélgetésben marad.
   await workflowPhase("lektor");
   const warnings: string[] = [];
-  const sourceBlock = sourceText ? [text(`A FORRÁS ÁTIRATA (adat, a mérce):\n${sourceText}`)] : [];
+  // Spec 2026-10-19-eroforras-s3a: a forrásátirat mindkét lektorkörben bájtra azonos — töréspont a végén, a 2. kör olvassa.
+  const sourceBlock: TurnBlock[] = sourceText ? [{ type: "text", text: `A FORRÁS ÁTIRATA (adat, a mérce):\n${sourceText}`, cache: true }] : [];
   let previousBlockers: ReturnType<typeof classifyNotes> = [];
   /** Review #263: a lektori bankjavítás a kezdete előtt mentett jelzővel fut (folytatáskor onnan fejeződik be), a végén a jelző törlődik. */
   const repairBank = async (base: Lesson, repair: PendingBankRepair): Promise<Lesson> => {

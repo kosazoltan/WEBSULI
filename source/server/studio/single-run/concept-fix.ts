@@ -55,7 +55,8 @@ export async function fixConceptInConversation(input: {
     assertRepairCandidate(original, candidate, source);
     await workflowPhase("lektor");
     // J2: a lektor friss beszélgetésben, a javítás menetétől függetlenül ítél.
-    const sourceBlock = input.sourceText?.trim() ? [{ type: "text" as const, text: `A FORRÁS ÁTIRATA (adat, a mérce):\n${input.sourceText.trim()}` }] : [];
+    // Review #329 (spec 2026-10-19-eroforras-s3a): a forrásátirat töréspontot kap — a lektor javítóköre gyorsítótárból olvassa.
+    const sourceBlock = input.sourceText?.trim() ? [{ type: "text" as const, text: `A FORRÁS ÁTIRATA (adat, a mérce):\n${input.sourceText.trim()}`, cache: true }] : [];
     const report = await runStation({ conversation: input.fresh(freshSystemPrompt("lektor")), log: input.log }, "a javítás lektorálása", withRoleRunbook([...sourceBlock, { type: "text", text: `LEKTORÁLÁS — a javított tanítás és a friss bankok, a forráshoz mérve.\n${buildLektorPrompt(candidate, source)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.` }], "lektor"),
       (json) => {
         const r = parseLektorResponse(json);
