@@ -20,3 +20,12 @@ Terv: `docs/specs/2026-10-19-eroforras-s2b.md`. Munkakönyvtár: `source/`. Ág:
 5. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`, `test:learning-db`.
 6. **Kitelepítés:** összevonás előtt az aktív-futás őr = 0 (a migráció rövid táblazárat kér). Utána csak olvasó `EXPLAIN ANALYZE`
    mérés élesen.
+
+## Review #328 — pontosítás
+- **Korlátos zárvárakozás:** a migráció első utasítása `SET LOCAL lock_timeout = '5s'` (a futtató fájlonként tranzakcióban
+  fut). Ütköző hosszú tranzakciónál a build gyorsan bukik, és a régi példány fut tovább; nem akad el.
+- **Az induló mentés döntése:** a `runStartupBackup(deps)` (`server/lib/backup-startup.ts`) viszi, a listázást és a mentést
+  befecskendezve kapja. A teszt viselkedésszintű:
+  - Render → nincs lista, nincs export;
+  - friss mentés → kimarad;
+  - olvashatatlan lista → mentés.
