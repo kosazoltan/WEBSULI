@@ -1,6 +1,6 @@
 import { withLessonTypography } from "@shared/lesson-typography";
 import { useEffect, useState } from "react";
-import { Globe, Loader2, CheckCircle2, Eye, Link2, AlertTriangle } from "lucide-react";
+import { Globe, Loader2, CheckCircle2, Eye, Link2, AlertTriangle, RotateCcw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,6 +91,9 @@ export function WebResearchAgentPanel() {
         setCanResume(job.canResume === true);
         setMessages([{ role: "user", content: job.message }, { role: "assistant", content: job.state === "done" ? "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." : job.content || job.stage }]);
         // Spec 2026-09-25: a Studio lesson made from the downloaded pages has no inline HTML — the saved material is the result.
+        // Spec 2026-10-19-webes-keszites-uj-inditas: végállapot után a böngésző elfelejti a futást (újratöltéskor üres panel);
+        // a mentésre váró (`ready`) és a folytatható hibás futás megmarad.
+        if (job.state === "done" || (job.state === "error" && job.canResume !== true)) rememberResearch(null);
         if (job.state === "done" && job.materialId && !job.html) {
           setGeneratedHtml("");
           setTitle(job.title);
@@ -146,6 +149,19 @@ export function WebResearchAgentPanel() {
     rememberResearch(request);
     setIsLoading(true);
     setPending(request);
+  };
+
+  /**
+   * Spec 2026-10-19-webes-keszites-uj-inditas: a panel elengedi a követett futást, és alaphelyzetbe áll. A szerveren futó munka
+   * nem áll le (a kész anyag a tananyagok közé kerül); folyamatban lévő futásnál ezért előbb megerősítést kér.
+   */
+  const startOver = () => {
+    if (isSaving) return;
+    if (isLoading && !window.confirm("A mostani készítés a szerveren tovább fut, és ha elkészül, a tananyagok közé kerül. A panel elengedi, és új készítést indíthatsz. Folytatod?")) return;
+    rememberResearch(null);
+    setPending(null);
+    setMessages([]); setGeneratedHtml(""); setSavedId(null); setFailure(null); setCanResume(false);
+    setSources([]); setWarnings([]); setStatus(null); setIsLoading(false); setTitle("");
   };
 
   const handleSave = async () => {
@@ -300,6 +316,11 @@ export function WebResearchAgentPanel() {
         {savedId && (
           <Button asChild variant="outline" className="min-h-11" data-testid="web-research-open-saved">
             <a href={`/preview/${savedId}`}>Megnyitás</a>
+          </Button>
+        )}
+        {(pending || savedId || failure || messages.length > 0) && (
+          <Button variant="outline" className="min-h-11" onClick={startOver} disabled={isSaving} data-testid="web-research-new">
+            <RotateCcw className="w-4 h-4 mr-2" /> Új készítés
           </Button>
         )}
       </CardFooter>
