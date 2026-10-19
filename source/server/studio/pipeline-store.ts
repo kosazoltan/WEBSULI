@@ -4,13 +4,15 @@
  * használt műveletek maradtak. A `db` lustán töltődik: a modul importja nem nyithat adatbázis-kapcsolatot.
  */
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lessons, studioJobs, type InsertGameQuizItem } from "../../shared/schema";
+import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lessons, studioJobs, type InsertGameQuizItem } from "../../shared/schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { workflowFence, workflowSerialized } from "../workflows/engine";
 import type { Coverage, MapConcept } from "./coverage";
 import type { StudioStep } from "./pipeline";
 import { withLessonArt } from "../design-assets";
+import type { CatalogRowLike } from "../catalog/retrieval";
+import type { MemoryCard } from "../memory/subject-memory";
 
 /** Spec 2026-09-19: csak a forrásból igazolt (megtartott / szerkesztett) fogalmak taníthatók. */
 export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
@@ -72,12 +74,43 @@ export type PipelineStore = {
    */
   publishLesson(input: PublishInput): Promise<{ htmlFileId: string; exportedQuizItems: number }>;
   createJob(input: { mapId: string; step: "pedagogue"; status: string; model: string; promptVersion: string; inputHash: string }): Promise<string>;
+  /** Spec 2026-10-19-tudasbank-s5-s6-ujrabekotes (S6, kapcsolós): EGY tantárgyi bank aktív tételei. */
+  loadCatalogRows?(subject: string): Promise<CatalogRowLike[]>;
+  /** Spec 2026-10-19-tudasbank-s5-s6-ujrabekotes (S5, kapcsolós): EGY tantárgy nyitott memória-kártyái. */
+  loadSubjectMemory?(subject: string): Promise<MemoryCard[]>;
 };
 
 export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
   const { db } = await import("../db");
 
   return {
+    // Spec 2026-10-19 (a d9e9c8e9 előtti lekérdezés): EGY tantárgyi bank aktív tételei — a keresztlekérést a feltétel zárja ki.
+    async loadCatalogRows(subject) {
+      return db.select({
+        subject: catalogItems.subject, grade: catalogItems.grade, topicArea: catalogItems.topicArea, topic: catalogItems.topic, kind: catalogItems.kind,
+        prompt: catalogItems.prompt, body: catalogItems.body, options: catalogItems.options, correctIndex: catalogItems.correctIndex, accepted: catalogItems.accepted,
+        provenances: catalogItems.provenances, trust: catalogItems.trust, status: catalogItems.status, fingerprint: catalogItems.fingerprint,
+      }).from(catalogItems).where(and(eq(catalogItems.subject, subject), eq(catalogItems.status, "active")));
+    },
+    // Spec 2026-10-19 (S5): EGY tantárgy nyitott memória-kártyái (`subject = $1`).
+    // Review #311: a kártyák és a bizonyíték-kulcsaik EGY pillanatképből (REPEATABLE READ, csak olvasás) — egy közben záruló írás nem
+    // keverhet régi kártyát új kulccsal.
+    async loadSubjectMemory(subject) {
+      const [{ dbPool }, { loadSubjectMemoryCards }] = await Promise.all([import("../db"), import("../memory/store")]);
+      const client = await dbPool.connect();
+      try {
+        await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+        const cards = await loadSubjectMemoryCards(async (text, params) => (await client.query(text, params as unknown[] | undefined)).rows, subject);
+        await client.query("COMMIT");
+        return cards;
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
     async loadMap(mapId) {
       const [map] = await db
         .select({
