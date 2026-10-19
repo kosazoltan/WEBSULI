@@ -48,7 +48,10 @@ test("egyedi maxAgeMs és alapérték", () => {
 
 test("autoBackup.ts: a döntést használja, a cron budapesti időben fut", () => {
   const src = readFileSync(join(import.meta.dirname, "..", "server", "autoBackup.ts"), "utf8");
-  assert.match(src, /shouldBackupOnStartup\(/);
+  // Dokumentált specváltozás (review #328, docs/specs/2026-10-19-eroforras-s2b-vegrehajtas.md): a döntést a `runStartupBackup`
+  // viszi (viselkedéstesztje: tests/resource-s2b.test.ts) — az autoBackup ezt hívja, az pedig a `shouldBackupOnStartup`-ot.
+  assert.match(src, /runStartupBackup\(/);
+  assert.match(readFileSync(join(import.meta.dirname, "..", "server", "lib", "backup-startup.ts"), "utf8"), /shouldBackupOnStartup\(files/);
   assert.match(src, /timezone: 'Europe\/Budapest'/);
 });
 
