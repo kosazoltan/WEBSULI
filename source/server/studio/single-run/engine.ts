@@ -40,7 +40,7 @@ import type { ExtractorFile } from "../extractor";
 import type { LessonConversation, TurnBlock } from "./conversation";
 import { TelemetryRecorder, telemetryOf, timed } from "./telemetry";
 import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock, poolMatches, type CatalogMapLike } from "../../catalog/s6-context";
-import type { CatalogPool } from "../../catalog/retrieval";
+import { catalogVerbatimPaths, type CatalogPool } from "../../catalog/retrieval";
 import { isMemorySnapshot, memorySnapshot, snapshotPromptBlock, subjectMemoryEnabled, type MemorySnapshot } from "../../memory/subject-memory";
 import { subjectKeyOf } from "../../../shared/subject-key";
 
@@ -691,7 +691,10 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   for (let round = startRound; round <= SINGLE_RUN_REVIEW_ROUNDS; round++) {
     phase("lektor", `Lektorálás (${round + 1}. kör)…`);
     const reviewer: StationDeps = { conversation: deps.fresh(freshSystemPrompt("lektor")), log: deps.log, telemetry, onFix };
-    const report = await runStation(reviewer, "lektorálás", withRoleRunbook([...sourceBlock, text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, previousBlockers, owner)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)], "lektor"),
+    // Review #311 (S6, kapcsolós): a szó szerint átvett, szülő által ellenőrzött katalógus-kvízek útvonala a lektornak (igazolt forrás) —
+    // különben a feltöltött forráshoz mérve hamis source_conflictot kaphatnának. Üres halmaz → a kérés változatlan.
+    const catalogPaths = catalogVerbatimPaths(lesson, await ensureCatalogPool("lektor"));
+    const report = await runStation(reviewer, "lektorálás", withRoleRunbook([...sourceBlock, text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, previousBlockers, owner, undefined, undefined, catalogPaths.size ? catalogPaths : undefined)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)], "lektor"),
       (json) => {
         const r = parseLektorResponse(json);
         if (!r.ok) return { ok: false, problems: [r.reason] };

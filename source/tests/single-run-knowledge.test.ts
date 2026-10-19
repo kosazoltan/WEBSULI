@@ -12,6 +12,7 @@ import type { MemoryCard } from "../server/memory/subject-memory";
    egyfutásos gyártásban — kapcsolós, alapból KI; kikapcsolva a betöltő nem hívódik és a kérések bájtra azonosak. */
 
 const fixture = standardFusionFixture(); // matematika, 7. évfolyam
+type Experience = NonNullable<typeof fixture.experience>;
 const concepts: MapConcept[] = [{ localId: "area", examWeight: "core", term: "terület", definition: "A síkidom által lefedett rész nagysága." }];
 const TRANSCRIPT = "A téglalap területe az oldalak szorzata. A terület mértékegysége a négyzetcentiméter.";
 const outline = { sections: [{ heading: fixture.sections[0].heading, conceptIds: ["area"], plannedBlocks: ["explain", "example", "animate", "recap"], animationSuggestions: [] }], misconceptions: [] };
@@ -34,7 +35,7 @@ const MEMORY_CARD: MemoryCard = {
 const text = (turns: Turn[]) => turns.at(-1)!.blocks.map((b) => (b.type === "text" ? b.text : "")).join("\n");
 
 /** Forgatókönyves modell; minden hívás rendszerpromptja és utolsó kérése rögzítve. */
-function scriptedClient(): ModelClient & { seen: Array<{ system: string; text: string }> } {
+function scriptedClient(bank: (experience: Experience) => unknown = (e) => e): ModelClient & { seen: Array<{ system: string; text: string }> } {
   const seen: Array<{ system: string; text: string }> = [];
   const { experience: _bank, ...teaching } = fixture;
   return {
@@ -49,7 +50,7 @@ function scriptedClient(): ModelClient & { seen: Array<{ system: string; text: s
       else if (station === "2") json = outline;
       else if (station === "3") json = teaching;
       else if (station === "4") json = { patches: "nem érvényes ábrafolt" };
-      else if (station === "5") json = structuredClone(fixture.experience);
+      else if (station === "5") json = bank(structuredClone(fixture.experience!));
       else if (station === "6") json = { solutions: [], notes: [], reviewedAll: true };
       else json = {};
       return { text: JSON.stringify(json), model: "claude-opus-5-5", truncated: false, usage: { input: 1000, cachedInput: 600, output: 100 } };
@@ -104,7 +105,8 @@ async function withEnv<T>(env: Record<string, string | undefined>, run: () => Pr
 const OFF = { STUDIO_CATALOG_S6: undefined, STUDIO_SUBJECT_MEMORY: undefined };
 const run = (client: ReturnType<typeof scriptedClient>, mem: ReturnType<typeof memoryStore>, logs?: string[]) =>
   runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, mem, logs));
-const stationText = (client: ReturnType<typeof scriptedClient>, n: string) => client.seen.find((c) => c.text.startsWith(`${n}. ÁLLOMÁS`))?.text ?? "";
+// A lektor kérése a forrás-blokkal kezdődik, ezért nem elég a kezdet: az állomás fejléce bárhol a kérésben.
+const stationText = (client: ReturnType<typeof scriptedClient>, n: string) => client.seen.find((c) => new RegExp(`(^|\\n)${n}\\. ÁLLOMÁS`).test(c.text))?.text ?? "";
 
 test("kikapcsolva: a betöltők nem hívódnak, a 2. és 3. állomás kérése bájtra azonos a betöltők nélküli futáséval", async () => {
   await withEnv(OFF, async () => {
@@ -199,5 +201,27 @@ test("review #311: bekapcsolt funkció, de ismeretlen tantárgy vagy hiányzó b
     await run(scriptedClient(), memoryStore(), noLoader);
     assert.ok(noLoader.some((l) => /Katalógus kihagyva: az adattárnak nincs katalógus-betöltője/.test(l)));
     assert.ok(noLoader.some((l) => /Tantárgyi memória kihagyva: az adattárnak nincs memória-betöltője/.test(l)));
+  });
+});
+
+test("review #311: a szó szerint átvett, szülő által ellenőrzött katalógus-kvíz a lektornak igazolt forrásként jelölve", async () => {
+  const QUIZ: CatalogRowLike = {
+    ...CATALOG_ROW, kind: "quiz", trust: "parent_verified", fingerprint: "fq1", provenances: ["szulo:1"],
+    prompt: "Mennyi a 3 cm és 4 cm oldalú téglalap területe?", options: ["12 négyzetcentiméter", "7 négyzetcentiméter", "14 négyzetcentiméter"], correctIndex: 0,
+  };
+  const withCatalogQuiz = (e: Experience) => {
+    const quiz = e.quiz.map((q, i) => (i === 0 ? { ...q, question: QUIZ.prompt, options: [...QUIZ.options!], correctIndex: 0 } : q));
+    return { ...e, quiz };
+  };
+  await withEnv({ STUDIO_CATALOG_S6: "1", STUDIO_SUBJECT_MEMORY: undefined }, async () => {
+    const client = scriptedClient(withCatalogQuiz);
+    const result = await run(client, memoryStore({ catalog: async () => [QUIZ] }));
+    assert.equal(result.htmlFileId, "html1");
+    assert.match(stationText(client, "6"), /KATALÓGUS-TÉTELEK \(a lecke tantárgyi bankjából szó szerint átvett/);
+  });
+  await withEnv(OFF, async () => {
+    const client = scriptedClient(withCatalogQuiz);
+    await run(client, memoryStore({ catalog: async () => [QUIZ] }));
+    assert.doesNotMatch(stationText(client, "6"), /KATALÓGUS-TÉTELEK/, "kikapcsolva nincs jelölés");
   });
 });
