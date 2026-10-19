@@ -7,6 +7,15 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { parseLessonRepair } from "@shared/lesson-repair";
 import { WorkflowPhaseBar } from "./studio/WorkflowPhaseBar";
+import { createPortal } from "react-dom";
+
+/** A Tananyagjavító lapjának ragadós fázishelye; ha nincs (a lecke alatti panel), a sáv a helyén marad. */
+export const REPAIR_PHASE_SLOT_ID = "lesson-repair-phase-slot";
+function PhaseBarSlot({ children }: { children: React.ReactNode }) {
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => { setSlot(document.getElementById(REPAIR_PHASE_SLOT_ID)); }, []);
+  return slot ? createPortal(children, slot) : <>{children}</>;
+}
 
 /**
  * Spec 2026-09-23 — javító modul a kész tananyag alatt (csak adminnak).
@@ -145,8 +154,9 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
             <p className="flex items-center gap-2 text-sm" data-testid="lesson-repair-running" role="status">
               <Loader2 className="w-4 h-4 animate-spin" /> A javítás fut{status.data?.elapsed ? ` (${Math.round(status.data.elapsed / 60)} perc)` : ""}… Az oldal bezárható, később itt folytatódik.
             </p>
-            {/* Spec 2026-10-19-okositas-fazisjelzo (3): a teljes fázissor ragadósan (a jobId újratöltés után is megmarad). */}
-            <WorkflowPhaseBar id={jobId} sticky title="Tananyag javítása" />
+            {/* Spec 2026-10-19-okositas-fazisjelzo (3) + review #323: a teljes fázissor ragadósan. A Tananyagjavítóban a lap tetején
+                lévő helyre kerül (portál) — a ragadós elemet a szülője határolja, a panel rövid állapotblokkjában görgetéskor eltűnne. */}
+            <PhaseBarSlot><WorkflowPhaseBar id={jobId} sticky title="Tananyag javítása" /></PhaseBarSlot>
           </div>
         )}
         {jobId && (s === "error" || s === "not_found") && (

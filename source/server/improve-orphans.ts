@@ -7,7 +7,6 @@
  * bérletéhez kötve: élő bérletű futáshoz nem nyúlunk (deploykor a régi példány még befejezheti).
  */
 import { sql } from "drizzle-orm";
-import { db } from "./db";
 import { logger } from "./lib/logger";
 
 export const ORPHAN_IMPROVE_ERROR = "A szerver újraindult az okosítás / javítás közben — töröld, és indítsd újra.";
@@ -30,6 +29,8 @@ export function orphanedImproveIds(rows: readonly ImproveOrphanRow[], now: numbe
 }
 
 export async function sweepImproveJobs(): Promise<number> {
+  // Review #323: dinamikus import — a tiszta döntésfüggvény importja (egységteszt) ne nyisson adatbázis-kapcsolatot.
+  const { db } = await import("./db");
   const { rows } = await db.execute(sql`
     SELECT f.id, f.created_at, w.state AS run_state, w.lease_until, w.updated_at AS run_updated_at
     FROM improved_html_files f

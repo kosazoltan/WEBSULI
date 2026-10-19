@@ -68,3 +68,33 @@ for (const vp of [{ width: 393, height: 780 }, { width: 835, height: 810 }]) {
     await page.screenshot({ path: `test-results/phase-bar/error-${vp.width}.png`, fullPage: true });
   });
 }
+
+test("Tananyagjavító: a futó javítás fázissora a lap tetején ragad a teljes görgetés alatt (review #323)", async ({ page }) => {
+  const repairRun = { ...run("job-r", "running", [{ step: "source", attempt: 1, startedAt: now - 60_000, state: "running", cacheHits: 0 }]), definition: workflowDefinition("repair") } as WorkflowView;
+  await page.route("**/api/**", (route) => {
+    const req = route.request(); const path = new URL(req.url()).pathname;
+    if (path === "/api/auth/user") return route.fulfill({ json: { id: "admin-fixture", isAdmin: true, firstName: "Admin" } });
+    if (path === "/api/config") return route.fulfill({ json: { baseUrl: "http://localhost", materialOrigin: "" } });
+    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "probe" } });
+    if (path === "/api/html-files") return route.fulfill({ json: [{ id: "les-1", title: "Kéttagú kifejezések négyzete", contentType: "lesson", classroom: 9, createdAt: iso }] });
+    if (path === "/api/studio/skills/tananyag-javito") return route.fulfill({ json: { snapshot: { version: "v1", rules: [] } } });
+    if (path === "/api/studio/skills/tananyag-javito/roles") return route.fulfill({ json: { roles: Array.from({ length: 8 }, (_, i) => ({ role: `szerep-${i}`, version: "1", text: "Szabály. ".repeat(200) })) } });
+    if (path === "/api/admin/improve-material/les-1" && req.method() === "POST") return route.fulfill({ json: { jobId: "job-r" } });
+    if (path === "/api/admin/improve-material/status/job-r") return route.fulfill({ json: { status: "processing", elapsed: 60 } });
+    if (path === "/api/studio/workflows/job-r") return route.fulfill({ json: { run: repairRun } });
+    return route.fulfill({ json: [] });
+  });
+  await page.setViewportSize({ width: 393, height: 780 });
+  await page.goto("/admin?tab=lesson-repair");
+  await page.getByTestId("lesson-repair-option-les-1").click();
+  await page.getByTestId("lesson-repair-instruction").fill("Javítsd az elírásokat.");
+  await page.getByTestId("lesson-repair-start").click();
+  const slot = page.getByTestId("lesson-repair-phase-slot");
+  await expect(slot.getByTestId("phase-bar")).toHaveAttribute("data-run-state", "running");
+  await expect(slot.locator("li")).toHaveCount(7);
+  await page.evaluate(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "instant" as ScrollBehavior }));
+  const box = await slot.boundingBox();
+  expect(box!.y).toBeGreaterThanOrEqual(-1);
+  expect(box!.y).toBeLessThan(200);
+  await page.screenshot({ path: "test-results/phase-bar/repair-scrolled-393.png" });
+});

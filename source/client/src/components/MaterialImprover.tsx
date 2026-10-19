@@ -2,7 +2,7 @@ import { withLessonTypography } from "@shared/lesson-typography";
 import { parseLessonRepair } from "@shared/lesson-repair";
 import { LessonRuntime } from "@/lesson-runtime/LessonRuntime";
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueries } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { deleteImprovedConfirmMessage, IMPROVER_ZOOM } from "@shared/improver-ui";
 import { useToast } from "@/hooks/use-toast";
@@ -88,8 +88,21 @@ export default function MaterialImprover() {
   // Get all improved files
   const { data: improvedFiles = [], isLoading: isLoadingImproved } = useQuery<ImprovedFile[]>({
     queryKey: ["/api/admin/improved-files"],
-    // Spec 2026-10-19-okositas-fazisjelzo: futó sor mellett a lista is frissül (újratöltés után is látszik a vége).
-    refetchInterval: (q) => ((q.state.data ?? []).some((f) => f.status === "processing") ? 5000 : false),
+  });
+  // Spec 2026-10-19-okositas-fazisjelzo + review #323: futó sor mellett a KÖNNYŰ állapotvégpontot kérdezzük (nem a teljes, tartalmas
+  // listát); ha bármelyik futás véget ért, a lista egyszer frissül.
+  const processingIds = improvedFiles.filter((f) => f.status === "processing").map((f) => f.id);
+  useQueries({
+    queries: processingIds.map((id) => ({
+      queryKey: ["/api/admin/improve-material/status", id, "list-watch"],
+      queryFn: async () => {
+        const res = await fetch(`/api/admin/improve-material/status/${id}`, { credentials: "include" });
+        const body = res.ok ? await res.json() as { status?: string } : { status: "processing" };
+        if (body.status && body.status !== "processing") await queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
+        return body;
+      },
+      refetchInterval: 5000,
+    })),
   });
 
   // Get single improved file with original for preview

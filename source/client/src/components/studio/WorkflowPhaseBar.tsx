@@ -40,7 +40,9 @@ export function WorkflowPhaseBar({ id, sticky = false, title }: { id: string | n
   const current = run.visits.at(-1);
   const currentStep = current ? run.definition.steps.find((s) => s.id === current.step) : undefined;
   const round = current ? run.visits.filter((v) => v.step === current.step).length : 0;
-  const minutes = Math.max(0, Math.round(((run.state === "running" || run.state === "waiting" ? Date.now() : run.updatedAt) - run.createdAt) / 60_000));
+  // Review #323: a szívverés csak a bérletet frissíti, a `run` változatlan maradhat — az „most” a sikeres lekérdezés ideje
+  // (minden 2,5 mp-es lekérdezéssel változik, így újrarajzol), nem a renderkori `Date.now()`.
+  const minutes = Math.max(0, Math.round(((run.state === "running" || run.state === "waiting" ? query.dataUpdatedAt : run.updatedAt) - run.createdAt) / 60_000));
   const failed = [...run.visits].reverse().find((v) => v.state === "error");
   const errorText = run.error ?? failed?.error;
   return (
