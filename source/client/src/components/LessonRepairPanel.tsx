@@ -6,6 +6,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { parseLessonRepair } from "@shared/lesson-repair";
+import { WorkflowPhaseBar } from "./studio/WorkflowPhaseBar";
+import { createPortal } from "react-dom";
+
+/** A Tananyagjavító lapjának ragadós fázishelye; ha nincs (a lecke alatti panel), a sáv a helyén marad. */
+export const REPAIR_PHASE_SLOT_ID = "lesson-repair-phase-slot";
+function PhaseBarSlot({ children }: { children: React.ReactNode }) {
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => { setSlot(document.getElementById(REPAIR_PHASE_SLOT_ID)); }, []);
+  return slot ? createPortal(children, slot) : <>{children}</>;
+}
 
 /**
  * Spec 2026-09-23 — javító modul a kész tananyag alatt (csak adminnak).
@@ -140,12 +150,18 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
           </>
         )}
         {jobId && (s === "processing" || !s) && (
-          <p className="flex items-center gap-2 text-sm" data-testid="lesson-repair-running" role="status">
-            <Loader2 className="w-4 h-4 animate-spin" /> A javítás fut{status.data?.elapsed ? ` (${Math.round(status.data.elapsed / 60)} perc)` : ""}… Az oldal bezárható, később itt folytatódik.
-          </p>
+          <div className="space-y-2">
+            <p className="flex items-center gap-2 text-sm" data-testid="lesson-repair-running" role="status">
+              <Loader2 className="w-4 h-4 animate-spin" /> A javítás fut{status.data?.elapsed ? ` (${Math.round(status.data.elapsed / 60)} perc)` : ""}… Az oldal bezárható, később itt folytatódik.
+            </p>
+            {/* Spec 2026-10-19-okositas-fazisjelzo (3) + review #323: a teljes fázissor ragadósan. A Tananyagjavítóban a lap tetején
+                lévő helyre kerül (portál) — a ragadós elemet a szülője határolja, a panel rövid állapotblokkjában görgetéskor eltűnne. */}
+            <PhaseBarSlot><WorkflowPhaseBar id={jobId} sticky title="Tananyag javítása" /></PhaseBarSlot>
+          </div>
         )}
         {jobId && (s === "error" || s === "not_found") && (
           <div className="space-y-2" data-testid="lesson-repair-error" role="alert">
+            <WorkflowPhaseBar id={jobId} title="Tananyag javítása" />
             <p className="flex items-start gap-2 text-sm text-destructive"><XCircle className="w-4 h-4 mt-0.5 shrink-0" />{status.data?.message ?? "A javítási feladat nem található (szerver-újraindulás)."} Az eredeti tananyag érintetlen.</p>
             <Button variant="outline" onClick={() => setJobId(null)} className="min-h-11">Új utasítás</Button>
           </div>

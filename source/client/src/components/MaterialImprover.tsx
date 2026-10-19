@@ -2,13 +2,15 @@ import { withLessonTypography } from "@shared/lesson-typography";
 import { parseLessonRepair } from "@shared/lesson-repair";
 import { LessonRuntime } from "@/lesson-runtime/LessonRuntime";
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueries } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { deleteImprovedConfirmMessage, IMPROVER_ZOOM } from "@shared/improver-ui";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { WorkflowMonitor } from "./studio/WorkflowMonitor";
+import { WorkflowPhaseBar } from "./studio/WorkflowPhaseBar";
+import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -54,6 +56,7 @@ interface ImprovedFile {
   createdAt: string;
   appliedAt: string | null;
   content?: string; // HTML content of the improved file
+  createdBy?: string | null;
   originalFile?: {
     id: string;
     title: string;
@@ -74,6 +77,7 @@ export default function MaterialImprover() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [previewImprovedId, setPreviewImprovedId] = useState<string | null>(null);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const { user } = useAuth();
   const blobUrlRef = useRef<string | null>(null);
 
   // Get all HTML files
@@ -84,6 +88,21 @@ export default function MaterialImprover() {
   // Get all improved files
   const { data: improvedFiles = [], isLoading: isLoadingImproved } = useQuery<ImprovedFile[]>({
     queryKey: ["/api/admin/improved-files"],
+  });
+  // Spec 2026-10-19-okositas-fazisjelzo + review #323: futó sor mellett a KÖNNYŰ állapotvégpontot kérdezzük (nem a teljes, tartalmas
+  // listát); ha bármelyik futás véget ért, a lista egyszer frissül.
+  const processingIds = improvedFiles.filter((f) => f.status === "processing").map((f) => f.id);
+  useQueries({
+    queries: processingIds.map((id) => ({
+      queryKey: ["/api/admin/improve-material/status", id, "list-watch"],
+      queryFn: async () => {
+        const res = await fetch(`/api/admin/improve-material/status/${id}`, { credentials: "include" });
+        const body = res.ok ? await res.json() as { status?: string } : { status: "processing" };
+        if (body.status && body.status !== "processing") await queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
+        return body;
+      },
+      refetchInterval: 5000,
+    })),
   });
 
   // Get single improved file with original for preview
@@ -466,7 +485,19 @@ export default function MaterialImprover() {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
+  // Spec 2026-10-19-okositas-fazisjelzo (2): minden futó okosítás fázissora ragadósan, a 70%-os nagyításon KÍVÜL (olvasható),
+  // a rekord azonosítójával — újratöltés után is (a régi jelző csak az oldalon belüli `workflowId`-ből élt).
+  // Review #323: a futásnapló csak a saját futásra olvasható (`/api/studio/workflows/:id` a kérőé) — más admin futásához nem
+  // mutatunk félrevezető „nincs fázisnapló” sávot.
+  const ownRun = (f: ImprovedFile) => !!user?.id && f.createdBy === user.id;
+  const activeRunIds = [...new Set([...(workflowId ? [workflowId] : []), ...improvedFiles.filter((f) => f.status === "processing" && ownRun(f)).map((f) => f.id)])];
   return (
+    <>
+    {activeRunIds.length > 0 && (
+      <div className="sticky top-0 z-20 space-y-2" data-testid="improver-phase-bars">
+        {activeRunIds.map((id) => <WorkflowPhaseBar key={id} id={id} title={improvedFiles.find((f) => f.id === id)?.title ? `Okosítás: ${improvedFiles.find((f) => f.id === id)!.title}` : undefined} />)}
+      </div>
+    )}
     <div className="space-y-6" style={{ zoom: IMPROVER_ZOOM }} data-testid="improver-root">
       <Card className="border-red-500 border-2">
         <CardHeader>
@@ -577,9 +608,13 @@ export default function MaterialImprover() {
                                 AI dolgozik…
                               </Badge>
                             ) : file.status === "error" ? (
-                              <span className="text-xs text-red-600 max-w-[200px] truncate" title={file.improvementNotes || ''}>
-                                {file.improvementNotes || 'Hiba'}
-                              </span>
+                              <details className="text-left max-w-[min(420px,80vw)]" data-testid={`improver-error-${file.id}`}>
+                                <summary className="cursor-pointer text-xs text-red-600 truncate" title={file.improvementNotes || ''}>
+                                  Hiba — hol állt meg?
+                                </summary>
+                                <p className="mt-1 text-xs text-red-700 whitespace-pre-wrap break-words">{file.improvementNotes || 'Ismeretlen hiba'}</p>
+                                <div className="mt-2">{ownRun(file) ? <WorkflowPhaseBar id={file.id} /> : <p className="text-xs text-muted-foreground">Másik admin futása — a fázisnaplót ő látja.</p>}</div>
+                              </details>
                             ) : (
                               <>
                                 <Button
@@ -773,5 +808,6 @@ export default function MaterialImprover() {
 
 
     </div>
+    </>
   );
 }

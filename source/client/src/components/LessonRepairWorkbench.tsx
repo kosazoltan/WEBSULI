@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { homeFilesQueryOptions } from "@/lib/home-files-query";
 import { workflowDefinition } from "@shared/lesson-workflow";
 import { SKILL_RULES, type SkillCode, type SkillSnapshot } from "@shared/lesson-skill";
-import { LessonRepairPanel, type RepairPreset } from "./LessonRepairPanel";
+import { LessonRepairPanel, REPAIR_PHASE_SLOT_ID, type RepairPreset } from "./LessonRepairPanel";
 import { isRepairable, matchesRepairQuery } from "@/lib/lesson-repair-search";
 
 /**
@@ -54,6 +54,8 @@ export default function LessonRepairWorkbench() {
 
   return (
     <div className="space-y-3" data-testid="lesson-repair-workbench">
+      {/* Spec 2026-10-19-okositas-fazisjelzo: a futó javítás fázissora ide kerül, és a teljes lap görgetése alatt látszik. */}
+      <div id={REPAIR_PHASE_SLOT_ID} className="sticky top-0 z-20 empty:hidden" data-testid="lesson-repair-phase-slot" />
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">1. Tananyag kiválasztása</CardTitle>
