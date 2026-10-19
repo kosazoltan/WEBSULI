@@ -29,6 +29,9 @@ for (const d of DEVICES) {
       await page.screenshot({ path: `test-results/admin-responsive/${d.name}-${tab}.png` });
     }
     fs.writeFileSync(`test-results/admin-responsive/${d.name}.json`, JSON.stringify(report, null, 1));
+    // Review #321: a renderhiba (ErrorBoundary / üres állapot) nem maradhat rejtve. Kivétel: a tananyag-előnézet sandboxolt
+    // iframe-jének service-worker üzenete (a lecke saját szkriptje, nem az admin hibája).
+    expect(errors.filter((m) => !/serviceWorker.*sandboxed/.test(m)), "böngészőhibák").toEqual([]);
     const bad = Object.entries(report).filter(([, v]) => (v as { problems: string[]; ovx: number }).problems.length || (v as { ovx: number }).ovx > 1);
     expect(bad, JSON.stringify(bad, null, 1)).toEqual([]);
   });
@@ -88,9 +91,29 @@ test("felugró ablak: a kijelzőnél magasabb tartalom belül görget, az alsó 
   const box = await dialog.boundingBox();
   expect(box!.y).toBeGreaterThanOrEqual(0);
   expect(box!.y + box!.height).toBeLessThanOrEqual(450 + 1);
-  const last = dialog.locator("button:visible").last();
-  await last.scrollIntoViewIfNeeded();
-  const lb = await last.boundingBox();
-  expect(lb!.y + lb!.height).toBeLessThanOrEqual(450 + 1);
+  // Címzett nélkül a „Küldés” tiltott — a valós használatban előbb cím kerül bele.
+  await page.getByTestId("input-custom-email").fill("tanulo@example.test");
+  await expect(page.getByTestId("button-send-email-confirm")).toBeEnabled();
+  // Review #321: a „Küldés” gombot mérjük (a `.last()` a jobb felső X lett volna).
+  expect(await reachableProblem(page, '[data-testid="button-send-email-confirm"]')).toBeNull();
   await page.screenshot({ path: "test-results/admin-responsive/dialog-450.png" });
 });
+
+for (const d of DEVICES) {
+  test(`${d.name}: Okosítás és Javítási mentések előnézete — az „Alkalmaz” és a „Visszaállítás” elérhető`, async ({ page }) => {
+    await mockAdmin(page);
+    await page.setViewportSize({ width: d.width, height: d.height });
+    await page.goto("/admin?tab=improve-materials");
+    await page.getByRole("button", { name: "Előnézet" }).first().click();
+    await expect(page.getByTestId("iframe-preview-improved")).toBeVisible();
+    expect(await reachableProblem(page, '[data-testid="improver-preview-apply"]'), d.name).toBeNull();
+    const frame = await page.getByTestId("iframe-preview-improved").boundingBox();
+    expect(frame!.height, "az előnézet nem magasabb a nézet 60%-ánál (+ zoom)").toBeLessThanOrEqual(d.height * 0.6 + 2);
+    await page.screenshot({ path: `test-results/admin-responsive/${d.name}-improver-preview.png` });
+
+    await page.goto("/admin?tab=improvement-backups");
+    await page.getByRole("button", { name: "Előnézet" }).first().click();
+    await expect(page.getByTestId("backup-preview-restore")).toBeVisible();
+    expect(await reachableProblem(page, '[data-testid="backup-preview-restore"]'), d.name).toBeNull();
+  });
+}

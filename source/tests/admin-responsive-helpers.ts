@@ -17,6 +17,12 @@ const files = [
 const draft = { jobId: "job-1", title: "Kéttagú kifejezések négyzete – azonos kifejezések párosítása", subject: "Matematika", classroom: 9, state: "error",
   stage: "gate", saved: { sections: 3, banks: 7 }, canResume: true, error: "Megállt: lektorálás: experience.tasks[29]: Mi hamis: a rubrikák továbbra sem követelik a teljes eredményt | Bizonyíték: 28-nál „ab + 4b” 1 pont | Javítás iránya: required + 7 [12x]; 17 [9]; 21 [2a²]", createdAt: now, updatedAt: now };
 
+const previewHtml = `<!doctype html><html lang="hu"><body>${"<p>Javított tananyag sor — ő ű.</p>".repeat(400)}</body></html>`;
+const improved = { id: "imp-1", originalFileId: "f-html", title: "4. osztály - Angol nyelvtan - Countable & Uncountable nouns", description: null, classroom: 4,
+  status: "pending", improvementPrompt: "Elírások javítása", improvementNotes: null, createdAt: now, appliedAt: null, originalFile: { id: "f-html", title: "4. osztály - Angol nyelvtan" } };
+const backup = { id: "b-1", originalFileId: "f-html", improvedFileId: "imp-1", notes: null, createdAt: now,
+  backupData: { id: "f-html", title: "4. osztály - Angol nyelvtan", content: previewHtml, description: null, classroom: 4, contentType: "html", displayOrder: 0, userId: null, createdAt: now } };
+
 export async function mockAdmin(page: Page) {
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -25,6 +31,11 @@ export async function mockAdmin(page: Page) {
     if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "probe" } });
     if (path === "/api/html-files") return route.fulfill({ json: files });
     if (path === "/api/studio/drafts") return route.fulfill({ json: [draft] });
+    // Review #321: nem üres listák, hogy az Okosítás „Alkalmaz” / „Törlés” sora és az előnézetek is mérhetők legyenek.
+    if (path === "/api/admin/improved-files") return route.fulfill({ json: [improved] });
+    if (path === "/api/admin/improved-files/imp-1") return route.fulfill({ json: { ...improved, content: previewHtml } });
+    if (path === "/api/admin/improvement-backups") return route.fulfill({ json: [backup] });
+    if (path === "/api/admin/improvement-backups/b-1") return route.fulfill({ json: backup });
     // A szerver válaszalakja: { runs: [...] } (WorkflowMonitor) — a puszta [] ál-adat a komponenst összeomlasztaná.
     if (path === "/api/studio/workflows") return route.fulfill({ json: { runs: [] } });
     if (path === "/api/studio/skills/tananyag-javito") return route.fulfill({ json: { snapshot: { version: "v1", rules: [] } } });
@@ -57,7 +68,9 @@ export async function unreachable(page: Page, scope = "body") {
       const cx = Math.min(Math.max(r.left + r.width / 2, 1), innerWidth - 2), cy = Math.min(Math.max(r.top + Math.min(r.height, 40) / 2, 1), innerHeight - 2);
       const hit = document.elementFromPoint(cx, cy);
       if (disabled) { if (hit && nav?.contains(hit)) out.push(`${label}: takarja az ALSÓ MENÜ`); continue; }
-      if (hit && hit !== el && !el.contains(hit) && !(el as HTMLInputElement).labels?.length && !hit.closest("label")?.contains(el)) {
+      // Review #321: címkekivétel csak akkor, ha a találat ténylegesen a mező SAJÁT címkéje.
+      const ownLabel = [...((el as HTMLInputElement).labels ?? [])].some((l) => l === hit || l.contains(hit!));
+      if (hit && hit !== el && !el.contains(hit) && !ownLabel) {
         out.push(`${label}: takarja: ${hit.tagName.toLowerCase()}.${String(hit.getAttribute("class") ?? "").split(" ").slice(0, 3).join(".")}${nav?.contains(hit) ? " (ALSÓ MENÜ)" : ""}`);
       }
     }

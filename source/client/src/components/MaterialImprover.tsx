@@ -666,7 +666,7 @@ export default function MaterialImprover() {
                       sandbox="allow-scripts allow-forms allow-popups allow-modals"
                       data-testid="iframe-preview-original"
                       style={{
-                        minHeight: '400px',
+                        minHeight: 'min(400px, 60dvh)',
                         backgroundColor: 'white',
                       }}
                     />
@@ -710,7 +710,7 @@ export default function MaterialImprover() {
                       sandbox="allow-scripts allow-forms allow-popups allow-modals"
                       data-testid="iframe-preview-improved"
                       style={{
-                        minHeight: '400px',
+                        minHeight: 'min(400px, 60dvh)',
                         backgroundColor: 'white',
                       }}
                     />
@@ -741,7 +741,7 @@ export default function MaterialImprover() {
               </TabsContent>
             </Tabs>
             <div className="mt-4 flex justify-end gap-2">
-              <Button
+              <Button data-testid="improver-preview-apply"
                 onClick={() => {
                   setPreviewImprovedId(null);
                   handleApply(previewData.id);

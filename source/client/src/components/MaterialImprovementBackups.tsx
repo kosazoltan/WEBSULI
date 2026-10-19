@@ -274,7 +274,7 @@ export default function MaterialImprovementBackups() {
                 </ScrollArea>
               </div>
               <div className="flex justify-end">
-                <Button
+                <Button data-testid="backup-preview-restore"
                   onClick={() => {
                     setPreviewBackupId(null);
                     handleRestore(previewBackup.id);
