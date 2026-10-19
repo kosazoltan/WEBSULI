@@ -7,11 +7,11 @@ export function createWorkflowStore(getPool: () => Promise<Pool>): WorkflowStore
   return {
     loadSkill: createSkillStore(getPool).load,
     async related(id, owner) {
-      const { rows } = await (await getPool()).query("SELECT id FROM lesson_workflow_runs WHERE owner_id=$1 AND snapshot->>'resourceId'=$2 ORDER BY created_at DESC LIMIT 1", [owner, id]);
+      const { rows } = await (await getPool()).query("SELECT id FROM lesson_workflow_runs WHERE owner_id=$1 AND resource_id=$2 ORDER BY created_at DESC LIMIT 1", [owner, id]);
       return rows[0]?.id ?? null;
     },
     async exists(id) {
-      const { rows } = await (await getPool()).query("SELECT id FROM lesson_workflow_runs WHERE id=$1 OR snapshot->>'resourceId'=$1 LIMIT 1", [id]);
+      const { rows } = await (await getPool()).query("SELECT id FROM lesson_workflow_runs WHERE id=$1 OR resource_id=$1 LIMIT 1", [id]);
       return rows.length > 0;
     },
     async create(record) {

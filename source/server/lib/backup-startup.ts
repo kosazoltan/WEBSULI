@@ -27,3 +27,12 @@ export function shouldBackupOnStartup(
       f.complete !== false && f.name.startsWith("backup_") && f.name.endsWith(".json") && nowMs - f.mtimeMs < maxAgeMs,
   );
 }
+
+/**
+ * Spec 2026-10-19-eroforras-s2b: a Renderen (RENDER=true) nincs tartós lemez — minden indulás üres `backups` mappával kezd, így a
+ * 24 órás őr sosem véd, és minden kitelepítés teljes adatbázis-exportot olvasott (~12 MB), amely a következő kitelepítéskor elveszett.
+ * Ott az induló mentés kimarad; a napi ütemezett és az eseményalapú mentés változatlan.
+ */
+export function startupBackupDisabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.RENDER === "true";
+}

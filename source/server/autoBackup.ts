@@ -4,7 +4,7 @@ import fs from 'fs/promises'; // Async file I/O
 import fsSync from 'fs'; // For synchronous operations where needed
 import path from 'path';
 import { logger } from "./lib/logger";
-import { isCompleteBackupTail, shouldBackupOnStartup, type BackupFileInfo } from "./lib/backup-startup";
+import { isCompleteBackupTail, shouldBackupOnStartup, startupBackupDisabled, type BackupFileInfo } from "./lib/backup-startup";
 
 // Backup configuration
 const BACKUP_DIR = path.join(process.cwd(), 'backups');
@@ -217,6 +217,10 @@ export function startAutoBackupJob() {
 
   // Initial backup on startup — only if no backup was made in the last 24 h (kanban #187)
   setTimeout(async () => {
+    if (startupBackupDisabled()) {
+      logger.info('[AUTO-BACKUP] Render (no persistent disk): startup backup skipped — the daily scheduled backup still runs');
+      return;
+    }
     const files: BackupFileInfo[] = [];
     try {
       for (const name of await fs.readdir(BACKUP_DIR)) {
