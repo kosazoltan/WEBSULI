@@ -72,7 +72,11 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // teljes kifejezés szóhatáros előfordulása dönt (legalább két rövid szóból, hogy egy magányos betű ne igazoljon).
   if (words.length === 0 && !formula) {
     const phrase = normalizeText(concept.term ?? "").trim();
-    return phrase.split(" ").length >= 2 && ` ${normalizeText(blockText)} `.includes(` ${phrase} `);
+    if (phrase.split(" ").length >= 2 && ` ${normalizeText(blockText)} `.includes(` ${phrase} `)) return true;
+    // Spec 2026-10-19-rovid-fogalom-megalapozas (mérve: „Where I Live” 639b5201 / 6f1158ce / 55736ce3): az 1–2 betűs NÉV („a”, „an”)
+    // érdemi szólistája is üres — itt eddig azonnal hamis lett, a definíció- és idézet-tartalékig sosem jutott, így a lecke
+    // semmilyen tartalommal nem mehetett át. Most a forrás saját példája („a lamp”) dönthet, különben a meglévő tartalékok jönnek.
+    if (phrase && shortTermExamplePresent(phrase, concept.quote ?? "", blockText)) return true;
   }
 
   // Képlet-fogalomnál CSAK az előjel-pontos képlet dönt: az idézet-számok tartaléka előjel-vak („9-(+6)=+3” számai a „9-(-6)=+3”
@@ -127,6 +131,23 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // különböző számot tartalmaz, és azok ≥ 75 %-a a blokkban is szerepel, a blokk a forrás
   // példáját dolgozza ki: megalapozott.
   return quoteNumbersPresent(concept.quote ?? concept.definition ?? "", haystack);
+}
+
+/**
+ * Spec 2026-10-19-rovid-fogalom-megalapozas: rövid fogalomnév („an”) esetén a forrás-idézet PÉLDA-darabjai („an armchair”) közül
+ * legalább egy szóhatárosan a blokkban van. A `=`-t tartalmazó darab („an = before vowel sounds”) magyarázat, nem példa; a puszta
+ * egyszavas darab nem elég (a magyar „a” névelő mindenhol ott van).
+ */
+export function shortTermExamplePresent(term: string, quote: string, blockText: string): boolean {
+  const name = normalizeText(term);
+  if (!name) return false;
+  const haystack = ` ${normalizeText(blockText)} `;
+  return quote
+    .split(/[,;:\n]/)
+    .filter((part) => !part.includes("="))
+    .map(normalizeText)
+    .filter((part) => part.split(" ").length >= 2 && ` ${part} `.includes(` ${name} `))
+    .some((part) => haystack.includes(` ${part} `));
 }
 
 /** Képlet-alak (közös modul, spec 2026-10-04-kepletbiztos-heurisztikak); `null`, ha a fogalom neve nem képlet. */
