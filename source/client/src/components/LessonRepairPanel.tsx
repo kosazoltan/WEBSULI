@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { parseLessonRepair } from "@shared/lesson-repair";
+import { WorkflowPhaseBar } from "./studio/WorkflowPhaseBar";
 
 /**
  * Spec 2026-09-23 — javító modul a kész tananyag alatt (csak adminnak).
@@ -140,12 +141,17 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
           </>
         )}
         {jobId && (s === "processing" || !s) && (
-          <p className="flex items-center gap-2 text-sm" data-testid="lesson-repair-running" role="status">
-            <Loader2 className="w-4 h-4 animate-spin" /> A javítás fut{status.data?.elapsed ? ` (${Math.round(status.data.elapsed / 60)} perc)` : ""}… Az oldal bezárható, később itt folytatódik.
-          </p>
+          <div className="space-y-2">
+            <p className="flex items-center gap-2 text-sm" data-testid="lesson-repair-running" role="status">
+              <Loader2 className="w-4 h-4 animate-spin" /> A javítás fut{status.data?.elapsed ? ` (${Math.round(status.data.elapsed / 60)} perc)` : ""}… Az oldal bezárható, később itt folytatódik.
+            </p>
+            {/* Spec 2026-10-19-okositas-fazisjelzo (3): a teljes fázissor ragadósan (a jobId újratöltés után is megmarad). */}
+            <WorkflowPhaseBar id={jobId} sticky title="Tananyag javítása" />
+          </div>
         )}
         {jobId && (s === "error" || s === "not_found") && (
           <div className="space-y-2" data-testid="lesson-repair-error" role="alert">
+            <WorkflowPhaseBar id={jobId} title="Tananyag javítása" />
             <p className="flex items-start gap-2 text-sm text-destructive"><XCircle className="w-4 h-4 mt-0.5 shrink-0" />{status.data?.message ?? "A javítási feladat nem található (szerver-újraindulás)."} Az eredeti tananyag érintetlen.</p>
             <Button variant="outline" onClick={() => setJobId(null)} className="min-h-11">Új utasítás</Button>
           </div>

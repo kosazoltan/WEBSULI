@@ -542,6 +542,9 @@ app.use((req, res, next) => {
         await closeOrphanedStudioJobs();
         // Spec 2026-10-05-s10: deploykor a régi példány még tartja a lízinget — annak lejárta után a futás magától folytatódik.
         startStudioJobSweeper();
+        // Spec 2026-10-19-okositas-fazisjelzo: az okosítás / javítás elárvult `processing` rekordjai is (indításkor és 2 percenként).
+        const { startImproveOrphanSweeper } = await import("./improve-orphans");
+        startImproveOrphanSweeper();
       } catch (sweepError) {
         logger.error("[STARTUP] Az árva futások/jobok zárása nem sikerült:", sweepError);
         // Nem végzetes: a poll 404-et ad az ismeretlen futásra.

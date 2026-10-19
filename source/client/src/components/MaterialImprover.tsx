@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { WorkflowMonitor } from "./studio/WorkflowMonitor";
+import { WorkflowPhaseBar } from "./studio/WorkflowPhaseBar";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -84,6 +85,8 @@ export default function MaterialImprover() {
   // Get all improved files
   const { data: improvedFiles = [], isLoading: isLoadingImproved } = useQuery<ImprovedFile[]>({
     queryKey: ["/api/admin/improved-files"],
+    // Spec 2026-10-19-okositas-fazisjelzo: futó sor mellett a lista is frissül (újratöltés után is látszik a vége).
+    refetchInterval: (q) => ((q.state.data ?? []).some((f) => f.status === "processing") ? 5000 : false),
   });
 
   // Get single improved file with original for preview
@@ -466,7 +469,16 @@ export default function MaterialImprover() {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
+  // Spec 2026-10-19-okositas-fazisjelzo (2): minden futó okosítás fázissora ragadósan, a 70%-os nagyításon KÍVÜL (olvasható),
+  // a rekord azonosítójával — újratöltés után is (a régi jelző csak az oldalon belüli `workflowId`-ből élt).
+  const activeRunIds = [...new Set([...(workflowId ? [workflowId] : []), ...improvedFiles.filter((f) => f.status === "processing").map((f) => f.id)])];
   return (
+    <>
+    {activeRunIds.length > 0 && (
+      <div className="sticky top-0 z-20 space-y-2" data-testid="improver-phase-bars">
+        {activeRunIds.map((id) => <WorkflowPhaseBar key={id} id={id} title={improvedFiles.find((f) => f.id === id)?.title ? `Okosítás: ${improvedFiles.find((f) => f.id === id)!.title}` : undefined} />)}
+      </div>
+    )}
     <div className="space-y-6" style={{ zoom: IMPROVER_ZOOM }} data-testid="improver-root">
       <Card className="border-red-500 border-2">
         <CardHeader>
@@ -577,9 +589,13 @@ export default function MaterialImprover() {
                                 AI dolgozik…
                               </Badge>
                             ) : file.status === "error" ? (
-                              <span className="text-xs text-red-600 max-w-[200px] truncate" title={file.improvementNotes || ''}>
-                                {file.improvementNotes || 'Hiba'}
-                              </span>
+                              <details className="text-left max-w-[min(420px,80vw)]" data-testid={`improver-error-${file.id}`}>
+                                <summary className="cursor-pointer text-xs text-red-600 truncate" title={file.improvementNotes || ''}>
+                                  Hiba — hol állt meg?
+                                </summary>
+                                <p className="mt-1 text-xs text-red-700 whitespace-pre-wrap break-words">{file.improvementNotes || 'Ismeretlen hiba'}</p>
+                                <div className="mt-2"><WorkflowPhaseBar id={file.id} /></div>
+                              </details>
                             ) : (
                               <>
                                 <Button
@@ -773,5 +789,6 @@ export default function MaterialImprover() {
 
 
     </div>
+    </>
   );
 }
