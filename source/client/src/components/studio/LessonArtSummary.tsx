@@ -4,7 +4,7 @@ import { Palette } from "lucide-react";
 import { DESIGN_ASSET_CATALOG } from "@shared/design-asset-catalog";
 import { artSummary, type StoredLessonArt } from "@shared/design-assets";
 import { DESIGN_THEMES, designThemeForClassroom } from "@shared/lesson-design";
-import { ArtImage } from "@/lesson-runtime/LessonArt";
+import { ArtImage, lessonArtFor } from "@/lesson-runtime/LessonArt";
 import { lessonByFileQuery } from "@/lesson-runtime/lesson-query";
 
 /**
@@ -21,7 +21,11 @@ export function LessonArtSummary({ lessonId, htmlFileId }: { lessonId?: string; 
   const band = designThemeForClassroom(data.classroom);
   const theme = DESIGN_THEMES[band];
   // Spec 2026-10-19-hos-kep-sav: a lejátszóval azonos érvényesség — a régi szabállyal mentett, nem illő kép „régi” (újraválasztva).
-  const s = artSummary(data.art, band, DESIGN_ASSET_CATALOG, typeof data.subject === "string" && typeof data.title === "string" ? { subject: data.subject, title: data.title } : undefined);
+  const meta = typeof data.subject === "string" && typeof data.title === "string" ? { subject: data.subject, title: data.title } : undefined;
+  const stored = artSummary(data.art, band, DESIGN_ASSET_CATALOG, meta);
+  // Review #322: a tárolt, de az új szabály szerint nem illő kép helyett a lejátszóval azonos friss választás (nem „Régi lecke”).
+  const s = stored.legacy && data.art?.picture && meta ? { ...stored, legacy: false, art: lessonArtFor({ ...meta, seed: fileId, art: data.art }, band) } : stored;
+  const fromDb = !(stored.legacy && s.art);
   const picture = s.art?.cover ?? s.art?.hero;
   return (
     <section className="rounded-xl border bg-card text-card-foreground p-4 space-y-3" data-testid="lesson-art-summary" aria-labelledby="lesson-art-title">
@@ -37,9 +41,9 @@ export function LessonArtSummary({ lessonId, htmlFileId }: { lessonId?: string; 
         <p className="text-muted-foreground">Régi lecke: az arculatot megnyitáskor választja.</p>
       ) : (
         <div className="flex flex-wrap items-end gap-3 [&_img]:rounded-lg [&_img]:border [&_img]:object-cover">
-          {picture && <figure className="m-0 w-48 max-w-full" title={picture.alt}><div className="aspect-[3/2] [&_img]:w-full [&_img]:h-full"><ArtImage asset={picture} fromDb alt={picture.alt} /></div><figcaption className="text-xs text-muted-foreground mt-1">{picture.kind === "cover" ? "Borító" : "Sávhős"}</figcaption></figure>}
-          {s.art?.subjectIcon && <figure className="m-0 w-16" title={s.art.subjectIcon.alt}><div className="w-16 h-16 [&_img]:w-full [&_img]:h-full"><ArtImage asset={s.art.subjectIcon} fromDb alt={s.art.subjectIcon.alt} /></div><figcaption className="text-xs text-muted-foreground mt-1">Ikon</figcaption></figure>}
-          {s.art?.mascot && <figure className="m-0 w-16" title={s.art.mascot.alt}><div className="w-16 h-16 [&_img]:w-full [&_img]:h-full"><ArtImage asset={s.art.mascot} fromDb alt={s.art.mascot.alt} /></div><figcaption className="text-xs text-muted-foreground mt-1">Kabala</figcaption></figure>}
+          {picture && <figure className="m-0 w-48 max-w-full" title={picture.alt}><div className="aspect-[3/2] [&_img]:w-full [&_img]:h-full"><ArtImage asset={picture} fromDb={fromDb} alt={picture.alt} /></div><figcaption className="text-xs text-muted-foreground mt-1">{picture.kind === "cover" ? "Borító" : "Sávhős"}</figcaption></figure>}
+          {s.art?.subjectIcon && <figure className="m-0 w-16" title={s.art.subjectIcon.alt}><div className="w-16 h-16 [&_img]:w-full [&_img]:h-full"><ArtImage asset={s.art.subjectIcon} fromDb={fromDb} alt={s.art.subjectIcon.alt} /></div><figcaption className="text-xs text-muted-foreground mt-1">Ikon</figcaption></figure>}
+          {s.art?.mascot && <figure className="m-0 w-16" title={s.art.mascot.alt}><div className="w-16 h-16 [&_img]:w-full [&_img]:h-full"><ArtImage asset={s.art.mascot} fromDb={fromDb} alt={s.art.mascot.alt} /></div><figcaption className="text-xs text-muted-foreground mt-1">Kabala</figcaption></figure>}
         </div>
       )}
     </section>
