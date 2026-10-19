@@ -41,7 +41,8 @@ test("felhasználók: a végpontok az admin-routeren regisztráltak", () => {
 });
 
 test("menü: 4 csoport, 16 fül (S4: Tanulók — docs/specs/2026-10-18-tanuloi-profil-s4-vegrehajtas.md), mindnek ikonja; a megszűnt fülek régi linkjei a tananyagkészítésre visznek", () => {
-  assert.deepEqual(ADMIN_TAB_GROUPS.map(g => g.label), ["Tananyagok", "Készítés és javítás", "Kommunikáció", "Rendszer"]);
+  // Spec 2026-10-19-admin-menu-nevek (dokumentált spec-változás): a csoportnév a funkciókat mondja.
+  assert.deepEqual(ADMIN_TAB_GROUPS.map(g => g.label), ["Tananyagok", "Készítés és javítás", "Tanulók és levelek", "Rendszer és mentések"]);
   assert.equal(ADMIN_TAB_VALUES.length, 16);
   assert.equal(new Set(ADMIN_TAB_VALUES).size, 16);
   assert.ok(!ADMIN_TAB_VALUES.includes("enhanced"));
@@ -103,4 +104,11 @@ test("review #287: két egyidejű admin-jog megvonás / törlés sem hagyja admi
 
 test("review #287: a prototípus-kulcsok nem fül-azonosítók", () => {
   for (const p of ["constructor", "__proto__", "toString", "hasOwnProperty"]) assert.equal(resolveAdminTab(p), "files", p);
+});
+
+test("spec 2026-10-19-admin-menu-nevek: a mobil gombok neve a funkciókat mondja, a testid a csoport-id-ből", () => {
+  const nav = readFileSync(new URL("../client/src/components/MobileBottomNav.tsx", import.meta.url), "utf8");
+  assert.match(nav, /SHORT_LABEL: Record<string, string> = \{ materials: "Tananyagok", authoring: "Készítés", communication: "Tanulók", system: "Rendszer" \}/);
+  assert.match(nav, /data-testid=\{`mobile-nav-\$\{category\.value\}`\}/);
+  assert.doesNotMatch(nav, /Üzenetek/);
 });
