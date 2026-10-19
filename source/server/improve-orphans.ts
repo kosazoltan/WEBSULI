@@ -49,9 +49,12 @@ export async function sweepImproveJobs(): Promise<number> {
   return ids.length;
 }
 
-/** Indításkor és utána 2 percenként (a deploykori régi példány bérletének lejárta után zár). */
+/** Spec 2026-10-19-eroforras-s1: 5 percenként (az adatbázis tétlenségben elaludhasson). */
+export const IMPROVE_SWEEP_INTERVAL_MS = 300_000;
+
+/** Indításkor és utána 5 percenként (a deploykori régi példány bérletének lejárta után zár). */
 export function startImproveOrphanSweeper(): void {
   const run = () => void sweepImproveJobs().catch((error) => logger.error("[IMPROVE] Az elárvult futások söprése nem sikerült:", error));
   run();
-  setInterval(run, 120_000).unref();
+  setInterval(run, IMPROVE_SWEEP_INTERVAL_MS).unref();
 }

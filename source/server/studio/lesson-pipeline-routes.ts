@@ -182,7 +182,8 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
   return acted;
 }
 
-export const STUDIO_SWEEP_INTERVAL_MS = 100_000;
+// Spec 2026-10-19-eroforras-s1: 5 perc (korábban 100 s) — a deploykori régi példány bérlete 90 s, a lezárás így is percek alatt jön.
+export const STUDIO_SWEEP_INTERVAL_MS = 300_000;
 /** Időszakos söprés (a lejárt lízingű, gazdátlanná vált jobok lezárása); a folyamat leállását nem tartja fel. */
 export function startStudioJobSweeper(): void {
   setInterval(() => {

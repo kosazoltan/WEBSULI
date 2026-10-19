@@ -647,6 +647,13 @@ app.use((req, res, next) => {
         log("HTTP server closed");
 
         try {
+          // Spec 2026-10-19-eroforras-s1 (3): a futó gyártás / javítás / okosítás befejezése (legfeljebb 280 s; a Render 300 s-ot ad).
+          const { activeWorkflowRuns, waitForActiveRuns } = await import("./workflows/engine");
+          if (activeWorkflowRuns() > 0) {
+            log(`Waiting for ${activeWorkflowRuns()} active workflow run(s) before shutdown (max 280 s)...`);
+            const left = await waitForActiveRuns(280_000);
+            log(left ? `${left} run(s) still active after 280 s — shutting down` : "All workflow runs finished");
+          }
           // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: the still-coalesced material results go out before the pool closes (max 10 s).
           await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
           // Close database pool
@@ -661,13 +668,13 @@ app.use((req, res, next) => {
         }
       });
 
-      // Force close after 30 seconds
+      // Force close after 295 seconds (a futó munka kivárása után; a Render maxShutdownDelaySeconds = 300)
       setTimeout(() => {
         logger.error(
           "Could not close connections in time, forcefully shutting down",
         );
         process.exit(1);
-      }, 30000);
+      }, 295_000);
     };
 
     // Listen for shutdown signals
