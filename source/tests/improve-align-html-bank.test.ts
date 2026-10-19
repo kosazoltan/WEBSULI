@@ -58,3 +58,14 @@ test("az okosítás a kapu előtt igazít, és a tartalék próba megkapja az el
   assert.match(src, /AZ ELŐZŐ PRÓBA ZÁRÓ ELLENŐRZÉSÉNEK HIBÁI/);
   assert.match(src, /verification\.problems\.join\(' '\)}`, verification\.problems\)/);
 });
+
+// Review #327: az alakhibás feladat (hiányos requiredDistinct) nem dob kivételt, és érintetlen marad — a sémakapu jelenti.
+test("alakhibás feladat: nincs kivétel, a bank érintetlen, a kapu sémahibát jelez", () => {
+  const html = htmlDocument();
+  const data = readHtmlLessonData(html) as unknown as { experience: { tasks: Array<Record<string, unknown>> } };
+  data.experience.tasks[0] = { ...data.experience.tasks[0], sample: "alma", minWords: 1, required: [["alma"]], requiredDistinct: [{ category: "gyümölcs", count: 1 }] };
+  const broken = writeHtmlLessonData(html, data);
+  const result = alignHtmlLessonBank(broken);
+  assert.deepEqual(result, { html: broken, aligned: [] });
+  assert.equal(verifyLessonMethodHtml(broken).ok, false);
+});

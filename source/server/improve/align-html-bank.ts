@@ -1,6 +1,6 @@
 import { readRawHtmlLessonData, writeHtmlLessonData } from "../../shared/lesson-html-data";
 import { alignTaskToSample } from "../studio/bank-normalize";
-import type { LessonExperience } from "../../shared/lesson-experience";
+import { openTaskSchema, type LessonExperience } from "../../shared/lesson-experience";
 
 type Task = LessonExperience["tasks"][number];
 
@@ -17,11 +17,12 @@ export function alignHtmlLessonBank(html: string): { html: string; aligned: stri
   if (!Array.isArray(tasks)) return { html, aligned: [] };
   const aligned: string[] = [];
   for (const raw of tasks) {
-    const t = raw as Partial<Task> | null;
-    if (!t || typeof t.sample !== "string" || typeof t.minWords !== "number" || !Array.isArray(t.required)
-      || !t.required.every((g) => Array.isArray(g) && g.every((w) => typeof w === "string"))) continue;
+    // Review #327: csak a sémának megfelelő feladat igazítható; az alakhibásat (pl. hiányos `requiredDistinct`) a kapu jelenti, és a
+    // pontozó kivétele sem kerülheti meg a sémakaput és a hibalistás újrapróbát.
+    if (!openTaskSchema.safeParse(raw).success) continue;
+    const t = raw as Task;
     const before = JSON.stringify(t);
-    alignTaskToSample(t as Task);
+    try { alignTaskToSample(t); } catch { Object.assign(t, JSON.parse(before)); continue; }
     if (JSON.stringify(t) !== before) aligned.push(String(t.id ?? "?"));
   }
   if (aligned.length === 0) return { html, aligned };
