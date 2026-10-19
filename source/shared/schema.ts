@@ -1177,6 +1177,9 @@ export const learners = pgTable("learners", {
   /** Review #304: az aktuális inaktivitási időszak kulcsa és a benne már értesített admin-címzettek. */
   inactivityAlertKey: text("inactivity_alert_key"),
   inactivityAlertedTo: text("inactivity_alerted_to").array().notNull().default(sql`'{}'::text[]`),
+  /** „Mai felfedezés” hírlevél (migrations/0034): érdeklődési címkék és a napi hírlevél kapcsolója (alapból KI). */
+  interests: text("interests").array().notNull().default(sql`'{}'::text[]`),
+  newsletter: boolean("newsletter").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

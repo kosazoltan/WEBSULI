@@ -15,6 +15,7 @@ import { getAllAudioBase64 } from "google-tts-api";
 
 import { eq, sql, and, or, ilike, desc, inArray } from "drizzle-orm";
 import { htmlFiles, users, materialComments, learners } from "@shared/schema";
+import { NEWSLETTER_LIMITS, normalizeInterests } from "@shared/newsletter";
 import { sanitizeText, sanitizeEmail } from "./utils/sanitize";
 // Admin authentication with hardcoded admin emails
 import { isAuthenticated, isAuthenticatedAdmin } from "./auth";
@@ -1319,11 +1320,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   adminRouter.get("/learners", async (_req, res) => {
     try {
       const list = await buildLearnerReports();
+      // „Mai felfedezés” hírlevél (S1): az érdeklődés és a kapcsoló a tanulónál.
+      const prefs = new Map((await db.select({ id: learners.id, interests: learners.interests, newsletter: learners.newsletter }).from(learners)).map(p => [p.id, p]));
       res.setHeader('Cache-Control', 'no-store');
-      res.json(list.map(o => ({ id: o.id, name: o.name, grade: o.grade, emails: o.emails, report: o.report, pairLink: pairLinkOf(o.id, o.tokenVersion) })));
+      res.json(list.map(o => ({ id: o.id, name: o.name, grade: o.grade, emails: o.emails, report: o.report, pairLink: pairLinkOf(o.id, o.tokenVersion),
+        interests: prefs.get(o.id)?.interests ?? [], newsletter: prefs.get(o.id)?.newsletter ?? false })));
     } catch (error: unknown) {
       logger.error('[LEARNERS] összesítő hiba:', error instanceof Error ? error.message : String(error));
       res.status(500).json({ message: "A tanulói összesítő nem érhető el." });
+    }
+  });
+  // „Mai felfedezés” hírlevél (docs/specs/2026-10-19-mai-felfedezes-hirlevel.md, S1): érdeklődés és kapcsoló — csak admin (adminRouter),
+  // CSRF-fel. A naplóba sem név, sem címke nem kerül.
+  adminRouter.patch("/learners/:id", async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as { interests?: unknown; newsletter?: unknown };
+      const patch: { interests?: string[]; newsletter?: boolean } = {};
+      if (body.interests !== undefined) {
+        const interests = normalizeInterests(body.interests);
+        if (!interests) return res.status(400).json({ message: `Legfeljebb ${NEWSLETTER_LIMITS.tags} érdeklődési címke, egyenként legfeljebb ${NEWSLETTER_LIMITS.tagChars} karakter.` });
+        patch.interests = interests;
+      }
+      if (body.newsletter !== undefined) {
+        if (typeof body.newsletter !== "boolean") return res.status(400).json({ message: "A hírlevél-kapcsoló értéke igaz vagy hamis." });
+        patch.newsletter = body.newsletter;
+      }
+      if (!Object.keys(patch).length) return res.status(400).json({ message: "Nincs módosítandó mező." });
+      const [row] = await db.update(learners).set({ ...patch, updatedAt: new Date() }).where(eq(learners.id, req.params.id))
+        .returning({ interests: learners.interests, newsletter: learners.newsletter });
+      if (!row) return res.status(404).json({ message: "A tanuló nem található." });
+      res.json(row);
+    } catch (error: unknown) {
+      // Review #312: a Drizzle-üzenet a lekérdezés paramétereit (a címkéket) is tartalmazhatja — csak a hiba fajtája és kódja.
+      logger.error('[LEARNERS] hírlevél-beállítás hiba:', error instanceof Error ? `${error.name}${(error as { code?: unknown }).code ? ` (${String((error as { code?: unknown }).code)})` : ""}` : "ismeretlen");
+      res.status(500).json({ message: "A mentés nem sikerült." });
     }
   });
   adminRouter.post("/learners/:id/rotate", async (req, res) => {
