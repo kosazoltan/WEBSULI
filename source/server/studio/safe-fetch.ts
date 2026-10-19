@@ -155,6 +155,8 @@ function decode(bytes: Uint8Array, charset: string): string {
 export async function fetchPublicPage(raw: string, opts: {
   timeoutMs?: number; maxBytes?: number; maxRedirects?: number; signal?: AbortSignal;
   lookup?: AddressLookup; request?: RawRequest;
+  /** Review #313: minden lépés (az átirányítás célja is) a kérés ELŐTT ellenőrizve; hamis → hiba, a kérés nem indul el. */
+  allowUrl?: (url: URL) => boolean;
 } = {}): Promise<PublicPage> {
   // Review #222 (CI): rendes (ref-elt) időzítő, a végén mindig törölve — az `AbortSignal.timeout` unref-elt időzítője nem tartja
   // életben a folyamatot, így egy függő DNS-ígéret mellett a határidő le sem járna.
@@ -182,6 +184,7 @@ async function fetchWithinDeadline(raw: string, opts: Parameters<typeof fetchPub
   let current = raw;
   for (let redirects = 0; ; redirects++) {
     const url = checkFetchUrl(current);
+    if (opts.allowUrl && !opts.allowUrl(url)) throw new Error(`Nem engedélyezett cél: ${url.hostname}`);
     const host = url.hostname.replace(/^\[|\]$/g, "");
     const addresses = await abortable(lookup(host));
     if (!addresses.length || addresses.some((a) => !isPublicAddress(a.address))) throw new Error(`Nem nyilvános címre oldódik fel: ${host}`);

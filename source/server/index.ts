@@ -12,6 +12,7 @@ import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
 import { setupDailyViewSummary } from "./dailyViewSummary";
 import { setupDailyReminders } from "./daily-reminder";
+import { setupNewsletters } from "./newsletter";
 import { syncLearners } from "./learners";
 import { setupLearnerReports } from "./learner-reports";
 // import { initializeDatabase } from "./initDb"; // Not needed for Neon PostgreSQL
@@ -579,6 +580,8 @@ app.use((req, res, next) => {
       setupDailyViewSummary();
       // Napi tananyag-emlékeztető a regisztrált tanulóknak (docs/specs/2026-10-18-napi-emlekezteto.md) — E2E-ben nem (levél!)
       setupDailyReminders();
+      // „Mai felfedezés” hírlevél (docs/specs/2026-10-19-mai-felfedezes-hirlevel.md) — naponta 16:00, E2E-ben nem (levél!)
+      setupNewsletters();
       // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md): a nevesített címekből tanulók (idempotens, sosem dob).
       void syncLearners();
       // S4: heti összefoglaló, inaktivitás-riasztás, 365 napos megőrzés (csak élesben)
