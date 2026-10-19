@@ -22,3 +22,9 @@ Terv: `docs/specs/2026-10-19-eroforras-s3a.md`. Munkakönyvtár: `source/`. Ág:
    - A meglévő tesztek zöldek; ha egy teszt a régi sorrendet rögzíti, az dokumentált specváltozás.
 5. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`.
 6. **Kitelepítés:** az aktív-futás őr = 0. Élő mérés a következő gyártás telemetriájából.
+
+## Review #329 — pontosítás
+- **Jelölők kiválasztása:** a töréspontot a jelölt blokkok POZÍCIÓJA (forduló:blokk) alapján választjuk, nem objektum-azonosság
+  szerint, mert ugyanaz a blokkobjektum több fordulóban is szerepelhet.
+  - Teszt: négy fordulóban újrahasznált blokk → csak az utolsó két előfordulás kap jelölőt.
+- **Fogalomjavítás lektora:** a `server/studio/single-run/concept-fix.ts` forrásátirat-blokkja is `cache: true`.
