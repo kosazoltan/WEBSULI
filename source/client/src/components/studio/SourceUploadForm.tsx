@@ -225,7 +225,8 @@ export function SourceUploadForm({
     },
     // #166 — a poll háttér-fülben/fókuszvesztéskor is fusson: e nélkül a jelző
     // "befagyott" (OCR 8/10), miközben a szerver rég továbbhaladt.
-    refetchIntervalInBackground: true,
+    // Spec 2026-10-19-eroforras-s2a: rejtett fülön nem kérdez (visszatéréskor a fókusz frissít).
+    refetchIntervalInBackground: false,
   });
 
   const runFinished = run.data?.phase === "done" || run.data?.phase === "error" || run.data?.phase === "parked" || run.data?.phase === "draft";

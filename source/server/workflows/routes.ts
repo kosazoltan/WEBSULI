@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { slimRun } from "./slim";
 import { isAuthenticatedAdmin } from "../auth";
 import { workflowStore } from "./store";
 import { skillStore } from "./learning-store";
@@ -54,7 +55,7 @@ workflowRouter.post("/skills/:skill/:fingerprint/disable", async (req, res) => {
 workflowRouter.get("/workflows", async (req, res) => {
   try {
     const records = await workflowStore.list(req.user!.id);
-    res.json({ runs: records.map(r => r.view) });
+    res.json({ runs: records.map(r => slimRun(r.view)) });
   } catch { res.status(503).json({ message: "A futásnapló átmenetileg nem olvasható." }); }
 });
 workflowRouter.get("/workflows/:id", async (req, res) => {

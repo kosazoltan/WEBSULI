@@ -98,12 +98,15 @@ designAssetsRouter.get("/:id", async (req, res) => {
   const id = req.params.id;
   if (!ID.test(id)) return res.status(400).json({ message: "Érvénytelen képazonosító." });
   try {
-    const [row] = await db.select({ mime: designAssets.mime, sha256: designAssets.sha256, bytes: designAssets.bytes }).from(designAssets).where(eq(designAssets.id, id));
-    if (!row) return res.status(404).json({ message: "Nincs ilyen kép." });
-    const etag = `"${row.sha256}"`;
+    // Spec 2026-10-19-eroforras-s2a: előbb csak a meta; egyező ETag-nél 304 a képbájtok beolvasása nélkül.
+    const [meta] = await db.select({ mime: designAssets.mime, sha256: designAssets.sha256 }).from(designAssets).where(eq(designAssets.id, id));
+    if (!meta) return res.status(404).json({ message: "Nincs ilyen kép." });
+    const etag = `"${meta.sha256}"`;
     res.set({ "Cache-Control": "public, max-age=86400", ETag: etag, "X-Content-Type-Options": "nosniff" });
     if (req.headers["if-none-match"] === etag) return res.status(304).end();
-    return res.type(row.mime).send(row.bytes);
+    const [row] = await db.select({ bytes: designAssets.bytes }).from(designAssets).where(eq(designAssets.id, id));
+    if (!row) return res.status(404).json({ message: "Nincs ilyen kép." });
+    return res.type(meta.mime).send(row.bytes);
   } catch (error) {
     logger.error("[design-assets] A kép nem olvasható:", error);
     return res.status(500).json({ message: "A kép most nem érhető el." });
