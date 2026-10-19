@@ -1185,6 +1185,29 @@ export const learners = pgTable("learners", {
 });
 export type Learner = typeof learners.$inferSelect;
 
+/** „Mai felfedezés” hírlevél (migrations/0035): tanulónként és naponként egy foglalás → küldés. */
+export const learnerNewsletters = pgTable(
+  "learner_newsletters",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    learnerId: varchar("learner_id").notNull().references(() => learners.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("pending").$type<"pending" | "sent" | "failed" | "skipped">(),
+    attempts: integer("attempts").notNull().default(1),
+    articleUrl: text("article_url"),
+    articleTitle: text("article_title"),
+    materialId: varchar("material_id"),
+    /** Review #313: a kiválasztott cikk szövege és a kézbesített címek kivonata (nem cím). */
+    teaser: text("teaser"),
+    question: text("question"),
+    deliveredTo: text("delivered_to").array().notNull().default(sql`'{}'::text[]`),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ learnerDayIdx: uniqueIndex("learner_newsletters_learner_day_idx").on(table.learnerId, table.day) }),
+);
+
 /** Megtekintés és eredmény tanulónként (migrations/0032); megőrzés 365 nap. */
 export const learnerActivity = pgTable(
   "learner_activity",
