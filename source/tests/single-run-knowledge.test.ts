@@ -225,3 +225,13 @@ test("review #311: a szó szerint átvett, szülő által ellenőrzött katalóg
     assert.doesNotMatch(stationText(client, "6"), /KATALÓGUS-TÉTELEK/, "kikapcsolva nincs jelölés");
   });
 });
+
+test("review #311: a betöltőből érkező WorkflowConflict sem fail-open — a futás megáll", async () => {
+  const { WorkflowConflict } = await import("../server/workflows/engine");
+  await withEnv({ STUDIO_CATALOG_S6: "1", STUDIO_SUBJECT_MEMORY: undefined }, async () => {
+    const client = scriptedClient();
+    const mem = memoryStore({ catalog: async () => { throw new WorkflowConflict("a lízing másé"); } });
+    await assert.rejects(run(client, mem), (e: unknown) => e instanceof WorkflowConflict);
+    assert.equal(stationText(client, "2"), "", "a tervező nem kapott kérést");
+  });
+});

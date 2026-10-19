@@ -449,6 +449,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     try {
       pool = catalogPoolFor(knowledgeMap, await withKnowledgeDeadline(store.loadCatalogRows(query.subject), "katalógus"));
     } catch (error) {
+      if (error instanceof WorkflowConflict || error instanceof WorkflowWaiting) throw error; // review #311: a végrehajtást megszakító kivétel nem fail-open
       log(`[EGYFUTÁS] A katalógus-lekérés elmaradt: ${knowledgeReason(error)}`);
       return undefined;
     }
@@ -472,6 +473,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     try {
       snapshot = memorySnapshot(await withKnowledgeDeadline(store.loadSubjectMemory(subject), "tantárgyi memória"), subject, Date.now());
     } catch (error) {
+      if (error instanceof WorkflowConflict || error instanceof WorkflowWaiting) throw error; // review #311: a végrehajtást megszakító kivétel nem fail-open
       log(`[EGYFUTÁS] A tantárgyi memória betöltése elmaradt: ${knowledgeReason(error)}`);
       return undefined;
     }
