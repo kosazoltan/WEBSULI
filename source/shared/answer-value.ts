@@ -9,7 +9,7 @@
  * Szándékosan import-szegény (csak a közös kifejezés-kiértékelő): a kliens és a szerver ugyanezt futtatja.
  */
 import { ATOM, OPS, SIGN, atomValue, evaluateExpression } from "./arithmetic-expression";
-import { formatPolynomial, isExpanded, parsePolynomial, polyEquals, polynomialCandidates } from "./polynomial";
+import { formatPolynomial, isExpanded, isFactored, parsePolynomial, polyEquals, polynomialCandidates } from "./polynomial";
 
 /** A lecke pontozási szerződésének verziója (`experience.scoringVersion`); hiányzó mező = 1 (régi kulcsszó-pontozó). */
 export const LESSON_SCORING_VERSION = 3;
@@ -100,22 +100,23 @@ export function isValidReference(a: Pick<TypedAnswer, "kind" | "value" | "form">
 }
 
 /** Betűs végeredmény ítélete: a válasz polinom-jelöltjei közül a `from`-tól az első, értékazonos és a kért alakú. */
-function findPolynomial(answer: string, expected: TypedAnswer, from: number): { index: number; reason?: string } {
+function findPolynomial(answer: string, expected: TypedAnswer, from: number): { index: number; end: number; reason?: string } {
   const ref = parsePolynomial(expected.value);
-  if (!ref) return { index: -1 };
+  if (!ref) return { index: -1, end: from };
   const candidates = polynomialCandidates(answer);
   let sameValueWrongForm = false;
-  for (let i = from; i < candidates.length; i++) {
+  for (let i = 0; i < candidates.length; i++) {
+    if (candidates[i].start < from) continue;
     const c = candidates[i].parsed;
     if (ref.hasVariable && !c.hasVariable) continue;
     if (!polyEquals(c.poly, ref.poly)) continue;
     const form = expected.form ?? "expanded";
     if (form === "expanded" && !isExpanded(c)) { sameValueWrongForm = true; continue; }
-    if (form === "factored" && (!c.parens || isExpanded(c))) { sameValueWrongForm = true; continue; }
-    return { index: i };
+    if (form === "factored" && !isFactored(c, candidates[i].text)) { sameValueWrongForm = true; continue; }
+    return { index: i, end: candidates[i].end };
   }
   const wanted = (expected.form ?? "expanded") === "factored" ? "szorzattá alakított (zárójeles)" : "kifejtett, összevont";
-  return { index: -1, reason: sameValueWrongForm ? `A(z) ${expected.part} részhez ${wanted} alakot várunk.` : undefined };
+  return { index: -1, end: from, reason: sameValueWrongForm ? `A(z) ${expected.part} részhez ${wanted} alakot várunk.` : undefined };
 }
 
 /**
@@ -176,12 +177,13 @@ export function gradeTypedAnswers(rawAnswer: string, answers: readonly TypedAnsw
   const atoms = [...answer.matchAll(ATOM_RE)].map((m) => ({ text: m[0], index: m.index ?? 0, value: atomValue(m[0].replace(/^[−–]/, "-")) }));
   let cursor = 0;
   let undecidable = false;
-  let polyCursor = 0;
+  // Review #319: EGY közös szövegpozíció a vegyes (betűs + számos) részeredmények sorrendjéhez.
+  let textPos = 0;
   for (const expected of answers) {
     if (expected.kind === "polynomial") {
       if (!isValidReference(expected)) { undecidable = true; verdicts.push({ part: expected.part, ok: false, undecidable: true, reason: `A(z) ${expected.part} rész referenciaértéke nem értelmezhető.` }); continue; }
-      const hit = findPolynomial(answer, expected, polyCursor);
-      if (hit.index >= 0) { polyCursor = hit.index + 1; verdicts.push({ part: expected.part, ok: true, reason: "Helyes kifejezés." }); }
+      const hit = findPolynomial(answer, expected, textPos);
+      if (hit.index >= 0) { textPos = hit.end; verdicts.push({ part: expected.part, ok: true, reason: "Helyes kifejezés." }); }
       else verdicts.push({ part: expected.part, ok: false, reason: hit.reason ?? `A(z) ${expected.part} rész eredménye hiányzik vagy hibás.` });
       continue;
     }
@@ -196,13 +198,14 @@ export function gradeTypedAnswers(rawAnswer: string, answers: readonly TypedAnsw
     let found = -1;
     for (let i = cursor; i < atoms.length; i++) {
       const a = atoms[i];
+      if (a.index < textPos) continue;
       if (Number.isNaN(a.value) || Math.abs(a.value - ref) > 1e-6 * Math.max(1, Math.abs(ref))) continue;
       if (expected.form === "simplified-fraction" && !isSimplifiedFraction(a.text)) continue;
       if (expected.form === "decimal" && !isDecimalForm(a.text)) continue;
       if (expected.unit && !unitPresent(answer, a.text, expected.unit)) continue;
       found = i; break;
     }
-    if (found >= 0) { cursor = found + 1; verdicts.push({ part: expected.part, ok: true, reason: "Helyes érték." }); }
+    if (found >= 0) { cursor = found + 1; textPos = atoms[found].index + atoms[found].text.length; verdicts.push({ part: expected.part, ok: true, reason: "Helyes érték." }); }
     else verdicts.push({ part: expected.part, ok: false, reason: expected.form === "simplified-fraction" ? `A(z) ${expected.part} rész eredményét egyszerűsített törtként várjuk.` : expected.unit ? `A(z) ${expected.part} rész eredménye a(z) ${expected.unit} mértékegységgel hiányzik vagy hibás.` : `A(z) ${expected.part} rész eredménye hiányzik vagy hibás.` });
   }
   return { total: answers.length, correct: verdicts.filter((v) => v.ok).length, verdicts, undecidable };

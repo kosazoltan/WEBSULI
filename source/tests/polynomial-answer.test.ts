@@ -66,3 +66,21 @@ test("a polinom-értelmező a zárójeles hatványt és az implicit szorzást ki
   assert.ok(p);
   assert.equal(gradeTypedAnswers("16a² + 24a + 9", [poly("16[(a+1)² - 1/2(a+1)] + 1", "any")]).correct, 1);
 });
+
+test("review #319: a szorzatalak valódi felső szintű szorzat — a zárójeles tagú vagy egészében zárójelezett összeg nem", () => {
+  const ref = poly("(x+5)²", "factored");
+  for (const a of ["x² + 10x + (25)", "(x² + 10x + 25)", "((x² + 10x + 25))"]) assert.equal(ok(a, ref), false, a);
+  for (const a of ["((x+5)²)", "2(x+5)²/2", "(x+5)·(x+5)"]) assert.equal(ok(a, ref), true, a);
+});
+
+test("review #319: a mondatzáró „?” és „!” leválik — a kérdés-ellenőrzés és a tanulói válasz sem vész el", () => {
+  assert.match(referenceValueProblems({ id: "t1", q: "Bontsd ki: (x+5)²!", typedAnswers: [poly("x² + 5x + 25")] }).join(" "), /nem egyenlő a kérdés kifejezésével/);
+  assert.match(referenceValueProblems({ id: "t1", q: "Mennyi (x+5)²?", typedAnswers: [poly("x² + 5x + 25")] }).join(" "), /nem egyenlő/);
+  assert.equal(ok("Kész: x² + 10x + 25!", poly("x² + 10x + 25")), true);
+});
+
+test("review #319: vegyes (betűs + számos) részeredményeknél egy közös sorrend érvényes", () => {
+  const parts: TypedAnswer[] = [{ ...poly("x + 1", "any"), part: "a" }, { part: "b", kind: "number", value: "5" }];
+  assert.equal(gradeTypedAnswers("a) x + 1 b) 5", parts).correct, 2);
+  assert.equal(gradeTypedAnswers("5; x + 1", parts).correct, 1, "felcserélt sorrend: a szám a polinom ELŐTT áll");
+});

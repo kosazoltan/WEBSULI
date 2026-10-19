@@ -180,18 +180,30 @@ export function isExpanded(p: Parsed): boolean {
  * szóközzel követett vessző/kettőspont és a részfeladat-jel („a)”, „2)”) határol; a jelölt a TELJES szakasz (nem részlete —
  * a „x² + 10x + 25 + 1” nem lehet helyes egy részlete miatt).
  */
-export function polynomialCandidates(text: string): Array<{ text: string; parsed: Parsed }> {
+export function polynomialCandidates(text: string): Array<{ text: string; parsed: Parsed; start: number; end: number }> {
+  // Hosszmegtartó jelölés: a jelölt pozíciója az eredeti szövegben marad (a pontozó közös sorrend-kurzora ezt követi — review #319).
   const marked = text
-    .replace(/(^|[\s,;])(?:[a-z]|\d{1,2})\)(?=\s)/gi, "$1\n")
-    .replace(/[=;≠<>≤≥\n]|[,:](?=\s|$)|\.(?=\s|$)/g, "\n");
-  const out: Array<{ text: string; parsed: Parsed }> = [];
+    .replace(/(^|[\s,;])((?:[a-z]|\d{1,2})\))(?=\s)/gi, (_m, pre: string, label: string) => pre + "\n".repeat(label.length))
+    // Review #319: a mondatzáró „?” és „!” is határ („Bontsd ki: (x+5)²!”).
+    .replace(/[=;≠<>≤≥\n?!]|[,:](?=\s|$)|\.(?=\s|$)/g, "\n");
+  const out: Array<{ text: string; parsed: Parsed; start: number; end: number }> = [];
+  let chunkStart = 0;
   for (const chunk of marked.split("\n")) {
     // Próza-szó: nem ASCII-betűhöz tapadó betűsor, vagy olyan ≥2 betűs szó, amelynek egyik szomszédja sem műveleti jel.
     const words = chunk.split(/(\s+)/);
     let current = "";
-    const flush = () => { const t = current.trim(); current = ""; if (!t) return; const parsed = parsePolynomial(t); if (parsed) out.push({ text: t, parsed }); };
-    for (let i = 0; i < words.length; i++) {
+    let currentStart = 0;
+    let offset = 0;
+    const flush = () => {
+      const lead = current.length - current.trimStart().length;
+      const t = current.trim(); current = "";
+      if (!t) return;
+      const parsed = parsePolynomial(t);
+      if (parsed) out.push({ text: t, parsed, start: chunkStart + currentStart + lead, end: chunkStart + currentStart + lead + t.length });
+    };
+    for (let i = 0; i < words.length; offset += words[i].length, i++) {
       const w = words[i];
+      if (!current) currentStart = offset;
       if (/^\s+$/.test(w) || !w) { current += w; continue; }
       const prev = words.slice(0, i).reverse().find((x) => x && !/^\s+$/.test(x)) ?? "";
       const next = words.slice(i + 1).find((x) => x && !/^\s+$/.test(x)) ?? "";
@@ -202,12 +214,35 @@ export function polynomialCandidates(text: string): Array<{ text: string; parsed
       // Két, műveleti jel nélkül egymás mellé írt kifejezés két jelölt („x²+1 x²-1”); zárójel előtt nem vágunk („3 (x+1)”).
       const glued = current.trim() && !/^[+\-−–·×*/^)²³(]/.test(w) && !/[+\-−–·×*/^(]$/.test(current.trim());
       if (prose) { flush(); continue; }
-      if (glued) flush();
+      if (glued) { flush(); currentStart = offset; }
       current += w;
     }
     flush();
+    chunkStart += chunk.length + 1;
   }
   return out;
+}
+
+/**
+ * Szorzattá alakított alak (review #319): a TELJES kifejezés egyetlen felső szintű szorzat (vagy zárójeles hatvány), amelyben
+ * zárójeles tényező áll — az „x² + 10x + (25)” zárójele ellenére összeg, és a teljes egészében zárójelbe tett összeg
+ * („(x² + 10x + 25)”) sem szorzat.
+ */
+export function isFactored(p: Parsed, text: string): boolean {
+  if (!p.parens || p.topTerms.length !== 1 || p.topTerms[0].size < 2) return false;
+  let t = text.trim();
+  const wrapped = (x: string) => {
+    if (!/^[([]/.test(x) || !/[)\]]$/.test(x)) return false;
+    let depth = 0;
+    for (let i = 0; i < x.length; i++) {
+      if (/[([]/.test(x[i])) depth++;
+      else if (/[)\]]/.test(x[i]) && --depth === 0 && i < x.length - 1) return false;
+    }
+    return true;
+  };
+  while (wrapped(t)) t = t.slice(1, -1).trim();
+  const inner = parsePolynomial(t);
+  return !!inner && inner.parens && inner.topTerms.length === 1;
 }
 
 export function formatPolynomial(p: Polynomial): string {
