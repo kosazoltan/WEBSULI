@@ -22,7 +22,8 @@ const LONG = "A villanymotor a mágneses mező és az áram kölcsönhatásával
 
 function fakeDeps(opts: { url: string; ageAppropriate: boolean; seen: string[] }): NonNullable<Deps> {
   return {
-    async search() { return [opts.url]; },
+    // Review #313: a KERESÉS bemenete is rögzítve — név, cím, azonosító ott sem lehet.
+    async search(input) { opts.seen.push(JSON.stringify(input)); return [opts.url]; },
     async download(u) { return { url: u, title: "Villanymotor", text: LONG }; },
     async choose(req) {
       opts.seen.push(`${req.system}\n${req.user}`);
@@ -56,8 +57,8 @@ test("csak a bekapcsolt, érdeklődéssel bíró tanuló kap levelet, minden cí
   assert.match(sent[0].html, /href="https:\/\/qubit\.hu\/villanymotor"/);
   assert.match(sent[0].html, /Az elektromosság alapjai/);
   assert.match(sent[0].html, /\/preview\/nl-mat\?t=/, "személyes anyaglink");
-  assert.equal(seen.length, 1);
-  assert.doesNotMatch(seen[0], /Marci|Próba|@example\.test|nl-on/, "a modell bemenete név, cím és azonosító nélkül");
+  assert.equal(seen.length, 2, "keresés + választás");
+  for (const input of seen) assert.doesNotMatch(input, /Marci|Próba|@example\.test|nl-on/, "a modell bemenete (keresés és választás) név, cím és azonosító nélkül");
   const [row] = await db.select().from(learnerNewsletters).where(eq(learnerNewsletters.learnerId, "nl-on"));
   assert.equal(row.status, "sent");
   assert.equal(row.articleUrl, "https://qubit.hu/villanymotor");
@@ -79,4 +80,49 @@ test("korának nem megfelelő választás → kihagyva, nincs levél", async () 
   const r = await runNewsletters(day3, fakeDeps({ url: "https://qubit.hu/masik", ageAppropriate: false, seen: [] }));
   assert.deepEqual({ sent: r.sent, skipped: r.skipped }, { sent: 0, skipped: 1 });
   assert.equal(sent.length, 0);
+});
+
+test("review #313: újrapróbáláskor ugyanaz a cikk megy, és a már kézbesített cím nem kap újra", async () => {
+  sent.length = 0;
+  const day = new Date("2026-10-22T14:00:00Z");
+  let failSecond = true;
+  setNewsletterSender(async (subject, html, to) => {
+    if (to === "marci-masik@example.test" && failSecond) { failSecond = false; throw new Error("átmeneti hiba"); }
+    sent.push({ subject, html, to });
+  });
+  const first = await runNewsletters(day, fakeDeps({ url: "https://qubit.hu/elso", ageAppropriate: true, seen: [] }));
+  assert.equal(first.failed, 1);
+  assert.deepEqual(sent.map((m) => m.to), ["marci@example.test"]);
+  // A második kör más cikket „találna” — de a foglalásban rögzített cikk megy, csak a hiányzó címre.
+  const seen: string[] = [];
+  const second = await runNewsletters(day, fakeDeps({ url: "https://qubit.hu/masik-cikk", ageAppropriate: true, seen }));
+  assert.equal(second.sent, 1);
+  assert.equal(seen.length, 0, "nincs új keresés és választás");
+  assert.deepEqual(sent.map((m) => m.to), ["marci@example.test", "marci-masik@example.test"]);
+  assert.match(sent[1].html, /href="https:\/\/qubit\.hu\/elso"/);
+  setNewsletterSender(async (subject, html, to) => { sent.push({ subject, html, to }); });
+});
+
+test("review #313: a 20 percnél régebbi „pending” foglalás visszavehető; a friss nem", async () => {
+  sent.length = 0;
+  const day = new Date("2026-10-23T14:00:00Z");
+  await db.insert(learnerNewsletters).values({ learnerId: "nl-on", day: "2026-10-23", status: "pending", attempts: 1 });
+  const fresh = await runNewsletters(day, fakeDeps({ url: "https://qubit.hu/harmadik", ageAppropriate: true, seen: [] }));
+  assert.equal(fresh.duplicate, 1, "élő foglalás: nem nyúl hozzá");
+  await db.update(learnerNewsletters).set({ updatedAt: new Date(Date.now() - 30 * 60_000) }).where(eq(learnerNewsletters.day, "2026-10-23"));
+  const stale = await runNewsletters(day, fakeDeps({ url: "https://qubit.hu/harmadik", ageAppropriate: true, seen: [] }));
+  assert.equal(stale.sent, 1, "a beragadt foglalás visszavéve");
+});
+
+test("review #313: a közben kikapcsolt cím nem kap levelet", async () => {
+  sent.length = 0;
+  const day = new Date("2026-10-24T14:00:00Z");
+  setNewsletterSender(async (subject, html, to) => {
+    sent.push({ subject, html, to });
+    // Az első küldés után a másik címet kikapcsolják.
+    await db.update(extraEmailAddresses).set({ isActive: false }).where(eq(extraEmailAddresses.email, "marci-masik@example.test"));
+  });
+  const r = await runNewsletters(day, fakeDeps({ url: "https://qubit.hu/negyedik", ageAppropriate: true, seen: [] }));
+  assert.equal(r.sent, 1);
+  assert.deepEqual(sent.map((m) => m.to), ["marci@example.test"]);
 });

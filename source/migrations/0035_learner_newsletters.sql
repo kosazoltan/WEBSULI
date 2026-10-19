@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS learner_newsletters (
   article_url text,
   article_title text,
   material_id varchar,
+  -- Review #313: a kiválasztott cikk szövege (újrapróbáláskor ugyanaz megy) és a már kézbesített címek kivonata (sha256-előtag, nem cím).
+  teaser text,
+  question text,
+  delivered_to text[] NOT NULL DEFAULT '{}',
   error text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now()

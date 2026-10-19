@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import cron from "node-cron";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -18,7 +19,7 @@ import type { PublicPage } from "./studio/safe-fetch";
  * A modell csak az érdeklődést és az évfolyamot kapja — nevet, címet, azonosítót soha. Hiba vagy alkalmatlan cikk → aznap nincs levél.
  */
 export const NEWSLETTER_MODEL = "gpt-6.1-sol";
-export const NEWSLETTER_LIMITS_S2 = { candidates: 8, downloads: 6, minChars: 600, excerptChars: 1500, materials: 60, teaser: 450, question: 160, recentDays: 60, attempts: 2 } as const;
+export const NEWSLETTER_LIMITS_S2 = { candidates: 8, downloads: 6, minChars: 600, excerptChars: 1500, materials: 60, teaser: 450, question: 160, recentDays: 60, attempts: 3 } as const;
 
 export type ArticlePick = { url: string; title: string; teaser: string; question: string; materialId: string | null };
 export type MaterialOption = { id: string; title: string };
@@ -30,8 +31,24 @@ export type NewsletterDeps = {
   choose(input: { system: string; user: string }): Promise<unknown>;
 };
 
-const HU_LETTERS = /[áéíóöőúüű]/i;
-const usable = (page: PublicPage) => page.text.trim().length >= NEWSLETTER_LIMITS_S2.minChars && HU_LETTERS.test(page.text);
+/**
+ * Review #313: magyar-e a szöveg — nem egyetlen ékezet, hanem arány: a betűk legalább 2%-a magyar ékezetes, és van gyakori
+ * magyar funkciószó. (Egy átlagos magyar szövegben az ékezetes betűk aránya ~8–10%.)
+ */
+export function looksHungarian(text: string): boolean {
+  const letters = text.match(/\p{L}/gu)?.length ?? 0;
+  const accented = text.match(/[áéíóöőúüű]/gi)?.length ?? 0;
+  return letters > 0 && accented / letters >= 0.02 && /(^|\s)(és|hogy|egy|nem|is|meg|már|vagy|mert)(\s|$)/i.test(text);
+}
+const usable = (page: PublicPage) => page.text.trim().length >= NEWSLETTER_LIMITS_S2.minChars && looksHungarian(page.text);
+
+/**
+ * Review #313: a modell `ageAppropriate` ítéletétől FÜGGETLEN, determinisztikus szűrő a gyereknek kimenő szövegre (cím, ismertető,
+ * kérdés) — egy cikkbe ágyazott utasítás (prompt-injekció) sem juttathat át ilyen szöveget. A katonai téma (repülők, csaták) nem tilos;
+ * a naturalisztikus és felnőtt tartalom szavai igen.
+ */
+const UNSAFE_TERMS = /(holttest|lemészárol|kivégez|kivégzés|megerőszak|öngyilkos|szex|pornó|porno|drog|kábítószer|terrortámadás|lefejez|brutális|vérfürdő|halálos áldozat|meggyilkol)/i;
+export const unsafeForChild = (text: string) => UNSAFE_TERMS.test(text);
 
 /** A választó kérése — CSAK érdeklődés, évfolyam, cikk-kivonatok és anyaglista (ADAT). */
 export function chooseRequest(input: { interests: string[]; grade: number; articles: PublicPage[]; materials: MaterialOption[] }): { system: string; user: string } {
@@ -64,6 +81,7 @@ export function validatePick(raw: unknown, articles: PublicPage[], materials: Ma
   const question = typeof r.question === "string" ? r.question.trim() : "";
   if (!teaser || teaser.length > NEWSLETTER_LIMITS_S2.teaser || !question || question.length > NEWSLETTER_LIMITS_S2.question) return { ok: false, reason: "hiányzó vagy túl hosszú ismertető / kérdés" };
   const title = (typeof r.title === "string" && r.title.trim() ? r.title.trim() : article.title).slice(0, 200);
+  if (unsafeForChild(`${title}\n${teaser}\n${question}\n${article.title}`)) return { ok: false, reason: "a független tartalomszűrő gyereknek nem valónak ítélte" };
   const materialId = typeof r.materialId === "string" && materials.some((m) => m.id === r.materialId) ? r.materialId : null;
   return { ok: true, pick: { url: article.url, title, teaser, question, materialId } };
 }
@@ -73,10 +91,17 @@ export async function pickArticle(input: { interests: string[]; grade: number; r
   const urls = [...new Set(await deps.search({ interests: input.interests, grade: input.grade }))]
     .filter((u) => isAllowedArticleUrl(u) && !input.recentUrls.has(u)).slice(0, NEWSLETTER_LIMITS_S2.candidates);
   const articles: PublicPage[] = [];
+  let fetched = 0;
   for (let i = 0; i < urls.length && articles.length < NEWSLETTER_LIMITS_S2.downloads; i += 3) {
     const batch = await Promise.allSettled(urls.slice(i, i + 3).map((u) => deps.download(u)));
-    for (const b of batch) if (b.status === "fulfilled" && isAllowedArticleUrl(b.value.url) && !input.recentUrls.has(b.value.url) && usable(b.value)) articles.push(b.value);
+    for (const b of batch) {
+      if (b.status !== "fulfilled") continue;
+      fetched++;
+      if (isAllowedArticleUrl(b.value.url) && !input.recentUrls.has(b.value.url) && usable(b.value)) articles.push(b.value);
+    }
   }
+  // Review #313: ha VOLT jelölt, de egy sem tölthető le, az átmeneti hiba (újrapróbálható), nem „nincs cikk”.
+  if (urls.length && !fetched) throw new Error(`a ${urls.length} jelölt egyike sem tölthető le (átmeneti hiba?)`);
   if (!articles.length) return { ok: false, reason: `nincs letölthető, engedélyezett cikk (${urls.length} jelöltből)` };
   return validatePick(await deps.choose(chooseRequest({ ...input, articles })), articles, input.materials);
 }
@@ -102,7 +127,8 @@ export async function liveNewsletterDeps(): Promise<NewsletterDeps> {
       } as never) as unknown as { output: Parameters<typeof candidateUrls>[0] };
       return candidateUrls(response.output);
     },
-    download: (url) => fetchPublicPage(url),
+    // Review #313: minden átirányítási cél is az engedélyezett forráslistán kell legyen, a kérés előtt.
+    download: (url) => fetchPublicPage(url, { allowUrl: (u) => isAllowedArticleUrl(u.href) }),
     async choose({ system, user }) {
       const response = await client.responses.create({ model: connection.model, reasoning: { effort: "medium" }, instructions: system, input: user, store: false } as never) as unknown as { output_text?: string };
       const text = response.output_text ?? "";
@@ -124,6 +150,17 @@ async function send(subject: string, html: string, to: string) {
 
 export type NewsletterRun = { day: string; sent: number; skipped: number; failed: number; duplicate: number };
 
+/** Review #313: a kézbesített cím kivonata a foglalásban (nem maga a cím). */
+export const addressKey = (email: string) => createHash("sha256").update(email.trim().toLowerCase()).digest("hex").slice(0, 16);
+
+/** Review #313: közvetlenül küldés előtt — a tanuló hírlevele még be van-e kapcsolva, és a cím aktív-e és hozzá tartozik-e. */
+async function stillEligible(learnerId: string, email: string): Promise<boolean> {
+  const [row] = await db.select({ on: learners.newsletter }).from(learners)
+    .innerJoin(extraEmailAddresses, eq(extraEmailAddresses.learnerId, learners.id))
+    .where(and(eq(learners.id, learnerId), eq(extraEmailAddresses.email, email), eq(extraEmailAddresses.isActive, true))).limit(1);
+  return row?.on === true;
+}
+
 /** A mai hírlevelek — tanulónként naponta egy (a sikertelen egyszer újrapróbálható). Sosem dob. */
 export async function runNewsletters(now: Date, deps?: NewsletterDeps): Promise<NewsletterRun> {
   const { iso, date } = budapestDay(now);
@@ -142,37 +179,54 @@ export async function runNewsletters(now: Date, deps?: NewsletterDeps): Promise<
     for (const learner of subscribed) {
       const to = addresses.filter((a) => a.learnerId === learner.id);
       if (!to.length) continue;
+      // Review #313: a 20 percnél régebbi „pending” foglalás (egy leállt futás maradéka) is visszavehető; az élő foglalás nem.
       const claimed = await db.insert(learnerNewsletters).values({ learnerId: learner.id, day: iso, status: "pending", attempts: 1 })
         .onConflictDoUpdate({
           target: [learnerNewsletters.learnerId, learnerNewsletters.day],
           set: { status: "pending", attempts: sql`${learnerNewsletters.attempts} + 1`, error: null, updatedAt: new Date() },
-          setWhere: sql`${learnerNewsletters.status} = 'failed' AND ${learnerNewsletters.attempts} < ${NEWSLETTER_LIMITS_S2.attempts}`,
-        }).returning({ id: learnerNewsletters.id });
+          setWhere: sql`(${learnerNewsletters.status} = 'failed' AND ${learnerNewsletters.attempts} < ${NEWSLETTER_LIMITS_S2.attempts})
+            OR (${learnerNewsletters.status} = 'pending' AND ${learnerNewsletters.updatedAt} < now() - interval '20 minutes')`,
+        }).returning({ id: learnerNewsletters.id, articleUrl: learnerNewsletters.articleUrl, articleTitle: learnerNewsletters.articleTitle, teaser: learnerNewsletters.teaser, question: learnerNewsletters.question, materialId: learnerNewsletters.materialId, deliveredTo: learnerNewsletters.deliveredTo });
       if (!claimed.length) { result.duplicate++; continue; }
-      const claimId = claimed[0].id;
+      const claim = claimed[0];
+      const claimId = claim.id;
       const finish = (patch: Partial<typeof learnerNewsletters.$inferInsert>) => db.update(learnerNewsletters).set({ ...patch, updatedAt: new Date() }).where(eq(learnerNewsletters.id, claimId));
       try {
         const materials = files.filter((f) => f.classroom === learner.grade).map((f) => ({ id: f.id, title: f.title }));
-        const recentUrls = new Set(recentRows.filter((r) => r.learnerId === learner.id && r.url).map((r) => r.url as string));
-        const picked = await pickArticle({ interests: learner.interests, grade: learner.grade, recentUrls, materials }, live);
-        if (!picked.ok) {
-          await finish({ status: "skipped", error: picked.reason.slice(0, 500) });
-          result.skipped++;
-          logger.info(`[NEWSLETTER] kihagyva, foglalás: ${claimId} — ${picked.reason.slice(0, 200)}`);
-          continue;
+        let pick: ArticlePick;
+        if (claim.articleUrl && claim.articleTitle && claim.teaser && claim.question) {
+          // Review #313: újrapróbálás — ugyanaz a (már kiválasztott) cikk megy, a már kézbesített címek kimaradnak.
+          pick = { url: claim.articleUrl, title: claim.articleTitle, teaser: claim.teaser, question: claim.question, materialId: claim.materialId };
+        } else {
+          const recentUrls = new Set(recentRows.filter((r) => r.learnerId === learner.id && r.url).map((r) => r.url as string));
+          const picked = await pickArticle({ interests: learner.interests, grade: learner.grade, recentUrls, materials }, live);
+          if (!picked.ok) {
+            await finish({ status: "skipped", error: picked.reason.slice(0, 500) });
+            result.skipped++;
+            logger.info(`[NEWSLETTER] kihagyva, foglalás: ${claimId} — ${picked.reason.slice(0, 200)}`);
+            continue;
+          }
+          pick = picked.pick;
+          await finish({ articleUrl: pick.url, articleTitle: pick.title.slice(0, 300), teaser: pick.teaser, question: pick.question, materialId: pick.materialId });
         }
-        const { pick } = picked;
         const material = pick.materialId ? materials.find((m) => m.id === pick.materialId) : undefined;
         const materialUrl = material ? personalUrl(getMaterialPreviewUrl(material.id), learnerTokenFor(learner.id, learner.tokenVersion)) : null;
         const first = firstNameOf(learner.name);
-        let delivered = 0;
+        const delivered = new Set(claim.deliveredTo);
+        let skippedNow = 0;
         for (const a of to) {
+          const key = addressKey(a.email);
+          if (delivered.has(key)) continue;
+          // Review #313: a kapcsoló és a cím közben kikapcsolhatott — küldés előtt friss ellenőrzés.
+          if (!(await stillEligible(learner.id, a.email))) { skippedNow++; continue; }
           await send(newsletterSubject(first, pick.title), newsletterHtml({ first, title: pick.title, teaser: pick.teaser, question: pick.question, articleUrl: pick.url, materialTitle: material?.title ?? null, materialUrl }), a.email);
-          delivered++;
+          delivered.add(key);
+          await db.update(learnerNewsletters).set({ deliveredTo: sql`array_append(${learnerNewsletters.deliveredTo}, ${key})`, updatedAt: new Date() }).where(eq(learnerNewsletters.id, claimId));
           await new Promise((r) => setTimeout(r, 600)); // Resend: legfeljebb 2 kérés/másodperc
         }
-        await finish({ status: delivered ? "sent" : "failed", articleUrl: pick.url, articleTitle: pick.title.slice(0, 300), materialId: material?.id ?? null });
-        if (delivered) result.sent++; else result.failed++;
+        const reached = to.some((a) => delivered.has(addressKey(a.email)));
+        await finish({ status: reached ? "sent" : "skipped", ...(reached ? {} : { error: skippedNow ? "a címzettek közben kikapcsoltak" : "nincs címzett" }) });
+        if (reached) result.sent++; else result.skipped++;
       } catch (error) {
         // A részletek az adatbázisba (címek nélkül); a naplóba csak a foglalás azonosítója.
         const message = (error instanceof Error ? error.message : String(error)).replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "[cím]");
@@ -188,10 +242,12 @@ export async function runNewsletters(now: Date, deps?: NewsletterDeps): Promise<
   return result;
 }
 
-/** Naponta 16:00-kor (pótfutás 16:30), magyar idő szerint; csak éles környezetben, e2e-ben nem. */
+/**
+ * Naponta 16:00-kor, pótfutás 16:30-kor és 17:15-kor (review #313: a 16:00-s kör késői hibája is kapjon újrapróbát), magyar idő szerint;
+ * csak éles környezetben, e2e-ben nem.
+ */
 export function setupNewsletters(): void {
   if (process.env.NODE_ENV !== "production") return;
-  cron.schedule("0 16 * * *", () => { void runNewsletters(new Date()); }, { timezone: REMINDER_TIMEZONE });
-  cron.schedule("30 16 * * *", () => { void runNewsletters(new Date()); }, { timezone: REMINDER_TIMEZONE });
-  logger.info("[NEWSLETTER] ütemezve: naponta 16:00 (pótfutás 16:30), Europe/Budapest");
+  for (const at of ["0 16 * * *", "30 16 * * *", "15 17 * * *"]) cron.schedule(at, () => { void runNewsletters(new Date()); }, { timezone: REMINDER_TIMEZONE });
+  logger.info("[NEWSLETTER] ütemezve: naponta 16:00 (pótfutás 16:30 és 17:15), Europe/Budapest");
 }

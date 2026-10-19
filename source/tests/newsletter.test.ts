@@ -87,12 +87,44 @@ test("sablon: escape, a cikk és az anyag linkje; tárgy a keresztnévvel", () =
   assert.equal(newsletterSubject("Marci", "Hogyan működik a villanymotor?"), "🔭 Marci, mai felfedezésed: Hogyan működik a villanymotor?");
 });
 
-test("ütemezés: naponta 16:00 és 16:30 budapesti időben, csak élesben; e2e-ben nem indul", () => {
+test("ütemezés: naponta 16:00, pótfutás 16:30 és 17:15 (review #313) budapesti időben, csak élesben; e2e-ben nem indul", () => {
   const src = readFileSync(join(root, "server", "newsletter.ts"), "utf8");
-  assert.match(src, /cron\.schedule\("0 16 \* \* \*"[\s\S]*timezone: REMINDER_TIMEZONE/);
-  assert.match(src, /cron\.schedule\("30 16 \* \* \*"/);
+  assert.match(src, /for \(const at of \["0 16 \* \* \*", "30 16 \* \* \*", "15 17 \* \* \*"\]\) cron\.schedule\(at, [^\n]*timezone: REMINDER_TIMEZONE/);
+  assert.match(src, /if \(process\.env\.NODE_ENV !== "production"\) return;/);
   const index = readFileSync(join(root, "server", "index.ts"), "utf8");
   const e2eGuard = index.indexOf("if (!e2e) {");
   const call = index.indexOf("setupNewsletters();");
   assert.ok(e2eGuard > 0 && call > e2eGuard, "a hírlevél az e2e-őr mögött indul");
+});
+
+test("review #313: magyar-e — arány és funkciószó kell, egy ékezet nem elég", async () => {
+  const { looksHungarian } = await import("../server/newsletter");
+  assert.equal(looksHungarian("A villanymotor a mágneses mező és az áram kölcsönhatásával forog."), true);
+  assert.equal(looksHungarian(`${"The electric motor spins because of magnetic fields and current. ".repeat(10)}é`), false, "angol szöveg egy ékezettel");
+  assert.equal(looksHungarian(""), false);
+});
+
+test("review #313: a független tartalomszűrő a modell ítélete ELLENÉRE is kizárja a nem gyereknek való szöveget", () => {
+  const articles = [page("https://index.hu/a", "Hír")];
+  const r = validatePick({ url: "https://index.hu/a", title: "Brutális vérfürdő a városban", teaser: "Rövid ismertető.", question: "Kérdés?", materialId: null, ageAppropriate: true }, articles, materials);
+  assert.equal(r.ok, false);
+  const military = validatePick({ url: "https://index.hu/a", title: "A második világháború legendás vadászgépe", teaser: "A Spitfire gyors és fordulékony volt.", question: "Miért volt ilyen gyors?", materialId: null, ageAppropriate: true }, articles, materials);
+  assert.equal(military.ok, true, "a katonai történelem (repülőgép) nem tilos");
+});
+
+test("review #313: ha minden letöltés hibás, az átmeneti hiba (újrapróbálható), nem „nincs cikk”", async () => {
+  const d: NewsletterDeps = { async search() { return ["https://qubit.hu/a", "https://qubit.hu/b"]; }, async download() { throw new Error("ECONNRESET"); }, async choose() { throw new Error("nem hívódhat"); } };
+  await assert.rejects(pickArticle({ interests: ["fizika"], grade: 6, recentUrls: new Set(), materials }, d), /egyike sem tölthető le/);
+});
+
+test("review #313: a nem engedélyezett átirányítási célra a letöltő kérést sem indít", async () => {
+  const { fetchPublicPage } = await import("../server/studio/safe-fetch");
+  const seen: string[] = [];
+  const request = async (u: URL) => {
+    seen.push(u.hostname);
+    if (u.hostname === "qubit.hu") return { status: 302, headers: { location: "https://kulso.example.org/x" }, body: (async function* () { /* üres */ })(), destroy: () => undefined };
+    return { status: 200, headers: { "content-type": "text/html" }, body: (async function* () { yield new TextEncoder().encode("<p>x</p>"); })(), destroy: () => undefined };
+  };
+  await assert.rejects(fetchPublicPage("https://qubit.hu/cikk", { lookup: async () => [{ address: "93.184.216.34", family: 4 }], request, allowUrl: (u) => isAllowedArticleUrl(u.href) }), /Nem engedélyezett cél/);
+  assert.deepEqual(seen, ["qubit.hu"], "a külső hostra nem ment kérés");
 });

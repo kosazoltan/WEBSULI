@@ -1197,6 +1197,10 @@ export const learnerNewsletters = pgTable(
     articleUrl: text("article_url"),
     articleTitle: text("article_title"),
     materialId: varchar("material_id"),
+    /** Review #313: a kiválasztott cikk szövege és a kézbesített címek kivonata (nem cím). */
+    teaser: text("teaser"),
+    question: text("question"),
+    deliveredTo: text("delivered_to").array().notNull().default(sql`'{}'::text[]`),
     error: text("error"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
