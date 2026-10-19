@@ -83,6 +83,9 @@ test("review #319: vegyes (betűs + számos) részeredményeknél egy közös so
   const parts: TypedAnswer[] = [{ ...poly("x + 1", "any"), part: "a" }, { part: "b", kind: "number", value: "5" }];
   assert.equal(gradeTypedAnswers("a) x + 1 b) 5", parts).correct, 2);
   assert.equal(gradeTypedAnswers("5; x + 1", parts).correct, 1, "felcserélt sorrend: a szám a polinom ELŐTT áll");
+  const reverse: TypedAnswer[] = [{ part: "a", kind: "number", value: "12" }, { ...poly("x + 1", "any"), part: "b" }];
+  assert.equal(gradeTypedAnswers("a) 12 b) x + 1", reverse).correct, 2);
+  assert.equal(gradeTypedAnswers("a) x+1; b) 12", reverse).correct, 1, "fordított típussorrend: a polinom a szám ELŐTT áll");
 });
 
 test("review #319: a „^(n)” és a „^n” kitevő; a nyitó pár nélküli „)” nem nyelődik el", () => {
