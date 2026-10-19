@@ -30,7 +30,7 @@ import { withSupportSkill } from "./studio/support-skills";
  */
 export class ImproveOutputError extends Error {
   override readonly name = "ImproveOutputError";
-  constructor(message: string, readonly modelIndex: number, readonly canFallback: boolean) { super(message); }
+  constructor(message: string, readonly modelIndex: number, readonly canFallback: boolean, readonly problems: string[] = []) { super(message); }
 }
 
 async function processImprovementJob(
@@ -46,7 +46,7 @@ async function processImprovementJob(
     } catch (error) {
       if (!(error instanceof ImproveOutputError) || !error.canFallback) throw error;
       logger.warn(`[IMPROVE] Record ${dbRecordId}: a kimenet érvénytelen (${error.message.slice(0, 200)}) — újragenerálás a tartalék modellen.`);
-      await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey, { startModelIndex: error.modelIndex + 1, isOutputRetry: true });
+      await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey, { startModelIndex: error.modelIndex + 1, isOutputRetry: true, previousProblems: error.problems });
     }
     await workflowPhase("readback");
     const saved = await storage.getImprovedHtmlFile(dbRecordId);
@@ -56,7 +56,7 @@ async function processImprovementJob(
 }
 
 async function processImprovementCore(dbRecordId: string, originalFile: HtmlFile, customPrompt: string | undefined, userId: string, anthropicKey: string,
-  opts: { startModelIndex?: number; isOutputRetry?: boolean; retryOnOutputFailure?: boolean } = {}) {
+  opts: { startModelIndex?: number; isOutputRetry?: boolean; retryOnOutputFailure?: boolean; previousProblems?: string[] } = {}) {
   const contentSizeKB = Buffer.byteLength(originalFile.content, 'utf8') / 1024;
   // AUDIT 2026-09-01: a 15 perces abort-timer azonosítója a catch-ágban is elérhető legyen
   let abortTimeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -159,6 +159,9 @@ ${specBlock}
 
 ${customPrompt ? `## EGYEDI UTASÍTÁSOK (FONTOS - KÖVESD EZEKET!)
 ${customPrompt}
+
+` : ''}${opts.previousProblems?.length ? `## AZ ELŐZŐ PRÓBA ZÁRÓ ELLENŐRZÉSÉNEK HIBÁI (ezeket MIND javítsd; a gépi kapu ugyanezt méri)
+${opts.previousProblems.join('\n').slice(0, 4000)}
 
 ` : ''}## MODERNIZÁLANDÓ HTML TARTALOM
 Az alábbi HTML kódot alakítsd át a fenti szabályok szerint. ŐRIZD MEG A TELJES TARTALMAT!
@@ -335,7 +338,7 @@ ${originalFile.content}
 
     const aiResponse = { content: fullContent };
 
-    const outputError = (message: string) => new ImproveOutputError(message, currentModelIndex, currentModelIndex < MODEL_CHAIN.length - 1);
+    const outputError = (message: string, problems: string[] = []) => new ImproveOutputError(message, currentModelIndex, currentModelIndex < MODEL_CHAIN.length - 1, problems);
     if (!aiResponse || !aiResponse.content) {
       throw outputError('Az AI nem adott vissza választ');
     }
@@ -524,12 +527,19 @@ ${originalFile.content}
     // the problem list, so the admin sees exactly why and can re-run.
     const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
     await workflowPhase("gate");
+    // Spec 2026-10-19-okositas-bank-igazitas: a rubrikák gépi igazítása a saját mintájukhoz a kapu ELŐTT (Stúdió-ággal azonos lépés).
+    const { alignHtmlLessonBank } = await import('./improve/align-html-bank');
+    const alignment = alignHtmlLessonBank(improvedHtml);
+    if (alignment.aligned.length > 0) {
+      improvedHtml = alignment.html;
+      logger.info(`[IMPROVE] Record ${dbRecordId}: rubrika a mintához igazítva: ${alignment.aligned.join(', ')}`);
+    }
     const verification = verifyLessonMethodHtml(improvedHtml);
     if (!verification.ok) {
       logger.error(
         `[IMPROVE] Record ${dbRecordId}: ❌ Verification gate rejected the output: ${verification.problems.join(' | ')}`,
       );
-      throw outputError(`A javított tananyag nem ment át a záró ellenőrzésen: ${verification.problems.join(' ')}`);
+      throw outputError(`A javított tananyag nem ment át a záró ellenőrzésen: ${verification.problems.join(' ')}`, verification.problems);
     }
     logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ Verification gate passed (${verification.problems.length} problem)`);
 
