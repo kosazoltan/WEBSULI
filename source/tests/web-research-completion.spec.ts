@@ -186,3 +186,17 @@ test("review #317: a kézi mentés befejezése után is elfelejti a futást (új
   await expect(page.getByTestId("web-research-open-saved")).toHaveCount(0);
   await expect(page.getByTestId("web-research-new")).toHaveCount(0);
 });
+test("review #317: két lap — az egyik lap kész futása nem törli a másik lap tárolt (futó) követését", async ({ page, context }) => {
+  await page.route("**/api/studio/web-research/jobs", r => r.fulfill({ status: 202, json: job }));
+  await page.route("**/api/studio/web-research/jobs/*", r => r.fulfill({ json: done }));
+  await open(page); await send(page);
+  await expect(page.getByTestId("web-research-open-saved")).toBeVisible();
+  // A második lap közben egy másik futást tárol (ugyanaz a localStorage) — az első lap ezt nem törölheti.
+  const other = await context.newPage();
+  await other.goto("/__studio-panel-probe");
+  await other.evaluate(() => localStorage.setItem("websuli:web-research:pending", JSON.stringify({ id: "00000000-0000-4000-8000-000000000002", message: "másik", classroom: 5 })));
+  page.once("dialog", d => void d.accept());
+  await page.getByTestId("web-research-new").click();
+  const stored = await other.evaluate(() => JSON.parse(localStorage.getItem("websuli:web-research:pending") || "null"));
+  expect(stored?.id).toBe("00000000-0000-4000-8000-000000000002");
+});
