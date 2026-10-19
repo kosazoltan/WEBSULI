@@ -51,6 +51,10 @@ try {
   const skillMigration = await readFile(new URL("../migrations/0020_lesson_skill_learning.sql", import.meta.url), "utf8");
   await pool.query(skillMigration);
   await pool.query(skillMigration);
+  // Erőforrás S2b: a futás→job keresés generált oszlopa (0036) a migrációs fájlból, kétszer — idempotens.
+  const resourceIdMigration = await readFile(new URL("../migrations/0036_workflow_resource_id.sql", import.meta.url), "utf8");
+  await pool.query(resourceIdMigration);
+  await pool.query(resourceIdMigration);
   // S8: the outcome table from the migration file itself (not the schema export), twice.
   await pool.query("DROP TABLE catalog_item_outcomes");
   const outcomeMigration = await readFile(new URL("../migrations/0023_catalog_item_outcomes.sql", import.meta.url), "utf8");

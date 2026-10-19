@@ -4,7 +4,7 @@ import fs from 'fs/promises'; // Async file I/O
 import fsSync from 'fs'; // For synchronous operations where needed
 import path from 'path';
 import { logger } from "./lib/logger";
-import { isCompleteBackupTail, shouldBackupOnStartup, type BackupFileInfo } from "./lib/backup-startup";
+import { isCompleteBackupTail, runStartupBackup, type BackupFileInfo } from "./lib/backup-startup";
 
 // Backup configuration
 const BACKUP_DIR = path.join(process.cwd(), 'backups');
@@ -216,26 +216,21 @@ export function startAutoBackupJob() {
   logger.info(`[AUTO-BACKUP] ♻️  Retention: ${MAX_BACKUP_AGE_DAYS} days`);
 
   // Initial backup on startup — only if no backup was made in the last 24 h (kanban #187)
-  setTimeout(async () => {
-    const files: BackupFileInfo[] = [];
-    try {
-      for (const name of await fs.readdir(BACKUP_DIR)) {
-        const filepath = name.startsWith('backup_') ? getSafeBackupPath(name) : null;
-        if (filepath) {
-          const { mtimeMs, size } = await fs.stat(filepath);
-          files.push({ name, mtimeMs, complete: await hasCompleteBackupTail(filepath, size) });
+  setTimeout(() => {
+    void runStartupBackup({
+      listBackups: async () => {
+        const files: BackupFileInfo[] = [];
+        for (const name of await fs.readdir(BACKUP_DIR)) {
+          const filepath = name.startsWith('backup_') ? getSafeBackupPath(name) : null;
+          if (filepath) {
+            const { mtimeMs, size } = await fs.stat(filepath);
+            files.push({ name, mtimeMs, complete: await hasCompleteBackupTail(filepath, size) });
+          }
         }
-      }
-    } catch (error) {
-      // Unreadable directory → back up anyway (safer default)
-      logger.warn('[AUTO-BACKUP] Could not list backups, creating startup backup:', error);
-      files.length = 0;
-    }
-    if (!shouldBackupOnStartup(files, Date.now())) {
-      logger.info('[AUTO-BACKUP] Recent backup exists (< 24 h), skipping startup backup');
-      return;
-    }
-    logger.info('[AUTO-BACKUP] Creating initial backup on startup...');
-    await createAutoBackup('scheduled');
+        return files;
+      },
+      create: () => createAutoBackup('scheduled'),
+      log: (message, error) => (error ? logger.warn(`[AUTO-BACKUP] ${message}`, error) : logger.info(`[AUTO-BACKUP] ${message}`)),
+    }).catch((error: unknown) => logger.error('[AUTO-BACKUP] Startup backup failed:', error));
   }, 5000); // 5 second delay to ensure DB is ready
 }
