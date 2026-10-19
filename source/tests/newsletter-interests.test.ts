@@ -19,6 +19,10 @@ test("normalizeInterests: hibás bemenet → null", () => {
   assert.equal(normalizeInterests([1, 2]), null, "nem szöveg");
   assert.equal(normalizeInterests(["x".repeat(NEWSLETTER_LIMITS.tagChars + 1)]), null, "túl hosszú címke");
   assert.equal(normalizeInterests(["rossz\u0007címke"]), null, "vezérlőkarakter");
+  assert.equal(normalizeInterests(["repülők\trakéták"]), null, "review #312: a tab a normalizálás előtt hiba");
+  assert.equal(normalizeInterests(["repülők\n"]), null, "review #312: a sortörés is");
+  assert.equal(normalizeInterests(["repülők, rakéták"]), null, "review #312: a vessző a felület elválasztója");
+  assert.equal(normalizeInterests(["repülők; rakéták"]), null, "review #312: a pontosvessző is");
   assert.equal(normalizeInterests(Array.from({ length: NEWSLETTER_LIMITS.tags + 1 }, (_, i) => `téma ${i}`)), null, "túl sok címke");
   assert.deepEqual(normalizeInterests(Array.from({ length: NEWSLETTER_LIMITS.tags }, (_, i) => `téma ${i}`))?.length, NEWSLETTER_LIMITS.tags, "a határ még jó");
 });
