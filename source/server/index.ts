@@ -637,44 +637,45 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
     });
 
-    // Graceful shutdown handler
+    // Graceful shutdown handler — Spec 2026-10-19-eroforras-s1 + review #324: a futó gyártás / javítás / okosítás kivárása AZONNAL indul
+    // (nem a nyitott kérések lezárása után), az ütemezett feladatok leállnak, és a 295 s-os keretből marad idő a mentésre és a pool zárására.
+    // A Render maxShutdownDelaySeconds = 300 (beállítva 2026-10-19).
+    let shuttingDown = false;
     const gracefulShutdown = async (signal: string) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
       stopSkillLearningAudit();
       log(`${signal} received. Starting graceful shutdown...`);
-
-      // Stop accepting new connections
-      server.close(async () => {
-        log("HTTP server closed");
-
-        try {
-          // Spec 2026-10-19-eroforras-s1 (3): a futó gyártás / javítás / okosítás befejezése (legfeljebb 280 s; a Render 300 s-ot ad).
-          const { activeWorkflowRuns, waitForActiveRuns } = await import("./workflows/engine");
-          if (activeWorkflowRuns() > 0) {
-            log(`Waiting for ${activeWorkflowRuns()} active workflow run(s) before shutdown (max 280 s)...`);
-            const left = await waitForActiveRuns(280_000);
-            log(left ? `${left} run(s) still active after 280 s — shutting down` : "All workflow runs finished");
-          }
-          // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: the still-coalesced material results go out before the pool closes (max 10 s).
-          await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
-          // Close database pool
-          await dbPool.end();
-          log("Database pool closed");
-
-          log("Graceful shutdown completed");
-          process.exit(0);
-        } catch (err) {
-          logger.error("Error during shutdown:", err);
-          process.exit(1);
-        }
-      });
-
-      // Force close after 295 seconds (a futó munka kivárása után; a Render maxShutdownDelaySeconds = 300)
-      setTimeout(() => {
-        logger.error(
-          "Could not close connections in time, forcefully shutting down",
-        );
+      const force = setTimeout(() => {
+        logger.error("Could not close connections in time, forcefully shutting down");
         process.exit(1);
       }, 295_000);
+      force.unref();
+      try {
+        const cron = (await import("node-cron")).default;
+        for (const task of cron.getTasks().values()) task.stop();
+      } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
+      // Új kapcsolatot nem fogadunk; a nyitott kérések közben lefuthatnak.
+      server.close(() => log("HTTP server closed"));
+      try {
+        const { activeWorkflowRuns, waitForActiveRuns } = await import("./workflows/engine");
+        if (activeWorkflowRuns() > 0) {
+          log(`Waiting for ${activeWorkflowRuns()} active workflow run(s) before shutdown (max 270 s)...`);
+          const left = await waitForActiveRuns(270_000);
+          log(left ? `${left} run(s) still active after 270 s — shutting down` : "All workflow runs finished");
+          // A futás utáni hívói takarítás (hibaállapot mentése, claim felengedése) még a poolt használja.
+          await new Promise((resolve) => setTimeout(resolve, 3_000));
+        }
+        // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: the still-coalesced material results go out before the pool closes (max 10 s).
+        await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
+        await dbPool.end();
+        log("Database pool closed");
+        log("Graceful shutdown completed");
+        process.exit(0);
+      } catch (err) {
+        logger.error("Error during shutdown:", err);
+        process.exit(1);
+      }
     };
 
     // Listen for shutdown signals

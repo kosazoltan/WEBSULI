@@ -11,9 +11,10 @@ import { IMPROVE_SWEEP_INTERVAL_MS } from "../server/improve-orphans";
 
 test("az időzítők ritkák: tanulási ellenőrzés 30 perc, okosítás-söprés 5 perc, ütemezett közzététel óránként, munkamenet-takarítás 6 óra", () => {
   assert.equal(LEARNING_AUDIT_INTERVAL_MS, 30 * 60_000);
-  assert.equal(IMPROVE_SWEEP_INTERVAL_MS, 300_000);
+  // Dokumentált specváltozás (review #324): 15 perc — hosszabb a Neon 5 perces elalvási küszöbénél.
+  assert.equal(IMPROVE_SWEEP_INTERVAL_MS, 15 * 60_000);
   assert.match(fs.readFileSync("server/scheduledPublishing.ts", "utf8"), /cron\.schedule\("0 \* \* \* \*"/);
-  assert.match(fs.readFileSync("server/studio/lesson-pipeline-routes.ts", "utf8"), /STUDIO_SWEEP_INTERVAL_MS = 300_000/);
+  assert.match(fs.readFileSync("server/studio/lesson-pipeline-routes.ts", "utf8"), /STUDIO_SWEEP_INTERVAL_MS = 15 \* 60_000/);
   assert.match(fs.readFileSync("server/auth.ts", "utf8"), /pruneSessionInterval: 60 \* 60 \* 6/);
 });
 
@@ -40,4 +41,15 @@ test("leálláskor: futás nélkül azonnal; futásnál a végéig vár; a hatá
   t = 0; left = 1;
   assert.equal(await waitForActiveRuns(280_000, () => left, 2000, now, sleep), 1, "a határidő után a maradék futás száma");
   assert.equal(t, 280_000);
+});
+
+// Review #324: a kivárás azonnal indul (nem a server.close visszahívásában), a cron leáll, és a 295 s-os keretben marad idő.
+test("leállás: cron leáll, a futások kivárása azonnal, max 270 s, utána 3 s takarítási idő", () => {
+  const src = fs.readFileSync("server/index.ts", "utf8");
+  const body = src.slice(src.indexOf("const gracefulShutdown"), src.indexOf("// Listen for shutdown signals"));
+  assert.match(body, /getTasks\(\)/);
+  assert.match(body, /waitForActiveRuns\(270_000\)/);
+  assert.match(body, /}, 295_000\)/);
+  assert.ok(body.indexOf("server.close(") < body.indexOf("waitForActiveRuns(270_000)"));
+  assert.doesNotMatch(body, /server\.close\(async/, "a kivárás nem a close-visszahívásban van");
 });
