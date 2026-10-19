@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpen, ExternalLink, Search, Wrench } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { homeFilesQueryOptions } from "@/lib/home-files-query";
 import { workflowDefinition } from "@shared/lesson-workflow";
 import { SKILL_RULES, type SkillCode, type SkillSnapshot } from "@shared/lesson-skill";
 import { LessonRepairPanel, type RepairPreset } from "./LessonRepairPanel";
+import { isRepairable, matchesRepairQuery } from "@/lib/lesson-repair-search";
 
 /**
  * Spec 2026-09-23 — külön „Tananyagjavító” menüpont (az Okosítás mintájára): a javítás tudása
@@ -42,16 +43,57 @@ export default function LessonRepairWorkbench() {
   const learned = useQuery<{ snapshot: SkillSnapshot }>({ queryKey: ["/api/studio/skills/tananyag-javito"] });
   const steps = workflowDefinition("repair").steps;
 
-  const lessons = useMemo(() => (files.data ?? []).filter((f) => f.contentType === "lesson"), [files.data]);
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return (q ? lessons.filter((f) => (f.title ?? "").toLowerCase().includes(q)) : lessons).slice(0, 60);
-  }, [lessons, query]);
+  // Spec 2026-10-19 (javító-választó): a régi HTML-tananyag is javítható; a keresés évfolyamra és szinonimára is illik.
+  const lessons = useMemo(() => (files.data ?? []).filter((f) => isRepairable(f.contentType)), [files.data]);
+  const shown = useMemo(() => lessons.filter((f) => matchesRepairQuery(f, query)).slice(0, 100), [lessons, query]);
   const current = lessons.find((f) => f.id === selected);
+  const step2 = useRef<HTMLDivElement>(null);
+  // Mobilon a választás után a 2. lépés a látótérbe kerül (a lista alatt, a billentyűzet mögött volt).
+  useEffect(() => { if (selected) step2.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }, [selected]);
   const rules = (learned.data?.snapshot.rules ?? []).filter((c): c is SkillCode => Object.hasOwn(SKILL_RULES, c));
 
   return (
     <div className="space-y-3" data-testid="lesson-repair-workbench">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">1. Tananyag kiválasztása</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Keresés: cím, évfolyam (pl. 4 osztályos angol)…" className="pl-9 min-h-11" aria-label="Lecke keresése" data-testid="lesson-repair-search" />
+          </div>
+          {files.isLoading && <p className="text-sm text-muted-foreground">Betöltés…</p>}
+          {!files.isLoading && shown.length === 0 && <p className="text-sm text-muted-foreground">Nincs javítható tananyag{query ? " erre a keresésre" : ""}.</p>}
+          <ul className="max-h-72 overflow-y-auto divide-y rounded-md border" role="listbox" aria-label="Leckék">
+            {shown.map((f) => (
+              <li key={f.id}>
+                <button type="button" role="option" aria-selected={f.id === selected} onClick={() => setSelected(f.id)}
+                  className={`w-full text-left px-3 py-2 min-h-11 text-sm hover:bg-muted ${f.id === selected ? "bg-primary/10 font-medium" : ""}`}
+                  data-testid={`lesson-repair-option-${f.id}`}>
+                  <span className="break-words">{f.title || "Névtelen tananyag"}</span>
+                  <span className="block text-xs text-muted-foreground font-normal">
+                    {f.contentType === "lesson" ? "Lecke" : "Régi HTML"}{f.classroom ? ` · ${f.classroom}. osztály` : ""}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+
+      {current && (
+        <div className="space-y-2 scroll-mt-4" id="lesson-repair-step2" ref={step2}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium">2. A javítás iránya — „{current.title}”</p>
+            <Button variant="outline" size="sm" className="min-h-9" onClick={() => window.open(`/preview/${current.id}`, "_blank", "noopener,noreferrer")}>
+              <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Lecke megnyitása
+            </Button>
+          </div>
+          <LessonRepairPanel key={current.id} fileId={current.id} isLesson={current.contentType === "lesson"} presets={PRESETS} embedded />
+        </div>
+      )}
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base"><Wrench className="w-4 h-4" /> Tananyagjavító</CardTitle>
@@ -87,43 +129,6 @@ export default function LessonRepairWorkbench() {
           </div>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">1. Tananyag kiválasztása</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Keresés a leckék címében…" className="pl-9 min-h-11" aria-label="Lecke keresése" data-testid="lesson-repair-search" />
-          </div>
-          {files.isLoading && <p className="text-sm text-muted-foreground">Betöltés…</p>}
-          {!files.isLoading && shown.length === 0 && <p className="text-sm text-muted-foreground">Nincs javítható (strukturált) lecke{query ? " ezzel a címmel" : ""}.</p>}
-          <ul className="max-h-72 overflow-y-auto divide-y rounded-md border" role="listbox" aria-label="Leckék">
-            {shown.map((f) => (
-              <li key={f.id}>
-                <button type="button" role="option" aria-selected={f.id === selected} onClick={() => setSelected(f.id)}
-                  className={`w-full text-left px-3 py-2 min-h-11 text-sm hover:bg-muted ${f.id === selected ? "bg-primary/10 font-medium" : ""}`}
-                  data-testid={`lesson-repair-option-${f.id}`}>
-                  {f.title || "Névtelen lecke"}{f.classroom ? <span className="text-xs text-muted-foreground"> · {f.classroom}. osztály</span> : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
-
-      {current && (
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium">2. A javítás iránya — „{current.title}”</p>
-            <Button variant="outline" size="sm" className="min-h-9" onClick={() => window.open(`/preview/${current.id}`, "_blank", "noopener,noreferrer")}>
-              <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Lecke megnyitása
-            </Button>
-          </div>
-          <LessonRepairPanel key={current.id} fileId={current.id} isLesson presets={PRESETS} embedded />
-        </div>
-      )}
     </div>
   );
 }
