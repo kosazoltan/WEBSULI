@@ -21,7 +21,7 @@ const failed = run("imp-err", "error", [
 ], "A javított tananyag nem ment át a záró ellenőrzésen: t09: a saját mintaválasz nem kap teljes pontot.");
 const iso = new Date(now).toISOString();
 const imp = (id: string, status: string, notes: string | null) => ({ id, originalFileId: "f1", title: id === "imp-run" ? "Who's vs Whose" : "Week 6 – angol", description: null, classroom: 4,
-  status, improvementPrompt: "x", improvementNotes: notes, createdAt: iso, appliedAt: null, originalFile: { id: "f1", title: "Eredeti" } });
+  status, improvementPrompt: "x", improvementNotes: notes, createdAt: iso, appliedAt: null, originalFile: { id: "f1", title: "Eredeti" }, createdBy: "admin-fixture" });
 
 async function mock(page: Page) {
   await page.route("**/api/**", (route) => {
@@ -29,7 +29,8 @@ async function mock(page: Page) {
     if (path === "/api/auth/user") return route.fulfill({ json: { id: "admin-fixture", isAdmin: true, firstName: "Admin" } });
     if (path === "/api/config") return route.fulfill({ json: { baseUrl: "http://localhost", materialOrigin: "" } });
     if (path === "/api/html-files") return route.fulfill({ json: [{ id: "f1", title: "Eredeti", contentType: "html", classroom: 4, createdAt: iso }] });
-    if (path === "/api/admin/improved-files") return route.fulfill({ json: [imp("imp-run", "processing", null), imp("imp-err", "error", failed.error!)] });
+    // Review #323: a másik admin futó rekordja nem kap fázissávot (a naplója nem olvasható).
+    if (path === "/api/admin/improved-files") return route.fulfill({ json: [imp("imp-run", "processing", null), imp("imp-err", "error", failed.error!), { ...imp("imp-other", "processing", null), createdBy: "masik-admin" }] });
     if (path === "/api/studio/workflows/imp-run") return route.fulfill({ json: { run: running } });
     if (path === "/api/studio/workflows/imp-err") return route.fulfill({ json: { run: failed } });
     if (path === "/api/studio/workflows") return route.fulfill({ json: { runs: [] } });
@@ -46,6 +47,7 @@ for (const vp of [{ width: 393, height: 780 }, { width: 835, height: 810 }]) {
     const bar = bars.getByTestId("phase-bar").first();
     await expect(bar).toHaveAttribute("data-run-state", "running");
     await expect(bar.locator("li")).toHaveCount(5);
+    await expect(bars.getByTestId("phase-bar")).toHaveCount(1);
     await expect(bar.locator('li[data-step="source"]')).toHaveAttribute("data-state", "done");
     await expect(bar.locator('li[data-step="gate"]')).toHaveAttribute("data-state", "running");
     await expect(bar.locator('li[data-step="save"]')).toHaveAttribute("data-state", "pending");

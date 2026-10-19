@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { WorkflowMonitor } from "./studio/WorkflowMonitor";
 import { WorkflowPhaseBar } from "./studio/WorkflowPhaseBar";
+import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -55,6 +56,7 @@ interface ImprovedFile {
   createdAt: string;
   appliedAt: string | null;
   content?: string; // HTML content of the improved file
+  createdBy?: string | null;
   originalFile?: {
     id: string;
     title: string;
@@ -75,6 +77,7 @@ export default function MaterialImprover() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [previewImprovedId, setPreviewImprovedId] = useState<string | null>(null);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const { user } = useAuth();
   const blobUrlRef = useRef<string | null>(null);
 
   // Get all HTML files
@@ -471,7 +474,10 @@ export default function MaterialImprover() {
 
   // Spec 2026-10-19-okositas-fazisjelzo (2): minden futó okosítás fázissora ragadósan, a 70%-os nagyításon KÍVÜL (olvasható),
   // a rekord azonosítójával — újratöltés után is (a régi jelző csak az oldalon belüli `workflowId`-ből élt).
-  const activeRunIds = [...new Set([...(workflowId ? [workflowId] : []), ...improvedFiles.filter((f) => f.status === "processing").map((f) => f.id)])];
+  // Review #323: a futásnapló csak a saját futásra olvasható (`/api/studio/workflows/:id` a kérőé) — más admin futásához nem
+  // mutatunk félrevezető „nincs fázisnapló” sávot.
+  const ownRun = (f: ImprovedFile) => !!user?.id && f.createdBy === user.id;
+  const activeRunIds = [...new Set([...(workflowId ? [workflowId] : []), ...improvedFiles.filter((f) => f.status === "processing" && ownRun(f)).map((f) => f.id)])];
   return (
     <>
     {activeRunIds.length > 0 && (
@@ -594,7 +600,7 @@ export default function MaterialImprover() {
                                   Hiba — hol állt meg?
                                 </summary>
                                 <p className="mt-1 text-xs text-red-700 whitespace-pre-wrap break-words">{file.improvementNotes || 'Ismeretlen hiba'}</p>
-                                <div className="mt-2"><WorkflowPhaseBar id={file.id} /></div>
+                                <div className="mt-2">{ownRun(file) ? <WorkflowPhaseBar id={file.id} /> : <p className="text-xs text-muted-foreground">Másik admin futása — a fázisnaplót ő látja.</p>}</div>
                               </details>
                             ) : (
                               <>
