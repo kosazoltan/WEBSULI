@@ -57,20 +57,30 @@ function scriptedClient(): ModelClient & { seen: Array<{ system: string; text: s
   };
 }
 
-function memoryStore(loaders: { catalog?: () => Promise<CatalogRowLike[]>; memory?: () => Promise<MemoryCard[]> } = {}) {
+function memoryStore(loaders: {
+  catalog?: () => Promise<CatalogRowLike[]>; memory?: () => Promise<MemoryCard[]>;
+  /** A térkép tantárgya (alapból a fixtúráé: „matematika”). */
+  subject?: string;
+  /** Igaz → a mentés dob (pl. egy másik futó átvette a jobot). */
+  failSave?: (patch: JobPatch) => boolean;
+} = {}) {
   const steps: JobPatch[] = [];
   const calls = { catalog: 0, memory: 0 };
+  const subjects: string[] = [];
   let published = 0;
   const store = {
-    async loadMap(id: string) { return id === "m1" ? { meta: { id: "m1", title: "Terület", subject: fixture.subject, classroom: fixture.classroom, sourceText: TRANSCRIPT }, concepts } : null; },
+    async loadMap(id: string) { return id === "m1" ? { meta: { id: "m1", title: "Terület", subject: loaders.subject ?? fixture.subject, classroom: fixture.classroom, sourceText: TRANSCRIPT }, concepts } : null; },
     async createJob() { return "job1"; },
-    async saveStep(_id: string, patch: JobPatch) { steps.push(structuredClone(patch)); },
+    async saveStep(_id: string, patch: JobPatch) {
+      if (loaders.failSave?.(patch)) throw new Error("WorkflowConflict: a job egy másik futóé");
+      steps.push(structuredClone(patch));
+    },
     async upsertLesson() { return "lesson1"; },
     async publishLesson() { published++; return { htmlFileId: "html1", exportedQuizItems: 3 }; },
-    ...(loaders.catalog ? { async loadCatalogRows() { calls.catalog++; return loaders.catalog!(); } } : {}),
-    ...(loaders.memory ? { async loadSubjectMemory() { calls.memory++; return loaders.memory!(); } } : {}),
+    ...(loaders.catalog ? { async loadCatalogRows(subject: string) { calls.catalog++; subjects.push(subject); return loaders.catalog!(); } } : {}),
+    ...(loaders.memory ? { async loadSubjectMemory(subject: string) { calls.memory++; subjects.push(subject); return loaders.memory!(); } } : {}),
   } as unknown as PipelineStore;
-  return { store, steps, calls, published: () => published };
+  return { store, steps, calls, subjects, published: () => published };
 }
 
 function deps(client: ModelClient, mem: ReturnType<typeof memoryStore>, logs: string[] = []): SingleRunDeps {
@@ -119,6 +129,7 @@ test("S6 bekapcsolva: a tervező és a szerző a katalógus-mintákat kapja, a p
     assert.equal(result.htmlFileId, "html1");
     for (const n of ["2", "3"]) assert.match(stationText(client, n), /TANTÁRGYI KATALÓGUS — MINTÁK \(matematika, 7\. évf\./, `${n}. állomás`);
     assert.equal(mem.calls.catalog, 1, "jobonként egyszer");
+    assert.deepEqual(mem.subjects, ["matematika"], "a betöltő a térkép normalizált tantárgyát kapja (review #311)");
     assert.ok(mem.steps.some((s) => (s.output as { catalog?: { items: unknown[] } } | undefined)?.catalog?.items.length === 2), "a pool a jobon");
     const bank = client.seen.filter((c) => /5\. ÁLLOMÁS/.test(c.text));
     assert.ok(bank.length >= 1 && bank.every((c) => c.text.includes("Mennyi a 3 cm és 4 cm oldalú téglalap területe?")), "a bankcsomag kérése (freshBankCall: a csomag „system”-je a kérésben) a katalógus-mintát kapja");
@@ -133,6 +144,7 @@ test("S5 bekapcsolva: a tervező és a szerző a tantárgyi memória blokkját k
     for (const n of ["2", "3"]) assert.match(stationText(client, n), /TANTÁRGYI MEMÓRIA \(matematika\)/, `${n}. állomás`);
     assert.doesNotMatch(stationText(client, "2"), /TANTÁRGYI KATALÓGUS/, "az S6 ki van kapcsolva");
     assert.equal(mem.calls.memory, 1);
+    assert.deepEqual(mem.subjects, ["matematika"], "a betöltő a térkép normalizált tantárgyát kapja (review #311)");
     assert.ok(mem.steps.some((s) => (s.output as { subjectMemory?: { cards: unknown[] } } | undefined)?.subjectMemory?.cards.length === 1));
     const bank = client.seen.filter((c) => /5\. ÁLLOMÁS/.test(c.text));
     assert.ok(bank.length >= 1 && bank.every((c) => `${c.system}\n${c.text}`.includes("TANTÁRGYI MEMÓRIA (matematika)")), "a bank a bank-szerep blokkját kapja");
@@ -147,8 +159,45 @@ test("betöltési hiba: a gyártás a funkció nélkül közzétesz, a hiba napl
     const result = await run(client, mem, logs);
     assert.equal(result.htmlFileId, "html1");
     assert.equal(mem.published(), 1);
+    assert.deepEqual(mem.calls, { catalog: 1, memory: 1 }, "review #311: a sikertelen betöltést a későbbi állomás nem próbálja újra");
     assert.ok(logs.some((l) => /katalógus-lekérés elmaradt: db le/.test(l)));
     assert.ok(logs.some((l) => /tantárgyi memória betöltése elmaradt: db le/.test(l)));
     assert.doesNotMatch(stationText(client, "2"), /TANTÁRGYI (KATALÓGUS|MEMÓRIA)/);
+  });
+});
+
+test("review #311: a beragadt betöltés határidő után fail-open (a gyártás nélküle közzétesz)", async () => {
+  await withEnv({ STUDIO_CATALOG_S6: "1", STUDIO_SUBJECT_MEMORY: "1", STUDIO_KNOWLEDGE_TIMEOUT_MS: "50" }, async () => {
+    const client = scriptedClient();
+    const logs: string[] = [];
+    const never = () => new Promise<never>(() => undefined);
+    const mem = memoryStore({ catalog: never, memory: never });
+    const result = await run(client, mem, logs);
+    assert.equal(result.htmlFileId, "html1");
+    assert.ok(logs.some((l) => /katalógus-lekérés elmaradt: katalógus: a lekérdezés 50 ms alatt nem fejeződött be/.test(l)));
+    assert.ok(logs.some((l) => /memória betöltése elmaradt: tantárgyi memória: a lekérdezés 50 ms alatt/.test(l)));
+  });
+});
+
+test("review #311: a jobra mentés hibája (pl. WorkflowConflict) nem nyelődik el — a futás megáll, nem megy tovább a modellhez", async () => {
+  await withEnv({ STUDIO_CATALOG_S6: "1", STUDIO_SUBJECT_MEMORY: undefined }, async () => {
+    const client = scriptedClient();
+    const mem = memoryStore({ catalog: async () => [CATALOG_ROW], failSave: (patch) => Boolean(patch.output && "catalog" in patch.output) });
+    await assert.rejects(run(client, mem), /WorkflowConflict/);
+    assert.equal(stationText(client, "2"), "", "a tervező nem kapott kérést");
+    assert.equal(mem.published(), 0);
+  });
+});
+
+test("review #311: bekapcsolt funkció, de ismeretlen tantárgy vagy hiányzó betöltő → naplózott kihagyás", async () => {
+  await withEnv({ STUDIO_CATALOG_S6: "1", STUDIO_SUBJECT_MEMORY: "1" }, async () => {
+    const unknown: string[] = [];
+    await run(scriptedClient(), memoryStore({ subject: "Ismeretlen tárgy", catalog: async () => [CATALOG_ROW], memory: async () => [MEMORY_CARD] }), unknown);
+    assert.ok(unknown.some((l) => /Katalógus kihagyva: a tantárgy \(„Ismeretlen tárgy”\) nem azonosítható/.test(l)));
+    assert.ok(unknown.some((l) => /Tantárgyi memória kihagyva: a tantárgy \(„Ismeretlen tárgy”\) nem azonosítható/.test(l)));
+    const noLoader: string[] = [];
+    await run(scriptedClient(), memoryStore(), noLoader);
+    assert.ok(noLoader.some((l) => /Katalógus kihagyva: az adattárnak nincs katalógus-betöltője/.test(l)));
+    assert.ok(noLoader.some((l) => /Tantárgyi memória kihagyva: az adattárnak nincs memória-betöltője/.test(l)));
   });
 });

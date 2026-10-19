@@ -93,9 +93,22 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       }).from(catalogItems).where(and(eq(catalogItems.subject, subject), eq(catalogItems.status, "active")));
     },
     // Spec 2026-10-19 (S5): EGY tantárgy nyitott memória-kártyái (`subject = $1`).
+    // Review #311: a kártyák és a bizonyíték-kulcsaik EGY pillanatképből (REPEATABLE READ, csak olvasás) — egy közben záruló írás nem
+    // keverhet régi kártyát új kulccsal.
     async loadSubjectMemory(subject) {
       const [{ dbPool }, { loadSubjectMemoryCards }] = await Promise.all([import("../db"), import("../memory/store")]);
-      return loadSubjectMemoryCards(async (text, params) => (await dbPool.query(text, params as unknown[] | undefined)).rows, subject);
+      const client = await dbPool.connect();
+      try {
+        await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+        const cards = await loadSubjectMemoryCards(async (text, params) => (await client.query(text, params as unknown[] | undefined)).rows, subject);
+        await client.query("COMMIT");
+        return cards;
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     async loadMap(mapId) {

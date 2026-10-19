@@ -69,6 +69,16 @@ export function bankProgressText(label: string, p: { done: number; total: number
 /** A lektorálás legfeljebb ennyi kör (lektor → javítás → újra lektor). */
 export const SINGLE_RUN_REVIEW_ROUNDS = 2;
 
+/** Review #311: a tudásbank-betöltés (S5/S6) határideje; utána a gyártás nélküle fut. `STUDIO_KNOWLEDGE_TIMEOUT_MS` felülírja. */
+export const KNOWLEDGE_LOAD_TIMEOUT_MS = 20_000;
+function withKnowledgeDeadline<T>(work: Promise<T>, label: string): Promise<T> {
+  const configured = Number(process.env.STUDIO_KNOWLEDGE_TIMEOUT_MS);
+  const ms = Number.isFinite(configured) && configured > 0 ? configured : KNOWLEDGE_LOAD_TIMEOUT_MS;
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label}: a lekérdezés ${ms} ms alatt nem fejeződött be`)), ms); });
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
+}
+
 export type SingleRunPhase = "extract" | "pedagogue" | "author" | "animator" | "lektor" | "gate" | "done";
 export class SingleRunError extends Error {
   constructor(readonly station: string, readonly problems: string[]) { super(`${station}: ${problems.slice(0, 8).join(" | ").slice(0, 1200)}`); this.name = "SingleRunError"; }
@@ -419,40 +429,56 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   // Spec 2026-10-19-tudasbank-s5-s6-ujrabekotes (kapcsolós, alapból KI): a tantárgyi katalógus (S6) és a tantárgyi memória (S5).
   // Jobonként egyszer töltődik és a jobon marad (folytatáskor ugyanaz); kikapcsolva a betöltő nem hívódik, a kérések bájtra azonosak.
   // Betöltési hiba, ismeretlen tantárgy vagy betöltő hiánya → a gyártás nélküle fut (fail-open, naplózva).
+  // Review #311: futásonként EGY kísérlet (a sikertelen is) — a későbbi állomás nem próbálja újra, így minden állomás ugyanazt látja.
+  // A betöltés határidős (beragadt lekérdezés → fail-open); a jobra mentés hibája (pl. WorkflowConflict) NEM nyelődik el.
   const knowledgeMap: CatalogMapLike = { meta: { title: map.meta.title, subject: map.meta.subject, classroom: map.meta.classroom }, concepts };
-  async function ensureCatalogPool(step: Exclude<SingleRunPhase, "extract">): Promise<CatalogPool | undefined> {
-    if (!catalogS6Enabled()) return undefined;
+  const knowledgeReason = (error: unknown) => (error instanceof Error ? error.message.slice(0, 300) : String(error));
+  let catalogLoad: Promise<CatalogPool | undefined> | undefined;
+  let memoryLoad: Promise<MemorySnapshot | undefined> | undefined;
+  function ensureCatalogPool(step: Exclude<SingleRunPhase, "extract">): Promise<CatalogPool | undefined> {
+    if (!catalogS6Enabled()) return Promise.resolve(undefined);
+    catalogLoad ??= loadCatalogPool(step);
+    return catalogLoad;
+  }
+  async function loadCatalogPool(step: Exclude<SingleRunPhase, "extract">): Promise<CatalogPool | undefined> {
     if (poolMatches(output.catalog, knowledgeMap)) return output.catalog;
     const query = catalogQueryOf(knowledgeMap);
-    if (!query || !store.loadCatalogRows) return undefined;
+    if (!query) { log(`[EGYFUTÁS] Katalógus kihagyva: a tantárgy („${knowledgeMap.meta.subject}”) nem azonosítható egyértelműen.`); return undefined; }
+    if (!store.loadCatalogRows) { log("[EGYFUTÁS] Katalógus kihagyva: az adattárnak nincs katalógus-betöltője."); return undefined; }
+    let pool: CatalogPool | undefined;
     try {
-      const pool = catalogPoolFor(knowledgeMap, await store.loadCatalogRows(query.subject));
-      if (!pool) return undefined;
-      output = { ...output, catalog: pool };
-      await save(step, output);
-      log(`[EGYFUTÁS] Katalógus-pool: ${query.subject}, ${query.grade}. évf. — ${pool.items.length} tétel, ebből ${pool.items.filter((i) => i.verbatim).length} szó szerint átvehető`);
-      return pool;
+      pool = catalogPoolFor(knowledgeMap, await withKnowledgeDeadline(store.loadCatalogRows(query.subject), "katalógus"));
     } catch (error) {
-      log(`[EGYFUTÁS] A katalógus-lekérés elmaradt: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
+      log(`[EGYFUTÁS] A katalógus-lekérés elmaradt: ${knowledgeReason(error)}`);
       return undefined;
     }
+    if (!pool) return undefined;
+    output = { ...output, catalog: pool };
+    await save(step, output);
+    log(`[EGYFUTÁS] Katalógus-pool: ${query.subject}, ${query.grade}. évf. — ${pool.items.length} tétel, ebből ${pool.items.filter((i) => i.verbatim).length} szó szerint átvehető`);
+    return pool;
   }
-  async function ensureSubjectMemory(step: Exclude<SingleRunPhase, "extract">): Promise<MemorySnapshot | undefined> {
-    if (!subjectMemoryEnabled()) return undefined;
+  function ensureSubjectMemory(step: Exclude<SingleRunPhase, "extract">): Promise<MemorySnapshot | undefined> {
+    if (!subjectMemoryEnabled()) return Promise.resolve(undefined);
+    memoryLoad ??= loadSubjectMemory(step);
+    return memoryLoad;
+  }
+  async function loadSubjectMemory(step: Exclude<SingleRunPhase, "extract">): Promise<MemorySnapshot | undefined> {
     const subject = subjectKeyOf(knowledgeMap.meta.subject);
-    if (!subject) return undefined;
+    if (!subject) { log(`[EGYFUTÁS] Tantárgyi memória kihagyva: a tantárgy („${knowledgeMap.meta.subject}”) nem azonosítható egyértelműen.`); return undefined; }
     if (isMemorySnapshot(output.subjectMemory, subject)) return output.subjectMemory;
-    if (!store.loadSubjectMemory) return undefined;
+    if (!store.loadSubjectMemory) { log("[EGYFUTÁS] Tantárgyi memória kihagyva: az adattárnak nincs memória-betöltője."); return undefined; }
+    let snapshot: MemorySnapshot;
     try {
-      const snapshot = memorySnapshot(await store.loadSubjectMemory(subject), subject, Date.now());
-      output = { ...output, subjectMemory: snapshot };
-      await save(step, output);
-      log(`[EGYFUTÁS] Tantárgyi memória: ${subject} — ${snapshot.cards.length} nyitott kártya`);
-      return snapshot;
+      snapshot = memorySnapshot(await withKnowledgeDeadline(store.loadSubjectMemory(subject), "tantárgyi memória"), subject, Date.now());
     } catch (error) {
-      log(`[EGYFUTÁS] A tantárgyi memória betöltése elmaradt: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
+      log(`[EGYFUTÁS] A tantárgyi memória betöltése elmaradt: ${knowledgeReason(error)}`);
       return undefined;
     }
+    output = { ...output, subjectMemory: snapshot };
+    await save(step, output);
+    log(`[EGYFUTÁS] Tantárgyi memória: ${subject} — ${snapshot.cards.length} nyitott kártya`);
+    return snapshot;
   }
   /** A tervező / szerző kérésének kiegészítése; üres, ha egyik kapcsoló sincs bekapcsolva vagy nincs mit adni. */
   async function knowledgeBlock(role: "pedagogue" | "author"): Promise<string> {
