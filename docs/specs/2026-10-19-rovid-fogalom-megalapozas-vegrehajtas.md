@@ -20,3 +20,13 @@ Terv: `docs/specs/2026-10-19-rovid-fogalom-megalapozas.md`. Munkakönyvtár: `so
    - a „Kr. u. / i. sz.” eset változatlan.
 4. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`.
 5. **Kitelepítés:** összevonás előtt az aktív-futás őr = 0.
+
+## Review #326 — pontosítás
+- **A „< 4 szó” védelem:** a rövid névre is érvényes. Az egyszavas, 1–2 betűs nevet a `checkGrounding` a védelem UTÁN, külön
+  `shortTermGrounded` függvényben dönti el; a kétszavas kifejezés-egyezés változatlanul előtte.
+- **A `shortTermGrounded` szabályai:**
+  - a forrás saját példája dönt;
+  - a definíció-tartalék CSAK akkor, ha a név idézőjelben / kiemelve áll a blokkban („an”). Így a testvérfogalmak („a” / „an”)
+    közös definíciószavai nem alapozzák meg egymást;
+  - az idézetszám-tartalék itt nem fut.
+- **Teszt:** az „a”-t tanító blokk nem alapozza meg az „an”-t (és fordítva); a kétszavas „an armchair” blokk önmagában nem elég.
