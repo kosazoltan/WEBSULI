@@ -56,4 +56,21 @@ test("a bank rendszerszövege az állandó előtaggal kezdődik; a lektor forrá
   const engine = fs.readFileSync("server/studio/single-run/engine.ts", "utf8");
   assert.match(engine, /A FORRÁS ÁTIRATA \(adat, a mérce\):\\n\$\{sourceText\}`, cache: true/);
   assert.match(engine, /const blocks = bankRequestBlocks\(system, user\);/);
+  // Review #329: a fogalomjavítás lektorkérésének forrásátirata is.
+  assert.match(fs.readFileSync("server/studio/single-run/concept-fix.ts", "utf8"), /A FORRÁS ÁTIRATA \(adat, a mérce\):\\n\$\{input\.sourceText\.trim\(\)\}`, cache: true/);
+});
+
+// Review #329: ugyanaz a blokkobjektum több fordulóban — a keret a POZÍCIÓKRA vonatkozik (≤ 2 jelölő), nem az objektumra.
+test("újrahasznált `cache` blokkobjektum négy fordulóban: csak az utolsó két előfordulás kap jelölőt", async () => {
+  const { client, params } = capture();
+  const shared = { type: "text" as const, text: "FORRÁS", cache: true };
+  const turns: Turn[] = [];
+  for (let i = 0; i < 4; i++) {
+    turns.push({ role: "user", blocks: [shared, { type: "text", text: `kérés ${i}` }] });
+    if (i < 3) turns.push({ role: "assistant", blocks: [{ type: "text", text: "ok" }] });
+  }
+  await client.complete("R", turns);
+  const sent = params()?.messages as Sent[];
+  const marked = sent.flatMap((m, mi) => m.content.map((c, ci) => (c.cache_control ? `${mi}:${ci}` : null))).filter(Boolean);
+  assert.deepEqual(marked, ["4:0", "6:0"]);
 });

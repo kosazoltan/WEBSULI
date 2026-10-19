@@ -55,13 +55,14 @@ export function anthropicClient(opts: { apiKey?: string; model?: string; client?
   return {
     model,
     async complete(system, turns, signal) {
-      // Spec 2026-10-19-eroforras-s3a: csak a kérés UTOLSÓ `MAX_BLOCK_CACHE_MARKERS` jelölt blokkja kap töréspontot.
-      const marked = turns.flatMap((t) => t.blocks).filter((b) => b.type === "text" && b.cache);
-      const keep = new Set(marked.slice(-MAX_BLOCK_CACHE_MARKERS));
-      const messages: Anthropic.MessageParam[] = turns.map((t) => ({
+      // Spec 2026-10-19-eroforras-s3a: csak a kérés UTOLSÓ `MAX_BLOCK_CACHE_MARKERS` jelölt blokk-POZÍCIÓJA kap töréspontot (review #329:
+      // pozíció, nem objektum-azonosság — ugyanaz a blokkobjektum több fordulóban is szerepelhet).
+      const positions = turns.flatMap((t, ti) => t.blocks.map((b, bi) => (b.type === "text" && b.cache ? `${ti}:${bi}` : null))).filter((k): k is string => k !== null);
+      const keep = new Set(positions.slice(-MAX_BLOCK_CACHE_MARKERS));
+      const messages: Anthropic.MessageParam[] = turns.map((t, ti) => ({
         role: t.role,
-        content: t.blocks.map((b): Anthropic.ContentBlockParam => (b.type === "text"
-          ? { type: "text", text: b.text, ...(keep.has(b) ? { cache_control: { type: "ephemeral", ttl: "1h" } } : {}) }
+        content: t.blocks.map((b, bi): Anthropic.ContentBlockParam => (b.type === "text"
+          ? { type: "text", text: b.text, ...(keep.has(`${ti}:${bi}`) ? { cache_control: { type: "ephemeral", ttl: "1h" } } : {}) }
           : isBinarySource(b.file) ? claudeSourceBlock(b.file) : { type: "text", text: sourceAsText(b.file) })),
       }));
       const stream = client.messages.stream({
