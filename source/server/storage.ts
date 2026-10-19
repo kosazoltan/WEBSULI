@@ -46,7 +46,7 @@ import {
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, desc, gt, gte, lt, and, sql, inArray } from "drizzle-orm";
+import { eq, desc, gt, gte, lt, and, sql, inArray, getTableColumns } from "drizzle-orm";
 import { assertBackupFilesHaveContent } from "./lib/backup-guard";
 import { logger } from "./lib/logger";
 
@@ -182,7 +182,8 @@ export interface IStorage {
   // Improved files operations
   createImprovedHtmlFile(file: InsertImprovedHtmlFile): Promise<ImprovedHtmlFile>;
   getImprovedHtmlFile(id: string): Promise<ImprovedHtmlFile | undefined>;
-  getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<ImprovedHtmlFile[]>;
+  getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<Omit<ImprovedHtmlFile, "content">[]>;
+  getImprovedHtmlFileStatus(id: string): Promise<Pick<ImprovedHtmlFile, "id" | "status" | "title" | "contentType" | "createdAt" | "improvementNotes"> | undefined>;
   getImprovedFilesByOriginalId(originalFileId: string): Promise<ImprovedHtmlFile[]>;
   updateImprovedHtmlFileStatus(id: string, status: string, appliedBy?: string, notes?: string): Promise<ImprovedHtmlFile | null>;
   updateImprovedHtmlFileContent(id: string, content: string): Promise<void>;
@@ -1314,7 +1315,17 @@ export class DatabaseStorage implements IStorage {
     return improved;
   }
 
-  async getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<ImprovedHtmlFile[]> {
+  /** Spec 2026-10-19-eroforras-s2a: könnyű állapot (a teljes HTML nélkül) — az 5 mp-es állapot-lekérdezéshez. */
+  async getImprovedHtmlFileStatus(id: string) {
+    const [row] = await db.select({ id: improvedHtmlFiles.id, status: improvedHtmlFiles.status, title: improvedHtmlFiles.title,
+      contentType: improvedHtmlFiles.contentType, createdAt: improvedHtmlFiles.createdAt, improvementNotes: improvedHtmlFiles.improvementNotes })
+      .from(improvedHtmlFiles).where(eq(improvedHtmlFiles.id, id));
+    return row;
+  }
+
+  /** Spec 2026-10-19-eroforras-s2a: a lista a teljes `content` nélkül (a felület az előnézetet külön végpontról tölti), legutóbbi 200. */
+  async getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<Omit<ImprovedHtmlFile, "content">[]> {
+    const { content: _content, ...listColumns } = getTableColumns(improvedHtmlFiles);
     const conditions = [];
     if (status) {
       conditions.push(eq(improvedHtmlFiles.status, status));
@@ -1324,10 +1335,10 @@ export class DatabaseStorage implements IStorage {
     }
     
     const query = conditions.length > 0
-      ? db.select().from(improvedHtmlFiles).where(and(...conditions))
-      : db.select().from(improvedHtmlFiles);
-    
-    return await query.orderBy(desc(improvedHtmlFiles.createdAt));
+      ? db.select(listColumns).from(improvedHtmlFiles).where(and(...conditions))
+      : db.select(listColumns).from(improvedHtmlFiles);
+
+    return await query.orderBy(desc(improvedHtmlFiles.createdAt)).limit(200);
   }
 
   async getImprovedFilesByOriginalId(originalFileId: string): Promise<ImprovedHtmlFile[]> {

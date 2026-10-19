@@ -674,7 +674,8 @@ export function registerImprovementRoutes(adminRouter: Router) {
     const { jobId } = req.params;
 
     // ✅ Read from DATABASE, not in-memory Map
-    const record = await storage.getImprovedHtmlFile(jobId);
+    // Spec 2026-10-19-eroforras-s2a: könnyű állapot-olvasás; a teljes rekord (HTML) csak az időtúllépési ágban kell.
+    const record = await storage.getImprovedHtmlFileStatus(jobId);
 
     if (!record) {
       return res.status(404).json({ status: 'not_found', message: 'Job nem található' });
@@ -702,7 +703,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
 
         // Check if content was already written (AI finished but race condition occurred)
         // BUG FIX: Use freshRecord content (not stale record) for validity check
-        const checkContent = freshRecord?.content || record.content;
+        const checkContent = freshRecord?.content ?? "";
         const contentLength = checkContent?.length || 0;
         const hasValidContent = contentLength > 200 && 
           !checkContent?.includes('Feldolgozás alatt') &&
