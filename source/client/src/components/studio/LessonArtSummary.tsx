@@ -16,11 +16,12 @@ export function LessonArtSummary({ lessonId, htmlFileId }: { lessonId?: string; 
   const material = useQuery<{ htmlFileId: string }>({ queryKey: [`/api/lessons/${lessonId}/material`], retry: 1, enabled: !htmlFileId && !!lessonId });
   const fileId = htmlFileId ?? material.data?.htmlFileId;
   const lesson = useQuery({ ...lessonByFileQuery(fileId ?? ""), enabled: !!fileId });
-  const data = lesson.data?.lesson as { classroom?: number; art?: StoredLessonArt } | undefined;
+  const data = lesson.data?.lesson as { classroom?: number; subject?: string; title?: string; art?: StoredLessonArt } | undefined;
   if (!data || typeof data.classroom !== "number") return null;
   const band = designThemeForClassroom(data.classroom);
   const theme = DESIGN_THEMES[band];
-  const s = artSummary(data.art, band, DESIGN_ASSET_CATALOG);
+  // Spec 2026-10-19-hos-kep-sav: a lejátszóval azonos érvényesség — a régi szabállyal mentett, nem illő kép „régi” (újraválasztva).
+  const s = artSummary(data.art, band, DESIGN_ASSET_CATALOG, typeof data.subject === "string" && typeof data.title === "string" ? { subject: data.subject, title: data.title } : undefined);
   const picture = s.art?.cover ?? s.art?.hero;
   return (
     <section className="rounded-xl border bg-card text-card-foreground p-4 space-y-3" data-testid="lesson-art-summary" aria-labelledby="lesson-art-title">

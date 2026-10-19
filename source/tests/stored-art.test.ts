@@ -54,3 +54,15 @@ test("stúdió (2026-10-17-studio-ui): az arculat-összefoglaló a tárolt adatb
   assert.equal(legacy.legacy, true);
   assert.equal(legacy.art, null);
 });
+
+// Spec 2026-10-19-hos-kep-sav: a régi szabállyal mentett, nem illő kép megjelenítéskor nem marad (az éles adatot nem írjuk át).
+test("resolveStoredArt a leckével: idegen tárolt borító → null; a sávhős és a témakörű borító marad", () => {
+  const math9 = { subject: "Matematika", title: "Kéttagú kifejezések négyzete" };
+  assert.equal(resolveStoredArt({ picture: "cover-ismetlodes" }, "laboratory", C, math9), null);
+  assert.equal(resolveStoredArt({ picture: "hero-studio" }, "laboratory", C, math9), null, "más sáv hőse sem marad");
+  assert.equal(resolveStoredArt({ picture: "hero-laboratory" }, "laboratory", C, math9)?.hero?.id, "hero-laboratory");
+  const topical = C.find((a) => a.kind === "cover" && a.topic && a.band === "laboratory");
+  if (topical) assert.equal(resolveStoredArt({ picture: topical.id, topic: topical.topic }, "laboratory", C, math9)?.cover?.id, topical.id);
+  // Lecke nélkül (régi hívó) a korábbi viselkedés.
+  assert.equal(resolveStoredArt({ picture: "cover-ismetlodes" }, "laboratory", C)?.cover?.id, "cover-ismetlodes");
+});
