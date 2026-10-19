@@ -570,7 +570,7 @@ export default function MaterialImprover() {
                         {format(new Date(file.createdAt), "yyyy. MM. dd. HH:mm", { locale: hu })}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           {file.status === "processing" ? (
                               <Badge variant="secondary" className="animate-pulse">
                                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -626,7 +626,7 @@ export default function MaterialImprover() {
       {previewData && (
         <Card className="border-red-500 border-2">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-red-700">Előnézet: {previewData.title}</CardTitle>
               <Button
                 variant="ghost"
@@ -650,7 +650,7 @@ export default function MaterialImprover() {
               <TabsContent value="run-original" className="mt-4">
                 {structuredPreview ? <LessonRuntime lesson={structuredPreview.previousLesson} /> : renderedOriginal ? (
                   <div className="border-2 border-border rounded-lg overflow-hidden bg-white">
-                    <div className="bg-muted px-3 py-2 border-b flex items-center justify-between">
+                    <div className="bg-muted px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Eye className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm font-medium">Eredeti HTML futás közben</span>
@@ -661,18 +661,18 @@ export default function MaterialImprover() {
                     </div>
                     <iframe
                       srcDoc={renderedOriginal}
-                      className="w-full h-[600px] border-0"
+                      className="w-full h-[min(600px,60dvh)] border-0"
                       title="Eredeti HTML Preview"
                       sandbox="allow-scripts allow-forms allow-popups allow-modals"
                       data-testid="iframe-preview-original"
                       style={{
-                        minHeight: '400px',
+                        minHeight: 'min(400px, 60dvh)',
                         backgroundColor: 'white',
                       }}
                     />
                   </div>
                 ) : (
-                  <div className="h-[600px] flex items-center justify-center rounded-md border text-muted-foreground">
+                  <div className="h-[min(600px,60dvh)] flex items-center justify-center rounded-md border text-muted-foreground">
                     Nincs elérhető tartalom
                   </div>
                 )}
@@ -682,12 +682,12 @@ export default function MaterialImprover() {
               <TabsContent value="run-improved" className="mt-4">
                 {structuredPreview ? <LessonRuntime lesson={structuredPreview.candidate} /> : renderedImproved ? (
                   <div className="border-2 border-border rounded-lg overflow-hidden bg-white">
-                    <div className="bg-muted px-3 py-2 border-b flex items-center justify-between">
+                    <div className="bg-muted px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Eye className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm font-medium">Javított HTML futás közben</span>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-3">
                         <Button
                           variant="outline"
                           size="sm"
@@ -705,18 +705,18 @@ export default function MaterialImprover() {
                     </div>
                     <iframe
                       srcDoc={renderedImproved}
-                      className="w-full h-[600px] border-0"
+                      className="w-full h-[min(600px,60dvh)] border-0"
                       title="Javított HTML Preview"
                       sandbox="allow-scripts allow-forms allow-popups allow-modals"
                       data-testid="iframe-preview-improved"
                       style={{
-                        minHeight: '400px',
+                        minHeight: 'min(400px, 60dvh)',
                         backgroundColor: 'white',
                       }}
                     />
                   </div>
                 ) : (
-                  <div className="h-[600px] flex items-center justify-center rounded-md border text-muted-foreground">
+                  <div className="h-[min(600px,60dvh)] flex items-center justify-center rounded-md border text-muted-foreground">
                     Nincs elérhető tartalom
                   </div>
                 )}
@@ -724,7 +724,7 @@ export default function MaterialImprover() {
 
               {/* Code View - Original */}
               <TabsContent value="code-original" className="mt-4">
-                <ScrollArea className="h-[600px] w-full rounded-md border p-4">
+                <ScrollArea className="h-[min(600px,60dvh)] w-full rounded-md border p-4">
                   <pre className="text-xs whitespace-pre-wrap font-mono">
                     {previewData.originalFile?.content || "Nincs elérhető tartalom"}
                   </pre>
@@ -733,7 +733,7 @@ export default function MaterialImprover() {
 
               {/* Code View - Improved */}
               <TabsContent value="code-improved" className="mt-4">
-                <ScrollArea className="h-[600px] w-full rounded-md border p-4">
+                <ScrollArea className="h-[min(600px,60dvh)] w-full rounded-md border p-4">
                   <pre className="text-xs whitespace-pre-wrap font-mono">
                     {previewData.content || "Nincs elérhető tartalom"}
                   </pre>
@@ -741,7 +741,7 @@ export default function MaterialImprover() {
               </TabsContent>
             </Tabs>
             <div className="mt-4 flex justify-end gap-2">
-              <Button
+              <Button data-testid="improver-preview-apply"
                 onClick={() => {
                   setPreviewImprovedId(null);
                   handleApply(previewData.id);

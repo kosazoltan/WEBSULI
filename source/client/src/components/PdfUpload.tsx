@@ -272,7 +272,7 @@ export default function PdfUpload() {
                   <Badge variant="secondary" className="mb-4" data-testid="badge-file-size">
                     {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                   </Badge>
-                  <div className="flex gap-2 justify-center">
+                  <div className="flex flex-wrap gap-2 justify-center">
                     <Button 
                       variant="outline" 
                       size="sm"

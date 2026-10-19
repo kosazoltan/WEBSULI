@@ -641,7 +641,9 @@ export default function Admin() {
       {/* Admin háttér - sötét amber/narancs téma */}
       <div className="fixed inset-0 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-gray-950 dark:via-amber-950/20 dark:to-gray-950 -z-10" />
 
-      <div className={`container mx-auto px-2 py-1.5 sm:px-3 sm:py-2 max-w-full ${isMobile ? 'pb-20' : ''} relative z-10`} data-testid="admin-panel">
+      {/* docs/specs/2026-10-19-admin-reszponzivitas.md (1): a 640 px fölötti `sm:py-2` felülírta a `pb-20`-at — széthajtott
+          kijelzőn az alsó menü takarta a legalsó gombokat. A felső és az alsó kitöltés külön, a gesztussávval együtt. */}
+      <div className={`container mx-auto px-2 pt-1.5 sm:px-3 sm:pt-2 max-w-full ${isMobile ? 'pb-[calc(5rem+env(safe-area-inset-bottom))]' : 'pb-1.5 sm:pb-2'} relative z-10`} data-testid="admin-panel">
         <div className="flex items-center justify-between gap-1.5 mb-2">
           <div className="flex items-center gap-2">
             <Link href="/">
