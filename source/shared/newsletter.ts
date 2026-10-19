@@ -14,10 +14,13 @@ export function normalizeInterests(input: unknown): string[] | null {
   const seen = new Set<string>();
   for (const raw of input) {
     if (typeof raw !== "string") return null;
-    const tag = raw.trim().replace(/\s+/g, " ");
-    if (!tag) continue;
+    // Review #312: a vezérlőkarakter (tab, sortörés is) a normalizálás ELŐTT hiba; a vessző és a pontosvessző a felület elválasztója,
+    // ezért címkén belül nem lehet (különben a következő mentéskor a címke kettéválna).
     // eslint-disable-next-line no-control-regex
-    if (tag.length > NEWSLETTER_LIMITS.tagChars || /[\u0000-\u001f\u007f]/.test(tag)) return null;
+    if (/[\u0000-\u001f\u007f]/.test(raw) || /[,;]/.test(raw)) return null;
+    const tag = raw.trim().replace(/ {2,}/g, " ");
+    if (!tag) continue;
+    if (tag.length > NEWSLETTER_LIMITS.tagChars) return null;
     const key = tag.toLocaleLowerCase("hu");
     if (seen.has(key)) continue;
     seen.add(key);

@@ -1351,7 +1351,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!row) return res.status(404).json({ message: "A tanuló nem található." });
       res.json(row);
     } catch (error: unknown) {
-      logger.error('[LEARNERS] hírlevél-beállítás hiba:', error instanceof Error ? error.message : String(error));
+      // Review #312: a Drizzle-üzenet a lekérdezés paramétereit (a címkéket) is tartalmazhatja — csak a hiba fajtája és kódja.
+      logger.error('[LEARNERS] hírlevél-beállítás hiba:', error instanceof Error ? `${error.name}${(error as { code?: unknown }).code ? ` (${String((error as { code?: unknown }).code)})` : ""}` : "ismeretlen");
       res.status(500).json({ message: "A mentés nem sikerült." });
     }
   });
