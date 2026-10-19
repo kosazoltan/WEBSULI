@@ -27,9 +27,10 @@ test("az öt sáv háttere a saját színátmenete, és mind különböző; ninc
     expect(img, b.id).toContain("linear-gradient");
     expect(img, b.id).toContain(b.from);
     seen.add(img);
-    // A kártyák felső szegélye a sáv főszíne (nem fehér-a-fehéren).
-    const top = await page.locator(".lesson-block").first().evaluate((el) => [getComputedStyle(el).borderTopWidth, getComputedStyle(el).borderTopColor]);
-    expect(top[0]).toBe("4px");
+    // A kártyák tetején 4 px-es sávszínű csík (belső árnyék — az elrendezést nem tolja el), nem fehér-a-fehéren.
+    const shadow = await page.locator(".lesson-block").first().evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(shadow).toMatch(/inset/);
+    expect(shadow).toMatch(/0px 4px 0px/);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: `test-results/band-colors/${b.id}-${width}.png` });
   }
@@ -47,7 +48,9 @@ test("a régi, beragadt Csendes-nézet-érték nem színteleníti a leckét; a g
   await expect(btn).toHaveText(/Csendes nézet/);
   await btn.click();
   await expect(btn).toHaveText(/Színes nézet/);
-  await expect(btn).toHaveAttribute("aria-pressed", "true");
+  // Review #320: a gomb a műveletet nevezi meg — nincs ellentmondó aria-pressed; az állapot a data-on.
+  await expect(btn).not.toHaveAttribute("aria-pressed", /.*/);
+  await expect(btn).toHaveAttribute("data-on", "true");
   await expect(root).toHaveCSS("background-color", "rgb(247, 246, 242)");
   // A bekapcsolt gomb tömör, látható kitöltésű (nem a halk háttér).
   const fill = await btn.evaluate((el) => getComputedStyle(el).backgroundColor);

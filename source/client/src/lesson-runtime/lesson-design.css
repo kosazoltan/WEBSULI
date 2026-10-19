@@ -256,8 +256,11 @@
 /* ---------- Spec 2026-10-19-evfolyam-arculat-lathato: sávszín a kártyákon, látható Csendes-nézet-állapot ---------- */
 [data-band][data-experience][data-ws-theme] .lesson-block,
 [data-band][data-experience][data-ws-theme] .fusion-task,
-[data-band][data-experience][data-ws-theme] .fusion-method { border-top: 4px solid var(--ws-accent); }
-/* A bekapcsolt Csendes nézet gombja tömör, jól látható (korábban a halk palettán #EEEFEA a #FFFEFA mellett — láthatatlan). */
-[data-band][data-experience][data-ws-theme] .learning-quiet[aria-pressed="true"] {
+[data-band][data-experience][data-ws-theme] .fusion-method { box-shadow: inset 0 4px 0 var(--ws-accent), 0 5px 15px #1837540A; }
+/* Belső árnyék, nem szegély: az elrendezés pixelre a régi marad (mért: a +3 px-es szegély hat kártyán a lusta betöltésű
+   blokkjelzőt a betöltési sávon túlra tolta — block-art.spec). */
+/* A bekapcsolt Csendes nézet gombja tömör, jól látható (korábban a halk palettán #EEEFEA a #FFFEFA mellett — láthatatlan). A gomb a
+   MŰVELETET nevezi meg („Színes nézet”), ezért nincs aria-pressed (review #320) — a kiemelést a data-on állapot vezérli. */
+[data-band][data-experience][data-ws-theme] .learning-quiet[data-on="true"] {
   background: var(--ws-strong); color: var(--ws-strong-ink); border-color: var(--ws-strong);
 }
