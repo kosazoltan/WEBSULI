@@ -26,8 +26,8 @@ const strictMethod = z.object({
   steps: z.array(text(500)).min(2).max(8).nullable(),
 });
 const strictTypedAnswer = z.object({
-  part: text(40), kind: z.enum(["number", "fraction", "expression"]), value: text(120),
-  unit: text(24).nullable(), form: z.enum(["any", "simplified-fraction", "decimal", "intermediate-step"]).nullable(),
+  part: text(40), kind: z.enum(["number", "fraction", "expression", "polynomial"]), value: text(120),
+  unit: text(24).nullable(), form: z.enum(["any", "simplified-fraction", "decimal", "intermediate-step", "expanded", "factored"]).nullable(),
 });
 const strictDistinct = z.object({ category: text(80), from: z.array(z.array(text(160)).min(1)).min(1).max(20), count: z.number().int().min(1).max(10) });
 const strictTask = z.object({

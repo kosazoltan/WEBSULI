@@ -9,17 +9,22 @@
  * Szándékosan import-szegény (csak a közös kifejezés-kiértékelő): a kliens és a szerver ugyanezt futtatja.
  */
 import { ATOM, OPS, SIGN, atomValue, evaluateExpression } from "./arithmetic-expression";
+import { formatPolynomial, isExpanded, isFactored, parsePolynomial, polyEquals, polynomialCandidates } from "./polynomial";
 
 /** A lecke pontozási szerződésének verziója (`experience.scoringVersion`); hiányzó mező = 1 (régi kulcsszó-pontozó). */
-export const LESSON_SCORING_VERSION = 2;
+export const LESSON_SCORING_VERSION = 3;
+/** Számos típusos mező (`number`/`fraction`/`expression`, `requiredDistinct`). */
+export const TYPED_SCORING_VERSION = 2;
+/** Spec 2026-10-19-algebrai-referencia: betűs (`polynomial`) végeredmény — a régebbi kliens ezt nem ismeri. */
+export const POLYNOMIAL_SCORING_VERSION = 3;
 /** A kliens ezt küldi (`X-Websuli-Scoring`); a kiszolgáló az ennél újabb leckét nem adja ki némán (§C-V/1, 11). */
 export const SCORING_HEADER = "x-websuli-scoring";
 
-export type AnswerForm = "any" | "simplified-fraction" | "decimal" | "intermediate-step";
+export type AnswerForm = "any" | "simplified-fraction" | "decimal" | "intermediate-step" | "expanded" | "factored";
 export type TypedAnswer = {
   /** Részfeladat jele („a”, „1”, „kerület”) — a válaszban a részeredmények SORRENDJE kötött (felcserélve hibás). */
   part: string;
-  kind: "number" | "fraction" | "expression";
+  kind: "number" | "fraction" | "expression" | "polynomial";
   /** Az elvárt érték szövege: „17/12”, „-3”, „12,5”, vagy `intermediate-step`-nél a kért köztes kifejezés („35 + 64 − 12”). */
   value: string;
   /** Kért mértékegység a szám után („cm²”, „°C”, „Ft”); ha van, kötelező. */
@@ -88,6 +93,50 @@ export function referenceValue(value: unknown): number | null {
 /** `intermediate-step` referencia: a kért köztes állapot maga is a kifejezésnyelv mondata legyen (review #159: „eredmény” nem az). */
 export const isExpressionText = (value: unknown): boolean => typeof value === "string" && parseReferenceExpression(value.trim()).valid;
 
+/** A típusos rész referenciája értelmezhető-e (a séma, a csomag-ellenőrzés és a pontozó EGY szabálya). */
+export function isValidReference(a: Pick<TypedAnswer, "kind" | "value" | "form">): boolean {
+  if (a.kind === "polynomial") return typeof a.value === "string" && parsePolynomial(a.value) !== null;
+  return a.form === "intermediate-step" ? isExpressionText(a.value) : referenceValue(a.value) !== null;
+}
+
+/** A `pos` pozíción (szóköz után) kezdődő mértékegység vége, vagy null (kis- és nagybetű, szóköz nem számít). */
+function unitAfter(answer: string, pos: number, unit: string): number | null {
+  const want = fold(unit).replace(/\s+/g, "");
+  const rest = answer.slice(pos);
+  const lead = rest.length - rest.trimStart().length;
+  let i = lead, got = "";
+  while (i < rest.length && got.length < want.length) { if (!/\s/.test(rest[i])) got += fold(rest[i]); i++; }
+  return got === want && !/[\p{L}\d]/u.test(rest[i] ?? "") ? pos + i : null;
+}
+
+/** Betűs végeredmény ítélete: a válasz polinom-jelöltjei közül a `from`-tól az első, értékazonos és a kért alakú. */
+function findPolynomial(answer: string, expected: TypedAnswer, from: number): { index: number; end: number; reason?: string } {
+  const ref = parsePolynomial(expected.value);
+  if (!ref) return { index: -1, end: from };
+  const candidates = polynomialCandidates(answer);
+  let sameValueWrongForm = false;
+  let wrongUnit = false;
+  for (let i = 0; i < candidates.length; i++) {
+    if (candidates[i].start < from) continue;
+    const c = candidates[i].parsed;
+    if (ref.hasVariable && !c.hasVariable) continue;
+    if (!polyEquals(c.poly, ref.poly)) continue;
+    const form = expected.form ?? "expanded";
+    if (form === "expanded" && !isExpanded(c)) { sameValueWrongForm = true; continue; }
+    if (form === "factored" && !isFactored(c, candidates[i].text)) { sameValueWrongForm = true; continue; }
+    // Review #319: a kért mértékegység a betűs eredmény után is kötelező („2x cm²”).
+    if (expected.unit) {
+      const unit = unitAfter(answer, candidates[i].end, expected.unit);
+      if (unit === null) { wrongUnit = true; continue; }
+      return { index: i, end: unit };
+    }
+    return { index: i, end: candidates[i].end };
+  }
+  if (wrongUnit && !sameValueWrongForm) return { index: -1, end: from, reason: `A(z) ${expected.part} rész eredménye a(z) ${expected.unit} mértékegységgel hiányzik vagy hibás.` };
+  const wanted = (expected.form ?? "expanded") === "factored" ? "szorzattá alakított (zárójeles)" : "kifejtett, összevont";
+  return { index: -1, end: from, reason: sameValueWrongForm ? `A(z) ${expected.part} részhez ${wanted} alakot várunk.` : undefined };
+}
+
 /**
  * A pontozott ablak: csak az első `words` szó (szó = szám vagy betűsor — a pontozó 1. szabálya). A típusos érték is csak
  * ebben kereshető (review #159: az 500. szó utáni helyes érték nem érhet pontot).
@@ -146,7 +195,16 @@ export function gradeTypedAnswers(rawAnswer: string, answers: readonly TypedAnsw
   const atoms = [...answer.matchAll(ATOM_RE)].map((m) => ({ text: m[0], index: m.index ?? 0, value: atomValue(m[0].replace(/^[−–]/, "-")) }));
   let cursor = 0;
   let undecidable = false;
+  // Review #319: EGY közös szövegpozíció a vegyes (betűs + számos) részeredmények sorrendjéhez.
+  let textPos = 0;
   for (const expected of answers) {
+    if (expected.kind === "polynomial") {
+      if (!isValidReference(expected)) { undecidable = true; verdicts.push({ part: expected.part, ok: false, undecidable: true, reason: `A(z) ${expected.part} rész referenciaértéke nem értelmezhető.` }); continue; }
+      const hit = findPolynomial(answer, expected, textPos);
+      if (hit.index >= 0) { textPos = hit.end; verdicts.push({ part: expected.part, ok: true, reason: "Helyes kifejezés." }); }
+      else verdicts.push({ part: expected.part, ok: false, reason: hit.reason ?? `A(z) ${expected.part} rész eredménye hiányzik vagy hibás.` });
+      continue;
+    }
     if (expected.form === "intermediate-step") {
       if (!isExpressionText(expected.value)) { undecidable = true; verdicts.push({ part: expected.part, ok: false, undecidable: true, reason: `A(z) ${expected.part} rész kért köztes alakja nem értelmezhető.` }); continue; }
       const ok = containsExpressionState(normalizeExpressionText(answer), normalizeExpressionText(expected.value));
@@ -158,13 +216,14 @@ export function gradeTypedAnswers(rawAnswer: string, answers: readonly TypedAnsw
     let found = -1;
     for (let i = cursor; i < atoms.length; i++) {
       const a = atoms[i];
+      if (a.index < textPos) continue;
       if (Number.isNaN(a.value) || Math.abs(a.value - ref) > 1e-6 * Math.max(1, Math.abs(ref))) continue;
       if (expected.form === "simplified-fraction" && !isSimplifiedFraction(a.text)) continue;
       if (expected.form === "decimal" && !isDecimalForm(a.text)) continue;
       if (expected.unit && !unitPresent(answer, a.text, expected.unit)) continue;
       found = i; break;
     }
-    if (found >= 0) { cursor = found + 1; verdicts.push({ part: expected.part, ok: true, reason: "Helyes érték." }); }
+    if (found >= 0) { cursor = found + 1; textPos = atoms[found].index + atoms[found].text.length; verdicts.push({ part: expected.part, ok: true, reason: "Helyes érték." }); }
     else verdicts.push({ part: expected.part, ok: false, reason: expected.form === "simplified-fraction" ? `A(z) ${expected.part} rész eredményét egyszerűsített törtként várjuk.` : expected.unit ? `A(z) ${expected.part} rész eredménye a(z) ${expected.unit} mértékegységgel hiányzik vagy hibás.` : `A(z) ${expected.part} rész eredménye hiányzik vagy hibás.` });
   }
   return { total: answers.length, correct: verdicts.filter((v) => v.ok).length, verdicts, undecidable };
@@ -189,14 +248,30 @@ export function referenceValueProblems(task: { id?: string; q: string; typedAnsw
       return !/\(\s*$|\)\s*[+\-−–·×*:÷/]\s*$/.test(before) && !/^\s*[+\-−–·×*:÷/]\s*\(|^\s*\)/.test(after);
     })
     .map((m) => m[0]).filter((c) => !/=/.test(c));
-  for (const a of answers) {
+  // Spec 2026-10-19-algebrai-referencia: a betűs rész referenciája polinom; ha a kérdésben pontosan annyi betűs kifejezés áll, ahány
+  // betűs rész, azok sorrendben egyezzenek a referenciával (a hibás kifejtés csomaghiba).
+  const polyParts = answers.filter((a) => a.kind === "polynomial");
+  for (const a of polyParts) if (!isValidReference(a)) problems.push(`${task.id ?? "feladat"}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető polinom.`);
+  const asked = polynomialCandidates(task.q).filter((c) => c.parsed.hasVariable && /[+\-−–·×*/^()²³]/.test(c.text));
+  if (polyParts.length && asked.length === polyParts.length) {
+    polyParts.forEach((a, i) => {
+      const ref = parsePolynomial(a.value);
+      // Csak a valódi átalakítás (zárójeles kérdés → kifejtett válasz, kifejtett kérdés → szorzat) ítélhető; a „Melyik kifejezés
+      // négyzete az x² + 10x + 25?” jellegű kérdés referenciája szándékosan nem azonos a kérdés kifejezésével.
+      const form = a.form ?? "expanded";
+      const transform = form === "expanded" ? asked[i].parsed.parens : form === "factored" ? isExpanded(asked[i].parsed) : false;
+      if (ref && transform && !polyEquals(ref.poly, asked[i].parsed.poly)) problems.push(`${task.id ?? "feladat"}: a(z) ${a.part} rész referenciája (${a.value}) nem egyenlő a kérdés kifejezésével (${asked[i].text} = ${formatPolynomial(asked[i].parsed.poly)}).`);
+    });
+  }
+  const numeric = answers.filter((a) => a.kind !== "polynomial");
+  for (const a of numeric) {
     if (a.form === "intermediate-step") { if (!isExpressionText(a.value)) problems.push(`${task.id ?? "feladat"}: a(z) ${a.part} rész kért köztes alakja („${a.value}”) nem a kifejezésnyelv mondata.`); continue; }
     const ref = referenceValue(a.value);
     if (ref === null) { problems.push(`${task.id ?? "feladat"}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető.`); continue; }
   }
-  if (chains.length === answers.filter((a) => a.form !== "intermediate-step").length) {
+  if (numeric.length && chains.length === numeric.filter((a) => a.form !== "intermediate-step").length) {
     let i = 0;
-    for (const a of answers) {
+    for (const a of numeric) {
       if (a.form === "intermediate-step") continue;
       const computed = evaluateExpression(chains[i++]);
       const ref = referenceValue(a.value);
