@@ -175,3 +175,14 @@ test("kész futás után újratöltéskor üres a panel (a böngésző elfelejti
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   }
 });
+test("review #317: a kézi mentés befejezése után is elfelejti a futást (újratöltéskor üres panel)", async ({ page }) => {
+  await page.route("**/api/studio/web-research/jobs", r => r.fulfill({ status: 202, json: job }));
+  await page.route("**/api/studio/web-research/jobs/*", r => r.fulfill({ json: { ...done, state: "ready", materialId: undefined, error: "Mentés átmenetileg nem elérhető" } }));
+  await page.route("**/api/studio/web-research/jobs/*/publish", r => r.fulfill({ json: done }));
+  await open(page); await send(page);
+  await page.getByTestId("web-research-save").click();
+  await expect(page.getByTestId("web-research-open-saved")).toBeVisible();
+  await page.reload(); await page.getByTestId("studio-mode-web").click();
+  await expect(page.getByTestId("web-research-open-saved")).toHaveCount(0);
+  await expect(page.getByTestId("web-research-new")).toHaveCount(0);
+});
