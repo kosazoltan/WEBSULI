@@ -57,7 +57,8 @@ const usable = (page: PublicPage) => page.text.trim().length >= NEWSLETTER_LIMIT
  * a naturalisztikus és felnőtt tartalom szavai igen.
  */
 // Review #314: szótövek, hogy a ragozott alakokat is fogja (pl. „meggyilkolták”, „megkínozták”, „erőszakos”).
-const UNSAFE_TERMS = /(holttest|hulla|lemészárol|mészárlás|kivégez|kivégzés|megerőszak|erőszakos|nemi erőszak|öngyilkos|szex|pornó|porno|drog|kábítószer|terror|merénylet|lefejez|brutális|vérfürdő|vérengzés|halálos áldozat|meggyilkol|gyilkos|gyilkoss|megöl|megkínoz|kínzás|kínoz|csonkít|tömegsír|lövöldözés)/i;
+// Review #315: csak SZÓ ELEJÉN illeszt (a „hidrogén” nem „drog”), és a két ártalmatlan rokon alak kivétel („hulladék”, „megölel”).
+const UNSAFE_TERMS = /(?:^|[^\p{L}])(holttest|hulla(?!d)|lemészárol|mészárlás|kivégez|kivégzés|megerőszak|erőszakos|nemi erőszak|öngyilkos|szex|pornó|porno|drog|kábítószer|terror|merénylet|lefejez|brutális|vérfürdő|vérengzés|halálos áldozat|meggyilkol|gyilkos|megöl(?!el)|megkínoz|kínzás|kínoz|csonkít|tömegsír|lövöldözés)/iu;
 export const unsafeForChild = (text: string) => UNSAFE_TERMS.test(text);
 
 /** A választó kérése — CSAK érdeklődés, évfolyam, cikk-kivonatok és anyaglista (ADAT). */

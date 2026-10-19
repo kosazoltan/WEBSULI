@@ -160,3 +160,13 @@ test("review #314: a tartalomszűrő a ragozott alakokat is fogja", () => {
     assert.equal(validatePick({ url: "https://index.hu/a", title, teaser: "Rövid ismertető.", question: "Kérdés?", materialId: null, ageAppropriate: true }, articles, materials).ok, false, title);
   }
 });
+
+test("review #315: a tartalomszűrő szó elején illeszt — ártalmatlan tudományos címek átmennek", () => {
+  const articles = [page("https://qubit.hu/a", "Cikk")];
+  for (const title of ["Hidrogénnel működő repülőgép", "A hulladék újrahasznosítása", "Megölelte a kiskutyát", "Az Essex osztályú repülőgép-hordozó"]) {
+    assert.equal(validatePick({ url: "https://qubit.hu/a", title, teaser: "Rövid ismertető.", question: "Kérdés?", materialId: null, ageAppropriate: true }, articles, materials).ok, true, title);
+  }
+  for (const title of ["Drogkereskedőket fogtak el", "Hulla a folyóban", "Megölték a királyt"]) {
+    assert.equal(validatePick({ url: "https://qubit.hu/a", title, teaser: "Rövid ismertető.", question: "Kérdés?", materialId: null, ageAppropriate: true }, articles, materials).ok, false, title);
+  }
+});
