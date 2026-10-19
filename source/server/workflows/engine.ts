@@ -314,7 +314,30 @@ export async function workflowUsage(usage: { prompt_tokens?: number; completion_
   await persist(ctx);
 }
 
+/**
+ * Spec 2026-10-19-eroforras-s1 (3): a folyamatban élő futások száma — a leálló példány (Render-kitelepítés) ezt várja ki, hogy
+ * a futó gyártás / javítás / okosítás ne szakadjon meg (mért: 2026-10-19 09:56 egy kitelepítés megszakított egy okosítást).
+ */
+let activeRuns = 0;
+export const activeWorkflowRuns = (): number => activeRuns;
+
+/** Legfeljebb `maxMs`-ig vár, amíg nincs élő futás. Visszaadja, hány futás maradt (0 = mind befejeződött). Tiszta, tesztelhető. */
+export async function waitForActiveRuns(maxMs: number, count: () => number = activeWorkflowRuns, pollMs = 2000,
+  now: () => number = Date.now, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<number> {
+  const deadline = now() + maxMs;
+  while (count() > 0 && now() < deadline) await sleep(Math.min(pollMs, Math.max(0, deadline - now())));
+  return count();
+}
+
 export async function executeWorkflow<T extends WorkflowView["result"]>(
+  store: WorkflowStore, input: { id: string; owner: string; mode: WorkflowMode; retry?: boolean; continuation?: boolean; request?: unknown; explicitResume?: boolean; recoveryResume?: boolean },
+  work: () => Promise<T>,
+): Promise<WorkflowView> {
+  activeRuns++;
+  try { return await executeWorkflowCounted(store, input, work); } finally { activeRuns--; }
+}
+
+async function executeWorkflowCounted<T extends WorkflowView["result"]>(
   store: WorkflowStore, input: { id: string; owner: string; mode: WorkflowMode; retry?: boolean; continuation?: boolean; request?: unknown; explicitResume?: boolean; recoveryResume?: boolean },
   work: () => Promise<T>,
 ): Promise<WorkflowView> {

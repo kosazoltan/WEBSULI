@@ -182,7 +182,9 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
   return acted;
 }
 
-export const STUDIO_SWEEP_INTERVAL_MS = 100_000;
+// Spec 2026-10-19-eroforras-s1 + review #324: 15 perc (korábban 100 s) — biztosan hosszabb a Neon 5 perces elalvási küszöbénél; a
+// leállás a futó munkát kivárja (max 270 s), így árva job ritka, és indításkor a söprés úgyis lefut.
+export const STUDIO_SWEEP_INTERVAL_MS = 15 * 60_000;
 /** Időszakos söprés (a lejárt lízingű, gazdátlanná vált jobok lezárása); a folyamat leállását nem tartja fel. */
 export function startStudioJobSweeper(): void {
   setInterval(() => {

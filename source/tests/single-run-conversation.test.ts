@@ -91,7 +91,8 @@ test("Anthropic-kliens: medium effort, adaptív gondolkodás, gyorsítótár, fo
   assert.equal(params?.model, "claude-opus-5-5");
   assert.deepEqual(params?.output_config, { effort: "medium" });
   assert.deepEqual(params?.thinking, { type: "adaptive" });
-  assert.deepEqual(params?.cache_control, { type: "ephemeral" });
+  // Dokumentált specváltozás (docs/specs/2026-10-19-eroforras-s1.md): 1 órás TTL — a körök gyakran 5 percnél hosszabbak.
+  assert.deepEqual(params?.cache_control, { type: "ephemeral", ttl: "1h" });
   const content = (params?.messages as Array<{ content: Array<{ type: string; text?: string }> }>)[0].content;
   assert.deepEqual(content.map((c) => c.type), ["image", "text", "text"]);
   assert.match(content[1].text ?? "", /FORRÁS \(b\.txt\):\nForrásszöveg\./);

@@ -1,6 +1,8 @@
 import { skillStore } from "./learning-store";
 import { logger } from "../lib/logger";
 
+export const LEARNING_AUDIT_INTERVAL_MS = 30 * 60_000;
+
 export function startSkillLearningAudit() {
   let busy = false;
   const sweep = async () => {
@@ -13,7 +15,8 @@ export function startSkillLearningAudit() {
     finally { busy = false; }
   };
   void sweep();
-  const timer = setInterval(() => { void sweep(); }, 60_000);
+  // Spec 2026-10-19-eroforras-s1: 30 percenként (korábban percenként — a Neon-adatbázist soha nem hagyta elaludni).
+  const timer = setInterval(() => { void sweep(); }, LEARNING_AUDIT_INTERVAL_MS);
   timer.unref();
   return () => clearInterval(timer);
 }

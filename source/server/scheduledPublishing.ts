@@ -4,9 +4,10 @@ import { db } from "./db";
 import { logger } from "./lib/logger";
 
 export function setupScheduledPublishing() {
-  // Run every minute to check for scheduled jobs
-  cron.schedule("* * * * *", runScheduledPublishingCheck);
-  logger.info("Scheduled publishing cron job started (runs every minute)");
+  // Spec 2026-10-19-eroforras-s1: óránként (korábban percenként — a `scheduled_jobs` üres, semmi nem ír bele, a percenkénti
+  // lekérdezés viszont soha nem hagyta elaludni a Neon-adatbázist).
+  cron.schedule("0 * * * *", runScheduledPublishingCheck);
+  logger.info("Scheduled publishing cron job started (runs hourly)");
 }
 
 /** Share the application's selected DEV/production database and connection pool. */

@@ -49,9 +49,12 @@ export async function sweepImproveJobs(): Promise<number> {
   return ids.length;
 }
 
-/** Indításkor és utána 2 percenként (a deploykori régi példány bérletének lejárta után zár). */
+/** Spec 2026-10-19-eroforras-s1 + review #324: 15 percenként — biztosan hosszabb a Neon 5 perces elalvási küszöbénél. */
+export const IMPROVE_SWEEP_INTERVAL_MS = 15 * 60_000;
+
+/** Indításkor és utána 15 percenként (a deploykori régi példány bérletének lejárta után zár). */
 export function startImproveOrphanSweeper(): void {
   const run = () => void sweepImproveJobs().catch((error) => logger.error("[IMPROVE] Az elárvult futások söprése nem sikerült:", error));
   run();
-  setInterval(run, 120_000).unref();
+  setInterval(run, IMPROVE_SWEEP_INTERVAL_MS).unref();
 }

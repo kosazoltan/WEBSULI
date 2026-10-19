@@ -60,11 +60,13 @@ export function anthropicClient(opts: { apiKey?: string; model?: string; client?
       const stream = client.messages.stream({
         model, max_tokens: SINGLE_RUN_MAX_TOKENS,
         // A stabil előtag (a gyártás teljes módszertana) gyorsítótárból; a beszélgetés eddigi része a kérés-szintű töréspontból.
-        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        // Spec 2026-10-19-eroforras-s1: 1 órás TTL — egy kör (generálással) gyakran 5 percnél hosszabb, az alapértelmezett 5 perces
+        // bejegyzés a következő körre lejárt (mért: a bemenet 24%-a jött gyorsítótárból). Az 1 órás bejegyzés áll elöl.
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral", ttl: "1h" } }],
         messages,
         thinking: { type: "adaptive" },
         output_config: { effort: SINGLE_RUN_EFFORT },
-        cache_control: { type: "ephemeral" },
+        cache_control: { type: "ephemeral", ttl: "1h" },
       } as Anthropic.MessageStreamParams, { signal });
       const msg = await stream.finalMessage();
       const text = msg.content.filter((c): c is Anthropic.TextBlock => c.type === "text").map((c) => c.text).join("");
