@@ -61,7 +61,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
   // CRITICAL SECURITY: Admin navigation - ONLY for authenticated admin users
   return (
       <>
-        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border lg:hidden" aria-label="Admin navigáció">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border lg:hidden pb-[env(safe-area-inset-bottom)]" aria-label="Admin navigáció">
           <div className="flex items-center justify-around h-16 px-1">
             {adminCategories.map((category) => {
               const isActive = category.tabs.some(tab => tab.value === activeTab);
@@ -98,7 +98,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
               open={openSheet === category.value} 
               onOpenChange={(open) => setOpenSheet(open ? category.value : null)}
             >
-              <SheetContent side="bottom" className="max-h-[80vh]">
+              <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto">
                 <SheetHeader>
                   <SheetTitle>{category.label}</SheetTitle>
                 </SheetHeader>

@@ -241,7 +241,7 @@ export function WebResearchAgentPanel() {
           </div>
         </div>
         <Badge variant="outline" className="text-xs">Tananyag · Módszerek · Feladatok · Kvíz</Badge>
-        <div className="h-[480px]">
+        <div className="h-[min(480px,62dvh)]">
           <ChatInterface
             title="Tananyagkészítő ügynök"
             description="Pl.: Keress 5. osztályos törtes tananyagot, és készíts belőle interaktív HTML-t"
@@ -303,7 +303,7 @@ export function WebResearchAgentPanel() {
             </div>
             <iframe
               srcDoc={withLessonTypography(generatedHtml, classroom, title)}
-              className="w-full h-[320px]"
+              className="w-full h-[min(320px,40dvh)]"
               title="Webes tananyag előnézet"
               sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
               data-testid="web-research-preview"

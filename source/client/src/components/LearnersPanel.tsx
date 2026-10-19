@@ -79,7 +79,7 @@ export default function LearnersPanel() {
     <div className="space-y-3" data-testid="learners-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-bold flex items-center gap-2"><UserRound className="h-5 w-5" /> Tanulók</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}><RefreshCw className="h-4 w-4 mr-1" /> Frissítés</Button>
           <Button size="sm" onClick={() => weekly.mutate()} disabled={weekly.isPending} data-testid="learners-weekly"><Send className="h-4 w-4 mr-1" /> Heti összefoglaló most</Button>
         </div>

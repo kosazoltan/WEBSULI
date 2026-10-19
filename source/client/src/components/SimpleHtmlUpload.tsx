@@ -114,8 +114,11 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] sm:h-[calc(100vh-5.5rem)] px-1 sm:px-2">
-      <Card className="flex flex-col flex-1 min-h-0 shadow-xl border-2 border-orange-400/60 dark:border-orange-600/60 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-xl">
+    // docs/specs/2026-10-19-admin-reszponzivitas.md (3): korábban fix `100vh` magasság, belül nem görgető oszlop — mobilon a
+    // „Feltöltés” sor az alsó menü mögé / a látható részen túlra került, a betöltött HTML-lel teli mezőt húzva pedig a mező
+    // görgött, nem az oldal. Most természetes oldalfolyam, korlátos mező, az akciósor ragad az alsó menü fölött.
+    <div className="flex flex-col px-1 sm:px-2">
+      <Card className="flex flex-col shadow-xl border-2 border-orange-400/60 dark:border-orange-600/60 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-xl">
         <CardHeader className="flex-shrink-0 bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 text-gray-900 rounded-t-xl border-b-2 border-orange-600/40 py-2 px-3 sm:px-4">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm sm:text-base font-extrabold drop-shadow-sm">🚀 Új HTML anyag feltöltése</CardTitle>
@@ -131,8 +134,8 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 min-h-0 flex flex-col pt-2 pb-2 px-3 sm:px-4">
-          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-1.5">
+        <CardContent className="flex flex-col pt-2 pb-0 px-3 sm:px-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-1.5">
             {/* Osztály + Cím egymás mellett desktopon */}
             <div className="flex-shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {/* Osztály választó */}
@@ -181,7 +184,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
             </div>
 
             {/* HTML tartalom mező - flex-1 kitölti a maradék helyet */}
-            <div className="flex-1 min-h-0 flex flex-col gap-1">
+            <div className="flex flex-col gap-1">
               <div className="flex-shrink-0 flex items-center justify-between">
                 <Label htmlFor="content" className="text-xs font-semibold flex items-center gap-1">
                   💻 HTML tartalom *
@@ -236,17 +239,17 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                 placeholder="Illeszd be a HTML kódot ide…"
                 required
                 disabled={isPending}
-                className="flex-1 min-h-[80px] resize-none font-mono text-xs bg-gray-50 dark:bg-gray-950"
+                className="h-[38dvh] min-h-[160px] resize-none font-mono text-xs bg-gray-50 dark:bg-gray-950"
                 data-testid="input-content"
               />
             </div>
 
             {/* Akció gombok */}
-            <div className="flex-shrink-0 flex flex-row gap-2 pt-1 border-t border-orange-300 dark:border-orange-700">
+            <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-0 z-10 flex flex-row gap-2 py-2 border-t border-orange-300 dark:border-orange-700 bg-white dark:bg-gray-900" data-testid="upload-actions">
               <Button
                 type="submit"
                 disabled={!title.trim() || !content.trim() || isPending}
-                className="flex-1 h-8 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold shadow-xl text-xs sm:text-sm border-2 border-orange-600"
+                className="flex-1 h-11 sm:h-9 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold shadow-xl text-xs sm:text-sm border-2 border-orange-600"
                 data-testid="button-submit-upload"
               >
                 {isPending ? (
@@ -266,7 +269,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                 variant="outline"
                 onClick={onCancel}
                 disabled={isPending}
-                className="h-8 text-xs sm:text-sm px-4"
+                className="h-11 sm:h-9 text-xs sm:text-sm px-4"
                 data-testid="button-cancel-upload-bottom"
               >
                 Mégse

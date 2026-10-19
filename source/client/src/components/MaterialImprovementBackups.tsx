@@ -235,7 +235,7 @@ export default function MaterialImprovementBackups() {
       {previewBackup && (
         <Card className="border-red-500 border-2">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-red-700">
                 Backup Előnézet: {previewBackup.backupData.title}
               </CardTitle>
@@ -267,7 +267,7 @@ export default function MaterialImprovementBackups() {
               </div>
               <div>
                 <h4 className="font-semibold mb-2">Backup tartalom</h4>
-                <ScrollArea className="h-[400px] w-full rounded-md border p-4">
+                <ScrollArea className="h-[min(400px,50dvh)] w-full rounded-md border p-4">
                   <pre className="text-xs whitespace-pre-wrap">
                     {previewBackup.backupData.content || "Nincs elérhető tartalom"}
                   </pre>
