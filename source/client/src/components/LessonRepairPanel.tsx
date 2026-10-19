@@ -174,7 +174,7 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
               </ul>
             )}
             <div className="flex flex-wrap gap-2">
-              <Button onClick={apply} disabled={busy || !repair} className="min-h-11" data-testid="lesson-repair-apply">
+              <Button onClick={apply} disabled={busy || (isLesson ? !repair : !candidate.data?.content)} className="min-h-11" data-testid="lesson-repair-apply">
                 {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}Alkalmazás
               </Button>
               <Button variant="outline" onClick={discard} disabled={busy} className="min-h-11" data-testid="lesson-repair-discard">Elvetés</Button>

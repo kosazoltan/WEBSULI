@@ -22,6 +22,7 @@ const CouponHudProbe = lazy(() =>
 const StudioPanelProbe = lazy(() => import("@/components/studio/StudioPanelProbe"));
 const AdminTabsProbe = lazy(() => import("@/pages/AdminTabsProbe"));
 const LearnersPanelProbe = lazy(() => import("@/pages/LearnersPanelProbe"));
+const RepairWorkbenchProbe = lazy(() => import("@/pages/RepairWorkbenchProbe"));
 
 // Lazy load heavy components for better code splitting
 const Preview = lazy(() => import("@/pages/Preview"));
@@ -80,6 +81,9 @@ function Router() {
         )}
         {import.meta.env.VITE_ENABLE_RUNTIME_PROBE === "1" && (
           <Route path="/__learners-panel-probe" component={LearnersPanelProbe} />
+        )}
+        {import.meta.env.VITE_ENABLE_RUNTIME_PROBE === "1" && (
+          <Route path="/__repair-workbench-probe" component={RepairWorkbenchProbe} />
         )}
         <Route path="/preview/:id" component={Preview} />
         <Route path="/lesson/:id" component={LessonRedirect} />
