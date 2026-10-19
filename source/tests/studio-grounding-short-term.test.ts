@@ -22,8 +22,20 @@ test("a forrás saját példáját tanító angol blokk megalapozza az „an” 
   assert.equal(shortTermExamplePresent("an", articleAn.quote ?? "", "I have an orange for lunch today."), true);
 });
 
-test("a definíciót magyarázó blokk megalapozza az „a” címkét (eddig a tartalékig sem jutott)", () => {
-  assert.equal(checkGrounding("Az a névelőt mássalhangzó hang előtt használjuk, például: a bed, a chair, a table.", articleA), true);
+test("a definíciót magyarázó blokk megalapozza az „a” címkét, ha a név megkülönböztetően (idézőjelben) áll", () => {
+  assert.equal(checkGrounding("Az „a” névelőt mássalhangzó hang előtt használjuk, például: a bed, a chair, a table.", articleA), true);
+});
+
+// Review #326 (Copilot): a testvérfogalmak közös definíciószavai („névelő”, „hang”, „előtt”) nem alapozzák meg egymást.
+test("az „a”-t tanító blokk nem alapozza meg az „an” címkét, és fordítva", () => {
+  assert.equal(checkGrounding("Az „a” névelőt mássalhangzó hang előtt használjuk, például: a bed, a chair, a table.", articleAn), false);
+  assert.equal(checkGrounding("Az „an” névelőt magánhangzó hang előtt használjuk, például: an apple, an egg, an ice cream.", articleA), false);
+  assert.equal(checkGrounding("Az „an” névelőt magánhangzó hang előtt használjuk, például: an apple, an egg, an ice cream.", articleAn), true);
+});
+
+// Review #326 (Codex): a „< 4 szó” védelem a rövid név forráspéldájára is érvényes.
+test("egy kétszavas képaláírás („an armchair”) önmagában nem alapoz meg", () => {
+  assert.equal(checkGrounding("an armchair", articleAn), false);
 });
 
 test("más témájú magyar blokk, benne csak a magyar „a” névelővel: nem megalapozott", () => {

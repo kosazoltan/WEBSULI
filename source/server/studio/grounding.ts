@@ -70,13 +70,15 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // Spec 2026-10-05-bank-determinisztikus-normalizalas (mért: job 5b33202a, a kapu 4 hamis lelettel állt meg): a csak RÖVIDÍTÉSBŐL álló
   // fogalom („Kr. u. / i. sz.”) érdemi szólistája üres — a blokk szó szerinti „Kr. u. / i. sz.” szövege mellett is bukott. Ilyenkor a
   // teljes kifejezés szóhatáros előfordulása dönt (legalább két rövid szóból, hogy egy magányos betű ne igazoljon).
+  // Spec 2026-10-19-rovid-fogalom-megalapozas (mérve: „Where I Live” 639b5201 / 6f1158ce / 55736ce3): az EGYSZAVAS, 1–2 betűs NÉV
+  // („a”, „an”) érdemi szólistája is üres — itt eddig azonnal hamis lett, így a lecke semmilyen tartalommal nem mehetett át. Az ilyen
+  // nevet lent, a „< 4 szó” védelem UTÁN a saját szabálya (`shortTermGrounded`) dönti el.
+  let shortName = "";
   if (words.length === 0 && !formula) {
     const phrase = normalizeText(concept.term ?? "").trim();
     if (phrase.split(" ").length >= 2 && ` ${normalizeText(blockText)} `.includes(` ${phrase} `)) return true;
-    // Spec 2026-10-19-rovid-fogalom-megalapozas (mérve: „Where I Live” 639b5201 / 6f1158ce / 55736ce3): az 1–2 betűs NÉV („a”, „an”)
-    // érdemi szólistája is üres — itt eddig azonnal hamis lett, a definíció- és idézet-tartalékig sosem jutott, így a lecke
-    // semmilyen tartalommal nem mehetett át. Most a forrás saját példája („a lamp”) dönthet, különben a meglévő tartalékok jönnek.
-    if (phrase && shortTermExamplePresent(phrase, concept.quote ?? "", blockText)) return true;
+    if (!phrase || phrase.includes(" ")) return false;
+    shortName = phrase;
   }
 
   // Képlet-fogalomnál CSAK az előjel-pontos képlet dönt: az idézet-számok tartaléka előjel-vak („9-(+6)=+3” számai a „9-(-6)=+3”
@@ -87,6 +89,7 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   const haystack = normalizeText(blockText);
   // Egy pár szavas blokk nem taníthat fogalmat, bármit is állít a címke.
   if (haystack.split(" ").filter(Boolean).length < 4) return false;
+  if (shortName) return shortTermGrounded(shortName, concept, blockText);
 
   const tokens = haystack.split(" ").filter(Boolean);
   const stems = new Set(tokens.map(stem));
@@ -131,6 +134,25 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // különböző számot tartalmaz, és azok ≥ 75 %-a a blokkban is szerepel, a blokk a forrás
   // példáját dolgozza ki: megalapozott.
   return quoteNumbersPresent(concept.quote ?? concept.definition ?? "", haystack);
+}
+
+/**
+ * Spec 2026-10-19-rovid-fogalom-megalapozas + review #326: egyszavas, 1–2 betűs név („a”, „an”) megalapozása. A forrás saját példája
+ * („an armchair”) dönt; a definíció-tartalék CSAK akkor, ha a név megkülönböztetően, idézőjelben / kiemelve áll a blokkban („an”) —
+ * különben a testvérfogalmak („a” / „an”) közös definíciószavai („névelő”, „hang”, „előtt”) egymást is megalapoznák. Az idézetszám-
+ * tartalék itt nem fut.
+ */
+function shortTermGrounded(name: string, concept: MapConcept, blockText: string): boolean {
+  if (shortTermExamplePresent(name, concept.quote ?? "", blockText)) return true;
+  // A `name` normalizált (csak a-z, 0-9), így regexben escape nélkül is biztonságos.
+  if (!new RegExp(`[„"'“‚‘*«]\\s?${name}\\s?[”"'’‘“*»]`, "i").test(blockText)) return false;
+  const tokens = normalizeText(blockText).split(" ").filter(Boolean);
+  const stems = new Set(tokens.map(stem));
+  const present = (word: string): boolean => stems.has(stem(word)) || (word.length < STEM_LEN ? tokens.some((t) => t.startsWith(word)) : tokens.some((t) => t.includes(stem(word))));
+  const defWords = significantWords(concept.definition ?? "").filter((w) => !STOP_WORDS.has(w));
+  if (defWords.length === 0) return false;
+  const need = defWords.length < 2 ? defWords.length : Math.max(2, Math.ceil(defWords.length / 2));
+  return defWords.filter(present).length >= need;
 }
 
 /**
