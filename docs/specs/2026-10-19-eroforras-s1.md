@@ -28,14 +28,14 @@ S3 (AI-gyártás pazarlása).
 1. **Időzítők** (az adatbázis tétlenségben elaludhasson):
    - `scheduledPublishing`: óránként (`0 * * * *`) — a funkció megmarad, a percenkénti üres lekérdezés megszűnik;
    - `learning-worker`: indításkor + 30 percenként;
-   - stúdió-söprés: 5 perc (indításkor marad);
-   - okosítás-söprés: 5 perc;
+   - stúdió-söprés: 15 perc (indításkor marad);
+   - okosítás-söprés: 15 perc (review #324: az 5 perc egybeesne a Neon 5 perces elalvási küszöbével);
    - munkamenet-takarítás: 6 óra.
 2. **AI-gyorsítótár:** a hosszú gyártás mindkét töréspontja (`system` és kérés-szintű) `ttl: "1h"`.
 3. **Kitelepítés futás közben:**
    - **Számláló:** `executeWorkflow` számolja az élő futásokat (`activeWorkflowRuns()`).
-   - **Leállás:** SIGTERM-re a szerver nem fogad új kérést, és legfeljebb 280 s-ig vár, amíg a számláló 0 lesz; utána zárja a
-     poolt.
+   - **Leállás:** SIGTERM-re a szerver nem fogad új kérést, és legfeljebb 270 s-ig vár, amíg a számláló 0 lesz (a kivárás azonnal indul, a cron leáll); 3 s takarítás után
+     zárja a poolt (review #324).
    - **Render-beállítás** (a kód összevonása után, API-val): `maxShutdownDelaySeconds = 300`, build-szűrő a `docs/**`,
      `**/*.md`, `source/tests/**`, `.github/**` útvonalakra.
 4. **Neon:** az összevonás és a mérés után az endpoint minimuma 0,25 CU, felfüggesztés az alapértelmezett 5 perc után.
@@ -50,6 +50,6 @@ S3 (AI-gyártás pazarlása).
 - **Ütemezés:** HA a szerver fut, AKKOR a `scheduled_jobs`-t legfeljebb óránként kérdezi; a tanulási ellenőrzés legfeljebb
   30 percenként fut.
 - **Gyorsítótár:** HA hosszú gyártási kérés megy, AKKOR mindkét töréspont `ttl: "1h"` (egységteszt a kérés alakjára).
-- **Leállás:** HA SIGTERM jön, miközben futás él, AKKOR a szerver legfeljebb 280 s-ig vár a futás végére (egységteszt a
+- **Leállás:** HA SIGTERM jön, miközben futás él, AKKOR a szerver legfeljebb 270 s-ig vár a futás végére (egységteszt a
   várakozó függvényre).
 - **Kitelepítés:** a kitelepítés csak akkor indul, ha a csak olvasó őr szerint nincs futó gyártás, javítás vagy okosítás.
