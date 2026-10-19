@@ -19,7 +19,10 @@ export const SINGLE_RUN_MAX_TOKENS = 64_000;
 /** Egy forduló időkerete: a hosszú, gondolkodó fordulók streamelve futnak. */
 export const SINGLE_RUN_TIMEOUT_MS = 30 * 60_000;
 
-export type TurnBlock = { type: "text"; text: string } | { type: "source"; file: ExtractorFile };
+/** Spec 2026-10-19-eroforras-s3a: `cache` — a blokk végén 1 órás gyorsítótár-töréspont (állandó előtag / ismétlődő forrás). */
+export type TurnBlock = { type: "text"; text: string; cache?: boolean } | { type: "source"; file: ExtractorFile };
+/** Kérésenként legfeljebb ennyi blokk-jelölő (+ a rendszerblokk és a kérés-szintű jelölő ≤ 4, az API korlátja). */
+export const MAX_BLOCK_CACHE_MARKERS = 2;
 export type Turn = { role: "user" | "assistant"; blocks: TurnBlock[] };
 /** Kép / PDF natív tartalomblokk (data URL); minden más forrás már kinyert szöveg — szövegként megy. */
 const isBinarySource = (file: ExtractorFile) => /^data:[^;,]+;base64,/.test(file.content) && (file.kind === "image" || file.kind === "pdf");
@@ -52,9 +55,13 @@ export function anthropicClient(opts: { apiKey?: string; model?: string; client?
   return {
     model,
     async complete(system, turns, signal) {
+      // Spec 2026-10-19-eroforras-s3a: csak a kérés UTOLSÓ `MAX_BLOCK_CACHE_MARKERS` jelölt blokkja kap töréspontot.
+      const marked = turns.flatMap((t) => t.blocks).filter((b) => b.type === "text" && b.cache);
+      const keep = new Set(marked.slice(-MAX_BLOCK_CACHE_MARKERS));
       const messages: Anthropic.MessageParam[] = turns.map((t) => ({
         role: t.role,
-        content: t.blocks.map((b): Anthropic.ContentBlockParam => (b.type === "text" ? { type: "text", text: b.text }
+        content: t.blocks.map((b): Anthropic.ContentBlockParam => (b.type === "text"
+          ? { type: "text", text: b.text, ...(keep.has(b) ? { cache_control: { type: "ephemeral", ttl: "1h" } } : {}) }
           : isBinarySource(b.file) ? claudeSourceBlock(b.file) : { type: "text", text: sourceAsText(b.file) })),
       }));
       const stream = client.messages.stream({
