@@ -24,3 +24,9 @@ Terv: `docs/specs/2026-10-19-okositas-bank-igazitas.md`. Munkakönyvtár: `sourc
    - forrásszintű ellenőrzés: az `improveAsync` az igazítást a kapu előtt hívja, és a `previousProblems` a promptba kerül.
 5. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`.
 6. **Kitelepítés:** összevonás előtt az aktív-futás őr = 0.
+
+## Review #327 — pontosítás
+- **Igazítás csak sémahelyes feladaton:** a feladat csak akkor igazítható, ha az `openTaskSchema.safeParse` sikeres.
+- **Kivétel esetén:** az `alignTaskToSample` kivételénél a feladat visszaáll az eredetire. Az alakhibás feladatot a sémakapu
+  jelenti, így a hibalistás újrapróba elindul.
+- **Teszt:** alakhibás `requiredDistinct` → nincs kivétel, a bank érintetlen, a kapu hibát jelez.
