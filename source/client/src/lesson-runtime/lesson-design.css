@@ -27,31 +27,38 @@
   --fusion-soft: var(--ws-soft);
   --fusion-secondary: var(--ws-accent);
   background-color: var(--ws-surface);
-  background-image: linear-gradient(150deg, var(--ws-surface) 0%, color-mix(in srgb, var(--ws-surface) 40%, #FFFFFF) 70%);
+  /* Spec 2026-10-19-evfolyam-arculat-lathato: a sáv saját színátmenete (szabályterv 1.2 „Háttér”) — korábban a halvány alapfelület
+     fehérbe futott, így a sávok alig különböztek. */
+  background-image: linear-gradient(170deg, var(--ws-hero-from, var(--ws-surface)) 0%, var(--ws-hero-to, var(--ws-surface)) 100%);
   /* A 9–10. o. régi senior sávja 32px-es vonalazott papírt rajzolt (lesson-theme.css) — az átmenet a teljes felületet tölti ki. */
   background-size: auto; background-repeat: no-repeat;
   color: var(--ws-ink);
 }
 
 [data-band][data-experience][data-ws-theme="explorer"] {
+  --ws-hero-from: #C9EDC0; --ws-hero-to: #FBF6DC; --ws-accent-2: #9A6A00; --ws-accent-3: #1F6FA8;
   --ws-surface: #E9F9E9; --ws-accent: #17865F; --ws-ink: #174A39; --ws-panel: #FFFFFF; --ws-soft: #E5F8ED; --ws-deep: #225842;
   --ws-muted: #3D6352; --ws-line: #CFE3D6; --ws-strong: #157A57; --ws-strong-ink: #FFFFFF; --grade-size: 22px;
 }
 [data-band][data-experience][data-ws-theme="adventure"] {
+  --ws-hero-from: #F9D9A6; --ws-hero-to: #FFD9C2; --ws-accent-2: #0B7C71; --ws-accent-3: #9B2C3F;
   --ws-surface: #FFF0D2; --ws-accent: #C36A28; --ws-ink: #703C1B; --ws-panel: #FFFFFF; --ws-soft: #FFF3DF; --ws-deep: #754520;
   --ws-muted: #6E4A2E; --ws-line: #F0D9B5; --ws-strong: #A4561D; --ws-strong-ink: #FFFFFF; --grade-size: 19px;
   --lesson-check-head: #8E4417;
 }
 [data-band][data-experience][data-ws-theme="studio"] {
+  --ws-hero-from: #D9D6FF; --ws-hero-to: #EEE2FF; --ws-accent-2: #6D3FD8; --ws-accent-3: #1F6FA8;
   --ws-surface: #EFEFFF; --ws-accent: #5159A8; --ws-ink: #292F62; --ws-panel: #FFFFFF; --ws-soft: #EFEFFE; --ws-deep: #2B356B;
   --ws-muted: #4C5378; --ws-line: #D9DBF2; --ws-strong: #5159A8; --ws-strong-ink: #FFFFFF; --grade-size: 17px;
 }
 [data-band][data-experience][data-ws-theme="laboratory"] {
+  --ws-hero-from: #C9E3F8; --ws-hero-to: #F3F9FF; --ws-accent-2: #0B7480; --ws-accent-3: #3F4A5A;
   --ws-surface: #E6F3FF; --ws-accent: #226493; --ws-ink: #143B62; --ws-panel: #FFFFFF; --ws-soft: #E6F3FC; --ws-deep: #173C62;
   --ws-muted: #3D5873; --ws-line: #CFE1F0; --ws-strong: #226493; --ws-strong-ink: #FFFFFF; --grade-size: 16px;
 }
 /* 11–12.: sötét felület, sötét panelek világos szöveggel (§8: sötét háttéren világos szöveg). */
 [data-band][data-experience][data-ws-theme="future"] {
+  --ws-hero-from: #0B1A2E; --ws-hero-to: #1D3557; --ws-accent-2: #B9A6FF; --ws-accent-3: #F5B841;
   --ws-surface: #132540; --ws-accent: #0C929C; --ws-ink: #EFF8FF; --ws-panel: #233956; --ws-soft: #1B3150; --ws-deep: #0B1A2E;
   --ws-muted: #BCD0E4; --ws-line: #35506E; --ws-strong: #0C929C; --ws-strong-ink: #061A22; --grade-size: 16px;
   --ws-title: var(--ws-ink);
@@ -60,7 +67,6 @@
   --lesson-ok-bg: #12291B; --lesson-ok-bg-ink: #D9FFE4; --lesson-ok: #86EFAC; --lesson-ok-ink: #062A1C;
   --lesson-warn-bg: #3A2A08; --lesson-warn-ink: #FFE4A8; --lesson-error: #FDA4AF;
   --lesson-check-head: #FBBF24; --lesson-check-head-ink: #1A1400;
-  background-image: none;
 }
 
 /* Csendes nézet: a tompított paletta a témás tokeneken is érvényes (a terv megőrzi a kapcsolót). Minden témán világos, halk. */
@@ -246,3 +252,15 @@
   [data-ws-theme] .ws-section-mascot { order: -1; flex-basis: 100%; margin-left: 0; }
 }
 [data-ws-theme]:not([data-ws-theme="future"]) :is(.ws-block-marker, .ws-divider img) { mix-blend-mode: multiply; }
+
+/* ---------- Spec 2026-10-19-evfolyam-arculat-lathato: sávszín a kártyákon, látható Csendes-nézet-állapot ---------- */
+[data-band][data-experience][data-ws-theme] .lesson-block,
+[data-band][data-experience][data-ws-theme] .fusion-task,
+[data-band][data-experience][data-ws-theme] .fusion-method { box-shadow: inset 0 4px 0 var(--ws-accent), 0 5px 15px #1837540A; }
+/* Belső árnyék, nem szegély: az elrendezés pixelre a régi marad (mért: a +3 px-es szegély hat kártyán a lusta betöltésű
+   blokkjelzőt a betöltési sávon túlra tolta — block-art.spec). */
+/* A bekapcsolt Csendes nézet gombja tömör, jól látható (korábban a halk palettán #EEEFEA a #FFFEFA mellett — láthatatlan). A gomb a
+   MŰVELETET nevezi meg („Színes nézet”), ezért nincs aria-pressed (review #320) — a kiemelést a data-on állapot vezérli. */
+[data-band][data-experience][data-ws-theme] .learning-quiet[data-on="true"] {
+  background: var(--ws-strong); color: var(--ws-strong-ink); border-color: var(--ws-strong);
+}

@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Brain, PencilLine, Trophy, Download, RotateCcw, Mic, Leaf, Layers } from "lucide-react";
+import { BookOpen, Brain, PencilLine, Trophy, Download, RotateCcw, Mic, Leaf, Palette, Layers } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { experienceRoundSizes, type LessonExperience } from "@shared/lesson-experience";
 import { evaluateOpenAnswer, scoreSummary, sampleTaskIds } from "@shared/lesson-experience-score";
@@ -47,7 +47,9 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   const taskElements = useRef(new Map<string, HTMLElement>());
   const quizElements = useRef(new Map<string, HTMLElement>());
   const [savedFinished, setSavedFinished] = useState<boolean | null>(null);
-  const [quiet, setQuiet] = useLearningPreference<boolean>("websuli:learning-quiet", false, (v): v is boolean => typeof v === "boolean");
+  // Spec 2026-10-19-evfolyam-arculat-lathato: új kulcs — a régi érték láthatatlanul beragadhatott (a gomb nem mutatta az állapotot),
+  // és minden leckét az évfolyam-színek nélkül, egyszínűen mutatott; egyszer elengedjük, mindenki színes nézettel indul.
+  const [quiet, setQuiet] = useLearningPreference<boolean>("websuli:learning-quiet-v2", false, (v): v is boolean => typeof v === "boolean");
   const jumpToTeaching = (section: number) => { setTeachingSection(section); setTeachingOverview(false); changeTab("teaching"); };
   const { taskRound, quizRound } = experienceRoundSizes(e);
   const taskState = useExperienceRound(e.tasks, taskRound, `${storageKey}:tasks`, () => sampleTaskIds(e.tasks, taskRound));
@@ -82,7 +84,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
         changeTab(tabs[next].id); document.getElementById(`${prefix}-fusion-tab-${tabs[next].id}`)?.focus();
       }
     }}><Icon size={19} /><span>{label}</span></button>)}</nav>
-    <div className="learning-toolbar"><span className="fusion-eyebrow">Egy lépés, egy új felismerés</span><button className="lesson-ghost-btn learning-quiet" aria-pressed={quiet} onClick={() => setQuiet(!quiet)}><Leaf size={16} /> Csendes nézet</button></div>
+    <div className="learning-toolbar"><span className="fusion-eyebrow">Egy lépés, egy új felismerés</span><button type="button" className="lesson-ghost-btn learning-quiet" data-on={quiet} onClick={() => setQuiet(!quiet)} title={quiet ? "Most a tompított, egyszínű nézet látszik — vissza az évfolyam színeihez" : "Tompított, egyszínű nézet kevesebb ingerrel"} data-testid="learning-quiet">{quiet ? <><Palette size={16} /> Színes nézet</> : <><Leaf size={16} /> Csendes nézet</>}</button></div>
     <div role="tabpanel" id={`${prefix}-fusion-panel-teaching`} aria-labelledby={`${prefix}-fusion-tab-teaching`} hidden={tab !== "teaching"} className="fusion-panel space-y-6">
       <div className="learning-book-head"><label className="fusion-label">Fejezet<select aria-label="Fejezet" value={teachingSection} onChange={event => { setTeachingSection(Number(event.target.value)); setTeachingOverview(false); }}>{headings.map((heading, index) => <option key={index} value={index}>{index + 1}. {heading}</option>)}</select></label><LearningMode overview={teachingOverview} onChange={setTeachingOverview} label="tananyag" /></div>
       {children(teachingOverview ? null : teachingSection)}
