@@ -40,7 +40,7 @@ továbbra sem követelik a teljes eredményt*.
 5. **Utasítások:**
    - Szerző (`experience-builder`, `role-skills`, `lesson-experience-score`, `lesson-experience`): betűs végeredmény →
      `typedAnswers` `kind: "polynomial"`, nem `required`-csoport.
-   - Lektor (`role-skills`, `support-skills`): a polinomos típusos mező a teljes eredményt követeli — nem blokkolandó azon,
+   - Lektor (`role-skills`, a „Javítás iránya” pont): a polinomos típusos mező a teljes eredményt követeli — nem blokkolandó azon,
      hogy a tagok nincsenek `required`-ben.
    - Mindkét séma (`openTaskSchema`, `bank-schema` strict) ismeri az új fajtát és alakot.
 

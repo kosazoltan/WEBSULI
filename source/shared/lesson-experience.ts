@@ -1,7 +1,7 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
 import { z } from "zod";
 import { LESSON_FLAIRS } from "./lesson-visuals";
-import { LESSON_SCORING_VERSION, isExpressionText, referenceValue } from "./answer-value";
+import { LESSON_SCORING_VERSION, POLYNOMIAL_SCORING_VERSION, TYPED_SCORING_VERSION, isValidReference } from "./answer-value";
 
 /** Pedagogy shared by the structured runtime and the standalone HTML author. */
 export const LEGACY_LESSON_METHOD_VERSION = "fusion-7.4-1" as const;
@@ -26,8 +26,8 @@ const binding = { id: text(64), sectionIndex: z.number().int().min(0), coversCon
 
 /** Spec 2026-09-30 (U1, C13): típusos részeredmény zárt matematikai feladathoz — az érték dönt, nem a kulcsszó. */
 export const typedAnswerSchema = z.object({
-  part: text(40), kind: z.enum(["number", "fraction", "expression"]), value: text(120),
-  unit: text(24).optional(), form: z.enum(["any", "simplified-fraction", "decimal", "intermediate-step"]).optional(),
+  part: text(40), kind: z.enum(["number", "fraction", "expression", "polynomial"]), value: text(120),
+  unit: text(24).optional(), form: z.enum(["any", "simplified-fraction", "decimal", "intermediate-step", "expanded", "factored"]).optional(),
 });
 /** Kategóriakvóta: „2 fás és 2 lágy szárú példa” — kategóriánként legalább `count` KÜLÖNBÖZŐ elem, egy szinonimacsoport egy elem. */
 const canonicalAlternative = (s: string) => s.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim();
@@ -102,9 +102,11 @@ export const experiencePacketSchema = z.object({
 }).superRefine((e, ctx) => {
   // Típusos mező csak a 2-es pontozási szerződéssel; a referenciaérték értelmezhető legyen (a pontozó nem találgat).
   const typed = e.tasks.filter((t) => t.typedAnswers?.length || t.requiredDistinct?.length);
-  if (typed.length && (e.scoringVersion ?? 1) < LESSON_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Típusos feladathoz scoringVersion=${LESSON_SCORING_VERSION} kell (${typed[0].id}).` });
+  if (typed.length && (e.scoringVersion ?? 1) < TYPED_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Típusos feladathoz scoringVersion=${TYPED_SCORING_VERSION} kell (${typed[0].id}).` });
+  const poly = typed.find((t) => t.typedAnswers?.some((a) => a.kind === "polynomial"));
+  if (poly && (e.scoringVersion ?? 1) < POLYNOMIAL_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Betűs (polynomial) feladathoz scoringVersion=${POLYNOMIAL_SCORING_VERSION} kell (${poly.id}).` });
   for (const t of typed) for (const a of t.typedAnswers ?? []) {
-    if (a.form === "intermediate-step" ? !isExpressionText(a.value) : referenceValue(a.value) === null) ctx.addIssue({ code: "custom", path: ["tasks"], message: `${t.id}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető.` });
+    if (!isValidReference(a)) ctx.addIssue({ code: "custom", path: ["tasks"], message: `${t.id}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető.` });
   }
   if (e.version === LEGACY_LESSON_METHOD_VERSION) {
     if (e.methods.length < 11 || e.methods.length > 20 || e.tasks.length !== 45 || e.quiz.length !== 75 || e.quiz.some(q => q.options.length !== 3)) ctx.addIssue({ code: "custom", message: "A régi módszer 11–20 módszert, 45 feladatot és 75 háromválaszos kvízt igényel." });
@@ -167,11 +169,15 @@ export const experiencePacketSchema = z.object({
  * (hiányzik = 1, a régi kliens is pontozza). Mért (élő Egyiptom-futás 7ee8913e, 2026-10-01): a bank típusos feladatot írt,
  * a csomag-ellenőrzés `scoringVersion=2`-t követelt, amit senki nem állított be — a csomag 4 kísérlet után bukott.
  */
-export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: unknown[]; requiredDistinct?: unknown[] }>, current?: unknown): number | undefined {
+export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: ReadonlyArray<{ kind?: unknown; [key: string]: unknown }>; requiredDistinct?: unknown[] }>, current?: unknown): number | undefined {
   // Review #166: a meglévő verzió csak érvényes tartományban (1..LESSON_SCORING_VERSION, egész) marad meg; a hibás érték a régi alapérték.
   const valid = typeof current === "number" && Number.isInteger(current) && current >= 1 && current <= LESSON_SCORING_VERSION ? current : undefined;
   const typed = tasks.some((t) => t.typedAnswers?.length || t.requiredDistinct?.length);
-  return typed ? LESSON_SCORING_VERSION : valid;
+  // Spec 2026-10-19-algebrai-referencia: a betűs végeredmény a 3-as szerződés; a csak számos típusos lecke 2-n marad, hogy a
+  // már megnyitott (régebbi) kliens ne kapjon fölöslegesen frissítési kérést.
+  const poly = tasks.some((t) => t.typedAnswers?.some((a) => a?.kind === "polynomial"));
+  const needed = poly ? POLYNOMIAL_SCORING_VERSION : typed ? TYPED_SCORING_VERSION : undefined;
+  return needed === undefined ? valid : Math.max(needed, valid ?? 0);
 }
 
 export const experienceSchema = experiencePacketSchema.superRefine((e, ctx) => {
@@ -249,7 +255,7 @@ export function bankPacketContract(c: { sectionIndex: number; conceptIds: readon
     "3. EBBEN a csomagban legalább egy mode=\"oral\" és egy mode=\"written\" nyílt feladat.",
     "4. Kérdés-egyediség: a kérdés kulcsa (kisbetű, írásjel nélkül; a + − · × : / jel és a számok megmaradnak) nem ismétlődhet a csomagon belül, sem a korábbi csomagok kérdéseivel és kapukérdéseivel; két kapukérdés (gate) csak különböző lehet.",
     "5. Egyválasztós tétel (kvíz; gate/myth/popup módszer): 3–4 különböző opció, PONTOSAN egy igaz, minden opcióhoz magyarázat; a correctIndex opciójának száma egyezzen a magyarázatban helyesnek mondott számmal; minden kiírt „a · b = c” állítás igaz (a program kiszámolja).",
-    "6. Nyílt feladat: a sample a saját rubrikán 1 pont (a pontozó szabályai lent); számolós feladatnál typedAnswers, amelynek value-ját a program a kérdés kifejezéséből újraszámolja; a végeredmény nem required-csoport.",
+    "6. Nyílt feladat: a sample a saját rubrikán 1 pont (a pontozó szabályai lent); számolós feladatnál typedAnswers, amelynek value-ját a program a kérdés kifejezéséből újraszámolja; a végeredmény nem required-csoport; betűs végeredménynél kind: polynomial (form: expanded / factored).",
     "7. Tilos: ábrára („az ábrán”, „N. ábra”), forrásra, füzetre, tananyagra („a tananyag szerint”, „a tananyag nem …”) hivatkozni — a visszajelzés magát a tényt mondja ki; csomagon kívüli fogalom; a tanításban nem szereplő tény; párosításban ismétlődő oldal.",
     "8. JAVÍTÁSI MÓD: csak a JAVÍTÁSI JOGOSULTSÁG tételei és mezői cserélhetők, eredeti id-val, minden mezővel; új id és törlés tilos; a többit a program változatlanul megőrzi.",
   ].join("\n");
