@@ -39,6 +39,10 @@ import type { PromptRole } from "../../../shared/instruction-bundles/roles";
 import type { ExtractorFile } from "../extractor";
 import type { LessonConversation, TurnBlock } from "./conversation";
 import { TelemetryRecorder, telemetryOf, timed } from "./telemetry";
+import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock, poolMatches, type CatalogMapLike } from "../../catalog/s6-context";
+import type { CatalogPool } from "../../catalog/retrieval";
+import { isMemorySnapshot, memorySnapshot, snapshotPromptBlock, subjectMemoryEnabled, type MemorySnapshot } from "../../memory/subject-memory";
+import { subjectKeyOf } from "../../../shared/subject-key";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
 /** Állomásonként ennyi javító forduló jár a determinisztikus visszajelzés után. */
@@ -411,6 +415,52 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const pastBank = resumed?.stage === "lektor" || resumed?.stage === "bankRepair";
   const pastAnimator = pastBank || resumed?.stage === "bank";
   if (resumed) log(`[EGYFUTÁS] Folytatás (${jobId}): ${resumed.stage} állomástól, a mentett beszélgetéssel (${conversation.state().turns.length} forduló)`);
+
+  // Spec 2026-10-19-tudasbank-s5-s6-ujrabekotes (kapcsolós, alapból KI): a tantárgyi katalógus (S6) és a tantárgyi memória (S5).
+  // Jobonként egyszer töltődik és a jobon marad (folytatáskor ugyanaz); kikapcsolva a betöltő nem hívódik, a kérések bájtra azonosak.
+  // Betöltési hiba, ismeretlen tantárgy vagy betöltő hiánya → a gyártás nélküle fut (fail-open, naplózva).
+  const knowledgeMap: CatalogMapLike = { meta: { title: map.meta.title, subject: map.meta.subject, classroom: map.meta.classroom }, concepts };
+  async function ensureCatalogPool(step: Exclude<SingleRunPhase, "extract">): Promise<CatalogPool | undefined> {
+    if (!catalogS6Enabled()) return undefined;
+    if (poolMatches(output.catalog, knowledgeMap)) return output.catalog;
+    const query = catalogQueryOf(knowledgeMap);
+    if (!query || !store.loadCatalogRows) return undefined;
+    try {
+      const pool = catalogPoolFor(knowledgeMap, await store.loadCatalogRows(query.subject));
+      if (!pool) return undefined;
+      output = { ...output, catalog: pool };
+      await save(step, output);
+      log(`[EGYFUTÁS] Katalógus-pool: ${query.subject}, ${query.grade}. évf. — ${pool.items.length} tétel, ebből ${pool.items.filter((i) => i.verbatim).length} szó szerint átvehető`);
+      return pool;
+    } catch (error) {
+      log(`[EGYFUTÁS] A katalógus-lekérés elmaradt: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
+      return undefined;
+    }
+  }
+  async function ensureSubjectMemory(step: Exclude<SingleRunPhase, "extract">): Promise<MemorySnapshot | undefined> {
+    if (!subjectMemoryEnabled()) return undefined;
+    const subject = subjectKeyOf(knowledgeMap.meta.subject);
+    if (!subject) return undefined;
+    if (isMemorySnapshot(output.subjectMemory, subject)) return output.subjectMemory;
+    if (!store.loadSubjectMemory) return undefined;
+    try {
+      const snapshot = memorySnapshot(await store.loadSubjectMemory(subject), subject, Date.now());
+      output = { ...output, subjectMemory: snapshot };
+      await save(step, output);
+      log(`[EGYFUTÁS] Tantárgyi memória: ${subject} — ${snapshot.cards.length} nyitott kártya`);
+      return snapshot;
+    } catch (error) {
+      log(`[EGYFUTÁS] A tantárgyi memória betöltése elmaradt: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
+      return undefined;
+    }
+  }
+  /** A tervező / szerző kérésének kiegészítése; üres, ha egyik kapcsoló sincs bekapcsolva vagy nincs mit adni. */
+  async function knowledgeBlock(role: "pedagogue" | "author"): Promise<string> {
+    const catalog = catalogS6Enabled() ? planningContextBlock(knowledgeMap, await ensureCatalogPool(role)) : "";
+    const memory = snapshotPromptBlock(await ensureSubjectMemory(role), role);
+    return [catalog, memory].filter(Boolean).join("\n");
+  }
+  const withKnowledge = (prompt: string, block: string) => (block ? `${prompt}\n${block}` : prompt);
   await save(resumed ? resumeStep[resumed.stage] : "pedagogue", output, resumed ? { status: "running", error: null, finishedAt: null } : {});
   try {
     return await produce();
@@ -426,7 +476,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   await workflowPhase("pedagogue");
   phase("pedagogue", resumed?.outline ? "A mentett tananyagterv ellenőrzése…" : input.approvedOutline ? "A jóváhagyott tanulási terv ellenőrzése…" : "A tananyagterv készül…");
   const planned = resumed?.outline ?? input.approvedOutline;
-  const outline = planned !== undefined ? approvedOutlineOf(planned, concepts) : await runStation(station, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${buildPedagoguePrompt(promptMap, undefined, owner)}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
+  const outline = planned !== undefined ? approvedOutlineOf(planned, concepts) : await runStation(station, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${withKnowledge(buildPedagoguePrompt(promptMap, undefined, owner), await knowledgeBlock("pedagogue"))}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
     const fixed = autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline;
     const parsed = outlineSchema.safeParse(fixed);
     if (!parsed.success) return { ok: false, problems: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
@@ -439,8 +489,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   // 3. Tananyag (tanítás).
   await workflowPhase("author");
   phase("author", "A tananyag készül…");
+  const authorKnowledge = resumed?.lesson ? "" : await knowledgeBlock("author");
   const authorRequest = (notes: Parameters<typeof buildAuthorPrompt>[2]) =>
-    withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
+    withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner), authorKnowledge)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
   const validateLesson = (json: unknown): { ok: true; value: Lesson } | { ok: false; problems: string[] } => {
     const parsed = lessonSchema.safeParse({ ...(json as object), mapId, sourceOnly: true });
     if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
@@ -537,7 +588,12 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     // Spec 2026-10-16-gyartas-haladas: a bank a leghosszabb szakasz — egységenként és javító kísérletenként jelez a felületnek.
     const label = extra.reviewFeedback?.length ? "Bankjavítás a lektor jelzései alapján" : "Gyakorlóbank";
     let progress = { done: 0, total: base.sections.length };
+    // Spec 2026-10-19 (S6/S5, kapcsolós): a bank a katalógus-poolt és a bank-szerep memória-blokkját kapja; üresen semmi.
+    const catalogPool = await ensureCatalogPool("animator");
+    const memoryBlock = snapshotPromptBlock(await ensureSubjectMemory("animator"), "bank");
     return buildLessonExperience(base, concepts, {
+      ...(catalogPool ? { catalog: catalogPool } : {}),
+      ...(memoryBlock ? { memory: memoryBlock } : {}),
       onProgress: (p) => {
         progress = { done: p.done, total: p.total };
         // Review #264: a számláló bankcsomagot számol (egy sok fogalmas fejezet több csomag is lehet), a készülőnél a fejezetet nevezzük meg.
