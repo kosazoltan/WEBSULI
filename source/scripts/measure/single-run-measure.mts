@@ -18,6 +18,23 @@ const out: Record<string, unknown> = { label, target, startedAt: new Date().toIS
 type File = { name: string; kind: "text" | "image" | "pdf"; content: string };
 let files: File[];
 let sourceText = "";
+let mapSubject = "";
+
+// Spec 2026-10-19-tudasbank-s5-s6-ujrabekotes (A/B): MEASURE_KNOWLEDGE=1 → a térkép tantárgyának katalógus-tételei és memória-kártyái
+// az élesből (csak OLVASVA) az eldobható adatbázisba másolódnak, hogy a STUDIO_CATALOG_S6 / STUDIO_SUBJECT_MEMORY ág valódi adattal
+// fusson. Más tantárgy soha. A kapcsolók a futtató környezetéből jönnek (a KI-ág ugyanezzel a másolattal mérhető).
+type KnowledgeCopy = { catalog: unknown[]; cards: unknown[]; events: unknown[] };
+async function readKnowledge(subjectText: string): Promise<KnowledgeCopy> {
+  const { subjectKeyOf } = await import("../../shared/subject-key");
+  const subject = subjectKeyOf(subjectText);
+  if (!subject) return { catalog: [], cards: [], events: [] };
+  return withReadOnlyDb(async (q) => {
+    const catalog = (await q<{ r: unknown }>("SELECT row_to_json(t) AS r FROM catalog_items t WHERE subject = $1", [subject])).map((x) => x.r);
+    const cards = (await q<{ r: unknown }>("SELECT row_to_json(t) AS r FROM subject_memory_cards t WHERE subject = $1", [subject])).map((x) => x.r);
+    const events = (await q<{ r: unknown }>("SELECT row_to_json(e) AS r FROM subject_memory_events e JOIN subject_memory_cards c ON c.fingerprint = e.card_fingerprint WHERE c.subject = $1", [subject])).map((x) => x.r);
+    return { catalog, cards, events };
+  });
+}
 if (target.startsWith("file:")) {
   const path = target.slice(5);
   const lower = path.toLowerCase();
@@ -28,12 +45,28 @@ if (target.startsWith("file:")) {
     files = [{ name: path.split(/[\\/]/).pop()!, kind, content: `data:${mime};base64,${readFileSync(path).toString("base64")}` }];
   }
 } else {
-  const [row] = await withReadOnlyDb((q) => q<{ id: string; title: string; source_text: string }>("SELECT id, title, source_text FROM knowledge_maps WHERE id::text LIKE $1 LIMIT 1", [`${target}%`]));
+  const [row] = await withReadOnlyDb((q) => q<{ id: string; title: string; subject: string; source_text: string }>("SELECT id, title, subject, source_text FROM knowledge_maps WHERE id::text LIKE $1 LIMIT 1", [`${target}%`]));
   if (!row?.source_text) throw new Error("Nincs ilyen (forrásszöveges) térkép.");
   sourceText = row.source_text;
-  out.sourceMap = { id: row.id, title: row.title, chars: sourceText.length };
+  out.sourceMap = { id: row.id, title: row.title, subject: row.subject, chars: sourceText.length };
+  mapSubject = row.subject;
   files = [{ name: "forras.txt", kind: "text", content: sourceText }];
 }
+
+// A/B (2026-10-19): MEASURE_SAME_MAP=1 → az éles térkép és fogalmai (csak OLVASVA) az eldobható DB-be másolódnak, és a motor a KÉSZ
+// térképből indul (a forrást nem nyeri ki újra) — így a két ág ugyanazokkal a fogalmakkal fut, nem a kinyerés véletlenjével.
+const sameMap = process.env.MEASURE_SAME_MAP === "1" && !target.startsWith("file:")
+  ? await withReadOnlyDb(async (q) => {
+    const [map] = (await q<{ r: Record<string, unknown> }>("SELECT row_to_json(t) AS r FROM knowledge_maps t WHERE id::text LIKE $1 LIMIT 1", [`${target}%`])).map((x) => x.r);
+    const concepts = (await q<{ r: unknown }>("SELECT row_to_json(t) AS r FROM km_concepts t WHERE map_id::text LIKE $1", [`${target}%`])).map((x) => x.r);
+    return map ? { map: { ...map, created_by: null, approved_by: null }, concepts } : null;
+  })
+  : null;
+if (process.env.MEASURE_SAME_MAP === "1" && !sameMap) throw new Error("MEASURE_SAME_MAP: a térkép nem másolható (helyi fájl, vagy nincs ilyen éles térkép).");
+if (sameMap) out.sameMap = { id: sameMap.map.id, concepts: sameMap.concepts.length };
+const knowledge = process.env.MEASURE_KNOWLEDGE === "1" && mapSubject ? await readKnowledge(mapSubject) : null;
+if (knowledge) out.knowledgeCopy = { catalog: knowledge.catalog.length, cards: knowledge.cards.length, events: knowledge.events.length };
+out.flags = { STUDIO_CATALOG_S6: process.env.STUDIO_CATALOG_S6 ?? null, STUDIO_SUBJECT_MEMORY: process.env.STUDIO_SUBJECT_MEMORY ?? null };
 
 // 2) Eldobható Postgres; a séma a drizzle-kit exportból. Az éles kapcsolat innentől nem használható (biztonsági őr lent).
 const name = `websuli-measure-${randomBytes(6).toString("hex")}`;
@@ -48,10 +81,37 @@ try {
   for (let i = 0; i < 60; i++) { try { await pool.query("select 1"); break; } catch { await new Promise((r) => setTimeout(r, 500)); } }
   await pool.query(cmd(process.execPath, ["node_modules/drizzle-kit/bin.cjs", "export", "--dialect=postgresql", "--schema=./shared/schema.ts"]));
   await pool.query("INSERT INTO users(id,email,is_admin) VALUES ('measure-owner','measure@test.invalid',true)");
+  // Az alkalmazás kapcsolata MINDEN további lépés előtt (a próba térkép-betöltése is) az eldobható adatbázisra áll.
   process.env.DATABASE_URL = url;
   delete process.env.DEV_DATABASE_URL;
   process.env.NODE_ENV = "test"; // a server/db.ts fejlesztői ága ne vihesse máshová
   if (!/@127\.0\.0\.1:\d+\/websuli_measure$/.test(process.env.DATABASE_URL)) throw new Error("Biztonsági őr: a mérés csak az eldobható helyi adatbázisra írhat.");
+  if (knowledge) {
+    // A sorok az éles oszlopneveivel (row_to_json) → json_populate_recordset: a típusokat (jsonb, text[], timestamp) a séma adja.
+    await pool.query("INSERT INTO catalog_items SELECT * FROM json_populate_recordset(null::catalog_items, $1::json)", [JSON.stringify(knowledge.catalog)]);
+    await pool.query("INSERT INTO subject_memory_cards SELECT * FROM json_populate_recordset(null::subject_memory_cards, $1::json)", [JSON.stringify(knowledge.cards)]);
+    await pool.query("INSERT INTO subject_memory_events SELECT * FROM json_populate_recordset(null::subject_memory_events, $1::json)", [JSON.stringify(knowledge.events)]);
+  }
+  if (sameMap) {
+    await pool.query("INSERT INTO knowledge_maps SELECT * FROM json_populate_record(null::knowledge_maps, $1::json)", [JSON.stringify(sameMap.map)]);
+    await pool.query("INSERT INTO km_concepts SELECT * FROM json_populate_recordset(null::km_concepts, $1::json)", [JSON.stringify(sameMap.concepts)]);
+  }
+  if (process.env.MEASURE_DRY === "1") {
+    // Modellhívás nélküli próba: a másolat az eldobható adatbázisban (költség: 0).
+    const count = async (table: string) => Number((await pool.query(`SELECT count(*)::int AS n FROM ${table}`)).rows[0].n);
+    out.dry = { catalog_items: await count("catalog_items"), subject_memory_cards: await count("subject_memory_cards"), subject_memory_events: await count("subject_memory_events"),
+      knowledge_maps: await count("knowledge_maps"), km_concepts: await count("km_concepts") };
+    if (sameMap) {
+      // A motor ugyanígy tölti a térképet — a taníthatónak (kept / edited) jelölt fogalmak száma.
+      const { createDrizzlePipelineStore } = await import("../../server/studio/pipeline-store");
+      const loaded = await (await createDrizzlePipelineStore()).loadMap(String(sameMap.map.id));
+      out.dry = { ...(out.dry as object), taughtConcepts: loaded?.concepts.length ?? 0, mapSubject: loaded?.meta.subject ?? null };
+      const { dbPool } = await import("../../server/db");
+      await dbPool.end().catch(() => undefined);
+    }
+    await pool.end();
+    throw Object.assign(new Error("MEASURE_DRY"), { dry: true });
+  }
   process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY ||= process.env.ANTHROPIC_API_KEY ?? "";
 
   // 3) A motor az éles bekötéssel azonos függőségekkel (fő + friss beszélgetések, adattár); a telemetria a jobra kerül.
@@ -65,7 +125,7 @@ try {
   let error: string | null = null;
   let result: Awaited<ReturnType<typeof runSingleLesson>> | undefined;
   try {
-    result = await runSingleLesson({ files, ownerId: "measure-owner" }, {
+    result = await runSingleLesson(sameMap ? { files: [], mapId: String(sameMap.map.id), ownerId: "measure-owner" } : { files, ownerId: "measure-owner" }, {
       conversation,
       fresh: (system) => createLessonConversation(system, { onFallback: (reason) => logs.push(`FALLBACK (friss): ${reason}`) }),
       store: await createDrizzlePipelineStore(),
@@ -80,7 +140,7 @@ try {
   out.job = job ? { step: job.step, status: job.status, error: job.error?.slice(0, 500) ?? null, qualityNotes: job.output?.qualityNotes ?? [], warnings: job.output?.quality?.warnings ?? [] } : null;
   out.telemetry = job?.output?.telemetry ?? null;
   out.fallback = logs.filter((l) => l.startsWith("FALLBACK"));
-  out.gateLogs = logs.filter((l) => /Válaszkulcs|Kvíz-előszűrő|quiz-blind|answer-key|Terjedelmi|Forrás-helyesbítés|bankcsomag|kivéve|lektor/i.test(l)).map((l) => l.slice(0, 300));
+  out.gateLogs = logs.filter((l) => /Válaszkulcs|Kvíz-előszűrő|quiz-blind|answer-key|Terjedelmi|Forrás-helyesbítés|bankcsomag|kivéve|lektor|Katalógus|katalógus|memória/i.test(l)).map((l) => l.slice(0, 300));
   if (result) {
     const lesson = (await pool.query("SELECT json FROM lessons WHERE id=$1", [result.lessonId])).rows[0].json;
     const concepts = (await pool.query("SELECT term, definition, quote, exam_weight AS \"examWeight\" FROM km_concepts WHERE map_id=$1", [result.mapId])).rows;
@@ -92,6 +152,8 @@ try {
   // Az alkalmazás saját kapcsolata (server/db) is lezárul a konténer eltávolítása előtt — különben a kilépéskor kezeletlen hibát dob.
   const { dbPool } = await import("../../server/db");
   await dbPool.end().catch(() => undefined);
+} catch (e) {
+  if (!(e as { dry?: boolean }).dry) throw e;
 } finally {
   try { cmd(docker, ["rm", "-f", id]); } catch { /* már leállt */ }
 }
