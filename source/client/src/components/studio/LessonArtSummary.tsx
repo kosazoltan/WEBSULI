@@ -24,7 +24,7 @@ export function LessonArtSummary({ lessonId, htmlFileId }: { lessonId?: string; 
   const meta = typeof data.subject === "string" && typeof data.title === "string" ? { subject: data.subject, title: data.title } : undefined;
   const stored = artSummary(data.art, band, DESIGN_ASSET_CATALOG, meta);
   // Review #322: a tárolt, de az új szabály szerint nem illő kép helyett a lejátszóval azonos friss választás (nem „Régi lecke”).
-  const s = stored.legacy && data.art?.picture && meta ? { ...stored, legacy: false, art: lessonArtFor({ ...meta, seed: fileId, art: data.art }, band) } : stored;
+  const s = stored.legacy && data.art?.picture && meta ? { ...stored, legacy: false, art: lessonArtFor({ ...meta, seed: (lesson.data as { lessonId?: string } | undefined)?.lessonId ?? data.title, art: data.art }, band) } : stored;
   const fromDb = !(stored.legacy && s.art);
   const picture = s.art?.cover ?? s.art?.hero;
   return (
