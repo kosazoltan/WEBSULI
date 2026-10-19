@@ -10,14 +10,10 @@ export function isRepairable(contentType: string | undefined): boolean {
 
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-/** Kis szinonimaszótár: a régi címek gyakran angolul nevezik meg a tárgyat. */
-const SYNONYMS: Record<string, string[]> = {
-  angol: ["angol", "english"],
-  english: ["english", "angol"],
-  nemet: ["nemet", "german", "deutsch"],
-  matek: ["matek", "matematika", "math"],
-  matematika: ["matematika", "matek", "math"],
-};
+/** Kis szinonimaszótár: a régi címek gyakran angolul nevezik meg a tárgyat. Csoportonként kétirányú (review #318). */
+const SYNONYM_GROUPS = [["angol", "english"], ["nemet", "german", "deutsch"], ["matek", "matematika", "math"]];
+/** `Map`, nem objektum-literál: az örökölt kulcs („constructor”) ne adjon vissza függvényt (review #318). */
+const SYNONYMS = new Map<string, string[]>(SYNONYM_GROUPS.flatMap((g) => g.map((w) => [w, g] as [string, string[]])));
 
 /** „osztályos”, „osztálynak”, „osztály” → az évfolyam jelölése. */
 const isGradeWord = (w: string) => /^osztaly/.test(w);
@@ -34,6 +30,6 @@ export function matchesRepairQuery(file: RepairableFile, query: string): boolean
     }
     if (isGradeWord(w)) return grade !== null || title.includes("osztaly");
     // Szókezdetre illik: a „barangolás” ne találja az „angol”-t.
-    return (SYNONYMS[w] ?? [w]).some((s) => haystack.split(/[^\p{L}\p{N}]+/u).some((word) => word.startsWith(s)));
+    return (SYNONYMS.get(w) ?? [w]).some((s) => haystack.split(/[^\p{L}\p{N}]+/u).some((word) => word.startsWith(s)));
   });
 }
