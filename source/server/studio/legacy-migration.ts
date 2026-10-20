@@ -12,7 +12,7 @@ import { htmlToText } from "./safe-fetch";
 
 export type LegacyMode = "off" | "pilot" | "all";
 /** A kapcsoló — tulajdonosi döntés 2026-10-20: előbb 3 próba, utána mind. */
-export const LEGACY_MIGRATION_MODE: LegacyMode = "pilot";
+export const LEGACY_MIGRATION_MODE: LegacyMode = "all";
 /** Review #349: a határnap Budapest szerinti éjfél (2026. június 1-jén UTC+2). */
 export const LEGACY_CUTOFF = new Date("2026-06-01T00:00:00+02:00");
 export const LEGACY_JOB_TYPE = "legacy-studio-migration";
@@ -55,7 +55,9 @@ export function legacyCandidates(rows: readonly LegacyRow[], mode: LegacyMode): 
   return { queue: [...pool].sort((a, b) => b.views - a.views || a.createdAt.getTime() - b.createdAt.getTime()).map((r) => r.id), skipped };
 }
 
-export type LegacyJobState = { attempt: number; startedAt: number; runPhase: string | null; runUpdatedAt: Date | null; leaseAlive: boolean; targetIsLesson: boolean; jobResumable: boolean };
+export type LegacyJobState = { attempt: number; startedAt: number; runPhase: string | null; runUpdatedAt: Date | null; leaseAlive: boolean; targetIsLesson: boolean; jobResumable: boolean;
+  /** Review #350: a Stúdió-job épp fut (pl. egy másik példány folytatása) — élő, nem indul mellé újabb. */
+  jobRunning?: boolean };
 export type LegacyDecision = "done" | "running" | "waiting" | "resume" | "restart" | "error";
 const STALE_MS = 45 * 60_000;
 /** A futás DB-sora aszinkron íródik: az indítás utáni hiánya még nem leállás. */
@@ -65,7 +67,7 @@ const START_GRACE_MS = 10 * 60_000;
 export function reconcileLegacy(s: LegacyJobState, now: number): LegacyDecision {
   if (s.targetIsLesson) return "done";
   // Review #349: az élő lízing (a végrehajtó szívverése) a futás jele, akkor is, ha a fázis rég nem változott.
-  if (s.leaseAlive) return "running";
+  if (s.leaseAlive || s.jobRunning) return "running";
   if (s.runPhase === null && now - s.startedAt < START_GRACE_MS) return "running";
   // A kész futás, amely mégsem a célt alakította át, nem újrapróbálandó (duplikátum keletkezne) — hiba, kézi vizsgálatra.
   if (s.runPhase === "done") return "error";
@@ -157,13 +159,15 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       const [run] = runId ? await db.select({ phase: oneStepRuns.phase, updatedAt: oneStepRuns.updatedAt, jobId: oneStepRuns.jobId, error: oneStepRuns.error }).from(oneStepRuns).where(eq(oneStepRuns.id, runId)).limit(1) : [];
       const lease = runId ? await db.execute(sql`SELECT 1 FROM lesson_workflow_runs WHERE id = ${runId} AND lease_until > now() LIMIT 1`) : { rows: [] };
       let resumable = false;
+      let jobRunning = false;
       if (run?.jobId) {
         const [job] = await db.select({ status: studioJobs.status, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, run.jobId)).limit(1);
         const { singleRunResumable } = await import("./single-run/engine");
         resumable = job?.status === "error" && singleRunResumable((job.output ?? {}) as Record<string, unknown>);
+        jobRunning = job?.status === "running";
       }
       const decision = reconcileLegacy({ attempt, startedAt, runPhase: run?.phase ?? null, runUpdatedAt: run?.updatedAt ?? null, leaseAlive: lease.rows.length > 0,
-        targetIsLesson: file?.contentType === "lesson", jobResumable: resumable }, now);
+        targetIsLesson: file?.contentType === "lesson", jobResumable: resumable, jobRunning }, now);
       if (decision === "running") { running++; continue; }
       if (decision === "done") { await finish(row.id, "done", null); logger.info(`[RÉGI→STÚDIÓ] Kész: ${htmlFileId} (${attempt}. kísérlet)`); continue; }
       if (decision === "waiting") { await finish(row.id, "waiting", `emberi döntésre vár (${run?.phase}): ${run?.error ?? ""}`.slice(0, 2000)); continue; }
@@ -181,9 +185,11 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       const { htmlFileId, attempt = 1 } = row.payload;
       try {
         if (decision === "resume" && jobId) {
-          // A folytatás a jobot atomikusan foglalja (`resumeSingleRun`); a futás-azonosító utána kerül a sorelembe.
+          // Review #350: a sorelem ELŐBB foglalódik (helyőrző azonosítóval), csak a nyertes folytat; utána a valódi futás-azonosító kerül be.
+          const placeholder = `resume-${randomUUID()}`;
+          if (!await claimRetry(row, { htmlFileId, runId: placeholder, attempt: attempt + 1, startedAt: Date.now() })) continue;
           const next = await resumeJob(jobId, htmlFileId);
-          if (!await claimRetry(row, { htmlFileId, runId: next, attempt: attempt + 1, startedAt: Date.now() })) continue;
+          await db.execute(sql`UPDATE scheduled_jobs SET payload = jsonb_set(payload, '{runId}', to_jsonb(${next}::text)) WHERE id = ${row.id} AND payload->>'runId' = ${placeholder}`);
         } else {
           const runId = randomUUID();
           if (!await claimRetry(row, { htmlFileId, runId, attempt: attempt + 1, startedAt: Date.now() })) continue;
