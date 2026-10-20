@@ -301,7 +301,7 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
 \`\`\`javascript
 function ee_norm(s){
   s = (s||'').toLocaleLowerCase('hu').normalize('NFD').replace(/\\p{M}/gu,'')
-    .replace(/(\\d)[,.](?=\\d)/g,'$1.').replace(/\\u2212/g,'-');
+    .replace(/(\\d)[,.](?=\\d)/g,'$1.').replace(/\\u2212/g,'-').replace(/([\\p{L}\\d])[+-](?=\\d)/gu,'$1 ');
   return (s.match(/[+-]?\\d+(?:\\.\\d+)?|[\\p{L}]+/gu)||[]).map(function(t){return t.replace(/^\\+(?=\\d)/,'');}).join(' ');
 }
 function ee_stem(w){
