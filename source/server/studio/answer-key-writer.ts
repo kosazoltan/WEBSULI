@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { sanitizeAnswerKeyCases, ANSWER_KEY_LIMITS, type AnswerKeyCases } from "../../shared/answer-key-tests";
 import type { OpenTask } from "../../shared/lesson-experience";
-import { isTypedTask } from "../../shared/lesson-experience-score";
+import { isComputedTask } from "../../shared/lesson-experience-score";
 import { WorkflowConflict, WorkflowWaiting } from "../workflows/engine";
 
 export type AnswerKeyCaller = (system: string, user: string) => Promise<unknown>;
@@ -23,18 +23,23 @@ export const ANSWER_KEY_SYSTEM = [
   "A pontozó szócsoportokat keres, a szórendet és a viszonyt NEM méri. Ezért minden hibás válasz tartalmazzon legalább egy olyan tartalmi",
   "szót, amely egyik helyes válaszban sincs (a helyes szavak puszta felcserélése nem hibás próba): a „forditott” a fogalmat vagy az irányt",
   "jelölő SZÓT cserélje (pl. „csökken” a „nő” helyett), ne csak a sorrendet.",
+  "KIVÉTEL — ha a feladatnál \"kifejezesek\" (sorrendérzékeny, pontos kifejezések) áll: ott a pontozó a szórendet és a nyelvtani alakot is méri.",
+  "Ilyenkor a hibás válaszok között legyen alak- vagy szórendhibás is (felcserélt egyeztetés, rossz segédige vagy szórend, rossz névmásalak),",
+  "a helyes válaszok pedig nyelvtanilag hibátlanok legyenek.",
   `Egy válasz legfeljebb ${ANSWER_KEY_LIMITS.textMax} karakter. Csak a tanított fogalmakra támaszkodj; ne találj ki új tényt.`,
   'Válaszolj kizárólag ilyen JSON-nal: { "items": [ { "id": "<feladat id>", "correct": ["…"], "wrong": [ { "kind": "tevhit", "text": "…" } ] } ] }',
 ].join("\n");
 
 /** A feladat tartalmi kulcsa: ha a kérdés, a minta és a szóminimum nem változott, a tesztek újrahasznosíthatók (javítókör). */
-export const answerKeyCacheKey = (task: Pick<OpenTask, "q" | "sample" | "minWords">) =>
-  createHash("sha256").update(JSON.stringify([task.q, task.sample, task.minWords])).digest("hex");
+export const answerKeyCacheKey = (task: Pick<OpenTask, "q" | "sample" | "minWords" | "requiredPhrases">) =>
+  // Review #341: a kifejezéses feladat más hibás próbákat kap (alak / szórend) — a kulcs csak ilyenkor bővül (a régi kulcsok azonosak).
+  createHash("sha256").update(JSON.stringify(task.requiredPhrases?.length ? [task.q, task.sample, task.minWords, "phrases"] : [task.q, task.sample, task.minWords])).digest("hex");
 
 export function answerKeyUserMessage(tasks: OpenTask[], ctx: AnswerKeyContext): string {
   const used = new Set(tasks.flatMap((t) => t.coversConceptIds));
   const concepts = ctx.concepts.filter((c) => used.has(c.id)).map((c) => ({ id: c.id, term: c.term ?? "", definition: (c.definition ?? "").slice(0, 400) }));
-  const items = tasks.map((t) => ({ id: t.id, kerdes: t.q, mintavalasz: t.sample, fogalmak: t.coversConceptIds }));
+  // Review #341 (P2): a kifejezéses (sorrendérzékeny) feladat jelölve — ott a pontozó a szórendet és az alakot is méri.
+  const items = tasks.map((t) => ({ id: t.id, kerdes: t.q, mintavalasz: t.sample, fogalmak: t.coversConceptIds, ...(t.requiredPhrases?.length ? { kifejezesek: t.requiredPhrases } : {}) }));
   return `${ctx.classroom ? `Évfolyam: ${ctx.classroom}. osztály.\n` : ""}Fogalmak:\n${JSON.stringify(concepts)}\n\nFeladatok:\n${JSON.stringify(items)}`;
 }
 
@@ -47,7 +52,7 @@ export async function writeAnswerKeys(
   cache: Map<string, AnswerKeyCases>, warn: (message: string) => void = () => {},
 ): Promise<Map<string, AnswerKeyCases>> {
   const out = new Map<string, AnswerKeyCases>();
-  const open = tasks.filter((t) => !isTypedTask(t));
+  const open = tasks.filter((t) => !isComputedTask(t)); // S5a: a kifejezéses feladat is kap tesztesetet
   const missing = open.filter((t) => {
     const hit = cache.get(answerKeyCacheKey(t));
     if (hit) out.set(t.id, hit);

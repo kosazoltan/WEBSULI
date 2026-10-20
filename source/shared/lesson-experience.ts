@@ -1,7 +1,7 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
 import { z } from "zod";
 import { LESSON_FLAIRS } from "./lesson-visuals";
-import { LESSON_SCORING_VERSION, POLYNOMIAL_SCORING_VERSION, TYPED_SCORING_VERSION, isValidReference } from "./answer-value";
+import { LESSON_SCORING_VERSION, PHRASE_SCORING_VERSION, POLYNOMIAL_SCORING_VERSION, TYPED_SCORING_VERSION, isValidReference } from "./answer-value";
 
 /** Pedagogy shared by the structured runtime and the standalone HTML author. */
 export const LEGACY_LESSON_METHOD_VERSION = "fusion-7.4-1" as const;
@@ -44,6 +44,11 @@ export const openTaskSchema = z.object({
   mode: z.enum(["written", "oral"]),
   typedAnswers: z.array(typedAnswerSchema).min(1).max(8).optional(),
   requiredDistinct: z.array(requiredDistinctSchema).min(1).max(6).optional(),
+  /**
+   * Spec 2026-10-20-s5-sorrendes-kifejezes (S5a): sorrendérzékeny kötelező kifejezések (nyelvtani alak / szórend). ÉS-csoportok, egy
+   * csoporton belül VAGY; egy alternatíva normalizált tokenjei a válaszban egymás után, pontosan. A típusos (v2) útra visz.
+   */
+  requiredPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).optional(),
   /**
    * Spec 2026-10-20-s4 (S4a): a gépi szigorítással (S3c) felvett, a `required`-ben bent maradt kötelező csoportok. Review #339: a korlát nem
    * szűkebb a kalibrátornál (blokkoló hibás esetenként 1 csoport, legfeljebb `ANSWER_KEY_LIMITS.wrongMax`, javítókörönként egyesítve).
@@ -117,6 +122,9 @@ export const experiencePacketSchema = z.object({
   if (typed.length && (e.scoringVersion ?? 1) < TYPED_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Típusos feladathoz scoringVersion=${TYPED_SCORING_VERSION} kell (${typed[0].id}).` });
   const poly = typed.find((t) => t.typedAnswers?.some((a) => a.kind === "polynomial"));
   if (poly && (e.scoringVersion ?? 1) < POLYNOMIAL_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Betűs (polynomial) feladathoz scoringVersion=${POLYNOMIAL_SCORING_VERSION} kell (${poly.id}).` });
+  // Review #341: a kifejezéses bank a 4-es szerződés — különben a régi kliens frissítés nélkül, a kifejezéseket figyelmen kívül hagyva pontozna.
+  const phrase = e.tasks.find((t) => t.requiredPhrases?.length);
+  if (phrase && (e.scoringVersion ?? 1) < PHRASE_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Kifejezéses (requiredPhrases) feladathoz scoringVersion=${PHRASE_SCORING_VERSION} kell (${phrase.id}).` });
   for (const t of typed) for (const a of t.typedAnswers ?? []) {
     if (!isValidReference(a)) ctx.addIssue({ code: "custom", path: ["tasks"], message: `${t.id}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető.` });
   }
@@ -181,14 +189,16 @@ export const experiencePacketSchema = z.object({
  * (hiányzik = 1, a régi kliens is pontozza). Mért (élő Egyiptom-futás 7ee8913e, 2026-10-01): a bank típusos feladatot írt,
  * a csomag-ellenőrzés `scoringVersion=2`-t követelt, amit senki nem állított be — a csomag 4 kísérlet után bukott.
  */
-export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: ReadonlyArray<{ kind?: unknown; [key: string]: unknown }>; requiredDistinct?: unknown[] }>, current?: unknown): number | undefined {
+export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: ReadonlyArray<{ kind?: unknown; [key: string]: unknown }>; requiredDistinct?: unknown[]; requiredPhrases?: unknown[] }>, current?: unknown): number | undefined {
   // Review #166: a meglévő verzió csak érvényes tartományban (1..LESSON_SCORING_VERSION, egész) marad meg; a hibás érték a régi alapérték.
   const valid = typeof current === "number" && Number.isInteger(current) && current >= 1 && current <= LESSON_SCORING_VERSION ? current : undefined;
-  const typed = tasks.some((t) => t.typedAnswers?.length || t.requiredDistinct?.length);
+  const typed = tasks.some((t) => t.typedAnswers?.length || t.requiredDistinct?.length || t.requiredPhrases?.length);
+  // S5a: a sorrendérzékeny kifejezés a 4-es szerződés (a régebbi kliens nem ismeri — frissítést kap, nem pontoz engedékenyen).
+  const phrases = tasks.some((t) => t.requiredPhrases?.length);
   // Spec 2026-10-19-algebrai-referencia: a betűs végeredmény a 3-as szerződés; a csak számos típusos lecke 2-n marad, hogy a
   // már megnyitott (régebbi) kliens ne kapjon fölöslegesen frissítési kérést.
   const poly = tasks.some((t) => t.typedAnswers?.some((a) => a?.kind === "polynomial"));
-  const needed = poly ? POLYNOMIAL_SCORING_VERSION : typed ? TYPED_SCORING_VERSION : undefined;
+  const needed = phrases ? PHRASE_SCORING_VERSION : poly ? POLYNOMIAL_SCORING_VERSION : typed ? TYPED_SCORING_VERSION : undefined;
   return needed === undefined ? valid : Math.max(needed, valid ?? 0);
 }
 

@@ -1,4 +1,4 @@
-import { evaluateOpenAnswer, isTypedTask, normalizeAnswer } from "../../shared/lesson-experience-score";
+import { evaluateOpenAnswer, evaluateOpenAnswerV2, isComputedTask, normalizeAnswer } from "../../shared/lesson-experience-score";
 import type { LessonExperience } from "../../shared/lesson-experience";
 
 /**
@@ -46,13 +46,16 @@ function inflectedPhrase(sample: string, group: readonly string[]): string | nul
 /** Egy nyílt feladat rubrikájának igazítása a saját mintájához. true: a minta teljes pont (eleve vagy igazítás után). */
 export function alignTaskToSample(t: Task): boolean {
   if (evaluateOpenAnswer(t.sample, t).score === 1) return true;
-  if (isTypedTask(t)) return false; // a típusos (v2) részeredmény-feladatot nem igazítjuk — az a modell dolga
+  if (isComputedTask(t)) return false; // a számolós / kvótás (v2) feladatot nem igazítjuk — az a modell dolga (S5a: a kifejezéses igen)
   const words = tokens(t.sample).slice(0, 500).length;
   // A szószám-küszöb SOHA nem csökken (tests/lesson-experience „without lowering the threshold”): rövid mintát a modell javít.
   if (words < t.minWords) return false;
   const candidate: Task = { ...t, required: t.required.map((g) => [...g]) };
   for (const group of candidate.required) {
-    if (evaluateOpenAnswer(t.sample, { ...candidate, required: [group], minWords: 1, needsSentence: false }).score === 1) continue;
+    // S5a: a csoportpróba csak a csoportot méri (a kifejezések nélkül); a végső próba a teljes feladaton fut. Review #341: a kifejezéses
+    // feladat a v2 úton pontoz (más tokenizálás, pl. a kötőjel külön token) — a csoportpróba is v2, különben eltérne a végső próbától.
+    const probe = { ...candidate, required: [group], requiredPhrases: undefined, minWords: 1, needsSentence: false };
+    if ((t.requiredPhrases?.length ? evaluateOpenAnswerV2(t.sample, probe) : evaluateOpenAnswer(t.sample, probe)).score === 1) continue;
     const form = inflectedPhrase(t.sample, group);
     if (form && !group.includes(form)) group.push(form);
   }
