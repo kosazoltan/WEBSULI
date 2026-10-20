@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS task_results (
   lesson_id varchar NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
   task_id varchar(64) NOT NULL,
   round_key char(64) NOT NULL,
+  -- Review #340 (P1): a küszöb KÖZREMŰKÖDŐNKÉNT számol (a kliens a kör-azonosítót szabadon választja). Álnevesített, kulcsolt lenyomat
+  -- (HMAC, SESSION_SECRET): bejelentkezve a felhasználó, párosítva a tanuló, vendégnél az IP — nem a kliens által küldött ujjlenyomat.
+  contributor char(64) NOT NULL,
   det_state varchar(8) NOT NULL CHECK (det_state IN ('ok', 'partial', 'fail')),
   final_state varchar(8) NOT NULL CHECK (final_state IN ('ok', 'partial', 'fail')),
   arbiter_raised boolean NOT NULL DEFAULT false,

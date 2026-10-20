@@ -56,6 +56,14 @@ Előzmény: S3c (#338, `docs/specs/2026-10-20-eroforras-s3c-rubrika-szigoritas.m
     (napló).
   - Ha nincs teendő (már lazított), workflow-futás sem indul.
 
+## Review #340 (pontosítás)
+- **Közreműködőnkénti küszöb (P1):** a kör-azonosítót a kliens választja, ezért a küszöb KÜLÖNBÖZŐ közreműködőket számol.
+  - Új oszlop: `task_results.contributor` — álnevesített, kulcsolt lenyomat (HMAC, `SESSION_SECRET`).
+  - Forrása: bejelentkezve a felhasználó, párosítva a tanuló, vendégnél az IP. NEM a kliens által küldött ujjlenyomat.
+  - Visszafejthető felhasználó-azonosító továbbra sincs a táblában.
+- **Ellenpróba (P1):** a „csak a szigorítás miatt bukott” jel csak akkor igaz, ha a szigorított csoportok nélkül a pontozó teljes
+  pontot adna. Ha a válasz más ok miatt is bukik (hossz, mondat, tagadás), az nem téves elutasítás.
+
 ## Nem-cél
 - A pontozó (`evaluateOpenAnswer`) és a döntőbíró nem változik.
 - Tanulói szöveg vagy felhasználó tárolása.

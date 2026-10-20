@@ -25,6 +25,12 @@ test("S4b: a sor feladat-azonosítót, pontozói állapotot, döntőbírói emel
   assert.equal(plain.rows[0].tightenedOnlyMiss, false, "teljes pont: nem bukott");
 });
 
+test("review #340 (P1): ellenpróba — ha a szigorított csoport nélkül sem teljes pont (pl. túl rövid), nem „csak a szigorítás miatt”", () => {
+  const t = task({ minWords: 8 });
+  assert.equal(tightenedOnlyMiss(t, "A gáz térfogata megnövekszik.", "partial"), false, "a szóminimum miatt is bukik");
+  assert.equal(tightenedOnlyMiss(task(), "Melegítéskor a gáz térfogata megnövekszik.", "partial"), true);
+});
+
 test("S4b: nem „csak a szigorítás miatt”, ha más csoport is hiányzik, vagy a feladat nem szigorított", () => {
   assert.equal(tightenedOnlyMiss(task(), "A térfogata megnövekszik melegítéskor.", "partial"), false, "a „gáz” csoport is hiányzik");
   const { tightened: _t, ...plain } = task();

@@ -4,6 +4,7 @@
  * csak a szigorított csoport hiánya miatt nem adott teljes pontot, a döntőbíró viszont teljes pontra emelte) — nem a részpont-arány, mert
  * a szigorítás épp a fordított irányú hibás választ hivatott elutasítani. Tanulói szöveget és felhasználót nem tárol.
  */
+import { createHmac } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import { htmlFiles, knowledgeMaps, lessons, taskResults } from "../shared/schema";
@@ -14,7 +15,10 @@ import type { OpenTask } from "../shared/lesson-experience";
 import type { GradedTaskRow } from "../shared/lesson-result-email";
 import { logger } from "./lib/logger";
 
-/** A tulajdonos példája szerint: legalább 20 megválaszolt kör, és ezek legalább 40 %-a téves elutasítás. */
+/**
+ * A tulajdonos példája szerint: legalább 20 megválaszolt kör, és ezek legalább 40 %-a téves elutasítás — review #340 óta KÜLÖNBÖZŐ
+ * közreműködőkre számolva (a `TightenedStats` darabszámai közreműködők).
+ */
 export const RELAX_MIN_ANSWERED = 20;
 export const RELAX_FALSE_REJECT_RATE = 0.4;
 
@@ -36,10 +40,18 @@ export function relaxTask(task: OpenTask, stats: TightenedStats, now: Date): Ope
   return { ...rest, required, bonus: [...task.bonus, ...moved], relaxedTightening: { at: now.toISOString(), answered: stats.answered, falseRejects: stats.falseRejects } };
 }
 
+/**
+ * Review #340 (P1): álnevesített közreműködő-kulcs — kulcsolt HMAC (SESSION_SECRET), így a táblában nincs visszafejthető azonosító. A hívó
+ * adja a szerver által ismert identitást (felhasználó / párosított tanuló / vendégnél az IP), NEM a kliens által választott ujjlenyomatot.
+ */
+export function contributorKey(identity: string): string {
+  return createHmac("sha256", process.env.SESSION_SECRET || "websuli-task-results").update(`task-results|${identity}`).digest("hex");
+}
+
 /** S4b: a kör feladatonkénti sora (csak megválaszolt feladat); az azonos kör újraküldése nem duplikál. */
-export async function recordTaskResults(lessonId: string, roundKey: string, rows: readonly GradedTaskRow[]): Promise<number> {
+export async function recordTaskResults(lessonId: string, roundKey: string, contributor: string, rows: readonly GradedTaskRow[]): Promise<number> {
   const values = rows.filter((r) => r.answer).map((r) => ({
-    lessonId, taskId: r.taskId.slice(0, 64), roundKey, detState: r.detState, finalState: r.state, arbiterRaised: r.arbiterRaised, tightenedOnlyMiss: r.tightenedOnlyMiss,
+    lessonId, taskId: r.taskId.slice(0, 64), roundKey, contributor, detState: r.detState, finalState: r.state, arbiterRaised: r.arbiterRaised, tightenedOnlyMiss: r.tightenedOnlyMiss,
   }));
   if (!values.length) return 0;
   const inserted = await db.insert(taskResults).values(values).onConflictDoNothing().returning({ id: taskResults.id });
@@ -56,8 +68,9 @@ export async function maybeRelaxTightening(lessonId: string, taskIds: readonly s
   if (!taskIds.length) return [];
   const counts = await db.select({
     taskId: taskResults.taskId,
-    answered: sql<number>`count(*)::int`,
-    falseRejects: sql<number>`(count(*) filter (where ${taskResults.tightenedOnlyMiss} and ${taskResults.arbiterRaised} and ${taskResults.finalState} = 'ok'))::int`,
+    // Review #340 (P1): közreműködőnként egyszer — egy kliens tetszőleges kör-azonosítókkal sem érheti el egyedül a küszöböt.
+    answered: sql<number>`count(distinct ${taskResults.contributor})::int`,
+    falseRejects: sql<number>`(count(distinct ${taskResults.contributor}) filter (where ${taskResults.tightenedOnlyMiss} and ${taskResults.arbiterRaised} and ${taskResults.finalState} = 'ok'))::int`,
   }).from(taskResults).where(and(eq(taskResults.lessonId, lessonId), inArray(taskResults.taskId, [...taskIds]))).groupBy(taskResults.taskId);
   const stats = new Map(counts.map((c) => [c.taskId, { answered: Number(c.answered), falseRejects: Number(c.falseRejects) }]));
   const due = [...stats].filter(([, s]) => s.answered >= RELAX_MIN_ANSWERED && s.falseRejects / s.answered >= RELAX_FALSE_REJECT_RATE).map(([id]) => id);

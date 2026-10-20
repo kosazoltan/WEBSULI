@@ -33,7 +33,11 @@ export function tightenedOnlyMiss(task: OpenTask, answer: string, detState: Answ
   if (detState === "ok" || !answer || !task.tightened?.length) return false;
   const tightened = new Set(task.tightened.map((g) => JSON.stringify(g)));
   const missing = missingAnswerConcepts(answer, task);
-  return missing.length > 0 && missing.every((g) => tightened.has(JSON.stringify(g)));
+  if (!missing.length || !missing.every((g) => tightened.has(JSON.stringify(g)))) return false;
+  // Review #340 (P1): ellenpróba — a szigorított csoportok nélkül a pontozó teljes pontot adna (különben más ok is van: hossz, mondat,
+  // tagadás…, és a döntőbírói emelés nem a szigorítás téves elutasítása).
+  const required = task.required.filter((g) => !tightened.has(JSON.stringify(g)));
+  return required.length > 0 && evaluateOpenAnswer(answer, { ...task, required }).state === "ok";
 }
 
 /** Csak az ismert feladatokat pontozza; a döntőbíró gyorsítótár-ítélete (ha van) csak emelhet — mint a tanuló képernyőjén. */

@@ -1160,6 +1160,8 @@ export const taskResults = pgTable(
     lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
     taskId: varchar("task_id", { length: 64 }).notNull(),
     roundKey: char("round_key", { length: 64 }).notNull(),
+    /** Review #340: álnevesített közreműködő-kulcs (HMAC) — a lazítási küszöb közreműködőnként számol. */
+    contributor: char("contributor", { length: 64 }).notNull(),
     detState: varchar("det_state", { length: 8 }).notNull().$type<"ok" | "partial" | "fail">(),
     finalState: varchar("final_state", { length: 8 }).notNull().$type<"ok" | "partial" | "fail">(),
     arbiterRaised: boolean("arbiter_raised").notNull().default(false),

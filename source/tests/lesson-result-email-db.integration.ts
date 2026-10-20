@@ -127,6 +127,7 @@ test("S4b: a feladatkör beküldése feladatonként egy névtelen sort ír; ugya
   assert.equal(rows[0].taskId, task.id);
   assert.equal(rows[0].finalState, "ok");
   assert.equal(rows[0].tightenedOnlyMiss, false);
+  assert.match(rows[0].contributor, /^[a-f0-9]{64}$/, "álnevesített lenyomat, nem nyers azonosító");
   assert.equal(JSON.stringify(rows[0]).includes(task.sample), false, "a válasz szövege nincs tárolva");
   assert.equal((await post()).status, 202);
   await new Promise(r => setTimeout(r, 300));
@@ -134,13 +135,17 @@ test("S4b: a feladatkör beküldése feladatonként egy névtelen sort ír; ugya
 });
 
 test("S4c: a küszöb alatt nincs lazítás; ≥ 20 kör és ≥ 40 % téves elutasítás után a szigorított csoport bónusz lesz, a verzió nő", async () => {
-  const { maybeRelaxTightening, RELAX_MIN_ANSWERED } = await import("../server/task-results");
+  const { contributorKey, maybeRelaxTightening, RELAX_MIN_ANSWERED } = await import("../server/task-results");
   // S7: a lazítás workflow alatt fut; a futás tulajdonosa a lecke gyártója (a térkép `createdBy`-ja).
   await db.insert(users).values({ id: "s4c-owner" });
   await db.update(knowledgeMaps).set({ createdBy: "s4c-owner" }).where(eq(knowledgeMaps.id, "result-map"));
   const taskId = tightenedLesson().experience!.tasks[0].id;
-  const row = (i: number, falseReject: boolean) => ({ lessonId: "result-tightened", taskId, roundKey: roundKeyOf("s4c", String(i)), detState: falseReject ? "partial" as const : "ok" as const,
-    finalState: "ok" as const, arbiterRaised: falseReject, tightenedOnlyMiss: falseReject });
+  const row = (i: number, falseReject: boolean, who = `c${i}`) => ({ lessonId: "result-tightened", taskId, roundKey: roundKeyOf("s4c", String(i)), contributor: contributorKey(who),
+    detState: falseReject ? "partial" as const : "ok" as const, finalState: "ok" as const, arbiterRaised: falseReject, tightenedOnlyMiss: falseReject });
+  // Review #340 (P1): egyetlen közreműködő 30 körrel (kliens által választott kör-azonosítókkal) sem lazít.
+  await db.insert(taskResults).values(Array.from({ length: 30 }, (_, i) => row(1000 + i, true, "egy-kliens")));
+  assert.deepEqual(await maybeRelaxTightening("result-tightened", [taskId]), [], "egy közreműködő = 1, a küszöb alatt");
+  await db.delete(taskResults).where(eq(taskResults.lessonId, "result-tightened"));
   await db.insert(taskResults).values(Array.from({ length: RELAX_MIN_ANSWERED - 1 }, (_, i) => row(i, i < 10)));
   assert.deepEqual(await maybeRelaxTightening("result-tightened", [taskId]), [], "19 kör: a küszöb alatt");
   await db.insert(taskResults).values(row(99, false));
