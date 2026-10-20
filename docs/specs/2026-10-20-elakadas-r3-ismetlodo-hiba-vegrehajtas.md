@@ -19,3 +19,12 @@ Terv: `docs/specs/2026-10-20-elakadas-r3-ismetlodo-hiba.md`. Munkakönyvtár: `s
    - `issueSignature`: sorrendfüggetlen.
 3. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`.
 4. **Kitelepítés:** az aktív-futás őr = 0.
+
+## Pontosítás a megvalósítás során (meglévő teszt alapján)
+- **Küszöb:** az elakadás küszöbe HÁROM egymást követő azonos hibalista (`STUCK_SAME_ISSUE_RUNS = 3`; doom-loop: figyel 2-nél,
+  blokkol 3-nál), nem kettő.
+- **Miért:** a `tests/bank-repair.test.ts` „javító kör a gyakorlatban” esete mutatja, hogy két azonos kör még nem elakadás. A
+  jogosultságon kívüli, figyelmen kívül hagyott csere után a 3. kör javíthat.
+- **Megtakarítás:** a 4. (mentő, erős modellre irányítható) hívás.
+- **Dokumentált specváltozás:** a `bank-salvage` és a `bank-answer-keys` teszt a 4 helyett 3 hívást vár; a szándék (a hibás tétel
+  kikerül, a bank elkészül) változatlan.
