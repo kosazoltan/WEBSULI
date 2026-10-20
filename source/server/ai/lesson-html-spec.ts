@@ -359,6 +359,20 @@ function ee_conceptHit(answerNorm, answerTokens, answerStems, concept){
   }
   return false;
 }
+/* tagadas a NYERS szovegbol (ekezet es aposztrof marad): 'en' = not / cannot / mustn't-fele osszevonas / aposztrof nelkuli alak
+   (weak: no, never...); 'hu' = nem. A "PIN-t", a "dont" helyett "dönt" es a "legyen t" nem tagadas. */
+var EE_EN_NEG = ['not','cannot','dont','doesnt','didnt','cant','couldnt','wont','wouldnt','shouldnt','mustnt','isnt','arent','wasnt','werent','hasnt','havent','hadnt','neednt'];
+var EE_EN_WEAK = ['no','never','nothing','nobody','none','nowhere','neither','nor'];
+function ee_negKind(text, weak){
+  var words = String(text||'').toLowerCase().split(/[^a-z\\u00e0-\\u024f'\\u2019]+/), i, w;
+  for(i=0;i<words.length;i++){
+    w = words[i].replace(/^['\\u2019]+|['\\u2019]+$/g,'');
+    if(!w) continue;
+    if(EE_EN_NEG.indexOf(w)!==-1 || /^[a-z]+n['\\u2019]t$/.test(w) || (weak && EE_EN_WEAK.indexOf(w)!==-1)) return 'en';
+  }
+  for(i=0;i<words.length;i++){ if(words[i]==='nem') return 'hu'; }
+  return 'none';
+}
 function ee_evaluate(answer, task){
   var norm = ee_norm(answer);
   var tokens = norm ? norm.split(' ').slice(0,500) : [];
@@ -383,9 +397,8 @@ function ee_evaluate(answer, task){
               ' is ',' are ',' there ',' have ',' has ',' do ',' does ',' a ',' an ',' the ',
               ' some ',' any ',' how ',' much ',' many ',' of ',' on ',' in '];
   var padded = ' ' + norm + ' '; var hasFunc = false, f;
-  var sampleWords = ee_norm(task.sample).split(' ');
-  var unexpectedNegation = (tokens.indexOf('nem')!==-1 || tokens.indexOf('not')!==-1)
-    && sampleWords.indexOf('nem')===-1 && sampleWords.indexOf('not')===-1;
+  var unexpectedNegation = (ee_negKind(answer) !== 'none' && ee_negKind(task.sample, true) === 'none')
+    || (ee_negKind(task.sample) === 'en' && ee_negKind(answer, true) === 'none');
   for(f=0;f<FUNC.length;f++){ if(padded.indexOf(FUNC[f]) !== -1){ hasFunc=true; break; } }
   if(ratio >= 1){
     if((task.needsSentence && !hasFunc) || unexpectedNegation){
