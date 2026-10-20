@@ -84,6 +84,11 @@ try {
   const reminderMigration = await readFile(new URL("../migrations/0031_daily_reminders.sql", import.meta.url), "utf8");
   await pool.query(reminderMigration);
   await pool.query(reminderMigration);
+  // S4b: a feladatszintű eredmény táblája (0037) a migrációs fájlból (nem a séma-exportból), kétszer — idempotens.
+  await pool.query("DROP TABLE task_results");
+  const taskResultsMigration = await readFile(new URL("../migrations/0037_task_results.sql", import.meta.url), "utf8");
+  await pool.query(taskResultsMigration);
+  await pool.query(taskResultsMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {

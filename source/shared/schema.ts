@@ -1149,6 +1149,26 @@ export const lessonResultEmails = pgTable(
   (table) => ({ roundUnique: uniqueIndex("lesson_result_emails_round_unique").on(table.lessonId, table.kind, table.roundKey) }),
 );
 
+/**
+ * Spec 2026-10-20-s4 (S4b, migrations/0037): feladatszintű, NÉVTELEN tanulói eredmény körönként — tanulói szöveg és felhasználó nélkül.
+ * A gépi rubrika-szigorítás (S3c) mérése és automatikus lazítása (S4c) ebből számol.
+ */
+export const taskResults = pgTable(
+  "task_results",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+    taskId: varchar("task_id", { length: 64 }).notNull(),
+    roundKey: char("round_key", { length: 64 }).notNull(),
+    detState: varchar("det_state", { length: 8 }).notNull().$type<"ok" | "partial" | "fail">(),
+    finalState: varchar("final_state", { length: 8 }).notNull().$type<"ok" | "partial" | "fail">(),
+    arbiterRaised: boolean("arbiter_raised").notNull().default(false),
+    tightenedOnlyMiss: boolean("tightened_only_miss").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ roundUnique: uniqueIndex("task_results_round_unique").on(table.lessonId, table.taskId, table.roundKey) }),
+);
+
 /** Napi tananyag-emlékeztető ismétlésvédelme (migrations/0031): címenként naponta legfeljebb egy levél. */
 export const dailyReminderEmails = pgTable(
   "daily_reminder_emails",

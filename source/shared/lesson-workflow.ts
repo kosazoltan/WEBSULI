@@ -3,7 +3,9 @@ import type { SkillSnapshot, SkillFinding, SkillAudit } from "./lesson-skill";
 export const WORKFLOW_VERSION = "lesson-flow-2";
 export type WorkflowMode = "upload" | "studio" | "web" | "repair" | "concept" | "html" | "apply"
   // Spec 2026-10-06-s7-workflow-rendbetetel: a korábban workflow nélküli utak saját módjai (a fenti hét lánc változatlan).
-  | "htmlAssist" | "creator" | "quiz" | "map" | "mapCheck" | "webStudio";
+  | "htmlAssist" | "creator" | "quiz" | "map" | "mapCheck" | "webStudio"
+  // Spec 2026-10-20-s4 (S4c): a gépi rubrika-szigorítás automatikus lazítása (élő lecke módosítása — S7: csak workflow alatt).
+  | "relax";
 export type WorkflowStep = { id: string; label: string; after: string[]; maxVisits: number };
 export type WorkflowDefinition = { version: string; mode: WorkflowMode; label: string; steps: WorkflowStep[] };
 const labels: Record<string, string> = {
@@ -26,6 +28,7 @@ const chains: Record<WorkflowMode, { label: string; ids: string[] }> = {
   quiz: { label: "Játék-kvízgenerálás", ids: ["source", "author", "gate", "save", "readback"] },
   map: { label: "Tudástár-kivonatolás", ids: ["source", "scope", "knowledge", "gate", "readback"] },
   mapCheck: { label: "Tudástár-ellenőrzés", ids: ["source", "gate", "save", "readback"] },
+  relax: { label: "Szigorítás automatikus lazítása", ids: ["source", "gate", "apply", "readback"] },
   webStudio: { label: "Internetes készítés (Studio)", ids: ["generate", "source", "scope", "knowledge", "sourceCheck", "pedagogue", "author", "animator", "lektor", "gate", "readback"] },
 };
 /** Spec 2026-10-06-s7: a gyártó körszabályai (szerző/vázlat/ábra/lektor/kapu visszalépés és keret) ezekben a módokban élnek. */
@@ -33,7 +36,7 @@ const PRODUCTION_MODES: readonly WorkflowMode[] = ["upload", "studio", "webStudi
 /** Spec 2026-10-06-s7: a futás eredményének elvárt fajtája módonként (a motor ezt ellenőrzi a kész futáson). */
 export const WORKFLOW_RESULT_KIND: Record<WorkflowMode, NonNullable<WorkflowView["result"]>["kind"]> = {
   upload: "material", studio: "material", web: "material", repair: "candidate", concept: "material", html: "candidate", apply: "material",
-  htmlAssist: "proposal", creator: "proposal", quiz: "material", map: "map", mapCheck: "map", webStudio: "material",
+  htmlAssist: "proposal", creator: "proposal", quiz: "material", map: "map", mapCheck: "map", webStudio: "material", relax: "material",
 };
 export const WORKFLOW_MODES = Object.keys(chains) as WorkflowMode[];
 export function workflowDefinition(mode: WorkflowMode): WorkflowDefinition {
