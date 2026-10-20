@@ -31,6 +31,8 @@ async function mock(page: Page) {
     if (path === "/api/html-files") return route.fulfill({ json: [{ id: "f1", title: "Eredeti", contentType: "html", classroom: 4, createdAt: iso }] });
     // Review #323: a másik admin futó rekordja nem kap fázissávot (a naplója nem olvasható).
     if (path === "/api/admin/improved-files") return route.fulfill({ json: [imp("imp-run", "processing", null), imp("imp-err", "error", failed.error!), { ...imp("imp-other", "processing", null), createdBy: "masik-admin" }] });
+    // Review #336: a kapun bukott jelölt diagnosztikai tartalma (csak megtekinthető).
+    if (path === "/api/admin/improved-files/imp-err") return route.fulfill({ json: { ...imp("imp-err", "error", failed.error!), content: "<!DOCTYPE html><html><body>bukott jelölt</body></html>", contentType: "html" } });
     if (path === "/api/studio/workflows/imp-run") return route.fulfill({ json: { run: running } });
     if (path === "/api/studio/workflows/imp-err") return route.fulfill({ json: { run: failed } });
     if (path === "/api/studio/workflows") return route.fulfill({ json: { runs: [] } });
@@ -66,6 +68,15 @@ for (const vp of [{ width: 393, height: 780 }, { width: 835, height: 810 }]) {
     await expect(err.locator('li[data-step="gate"]')).toHaveAttribute("data-state", "error");
     await expect(err).toContainText("t09: a saját mintaválasz nem kap teljes pontot.");
     await page.screenshot({ path: `test-results/phase-bar/error-${vp.width}.png`, fullPage: true });
+    // Review #336: a bukott jelölt csak olvasható előnézetben nyílik, „Alkalmaz” gomb nélkül.
+    await err.getByTestId("improver-error-preview-imp-err").click();
+    await expect(page.getByTestId("improver-preview-failed-note")).toBeVisible();
+    await expect(page.getByTestId("improver-preview-apply")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    const note = page.getByTestId("improver-preview-failed-note");
+    await note.scrollIntoViewIfNeeded();
+    await expect(note).toBeInViewport();
+    await page.screenshot({ path: `test-results/phase-bar/failed-preview-${vp.width}.png` });
   });
 }
 

@@ -31,7 +31,12 @@ import { withSupportSkill } from "./studio/support-skills";
 export class ImproveOutputError extends Error {
   override readonly name = "ImproveOutputError";
   // Spec 2026-10-20-okositas-bukott-jelolt: a kapun bukott jelölt (diagnosztikának az `error` rekordba kerül; alkalmazni nem lehet).
-  constructor(message: string, readonly modelIndex: number, readonly canFallback: boolean, readonly problems: string[] = [], readonly candidate?: string) { super(message); }
+  // Review #336: NEM felsorolható mező — a hibaobjektum naplózásakor (cause) a nem publikált tartalom ne kerüljön a szervernaplóba.
+  declare readonly candidate?: string;
+  constructor(message: string, readonly modelIndex: number, readonly canFallback: boolean, readonly problems: string[] = [], candidate?: string) {
+    super(message);
+    Object.defineProperty(this, "candidate", { value: candidate, enumerable: false, writable: false });
+  }
 }
 
 async function processImprovementJob(
@@ -718,6 +723,12 @@ export function registerImprovementRoutes(adminRouter: Router) {
               improvedFile: { id: freshRecord.id, title: freshRecord.title, status: freshRecord.status }
             });
           }
+          // Review #336: a közben hibára zárt rekordnál (benne a bukott, csak diagnosztikai jelölttel) a hiba a válasz — a lenti
+          // tartalomalapú helyreállítás CSAK `processing` rekordra fut, különben egy kapun bukott jelölt alkalmazhatóvá válna.
+          if (freshRecord.status === 'error') {
+            return res.json({ status: 'error', elapsed, message: freshRecord.improvementNotes || 'Ismeretlen hiba' });
+          }
+          return res.json({ status: 'completed', elapsed, improvedFile: { id: freshRecord.id, title: freshRecord.title, status: freshRecord.status } });
         }
 
         // Check if content was already written (AI finished but race condition occurred)

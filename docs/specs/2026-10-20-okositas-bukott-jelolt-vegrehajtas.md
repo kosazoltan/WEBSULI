@@ -14,3 +14,14 @@ Terv: `docs/specs/2026-10-20-okositas-bukott-jelolt.md`. Munkakönyvtár: `sourc
    - a `storage.applyImprovedFileToOriginal` státuszőre `error`-t nem enged (forrásszintű ellenőrzés a meglévő listára).
 3. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`.
 4. **Kitelepítés:** az aktív-futás őr = 0.
+
+## Review #336 — pontosítás
+- **Versenyhelyzet:** a 15 percen túli állapotlekérdezés a közben hibára zárt (`error`) friss rekordnál a hibát adja vissza. A
+  tartalomalapú „helyreállítás” (`pending`-re írás) CSAK `processing` rekordra fut, különben a kapun bukott jelölt alkalmazhatóvá
+  válna.
+- **Adatvédelem:** az `ImproveOutputError.candidate` NEM felsorolható (`Object.defineProperty`, `enumerable: false`), így a
+  hibaobjektum naplózása / szerializálása nem viszi a nem publikált tartalmat.
+- **Admin felület (`MaterialImprover`):**
+  - a hibás sorban „Bukott jelölt megtekintése” gomb;
+  - az előnézetben `error` állapotnál nincs „Alkalmaz”, csak a „csak megtekinthető, nem alkalmazható” jelzés.
+  - Böngészős teszt (`tests/phase-bar.spec.ts`, 393 és 835 px): az előnézet a nézetben, kilógás nélkül.
