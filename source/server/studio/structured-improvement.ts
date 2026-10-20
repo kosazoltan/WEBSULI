@@ -80,12 +80,14 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const ownerInstruction = normalizeOwnerInstruction(instruction);
   const { sourceFiles, ...hashedSource } = source;
   const transcript = Array.isArray(sourceFiles) && sourceFiles.some((f) => (f as { kind?: string } | null)?.kind === "image");
-  const { candidate, review, owner, staleWarnings } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript });
+  const { candidate, review, owner, staleWarnings, lektorRemoved } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript });
   return lessonRepairSchema.parse({
     kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(hashedSource), previousLesson: original, candidate, reviewNotes: review.notes,
     ...(ownerInstruction ? { ownerInstruction } : {}), ...(owner.corrections.length ? { sourceCorrections: owner.corrections } : {}), ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}),
     // Review #164: az eldöntetlen régi-alak jelöltek a javítás-artefaktumban maradnak (admin-nézet), nem csak a naplóban.
     ...(staleWarnings?.length ? { staleWarnings } : {}),
+    // Review #331: a lektor által blokkolt és kivett banktételek (a jegyzetek útvonalai a kivétel ELŐTTI indexekre vonatkoznak).
+    ...(lektorRemoved?.length ? { lektorRemoved } : {}),
   });
 }
 
@@ -216,7 +218,7 @@ export async function finishStructuredImprovement(original: Lesson, candidate: L
     for (const code of lektorSkillCodes(blockers)) await workflowFinding(code);
     // Spec 2026-10-20-elakadas-gyokerok-elemzes (R1): csak kivehető tételekre (banktétel, ellenőrző blokk, ábra) a jelölt a tételek
     // nélkül megy tovább; ténybeli / tanítási jegyzetnél a régi megállás (az eredeti érintetlen).
-    const removal = removeLektorBlockers(candidate, blockers);
+    const removal = removeLektorBlockers(candidate, blockers, review.solutions);
     if ("error" in removal) throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
     candidate = removal.lesson;
     lektorRemoved = removal.removed;

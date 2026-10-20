@@ -733,12 +733,13 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     if (round === SINGLE_RUN_REVIEW_ROUNDS) {
       // Spec 2026-10-20-elakadas-gyokerok-elemzes (R1): az utolsó körben a kivehető tételek (banktétel, ellenőrző blokk, ábra) kikerülnek,
       // és a lecke a végkapura megy — a kész lecke nem vész el egy hibás feladat miatt. Tanítási / ténybeli jegyzetnél a régi megállás.
-      const removal = removeLektorBlockers(lesson, blocking);
+      const removal = removeLektorBlockers(lesson, blocking, report.solutions);
       if ("error" in removal) throw new SingleRunError("lektorálás", [...blocking.map((n) => `${n.blockPath ?? "—"}: ${n.message}`), `(kivétel nem lehetséges: ${removal.error})`]);
       lesson = removal.lesson;
       telemetry.gates.lektorRemoved += removal.removed.length;
       warnings.push(`Az utolsó lektorkör hibás tételeit kivettük: ${removal.removed.join(", ")}`);
-      output = { ...output, lesson, experienceCheckpoint: checkpoint };
+      // Review #331: a kivétel a mentett kimenetben is megmarad (folytatáskor is látszik).
+      output = { ...output, lesson, experienceCheckpoint: checkpoint, lektorRemoved: removal.removed };
       await save("lektor", output);
       break;
     }
@@ -775,6 +776,10 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const skill = verifyLessonSkillBank(final.data.experience, final.data.subject, final.data.sections);
   const problems = [...experienceProblems(final.data), ...(skill.ok ? [] : skill.problems), ...(coverage.ok ? [] : coverage.reasons), ...(checkLessonArc(final.data).ok ? [] : checkLessonArc(final.data).reasons)];
   if (problems.length) throw new SingleRunError("végellenőrzés", problems);
+  // Review #331: a folytatott futásban a memóriabeli figyelmeztetés elveszne — a mentett kivétel-lista is bekerül.
+  const savedRemoved = (output as { lektorRemoved?: unknown }).lektorRemoved;
+  if (Array.isArray(savedRemoved) && savedRemoved.length && !warnings.some((w) => w.startsWith("Az utolsó lektorkör hibás tételeit kivettük")))
+    warnings.push(`Az utolsó lektorkör hibás tételeit kivettük: ${savedRemoved.join(", ")}`);
   const lessonId = await store.upsertLesson(null, mapId, final.data);
   const published = await store.publishLesson({
     lessonId, mapId, title: final.data.title, classroom: final.data.classroom, coverage: coverage.coverage,

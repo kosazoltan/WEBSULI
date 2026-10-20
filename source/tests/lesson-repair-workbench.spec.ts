@@ -73,3 +73,28 @@ test("lecke-jelöltnél az értelmezhetetlen tartalom mellett az „Alkalmazás�
   await expect(page.getByTestId("lesson-repair-ready")).toBeVisible();
   await expect(page.getByTestId("lesson-repair-apply")).toBeDisabled();
 });
+
+// Review #331 (spec 2026-10-20-elakadas-gyokerok-elemzes, R1): a lektor által blokkolt, ezért kivett banktételek alkalmazás előtt látszanak.
+for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+  test(`a lektor által kivett gyakorlótételek listája megjelenik a kész javításnál ${viewport.width}`, async ({ page }) => {
+    const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+    const lesson = standardFusionFixture();
+    const repair = { kind: "lesson-repair-fusion-1", lessonId: "new-en", baseVersion: 1, baselineHash: "a".repeat(64), baselineMaterialHash: "b".repeat(64), sourceHash: "c".repeat(64),
+      previousLesson: lesson, candidate: lesson, reviewNotes: [{ kind: "source_conflict", subkind: "contradicts_source", message: "A rubrika hibás.", blockPath: "experience.tasks[3]" }],
+      lektorRemoved: ["experience.tasks[3]"] };
+    await page.setViewportSize(viewport);
+    await mock(page, () => undefined);
+    await page.route("**/api/admin/improve-material/new-en", (route) => route.fulfill({ json: { jobId: "job-1" } }));
+    await page.route("**/api/admin/improved-files/imp-1", (route) => route.fulfill({ json: { content: JSON.stringify(repair), status: "pending", contentType: "lesson" } }));
+    await page.goto("/__repair-workbench-probe");
+    await page.getByTestId("lesson-repair-search").fill("week");
+    await page.getByTestId("lesson-repair-option-new-en").click();
+    await page.getByTestId("lesson-repair-instruction").fill("Rövidítsd.");
+    await page.getByTestId("lesson-repair-start").click();
+    const removed = page.getByTestId("lesson-repair-lektor-removed");
+    await expect(removed).toBeVisible();
+    await expect(removed).toContainText("experience.tasks[3]");
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+}

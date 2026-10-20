@@ -181,7 +181,12 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
                 {(repair.sourceCorrections ?? []).map((c) => (
                   <li key={c.localId}>Forrás-helyesbítés: „{c.from.term ?? c.from.definition}” → „{c.term ?? c.definition}”</li>
                 ))}
-                <li>Lektori megjegyzések: {repair.reviewNotes?.length ?? 0} (blokkoló nincs)</li>
+                <li>Lektori megjegyzések: {repair.reviewNotes?.length ?? 0} {repair.lektorRemoved?.length ? "" : "(blokkoló nincs)"}</li>
+                {repair.lektorRemoved?.length ? (
+                  <li className="text-amber-700 dark:text-amber-400" data-testid="lesson-repair-lektor-removed">
+                    A lektor {repair.lektorRemoved.length} gyakorlótételt hibásnak jelölt, ezért kivettük: {repair.lektorRemoved.join(", ")} (a megjegyzések útvonalai a kivétel előtti sorszámokra vonatkoznak) — nézd át alkalmazás előtt.
+                  </li>
+                ) : null}
                 {(repair.staleWarnings ?? []).map((w, i) => (
                   <li key={`stale-${i}`} className="text-amber-700 dark:text-amber-400" data-testid="lesson-repair-stale-warning">
                     Eldöntetlen régi alak („{w.oldForm}” → „{w.newForm}”): „{w.sentence}” — nézd át alkalmazás előtt.
