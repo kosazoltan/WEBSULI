@@ -26,6 +26,12 @@ export function alignHtmlLessonBank(html: string): HtmlBankRepair {
   if (!experience || !Array.isArray(experience.tasks)) return none;
   const tasks = experience.tasks as unknown[];
   const result: HtmlBankRepair = { ...none };
+  // Spec 2026-10-20-s5-sorrendes-kifejezes: a HTML-lecke pontozója (ee_evaluate) a sorrendes kifejezést nem ismeri — a mező itt nem
+  // maradhat, különben a szerver (v2) és a lecke (v1) másként pontozna. Ritka (a HTML-út promptja nem kéri); az eltávolítás igazításnak számít.
+  for (const raw of tasks) {
+    const t = raw as { id?: unknown; requiredPhrases?: unknown };
+    if (t && typeof t === "object" && "requiredPhrases" in t) { delete t.requiredPhrases; if (typeof t.id === "string") result.aligned.push(t.id); }
+  }
 
   // (1) Rubrika-igazítás — review #327: csak sémahelyes feladat; a pontozó kivétele nem kerülheti meg a sémakaput.
   for (const raw of tasks) {

@@ -32,10 +32,11 @@ export function redactAnswer(text: string): string {
  * A feladat tartalmi lenyomata + a normalizált válasz: azonos feladatra azonos (normalizált) válasz → egy fizetett hívás. Review #241: a
  * műveleti jeleket és a törtvonalat megőrző (v2) normalizálás — a „8 + 2 = 10” és a „8 - 2 = 10” két különböző válasz.
  */
-export function arbiterCacheKey(task: Pick<OpenTask, "q" | "sample" | "required" | "bonus" | "minWords">, answer: string): string {
-  return createHash("sha256")
-    .update(JSON.stringify([ARBITER_VERSION, task.q, task.sample, task.required, task.bonus, task.minWords, normalizeAnswerV2(redactAnswer(answer))]))
-    .digest("hex");
+export function arbiterCacheKey(task: Pick<OpenTask, "q" | "sample" | "required" | "bonus" | "minWords" | "requiredPhrases">, answer: string): string {
+  const parts: unknown[] = [ARBITER_VERSION, task.q, task.sample, task.required, task.bonus, task.minWords, normalizeAnswerV2(redactAnswer(answer))];
+  // S5a: a kifejezés a rubrika része — csak ha van (kifejezés nélkül a kulcs bitre azonos, a meglévő ítéletek megmaradnak).
+  if (task.requiredPhrases?.length) parts.push({ requiredPhrases: task.requiredPhrases });
+  return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 
 export const ARBITER_SYSTEM = [

@@ -5,7 +5,7 @@
  */
 import { blockingWrongCases, type AnswerKeyCases } from "./answer-key-tests";
 import type { OpenTask } from "./lesson-experience";
-import { ENGLISH_NEGATIONS, ENGLISH_WEAK_NEGATIONS, SENTENCE_CONNECTIVES, evaluateOpenAnswer, isTypedTask, missingAnswerConcepts, normalizeAnswer } from "./lesson-experience-score";
+import { ENGLISH_NEGATIONS, ENGLISH_WEAK_NEGATIONS, SENTENCE_CONNECTIVES, evaluateOpenAnswer, isComputedTask, missingAnswerConcepts, normalizeAnswer } from "./lesson-experience-score";
 import { inflectedForms, synonymsOf } from "./hu-lexicon";
 
 const NEGATIONS = new Set(["nem", "ne", "sem", "se", "nincs", "sincs"]);
@@ -100,7 +100,7 @@ function tighten(task: OpenTask, cases: AnswerKeyCases): Tightening | null {
 }
 
 export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null, options: CalibrationOptions = {}): Calibration {
-  if (!cases || isTypedTask(original)) return { task: original, changes: [] };
+  if (!cases || isComputedTask(original)) return { task: original, changes: [] };
   // Spec 2026-10-20-eroforras-s3c-rubrika-szigoritas: ha egy hibás eset teljes pontot kap, előbb szigorítunk (különben a rubrika változatlan).
   const tightened: Tightening | null = guardHolds(original, cases) ? { task: original, changes: [], tightened: [] } : tighten(original, cases);
   if (!tightened || !guardHolds(tightened.task, cases)) return { task: original, changes: [] };

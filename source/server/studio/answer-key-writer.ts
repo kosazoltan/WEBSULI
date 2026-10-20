@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { sanitizeAnswerKeyCases, ANSWER_KEY_LIMITS, type AnswerKeyCases } from "../../shared/answer-key-tests";
 import type { OpenTask } from "../../shared/lesson-experience";
-import { isTypedTask } from "../../shared/lesson-experience-score";
+import { isComputedTask } from "../../shared/lesson-experience-score";
 import { WorkflowConflict, WorkflowWaiting } from "../workflows/engine";
 
 export type AnswerKeyCaller = (system: string, user: string) => Promise<unknown>;
@@ -47,7 +47,7 @@ export async function writeAnswerKeys(
   cache: Map<string, AnswerKeyCases>, warn: (message: string) => void = () => {},
 ): Promise<Map<string, AnswerKeyCases>> {
   const out = new Map<string, AnswerKeyCases>();
-  const open = tasks.filter((t) => !isTypedTask(t));
+  const open = tasks.filter((t) => !isComputedTask(t)); // S5a: a kifejezéses feladat is kap tesztesetet
   const missing = open.filter((t) => {
     const hit = cache.get(answerKeyCacheKey(t));
     if (hit) out.set(t.id, hit);

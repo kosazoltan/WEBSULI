@@ -46,6 +46,17 @@ Két PR:
    - Böngészős próba: a kliens pontozó a megosztott kódot használja — e2e (Playwright) tesztet keress a lecke-felületre; ha van
      kifejezéses fixture-re alkalmas, futtasd.
 
+### PR1 megvalósítási pontosítások
+- **`isComputedTask`:** új ismérv a számolós vagy kvótás feladatra (`typedAnswers` / `requiredDistinct`). A válaszkulcs-tesztek, a
+  tesztíró, a minta-igazítás és a kalibráció csak ezt hagyja ki. A kifejezéses feladat a v2 úton pontoz, de szöveges rubrika:
+  tesztelt és kalibrált. A szóalapú kalibráció ezért már a PR1-ben fut rajta.
+- **A skill-szövegek nem bővültek:** a bank (< 5200) és a bank-ellenőrző (≤ 2800) hosszkorlátja miatt. A modell a szabályt a
+  pontozó szerződéséből (`OPEN_ANSWER_RULES_HU` 7.) és a bank mezőleírásából kapja. A lektornézet mutatja a kifejezést, a lektor
+  ebből ítél.
+- **Diagnosztika:** a válaszkulcs-teszt üzenete a hiányzó kifejezést is megnevezi. A túl megengedő rubrikánál a javítás iránya
+  `requiredPhrases`, ha a különbség a nyelvtani alak vagy a szórend.
+- **Kulcsok:** a döntőbíró-kulcs és a `rubricHash` csak kifejezés esetén bővül (feltételes), így a meglévő kulcsok bitre azonosak.
+
 ## PR2 — S5b: gépi szigorítás kifejezéssel
 1. **`shared/answer-key-calibrate.ts` `tighten`:** szóalapú jelölt nélkül a minta 3- és 2-tokenes, egymás utáni kifejezései
    (`tokensOfV2`), a leghosszabbal kezdve, legalább egy nem kötőszó tokennel.
