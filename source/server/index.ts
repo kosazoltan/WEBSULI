@@ -545,6 +545,9 @@ app.use((req, res, next) => {
         // Spec 2026-10-19-okositas-fazisjelzo: az okosítás / javítás elárvult `processing` rekordjai is (indításkor és 2 percenként).
         const { startImproveOrphanSweeper } = await import("./improve-orphans");
         startImproveOrphanSweeper();
+        // Spec 2026-10-20-regi-anyag-studio-atalakitas: a régi anyagok Stúdió-leckévé alakítása (a kapcsoló a kódban).
+        const { startLegacyMigration } = await import("./studio/legacy-migration");
+        startLegacyMigration();
       } catch (sweepError) {
         logger.error("[STARTUP] Az árva futások/jobok zárása nem sikerült:", sweepError);
         // Nem végzetes: a poll 404-et ad az ismeretlen futásra.
