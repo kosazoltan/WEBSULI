@@ -3,8 +3,9 @@
  * közzététele. A régi lépésgépből (`step-runner.ts`) változatlan lekérdezésekkel áthelyezve; csak az egyfutásos motor által
  * használt műveletek maradtak. A `db` lustán töltődik: a modul importja nem nyithat adatbázis-kapcsolatot.
  */
+import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lessons, studioJobs, type InsertGameQuizItem } from "../../shared/schema";
+import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lessons, materialImprovementBackups, studioJobs, type InsertGameQuizItem } from "../../shared/schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { workflowFence, workflowSerialized } from "../workflows/engine";
@@ -45,7 +46,22 @@ export type PublishInput = {
    * jobok fedettségét nem terhelik), hogy a lecke `instr-*` címkéit a későbbi javítás is ismerje.
    */
   extraConcepts?: MapConcept[];
+  /**
+   * Spec 2026-10-20-regi-anyag-studio-atalakitas: a régi (HTML) anyag, amely HELYBEN lesz ez a lecke — azonos azonosító / link; a régi
+   * sor mentésbe kerül ugyanabban a tranzakcióban.
+   */
+  targetHtmlFileId?: string;
+  /** A régi anyag tartalmának sha256-lenyomata az indításkor: ha közben változott (pl. alkalmazott okosítás), a csere elmarad (review #349). */
+  targetBaseline?: string;
 };
+
+/** A régi anyag mentésének jelölése (`material_improvement_backups.notes`) — a visszaállításhoz és a méréshez. */
+export const LEGACY_BACKUP_NOTE = "legacy-studio-migration";
+
+/** A régi sor mentésre kerülő mezői (tiszta — tesztelhető). Review #349: az `id` a meglévő visszaállító út szerződése. */
+export function legacyBackupData(row: { id: string; title: string; content: string; description: string | null; classroom: number; contentType: string }) {
+  return { id: row.id, title: row.title, content: row.content, description: row.description, classroom: row.classroom, contentType: row.contentType };
+}
 
 export type JobPatch = Partial<{
   step: StudioStep;
@@ -185,6 +201,23 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           .limit(1);
 
         let fileId = existing?.htmlFileId ?? null;
+        // Review #349: a cél-anyag nem kerülhető meg — ha a lecke már más anyaghoz kötött, a publikálás megáll.
+        if (fileId && input.targetHtmlFileId && fileId !== input.targetHtmlFileId) throw new Error(`A lecke már más anyaghoz kötött (${fileId}), nem a célhoz (${input.targetHtmlFileId}).`);
+        // Spec 2026-10-20-regi-anyag-studio-atalakitas: a régi anyag helyben lesz lecke — előbb mentés, utána ugyanaz a frissítés, mint a
+        // meglévő fájl ágán (a tartalom a lecke helyőrzője). Hibás cél → kivétel, a tranzakció visszagördül (a régi anyag érintetlen).
+        if (!fileId && input.targetHtmlFileId) {
+          const [target] = await tx.select({ id: htmlFiles.id, title: htmlFiles.title, content: htmlFiles.content, description: htmlFiles.description,
+            classroom: htmlFiles.classroom, contentType: htmlFiles.contentType, userId: htmlFiles.userId })
+            .from(htmlFiles).where(eq(htmlFiles.id, input.targetHtmlFileId)).for("update");
+          if (!target) throw new Error(`A cél-anyag nem létezik: ${input.targetHtmlFileId}`);
+          if (target.contentType === "lesson") throw new Error(`A cél-anyag már lecke: ${input.targetHtmlFileId}`);
+          if (input.targetBaseline && createHash("sha256").update(target.content).digest("hex") !== input.targetBaseline) {
+            throw new Error(`A cél-anyag a gyártás közben megváltozott (${input.targetHtmlFileId}) — a csere elmarad, újragyártás szükséges.`);
+          }
+          await tx.insert(materialImprovementBackups).values({ originalFileId: target.id, backupData: legacyBackupData(target), createdBy: target.userId, notes: LEGACY_BACKUP_NOTE });
+          await tx.update(htmlFiles).set({ content: LESSON_PLACEHOLDER_HTML }).where(eq(htmlFiles.id, target.id));
+          fileId = target.id;
+        }
         if (fileId) {
           await tx
             .update(htmlFiles)

@@ -545,6 +545,9 @@ app.use((req, res, next) => {
         // Spec 2026-10-19-okositas-fazisjelzo: az okosítás / javítás elárvult `processing` rekordjai is (indításkor és 2 percenként).
         const { startImproveOrphanSweeper } = await import("./improve-orphans");
         startImproveOrphanSweeper();
+        // Spec 2026-10-20-regi-anyag-studio-atalakitas: a régi anyagok Stúdió-leckévé alakítása (a kapcsoló a kódban).
+        const { startLegacyMigration } = await import("./studio/legacy-migration");
+        startLegacyMigration();
       } catch (sweepError) {
         logger.error("[STARTUP] Az árva futások/jobok zárása nem sikerült:", sweepError);
         // Nem végzetes: a poll 404-et ad az ismeretlen futásra.
@@ -655,6 +658,8 @@ app.use((req, res, next) => {
         const cron = (await import("node-cron")).default;
         for (const task of cron.getTasks().values()) task.stop();
       } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
+      // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a régi anyagok sora sem indít új gyártást a leálló példányon.
+      try { (await import("./studio/legacy-migration")).stopLegacyMigration(); } catch (err) { logger.warn("A régi anyagok sora nem állítható le", err); }
       // Új kapcsolatot nem fogadunk; a nyitott kérések közben lefuthatnak.
       server.close(() => log("HTTP server closed"));
       try {

@@ -18,6 +18,7 @@ import {
   systemPrompts,
   improvedHtmlFiles,
   materialImprovementBackups,
+  lessons,
   type HtmlFile,
   type InsertHtmlFile,
   type User,
@@ -1614,7 +1615,7 @@ export class DatabaseStorage implements IStorage {
       }
 
       // 2. Validate backup data structure
-      const backupData = backup.backupData as { id: string; content: string; title?: string; description?: string | null; classroom?: number };
+      const backupData = backup.backupData as { id: string; content: string; title?: string; description?: string | null; classroom?: number; contentType?: string };
       if (!backupData || !backupData.id || !backupData.content) {
         throw new Error('Invalid backup data structure');
       }
@@ -1627,12 +1628,18 @@ export class DatabaseStorage implements IStorage {
           title: backupData.title || 'Restored',
           description: backupData.description || null,
           ...(backupData.classroom !== undefined ? { classroom: backupData.classroom } : {}),
+          // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a Stúdió-leckévé alakított régi anyag a típusát is visszakapja.
+          ...(backupData.contentType ? { contentType: backupData.contentType } : {}),
         })
         .where(eq(htmlFiles.id, backup.originalFileId))
         .returning();
 
       if (!restored) {
         throw new Error('Failed to restore file');
+      }
+      // Review #349: a Stúdió-leckévé alakított régi anyag visszaállításakor a lecke leválik (nem publikált, nem ehhez az anyaghoz kötött).
+      if (backupData.contentType && backupData.contentType !== 'lesson') {
+        await tx.update(lessons).set({ htmlFileId: null, publishedAt: null }).where(eq(lessons.htmlFileId, backup.originalFileId));
       }
 
       return {

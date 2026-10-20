@@ -335,6 +335,10 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
  * terv-állomás ezt veszi át, nem kér új tervet).
  */
 export type SingleRunInput = { files: ExtractorFile[]; instruction?: string; title?: string; ownerId: string; mapId?: string; approvedOutline?: unknown;
+  /** Spec 2026-10-20-regi-anyag-studio-atalakitas: a régi anyag, amely helyben lesz ez a lecke (a job kimenetében is — a folytatás ismeri). */
+  targetHtmlFileId?: string;
+  /** A régi anyag tartalmának lenyomata az indításkor — a publikálás csak változatlan anyagot cserél (review #349). */
+  targetBaseline?: string;
   /** J5: a megszakadt egyfutásos job folytatása a mentett kimenetéből (a hívó a beszélgetést a mentett állapotból állítja vissza). */
   resume?: { jobId: string; output: Record<string, unknown> } };
 
@@ -439,7 +443,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   deps.onJob?.(jobId, mapId);
   // J5: folytatásnál a mentett kimenet megmarad (a helyreállítási jelzők és a régi pillanatképek nélkül); a job újra fut.
   const { recoveryState: _recovery, remanufacturedAs: _remade, singleRun: _run, telemetry: _telemetry, ...kept } = input.resume?.output ?? {};
-  let output: Record<string, unknown> = { ...kept, ...(input.instruction ? { ownerInstruction: input.instruction } : {}), ...(corrections.length ? { sourceCorrections: corrections } : {}) };
+  let output: Record<string, unknown> = { ...kept, ...(input.instruction ? { ownerInstruction: input.instruction } : {}), ...(input.targetHtmlFileId ? { targetHtmlFileId: input.targetHtmlFileId, targetBaseline: input.targetBaseline } : {}), ...(corrections.length ? { sourceCorrections: corrections } : {}) };
   const resumeStep = { plan: "pedagogue", author: "author", animator: "animator", bank: "animator", lektor: "lektor", bankRepair: "lektor" } as const;
   // A mentett bank (és benne az ábrák) már kész: a lektorálás vagy a félkész lektori bankjavítás folytatódik.
   const pastBank = resumed?.stage === "lektor" || resumed?.stage === "bankRepair";
@@ -788,6 +792,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const published = await store.publishLesson({
     lessonId, mapId, title: final.data.title, classroom: final.data.classroom, coverage: coverage.coverage,
     quizItems: exportQuizItemsForPublish(final.data, lessonId, conceptIdResolver(concepts)),
+    ...(typeof output.targetHtmlFileId === "string" ? { targetHtmlFileId: output.targetHtmlFileId, ...(typeof output.targetBaseline === "string" ? { targetBaseline: output.targetBaseline } : {}) } : {}),
   });
   await store.saveStep(jobId, { step: "done", status: "ok", lessonId, finishedAt: new Date(),
     output: { ...output, lesson: final.data, htmlFileId: published.htmlFileId, exportedQuizItems: published.exportedQuizItems, quality: { removed: [], warnings },

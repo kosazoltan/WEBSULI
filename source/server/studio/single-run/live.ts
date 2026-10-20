@@ -99,7 +99,7 @@ async function singleRunDeps(ownerId: string, progress: (p: SingleRunProgress) =
 }
 
 /** Egy feltöltés teljes gyártása egy beszélgetésben (a hívó workflow-ján belül). */
-export async function runSingleUpload(input: { files: ExtractorFile[]; instruction?: string; title?: string; ownerId: string }, progress: (p: SingleRunProgress) => void): Promise<SingleRunResult> {
+export async function runSingleUpload(input: { files: ExtractorFile[]; instruction?: string; title?: string; ownerId: string; targetHtmlFileId?: string; targetBaseline?: string }, progress: (p: SingleRunProgress) => void): Promise<SingleRunResult> {
   progress({ phase: "ocr", detail: "A forrás előkészítése…" });
   const files = await prepareFiles(input.files);
   const deps = await singleRunDeps(input.ownerId, progress);
