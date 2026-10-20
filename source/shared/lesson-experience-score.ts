@@ -160,6 +160,10 @@ function orderSatisfied(tokens: readonly string[], groups: readonly (readonly st
   }
   return true;
 }
+/** S6b: a sorrendi csoport első pozíciója a válaszban (-1: nincs) — a gépi sorrend-szigorítás iránya és próbája, a pontozóval azonos módon. */
+export function orderPosition(answer: string, group: readonly string[]): number {
+  return firstPosition(tokensOfV2(answerWindow(answer)), group);
+}
 /** S6a: a sorrendi szabály nem teljesül (diagnosztika, válaszkulcs-tesztek, J1). */
 export function missingOrder(answer: string, task: Pick<OpenTask, "requiredOrder">): boolean {
   if (!task.requiredOrder?.length) return false;

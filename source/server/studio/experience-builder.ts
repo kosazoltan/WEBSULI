@@ -287,7 +287,7 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
   // öröklődnek; a jelölés csak a javított `required`-ben bent maradt (esetleg bővített) csoportra marad.
   const keepServerFields = (task: PacketContent["tasks"][number]) => {
     const previous = original.tasks.find(item => item.id === task.id);
-    const { tightened: _t, tightenedPhrases: _tp, relaxedTightening: _r, ...rest } = task;
+    const { tightened: _t, tightenedPhrases: _tp, tightenedOrder: _to, relaxedTightening: _r, ...rest } = task;
     const tightened = previous?.tightened ? retainTightened(previous.tightened, rest.required) : [];
     // S5b: a kifejezéses szigorítás jelölése is szerveres mező.
     const tightenedPhrases = previous?.tightenedPhrases ? retainTightenedPhrases(previous.tightenedPhrases, rest.requiredPhrases ?? []) : [];
@@ -297,7 +297,9 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
       if (previous.requiredOrder?.length && !rest.requiredOrder?.length) rest.requiredOrder = previous.requiredOrder;
       if (previous.requiredPhrases?.length && !rest.requiredPhrases?.length) rest.requiredPhrases = previous.requiredPhrases;
     }
-    return { ...rest, ...(tightened.length ? { tightened } : {}), ...(tightenedPhrases.length ? { tightenedPhrases } : {}), ...(previous?.relaxedTightening ? { relaxedTightening: previous.relaxedTightening } : {}) };
+    // S6b: a gépi sorrendi szabály jelölése csak a változatlan `requiredOrder`-rel öröklődik (a lektori javítás felülírhatja a szabályt).
+    const tightenedOrder = Boolean(previous?.tightenedOrder && rest.requiredOrder?.length && JSON.stringify(previous.requiredOrder) === JSON.stringify(rest.requiredOrder));
+    return { ...rest, ...(tightened.length ? { tightened } : {}), ...(tightenedPhrases.length ? { tightenedPhrases } : {}), ...(tightenedOrder ? { tightenedOrder: true } : {}), ...(previous?.relaxedTightening ? { relaxedTightening: previous.relaxedTightening } : {}) };
   };
   return { methods: replace(original.methods, patch.methods), tasks: replace(original.tasks, patch.tasks).map(keepServerFields),
     quiz: replace(original.quiz, patch.quiz), glossary: patch.glossary?.length && !glossaryIgnored ? patch.glossary : original.glossary };

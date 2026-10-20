@@ -5,7 +5,8 @@
  */
 import { blockingWrongCases, type AnswerKeyCases } from "./answer-key-tests";
 import type { OpenTask } from "./lesson-experience";
-import { ENGLISH_NEGATIONS, ENGLISH_WEAK_NEGATIONS, SENTENCE_CONNECTIVES, evaluateOpenAnswer, isComputedTask, missingAnswerConcepts, missingPhrases, normalizeAnswer, normalizeAnswerV2 } from "./lesson-experience-score";
+import { canonicalAlternative } from "./lesson-experience";
+import { ENGLISH_NEGATIONS, ENGLISH_WEAK_NEGATIONS, SENTENCE_CONNECTIVES, evaluateOpenAnswer, isComputedTask, missingAnswerConcepts, missingOrder, missingPhrases, normalizeAnswer, normalizeAnswerV2, orderPosition } from "./lesson-experience-score";
 import { inflectedForms, synonymsOf } from "./hu-lexicon";
 
 const NEGATIONS = new Set(["nem", "ne", "sem", "se", "nincs", "sincs"]);
@@ -65,7 +66,7 @@ function guardHolds(task: OpenTask, cases: AnswerKeyCases): boolean {
 }
 
 export type Calibration = { task: OpenTask; changes: string[] };
-type Tightening = Calibration & { tightened: string[][]; tightenedPhrases: string[][] };
+type Tightening = Calibration & { tightened: string[][]; tightenedPhrases: string[][]; tightenedOrder: boolean };
 
 /** A bónuszba sorolás küszöbe: hány helyes esetből kell hiányoznia a csoportnak (alapból legalább 2 — második tulajdonosi döntés 2026-10-15). */
 export type CalibrationOptions = {
@@ -93,6 +94,7 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
   const changes: string[] = [];
   const added: string[][] = [];
   const addedPhrases: string[][] = [];
+  let addedOrder = false;
   // Az aposztrófos összevonás egy szó (review #338: a „mustn't” ne essen „mustn” + „t” részre); a tagadó összevonás és minden aposztrófos
   // alak kimarad (a pontozó normalizálása szétbontja).
   const raw = [...new Set(task.sample.match(/[\p{L}\d]+(?:['’][\p{L}\d]+)*/gu) ?? [])]
@@ -135,9 +137,46 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
       fixed = true;
       break;
     }
+    // Spec 2026-10-20-s6-fogalom-sorrend (S6b): ha sem szó, sem kifejezés nem különböztet meg (ugyanazok a fogalmak, fordított sorrendben:
+    // „először szorzunk, utána emelünk négyzetre”), két kötelező csoport egyszavas alternatíváiból a minta sorrendje lesz a szabály — ha
+    // minden teljes pontos helyes válasz ugyanígy tartja, a hibás mindkét fogalmat tartalmazza, de fordítva. Minden nyelven (a sorrend a
+    // fogalmak első előfordulása, nem a szórend). Feladatonként legfeljebb egy sorrendi szabály; meglévőhöz nem nyúlunk.
+    for (const order of fixed || current.requiredOrder?.length ? [] : orderCandidates(current)) {
+      const probe = { requiredOrder: order };
+      if (order.some((g) => orderPosition(wrong.text, g) < 0) || !missingOrder(wrong.text, probe)) continue;
+      if (okCorrect.some((a) => missingOrder(a, probe))) continue;
+      const next: OpenTask = { ...current, requiredOrder: order };
+      if (evaluateOpenAnswer(next.sample, next).state !== "ok") continue;
+      if (okCorrect.some((a) => evaluateOpenAnswer(a, next).state !== "ok")) continue;
+      if (evaluateOpenAnswer(wrong.text, next).state === "ok") continue;
+      current = next;
+      addedOrder = true;
+      changes.push(`szigorítás (sorrend): + requiredOrder ${JSON.stringify(order)} (megkülönbözteti a hibás (${wrong.kind}) választ)`);
+      fixed = true;
+      break;
+    }
     if (!fixed) return null;
   }
-  return { task: current, changes, tightened: added, tightenedPhrases: addedPhrases };
+  return { task: current, changes, tightened: added, tightenedPhrases: addedPhrases, tightenedOrder: addedOrder };
+}
+
+/**
+ * S6b: sorrendi jelöltpárok a kötelező csoportokból — csoportonként az EGYSZAVAS alternatívák (a séma S6a-szabálya, review #346), közös
+ * alternatíva nélkül; az irány a minta első előfordulásaiból. A minta sorrendjében, a korábbi csoportpár előre.
+ */
+function orderCandidates(task: OpenTask): string[][][] {
+  const single = task.required.map((g) => [...new Set(g.filter((a) => canonicalAlternative(a).split(" ").filter(Boolean).length === 1))]);
+  const out: string[][][] = [];
+  for (let i = 0; i < single.length; i++) for (let j = i + 1; j < single.length; j++) {
+    const [a, b] = [single[i], single[j]];
+    if (!a.length || !b.length) continue;
+    const seen = new Set(a.map(canonicalAlternative));
+    if (b.some((x) => seen.has(canonicalAlternative(x)))) continue;
+    const [pa, pb] = [orderPosition(task.sample, a), orderPosition(task.sample, b)];
+    if (pa < 0 || pb < 0 || pa === pb) continue;
+    out.push(pa < pb ? [a, b] : [b, a]);
+  }
+  return out;
 }
 
 /** S5b: a minta egymás utáni 3- és 2-tokenes kifejezései (v2-tokenek, műveleti jel nélkül), legalább egy nem kötőszó tokennel; a hosszabb előre. */
@@ -167,7 +206,7 @@ function phraseCandidates(sample: string): string[] {
 export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null, options: CalibrationOptions = {}): Calibration {
   if (!cases || isComputedTask(original)) return { task: original, changes: [] };
   // Spec 2026-10-20-eroforras-s3c-rubrika-szigoritas: ha egy hibás eset teljes pontot kap, előbb szigorítunk (különben a rubrika változatlan).
-  const tightened: Tightening | null = guardHolds(original, cases) ? { task: original, changes: [], tightened: [], tightenedPhrases: [] } : tighten(original, cases, options.phrases === true);
+  const tightened: Tightening | null = guardHolds(original, cases) ? { task: original, changes: [], tightened: [], tightenedPhrases: [], tightenedOrder: false } : tighten(original, cases, options.phrases === true);
   if (!tightened || !guardHolds(tightened.task, cases)) return { task: original, changes: [] };
   let task: OpenTask = { ...tightened.task, required: tightened.task.required.map((g) => [...g]), bonus: tightened.task.bonus.map((g) => [...g]) };
   const changes: string[] = [...tightened.changes];
@@ -219,8 +258,10 @@ export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null
   const marked = retainTightened([...(original.tightened ?? []), ...tightened.tightened], task.required);
   // S5b: a kifejezéses szigorítás nyoma — csak a `requiredPhrases`-ben (pontosan) bent maradt kifejezés.
   const markedPhrases = retainTightenedPhrases([...(original.tightenedPhrases ?? []), ...tightened.tightenedPhrases], task.requiredPhrases ?? []);
-  const { tightened: _previous, tightenedPhrases: _previousPhrases, ...untagged } = task;
-  return { task: { ...untagged, ...(marked.length ? { tightened: marked } : {}), ...(markedPhrases.length ? { tightenedPhrases: markedPhrases } : {}) }, changes };
+  // S6b: a sorrend-szigorítás nyoma — a kalibráció lépései a `requiredOrder`-hez nem nyúlnak, így a korábbi vagy az új jelölés marad.
+  const markedOrder = Boolean(task.requiredOrder?.length) && (tightened.tightenedOrder || original.tightenedOrder === true);
+  const { tightened: _previous, tightenedPhrases: _previousPhrases, tightenedOrder: _previousOrder, ...untagged } = task;
+  return { task: { ...untagged, ...(marked.length ? { tightened: marked } : {}), ...(markedPhrases.length ? { tightenedPhrases: markedPhrases } : {}), ...(markedOrder ? { tightenedOrder: true } : {}) }, changes };
 }
 
 /** S5b: a kifejezéses szigorítás csoportjai közül a `requiredPhrases`-ben bent maradtak (a csoport aktuális alakjával). */
