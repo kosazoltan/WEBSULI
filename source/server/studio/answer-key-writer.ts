@@ -35,7 +35,10 @@ export const ANSWER_KEY_SYSTEM = [
 /** A feladat tartalmi kulcsa: ha a kérdés, a minta és a szóminimum nem változott, a tesztek újrahasznosíthatók (javítókör). */
 export const answerKeyCacheKey = (task: Pick<OpenTask, "q" | "sample" | "minWords" | "requiredPhrases" | "requiredOrder">) =>
   // Review #341: a kifejezéses feladat más hibás próbákat kap (alak / szórend) — a kulcs csak ilyenkor bővül (a régi kulcsok azonosak).
-  createHash("sha256").update(JSON.stringify(task.requiredPhrases?.length || task.requiredOrder?.length ? [task.q, task.sample, task.minWords, ...(task.requiredPhrases?.length ? ["phrases"] : []), ...(task.requiredOrder?.length ? ["order"] : [])] : [task.q, task.sample, task.minWords])).digest("hex");
+  // Review #346: a kifejezés és a sorrend TARTALMA is a kulcsba kerül — a javítókörben módosított sorrendhez új (fordított) próba kell.
+  createHash("sha256").update(JSON.stringify(task.requiredPhrases?.length || task.requiredOrder?.length
+    ? [task.q, task.sample, task.minWords, ...(task.requiredPhrases?.length ? [{ phrases: task.requiredPhrases }] : []), ...(task.requiredOrder?.length ? [{ order: task.requiredOrder }] : [])]
+    : [task.q, task.sample, task.minWords])).digest("hex");
 
 export function answerKeyUserMessage(tasks: OpenTask[], ctx: AnswerKeyContext): string {
   const used = new Set(tasks.flatMap((t) => t.coversConceptIds));

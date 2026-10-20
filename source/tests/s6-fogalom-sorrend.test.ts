@@ -91,3 +91,10 @@ test("S6a: séma és szigorú bank-kimenet", () => {
   const packet = normalizeStrictPacket({ tasks: [{ ...task(), requiredOrder: null, requiredPhrases: null, typedAnswers: null, requiredDistinct: null }], methods: [], quiz: [] }) as { tasks: Array<Record<string, unknown>> };
   assert.equal("requiredOrder" in packet.tasks[0], false);
 });
+
+test("review #346: a tesztíró gyorsítótár-kulcsa a sorrend tartalmától függ (a módosított sorrendhez új próba)", () => {
+  const a = task();
+  const b = task({ requiredOrder: [["szorzunk", "szoroz", "szorzás"], ["négyzetre", "négyzet"]] });
+  assert.notEqual(answerKeyCacheKey(a), answerKeyCacheKey(b));
+  assert.equal(answerKeyCacheKey(a), answerKeyCacheKey(task()), "azonos sorrend: azonos kulcs");
+});
