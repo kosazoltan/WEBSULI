@@ -143,13 +143,20 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
 /** S5b: a minta egymás utáni 3- és 2-tokenes kifejezései (v2-tokenek, műveleti jel nélkül), legalább egy nem kötőszó tokennel; a hosszabb előre. */
 function phraseCandidates(sample: string): string[] {
   const tokens = normalizeAnswerV2(sample).split(/\s+/).filter((t) => t && /\p{L}/u.test(t));
+  // Review #342: a tagadó összevonás MINDKÉT töredéke tagadásjel („mustn t”: a „mustn” is) — a „t” előtti pozíció is tiltott, hogy az
+  // ablak ne végződhessen az első töredéken („the pupils mustn”).
+  const negated = new Set<number>();
+  tokens.forEach((t, i) => {
+    if (NEGATIONS.has(t) || NOT_DISTINGUISHING_NEGATION.has(t)) negated.add(i);
+    if (t === "t" && i > 0) negated.add(i - 1);
+  });
   const out: string[] = [];
   for (const n of [3, 2]) for (let i = 0; i + n <= tokens.length; i++) {
     const gram = tokens.slice(i, i + n);
     if (gram.every((t) => NOT_DISTINGUISHING.has(t))) continue;
     // Tagadás nem lehet a megkülönböztető kifejezés része (S3c-szerződés, review #338: a „mustn t run” egy helyes „must not run”-t is
-    // elutasítana); az aposztrófos összevonás maradéka („t”) is tagadásjel.
-    if (gram.some((t) => NEGATIONS.has(t) || NOT_DISTINGUISHING_NEGATION.has(t))) continue;
+    // elutasítana) — a tagadószó és az összevonás mindkét töredéke.
+    if (gram.some((_, k) => negated.has(i + k))) continue;
     const phrase = gram.join(" ");
     if (phrase.length > PHRASE_LENGTH_MAX) continue; // review #342: a séma kifejezés-hosszkorlátja
     if (!out.includes(phrase)) out.push(phrase);

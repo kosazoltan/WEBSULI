@@ -61,7 +61,9 @@ test("S5b: a kifejezéses szigorítás „csak emiatt bukott” jele és lazít�
   assert.equal(tightenedOnlyMiss(tight, other, det), true, `${phrase} / ${det}`);
   const relaxed = relaxTask(tight, { answered: 20, falseRejects: 10 }, new Date())!;
   assert.ok(relaxed, "lazítva");
-  assert.equal(relaxed.requiredPhrases!.length, tight.requiredPhrases!.length, "a csoportszám változatlan");
+  // Review #342: a szigorított kifejezéscsoport fogalomcsoporttá alakul (a csoportszám — kötelező + kifejezés — változatlan).
+  assert.equal(relaxed.required.length + (relaxed.requiredPhrases?.length ?? 0), tight.required.length + tight.requiredPhrases!.length, "a csoportszám változatlan");
+  assert.equal(relaxed.requiredPhrases, undefined, "a kiürült kifejezésmező törlődik");
   assert.equal("tightenedPhrases" in relaxed, false);
   assert.deepEqual(relaxed.relaxedTightening?.phraseGroups, tight.requiredPhrases);
   for (const a of [other, sofaCases.wrong[0].text, "sofa", "chairs sofa", "nothing at all here"]) {
@@ -108,4 +110,28 @@ test("review #342 (P2): a német, francia, spanyol, olasz tagadás sem lehet a m
     const out = calibrateRubric(t, cases, { phrases: true });
     assert.ok(!(out.task.requiredPhrases ?? []).flat().some((p) => p.split(" ").includes(neg)), `${neg}: ${JSON.stringify(out.task.requiredPhrases)}`);
   }
+});
+
+test("review #342: a kifejezéscsoport lazítása a tűrő fogalomillesztéssel is teljesül (sorrend, elütés) és sémahelyes hosszú fogalomtaggal", () => {
+  const t = task({
+    required: [["large sofa"], ["wooden chairs"], ["a very long concept alternative that is definitely longer than eighty characters in total, really long"]],
+    requiredPhrases: [["is a large"]], tightenedPhrases: [["is a large"]],
+    sample: "There is a large sofa and wooden chairs, a very long concept alternative that is definitely longer than eighty characters in total, really long.",
+  });
+  const answer = "The sofa is large and the chairs are wooden, a very long concept alternative that is definitely longer than eighty characters in total, really long.";
+  assert.notEqual(evaluateOpenAnswer(answer, t).state, "ok", "előfeltétel: a kifejezés hiányzik");
+  const relaxed = relaxTask(t, { answered: 20, falseRejects: 10 }, new Date())!;
+  assert.equal(evaluateOpenAnswer(answer, relaxed).state, "ok", "a többi fogalom (sorrend nélkül) teljesíti a hatástalanított csoportot");
+  assert.ok(openTaskSchema.safeParse(relaxed).success, "a 80 karakternél hosszabb fogalomtag nem kerül kifejezésmezőbe");
+  for (const a of [answer, "is a large", "sofa", "nothing", t.sample]) assert.ok(evaluateOpenAnswer(a, relaxed).score >= evaluateOpenAnswer(a, t).score, a);
+});
+
+test("review #342: a tagadó összevonás első töredéke („mustn”) sem lehet a kifejezés vége", () => {
+  const t = task({ q: "What does the sign say?", required: [["run"]], minWords: 3, sample: "The pupils mustn't run here." });
+  const cases: AnswerKeyCases = {
+    correct: ["The pupils mustn't run here, ok.", "The pupils mustn't run here today.", "The pupils mustn't run here at all."],
+    wrong: [{ kind: "tevhit", text: "The pupils cannot run here." }, { kind: "temaidegen", text: "I like apples." }],
+  };
+  const out = calibrateRubric(t, cases, { phrases: true });
+  assert.ok(!(out.task.requiredPhrases ?? []).flat().some((p) => /(^| )mustn( |$)/.test(p)), JSON.stringify(out.task.requiredPhrases));
 });

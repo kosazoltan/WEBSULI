@@ -39,14 +39,18 @@ export function relaxTask(task: OpenTask, stats: TightenedStats, now: Date): Ope
   if (!others.length) return null;
   const otherMembers = others.flat();
   const groups = task.required.filter((g) => tightened.has(JSON.stringify(g)));
-  const required = task.required.map((g) => (tightened.has(JSON.stringify(g)) ? [...new Set([...g, ...otherMembers])] : g));
-  // S5b: a szigorított kifejezéscsoport ugyanígy hatástalanítva — a többi kötelező fogalom egy-egy szava is alternatívája (egyszavas
-  // kifejezés = pontos tokenegyezés), így a csoport találata legalább a régi, a pont nem csökken.
+  const relaxedRequired = task.required.map((g) => (tightened.has(JSON.stringify(g)) ? [...new Set([...g, ...otherMembers])] : g));
+  // S5b + review #342: a szigorított KIFEJEZÉScsoport fogalomcsoporttá alakul — alternatívái a kifejezés (a fogalomillesztő sorrend nélkül,
+  // tűréssel nézi, tehát a pontos kifejezés teljesülésekor ez is teljesül) és a többi kötelező fogalom összes tagja (ugyanazzal a tűrő
+  // illesztéssel, mint a saját csoportjukban). A csoportszám (kötelező + kifejezés) változatlan, a találat nem csökken; a fogalomtag
+  // 160 karakteres korlátja a kifejezés (≤ 80) és a fogalomtagok (≤ 160) hosszát is befogadja. Ha a `requiredPhrases` kiürül, a mező
+  // törlődik: a feladat a v1 útra kerül, amely a szavakat ugyanígy (a műveleti jelek nélkül, tehát legalább olyan engedékenyen) illeszti.
   const tightenedPhrases = new Set((task.tightenedPhrases ?? []).map((g) => JSON.stringify(g)));
   const phraseGroups = (task.requiredPhrases ?? []).filter((g) => tightenedPhrases.has(JSON.stringify(g)));
-  const requiredPhrases = task.requiredPhrases?.map((g) => (tightenedPhrases.has(JSON.stringify(g)) ? [...new Set([...g, ...otherMembers])] : g));
-  const { tightened: _dropped, tightenedPhrases: _droppedPhrases, ...rest } = task;
-  return { ...rest, required, ...(requiredPhrases ? { requiredPhrases } : {}), relaxedTightening: { at: now.toISOString(), answered: stats.answered, falseRejects: stats.falseRejects,
+  const keptPhrases = (task.requiredPhrases ?? []).filter((g) => !tightenedPhrases.has(JSON.stringify(g)));
+  const required = [...relaxedRequired, ...phraseGroups.map((g) => [...new Set([...g, ...otherMembers])])];
+  const { tightened: _dropped, tightenedPhrases: _droppedPhrases, requiredPhrases: _phrases, ...rest } = task;
+  return { ...rest, required, ...(keptPhrases.length ? { requiredPhrases: keptPhrases } : {}), relaxedTightening: { at: now.toISOString(), answered: stats.answered, falseRejects: stats.falseRejects,
     previousRequired: task.required.map((g) => [...g]), ...(groups.length ? { groups: groups.map((g) => [...g]) } : {}),
     ...(phraseGroups.length ? { previousRequiredPhrases: task.requiredPhrases!.map((g) => [...g]), phraseGroups: phraseGroups.map((g) => [...g]) } : {}) } };
 }
