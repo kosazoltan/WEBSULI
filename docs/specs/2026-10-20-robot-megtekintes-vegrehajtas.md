@@ -13,3 +13,12 @@ Terv: `docs/specs/2026-10-20-robot-megtekintes.md`. Munkakönyvtár: `source/`. 
    - forrásszintű ellenőrzés: a `/dev/:id` rögzítése az `isAutomatedUserAgent` mögött van.
 4. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`.
 5. **Kitelepítés:** az aktív-futás őr = 0.
+
+## Review #335 — pontosítás
+- **Nincs puszta „bot” részszó-illesztés:** a „CUBOT X30” telefonnév is tartalmazza.
+- **Ehelyett:**
+  - ismert robot-termékazonosítók (googlebot, bingbot, …, meta-externalagent, facebookexternalhit);
+  - a robotok szokásos `(compatible; …bot|crawler|spider…)` és `+http(s)://` jelölése;
+  - előnézet- és parancssori kliensek.
+- **Ellenőrzés a valós 7 napos UA-listán:** 444 robot / 100 böngésző; a böngészős lista csak valódi eszközöket tartalmaz.
+- **Teszt:** CUBOT negatív eset, `compatible; Googlebot` és ismeretlen `compatible; …Crawler` pozitív eset.
