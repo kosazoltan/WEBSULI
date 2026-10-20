@@ -3,7 +3,7 @@
  * a nyílt feladat rubrikája a válaszkulcs-tesztesetekből, MODELLHÍVÁS NÉLKÜL igazodik. Minden lépés után őr: a minta teljes pontot kap, és
  * egyik hibás eset sem — ha sérül, az adott lépés visszavonódik. A pontozó nem változik (a régi leckék pontozása azonos).
  */
-import type { AnswerKeyCases } from "./answer-key-tests";
+import { blockingWrongCases, type AnswerKeyCases } from "./answer-key-tests";
 import type { OpenTask } from "./lesson-experience";
 import { ENGLISH_NEGATIONS, ENGLISH_WEAK_NEGATIONS, SENTENCE_CONNECTIVES, evaluateOpenAnswer, isTypedTask, missingAnswerConcepts, normalizeAnswer } from "./lesson-experience-score";
 import { inflectedForms, synonymsOf } from "./hu-lexicon";
@@ -43,9 +43,9 @@ function relatedForms(group: readonly string[], answer: string): string[] {
   return [...out].filter((f) => !existing.has(normalizeAnswer(f)));
 }
 
-/** Az őr: a minta `ok`, egyik hibás eset sem `ok`. */
+/** Az őr: a minta `ok`, egyik BLOKKOLÓ hibás eset sem `ok` (J1: ugyanaz a predikátum, mint az `answerKeyProblems`-ben — review #338). */
 function guardHolds(task: OpenTask, cases: AnswerKeyCases): boolean {
-  return evaluateOpenAnswer(task.sample, task).state === "ok" && cases.wrong.every((w) => evaluateOpenAnswer(w.text, task).state !== "ok");
+  return evaluateOpenAnswer(task.sample, task).state === "ok" && blockingWrongCases(task, cases).every((w) => evaluateOpenAnswer(w.text, task).state !== "ok");
 }
 
 export type Calibration = { task: OpenTask; changes: string[] };
@@ -67,10 +67,13 @@ function tighten(task: OpenTask, cases: AnswerKeyCases): Calibration | null {
   if (okCorrect.length < Math.max(1, AT_LEAST_TWO(cases.correct.length))) return null;
   let current: OpenTask = { ...task, required: task.required.map((g) => [...g]), bonus: task.bonus.map((g) => [...g]) };
   const changes: string[] = [];
-  const raw = [...new Set(task.sample.match(/[\p{L}\d]+/gu) ?? [])]
-    .filter(isDistinguishingCandidate)
+  // Az aposztrófos összevonás egy szó (review #338: a „mustn't” ne essen „mustn” + „t” részre); a tagadó összevonás és minden aposztrófos
+  // alak kimarad (a pontozó normalizálása szétbontja).
+  const raw = [...new Set(task.sample.match(/[\p{L}\d]+(?:['’][\p{L}\d]+)*/gu) ?? [])]
+    .filter((w) => !/['’]/.test(w) && isDistinguishingCandidate(w))
     .sort((a, b) => b.length - a.length);
-  for (const wrong of cases.wrong) {
+  // A blokkoló kör az eredeti rubrikán mérve; a szigorítás a teljes pontos helyeseket megtartja, így a kör nem változik.
+  for (const wrong of blockingWrongCases(task, cases)) {
     if (evaluateOpenAnswer(wrong.text, current).state !== "ok") continue;
     let fixed = false;
     for (const word of raw) {

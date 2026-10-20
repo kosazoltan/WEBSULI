@@ -30,6 +30,12 @@ rubrikával JAVÍTHATÓK. A modell irányszót cserél: „csökken” a „nő�
 - **Ha minden hibás válasz kizárható:** a kalibráció a meglévő lazító lépésekkel folytatódik.
 - **Különben:** az eredeti rubrika marad (a javítókör dönt).
 
+## Review #338 (pontosítás)
+- **Blokkoló kör = J1:** a kalibráció őre és a szigorítás is csak a blokkoló hibás esetekkel számol. Ugyanaz a predikátum, mint az
+  `answerKeyProblems`-ben (`blockingWrongCases`): a teljes pontos helyes válasz minden szavát tartalmazó hibás eset nem blokkol, ezért
+  nem is akadályozza a kalibrációt.
+- **Aposztrófos összevonás:** egy szó („mustn't”); minden aposztrófos alak kimarad a jelöltek közül.
+
 ## Nem-cél
 - **A pontozó és a minimumok:** nem változnak. A régi leckék pontozása azonos.
 - **A típusos (v2) feladatok:** változatlanok (a kalibráció ma sem nyúl hozzájuk).
