@@ -40,11 +40,11 @@ test("az igazítás a JSON-bankon kívül egy bájtot sem változtat", () => {
 
 test("helyes bank és olvashatatlan bank: semmi nem változik", () => {
   const ok = htmlDocument();
-  assert.deepEqual(alignHtmlLessonBank(ok), { html: ok, aligned: [] });
+  assert.deepEqual(alignHtmlLessonBank(ok), { html: ok, aligned: [], narrowed: [], modeFlipped: [], dropped: [] });
   const broken = ok.replace(/("experience":)/, "$1 {");
-  assert.deepEqual(alignHtmlLessonBank(broken), { html: broken, aligned: [] });
+  assert.deepEqual(alignHtmlLessonBank(broken), { html: broken, aligned: [], narrowed: [], modeFlipped: [], dropped: [] });
   const none = "<html><body>nincs bank</body></html>";
-  assert.deepEqual(alignHtmlLessonBank(none), { html: none, aligned: [] });
+  assert.deepEqual(alignHtmlLessonBank(none), { html: none, aligned: [], narrowed: [], modeFlipped: [], dropped: [] });
 });
 
 test("a HTML-szerződés kimondja a csomagonkénti szóbeli/írásos szabályt", () => {
@@ -66,6 +66,6 @@ test("alakhibás feladat: nincs kivétel, a bank érintetlen, a kapu sémahibát
   data.experience.tasks[0] = { ...data.experience.tasks[0], sample: "alma", minWords: 1, required: [["alma"]], requiredDistinct: [{ category: "gyümölcs", count: 1 }] };
   const broken = writeHtmlLessonData(html, data);
   const result = alignHtmlLessonBank(broken);
-  assert.deepEqual(result, { html: broken, aligned: [] });
+  assert.deepEqual(result, { html: broken, aligned: [], narrowed: [], modeFlipped: [], dropped: [] });
   assert.equal(verifyLessonMethodHtml(broken).ok, false);
 });
