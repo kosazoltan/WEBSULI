@@ -315,7 +315,8 @@ export function quizCorrectIndexProblems(quiz: ReadonlyArray<{ id: string; optio
   const powersToValues = (text: string) => text.replace(/(?<!\d)(?<!\d[.,])(\d+)\s*(?:\^\s*(\d{1,2})(?!\d)|([⁰¹²³⁴⁵⁶⁷⁸⁹]{1,2})(?![⁰¹²³⁴⁵⁶⁷⁸⁹]))/g, (whole, base: string, caret?: string, sup?: string) => {
     const exponent = Number(caret ?? [...(sup ?? "")].map((c) => SUPERSCRIPT[c]).join(""));
     const value = Number(base) ** exponent;
-    return Number.isSafeInteger(value) ? ` ${value} ` : whole;
+    // Review #344: szóköz nélkül — a megelőző előjel az értékhez tapad („-7³” → „-343”, nem „- 343”, amelyből a mínusz elveszne).
+    return Number.isSafeInteger(value) ? String(value) : whole;
   });
   const numbersOf = (text: string) => new Set((normalizeAnswer(powersToValues(text)).match(/-?\d+(?:\.\d+)?/g) ?? []));
   for (const q of quiz) {

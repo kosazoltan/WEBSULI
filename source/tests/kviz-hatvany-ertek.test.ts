@@ -36,3 +36,15 @@ test("review #344: tizedes alap és háromjegyű kitevő nem illeszkedik részle
   const big = { id: "q4", options: ["1024", "5", "3"], correctIndex: 1, feedbackPerOption: ["Nem.", "Helyes: a 2^100 ennél sokkal nagyobb.", "Nem."] };
   assert.deepEqual(quizCorrectIndexProblems([big]), [], "a 2^100 nem lesz 2^10 = 1024");
 });
+
+test("review #344: a felső indexes háromjegyű kitevő („2¹⁰⁰”) sem illeszkedik részlegesen", () => {
+  const big = { id: "q5", options: ["1024", "5", "3"], correctIndex: 1, feedbackPerOption: ["Nem.", "Helyes: a 2¹⁰⁰ ennél sokkal nagyobb.", "Nem."] };
+  assert.deepEqual(quizCorrectIndexProblems([big]), []);
+});
+
+test("review #344: a negatív alap előjele megmarad (-7³ = -343) — kalap, felső index és Unicode mínusz", () => {
+  for (const text of ["Helyes: -7³.", "Helyes: -7^3.", "Helyes: −7³."]) {
+    const q = { id: "q6", options: ["-343", "343", "0"], correctIndex: 0, feedbackPerOption: [text, "Nem.", "Nem."] };
+    assert.deepEqual(quizCorrectIndexProblems([q]), [], text);
+  }
+});
