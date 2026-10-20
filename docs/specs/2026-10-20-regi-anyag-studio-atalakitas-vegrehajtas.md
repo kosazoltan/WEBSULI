@@ -36,3 +36,15 @@ Terv: `docs/specs/2026-10-20-regi-anyag-studio-atalakitas.md`. Munkakönyvtár: 
    - összevonás `pilot` kapcsolóval (AKTIV=0 mellett), majd a 3 próba mérése (költség, idő, valódi böngészős ellenőrzés: a lecke, a
      kiértékelés és az eredmény-e-mail útja);
    - utána egy PR `all`-ra; onnan a sor éjszaka fut.
+
+## A próba eredménye (2026-10-20, élesben; #349)
+- **Átalakítva 3/3,** helyben. Azonos azonosító és nézettség (57 / 47 / 43), `content_type: lesson`, publikált lecke, mentés
+  (`legacy-studio-migration`). A felismert évfolyam (5. / 8. / 4.) egyezik a régivel.
+- **Idő:** 11–16 perc anyagonként (3 párhuzamosan).
+- **Költség:** gyorsítótár nélküli felső becsléssel ~$4,9 / $6,5 / $6,9, összesen ~$18,3. A keretben van ($5–10 / anyag).
+- **Kapuk:** `outputTruncated: 0`; a lektor a törtes leckéből 9 banktételt kivett (a bank így is teljes).
+- **Böngészős ellenőrzés** (websuli.vip, a törtes lecke): a Stúdió-arculat, a 6 fejezet, a mozgóképek, a felolvasás, a Feladatok
+  fül (15 az 50-ből, írásban / szóban, diktálás) rendben; konzolhiba nincs. A kiértékelést nem küldtük be (valódi e-mail menne az
+  adminoknak).
+- **Tulajdonosi döntés:** a próba után mind. → A kapcsoló `all` (a teszt a kapcsoló értékét ennek megfelelően rögzíti — dokumentált
+  spec-változás).
