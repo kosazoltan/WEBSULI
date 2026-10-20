@@ -310,7 +310,9 @@ export function quizCorrectIndexProblems(quiz: ReadonlyArray<{ id: string; optio
   // eldobja, így a „7²” → „7”, és a helyes 49-es opció „(3 + 4)² = 7²” magyarázata a 7-es disztraktort „nevezte helyesnek”. A számjegyes
   // alapú hatványalak az ÉRTÉKÉVEL számít (7² → 49); betűs alap és túl nagy érték változatlan.
   const SUPERSCRIPT: Record<string, string> = { "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9" };
-  const powersToValues = (text: string) => text.replace(/(\d+)\s*(?:\^\s*(\d{1,2})|([⁰¹²³⁴⁵⁶⁷⁸⁹]{1,2}))/g, (whole, base: string, caret?: string, sup?: string) => {
+  // Review #344: teljes, egész alap (balról nem lehet számjegy vagy tizedes rész: „0,5²” nem „0, 25”) és lezárt kitevő („2^100” nem
+  // „2^10” + „0”) — a tizedes alapú és a túl hosszú kitevőjű alak változatlan marad.
+  const powersToValues = (text: string) => text.replace(/(?<!\d)(?<!\d[.,])(\d+)\s*(?:\^\s*(\d{1,2})(?!\d)|([⁰¹²³⁴⁵⁶⁷⁸⁹]{1,2})(?![⁰¹²³⁴⁵⁶⁷⁸⁹]))/g, (whole, base: string, caret?: string, sup?: string) => {
     const exponent = Number(caret ?? [...(sup ?? "")].map((c) => SUPERSCRIPT[c]).join(""));
     const value = Number(base) ** exponent;
     return Number.isSafeInteger(value) ? ` ${value} ` : whole;

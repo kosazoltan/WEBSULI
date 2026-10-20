@@ -28,3 +28,11 @@ test("betűs alap (x²) és a felső index nélküli számok változatlanok", ()
   // A helyes (9) magyarázata a 3-at említi, a 9-et nem → a meglévő szabály szerint jelez (az x² nem változtat rajta).
   assert.equal(quizCorrectIndexProblems([q]).length, 1);
 });
+
+test("review #344: tizedes alap és háromjegyű kitevő nem illeszkedik részlegesen", () => {
+  const dec = { id: "q3", options: ["0,25", "25", "1"], correctIndex: 0, feedbackPerOption: ["Helyes: 0,5².", "Nem.", "Nem."] };
+  assert.deepEqual(quizCorrectIndexProblems([dec]), [], "a 0,5² nem lesz „0, 25”");
+  // A helyes (5) magyarázata a saját értéket nem írja ki; a régi minta a „2^100” elejét „2^10” = 1024-ként (disztraktor) olvasta volna.
+  const big = { id: "q4", options: ["1024", "5", "3"], correctIndex: 1, feedbackPerOption: ["Nem.", "Helyes: a 2^100 ennél sokkal nagyobb.", "Nem."] };
+  assert.deepEqual(quizCorrectIndexProblems([big]), [], "a 2^100 nem lesz 2^10 = 1024");
+});
