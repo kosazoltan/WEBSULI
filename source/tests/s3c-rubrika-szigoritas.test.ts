@@ -184,3 +184,9 @@ test("review #339 (P1): a lektori bankjavítás a `tightened` jelölést az elő
   const dropped = applyBankPacketRepair(original, { tasks: [{ ...withoutTag, required: t0.required.slice(1).length ? t0.required.slice(1) : [["más"]] }] }, new Set([t0.id]));
   assert.equal(dropped.tasks[0].tightened, undefined, "a csoport kikerült a kötelezők közül: nincs jelölés");
 });
+
+test("review #339: a jelölés sémája nem szűkebb a kalibrátornál — 5 szigorított csoport érvényes", () => {
+  const five = [["egy"], ["kettő"], ["három"], ["négy"], ["öt"]];
+  const t = task({ required: [...task().required, ...five], tightened: five });
+  assert.ok(openTaskSchema.safeParse(t).success);
+});
