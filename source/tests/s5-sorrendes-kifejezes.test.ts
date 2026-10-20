@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { evaluateOpenAnswer, isComputedTask, isTypedTask, missingPhrases } from "../shared/lesson-experience-score";
-import { openTaskSchema, scoringVersionFor, type OpenTask } from "../shared/lesson-experience";
+import { experiencePacketSchema, openTaskSchema, scoringVersionFor, type OpenTask } from "../shared/lesson-experience";
+import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { PHRASE_SCORING_VERSION, LESSON_SCORING_VERSION, scoringGate } from "../shared/answer-value";
 import { answerKeyNotes, answerKeyProblems, blockingWrongCases, type AnswerKeyCases } from "../shared/answer-key-tests";
 import { arbiterCacheKey, buildArbiterUserMessage } from "../server/arbiter/arbiter";
@@ -117,4 +118,22 @@ test("review #341 (P2): a tesztíró a kifejezéses feladatnál alak- és szóre
   const { requiredPhrases: _p, ...plain } = task();
   assert.equal(answerKeyUserMessage([plain as OpenTask], ctx).includes("kifejezesek"), false);
   assert.notEqual(answerKeyCacheKey(task()), answerKeyCacheKey(plain as OpenTask));
+});
+
+test("review #341: a minta-igazítás csoportpróbája a kifejezéses feladatnál v2 (a kötőjeles alak is bekerül)", () => {
+  const t = task({ required: [["well-known"]], sample: "He is well known.", requiredPhrases: [["he is"]], minWords: 4, needsSentence: false });
+  assert.notEqual(evaluateOpenAnswer(t.sample, t).score, 1, "előfeltétel: v2-ben a kötőjel külön token");
+  assert.equal(alignTaskToSample(t), true, JSON.stringify(t.required));
+  assert.equal(evaluateOpenAnswer(t.sample, t).score, 1);
+});
+
+test("review #341: a kifejezéses bank csomagsémája 4-es pontozási verziót követel", () => {
+  const e = standardFusionFixture().experience!;
+  const withPhrase = { ...e, tasks: e.tasks.map((x, i) => (i === 0 ? { ...x, requiredPhrases: [["there is"]] } : x)) };
+  for (const v of [undefined, 1, 2, 3]) {
+    const r = experiencePacketSchema.safeParse({ ...withPhrase, scoringVersion: v });
+    assert.equal(r.success, false, `scoringVersion=${v}`);
+    assert.match(JSON.stringify(r.success ? [] : r.error.issues), /Kifejezéses \(requiredPhrases\) feladathoz scoringVersion=4 kell/);
+  }
+  assert.equal(experiencePacketSchema.safeParse({ ...withPhrase, scoringVersion: 4 }).success, true);
 });

@@ -122,6 +122,9 @@ export const experiencePacketSchema = z.object({
   if (typed.length && (e.scoringVersion ?? 1) < TYPED_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Típusos feladathoz scoringVersion=${TYPED_SCORING_VERSION} kell (${typed[0].id}).` });
   const poly = typed.find((t) => t.typedAnswers?.some((a) => a.kind === "polynomial"));
   if (poly && (e.scoringVersion ?? 1) < POLYNOMIAL_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Betűs (polynomial) feladathoz scoringVersion=${POLYNOMIAL_SCORING_VERSION} kell (${poly.id}).` });
+  // Review #341: a kifejezéses bank a 4-es szerződés — különben a régi kliens frissítés nélkül, a kifejezéseket figyelmen kívül hagyva pontozna.
+  const phrase = e.tasks.find((t) => t.requiredPhrases?.length);
+  if (phrase && (e.scoringVersion ?? 1) < PHRASE_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Kifejezéses (requiredPhrases) feladathoz scoringVersion=${PHRASE_SCORING_VERSION} kell (${phrase.id}).` });
   for (const t of typed) for (const a of t.typedAnswers ?? []) {
     if (!isValidReference(a)) ctx.addIssue({ code: "custom", path: ["tasks"], message: `${t.id}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető.` });
   }
