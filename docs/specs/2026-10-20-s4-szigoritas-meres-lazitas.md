@@ -50,6 +50,11 @@ Előzmény: S3c (#338, `docs/specs/2026-10-20-eroforras-s3c-rubrika-szigoritas.m
   - törli a `tightened` mezőt, és felveszi a `relaxedTightening: { at, answered, falseRejects }` mezőt;
   - `lessons.version + 1`, naplóbejegyzés.
 - **Hatás a tanulóra:** csak emelhet pontot (a csoport bónusz lesz). A folyamatban lévő kör a szerveren a friss leckével pontozódik.
+- **Workflow (S7-szabály, `tests/s7-workflow-guard.test.ts`):** élő lecke gépi módosítása csak workflow alatt — új `relax` mód
+  (forrás → kapu → alkalmazás → visszaolvasás), `workflowFence` a tranzakcióban.
+  - A futás tulajdonosa a lecke gyártója: a tudástár-térkép `createdBy`, különben az anyag `userId`. Ha egyik sincs, nincs lazítás
+    (napló).
+  - Ha nincs teendő (már lazított), workflow-futás sem indul.
 
 ## Nem-cél
 - A pontozó (`evaluateOpenAnswer`) és a döntőbíró nem változik.
