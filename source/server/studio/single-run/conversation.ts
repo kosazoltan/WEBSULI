@@ -14,8 +14,12 @@ import type { ExtractorFile } from "../extractor";
 export const SINGLE_RUN_PRIMARY_MODEL = LESSON_MODELS.primary;
 export const SINGLE_RUN_FALLBACK_MODEL = LESSON_MODELS.fallback;
 export const SINGLE_RUN_EFFORT = "medium" as const;
-/** Egy forduló kimeneti kerete (a teljes tanítás vagy egy fejezet bankja is ebbe fér; csak a használt token fizetendő). */
-export const SINGLE_RUN_MAX_TOKENS = 64_000;
+/**
+ * Egy forduló kimeneti kerete = a modellek plafonja (Opus 5.5 és GPT-6.1 Sol: 128 000, `server/ai/models.ts`). Csak a ténylegesen generált
+ * token fizetendő, a levágás viszont a már kifizetett kimenetet eldobja és újragenerálást kér — spec 2026-10-20-bank-kimeneti-keret
+ * (mért: job be3bd5d2, a 64 000-es keretnél levágott bankcsomag). A tömörséget a bank szerződésének kimeneti kerete kéri előre.
+ */
+export const SINGLE_RUN_MAX_TOKENS = 128_000;
 /** Egy forduló időkerete: a hosszú, gondolkodó fordulók streamelve futnak. */
 export const SINGLE_RUN_TIMEOUT_MS = 30 * 60_000;
 
