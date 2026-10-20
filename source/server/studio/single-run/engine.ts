@@ -783,7 +783,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   if (Array.isArray(savedRemoved) && savedRemoved.length && !warnings.some((w) => w.startsWith("Az utolsó lektorkör hibás tételeit kivettük")))
     warnings.push(`Az utolsó lektorkör hibás tételeit kivettük: ${savedRemoved.join(", ")}`);
   // Spec 2026-10-20-s4 (S4a): a közzétett bank szigorított feladatai (beállítás, nem halmozás — a folytatott futás sem számol kétszer).
-  telemetry.gates.rubricTightened = final.data.experience?.tasks.filter((t) => t.tightened?.length || t.tightenedPhrases?.length).length ?? 0;
+  telemetry.gates.rubricTightened = final.data.experience?.tasks.filter((t) => t.tightened?.length || t.tightenedPhrases?.length || t.tightenedOrder).length ?? 0;
   const lessonId = await store.upsertLesson(null, mapId, final.data);
   const published = await store.publishLesson({
     lessonId, mapId, title: final.data.title, classroom: final.data.classroom, coverage: coverage.coverage,

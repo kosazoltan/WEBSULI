@@ -62,3 +62,38 @@ Két PR:
    - `tightenedOnlyMiss` (csak a sorrend hiányzik + ellenpróba);
    - `relaxTask`: a sorrend helyett fogalomcsoport (a sorrendi csoportok + a többi kötelező tagjai), a `requiredOrder` törlődik.
 4. **Teszt:** a fordított műveleti sorrend szigorodik; ha nem minden helyes egyirányú, nem; a lazítás pontot nem csökkent.
+
+### PR2 megvalósítási pontosítások (S6b, a kód előtt)
+- **Jelöltpár (`shared/answer-key-calibrate.ts` `orderCandidates`):**
+  - forrás: a meglévő kötelező csoportok (`required`) EGYSZAVAS alternatívái (a séma S6a-szabálya, review #346; azonos kanonikus
+    alakkal);
+  - a két csoport nem oszthat meg alternatívát; az egyszavas alternatíva nélküli csoport kimarad.
+- **Az irány:** a minta határozza meg (az első előfordulás, a pontozó `firstPosition`-jével; exportált segéd: `orderPositions`).
+- **A felvétel feltételei:**
+  - a minta és MINDEN teljes pontos helyes válasz teljesíti a sorrendet;
+  - a hibás válasz mindkét csoportot tartalmazza, és fordított sorrendben;
+  - a felvétel után a minta és a helyesek `ok`, a hibás nem.
+- **A szigorítási sorrend:**
+  - szó (S3c) → kifejezés (S5b, csak idegen nyelven) → sorrend (S6b, minden nyelven);
+  - csak ha a feladatnak nincs `requiredOrder`-je; egy feladatra legfeljebb egy sorrendi szabály.
+- **A pontozási út:** a `requiredOrder` a feladatot a v2 útra viszi (mint az S5b kifejezése). Az őr (minta / helyesek / hibás) a
+  v2-n mér, a `validate` újraszámolja a `scoringVersion`-t (5).
+- **Jelölés:**
+  - `tightenedOrder: true` csak akkor marad, ha a végső `requiredOrder` a felvett szabály (JSON-egyezés);
+  - a `keepServerFields` ugyanígy örökíti (a `requiredOrder` változatlan).
+- **Lazítás (`relaxTask`):**
+  - a `requiredOrder` törlődik; helyette egy új kötelező fogalomcsoport: a sorrendi csoportok tagjai + a többi kötelező csoport tagjai;
+  - a csoportszám (a v2 egy sorrendi feltétele → egy fogalomcsoport) változatlan, a pont nem csökken;
+  - `relaxedTightening.previousRequiredOrder` őrzi az előállapotot.
+- **`tightenedOnlyMiss`:** a sorrend is lehet az egyetlen hiány. Ellenpróba: a szigorított szabályok nélkül teljes pont.
+- **Telemetria:** a `rubricTightened` és a lazítás jelöltjei a `tightenedOrder`-t is számolják; ez az e-mailben is megjelenik.
+- **Review #347:**
+  - **J1-kivételes próba:** a J1 miatt nem blokkoló, de teljes pontos, csak sorrendben eltérő hibás próba is megkapja a sorrendi
+    lépést (szóval / kifejezéssel elvben sem különböztethető meg). Ha a sorrend sem különbözteti meg, kimarad, nem blokkol. A
+    kalibráció ezért az őr teljesülésekor is lefuttatja a szigorítást.
+  - **Ellenpróba:** a „csak a szigorítás miatt bukott” ellenpróba a feladat saját (v2) pontozási útján fut, a szigorított mezők
+    elhagyása nem viheti át a v1-re.
+  - **Nem módosul:**
+    - a lazítás feltétele: kell nem szigorított kötelező csoport (S4-szerződés);
+    - a tesztíró utasítása: a nem sorrendi feladatnál továbbra sem kér puszta sorrendcserét;
+    - a vegyes verziójú futás kezelése.

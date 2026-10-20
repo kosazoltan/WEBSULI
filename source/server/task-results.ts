@@ -32,7 +32,7 @@ export type TightenedStats = { answered: number; falseRejects: number };
  * `null`: nincs teendő (küszöb alatt, már lazított, vagy nincs nem szigorított kötelező csoport, amellyel teljesülhetne).
  */
 export function relaxTask(task: OpenTask, stats: TightenedStats, now: Date): OpenTask | null {
-  if (!(task.tightened?.length || task.tightenedPhrases?.length) || task.relaxedTightening) return null;
+  if (!(task.tightened?.length || task.tightenedPhrases?.length || task.tightenedOrder) || task.relaxedTightening) return null;
   if (stats.answered < RELAX_MIN_ANSWERED || stats.falseRejects / stats.answered < RELAX_FALSE_REJECT_RATE) return null;
   const tightened = new Set((task.tightened ?? []).map((g) => JSON.stringify(g)));
   const others = task.required.filter((g) => !tightened.has(JSON.stringify(g)));
@@ -48,11 +48,17 @@ export function relaxTask(task: OpenTask, stats: TightenedStats, now: Date): Ope
   const tightenedPhrases = new Set((task.tightenedPhrases ?? []).map((g) => JSON.stringify(g)));
   const phraseGroups = (task.requiredPhrases ?? []).filter((g) => tightenedPhrases.has(JSON.stringify(g)));
   const keptPhrases = (task.requiredPhrases ?? []).filter((g) => !tightenedPhrases.has(JSON.stringify(g)));
-  const required = [...relaxedRequired, ...phraseGroups.map((g) => [...new Set([...g, ...otherMembers])])];
-  const { tightened: _dropped, tightenedPhrases: _droppedPhrases, requiredPhrases: _phrases, ...rest } = task;
-  return { ...rest, required, ...(keptPhrases.length ? { requiredPhrases: keptPhrases } : {}), relaxedTightening: { at: now.toISOString(), answered: stats.answered, falseRejects: stats.falseRejects,
-    previousRequired: task.required.map((g) => [...g]), ...(groups.length ? { groups: groups.map((g) => [...g]) } : {}),
-    ...(phraseGroups.length ? { previousRequiredPhrases: task.requiredPhrases!.map((g) => [...g]), phraseGroups: phraseGroups.map((g) => [...g]) } : {}) } };
+  // Spec 2026-10-20-s6-fogalom-sorrend (S6b): a gépi sorrendi szabály (EGY kötelező feltétel a v2-ben) egy fogalomcsoporttá alakul — a
+  // sorrendi csoportok és a többi kötelező fogalom tagjai, sorrend nélkül. A feltételszám változatlan; ha a sorrend teljesült, a tagjai
+  // megvannak, tehát a csoport is: a pont nem csökken. A `requiredOrder` törlődik (más típusos mező nélkül a feladat a v1 útra kerül).
+  const order = task.tightenedOrder && task.requiredOrder?.length ? task.requiredOrder : null;
+  const required = [...relaxedRequired, ...phraseGroups.map((g) => [...new Set([...g, ...otherMembers])]), ...(order ? [[...new Set([...order.flat(), ...otherMembers])]] : [])];
+  const { tightened: _dropped, tightenedPhrases: _droppedPhrases, requiredPhrases: _phrases, tightenedOrder: _droppedOrder, requiredOrder: _order, ...rest } = task;
+  return { ...rest, required, ...(keptPhrases.length ? { requiredPhrases: keptPhrases } : {}), ...(task.requiredOrder?.length && !order ? { requiredOrder: task.requiredOrder } : {}),
+    relaxedTightening: { at: now.toISOString(), answered: stats.answered, falseRejects: stats.falseRejects,
+      previousRequired: task.required.map((g) => [...g]), ...(groups.length ? { groups: groups.map((g) => [...g]) } : {}),
+      ...(phraseGroups.length ? { previousRequiredPhrases: task.requiredPhrases!.map((g) => [...g]), phraseGroups: phraseGroups.map((g) => [...g]) } : {}),
+      ...(order ? { previousRequiredOrder: order.map((g) => [...g]) } : {}) } };
 }
 
 /**
@@ -86,7 +92,7 @@ export async function maybeRelaxTightening(lessonId: string, taskIds: readonly s
     .from(lessons).leftJoin(knowledgeMaps, eq(lessons.mapId, knowledgeMaps.id)).leftJoin(htmlFiles, eq(lessons.htmlFileId, htmlFiles.id)).where(eq(lessons.id, lessonId));
   const parsed = current ? lessonSchema.safeParse(current.json) : null;
   if (!current || !parsed?.success || !parsed.data.experience) return [];
-  const candidates = parsed.data.experience.tasks.filter((t) => taskIds.includes(t.id) && (t.tightened?.length || t.tightenedPhrases?.length) && !t.relaxedTightening);
+  const candidates = parsed.data.experience.tasks.filter((t) => taskIds.includes(t.id) && (t.tightened?.length || t.tightenedPhrases?.length || t.tightenedOrder) && !t.relaxedTightening);
   if (!candidates.length) return [];
   const hashes = new Map(candidates.map((t) => [t.id, rubricHash(t)]));
   const stats = new Map<string, TightenedStats>();
@@ -139,7 +145,7 @@ export async function maybeRelaxTightening(lessonId: string, taskIds: readonly s
     // Review #340: valódi visszaolvasás — a mentett verzió és a lazított feladatok nyoma (a párhuzamosan már lazított is igazolt).
     const [saved] = await db.select({ json: lessons.json, version: lessons.version }).from(lessons).where(eq(lessons.id, lessonId));
     const savedLesson = saved ? lessonSchema.safeParse(saved.json) : null;
-    const isRelaxed = (id: string) => Boolean(savedLesson?.success && savedLesson.data.experience?.tasks.some((t) => t.id === id && t.relaxedTightening && !t.tightened && !t.tightenedPhrases));
+    const isRelaxed = (id: string) => Boolean(savedLesson?.success && savedLesson.data.experience?.tasks.some((t) => t.id === id && t.relaxedTightening && !t.tightened && !t.tightenedPhrases && !t.tightenedOrder));
     if (!saved || saved.version < applied.version || !plan.relaxed.every(isRelaxed)) throw new Error(`[S4c] a visszaolvasás nem igazolja a lazítást (${lessonId}).`);
     if (applied.relaxed.length) logger.info(`[S4c] gépi szigorítás automatikusan lazítva (${lessonId}): ${applied.relaxed.map((id) => `${id} ${stats.get(id)!.falseRejects}/${stats.get(id)!.answered}`).join(", ")}`);
     return { value: applied.relaxed, result: { kind: "material" as const, id: resultId } };

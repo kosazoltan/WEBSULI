@@ -30,7 +30,7 @@ export const typedAnswerSchema = z.object({
   unit: text(24).optional(), form: z.enum(["any", "simplified-fraction", "decimal", "intermediate-step", "expanded", "factored"]).optional(),
 });
 /** Kategóriakvóta: „2 fás és 2 lágy szárú példa” — kategóriánként legalább `count` KÜLÖNBÖZŐ elem, egy szinonimacsoport egy elem. */
-const canonicalAlternative = (s: string) => s.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim();
+export const canonicalAlternative = (s: string) => s.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim();
 export const requiredDistinctSchema = z.object({
   category: text(80), from: z.array(z.array(text(160)).min(1)).min(1).max(20), count: z.number().int().min(1).max(10),
 }).refine((r) => r.count <= r.from.length, { message: "A kért darabszám nem lehet több a felsorolt elemeknél." })
@@ -65,6 +65,8 @@ export const openTaskSchema = z.object({
     .optional(),
   /** S5b: a gépi szigorítással felvett, a `requiredPhrases`-ben bent maradt kifejezéscsoportok (S4 mérés / lazítás). */
   tightenedPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).optional(),
+  /** Spec 2026-10-20-s6-fogalom-sorrend (S6b): a `requiredOrder` a gépi sorrend-szigorítás eredménye (S4 mérés / lazítás). */
+  tightenedOrder: z.boolean().optional(),
   /**
    * Spec 2026-10-20-s4 (S4a): a gépi szigorítással (S3c) felvett, a `required`-ben bent maradt kötelező csoportok. Review #339: a korlát nem
    * szűkebb a kalibrátornál (blokkoló hibás esetenként 1 csoport, legfeljebb `ANSWER_KEY_LIMITS.wrongMax`, javítókörönként egyesítve).
@@ -79,6 +81,8 @@ export const openTaskSchema = z.object({
     /** S5b: a kifejezéses szigorítás lazításának előállapota. */
     previousRequiredPhrases: z.array(z.array(text(80)).min(1)).min(1).optional(),
     phraseGroups: z.array(z.array(text(80)).min(1)).min(1).optional(),
+    /** S6b: a sorrend-szigorítás lazításának előállapota (a törölt `requiredOrder`). */
+    previousRequiredOrder: z.array(z.array(text(160)).min(1)).min(2).max(4).optional(),
   }).optional(),
 });
 export const experienceQuizSchema = z.object({
