@@ -4,7 +4,8 @@ import { evaluateOpenAnswer, isComputedTask, isTypedTask, missingPhrases } from 
 import { openTaskSchema, scoringVersionFor, type OpenTask } from "../shared/lesson-experience";
 import { PHRASE_SCORING_VERSION, LESSON_SCORING_VERSION, scoringGate } from "../shared/answer-value";
 import { answerKeyNotes, answerKeyProblems, blockingWrongCases, type AnswerKeyCases } from "../shared/answer-key-tests";
-import { arbiterCacheKey } from "../server/arbiter/arbiter";
+import { arbiterCacheKey, buildArbiterUserMessage } from "../server/arbiter/arbiter";
+import { ANSWER_KEY_SYSTEM, answerKeyCacheKey, answerKeyUserMessage } from "../server/studio/answer-key-writer";
 import { rubricHash } from "../shared/lesson-result-email";
 import { normalizeStrictPacket } from "../server/studio/bank-schema";
 import { alignTaskToSample } from "../server/studio/bank-normalize";
@@ -98,4 +99,22 @@ test("S5a: a minta-igazítás a kifejezéses feladat szócsoportjait is igazítj
   assert.equal(alignTaskToSample(t), true);
   assert.ok(t.required[0].length > 1, JSON.stringify(t.required));
   assert.deepEqual(t.requiredPhrases, task().requiredPhrases, "a kifejezés érintetlen");
+});
+
+test("review #341 (P1): a döntőbíró kifejezéses feladatnál megkapja a helyes alakot és a nyelvtani szabályt; más feladatnál a prompt változatlan", () => {
+  const msg = buildArbiterUserMessage(task(), "", "There are a sofa.");
+  assert.match(msg, /NYELVTANI ALAK/);
+  assert.match(msg, /there is a sofa/);
+  assert.match(msg, /nem lehet "ok"/);
+  const { requiredPhrases: _p, ...plain } = task();
+  assert.equal(buildArbiterUserMessage(plain as OpenTask, "", "x").includes("NYELVTANI ALAK"), false);
+});
+
+test("review #341 (P2): a tesztíró a kifejezéses feladatnál alak- és szórendhibás próbát kér; a gyorsítótár-kulcs csak ekkor bővül", () => {
+  assert.match(ANSWER_KEY_SYSTEM, /KIVÉTEL — ha a feladatnál "kifejezesek"/);
+  const ctx = { concepts: [], classroom: 5 } as unknown as Parameters<typeof answerKeyUserMessage>[1];
+  assert.match(answerKeyUserMessage([task()], ctx), /"kifejezesek":\[\["there is a sofa"\]/);
+  const { requiredPhrases: _p, ...plain } = task();
+  assert.equal(answerKeyUserMessage([plain as OpenTask], ctx).includes("kifejezesek"), false);
+  assert.notEqual(answerKeyCacheKey(task()), answerKeyCacheKey(plain as OpenTask));
 });

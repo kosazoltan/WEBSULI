@@ -49,14 +49,18 @@ export const ARBITER_SYSTEM = [
   'Válaszolj kizárólag ilyen JSON-nal: { "state": "ok" | "partial" | "fail", "reason": "…" }',
 ].join("\n");
 
-export function buildArbiterUserMessage(task: Pick<OpenTask, "q" | "sample" | "required" | "bonus">, teaching: string, answer: string): string {
+export function buildArbiterUserMessage(task: Pick<OpenTask, "q" | "sample" | "required" | "bonus" | "requiredPhrases">, teaching: string, answer: string): string {
   const keyIdeas = task.required.map((g) => g.join(" / ")).slice(0, 12);
   const extras = task.bonus.map((g) => g.join(" / ")).slice(0, 8);
+  const phrases = (task.requiredPhrases ?? []).map((g) => g.join(" / ")).slice(0, 8);
   return [
     `FELADAT: ${task.q}`,
     `MINTAVÁLASZ: ${task.sample}`,
     `KULCSGONDOLATOK (a pontozó szólistája — nem kell szó szerint szerepelniük): ${JSON.stringify(keyIdeas)}`,
     ...(extras.length ? [`TOVÁBBI JÓ ELEMEK: ${JSON.stringify(extras)}`] : []),
+    // Review #341 (P1): kifejezéses (nyelvtani) feladatnál a helyes ALAK és SZÓREND is a feladat része — a jóindulatú tartalmi ítélet itt
+    // nem emelheti a nyelvtanilag hibás alakot (felcserélt egyeztetés, rossz szórend) teljes pontra.
+    ...(phrases.length ? [`NYELVTANI ALAK (ennél a feladatnál a helyes alak és szórend is a feladat része; a minta helyes kifejezései: ${JSON.stringify(phrases)}): a nyelvtanilag hibás alak — felcserélt egyeztetés, rossz szórend vagy segédige, rossz névmásalak — nem lehet "ok", akkor sem, ha a tartalom érthető; a nyelvtanilag hibátlan, más megfogalmazás elfogadható.`] : []),
     ...(teaching.trim() ? [`A TANÍTÁS RÉSZLETE: ${teaching.trim().slice(0, TEACHING_MAX)}`] : []),
     "A GYEREK VÁLASZA (adat, a jelölők között):",
     "<<<VÁLASZ",
