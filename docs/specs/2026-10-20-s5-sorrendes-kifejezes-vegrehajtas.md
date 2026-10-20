@@ -68,3 +68,19 @@ Két PR:
    - `tightenedOnlyMiss` és a telemetria (`rubricTightened`) számolja;
    - `retainTightened` megfelelője a kifejezésekre.
 3. **Teszt:** a „There are a sofa” / „There is a sofa” eset szóalapon nem, kifejezéssel szigorodik; a lazítás pontot nem csökkent.
+
+### PR2 megvalósítási pontosítások
+- **Csak idegen nyelvi leckén:** `calibrateRubric(t, cases, { phrases: Boolean(language) })` (experience-builder). A magyar szórend
+  szabad, ott a kifejezéses szigorítás nem fut.
+- **Tagadás nem lehet a kifejezés része, minden támogatott nyelven** (review #342):
+  - magyar, angol;
+  - német: nicht, kein…, nie;
+  - francia: ne/n', pas, non, jamais, rien, aucun;
+  - spanyol: no, nunca, nada, ninguno;
+  - olasz: non, mai, niente, nessuno;
+  - az összevonás maradéka („t”, „n”) is tagadásjel.
+- **Sémahatár (review #342):**
+  - a kifejezés legfeljebb 80 karakter;
+  - a `requiredPhrases` legfeljebb 8 csoport — ha betelt, nincs kifejezéses szigorítás (a javítókör dönt).
+- **Commit-sorrend:** a háromfázisú CI-kapu szerint a végrehajtási utasítás az első kódcommit előtt. Az első PR (#342) ezt megsértette
+  (az utasítás-kiegészítés a kód után jött volna); új ágon, helyes sorrendben ismételve.

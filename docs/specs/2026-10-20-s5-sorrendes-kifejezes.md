@@ -58,6 +58,14 @@ mérése után).
   - a felvett kifejezés `requiredPhrases`-be kerül, jelölése `tightenedPhrases` (a S4 telemetria `rubricTightened` része);
   - az S4c lazítás a kifejezéscsoportot ugyanúgy hatástalanítja: a többi kötelező csoport tagjai is alternatívái lesznek.
 
+## S5b pontosítás (megvalósítás)
+- **Csak idegen nyelvi leckén:** a kifejezéses gépi szigorítás csak ott fut (`calibrateRubric(..., { phrases: Boolean(language) })`). A
+  magyar szórend szabad („változatlan marad” = „marad változatlan”), ott a sorrend nem megkülönböztető jel. Mért: egy meglévő teszt
+  ilyen hamis megkülönböztetést fogott.
+- **Tagadás nem lehet a kifejezés része** (S3c-szerződés, review #338): a „mustn t run” egy helyes „must not run”-t is elutasítana. A
+  tagadó összevonás „t” maradéka is tagadásjel. A tagadásos alakot a modell írja `requiredPhrases`-be, VAGY-alternatívákkal.
+- **A J1-es (megkülönböztethetetlen) próba továbbra sem blokkol** — kifejezéses szigorítás csak a blokkoló próbára fut.
+
 ## Nem-cél
 - A v1 pontozó (a régi leckék és a HTML-paritás, `ee_evaluate`) nem változik. A HTML-okosítás útja nem kap kifejezést: a HTML-bank
   promptja nem említi, és az ott bejövő kifejezéses feladatot az igazítás kihagyja.
