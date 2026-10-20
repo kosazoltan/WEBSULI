@@ -4,10 +4,10 @@ import { calibrateRubric } from "../shared/answer-key-calibrate";
 import { evaluateOpenAnswer, missingOrder } from "../shared/lesson-experience-score";
 import { openTaskSchema, type OpenTask } from "../shared/lesson-experience";
 import { tightenedOnlyMiss } from "../shared/lesson-result-email";
+import { answerKeyProblems, blockingWrongCases, type AnswerKeyCases } from "../shared/answer-key-tests";
 import { relaxTask } from "../server/task-results";
 import { applyBankPacketRepair } from "../server/studio/experience-builder";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
-import type { AnswerKeyCases } from "../shared/answer-key-tests";
 
 /* Spec 2026-10-20-s6-fogalom-sorrend (S6b): gépi sorrend-szigorítás (minden nyelven), S4-lánc. Mért eset: job be3bd5d2, s1-t1. */
 
@@ -97,4 +97,46 @@ test("S6b: a lektori bankjavítás a `tightenedOrder` jelölést csak változatl
   assert.equal(kept.tasks[0].tightenedOrder, true);
   const changed = applyBankPacketRepair(original, { tasks: [{ ...withoutTag, requiredOrder: [["béta"], ["alfa"]] }] }, new Set([t0.id]));
   assert.equal(changed.tasks[0].tightenedOrder, undefined, "a lektori javítás új sorrendje már nem gépi szigorítás");
+});
+
+test("review #347 (P1): a csak sorrendben eltérő (J1 miatt nem blokkoló) teljes pontos hibás próba is sorrendi szabályt kap", () => {
+  const sameWords: AnswerKeyCases = { ...cases, correct: [...cases.correct, "Először négyzetre emelünk, utána szorzunk 4-gyel."] };
+  const t = task();
+  assert.ok(!blockingWrongCases(t, sameWords).includes(sameWords.wrong[0]), "előfeltétel: a próba J1-kivétel (egy helyes válasz minden szava benne van)");
+  assert.equal(evaluateOpenAnswer(sameWords.wrong[0].text, t).state, "ok", "előfeltétel: teljes pontot kap");
+  const { task: out, changes } = calibrateRubric(t, sameWords);
+  assert.deepEqual(out.requiredOrder, [["négyzetre", "négyzet"], ["szorzunk", "szoroz"]], JSON.stringify(changes));
+  assert.equal(out.tightenedOrder, true);
+  assert.notEqual(evaluateOpenAnswer(sameWords.wrong[0].text, out).state, "ok");
+  for (const a of sameWords.correct) assert.equal(evaluateOpenAnswer(a, out).state, "ok", a);
+  assert.deepEqual(answerKeyProblems(out, sameWords), []);
+  // Ha a sorrend sem különbözteti meg (a helyesek vegyes irányúak), a J1-kivétel marad, és a rubrika változatlan.
+  const mixed = calibrateRubric(t, { ...sameWords, correct: [...sameWords.correct, reversedCorrect] });
+  assert.equal(mixed.task.requiredOrder, undefined);
+  assert.deepEqual(mixed.changes, []);
+});
+
+test("review #347: aktív (szóalapú) szigorítás közben a modell adta sorrendi szabály változatlan marad, és nem kap gépi jelölést", () => {
+  const given = task({ requiredOrder: [["szorzunk", "szoroz"], ["négyzetre", "négyzet"]], sample: "Először szorzunk, utána négyzetre emelünk." });
+  const wordCases: AnswerKeyCases = {
+    correct: ["Előbb szorzunk, aztán négyzetre emelünk.", "Először szorzunk, és csak utána négyzetre emelünk.", "Szorzunk elsőként, majd négyzetre emelünk."],
+    wrong: [{ kind: "hianyos", text: "Először szorzunk, utána négyzetre." }, cases.wrong[1]],
+  };
+  assert.equal(evaluateOpenAnswer(wordCases.wrong[0].text, given).state, "ok", "előfeltétel: a szigorítás fut");
+  const out = calibrateRubric(given, wordCases);
+  assert.ok(out.changes.some((c) => c.startsWith("szigorítás: + kötelező csoport")), JSON.stringify(out.changes));
+  assert.deepEqual(out.task.requiredOrder, given.requiredOrder);
+  assert.equal(out.task.tightenedOrder, undefined);
+});
+
+test("review #347: a „csak a sorrend miatt bukott” ellenpróba más ok miatti bukásnál nem jelez — a feladat saját (v2) útján", () => {
+  const { task: tight } = calibrateRubric(task(), cases);
+  // Túl rövid ÉS fordított: a sorrend nélkül is bukna.
+  const short = "szorzunk négyzetre";
+  assert.equal(tightenedOnlyMiss(tight, short, evaluateOpenAnswer(short, tight).state), false);
+  // A tört a v2-ben EGY szó („1/2”), a v1-ben kettő: a v2-n túl rövid, a v1-en nem. Az ellenpróba nem válthat át a v1-re.
+  const strict = { ...tight, minWords: 4 };
+  const fraction = "Szorzunk 1/2 négyzetre";
+  assert.equal(evaluateOpenAnswer(fraction, strict).state, "fail", "előfeltétel: a v2-n túl rövid");
+  assert.equal(tightenedOnlyMiss(strict, fraction, "fail"), false);
 });

@@ -101,10 +101,15 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
     .filter((w) => !/['’]/.test(w) && isDistinguishingCandidate(w))
     .sort((a, b) => b.length - a.length);
   // A blokkoló kör az eredeti rubrikán mérve; a szigorítás a teljes pontos helyeseket megtartja, így a kör nem változik.
-  for (const wrong of blockingWrongCases(task, cases)) {
+  // Review #347 (P1): a J1 miatt NEM blokkoló, de teljes pontos hibás próba (egy helyes válasz minden szava benne van — pl. ugyanazok a
+  // lépések fordított sorrendben) szóval / kifejezéssel elvben sem különböztethető meg, sorrenddel igen: csak a sorrendi lépést kapja, és
+  // ha az sem segít, kimarad (nem blokkol, mint eddig).
+  const blocking = new Set(blockingWrongCases(task, cases));
+  for (const wrong of cases.wrong) {
+    const isBlocking = blocking.has(wrong);
     if (evaluateOpenAnswer(wrong.text, current).state !== "ok") continue;
     let fixed = false;
-    for (const word of raw) {
+    for (const word of isBlocking ? raw : []) {
       const group = [word, ...new Set(okCorrect.flatMap((a) => relatedForms([word], a)))];
       if (missingAnswerConcepts(wrong.text, { required: [group] }).length === 0) continue; // a hibás válasz is tartalmazza
       if (okCorrect.some((a) => missingAnswerConcepts(a, { required: [group] }).length > 0)) continue; // nem minden helyesben van meg
@@ -123,7 +128,7 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
     // nincs, és felvétele után a minta / a helyesek ok, a hibás nem.
     // Review #342 (P1): a csoportszám sémahatárán (8) nincs kifejezéses szigorítás — a javítókör dönt, érvénytelen feladat nem keletkezik.
     const room = (current.requiredPhrases?.length ?? 0) < PHRASE_GROUPS_MAX;
-    for (const phrase of fixed || !phrases || !room ? [] : phraseCandidates(task.sample)) {
+    for (const phrase of fixed || !phrases || !room || !isBlocking ? [] : phraseCandidates(task.sample)) {
       const probe = { requiredPhrases: [[phrase]] };
       if (missingPhrases(wrong.text, probe).length === 0) continue;
       if (okCorrect.some((a) => missingPhrases(a, probe).length > 0)) continue;
@@ -155,7 +160,7 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
       fixed = true;
       break;
     }
-    if (!fixed) return null;
+    if (!fixed && isBlocking) return null;
   }
   return { task: current, changes, tightened: added, tightenedPhrases: addedPhrases, tightenedOrder: addedOrder };
 }
@@ -206,8 +211,12 @@ function phraseCandidates(sample: string): string[] {
 export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null, options: CalibrationOptions = {}): Calibration {
   if (!cases || isComputedTask(original)) return { task: original, changes: [] };
   // Spec 2026-10-20-eroforras-s3c-rubrika-szigoritas: ha egy hibás eset teljes pontot kap, előbb szigorítunk (különben a rubrika változatlan).
-  const tightened: Tightening | null = guardHolds(original, cases) ? { task: original, changes: [], tightened: [], tightenedPhrases: [], tightenedOrder: false } : tighten(original, cases, options.phrases === true);
-  if (!tightened || !guardHolds(tightened.task, cases)) return { task: original, changes: [] };
+  // Review #347: az őr teljesülésekor is fut (a J1 miatt nem blokkoló, csak sorrendben eltérő hibás próba sorrendi szigorítása); ha ez nem
+  // sikerül, az eredeti rubrika marad a kiinduló pont.
+  const untouched: Tightening = { task: original, changes: [], tightened: [], tightenedPhrases: [], tightenedOrder: false };
+  const attempt = tighten(original, cases, options.phrases === true);
+  const tightened: Tightening | null = attempt && guardHolds(attempt.task, cases) ? attempt : guardHolds(original, cases) ? untouched : null;
+  if (!tightened) return { task: original, changes: [] };
   let task: OpenTask = { ...tightened.task, required: tightened.task.required.map((g) => [...g]), bonus: tightened.task.bonus.map((g) => [...g]) };
   const changes: string[] = [...tightened.changes];
   const failing = () => cases.correct.filter((a) => evaluateOpenAnswer(a, task).state !== "ok");

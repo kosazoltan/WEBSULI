@@ -87,3 +87,13 @@ Két PR:
   - `relaxedTightening.previousRequiredOrder` őrzi az előállapotot.
 - **`tightenedOnlyMiss`:** a sorrend is lehet az egyetlen hiány. Ellenpróba: a szigorított szabályok nélkül teljes pont.
 - **Telemetria:** a `rubricTightened` és a lazítás jelöltjei a `tightenedOrder`-t is számolják; ez az e-mailben is megjelenik.
+- **Review #347:**
+  - **J1-kivételes próba:** a J1 miatt nem blokkoló, de teljes pontos, csak sorrendben eltérő hibás próba is megkapja a sorrendi
+    lépést (szóval / kifejezéssel elvben sem különböztethető meg). Ha a sorrend sem különbözteti meg, kimarad, nem blokkol. A
+    kalibráció ezért az őr teljesülésekor is lefuttatja a szigorítást.
+  - **Ellenpróba:** a „csak a szigorítás miatt bukott” ellenpróba a feladat saját (v2) pontozási útján fut, a szigorított mezők
+    elhagyása nem viheti át a v1-re.
+  - **Nem módosul:**
+    - a lazítás feltétele: kell nem szigorított kötelező csoport (S4-szerződés);
+    - a tesztíró utasítása: a nem sorrendi feladatnál továbbra sem kér puszta sorrendcserét;
+    - a vegyes verziójú futás kezelése.

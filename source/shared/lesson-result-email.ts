@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { evaluateOpenAnswer, missingAnswerConcepts, missingOrder, missingPhrases, scoreSummary, type AnswerScore } from "./lesson-experience-score";
+import { evaluateOpenAnswer, evaluateOpenAnswerV2, isTypedTask, missingAnswerConcepts, missingOrder, missingPhrases, scoreSummary, type AnswerScore } from "./lesson-experience-score";
 
 /**
  * Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — tiszta modul, DB és hálózat nélkül:
@@ -55,7 +55,10 @@ export function tightenedOnlyMiss(task: OpenTask, answer: string, detState: Answ
   // tagadás…, és a döntőbírói emelés nem a szigorítás téves elutasítása).
   const required = task.required.filter((g) => !tightened.has(JSON.stringify(g)));
   const phrases = (task.requiredPhrases ?? []).filter((g) => !tightenedPhrases.has(JSON.stringify(g)));
-  return required.length > 0 && evaluateOpenAnswer(answer, { ...task, required, requiredPhrases: phrases.length ? phrases : undefined, requiredOrder: task.tightenedOrder ? undefined : task.requiredOrder }).state === "ok";
+  // Review #347: az ellenpróba a feladat SAJÁT pontozási útján fut — a szigorított mezők elhagyása nem vihet át a v1-re, amely a v2
+  // szabályait (pl. a tört egy szó) nem nézi, így más ok miatti bukás nem látszhat a szigorítás téves elutasításának.
+  const counterfactual = { ...task, required, requiredPhrases: phrases.length ? phrases : undefined, requiredOrder: task.tightenedOrder ? undefined : task.requiredOrder };
+  return required.length > 0 && (isTypedTask(task) ? evaluateOpenAnswerV2 : evaluateOpenAnswer)(answer, counterfactual).state === "ok";
 }
 
 /** Csak az ismert feladatokat pontozza; a döntőbíró gyorsítótár-ítélete (ha van) csak emelhet — mint a tanuló képernyőjén. */
