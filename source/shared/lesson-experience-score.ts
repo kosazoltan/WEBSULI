@@ -132,15 +132,20 @@ export type AnswerScore = { state: "ok" | "partial" | "fail"; score: number; rea
 export const isTypedTask = (task: Pick<OpenTask, "typedAnswers" | "requiredDistinct" | "requiredPhrases" | "requiredOrder">): boolean => Boolean(task.typedAnswers?.length || task.requiredDistinct?.length || task.requiredPhrases?.length || task.requiredOrder?.length);
 
 /**
- * Spec 2026-10-20-s6-fogalom-sorrend (S6a): a fogalomcsoport első előfordulása a válaszban (token-index) — alternatívánként csak akkor, ha a
- * teljes alternatíva illeszkedik (`conceptHit`, tűréssel, sorrend nélkül); a pozíció az első szavára illeszkedő első token. -1: nincs.
+ * Spec 2026-10-20-s6-fogalom-sorrend (S6a): a fogalomcsoport első előfordulása a válaszban (token-index), alternatívánként tűréssel
+ * (`wordHit`). -1: nincs. Review #346: a több tokenre bomló alternatíva (kötőjeles összetett szó: „szén-dioxid” → „szen dioxid”) csak
+ * EGYMÁS UTÁNI illeszkedéssel kap pozíciót — különben egy korábbi, önálló „szén” horgonyozná, és a fordított sorrend is teljesülne. A
+ * műveleti jel (a kötőjel is) az egymásutániságban nem számít („szén dioxid” = „szén-dioxid”), kivéve a csak jelből álló alternatívát.
  */
 function firstPosition(tokens: readonly string[], group: readonly string[]): number {
+  const wordAt = tokens.map((_, i) => i).filter((i) => !OPERATOR_TOKEN.test(tokens[i]));
   let best = -1;
   for (const alternative of group) {
-    const words = tokensOfV2(alternative);
-    if (!words.length || !conceptHit(tokens as string[], [alternative], tokensOfV2)) continue;
-    const at = tokens.findIndex((token) => wordHit(token, words[0]));
+    const all = tokensOfV2(alternative);
+    const words = all.filter((w) => !OPERATOR_TOKEN.test(w));
+    const at = words.length
+      ? wordAt[wordAt.findIndex((_, j) => j + words.length <= wordAt.length && words.every((word, k) => wordHit(tokens[wordAt[j + k]], word)))] ?? -1
+      : tokens.findIndex((_, i) => all.length > 0 && i + all.length <= tokens.length && all.every((sign, k) => tokens[i + k] === sign));
     if (at >= 0 && (best < 0 || at < best)) best = at;
   }
   return best;

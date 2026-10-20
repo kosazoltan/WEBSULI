@@ -50,6 +50,8 @@
 - **Egyszavas alternatívák:** a `requiredOrder` alternatívái egyszavasak (a megkülönböztető szó), ezt a séma kikényszeríti. A
   többszavas alternatívánál a közös szó (pl. „víz forralása” / „víz hűtése”) ugyanarra az előfordulásra mutatna, így a sorrend hamisan
   bukna vagy teljesülne.
+- **A több tokenre bomló alternatíva** (kötőjeles összetett szó: „szén-dioxid”) csak egymás utáni illeszkedéssel kap pozíciót, így
+  egy korábbi, önálló „szén” nem horgonyozza. A műveleti jel (a kötőjel is) ebben nem számít („szén dioxid” = „szén-dioxid”).
 - **Nincs közös alternatíva** két csoport között.
 - **Bankjavítás:** a lektor által nem érintett tétel javítása nem hagyhatja el a `requiredOrder` / `requiredPhrases` szabályt (öröklődik).
 - **A döntőbíró továbbra is emelhet** (a helyes, más szórendű megfogalmazásért); a SORREND utasítás és a gyorsítótár-kulcs védi.

@@ -129,3 +129,14 @@ test("review #346: a sorrendi alternatíva egyszavas — a többszavas (közös 
   assert.equal(evaluateOpenAnswer(t.sample, t).state, "ok", "a minta teljes pont");
   assert.equal(missingOrder("Először a víz hűtése, utána a víz forralása.", t), true, "fordított sorrend");
 });
+
+test("review #346: a kötőjeles összetett alternatíva („szén-dioxid”) egymás utáni illeszkedéssel kap pozíciót — egy korábbi önálló „szén” nem horgonyozza", () => {
+  const t = task({ q: "Mi történik égéskor?", required: [["szén-dioxid"], ["oxigén"]], sample: "Égéskor először szén-dioxid keletkezik, utána oxigén fogy.",
+    requiredOrder: [["szén-dioxid"], ["oxigén"]] });
+  assert.ok(openTaskSchema.safeParse(t).success);
+  assert.equal(missingOrder(t.sample, t), false, "a minta sorrendje teljesül");
+  assert.equal(missingOrder("A szén égésekor először oxigén fogy, majd szén-dioxid keletkezik.", t), true, "fordított sorrend, korai önálló „szén”");
+  assert.notEqual(evaluateOpenAnswer("A szén égésekor először oxigén fogy, majd szén-dioxid keletkezik.", t).state, "ok");
+  assert.equal(missingOrder("Égéskor először szén dioxid keletkezik, utána oxigén fogy.", t), false, "kötőjel nélkül is ugyanaz a szó");
+  assert.equal(missingOrder("Égéskor először dioxid és szén keletkezik, utána oxigén fogy.", t), true, "szétszórt tagok: nincs pozíció");
+});
