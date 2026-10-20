@@ -34,3 +34,15 @@ test("a levágott forduló a telemetriában számít, és a futás nézete mutat
   delete (old.gates as { outputTruncated?: number }).outputTruncated;
   assert.ok(!telemetryView(old).gates.some((g) => g.startsWith("Levágott")), "a régi telemetria (mező nélkül) nem mutat sort");
 });
+
+test("review #345: a szerződés karakterkeretet is ad; a tartalékmodell tartalomszűrése nem számít levágásnak", async () => {
+  const c = bankPacketContract({ sectionIndex: 0, conceptIds: ["a"], methodKinds: ["gate"], taskCount: 1, taskTarget: 2, quizCount: 2, quizTarget: 3 });
+  assert.match(c, /≤ 300 karakter/);
+  assert.match(c, /≤ 200 karakter/);
+  const { openAIClient } = await import("../server/studio/single-run/conversation");
+  const make = (reason: string | undefined) => openAIClient({ apiKey: "x", client: { responses: { create: async () => ({ output_text: "{}", status: "incomplete", incomplete_details: reason ? { reason } : null }) } } });
+  const filtered = await make("content_filter").complete("s", [{ role: "user", blocks: [{ type: "text", text: "x" }] }] as never);
+  assert.equal(filtered.truncated, false, "tartalomszűrés: nem kimeneti korlát");
+  const limited = await make("max_output_tokens").complete("s", [{ role: "user", blocks: [{ type: "text", text: "x" }] }] as never);
+  assert.equal(limited.truncated, true);
+});

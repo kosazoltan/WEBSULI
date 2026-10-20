@@ -29,6 +29,18 @@ forduljon elő, ne legyenek felesleges API-költségek.”
    - A szerződés a csomag méretét is megmondja („ez N tétel”), hogy a modell a keretet ehhez mérje.
 3. **Mérés:** a futás telemetriája számolja a levágott válaszokat (`gates.outputTruncated`), a futás nézete mutatja.
 
+## Review #345 (pontosítás)
+- **Karakterkeret:** a tételenkénti mondatkeret karakterkerettel is kiegészül.
+  - Kérdés ≤ 300, sample ≤ 400, opciónkénti magyarázat ≤ 200, módszer ≤ 300 karakter, és pontosan a kért darabszám.
+  - A sémába NEM kerül kötelező hosszkorlát: az többletjavítóköröket okozna, vagyis épp fölösleges költséget.
+- **Tartalékmodell:** a GPT `incomplete` válasza csak a kimeneti korlát miatt (`max_output_tokens`, illetve ismeretlen ok esetén)
+  számít levágásnak; a tartalomszűrés nem torzítja a számlálót.
+- **Hatókör:**
+  - A 128 000-es korlát minden úton érvényes (a fogalomjavító és a szerkezeti javító út is ezt a beszélgetést használja).
+  - Az `outputTruncated` számláló az egyfutásos gyártás telemetriája; a többi útnak nincs futás-telemetriája.
+- **A mentett (folytatott) csomag:** változatlan. A már elfogadott csomag nem generálódik újra, így nem is vágódhat le; a módszerverzió
+  emelése fölösleges újragyártást okozna.
+
 ## Nem-cél
 - A csomagbeosztás (fejezetenként legfeljebb 6 fogalom) és a bankméret (45/75 + tartalék) nem változik.
 - A modell és a gondolkodási szint (medium) nem változik.

@@ -286,7 +286,7 @@ export function bankPacketContract(c: { sectionIndex: number; conceptIds: readon
     "7. Tilos: ábrára („az ábrán”, „N. ábra”), forrásra, füzetre, tananyagra („a tananyag szerint”, „a tananyag nem …”) hivatkozni — a visszajelzés magát a tényt mondja ki; csomagon kívüli fogalom; a tanításban nem szereplő tény; párosításban ismétlődő oldal.",
     "8. JAVÍTÁSI MÓD: csak a JAVÍTÁSI JOGOSULTSÁG tételei és mezői cserélhetők, eredeti id-val, minden mezővel; új id és törlés tilos; a többit a program változatlanul megőrzi.",
     // Spec 2026-10-20-bank-kimeneti-keret: előre megadott keret — a levágott válasz a teljes kimenetet elveszíti (mért: job be3bd5d2).
-    `9. KIMENETI KERET (a túl hosszú válasz levágódik és elvész): ez a csomag ${c.taskTarget} nyílt feladat + ${c.quizTarget} kvízkérdés + legalább ${c.methodKinds.length} módszer — tömören: kérdés legfeljebb 2 mondat, sample legfeljebb 3 mondat, kvízopciónként legfeljebb 1 mondatos magyarázat, módszer prompt / answer legfeljebb 2 mondat. A gondolkodásban ne írd meg előre a csomagot (csak a számolásokat és a kulcsokat ellenőrizd); a JSON-t egyszer írd le.`,
+    `9. KIMENETI KERET (a túl hosszú válasz levágódik és elvész): ez a csomag ${c.taskTarget} nyílt feladat + ${c.quizTarget} kvízkérdés + legalább ${c.methodKinds.length} módszer — tömören: kérdés legfeljebb 2 mondat (≤ 300 karakter), sample legfeljebb 3 mondat (≤ 400 karakter), kvízopciónként legfeljebb 1 mondatos magyarázat (≤ 200 karakter), módszer prompt / answer legfeljebb 2 mondat (≤ 300 karakter); pontosan a kért darabszám, nem több. A gondolkodásban ne írd meg előre a csomagot (csak a számolásokat és a kulcsokat ellenőrizd); a JSON-t egyszer írd le.`,
   ].join("\n");
 }
 

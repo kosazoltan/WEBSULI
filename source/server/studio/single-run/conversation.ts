@@ -89,7 +89,7 @@ export function anthropicClient(opts: { apiKey?: string; model?: string; client?
   };
 }
 
-type OpenAILike = { responses: { create(params: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<{ output_text?: string; status?: string; usage?: { input_tokens: number; output_tokens: number; input_tokens_details?: { cached_tokens?: number } } }> } };
+type OpenAILike = { responses: { create(params: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<{ output_text?: string; status?: string; incomplete_details?: { reason?: string } | null; usage?: { input_tokens: number; output_tokens: number; input_tokens_details?: { cached_tokens?: number } } }> } };
 
 /** GPT-6.1 Sol (tartalék): Responses API, medium effort, a teljes beszélgetés (szöveg + forrás) minden fordulóban. */
 export function openAIClient(opts: { apiKey?: string; model?: string; client?: OpenAILike } = {}): ModelClient {
@@ -110,7 +110,8 @@ export function openAIClient(opts: { apiKey?: string; model?: string; client?: O
       if (response.status && response.status !== "completed" && response.status !== "incomplete") {
         throw Object.assign(new Error(`A tartalék modell válasza ${response.status} állapotú.`), { status: 502 });
       }
-      return { text: response.output_text ?? "", model, truncated: response.status === "incomplete",
+      // Review #345: csak a kimeneti korlát miatti `incomplete` levágás (a tartalomszűrés nem — az a telemetriát torzítaná); ismeretlen ok: levágás.
+      return { text: response.output_text ?? "", model, truncated: response.status === "incomplete" && (!response.incomplete_details?.reason || response.incomplete_details.reason === "max_output_tokens"),
         ...(response.usage ? { usage: { input: response.usage.input_tokens, output: response.usage.output_tokens, cachedInput: response.usage.input_tokens_details?.cached_tokens ?? 0 } } : {}) };
     },
   };
