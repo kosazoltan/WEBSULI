@@ -136,15 +136,21 @@ test("S4b: a feladatkör beküldése feladatonként egy névtelen sort ír; ugya
 
 test("S4c: a küszöb alatt nincs lazítás; ≥ 20 kör és ≥ 40 % téves elutasítás után a szigorított csoport bónusz lesz, a verzió nő", async () => {
   const { contributorKey, maybeRelaxTightening, RELAX_MIN_ANSWERED } = await import("../server/task-results");
+  const { rubricHash } = await import("../shared/lesson-result-email");
   // S7: a lazítás workflow alatt fut; a futás tulajdonosa a lecke gyártója (a térkép `createdBy`-ja).
   await db.insert(users).values({ id: "s4c-owner" });
   await db.update(knowledgeMaps).set({ createdBy: "s4c-owner" }).where(eq(knowledgeMaps.id, "result-map"));
-  const taskId = tightenedLesson().experience!.tasks[0].id;
-  const row = (i: number, falseReject: boolean, who = `c${i}`) => ({ lessonId: "result-tightened", taskId, roundKey: roundKeyOf("s4c", String(i)), contributor: contributorKey(who),
-    detState: falseReject ? "partial" as const : "ok" as const, finalState: "ok" as const, arbiterRaised: falseReject, tightenedOnlyMiss: falseReject });
+  const tightenedTask = tightenedLesson().experience!.tasks[0];
+  const taskId = tightenedTask.id;
+  const row = (i: number, falseReject: boolean, who = `c${i}`, hash = rubricHash(tightenedTask)) => ({ lessonId: "result-tightened", taskId, roundKey: roundKeyOf("s4c", String(i)),
+    contributor: contributorKey(who), rubricHash: hash, detState: falseReject ? "partial" as const : "ok" as const, finalState: "ok" as const, arbiterRaised: falseReject, tightenedOnlyMiss: falseReject });
   // Review #340 (P1): egyetlen közreműködő 30 körrel (kliens által választott kör-azonosítókkal) sem lazít.
   await db.insert(taskResults).values(Array.from({ length: 30 }, (_, i) => row(1000 + i, true, "egy-kliens")));
   assert.deepEqual(await maybeRelaxTightening("result-tightened", [taskId]), [], "egy közreműködő = 1, a küszöb alatt");
+  await db.delete(taskResults).where(eq(taskResults.lessonId, "result-tightened"));
+  // Review #340 (P2): a régi rubrikára (más lenyomat) adott eredmények nem számítanak.
+  await db.insert(taskResults).values(Array.from({ length: 30 }, (_, i) => row(2000 + i, true, `regi${i}`, "0".repeat(64))));
+  assert.deepEqual(await maybeRelaxTightening("result-tightened", [taskId]), [], "régi rubrika eredményei nem számítanak");
   await db.delete(taskResults).where(eq(taskResults.lessonId, "result-tightened"));
   await db.insert(taskResults).values(Array.from({ length: RELAX_MIN_ANSWERED - 1 }, (_, i) => row(i, i < 10)));
   assert.deepEqual(await maybeRelaxTightening("result-tightened", [taskId]), [], "19 kör: a küszöb alatt");
@@ -154,7 +160,11 @@ test("S4c: a küszöb alatt nincs lazítás; ≥ 20 kör és ≥ 40 % téves elu
   const [saved] = await db.select().from(lessons).where(eq(lessons.id, "result-tightened"));
   const t = (saved.json as typeof lesson).experience!.tasks[0];
   assert.equal(saved.version, 2);
-  assert.ok(!t.required.some(g => g[0] === "kötelezőszó") && t.bonus.some(g => g[0] === "kötelezőszó"), JSON.stringify(t));
+  // Review #340 (P1): a csoport nem kerül ki (a pont sehol sem csökkenhet), hanem a többi kötelező fogalommal is teljesül.
+  assert.equal(t.required.length, tightenedTask.required.length);
+  const relaxedGroup = t.required.find(g => g[0] === "kötelezőszó")!;
+  assert.ok(tightenedTask.required.filter(g => g[0] !== "kötelezőszó").flat().every(m => relaxedGroup.includes(m)), JSON.stringify(t.required));
+  assert.deepEqual(t.relaxedTightening?.previousRequired, tightenedTask.required, "a pontos előállapot mentve");
   assert.equal(t.tightened, undefined);
   assert.deepEqual({ answered: t.relaxedTightening?.answered, falseRejects: t.relaxedTightening?.falseRejects }, { answered: 20, falseRejects: 10 });
   assert.deepEqual(await maybeRelaxTightening("result-tightened", [taskId]), [], "már lazított: nincs második módosítás");

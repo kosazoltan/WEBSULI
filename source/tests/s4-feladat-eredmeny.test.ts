@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { gradeTasks, tightenedOnlyMiss } from "../shared/lesson-result-email";
 import { RELAX_MIN_ANSWERED, relaxTask } from "../server/task-results";
-import type { OpenTask } from "../shared/lesson-experience";
+import { openTaskSchema, type OpenTask } from "../shared/lesson-experience";
+import { evaluateOpenAnswer } from "../shared/lesson-experience-score";
 
 /* Spec 2026-10-20-s4 (S4b + S4c): a feladatszintű sor mezői és a lazítás tiszta döntése. */
 
@@ -37,20 +38,29 @@ test("S4b: nem „csak a szigorítás miatt”, ha más csoport is hiányzik, va
   assert.equal(tightenedOnlyMiss(plain as OpenTask, "Melegítéskor a gáz térfogata megnövekszik.", "partial"), false);
 });
 
-test("S4c: a küszöb alatt nincs lazítás; fölötte a szigorított csoport bónusz lesz, a többi kötelező marad", () => {
+test("S4c: a küszöb alatt nincs lazítás; fölötte a szigorított csoport hatástalanítva (a többi kötelező fogalommal is teljesül), előállapot mentve", () => {
   const now = new Date("2026-10-27T09:00:00Z");
-  assert.equal(relaxTask(task(), { answered: RELAX_MIN_ANSWERED - 1, falseRejects: 19 }, now), null, "kevés kör");
+  assert.equal(relaxTask(task(), { answered: RELAX_MIN_ANSWERED - 1, falseRejects: 19 }, now), null, "kevés közreműködő");
   assert.equal(relaxTask(task(), { answered: 20, falseRejects: 7 }, now), null, "35 % < 40 %");
   const out = relaxTask(task(), { answered: 20, falseRejects: 8 }, now)!;
-  assert.deepEqual(out.required, [["gáz", "gázok"], ["térfogat", "térfogata"]]);
-  assert.deepEqual(out.bonus, [["nő"]]);
+  assert.equal(out.required.length, 3, "a csoportszám változatlan");
+  assert.deepEqual(out.required[2], ["nő", "gáz", "gázok", "térfogat", "térfogata"]);
   assert.equal("tightened" in out, false);
-  assert.deepEqual(out.relaxedTightening, { at: now.toISOString(), answered: 20, falseRejects: 8 });
+  assert.deepEqual(out.relaxedTightening, { at: now.toISOString(), answered: 20, falseRejects: 8, previousRequired: task().required, groups: [["nő"]] });
+  assert.ok(openTaskSchema.safeParse(out).success);
+  assert.equal(evaluateOpenAnswer("Melegítéskor a gáz térfogata megnövekszik.", out).state, "ok", "a szigorított szó nélkül is teljes pont");
   assert.equal(relaxTask(out, { answered: 40, falseRejects: 40 }, now), null, "már lazított");
 });
 
-test("S4c: ha minden kötelező csoport szigorított volt, legalább egy kötelező marad", () => {
-  const out = relaxTask(task({ required: [["nő"], ["kitágul"]], tightened: [["nő"], ["kitágul"]] }), { answered: 30, falseRejects: 20 }, new Date())!;
-  assert.equal(out.required.length, 1);
-  assert.equal(out.bonus.length, 1);
+test("review #340 (P1): a lazítás után egyetlen válasz pontja sem csökken — a páros csoportszámú részpont-eset is", () => {
+  const t = task({ required: [["cat"], ["dog"], ["bird"], ["fish"]], tightened: [["fish"]], minWords: 1, sample: "cat dog bird fish" });
+  const out = relaxTask(t, { answered: 20, falseRejects: 10 }, new Date())!;
+  for (const answer of ["cat fish", "cat", "fish", "dog bird", "cat dog bird", "cat dog bird fish", "semmi", "bird fish dog"]) {
+    assert.ok(evaluateOpenAnswer(answer, out).score >= evaluateOpenAnswer(answer, t).score, answer);
+  }
+  assert.equal(evaluateOpenAnswer("cat fish", out).score, 0.5, "a reviewer példája: 0,5 marad");
+});
+
+test("S4c: ha nincs nem szigorított kötelező csoport, nincs lazítás", () => {
+  assert.equal(relaxTask(task({ required: [["nő"], ["kitágul"]], tightened: [["nő"], ["kitágul"]] }), { answered: 30, falseRejects: 20 }, new Date()), null);
 });

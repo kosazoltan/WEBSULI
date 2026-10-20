@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { evaluateOpenAnswer, missingAnswerConcepts, scoreSummary, type AnswerScore } from "./lesson-experience-score";
 
@@ -24,7 +25,12 @@ export type ArbiterLookup = (task: OpenTask, answer: string) => { state: AnswerS
  * `arbiterRaised` (a döntőbíró emelte), `tightenedOnlyMiss` (a pontozó csak a gépileg szigorított csoport(ok) hiánya miatt nem adott teljes
  * pontot). A levél (`buildResultEmail`) ezeket nem használja.
  */
-export type GradedTaskRow = { taskId: string; q: string; answer: string; state: AnswerScore["state"]; score: number; detState: AnswerScore["state"]; arbiterRaised: boolean; tightenedOnlyMiss: boolean };
+export type GradedTaskRow = { taskId: string; q: string; answer: string; state: AnswerScore["state"]; score: number; detState: AnswerScore["state"]; arbiterRaised: boolean; tightenedOnlyMiss: boolean; rubricHash: string };
+
+/** Review #340: a feladat pontozási lenyomata — a statisztika csak az AKTUÁLIS rubrikára adott eredményeket számolja. */
+export function rubricHash(task: OpenTask): string {
+  return createHash("sha256").update(JSON.stringify([task.q, task.sample, task.required, task.bonus, task.minWords, task.needsSentence, task.typedAnswers ?? null, task.requiredDistinct ?? null])).digest("hex");
+}
 export type GradedTasks = { kind: "tasks"; rows: GradedTaskRow[]; summary: ReturnType<typeof scoreSummary> };
 export type GradedQuiz = { kind: "quiz"; wrong: Array<{ question: string; picked: string | null; correct: string }>; summary: ReturnType<typeof scoreSummary> };
 
@@ -51,7 +57,7 @@ export function gradeTasks(tasks: readonly OpenTask[], answers: Record<string, s
     const arb = answer ? arbiter?.(task, answer) : null;
     const raised = Boolean(arb && arb.score > det.score);
     const best = raised ? { state: arb!.state, score: arb!.score } : { state: det.state, score: det.score };
-    rows.push({ taskId, q: task.q, answer, ...best, detState: det.state, arbiterRaised: raised, tightenedOnlyMiss: tightenedOnlyMiss(task, answer, det.state) });
+    rows.push({ taskId, q: task.q, answer, ...best, detState: det.state, arbiterRaised: raised, tightenedOnlyMiss: tightenedOnlyMiss(task, answer, det.state), rubricHash: rubricHash(task) });
   }
   return { kind: "tasks", rows, summary: scoreSummary(rows.reduce((s, r) => s + r.score, 0), rows.length) };
 }
