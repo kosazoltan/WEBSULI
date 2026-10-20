@@ -31,7 +31,8 @@ test("E2: a túl megengedő rubrika (hibás válasz teljes pontot kap) javítók
       .map((t) => [t.id, { ...failing, wrong: [{ kind: "tevhit", text: t.sample }, { kind: "temaidegen", text: "x" }] }] as const)),
     onToolFix: (tool, list) => { if (tool === "answer-key-tests") fixes.push(...list); },
   });
-  assert.equal(prompts.length, 4, "három kísérlet + mentőkör");
+  // Dokumentált specváltozás (R3): háromszor azonos hibalista → a tesztbukott feladat a tartalék terhére kikerül, a mentőkör elmarad.
+  assert.equal(prompts.length, 3, "három azonos kísérlet után korai kivétel");
   assert.match(prompts[1], /válaszkulcs-teszt: a hibás \(tévhit\) válasz .* teljes pontot kap — a rubrika túl megengedő/);
   assert.equal(experience.tasks.some((t) => t.q.endsWith("(tartalék)")), false, "a megkülönböztetni képtelen feladat nem jut a gyerekhez");
   assert.match(fixes.join(" "), /1 tesztbukott feladat kivéve a tartalék terhére/);
