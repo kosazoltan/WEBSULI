@@ -60,10 +60,7 @@ export function normalizeAnswerV2(value: string): string {
 }
 const tokensOf = (s: string) => normalizeAnswer(s).split(/\s+/).filter(Boolean);
 const tokensOfV2 = (s: string) => normalizeAnswerV2(s).split(/\s+/).filter(Boolean);
-/** Spec 2026-10-20-r5-pontozo-korpusz: az összehasonuló -val/-vel (mássalhangzó után duplázódik: „fotoszintézissel”, „kalappal”, „kézzel”). */
-const ASSIMILATED_INSTRUMENTAL = /([bcdfghjklmnpqrstvwxyz])\1(al|el)$/;
 function stem(w: string): string {
-  if (w.length >= 6 && ASSIMILATED_INSTRUMENTAL.test(w)) return w.slice(0, -3);
   for (const suffix of STEM_SUFFIXES) {
     if (w.length > suffix.length + 3 && w.endsWith(suffix)) return w.slice(0, -suffix.length);
   }
@@ -82,9 +79,6 @@ function wordHit(token: string, word: string): boolean {
   if (token === word) return true;
   // Numbers, negation and short words may never be "corrected" into another answer.
   if (/\d/.test(token + word) || (NEGATIONS as readonly string[]).includes(word)) return false;
-  // Spec 2026-10-20-r5-pontozo-korpusz: a rövid szó („kéz”) is egyezik az összehasonuló -val/-vel alakjával („kézzel”) — csak ezzel a raggal
-  // (a rövid szavak egyéb illesztése tiltott marad: „kör” ≠ „korszak”).
-  if (word.length >= 2 && token.length >= 6 && ASSIMILATED_INSTRUMENTAL.test(token) && token.slice(0, -3) === word) return true;
   if (Math.min(token.length, word.length) >= 4 && (stem(token) === word || token === stem(word) || stem(token) === stem(word))) return true;
   if (Math.min(token.length, word.length) < 5) return false;
   return distance(token, word) <= (Math.max(token.length, word.length) > 8 ? 2 : 1);
@@ -201,7 +195,7 @@ export function evaluateOpenAnswer(answer: string, task: OpenTask): AnswerScore 
 export const OPEN_ANSWER_RULES_HU = [
   "A NYÍLT FELADAT PONTOZÓJA (program, nem ember — ezek a tényleges szabályok):",
   `1. Szó = szám vagy betűsor; a kötőjeles szó 2 szó, az írásjel 0 szó; csak az első 500 szó számít. minWords: ennél kevesebb szó = 0 pont — a minWords a LEGRÖVIDEBB teljes helyes válasz szószáma legyen, nem a minta hosszáé.`,
-  `2. required = ÉS-csoportok; egy csoporton belül VAGY-alternatívák. Többszavas alternatíva: minden szava külön, bármilyen sorrendben. Szóillesztés: azonos alak; ≥ 4 betűs szónál EGY toldalék (${STEM_SUFFIXES.join(", ")}) lehagyva is; ≥ 5 betűnél 1 elütés (8 betű fölött 2); az összehasonuló -val/-vel alak (kézzel, kalappal, fotoszintézissel) rövid szónál is egyezik. Szám és a tagadószavak (${NEGATIONS.join(", ")}) csak pontosan.`,
+  `2. required = ÉS-csoportok; egy csoporton belül VAGY-alternatívák. Többszavas alternatíva: minden szava külön, bármilyen sorrendben. Szóillesztés: azonos alak; ≥ 4 betűs szónál EGY toldalék (${STEM_SUFFIXES.join(", ")}) lehagyva is; ≥ 5 betűnél 1 elütés (8 betű fölött 2). Szám és a tagadószavak (${NEGATIONS.join(", ")}) csak pontosan.`,
   "3. Pontérték: a csoportok kevesebb mint felének találata → 0; nem mind → 0,5 („Még N kötelező fogalom hiányzik”); mind → 1, ha a needsSentence és a tagadás is rendben.",
   `4. needsSentence: legalább egy kötőszó/névelő kell ezek közül: ${SENTENCE_CONNECTIVES.slice(0, 19).join(", ")}; különben 0,5. Tagadás: a nem/not, a cannot és az aposztrófos angol n't (don't, mustn't, can't…) tagadásnak számít; ha a válaszban van ilyen tagadás, a mintában semmilyen (no/never sem) → 0,5; ha a minta angolul tagadó (not / n't), a válaszban pedig nincs tagadás (a no, never, nothing… is annak számít) → 0,5. (A „must” és a „mustn't” így nem cserélhető fel.)`,
   "5. TÍPUSOS (zárt matematikai) feladat: typedAnswers = [{part, kind: number|fraction|expression, value, unit?, form?}] részfeladatonként, SORRENDBEN (felcserélt részeredmény hibás). Az érték dönt: 2/1 ≠ 1/2; 0,5 = 1/2 csak form: any esetén; form: simplified-fraction → csak egyszerűsített tört (2/4, 0,5 nem); form: decimal → tizedes/egész alak; form: intermediate-step → a KÉRT köztes kifejezés szerepeljen (35 + 64 − 12), az értékazonos más alak (35 + 8 · 8 − 12) nem; unit → a szám után a mértékegység kötelező. Betűs (algebrai) végeredmény: kind: polynomial, value a teljes kifejezés („x² + 10x + 25”); a program a kifejtett, összevont normálalakot hasonlítja (tagsorrend, szóköz, x^2/x² nem számít); form: expanded (alapértelmezés) → kifejtett, összevont alak kell, a zárójeles (a kérdés másolata) nem; form: factored → szorzattá alakított, zárójeles alak kell. A required ekkor csak a szöveges részt méri; a végeredményt NE tedd required-csoportba.",

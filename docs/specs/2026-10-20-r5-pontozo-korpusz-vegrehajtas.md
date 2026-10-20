@@ -17,3 +17,19 @@ Terv: `docs/specs/2026-10-20-r5-pontozo-korpusz.md`. Munkakönyvtár: `source/`.
 4. **`server/ai/lesson-html-spec.ts`:** `ee_stem` és `ee_wordHit` ugyanez (a template literálban `\\1`).
 5. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`.
 6. **Kitelepítés:** az aktív-futás őr = 0.
+
+## Review #334 — a ragfeloldás visszavonva (döntés)
+- **A visszavont heurisztika hamis egyezései:**
+  - angol: barrel/bar, funnel/fun, flannel/flan;
+  - magyar: reggel/rég.
+- **Amit nem kezelt:**
+  - kétjegyű mássalhangzó: kulccsal;
+  - eleve hosszú mássalhangzó: sakkal;
+  - rövid szó: úttal.
+- **Miért vonom vissza:** ékezet nélküli normalizálás mellett (ö/ü → o/u) a magánhangzó-illeszkedés sem dönthető el biztonságosan.
+  Ezért a pontozó NEM változik.
+- **A korpusz most:**
+  - negatív esetként rögzíti a fenti hamis egyezéseket;
+  - a -val/-vel hasonulást ismert korlátként (`knownGap: true`) rögzíti — `expected` = a jelenlegi pont, `desired` = a kívánt;
+    egy jövőbeli javításkor a teszt jelez, és tudatosan kell átírni.
+- **Kezelés addig:** a rubrikában a ragos alak adható meg. A minta alakját az `alignTaskToSample` már most hozzáadja.

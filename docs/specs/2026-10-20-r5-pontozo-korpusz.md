@@ -36,3 +36,19 @@
 - **Változás előtt:** HA a pontozó változik, AKKOR a korpusz minden esete az elvárt pontot adja mindkét pontozón.
 - **A talált hiba:** HA a rubrika „fotoszintézis” / „kalap” / „kéz”, és a válasz a -val/-vel alakot használja, AKKOR teljes pont.
 - **Rövid szó:** HA a válasz „korszak”, a rubrika „kör”, AKKOR 0 pont (változatlan).
+
+## Review #334 — a ragfeloldás visszavonva (döntés)
+- **A visszavont heurisztika hamis egyezései:**
+  - angol: barrel/bar, funnel/fun, flannel/flan;
+  - magyar: reggel/rég.
+- **Amit nem kezelt:**
+  - kétjegyű mássalhangzó: kulccsal;
+  - eleve hosszú mássalhangzó: sakkal;
+  - rövid szó: úttal.
+- **Miért vonom vissza:** ékezet nélküli normalizálás mellett (ö/ü → o/u) a magánhangzó-illeszkedés sem dönthető el biztonságosan.
+  Ezért a pontozó NEM változik.
+- **A korpusz most:**
+  - negatív esetként rögzíti a fenti hamis egyezéseket;
+  - a -val/-vel hasonulást ismert korlátként (`knownGap: true`) rögzíti — `expected` = a jelenlegi pont, `desired` = a kívánt;
+    egy jövőbeli javításkor a teszt jelez, és tudatosan kell átírni.
+- **Kezelés addig:** a rubrikában a ragos alak adható meg. A minta alakját az `alignTaskToSample` már most hozzáadja.

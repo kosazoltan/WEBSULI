@@ -1,5 +1,5 @@
 {
-  "about": "Spec 2026-10-20-r5-pontozo-korpusz: a nyílt feladat pontozójának regressziós korpusza a valódi (éles) buktatókból. Minden eset: rubrika, minta (mindig 1 pont), válasz és a válasz elvárt pontja. A v1 pontozó ÉS a HTML-referencia (ee_evaluate) is ezt adja.",
+  "about": "Spec 2026-10-20-r5-pontozo-korpusz: a nyílt feladat pontozójának regressziós korpusza a valódi (éles) buktatókból. Minden eset: rubrika, minta (mindig 1 pont), válasz és a válasz elvárt pontja. A v1 pontozó ÉS a HTML-referencia (ee_evaluate) is ezt adja. Az ismert korlátok (`knownGap: true`) a JELENLEGI pontot rögzítik, a `desired` a kívánt pontot: a pontozó javításakor a teszt jelzi, és tudatosan kell átírni.",
   "cases": [
     {
       "name": "angol tagadás: must a mustn't mintára (e1f59f8d)",
@@ -371,14 +371,16 @@
         ],
         "minWords": 4,
         "needsSentence": false,
-        "sample": "A növény fotoszintézissel készít cukrot."
+        "sample": "A növény a fotoszintézis során cukrot készít."
       },
       "answer": "fotoszintézis",
       "expected": 0
     },
     {
-      "name": "ragozás: összehasonuló -val/-vel (fotoszintézissel)",
-      "source": "R5 korpusz (talált hiba)",
+      "name": "ismert korlát: összehasonuló -val/-vel (fotoszintézissel)",
+      "source": "R5 korpusz — ismert korlát: a -val/-vel hasonulás ékezet nélküli normalizálás mellett biztonságosan nem ismerhető fel (review #334: barrel/bar, reggel/rég); a rubrikában a ragos alak adható meg",
+      "knownGap": true,
+      "desired": 1,
       "task": {
         "required": [
           [
@@ -390,42 +392,107 @@
         "sample": "A növény a fotoszintézis során cukrot készít."
       },
       "answer": "A levél fotoszintézissel készít cukrot.",
-      "expected": 1
+      "expected": 0
     },
     {
-      "name": "ragozás: összehasonuló -val (kalappal)",
-      "source": "R5 korpusz (talált hiba)",
+      "name": "ismert korlát: összehasonuló -val (kulccsal, kétjegyű mássalhangzó)",
+      "source": "R5 korpusz — ismert korlát: a -val/-vel hasonulás ékezet nélküli normalizálás mellett biztonságosan nem ismerhető fel (review #334: barrel/bar, reggel/rég); a rubrikában a ragos alak adható meg",
+      "knownGap": true,
+      "desired": 1,
       "task": {
         "required": [
           [
-            "kalap"
+            "kulcs"
           ]
         ],
         "minWords": 2,
         "needsSentence": false,
-        "sample": "Ez egy piros kalap."
+        "sample": "Ez a kulcs."
       },
-      "answer": "Kalappal ment ki.",
-      "expected": 1
+      "answer": "Kulccsal nyitotta.",
+      "expected": 0
     },
     {
-      "name": "ragozás: összehasonuló -vel (kézzel)",
-      "source": "R5 korpusz (talált hiba)",
+      "name": "ismert korlát: összehasonuló -val (úttal, rövid szó)",
+      "source": "R5 korpusz — ismert korlát: a -val/-vel hasonulás ékezet nélküli normalizálás mellett biztonságosan nem ismerhető fel (review #334: barrel/bar, reggel/rég); a rubrikában a ragos alak adható meg",
+      "knownGap": true,
+      "desired": 1,
       "task": {
         "required": [
           [
-            "kéz"
-          ],
+            "út"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "út"
+      },
+      "answer": "úttal",
+      "expected": 0
+    },
+    {
+      "name": "negatív: angol „barrel” nem „bar”",
+      "source": "review #334",
+      "task": {
+        "required": [
           [
-            "írt"
+            "bar"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "There is a bar."
+      },
+      "answer": "There is a barrel.",
+      "expected": 0
+    },
+    {
+      "name": "negatív: angol „funnel” nem „fun”",
+      "source": "review #334",
+      "task": {
+        "required": [
+          [
+            "fun"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "It is fun."
+      },
+      "answer": "It is a funnel.",
+      "expected": 0
+    },
+    {
+      "name": "negatív: angol „flannel” nem „flan”",
+      "source": "review #334",
+      "task": {
+        "required": [
+          [
+            "flan"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "I ate flan."
+      },
+      "answer": "I wore flannel.",
+      "expected": 0
+    },
+    {
+      "name": "negatív: „reggel” nem „rég”",
+      "source": "review #334",
+      "task": {
+        "required": [
+          [
+            "rég"
           ]
         ],
         "minWords": 2,
         "needsSentence": false,
-        "sample": "A kéz írt."
+        "sample": "Ez rég volt."
       },
-      "answer": "Kézzel írt levelet.",
-      "expected": 1
+      "answer": "Ez reggel volt.",
+      "expected": 0
     }
   ]
 }

@@ -12,7 +12,7 @@ import type { OpenTask } from "../shared/lesson-experience";
  * pontozó és a HTML-referencia (ee_evaluate) is pontosan az elvárt pontot adja, és minden minta a saját rubrikáján 1 pont.
  */
 
-type Case = { name: string; source: string; task: Pick<OpenTask, "required" | "minWords" | "needsSentence" | "sample">; answer: string; expected: number };
+type Case = { name: string; source: string; task: Pick<OpenTask, "required" | "minWords" | "needsSentence" | "sample">; answer: string; expected: number; knownGap?: boolean; desired?: number };
 const corpus = JSON.parse(fs.readFileSync("tests/fixtures/scorer-corpus.json", "utf8")) as { cases: Case[] };
 const base = { id: "t", sectionIndex: 0, coversConceptIds: ["c"], q: "q", bonus: [], mode: "written" } as unknown as OpenTask;
 
@@ -27,6 +27,8 @@ function eeEvaluate(): typeof evaluateOpenAnswer {
 test("a korpusz nem üres, és minden esetnek van forrása", () => {
   assert.ok(corpus.cases.length >= 20);
   for (const c of corpus.cases) assert.ok(c.source && c.name, JSON.stringify(c));
+  // Az ismert korlát jelölt: a kívánt pont eltér a jelenlegitől (különben nem korlát, hanem rendes eset).
+  for (const c of corpus.cases.filter((x) => x.knownGap)) assert.ok(typeof c.desired === "number" && c.desired !== c.expected, c.name);
 });
 
 for (const [label, score] of [["v1 (megosztott)", evaluateOpenAnswer], ["HTML-referencia (ee_evaluate)", eeEvaluate()]] as const) {
