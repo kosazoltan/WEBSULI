@@ -614,6 +614,12 @@ export default function MaterialImprover() {
                                 </summary>
                                 <p className="mt-1 text-xs text-red-700 whitespace-pre-wrap break-words">{file.improvementNotes || 'Ismeretlen hiba'}</p>
                                 <div className="mt-2">{ownRun(file) ? <WorkflowPhaseBar id={file.id} /> : <p className="text-xs text-muted-foreground">Másik admin futása — a fázisnaplót ő látja.</p>}</div>
+                                {/* Spec 2026-10-20-okositas-bukott-jelolt (review #336): a kapun bukott jelölt csak megtekinthető, alkalmazni nem lehet. */}
+                                <Button variant="outline" size="sm" className="mt-2" data-testid={`improver-error-preview-${file.id}`}
+                                  onClick={() => { setWorkflowId(null); setPreviewImprovedId(file.id); }}>
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  Bukott jelölt megtekintése
+                                </Button>
                               </details>
                             ) : (
                               <>
@@ -775,7 +781,12 @@ export default function MaterialImprover() {
                 </ScrollArea>
               </TabsContent>
             </Tabs>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              {previewData.status === "error" ? (
+                <p className="mr-auto text-sm text-red-700" data-testid="improver-preview-failed-note">
+                  Ez a jelölt a záró ellenőrzésen elbukott — csak megtekinthető, nem alkalmazható.
+                </p>
+              ) : (
               <Button data-testid="improver-preview-apply"
                 onClick={() => {
                   setPreviewImprovedId(null);
@@ -787,6 +798,7 @@ export default function MaterialImprover() {
                 <CheckCircle className="h-4 w-4 mr-2" />
                 {previewData.status === "applied" ? "Újra alkalmaz" : "Alkalmaz"}
               </Button>
+              )}
 
               <Button
                 variant="outline"
