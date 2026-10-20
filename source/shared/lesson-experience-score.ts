@@ -50,9 +50,11 @@ function unexpectedNegation(answer: string, sample: string): boolean {
 }
 
 export function normalizeAnswer(value: string): string {
-  const normalized = value.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/(\d)[,.](?=\d)/g, "$1.").replace(/−/g, "-");
-  // Spec 2026-10-20-v1-kotojeles-szam: a számjel csak betű / számjegy UTÁN nem előjel — a „552-270” két szám, nem „552 -270”.
-  return (normalized.match(/(?:(?<![\p{L}\d])[+-])?\d+(?:\.\d+)?|[\p{L}]+/gu) ?? []).map(t => t.replace(/^\+(?=\d)/, "")).join(" ");
+  const normalized = value.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/(\d)[,.](?=\d)/g, "$1.").replace(/−/g, "-")
+    // Spec 2026-10-20-v1-kotojeles-szam: a betű / számjegy utáni számjel nem előjel — a „552-270” két szám, nem „552 -270”. Review #348:
+    // lookbehind nélkül (a régebbi Safari a lookbehindos regexet be sem tölti) — a jel szóközre cserélődik.
+    .replace(/([\p{L}\d])[+-](?=\d)/gu, "$1 ");
+  return (normalized.match(/[+-]?\d+(?:\.\d+)?|[\p{L}]+/gu) ?? []).map(t => t.replace(/^\+(?=\d)/, "")).join(" ");
 }
 /** v2: a műveleti jel és a törtvonal is token — a „8 : 2” és a „8 · 2”, a „1/2” és a „2/1” különbözik. */
 export function normalizeAnswerV2(value: string): string {

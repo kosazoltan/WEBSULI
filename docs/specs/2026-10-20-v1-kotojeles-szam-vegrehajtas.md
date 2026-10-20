@@ -11,3 +11,4 @@ Terv: `docs/specs/2026-10-20-v1-kotojeles-szam.md`. Munkakönyvtár: `source/`. 
    - „2-3” → „2 3”;
    - HTML-paritás a kötőjeles esetekre.
 4. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`, háromfázisú ellenőrzés.
+- **Review #348:** lookbehind nélkül — a betű / számjegy utáni számjel előbb szóközre cserélődik (a régebbi Safari a lookbehindos regexet be sem tölti, az egész szkript leállna); teszt őrzi.

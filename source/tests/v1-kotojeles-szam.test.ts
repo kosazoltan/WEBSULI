@@ -45,3 +45,12 @@ test("a HTML-szerző referencia-pontozója ugyanígy kezeli a kötőjeles számo
     assert.equal(score(a, t).state, evaluateOpenAnswer(a, t).state, a);
   }
 });
+
+test("review #348: egyik pontozó sem használ lookbehindot (a régebbi Safari a regexet be sem tölti — az egész szkript leállna)", () => {
+  const begin = LESSON_HTML_SPEC_V74.indexOf("function ee_norm(s)");
+  const htmlScorer = LESSON_HTML_SPEC_V74.slice(begin, LESSON_HTML_SPEC_V74.indexOf("```", begin));
+  for (const source of [htmlScorer, normalizeAnswer.toString()]) {
+    assert.ok(!/\(\?<[=!]/.test(source), source.slice(0, 120));
+  }
+  assert.equal(normalizeAnswer("1-2-3 és x-4, +5"), "1 2 3 es x 4 5");
+});
