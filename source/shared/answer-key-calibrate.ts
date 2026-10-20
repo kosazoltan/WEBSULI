@@ -149,9 +149,22 @@ export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null
       tryStep({ ...task, minWords: shortest }, `szóminimum ${task.minWords} → ${shortest}`);
     }
   }
-  // Spec 2026-10-20-s4 (S4a): a szigorítás nyoma a feladaton — csak a végső `required`-ben bent maradt csoport (a lazító lépések csoportot
-  // bővíthetnek: az aktuális alak kerül be; a bónuszba sorolt kimarad).
-  const keep = (g: readonly string[]) => task.required.find((r) => r[0] === g[0] && g.every((m) => r.includes(m)));
-  const marked = tightened.tightened.map(keep).filter((g): g is string[] => Boolean(g));
-  return { task: marked.length ? { ...task, tightened: marked.map((g) => [...g]) } : task, changes };
+  // Spec 2026-10-20-s4 (S4a): a szigorítás nyoma a feladaton — a korábbi és az új jelölés egyesítve (review #339), a végső `required`-ben
+  // bent maradt alakkal.
+  const marked = retainTightened([...(original.tightened ?? []), ...tightened.tightened], task.required);
+  const { tightened: _previous, ...untagged } = task;
+  return { task: marked.length ? { ...untagged, tightened: marked } : untagged, changes };
+}
+
+/**
+ * S4a: a szigorítással felvett csoportok közül a `required`-ben bent maradtak, a `required` AKTUÁLIS alakjával (a lazító lépés vagy a
+ * bankjavítás alakot vehet fel: azonos első elem, a régi tagok mind benne). Duplikátum nélkül; a bónuszba sorolt / törölt kimarad.
+ */
+export function retainTightened(tightened: readonly (readonly string[])[], required: readonly (readonly string[])[]): string[][] {
+  const out: string[][] = [];
+  for (const g of tightened) {
+    const hit = required.find((r) => r[0] === g[0] && g.every((m) => r.includes(m)));
+    if (hit && !out.some((o) => JSON.stringify(o) === JSON.stringify(hit))) out.push([...hit]);
+  }
+  return out;
 }
