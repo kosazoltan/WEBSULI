@@ -26,20 +26,25 @@ export const ANSWER_KEY_SYSTEM = [
   "KIVÉTEL — ha a feladatnál \"kifejezesek\" (sorrendérzékeny, pontos kifejezések) áll: ott a pontozó a szórendet és a nyelvtani alakot is méri.",
   "Ilyenkor a hibás válaszok között legyen alak- vagy szórendhibás is (felcserélt egyeztetés, rossz segédige vagy szórend, rossz névmásalak),",
   "a helyes válaszok pedig nyelvtanilag hibátlanok legyenek.",
+  "KIVÉTEL — ha a feladatnál \"sorrend\" (a fogalmak kötelező sorrendje) áll: ott a pontozó a lépések sorrendjét is méri. Ilyenkor a hibás",
+  "válaszok között legyen fordított / felcserélt sorrendű is (ugyanazok a lépések más sorrendben), a helyes válaszok pedig a helyes sorrendet kövessék.",
   `Egy válasz legfeljebb ${ANSWER_KEY_LIMITS.textMax} karakter. Csak a tanított fogalmakra támaszkodj; ne találj ki új tényt.`,
   'Válaszolj kizárólag ilyen JSON-nal: { "items": [ { "id": "<feladat id>", "correct": ["…"], "wrong": [ { "kind": "tevhit", "text": "…" } ] } ] }',
 ].join("\n");
 
 /** A feladat tartalmi kulcsa: ha a kérdés, a minta és a szóminimum nem változott, a tesztek újrahasznosíthatók (javítókör). */
-export const answerKeyCacheKey = (task: Pick<OpenTask, "q" | "sample" | "minWords" | "requiredPhrases">) =>
+export const answerKeyCacheKey = (task: Pick<OpenTask, "q" | "sample" | "minWords" | "requiredPhrases" | "requiredOrder">) =>
   // Review #341: a kifejezéses feladat más hibás próbákat kap (alak / szórend) — a kulcs csak ilyenkor bővül (a régi kulcsok azonosak).
-  createHash("sha256").update(JSON.stringify(task.requiredPhrases?.length ? [task.q, task.sample, task.minWords, "phrases"] : [task.q, task.sample, task.minWords])).digest("hex");
+  // Review #346: a kifejezés és a sorrend TARTALMA is a kulcsba kerül — a javítókörben módosított sorrendhez új (fordított) próba kell.
+  createHash("sha256").update(JSON.stringify(task.requiredPhrases?.length || task.requiredOrder?.length
+    ? [task.q, task.sample, task.minWords, ...(task.requiredPhrases?.length ? [{ phrases: task.requiredPhrases }] : []), ...(task.requiredOrder?.length ? [{ order: task.requiredOrder }] : [])]
+    : [task.q, task.sample, task.minWords])).digest("hex");
 
 export function answerKeyUserMessage(tasks: OpenTask[], ctx: AnswerKeyContext): string {
   const used = new Set(tasks.flatMap((t) => t.coversConceptIds));
   const concepts = ctx.concepts.filter((c) => used.has(c.id)).map((c) => ({ id: c.id, term: c.term ?? "", definition: (c.definition ?? "").slice(0, 400) }));
   // Review #341 (P2): a kifejezéses (sorrendérzékeny) feladat jelölve — ott a pontozó a szórendet és az alakot is méri.
-  const items = tasks.map((t) => ({ id: t.id, kerdes: t.q, mintavalasz: t.sample, fogalmak: t.coversConceptIds, ...(t.requiredPhrases?.length ? { kifejezesek: t.requiredPhrases } : {}) }));
+  const items = tasks.map((t) => ({ id: t.id, kerdes: t.q, mintavalasz: t.sample, fogalmak: t.coversConceptIds, ...(t.requiredPhrases?.length ? { kifejezesek: t.requiredPhrases } : {}), ...(t.requiredOrder?.length ? { sorrend: t.requiredOrder } : {}) }));
   return `${ctx.classroom ? `Évfolyam: ${ctx.classroom}. osztály.\n` : ""}Fogalmak:\n${JSON.stringify(concepts)}\n\nFeladatok:\n${JSON.stringify(items)}`;
 }
 

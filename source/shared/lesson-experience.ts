@@ -1,7 +1,7 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
 import { z } from "zod";
 import { LESSON_FLAIRS } from "./lesson-visuals";
-import { LESSON_SCORING_VERSION, PHRASE_SCORING_VERSION, POLYNOMIAL_SCORING_VERSION, TYPED_SCORING_VERSION, isValidReference } from "./answer-value";
+import { LESSON_SCORING_VERSION, ORDER_SCORING_VERSION, PHRASE_SCORING_VERSION, POLYNOMIAL_SCORING_VERSION, TYPED_SCORING_VERSION, isValidReference } from "./answer-value";
 
 /** Pedagogy shared by the structured runtime and the standalone HTML author. */
 export const LEGACY_LESSON_METHOD_VERSION = "fusion-7.4-1" as const;
@@ -49,6 +49,20 @@ export const openTaskSchema = z.object({
    * csoporton belül VAGY; egy alternatíva normalizált tokenjei a válaszban egymás után, pontosan. A típusos (v2) útra visz.
    */
   requiredPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).optional(),
+  /**
+   * Spec 2026-10-20-s6-fogalom-sorrend (S6a): a fogalmak kötelező sorrendje (sorrendi / műveleti sorrend feladat) — 2–4 fogalomcsoport
+   * (csoporton belül VAGY), a válaszban mindegyik megvan, és az első előfordulásuk sorrendje szigorúan növekvő. Egy kötelező feltétel.
+   */
+  requiredOrder: z.array(z.array(text(160)).min(1)).min(2).max(4)
+    // Review #346: két sorrendi csoport nem oszthat meg alternatívát — ugyanaz az előfordulás nem lehet egyszerre előbb és később
+    // (a szabály teljesíthetetlen lenne).
+    .refine((groups) => { const all = groups.flatMap((g) => [...new Set(g.map(canonicalAlternative))]); return new Set(all).size === all.length; },
+      { message: "A sorrendi csoportok (requiredOrder) nem oszthatnak meg alternatívát." })
+    // Review #346: az alternatíva EGY szó — a pozíció így egyértelmű (többszavasnál a közös szó, pl. „víz forralása” / „víz hűtése”, ugyanarra
+    // az előfordulásra mutatna, a sorrend pedig hamisan teljesülhetne vagy bukhatna). A megkülönböztető szót kell megadni (forralás, hűtés).
+    .refine((groups) => groups.every((g) => g.every((a) => canonicalAlternative(a).split(" ").filter(Boolean).length === 1)),
+      { message: "A sorrendi csoportok (requiredOrder) alternatívái egyszavasak legyenek (a megkülönböztető szó)." })
+    .optional(),
   /** S5b: a gépi szigorítással felvett, a `requiredPhrases`-ben bent maradt kifejezéscsoportok (S4 mérés / lazítás). */
   tightenedPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).optional(),
   /**
@@ -130,6 +144,9 @@ export const experiencePacketSchema = z.object({
   // Review #341: a kifejezéses bank a 4-es szerződés — különben a régi kliens frissítés nélkül, a kifejezéseket figyelmen kívül hagyva pontozna.
   const phrase = e.tasks.find((t) => t.requiredPhrases?.length);
   if (phrase && (e.scoringVersion ?? 1) < PHRASE_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Kifejezéses (requiredPhrases) feladathoz scoringVersion=${PHRASE_SCORING_VERSION} kell (${phrase.id}).` });
+  // S6a: a sorrendi bank az 5-ös szerződés (a régi kliens a sorrendet nem ismerné).
+  const ordered = e.tasks.find((t) => t.requiredOrder?.length);
+  if (ordered && (e.scoringVersion ?? 1) < ORDER_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Sorrendi (requiredOrder) feladathoz scoringVersion=${ORDER_SCORING_VERSION} kell (${ordered.id}).` });
   for (const t of typed) for (const a of t.typedAnswers ?? []) {
     if (!isValidReference(a)) ctx.addIssue({ code: "custom", path: ["tasks"], message: `${t.id}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető.` });
   }
@@ -194,16 +211,18 @@ export const experiencePacketSchema = z.object({
  * (hiányzik = 1, a régi kliens is pontozza). Mért (élő Egyiptom-futás 7ee8913e, 2026-10-01): a bank típusos feladatot írt,
  * a csomag-ellenőrzés `scoringVersion=2`-t követelt, amit senki nem állított be — a csomag 4 kísérlet után bukott.
  */
-export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: ReadonlyArray<{ kind?: unknown; [key: string]: unknown }>; requiredDistinct?: unknown[]; requiredPhrases?: unknown[] }>, current?: unknown): number | undefined {
+export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: ReadonlyArray<{ kind?: unknown; [key: string]: unknown }>; requiredDistinct?: unknown[]; requiredPhrases?: unknown[]; requiredOrder?: unknown[] }>, current?: unknown): number | undefined {
   // Review #166: a meglévő verzió csak érvényes tartományban (1..LESSON_SCORING_VERSION, egész) marad meg; a hibás érték a régi alapérték.
   const valid = typeof current === "number" && Number.isInteger(current) && current >= 1 && current <= LESSON_SCORING_VERSION ? current : undefined;
-  const typed = tasks.some((t) => t.typedAnswers?.length || t.requiredDistinct?.length || t.requiredPhrases?.length);
+  const typed = tasks.some((t) => t.typedAnswers?.length || t.requiredDistinct?.length || t.requiredPhrases?.length || t.requiredOrder?.length);
+  // S6a: a sorrendi szabály az 5-ös szerződés.
+  const ordered = tasks.some((t) => t.requiredOrder?.length);
   // S5a: a sorrendérzékeny kifejezés a 4-es szerződés (a régebbi kliens nem ismeri — frissítést kap, nem pontoz engedékenyen).
   const phrases = tasks.some((t) => t.requiredPhrases?.length);
   // Spec 2026-10-19-algebrai-referencia: a betűs végeredmény a 3-as szerződés; a csak számos típusos lecke 2-n marad, hogy a
   // már megnyitott (régebbi) kliens ne kapjon fölöslegesen frissítési kérést.
   const poly = tasks.some((t) => t.typedAnswers?.some((a) => a?.kind === "polynomial"));
-  const needed = phrases ? PHRASE_SCORING_VERSION : poly ? POLYNOMIAL_SCORING_VERSION : typed ? TYPED_SCORING_VERSION : undefined;
+  const needed = ordered ? ORDER_SCORING_VERSION : phrases ? PHRASE_SCORING_VERSION : poly ? POLYNOMIAL_SCORING_VERSION : typed ? TYPED_SCORING_VERSION : undefined;
   return needed === undefined ? valid : Math.max(needed, valid ?? 0);
 }
 

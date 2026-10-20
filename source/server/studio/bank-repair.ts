@@ -21,7 +21,7 @@ export type RepairPlan = {
 type PacketIds = { methods: ReadonlyArray<{ id: string }>; tasks: ReadonlyArray<{ id: string }>; quiz: ReadonlyArray<{ id: string }> };
 const BANKS: readonly BankName[] = ["methods", "tasks", "quiz"];
 
-const TASK_RUBRIC = ["q", "required", "bonus", "sample", "minWords", "needsSentence", "typedAnswers", "requiredDistinct", "requiredPhrases"];
+const TASK_RUBRIC = ["q", "required", "bonus", "sample", "minWords", "needsSentence", "typedAnswers", "requiredDistinct", "requiredPhrases", "requiredOrder"];
 /** Választós hiba: a kérdés/felhívás is cserélhető (a csupa-igaz opciójú tétel gyakran a kérdés átfogalmazásával javul). */
 const CHOICE = ["question", "prompt", "options", "correctIndex", "feedbackPerOption", "answer"];
 
