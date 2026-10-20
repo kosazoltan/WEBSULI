@@ -29,7 +29,7 @@ import { lessonVisibleText, words } from "../lesson-metrics";
 import { applySourceCorrections, arithmeticSourceCorrections, correctionAuditText, correctionReasonCode, type SourceCorrection } from "../source-corrections";
 import { classifyNotes } from "../lektor";
 import { splitLimitBlockers } from "../limit-policy";
-import { openBankFindingFlags, resolveChoiceGate } from "../choice-gate";
+import { openBankFindingFlags, removeLektorBlockers, resolveChoiceGate } from "../choice-gate";
 import type { JobPatch, PipelineStore } from "../pipeline-store";
 import { conceptIdResolver, exportQuizItemsForPublish } from "../quiz-export";
 import { parseModelJson } from "../run-step";
@@ -730,7 +730,19 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     const blocking = classifyNotes(report.notes).filter((n) => n.blocking);
     if (!blocking.length) break;
     previousBlockers = blocking;
-    if (round === SINGLE_RUN_REVIEW_ROUNDS) throw new SingleRunError("lektorálás", blocking.map((n) => `${n.blockPath ?? "—"}: ${n.message}`));
+    if (round === SINGLE_RUN_REVIEW_ROUNDS) {
+      // Spec 2026-10-20-elakadas-gyokerok-elemzes (R1): az utolsó körben a kivehető tételek (banktétel, ellenőrző blokk, ábra) kikerülnek,
+      // és a lecke a végkapura megy — a kész lecke nem vész el egy hibás feladat miatt. Tanítási / ténybeli jegyzetnél a régi megállás.
+      const removal = removeLektorBlockers(lesson, blocking, report.solutions);
+      if ("error" in removal) throw new SingleRunError("lektorálás", [...blocking.map((n) => `${n.blockPath ?? "—"}: ${n.message}`), `(kivétel nem lehetséges: ${removal.error})`]);
+      lesson = removal.lesson;
+      telemetry.gates.lektorRemoved += removal.removed.length;
+      warnings.push(`Az utolsó lektorkör hibás tételeit kivettük: ${removal.removed.join(", ")}`);
+      // Review #331: a kivétel a mentett kimenetben is megmarad (folytatáskor is látszik).
+      output = { ...output, lesson, experienceCheckpoint: checkpoint, lektorRemoved: removal.removed };
+      await save("lektor", output);
+      break;
+    }
     const bankNotes = blocking.filter((n) => /^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
     const teachingNotes = blocking.filter((n) => !/^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
     if (teachingNotes.length) {
@@ -764,6 +776,10 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const skill = verifyLessonSkillBank(final.data.experience, final.data.subject, final.data.sections);
   const problems = [...experienceProblems(final.data), ...(skill.ok ? [] : skill.problems), ...(coverage.ok ? [] : coverage.reasons), ...(checkLessonArc(final.data).ok ? [] : checkLessonArc(final.data).reasons)];
   if (problems.length) throw new SingleRunError("végellenőrzés", problems);
+  // Review #331: a folytatott futásban a memóriabeli figyelmeztetés elveszne — a mentett kivétel-lista is bekerül.
+  const savedRemoved = (output as { lektorRemoved?: unknown }).lektorRemoved;
+  if (Array.isArray(savedRemoved) && savedRemoved.length && !warnings.some((w) => w.startsWith("Az utolsó lektorkör hibás tételeit kivettük")))
+    warnings.push(`Az utolsó lektorkör hibás tételeit kivettük: ${savedRemoved.join(", ")}`);
   const lessonId = await store.upsertLesson(null, mapId, final.data);
   const published = await store.publishLesson({
     lessonId, mapId, title: final.data.title, classroom: final.data.classroom, coverage: coverage.coverage,

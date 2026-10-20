@@ -11,6 +11,7 @@ import type { MapConcept } from "./coverage";
 import { checkCoverageGate } from "./coverage";
 import { buildAuthorPrompt, buildLektorPrompt, canonicalJson, lektorReportSchema } from "./step-io";
 import { classifyNotes } from "./lektor";
+import { removeLektorBlockers } from "./choice-gate";
 import { lektorSkillCodes } from "../workflows/learning";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
 import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
@@ -79,12 +80,14 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const ownerInstruction = normalizeOwnerInstruction(instruction);
   const { sourceFiles, ...hashedSource } = source;
   const transcript = Array.isArray(sourceFiles) && sourceFiles.some((f) => (f as { kind?: string } | null)?.kind === "image");
-  const { candidate, review, owner, staleWarnings } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript });
+  const { candidate, review, owner, staleWarnings, lektorRemoved } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript });
   return lessonRepairSchema.parse({
     kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(hashedSource), previousLesson: original, candidate, reviewNotes: review.notes,
     ...(ownerInstruction ? { ownerInstruction } : {}), ...(owner.corrections.length ? { sourceCorrections: owner.corrections } : {}), ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}),
     // Review #164: az eldöntetlen régi-alak jelöltek a javítás-artefaktumban maradnak (admin-nézet), nem csak a naplóban.
     ...(staleWarnings?.length ? { staleWarnings } : {}),
+    // Review #331: a lektor által blokkolt és kivett banktételek (a jegyzetek útvonalai a kivétel ELŐTTI indexekre vonatkoznak).
+    ...(lektorRemoved?.length ? { lektorRemoved } : {}),
   });
 }
 
@@ -210,13 +213,19 @@ export async function finishStructuredImprovement(original: Lesson, candidate: L
   const lektorOwner = owner && (owner.instruction || owner.corrections.length) ? { instruction: owner.instruction, corrections: owner.corrections } : undefined;
   const review = lektorReportSchema.parse(await call("lektor", withRoleSkill("lektor", buildLektorPrompt(candidate, source, [], lektorOwner)), "Ellenőrizd a teljes tanítást és mindkét bank megoldásait. Csak a konkrét eltéréseket jelentsd JSON-ban."));
   const blockers = classifyNotes(review.notes).filter(n => n.blocking);
+  let lektorRemoved: string[] = [];
   if (blockers.length) {
     for (const code of lektorSkillCodes(blockers)) await workflowFinding(code);
-    throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
+    // Spec 2026-10-20-elakadas-gyokerok-elemzes (R1): csak kivehető tételekre (banktétel, ellenőrző blokk, ábra) a jelölt a tételek
+    // nélkül megy tovább; ténybeli / tanítási jegyzetnél a régi megállás (az eredeti érintetlen).
+    const removal = removeLektorBlockers(candidate, blockers, review.solutions);
+    if ("error" in removal) throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
+    candidate = removal.lesson;
+    lektorRemoved = removal.removed;
   }
   await workflowPhase("gate");
   assertRepairCandidate(original, candidate, source, classroom);
-  return { candidate, review };
+  return { candidate, review, ...(lektorRemoved.length ? { lektorRemoved } : {}) };
 }
 
 /** Backup, lesson, public metadata and game banks commit or roll back together. */
