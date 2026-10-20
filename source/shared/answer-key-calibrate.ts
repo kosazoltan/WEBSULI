@@ -17,7 +17,20 @@ const NEGATIONS = new Set(["nem", "ne", "sem", "se", "nincs", "sincs"]);
 const NOT_DISTINGUISHING = new Set<string>([
   ...NEGATIONS, ...ENGLISH_NEGATIONS, ...ENGLISH_WEAK_NEGATIONS, ...SENTENCE_CONNECTIVES, "és", "ezért", "így", "míg", "tehát",
 ]);
-const NOT_DISTINGUISHING_NEGATION = new Set<string>([...ENGLISH_NEGATIONS, ...ENGLISH_WEAK_NEGATIONS]);
+/**
+ * S5b: a kifejezéses szigorításból kizárt tagadásjelek minden támogatott nyelven (review #342) — normalizált (ékezet nélküli, kisbetűs)
+ * v2-tokenek. Angol + német, francia, spanyol, olasz; az aposztrófos összevonás maradéka („t”: mustn't, „n”: n'est) is tagadásjel.
+ */
+const NOT_DISTINGUISHING_NEGATION = new Set<string>([
+  ...ENGLISH_NEGATIONS, ...ENGLISH_WEAK_NEGATIONS, "t", "n",
+  "nicht", "kein", "keine", "keinen", "keinem", "keiner", "keines", "nie", "niemals", "nichts",
+  "ne", "pas", "non", "jamais", "rien", "aucun", "aucune", "ni",
+  "nunca", "nada", "ninguno", "ninguna", "ningun", "tampoco", "jamas",
+  "mai", "niente", "nulla", "nessuno", "nessuna",
+]);
+/** S5b: a `requiredPhrases` sémahatárai (`openTaskSchema`): legfeljebb 8 csoport, kifejezésenként legfeljebb 80 karakter. */
+const PHRASE_GROUPS_MAX = 8;
+const PHRASE_LENGTH_MAX = 80;
 const isDistinguishingCandidate = (word: string) => {
   const n = normalizeAnswer(word);
   return n.length >= 2 && !/\d/.test(n) && !NOT_DISTINGUISHING.has(word.toLowerCase());
@@ -106,7 +119,9 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
     // Spec 2026-10-20-s5-sorrendes-kifejezes (S5b): ha szó nem különböztet meg (azonos szavak, más alak / sorrend: „there are a sofa”),
     // a minta 3- és 2-tokenes, egymás utáni kifejezései közül az első, amely minden teljes pontos helyesben EGYMÁS UTÁN megvan, a hibásban
     // nincs, és felvétele után a minta / a helyesek ok, a hibás nem.
-    for (const phrase of fixed || !phrases ? [] : phraseCandidates(task.sample)) {
+    // Review #342 (P1): a csoportszám sémahatárán (8) nincs kifejezéses szigorítás — a javítókör dönt, érvénytelen feladat nem keletkezik.
+    const room = (current.requiredPhrases?.length ?? 0) < PHRASE_GROUPS_MAX;
+    for (const phrase of fixed || !phrases || !room ? [] : phraseCandidates(task.sample)) {
       const probe = { requiredPhrases: [[phrase]] };
       if (missingPhrases(wrong.text, probe).length === 0) continue;
       if (okCorrect.some((a) => missingPhrases(a, probe).length > 0)) continue;
@@ -134,8 +149,9 @@ function phraseCandidates(sample: string): string[] {
     if (gram.every((t) => NOT_DISTINGUISHING.has(t))) continue;
     // Tagadás nem lehet a megkülönböztető kifejezés része (S3c-szerződés, review #338: a „mustn t run” egy helyes „must not run”-t is
     // elutasítana); az aposztrófos összevonás maradéka („t”) is tagadásjel.
-    if (gram.some((t) => t === "t" || NEGATIONS.has(t) || NOT_DISTINGUISHING_NEGATION.has(t))) continue;
+    if (gram.some((t) => NEGATIONS.has(t) || NOT_DISTINGUISHING_NEGATION.has(t))) continue;
     const phrase = gram.join(" ");
+    if (phrase.length > PHRASE_LENGTH_MAX) continue; // review #342: a séma kifejezés-hosszkorlátja
     if (!out.includes(phrase)) out.push(phrase);
   }
   return out;

@@ -78,3 +78,34 @@ test("S5b: a lektori bankjavítás a `tightenedPhrases` jelölést az előző t�
   const kept = applyBankPacketRepair(original, { tasks: [{ ...withoutTag, sample: `${t0.sample} Bővítve.` }] }, new Set([t0.id]));
   assert.deepEqual(kept.tasks[0].tightenedPhrases, t0.tightenedPhrases);
 });
+
+test("review #342 (P1): a sémahatáron (8 kifejezéscsoport) nincs kifejezéses szigorítás — érvénytelen feladat nem keletkezik", () => {
+  const full = Array.from({ length: 8 }, (_, i) => [`word${"abcdefgh"[i]} one`]);
+  const t = task({ requiredPhrases: full, sample: `There is a sofa in my house. There are many chairs. ${full.map((g) => g[0]).join(". ")}.` });
+  const cases: AnswerKeyCases = {
+    correct: sofaCases.correct.map((c) => `${c} ${full.map((g) => g[0]).join(" ")}`),
+    wrong: [{ kind: "tevhit", text: `There are a sofa in my house. There is many chairs. ${full.map((g) => g[0]).join(" ")}` }, sofaCases.wrong[1]],
+  };
+  const out = calibrateRubric(t, cases, { phrases: true });
+  assert.equal(out.task.requiredPhrases?.length ?? 0, 8);
+  assert.ok(openTaskSchema.safeParse(out.task).success);
+});
+
+test("review #342 (P2): a német, francia, spanyol, olasz tagadás sem lehet a megkülönböztető kifejezés része", () => {
+  // Csak a tagadás helye különbözik: a tagadás nélküli kifejezések mind megvannak a hibásban is — a tagadásos kifejezés lenne az
+  // egyetlen megkülönböztető (a javítás nélkül azt venné fel).
+  for (const [sample, wrongText, neg, extra] of [
+    ["Ich spiele nicht Fussball gern.", "Ich spiele Fussball gern nicht.", "nicht", ["ja", "leider", "heute"]],
+    ["Je ne mange pas pommes.", "Je mange pommes ne pas.", "pas", ["oui", "merci", "aujourd"]],
+    ["Yo no como manzanas hoy.", "Yo como manzanas hoy no.", "no", ["si", "gracias", "ahora"]],
+    ["Io non mangio mele volentieri.", "Io mangio mele volentieri non.", "non", ["si", "grazie", "oggi"]],
+  ] as const) {
+    const t = task({ q: "Translate.", required: [[sample.split(" ")[sample.split(" ").length - 2]]], minWords: 3, sample });
+    const cases: AnswerKeyCases = {
+      correct: extra.map((x) => `${sample} ${x}`),
+      wrong: [{ kind: "forditott", text: wrongText }, { kind: "temaidegen", text: "Bonjour tout le monde ici." }],
+    };
+    const out = calibrateRubric(t, cases, { phrases: true });
+    assert.ok(!(out.task.requiredPhrases ?? []).flat().some((p) => p.split(" ").includes(neg)), `${neg}: ${JSON.stringify(out.task.requiredPhrases)}`);
+  }
+});
