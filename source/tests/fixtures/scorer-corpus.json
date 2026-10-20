@@ -1,0 +1,431 @@
+{
+  "about": "Spec 2026-10-20-r5-pontozo-korpusz: a nyílt feladat pontozójának regressziós korpusza a valódi (éles) buktatókból. Minden eset: rubrika, minta (mindig 1 pont), válasz és a válasz elvárt pontja. A v1 pontozó ÉS a HTML-referencia (ee_evaluate) is ezt adja.",
+  "cases": [
+    {
+      "name": "angol tagadás: must a mustn't mintára (e1f59f8d)",
+      "source": "#330",
+      "task": {
+        "required": [
+          [
+            "mustn't",
+            "mustn",
+            "mustnt"
+          ],
+          [
+            "run"
+          ],
+          [
+            "eat",
+            "drink"
+          ]
+        ],
+        "minWords": 4,
+        "needsSentence": false,
+        "sample": "You mustn't run. You mustn't eat or drink."
+      },
+      "answer": "You must run. You must eat.",
+      "expected": 0.5
+    },
+    {
+      "name": "angol tagadás: kifejtett „must not” egyenértékű",
+      "source": "#330",
+      "task": {
+        "required": [
+          [
+            "mustn't",
+            "mustn",
+            "mustnt"
+          ],
+          [
+            "run"
+          ],
+          [
+            "eat",
+            "drink"
+          ]
+        ],
+        "minWords": 4,
+        "needsSentence": false,
+        "sample": "You mustn't run. You mustn't eat or drink."
+      },
+      "answer": "You must not run. You must not eat.",
+      "expected": 1
+    },
+    {
+      "name": "angol tagadás: tagadó válasz állító mintára",
+      "source": "#330",
+      "task": {
+        "required": [
+          [
+            "must"
+          ],
+          [
+            "ticket"
+          ]
+        ],
+        "minWords": 4,
+        "needsSentence": false,
+        "sample": "You must buy a ticket."
+      },
+      "answer": "You mustn't buy a ticket.",
+      "expected": 0.5
+    },
+    {
+      "name": "angol tagadás: no = isn't any",
+      "source": "#330 review",
+      "task": {
+        "required": [
+          [
+            "water"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "There isn't any water."
+      },
+      "answer": "There is no water.",
+      "expected": 1
+    },
+    {
+      "name": "angol tagadás: never = not",
+      "source": "#330 review",
+      "task": {
+        "required": [
+          [
+            "must"
+          ],
+          [
+            "run"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "You must not run."
+      },
+      "answer": "You must never run.",
+      "expected": 1
+    },
+    {
+      "name": "angol tagadás: isn't mintára állító válasz",
+      "source": "#330",
+      "task": {
+        "required": [
+          [
+            "isn't",
+            "is not"
+          ],
+          [
+            "big"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "It isn't big."
+      },
+      "answer": "It is big.",
+      "expected": 0.5
+    },
+    {
+      "name": "angol tagadás: cannot = can't",
+      "source": "#330",
+      "task": {
+        "required": [
+          [
+            "swim"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "I cannot swim."
+      },
+      "answer": "I can't swim.",
+      "expected": 1
+    },
+    {
+      "name": "hamis tagadás: PIN-t (kötőjeles toldalék)",
+      "source": "#330 review",
+      "task": {
+        "required": [
+          [
+            "pin"
+          ],
+          [
+            "használunk"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Kódot használunk: a PIN kell."
+      },
+      "answer": "PIN-t használunk.",
+      "expected": 1
+    },
+    {
+      "name": "hamis tagadás: „dönt” nem „don't”",
+      "source": "#330 review",
+      "task": {
+        "required": [
+          [
+            "kormány"
+          ],
+          [
+            "dönt",
+            "határoz"
+          ],
+          [
+            "adóról"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "A kormány határoz az adóról."
+      },
+      "answer": "A kormány dönt az adóról.",
+      "expected": 1
+    },
+    {
+      "name": "hamis tagadás: „legyen t”",
+      "source": "#330 review",
+      "task": {
+        "required": [
+          [
+            "idő"
+          ],
+          [
+            "t"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Az idő jele t."
+      },
+      "answer": "Az idő jele legyen t.",
+      "expected": 1
+    },
+    {
+      "name": "magyar tagadás: „nem” a válaszban, állító mintára",
+      "source": "lesson-html-score",
+      "task": {
+        "required": [
+          [
+            "magasság"
+          ],
+          [
+            "merőleges"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "A magasság merőleges az alapra."
+      },
+      "answer": "A magasság nem merőleges az alapra.",
+      "expected": 0.5
+    },
+    {
+      "name": "magyar tagadás: a fordított irány változatlan (tilos = nem szabad)",
+      "source": "#330",
+      "task": {
+        "required": [
+          [
+            "tilos"
+          ],
+          [
+            "futni"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Nem szabad, tilos futni."
+      },
+      "answer": "Tilos futni.",
+      "expected": 1
+    },
+    {
+      "name": "ragozás: „területét” a „terület” csoportra",
+      "source": "grounding/score",
+      "task": {
+        "required": [
+          [
+            "terület"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Kiszámoltuk a területet."
+      },
+      "answer": "Kiszámoltuk a kert területét.",
+      "expected": 1
+    },
+    {
+      "name": "rövid szó: „kör” nem egyezik a „korszak”-kal",
+      "source": "grounding M-5",
+      "task": {
+        "required": [
+          [
+            "kör"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Ez egy kör."
+      },
+      "answer": "Ez egy korszak.",
+      "expected": 0
+    },
+    {
+      "name": "szám: 45 nem 4,5",
+      "source": "lesson-html-score",
+      "task": {
+        "required": [
+          [
+            "4.5"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "4,5 cm"
+      },
+      "answer": "45 cm",
+      "expected": 0
+    },
+    {
+      "name": "szám: 4.5 = 4,5",
+      "source": "lesson-html-score",
+      "task": {
+        "required": [
+          [
+            "4.5"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "4,5 cm"
+      },
+      "answer": "4.5 cm",
+      "expected": 1
+    },
+    {
+      "name": "szám: az előjel nem veszhet el",
+      "source": "lesson-html-score",
+      "task": {
+        "required": [
+          [
+            "4.5"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "4,5 cm"
+      },
+      "answer": "-4,5 cm",
+      "expected": 0
+    },
+    {
+      "name": "angol összevonás: who is = who's",
+      "source": "1e169ace (Who's vs Whose)",
+      "task": {
+        "required": [
+          [
+            "who's",
+            "who is"
+          ],
+          [
+            "teacher"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "Who's your teacher?"
+      },
+      "answer": "Who is your teacher?",
+      "expected": 1
+    },
+    {
+      "name": "angol összevonás: whose nem who's",
+      "source": "1e169ace (Who's vs Whose)",
+      "task": {
+        "required": [
+          [
+            "who's",
+            "who is"
+          ],
+          [
+            "teacher"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "Who's your teacher?"
+      },
+      "answer": "Whose teacher is it?",
+      "expected": 0.5
+    },
+    {
+      "name": "túl rövid válasz",
+      "source": "minWords",
+      "task": {
+        "required": [
+          [
+            "fotoszintézis"
+          ]
+        ],
+        "minWords": 4,
+        "needsSentence": false,
+        "sample": "A növény fotoszintézissel készít cukrot."
+      },
+      "answer": "fotoszintézis",
+      "expected": 0
+    },
+    {
+      "name": "ragozás: összehasonuló -val/-vel (fotoszintézissel)",
+      "source": "R5 korpusz (talált hiba)",
+      "task": {
+        "required": [
+          [
+            "fotoszintézis"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "A növény a fotoszintézis során cukrot készít."
+      },
+      "answer": "A levél fotoszintézissel készít cukrot.",
+      "expected": 1
+    },
+    {
+      "name": "ragozás: összehasonuló -val (kalappal)",
+      "source": "R5 korpusz (talált hiba)",
+      "task": {
+        "required": [
+          [
+            "kalap"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Ez egy piros kalap."
+      },
+      "answer": "Kalappal ment ki.",
+      "expected": 1
+    },
+    {
+      "name": "ragozás: összehasonuló -vel (kézzel)",
+      "source": "R5 korpusz (talált hiba)",
+      "task": {
+        "required": [
+          [
+            "kéz"
+          ],
+          [
+            "írt"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "A kéz írt."
+      },
+      "answer": "Kézzel írt levelet.",
+      "expected": 1
+    }
+  ]
+}

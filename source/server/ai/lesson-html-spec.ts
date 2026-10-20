@@ -305,6 +305,8 @@ function ee_norm(s){
   return (s.match(/[+-]?\\d+(?:\\.\\d+)?|[\\p{L}]+/gu)||[]).map(function(t){return t.replace(/^\\+(?=\\d)/,'');}).join(' ');
 }
 function ee_stem(w){
+  /* osszehasonulo -val/-vel: fotoszintezissel, kalappal, kezzel */
+  if(w.length >= 6 && /([bcdfghjklmnpqrstvwxyz])\\1(al|el)$/.test(w)){ return w.slice(0, w.length - 3); }
   var suf = ['juk','unk','ban','ben','bol','rol','tol','nak','nek',
              'val','vel','hoz','hez','uk','ja','je','ra','re','ba','be','ot','et','at',
              'ok','ek','k','t','n'];
@@ -337,6 +339,7 @@ function ee_wordHit(answerTokens, answerStems, word){
     var tok = answerTokens[t];
     if(tok === p) return true;
     if(/\\d/.test(tok+p) || ['nem','ne','not','no'].indexOf(p)!==-1) continue;
+    if(p.length >= 2 && tok.length >= 6 && /([bcdfghjklmnpqrstvwxyz])\\1(al|el)$/.test(tok) && tok.slice(0, tok.length - 3) === p) return true;
     if(Math.min(tok.length,p.length)>=4 && (answerStems[t]===p || tok===ps || answerStems[t]===ps)) return true;
     if(Math.min(tok.length,p.length)<5) continue;
     if(ee_lev(tok, p) <= ee_tol(Math.max(tok.length, p.length))) return true;
