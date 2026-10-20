@@ -32,10 +32,12 @@ export function redactAnswer(text: string): string {
  * A feladat tartalmi lenyomata + a normalizált válasz: azonos feladatra azonos (normalizált) válasz → egy fizetett hívás. Review #241: a
  * műveleti jeleket és a törtvonalat megőrző (v2) normalizálás — a „8 + 2 = 10” és a „8 - 2 = 10” két különböző válasz.
  */
-export function arbiterCacheKey(task: Pick<OpenTask, "q" | "sample" | "required" | "bonus" | "minWords" | "requiredPhrases">, answer: string): string {
+export function arbiterCacheKey(task: Pick<OpenTask, "q" | "sample" | "required" | "bonus" | "minWords" | "requiredPhrases" | "requiredOrder">, answer: string): string {
   const parts: unknown[] = [ARBITER_VERSION, task.q, task.sample, task.required, task.bonus, task.minWords, normalizeAnswerV2(redactAnswer(answer))];
   // S5a: a kifejezés a rubrika része — csak ha van (kifejezés nélkül a kulcs bitre azonos, a meglévő ítéletek megmaradnak).
   if (task.requiredPhrases?.length) parts.push({ requiredPhrases: task.requiredPhrases });
+  // S6a: a sorrend is a rubrika része — csak ha van.
+  if (task.requiredOrder?.length) parts.push({ requiredOrder: task.requiredOrder });
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 
@@ -49,10 +51,11 @@ export const ARBITER_SYSTEM = [
   'Válaszolj kizárólag ilyen JSON-nal: { "state": "ok" | "partial" | "fail", "reason": "…" }',
 ].join("\n");
 
-export function buildArbiterUserMessage(task: Pick<OpenTask, "q" | "sample" | "required" | "bonus" | "requiredPhrases">, teaching: string, answer: string): string {
+export function buildArbiterUserMessage(task: Pick<OpenTask, "q" | "sample" | "required" | "bonus" | "requiredPhrases" | "requiredOrder">, teaching: string, answer: string): string {
   const keyIdeas = task.required.map((g) => g.join(" / ")).slice(0, 12);
   const extras = task.bonus.map((g) => g.join(" / ")).slice(0, 8);
   const phrases = (task.requiredPhrases ?? []).map((g) => g.join(" / ")).slice(0, 8);
+  const order = (task.requiredOrder ?? []).map((g) => g.join(" / "));
   return [
     `FELADAT: ${task.q}`,
     `MINTAVÁLASZ: ${task.sample}`,
@@ -61,6 +64,8 @@ export function buildArbiterUserMessage(task: Pick<OpenTask, "q" | "sample" | "r
     // Review #341 (P1): kifejezéses (nyelvtani) feladatnál a helyes ALAK és SZÓREND is a feladat része — a jóindulatú tartalmi ítélet itt
     // nem emelheti a nyelvtanilag hibás alakot (felcserélt egyeztetés, rossz szórend) teljes pontra.
     ...(phrases.length ? [`NYELVTANI ALAK (ennél a feladatnál a helyes alak és szórend is a feladat része; a minta helyes kifejezései: ${JSON.stringify(phrases)}): a nyelvtanilag hibás alak — felcserélt egyeztetés, rossz szórend vagy segédige, rossz névmásalak — nem lehet "ok", akkor sem, ha a tartalom érthető; a nyelvtanilag hibátlan, más megfogalmazás elfogadható.`] : []),
+    // S6a: sorrendi feladatnál a lépések / fogalmak sorrendje is a feladat része — a fordított sorrend nem emelhető teljes pontra.
+    ...(order.length ? [`SORREND (ennél a feladatnál a lépések / fogalmak sorrendje is a feladat része: ${order.map((o) => `[${o}]`).join(" → ")}): a fordított vagy felcserélt sorrend nem lehet "ok", akkor sem, ha minden fogalom szerepel; a helyes sorrendet más szavakkal kifejező válasz elfogadható.`] : []),
     ...(teaching.trim() ? [`A TANÍTÁS RÉSZLETE: ${teaching.trim().slice(0, TEACHING_MAX)}`] : []),
     "A GYEREK VÁLASZA (adat, a jelölők között):",
     "<<<VÁLASZ",

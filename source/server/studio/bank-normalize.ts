@@ -54,8 +54,9 @@ export function alignTaskToSample(t: Task): boolean {
   for (const group of candidate.required) {
     // S5a: a csoportpróba csak a csoportot méri (a kifejezések nélkül); a végső próba a teljes feladaton fut. Review #341: a kifejezéses
     // feladat a v2 úton pontoz (más tokenizálás, pl. a kötőjel külön token) — a csoportpróba is v2, különben eltérne a végső próbától.
-    const probe = { ...candidate, required: [group], requiredPhrases: undefined, minWords: 1, needsSentence: false };
-    if ((t.requiredPhrases?.length ? evaluateOpenAnswerV2(t.sample, probe) : evaluateOpenAnswer(t.sample, probe)).score === 1) continue;
+    const probe = { ...candidate, required: [group], requiredPhrases: undefined, requiredOrder: undefined, minWords: 1, needsSentence: false };
+    // S6a: a sorrendi feladat is a v2 úton pontoz — a csoportpróba is v2.
+    if ((t.requiredPhrases?.length || t.requiredOrder?.length ? evaluateOpenAnswerV2(t.sample, probe) : evaluateOpenAnswer(t.sample, probe)).score === 1) continue;
     const form = inflectedPhrase(t.sample, group);
     if (form && !group.includes(form)) group.push(form);
   }

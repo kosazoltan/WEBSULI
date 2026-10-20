@@ -12,13 +12,15 @@ import { ATOM, OPS, SIGN, atomValue, evaluateExpression } from "./arithmetic-exp
 import { formatPolynomial, isExpanded, isFactored, parsePolynomial, polyEquals, polynomialCandidates } from "./polynomial";
 
 /** A lecke pontozási szerződésének verziója (`experience.scoringVersion`); hiányzó mező = 1 (régi kulcsszó-pontozó). */
-export const LESSON_SCORING_VERSION = 4;
+export const LESSON_SCORING_VERSION = 5;
 /** Számos típusos mező (`number`/`fraction`/`expression`, `requiredDistinct`). */
 export const TYPED_SCORING_VERSION = 2;
 /** Spec 2026-10-19-algebrai-referencia: betűs (`polynomial`) végeredmény — a régebbi kliens ezt nem ismeri. */
 export const POLYNOMIAL_SCORING_VERSION = 3;
 /** Spec 2026-10-20-s5-sorrendes-kifejezes: sorrendérzékeny kötelező kifejezés (`requiredPhrases`) — a régebbi kliens ezt nem ismeri. */
 export const PHRASE_SCORING_VERSION = 4;
+/** Spec 2026-10-20-s6-fogalom-sorrend: a fogalmak kötelező sorrendje (`requiredOrder`) — a régebbi kliens ezt nem ismeri. */
+export const ORDER_SCORING_VERSION = 5;
 /** A kliens ezt küldi (`X-Websuli-Scoring`); a kiszolgáló az ennél újabb leckét nem adja ki némán (§C-V/1, 11). */
 export const SCORING_HEADER = "x-websuli-scoring";
 

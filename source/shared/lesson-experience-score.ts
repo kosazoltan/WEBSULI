@@ -129,7 +129,37 @@ export function missingAnswerConcepts(answer: string, task: Pick<OpenTask, "requ
 export type AnswerScore = { state: "ok" | "partial" | "fail"; score: number; reason: string };
 
 /** A típusos (v2) feladat ismérve: van részeredmény-lista vagy kategóriakvóta. */
-export const isTypedTask = (task: Pick<OpenTask, "typedAnswers" | "requiredDistinct" | "requiredPhrases">): boolean => Boolean(task.typedAnswers?.length || task.requiredDistinct?.length || task.requiredPhrases?.length);
+export const isTypedTask = (task: Pick<OpenTask, "typedAnswers" | "requiredDistinct" | "requiredPhrases" | "requiredOrder">): boolean => Boolean(task.typedAnswers?.length || task.requiredDistinct?.length || task.requiredPhrases?.length || task.requiredOrder?.length);
+
+/**
+ * Spec 2026-10-20-s6-fogalom-sorrend (S6a): a fogalomcsoport első előfordulása a válaszban (token-index) — alternatívánként csak akkor, ha a
+ * teljes alternatíva illeszkedik (`conceptHit`, tűréssel, sorrend nélkül); a pozíció az első szavára illeszkedő első token. -1: nincs.
+ */
+function firstPosition(tokens: readonly string[], group: readonly string[]): number {
+  let best = -1;
+  for (const alternative of group) {
+    const words = tokensOfV2(alternative);
+    if (!words.length || !conceptHit(tokens as string[], [alternative], tokensOfV2)) continue;
+    const at = tokens.findIndex((token) => wordHit(token, words[0]));
+    if (at >= 0 && (best < 0 || at < best)) best = at;
+  }
+  return best;
+}
+/** S6a: minden sorrendi csoport megvan, és az első előfordulásuk szigorúan növekvő. */
+function orderSatisfied(tokens: readonly string[], groups: readonly (readonly string[])[]): boolean {
+  let previous = -1;
+  for (const group of groups) {
+    const at = firstPosition(tokens, group);
+    if (at < 0 || at <= previous) return false;
+    previous = at;
+  }
+  return true;
+}
+/** S6a: a sorrendi szabály nem teljesül (diagnosztika, válaszkulcs-tesztek, J1). */
+export function missingOrder(answer: string, task: Pick<OpenTask, "requiredOrder">): boolean {
+  if (!task.requiredOrder?.length) return false;
+  return !orderSatisfied(tokensOfV2(answerWindow(answer)), task.requiredOrder);
+}
 
 /**
  * S5a: számolós (`typedAnswers`) vagy kategóriakvótás (`requiredDistinct`) feladat — ezt a válaszkulcs-tesztek, a minta-igazítás és a
@@ -200,13 +230,16 @@ export function evaluateOpenAnswerV2(rawAnswer: string, task: OpenTask): AnswerS
   const phraseGroups = task.requiredPhrases ?? [];
   const phraseHits = phraseGroups.filter(g => phraseHit(tokens, g)).length;
   const conceptHits = task.required.filter(c => conceptHit(tokens, c, tokensOfV2)).length;
-  const hits = conceptHits + phraseHits;
-  const total = task.required.length + phraseGroups.length;
+  // S6a: a sorrendi szabály EGY kötelező feltétel (fele- és összes-szabály).
+  const hasOrder = Boolean(task.requiredOrder?.length);
+  const orderHit = hasOrder && orderSatisfied(tokens, task.requiredOrder!);
+  const hits = conceptHits + phraseHits + (orderHit ? 1 : 0);
+  const total = task.required.length + phraseGroups.length + (hasOrder ? 1 : 0);
   if (total && hits < Math.ceil(total / 2) && !task.typedAnswers?.length) return { state: "fail", score: 0, reason: "A lényegi fogalmak még hiányoznak." };
   const connective = tokens.some(t => (SENTENCE_CONNECTIVES as readonly string[]).includes(t));
   const hasUnexpectedNegation = unexpectedNegation(answer, task.sample);
   if (partialReason || hits < total || (task.needsSentence && !connective) || hasUnexpectedNegation) {
-    const reason = partialReason ?? (conceptHits < task.required.length ? `Részben jó. Még ${task.required.length - conceptHits} kötelező fogalom hiányzik.` : phraseHits < phraseGroups.length ? "Részben jó. A helyes nyelvtani alak vagy szórend még hiányzik." : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : "A fogalmak megvannak; fogalmazd őket összefüggő mondattá.");
+    const reason = partialReason ?? (conceptHits < task.required.length ? `Részben jó. Még ${task.required.length - conceptHits} kötelező fogalom hiányzik.` : phraseHits < phraseGroups.length ? "Részben jó. A helyes nyelvtani alak vagy szórend még hiányzik." : hasOrder && !orderHit ? "Részben jó. A lépések / fogalmak sorrendje nem megfelelő." : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : "A fogalmak megvannak; fogalmazd őket összefüggő mondattá.");
     return { state: "partial", score: 0.5, reason };
   }
   return { state: "ok", score: 1, reason: "A végeredmény, a szükséges fogalmak és a megfogalmazás is rendben vannak." };
@@ -229,8 +262,9 @@ export const OPEN_ANSWER_RULES_HU = [
   `4. needsSentence: legalább egy kötőszó/névelő kell ezek közül: ${SENTENCE_CONNECTIVES.slice(0, 19).join(", ")}; különben 0,5. Tagadás: a nem/not, a cannot és az aposztrófos angol n't (don't, mustn't, can't…) tagadásnak számít; ha a válaszban van ilyen tagadás, a mintában semmilyen (no/never sem) → 0,5; ha a minta angolul tagadó (not / n't), a válaszban pedig nincs tagadás (a no, never, nothing… is annak számít) → 0,5. (A „must” és a „mustn't” így nem cserélhető fel.)`,
   "5. TÍPUSOS (zárt matematikai) feladat: typedAnswers = [{part, kind: number|fraction|expression, value, unit?, form?}] részfeladatonként, SORRENDBEN (felcserélt részeredmény hibás). Az érték dönt: 2/1 ≠ 1/2; 0,5 = 1/2 csak form: any esetén; form: simplified-fraction → csak egyszerűsített tört (2/4, 0,5 nem); form: decimal → tizedes/egész alak; form: intermediate-step → a KÉRT köztes kifejezés szerepeljen (35 + 64 − 12), az értékazonos más alak (35 + 8 · 8 − 12) nem; unit → a szám után a mértékegység kötelező. Betűs (algebrai) végeredmény: kind: polynomial, value a teljes kifejezés („x² + 10x + 25”); a program a kifejtett, összevont normálalakot hasonlítja (tagsorrend, szóköz, x^2/x² nem számít); form: expanded (alapértelmezés) → kifejtett, összevont alak kell, a zárójeles (a kérdés másolata) nem; form: factored → szorzattá alakított, zárójeles alak kell. A required ekkor csak a szöveges részt méri; a végeredményt NE tedd required-csoportba.",
   "6. requiredDistinct = [{category, from: [[szinonimák]…], count}]: kategóriánként legalább count KÜLÖNBÖZŐ elem; egy szinonimacsoport egy elem (két szinonima nem két példa). Ezt használd, ha a kérdés „N példát” kér egy halmazból — ne tegyél önkényes mintát kötelezővé.",
-  "7. requiredPhrases = [[kifejezés, …], …] — SORRENDÉRZÉKENY kötelező kifejezések (nyelvtani alak, szórend, egyeztetés): ÉS-csoportok, egy csoporton belül VAGY; egy kifejezés szavai a válaszban EGYMÁS UTÁN, ebben a sorrendben és PONTOSAN (tűrés és toldalék nélkül) kellenek; az aposztróf elválaszt („mustn't” = „mustn t”). A kötelező csoportokkal együtt számít a fele/mind szabályba; hiányában legfeljebb 0,5 („A helyes nyelvtani alak vagy szórend még hiányzik”). Nyelvtani / idegen nyelvi alak- és szórend-feladatnál a helyes alakot ez kéri (2–5 szavas kifejezés a minta szövegéből, a szükséges változatok VAGY-alternatívaként); a required a tartalmat.",
-  "8. A sample-nek a saját rubrikán 1 pontot kell kapnia (a program ellenőrzi); a program a referenciaértéket a kérdés kifejezéséből újraszámolja — eltérés csomaghiba.",
+  "7. requiredPhrases = [[kifejezés, …]] (nyelvtani alak / szórend): a kifejezés szavai EGYMÁS UTÁN, PONTOSAN (tűrés nélkül; az aposztróf elválaszt: mustn't = mustn t); ÉS-csoportok, csoporton belül VAGY; kötelező feltétel, hiányában ≤ 0,5. A sample-ből vett 2–5 szavas kifejezés; a required a tartalmat méri.",
+  "8. requiredOrder = [[fogalom, …], …] (2–4; sorrendi / műveleti sorrend feladat): a csoportok első előfordulása ebben a sorrendben (tűréssel, a köztes szavak szabadok); kötelező feltétel, fordított sorrend ≤ 0,5.",
+  "9. A sample-nek a saját rubrikán 1 pontot kell kapnia (a program ellenőrzi); a program a referenciaértéket a kérdés kifejezéséből újraszámolja — eltérés csomaghiba.",
 ].join("\n");
 
 export function scoreSummary(points: number, total: number) {

@@ -37,6 +37,8 @@ const strictTask = z.object({
   typedAnswers: z.array(strictTypedAnswer).min(1).max(8).nullable(), requiredDistinct: z.array(strictDistinct).min(1).max(6).nullable(),
   // Spec 2026-10-20-s5-sorrendes-kifejezes: sorrendérzékeny kötelező kifejezések (nyelvtani alak / szórend).
   requiredPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).nullable(),
+  // Spec 2026-10-20-s6-fogalom-sorrend: a fogalmak kötelező sorrendje.
+  requiredOrder: z.array(z.array(text(160)).min(1)).min(2).max(4).nullable(),
 });
 const strictQuiz = z.object({
   id: text(64), sectionIndex: z.number().int().min(0), coversConceptIds: ids, question: text(1500),
@@ -83,7 +85,7 @@ export function bankResponseFormat(counts: BankPacketCounts, patch: boolean): Re
  * Választható lista-mezők (a helyi sémában `optional`, jelen esetben legalább 1 elem): az üres lista a hiánnyal azonos
  * (docs/specs/2026-10-18-bank-ures-lista.md — a szolgáltatói kimenet az elemszám-minimumot nem kényszeríti, a modell `[]`-t ad).
  */
-export const OPTIONAL_ARRAY_KEYS: Readonly<Record<"methods" | "tasks", readonly string[]>> = { methods: ["options", "steps"], tasks: ["typedAnswers", "requiredDistinct", "requiredPhrases"] };
+export const OPTIONAL_ARRAY_KEYS: Readonly<Record<"methods" | "tasks", readonly string[]>> = { methods: ["options", "steps"], tasks: ["typedAnswers", "requiredDistinct", "requiredPhrases", "requiredOrder"] };
 
 /** A szigorú séma `null`-jai (és a választható mezők üres listái) a helyi séma szempontjából hiányzó mezők. */
 export function normalizeStrictPacket(json: unknown): unknown {

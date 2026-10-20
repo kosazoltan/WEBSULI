@@ -30,7 +30,7 @@ test("a szigorú séma tükrözi a helyi sémát: a fixture bankja átmegy rajta
   const toStrict = (item: Record<string, unknown>, nullables: string[]) => { const o: Record<string, unknown> = { ...item }; delete o.sourceHash; for (const k of nullables) if (!(k in o) || o[k] === undefined) o[k] = null; return o; };
   const packet = {
     methods: e.methods.map((m) => toStrict(m as unknown as Record<string, unknown>, ["options", "correctIndex", "steps"])),
-    tasks: e.tasks.map((t) => toStrict(t as unknown as Record<string, unknown>, ["typedAnswers", "requiredDistinct", "requiredPhrases"])),
+    tasks: e.tasks.map((t) => toStrict(t as unknown as Record<string, unknown>, ["typedAnswers", "requiredDistinct", "requiredPhrases", "requiredOrder"])),
     quiz: e.quiz.map((q) => ({ ...toStrict(q as unknown as Record<string, unknown>, []), intent: q.intent ?? "recall" })),
     glossary: [],
   };

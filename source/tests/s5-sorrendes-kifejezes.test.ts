@@ -57,7 +57,9 @@ test("S5a: kifejezés nélkül a pontozás változatlan (v1 út), a típusos ism
 });
 
 test("S5a: pontozási verzió 4 a kifejezéses leckénél; a régi (3-as) kliens frissítést kap", () => {
-  assert.equal(LESSON_SCORING_VERSION, 4);
+  // Dokumentált specváltozás (2026-10-20-s6-fogalom-sorrend): a kliens szerződése 5-re nőtt; a kifejezés továbbra is a 4-es szerződés.
+  assert.equal(PHRASE_SCORING_VERSION, 4);
+  assert.ok(LESSON_SCORING_VERSION >= PHRASE_SCORING_VERSION);
   assert.equal(scoringVersionFor([task()]), PHRASE_SCORING_VERSION);
   const { requiredPhrases: _p, ...plain } = task();
   assert.equal(scoringVersionFor([plain as OpenTask]), undefined, "típus nélküli bank: változatlan");

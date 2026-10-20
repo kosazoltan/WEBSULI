@@ -32,6 +32,7 @@ export function rubricHash(task: OpenTask): string {
   const parts: unknown[] = [task.q, task.sample, task.required, task.bonus, task.minWords, task.needsSentence, task.typedAnswers ?? null, task.requiredDistinct ?? null];
   // S5a: a kifejezés a rubrika része — csak ha van (kifejezés nélkül a lenyomat változatlan).
   if (task.requiredPhrases?.length) parts.push({ requiredPhrases: task.requiredPhrases });
+  if (task.requiredOrder?.length) parts.push({ requiredOrder: task.requiredOrder });
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 export type GradedTasks = { kind: "tasks"; rows: GradedTaskRow[]; summary: ReturnType<typeof scoreSummary> };
