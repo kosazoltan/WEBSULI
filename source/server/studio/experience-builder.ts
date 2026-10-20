@@ -155,7 +155,8 @@ export const PACKET_ATTEMPTS = 3;
 export const STUCK_SAME_ISSUE_RUNS = 3;
 /** Spec 2026-10-20-elakadas-r3-ismetlodo-hiba: a hibalista sorrendfüggetlen lenyomata (két kísérlet azonos hibáinak felismeréséhez). */
 export function issueSignature(issues: readonly string[]): string {
-  return [...issues].map((i) => i.trim()).sort().join("\n");
+  // Review #333: egyértelmű kódolás (a sortörést tartalmazó üzenetek összefűzése nem moshat össze két eltérő listát).
+  return JSON.stringify([...issues].map((i) => i.trim()).sort());
 }
 /** One extra attempt after PACKET_ATTEMPTS failures, which the caller may route to the rescue model. */
 export const PACKET_RESCUE_ATTEMPTS = 1;
@@ -655,8 +656,12 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       if (salvaged) deps.onToolFix?.(stuck && !lastAttempt ? "bank-stuck" : "bank-salvage", [`${unit.sectionIndex + 1}. fejezet: ${stuck && !lastAttempt ? "ismétlődő hiba — korai kivétel" : "a mentő kísérlet után"} ${salvaged.removed.length} hibás tétel kivéve (${salvaged.removed.join(", ")}), a csomag többi része átvéve`]);
       // Tételgyár T2.1: a T2 soha nem ront a korábbi állapoton — az utolsó kísérletnél a tesztbukott feladat csak a tartalék terhére
       // kerül ki (a csomag a padlón marad); ami ezen felül bukik, figyelmeztetéssel bent marad (a lektor a tanítás alapján úgyis ítél).
-      const keyTrimmed = parsed?.success && removalAttempt && answerKeyOnly ? trimAnswerKeyFailures(parsed!.data, issues, taskCount) : null;
-      if (keyTrimmed) deps.onToolFix?.("answer-key-tests", [`${unit.sectionIndex + 1}. fejezet: ${keyTrimmed.removed.length} tesztbukott feladat kivéve a tartalék terhére (${keyTrimmed.removed.join(", ")})${keyTrimmed.kept.length ? `; ${keyTrimmed.kept.length} a padló miatt bent maradt (${keyTrimmed.kept.join(", ")})` : ""}`]);
+      let keyTrimmed = parsed?.success && removalAttempt && answerKeyOnly ? trimAnswerKeyFailures(parsed!.data, issues, taskCount) : null;
+      // Review #333: az elakadás miatti KORAI kivétel csak akkor zár, ha minden tesztbukott feladat kikerült, és a maradék csomag
+      // érvényes; különben a ciklus megy tovább (a mentőkör engedménye — az utolsó kísérlet — változatlan).
+      if (keyTrimmed && !lastAttempt && (keyTrimmed.kept.length || quotaAndValidate(keyTrimmed.packet).length)) keyTrimmed = null;
+      if (keyTrimmed && !lastAttempt) deps.onToolFix?.("bank-stuck", [`${unit.sectionIndex + 1}. fejezet: ismétlődő hiba — korai kivétel ${keyTrimmed.removed.length} tesztbukott feladat (${keyTrimmed.removed.join(", ")}); ${issues.length} válaszkulcs-hiba`]);
+      else if (keyTrimmed) deps.onToolFix?.("answer-key-tests", [`${unit.sectionIndex + 1}. fejezet: ${keyTrimmed.removed.length} tesztbukott feladat kivéve a tartalék terhére (${keyTrimmed.removed.join(", ")})${keyTrimmed.kept.length ? `; ${keyTrimmed.kept.length} a padló miatt bent maradt (${keyTrimmed.kept.join(", ")})` : ""}`]);
       if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly))) packet = parsed!.data;
       else if (keyTrimmed) packet = keyTrimmed.packet;
       else if (salvaged) packet = salvaged.packet;

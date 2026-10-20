@@ -29,13 +29,14 @@ test("E2: a túl megengedő rubrika (hibás válasz teljes pontot kap) javítók
     // A minta maga a „hibás” eset: a rubrika szerint teljes pont → a rubrika nem különbözteti meg a hibás választ.
     answerKeys: async (tasks: OpenTask[]) => new Map(tasks.filter((t) => t.q.endsWith("(tartalék)"))
       .map((t) => [t.id, { ...failing, wrong: [{ kind: "tevhit", text: t.sample }, { kind: "temaidegen", text: "x" }] }] as const)),
-    onToolFix: (tool, list) => { if (tool === "answer-key-tests") fixes.push(...list); },
+    onToolFix: (tool, list) => { if (tool === "answer-key-tests" || tool === "bank-stuck") fixes.push(...list); },
   });
-  // Dokumentált specváltozás (R3): háromszor azonos hibalista → a tesztbukott feladat a tartalék terhére kikerül, a mentőkör elmarad.
+  // Dokumentált specváltozás (R3 + review #333): háromszor azonos hibalista → a tesztbukott feladat a tartalék terhére kikerül (a
+  // korai kivétel `bank-stuck` jelzéssel), a mentőkör elmarad.
   assert.equal(prompts.length, 3, "három azonos kísérlet után korai kivétel");
   assert.match(prompts[1], /válaszkulcs-teszt: a hibás \(tévhit\) válasz .* teljes pontot kap — a rubrika túl megengedő/);
   assert.equal(experience.tasks.some((t) => t.q.endsWith("(tartalék)")), false, "a megkülönböztetni képtelen feladat nem jut a gyerekhez");
-  assert.match(fixes.join(" "), /1 tesztbukott feladat kivéve a tartalék terhére/);
+  assert.match(fixes.join(" "), /ismétlődő hiba — korai kivétel 1 tesztbukott feladat/);
 });
 
 test("T2.1c: a helyes-eset bukás NEM indít javítókört — a jelentésbe kerül a végleges azonosítóval", async () => {

@@ -30,3 +30,8 @@ test("ugyanaz a javíthatatlan tétel minden kísérletben: a 3. kísérlet utá
   assert.match(stuck.join(" "), /ismétlődő hiba — korai kivétel 1 hibás tétel kivéve/);
   assert.equal(experience.tasks.some((t) => t.q.endsWith("(hibás)")), false);
 });
+
+// Review #333: a lenyomat egyértelmű — sortörést tartalmazó, eltérő listák nem esnek egybe.
+test("issueSignature: a sortörés nem mos össze két eltérő hibalistát", () => {
+  assert.notEqual(issueSignature(["a\nb"]), issueSignature(["a", "b"]));
+});

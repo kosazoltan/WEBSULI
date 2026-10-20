@@ -28,3 +28,12 @@ Terv: `docs/specs/2026-10-20-elakadas-r3-ismetlodo-hiba.md`. Munkakönyvtár: `s
 - **Megtakarítás:** a 4. (mentő, erős modellre irányítható) hívás.
 - **Dokumentált specváltozás:** a `bank-salvage` és a `bank-answer-keys` teszt a 4 helyett 3 hívást vár; a szándék (a hibás tétel
   kikerül, a bank elkészül) változatlan.
+
+## Review #333 — pontosítás
+- **Korai lezárás válaszkulcs-hibánál:** csak akkor, ha minden tesztbukott feladat kikerült (`kept` üres), ÉS a maradék csomag a
+  teljes ellenőrzésen (`quotaAndValidate`) átmegy; különben a ciklus megy tovább. Az utolsó kísérlet engedménye változatlan.
+- **Jelzés:** a korai kivétel `bank-stuck` („ismétlődő hiba — korai kivétel …; N válaszkulcs-hiba”); az egyfutásos telemetria az
+  `answerKeyFails`-t ebből is számolja.
+- **Lenyomat:** `issueSignature` = `JSON.stringify(rendezett lista)`, így a sortörés nem mos össze két listát.
+- **Eszközleírás:** az élő `bank-salvage` leírása (role-skills) említi a korai kivételt. A befagyasztott `websuli-runtime-2`
+  csomag változatlan (hash-védett, régi futásoké).

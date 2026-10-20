@@ -230,7 +230,7 @@ Futtatás: automatikus; kézzel \`npm run studio:tool -- section-visuals <lecke.
 Mit tesz: minden tétel szövegében (kérdés, minta, magyarázatok) minden „a · b = c" alakú (+ − · :, zárójel nélküli) állítást kiszámol; a hamis (pl. „154 · 8 = 1238") javító kört indít a lektor előtt. A typedAnswers value-ját a kérdés kifejezéséből újraszámolja; eltérés vagy értelmezhetetlen referencia = csomaghiba.
 Mit NEM tesz: zárójeles kifejezést, szöveges következtetést, mértékegység-átváltást nem ítél meg (a lektoré).
 Futtatás: automatikus; kézzel \`npm run studio:tool -- arithmetic-claims <csomag.json>\`.`,
-  "bank-salvage": `### Eszköz: bank-salvage (a MENTŐ kísérlet után is hibás csomagra, kódból)
+  "bank-salvage": `### Eszköz: bank-salvage (mentőkör vagy 3 azonos hibalista után, kódból)
 Mit tesz: az „ID: …” hibás tételeket kiveszi (≤ 20%), a csomagot csak teljes ellenőrzés után veszi át.
 Mit NEM tesz: tételt nem javít, kvótát nem pótol — a kivett tétel hiányzik: az első válasz legyen hibátlan.
 Futtatás: automatikus; kézzel \`npm run studio:tool -- bank-salvage <csomag.json> <hibak.json>\`.`,
