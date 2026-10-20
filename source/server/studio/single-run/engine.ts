@@ -667,6 +667,8 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
       onOpenFinding: (finding) => { openFindings.push(finding); output = { ...output, bankOpenFindings: [...openFindings] }; },
       onToolFix: (tool, fixes) => {
         if (tool === "quiz-blind") for (const f of fixes) telemetry.gates.quizBlindRemoved += Number(/: (\d+) kvíztétel kivéve/.exec(f)?.[1] ?? 0);
+        // Review #333: az elakadás miatti korai kivétel válaszkulcs-hibái is a telemetriába kerülnek.
+        if (tool === "bank-stuck") for (const f of fixes) telemetry.gates.answerKeyFails += Number(/(\d+) válaszkulcs-hiba/.exec(f)?.[1] ?? 0);
         log(`[EGYFUTÁS] ${tool}: ${fixes.join("; ").slice(0, 300)}`);
       },
       onAttemptFailure: (section, attempt, reason) => {

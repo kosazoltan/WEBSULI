@@ -151,6 +151,13 @@ export class RetryableBankCallError extends Error {
 
 /** Spec 2026-09-19: model attempts per bank packet on the cheap bank model (initial + repairs). */
 export const PACKET_ATTEMPTS = 3;
+/** Spec 2026-10-20-elakadas-r3-ismetlodo-hiba: ennyi egymást követő azonos hibalista után nincs újabb kör (korai kivétel). */
+export const STUCK_SAME_ISSUE_RUNS = 3;
+/** Spec 2026-10-20-elakadas-r3-ismetlodo-hiba: a hibalista sorrendfüggetlen lenyomata (két kísérlet azonos hibáinak felismeréséhez). */
+export function issueSignature(issues: readonly string[]): string {
+  // Review #333: egyértelmű kódolás (a sortörést tartalmazó üzenetek összefűzése nem moshat össze két eltérő listát).
+  return JSON.stringify([...issues].map((i) => i.trim()).sort());
+}
 /** One extra attempt after PACKET_ATTEMPTS failures, which the caller may route to the rescue model. */
 export const PACKET_RESCUE_ATTEMPTS = 1;
 /**
@@ -536,6 +543,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // kapja meg más fejezet javító utasítását.
     let unitSystem = system;
     const diagnoses: string[] = [];
+    // Spec 2026-10-20-elakadas-r3-ismetlodo-hiba: az előző kísérlet hibalistájának lenyomata (elakadás-felismerés).
+    let previousIssueKey: string | null = null;
+    let sameIssueRuns = 0;
     // Spec 2026-09-19: three attempts per packet — on 36–48 concept maps a second miss
     // on one packet killed whole runs (studio_jobs 41a94054, 222202f1, 4f853db8).
     for (let attempt = 0; !packet && attempt < PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS; attempt++) {
@@ -625,6 +635,15 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       // tévedhetetlen; az utolsó (mentő) kísérletnél egyedül nem ölheti meg a csomagot — figyelmeztetéssel
       // átmegy, a lektor pedig úgyis a forráshoz méri.
       const lastAttempt = attempt === PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS - 1;
+      // Spec 2026-10-20-elakadas-r3-ismetlodo-hiba: ugyanaz a hibalista HÁROMSZOR egymás után (doom-loop: figyel 2-nél, blokkol 3-nál)
+      // → a modell nem halad; a hibás tételek kivétele (mentés / tesztbukott feladat) azonnal fut, a mentőkísérlet elmarad. Két
+      // azonos kör még nem elakadás (pl. a jogosultságon kívüli, figyelmen kívül hagyott csere után a következő kör javíthat).
+      // Az aritmetikai szelep marad az utolsó kísérletre.
+      const issueKey = issueSignature(issues);
+      sameIssueRuns = issues.length > 0 && issueKey === previousIssueKey ? sameIssueRuns + 1 : 1;
+      previousIssueKey = issueKey;
+      const stuck = Boolean(parsed?.success) && issues.length > 0 && sameIssueRuns >= STUCK_SAME_ISSUE_RUNS;
+      const removalAttempt = lastAttempt || stuck;
       const arithmeticOnly = issues.length > 0 && issues.every(i => /hibás számítás/.test(i));
       // Spec 2026-09-30 (U2, H52): nem néma figyelmeztetés — nyitott lelet, amelyet a kapu kivehető tételként kezel (limit-tábla).
       if (parsed?.success && lastAttempt && arithmeticOnly) { openIssues = issues; deps.onToolFix?.("arithmetic-claims", issues.map(i => `nyitott lelet (átengedve, a kapunál kivehető tétel): ${i}`)); }
@@ -633,12 +652,16 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         const quota = salvageSchema.safeParse(p);
         return quota.success ? validate(quota.data) : quota.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       };
-      const salvaged = parsed?.success && lastAttempt && issues.length && !arithmeticOnly && !answerKeyOnly ? salvagePacket(parsed!.data, quotaAndValidate) : null;
-      if (salvaged) deps.onToolFix?.("bank-salvage", [`${unit.sectionIndex + 1}. fejezet: a mentő kísérlet után ${salvaged.removed.length} hibás tétel kivéve (${salvaged.removed.join(", ")}), a csomag többi része átvéve`]);
+      const salvaged = parsed?.success && removalAttempt && issues.length && !arithmeticOnly && !answerKeyOnly ? salvagePacket(parsed!.data, quotaAndValidate) : null;
+      if (salvaged) deps.onToolFix?.(stuck && !lastAttempt ? "bank-stuck" : "bank-salvage", [`${unit.sectionIndex + 1}. fejezet: ${stuck && !lastAttempt ? "ismétlődő hiba — korai kivétel" : "a mentő kísérlet után"} ${salvaged.removed.length} hibás tétel kivéve (${salvaged.removed.join(", ")}), a csomag többi része átvéve`]);
       // Tételgyár T2.1: a T2 soha nem ront a korábbi állapoton — az utolsó kísérletnél a tesztbukott feladat csak a tartalék terhére
       // kerül ki (a csomag a padlón marad); ami ezen felül bukik, figyelmeztetéssel bent marad (a lektor a tanítás alapján úgyis ítél).
-      const keyTrimmed = parsed?.success && lastAttempt && answerKeyOnly ? trimAnswerKeyFailures(parsed!.data, issues, taskCount) : null;
-      if (keyTrimmed) deps.onToolFix?.("answer-key-tests", [`${unit.sectionIndex + 1}. fejezet: ${keyTrimmed.removed.length} tesztbukott feladat kivéve a tartalék terhére (${keyTrimmed.removed.join(", ")})${keyTrimmed.kept.length ? `; ${keyTrimmed.kept.length} a padló miatt bent maradt (${keyTrimmed.kept.join(", ")})` : ""}`]);
+      let keyTrimmed = parsed?.success && removalAttempt && answerKeyOnly ? trimAnswerKeyFailures(parsed!.data, issues, taskCount) : null;
+      // Review #333: az elakadás miatti KORAI kivétel csak akkor zár, ha minden tesztbukott feladat kikerült, és a maradék csomag
+      // érvényes; különben a ciklus megy tovább (a mentőkör engedménye — az utolsó kísérlet — változatlan).
+      if (keyTrimmed && !lastAttempt && (keyTrimmed.kept.length || quotaAndValidate(keyTrimmed.packet).length)) keyTrimmed = null;
+      if (keyTrimmed && !lastAttempt) deps.onToolFix?.("bank-stuck", [`${unit.sectionIndex + 1}. fejezet: ismétlődő hiba — korai kivétel ${keyTrimmed.removed.length} tesztbukott feladat (${keyTrimmed.removed.join(", ")}); ${issues.length} válaszkulcs-hiba`]);
+      else if (keyTrimmed) deps.onToolFix?.("answer-key-tests", [`${unit.sectionIndex + 1}. fejezet: ${keyTrimmed.removed.length} tesztbukott feladat kivéve a tartalék terhére (${keyTrimmed.removed.join(", ")})${keyTrimmed.kept.length ? `; ${keyTrimmed.kept.length} a padló miatt bent maradt (${keyTrimmed.kept.join(", ")})` : ""}`]);
       if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly))) packet = parsed!.data;
       else if (keyTrimmed) packet = keyTrimmed.packet;
       else if (salvaged) packet = salvaged.packet;
