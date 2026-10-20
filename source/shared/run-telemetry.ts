@@ -12,6 +12,8 @@ export type RunGates = {
   quizBlindRemoved: number;
   /** A lektor szerint hibás, kivett banktételek. */
   lektorRemoved: number;
+  /** Spec 2026-10-20-s4 (S4a): a közzétett bank gépileg szigorított (S3c) feladatai. Régi telemetriában hiányzik (= 0). */
+  rubricTightened?: number;
   /** A Tananyag lap a szókeret fölött maradt (a rövidítő forduló után is). */
   lengthOverBudget: boolean;
   /** A szókeret-túllépés rövidítő fordulója elfogadott, rövidebb leckét adott (J5). */
@@ -63,6 +65,7 @@ export function telemetryView(t: RunTelemetry): TelemetryView {
       ...(g.answerKeyNotes ? [`Válaszkulcs-teszt, nem blokkoló (a pontozó nem különbözteti meg): ${g.answerKeyNotes}`] : []),
       ...(g.quizBlindRemoved ? [`Kvíz vak előszűrő kivett: ${g.quizBlindRemoved}`] : []),
       ...(g.lektorRemoved ? [`Lektor szerint hibás, kivett banktétel: ${g.lektorRemoved}`] : []),
+      ...(g.rubricTightened ? [`Gépi rubrika-szigorítás (feladat): ${g.rubricTightened}`] : []),
       ...(g.lengthShortened ? ["A szókeret-túllépés rövidítő fordulóval javítva"] : []),
       ...(g.lengthOverBudget ? ["A Tananyag lap a szókeret fölött maradt"] : []),
     ],

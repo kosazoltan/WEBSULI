@@ -20,7 +20,9 @@ Két PR:
    `experience.tasks.filter(t => t.tightened?.length).length` értéket állítja (nem halmoz: újraépítésnél felülír).
 6. **Teszt:**
    - `tests/s3c-rubrika-szigoritas.test.ts`: a szigorított feladat `tightened` mezője;
-   - bónuszba sorolt csoport nincs benne;
+   - bónuszba sorolt csoport nincs benne — kódút (`keep`), valószerű bemenettel nem állítható elő: a szigorított csoport minden
+     teljes pontos helyes válaszban megvan, ezért a bónuszba sorolás küszöbét (≥ 2 helyesből hiányzik) csak a nem teljes pontos
+     helyesek érhetnék el, és az őr ilyenkor is a kizárt hibás választ védi;
    - szigorítás nélkül nincs mező;
    - telemetria-sor.
 7. **Ellenőrzés:** `check`, `check:test`, `eslint` (érintett fájlok), `npm test`, `build`.

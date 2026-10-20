@@ -10,7 +10,7 @@ import type { RunGates, RunTelemetry, StationTelemetry } from "../../../shared/r
 export type { RunGates, RunTelemetry, StationTelemetry } from "../../../shared/run-telemetry";
 export { telemetryOf } from "../../../shared/run-telemetry";
 
-const emptyGates = (): RunGates => ({ answerKeyNotes: 0, answerKeyFails: 0, quizBlindRemoved: 0, lektorRemoved: 0, lengthOverBudget: false, lengthShortened: false });
+const emptyGates = (): RunGates => ({ answerKeyNotes: 0, answerKeyFails: 0, quizBlindRemoved: 0, lektorRemoved: 0, rubricTightened: 0, lengthOverBudget: false, lengthShortened: false });
 
 /** A futás telemetriájának gyűjtője. `previous`: folytatásnál a megszakadt futás mentett telemetriája (az idő és a számok összeadódnak). */
 export class TelemetryRecorder {
