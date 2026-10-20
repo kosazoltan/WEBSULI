@@ -306,7 +306,16 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
  */
 export function quizCorrectIndexProblems(quiz: ReadonlyArray<{ id: string; options: readonly string[]; correctIndex: number; feedbackPerOption: readonly string[] }>): string[] {
   const problems: string[] = [];
-  const numbersOf = (text: string) => new Set((normalizeAnswer(text).match(/-?\d+(?:\.\d+)?/g) ?? []));
+  // Spec 2026-10-20-kviz-hatvany-ertek (mért: job be3bd5d2, „Kéttagú kifejezések négyzete”): a normalizálás a felső indexes kitevőt
+  // eldobja, így a „7²” → „7”, és a helyes 49-es opció „(3 + 4)² = 7²” magyarázata a 7-es disztraktort „nevezte helyesnek”. A számjegyes
+  // alapú hatványalak az ÉRTÉKÉVEL számít (7² → 49); betűs alap és túl nagy érték változatlan.
+  const SUPERSCRIPT: Record<string, string> = { "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9" };
+  const powersToValues = (text: string) => text.replace(/(\d+)\s*(?:\^\s*(\d{1,2})|([⁰¹²³⁴⁵⁶⁷⁸⁹]{1,2}))/g, (whole, base: string, caret?: string, sup?: string) => {
+    const exponent = Number(caret ?? [...(sup ?? "")].map((c) => SUPERSCRIPT[c]).join(""));
+    const value = Number(base) ** exponent;
+    return Number.isSafeInteger(value) ? ` ${value} ` : whole;
+  });
+  const numbersOf = (text: string) => new Set((normalizeAnswer(powersToValues(text)).match(/-?\d+(?:\.\d+)?/g) ?? []));
   for (const q of quiz) {
     const values = q.options.map(o => { const n = [...numbersOf(o)]; return n.length === 1 ? n[0] : null; });
     if (values.some(v => v === null) || new Set(values).size !== values.length) continue;
