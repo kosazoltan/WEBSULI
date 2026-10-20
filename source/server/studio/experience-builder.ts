@@ -151,6 +151,8 @@ export class RetryableBankCallError extends Error {
 
 /** Spec 2026-09-19: model attempts per bank packet on the cheap bank model (initial + repairs). */
 export const PACKET_ATTEMPTS = 3;
+/** Spec 2026-10-20-eroforras-s3b-forditott-irany: a sorrendvak rubrikával javíthatatlan „fordított irányú” válaszkulcs-bukás. */
+export const isReversedDirectionKeyFailure = (issue: string): boolean => /válaszkulcs-teszt: a hibás \(fordított irány\)/.test(issue);
 /** Spec 2026-10-20-elakadas-r3-ismetlodo-hiba: ennyi egymást követő azonos hibalista után nincs újabb kör (korai kivétel). */
 export const STUCK_SAME_ISSUE_RUNS = 3;
 /** Spec 2026-10-20-elakadas-r3-ismetlodo-hiba: a hibalista sorrendfüggetlen lenyomata (két kísérlet azonos hibáinak felismeréséhez). */
@@ -643,7 +645,10 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       sameIssueRuns = issues.length > 0 && issueKey === previousIssueKey ? sameIssueRuns + 1 : 1;
       previousIssueKey = issueKey;
       const stuck = Boolean(parsed?.success) && issues.length > 0 && sameIssueRuns >= STUCK_SAME_ISSUE_RUNS;
-      const removalAttempt = lastAttempt || stuck;
+      // Spec 2026-10-20-eroforras-s3b-forditott-irany: a „fordított irányú” válaszkulcs-bukást a sorrendvak kulcsszó-rubrika szerkezetileg
+      // nem tudja megkülönböztetni — a javítókör hiábavaló (mért: az animator „unknown” hibáinak zöme); azonnali kivétel a tartalékból.
+      const reversedOnly = answerKeyOnly && issues.length > 0 && issues.every(isReversedDirectionKeyFailure);
+      const removalAttempt = lastAttempt || stuck || reversedOnly;
       const arithmeticOnly = issues.length > 0 && issues.every(i => /hibás számítás/.test(i));
       // Spec 2026-09-30 (U2, H52): nem néma figyelmeztetés — nyitott lelet, amelyet a kapu kivehető tételként kezel (limit-tábla).
       if (parsed?.success && lastAttempt && arithmeticOnly) { openIssues = issues; deps.onToolFix?.("arithmetic-claims", issues.map(i => `nyitott lelet (átengedve, a kapunál kivehető tétel): ${i}`)); }
@@ -660,7 +665,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       // Review #333: az elakadás miatti KORAI kivétel csak akkor zár, ha minden tesztbukott feladat kikerült, és a maradék csomag
       // érvényes; különben a ciklus megy tovább (a mentőkör engedménye — az utolsó kísérlet — változatlan).
       if (keyTrimmed && !lastAttempt && (keyTrimmed.kept.length || quotaAndValidate(keyTrimmed.packet).length)) keyTrimmed = null;
-      if (keyTrimmed && !lastAttempt) deps.onToolFix?.("bank-stuck", [`${unit.sectionIndex + 1}. fejezet: ismétlődő hiba — korai kivétel ${keyTrimmed.removed.length} tesztbukott feladat (${keyTrimmed.removed.join(", ")}); ${issues.length} válaszkulcs-hiba`]);
+      if (keyTrimmed && !lastAttempt) deps.onToolFix?.("bank-stuck", [`${unit.sectionIndex + 1}. fejezet: ${reversedOnly && !stuck ? "fordított irány — azonnali kivétel" : "ismétlődő hiba — korai kivétel"} ${keyTrimmed.removed.length} tesztbukott feladat (${keyTrimmed.removed.join(", ")}); ${issues.length} válaszkulcs-hiba`]);
       else if (keyTrimmed) deps.onToolFix?.("answer-key-tests", [`${unit.sectionIndex + 1}. fejezet: ${keyTrimmed.removed.length} tesztbukott feladat kivéve a tartalék terhére (${keyTrimmed.removed.join(", ")})${keyTrimmed.kept.length ? `; ${keyTrimmed.kept.length} a padló miatt bent maradt (${keyTrimmed.kept.join(", ")})` : ""}`]);
       if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly))) packet = parsed!.data;
       else if (keyTrimmed) packet = keyTrimmed.packet;
