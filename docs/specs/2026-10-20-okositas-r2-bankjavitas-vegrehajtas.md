@@ -27,3 +27,17 @@ Terv: `docs/specs/2026-10-20-okositas-r2-bankjavitas.md`. Munkakönyvtár: `sour
    - hibátlan bank → bájtra azonos.
 5. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`.
 6. **Kitelepítés:** az aktív-futás őr = 0.
+
+## Review #332 — pontosítás
+- **Kvíz:** a kvízkérdést NEM szűkítjük. A kérdés több fogalmat kérdezhet, a hamis címke a tanulói kiértékelést torzítaná; a kapu
+  jelenti, és a hibalistás újrapróba javítja. Csak a módszer és a feladat szűkül.
+- **Módváltás:**
+  - a csomag utolsó, saját mintáján teljes pontos feladata vált (a hibás mintájú így még elhagyható);
+  - szóbeliből írásosra csak akkor, ha a globális öt szóbeli minimum megmarad.
+- **Elhagyás:** az üzenetszámláló mellett KIFEJEZETT minimum-ellenőrzés kell (az összevont sémaüzenet egy meglévő hiánnyal elfedné
+  az újat):
+  - legalább 45 feladat;
+  - legalább 5 szóbeli;
+  - csomagonként max(2, fogalomszám) feladat;
+  - a meglévő mód és fogalom nem tűnhet el a csomagból.
+- **Regressziós tesztek:** 45/74 eset, módváltás + elhagyás együtt, szóbeli minimum.
