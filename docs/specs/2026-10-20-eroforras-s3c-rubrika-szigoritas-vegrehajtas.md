@@ -4,10 +4,10 @@ Terv: `docs/specs/2026-10-20-eroforras-s3c-rubrika-szigoritas.md`. Munkakönyvt�
 
 1. **`shared/answer-key-calibrate.ts`:**
    - új `function tighten(task, cases): { task, changes } | null`:
-     - minta nem `ok` → `null`;
+     - minta nem `ok`, vagy 2-nél (kevesebb esetnél mindnél) kevesebb a teljes pontos helyes válasz → `null`;
      - a teljes pontot kapó hibás válaszok és a jelenleg teljes pontos helyes válaszok kigyűjtése;
      - minden ilyen hibás válaszra:
-       - a minta szavai (normalizált, ≥ 3 betű, nem `NEGATIONS`, nem szám, egyedi, hossz szerint csökkenő);
+       - a minta szavai (normalizált, ≥ 2 betű, nem tagadószó — magyar és angol —, nem `SENTENCE_CONNECTIVES`, nem szám, egyedi, hossz szerint csökkenő);
        - az első szó, amelynél a csoport `[szó, ...minden helyes válasz relatedForms([szó], válasz)]` a hibás válaszból hiányzik, és
          minden ok helyes válaszban megvan;
        - a csoport felvétele után a minta ok, minden korábban ok helyes válasz ok, a hibás válasz nem ok.

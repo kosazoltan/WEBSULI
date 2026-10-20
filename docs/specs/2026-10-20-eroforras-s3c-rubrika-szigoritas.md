@@ -18,9 +18,9 @@ rubrikával JAVÍTHATÓK. A modell irányszót cserél: „csökken” a „nő�
   szó (pl. „nő”) kötelező csoportként kizárná a hibás választ.
 
 ## Cél — új 0. lépés a kalibrációban („szigorítás”)
-- **Feltétel:** a minta `ok`.
-- **A teljes pontot kapó hibás válaszok mindegyikére** keresünk a minta szavai közül (normalizált, ≥ 3 betű, nem tagadószó, nem
-  szám; hosszabb előre) olyat, amelyre:
+- **Feltétel:** a minta `ok`, és legalább 2 (kevesebb esetnél mind) helyes válasz jelenleg teljes pontos — bizonyíték nélkül nincs szigorítás.
+- **A teljes pontot kapó hibás válaszok mindegyikére** keresünk a minta szavai közül (normalizált, ≥ 2 betű — a „nő” is —, nem tagadószó, nem kötőszó/névelő
+  (`SENTENCE_CONNECTIVES`), nem szám; hosszabb előre) olyat, amelyre:
   - a hibás válasz NEM tartalmazza (a pontozó szerint: `missingAnswerConcepts`);
   - MINDEN, jelenleg teljes pontos helyes válasz tartalmazza a szót vagy igazolt rokon alakját (`relatedForms`, mint az 1.
     lépésben);
