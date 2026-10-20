@@ -1,6 +1,6 @@
 import { htmlLessonDataSchema, readRawHtmlLessonData, writeHtmlLessonData } from "../../shared/lesson-html-data";
 import { alignTaskToSample } from "../studio/bank-normalize";
-import { openTaskSchema, type LessonExperience } from "../../shared/lesson-experience";
+import { LESSON_BANK_SIZES, openTaskSchema, type LessonExperience } from "../../shared/lesson-experience";
 import { evaluateOpenAnswer } from "../../shared/lesson-experience-score";
 
 type Task = LessonExperience["tasks"][number];
@@ -41,8 +41,9 @@ export function alignHtmlLessonBank(html: string): HtmlBankRepair {
     : [];
   const ids = (item: Item): string[] | null => (Array.isArray(item.coversConceptIds) && item.coversConceptIds.every((c) => typeof c === "string") ? item.coversConceptIds as string[] : null);
 
-  // (2) Csomaghatár: a fejezet egyik csomagjába sem férő tétel az első fogalom csomagjára szűkül (kvíznél egy fogalom marad).
-  for (const bank of ["methods", "tasks", "quiz"] as const) {
+  // (2) Csomaghatár: a fejezet egyik csomagjába sem férő módszer / feladat az első fogalom csomagjára szűkül. Review #332: a kvízt NEM
+  // szűkítjük — a kérdés szövege több fogalmat kérdezhet, a hamis címke a tanulói kiértékelést torzítaná (a kapu jelenti, újrapróba).
+  for (const bank of ["methods", "tasks"] as const) {
     const items = experience[bank];
     if (!Array.isArray(items)) continue;
     for (const raw of items as Item[]) {
@@ -52,23 +53,32 @@ export function alignHtmlLessonBank(html: string): HtmlBankRepair {
       if (sectionUnits.some((u) => covers.every((c) => u.conceptIds.includes(c)))) continue;
       const home = sectionUnits.find((u) => u.conceptIds.includes(covers[0]));
       if (!home) continue;
-      const narrowed = bank === "quiz" ? [covers[0]] : covers.filter((c) => home.conceptIds.includes(c));
+      const narrowed = covers.filter((c) => home.conceptIds.includes(c));
       raw.coversConceptIds = narrowed;
       result.narrowed.push(String(raw.id ?? "?"));
     }
   }
 
-  // (3) Szóbeli/írásos egyensúly csomagonként (≥ 2 feladat, egyféle mód → az utolsó átvált).
+  // (3) Szóbeli/írásos egyensúly csomagonként (≥ 2 feladat, egyféle mód). Review #332: a váltásra a csomag UTOLSÓ, saját mintáján teljes
+  // pontos feladata kerül (a hibás mintájú később elhagyható), és szóbeliből írásosra csak úgy, hogy a globális szóbeli minimum (5) marad.
+  const fullSample = (raw: unknown) => {
+    if (!openTaskSchema.safeParse(raw).success) return false;
+    try { return evaluateOpenAnswer((raw as Task).sample, raw as Task).score === 1; } catch { return false; }
+  };
+  const oralCount = () => (tasks as Item[]).filter((t) => t?.mode === "oral").length;
+  const unitTasks = (unit: Unit, list: unknown[]) => (list as Item[]).filter((t) => t && t.sectionIndex === unit.sectionIndex && (ids(t) ?? []).length > 0 && ids(t)!.every((c) => unit.conceptIds.includes(c)));
   for (const unit of units) {
-    const own = (tasks as Item[]).filter((t) => t && t.sectionIndex === unit.sectionIndex && (ids(t) ?? []).length > 0 && ids(t)!.every((c) => unit.conceptIds.includes(c)));
+    const own = unitTasks(unit, tasks);
     if (own.length < 2) continue;
     const modes = new Set(own.map((t) => t.mode));
     if (modes.size !== 1) continue;
     const only = [...modes][0];
     if (only !== "oral" && only !== "written") continue;
-    const last = own[own.length - 1];
-    last.mode = only === "oral" ? "written" : "oral";
-    result.modeFlipped.push(String(last.id ?? "?"));
+    if (only === "oral" && oralCount() - 1 < 5) continue;
+    const pick = [...own].reverse().find((t) => fullSample(t));
+    if (!pick) continue;
+    pick.mode = only === "oral" ? "written" : "oral";
+    result.modeFlipped.push(String(pick.id ?? "?"));
   }
 
   // (4) Padló-próbás elhagyás: a mintájára sem teljes pontos feladat kikerül, ha a bank sémája nem kap tőle ÚJ hibát.
@@ -80,12 +90,29 @@ export function alignHtmlLessonBank(html: string): HtmlBankRepair {
     for (const issue of parsed.success ? [] : parsed.error.issues) counts.set(issue.message, (counts.get(issue.message) ?? 0) + 1);
     return counts;
   };
+  const canDropTask = (index: number): boolean => {
+    const task = tasks[index] as Item;
+    const rest = tasks.filter((_, j) => j !== index);
+    if (rest.length < LESSON_BANK_SIZES.tasks) return false;
+    if (task.mode === "oral" && (rest as Item[]).filter((t) => t?.mode === "oral").length < 5) return false;
+    for (const unit of units) {
+      const before = unitTasks(unit, tasks);
+      if (!before.includes(task)) continue;
+      const after = unitTasks(unit, rest);
+      if (after.length < Math.max(2, unit.conceptIds.length)) return false;
+      for (const mode of ["oral", "written"]) if (before.some((t) => t.mode === mode) && !after.some((t) => t.mode === mode)) return false;
+      for (const c of unit.conceptIds) if (before.some((t) => ids(t)!.includes(c)) && !after.some((t) => ids(t)!.includes(c))) return false;
+    }
+    return true;
+  };
   for (let i = tasks.length - 1; i >= 0; i--) {
     const raw = tasks[i];
     if (!openTaskSchema.safeParse(raw).success) continue;
     let full: boolean;
     try { full = evaluateOpenAnswer((raw as Task).sample, raw as Task).score === 1; } catch { full = false; }
     if (full) continue;
+    // Review #332: a kivétel kifejezett minimumokat sem sérthet (az összevont sémaüzenet egy meglévő hiánnyal elfedné az újat).
+    if (!canDropTask(i)) continue;
     const before = issues();
     tasks.splice(i, 1);
     const after = issues();
