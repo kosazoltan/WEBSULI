@@ -17,6 +17,24 @@ export const STEM_SUFFIXES = ["juk", "unk", "ban", "ben", "bol", "rol", "tol", "
 /** Kötőszavak/névelők, amelyek egyike kell a `needsSentence` feladat „mondat” feltételéhez. */
 export const SENTENCE_CONNECTIVES = ["mert", "es", "olyan", "ami", "amit", "azt", "hogy", "lehet", "tudom", "tudjuk", "mint", "ezert", "igy", "mivel", "tehat", "ha", "akkor", "vagyis", "mig", "a", "az", "because", "and", "is", "are", "there", "have", "has", "do", "does", "an", "the", "some", "any", "how", "much", "many", "of", "on", "in"] as const;
 const NEGATIONS = ["nem", "ne", "not", "no"] as const;
+/** Spec 2026-10-20-pontozo-angol-tagadas: aposztróf nélküli angol tagadó alakok (az aposztrófos „don't” → „don t” külön ismert). */
+export const ENGLISH_NEGATIONS = ["not", "cannot", "dont", "doesnt", "didnt", "cant", "couldnt", "wont", "wouldnt", "shouldnt", "mustnt", "isnt", "arent", "wasnt", "werent", "hasnt", "havent", "hadnt", "neednt"] as const;
+
+/**
+ * Spec 2026-10-20-pontozo-angol-tagadas (mért: Where I Live e1f59f8d — a „You must run” teljes pontot kapott a „You mustn't run”
+ * mintára, mert a szótövezés a „mustn” „n”-jét toldalékként levágja): a tokenek tagadása. „en”: not / cannot / n't (az aposztróf a
+ * normalizálásban szóközzé válik: „mustn t”) / aposztróf nélküli alak; „hu”: nem.
+ */
+export function negationKind(tokens: readonly string[]): "none" | "hu" | "en" {
+  const en = tokens.some((t, i) => (ENGLISH_NEGATIONS as readonly string[]).includes(t) || (t === "t" && i > 0 && tokens[i - 1].length > 1 && tokens[i - 1].endsWith("n")));
+  if (en) return "en";
+  return tokens.includes("nem") ? "hu" : "none";
+}
+/** Kétirányú tagadásőr: tagadó válasz állító mintára, vagy állító válasz ANGOLUL tagadó mintára (a magyar fordított irány változatlan). */
+function unexpectedNegation(answer: readonly string[], sample: readonly string[]): boolean {
+  const a = negationKind(answer), s = negationKind(sample);
+  return (a !== "none" && s === "none") || (s === "en" && a === "none");
+}
 
 export function normalizeAnswer(value: string): string {
   const normalized = value.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/(\d)[,.](?=\d)/g, "$1.").replace(/−/g, "-");
@@ -109,7 +127,7 @@ export function evaluateOpenAnswerV1(answer: string, task: OpenTask): AnswerScor
   // A correct sentence may use only rubric words. Off-rubric filler cannot prove
   // originality, and adding a bonus term must never lower an otherwise correct score.
   const connective = tokens.some(t => (SENTENCE_CONNECTIVES as readonly string[]).includes(t));
-  const hasUnexpectedNegation = tokens.some(t => ["nem", "not"].includes(t)) && !tokensOf(task.sample).some(t => ["nem", "not"].includes(t));
+  const hasUnexpectedNegation = unexpectedNegation(tokens, tokensOf(task.sample));
   if (hits < task.required.length || (task.needsSentence && !connective) || hasUnexpectedNegation) {
     const reason = hits < task.required.length ? `Részben jó. Még ${task.required.length - hits} kötelező fogalom hiányzik.` : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : "A fogalmak megvannak; fogalmazd őket összefüggő mondattá.";
     return { state: "partial", score: 0.5, reason };
@@ -144,7 +162,7 @@ export function evaluateOpenAnswerV2(rawAnswer: string, task: OpenTask): AnswerS
   const hits = task.required.filter(c => conceptHit(tokens, c, tokensOfV2)).length;
   if (task.required.length && hits < Math.ceil(task.required.length / 2) && !task.typedAnswers?.length) return { state: "fail", score: 0, reason: "A lényegi fogalmak még hiányoznak." };
   const connective = tokens.some(t => (SENTENCE_CONNECTIVES as readonly string[]).includes(t));
-  const hasUnexpectedNegation = tokens.some(t => ["nem", "not"].includes(t)) && !tokensOfV2(task.sample).some(t => ["nem", "not"].includes(t));
+  const hasUnexpectedNegation = unexpectedNegation(tokens, tokensOfV2(task.sample));
   if (partialReason || hits < task.required.length || (task.needsSentence && !connective) || hasUnexpectedNegation) {
     const reason = partialReason ?? (hits < task.required.length ? `Részben jó. Még ${task.required.length - hits} kötelező fogalom hiányzik.` : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : "A fogalmak megvannak; fogalmazd őket összefüggő mondattá.");
     return { state: "partial", score: 0.5, reason };
@@ -166,7 +184,7 @@ export const OPEN_ANSWER_RULES_HU = [
   `1. Szó = szám vagy betűsor; a kötőjeles szó 2 szó, az írásjel 0 szó; csak az első 500 szó számít. minWords: ennél kevesebb szó = 0 pont — a minWords a LEGRÖVIDEBB teljes helyes válasz szószáma legyen, nem a minta hosszáé.`,
   `2. required = ÉS-csoportok; egy csoporton belül VAGY-alternatívák. Többszavas alternatíva: minden szava külön, bármilyen sorrendben. Szóillesztés: azonos alak; ≥ 4 betűs szónál EGY toldalék (${STEM_SUFFIXES.join(", ")}) lehagyva is; ≥ 5 betűnél 1 elütés (8 betű fölött 2). Szám és a tagadószavak (${NEGATIONS.join(", ")}) csak pontosan.`,
   "3. Pontérték: a csoportok kevesebb mint felének találata → 0; nem mind → 0,5 („Még N kötelező fogalom hiányzik”); mind → 1, ha a needsSentence és a tagadás is rendben.",
-  `4. needsSentence: legalább egy kötőszó/névelő kell ezek közül: ${SENTENCE_CONNECTIVES.slice(0, 19).join(", ")}; különben 0,5. Tagadás: ha a válaszban van „nem/not”, a mintában viszont nincs → 0,5.`,
+  `4. needsSentence: legalább egy kötőszó/névelő kell ezek közül: ${SENTENCE_CONNECTIVES.slice(0, 19).join(", ")}; különben 0,5. Tagadás: a nem/not és az angol n't (don't, mustn't, can't…, cannot) tagadásnak számít; ha a válaszban van tagadás, a mintában nincs → 0,5; ha a minta angolul tagadó (not / n't), a válasz pedig nem → 0,5. (A „must” és a „mustn't” így nem cserélhető fel.)`,
   "5. TÍPUSOS (zárt matematikai) feladat: typedAnswers = [{part, kind: number|fraction|expression, value, unit?, form?}] részfeladatonként, SORRENDBEN (felcserélt részeredmény hibás). Az érték dönt: 2/1 ≠ 1/2; 0,5 = 1/2 csak form: any esetén; form: simplified-fraction → csak egyszerűsített tört (2/4, 0,5 nem); form: decimal → tizedes/egész alak; form: intermediate-step → a KÉRT köztes kifejezés szerepeljen (35 + 64 − 12), az értékazonos más alak (35 + 8 · 8 − 12) nem; unit → a szám után a mértékegység kötelező. Betűs (algebrai) végeredmény: kind: polynomial, value a teljes kifejezés („x² + 10x + 25”); a program a kifejtett, összevont normálalakot hasonlítja (tagsorrend, szóköz, x^2/x² nem számít); form: expanded (alapértelmezés) → kifejtett, összevont alak kell, a zárójeles (a kérdés másolata) nem; form: factored → szorzattá alakított, zárójeles alak kell. A required ekkor csak a szöveges részt méri; a végeredményt NE tedd required-csoportba.",
   "6. requiredDistinct = [{category, from: [[szinonimák]…], count}]: kategóriánként legalább count KÜLÖNBÖZŐ elem; egy szinonimacsoport egy elem (két szinonima nem két példa). Ezt használd, ha a kérdés „N példát” kér egy halmazból — ne tegyél önkényes mintát kötelezővé.",
   "7. A sample-nek a saját rubrikán 1 pontot kell kapnia (a program ellenőrzi); a program a referenciaértéket a kérdés kifejezéséből újraszámolja — eltérés csomaghiba.",

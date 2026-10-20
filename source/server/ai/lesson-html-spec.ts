@@ -359,6 +359,16 @@ function ee_conceptHit(answerNorm, answerTokens, answerStems, concept){
   }
   return false;
 }
+/* tagadas: 'en' = not / cannot / n't (mustn t) / aposztrof nelkuli alak; 'hu' = nem */
+var EE_EN_NEG = ['not','cannot','dont','doesnt','didnt','cant','couldnt','wont','wouldnt','shouldnt','mustnt','isnt','arent','wasnt','werent','hasnt','havent','hadnt','neednt'];
+function ee_negKind(words){
+  var i;
+  for(i=0;i<words.length;i++){
+    if(EE_EN_NEG.indexOf(words[i])!==-1) return 'en';
+    if(words[i]==='t' && i>0 && words[i-1].length>1 && words[i-1].charAt(words[i-1].length-1)==='n') return 'en';
+  }
+  return words.indexOf('nem')!==-1 ? 'hu' : 'none';
+}
 function ee_evaluate(answer, task){
   var norm = ee_norm(answer);
   var tokens = norm ? norm.split(' ').slice(0,500) : [];
@@ -384,8 +394,8 @@ function ee_evaluate(answer, task){
               ' some ',' any ',' how ',' much ',' many ',' of ',' on ',' in '];
   var padded = ' ' + norm + ' '; var hasFunc = false, f;
   var sampleWords = ee_norm(task.sample).split(' ');
-  var unexpectedNegation = (tokens.indexOf('nem')!==-1 || tokens.indexOf('not')!==-1)
-    && sampleWords.indexOf('nem')===-1 && sampleWords.indexOf('not')===-1;
+  var ansNeg = ee_negKind(tokens), sampleNeg = ee_negKind(sampleWords);
+  var unexpectedNegation = (ansNeg !== 'none' && sampleNeg === 'none') || (sampleNeg === 'en' && ansNeg === 'none');
   for(f=0;f<FUNC.length;f++){ if(padded.indexOf(FUNC[f]) !== -1){ hasFunc=true; break; } }
   if(ratio >= 1){
     if((task.needsSentence && !hasFunc) || unexpectedNegation){
