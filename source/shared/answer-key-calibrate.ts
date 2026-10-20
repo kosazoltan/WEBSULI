@@ -10,14 +10,16 @@ import { inflectedForms, synonymsOf } from "./hu-lexicon";
 
 const NEGATIONS = new Set(["nem", "ne", "sem", "se", "nincs", "sincs"]);
 /**
- * S3c: szigorításra nem jelölhető szavak — tagadás (az irány nem tagadással cserélhető) és kötőszó/névelő (nem tartalom). Az angol lista a
- * nyers kisbetűs alakkal vetendő össze: ékezet nélkül a „nő” is „no” lenne.
+ * S3c: szigorításra nem jelölhető szavak — tagadás (az irány nem tagadással cserélhető) és kötőszó/névelő (nem tartalom). A NYERS kisbetűs
+ * alakkal vetjük össze (review #338): ékezet nélkül a „nő” „no”, az „ón” „on”, az „ín” „in” lenne — ezek tartalmi szavak. A kötőszólista
+ * ékezet nélküli magyar elemei ezért ékezetes alakjukkal is szerepelnek.
  */
-const HU_NOT_DISTINGUISHING = new Set<string>([...NEGATIONS, ...SENTENCE_CONNECTIVES]);
-const EN_NOT_DISTINGUISHING = new Set<string>([...ENGLISH_NEGATIONS, ...ENGLISH_WEAK_NEGATIONS, ...SENTENCE_CONNECTIVES]);
+const NOT_DISTINGUISHING = new Set<string>([
+  ...NEGATIONS, ...ENGLISH_NEGATIONS, ...ENGLISH_WEAK_NEGATIONS, ...SENTENCE_CONNECTIVES, "és", "ezért", "így", "míg", "tehát",
+]);
 const isDistinguishingCandidate = (word: string) => {
   const n = normalizeAnswer(word);
-  return n.length >= 2 && !/\d/.test(n) && !HU_NOT_DISTINGUISHING.has(n) && !EN_NOT_DISTINGUISHING.has(word.toLowerCase());
+  return n.length >= 2 && !/\d/.test(n) && !NOT_DISTINGUISHING.has(word.toLowerCase());
 };
 const words = (s: string) => normalizeAnswer(s).split(/\s+/).filter(Boolean);
 

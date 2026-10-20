@@ -35,6 +35,8 @@ rubrikával JAVÍTHATÓK. A modell irányszót cserél: „csökken” a „nő�
   `answerKeyProblems`-ben (`blockingWrongCases`): a teljes pontos helyes válasz minden szavát tartalmazó hibás eset nem blokkol, ezért
   nem is akadályozza a kalibrációt.
 - **Aposztrófos összevonás:** egy szó („mustn't”); minden aposztrófos alak kimarad a jelöltek közül.
+- **Tiltólista a nyers kisbetűs alakkal:** ékezet nélkül az „ón” „on”, az „ín” „in” lenne, ezért a tiltólista (tagadás + kötőszó,
+  a magyar kötőszók ékezetes alakjával) a nyers kisbetűs szóval vetendő össze.
 
 ## Nem-cél
 - **A pontozó és a minimumok:** nem változnak. A régi leckék pontozása azonos.

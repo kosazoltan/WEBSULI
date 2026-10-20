@@ -70,6 +70,19 @@ test("review #338 (P2): az aposztrófos angol tagadás („mustn't”) egy szó,
   assert.deepEqual(out.changes, []);
 });
 
+test("review #338: az ékezet nélkül angol kötőszónak látszó magyar tartalmi szó („ón” → on) megkülönböztető lehet", () => {
+  const t = task({ q: "Miből áll a bronz?", required: [["bronz"], ["réz"]], minWords: 3, sample: "A bronz réz és ón ötvözete." });
+  const cases: AnswerKeyCases = {
+    correct: ["A bronz a réz és az ón ötvözete.", "Bronz: réz és ón keveréke.", "A bronz nevű ötvözetben réz és ón van."],
+    wrong: [{ kind: "tevhit", text: "A bronz réz és cink ötvözete." }, { kind: "temaidegen", text: "A víz folyékony anyag." }],
+  };
+  assert.equal(evaluateOpenAnswer(cases.wrong[0].text, t).state, "ok", "előfeltétel: az eredeti rubrika túl megengedő");
+  const { task: out, changes } = calibrateRubric(t, cases);
+  assert.ok(changes.some((c) => c.startsWith("szigorítás:") && c.includes("ón")), JSON.stringify(changes));
+  assert.notEqual(evaluateOpenAnswer(cases.wrong[0].text, out).state, "ok");
+  for (const a of cases.correct) assert.equal(evaluateOpenAnswer(a, out).state, "ok", a);
+});
+
 test("a tagadószó nem lehet megkülönböztető: csak tagadásban eltérő hibás válasznál nincs szigorítás", () => {
   const t = task({ sample: "Melegítéskor a gáz térfogata nem marad változatlan." });
   const cases: AnswerKeyCases = {
