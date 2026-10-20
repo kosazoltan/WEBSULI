@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LEGACY_CONCURRENCY, LEGACY_EXCLUDED_IDS, LEGACY_MAX_ATTEMPTS, LEGACY_MIGRATION_MODE, LEGACY_PILOT_IDS, legacyCandidates, legacySource, reconcileLegacy, type LegacyRow } from "../server/studio/legacy-migration";
+import { LEGACY_CONCURRENCY, LEGACY_CUTOFF, LEGACY_EXCLUDED_IDS, LEGACY_MAX_ATTEMPTS, LEGACY_MIGRATION_MODE, LEGACY_PILOT_IDS, legacyBaseline, legacyCandidates, legacySource, reconcileLegacy, type LegacyRow } from "../server/studio/legacy-migration";
 import { LEGACY_BACKUP_NOTE, legacyBackupData } from "../server/studio/pipeline-store";
 
 /* Spec 2026-10-20-regi-anyag-studio-atalakitas: a régi anyagok helyben Stúdió-leckévé — a sor tiszta döntései. */
@@ -13,6 +13,8 @@ test("a jelöltek: csak a határnap előtti, nem lecke, nem kizárt anyag; a né
   const rows = [
     row({ id: "a", views: 5 }), row({ id: "b", views: 50 }),
     row({ id: "uj", createdAt: new Date("2026-06-01T00:00:00Z") }),
+    row({ id: "budapest", createdAt: new Date("2026-05-31T22:30:00Z") }),
+    row({ id: "kep", hasEmbed: true }),
     row({ id: "lecke", contentType: "lesson" }),
     row({ id: "pdf", contentType: "pdf" }),
     row({ id: "nagy", bytes: 841_000 }),
@@ -22,7 +24,8 @@ test("a jelöltek: csak a határnap előtti, nem lecke, nem kizárt anyag; a né
   ];
   const all = legacyCandidates(rows, "all");
   assert.deepEqual(all.queue, ["b", "a"]);
-  assert.deepEqual(all.skipped.map((s) => s.id).sort(), ["abig2", LEGACY_EXCLUDED_IDS[0], "nagy", "pdf", "zene"].sort());
+  assert.deepEqual(all.skipped.map((s) => s.id).sort(), ["abig2", LEGACY_EXCLUDED_IDS[0], "kep", "nagy", "pdf", "zene"].sort());
+  assert.equal(LEGACY_CUTOFF.toISOString(), "2026-05-31T22:00:00.000Z", "Budapest szerinti éjfél");
   assert.ok(all.skipped.every((s) => s.reason.length > 0));
   assert.deepEqual(legacyCandidates(rows, "off").queue, []);
   const pilot = legacyCandidates([...rows, row({ id: LEGACY_PILOT_IDS[0] }), row({ id: LEGACY_PILOT_IDS[1], views: 99 })], "pilot");
@@ -39,7 +42,7 @@ test("a kapcsoló a próbára áll; az Abigél egyik próba-anyag sem; a korlát
 
 test("az egyeztetés: kész cél → kész; élő futás → fut; leállt futás → folytatás / újrakezdés / hiba", () => {
   const now = Date.parse("2026-10-20T20:00:00Z");
-  const base = { status: "running", attempt: 1, startedAt: now - 60_000, runPhase: "author", runUpdatedAt: new Date(now - 60_000), targetIsLesson: false, jobResumable: false };
+  const base = { attempt: 1, startedAt: now - 60_000, runPhase: "author" as string | null, runUpdatedAt: new Date(now - 60_000), leaseAlive: false, targetIsLesson: false, jobResumable: false };
   assert.equal(reconcileLegacy({ ...base, targetIsLesson: true, runPhase: "error" }, now), "done");
   assert.equal(reconcileLegacy(base, now), "running");
   assert.equal(reconcileLegacy({ ...base, runPhase: null }, now), "running", "a futás sora még nem íródott ki");
@@ -49,6 +52,8 @@ test("az egyeztetés: kész cél → kész; élő futás → fut; leállt futás
   assert.equal(reconcileLegacy({ ...base, runUpdatedAt: new Date(now - 50 * 60_000) }, now), "restart", "45 percnél régebben némán");
   assert.equal(reconcileLegacy({ ...base, runPhase: "error", attempt: 2 }, now), "error");
   assert.equal(reconcileLegacy({ ...base, runPhase: "done" }, now), "error", "kész, de nem a célt alakította át — nincs duplikátum");
+  assert.equal(reconcileLegacy({ ...base, runUpdatedAt: new Date(now - 90 * 60_000), leaseAlive: true }, now), "running", "review #349: élő lízing → fut");
+  for (const phase of ["parked", "draft"]) assert.equal(reconcileLegacy({ ...base, runPhase: phase, attempt: 2 }, now), "waiting", phase);
 });
 
 test("a forrás: a régi anyag szövege a script és a stílus nélkül, a címmel; az utasítás a tanított tartalmat kéri", () => {
@@ -65,7 +70,9 @@ test("a forrás: a régi anyag szövege a script és a stílus nélkül, a címm
 });
 
 test("a mentésrekord: a régi sor teljes tartalma visszaállítható", () => {
-  const old = { title: "Régi", content: "<html>régi</html>", description: "leírás", classroom: 4, contentType: "html" };
+  const old = { id: "f1", title: "Régi", content: "<html>régi</html>", description: "leírás", classroom: 4, contentType: "html" };
   assert.deepEqual(legacyBackupData({ ...old, ...{} }), old);
   assert.equal(LEGACY_BACKUP_NOTE, "legacy-studio-migration");
+  assert.equal(legacyBaseline("a"), legacyBaseline("a"));
+  assert.notEqual(legacyBaseline("a"), legacyBaseline("b"));
 });

@@ -233,14 +233,17 @@ lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Respons
  * Starts a one-step run in the background; the run loop reports through the progress store.
  * Spec 2026-09-25: the internet path hands its downloaded sources to this same manufacture.
  */
-export function startOneStepRun(data: OneStepRequest, userId: string | undefined, targetHtmlFileId?: string): string {
-  const runId = createRun();
-  void runOneStep(runId, data, userId, targetHtmlFileId).catch((error) => {
+export function startOneStepRun(data: OneStepRequest, userId: string | undefined, target?: LegacyTarget, presetRunId?: string): string {
+  const runId = createRun(presetRunId);
+  void runOneStep(runId, data, userId, target).catch((error) => {
     if (error instanceof WorkflowWaiting) return;
     void recordOneStepFailure(runId, error);
   });
   return runId;
 }
+
+/** Spec 2026-10-20-regi-anyag-studio-atalakitas: a helyben átalakítandó régi anyag és a tartalma lenyomata az indításkor. */
+export type LegacyTarget = { htmlFileId: string; baseline: string };
 
 /** Spec 2026-10-14-folytatas-mentett-reszekbol: a megállt gyártás mentett piszkozata (csak darabszámok, tartalom nem). */
 export type OneStepDraft = { teachingSections: number; savedBankPackets: number };
@@ -551,11 +554,11 @@ export async function runOneStep(
   data: OneStepRequest,
   userId: string | undefined,
   /** Spec 2026-10-20-regi-anyag-studio-atalakitas: csak a szerveroldali átalakító sor adja (a nyilvános kérés nem). */
-  targetHtmlFileId?: string,
+  target?: LegacyTarget,
 ): Promise<void> {
   if (!userId) throw new Error("A futáshoz hitelesített készítő szükséges.");
   await executeWorkflow(workflowStore, { id: runId, owner: userId, mode: "upload", request: data }, async () => {
-    await runOneStepCore(runId, data, userId, targetHtmlFileId);
+    await runOneStepCore(runId, data, userId, target);
     const run = await getRun(runId);
     if (run?.phase === "parked") throw new WorkflowWaiting(run.detail ?? "Forrásellenőrzés szükséges.");
     // Review #248 (P1): a piszkozat-választás szabályos várakozás (a tanár dönt), nem hiba.
@@ -598,11 +601,11 @@ async function readPublishedLesson(lessonId: string) {
  * docs/specs/2026-10-16-egy-futas.md (tulajdonosi döntés 2026-10-16): minden gyártás az egyfutásos motoron — Opus 5.5 (medium) egy
  * beszélgetésben a forrástól a közzétételig, tartalék GPT-6.1 Sol.
  */
-async function runOneStepCore(runId: string, data: OneStepRequest, userId: string, targetHtmlFileId?: string) {
+async function runOneStepCore(runId: string, data: OneStepRequest, userId: string, target?: LegacyTarget) {
   const { runSingleUpload } = await import("./single-run/live");
   try {
     const result = await runSingleUpload(
-      { files: data.files as ExtractorFile[], instruction: normalizeOwnerInstruction(data.instructions), title: data.title, ownerId: userId, ...(targetHtmlFileId ? { targetHtmlFileId } : {}) },
+      { files: data.files as ExtractorFile[], instruction: normalizeOwnerInstruction(data.instructions), title: data.title, ownerId: userId, ...(target ? { targetHtmlFileId: target.htmlFileId, targetBaseline: target.baseline } : {}) },
       (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }),
     );
     updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });

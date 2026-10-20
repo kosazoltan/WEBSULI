@@ -37,7 +37,8 @@ Döntések (2026-10-20):
      tanított tartalmat dolgozza fel, ne a weboldal-kezelőfelület szövegeit.
    - **A készítő** a régi anyag tulajdonosa, ha admin; különben az első admin.
 3. **Kihagyás:**
-   - a `pdf` (külön forrásút) és az 500 kB-nál nagyobb anyag, a naplóban jelezve;
+   - a `pdf` (külön forrásút), a 300 kB-nál (bájtban) nagyobb, a képet / beágyazott keretet, hangot vagy videót tartalmazó anyag (a
+    szövegkivonat ezeket elveszítené), és az Abigél (tulajdonosi kizárás); mind okkal naplózva;
    - a már `lesson` típusú cél (idempotens).
 
 ## Nem-cél
@@ -62,3 +63,12 @@ Döntések (2026-10-20):
 - HA a gyártás hibával áll meg, AKKOR a régi anyag változatlan.
 - HA a kapcsoló `pilot`, AKKOR csak a 3 próba-anyag kerül sorba; HA `off`, AKKOR új gyártás nem indul.
 - A sor újraindítás után sem indít kétszer gyártást ugyanarra az anyagra.
+
+## Review #349 (pontosítás)
+- **Határnap:** Budapest szerinti éjfél (`2026-06-01T00:00:00+02:00`).
+- **Atomi foglalás:** tranzakciós zár mellett; a futás-azonosító az indítás ELŐTT rögzül. A párhuzamossági korlát az újrapróbákra is
+  érvényes, `off` módban újrapróba sem indul.
+- **Élőség:** az élő workflow-lízing a futás jele. A `parked` / `draft` futás `waiting` állapotba kerül, nem indul újra.
+- **Változott anyag:** a publikálás a régi tartalom indításkori lenyomatát ellenőrzi; ha közben változott, a csere elmarad.
+- **Visszaállítás:** a mentés `id`-t is tartalmaz, és a visszaállító a `contentType`-ot is visszaírja (a meglévő admin út).
+- **Indítási hiba:** nem végleges; a foglalás megmarad, a türelmi idő után a kísérletkeret szerint újrapróba.
