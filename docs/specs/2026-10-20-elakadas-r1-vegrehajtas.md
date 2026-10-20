@@ -25,3 +25,16 @@ Terv: `docs/specs/2026-10-20-elakadas-gyokerok-elemzes.md` (4. pont, R1). Munkak
    - **Egyfutásos gyártás:** forrásszintű ellenőrzés — az utolsó körben a kivétel a dobás előtt fut.
 4. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`.
 5. **Kitelepítés:** az aktív-futás őr = 0.
+
+## Review #331 — pontosítás
+- **Kivehető tétel:** CSAK gyakorlóbank-tétel (`experience.tasks|quiz|methods[i]`). Az ellenőrző blokk, az ábra és a tévhit-elem a
+  tanítás része, ezért itt nem vehető ki — a leckeív-invariáns (`no_engagement_layer`) sem sérülhet.
+- **Nincs kivétel, a régi megállás marad, ha:**
+  - a lektor eltérő tanítási megoldást jelez (`solutions[].match === false`);
+  - vagy a leckének nincs bankja.
+- **A kivett tételek listája:**
+  - **egyfutásos gyártás:** a mentett kimenetben (`output.lektorRemoved`), folytatás után is a figyelmeztetésben;
+  - **javítás:** a `lessonRepairSchema.lektorRemoved`-ben;
+  - **admin:** a javítópanel alkalmazás előtt mutatja (`data-testid="lesson-repair-lektor-removed"`, böngészős teszt mobil + asztal).
+- **Tesztek:** a PONTOS tétel hiányát és a többi tétel megmaradását ellenőrzik; a forrásszintű sorrendteszt mindkét részlet
+  jelenlétét is.
