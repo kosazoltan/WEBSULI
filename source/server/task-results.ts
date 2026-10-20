@@ -32,17 +32,23 @@ export type TightenedStats = { answered: number; falseRejects: number };
  * `null`: nincs teendő (küszöb alatt, már lazított, vagy nincs nem szigorított kötelező csoport, amellyel teljesülhetne).
  */
 export function relaxTask(task: OpenTask, stats: TightenedStats, now: Date): OpenTask | null {
-  if (!task.tightened?.length || task.relaxedTightening) return null;
+  if (!(task.tightened?.length || task.tightenedPhrases?.length) || task.relaxedTightening) return null;
   if (stats.answered < RELAX_MIN_ANSWERED || stats.falseRejects / stats.answered < RELAX_FALSE_REJECT_RATE) return null;
-  const tightened = new Set(task.tightened.map((g) => JSON.stringify(g)));
+  const tightened = new Set((task.tightened ?? []).map((g) => JSON.stringify(g)));
   const others = task.required.filter((g) => !tightened.has(JSON.stringify(g)));
   if (!others.length) return null;
   const otherMembers = others.flat();
   const groups = task.required.filter((g) => tightened.has(JSON.stringify(g)));
   const required = task.required.map((g) => (tightened.has(JSON.stringify(g)) ? [...new Set([...g, ...otherMembers])] : g));
-  const { tightened: _dropped, ...rest } = task;
-  return { ...rest, required, relaxedTightening: { at: now.toISOString(), answered: stats.answered, falseRejects: stats.falseRejects,
-    previousRequired: task.required.map((g) => [...g]), groups: groups.map((g) => [...g]) } };
+  // S5b: a szigorított kifejezéscsoport ugyanígy hatástalanítva — a többi kötelező fogalom egy-egy szava is alternatívája (egyszavas
+  // kifejezés = pontos tokenegyezés), így a csoport találata legalább a régi, a pont nem csökken.
+  const tightenedPhrases = new Set((task.tightenedPhrases ?? []).map((g) => JSON.stringify(g)));
+  const phraseGroups = (task.requiredPhrases ?? []).filter((g) => tightenedPhrases.has(JSON.stringify(g)));
+  const requiredPhrases = task.requiredPhrases?.map((g) => (tightenedPhrases.has(JSON.stringify(g)) ? [...new Set([...g, ...otherMembers])] : g));
+  const { tightened: _dropped, tightenedPhrases: _droppedPhrases, ...rest } = task;
+  return { ...rest, required, ...(requiredPhrases ? { requiredPhrases } : {}), relaxedTightening: { at: now.toISOString(), answered: stats.answered, falseRejects: stats.falseRejects,
+    previousRequired: task.required.map((g) => [...g]), ...(groups.length ? { groups: groups.map((g) => [...g]) } : {}),
+    ...(phraseGroups.length ? { previousRequiredPhrases: task.requiredPhrases!.map((g) => [...g]), phraseGroups: phraseGroups.map((g) => [...g]) } : {}) } };
 }
 
 /**
@@ -76,7 +82,7 @@ export async function maybeRelaxTightening(lessonId: string, taskIds: readonly s
     .from(lessons).leftJoin(knowledgeMaps, eq(lessons.mapId, knowledgeMaps.id)).leftJoin(htmlFiles, eq(lessons.htmlFileId, htmlFiles.id)).where(eq(lessons.id, lessonId));
   const parsed = current ? lessonSchema.safeParse(current.json) : null;
   if (!current || !parsed?.success || !parsed.data.experience) return [];
-  const candidates = parsed.data.experience.tasks.filter((t) => taskIds.includes(t.id) && t.tightened?.length && !t.relaxedTightening);
+  const candidates = parsed.data.experience.tasks.filter((t) => taskIds.includes(t.id) && (t.tightened?.length || t.tightenedPhrases?.length) && !t.relaxedTightening);
   if (!candidates.length) return [];
   const hashes = new Map(candidates.map((t) => [t.id, rubricHash(t)]));
   const stats = new Map<string, TightenedStats>();
@@ -129,7 +135,7 @@ export async function maybeRelaxTightening(lessonId: string, taskIds: readonly s
     // Review #340: valódi visszaolvasás — a mentett verzió és a lazított feladatok nyoma (a párhuzamosan már lazított is igazolt).
     const [saved] = await db.select({ json: lessons.json, version: lessons.version }).from(lessons).where(eq(lessons.id, lessonId));
     const savedLesson = saved ? lessonSchema.safeParse(saved.json) : null;
-    const isRelaxed = (id: string) => Boolean(savedLesson?.success && savedLesson.data.experience?.tasks.some((t) => t.id === id && t.relaxedTightening && !t.tightened));
+    const isRelaxed = (id: string) => Boolean(savedLesson?.success && savedLesson.data.experience?.tasks.some((t) => t.id === id && t.relaxedTightening && !t.tightened && !t.tightenedPhrases));
     if (!saved || saved.version < applied.version || !plan.relaxed.every(isRelaxed)) throw new Error(`[S4c] a visszaolvasás nem igazolja a lazítást (${lessonId}).`);
     if (applied.relaxed.length) logger.info(`[S4c] gépi szigorítás automatikusan lazítva (${lessonId}): ${applied.relaxed.map((id) => `${id} ${stats.get(id)!.falseRejects}/${stats.get(id)!.answered}`).join(", ")}`);
     return { value: applied.relaxed, result: { kind: "material" as const, id: resultId } };

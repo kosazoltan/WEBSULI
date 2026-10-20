@@ -120,7 +120,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
   // várjuk meg; a hiba csak napló.
   if (graded.kind === "tasks") {
     const tasksGraded = graded;
-    const tightened = experience.tasks.filter(t => t.tightened?.length && tasksGraded.rows.some(r => r.taskId === t.id)).map(t => t.id);
+    const tightened = experience.tasks.filter(t => (t.tightened?.length || t.tightenedPhrases?.length) && tasksGraded.rows.some(r => r.taskId === t.id)).map(t => t.id);
     // Review #340 (P1): a közreműködő a szerver által ismert identitás (a kliens ujjlenyomata nem — azt szabadon választhatja).
     const contributor = contributorKey(userId ? `user:${userId}` : paired ? `learner:${paired.id}` : `ip:${req.ip ?? "?"}`);
     void recordTaskResults(req.params.lessonId, roundKey, contributor, tasksGraded.rows)

@@ -49,6 +49,8 @@ export const openTaskSchema = z.object({
    * csoporton belül VAGY; egy alternatíva normalizált tokenjei a válaszban egymás után, pontosan. A típusos (v2) útra visz.
    */
   requiredPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).optional(),
+  /** S5b: a gépi szigorítással felvett, a `requiredPhrases`-ben bent maradt kifejezéscsoportok (S4 mérés / lazítás). */
+  tightenedPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).optional(),
   /**
    * Spec 2026-10-20-s4 (S4a): a gépi szigorítással (S3c) felvett, a `required`-ben bent maradt kötelező csoportok. Review #339: a korlát nem
    * szűkebb a kalibrátornál (blokkoló hibás esetenként 1 csoport, legfeljebb `ANSWER_KEY_LIMITS.wrongMax`, javítókörönként egyesítve).
@@ -60,6 +62,9 @@ export const openTaskSchema = z.object({
     /** Review #340: a lazítás előtti `required` és a hatástalanított csoportok — ugyanabban a tranzakcióban mentett, pontosan visszaállítható előállapot. */
     previousRequired: z.array(z.array(text(160)).min(1)).min(1).optional(),
     groups: z.array(z.array(text(160)).min(1)).min(1).optional(),
+    /** S5b: a kifejezéses szigorítás lazításának előállapota. */
+    previousRequiredPhrases: z.array(z.array(text(80)).min(1)).min(1).optional(),
+    phraseGroups: z.array(z.array(text(80)).min(1)).min(1).optional(),
   }).optional(),
 });
 export const experienceQuizSchema = z.object({

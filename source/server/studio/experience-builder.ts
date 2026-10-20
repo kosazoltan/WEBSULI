@@ -22,7 +22,7 @@ import { changedFields, describeRepairPermissions, repairPermissions, type Repai
 import { unitCatalog, unitCatalogBlock, unitCatalogVersion, type CatalogPool, type UnitCatalog } from "../catalog/retrieval";
 import { memoryBlockVersion } from "../memory/subject-memory";
 import { answerKeyProblems, type AnswerKeyCases } from "../../shared/answer-key-tests";
-import { calibrateRubric, retainTightened } from "../../shared/answer-key-calibrate";
+import { calibrateRubric, retainTightened, retainTightenedPhrases } from "../../shared/answer-key-calibrate";
 import type { QuizBlindItem } from "./quiz-blind-check";
 import type { OpenTask } from "../../shared/lesson-experience";
 
@@ -287,9 +287,11 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
   // öröklődnek; a jelölés csak a javított `required`-ben bent maradt (esetleg bővített) csoportra marad.
   const keepServerFields = (task: PacketContent["tasks"][number]) => {
     const previous = original.tasks.find(item => item.id === task.id);
-    const { tightened: _t, relaxedTightening: _r, ...rest } = task;
+    const { tightened: _t, tightenedPhrases: _tp, relaxedTightening: _r, ...rest } = task;
     const tightened = previous?.tightened ? retainTightened(previous.tightened, rest.required) : [];
-    return { ...rest, ...(tightened.length ? { tightened } : {}), ...(previous?.relaxedTightening ? { relaxedTightening: previous.relaxedTightening } : {}) };
+    // S5b: a kifejezéses szigorítás jelölése is szerveres mező.
+    const tightenedPhrases = previous?.tightenedPhrases ? retainTightenedPhrases(previous.tightenedPhrases, rest.requiredPhrases ?? []) : [];
+    return { ...rest, ...(tightened.length ? { tightened } : {}), ...(tightenedPhrases.length ? { tightenedPhrases } : {}), ...(previous?.relaxedTightening ? { relaxedTightening: previous.relaxedTightening } : {}) };
   };
   return { methods: replace(original.methods, patch.methods), tasks: replace(original.tasks, patch.tasks).map(keepServerFields),
     quiz: replace(original.quiz, patch.quiz), glossary: patch.glossary?.length && !glossaryIgnored ? patch.glossary : original.glossary };
@@ -624,7 +626,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         const keys = await deps.answerKeys(parsed.data.tasks, unit.sectionIndex);
         // T2.1b: gépi kalibráció (modellhívás nélkül); a kalibrált csomag újra átmegy a teljes ellenőrzésen, különben visszavonódik.
         const before = parsed.data.tasks;
-        const calibrated = before.map((t) => calibrateRubric(t, keys.get(t.id) ?? null));
+        // S5b: kifejezéses (sorrendes) szigorítás csak idegen nyelvi leckén (a magyar szórend szabad).
+        const calibrated = before.map((t) => calibrateRubric(t, keys.get(t.id) ?? null, { phrases: Boolean(language) }));
         let applied = calibrated.some((c) => c.changes.length > 0);
         if (applied) {
           parsed.data.tasks = calibrated.map((c) => c.task);

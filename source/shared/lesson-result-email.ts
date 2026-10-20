@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { evaluateOpenAnswer, missingAnswerConcepts, scoreSummary, type AnswerScore } from "./lesson-experience-score";
+import { evaluateOpenAnswer, missingAnswerConcepts, missingPhrases, scoreSummary, type AnswerScore } from "./lesson-experience-score";
 
 /**
  * Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — tiszta modul, DB és hálózat nélkül:
@@ -39,14 +39,19 @@ export type GradedQuiz = { kind: "quiz"; wrong: Array<{ question: string; picked
 
 /** S4b: a pontozó csak a gépi szigorítással (S3c) felvett csoport(ok) hiánya miatt nem adott teljes pontot (JSON-egyezés a `tightened`-del). */
 export function tightenedOnlyMiss(task: OpenTask, answer: string, detState: AnswerScore["state"]): boolean {
-  if (detState === "ok" || !answer || !task.tightened?.length) return false;
-  const tightened = new Set(task.tightened.map((g) => JSON.stringify(g)));
+  if (detState === "ok" || !answer || !(task.tightened?.length || task.tightenedPhrases?.length)) return false;
+  const tightened = new Set((task.tightened ?? []).map((g) => JSON.stringify(g)));
+  // S5b: a kifejezéses szigorítás (`tightenedPhrases`) ugyanígy — a hiányzó kifejezéscsoportok mind a szigorítottak közül valók.
+  const tightenedPhrases = new Set((task.tightenedPhrases ?? []).map((g) => JSON.stringify(g)));
   const missing = missingAnswerConcepts(answer, task);
-  if (!missing.length || !missing.every((g) => tightened.has(JSON.stringify(g)))) return false;
+  const missingP = missingPhrases(answer, task);
+  if (!missing.length && !missingP.length) return false;
+  if (!missing.every((g) => tightened.has(JSON.stringify(g))) || !missingP.every((g) => tightenedPhrases.has(JSON.stringify(g)))) return false;
   // Review #340 (P1): ellenpróba — a szigorított csoportok nélkül a pontozó teljes pontot adna (különben más ok is van: hossz, mondat,
   // tagadás…, és a döntőbírói emelés nem a szigorítás téves elutasítása).
   const required = task.required.filter((g) => !tightened.has(JSON.stringify(g)));
-  return required.length > 0 && evaluateOpenAnswer(answer, { ...task, required }).state === "ok";
+  const phrases = (task.requiredPhrases ?? []).filter((g) => !tightenedPhrases.has(JSON.stringify(g)));
+  return required.length > 0 && evaluateOpenAnswer(answer, { ...task, required, requiredPhrases: phrases.length ? phrases : undefined }).state === "ok";
 }
 
 /** Csak az ismert feladatokat pontozza; a döntőbíró gyorsítótár-ítélete (ha van) csak emelhet — mint a tanuló képernyőjén. */
