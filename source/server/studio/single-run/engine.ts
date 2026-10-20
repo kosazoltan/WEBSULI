@@ -29,7 +29,7 @@ import { lessonVisibleText, words } from "../lesson-metrics";
 import { applySourceCorrections, arithmeticSourceCorrections, correctionAuditText, correctionReasonCode, type SourceCorrection } from "../source-corrections";
 import { classifyNotes } from "../lektor";
 import { splitLimitBlockers } from "../limit-policy";
-import { openBankFindingFlags, resolveChoiceGate } from "../choice-gate";
+import { openBankFindingFlags, removeLektorBlockers, resolveChoiceGate } from "../choice-gate";
 import type { JobPatch, PipelineStore } from "../pipeline-store";
 import { conceptIdResolver, exportQuizItemsForPublish } from "../quiz-export";
 import { parseModelJson } from "../run-step";
@@ -730,7 +730,18 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     const blocking = classifyNotes(report.notes).filter((n) => n.blocking);
     if (!blocking.length) break;
     previousBlockers = blocking;
-    if (round === SINGLE_RUN_REVIEW_ROUNDS) throw new SingleRunError("lektorálás", blocking.map((n) => `${n.blockPath ?? "—"}: ${n.message}`));
+    if (round === SINGLE_RUN_REVIEW_ROUNDS) {
+      // Spec 2026-10-20-elakadas-gyokerok-elemzes (R1): az utolsó körben a kivehető tételek (banktétel, ellenőrző blokk, ábra) kikerülnek,
+      // és a lecke a végkapura megy — a kész lecke nem vész el egy hibás feladat miatt. Tanítási / ténybeli jegyzetnél a régi megállás.
+      const removal = removeLektorBlockers(lesson, blocking);
+      if ("error" in removal) throw new SingleRunError("lektorálás", [...blocking.map((n) => `${n.blockPath ?? "—"}: ${n.message}`), `(kivétel nem lehetséges: ${removal.error})`]);
+      lesson = removal.lesson;
+      telemetry.gates.lektorRemoved += removal.removed.length;
+      warnings.push(`Az utolsó lektorkör hibás tételeit kivettük: ${removal.removed.join(", ")}`);
+      output = { ...output, lesson, experienceCheckpoint: checkpoint };
+      await save("lektor", output);
+      break;
+    }
     const bankNotes = blocking.filter((n) => /^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
     const teachingNotes = blocking.filter((n) => !/^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
     if (teachingNotes.length) {

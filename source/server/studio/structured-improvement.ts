@@ -11,6 +11,7 @@ import type { MapConcept } from "./coverage";
 import { checkCoverageGate } from "./coverage";
 import { buildAuthorPrompt, buildLektorPrompt, canonicalJson, lektorReportSchema } from "./step-io";
 import { classifyNotes } from "./lektor";
+import { removeLektorBlockers } from "./choice-gate";
 import { lektorSkillCodes } from "../workflows/learning";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
 import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
@@ -210,13 +211,19 @@ export async function finishStructuredImprovement(original: Lesson, candidate: L
   const lektorOwner = owner && (owner.instruction || owner.corrections.length) ? { instruction: owner.instruction, corrections: owner.corrections } : undefined;
   const review = lektorReportSchema.parse(await call("lektor", withRoleSkill("lektor", buildLektorPrompt(candidate, source, [], lektorOwner)), "Ellenőrizd a teljes tanítást és mindkét bank megoldásait. Csak a konkrét eltéréseket jelentsd JSON-ban."));
   const blockers = classifyNotes(review.notes).filter(n => n.blocking);
+  let lektorRemoved: string[] = [];
   if (blockers.length) {
     for (const code of lektorSkillCodes(blockers)) await workflowFinding(code);
-    throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
+    // Spec 2026-10-20-elakadas-gyokerok-elemzes (R1): csak kivehető tételekre (banktétel, ellenőrző blokk, ábra) a jelölt a tételek
+    // nélkül megy tovább; ténybeli / tanítási jegyzetnél a régi megállás (az eredeti érintetlen).
+    const removal = removeLektorBlockers(candidate, blockers);
+    if ("error" in removal) throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
+    candidate = removal.lesson;
+    lektorRemoved = removal.removed;
   }
   await workflowPhase("gate");
   assertRepairCandidate(original, candidate, source, classroom);
-  return { candidate, review };
+  return { candidate, review, ...(lektorRemoved.length ? { lektorRemoved } : {}) };
 }
 
 /** Backup, lesson, public metadata and game banks commit or roll back together. */
