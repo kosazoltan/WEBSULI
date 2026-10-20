@@ -53,7 +53,12 @@ export const openTaskSchema = z.object({
    * Spec 2026-10-20-s6-fogalom-sorrend (S6a): a fogalmak kötelező sorrendje (sorrendi / műveleti sorrend feladat) — 2–4 fogalomcsoport
    * (csoporton belül VAGY), a válaszban mindegyik megvan, és az első előfordulásuk sorrendje szigorúan növekvő. Egy kötelező feltétel.
    */
-  requiredOrder: z.array(z.array(text(160)).min(1)).min(2).max(4).optional(),
+  requiredOrder: z.array(z.array(text(160)).min(1)).min(2).max(4)
+    // Review #346: két sorrendi csoport nem oszthat meg alternatívát — ugyanaz az előfordulás nem lehet egyszerre előbb és később
+    // (a szabály teljesíthetetlen lenne).
+    .refine((groups) => { const all = groups.flatMap((g) => [...new Set(g.map(canonicalAlternative))]); return new Set(all).size === all.length; },
+      { message: "A sorrendi csoportok (requiredOrder) nem oszthatnak meg alternatívát." })
+    .optional(),
   /** S5b: a gépi szigorítással felvett, a `requiredPhrases`-ben bent maradt kifejezéscsoportok (S4 mérés / lazítás). */
   tightenedPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).optional(),
   /**

@@ -9,6 +9,7 @@ import { ANSWER_KEY_SYSTEM, answerKeyCacheKey, answerKeyUserMessage } from "../s
 import { rubricHash } from "../shared/lesson-result-email";
 import { normalizeStrictPacket } from "../server/studio/bank-schema";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { applyBankPacketRepair } from "../server/studio/experience-builder";
 
 /* Spec 2026-10-20-s6-fogalom-sorrend (S6a): a fogalmak kötelező sorrendje (sorrendi / műveleti sorrend feladat). */
 
@@ -24,6 +25,7 @@ test("S6a: a helyes sorrend teljes pont; a fordított legfeljebb 0,5, a sorrend 
   assert.equal(evaluateOpenAnswer(t.sample, t).state, "ok");
   const wrong = evaluateOpenAnswer("Először 4-gyel szorzunk, és csak utána emelünk négyzetre.", t);
   assert.notEqual(wrong.state, "ok");
+  assert.ok(wrong.score <= 0.5, `legfeljebb 0,5 (${wrong.score})`);
   assert.match(wrong.reason, /sorrendje nem megfelelő/);
   assert.equal(missingOrder("Először 4-gyel szorzunk, és csak utána emelünk négyzetre.", t), true);
 });
@@ -75,11 +77,13 @@ test("S6a: J1 — a fordított sorrendű próba sorrendi szabállyal megkülönb
 test("S6a: a döntőbíró és a tesztíró ismeri a sorrendet; a kulcsok csak sorrendnél bővülnek", () => {
   const t = task();
   const { requiredOrder: _o, ...plain } = t;
-  assert.match(buildArbiterUserMessage(t, "", "x"), /SORREND .*a fordított vagy felcserélt sorrend nem lehet "ok"/);
+  const arbiterMsg = buildArbiterUserMessage(t, "", "x");
+  assert.match(arbiterMsg, /SORREND .*a fordított vagy felcserélt sorrend nem lehet "ok"/);
+  assert.ok(arbiterMsg.includes("[négyzetre / négyzet] → [szorzunk / szoroz / szorzás]"), "a teljes sorrend minden csoporttal és alternatívával");
   assert.equal(buildArbiterUserMessage(plain as OpenTask, "", "x").includes("SORREND"), false);
   assert.match(ANSWER_KEY_SYSTEM, /KIVÉTEL — ha a feladatnál "sorrend"/);
   const ctx = { concepts: [], classroom: 9 } as unknown as Parameters<typeof answerKeyUserMessage>[1];
-  assert.match(answerKeyUserMessage([t], ctx), /"sorrend":\[\["négyzetre"/);
+  assert.ok(answerKeyUserMessage([t], ctx).includes(JSON.stringify({ sorrend: t.requiredOrder }).slice(1, -1)), "a teljes sorrend a tesztírónak");
   assert.notEqual(answerKeyCacheKey(t), answerKeyCacheKey(plain as OpenTask));
   assert.notEqual(arbiterCacheKey(t, "x"), arbiterCacheKey(plain as OpenTask, "x"));
   assert.notEqual(rubricHash(t), rubricHash(plain as OpenTask));
@@ -97,4 +101,22 @@ test("review #346: a tesztíró gyorsítótár-kulcsa a sorrend tartalmától f�
   const b = task({ requiredOrder: [["szorzunk", "szoroz", "szorzás"], ["négyzetre", "négyzet"]] });
   assert.notEqual(answerKeyCacheKey(a), answerKeyCacheKey(b));
   assert.equal(answerKeyCacheKey(a), answerKeyCacheKey(task()), "azonos sorrend: azonos kulcs");
+});
+
+test("review #346: átfedő sorrendi csoport (közös alternatíva) érvénytelen — a szabály különben teljesíthetetlen", () => {
+  assert.equal(openTaskSchema.safeParse(task({ requiredOrder: [["négyzet", "szoroz"], ["szoroz"]] })).success, false);
+  assert.equal(openTaskSchema.safeParse(task({ requiredOrder: [["Négyzet"], ["négyzet"]] })).success, false, "normalizálva is azonos");
+});
+
+test("review #346: a lektor által nem érintett tétel javítása nem hagyhatja el a sorrendi / kifejezés-szabályt", () => {
+  const e = standardFusionFixture().experience!;
+  const t0 = { ...e.tasks[0], requiredOrder: [["alap"], ["magasság"]], requiredPhrases: [["az alap"]] };
+  const original = { methods: e.methods, tasks: [t0, ...e.tasks.slice(1)], quiz: e.quiz, glossary: [] };
+  const { requiredOrder: _o, requiredPhrases: _p, ...without } = t0;
+  const perms = new Map<string, string[] | "*">([[t0.id, "*"]]);
+  const kept = applyBankPacketRepair(original, { tasks: [{ ...without, sample: `${t0.sample} Bővítve.` }] }, undefined, undefined, perms);
+  assert.deepEqual(kept.tasks[0].requiredOrder, t0.requiredOrder);
+  assert.deepEqual(kept.tasks[0].requiredPhrases, t0.requiredPhrases);
+  const reviewed = applyBankPacketRepair(original, { tasks: [{ ...without, sample: `${t0.sample} Bővítve.` }] }, new Set([t0.id]));
+  assert.equal(reviewed.tasks[0].requiredOrder, undefined, "a lektor által kifogásolt tételnél a javítás dönt");
 });

@@ -291,6 +291,12 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
     const tightened = previous?.tightened ? retainTightened(previous.tightened, rest.required) : [];
     // S5b: a kifejezéses szigorítás jelölése is szerveres mező.
     const tightenedPhrases = previous?.tightenedPhrases ? retainTightenedPhrases(previous.tightenedPhrases, rest.requiredPhrases ?? []) : [];
+    // Review #346: a lektor által NEM érintett tétel javításában a kihagyott sorrendi / kifejezés-szabály nem vész el (a modell a választható
+    // mezőt elhagyhatja) — az előző tételből öröklődik; a lektor által kifogásolt tételnél a javítás dönt.
+    if (previous && !reviewedIds?.has(task.id)) {
+      if (previous.requiredOrder?.length && !rest.requiredOrder?.length) rest.requiredOrder = previous.requiredOrder;
+      if (previous.requiredPhrases?.length && !rest.requiredPhrases?.length) rest.requiredPhrases = previous.requiredPhrases;
+    }
     return { ...rest, ...(tightened.length ? { tightened } : {}), ...(tightenedPhrases.length ? { tightenedPhrases } : {}), ...(previous?.relaxedTightening ? { relaxedTightening: previous.relaxedTightening } : {}) };
   };
   return { methods: replace(original.methods, patch.methods), tasks: replace(original.tasks, patch.tasks).map(keepServerFields),
