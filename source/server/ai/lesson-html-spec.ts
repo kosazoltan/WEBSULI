@@ -359,15 +359,19 @@ function ee_conceptHit(answerNorm, answerTokens, answerStems, concept){
   }
   return false;
 }
-/* tagadas: 'en' = not / cannot / n't (mustn t) / aposztrof nelkuli alak; 'hu' = nem */
+/* tagadas a NYERS szovegbol (ekezet es aposztrof marad): 'en' = not / cannot / mustn't-fele osszevonas / aposztrof nelkuli alak
+   (weak: no, never...); 'hu' = nem. A "PIN-t", a "dont" helyett "dönt" es a "legyen t" nem tagadas. */
 var EE_EN_NEG = ['not','cannot','dont','doesnt','didnt','cant','couldnt','wont','wouldnt','shouldnt','mustnt','isnt','arent','wasnt','werent','hasnt','havent','hadnt','neednt'];
-function ee_negKind(words){
-  var i;
+var EE_EN_WEAK = ['no','never','nothing','nobody','none','nowhere','neither','nor'];
+function ee_negKind(text, weak){
+  var words = String(text||'').toLowerCase().split(/[^a-z\\u00e0-\\u024f'\\u2019]+/), i, w;
   for(i=0;i<words.length;i++){
-    if(EE_EN_NEG.indexOf(words[i])!==-1) return 'en';
-    if(words[i]==='t' && i>0 && words[i-1].length>1 && words[i-1].charAt(words[i-1].length-1)==='n') return 'en';
+    w = words[i].replace(/^['\\u2019]+|['\\u2019]+$/g,'');
+    if(!w) continue;
+    if(EE_EN_NEG.indexOf(w)!==-1 || /^[a-z]+n['\\u2019]t$/.test(w) || (weak && EE_EN_WEAK.indexOf(w)!==-1)) return 'en';
   }
-  return words.indexOf('nem')!==-1 ? 'hu' : 'none';
+  for(i=0;i<words.length;i++){ if(words[i]==='nem') return 'hu'; }
+  return 'none';
 }
 function ee_evaluate(answer, task){
   var norm = ee_norm(answer);
@@ -393,9 +397,8 @@ function ee_evaluate(answer, task){
               ' is ',' are ',' there ',' have ',' has ',' do ',' does ',' a ',' an ',' the ',
               ' some ',' any ',' how ',' much ',' many ',' of ',' on ',' in '];
   var padded = ' ' + norm + ' '; var hasFunc = false, f;
-  var sampleWords = ee_norm(task.sample).split(' ');
-  var ansNeg = ee_negKind(tokens), sampleNeg = ee_negKind(sampleWords);
-  var unexpectedNegation = (ansNeg !== 'none' && sampleNeg === 'none') || (sampleNeg === 'en' && ansNeg === 'none');
+  var unexpectedNegation = (ee_negKind(answer) !== 'none' && ee_negKind(task.sample, true) === 'none')
+    || (ee_negKind(task.sample) === 'en' && ee_negKind(answer, true) === 'none');
   for(f=0;f<FUNC.length;f++){ if(padded.indexOf(FUNC[f]) !== -1){ hasFunc=true; break; } }
   if(ratio >= 1){
     if((task.needsSentence && !hasFunc) || unexpectedNegation){
