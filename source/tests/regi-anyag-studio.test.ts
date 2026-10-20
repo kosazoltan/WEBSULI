@@ -32,8 +32,8 @@ test("a jelöltek: csak a határnap előtti, nem lecke, nem kizárt anyag; a né
   assert.deepEqual(pilot.queue, [LEGACY_PILOT_IDS[1], LEGACY_PILOT_IDS[0]]);
 });
 
-test("a kapcsoló a próbára áll; az Abigél egyik próba-anyag sem; a korlátok", () => {
-  assert.equal(LEGACY_MIGRATION_MODE, "pilot");
+test("a kapcsoló a teljes sorra áll (a próba után); az Abigél egyik próba-anyag sem; a korlátok", () => {
+  assert.equal(LEGACY_MIGRATION_MODE, "all", "a próba (#349) után mind — tulajdonosi döntés 2026-10-20");
   assert.equal(LEGACY_PILOT_IDS.length, 3);
   for (const id of LEGACY_EXCLUDED_IDS) assert.ok(!LEGACY_PILOT_IDS.includes(id));
   assert.ok(LEGACY_CONCURRENCY >= 1 && LEGACY_CONCURRENCY <= 4);

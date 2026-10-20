@@ -12,7 +12,7 @@ import { htmlToText } from "./safe-fetch";
 
 export type LegacyMode = "off" | "pilot" | "all";
 /** A kapcsoló — tulajdonosi döntés 2026-10-20: előbb 3 próba, utána mind. */
-export const LEGACY_MIGRATION_MODE: LegacyMode = "pilot";
+export const LEGACY_MIGRATION_MODE: LegacyMode = "all";
 /** Review #349: a határnap Budapest szerinti éjfél (2026. június 1-jén UTC+2). */
 export const LEGACY_CUTOFF = new Date("2026-06-01T00:00:00+02:00");
 export const LEGACY_JOB_TYPE = "legacy-studio-migration";
