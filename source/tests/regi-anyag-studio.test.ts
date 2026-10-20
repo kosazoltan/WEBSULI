@@ -55,6 +55,7 @@ test("az egyeztetés: kész cél → kész; élő futás → fut; leállt futás
   assert.equal(reconcileLegacy({ ...base, runPhase: "error", attempt: 2 }, now), "error");
   assert.equal(reconcileLegacy({ ...base, runPhase: "done" }, now), "error", "kész, de nem a célt alakította át — nincs duplikátum");
   assert.equal(reconcileLegacy({ ...base, runUpdatedAt: new Date(now - 90 * 60_000), leaseAlive: true }, now), "running", "review #349: élő lízing → fut");
+  assert.equal(reconcileLegacy({ ...base, runPhase: "error", jobRunning: true }, now), "running", "review #350: a job épp fut (másik példány folytatása)");
   for (const phase of ["parked", "draft"]) assert.equal(reconcileLegacy({ ...base, runPhase: phase, attempt: 2 }, now), "waiting", phase);
 });
 
