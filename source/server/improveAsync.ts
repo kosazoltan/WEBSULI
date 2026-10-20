@@ -30,7 +30,8 @@ import { withSupportSkill } from "./studio/support-skills";
  */
 export class ImproveOutputError extends Error {
   override readonly name = "ImproveOutputError";
-  constructor(message: string, readonly modelIndex: number, readonly canFallback: boolean, readonly problems: string[] = []) { super(message); }
+  // Spec 2026-10-20-okositas-bukott-jelolt: a kapun bukott jelölt (diagnosztikának az `error` rekordba kerül; alkalmazni nem lehet).
+  constructor(message: string, readonly modelIndex: number, readonly canFallback: boolean, readonly problems: string[] = [], readonly candidate?: string) { super(message); }
 }
 
 async function processImprovementJob(
@@ -338,7 +339,7 @@ ${originalFile.content}
 
     const aiResponse = { content: fullContent };
 
-    const outputError = (message: string, problems: string[] = []) => new ImproveOutputError(message, currentModelIndex, currentModelIndex < MODEL_CHAIN.length - 1, problems);
+    const outputError = (message: string, problems: string[] = [], candidate?: string) => new ImproveOutputError(message, currentModelIndex, currentModelIndex < MODEL_CHAIN.length - 1, problems, candidate);
     if (!aiResponse || !aiResponse.content) {
       throw outputError('Az AI nem adott vissza választ');
     }
@@ -542,7 +543,7 @@ ${originalFile.content}
       logger.error(
         `[IMPROVE] Record ${dbRecordId}: ❌ Verification gate rejected the output: ${verification.problems.join(' | ')}`,
       );
-      throw outputError(`A javított tananyag nem ment át a záró ellenőrzésen: ${verification.problems.join(' ')}`, verification.problems);
+      throw outputError(`A javított tananyag nem ment át a záró ellenőrzésen: ${verification.problems.join(' ')}`, verification.problems, improvedHtml);
     }
     logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ Verification gate passed (${verification.problems.length} problem)`);
 
@@ -577,6 +578,11 @@ ${originalFile.content}
 
     // ✅ UPDATE the DB record with error status
     try {
+      // Spec 2026-10-20-okositas-bukott-jelolt: a kapun bukott jelölt megmarad (diagnosztika); `error` állapotban nem alkalmazható.
+      if (error instanceof ImproveOutputError && error.candidate) {
+        await storage.updateImprovedHtmlFileContentAndStatus(dbRecordId, error.candidate, 'error')
+          .catch((saveError: unknown) => logger.warn(`[IMPROVE] Record ${dbRecordId}: a bukott jelölt nem menthető`, saveError));
+      }
       await storage.updateImprovedHtmlFileStatus(dbRecordId, 'error', undefined, userMessage);
     } catch (dbError: unknown) {
       const dbErrorTyped = dbError instanceof Error ? dbError : new Error(String(dbError));

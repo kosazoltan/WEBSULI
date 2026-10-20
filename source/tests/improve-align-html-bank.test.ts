@@ -56,7 +56,8 @@ test("az okosítás a kapu előtt igazít, és a tartalék próba megkapja az el
   assert.ok(src.indexOf("alignHtmlLessonBank(improvedHtml)") < src.indexOf("verifyLessonMethodHtml(improvedHtml)"));
   assert.match(src, /previousProblems: error\.problems/);
   assert.match(src, /AZ ELŐZŐ PRÓBA ZÁRÓ ELLENŐRZÉSÉNEK HIBÁI/);
-  assert.match(src, /verification\.problems\.join\(' '\)}`, verification\.problems\)/);
+  // Spec 2026-10-20-okositas-bukott-jelolt: a hibalista mellett a bukott jelölt is átadódik (diagnosztika).
+  assert.match(src, /verification\.problems\.join\(' '\)}`, verification\.problems, improvedHtml\)/);
 });
 
 // Review #327: az alakhibás feladat (hiányos requiredDistinct) nem dob kivételt, és érintetlen marad — a sémakapu jelenti.
