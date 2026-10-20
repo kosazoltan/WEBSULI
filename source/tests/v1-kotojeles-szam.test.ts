@@ -43,6 +43,7 @@ test("a HTML-szerző referencia-pontozója ugyanígy kezeli a kötőjeles számo
   const t = task();
   for (const a of [t.sample, "Contact, telefonszám: 72-552-270", "Contact 72 552 -270"]) {
     assert.equal(score(a, t).state, evaluateOpenAnswer(a, t).state, a);
+    assert.equal(score(a, t).score, evaluateOpenAnswer(a, t).score, a);
   }
 });
 
