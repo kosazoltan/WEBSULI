@@ -658,6 +658,8 @@ app.use((req, res, next) => {
         const cron = (await import("node-cron")).default;
         for (const task of cron.getTasks().values()) task.stop();
       } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
+      // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a régi anyagok sora sem indít új gyártást a leálló példányon.
+      try { (await import("./studio/legacy-migration")).stopLegacyMigration(); } catch (err) { logger.warn("A régi anyagok sora nem állítható le", err); }
       // Új kapcsolatot nem fogadunk; a nyitott kérések közben lefuthatnak.
       server.close(() => log("HTTP server closed"));
       try {

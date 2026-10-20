@@ -140,9 +140,11 @@ const finish = (id: string, status: "done" | "error" | "waiting", error: string 
 
 let ticking = false;
 let skippedLogged = false;
-/** Egy kör: egyeztetés, utána a szabad helyek feltöltése. */
-export async function legacyMigrationTick(now = Date.now()): Promise<void> {
-  if (ticking) return;
+/** Review #349: leállításkor új kör (és benne új gyártás) nem indul. */
+let stopped = false;
+/** Egy kör: egyeztetés, utána a szabad helyek feltöltése. Visszaad: van-e még teendő (futó elem vagy jelölt) — tétlenül ritkább kör. */
+export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
+  if (ticking || stopped) return true;
   ticking = true;
   try {
     const rows = (await db.select({ id: scheduledJobs.id, status: scheduledJobs.status, payload: scheduledJobs.payload }).from(scheduledJobs)
@@ -173,9 +175,9 @@ export async function legacyMigrationTick(now = Date.now()): Promise<void> {
       retries.push({ row, decision, jobId: run?.jobId ?? null, error: run?.error ?? null });
     }
     // Review #349: `off` módban újrapróba sem indul; a párhuzamosság az újrapróbákra is érvényes (azok elsőbbséget kapnak).
-    if (LEGACY_MIGRATION_MODE === "off") return;
+    if (LEGACY_MIGRATION_MODE === "off") return running > 0;
     for (const { row, decision, jobId, error } of retries) {
-      if (running >= LEGACY_CONCURRENCY) break;
+      if (running >= LEGACY_CONCURRENCY || stopped) break;
       const { htmlFileId, attempt = 1 } = row.payload;
       try {
         if (decision === "resume" && jobId) {
@@ -194,7 +196,7 @@ export async function legacyMigrationTick(now = Date.now()): Promise<void> {
         logger.warn(`[RÉGI→STÚDIÓ] Újrapróba nem indult (${htmlFileId}): ${e instanceof Error ? e.message : String(e)}`);
       }
     }
-    if (running >= LEGACY_CONCURRENCY) return;
+    if (running >= LEGACY_CONCURRENCY) return true;
     const { rows: fileRows } = await db.execute(sql`SELECT h.id, h.title, h.content_type, octet_length(h.content) AS bytes, h.created_at,
         (h.content ILIKE '%<audio%' OR h.content ILIKE '%<video%') AS has_media,
         (h.content ILIKE '%<img%' OR h.content ILIKE '%<iframe%' OR h.content ILIKE '%<embed%' OR h.content ILIKE '%<object%') AS has_embed,
@@ -208,8 +210,10 @@ export async function legacyMigrationTick(now = Date.now()): Promise<void> {
       skippedLogged = true;
       for (const s of skipped) logger.info(`[RÉGI→STÚDIÓ] Kimarad: ${s.id} „${s.title}” — ${s.reason}`);
     }
-    for (const htmlFileId of queue) {
-      if (running >= LEGACY_CONCURRENCY) break;
+    const queuedIds = new Set(rows.map((r) => r.payload.htmlFileId));
+    const pending = queue.filter((id) => !queuedIds.has(id));
+    for (const htmlFileId of pending) {
+      if (running >= LEGACY_CONCURRENCY || stopped) break;
       // Review #349: atomi foglalás tranzakciós zárral — két példány nem foglalhatja ugyanazt az anyagot; a futás-azonosító ELŐBB rögzül.
       const runId = randomUUID();
       const claimed = await db.transaction(async (tx) => {
@@ -231,13 +235,30 @@ export async function legacyMigrationTick(now = Date.now()): Promise<void> {
       }
       running++;
     }
+    return running > 0 || pending.length > 0 || retries.length > 0;
   } finally {
     ticking = false;
   }
 }
 
-/** Indítás a szerverből (az e2e-módon kívül): 2 perc múlva először (a boot söprései előbb lefutnak), utána percenként. */
+/** Munka közben percenként; tétlenül (nincs futó elem, sem jelölt) a Neon 5 perces elalvási küszöbénél ritkábban (review #349). */
+export const LEGACY_BUSY_MS = 60_000;
+export const LEGACY_IDLE_MS = 30 * 60_000;
+let timer: NodeJS.Timeout | null = null;
+
+/** Indítás a szerverből (az e2e-módon kívül): 2 perc múlva először (a boot söprései előbb lefutnak); `off` módban el sem indul. */
 export function startLegacyMigration(): void {
-  const tick = () => void legacyMigrationTick().catch((error) => logger.error(`[RÉGI→STÚDIÓ] A kör hibája: ${error instanceof Error ? error.message : String(error)}`));
-  setTimeout(() => { tick(); setInterval(tick, 60_000).unref(); }, 120_000).unref();
+  if (LEGACY_MIGRATION_MODE === "off") return;
+  const schedule = (ms: number) => { if (!stopped) { timer = setTimeout(run, ms); timer.unref(); } };
+  const run = () => void legacyMigrationTick()
+    .then((busy) => schedule(busy ? LEGACY_BUSY_MS : LEGACY_IDLE_MS))
+    .catch((error) => { logger.error(`[RÉGI→STÚDIÓ] A kör hibája: ${error instanceof Error ? error.message : String(error)}`); schedule(LEGACY_BUSY_MS); });
+  schedule(120_000);
+}
+
+/** Review #349: a leállítás ELEJÉN — az időzítő törlődik, és a futó kör sem indít több gyártást. */
+export function stopLegacyMigration(): void {
+  stopped = true;
+  if (timer) clearTimeout(timer);
+  timer = null;
 }

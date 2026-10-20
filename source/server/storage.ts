@@ -18,6 +18,7 @@ import {
   systemPrompts,
   improvedHtmlFiles,
   materialImprovementBackups,
+  lessons,
   type HtmlFile,
   type InsertHtmlFile,
   type User,
@@ -1635,6 +1636,10 @@ export class DatabaseStorage implements IStorage {
 
       if (!restored) {
         throw new Error('Failed to restore file');
+      }
+      // Review #349: a Stúdió-leckévé alakított régi anyag visszaállításakor a lecke leválik (nem publikált, nem ehhez az anyaghoz kötött).
+      if (backupData.contentType && backupData.contentType !== 'lesson') {
+        await tx.update(lessons).set({ htmlFileId: null, publishedAt: null }).where(eq(lessons.htmlFileId, backup.originalFileId));
       }
 
       return {

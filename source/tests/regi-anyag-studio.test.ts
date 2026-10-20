@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LEGACY_CONCURRENCY, LEGACY_CUTOFF, LEGACY_EXCLUDED_IDS, LEGACY_MAX_ATTEMPTS, LEGACY_MIGRATION_MODE, LEGACY_PILOT_IDS, legacyBaseline, legacyCandidates, legacySource, reconcileLegacy, type LegacyRow } from "../server/studio/legacy-migration";
+import { LEGACY_BUSY_MS, LEGACY_CONCURRENCY, LEGACY_CUTOFF, LEGACY_IDLE_MS, LEGACY_EXCLUDED_IDS, LEGACY_MAX_ATTEMPTS, LEGACY_MIGRATION_MODE, LEGACY_PILOT_IDS, legacyBaseline, legacyCandidates, legacySource, reconcileLegacy, type LegacyRow } from "../server/studio/legacy-migration";
 import { LEGACY_BACKUP_NOTE, legacyBackupData } from "../server/studio/pipeline-store";
 
 /* Spec 2026-10-20-regi-anyag-studio-atalakitas: a régi anyagok helyben Stúdió-leckévé — a sor tiszta döntései. */
@@ -38,6 +38,8 @@ test("a kapcsoló a próbára áll; az Abigél egyik próba-anyag sem; a korlát
   for (const id of LEGACY_EXCLUDED_IDS) assert.ok(!LEGACY_PILOT_IDS.includes(id));
   assert.ok(LEGACY_CONCURRENCY >= 1 && LEGACY_CONCURRENCY <= 4);
   assert.equal(LEGACY_MAX_ATTEMPTS, 2);
+  // Review #349: tétlenül a Neon 5 perces elalvási küszöbénél ritkábban kérdez.
+  assert.ok(LEGACY_IDLE_MS > 5 * 60_000 && LEGACY_BUSY_MS < LEGACY_IDLE_MS);
 });
 
 test("az egyeztetés: kész cél → kész; élő futás → fut; leállt futás → folytatás / újrakezdés / hiba", () => {
