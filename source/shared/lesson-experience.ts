@@ -44,6 +44,13 @@ export const openTaskSchema = z.object({
   mode: z.enum(["written", "oral"]),
   typedAnswers: z.array(typedAnswerSchema).min(1).max(8).optional(),
   requiredDistinct: z.array(requiredDistinctSchema).min(1).max(6).optional(),
+  /**
+   * Spec 2026-10-20-s4 (S4a): a gépi szigorítással (S3c) felvett, a `required`-ben bent maradt kötelező csoportok. Review #339: a korlát nem
+   * szűkebb a kalibrátornál (blokkoló hibás esetenként 1 csoport, legfeljebb `ANSWER_KEY_LIMITS.wrongMax`, javítókörönként egyesítve).
+   */
+  tightened: z.array(z.array(text(160)).min(1)).min(1).max(20).optional(),
+  /** Spec 2026-10-20-s4 (S4c): az automatikus lazítás nyoma (a szigorított csoport bónuszba került). */
+  relaxedTightening: z.object({ at: z.string().max(40), answered: z.number().int().min(0), falseRejects: z.number().int().min(0) }).optional(),
 });
 export const experienceQuizSchema = z.object({
   ...binding, question: text(), options: z.array(text(500)).min(3).max(4),

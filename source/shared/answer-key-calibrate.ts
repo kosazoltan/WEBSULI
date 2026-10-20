@@ -51,6 +51,7 @@ function guardHolds(task: OpenTask, cases: AnswerKeyCases): boolean {
 }
 
 export type Calibration = { task: OpenTask; changes: string[] };
+type Tightening = Calibration & { tightened: string[][] };
 
 /** A bónuszba sorolás küszöbe: hány helyes esetből kell hiányoznia a csoportnak (alapból legalább 2 — második tulajdonosi döntés 2026-10-15). */
 export type CalibrationOptions = { demoteWhenMissingIn?: (correctCount: number) => number };
@@ -62,13 +63,14 @@ const AT_LEAST_TWO = (n: number) => Math.min(2, n);
  * semmit sem tett. A minta egy olyan szava lesz új kötelező csoport (igazolt rokon alakjaival), amely MINDEN teljes pontos helyes válaszban
  * megvan, a hibás válaszban nincs; csak ha utána a minta és a helyesek teljes pontosak maradnak, a hibás pedig nem. Különben `null`.
  */
-function tighten(task: OpenTask, cases: AnswerKeyCases): Calibration | null {
+function tighten(task: OpenTask, cases: AnswerKeyCases): Tightening | null {
   if (evaluateOpenAnswer(task.sample, task).state !== "ok") return null;
   const okCorrect = cases.correct.filter((a) => evaluateOpenAnswer(a, task).state === "ok");
   // Bizonyíték nélkül nem szigorítunk: legalább 2 (kevesebb esetnél mind) teljes pontos helyes válasz kell, különben a „minden helyesben megvan” üres igazság.
   if (okCorrect.length < Math.max(1, AT_LEAST_TWO(cases.correct.length))) return null;
   let current: OpenTask = { ...task, required: task.required.map((g) => [...g]), bonus: task.bonus.map((g) => [...g]) };
   const changes: string[] = [];
+  const added: string[][] = [];
   // Az aposztrófos összevonás egy szó (review #338: a „mustn't” ne essen „mustn” + „t” részre); a tagadó összevonás és minden aposztrófos
   // alak kimarad (a pontozó normalizálása szétbontja).
   const raw = [...new Set(task.sample.match(/[\p{L}\d]+(?:['’][\p{L}\d]+)*/gu) ?? [])]
@@ -87,19 +89,20 @@ function tighten(task: OpenTask, cases: AnswerKeyCases): Calibration | null {
       if (okCorrect.some((a) => evaluateOpenAnswer(a, next).state !== "ok")) continue;
       if (evaluateOpenAnswer(wrong.text, next).state === "ok") continue;
       current = next;
+      added.push(group);
       changes.push(`szigorítás: + kötelező csoport ${JSON.stringify(group)} (megkülönbözteti a hibás (${wrong.kind}) választ)`);
       fixed = true;
       break;
     }
     if (!fixed) return null;
   }
-  return { task: current, changes };
+  return { task: current, changes, tightened: added };
 }
 
 export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null, options: CalibrationOptions = {}): Calibration {
   if (!cases || isTypedTask(original)) return { task: original, changes: [] };
   // Spec 2026-10-20-eroforras-s3c-rubrika-szigoritas: ha egy hibás eset teljes pontot kap, előbb szigorítunk (különben a rubrika változatlan).
-  const tightened = guardHolds(original, cases) ? { task: original, changes: [] as string[] } : tighten(original, cases);
+  const tightened: Tightening | null = guardHolds(original, cases) ? { task: original, changes: [], tightened: [] } : tighten(original, cases);
   if (!tightened || !guardHolds(tightened.task, cases)) return { task: original, changes: [] };
   let task: OpenTask = { ...tightened.task, required: tightened.task.required.map((g) => [...g]), bonus: tightened.task.bonus.map((g) => [...g]) };
   const changes: string[] = [...tightened.changes];
@@ -146,5 +149,22 @@ export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null
       tryStep({ ...task, minWords: shortest }, `szóminimum ${task.minWords} → ${shortest}`);
     }
   }
-  return { task, changes };
+  // Spec 2026-10-20-s4 (S4a): a szigorítás nyoma a feladaton — a korábbi és az új jelölés egyesítve (review #339), a végső `required`-ben
+  // bent maradt alakkal.
+  const marked = retainTightened([...(original.tightened ?? []), ...tightened.tightened], task.required);
+  const { tightened: _previous, ...untagged } = task;
+  return { task: marked.length ? { ...untagged, tightened: marked } : untagged, changes };
+}
+
+/**
+ * S4a: a szigorítással felvett csoportok közül a `required`-ben bent maradtak, a `required` AKTUÁLIS alakjával (a lazító lépés vagy a
+ * bankjavítás alakot vehet fel: azonos első elem, a régi tagok mind benne). Duplikátum nélkül; a bónuszba sorolt / törölt kimarad.
+ */
+export function retainTightened(tightened: readonly (readonly string[])[], required: readonly (readonly string[])[]): string[][] {
+  const out: string[][] = [];
+  for (const g of tightened) {
+    const hit = required.find((r) => r[0] === g[0] && g.every((m) => r.includes(m)));
+    if (hit && !out.some((o) => JSON.stringify(o) === JSON.stringify(hit))) out.push([...hit]);
+  }
+  return out;
 }
