@@ -58,6 +58,10 @@ export const openTaskSchema = z.object({
     // (a szabály teljesíthetetlen lenne).
     .refine((groups) => { const all = groups.flatMap((g) => [...new Set(g.map(canonicalAlternative))]); return new Set(all).size === all.length; },
       { message: "A sorrendi csoportok (requiredOrder) nem oszthatnak meg alternatívát." })
+    // Review #346: az alternatíva EGY szó — a pozíció így egyértelmű (többszavasnál a közös szó, pl. „víz forralása” / „víz hűtése”, ugyanarra
+    // az előfordulásra mutatna, a sorrend pedig hamisan teljesülhetne vagy bukhatna). A megkülönböztető szót kell megadni (forralás, hűtés).
+    .refine((groups) => groups.every((g) => g.every((a) => canonicalAlternative(a).split(" ").filter(Boolean).length === 1)),
+      { message: "A sorrendi csoportok (requiredOrder) alternatívái egyszavasak legyenek (a megkülönböztető szó)." })
     .optional(),
   /** S5b: a gépi szigorítással felvett, a `requiredPhrases`-ben bent maradt kifejezéscsoportok (S4 mérés / lazítás). */
   tightenedPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).optional(),

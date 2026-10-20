@@ -46,6 +46,14 @@
   - lazítás: a sorrendi feltétel fogalomcsoporttá alakul (a sorrendi csoportok és a többi kötelező fogalom tagjai) — a
     feltételszám változatlan, a pont nem csökken.
 
+## Review #346 (pontosítás)
+- **Egyszavas alternatívák:** a `requiredOrder` alternatívái egyszavasak (a megkülönböztető szó), ezt a séma kikényszeríti. A
+  többszavas alternatívánál a közös szó (pl. „víz forralása” / „víz hűtése”) ugyanarra az előfordulásra mutatna, így a sorrend hamisan
+  bukna vagy teljesülne.
+- **Nincs közös alternatíva** két csoport között.
+- **Bankjavítás:** a lektor által nem érintett tétel javítása nem hagyhatja el a `requiredOrder` / `requiredPhrases` szabályt (öröklődik).
+- **A döntőbíró továbbra is emelhet** (a helyes, más szórendű megfogalmazásért); a SORREND utasítás és a gyorsítótár-kulcs védi.
+
 ## Nem-cél
 - Nyelvtani elemzés vagy modellalapú pontozás.
 - A kifejezéses szabály (S5) magyar engedélyezése.

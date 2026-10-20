@@ -120,3 +120,12 @@ test("review #346: a lektor által nem érintett tétel javítása nem hagyhatja
   const reviewed = applyBankPacketRepair(original, { tasks: [{ ...without, sample: `${t0.sample} Bővítve.` }] }, new Set([t0.id]));
   assert.equal(reviewed.tasks[0].requiredOrder, undefined, "a lektor által kifogásolt tételnél a javítás dönt");
 });
+
+test("review #346: a sorrendi alternatíva egyszavas — a többszavas (közös szóra mutató) alak érvénytelen; a megkülönböztető szóval helyes", () => {
+  assert.equal(openTaskSchema.safeParse(task({ requiredOrder: [["víz forralása"], ["víz hűtése"]] })).success, false);
+  const t = task({ q: "Mi a sorrend?", required: [["forralás", "forralása", "forraljuk"], ["hűtés", "hűtése", "hűtjük"]], sample: "Először a víz forralása, utána a víz hűtése.",
+    requiredOrder: [["forralás", "forralása", "forraljuk"], ["hűtés", "hűtése", "hűtjük"]] });
+  assert.ok(openTaskSchema.safeParse(t).success);
+  assert.equal(evaluateOpenAnswer(t.sample, t).state, "ok", "a minta teljes pont");
+  assert.equal(missingOrder("Először a víz hűtése, utána a víz forralása.", t), true, "fordított sorrend");
+});
