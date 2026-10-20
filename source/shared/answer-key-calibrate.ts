@@ -5,7 +5,7 @@
  */
 import { blockingWrongCases, type AnswerKeyCases } from "./answer-key-tests";
 import type { OpenTask } from "./lesson-experience";
-import { ENGLISH_NEGATIONS, ENGLISH_WEAK_NEGATIONS, SENTENCE_CONNECTIVES, evaluateOpenAnswer, isComputedTask, missingAnswerConcepts, normalizeAnswer } from "./lesson-experience-score";
+import { ENGLISH_NEGATIONS, ENGLISH_WEAK_NEGATIONS, SENTENCE_CONNECTIVES, evaluateOpenAnswer, isComputedTask, missingAnswerConcepts, missingPhrases, normalizeAnswer, normalizeAnswerV2 } from "./lesson-experience-score";
 import { inflectedForms, synonymsOf } from "./hu-lexicon";
 
 const NEGATIONS = new Set(["nem", "ne", "sem", "se", "nincs", "sincs"]);
@@ -17,6 +17,20 @@ const NEGATIONS = new Set(["nem", "ne", "sem", "se", "nincs", "sincs"]);
 const NOT_DISTINGUISHING = new Set<string>([
   ...NEGATIONS, ...ENGLISH_NEGATIONS, ...ENGLISH_WEAK_NEGATIONS, ...SENTENCE_CONNECTIVES, "és", "ezért", "így", "míg", "tehát",
 ]);
+/**
+ * S5b: a kifejezéses szigorításból kizárt tagadásjelek minden támogatott nyelven (review #342) — normalizált (ékezet nélküli, kisbetűs)
+ * v2-tokenek. Angol + német, francia, spanyol, olasz; az aposztrófos összevonás maradéka („t”: mustn't, „n”: n'est) is tagadásjel.
+ */
+const NOT_DISTINGUISHING_NEGATION = new Set<string>([
+  ...ENGLISH_NEGATIONS, ...ENGLISH_WEAK_NEGATIONS, "t", "n",
+  "nicht", "kein", "keine", "keinen", "keinem", "keiner", "keines", "nie", "niemals", "nichts",
+  "ne", "pas", "non", "jamais", "rien", "aucun", "aucune", "ni",
+  "nunca", "nada", "ninguno", "ninguna", "ningun", "tampoco", "jamas",
+  "mai", "niente", "nulla", "nessuno", "nessuna",
+]);
+/** S5b: a `requiredPhrases` sémahatárai (`openTaskSchema`): legfeljebb 8 csoport, kifejezésenként legfeljebb 80 karakter. */
+const PHRASE_GROUPS_MAX = 8;
+const PHRASE_LENGTH_MAX = 80;
 const isDistinguishingCandidate = (word: string) => {
   const n = normalizeAnswer(word);
   return n.length >= 2 && !/\d/.test(n) && !NOT_DISTINGUISHING.has(word.toLowerCase());
@@ -51,10 +65,17 @@ function guardHolds(task: OpenTask, cases: AnswerKeyCases): boolean {
 }
 
 export type Calibration = { task: OpenTask; changes: string[] };
-type Tightening = Calibration & { tightened: string[][] };
+type Tightening = Calibration & { tightened: string[][]; tightenedPhrases: string[][] };
 
 /** A bónuszba sorolás küszöbe: hány helyes esetből kell hiányoznia a csoportnak (alapból legalább 2 — második tulajdonosi döntés 2026-10-15). */
-export type CalibrationOptions = { demoteWhenMissingIn?: (correctCount: number) => number };
+export type CalibrationOptions = {
+  demoteWhenMissingIn?: (correctCount: number) => number;
+  /**
+   * S5b: kifejezéses (sorrendes) szigorítás — csak idegen nyelvi leckén (a hívó a lecke nyelvéből dönti el). A magyar szórend szabad
+   * („változatlan marad” = „marad változatlan”), ott a sorrend nem megkülönböztető jel.
+   */
+  phrases?: boolean;
+};
 const AT_LEAST_TWO = (n: number) => Math.min(2, n);
 
 /**
@@ -63,7 +84,7 @@ const AT_LEAST_TWO = (n: number) => Math.min(2, n);
  * semmit sem tett. A minta egy olyan szava lesz új kötelező csoport (igazolt rokon alakjaival), amely MINDEN teljes pontos helyes válaszban
  * megvan, a hibás válaszban nincs; csak ha utána a minta és a helyesek teljes pontosak maradnak, a hibás pedig nem. Különben `null`.
  */
-function tighten(task: OpenTask, cases: AnswerKeyCases): Tightening | null {
+function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tightening | null {
   if (evaluateOpenAnswer(task.sample, task).state !== "ok") return null;
   const okCorrect = cases.correct.filter((a) => evaluateOpenAnswer(a, task).state === "ok");
   // Bizonyíték nélkül nem szigorítunk: legalább 2 (kevesebb esetnél mind) teljes pontos helyes válasz kell, különben a „minden helyesben megvan” üres igazság.
@@ -71,6 +92,7 @@ function tighten(task: OpenTask, cases: AnswerKeyCases): Tightening | null {
   let current: OpenTask = { ...task, required: task.required.map((g) => [...g]), bonus: task.bonus.map((g) => [...g]) };
   const changes: string[] = [];
   const added: string[][] = [];
+  const addedPhrases: string[][] = [];
   // Az aposztrófos összevonás egy szó (review #338: a „mustn't” ne essen „mustn” + „t” részre); a tagadó összevonás és minden aposztrófos
   // alak kimarad (a pontozó normalizálása szétbontja).
   const raw = [...new Set(task.sample.match(/[\p{L}\d]+(?:['’][\p{L}\d]+)*/gu) ?? [])]
@@ -94,15 +116,58 @@ function tighten(task: OpenTask, cases: AnswerKeyCases): Tightening | null {
       fixed = true;
       break;
     }
+    // Spec 2026-10-20-s5-sorrendes-kifejezes (S5b): ha szó nem különböztet meg (azonos szavak, más alak / sorrend: „there are a sofa”),
+    // a minta 3- és 2-tokenes, egymás utáni kifejezései közül az első, amely minden teljes pontos helyesben EGYMÁS UTÁN megvan, a hibásban
+    // nincs, és felvétele után a minta / a helyesek ok, a hibás nem.
+    // Review #342 (P1): a csoportszám sémahatárán (8) nincs kifejezéses szigorítás — a javítókör dönt, érvénytelen feladat nem keletkezik.
+    const room = (current.requiredPhrases?.length ?? 0) < PHRASE_GROUPS_MAX;
+    for (const phrase of fixed || !phrases || !room ? [] : phraseCandidates(task.sample)) {
+      const probe = { requiredPhrases: [[phrase]] };
+      if (missingPhrases(wrong.text, probe).length === 0) continue;
+      if (okCorrect.some((a) => missingPhrases(a, probe).length > 0)) continue;
+      const next: OpenTask = { ...current, requiredPhrases: [...(current.requiredPhrases ?? []), [phrase]] };
+      if (evaluateOpenAnswer(next.sample, next).state !== "ok") continue;
+      if (okCorrect.some((a) => evaluateOpenAnswer(a, next).state !== "ok")) continue;
+      if (evaluateOpenAnswer(wrong.text, next).state === "ok") continue;
+      current = next;
+      addedPhrases.push([phrase]);
+      changes.push(`szigorítás (kifejezés): + requiredPhrases ${JSON.stringify([phrase])} (megkülönbözteti a hibás (${wrong.kind}) választ)`);
+      fixed = true;
+      break;
+    }
     if (!fixed) return null;
   }
-  return { task: current, changes, tightened: added };
+  return { task: current, changes, tightened: added, tightenedPhrases: addedPhrases };
+}
+
+/** S5b: a minta egymás utáni 3- és 2-tokenes kifejezései (v2-tokenek, műveleti jel nélkül), legalább egy nem kötőszó tokennel; a hosszabb előre. */
+function phraseCandidates(sample: string): string[] {
+  const tokens = normalizeAnswerV2(sample).split(/\s+/).filter((t) => t && /\p{L}/u.test(t));
+  // Review #342: a tagadó összevonás MINDKÉT töredéke tagadásjel („mustn t”: a „mustn” is) — a „t” előtti pozíció is tiltott, hogy az
+  // ablak ne végződhessen az első töredéken („the pupils mustn”).
+  const negated = new Set<number>();
+  tokens.forEach((t, i) => {
+    if (NEGATIONS.has(t) || NOT_DISTINGUISHING_NEGATION.has(t)) negated.add(i);
+    if (t === "t" && i > 0) negated.add(i - 1);
+  });
+  const out: string[] = [];
+  for (const n of [3, 2]) for (let i = 0; i + n <= tokens.length; i++) {
+    const gram = tokens.slice(i, i + n);
+    if (gram.every((t) => NOT_DISTINGUISHING.has(t))) continue;
+    // Tagadás nem lehet a megkülönböztető kifejezés része (S3c-szerződés, review #338: a „mustn t run” egy helyes „must not run”-t is
+    // elutasítana) — a tagadószó és az összevonás mindkét töredéke.
+    if (gram.some((_, k) => negated.has(i + k))) continue;
+    const phrase = gram.join(" ");
+    if (phrase.length > PHRASE_LENGTH_MAX) continue; // review #342: a séma kifejezés-hosszkorlátja
+    if (!out.includes(phrase)) out.push(phrase);
+  }
+  return out;
 }
 
 export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null, options: CalibrationOptions = {}): Calibration {
   if (!cases || isComputedTask(original)) return { task: original, changes: [] };
   // Spec 2026-10-20-eroforras-s3c-rubrika-szigoritas: ha egy hibás eset teljes pontot kap, előbb szigorítunk (különben a rubrika változatlan).
-  const tightened: Tightening | null = guardHolds(original, cases) ? { task: original, changes: [], tightened: [] } : tighten(original, cases);
+  const tightened: Tightening | null = guardHolds(original, cases) ? { task: original, changes: [], tightened: [], tightenedPhrases: [] } : tighten(original, cases, options.phrases === true);
   if (!tightened || !guardHolds(tightened.task, cases)) return { task: original, changes: [] };
   let task: OpenTask = { ...tightened.task, required: tightened.task.required.map((g) => [...g]), bonus: tightened.task.bonus.map((g) => [...g]) };
   const changes: string[] = [...tightened.changes];
@@ -152,8 +217,20 @@ export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null
   // Spec 2026-10-20-s4 (S4a): a szigorítás nyoma a feladaton — a korábbi és az új jelölés egyesítve (review #339), a végső `required`-ben
   // bent maradt alakkal.
   const marked = retainTightened([...(original.tightened ?? []), ...tightened.tightened], task.required);
-  const { tightened: _previous, ...untagged } = task;
-  return { task: marked.length ? { ...untagged, tightened: marked } : untagged, changes };
+  // S5b: a kifejezéses szigorítás nyoma — csak a `requiredPhrases`-ben (pontosan) bent maradt kifejezés.
+  const markedPhrases = retainTightenedPhrases([...(original.tightenedPhrases ?? []), ...tightened.tightenedPhrases], task.requiredPhrases ?? []);
+  const { tightened: _previous, tightenedPhrases: _previousPhrases, ...untagged } = task;
+  return { task: { ...untagged, ...(marked.length ? { tightened: marked } : {}), ...(markedPhrases.length ? { tightenedPhrases: markedPhrases } : {}) }, changes };
+}
+
+/** S5b: a kifejezéses szigorítás csoportjai közül a `requiredPhrases`-ben bent maradtak (a csoport aktuális alakjával). */
+export function retainTightenedPhrases(tightened: readonly (readonly string[])[], phrases: readonly (readonly string[])[]): string[][] {
+  const out: string[][] = [];
+  for (const g of tightened) {
+    const hit = phrases.find((r) => g.every((m) => r.includes(m)));
+    if (hit && !out.some((o) => JSON.stringify(o) === JSON.stringify(hit))) out.push([...hit]);
+  }
+  return out;
 }
 
 /**
