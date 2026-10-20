@@ -20,3 +20,15 @@ Terv: `docs/specs/2026-10-20-pontozo-angol-tagadas.md`. Munkakönyvtár: `source
    - A `tests/lesson-html-score.test.ts` változatlanul zöld.
 4. **Ellenőrzés:** `check`, `check:test`, `eslint`, `npm test`, `build`.
 5. **Kitelepítés:** az aktív-futás őr = 0.
+
+## Review #330 — pontosítás
+- **Felismerés a nyers szövegből:** a tagadást a NYERS szövegből ismerjük fel; a kisbetűs szavakban az ékezet és az aposztróf
+  megmarad (`negationKind(text, { weak })`).
+  - n't csak valódi aposztrófos összevonás (`mustn't`, `don't`).
+  - A „PIN-t”, a „dönt” és a „legyen t” így nem tagadás.
+- **Gyenge tagadószavak:** no, never, nothing, nobody, none, nowhere, neither, nor.
+  - Az angolul tagadó mintánál a válaszban ezek is tagadásnak számítanak („There is no water” ↔ „There isn't any water”,
+    „You must never run” ↔ „You must not run”).
+  - Az állító mintánál az ilyen szót tartalmazó minta nem számít állítónak.
+  - A magyar „nő” ékezetes, így nem „no”.
+- **Paritás és teszt:** az `ee_evaluate` ugyanezt teszi. A teszt a fenti hamis eseteket v1-re és HTML-paritásra is ellenőrzi.
