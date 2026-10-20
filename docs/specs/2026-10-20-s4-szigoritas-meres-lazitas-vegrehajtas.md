@@ -41,7 +41,9 @@ Két PR:
    - `recordTaskResults(lessonId, roundKey, rows)`: `insert … onConflictDoNothing`, csak a lecke feladatai;
    - `maybeRelaxTightening(lessonId, taskIds)`: feladatonként számlál (`count(*)`, `count(*) filter (where tightened_only_miss and
      arbiter_raised and final_state = 'ok')`); a küszöb `RELAX_MIN_ANSWERED = 20`, `RELAX_FALSE_REJECT_RATE = 0.4`;
-   - lazítás: `db.transaction` + `select … for update` a leckére, újraellenőrzés, a csoportok áthelyezése, `version + 1`, napló.
+   - lazítás: `runToolWorkflow({ mode: "relax" })` alatt (S7). Lépések: `source` → `gate` → `apply` → `readback`; az `apply`-ban
+     `db.transaction` + `workflowFence` + `select … for update`, újraellenőrzés, a csoportok áthelyezése, `version + 1`, napló.
+     Új mód: `shared/lesson-workflow.ts` (`relax`, eredmény: `material`).
    - Tiszta függvény a lazításhoz: `relaxTask(task, stats, now)` — tesztelhető DB nélkül.
 4. **`server/lesson-result-email.ts` `/:lessonId/results`:**
    - `kind = "tasks"` esetén a válasz után (nem blokkolva) `recordTaskResults` → `maybeRelaxTightening`;

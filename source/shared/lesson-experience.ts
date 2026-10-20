@@ -50,7 +50,12 @@ export const openTaskSchema = z.object({
    */
   tightened: z.array(z.array(text(160)).min(1)).min(1).max(20).optional(),
   /** Spec 2026-10-20-s4 (S4c): az automatikus lazítás nyoma (a szigorított csoport bónuszba került). */
-  relaxedTightening: z.object({ at: z.string().max(40), answered: z.number().int().min(0), falseRejects: z.number().int().min(0) }).optional(),
+  relaxedTightening: z.object({
+    at: z.string().max(40), answered: z.number().int().min(0), falseRejects: z.number().int().min(0),
+    /** Review #340: a lazítás előtti `required` és a hatástalanított csoportok — ugyanabban a tranzakcióban mentett, pontosan visszaállítható előállapot. */
+    previousRequired: z.array(z.array(text(160)).min(1)).min(1).optional(),
+    groups: z.array(z.array(text(160)).min(1)).min(1).optional(),
+  }).optional(),
 });
 export const experienceQuizSchema = z.object({
   ...binding, question: text(), options: z.array(text(500)).min(3).max(4),

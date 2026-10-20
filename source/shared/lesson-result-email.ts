@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
-import { evaluateOpenAnswer, scoreSummary, type AnswerScore } from "./lesson-experience-score";
+import { evaluateOpenAnswer, missingAnswerConcepts, scoreSummary, type AnswerScore } from "./lesson-experience-score";
 
 /**
  * Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — tiszta modul, DB és hálózat nélkül:
@@ -19,8 +20,31 @@ type OpenTask = Parameters<typeof evaluateOpenAnswer>[1] & { id: string; q: stri
 type QuizItem = { id: string; question: string; options: string[]; correctIndex: number };
 export type ArbiterLookup = (task: OpenTask, answer: string) => { state: AnswerScore["state"]; score: number } | null | undefined;
 
-export type GradedTasks = { kind: "tasks"; rows: Array<{ q: string; answer: string; state: AnswerScore["state"]; score: number }>; summary: ReturnType<typeof scoreSummary> };
+/**
+ * Spec 2026-10-20-s4 (S4b): a sor a levél mezői mellett a feladatszintű méréshez is ad adatot — `detState` (a pontozó ítélete),
+ * `arbiterRaised` (a döntőbíró emelte), `tightenedOnlyMiss` (a pontozó csak a gépileg szigorított csoport(ok) hiánya miatt nem adott teljes
+ * pontot). A levél (`buildResultEmail`) ezeket nem használja.
+ */
+export type GradedTaskRow = { taskId: string; q: string; answer: string; state: AnswerScore["state"]; score: number; detState: AnswerScore["state"]; arbiterRaised: boolean; tightenedOnlyMiss: boolean; rubricHash: string };
+
+/** Review #340: a feladat pontozási lenyomata — a statisztika csak az AKTUÁLIS rubrikára adott eredményeket számolja. */
+export function rubricHash(task: OpenTask): string {
+  return createHash("sha256").update(JSON.stringify([task.q, task.sample, task.required, task.bonus, task.minWords, task.needsSentence, task.typedAnswers ?? null, task.requiredDistinct ?? null])).digest("hex");
+}
+export type GradedTasks = { kind: "tasks"; rows: GradedTaskRow[]; summary: ReturnType<typeof scoreSummary> };
 export type GradedQuiz = { kind: "quiz"; wrong: Array<{ question: string; picked: string | null; correct: string }>; summary: ReturnType<typeof scoreSummary> };
+
+/** S4b: a pontozó csak a gépi szigorítással (S3c) felvett csoport(ok) hiánya miatt nem adott teljes pontot (JSON-egyezés a `tightened`-del). */
+export function tightenedOnlyMiss(task: OpenTask, answer: string, detState: AnswerScore["state"]): boolean {
+  if (detState === "ok" || !answer || !task.tightened?.length) return false;
+  const tightened = new Set(task.tightened.map((g) => JSON.stringify(g)));
+  const missing = missingAnswerConcepts(answer, task);
+  if (!missing.length || !missing.every((g) => tightened.has(JSON.stringify(g)))) return false;
+  // Review #340 (P1): ellenpróba — a szigorított csoportok nélkül a pontozó teljes pontot adna (különben más ok is van: hossz, mondat,
+  // tagadás…, és a döntőbírói emelés nem a szigorítás téves elutasítása).
+  const required = task.required.filter((g) => !tightened.has(JSON.stringify(g)));
+  return required.length > 0 && evaluateOpenAnswer(answer, { ...task, required }).state === "ok";
+}
 
 /** Csak az ismert feladatokat pontozza; a döntőbíró gyorsítótár-ítélete (ha van) csak emelhet — mint a tanuló képernyőjén. */
 export function gradeTasks(tasks: readonly OpenTask[], answers: Record<string, string>, arbiter?: ArbiterLookup): GradedTasks {
@@ -31,8 +55,9 @@ export function gradeTasks(tasks: readonly OpenTask[], answers: Record<string, s
     const answer = raw.trim();
     const det = evaluateOpenAnswer(answer, task);
     const arb = answer ? arbiter?.(task, answer) : null;
-    const best = arb && arb.score > det.score ? { state: arb.state, score: arb.score } : { state: det.state, score: det.score };
-    rows.push({ q: task.q, answer, ...best });
+    const raised = Boolean(arb && arb.score > det.score);
+    const best = raised ? { state: arb!.state, score: arb!.score } : { state: det.state, score: det.score };
+    rows.push({ taskId, q: task.q, answer, ...best, detState: det.state, arbiterRaised: raised, tightenedOnlyMiss: tightenedOnlyMiss(task, answer, det.state), rubricHash: rubricHash(task) });
   }
   return { kind: "tasks", rows, summary: scoreSummary(rows.reduce((s, r) => s + r.score, 0), rows.length) };
 }

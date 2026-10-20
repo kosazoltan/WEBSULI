@@ -46,10 +46,38 @@ Előzmény: S3c (#338, `docs/specs/2026-10-20-eroforras-s3c-rubrika-szigoritas.m
 - **Mikor fut:** a rögzítés után minden szigorított (`tightened`) feladatra.
 - **Feltétel:** `megválaszolt ≥ 20` és `téves elutasítás / megválaszolt ≥ 0,4`.
 - **Mit tesz:** tranzakcióban, sorzárral (`for update`):
-  - a `tightened` csoportokat a `required`-ből a `bonus`-ba teszi (legalább 1 kötelező csoport marad);
+  - a `tightened` csoportokat hatástalanítja (lásd a review #340 pontosítást; korábban: bónuszba sorolás);
   - törli a `tightened` mezőt, és felveszi a `relaxedTightening: { at, answered, falseRejects }` mezőt;
   - `lessons.version + 1`, naplóbejegyzés.
 - **Hatás a tanulóra:** csak emelhet pontot (a csoport bónusz lesz). A folyamatban lévő kör a szerveren a friss leckével pontozódik.
+- **Workflow (S7-szabály, `tests/s7-workflow-guard.test.ts`):** élő lecke gépi módosítása csak workflow alatt — új `relax` mód
+  (forrás → kapu → alkalmazás → visszaolvasás), `workflowFence` a tranzakcióban.
+  - A futás tulajdonosa a lecke gyártója: a tudástár-térkép `createdBy`, különben az anyag `userId`. Ha egyik sincs, nincs lazítás
+    (napló).
+  - Ha nincs teendő (már lazított), workflow-futás sem indul.
+
+## Review #340 (pontosítás)
+- **Közreműködőnkénti küszöb (P1):** a kör-azonosítót a kliens választja, ezért a küszöb KÜLÖNBÖZŐ közreműködőket számol.
+  - Új oszlop: `task_results.contributor` — álnevesített, kulcsolt lenyomat (HMAC, `SESSION_SECRET`).
+  - Forrása: bejelentkezve a felhasználó, párosítva a tanuló, vendégnél az IP. NEM a kliens által küldött ujjlenyomat.
+  - Visszafejthető felhasználó-azonosító továbbra sincs a táblában.
+- **A pont sehol sem csökkenhet (P1):** a pontozó részpont-küszöbe a kötelező csoportok fele, ezért a csoport kivétele páros esetben
+  0,5 → 0 pontot adhatna. A lazítás ezért a csoportot NEM veszi ki és nem sorolja bónuszba, hanem HATÁSTALANÍTJA: kibővíti az összes
+  többi kötelező csoport tagjaival.
+  - A csoportszám változatlan, és minden válasz találatszáma legalább a régi, így a pont nem csökken.
+  - Aki a többi kötelező fogalmat eltalálja, a szigorított szó nélkül is teljes pontot kap.
+  - Ha nincs nem szigorított kötelező csoport, nincs lazítás.
+- **Rubrika-lenyomat (P2):** a `task_results.rubric_hash` a feladat pontozási lenyomata. A küszöb csak az aktuális rubrikára adott
+  eredményekből számol, és a sorzár alatt is ellenőrzi az egyezést.
+- **Előállapot (P2):** a `relaxedTightening.previousRequired` és `groups` ugyanabban a tranzakcióban menti a lazítás előtti `required`
+  mezőt, így pontosan visszaállítható. Visszaállításkor a jelenlegi `required` egyezését a lazított állapottal ellenőrizni kell. A
+  visszaállító felület nem része ennek a szeletnek.
+- **Kerítés és visszaolvasás (P2):**
+  - `workflowFence` a tranzakció elején és a visszatérés előtt;
+  - a `readback` a mentett verziót és a lazítás nyomát olvassa vissza;
+  - a hiányzó lecke a futás hibája.
+- **Ellenpróba (P1):** a „csak a szigorítás miatt bukott” jel csak akkor igaz, ha a szigorított csoportok nélkül a pontozó teljes
+  pontot adna. Ha a válasz más ok miatt is bukik (hossz, mondat, tagadás), az nem téves elutasítás.
 
 ## Nem-cél
 - A pontozó (`evaluateOpenAnswer`) és a döntőbíró nem változik.
