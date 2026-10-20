@@ -1,4 +1,5 @@
 import { withLessonTypography } from "../shared/lesson-typography";
+import { isAutomatedUserAgent } from "./lib/automated-agent";
 import { registerLessonFontAssets } from "./lesson-font-assets";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
@@ -2933,7 +2934,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // BACKLOG T2 (2026-09-02): ugyanaz az IP + anyag 1 órán belül csak egyszer számít —
         // eddig minden GET egy sort írt, rate-limit nélkül (spam / statisztika-torzítás).
-        if (materialViewDedup.shouldRecord(`${req.ip ?? 'unknown'}|${file.id}`)) {
+        // Spec 2026-10-20-robot-megtekintes: robot / link-előnézet / parancssor nem számít megtekintésnek (a tartalmat megkapja).
+        if (isAutomatedUserAgent(userAgent)) {
+          logger.debug(`[TRACKING] Automatikus kliens, a megtekintés nem rögzül: ${String(userAgent ?? '').slice(0, 80)}`);
+        } else if (materialViewDedup.shouldRecord(`${req.ip ?? 'unknown'}|${file.id}`)) {
           // Create material view record with NULL userId for anonymous
           await storage.createMaterialView({
             userId: null, // NULL for anonymous users (schema allows nullable)
