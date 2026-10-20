@@ -530,7 +530,10 @@ ${originalFile.content}
     // Spec 2026-10-19-okositas-bank-igazitas: a rubrikák gépi igazítása a saját mintájukhoz a kapu ELŐTT (Stúdió-ággal azonos lépés).
     const { alignHtmlLessonBank } = await import('./improve/align-html-bank');
     const alignment = alignHtmlLessonBank(improvedHtml);
-    if (alignment.aligned.length > 0) {
+    if (alignment.aligned.length + alignment.narrowed.length + alignment.modeFlipped.length + alignment.dropped.length > 0) {
+      logger.info(`[IMPROVE] Record ${dbRecordId}: gépi bankjavítás — szűkítve: ${alignment.narrowed.join(', ') || '-'}; módváltás: ${alignment.modeFlipped.join(', ') || '-'}; elhagyva: ${alignment.dropped.join(', ') || '-'}`);
+    }
+    if (alignment.html !== improvedHtml) {
       improvedHtml = alignment.html;
       logger.info(`[IMPROVE] Record ${dbRecordId}: rubrika a mintához igazítva: ${alignment.aligned.join(', ')}`);
     }
