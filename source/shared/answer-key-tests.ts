@@ -30,23 +30,30 @@ export function sanitizeAnswerKeyCases(raw: unknown): AnswerKeyCases | null {
 }
 
 /**
+ * J1: a blokkolásra jogosult hibás esetek — kimarad, amely egy teljes pontos helyes válasz minden szavát tartalmazza (ezt semmilyen
+ * szócsoport-rubrika nem utasíthatja el). Közös predikátum: az `answerKeyProblems` és a gépi kalibráció őre (S3c, review #338) is ezt használja.
+ */
+export function blockingWrongCases(task: OpenTask, cases: AnswerKeyCases): AnswerKeyCases["wrong"] {
+  const fullCorrect = cases.correct.filter((answer) => evaluateOpenAnswer(answer, task).state === "ok");
+  return cases.wrong.filter((wrong) => !fullCorrect.some((answer) => answerTokensCover(wrong.text, answer)));
+}
+
+/**
  * A tesztek ítélete: minden helyes eset teljes pontot kap, és egyik hibás sem. Az üzenet a bank meglévő `"<id>: …"` alakját követi,
  * így a javítókör és a kivétel (salvage) változatlanul kezeli. A számolós (`typedAnswers`) feladat kimarad (T5).
  */
 export function answerKeyProblems(task: OpenTask, cases: AnswerKeyCases | null): string[] {
   if (!cases || isTypedTask(task)) return [];
   const problems: string[] = [];
-  const fullCorrect = cases.correct.filter((answer) => evaluateOpenAnswer(answer, task).state === "ok");
   for (const answer of cases.correct) {
     const score = evaluateOpenAnswer(answer, task);
     if (score.state !== "ok") {
       problems.push(`${task.id}: válaszkulcs-teszt: a helyes válasz ${quote(answer)} nem kap teljes pontot (${score.reason}; a rubrika fel nem ismert csoportjai: ${JSON.stringify(missingAnswerConcepts(answer, task))}). Bővítsd a rubrikát a helyes megfogalmazásokkal, vagy tedd a kérdést egyértelművé.`);
     }
   }
-  for (const wrong of cases.wrong) {
-    // J1: a pontozóval elvben megkülönböztethetetlen hibás próba (egy teljes pontos helyes válasz minden szavát tartalmazza) nem blokkol —
-    // ezt semmilyen szócsoport-rubrika nem utasíthatja el; `answerKeyNotes` jelenti tájékoztatásként.
-    if (fullCorrect.some((answer) => answerTokensCover(wrong.text, answer))) continue;
+  // J1: a pontozóval elvben megkülönböztethetetlen hibás próba (egy teljes pontos helyes válasz minden szavát tartalmazza) nem blokkol —
+  // ezt semmilyen szócsoport-rubrika nem utasíthatja el; `answerKeyNotes` jelenti tájékoztatásként.
+  for (const wrong of blockingWrongCases(task, cases)) {
     if (evaluateOpenAnswer(wrong.text, task).state === "ok") {
       problems.push(`${task.id}: válaszkulcs-teszt: a hibás (${KIND_HU[wrong.kind]}) válasz ${quote(wrong.text)} teljes pontot kap — a rubrika túl megengedő; tegyél kötelező csoportba olyan elemet, amely a helyes választ megkülönbözteti.`);
     }

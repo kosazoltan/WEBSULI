@@ -3,12 +3,24 @@
  * a nyílt feladat rubrikája a válaszkulcs-tesztesetekből, MODELLHÍVÁS NÉLKÜL igazodik. Minden lépés után őr: a minta teljes pontot kap, és
  * egyik hibás eset sem — ha sérül, az adott lépés visszavonódik. A pontozó nem változik (a régi leckék pontozása azonos).
  */
-import type { AnswerKeyCases } from "./answer-key-tests";
+import { blockingWrongCases, type AnswerKeyCases } from "./answer-key-tests";
 import type { OpenTask } from "./lesson-experience";
-import { evaluateOpenAnswer, isTypedTask, missingAnswerConcepts, normalizeAnswer } from "./lesson-experience-score";
+import { ENGLISH_NEGATIONS, ENGLISH_WEAK_NEGATIONS, SENTENCE_CONNECTIVES, evaluateOpenAnswer, isTypedTask, missingAnswerConcepts, normalizeAnswer } from "./lesson-experience-score";
 import { inflectedForms, synonymsOf } from "./hu-lexicon";
 
 const NEGATIONS = new Set(["nem", "ne", "sem", "se", "nincs", "sincs"]);
+/**
+ * S3c: szigorításra nem jelölhető szavak — tagadás (az irány nem tagadással cserélhető) és kötőszó/névelő (nem tartalom). A NYERS kisbetűs
+ * alakkal vetjük össze (review #338): ékezet nélkül a „nő” „no”, az „ón” „on”, az „ín” „in” lenne — ezek tartalmi szavak. A kötőszólista
+ * ékezet nélküli magyar elemei ezért ékezetes alakjukkal is szerepelnek.
+ */
+const NOT_DISTINGUISHING = new Set<string>([
+  ...NEGATIONS, ...ENGLISH_NEGATIONS, ...ENGLISH_WEAK_NEGATIONS, ...SENTENCE_CONNECTIVES, "és", "ezért", "így", "míg", "tehát",
+]);
+const isDistinguishingCandidate = (word: string) => {
+  const n = normalizeAnswer(word);
+  return n.length >= 2 && !/\d/.test(n) && !NOT_DISTINGUISHING.has(word.toLowerCase());
+};
 const words = (s: string) => normalizeAnswer(s).split(/\s+/).filter(Boolean);
 
 /** Közös szótő: közös kezdet ≥ 5 betű, és mindkét szó maradéka legfeljebb 5 betű (a „rovar” nem rokona a „rovarbeporzás”-nak). */
@@ -33,9 +45,9 @@ function relatedForms(group: readonly string[], answer: string): string[] {
   return [...out].filter((f) => !existing.has(normalizeAnswer(f)));
 }
 
-/** Az őr: a minta `ok`, egyik hibás eset sem `ok`. */
+/** Az őr: a minta `ok`, egyik BLOKKOLÓ hibás eset sem `ok` (J1: ugyanaz a predikátum, mint az `answerKeyProblems`-ben — review #338). */
 function guardHolds(task: OpenTask, cases: AnswerKeyCases): boolean {
-  return evaluateOpenAnswer(task.sample, task).state === "ok" && cases.wrong.every((w) => evaluateOpenAnswer(w.text, task).state !== "ok");
+  return evaluateOpenAnswer(task.sample, task).state === "ok" && blockingWrongCases(task, cases).every((w) => evaluateOpenAnswer(w.text, task).state !== "ok");
 }
 
 export type Calibration = { task: OpenTask; changes: string[] };
@@ -44,10 +56,53 @@ export type Calibration = { task: OpenTask; changes: string[] };
 export type CalibrationOptions = { demoteWhenMissingIn?: (correctCount: number) => number };
 const AT_LEAST_TWO = (n: number) => Math.min(2, n);
 
-export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null, options: CalibrationOptions = {}): Calibration {
-  if (!cases || isTypedTask(original) || !guardHolds(original, cases)) return { task: original, changes: [] };
-  let task: OpenTask = { ...original, required: original.required.map((g) => [...g]), bonus: original.bonus.map((g) => [...g]) };
+/**
+ * Spec 2026-10-20-eroforras-s3c-rubrika-szigoritas: a teljes pontot kapó HIBÁS válasz kizárása modellhívás nélkül. Mért: a bank javítóköreinek
+ * fő oka a „fordított irányú” (irányszót cserélő: „csökken” a „nő” helyett) teljes pontos hibás válasz volt, és a kalibráció ilyenkor
+ * semmit sem tett. A minta egy olyan szava lesz új kötelező csoport (igazolt rokon alakjaival), amely MINDEN teljes pontos helyes válaszban
+ * megvan, a hibás válaszban nincs; csak ha utána a minta és a helyesek teljes pontosak maradnak, a hibás pedig nem. Különben `null`.
+ */
+function tighten(task: OpenTask, cases: AnswerKeyCases): Calibration | null {
+  if (evaluateOpenAnswer(task.sample, task).state !== "ok") return null;
+  const okCorrect = cases.correct.filter((a) => evaluateOpenAnswer(a, task).state === "ok");
+  // Bizonyíték nélkül nem szigorítunk: legalább 2 (kevesebb esetnél mind) teljes pontos helyes válasz kell, különben a „minden helyesben megvan” üres igazság.
+  if (okCorrect.length < Math.max(1, AT_LEAST_TWO(cases.correct.length))) return null;
+  let current: OpenTask = { ...task, required: task.required.map((g) => [...g]), bonus: task.bonus.map((g) => [...g]) };
   const changes: string[] = [];
+  // Az aposztrófos összevonás egy szó (review #338: a „mustn't” ne essen „mustn” + „t” részre); a tagadó összevonás és minden aposztrófos
+  // alak kimarad (a pontozó normalizálása szétbontja).
+  const raw = [...new Set(task.sample.match(/[\p{L}\d]+(?:['’][\p{L}\d]+)*/gu) ?? [])]
+    .filter((w) => !/['’]/.test(w) && isDistinguishingCandidate(w))
+    .sort((a, b) => b.length - a.length);
+  // A blokkoló kör az eredeti rubrikán mérve; a szigorítás a teljes pontos helyeseket megtartja, így a kör nem változik.
+  for (const wrong of blockingWrongCases(task, cases)) {
+    if (evaluateOpenAnswer(wrong.text, current).state !== "ok") continue;
+    let fixed = false;
+    for (const word of raw) {
+      const group = [word, ...new Set(okCorrect.flatMap((a) => relatedForms([word], a)))];
+      if (missingAnswerConcepts(wrong.text, { required: [group] }).length === 0) continue; // a hibás válasz is tartalmazza
+      if (okCorrect.some((a) => missingAnswerConcepts(a, { required: [group] }).length > 0)) continue; // nem minden helyesben van meg
+      const next: OpenTask = { ...current, required: [...current.required, group] };
+      if (evaluateOpenAnswer(next.sample, next).state !== "ok") continue;
+      if (okCorrect.some((a) => evaluateOpenAnswer(a, next).state !== "ok")) continue;
+      if (evaluateOpenAnswer(wrong.text, next).state === "ok") continue;
+      current = next;
+      changes.push(`szigorítás: + kötelező csoport ${JSON.stringify(group)} (megkülönbözteti a hibás (${wrong.kind}) választ)`);
+      fixed = true;
+      break;
+    }
+    if (!fixed) return null;
+  }
+  return { task: current, changes };
+}
+
+export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null, options: CalibrationOptions = {}): Calibration {
+  if (!cases || isTypedTask(original)) return { task: original, changes: [] };
+  // Spec 2026-10-20-eroforras-s3c-rubrika-szigoritas: ha egy hibás eset teljes pontot kap, előbb szigorítunk (különben a rubrika változatlan).
+  const tightened = guardHolds(original, cases) ? { task: original, changes: [] as string[] } : tighten(original, cases);
+  if (!tightened || !guardHolds(tightened.task, cases)) return { task: original, changes: [] };
+  let task: OpenTask = { ...tightened.task, required: tightened.task.required.map((g) => [...g]), bonus: tightened.task.bonus.map((g) => [...g]) };
+  const changes: string[] = [...tightened.changes];
   const failing = () => cases.correct.filter((a) => evaluateOpenAnswer(a, task).state !== "ok");
   const tryStep = (next: OpenTask, change: string) => {
     if (!guardHolds(next, cases)) return false;
