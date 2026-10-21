@@ -24,7 +24,6 @@ export type BankAutofixResult = { packet: unknown; fixes: string[] };
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const isStrArr = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === "string");
-const key = (s: string) => s.normalize("NFC").trim().toLocaleLowerCase("hu");
 
 /** Stem prefix used to match a rubric term with a word form in the sample (≥4 chars, drops ≤3-char suffix). */
 function stemPrefix(term: string): string | null {
