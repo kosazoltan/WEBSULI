@@ -89,6 +89,9 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   const haystack = normalizeText(blockText);
   // Egy pár szavas blokk nem taníthat fogalmat, bármit is állít a címke.
   if (haystack.split(" ").filter(Boolean).length < 4) return false;
+  // Spec 2026-10-21-rovid-fogalom-ekezet (mérve: Az Erdő, job 952d0101): az ÉKEZETES rövid név („Őz” → „oz”) valódi szó, nem
+  // téveszthető össze az ASCII funkciószavakkal („a”, „an”) — a rendes rövid szó szabálya dönt, az ékezetes alakon (ragozva is).
+  if (shortName && isAccentedShortName(concept.term ?? "")) return accentedTokens(blockText).some((t) => t.startsWith(accentedForm(concept.term ?? "")));
   if (shortName) return shortTermGrounded(shortName, concept, blockText);
 
   const tokens = haystack.split(" ").filter(Boolean);
@@ -143,9 +146,15 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
  * tartalék itt nem fut.
  */
 function shortTermGrounded(name: string, concept: MapConcept, blockText: string): boolean {
-  if (shortTermExamplePresent(name, concept.quote ?? "", blockText)) return true;
-  // A `name` normalizált (csak a-z, 0-9), így regexben escape nélkül is biztonságos.
-  if (!new RegExp(`[„"'“‚‘*«]\\s?${name}\\s?[”"'’‘“*»]`, "i").test(blockText)) return false;
+  // Spec 2026-10-21-rovid-fogalom-ekezet (mérve: job 8bc212f4): a forrás példái a definícióban is állhatnak („at noon”), ha az idézet
+  // csak összefoglaló képlet („AT = óra, noon, night, weekend.”).
+  if (shortTermExamplePresent(name, `${concept.quote ?? ""}\n${concept.definition ?? ""}`, blockText)) return true;
+  // A `name` normalizált (csak a-z, 0-9), így regexben escape nélkül is biztonságos. Spec 2026-10-21-rovid-fogalom-ekezet: a csupa
+  // nagybetűs név („AT:”) nagybetűs, önálló előfordulása is megkülönböztető — a kisbetűs „a” / „an” erre nem jogosult.
+  const term = (concept.term ?? "").trim();
+  const upperMarked = term.length >= 2 && term === term.toUpperCase() && term !== term.toLowerCase()
+    && new RegExp(`(^|[^A-Za-z0-9])${name.toUpperCase()}(?![A-Za-z0-9])`).test(blockText);
+  if (!upperMarked && !new RegExp(`[„"'“‚‘*«]\\s?${name}\\s?[”"'’‘“*»]`, "i").test(blockText)) return false;
   const tokens = normalizeText(blockText).split(" ").filter(Boolean);
   const stems = new Set(tokens.map(stem));
   const present = (word: string): boolean => stems.has(stem(word)) || (word.length < STEM_LEN ? tokens.some((t) => t.startsWith(word)) : tokens.some((t) => t.includes(stem(word))));
@@ -154,6 +163,16 @@ function shortTermGrounded(name: string, concept: MapConcept, blockText: string)
   const need = defWords.length < 2 ? defWords.length : Math.max(2, Math.ceil(defWords.length / 2));
   return defWords.filter(present).length >= need;
 }
+
+/** Spec 2026-10-21-rovid-fogalom-ekezet: a név ékezetes alakja (kisbetűs, NFC) — „Őz” → „őz”. */
+const accentedForm = (term: string): string => term.trim().toLowerCase().normalize("NFC");
+/** Ékezetes rövid név: az ékezetes alak nem csak a–z / 0–9 betűkből áll („őz”, „íj”), és egyetlen szó. */
+export function isAccentedShortName(term: string): boolean {
+  const form = accentedForm(term);
+  return form.length > 0 && !/\s/.test(form) && /[^a-z0-9]/.test(form) && /^[\p{L}\p{N}]+$/u.test(form);
+}
+/** A blokk ékezetes szavai (kisbetűs, NFC). */
+const accentedTokens = (text: string): string[] => text.toLowerCase().normalize("NFC").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 
 /**
  * Spec 2026-10-19-rovid-fogalom-megalapozas: rövid fogalomnév („an”) esetén a forrás-idézet PÉLDA-darabjai („an armchair”) közül
