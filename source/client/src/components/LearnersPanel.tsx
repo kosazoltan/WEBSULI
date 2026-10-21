@@ -90,6 +90,13 @@ export default function LearnersPanel() {
     onSuccess: (r) => toast({ title: "Heti összefoglaló elküldve", description: `${r.sent} címzettnek.` }),
     onError: () => toast({ title: "A heti összefoglaló nem ment el", variant: "destructive" }),
   });
+  // Spec 2026-10-21-tanulo-parositas („Kiegészítés”): párosítási útmutató — gyereklevél a saját linkkel, szülőlevél az adminoknak.
+  const guide = useMutation({
+    mutationFn: () => apiRequest<{ children: number; parents: number; failed: number }>("POST", "/api/admin/learners/pairing-guide"),
+    onSuccess: (r) => toast({ title: "Párosítási útmutató elküldve", description: `${r.children} gyereklevél, ${r.parents} szülőlevél${r.failed ? `, ${r.failed} hiba` : ""}.`,
+      ...(r.failed ? { variant: "destructive" as const } : {}) }),
+    onError: () => toast({ title: "Az útmutató nem ment el", variant: "destructive" }),
+  });
   const [qrFor, setQrFor] = useState<string | null>(null);
   const copy = async (link: string | null) => {
     if (!link) return;
@@ -108,6 +115,9 @@ export default function LearnersPanel() {
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}><RefreshCw className="h-4 w-4 mr-1" /> Frissítés</Button>
           <Button size="sm" onClick={() => weekly.mutate()} disabled={weekly.isPending} data-testid="learners-weekly"><Send className="h-4 w-4 mr-1" /> Heti összefoglaló most</Button>
+          <Button variant="outline" size="sm" disabled={guide.isPending} data-testid="learners-pairing-guide"
+            onClick={() => { if (window.confirm("Minden tanuló megkapja e-mailben a saját párosító linkjét és az útmutatót, a szülők (admin-címzettek) pedig a párosítás módjait. Küldöd?")) guide.mutate(); }}>
+            <QrCode className="h-4 w-4 mr-1" /> Párosítási útmutató küldése</Button>
         </div>
       </div>
       {isLoading && <Skeleton className="h-40 w-full" />}

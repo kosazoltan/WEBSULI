@@ -84,3 +84,24 @@ for (const viewport of [{ width: 375, height: 812 }, { width: 1280, height: 800 
     await expect(page.getByTestId("pair-qr")).toHaveCount(0);
   });
 }
+
+// Spec 2026-10-21-tanulo-parositas („Kiegészítés”): „Párosítási útmutató küldése” — megerősítés után küld, az eredmény a toastban.
+test("párosítási útmutató küldése megerősítéssel", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  let posted = 0;
+  await page.route("**/api/admin/learners", (route) => route.fulfill({ json: learner([], false) }));
+  await page.route("**/api/csrf-token", (route) => route.fulfill({ json: { csrfToken: "probe" } }));
+  await page.route("**/api/admin/learners/pairing-guide", (route) => { posted++; return route.fulfill({ json: { children: 6, parents: 2, failed: 0 } }); });
+  await page.goto("/__learners-panel-probe");
+  const button = page.getByTestId("learners-pairing-guide");
+  page.once("dialog", (d) => void d.dismiss());
+  await button.click();
+  expect(posted).toBe(0);
+  page.once("dialog", (d) => void d.accept());
+  await button.click();
+  await expect(page.getByText("6 gyereklevél, 2 szülőlevél.").first()).toBeVisible();
+  expect(posted).toBe(1);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: "test-results/learners-pairing-guide-375.png", fullPage: true });
+});

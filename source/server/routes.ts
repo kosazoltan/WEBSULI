@@ -34,7 +34,7 @@ import { logger } from "./lib/logger";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, percentOf, withLearnerSubject, type MaterialResultPayload } from "./lib/material-result";
 import { learnerStreak, learnerTokenFor, recordLearnerActivity, resolveLearner, rotateLearnerToken, syncLearners, type ResolvedLearner } from "./learners";
-import { buildLearnerReports, runWeeklySummary } from "./learner-reports";
+import { buildLearnerReports, runWeeklySummary, sendPairingGuides } from "./learner-reports";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
@@ -1391,6 +1391,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: unknown) {
       logger.error('[LEARNERS] visszavonás hiba:', error instanceof Error ? error.message : String(error));
       res.status(500).json({ message: "A visszavonás nem sikerült." });
+    }
+  });
+  // Spec 2026-10-21-tanulo-parositas („Kiegészítés”): párosítási útmutató a gyerekeknek (saját link) és a szülőknek.
+  adminRouter.post("/learners/pairing-guide", async (_req, res) => {
+    try {
+      res.json(await sendPairingGuides());
+    } catch (error: unknown) {
+      logger.error('[LEARNERS] párosítási útmutató hiba:', error instanceof Error ? error.name : "ismeretlen");
+      res.status(500).json({ message: "Az útmutató küldése nem sikerült." });
     }
   });
   adminRouter.post("/learners/weekly-summary", async (_req, res) => {
