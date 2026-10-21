@@ -42,6 +42,13 @@ test("döntés 1c: duplikált vagy egyenértékű opció → hiba", () => {
   assert.deepEqual(singleChoiceProblems({ prompt: "Melyik gyümölcs?", options: ["Alma", "Körte", "Répa"], correctIndex: 0 }), []);
 });
 
+test("ciklus 8: helyesírási kérdésnél a csak kis- és nagybetűben eltérő opciók különbözők (mért: A főnév, Tulajdonságot kifejező szavak)", () => {
+  assert.deepEqual(singleChoiceProblems({ prompt: "Melyik az Eger szó helyes -i toldalékos alakja?", options: ["Egri", "egri", "egeri"], correctIndex: 1 }), []);
+  assert.deepEqual(singleChoiceProblems({ prompt: "Melyik írás helyes?", options: ["Petőfi sándor általános iskola", "Petőfi Sándor Általános Iskola", "petőfi Sándor általános Iskola"], correctIndex: 1 }), []);
+  // A szó szerinti ismétlődés helyesírási kérdésnél is hiba.
+  assert.equal(singleChoiceProblems({ prompt: "Melyik írás helyes?", options: ["Eger", "Eger.", "eger"], correctIndex: 0 }).length, 1);
+});
+
 test("nincs hamis riasztás a nem kiszámolható kérdésekre (történelem, angol, összetett feltétel)", () => {
   const silent = [
     { prompt: "Mikor volt a mohácsi csata?", options: ["1526", "1541", "1456", "1686"], correctIndex: 0 },

@@ -28,7 +28,7 @@ export const LEGACY_MAX_ATTEMPTS = 2;
  * Spec 2026-10-21-regi-anyag-ciklusos-felulvizsgalat: a sorelemek felső száma — a sor eddig indít új anyagot, utána megáll (az újrapróba a
  * meglévő elemen belül marad). Minden felülvizsgálati ciklus (5 anyag) egy PR-rel emeli; így a deploy mindig futásmentes állapotban megy.
  */
-export const LEGACY_BATCH_LIMIT = 137;
+export const LEGACY_BATCH_LIMIT = 178;
 
 /**
  * Spec 2026-10-21-ciklus6 (tulajdonosi döntés): a két tartalmi okból kétszer elbukott anyag egyszeri, célzott újragyártása — a forrás
@@ -46,7 +46,7 @@ export const LEGACY_REDO: Readonly<Record<string, string>> = {
  * Spec 2026-10-21-ciklus7: a célzott újragyártás köre. Az 1. kör (ciklus 6, `redo: true`) a pontos-alak hiánya miatt elbukott; a 2. kör a
  * pontos-alak szigorítással fut (tulajdonosi jóváhagyás). Körönként egyszer.
  */
-export const LEGACY_REDO_ROUND = 2;
+export const LEGACY_REDO_ROUND = 3;
 /** A sorelem célzott köre: a régi `true` az 1. kör. */
 export const redoRoundOf = (redo: boolean | number | undefined): number => (redo === true ? 1 : typeof redo === "number" ? redo : 0);
 /** Review #357: a listás anyag MINDEN újraindítása (az infrastruktúra-hiba miatti is) célzott — a redo-jelző körönként egyszeri futást biztosít. */

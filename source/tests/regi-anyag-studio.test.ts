@@ -110,9 +110,9 @@ test("ciklus-kapu (2026-10-21): a korlátig indul új anyag; a 0-s kategória me
   assert.equal(batchRoom(97, 100), 3);
   assert.equal(batchRoom(120, 100), 0);
   // Review #352: a korlát pontosan rögzített (a ciklus-PR emeli, a tényleges sorelemszám + 5 szerint).
-  assert.equal(LEGACY_BATCH_LIMIT, 137, "7. ciklus: 132 sorelem + 5");
-  assert.equal(batchRoom(136), 1);
-  assert.equal(batchRoom(137), 0);
+  assert.equal(LEGACY_BATCH_LIMIT, 178, "8. ciklus: 137 sorelem + a teljes maradék (41)");
+  assert.equal(batchRoom(177), 1);
+  assert.equal(batchRoom(178), 0);
   assert.equal(legacyClassroom(0, 12), 0, "Programozási alapismeretek marad");
   assert.equal(legacyClassroom(4, 4), 4);
   assert.equal(legacyClassroom(5, 6), 6, "egyébként a forrásból felismert évfolyam");
