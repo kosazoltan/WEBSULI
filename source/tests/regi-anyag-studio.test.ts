@@ -79,3 +79,15 @@ test("a mentésrekord: a régi sor teljes tartalma visszaállítható", () => {
   assert.equal(legacyBaseline("a"), legacyBaseline("a"));
   assert.notEqual(legacyBaseline("a"), legacyBaseline("b"));
 });
+
+test("fogalomtípus-hossz (2026-10-21): a címkék az oszlophatárra vágva; a csak emiatt hibás elem egyszer kerül újra sorba", async () => {
+  const { kmConceptColumns } = await import("../server/studio/single-run/live");
+  const { shouldRequeue } = await import("../server/studio/legacy-migration");
+  assert.deepEqual(kmConceptColumns({ type: "irodalomtörténeti esemény", correction: null }), { type: "irodalomtörténeti esemén", verbatimReason: null });
+  assert.equal(kmConceptColumns({ type: "fact", correction: "x".repeat(40) }).verbatimReason?.length, 32);
+  const err = 'Failed query: insert into "km_concepts" ("id", …';
+  assert.equal(shouldRequeue({ status: "error", error: err, payload: {} }), true);
+  assert.equal(shouldRequeue({ status: "error", error: err, payload: { requeued: true } }), false, "másodszor nem");
+  assert.equal(shouldRequeue({ status: "error", error: "a futás megállt", payload: {} }), false);
+  assert.equal(shouldRequeue({ status: "done", error: err, payload: {} }), false);
+});

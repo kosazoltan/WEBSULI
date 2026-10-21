@@ -95,7 +95,12 @@ export function legacySource(file: { title: string; content: string }): { files:
   };
 }
 
-type Payload = { htmlFileId: string; runId?: string; attempt?: number; startedAt?: number };
+type Payload = { htmlFileId: string; runId?: string; attempt?: number; startedAt?: number; requeued?: boolean };
+
+/** Spec 2026-10-21-fogalom-tipus-hossz: a csak a tudásbank-oszlophatár miatt hibára zárt elem egyszer újra sorba kerül. */
+export function shouldRequeue(row: { status: string; error: string | null; payload: { requeued?: boolean } }): boolean {
+  return row.status === "error" && !row.payload.requeued && (row.error ?? "").startsWith('Failed query: insert into "km_concepts"');
+}
 type QueueRow = { id: string; status: string; payload: Payload };
 
 async function ownerFor(fileUserId: string | null): Promise<string | null> {
@@ -149,8 +154,17 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
   if (ticking || stopped) return true;
   ticking = true;
   try {
-    const rows = (await db.select({ id: scheduledJobs.id, status: scheduledJobs.status, payload: scheduledJobs.payload }).from(scheduledJobs)
-      .where(eq(scheduledJobs.type, LEGACY_JOB_TYPE))) as QueueRow[];
+    let rows = (await db.select({ id: scheduledJobs.id, status: scheduledJobs.status, payload: scheduledJobs.payload, error: scheduledJobs.error }).from(scheduledJobs)
+      .where(eq(scheduledJobs.type, LEGACY_JOB_TYPE))) as Array<QueueRow & { error: string | null }>;
+    if (LEGACY_MIGRATION_MODE !== "off") {
+      for (const row of rows.filter(shouldRequeue)) {
+        await db.execute(sql`UPDATE scheduled_jobs SET status = 'running', error = NULL, completed_at = NULL,
+          payload = ${JSON.stringify({ htmlFileId: row.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true })}::jsonb
+          WHERE id = ${row.id} AND status = 'error' AND coalesce(payload->>'requeued', '') <> 'true'`);
+        logger.info(`[RÉGI→STÚDIÓ] Újra sorba (a tudásbank-oszlophatár javítása után): ${row.payload.htmlFileId}`);
+      }
+      rows = rows.map((r) => (shouldRequeue(r) ? { ...r, status: "running", payload: { htmlFileId: r.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true } } : r));
+    }
     let running = 0;
     const retries: Array<{ row: QueueRow; decision: "resume" | "restart"; jobId: string | null; error: string | null }> = [];
     for (const row of rows.filter((r) => r.status === "running")) {
