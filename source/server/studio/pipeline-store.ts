@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lessons, materialImprovementBackups, studioJobs, type InsertGameQuizItem } from "../../shared/schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
+import { deepWellFormed } from "../../shared/well-formed";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { workflowFence, workflowSerialized } from "../workflows/engine";
 import type { Coverage, MapConcept } from "./coverage";
@@ -190,7 +191,8 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       // Review #265: a workflow-mentésekkel közös sorban (párhuzamos bankcsomagok mellett sincs revízió-verseny).
       await workflowSerialized(() => db.transaction(async (tx) => {
         await workflowFence(tx);
-        await tx.update(studioJobs).set(patch).where(eq(studioJobs.id, jobId));
+        // Spec 2026-10-21-ciklus5: a félbevágott emoji (magányos fél-karakter) miatt a JSONB-mentés ne bukhasson el (mért: „Felszín és Térfogat”).
+        await tx.update(studioJobs).set(deepWellFormed(patch)).where(eq(studioJobs.id, jobId));
       }));
     },
 

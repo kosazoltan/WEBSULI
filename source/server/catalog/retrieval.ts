@@ -3,6 +3,7 @@ import type { CatalogItemKind } from "./catalog-item";
 import { isExcludedSample } from "./sample-exclusions";
 import { unaccentedHungarian } from "./subject-skill-builder";
 import { verifyItem } from "./verify";
+import { sliceCodePoints, wellFormed } from "../../shared/well-formed";
 
 /**
  * Spec 2026-10-06-s6-katalogus-bekotes: a tantárgyi katalógus lekérése a gyártáshoz — TISZTA, determinisztikus függvények.
@@ -80,7 +81,9 @@ export function verbatimEligible(row: CatalogRowLike, grade: number, topicOk: bo
   return verifyItem({ kind: "quiz", provenance: row.provenances[0] ?? "", prompt: row.prompt, options, correctIndex: row.correctIndex, fingerprint: row.fingerprint }).ok;
 }
 
-const clip = (s: string | null | undefined, n: number) => (s ?? "").slice(0, n);
+// Spec 2026-10-21-ciklus5: a vágás nem hagy fél-karaktert (a 📦 kettévágása a job mentését buktatta el).
+// Review #356: kódpont-határon vág (nem csereképkarakter), és a forrás esetleges magányos fél-karaktere is tisztul.
+export const clip = (s: string | null | undefined, n: number) => wellFormed(sliceCodePoints(s ?? "", n));
 const POOL_KINDS = new Set<string>(["quiz", "short_answer", "open_task", "method", "section"]);
 
 /**
