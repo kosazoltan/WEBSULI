@@ -15,6 +15,11 @@ test("(A) a címkés, de hamis állítás jelzése megmarad; a hanyag tapadó os
   assert.equal(falseArithmeticClaims("2: 4 + 1 = 6").length, 1, "mindkét olvasat hamis");
   assert.deepEqual(falseArithmeticClaims("12: 4 = 3"), []);
   assert.equal(falseArithmeticClaims("95 : 4 = 20").length, 1, "a szóközös osztás változatlan");
+  // Review #364 (Codex P1): a címke / ezres-tagolás olvasata csak az első tagot cseréli — a lánc hamis folytatása jelez.
+  assert.equal(falseArithmeticClaims("0: 4 + 0 = 4 = 5").length, 1);
+  assert.deepEqual(falseArithmeticClaims("0: 4 + 0 = 4 = 2 + 2"), []);
+  assert.equal(falseArithmeticClaims("3 133 + 126 = 259 = 260").length, 1);
+  assert.deepEqual(falseArithmeticClaims("3 133 + 126 = 259"), []);
 });
 
 const item = (prompt: string, options: string[], correctIndex: number) => ({ prompt, options, correctIndex });
