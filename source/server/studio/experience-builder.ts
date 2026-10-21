@@ -4,7 +4,7 @@ import { normalizeBankPacket } from "./bank-normalize";
 import { logger } from "../lib/logger";
 import { z } from "zod";
 import { LESSON_BANK_RESERVE, LESSON_BANK_SIZES, LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, bankPacketContract, experienceSchema, experiencePacketSchema, experienceTheme, experienceQuizSchema, glossaryEntrySchema, lessonLanguage, methodSchema, openTaskSchema, bankPlanSchema, type LessonExperience } from "../../shared/lesson-experience";
-import { OPEN_ANSWER_RULES_HU, evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../../shared/lesson-experience-score";
+import { OPEN_ANSWER_RULES_HU, evaluateOpenAnswer, missingAnswerConcepts, missingOrder, missingPhrases, normalizeAnswer } from "../../shared/lesson-experience-score";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { planLessonBank, bankUnitQuota } from "../../shared/lesson-bank-plan";
 import type { Lesson } from "../../shared/lesson-schema";
@@ -407,6 +407,17 @@ export function teachingTextOf(section: unknown): string {
 function withoutFigures<S extends { blocks: Array<{ kind: string }> }>(section: S | undefined): S | undefined {
   return section ? { ...section, blocks: section.blocks.filter((b) => b.kind !== "animate") } : section;
 }
+/**
+ * A minta-ellenőrzés javítóköri üzenete (tiszta). Spec 2026-10-21-ciklus4: a fogalmak mellett a mintából PONTOSAN hiányzó kifejezések és a
+ * sorrendi eltérés is megnevezve — mért: e nélkül a modell ugyanarra a feladatra többször is javítókört futott (18 kör / 98 futás).
+ */
+export function sampleScoreProblem(t: OpenTask, reason: string, wordCount: number): string {
+  const phrases = missingPhrases(t.sample, t);
+  return `${t.id}: a mintaválasz nem teljes pont. ${reason} A minta szószáma: ${wordCount}; minWords: ${t.minWords}. A mintában fel nem ismert kötelező szinonimacsoportok: ${JSON.stringify(missingAnswerConcepts(t.sample, t))}.`
+    + (phrases.length ? ` A mintában PONTOSAN (egymás után, ebben az alakban) hiányzó kifejezések (requiredPhrases): ${JSON.stringify(phrases)} — vagy a minta írja pontosan így, vagy a kifejezés a minta alakját vegye fel.` : "")
+    + (missingOrder(t.sample, t) ? ` A minta nem a requiredOrder sorrendjében említi a csoportokat: ${JSON.stringify(t.requiredOrder)}.` : "");
+}
+
 export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept[], deps: ExperienceBuildDeps): Promise<LessonExperience> {
   const plan = bankPlanSchema.parse(planLessonBank(lesson));
   const language = lessonLanguage(lesson.subject);
@@ -516,7 +527,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
         if (t.needsSentence && evaluateOpenAnswer(t.sample, t).score !== 1 && evaluateOpenAnswer(t.sample, { ...t, needsSentence: false }).score === 1) t.needsSentence = false;
         const score = evaluateOpenAnswer(t.sample, t);
         const wordCount = normalizeAnswer(t.sample).split(/\s+/).filter(Boolean).slice(0, 500).length;
-        if (score.score !== 1) problems.push(`${t.id}: a mintaválasz nem teljes pont. ${score.reason} A minta szószáma: ${wordCount}; minWords: ${t.minWords}. A mintában fel nem ismert kötelező szinonimacsoportok: ${JSON.stringify(missingAnswerConcepts(t.sample, t))}.`);
+        if (score.score !== 1) problems.push(sampleScoreProblem(t, score.reason, wordCount));
       }
       problems.push(...crossProblems(packet, before).filter(p => p.startsWith("Ismétlődő")));
       // Spec 2026-09-30 (U2): a bank ábra nélkül épül, ezért tétel nem hivatkozhat ábrára — különben az ábra cseréje a bankot is érvényteleníti.
