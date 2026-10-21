@@ -49,6 +49,42 @@ function dedupeOptions(item: Obj, minOptions: number, fixes: string[]): void {
   fixes.push(`${id}: ismétlődő válaszlehetőség elhagyva`);
 }
 
+const canon = (s: string) => s.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim();
+
+/**
+ * Spec 2026-10-21-ciklus3 (mért: 7 + 7 bankjavítókör a 98 futásban): a kategóriakvóta (`requiredDistinct`) gépi rendbetétele modellkör
+ * nélkül — (1) a csoportok közt ismétlődő elem csak az első csoportban marad, az üres csoport kiesik, a darabszám legfeljebb a csoportok
+ * száma (a séma szabálya); (2) a felsoroló feladat üres `required`-je a kvóta bármely elemét elfogadó csoport (a kvótát a
+ * `requiredDistinct` méri, a `required` a sémakövetelmény).
+ */
+function fixDistinct(task: Obj, fixes: string[]): void {
+  const id = typeof task.id === "string" ? task.id : "task[?]";
+  if (!Array.isArray(task.requiredDistinct)) return;
+  for (const rule of task.requiredDistinct) {
+    if (!isObj(rule) || !Array.isArray(rule.from)) continue;
+    const seen = new Set<string>();
+    let removed = 0;
+    const from = (rule.from as unknown[]).filter(isStrArr).map((group) => group.filter((alt) => {
+      const k = canon(alt);
+      if (seen.has(k)) { removed++; return false; }
+      seen.add(k);
+      return true;
+    })).filter((group) => group.length > 0);
+    if (removed) {
+      rule.from = from;
+      if (typeof rule.count === "number" && rule.count > from.length) rule.count = from.length;
+      fixes.push(`${id}: a kategóriakvóta ismétlődő elemei csak az első csoportban maradtak (${removed} elem)`);
+    }
+  }
+  if (Array.isArray(task.required) && task.required.length === 0) {
+    const any = [...new Set((task.requiredDistinct as unknown[]).filter(isObj).flatMap((r) => (Array.isArray(r.from) ? (r.from as unknown[]).filter(isStrArr).flat() : [])))];
+    if (any.length) {
+      task.required = [any];
+      fixes.push(`${id}: az üres required a kategóriakvóta bármely elemét elfogadja (a kvótát a requiredDistinct méri)`);
+    }
+  }
+}
+
 function fixTask(task: Obj, fixes: string[], teachingText?: string): void {
   const id = typeof task.id === "string" ? task.id : "task[?]";
   if (typeof task.sample !== "string" || !Array.isArray(task.required)) return;
@@ -131,7 +167,7 @@ export function autofixBankPacket(candidate: unknown, _ctx: BankAutofixContext):
       }
       if (bank === "quiz") dedupeOptions(item, 3, fixes);
       if (bank === "methods") dedupeOptions(item, 2, fixes);
-      if (bank === "tasks") fixTask(item, fixes, _ctx.teachingText);
+      if (bank === "tasks") { fixDistinct(item, fixes); fixTask(item, fixes, _ctx.teachingText); }
     }
     if (bank === "quiz") fixQuizIntent(items.filter(isObj), fixes);
   }
