@@ -171,10 +171,16 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false, exactFo
     // pontos alakjaival VAGY-csoportban) kerül a requiredPhrases-be, ha a hibásban a szó töve megvan, de a pontos alakja nincs.
     const exactRoom = (current.requiredPhrases?.length ?? 0) < PHRASE_GROUPS_MAX;
     for (const word of fixed || !exactForms || !exactRoom || !isBlocking ? [] : raw) {
+      if (word.length > PHRASE_MAX_LENGTH) continue; // a séma 80 karakteres korlátja (review #359)
       const exact = { requiredPhrases: [[word]] };
       if (missingPhrases(wrong.text, exact).length === 0) continue; // a hibásban a pontos alak is megvan
-      if (missingAnswerConcepts(wrong.text, { required: [[word]] }).length > 0) continue; // nem toldalékeltérés (a tő sincs meg)
-      const forms = [word, ...new Set(okCorrect.flatMap((a) => (missingPhrases(a, exact).length ? relatedForms([word], a) : [])))];
+      // Review #359: a pontozó elütéstűrő — a toldalékeltérést elütéstűrés NÉLKÜL, közös tővel kell igazolni („világ” ≠ „virág”).
+      if (!sharesStem(wrong.text, word)) continue;
+      // Review #359: a minta szavát tartalmazó kötelező csoport más tövű, helyes próbákkal igazolt alternatívái is (pl. „késsel”, „apával”).
+      const siblings = current.required.find((g) => g.some((alt) => normalizeAnswerV2(alt) === normalizeAnswerV2(word))) ?? [];
+      const forms = [...new Set([word, ...okCorrect.flatMap((a) => (missingPhrases(a, exact).length
+        ? [...relatedForms([word], a), ...siblings.filter((alt) => !/\s/.test(alt.trim()) && missingPhrases(a, { requiredPhrases: [[alt]] }).length === 0)] : []))])]
+        .filter((f) => f.length <= PHRASE_MAX_LENGTH);
       const group = { requiredPhrases: [forms] };
       if (missingPhrases(wrong.text, group).length === 0) continue; // egy helyes próba alakja a hibás alak — nem különböztet meg
       if (okCorrect.some((a) => missingPhrases(a, group).length > 0)) continue;
@@ -215,6 +221,22 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false, exactFo
  * S6b: sorrendi jelöltpárok a kötelező csoportokból — csoportonként az EGYSZAVAS alternatívák (a séma S6a-szabálya, review #346), közös
  * alternatíva nélkül; az irány a minta első előfordulásaiból. A minta sorrendjében, a korábbi csoportpár előre.
  */
+/** Review #359: a requiredPhrases tagjának sémahatára. */
+const PHRASE_MAX_LENGTH = 80;
+/**
+ * Review #359: elütéstűrés nélküli toldalékeltérés — a hibás válasz valamely szava a minta szavával közös tövű (a közös előtag legalább a
+ * rövidebb szó hossza − 3, de legalább 3 betű), és nem azonos vele. Így a „világ” / „virág” (más szó, 2 közös betű) nem számít toldaléknak.
+ */
+function sharesStem(text: string, word: string): boolean {
+  const w = word.toLowerCase();
+  return (text.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).some((t) => {
+    if (t === w) return false;
+    let k = 0;
+    while (k < t.length && k < w.length && t[k] === w[k]) k++;
+    return k >= Math.max(3, Math.min(t.length, w.length) - 3);
+  });
+}
+
 function orderCandidates(task: OpenTask): string[][][] {
   const single = task.required.map((g) => [...new Set(g.filter((a) => canonicalAlternative(a).split(" ").filter(Boolean).length === 1))]);
   const out: string[][][] = [];

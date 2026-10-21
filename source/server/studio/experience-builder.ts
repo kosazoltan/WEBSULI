@@ -35,6 +35,9 @@ export function bankStaticPrefix(): string {
   return `${roleSkillBlock("bank")}\n${LESSON_METHOD_CONTRACT}\n${OPEN_ANSWER_RULES_HU}`;
 }
 
+/** Review #359: a gépi rubrika-kalibráció verziója (ciklus 7: pontos alak magyar leckén). */
+export const CALIBRATION_VERSION = "exact-forms-1";
+
 export type ExperienceCheckpoint = { hash: string; parts: Record<string, unknown>; reviewedHashes?: Record<string, string>;
   /** Review #357: a lektor által valaha kifogásolt feladat-azonosítók — a gépi szigorítás tiltása a későbbi körökben is megmarad. */
   lektorReviewedIds?: string[] };
@@ -482,7 +485,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
   const unitTeaching = (unitIndex: number, unit: (typeof plan.units)[number]) => {
     const { taskCount, quizCount, taskTarget, quizTarget, methodKinds } = bankUnitQuota(plan, unitIndex);
     const source = concepts.filter(c => unit.conceptIds.includes(c.localId)).sort((a, b) => a.localId.localeCompare(b.localId));
-    const teaching = { version: LESSON_METHOD_VERSION, roleSkill: roleSkillVersion("bank"), ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}), taskCount, quizCount, taskTarget, quizTarget, methodKinds, subject: lesson.subject, classroom: lesson.classroom, sectionIndex: unit.sectionIndex, section: withoutFigures(lesson.sections[unit.sectionIndex]), concepts: source, allowedConceptIds: unit.conceptIds,
+    // Review #359: a kalibráció viselkedésének verziója a csomag hash-ében — a változás előtt mentett (pontos-alak szigorítás nélküli)
+    // csomag folytatáskor sem kerül át kalibrálatlanul.
+    const teaching = { version: LESSON_METHOD_VERSION, calibration: CALIBRATION_VERSION, roleSkill: roleSkillVersion("bank"), ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}), taskCount, quizCount, taskTarget, quizTarget, methodKinds, subject: lesson.subject, classroom: lesson.classroom, sectionIndex: unit.sectionIndex, section: withoutFigures(lesson.sections[unit.sectionIndex]), concepts: source, allowedConceptIds: unit.conceptIds,
       ...(catalogOf(unitIndex) ? { catalog: { version: unitCatalogVersion(catalogOf(unitIndex)!) } } : {}),
       ...(deps.memory ? { memory: { version: memoryBlockVersion(deps.memory) } } : {}),
       ...(deps.scoringRules ? { scoringRules: deps.scoringRules } : {}) };

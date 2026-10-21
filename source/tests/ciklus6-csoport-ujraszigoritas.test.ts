@@ -60,6 +60,10 @@ test("ciklus6: a célzott újragyártás anyagai és utasításai rögzítettek;
   assert.equal(shouldRedo({ status: "done", payload: { htmlFileId: TULAJDONSAG } }), false);
   assert.equal(shouldRedo({ status: "error", payload: { htmlFileId: "mas-anyag" } }), false);
   assert.equal(retryPayload({ htmlFileId: FONEV, redo: LEGACY_REDO_ROUND, requeued: true }, "r2", 2, 1).redo, LEGACY_REDO_ROUND);
+  // Review #359: a régi `redo: true` (1. kör) az újrapróbán is 1. kör marad — a 2. kör továbbra is jár.
+  const legacy = retryPayload({ htmlFileId: FONEV, redo: true, requeued: true }, "r2", 2, 1);
+  assert.equal(legacy.redo, true);
+  assert.equal(shouldRedo({ status: "error", payload: legacy }), true);
   const src = legacySource({ title: "A főnév", content: "<p>A főnév</p>" }, LEGACY_REDO[FONEV]);
   // A gyártási utasításból a banképítő pontosan a pontozási szabályt kapja (a forrásolvasó a teljes utasítást).
   assert.equal(scoringRulesOf(src.instructions), `${SCORING_RULE_MARK} ${LEGACY_REDO[FONEV]}`);
