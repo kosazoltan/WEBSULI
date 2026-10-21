@@ -97,3 +97,15 @@ test("fogalomtípus-hossz (2026-10-21): a címkék az oszlophatárra vágva; a c
   assert.equal(shouldRequeue({ status: "error", error: err, payload: next }), false);
   assert.equal("requeued" in retryPayload({ htmlFileId: "f" }, "r2", 2, 6), false);
 });
+
+test("ciklus-kapu (2026-10-21): a korlátig indul új anyag; a 0-s kategória megmarad", async () => {
+  const { batchRoom, LEGACY_BATCH_LIMIT } = await import("../server/studio/legacy-migration");
+  const { legacyClassroom } = await import("../server/studio/pipeline-store");
+  assert.equal(batchRoom(100, 100), 0);
+  assert.equal(batchRoom(97, 100), 3);
+  assert.equal(batchRoom(120, 100), 0);
+  assert.ok(LEGACY_BATCH_LIMIT >= 100 && LEGACY_BATCH_LIMIT % 5 === 0);
+  assert.equal(legacyClassroom(0, 12), 0, "Programozási alapismeretek marad");
+  assert.equal(legacyClassroom(4, 4), 4);
+  assert.equal(legacyClassroom(5, 6), 6, "egyébként a forrásból felismert évfolyam");
+});

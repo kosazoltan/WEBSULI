@@ -58,6 +58,12 @@ export type PublishInput = {
 /** A régi anyag mentésének jelölése (`material_improvement_backups.notes`) — a visszaállításhoz és a méréshez. */
 export const LEGACY_BACKUP_NOTE = "legacy-studio-migration";
 
+/**
+ * Spec 2026-10-21-regi-anyag-ciklusos-felulvizsgalat: a 0-s kategória („Programozási alapismeretek”) a helyben cserénél megmarad — a
+ * Stúdió a tartalomból 9–12. évfolyamot adna, és az anyag kikerülne a kategóriájából. Egyébként a forrásból felismert évfolyam.
+ */
+export const legacyClassroom = (targetClassroom: number | null | undefined, detected: number) => (targetClassroom === 0 ? 0 : detected);
+
 /** A régi sor mentésre kerülő mezői (tiszta — tesztelhető). Review #349: az `id` a meglévő visszaállító út szerződése. */
 export function legacyBackupData(row: { id: string; title: string; content: string; description: string | null; classroom: number; contentType: string }) {
   return { id: row.id, title: row.title, content: row.content, description: row.description, classroom: row.classroom, contentType: row.contentType };
@@ -201,6 +207,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           .limit(1);
 
         let fileId = existing?.htmlFileId ?? null;
+        let classroom = input.classroom;
         // Review #349: a cél-anyag nem kerülhető meg — ha a lecke már más anyaghoz kötött, a publikálás megáll.
         if (fileId && input.targetHtmlFileId && fileId !== input.targetHtmlFileId) throw new Error(`A lecke már más anyaghoz kötött (${fileId}), nem a célhoz (${input.targetHtmlFileId}).`);
         // Spec 2026-10-20-regi-anyag-studio-atalakitas: a régi anyag helyben lesz lecke — előbb mentés, utána ugyanaz a frissítés, mint a
@@ -217,6 +224,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           await tx.insert(materialImprovementBackups).values({ originalFileId: target.id, backupData: legacyBackupData(target), createdBy: target.userId, notes: LEGACY_BACKUP_NOTE });
           await tx.update(htmlFiles).set({ content: LESSON_PLACEHOLDER_HTML }).where(eq(htmlFiles.id, target.id));
           fileId = target.id;
+          classroom = legacyClassroom(target.classroom, input.classroom);
         }
         if (fileId) {
           await tx
@@ -224,7 +232,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
             .set({
               title: input.title,
               description: "Websuli lecke — a lecke-futtató jeleníti meg.",
-              classroom: input.classroom,
+              classroom,
               contentType: "lesson",
             })
             .where(eq(htmlFiles.id, fileId));

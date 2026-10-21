@@ -18,6 +18,13 @@ export const LEGACY_CUTOFF = new Date("2026-06-01T00:00:00+02:00");
 export const LEGACY_JOB_TYPE = "legacy-studio-migration";
 export const LEGACY_CONCURRENCY = 3;
 export const LEGACY_MAX_ATTEMPTS = 2;
+/**
+ * Spec 2026-10-21-regi-anyag-ciklusos-felulvizsgalat: a sorelemek felső száma — a sor eddig indít új anyagot, utána megáll (az újrapróba a
+ * meglévő elemen belül marad). Minden felülvizsgálati ciklus (5 anyag) egy PR-rel emeli; így a deploy mindig futásmentes állapotban megy.
+ */
+export const LEGACY_BATCH_LIMIT = 100;
+/** Tiszta: hány új anyag indulhat még a korlátig. */
+export const batchRoom = (totalRows: number, limit = LEGACY_BATCH_LIMIT) => Math.max(0, limit - totalRows);
 /** A szövegkivonat a beágyazott képeket elveszíti: a képgazdag (nagy) anyag kimarad, kézi döntésre (bájtban mérve). */
 export const LEGACY_MAX_BYTES = 300_000;
 /** A próba: 4. o. magyar (igekötők), 5. o. matek (törtek), 8. o. matek (szöveges feladatok). */
@@ -250,6 +257,9 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
         if (exists.length) return false;
         const { rows: active } = await tx.execute(sql`SELECT count(*)::int AS n FROM scheduled_jobs WHERE type = ${LEGACY_JOB_TYPE} AND status = 'running'`);
         if (Number((active[0] as { n?: number } | undefined)?.n ?? 0) >= LEGACY_CONCURRENCY) return false;
+        // A ciklus-kapu: az összes sorelem (kész, hibás, várakozó, futó) a korlát alatt.
+        const { rows: all } = await tx.execute(sql`SELECT count(*)::int AS n FROM scheduled_jobs WHERE type = ${LEGACY_JOB_TYPE}`);
+        if (batchRoom(Number((all[0] as { n?: number } | undefined)?.n ?? 0)) <= 0) return false;
         await tx.insert(scheduledJobs).values({ type: LEGACY_JOB_TYPE, scheduledFor: new Date(), status: "running", payload: { htmlFileId, runId, attempt: 1, startedAt: Date.now() } });
         return true;
       });
