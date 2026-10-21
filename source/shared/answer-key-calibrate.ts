@@ -76,6 +76,12 @@ export type CalibrationOptions = {
    * („változatlan marad” = „marad változatlan”), ott a sorrend nem megkülönböztető jel.
    */
   phrases?: boolean;
+  /**
+   * Spec 2026-10-21-ciklus6 + review #357: a lektor által kifogásolt feladatra SEMMILYEN gépi szigorítás (szó, csoport, kifejezés, sorrend)
+   * nem fut — különben a lektor által önkényesnek ítélt követelmény a javítás után azonnal visszakerül (mért: „Tulajdonságot kifejező
+   * szavak”, 2× elbukott). A lazítás (helyes válasz visszaengedése) továbbra is fut.
+   */
+  lektorReviewed?: boolean;
 };
 const AT_LEAST_TWO = (n: number) => Math.min(2, n);
 
@@ -260,7 +266,7 @@ export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null
   // Review #347: az őr teljesülésekor is fut (a J1 miatt nem blokkoló, csak sorrendben eltérő hibás próba sorrendi szigorítása); ha ez nem
   // sikerül, az eredeti rubrika marad a kiinduló pont.
   const untouched: Tightening = { task: original, changes: [], tightened: [], tightenedPhrases: [], tightenedOrder: false };
-  const attempt = tighten(original, cases, options.phrases === true);
+  const attempt = options.lektorReviewed ? null : tighten(original, cases, options.phrases === true);
   const tightened: Tightening | null = attempt && guardHolds(attempt.task, cases) ? attempt : guardHolds(original, cases) ? untouched : null;
   if (!tightened) return { task: original, changes: [] };
   let task: OpenTask = { ...tightened.task, required: tightened.task.required.map((g) => [...g]), bonus: tightened.task.bonus.map((g) => [...g]) };

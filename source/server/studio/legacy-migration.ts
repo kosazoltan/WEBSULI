@@ -7,6 +7,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { htmlFiles, oneStepRuns, scheduledJobs, studioJobs, users } from "../../shared/schema";
+import { SCORING_RULE_MARK } from "../../shared/scoring-rules";
 import { logger } from "../lib/logger";
 import { htmlToText } from "./safe-fetch";
 
@@ -22,7 +23,25 @@ export const LEGACY_MAX_ATTEMPTS = 2;
  * Spec 2026-10-21-regi-anyag-ciklusos-felulvizsgalat: a sorelemek felső száma — a sor eddig indít új anyagot, utána megáll (az újrapróba a
  * meglévő elemen belül marad). Minden felülvizsgálati ciklus (5 anyag) egy PR-rel emeli; így a deploy mindig futásmentes állapotban megy.
  */
-export const LEGACY_BATCH_LIMIT = 127;
+export const LEGACY_BATCH_LIMIT = 132;
+
+/**
+ * Spec 2026-10-21-ciklus6 (tulajdonosi döntés): a két tartalmi okból kétszer elbukott anyag egyszeri, célzott újragyártása — a forrás
+ * melletti utasítás a lektor visszatérő kifogását előzi meg.
+ */
+export const LEGACY_REDO: Readonly<Record<string, string>> = {
+  // A főnév – Magyar nyelvtan 4. osztály (a lektor: a -val/-vel ragos példára az „anyának” is teljes pontot kapott).
+  "7f9083e5-b1f9-4fe0-8c94-376ed61d228c": "A ragos alakokat gyakoroltató feladatoknál a pontozás CSAK a kérdezett rag pontos alakját fogadja el "
+    + "teljes ponttal (pl. -val/-vel ragnál az „anyával”, nem az „anyának”); a más raggal ellátott alak hibás válasz.",
+  // 4. osztály – Tulajdonságot kifejező szavak (a lektor: a mintaválasz önkényes szavai lettek kötelezők).
+  "59f1ce9a-92e5-4908-82fa-1027d82583bf": "A mondatalkotó, szabadon megfogalmazható feladatoknál a kötelező (required) fogalmak CSAK a kérdés által "
+    + "megkövetelt elemek (pl. a kért tulajdonságot kifejező szó); a mintaválasz többi szava (névelő, ige, tárgy) soha ne legyen kötelező.",
+};
+/** Review #357: a listás anyag MINDEN újraindítása (az infrastruktúra-hiba miatti is) célzott — a redo-jelző egyszeri futást biztosít. */
+const redoFlag = (htmlFileId: string) => (Object.prototype.hasOwnProperty.call(LEGACY_REDO, htmlFileId) ? { redo: true } : {});
+/** Spec 2026-10-21-ciklus6: a hibás, célzott újragyártásra kijelölt, még újra nem gyártott sorelem. */
+export const shouldRedo = (row: { status: string; payload: { htmlFileId: string; redo?: boolean } }): boolean =>
+  row.status === "error" && !row.payload.redo && Object.prototype.hasOwnProperty.call(LEGACY_REDO, row.payload.htmlFileId);
 // Review #352: a következő ciklus korlátja a TÉNYLEGES sorelemszám + 5 (nem az előző korlát + 5) — a korlát fölötti (pl. újrapróbált)
 // elem miatt a ciklus nem lehet 5-nél rövidebb.
 /** Tiszta: hány új anyag indulhat még a korlátig. */
@@ -104,18 +123,23 @@ export const jobStillRunning = (jobStatus: string | undefined, runPhase: string 
 export const legacyBaseline = (content: string) => createHash("sha256").update(content).digest("hex");
 
 /** Tiszta: a régi anyag szövege forrásként, és a gyártási utasítás. */
-export function legacySource(file: { title: string; content: string }): { files: Array<{ name: string; kind: "text"; content: string }>; instructions: string } {
+export function legacySource(file: { title: string; content: string }, extra?: string): { files: Array<{ name: string; kind: "text"; content: string }>; instructions: string } {
   const { text } = htmlToText(file.content);
   const name = `${file.title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 200) || "regi-anyag"}.txt`;
   return {
     files: [{ name, kind: "text", content: `${file.title}\n\n${text}` }],
     instructions: "A forrás egy korábbi, interaktív Websuli-tananyag kivonata. A benne TANÍTOTT tartalmat dolgozd fel teljes mélységben "
       + "(fogalmak, példák, feladatok témái); a weboldal kezelőfelületének szövegeit (gombok, pontszámítás, menük) hagyd figyelmen kívül. "
-      + "Az évfolyamot a tartalomból állapítsd meg.",
+      + "Az évfolyamot a tartalomból állapítsd meg."
+      // Spec 2026-10-21-ciklus6: a célzott újragyártás utasítása.
+      // Review #357: külön sorban, jelölve — a banképítő kötelező pontozási szabályként kapja (scoringRulesOf).
+      + (extra ? `\n${SCORING_RULE_MARK} ${extra}` : ""),
   };
 }
 
 type Payload = { htmlFileId: string; runId?: string; attempt?: number; startedAt?: number; requeued?: boolean;
+  /** Spec 2026-10-21-ciklus6: a célzott újragyártás egyszer fut. */
+  redo?: boolean;
   /** Review #352: a folytatott Stúdió-job — a futás-azonosító nélkül (helyőrző) is felismerhető, hogy a folytatás él. */
   jobId?: string };
 
@@ -138,7 +162,7 @@ type QueueRow = { id: string; status: string; payload: Payload };
 
 /** Review #351: az újrapróba payloadja — az újrasorolás jelzője (`requeued`) megmarad, így a tartós hiba nem indít végtelen újragyártást. */
 export const retryPayload = (prev: Payload, runId: string, attempt: number, startedAt: number, jobId?: string): Payload =>
-  ({ htmlFileId: prev.htmlFileId, runId, attempt, startedAt, ...(prev.requeued ? { requeued: true } : {}), ...(jobId ? { jobId } : {}) });
+  ({ htmlFileId: prev.htmlFileId, runId, attempt, startedAt, ...(prev.requeued ? { requeued: true } : {}), ...(prev.redo ? { redo: true } : {}), ...(jobId ? { jobId } : {}) });
 
 async function ownerFor(fileUserId: string | null): Promise<string | null> {
   if (fileUserId) {
@@ -155,7 +179,7 @@ async function startFresh(htmlFileId: string, runId: string): Promise<void> {
   if (!file) throw new Error("a régi anyag nem található");
   const owner = await ownerFor(file.userId);
   if (!owner) throw new Error("nincs admin készítő");
-  const source = legacySource(file);
+  const source = legacySource(file, LEGACY_REDO[htmlFileId]);
   const { startOneStepRun } = await import("./lesson-pipeline-routes");
   startOneStepRun({ title: file.title, instructions: source.instructions, files: source.files }, owner, { htmlFileId, baseline: legacyBaseline(file.content) }, runId);
 }
@@ -229,11 +253,19 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
     if (LEGACY_MIGRATION_MODE !== "off") {
       for (const row of rows.filter(shouldRequeue)) {
         await db.execute(sql`UPDATE scheduled_jobs SET status = 'running', error = NULL, completed_at = NULL,
-          payload = ${JSON.stringify({ htmlFileId: row.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true })}::jsonb
+          payload = ${JSON.stringify({ htmlFileId: row.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, ...redoFlag(row.payload.htmlFileId) })}::jsonb
           WHERE id = ${row.id} AND status = 'error' AND coalesce(payload->>'requeued', '') <> 'true'`);
         logger.info(`[RÉGI→STÚDIÓ] Újra sorba (a tudásbank-oszlophatár javítása után): ${row.payload.htmlFileId}`);
       }
-      rows = rows.map((r) => (shouldRequeue(r) ? { ...r, status: "running", payload: { htmlFileId: r.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true } } : r));
+      rows = rows.map((r) => (shouldRequeue(r) ? { ...r, status: "running", payload: { htmlFileId: r.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, ...redoFlag(r.payload.htmlFileId) } } : r));
+      // Spec 2026-10-21-ciklus6: célzott újragyártás — egyszer, a redo-jelzővel (a hibás állapotból, feltételes UPDATE-tel).
+      for (const row of rows.filter(shouldRedo)) {
+        const next = { htmlFileId: row.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, redo: true };
+        await db.execute(sql`UPDATE scheduled_jobs SET status = 'running', error = NULL, completed_at = NULL, payload = ${JSON.stringify(next)}::jsonb
+          WHERE id = ${row.id} AND status = 'error' AND coalesce(payload->>'redo', '') <> 'true'`);
+        logger.info(`[RÉGI→STÚDIÓ] Célzott újragyártás: ${row.payload.htmlFileId}`);
+      }
+      rows = rows.map((r) => (shouldRedo(r) ? { ...r, status: "running", payload: { htmlFileId: r.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, redo: true } } : r));
     }
     let running = 0;
     const retries: Array<{ row: QueueRow; decision: "resume" | "restart"; jobId: string | null; error: string | null }> = [];
