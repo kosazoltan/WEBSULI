@@ -22,7 +22,7 @@ export const LEGACY_MAX_ATTEMPTS = 2;
  * Spec 2026-10-21-regi-anyag-ciklusos-felulvizsgalat: a sorelemek felső száma — a sor eddig indít új anyagot, utána megáll (az újrapróba a
  * meglévő elemen belül marad). Minden felülvizsgálati ciklus (5 anyag) egy PR-rel emeli; így a deploy mindig futásmentes állapotban megy.
  */
-export const LEGACY_BATCH_LIMIT = 117;
+export const LEGACY_BATCH_LIMIT = 122;
 // Review #352: a következő ciklus korlátja a TÉNYLEGES sorelemszám + 5 (nem az előző korlát + 5) — a korlát fölötti (pl. újrapróbált)
 // elem miatt a ciklus nem lehet 5-nél rövidebb.
 /** Tiszta: hány új anyag indulhat még a korlátig. */
