@@ -211,7 +211,8 @@ export function coverGroup(sample: string, okCorrect: readonly string[], wrongTe
   const answers = [sample, ...okCorrect];
   const has = (answer: string, word: string) => missingAnswerConcepts(answer, { required: [[word]] }).length === 0;
   const pool = [...new Set(answers.flatMap((a) => a.match(/[\p{L}\d]+(?:['’][\p{L}\d]+)*/gu) ?? []))]
-    .filter((w) => !/['’]/.test(w) && isDistinguishingCandidate(w) && !has(wrongText, w));
+    // Review #353: a rubrika tagja legfeljebb 160 karakter (séma) — hosszabb jelölt nem kerülhet a csoportba.
+    .filter((w) => w.length <= 160 && !/['’]/.test(w) && isDistinguishingCandidate(w) && !has(wrongText, w));
   const group: string[] = [];
   let uncovered = answers.map((_, i) => i);
   while (uncovered.length) {

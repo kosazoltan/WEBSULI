@@ -35,19 +35,35 @@ test("S3d: a csoport tagjai a hibásban nincsenek, minden helyesben van tag; kor
   assert.ok(g && g.length <= COVER_GROUP_MAX, JSON.stringify(g));
   // Ha a hibás tartalmazza a megkülönböztető szavakat, nincs csoport.
   assert.equal(coverGroup("Az igekötő ad.", ["Az igekötő ad."], "Az igekötő ad, nem vesz el."), null);
-  // Ha 6-nál több tag kellene (minden helyes más, egyedi szót használ), nincs csoport.
-  const many = Array.from({ length: 8 }, (_, i) => `Válasz ${["alma", "körte", "szilva", "barack", "meggy", "cseresznye", "dinnye", "eper"][i]}.`);
-  assert.equal(coverGroup("Válasz málna.", many, "Válasz banán."), null);
+  // Review #353: a lefedés MEGVALÓSÍTHATÓ, csak 6-nál több tag kellene (a minta szava egy helyesben is szerepel) → a korlát miatt null.
+  const fruits = ["alma", "körte", "szilva", "barack", "meggy", "cseresznye", "dinnye", "eper"];
+  const many = fruits.map((f) => `Válasz ${f}.`);
+  assert.equal(coverGroup("Válasz alma.", many, "Válasz banán."), null, "8 különböző tag kellene");
+  // Ugyanez 6 helyessel (a minta egyikkel közös) → van csoport, legfeljebb 6 taggal.
+  const six = coverGroup("Válasz alma.", many.slice(0, 6), "Válasz banán.");
+  assert.ok(six && six.length === 6, JSON.stringify(six));
+  // Review #353: 160 karakternél hosszabb szó nem lehet tag (a séma korlátja).
+  const long = "a".repeat(170);
+  assert.equal(coverGroup(`Válasz ${long}.`, [`Válasz ${long}.`], "Válasz banán."), null);
 });
 
 test("analitikai archívum: a bejegyzés alakja (feladat, minta, rubrika, esetek; a szövegek vágva)", async () => {
   const { answerKeyArchiveEntry } = await import("../server/studio/single-run/engine");
+  const { finalizeAnswerKeyArchive } = await import("../server/studio/single-run/engine");
   const e = answerKeyArchiveEntry({ ...task(), requiredOrder: [["a"], ["b"]] }, { correct: ["x".repeat(400)], wrong: [{ kind: "forditott", text: "y" }] }, 2);
   assert.equal(e.id, "t1");
   assert.equal(e.sectionIndex, 2);
   assert.deepEqual(e.required, task().required);
   assert.deepEqual(e.requiredOrder, [["a"], ["b"]]);
-  assert.equal(e.correct[0].length, 300);
+  assert.equal(e.correct[0].length, 400, "review #353: teljes szöveg (visszajátszható)");
+  assert.equal(e.minWords, 4);
+  assert.equal(e.needsSentence, false);
+  assert.deepEqual(e.bonus, []);
   assert.deepEqual(e.wrong, [{ kind: "forditott", text: "y" }]);
   assert.equal("requiredPhrases" in e, false);
+  // Review #353: véglegesítés — csak a végleges leckében bent maradt feladat, a végleges azonosítóval; azonos modell-azonosító két fejezetben.
+  const other = { ...e, sectionIndex: 0, q: "Másik kérdés?" };
+  const dropped = { ...e, sectionIndex: 1, q: "Eldobott csomag kérdése?" };
+  const fin = finalizeAnswerKeyArchive([e, other, dropped], [{ id: "t-hash-a", sectionIndex: 2, q: e.q }, { id: "t-hash-b", sectionIndex: 0, q: "Másik kérdés?" }]);
+  assert.deepEqual(fin.map((x) => [x.id, x.modelId]), [["t-hash-a", "t1"], ["t-hash-b", "t1"]]);
 });

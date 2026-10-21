@@ -393,11 +393,22 @@ export type SingleRunResult = { mapId: string; jobId: string; lessonId: string; 
  * `step` mező a felület számára tükrözi az állomást. Hiba esetén SingleRunError (a mentett piszkozat megmarad).
  */
 /** Spec 2026-10-21-ciklus1-csoportos-szigoritas: egy archív válaszkulcs-bejegyzés (tiszta; a szövegek 300 karakterre vágva). */
-export function answerKeyArchiveEntry(t: { id: string; q: string; sample: string; required: string[][]; requiredPhrases?: string[][]; requiredOrder?: string[][] },
+export function answerKeyArchiveEntry(t: { id: string; q: string; sample: string; required: string[][]; bonus?: string[][]; minWords?: number; needsSentence?: boolean;
+  requiredPhrases?: string[][]; requiredOrder?: string[][]; requiredDistinct?: unknown[] },
   k: { correct: string[]; wrong: Array<{ kind: string; text: string }> }, sectionIndex: number) {
-  const cut = (x: string) => x.slice(0, 300);
-  return { id: t.id, sectionIndex, q: cut(t.q), sample: cut(t.sample), required: t.required, ...(t.requiredPhrases?.length ? { requiredPhrases: t.requiredPhrases } : {}),
-    ...(t.requiredOrder?.length ? { requiredOrder: t.requiredOrder } : {}), correct: k.correct.map(cut), wrong: k.wrong.map((w) => ({ kind: w.kind, text: cut(w.text) })) };
+  // Review #353: a pontozás minden bemenete és a TELJES minta (a tagadás-összevetés a mintából számol) — az offline visszajátszás pontos.
+  return { id: t.id, sectionIndex, q: t.q, sample: t.sample, required: t.required, bonus: t.bonus ?? [], minWords: t.minWords, needsSentence: t.needsSentence,
+    ...(t.requiredPhrases?.length ? { requiredPhrases: t.requiredPhrases } : {}), ...(t.requiredOrder?.length ? { requiredOrder: t.requiredOrder } : {}),
+    ...(t.requiredDistinct?.length ? { requiredDistinct: t.requiredDistinct } : {}), correct: [...k.correct], wrong: k.wrong.map((w) => ({ kind: w.kind, text: w.text })) };
+}
+
+/**
+ * Review #353: a publikáláskor csak a végleges leckében bent maradt feladatok esetei maradnak (az eldobott / újraépített csomagoké nem),
+ * a VÉGLEGES azonosítóval (a banképítő a modell azonosítóit lecseréli). Az összekapcsolás a fejezet + kérdés szövege szerint (tiszta).
+ */
+export function finalizeAnswerKeyArchive(entries: ReadonlyArray<{ sectionIndex: number; q: string } & Record<string, unknown>>, tasks: ReadonlyArray<{ id: string; sectionIndex: number; q: string }>) {
+  const byKey = new Map(tasks.map((t) => [JSON.stringify([t.sectionIndex, t.q]), t.id]));
+  return entries.flatMap((e) => { const id = byKey.get(JSON.stringify([e.sectionIndex, e.q])); return id ? [{ ...e, id, modelId: e.id }] : []; });
 }
 
 export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps): Promise<SingleRunResult> {
@@ -635,13 +646,16 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   );
   // Spec 2026-10-21-ciklus1-csoportos-szigoritas: analitikai archívum — a válaszkulcs-esetek feladatonként a job kimenetébe (a drága
   // futások offline visszamérhetők; legfeljebb 200 feladat, a szövegek vágva). A folytatott futás a mentett archívumot bővíti.
-  const keyArchive = new Map<string, unknown>((Array.isArray(output.answerKeyArchive) ? output.answerKeyArchive as Array<{ id: string }> : []).map((e) => [e.id, e]));
+  // Review #353: fejezet + modell-azonosító a kulcs (a csomagok azonosítói csak a csomagon belül egyediek).
+  const archiveKey = (sectionIndex: number, id: string) => `${sectionIndex}:${id}`;
+  const keyArchive = new Map<string, unknown>((Array.isArray(output.answerKeyArchive) ? output.answerKeyArchive as Array<{ id: string; sectionIndex: number }> : [])
+    .map((e) => [archiveKey(e.sectionIndex, e.id), e]));
   const answerKeysWithNotes: typeof writeKeys = async (tasks, sectionIndex) => {
     const keys = await writeKeys(tasks, sectionIndex);
     for (const t of tasks) {
       const k = keys.get(t.id);
-      if (!k || (keyArchive.size >= 200 && !keyArchive.has(t.id))) continue;
-      keyArchive.set(t.id, answerKeyArchiveEntry(t, k, sectionIndex));
+      if (!k || (keyArchive.size >= 400 && !keyArchive.has(archiveKey(sectionIndex, t.id)))) continue;
+      keyArchive.set(archiveKey(sectionIndex, t.id), answerKeyArchiveEntry(t, k, sectionIndex));
     }
     output = { ...output, answerKeyArchive: [...keyArchive.values()] };
     const notes = tasks.flatMap((t) => answerKeyNotes(t, keys.get(t.id) ?? null));
@@ -805,6 +819,10 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     warnings.push(`Az utolsó lektorkör hibás tételeit kivettük: ${savedRemoved.join(", ")}`);
   // Spec 2026-10-20-s4 (S4a): a közzétett bank szigorított feladatai (beállítás, nem halmozás — a folytatott futás sem számol kétszer).
   telemetry.gates.rubricTightened = final.data.experience?.tasks.filter((t) => t.tightened?.length || t.tightenedPhrases?.length || t.tightenedOrder).length ?? 0;
+  // Review #353: az archívum a végleges feladatokra szűkül (végleges azonosítóval).
+  if (Array.isArray(output.answerKeyArchive)) {
+    output = { ...output, answerKeyArchive: finalizeAnswerKeyArchive(output.answerKeyArchive as Array<{ sectionIndex: number; q: string } & Record<string, unknown>>, final.data.experience?.tasks ?? []) };
+  }
   const lessonId = await store.upsertLesson(null, mapId, final.data);
   const published = await store.publishLesson({
     lessonId, mapId, title: final.data.title, classroom: final.data.classroom, coverage: coverage.coverage,
