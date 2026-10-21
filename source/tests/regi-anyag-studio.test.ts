@@ -9,7 +9,7 @@ const row = (over: Partial<LegacyRow> = {}): LegacyRow => ({
   id: "x", title: "4. osztály - Igekötők", contentType: "html", bytes: 70_000, createdAt: new Date("2025-11-06"), views: 10, hasMedia: false, ...over,
 });
 
-test("a jelöltek: csak a határnap előtti, nem lecke, nem kizárt anyag; a nézettség szerint", () => {
+test("a jelöltek: nem lecke, nem kizárt anyag (ciklus 6b óta a határnap utáni is); a nézettség szerint", () => {
   const rows = [
     row({ id: "a", views: 5 }), row({ id: "b", views: 50 }),
     row({ id: "uj", createdAt: new Date("2026-06-01T00:00:00Z") }),
@@ -23,7 +23,8 @@ test("a jelöltek: csak a határnap előtti, nem lecke, nem kizárt anyag; a né
     row({ id: "abig2", title: "Szabó Magda: ABIGÉL — a regény" }),
   ];
   const all = legacyCandidates(rows, "all");
-  assert.deepEqual(all.queue, ["b", "a"]);
+  // Spec 2026-10-21-ciklus6b (tulajdonosi döntés): a határnap utáni régi formátumú anyag is jelölt; azonos nézettségnél a korábbi előbb.
+  assert.deepEqual(all.queue, ["b", "budapest", "uj", "a"]);
   assert.deepEqual(all.skipped.map((s) => s.id).sort(), ["abig2", LEGACY_EXCLUDED_IDS[0], "kep", "nagy", "pdf", "zene"].sort());
   assert.equal(LEGACY_CUTOFF.toISOString(), "2026-05-31T22:00:00.000Z", "Budapest szerinti éjfél");
   assert.ok(all.skipped.every((s) => s.reason.length > 0));

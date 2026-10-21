@@ -14,8 +14,13 @@ import { htmlToText } from "./safe-fetch";
 export type LegacyMode = "off" | "pilot" | "all";
 /** A kapcsoló — tulajdonosi döntés 2026-10-20: előbb 3 próba, utána mind. */
 export const LEGACY_MIGRATION_MODE: LegacyMode = "all";
-/** Review #349: a határnap Budapest szerinti éjfél (2026. június 1-jén UTC+2). */
+/** Review #349: a határnap Budapest szerinti éjfél. Spec 2026-10-21-ciklus6b óta TÖRTÉNETI (a jelöltek köre nem szűr rá; az eredeti hatókör jelölése). */
 export const LEGACY_CUTOFF = new Date("2026-06-01T00:00:00+02:00");
+/**
+ * Spec 2026-10-21-ciklus6b + review #358: a hatókör felső határa — a tulajdonosi döntés (2026-10-21 14:40) idején már meglévő anyagok. A később
+ * feltöltött HTML anyag NEM alakul át magától (különben minden új feltöltés a sorba kerülne).
+ */
+export const LEGACY_SCOPE_END = new Date("2026-10-21T15:00:00+02:00");
 export const LEGACY_JOB_TYPE = "legacy-studio-migration";
 export const LEGACY_CONCURRENCY = 3;
 export const LEGACY_MAX_ATTEMPTS = 2;
@@ -68,7 +73,8 @@ export function legacyCandidates(rows: readonly LegacyRow[], mode: LegacyMode): 
   const skipped: LegacyCandidates["skipped"] = [];
   const eligible: LegacyRow[] = [];
   for (const r of rows) {
-    if (r.createdAt >= LEGACY_CUTOFF || r.contentType === "lesson") continue;
+    // Spec 2026-10-21-ciklus6b (tulajdonosi döntés): a határnap utáni régi formátumú HTML anyag is jelölt — csak a lecke típus kimarad.
+    if (r.contentType === "lesson" || r.createdAt >= LEGACY_SCOPE_END) continue;
     const reason = LEGACY_EXCLUDED_IDS.includes(r.id) || /abig[eé]l/i.test(r.title) ? "tulajdonosi kizárás (Abigél)"
       : r.contentType === "pdf" ? "PDF-anyag (külön forrásút)"
       : r.bytes > LEGACY_MAX_BYTES ? `képgazdag / nagy anyag (${Math.round(r.bytes / 1000)} kB) — a szövegkivonat a képeket elveszítené`
@@ -209,6 +215,33 @@ const finish = (row: QueueRow, status: "done" | "error" | "waiting", error: stri
   db.execute(sql`UPDATE scheduled_jobs SET status = ${status}, error = ${error}, completed_at = now()
     WHERE id = ${row.id} AND status = 'running' AND coalesce(payload->>'runId', '') = ${row.payload.runId ?? ""}`);
 
+/**
+ * Spec 2026-10-21-ciklus6b: a KÉSZ régi anyag korábbi (nem aktuális, nem publikált) Stúdió-piszkozatai elvetett jelölést kapnak — ugyanaz,
+ * mint a felület „Törlés” gombja (visszafordítható). Különben a draftlista a már kész anyag elbukott próbálkozásait mutatja („megtévesztő”).
+ * Review #358: minden körben fut (idempotens — a hibás próbálkozás és a korábban kész elemek is sorra kerülnek); az aktívan vitt (élő
+ * bérletű) vagy újragyártott job érintetlen; a hibás és a beragadt „running” (élő bérlet és türelmi időn belüli frissülés nélküli) job is.
+ */
+export const supersededDraftCondition = sql`j.output ? 'targetHtmlFileId'
+  AND coalesce(j.output->>'recoveryState', '') NOT IN ('discarded', 'remanufacturing', 'remanufactured', 'superseded')
+  AND NOT EXISTS (SELECT 1 FROM lessons l WHERE l.id = j.lesson_id AND l.published_at IS NOT NULL)
+  AND NOT EXISTS (SELECT 1 FROM lesson_workflow_runs lw WHERE (lw.id = j.id OR lw.resource_id = j.id) AND lw.lease_until > now())
+  AND NOT EXISTS (SELECT 1 FROM one_step_runs r JOIN lesson_workflow_runs w ON w.id = r.id WHERE r.job_id = j.id AND w.lease_until > now())
+  AND (j.status = 'error' OR (j.status = 'running' AND NOT EXISTS (SELECT 1 FROM one_step_runs r WHERE r.job_id = j.id
+    AND r.updated_at > now() - make_interval(secs => ${START_GRACE_MS / 1000}))))
+  AND EXISTS (SELECT 1 FROM scheduled_jobs s WHERE s.type = ${LEGACY_JOB_TYPE} AND s.status = 'done'
+    AND s.payload->>'htmlFileId' = j.output->>'targetHtmlFileId'
+    AND NOT EXISTS (SELECT 1 FROM one_step_runs r WHERE r.id = s.payload->>'runId' AND r.job_id = j.id))`;
+async function discardSupersededDrafts(): Promise<void> {
+  try {
+    await db.execute(sql`UPDATE studio_jobs j SET output = coalesce(j.output, '{}'::jsonb)
+        || jsonb_build_object('recoveryState', 'discarded', 'discardedAt', now()::text, 'discardedBy', 'legacy-cleanup')
+      WHERE ${supersededDraftCondition}`);
+  } catch (error) {
+    // A következő kör újrapróbálja (idempotens).
+    logger.warn(`[RÉGI→STÚDIÓ] A régi piszkozatok elvetése nem sikerült: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 let ticking = false;
 let skippedLogged = false;
 /** Review #349: leállításkor új kör (és benne új gyártás) nem indul. */
@@ -312,6 +345,8 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
     if (LEGACY_MIGRATION_MODE === "off") return running > 0;
     // Spec 2026-10-21-ciklus4: példánykerítés — ha már újabb példány indult (deploy-átfedés), ez a kör új munkát nem kezd.
     if (await supersededInstance(now)) return running > 0;
+    // Review #358: a kész elemek elavult piszkozatainak takarítása minden körben (újrapróbálható, a korábban kész elemekre is).
+    await discardSupersededDrafts();
     for (const { row, decision, jobId, error } of retries) {
       if (running >= LEGACY_CONCURRENCY || stopped) break;
       const { htmlFileId, attempt = 1 } = row.payload;
@@ -339,7 +374,7 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
         (h.content ILIKE '%<audio%' OR h.content ILIKE '%<video%') AS has_media,
         (h.content ILIKE '%<img%' OR h.content ILIKE '%<iframe%' OR h.content ILIKE '%<embed%' OR h.content ILIKE '%<object%') AS has_embed,
         (SELECT count(*) FROM material_views v WHERE v.material_id = h.id) AS views
-      FROM html_files h WHERE h.created_at < ${LEGACY_CUTOFF.toISOString()}`);
+      FROM html_files h WHERE h.created_at < ${LEGACY_SCOPE_END.toISOString()}`);
     const { queue, skipped } = legacyCandidates((fileRows as Array<Record<string, unknown>>).map((r) => ({
       id: String(r.id), title: String(r.title), contentType: String(r.content_type), bytes: Number(r.bytes), createdAt: new Date(String(r.created_at)),
       views: Number(r.views ?? 0), hasMedia: Boolean(r.has_media), hasEmbed: Boolean(r.has_embed),
