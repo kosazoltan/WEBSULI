@@ -52,7 +52,7 @@ import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
 import { ViewDedup } from "./lib/view-dedup";
 import { getMaterialOrigin } from "./utils/config";
-import { prependWebLessonQualityNotice, showQualityNotice, webLessonQualityNotice } from "./lib/web-lesson-quality-notice";
+import { prependWebLessonQualityNotice, qualityNoticeFor } from "./lib/web-lesson-quality-notice";
 
 // BACKLOG T2: /dev/:id megtekintés-dedup (ip|materialId, 1 óra)
 const materialViewDedup = new ViewDedup();
@@ -3008,7 +3008,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         // HTML material: wrap with responsive container
         // Spec 2026-10-21-ciklus6b: a belső minőség-felirat csak adminnak (a tanulónak „teljesen oda nem illő”).
-        const notice = showQualityNotice(req.user) ? webLessonQualityNotice(file.content) : null;
+        const notice = qualityNoticeFor(req.user, file.content);
         const content = notice ? prependWebLessonQualityNotice(file.content, notice) : file.content;
         const typographed = withLessonTypography(wrapHtmlWithResponsiveContainer(content), file.classroom, file.title);
         const wrappedHtml = learner && learnerToken ? withLearnerScript(typographed, learnerToken) : typographed;

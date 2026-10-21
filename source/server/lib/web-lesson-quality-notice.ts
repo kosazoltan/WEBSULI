@@ -18,6 +18,10 @@ export type WebLessonQualityNotice = {
 /** Spec 2026-10-21-ciklus6b: a belső minőség-felirat csak adminnak szól — a tanuló / névtelen látogató felirat nélkül látja az anyagot. */
 export const showQualityNotice = (user: unknown): boolean => Boolean((user as { isAdmin?: boolean } | undefined)?.isAdmin);
 
+/** Review #358: a `/dev/:id` route döntése — a felirat csak adminnak (a teszt ugyanezt a függvényt hívja, nem csak a segédet). */
+export const qualityNoticeFor = (user: unknown, html: string): WebLessonQualityNotice | null =>
+  showQualityNotice(user) ? webLessonQualityNotice(html) : null;
+
 export function webLessonQualityNotice(html: string): WebLessonQualityNotice | null {
   if (!hasHtmlLessonData(html)) return null;
 
