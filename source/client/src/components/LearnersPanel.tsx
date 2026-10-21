@@ -25,6 +25,9 @@ function PairQr({ link, name }: { link: string; name: string }) {
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
+    // Review #362: új link (pl. visszavonás után) → a régi kód és hibaállapot nem maradhat látható.
+    setSrc(null);
+    setError(false);
     let alive = true;
     QRCode.toDataURL(link, { margin: 1, width: 240, errorCorrectionLevel: "M" })
       .then((url) => { if (alive) setSrc(url); })
@@ -34,7 +37,7 @@ function PairQr({ link, name }: { link: string; name: string }) {
   if (error) return <p className="text-sm text-destructive">A QR-kód nem készült el — használd a „Párosító link másolása” gombot.</p>;
   return <figure className="space-y-1" data-testid="pair-qr">
     {src ? <img src={src} width={240} height={240} alt={`${name} párosító QR-kódja`} className="rounded border bg-white p-1" /> : <div className="h-[240px] w-[240px] animate-pulse rounded bg-muted" />}
-    <figcaption className="text-xs text-muted-foreground">Olvasd be {name} telefonjának kamerájával, és nyisd meg a linket — minden böngészőben, amelyet használ, egyszer.</figcaption>
+    <figcaption className="max-w-[240px] text-xs text-muted-foreground">Ez a kód a te képernyődön jelenik meg: {name} a saját telefonja kamerájával erről olvassa be, és megnyitja a linket — minden böngészőben, amelyet használ, egyszer. Ha nincs kéznél másik eszköz, küldd el neki a linket üzenetben („Párosító link másolása”), és a telefonján nyissa meg.</figcaption>
   </figure>;
 }
 
@@ -136,7 +139,7 @@ export default function LearnersPanel() {
                   <ShieldOff className="h-4 w-4 mr-1" /> Párosítás visszavonása
                 </Button>
               </div>
-              {qrFor === l.id && l.pairLink && <PairQr link={l.pairLink} name={l.name} />}
+              {qrFor === l.id && l.pairLink && <PairQr key={l.pairLink} link={l.pairLink} name={l.name} />}
             </CardContent>
           </Card>
         ))}

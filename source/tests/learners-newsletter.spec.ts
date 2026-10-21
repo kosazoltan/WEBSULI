@@ -51,3 +51,36 @@ for (const viewport of [{ width: 375, height: 812 }, { width: 1280, height: 800 
     await page.screenshot({ path: `test-results/learners-newsletter-${viewport.width}.png`, fullPage: true });
   });
 }
+
+// Spec 2026-10-21-tanulo-parositas (review #362): a „Párosító QR-kód” gomb valós renderben — betöltött kép, nincs kilógás; új link
+// (visszavonás után) a régi kódot lecseréli.
+for (const viewport of [{ width: 375, height: 812 }, { width: 1280, height: 800 }]) {
+  test(`párosító QR-kód megjelenik és frissül ${viewport.width}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    let server = learner([], false);
+    await page.route("**/api/admin/learners", (route) => route.fulfill({ json: server }));
+    await page.route("**/api/csrf-token", (route) => route.fulfill({ json: { csrfToken: "probe" } }));
+    await page.goto("/__learners-panel-probe");
+    const button = page.getByRole("button", { name: "Párosító QR-kód" });
+    await expect(button).toHaveAttribute("aria-expanded", "false");
+    await button.click();
+    await expect(button).toHaveAttribute("aria-expanded", "true");
+    const img = page.getByTestId("pair-qr").getByRole("img", { name: "Teszt Tanuló párosító QR-kódja" });
+    await expect(img).toBeVisible();
+    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+    const first = await img.getAttribute("src");
+    expect(first).toMatch(/^data:image\/png;base64,/);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    const b = await page.getByTestId("pair-qr").boundingBox();
+    expect(b && b.x >= 0 && b.x + b.width <= viewport.width).toBeTruthy();
+    await page.screenshot({ path: `test-results/learners-pair-qr-${viewport.width}.png`, fullPage: true });
+    // Új párosító link (pl. visszavonás után) → a nyitott QR-kód az új linket kódolja.
+    server = learner([], false).map((l) => ({ ...l, pairLink: "https://example.test/?t=uj" }));
+    await page.getByRole("button", { name: "Frissítés" }).click();
+    await expect.poll(() => img.getAttribute("src")).not.toBe(first);
+    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+    await button.click();
+    await expect(page.getByTestId("pair-qr")).toHaveCount(0);
+  });
+}

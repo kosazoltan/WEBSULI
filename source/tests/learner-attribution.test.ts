@@ -53,11 +53,16 @@ test("Stúdió-lecke: a beküldés learner mezőt is fogadhat; a tárgy a keresz
   const graded = gradeQuiz(quiz as Parameters<typeof gradeQuiz>[0], { q1: 0 });
   const named = buildResultEmail({ lessonTitle: "Igék", classroom: 4, learner: "Teszt Dominik", learnerFirst: "Dominik", url: "", graded });
   assert.match(named.subject, /^\[WebSuli eredmény\] Dominik – Igék — Kvíz — 100% /);
-  const guest = buildResultEmail({ lessonTitle: "Igék", classroom: 4, learner: "Vendég tanuló", url: "", graded });
+  const guest = buildResultEmail({ lessonTitle: "Igék", classroom: 4, learner: "Vendég tanuló", guest: true, url: "", graded });
   assert.match(guest.subject, /^\[WebSuli eredmény\] Igék — Kvíz/);
   // Spec 2026-10-21-tanulo-parositas: vendég eredményénél párosítási útmutató; a párosított tanulóé nem kapja.
+  // Review #362: a cselekvés (QR-kód beolvasása a gyerek telefonjával) szerepel; a döntés az attribúcióból jön, nem a névből.
   assert.match(guest.html, /Párosító QR-kód/);
+  assert.match(guest.html, /a gyerek a telefonja kamerájával a te képernyődről olvassa be/);
+  assert.match(guest.html, /küldd el neki üzenetben a párosító linket/);
   assert.doesNotMatch(named.html, /Párosító QR-kód/);
+  const accountNamedLikeGuest = buildResultEmail({ lessonTitle: "Igék", classroom: 4, learner: "Vendég tanuló", url: "", graded });
+  assert.doesNotMatch(accountNamedLikeGuest.html, /Párosító QR-kód/);
 });
 
 test("review #302: percentOf — előjeles és túl hosszú szám, a tartomány a kerekítés előtt", () => {

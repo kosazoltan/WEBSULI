@@ -93,7 +93,7 @@ const MARK = { ok: "✅", partial: "🟡", fail: "❌" } as const;
 /** A párosítatlan, be nem jelentkezett tanuló neve az eredménylevélben. */
 export const GUEST_LEARNER = "Vendég tanuló";
 
-export function buildResultEmail(input: { lessonTitle: string; classroom: number; learner: string; learnerFirst?: string; url: string; graded: GradedTasks | GradedQuiz }): { subject: string; html: string } {
+export function buildResultEmail(input: { lessonTitle: string; classroom: number; learner: string; learnerFirst?: string; guest?: boolean; url: string; graded: GradedTasks | GradedQuiz }): { subject: string; html: string } {
   const { graded } = input;
   const part = graded.kind === "tasks" ? "Feladatok" : "Kvíz";
   const s = graded.summary;
@@ -106,9 +106,10 @@ export function buildResultEmail(input: { lessonTitle: string; classroom: number
     : graded.wrong.length
       ? `<p><strong>Hibás válaszok:</strong></p><ol>${graded.wrong.map(w => `<li><p>${esc(w.question)}</p><p>❌ ${w.picked ? esc(w.picked) : "<em>(nincs válasz)</em>"} — helyes: ${esc(w.correct)}</p></li>`).join("")}</ol>`
       : "<p>Minden kérdésre helyes választ adott.</p>";
-  // Spec 2026-10-21-tanulo-parositas: vendég eredményénél útmutató — így látszik, melyik gyermek eszköze nincs párosítva.
-  const guestHint = input.learner === GUEST_LEARNER
-    ? `<p style="color:#555"><em>Ha ezt egyik gyermeked oldotta meg, az eszköze nincs párosítva — Admin → Tanulók → „Párosító QR-kód”, és olvasd be az ő telefonjával; utána az eredménye a nevével érkezik, és a profiljában is megjelenik.</em></p>`
+  // Spec 2026-10-21-tanulo-parositas: vendég eredményénél útmutató — így látszik, melyik gyermek eszköze nincs párosítva. Review #362: a
+  // hívó attribúciójából (nincs fiók, nincs párosítás), nem a megjelenített névből (egy fiók neve is lehetne „Vendég tanuló”).
+  const guestHint = input.guest
+    ? `<p style="color:#555"><em>Ha ezt egyik gyermeked oldotta meg, az eszköze nincs párosítva — a saját eszközödön Admin → Tanulók → „Párosító QR-kód”, és a gyerek a telefonja kamerájával a te képernyődről olvassa be (vagy küldd el neki üzenetben a párosító linket); utána az eredménye a nevével érkezik, és a profiljában is megjelenik.</em></p>`
     : "";
   return { subject, html: `${head}${body}${guestHint}<p><a href="${esc(input.url)}">A lecke megnyitása</a></p>` };
 }
