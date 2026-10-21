@@ -43,6 +43,16 @@ export type ExperienceCheckpoint = { hash: string; parts: Record<string, unknown
 export const calibrationOptionsFor = (taskId: string, lektorReviewed: ReadonlySet<string>, language: boolean) =>
   ({ phrases: language, lektorReviewed: lektorReviewed.has(taskId) });
 
+/**
+ * A bank munkapéldánya az előző körből (azonos módszertan-verziónál): a kész csomagok, a lektori hash-ek és — review #357 — a lektor által
+ * kifogásolt azonosítók (a gépi szigorítás tiltása) is átkerülnek a következő körbe.
+ */
+export function hydrateCheckpoint(prev?: ExperienceCheckpoint): ExperienceCheckpoint {
+  const same = prev?.hash === LESSON_METHOD_VERSION;
+  return { hash: LESSON_METHOD_VERSION, parts: same ? { ...prev!.parts } : {}, reviewedHashes: same ? { ...prev!.reviewedHashes } : {},
+    ...(same && prev!.lektorReviewedIds?.length ? { lektorReviewedIds: [...prev!.lektorReviewedIds] } : {}) };
+}
+
 /** Review #357: a kifogásolt azonosítók körökön átívelő uniója (a checkpointban tárolva). */
 export function rememberLektorReviewed(checkpoint: ExperienceCheckpoint, ids: Iterable<string | undefined>): Set<string> {
   const all = new Set([...(checkpoint.lektorReviewedIds ?? []), ...[...ids].filter((id): id is string => Boolean(id))]);
@@ -437,8 +447,7 @@ export function sampleScoreProblem(t: OpenTask, reason: string, wordCount: numbe
 export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept[], deps: ExperienceBuildDeps): Promise<LessonExperience> {
   const plan = bankPlanSchema.parse(planLessonBank(lesson));
   const language = lessonLanguage(lesson.subject);
-  const checkpoint: ExperienceCheckpoint = { hash: LESSON_METHOD_VERSION, parts: deps.checkpoint?.hash === LESSON_METHOD_VERSION ? { ...deps.checkpoint.parts } : {},
-    reviewedHashes: deps.checkpoint?.hash === LESSON_METHOD_VERSION ? { ...deps.checkpoint.reviewedHashes } : {} };
+  const checkpoint = hydrateCheckpoint(deps.checkpoint);
   const taughtIds = new Set(plan.units.flatMap(u => u.conceptIds));
   // S6: az egységek katalógusa SORRENDBEN, előre (egy katalógus-tétel egy egységbe) — a párhuzamos építés nem befolyásolja.
   const catalogUsed = new Set<string>();

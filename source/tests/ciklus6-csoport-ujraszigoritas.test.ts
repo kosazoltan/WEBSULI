@@ -5,7 +5,7 @@ import type { OpenTask } from "../shared/lesson-experience";
 import type { AnswerKeyCases } from "../shared/answer-key-tests";
 import { scoringRulesOf, SCORING_RULE_MARK } from "../shared/scoring-rules";
 import { LEGACY_REDO, legacySource, retryPayload, shouldRedo } from "../server/studio/legacy-migration";
-import { calibrationOptionsFor, rememberLektorReviewed, type ExperienceCheckpoint } from "../server/studio/experience-builder";
+import { calibrationOptionsFor, hydrateCheckpoint, rememberLektorReviewed } from "../server/studio/experience-builder";
 
 /* Spec 2026-10-21-ciklus6 (+ review #357): a lektor által kifogásolt feladat gépi szigorítás nélkül + a két elakadt anyag célzott újragyártása. */
 
@@ -32,11 +32,16 @@ test("ciklus6: a lektor által kifogásolt feladatra SEMMILYEN gépi szigorítá
 });
 
 test("review #357: a tiltás körökön átível (checkpoint), és a builder-beállítás a kifogásolt azonosítóra érvényes", () => {
-  const cp: ExperienceCheckpoint = { hash: "h", parts: {} };
-  rememberLektorReviewed(cp, ["A", undefined]);
+  // 1. lektori kör: A kifogásolva; a bank a következő körre a checkpointból épül újra (hydrateCheckpoint — a valódi út).
+  const round1 = hydrateCheckpoint(undefined);
+  rememberLektorReviewed(round1, ["A", undefined]);
+  const round2 = hydrateCheckpoint(round1);
+  assert.deepEqual(round2.lektorReviewedIds, ["A"], "a tiltás átkerül a következő körbe");
   // A 2. lektori kör csak B-t kifogásolja — A tiltása megmarad.
-  const all = rememberLektorReviewed(cp, ["B"]);
-  assert.deepEqual(cp.lektorReviewedIds, ["A", "B"]);
+  const all = rememberLektorReviewed(round2, ["B"]);
+  assert.deepEqual(round2.lektorReviewedIds, ["A", "B"]);
+  // Más módszertan-verziójú (elavult) checkpoint nem hoz át semmit.
+  assert.equal(hydrateCheckpoint({ hash: "regi", parts: {}, lektorReviewedIds: ["A"] }).lektorReviewedIds, undefined);
   assert.deepEqual(calibrationOptionsFor("A", all, false), { phrases: false, lektorReviewed: true });
   assert.deepEqual(calibrationOptionsFor("C", all, true), { phrases: true, lektorReviewed: false });
   // A teljes út: a builder-beállítással kalibrált, korábban kifogásolt feladat sem kap csoportot.

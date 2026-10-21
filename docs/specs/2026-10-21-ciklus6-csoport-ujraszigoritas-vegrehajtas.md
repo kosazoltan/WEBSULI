@@ -12,3 +12,4 @@ Terv: `docs/specs/2026-10-21-ciklus6-csoport-ujraszigoritas.md`.
    körökön átível (`ExperienceCheckpoint.lektorReviewedIds`, `rememberLektorReviewed`, `calibrationOptionsFor`); a célzott utasítás
    `PONTOZÁSI SZABÁLY:` sorként megy (`shared/scoring-rules.ts`), a banképítő `scoringRules`-ként a rendszerpromptba és a hash-be kapja;
    a listás anyag infrastruktúra-hiba miatti újraindítása is `redo`-jelzős (egyszeri).
+6. **Review #357 (Vercel):** `hydrateCheckpoint(prev)` — a bank munkapéldánya a `lektorReviewedIds`-t is átveszi (különben a körök közti tiltás elveszne); teszt a valódi úton.
