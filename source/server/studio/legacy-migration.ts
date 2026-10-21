@@ -166,8 +166,9 @@ async function resumeJob(jobId: string, htmlFileId: string): Promise<string> {
  * előállapotból (futás-azonosító) frissít.
  */
 async function claimRetry(row: QueueRow, next: Payload): Promise<boolean> {
+  // Review #355: a példánykerítés a foglalás feltételében (atomi) — a leváltott példány nem foglalhat a feltétel ellenőrzése után sem.
   const { rows } = await db.execute(sql`UPDATE scheduled_jobs SET payload = ${JSON.stringify(next)}::jsonb
-    WHERE id = ${row.id} AND status = 'running' AND coalesce(payload->>'runId', '') = ${row.payload.runId ?? ""} RETURNING id`);
+    WHERE id = ${row.id} AND status = 'running' AND coalesce(payload->>'runId', '') = ${row.payload.runId ?? ""} AND ${isLatestInstance()} RETURNING id`);
   return rows.length === 1;
 }
 
@@ -184,15 +185,36 @@ let stopped = false;
 /** Spec 2026-10-21-ciklus4: e folyamat azonosítója a példánykerítéshez. */
 const INSTANCE_ID = randomUUID();
 const INSTANCE_TYPE = "legacy-instance";
-/** Igaz, ha a legutóbb bejegyzett példány nem ez (deploy-átfedés: a régi példány ne indítson munkát, amit a leállása megszakít). */
-async function supersededInstance(): Promise<boolean> {
-  const { rows } = await db.execute(sql`SELECT payload->>'instance' AS instance FROM scheduled_jobs WHERE type = ${INSTANCE_TYPE} ORDER BY created_at DESC LIMIT 1`);
-  const latest = (rows[0] as { instance?: string } | undefined)?.instance;
-  return Boolean(latest && latest !== INSTANCE_ID);
+/** Review #355: bejegyzés nélkül a példány nem foglal (a kerítés csak bejegyzett példányt enged). */
+let registered = false;
+/** Review #355: a legújabb példány minden körben frissíti a jelét; ennél régebbi jel = a példány nem él (pl. elbukott deploy) → a régi átveszi. */
+export const INSTANCE_STALE_MS = 35 * 60_000;
+/** SQL-feltétel: a legutóbb bejegyzett példány ez — a foglalások (új elem, újrapróba) feltételében, így a kerítés atomi. */
+const isLatestInstance = () => sql`(SELECT payload->>'instance' FROM scheduled_jobs WHERE type = ${INSTANCE_TYPE} ORDER BY created_at DESC, id DESC LIMIT 1) = ${INSTANCE_ID}`;
+async function registerInstance(): Promise<void> {
+  await db.insert(scheduledJobs).values({ type: INSTANCE_TYPE, scheduledFor: new Date(), status: "done", payload: { instance: INSTANCE_ID, bootedAt: Date.now() } });
+  registered = true;
+}
+/**
+ * Igaz, ha a legutóbb bejegyzett példány nem ez (deploy-átfedés: a régi példány ne indítson munkát, amit a leállása megszakít). A legújabb
+ * példány itt frissíti a jelét; ha a legújabb jele elavult (a példány nem él), ez a példány újra bejegyzi magát és folytatja.
+ */
+async function supersededInstance(now: number): Promise<boolean> {
+  const { rows } = await db.execute(sql`SELECT payload->>'instance' AS instance, scheduled_for FROM scheduled_jobs WHERE type = ${INSTANCE_TYPE} ORDER BY created_at DESC, id DESC LIMIT 1`);
+  const latest = rows[0] as { instance?: string; scheduled_for?: string | Date } | undefined;
+  if (latest?.instance === INSTANCE_ID) {
+    await db.execute(sql`UPDATE scheduled_jobs SET scheduled_for = now() WHERE type = ${INSTANCE_TYPE} AND payload->>'instance' = ${INSTANCE_ID}`);
+    return false;
+  }
+  if (latest && now - new Date(String(latest.scheduled_for)).getTime() < INSTANCE_STALE_MS) return true;
+  await registerInstance();
+  logger.info("[RÉGI→STÚDIÓ] A legújabb példány jele elavult — ez a példány veszi át a sort.");
+  return false;
 }
 /** Egy kör: egyeztetés, utána a szabad helyek feltöltése. Visszaad: van-e még teendő (futó elem vagy jelölt) — tétlenül ritkább kör. */
 export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
   if (ticking || stopped) return true;
+  if (!registered) return true;
   ticking = true;
   try {
     let rows = (await db.select({ id: scheduledJobs.id, status: scheduledJobs.status, payload: scheduledJobs.payload, error: scheduledJobs.error }).from(scheduledJobs)
@@ -234,7 +256,7 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       if (decision === "waiting") { await finish(row, "waiting", `emberi döntésre vár (${run?.phase}): ${run?.error ?? ""}`.slice(0, 2000)); continue; }
       if (decision === "error") {
         // Spec 2026-10-21-ciklus4: a futás hibaszövege hiányában a Stúdió-job hibája (pl. „A szerver újraindult…”) kerül a sorba.
-        await finish(row, "error", (run?.phase === "done" ? "a futás kész, de a cél nem lett lecke (kézi vizsgálat)" : run?.error ?? jobError ?? "a futás megállt").slice(0, 2000));
+        await finish(row, "error", (run?.phase === "done" ? "a futás kész, de a cél nem lett lecke (kézi vizsgálat)" : run?.error || jobError || "a futás megállt").slice(0, 2000));
         logger.warn(`[RÉGI→STÚDIÓ] Hiba, nincs több kísérlet: ${htmlFileId}: ${run?.error ?? "?"}`);
         continue;
       }
@@ -243,7 +265,7 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
     // Review #349: `off` módban újrapróba sem indul; a párhuzamosság az újrapróbákra is érvényes (azok elsőbbséget kapnak).
     if (LEGACY_MIGRATION_MODE === "off") return running > 0;
     // Spec 2026-10-21-ciklus4: példánykerítés — ha már újabb példány indult (deploy-átfedés), ez a kör új munkát nem kezd.
-    if (await supersededInstance()) return running > 0;
+    if (await supersededInstance(now)) return running > 0;
     for (const { row, decision, jobId, error } of retries) {
       if (running >= LEGACY_CONCURRENCY || stopped) break;
       const { htmlFileId, attempt = 1 } = row.payload;
@@ -288,6 +310,9 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       const runId = randomUUID();
       const claimed = await db.transaction(async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(${LOCK_KEY})`);
+        // Review #355: a kerítés a foglaló tranzakcióban is (atomi a beszúrással).
+        const { rows: fence } = await tx.execute(sql`SELECT ${isLatestInstance()} AS ok`);
+        if (!(fence[0] as { ok?: boolean } | undefined)?.ok) return false;
         const { rows: exists } = await tx.execute(sql`SELECT 1 FROM scheduled_jobs WHERE type = ${LEGACY_JOB_TYPE} AND payload->>'htmlFileId' = ${htmlFileId} LIMIT 1`);
         if (exists.length) return false;
         const { rows: active } = await tx.execute(sql`SELECT count(*)::int AS n FROM scheduled_jobs WHERE type = ${LEGACY_JOB_TYPE} AND status = 'running'`);
@@ -323,14 +348,19 @@ let timer: NodeJS.Timeout | null = null;
 /** Indítás a szerverből (az e2e-módon kívül): 2 perc múlva először (a boot söprései előbb lefutnak); `off` módban el sem indul. */
 export function startLegacyMigration(): void {
   if (LEGACY_MIGRATION_MODE === "off") return;
-  // Spec 2026-10-21-ciklus4: a példány AZONNAL bejegyzi magát (a régi példány a következő körében már látja, és nem indít új munkát).
-  void db.insert(scheduledJobs).values({ type: INSTANCE_TYPE, scheduledFor: new Date(), status: "done", payload: { instance: INSTANCE_ID, bootedAt: Date.now() } })
-    .catch((error) => logger.warn(`[RÉGI→STÚDIÓ] A példány bejegyzése nem sikerült: ${error instanceof Error ? error.message : String(error)}`));
   const schedule = (ms: number) => { if (!stopped) { timer = setTimeout(run, ms); timer.unref(); } };
   const run = () => void legacyMigrationTick()
     .then((busy) => schedule(busy ? LEGACY_BUSY_MS : LEGACY_IDLE_MS))
     .catch((error) => { logger.error(`[RÉGI→STÚDIÓ] A kör hibája: ${error instanceof Error ? error.message : String(error)}`); schedule(LEGACY_BUSY_MS); });
-  schedule(120_000);
+  // Spec 2026-10-21-ciklus4 + review #355: a példány AZONNAL bejegyzi magát (a régi példány a következő foglalásánál már látja); a körök
+  // csak sikeres bejegyzés után indulnak — hiba esetén percenként újrapróba.
+  const register = () => void registerInstance()
+    .then(() => schedule(120_000))
+    .catch((error) => {
+      logger.warn(`[RÉGI→STÚDIÓ] A példány bejegyzése nem sikerült: ${error instanceof Error ? error.message : String(error)}`);
+      if (!stopped) { timer = setTimeout(register, LEGACY_BUSY_MS); timer.unref(); }
+    });
+  register();
 }
 
 /** Review #349: a leállítás ELEJÉN — az időzítő törlődik, és a futó kör sem indít több gyártást. */

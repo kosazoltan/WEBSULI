@@ -88,11 +88,14 @@ function fixDistinct(task: Obj, fixes: string[]): void {
   }
 }
 
-/** Spec 2026-10-21-ciklus4 (mért: 3 bankjavítókör): a `typedAnswers[].value` szám → szöveg (azonos érték). */
+/**
+ * Spec 2026-10-21-ciklus4 (mért: 3 bankjavítókör): a `typedAnswers[].value` szám → szöveg (azonos érték). Review #355: az exponenses alak
+ * (pl. 1e+21) nem alakul át — a típusos értelmező nem fogadná; az ilyen érték a modell javítókörére marad.
+ */
 function fixTypedValues(task: Obj, fixes: string[]): void {
   if (!Array.isArray(task.typedAnswers)) return;
   for (const t of task.typedAnswers) {
-    if (isObj(t) && typeof t.value === "number" && Number.isFinite(t.value)) {
+    if (isObj(t) && typeof t.value === "number" && Number.isFinite(t.value) && !/e/i.test(String(t.value))) {
       t.value = String(t.value);
       fixes.push(`${typeof task.id === "string" ? task.id : "task[?]"}: typedAnswers.value szövegként (${t.value})`);
     }

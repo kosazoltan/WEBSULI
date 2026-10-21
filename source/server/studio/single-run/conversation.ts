@@ -109,7 +109,7 @@ export function openAIClient(opts: { apiKey?: string; model?: string; client?: O
         : { role: "user", content: t.blocks.map((b) => {
           if (b.type === "text") return { type: "input_text", text: wellFormed(b.text) };
           if (!isBinarySource(b.file)) return { type: "input_text", text: wellFormed(sourceAsText(b.file)) };
-          return b.file.kind === "image" ? { type: "input_image", image_url: b.file.content } : { type: "input_file", filename: b.file.name, file_data: b.file.content };
+          return b.file.kind === "image" ? { type: "input_image", image_url: b.file.content } : { type: "input_file", filename: wellFormed(b.file.name), file_data: b.file.content };
         }) });
       const response = await client.responses.create({ model, instructions: wellFormed(system), input, store: false, max_output_tokens: SINGLE_RUN_MAX_TOKENS, reasoning: { effort: SINGLE_RUN_EFFORT } }, { signal });
       // Review #259: csak a `completed` (és a csonka `incomplete`) eredmény válasz — a `failed` / `cancelled` hiba, nem üres forduló.
