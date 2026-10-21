@@ -55,6 +55,9 @@ test("Stúdió-lecke: a beküldés learner mezőt is fogadhat; a tárgy a keresz
   assert.match(named.subject, /^\[WebSuli eredmény\] Dominik – Igék — Kvíz — 100% /);
   const guest = buildResultEmail({ lessonTitle: "Igék", classroom: 4, learner: "Vendég tanuló", url: "", graded });
   assert.match(guest.subject, /^\[WebSuli eredmény\] Igék — Kvíz/);
+  // Spec 2026-10-21-tanulo-parositas: vendég eredményénél párosítási útmutató; a párosított tanulóé nem kapja.
+  assert.match(guest.html, /Párosító QR-kód/);
+  assert.doesNotMatch(named.html, /Párosító QR-kód/);
 });
 
 test("review #302: percentOf — előjeles és túl hosszú szám, a tartomány a kerekítés előtt", () => {

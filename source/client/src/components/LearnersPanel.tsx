@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Copy, RefreshCw, Save, Send, ShieldOff, UserRound } from "lucide-react";
+import { Copy, QrCode, RefreshCw, Save, Send, ShieldOff, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -16,6 +17,27 @@ import type { LearnerReport } from "@shared/learner-report";
  * Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S4): tanulónként az utolsó aktivitás, a heti aktív napok és az utolsó
  * eredmények; párosító link (pl. közös tablethez) és a párosítás visszavonása.
  */
+/**
+ * Spec 2026-10-21-tanulo-parositas: a párosító link QR-kódként — a gyerek telefonjának kamerájával beolvasva az eszköz azonnal párosul,
+ * e-mail nélkül (mért: a gyerekek a napi levelet nem látják, ezért az eszközük sosem párosult, és vendégként tanultak).
+ */
+function PairQr({ link, name }: { link: string; name: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    QRCode.toDataURL(link, { margin: 1, width: 240, errorCorrectionLevel: "M" })
+      .then((url) => { if (alive) setSrc(url); })
+      .catch(() => { if (alive) setError(true); });
+    return () => { alive = false; };
+  }, [link]);
+  if (error) return <p className="text-sm text-destructive">A QR-kód nem készült el — használd a „Párosító link másolása” gombot.</p>;
+  return <figure className="space-y-1" data-testid="pair-qr">
+    {src ? <img src={src} width={240} height={240} alt={`${name} párosító QR-kódja`} className="rounded border bg-white p-1" /> : <div className="h-[240px] w-[240px] animate-pulse rounded bg-muted" />}
+    <figcaption className="text-xs text-muted-foreground">Olvasd be {name} telefonjának kamerájával, és nyisd meg a linket — minden böngészőben, amelyet használ, egyszer.</figcaption>
+  </figure>;
+}
+
 type LearnerRow = { id: string; name: string; grade: number; emails: number; report: LearnerReport; pairLink: string | null; interests: string[]; newsletter: boolean };
 
 /** „Mai felfedezés” hírlevél (docs/specs/2026-10-19-mai-felfedezes-hirlevel.md, S1): érdeklődés + napi hírlevél kapcsoló. */
@@ -65,6 +87,7 @@ export default function LearnersPanel() {
     onSuccess: (r) => toast({ title: "Heti összefoglaló elküldve", description: `${r.sent} címzettnek.` }),
     onError: () => toast({ title: "A heti összefoglaló nem ment el", variant: "destructive" }),
   });
+  const [qrFor, setQrFor] = useState<string | null>(null);
   const copy = async (link: string | null) => {
     if (!link) return;
     try {
@@ -107,11 +130,13 @@ export default function LearnersPanel() {
               <NewsletterPrefs key={`${l.id}:${l.interests.join("\u0001")}:${l.newsletter}`} learner={l} />
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => void copy(l.pairLink)} disabled={!l.pairLink}><Copy className="h-4 w-4 mr-1" /> Párosító link másolása</Button>
+                <Button variant="outline" size="sm" disabled={!l.pairLink} aria-expanded={qrFor === l.id} onClick={() => setQrFor(qrFor === l.id ? null : l.id)}><QrCode className="h-4 w-4 mr-1" /> Párosító QR-kód</Button>
                 <Button variant="outline" size="sm" disabled={rotate.isPending}
                   onClick={() => { if (window.confirm(`${l.name}: minden párosított eszköz és a régi linkek érvénytelenné válnak. Folytatod?`)) rotate.mutate(l.id); }}>
                   <ShieldOff className="h-4 w-4 mr-1" /> Párosítás visszavonása
                 </Button>
               </div>
+              {qrFor === l.id && l.pairLink && <PairQr link={l.pairLink} name={l.name} />}
             </CardContent>
           </Card>
         ))}

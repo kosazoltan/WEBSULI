@@ -39,6 +39,11 @@ test("levelek: a név és a cím escape-elve; a tárgy névvel", () => {
   assert.match(weekly.html, /Törtek &amp; &lt;script&gt;: <strong>92%<\/strong>/);
   assert.match(weekly.html, /Igék: <strong>—<\/strong>/);
   const alert = inactivityAlertEmail(r);
-  assert.equal(alert.subject, "[WebSuli] Teszt <b>Anna</b> 3 tanítási napja nem tanult");
+  // Spec 2026-10-21-tanulo-parositas (dokumentált spec-változás): a riasztás a PROFILRA vonatkozik (a párosítatlan eszköz tanulását nem
+  // látja) — „nem tanult” helyett „nem érkezett tevékenység”, a párosítás és a Spam-mappa megnevezésével.
+  assert.equal(alert.subject, "[WebSuli] Teszt <b>Anna</b> profiljához 3 tanítási napja nem érkezett tevékenység");
+  assert.ok(!alert.subject.includes("nem tanult"));
+  assert.match(alert.html, /Párosító QR-kód/);
+  assert.match(alert.html, /Spam/);
   assert.ok(!alert.html.includes("<b>Anna</b>"));
 });

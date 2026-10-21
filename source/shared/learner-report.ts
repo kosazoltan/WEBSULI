@@ -58,7 +58,12 @@ export function weeklySummaryEmail(reports: readonly LearnerReport[], weekLabel:
 
 export function inactivityAlertEmail(report: LearnerReport): { subject: string; html: string } {
   return {
-    subject: `[WebSuli] ${report.name} 3 tanítási napja nem tanult`,
-    html: `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5"><p>${esc(report.name)} az utolsó 3 tanítási napon nem nyitott meg tananyagot.</p>${reportBlock(report)}</div>`,
+    // Spec 2026-10-21-tanulo-parositas: a rendszer csak a PÁROSÍTOTT eszköz tevékenységét látja — a riasztás erről szól, nem arról, hogy
+    // a gyerek „nem tanult” (mért: Léna vendégként oldotta meg az Egyiptom-kvízt, a riasztás mégis „nem tanult”-at írt).
+    subject: `[WebSuli] ${report.name} profiljához 3 tanítási napja nem érkezett tevékenység`,
+    html: `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5"><p>${esc(report.name)} profiljához az utolsó 3 tanítási napon nem érkezett tevékenység (megnyitás vagy eredmény).</p>`
+      + `<p><strong>Lehet, hogy tanult, csak nem párosított eszközön</strong> — ilyenkor az eredménylevél „Vendég tanuló” néven érkezik. Párosítás: Admin → Tanulók → `
+      + `„Párosító QR-kód”, és olvasd be a gyerek telefonjával (vagy nyisd meg rajta a párosító linket) — minden böngészőben, amelyet használ, egyszer. `
+      + `Ha a gyerek a napi leveleket sem látja, nézze meg a Spam / Promóciók mappát, és vegye fel a noreply@websuli.vip címet a névjegyei közé.</p>${reportBlock(report)}</div>`,
   };
 }

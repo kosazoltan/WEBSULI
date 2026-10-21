@@ -5,7 +5,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
 import { lessonSchema } from "../shared/lesson-schema";
-import { buildResultEmail, gradeQuiz, gradeTasks, resultRequestSchema, type GradedQuiz, type GradedTasks } from "../shared/lesson-result-email";
+import { buildResultEmail, GUEST_LEARNER, gradeQuiz, gradeTasks, resultRequestSchema, type GradedQuiz, type GradedTasks } from "../shared/lesson-result-email";
 import { resolveAdminRecipients } from "./lib/material-result";
 import { arbiterCacheKey } from "./arbiter/arbiter";
 import { getMaterialPreviewUrl } from "./utils/config";
@@ -75,7 +75,7 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
 }
 
 async function learnerName(userId: string | undefined): Promise<string> {
-  if (!userId) return "Vendég tanuló";
+  if (!userId) return GUEST_LEARNER;
   const [u] = await db.select({ first: users.firstName, last: users.lastName }).from(users).where(eq(users.id, userId));
   const name = `${u?.last ?? ""} ${u?.first ?? ""}`.trim();
   return name || "Bejelentkezett tanuló";
