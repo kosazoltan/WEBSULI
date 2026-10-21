@@ -26,3 +26,7 @@
 ## Kiegészítés (2026-10-21 07:45): a lektori jegyzetek archívuma
 - **Mérés:** a lektori kivétel 2,25 tétel / anyag (98 futás), szinte mind nyílt feladat — az OKUK nem maradt meg (csak az útvonal a figyelmeztetésben).
 - **Cél:** a lektor blokkoló jegyzetei körönként a job kimenetébe (`lektorArchive`: kör, fajta, alfajta, útvonal, üzenet; legfeljebb 200, az üzenet 600 karakterre vágva), hogy a kivételek oka offline elemezhető legyen.
+
+## Kiegészítés (2026-10-21 08:16): félbevágott emoji → elutasított API-kérés
+- **Mérés:** a „Felszín és Térfogat – 5. osztály” 2/2 kísérlete: `400 invalid_request_error: The request body is not valid JSON: unexpected end of hex escape`. Ok: a szöveg-vágások (`.slice()`) egy emoji karakterpárját kettévágják; a magányos fél-karakter (`\uD83E`) érvényes JS-szöveg, de a szigorú JSON-olvasó elutasítja (igazolva).
+- **Cél:** a modellhívás határán (`conversation.ts`, Anthropic és OpenAI kliens) minden szöveg (rendszer + blokkok) érvényes UTF-16-ra tisztul: a magányos fél-karakter `U+FFFD` lesz. Node-verziótól független regex.

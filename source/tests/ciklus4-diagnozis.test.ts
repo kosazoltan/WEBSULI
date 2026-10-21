@@ -47,3 +47,13 @@ test("ciklus4: a lektor blokkoló jegyzeteinek archívuma — körönként, vág
   assert.equal(many.length, 200);
   assert.equal((many[1] as { round: number }).round, 1);
 });
+
+test("ciklus4: a félbevágott emoji (magányos fél-karakter) a modellhívás előtt U+FFFD lesz; az ép emoji és szöveg érintetlen", async () => {
+  const { wellFormed } = await import("../server/studio/single-run/conversation");
+  const cut = "Kocka 🧊 térfogata".slice(0, 7);
+  assert.match(JSON.stringify(cut), /\ud83e/, "előfeltétel: magányos fél-karakter");
+  assert.equal(wellFormed(cut), "Kocka \uFFFD");
+  assert.equal(wellFormed("Kocka 🧊 térfogata"), "Kocka 🧊 térfogata");
+  assert.equal(wellFormed("\uDC00a"), "\uFFFDa", "magányos alsó fél is");
+  assert.doesNotMatch(JSON.stringify(wellFormed(cut)), /\ud8|\udc/i);
+});

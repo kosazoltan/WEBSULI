@@ -52,6 +52,12 @@ export function isUnavailable(error: unknown): boolean {
 
 type AnthropicLike = { messages: { stream(params: Anthropic.MessageStreamParams, options?: { signal?: AbortSignal }): { finalMessage(): Promise<Anthropic.Message> } } };
 
+/**
+ * Spec 2026-10-21-ciklus4: a modellhívás határán minden szöveg érvényes UTF-16 — a `.slice()` kettévághat egy emojit, a magányos
+ * fél-karaktert (pl. \ud83e) a szigorú JSON-olvasó elutasítja (mért: 400 „unexpected end of hex escape”, 2/2 kísérlet). U+FFFD lesz belőle.
+ */
+export const wellFormed = (s: string) => s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
+
 /** Claude Opus 5.5: natív, többfordulós üzenetek (szöveg + forrás tartalomblokk), streamelve, adaptív gondolkodással, medium efforttal. */
 export function anthropicClient(opts: { apiKey?: string; model?: string; client?: AnthropicLike } = {}): ModelClient {
   const model = opts.model ?? SINGLE_RUN_PRIMARY_MODEL;
@@ -66,15 +72,15 @@ export function anthropicClient(opts: { apiKey?: string; model?: string; client?
       const messages: Anthropic.MessageParam[] = turns.map((t, ti) => ({
         role: t.role,
         content: t.blocks.map((b, bi): Anthropic.ContentBlockParam => (b.type === "text"
-          ? { type: "text", text: b.text, ...(keep.has(`${ti}:${bi}`) ? { cache_control: { type: "ephemeral", ttl: "1h" } } : {}) }
-          : isBinarySource(b.file) ? claudeSourceBlock(b.file) : { type: "text", text: sourceAsText(b.file) })),
+          ? { type: "text", text: wellFormed(b.text), ...(keep.has(`${ti}:${bi}`) ? { cache_control: { type: "ephemeral", ttl: "1h" } } : {}) }
+          : isBinarySource(b.file) ? claudeSourceBlock(b.file) : { type: "text", text: wellFormed(sourceAsText(b.file)) })),
       }));
       const stream = client.messages.stream({
         model, max_tokens: SINGLE_RUN_MAX_TOKENS,
         // A stabil előtag (a gyártás teljes módszertana) gyorsítótárból; a beszélgetés eddigi része a kérés-szintű töréspontból.
         // Spec 2026-10-19-eroforras-s1: 1 órás TTL — egy kör (generálással) gyakran 5 percnél hosszabb, az alapértelmezett 5 perces
         // bejegyzés a következő körre lejárt (mért: a bemenet 24%-a jött gyorsítótárból). Az 1 órás bejegyzés áll elöl.
-        system: [{ type: "text", text: system, cache_control: { type: "ephemeral", ttl: "1h" } }],
+        system: [{ type: "text", text: wellFormed(system), cache_control: { type: "ephemeral", ttl: "1h" } }],
         messages,
         thinking: { type: "adaptive" },
         output_config: { effort: SINGLE_RUN_EFFORT },
@@ -99,13 +105,13 @@ export function openAIClient(opts: { apiKey?: string; model?: string; client?: O
     model,
     async complete(system, turns, signal) {
       const input = turns.map((t) => t.role === "assistant"
-        ? { role: "assistant", content: t.blocks.map((b) => (b.type === "text" ? b.text : "")).join("") }
+        ? { role: "assistant", content: wellFormed(t.blocks.map((b) => (b.type === "text" ? b.text : "")).join("")) }
         : { role: "user", content: t.blocks.map((b) => {
-          if (b.type === "text") return { type: "input_text", text: b.text };
-          if (!isBinarySource(b.file)) return { type: "input_text", text: sourceAsText(b.file) };
+          if (b.type === "text") return { type: "input_text", text: wellFormed(b.text) };
+          if (!isBinarySource(b.file)) return { type: "input_text", text: wellFormed(sourceAsText(b.file)) };
           return b.file.kind === "image" ? { type: "input_image", image_url: b.file.content } : { type: "input_file", filename: b.file.name, file_data: b.file.content };
         }) });
-      const response = await client.responses.create({ model, instructions: system, input, store: false, max_output_tokens: SINGLE_RUN_MAX_TOKENS, reasoning: { effort: SINGLE_RUN_EFFORT } }, { signal });
+      const response = await client.responses.create({ model, instructions: wellFormed(system), input, store: false, max_output_tokens: SINGLE_RUN_MAX_TOKENS, reasoning: { effort: SINGLE_RUN_EFFORT } }, { signal });
       // Review #259: csak a `completed` (és a csonka `incomplete`) eredmény válasz — a `failed` / `cancelled` hiba, nem üres forduló.
       if (response.status && response.status !== "completed" && response.status !== "incomplete") {
         throw Object.assign(new Error(`A tartalék modell válasza ${response.status} állapotú.`), { status: 502 });
