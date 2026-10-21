@@ -1,3 +1,4 @@
+import { GUEST_PAIRING_HINT_HTML } from "../../shared/pairing-guide";
 import { createHash } from 'node:crypto';
 
 /**
@@ -120,6 +121,8 @@ export function buildMaterialResultEmail(
   payload: MaterialResultPayload,
   materialTitle: string | null | undefined,
   previewUrl: string,
+  /** Review #362: a szerveren ellenőrzött párosítás hiánya → a vendég-útmutató (mint a Stúdió-lecke eredménylevelében). */
+  opts: { guest?: boolean } = {},
 ): { subject: string; html: string } {
   const title = materialTitle ? escapeHtml(materialTitle) : escapeHtml(payload.materialId);
   const bodyHtml = escapeHtml(payload.body).replace(/\r?\n/g, '<br>');
@@ -128,6 +131,7 @@ export function buildMaterialResultEmail(
     `<p><strong>Tananyag:</strong> ${title}</p>`,
     `<p><strong>Tárgy:</strong> ${escapeHtml(payload.subject)}</p>`,
     `<p style="white-space:pre-wrap">${bodyHtml || '<em>(üres üzenet)</em>'}</p>`,
+    ...(opts.guest ? [GUEST_PAIRING_HINT_HTML] : []),
     `<p style="color:#666;font-size:12px">Forrás: <a href="${escapeHtml(previewUrl)}">${escapeHtml(previewUrl)}</a></p>`,
     '</div>',
   ].join('');

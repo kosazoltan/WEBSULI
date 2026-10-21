@@ -5,6 +5,11 @@
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const WRAP = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#222;max-width:560px">`;
 
+/** A párosítatlan eszközről jött eredménylevél útmutatója (Stúdió-lecke és régi HTML-anyag). */
+export const GUEST_PAIRING_HINT_HTML = `<p style="color:#555"><em>Ha ezt egyik gyermeked oldotta meg, az eszköze nincs párosítva — a saját `
+  + `eszközödön Admin → Tanulók → „Párosító QR-kód”, és a gyerek a telefonja kamerájával a te képernyődről olvassa be (vagy küldd el `
+  + `neki üzenetben a párosító linket); utána az eredménye a nevével érkezik, és a profiljában is megjelenik.</em></p>`;
+
 export function childPairingGuideEmail(input: { firstName: string; pairLink: string }): { subject: string; html: string } {
   const name = esc(input.firstName);
   const link = esc(input.pairLink);

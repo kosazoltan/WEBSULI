@@ -1,3 +1,4 @@
+import { GUEST_PAIRING_HINT_HTML } from "./pairing-guide";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { evaluateOpenAnswer, evaluateOpenAnswerV2, isTypedTask, missingAnswerConcepts, missingOrder, missingPhrases, scoreSummary, type AnswerScore } from "./lesson-experience-score";
@@ -108,8 +109,6 @@ export function buildResultEmail(input: { lessonTitle: string; classroom: number
       : "<p>Minden kérdésre helyes választ adott.</p>";
   // Spec 2026-10-21-tanulo-parositas: vendég eredményénél útmutató — így látszik, melyik gyermek eszköze nincs párosítva. Review #362: a
   // hívó attribúciójából (nincs fiók, nincs párosítás), nem a megjelenített névből (egy fiók neve is lehetne „Vendég tanuló”).
-  const guestHint = input.guest
-    ? `<p style="color:#555"><em>Ha ezt egyik gyermeked oldotta meg, az eszköze nincs párosítva — a saját eszközödön Admin → Tanulók → „Párosító QR-kód”, és a gyerek a telefonja kamerájával a te képernyődről olvassa be (vagy küldd el neki üzenetben a párosító linket); utána az eredménye a nevével érkezik, és a profiljában is megjelenik.</em></p>`
-    : "";
+  const guestHint = input.guest ? GUEST_PAIRING_HINT_HTML : "";
   return { subject, html: `${head}${body}${guestHint}<p><a href="${esc(input.url)}">A lecke megnyitása</a></p>` };
 }

@@ -956,7 +956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     : Promise.resolve();
   // Ismétlésvédelem CÍMZETTENKÉNT (review #281): a már értesített admin nem kap újra, a kimaradt pótolható.
   const deliverMaterialResult = (q: QueuedMaterialResult) => {
-    const mail = buildMaterialResultEmail(withLearnerSubject(q.value, q.learner?.firstName), q.title, getMaterialPreviewUrl(q.fileId));
+    const mail = buildMaterialResultEmail(withLearnerSubject(q.value, q.learner?.firstName), q.title, getMaterialPreviewUrl(q.fileId), { guest: !q.learner });
     return deliverToRecipients({
       recipients: q.recipients,
       baseKey: materialResultDedupKey(q.value, q.ip),

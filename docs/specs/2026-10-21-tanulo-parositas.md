@@ -1,13 +1,14 @@
 # Tanulói párosítás — QR-kód, igaz riasztás, vendég-eredmény útmutató
 
-**Tulajdonosi jelzés (2026-10-21):** „Léna három napja nem tanult” riasztás, miközben ott van a megoldott Egyiptom-kvíz („Vendég
-tanuló”); Dominik, Léna és Marcell „nem kapja” a tananyag- és a felfedezés-leveleket.
+**Tulajdonosi jelzés (2026-10-21):** egy tanulóról „3 napja nem tanult” riasztás jött, miközben egy általa megoldott kvíz eredménye
+„Vendég tanuló” néven megérkezett; több tanuló „nem kapja” a tananyag- és a felfedezés-leveleket.
 
 **Mért:** a Resend szerint 10-19–21 között MIND a 4 gyerek MIND a 6 címére minden napi tananyag- és felfedezés-levél `delivered`
 (a fogadó szerver átvette) — a levelek valószínűleg a Spam / Promóciók mappában vannak (a gyerekek postafiókja nem érhető el). A
-tanulói tevékenység-napló egyetlen gyereknél sem tartalmaz eredményt (csak Kristóf 2 megnyitása) → az eszközök nincsenek párosítva;
-a párosítás EGYETLEN útja a levél személyes linkje (`?t=`). Léna 10-19-i levelének anyaga épp „Az ókori Egyiptom” volt — a kvízt
-párosítatlan eszközön, vendégként oldotta meg. A riasztás ezért tévesen állítja, hogy „nem tanult”.
+tanulói tevékenység-napló egyetlen gyereknél sem tartalmaz eredményt (egy tanulónál 2 megnyitás) → az eszközök nincsenek párosítva;
+a párosítás EGYETLEN útja a levél személyes linkje (`?t=`). A vendégként érkezett eredmény anyaga megegyezett az érintett tanuló
+napi levelének anyagával — párosítatlan eszközön oldotta meg, ezért a profiljában nem jelenik meg, és a riasztás tévesen állítja,
+hogy „nem tanult”.
 
 ## Cél
 1. Admin „Tanulók” fül: a párosító link QR-kódként is (a gyerek telefonjával beolvasva azonnal párosít, e-mail nélkül).
