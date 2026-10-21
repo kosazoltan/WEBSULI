@@ -35,6 +35,10 @@ test("(B) maradékos osztás egész opciókkal: az egész hányados a helyes (m�
 test("(B) maradék-kérdés egész opciókkal: a maradék a helyes", () => {
   assert.deepEqual(singleChoiceProblems(item("Mennyi a 95 : 4 maradéka?", ["1", "3", "2"], 1)), []);
   assert.equal(singleChoiceProblems(item("Mennyi a 95 : 4 maradéka?", ["1", "3", "2"], 0)).length, 1);
+  // Review #364 (Copilot): a „maradékos osztás” a műveletet nevezi meg, nem a maradékot kéri.
+  assert.deepEqual(singleChoiceProblems(item("Mennyi a 95 : 4 maradékos osztás egész hányadosa?", ["23", "3", "24"], 0)), []);
+  assert.equal(singleChoiceProblems(item("Mennyi a 95 : 4 maradékos osztás egész hányadosa?", ["23", "3", "24"], 1)).length, 1);
+  assert.deepEqual(singleChoiceProblems(item("Mennyi a 95 : 4 maradékos osztás maradéka?", ["23", "3", "24"], 1)), []);
 });
 
 test("(B) változatlan: tizedes opciók a pontos értéket, maradék nélküli osztás a pontos hányadost kéri", () => {
