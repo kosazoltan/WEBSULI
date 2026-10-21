@@ -10,3 +10,4 @@ Terv: `docs/specs/2026-10-21-ciklus7-pontos-alak.md`.
 3. **Teszt:** `tests/ciklus7-pontos-alak.test.ts` — „anyával” / „anyának” eset; más szó nem vált ki; lektorReviewed → nincs; séma OK.
 4. **Célzott újragyártás 2. köre:** `LEGACY_REDO_ROUND = 2`, a `redo` jelző körszám (`redoRoundOf`: a régi `true` = 1. kör); körönként
    egyszer; a ciklus-6-os teszt elvárása ennek megfelelően (dokumentált spec-változás).
+5. **Ciklus-kapu:** `LEGACY_BATCH_LIMIT` 132 → 137 (a tényleges 132 sorelem + 5; dokumentált spec-változás).

@@ -28,7 +28,7 @@ export const LEGACY_MAX_ATTEMPTS = 2;
  * Spec 2026-10-21-regi-anyag-ciklusos-felulvizsgalat: a sorelemek felső száma — a sor eddig indít új anyagot, utána megáll (az újrapróba a
  * meglévő elemen belül marad). Minden felülvizsgálati ciklus (5 anyag) egy PR-rel emeli; így a deploy mindig futásmentes állapotban megy.
  */
-export const LEGACY_BATCH_LIMIT = 132;
+export const LEGACY_BATCH_LIMIT = 137;
 
 /**
  * Spec 2026-10-21-ciklus6 (tulajdonosi döntés): a két tartalmi okból kétszer elbukott anyag egyszeri, célzott újragyártása — a forrás
