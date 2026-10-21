@@ -55,6 +55,25 @@ test("review #361: a „leírás” és a „helyesen jellemzi” NEM helyesír�
   assert.equal(singleChoiceProblems({ prompt: "Melyik válasz jellemzi helyesen a főnevet?", options: pair, correctIndex: 0 }).length, 1);
 });
 
+test("review #361: a gyakori helyesírási kérdésformák felismerése; a katalógus, a játék-kvíz és a szó szerinti átvétel is megtartja a helyesírási opciókat", async () => {
+  const { isSpellingPrompt } = await import("../shared/option-key");
+  for (const p of ["Melyik szó van helyesen leírva?", "Írja helyesen a város nevét!", "Melyik szó van helyesen írva?"]) assert.ok(isSpellingPrompt(p), p);
+  for (const p of ["Melyik leírás illik a főnévre?", "Melyik válasz jellemzi helyesen a főnevet?"]) assert.ok(!isSpellingPrompt(p), p);
+  const { verifyItem } = await import("../server/catalog/verify");
+  const { itemFingerprint } = await import("../server/catalog/catalog-item");
+  const { isPlayableQuestion } = await import("../shared/game-quiz-contract");
+  const spelling = { kind: "quiz" as const, provenance: "p", prompt: "Melyik az Eger szó helyes -i toldalékos alakja?", options: ["Egri", "egri", "egeri"], correctIndex: 1 };
+  assert.ok(!verifyItem(spelling).problems.includes("ismétlődő válaszlehetőség"), JSON.stringify(verifyItem(spelling).problems));
+  assert.ok(isPlayableQuestion({ prompt: spelling.prompt, options: spelling.options, correctIndex: 1 }), "a játék-kvíz játszható");
+  // Két, csak betűméretben eltérő helyesírási tétel nem vonódik össze a katalógusban.
+  const other = { ...spelling, options: ["EGRI", "egri", "egeri"] };
+  assert.notEqual(itemFingerprint(spelling), itemFingerprint(other));
+  // Nem helyesírási kérdésnél a régi szabály marad.
+  const fruit = { kind: "quiz" as const, provenance: "p", prompt: "Melyik gyümölcs?", options: ["Alma", "alma", "Répa"], correctIndex: 0 };
+  assert.ok(verifyItem(fruit).problems.includes("ismétlődő válaszlehetőség"));
+  assert.equal(itemFingerprint(fruit), itemFingerprint({ ...fruit, options: ["ALMA", "alma", "Répa"] }));
+});
+
 test("review #361: a kvízséma és az előfeldolgozó ugyanazt a kulcsot használja — a helyesírási opció és a helyes index megmarad", async () => {
   const { experienceQuizSchema } = await import("../shared/lesson-experience");
   const { autofixBankPacket } = await import("../server/studio/tools/bank-packet-autofix");

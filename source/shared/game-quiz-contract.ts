@@ -1,4 +1,5 @@
 import { singleChoiceProblems } from "./single-choice-check";
+import { isSpellingPrompt, optionKeyFor } from "./option-key";
 
 /** The lesson and every compatible game accept exactly the same choice contract. */
 export type ChoiceQuestion = { prompt: string; options: string[]; correctIndex: number };
@@ -8,7 +9,7 @@ export function isPlayableQuestion<T>(value: T): value is T & ChoiceQuestion {
   return typeof q.prompt === "string" && q.prompt.trim().length > 0
     && Array.isArray(q.options) && q.options.length >= 3 && q.options.length <= 4
     && q.options.every(o => typeof o === "string" && o.trim().length > 0)
-    && new Set(q.options.map(o => o.normalize("NFC").trim().toLocaleLowerCase("hu"))).size === q.options.length
+    && new Set(q.options.map(optionKeyFor(isSpellingPrompt(typeof q.prompt === "string" ? q.prompt : ""), o => o.normalize("NFC").trim().toLocaleLowerCase("hu")))).size === q.options.length
     && Number.isInteger(q.correctIndex) && q.correctIndex! >= 0 && q.correctIndex! < q.options.length
     // Spec 2026-09-29 (egy-helyes-valasz, E5): a bizonyíthatóan nem pontosan-egy helyes opciós (régi) sor nem játszható.
     && singleChoiceProblems({ prompt: q.prompt, options: q.options, correctIndex: q.correctIndex! }).length === 0;

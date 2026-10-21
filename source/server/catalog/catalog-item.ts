@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isSpellingPrompt, optionKeyFor } from "../../shared/option-key";
 
 /**
  * Spec 2026-10-05-s1-katalogus-kinyeres: a tantárgyi katalógus EGY tétele, forrásfüggetlen alakban. A tantárgy/téma/típus
@@ -44,7 +45,9 @@ const norm = (s: string) => s.normalize("NFC").toLocaleLowerCase("hu").replace(/
 export function itemFingerprint(item: Omit<CatalogItemDraft, "fingerprint" | "provenance">): string {
   // review #188 (Copilot): a módszer altípusa (shape: fusion.method.<kind>) is — különben az azonos szövegű, de más fajtájú
   // módszerek összevonódnának (a standard fixture-ben 11 → 4).
-  const parts = [item.kind, item.kind === "method" ? item.shape ?? "" : "", norm(item.prompt), norm(item.body ?? ""), ...(item.options ?? []).map(norm), String(item.correctIndex ?? ""), ...(item.accepted ?? []).map(norm),
+  // Review #361: helyesírási kérdésnél a betűméretben eltérő tételek NEM vonódnak össze (az opciók kulcsa betűméret-megtartó).
+  const optionKey = optionKeyFor(isSpellingPrompt(item.prompt), norm);
+  const parts = [item.kind, item.kind === "method" ? item.shape ?? "" : "", norm(item.prompt), norm(item.body ?? ""), ...(item.options ?? []).map(optionKey), String(item.correctIndex ?? ""), ...(item.accepted ?? []).map(norm),
     ...(item.keywordGroups ?? []).map((g) => g.map(norm).join("|")), ...(item.steps ?? []).map(norm),
     ...(item.pair ? [norm(item.pair.source), norm(item.pair.target)] : [])];
   return createHash("sha1").update(parts.join("\u0001")).digest("hex").slice(0, 16);
