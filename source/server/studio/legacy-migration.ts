@@ -28,7 +28,7 @@ export const LEGACY_MAX_ATTEMPTS = 2;
  * Spec 2026-10-21-regi-anyag-ciklusos-felulvizsgalat: a sorelemek felső száma — a sor eddig indít új anyagot, utána megáll (az újrapróba a
  * meglévő elemen belül marad). Minden felülvizsgálati ciklus (5 anyag) egy PR-rel emeli; így a deploy mindig futásmentes állapotban megy.
  */
-export const LEGACY_BATCH_LIMIT = 132;
+export const LEGACY_BATCH_LIMIT = 137;
 
 /**
  * Spec 2026-10-21-ciklus6 (tulajdonosi döntés): a két tartalmi okból kétszer elbukott anyag egyszeri, célzott újragyártása — a forrás
@@ -42,11 +42,18 @@ export const LEGACY_REDO: Readonly<Record<string, string>> = {
   "59f1ce9a-92e5-4908-82fa-1027d82583bf": "A mondatalkotó, szabadon megfogalmazható feladatoknál a kötelező (required) fogalmak CSAK a kérdés által "
     + "megkövetelt elemek (pl. a kért tulajdonságot kifejező szó); a mintaválasz többi szava (névelő, ige, tárgy) soha ne legyen kötelező.",
 };
-/** Review #357: a listás anyag MINDEN újraindítása (az infrastruktúra-hiba miatti is) célzott — a redo-jelző egyszeri futást biztosít. */
-const redoFlag = (htmlFileId: string) => (Object.prototype.hasOwnProperty.call(LEGACY_REDO, htmlFileId) ? { redo: true } : {});
+/**
+ * Spec 2026-10-21-ciklus7: a célzott újragyártás köre. Az 1. kör (ciklus 6, `redo: true`) a pontos-alak hiánya miatt elbukott; a 2. kör a
+ * pontos-alak szigorítással fut (tulajdonosi jóváhagyás). Körönként egyszer.
+ */
+export const LEGACY_REDO_ROUND = 2;
+/** A sorelem célzott köre: a régi `true` az 1. kör. */
+export const redoRoundOf = (redo: boolean | number | undefined): number => (redo === true ? 1 : typeof redo === "number" ? redo : 0);
+/** Review #357: a listás anyag MINDEN újraindítása (az infrastruktúra-hiba miatti is) célzott — a redo-jelző körönként egyszeri futást biztosít. */
+const redoFlag = (htmlFileId: string) => (Object.prototype.hasOwnProperty.call(LEGACY_REDO, htmlFileId) ? { redo: LEGACY_REDO_ROUND } : {});
 /** Spec 2026-10-21-ciklus6: a hibás, célzott újragyártásra kijelölt, még újra nem gyártott sorelem. */
-export const shouldRedo = (row: { status: string; payload: { htmlFileId: string; redo?: boolean } }): boolean =>
-  row.status === "error" && !row.payload.redo && Object.prototype.hasOwnProperty.call(LEGACY_REDO, row.payload.htmlFileId);
+export const shouldRedo = (row: { status: string; payload: { htmlFileId: string; redo?: boolean | number } }): boolean =>
+  row.status === "error" && redoRoundOf(row.payload.redo) < LEGACY_REDO_ROUND && Object.prototype.hasOwnProperty.call(LEGACY_REDO, row.payload.htmlFileId);
 // Review #352: a következő ciklus korlátja a TÉNYLEGES sorelemszám + 5 (nem az előző korlát + 5) — a korlát fölötti (pl. újrapróbált)
 // elem miatt a ciklus nem lehet 5-nél rövidebb.
 /** Tiszta: hány új anyag indulhat még a korlátig. */
@@ -145,7 +152,7 @@ export function legacySource(file: { title: string; content: string }, extra?: s
 
 type Payload = { htmlFileId: string; runId?: string; attempt?: number; startedAt?: number; requeued?: boolean;
   /** Spec 2026-10-21-ciklus6: a célzott újragyártás egyszer fut. */
-  redo?: boolean;
+  redo?: boolean | number;
   /** Review #352: a folytatott Stúdió-job — a futás-azonosító nélkül (helyőrző) is felismerhető, hogy a folytatás él. */
   jobId?: string };
 
@@ -168,7 +175,7 @@ type QueueRow = { id: string; status: string; payload: Payload };
 
 /** Review #351: az újrapróba payloadja — az újrasorolás jelzője (`requeued`) megmarad, így a tartós hiba nem indít végtelen újragyártást. */
 export const retryPayload = (prev: Payload, runId: string, attempt: number, startedAt: number, jobId?: string): Payload =>
-  ({ htmlFileId: prev.htmlFileId, runId, attempt, startedAt, ...(prev.requeued ? { requeued: true } : {}), ...(prev.redo ? { redo: true } : {}), ...(jobId ? { jobId } : {}) });
+  ({ htmlFileId: prev.htmlFileId, runId, attempt, startedAt, ...(prev.requeued ? { requeued: true } : {}), ...(prev.redo ? { redo: prev.redo } : {}), ...(jobId ? { jobId } : {}) });
 
 async function ownerFor(fileUserId: string | null): Promise<string | null> {
   if (fileUserId) {
@@ -293,12 +300,12 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       rows = rows.map((r) => (shouldRequeue(r) ? { ...r, status: "running", payload: { htmlFileId: r.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, ...redoFlag(r.payload.htmlFileId) } } : r));
       // Spec 2026-10-21-ciklus6: célzott újragyártás — egyszer, a redo-jelzővel (a hibás állapotból, feltételes UPDATE-tel).
       for (const row of rows.filter(shouldRedo)) {
-        const next = { htmlFileId: row.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, redo: true };
+        const next = { htmlFileId: row.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, redo: LEGACY_REDO_ROUND };
         await db.execute(sql`UPDATE scheduled_jobs SET status = 'running', error = NULL, completed_at = NULL, payload = ${JSON.stringify(next)}::jsonb
-          WHERE id = ${row.id} AND status = 'error' AND coalesce(payload->>'redo', '') <> 'true'`);
+          WHERE id = ${row.id} AND status = 'error' AND coalesce(payload->>'redo', '') <> ${String(LEGACY_REDO_ROUND)}`);
         logger.info(`[RÉGI→STÚDIÓ] Célzott újragyártás: ${row.payload.htmlFileId}`);
       }
-      rows = rows.map((r) => (shouldRedo(r) ? { ...r, status: "running", payload: { htmlFileId: r.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, redo: true } } : r));
+      rows = rows.map((r) => (shouldRedo(r) ? { ...r, status: "running", payload: { htmlFileId: r.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, redo: LEGACY_REDO_ROUND } } : r));
     }
     let running = 0;
     const retries: Array<{ row: QueueRow; decision: "resume" | "restart"; jobId: string | null; error: string | null }> = [];
