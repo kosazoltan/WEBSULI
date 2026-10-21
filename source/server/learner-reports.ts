@@ -4,6 +4,10 @@ import { db } from "./db";
 import { learnerActivity, learners } from "../shared/schema";
 import { alertPeriodKey, inactivityAlertEmail, isInactive, pendingAlertRecipients, weeklySummaryEmail, type LearnerReport } from "../shared/learner-report";
 import { isSchoolDay } from "../shared/school-calendar";
+import { firstNameOf } from "../shared/daily-reminder";
+import { planPairingGuides } from "../shared/pairing-guide";
+import { learnerTokenFor } from "./learners";
+import { getBaseUrl } from "./utils/config";
 import { resolveAdminRecipients } from "./lib/material-result";
 import { logger } from "./lib/logger";
 
@@ -100,6 +104,35 @@ export async function runInactivityAlerts(now = new Date(), send: Send = default
     if (delivered.size > 0) alerted++;
   }
   return { alerted };
+}
+
+/**
+ * Párosítási útmutató (docs/specs/2026-10-21-tanulo-parositas.md, „Kiegészítés”): gyereklevél a saját linkkel a tanuló aktív címeire,
+ * szülőlevél az admin-címzetteknek. Címenként hibatűrő; a naplóba nem kerül név vagy cím.
+ */
+export async function sendPairingGuides(send: Send = defaultSend): Promise<{ children: number; parents: number; failed: number }> {
+  const rows = await db.execute<{ id: string; name: string; token_version: number; email: string }>(sql`
+    SELECT l.id, l.name, l.token_version, e.email FROM learners l
+    JOIN extra_email_addresses e ON e.learner_id = l.id AND e.is_active
+    ORDER BY l.grade DESC, l.name`);
+  const byId = new Map<string, { id: string; name: string; emails: string[]; pairLink: string | null }>();
+  for (const r of rows.rows) {
+    const token = learnerTokenFor(r.id, r.token_version);
+    const entry = byId.get(r.id) ?? { id: r.id, name: r.name, emails: [], pairLink: token ? `${getBaseUrl()}/?t=${token}` : null };
+    entry.emails.push(r.email);
+    byId.set(r.id, entry);
+  }
+  const out = { children: 0, parents: 0, failed: 0 };
+  for (const mail of planPairingGuides([...byId.values()], recipients(), firstNameOf)) {
+    try {
+      await send(mail.subject, mail.html, mail.to);
+      out[mail.kind === "child" ? "children" : "parents"]++;
+    } catch (e) {
+      out.failed++;
+      logger.warn("[LEARNER-REPORT] párosítási útmutató hiba", { kind: mail.kind, error: String(e).replaceAll(mail.to, "[címzett]") });
+    }
+  }
+  return out;
 }
 
 export async function pruneLearnerActivity(now = new Date()): Promise<void> {

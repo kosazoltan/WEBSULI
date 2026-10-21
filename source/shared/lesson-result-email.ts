@@ -1,3 +1,4 @@
+import { GUEST_PAIRING_HINT_HTML } from "./pairing-guide";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { evaluateOpenAnswer, evaluateOpenAnswerV2, isTypedTask, missingAnswerConcepts, missingOrder, missingPhrases, scoreSummary, type AnswerScore } from "./lesson-experience-score";
@@ -90,7 +91,10 @@ export function gradeQuiz(quiz: readonly QuizItem[], picks: Record<string, numbe
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const MARK = { ok: "✅", partial: "🟡", fail: "❌" } as const;
 
-export function buildResultEmail(input: { lessonTitle: string; classroom: number; learner: string; learnerFirst?: string; url: string; graded: GradedTasks | GradedQuiz }): { subject: string; html: string } {
+/** A párosítatlan, be nem jelentkezett tanuló neve az eredménylevélben. */
+export const GUEST_LEARNER = "Vendég tanuló";
+
+export function buildResultEmail(input: { lessonTitle: string; classroom: number; learner: string; learnerFirst?: string; guest?: boolean; url: string; graded: GradedTasks | GradedQuiz }): { subject: string; html: string } {
   const { graded } = input;
   const part = graded.kind === "tasks" ? "Feladatok" : "Kvíz";
   const s = graded.summary;
@@ -103,5 +107,8 @@ export function buildResultEmail(input: { lessonTitle: string; classroom: number
     : graded.wrong.length
       ? `<p><strong>Hibás válaszok:</strong></p><ol>${graded.wrong.map(w => `<li><p>${esc(w.question)}</p><p>❌ ${w.picked ? esc(w.picked) : "<em>(nincs válasz)</em>"} — helyes: ${esc(w.correct)}</p></li>`).join("")}</ol>`
       : "<p>Minden kérdésre helyes választ adott.</p>";
-  return { subject, html: `${head}${body}<p><a href="${esc(input.url)}">A lecke megnyitása</a></p>` };
+  // Spec 2026-10-21-tanulo-parositas: vendég eredményénél útmutató — így látszik, melyik gyermek eszköze nincs párosítva. Review #362: a
+  // hívó attribúciójából (nincs fiók, nincs párosítás), nem a megjelenített névből (egy fiók neve is lehetne „Vendég tanuló”).
+  const guestHint = input.guest ? GUEST_PAIRING_HINT_HTML : "";
+  return { subject, html: `${head}${body}${guestHint}<p><a href="${esc(input.url)}">A lecke megnyitása</a></p>` };
 }
