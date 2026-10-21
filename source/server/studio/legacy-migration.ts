@@ -28,7 +28,7 @@ export const LEGACY_MAX_ATTEMPTS = 2;
  * Spec 2026-10-21-regi-anyag-ciklusos-felulvizsgalat: a sorelemek felső száma — a sor eddig indít új anyagot, utána megáll (az újrapróba a
  * meglévő elemen belül marad). Minden felülvizsgálati ciklus (5 anyag) egy PR-rel emeli; így a deploy mindig futásmentes állapotban megy.
  */
-export const LEGACY_BATCH_LIMIT = 137;
+export const LEGACY_BATCH_LIMIT = 178;
 
 /**
  * Spec 2026-10-21-ciklus6 (tulajdonosi döntés): a két tartalmi okból kétszer elbukott anyag egyszeri, célzott újragyártása — a forrás
@@ -38,6 +38,12 @@ export const LEGACY_REDO: Readonly<Record<string, string>> = {
   // A főnév – Magyar nyelvtan 4. osztály (a lektor: a -val/-vel ragos példára az „anyának” is teljes pontot kapott).
   "7f9083e5-b1f9-4fe0-8c94-376ed61d228c": "A ragos alakokat gyakoroltató feladatoknál a pontozás CSAK a kérdezett rag pontos alakját fogadja el "
     + "teljes ponttal (pl. -val/-vel ragnál az „anyával”, nem az „anyának”); a más raggal ellátott alak hibás válasz.",
+  // Spec 2026-10-21-ciklus8: Programozási alapismeretek – VS Code & GitHub („apiKey” / „ApiKey” ismétlődésnek látszott — javítva).
+  "3j1DnOnG1Lts-YPCic70R": "A programkód-azonosítóknál (változó-, függvény-, kulcsnév) a kis- és nagybetű különbözik; az ilyen kérdés "
+    + "válaszlehetőségeinek írásmódja pontosan a kódban használt alak legyen.",
+  // Spec 2026-10-21-ciklus8: Az Erdő – Környezetismeret 4. osztály (a tudásbank „őz” kulcsfogalmát egyetlen blokk sem tanította).
+  "02d9aecf-65cc-4b73-af57-6f1009211736": "A tudásbank MINDEN kulcsfogalmát (köztük az erdő állatait, pl. az őzet) tanítsa legalább egy tanítási "
+    + "blokk a fogalom nevével.",
   // 4. osztály – Tulajdonságot kifejező szavak (a lektor: a mintaválasz önkényes szavai lettek kötelezők).
   "59f1ce9a-92e5-4908-82fa-1027d82583bf": "A mondatalkotó, szabadon megfogalmazható feladatoknál a kötelező (required) fogalmak CSAK a kérdés által "
     + "megkövetelt elemek (pl. a kért tulajdonságot kifejező szó); a mintaválasz többi szava (névelő, ige, tárgy) soha ne legyen kötelező.",
@@ -46,7 +52,7 @@ export const LEGACY_REDO: Readonly<Record<string, string>> = {
  * Spec 2026-10-21-ciklus7: a célzott újragyártás köre. Az 1. kör (ciklus 6, `redo: true`) a pontos-alak hiánya miatt elbukott; a 2. kör a
  * pontos-alak szigorítással fut (tulajdonosi jóváhagyás). Körönként egyszer.
  */
-export const LEGACY_REDO_ROUND = 2;
+export const LEGACY_REDO_ROUND = 3;
 /** A sorelem célzott köre: a régi `true` az 1. kör. */
 export const redoRoundOf = (redo: boolean | number | undefined): number => (redo === true ? 1 : typeof redo === "number" ? redo : 0);
 /** Review #357: a listás anyag MINDEN újraindítása (az infrastruktúra-hiba miatti is) célzott — a redo-jelző körönként egyszeri futást biztosít. */
@@ -223,7 +229,8 @@ const finish = (row: QueueRow, status: "done" | "error" | "waiting", error: stri
     WHERE id = ${row.id} AND status = 'running' AND coalesce(payload->>'runId', '') = ${row.payload.runId ?? ""}`);
 
 /**
- * Spec 2026-10-21-ciklus6b: a KÉSZ régi anyag korábbi (nem aktuális, nem publikált) Stúdió-piszkozatai elvetett jelölést kapnak — ugyanaz,
+ * Spec 2026-10-21-ciklus6b (+ ciklus 8: nem csak a kész, MINDEN sorelemnél — anyagonként csak a legutolsó próbálkozás piszkozata látszik):
+ * a régi anyag korábbi (nem aktuális, nem publikált) Stúdió-piszkozatai elvetett jelölést kapnak — ugyanaz,
  * mint a felület „Törlés” gombja (visszafordítható). Különben a draftlista a már kész anyag elbukott próbálkozásait mutatja („megtévesztő”).
  * Review #358: minden körben fut (idempotens — a hibás próbálkozás és a korábban kész elemek is sorra kerülnek); az aktívan vitt (élő
  * bérletű) vagy újragyártott job érintetlen; a hibás és a beragadt „running” (élő bérlet és türelmi időn belüli frissülés nélküli) job is.
@@ -235,7 +242,7 @@ export const supersededDraftCondition = sql`j.output ? 'targetHtmlFileId'
   AND NOT EXISTS (SELECT 1 FROM one_step_runs r JOIN lesson_workflow_runs w ON w.id = r.id WHERE r.job_id = j.id AND w.lease_until > now())
   AND (j.status = 'error' OR (j.status = 'running' AND NOT EXISTS (SELECT 1 FROM one_step_runs r WHERE r.job_id = j.id
     AND r.updated_at > now() - make_interval(secs => ${START_GRACE_MS / 1000}))))
-  AND EXISTS (SELECT 1 FROM scheduled_jobs s WHERE s.type = ${LEGACY_JOB_TYPE} AND s.status = 'done'
+  AND EXISTS (SELECT 1 FROM scheduled_jobs s WHERE s.type = ${LEGACY_JOB_TYPE}
     AND s.payload->>'htmlFileId' = j.output->>'targetHtmlFileId'
     AND NOT EXISTS (SELECT 1 FROM one_step_runs r WHERE r.id = s.payload->>'runId' AND r.job_id = j.id))`;
 async function discardSupersededDrafts(): Promise<void> {

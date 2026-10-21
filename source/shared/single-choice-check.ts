@@ -1,4 +1,5 @@
 import { ATOM, EXPR, SIGN, atomValue, evaluateExpression, normalizeSignedParens } from "./arithmetic-expression";
+import { caseMatters, isSpellingPrompt } from "./option-key";
 
 /**
  * Spec 2026-09-29 (docs/specs/2026-09-29-egy-helyes-valasz.md), döntés 1: determinisztikus egy-helyes-válasz őr.
@@ -13,6 +14,13 @@ export type SingleChoiceItem = { prompt: string; options: readonly string[]; cor
 
 const norm = (s: string) => s.normalize("NFC").toLocaleLowerCase("hu").replace(/\s+/g, " ").trim();
 const textKey = (s: string) => norm(s).replace(/[.!?;:,]+$/u, "").trim();
+/**
+ * Spec 2026-10-21-ciklus8: HELYESÍRÁSI kérdésnél az opció-ismétlődés kulcsa kis- és nagybetű-MEGTARTÓ — a magyar helyesírásban a
+ * betűméret tartalmi különbség („Egri” / „egri”, „Petőfi Sándor Általános Iskola” / kisbetűs változatai: épp az a kérdés, melyik a helyes
+ * írásmód). Más kérdésnél a csak betűméretben eltérő opció továbbra is ismétlődés („Alma” / „alma”, döntés 1c).
+ */
+const caseKey = (s: string) => s.normalize("NFC").replace(/\s+/g, " ").trim().replace(/[.!?;:,]+$/u, "").trim();
+
 const INTEGER = new RegExp(`^(${SIGN})?(\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+|\\d+)$`);
 /** Egyetlen szám (egész, tizedes, tört, vegyes tört), előjellel. */
 const LONE_NUMBER = new RegExp(`^(?:${SIGN})?(?:${ATOM})$`);
@@ -65,9 +73,10 @@ function duplicateProblems(prompt: string, options: readonly string[]): string[]
   const byText = new Map<string, number>();
   const byValue = new Map<number, number>();
   const byEquality = new Map<number, number>();
+  const spelling = isSpellingPrompt(prompt);
   const compareValues = !ABOUT_FORM.test(norm(prompt)) && !NEGATED_EQUALITY.test(norm(prompt)) && !options.some((o) => AGGREGATE_OPTION.test(norm(o)));
   options.forEach((option, i) => {
-    const key = textKey(option);
+    const key = caseMatters(option, spelling) ? caseKey(option) : textKey(option);
     const value = compareValues ? numberOf(option) : null;
     const equality = compareValues && value === null ? trueEqualityValue(option) : null;
     const twin = byText.get(key) ?? (value === null ? undefined : byValue.get(value)) ?? (equality === null ? undefined : byEquality.get(equality));

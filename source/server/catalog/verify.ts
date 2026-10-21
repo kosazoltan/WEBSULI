@@ -2,6 +2,7 @@ import { singleChoiceProblems } from "../../shared/single-choice-check";
 import { evaluateExpression } from "../../shared/arithmetic-expression";
 import { falseArithmeticClaims } from "../studio/tools/arithmetic-claims";
 import type { CatalogItemDraft } from "./catalog-item";
+import { isSpellingPrompt, optionKeyFor } from "../../shared/option-key";
 
 /**
  * Spec 2026-10-05-s3-katalogus-bank: a katalógus-tétel DETERMINISZTIKUS ellenőrzése a meglévő őrökkel (egy-helyes-válasz,
@@ -27,7 +28,7 @@ export function verifyItem(item: CatalogItemDraft): VerifyResult {
   if (item.kind === "quiz") {
     const options = item.options ?? [];
     if (typeof item.correctIndex !== "number" || item.correctIndex < 0 || item.correctIndex >= options.length) problems.push("a helyes kulcs nem a válaszlehetőségek egyikére mutat");
-    if (new Set(options.map(norm)).size !== options.length) problems.push("ismétlődő válaszlehetőség");
+    if (new Set(options.map(optionKeyFor(isSpellingPrompt(item.prompt), norm))).size !== options.length) problems.push("ismétlődő válaszlehetőség");
     if (typeof item.correctIndex === "number" && item.correctIndex >= 0 && item.correctIndex < options.length) {
       problems.push(...singleChoiceProblems({ prompt: item.prompt, options, correctIndex: item.correctIndex }));
     }

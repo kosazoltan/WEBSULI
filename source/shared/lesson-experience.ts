@@ -1,4 +1,5 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
+import { foldCaseUnlessSpelling, isSpellingPrompt } from "./option-key";
 import { z } from "zod";
 import { LESSON_FLAIRS } from "./lesson-visuals";
 import { LESSON_SCORING_VERSION, ORDER_SCORING_VERSION, PHRASE_SCORING_VERSION, POLYNOMIAL_SCORING_VERSION, TYPED_SCORING_VERSION, isValidReference } from "./answer-value";
@@ -90,7 +91,9 @@ export const experienceQuizSchema = z.object({
   correctIndex: z.number().int().min(0).max(3), feedbackPerOption: z.array(text(1000)).min(3).max(4),
   intent: z.enum(["recall", "apply"]).optional(),
 }).superRefine((q, ctx) => {
-  if (new Set(q.options.map(s => s.normalize("NFC").toLocaleLowerCase("hu"))).size !== q.options.length) ctx.addIssue({ code: "custom", message: "A válaszlehetőségek legyenek különbözők." });
+  // Spec 2026-10-21-ciklus8 (review #361): helyesírási kérdésnél a csak betűméretben eltérő opciók különbözők (közös kulcs: option-key).
+  const spelling = isSpellingPrompt(q.question);
+  if (new Set(q.options.map(s => foldCaseUnlessSpelling(s.normalize("NFC"), spelling))).size !== q.options.length) ctx.addIssue({ code: "custom", message: "A válaszlehetőségek legyenek különbözők." });
   if (q.correctIndex >= q.options.length || q.feedbackPerOption.length !== q.options.length) ctx.addIssue({ code: "custom", message: "Minden válaszhoz magyarázat és érvényes helyes index szükséges." });
 });
 
@@ -99,7 +102,7 @@ export const methodSchema = z.object({
   options: z.array(text(500)).min(2).max(4).optional(), correctIndex: z.number().int().min(0).optional(),
   steps: z.array(text(500)).min(2).max(8).optional(),
 }).superRefine((m, ctx) => {
-  if (m.options && new Set(m.options.map(s => s.toLocaleLowerCase("hu"))).size !== m.options.length) ctx.addIssue({ code: "custom", message: "A módszer válaszlehetőségei legyenek különbözők." });
+  if (m.options && new Set(m.options.map(s => foldCaseUnlessSpelling(s, isSpellingPrompt(m.prompt)))).size !== m.options.length) ctx.addIssue({ code: "custom", message: "A módszer válaszlehetőségei legyenek különbözők." });
   if (["gate", "myth", "popup"].includes(m.kind) && (!m.options || m.correctIndex === undefined || m.correctIndex >= m.options.length)) {
     ctx.addIssue({ code: "custom", message: "A kérdéshez options és érvényes correctIndex kell." });
   }
