@@ -65,6 +65,20 @@
 .fusion-steps li > span { background: var(--lesson-accent); color: var(--lesson-accent-ink); min-width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; }
 .fusion-speech { color: var(--lesson-muted); font-size: .8rem; }
 .fusion-glossary article { padding: 18px 0; border-top: 1px solid var(--lesson-line); }
+/* Spec 2026-10-21-nyelvlecke-kiejtes: kiejtésgyakorló — feltűnő belépő a Tananyag tetején, szavanként Meghallgatás + Mondd ki!. */
+.fusion-pronounce-entry { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px 16px; border: 2px solid var(--lesson-accent); border-radius: var(--lesson-radius); background: var(--lesson-surface); color: var(--lesson-ink); font-size: .95rem; line-height: 1.4; cursor: pointer; }
+.fusion-pronounce-entry svg { flex: none; color: var(--lesson-accent); }
+.fusion-say { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 6px; }
+.fusion-pronounce { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; max-width: 100%; }
+.fusion-pronounce-manual { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; max-width: 100%; }
+.fusion-pronounce-manual input { min-width: 0; width: min(320px, 100%); padding: 10px 12px; border: 1px solid var(--lesson-line); border-radius: 10px; background: var(--lesson-surface); color: var(--lesson-ink); font-size: 1rem; }
+.fusion-pronounce-result { margin: 2px 0 0; font-size: .9rem; color: var(--lesson-ink); overflow-wrap: anywhere; }
+.fusion-pronounce-result:empty { display: none; }
+.fusion-speech-hint { display: flex; gap: 6px; align-items: flex-start; color: var(--lesson-muted); font-size: .8rem; margin: 6px 0; }
+.fusion-speech-hint svg { flex: none; margin-top: 2px; }
+.fusion-dictation-language { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; color: var(--lesson-muted); font-size: .85rem; }
+.fusion-dictation-language button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--lesson-line); border-radius: 999px; background: var(--lesson-surface); color: var(--lesson-ink); font-weight: 600; }
+.fusion-dictation-language button[aria-pressed="true"] { background: var(--lesson-accent); color: var(--lesson-accent-ink); border-color: var(--lesson-accent); }
 .fusion-dialog { background: #fff; color: #172c45; max-width: min(520px, calc(100vw - 32px)); max-height: 85dvh; overflow-y: auto; border-radius: 18px; }
 .fusion-dialog button { background: #edf3f9; color: #172c45; padding: 10px 14px; border-radius: 10px; }
 .fusion-dialog p { color: #435e79; }

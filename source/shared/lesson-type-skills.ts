@@ -21,6 +21,7 @@ export const LESSON_TYPE_SKILLS: Record<LessonType, string> = {
   "szokincs-nyelvi": [
     "# Lecketípus: szókincs- és nyelvi forma lecke",
     "- Szópárok/kifejezések témakörönként, kiejtéssel; sok rövid, gyors kérdés.",
+    "- Kiejtésgyakorlás KÖTELEZŐ (2026-10-21): minden tanított idegen szó és kifejezés a szószedetbe kerül példamondattal és fordítással — a lejátszó ebből adja a felolvasást (TTS) és a kimondásos kiejtésgyakorlást.",
     "- Ugyanaz a szó ne szerepeljen két opcióként; a disztraktor hasonló alakú vagy jelentésű szó.",
     "- Nyelvtani forma: szabály → 3–5 példa → átalakító feladatok.",
   ].join("\n"),

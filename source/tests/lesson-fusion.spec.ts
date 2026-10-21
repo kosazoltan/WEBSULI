@@ -82,6 +82,8 @@ test("foreign-language glossary starts speech only on request, with the correct 
   });
   await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: lesson }));
   await page.goto("/__lesson-runtime-probe?candidate=1");
+  // Spec 2026-10-21-nyelvlecke-kiejtes (dokumentált UI-változás): a szószedet a „Kiejtés” fülre költözött, a Tananyag tetején belépővel.
+  await page.getByTestId("pronounce-entry").click();
   await expect(page.getByRole("heading", { name: "Szószedet · hallgasd és mondd utánam!" })).toBeVisible();
   const calls = () => page.evaluate(() => (window as unknown as { __speechCalls: unknown[] }).__speechCalls);
   expect(await calls()).toEqual([]);
@@ -91,6 +93,59 @@ test("foreign-language glossary starts speech only on request, with the correct 
   await page.locator('.fusion-glossary input[type="range"]').fill("0.65");
   await page.getByRole("button", { name: "This is a triangle. meghallgatása", exact: true }).click();
   expect((await calls())[1]).toEqual({ text: "This is a triangle.", lang: "en-GB", rate: Math.fround(.65) });
+});
+
+// Spec 2026-10-21-nyelvlecke-kiejtes: kiejtésgyakorlás a lecke nyelvén; beszédfelismerés nélkül a billentyűzetes diktálás útja.
+const languageLesson = () => {
+  const lesson = fusionFixture(); lesson.subject = "angol";
+  lesson.experience!.language = "en-GB";
+  lesson.experience!.glossary = [{ word: "triangle", translation: "háromszög", partOfSpeech: "főnév", example: "This is a triangle.", exampleTranslation: "Ez egy háromszög." }];
+  return lesson;
+};
+
+test("pronunciation practice listens in the lesson language and judges the spoken word", async ({ page }) => {
+  await page.addInitScript(() => {
+    class FakeRecognition {
+      static last: FakeRecognition | null = null;
+      lang = ""; maxAlternatives = 1;
+      onresult: ((event: unknown) => void) | null = null; onerror = null; onend: (() => void) | null = null;
+      constructor() { FakeRecognition.last = this; }
+      start() { setTimeout(() => { this.onresult?.({ results: [[{ transcript: "Triangle" }, { transcript: "try angle" }]] }); this.onend?.(); }, 10); }
+      stop() { this.onend?.(); } abort() {}
+    }
+    Object.defineProperty(window, "SpeechRecognition", { value: FakeRecognition });
+    Object.defineProperty(window, "__lastRecognitionLang", { get: () => FakeRecognition.last?.lang });
+  });
+  await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: languageLesson() }));
+  await page.goto("/__lesson-runtime-probe?candidate=1");
+  await page.getByRole("tab", { name: "Kiejtés", exact: true }).click();
+  await page.getByRole("button", { name: "triangle kimondása", exact: true }).click();
+  const panel = page.getByRole("tabpanel", { name: "Kiejtés", exact: true });
+  await expect(panel.getByTestId("pronounce").first().getByRole("status")).toContainText("Szép kiejtés");
+  expect(await page.evaluate(() => (window as unknown as { __lastRecognitionLang: string }).__lastRecognitionLang)).toBe("en-GB");
+});
+
+test("pronunciation practice works without speech recognition via keyboard dictation, and dictation explains instead of vanishing", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "SpeechRecognition", { value: undefined, configurable: true });
+    Object.defineProperty(window, "webkitSpeechRecognition", { value: undefined, configurable: true });
+  });
+  await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: languageLesson() }));
+  await page.goto("/__lesson-runtime-probe?candidate=1");
+  await page.getByRole("tab", { name: "Kiejtés", exact: true }).click();
+  const practice = page.getByRole("tabpanel", { name: "Kiejtés", exact: true }).getByTestId("pronounce").first();
+  await practice.getByRole("button", { name: "triangle kimondása", exact: true }).click();
+  await practice.getByRole("textbox").fill("rectangle");
+  await practice.getByRole("button", { name: "Ellenőrzés" }).click();
+  await expect(practice.getByRole("status")).toContainText("Próbáld újra");
+  await practice.getByRole("textbox").fill("triangle");
+  await practice.getByRole("button", { name: "Ellenőrzés" }).click();
+  await expect(practice.getByRole("status")).toContainText("Szép kiejtés");
+  await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
+  await expect(page.getByText("billentyűzet 🎤 (mikrofon) gombját").first()).toBeVisible();
+  // Nyelvleckén a diktálás nyelve választható (alapból a lecke nyelve).
+  await expect(page.getByRole("group", { name: "A diktálás nyelve" }).getByRole("button", { name: "Angolul" })).toHaveAttribute("aria-pressed", "true");
 });
 
 

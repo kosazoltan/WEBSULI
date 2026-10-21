@@ -1,10 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Brain, PencilLine, Trophy, Download, RotateCcw, Mic, Leaf, Palette, Layers } from "lucide-react";
+import { BookOpen, Brain, PencilLine, Trophy, Download, RotateCcw, Mic, Leaf, Palette, Layers, Volume2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { experienceRoundSizes, type LessonExperience } from "@shared/lesson-experience";
 import { evaluateOpenAnswer, scoreSummary, sampleTaskIds } from "@shared/lesson-experience-score";
 import { CognitiveMethods } from "./CognitiveMethods";
-import { DictationButton, SpeakButton } from "./ExperienceSpeech";
+import { DictationButton, PronounceButton, SpeakButton } from "./ExperienceSpeech";
 import { useExperienceRound } from "./useExperienceRound";
 import { useResultReport } from "./resultReport";
 import { LearningMode, LearningPager, useLearningPreference } from "./LearningControls";
@@ -18,8 +18,12 @@ import { VerdictFeedback } from "./VerdictFeedback";
 import { stripVerdictPrefix } from "@shared/lesson-ui-text";
 
 // Websuli Design §3/§6: az ötödik fül a memóriakártya-ismétlés (docs/specs/2026-10-16-websuli-ismetles.md) — csak ha van kártya.
-const TABS = [{ id: "teaching", label: "Tananyag", icon: BookOpen }, { id: "methods", label: "Módszerek", icon: Brain }, { id: "tasks", label: "Feladatok", icon: PencilLine }, { id: "quiz", label: "Kvíz", icon: Trophy }, { id: "review", label: "Ismétlés", icon: Layers }] as const;
+// Spec 2026-10-21-nyelvlecke-kiejtes: nyelvleckén a második fül a kiejtésgyakorló (felolvasás + kimondás) — csak ha van nyelv.
+const TABS = [{ id: "teaching", label: "Tananyag", icon: BookOpen }, { id: "pronounce", label: "Kiejtés", icon: Volume2 }, { id: "methods", label: "Módszerek", icon: Brain }, { id: "tasks", label: "Feladatok", icon: PencilLine }, { id: "quiz", label: "Kvíz", icon: Trophy }, { id: "review", label: "Ismétlés", icon: Layers }] as const;
 type Tab = typeof TABS[number]["id"];
+/** A diktálás nyelvválasztójának felirata (a lecke nyelvének első tagja szerint). */
+const LANGUAGE_ADVERB: Record<string, string> = { en: "Angolul", fr: "Franciául", de: "Németül", es: "Spanyolul", it: "Olaszul", la: "Latinul", ru: "Oroszul" };
+const languageAdverb = (language: string) => LANGUAGE_ADVERB[language.split("-")[0]] ?? "Idegen nyelven";
 function Result({ title, points, total, seconds, answers }: { title: string; points: number; total: number; seconds: number; answers: unknown }) {
   const score = scoreSummary(points, total);
   return <section className="fusion-result" aria-label={`${title} eredmény`}>
@@ -36,7 +40,9 @@ function Result({ title, points, total, seconds, answers }: { title: string; poi
 export function LessonExperienceView({ experience: e, storageKey, reviewKey, headings, lessonId, arbiterSource, children }: { experience: LessonExperience; storageKey: string; reviewKey?: string; headings: string[]; lessonId?: string; arbiterSource?: ArbiterSource; children: (section: number | null) => ReactNode }) {
   const prefix = useId();
   const cards = useMemo(() => lessonFlashcards({ experience: e }), [e]);
-  const tabs = TABS.filter(t => t.id !== "review" || cards.length > 0);
+  const tabs = TABS.filter(t => (t.id !== "review" || cards.length > 0) && (t.id !== "pronounce" || !!e.language));
+  // Spec 2026-10-21-nyelvlecke-kiejtes: nyelvleckén a feladatok diktálása alapból a lecke nyelvén (az angol válasz magyar felismerővel értelmetlen).
+  const [dictationLanguage, setDictationLanguage] = useState(e.language ?? "hu-HU");
   const [tab, setTab] = useState<Tab>("teaching");
   const changeTab = (next: Tab) => { setTab(next); requestAnimationFrame(() => document.getElementById(`${prefix}-fusion-tab-${next}`)?.closest(".fusion-view")?.scrollIntoView({ block: "start", behavior: "instant" })); };
   const [resetTarget, setResetTarget] = useState<"tasks" | "quiz" | null>(null);
@@ -86,27 +92,33 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
     }}><Icon size={19} /><span>{label}</span></button>)}</nav>
     <div className="learning-toolbar"><span className="fusion-eyebrow">Egy lépés, egy új felismerés</span><button type="button" className="lesson-ghost-btn learning-quiet" data-on={quiet} onClick={() => setQuiet(!quiet)} title={quiet ? "Most a tompított, egyszínű nézet látszik — vissza az évfolyam színeihez" : "Tompított, egyszínű nézet kevesebb ingerrel"} data-testid="learning-quiet">{quiet ? <><Palette size={16} /> Színes nézet</> : <><Leaf size={16} /> Csendes nézet</>}</button></div>
     <div role="tabpanel" id={`${prefix}-fusion-panel-teaching`} aria-labelledby={`${prefix}-fusion-tab-teaching`} hidden={tab !== "teaching"} className="fusion-panel space-y-6">
+      {e.language && <button type="button" className="fusion-pronounce-entry" data-testid="pronounce-entry" onClick={() => changeTab("pronounce")}><Volume2 size={22} /><span><strong>Kiejtésgyakorló</strong> · hallgasd meg a szavakat és a mondatokat, majd mondd ki őket — a program meghallgat és visszajelez.</span></button>}
       <div className="learning-book-head"><label className="fusion-label">Fejezet<select aria-label="Fejezet" value={teachingSection} onChange={event => { setTeachingSection(Number(event.target.value)); setTeachingOverview(false); }}>{headings.map((heading, index) => <option key={index} value={index}>{index + 1}. {heading}</option>)}</select></label><LearningMode overview={teachingOverview} onChange={setTeachingOverview} label="tananyag" /></div>
       {children(teachingOverview ? null : teachingSection)}
       {!teachingOverview && <>
         <details className="learning-methods-inline"><summary>Próbáld ki az összefüggést!</summary><CognitiveMethods key={teachingSection} methods={e.methods.filter(m => m.sectionIndex === teachingSection)} /></details>
         <LearningPager index={teachingSection} count={headings.length} label="fejezet" onChange={index => { setTeachingSection(index); requestAnimationFrame(() => document.getElementById(`${prefix}-fusion-panel-teaching`)?.scrollIntoView({ block: "start" })); }} />
       </>}
-      {e.language && <section className="lesson-block fusion-glossary"><h2>Szószedet · hallgasd és mondd utánam!</h2><label className="fusion-label">Felolvasás sebessége: {rate.toFixed(2)}×<input type="range" min="0.5" max="1.2" step="0.05" value={rate} onChange={ev => setRate(Number(ev.target.value))} /></label>
-        {e.glossary.map(entry => <article key={entry.word}><h3 lang={e.language}>{entry.word}</h3><p>{entry.translation} · {entry.partOfSpeech}</p><SpeakButton text={entry.word} language={e.language!} rate={rate} /><p lang={e.language}>{entry.example}</p><p>{entry.exampleTranslation}</p><SpeakButton text={entry.example} language={e.language!} rate={rate} /></article>)}
-      </section>}
     </div>
+    {e.language && <div role="tabpanel" id={`${prefix}-fusion-panel-pronounce`} aria-labelledby={`${prefix}-fusion-tab-pronounce`} hidden={tab !== "pronounce"} className="fusion-panel">
+      <section className="lesson-block fusion-glossary"><h2>Szószedet · hallgasd és mondd utánam!</h2>
+        <p className="fusion-intro">Nyomd meg a <strong>Meghallgatás</strong> gombot, ismételd el hangosan, majd a <strong>Mondd ki!</strong> gombbal ellenőrizd a kiejtésed.</p>
+        <label className="fusion-label">Felolvasás sebessége: {rate.toFixed(2)}×<input type="range" min="0.5" max="1.2" step="0.05" value={rate} onChange={ev => setRate(Number(ev.target.value))} /></label>
+        {e.glossary.map(entry => <article key={entry.word}><h3 lang={e.language}>{entry.word}</h3><p>{entry.translation} · {entry.partOfSpeech}</p><div className="fusion-say"><SpeakButton text={entry.word} language={e.language!} rate={rate} /><PronounceButton target={entry.word} language={e.language!} /></div><p lang={e.language}>{entry.example}</p><p>{entry.exampleTranslation}</p><div className="fusion-say"><SpeakButton text={entry.example} language={e.language!} rate={rate} /><PronounceButton target={entry.example} language={e.language!} /></div></article>)}
+      </section>
+    </div>}
     <div role="tabpanel" id={`${prefix}-fusion-panel-methods`} aria-labelledby={`${prefix}-fusion-tab-methods`} hidden={tab !== "methods"} className="fusion-panel"><CognitiveMethods methods={e.methods} /></div>
     <div role="tabpanel" id={`${prefix}-fusion-panel-tasks`} aria-labelledby={`${prefix}-fusion-tab-tasks`} hidden={tab !== "tasks"} className="fusion-panel">
       <div className="fusion-round-head"><div><span className="fusion-eyebrow">Fogalmazd meg a saját szavaiddal</span><h2>Feladatok</h2><p>{taskRound} feladat a {e.tasks.length}-ből · írásban és szóban</p></div><button className="lesson-outline-btn" onClick={() => setResetTarget("tasks")}><RotateCcw size={17} /> Új feladatsor</button></div>
       <p className="fusion-intro">A szóbeli feladatot először mondd el, majd írd vagy diktáld be a válaszod. Az automatikus ellenőrzés fogalmakat keres; a mintaválasz segít megítélni a jelentést.{arbiterSource && " A nem teljes pontos válaszokat egy mesterséges intelligencia is átnézi."}</p>
+      {e.language && <div className="fusion-dictation-language" role="group" aria-label="A diktálás nyelve"><span>A diktálás nyelve:</span>{[e.language, "hu-HU"].map(language => <button key={language} type="button" className="lesson-ghost-btn" aria-pressed={dictationLanguage === language} onClick={() => setDictationLanguage(language)}>{language === "hu-HU" ? "Magyarul" : languageAdverb(language)}</button>)}</div>}
       {tasks.map((t, index) => {
         const graded = !!taskState.round.finishedAt;
         const verdict = finalVerdict(t.id);
         return <section className="lesson-block fusion-task" key={t.id} data-task-id={t.id} tabIndex={-1} ref={element => { if (element) taskElements.current.set(t.id, element); else taskElements.current.delete(t.id); }}>
           <span className="fusion-eyebrow">{index + 1}. feladat {t.mode === "oral" && <><Mic size={14} /> Szóbeli gyakorlás</>}</span><h3>{t.q}</h3>
           <label className="fusion-label">A válaszod<textarea maxLength={4000} value={taskState.round.answers[t.id] ?? ""} disabled={graded} onChange={ev => taskState.setRound(old => ({ ...old, answers: { ...old.answers, [t.id]: ev.target.value } }))} /></label>
-          {!graded && <DictationButton active={tab === "tasks" && !resetTarget} onText={text => taskState.setRound(old => ({ ...old, answers: { ...old.answers, [t.id]: `${old.answers[t.id] ?? ""} ${text}`.trim().slice(0, 4000) } }))} />}
+          {!graded && <DictationButton active={tab === "tasks" && !resetTarget} language={dictationLanguage} onText={text => taskState.setRound(old => ({ ...old, answers: { ...old.answers, [t.id]: `${old.answers[t.id] ?? ""} ${text}`.trim().slice(0, 4000) } }))} />}
           {graded && <div className="fusion-verdict" data-state={verdict.state}><strong>{verdict.state === "ok" ? "Elfogadva" : verdict.state === "partial" ? "Részben jó" : "Hiányos"} · {verdict.score} pont</strong><p>{verdict.reason}</p>
             {verdict.arbiter && <p className="fusion-arbiter" data-testid="arbiter-note">A döntőbíró {verdict.state === "ok" ? "elfogadta" : "részben elfogadta"} a saját megfogalmazásodat.</p>}
             {arbiter.pending.has(t.id) && <p className="fusion-arbiter" role="status">A válaszodat egy tanári segéd is átnézi…</p>}</div>}
