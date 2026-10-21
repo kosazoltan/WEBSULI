@@ -34,3 +34,10 @@
 ## Kiegészítés (2026-10-21 08:25): mojibake-őr (tulajdonosi kérés)
 - **Vizsgálat (csak olvasás):** a repó (kód, promptok, AGENTS/CLAUDE, docs, skillek), valamint az adatbázis — 137 publikált lecke, 77 régi anyag, 214 cím / leírás, 3 rendszerprompt, 23 209 katalógustétel, 169 memóriakártya, 6155 fogalom, 33 kvízelem — **mojibake-mentes**. Az egyetlen U+FFFD szándékos (a fél-karakter-védelem a `scripts/content-review/lib.ts`-ben).
 - **Tartós őr:** a `tests/mojibake-guard.test.ts` minden CI-futáson vizsgálja a kódot, a promptokat, a szabályokat, a skilleket és a dokumentációt (a minták karakterkódból épülnek; önellenőrzéssel).
+
+## Kiegészítés (2026-10-21 08:45): deploy-átfedés és infrastruktúra-hibák
+- **Mérés (1. ciklus):** a #353 deployjakor a RÉGI példány 05:32:29-kor (a régi kóddal) két folytatást indított, 05:35:24-kor SIGTERM-et kapott, a 270 s-os kivárás után a futások megszakadtak („A szerver újraindult…”). A sor ezt `a futás megállt`-ként rögzítette, és a 2. kísérlet miatt hibára zárta — infrastruktúra-hiba, nem tartalmi.
+- **Cél:**
+  1. **Példánykerítés:** minden induló példány bejegyzi magát (`scheduled_jobs`, `legacy-instance`); ha egy kör újabb példányt lát, új munkát (indítás / újrapróba) nem kezd, csak egyeztet.
+  2. **Pontos hibaüzenet:** ha a futásnak nincs hibaszövege, a sor a Stúdió-job hibáját rögzíti.
+  3. **Egyszeri újrasorolás infrastruktúra-hibára** is (a `km_concepts`-hiba mellett): szerver-újraindulás és a fél-karakteres JSON-hiba (`unexpected end of hex escape`, a 4. ciklus javítja).
