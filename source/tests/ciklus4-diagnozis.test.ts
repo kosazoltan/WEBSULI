@@ -51,9 +51,11 @@ test("ciklus4: a lektor blokkoló jegyzeteinek archívuma — körönként, vág
 test("ciklus4: a félbevágott emoji (magányos fél-karakter) a modellhívás előtt U+FFFD lesz; az ép emoji és szöveg érintetlen", async () => {
   const { wellFormed } = await import("../server/studio/single-run/conversation");
   const cut = "Kocka 🧊 térfogata".slice(0, 7);
-  assert.match(JSON.stringify(cut), /\ud83e/, "előfeltétel: magányos fél-karakter");
+  const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
+  assert.ok(isHighSurrogate(cut.charCodeAt(cut.length - 1)), "előfeltétel: a vágás magányos felső fél-karaktert hagy");
   assert.equal(wellFormed(cut), "Kocka \uFFFD");
   assert.equal(wellFormed("Kocka 🧊 térfogata"), "Kocka 🧊 térfogata");
   assert.equal(wellFormed("\uDC00a"), "\uFFFDa", "magányos alsó fél is");
-  assert.doesNotMatch(JSON.stringify(wellFormed(cut)), /\ud8|\udc/i);
+  const lone = [...wellFormed(cut)].some((ch) => ch.length === 1 && ch.charCodeAt(0) >= 0xd800 && ch.charCodeAt(0) <= 0xdfff);
+  assert.equal(lone, false, "nincs magányos fél-karakter");
 });
