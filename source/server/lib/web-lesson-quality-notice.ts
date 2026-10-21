@@ -15,6 +15,9 @@ export type WebLessonQualityNotice = {
  * Classifies an already stored HTML preview without changing its content.
  * Old material remains readable, but cannot look like a current v7.4-4 release.
  */
+/** Spec 2026-10-21-ciklus6b: a belső minőség-felirat csak adminnak szól — a tanuló / névtelen látogató felirat nélkül látja az anyagot. */
+export const showQualityNotice = (user: unknown): boolean => Boolean((user as { isAdmin?: boolean } | undefined)?.isAdmin);
+
 export function webLessonQualityNotice(html: string): WebLessonQualityNotice | null {
   if (!hasHtmlLessonData(html)) return null;
 
