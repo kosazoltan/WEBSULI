@@ -30,3 +30,7 @@
 ## Kiegészítés (2026-10-21 08:16): félbevágott emoji → elutasított API-kérés
 - **Mérés:** a „Felszín és Térfogat – 5. osztály” 2/2 kísérlete: `400 invalid_request_error: The request body is not valid JSON: unexpected end of hex escape`. Ok: a szöveg-vágások (`.slice()`) egy emoji karakterpárját kettévágják; a magányos fél-karakter (`\uD83E`) érvényes JS-szöveg, de a szigorú JSON-olvasó elutasítja (igazolva).
 - **Cél:** a modellhívás határán (`conversation.ts`, Anthropic és OpenAI kliens) minden szöveg (rendszer + blokkok) érvényes UTF-16-ra tisztul: a magányos fél-karakter `U+FFFD` lesz. Node-verziótól független regex.
+
+## Kiegészítés (2026-10-21 08:25): mojibake-őr (tulajdonosi kérés)
+- **Vizsgálat (csak olvasás):** a repó (kód, promptok, AGENTS/CLAUDE, docs, skillek), valamint az adatbázis — 137 publikált lecke, 77 régi anyag, 214 cím / leírás, 3 rendszerprompt, 23 209 katalógustétel, 169 memóriakártya, 6155 fogalom, 33 kvízelem — **mojibake-mentes**. Az egyetlen U+FFFD szándékos (a fél-karakter-védelem a `scripts/content-review/lib.ts`-ben).
+- **Tartós őr:** a `tests/mojibake-guard.test.ts` minden CI-futáson vizsgálja a kódot, a promptokat, a szabályokat, a skilleket és a dokumentációt (a minták karakterkódból épülnek; önellenőrzéssel).
