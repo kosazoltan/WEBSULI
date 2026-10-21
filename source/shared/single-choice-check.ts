@@ -228,6 +228,16 @@ function embeddedArithmeticProblems(item: SingleChoiceItem): string[] {
   if (result === null) return [];
   const values = item.options.map(signedNumberOf);
   if (values.some((v) => v === null)) return [];
+  // Spec 2026-10-21-c8-szamolas-kapu (B; mérve: „95 : 4 = 23.75” egész opciókkal, írásbeli osztás 4. o.): a maradékos osztás hányadosa
+  // az EGÉSZ hányados, a „maradéka?” kérdés a maradékot kéri.
+  const division = exprs[0].match(/^(\d+)\s*[:÷]\s*(\d+)$/u);
+  if (division && !Number.isInteger(result) && values.every((v) => Number.isInteger(v))) {
+    const [a, b] = [Number(division[1]), Number(division[2])];
+    const remainderAsked = /(?<!\p{L})maradék\p{L}*/u.test(norm(question));
+    const expected = remainderAsked ? a % b : Math.floor(a / b);
+    const hits = values.flatMap((v, i) => (v === expected ? [i] : []));
+    return exactlyOne(item, hits, remainderAsked ? `egyenlő a maradékkal (${exprs[0]} maradéka ${expected})` : `egyenlő a maradékos osztás egész hányadosával (${exprs[0]} = ${expected} maradék ${a % b})`);
+  }
   const satisfying = values.flatMap((v, i) => (Math.abs(v! - result) < 1e-6 ? [i] : []));
   return exactlyOne(item, satisfying, `egyenlő a kiszámolt eredménnyel (${exprs[0]} = ${result})`);
 }

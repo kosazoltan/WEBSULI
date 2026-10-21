@@ -95,6 +95,13 @@ export function falseArithmeticClaims(text: string): string[] {
     // Tört-bővítés/-egyszerűsítés jelölése („8÷4 / 12÷4 = 2/3”: számláló és nevező külön osztva) — nem balról jobbra értékelendő.
     const fractionOp = (seg: string) => /\s\/\s/.test(seg) && /[÷:]/.test(seg);
     const values = segments.map((seg) => fractionOp(seg) ? null : evaluateExpression(seg));
+    // Spec 2026-10-21-c8-szamolas-kapu (A; mérve: „0: 4 + 0 = 4”, „1: 5 + 6 + 1 = 12”, „40 · 6: 4 · 6 = 24”): a számhoz TAPADÓ, utána
+    // szóközös kettőspont lépés-címke is lehet — ha a címke utáni olvasat igaz, a lánc nem hamis (a „12: 4 = 3” osztás-olvasata is igaz).
+    const labelled = segments.length >= 2 ? segments[0].match(/^.*\d:\s+(.+)$/su) : null;
+    if (labelled && values[1] != null) {
+      const alt = evaluateExpression(labelled[1]);
+      if (alt !== null && Math.abs(alt - values[1]) < 1e-6) continue;
+    }
     // Sorszám + ezres tagolás kétértelműsége („3 133 + 126 = 259” = a 3. lépés): ha a vezető csoport elhagyásával az állítás igaz,
     // nem ítéljük hamisnak (a valódi ezres tagolású hamis állítás így sem marad rejtve, ha a rövidebb olvasat is hamis).
     const leadGroup = segments[0].match(/^\d{1,3}\s+(?=\d{3}(?!\d))/);
