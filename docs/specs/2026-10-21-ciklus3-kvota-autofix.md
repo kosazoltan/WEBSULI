@@ -9,8 +9,8 @@ modell javítókörrel (teljes csomag újraírása, kimeneti token) javított.
 
 ## Cél
 - **Az előfeldolgozó (`autofixBankPacket`), modellkör nélkül:**
-  1. a kvóta csoportjai közt ismétlődő elem csak az első csoportban marad, az üres csoport kiesik, a `count` legfeljebb a csoportok
-     száma;
+  1. a kvóta csoportjai közt ismétlődő elem csak az első csoportban marad, az üres csoport kiesik. A `count` SOHA nem csökken (review
+     #354: a kérdés követelménye) — ha a szűrés után kevesebb különböző csoport marad, a sémahiba a javítókörre marad (tartalmi pótlás);
   2. a kvótás feladat üres `required`-je a kvóta bármely elemét elfogadó egy csoport (a kvótát a `requiredDistinct` méri).
 - **Kvóta nélkül** az üres `required`-hez nem nyúl (az valódi hiba marad).
 

@@ -73,13 +73,11 @@ function fixDistinct(task: Obj, fixes: string[]): void {
       return true;
     })).filter((group) => group.length > 0);
     const changed = removed > 0 || JSON.stringify(from) !== JSON.stringify(rule.from);
-    const clamped = typeof rule.count === "number" && rule.count > from.length && from.length > 0;
-    // Review #354: az üres / érvénytelen csoport és a túl nagy darabszám ismétlődés nélkül is javul.
+    // Review #354: az üres / érvénytelen csoport ismétlődés nélkül is kiesik. A darabszám SOHA nem csökken (a kérdés követelménye) — ha
+    // a szűrés után kevesebb különböző csoport marad, mint a kért szám, a sémahiba a javítókörre marad (tartalmi pótlás).
     if (changed && from.length) rule.from = from;
-    if (clamped) rule.count = from.length;
     if (removed) fixes.push(`${id}: a kategóriakvóta ismétlődő elemei csak az első csoportban maradtak (${removed} elem)`);
     else if (changed && from.length) fixes.push(`${id}: a kategóriakvóta üres / érvénytelen elemei elhagyva`);
-    if (clamped) fixes.push(`${id}: a kvóta darabszáma a csoportok számára szorítva (${from.length})`);
   }
   if (Array.isArray(task.required) && task.required.length === 0) {
     const any = [...new Set((task.requiredDistinct as unknown[]).filter(isObj).flatMap((r) => (Array.isArray(r.from) ? (r.from as unknown[]).filter(isStrArr).flat() : [])))];
