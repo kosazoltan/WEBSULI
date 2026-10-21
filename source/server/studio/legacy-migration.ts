@@ -4,7 +4,7 @@
  * táblában; a kapcsoló a kódban van (`off` | `pilot` | `all`), így az indítás és a leállítás egy-egy PR — prod-DB-írás és konfiguráció nélkül.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { htmlFiles, oneStepRuns, scheduledJobs, studioJobs, users } from "../../shared/schema";
 import { logger } from "../lib/logger";
@@ -148,8 +148,10 @@ async function claimRetry(row: QueueRow, next: Payload): Promise<boolean> {
 }
 
 const LOCK_KEY = sql`hashtext(${LEGACY_JOB_TYPE})`;
-const finish = (id: string, status: "done" | "error" | "waiting", error: string | null) =>
-  db.update(scheduledJobs).set({ status, error, completedAt: new Date() }).where(and(eq(scheduledJobs.id, id), eq(scheduledJobs.status, "running")));
+/** Review #351: a lezárás csak az e kör által látott futásra érvényes (egy elavult döntés nem írhat felül egy közben újrasorolt elemet). */
+const finish = (row: QueueRow, status: "done" | "error" | "waiting", error: string | null) =>
+  db.execute(sql`UPDATE scheduled_jobs SET status = ${status}, error = ${error}, completed_at = now()
+    WHERE id = ${row.id} AND status = 'running' AND coalesce(payload->>'runId', '') = ${row.payload.runId ?? ""}`);
 
 let ticking = false;
 let skippedLogged = false;
@@ -189,10 +191,10 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       const decision = reconcileLegacy({ attempt, startedAt, runPhase: run?.phase ?? null, runUpdatedAt: run?.updatedAt ?? null, leaseAlive: lease.rows.length > 0,
         targetIsLesson: file?.contentType === "lesson", jobResumable: resumable, jobRunning }, now);
       if (decision === "running") { running++; continue; }
-      if (decision === "done") { await finish(row.id, "done", null); logger.info(`[RÉGI→STÚDIÓ] Kész: ${htmlFileId} (${attempt}. kísérlet)`); continue; }
-      if (decision === "waiting") { await finish(row.id, "waiting", `emberi döntésre vár (${run?.phase}): ${run?.error ?? ""}`.slice(0, 2000)); continue; }
+      if (decision === "done") { await finish(row, "done", null); logger.info(`[RÉGI→STÚDIÓ] Kész: ${htmlFileId} (${attempt}. kísérlet)`); continue; }
+      if (decision === "waiting") { await finish(row, "waiting", `emberi döntésre vár (${run?.phase}): ${run?.error ?? ""}`.slice(0, 2000)); continue; }
       if (decision === "error") {
-        await finish(row.id, "error", (run?.phase === "done" ? "a futás kész, de a cél nem lett lecke (kézi vizsgálat)" : run?.error ?? "a futás megállt").slice(0, 2000));
+        await finish(row, "error", (run?.phase === "done" ? "a futás kész, de a cél nem lett lecke (kézi vizsgálat)" : run?.error ?? "a futás megállt").slice(0, 2000));
         logger.warn(`[RÉGI→STÚDIÓ] Hiba, nincs több kísérlet: ${htmlFileId}: ${run?.error ?? "?"}`);
         continue;
       }
