@@ -23,6 +23,8 @@ export const LEGACY_MAX_ATTEMPTS = 2;
  * meglévő elemen belül marad). Minden felülvizsgálati ciklus (5 anyag) egy PR-rel emeli; így a deploy mindig futásmentes állapotban megy.
  */
 export const LEGACY_BATCH_LIMIT = 100;
+// Review #352: a következő ciklus korlátja a TÉNYLEGES sorelemszám + 5 (nem az előző korlát + 5) — a korlát fölötti (pl. újrapróbált)
+// elem miatt a ciklus nem lehet 5-nél rövidebb.
 /** Tiszta: hány új anyag indulhat még a korlátig. */
 export const batchRoom = (totalRows: number, limit = LEGACY_BATCH_LIMIT) => Math.max(0, limit - totalRows);
 /** A szövegkivonat a beágyazott képeket elveszíti: a képgazdag (nagy) anyag kimarad, kézi döntésre (bájtban mérve). */
@@ -102,7 +104,9 @@ export function legacySource(file: { title: string; content: string }): { files:
   };
 }
 
-type Payload = { htmlFileId: string; runId?: string; attempt?: number; startedAt?: number; requeued?: boolean };
+type Payload = { htmlFileId: string; runId?: string; attempt?: number; startedAt?: number; requeued?: boolean;
+  /** Review #352: a folytatott Stúdió-job — a futás-azonosító nélkül (helyőrző) is felismerhető, hogy a folytatás él. */
+  jobId?: string };
 
 /** Spec 2026-10-21-fogalom-tipus-hossz: a csak a tudásbank-oszlophatár miatt hibára zárt elem egyszer újra sorba kerül. */
 export function shouldRequeue(row: { status: string; error: string | null; payload: { requeued?: boolean } }): boolean {
@@ -113,8 +117,8 @@ export function shouldRequeue(row: { status: string; error: string | null; paylo
 type QueueRow = { id: string; status: string; payload: Payload };
 
 /** Review #351: az újrapróba payloadja — az újrasorolás jelzője (`requeued`) megmarad, így a tartós hiba nem indít végtelen újragyártást. */
-export const retryPayload = (prev: Payload, runId: string, attempt: number, startedAt: number): Payload =>
-  ({ htmlFileId: prev.htmlFileId, runId, attempt, startedAt, ...(prev.requeued ? { requeued: true } : {}) });
+export const retryPayload = (prev: Payload, runId: string, attempt: number, startedAt: number, jobId?: string): Payload =>
+  ({ htmlFileId: prev.htmlFileId, runId, attempt, startedAt, ...(prev.requeued ? { requeued: true } : {}), ...(jobId ? { jobId } : {}) });
 
 async function ownerFor(fileUserId: string | null): Promise<string | null> {
   if (fileUserId) {
@@ -189,8 +193,10 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       const lease = runId ? await db.execute(sql`SELECT 1 FROM lesson_workflow_runs WHERE id = ${runId} AND lease_until > now() LIMIT 1`) : { rows: [] };
       let resumable = false;
       let jobRunning = false;
-      if (run?.jobId) {
-        const [job] = await db.select({ status: studioJobs.status, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, run.jobId)).limit(1);
+      // Review #352: ha a futás-azonosító (még) helyőrző, a sorelemben rögzített folytatott job dönt.
+      const knownJobId = run?.jobId ?? row.payload.jobId;
+      if (knownJobId) {
+        const [job] = await db.select({ status: studioJobs.status, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, knownJobId)).limit(1);
         const { singleRunResumable } = await import("./single-run/engine");
         resumable = job?.status === "error" && singleRunResumable((job.output ?? {}) as Record<string, unknown>);
         jobRunning = job?.status === "running";
@@ -205,7 +211,7 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
         logger.warn(`[RÉGI→STÚDIÓ] Hiba, nincs több kísérlet: ${htmlFileId}: ${run?.error ?? "?"}`);
         continue;
       }
-      retries.push({ row, decision, jobId: run?.jobId ?? null, error: run?.error ?? null });
+      retries.push({ row, decision, jobId: knownJobId ?? null, error: run?.error ?? null });
     }
     // Review #349: `off` módban újrapróba sem indul; a párhuzamosság az újrapróbákra is érvényes (azok elsőbbséget kapnak).
     if (LEGACY_MIGRATION_MODE === "off") return running > 0;
@@ -216,7 +222,7 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
         if (decision === "resume" && jobId) {
           // Review #350: a sorelem ELŐBB foglalódik (helyőrző azonosítóval), csak a nyertes folytat; utána a valódi futás-azonosító kerül be.
           const placeholder = `resume-${randomUUID()}`;
-          if (!await claimRetry(row, retryPayload(row.payload, placeholder, attempt + 1, Date.now()))) continue;
+          if (!await claimRetry(row, retryPayload(row.payload, placeholder, attempt + 1, Date.now(), jobId))) continue;
           const next = await resumeJob(jobId, htmlFileId);
           await db.execute(sql`UPDATE scheduled_jobs SET payload = jsonb_set(payload, '{runId}', to_jsonb(${next}::text)) WHERE id = ${row.id} AND payload->>'runId' = ${placeholder}`);
         } else {
@@ -248,7 +254,7 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
     const queuedIds = new Set(rows.map((r) => r.payload.htmlFileId));
     const pending = queue.filter((id) => !queuedIds.has(id));
     for (const htmlFileId of pending) {
-      if (running >= LEGACY_CONCURRENCY || stopped) break;
+      if (running >= LEGACY_CONCURRENCY || stopped || batchRoom(rows.length) <= 0) break;
       // Review #349: atomi foglalás tranzakciós zárral — két példány nem foglalhatja ugyanazt az anyagot; a futás-azonosító ELŐBB rögzül.
       const runId = randomUUID();
       const claimed = await db.transaction(async (tx) => {
@@ -273,7 +279,8 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       }
       running++;
     }
-    return running > 0 || pending.length > 0 || retries.length > 0;
+    // Review #352: a ciklus-kapu szünetében a várakozó jelölt nem munka — tétlen ütem (nincs percenkénti foglalási próba).
+    return running > 0 || retries.length > 0 || (pending.length > 0 && batchRoom(rows.length) > 0);
   } finally {
     ticking = false;
   }

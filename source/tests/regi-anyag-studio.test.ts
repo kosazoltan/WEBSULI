@@ -84,7 +84,10 @@ test("fogalomtípus-hossz (2026-10-21): a címkék az oszlophatárra vágva; a c
   const { kmConceptColumns } = await import("../server/studio/single-run/live");
   const { shouldRequeue } = await import("../server/studio/legacy-migration");
   assert.deepEqual(kmConceptColumns({ type: "irodalomtörténeti esemény", correction: null }), { type: "irodalomtörténeti esemén", verbatimReason: null });
-  assert.equal(kmConceptColumns({ type: "fact", correction: "x".repeat(40) }).verbatimReason?.length, 32);
+  // Review #352: nem ismétlődő szöveg, pontos elvárás (az ELSŐ 32 karakter).
+  const correction = "A forrás szerint 1877-ben született, nem 1878-ban.";
+  assert.equal(kmConceptColumns({ type: "fact", correction }).verbatimReason, correction.slice(0, 32));
+  assert.equal(kmConceptColumns({ type: "fact", correction }).verbatimReason, "A forrás szerint 1877-ben szület");
   const err = 'Failed query: insert into "km_concepts" ("id", …';
   assert.equal(shouldRequeue({ status: "error", error: err, payload: {} }), true);
   assert.equal(shouldRequeue({ status: "error", error: err, payload: { requeued: true } }), false, "másodszor nem");
@@ -104,7 +107,10 @@ test("ciklus-kapu (2026-10-21): a korlátig indul új anyag; a 0-s kategória me
   assert.equal(batchRoom(100, 100), 0);
   assert.equal(batchRoom(97, 100), 3);
   assert.equal(batchRoom(120, 100), 0);
-  assert.ok(LEGACY_BATCH_LIMIT >= 100 && LEGACY_BATCH_LIMIT % 5 === 0);
+  // Review #352: a korlát pontosan rögzített (a ciklus-PR emeli, a tényleges sorelemszám + 5 szerint).
+  assert.equal(LEGACY_BATCH_LIMIT, 100);
+  assert.equal(batchRoom(99), 1);
+  assert.equal(batchRoom(100), 0);
   assert.equal(legacyClassroom(0, 12), 0, "Programozási alapismeretek marad");
   assert.equal(legacyClassroom(4, 4), 4);
   assert.equal(legacyClassroom(5, 6), 6, "egyébként a forrásból felismert évfolyam");
