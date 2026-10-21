@@ -123,6 +123,20 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
       fixed = true;
       break;
     }
+    // Spec 2026-10-21-ciklus1-csoportos-szigoritas (S3d): ha EGY szó nem különböztet meg (a helyesek eltérő szinonimákkal fogalmaznak — mért:
+    // a bank 271 javítókörének 76%-a „fordított” próba), egy legfeljebb 6 tagú VAGY-csoport, amelyből minden teljes pontos helyesben és a
+    // mintában van tag, a hibásban egy sem. Gépi szigorításként jelölve (S4: a tanulói mérés lazíthat).
+    const cover = fixed || !isBlocking ? null : coverGroup(task.sample, okCorrect, wrong.text);
+    if (cover) {
+      const next: OpenTask = { ...current, required: [...current.required, cover] };
+      if (evaluateOpenAnswer(next.sample, next).state === "ok" && okCorrect.every((a) => evaluateOpenAnswer(a, next).state === "ok")
+        && evaluateOpenAnswer(wrong.text, next).state !== "ok") {
+        current = next;
+        added.push(cover);
+        changes.push(`szigorítás (csoport): + kötelező csoport ${JSON.stringify(cover)} (megkülönbözteti a hibás (${wrong.kind}) választ)`);
+        fixed = true;
+      }
+    }
     // Spec 2026-10-20-s5-sorrendes-kifejezes (S5b): ha szó nem különböztet meg (azonos szavak, más alak / sorrend: „there are a sofa”),
     // a minta 3- és 2-tokenes, egymás utáni kifejezései közül az első, amely minden teljes pontos helyesben EGYMÁS UTÁN megvan, a hibásban
     // nincs, és felvétele után a minta / a helyesek ok, a hibás nem.
@@ -185,6 +199,38 @@ function orderCandidates(task: OpenTask): string[][][] {
 }
 
 /** S5b: a minta egymás utáni 3- és 2-tokenes kifejezései (v2-tokenek, műveleti jel nélkül), legalább egy nem kötőszó tokennel; a hosszabb előre. */
+/** S3d: a csoport legfeljebb ennyi tagú (a túl széles csoport már nem megkülönböztető, csak a hibást zárja ki). */
+export const COVER_GROUP_MAX = 6;
+
+/**
+ * Spec 2026-10-21-ciklus1-csoportos-szigoritas (S3d), tiszta: mohó lefedés — a minta és a teljes pontos helyesek megkülönböztető szavaiból
+ * (a hibásban a pontozó tűrő illesztésével sincs meg) a legtöbb még le nem fedett választ tartalmazó szó, amíg minden (a minta is) le nem
+ * fedett. `null`, ha nincs ilyen csoport legfeljebb `COVER_GROUP_MAX` taggal.
+ */
+export function coverGroup(sample: string, okCorrect: readonly string[], wrongText: string): string[] | null {
+  const answers = [sample, ...okCorrect];
+  const has = (answer: string, word: string) => missingAnswerConcepts(answer, { required: [[word]] }).length === 0;
+  const pool = [...new Set(answers.flatMap((a) => a.match(/[\p{L}\d]+(?:['’][\p{L}\d]+)*/gu) ?? []))]
+    // Review #353: a rubrika tagja legfeljebb 160 karakter (séma) — hosszabb jelölt nem kerülhet a csoportba.
+    .filter((w) => w.length <= 160 && !/['’]/.test(w) && isDistinguishingCandidate(w) && !has(wrongText, w));
+  const group: string[] = [];
+  let uncovered = answers.map((_, i) => i);
+  while (uncovered.length) {
+    let best: string | null = null;
+    let bestHits: number[] = [];
+    for (const w of pool) {
+      if (group.includes(w)) continue;
+      const hits = uncovered.filter((i) => has(answers[i], w));
+      if (hits.length > bestHits.length || (hits.length === bestHits.length && hits.length > 0 && best !== null && w.length > best.length)) { best = w; bestHits = hits; }
+    }
+    if (!best || !bestHits.length || group.length >= COVER_GROUP_MAX) return null;
+    group.push(best);
+    uncovered = uncovered.filter((i) => !bestHits.includes(i));
+  }
+  // A csoport egésze sem lehet a hibásban (a tagok külön-külön sem voltak benne; a csoport-illesztés ugyanaz a predikátum).
+  return group.length && missingAnswerConcepts(wrongText, { required: [group] }).length > 0 ? group : null;
+}
+
 function phraseCandidates(sample: string): string[] {
   const tokens = normalizeAnswerV2(sample).split(/\s+/).filter((t) => t && /\p{L}/u.test(t));
   // Review #342: a tagadó összevonás MINDKÉT töredéke tagadásjel („mustn t”: a „mustn” is) — a „t” előtti pozíció is tiltott, hogy az
