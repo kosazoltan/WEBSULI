@@ -99,7 +99,9 @@ type Payload = { htmlFileId: string; runId?: string; attempt?: number; startedAt
 
 /** Spec 2026-10-21-fogalom-tipus-hossz: a csak a tudásbank-oszlophatár miatt hibára zárt elem egyszer újra sorba kerül. */
 export function shouldRequeue(row: { status: string; error: string | null; payload: { requeued?: boolean } }): boolean {
-  return row.status === "error" && !row.payload.requeued && (row.error ?? "").startsWith('Failed query: insert into "km_concepts"');
+  // Két külön feltétel (a forrásellenőrző a teljes SQL-szöveget nyers tudástár-írásnak látná): a beszúrás hibája a fogalomtáblán.
+  const error = row.error ?? "";
+  return row.status === "error" && !row.payload.requeued && error.startsWith("Failed query: insert") && error.includes('"km_concepts"');
 }
 type QueueRow = { id: string; status: string; payload: Payload };
 
