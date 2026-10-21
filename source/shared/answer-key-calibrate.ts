@@ -76,6 +76,11 @@ export type CalibrationOptions = {
    * („változatlan marad” = „marad változatlan”), ott a sorrend nem megkülönböztető jel.
    */
   phrases?: boolean;
+  /**
+   * Spec 2026-10-21-ciklus6: a lektori javítókörben kifogásolt feladatra a csoportos szigorítás (`coverGroup`) nem fut — különben a lektor
+   * által önkényesnek ítélt mintaszó-csoport a javítás után azonnal visszakerül (mért: „Tulajdonságot kifejező szavak”, 2× elbukott).
+   */
+  noCoverGroup?: boolean;
 };
 const AT_LEAST_TWO = (n: number) => Math.min(2, n);
 
@@ -85,7 +90,7 @@ const AT_LEAST_TWO = (n: number) => Math.min(2, n);
  * semmit sem tett. A minta egy olyan szava lesz új kötelező csoport (igazolt rokon alakjaival), amely MINDEN teljes pontos helyes válaszban
  * megvan, a hibás válaszban nincs; csak ha utána a minta és a helyesek teljes pontosak maradnak, a hibás pedig nem. Különben `null`.
  */
-function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tightening | null {
+function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false, noCoverGroup = false): Tightening | null {
   if (evaluateOpenAnswer(task.sample, task).state !== "ok") return null;
   const okCorrect = cases.correct.filter((a) => evaluateOpenAnswer(a, task).state === "ok");
   // Bizonyíték nélkül nem szigorítunk: legalább 2 (kevesebb esetnél mind) teljes pontos helyes válasz kell, különben a „minden helyesben megvan” üres igazság.
@@ -126,7 +131,7 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
     // Spec 2026-10-21-ciklus1-csoportos-szigoritas (S3d): ha EGY szó nem különböztet meg (a helyesek eltérő szinonimákkal fogalmaznak — mért:
     // a bank 271 javítókörének 76%-a „fordított” próba), egy legfeljebb 6 tagú VAGY-csoport, amelyből minden teljes pontos helyesben és a
     // mintában van tag, a hibásban egy sem. Gépi szigorításként jelölve (S4: a tanulói mérés lazíthat).
-    const cover = fixed || !isBlocking ? null : coverGroup(task.sample, okCorrect, wrong.text);
+    const cover = fixed || !isBlocking || noCoverGroup ? null : coverGroup(task.sample, okCorrect, wrong.text);
     if (cover) {
       const next: OpenTask = { ...current, required: [...current.required, cover] };
       if (evaluateOpenAnswer(next.sample, next).state === "ok" && okCorrect.every((a) => evaluateOpenAnswer(a, next).state === "ok")
@@ -260,7 +265,7 @@ export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null
   // Review #347: az őr teljesülésekor is fut (a J1 miatt nem blokkoló, csak sorrendben eltérő hibás próba sorrendi szigorítása); ha ez nem
   // sikerül, az eredeti rubrika marad a kiinduló pont.
   const untouched: Tightening = { task: original, changes: [], tightened: [], tightenedPhrases: [], tightenedOrder: false };
-  const attempt = tighten(original, cases, options.phrases === true);
+  const attempt = tighten(original, cases, options.phrases === true, options.noCoverGroup === true);
   const tightened: Tightening | null = attempt && guardHolds(attempt.task, cases) ? attempt : guardHolds(original, cases) ? untouched : null;
   if (!tightened) return { task: original, changes: [] };
   let task: OpenTask = { ...tightened.task, required: tightened.task.required.map((g) => [...g]), bonus: tightened.task.bonus.map((g) => [...g]) };

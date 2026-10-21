@@ -658,7 +658,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         // T2.1b: gépi kalibráció (modellhívás nélkül); a kalibrált csomag újra átmegy a teljes ellenőrzésen, különben visszavonódik.
         const before = parsed.data.tasks;
         // S5b: kifejezéses (sorrendes) szigorítás csak idegen nyelvi leckén (a magyar szórend szabad).
-        const calibrated = before.map((t) => calibrateRubric(t, keys.get(t.id) ?? null, { phrases: Boolean(language) }));
+        // Spec 2026-10-21-ciklus6: a lektor által kifogásolt feladatra nincs csoportos szigorítás (a lektor ítélete erősebb).
+        const calibrated = before.map((t) => calibrateRubric(t, keys.get(t.id) ?? null, { phrases: Boolean(language), noCoverGroup: reviewedIds.has(t.id) }));
         let applied = calibrated.some((c) => c.changes.length > 0);
         if (applied) {
           parsed.data.tasks = calibrated.map((c) => c.task);
