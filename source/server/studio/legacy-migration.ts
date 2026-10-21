@@ -93,9 +93,12 @@ export function reconcileLegacy(s: LegacyJobState, now: number): LegacyDecision 
   return s.jobResumable ? "resume" : "restart";
 }
 
-/** Spec 2026-10-21-ciklus5: a „running” job csak akkor fut, ha a futása nem hibás, vagy a job valamely futásának bérlete él. */
-export const jobStillRunning = (jobStatus: string | undefined, runPhase: string | null, jobLeaseAlive: boolean) =>
-  jobStatus === "running" && (runPhase !== "error" || jobLeaseAlive);
+/**
+ * Spec 2026-10-21-ciklus5: a „running” job csak akkor fut, ha a futása nem hibás, vagy a job él (`jobActive`: valamely futásának bérlete él,
+ * VAGY valamely futása a türelmi időn belül frissült — review #356: a folytatás még bérlet nélkül is élőnek számít).
+ */
+export const jobStillRunning = (jobStatus: string | undefined, runPhase: string | null, jobActive: boolean) =>
+  jobStatus === "running" && (runPhase !== "error" || jobActive);
 
 /** A régi anyag tartalmának lenyomata: a publikálás csak akkor cseréli, ha közben nem változott (review #349). */
 export const legacyBaseline = (content: string) => createHash("sha256").update(content).digest("hex");
@@ -251,11 +254,13 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
         const { singleRunResumable } = await import("./single-run/engine");
         resumable = job?.status === "error" && singleRunResumable((job.output ?? {}) as Record<string, unknown>);
         // Spec 2026-10-21-ciklus5: a hibás fázisú futás job-ja „running” maradhat, ha a hibaállapot mentése is elbukott (mért: 100+ perces
-        // beragadás) — ilyenkor csak a job BÁRMELY futásának élő bérlete jelez valódi futást (review #350: egy másik példány folytatása).
-        const jobLeaseAlive = job?.status === "running" && run?.phase === "error"
-          ? (await db.execute(sql`SELECT 1 FROM lesson_workflow_runs w JOIN one_step_runs r ON r.id = w.id WHERE r.job_id = ${knownJobId} AND w.lease_until > now() LIMIT 1`)).rows.length > 0
+        // beragadás) — ilyenkor a job BÁRMELY futásának élő bérlete (review #350: egy másik példány folytatása) vagy a türelmi időn belüli
+        // frissülése (review #356: a még bérlet nélküli folytatás, ill. a friss hiba) jelez valódi futást.
+        const jobActive = job?.status === "running" && run?.phase === "error"
+          ? (await db.execute(sql`SELECT 1 FROM one_step_runs r LEFT JOIN lesson_workflow_runs w ON w.id = r.id WHERE r.job_id = ${knownJobId}
+              AND (w.lease_until > now() OR r.updated_at > now() - make_interval(secs => ${START_GRACE_MS / 1000})) LIMIT 1`)).rows.length > 0
           : false;
-        jobRunning = jobStillRunning(job?.status, run?.phase ?? null, jobLeaseAlive);
+        jobRunning = jobStillRunning(job?.status, run?.phase ?? null, jobActive);
         jobFailed = job?.status === "error";
       }
       const decision = reconcileLegacy({ attempt, startedAt, runPhase: run?.phase ?? null, runUpdatedAt: run?.updatedAt ?? null, leaseAlive: lease.rows.length > 0,

@@ -24,6 +24,16 @@ test("ciklus5: a katalógus-vágás módjára kettévágott emoji mélyen beágy
   assert.equal(wellFormed("ép szöveg"), "ép szöveg");
 });
 
+test("review #356: a katalógus clip kódpont-határon vág (az emoji kimarad, nincs csereképkarakter); a kulcs is tisztul", async () => {
+  const { clip } = await import("../server/catalog/retrieval");
+  assert.equal(clip(`${box} FELSZÍN`, 1), "", "az emoji két fele közé eső vágás eggyel előbb vág");
+  assert.equal(clip(`${box} FELSZÍN`, 2), box);
+  assert.equal(clip(`a${HIGH}b`, 3), `a${REPL}b`, "a forrás magányos fél-karaktere is tisztul");
+  assert.equal(clip(null, 5), "");
+  const clean = deepWellFormed({ [`k${HIGH}`]: 1 });
+  assert.deepEqual(Object.keys(clean), [`k${REPL}`]);
+});
+
 test("ciklus5: a hibás fázisú futás „running” job-ja bérlet nélkül nem fut (nem ragad be); a másik példány folytatása (élő bérlet) fut", () => {
   assert.equal(jobStillRunning("running", "error", false), false, "elbukott hibamentés: a job running maradt, de senki nem dolgozik rajta");
   assert.equal(jobStillRunning("running", "error", true), true, "review #350: a job egy másik futásban (folytatás) él");
