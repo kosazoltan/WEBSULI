@@ -22,3 +22,23 @@ Automatikus (titok nélküli) gyerekválasztás az eszközön (megszemélyesíth
 - HA a tanuló profiljához 3 tanítási napja nincs tevékenység, AKKOR a riasztás tárgya és szövege a profilra vonatkozik, és megnevezi a párosítást.
 - HA az admin a Tanulók fülön a QR-kódot kéri, AKKOR a párosító link QR-kódja jelenik meg.
 - HA az eredmény vendégtől jön, AKKOR a levél útmutatót ad a párosításhoz.
+
+## Kiegészítés — párosítási útmutató e-mailben (tulajdonosi kérés 2026-10-21)
+„A gyereknek is, meg a szülőnek is küldj egy e-mailt, hogy hogyan kell párosítani az eszközöket, mert azt egyik sem fogja kitalálni
+magától.” Tulajdonosi pontosítás: a QR-kód a SZÜLŐ képernyőjén jelenik meg, a gyerek a saját telefonjával arról olvassa be.
+
+- **Gyereklevél** (a tanuló minden aktív címére): gyerekhangon, nagy „Párosítom ezt az eszközt” gombbal (a személyes `?t=` link);
+  lépések: a telefonján nyissa meg a levelet és koppintson a gombra; minden használt böngészőben egyszer; ellenőrzés: a kezdőlap
+  „Szia, ‹keresztnév›!”; a link csak az övé (ne küldje tovább); a noreply@websuli.vip a névjegyekhez (ne a Spambe menjen a napi levél).
+- **Szülőlevél** (ADMIN_EMAILS, egy levél az összes tanulóval): a három út — a gyerek a saját levelében a gombra koppint; QR-kód a
+  szülő képernyőjén (Admin → Tanulók → „Párosító QR-kód”), a gyerek a kamerájával olvassa be; második eszköz nélkül „Párosító link
+  másolása” → üzenetben a gyereknek. Ellenőrzés: az eredménylevél a gyerek nevével érkezik, a Tanulók fülön látszik a tevékenység.
+- **Indítás:** admin végpont `POST /api/admin/learners/pairing-guide` (CSRF, adminRouter) és „Párosítási útmutató küldése” gomb a
+  Tanulók fülön (megerősítéssel); a választ a darabszámok adják (gyereklevél / szülőlevél / hiba). Naplóba nem kerül név vagy cím.
+- **Első kiküldés:** a tulajdonos kérésére most, a meglévő éles küldővel (Resend), ugyanazzal a levélépítővel.
+
+### Elfogadás (EARS) — kiegészítés
+- HA az admin a párosítási útmutatót küldi, AKKOR minden címmel rendelkező tanuló minden aktív címe megkapja a saját párosító linkjét
+  tartalmazó gyereklevelet, és minden admin-címzett egy szülőlevelet.
+- HA egy cím küldése hibázik, AKKOR a többi levél kimegy, és a válasz a hibák számát jelzi.
+- A gyereklevél csak a saját tanulója linkjét tartalmazza; a szülőlevél nem tartalmaz linket (a QR / másolás az admin felületen van).
