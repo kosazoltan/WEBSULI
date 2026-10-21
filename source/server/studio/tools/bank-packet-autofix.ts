@@ -88,6 +88,20 @@ function fixDistinct(task: Obj, fixes: string[]): void {
   }
 }
 
+/**
+ * Spec 2026-10-21-ciklus4 (mért: 3 bankjavítókör): a `typedAnswers[].value` szám → szöveg (azonos érték). Review #355: az exponenses alak
+ * (pl. 1e+21) nem alakul át — a típusos értelmező nem fogadná; az ilyen érték a modell javítókörére marad.
+ */
+function fixTypedValues(task: Obj, fixes: string[]): void {
+  if (!Array.isArray(task.typedAnswers)) return;
+  for (const t of task.typedAnswers) {
+    if (isObj(t) && typeof t.value === "number" && Number.isFinite(t.value) && !/e/i.test(String(t.value))) {
+      t.value = String(t.value);
+      fixes.push(`${typeof task.id === "string" ? task.id : "task[?]"}: typedAnswers.value szövegként (${t.value})`);
+    }
+  }
+}
+
 function fixTask(task: Obj, fixes: string[], teachingText?: string): void {
   const id = typeof task.id === "string" ? task.id : "task[?]";
   if (typeof task.sample !== "string" || !Array.isArray(task.required)) return;
@@ -170,7 +184,7 @@ export function autofixBankPacket(candidate: unknown, _ctx: BankAutofixContext):
       }
       if (bank === "quiz") dedupeOptions(item, 3, fixes);
       if (bank === "methods") dedupeOptions(item, 2, fixes);
-      if (bank === "tasks") { fixDistinct(item, fixes); fixTask(item, fixes, _ctx.teachingText); }
+      if (bank === "tasks") { fixDistinct(item, fixes); fixTypedValues(item, fixes); fixTask(item, fixes, _ctx.teachingText); }
     }
     if (bank === "quiz") fixQuizIntent(items.filter(isObj), fixes);
   }

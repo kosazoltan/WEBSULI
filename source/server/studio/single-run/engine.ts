@@ -37,7 +37,7 @@ import { roleSkillBlock } from "../role-skills";
 import { WorkflowConflict, WorkflowWaiting, workflowPhase, workflowResource, workflowSkillPrompt } from "../../workflows/engine";
 import type { PromptRole } from "../../../shared/instruction-bundles/roles";
 import type { ExtractorFile } from "../extractor";
-import type { LessonConversation, TurnBlock } from "./conversation";
+import { wellFormed, type LessonConversation, type TurnBlock } from "./conversation";
 import { TelemetryRecorder, telemetryOf, timed } from "./telemetry";
 import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock, poolMatches, type CatalogMapLike } from "../../catalog/s6-context";
 import { catalogVerbatimPaths, type CatalogPool } from "../../catalog/retrieval";
@@ -411,6 +411,14 @@ export function finalizeAnswerKeyArchive(entries: ReadonlyArray<{ sectionIndex: 
   return entries.flatMap((e) => { const id = byKey.get(JSON.stringify([e.sectionIndex, e.q])); return id ? [{ ...e, id, modelId: e.id }] : []; });
 }
 
+/** Spec 2026-10-21-ciklus4: a lektor blokkoló jegyzeteinek archívuma (tiszta; legfeljebb 200 jegyzet, az üzenet 600 karakterre vágva). */
+export function appendLektorArchive(prev: unknown, round: number, notes: ReadonlyArray<{ kind: string; subkind?: string; blockPath?: string; message: string }>) {
+  const base = Array.isArray(prev) ? prev as unknown[] : [];
+  const add = notes.map((n) => ({ round, kind: n.kind, ...(n.subkind ? { subkind: n.subkind } : {}), ...(n.blockPath ? { blockPath: n.blockPath } : {}), message: wellFormed(n.message.slice(0, 600)) }));
+  // Review #355: a vágás nem hagy fél-karaktert; telítéskor a LEGÚJABB 200 marad (a későbbi körök a kivétel közvetlen okai).
+  return [...base, ...add].slice(-200);
+}
+
 export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps): Promise<SingleRunResult> {
   const { conversation, store } = deps;
   const log = (m: string) => deps.log?.(m);
@@ -765,6 +773,13 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
         return { ok: true, value: r.report };
       }, { fresh: true });
     const blocking = classifyNotes(report.notes).filter((n) => n.blocking);
+    // Spec 2026-10-21-ciklus4: analitikai archívum — a lektor blokkoló jegyzetei körönként (a kivételek és javítókörök OKA eddig nem maradt
+    // meg; a lektori kivétel 2,25 tétel / anyag volt, ok nélkül nem csökkenthető célzottan).
+    if (blocking.length) {
+      output = { ...output, lektorArchive: appendLektorArchive(output.lektorArchive, round, blocking) };
+      // Review #355: azonnal mentve — egy későbbi dobás (pl. a kivétel lehetetlensége) előtt is megmarad.
+      await save("lektor", output);
+    }
     if (!blocking.length) break;
     previousBlockers = blocking;
     if (round === SINGLE_RUN_REVIEW_ROUNDS) {

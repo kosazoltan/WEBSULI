@@ -91,7 +91,8 @@ test("fogalomtípus-hossz (2026-10-21): a címkék az oszlophatárra vágva; a c
   const err = 'Failed query: insert into "km_concepts" ("id", …';
   assert.equal(shouldRequeue({ status: "error", error: err, payload: {} }), true);
   assert.equal(shouldRequeue({ status: "error", error: err, payload: { requeued: true } }), false, "másodszor nem");
-  assert.equal(shouldRequeue({ status: "error", error: "a futás megállt", payload: {} }), false);
+  // Spec 2026-10-21-ciklus4 (dokumentált változás): az üres okú „a futás megállt” infrastruktúra-jel, egyszer újrasorol — tartalmi hiba nem.
+  assert.equal(shouldRequeue({ status: "error", error: "lektorálás: experience.tasks[3]: Mi hamis: a minta hibás", payload: {} }), false);
   assert.equal(shouldRequeue({ status: "done", error: err, payload: {} }), false);
   // Review #351: az újrapróba megőrzi a jelzőt — a második ugyanilyen hiba már nem sorol újra.
   const { retryPayload } = await import("../server/studio/legacy-migration");
@@ -108,9 +109,9 @@ test("ciklus-kapu (2026-10-21): a korlátig indul új anyag; a 0-s kategória me
   assert.equal(batchRoom(97, 100), 3);
   assert.equal(batchRoom(120, 100), 0);
   // Review #352: a korlát pontosan rögzített (a ciklus-PR emeli, a tényleges sorelemszám + 5 szerint).
-  assert.equal(LEGACY_BATCH_LIMIT, 117, "2. ciklus: 112 sorelem + 5");
-  assert.equal(batchRoom(116), 1);
-  assert.equal(batchRoom(117), 0);
+  assert.equal(LEGACY_BATCH_LIMIT, 122, "4. ciklus: 117 sorelem + 5");
+  assert.equal(batchRoom(121), 1);
+  assert.equal(batchRoom(122), 0);
   assert.equal(legacyClassroom(0, 12), 0, "Programozási alapismeretek marad");
   assert.equal(legacyClassroom(4, 4), 4);
   assert.equal(legacyClassroom(5, 6), 6, "egyébként a forrásból felismert évfolyam");
@@ -129,4 +130,19 @@ test("2. ciklus: a hibás job + nem élő bérlet = leállt futás (nincs 45 per
   const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
   const prompt = buildLektorPrompt(standardFusionFixture(), { title: "T", subject: "m", classroom: 5, concepts: [] });
   assert.match(prompt, /ragozott \/ toldalékos ALAK[^\n]*requiredPhrases/);
+});
+
+test("ciklus4: infrastruktúra-hiba (deploy-átfedés, félbevágott emoji, eltűnt futás) egyszer újra sorba kerül; tartalmi hiba nem", async () => {
+  const { isInfrastructureError, shouldRequeue } = await import("../server/studio/legacy-migration");
+  const restart = "A szerver újraindult a lecke-készítés közben — indítsd újra a lépést az „Újra” gombbal.";
+  const hex = '400 {"type":"error","error":{"type":"invalid_request_error","message":"The request body is not valid JSON: unexpected end of hex escape at line 1"}}';
+  for (const e of [restart, hex, "a futás megállt"]) {
+    assert.equal(isInfrastructureError(e), true, e);
+    assert.equal(shouldRequeue({ status: "error", error: e, payload: {} }), true, e);
+    assert.equal(shouldRequeue({ status: "error", error: e, payload: { requeued: true } }), false, "csak egyszer");
+  }
+  const content = "lektorálás: experience.tasks[48]: Mi hamis: (javítatlan) a -val/-vel ragos példára az „anyának” is teljes pontot kap.";
+  assert.equal(isInfrastructureError(content), false);
+  assert.equal(shouldRequeue({ status: "error", error: content, payload: {} }), false);
+  assert.equal(isInfrastructureError("a futás megállt, de a lektor szerint…"), false, "csak a pontos, üres-ok szöveg");
 });
