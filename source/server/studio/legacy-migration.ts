@@ -116,7 +116,16 @@ type Payload = { htmlFileId: string; runId?: string; attempt?: number; startedAt
 export function shouldRequeue(row: { status: string; error: string | null; payload: { requeued?: boolean } }): boolean {
   // Két külön feltétel (a forrásellenőrző a teljes SQL-szöveget nyers tudástár-írásnak látná): a beszúrás hibája a fogalomtáblán.
   const error = row.error ?? "";
-  return row.status === "error" && !row.payload.requeued && error.startsWith("Failed query: insert") && error.includes('"km_concepts"');
+  if (row.status !== "error" || row.payload.requeued) return false;
+  return (error.startsWith("Failed query: insert") && error.includes('"km_concepts"')) || isInfrastructureError(error);
+}
+
+/**
+ * Spec 2026-10-21-ciklus4: infrastruktúra-hiba (nem tartalmi) — a deploy-átfedésben megszakadt futás („A szerver újraindult…”, az eltűnt
+ * futás „a futás megállt”) és a félbevágott emoji miatt elutasított kérés (a 4. ciklus javítja). Egyszer újra sorba kerül.
+ */
+export function isInfrastructureError(error: string): boolean {
+  return /szerver újraindult|^a futás megállt$|unexpected end of hex escape/.test(error);
 }
 type QueueRow = { id: string; status: string; payload: Payload };
 
@@ -172,6 +181,15 @@ let ticking = false;
 let skippedLogged = false;
 /** Review #349: leállításkor új kör (és benne új gyártás) nem indul. */
 let stopped = false;
+/** Spec 2026-10-21-ciklus4: e folyamat azonosítója a példánykerítéshez. */
+const INSTANCE_ID = randomUUID();
+const INSTANCE_TYPE = "legacy-instance";
+/** Igaz, ha a legutóbb bejegyzett példány nem ez (deploy-átfedés: a régi példány ne indítson munkát, amit a leállása megszakít). */
+async function supersededInstance(): Promise<boolean> {
+  const { rows } = await db.execute(sql`SELECT payload->>'instance' AS instance FROM scheduled_jobs WHERE type = ${INSTANCE_TYPE} ORDER BY created_at DESC LIMIT 1`);
+  const latest = (rows[0] as { instance?: string } | undefined)?.instance;
+  return Boolean(latest && latest !== INSTANCE_ID);
+}
 /** Egy kör: egyeztetés, utána a szabad helyek feltöltése. Visszaad: van-e még teendő (futó elem vagy jelölt) — tétlenül ritkább kör. */
 export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
   if (ticking || stopped) return true;
@@ -198,10 +216,12 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       let resumable = false;
       let jobRunning = false;
       let jobFailed = false;
+      let jobError: string | null = null;
       // Review #352: ha a futás-azonosító (még) helyőrző, a sorelemben rögzített folytatott job dönt.
       const knownJobId = run?.jobId ?? row.payload.jobId;
       if (knownJobId) {
-        const [job] = await db.select({ status: studioJobs.status, output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, knownJobId)).limit(1);
+        const [job] = await db.select({ status: studioJobs.status, output: studioJobs.output, error: studioJobs.error }).from(studioJobs).where(eq(studioJobs.id, knownJobId)).limit(1);
+        jobError = job?.error ?? null;
         const { singleRunResumable } = await import("./single-run/engine");
         resumable = job?.status === "error" && singleRunResumable((job.output ?? {}) as Record<string, unknown>);
         jobRunning = job?.status === "running";
@@ -213,7 +233,8 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       if (decision === "done") { await finish(row, "done", null); logger.info(`[RÉGI→STÚDIÓ] Kész: ${htmlFileId} (${attempt}. kísérlet)`); continue; }
       if (decision === "waiting") { await finish(row, "waiting", `emberi döntésre vár (${run?.phase}): ${run?.error ?? ""}`.slice(0, 2000)); continue; }
       if (decision === "error") {
-        await finish(row, "error", (run?.phase === "done" ? "a futás kész, de a cél nem lett lecke (kézi vizsgálat)" : run?.error ?? "a futás megállt").slice(0, 2000));
+        // Spec 2026-10-21-ciklus4: a futás hibaszövege hiányában a Stúdió-job hibája (pl. „A szerver újraindult…”) kerül a sorba.
+        await finish(row, "error", (run?.phase === "done" ? "a futás kész, de a cél nem lett lecke (kézi vizsgálat)" : run?.error ?? jobError ?? "a futás megállt").slice(0, 2000));
         logger.warn(`[RÉGI→STÚDIÓ] Hiba, nincs több kísérlet: ${htmlFileId}: ${run?.error ?? "?"}`);
         continue;
       }
@@ -221,6 +242,8 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
     }
     // Review #349: `off` módban újrapróba sem indul; a párhuzamosság az újrapróbákra is érvényes (azok elsőbbséget kapnak).
     if (LEGACY_MIGRATION_MODE === "off") return running > 0;
+    // Spec 2026-10-21-ciklus4: példánykerítés — ha már újabb példány indult (deploy-átfedés), ez a kör új munkát nem kezd.
+    if (await supersededInstance()) return running > 0;
     for (const { row, decision, jobId, error } of retries) {
       if (running >= LEGACY_CONCURRENCY || stopped) break;
       const { htmlFileId, attempt = 1 } = row.payload;
@@ -300,6 +323,9 @@ let timer: NodeJS.Timeout | null = null;
 /** Indítás a szerverből (az e2e-módon kívül): 2 perc múlva először (a boot söprései előbb lefutnak); `off` módban el sem indul. */
 export function startLegacyMigration(): void {
   if (LEGACY_MIGRATION_MODE === "off") return;
+  // Spec 2026-10-21-ciklus4: a példány AZONNAL bejegyzi magát (a régi példány a következő körében már látja, és nem indít új munkát).
+  void db.insert(scheduledJobs).values({ type: INSTANCE_TYPE, scheduledFor: new Date(), status: "done", payload: { instance: INSTANCE_ID, bootedAt: Date.now() } })
+    .catch((error) => logger.warn(`[RÉGI→STÚDIÓ] A példány bejegyzése nem sikerült: ${error instanceof Error ? error.message : String(error)}`));
   const schedule = (ms: number) => { if (!stopped) { timer = setTimeout(run, ms); timer.unref(); } };
   const run = () => void legacyMigrationTick()
     .then((busy) => schedule(busy ? LEGACY_BUSY_MS : LEGACY_IDLE_MS))
