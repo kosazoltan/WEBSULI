@@ -91,7 +91,7 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   if (haystack.split(" ").filter(Boolean).length < 4) return false;
   // Spec 2026-10-21-rovid-fogalom-ekezet (mérve: Az Erdő, job 952d0101): az ÉKEZETES rövid név („Őz” → „oz”) valódi szó, nem
   // téveszthető össze az ASCII funkciószavakkal („a”, „an”) — a rendes rövid szó szabálya dönt, az ékezetes alakon (ragozva is).
-  if (shortName && isAccentedShortName(concept.term ?? "")) return accentedTokens(blockText).some((t) => t.startsWith(accentedForm(concept.term ?? "")));
+  if (shortName && isAccentedShortName(concept.term ?? "")) return accentedShortGrounded(concept, blockText);
   if (shortName) return shortTermGrounded(shortName, concept, blockText);
 
   const tokens = haystack.split(" ").filter(Boolean);
@@ -173,6 +173,38 @@ export function isAccentedShortName(term: string): boolean {
 }
 /** A blokk ékezetes szavai (kisbetűs, NFC). */
 const accentedTokens = (text: string): string[] => text.toLowerCase().normalize("NFC").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+/**
+ * Review #363 (Copilot): a ragozott alak CSAK ellenőrzött magyar toldalékkal (többes jel, esetrag, birtokos jel, -val/-vel hasonult
+ * alakja) — a puszta előtag-egyezés más szót is elfogadna („ősszel” az „ős”-re, „élőlények” az „él”-re).
+ */
+const HU_SUFFIX = new RegExp(
+  "^(?:[aeoö]?k)?"
+  // birtokos személyjel / birtoktöbbesítő („őseink”, „éle”, „őzünk”)
+  + "(?:[aeoöá]?(?:aink|eink|aitok|eitek|aim|eim|aid|eid|aik|eik|ink|itok|itek|im|id|ik|ai|ei|unk|ünk|nk|tok|tek|tök|juk|jük|uk|ük|ja|je|a|e|i|m|d))?"
+  + "(?:[aeoöáé]?(?:t|nak|nek|ban|ben|ba|be|ból|ből|ra|re|ról|ről|hoz|hez|höz|tól|től|nál|nél|on|en|ön|n|ig|ért|ként|ul|ül))?$",
+  "u",
+);
+const isInflectionOf = (token: string, form: string): boolean => {
+  if (!token.startsWith(form) || token === form) return false;
+  const rest = token.slice(form.length);
+  const last = form.slice(-1);
+  return HU_SUFFIX.test(rest) || new RegExp(`^(?:[aeoö]?k[aeo]?)?${last}(?:al|el|á|é)$`, "u").test(rest);
+};
+/**
+ * Ékezetes rövid név: a pontos szó („őz”) önmagában megalapoz; a ragozott alak („őzek”, „őzzel”) mellé a definíció legalább egy érdemi
+ * szava is kell (review #363: a ragozott alak többértelmű lehet — „élet” az „él” tárgyesete is).
+ */
+function accentedShortGrounded(concept: MapConcept, blockText: string): boolean {
+  const form = accentedForm(concept.term ?? "");
+  const tokens = accentedTokens(blockText);
+  if (tokens.includes(form)) return true;
+  if (!tokens.some((t) => isInflectionOf(t, form))) return false;
+  const plain = normalizeText(blockText).split(" ").filter(Boolean);
+  // A fogalom saját alakjai („éle” az „él”-nél) nem független bizonyíték — ugyanúgy illeszkednének a más jelentésű szóra („élet”).
+  const own = normalizeText(form);
+  const defWords = significantWords(concept.definition ?? "").filter((w) => !STOP_WORDS.has(w) && !w.startsWith(own));
+  return defWords.some((w) => (w.length < STEM_LEN ? plain.some((t) => t.startsWith(w)) : plain.some((t) => t.includes(stem(w)))));
+}
 
 /**
  * Spec 2026-10-19-rovid-fogalom-megalapozas: rövid fogalomnév („an”) esetén a forrás-idézet PÉLDA-darabjai („an armchair”) közül

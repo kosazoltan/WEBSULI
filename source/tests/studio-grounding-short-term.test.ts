@@ -111,3 +111,21 @@ test("a kisbetűs „a” / „an” a nagybetűs ágra nem jogosult, és a mond
   assert.equal(checkGrounding("Az erdőben sok fa él. Az ősszel lehulló levelek táplálják a talajt.", az), false);
   assert.equal(checkGrounding("Magánhangzó előtt így mondjuk: az alma, az ablak, az egér.", az), true);
 });
+
+// Review #363 (Copilot): a ragozott alak csak ellenőrzött toldalékkal és definíció-bizonyítékkal — a más jelentésű előtag-szó nem alapoz meg.
+test("ékezetes rövid név: a más jelentésű, azonos kezdetű szó nem alapoz meg („ősszel” ≠ „ős”, „élőlények” ≠ „él”)", () => {
+  const os = { localId: "os", term: "Ős", examWeight: "core", definition: "Régebbi nemzedékbeli előd, akitől a család származik.", quote: "Ős: előd." } as MapConcept;
+  const el = { localId: "el", term: "Él", examWeight: "core", definition: "Két lap közös határvonala a testen; a kocka éle szakasz.", quote: "Él: két lap találkozása." } as MapConcept;
+  assert.equal(checkGrounding("Ősszel a fák levelei lehullanak a talajra.", os), false);
+  assert.equal(checkGrounding("Az élőlények életéhez vízre és levegőre van szükség.", el), false);
+  assert.equal(checkGrounding("Az élet a földön sokféle formában jelenik meg mindenhol.", el), false, "a ragozott alak definíció-bizonyíték nélkül nem elég");
+  assert.equal(checkGrounding("A kockának tizenkét éle van: minden él két lap határvonala.", el), true);
+  assert.equal(checkGrounding("A nagyszüleink szülei a mi őseink, tőlük származik a család.", os), true);
+});
+
+test("ékezetes rövid név: a pontos és az ellenőrzötten ragozott alakok („őzek”, „őzet”, „őzzel”, „őzről”)", () => {
+  assert.equal(checkGrounding("A gidák az őzzel együtt legelnek a tisztáson reggel.", oz), true);
+  assert.equal(checkGrounding("A vadász az őzet messziről figyeli, mert az növényevő.", oz), true);
+  assert.equal(checkGrounding("Ma az őzről tanulunk: kecses test, hosszú lábak.", oz), true);
+  assert.equal(checkGrounding("Az őzike mese szereplője volt a régi könyvben.", oz), false, "nem ellenőrzött toldalék, definíció-bizonyíték nélkül");
+});
