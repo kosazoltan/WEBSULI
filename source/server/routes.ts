@@ -386,6 +386,8 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
           recognition.onerror = function(ev) {
             var code = ev && ev.error;
             try { field.setAttribute('data-dictation-error', code || 'error'); } catch (e) {}
+            // Diagnosztika a konzolon (a látható üzenet MELLETT — review #360).
+            if (code === 'not-allowed' || code === 'service-not-allowed') console.warn('[WEBSULI DIKTÁLÁS] Mikrofon engedély megtagadva:', code);
             // Spec 2026-10-21-diktalas-hid: a hiba nem lehet néma (korábban csak a konzolba írt — a tanuló semmit sem látott).
             var msg = code === 'not-allowed' || code === 'service-not-allowed' ? 'A mikrofon nincs engedélyezve. Engedélyezd a címsor melletti lakatnál, vagy használd a billentyűzet 🎤 gombját.'
               : code === 'no-speech' ? 'Nem hallottam semmit — nyomd meg újra, és beszélj.'
