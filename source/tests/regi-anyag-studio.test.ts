@@ -122,6 +122,9 @@ test("2. ciklus: a hibás job + nem élő bérlet = leállt futás (nincs 45 per
   assert.equal(reconcileLegacy(base, now), "running", "előfeltétel: 45 percen belül a régi szabály még fut-nak venné");
   assert.equal(reconcileLegacy({ ...base, jobFailed: true }, now), "resume", "a hibás job azonnal folytatható");
   assert.equal(reconcileLegacy({ ...base, jobFailed: true, leaseAlive: true }, now), "running", "élő bérlettel nem");
+  // Review #354: a futás-sor még nem íródott ki (türelmi idő), de a job már hibás → nem vár.
+  assert.equal(reconcileLegacy({ ...base, runPhase: null, startedAt: now - 60_000, jobFailed: true }, now), "resume");
+  assert.equal(reconcileLegacy({ ...base, runPhase: null, startedAt: now - 60_000 }, now), "running", "hibás job nélkül a türelmi idő marad");
   const { buildLektorPrompt } = await import("../server/studio/step-io");
   const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
   const prompt = buildLektorPrompt(standardFusionFixture(), { title: "T", subject: "m", classroom: 5, concepts: [] });

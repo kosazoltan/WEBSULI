@@ -64,17 +64,22 @@ function fixDistinct(task: Obj, fixes: string[]): void {
     if (!isObj(rule) || !Array.isArray(rule.from)) continue;
     const seen = new Set<string>();
     let removed = 0;
-    const from = (rule.from as unknown[]).filter(isStrArr).map((group) => group.filter((alt) => {
+    // Review #354: a csoporton BELÜL esik ki az érvénytelen (nem szöveg) elem — a csoport többi érvényes eleme megmarad.
+    const groups = (rule.from as unknown[]).filter(Array.isArray).map((g) => (g as unknown[]).filter((x): x is string => typeof x === "string" && x.trim().length > 0));
+    const from = groups.map((group) => group.filter((alt) => {
       const k = canon(alt);
       if (seen.has(k)) { removed++; return false; }
       seen.add(k);
       return true;
     })).filter((group) => group.length > 0);
-    if (removed) {
-      rule.from = from;
-      if (typeof rule.count === "number" && rule.count > from.length) rule.count = from.length;
-      fixes.push(`${id}: a kategóriakvóta ismétlődő elemei csak az első csoportban maradtak (${removed} elem)`);
-    }
+    const changed = removed > 0 || JSON.stringify(from) !== JSON.stringify(rule.from);
+    const clamped = typeof rule.count === "number" && rule.count > from.length && from.length > 0;
+    // Review #354: az üres / érvénytelen csoport és a túl nagy darabszám ismétlődés nélkül is javul.
+    if (changed && from.length) rule.from = from;
+    if (clamped) rule.count = from.length;
+    if (removed) fixes.push(`${id}: a kategóriakvóta ismétlődő elemei csak az első csoportban maradtak (${removed} elem)`);
+    else if (changed && from.length) fixes.push(`${id}: a kategóriakvóta üres / érvénytelen elemei elhagyva`);
+    if (clamped) fixes.push(`${id}: a kvóta darabszáma a csoportok számára szorítva (${from.length})`);
   }
   if (Array.isArray(task.required) && task.required.length === 0) {
     const any = [...new Set((task.requiredDistinct as unknown[]).filter(isObj).flatMap((r) => (Array.isArray(r.from) ? (r.from as unknown[]).filter(isStrArr).flat() : [])))];

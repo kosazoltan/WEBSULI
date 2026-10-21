@@ -79,7 +79,8 @@ export function reconcileLegacy(s: LegacyJobState, now: number): LegacyDecision 
   if (s.targetIsLesson) return "done";
   // Review #349: az élő lízing (a végrehajtó szívverése) a futás jele, akkor is, ha a fázis rég nem változott.
   if (s.leaseAlive || s.jobRunning) return "running";
-  if (s.runPhase === null && now - s.startedAt < START_GRACE_MS) return "running";
+  // Review #354: a hibás job (nem élő bérlettel) a türelmi idő ELŐTT dönt — a futás-sor hiánya ilyenkor nem „még íródik”, hanem leállás.
+  if (s.runPhase === null && now - s.startedAt < START_GRACE_MS && !s.jobFailed) return "running";
   // A kész futás, amely mégsem a célt alakította át, nem újrapróbálandó (duplikátum keletkezne) — hiba, kézi vizsgálatra.
   if (s.runPhase === "done") return "error";
   // Review #349: emberi döntésre váró futás — nem indul újra, a kísérletet nem fogyasztja, a helyet felszabadítja.

@@ -34,3 +34,13 @@ test("ciklus3: a felsoroló feladat üres required-je a kvóta bármely elemét 
   const { packet: untouched } = autofixBankPacket(packet({ required: [] }), {} as never);
   assert.deepEqual((untouched as { tasks: Array<{ required: string[][] }> }).tasks[0].required, []);
 });
+
+test("review #354: a vegyes csoport érvényes elemei megmaradnak; üres csoport és túl nagy darabszám ismétlődés nélkül is javul", () => {
+  const rule = { category: "főnév", count: 4, from: [["kutya", 7, "eb"], [], ["alma"]] as unknown[] };
+  const { packet: out, fixes } = autofixBankPacket(packet({ required: [["főnév"]], requiredDistinct: [rule] }), {} as never);
+  const fixed = (out as { tasks: Array<{ requiredDistinct: Array<{ count: number; from: string[][] }> }> }).tasks[0].requiredDistinct[0];
+  assert.deepEqual(fixed.from, [["kutya", "eb"], ["alma"]]);
+  assert.equal(fixed.count, 2);
+  assert.ok(requiredDistinctSchema.safeParse(fixed).success);
+  assert.ok(fixes.some((f) => /üres \/ érvénytelen/.test(f)) && fixes.some((f) => /darabszáma/.test(f)), JSON.stringify(fixes));
+});
