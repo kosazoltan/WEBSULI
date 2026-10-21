@@ -38,6 +38,7 @@ import { buildLearnerReports, runWeeklySummary } from "./learner-reports";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
+import { SPEECH_BRIDGE_SCRIPT } from "./lib/speech-bridge";
 import { lessonResultsRouter } from "./lesson-result-email";
 
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
@@ -362,6 +363,8 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
             stopActive();
             if (wasSame) return;
           }
+          // Review #360: új próbálkozáskor a korábbi hibaüzenet eltűnik.
+          if (btn.__websuliNote) btn.__websuliNote.textContent = '';
           recognition = new SR();
           recognition.lang = document.documentElement.lang || 'hu-HU';
           recognition.interimResults = false;
@@ -376,14 +379,21 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
             for (var i = ev.resultIndex; i < ev.results.length; i++) {
               if (ev.results[i].isFinal) {
                 insertText(field, ev.results[i][0].transcript.trim());
+                if (btn.__websuliNote) btn.__websuliNote.textContent = '';
               }
             }
           };
           recognition.onerror = function(ev) {
-            if (ev && (ev.error === 'not-allowed' || ev.error === 'service-not-allowed')) {
-              try { field.setAttribute('data-dictation-error', ev.error); } catch (e) {}
-              console.warn('[WEBSULI DIKTÁLÁS] Mikrofon engedély megtagadva:', ev.error);
-            }
+            var code = ev && ev.error;
+            try { field.setAttribute('data-dictation-error', code || 'error'); } catch (e) {}
+            // Diagnosztika a konzolon (a látható üzenet MELLETT — review #360).
+            if (code === 'not-allowed' || code === 'service-not-allowed') console.warn('[WEBSULI DIKTÁLÁS] Mikrofon engedély megtagadva:', code);
+            // Spec 2026-10-21-diktalas-hid: a hiba nem lehet néma (korábban csak a konzolba írt — a tanuló semmit sem látott).
+            var msg = code === 'not-allowed' || code === 'service-not-allowed' ? 'A mikrofon nincs engedélyezve. Engedélyezd a címsor melletti lakatnál, vagy használd a billentyűzet 🎤 gombját.'
+              : code === 'no-speech' ? 'Nem hallottam semmit — nyomd meg újra, és beszélj.'
+              : code === 'not-supported' ? 'Ezen a böngészőn a diktálás nem érhető el — használd a billentyűzet 🎤 gombját.'
+              : 'A diktálás most nem sikerült — próbáld újra, vagy használd a billentyűzet 🎤 gombját.';
+            showNote(btn, msg);
           };
           recognition.onend = function() {
             if (activeBtn) { activeBtn.setAttribute('aria-pressed', 'false'); activeBtn.title = 'Diktálás'; }
@@ -393,6 +403,18 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
 
           try { recognition.start(); }
           catch (e) { recognition = null; activeBtn = null; btn.setAttribute('aria-pressed', 'false'); }
+        }
+
+        function showNote(btn, msg) {
+          var note = btn.__websuliNote;
+          if (!note) {
+            note = document.createElement('span');
+            note.setAttribute('role', 'status');
+            note.style.cssText = 'display:block;font-size:.85em;margin:2px 0 6px;opacity:.85;';
+            btn.parentNode.insertBefore(note, btn.nextSibling);
+            btn.__websuliNote = note;
+          }
+          note.textContent = msg;
         }
 
         function makeButton(field) {
@@ -477,18 +499,20 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
   if (isFullHtmlDocument) {
     // CRITICAL: sandboxLocalStorageFix MUST run EARLY (before ANY user scripts)
     // Inject it RIGHT AFTER <head> opening tag to prevent DOMException
-    const headOpenIndex = userHtml.toLowerCase().indexOf('<head>');
+    // Review #360: attribútumos nyitó head-tag (<head lang="en">) is — különben a diktálás-híd kimaradna.
+    const headOpenMatch = /<head(?:\s[^>]*)?>/i.exec(userHtml);
+    const headOpenIndex = headOpenMatch ? headOpenMatch.index : -1;
     let htmlWithFix = userHtml;
 
-    if (headOpenIndex !== -1) {
-      const insertPosition = headOpenIndex + '<head>'.length;
-      htmlWithFix = userHtml.slice(0, insertPosition) + sandboxLocalStorageFix + MATERIAL_CAPTURE_SCRIPT + userHtml.slice(insertPosition);
+    if (headOpenMatch) {
+      const insertPosition = headOpenIndex + headOpenMatch[0].length;
+      htmlWithFix = userHtml.slice(0, insertPosition) + sandboxLocalStorageFix + SPEECH_BRIDGE_SCRIPT + MATERIAL_CAPTURE_SCRIPT + userHtml.slice(insertPosition);
     } else {
       // No <head> found - create one and inject fix
       const htmlTagIndex = userHtml.toLowerCase().indexOf('<html');
       if (htmlTagIndex !== -1) {
         const htmlTagEnd = userHtml.indexOf('>', htmlTagIndex) + 1;
-        htmlWithFix = userHtml.slice(0, htmlTagEnd) + '<head>' + sandboxLocalStorageFix + MATERIAL_CAPTURE_SCRIPT + '</head>' + userHtml.slice(htmlTagEnd);
+        htmlWithFix = userHtml.slice(0, htmlTagEnd) + '<head>' + sandboxLocalStorageFix + SPEECH_BRIDGE_SCRIPT + MATERIAL_CAPTURE_SCRIPT + '</head>' + userHtml.slice(htmlTagEnd);
       }
     }
 
@@ -528,6 +552,7 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
 <html lang="hu">
 <head>
   <meta charset="UTF-8">
+  ${SPEECH_BRIDGE_SCRIPT}
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">

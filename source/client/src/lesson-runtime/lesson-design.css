@@ -184,6 +184,8 @@
   /* 360 px-en az egyforma oszlopban a „Módszerek” nem fért el: a fül a tartalma szerint széles, a maradék hely köztük oszlik el. */
   [data-ws-theme] .fusion-tabs { gap: 2px; padding: 4px; grid-auto-columns: auto; justify-content: space-between; }
   [data-ws-theme] .fusion-tabs button { padding-inline: 4px; font-size: 13px; letter-spacing: -0.02em; }
+  /* Review #360: nyelvleckén (Kiejtés + Ismétlés) hat fül — 320 px-en egy sorban nem fér el: két sor, soronként három. */
+  [data-ws-theme] .fusion-tabs[data-tabs="6"] { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-columns: unset; justify-content: stretch; }
 }
 [data-ws-theme] .fusion-tabs button { color: var(--lesson-muted); border-radius: 12px; box-shadow: inset 0 0 0 2px transparent; }
 [data-ws-theme] .fusion-tabs button[aria-selected="true"] {
