@@ -90,4 +90,10 @@ test("fogalomtípus-hossz (2026-10-21): a címkék az oszlophatárra vágva; a c
   assert.equal(shouldRequeue({ status: "error", error: err, payload: { requeued: true } }), false, "másodszor nem");
   assert.equal(shouldRequeue({ status: "error", error: "a futás megállt", payload: {} }), false);
   assert.equal(shouldRequeue({ status: "done", error: err, payload: {} }), false);
+  // Review #351: az újrapróba megőrzi a jelzőt — a második ugyanilyen hiba már nem sorol újra.
+  const { retryPayload } = await import("../server/studio/legacy-migration");
+  const next = retryPayload({ htmlFileId: "f", attempt: 0, startedAt: 0, requeued: true }, "r1", 1, 5);
+  assert.deepEqual(next, { htmlFileId: "f", runId: "r1", attempt: 1, startedAt: 5, requeued: true });
+  assert.equal(shouldRequeue({ status: "error", error: err, payload: next }), false);
+  assert.equal("requeued" in retryPayload({ htmlFileId: "f" }, "r2", 2, 6), false);
 });

@@ -105,6 +105,10 @@ export function shouldRequeue(row: { status: string; error: string | null; paylo
 }
 type QueueRow = { id: string; status: string; payload: Payload };
 
+/** Review #351: az újrapróba payloadja — az újrasorolás jelzője (`requeued`) megmarad, így a tartós hiba nem indít végtelen újragyártást. */
+export const retryPayload = (prev: Payload, runId: string, attempt: number, startedAt: number): Payload =>
+  ({ htmlFileId: prev.htmlFileId, runId, attempt, startedAt, ...(prev.requeued ? { requeued: true } : {}) });
+
 async function ownerFor(fileUserId: string | null): Promise<string | null> {
   if (fileUserId) {
     const [u] = await db.select({ id: users.id, isAdmin: users.isAdmin }).from(users).where(eq(users.id, fileUserId)).limit(1);
@@ -203,12 +207,12 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
         if (decision === "resume" && jobId) {
           // Review #350: a sorelem ELŐBB foglalódik (helyőrző azonosítóval), csak a nyertes folytat; utána a valódi futás-azonosító kerül be.
           const placeholder = `resume-${randomUUID()}`;
-          if (!await claimRetry(row, { htmlFileId, runId: placeholder, attempt: attempt + 1, startedAt: Date.now() })) continue;
+          if (!await claimRetry(row, retryPayload(row.payload, placeholder, attempt + 1, Date.now()))) continue;
           const next = await resumeJob(jobId, htmlFileId);
           await db.execute(sql`UPDATE scheduled_jobs SET payload = jsonb_set(payload, '{runId}', to_jsonb(${next}::text)) WHERE id = ${row.id} AND payload->>'runId' = ${placeholder}`);
         } else {
           const runId = randomUUID();
-          if (!await claimRetry(row, { htmlFileId, runId, attempt: attempt + 1, startedAt: Date.now() })) continue;
+          if (!await claimRetry(row, retryPayload(row.payload, runId, attempt + 1, Date.now()))) continue;
           await startFresh(htmlFileId, runId);
         }
         logger.info(`[RÉGI→STÚDIÓ] ${decision === "resume" ? "Folytatás" : "Újrakezdés"} (${attempt + 1}. kísérlet): ${htmlFileId} — előző hiba: ${error ?? "?"}`);
