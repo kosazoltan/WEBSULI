@@ -2,6 +2,7 @@ import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../.
 import type { OpenTask } from "../../../shared/lesson-experience";
 import { OPTIONAL_ARRAY_KEYS } from "../bank-schema";
 import { inflectedForms, spellingVariants, staleGeneratedForms, synonymsOf } from "../../../shared/hu-lexicon";
+import { foldCaseUnlessSpelling, isSpellingPrompt } from "../../../shared/option-key";
 
 /**
  * Eszköz (tulajdonosi kérés 2026-09-19): determinisztikus bankcsomag-javítás MODELLHÍVÁS NÉLKÜL.
@@ -34,6 +35,9 @@ function stemPrefix(term: string): string | null {
 
 function dedupeOptions(item: Obj, minOptions: number, fixes: string[]): void {
   if (!isStrArr(item.options)) return;
+  // Spec 2026-10-21-ciklus8 (review #361): helyesírási kérdésnél a betűméret tartalmi különbség — a kulcs a sémáéval azonos.
+  const spelling = isSpellingPrompt(typeof item.question === "string" ? item.question : typeof item.prompt === "string" ? item.prompt : "");
+  const key = (s: string) => foldCaseUnlessSpelling(s.normalize("NFC").trim(), spelling);
   const seen = new Map<string, number>();
   const keep: number[] = [];
   item.options.forEach((o, i) => { const k = key(o); if (!seen.has(k)) { seen.set(k, i); keep.push(i); } });

@@ -1,4 +1,5 @@
 import { ATOM, EXPR, SIGN, atomValue, evaluateExpression, normalizeSignedParens } from "./arithmetic-expression";
+import { isSpellingPrompt } from "./option-key";
 
 /**
  * Spec 2026-09-29 (docs/specs/2026-09-29-egy-helyes-valasz.md), döntés 1: determinisztikus egy-helyes-válasz őr.
@@ -19,7 +20,7 @@ const textKey = (s: string) => norm(s).replace(/[.!?;:,]+$/u, "").trim();
  * írásmód). Más kérdésnél a csak betűméretben eltérő opció továbbra is ismétlődés („Alma” / „alma”, döntés 1c).
  */
 const caseKey = (s: string) => s.normalize("NFC").replace(/\s+/g, " ").trim().replace(/[.!?;:,]+$/u, "").trim();
-const ABOUT_SPELLING = /írás|írjuk|írod|írd\b|helyesír|kezdőbetű|nagybetű|kisbetű|toldalékos alak|helyes alak|helyesen/u;
+
 const INTEGER = new RegExp(`^(${SIGN})?(\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+|\\d+)$`);
 /** Egyetlen szám (egész, tizedes, tört, vegyes tört), előjellel. */
 const LONE_NUMBER = new RegExp(`^(?:${SIGN})?(?:${ATOM})$`);
@@ -72,7 +73,7 @@ function duplicateProblems(prompt: string, options: readonly string[]): string[]
   const byText = new Map<string, number>();
   const byValue = new Map<number, number>();
   const byEquality = new Map<number, number>();
-  const spelling = ABOUT_SPELLING.test(norm(prompt));
+  const spelling = isSpellingPrompt(prompt);
   const compareValues = !ABOUT_FORM.test(norm(prompt)) && !NEGATED_EQUALITY.test(norm(prompt)) && !options.some((o) => AGGREGATE_OPTION.test(norm(o)));
   options.forEach((option, i) => {
     const key = spelling ? caseKey(option) : textKey(option);

@@ -49,6 +49,27 @@ test("ciklus 8: helyesírási kérdésnél a csak kis- és nagybetűben eltérő
   assert.equal(singleChoiceProblems({ prompt: "Melyik írás helyes?", options: ["Eger", "Eger.", "eger"], correctIndex: 0 }).length, 1);
 });
 
+test("review #361: a „leírás” és a „helyesen jellemzi” NEM helyesírási kontextus — ott a betűméret-változat ismétlődés", () => {
+  const pair = ["Élőlény, tárgy vagy fogalom neve", "élőlény, tárgy vagy fogalom neve", "Cselekvést jelent"];
+  assert.equal(singleChoiceProblems({ prompt: "Melyik leírás illik a főnévre?", options: pair, correctIndex: 0 }).length, 1);
+  assert.equal(singleChoiceProblems({ prompt: "Melyik válasz jellemzi helyesen a főnevet?", options: pair, correctIndex: 0 }).length, 1);
+});
+
+test("review #361: a kvízséma és az előfeldolgozó ugyanazt a kulcsot használja — a helyesírási opció és a helyes index megmarad", async () => {
+  const { experienceQuizSchema } = await import("../shared/lesson-experience");
+  const { autofixBankPacket } = await import("../server/studio/tools/bank-packet-autofix");
+  const quiz = { id: "q1", sectionIndex: 0, coversConceptIds: ["c1"], question: "Melyik az Eger szó helyes -i toldalékos alakja?",
+    options: ["Egri", "egri", "egeri", "eger-i"], correctIndex: 1,
+    feedbackPerOption: ["Nem: kisbetű kell.", "Helyes: egri.", "Nem: nincs ilyen alak.", "Nem: kötőjel nélkül."], intent: "recall" };
+  assert.ok(experienceQuizSchema.safeParse(quiz).success, "a séma elfogadja");
+  const { packet } = autofixBankPacket({ methods: [], tasks: [], quiz: [structuredClone(quiz)] }, {} as never);
+  const fixed = (packet as { quiz: typeof quiz[] }).quiz[0];
+  assert.deepEqual(fixed.options, quiz.options, "az előfeldolgozó nem töröl helyesírási opciót");
+  assert.equal(fixed.options[fixed.correctIndex], "egri", "a helyes index a helyes alakon marad");
+  // Nem helyesírási kérdésnél a régi szabály: a betűméret-változat ismétlődés (séma).
+  assert.equal(experienceQuizSchema.safeParse({ ...quiz, question: "Melyik gyümölcs?", options: ["Alma", "alma", "Répa"], feedbackPerOption: ["a", "b", "c"], correctIndex: 0 }).success, false);
+});
+
 test("nincs hamis riasztás a nem kiszámolható kérdésekre (történelem, angol, összetett feltétel)", () => {
   const silent = [
     { prompt: "Mikor volt a mohácsi csata?", options: ["1526", "1541", "1456", "1686"], correctIndex: 0 },
