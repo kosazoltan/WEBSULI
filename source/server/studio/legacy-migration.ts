@@ -22,7 +22,7 @@ export const LEGACY_MAX_ATTEMPTS = 2;
  * Spec 2026-10-21-regi-anyag-ciklusos-felulvizsgalat: a sorelemek felső száma — a sor eddig indít új anyagot, utána megáll (az újrapróba a
  * meglévő elemen belül marad). Minden felülvizsgálati ciklus (5 anyag) egy PR-rel emeli; így a deploy mindig futásmentes állapotban megy.
  */
-export const LEGACY_BATCH_LIMIT = 122;
+export const LEGACY_BATCH_LIMIT = 127;
 // Review #352: a következő ciklus korlátja a TÉNYLEGES sorelemszám + 5 (nem az előző korlát + 5) — a korlát fölötti (pl. újrapróbált)
 // elem miatt a ciklus nem lehet 5-nél rövidebb.
 /** Tiszta: hány új anyag indulhat még a korlátig. */
@@ -92,6 +92,10 @@ export function reconcileLegacy(s: LegacyJobState, now: number): LegacyDecision 
   if (s.attempt >= LEGACY_MAX_ATTEMPTS) return "error";
   return s.jobResumable ? "resume" : "restart";
 }
+
+/** Spec 2026-10-21-ciklus5: a „running” job csak akkor fut, ha a futása nem hibás, vagy a job valamely futásának bérlete él. */
+export const jobStillRunning = (jobStatus: string | undefined, runPhase: string | null, jobLeaseAlive: boolean) =>
+  jobStatus === "running" && (runPhase !== "error" || jobLeaseAlive);
 
 /** A régi anyag tartalmának lenyomata: a publikálás csak akkor cseréli, ha közben nem változott (review #349). */
 export const legacyBaseline = (content: string) => createHash("sha256").update(content).digest("hex");
@@ -246,7 +250,12 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
         jobError = job?.error ?? null;
         const { singleRunResumable } = await import("./single-run/engine");
         resumable = job?.status === "error" && singleRunResumable((job.output ?? {}) as Record<string, unknown>);
-        jobRunning = job?.status === "running";
+        // Spec 2026-10-21-ciklus5: a hibás fázisú futás job-ja „running” maradhat, ha a hibaállapot mentése is elbukott (mért: 100+ perces
+        // beragadás) — ilyenkor csak a job BÁRMELY futásának élő bérlete jelez valódi futást (review #350: egy másik példány folytatása).
+        const jobLeaseAlive = job?.status === "running" && run?.phase === "error"
+          ? (await db.execute(sql`SELECT 1 FROM lesson_workflow_runs w JOIN one_step_runs r ON r.id = w.id WHERE r.job_id = ${knownJobId} AND w.lease_until > now() LIMIT 1`)).rows.length > 0
+          : false;
+        jobRunning = jobStillRunning(job?.status, run?.phase ?? null, jobLeaseAlive);
         jobFailed = job?.status === "error";
       }
       const decision = reconcileLegacy({ attempt, startedAt, runPhase: run?.phase ?? null, runUpdatedAt: run?.updatedAt ?? null, leaseAlive: lease.rows.length > 0,

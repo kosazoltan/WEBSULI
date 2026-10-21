@@ -56,7 +56,8 @@ type AnthropicLike = { messages: { stream(params: Anthropic.MessageStreamParams,
  * Spec 2026-10-21-ciklus4: a modellhívás határán minden szöveg érvényes UTF-16 — a `.slice()` kettévághat egy emojit, a magányos
  * fél-karaktert (pl. \ud83e) a szigorú JSON-olvasó elutasítja (mért: 400 „unexpected end of hex escape”, 2/2 kísérlet). U+FFFD lesz belőle.
  */
-export const wellFormed = (s: string) => s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
+import { wellFormed } from "../../../shared/well-formed";
+export { wellFormed };
 
 /** Claude Opus 5.5: natív, többfordulós üzenetek (szöveg + forrás tartalomblokk), streamelve, adaptív gondolkodással, medium efforttal. */
 export function anthropicClient(opts: { apiKey?: string; model?: string; client?: AnthropicLike } = {}): ModelClient {
