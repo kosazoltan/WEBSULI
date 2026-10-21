@@ -8,9 +8,11 @@
 - **3 javítókör:** „tasks.N.typedAnswers.N.value: Expected string, received number”.
 
 ## Cél (előfeldolgozó, `autofixBankPacket`)
-1. **Minta-kifejezés:** ha egy kifejezéscsoport egyik alternatívája sincs meg pontosan a mintában, de a mintában van olyan egymás
-   utáni, azonos hosszú szósor, amely a kifejezés szavait a pontozó tűrő illesztésével tartalmazza, ez a szósor (a minta alakjában)
-   új alternatívaként a csoportba kerül. A minta a feladat saját, teljes pontos válasza, így ez a szándékolt alak.
+1. **Minta-kifejezés (felülvizsgált döntés):** gépi javítás NEM lesz. A v2-normalizálás már elnyeli a kis- és nagybetűt, az
+   ékezetet és az írásjelet, így ha a kifejezés a mintában pontosan nincs meg, a szavak valóban különböznek (nyelvtani eltérés). A
+   tűrő illesztéssel a hibás minta-alak kerülne a pontos rubrikába. Helyette **célzott diagnózis**: a javítókör üzenete megnevezi a
+   mintából pontosan hiányzó kifejezéscsoportokat és a sorrendi eltérést. Eddig csak a fogalmakat nevezte meg, a modell ezért
+   ugyanarra a feladatra többször is javítókört futott (s9-t8, s8-t2).
 2. **Szám → szöveg:** a `typedAnswers[].value` számértéke szöveggé alakul.
 
 ## Nem-cél
