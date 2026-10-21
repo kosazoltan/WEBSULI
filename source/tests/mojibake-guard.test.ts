@@ -14,8 +14,8 @@ import { fileURLToPath } from "node:url";
 const c = (...codes: number[]) => String.fromCharCode(...codes);
 // UTF-8 bájtok Latin-1 / Windows-1252 / Latin-2 szerinti visszaolvasása — a magyar ékezetek és a tipográfiai jelek tipikus nyomai.
 const PATTERNS: RegExp[] = [
-  new RegExp(`${c(0xc3)}[${c(0x80)}-${c(0xbf)}${c(0xa9, 0xa1, 0xb3, 0xb6, 0xbc, 0xba)}]`), // U+00C3 + második bájt (é, á, ó, ö, ü, ú…)
-  new RegExp(`${c(0xc5)}[${c(0x2018, 0xb1, 0x90, 0xb0)}]`), // U+00C5 + második jel (ő, ű)
+  new RegExp(`${c(0xc3)}[${c(0x80)}-${c(0xbf)}${c(0xa9, 0xa1, 0xb3, 0xb6, 0xbc, 0xba, 0x2030, 0x201c, 0x2013, 0x161, 0x153)}]`), // U+00C3 + második bájt (é, á, ó, ö, ü, ú…; review #355: a nagybetűk Windows-1252 alakja is)
+  new RegExp(`${c(0xc5)}[${c(0x2018, 0x91, 0xb1, 0x90, 0xb0)}]`), // U+00C5 + második jel (ő, ű; review #355: a Latin-1 U+0091 is)
   new RegExp(`${c(0xe2)}${c(0x20ac)}`), // U+00E2 + U+20AC (tipográfiai idézőjel / gondolatjel)
   new RegExp(`${c(0x102)}[${c(0xa9, 0x15e, 0x2c7, 0xad)}]`), // U+0102 + második jel (Latin-2 visszaolvasás)
   new RegExp(`${c(0x139)}[${c(0x2018, 0xb1)}]`), // U+0139 + második jel (Latin-2: ő, ű)
@@ -24,11 +24,11 @@ const PATTERNS: RegExp[] = [
 const REPLACEMENT_ALLOWED = new Set(["source/scripts/content-review/lib.ts", "source/server/studio/single-run/conversation.ts"]);
 
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..", "..");
-const DIRS = ["source/server", "source/shared", "source/client/src", "source/scripts", "source/tests", "docs", ".claude/skills"];
+const DIRS = ["source/server", "source/shared", "source/client/src", "source/scripts", "source/tests", "docs", ".claude/skills", ".agents/skills", ".cursor/rules", ".github"];
 // Review #355: a vezérlőfájlok bárhol a repóban (beágyazott AGENTS.md / CLAUDE.md is).
 const RULE_FILES = new Set(["AGENTS.md", "CLAUDE.md"]);
 const SKIP = (name: string) => name === "node_modules" || name === "dist" || name.startsWith(".git") || name.startsWith(".wt-");
-const TEXT = /\.(ts|tsx|js|mjs|cjs|json|md|mdc|txt|html|css)$/;
+const TEXT = /\.(ts|tsx|js|mjs|cjs|json|md|mdc|txt|html|css|py|yaml|yml)$/;
 
 function findRuleFiles(dir: string, out: string[]): void {
   let entries: string[];
@@ -75,5 +75,11 @@ test("mojibake-őr: a kód, a promptok, a szabályok, a skillek és a dokumentá
 test("mojibake-őr: a minták valóban elkapják a tipikus hibákat (önellenőrzés)", () => {
   const broken = Buffer.from("téli ő ű „idézet”", "utf8").toString("latin1");
   assert.ok(PATTERNS.some((p) => p.test(broken)), broken);
+  // Review #355: minden ékezetes betű KÜLÖN is jelez, Latin-1 és Windows-1252 visszaolvasásban (a Latin-1-es ő eddig kimaradt).
+  const cp1252 = new TextDecoder("windows-1252");
+  for (const ch of "áéíóöőúüűÁÉÍÓÖŐÚÜŰ") {
+    const bytes = Buffer.from(ch, "utf8");
+    for (const misread of [bytes.toString("latin1"), cp1252.decode(bytes)]) assert.ok(PATTERNS.some((p) => p.test(misread)), `${ch} → ${[...misread].map((x) => x.charCodeAt(0).toString(16))}`);
+  }
   assert.ok(!PATTERNS.some((p) => p.test("téli ő ű „idézet” — Ádám")), "a helyes magyar szöveg nem jelez");
 });

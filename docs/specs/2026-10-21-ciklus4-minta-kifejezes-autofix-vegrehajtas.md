@@ -17,3 +17,5 @@ Terv: `docs/specs/2026-10-21-ciklus4-minta-kifejezes-autofix.md`.
 4. **`bank-packet-autofix.ts`:** az exponenses alak (`1e+21`) nem alakul szöveggé.
 5. **`tests/mojibake-guard.test.ts`:** + `source/tests`, beágyazott `AGENTS.md` / `CLAUDE.md`; a teszt saját megjegyzései kódpontosak.
 6. **Teszt:** `tests/ciklus4-diagnozis.test.ts` — legújabb 200, fél-karakter-biztos vágás, exponens, kliens-bekötés (mock), bejegyzés nélküli kör.
+7. **`tests/mojibake-guard.test.ts` (2. kör):** + `.py` / `.yaml` / `.yml`, `.agents/skills`, `.cursor/rules`, `.github`; a Latin-1-es
+   „ő” (U+00C5 + U+0091) és a nagybetűk Windows-1252 alakja; önellenőrzés minden ékezetes betűre külön, mindkét kódlappal.
