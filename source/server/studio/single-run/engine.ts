@@ -20,6 +20,7 @@ import { autofixOutline } from "../tools/outline-autofix";
 import { applyVisualPatch } from "../visual-patch";
 import { stripUngroundedAnimateLabels } from "../grounding";
 import { ensureSectionVisuals } from "../section-visuals";
+import { scoringRulesOf } from "../../../shared/scoring-rules";
 import { bankStaticPrefix, buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceCheckpoint } from "../experience-builder";
 import { answerKeysFor, answerKeyTestsEnabled } from "../answer-key-writer";
 import { answerKeyNotes } from "../../../shared/answer-key-tests";
@@ -685,6 +686,8 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     return buildLessonExperience(base, concepts, {
       ...(catalogPool ? { catalog: catalogPool } : {}),
       ...(memoryBlock ? { memory: memoryBlock } : {}),
+      // Spec 2026-10-21-ciklus6 (review #357): a gyártási utasítás pontozási szabálya a banképítőhöz is eljut.
+      ...(scoringRulesOf(input.instruction) ? { scoringRules: scoringRulesOf(input.instruction) } : {}),
       onProgress: (p) => {
         progress = { done: p.done, total: p.total };
         // Review #264: a számláló bankcsomagot számol (egy sok fogalmas fejezet több csomag is lehet), a készülőnél a fejezetet nevezzük meg.

@@ -8,3 +8,7 @@ Terv: `docs/specs/2026-10-21-ciklus6-csoport-ujraszigoritas.md`.
    a körben a hibás, listán lévő, `redo` nélküli sorelem egyszer újra sorba (`redo: true`, `attempt: 0`); `LEGACY_BATCH_LIMIT` 132.
 4. **Teszt:** `tests/ciklus6-csoport-ujraszigoritas.test.ts` — `noCoverGroup` (az S3d-eset csoport nélkül), `legacySource` az utasítással,
    `shouldRedo`; a `regi-anyag-studio` rögzített korlátja 132 (dokumentált spec-változás).
+5. **Review #357:** a kifogásolt feladatra SEMMILYEN gépi szigorítás (`lektorReviewed`, a `tighten` ki sem fut; a lazítás marad); a tiltás
+   körökön átível (`ExperienceCheckpoint.lektorReviewedIds`, `rememberLektorReviewed`, `calibrationOptionsFor`); a célzott utasítás
+   `PONTOZÁSI SZABÁLY:` sorként megy (`shared/scoring-rules.ts`), a banképítő `scoringRules`-ként a rendszerpromptba és a hash-be kapja;
+   a listás anyag infrastruktúra-hiba miatti újraindítása is `redo`-jelzős (egyszeri).

@@ -7,6 +7,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { htmlFiles, oneStepRuns, scheduledJobs, studioJobs, users } from "../../shared/schema";
+import { SCORING_RULE_MARK } from "../../shared/scoring-rules";
 import { logger } from "../lib/logger";
 import { htmlToText } from "./safe-fetch";
 
@@ -36,6 +37,8 @@ export const LEGACY_REDO: Readonly<Record<string, string>> = {
   "59f1ce9a-92e5-4908-82fa-1027d82583bf": "A mondatalkotó, szabadon megfogalmazható feladatoknál a kötelező (required) fogalmak CSAK a kérdés által "
     + "megkövetelt elemek (pl. a kért tulajdonságot kifejező szó); a mintaválasz többi szava (névelő, ige, tárgy) soha ne legyen kötelező.",
 };
+/** Review #357: a listás anyag MINDEN újraindítása (az infrastruktúra-hiba miatti is) célzott — a redo-jelző egyszeri futást biztosít. */
+const redoFlag = (htmlFileId: string) => (Object.prototype.hasOwnProperty.call(LEGACY_REDO, htmlFileId) ? { redo: true } : {});
 /** Spec 2026-10-21-ciklus6: a hibás, célzott újragyártásra kijelölt, még újra nem gyártott sorelem. */
 export const shouldRedo = (row: { status: string; payload: { htmlFileId: string; redo?: boolean } }): boolean =>
   row.status === "error" && !row.payload.redo && Object.prototype.hasOwnProperty.call(LEGACY_REDO, row.payload.htmlFileId);
@@ -129,7 +132,8 @@ export function legacySource(file: { title: string; content: string }, extra?: s
       + "(fogalmak, példák, feladatok témái); a weboldal kezelőfelületének szövegeit (gombok, pontszámítás, menük) hagyd figyelmen kívül. "
       + "Az évfolyamot a tartalomból állapítsd meg."
       // Spec 2026-10-21-ciklus6: a célzott újragyártás utasítása.
-      + (extra ? ` ${extra}` : ""),
+      // Review #357: külön sorban, jelölve — a banképítő kötelező pontozási szabályként kapja (scoringRulesOf).
+      + (extra ? `\n${SCORING_RULE_MARK} ${extra}` : ""),
   };
 }
 
@@ -249,11 +253,11 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
     if (LEGACY_MIGRATION_MODE !== "off") {
       for (const row of rows.filter(shouldRequeue)) {
         await db.execute(sql`UPDATE scheduled_jobs SET status = 'running', error = NULL, completed_at = NULL,
-          payload = ${JSON.stringify({ htmlFileId: row.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true })}::jsonb
+          payload = ${JSON.stringify({ htmlFileId: row.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, ...redoFlag(row.payload.htmlFileId) })}::jsonb
           WHERE id = ${row.id} AND status = 'error' AND coalesce(payload->>'requeued', '') <> 'true'`);
         logger.info(`[RÉGI→STÚDIÓ] Újra sorba (a tudásbank-oszlophatár javítása után): ${row.payload.htmlFileId}`);
       }
-      rows = rows.map((r) => (shouldRequeue(r) ? { ...r, status: "running", payload: { htmlFileId: r.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true } } : r));
+      rows = rows.map((r) => (shouldRequeue(r) ? { ...r, status: "running", payload: { htmlFileId: r.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, ...redoFlag(r.payload.htmlFileId) } } : r));
       // Spec 2026-10-21-ciklus6: célzott újragyártás — egyszer, a redo-jelzővel (a hibás állapotból, feltételes UPDATE-tel).
       for (const row of rows.filter(shouldRedo)) {
         const next = { htmlFileId: row.payload.htmlFileId, attempt: 0, startedAt: 0, requeued: true, redo: true };
