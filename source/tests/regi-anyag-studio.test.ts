@@ -115,3 +115,15 @@ test("ciklus-kapu (2026-10-21): a korlátig indul új anyag; a 0-s kategória me
   assert.equal(legacyClassroom(4, 4), 4);
   assert.equal(legacyClassroom(5, 6), 6, "egyébként a forrásból felismert évfolyam");
 });
+
+test("2. ciklus: a hibás job + nem élő bérlet = leállt futás (nincs 45 perces várakozás); a lektor a ragos alakra requiredPhrases-t ír elő", async () => {
+  const now = Date.parse("2026-10-21T05:20:00Z");
+  const base = { attempt: 1, startedAt: now - 30 * 60_000, runPhase: "author" as string | null, runUpdatedAt: new Date(now - 20 * 60_000), leaseAlive: false, targetIsLesson: false, jobResumable: true };
+  assert.equal(reconcileLegacy(base, now), "running", "előfeltétel: 45 percen belül a régi szabály még fut-nak venné");
+  assert.equal(reconcileLegacy({ ...base, jobFailed: true }, now), "resume", "a hibás job azonnal folytatható");
+  assert.equal(reconcileLegacy({ ...base, jobFailed: true, leaseAlive: true }, now), "running", "élő bérlettel nem");
+  const { buildLektorPrompt } = await import("../server/studio/step-io");
+  const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+  const prompt = buildLektorPrompt(standardFusionFixture(), { title: "T", subject: "m", classroom: 5, concepts: [] });
+  assert.match(prompt, /ragozott \/ toldalékos ALAK[^\n]*requiredPhrases/);
+});

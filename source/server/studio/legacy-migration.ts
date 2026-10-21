@@ -66,7 +66,9 @@ export function legacyCandidates(rows: readonly LegacyRow[], mode: LegacyMode): 
 
 export type LegacyJobState = { attempt: number; startedAt: number; runPhase: string | null; runUpdatedAt: Date | null; leaseAlive: boolean; targetIsLesson: boolean; jobResumable: boolean;
   /** Review #350: a Stúdió-job épp fut (pl. egy másik példány folytatása) — élő, nem indul mellé újabb. */
-  jobRunning?: boolean };
+  jobRunning?: boolean;
+  /** Spec 2026-10-21-ciklus2: a Stúdió-job `error` — lejárt bérlettel ez leállt futás (nincs 45 perces várakozás). */
+  jobFailed?: boolean };
 export type LegacyDecision = "done" | "running" | "waiting" | "resume" | "restart" | "error";
 const STALE_MS = 45 * 60_000;
 /** A futás DB-sora aszinkron íródik: az indítás utáni hiánya még nem leállás. */
@@ -82,7 +84,8 @@ export function reconcileLegacy(s: LegacyJobState, now: number): LegacyDecision 
   if (s.runPhase === "done") return "error";
   // Review #349: emberi döntésre váró futás — nem indul újra, a kísérletet nem fogyasztja, a helyet felszabadítja.
   if (s.runPhase === "parked" || s.runPhase === "draft") return "waiting";
-  const finished = s.runPhase === "error" || s.runPhase === null;
+  // Spec 2026-10-21-ciklus2: a hibás job + nem élő bérlet = leállt futás, akkor is, ha a futás fázisa (a deploy miatt) nem záródott le.
+  const finished = s.runPhase === "error" || s.runPhase === null || s.jobFailed === true;
   const stale = s.runUpdatedAt ? now - s.runUpdatedAt.getTime() > STALE_MS : true;
   if (!finished && !stale) return "running";
   if (s.attempt >= LEGACY_MAX_ATTEMPTS) return "error";
@@ -193,6 +196,7 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
       const lease = runId ? await db.execute(sql`SELECT 1 FROM lesson_workflow_runs WHERE id = ${runId} AND lease_until > now() LIMIT 1`) : { rows: [] };
       let resumable = false;
       let jobRunning = false;
+      let jobFailed = false;
       // Review #352: ha a futás-azonosító (még) helyőrző, a sorelemben rögzített folytatott job dönt.
       const knownJobId = run?.jobId ?? row.payload.jobId;
       if (knownJobId) {
@@ -200,9 +204,10 @@ export async function legacyMigrationTick(now = Date.now()): Promise<boolean> {
         const { singleRunResumable } = await import("./single-run/engine");
         resumable = job?.status === "error" && singleRunResumable((job.output ?? {}) as Record<string, unknown>);
         jobRunning = job?.status === "running";
+        jobFailed = job?.status === "error";
       }
       const decision = reconcileLegacy({ attempt, startedAt, runPhase: run?.phase ?? null, runUpdatedAt: run?.updatedAt ?? null, leaseAlive: lease.rows.length > 0,
-        targetIsLesson: file?.contentType === "lesson", jobResumable: resumable, jobRunning }, now);
+        targetIsLesson: file?.contentType === "lesson", jobResumable: resumable, jobRunning, jobFailed }, now);
       if (decision === "running") { running++; continue; }
       if (decision === "done") { await finish(row, "done", null); logger.info(`[RÉGI→STÚDIÓ] Kész: ${htmlFileId} (${attempt}. kísérlet)`); continue; }
       if (decision === "waiting") { await finish(row, "waiting", `emberi döntésre vár (${run?.phase}): ${run?.error ?? ""}`.slice(0, 2000)); continue; }
