@@ -392,6 +392,14 @@ export type SingleRunResult = { mapId: string; jobId: string; lessonId: string; 
  * A teljes gyártás egy beszélgetésben. A job állomásonként menti az elkészült részeket és a beszélgetést (`output.singleRun`); a
  * `step` mező a felület számára tükrözi az állomást. Hiba esetén SingleRunError (a mentett piszkozat megmarad).
  */
+/** Spec 2026-10-21-ciklus1-csoportos-szigoritas: egy archív válaszkulcs-bejegyzés (tiszta; a szövegek 300 karakterre vágva). */
+export function answerKeyArchiveEntry(t: { id: string; q: string; sample: string; required: string[][]; requiredPhrases?: string[][]; requiredOrder?: string[][] },
+  k: { correct: string[]; wrong: Array<{ kind: string; text: string }> }, sectionIndex: number) {
+  const cut = (x: string) => x.slice(0, 300);
+  return { id: t.id, sectionIndex, q: cut(t.q), sample: cut(t.sample), required: t.required, ...(t.requiredPhrases?.length ? { requiredPhrases: t.requiredPhrases } : {}),
+    ...(t.requiredOrder?.length ? { requiredOrder: t.requiredOrder } : {}), correct: k.correct.map(cut), wrong: k.wrong.map((w) => ({ kind: w.kind, text: cut(w.text) })) };
+}
+
 export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps): Promise<SingleRunResult> {
   const { conversation, store } = deps;
   const log = (m: string) => deps.log?.(m);
@@ -625,8 +633,17 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     freshJsonCall(deps.fresh, "VÁLASZKULCS-TESZTEK (a pontozó próbája).", telemetry),
     (w) => log(`[EGYFUTÁS] Válaszkulcs-teszt: ${w}`),
   );
+  // Spec 2026-10-21-ciklus1-csoportos-szigoritas: analitikai archívum — a válaszkulcs-esetek feladatonként a job kimenetébe (a drága
+  // futások offline visszamérhetők; legfeljebb 200 feladat, a szövegek vágva). A folytatott futás a mentett archívumot bővíti.
+  const keyArchive = new Map<string, unknown>((Array.isArray(output.answerKeyArchive) ? output.answerKeyArchive as Array<{ id: string }> : []).map((e) => [e.id, e]));
   const answerKeysWithNotes: typeof writeKeys = async (tasks, sectionIndex) => {
     const keys = await writeKeys(tasks, sectionIndex);
+    for (const t of tasks) {
+      const k = keys.get(t.id);
+      if (!k || (keyArchive.size >= 200 && !keyArchive.has(t.id))) continue;
+      keyArchive.set(t.id, answerKeyArchiveEntry(t, k, sectionIndex));
+    }
+    output = { ...output, answerKeyArchive: [...keyArchive.values()] };
     const notes = tasks.flatMap((t) => answerKeyNotes(t, keys.get(t.id) ?? null));
     telemetry.gates.answerKeyNotes += notes.length;
     for (const n of notes) log(`[EGYFUTÁS] Válaszkulcs-teszt (tájékoztatás) ${sectionIndex + 1}. fejezet: ${n}`);
