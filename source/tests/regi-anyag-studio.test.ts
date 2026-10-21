@@ -108,10 +108,25 @@ test("ciklus-kapu (2026-10-21): a korlátig indul új anyag; a 0-s kategória me
   assert.equal(batchRoom(97, 100), 3);
   assert.equal(batchRoom(120, 100), 0);
   // Review #352: a korlát pontosan rögzített (a ciklus-PR emeli, a tényleges sorelemszám + 5 szerint).
-  assert.equal(LEGACY_BATCH_LIMIT, 112, "1. ciklus: 107 sorelem + 5");
-  assert.equal(batchRoom(111), 1);
-  assert.equal(batchRoom(112), 0);
+  assert.equal(LEGACY_BATCH_LIMIT, 117, "2. ciklus: 112 sorelem + 5");
+  assert.equal(batchRoom(116), 1);
+  assert.equal(batchRoom(117), 0);
   assert.equal(legacyClassroom(0, 12), 0, "Programozási alapismeretek marad");
   assert.equal(legacyClassroom(4, 4), 4);
   assert.equal(legacyClassroom(5, 6), 6, "egyébként a forrásból felismert évfolyam");
+});
+
+test("2. ciklus: a hibás job + nem élő bérlet = leállt futás (nincs 45 perces várakozás); a lektor a ragos alakra requiredPhrases-t ír elő", async () => {
+  const now = Date.parse("2026-10-21T05:20:00Z");
+  const base = { attempt: 1, startedAt: now - 30 * 60_000, runPhase: "author" as string | null, runUpdatedAt: new Date(now - 20 * 60_000), leaseAlive: false, targetIsLesson: false, jobResumable: true };
+  assert.equal(reconcileLegacy(base, now), "running", "előfeltétel: 45 percen belül a régi szabály még fut-nak venné");
+  assert.equal(reconcileLegacy({ ...base, jobFailed: true }, now), "resume", "a hibás job azonnal folytatható");
+  assert.equal(reconcileLegacy({ ...base, jobFailed: true, leaseAlive: true }, now), "running", "élő bérlettel nem");
+  // Review #354: a futás-sor még nem íródott ki (türelmi idő), de a job már hibás → nem vár.
+  assert.equal(reconcileLegacy({ ...base, runPhase: null, startedAt: now - 60_000, jobFailed: true }, now), "resume");
+  assert.equal(reconcileLegacy({ ...base, runPhase: null, startedAt: now - 60_000 }, now), "running", "hibás job nélkül a türelmi idő marad");
+  const { buildLektorPrompt } = await import("../server/studio/step-io");
+  const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+  const prompt = buildLektorPrompt(standardFusionFixture(), { title: "T", subject: "m", classroom: 5, concepts: [] });
+  assert.match(prompt, /ragozott \/ toldalékos ALAK[^\n]*requiredPhrases/);
 });
