@@ -41,7 +41,8 @@ export type ExperienceCheckpoint = { hash: string; parts: Record<string, unknown
 
 /** Review #357: a kalibráció beállítása egy feladatra (a lektor által kifogásolt feladatra nincs gépi szigorítás). */
 export const calibrationOptionsFor = (taskId: string, lektorReviewed: ReadonlySet<string>, language: boolean) =>
-  ({ phrases: language, lektorReviewed: lektorReviewed.has(taskId) });
+  // Spec 2026-10-21-ciklus7: magyar leckén a toldalékcsere pontos-alak szigorítása (idegen nyelven a teljes kifejezés-szigorítás fut).
+  ({ phrases: language, exactForms: !language, lektorReviewed: lektorReviewed.has(taskId) });
 
 /**
  * A bank munkapéldánya az előző körből (azonos módszertan-verziónál): a kész csomagok, a lektori hash-ek és — review #357 — a lektor által

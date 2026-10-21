@@ -77,6 +77,11 @@ export type CalibrationOptions = {
    */
   phrases?: boolean;
   /**
+   * Spec 2026-10-21-ciklus7: magyar (nem idegen nyelvi) leckén a CSAK toldalékban eltérő hibás próba (pl. „anyának” az „anyával” helyett —
+   * a pontozó toldaléktűrő) egyszavas pontos-alak csoporttal (`requiredPhrases`) különböztethető meg; egy szónál a szórend nem számít.
+   */
+  exactForms?: boolean;
+  /**
    * Spec 2026-10-21-ciklus6 + review #357: a lektor által kifogásolt feladatra SEMMILYEN gépi szigorítás (szó, csoport, kifejezés, sorrend)
    * nem fut — különben a lektor által önkényesnek ítélt követelmény a javítás után azonnal visszakerül (mért: „Tulajdonságot kifejező
    * szavak”, 2× elbukott). A lazítás (helyes válasz visszaengedése) továbbra is fut.
@@ -91,7 +96,7 @@ const AT_LEAST_TWO = (n: number) => Math.min(2, n);
  * semmit sem tett. A minta egy olyan szava lesz új kötelező csoport (igazolt rokon alakjaival), amely MINDEN teljes pontos helyes válaszban
  * megvan, a hibás válaszban nincs; csak ha utána a minta és a helyesek teljes pontosak maradnak, a hibás pedig nem. Különben `null`.
  */
-function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tightening | null {
+function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false, exactForms = false): Tightening | null {
   if (evaluateOpenAnswer(task.sample, task).state !== "ok") return null;
   const okCorrect = cases.correct.filter((a) => evaluateOpenAnswer(a, task).state === "ok");
   // Bizonyíték nélkül nem szigorítunk: legalább 2 (kevesebb esetnél mind) teljes pontos helyes válasz kell, különben a „minden helyesben megvan” üres igazság.
@@ -159,6 +164,27 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
       current = next;
       addedPhrases.push([phrase]);
       changes.push(`szigorítás (kifejezés): + requiredPhrases ${JSON.stringify([phrase])} (megkülönbözteti a hibás (${wrong.kind}) választ)`);
+      fixed = true;
+      break;
+    }
+    // Spec 2026-10-21-ciklus7: magyar leckén a csak toldalékban eltérő hibás próba — a minta egy szavának pontos alakja (a helyes próbák
+    // pontos alakjaival VAGY-csoportban) kerül a requiredPhrases-be, ha a hibásban a szó töve megvan, de a pontos alakja nincs.
+    const exactRoom = (current.requiredPhrases?.length ?? 0) < PHRASE_GROUPS_MAX;
+    for (const word of fixed || !exactForms || !exactRoom || !isBlocking ? [] : raw) {
+      const exact = { requiredPhrases: [[word]] };
+      if (missingPhrases(wrong.text, exact).length === 0) continue; // a hibásban a pontos alak is megvan
+      if (missingAnswerConcepts(wrong.text, { required: [[word]] }).length > 0) continue; // nem toldalékeltérés (a tő sincs meg)
+      const forms = [word, ...new Set(okCorrect.flatMap((a) => (missingPhrases(a, exact).length ? relatedForms([word], a) : [])))];
+      const group = { requiredPhrases: [forms] };
+      if (missingPhrases(wrong.text, group).length === 0) continue; // egy helyes próba alakja a hibás alak — nem különböztet meg
+      if (okCorrect.some((a) => missingPhrases(a, group).length > 0)) continue;
+      const next: OpenTask = { ...current, requiredPhrases: [...(current.requiredPhrases ?? []), forms] };
+      if (evaluateOpenAnswer(next.sample, next).state !== "ok") continue;
+      if (okCorrect.some((a) => evaluateOpenAnswer(a, next).state !== "ok")) continue;
+      if (evaluateOpenAnswer(wrong.text, next).state === "ok") continue;
+      current = next;
+      addedPhrases.push(forms);
+      changes.push(`szigorítás (pontos alak): + requiredPhrases ${JSON.stringify(forms)} (megkülönbözteti a toldalékban eltérő hibás (${wrong.kind}) választ)`);
       fixed = true;
       break;
     }
@@ -266,7 +292,7 @@ export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null
   // Review #347: az őr teljesülésekor is fut (a J1 miatt nem blokkoló, csak sorrendben eltérő hibás próba sorrendi szigorítása); ha ez nem
   // sikerül, az eredeti rubrika marad a kiinduló pont.
   const untouched: Tightening = { task: original, changes: [], tightened: [], tightenedPhrases: [], tightenedOrder: false };
-  const attempt = options.lektorReviewed ? null : tighten(original, cases, options.phrases === true);
+  const attempt = options.lektorReviewed ? null : tighten(original, cases, options.phrases === true, options.exactForms === true);
   const tightened: Tightening | null = attempt && guardHolds(attempt.task, cases) ? attempt : guardHolds(original, cases) ? untouched : null;
   if (!tightened) return { task: original, changes: [] };
   let task: OpenTask = { ...tightened.task, required: tightened.task.required.map((g) => [...g]), bonus: tightened.task.bonus.map((g) => [...g]) };
