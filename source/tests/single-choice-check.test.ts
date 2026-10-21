@@ -49,6 +49,14 @@ test("ciklus 8: helyesírási kérdésnél a csak kis- és nagybetűben eltérő
   assert.equal(singleChoiceProblems({ prompt: "Melyik írás helyes?", options: ["Eger", "Eger.", "eger"], correctIndex: 0 }).length, 1);
 });
 
+test("ciklus 8: programkód-azonosítónál (camelCase) a betűméret kérdéstől függetlenül számít (mért: VS Code-anyag)", async () => {
+  assert.deepEqual(singleChoiceProblems({ prompt: "Melyik a kulcs neve a konfigurációban?", options: ["apiKey", "ApiKey", "api_key"], correctIndex: 0 }), []);
+  const { experienceQuizSchema } = await import("../shared/lesson-experience");
+  assert.ok(experienceQuizSchema.safeParse({ id: "q", sectionIndex: 0, coversConceptIds: ["c"], question: "Melyik a kulcs neve?", options: ["apiKey", "ApiKey", "api_key"], correctIndex: 0, feedbackPerOption: ["a", "b", "c"] }).success);
+  // A nem azonosító betűméret-változat továbbra is ismétlődés.
+  assert.equal(singleChoiceProblems({ prompt: "Melyik gyümölcs?", options: ["Alma", "alma", "Répa"], correctIndex: 0 }).length, 1);
+});
+
 test("review #361: a „leírás” és a „helyesen jellemzi” NEM helyesírási kontextus — ott a betűméret-változat ismétlődés", () => {
   const pair = ["Élőlény, tárgy vagy fogalom neve", "élőlény, tárgy vagy fogalom neve", "Cselekvést jelent"];
   assert.equal(singleChoiceProblems({ prompt: "Melyik leírás illik a főnévre?", options: pair, correctIndex: 0 }).length, 1);
@@ -63,14 +71,14 @@ test("review #361: a gyakori helyesírási kérdésformák felismerése; a katal
   const { itemFingerprint } = await import("../server/catalog/catalog-item");
   const { isPlayableQuestion } = await import("../shared/game-quiz-contract");
   const spelling = { kind: "quiz" as const, provenance: "p", prompt: "Melyik az Eger szó helyes -i toldalékos alakja?", options: ["Egri", "egri", "egeri"], correctIndex: 1 };
-  assert.ok(!verifyItem(spelling).problems.includes("ismétlődő válaszlehetőség"), JSON.stringify(verifyItem(spelling).problems));
+  assert.ok(!verifyItem({ ...spelling, fingerprint: "f1" }).problems.includes("ismétlődő válaszlehetőség"), JSON.stringify(verifyItem({ ...spelling, fingerprint: "f1" }).problems));
   assert.ok(isPlayableQuestion({ prompt: spelling.prompt, options: spelling.options, correctIndex: 1 }), "a játék-kvíz játszható");
   // Két, csak betűméretben eltérő helyesírási tétel nem vonódik össze a katalógusban.
   const other = { ...spelling, options: ["EGRI", "egri", "egeri"] };
   assert.notEqual(itemFingerprint(spelling), itemFingerprint(other));
   // Nem helyesírási kérdésnél a régi szabály marad.
   const fruit = { kind: "quiz" as const, provenance: "p", prompt: "Melyik gyümölcs?", options: ["Alma", "alma", "Répa"], correctIndex: 0 };
-  assert.ok(verifyItem(fruit).problems.includes("ismétlődő válaszlehetőség"));
+  assert.ok(verifyItem({ ...fruit, fingerprint: "f2" }).problems.includes("ismétlődő válaszlehetőség"));
   assert.equal(itemFingerprint(fruit), itemFingerprint({ ...fruit, options: ["ALMA", "alma", "Répa"] }));
 });
 

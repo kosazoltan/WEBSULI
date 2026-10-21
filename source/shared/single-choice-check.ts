@@ -1,5 +1,5 @@
 import { ATOM, EXPR, SIGN, atomValue, evaluateExpression, normalizeSignedParens } from "./arithmetic-expression";
-import { isSpellingPrompt } from "./option-key";
+import { caseMatters, isSpellingPrompt } from "./option-key";
 
 /**
  * Spec 2026-09-29 (docs/specs/2026-09-29-egy-helyes-valasz.md), döntés 1: determinisztikus egy-helyes-válasz őr.
@@ -76,7 +76,7 @@ function duplicateProblems(prompt: string, options: readonly string[]): string[]
   const spelling = isSpellingPrompt(prompt);
   const compareValues = !ABOUT_FORM.test(norm(prompt)) && !NEGATED_EQUALITY.test(norm(prompt)) && !options.some((o) => AGGREGATE_OPTION.test(norm(o)));
   options.forEach((option, i) => {
-    const key = spelling ? caseKey(option) : textKey(option);
+    const key = caseMatters(option, spelling) ? caseKey(option) : textKey(option);
     const value = compareValues ? numberOf(option) : null;
     const equality = compareValues && value === null ? trueEqualityValue(option) : null;
     const twin = byText.get(key) ?? (value === null ? undefined : byValue.get(value)) ?? (equality === null ? undefined : byEquality.get(equality));

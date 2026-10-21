@@ -12,9 +12,16 @@ const SPELLING_CONTEXT = /helyesír|kezdőbetű|nagybetű|kisbetű|írásmód|to
 export const isSpellingPrompt = (prompt: string | undefined): boolean =>
   SPELLING_CONTEXT.test((prompt ?? "").normalize("NFC").toLocaleLowerCase("hu"));
 
-/** Review #361: a katalógus és a játék-kvíz kulcsa — helyesírási kérdésnél betűméret-megtartó, különben a hívó régi `fold`-ja. */
-export const optionKeyFor = (spelling: boolean, fold: (s: string) => string) => (option: string): string =>
-  spelling ? option.normalize("NFC").replace(/\s+/g, " ").trim() : fold(option);
+/**
+ * Spec 2026-10-21-ciklus8 (mért: VS Code-anyag, „apiKey” / „ApiKey”): a programkód-azonosító (szó belsejében kis után nagybetű, camelCase)
+ * betűmérete is tartalmi — az ilyen opció kulcsa kérdéstől függetlenül betűméret-megtartó. Az „Alma” / „alma” továbbra is ismétlődés.
+ */
+const CODE_IDENTIFIER = /\p{Ll}\p{Lu}/u;
+export const caseMatters = (option: string, spelling: boolean): boolean => spelling || CODE_IDENTIFIER.test(option);
 
-/** A hívó saját normalizálása UTÁN: helyesírási kérdésnél nincs kisbetűsítés, különben a régi kisbetűsítés (a szabály sehol nem szigorodik). */
-export const foldCaseUnlessSpelling = (option: string, spelling: boolean): string => (spelling ? option : option.toLocaleLowerCase("hu"));
+/** Review #361: a katalógus és a játék-kvíz kulcsa — ahol a betűméret számít, betűméret-megtartó, különben a hívó régi `fold`-ja. */
+export const optionKeyFor = (spelling: boolean, fold: (s: string) => string) => (option: string): string =>
+  caseMatters(option, spelling) ? option.normalize("NFC").replace(/\s+/g, " ").trim() : fold(option);
+
+/** A hívó saját normalizálása UTÁN: ahol a betűméret számít, nincs kisbetűsítés, különben a régi kisbetűsítés (a szabály sehol nem szigorodik). */
+export const foldCaseUnlessSpelling = (option: string, spelling: boolean): string => (caseMatters(option, spelling) ? option : option.toLocaleLowerCase("hu"));

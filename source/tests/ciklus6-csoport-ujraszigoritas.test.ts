@@ -50,7 +50,8 @@ test("review #357: a tiltás körökön átível (checkpoint), és a builder-be�
 });
 
 test("ciklus6: a célzott újragyártás anyagai és utasításai rögzítettek; egyszer fut; a pontozási szabály a banképítőhöz is eljut", () => {
-  assert.deepEqual(Object.keys(LEGACY_REDO).sort(), [FONEV, TULAJDONSAG].sort());
+  // Spec 2026-10-21-ciklus8 (dokumentált bővítés): + a VS Code-anyag és Az Erdő.
+  assert.deepEqual(Object.keys(LEGACY_REDO).sort(), [FONEV, TULAJDONSAG, "3j1DnOnG1Lts-YPCic70R", "02d9aecf-65cc-4b73-af57-6f1009211736"].sort());
   assert.match(LEGACY_REDO[FONEV], /CSAK a kérdezett rag pontos alakját/);
   assert.match(LEGACY_REDO[TULAJDONSAG], /a mintaválasz többi szava .* soha ne legyen kötelező/);
   assert.equal(shouldRedo({ status: "error", payload: { htmlFileId: FONEV } }), true);
