@@ -77,6 +77,11 @@ export type CalibrationOptions = {
    */
   phrases?: boolean;
   /**
+   * Spec 2026-10-21-ciklus7: magyar (nem idegen nyelvi) leckén a CSAK toldalékban eltérő hibás próba (pl. „anyának” az „anyával” helyett —
+   * a pontozó toldaléktűrő) egyszavas pontos-alak csoporttal (`requiredPhrases`) különböztethető meg; egy szónál a szórend nem számít.
+   */
+  exactForms?: boolean;
+  /**
    * Spec 2026-10-21-ciklus6 + review #357: a lektor által kifogásolt feladatra SEMMILYEN gépi szigorítás (szó, csoport, kifejezés, sorrend)
    * nem fut — különben a lektor által önkényesnek ítélt követelmény a javítás után azonnal visszakerül (mért: „Tulajdonságot kifejező
    * szavak”, 2× elbukott). A lazítás (helyes válasz visszaengedése) továbbra is fut.
@@ -91,7 +96,7 @@ const AT_LEAST_TWO = (n: number) => Math.min(2, n);
  * semmit sem tett. A minta egy olyan szava lesz új kötelező csoport (igazolt rokon alakjaival), amely MINDEN teljes pontos helyes válaszban
  * megvan, a hibás válaszban nincs; csak ha utána a minta és a helyesek teljes pontosak maradnak, a hibás pedig nem. Különben `null`.
  */
-function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tightening | null {
+function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false, exactForms = false): Tightening | null {
   if (evaluateOpenAnswer(task.sample, task).state !== "ok") return null;
   const okCorrect = cases.correct.filter((a) => evaluateOpenAnswer(a, task).state === "ok");
   // Bizonyíték nélkül nem szigorítunk: legalább 2 (kevesebb esetnél mind) teljes pontos helyes válasz kell, különben a „minden helyesben megvan” üres igazság.
@@ -162,6 +167,33 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
       fixed = true;
       break;
     }
+    // Spec 2026-10-21-ciklus7: magyar leckén a csak toldalékban eltérő hibás próba — a minta egy szavának pontos alakja (a helyes próbák
+    // pontos alakjaival VAGY-csoportban) kerül a requiredPhrases-be, ha a hibásban a szó töve megvan, de a pontos alakja nincs.
+    const exactRoom = (current.requiredPhrases?.length ?? 0) < PHRASE_GROUPS_MAX;
+    for (const word of fixed || !exactForms || !exactRoom || !isBlocking ? [] : raw) {
+      if (word.length > PHRASE_MAX_LENGTH) continue; // a séma 80 karakteres korlátja (review #359)
+      const exact = { requiredPhrases: [[word]] };
+      if (missingPhrases(wrong.text, exact).length === 0) continue; // a hibásban a pontos alak is megvan
+      // Review #359: a pontozó elütéstűrő — a toldalékeltérést elütéstűrés NÉLKÜL, közös tővel kell igazolni („világ” ≠ „virág”).
+      if (!sharesStem(wrong.text, word)) continue;
+      // Review #359: a minta szavát tartalmazó kötelező csoport más tövű, helyes próbákkal igazolt alternatívái is (pl. „késsel”, „apával”).
+      const siblings = current.required.find((g) => g.some((alt) => normalizeAnswerV2(alt) === normalizeAnswerV2(word))) ?? [];
+      const forms = [...new Set([word, ...okCorrect.flatMap((a) => (missingPhrases(a, exact).length
+        ? [...relatedForms([word], a), ...siblings.filter((alt) => !/\s/.test(alt.trim()) && missingPhrases(a, { requiredPhrases: [[alt]] }).length === 0)] : []))])]
+        .filter((f) => f.length <= PHRASE_MAX_LENGTH);
+      const group = { requiredPhrases: [forms] };
+      if (missingPhrases(wrong.text, group).length === 0) continue; // egy helyes próba alakja a hibás alak — nem különböztet meg
+      if (okCorrect.some((a) => missingPhrases(a, group).length > 0)) continue;
+      const next: OpenTask = { ...current, requiredPhrases: [...(current.requiredPhrases ?? []), forms] };
+      if (evaluateOpenAnswer(next.sample, next).state !== "ok") continue;
+      if (okCorrect.some((a) => evaluateOpenAnswer(a, next).state !== "ok")) continue;
+      if (evaluateOpenAnswer(wrong.text, next).state === "ok") continue;
+      current = next;
+      addedPhrases.push(forms);
+      changes.push(`szigorítás (pontos alak): + requiredPhrases ${JSON.stringify(forms)} (megkülönbözteti a toldalékban eltérő hibás (${wrong.kind}) választ)`);
+      fixed = true;
+      break;
+    }
     // Spec 2026-10-20-s6-fogalom-sorrend (S6b): ha sem szó, sem kifejezés nem különböztet meg (ugyanazok a fogalmak, fordított sorrendben:
     // „először szorzunk, utána emelünk négyzetre”), két kötelező csoport egyszavas alternatíváiból a minta sorrendje lesz a szabály — ha
     // minden teljes pontos helyes válasz ugyanígy tartja, a hibás mindkét fogalmat tartalmazza, de fordítva. Minden nyelven (a sorrend a
@@ -189,6 +221,22 @@ function tighten(task: OpenTask, cases: AnswerKeyCases, phrases = false): Tighte
  * S6b: sorrendi jelöltpárok a kötelező csoportokból — csoportonként az EGYSZAVAS alternatívák (a séma S6a-szabálya, review #346), közös
  * alternatíva nélkül; az irány a minta első előfordulásaiból. A minta sorrendjében, a korábbi csoportpár előre.
  */
+/** Review #359: a requiredPhrases tagjának sémahatára. */
+const PHRASE_MAX_LENGTH = 80;
+/**
+ * Review #359: elütéstűrés nélküli toldalékeltérés — a hibás válasz valamely szava a minta szavával közös tövű (a közös előtag legalább a
+ * rövidebb szó hossza − 3, de legalább 3 betű), és nem azonos vele. Így a „világ” / „virág” (más szó, 2 közös betű) nem számít toldaléknak.
+ */
+function sharesStem(text: string, word: string): boolean {
+  const w = word.toLowerCase();
+  return (text.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).some((t) => {
+    if (t === w) return false;
+    let k = 0;
+    while (k < t.length && k < w.length && t[k] === w[k]) k++;
+    return k >= Math.max(3, Math.min(t.length, w.length) - 3);
+  });
+}
+
 function orderCandidates(task: OpenTask): string[][][] {
   const single = task.required.map((g) => [...new Set(g.filter((a) => canonicalAlternative(a).split(" ").filter(Boolean).length === 1))]);
   const out: string[][][] = [];
@@ -266,7 +314,7 @@ export function calibrateRubric(original: OpenTask, cases: AnswerKeyCases | null
   // Review #347: az őr teljesülésekor is fut (a J1 miatt nem blokkoló, csak sorrendben eltérő hibás próba sorrendi szigorítása); ha ez nem
   // sikerül, az eredeti rubrika marad a kiinduló pont.
   const untouched: Tightening = { task: original, changes: [], tightened: [], tightenedPhrases: [], tightenedOrder: false };
-  const attempt = options.lektorReviewed ? null : tighten(original, cases, options.phrases === true);
+  const attempt = options.lektorReviewed ? null : tighten(original, cases, options.phrases === true, options.exactForms === true);
   const tightened: Tightening | null = attempt && guardHolds(attempt.task, cases) ? attempt : guardHolds(original, cases) ? untouched : null;
   if (!tightened) return { task: original, changes: [] };
   let task: OpenTask = { ...tightened.task, required: tightened.task.required.map((g) => [...g]), bonus: tightened.task.bonus.map((g) => [...g]) };

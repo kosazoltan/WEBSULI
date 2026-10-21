@@ -4,7 +4,7 @@ import { calibrateRubric } from "../shared/answer-key-calibrate";
 import type { OpenTask } from "../shared/lesson-experience";
 import type { AnswerKeyCases } from "../shared/answer-key-tests";
 import { scoringRulesOf, SCORING_RULE_MARK } from "../shared/scoring-rules";
-import { LEGACY_REDO, legacySource, retryPayload, shouldRedo } from "../server/studio/legacy-migration";
+import { LEGACY_REDO, LEGACY_REDO_ROUND, legacySource, retryPayload, shouldRedo } from "../server/studio/legacy-migration";
 import { calibrationOptionsFor, hydrateCheckpoint, rememberLektorReviewed } from "../server/studio/experience-builder";
 
 /* Spec 2026-10-21-ciklus6 (+ review #357): a lektor által kifogásolt feladat gépi szigorítás nélkül + a két elakadt anyag célzott újragyártása. */
@@ -42,8 +42,8 @@ test("review #357: a tiltás körökön átível (checkpoint), és a builder-be�
   assert.deepEqual(round2.lektorReviewedIds, ["A", "B"]);
   // Más módszertan-verziójú (elavult) checkpoint nem hoz át semmit.
   assert.equal(hydrateCheckpoint({ hash: "regi", parts: {}, lektorReviewedIds: ["A"] }).lektorReviewedIds, undefined);
-  assert.deepEqual(calibrationOptionsFor("A", all, false), { phrases: false, lektorReviewed: true });
-  assert.deepEqual(calibrationOptionsFor("C", all, true), { phrases: true, lektorReviewed: false });
+  assert.deepEqual(calibrationOptionsFor("A", all, false), { phrases: false, exactForms: true, lektorReviewed: true });
+  assert.deepEqual(calibrationOptionsFor("C", all, true), { phrases: true, exactForms: false, lektorReviewed: false });
   // A teljes út: a builder-beállítással kalibrált, korábban kifogásolt feladat sem kap csoportot.
   const viaBuilder = calibrateRubric({ ...task(), id: "A" }, cases, calibrationOptionsFor("A", all, false));
   assert.ok(!viaBuilder.changes.some((c) => c.startsWith("szigorítás")));
@@ -54,10 +54,16 @@ test("ciklus6: a célzott újragyártás anyagai és utasításai rögzítettek;
   assert.match(LEGACY_REDO[FONEV], /CSAK a kérdezett rag pontos alakját/);
   assert.match(LEGACY_REDO[TULAJDONSAG], /a mintaválasz többi szava .* soha ne legyen kötelező/);
   assert.equal(shouldRedo({ status: "error", payload: { htmlFileId: FONEV } }), true);
-  assert.equal(shouldRedo({ status: "error", payload: { htmlFileId: FONEV, redo: true } }), false, "egyszer");
+  // Spec 2026-10-21-ciklus7: körönként egyszer — az 1. kör (redo: true) után a 2. kör még jár, utána nem.
+  assert.equal(shouldRedo({ status: "error", payload: { htmlFileId: FONEV, redo: true } }), true, "a 2. kör még jár");
+  assert.equal(shouldRedo({ status: "error", payload: { htmlFileId: FONEV, redo: LEGACY_REDO_ROUND } }), false, "körönként egyszer");
   assert.equal(shouldRedo({ status: "done", payload: { htmlFileId: TULAJDONSAG } }), false);
   assert.equal(shouldRedo({ status: "error", payload: { htmlFileId: "mas-anyag" } }), false);
-  assert.equal(retryPayload({ htmlFileId: FONEV, redo: true, requeued: true }, "r2", 2, 1).redo, true);
+  assert.equal(retryPayload({ htmlFileId: FONEV, redo: LEGACY_REDO_ROUND, requeued: true }, "r2", 2, 1).redo, LEGACY_REDO_ROUND);
+  // Review #359: a régi `redo: true` (1. kör) az újrapróbán is 1. kör marad — a 2. kör továbbra is jár.
+  const legacy = retryPayload({ htmlFileId: FONEV, redo: true, requeued: true }, "r2", 2, 1);
+  assert.equal(legacy.redo, true);
+  assert.equal(shouldRedo({ status: "error", payload: legacy }), true);
   const src = legacySource({ title: "A főnév", content: "<p>A főnév</p>" }, LEGACY_REDO[FONEV]);
   // A gyártási utasításból a banképítő pontosan a pontozási szabályt kapja (a forrásolvasó a teljes utasítást).
   assert.equal(scoringRulesOf(src.instructions), `${SCORING_RULE_MARK} ${LEGACY_REDO[FONEV]}`);
