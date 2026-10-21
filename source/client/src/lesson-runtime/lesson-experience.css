@@ -84,6 +84,8 @@
 .fusion-dialog p { color: #435e79; }
 @media (max-width: 650px) { .fusion-method-grid { grid-template-columns: 1fr; } .fusion-tabs button { flex-direction: column; gap: 2px; } [data-experience] > article { padding: 12px; } .fusion-tabs { gap: 1px; padding: 4px; } .fusion-result { padding: 18px; } }
 @media (max-height: 480px) and (orientation: landscape) { .fusion-tabs button { min-height: 44px; flex-direction: row; } }
+/* Review #360: hat fül (nyelvlecke) keskeny kijelzőn két sorban. */
+@media (max-width: 480px) { .fusion-tabs[data-tabs="6"] { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* Switching tabs must not restart an opacity-zero entrance on readable content. */
 [data-experience] .lesson-block, [data-experience] .lesson-hero, [data-experience] figure[data-anim] { animation: none; }

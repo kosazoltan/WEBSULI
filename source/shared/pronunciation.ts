@@ -25,8 +25,16 @@ export function spokenSimilarity(target: string, heard: string): number {
   return 1 - levenshtein(t, h) / Math.max(t.length, h.length);
 }
 
-/** ✅ egyezés (≥ 0,92) · 🟡 közeli (≥ 0,7) · 🔁 próbáld újra. */
+/** Review #360: a cél minden szava elhangzott-e (szavanként legalább 0,75-ös hasonlóságú hallott szóval) — kihagyott szóval nincs ✅. */
+export function allWordsSpoken(target: string, heard: string): boolean {
+  const heardWords = normalizeSpoken(heard).split(" ").filter(Boolean);
+  return normalizeSpoken(target).split(" ").filter(Boolean)
+    .every((w) => heardWords.some((h) => h === w || 1 - levenshtein(w, h) / Math.max(w.length, h.length) >= 0.75));
+}
+
+/** ✅ egyezés (≥ 0,92 ÉS minden szó elhangzott) · 🟡 közeli (≥ 0,7) · 🔁 próbáld újra. */
 export function pronunciationVerdict(target: string, heard: string): PronunciationVerdict {
   const similarity = spokenSimilarity(target, heard);
-  return { state: similarity >= 0.92 ? "ok" : similarity >= 0.7 ? "close" : "retry", similarity };
+  const state = similarity >= 0.92 && allWordsSpoken(target, heard) ? "ok" : similarity >= 0.7 ? "close" : "retry";
+  return { state, similarity };
 }

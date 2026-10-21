@@ -121,7 +121,7 @@ const VERDICT_TEXT: Record<PronunciationVerdict["state"], string> = {
  * a hallott szöveg a célhoz mérve (✅ / 🟡 / 🔁). Beszédfelismerés nélkül (vagy megtagadott mikrofonnál) beviteli mező: a billentyűzet 🎤
  * gombjával bediktált szöveg ugyanúgy összevetődik — így minden telefonos böngészőben gyakorolható.
  */
-export function PronounceButton({ target, language }: { target: string; language: string }) {
+export function PronounceButton({ target, language, active = true }: { target: string; language: string; active?: boolean }) {
   const [supported] = useState(recognitionSupported);
   const [manual, setManual] = useState(false);
   const [typed, setTyped] = useState("");
@@ -129,6 +129,9 @@ export function PronounceButton({ target, language }: { target: string; language
   const [result, setResult] = useState<{ heard: string; verdict: PronunciationVerdict } | null>(null);
   const [message, setMessage] = useState("");
   const cancelRef = useRef<(() => void) | null>(null);
+  const stopRef = useRef<(() => void) | null>(null);
+  // Review #360: a rejtett (nem látható fülön lévő) gyakorló nem hallgathat tovább.
+  useEffect(() => { if (!active) cancelRef.current?.(); }, [active]);
   useEffect(() => () => { cancelRef.current?.(); }, []);
   const judge = (alternatives: string[]) => {
     const scored = alternatives.filter(a => a.trim()).map(heard => ({ heard, verdict: pronunciationVerdict(target, heard) }))
@@ -137,7 +140,8 @@ export function PronounceButton({ target, language }: { target: string; language
   };
   const start = () => {
     if (!supported) { setManual(true); return; }
-    if (listening) { cancelRef.current?.(); return; }
+    // Review #360: a tanuló leállítása befejezi (stop) a felismerést — a végső eredmény még kiértékelődik; az abort csak takarítás.
+    if (listening) { stopRef.current?.(); return; }
     const Constructor = recognitionConstructor();
     if (!Constructor) { setManual(true); return; }
     cancelActiveDictation?.();
@@ -150,6 +154,7 @@ export function PronounceButton({ target, language }: { target: string; language
       setListening(false);
     };
     cancelRef.current = cancel;
+    stopRef.current = () => { try { engine.stop(); } catch { cancel(); } };
     cancelActiveDictation = cancel;
     engine.lang = language;
     engine.interimResults = false;
@@ -161,7 +166,7 @@ export function PronounceButton({ target, language }: { target: string; language
       else if (e.error === "no-speech") setMessage("Nem hallottam semmit — nyomd meg újra, és mondd ki hangosan.");
       else { setManual(true); setMessage("A beszédfelismerés most nem érhető el — a billentyűzet 🎤 gombjával is bediktálhatod."); }
     };
-    engine.onend = () => { if (cancelRef.current === cancel) { cancelRef.current = null; if (cancelActiveDictation === cancel) cancelActiveDictation = null; } setListening(false); };
+    engine.onend = () => { if (cancelRef.current === cancel) { cancelRef.current = null; stopRef.current = null; if (cancelActiveDictation === cancel) cancelActiveDictation = null; } setListening(false); };
     setResult(null); setMessage("");
     try { engine.start(); setListening(true); }
     catch { cancel(); setManual(true); setMessage("A mikrofon most nem indítható — a billentyűzet 🎤 gombjával is bediktálhatod."); }

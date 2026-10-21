@@ -17,7 +17,7 @@ beszédfelismerést, a diktálás gomb nyom nélkül eltűnik; a felolvasás nem
    beszédfelismerés (pl. egyes gyártói böngészők), a gomb NEM tűnik el — egy beviteli mező jelenik meg „diktáld be a billentyűzet 🎤
    gombjával” útmutatással, és az összevetés ugyanúgy megtörténik (a telefonos billentyűzetek diktálása minden böngészőben működik).
 3. **Diktálás a feladatoknál:** nyelvleckén nyelvválasztó (az idegen nyelv / magyar); támogatás hiányában útmutató szöveg a gomb helyett.
-4. **Gyártás:** nyelvleckénél a szószedet a kiejtésgyakorló alapja — a bankszerződés legalább 12 elemet kér (minden tanított idegen
+4. **Gyártás:** nyelvleckénél a szószedet a kiejtésgyakorló alapja — a bankszerződés, a csomag-prompt és a csomag-ellenőrzés fejezetenként legalább 4 elemet kér (minden tanított idegen
    szó / kifejezés, példamondattal); a lecke-típus skill rögzíti a kiejtésgyakorlást.
 
 ## Nem-cél

@@ -2,11 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { SPEECH_BRIDGE_SCRIPT } from "../server/lib/speech-bridge";
-import { serializeResults } from "../client/src/lib/speech-bridge-host";
+import { acceptsBridgeMessage, hasFreshGesture, serializeResults } from "../client/src/lib/speech-bridge-host";
 
 /* Spec 2026-10-21-diktalas-hid: a kereszt-domaines tananyag-keret diktálása a főoldalon fut (a gyökérok javítása). */
 
-function frameContext(opts: { framed: boolean }) {
+function frameContext(opts: { framed: boolean; native?: unknown }) {
   const posted: Array<Record<string, unknown>> = [];
   const listeners: Array<(ev: { source: unknown; data: unknown }) => void> = [];
   const parent = { postMessage: (data: Record<string, unknown>) => posted.push(data) };
@@ -14,6 +14,7 @@ function frameContext(opts: { framed: boolean }) {
     addEventListener: (type: string, fn: (ev: { source: unknown; data: unknown }) => void) => { if (type === "message") listeners.push(fn); },
   };
   win.self = win;
+  if (opts.native) { win.SpeechRecognition = opts.native; win.webkitSpeechRecognition = opts.native; }
   win.top = opts.framed ? {} : win;
   win.parent = opts.framed ? parent : win;
   const timers: Array<() => void> = [];
@@ -56,8 +57,11 @@ test("diktálás-híd: a főoldal hibája látható hibaként ér vissza; idegen
   engine.start();
   fromParent({ type: "websuli-sr:error", id: posted[0].id, error: "not-allowed" });
   assert.deepEqual(errors, ["not-allowed"]);
-  const unframed = frameContext({ framed: false });
-  assert.equal(unframed.win.SpeechRecognition, undefined, "külön lapon a natív felismerés marad (a híd nem települ)");
+  // Review #360: külön lapon a böngésző SAJÁT felismerője érintetlen marad.
+  class Native {}
+  const unframed = frameContext({ framed: false, native: Native });
+  assert.equal(unframed.win.SpeechRecognition, Native);
+  assert.equal(unframed.win.webkitSpeechRecognition, Native);
 });
 
 test("diktálás-híd: ha nincs WebSuli-főoldal (nincs nyugta), nem ragad be — hibával lezárul", () => {
@@ -72,9 +76,46 @@ test("diktálás-híd: ha nincs WebSuli-főoldal (nincs nyugta), nem ragad be �
   assert.deepEqual(seen, ["error:service-not-allowed", "end"]);
 });
 
-test("diktálás-híd (főoldal): a felismerés eredménye klónozható alakban, a resultIndex-től", () => {
+test("review #360: nyugta előtti leállítás után a natív tartalék nem indul el később; az onend-beli újraindítás munkamenete megmarad", () => {
+  let nativeStarted = 0;
+  class Native { lang = ""; continuous = false; interimResults = false; maxAlternatives = 1; start() { nativeStarted++; } stop() {} abort() {} }
+  const { win, timers, posted, fromParent } = frameContext({ framed: true, native: Native });
+  const SR = win.SpeechRecognition as new () => Record<string, unknown> & { start(): void; stop(): void };
+  const engine = new SR();
+  const ends: string[] = [];
+  engine.onend = () => ends.push("end");
+  engine.start();
+  engine.stop();
+  timers.forEach((fn) => fn());
+  assert.equal(nativeStarted, 0, "a leállított kérés nem kapcsolja be később a mikrofont");
+  assert.deepEqual(ends, ["end"]);
+  // Újraindítás az onend-ben: az új munkamenet válaszai megérkeznek.
+  const again = new SR();
+  let restarted = false;
+  const results: string[] = [];
+  again.onend = () => { if (!restarted) { restarted = true; again.start(); } };
+  again.onresult = (e: { results: Array<Array<{ transcript: string }>> }) => results.push(e.results[0][0].transcript);
+  again.start();
+  const first = posted[posted.length - 1].id;
+  fromParent({ type: "websuli-sr:ack", id: first });
+  fromParent({ type: "websuli-sr:end", id: first });
+  const second = posted[posted.length - 1].id;
+  assert.notEqual(second, first);
+  fromParent({ type: "websuli-sr:ack", id: second });
+  fromParent({ type: "websuli-sr:result", id: second, resultIndex: 0, results: [{ isFinal: true, alternatives: [{ transcript: "megvan" }] }] });
+  assert.deepEqual(results, ["megvan"]);
+});
+
+test("diktálás-híd (főoldal): csak a saját keret, a várt originről; friss gesztus kell; a teljes eredménylista megy át", () => {
+  const frame = {};
+  assert.equal(acceptsBridgeMessage({ source: frame, origin: "https://anyag.example" }, frame, "https://anyag.example"), true);
+  assert.equal(acceptsBridgeMessage({ source: frame, origin: "https://idegen.example" }, frame, "https://anyag.example"), false, "a keret idegen originre navigált");
+  assert.equal(acceptsBridgeMessage({ source: {}, origin: "https://anyag.example" }, frame, "https://anyag.example"), false, "nem a saját keret");
+  assert.equal(hasFreshGesture({ isActive: true }), true);
+  assert.equal(hasFreshGesture({ isActive: false }), false, "egy korábbi kattintás nem elég");
+  assert.equal(hasFreshGesture(undefined), true, "ahol a böngésző nem méri");
   const alt = (t: string) => ({ transcript: t, confidence: 0.9 });
   const r1 = Object.assign([alt("első")], { isFinal: true });
   const r2 = Object.assign([alt("második"), alt("masodik")], { isFinal: false });
-  assert.deepEqual(serializeResults([r1, r2], 1), [{ isFinal: false, alternatives: [alt("második"), alt("masodik")] }]);
+  assert.deepEqual(serializeResults([r1, r2]), [{ isFinal: true, alternatives: [alt("első")] }, { isFinal: false, alternatives: [alt("második"), alt("masodik")] }]);
 });

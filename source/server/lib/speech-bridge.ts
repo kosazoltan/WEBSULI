@@ -33,13 +33,15 @@ export const SPEECH_BRIDGE_SCRIPT = `<script>/* WEBSULI DIKTÁLÁS-HÍD */(funct
     Bridged.prototype._finish = function(error) {
       if (this._ended) return;
       this._ended = true;
+      // Review #360: a munkamenet az 'end' ELŐTT törlődik — az onend-ben újraindított felismerés új munkamenete így megmarad.
+      if (this._id && sessions[this._id] === this) delete sessions[this._id];
       if (error) this._emit('error', { error: error, message: error });
       this._emit('end');
-      if (this._id) delete sessions[this._id];
     };
     Bridged.prototype.start = function() {
       var self = this;
-      this._ended = false;
+      // Review #360: indításonként tiszta állapot (az újrahasznált felismerő korábbi híd- / natív állapota nem öröklődik).
+      this._ended = false; this._bridged = false; this._native = null; this._cancelled = false;
       this._id = 'sr' + (++seq) + '-' + Date.now();
       sessions[this._id] = this;
       var lang = this.lang || document.documentElement.lang || 'hu-HU';
@@ -47,7 +49,7 @@ export const SPEECH_BRIDGE_SCRIPT = `<script>/* WEBSULI DIKTÁLÁS-HÍD */(funct
       // Ha a szülő nem WebSuli (nincs híd), ne ragadjon be: a natív felismerés próbája, különben hiba.
       var id = this._id;
       setTimeout(function() {
-        if (sessions[id] === self && !self._bridged) {
+        if (sessions[id] === self && !self._bridged && !self._cancelled) {
           delete sessions[id];
           if (NativeSR) { try { var n = new NativeSR(); n.lang = lang; n.continuous = self.continuous; n.interimResults = self.interimResults; n.maxAlternatives = self.maxAlternatives;
             n.onresult = function(e) { self._emit('result', e); }; n.onerror = function(e) { self._emit('error', e); }; n.onend = function() { self._finish(); }; n.onstart = function() { self._emit('start'); };
@@ -56,8 +58,15 @@ export const SPEECH_BRIDGE_SCRIPT = `<script>/* WEBSULI DIKTÁLÁS-HÍD */(funct
         }
       }, 2500);
     };
-    Bridged.prototype.stop = function() { if (this._native) { try { this._native.stop(); } catch (e) {} return; } if (this._id) window.parent.postMessage({ type: 'websuli-sr:stop', id: this._id }, '*'); };
-    Bridged.prototype.abort = function() { if (this._native) { try { this._native.abort(); } catch (e) {} return; } if (this._id) window.parent.postMessage({ type: 'websuli-sr:abort', id: this._id }, '*'); };
+    Bridged.prototype._halt = function(kind) {
+      if (this._native) { try { this._native[kind](); } catch (e) {} return; }
+      if (!this._id || this._ended) return;
+      window.parent.postMessage({ type: 'websuli-sr:' + kind, id: this._id }, '*');
+      // Review #360: nyugta előtti leállítás — a függő natív tartalék nem indulhat el később; a munkamenet lezárul.
+      if (!this._bridged) { this._cancelled = true; this._finish(); }
+    };
+    Bridged.prototype.stop = function() { this._halt('stop'); };
+    Bridged.prototype.abort = function() { this._halt('abort'); };
     window.addEventListener('message', function(ev) {
       if (ev.source !== window.parent) return;
       var d = ev.data || {};

@@ -363,6 +363,8 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
             stopActive();
             if (wasSame) return;
           }
+          // Review #360: új próbálkozáskor a korábbi hibaüzenet eltűnik.
+          if (btn.__websuliNote) btn.__websuliNote.textContent = '';
           recognition = new SR();
           recognition.lang = document.documentElement.lang || 'hu-HU';
           recognition.interimResults = false;
@@ -377,6 +379,7 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
             for (var i = ev.resultIndex; i < ev.results.length; i++) {
               if (ev.results[i].isFinal) {
                 insertText(field, ev.results[i][0].transcript.trim());
+                if (btn.__websuliNote) btn.__websuliNote.textContent = '';
               }
             }
           };
@@ -494,11 +497,13 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
   if (isFullHtmlDocument) {
     // CRITICAL: sandboxLocalStorageFix MUST run EARLY (before ANY user scripts)
     // Inject it RIGHT AFTER <head> opening tag to prevent DOMException
-    const headOpenIndex = userHtml.toLowerCase().indexOf('<head>');
+    // Review #360: attribútumos nyitó head-tag (<head lang="en">) is — különben a diktálás-híd kimaradna.
+    const headOpenMatch = /<head(?:\s[^>]*)?>/i.exec(userHtml);
+    const headOpenIndex = headOpenMatch ? headOpenMatch.index : -1;
     let htmlWithFix = userHtml;
 
-    if (headOpenIndex !== -1) {
-      const insertPosition = headOpenIndex + '<head>'.length;
+    if (headOpenMatch) {
+      const insertPosition = headOpenIndex + headOpenMatch[0].length;
       htmlWithFix = userHtml.slice(0, insertPosition) + sandboxLocalStorageFix + SPEECH_BRIDGE_SCRIPT + MATERIAL_CAPTURE_SCRIPT + userHtml.slice(insertPosition);
     } else {
       // No <head> found - create one and inject fix

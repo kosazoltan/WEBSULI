@@ -35,6 +35,9 @@ export function bankStaticPrefix(): string {
   return `${roleSkillBlock("bank")}\n${LESSON_METHOD_CONTRACT}\n${OPEN_ANSWER_RULES_HU}`;
 }
 
+/** Spec 2026-10-21-nyelvlecke-kiejtes: a nyelvlecke csomagjának szószedet-minimuma (a kiejtésgyakorló alapja). */
+export const GLOSSARY_MIN_PER_PACKET = 4;
+
 export type ExperienceCheckpoint = { hash: string; parts: Record<string, unknown>; reviewedHashes?: Record<string, string>;
   /** Review #357: a lektor által valaha kifogásolt feladat-azonosítók — a gépi szigorítás tiltása a későbbi körökben is megmarad. */
   lektorReviewedIds?: string[] };
@@ -541,6 +544,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       const local = experiencePacketSchema.safeParse({ version: LESSON_METHOD_VERSION, theme: "ocean", ...packet, scoringVersion: scoringVersionFor(packet.tasks), bankPlan: { units: [unit], taskRound: Math.min(plan.taskRound, packet.tasks.length), quizRound: Math.min(plan.quizRound, packet.quiz.length) }, language });
       const problems = local.success ? [] : local.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       problems.push(...gateQuestionProblems([...before.methods, ...packet.methods]));
+      // Spec 2026-10-21-nyelvlecke-kiejtes (review #360): nyelvleckén a csomag szószedete a kiejtésgyakorló alapja — legalább 4 elem.
+      if (language && (packet.glossary?.length ?? 0) < GLOSSARY_MIN_PER_PACKET) problems.push(`glossary: nyelvleckén legalább ${GLOSSARY_MIN_PER_PACKET} szószedet-elem kell (most ${packet.glossary?.length ?? 0}) — a fejezet tanított idegen szavai / kifejezései, példamondattal.`);
       problems.push(...quizCorrectIndexProblems(packet.quiz));
       problems.push(...arithmeticClaimProblems(packet));
       // Spec 2026-09-29 (egy-helyes-valasz): pontosan egy helyes opció — a kvízben és a választós módszerben is.
@@ -628,7 +633,7 @@ A csomag kötelező módszerei (ismétlődő típusnál külön kérdésekkel): 
 Nyílt feladat mezői: id,sectionIndex,coversConceptIds,q,required:string[][] (szinonimacsoportok),bonus:string[][],minWords,needsSentence,sample,mode; számolós feladatnál typedAnswers:[{part,kind,value,unit?,form?}]; betűs (algebrai) végeredménynél kind:"polynomial", value pl. "x² + 10x + 25", form:"expanded" (kifejtés) vagy "factored" (szorzattá alakítás) — a tagokat NE bontsd required-csoportokba; „N példát” kérő feladatnál requiredDistinct:[{category,from:string[][],count}]; nyelvtani / idegen nyelvi alak- vagy szórend-feladatnál requiredPhrases:string[][] (sorrendérzékeny, pontos kifejezések a sample szövegéből, pl. [["there is a sofa"],["there are many chairs"]]); sorrendi / műveleti sorrend feladatnál requiredOrder:string[][] (2–4 fogalomcsoport a kötelező sorrendben, pl. [["négyzetre","négyzet"],["szorzunk","szoroz"]]). A rubrika és a pontozás szabályai: A NYÍLT FELADAT PONTOZÓJA (rendszerutasítás). A sample természetes, teljes válasz a kérdésre, amely a saját rubrikán teljes pontot ér; minden required csoportban a sample-ben ténylegesen használt alak is szerepeljen (["mag","magra"]). A required csoportok között ÉS, egy csoporton belül VAGY kapcsolat van; a bonus nem helyettesít kötelező csoportot; ne kérj tetszőleges számú példát egy nagyobb halmazból önkényes mintafelsorolással (arra a requiredDistinct való). Az összes fogalmat fedje le; needsSentence csak valódi mondatfeladatnál.
 ${reviewBase ? `TARTALMI LEKTORI JAVÍTÁS: csak ezek az ID-k módosíthatók: ${JSON.stringify([...allowedReviewIds!])}. Ezek kérdését és hibás rubrikáját a forrás szerint összhangba hozhatod; a nem érintett tételeket a program változatlanul megőrzi, azokat ne küldd vissza.` : `A javított required minden korábbi csoportot külön őrizzen meg, annak összes korábbi alakjával. Új szinonimát hozzáadhatsz; csoportot vagy alakot törölni, két kötelező csoportot összevonni tilos. Ezt a program is ellenőrzi. Hibajavításnál a megnevezett csoport jelentését és a kérdés követelményeit őrizd meg; ne töröld a hiányzó fogalmat.${bindingRepairIds.size ? ` Kivétel: a bizonyítottan csomaghatársértő feladatok (${JSON.stringify([...bindingRepairIds])}) kérdését, mintáját és hibás rubrikáját az engedélyezett tanítás szerint együtt javítsd; ezeknél a hibás követelmény cserélhető.` : ""}`}
 Kvíz mezői: id,sectionIndex,coversConceptIds:[egyetlen ID],intent,question,options (3 vagy 4 különböző),correctIndex,feedbackPerOption (minden opcióhoz magyarázat); minden fogalomhoz egy intent=recall és egy intent=apply. Felidézés és valódi alkalmazás külön kérdés, ne csak számot cserélj!
-${language ? `Nyelv: ${language}. glossary: a csomag ténylegesen tanított szavai, mind {word,translation,partOfSpeech,example,exampleTranslation}; legalább egy elem.` : "glossary: []."}
+${language ? `Nyelv: ${language}. glossary: a csomag ténylegesen tanított szavai, mind {word,translation,partOfSpeech,example,exampleTranslation}; legalább 4 elem (a kiejtésgyakorló alapja: meghallgatás + kimondás).` : "glossary: []."}
 Ábrára, rajzra, „az ábrán látható” részletre NE hivatkozz: a csomag a tanítás szövegéből épül, az ábrát nem látod.
 Korábbi kérdések és kapukérdések, ne ismételd (a program a műveleti jelet is figyeli, a „8 : 2” és a „8 · 2” különböző): ${JSON.stringify({ tasks: tasks.map(t => t.q), quiz: quiz.map(q => q.question), gates: methods.filter(m => m.kind === "gate").map(m => m.prompt) })}
 ${errors ? `Az előző válasz hibái: ${errors}.

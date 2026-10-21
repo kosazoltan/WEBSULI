@@ -83,7 +83,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   useEffect(() => () => { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }, [tab]);
   const seconds = (round: typeof taskState.round) => Math.max(0, Math.floor(((round.finishedAt ?? Date.now()) - round.startedAt) / 1000));
   return <div className="fusion-view" data-quiet={quiet} data-quiz-guided={false}>
-    <nav className="fusion-tabs" role="tablist" aria-label="A tananyag oldalai">{tabs.map(({ id, label, icon: Icon }, i) => <button key={id} id={`${prefix}-fusion-tab-${id}`} role="tab" aria-selected={tab === id} aria-controls={`${prefix}-fusion-panel-${id}`} tabIndex={tab === id ? 0 : -1} onClick={() => changeTab(id)} onKeyDown={event => {
+    <nav className="fusion-tabs" role="tablist" aria-label="A tananyag oldalai" data-tabs={tabs.length}>{tabs.map(({ id, label, icon: Icon }, i) => <button key={id} id={`${prefix}-fusion-tab-${id}`} role="tab" aria-selected={tab === id} aria-controls={`${prefix}-fusion-panel-${id}`} tabIndex={tab === id ? 0 : -1} onClick={() => changeTab(id)} onKeyDown={event => {
       if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) {
         event.preventDefault();
         const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (i + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length;
@@ -104,7 +104,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
       <section className="lesson-block fusion-glossary"><h2>Szószedet · hallgasd és mondd utánam!</h2>
         <p className="fusion-intro">Nyomd meg a <strong>Meghallgatás</strong> gombot, ismételd el hangosan, majd a <strong>Mondd ki!</strong> gombbal ellenőrizd a kiejtésed.</p>
         <label className="fusion-label">Felolvasás sebessége: {rate.toFixed(2)}×<input type="range" min="0.5" max="1.2" step="0.05" value={rate} onChange={ev => setRate(Number(ev.target.value))} /></label>
-        {e.glossary.map(entry => <article key={entry.word}><h3 lang={e.language}>{entry.word}</h3><p>{entry.translation} · {entry.partOfSpeech}</p><div className="fusion-say"><SpeakButton text={entry.word} language={e.language!} rate={rate} /><PronounceButton target={entry.word} language={e.language!} /></div><p lang={e.language}>{entry.example}</p><p>{entry.exampleTranslation}</p><div className="fusion-say"><SpeakButton text={entry.example} language={e.language!} rate={rate} /><PronounceButton target={entry.example} language={e.language!} /></div></article>)}
+        {e.glossary.map(entry => <article key={entry.word}><h3 lang={e.language}>{entry.word}</h3><p>{entry.translation} · {entry.partOfSpeech}</p><div className="fusion-say"><SpeakButton text={entry.word} language={e.language!} rate={rate} /><PronounceButton target={entry.word} language={e.language!} active={tab === "pronounce"} /></div><p lang={e.language}>{entry.example}</p><p>{entry.exampleTranslation}</p><div className="fusion-say"><SpeakButton text={entry.example} language={e.language!} rate={rate} /><PronounceButton target={entry.example} language={e.language!} active={tab === "pronounce"} /></div></article>)}
       </section>
     </div>}
     <div role="tabpanel" id={`${prefix}-fusion-panel-methods`} aria-labelledby={`${prefix}-fusion-tab-methods`} hidden={tab !== "methods"} className="fusion-panel"><CognitiveMethods methods={e.methods} /></div>

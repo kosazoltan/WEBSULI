@@ -125,6 +125,21 @@ test("pronunciation practice listens in the lesson language and judges the spoke
   expect(await page.evaluate(() => (window as unknown as { __lastRecognitionLang: string }).__lastRecognitionLang)).toBe("en-GB");
 });
 
+test("review #360: on a 320px phone the six language-lesson tabs wrap into two rows without horizontal overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: languageLesson() }));
+  await page.goto("/__lesson-runtime-probe?candidate=1");
+  await expect(page.getByTestId("pronounce-entry")).toBeVisible();
+  const tabs = page.getByRole("tab");
+  const count = await tabs.count();
+  expect(count).toBeGreaterThanOrEqual(5);
+  for (let i = 0; i < count; i++) {
+    const box = await tabs.nth(i).boundingBox();
+    expect(box && box.x >= 0 && box.x + box.width <= 320).toBeTruthy();
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+});
+
 test("pronunciation practice works without speech recognition via keyboard dictation, and dictation explains instead of vanishing", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {

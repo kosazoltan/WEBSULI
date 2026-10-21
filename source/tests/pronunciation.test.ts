@@ -18,3 +18,10 @@ test("kiejtés: a közeli felismerés 🟡, a más szó 🔁, az üres 🔁", ()
   // Az ékezet számít (franciában más szó lehet): „été” ≠ „ete” — legfeljebb közeli.
   assert.notEqual(pronunciationVerdict("été", "ete").state, "ok");
 });
+
+test("review #360: hosszú mondatból kihagyott rövid szó nem lehet ✅ (a karakter-hasonlóság magas maradna)", () => {
+  const target = "My grandmother always makes delicious apple pie on Sundays";
+  const missing = "My grandmother always makes delicious apple pie Sundays";
+  assert.notEqual(pronunciationVerdict(target, missing).state, "ok");
+  assert.equal(pronunciationVerdict(target, target.toLowerCase()).state, "ok");
+});

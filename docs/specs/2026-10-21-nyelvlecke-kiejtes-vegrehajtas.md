@@ -13,3 +13,9 @@ Terv: `docs/specs/2026-10-21-nyelvlecke-kiejtes.md`.
    `shared/lesson-type-skills.ts` — a nyelvlecke kiejtésgyakorló követelménye.
 5. **Teszt:** `tests/pronunciation.test.ts`; `tests/lesson-fusion.spec.ts` a fülre (dokumentált UI-változás) + kiejtésgyakorlás mock
    felismerővel és felismerő nélkül. Valódi böngészős ellenőrzés mobil és asztali nézetben.
+6. **Review #360:** a főoldal csak a saját keret várt originjéről, FRISS gesztussal (`userActivation.isActive`) indít; a keret újratöltése
+   leállít; a teljes eredménylista a natív `resultIndex`-szel; a konstruktor hibája is válasz; a keretbeli híd nyugta előtti leállítása
+   a natív tartalékot törli, a munkamenet az `end` előtt törlődik, indításonként tiszta állapot; attribútumos `<head …>` is; a segéd
+   hibaüzenete új próbánál / sikernél eltűnik; a kiejtés-gyakorló a rejtett fülön leáll, a leállítás `stop()` (a végső eredmény
+   kiértékelődik); kihagyott szóval nincs ✅ (`allWordsSpoken`); hat fül 480 px alatt két sorban; szószedet-minimum 4 a promptban és
+   a csomag-ellenőrzésben (`GLOSSARY_MIN_PER_PACKET`).
