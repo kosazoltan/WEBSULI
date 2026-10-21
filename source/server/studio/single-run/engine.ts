@@ -411,6 +411,13 @@ export function finalizeAnswerKeyArchive(entries: ReadonlyArray<{ sectionIndex: 
   return entries.flatMap((e) => { const id = byKey.get(JSON.stringify([e.sectionIndex, e.q])); return id ? [{ ...e, id, modelId: e.id }] : []; });
 }
 
+/** Spec 2026-10-21-ciklus4: a lektor blokkoló jegyzeteinek archívuma (tiszta; legfeljebb 200 jegyzet, az üzenet 600 karakterre vágva). */
+export function appendLektorArchive(prev: unknown, round: number, notes: ReadonlyArray<{ kind: string; subkind?: string; blockPath?: string; message: string }>) {
+  const base = Array.isArray(prev) ? prev as unknown[] : [];
+  const add = notes.map((n) => ({ round, kind: n.kind, ...(n.subkind ? { subkind: n.subkind } : {}), ...(n.blockPath ? { blockPath: n.blockPath } : {}), message: n.message.slice(0, 600) }));
+  return [...base, ...add].slice(0, 200);
+}
+
 export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps): Promise<SingleRunResult> {
   const { conversation, store } = deps;
   const log = (m: string) => deps.log?.(m);
@@ -765,6 +772,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
         return { ok: true, value: r.report };
       }, { fresh: true });
     const blocking = classifyNotes(report.notes).filter((n) => n.blocking);
+    // Spec 2026-10-21-ciklus4: analitikai archívum — a lektor blokkoló jegyzetei körönként (a kivételek és javítókörök OKA eddig nem maradt
+    // meg; a lektori kivétel 2,25 tétel / anyag volt, ok nélkül nem csökkenthető célzottan).
+    if (blocking.length) output = { ...output, lektorArchive: appendLektorArchive(output.lektorArchive, round, blocking) };
     if (!blocking.length) break;
     previousBlockers = blocking;
     if (round === SINGLE_RUN_REVIEW_ROUNDS) {

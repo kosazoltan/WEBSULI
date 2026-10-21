@@ -22,3 +22,7 @@
 - HA a minta a kifejezést más (tűréssel egyező) alakban tartalmazza, AKKOR a javítás után a minta teljes pontot kap, a javítás naplózott.
 - HA nincs ilyen szósor, AKKOR a csomag változatlan (a javítókör dönt).
 - HA a `typedAnswers.value` szám, AKKOR szöveg lesz, azonos értékkel.
+
+## Kiegészítés (2026-10-21 07:45): a lektori jegyzetek archívuma
+- **Mérés:** a lektori kivétel 2,25 tétel / anyag (98 futás), szinte mind nyílt feladat — az OKUK nem maradt meg (csak az útvonal a figyelmeztetésben).
+- **Cél:** a lektor blokkoló jegyzetei körönként a job kimenetébe (`lektorArchive`: kör, fajta, alfajta, útvonal, üzenet; legfeljebb 200, az üzenet 600 karakterre vágva), hogy a kivételek oka offline elemezhető legyen.

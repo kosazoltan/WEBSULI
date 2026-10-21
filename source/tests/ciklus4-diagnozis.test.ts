@@ -37,3 +37,13 @@ test("ciklus4: typedAnswers.value szám → szöveg (azonos érték), a szövegh
   assert.deepEqual((packet as typeof p).tasks[0].typedAnswers.map((x) => x.value), ["12", "7"]);
   assert.ok(fixes.some((f) => /typedAnswers.value szövegként \(12\)/.test(f)), JSON.stringify(fixes));
 });
+
+test("ciklus4: a lektor blokkoló jegyzeteinek archívuma — körönként, vágva, legfeljebb 200", async () => {
+  const { appendLektorArchive } = await import("../server/studio/single-run/engine");
+  const a = appendLektorArchive(undefined, 0, [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.3", message: "x".repeat(900) }]);
+  assert.deepEqual(Object.keys(a[0] as object).sort(), ["blockPath", "kind", "message", "round", "subkind"]);
+  assert.equal((a[0] as { message: string }).message.length, 600);
+  const many = appendLektorArchive(a, 1, Array.from({ length: 250 }, () => ({ kind: "coverage_gap", message: "m" })));
+  assert.equal(many.length, 200);
+  assert.equal((many[1] as { round: number }).round, 1);
+});
