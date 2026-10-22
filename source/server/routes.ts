@@ -2053,8 +2053,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { planDailyReminders, budapestDay } = await import("./daily-reminder");
       const { isSchoolDay } = await import("../shared/school-calendar");
+      const { repeatOnlyPlan } = await import("../shared/daily-reminder");
       const now = new Date();
-      const plan = await planDailyReminders(now);
+      // Spec 2026-10-22-uj-lecke-ertesito: az előnézet az ütemezett levelet mutatja — csak az ismétlést.
+      const plan = repeatOnlyPlan(await planDailyReminders(now));
       // Átfogó review (S1–S5): az admin előnézet linkje token nélküli — különben az admin böngészője a tanulóhoz párosulna.
       const { getMaterialPreviewUrl: previewUrl } = await import("./utils/config");
       res.json({ day: budapestDay(now).iso, schoolDay: isSchoolDay(budapestDay(now).date), items: plan.map(p => ({ ...p, url: previewUrl(p.materialId) })) });
@@ -2078,7 +2080,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/daily-reminders/run", isAuthenticatedAdmin, async (_req: Request, res) => {
     const { runDailyReminders } = await import("./daily-reminder");
-    const result = await runDailyReminders(new Date());
+    // Review #365: a kézi küldés ugyanazt a (csak ismétlés) tervet küldi, amit az előnézet jóváhagyásra mutat.
+    const result = await runDailyReminders(new Date(), { repeatOnly: true });
     // Review #292: a futásszintű hiba HTTP-hibaként jelenik meg (a részleges számlálókkal együtt).
     res.status(result.error ? 500 : 200).json(result.error ? { ...result, message: `A kiküldés megszakadt: ${result.error}` } : result);
   });
