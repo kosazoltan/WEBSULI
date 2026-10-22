@@ -20,6 +20,7 @@ import { executeWorkflow, workflowPhase, workflowSkillPrompt, workflowFinding } 
 import { workflowStore } from "./workflows/store";
 import { htmlBaselineHash } from "./improve/html-baseline";
 import { withSupportSkill } from "./studio/support-skills";
+import { WORKFLOW_STOPPED_MESSAGE } from "../shared/lesson-workflow";
 
 /**
  * Run the AI improvement in background and update the DATABASE record
@@ -227,6 +228,12 @@ ${originalFile.content}
     const MAX_ATTEMPTS = MAX_RETRIES + 1; // +1 for fallback model attempt
 
     for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
+      // Review #366 (spec 2026-10-22-elmaradt-feladatok, S3): a tulajdonos leállítása után nincs új szolgáltatói próba / tartalékmodell —
+      // adatbázisból ellenőrizve, a cikluson KÍVÜL dobva (a retry-ág nem nyeli el).
+      if (attempt > 0) {
+        const current = await storage.getImprovedHtmlFile(dbRecordId).catch(() => undefined);
+        if (current?.status === 'error' && current.improvementNotes === WORKFLOW_STOPPED_MESSAGE) throw new Error(WORKFLOW_STOPPED_MESSAGE);
+      }
       try {
         fullContent = '';
         lastLogTime = Date.now();
@@ -582,18 +589,22 @@ ${originalFile.content}
     }
 
     // ✅ UPDATE the DB record with error status
+    // Spec 2026-10-22-elmaradt-feladatok (S3) + review #366: ha a tulajdonos leállította, a leállítás megjegyzése marad — feltételes UPDATE
+    // (atomikus: nincs előolvasás és felülírás közti versenyhelyzet).
+    let stoppedByOwner = false;
     try {
       // Spec 2026-10-20-okositas-bukott-jelolt: a kapun bukott jelölt megmarad (diagnosztika); `error` állapotban nem alkalmazható.
       if (error instanceof ImproveOutputError && error.candidate) {
         await storage.updateImprovedHtmlFileContentAndStatus(dbRecordId, error.candidate, 'error')
           .catch((saveError: unknown) => logger.warn(`[IMPROVE] Record ${dbRecordId}: a bukott jelölt nem menthető`, saveError));
       }
-      await storage.updateImprovedHtmlFileStatus(dbRecordId, 'error', undefined, userMessage);
+      stoppedByOwner = !(await storage.failImprovedHtmlFileUnlessStopped(dbRecordId, userMessage, WORKFLOW_STOPPED_MESSAGE));
+      if (stoppedByOwner) logger.info(`[IMPROVE] Record ${dbRecordId}: a tulajdonos leállította`);
     } catch (dbError: unknown) {
       const dbErrorTyped = dbError instanceof Error ? dbError : new Error(String(dbError));
       logger.error(`[IMPROVE] Record ${dbRecordId}: Failed to save error status:`, dbErrorTyped.message);
     }
-    throw new Error(userMessage, { cause: error });
+    throw new Error(stoppedByOwner ? WORKFLOW_STOPPED_MESSAGE : userMessage, { cause: error });
   }
 }
 

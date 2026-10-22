@@ -281,3 +281,87 @@ test("párhuzamos workflow-mentés és kerített jobmentés: nincs hamis konflik
     await dbPool.query("DELETE FROM knowledge_maps WHERE id=$1", [map]);
   }
 });
+
+// Spec 2026-10-22-elmaradt-feladatok (S3): a futó futás leállítása — bérlet törölve, állapot „hiba” az üzenettel, revízió lép, a hozzá
+// tartozó okosítás-sor lezárul; befejezett futás és idegen tulajdonos nem állítható le; a régi bérletű végrehajtó nem írhat vissza.
+test("futó okosítás leállítása: állapot, bérlet, revízió, okosítás-sor; ismételt és idegen leállítás nem módosít", async () => {
+  const id = "workflow-stop-1";
+  const view = { id, definition: workflowDefinition("html"), state: "running", createdAt: Date.now(), updatedAt: Date.now(), visits: [], revision: 2 };
+  await dbPool.query("INSERT INTO html_files(id,title,content) VALUES ('stop-file','Stop anyag','<p>x</p>')");
+  await dbPool.query("INSERT INTO improved_html_files(id,original_file_id,title,content,status) VALUES ($1,'stop-file','Stop anyag','<p>…</p>','processing')", [id]);
+  await dbPool.query("INSERT INTO lesson_workflow_runs(id,owner_id,state,revision,snapshot,lease_token,lease_until) VALUES ($1,'workflow-owner','running',2,$2::jsonb,'tok-1',now()+interval '90 seconds')", [id, JSON.stringify(view)]);
+  assert.equal(await store.stop(id, "workflow-other", "A futást a tulajdonos leállította."), false, "idegen tulajdonos nem állíthatja le");
+  assert.equal(await store.stop(id, "workflow-owner", "A futást a tulajdonos leállította."), true);
+  const { rows: [run] } = await dbPool.query("SELECT state, revision, lease_token, lease_until, snapshot FROM lesson_workflow_runs WHERE id=$1", [id]);
+  assert.equal(run.state, "error");
+  assert.equal(run.revision, 3);
+  assert.equal(run.lease_token, null);
+  assert.equal(run.lease_until, null);
+  assert.equal(run.snapshot.state, "error");
+  assert.equal(run.snapshot.error, "A futást a tulajdonos leállította.");
+  const { rows: [imp] } = await dbPool.query("SELECT status, improvement_notes FROM improved_html_files WHERE id=$1", [id]);
+  assert.deepEqual({ status: imp.status, notes: imp.improvement_notes }, { status: "error", notes: "A futást a tulajdonos leállította." });
+  // A régi végrehajtó szívverése és mentése elbukik (a motor ebből tudja, hogy nem írhat vissza).
+  assert.equal(await store.heartbeat(id, "tok-1"), false);
+  assert.equal(await store.stop(id, "workflow-owner", "x"), false, "a már leállított futás nem állítható le újra");
+});
+
+// Review #366: a már „pending” (nem alkalmazott) jelölt is lezárul; a hibaág a leállítás megjegyzését atomikusan megőrzi; a későn
+// befejeződő háttérmunka „pending” mentése a leállított sort nem éleszti újra.
+test("leállítás: pending jelölt lezárul, a megjegyzés megmarad, a késői pending mentés elutasítva", async () => {
+  const { storage } = await import("../server/storage");
+  const STOP = "A futást a tulajdonos leállította.";
+  const mk = async (id: string, status: string) => {
+    const view = { id, definition: workflowDefinition("html"), state: "running", createdAt: Date.now(), updatedAt: Date.now(), visits: [], revision: 1 };
+    await dbPool.query("INSERT INTO improved_html_files(id,original_file_id,title,content,status) VALUES ($1,'stop-file','Stop anyag','<p>…</p>',$2)", [id, status]);
+    await dbPool.query("INSERT INTO lesson_workflow_runs(id,owner_id,state,revision,snapshot,lease_token,lease_until) VALUES ($1,'workflow-owner','running',1,$2::jsonb,'tok',now()+interval '90 seconds')", [id, JSON.stringify(view)]);
+  };
+  await mk("workflow-stop-pending", "pending");
+  assert.equal(await store.stop("workflow-stop-pending", "workflow-owner", STOP), true);
+  const { rows: [p] } = await dbPool.query("SELECT status, improvement_notes FROM improved_html_files WHERE id='workflow-stop-pending'");
+  assert.deepEqual({ s: p.status, n: p.improvement_notes }, { s: "error", n: STOP }, "a pending jelölt sem alkalmazható");
+
+  await mk("workflow-stop-race", "processing");
+  assert.equal(await store.stop("workflow-stop-race", "workflow-owner", STOP), true);
+  assert.equal(await storage.failImprovedHtmlFileUnlessStopped("workflow-stop-race", "A futást már másik végrehajtó kezeli.", STOP), false, "a hibaág nem írja felül");
+  await assert.rejects(storage.updateImprovedHtmlFileContentAndStatus("workflow-stop-race", "<p>késő jelölt</p>", "pending"), /nem menthető/);
+  const { rows: [r] } = await dbPool.query("SELECT status, improvement_notes, content FROM improved_html_files WHERE id='workflow-stop-race'");
+  assert.deepEqual({ s: r.status, n: r.improvement_notes, c: r.content }, { s: "error", n: STOP, c: "<p>…</p>" });
+
+  // A nem leállított sor hibára zárása változatlanul működik.
+  await dbPool.query("INSERT INTO improved_html_files(id,original_file_id,title,content,status) VALUES ('imp-normal-fail','stop-file','x','<p>x</p>','processing')");
+  assert.equal(await storage.failImprovedHtmlFileUnlessStopped("imp-normal-fail", "Időtúllépés", STOP), true);
+});
+
+// Review #366: az olvasás és a foglalás közé eső leállítás elutasítja az elavult indulást; a leállítás lezárja a nyitott lépést
+// (futó / várakozó / üres lépéslista) és frissíti a pillanatkép idejét.
+test("leállítás: elavult foglalás elutasítva; nyitott lépés lezárva, időpont frissítve", async () => {
+  const STOP = "A futást a tulajdonos leállította.";
+  const mk = async (id: string, state: string, visits: unknown[]) => {
+    const view = { id, definition: workflowDefinition("html"), state, createdAt: 1, updatedAt: 1, visits, revision: 4 };
+    await dbPool.query("INSERT INTO lesson_workflow_runs(id,owner_id,state,revision,snapshot) VALUES ($1,'workflow-owner',$2,4,$3::jsonb)", [id, state, JSON.stringify(view)]);
+  };
+  // Verseny: a motor 4-es revíziót olvasott, közben leállították → a régi revíziós foglalás elbukik.
+  await mk("workflow-stop-claim", "running", []);
+  const read = await store.read("workflow-stop-claim", "workflow-owner");
+  assert.equal(read!.view.revision, 4);
+  assert.equal(await store.stop("workflow-stop-claim", "workflow-owner", STOP), true);
+  assert.equal(await store.claim("workflow-stop-claim", "workflow-owner", "late", read!.view.revision), false, "elavult indulás elutasítva");
+  // A kifejezett újrapróba a friss revízióval foglalhat (a hibaállapot nincs általánosan tiltva).
+  assert.equal(await store.claim("workflow-stop-claim", "workflow-owner", "retry", 5), true);
+
+  await mk("workflow-stop-visit-run", "running", [{ step: "author", attempt: 1, startedAt: 1, state: "done", finishedAt: 2, cacheHits: 0 }, { step: "gate", attempt: 1, startedAt: 3, state: "running", cacheHits: 0 }]);
+  await mk("workflow-stop-visit-wait", "waiting", [{ step: "gate", attempt: 1, startedAt: 3, state: "waiting", cacheHits: 0 }]);
+  for (const id of ["workflow-stop-visit-run", "workflow-stop-visit-wait", "workflow-stop-visit-empty"]) {
+    if (id.endsWith("empty")) await mk(id, "running", []);
+    assert.equal(await store.stop(id, "workflow-owner", STOP), true, id);
+    const { rows: [r] } = await dbPool.query("SELECT snapshot FROM lesson_workflow_runs WHERE id=$1", [id]);
+    assert.equal(r.snapshot.state, "error");
+    assert.ok(r.snapshot.updatedAt > 1, "a pillanatkép ideje frissült");
+    const last = r.snapshot.visits.at(-1);
+    if (last) { assert.equal(last.state, "error", id); assert.equal(last.error, STOP); assert.ok(last.finishedAt > 1); }
+    else assert.deepEqual(r.snapshot.visits, []);
+  }
+  const { rows: [done] } = await dbPool.query("SELECT snapshot FROM lesson_workflow_runs WHERE id='workflow-stop-visit-run'");
+  assert.equal(done.snapshot.visits[0].state, "done", "a már kész lépés változatlan");
+});

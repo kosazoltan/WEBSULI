@@ -2,6 +2,7 @@ import { Router } from "express";
 import { slimRun } from "./slim";
 import { isAuthenticatedAdmin } from "../auth";
 import { workflowStore } from "./store";
+import { WORKFLOW_STOPPED_MESSAGE } from "../../shared/lesson-workflow";
 import { skillStore } from "./learning-store";
 import { skillMarkdown, type LessonSkill } from "../../shared/lesson-skill";
 import { runtimeKnowledge } from "../../shared/runtime-knowledge";
@@ -58,6 +59,18 @@ workflowRouter.get("/workflows", async (req, res) => {
     res.json({ runs: records.map(r => slimRun(r.view)) });
   } catch { res.status(503).json({ message: "A futásnapló átmenetileg nem olvasható." }); }
 });
+// Spec 2026-10-22-elmaradt-feladatok (S3): a saját futó / várakozó futás leállítása (admin, CSRF a globális őrrel).
+workflowRouter.post("/workflows/:id/stop", async (req, res) => {
+  if (!/^[a-zA-Z0-9:-]{1,100}$/.test(req.params.id)) return res.status(400).json({ message: "Hibás futásazonosító." });
+  try {
+    const owner = req.user!.id;
+    const record = await workflowStore.read(req.params.id, owner);
+    if (!record) return res.status(404).json({ message: "A futás nem található." });
+    if (!(await workflowStore.stop(req.params.id, owner, WORKFLOW_STOPPED_MESSAGE))) return res.status(409).json({ message: "A futás már nem fut, nem állítható le." });
+    res.json({ stopped: true });
+  } catch { res.status(503).json({ message: "A leállítás átmenetileg nem sikerült." }); }
+});
+
 workflowRouter.get("/workflows/:id", async (req, res) => {
   if (!/^[a-zA-Z0-9:-]{1,100}$/.test(req.params.id)) return res.status(400).json({ message: "Hibás futásazonosító." });
   try {

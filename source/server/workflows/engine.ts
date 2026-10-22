@@ -12,7 +12,8 @@ export type WorkflowRecord = { view: WorkflowView; owner: string; checkpoints: R
 export interface WorkflowStore {
   create(record: WorkflowRecord): Promise<boolean>;
   read(id: string, owner: string): Promise<WorkflowRecord | null>;
-  claim(id: string, owner: string, token: string): Promise<boolean>;
+  /** Review #366: `revision` megadásakor a foglalás csak az olvasott revízión sikerül (a közben lefutott leállítás elutasítja). */
+  claim(id: string, owner: string, token: string, revision?: number): Promise<boolean>;
   save(record: WorkflowRecord, token: string): Promise<boolean>;
   heartbeat(id: string, token: string): Promise<boolean>;
   release(id: string, token: string): Promise<void>;
@@ -352,7 +353,8 @@ async function executeWorkflowCounted<T extends WorkflowView["result"]>(
   if (["error", "interrupted", "waiting"].includes(record.view.state) && !input.retry) throw new WorkflowConflict("Ez a futás megállt; külön folytatási művelet szükséges.");
   if ((record.view.executions ?? 0) >= workflowExecutionBudget(input.explicitResume, input.recoveryResume)) throw new WorkflowConflict("A futás folytatási kerete elfogyott. Ellenőrizd a hibát új készítés előtt.");
   const token = randomUUID();
-  if (!await store.claim(input.id, input.owner, token)) throw new WorkflowConflict("Ez a futás már folyamatban van.");
+  // Review #366: a foglalás az olvasott revízióhoz kötött — az olvasás és a foglalás közé eső leállítás (revízióléptetés) elutasítja az elavult indulást.
+  if (!await store.claim(input.id, input.owner, token, record.view.revision)) throw new WorkflowConflict("Ez a futás már folyamatban van, vagy közben megváltozott (pl. leállították).");
   const fresh = await store.read(input.id, input.owner);
   if (!fresh) throw new WorkflowConflict("A futás nem található.");
   const ctx: Context = { record: fresh, store, token, lostLease: false, continuation: input.continuation ?? false, persistQueue: Promise.resolve() };

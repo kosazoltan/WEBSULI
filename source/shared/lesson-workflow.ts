@@ -94,6 +94,11 @@ export type WorkflowView = {
   /** Spec 2026-09-30-dinamikus-keret: a célzott javítóút egyszeri többletkeretei (ok + időpont), futásonként korlátozva. */
   repairGrants?: Array<{ reason: string; at: number }>;
 };
+/** Spec 2026-10-22-elmaradt-feladatok (S3): a tulajdonos által leállított futás üzenete (a futásnaplóban és az okosítás sorában). */
+export const WORKFLOW_STOPPED_MESSAGE = "A futást a tulajdonos leállította.";
+/** Leállítható-e a futás (csak a futó vagy döntésre váró). */
+export const canStopWorkflow = (state: WorkflowView["state"]): boolean => state === "running" || state === "waiting";
+
 export const WORKFLOW_STATE_LABELS: Record<WorkflowView["state"], string> = {
   running: "Folyamatban", waiting: "Döntésre vár", ready: "Jelölt elkészült, alkalmazásra vár",
   done: "Elkészült és visszaolvasva", error: "Hibával megállt", interrupted: "Megszakadt, részeredmények megőrizve",

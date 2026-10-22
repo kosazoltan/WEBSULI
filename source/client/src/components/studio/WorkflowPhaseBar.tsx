@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
-import { Check, CircleDashed, Loader2, RotateCcw, X, Pause } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Check, CircleDashed, Loader2, RotateCcw, X, Pause, Square } from "lucide-react";
 import type { WorkflowView } from "@shared/lesson-workflow";
-import { WORKFLOW_STATE_LABELS, workflowStepDisplay } from "@shared/lesson-workflow";
-import { apiRequest } from "@/lib/queryClient";
+import { canStopWorkflow, WORKFLOW_STATE_LABELS, workflowStepDisplay } from "@shared/lesson-workflow";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 /**
  * Spec 2026-10-19-okositas-fazisjelzo (1): állandóan látható fázissor egy munkafolyamat-futáshoz (okosítás, javítás). A teljes
@@ -25,6 +27,16 @@ export function WorkflowPhaseBar({ id, sticky = false, title }: { id: string | n
     queryFn: () => apiRequest("GET", `/api/studio/workflows/${encodeURIComponent(id!)}`),
     enabled: !!id, retry: 1,
     refetchInterval: (q) => (q.state.data?.run ? (["running", "waiting"].includes(q.state.data.run.state) ? 2500 : false) : q.state.dataUpdateCount < 4 ? 2500 : false),
+  });
+  const { toast } = useToast();
+  // Spec 2026-10-22-elmaradt-feladatok (S3): a futó / várakozó futás leállítása — a következő lépéshatáron áll meg.
+  const stop = useMutation({
+    mutationFn: () => apiRequest<{ stopped: boolean }>("POST", `/api/studio/workflows/${encodeURIComponent(id!)}/stop`),
+    onSuccess: async () => {
+      toast({ title: "A futás leállítva", description: "A már folyó lépés még befejeződhet; a tananyag nem változik." });
+      await Promise.all([query.refetch(), queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] })]);
+    },
+    onError: (error) => toast({ title: "A leállítás nem sikerült", description: error instanceof Error ? error.message : undefined, variant: "destructive" }),
   });
   if (!id) return null;
   const run = query.data?.run;
@@ -49,6 +61,12 @@ export function WorkflowPhaseBar({ id, sticky = false, title }: { id: string | n
     <section className={shell} data-testid="phase-bar" data-run-state={run.state} aria-live="polite" aria-label={`${title ?? run.definition.label} fázisai`}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="text-sm font-semibold">{title ?? run.definition.label}: {WORKFLOW_STATE_LABELS[run.state]}</p>
+        {canStopWorkflow(run.state) && (
+          <Button type="button" variant="outline" size="sm" className="h-7 border-red-300 text-red-700 hover:bg-red-50 dark:text-red-300" data-testid="phase-bar-stop"
+            disabled={stop.isPending} onClick={() => { if (window.confirm("Leállítod ezt a futást? A már folyó lépés még befejeződhet, a tananyag nem változik.")) stop.mutate(); }}>
+            <Square className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Leállítás
+          </Button>
+        )}
         <p className="text-xs text-muted-foreground" data-testid="phase-bar-current">
           {currentStep ? `${run.definition.steps.indexOf(currentStep) + 1}/${run.definition.steps.length}. ${currentStep.label}${round > 1 ? ` · ${round}. kör` : ""}` : "Indul…"} · {minutes} perc
         </p>

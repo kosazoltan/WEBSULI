@@ -187,6 +187,8 @@ export interface IStorage {
   getImprovedHtmlFileStatus(id: string): Promise<Pick<ImprovedHtmlFile, "id" | "status" | "title" | "contentType" | "createdAt" | "improvementNotes"> | undefined>;
   getImprovedFilesByOriginalId(originalFileId: string): Promise<ImprovedHtmlFile[]>;
   updateImprovedHtmlFileStatus(id: string, status: string, appliedBy?: string, notes?: string): Promise<ImprovedHtmlFile | null>;
+  /** Review #366: hibára zárás, kivéve ha a tulajdonos már leállította (a leállítás megjegyzése atomikusan megmarad). Visszaad: írt-e. */
+  failImprovedHtmlFileUnlessStopped(id: string, notes: string, stoppedMessage: string): Promise<boolean>;
   updateImprovedHtmlFileContent(id: string, content: string): Promise<void>;
   updateImprovedHtmlFileContentAndStatus(id: string, content: string, status: string): Promise<void>;
   deleteImprovedHtmlFile(id: string): Promise<boolean>;
@@ -1350,6 +1352,15 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(improvedHtmlFiles.createdAt));
   }
 
+  async failImprovedHtmlFileUnlessStopped(id: string, notes: string, stoppedMessage: string): Promise<boolean> {
+    const updated = await db
+      .update(improvedHtmlFiles)
+      .set({ status: 'error', improvementNotes: notes })
+      .where(and(eq(improvedHtmlFiles.id, id), sql`NOT (${improvedHtmlFiles.status} = 'error' AND ${improvedHtmlFiles.improvementNotes} IS NOT DISTINCT FROM ${stoppedMessage})`))
+      .returning({ id: improvedHtmlFiles.id });
+    return updated.length > 0;
+  }
+
   async updateImprovedHtmlFileStatus(
     id: string, 
     status: string, 
@@ -1385,14 +1396,18 @@ export class DatabaseStorage implements IStorage {
     // CRITICAL: Single atomic UPDATE to prevent race condition
     // If content and status were updated separately, a user could "Apply"
     // the file between the two updates, copying placeholder content!
+    // Review #366 (spec 2026-10-22-elmaradt-feladatok, S3): alkalmazható („pending”) jelölt CSAK a még futó („processing”) sorból lesz —
+    // a tulajdonos által leállított (vagy más okból lezárt) sor nem éled újra egy későn befejeződő háttérmunkától.
     const [updated] = await db
       .update(improvedHtmlFiles)
       .set({ content, status })
-      .where(eq(improvedHtmlFiles.id, id))
+      .where(status === 'pending' ? and(eq(improvedHtmlFiles.id, id), eq(improvedHtmlFiles.status, 'processing')) : eq(improvedHtmlFiles.id, id))
       .returning();
     
     if (!updated) {
-      throw new Error(`[DB] Failed to update improved file ${id}: no rows affected. Record may have been deleted.`);
+      throw new Error(status === 'pending'
+        ? `[DB] Improved file ${id}: a jelölt nem menthető — a sor már nem fut (leállítva, lezárva vagy törölve).`
+        : `[DB] Failed to update improved file ${id}: no rows affected. Record may have been deleted.`);
     }
     
     // VERIFY: confirm content was actually saved
