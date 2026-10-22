@@ -37,6 +37,7 @@ import { experienceFingerprint } from "./useExperienceRound";
 import "./lesson-design.css";
 import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom, type DesignThemeId } from "@shared/lesson-design";
 import { VerdictFeedback } from "./VerdictFeedback";
+import { explainIsLong, explainParagraphs } from "./explain-paragraphs";
 import { displayHeading } from "@shared/lesson-ui-text";
 
 /** A koncepciókép sávjelvényei: levél · iránytű · agy · lombik · emelkedő grafikon (szabályterv 1.2). */
@@ -63,8 +64,6 @@ const BAND_ICON: Record<DesignThemeId, typeof Leaf> = { explorer: Leaf, adventur
 
 const FullTeachingContext = createContext(false);
 const OPTION_KEYS = "ABCDEFGH";
-/** Spec 2026-10-22: a ennél hosszabb magyarázat ≥ 1500 px-en két hasábban folyik (rövid szövegnél a két hasáb csak szétszabdalná). */
-const EXPLAIN_LONG_CHARS = 600;
 
 function BlockHead({ icon: Icon, label, kind }: { icon: typeof BookOpen; label: string; kind?: string }) {
   // Arculati bank S2: a sáv blokkjelzője a lucide ikon helyett (ha nincs vagy nem töltődik be, a lucide marad).
@@ -101,7 +100,7 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
   );
 
   return (
-    <div className={cn("lesson-block space-y-1", theme.body)} data-block="explain" data-depth={block.depth} data-long={block.text.length > EXPLAIN_LONG_CHARS ? "true" : undefined}>
+    <div className={cn("lesson-block space-y-1", theme.body)} data-block="explain" data-depth={block.depth} data-long={explainIsLong(block.text) ? "true" : undefined}>
       <BlockHead icon={BookOpen} label={theme.labels.explain} kind="explain" />
       {block.depth !== "core" && (
         <span className="lesson-muted inline-flex items-center gap-1 text-xs">
@@ -109,7 +108,7 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
           {block.depth === "why" ? "Miért?" : "Mélyebben"}
         </span>
       )}
-      <p><RichText text={block.text} /></p>
+      {explainParagraphs(block.text).map((para, i) => <p key={i}><RichText text={para} /></p>)}
       {canSpeak && (
         <Button
           variant="ghost"

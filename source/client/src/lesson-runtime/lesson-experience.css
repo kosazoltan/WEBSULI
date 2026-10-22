@@ -238,6 +238,8 @@
 /* Az ábrák arányosan skálázódnak (nincs rögzített magasság), legfeljebb 920 px szélesek; az ikonok, a blokkjelzők és a fedő SVG kimarad.
    Nulla specificitású felső korlát: az ábra saját, szűkebb korlátja (pl. max-w-md) érvényben marad — a korlát nem nagyít. */
 :where([data-experience]) :where([data-block="animate"], [data-block="try"], [data-block="explain"], figure[data-anim]) :is(svg, canvas, img, video):where(:not([class*="lucide"], .ws-block-marker, .absolute, [aria-hidden="true"])) { max-width: min(100%, 920px); height: auto; }
+/* Review #368: a HTML-ből rajzolt ábrák (idővonal, térkép, folyamat) rajzterülete is legfeljebb 920 px; a felirat és a külső keret marad. */
+[data-experience] figure[data-anim] > :not(figcaption) { max-width: min(100%, 920px); }
 /* A kvíz egy-kérdéses köre olvasható szélességű marad. */
 .fusion-panel-quiz { max-width: 900px; margin-inline: auto; }
 @media (min-width: 1200px) {
@@ -260,13 +262,11 @@
   [data-experience] .fusion-task-list > .fusion-task { min-width: 0; margin: 0; }
 }
 @media (min-width: 1500px) {
-  /* A hosszú magyarázat (data-long) teljes sorszélességű és két hasábban folyik (egy félszéles cellában a kétszeres hasáb ~340 px-es
-     csíkokat adna, rövid szövegnél pedig szétszabdalná a bekezdést). A blokkban egyetlen bekezdés van: ha az nem törhetne hasábot váltva,
-     az egész szöveg az első hasábba záródna, ezért a bekezdés itt törhet; a fej és a gomb teljes szélességű marad. */
+  /* A hosszú, többbekezdéses magyarázat (data-long) teljes sorszélességű és két hasábban folyik; review #368: a hasábváltás csak
+     bekezdéshatáron történik (bekezdés sosem törik ketté); a fej és a gomb teljes szélességű marad. */
   [data-experience] .fusion-teaching-main section[id^="section-"] > .lesson-block[data-block="explain"][data-long] { grid-column: 1 / -1; }
   [data-experience] .lesson-block[data-block="explain"][data-long] { column-count: 2; column-gap: clamp(32px, 2.6vw, 64px); }
   [data-experience] .lesson-block[data-block="explain"][data-long] > * { break-inside: avoid; }
-  [data-experience] .lesson-block[data-block="explain"][data-long] > p { break-inside: auto; orphans: 3; widows: 3; }
   [data-experience] .lesson-block[data-block="explain"][data-long] > :is(.lesson-block-head, .lesson-muted, button) { column-span: all; }
   [data-experience] .lesson-block[data-block="explain"][data-long] > .lesson-block-head { display: flex; width: fit-content; }
 }

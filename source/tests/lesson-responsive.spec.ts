@@ -69,10 +69,20 @@ for (const classroom of CLASSROOMS) {
         const nav = document.querySelector<HTMLElement>('[data-testid="chapter-nav"]');
         const navStyle = nav && getComputedStyle(nav);
         const navBox = nav?.getBoundingClientRect();
-        const longParagraphs = [...document.querySelectorAll<HTMLElement>(".lesson-block p")].filter(p => p.getBoundingClientRect().width > 0).filter(p => {
-          const max = getComputedStyle(p).maxWidth;
-          return max === "none" || p.getBoundingClientRect().width > parseFloat(max) + 0.5;
-        }).map(p => `${(p.textContent ?? "").trim().slice(0, 24)} (${Math.round(p.getBoundingClientRect().width)} px, max-width ${getComputedStyle(p).maxWidth})`);
+        // Review #368: a 90ch-t a vizsgált CSS-től függetlenül mérjük — egy mérőelem a bekezdés saját betűbeállításaival; hasábos
+        // szövegnél minden fragmentum (getClientRects) külön.
+        const longParagraphs = [...document.querySelectorAll<HTMLElement>(".lesson-block p")].filter(p => p.getBoundingClientRect().width > 0).flatMap(p => {
+          const probe = document.createElement("span");
+          probe.style.cssText = "position:absolute;visibility:hidden;display:inline-block;width:90ch;";
+          p.appendChild(probe);
+          const limit = probe.getBoundingClientRect().width;
+          probe.remove();
+          const widest = Math.max(...[...p.getClientRects()].map(r => r.width));
+          return widest > limit + 0.5 ? [`${(p.textContent ?? "").trim().slice(0, 24)} (${Math.round(widest)} px > 90ch = ${Math.round(limit)} px)`] : [];
+        });
+        // Review #368: a HTML-ből rajzolt ábrák (idővonal, térkép, folyamat) rajzterülete is legfeljebb 920 px.
+        const htmlFigureIssues = [...document.querySelectorAll<HTMLElement>("figure[data-anim] > :not(figcaption)")].filter(el => el.getBoundingClientRect().width > 920.5)
+          .map(el => `${el.closest("figure")?.getAttribute("data-anim")} rajzterület ${Math.round(el.getBoundingClientRect().width)} px széles`);
         const figures = [...document.querySelectorAll<SVGSVGElement | HTMLImageElement>(':is([data-block="animate"], [data-block="try"], figure[data-anim]) :is(svg, img)')].filter(el => !el.matches('[class*="lucide"], .ws-block-marker, .absolute, [aria-hidden="true"]') && el.getBoundingClientRect().width > 0);
         const figureIssues = figures.flatMap(el => {
           const r = el.getBoundingClientRect();
@@ -82,7 +92,7 @@ for (const classroom of CLASSROOMS) {
           if (r.width > 920.5) out.push(`${el.tagName.toLowerCase()} ${Math.round(r.width)} px széles`);
           if (ratio > 0 && Math.abs(r.width / r.height - ratio) / ratio > 0.03) out.push(`${el.tagName.toLowerCase()} torzul (${(r.width / r.height).toFixed(2)} ≠ ${ratio.toFixed(2)})`);
           return out;
-        });
+        }).concat(htmlFigureIssues);
         return { overflowX, outside, clipped, broken, tiny, tabIssues, vw, articleWidth: article.width, navDisplay: navStyle?.display, navPosition: navStyle?.position, navWidth: navBox?.width ?? 0, longParagraphs, figureIssues };
       });
       await page.screenshot({ path: `test-results/websuli-responsive/${classroom}-${d.name}.png` });
