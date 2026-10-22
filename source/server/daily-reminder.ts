@@ -8,7 +8,7 @@ import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { getMaterialPreviewUrl } from "./utils/config";
 import { isSchoolDay, schoolYearPosition } from "../shared/school-calendar";
-import { displayTopic, firstNameOf, learnerHistoryFrom, NEW_LESSON_LABEL, newLessonRecipients, newLessonSubject, pickSmartMaterial, reminderHtml, reminderSubject, repeatOnlyPlan } from "../shared/daily-reminder";
+import { displayTopic, firstNameOf, learnerHistoryFrom, NEW_LESSON_FOOTER, NEW_LESSON_LABEL, newLessonRecipients, newLessonSubject, pickSmartMaterial, reminderHtml, reminderSubject, repeatOnlyPlan } from "../shared/daily-reminder";
 import { motivationFor } from "../shared/motivation";
 import { logger } from "./lib/logger";
 
@@ -192,7 +192,7 @@ export async function notifyNewLesson(lesson: { htmlFileId: string; title: strin
       const first = firstNameOf(r.studentName!.trim());
       const url = personalUrl(getMaterialPreviewUrl(lesson.htmlFileId), r.learnerId && versions.has(r.learnerId) ? learnerTokenFor(r.learnerId, versions.get(r.learnerId)!) : null);
       try {
-        await send(newLessonSubject(first, lesson.title), reminderHtml({ first, title: lesson.title, url, motivation: motivationFor(first, date), label: NEW_LESSON_LABEL }), r.email);
+        await send(newLessonSubject(first, lesson.title), reminderHtml({ first, title: lesson.title, url, motivation: motivationFor(first, date), label: NEW_LESSON_LABEL, footer: NEW_LESSON_FOOTER }), r.email);
         out.sent++;
       } catch {
         out.failed++;
