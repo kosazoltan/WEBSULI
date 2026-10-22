@@ -16,7 +16,9 @@ test("a kapu bukása átadja a jelöltet, a hibaág `error` állapotban menti; a
   const src = fs.readFileSync("server/improveAsync.ts", "utf8");
   assert.match(src, /verification\.problems\.join\(' '\)\}`, verification\.problems, improvedHtml\)/);
   const save = src.indexOf("updateImprovedHtmlFileContentAndStatus(dbRecordId, error.candidate, 'error')");
-  const status = src.indexOf("updateImprovedHtmlFileStatus(dbRecordId, 'error', undefined, userMessage)");
+  // Review #366 (dokumentált spec-változás, docs/specs/2026-10-22-elmaradt-feladatok.md): az üzenet feltételes írása (a tulajdonos
+  // leállítása megmarad) — a sorrend-követelmény változatlan: előbb a jelölt, utána az üzenet.
+  const status = src.indexOf("failImprovedHtmlFileUnlessStopped(dbRecordId, userMessage, WORKFLOW_STOPPED_MESSAGE)");
   assert.ok(save > 0 && status > save, "előbb a jelölt, utána az üzenet");
   const storage = fs.readFileSync("server/storage.ts", "utf8");
   assert.match(storage, /if \(!\['pending', 'approved', 'applied'\]\.includes\(improved\.status\)\)/, "az alkalmazás státuszőre változatlan");
