@@ -3,7 +3,7 @@ import type { WorkflowRecord, WorkflowStore } from "./engine";
 import { createSkillStore, saveSkillAudit } from "./learning-store";
 
 /** Lazy pool: importing the engine or running unit tests never connects to production. */
-export function createWorkflowStore(getPool: () => Promise<Pool>): WorkflowStore & { list(owner: string): Promise<WorkflowRecord[]>; related(id: string, owner: string): Promise<string | null>; exists(id: string): Promise<boolean> } {
+export function createWorkflowStore(getPool: () => Promise<Pool>): WorkflowStore & { list(owner: string): Promise<WorkflowRecord[]>; related(id: string, owner: string): Promise<string | null>; exists(id: string): Promise<boolean>; stop(id: string, owner: string, message: string): Promise<boolean> } {
   return {
     loadSkill: createSkillStore(getPool).load,
     async related(id, owner) {
@@ -52,6 +52,25 @@ export function createWorkflowStore(getPool: () => Promise<Pool>): WorkflowStore
       const pool = await getPool();
       const result = await pool.query("UPDATE lesson_workflow_runs SET lease_until=now()+interval '90 seconds' WHERE id=$1 AND lease_token=$2 AND lease_until>now()", [id, token]);
       return result.rowCount === 1;
+    },
+    /**
+     * Spec 2026-10-22-elmaradt-feladatok (S3): a futó / várakozó futás leállítása — bármelyik példányon fut. A bérlet törlődik és a revízió
+     * lép, így a motor szívverése és következő mentése elbukik (a motor nem ír vissza); a futás állapota „hiba” a megadott üzenettel.
+     * A hozzá tartozó okosítás-sor (azonos azonosító) is lezárul. Visszaad: történt-e leállítás.
+     */
+    async stop(id, owner, message) {
+      const pool = await getPool();
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const result = await client.query(`UPDATE lesson_workflow_runs SET lease_token=NULL, lease_until=NULL, state='error', revision=revision+1, updated_at=now(),
+          snapshot = jsonb_set(jsonb_set(jsonb_set(snapshot, '{state}', '"error"'::jsonb), '{error}', to_jsonb($3::text)), '{revision}', to_jsonb(revision+1))
+          WHERE id=$1 AND owner_id=$2 AND state IN ('running','waiting')`, [id, owner, message]);
+        if (result.rowCount === 1) await client.query("UPDATE improved_html_files SET status='error', improvement_notes=$2 WHERE id=$1 AND status='processing'", [id, message]);
+        await client.query("COMMIT");
+        return result.rowCount === 1;
+      } catch (error) { await client.query("ROLLBACK"); throw error; }
+      finally { client.release(); }
     },
     async release(id, token) {
       await (await getPool()).query("UPDATE lesson_workflow_runs SET lease_token=NULL,lease_until=NULL WHERE id=$1 AND lease_token=$2", [id, token]);

@@ -20,6 +20,7 @@ import { executeWorkflow, workflowPhase, workflowSkillPrompt, workflowFinding } 
 import { workflowStore } from "./workflows/store";
 import { htmlBaselineHash } from "./improve/html-baseline";
 import { withSupportSkill } from "./studio/support-skills";
+import { WORKFLOW_STOPPED_MESSAGE } from "../shared/lesson-workflow";
 
 /**
  * Run the AI improvement in background and update the DATABASE record
@@ -581,6 +582,12 @@ ${originalFile.content}
       userMessage = err.message;
     }
 
+    // Spec 2026-10-22-elmaradt-feladatok (S3): a tulajdonos leállította — a leállítás megjegyzése marad, a motor ütközési üzenete nem írja felül.
+    const current = await storage.getImprovedHtmlFile(dbRecordId).catch(() => undefined);
+    if (current?.status === 'error' && current.improvementNotes === WORKFLOW_STOPPED_MESSAGE) {
+      logger.info(`[IMPROVE] Record ${dbRecordId}: a tulajdonos leállította`);
+      throw new Error(WORKFLOW_STOPPED_MESSAGE, { cause: error });
+    }
     // ✅ UPDATE the DB record with error status
     try {
       // Spec 2026-10-20-okositas-bukott-jelolt: a kapun bukott jelölt megmarad (diagnosztika); `error` állapotban nem alkalmazható.

@@ -109,3 +109,46 @@ test("Tananyagjavító: a futó javítás fázissora a lap tetején ragad a telj
   expect(box!.y).toBeLessThan(200);
   await page.screenshot({ path: "test-results/phase-bar/repair-scrolled-393.png" });
 });
+
+// Spec 2026-10-22-elmaradt-feladatok (S3): a futó okosítás „Leállítás” gombja — megerősítés után POST, utána a futás „hiba: leállítva”;
+// befejezett / hibás futásnál nincs gomb.
+for (const vp of [{ width: 393, height: 780 }, { width: 1280, height: 800 }]) {
+  test(`${vp.width}: a futó okosítás leállítható (megerősítéssel), a hibás sornál nincs leállítás`, async ({ page }) => {
+    let stopped = false;
+    let posts = 0;
+    await page.route("**/api/**", (route) => {
+      const req = route.request(); const path = new URL(req.url()).pathname;
+      if (path === "/api/auth/user") return route.fulfill({ json: { id: "admin-fixture", isAdmin: true, firstName: "Admin" } });
+      if (path === "/api/config") return route.fulfill({ json: { baseUrl: "http://localhost", materialOrigin: "" } });
+      if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "probe" } });
+      if (path === "/api/html-files") return route.fulfill({ json: [{ id: "f1", title: "Eredeti", contentType: "html", classroom: 4, createdAt: iso }] });
+      if (path === "/api/admin/improved-files") return route.fulfill({ json: [imp("imp-run", stopped ? "error" : "processing", stopped ? "A futást a tulajdonos leállította." : null), imp("imp-err", "error", failed.error!)] });
+      if (path === "/api/studio/workflows/imp-run/stop" && req.method() === "POST") { posts++; stopped = true; return route.fulfill({ json: { stopped: true } }); }
+      if (path === "/api/studio/workflows/imp-run") return route.fulfill({ json: { run: stopped ? { ...running, state: "error", error: "A futást a tulajdonos leállította." } : running } });
+      if (path === "/api/studio/workflows/imp-err") return route.fulfill({ json: { run: failed } });
+      if (path === "/api/studio/workflows") return route.fulfill({ json: { runs: [] } });
+      return route.fulfill({ json: [] });
+    });
+    await page.setViewportSize(vp);
+    await page.goto("/admin?tab=improve-materials");
+    const bar = page.getByTestId("improver-phase-bars").getByTestId("phase-bar").first();
+    await expect(bar).toHaveAttribute("data-run-state", "running");
+    const stop = bar.getByTestId("phase-bar-stop");
+    await expect(stop).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `test-results/phase-bar/stop-${vp.width}.png` });
+    page.once("dialog", (d) => void d.dismiss());
+    await stop.click();
+    expect(posts).toBe(0);
+    page.once("dialog", (d) => void d.accept());
+    await stop.click();
+    await expect.poll(() => posts).toBe(1);
+    await expect(page.getByText("A futás leállítva").first()).toBeVisible();
+    // A leállított futás már nem fut: a futó sávok közül eltűnik vagy hibás állapotú, leállítás gomb nélkül.
+    await expect(page.getByTestId("phase-bar-stop")).toHaveCount(0);
+    const err = page.getByTestId("improver-error-imp-err");
+    await err.locator("summary").first().click();
+    await expect(err.getByTestId("phase-bar")).toHaveAttribute("data-run-state", "error");
+    await expect(err.getByTestId("phase-bar-stop")).toHaveCount(0);
+  });
+}
