@@ -63,6 +63,8 @@ const BAND_ICON: Record<DesignThemeId, typeof Leaf> = { explorer: Leaf, adventur
 
 const FullTeachingContext = createContext(false);
 const OPTION_KEYS = "ABCDEFGH";
+/** Spec 2026-10-22: a ennél hosszabb magyarázat ≥ 1500 px-en két hasábban folyik (rövid szövegnél a két hasáb csak szétszabdalná). */
+const EXPLAIN_LONG_CHARS = 600;
 
 function BlockHead({ icon: Icon, label, kind }: { icon: typeof BookOpen; label: string; kind?: string }) {
   // Arculati bank S2: a sáv blokkjelzője a lucide ikon helyett (ha nincs vagy nem töltődik be, a lucide marad).
@@ -99,7 +101,7 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
   );
 
   return (
-    <div className={cn("lesson-block space-y-1", theme.body)} data-block="explain" data-depth={block.depth}>
+    <div className={cn("lesson-block space-y-1", theme.body)} data-block="explain" data-depth={block.depth} data-long={block.text.length > EXPLAIN_LONG_CHARS ? "true" : undefined}>
       <BlockHead icon={BookOpen} label={theme.labels.explain} kind="explain" />
       {block.depth !== "core" && (
         <span className="lesson-muted inline-flex items-center gap-1 text-xs">
@@ -292,11 +294,11 @@ export function LessonBlock({
     case "animate": {
       const Anim = ANIMATE_REGISTRY[block.animKind];
       // Review #279: a mozgókép és a próba blokk is blokkfejlécet kap (a sáv jelzőjével), mint a többi négy típus.
-      return <div className="space-y-2"><BlockHead icon={PlayCircle} label="Mozgókép" kind="animate" /><Anim params={block.params} caption={block.caption} /></div>;
+      return <div className="space-y-2" data-block="animate"><BlockHead icon={PlayCircle} label="Mozgókép" kind="animate" /><Anim params={block.params} caption={block.caption} /></div>;
     }
     case "try": {
       const Try = TRY_REGISTRY[block.tryKind];
-      return <div className="space-y-2"><BlockHead icon={Hand} label="Próbáld ki" kind="try" /><Try spec={block.spec} persisted={tryPersisted} onPersist={onTryPersist} /></div>;
+      return <div className="space-y-2" data-block="try"><BlockHead icon={Hand} label="Próbáld ki" kind="try" /><Try spec={block.spec} persisted={tryPersisted} onPersist={onTryPersist} /></div>;
     }
   }
 }
@@ -512,7 +514,7 @@ export function LessonRuntime({
     // nem jelenik meg (tulajdonosi döntés 2026-10-16) — a `data-experience` állandó, így a régi téma- és világszabályok nem illeszkednek.
     <DesignBandContext.Provider value={designTheme}>
     <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
-      <article className="max-w-3xl mx-auto px-4 py-6 space-y-6" data-testid="lesson-runtime">
+      <article className="mx-auto py-6 space-y-6" data-testid="lesson-runtime">
         {/* Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a koncepciókép sávfejléce — jelvény, évfolyam, téma, mottó. */}
         <div className="ws-bandhead" data-testid="ws-bandhead">
           <span className="ws-badge" aria-hidden>{(() => { const Icon = BAND_ICON[designTheme]; return <Icon className="w-7 h-7" />; })()}</span>
