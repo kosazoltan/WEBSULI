@@ -9,6 +9,7 @@ import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, less
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import { deepWellFormed } from "../../shared/well-formed";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
+import { logger } from "../lib/logger";
 import { workflowFence, workflowSerialized } from "../workflows/engine";
 import type { Coverage, MapConcept } from "./coverage";
 import type { StudioStep } from "./pipeline";
@@ -95,7 +96,7 @@ export type PipelineStore = {
    * Audit 2026-09-05 (gate): make the lesson reachable for a child — html_files row (`contentType:'lesson'`), publishedAt + coverage
    * snapshot on the lessons row, and the concept-bound checks exported to the coupon games (idempotent per lesson).
    */
-  publishLesson(input: PublishInput): Promise<{ htmlFileId: string; exportedQuizItems: number }>;
+  publishLesson(input: PublishInput): Promise<{ htmlFileId: string; exportedQuizItems: number; created?: boolean }>;
   createJob(input: { mapId: string; step: "pedagogue"; status: string; model: string; promptVersion: string; inputHash: string }): Promise<string>;
   /** Spec 2026-10-19-tudasbank-s5-s6-ujrabekotes (S6, kapcsolós): EGY tantárgyi bank aktív tételei. */
   loadCatalogRows?(subject: string): Promise<CatalogRowLike[]>;
@@ -210,6 +211,8 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
 
         let fileId = existing?.htmlFileId ?? null;
         let classroom = input.classroom;
+        // Spec 2026-10-22-uj-lecke-ertesito: csak a valóban új anyag (nem átalakítás, nem újrapublikálás, nem javítás).
+        let created = false;
         // Review #349: a cél-anyag nem kerülhető meg — ha a lecke már más anyaghoz kötött, a publikálás megáll.
         if (fileId && input.targetHtmlFileId && fileId !== input.targetHtmlFileId) throw new Error(`A lecke már más anyaghoz kötött (${fileId}), nem a célhoz (${input.targetHtmlFileId}).`);
         // Spec 2026-10-20-regi-anyag-studio-atalakitas: a régi anyag helyben lesz lecke — előbb mentés, utána ugyanaz a frissítés, mint a
@@ -250,6 +253,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
             })
             .returning({ id: htmlFiles.id });
           fileId = file.id;
+          created = true;
         }
 
         await tx
@@ -276,12 +280,17 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
             .values(input.quizItems.map((q) => ({ ...q, sourceMaterialId: fileId })));
         }
         await workflowFence(tx);
-        return { htmlFileId: fileId, exportedQuizItems: input.quizItems.length };
+        return { htmlFileId: fileId, exportedQuizItems: input.quizItems.length, created };
       });
       // A lista-cache a GET /api/html-files előtt áll. Invalidálás CSAK a sikeres
       // commit után: különben az előnézet (/preview/:id) működik, a főoldal/Fájlok
       // lista pedig 5 percig a régi sort szolgálja.
       getHtmlFilesCache().invalidate();
+      // Spec 2026-10-22-uj-lecke-ertesito: az új lecke értesítője a commit UTÁN, nem blokkolva, csak élesben.
+      if (result.created && process.env.NODE_ENV === "production") {
+        void import("../daily-reminder").then(({ notifyNewLesson }) => notifyNewLesson({ htmlFileId: result.htmlFileId, title: input.title, classroom: input.classroom }))
+          .catch((error: unknown) => logger.error("[NEW-LESSON] az értesítő indítása nem sikerült:", error instanceof Error ? error.name : "ismeretlen"));
+      }
       return result;
     },
 

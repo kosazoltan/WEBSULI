@@ -2053,8 +2053,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { planDailyReminders, budapestDay } = await import("./daily-reminder");
       const { isSchoolDay } = await import("../shared/school-calendar");
+      const { repeatOnlyPlan } = await import("../shared/daily-reminder");
       const now = new Date();
-      const plan = await planDailyReminders(now);
+      // Spec 2026-10-22-uj-lecke-ertesito: az előnézet az ütemezett levelet mutatja — csak az ismétlést.
+      const plan = repeatOnlyPlan(await planDailyReminders(now));
       // Átfogó review (S1–S5): az admin előnézet linkje token nélküli — különben az admin böngészője a tanulóhoz párosulna.
       const { getMaterialPreviewUrl: previewUrl } = await import("./utils/config");
       res.json({ day: budapestDay(now).iso, schoolDay: isSchoolDay(budapestDay(now).date), items: plan.map(p => ({ ...p, url: previewUrl(p.materialId) })) });

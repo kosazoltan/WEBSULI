@@ -75,11 +75,25 @@ export function displayTopic(label: string | null | undefined): string | null {
 
 export const reminderSubject = (first: string, title: string, repeat = false) => repeat ? `${first}, ismételjük: ${title}` : `${first}, a mai tananyagod: ${title}`;
 
+/** Spec 2026-10-22-uj-lecke-ertesito: az új Stúdió-lecke értesítőjének tárgya és címkéje. */
+export const newLessonSubject = (first: string, title: string) => `${first}, új tananyagod érkezett: ${title}`;
+export const NEW_LESSON_LABEL = "ÚJ TANANYAG";
+
+/** Spec 2026-10-22-uj-lecke-ertesito: az ütemezett reggeli levél csak az ismétlést ajánlja (a 70% alatti eredmény újra). */
+export function repeatOnlyPlan<T extends { repeatPercent?: number }>(plan: readonly T[]): T[] {
+  return plan.filter((p) => p.repeatPercent !== undefined);
+}
+
+/** Spec 2026-10-22-uj-lecke-ertesito: az új lecke címzettjei — aktív, nevesített tanulói cím, amelynek évfolyama a leckéé. */
+export function newLessonRecipients<T extends { email: string; studentName?: string | null; isActive?: boolean | null; classrooms?: readonly number[] | null }>(rows: readonly T[], classroom: number): T[] {
+  return rows.filter((r) => r.isActive !== false && Boolean(r.studentName?.trim()) && Array.isArray(r.classrooms) && r.classrooms[0] === classroom);
+}
+
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-export function reminderHtml(input: { first: string; title: string; topic?: string | null; url: string; motivation: string; repeatPercent?: number | null }): string {
+export function reminderHtml(input: { first: string; title: string; topic?: string | null; url: string; motivation: string; repeatPercent?: number | null; label?: string }): string {
   const { first, title, topic, url, motivation, repeatPercent } = input;
-  const label = typeof repeatPercent === "number" ? `ISMÉTLÉS — MÚLTKOR ${Math.round(repeatPercent)}% LETT` : "A MAI TANANYAGOD";
+  const label = input.label ?? (typeof repeatPercent === "number" ? `ISMÉTLÉS — MÚLTKOR ${Math.round(repeatPercent)}% LETT` : "A MAI TANANYAGOD");
   return `<!doctype html><html lang="hu"><body style="margin:0;background:#0A0E27;font-family:Arial,Helvetica,sans-serif;color:#f8fafc">
 <div style="max-width:560px;margin:0 auto;padding:24px">
 <p style="font-size:22px;font-weight:bold;margin:0 0 8px">Szia, ${esc(first)}!</p>
