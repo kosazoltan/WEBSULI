@@ -30,9 +30,11 @@ export function createWorkflowStore(getPool: () => Promise<Pool>): WorkflowStore
       }
       return record;
     },
-    async claim(id, owner, token) {
+    async claim(id, owner, token, revision) {
       const pool = await getPool();
-      const result = await pool.query("UPDATE lesson_workflow_runs SET lease_token=$3,lease_until=now()+interval '90 seconds' WHERE id=$1 AND owner_id=$2 AND (lease_token IS NULL OR lease_until<now()) AND state NOT IN ('done','ready')", [id, owner, token]);
+      const result = revision === undefined
+        ? await pool.query("UPDATE lesson_workflow_runs SET lease_token=$3,lease_until=now()+interval '90 seconds' WHERE id=$1 AND owner_id=$2 AND (lease_token IS NULL OR lease_until<now()) AND state NOT IN ('done','ready')", [id, owner, token])
+        : await pool.query("UPDATE lesson_workflow_runs SET lease_token=$3,lease_until=now()+interval '90 seconds' WHERE id=$1 AND owner_id=$2 AND (lease_token IS NULL OR lease_until<now()) AND state NOT IN ('done','ready') AND revision=$4", [id, owner, token, revision]);
       return result.rowCount === 1;
     },
     async save(record, token) {
@@ -63,9 +65,15 @@ export function createWorkflowStore(getPool: () => Promise<Pool>): WorkflowStore
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-        const result = await client.query(`UPDATE lesson_workflow_runs SET lease_token=NULL, lease_until=NULL, state='error', revision=revision+1, updated_at=now(),
-          snapshot = jsonb_set(jsonb_set(jsonb_set(snapshot, '{state}', '"error"'::jsonb), '{error}', to_jsonb($3::text)), '{revision}', to_jsonb(revision+1))
-          WHERE id=$1 AND owner_id=$2 AND state IN ('running','waiting')`, [id, owner, message]);
+        const { rows } = await client.query("SELECT snapshot, revision FROM lesson_workflow_runs WHERE id=$1 AND owner_id=$2 AND state IN ('running','waiting') FOR UPDATE", [id, owner]);
+        if (!rows[0]) { await client.query("ROLLBACK"); return false; }
+        // Review #366: a nyitott (futó / várakozó) utolsó lépés lezárul az üzenettel, a pillanatkép ideje frissül — a fázissor nem „forog” tovább.
+        const now = Date.now();
+        const view = rows[0].snapshot as WorkflowRecord["view"];
+        const last = view.visits?.at(-1);
+        if (last && (last.state === "running" || last.state === "waiting")) Object.assign(last, { state: "error", error: message, finishedAt: now });
+        Object.assign(view, { state: "error", error: message, updatedAt: now, revision: rows[0].revision + 1 });
+        const result = await client.query("UPDATE lesson_workflow_runs SET lease_token=NULL, lease_until=NULL, state='error', revision=revision+1, updated_at=now(), snapshot=$3::jsonb WHERE id=$1 AND owner_id=$2", [id, owner, JSON.stringify(view)]);
         // Review #366: a már „pending” (alkalmazásra váró, nem alkalmazott) jelölt is lezárul — a leállított futás jelöltje nem alkalmazható.
         if (result.rowCount === 1) await client.query("UPDATE improved_html_files SET status='error', improvement_notes=$2 WHERE id=$1 AND status IN ('processing','pending')", [id, message]);
         await client.query("COMMIT");

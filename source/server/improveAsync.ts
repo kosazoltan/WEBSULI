@@ -228,6 +228,12 @@ ${originalFile.content}
     const MAX_ATTEMPTS = MAX_RETRIES + 1; // +1 for fallback model attempt
 
     for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
+      // Review #366 (spec 2026-10-22-elmaradt-feladatok, S3): a tulajdonos leállítása után nincs új szolgáltatói próba / tartalékmodell —
+      // adatbázisból ellenőrizve, a cikluson KÍVÜL dobva (a retry-ág nem nyeli el).
+      if (attempt > 0) {
+        const current = await storage.getImprovedHtmlFile(dbRecordId).catch(() => undefined);
+        if (current?.status === 'error' && current.improvementNotes === WORKFLOW_STOPPED_MESSAGE) throw new Error(WORKFLOW_STOPPED_MESSAGE);
+      }
       try {
         fullContent = '';
         lastLogTime = Date.now();
