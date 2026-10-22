@@ -14,7 +14,9 @@
 [data-band][data-experience="cosmos"] { --lesson-bg: #131b35; --lesson-surface: #1d2947; --lesson-ink: #f1f4ff; --lesson-muted: #becee8; --lesson-accent: #bbadff; --lesson-accent-ink: #221948; --lesson-line: #4a597a; --fusion-secondary: #64dae5; --fusion-soft: #303956; --lesson-radius: 12px; --lesson-check-head: #ffcb80; --lesson-check-head-ink: #382307; }
 [data-band][data-experience="paper"] { --lesson-bg: #f8f4e9; --lesson-surface: #fffdf6; --lesson-ink: #3c342c; --lesson-muted: #6e5e4d; --lesson-accent: #5e4b85; --lesson-line: #d8ccb5; --fusion-secondary: #936227; --fusion-soft: #ede6d5; --lesson-radius: 14px; background-image: linear-gradient(#d8ccb533 1px, transparent 1px); background-size: 100% 32px; }
 [data-band][data-experience="berry"] { --lesson-bg: #fbf2fa; --lesson-ink: #442a49; --lesson-muted: #705279; --lesson-accent: #854785; --lesson-line: #ddc5dd; --fusion-secondary: #256f85; --fusion-soft: #efe0ef; --lesson-radius: 22px; }
-[data-experience] > article { max-width: 840px; }
+/* Spec 2026-10-22-lecke-szeles-elrendezes: a lecke a nézet szélességét követi (korábban minden kijelzőn ≤ 840 px); a ≤ 650 px-es
+   mobilszabály (padding: 12px) lejjebb változatlanul marad. */
+[data-experience] > article { width: 100%; max-width: 2400px; margin-inline: auto; padding-inline: clamp(16px, 2.6vw, 72px); }
 [data-experience] .lesson-hero { position: relative; isolation: isolate; overflow: hidden; padding: clamp(22px, 4vw, 48px); border-bottom: 5px solid var(--fusion-secondary); background: var(--fusion-soft); }
 [data-experience] .lesson-hero::after { content: ""; position: absolute; z-index: -1; width: 200px; height: 200px; right: -45px; top: -80px; border: 30px solid var(--lesson-accent); border-radius: 50%; opacity: .12; }
 [data-experience="paper"] .lesson-hero::after { border-radius: 0; transform: rotate(25deg); }
@@ -204,9 +206,9 @@
    Egy olvasóoszlop, világos kártya-hierarchia, 8 px-es ritmus; a világ színe a hangsúlyokon.
    Csak megjelenítés: a lecke adatai nem változnak, minden meglévő lecke így jelenik meg.
    --------------------------------------------------------------------------------------------- */
-/* Egy olvasóoszlop (840 px): a fejléc, a fülsor és a tartalom egy vonalban; a bekezdés kitölti a kártyát. */
-[data-experience] .fusion-panel .lesson-block p { max-width: none; }
-[data-experience] .fusion-panel > div:has(> section[id^="section-"]) ~ div:has(> section[id^="section-"]):not([hidden]) { margin-top: 64px; }
+/* A fejléc, a fülsor és a tartalom egy vonalban; a bekezdés kitölti a kártyát, de legfeljebb 90 karakter széles (2026-10-22). */
+[data-experience] .fusion-panel .lesson-block p { max-width: 90ch; }
+[data-experience] .fusion-teaching-main > div:has(> section[id^="section-"]) ~ div:has(> section[id^="section-"]):not([hidden]) { margin-top: 64px; }
 [data-experience] section[id^="section-"] > h2.lesson-heading { gap: 14px; margin: 0 0 6px; padding-bottom: 14px; border-bottom: 1px solid var(--lesson-line); font-size: clamp(1.3rem, 2.3vw, 1.7rem); letter-spacing: -.01em; }
 [data-experience] .lesson-section-emoji { font-size: 1.15em; }
 [data-experience] .lesson-block { border: 1px solid var(--lesson-line); border-left: 4px solid var(--lesson-accent); box-shadow: 0 1px 2px rgb(15 23 42 / .05), 0 8px 24px rgb(15 23 42 / .05); }
@@ -221,6 +223,54 @@
 [data-experience] .lesson-block[data-block="recap"] { border-left-color: var(--fusion-secondary); }
 @media (max-width: 650px) {
   [data-experience] section[id^="section-"] > h2.lesson-heading { gap: 10px; font-size: 1.25rem; }
-  [data-experience] .fusion-panel > div:has(> section[id^="section-"]) ~ div:has(> section[id^="section-"]):not([hidden]) { margin-top: 48px; }
+  [data-experience] .fusion-teaching-main > div:has(> section[id^="section-"]) ~ div:has(> section[id^="section-"]):not([hidden]) { margin-top: 48px; }
   [data-experience] .lesson-section-no { width: 34px; height: 34px; border-radius: 10px; }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Spec 2026-10-22 (docs/specs/2026-10-22-lecke-szeles-elrendezes.md) — a kijelzőt kitöltő reszponzív elrendezés.
+   ≤ 520 px: változatlan egyhasábos · 521–1199 px: egyhasábos, a nézet szélességét követi · ≥ 1200 px: sticky fejezetlista +
+   kétoszlopos blokkrács · ≥ 1500 px: a magyarázat két hasábban · ≥ 2000 px: a rácsok három oszlopban. Minden rácsgyerek min-width: 0.
+   --------------------------------------------------------------------------------------------- */
+.fusion-chapter-nav { display: none; }
+.fusion-teaching-layout, .fusion-teaching-main { min-width: 0; }
+.fusion-task-list { min-width: 0; }
+/* Az ábrák arányosan skálázódnak (nincs rögzített magasság), legfeljebb 920 px szélesek; az ikonok, a blokkjelzők és a fedő SVG kimarad.
+   Nulla specificitású felső korlát: az ábra saját, szűkebb korlátja (pl. max-w-md) érvényben marad — a korlát nem nagyít. */
+:where([data-experience]) :where([data-block="animate"], [data-block="try"], [data-block="explain"], figure[data-anim]) :is(svg, canvas, img, video):where(:not([class*="lucide"], .ws-block-marker, .absolute, [aria-hidden="true"])) { max-width: min(100%, 920px); height: auto; }
+/* Review #368: a HTML-ből rajzolt ábrák (idővonal, térkép, folyamat) rajzterülete is legfeljebb 920 px; a felirat és a külső keret marad. Az SVG-s / képes ábra burkolója kimarad (azt az arányos médiaszabály korlátozza — a burkoló szűkítése a számegyenest 148 px-szel megnyújtotta, mért). */
+[data-experience] figure[data-anim] > :not(figcaption, svg, canvas, img, video):not(:has(svg, canvas, img)) { max-width: min(100%, 920px); }
+/* A kvíz egy-kérdéses köre olvasható szélességű marad. */
+.fusion-panel-quiz { max-width: 900px; margin-inline: auto; }
+@media (min-width: 1200px) {
+  .fusion-teaching-layout { display: grid; grid-template-columns: clamp(220px, 15vw, 300px) minmax(0, 1fr); gap: clamp(24px, 2.4vw, 56px); align-items: start; }
+  .fusion-chapter-nav { display: block; position: sticky; top: 84px; max-height: calc(100dvh - 104px); overflow-y: auto; padding: 14px 10px; border: 1px solid var(--lesson-line); border-radius: var(--lesson-radius); background: var(--lesson-surface); }
+  .fusion-chapter-nav ol { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+  .fusion-chapter-nav button { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 10px; border-radius: 10px; text-align: left; color: var(--lesson-ink); font-size: .95rem; line-height: 1.35; }
+  .fusion-chapter-nav button:hover { background: var(--fusion-soft); }
+  .fusion-chapter-nav button[aria-current="true"] { background: var(--fusion-soft); font-weight: 800; box-shadow: inset 4px 0 0 var(--lesson-accent); }
+  .fusion-chapter-no { flex: none; display: grid; place-items: center; min-width: 26px; height: 26px; border-radius: 8px; background: var(--lesson-accent); color: var(--lesson-accent-ink); font-size: .8rem; font-weight: 800; }
+  .fusion-chapter-name { min-width: 0; overflow-wrap: anywhere; }
+  /* A legördülő itt rejtett (a lista veszi át), a „Teljes tananyag” kapcsoló marad. */
+  .learning-book-head .fusion-label { display: none; }
+  .learning-book-head { justify-content: flex-end; }
+  /* A fejezet blokkjai kétoszlopos rácsban; az ábra, a gyakorlat, az összefoglaló és minden egyéb gyerek (cím, díszítő, Próba) teljes szélességű. */
+  [data-experience] .fusion-teaching-main section[id^="section-"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+  [data-experience] .fusion-teaching-main section[id^="section-"] > * { grid-column: 1 / -1; min-width: 0; margin: 0; }
+  [data-experience] .fusion-teaching-main section[id^="section-"] > .lesson-block:is([data-block="explain"], [data-block="example"], [data-block="check"]) { grid-column: auto; }
+  .fusion-task-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+  [data-experience] .fusion-task-list > .fusion-task { min-width: 0; margin: 0; }
+}
+@media (min-width: 1500px) {
+  /* A hosszú, többbekezdéses magyarázat (data-long) teljes sorszélességű és két hasábban folyik; review #368: a hasábváltás csak
+     bekezdéshatáron történik (bekezdés sosem törik ketté); a fej és a gomb teljes szélességű marad. */
+  [data-experience] .fusion-teaching-main section[id^="section-"] > .lesson-block[data-block="explain"][data-long] { grid-column: 1 / -1; }
+  [data-experience] .lesson-block[data-block="explain"][data-long] { column-count: 2; column-gap: clamp(32px, 2.6vw, 64px); }
+  [data-experience] .lesson-block[data-block="explain"][data-long] > * { break-inside: avoid; }
+  [data-experience] .lesson-block[data-block="explain"][data-long] > :is(.lesson-block-head, .lesson-muted, button) { column-span: all; }
+  [data-experience] .lesson-block[data-block="explain"][data-long] > .lesson-block-head { display: flex; width: fit-content; }
+}
+@media (min-width: 2000px) {
+  .fusion-method-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fusion-task-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
