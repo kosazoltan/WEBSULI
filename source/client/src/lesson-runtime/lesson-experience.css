@@ -238,8 +238,8 @@
 /* Az ábrák arányosan skálázódnak (nincs rögzített magasság), legfeljebb 920 px szélesek; az ikonok, a blokkjelzők és a fedő SVG kimarad.
    Nulla specificitású felső korlát: az ábra saját, szűkebb korlátja (pl. max-w-md) érvényben marad — a korlát nem nagyít. */
 :where([data-experience]) :where([data-block="animate"], [data-block="try"], [data-block="explain"], figure[data-anim]) :is(svg, canvas, img, video):where(:not([class*="lucide"], .ws-block-marker, .absolute, [aria-hidden="true"])) { max-width: min(100%, 920px); height: auto; }
-/* Review #368: a HTML-ből rajzolt ábrák (idővonal, térkép, folyamat) rajzterülete is legfeljebb 920 px; a felirat és a külső keret marad. */
-[data-experience] figure[data-anim] > :not(figcaption) { max-width: min(100%, 920px); }
+/* Review #368: a HTML-ből rajzolt ábrák (idővonal, térkép, folyamat) rajzterülete is legfeljebb 920 px; a felirat és a külső keret marad. Az SVG-s / képes ábra burkolója kimarad (azt az arányos médiaszabály korlátozza — a burkoló szűkítése a számegyenest 148 px-szel megnyújtotta, mért). */
+[data-experience] figure[data-anim] > :not(figcaption, svg, canvas, img, video):not(:has(svg, canvas, img)) { max-width: min(100%, 920px); }
 /* A kvíz egy-kérdéses köre olvasható szélességű marad. */
 .fusion-panel-quiz { max-width: 900px; margin-inline: auto; }
 @media (min-width: 1200px) {

@@ -81,7 +81,7 @@ for (const classroom of CLASSROOMS) {
           return widest > limit + 0.5 ? [`${(p.textContent ?? "").trim().slice(0, 24)} (${Math.round(widest)} px > 90ch = ${Math.round(limit)} px)`] : [];
         });
         // Review #368: a HTML-ből rajzolt ábrák (idővonal, térkép, folyamat) rajzterülete is legfeljebb 920 px.
-        const htmlFigureIssues = [...document.querySelectorAll<HTMLElement>("figure[data-anim] > :not(figcaption)")].filter(el => el.getBoundingClientRect().width > 920.5)
+        const htmlFigureIssues = [...document.querySelectorAll<HTMLElement>("figure[data-anim] > :not(figcaption, svg, canvas, img, video):not(:has(svg, canvas, img))")].filter(el => el.getBoundingClientRect().width > 920.5)
           .map(el => `${el.closest("figure")?.getAttribute("data-anim")} rajzterület ${Math.round(el.getBoundingClientRect().width)} px széles`);
         const figures = [...document.querySelectorAll<SVGSVGElement | HTMLImageElement>(':is([data-block="animate"], [data-block="try"], figure[data-anim]) :is(svg, img)')].filter(el => !el.matches('[class*="lucide"], .ws-block-marker, .absolute, [aria-hidden="true"]') && el.getBoundingClientRect().width > 0);
         const figureIssues = figures.flatMap(el => {
