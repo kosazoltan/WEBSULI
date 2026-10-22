@@ -582,25 +582,23 @@ ${originalFile.content}
       userMessage = err.message;
     }
 
-    // Spec 2026-10-22-elmaradt-feladatok (S3): a tulajdonos leállította — a leállítás megjegyzése marad, a motor ütközési üzenete nem írja felül.
-    const current = await storage.getImprovedHtmlFile(dbRecordId).catch(() => undefined);
-    if (current?.status === 'error' && current.improvementNotes === WORKFLOW_STOPPED_MESSAGE) {
-      logger.info(`[IMPROVE] Record ${dbRecordId}: a tulajdonos leállította`);
-      throw new Error(WORKFLOW_STOPPED_MESSAGE, { cause: error });
-    }
     // ✅ UPDATE the DB record with error status
+    // Spec 2026-10-22-elmaradt-feladatok (S3) + review #366: ha a tulajdonos leállította, a leállítás megjegyzése marad — feltételes UPDATE
+    // (atomikus: nincs előolvasás és felülírás közti versenyhelyzet).
+    let stoppedByOwner = false;
     try {
       // Spec 2026-10-20-okositas-bukott-jelolt: a kapun bukott jelölt megmarad (diagnosztika); `error` állapotban nem alkalmazható.
       if (error instanceof ImproveOutputError && error.candidate) {
         await storage.updateImprovedHtmlFileContentAndStatus(dbRecordId, error.candidate, 'error')
           .catch((saveError: unknown) => logger.warn(`[IMPROVE] Record ${dbRecordId}: a bukott jelölt nem menthető`, saveError));
       }
-      await storage.updateImprovedHtmlFileStatus(dbRecordId, 'error', undefined, userMessage);
+      stoppedByOwner = !(await storage.failImprovedHtmlFileUnlessStopped(dbRecordId, userMessage, WORKFLOW_STOPPED_MESSAGE));
+      if (stoppedByOwner) logger.info(`[IMPROVE] Record ${dbRecordId}: a tulajdonos leállította`);
     } catch (dbError: unknown) {
       const dbErrorTyped = dbError instanceof Error ? dbError : new Error(String(dbError));
       logger.error(`[IMPROVE] Record ${dbRecordId}: Failed to save error status:`, dbErrorTyped.message);
     }
-    throw new Error(userMessage, { cause: error });
+    throw new Error(stoppedByOwner ? WORKFLOW_STOPPED_MESSAGE : userMessage, { cause: error });
   }
 }
 

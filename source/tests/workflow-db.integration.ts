@@ -305,3 +305,30 @@ test("futó okosítás leállítása: állapot, bérlet, revízió, okosítás-s
   assert.equal(await store.heartbeat(id, "tok-1"), false);
   assert.equal(await store.stop(id, "workflow-owner", "x"), false, "a már leállított futás nem állítható le újra");
 });
+
+// Review #366: a már „pending” (nem alkalmazott) jelölt is lezárul; a hibaág a leállítás megjegyzését atomikusan megőrzi; a későn
+// befejeződő háttérmunka „pending” mentése a leállított sort nem éleszti újra.
+test("leállítás: pending jelölt lezárul, a megjegyzés megmarad, a késői pending mentés elutasítva", async () => {
+  const { storage } = await import("../server/storage");
+  const STOP = "A futást a tulajdonos leállította.";
+  const mk = async (id: string, status: string) => {
+    const view = { id, definition: workflowDefinition("html"), state: "running", createdAt: Date.now(), updatedAt: Date.now(), visits: [], revision: 1 };
+    await dbPool.query("INSERT INTO improved_html_files(id,original_file_id,title,content,status) VALUES ($1,'stop-file','Stop anyag','<p>…</p>',$2)", [id, status]);
+    await dbPool.query("INSERT INTO lesson_workflow_runs(id,owner_id,state,revision,snapshot,lease_token,lease_until) VALUES ($1,'workflow-owner','running',1,$2::jsonb,'tok',now()+interval '90 seconds')", [id, JSON.stringify(view)]);
+  };
+  await mk("workflow-stop-pending", "pending");
+  assert.equal(await store.stop("workflow-stop-pending", "workflow-owner", STOP), true);
+  const { rows: [p] } = await dbPool.query("SELECT status, improvement_notes FROM improved_html_files WHERE id='workflow-stop-pending'");
+  assert.deepEqual({ s: p.status, n: p.improvement_notes }, { s: "error", n: STOP }, "a pending jelölt sem alkalmazható");
+
+  await mk("workflow-stop-race", "processing");
+  assert.equal(await store.stop("workflow-stop-race", "workflow-owner", STOP), true);
+  assert.equal(await storage.failImprovedHtmlFileUnlessStopped("workflow-stop-race", "A futást már másik végrehajtó kezeli.", STOP), false, "a hibaág nem írja felül");
+  await assert.rejects(storage.updateImprovedHtmlFileContentAndStatus("workflow-stop-race", "<p>késő jelölt</p>", "pending"), /nem menthető/);
+  const { rows: [r] } = await dbPool.query("SELECT status, improvement_notes, content FROM improved_html_files WHERE id='workflow-stop-race'");
+  assert.deepEqual({ s: r.status, n: r.improvement_notes, c: r.content }, { s: "error", n: STOP, c: "<p>…</p>" });
+
+  // A nem leállított sor hibára zárása változatlanul működik.
+  await dbPool.query("INSERT INTO improved_html_files(id,original_file_id,title,content,status) VALUES ('imp-normal-fail','stop-file','x','<p>x</p>','processing')");
+  assert.equal(await storage.failImprovedHtmlFileUnlessStopped("imp-normal-fail", "Időtúllépés", STOP), true);
+});

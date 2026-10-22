@@ -66,7 +66,8 @@ export function createWorkflowStore(getPool: () => Promise<Pool>): WorkflowStore
         const result = await client.query(`UPDATE lesson_workflow_runs SET lease_token=NULL, lease_until=NULL, state='error', revision=revision+1, updated_at=now(),
           snapshot = jsonb_set(jsonb_set(jsonb_set(snapshot, '{state}', '"error"'::jsonb), '{error}', to_jsonb($3::text)), '{revision}', to_jsonb(revision+1))
           WHERE id=$1 AND owner_id=$2 AND state IN ('running','waiting')`, [id, owner, message]);
-        if (result.rowCount === 1) await client.query("UPDATE improved_html_files SET status='error', improvement_notes=$2 WHERE id=$1 AND status='processing'", [id, message]);
+        // Review #366: a már „pending” (alkalmazásra váró, nem alkalmazott) jelölt is lezárul — a leállított futás jelöltje nem alkalmazható.
+        if (result.rowCount === 1) await client.query("UPDATE improved_html_files SET status='error', improvement_notes=$2 WHERE id=$1 AND status IN ('processing','pending')", [id, message]);
         await client.query("COMMIT");
         return result.rowCount === 1;
       } catch (error) { await client.query("ROLLBACK"); throw error; }
