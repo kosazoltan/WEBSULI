@@ -290,7 +290,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       // Spec 2026-10-22-uj-lecke-ertesito: az új lecke értesítője a commit UTÁN, nem blokkolva, csak élesben.
       // Review #365: az E2E szerver is NODE_ENV=production-nel fut — ott nincs valódi levél.
       if (result.created && process.env.NODE_ENV === "production" && !isE2eMode()) {
-        void import("../daily-reminder").then(({ notifyNewLesson }) => notifyNewLesson({ htmlFileId: result.htmlFileId, title: input.title, classroom: input.classroom }))
+        void import("../daily-reminder").then(({ enqueueNewLessonNotification }) => enqueueNewLessonNotification({ htmlFileId: result.htmlFileId, title: input.title, classroom: input.classroom }))
           .catch((error: unknown) => logger.error("[NEW-LESSON] az értesítő indítása nem sikerült:", error instanceof Error ? error.name : "ismeretlen"));
       }
       return result;

@@ -180,6 +180,21 @@ export function setupDailyReminders(): void {
  * Spec 2026-10-22-uj-lecke-ertesito: az új Stúdió-lecke értesítője — az évfolyam aktív, nevesített tanulói címeire, személyes linkkel.
  * Sosem dob; a naplóba nem kerül név vagy cím.
  */
+/**
+ * Review #365: az új-lecke értesítők közös, egymás utáni sorban mennek (az egyidejű publikálások összesített küldési sebessége is a
+ * Resend-korlát alatt marad); a leállítás a sor végét korlátos ideig kivárja.
+ */
+let newLessonChain: Promise<unknown> = Promise.resolve();
+export function enqueueNewLessonNotification(lesson: { htmlFileId: string; title: string; classroom: number }): Promise<{ sent: number; failed: number }> {
+  const next = newLessonChain.then(() => notifyNewLesson(lesson));
+  newLessonChain = next.catch(() => undefined);
+  return next;
+}
+/** A még futó / sorban álló új-lecke értesítők vége (a leállítás korlátos ideig kivárja). */
+export function pendingNewLessonNotifications(): Promise<unknown> {
+  return newLessonChain;
+}
+
 export async function notifyNewLesson(lesson: { htmlFileId: string; title: string; classroom: number }, opts: { pauseMs?: number } = {}): Promise<{ sent: number; failed: number }> {
   const out = { sent: 0, failed: 0 };
   try {
@@ -191,11 +206,19 @@ export async function notifyNewLesson(lesson: { htmlFileId: string; title: strin
     for (const r of recipients) {
       const first = firstNameOf(r.studentName!.trim());
       const url = personalUrl(getMaterialPreviewUrl(lesson.htmlFileId), r.learnerId && versions.has(r.learnerId) ? learnerTokenFor(r.learnerId, versions.get(r.learnerId)!) : null);
+      const mail = { subject: newLessonSubject(first, lesson.title), html: reminderHtml({ first, title: lesson.title, url, motivation: motivationFor(first, date), label: NEW_LESSON_LABEL, footer: NEW_LESSON_FOOTER }) };
       try {
-        await send(newLessonSubject(first, lesson.title), reminderHtml({ first, title: lesson.title, url, motivation: motivationFor(first, date), label: NEW_LESSON_LABEL, footer: NEW_LESSON_FOOTER }), r.email);
+        await send(mail.subject, mail.html, r.email);
         out.sent++;
       } catch {
-        out.failed++;
+        // Review #365: egy újrapróba rövid várakozás után (pl. a Resend 2 kérés/mp korlátja).
+        try {
+          if (opts.pauseMs !== 0) await new Promise(res => setTimeout(res, 1_500));
+          await send(mail.subject, mail.html, r.email);
+          out.sent++;
+        } catch {
+          out.failed++;
+        }
       }
       // Resend: legfeljebb 2 kérés/másodperc.
       if (opts.pauseMs !== 0) await new Promise(res => setTimeout(res, opts.pauseMs ?? 600));

@@ -2080,7 +2080,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/daily-reminders/run", isAuthenticatedAdmin, async (_req: Request, res) => {
     const { runDailyReminders } = await import("./daily-reminder");
-    const result = await runDailyReminders(new Date());
+    // Review #365: a kézi küldés ugyanazt a (csak ismétlés) tervet küldi, amit az előnézet jóváhagyásra mutat.
+    const result = await runDailyReminders(new Date(), { repeatOnly: true });
     // Review #292: a futásszintű hiba HTTP-hibaként jelenik meg (a részleges számlálókkal együtt).
     res.status(result.error ? 500 : 200).json(result.error ? { ...result, message: `A kiküldés megszakadt: ${result.error}` } : result);
   });
