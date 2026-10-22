@@ -101,6 +101,8 @@ test("a témás lecke nem animál, és a fókusz kétszínű gyűrű (borostyán
   assert.doesNotMatch(css, /animation\s*:/);
   assert.match(css, /:focus-visible \{\s*outline: 3px solid #F4AB37; outline-offset: 3px; box-shadow: 0 0 0 3px #10233C;/);
   assert.match(css, /\.fusion-tabs button\[aria-selected="true"\]:focus-visible \{\s*box-shadow: inset 0 0 0 2px var\(--ws-accent\), 0 0 0 3px #10233C;/);
+  // Review #367: a párosító kijelölt eleme fókuszban is megtartja a kijelölési gyűrűt.
+  assert.match(css, /\[data-try="match"\] button\[aria-pressed="true"\]:focus-visible \{\s*box-shadow: inset 0 0 0 2px #10B981, 0 0 0 3px #10233C;/);
 });
 
 test("a fókuszgyűrű valamelyik színe minden téma felületén, csempéjén és halvány felületén ≥ 3:1 (§2.6)", () => {

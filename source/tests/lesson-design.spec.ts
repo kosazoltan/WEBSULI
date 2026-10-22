@@ -161,3 +161,21 @@ for (const t of [THEMES[0], THEMES[4]]) {
       clip: { x: Math.max(0, box!.x - 24), y: Math.max(0, box!.y - 24), width: Math.min(1440, box!.width + 48), height: box!.height + 48 } });
   });
 }
+
+// Review #367: a párosító kijelölt bal eleme billentyűs fókuszban is megtartja a zöld kijelölési gyűrűt (a fókuszgyűrű mellett), és
+// aria-pressed állapotot jelez.
+test("párosító: a kijelölt elem fókuszban is látható (zöld + sötét gyűrű, aria-pressed)", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`/__lesson-runtime-probe?fusion=1&classroom=${THEMES[0].classroom}&match=1`);
+  const first = page.locator('[data-try="match"] button').first();
+  await expect(first).toBeVisible();
+  for (let i = 0; i < 120 && !(await first.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press("Tab");
+  await expect(first).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(first).toHaveAttribute("aria-pressed", "true");
+  const st = await first.evaluate((el) => ({ shadow: getComputedStyle(el).boxShadow, focus: el.matches(":focus-visible") }));
+  expect(st.focus).toBe(true);
+  expect(st.shadow).toContain("rgb(16, 185, 129)");
+  expect(st.shadow).toContain("rgb(16, 35, 60)");
+  await first.screenshot({ path: "test-results/websuli-design/match-selected-focus.png" });
+});

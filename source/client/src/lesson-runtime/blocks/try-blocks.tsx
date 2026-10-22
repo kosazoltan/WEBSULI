@@ -220,6 +220,8 @@ function Match({ spec, persisted, onPersist }: TryProps) {
             <button
               key={`l-${i}`}
               onClick={() => pickLeft(i)}
+              // Review #367: a kijelölés állapota a kisegítő technológiának is (fókuszban a gyűrű a CSS-ben összefűzve).
+              aria-pressed={selectedLeft === i}
               className={cn(
                 "w-full text-left border rounded-md px-3 py-2 text-sm min-h-11",
                 selectedLeft === i && "ring-2 ring-emerald-500",
