@@ -61,6 +61,8 @@ test("fényképezés: megtagadott engedély → a natív kamera-input nyílik (f
   // A natív `capture` input kattintása fájlválasztóként jelentkezik a tesztben — ez a fallback bizonyítéka.
   await chooser;
   await expect(page.getByTestId("camera-dialog")).toHaveCount(0);
+  // Review #370 (Vercel): a tartalék út látható gombként is megmarad (lejárt user activation esetére).
+  await expect(page.getByTestId("camera-native-open")).toBeVisible();
 });
 
 test("magicv6-kulso: a Fényképezés gomb látszik és nem lóg ki a tananyagkészítés fülön", async ({ page }) => {

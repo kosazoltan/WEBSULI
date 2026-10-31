@@ -44,6 +44,9 @@ export function CameraCaptureDialog({
   const [videoReady, setVideoReady] = useState(false);
   const [shooting, setShooting] = useState(false);
   const [photos, setPhotos] = useState<CameraPhoto[]>([]);
+  // Review #370 (Codex P2): törléstől független, monoton sorszám — azonos másodpercen belül sem ütközhet két fájlnév
+  // (a hívó név alapján cserél, egy ütközés egy tankönyvoldal elvesztése volna).
+  const photoSeq = useRef(0);
 
   const stop = useCallback(() => {
     stopStream(cameraRef.current?.stream);
@@ -56,6 +59,7 @@ export function CameraCaptureDialog({
     if (!open) return;
     let cancelled = false;
     setPhotos([]);
+    photoSeq.current = 0;
     void (async () => {
       try {
         const camera = await startCamera(browserMediaDevices(), readPreferredCamera());
@@ -102,10 +106,9 @@ export function CameraCaptureDialog({
         return;
       }
       const dataUrl = await blobToDataUrl(still.blob);
-      setPhotos((prev) => [
-        ...prev,
-        { name: `fenykep-${stamp(new Date())}-${prev.length + 1}.jpg`, dataUrl },
-      ]);
+      photoSeq.current += 1;
+      const name = `fenykep-${stamp(new Date())}-${photoSeq.current}.jpg`;
+      setPhotos((prev) => [...prev, { name, dataUrl }]);
     } finally {
       setShooting(false);
     }
@@ -191,7 +194,9 @@ export function CameraCaptureDialog({
           variant="secondary"
           className="w-24 min-h-11 gap-1"
           onClick={finish}
-          disabled={photos.length === 0}
+          // Review #370 (Codex P2 + Vercel): folyamatban lévő exponálás alatt a befejezés tiltott — különben az
+          // utolsó oldal kimaradna (a finish a régi listát adná át, a kései setPhotos már senkihez nem jut el).
+          disabled={photos.length === 0 || shooting}
           data-testid="camera-done"
         >
           <Check className="w-4 h-4" />

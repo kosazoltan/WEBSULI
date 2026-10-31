@@ -149,6 +149,9 @@ export function SourceUploadForm({
   // Fényképezős forrásfelvétel (docs/specs/2026-10-31-tananyag-fenykepezo.md): élő kamera a lapon belül;
   // kameraindítási hibánál a natív kamera-input (telefonon a rendszer-kamera) a tartalék út.
   const [cameraOpen, setCameraOpen] = useState(false);
+  // Review #370 (Vercel): ha az engedély-elutasítás sokára jön, a user activation lejár, és a programozott
+  // input.click() némán elakadhat — ezért a tartalék út látható gombként is megjelenik.
+  const [showNativeFallback, setShowNativeFallback] = useState(false);
   const nativeCameraInput = useRef<HTMLInputElement>(null);
   const FALLBACK_TEXT: Record<CameraStartError, string> = {
     permission: "Nincs kameraengedély — a rendszer fényképezője nyílik meg helyette.",
@@ -159,6 +162,7 @@ export function SourceUploadForm({
   };
   const onCameraFallback = (kind: CameraStartError) => {
     toast({ title: "Beépített fényképező nem elérhető", description: FALLBACK_TEXT[kind] });
+    setShowNativeFallback(true);
     nativeCameraInput.current?.click();
   };
   const addPhotos = async (photos: CameraPhoto[]) => {
@@ -428,6 +432,18 @@ export function SourceUploadForm({
             <Camera className="w-4 h-4" />
             Fényképezés
           </Button>
+          {showNativeFallback && (
+            <Button
+              variant="outline"
+              className="min-h-11 gap-1"
+              disabled={busy}
+              onClick={() => nativeCameraInput.current?.click()}
+              data-testid="camera-native-open"
+            >
+              <Camera className="w-4 h-4" />
+              Rendszer-fényképező
+            </Button>
+          )}
         </div>
         <CameraCaptureDialog
           open={cameraOpen}
