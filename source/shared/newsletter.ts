@@ -41,13 +41,22 @@ export function newsletterSubject(first: string, title: string): string {
 }
 
 /** S2: a hírlevél törzse a reggeli levél stílusában; minden külső szöveg escape-elve. */
-export function newsletterHtml(input: { first: string; title: string; teaser: string; question: string; articleUrl: string; materialTitle?: string | null; materialUrl?: string | null }): string {
-  const { first, title, teaser, question, articleUrl, materialTitle, materialUrl } = input;
+export function newsletterHtml(input: { first: string; title: string; teaser: string; question: string; articleUrl: string; materialTitle?: string | null; materialUrl?: string | null; channel?: { name: string; url: string; description: string } | null }): string {
+  const { first, title, teaser, question, articleUrl, materialTitle, materialUrl, channel } = input;
   const bridge = materialTitle && materialUrl
     ? `<div style="background:#0f172a;border:1px solid #38bdf8;border-radius:16px;padding:18px;margin-top:16px">
 <p style="font-size:13px;margin:0 0 6px;color:#7dd3fc;font-weight:bold">HA EZ TETSZETT, EZT IS NÉZD MEG A WEBSULIN</p>
 <p style="font-size:18px;font-weight:bold;margin:0 0 12px;color:#e0f2fe">${esc(materialTitle)}</p>
 <a href="${esc(materialUrl)}" style="display:inline-block;background:#38bdf8;color:#0f172a;font-weight:bold;font-size:16px;text-decoration:none;padding:12px 22px;border-radius:999px">Megnyitom</a>
+</div>`
+    : "";
+  // Videó-ajánló (docs/specs/2026-10-31-hirlevel-youtube-ajanlo.md): ellenőrzött, kézzel gondozott csatornabankból.
+  const video = channel
+    ? `<div style="background:#052e16;border:1px solid #4ade80;border-radius:16px;padding:18px;margin-top:16px">
+<p style="font-size:13px;margin:0 0 6px;color:#86efac;font-weight:bold">VIDEÓ-AJÁNLÓ 🎬</p>
+<p style="font-size:18px;font-weight:bold;margin:0 0 6px;color:#bbf7d0">${esc(channel.name)}</p>
+<p style="font-size:15px;line-height:1.5;margin:0 0 12px;color:#dcfce7">${esc(channel.description)}</p>
+<a href="${esc(channel.url)}" style="display:inline-block;background:#22c55e;color:#052e16;font-weight:bold;font-size:16px;text-decoration:none;padding:12px 22px;border-radius:999px">Megnézem a csatornát</a>
 </div>`
     : "";
   return `<!doctype html><html lang="hu"><body style="margin:0;background:#0A0E27;font-family:Arial,Helvetica,sans-serif;color:#f8fafc">
@@ -62,6 +71,7 @@ export function newsletterHtml(input: { first: string; title: string; teaser: st
 <a href="${esc(articleUrl)}" style="display:inline-block;background:#fb923c;color:#0f172a;font-weight:bold;font-size:17px;text-decoration:none;padding:14px 24px;border-radius:999px">Elolvasom a cikket</a>
 </div>
 ${bridge}
+${video}
 <p style="font-size:12px;color:#94a3b8;margin:20px 0 0">A cikk egy magyar ismeretterjesztő vagy hírportálon jelent meg; a WebSuli minden délután válogat neked egyet az érdeklődésed alapján.</p>
 </div></body></html>`;
 }

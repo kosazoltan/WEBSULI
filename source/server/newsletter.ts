@@ -9,6 +9,7 @@ import { getMaterialPreviewUrl } from "./utils/config";
 import { budapestDay, personalUrl, REMINDER_TIMEZONE } from "./daily-reminder";
 import { firstNameOf } from "../shared/daily-reminder";
 import { newsletterHtml, newsletterSubject } from "../shared/newsletter";
+import { pickYoutubeChannel } from "../shared/youtube-channels";
 import { isAllowedArticleUrl, NEWSLETTER_DOMAINS } from "../shared/newsletter-sources";
 import { logger } from "./lib/logger";
 import type { PublicPage } from "./studio/safe-fetch";
@@ -231,6 +232,9 @@ export async function runNewsletters(now: Date, deps?: NewsletterDeps): Promise<
           await finish({ articleUrl: pick.url, articleTitle: pick.title.slice(0, 300), teaser: pick.teaser, question: pick.question, materialId: pick.materialId });
         }
         const material = pick.materialId ? materials.find((m) => m.id === pick.materialId) : undefined;
+        // Videó-ajánló (docs/specs/2026-10-31-hirlevel-youtube-ajanlo.md): determinisztikus, a nap+tanuló seeddel —
+        // az aznapi újrapróba ugyanazt a csatornát adja.
+        const channel = pickYoutubeChannel(learner.interests, learner.grade, `${iso}|${learner.id}`);
         const first = firstNameOf(learner.name);
         const delivered = new Set(claim.deliveredTo);
         let skippedNow = 0;
@@ -247,7 +251,7 @@ export async function runNewsletters(now: Date, deps?: NewsletterDeps): Promise<
           if (tokenVersion === null) { skippedNow++; continue; }
           const materialUrl = material ? personalUrl(getMaterialPreviewUrl(material.id), learnerTokenFor(learner.id, tokenVersion)) : null;
           try {
-            await send(newsletterSubject(first, pick.title), newsletterHtml({ first, title: pick.title, teaser: pick.teaser, question: pick.question, articleUrl: pick.url, materialTitle: material?.title ?? null, materialUrl }), a.email);
+            await send(newsletterSubject(first, pick.title), newsletterHtml({ first, title: pick.title, teaser: pick.teaser, question: pick.question, articleUrl: pick.url, materialTitle: material?.title ?? null, materialUrl, channel }), a.email);
           } catch (error) {
             // Review #314: egy hibás cím nem akadályozza a többit; a foglalás a végén újrapróbálható marad.
             sendFailures++;
