@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FileUp, Loader2, Upload, X } from "lucide-react";
+import { Camera, FileUp, Loader2, Upload, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { LessonArtSummary } from "@/components/studio/LessonArtSummary";
+import { CameraCaptureDialog, type CameraPhoto } from "@/components/studio/CameraCaptureDialog";
+import type { CameraStartError } from "@/lib/camera-capture";
 
 /** A folytatás fajtája szerinti, a valóságnak megfelelő tájékoztatás (spec 2026-10-15-folytatas-szoveg). */
 const RESUME_TEXT: Record<string, string> = {
@@ -143,6 +145,30 @@ export function SourceUploadForm({
   // Review #248 (P2): oldalfrissítés után a fájlok nincsenek meg — az újragyártás a forrás újraválasztásával indul (a választás végén magától).
   const [picked, setPicked] = useState(0);
   const remakeAfterPick = useRef(false);
+
+  // Fényképezős forrásfelvétel (docs/specs/2026-10-31-tananyag-fenykepezo.md): élő kamera a lapon belül;
+  // kameraindítási hibánál a natív kamera-input (telefonon a rendszer-kamera) a tartalék út.
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const nativeCameraInput = useRef<HTMLInputElement>(null);
+  const FALLBACK_TEXT: Record<CameraStartError, string> = {
+    permission: "Nincs kameraengedély — a rendszer fényképezője nyílik meg helyette.",
+    no_camera: "Nem találtunk kamerát — fájlválasztó nyílik meg helyette.",
+    busy: "A kamerát másik alkalmazás használja — a rendszer fényképezője nyílik meg helyette.",
+    unsupported: "Ez a böngésző nem támogatja a beépített fényképezőt — a rendszer fényképezője nyílik meg helyette.",
+    failed: "A kamera nem indult el — a rendszer fényképezője nyílik meg helyette.",
+  };
+  const onCameraFallback = (kind: CameraStartError) => {
+    toast({ title: "Beépített fényképező nem elérhető", description: FALLBACK_TEXT[kind] });
+    nativeCameraInput.current?.click();
+  };
+  const addPhotos = async (photos: CameraPhoto[]) => {
+    for (const photo of photos) {
+      // #163 mintája: a fotó kicsinyítve megy fel (olcsóbb OCR, kisebb kérés).
+      const content = await downscaleImage(photo.dataUrl);
+      setFiles((prev) => [...prev.filter((f) => f.name !== photo.name), { name: photo.name, kind: "image" as const, content }]);
+    }
+    setPicked((n) => n + 1);
+  };
 
   const extract = useMutation({
     mutationFn: () =>
@@ -373,15 +399,42 @@ export function SourceUploadForm({
           onChange={(e) => void addFiles(e.target.files)}
           data-testid="extract-file-input"
         />
-        <Button
-          variant="outline"
-          className="min-h-11 gap-1"
-          onClick={() => fileInput.current?.click()}
-          data-testid="extract-pick-files"
-        >
-          <Upload className="w-4 h-4" />
-          Fájlok kiválasztása
-        </Button>
+        <input
+          ref={nativeCameraInput}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => void addFiles(e.target.files)}
+          data-testid="camera-native-input"
+        />
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            className="min-h-11 gap-1"
+            onClick={() => fileInput.current?.click()}
+            data-testid="extract-pick-files"
+          >
+            <Upload className="w-4 h-4" />
+            Fájlok kiválasztása
+          </Button>
+          <Button
+            variant="outline"
+            className="min-h-11 gap-1"
+            disabled={busy}
+            onClick={() => setCameraOpen(true)}
+            data-testid="camera-open"
+          >
+            <Camera className="w-4 h-4" />
+            Fényképezés
+          </Button>
+        </div>
+        <CameraCaptureDialog
+          open={cameraOpen}
+          onClose={() => setCameraOpen(false)}
+          onDone={(photos) => void addPhotos(photos)}
+          onFallback={onCameraFallback}
+        />
 
         {files.length > 0 && (
           <ul className="flex flex-wrap gap-2" data-testid="extract-file-list">
