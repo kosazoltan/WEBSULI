@@ -51,6 +51,9 @@ A kapuk: `t->'gates'` — `answerKeyFails`, `lektorRemoved`, `quizBlindRemoved`,
 
 ## 4. A ciklus menete
 
+Befejezési mandátum (2026-11-01): megkezdett ciklust, javítást vagy specet félbehagyni tilos — a ciklus mind az 5 lépése
+lefut, és a session végén tételes teljességellenőrzés kell a kiadott kérésekhez mérve (ami nem készült el: NOT DONE + ok).
+
 1. A sor a korlátnál megáll, a futók befejeződnek (AKTIV=0).
 2. Az utolsó 5 anyag mérése: az 1–3. pont, összevetve az előző ciklussal.
 3. A legnagyobb pazarlás vagy hiba javítása a háromfázisú rend szerint (terv → végrehajtás → kód), teszttel.

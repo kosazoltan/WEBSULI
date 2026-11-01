@@ -120,6 +120,24 @@ A teljes szabály: `docs/agent-haromfazisu-munka.md`. A Cursor-szabály: `.curso
 
 Ez szigorítja a fenti „Terv-először” és spec-kötelezettség blokkot: a terv mellett külön, ügynöknek szóló végrehajtási fájl is kell, mielőtt a kódolás elindul.
 
+## Befejezési mandátum (kötelező, tulajdonosi utasítás 2026-11-01)
+
+Spec, végrehajtási utasítás, javítás, fejlesztés vagy implementáció **félbehagyása tilos**.
+
+- Megkezdett spec / `*-vegrehajtas.md` csak teljesen kidolgozva számít késznek; félig
+  elkészített spec leadása eljárási hiba.
+- Minden kiadott feladatot a teljes elkészültéig kell vinni: a javítás / módosítás /
+  bővítés / implementáció nem állhat meg menet közben.
+- **Minden session végén kötelező a teljességellenőrzés**: a beadott kérések tételes
+  összevetése az elkészült munkával, és addig kell javítani / fejleszteni, amíg az
+  összes kérés nem teljesült.
+- Ami objektív blokkoló miatt nem készült el, azt NOT DONE + ok + kockázat jelöléssel
+  kell jelenteni (ld. Evidence-before-completion) — de a cél a befejezés, nem a jelentés.
+
+A mandátum a háromfázisú rend mindhárom fázisára és a kanban-jegyekre is vonatkozik
+(`docs/agent-haromfazisu-munka.md`, `docs/kanban.md`). A kezelt `agentic-qa-kit`
+blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
+
 ## Verifikáció
 
 A változáshoz illő legkisebb ellenőrzési kört futtasd: célzott teszt/lint/typecheck

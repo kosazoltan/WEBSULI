@@ -41,6 +41,11 @@ node --no-warnings kanban.mjs stats                    # összesítő
 4. **A tábla és a valóság együtt mozog.** Ha a PR mergelődött, a board ugyanabban
    a körben `done`. (2026-09-06-án a #181 `review`-ban ragadt, pedig élesben futott —
    ezt higiéniai söpréskor kell elkapni.)
+5. **Befejezési mandátum (tulajdonosi utasítás 2026-11-01).** Megkezdett jegyet,
+   specet, javítást vagy implementációt félbehagyni tilos: a munka a teljes
+   elkészültéig fut, és minden session végén tételes teljességellenőrzés kell a
+   kiadott kérésekhez mérve. Objektív blokkolónál a jegyre `note`: NOT DONE + ok +
+   kockázat. A szabály a #11-es STANDING jegyen áll a táblán.
 
 ## Elnevezési minta
 
