@@ -25,6 +25,15 @@ Egy soros, egy fájlos javításnál a terv lehet a commit-üzenet előtti 5–1
 - A 2. fázis után megállni második „mehet” üzenetre, ha a tulajdonos már kérte a munkát. A 3. fázis a 2. után azonnal következik.
 - A 1. és 2. fázist átugrani a „a feladat biztonságosan implementálható” indokkal.
 
+## Befejezési mandátum (tulajdonosi utasítás 2026-11-01)
+
+Egyik fázist sem szabad félbehagyni. A spec és a végrehajtási utasítás csak teljesen
+kidolgozva számít késznek — félig elkészített spec leadása eljárási hiba. A 3. fázis
+(javítás / módosítás / bővítés) a teljes elkészültéig fut. Minden session végén
+kötelező a teljességellenőrzés: a beadott kérések tételes összevetése az elkészült
+munkával, és addig kell javítani, amíg az összes kérés nem teljesült. Objektív
+blokkolónál: NOT DONE + ok + kockázat.
+
 ## Fájlnevek
 
 - Terv: `docs/specs/YYYY-MM-DD-<rovid-nev>.md`

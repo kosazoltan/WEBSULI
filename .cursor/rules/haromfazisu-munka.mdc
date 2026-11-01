@@ -12,3 +12,5 @@ Kódolás előtt olvasd: `docs/agent-haromfazisu-munka.md`.
 3. Csak ezután javítás / módosítás / bővítés.
 
 Tilos a kódolás az 1–2. fázis előtt. Ha a tulajdonos már kérte a munkát, a 2. fázis után ne várj második megerősítésre. Ne találj ki fájlt, API-t, tesztet; ellenőrizetlen állítás: UNKNOWN / UNVERIFIED.
+
+Befejezési mandátum (2026-11-01): egyik fázist sem szabad félbehagyni — a spec és a végrehajtási utasítás csak teljesen kidolgozva kész, az implementáció a teljes elkészültéig fut. Session végén kötelező a teljességellenőrzés a beadott kérésekhez mérve; objektív blokkolónál NOT DONE + ok + kockázat.
