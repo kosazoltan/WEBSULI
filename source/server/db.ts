@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from "@shared/schema";
 import { logger } from "./lib/logger";
+import { attachPoolErrorHandler } from "./lib/pool-error-handler";
 import { assertE2eDatabaseUrl, isE2eMode } from "./lib/e2e-mode";
 
 const { Pool } = pg;
@@ -48,6 +49,9 @@ const pool = new Pool({
     }
   }),
 });
+
+// Spec 2026-11-01-db-pool-error-crash: an idle client's dropped connection must not crash the server (exit 1).
+attachPoolErrorHandler(pool, (msg) => logger.error(msg));
 
 // Test connection on startup with retry for Neon cold starts
 async function testConnectionWithRetry(maxRetries = 3, delayMs = 2000): Promise<void> {
