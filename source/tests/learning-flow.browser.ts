@@ -19,7 +19,12 @@ for (const [width, height] of [[320, 900], [390, 844], [844, 390], [1365, 612], 
     // Dokumentált spec-változás (docs/specs/2026-10-17-websuli-lecke-hos.md, review #273): a borító a katalógus képe (`.ws-art`),
     // kép híján a rajzos tartalék (`.lesson-cover-art`) — a tests/lesson-design.spec.ts mintája szerint.
     await page.locator(".lesson-hero h1").waitFor();
-    if (await page.locator(".lesson-hero .ws-art").count()) await expect(page.locator(".lesson-hero .ws-art > img")).toBeVisible();
+    if (await page.locator(".lesson-hero .ws-art").count()) {
+      const cover = page.locator(".lesson-hero .ws-art > img");
+      await expect(cover).toBeVisible();
+      // Review #376: a törött kép-URL is „látható” <img> lenne — a kép ténylegesen betöltődött.
+      await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    }
     else await expect(page.locator(".lesson-hero .lesson-cover-art")).toBeVisible();
     await page.screenshot({ path: `test-results/learning-cover-${width}x${height}.png` });
     await page.getByRole("tab", { name: "Kvíz", exact: true }).click();

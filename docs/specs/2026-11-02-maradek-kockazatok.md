@@ -38,5 +38,25 @@ mindkettő tulajdonosi döntés és költség; kód nem változik e nélkül. NO
 mentés, visszaolvasás). Közvetlen DB-írás ezt megkerülné. A javítás admin-belépést igényel (az ágens jelszót nem ad meg).
 NOT DONE ebben a szeletben, ok: admin-munkamenet szükséges.
 
+## Érintett fájlok
+- `source/tests/learning-flow.browser.ts` (borító- és kvíz-ellenőrzés), `.github/workflows/ci.yml` (két új E2E lépés).
+- 2. és 3. pont: kód nem változik ebben a PR-ban (lásd döntések).
+
+## Edge case-ek
+- A próbalecke borítója lehet katalóguskép (`.ws-art`) vagy rajzos tartalék (`.lesson-cover-art`) — mindkettő elfogadott, üres soha.
+- A katalóguskép URL-je törött: a teszt bukik (`naturalWidth > 0` ellenőrzés).
+- A kvízkör kérdéseinek sorrendje és elrendezése determinisztikus (`balancedLayouts`), újratöltéskor is.
+- A CI-ben a két konfig saját vite-szervert indít (5182 / 5188), a fő E2E szervertől függetlenül.
+
+## Elfogadás (EARS)
+- HA a `learning-flow.browser.ts` fut, AKKOR a borító látható és betöltött kép (vagy a rajzos tartalék), és a két helyes kvízválasz „2 pont”-ot ad.
+- HA egy PR CI-je fut, AKKOR a „Playwright E2E” job a `learning-flow` és a `lesson-practice` konfigot is lefuttatja, és bukásuk a jobot bukatja.
+- HA a 2. vagy 3. pont nincs kész, AKKOR a záró jelentés NOT DONE + ok jelöléssel nevezi meg.
+
+## Tulajdonosi döntés (2026-11-02, a PR közben)
+- 3. pont: a tulajdonos belép adminként, az ágens indítja a célzott javítást, majd élesben visszaolvassa.
+- 2. pont: új 9–10. sávos irodalmi / drámai borító készül (jelöltek generálása → tulajdonosi kiválasztás a képválogatóban → katalógus);
+  külön PR-ban, a borító-folyamat szerint.
+
 ## Nem-cél
 - A gyártási prompt módosítása a „Szerző: Mű” címek miatt (élő méréssel külön feladat lenne).

@@ -17,5 +17,11 @@ Munkakönyvtár: `source/` (a CI-fájl a repó gyökerében).
   `npx playwright test --config playwright.lesson-practice.config.ts`.
 - Ellenőrzés: helyben mindkét parancs zöld (23 passed / 8 passed); a PR CI „Playwright E2E” jobja zöld.
 
-## T4 — 2. és 3. kockázat
-- Kód nem változik; a záró jelentés NOT DONE + ok jelöléssel nevezi meg, és a tulajdonostól kér döntést / admin-munkamenetet.
+## T4 — 2. és 3. kockázat (tulajdonosi döntés 2026-11-02)
+- 3. pont (címismétlés): a tulajdonos belép (admin), az ágens az admin Stúdióban célzott javítást indít az Antigoné-leckén
+  (`lessonId 8eac8bc8…`, fájl `7900a871…`) ezzel a kéréssel: az első bekezdés ne ismételje a címet („Az Antigoné című drámát Szophoklész
+  írta”). Ellenőrzés: `curl -H "x-websuli-scoring: 5" https://websuli.vip/api/lessons/by-file/7900a871-5788-4df1-95d7-77a646a9ffd6`
+  → a `version` nő, és a szövegben nincs „Szophoklész: Antigoné című”; böngészőben a lecke betölt, konzolhiba nélkül.
+- 2. pont (borító): külön PR — jelöltgenerálás, tulajdonosi kiválasztás, katalógus-bejegyzés, a katalógus tesztjei. Ellenőrzés:
+  `pickLessonArt({ subject: "Magyar nyelv és irodalom", title: "Szophoklész: Antigoné" }, "laboratory", catalog)` az új borítót adja.
+- Ebben a PR-ban kód nem változik a 2–3. ponthoz; ellenőrzés: a záró jelentés a két pontot állapottal (DONE / NOT DONE + ok) sorolja fel.
