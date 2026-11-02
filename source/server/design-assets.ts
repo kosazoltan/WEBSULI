@@ -35,16 +35,33 @@ export type SyncReport = { written: number; unchanged: number; missing: string[]
  * utáni első percekben mentett lecke a még be nem töltött borító helyett végleges tartalékképet rögzítene (nincs utólagos pótlás).
  */
 let initialSync: Promise<SyncReport> | null = null;
+let rerunSync: (() => Promise<SyncReport>) | null = null;
 export const SYNC_WAIT_MS = 60_000;
 export function startDesignAssetSync(run: () => Promise<SyncReport> = () => syncDesignAssets()): Promise<SyncReport> {
+  rerunSync = run;
   initialSync = run();
   return initialSync;
 }
-async function initialSyncSettled(ms = SYNC_WAIT_MS): Promise<void> {
-  if (!initialSync) return;
+async function settledWithin(sync: Promise<SyncReport>, ms: number): Promise<"ok" | "failed" | "timeout"> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  await Promise.race([initialSync.then(() => undefined, () => undefined), new Promise<void>(r => { timer = setTimeout(r, ms); })]);
+  const result = await Promise.race([sync.then(() => "ok" as const, () => "failed" as const), new Promise<"timeout">(r => { timer = setTimeout(() => r("timeout"), ms); })]);
   if (timer) clearTimeout(timer);
+  return result;
+}
+/**
+ * Review #377: a sikertelen induló szinkron (átmeneti DB- / fájlhiba) nem hagyhatja tartalékképpel menteni a leckéket — a mentés előtt
+ * egyszer újrafut; ha az is hibás, a következő mentés újra próbálja.
+ */
+export async function initialSyncSettled(ms = SYNC_WAIT_MS): Promise<void> {
+  const observed = initialSync;
+  if (!observed) return;
+  if ((await settledWithin(observed, ms)) !== "failed" || !rerunSync) return;
+  // Review #377: egyidejű mentéseknél csak az első indít újrafutást, a többi ugyanazt várja meg.
+  if (initialSync === observed) {
+    logger.warn("[design-assets] Az előző képkészlet-szinkron sikertelen volt — mentés előtt újrafut.");
+    initialSync = rerunSync();
+  }
+  await settledWithin(initialSync!, ms);
 }
 
 /** Idempotens: a már azonos lenyomatú képet nem írja újra; a hiányzó fájlt naplózza, a többit betölti. */

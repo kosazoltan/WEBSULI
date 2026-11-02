@@ -176,6 +176,24 @@
       "batch": 1
     },
     {
+      "id": "cover-gorog-drama",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "irodalom",
+        "Magyar nyelv és irodalom"
+      ],
+      "keywords": [
+        "antigoné",
+        "szophoklész",
+        "oidipusz",
+        "görög dráma"
+      ],
+      "alt": "Ókori görög kőszínház alkonyatkor, oszlopos színpadfallal és két klasszikus színházi maszkkal.",
+      "aspect_ratio": "3:2",
+      "prompt": "An ancient Greek open-air stone theatre seen from the upper seats at dusk, a simple stage in front of a classical columned palace facade, two classical theatre masks resting on a stone ledge in the foreground, cool blue evening light with warm stone tones, calm and dignified, educational."
+    },
+    {
       "id": "cover-sejt",
       "kind": "cover",
       "band": "laboratory",
