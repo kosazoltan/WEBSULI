@@ -148,6 +148,24 @@ test("MHT: a gyökér beágyazott multipart/alternative — a főoldal szövege 
   assert.equal(await readMhtText(mhtUrl(Buffer.from(rootOnly, "utf8"))), "Antigoné tananyag");
 });
 
+test("MHT: a határoló csak sor elején számít — a törzsben lévő „literal--B1” nem vág (review #374)", async () => {
+  const raw = 'Content-Type: multipart/related; boundary="B1"\r\n\r\n--B1\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Első rész literal--B1\r\nmég a tananyag része</p>\r\n--B1--';
+  assert.equal(await readMhtText(mhtUrl(Buffer.from(raw, "utf8"))), "Első rész literal--B1\nmég a tananyag része");
+});
+
+test("MHT: `charset = \"windows-1250\"` szóközzel a rész-fejlécben, meta nélkül (review #374)", async () => {
+  const body = Buffer.from([..."<p>Kreón őr</p>"].map((c) => ({ "ó": 0xf3, "ő": 0xf5 } as Record<string, number>)[c] ?? c.charCodeAt(0)));
+  const raw = Buffer.concat([Buffer.from('Content-Type: multipart/related; boundary="b"\r\n\r\n--b\r\nContent-Type: text/html; charset = "windows-1250"\r\n\r\n'), body, Buffer.from("\r\n--b--")]);
+  assert.equal(await readMhtText(mhtUrl(raw)), "Kreón őr");
+});
+
+test("MHT: olvashatatlan MHT a gyártásban SingleRunError, konkrét okkal (review #374)", async () => {
+  const { prepareFiles } = await import("../server/studio/single-run/live");
+  const { SingleRunError } = await import("../server/studio/single-run/engine");
+  const file = { name: "ures.mht", kind: "mht" as const, content: mhtUrl('Content-Type: multipart/related; boundary="b"\r\n\r\n--b\r\nContent-Type: image/png\r\n\r\nx\r\n--b--') };
+  await assert.rejects(prepareFiles([file]), (error: unknown) => error instanceof SingleRunError && /ures\.mht: Az MHT-fájlban nincs olvasható weboldal/.test(error.message));
+});
+
 test("MHT: normalizálás után kereshető; html rész nélkül érthető hiba", async () => {
   const raw = 'Content-Type: multipart/related; boundary="b"\r\n\r\n--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>A sejt az élőlények alapegysége.</p>\r\n--b--';
   const file = { name: "lap.mht", kind: "mht" as const, content: mhtUrl(Buffer.from(raw, "utf8")) };

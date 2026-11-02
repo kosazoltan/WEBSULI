@@ -62,7 +62,8 @@ export async function readMhtText(content: string): Promise<string> {
     if (depth > 8) throw new Error("Az MHT-fájl szerkezete túl mélyen egymásba ágyazott.");
     const boundary = mimeParam(type, "boundary");
     if (!boundary) throw new Error("Az MHT-fájl szerkezete nem olvasható (hiányzó határoló).");
-    const delimiter = new RegExp(`\\r?\\n?--${boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:--)?[ \\t]*(?:\\r?\\n|$)`);
+    // Review #374: a delimiter only at the body start or right after a line break (RFC 2046), never mid-line.
+    const delimiter = new RegExp(`(?:^|\\r?\\n)--${boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:--)?[ \\t]*(?:\\r?\\n|$)`);
     const parts = entity.body.split(delimiter).slice(1).filter(p => p.trim()).map(splitMimeEntity);
     const startId = cid(mimeParam(type, "start"));
     const preferred = (startId && parts.find(p => cid(p.headers.get("content-id")) === startId))
@@ -78,7 +79,9 @@ export async function readMhtText(content: string): Promise<string> {
   const root = htmlOf(top, 0, true);
   if (!root) throw new Error("Az MHT-fájlban nincs olvasható weboldal.");
   const bytes = decodeTransfer(root.body, root.headers.get("content-transfer-encoding"));
-  return htmlToText(decode(bytes, charsetOf(root.headers.get("content-type") ?? "", bytes))).text;
+  // Review #374: MIME allows `charset = "x"` (spaces, quotes); the part header wins, the <meta> sniff is the fallback.
+  const charset = mimeParam(root.headers.get("content-type"), "charset");
+  return htmlToText(decode(bytes, charset ?? charsetOf("", bytes))).text;
 }
 
 /**
