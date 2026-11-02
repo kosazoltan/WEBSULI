@@ -32,9 +32,13 @@ Terv: `docs/specs/2026-11-02-ellenorzes-effort-ab.md`. Ügynöknek szóló, lép
   opts.effort nélkül → `"medium"`.
 - `openAIClient` mock klienssel: `reasoning.effort` ugyanígy.
 
-## 6. Ellenőrzés
-- `cd source && npx tsc --noEmit` ; `npm run lint` ; `node --import tsx --test tests/check-effort.test.ts`.
-- Teljes érintett teszt: `npm test` (PR előtt).
+## 6. Ellenőrzés (parancs → elvárt kimenet)
+- `cd source && npx tsc --noEmit` → üres kimenet (0 hiba).
+- `npm run lint` → 0 hiba, 0 figyelmeztetés (`--max-warnings 0`).
+- `node --import tsx --test tests/check-effort.test.ts` → `pass 3, fail 0`.
+- Teljes suite PR előtt: `npm test` → minden teszt PASS (`fail 0`).
+- Főpróba (0 költség): `MEASURE_DRY=1 MEASURE_SAME_MAP=1 npx tsx scripts/measure/single-run-measure.mts <map8> dry <mappa>`
+  → a kimeneti JSON `dry.km_concepts` > 0 és `checkEffort` mező.
 
 ## 7. A mérés lefuttatása (tulajdonosi keret: ~60–90 USD)
 1. 5 éles térkép kiválasztása (csak olvasás): van `source_text`, különböző tantárgy; az azonosító-előtagok rögzítése.

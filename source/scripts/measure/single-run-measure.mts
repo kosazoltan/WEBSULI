@@ -12,9 +12,11 @@ import { withReadOnlyDb } from "../lib/read-only-db";
 
 const [target, label, outDir = "."] = process.argv.slice(2);
 if (!target || !label) throw new Error("Használat: single-run-measure.mts <térkép-azonosító eleje | file:útvonal> <címke> [kimeneti mappa]");
+// Spec 2026-11-02-ellenorzes-effort-ab: az A/B ág azonosítása a kimenetben — a KANONIKUS, ténylegesen ható érték
+// (ugyanaz a szabály, mint az engine `checkEffort()`-je; PR #373 review: érvénytelen érték mediumként fut, úgy is jelenjen meg).
+const effectiveCheckEffort = (process.env.STUDIO_CHECK_EFFORT ?? "").trim().toLowerCase() === "low" ? "low" : "medium";
 const out: Record<string, unknown> = { label, target, startedAt: new Date().toISOString(),
-  // Spec 2026-11-02-ellenorzes-effort-ab: az A/B ág azonosítása a kimenetben.
-  checkEffort: (process.env.STUDIO_CHECK_EFFORT ?? "").trim() || "medium (default)" };
+  checkEffort: effectiveCheckEffort, checkEffortRaw: (process.env.STUDIO_CHECK_EFFORT ?? "").trim() || null };
 
 // 1) A forrás: éles térkép forrásszövege (csak olvasás), vagy helyi fájl (kép / PDF / szöveg).
 type File = { name: string; kind: "text" | "image" | "pdf"; content: string };
