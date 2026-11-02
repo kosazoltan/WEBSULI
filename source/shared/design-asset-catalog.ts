@@ -1508,6 +1508,27 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "approvedAt": "2026-10-17T11:23:27.549Z"
   },
   {
+    "id": "cover-gorog-drama",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "irodalom",
+      "Magyar nyelv és irodalom"
+    ],
+    "keywords": [
+      "antigoné",
+      "szophoklész",
+      "oidipusz",
+      "görög dráma"
+    ],
+    "alt": "Ókori görög kőszínház alkonyatkor, oszlopos színpadfallal és két klasszikus színházi maszkkal.",
+    "src": "/design/laboratory/cover-gorog-drama.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "50db3521ea98fbf0",
+    "approvedAt": "2026-11-02T20:22:11.760Z"
+  },
+  {
     "id": "cover-hit-es-erkolcstan-adventure-ertekek",
     "kind": "cover",
     "band": "adventure",
