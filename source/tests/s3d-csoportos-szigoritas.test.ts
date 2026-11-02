@@ -67,3 +67,26 @@ test("analitikai archívum: a bejegyzés alakja (feladat, minta, rubrika, esetek
   const fin = finalizeAnswerKeyArchive([e, other, dropped], [{ id: "t-hash-a", sectionIndex: 2, q: e.q }, { id: "t-hash-b", sectionIndex: 0, q: "Másik kérdés?" }]);
   assert.deepEqual(fin.map((x) => [x.id, x.modelId]), [["t-hash-a", "t1"], ["t-hash-b", "t1"]]);
 });
+
+test("analitikai archívum: a véglegesítés a KALIBRÁLT (végleges) rubrikát írja a bejegyzésbe (PR #373, Codex P2)", async () => {
+  const { answerKeyArchiveEntry, finalizeAnswerKeyArchive } = await import("../server/studio/single-run/engine");
+  const e = answerKeyArchiveEntry({ ...task(), requiredPhrases: [["régi kifejezés"]] }, { correct: ["jó válasz"], wrong: [{ kind: "tevhit", text: "rossz" }] }, 1);
+  // A kalibráció szigorított: bővült required, új sorrend, a kifejezés viszont kikerült; a minta is változott.
+  const calibrated = { id: "t-veg", sectionIndex: 1, q: e.q, sample: "Új minta.", required: [["szigorított"], ["csoport"]],
+    bonus: [["ráadás"]], minWords: 6, needsSentence: true, requiredOrder: [["első"], ["második"]] };
+  const [fin] = finalizeAnswerKeyArchive([e], [calibrated]);
+  assert.equal(fin.id, "t-veg");
+  assert.equal(fin.modelId, "t1");
+  assert.equal(fin.sample, "Új minta.");
+  assert.deepEqual(fin.required, [["szigorított"], ["csoport"]]);
+  assert.deepEqual(fin.bonus, [["ráadás"]]);
+  assert.equal(fin.minWords, 6);
+  assert.equal(fin.needsSentence, true);
+  assert.deepEqual(fin.requiredOrder, [["első"], ["második"]]);
+  assert.equal("requiredPhrases" in fin, false, "a kalibrációban kikerült mező nem maradhat az archívumban");
+  assert.deepEqual(fin.correct, ["jó válasz"], "az írott esetek változatlanok");
+  // Pontozási mezők nélküli feladatlista (régi hívó): a bejegyzés rubrikája változatlan marad.
+  const [legacy] = finalizeAnswerKeyArchive([e], [{ id: "t-veg", sectionIndex: 1, q: e.q }]);
+  assert.deepEqual(legacy.required, task().required);
+  assert.deepEqual(legacy.requiredPhrases, [["régi kifejezés"]]);
+});

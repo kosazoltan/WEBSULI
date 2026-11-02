@@ -8,12 +8,13 @@ config({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../../.env") })
 
 /**
  * Spec 2026-11-02-ellenorzes-effort-ab: az URL `?sslmode=...` paramétere a node-postgresben felülüti az explicit ssl-objektumot,
- * így a DATABASE_CA_CERT nem érvényesült (mért: UNABLE_TO_GET_ISSUER_CERT a Neon új, Root YR láncán). A kérdőjeles paraméterek
- * lekerülnek — mindig az ssl-objektum dönt, a tanúsítvány-ellenőrzés bekapcsolva marad.
+ * így a DATABASE_CA_CERT nem érvényesült (mért: UNABLE_TO_GET_ISSUER_CERT a Neon új, Root YR láncán). Csak a TLS-paraméterek
+ * kerülnek le (PR #373 review: a többi — pl. `options`, `application_name` — megmarad); mindig az ssl-objektum dönt,
+ * a tanúsítvány-ellenőrzés bekapcsolva marad.
  */
 function verifiedTlsClient(url: string): pg.Client {
   const bare = new URL(url);
-  bare.search = "";
+  for (const param of ["sslmode", "sslcert", "sslkey", "sslrootcert", "sslpassword", "channel_binding"]) bare.searchParams.delete(param);
   return new pg.Client({
     connectionString: bare.toString(),
     ssl: { rejectUnauthorized: true, ...(process.env.DATABASE_CA_CERT ? { ca: process.env.DATABASE_CA_CERT } : {}) },

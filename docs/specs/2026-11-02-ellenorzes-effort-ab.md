@@ -54,8 +54,12 @@
 - Ellenőrzés-állomás megtakarítás a 4 tiszta páron: **átlag 39,7%** (36–44%) — az E4 40%-os küszöbe ALATT.
 - **A teljes futásköltség nem csökken**: a tiszta párokon A $17,94 vs B $18,20 — az állomás-megtakarítást (~$0,45/lecke)
   elnyeli a futások közti szórás (javítókörök máshol).
-- Medium-visszajátszás (minden futás archivált feladatain): átengedett rubrika A-kontroll 29/281 (10,3%) vs B 28/290 (9,7%)
-  — a tesztíró minőségében NINCS mérhető romlás low efforton.
+- Medium-visszajátszás (minden futás archivált feladatain): átengedett hibás próba A-kontroll 29/281 feladat vs B 28/290
+  — a tesztíró minőségében NINCS mérhető romlás low efforton. KORLÁT (PR #373 review, Codex P2): ezek a számok PRÓBA-szintű
+  összegek a KALIBRÁCIÓ ELŐTTI rubrikákon mérve, tehát felső becslések; a torzítás a két ágat azonosan érinti, az A↔B
+  összevetés áll, de az abszolút arányok nem a közzétett pontozót mérik. A javítás él: a véglegesítés mostantól a kalibrált
+  rubrikát írja az archívumba, és a visszajátszó feladatonként legfeljebb egy találatot számol (külön próba-számlálóval) —
+  a KÖVETKEZŐ mérés már a közzétett pontozón fut. A döntés nem a visszajátszáson nyugszik.
 - A B-ág kapu-jelei: answerKeyFails 0→1, 2→1, 0→0, 0→3; 1/5 futás a végellenőrzésen elbukott (A: 0/5).
 
 **Döntés az E4 szerint: MARADÁS a medium efforton.** A megtakarítás a küszöb alatt van, a rendszer-szintű költség nem

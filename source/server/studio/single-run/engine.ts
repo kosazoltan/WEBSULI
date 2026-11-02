@@ -414,10 +414,27 @@ export function answerKeyArchiveEntry(t: { id: string; q: string; sample: string
 /**
  * Review #353: a publikáláskor csak a végleges leckében bent maradt feladatok esetei maradnak (az eldobott / újraépített csomagoké nem),
  * a VÉGLEGES azonosítóval (a banképítő a modell azonosítóit lecseréli). Az összekapcsolás a fejezet + kérdés szövege szerint (tiszta).
+ * PR #373 (Codex P2): az archív bejegyzés a kulcsírás PILLANATÁBAN készül, a `calibrateRubric` előtt — a véglegesítés ezért a
+ * VÉGLEGES feladat pontozási mezőit írja a bejegyzésbe (ha a hívó teljes feladatokat ad), hogy az offline visszajátszás a
+ * közzétett pontozót mérje. A pontozási mező nélküli feladatlista (régi hívók, tesztek) viselkedése változatlan.
  */
-export function finalizeAnswerKeyArchive(entries: ReadonlyArray<{ sectionIndex: number; q: string } & Record<string, unknown>>, tasks: ReadonlyArray<{ id: string; sectionIndex: number; q: string }>) {
-  const byKey = new Map(tasks.map((t) => [JSON.stringify([t.sectionIndex, t.q]), t.id]));
-  return entries.flatMap((e) => { const id = byKey.get(JSON.stringify([e.sectionIndex, e.q])); return id ? [{ ...e, id, modelId: e.id }] : []; });
+type ArchiveTaskFields = { sample?: string; required?: string[][]; bonus?: string[][]; minWords?: number; needsSentence?: boolean;
+  requiredPhrases?: string[][]; requiredOrder?: string[][]; requiredDistinct?: unknown[] };
+export function finalizeAnswerKeyArchive(entries: ReadonlyArray<{ sectionIndex: number; q: string } & Record<string, unknown>>, tasks: ReadonlyArray<{ id: string; sectionIndex: number; q: string } & ArchiveTaskFields>) {
+  const byKey = new Map(tasks.map((t) => [JSON.stringify([t.sectionIndex, t.q]), t]));
+  return entries.flatMap((e) => {
+    const f = byKey.get(JSON.stringify([e.sectionIndex, e.q]));
+    if (!f) return [];
+    const out: Record<string, unknown> = { ...e, id: f.id, modelId: e.id };
+    if (Array.isArray(f.required)) {
+      Object.assign(out, { sample: f.sample, required: f.required, bonus: f.bonus ?? [], minWords: f.minWords, needsSentence: f.needsSentence });
+      for (const key of ["requiredPhrases", "requiredOrder", "requiredDistinct"] as const) {
+        const value = f[key];
+        if (Array.isArray(value) && value.length) out[key] = value; else delete out[key];
+      }
+    }
+    return [out];
+  });
 }
 
 /** Spec 2026-10-21-ciklus4: a lektor blokkoló jegyzeteinek archívuma (tiszta; legfeljebb 200 jegyzet, az üzenet 600 karakterre vágva). */

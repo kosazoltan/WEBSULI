@@ -7,7 +7,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createLessonConversation } from "../../server/studio/single-run/conversation";
 import { ANSWER_KEY_SYSTEM } from "../../server/studio/answer-key-writer";
-import { sanitizeAnswerKeyCases, answerKeyProblems } from "../../shared/answer-key-tests";
+import { sanitizeAnswerKeyCases, answerKeyProblems, answerKeyNotes } from "../../shared/answer-key-tests";
 import type { OpenTask } from "../../shared/lesson-experience";
 
 const dir = process.argv[2];
@@ -24,7 +24,9 @@ for (const f of files) {
   const label = f.replace(/^single-run-measure-|\.json$/g, "");
   const archive: Entry[] = Array.isArray(j.answerKeyArchive) ? (j.answerKeyArchive as Entry[]) : [];
   if (!archive.length) { out[label] = { skipped: "nincs archívum" }; console.log(label, "kihagyva: nincs archívum"); continue; }
-  let newProblems = 0, strictSignals = 0, judged = 0, writerMiss = 0;
+  // PR #373 (Codex P2): rubrikaarányhoz feladatonként LEGFELJEBB EGY találat számít; a próbaszintű arányhoz külön
+  // számláló és nevező (a vizsgált, blokkoló hibás próbák száma — a nem blokkoló, megkülönböztethetetlen próbák nélkül).
+  let flaggedTasks = 0, missedProbes = 0, blockingProbes = 0, strictSignals = 0, judged = 0, writerMiss = 0;
   const details: string[] = [];
   for (let i = 0; i < archive.length; i += 8) {
     const batch = archive.slice(i, i + 8);
@@ -49,11 +51,13 @@ for (const f of files) {
       const problems = answerKeyProblems(task, cases);
       const missed = problems.filter((p) => p.includes("a hibás")).length; // túl megengedő (átengedett) rubrika
       const strict = problems.filter((p) => p.includes("a helyes")).length; // túl szigorú rubrika jelzése
-      newProblems += missed; strictSignals += strict;
-      if (missed) details.push(`${t.id}: ${missed} átengedett hibás próba a medium-írótól`);
+      blockingProbes += Math.max(0, cases.wrong.length - answerKeyNotes(task, cases).length);
+      missedProbes += missed; strictSignals += strict;
+      if (missed) { flaggedTasks++; details.push(`${t.id}: ${missed} átengedett hibás próba a medium-írótól`); }
     }
   }
-  out[label] = { feladatok: archive.length, judged, writerMiss, atengedettRubrika: newProblems, tulSzigoruJelzes: strictSignals, details: details.slice(0, 20) };
+  out[label] = { feladatok: archive.length, judged, writerMiss, atengedettFeladat: flaggedTasks,
+    atengedettProba: missedProbes, vizsgaltBlokkoloProba: blockingProbes, tulSzigoruJelzes: strictSignals, details: details.slice(0, 20) };
   console.log(label, JSON.stringify(out[label]).slice(0, 300));
 }
 writeFileSync(join(dir, "replay-medium-eredmeny.json"), JSON.stringify(out, null, 2));
