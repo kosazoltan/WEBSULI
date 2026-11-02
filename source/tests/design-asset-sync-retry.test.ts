@@ -21,3 +21,12 @@ test("sikeres induló szinkronnál nincs újrafutás", async () => {
   await initialSyncSettled(1000);
   assert.equal(calls, 1);
 });
+
+test("egyidejű mentések a sikertelen szinkron után egyetlen közös újrafutást várnak meg", async () => {
+  const { startDesignAssetSync, initialSyncSettled } = await import("../server/design-assets");
+  let calls = 0;
+  const run = () => (++calls === 1 ? Promise.reject(new Error("átmeneti DB-hiba")) : new Promise<{ written: number; unchanged: number; missing: string[] }>(r => setTimeout(() => r({ written: 1, unchanged: 0, missing: [] }), 50)));
+  startDesignAssetSync(run).catch(() => undefined);
+  await Promise.all([initialSyncSettled(1000), initialSyncSettled(1000), initialSyncSettled(1000)]);
+  assert.equal(calls, 2, "egy közös újrafutás");
+});

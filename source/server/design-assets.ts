@@ -53,11 +53,15 @@ async function settledWithin(sync: Promise<SyncReport>, ms: number): Promise<"ok
  * egyszer újrafut; ha az is hibás, a következő mentés újra próbálja.
  */
 export async function initialSyncSettled(ms = SYNC_WAIT_MS): Promise<void> {
-  if (!initialSync) return;
-  if ((await settledWithin(initialSync, ms)) !== "failed" || !rerunSync) return;
-  logger.warn("[design-assets] Az előző képkészlet-szinkron sikertelen volt — mentés előtt újrafut.");
-  initialSync = rerunSync();
-  await settledWithin(initialSync, ms);
+  const observed = initialSync;
+  if (!observed) return;
+  if ((await settledWithin(observed, ms)) !== "failed" || !rerunSync) return;
+  // Review #377: egyidejű mentéseknél csak az első indít újrafutást, a többi ugyanazt várja meg.
+  if (initialSync === observed) {
+    logger.warn("[design-assets] Az előző képkészlet-szinkron sikertelen volt — mentés előtt újrafut.");
+    initialSync = rerunSync();
+  }
+  await settledWithin(initialSync!, ms);
 }
 
 /** Idempotens: a már azonos lenyomatú képet nem írja újra; a hiányzó fájlt naplózza, a többit betölti. */
