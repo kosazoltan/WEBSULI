@@ -12,17 +12,27 @@ Munkakönyvtár: `source/`. Sorrendben.
   `choiceSeed`; célpozíció a legkevésbé használt pozíciók közül (seedelt döntetlen-bontás), a többi opció `optionOrder` szerint.
 - `export const choiceSeed = (question: string, options: string[]) => [question, ...options].join("\u0000")`.
 
+- Ellenőrzés T1-re: `node --import tsx --test tests/option-order.test.ts` → `ℹ fail 0`.
+
 ## T2 — `client/src/lesson-runtime/LessonRuntime.tsx` `CheckBlock`
 - Új `ChoiceLayoutContext` (`Map<string, number[]> | null`); a lecke-gyökér `useMemo(() => balancedLayouts(összes check blokk), [lesson.sections])`-t ad.
 - `CheckBlock`: `layout?.get(choiceSeed(...)) ?? displayOrder(...)`.
 - `order.map((i, position) => …)`: a gomb tartalma és `data-testid` az eredeti `i`; a betű `OPTION_KEYS[position]`.
 
+- Ellenőrzés: `npx tsc --noEmit` → kimenet nélkül, exit 0; `npm run test:e2e -- tests/option-shuffle.spec.ts` → az 1. teszt `passed`.
+
 ## T3 — `client/src/lesson-runtime/LessonExperienceView.tsx` Kvíz
 - `const quizLayout = useMemo(() => balancedLayouts(quiz), [quiz])`; `(quizLayout.get(choiceSeed(q.question, q.options)) ?? displayOrder(...)).map((i, position) => …)`, betű `"ABCD"[position]`,
   minden más (`pick === i`, `picks[q.id] = i`) eredeti index.
 
+- Ellenőrzés: `npm run test:e2e -- tests/option-shuffle.spec.ts tests/lesson-fusion.spec.ts` → minden `passed`.
+
 ## T4 — `client/src/lesson-runtime/SavedLessonQuiz.tsx`
 - `displayOrder(q.id, q.options).map((pickedIndex, position) => …)`, betű `"ABCD"[position]`; a POST `pickedIndex` eredeti.
+
+- Review #375: a szerver `viewOf` kérdésenként `fixedOrder` jelzőt küld (`refersToOtherOptions(options, feedbackPerOption)`); a kliens
+  `q.fixedOrder` esetén a tárolt sorrendet mutatja.
+- Ellenőrzés: `npx tsc --noEmit -p tsconfig.test.json` → exit 0; `npx playwright test --config playwright.lesson-practice.config.ts` → `8 passed`.
 
 ## T5 — tesztek
 - Új `tests/option-order.test.ts`: permutáció (minden index pontosan egyszer); determinisztikus; 2/3/4 opciós eloszlás 4000 seeden
@@ -34,5 +44,9 @@ Munkakönyvtár: `source/`. Sorrendben.
 - Parancsok: `npm test`, `npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.test.json`, `npx eslint client/src server --max-warnings 0`,
   `npm run test:e2e -- tests/option-shuffle.spec.ts tests/websuli.spec.ts tests/lesson-verdict.spec.ts tests/lesson-progress-persistence.spec.ts`.
 
+- Elvárt kimenet: `npm test` → `ℹ fail 0`; `tsc` mindkét konfiggal exit 0; `eslint` → exit 0, 0 figyelmeztetés; a négy e2e fájl → `passed`, `failed` nincs.
+
 ## T6 — élő mérés
 - Az Antigoné-lecke JSON-ján (`/api/lessons/by-file/7900a871…`, `x-websuli-scoring: 5`) a helyes válasz megjelenített pozíciójának eloszlása.
+- Parancs: `node --import tsx <scratchpad>/shuffle-measure.mts <lecke.json>`; elvárt: opciószámonként a helyes pozíciók darabszáma legfeljebb
+  1-gyel tér el (mért: ellenőrzők 2/2/1/2; kvíz 3 opciós 18/18/18, 4 opciós 11/11/11/11).

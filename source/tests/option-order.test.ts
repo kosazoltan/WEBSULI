@@ -75,10 +75,12 @@ test("balancedLayouts: determinisztikus, és a célpozíciók sorrendje nem cikl
   const qs = choices(Array(12).fill(0));
   const positions = (m: Map<string, number[]>) => qs.map((q) => m.get(choiceSeed(q.question, q.options))!.indexOf(0)).join("");
   assert.equal(positions(balancedLayouts(qs)), positions(balancedLayouts(qs)));
-  assert.notEqual(positions(balancedLayouts(qs)), "012301230123");
+  // Review #375: semmilyen 4-es ciklus (eltolt kezdettel sem) nem ismétlődik végig.
+  const p = positions(balancedLayouts(qs));
+  assert.ok([...p].some((c, i) => i + 4 < p.length && c !== p[i + 4]), `periodikus: ${p}`);
 });
 
-test("balancedLayouts: hivatkozó, érvénytelen és egyopciós kérdés nem kerül a mérlegre", () => {
+test("balancedLayouts: hivatkozó, érvénytelen és egyopciós kérdés elrendezése (tárolt / kevert / egyetlen)", () => {
   const layouts = balancedLayouts([
     { question: "h", options: ["Az A és B is", "Csak C", "x", "y"], correctIndex: 0 },
     { question: "e", options: ["a", "b"], correctIndex: 5 },
@@ -87,4 +89,78 @@ test("balancedLayouts: hivatkozó, érvénytelen és egyopciós kérdés nem ker
   assert.deepEqual(layouts.get(choiceSeed("h", ["Az A és B is", "Csak C", "x", "y"])), [0, 1, 2, 3]);
   assert.deepEqual([...layouts.get(choiceSeed("e", ["a", "b"]))!].sort(), [0, 1]);
   assert.deepEqual(layouts.get(choiceSeed("o", ["egyetlen"])), [0]);
+});
+
+test("gyakorlókör (review #375): ha csak a rejtett visszajelzés hivatkozik betűre, a szerver fixedOrder-t küld, correctIndex nélkül", async () => {
+  const { viewOf } = await import("../server/rewards/lesson-attempts");
+  const question = (id: string, feedbackPerOption: string[]) => ({ id, questionId: "x", questionVersion: "1", prompt: "p", options: ["a", "b", "c", "d"], correctIndex: 0, feedbackPerOption, coversConceptIds: [] });
+  const row = {
+    id: "r", userId: "u", lessonId: "l", bankVersion: "v", status: "active", startedAt: new Date(0), finishedAt: null, result: null, hints: [], answers: {},
+    questions: [question("q0", ["Helyes.", "Nem: az A válasz a helyes.", "Nem.", "Nem."]), question("q1", ["Helyes.", "Nem.", "Nem.", "Nem."])],
+  } as unknown as Parameters<typeof viewOf>[0];
+  const view = viewOf(row);
+  assert.equal(view.questions[0].fixedOrder, true);
+  assert.equal(view.questions[1].fixedOrder, false);
+  for (const q of view.questions) assert.ok(!("correctIndex" in q) && !("feedbackPerOption" in q), "a helyes válasz nem szivárog ki");
+  // A reprodukció: a `q0` seed kevert sorrendet adna, ezért kell a szerver jelzője.
+  assert.notDeepEqual(displayOrder("q0", ["a", "b", "c", "d"]), [0, 1, 2, 3]);
+});
+
+test("balancedLayouts (review #375): a tárolt sorrendű kérdés helyes pozíciója beszámít, az érvénytelen nem", () => {
+  const eligible = choices([0, 0, 0]).map((q, n) => ({ ...q, question: `mozgatható ${n}` }));
+  const fixed = { question: "rögzített", options: ["Az A és B is", "Csak C", "x", "y"], correctIndex: 0 };
+  const invalid = { question: "érvénytelen", options: ["a", "b", "c", "d"], correctIndex: 9 };
+  const layouts = balancedLayouts([fixed, invalid, ...eligible]);
+  const targets = eligible.map((q) => layouts.get(choiceSeed(q.question, q.options))!.indexOf(0)).sort();
+  // A rögzített kérdés az „A” helyet foglalja; a három mozgatható ezért pontosan a B, C, D helyre kerül.
+  assert.deepEqual(targets, [1, 2, 3]);
+});
+
+test("balancedLayouts (review #375): opciószámonként külön mérleg — 3 és 4 opciós kérdések vegyesen", () => {
+  const three = Array.from({ length: 6 }, (_, n) => ({ question: `h${n}`, options: ["x", "y", "z"].map((o) => `${o}${n}`), correctIndex: 0 }));
+  const four = choices(Array(8).fill(1));
+  const mixed = three.flatMap((q, n) => [q, four[n]]).concat(four.slice(6));
+  const layouts = balancedLayouts(mixed);
+  for (const [group, n] of [[three, 3], [four, 4]] as const) {
+    const shown = new Array(n).fill(0);
+    for (const q of group) shown[layouts.get(choiceSeed(q.question, q.options))!.indexOf(q.correctIndex)]++;
+    assert.ok(Math.max(...shown) - Math.min(...shown) <= 1, `${n} opció: ${shown.join("/")}`);
+  }
+});
+
+test("balancedLayouts (review #375): az ismételt azonos kérdés ugyanazt az elrendezést kapja, de mindkétszer beszámít", () => {
+  const [a, b, c] = choices([0, 0, 0]);
+  const layouts = balancedLayouts([a, a, b, c]);
+  const at = (q: typeof a) => layouts.get(choiceSeed(q.question, q.options))!.indexOf(0);
+  // Az „a” kétszer foglalja ugyanazt a helyet; b és c így két MÁSIK, egymástól is különböző helyre kerül.
+  assert.equal(new Set([at(a), at(b), at(c)]).size, 3);
+});
+
+test("refersToOtherOptions (review #375): E betű (5 opciós ellenőrző) és sorszámos hivatkozás", () => {
+  assert.equal(refersToOtherOptions(["a", "b"], ["Nem: az E válasz a helyes."]), true);
+  assert.equal(refersToOtherOptions(["a", "b"], ["Nem: a második lehetőség a jó."]), true);
+  assert.equal(refersToOtherOptions(["Csak az első opció igaz", "b"]), true);
+  assert.equal(refersToOtherOptions(["Az első világháború", "A második király"], ["Nem: Thébaiban játszódik."]), false);
+});
+
+test("refersToOtherOptions (review #375): a közönséges „a válasz” és a mondatkezdő „A válasz” nem hivatkozás, a betűjel igen", () => {
+  for (const text of ["Ez a válasz téves, mert a szorzatot osztani kell.", "A válasz helyes, mert Thébaiban játszódik.", "Nem: a válasz túl általános."]) {
+    assert.equal(refersToOtherOptions(["x", "y"], [text]), false, text);
+  }
+  for (const text of ["Nem: az A válasz a helyes.", "Nem: a B válasz a helyes.", "Az E opció a jó.", "B válasz a helyes.", "Lásd (C)", "Az A és B is igaz"]) {
+    assert.equal(refersToOtherOptions(["x", "y"], [text]), true, text);
+  }
+});
+
+test("balancedLayouts (review #375): a megjelenítési sorrend négyes csoportjai nem kikövetkeztethetők (nem mindig A–D permutáció)", () => {
+  const qs = choices(Array(100).fill(0));
+  const layouts = balancedLayouts(qs);
+  const at = qs.map((q) => layouts.get(choiceSeed(q.question, q.options))!.indexOf(0));
+  const shown = [0, 0, 0, 0];
+  at.forEach((p) => shown[p]++);
+  assert.ok(Math.max(...shown) - Math.min(...shown) <= 1, `kiegyensúlyozott: ${shown.join("/")}`);
+  const blocks = Array.from({ length: 25 }, (_, b) => at.slice(b * 4, b * 4 + 4));
+  const permutations = blocks.filter((block) => new Set(block).size === 4).length;
+  // Soronkénti (prefix) kiegyensúlyozásnál mind a 25 blokk permutáció lenne; véletlen kiosztásnál ~9%.
+  assert.ok(permutations < 12, `${permutations}/25 négyes blokk teljes permutáció`);
 });

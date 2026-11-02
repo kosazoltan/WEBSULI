@@ -66,10 +66,22 @@ test("Kvíz: a kör kérdései kiegyensúlyozott elrendezésben, betűjel a poz�
   const firstAt = layouts.get(choiceSeed(first.question, first.options))!.indexOf(first.correctIndex);
   await sections.nth(0).locator("button.lesson-option").nth(firstAt).click();
   await expect(sections.nth(0).locator("button.lesson-option").nth(firstAt)).toHaveAttribute("data-state", "right");
+  // Review #375: teljes képernyős render a kevert, megválaszolt kvízállapotban — nincs vízszintes túlcsordulás, levágott
+  // válaszszöveg, egymásra lógó gomb vagy viewporton kívül eső gomb.
   for (const size of [{ width: 360, height: 740 }, { width: 1366, height: 900 }]) {
     await page.setViewportSize(size);
+    await sections.nth(0).scrollIntoViewIfNeeded();
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
-    await sections.nth(0).screenshot({ path: `tests/screenshots/option-shuffle-quiz-${size.width}.png` });
+    const report = await sections.nth(0).locator("button.lesson-option").evaluateAll(els => {
+      const boxes = els.map(el => el.getBoundingClientRect());
+      return {
+        clipped: els.filter(el => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1).length,
+        outside: boxes.filter(b => b.left < 0 || b.right > window.innerWidth + 1).length,
+        overlaps: boxes.slice(1).filter((b, i) => b.top < boxes[i].bottom - 1).length,
+      };
+    });
+    expect(report).toEqual({ clipped: 0, outside: 0, overlaps: 0 });
+    await page.screenshot({ path: `tests/screenshots/option-shuffle-quiz-page-${size.width}.png` });
   }
   expect(errors).toEqual([]);
 });

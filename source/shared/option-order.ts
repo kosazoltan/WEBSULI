@@ -33,11 +33,16 @@ export function optionOrder(seed: string, count: number): number[] {
   return order;
 }
 
-// Betűvel („A)”, „A és B”, „„C””, „B válasz”) vagy „fenti / előző válasz” szóval más opcióra hivatkozó kérdés nem keverhető.
-const REFERS_TO_OTHER_OPTION = /(^|[\s(„])[A-D]\)|(^|\s)[A-D] (és|vagy) [A-D]\b|„[A-D]”|\b[A-D] válasz|fenti|előző válasz/i;
+// Betűvel („A)”, „A és B”, „„C””, „B válasz”; az ellenőrző legfeljebb 5 opciós, ezért A–E), sorszámmal („a második válasz”) vagy
+// „fenti / előző válasz” szóval más opcióra hivatkozó kérdés nem keverhető (review #375).
+// Review #375: a betűjel NAGYBETŰ (kis-nagybetű-érzékeny minta), és az „A” csak névelővel („az A válasz”) jelöl opciót — a mondatkezdő
+// „A válasz téves” és a közönséges „a válasz” nem hivatkozás.
+const LETTER_REFERENCE =
+  /(^|[\s(„])[A-E]\)|(^|\s)[A-E] (és|vagy) [A-E](?![\p{L}])|„[A-E]”|(?<![\p{L}])[Aa]z? [A-E] (válasz|opció|lehetőség)|(?<![\p{L}])[B-E] (válasz|opció|lehetőség)/u;
+const WORD_REFERENCE = /(?<![\p{L}])(első|második|harmadik|negyedik|ötödik|utolsó) (válasz|opció|lehetőség)|fenti|előző válasz/iu;
 
 export const refersToOtherOptions = (options: readonly string[], feedback: readonly string[] = []): boolean =>
-  [...options, ...feedback].some((text) => REFERS_TO_OTHER_OPTION.test(text));
+  [...options, ...feedback].some((text) => LETTER_REFERENCE.test(text) || WORD_REFERENCE.test(text));
 
 /** A megjelenítés sorrendje: hivatkozó opcióknál a tárolt sorrend, különben a kevert. */
 export function displayOrder(seed: string, options: readonly string[], feedback: readonly string[] = []): number[] {
@@ -51,30 +56,48 @@ export type ChoiceQuestion = { question: string; options: readonly string[]; cor
 
 /**
  * Spec 2026-11-02-valasz-keveres: a kérdésenkénti keverés egy adott leckén determinisztikus mintát adhat (mért: az Antigoné 7
- * ellenőrzőjéből 6-nál „A”, mindig). Ezért egy lecke / kör kérdéseinél a helyes válasz célpozíciója a sorban eddig legkevésbé
- * használt pozíciók egyike (seedelt döntetlen-bontás), a többi opció kevert sorrendben. Kulcs: `choiceSeed(question, options)`.
+ * ellenőrzőjéből 6-nál „A”, mindig). Ezért egy lecke / kör kérdéseinél a helyes válasz célpozíciói opciószámonként kiegyensúlyozottak
+ * (a darabszámok legfeljebb 1-gyel térnek el), a többi opció kevert sorrendben. Kulcs: `choiceSeed(question, options)`.
+ *
+ * Review #375: a kiosztás a kérdések SEEDELT VÉLETLEN sorrendjében történik, nem a megjelenítésében — így a sorban haladva egy négyes
+ * csoport utolsó helyes pozíciója nem következtethető ki az előző háromból. A tárolt sorrendben maradó (hivatkozó) kérdés helyes
+ * pozíciója előre beszámít; az azonos szövegű ismételt kérdés ugyanazt az elrendezést kapja, és minden előfordulása beszámít.
  */
 export function balancedLayouts(choices: readonly ChoiceQuestion[]): Map<string, number[]> {
   const layouts = new Map<string, number[]>();
-  const random = mulberry32(hash32(choices.map((c) => choiceSeed(c.question, c.options)).join("\u0001")));
-  const used: number[] = [];
+  const seed = choices.map((c) => choiceSeed(c.question, c.options)).join("\u0001");
+  const random = mulberry32(hash32(seed));
+  const usedByCount = new Map<number, number[]>();
+  const usage = (n: number) => usedByCount.get(n) ?? usedByCount.set(n, Array.from({ length: n }, () => 0)).get(n)!;
+  // Egyedi kérdések, előfordulásszámmal; az érvényes, nem hivatkozó kérdések a mozgathatók.
+  const unique = new Map<string, { choice: ChoiceQuestion; weight: number }>();
   for (const choice of choices) {
     const key = choiceSeed(choice.question, choice.options);
-    const count = choice.options.length;
-    if (layouts.has(key)) continue;
-    const valid = Number.isInteger(choice.correctIndex) && choice.correctIndex >= 0 && choice.correctIndex < count;
-    if (!valid || count < 2 || refersToOtherOptions(choice.options, choice.feedbackPerOption)) {
-      layouts.set(key, displayOrder(key, choice.options, choice.feedbackPerOption));
-      continue;
-    }
-    const usage = Array.from({ length: count }, (_, p) => used[p] ?? 0);
-    const least = Math.min(...usage);
-    const candidates = usage.flatMap((n, p) => (n === least ? [p] : []));
+    const seen = unique.get(key);
+    if (seen) seen.weight++;
+    else unique.set(key, { choice, weight: 1 });
+  }
+  const movable: string[] = [];
+  for (const [key, { choice, weight }] of unique) {
+    const n = choice.options.length;
+    const valid = Number.isInteger(choice.correctIndex) && choice.correctIndex >= 0 && choice.correctIndex < n;
+    if (valid && n >= 2 && !refersToOtherOptions(choice.options, choice.feedbackPerOption)) { movable.push(key); continue; }
+    const order = displayOrder(key, choice.options, choice.feedbackPerOption);
+    layouts.set(key, order);
+    if (valid && n >= 2) usage(n)[order.indexOf(choice.correctIndex)] += weight;
+  }
+  for (const index of optionOrder(seed, movable.length)) {
+    const key = movable[index];
+    const { choice, weight } = unique.get(key)!;
+    const n = choice.options.length;
+    const used = usage(n);
+    const least = Math.min(...used);
+    const candidates = used.flatMap((count, p) => (count === least ? [p] : []));
     const target = candidates[Math.floor(random() * candidates.length)];
-    const others = optionOrder(key, count).filter((i) => i !== choice.correctIndex);
-    others.splice(target, 0, choice.correctIndex);
-    layouts.set(key, others);
-    used[target] = (used[target] ?? 0) + 1;
+    const order = optionOrder(key, n).filter((i) => i !== choice.correctIndex);
+    order.splice(target, 0, choice.correctIndex);
+    layouts.set(key, order);
+    used[target] += weight;
   }
   return layouts;
 }
