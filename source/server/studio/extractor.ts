@@ -93,7 +93,7 @@ export function computeInputHash(
 /** Plain text available for quote checking (images carry no checkable text). */
 export function sourceTextOf(files: ExtractorFile[]): string {
   return files
-    .filter((f) => f.kind === "text" || f.kind === "docx" || f.kind === "pdf")
+    .filter((f) => f.kind === "text" || f.kind === "docx" || f.kind === "pdf" || f.kind === "mht")
     .map((f) => f.extractedText ?? (f.content.startsWith("data:") ? "" : f.content))
     .join("\n");
 }

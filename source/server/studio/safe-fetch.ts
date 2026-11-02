@@ -142,13 +142,13 @@ export function htmlToText(html: string): { title: string; text: string } {
   return { title, text };
 }
 
-function charsetOf(contentType: string, head: Uint8Array): string {
+export function charsetOf(contentType: string, head: Uint8Array): string {
   const fromHeader = /charset=["']?([\w-]+)/i.exec(contentType)?.[1];
   if (fromHeader) return fromHeader;
   const sniff = new TextDecoder("latin1").decode(head.slice(0, 2048));
   return /<meta[^>]+charset=["']?([\w-]+)/i.exec(sniff)?.[1] ?? "utf-8";
 }
-function decode(bytes: Uint8Array, charset: string): string {
+export function decode(bytes: Uint8Array, charset: string): string {
   try { return new TextDecoder(charset).decode(bytes); } catch { return new TextDecoder("utf-8").decode(bytes); }
 }
 

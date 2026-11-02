@@ -16,6 +16,61 @@ export async function readDocxText(content: string): Promise<string> {
   return sections.join("\n");
 }
 
+type MimePart = { headers: Map<string, string>; body: string };
+
+/** RFC 822 style header block → lower-cased name map (folded continuation lines joined). */
+function parseMimeHeaders(block: string): Map<string, string> {
+  const headers = new Map<string, string>();
+  for (const line of block.replace(/\r?\n[ \t]+/g, " ").split(/\r?\n/)) {
+    const colon = line.indexOf(":");
+    if (colon > 0) headers.set(line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim());
+  }
+  return headers;
+}
+
+function splitMimeEntity(raw: string): MimePart {
+  const match = /\r?\n\r?\n/.exec(raw);
+  if (!match) return { headers: parseMimeHeaders(raw), body: "" };
+  return { headers: parseMimeHeaders(raw.slice(0, match.index)), body: raw.slice(match.index + match[0].length) };
+}
+
+const mimeParam = (header: string | undefined, name: string) =>
+  header ? new RegExp(`(?:^|;)\\s*${name}\\s*=\\s*(?:"([^"]*)"|([^;\\s]+))`, "i").exec(header)?.slice(1).find(v => v !== undefined) : undefined;
+
+/** Transfer-decoded bytes of one part; `body` is a latin1 (byte-preserving) string. */
+function decodeTransfer(body: string, encoding: string | undefined): Buffer {
+  switch ((encoding ?? "").toLowerCase()) {
+    case "base64": return Buffer.from(body.replace(/[^A-Za-z0-9+/=]/g, ""), "base64");
+    case "quoted-printable": return Buffer.from(body.replace(/=\r?\n/g, "").replace(/=([0-9A-Fa-f]{2})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16))), "latin1");
+    default: return Buffer.from(body, "latin1");
+  }
+}
+
+/** Spec 2026-11-02-mht-forras: the root HTML page of an MHT/MHTML web archive as plain text (embedded images are not read). */
+export async function readMhtText(content: string): Promise<string> {
+  const encoded = content.match(/^data:[^,]*;base64,([\s\S]+)$/)?.[1];
+  const raw = encoded ? Buffer.from(encoded, "base64").toString("latin1") : content;
+  const [{ charsetOf, decode, htmlToText }] = await Promise.all([import("./safe-fetch")]);
+  const top = splitMimeEntity(raw.replace(/^\xEF\xBB\xBF/, ""));
+  const topType = top.headers.get("content-type") ?? "";
+  let parts: MimePart[] = [top];
+  if (/^multipart\//i.test(topType)) {
+    const boundary = mimeParam(topType, "boundary");
+    if (!boundary) throw new Error("Az MHT-fájl szerkezete nem olvasható (hiányzó határoló).");
+    const delimiter = new RegExp(`\\r?\\n?--${boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:--)?[ \\t]*(?:\\r?\\n|$)`);
+    parts = top.body.split(delimiter).slice(1).filter(p => p.trim()).map(splitMimeEntity);
+  }
+  const html = parts.filter(p => /^text\/html/i.test(p.headers.get("content-type") ?? (parts.length === 1 ? "text/html" : "")));
+  const startId = mimeParam(topType, "start")?.replace(/^<|>$/g, "");
+  const snapshot = top.headers.get("snapshot-content-location");
+  const root = (startId && html.find(p => p.headers.get("content-id")?.replace(/^<|>$/g, "") === startId))
+    ?? (snapshot && html.find(p => p.headers.get("content-location") === snapshot))
+    ?? html[0];
+  if (!root) throw new Error("Az MHT-fájlban nincs olvasható weboldal.");
+  const bytes = decodeTransfer(root.body, root.headers.get("content-transfer-encoding"));
+  return htmlToText(decode(bytes, charsetOf(root.headers.get("content-type") ?? "", bytes))).text;
+}
+
 /**
  * Spec 2026-09-19: the bytes decide, not the file extension. A photo saved as ".pdf" is
  * a photo; a real PDF pdfjs cannot open still gets a vision transcript.
@@ -32,7 +87,7 @@ export function sniffImageMime(buffer: Buffer): "image/jpeg" | "image/png" | "im
 export async function normalizeDocumentSources(files: ExtractorFile[], transcribePdf?: (file: ExtractorFile) => Promise<string>): Promise<ExtractorFile[]> {
   const out: ExtractorFile[] = [];
   for (const file of files) {
-    if (file.extractedText !== undefined || !["pdf", "docx"].includes(file.kind) || !file.content.startsWith("data:")) { out.push(file); continue; }
+    if (file.extractedText !== undefined || !["pdf", "docx", "mht"].includes(file.kind) || !file.content.startsWith("data:")) { out.push(file); continue; }
     const encoded = file.content.match(/^data:[^,]+;base64,([\s\S]+)$/)?.[1];
     if (!encoded) throw new Error("A dokumentum kódolása nem olvasható.");
     const buffer = Buffer.from(encoded, "base64");
@@ -46,6 +101,8 @@ export async function normalizeDocumentSources(files: ExtractorFile[], transcrib
     let text: string;
     if (file.kind === "docx") {
       text = await readDocxText(file.content);
+    } else if (file.kind === "mht") {
+      text = await readMhtText(file.content);
     } else {
       const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.js");
       let pdf: Awaited<ReturnType<typeof getDocument>["promise"]>;

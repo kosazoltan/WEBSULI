@@ -46,7 +46,11 @@ async function prepareFiles(files: ExtractorFile[]): Promise<ExtractorFile[]> {
   const out: ExtractorFile[] = [];
   for (const file of files) {
     try { out.push(...await normalizeDocumentSources([file])); }
-    catch { out.push(file); } // olvashatatlan PDF: az Opus natívan olvassa (dokumentumblokk)
+    catch (error) {
+      // Spec 2026-11-02-mht-forras: az MHT nyers base64-e nem mehet szövegként a modellhez — érthető hiba.
+      if (file.kind === "mht") throw error;
+      out.push(file); // olvashatatlan PDF: az Opus natívan olvassa (dokumentumblokk)
+    }
   }
   return out;
 }

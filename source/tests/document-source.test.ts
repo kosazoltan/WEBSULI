@@ -77,3 +77,73 @@ test("sérült PDF átíró nélkül vagy üres átirattal → magyar hiba a pdf
   await assert.rejects(normalizeDocumentSources([broken]), /A PDF nem olvasható \(sérült vagy titkosított\)/);
   await assert.rejects(normalizeDocumentSources([broken], async () => "   "), /A PDF nem olvasható/);
 });
+
+/* ------------------------------------------------------------------------- *
+ * Spec 2026-11-02-mht-forras — MHT/MHTML webarchívum: a gyökér-HTML szövege,
+ * helyes karakterkészlettel; a követőkód-rész nem kerül be; olvashatatlannál hiba.
+ * ------------------------------------------------------------------------- */
+
+import { readMhtText } from "../server/studio/document-source";
+
+const mhtUrl = (raw: Buffer | string) => `data:multipart/related;base64,${(typeof raw === "string" ? Buffer.from(raw, "latin1") : raw).toString("base64")}`;
+
+test("MHT: quoted-printable utf-8 gyökér-HTML, soft line break", async () => {
+  const raw = [
+    "MIME-Version: 1.0",
+    'Content-Type: multipart/related; type="text/html"; boundary="B1"',
+    "",
+    "--B1",
+    "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: quoted-printable",
+    "",
+    "<html><body><h1>Antigon=C3=A9</h1><p>=C3=81rv=C3=ADzt=C5=B1r=C5=91 t=C3=BCk=",
+    "örfúrógép</p></body></html>".replace(/[^\x00-\x7f]/g, (c) => [...Buffer.from(c, "utf8")].map((b) => `=${b.toString(16).toUpperCase()}`).join("")),
+    "--B1--",
+  ].join("\r\n");
+  const text = await readMhtText(mhtUrl(raw));
+  assert.match(text, /Antigoné/);
+  assert.match(text, /Árvíztűrő tükörfúrógép/);
+});
+
+test("MHT: base64 + windows-1250 rész-fejléc karakterkészlet", async () => {
+  const cp1250: Record<string, number> = { "ó": 0xf3, "ü": 0xfc, "é": 0xe9, "ő": 0xf5 };
+  const html = Buffer.from([..."<p>Kreón: tilos eltemetni Polüneikészt őr</p>"].map((c) => cp1250[c] ?? c.charCodeAt(0)));
+  const raw = `Content-Type: multipart/related; boundary=XYZ\r\n\r\n--XYZ\r\nContent-Type: text/html; charset=windows-1250\r\nContent-Transfer-Encoding: base64\r\n\r\n${html.toString("base64").replace(/(.{20})/g, "$1\r\n")}\r\n--XYZ--\r\n`;
+  const text = await readMhtText(mhtUrl(raw));
+  assert.match(text, /Kreón: tilos eltemetni Polüneikészt őr/);
+});
+
+test("MHT: binary rész, a karakterkészlet a <meta>-ban; a követőkód-rész kimarad (Blink-mentés)", async () => {
+  const root = Buffer.concat([Buffer.from('<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-2"><title>Szophokl'), Buffer.from([0xe9]), Buffer.from("sz</title></head><body><h3>Ford"), Buffer.from([0xed]), Buffer.from("totta: Trencs"), Buffer.from([0xe9]), Buffer.from("nyi-Waldapfel Imre</h3><p>SZEM"), Buffer.from([0xc9]), Buffer.from("LYEK</p><p>H"), Buffer.from([0xcd]), Buffer.from("RN"), Buffer.from([0xd6]), Buffer.from("K, EUR"), Buffer.from([0xdc]), Buffer.from("DIK"), Buffer.from([0xc9]), Buffer.from("</p></body></html>")]);
+  const raw = Buffer.concat([
+    Buffer.from('From: <Saved by Blink>\r\nSnapshot-Content-Location: https://vmek.oszk.hu/00500/00500/00500.htm\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related;\r\n\ttype="text/html";\r\n\tboundary="----MultipartBoundary--abc----"\r\n\r\n\r\n'),
+    Buffer.from("------MultipartBoundary--abc----\r\nContent-Type: text/html\r\nContent-Transfer-Encoding: binary\r\nContent-Location: https://vmek.oszk.hu/00500/00500/00500.htm\r\n\r\n"), root,
+    Buffer.from("\r\n------MultipartBoundary--abc----\r\nContent-Type: text/css\r\nContent-Transfer-Encoding: binary\r\n\r\nbody{color:red}\r\n"),
+    Buffer.from("------MultipartBoundary--abc----\r\nContent-Type: text/html\r\nContent-Transfer-Encoding: binary\r\nContent-Location: https://ls.hit.gemius.pl/lsget.html\r\n\r\n<html><body>gemius tracker</body></html>\r\n------MultipartBoundary--abc------\r\n"),
+  ]);
+  const text = await readMhtText(mhtUrl(raw));
+  assert.match(text, /Fordította: Trencsényi-Waldapfel Imre/);
+  assert.match(text, /SZEMÉLYEK/);
+  assert.match(text, /HÍRNÖK/);
+  assert.match(text, /EURÜDIKÉ/);
+  assert.doesNotMatch(text, /�|gemius|color:red/);
+});
+
+test("MHT: UTF-8 BOM a fájl elején nem rontja el a fejlécet", async () => {
+  const raw = Buffer.from('﻿Content-Type: multipart/related; boundary="b"\r\n\r\n--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Antigoné</p>\r\n--b--', "utf8");
+  assert.equal(await readMhtText(mhtUrl(raw)), "Antigoné");
+});
+
+test("MHT: a start paraméter Content-ID-ja választja a gyökeret", async () => {
+  const raw = 'Content-Type: multipart/related; boundary="b"; start="<root@x>"\r\n\r\n--b\r\nContent-Type: text/html\r\nContent-ID: <ad@x>\r\n\r\n<p>reklam</p>\r\n--b\r\nContent-Type: text/html\r\nContent-ID: <root@x>\r\n\r\n<p>Tananyag</p>\r\n--b--';
+  assert.equal(await readMhtText(mhtUrl(raw)), "Tananyag");
+});
+
+test("MHT: normalizálás után kereshető; html rész nélkül érthető hiba", async () => {
+  const raw = 'Content-Type: multipart/related; boundary="b"\r\n\r\n--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>A sejt az élőlények alapegysége.</p>\r\n--b--';
+  const file = { name: "lap.mht", kind: "mht" as const, content: mhtUrl(Buffer.from(raw, "utf8")) };
+  assert.equal(sourceTextOf([file]), "");
+  assert.match(sourceTextOf(await normalizeDocumentSources([file])), /A sejt az élőlények alapegysége\./);
+  const imageOnly = { ...file, content: mhtUrl('Content-Type: multipart/related; boundary="b"\r\n\r\n--b\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\n\r\niVBORw0KGgo=\r\n--b--') };
+  await assert.rejects(normalizeDocumentSources([imageOnly]), /nincs olvasható weboldal/);
+});

@@ -22,7 +22,7 @@ export const CONCEPT_TYPES = [
 /** How much the concept matters for an exam — drives the LS-2 coverage gate. */
 export const EXAM_WEIGHTS = ["core", "supporting", "extra"] as const;
 
-export const SOURCE_KINDS = ["pdf", "image", "docx", "text"] as const;
+export const SOURCE_KINDS = ["pdf", "image", "docx", "text", "mht"] as const;
 
 export const REVIEW_STATES = ["pending", "kept", "edited", "rejected"] as const;
 
