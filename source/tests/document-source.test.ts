@@ -139,6 +139,15 @@ test("MHT: a start paraméter Content-ID-ja választja a gyökeret", async () =>
   assert.equal(await readMhtText(mhtUrl(raw)), "Tananyag");
 });
 
+test("MHT: a gyökér beágyazott multipart/alternative — a főoldal szövege jön, nem az iframe-é (review #374)", async () => {
+  const alternative = 'Content-Type: multipart/alternative; boundary="alt"\r\nContent-ID: <root@x>\r\n\r\n--alt\r\nContent-Type: text/plain\r\n\r\nsima szöveg\r\n--alt\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Antigoné tananyag</p>\r\n--alt--\r\n';
+  const iframe = 'Content-Type: text/html\r\nContent-ID: <frame@x>\r\n\r\n<p>iframe reklám</p>\r\n';
+  const withIframe = `Content-Type: multipart/related; boundary="rel"; start="<root@x>"\r\n\r\n--rel\r\n${iframe}--rel\r\n${alternative}--rel--`;
+  assert.equal(await readMhtText(mhtUrl(Buffer.from(withIframe, "utf8"))), "Antigoné tananyag");
+  const rootOnly = `Content-Type: multipart/related; boundary="rel"\r\n\r\n--rel\r\n${alternative}--rel--`;
+  assert.equal(await readMhtText(mhtUrl(Buffer.from(rootOnly, "utf8"))), "Antigoné tananyag");
+});
+
 test("MHT: normalizálás után kereshető; html rész nélkül érthető hiba", async () => {
   const raw = 'Content-Type: multipart/related; boundary="b"\r\n\r\n--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>A sejt az élőlények alapegysége.</p>\r\n--b--';
   const file = { name: "lap.mht", kind: "mht" as const, content: mhtUrl(Buffer.from(raw, "utf8")) };

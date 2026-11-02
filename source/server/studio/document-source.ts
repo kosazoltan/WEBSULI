@@ -52,20 +52,30 @@ export async function readMhtText(content: string): Promise<string> {
   const raw = encoded ? Buffer.from(encoded, "base64").toString("latin1") : content;
   const [{ charsetOf, decode, htmlToText }] = await Promise.all([import("./safe-fetch")]);
   const top = splitMimeEntity(raw.replace(/^\xEF\xBB\xBF/, ""));
-  const topType = top.headers.get("content-type") ?? "";
-  let parts: MimePart[] = [top];
-  if (/^multipart\//i.test(topType)) {
-    const boundary = mimeParam(topType, "boundary");
+  const snapshot = top.headers.get("snapshot-content-location");
+  const cid = (value: string | undefined) => value?.replace(/^<|>$/g, "");
+  // Review #374 (P2): the root may itself be multipart (e.g. multipart/alternative around the page), so the root
+  // entity is chosen before any HTML filtering and nested multiparts are descended into.
+  const htmlOf = (entity: MimePart, depth: number, isTop: boolean): MimePart | undefined => {
+    const type = entity.headers.get("content-type") ?? (isTop ? "text/html" : "text/plain");
+    if (!/^multipart\//i.test(type)) return /^text\/html/i.test(type) ? entity : undefined;
+    if (depth > 8) throw new Error("Az MHT-fájl szerkezete túl mélyen egymásba ágyazott.");
+    const boundary = mimeParam(type, "boundary");
     if (!boundary) throw new Error("Az MHT-fájl szerkezete nem olvasható (hiányzó határoló).");
     const delimiter = new RegExp(`\\r?\\n?--${boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:--)?[ \\t]*(?:\\r?\\n|$)`);
-    parts = top.body.split(delimiter).slice(1).filter(p => p.trim()).map(splitMimeEntity);
-  }
-  const html = parts.filter(p => /^text\/html/i.test(p.headers.get("content-type") ?? (parts.length === 1 ? "text/html" : "")));
-  const startId = mimeParam(topType, "start")?.replace(/^<|>$/g, "");
-  const snapshot = top.headers.get("snapshot-content-location");
-  const root = (startId && html.find(p => p.headers.get("content-id")?.replace(/^<|>$/g, "") === startId))
-    ?? (snapshot && html.find(p => p.headers.get("content-location") === snapshot))
-    ?? html[0];
+    const parts = entity.body.split(delimiter).slice(1).filter(p => p.trim()).map(splitMimeEntity);
+    const startId = cid(mimeParam(type, "start"));
+    const preferred = (startId && parts.find(p => cid(p.headers.get("content-id")) === startId))
+      || (snapshot && parts.find(p => p.headers.get("content-location") === snapshot)) || undefined;
+    // In multipart/alternative the last part is the richest representation.
+    const ordered = /^multipart\/alternative/i.test(type) ? [...parts].reverse() : parts;
+    for (const part of preferred ? [preferred, ...ordered.filter(p => p !== preferred)] : ordered) {
+      const found = htmlOf(part, depth + 1, false);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  const root = htmlOf(top, 0, true);
   if (!root) throw new Error("Az MHT-fájlban nincs olvasható weboldal.");
   const bytes = decodeTransfer(root.body, root.headers.get("content-transfer-encoding"));
   return htmlToText(decode(bytes, charsetOf(root.headers.get("content-type") ?? "", bytes))).text;
