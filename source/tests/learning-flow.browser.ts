@@ -1,5 +1,6 @@
 import { expect, test, type Locator } from "@playwright/test";
 import { fusionFixture, compactFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { balancedLayouts, choiceSeed } from "../shared/option-order";
 
 async function expectUncovered(part: Locator) {
   await part.evaluate(element => element.scrollIntoView({ block: "center", behavior: "instant" }));
@@ -15,7 +16,11 @@ for (const [width, height] of [[320, 900], [390, 844], [844, 390], [1365, 612], 
     await page.setViewportSize({ width, height });
     await page.goto("/__lesson-runtime-probe?fusion=1");
     await page.evaluate(() => document.fonts.ready);
-    await expect(page.locator(".lesson-cover-art")).toBeVisible();
+    // Dokumentált spec-változás (docs/specs/2026-10-17-websuli-lecke-hos.md, review #273): a borító a katalógus képe (`.ws-art`),
+    // kép híján a rajzos tartalék (`.lesson-cover-art`) — a tests/lesson-design.spec.ts mintája szerint.
+    await page.locator(".lesson-hero h1").waitFor();
+    if (await page.locator(".lesson-hero .ws-art").count()) await expect(page.locator(".lesson-hero .ws-art > img")).toBeVisible();
+    else await expect(page.locator(".lesson-hero .lesson-cover-art")).toBeVisible();
     await page.screenshot({ path: `test-results/learning-cover-${width}x${height}.png` });
     await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
     const questions = page.locator("[data-quiz-id]");
@@ -23,10 +28,16 @@ for (const [width, height] of [[320, 900], [390, 844], [844, 390], [1365, 612], 
     const quizPanel = page.getByRole("tabpanel", { name: "Kvíz", exact: true });
     await expect(quizPanel.locator(".learning-pager, .learning-mode")).toHaveCount(0);
     await expect(quizPanel.getByRole("button", { name: /Teljes kvíz|Következő kérdés|Előző kérdés/ })).toHaveCount(0);
-    await questions.last().getByRole("button").first().click();
+    // Spec 2026-11-02-valasz-keveres (dokumentált spec-változás): a válaszok kevert sorrendben jelennek meg; a helyes válasz
+    // megjelenített helyét a kör kiegyensúlyozott elrendezéséből számoljuk (a szándék változatlan: két helyes válasz, 2 pont).
+    const bank = fusionFixture().experience!.quiz;
+    const round = (await questions.evaluateAll(els => els.map(el => el.getAttribute("data-quiz-id")!))).map(id => bank.find(q => q.id === id)!);
+    const layouts = balancedLayouts(round);
+    const correctAt = (n: number) => layouts.get(choiceSeed(round[n].question, round[n].options))!.indexOf(round[n].correctIndex);
+    await questions.last().getByRole("button").nth(correctAt(round.length - 1)).click();
     await expect(questions.first().getByRole("button").first()).toBeEnabled();
-    await questions.first().getByRole("button").first().click();
-    await expect(questions.last().getByRole("button").first()).toHaveAttribute("aria-pressed", "true");
+    await questions.first().getByRole("button").nth(correctAt(0)).click();
+    await expect(questions.last().getByRole("button").nth(correctAt(round.length - 1))).toHaveAttribute("aria-pressed", "true");
     await expect(questions.last().getByRole("button").nth(1)).toBeDisabled();
     await expect(quizPanel).toContainText("2 megválaszolva · 2 pont");
     await page.getByRole("button", { name: "Kvíz kiértékelése", exact: true }).click();

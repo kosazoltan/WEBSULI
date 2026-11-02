@@ -150,6 +150,14 @@ jobs:
       - name: Verify service worker install keeps the previous offline cache (#207)
         run: npx playwright test --config playwright.service-worker.config.ts
 
+      # docs/specs/2026-11-02-maradek-kockazatok.md: ez a két böngészős konfig nem futott a CI-ben, ezért észrevétlenül
+      # elavult (borító-spec 2026-10-17, válaszkeverés 2026-11-02). Most minden PR-on futnak.
+      - name: Verify lesson cover, continuous exercise lists and the fusion lesson (learning flow)
+        run: npx playwright test --config playwright.learning-flow.config.ts
+
+      - name: Verify saved practice rounds (first answer, retry, reload, reward)
+        run: npx playwright test --config playwright.lesson-practice.config.ts
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4
