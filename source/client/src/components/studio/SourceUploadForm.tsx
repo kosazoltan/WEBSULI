@@ -123,7 +123,7 @@ export function SourceUploadForm({
         if (!source) {
           toast({
             title: "Nem támogatott fájl",
-            description: `${file.name} — pdf, kép, docx vagy txt/md tölthető fel.`,
+            description: `${file.name} — pdf, kép, docx, mht vagy txt/md tölthető fel.`,
             variant: "destructive",
           });
           continue;
@@ -361,7 +361,7 @@ export function SourceUploadForm({
             Forrás feltöltése — új tudás-térkép
           </CardTitle>
           <CardDescription className="text-xs">
-            Tölts fel tananyag-forrást (pdf, kép, docx, txt) — a gép fogalomjegyzéket kivonatol
+            Tölts fel tananyag-forrást (pdf, kép, docx, mht, txt) — a gép fogalomjegyzéket kivonatol
             belőle, te átnézed és jóváhagyod, és abból készül a lecke.
           </CardDescription>
         </CardHeader>
@@ -398,7 +398,7 @@ export function SourceUploadForm({
           ref={fileInput}
           type="file"
           multiple
-          accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.docx,.txt,.md"
+          accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.docx,.mht,.mhtml,.txt,.md"
           className="hidden"
           onChange={(e) => void addFiles(e.target.files)}
           data-testid="extract-file-input"

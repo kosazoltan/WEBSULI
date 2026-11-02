@@ -67,3 +67,9 @@ test("extractSubmitDisabledReason: hiányos űrlapra magyar indok, teljesre null
   assert.match(extractSubmitDisabledReason("matek", 4, 0) ?? "", /forrás/i);
   assert.equal(extractSubmitDisabledReason("matek", 4, 1), null);
 });
+
+test("fileKindOf: MHT/MHTML webarchívum (spec 2026-11-02-mht-forras)", () => {
+  assert.equal(fileKindOf("Szophoklész_ Antigoné.mht"), "mht");
+  assert.equal(fileKindOf("lap.MHTML"), "mht");
+  assert.equal(sourceFileFromRead("lap.mht", "data:multipart/related;base64,AAAA")?.kind, "mht");
+});

@@ -278,7 +278,7 @@ export function downscaleTargetOf(width: number, height: number): { width: numbe
  * ------------------------------------------------------------------ */
 
 /** A server-side SOURCE_KINDS tükre — a payload ezt a szűk halmazt küldheti. */
-export type SourceFileKind = "pdf" | "image" | "docx" | "text";
+export type SourceFileKind = "pdf" | "image" | "docx" | "text" | "mht";
 
 export type SourceFile = { name: string; kind: SourceFileKind; content: string };
 
@@ -290,6 +290,8 @@ const KIND_BY_EXT: Record<string, SourceFileKind> = {
   webp: "image",
   gif: "image",
   docx: "docx",
+  mht: "mht",
+  mhtml: "mht",
   txt: "text",
   md: "text",
 };

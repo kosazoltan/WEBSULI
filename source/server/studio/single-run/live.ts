@@ -10,7 +10,7 @@ import { logger } from "../../lib/logger";
 import type { ExtractorFile } from "../extractor";
 import { createDrizzlePipelineStore } from "../pipeline-store";
 import { createLessonConversation, type ConversationState, type SingleRunEffort } from "./conversation";
-import { readSourceStation, runSingleLesson, singleRunResumable, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
+import { readSourceStation, runSingleLesson, SingleRunError, singleRunResumable, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
 import { eq } from "drizzle-orm";
 
 
@@ -47,12 +47,17 @@ export async function saveSingleRunMap(map: SingleRunMap, files: ExtractorFile[]
 }
 
 /** A feltöltött forrás előkészítése modell nélkül: docx → szöveg, szöveges PDF → kinyert szöveg; kép / szkennelt PDF natívan megy. */
-async function prepareFiles(files: ExtractorFile[]): Promise<ExtractorFile[]> {
+export async function prepareFiles(files: ExtractorFile[]): Promise<ExtractorFile[]> {
   const { normalizeDocumentSources } = await import("../document-source");
   const out: ExtractorFile[] = [];
   for (const file of files) {
     try { out.push(...await normalizeDocumentSources([file])); }
-    catch { out.push(file); } // olvashatatlan PDF: az Opus natívan olvassa (dokumentumblokk)
+    catch (error) {
+      // Spec 2026-11-02-mht-forras: az MHT nyers base64-e nem mehet szövegként a modellhez — érthető hiba.
+      // Review #374: SingleRunError → the route returns the concrete reason (a retry would fail the same way).
+      if (file.kind === "mht") throw new SingleRunError("forrás", [`${file.name}: ${error instanceof Error ? error.message : String(error)}`]);
+      out.push(file); // olvashatatlan PDF: az Opus natívan olvassa (dokumentumblokk)
+    }
   }
   return out;
 }
