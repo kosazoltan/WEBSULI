@@ -38,7 +38,7 @@ import { roleSkillBlock } from "../role-skills";
 import { WorkflowConflict, WorkflowWaiting, workflowPhase, workflowResource, workflowSkillPrompt } from "../../workflows/engine";
 import type { PromptRole } from "../../../shared/instruction-bundles/roles";
 import type { ExtractorFile } from "../extractor";
-import { wellFormed, type LessonConversation, type TurnBlock } from "./conversation";
+import { wellFormed, type LessonConversation, type SingleRunEffort, type TurnBlock } from "./conversation";
 import { TelemetryRecorder, telemetryOf, timed } from "./telemetry";
 import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock, poolMatches, type CatalogMapLike } from "../../catalog/s6-context";
 import { catalogVerbatimPaths, type CatalogPool } from "../../catalog/retrieval";
@@ -107,8 +107,16 @@ export type SingleRunDeps = {
    * gyakorlóbank minden csomagja, a lektorálás minden köre és a kulcsmentes ellenőrzés (válaszkulcs-teszt, kvíz vak előszűrő) — a
    * szerzői munka (terv, tananyag, ábra, lektori javítás) a fő beszélgetésben marad.
    */
-  fresh(system: string): LessonConversation;
+  fresh(system: string, opts?: { effort?: SingleRunEffort }): LessonConversation;
 };
+
+/**
+ * Spec 2026-11-02-ellenorzes-effort-ab: az ellenőrzés-állomás (válaszkulcs-teszt, kvíz vak előszűrő) efforja a
+ * STUDIO_CHECK_EFFORT env-ből: "low" → low, minden más (hiányzó, üres, elgépelt) → a mai "medium" (biztonságos default).
+ */
+export function checkEffort(env: NodeJS.ProcessEnv = process.env): SingleRunEffort {
+  return env.STUDIO_CHECK_EFFORT?.trim().toLowerCase() === "low" ? "low" : "medium";
+}
 
 /** Az állomás-futtató függősége: a beszélgetés, a napló és (ha van) a telemetria gyűjtője. */
 export type StationDeps = Pick<SingleRunDeps, "conversation" | "log"> & { telemetry?: TelemetryRecorder;
@@ -235,10 +243,10 @@ export function freshBankCall(fresh: (system: string) => LessonConversation, tel
  * Egy JSON-kérés a beszélgetésben (a banképítő minőségkapuinak: válaszkulcs-teszt, kvíz vak előszűrő). A hívó a hibát kezeli: ezeknél a
  * kapuknál a hívás- vagy alakhiba csak az adott tétel ítéletét hagyja ki (nincs megállás).
  */
-function freshJsonCall(fresh: (system: string) => LessonConversation, label: string, telemetry?: TelemetryRecorder) {
+function freshJsonCall(fresh: SingleRunDeps["fresh"], label: string, telemetry?: TelemetryRecorder) {
   return async (system: string, user: string): Promise<unknown> => {
     // Hívásonként új beszélgetés: az ellenőr csak ezt a kérést látja (nincs korábbi kulcs / rubrika a kontextusban).
-    const reply = await timed(telemetry, "ellenőrzés", () => fresh(freshSystemPrompt("check")).send([text(`${label}\n${system}\n\n${user}`)]), { fresh: true });
+    const reply = await timed(telemetry, "ellenőrzés", () => fresh(freshSystemPrompt("check"), { effort: checkEffort() }).send([text(`${label}\n${system}\n\n${user}`)]), { fresh: true });
     if (reply.truncated) throw new Error("A válasz elérte a kimeneti keretet és levágódott.");
     return parseModelJson(reply.text).json;
   };

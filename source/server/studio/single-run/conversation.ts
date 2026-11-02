@@ -59,8 +59,11 @@ type AnthropicLike = { messages: { stream(params: Anthropic.MessageStreamParams,
 import { wellFormed } from "../../../shared/well-formed";
 export { wellFormed };
 
+/** Spec 2026-11-02-ellenorzes-effort-ab: az ellenőrzés-állomás efforja kapcsolható; minden más a SINGLE_RUN_EFFORT-on marad. */
+export type SingleRunEffort = "low" | "medium";
+
 /** Claude Opus 5.5: natív, többfordulós üzenetek (szöveg + forrás tartalomblokk), streamelve, adaptív gondolkodással, medium efforttal. */
-export function anthropicClient(opts: { apiKey?: string; model?: string; client?: AnthropicLike } = {}): ModelClient {
+export function anthropicClient(opts: { apiKey?: string; model?: string; client?: AnthropicLike; effort?: SingleRunEffort } = {}): ModelClient {
   const model = opts.model ?? SINGLE_RUN_PRIMARY_MODEL;
   const client: AnthropicLike = opts.client ?? new Anthropic({ apiKey: opts.apiKey, timeout: SINGLE_RUN_TIMEOUT_MS, maxRetries: 0 });
   return {
@@ -84,7 +87,7 @@ export function anthropicClient(opts: { apiKey?: string; model?: string; client?
         system: [{ type: "text", text: wellFormed(system), cache_control: { type: "ephemeral", ttl: "1h" } }],
         messages,
         thinking: { type: "adaptive" },
-        output_config: { effort: SINGLE_RUN_EFFORT },
+        output_config: { effort: opts.effort ?? SINGLE_RUN_EFFORT },
         cache_control: { type: "ephemeral", ttl: "1h" },
       } as Anthropic.MessageStreamParams, { signal });
       const msg = await stream.finalMessage();
@@ -99,7 +102,7 @@ export function anthropicClient(opts: { apiKey?: string; model?: string; client?
 type OpenAILike = { responses: { create(params: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<{ output_text?: string; status?: string; incomplete_details?: { reason?: string } | null; usage?: { input_tokens: number; output_tokens: number; input_tokens_details?: { cached_tokens?: number } } }> } };
 
 /** GPT-6.1 Sol (tartalék): Responses API, medium effort, a teljes beszélgetés (szöveg + forrás) minden fordulóban. */
-export function openAIClient(opts: { apiKey?: string; model?: string; client?: OpenAILike } = {}): ModelClient {
+export function openAIClient(opts: { apiKey?: string; model?: string; client?: OpenAILike; effort?: SingleRunEffort } = {}): ModelClient {
   const model = opts.model ?? SINGLE_RUN_FALLBACK_MODEL;
   const client: OpenAILike = opts.client ?? (new OpenAI({ apiKey: opts.apiKey, timeout: SINGLE_RUN_TIMEOUT_MS, maxRetries: 0 }) as unknown as OpenAILike);
   return {
@@ -112,7 +115,7 @@ export function openAIClient(opts: { apiKey?: string; model?: string; client?: O
           if (!isBinarySource(b.file)) return { type: "input_text", text: wellFormed(sourceAsText(b.file)) };
           return b.file.kind === "image" ? { type: "input_image", image_url: b.file.content } : { type: "input_file", filename: wellFormed(b.file.name), file_data: b.file.content };
         }) });
-      const response = await client.responses.create({ model, instructions: wellFormed(system), input, store: false, max_output_tokens: SINGLE_RUN_MAX_TOKENS, reasoning: { effort: SINGLE_RUN_EFFORT } }, { signal });
+      const response = await client.responses.create({ model, instructions: wellFormed(system), input, store: false, max_output_tokens: SINGLE_RUN_MAX_TOKENS, reasoning: { effort: opts.effort ?? SINGLE_RUN_EFFORT } }, { signal });
       // Review #259: csak a `completed` (és a csonka `incomplete`) eredmény válasz — a `failed` / `cancelled` hiba, nem üres forduló.
       if (response.status && response.status !== "completed" && response.status !== "incomplete") {
         throw Object.assign(new Error(`A tartalék modell válasza ${response.status} állapotú.`), { status: 502 });
@@ -190,10 +193,11 @@ export class LessonConversation {
 }
 
 /** Az éles beszélgetés a környezet kulcsaival: Opus 5.5 elsődleges, GPT-6.1 Sol tartalék (kulcs nélküli modell kimarad). */
-export function createLessonConversation(system: string, opts: ConstructorParameters<typeof LessonConversation>[3] = {}, env: NodeJS.ProcessEnv = process.env): LessonConversation {
+export function createLessonConversation(system: string, opts: ConstructorParameters<typeof LessonConversation>[3] & { effort?: SingleRunEffort } = {}, env: NodeJS.ProcessEnv = process.env): LessonConversation {
   // Review #259: az üres / csak szóközös kulcs hiányzó kulcs (mint a studio-provider.ts-ben).
   const key = (...values: Array<string | undefined>) => values.map((v) => v?.trim()).find((v) => !!v);
   const anthropicKey = key(env.AI_INTEGRATIONS_ANTHROPIC_API_KEY);
   const openaiKey = key(env.AI_INTEGRATIONS_OPENAI_API_KEY, env.OPENAI_API_KEY);
-  return new LessonConversation(system, anthropicKey ? anthropicClient({ apiKey: anthropicKey }) : null, openaiKey ? openAIClient({ apiKey: openaiKey }) : null, opts);
+  const { effort, ...convOpts } = opts;
+  return new LessonConversation(system, anthropicKey ? anthropicClient({ apiKey: anthropicKey, ...(effort ? { effort } : {}) }) : null, openaiKey ? openAIClient({ apiKey: openaiKey, ...(effort ? { effort } : {}) }) : null, convOpts);
 }

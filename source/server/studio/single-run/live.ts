@@ -9,7 +9,7 @@ import { workflowFence } from "../../workflows/engine";
 import { logger } from "../../lib/logger";
 import type { ExtractorFile } from "../extractor";
 import { createDrizzlePipelineStore } from "../pipeline-store";
-import { createLessonConversation, type ConversationState } from "./conversation";
+import { createLessonConversation, type ConversationState, type SingleRunEffort } from "./conversation";
 import { readSourceStation, runSingleLesson, singleRunResumable, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
 import { eq } from "drizzle-orm";
 
@@ -94,7 +94,8 @@ async function singleRunDeps(ownerId: string, progress: (p: SingleRunProgress) =
     store: await createDrizzlePipelineStore(),
     saveMap: (map: SingleRunMap, f: ExtractorFile[]) => saveSingleRunMap(map, f, ownerId, conversation.model),
     // J2: friss, előzmény nélküli beszélgetés (bank, lektor, kulcsmentes ellenőrzés) — ugyanaz a modellpár és tartalékváltás.
-    fresh: (system: string) => createLessonConversation(system, {
+    fresh: (system: string, opts?: { effort?: SingleRunEffort }) => createLessonConversation(system, {
+      ...opts,
       onFallback: (reason) => logger.warn(`[EGYFUTÁS] Tartalékmodell (friss beszélgetés): ${reason}`),
       onUsage: (r) => logger.info(`[EGYFUTÁS] friss ${r.model}: be ${r.usage?.input ?? "?"} (gyorsítótár ${r.usage?.cachedInput ?? 0}), ki ${r.usage?.output ?? "?"} token`),
     }),
