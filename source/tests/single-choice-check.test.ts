@@ -42,6 +42,61 @@ test("döntés 1c: duplikált vagy egyenértékű opció → hiba", () => {
   assert.deepEqual(singleChoiceProblems({ prompt: "Melyik gyümölcs?", options: ["Alma", "Körte", "Répa"], correctIndex: 0 }), []);
 });
 
+test("ciklus 8: helyesírási kérdésnél a csak kis- és nagybetűben eltérő opciók különbözők (mért: A főnév, Tulajdonságot kifejező szavak)", () => {
+  assert.deepEqual(singleChoiceProblems({ prompt: "Melyik az Eger szó helyes -i toldalékos alakja?", options: ["Egri", "egri", "egeri"], correctIndex: 1 }), []);
+  assert.deepEqual(singleChoiceProblems({ prompt: "Melyik írás helyes?", options: ["Petőfi sándor általános iskola", "Petőfi Sándor Általános Iskola", "petőfi Sándor általános Iskola"], correctIndex: 1 }), []);
+  // A szó szerinti ismétlődés helyesírási kérdésnél is hiba.
+  assert.equal(singleChoiceProblems({ prompt: "Melyik írás helyes?", options: ["Eger", "Eger.", "eger"], correctIndex: 0 }).length, 1);
+});
+
+test("ciklus 8: programkód-azonosítónál (camelCase) a betűméret kérdéstől függetlenül számít (mért: VS Code-anyag)", async () => {
+  assert.deepEqual(singleChoiceProblems({ prompt: "Melyik a kulcs neve a konfigurációban?", options: ["apiKey", "ApiKey", "api_key"], correctIndex: 0 }), []);
+  const { experienceQuizSchema } = await import("../shared/lesson-experience");
+  assert.ok(experienceQuizSchema.safeParse({ id: "q", sectionIndex: 0, coversConceptIds: ["c"], question: "Melyik a kulcs neve?", options: ["apiKey", "ApiKey", "api_key"], correctIndex: 0, feedbackPerOption: ["a", "b", "c"] }).success);
+  // A nem azonosító betűméret-változat továbbra is ismétlődés.
+  assert.equal(singleChoiceProblems({ prompt: "Melyik gyümölcs?", options: ["Alma", "alma", "Répa"], correctIndex: 0 }).length, 1);
+});
+
+test("review #361: a „leírás” és a „helyesen jellemzi” NEM helyesírási kontextus — ott a betűméret-változat ismétlődés", () => {
+  const pair = ["Élőlény, tárgy vagy fogalom neve", "élőlény, tárgy vagy fogalom neve", "Cselekvést jelent"];
+  assert.equal(singleChoiceProblems({ prompt: "Melyik leírás illik a főnévre?", options: pair, correctIndex: 0 }).length, 1);
+  assert.equal(singleChoiceProblems({ prompt: "Melyik válasz jellemzi helyesen a főnevet?", options: pair, correctIndex: 0 }).length, 1);
+});
+
+test("review #361: a gyakori helyesírási kérdésformák felismerése; a katalógus, a játék-kvíz és a szó szerinti átvétel is megtartja a helyesírási opciókat", async () => {
+  const { isSpellingPrompt } = await import("../shared/option-key");
+  for (const p of ["Melyik szó van helyesen leírva?", "Írja helyesen a város nevét!", "Melyik szó van helyesen írva?"]) assert.ok(isSpellingPrompt(p), p);
+  for (const p of ["Melyik leírás illik a főnévre?", "Melyik válasz jellemzi helyesen a főnevet?"]) assert.ok(!isSpellingPrompt(p), p);
+  const { verifyItem } = await import("../server/catalog/verify");
+  const { itemFingerprint } = await import("../server/catalog/catalog-item");
+  const { isPlayableQuestion } = await import("../shared/game-quiz-contract");
+  const spelling = { kind: "quiz" as const, provenance: "p", prompt: "Melyik az Eger szó helyes -i toldalékos alakja?", options: ["Egri", "egri", "egeri"], correctIndex: 1 };
+  assert.ok(!verifyItem({ ...spelling, fingerprint: "f1" }).problems.includes("ismétlődő válaszlehetőség"), JSON.stringify(verifyItem({ ...spelling, fingerprint: "f1" }).problems));
+  assert.ok(isPlayableQuestion({ prompt: spelling.prompt, options: spelling.options, correctIndex: 1 }), "a játék-kvíz játszható");
+  // Két, csak betűméretben eltérő helyesírási tétel nem vonódik össze a katalógusban.
+  const other = { ...spelling, options: ["EGRI", "egri", "egeri"] };
+  assert.notEqual(itemFingerprint(spelling), itemFingerprint(other));
+  // Nem helyesírási kérdésnél a régi szabály marad.
+  const fruit = { kind: "quiz" as const, provenance: "p", prompt: "Melyik gyümölcs?", options: ["Alma", "alma", "Répa"], correctIndex: 0 };
+  assert.ok(verifyItem({ ...fruit, fingerprint: "f2" }).problems.includes("ismétlődő válaszlehetőség"));
+  assert.equal(itemFingerprint(fruit), itemFingerprint({ ...fruit, options: ["ALMA", "alma", "Répa"] }));
+});
+
+test("review #361: a kvízséma és az előfeldolgozó ugyanazt a kulcsot használja — a helyesírási opció és a helyes index megmarad", async () => {
+  const { experienceQuizSchema } = await import("../shared/lesson-experience");
+  const { autofixBankPacket } = await import("../server/studio/tools/bank-packet-autofix");
+  const quiz = { id: "q1", sectionIndex: 0, coversConceptIds: ["c1"], question: "Melyik az Eger szó helyes -i toldalékos alakja?",
+    options: ["Egri", "egri", "egeri", "eger-i"], correctIndex: 1,
+    feedbackPerOption: ["Nem: kisbetű kell.", "Helyes: egri.", "Nem: nincs ilyen alak.", "Nem: kötőjel nélkül."], intent: "recall" };
+  assert.ok(experienceQuizSchema.safeParse(quiz).success, "a séma elfogadja");
+  const { packet } = autofixBankPacket({ methods: [], tasks: [], quiz: [structuredClone(quiz)] }, {} as never);
+  const fixed = (packet as { quiz: typeof quiz[] }).quiz[0];
+  assert.deepEqual(fixed.options, quiz.options, "az előfeldolgozó nem töröl helyesírási opciót");
+  assert.equal(fixed.options[fixed.correctIndex], "egri", "a helyes index a helyes alakon marad");
+  // Nem helyesírási kérdésnél a régi szabály: a betűméret-változat ismétlődés (séma).
+  assert.equal(experienceQuizSchema.safeParse({ ...quiz, question: "Melyik gyümölcs?", options: ["Alma", "alma", "Répa"], feedbackPerOption: ["a", "b", "c"], correctIndex: 0 }).success, false);
+});
+
 test("nincs hamis riasztás a nem kiszámolható kérdésekre (történelem, angol, összetett feltétel)", () => {
   const silent = [
     { prompt: "Mikor volt a mohácsi csata?", options: ["1526", "1541", "1456", "1686"], correctIndex: 0 },

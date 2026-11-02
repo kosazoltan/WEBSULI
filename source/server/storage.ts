@@ -18,6 +18,7 @@ import {
   systemPrompts,
   improvedHtmlFiles,
   materialImprovementBackups,
+  lessons,
   type HtmlFile,
   type InsertHtmlFile,
   type User,
@@ -46,7 +47,7 @@ import {
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, desc, gt, gte, lt, and, sql, inArray } from "drizzle-orm";
+import { eq, desc, gt, gte, lt, and, sql, inArray, getTableColumns } from "drizzle-orm";
 import { assertBackupFilesHaveContent } from "./lib/backup-guard";
 import { logger } from "./lib/logger";
 
@@ -182,9 +183,12 @@ export interface IStorage {
   // Improved files operations
   createImprovedHtmlFile(file: InsertImprovedHtmlFile): Promise<ImprovedHtmlFile>;
   getImprovedHtmlFile(id: string): Promise<ImprovedHtmlFile | undefined>;
-  getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<ImprovedHtmlFile[]>;
+  getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<Omit<ImprovedHtmlFile, "content">[]>;
+  getImprovedHtmlFileStatus(id: string): Promise<Pick<ImprovedHtmlFile, "id" | "status" | "title" | "contentType" | "createdAt" | "improvementNotes"> | undefined>;
   getImprovedFilesByOriginalId(originalFileId: string): Promise<ImprovedHtmlFile[]>;
   updateImprovedHtmlFileStatus(id: string, status: string, appliedBy?: string, notes?: string): Promise<ImprovedHtmlFile | null>;
+  /** Review #366: hibára zárás, kivéve ha a tulajdonos már leállította (a leállítás megjegyzése atomikusan megmarad). Visszaad: írt-e. */
+  failImprovedHtmlFileUnlessStopped(id: string, notes: string, stoppedMessage: string): Promise<boolean>;
   updateImprovedHtmlFileContent(id: string, content: string): Promise<void>;
   updateImprovedHtmlFileContentAndStatus(id: string, content: string, status: string): Promise<void>;
   deleteImprovedHtmlFile(id: string): Promise<boolean>;
@@ -1314,7 +1318,17 @@ export class DatabaseStorage implements IStorage {
     return improved;
   }
 
-  async getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<ImprovedHtmlFile[]> {
+  /** Spec 2026-10-19-eroforras-s2a: könnyű állapot (a teljes HTML nélkül) — az 5 mp-es állapot-lekérdezéshez. */
+  async getImprovedHtmlFileStatus(id: string) {
+    const [row] = await db.select({ id: improvedHtmlFiles.id, status: improvedHtmlFiles.status, title: improvedHtmlFiles.title,
+      contentType: improvedHtmlFiles.contentType, createdAt: improvedHtmlFiles.createdAt, improvementNotes: improvedHtmlFiles.improvementNotes })
+      .from(improvedHtmlFiles).where(eq(improvedHtmlFiles.id, id));
+    return row;
+  }
+
+  /** Spec 2026-10-19-eroforras-s2a: a lista a teljes `content` nélkül (a felület az előnézetet külön végpontról tölti), legutóbbi 200. */
+  async getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<Omit<ImprovedHtmlFile, "content">[]> {
+    const { content: _content, ...listColumns } = getTableColumns(improvedHtmlFiles);
     const conditions = [];
     if (status) {
       conditions.push(eq(improvedHtmlFiles.status, status));
@@ -1324,10 +1338,10 @@ export class DatabaseStorage implements IStorage {
     }
     
     const query = conditions.length > 0
-      ? db.select().from(improvedHtmlFiles).where(and(...conditions))
-      : db.select().from(improvedHtmlFiles);
-    
-    return await query.orderBy(desc(improvedHtmlFiles.createdAt));
+      ? db.select(listColumns).from(improvedHtmlFiles).where(and(...conditions))
+      : db.select(listColumns).from(improvedHtmlFiles);
+
+    return await query.orderBy(desc(improvedHtmlFiles.createdAt)).limit(200);
   }
 
   async getImprovedFilesByOriginalId(originalFileId: string): Promise<ImprovedHtmlFile[]> {
@@ -1336,6 +1350,15 @@ export class DatabaseStorage implements IStorage {
       .from(improvedHtmlFiles)
       .where(eq(improvedHtmlFiles.originalFileId, originalFileId))
       .orderBy(desc(improvedHtmlFiles.createdAt));
+  }
+
+  async failImprovedHtmlFileUnlessStopped(id: string, notes: string, stoppedMessage: string): Promise<boolean> {
+    const updated = await db
+      .update(improvedHtmlFiles)
+      .set({ status: 'error', improvementNotes: notes })
+      .where(and(eq(improvedHtmlFiles.id, id), sql`NOT (${improvedHtmlFiles.status} = 'error' AND ${improvedHtmlFiles.improvementNotes} IS NOT DISTINCT FROM ${stoppedMessage})`))
+      .returning({ id: improvedHtmlFiles.id });
+    return updated.length > 0;
   }
 
   async updateImprovedHtmlFileStatus(
@@ -1373,14 +1396,18 @@ export class DatabaseStorage implements IStorage {
     // CRITICAL: Single atomic UPDATE to prevent race condition
     // If content and status were updated separately, a user could "Apply"
     // the file between the two updates, copying placeholder content!
+    // Review #366 (spec 2026-10-22-elmaradt-feladatok, S3): alkalmazható („pending”) jelölt CSAK a még futó („processing”) sorból lesz —
+    // a tulajdonos által leállított (vagy más okból lezárt) sor nem éled újra egy későn befejeződő háttérmunkától.
     const [updated] = await db
       .update(improvedHtmlFiles)
       .set({ content, status })
-      .where(eq(improvedHtmlFiles.id, id))
+      .where(status === 'pending' ? and(eq(improvedHtmlFiles.id, id), eq(improvedHtmlFiles.status, 'processing')) : eq(improvedHtmlFiles.id, id))
       .returning();
     
     if (!updated) {
-      throw new Error(`[DB] Failed to update improved file ${id}: no rows affected. Record may have been deleted.`);
+      throw new Error(status === 'pending'
+        ? `[DB] Improved file ${id}: a jelölt nem menthető — a sor már nem fut (leállítva, lezárva vagy törölve).`
+        : `[DB] Failed to update improved file ${id}: no rows affected. Record may have been deleted.`);
     }
     
     // VERIFY: confirm content was actually saved
@@ -1603,7 +1630,7 @@ export class DatabaseStorage implements IStorage {
       }
 
       // 2. Validate backup data structure
-      const backupData = backup.backupData as { id: string; content: string; title?: string; description?: string | null; classroom?: number };
+      const backupData = backup.backupData as { id: string; content: string; title?: string; description?: string | null; classroom?: number; contentType?: string };
       if (!backupData || !backupData.id || !backupData.content) {
         throw new Error('Invalid backup data structure');
       }
@@ -1616,12 +1643,18 @@ export class DatabaseStorage implements IStorage {
           title: backupData.title || 'Restored',
           description: backupData.description || null,
           ...(backupData.classroom !== undefined ? { classroom: backupData.classroom } : {}),
+          // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a Stúdió-leckévé alakított régi anyag a típusát is visszakapja.
+          ...(backupData.contentType ? { contentType: backupData.contentType } : {}),
         })
         .where(eq(htmlFiles.id, backup.originalFileId))
         .returning();
 
       if (!restored) {
         throw new Error('Failed to restore file');
+      }
+      // Review #349: a Stúdió-leckévé alakított régi anyag visszaállításakor a lecke leválik (nem publikált, nem ehhez az anyaghoz kötött).
+      if (backupData.contentType && backupData.contentType !== 'lesson') {
+        await tx.update(lessons).set({ htmlFileId: null, publishedAt: null }).where(eq(lessons.htmlFileId, backup.originalFileId));
       }
 
       return {

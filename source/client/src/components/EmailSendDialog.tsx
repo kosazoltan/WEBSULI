@@ -172,7 +172,7 @@ export default function EmailSendDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px] max-h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-[500px] max-h-[min(80dvh,calc(100dvh-2rem))] flex flex-col">
         <DialogHeader>
           <DialogTitle>Email értesítés küldése</DialogTitle>
           <DialogDescription>

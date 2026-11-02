@@ -79,6 +79,9 @@ test("a végpont: az auto jelölés opcionális logikai érték; a tárgy végé
   assert.equal(longMail.subject.length, 200);
   assert.ok(longMail.subject.endsWith(" — automatikus"));
   assert.equal(buildMaterialResultEmail(manual.ok ? manual.value : ok.value, null, "u").subject, "[WebSuli eredmény] Kvíz");
+  // Review #362: párosítatlan (vendég) eredménynél a régi anyag levele is párosítási útmutatót ad; párosítottnál nem.
+  assert.match(buildMaterialResultEmail(ok.value, "Törtek", "u", { guest: true }).html, /Párosító QR-kód/);
+  assert.doesNotMatch(mail.html, /Párosító QR-kód/);
 });
 
 test("ismétlésvédelem: azonos anyag + kliens + tartalom egyszer; más tanuló (IP) vagy más eredmény újra küld; a meghiúsult visszavonható", () => {

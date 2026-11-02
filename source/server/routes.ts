@@ -1,4 +1,5 @@
 import { withLessonTypography } from "../shared/lesson-typography";
+import { isAutomatedUserAgent } from "./lib/automated-agent";
 import { registerLessonFontAssets } from "./lesson-font-assets";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
@@ -15,6 +16,7 @@ import { getAllAudioBase64 } from "google-tts-api";
 
 import { eq, sql, and, or, ilike, desc, inArray } from "drizzle-orm";
 import { htmlFiles, users, materialComments, learners } from "@shared/schema";
+import { NEWSLETTER_LIMITS, normalizeInterests } from "@shared/newsletter";
 import { sanitizeText, sanitizeEmail } from "./utils/sanitize";
 // Admin authentication with hardcoded admin emails
 import { isAuthenticated, isAuthenticatedAdmin } from "./auth";
@@ -32,10 +34,11 @@ import { logger } from "./lib/logger";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, percentOf, withLearnerSubject, type MaterialResultPayload } from "./lib/material-result";
 import { learnerStreak, learnerTokenFor, recordLearnerActivity, resolveLearner, rotateLearnerToken, syncLearners, type ResolvedLearner } from "./learners";
-import { buildLearnerReports, runWeeklySummary } from "./learner-reports";
+import { buildLearnerReports, runWeeklySummary, sendPairingGuides } from "./learner-reports";
 import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
+import { SPEECH_BRIDGE_SCRIPT } from "./lib/speech-bridge";
 import { lessonResultsRouter } from "./lesson-result-email";
 
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
@@ -50,7 +53,7 @@ import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
 import { ViewDedup } from "./lib/view-dedup";
 import { getMaterialOrigin } from "./utils/config";
-import { prependWebLessonQualityNotice, webLessonQualityNotice } from "./lib/web-lesson-quality-notice";
+import { prependWebLessonQualityNotice, qualityNoticeFor } from "./lib/web-lesson-quality-notice";
 
 // BACKLOG T2: /dev/:id megtekintés-dedup (ip|materialId, 1 óra)
 const materialViewDedup = new ViewDedup();
@@ -360,6 +363,8 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
             stopActive();
             if (wasSame) return;
           }
+          // Review #360: új próbálkozáskor a korábbi hibaüzenet eltűnik.
+          if (btn.__websuliNote) btn.__websuliNote.textContent = '';
           recognition = new SR();
           recognition.lang = document.documentElement.lang || 'hu-HU';
           recognition.interimResults = false;
@@ -374,14 +379,21 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
             for (var i = ev.resultIndex; i < ev.results.length; i++) {
               if (ev.results[i].isFinal) {
                 insertText(field, ev.results[i][0].transcript.trim());
+                if (btn.__websuliNote) btn.__websuliNote.textContent = '';
               }
             }
           };
           recognition.onerror = function(ev) {
-            if (ev && (ev.error === 'not-allowed' || ev.error === 'service-not-allowed')) {
-              try { field.setAttribute('data-dictation-error', ev.error); } catch (e) {}
-              console.warn('[WEBSULI DIKTÁLÁS] Mikrofon engedély megtagadva:', ev.error);
-            }
+            var code = ev && ev.error;
+            try { field.setAttribute('data-dictation-error', code || 'error'); } catch (e) {}
+            // Diagnosztika a konzolon (a látható üzenet MELLETT — review #360).
+            if (code === 'not-allowed' || code === 'service-not-allowed') console.warn('[WEBSULI DIKTÁLÁS] Mikrofon engedély megtagadva:', code);
+            // Spec 2026-10-21-diktalas-hid: a hiba nem lehet néma (korábban csak a konzolba írt — a tanuló semmit sem látott).
+            var msg = code === 'not-allowed' || code === 'service-not-allowed' ? 'A mikrofon nincs engedélyezve. Engedélyezd a címsor melletti lakatnál, vagy használd a billentyűzet 🎤 gombját.'
+              : code === 'no-speech' ? 'Nem hallottam semmit — nyomd meg újra, és beszélj.'
+              : code === 'not-supported' ? 'Ezen a böngészőn a diktálás nem érhető el — használd a billentyűzet 🎤 gombját.'
+              : 'A diktálás most nem sikerült — próbáld újra, vagy használd a billentyűzet 🎤 gombját.';
+            showNote(btn, msg);
           };
           recognition.onend = function() {
             if (activeBtn) { activeBtn.setAttribute('aria-pressed', 'false'); activeBtn.title = 'Diktálás'; }
@@ -391,6 +403,18 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
 
           try { recognition.start(); }
           catch (e) { recognition = null; activeBtn = null; btn.setAttribute('aria-pressed', 'false'); }
+        }
+
+        function showNote(btn, msg) {
+          var note = btn.__websuliNote;
+          if (!note) {
+            note = document.createElement('span');
+            note.setAttribute('role', 'status');
+            note.style.cssText = 'display:block;font-size:.85em;margin:2px 0 6px;opacity:.85;';
+            btn.parentNode.insertBefore(note, btn.nextSibling);
+            btn.__websuliNote = note;
+          }
+          note.textContent = msg;
         }
 
         function makeButton(field) {
@@ -475,18 +499,20 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
   if (isFullHtmlDocument) {
     // CRITICAL: sandboxLocalStorageFix MUST run EARLY (before ANY user scripts)
     // Inject it RIGHT AFTER <head> opening tag to prevent DOMException
-    const headOpenIndex = userHtml.toLowerCase().indexOf('<head>');
+    // Review #360: attribútumos nyitó head-tag (<head lang="en">) is — különben a diktálás-híd kimaradna.
+    const headOpenMatch = /<head(?:\s[^>]*)?>/i.exec(userHtml);
+    const headOpenIndex = headOpenMatch ? headOpenMatch.index : -1;
     let htmlWithFix = userHtml;
 
-    if (headOpenIndex !== -1) {
-      const insertPosition = headOpenIndex + '<head>'.length;
-      htmlWithFix = userHtml.slice(0, insertPosition) + sandboxLocalStorageFix + MATERIAL_CAPTURE_SCRIPT + userHtml.slice(insertPosition);
+    if (headOpenMatch) {
+      const insertPosition = headOpenIndex + headOpenMatch[0].length;
+      htmlWithFix = userHtml.slice(0, insertPosition) + sandboxLocalStorageFix + SPEECH_BRIDGE_SCRIPT + MATERIAL_CAPTURE_SCRIPT + userHtml.slice(insertPosition);
     } else {
       // No <head> found - create one and inject fix
       const htmlTagIndex = userHtml.toLowerCase().indexOf('<html');
       if (htmlTagIndex !== -1) {
         const htmlTagEnd = userHtml.indexOf('>', htmlTagIndex) + 1;
-        htmlWithFix = userHtml.slice(0, htmlTagEnd) + '<head>' + sandboxLocalStorageFix + MATERIAL_CAPTURE_SCRIPT + '</head>' + userHtml.slice(htmlTagEnd);
+        htmlWithFix = userHtml.slice(0, htmlTagEnd) + '<head>' + sandboxLocalStorageFix + SPEECH_BRIDGE_SCRIPT + MATERIAL_CAPTURE_SCRIPT + '</head>' + userHtml.slice(htmlTagEnd);
       }
     }
 
@@ -526,6 +552,7 @@ function wrapHtmlWithResponsiveContainer(storedHtml: string): string {
 <html lang="hu">
 <head>
   <meta charset="UTF-8">
+  ${SPEECH_BRIDGE_SCRIPT}
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -929,7 +956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     : Promise.resolve();
   // Ismétlésvédelem CÍMZETTENKÉNT (review #281): a már értesített admin nem kap újra, a kimaradt pótolható.
   const deliverMaterialResult = (q: QueuedMaterialResult) => {
-    const mail = buildMaterialResultEmail(withLearnerSubject(q.value, q.learner?.firstName), q.title, getMaterialPreviewUrl(q.fileId));
+    const mail = buildMaterialResultEmail(withLearnerSubject(q.value, q.learner?.firstName), q.title, getMaterialPreviewUrl(q.fileId), { guest: !q.learner });
     return deliverToRecipients({
       recipients: q.recipients,
       baseKey: materialResultDedupKey(q.value, q.ip),
@@ -1319,11 +1346,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   adminRouter.get("/learners", async (_req, res) => {
     try {
       const list = await buildLearnerReports();
+      // „Mai felfedezés” hírlevél (S1): az érdeklődés és a kapcsoló a tanulónál.
+      const prefs = new Map((await db.select({ id: learners.id, interests: learners.interests, newsletter: learners.newsletter }).from(learners)).map(p => [p.id, p]));
       res.setHeader('Cache-Control', 'no-store');
-      res.json(list.map(o => ({ id: o.id, name: o.name, grade: o.grade, emails: o.emails, report: o.report, pairLink: pairLinkOf(o.id, o.tokenVersion) })));
+      res.json(list.map(o => ({ id: o.id, name: o.name, grade: o.grade, emails: o.emails, report: o.report, pairLink: pairLinkOf(o.id, o.tokenVersion),
+        interests: prefs.get(o.id)?.interests ?? [], newsletter: prefs.get(o.id)?.newsletter ?? false })));
     } catch (error: unknown) {
       logger.error('[LEARNERS] összesítő hiba:', error instanceof Error ? error.message : String(error));
       res.status(500).json({ message: "A tanulói összesítő nem érhető el." });
+    }
+  });
+  // „Mai felfedezés” hírlevél (docs/specs/2026-10-19-mai-felfedezes-hirlevel.md, S1): érdeklődés és kapcsoló — csak admin (adminRouter),
+  // CSRF-fel. A naplóba sem név, sem címke nem kerül.
+  adminRouter.patch("/learners/:id", async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as { interests?: unknown; newsletter?: unknown };
+      const patch: { interests?: string[]; newsletter?: boolean } = {};
+      if (body.interests !== undefined) {
+        const interests = normalizeInterests(body.interests);
+        if (!interests) return res.status(400).json({ message: `Legfeljebb ${NEWSLETTER_LIMITS.tags} érdeklődési címke, egyenként legfeljebb ${NEWSLETTER_LIMITS.tagChars} karakter.` });
+        patch.interests = interests;
+      }
+      if (body.newsletter !== undefined) {
+        if (typeof body.newsletter !== "boolean") return res.status(400).json({ message: "A hírlevél-kapcsoló értéke igaz vagy hamis." });
+        patch.newsletter = body.newsletter;
+      }
+      if (!Object.keys(patch).length) return res.status(400).json({ message: "Nincs módosítandó mező." });
+      const [row] = await db.update(learners).set({ ...patch, updatedAt: new Date() }).where(eq(learners.id, req.params.id))
+        .returning({ interests: learners.interests, newsletter: learners.newsletter });
+      if (!row) return res.status(404).json({ message: "A tanuló nem található." });
+      res.json(row);
+    } catch (error: unknown) {
+      // Review #312: a Drizzle-üzenet a lekérdezés paramétereit (a címkéket) is tartalmazhatja — csak a hiba fajtája és kódja.
+      logger.error('[LEARNERS] hírlevél-beállítás hiba:', error instanceof Error ? `${error.name}${(error as { code?: unknown }).code ? ` (${String((error as { code?: unknown }).code)})` : ""}` : "ismeretlen");
+      res.status(500).json({ message: "A mentés nem sikerült." });
     }
   });
   adminRouter.post("/learners/:id/rotate", async (req, res) => {
@@ -1335,6 +1391,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: unknown) {
       logger.error('[LEARNERS] visszavonás hiba:', error instanceof Error ? error.message : String(error));
       res.status(500).json({ message: "A visszavonás nem sikerült." });
+    }
+  });
+  // Spec 2026-10-21-tanulo-parositas („Kiegészítés”): párosítási útmutató a gyerekeknek (saját link) és a szülőknek.
+  adminRouter.post("/learners/pairing-guide", async (_req, res) => {
+    try {
+      res.json(await sendPairingGuides());
+    } catch (error: unknown) {
+      logger.error('[LEARNERS] párosítási útmutató hiba:', error instanceof Error ? error.name : "ismeretlen");
+      res.status(500).json({ message: "Az útmutató küldése nem sikerült." });
     }
   });
   adminRouter.post("/learners/weekly-summary", async (_req, res) => {
@@ -1988,8 +2053,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { planDailyReminders, budapestDay } = await import("./daily-reminder");
       const { isSchoolDay } = await import("../shared/school-calendar");
+      const { repeatOnlyPlan } = await import("../shared/daily-reminder");
       const now = new Date();
-      const plan = await planDailyReminders(now);
+      // Spec 2026-10-22-uj-lecke-ertesito: az előnézet az ütemezett levelet mutatja — csak az ismétlést.
+      const plan = repeatOnlyPlan(await planDailyReminders(now));
       // Átfogó review (S1–S5): az admin előnézet linkje token nélküli — különben az admin böngészője a tanulóhoz párosulna.
       const { getMaterialPreviewUrl: previewUrl } = await import("./utils/config");
       res.json({ day: budapestDay(now).iso, schoolDay: isSchoolDay(budapestDay(now).date), items: plan.map(p => ({ ...p, url: previewUrl(p.materialId) })) });
@@ -2013,7 +2080,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/daily-reminders/run", isAuthenticatedAdmin, async (_req: Request, res) => {
     const { runDailyReminders } = await import("./daily-reminder");
-    const result = await runDailyReminders(new Date());
+    // Review #365: a kézi küldés ugyanazt a (csak ismétlés) tervet küldi, amit az előnézet jóváhagyásra mutat.
+    const result = await runDailyReminders(new Date(), { repeatOnly: true });
     // Review #292: a futásszintű hiba HTTP-hibaként jelenik meg (a részleges számlálókkal együtt).
     res.status(result.error ? 500 : 200).json(result.error ? { ...result, message: `A kiküldés megszakadt: ${result.error}` } : result);
   });
@@ -2903,7 +2971,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // BACKLOG T2 (2026-09-02): ugyanaz az IP + anyag 1 órán belül csak egyszer számít —
         // eddig minden GET egy sort írt, rate-limit nélkül (spam / statisztika-torzítás).
-        if (materialViewDedup.shouldRecord(`${req.ip ?? 'unknown'}|${file.id}`)) {
+        // Spec 2026-10-20-robot-megtekintes: robot / link-előnézet / parancssor nem számít megtekintésnek (a tartalmat megkapja).
+        if (isAutomatedUserAgent(userAgent)) {
+          logger.debug(`[TRACKING] Automatikus kliens, a megtekintés nem rögzül: ${String(userAgent ?? '').slice(0, 80)}`);
+        } else if (materialViewDedup.shouldRecord(`${req.ip ?? 'unknown'}|${file.id}`)) {
           // Create material view record with NULL userId for anonymous
           await storage.createMaterialView({
             userId: null, // NULL for anonymous users (schema allows nullable)
@@ -2973,7 +3044,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.send(learner && learnerToken ? withLearnerScript(pdfViewerHtml, learnerToken) : pdfViewerHtml);
       } else {
         // HTML material: wrap with responsive container
-        const notice = webLessonQualityNotice(file.content);
+        // Spec 2026-10-21-ciklus6b: a belső minőség-felirat csak adminnak (a tanulónak „teljesen oda nem illő”).
+        const notice = qualityNoticeFor(req.user, file.content);
         const content = notice ? prependWebLessonQualityNotice(file.content, notice) : file.content;
         const typographed = withLessonTypography(wrapHtmlWithResponsiveContainer(content), file.classroom, file.title);
         const wrappedHtml = learner && learnerToken ? withLearnerScript(typographed, learnerToken) : typographed;

@@ -41,6 +41,11 @@ node --no-warnings kanban.mjs stats                    # összesítő
 4. **A tábla és a valóság együtt mozog.** Ha a PR mergelődött, a board ugyanabban
    a körben `done`. (2026-09-06-án a #181 `review`-ban ragadt, pedig élesben futott —
    ezt higiéniai söpréskor kell elkapni.)
+5. **Befejezési mandátum (tulajdonosi utasítás 2026-11-01).** Megkezdett jegyet,
+   specet, javítást vagy implementációt félbehagyni tilos: a munka a teljes
+   elkészültéig fut, és minden session végén tételes teljességellenőrzés kell a
+   kiadott kérésekhez mérve. Objektív blokkolónál a jegyre `note`: NOT DONE + ok +
+   kockázat. A szabály a #11-es STANDING jegyen áll a táblán.
 
 ## Elnevezési minta
 
@@ -53,6 +58,34 @@ node --no-warnings kanban.mjs stats                    # összesítő
 | `HIGIENIA:` | takarítás, elavult tartalom kivezetése |
 | `REGRESSZIO(#n):` | korábbi jegy visszaesése |
 | `STANDING(binding):` | tartós szabály, nem záródik le |
+
+## Állapot — 2026-11-02 (élesből és a CLI-ból ellenőrizve)
+
+Tulajdonosi döntések 2026-11-02 (javaslatra, rögzítve a Hermes-táblán is):
+
+| Tétel | Döntés | Bizonyíték |
+|---|---|---|
+| #5 ellenőrzés-költség | **A/B mérés jóváhagyva** (~60–90 USD, 5+5 anyag eldobható DB-n) — `docs/specs/2026-11-02-ellenorzes-effort-ab.md` | in_progress a táblán |
+| 1120 (S5/S6 A/B) | **lezárva okafogyottként** — az S4b óta az egyfutásos gyártás nem használja az útvonalakat | kódból ellenőrizve |
+| 1118 („két függő fogalom", 13f2102b) | **lezárva okafogyottként** — a lecke sehol nincs élesben (html_files, lessons, knowledge_maps, mentések: üres); kiváltja a #13 | éles lekérdezés 2026-11-02 |
+| #13 (új) | TANÁRI FELÜLVIZSGÁLAT: 62 függő (`review_state='pending'`) fogalom 6 térképen — tulajdonosi admin-munka | éles lekérdezés 2026-11-02 |
+| #11 | STANDING: befejezési mandátum (2026-11-01) | AGENTS.md |
+| #12 | done: pool-crash javítás — PR #371 → 50a5512b, éles deploy 19:27:38 | Render-napló |
+
+## Állapot — 2026-10-18 (kódból ellenőrizve)
+
+A CLI `list --repo WEBSULI` 2026-10-18-án üres táblát adott, ezért az alábbiak a kódból és a git-történetből ellenőrzött
+állapotok. A 2026-10-05-i táblázat alatta történetként marad.
+
+| # | Állapot | Bizonyíték |
+|---|---|---|
+| 560 | kész | A webes út tudásbázissal épül: e91b501a (#66), az egyfutásos `webStudio` `knowledge` lépése (#203), az S4b a különálló webes HTML-utat törölte (d9e9c8e9) |
+| 187 | PR | #308: induló mentés csak 24 órán belüli mentés hiányában, budapesti cron |
+| 127 | PR | #309: böngészős hibajelentés a titok nélküli `/api/client-error`-on (eredet-allowlist, IP-korlát, napi plafon) |
+| 1119 | okafogyott | A PR #182 összevonva |
+| 1120 | beolvadt, részben | S8 #201, S6 #202, S7 #203, S5 #204. Az S4b óta az S5/S6 (katalógus, tantárgyi memória) nem jut el az egyfutásos gyártásig, és a fizetős A/B mérés nem futott: tulajdonosi döntés kell |
+| 1118 | nyitott | Tartalmi tétel; a „két függő fogalom” nincs leírva, a leckét az adminban kell megnézni |
+| 152 | STANDING | Tartós szabály |
 
 ## Állapot — 2026-10-05
 

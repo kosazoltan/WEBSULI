@@ -119,7 +119,7 @@ export async function closeOrphanedOneStepRuns(): Promise<number> {
       FROM studio_jobs j
       LEFT JOIN LATERAL (
         SELECT w.id, w.owner_id, w.state, w.lease_until, w.snapshot FROM lesson_workflow_runs w
-        WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
+        WHERE w.id = j.id OR w.resource_id = j.id ORDER BY w.created_at DESC LIMIT 1
       ) r ON true
       WHERE j.id IN (${sql.join(jobIds.map((id) => sql`${id}`), sql`, `)}) AND j.status NOT IN ('ok', 'error')`);
     const now = Date.now();
@@ -164,7 +164,7 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
     FROM studio_jobs j
     LEFT JOIN LATERAL (
       SELECT w.id, w.owner_id, w.state, w.lease_until, w.snapshot FROM lesson_workflow_runs w
-      WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
+      WHERE w.id = j.id OR w.resource_id = j.id ORDER BY w.created_at DESC LIMIT 1
     ) r ON true
     WHERE j.status NOT IN ('ok', 'error')`);
   const now = Date.now();
@@ -182,7 +182,9 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
   return acted;
 }
 
-export const STUDIO_SWEEP_INTERVAL_MS = 100_000;
+// Spec 2026-10-19-eroforras-s1 + review #324: 15 perc (korábban 100 s) — biztosan hosszabb a Neon 5 perces elalvási küszöbénél; a
+// leállás a futó munkát kivárja (max 270 s), így árva job ritka, és indításkor a söprés úgyis lefut.
+export const STUDIO_SWEEP_INTERVAL_MS = 15 * 60_000;
 /** Időszakos söprés (a lejárt lízingű, gazdátlanná vált jobok lezárása); a folyamat leállását nem tartja fel. */
 export function startStudioJobSweeper(): void {
   setInterval(() => {
@@ -231,14 +233,17 @@ lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Respons
  * Starts a one-step run in the background; the run loop reports through the progress store.
  * Spec 2026-09-25: the internet path hands its downloaded sources to this same manufacture.
  */
-export function startOneStepRun(data: OneStepRequest, userId: string | undefined): string {
-  const runId = createRun();
-  void runOneStep(runId, data, userId).catch((error) => {
+export function startOneStepRun(data: OneStepRequest, userId: string | undefined, target?: LegacyTarget, presetRunId?: string): string {
+  const runId = createRun(presetRunId);
+  void runOneStep(runId, data, userId, target).catch((error) => {
     if (error instanceof WorkflowWaiting) return;
     void recordOneStepFailure(runId, error);
   });
   return runId;
 }
+
+/** Spec 2026-10-20-regi-anyag-studio-atalakitas: a helyben átalakítandó régi anyag és a tartalma lenyomata az indításkor. */
+export type LegacyTarget = { htmlFileId: string; baseline: string };
 
 /** Spec 2026-10-14-folytatas-mentett-reszekbol: a megállt gyártás mentett piszkozata (csak darabszámok, tartalom nem). */
 export type OneStepDraft = { teachingSections: number; savedBankPackets: number };
@@ -360,7 +365,7 @@ function parseWorkflowVisits(row: { visits?: unknown; executions?: unknown } | u
 
 /** A job legutóbbi workflow-futásának látogatásai és végrehajtásszáma (a piszkozat-választás nézetéhez). */
 async function workflowVisitsOfJob(jobId: string): Promise<{ visits: Array<{ step: string; state: string; error?: string }>; executions: number }> {
-  const result = await db.execute(sql`SELECT id FROM lesson_workflow_runs WHERE id = ${jobId} OR snapshot->>'resourceId' = ${jobId} ORDER BY created_at DESC LIMIT 1`);
+  const result = await db.execute(sql`SELECT id FROM lesson_workflow_runs WHERE id = ${jobId} OR resource_id = ${jobId} ORDER BY created_at DESC LIMIT 1`);
   const row = result.rows[0] as { id?: string } | undefined;
   return row?.id ? workflowVisitsOf(String(row.id)) : { visits: [], executions: 0 };
 }
@@ -375,13 +380,13 @@ export type OwnerDraft = { jobId: string; title: string; subject: string; classr
  * docs/specs/2026-10-16-draft-kezeles.md: a belépett admin által kezelhető job — nincs olyan workflow-sora, amelynek MÁS a gazdája
  * (saját vagy gazdátlan). Feltétel: a lekérdezésben `j` a job.
  */
-const manageableBy = (owner: string) => sql`NOT EXISTS (SELECT 1 FROM lesson_workflow_runs ow WHERE (ow.id = j.id OR ow.snapshot->>'resourceId' = j.id) AND ow.owner_id <> ${owner})`;
+const manageableBy = (owner: string) => sql`NOT EXISTS (SELECT 1 FROM lesson_workflow_runs ow WHERE (ow.id = j.id OR ow.resource_id = j.id) AND ow.owner_id <> ${owner})`;
 
 /**
  * Review #255 (P2): elvetni csak olyan jobot lehet, amelyet épp senki nem visz (nincs élő workflow-lízing, nincs folyamatban lévő újragyártás) —
  * a folytatás a lízing alatt újraellenőrzi az elvetést, így a kettő atomikusan kizárja egymást.
  */
-const notBeingDriven = sql`NOT EXISTS (SELECT 1 FROM lesson_workflow_runs lw WHERE (lw.id = j.id OR lw.snapshot->>'resourceId' = j.id) AND lw.lease_until > now())
+const notBeingDriven = sql`NOT EXISTS (SELECT 1 FROM lesson_workflow_runs lw WHERE (lw.id = j.id OR lw.resource_id = j.id) AND lw.lease_until > now())
   AND coalesce(j.output->>'recoveryState', '') NOT IN ('remanufacturing', 'remanufactured')`;
 
 /**
@@ -395,7 +400,7 @@ export const DRAFT_LIST_LIMIT = 200;
 /** A kezelhető tételek teljes száma (a lista feltételével, korlát nélkül). */
 export async function ownerDraftTotal(owner: string): Promise<number> {
   const { rows } = await db.execute(sql`SELECT count(*)::int AS n FROM studio_jobs j LEFT JOIN lessons l ON l.id = j.lesson_id
-    LEFT JOIN LATERAL (SELECT w.owner_id FROM lesson_workflow_runs w WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1) wr ON true
+    LEFT JOIN LATERAL (SELECT w.owner_id FROM lesson_workflow_runs w WHERE w.id = j.id OR w.resource_id = j.id ORDER BY w.created_at DESC LIMIT 1) wr ON true
     WHERE coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing', 'discarded')
       AND ((j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok' AND ${manageableBy(owner)})
         OR (j.status IN ('pending', 'running') AND j.created_at > now() - interval '7 days' AND wr.owner_id = ${owner})
@@ -412,7 +417,7 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
     -- Review #253 (P2): a job legutóbbi workflow-pillanatképe ugyanebben a lekérdezésben (nincs tételenkénti 2 körút).
     LEFT JOIN LATERAL (
       SELECT w.owner_id, w.snapshot->'visits' AS visits, w.snapshot->'executions' AS executions FROM lesson_workflow_runs w
-      WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
+      WHERE w.id = j.id OR w.resource_id = j.id ORDER BY w.created_at DESC LIMIT 1
     ) wr ON true
     -- Spec 2026-10-16-gyartas-haladas: a job legutóbbi futásának részlete, ideje (a szerver órája szerint) és a háttérfolyamat lízingje.
     LEFT JOIN LATERAL (
@@ -519,7 +524,7 @@ lessonPipelineRouter.post("/drafts/discard-published", async (req: Request, res:
 lessonPipelineRouter.post("/drafts/:jobId/continue", async (req: Request, res: Response) => {
   const owner = req.user!.id;
   const { rows } = await db.execute(sql`SELECT j.id FROM studio_jobs j
-    LEFT JOIN LATERAL (SELECT w.owner_id FROM lesson_workflow_runs w WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1) wr ON true
+    LEFT JOIN LATERAL (SELECT w.owner_id FROM lesson_workflow_runs w WHERE w.id = j.id OR w.resource_id = j.id ORDER BY w.created_at DESC LIMIT 1) wr ON true
     WHERE j.id = ${req.params.jobId} AND ${notBeingDriven} AND coalesce(j.output->>'recoveryState', '') <> 'discarded' AND (j.status = 'ok' AND j.step = 'author' AND j.output ? 'outline' AND NOT j.output ? 'approvedOutline' AND j.created_at > now() - interval '7 days' AND wr.owner_id = ${owner})`);
   if (!rows.length) return res.status(409).json({ message: "Ez a job nem vár a tanulási terv jóváhagyására (vagy másik készítőhöz tartozik)." });
   try { return res.status(202).json({ jobId: req.params.jobId, runId: await remakeAsSingleRun(req.params.jobId, owner) }); }
@@ -548,10 +553,12 @@ export async function runOneStep(
   runId: string,
   data: OneStepRequest,
   userId: string | undefined,
+  /** Spec 2026-10-20-regi-anyag-studio-atalakitas: csak a szerveroldali átalakító sor adja (a nyilvános kérés nem). */
+  target?: LegacyTarget,
 ): Promise<void> {
   if (!userId) throw new Error("A futáshoz hitelesített készítő szükséges.");
   await executeWorkflow(workflowStore, { id: runId, owner: userId, mode: "upload", request: data }, async () => {
-    await runOneStepCore(runId, data, userId);
+    await runOneStepCore(runId, data, userId, target);
     const run = await getRun(runId);
     if (run?.phase === "parked") throw new WorkflowWaiting(run.detail ?? "Forrásellenőrzés szükséges.");
     // Review #248 (P1): a piszkozat-választás szabályos várakozás (a tanár dönt), nem hiba.
@@ -594,11 +601,11 @@ async function readPublishedLesson(lessonId: string) {
  * docs/specs/2026-10-16-egy-futas.md (tulajdonosi döntés 2026-10-16): minden gyártás az egyfutásos motoron — Opus 5.5 (medium) egy
  * beszélgetésben a forrástól a közzétételig, tartalék GPT-6.1 Sol.
  */
-async function runOneStepCore(runId: string, data: OneStepRequest, userId: string) {
+async function runOneStepCore(runId: string, data: OneStepRequest, userId: string, target?: LegacyTarget) {
   const { runSingleUpload } = await import("./single-run/live");
   try {
     const result = await runSingleUpload(
-      { files: data.files as ExtractorFile[], instruction: normalizeOwnerInstruction(data.instructions), title: data.title, ownerId: userId },
+      { files: data.files as ExtractorFile[], instruction: normalizeOwnerInstruction(data.instructions), title: data.title, ownerId: userId, ...(target ? { targetHtmlFileId: target.htmlFileId, targetBaseline: target.baseline } : {}) },
       (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }),
     );
     updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });

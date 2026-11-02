@@ -8,7 +8,7 @@ import rateLimit from "express-rate-limit";
 import type { ErrorReportPayload } from "../lib/error-mailer";
 import { logger } from "../lib/logger";
 
-const MAX_LENGTHS = {
+export const MAX_LENGTHS = {
   errorType: 50,
   message: 5000,
   stack: 10000,

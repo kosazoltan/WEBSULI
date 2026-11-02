@@ -7,6 +7,21 @@ import { fileURLToPath } from "node:url";
 config({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../../.env") });
 
 /**
+ * Spec 2026-11-02-ellenorzes-effort-ab: az URL `?sslmode=...` paramétere a node-postgresben felülüti az explicit ssl-objektumot,
+ * így a DATABASE_CA_CERT nem érvényesült (mért: UNABLE_TO_GET_ISSUER_CERT a Neon új, Root YR láncán). Csak a TLS-paraméterek
+ * kerülnek le (PR #373 review: a többi — pl. `options`, `application_name` — megmarad); mindig az ssl-objektum dönt,
+ * a tanúsítvány-ellenőrzés bekapcsolva marad.
+ */
+function verifiedTlsClient(url: string): pg.Client {
+  const bare = new URL(url);
+  for (const param of ["sslmode", "sslcert", "sslkey", "sslrootcert", "sslpassword", "channel_binding"]) bare.searchParams.delete(param);
+  return new pg.Client({
+    connectionString: bare.toString(),
+    ssl: { rejectUnauthorized: true, ...(process.env.DATABASE_CA_CERT ? { ca: process.env.DATABASE_CA_CERT } : {}) },
+  });
+}
+
+/**
  * Review #187: a mérő/kinyerő scriptek közös, CSAK OLVASÓ kapcsolata — ellenőrzött TLS-sel (a tanúsítvány-ellenőrzés nem
  * kapcsolható ki csendben; a `DATABASE_CA_CERT` saját CA-t ad). Mérve 2026-10-05: az éles (Neon) DB ellenőrzött TLS-sel működik.
  * Minden lekérdezés `BEGIN READ ONLY` tranzakcióban fut, a végén ROLLBACK.
@@ -14,10 +29,7 @@ config({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../../.env") })
 export async function withReadOnlyDb<T>(work: (query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<R[]>) => Promise<T>): Promise<T> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL nincs beállítva");
-  const client = new pg.Client({
-    connectionString: url,
-    ssl: { rejectUnauthorized: true, ...(process.env.DATABASE_CA_CERT ? { ca: process.env.DATABASE_CA_CERT } : {}) },
-  });
+  const client = verifiedTlsClient(url);
   await client.connect();
   try {
     await client.query("BEGIN READ ONLY");
@@ -35,10 +47,7 @@ export async function withReadOnlyDb<T>(work: (query: <R = Record<string, unknow
 export async function withWriteTransaction<T>(work: (query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<R[]>) => Promise<T>): Promise<T> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL nincs beállítva");
-  const client = new pg.Client({
-    connectionString: url,
-    ssl: { rejectUnauthorized: true, ...(process.env.DATABASE_CA_CERT ? { ca: process.env.DATABASE_CA_CERT } : {}) },
-  });
+  const client = verifiedTlsClient(url);
   await client.connect();
   try {
     await client.query("BEGIN");

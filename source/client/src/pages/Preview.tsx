@@ -14,6 +14,7 @@ import { curriculumSort, todayPosition, type CurriculumHint } from "@/lib/curric
 import { useAuth } from "@/hooks/useAuth";
 import { LessonRepairPanel } from "@/components/LessonRepairPanel";
 import { getLearnerToken, useRecordLearnerView } from "@/lib/learnerProfile";
+import { useSpeechBridgeHost } from "@/lib/speech-bridge-host";
 
 export default function Preview() {
   const [, params] = useRoute("/preview/:id");
@@ -78,6 +79,8 @@ export default function Preview() {
   // Review #302: a megnyitás jelzése (a Stúdió-lecke nem a /dev/:id-n át nyílik); a szerver tanuló + anyag szerint óránként egyszer ír.
   useRecordLearnerView(material ? params?.id : null);
   const renderUrl = `${materialOrigin}/dev/${params?.id}${learnerToken ? `?lt=${encodeURIComponent(learnerToken)}` : ""}`;
+  // Spec 2026-10-21-diktalas-hid: a kereszt-domaines tananyag-keret diktálását (beszédfelismerés) a főoldal futtatja.
+  useSpeechBridgeHost(iframeRef, materialOrigin);
   
   const handleReloadIframe = () => {
     if (isLesson) {

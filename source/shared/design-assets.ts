@@ -52,19 +52,39 @@ const BAND_SUFFIX = new RegExp(`-(${DESIGN_ASSET_BANDS.join("|")})$`);
  *   korosztályú, azonos tárgyú borítók közül.
  * - Kabala csak 1–5.: a pózok közül rotál (a 3–5. sávban a felfedező pózzal együtt). Tárgyikon: a korosztálynak megfelelő változat.
  */
+/** A kulcsszavas borító illik-e a leckéhez: a cím kulcsszava, a tantárgy és a SÁV is egyezik (spec 2026-10-19-hos-kep-sav). */
+export function coverFits(a: DesignAsset, lesson: { subject: string; title: string }, band: string): boolean {
+  if (a.kind !== "cover" || a.band !== band) return false;
+  const subject = foldText(lesson.subject), title = foldText(lesson.title);
+  const subjectHit = a.subjects.some(s => { const f = foldText(s); return f.length >= 4 && (subject.includes(f) || f.includes(subject.slice(0, Math.max(4, Math.min(subject.length, 8))))); });
+  return subjectHit && a.keywords.some(k => { const f = foldText(k); return f.length >= 4 && title.includes(f); });
+}
+
+/**
+ * A tárolt (mentéskori) kép az új szabály szerint is illik-e (spec 2026-10-19-hos-kep-sav): a sáv saját hőse (ha a sávnak nincs,
+ * bármely azonos korosztályú hős), a tárolt témakörű azonos sávú borító, vagy a címre és tárgyra illő azonos sávú borító.
+ */
+export function pictureFits(picture: DesignAsset, lesson: { subject: string; title: string }, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[], topic?: string): boolean {
+  if (picture.kind === "hero") {
+    const own = catalog.some(a => a.kind === "hero" && a.band === band);
+    return own ? picture.band === band : YOUNG_BANDS.has(picture.band) === YOUNG_BANDS.has(band);
+  }
+  if (picture.kind !== "cover" || picture.band !== band) return false;
+  return (Boolean(topic) && picture.topic === topic) || coverFits(picture, lesson, band);
+}
+
 export function pickLessonArt(lesson: { subject: string; title: string; seed?: string; topicCoverId?: string | null }, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): LessonArt {
   const subject = foldText(lesson.subject);
-  const title = foldText(lesson.title);
   const seed = lesson.seed || lesson.title;
   const young = YOUNG_BANDS.has(band);
   const sameAge = (a: DesignAsset) => YOUNG_BANDS.has(a.band) === young;
   const subjectHit = (a: DesignAsset) => a.subjects.some(s => { const f = foldText(s); return f.length >= 4 && (subject.includes(f) || f.includes(subject.slice(0, Math.max(4, Math.min(subject.length, 8))))); });
-  const keywordHit = (a: DesignAsset) => a.keywords.some(k => { const f = foldText(k); return f.length >= 4 && title.includes(f); });
   // A témaköri borítók csak a saját témakörükhöz járnak (nem kerülnek az általános rotációba és a kulcsszavas készletbe).
   const covers = catalog.filter(a => a.kind === "cover" && !a.topic);
   // Review #273: a kulcsszavas borítóhoz a tantárgynak is egyeznie kell (a „Sejtések” matematika-lecke ne kapjon sejt-borítót).
-  const keyed = covers.filter(a => keywordHit(a) && subjectHit(a));
-  const keyedPool = keyed.filter(sameAge).length ? keyed.filter(sameAge) : keyed;
+  // Spec 2026-10-19-hos-kep-sav (tulajdonosi döntés): és a lecke SÁVJÁÉ legyen — a 6–8. o. halloweeni füzére („ismétlődő
+  // minta”) nem kerülhet 9. o. matekra.
+  const keyedPool = covers.filter(a => coverFits(a, lesson, band));
   let cover: DesignAsset | undefined;
   let hero: DesignAsset | undefined;
   // Arculati bank: a lecke témakörének borítója nyer (a hívó a topicKeyOf-ból adja; csak a lecke sávjáé).
@@ -72,12 +92,11 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
   if (topical) cover = topical;
   else if (keyedPool.length) cover = rotate(keyedPool, seed, "cover");
   else {
-    // A sáv saját hős-képe kétszeres súllyal; mellette az azonos korosztály többi sávhőse és az azonos tárgyú borítók.
+    // Spec 2026-10-19-hos-kep-sav: a sáv saját hős-képe (koncepciókép: 6–8. a Föld az űrből, 9–10. függőhíd…). A korábbi
+    // sorsolás (más sávok hősei + a korosztály minden tárgyi borítója) témaspecifikus borítót tett idegen leckére. Ha a sávnak még
+    // nincs hőse, a korosztály többi sávhőse közül (régi tartalék).
     const heroes = catalog.filter(a => a.kind === "hero" && sameAge(a));
-    const own = heroes.filter(a => a.band === band);
-    const pool = [...own, ...own, ...heroes.filter(a => a.band !== band), ...covers.filter(a => sameAge(a) && subjectHit(a))];
-    const chosen = rotate(pool, seed, "art");
-    if (chosen?.kind === "cover") cover = chosen; else hero = chosen;
+    hero = heroes.find(a => a.band === band) ?? rotate(heroes, seed, "art");
   }
   // Review #279: a blokktípushoz kötött pózok (mascot-explain…) a fejezetcímhez valók, nem az általános fejléc-rotációba.
   const mascots = catalog.filter(a => a.kind === "mascot" && !BLOCK_POSE.test(a.id) && (band === "explorer" ? a.band === "explorer" : YOUNG_BANDS.has(a.band)));
@@ -104,7 +123,7 @@ export function lessonArtIds(art: LessonArt): StoredLessonArt {
  * (az évfolyam a mentés óta változhatott): az ikon sáv-utótagja egyezik, a kép a korosztályé, kabala csak 1–5. évfolyamon.
  * Ha a tárolt kép nem érvényes, `null`: a hívó a mai számolásra (`pickLessonArt`) vált.
  */
-export function resolveStoredArt(stored: StoredLessonArt | undefined, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): LessonArt | null {
+export function resolveStoredArt(stored: StoredLessonArt | undefined, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[], lesson?: { subject: string; title: string }): LessonArt | null {
   if (!stored?.picture) return null;
   const byId = (id: string | undefined, kind: DesignAsset["kind"][]) => (id ? catalog.find(a => a.id === id && kind.includes(a.kind)) : undefined);
   const young = YOUNG_BANDS.has(band);
@@ -112,6 +131,9 @@ export function resolveStoredArt(stored: StoredLessonArt | undefined, band: (typ
   // Review #275: a kulcsszavas borító szándékosan lehet a másik korosztályé (a pickLessonArt is ezt választja, ha csak ott van);
   // a sávhős viszont csak a saját korosztályé lehet (a más korosztályú tárolt hős az évfolyam megváltozását jelzi).
   if (!picture || (picture.kind === "hero" && YOUNG_BANDS.has(picture.band) !== young)) return null;
+  // Spec 2026-10-19-hos-kep-sav: a régi szabállyal mentett, idegen kép (pl. halloweeni füzér 9. o. matekon) nem marad — a hívó friss
+  // választást mutat. Az éles adatot nem írjuk át; a megjelenítés javul.
+  if (lesson && !pictureFits(picture, lesson, band, catalog, stored.topic)) return null;
   const mascot = young ? byId(stored.mascot, ["mascot"]) : undefined;
   const icon = byId(stored.subjectIcon, ["icon"]);
   const subjectIcon = icon && (icon.id.endsWith(`-${band}`) || (!BAND_SUFFIX.test(icon.id) && icon.id.endsWith("-young") === young)) ? icon : undefined;
@@ -123,7 +145,7 @@ export function resolveStoredArt(stored: StoredLessonArt | undefined, band: (typ
  * leckénél ebből mutatja a sávot, az ikont, a képet, a kabalát és a témakört. `legacy`: régi, tárolt arculat nélküli lecke.
  */
 export type ArtSummary = { band: (typeof DESIGN_ASSET_BANDS)[number]; legacy: boolean; art: LessonArt | null; topic?: string };
-export function artSummary(stored: StoredLessonArt | undefined, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): ArtSummary {
-  const art = resolveStoredArt(stored, band, catalog);
+export function artSummary(stored: StoredLessonArt | undefined, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[], lesson?: { subject: string; title: string }): ArtSummary {
+  const art = resolveStoredArt(stored, band, catalog, lesson);
   return { band, legacy: !art, art, ...(stored?.topic ? { topic: stored.topic } : {}) };
 }

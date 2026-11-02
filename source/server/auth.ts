@@ -40,7 +40,8 @@ export function setupAuth(app: Express) {
             pool: dbPool,
             tableName: 'session',
             createTableIfMissing: true, // Auto-create session table
-            pruneSessionInterval: 60 * 15, // Clean expired sessions every 15 min
+            // Spec 2026-10-19-eroforras-s1: 6 óránként (korábban 15 percenként — 82 ezer teljes táblaolvasás a `session`-ön).
+            pruneSessionInterval: 60 * 60 * 6,
         }),
         secret: sessionSecret,
         resave: false,

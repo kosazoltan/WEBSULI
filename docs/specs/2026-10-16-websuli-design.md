@@ -18,7 +18,7 @@ A csomag a repóban:
    A régi leckék is az új arculattal jelennek meg.
 3. **Fontok:** önhostolt Inter (6–12.) és Nunito Sans (1–5.), a hivatalos Google Fonts-repóból (OFL), latin-ext és
    ő/ű/Ő/Ű-ellenőrzéssel.
-4. **Memóriakártya és ismétlés-ütemezés** valódi mentéssel: külön, következő szelet (nem része ennek a tervnek).
+4. **Memóriakártya és ismétlés-ütemezés** valódi mentéssel: külön szelet volt (nem része ennek a tervnek) — azóta kész (C szelet, 7e1ca668).
 
 ## A leírás kötelező elemei → megvalósítás
 | Leírás | Megvalósítás |
@@ -36,7 +36,7 @@ A csomag a repóban:
 
 ## Nem-cél
 - A tanulói keret (AppShell, irányítópult, tantárgykártyák).
-- A memóriakártya és az ismétlés-ütemezés: következő szelet.
+- A memóriakártya és az ismétlés-ütemezés: külön szelet (azóta kész, 7e1ca668).
 - A gyártás promptjai.
 - A régi, saját HTML-dizájnú anyagok (`html_files` `contentType: html`) átfestése. Ezek az új fontokat kapják (a
   `withLessonTypography` a `lessonFontPair`-t használja), a saját elrendezésük marad.

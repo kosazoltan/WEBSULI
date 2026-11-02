@@ -2,6 +2,7 @@ import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../.
 import type { OpenTask } from "../../../shared/lesson-experience";
 import { OPTIONAL_ARRAY_KEYS } from "../bank-schema";
 import { inflectedForms, spellingVariants, staleGeneratedForms, synonymsOf } from "../../../shared/hu-lexicon";
+import { foldCaseUnlessSpelling, isSpellingPrompt } from "../../../shared/option-key";
 
 /**
  * Eszköz (tulajdonosi kérés 2026-09-19): determinisztikus bankcsomag-javítás MODELLHÍVÁS NÉLKÜL.
@@ -23,7 +24,6 @@ export type BankAutofixResult = { packet: unknown; fixes: string[] };
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const isStrArr = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === "string");
-const key = (s: string) => s.normalize("NFC").trim().toLocaleLowerCase("hu");
 
 /** Stem prefix used to match a rubric term with a word form in the sample (≥4 chars, drops ≤3-char suffix). */
 function stemPrefix(term: string): string | null {
@@ -34,6 +34,9 @@ function stemPrefix(term: string): string | null {
 
 function dedupeOptions(item: Obj, minOptions: number, fixes: string[]): void {
   if (!isStrArr(item.options)) return;
+  // Spec 2026-10-21-ciklus8 (review #361): helyesírási kérdésnél a betűméret tartalmi különbség — a kulcs a sémáéval azonos.
+  const spelling = isSpellingPrompt(typeof item.question === "string" ? item.question : typeof item.prompt === "string" ? item.prompt : "");
+  const key = (s: string) => foldCaseUnlessSpelling(s.normalize("NFC").trim(), spelling);
   const seen = new Map<string, number>();
   const keep: number[] = [];
   item.options.forEach((o, i) => { const k = key(o); if (!seen.has(k)) { seen.set(k, i); keep.push(i); } });
@@ -47,6 +50,59 @@ function dedupeOptions(item: Obj, minOptions: number, fixes: string[]): void {
   if (isStrArr(item.feedbackPerOption) && item.feedbackPerOption.length >= keep.length) item.feedbackPerOption = keep.map(i => (item.feedbackPerOption as string[])[i]);
   if (correctKey !== null) item.correctIndex = nextOptions.findIndex(o => key(o) === correctKey);
   fixes.push(`${id}: ismétlődő válaszlehetőség elhagyva`);
+}
+
+const canon = (s: string) => s.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim();
+
+/**
+ * Spec 2026-10-21-ciklus3 (mért: 7 + 7 bankjavítókör a 98 futásban): a kategóriakvóta (`requiredDistinct`) gépi rendbetétele modellkör
+ * nélkül — (1) a csoportok közt ismétlődő elem csak az első csoportban marad, az üres csoport kiesik, a darabszám legfeljebb a csoportok
+ * száma (a séma szabálya); (2) a felsoroló feladat üres `required`-je a kvóta bármely elemét elfogadó csoport (a kvótát a
+ * `requiredDistinct` méri, a `required` a sémakövetelmény).
+ */
+function fixDistinct(task: Obj, fixes: string[]): void {
+  const id = typeof task.id === "string" ? task.id : "task[?]";
+  if (!Array.isArray(task.requiredDistinct)) return;
+  for (const rule of task.requiredDistinct) {
+    if (!isObj(rule) || !Array.isArray(rule.from)) continue;
+    const seen = new Set<string>();
+    let removed = 0;
+    // Review #354: a csoporton BELÜL esik ki az érvénytelen (nem szöveg) elem — a csoport többi érvényes eleme megmarad.
+    const groups = (rule.from as unknown[]).filter(Array.isArray).map((g) => (g as unknown[]).filter((x): x is string => typeof x === "string" && x.trim().length > 0));
+    const from = groups.map((group) => group.filter((alt) => {
+      const k = canon(alt);
+      if (seen.has(k)) { removed++; return false; }
+      seen.add(k);
+      return true;
+    })).filter((group) => group.length > 0);
+    const changed = removed > 0 || JSON.stringify(from) !== JSON.stringify(rule.from);
+    // Review #354: az üres / érvénytelen csoport ismétlődés nélkül is kiesik. A darabszám SOHA nem csökken (a kérdés követelménye) — ha
+    // a szűrés után kevesebb különböző csoport marad, mint a kért szám, a sémahiba a javítókörre marad (tartalmi pótlás).
+    if (changed && from.length) rule.from = from;
+    if (removed) fixes.push(`${id}: a kategóriakvóta ismétlődő elemei csak az első csoportban maradtak (${removed} elem)`);
+    else if (changed && from.length) fixes.push(`${id}: a kategóriakvóta üres / érvénytelen elemei elhagyva`);
+  }
+  if (Array.isArray(task.required) && task.required.length === 0) {
+    const any = [...new Set((task.requiredDistinct as unknown[]).filter(isObj).flatMap((r) => (Array.isArray(r.from) ? (r.from as unknown[]).filter(isStrArr).flat() : [])))];
+    if (any.length) {
+      task.required = [any];
+      fixes.push(`${id}: az üres required a kategóriakvóta bármely elemét elfogadja (a kvótát a requiredDistinct méri)`);
+    }
+  }
+}
+
+/**
+ * Spec 2026-10-21-ciklus4 (mért: 3 bankjavítókör): a `typedAnswers[].value` szám → szöveg (azonos érték). Review #355: az exponenses alak
+ * (pl. 1e+21) nem alakul át — a típusos értelmező nem fogadná; az ilyen érték a modell javítókörére marad.
+ */
+function fixTypedValues(task: Obj, fixes: string[]): void {
+  if (!Array.isArray(task.typedAnswers)) return;
+  for (const t of task.typedAnswers) {
+    if (isObj(t) && typeof t.value === "number" && Number.isFinite(t.value) && !/e/i.test(String(t.value))) {
+      t.value = String(t.value);
+      fixes.push(`${typeof task.id === "string" ? task.id : "task[?]"}: typedAnswers.value szövegként (${t.value})`);
+    }
+  }
 }
 
 function fixTask(task: Obj, fixes: string[], teachingText?: string): void {
@@ -131,7 +187,7 @@ export function autofixBankPacket(candidate: unknown, _ctx: BankAutofixContext):
       }
       if (bank === "quiz") dedupeOptions(item, 3, fixes);
       if (bank === "methods") dedupeOptions(item, 2, fixes);
-      if (bank === "tasks") fixTask(item, fixes, _ctx.teachingText);
+      if (bank === "tasks") { fixDistinct(item, fixes); fixTypedValues(item, fixes); fixTask(item, fixes, _ctx.teachingText); }
     }
     if (bank === "quiz") fixQuizIntent(items.filter(isObj), fixes);
   }

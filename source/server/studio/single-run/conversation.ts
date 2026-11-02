@@ -14,12 +14,19 @@ import type { ExtractorFile } from "../extractor";
 export const SINGLE_RUN_PRIMARY_MODEL = LESSON_MODELS.primary;
 export const SINGLE_RUN_FALLBACK_MODEL = LESSON_MODELS.fallback;
 export const SINGLE_RUN_EFFORT = "medium" as const;
-/** Egy forduló kimeneti kerete (a teljes tanítás vagy egy fejezet bankja is ebbe fér; csak a használt token fizetendő). */
-export const SINGLE_RUN_MAX_TOKENS = 64_000;
+/**
+ * Egy forduló kimeneti kerete = a modellek plafonja (Opus 5.5 és GPT-6.1 Sol: 128 000, `server/ai/models.ts`). Csak a ténylegesen generált
+ * token fizetendő, a levágás viszont a már kifizetett kimenetet eldobja és újragenerálást kér — spec 2026-10-20-bank-kimeneti-keret
+ * (mért: job be3bd5d2, a 64 000-es keretnél levágott bankcsomag). A tömörséget a bank szerződésének kimeneti kerete kéri előre.
+ */
+export const SINGLE_RUN_MAX_TOKENS = 128_000;
 /** Egy forduló időkerete: a hosszú, gondolkodó fordulók streamelve futnak. */
 export const SINGLE_RUN_TIMEOUT_MS = 30 * 60_000;
 
-export type TurnBlock = { type: "text"; text: string } | { type: "source"; file: ExtractorFile };
+/** Spec 2026-10-19-eroforras-s3a: `cache` — a blokk végén 1 órás gyorsítótár-töréspont (állandó előtag / ismétlődő forrás). */
+export type TurnBlock = { type: "text"; text: string; cache?: boolean } | { type: "source"; file: ExtractorFile };
+/** Kérésenként legfeljebb ennyi blokk-jelölő (+ a rendszerblokk és a kérés-szintű jelölő ≤ 4, az API korlátja). */
+export const MAX_BLOCK_CACHE_MARKERS = 2;
 export type Turn = { role: "user" | "assistant"; blocks: TurnBlock[] };
 /** Kép / PDF natív tartalomblokk (data URL); minden más forrás már kinyert szöveg — szövegként megy. */
 const isBinarySource = (file: ExtractorFile) => /^data:[^;,]+;base64,/.test(file.content) && (file.kind === "image" || file.kind === "pdf");
@@ -45,26 +52,43 @@ export function isUnavailable(error: unknown): boolean {
 
 type AnthropicLike = { messages: { stream(params: Anthropic.MessageStreamParams, options?: { signal?: AbortSignal }): { finalMessage(): Promise<Anthropic.Message> } } };
 
+/**
+ * Spec 2026-10-21-ciklus4: a modellhívás határán minden szöveg érvényes UTF-16 — a `.slice()` kettévághat egy emojit, a magányos
+ * fél-karaktert (pl. \ud83e) a szigorú JSON-olvasó elutasítja (mért: 400 „unexpected end of hex escape”, 2/2 kísérlet). U+FFFD lesz belőle.
+ */
+import { wellFormed } from "../../../shared/well-formed";
+export { wellFormed };
+
+/** Spec 2026-11-02-ellenorzes-effort-ab: az ellenőrzés-állomás efforja kapcsolható; minden más a SINGLE_RUN_EFFORT-on marad. */
+export type SingleRunEffort = "low" | "medium";
+
 /** Claude Opus 5.5: natív, többfordulós üzenetek (szöveg + forrás tartalomblokk), streamelve, adaptív gondolkodással, medium efforttal. */
-export function anthropicClient(opts: { apiKey?: string; model?: string; client?: AnthropicLike } = {}): ModelClient {
+export function anthropicClient(opts: { apiKey?: string; model?: string; client?: AnthropicLike; effort?: SingleRunEffort } = {}): ModelClient {
   const model = opts.model ?? SINGLE_RUN_PRIMARY_MODEL;
   const client: AnthropicLike = opts.client ?? new Anthropic({ apiKey: opts.apiKey, timeout: SINGLE_RUN_TIMEOUT_MS, maxRetries: 0 });
   return {
     model,
     async complete(system, turns, signal) {
-      const messages: Anthropic.MessageParam[] = turns.map((t) => ({
+      // Spec 2026-10-19-eroforras-s3a: csak a kérés UTOLSÓ `MAX_BLOCK_CACHE_MARKERS` jelölt blokk-POZÍCIÓJA kap töréspontot (review #329:
+      // pozíció, nem objektum-azonosság — ugyanaz a blokkobjektum több fordulóban is szerepelhet).
+      const positions = turns.flatMap((t, ti) => t.blocks.map((b, bi) => (b.type === "text" && b.cache ? `${ti}:${bi}` : null))).filter((k): k is string => k !== null);
+      const keep = new Set(positions.slice(-MAX_BLOCK_CACHE_MARKERS));
+      const messages: Anthropic.MessageParam[] = turns.map((t, ti) => ({
         role: t.role,
-        content: t.blocks.map((b): Anthropic.ContentBlockParam => (b.type === "text" ? { type: "text", text: b.text }
-          : isBinarySource(b.file) ? claudeSourceBlock(b.file) : { type: "text", text: sourceAsText(b.file) })),
+        content: t.blocks.map((b, bi): Anthropic.ContentBlockParam => (b.type === "text"
+          ? { type: "text", text: wellFormed(b.text), ...(keep.has(`${ti}:${bi}`) ? { cache_control: { type: "ephemeral", ttl: "1h" } } : {}) }
+          : isBinarySource(b.file) ? claudeSourceBlock(b.file) : { type: "text", text: wellFormed(sourceAsText(b.file)) })),
       }));
       const stream = client.messages.stream({
         model, max_tokens: SINGLE_RUN_MAX_TOKENS,
         // A stabil előtag (a gyártás teljes módszertana) gyorsítótárból; a beszélgetés eddigi része a kérés-szintű töréspontból.
-        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        // Spec 2026-10-19-eroforras-s1: 1 órás TTL — egy kör (generálással) gyakran 5 percnél hosszabb, az alapértelmezett 5 perces
+        // bejegyzés a következő körre lejárt (mért: a bemenet 24%-a jött gyorsítótárból). Az 1 órás bejegyzés áll elöl.
+        system: [{ type: "text", text: wellFormed(system), cache_control: { type: "ephemeral", ttl: "1h" } }],
         messages,
         thinking: { type: "adaptive" },
-        output_config: { effort: SINGLE_RUN_EFFORT },
-        cache_control: { type: "ephemeral" },
+        output_config: { effort: opts.effort ?? SINGLE_RUN_EFFORT },
+        cache_control: { type: "ephemeral", ttl: "1h" },
       } as Anthropic.MessageStreamParams, { signal });
       const msg = await stream.finalMessage();
       const text = msg.content.filter((c): c is Anthropic.TextBlock => c.type === "text").map((c) => c.text).join("");
@@ -75,28 +99,29 @@ export function anthropicClient(opts: { apiKey?: string; model?: string; client?
   };
 }
 
-type OpenAILike = { responses: { create(params: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<{ output_text?: string; status?: string; usage?: { input_tokens: number; output_tokens: number; input_tokens_details?: { cached_tokens?: number } } }> } };
+type OpenAILike = { responses: { create(params: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<{ output_text?: string; status?: string; incomplete_details?: { reason?: string } | null; usage?: { input_tokens: number; output_tokens: number; input_tokens_details?: { cached_tokens?: number } } }> } };
 
 /** GPT-6.1 Sol (tartalék): Responses API, medium effort, a teljes beszélgetés (szöveg + forrás) minden fordulóban. */
-export function openAIClient(opts: { apiKey?: string; model?: string; client?: OpenAILike } = {}): ModelClient {
+export function openAIClient(opts: { apiKey?: string; model?: string; client?: OpenAILike; effort?: SingleRunEffort } = {}): ModelClient {
   const model = opts.model ?? SINGLE_RUN_FALLBACK_MODEL;
   const client: OpenAILike = opts.client ?? (new OpenAI({ apiKey: opts.apiKey, timeout: SINGLE_RUN_TIMEOUT_MS, maxRetries: 0 }) as unknown as OpenAILike);
   return {
     model,
     async complete(system, turns, signal) {
       const input = turns.map((t) => t.role === "assistant"
-        ? { role: "assistant", content: t.blocks.map((b) => (b.type === "text" ? b.text : "")).join("") }
+        ? { role: "assistant", content: wellFormed(t.blocks.map((b) => (b.type === "text" ? b.text : "")).join("")) }
         : { role: "user", content: t.blocks.map((b) => {
-          if (b.type === "text") return { type: "input_text", text: b.text };
-          if (!isBinarySource(b.file)) return { type: "input_text", text: sourceAsText(b.file) };
-          return b.file.kind === "image" ? { type: "input_image", image_url: b.file.content } : { type: "input_file", filename: b.file.name, file_data: b.file.content };
+          if (b.type === "text") return { type: "input_text", text: wellFormed(b.text) };
+          if (!isBinarySource(b.file)) return { type: "input_text", text: wellFormed(sourceAsText(b.file)) };
+          return b.file.kind === "image" ? { type: "input_image", image_url: b.file.content } : { type: "input_file", filename: wellFormed(b.file.name), file_data: b.file.content };
         }) });
-      const response = await client.responses.create({ model, instructions: system, input, store: false, max_output_tokens: SINGLE_RUN_MAX_TOKENS, reasoning: { effort: SINGLE_RUN_EFFORT } }, { signal });
+      const response = await client.responses.create({ model, instructions: wellFormed(system), input, store: false, max_output_tokens: SINGLE_RUN_MAX_TOKENS, reasoning: { effort: opts.effort ?? SINGLE_RUN_EFFORT } }, { signal });
       // Review #259: csak a `completed` (és a csonka `incomplete`) eredmény válasz — a `failed` / `cancelled` hiba, nem üres forduló.
       if (response.status && response.status !== "completed" && response.status !== "incomplete") {
         throw Object.assign(new Error(`A tartalék modell válasza ${response.status} állapotú.`), { status: 502 });
       }
-      return { text: response.output_text ?? "", model, truncated: response.status === "incomplete",
+      // Review #345: csak a kimeneti korlát miatti `incomplete` levágás (a tartalomszűrés nem — az a telemetriát torzítaná); ismeretlen ok: levágás.
+      return { text: response.output_text ?? "", model, truncated: response.status === "incomplete" && (!response.incomplete_details?.reason || response.incomplete_details.reason === "max_output_tokens"),
         ...(response.usage ? { usage: { input: response.usage.input_tokens, output: response.usage.output_tokens, cachedInput: response.usage.input_tokens_details?.cached_tokens ?? 0 } } : {}) };
     },
   };
@@ -168,10 +193,11 @@ export class LessonConversation {
 }
 
 /** Az éles beszélgetés a környezet kulcsaival: Opus 5.5 elsődleges, GPT-6.1 Sol tartalék (kulcs nélküli modell kimarad). */
-export function createLessonConversation(system: string, opts: ConstructorParameters<typeof LessonConversation>[3] = {}, env: NodeJS.ProcessEnv = process.env): LessonConversation {
+export function createLessonConversation(system: string, opts: ConstructorParameters<typeof LessonConversation>[3] & { effort?: SingleRunEffort } = {}, env: NodeJS.ProcessEnv = process.env): LessonConversation {
   // Review #259: az üres / csak szóközös kulcs hiányzó kulcs (mint a studio-provider.ts-ben).
   const key = (...values: Array<string | undefined>) => values.map((v) => v?.trim()).find((v) => !!v);
   const anthropicKey = key(env.AI_INTEGRATIONS_ANTHROPIC_API_KEY);
   const openaiKey = key(env.AI_INTEGRATIONS_OPENAI_API_KEY, env.OPENAI_API_KEY);
-  return new LessonConversation(system, anthropicKey ? anthropicClient({ apiKey: anthropicKey }) : null, openaiKey ? openAIClient({ apiKey: openaiKey }) : null, opts);
+  const { effort, ...convOpts } = opts;
+  return new LessonConversation(system, anthropicKey ? anthropicClient({ apiKey: anthropicKey, ...(effort ? { effort } : {}) }) : null, openaiKey ? openAIClient({ apiKey: openaiKey, ...(effort ? { effort } : {}) }) : null, convOpts);
 }

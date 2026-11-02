@@ -21,7 +21,9 @@ export function WorkflowMonitor({ id }: { id: string | null }) {
 
 export function WorkflowHistory() {
   const [selected, setSelected] = useState<string | null>(null);
-  const query = useQuery<{ runs: WorkflowView[] }>({ queryKey: ["/api/studio/workflows"], queryFn: () => apiRequest("GET", "/api/studio/workflows"), refetchInterval: 5000, retry: 1 });
+  const query = useQuery<{ runs: WorkflowView[] }>({ queryKey: ["/api/studio/workflows"], queryFn: () => apiRequest("GET", "/api/studio/workflows"), retry: 1,
+    // Spec 2026-10-19-eroforras-s2a: csak futó futás mellett gyakori, egyébként percenként; rejtett fülön nem.
+    refetchInterval: (q) => (q.state.data?.runs.some((r) => r.state === "running" || r.state === "waiting") ? 5000 : 60_000), refetchIntervalInBackground: false });
   return <section className="min-w-0 space-y-4 rounded-2xl border bg-white p-3 pb-24 text-slate-900 sm:p-5 dark:bg-slate-950 dark:text-slate-100" data-testid="workflow-history">
     <h2 className="text-lg font-bold">Tananyagkészítési futások</h2>
     <p className="text-sm text-muted-foreground">A saját utolsó 50 futásod. A lépések a szerveren rögzített eseményeket mutatják.</p>

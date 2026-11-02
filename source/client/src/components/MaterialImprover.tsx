@@ -2,13 +2,15 @@ import { withLessonTypography } from "@shared/lesson-typography";
 import { parseLessonRepair } from "@shared/lesson-repair";
 import { LessonRuntime } from "@/lesson-runtime/LessonRuntime";
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueries } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { deleteImprovedConfirmMessage, IMPROVER_ZOOM } from "@shared/improver-ui";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { WorkflowMonitor } from "./studio/WorkflowMonitor";
+import { WorkflowPhaseBar } from "./studio/WorkflowPhaseBar";
+import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -54,6 +56,7 @@ interface ImprovedFile {
   createdAt: string;
   appliedAt: string | null;
   content?: string; // HTML content of the improved file
+  createdBy?: string | null;
   originalFile?: {
     id: string;
     title: string;
@@ -74,6 +77,7 @@ export default function MaterialImprover() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [previewImprovedId, setPreviewImprovedId] = useState<string | null>(null);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const { user } = useAuth();
   const blobUrlRef = useRef<string | null>(null);
 
   // Get all HTML files
@@ -84,6 +88,21 @@ export default function MaterialImprover() {
   // Get all improved files
   const { data: improvedFiles = [], isLoading: isLoadingImproved } = useQuery<ImprovedFile[]>({
     queryKey: ["/api/admin/improved-files"],
+  });
+  // Spec 2026-10-19-okositas-fazisjelzo + review #323: futó sor mellett a KÖNNYŰ állapotvégpontot kérdezzük (nem a teljes, tartalmas
+  // listát); ha bármelyik futás véget ért, a lista egyszer frissül.
+  const processingIds = improvedFiles.filter((f) => f.status === "processing").map((f) => f.id);
+  useQueries({
+    queries: processingIds.map((id) => ({
+      queryKey: ["/api/admin/improve-material/status", id, "list-watch"],
+      queryFn: async () => {
+        const res = await fetch(`/api/admin/improve-material/status/${id}`, { credentials: "include" });
+        const body = res.ok ? await res.json() as { status?: string } : { status: "processing" };
+        if (body.status && body.status !== "processing") await queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
+        return body;
+      },
+      refetchInterval: 5000,
+    })),
   });
 
   // Get single improved file with original for preview
@@ -466,7 +485,19 @@ export default function MaterialImprover() {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
+  // Spec 2026-10-19-okositas-fazisjelzo (2): minden futó okosítás fázissora ragadósan, a 70%-os nagyításon KÍVÜL (olvasható),
+  // a rekord azonosítójával — újratöltés után is (a régi jelző csak az oldalon belüli `workflowId`-ből élt).
+  // Review #323: a futásnapló csak a saját futásra olvasható (`/api/studio/workflows/:id` a kérőé) — más admin futásához nem
+  // mutatunk félrevezető „nincs fázisnapló” sávot.
+  const ownRun = (f: ImprovedFile) => !!user?.id && f.createdBy === user.id;
+  const activeRunIds = [...new Set([...(workflowId ? [workflowId] : []), ...improvedFiles.filter((f) => f.status === "processing" && ownRun(f)).map((f) => f.id)])];
   return (
+    <>
+    {activeRunIds.length > 0 && (
+      <div className="sticky top-0 z-20 space-y-2" data-testid="improver-phase-bars">
+        {activeRunIds.map((id) => <WorkflowPhaseBar key={id} id={id} title={improvedFiles.find((f) => f.id === id)?.title ? `Okosítás: ${improvedFiles.find((f) => f.id === id)!.title}` : undefined} />)}
+      </div>
+    )}
     <div className="space-y-6" style={{ zoom: IMPROVER_ZOOM }} data-testid="improver-root">
       <Card className="border-red-500 border-2">
         <CardHeader>
@@ -570,16 +601,26 @@ export default function MaterialImprover() {
                         {format(new Date(file.createdAt), "yyyy. MM. dd. HH:mm", { locale: hu })}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           {file.status === "processing" ? (
                               <Badge variant="secondary" className="animate-pulse">
                                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                                 AI dolgozik…
                               </Badge>
                             ) : file.status === "error" ? (
-                              <span className="text-xs text-red-600 max-w-[200px] truncate" title={file.improvementNotes || ''}>
-                                {file.improvementNotes || 'Hiba'}
-                              </span>
+                              <details className="text-left max-w-[min(420px,80vw)]" data-testid={`improver-error-${file.id}`}>
+                                <summary className="cursor-pointer text-xs text-red-600 truncate" title={file.improvementNotes || ''}>
+                                  Hiba — hol állt meg?
+                                </summary>
+                                <p className="mt-1 text-xs text-red-700 whitespace-pre-wrap break-words">{file.improvementNotes || 'Ismeretlen hiba'}</p>
+                                <div className="mt-2">{ownRun(file) ? <WorkflowPhaseBar id={file.id} /> : <p className="text-xs text-muted-foreground">Másik admin futása — a fázisnaplót ő látja.</p>}</div>
+                                {/* Spec 2026-10-20-okositas-bukott-jelolt (review #336): a kapun bukott jelölt csak megtekinthető, alkalmazni nem lehet. */}
+                                <Button variant="outline" size="sm" className="mt-2" data-testid={`improver-error-preview-${file.id}`}
+                                  onClick={() => { setWorkflowId(null); setPreviewImprovedId(file.id); }}>
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  Bukott jelölt megtekintése
+                                </Button>
+                              </details>
                             ) : (
                               <>
                                 <Button
@@ -626,7 +667,7 @@ export default function MaterialImprover() {
       {previewData && (
         <Card className="border-red-500 border-2">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-red-700">Előnézet: {previewData.title}</CardTitle>
               <Button
                 variant="ghost"
@@ -650,7 +691,7 @@ export default function MaterialImprover() {
               <TabsContent value="run-original" className="mt-4">
                 {structuredPreview ? <LessonRuntime lesson={structuredPreview.previousLesson} /> : renderedOriginal ? (
                   <div className="border-2 border-border rounded-lg overflow-hidden bg-white">
-                    <div className="bg-muted px-3 py-2 border-b flex items-center justify-between">
+                    <div className="bg-muted px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Eye className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm font-medium">Eredeti HTML futás közben</span>
@@ -661,18 +702,18 @@ export default function MaterialImprover() {
                     </div>
                     <iframe
                       srcDoc={renderedOriginal}
-                      className="w-full h-[600px] border-0"
+                      className="w-full h-[min(600px,60dvh)] border-0"
                       title="Eredeti HTML Preview"
                       sandbox="allow-scripts allow-forms allow-popups allow-modals"
                       data-testid="iframe-preview-original"
                       style={{
-                        minHeight: '400px',
+                        minHeight: 'min(400px, 60dvh)',
                         backgroundColor: 'white',
                       }}
                     />
                   </div>
                 ) : (
-                  <div className="h-[600px] flex items-center justify-center rounded-md border text-muted-foreground">
+                  <div className="h-[min(600px,60dvh)] flex items-center justify-center rounded-md border text-muted-foreground">
                     Nincs elérhető tartalom
                   </div>
                 )}
@@ -682,12 +723,12 @@ export default function MaterialImprover() {
               <TabsContent value="run-improved" className="mt-4">
                 {structuredPreview ? <LessonRuntime lesson={structuredPreview.candidate} /> : renderedImproved ? (
                   <div className="border-2 border-border rounded-lg overflow-hidden bg-white">
-                    <div className="bg-muted px-3 py-2 border-b flex items-center justify-between">
+                    <div className="bg-muted px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Eye className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm font-medium">Javított HTML futás közben</span>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-3">
                         <Button
                           variant="outline"
                           size="sm"
@@ -705,18 +746,18 @@ export default function MaterialImprover() {
                     </div>
                     <iframe
                       srcDoc={renderedImproved}
-                      className="w-full h-[600px] border-0"
+                      className="w-full h-[min(600px,60dvh)] border-0"
                       title="Javított HTML Preview"
                       sandbox="allow-scripts allow-forms allow-popups allow-modals"
                       data-testid="iframe-preview-improved"
                       style={{
-                        minHeight: '400px',
+                        minHeight: 'min(400px, 60dvh)',
                         backgroundColor: 'white',
                       }}
                     />
                   </div>
                 ) : (
-                  <div className="h-[600px] flex items-center justify-center rounded-md border text-muted-foreground">
+                  <div className="h-[min(600px,60dvh)] flex items-center justify-center rounded-md border text-muted-foreground">
                     Nincs elérhető tartalom
                   </div>
                 )}
@@ -724,7 +765,7 @@ export default function MaterialImprover() {
 
               {/* Code View - Original */}
               <TabsContent value="code-original" className="mt-4">
-                <ScrollArea className="h-[600px] w-full rounded-md border p-4">
+                <ScrollArea className="h-[min(600px,60dvh)] w-full rounded-md border p-4">
                   <pre className="text-xs whitespace-pre-wrap font-mono">
                     {previewData.originalFile?.content || "Nincs elérhető tartalom"}
                   </pre>
@@ -733,15 +774,20 @@ export default function MaterialImprover() {
 
               {/* Code View - Improved */}
               <TabsContent value="code-improved" className="mt-4">
-                <ScrollArea className="h-[600px] w-full rounded-md border p-4">
+                <ScrollArea className="h-[min(600px,60dvh)] w-full rounded-md border p-4">
                   <pre className="text-xs whitespace-pre-wrap font-mono">
                     {previewData.content || "Nincs elérhető tartalom"}
                   </pre>
                 </ScrollArea>
               </TabsContent>
             </Tabs>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              {previewData.status === "error" ? (
+                <p className="mr-auto text-sm text-red-700" data-testid="improver-preview-failed-note">
+                  Ez a jelölt a záró ellenőrzésen elbukott — csak megtekinthető, nem alkalmazható.
+                </p>
+              ) : (
+              <Button data-testid="improver-preview-apply"
                 onClick={() => {
                   setPreviewImprovedId(null);
                   handleApply(previewData.id);
@@ -752,6 +798,7 @@ export default function MaterialImprover() {
                 <CheckCircle className="h-4 w-4 mr-2" />
                 {previewData.status === "applied" ? "Újra alkalmaz" : "Alkalmaz"}
               </Button>
+              )}
 
               <Button
                 variant="outline"
@@ -773,5 +820,6 @@ export default function MaterialImprover() {
 
 
     </div>
+    </>
   );
 }

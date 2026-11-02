@@ -3,6 +3,8 @@ import type { CatalogItemKind } from "./catalog-item";
 import { isExcludedSample } from "./sample-exclusions";
 import { unaccentedHungarian } from "./subject-skill-builder";
 import { verifyItem } from "./verify";
+import { sliceCodePoints, wellFormed } from "../../shared/well-formed";
+import { isSpellingPrompt, optionKeyFor } from "../../shared/option-key";
 
 /**
  * Spec 2026-10-06-s6-katalogus-bekotes: a tantárgyi katalógus lekérése a gyártáshoz — TISZTA, determinisztikus függvények.
@@ -72,7 +74,7 @@ const norm = (s: string) => s.normalize("NFC").toLocaleLowerCase("hu").replace(/
 export function verbatimEligible(row: CatalogRowLike, grade: number, topicOk: boolean): boolean {
   if (row.kind !== "quiz" || row.status !== "active" || row.trust !== "parent_verified" || row.grade !== grade || !topicOk) return false;
   const options = row.options ?? [];
-  if (options.length < 3 || options.length > 4 || new Set(options.map(norm)).size !== options.length) return false;
+  if (options.length < 3 || options.length > 4 || new Set(options.map(optionKeyFor(isSpellingPrompt(row.prompt), norm))).size !== options.length) return false;
   // A poolban tárolt szöveg nem lehet levágott — különben a szó szerinti kulcs nem egyezne (és a tétel nem lenne betűre azonos).
   if (row.prompt.length > POOL_LIMITS.prompt || options.some((o) => o.length > POOL_LIMITS.option)) return false;
   if (typeof row.correctIndex !== "number" || row.correctIndex < 0 || row.correctIndex >= options.length) return false;
@@ -80,7 +82,9 @@ export function verbatimEligible(row: CatalogRowLike, grade: number, topicOk: bo
   return verifyItem({ kind: "quiz", provenance: row.provenances[0] ?? "", prompt: row.prompt, options, correctIndex: row.correctIndex, fingerprint: row.fingerprint }).ok;
 }
 
-const clip = (s: string | null | undefined, n: number) => (s ?? "").slice(0, n);
+// Spec 2026-10-21-ciklus5: a vágás nem hagy fél-karaktert (a 📦 kettévágása a job mentését buktatta el).
+// Review #356: kódpont-határon vág (nem csereképkarakter), és a forrás esetleges magányos fél-karaktere is tisztul.
+export const clip = (s: string | null | undefined, n: number) => wellFormed(sliceCodePoints(s ?? "", n));
 const POOL_KINDS = new Set<string>(["quiz", "short_answer", "open_task", "method", "section"]);
 
 /**

@@ -70,9 +70,15 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // Spec 2026-10-05-bank-determinisztikus-normalizalas (mért: job 5b33202a, a kapu 4 hamis lelettel állt meg): a csak RÖVIDÍTÉSBŐL álló
   // fogalom („Kr. u. / i. sz.”) érdemi szólistája üres — a blokk szó szerinti „Kr. u. / i. sz.” szövege mellett is bukott. Ilyenkor a
   // teljes kifejezés szóhatáros előfordulása dönt (legalább két rövid szóból, hogy egy magányos betű ne igazoljon).
+  // Spec 2026-10-19-rovid-fogalom-megalapozas (mérve: „Where I Live” 639b5201 / 6f1158ce / 55736ce3): az EGYSZAVAS, 1–2 betűs NÉV
+  // („a”, „an”) érdemi szólistája is üres — itt eddig azonnal hamis lett, így a lecke semmilyen tartalommal nem mehetett át. Az ilyen
+  // nevet lent, a „< 4 szó” védelem UTÁN a saját szabálya (`shortTermGrounded`) dönti el.
+  let shortName = "";
   if (words.length === 0 && !formula) {
     const phrase = normalizeText(concept.term ?? "").trim();
-    return phrase.split(" ").length >= 2 && ` ${normalizeText(blockText)} `.includes(` ${phrase} `);
+    if (phrase.split(" ").length >= 2 && ` ${normalizeText(blockText)} `.includes(` ${phrase} `)) return true;
+    if (!phrase || phrase.includes(" ")) return false;
+    shortName = phrase;
   }
 
   // Képlet-fogalomnál CSAK az előjel-pontos képlet dönt: az idézet-számok tartaléka előjel-vak („9-(+6)=+3” számai a „9-(-6)=+3”
@@ -83,6 +89,10 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   const haystack = normalizeText(blockText);
   // Egy pár szavas blokk nem taníthat fogalmat, bármit is állít a címke.
   if (haystack.split(" ").filter(Boolean).length < 4) return false;
+  // Spec 2026-10-21-rovid-fogalom-ekezet (mérve: Az Erdő, job 952d0101): az ÉKEZETES rövid név („Őz” → „oz”) valódi szó, nem
+  // téveszthető össze az ASCII funkciószavakkal („a”, „an”) — a rendes rövid szó szabálya dönt, az ékezetes alakon (ragozva is).
+  if (shortName && isAccentedShortName(concept.term ?? "")) return accentedShortGrounded(concept, blockText);
+  if (shortName) return shortTermGrounded(shortName, concept, blockText);
 
   const tokens = haystack.split(" ").filter(Boolean);
   const stems = new Set(tokens.map(stem));
@@ -127,6 +137,90 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // különböző számot tartalmaz, és azok ≥ 75 %-a a blokkban is szerepel, a blokk a forrás
   // példáját dolgozza ki: megalapozott.
   return quoteNumbersPresent(concept.quote ?? concept.definition ?? "", haystack);
+}
+
+/**
+ * Spec 2026-10-19-rovid-fogalom-megalapozas + review #326: egyszavas, 1–2 betűs név („a”, „an”) megalapozása. A forrás saját példája
+ * („an armchair”) dönt; a definíció-tartalék CSAK akkor, ha a név megkülönböztetően, idézőjelben / kiemelve áll a blokkban („an”) —
+ * különben a testvérfogalmak („a” / „an”) közös definíciószavai („névelő”, „hang”, „előtt”) egymást is megalapoznák. Az idézetszám-
+ * tartalék itt nem fut.
+ */
+function shortTermGrounded(name: string, concept: MapConcept, blockText: string): boolean {
+  // Spec 2026-10-21-rovid-fogalom-ekezet (mérve: job 8bc212f4): a forrás példái a definícióban is állhatnak („at noon”), ha az idézet
+  // csak összefoglaló képlet („AT = óra, noon, night, weekend.”).
+  if (shortTermExamplePresent(name, `${concept.quote ?? ""}\n${concept.definition ?? ""}`, blockText)) return true;
+  // A `name` normalizált (csak a-z, 0-9), így regexben escape nélkül is biztonságos. Spec 2026-10-21-rovid-fogalom-ekezet: a csupa
+  // nagybetűs név („AT:”) nagybetűs, önálló előfordulása is megkülönböztető — a kisbetűs „a” / „an” erre nem jogosult.
+  const term = (concept.term ?? "").trim();
+  const upperMarked = term.length >= 2 && term === term.toUpperCase() && term !== term.toLowerCase()
+    && new RegExp(`(^|[^A-Za-z0-9])${name.toUpperCase()}(?![A-Za-z0-9])`).test(blockText);
+  if (!upperMarked && !new RegExp(`[„"'“‚‘*«]\\s?${name}\\s?[”"'’‘“*»]`, "i").test(blockText)) return false;
+  const tokens = normalizeText(blockText).split(" ").filter(Boolean);
+  const stems = new Set(tokens.map(stem));
+  const present = (word: string): boolean => stems.has(stem(word)) || (word.length < STEM_LEN ? tokens.some((t) => t.startsWith(word)) : tokens.some((t) => t.includes(stem(word))));
+  const defWords = significantWords(concept.definition ?? "").filter((w) => !STOP_WORDS.has(w));
+  if (defWords.length === 0) return false;
+  const need = defWords.length < 2 ? defWords.length : Math.max(2, Math.ceil(defWords.length / 2));
+  return defWords.filter(present).length >= need;
+}
+
+/** Spec 2026-10-21-rovid-fogalom-ekezet: a név ékezetes alakja (kisbetűs, NFC) — „Őz” → „őz”. */
+const accentedForm = (term: string): string => term.trim().toLowerCase().normalize("NFC");
+/** Ékezetes rövid név: az ékezetes alak nem csak a–z / 0–9 betűkből áll („őz”, „íj”), és egyetlen szó. */
+export function isAccentedShortName(term: string): boolean {
+  const form = accentedForm(term);
+  return form.length > 0 && !/\s/.test(form) && /[^a-z0-9]/.test(form) && /^[\p{L}\p{N}]+$/u.test(form);
+}
+/** A blokk ékezetes szavai (kisbetűs, NFC). */
+const accentedTokens = (text: string): string[] => text.toLowerCase().normalize("NFC").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+/**
+ * Review #363 (Copilot): a ragozott alak CSAK ellenőrzött magyar toldalékkal (többes jel, esetrag, birtokos jel, -val/-vel hasonult
+ * alakja) — a puszta előtag-egyezés más szót is elfogadna („ősszel” az „ős”-re, „élőlények” az „él”-re).
+ */
+const HU_SUFFIX = new RegExp(
+  "^(?:[aeoö]?k)?"
+  // birtokos személyjel / birtoktöbbesítő („őseink”, „éle”, „őzünk”)
+  + "(?:[aeoöá]?(?:aink|eink|aitok|eitek|aim|eim|aid|eid|aik|eik|ink|itok|itek|im|id|ik|ai|ei|unk|ünk|nk|tok|tek|tök|juk|jük|uk|ük|ja|je|a|e|i|m|d))?"
+  + "(?:[aeoöáé]?(?:t|nak|nek|ban|ben|ba|be|ból|ből|ra|re|ról|ről|hoz|hez|höz|tól|től|nál|nél|on|en|ön|n|ig|ért|ként|ul|ül))?$",
+  "u",
+);
+const isInflectionOf = (token: string, form: string): boolean => {
+  if (!token.startsWith(form) || token === form) return false;
+  const rest = token.slice(form.length);
+  const last = form.slice(-1);
+  return HU_SUFFIX.test(rest) || new RegExp(`^(?:[aeoö]?k[aeo]?)?${last}(?:al|el|á|é)$`, "u").test(rest);
+};
+/**
+ * Ékezetes rövid név: a pontos szó („őz”) önmagában megalapoz; a ragozott alak („őzek”, „őzzel”) mellé a definíció legalább egy érdemi
+ * szava is kell (review #363: a ragozott alak többértelmű lehet — „élet” az „él” tárgyesete is).
+ */
+function accentedShortGrounded(concept: MapConcept, blockText: string): boolean {
+  const form = accentedForm(concept.term ?? "");
+  const tokens = accentedTokens(blockText);
+  if (tokens.includes(form)) return true;
+  if (!tokens.some((t) => isInflectionOf(t, form))) return false;
+  const plain = normalizeText(blockText).split(" ").filter(Boolean);
+  // A fogalom saját alakjai („éle” az „él”-nél) nem független bizonyíték — ugyanúgy illeszkednének a más jelentésű szóra („élet”).
+  const own = normalizeText(form);
+  const defWords = significantWords(concept.definition ?? "").filter((w) => !STOP_WORDS.has(w) && !w.startsWith(own));
+  return defWords.some((w) => (w.length < STEM_LEN ? plain.some((t) => t.startsWith(w)) : plain.some((t) => t.includes(stem(w)))));
+}
+
+/**
+ * Spec 2026-10-19-rovid-fogalom-megalapozas: rövid fogalomnév („an”) esetén a forrás-idézet PÉLDA-darabjai („an armchair”) közül
+ * legalább egy szóhatárosan a blokkban van. A `=`-t tartalmazó darab („an = before vowel sounds”) magyarázat, nem példa; a puszta
+ * egyszavas darab nem elég (a magyar „a” névelő mindenhol ott van).
+ */
+export function shortTermExamplePresent(term: string, quote: string, blockText: string): boolean {
+  const name = normalizeText(term);
+  if (!name) return false;
+  const haystack = ` ${normalizeText(blockText)} `;
+  return quote
+    .split(/[,;:\n]/)
+    .filter((part) => !part.includes("="))
+    .map(normalizeText)
+    .filter((part) => part.split(" ").length >= 2 && ` ${part} `.includes(` ${name} `))
+    .some((part) => haystack.includes(` ${part} `));
 }
 
 /** Képlet-alak (közös modul, spec 2026-10-04-kepletbiztos-heurisztikak); `null`, ha a fogalom neve nem képlet. */

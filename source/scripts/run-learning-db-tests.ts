@@ -51,6 +51,10 @@ try {
   const skillMigration = await readFile(new URL("../migrations/0020_lesson_skill_learning.sql", import.meta.url), "utf8");
   await pool.query(skillMigration);
   await pool.query(skillMigration);
+  // Erőforrás S2b: a futás→job keresés generált oszlopa (0036) a migrációs fájlból, kétszer — idempotens.
+  const resourceIdMigration = await readFile(new URL("../migrations/0036_workflow_resource_id.sql", import.meta.url), "utf8");
+  await pool.query(resourceIdMigration);
+  await pool.query(resourceIdMigration);
   // S8: the outcome table from the migration file itself (not the schema export), twice.
   await pool.query("DROP TABLE catalog_item_outcomes");
   const outcomeMigration = await readFile(new URL("../migrations/0023_catalog_item_outcomes.sql", import.meta.url), "utf8");
@@ -80,11 +84,16 @@ try {
   const reminderMigration = await readFile(new URL("../migrations/0031_daily_reminders.sql", import.meta.url), "utf8");
   await pool.query(reminderMigration);
   await pool.query(reminderMigration);
+  // S4b: a feladatszintű eredmény táblája (0037) a migrációs fájlból (nem a séma-exportból), kétszer — idempotens.
+  await pool.query("DROP TABLE task_results");
+  const taskResultsMigration = await readFile(new URL("../migrations/0037_task_results.sql", import.meta.url), "utf8");
+  await pool.query(taskResultsMigration);
+  await pool.query(taskResultsMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {
     // The reconciler intentionally scans all workflow rows; isolate suite-owned lifecycle tests.
-    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts", "tests/daily-reminder-db.integration.ts"], {
+    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts", "tests/daily-reminder-db.integration.ts", "tests/newsletter-db.integration.ts"], {
       cwd, env: { ...env, DATABASE_URL: databaseUrl, NODE_ENV: "test", WEBSULI_DISPOSABLE_DB: name },
       windowsHide: true, stdio: "inherit",
     });

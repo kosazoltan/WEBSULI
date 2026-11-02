@@ -28,7 +28,7 @@ const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
 export async function fixConceptInConversation(input: {
   original: Lesson; source: ConceptFixSource; conceptId: string; conversation: LessonConversation; log?: (m: string) => void;
   /** J2: friss, előzmény nélküli beszélgetés (bank, lektor) — ugyanaz a modellpár. */
-  fresh: (system: string) => LessonConversation;
+  fresh: (system: string, opts?: { effort?: import("./conversation").SingleRunEffort }) => LessonConversation;
   /** Review #263: a forrás átirata (a térkép `sourceText`-je) — a friss lektor ehhez is mér, mint a gyártásban. */
   sourceText?: string | null;
 }): Promise<{ ok: true; candidate: Lesson; report: LektorReport } | { ok: false; error: string }> {
@@ -55,7 +55,8 @@ export async function fixConceptInConversation(input: {
     assertRepairCandidate(original, candidate, source);
     await workflowPhase("lektor");
     // J2: a lektor friss beszélgetésben, a javítás menetétől függetlenül ítél.
-    const sourceBlock = input.sourceText?.trim() ? [{ type: "text" as const, text: `A FORRÁS ÁTIRATA (adat, a mérce):\n${input.sourceText.trim()}` }] : [];
+    // Review #329 (spec 2026-10-19-eroforras-s3a): a forrásátirat töréspontot kap — a lektor javítóköre gyorsítótárból olvassa.
+    const sourceBlock = input.sourceText?.trim() ? [{ type: "text" as const, text: `A FORRÁS ÁTIRATA (adat, a mérce):\n${input.sourceText.trim()}`, cache: true }] : [];
     const report = await runStation({ conversation: input.fresh(freshSystemPrompt("lektor")), log: input.log }, "a javítás lektorálása", withRoleRunbook([...sourceBlock, { type: "text", text: `LEKTORÁLÁS — a javított tanítás és a friss bankok, a forráshoz mérve.\n${buildLektorPrompt(candidate, source)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.` }], "lektor"),
       (json) => {
         const r = parseLektorResponse(json);
@@ -97,7 +98,7 @@ export async function fixConceptSingleRun(lessonId: string, conceptId: string, a
   let conversation: LessonConversation;
   try { conversation = createLessonConversation(singleRunSystemPrompt()); }
   catch (error) { return { ok: false, error: error instanceof Error ? error.message : "Nincs beállított modellkulcs." }; }
-  const fixed = await fixConceptInConversation({ original, source, conceptId, conversation, fresh: (system) => createLessonConversation(system), sourceText });
+  const fixed = await fixConceptInConversation({ original, source, conceptId, conversation, fresh: (system, opts) => createLessonConversation(system, opts ?? {}), sourceText });
   if (!fixed.ok) return fixed;
   try {
     const { repairHash, materialHash, applyStructuredImprovement } = await import("../structured-improvement");

@@ -46,6 +46,6 @@ Tulajdonosi kérés 2026-11-02: a Stúdió forrásfeltöltése fogadjon el `.mht
 - HA a szerver `mht` forrást kap, AKKOR `extractedText` a gyökér-HTML szövegét tartalmazza helyes ékezetekkel,
   és `sourceTextOf` ezt adja vissza.
 - HA a próbafájlt (`Szophoklész_ Antigoné.mht`) dolgozzuk fel, AKKOR a szövegben szerepel „Antigoné”, „Trencsényi-Waldapfel Imre”,
-  „SZEMÉLYEK”, és nem szerepel `�` (U+FFFD) karakter, sem a követőkód-rész tartalma.
+  „SZEMÉLYEK”, és nem szerepel U+FFFD (cserekép) karakter, sem a követőkód-rész tartalma.
 - HA az MHT olvashatatlan, AKKOR a gyártás érthető magyar hibával áll meg, nem base64 szöveggel.
 - Tesztek: `npm test` (új esetek: QP+utf-8, base64+windows-1250, binary+meta ISO-8859-2, gyökérválasztás), `npm run check`.

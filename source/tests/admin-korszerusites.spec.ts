@@ -15,7 +15,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1366, height: 768 
     await page.goto("/__admin-tabs-probe");
     const bar = page.getByTestId("admin-tab-groups");
     await expect(bar).toBeVisible();
-    for (const label of ["Tananyagok", "Készítés és javítás", "Kommunikáció", "Rendszer"]) await expect(bar.getByText(label, { exact: true })).toBeVisible();
+    for (const label of ["Tananyagok", "Készítés és javítás", "Tanulók és levelek", "Rendszer és mentések"]) await expect(bar.getByText(label, { exact: true })).toBeVisible();
     const tabs = bar.getByRole("tab");
     // S4 (docs/specs/2026-10-18-tanuloi-profil-s4-vegrehajtas.md): a „Tanulók” fül — 16 fül (dokumentált spec-változás).
     await expect(tabs).toHaveCount(16);

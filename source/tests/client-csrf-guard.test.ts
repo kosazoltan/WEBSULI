@@ -52,6 +52,10 @@ const SERVER_ORIGIN_GUARDED: { prefix: string; why: string }[] = [
     prefix: "/api/lessons/arbiter",
     why: "Tételgyár T7: nyilvános döntőbíró, munkamenet-jogosultság nélkül; a HTML-lecke iframe-je is hívja (routes.ts Origin-allowlist + saját IP-korlát)",
   },
+  {
+    prefix: "/api/client-error",
+    why: "kanban #127: a böngészős hibajelentés hibaállapotban is menjen (token-lekérés nélkül); a routes.ts CSRF-őre ELŐTT van bekötve (index.ts), a saját routere őrzi Origin-allowlisttel + IP-korláttal + napi plafonnal (tests/client-error-route.test.ts)",
+  },
 ];
 
 function walk(dir: string): string[] {

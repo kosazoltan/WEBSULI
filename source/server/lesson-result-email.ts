@@ -5,13 +5,14 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
 import { lessonSchema } from "../shared/lesson-schema";
-import { buildResultEmail, gradeQuiz, gradeTasks, resultRequestSchema, type GradedQuiz, type GradedTasks } from "../shared/lesson-result-email";
+import { buildResultEmail, GUEST_LEARNER, gradeQuiz, gradeTasks, resultRequestSchema, type GradedQuiz, type GradedTasks } from "../shared/lesson-result-email";
 import { resolveAdminRecipients } from "./lib/material-result";
 import { arbiterCacheKey } from "./arbiter/arbiter";
 import { getMaterialPreviewUrl } from "./utils/config";
 import type { AttemptAnswer, AttemptQuestion } from "../shared/lesson-attempt";
 import { logger } from "./lib/logger";
 import { recordLearnerActivity, resolveLearner } from "./learners";
+import { contributorKey, maybeRelaxTightening, recordTaskResults } from "./task-results";
 
 /**
  * Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — „motorháztető alatt”: a tanuló felülete
@@ -38,7 +39,7 @@ export const roundKeyOf = (...parts: string[]) => createHash("sha256").update(pa
  * nyilvántartott (`delivered`) — a meghiúsult címzett a következő azonos hívással és egy 60 s-os automatikus újrapróbálással pótolódik,
  * a már kézbesített nem kap másodikat. Sosem dob — a hiba a naplóba megy.
  */
-export async function sendLessonResult(input: { lessonId: string; roundKey: string; learner: string; learnerFirst?: string; learnerId?: string; graded: GradedTasks | GradedQuiz }, retry = true): Promise<{ sent: number; duplicate: boolean }> {
+export async function sendLessonResult(input: { lessonId: string; roundKey: string; learner: string; learnerFirst?: string; learnerId?: string; guest?: boolean; graded: GradedTasks | GradedQuiz }, retry = true): Promise<{ sent: number; duplicate: boolean }> {
   try {
     const [row] = await db.select({ json: lessons.json, htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, input.lessonId));
     const lesson = row ? lessonSchema.safeParse(row.json) : null;
@@ -57,7 +58,7 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
     if (!recipients.length) { logger.warn("[LESSON-RESULT] nincs címzett (ADMIN_EMAILS)"); return { sent: 0, duplicate: false }; }
     const missing = recipients.filter(r => !claim.delivered.includes(r));
     if (!missing.length) return { sent: 0, duplicate: true };
-    const mail = buildResultEmail({ lessonTitle: lesson.data.title, classroom: lesson.data.classroom, learner: input.learner, learnerFirst: input.learnerFirst,
+    const mail = buildResultEmail({ lessonTitle: lesson.data.title, classroom: lesson.data.classroom, learner: input.learner, learnerFirst: input.learnerFirst, guest: input.guest,
       url: row.htmlFileId ? getMaterialPreviewUrl(row.htmlFileId) : "", graded: input.graded });
     const results = await Promise.allSettled(missing.map(to => send(mail.subject, mail.html, to)));
     const ok = missing.filter((_, i) => results[i].status === "fulfilled");
@@ -74,7 +75,7 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
 }
 
 async function learnerName(userId: string | undefined): Promise<string> {
-  if (!userId) return "Vendég tanuló";
+  if (!userId) return GUEST_LEARNER;
   const [u] = await db.select({ first: users.firstName, last: users.lastName }).from(users).where(eq(users.id, userId));
   const name = `${u?.last ?? ""} ${u?.first ?? ""}`.trim();
   return name || "Bejelentkezett tanuló";
@@ -114,9 +115,21 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
   // (mint a régi anyagnál); a levél neve bejelentkezve a fiók neve marad.
   const paired = body.learner ? await resolveLearner(body.learner).catch(() => null) : null;
   const who = userId ?? (paired ? `learner:${paired.id}` : `guest:${body.fingerprint ?? req.ip ?? "?"}`);
+  const roundKey = roundKeyOf(who, body.kind, body.roundId);
+  // Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény (a levéltől független), utána a szigorítás automatikus lazítása. Nem
+  // várjuk meg; a hiba csak napló.
+  if (graded.kind === "tasks") {
+    const tasksGraded = graded;
+    const tightened = experience.tasks.filter(t => (t.tightened?.length || t.tightenedPhrases?.length || t.tightenedOrder) && tasksGraded.rows.some(r => r.taskId === t.id)).map(t => t.id);
+    // Review #340 (P1): a közreműködő a szerver által ismert identitás (a kliens ujjlenyomata nem — azt szabadon választhatja).
+    const contributor = contributorKey(userId ? `user:${userId}` : paired ? `learner:${paired.id}` : `ip:${req.ip ?? "?"}`);
+    void recordTaskResults(req.params.lessonId, roundKey, contributor, tasksGraded.rows)
+      .then(() => maybeRelaxTightening(req.params.lessonId, tightened))
+      .catch(error => logger.error("[S4] feladatszintű eredmény / lazítás hiba:", error));
+  }
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
-  void (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => sendLessonResult({ lessonId: req.params.lessonId, roundKey: roundKeyOf(who, body.kind, body.roundId), learner,
-    ...(paired ? { learnerId: paired.id, ...(!userId ? { learnerFirst: paired.firstName } : {}) } : {}), graded }))
+  void (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => sendLessonResult({ lessonId: req.params.lessonId, roundKey, learner,
+    ...(paired ? { learnerId: paired.id, ...(!userId ? { learnerFirst: paired.firstName } : {}) } : {}), guest: !userId && !paired, graded }))
     .catch(error => logger.error("[LESSON-RESULT] háttérküldés hiba:", error));
   return res.status(202).json({ queued: true });
   } catch (error) { next(error); }

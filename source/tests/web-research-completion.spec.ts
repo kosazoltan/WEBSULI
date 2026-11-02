@@ -139,3 +139,64 @@ test("spec 2026-09-25: a Studio-gyártással kész internetes lecke megnyitható
   }
   expect(errors).toEqual([]);
 });
+// Spec 2026-10-19-webes-keszites-uj-inditas: a korábbi futás nem foglalhatja a panelt.
+test("beragadt futás: az „Új készítés” elengedi (megerősítéssel), és új kérés új azonosítóval indul", async ({ page }) => {
+  const starts: string[] = [];
+  await page.route("**/api/studio/web-research/jobs", r => { starts.push(r.request().postDataJSON().id); return r.fulfill({ status: 202, json: { ...job, id: starts.at(-1) } }); });
+  // Mint a szerver: ismeretlen azonosítóra 404 (a kliens erre indít POST-ot), az indítottra a beragadt „running”.
+  await page.route("**/api/studio/web-research/jobs/*", r => {
+    const id = r.request().url().split("/").pop()!;
+    return r.fulfill(starts.includes(id) ? { json: { ...job, id } } : { status: 404, json: {} });
+  });
+  await open(page); await send(page);
+  await expect(page.getByTestId("web-research-status")).toContainText("Források feldolgozása");
+  const box = page.getByPlaceholder("Pl.: Keress tananyagot 5. osztályos törtekhez, és készítsd el");
+  await expect(box).toBeDisabled();
+  page.once("dialog", d => void d.accept());
+  await page.getByTestId("web-research-new").click();
+  await expect(box).toBeEnabled();
+  await expect(page.getByTestId("web-research-status")).toHaveCount(0);
+  await send(page, "Új téma: a vulkánok");
+  await expect.poll(() => starts.length).toBe(2);
+  expect(starts[1]).not.toBe(starts[0]);
+});
+test("kész futás után újratöltéskor üres a panel (a böngésző elfelejti a futást)", async ({ page }) => {
+  await page.route("**/api/studio/web-research/jobs", r => r.fulfill({ status: 202, json: job }));
+  await page.route("**/api/studio/web-research/jobs/*", r => r.fulfill({ json: done }));
+  await open(page); await send(page);
+  await expect(page.getByTestId("web-research-open-saved")).toBeVisible();
+  await page.reload(); await page.getByTestId("studio-mode-web").click();
+  await expect(page.getByTestId("web-research-panel-ready").or(page.getByTestId("web-research-agent-panel"))).toBeVisible();
+  await expect(page.getByTestId("web-research-open-saved")).toHaveCount(0);
+  await expect(page.getByTestId("web-research-new")).toHaveCount(0);
+  await expect(page.getByPlaceholder("Pl.: Keress tananyagot 5. osztályos törtekhez, és készítsd el")).toBeEnabled();
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  }
+});
+test("review #317: a kézi mentés befejezése után is elfelejti a futást (újratöltéskor üres panel)", async ({ page }) => {
+  await page.route("**/api/studio/web-research/jobs", r => r.fulfill({ status: 202, json: job }));
+  await page.route("**/api/studio/web-research/jobs/*", r => r.fulfill({ json: { ...done, state: "ready", materialId: undefined, error: "Mentés átmenetileg nem elérhető" } }));
+  await page.route("**/api/studio/web-research/jobs/*/publish", r => r.fulfill({ json: done }));
+  await open(page); await send(page);
+  await page.getByTestId("web-research-save").click();
+  await expect(page.getByTestId("web-research-open-saved")).toBeVisible();
+  await page.reload(); await page.getByTestId("studio-mode-web").click();
+  await expect(page.getByTestId("web-research-open-saved")).toHaveCount(0);
+  await expect(page.getByTestId("web-research-new")).toHaveCount(0);
+});
+test("review #317: két lap — az egyik lap kész futása nem törli a másik lap tárolt (futó) követését", async ({ page, context }) => {
+  await page.route("**/api/studio/web-research/jobs", r => r.fulfill({ status: 202, json: job }));
+  await page.route("**/api/studio/web-research/jobs/*", r => r.fulfill({ json: done }));
+  await open(page); await send(page);
+  await expect(page.getByTestId("web-research-open-saved")).toBeVisible();
+  // A második lap közben egy másik futást tárol (ugyanaz a localStorage) — az első lap ezt nem törölheti.
+  const other = await context.newPage();
+  await other.goto("/__studio-panel-probe");
+  await other.evaluate(() => localStorage.setItem("websuli:web-research:pending", JSON.stringify({ id: "00000000-0000-4000-8000-000000000002", message: "másik", classroom: 5 })));
+  page.once("dialog", d => void d.accept());
+  await page.getByTestId("web-research-new").click();
+  const stored = await other.evaluate(() => JSON.parse(localStorage.getItem("websuli:web-research:pending") || "null"));
+  expect(stored?.id).toBe("00000000-0000-4000-8000-000000000002");
+});

@@ -9,7 +9,7 @@ import { workflowFence } from "../../workflows/engine";
 import { logger } from "../../lib/logger";
 import type { ExtractorFile } from "../extractor";
 import { createDrizzlePipelineStore } from "../pipeline-store";
-import { createLessonConversation, type ConversationState } from "./conversation";
+import { createLessonConversation, type ConversationState, type SingleRunEffort } from "./conversation";
 import { readSourceStation, runSingleLesson, SingleRunError, singleRunResumable, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
 import { eq } from "drizzle-orm";
 
@@ -18,6 +18,12 @@ import { eq } from "drizzle-orm";
  * A tudásbank mentése (egy tranzakció, workflow-fence-szel). Gyártásnál jóváhagyott térkép, a szó szerint igazolt fogalmak „kept”
  * állapotban; a különálló kinyerésnél (S4a) `draft` térkép, a fogalmak a tanári jóváhagyásra várnak (mint a korábbi kinyerésnél).
  */
+/**
+ * Spec 2026-10-21-fogalom-tipus-hossz: a modell szabad szöveges címkéi az oszlophatárra vágva (`km_concepts.type` varchar(24),
+ * `verbatim_reason` varchar(32)) — mért: „irodalomtörténeti esemény” (25) megállította a gyártást.
+ */
+export const kmConceptColumns = (c: { type: string; correction?: string | null }) => ({ type: c.type.slice(0, 24), verbatimReason: c.correction ? c.correction.slice(0, 32) : null });
+
 export async function saveSingleRunMap(map: SingleRunMap, files: ExtractorFile[], ownerId: string, model: string, opts: { draft?: boolean; inputHash?: string } = {}): Promise<string> {
   // Gyártásnál egyedi bemeneti lenyomat (a tábla `input_hash` egyedi): az egyfutásos térkép gyártásonként új.
   const inputHash = opts.inputHash ?? createHash("sha256").update(`single-run:${randomUUID()}`).digest("hex");
@@ -31,7 +37,7 @@ export async function saveSingleRunMap(map: SingleRunMap, files: ExtractorFile[]
     }).returning({ id: knowledgeMaps.id });
     await tx.insert(kmConcepts).values(map.concepts.map((c, index) => ({
       mapId: row.id, localId: c.id, term: c.term, definition: c.definition, quote: c.quote, sourceRef: { file: c.sourceFile },
-      type: c.type, examWeight: c.examWeight, relatedIds: c.relatedIds, verbatimOk: c.verbatimOk, verbatimReason: c.correction ?? null,
+      ...kmConceptColumns(c), examWeight: c.examWeight, relatedIds: c.relatedIds, verbatimOk: c.verbatimOk,
       // A helyesbített fogalom „edited” (mint a régi helyesbítésnél); a draft térkép fogalmai a tanári jóváhagyásra várnak.
       ...(opts.draft ? {} : { reviewState: c.correction ? "edited" as const : "kept" as const }), orderIndex: index,
     })));
@@ -93,7 +99,8 @@ async function singleRunDeps(ownerId: string, progress: (p: SingleRunProgress) =
     store: await createDrizzlePipelineStore(),
     saveMap: (map: SingleRunMap, f: ExtractorFile[]) => saveSingleRunMap(map, f, ownerId, conversation.model),
     // J2: friss, előzmény nélküli beszélgetés (bank, lektor, kulcsmentes ellenőrzés) — ugyanaz a modellpár és tartalékváltás.
-    fresh: (system: string) => createLessonConversation(system, {
+    fresh: (system: string, opts?: { effort?: SingleRunEffort }) => createLessonConversation(system, {
+      ...opts,
       onFallback: (reason) => logger.warn(`[EGYFUTÁS] Tartalékmodell (friss beszélgetés): ${reason}`),
       onUsage: (r) => logger.info(`[EGYFUTÁS] friss ${r.model}: be ${r.usage?.input ?? "?"} (gyorsítótár ${r.usage?.cachedInput ?? 0}), ki ${r.usage?.output ?? "?"} token`),
     }),
@@ -104,7 +111,7 @@ async function singleRunDeps(ownerId: string, progress: (p: SingleRunProgress) =
 }
 
 /** Egy feltöltés teljes gyártása egy beszélgetésben (a hívó workflow-ján belül). */
-export async function runSingleUpload(input: { files: ExtractorFile[]; instruction?: string; title?: string; ownerId: string }, progress: (p: SingleRunProgress) => void): Promise<SingleRunResult> {
+export async function runSingleUpload(input: { files: ExtractorFile[]; instruction?: string; title?: string; ownerId: string; targetHtmlFileId?: string; targetBaseline?: string }, progress: (p: SingleRunProgress) => void): Promise<SingleRunResult> {
   progress({ phase: "ocr", detail: "A forrás előkészítése…" });
   const files = await prepareFiles(input.files);
   const deps = await singleRunDeps(input.ownerId, progress);

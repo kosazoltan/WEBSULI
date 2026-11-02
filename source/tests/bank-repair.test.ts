@@ -118,7 +118,7 @@ test("B4: a bank rendszerutasítása a generált BANKCSOMAG-SZERZŐDÉST és a p
   const c = bankPacketContract({ sectionIndex: 3, conceptIds: ["a", "b"], methodKinds: ["gate", "myth"], taskCount: 2, taskTarget: 5, quizCount: 4, quizTarget: 10 });
   assert.match(c, /methods legalább 2 \(kindek: gate, myth\), legfeljebb 20; tasks PONTOSAN 5, quiz PONTOSAN 10 \(a program ennél kevesebbet elutasít — a tartalék kötelező; csak a mentő kivétel mehet 2\/4-ig\); glossary: \[\]/);
   assert.match(c, /sectionIndex=3, coversConceptIds csak ebből: \["a","b"\]/);
-  assert.match(bankPacketContract({ sectionIndex: 0, conceptIds: ["a"], methodKinds: ["gate"], taskCount: 1, taskTarget: 1, quizCount: 2, quizTarget: 2, language: "en-GB" }), /glossary: legalább 1 elem \(en-GB\)/);
+  assert.match(bankPacketContract({ sectionIndex: 0, conceptIds: ["a"], methodKinds: ["gate"], taskCount: 1, taskTarget: 1, quizCount: 2, quizTarget: 2, language: "en-GB" }), /glossary: legalább 4 elem \(en-GB\)[^\n]*kiejtésgyakorló/); // Spec 2026-10-21-nyelvlecke-kiejtes: a szószedet a kiejtésgyakorló alapja
 });
 
 test("C9: a csomagon belüli ismétlődés a MÁSODIK tételt nevezi meg, az elsőt hivatkozza", () => {

@@ -1,4 +1,4 @@
-import { FileText, Settings, Sparkles, Mail, type LucideIcon } from "lucide-react";
+import { FileText, Settings, Sparkles, UserRound, type LucideIcon } from "lucide-react";
 import { ADMIN_TAB_GROUPS } from "@/lib/admin-tabs";
 import { useLocation } from "wouter";
 import { useState } from "react";
@@ -20,8 +20,9 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
   const [openSheet, setOpenSheet] = useState<string | null>(null);
 
   // Admin kategóriák (4 fő csoport) — a közös admin-menüből (lib/admin-tabs.ts, spec 2026-10-18-admin-korszerusites).
-  const CATEGORY_ICON: Record<string, LucideIcon> = { materials: FileText, authoring: Sparkles, communication: Mail, system: Settings };
-  const SHORT_LABEL: Record<string, string> = { materials: "Anyagok", authoring: "Készítés", communication: "Üzenetek", system: "Rendszer" };
+  const CATEGORY_ICON: Record<string, LucideIcon> = { materials: FileText, authoring: Sparkles, communication: UserRound, system: Settings };
+  // Spec 2026-10-19-admin-menu-nevek: a gomb neve a mögötte lévő funkciókat mondja (a „Tanulók” alatt a tanulói fülek).
+  const SHORT_LABEL: Record<string, string> = { materials: "Tananyagok", authoring: "Készítés", communication: "Tanulók", system: "Rendszer" };
   const adminCategories = ADMIN_TAB_GROUPS.map(group => ({
     icon: CATEGORY_ICON[group.id] ?? Settings,
     label: SHORT_LABEL[group.id] ?? group.label,
@@ -60,7 +61,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
   // CRITICAL SECURITY: Admin navigation - ONLY for authenticated admin users
   return (
       <>
-        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border lg:hidden" aria-label="Admin navigáció">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border lg:hidden pb-[env(safe-area-inset-bottom)]" aria-label="Admin navigáció">
           <div className="flex items-center justify-around h-16 px-1">
             {adminCategories.map((category) => {
               const isActive = category.tabs.some(tab => tab.value === activeTab);
@@ -79,7 +80,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
                       : "text-muted-foreground"
                     }
                   `}
-                  data-testid={`mobile-nav-${category.label.toLowerCase()}`}
+                  data-testid={`mobile-nav-${category.value}`}
                 >
                   <category.icon className="w-5 h-5" />
                   <span className="text-xs font-medium leading-tight text-center">{category.label}</span>
@@ -97,7 +98,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
               open={openSheet === category.value} 
               onOpenChange={(open) => setOpenSheet(open ? category.value : null)}
             >
-              <SheetContent side="bottom" className="max-h-[80vh]">
+              <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto">
                 <SheetHeader>
                   <SheetTitle>{category.label}</SheetTitle>
                 </SheetHeader>

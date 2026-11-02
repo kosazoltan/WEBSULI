@@ -2,8 +2,8 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import type { AddressInfo } from "node:net";
-import { eq } from "drizzle-orm";
-import { knowledgeMaps, lessonResultEmails, lessons } from "../shared/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { knowledgeMaps, lessonResultEmails, lessons, taskResults, users } from "../shared/schema";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 import { gradeQuiz } from "../shared/lesson-result-email";
 
@@ -18,6 +18,15 @@ const { db, dbPool } = await import("../server/db");
 const { lessonResultsRouter, roundKeyOf, sendLessonResult, sendPracticeResult, setResultSender } = await import("../server/lesson-result-email");
 
 const sent: Array<{ subject: string; html: string; to: string }> = [];
+/** S4: a fixture első feladata gépileg szigorított csoporttal (a minta egy szava kötelező, `tightened`-ként jelölve). */
+const tightenedLesson = () => {
+  const l = structuredClone(fusionFixture());
+  const t = l.experience!.tasks[0];
+  t.required = [...t.required, ["kötelezőszó"]];
+  t.tightened = [["kötelezőszó"]];
+  t.sample = `${t.sample} kötelezőszó`;
+  return l;
+};
 setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); });
 const lesson = fusionFixture();
 let base = "";
@@ -27,6 +36,7 @@ before(async () => {
   await db.insert(lessons).values([
     { id: "result-published", mapId: "result-map", json: lesson, version: 1, publishedAt: new Date() },
     { id: "result-draft", mapId: "result-map", json: lesson, version: 2 },
+    { id: "result-tightened", mapId: "result-map", json: tightenedLesson(), version: 1, publishedAt: new Date() },
   ]);
   const app = express();
   app.use(express.json());
@@ -99,4 +109,66 @@ test("valódi DB (review #280): a meghiúsult címzett pótolható — a másodi
   const third = await sendLessonResult({ lessonId: "result-published", roundKey: roundKeyOf("t", "quiz", "round-retry"), learner: "Vendég tanuló", graded }, false);
   assert.deepEqual(third, { sent: 0, duplicate: true });
   setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); });
+});
+
+/* Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény + a szigorítás automatikus lazítása, valódi DB-n és HTTP-n. */
+test("S4b: a feladatkör beküldése feladatonként egy névtelen sort ír; ugyanaz a kör újra nem duplikál; tanulói szöveg nincs", async () => {
+  const task = lesson.experience!.tasks[0];
+  const post = () => fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind: "tasks", roundId: "round-s4b", answers: { [task.id]: task.sample }, fingerprint: "fp-s4b" }) });
+  const mailsBefore = sent.length;
+  assert.equal((await post()).status, 202);
+  await waitFor(() => sent.length === mailsBefore + 2); // a háttérlevél is lezárul (a pool a tesztek végén zárul)
+  // A vendég kör kulcsa ugyanaz, mint a levélé (who = guest:<fingerprint>); a korábbi teszt köre külön kulcs.
+  const mine = () => db.select().from(taskResults).where(and(eq(taskResults.lessonId, "result-published"), eq(taskResults.roundKey, roundKeyOf("guest:fp-s4b", "tasks", "round-s4b"))));
+  let rows: Array<typeof taskResults.$inferSelect> = [];
+  for (let i = 0; i < 50 && !rows.length; i++) { await new Promise(r => setTimeout(r, 50)); rows = await mine(); }
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].taskId, task.id);
+  assert.equal(rows[0].finalState, "ok");
+  assert.equal(rows[0].tightenedOnlyMiss, false);
+  assert.match(rows[0].contributor, /^[a-f0-9]{64}$/, "álnevesített lenyomat, nem nyers azonosító");
+  assert.equal(JSON.stringify(rows[0]).includes(task.sample), false, "a válasz szövege nincs tárolva");
+  assert.equal((await post()).status, 202);
+  await new Promise(r => setTimeout(r, 300));
+  assert.equal((await mine()).length, 1, "a kör nem duplikál");
+});
+
+test("S4c: a küszöb alatt nincs lazítás; ≥ 20 kör és ≥ 40 % téves elutasítás után a szigorított csoport bónusz lesz, a verzió nő", async () => {
+  const { contributorKey, maybeRelaxTightening, RELAX_MIN_ANSWERED } = await import("../server/task-results");
+  const { rubricHash } = await import("../shared/lesson-result-email");
+  // S7: a lazítás workflow alatt fut; a futás tulajdonosa a lecke gyártója (a térkép `createdBy`-ja).
+  await db.insert(users).values({ id: "s4c-owner" });
+  await db.update(knowledgeMaps).set({ createdBy: "s4c-owner" }).where(eq(knowledgeMaps.id, "result-map"));
+  const tightenedTask = tightenedLesson().experience!.tasks[0];
+  const taskId = tightenedTask.id;
+  const row = (i: number, falseReject: boolean, who = `c${i}`, hash = rubricHash(tightenedTask)) => ({ lessonId: "result-tightened", taskId, roundKey: roundKeyOf("s4c", String(i)),
+    contributor: contributorKey(who), rubricHash: hash, detState: falseReject ? "partial" as const : "ok" as const, finalState: "ok" as const, arbiterRaised: falseReject, tightenedOnlyMiss: falseReject });
+  // Review #340 (P1): egyetlen közreműködő 30 körrel (kliens által választott kör-azonosítókkal) sem lazít.
+  await db.insert(taskResults).values(Array.from({ length: 30 }, (_, i) => row(1000 + i, true, "egy-kliens")));
+  assert.deepEqual(await maybeRelaxTightening("result-tightened", [taskId]), [], "egy közreműködő = 1, a küszöb alatt");
+  await db.delete(taskResults).where(eq(taskResults.lessonId, "result-tightened"));
+  // Review #340 (P2): a régi rubrikára (más lenyomat) adott eredmények nem számítanak.
+  await db.insert(taskResults).values(Array.from({ length: 30 }, (_, i) => row(2000 + i, true, `regi${i}`, "0".repeat(64))));
+  assert.deepEqual(await maybeRelaxTightening("result-tightened", [taskId]), [], "régi rubrika eredményei nem számítanak");
+  await db.delete(taskResults).where(eq(taskResults.lessonId, "result-tightened"));
+  await db.insert(taskResults).values(Array.from({ length: RELAX_MIN_ANSWERED - 1 }, (_, i) => row(i, i < 10)));
+  assert.deepEqual(await maybeRelaxTightening("result-tightened", [taskId]), [], "19 kör: a küszöb alatt");
+  await db.insert(taskResults).values(row(99, false));
+  const relaxed = await maybeRelaxTightening("result-tightened", [taskId]);
+  assert.deepEqual(relaxed, [taskId]);
+  const [saved] = await db.select().from(lessons).where(eq(lessons.id, "result-tightened"));
+  const t = (saved.json as typeof lesson).experience!.tasks[0];
+  assert.equal(saved.version, 2);
+  // Review #340 (P1): a csoport nem kerül ki (a pont sehol sem csökkenhet), hanem a többi kötelező fogalommal is teljesül.
+  assert.equal(t.required.length, tightenedTask.required.length);
+  const relaxedGroup = t.required.find(g => g[0] === "kötelezőszó")!;
+  assert.ok(tightenedTask.required.filter(g => g[0] !== "kötelezőszó").flat().every(m => relaxedGroup.includes(m)), JSON.stringify(t.required));
+  assert.deepEqual(t.relaxedTightening?.previousRequired, tightenedTask.required, "a pontos előállapot mentve");
+  assert.equal(t.tightened, undefined);
+  assert.deepEqual({ answered: t.relaxedTightening?.answered, falseRejects: t.relaxedTightening?.falseRejects }, { answered: 20, falseRejects: 10 });
+  assert.deepEqual(await maybeRelaxTightening("result-tightened", [taskId]), [], "már lazított: nincs második módosítás");
+  assert.equal((await db.select().from(lessons).where(eq(lessons.id, "result-tightened")))[0].version, 2);
+  const runs = await db.execute(sql`select snapshot->>'state' as state, snapshot->'definition'->>'mode' as mode from lesson_workflow_runs where owner_id = 's4c-owner'`);
+  assert.ok(runs.rows.some((r) => (r as { mode: string; state: string }).mode === "relax" && (r as { state: string }).state === "done"), JSON.stringify(runs.rows));
 });

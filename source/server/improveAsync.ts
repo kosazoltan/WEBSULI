@@ -20,6 +20,7 @@ import { executeWorkflow, workflowPhase, workflowSkillPrompt, workflowFinding } 
 import { workflowStore } from "./workflows/store";
 import { htmlBaselineHash } from "./improve/html-baseline";
 import { withSupportSkill } from "./studio/support-skills";
+import { WORKFLOW_STOPPED_MESSAGE } from "../shared/lesson-workflow";
 
 /**
  * Run the AI improvement in background and update the DATABASE record
@@ -30,7 +31,13 @@ import { withSupportSkill } from "./studio/support-skills";
  */
 export class ImproveOutputError extends Error {
   override readonly name = "ImproveOutputError";
-  constructor(message: string, readonly modelIndex: number, readonly canFallback: boolean) { super(message); }
+  // Spec 2026-10-20-okositas-bukott-jelolt: a kapun bukott jelölt (diagnosztikának az `error` rekordba kerül; alkalmazni nem lehet).
+  // Review #336: NEM felsorolható mező — a hibaobjektum naplózásakor (cause) a nem publikált tartalom ne kerüljön a szervernaplóba.
+  declare readonly candidate?: string;
+  constructor(message: string, readonly modelIndex: number, readonly canFallback: boolean, readonly problems: string[] = [], candidate?: string) {
+    super(message);
+    Object.defineProperty(this, "candidate", { value: candidate, enumerable: false, writable: false });
+  }
 }
 
 async function processImprovementJob(
@@ -46,7 +53,7 @@ async function processImprovementJob(
     } catch (error) {
       if (!(error instanceof ImproveOutputError) || !error.canFallback) throw error;
       logger.warn(`[IMPROVE] Record ${dbRecordId}: a kimenet érvénytelen (${error.message.slice(0, 200)}) — újragenerálás a tartalék modellen.`);
-      await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey, { startModelIndex: error.modelIndex + 1, isOutputRetry: true });
+      await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey, { startModelIndex: error.modelIndex + 1, isOutputRetry: true, previousProblems: error.problems });
     }
     await workflowPhase("readback");
     const saved = await storage.getImprovedHtmlFile(dbRecordId);
@@ -56,7 +63,7 @@ async function processImprovementJob(
 }
 
 async function processImprovementCore(dbRecordId: string, originalFile: HtmlFile, customPrompt: string | undefined, userId: string, anthropicKey: string,
-  opts: { startModelIndex?: number; isOutputRetry?: boolean; retryOnOutputFailure?: boolean } = {}) {
+  opts: { startModelIndex?: number; isOutputRetry?: boolean; retryOnOutputFailure?: boolean; previousProblems?: string[] } = {}) {
   const contentSizeKB = Buffer.byteLength(originalFile.content, 'utf8') / 1024;
   // AUDIT 2026-09-01: a 15 perces abort-timer azonosítója a catch-ágban is elérhető legyen
   let abortTimeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -160,6 +167,9 @@ ${specBlock}
 ${customPrompt ? `## EGYEDI UTASÍTÁSOK (FONTOS - KÖVESD EZEKET!)
 ${customPrompt}
 
+` : ''}${opts.previousProblems?.length ? `## AZ ELŐZŐ PRÓBA ZÁRÓ ELLENŐRZÉSÉNEK HIBÁI (ezeket MIND javítsd; a gépi kapu ugyanezt méri)
+${opts.previousProblems.join('\n').slice(0, 4000)}
+
 ` : ''}## MODERNIZÁLANDÓ HTML TARTALOM
 Az alábbi HTML kódot alakítsd át a fenti szabályok szerint. ŐRIZD MEG A TELJES TARTALMAT!
 
@@ -218,6 +228,12 @@ ${originalFile.content}
     const MAX_ATTEMPTS = MAX_RETRIES + 1; // +1 for fallback model attempt
 
     for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
+      // Review #366 (spec 2026-10-22-elmaradt-feladatok, S3): a tulajdonos leállítása után nincs új szolgáltatói próba / tartalékmodell —
+      // adatbázisból ellenőrizve, a cikluson KÍVÜL dobva (a retry-ág nem nyeli el).
+      if (attempt > 0) {
+        const current = await storage.getImprovedHtmlFile(dbRecordId).catch(() => undefined);
+        if (current?.status === 'error' && current.improvementNotes === WORKFLOW_STOPPED_MESSAGE) throw new Error(WORKFLOW_STOPPED_MESSAGE);
+      }
       try {
         fullContent = '';
         lastLogTime = Date.now();
@@ -335,7 +351,7 @@ ${originalFile.content}
 
     const aiResponse = { content: fullContent };
 
-    const outputError = (message: string) => new ImproveOutputError(message, currentModelIndex, currentModelIndex < MODEL_CHAIN.length - 1);
+    const outputError = (message: string, problems: string[] = [], candidate?: string) => new ImproveOutputError(message, currentModelIndex, currentModelIndex < MODEL_CHAIN.length - 1, problems, candidate);
     if (!aiResponse || !aiResponse.content) {
       throw outputError('Az AI nem adott vissza választ');
     }
@@ -524,12 +540,22 @@ ${originalFile.content}
     // the problem list, so the admin sees exactly why and can re-run.
     const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
     await workflowPhase("gate");
+    // Spec 2026-10-19-okositas-bank-igazitas: a rubrikák gépi igazítása a saját mintájukhoz a kapu ELŐTT (Stúdió-ággal azonos lépés).
+    const { alignHtmlLessonBank } = await import('./improve/align-html-bank');
+    const alignment = alignHtmlLessonBank(improvedHtml);
+    if (alignment.aligned.length + alignment.narrowed.length + alignment.modeFlipped.length + alignment.dropped.length > 0) {
+      logger.info(`[IMPROVE] Record ${dbRecordId}: gépi bankjavítás — szűkítve: ${alignment.narrowed.join(', ') || '-'}; módváltás: ${alignment.modeFlipped.join(', ') || '-'}; elhagyva: ${alignment.dropped.join(', ') || '-'}`);
+    }
+    if (alignment.html !== improvedHtml) {
+      improvedHtml = alignment.html;
+      logger.info(`[IMPROVE] Record ${dbRecordId}: rubrika a mintához igazítva: ${alignment.aligned.join(', ')}`);
+    }
     const verification = verifyLessonMethodHtml(improvedHtml);
     if (!verification.ok) {
       logger.error(
         `[IMPROVE] Record ${dbRecordId}: ❌ Verification gate rejected the output: ${verification.problems.join(' | ')}`,
       );
-      throw outputError(`A javított tananyag nem ment át a záró ellenőrzésen: ${verification.problems.join(' ')}`);
+      throw outputError(`A javított tananyag nem ment át a záró ellenőrzésen: ${verification.problems.join(' ')}`, verification.problems, improvedHtml);
     }
     logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ Verification gate passed (${verification.problems.length} problem)`);
 
@@ -563,13 +589,22 @@ ${originalFile.content}
     }
 
     // ✅ UPDATE the DB record with error status
+    // Spec 2026-10-22-elmaradt-feladatok (S3) + review #366: ha a tulajdonos leállította, a leállítás megjegyzése marad — feltételes UPDATE
+    // (atomikus: nincs előolvasás és felülírás közti versenyhelyzet).
+    let stoppedByOwner = false;
     try {
-      await storage.updateImprovedHtmlFileStatus(dbRecordId, 'error', undefined, userMessage);
+      // Spec 2026-10-20-okositas-bukott-jelolt: a kapun bukott jelölt megmarad (diagnosztika); `error` állapotban nem alkalmazható.
+      if (error instanceof ImproveOutputError && error.candidate) {
+        await storage.updateImprovedHtmlFileContentAndStatus(dbRecordId, error.candidate, 'error')
+          .catch((saveError: unknown) => logger.warn(`[IMPROVE] Record ${dbRecordId}: a bukott jelölt nem menthető`, saveError));
+      }
+      stoppedByOwner = !(await storage.failImprovedHtmlFileUnlessStopped(dbRecordId, userMessage, WORKFLOW_STOPPED_MESSAGE));
+      if (stoppedByOwner) logger.info(`[IMPROVE] Record ${dbRecordId}: a tulajdonos leállította`);
     } catch (dbError: unknown) {
       const dbErrorTyped = dbError instanceof Error ? dbError : new Error(String(dbError));
       logger.error(`[IMPROVE] Record ${dbRecordId}: Failed to save error status:`, dbErrorTyped.message);
     }
-    throw new Error(userMessage, { cause: error });
+    throw new Error(stoppedByOwner ? WORKFLOW_STOPPED_MESSAGE : userMessage, { cause: error });
   }
 }
 
@@ -674,7 +709,8 @@ export function registerImprovementRoutes(adminRouter: Router) {
     const { jobId } = req.params;
 
     // ✅ Read from DATABASE, not in-memory Map
-    const record = await storage.getImprovedHtmlFile(jobId);
+    // Spec 2026-10-19-eroforras-s2a: könnyű állapot-olvasás; a teljes rekord (HTML) csak az időtúllépési ágban kell.
+    const record = await storage.getImprovedHtmlFileStatus(jobId);
 
     if (!record) {
       return res.status(404).json({ status: 'not_found', message: 'Job nem található' });
@@ -698,11 +734,17 @@ export function registerImprovementRoutes(adminRouter: Router) {
               improvedFile: { id: freshRecord.id, title: freshRecord.title, status: freshRecord.status }
             });
           }
+          // Review #336: a közben hibára zárt rekordnál (benne a bukott, csak diagnosztikai jelölttel) a hiba a válasz — a lenti
+          // tartalomalapú helyreállítás CSAK `processing` rekordra fut, különben egy kapun bukott jelölt alkalmazhatóvá válna.
+          if (freshRecord.status === 'error') {
+            return res.json({ status: 'error', elapsed, message: freshRecord.improvementNotes || 'Ismeretlen hiba' });
+          }
+          return res.json({ status: 'completed', elapsed, improvedFile: { id: freshRecord.id, title: freshRecord.title, status: freshRecord.status } });
         }
 
         // Check if content was already written (AI finished but race condition occurred)
         // BUG FIX: Use freshRecord content (not stale record) for validity check
-        const checkContent = freshRecord?.content || record.content;
+        const checkContent = freshRecord?.content ?? "";
         const contentLength = checkContent?.length || 0;
         const hasValidContent = contentLength > 200 && 
           !checkContent?.includes('Feldolgozás alatt') &&

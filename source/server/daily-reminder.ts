@@ -8,7 +8,7 @@ import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { getMaterialPreviewUrl } from "./utils/config";
 import { isSchoolDay, schoolYearPosition } from "../shared/school-calendar";
-import { displayTopic, firstNameOf, learnerHistoryFrom, pickSmartMaterial, reminderHtml, reminderSubject } from "../shared/daily-reminder";
+import { displayTopic, firstNameOf, learnerHistoryFrom, NEW_LESSON_FOOTER, NEW_LESSON_LABEL, newLessonRecipients, newLessonSubject, pickSmartMaterial, reminderHtml, reminderSubject, repeatOnlyPlan } from "../shared/daily-reminder";
 import { motivationFor } from "../shared/motivation";
 import { logger } from "./lib/logger";
 
@@ -96,12 +96,13 @@ export async function planDailyReminders(now: Date): Promise<PlannedReminder[]> 
 export type ReminderRun = { day: string; skipped?: string; sent: number; failed: number; duplicate: number; error?: string };
 
 /** A mai levelek kiküldése — címenként naponta egyszer (a sikertelen egyszer újrapróbálható). Sosem dob. */
-export async function runDailyReminders(now: Date, opts: { pauseMs?: number } = {}): Promise<ReminderRun> {
+export async function runDailyReminders(now: Date, opts: { pauseMs?: number; repeatOnly?: boolean } = {}): Promise<ReminderRun> {
   const { iso, date } = budapestDay(now);
   const result: ReminderRun = { day: iso, sent: 0, failed: 0, duplicate: 0 };
   try {
     if (!isSchoolDay(date)) return { ...result, skipped: "nem tanítási nap" };
-    const plan = await planDailyReminders(now);
+    // Spec 2026-10-22-uj-lecke-ertesito: az ütemezett futás csak az ismétlést küldi (az új anyagról az elkészültekor megy értesítő).
+    const plan = opts.repeatOnly ? repeatOnlyPlan(await planDailyReminders(now)) : await planDailyReminders(now);
     const motivationDate = date;
     for (const p of plan) {
       // Foglalás: új sor, vagy a sikertelen sor újrapróbája — a már kiküldött / folyamatban lévő nap nem kap második levelet.
@@ -169,7 +170,62 @@ export async function sendTestReminder(to: string, now: Date): Promise<{ student
 /** Minden tanítási nap 6:45-kor, magyar idő szerint; csak éles környezetben. Hiba esetén 7:15-kor egy pótfutás. */
 export function setupDailyReminders(): void {
   if (process.env.NODE_ENV !== "production") return;
-  cron.schedule("45 6 * * 1-5", () => { void runDailyReminders(new Date()); }, { timezone: REMINDER_TIMEZONE });
-  cron.schedule("15 7 * * 1-5", () => { void runDailyReminders(new Date()); }, { timezone: REMINDER_TIMEZONE });
-  logger.info("[DAILY-REMINDER] ütemezve: tanítási napokon 6:45 (pótfutás 7:15), Europe/Budapest");
+  // Spec 2026-10-22-uj-lecke-ertesito: reggel csak az újra ajánlott (ismétlendő) anyag megy.
+  cron.schedule("45 6 * * 1-5", () => { void runDailyReminders(new Date(), { repeatOnly: true }); }, { timezone: REMINDER_TIMEZONE });
+  cron.schedule("15 7 * * 1-5", () => { void runDailyReminders(new Date(), { repeatOnly: true }); }, { timezone: REMINDER_TIMEZONE });
+  logger.info("[DAILY-REMINDER] ütemezve: tanítási napokon 6:45 (pótfutás 7:15), Europe/Budapest — csak ismétlés");
+}
+
+/**
+ * Spec 2026-10-22-uj-lecke-ertesito: az új Stúdió-lecke értesítője — az évfolyam aktív, nevesített tanulói címeire, személyes linkkel.
+ * Sosem dob; a naplóba nem kerül név vagy cím.
+ */
+/**
+ * Review #365: az új-lecke értesítők közös, egymás utáni sorban mennek (az egyidejű publikálások összesített küldési sebessége is a
+ * Resend-korlát alatt marad); a leállítás a sor végét korlátos ideig kivárja.
+ */
+let newLessonChain: Promise<unknown> = Promise.resolve();
+export function enqueueNewLessonNotification(lesson: { htmlFileId: string; title: string; classroom: number }): Promise<{ sent: number; failed: number }> {
+  const next = newLessonChain.then(() => notifyNewLesson(lesson));
+  newLessonChain = next.catch(() => undefined);
+  return next;
+}
+/** A még futó / sorban álló új-lecke értesítők vége (a leállítás korlátos ideig kivárja). */
+export function pendingNewLessonNotifications(): Promise<unknown> {
+  return newLessonChain;
+}
+
+export async function notifyNewLesson(lesson: { htmlFileId: string; title: string; classroom: number }, opts: { pauseMs?: number } = {}): Promise<{ sent: number; failed: number }> {
+  const out = { sent: 0, failed: 0 };
+  try {
+    const recipients = newLessonRecipients(await storage.getActiveExtraEmails(), lesson.classroom);
+    if (!recipients.length) return out;
+    const learnerIds = [...new Set(recipients.map(r => r.learnerId).filter((id): id is string => Boolean(id)))];
+    const versions = new Map(learnerIds.length ? (await db.select({ id: learners.id, tokenVersion: learners.tokenVersion }).from(learners).where(inArray(learners.id, learnerIds))).map(l => [l.id, l.tokenVersion]) : []);
+    const { date } = budapestDay(new Date());
+    for (const r of recipients) {
+      const first = firstNameOf(r.studentName!.trim());
+      const url = personalUrl(getMaterialPreviewUrl(lesson.htmlFileId), r.learnerId && versions.has(r.learnerId) ? learnerTokenFor(r.learnerId, versions.get(r.learnerId)!) : null);
+      const mail = { subject: newLessonSubject(first, lesson.title), html: reminderHtml({ first, title: lesson.title, url, motivation: motivationFor(first, date), label: NEW_LESSON_LABEL, footer: NEW_LESSON_FOOTER }) };
+      try {
+        await send(mail.subject, mail.html, r.email);
+        out.sent++;
+      } catch {
+        // Review #365: egy újrapróba rövid várakozás után (pl. a Resend 2 kérés/mp korlátja).
+        try {
+          if (opts.pauseMs !== 0) await new Promise(res => setTimeout(res, 1_500));
+          await send(mail.subject, mail.html, r.email);
+          out.sent++;
+        } catch {
+          out.failed++;
+        }
+      }
+      // Resend: legfeljebb 2 kérés/másodperc.
+      if (opts.pauseMs !== 0) await new Promise(res => setTimeout(res, opts.pauseMs ?? 600));
+    }
+    logger.info(`[NEW-LESSON] értesítő ${lesson.htmlFileId}: elküldve ${out.sent}, hiba ${out.failed}`);
+  } catch (error) {
+    logger.error("[NEW-LESSON] az értesítő nem ment el:", error instanceof Error ? error.name : "ismeretlen");
+  }
+  return out;
 }

@@ -95,9 +95,30 @@ test("a törzsszöveg legkisebb mérete a mesterutasítás szerint (§2.5): 1–
   for (const m of css.matchAll(/font-size:\s*(\d+)px/g)) assert.ok(Number(m[1]) >= 13, `font-size ${m[1]}px`);
 });
 
-test("a témás lecke nem animál, és a fókusz a referencia 3px-es borostyán kerete", () => {
+// Spec-változás (docs/specs/2026-10-17-fokuszgyuru-ketszinu.md): a referencia egyszínű borostyán kerete világos felületen
+// csak ~1,7–1,96:1 volt (§2.6: ≥ 3:1) — a borostyán körvonal mellé sötét belső gyűrű kerül, a kiválasztott fül kerete marad.
+test("a témás lecke nem animál, és a fókusz kétszínű gyűrű (borostyán körvonal + sötét belső gyűrű)", () => {
   assert.doesNotMatch(css, /animation\s*:/);
-  assert.match(css, /:focus-visible \{\s*outline: 3px solid #F4AB37; outline-offset: 3px;/);
+  assert.match(css, /:focus-visible \{\s*outline: 3px solid #F4AB37; outline-offset: 3px; box-shadow: 0 0 0 3px #10233C;/);
+  assert.match(css, /\.fusion-tabs button\[aria-selected="true"\]:focus-visible \{\s*box-shadow: inset 0 0 0 2px var\(--ws-accent\), 0 0 0 3px #10233C;/);
+  // Review #367: a párosító kijelölt eleme fókuszban is megtartja a kijelölési gyűrűt.
+  assert.match(css, /\[data-try="match"\] button\[aria-pressed="true"\]:focus-visible \{\s*box-shadow: inset 0 0 0 2px #10B981, 0 0 0 3px #10233C;/);
+});
+
+test("a fókuszgyűrű valamelyik színe minden téma felületén, csempéjén és halvány felületén ≥ 3:1 (§2.6)", () => {
+  const rule = /:focus-visible \{\s*outline: 3px solid (#[0-9A-Fa-f]{6});[^}]*box-shadow: 0 0 0 3px (#[0-9A-Fa-f]{6});/.exec(css);
+  assert.ok(rule, "fókuszszabály");
+  const [, amber, dark] = rule!;
+  assert.equal(amber.toUpperCase(), "#F4AB37", "a referencia borostyánja megmarad");
+  assert.ok(contrastRatio(amber, dark) >= 3, "a két gyűrű egymástól is elválik");
+  const quiet = tokenBlock('[data-band][data-experience][data-ws-theme]:has(.fusion-view[data-quiet="true"]) {');
+  const quietTok = (prop: string) => { const v = new RegExp(`${prop}:\\s*(#[0-9A-Fa-f]{6})`).exec(quiet)?.[1]; assert.ok(v, prop); return v!; };
+  const backgrounds: Array<[string, string]> = [];
+  for (const id of DESIGN_THEME_IDS) for (const prop of ["--ws-surface", "--ws-panel", "--ws-soft"]) backgrounds.push([`${id} ${prop}`, cssToken(id, prop)]);
+  for (const prop of ["--ws-surface", "--ws-panel", "--ws-soft"]) backgrounds.push([`Csendes nézet ${prop}`, quietTok(prop)]);
+  const problems = backgrounds.filter(([, bg]) => Math.max(contrastRatio(amber, bg), contrastRatio(dark, bg)) < 3)
+    .map(([what, bg]) => `${what} ${bg}: ${contrastRatio(amber, bg).toFixed(2)} / ${contrastRatio(dark, bg).toFixed(2)}`);
+  assert.deepEqual(problems, []);
 });
 
 // Review #267: a fejezetsorszám (1rem-es szöveg) a kimért fő gombpárt kapja, nem a nyers főszínen fehéret.
@@ -117,4 +138,24 @@ test("a Csendes nézet a témás tokeneket is felülírja, és a halk paletta sz
   }
   assert.deepEqual(problems, []);
   assert.match(block, /background-image: none;/);
+});
+
+// Spec 2026-10-19-evfolyam-arculat-lathato: a sáv háttér-színátmenete és kísérőszínei — egy forrás (TS) és a CSS egyezik; minden
+// szövegszín mindkét végponton olvasható; a sávok háttere egymástól különbözik (a tulajdonos „egyszínű” jelzése ellen).
+test("évfolyam-arculat: hero-színátmenet és kísérőszínek — CSS ↔ TS, kontraszt ≥ 4,5:1, öt különböző sávháttér", () => {
+  const map = { "--ws-hero-from": "heroFrom", "--ws-hero-to": "heroTo", "--ws-accent-2": "accent2", "--ws-accent-3": "accent3" } as const;
+  const problems: string[] = [];
+  for (const id of DESIGN_THEME_IDS) {
+    const t = DESIGN_THEMES[id];
+    for (const [prop, key] of Object.entries(map)) assert.equal(cssToken(id, prop).toUpperCase(), t[key].toUpperCase(), `${id} ${prop}`);
+    for (const end of [t.heroFrom, t.heroTo]) {
+      for (const [fg, what] of [[t.ink, "szöveg"], [t.muted, "halvány szöveg"], [id === "future" ? t.ink : t.deep, "cím"]] as const) {
+        const r = contrastRatio(fg, end);
+        if (r < 4.5) problems.push(`${id}: ${what} ${fg} a ${end} háttéren ${r.toFixed(2)}`);
+      }
+    }
+  }
+  assert.deepEqual(problems, []);
+  assert.equal(new Set(DESIGN_THEME_IDS.map((id) => DESIGN_THEMES[id].heroFrom)).size, DESIGN_THEME_IDS.length, "öt különböző sávháttér");
+  assert.match(css, /background-image:\s*linear-gradient\(170deg, var\(--ws-hero-from/);
 });

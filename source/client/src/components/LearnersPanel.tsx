@@ -1,6 +1,11 @@
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Copy, RefreshCw, Send, ShieldOff, UserRound } from "lucide-react";
+import { Copy, QrCode, RefreshCw, Save, Send, ShieldOff, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { interestsFromText, NEWSLETTER_LIMITS } from "@shared/newsletter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +17,60 @@ import type { LearnerReport } from "@shared/learner-report";
  * Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S4): tanulónként az utolsó aktivitás, a heti aktív napok és az utolsó
  * eredmények; párosító link (pl. közös tablethez) és a párosítás visszavonása.
  */
-type LearnerRow = { id: string; name: string; grade: number; emails: number; report: LearnerReport; pairLink: string | null };
+/**
+ * Spec 2026-10-21-tanulo-parositas: a párosító link QR-kódként — a gyerek telefonjának kamerájával beolvasva az eszköz azonnal párosul,
+ * e-mail nélkül (mért: a gyerekek a napi levelet nem látják, ezért az eszközük sosem párosult, és vendégként tanultak).
+ */
+function PairQr({ link, name }: { link: string; name: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    // Review #362: új link (pl. visszavonás után) → a régi kód és hibaállapot nem maradhat látható.
+    setSrc(null);
+    setError(false);
+    let alive = true;
+    QRCode.toDataURL(link, { margin: 1, width: 240, errorCorrectionLevel: "M" })
+      .then((url) => { if (alive) setSrc(url); })
+      .catch(() => { if (alive) setError(true); });
+    return () => { alive = false; };
+  }, [link]);
+  if (error) return <p className="text-sm text-destructive">A QR-kód nem készült el — használd a „Párosító link másolása” gombot.</p>;
+  return <figure className="space-y-1" data-testid="pair-qr">
+    {src ? <img src={src} width={240} height={240} alt={`${name} párosító QR-kódja`} className="rounded border bg-white p-1" /> : <div className="h-[240px] w-[240px] animate-pulse rounded bg-muted" />}
+    <figcaption className="max-w-[240px] text-xs text-muted-foreground">Ez a kód a te képernyődön jelenik meg: {name} a saját telefonja kamerájával erről olvassa be, és megnyitja a linket — minden böngészőben, amelyet használ, egyszer. Ha nincs kéznél másik eszköz, küldd el neki a linket üzenetben („Párosító link másolása”), és a telefonján nyissa meg.</figcaption>
+  </figure>;
+}
+
+type LearnerRow = { id: string; name: string; grade: number; emails: number; report: LearnerReport; pairLink: string | null; interests: string[]; newsletter: boolean };
+
+/** „Mai felfedezés” hírlevél (docs/specs/2026-10-19-mai-felfedezes-hirlevel.md, S1): érdeklődés + napi hírlevél kapcsoló. */
+function NewsletterPrefs({ learner }: { learner: LearnerRow }) {
+  const { toast } = useToast();
+  const [text, setText] = useState(learner.interests.join(", "));
+  const [enabled, setEnabled] = useState(learner.newsletter);
+  const save = useMutation({
+    mutationFn: () => apiRequest<{ interests: string[]; newsletter: boolean }>("PATCH", `/api/admin/learners/${learner.id}`, { interests: interestsFromText(text), newsletter: enabled }),
+    // Review #312: a mentett (szerveroldali) érték a lista frissítésével jön vissza — a szerkesztő a kulcsa miatt újraindul vele;
+    // a válasz nem írja felül a mentés közbeni bevitelt (közben a mező és a kapcsoló tiltott).
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/admin/learners"] });
+      if (res.newsletter && !res.interests.length) toast({ title: "Mentve — de érdeklődés nélkül nem megy hírlevél", description: "Adj meg legalább egy érdeklődési kört.", variant: "destructive" });
+      else toast({ title: "Mentve", description: res.newsletter ? "A napi felfedezés-hírlevél 16:00-kor megy." : "A hírlevél kikapcsolva." });
+    },
+    onError: (error) => toast({ title: "A mentés nem sikerült", description: error instanceof Error ? error.message : undefined, variant: "destructive" }),
+  });
+  return (
+    <div className="space-y-2 rounded-md border p-2" data-testid={`learner-newsletter-${learner.id}`}>
+      <label className="text-sm font-medium" htmlFor={`interests-${learner.id}`}>Érdeklődés (vesszővel elválasztva, legfeljebb {NEWSLETTER_LIMITS.tags})</label>
+      <Input id={`interests-${learner.id}`} value={text} onChange={(e) => setText(e.target.value)} disabled={save.isPending} placeholder="pl. repülők, történelem, elektromosság" />
+      <label className="flex items-center gap-2 text-sm">
+        <Switch checked={enabled} onCheckedChange={setEnabled} disabled={save.isPending} aria-label="Napi felfedezés-hírlevél" />
+        Napi felfedezés-hírlevél 16:00-kor
+      </label>
+      <Button size="sm" variant="outline" onClick={() => save.mutate()} disabled={save.isPending}><Save className="h-4 w-4 mr-1" /> Mentés</Button>
+    </div>
+  );
+}
 
 export default function LearnersPanel() {
   const { toast } = useToast();
@@ -32,6 +90,14 @@ export default function LearnersPanel() {
     onSuccess: (r) => toast({ title: "Heti összefoglaló elküldve", description: `${r.sent} címzettnek.` }),
     onError: () => toast({ title: "A heti összefoglaló nem ment el", variant: "destructive" }),
   });
+  // Spec 2026-10-21-tanulo-parositas („Kiegészítés”): párosítási útmutató — gyereklevél a saját linkkel, szülőlevél az adminoknak.
+  const guide = useMutation({
+    mutationFn: () => apiRequest<{ children: number; parents: number; failed: number }>("POST", "/api/admin/learners/pairing-guide"),
+    onSuccess: (r) => toast({ title: "Párosítási útmutató elküldve", description: `${r.children} gyereklevél, ${r.parents} szülőlevél${r.failed ? `, ${r.failed} hiba` : ""}.`,
+      ...(r.failed ? { variant: "destructive" as const } : {}) }),
+    onError: () => toast({ title: "Az útmutató nem ment el", variant: "destructive" }),
+  });
+  const [qrFor, setQrFor] = useState<string | null>(null);
   const copy = async (link: string | null) => {
     if (!link) return;
     try {
@@ -46,9 +112,12 @@ export default function LearnersPanel() {
     <div className="space-y-3" data-testid="learners-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-bold flex items-center gap-2"><UserRound className="h-5 w-5" /> Tanulók</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}><RefreshCw className="h-4 w-4 mr-1" /> Frissítés</Button>
           <Button size="sm" onClick={() => weekly.mutate()} disabled={weekly.isPending} data-testid="learners-weekly"><Send className="h-4 w-4 mr-1" /> Heti összefoglaló most</Button>
+          <Button variant="outline" size="sm" disabled={guide.isPending} data-testid="learners-pairing-guide"
+            onClick={() => { if (window.confirm("Minden tanuló megkapja e-mailben a saját párosító linkjét és az útmutatót, a szülők (admin-címzettek) pedig a párosítás módjait. Küldöd?")) guide.mutate(); }}>
+            <QrCode className="h-4 w-4 mr-1" /> Párosítási útmutató küldése</Button>
         </div>
       </div>
       {isLoading && <Skeleton className="h-40 w-full" />}
@@ -70,13 +139,17 @@ export default function LearnersPanel() {
                   ))}
                 </ul>
               ) : <p className="text-sm text-muted-foreground">Még nincs beküldött eredmény.</p>}
+              {/* Review #312: a kulcs a szerver értéke — frissítés vagy más admin módosítása után a szerkesztő azzal indul újra. */}
+              <NewsletterPrefs key={`${l.id}:${l.interests.join("\u0001")}:${l.newsletter}`} learner={l} />
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => void copy(l.pairLink)} disabled={!l.pairLink}><Copy className="h-4 w-4 mr-1" /> Párosító link másolása</Button>
+                <Button variant="outline" size="sm" disabled={!l.pairLink} aria-expanded={qrFor === l.id} onClick={() => setQrFor(qrFor === l.id ? null : l.id)}><QrCode className="h-4 w-4 mr-1" /> Párosító QR-kód</Button>
                 <Button variant="outline" size="sm" disabled={rotate.isPending}
                   onClick={() => { if (window.confirm(`${l.name}: minden párosított eszköz és a régi linkek érvénytelenné válnak. Folytatod?`)) rotate.mutate(l.id); }}>
                   <ShieldOff className="h-4 w-4 mr-1" /> Párosítás visszavonása
                 </Button>
               </div>
+              {qrFor === l.id && l.pairLink && <PairQr key={l.pairLink} link={l.pairLink} name={l.name} />}
             </CardContent>
           </Card>
         ))}

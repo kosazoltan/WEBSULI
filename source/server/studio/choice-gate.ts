@@ -8,7 +8,8 @@ import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
 import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef, misconceptionPath, misconceptionRef, type BankItemRef } from "../../shared/bank-item-ref";
-import { applyLimitRelaxation } from "./limit-policy";
+import { applyLimitRelaxation, splitLimitBlockers } from "./limit-policy";
+import type { LektorNote } from "./lektor";
 
 /** Egy nyitott jelzés a kapunak: a tétel / blokk útvonala, az ok, és az eredete (körlimit / aritmetikai lelet). */
 export type ChoiceFlag = { path: string; message: string; origin?: "limit" | "arithmetic" };
@@ -94,4 +95,24 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
       : `Egyválasztós hiba maradt a bankban, és a tételek kivétele után a bank nem felelne meg — nem publikálható: ${all} (kivétel után: ${after.join("; ")})` };
   }
   return { lesson: reduced, removed: [...removed.keys()], ...(limitRemoved.length ? { trimmed: trimmedSections, limitRelaxed: true as const } : {}) };
+}
+
+/**
+ * Spec 2026-10-20-elakadas-gyokerok-elemzes (R1) + review #331: ha a lektor MINDEN blokkoló jegyzete létező GYAKORLÓBANK-tételre mutat
+ * (`experience.tasks|quiz|methods[i]`), nincs eltérő tanítási megoldás (`solutions[].match === false`), és van bank, a tételek kikerülnek
+ * (a padló a körlimit szabálya szerint lazul); különben hiba. Tanítási elem (ellenőrző blokk, ábra, tévhit) itt NEM vehető ki — az a
+ * tanítás része (a terv szerint a régi megállás). Mért (30 nap): 8 futás állt meg az utolsó lektorkörben kivehető banktétel miatt.
+ */
+export function removeLektorBlockers(lesson: Lesson, blocking: LektorNote[], solutions?: ReadonlyArray<{ match: boolean }>): { lesson: Lesson; removed: string[] } | { error: string } {
+  if (!lesson.experience) return { error: "a leckének nincs gyakorlóbankja" };
+  if ((solutions ?? []).some((sol) => !sol.match)) return { error: "a lektor eltérő tanítási megoldást jelzett" };
+  const nonBank = blocking.filter((n) => !bankItemRef(n.blockPath));
+  if (nonBank.length) return { error: `nem banktétel: ${nonBank.map((n) => `${n.blockPath ?? "—"}: ${n.message}`).join("; ")}` };
+  const split = splitLimitBlockers(lesson, blocking);
+  if (!split.removable.length || split.factual.length || split.incomplete.length) {
+    const rest = [...split.factual, ...split.incomplete].map((n) => `${n.blockPath ?? "—"}: ${n.message}`);
+    return { error: rest.length ? `nem kivehető jegyzet: ${rest.join("; ")}` : "nincs kivehető tétel" };
+  }
+  const removal = resolveChoiceGate(lesson, split.removable);
+  return "error" in removal ? removal : { lesson: removal.lesson, removed: removal.removed };
 }

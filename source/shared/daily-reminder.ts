@@ -75,11 +75,27 @@ export function displayTopic(label: string | null | undefined): string | null {
 
 export const reminderSubject = (first: string, title: string, repeat = false) => repeat ? `${first}, ismételjük: ${title}` : `${first}, a mai tananyagod: ${title}`;
 
+/** Spec 2026-10-22-uj-lecke-ertesito: az új Stúdió-lecke értesítőjének tárgya és címkéje. */
+export const newLessonSubject = (first: string, title: string) => `${first}, új tananyagod érkezett: ${title}`;
+export const NEW_LESSON_LABEL = "ÚJ TANANYAG";
+/** Review #365: az új-lecke értesítő nem reggeli levél — a lábléc az elkészülést nevezi meg. */
+export const NEW_LESSON_FOOTER = "Ezt a levelet a WebSuli akkor küldi, amikor elkészül egy új tananyag az évfolyamodnak. Jó tanulást!";
+
+/** Spec 2026-10-22-uj-lecke-ertesito: az ütemezett reggeli levél csak az ismétlést ajánlja (a 70% alatti eredmény újra). */
+export function repeatOnlyPlan<T extends { repeatPercent?: number }>(plan: readonly T[]): T[] {
+  return plan.filter((p) => p.repeatPercent !== undefined);
+}
+
+/** Spec 2026-10-22-uj-lecke-ertesito: az új lecke címzettjei — aktív, nevesített tanulói cím, amelynek évfolyama a leckéé. */
+export function newLessonRecipients<T extends { email: string; studentName?: string | null; isActive?: boolean | null; classrooms?: readonly number[] | null }>(rows: readonly T[], classroom: number): T[] {
+  return rows.filter((r) => r.isActive !== false && Boolean(r.studentName?.trim()) && Array.isArray(r.classrooms) && r.classrooms[0] === classroom);
+}
+
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-export function reminderHtml(input: { first: string; title: string; topic?: string | null; url: string; motivation: string; repeatPercent?: number | null }): string {
+export function reminderHtml(input: { first: string; title: string; topic?: string | null; url: string; motivation: string; repeatPercent?: number | null; label?: string; footer?: string }): string {
   const { first, title, topic, url, motivation, repeatPercent } = input;
-  const label = typeof repeatPercent === "number" ? `ISMÉTLÉS — MÚLTKOR ${Math.round(repeatPercent)}% LETT` : "A MAI TANANYAGOD";
+  const label = input.label ?? (typeof repeatPercent === "number" ? `ISMÉTLÉS — MÚLTKOR ${Math.round(repeatPercent)}% LETT` : "A MAI TANANYAGOD");
   return `<!doctype html><html lang="hu"><body style="margin:0;background:#0A0E27;font-family:Arial,Helvetica,sans-serif;color:#f8fafc">
 <div style="max-width:560px;margin:0 auto;padding:24px">
 <p style="font-size:22px;font-weight:bold;margin:0 0 8px">Szia, ${esc(first)}!</p>
@@ -90,6 +106,6 @@ export function reminderHtml(input: { first: string; title: string; topic?: stri
 ${topic ? `<p style="font-size:14px;margin:0 0 16px;color:#cbd5e1">Ezt tanuljátok most: ${esc(topic)}</p>` : ""}
 <a href="${esc(url)}" style="display:inline-block;background:#fb923c;color:#0f172a;font-weight:bold;font-size:17px;text-decoration:none;padding:14px 24px;border-radius:999px">Megnyitom a tananyagot</a>
 </div>
-<p style="font-size:12px;color:#94a3b8;margin:20px 0 0">Ezt a levelet a WebSuli küldi minden tanítási reggel. Jó tanulást!</p>
+<p style="font-size:12px;color:#94a3b8;margin:20px 0 0">${esc(input.footer ?? "Ezt a levelet a WebSuli küldi minden tanítási reggel. Jó tanulást!")}</p>
 </div></body></html>`;
 }

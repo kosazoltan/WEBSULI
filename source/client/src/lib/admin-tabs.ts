@@ -23,14 +23,14 @@ export const ADMIN_TAB_GROUPS: AdminTabGroup[] = [
     { value: "lesson-repair", label: "Tananyagjavító", icon: Wrench },
     { value: "improve-materials", label: "Régi anyag okosítása", icon: Wand2 },
   ] },
-  { id: "communication", label: "Kommunikáció", tabs: [
+  { id: "communication", label: "Tanulók és levelek", tabs: [
     { value: "emails", label: "E-mail címzettek", icon: Mail },
     { value: "email-debug", label: "E-mail diagnosztika", icon: Activity },
     { value: "parent-dashboard", label: "Szülői összesítő", icon: GraduationCap },
     // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S4)
     { value: "learners", label: "Tanulók", icon: UserRound },
   ] },
-  { id: "system", label: "Rendszer", tabs: [
+  { id: "system", label: "Rendszer és mentések", tabs: [
     { value: "users", label: "Felhasználók", icon: Users },
     { value: "backup", label: "Mentés és visszaállítás", icon: HardDriveDownload },
     { value: "improvement-backups", label: "Javítási mentések", icon: History },

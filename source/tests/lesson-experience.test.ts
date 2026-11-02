@@ -348,7 +348,13 @@ test("bank patch resolves a mangled ID onto the reviewed item; ambiguity still r
 test("language task repair preserves the taught glossary when the repair sends an empty list", async () => {
   const lesson = standardFusionFixture(), e = lesson.experience!;
   lesson.subject = "angol";
-  const glossary = [{ word: "water", translation: "víz", partOfSpeech: "főnév", example: "Plants need water.", exampleTranslation: "A növényeknek vízre van szükségük." }];
+  // Spec 2026-10-21-nyelvlecke-kiejtes: nyelvleckén a csomag szószedete legalább 4 elem (a kiejtésgyakorló alapja).
+  const glossary = [
+    { word: "water", translation: "víz", partOfSpeech: "főnév", example: "Plants need water.", exampleTranslation: "A növényeknek vízre van szükségük." },
+    { word: "light", translation: "fény", partOfSpeech: "főnév", example: "Plants need light.", exampleTranslation: "A növényeknek fényre van szükségük." },
+    { word: "leaf", translation: "levél", partOfSpeech: "főnév", example: "The leaf is green.", exampleTranslation: "A levél zöld." },
+    { word: "root", translation: "gyökér", partOfSpeech: "főnév", example: "The root drinks water.", exampleTranslation: "A gyökér vizet iszik." },
+  ];
   const tasks = structuredClone(e.tasks); tasks[0].sample = "Az alap és a magasság szorzata.";
   let calls = 0;
   const result = await buildLessonExperience(lesson, [], { call: async () => ++calls === 1

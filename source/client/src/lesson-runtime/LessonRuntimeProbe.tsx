@@ -206,6 +206,8 @@ function probeLesson(search: string): Lesson {
     // Ikonkészlet: a mentéskor rendelt adatbázis-ikon kipróbálása (`&icon=<azonosító>`).
     const icon = q.get("icon");
     if (icon && /^[a-z0-9-]{3,64}$/.test(icon)) lesson.art = { subjectIcon: icon };
+    // Review #367: a párosító gyakorlat a témás leckén (`&match=1`) — a kijelölés fókuszban is látszik.
+    if (q.has("match")) lesson.sections[0].blocks.unshift({ kind: "try", tryKind: "match", spec: { pairs: [{ left: "kutya", right: "dog" }, { left: "macska", right: "cat" }] }, coversConceptIds: lesson.sections[0].blocks.flatMap((b) => ("coversConceptIds" in b ? b.coversConceptIds : [])).slice(0, 1) } as Lesson["sections"][number]["blocks"][number]);
     return lesson;
   }
   const classroom = Number(q.get("classroom"));

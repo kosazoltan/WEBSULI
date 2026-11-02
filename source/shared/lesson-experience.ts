@@ -1,7 +1,8 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
+import { foldCaseUnlessSpelling, isSpellingPrompt } from "./option-key";
 import { z } from "zod";
 import { LESSON_FLAIRS } from "./lesson-visuals";
-import { LESSON_SCORING_VERSION, isExpressionText, referenceValue } from "./answer-value";
+import { LESSON_SCORING_VERSION, ORDER_SCORING_VERSION, PHRASE_SCORING_VERSION, POLYNOMIAL_SCORING_VERSION, TYPED_SCORING_VERSION, isValidReference } from "./answer-value";
 
 /** Pedagogy shared by the structured runtime and the standalone HTML author. */
 export const LEGACY_LESSON_METHOD_VERSION = "fusion-7.4-1" as const;
@@ -26,11 +27,11 @@ const binding = { id: text(64), sectionIndex: z.number().int().min(0), coversCon
 
 /** Spec 2026-09-30 (U1, C13): típusos részeredmény zárt matematikai feladathoz — az érték dönt, nem a kulcsszó. */
 export const typedAnswerSchema = z.object({
-  part: text(40), kind: z.enum(["number", "fraction", "expression"]), value: text(120),
-  unit: text(24).optional(), form: z.enum(["any", "simplified-fraction", "decimal", "intermediate-step"]).optional(),
+  part: text(40), kind: z.enum(["number", "fraction", "expression", "polynomial"]), value: text(120),
+  unit: text(24).optional(), form: z.enum(["any", "simplified-fraction", "decimal", "intermediate-step", "expanded", "factored"]).optional(),
 });
 /** Kategóriakvóta: „2 fás és 2 lágy szárú példa” — kategóriánként legalább `count` KÜLÖNBÖZŐ elem, egy szinonimacsoport egy elem. */
-const canonicalAlternative = (s: string) => s.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim();
+export const canonicalAlternative = (s: string) => s.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim();
 export const requiredDistinctSchema = z.object({
   category: text(80), from: z.array(z.array(text(160)).min(1)).min(1).max(20), count: z.number().int().min(1).max(10),
 }).refine((r) => r.count <= r.from.length, { message: "A kért darabszám nem lehet több a felsorolt elemeknél." })
@@ -44,13 +45,55 @@ export const openTaskSchema = z.object({
   mode: z.enum(["written", "oral"]),
   typedAnswers: z.array(typedAnswerSchema).min(1).max(8).optional(),
   requiredDistinct: z.array(requiredDistinctSchema).min(1).max(6).optional(),
+  /**
+   * Spec 2026-10-20-s5-sorrendes-kifejezes (S5a): sorrendérzékeny kötelező kifejezések (nyelvtani alak / szórend). ÉS-csoportok, egy
+   * csoporton belül VAGY; egy alternatíva normalizált tokenjei a válaszban egymás után, pontosan. A típusos (v2) útra visz.
+   */
+  requiredPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).optional(),
+  /**
+   * Spec 2026-10-20-s6-fogalom-sorrend (S6a): a fogalmak kötelező sorrendje (sorrendi / műveleti sorrend feladat) — 2–4 fogalomcsoport
+   * (csoporton belül VAGY), a válaszban mindegyik megvan, és az első előfordulásuk sorrendje szigorúan növekvő. Egy kötelező feltétel.
+   */
+  requiredOrder: z.array(z.array(text(160)).min(1)).min(2).max(4)
+    // Review #346: két sorrendi csoport nem oszthat meg alternatívát — ugyanaz az előfordulás nem lehet egyszerre előbb és később
+    // (a szabály teljesíthetetlen lenne).
+    .refine((groups) => { const all = groups.flatMap((g) => [...new Set(g.map(canonicalAlternative))]); return new Set(all).size === all.length; },
+      { message: "A sorrendi csoportok (requiredOrder) nem oszthatnak meg alternatívát." })
+    // Review #346: az alternatíva EGY szó — a pozíció így egyértelmű (többszavasnál a közös szó, pl. „víz forralása” / „víz hűtése”, ugyanarra
+    // az előfordulásra mutatna, a sorrend pedig hamisan teljesülhetne vagy bukhatna). A megkülönböztető szót kell megadni (forralás, hűtés).
+    .refine((groups) => groups.every((g) => g.every((a) => canonicalAlternative(a).split(" ").filter(Boolean).length === 1)),
+      { message: "A sorrendi csoportok (requiredOrder) alternatívái egyszavasak legyenek (a megkülönböztető szó)." })
+    .optional(),
+  /** S5b: a gépi szigorítással felvett, a `requiredPhrases`-ben bent maradt kifejezéscsoportok (S4 mérés / lazítás). */
+  tightenedPhrases: z.array(z.array(text(80)).min(1)).min(1).max(8).optional(),
+  /** Spec 2026-10-20-s6-fogalom-sorrend (S6b): a `requiredOrder` a gépi sorrend-szigorítás eredménye (S4 mérés / lazítás). */
+  tightenedOrder: z.boolean().optional(),
+  /**
+   * Spec 2026-10-20-s4 (S4a): a gépi szigorítással (S3c) felvett, a `required`-ben bent maradt kötelező csoportok. Review #339: a korlát nem
+   * szűkebb a kalibrátornál (blokkoló hibás esetenként 1 csoport, legfeljebb `ANSWER_KEY_LIMITS.wrongMax`, javítókörönként egyesítve).
+   */
+  tightened: z.array(z.array(text(160)).min(1)).min(1).max(20).optional(),
+  /** Spec 2026-10-20-s4 (S4c): az automatikus lazítás nyoma (a szigorított csoport bónuszba került). */
+  relaxedTightening: z.object({
+    at: z.string().max(40), answered: z.number().int().min(0), falseRejects: z.number().int().min(0),
+    /** Review #340: a lazítás előtti `required` és a hatástalanított csoportok — ugyanabban a tranzakcióban mentett, pontosan visszaállítható előállapot. */
+    previousRequired: z.array(z.array(text(160)).min(1)).min(1).optional(),
+    groups: z.array(z.array(text(160)).min(1)).min(1).optional(),
+    /** S5b: a kifejezéses szigorítás lazításának előállapota. */
+    previousRequiredPhrases: z.array(z.array(text(80)).min(1)).min(1).optional(),
+    phraseGroups: z.array(z.array(text(80)).min(1)).min(1).optional(),
+    /** S6b: a sorrend-szigorítás lazításának előállapota (a törölt `requiredOrder`). */
+    previousRequiredOrder: z.array(z.array(text(160)).min(1)).min(2).max(4).optional(),
+  }).optional(),
 });
 export const experienceQuizSchema = z.object({
   ...binding, question: text(), options: z.array(text(500)).min(3).max(4),
   correctIndex: z.number().int().min(0).max(3), feedbackPerOption: z.array(text(1000)).min(3).max(4),
   intent: z.enum(["recall", "apply"]).optional(),
 }).superRefine((q, ctx) => {
-  if (new Set(q.options.map(s => s.normalize("NFC").toLocaleLowerCase("hu"))).size !== q.options.length) ctx.addIssue({ code: "custom", message: "A válaszlehetőségek legyenek különbözők." });
+  // Spec 2026-10-21-ciklus8 (review #361): helyesírási kérdésnél a csak betűméretben eltérő opciók különbözők (közös kulcs: option-key).
+  const spelling = isSpellingPrompt(q.question);
+  if (new Set(q.options.map(s => foldCaseUnlessSpelling(s.normalize("NFC"), spelling))).size !== q.options.length) ctx.addIssue({ code: "custom", message: "A válaszlehetőségek legyenek különbözők." });
   if (q.correctIndex >= q.options.length || q.feedbackPerOption.length !== q.options.length) ctx.addIssue({ code: "custom", message: "Minden válaszhoz magyarázat és érvényes helyes index szükséges." });
 });
 
@@ -59,7 +102,7 @@ export const methodSchema = z.object({
   options: z.array(text(500)).min(2).max(4).optional(), correctIndex: z.number().int().min(0).optional(),
   steps: z.array(text(500)).min(2).max(8).optional(),
 }).superRefine((m, ctx) => {
-  if (m.options && new Set(m.options.map(s => s.toLocaleLowerCase("hu"))).size !== m.options.length) ctx.addIssue({ code: "custom", message: "A módszer válaszlehetőségei legyenek különbözők." });
+  if (m.options && new Set(m.options.map(s => foldCaseUnlessSpelling(s, isSpellingPrompt(m.prompt)))).size !== m.options.length) ctx.addIssue({ code: "custom", message: "A módszer válaszlehetőségei legyenek különbözők." });
   if (["gate", "myth", "popup"].includes(m.kind) && (!m.options || m.correctIndex === undefined || m.correctIndex >= m.options.length)) {
     ctx.addIssue({ code: "custom", message: "A kérdéshez options és érvényes correctIndex kell." });
   }
@@ -102,9 +145,17 @@ export const experiencePacketSchema = z.object({
 }).superRefine((e, ctx) => {
   // Típusos mező csak a 2-es pontozási szerződéssel; a referenciaérték értelmezhető legyen (a pontozó nem találgat).
   const typed = e.tasks.filter((t) => t.typedAnswers?.length || t.requiredDistinct?.length);
-  if (typed.length && (e.scoringVersion ?? 1) < LESSON_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Típusos feladathoz scoringVersion=${LESSON_SCORING_VERSION} kell (${typed[0].id}).` });
+  if (typed.length && (e.scoringVersion ?? 1) < TYPED_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Típusos feladathoz scoringVersion=${TYPED_SCORING_VERSION} kell (${typed[0].id}).` });
+  const poly = typed.find((t) => t.typedAnswers?.some((a) => a.kind === "polynomial"));
+  if (poly && (e.scoringVersion ?? 1) < POLYNOMIAL_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Betűs (polynomial) feladathoz scoringVersion=${POLYNOMIAL_SCORING_VERSION} kell (${poly.id}).` });
+  // Review #341: a kifejezéses bank a 4-es szerződés — különben a régi kliens frissítés nélkül, a kifejezéseket figyelmen kívül hagyva pontozna.
+  const phrase = e.tasks.find((t) => t.requiredPhrases?.length);
+  if (phrase && (e.scoringVersion ?? 1) < PHRASE_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Kifejezéses (requiredPhrases) feladathoz scoringVersion=${PHRASE_SCORING_VERSION} kell (${phrase.id}).` });
+  // S6a: a sorrendi bank az 5-ös szerződés (a régi kliens a sorrendet nem ismerné).
+  const ordered = e.tasks.find((t) => t.requiredOrder?.length);
+  if (ordered && (e.scoringVersion ?? 1) < ORDER_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Sorrendi (requiredOrder) feladathoz scoringVersion=${ORDER_SCORING_VERSION} kell (${ordered.id}).` });
   for (const t of typed) for (const a of t.typedAnswers ?? []) {
-    if (a.form === "intermediate-step" ? !isExpressionText(a.value) : referenceValue(a.value) === null) ctx.addIssue({ code: "custom", path: ["tasks"], message: `${t.id}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető.` });
+    if (!isValidReference(a)) ctx.addIssue({ code: "custom", path: ["tasks"], message: `${t.id}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető.` });
   }
   if (e.version === LEGACY_LESSON_METHOD_VERSION) {
     if (e.methods.length < 11 || e.methods.length > 20 || e.tasks.length !== 45 || e.quiz.length !== 75 || e.quiz.some(q => q.options.length !== 3)) ctx.addIssue({ code: "custom", message: "A régi módszer 11–20 módszert, 45 feladatot és 75 háromválaszos kvízt igényel." });
@@ -167,11 +218,19 @@ export const experiencePacketSchema = z.object({
  * (hiányzik = 1, a régi kliens is pontozza). Mért (élő Egyiptom-futás 7ee8913e, 2026-10-01): a bank típusos feladatot írt,
  * a csomag-ellenőrzés `scoringVersion=2`-t követelt, amit senki nem állított be — a csomag 4 kísérlet után bukott.
  */
-export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: unknown[]; requiredDistinct?: unknown[] }>, current?: unknown): number | undefined {
+export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: ReadonlyArray<{ kind?: unknown; [key: string]: unknown }>; requiredDistinct?: unknown[]; requiredPhrases?: unknown[]; requiredOrder?: unknown[] }>, current?: unknown): number | undefined {
   // Review #166: a meglévő verzió csak érvényes tartományban (1..LESSON_SCORING_VERSION, egész) marad meg; a hibás érték a régi alapérték.
   const valid = typeof current === "number" && Number.isInteger(current) && current >= 1 && current <= LESSON_SCORING_VERSION ? current : undefined;
-  const typed = tasks.some((t) => t.typedAnswers?.length || t.requiredDistinct?.length);
-  return typed ? LESSON_SCORING_VERSION : valid;
+  const typed = tasks.some((t) => t.typedAnswers?.length || t.requiredDistinct?.length || t.requiredPhrases?.length || t.requiredOrder?.length);
+  // S6a: a sorrendi szabály az 5-ös szerződés.
+  const ordered = tasks.some((t) => t.requiredOrder?.length);
+  // S5a: a sorrendérzékeny kifejezés a 4-es szerződés (a régebbi kliens nem ismeri — frissítést kap, nem pontoz engedékenyen).
+  const phrases = tasks.some((t) => t.requiredPhrases?.length);
+  // Spec 2026-10-19-algebrai-referencia: a betűs végeredmény a 3-as szerződés; a csak számos típusos lecke 2-n marad, hogy a
+  // már megnyitott (régebbi) kliens ne kapjon fölöslegesen frissítési kérést.
+  const poly = tasks.some((t) => t.typedAnswers?.some((a) => a?.kind === "polynomial"));
+  const needed = ordered ? ORDER_SCORING_VERSION : phrases ? PHRASE_SCORING_VERSION : poly ? POLYNOMIAL_SCORING_VERSION : typed ? TYPED_SCORING_VERSION : undefined;
+  return needed === undefined ? valid : Math.max(needed, valid ?? 0);
 }
 
 export const experienceSchema = experiencePacketSchema.superRefine((e, ctx) => {
@@ -244,14 +303,16 @@ export function experienceTheme(seed: string): LessonExperience["theme"] {
 export function bankPacketContract(c: { sectionIndex: number; conceptIds: readonly string[]; methodKinds: readonly string[]; taskCount: number; taskTarget: number; quizCount: number; quizTarget: number; language?: string }): string {
   return [
     "BANKCSOMAG-SZERZŐDÉS (a program méri; a hibás tétel javító kört kap, a csomagszintű hiba teljes újraírást):",
-    `1. Darabszám: methods legalább ${c.methodKinds.length} (kindek: ${c.methodKinds.join(", ")}), legfeljebb 20; tasks PONTOSAN ${c.taskTarget}, quiz PONTOSAN ${c.quizTarget} (a program ennél kevesebbet elutasít — a tartalék kötelező; csak a mentő kivétel mehet ${c.taskCount}/${c.quizCount}-ig); glossary: ${c.language ? `legalább 1 elem (${c.language})` : "[]"}.`,
+    `1. Darabszám: methods legalább ${c.methodKinds.length} (kindek: ${c.methodKinds.join(", ")}), legfeljebb 20; tasks PONTOSAN ${c.taskTarget}, quiz PONTOSAN ${c.quizTarget} (a program ennél kevesebbet elutasít — a tartalék kötelező; csak a mentő kivétel mehet ${c.taskCount}/${c.quizCount}-ig); glossary: ${c.language ? `legalább 4 elem (${c.language}) — a fejezet MINDEN tanított idegen szava / kifejezése, mindegyik példamondattal és magyar fordítással: ez a lecke kiejtésgyakorlójának alapja (meghallgatás + kimondás)` : "[]"}.`,
     `2. Csomaghatár: minden tétel sectionIndex=${c.sectionIndex}, coversConceptIds csak ebből: ${JSON.stringify(c.conceptIds)}; kvíznél pontosan egy id; fogalmanként legalább egy intent=recall és egy intent=apply kvíz és legalább egy nyílt feladat.`,
     "3. EBBEN a csomagban legalább egy mode=\"oral\" és egy mode=\"written\" nyílt feladat.",
     "4. Kérdés-egyediség: a kérdés kulcsa (kisbetű, írásjel nélkül; a + − · × : / jel és a számok megmaradnak) nem ismétlődhet a csomagon belül, sem a korábbi csomagok kérdéseivel és kapukérdéseivel; két kapukérdés (gate) csak különböző lehet.",
     "5. Egyválasztós tétel (kvíz; gate/myth/popup módszer): 3–4 különböző opció, PONTOSAN egy igaz, minden opcióhoz magyarázat; a correctIndex opciójának száma egyezzen a magyarázatban helyesnek mondott számmal; minden kiírt „a · b = c” állítás igaz (a program kiszámolja).",
-    "6. Nyílt feladat: a sample a saját rubrikán 1 pont (a pontozó szabályai lent); számolós feladatnál typedAnswers, amelynek value-ját a program a kérdés kifejezéséből újraszámolja; a végeredmény nem required-csoport.",
+    "6. Nyílt feladat: a sample a saját rubrikán 1 pont (a pontozó szabályai lent); számolós feladatnál typedAnswers, amelynek value-ját a program a kérdés kifejezéséből újraszámolja; a végeredmény nem required-csoport; betűs végeredménynél kind: polynomial (form: expanded / factored).",
     "7. Tilos: ábrára („az ábrán”, „N. ábra”), forrásra, füzetre, tananyagra („a tananyag szerint”, „a tananyag nem …”) hivatkozni — a visszajelzés magát a tényt mondja ki; csomagon kívüli fogalom; a tanításban nem szereplő tény; párosításban ismétlődő oldal.",
     "8. JAVÍTÁSI MÓD: csak a JAVÍTÁSI JOGOSULTSÁG tételei és mezői cserélhetők, eredeti id-val, minden mezővel; új id és törlés tilos; a többit a program változatlanul megőrzi.",
+    // Spec 2026-10-20-bank-kimeneti-keret: előre megadott keret — a levágott válasz a teljes kimenetet elveszíti (mért: job be3bd5d2).
+    `9. KIMENETI KERET (a túl hosszú válasz levágódik és elvész): ez a csomag ${c.taskTarget} nyílt feladat + ${c.quizTarget} kvízkérdés + legalább ${c.methodKinds.length} módszer — tömören: kérdés legfeljebb 2 mondat (≤ 300 karakter), sample legfeljebb 3 mondat (≤ 400 karakter), kvízopciónként legfeljebb 1 mondatos magyarázat (≤ 200 karakter), módszer prompt / answer legfeljebb 2 mondat (≤ 300 karakter); pontosan a kért darabszám, nem több. A gondolkodásban ne írd meg előre a csomagot (csak a számolásokat és a kulcsokat ellenőrizd); a JSON-t egyszer írd le.`,
   ].join("\n");
 }
 

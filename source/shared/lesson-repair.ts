@@ -24,6 +24,9 @@ export const lessonRepairSchema = z.object({
   })).optional(),
   classroom: z.number().int().min(1).max(12).optional(),
   // Spec 2026-09-30 (U6, C16) + review #164: a javító-lektor által eldöntetlen régi-alak jelöltek (figyelmeztetés, admin).
+  // Review #331 (spec 2026-10-20-elakadas-gyokerok-elemzes, R1): a lektor által blokkolt, ezért kivett banktételek útvonalai
+  // (a reviewNotes útvonalai a kivétel előtti indexekre vonatkoznak).
+  lektorRemoved: z.array(z.string()).optional(),
   staleWarnings: z.array(z.object({
     path: z.string(), sentence: z.string().max(400), oldForm: z.string(), newForm: z.string(), reason: z.string().max(300),
   })).optional(),

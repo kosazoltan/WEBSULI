@@ -12,7 +12,8 @@ export type WorkflowRecord = { view: WorkflowView; owner: string; checkpoints: R
 export interface WorkflowStore {
   create(record: WorkflowRecord): Promise<boolean>;
   read(id: string, owner: string): Promise<WorkflowRecord | null>;
-  claim(id: string, owner: string, token: string): Promise<boolean>;
+  /** Review #366: `revision` megadásakor a foglalás csak az olvasott revízión sikerül (a közben lefutott leállítás elutasítja). */
+  claim(id: string, owner: string, token: string, revision?: number): Promise<boolean>;
   save(record: WorkflowRecord, token: string): Promise<boolean>;
   heartbeat(id: string, token: string): Promise<boolean>;
   release(id: string, token: string): Promise<void>;
@@ -314,7 +315,30 @@ export async function workflowUsage(usage: { prompt_tokens?: number; completion_
   await persist(ctx);
 }
 
+/**
+ * Spec 2026-10-19-eroforras-s1 (3): a folyamatban élő futások száma — a leálló példány (Render-kitelepítés) ezt várja ki, hogy
+ * a futó gyártás / javítás / okosítás ne szakadjon meg (mért: 2026-10-19 09:56 egy kitelepítés megszakított egy okosítást).
+ */
+let activeRuns = 0;
+export const activeWorkflowRuns = (): number => activeRuns;
+
+/** Legfeljebb `maxMs`-ig vár, amíg nincs élő futás. Visszaadja, hány futás maradt (0 = mind befejeződött). Tiszta, tesztelhető. */
+export async function waitForActiveRuns(maxMs: number, count: () => number = activeWorkflowRuns, pollMs = 2000,
+  now: () => number = Date.now, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<number> {
+  const deadline = now() + maxMs;
+  while (count() > 0 && now() < deadline) await sleep(Math.min(pollMs, Math.max(0, deadline - now())));
+  return count();
+}
+
 export async function executeWorkflow<T extends WorkflowView["result"]>(
+  store: WorkflowStore, input: { id: string; owner: string; mode: WorkflowMode; retry?: boolean; continuation?: boolean; request?: unknown; explicitResume?: boolean; recoveryResume?: boolean },
+  work: () => Promise<T>,
+): Promise<WorkflowView> {
+  activeRuns++;
+  try { return await executeWorkflowCounted(store, input, work); } finally { activeRuns--; }
+}
+
+async function executeWorkflowCounted<T extends WorkflowView["result"]>(
   store: WorkflowStore, input: { id: string; owner: string; mode: WorkflowMode; retry?: boolean; continuation?: boolean; request?: unknown; explicitResume?: boolean; recoveryResume?: boolean },
   work: () => Promise<T>,
 ): Promise<WorkflowView> {
@@ -329,7 +353,8 @@ export async function executeWorkflow<T extends WorkflowView["result"]>(
   if (["error", "interrupted", "waiting"].includes(record.view.state) && !input.retry) throw new WorkflowConflict("Ez a futás megállt; külön folytatási művelet szükséges.");
   if ((record.view.executions ?? 0) >= workflowExecutionBudget(input.explicitResume, input.recoveryResume)) throw new WorkflowConflict("A futás folytatási kerete elfogyott. Ellenőrizd a hibát új készítés előtt.");
   const token = randomUUID();
-  if (!await store.claim(input.id, input.owner, token)) throw new WorkflowConflict("Ez a futás már folyamatban van.");
+  // Review #366: a foglalás az olvasott revízióhoz kötött — az olvasás és a foglalás közé eső leállítás (revízióléptetés) elutasítja az elavult indulást.
+  if (!await store.claim(input.id, input.owner, token, record.view.revision)) throw new WorkflowConflict("Ez a futás már folyamatban van, vagy közben megváltozott (pl. leállították).");
   const fresh = await store.read(input.id, input.owner);
   if (!fresh) throw new WorkflowConflict("A futás nem található.");
   const ctx: Context = { record: fresh, store, token, lostLease: false, continuation: input.continuation ?? false, persistQueue: Promise.resolve() };

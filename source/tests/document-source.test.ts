@@ -126,7 +126,7 @@ test("MHT: binary rész, a karakterkészlet a <meta>-ban; a követőkód-rész k
   assert.match(text, /SZEMÉLYEK/);
   assert.match(text, /HÍRNÖK/);
   assert.match(text, /EURÜDIKÉ/);
-  assert.doesNotMatch(text, /�|gemius|color:red/);
+  assert.doesNotMatch(text, /\uFFFD|gemius|color:red/);
 });
 
 test("MHT: UTF-8 BOM a fájl elején nem rontja el a fejlécet", async () => {

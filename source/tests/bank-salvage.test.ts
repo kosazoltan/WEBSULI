@@ -50,9 +50,11 @@ test("valódi csomagépítés: a minden kísérletben hibás mintájú feladat k
       e.tasks.push({ ...e.tasks[0], id: "bad-task", q: `${e.tasks[0].q} (hibás)`, sample: "x" });
       return e;
     },
-    onToolFix: (tool, list) => { if (tool === "bank-salvage") fixes.push(...list); },
+    onToolFix: (tool, list) => { if (tool === "bank-salvage" || tool === "bank-stuck") fixes.push(...list); },
   });
-  assert.equal(calls, 4, "három kísérlet + mentőkör, utána mentés (nem bukás)");
+  // Dokumentált specváltozás (docs/specs/2026-10-20-elakadas-r3-ismetlodo-hiba.md): háromszor azonos hibalista → korai kivétel, a mentőkör
+  // (4. hívás) elmarad; a szándék változatlan: a hibás feladat kikerül, a bank elkészül.
+  assert.equal(calls, 3, "három azonos kísérlet után korai kivétel (nem bukás)");
   assert.equal(experience.tasks.some((t) => t.q.endsWith("(hibás)")), false, "a hibás feladat nem jut a gyerekhez");
   assert.match(fixes.join(" "), /1 hibás tétel kivéve/);
 });

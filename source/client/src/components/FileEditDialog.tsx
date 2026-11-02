@@ -66,8 +66,10 @@ export default function FileEditDialog({ file, onSave, onCancel }: FileEditDialo
     classroom !== file.classroom;
 
   return (
-    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
-      <Card className="w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] flex flex-col p-4 sm:p-6">
+    // docs/specs/2026-10-19-admin-reszponzivitas.md (5): nem portál — az alsó admin menü (z-50, később a DOM-ban) rárajzolt az
+    // ablak aljára; a `vh` a mobil nagy nézete. Az ablak a menü fölött áll, a kis (dinamikus) nézethez méretezve.
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[60] flex items-center justify-center p-2 sm:p-4">
+      <Card className="w-full max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[90dvh] flex flex-col p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
           <h2 className="text-xl sm:text-2xl font-bold text-foreground">Fájl szerkesztése</h2>
           <Button

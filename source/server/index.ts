@@ -12,6 +12,7 @@ import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
 import { setupDailyViewSummary } from "./dailyViewSummary";
 import { setupDailyReminders } from "./daily-reminder";
+import { setupNewsletters } from "./newsletter";
 import { syncLearners } from "./learners";
 import { setupLearnerReports } from "./learner-reports";
 // import { initializeDatabase } from "./initDb"; // Not needed for Neon PostgreSQL
@@ -23,6 +24,7 @@ import { designAssetsRouter } from "./design-assets";
 import { startSkillLearningAudit } from "./workflows/learning-worker";
 import { requestIdMiddleware } from "./middleware/request-id";
 import errorReportRouter from "./routes/error-report";
+import clientErrorRouter from "./routes/client-error";
 import staticAuditRouter from "./routes/static-audit";
 import { getAllowedOrigins, isOriginAllowed, isSameOriginRequest } from "./lib/allowed-origins";
 import { logger } from "./lib/logger";
@@ -540,6 +542,12 @@ app.use((req, res, next) => {
         await closeOrphanedStudioJobs();
         // Spec 2026-10-05-s10: deploykor a régi példány még tartja a lízinget — annak lejárta után a futás magától folytatódik.
         startStudioJobSweeper();
+        // Spec 2026-10-19-okositas-fazisjelzo: az okosítás / javítás elárvult `processing` rekordjai is (indításkor és 2 percenként).
+        const { startImproveOrphanSweeper } = await import("./improve-orphans");
+        startImproveOrphanSweeper();
+        // Spec 2026-10-20-regi-anyag-studio-atalakitas: a régi anyagok Stúdió-leckévé alakítása (a kapcsoló a kódban).
+        const { startLegacyMigration } = await import("./studio/legacy-migration");
+        startLegacyMigration();
       } catch (sweepError) {
         logger.error("[STARTUP] Az árva futások/jobok zárása nem sikerült:", sweepError);
         // Nem végzetes: a poll 404-et ad az ismeretlen futásra.
@@ -561,6 +569,8 @@ app.use((req, res, next) => {
 
     // Universal Error Logger routes
     app.use("/api/error-report", errorReportRouter);
+    // Böngészős hibák: titok nélkül, eredet + korlátok őrzik (kanban #127)
+    app.use("/api/client-error", clientErrorRouter);
     app.use("/api/static-audit", staticAuditRouter);
     app.use("/api/design-assets", designAssetsRouter);
 
@@ -576,6 +586,8 @@ app.use((req, res, next) => {
       setupDailyViewSummary();
       // Napi tananyag-emlékeztető a regisztrált tanulóknak (docs/specs/2026-10-18-napi-emlekezteto.md) — E2E-ben nem (levél!)
       setupDailyReminders();
+      // „Mai felfedezés” hírlevél (docs/specs/2026-10-19-mai-felfedezes-hirlevel.md) — naponta 16:00, E2E-ben nem (levél!)
+      setupNewsletters();
       // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md): a nevesített címekből tanulók (idempotens, sosem dob).
       void syncLearners();
       // S4: heti összefoglaló, inaktivitás-riasztás, 365 napos megőrzés (csak élesben)
@@ -628,37 +640,49 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
     });
 
-    // Graceful shutdown handler
+    // Graceful shutdown handler — Spec 2026-10-19-eroforras-s1 + review #324: a futó gyártás / javítás / okosítás kivárása AZONNAL indul
+    // (nem a nyitott kérések lezárása után), az ütemezett feladatok leállnak, és a 295 s-os keretből marad idő a mentésre és a pool zárására.
+    // A Render maxShutdownDelaySeconds = 300 (beállítva 2026-10-19).
+    let shuttingDown = false;
     const gracefulShutdown = async (signal: string) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
       stopSkillLearningAudit();
       log(`${signal} received. Starting graceful shutdown...`);
-
-      // Stop accepting new connections
-      server.close(async () => {
-        log("HTTP server closed");
-
-        try {
-          // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: the still-coalesced material results go out before the pool closes (max 10 s).
-          await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
-          // Close database pool
-          await dbPool.end();
-          log("Database pool closed");
-
-          log("Graceful shutdown completed");
-          process.exit(0);
-        } catch (err) {
-          logger.error("Error during shutdown:", err);
-          process.exit(1);
-        }
-      });
-
-      // Force close after 30 seconds
-      setTimeout(() => {
-        logger.error(
-          "Could not close connections in time, forcefully shutting down",
-        );
+      const force = setTimeout(() => {
+        logger.error("Could not close connections in time, forcefully shutting down");
         process.exit(1);
-      }, 30000);
+      }, 295_000);
+      force.unref();
+      try {
+        const cron = (await import("node-cron")).default;
+        for (const task of cron.getTasks().values()) task.stop();
+      } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
+      // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a régi anyagok sora sem indít új gyártást a leálló példányon.
+      try { (await import("./studio/legacy-migration")).stopLegacyMigration(); } catch (err) { logger.warn("A régi anyagok sora nem állítható le", err); }
+      // Új kapcsolatot nem fogadunk; a nyitott kérések közben lefuthatnak.
+      server.close(() => log("HTTP server closed"));
+      try {
+        const { activeWorkflowRuns, waitForActiveRuns } = await import("./workflows/engine");
+        if (activeWorkflowRuns() > 0) {
+          log(`Waiting for ${activeWorkflowRuns()} active workflow run(s) before shutdown (max 270 s)...`);
+          const left = await waitForActiveRuns(270_000);
+          log(left ? `${left} run(s) still active after 270 s — shutting down` : "All workflow runs finished");
+          // A futás utáni hívói takarítás (hibaállapot mentése, claim felengedése) még a poolt használja.
+          await new Promise((resolve) => setTimeout(resolve, 3_000));
+        }
+        // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: the still-coalesced material results go out before the pool closes (max 10 s).
+        await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
+        // Review #365 (spec 2026-10-22-uj-lecke-ertesito): a függő új-lecke értesítők a pool lezárása előtt (max 15 s).
+        await Promise.race([(await import("./daily-reminder")).pendingNewLessonNotifications(), new Promise((resolve) => setTimeout(resolve, 15_000))]).catch((err: unknown) => logger.warn("New lesson notification flush failed", err));
+        await dbPool.end();
+        log("Database pool closed");
+        log("Graceful shutdown completed");
+        process.exit(0);
+      } catch (err) {
+        logger.error("Error during shutdown:", err);
+        process.exit(1);
+      }
     };
 
     // Listen for shutdown signals

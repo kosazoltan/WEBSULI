@@ -98,7 +98,7 @@ test("váratlan alakú piszkozat-válasz mellett az admin oldal stabil (nincs ki
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/admin");
-  await page.getByRole("button", { name: "Anyagok menü megnyitása" }).click({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Tananyagok menü megnyitása" }).click({ timeout: 10_000 });
   await expect(page.getByTestId("draft-lessons")).toHaveCount(0);
   expect(errors).toEqual([]);
 });

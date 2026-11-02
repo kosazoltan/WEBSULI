@@ -1149,6 +1149,30 @@ export const lessonResultEmails = pgTable(
   (table) => ({ roundUnique: uniqueIndex("lesson_result_emails_round_unique").on(table.lessonId, table.kind, table.roundKey) }),
 );
 
+/**
+ * Spec 2026-10-20-s4 (S4b, migrations/0037): feladatszintű, NÉVTELEN tanulói eredmény körönként — tanulói szöveg és felhasználó nélkül.
+ * A gépi rubrika-szigorítás (S3c) mérése és automatikus lazítása (S4c) ebből számol.
+ */
+export const taskResults = pgTable(
+  "task_results",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+    taskId: varchar("task_id", { length: 64 }).notNull(),
+    roundKey: char("round_key", { length: 64 }).notNull(),
+    /** Review #340: álnevesített közreműködő-kulcs (HMAC) — a lazítási küszöb közreműködőnként számol. */
+    contributor: char("contributor", { length: 64 }).notNull(),
+    /** Review #340: a feladat pontozási lenyomata (`rubricHash`) — a statisztika csak az aktuális rubrikára számol. */
+    rubricHash: char("rubric_hash", { length: 64 }).notNull(),
+    detState: varchar("det_state", { length: 8 }).notNull().$type<"ok" | "partial" | "fail">(),
+    finalState: varchar("final_state", { length: 8 }).notNull().$type<"ok" | "partial" | "fail">(),
+    arbiterRaised: boolean("arbiter_raised").notNull().default(false),
+    tightenedOnlyMiss: boolean("tightened_only_miss").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ roundUnique: uniqueIndex("task_results_round_unique").on(table.lessonId, table.taskId, table.roundKey) }),
+);
+
 /** Napi tananyag-emlékeztető ismétlésvédelme (migrations/0031): címenként naponta legfeljebb egy levél. */
 export const dailyReminderEmails = pgTable(
   "daily_reminder_emails",
@@ -1177,10 +1201,36 @@ export const learners = pgTable("learners", {
   /** Review #304: az aktuális inaktivitási időszak kulcsa és a benne már értesített admin-címzettek. */
   inactivityAlertKey: text("inactivity_alert_key"),
   inactivityAlertedTo: text("inactivity_alerted_to").array().notNull().default(sql`'{}'::text[]`),
+  /** „Mai felfedezés” hírlevél (migrations/0034): érdeklődési címkék és a napi hírlevél kapcsolója (alapból KI). */
+  interests: text("interests").array().notNull().default(sql`'{}'::text[]`),
+  newsletter: boolean("newsletter").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export type Learner = typeof learners.$inferSelect;
+
+/** „Mai felfedezés” hírlevél (migrations/0035): tanulónként és naponként egy foglalás → küldés. */
+export const learnerNewsletters = pgTable(
+  "learner_newsletters",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    learnerId: varchar("learner_id").notNull().references(() => learners.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("pending").$type<"pending" | "sent" | "failed" | "skipped">(),
+    attempts: integer("attempts").notNull().default(1),
+    articleUrl: text("article_url"),
+    articleTitle: text("article_title"),
+    materialId: varchar("material_id"),
+    /** Review #313: a kiválasztott cikk szövege és a kézbesített címek kivonata (nem cím). */
+    teaser: text("teaser"),
+    question: text("question"),
+    deliveredTo: text("delivered_to").array().notNull().default(sql`'{}'::text[]`),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ learnerDayIdx: uniqueIndex("learner_newsletters_learner_day_idx").on(table.learnerId, table.day) }),
+);
 
 /** Megtekintés és eredmény tanulónként (migrations/0032); megőrzés 365 nap. */
 export const learnerActivity = pgTable(
