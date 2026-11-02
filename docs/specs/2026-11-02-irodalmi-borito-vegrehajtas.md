@@ -15,12 +15,18 @@ Munkakönyvtár: `source/`.
 ## T3 — jóváhagyás
 - `npx tsx scripts/design-assets/approve.ts <választás.json>` → `client/public/design/laboratory/cover-gorog-drama.webp` + katalógus.
 - A „tragédia” kulcsszó törlése a `prompts.json`-ból és a katalógusból.
-- Ellenőrzés: a `git diff shared/design-asset-catalog.ts` csak hozzáadás; `grep -c tragédia` → 0.
+- Ellenőrzés: a `git diff shared/design-asset-catalog.ts` csak hozzáadás;
+  `! grep -n tragédia design-assets/prompts.json shared/design-asset-catalog.ts` → kimenet nélkül, exit 0 (bármelyik találat bukás).
 
 ## T4 — tesztek
 - Új `tests/cover-gorog-drama.test.ts` (Antigoné, Oidipusz, „görög dráma” → ez; más sáv / tantárgy / mű → nem; a fájl létezik).
 - Ellenőrzés: `node --import tsx --test tests/cover-gorog-drama.test.ts tests/design-assets.test.ts` → `ℹ fail 0`;
   `npm test`, `npx tsc --noEmit`, `npx eslint client/src server --max-warnings 0` → zöld.
+
+## T4b — induló szinkron újrapróbálása (review #377)
+- `server/design-assets.ts`: `initialSyncSettled` — ha az induló szinkron hibával zárult, a mentés előtti várakozás egyszer újrafuttatja
+  (a `startDesignAssetSync` által kapott futtatóval); ha az is hibás, a következő mentés újra próbálja.
+- Ellenőrzés: `node --import tsx --test tests/design-asset-sync-retry.test.ts` → `ℹ fail 0`.
 
 ## T5 — élesítés
 - PR → CI → merge; Render-revízió = merge commit; `https://websuli.vip/design/laboratory/cover-gorog-drama.webp` → 200.

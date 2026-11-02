@@ -25,9 +25,13 @@ Tulajdonosi döntés 2026-11-02 (a `2026-11-02-maradek-kockazatok.md` 2. pontja)
 - A már mentett lecke a tárolt képet tartja (`resolveStoredArt` / `pictureFits`); az Antigoné az ugyanaznapi célzott javítás
   újramentésével (`withLessonArt`) kapja meg. A szerver induláskor szinkronizálja a katalógust a `design_assets` táblába.
 
+- Review #377: ha az induló képkészlet-szinkron átmeneti hibával zárul, a lecke mentése nem rögzíthet tartalékképet — a mentés előtti
+  várakozás egyszer újrafuttatja a szinkront (`initialSyncSettled`).
+
 ## Elfogadás (EARS)
 - HA `pickLessonArt({ subject: "Magyar nyelv és irodalom", title: "Szophoklész: Antigoné" }, "laboratory", katalógus)` fut, AKKOR a
   borító `cover-gorog-drama`, hős-kép nincs.
 - HA a cím „Oidipusz király” vagy „A görög dráma születése”, AKKOR is ez; HA más sáv / tantárgy / „Az ember tragédiája”, AKKOR nem.
 - HA a katalógus tesztjei futnak (`tests/design-assets.test.ts`), AKKOR a séma és a fájl megléte zöld.
 - HA a lecke újramentődik élesben, AKKOR `/api/lessons/by-file/7900a871…` `lesson.art.picture` = `cover-gorog-drama`.
+- HA az induló szinkron hibával zárult, AKKOR a következő mentés előtt egyszer újrafut; sikeres szinkron után nincs újabb futás.
