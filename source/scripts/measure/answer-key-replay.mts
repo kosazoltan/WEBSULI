@@ -18,7 +18,8 @@ const dir = process.argv[2];
 if (!dir) throw new Error("Használat: answer-key-replay.mts <mappa>");
 process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY ||= process.env.ANTHROPIC_API_KEY ?? "";
 // PR #373 review (Sourcery): kulcs nélkül NINCS jelentés — a hiányos mérés nem nézhet ki késznek.
-if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY?.trim() && !process.env.OPENAI_API_KEY?.trim()) {
+// Ugyanazok a kulcsforrások, mint a createLessonConversation-ben (Vercel review): Anthropic vagy OpenAI (mindkét névvel).
+if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY?.trim() && !process.env.AI_INTEGRATIONS_OPENAI_API_KEY?.trim() && !process.env.OPENAI_API_KEY?.trim()) {
   throw new Error("Nincs modellkulcs (AI_INTEGRATIONS_ANTHROPIC_API_KEY / ANTHROPIC_API_KEY) — a visszajátszás el sem indul.");
 }
 const PROD_LABEL = "VÁLASZKULCS-TESZTEK (a pontozó próbája)."; // engine.ts:678 — a gyártói hívás labelje
