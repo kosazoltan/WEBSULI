@@ -41,6 +41,27 @@
 - Minőség-mérce (a zaj ellen): a B-ág `answerKeyArchive` eseteinek visszajátszása MEDIUM efforttal, offline —
   egyetértési arány a low- és medium-ítéletek között.
 
+## Eredmény (2026-11-02, 5+5 futás, összköltség ~49 USD)
+
+| Térkép (tantárgy) | Ellenőrzés A→B (USD) | Megtakarítás | Teljes A→B (USD) | Lecke B |
+|---|---|---|---|---|
+| 00d11a27 (angol 6.) | 0,97 → 0,61 | 37% | 4,62 → 5,07 | rendben (56 fel / 98 kvíz) |
+| 291a52ce (matek 5.) | 1,06 → 0,62 | 42% | 4,72 → 4,59 | rendben |
+| 7df40282 (termism. 5.) | 1,17 → 0,65 | 44% | 4,00 → 4,10 | rendben |
+| 8ad1258a (töri 5.) | 1,23 → 0,79 | 36% | 4,60 → 4,44 | rendben |
+| 07ddb36a (magyar 4.) | 1,60 → 0,87 | (45%) | 7,29 → (5,82) | **NEM PUBLIKÁLHATÓ** — végellenőrzés: csak kis/nagybetűben eltérő egyválasztós opciók maradtak |
+
+- Ellenőrzés-állomás megtakarítás a 4 tiszta páron: **átlag 39,7%** (36–44%) — az E4 40%-os küszöbe ALATT.
+- **A teljes futásköltség nem csökken**: a tiszta párokon A $17,94 vs B $18,20 — az állomás-megtakarítást (~$0,45/lecke)
+  elnyeli a futások közti szórás (javítókörök máshol).
+- Medium-visszajátszás (minden futás archivált feladatain): átengedett rubrika A-kontroll 29/281 (10,3%) vs B 28/290 (9,7%)
+  — a tesztíró minőségében NINCS mérhető romlás low efforton.
+- A B-ág kapu-jelei: answerKeyFails 0→1, 2→1, 0→0, 0→3; 1/5 futás a végellenőrzésen elbukott (A: 0/5).
+
+**Döntés az E4 szerint: MARADÁS a medium efforton.** A megtakarítás a küszöb alatt van, a rendszer-szintű költség nem
+csökken, és a low ágon volt publikálási bukás. A `STUDIO_CHECK_EFFORT` kapcsoló a kódban marad (alapértelmezés: medium),
+így egy későbbi modell- vagy promptváltozás után a mérés fillérpontosan megismételhető.
+
 ## Elfogadás (EARS)
 - E1: HA `STUDIO_CHECK_EFFORT=low`, AKKOR az ellenőrzés-állomás hívásai `low` efforttal mennek, minden más állomás `medium` marad.
 - E2: HA a kapcsoló nincs beállítva vagy érvénytelen, AKKOR a viselkedés bitre azonos a maival (`medium`).
