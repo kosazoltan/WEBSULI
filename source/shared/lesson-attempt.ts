@@ -10,7 +10,9 @@ export type AttemptResult = {
 };
 export type PracticeView = {
   id: string; lessonId: string; bankVersion: string; startedAt: string; finishedAt: string | null;
-  questions: Array<Omit<AttemptQuestion, "correctIndex" | "feedbackPerOption"> & { hintUsed: boolean; answer?: AttemptAnswer & { feedback: string } }>;
+  // Spec 2026-11-02-valasz-keveres (review #375): `fixedOrder` — an option or the (hidden) feedback refers to another option by
+  // letter, so the client must not shuffle; it reveals nothing about the correct answer. Optional: an older response omits it.
+  questions: Array<Omit<AttemptQuestion, "correctIndex" | "feedbackPerOption"> & { hintUsed: boolean; fixedOrder?: boolean; answer?: AttemptAnswer & { feedback: string } }>;
   result: AttemptResult | null;
 };
 export type QuestionReview = { at: number; correct: boolean; usedHint: boolean };

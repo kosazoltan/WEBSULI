@@ -24,6 +24,7 @@ import {
 } from "./useLessonProgress";
 import "./lesson-theme.css";
 import { splitEmphasis, stripEmphasis } from "@shared/lesson-visuals";
+import { balancedLayouts, choiceSeed, displayOrder } from "@shared/option-order";
 import "./triangle-lab.css";
 import "./decision-story.css";
 import { LessonExperienceView } from "./LessonExperienceView";
@@ -63,6 +64,8 @@ const BAND_ICON: Record<DesignThemeId, typeof Leaf> = { explorer: Leaf, adventur
  */
 
 const FullTeachingContext = createContext(false);
+/** Spec 2026-11-02-valasz-keveres: the lesson-wide balanced option layouts (key: choiceSeed); null outside a lesson. */
+const ChoiceLayoutContext = createContext<Map<string, number[]> | null>(null);
 const OPTION_KEYS = "ABCDEFGH";
 
 function BlockHead({ icon: Icon, label, kind }: { icon: typeof BookOpen; label: string; kind?: string }) {
@@ -177,6 +180,12 @@ function CheckBlock({
   const picked = controlledPicked !== undefined ? controlledPicked : localPicked;
   const [hintOpen, setHintOpen] = useState(false);
   const correct = picked !== null && picked === block.correctIndex;
+  // Spec 2026-11-02-valasz-keveres: shuffled display order; `i` stays the stored index (picks, server grading, feedback).
+  const layout = useContext(ChoiceLayoutContext);
+  const order = useMemo(() => {
+    const seed = choiceSeed(block.question, block.options);
+    return layout?.get(seed) ?? displayOrder(seed, block.options, block.feedbackPerOption);
+  }, [layout, block.question, block.options, block.feedbackPerOption]);
 
   const pick = (i: number) => {
     setLocalPicked(i);
@@ -190,7 +199,8 @@ function CheckBlock({
       <p className={cn("font-medium", theme.body)}>{block.question}</p>
 
       <div className="grid gap-2">
-        {block.options.map((option, i) => {
+        {order.map((i, position) => {
+          const option = block.options[i];
           const isPicked = picked === i;
           const isRight = i === block.correctIndex;
           const state = isPicked ? (isRight ? "right" : "wrong") : undefined;
@@ -204,7 +214,7 @@ function CheckBlock({
               className="lesson-option transition-colors disabled:cursor-default"
             >
               <span className="lesson-option-key" aria-hidden>
-                {OPTION_KEYS[i] ?? i + 1}
+                {OPTION_KEYS[position] ?? position + 1}
               </span>
               <span className="flex items-start gap-2">
                 {isPicked &&
@@ -503,6 +513,11 @@ export function LessonRuntime({
     for (const node of nodes) observer.observe(node);
     return () => observer.disconnect();
   }, [lesson.sections.length, lesson.experience, setCurrent]);
+  // Spec 2026-11-02-valasz-keveres: one balanced layout for all check blocks of the lesson.
+  const choiceLayout = useMemo(
+    () => balancedLayouts(lesson.sections.flatMap((s) => s.blocks.flatMap((b) => (b.kind === "check" ? [b] : [])))),
+    [lesson.sections],
+  );
 
   return (
     // #197 + LS-9: the lesson brings its OWN surface AND ink via [data-band] tokens
@@ -512,6 +527,7 @@ export function LessonRuntime({
     // Websuli Design: a színvilágot kizárólag az évfolyamsáv adja (`data-ws-theme`); a régi élménytéma, vizuális világ és díszítőeffekt
     // nem jelenik meg (tulajdonosi döntés 2026-10-16) — a `data-experience` állandó, így a régi téma- és világszabályok nem illeszkednek.
     <DesignBandContext.Provider value={designTheme}>
+    <ChoiceLayoutContext.Provider value={choiceLayout}>
     <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
       <article className="mx-auto py-6 space-y-6" data-testid="lesson-runtime">
         {/* Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a koncepciókép sávfejléce — jelvény, évfolyam, téma, mottó. */}
@@ -577,6 +593,7 @@ export function LessonRuntime({
         </>}
       </article>
     </div>
+    </ChoiceLayoutContext.Provider>
     </DesignBandContext.Provider>
   );
 }

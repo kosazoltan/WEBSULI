@@ -115,7 +115,9 @@ for (const [width, height] of [[390, 844], [844, 390]]) {
     for (const button of await question.getByRole("button").all()) {
       await expectUncovered(button);
     }
-    await question.getByRole("button", { name: "D Kétszeres lesz" }).click();
+    // Spec 2026-11-02-valasz-keveres (dokumentált spec-változás): a betűjel a kevert megjelenítési helyet követi, ezért a tárolt
+    // 4. opciót a szövege azonosítja, bármelyik betű alatt jelenik meg.
+    await question.getByRole("button", { name: /^[A-D] Kétszeres lesz$/ }).click();
     await expect(page.getByRole("tabpanel", { name: "Kvíz", exact: true })).toContainText("1 megválaszolva · 1 pont");
     await page.reload();
     await page.getByRole("tab", { name: "Kvíz", exact: true }).click();

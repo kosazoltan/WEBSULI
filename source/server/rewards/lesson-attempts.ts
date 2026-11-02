@@ -6,6 +6,7 @@ import { lessonSchema } from "../../shared/lesson-schema";
 import { experienceRoundSizes, LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { selectPracticeQuestions, reviewState, type PracticeView, type AttemptResult, type QuestionReview } from "../../shared/lesson-attempt";
 import { canonicalLessonQuiz } from "../studio/canonical-quiz-bank";
+import { refersToOtherOptions } from "../../shared/option-order";
 import { computeCoupon } from "../../shared/reward-policy";
 import { loadRewardPolicy } from "./store";
 import { expiryFor, SECTION_REWARD_COOLDOWN_MS } from "./coupons";
@@ -35,13 +36,13 @@ async function bankOf(tx: Tx, lessonId: string) {
 async function lockLearner(tx: Tx, userId: string, lessonId: string) {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["practice", userId, lessonId])}, 0))`);
 }
-function viewOf(row: Attempt): PracticeView {
+export function viewOf(row: Attempt): PracticeView {
   return {
     id: row.id, lessonId: row.lessonId, bankVersion: row.bankVersion, startedAt: row.startedAt.toISOString(),
     finishedAt: row.finishedAt?.toISOString() ?? null, result: row.result,
     questions: row.questions.map(({ correctIndex: _correctIndex, feedbackPerOption, ...q }) => {
       const answer = row.answers[q.id];
-      return { ...q, hintUsed: row.hints.includes(q.id), ...(answer ? { answer: { ...answer, feedback: feedbackPerOption[answer.pickedIndex] } } : {}) };
+      return { ...q, hintUsed: row.hints.includes(q.id), fixedOrder: refersToOtherOptions(q.options, feedbackPerOption), ...(answer ? { answer: { ...answer, feedback: feedbackPerOption[answer.pickedIndex] } } : {}) };
     }),
   };
 }

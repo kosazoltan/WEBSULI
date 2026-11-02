@@ -2,6 +2,12 @@ import { test, expect, type Page, type Locator } from "@playwright/test";
 import { compactFusionFixture, standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import type { PracticeView } from "../shared/lesson-attempt";
 import { readFile } from "node:fs/promises";
+import { displayOrder } from "../shared/option-order";
+
+// Spec 2026-11-02-valasz-keveres (dokumentált spec-változás): a gombok kevert sorrendben jelennek meg, ezért a tárolt indexű
+// opciót a megjelenített helyén célozzuk (a fixture-ben q1 helyes = 0, q2 helyes = 3).
+const storedOption = (question: Locator, q: PracticeView["questions"][number], stored: number) =>
+  question.locator(".lesson-option").nth(displayOrder(q.id, q.options).indexOf(stored));
 
 async function fullyVisible(button: Locator, page: Page) {
   await button.evaluate(element => element.scrollIntoView({ block: "center", behavior: "instant" }));
@@ -41,12 +47,12 @@ async function fixture(page: Page, questionCount = 2) {
   return round;
 }
 for (const [width, height] of [[320, 568], [390, 844], [844, 390], [1440, 900]]) test(`saved first answer, retry, reload and reward at ${width}x${height}`, async ({ page }) => {
-  await page.setViewportSize({ width, height }); await fixture(page);
+  await page.setViewportSize({ width, height }); const round = await fixture(page);
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
   await page.goto("/__lesson-runtime-probe?candidate=1&practice=1");
   await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
   await expect(page.getByText("A válaszaid mentve", { exact: true })).toBeVisible();
-  const first = page.locator('.fusion-quiz:visible .lesson-option').first();
+  const first = storedOption(page.locator('.fusion-quiz:visible').first(), round.questions[0], 0);
   await fullyVisible(first, page); await fullyVisible(page.getByRole("button", { name: "Kvíz kiértékelése", exact: true }), page);
   await first.click(); await expect(page.getByRole("alert")).toContainText("Próba mentési hiba");
   await expect(page.locator('.fusion-quiz:visible .lesson-feedback')).toHaveCount(0);
@@ -54,11 +60,11 @@ for (const [width, height] of [[320, 568], [390, 844], [844, 390], [1440, 900]])
   await page.getByRole("button", { name: "Mentés újrapróbálása" }).click();
   await expect(first).toBeDisabled(); await expect(page.locator('.fusion-quiz:visible .lesson-feedback')).toBeVisible();
   await page.reload(); await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
-  await expect(page.locator('.fusion-quiz:visible .lesson-option').first()).toHaveAttribute("aria-pressed", "true");
+  await expect(storedOption(page.locator('.fusion-quiz:visible').first(), round.questions[0], 0)).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator('[data-quiz-id]:visible')).toHaveCount(2);
   await expect(page.getByRole("tabpanel", { name: "Kvíz", exact: true }).locator(".learning-pager, .learning-mode")).toHaveCount(0);
   const question = page.locator('[data-quiz-id="q2"]');
-  const answer = question.locator('.lesson-option').nth(3);
+  const answer = storedOption(question, round.questions[1], 3);
   await fullyVisible(answer, page);
   await page.screenshot({ path: `test-results/practice-options-${width}x${height}.png`, fullPage: false });
   await fullyVisible(page.getByRole("button", { name: "Segítség: vissza a magyarázathoz", exact: true }), page);
@@ -101,7 +107,7 @@ for (const [width, height] of [[320, 900], [844, 390], [1365, 612]]) test(`saved
   await expect(panel.locator("[data-quiz-id]:visible")).toHaveCount(25);
   await expect(panel.locator(".learning-pager, .learning-mode")).toHaveCount(0);
   await expect(panel.getByRole("button", { name: /Teljes kvíz|Következő kérdés|Előző kérdés/ })).toHaveCount(0);
-  const lastAnswer = questions.last().locator(".lesson-option").first();
+  const lastAnswer = storedOption(questions.last(), round.questions[24], 0);
   await fullyVisible(lastAnswer, page);
   await lastAnswer.click();
   await expect(page.getByRole("alert")).toContainText("Próba mentési hiba");
@@ -113,7 +119,7 @@ for (const [width, height] of [[320, 900], [844, 390], [1365, 612]]) test(`saved
   await expect(lastAnswer).toHaveAttribute("aria-pressed", "true");
   await expect(questions.first().locator(".lesson-option").first()).toBeEnabled();
   const firstResponse = page.waitForResponse(response => response.url().endsWith("/answer") && response.status() === 200);
-  await questions.first().locator(".lesson-option").first().click();
+  await storedOption(questions.first(), round.questions[0], 0).click();
   await firstResponse;
   await expect(panel).toContainText("2 / 25 válasz · 2 pont");
   expect(answers).toEqual([round.questions[24].id, round.questions[24].id, round.questions[0].id]);
@@ -122,8 +128,8 @@ for (const [width, height] of [[320, 900], [844, 390], [1365, 612]]) test(`saved
   await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
   await expect(panel.locator("[data-quiz-id]:visible")).toHaveCount(25);
   await expect(panel).toContainText("2 / 25 válasz · 2 pont");
-  for (const question of [questions.first(), questions.last()]) {
-    await expect(question.locator(".lesson-option").first()).toHaveAttribute("aria-pressed", "true");
+  for (const [question, q] of [[questions.first(), round.questions[0]], [questions.last(), round.questions[24]]] as const) {
+    await expect(storedOption(question, q, 0)).toHaveAttribute("aria-pressed", "true");
     for (const option of await question.locator(".lesson-option").all()) await expect(option).toBeDisabled();
   }
   await page.getByRole("button", { name: "Kvíz kiértékelése", exact: true }).click();

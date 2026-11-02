@@ -148,14 +148,15 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
         }
 
         // 3. A ROSSZ válasz is tanít: saját visszajelzést kap, nem csak piros keretet.
-        await options.nth(1).click();
+        // Spec 2026-11-02-valasz-keveres (dokumentált spec-változás): a megjelenítés kevert, ezért a tárolt indexű testid-t célozzuk.
+        await page.getByTestId('check-option-1').click();
         const feedback = page.getByTestId('check-feedback');
         await expect(feedback).toBeVisible();
         await expect(feedback).toHaveText(/nem a gyökér/i);
 
         // 4. A helyes válasz után a visszajelzés is változik. Arculati bank S4 (dokumentált spec-változás, review #285):
         // az ítélet a kódszótár „Helyes!” szövege, a modell „Így van!” előtagja kimarad, az indoklás megmarad.
-        await options.nth(0).click();
+        await page.getByTestId('check-option-0').click();
         await expect(feedback).toHaveText(/^Helyes!\s+A zöld színtestek, a kloroplasztiszok/);
         await expect(feedback).not.toHaveText(/így van/i);
 
