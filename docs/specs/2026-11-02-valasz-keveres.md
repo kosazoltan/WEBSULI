@@ -39,6 +39,9 @@ Tulajdonosi kérés 2026-11-02 (az Antigoné-lecke élő ellenőrzése után): a
 - `tests/websuli.spec.ts` (~150. sor) a DOM-pozícióra kattintott (`options.nth(1)` = rossz, `nth(0)` = jó válasz). Keverés után a
   DOM-pozíció nem a tárolt index; a teszt ugyanazt a szándékot az eredeti indexű `check-option-1` / `check-option-0` azonosítóval méri.
 
+- `tests/lesson-fusion.spec.ts` (~25–27. sor) a Kvízben a DOM-pozícióra kattintott (1. kérdés 2. gombja = rossz, a többi 1. gombja = jó,
+  elvárt 24/25). A szándék változatlan: a helyes válasz megjelenített helyét a kör `balancedLayouts`-ából számolja.
+
 ## Edge case-ek
 - 2–4 opció; 1 opció → változatlan.
 - Ugyanaz a seed mindig ugyanaz a permutáció (nincs `Math.random`).
