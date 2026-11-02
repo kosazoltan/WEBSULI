@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
+import { balancedLayouts, choiceSeed } from "../shared/option-order";
 
 // Keep the candidate JSON interception identical in the focused and general CI runs.
 test.use({ serviceWorkers: "block" });
@@ -22,9 +23,15 @@ for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900], 
     await expect(quiz).toHaveCount(25);
     await expect(page.locator('[data-quiz-id]:visible')).toHaveCount(25);
     await expect(page.getByRole("tabpanel", { name: "Kvíz", exact: true }).locator(".learning-pager, .learning-mode")).toHaveCount(0);
-    await quiz.first().getByRole("button").nth(1).click();
+    // Spec 2026-11-02-valasz-keveres (dokumentált spec-változás): a válaszok kevert sorrendben jelennek meg, ezért a helyes válasz
+    // megjelenített helyét a kör kiegyensúlyozott elrendezéséből számoljuk; a szándék változatlan: 1 rossz + 24 jó válasz.
+    const bank = fusionFixture().experience!.quiz;
+    const round = (await quiz.evaluateAll(els => els.map(el => el.getAttribute("data-quiz-id")!))).map(id => bank.find(q => q.id === id)!);
+    const layouts = balancedLayouts(round);
+    const correctAt = (n: number) => layouts.get(choiceSeed(round[n].question, round[n].options))!.indexOf(round[n].correctIndex);
+    await quiz.first().getByRole("button").nth((correctAt(0) + 1) % round[0].options.length).click();
     await expect(quiz.first().getByRole("button").first()).toBeDisabled();
-    for (let i = 1; i < 25; i++) await quiz.nth(i).getByRole("button").first().click();
+    for (let i = 1; i < 25; i++) await quiz.nth(i).getByRole("button").nth(correctAt(i)).click();
     await page.getByRole("button", { name: "Kvíz kiértékelése" }).click();
     await expect(page.getByRole("region", { name: "Kvíz eredmény" })).toContainText("24 / 25 pont");
     await page.reload();

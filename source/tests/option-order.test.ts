@@ -1,0 +1,90 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { balancedLayouts, choiceSeed, displayOrder, optionOrder, refersToOtherOptions } from "../shared/option-order";
+
+// Spec 2026-11-02-valasz-keveres — a megjelenítési sorrend kevert, determinisztikus, és csak a sorrend változik.
+
+test("optionOrder: minden eredeti index pontosan egyszer szerepel", () => {
+  for (const count of [0, 1, 2, 3, 4]) {
+    for (const seed of ["a", "Ki írta az Antigonét?", "x".repeat(500)]) {
+      assert.deepEqual([...optionOrder(seed, count)].sort(), Array.from({ length: count }, (_, i) => i));
+    }
+  }
+});
+
+test("optionOrder: ugyanaz a seed mindig ugyanaz a sorrend (újratöltés, mentett válasz)", () => {
+  const seed = choiceSeed("Hogyan hal meg Haimón?", ["a", "b", "c", "d"]);
+  assert.deepEqual(optionOrder(seed, 4), optionOrder(seed, 4));
+  assert.notDeepEqual(
+    Array.from({ length: 20 }, (_, i) => optionOrder(`k${i}`, 4).join("")),
+    Array.from({ length: 20 }, () => "0123"),
+    "nem identitás minden seedre",
+  );
+});
+
+test("optionOrder: egyenletes — 4000 seeden a helyes (0.) válasz pozíció-aránya legfeljebb 5 százalékponttal tér el az 1/n-től", () => {
+  for (const count of [2, 3, 4]) {
+    const positions = new Array(count).fill(0);
+    for (let s = 0; s < 4000; s++) positions[optionOrder(`kérdés ${s}`, count).indexOf(0)]++;
+    for (const n of positions) {
+      const share = n / 4000;
+      assert.ok(Math.abs(share - 1 / count) < 0.05, `${count} opció: ${positions.join("/")}`);
+    }
+  }
+});
+
+test("élő Antigoné-minta torzítása (A:54/B:30/C:12/D:2 + 6×B): a megjelenített helyes pozíció egyik betűn sem haladja meg a 40%-ot", () => {
+  const stored = [...Array(54).fill(0), ...Array(36).fill(1), ...Array(12).fill(2), ...Array(2).fill(3)];
+  const shown = [0, 0, 0, 0];
+  stored.forEach((correctIndex, n) => {
+    const options = ["első", "második", "harmadik", "negyedik"].map((o) => `${o} ${n}`);
+    shown[displayOrder(choiceSeed(`${n}. kérdés`, options), options).indexOf(correctIndex)]++;
+  });
+  for (const count of shown) assert.ok(count / stored.length <= 0.4, `megjelenített pozíciók: ${shown.join("/")}`);
+});
+
+test("betűvel / „fenti” szóval más opcióra hivatkozó kérdés a tárolt sorrendben marad", () => {
+  assert.equal(refersToOtherOptions(["Az A és B is", "Csak C", "x", "y"]), true);
+  assert.equal(refersToOtherOptions(["A fenti mindegyik", "b"]), true);
+  assert.equal(refersToOtherOptions(["a", "b"], ["Nem: a „C” a jó."]), true);
+  assert.deepEqual(displayOrder("seed", ["Az A és B is", "Csak C", "x", "y"]), [0, 1, 2, 3]);
+  // A magyar „A” névelő nem hivatkozás.
+  assert.equal(refersToOtherOptions(["A cselekmény Argoszban játszódik.", "A kart thébai ifjak alkotják."], ["Nem: a helyszín Thébai."]), false);
+});
+
+
+const choices = (stored: number[]) =>
+  stored.map((correctIndex, n) => ({ question: `${n}. kérdés`, options: ["első", "második", "harmadik", "negyedik"].map((o) => `${o} ${n}`), correctIndex }));
+
+test("balancedLayouts: minden elrendezés permutáció, a helyes válasz pozíció-darabszáma legfeljebb 1-gyel tér el (mért 6×B + A minta)", () => {
+  for (const stored of [[1, 1, 0, 1, 1, 1, 1], [...Array(54).fill(0), ...Array(30).fill(1), ...Array(12).fill(2), ...Array(2).fill(3)]]) {
+    const qs = choices(stored);
+    const layouts = balancedLayouts(qs);
+    const shown = [0, 0, 0, 0];
+    for (const q of qs) {
+      const order = layouts.get(choiceSeed(q.question, q.options))!;
+      assert.deepEqual([...order].sort(), [0, 1, 2, 3]);
+      shown[order.indexOf(q.correctIndex)]++;
+    }
+    assert.ok(Math.max(...shown) - Math.min(...shown) <= 1, `megjelenített pozíciók: ${shown.join("/")}`);
+  }
+});
+
+test("balancedLayouts: determinisztikus, és a célpozíciók sorrendje nem ciklikus A, B, C, D", () => {
+  const qs = choices(Array(12).fill(0));
+  const positions = (m: Map<string, number[]>) => qs.map((q) => m.get(choiceSeed(q.question, q.options))!.indexOf(0)).join("");
+  assert.equal(positions(balancedLayouts(qs)), positions(balancedLayouts(qs)));
+  assert.notEqual(positions(balancedLayouts(qs)), "012301230123");
+});
+
+test("balancedLayouts: hivatkozó, érvénytelen és egyopciós kérdés nem kerül a mérlegre", () => {
+  const layouts = balancedLayouts([
+    { question: "h", options: ["Az A és B is", "Csak C", "x", "y"], correctIndex: 0 },
+    { question: "e", options: ["a", "b"], correctIndex: 5 },
+    { question: "o", options: ["egyetlen"], correctIndex: 0 },
+  ]);
+  assert.deepEqual(layouts.get(choiceSeed("h", ["Az A és B is", "Csak C", "x", "y"])), [0, 1, 2, 3]);
+  assert.deepEqual([...layouts.get(choiceSeed("e", ["a", "b"]))!].sort(), [0, 1]);
+  assert.deepEqual(layouts.get(choiceSeed("o", ["egyetlen"])), [0]);
+});
