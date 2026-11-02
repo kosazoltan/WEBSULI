@@ -28,7 +28,7 @@ const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
 export async function fixConceptInConversation(input: {
   original: Lesson; source: ConceptFixSource; conceptId: string; conversation: LessonConversation; log?: (m: string) => void;
   /** J2: friss, előzmény nélküli beszélgetés (bank, lektor) — ugyanaz a modellpár. */
-  fresh: (system: string) => LessonConversation;
+  fresh: (system: string, opts?: { effort?: import("./conversation").SingleRunEffort }) => LessonConversation;
   /** Review #263: a forrás átirata (a térkép `sourceText`-je) — a friss lektor ehhez is mér, mint a gyártásban. */
   sourceText?: string | null;
 }): Promise<{ ok: true; candidate: Lesson; report: LektorReport } | { ok: false; error: string }> {
@@ -98,7 +98,7 @@ export async function fixConceptSingleRun(lessonId: string, conceptId: string, a
   let conversation: LessonConversation;
   try { conversation = createLessonConversation(singleRunSystemPrompt()); }
   catch (error) { return { ok: false, error: error instanceof Error ? error.message : "Nincs beállított modellkulcs." }; }
-  const fixed = await fixConceptInConversation({ original, source, conceptId, conversation, fresh: (system) => createLessonConversation(system), sourceText });
+  const fixed = await fixConceptInConversation({ original, source, conceptId, conversation, fresh: (system, opts) => createLessonConversation(system, opts ?? {}), sourceText });
   if (!fixed.ok) return fixed;
   try {
     const { repairHash, materialHash, applyStructuredImprovement } = await import("../structured-improvement");

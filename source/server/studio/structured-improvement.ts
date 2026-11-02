@@ -100,7 +100,7 @@ export async function singleRunRepairCall(conversation?: import("./single-run/co
   const { freshBankCall, freshSystemPrompt, singleRunSystemPrompt, withRoleRunbook, SINGLE_RUN_FIX_ROUNDS } = await import("./single-run/engine");
   const { parseModelJson } = await import("./run-step");
   const main = conversation ?? createLessonConversation(singleRunSystemPrompt());
-  const newConversation = fresh ?? ((system: string) => createLessonConversation(system));
+  const newConversation = fresh ?? ((system: string, opts?: { effort?: import("./single-run/conversation").SingleRunEffort }) => createLessonConversation(system, opts ?? {}));
   const bank = freshBankCall(newConversation);
   return async (step: RepairStep, system: string, user: string, role: PromptRole): Promise<unknown> => {
     if (role === "bank") return bank(system, user);

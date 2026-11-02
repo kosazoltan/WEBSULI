@@ -12,7 +12,11 @@ import { withReadOnlyDb } from "../lib/read-only-db";
 
 const [target, label, outDir = "."] = process.argv.slice(2);
 if (!target || !label) throw new Error("Használat: single-run-measure.mts <térkép-azonosító eleje | file:útvonal> <címke> [kimeneti mappa]");
-const out: Record<string, unknown> = { label, target, startedAt: new Date().toISOString() };
+// Spec 2026-11-02-ellenorzes-effort-ab: az A/B ág azonosítása a kimenetben — a KANONIKUS, ténylegesen ható érték
+// (ugyanaz a szabály, mint az engine `checkEffort()`-je; PR #373 review: érvénytelen érték mediumként fut, úgy is jelenjen meg).
+const effectiveCheckEffort = (process.env.STUDIO_CHECK_EFFORT ?? "").trim().toLowerCase() === "low" ? "low" : "medium";
+const out: Record<string, unknown> = { label, target, startedAt: new Date().toISOString(),
+  checkEffort: effectiveCheckEffort, checkEffortRaw: (process.env.STUDIO_CHECK_EFFORT ?? "").trim() || null };
 
 // 1) A forrás: éles térkép forrásszövege (csak olvasás), vagy helyi fájl (kép / PDF / szöveg).
 type File = { name: string; kind: "text" | "image" | "pdf"; content: string };
@@ -127,7 +131,7 @@ try {
   try {
     result = await runSingleLesson(sameMap ? { files: [], mapId: String(sameMap.map.id), ownerId: "measure-owner" } : { files, ownerId: "measure-owner" }, {
       conversation,
-      fresh: (system) => createLessonConversation(system, { onFallback: (reason) => logs.push(`FALLBACK (friss): ${reason}`) }),
+      fresh: (system, opts) => createLessonConversation(system, { ...opts, onFallback: (reason) => logs.push(`FALLBACK (friss): ${reason}`) }),
       store: await createDrizzlePipelineStore(),
       saveMap: (map, f) => saveSingleRunMap(map, f, "measure-owner", conversation.model),
       log: (m) => logs.push(m),
@@ -139,6 +143,8 @@ try {
   out.error = error;
   out.job = job ? { step: job.step, status: job.status, error: job.error?.slice(0, 500) ?? null, qualityNotes: job.output?.qualityNotes ?? [], warnings: job.output?.quality?.warnings ?? [] } : null;
   out.telemetry = job?.output?.telemetry ?? null;
+  // Spec 2026-11-02-ellenorzes-effort-ab: a válaszkulcs-esetek a medium-visszajátszáshoz.
+  out.answerKeyArchive = job?.output?.answerKeyArchive ?? null;
   out.fallback = logs.filter((l) => l.startsWith("FALLBACK"));
   out.gateLogs = logs.filter((l) => /Válaszkulcs|Kvíz-előszűrő|quiz-blind|answer-key|Terjedelmi|Forrás-helyesbítés|bankcsomag|kivéve|lektor|Katalógus|katalógus|memória/i.test(l)).map((l) => l.slice(0, 300));
   if (result) {
