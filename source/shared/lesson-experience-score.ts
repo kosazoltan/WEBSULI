@@ -26,8 +26,13 @@ export const ENGLISH_WEAK_NEGATIONS = ["no", "never", "nothing", "nobody", "none
  * ilyenkor nem váratlan (mért: 6 helyes, tagadó válasz csak fél pontot kapott).
  */
 export const HU_WEAK_NEGATIONS = ["sem", "se", "soha", "sosem", "semmi", "semmit", "senki", "senkit", "sehol", "nincs", "nincsen", "nincsenek", "tilos", "ne"] as const;
-/** Fosztóképző a tő után (normalizált alakon): a „boldogtalan”, „jogtalan”, „lelkiismeretlen”, „szénmentes” NEM a tő szava. */
-const PRIVATIVE_SUFFIX = /^(t?[ae]l[ae]n|[ae]?tl[ae]n|l[ae]n|mentes)/;
+/**
+ * Fosztóképző a tő után (normalizált alakon): a „boldogtalan”, „jogtalan”, „lelkiismeretlen”, „szénmentes” NEM a tő szava. Review #380:
+ * az angol „colourless”, „sugarfree” sem.
+ */
+const PRIVATIVE_SUFFIX = /^(t?[ae]l[ae]n|[ae]?tl[ae]n|l[ae]n|mentes|less|free)/;
+/** Review #380: a jelentést megfordító előtag nem összetételi előtag („disagree”, „dishonest”, „nemdohányzó”). */
+const NEGATING_PREFIXES = new Set(["dis", "non", "mis", "anti", "counter", "mal", "nem"]);
 /** Az alak-tűrés (képzés, több toldalék, összetett szó) legrövidebb rubrikaszava: rövidebbnél csak a régi szabályok. */
 const FORM_MIN_LENGTH = 5;
 
@@ -102,13 +107,20 @@ function wordHit(token: string, word: string): boolean {
  * fosztóképzőset; az összetett szó utótagja (≥ 3 betűs előtaggal — „sziklabarlangba”); és a tövek elütése.
  */
 function formHit(token: string, word: string): boolean {
-  for (const base of new Set([word, stem(word)])) {
-    if (base.length < FORM_MIN_LENGTH) continue;
-    if (token.length > base.length && token.startsWith(base) && !PRIVATIVE_SUFFIX.test(token.slice(base.length))) return true;
-    if ([token, stem(token)].some((t) => t.length - base.length >= 3 && t.endsWith(base))) return true;
+  const bases = [...new Set([word, stem(word)])].filter((b) => b.length >= FORM_MIN_LENGTH);
+  // Review #380: a fosztóképző a TELJES szó után is tilt (haszon+talan, oxigén+mentes) — a rövidebb tő („haszo|ntalan”) nem kerülheti meg.
+  if (bases.some((b) => token.startsWith(b) && privativeBetween(token, b.length, word.length))) return false;
+  for (const base of bases) {
+    if (token.length > base.length && token.startsWith(base)) return true;
+    if ([token, stem(token)].some((t) => t.length - base.length >= 3 && t.endsWith(base) && !NEGATING_PREFIXES.has(t.slice(0, t.length - base.length)))) return true;
   }
   const [a, b] = [stem(token), stem(word)];
   return Math.min(a.length, b.length) >= FORM_MIN_LENGTH && distance(a, b) <= (Math.max(a.length, b.length) > 8 ? 2 : 1);
+}
+/** A `from` (az alap vége) és a `to` (a teljes szó vége) közti bármely ponton kezdődő fosztóképző. */
+function privativeBetween(token: string, from: number, to: number): boolean {
+  for (let i = from; i <= Math.max(from, to); i++) if (PRIVATIVE_SUFFIX.test(token.slice(i))) return true;
+  return false;
 }
 /**
  * J1 (docs/specs/2026-10-16-egyfutas-atvilagitas.md): a `candidate` válasz normalizált tokenjei között szerepel-e a `covered` válasz

@@ -346,14 +346,26 @@ function ee_wordHit(answerTokens, answerStems, word){
 }
 /* szoalak: a >= 5 betus szo (vagy egytoldalekos tove) kepzett / tobbszorosen ragozott alakja (a szoval kezdodo hosszabb szo),
    kiveve a fosztokepzoset (-talan/-telen/-tlan/-tlen/-len, -mentes); az osszetett szo utotagja (>= 3 betus elotaggal); a tovek eluteses. */
-var EE_PRIVATIVE = /^(t?[ae]l[ae]n|[ae]?tl[ae]n|l[ae]n|mentes)/;
+var EE_PRIVATIVE = /^(t?[ae]l[ae]n|[ae]?tl[ae]n|l[ae]n|mentes|less|free)/;
+/* a jelentest megfordito elotag nem osszetetteli elotag (disagree, dishonest, nemdohanyzo) */
+var EE_NEG_PREFIX = ['dis','non','mis','anti','counter','mal','nem'];
+function ee_privativeBetween(tok, from, to){
+  var i;
+  for(i=from;i<=Math.max(from,to);i++){ if(EE_PRIVATIVE.test(tok.slice(i))) return true; }
+  return false;
+}
+function ee_compound(t, b){
+  return t.length - b.length >= 3 && t.slice(-b.length) === b && EE_NEG_PREFIX.indexOf(t.slice(0, t.length - b.length)) === -1;
+}
 function ee_formHit(tok, tokStem, p, ps){
-  var bases = ps === p ? [p] : [p, ps], i, b;
+  var all = ps === p ? [p] : [p, ps], bases = [], i, b;
+  for(i=0;i<all.length;i++){ if(all[i].length >= 5) bases.push(all[i]); }
+  /* a fosztokepzo a TELJES szo utan is tilt (haszon+talan, oxigen+mentes): a rovidebb to nem kerulheti meg */
+  for(i=0;i<bases.length;i++){ b = bases[i]; if(tok.slice(0, b.length) === b && ee_privativeBetween(tok, b.length, p.length)) return false; }
   for(i=0;i<bases.length;i++){
     b = bases[i];
-    if(b.length < 5) continue;
-    if(tok.length > b.length && tok.slice(0, b.length) === b && !EE_PRIVATIVE.test(tok.slice(b.length))) return true;
-    if((tok.length - b.length >= 3 && tok.slice(-b.length) === b) || (tokStem.length - b.length >= 3 && tokStem.slice(-b.length) === b)) return true;
+    if(tok.length > b.length && tok.slice(0, b.length) === b) return true;
+    if(ee_compound(tok, b) || ee_compound(tokStem, b)) return true;
   }
   return Math.min(tokStem.length, ps.length) >= 5 && ee_lev(tokStem, ps) <= ee_tol(Math.max(tokStem.length, ps.length));
 }
@@ -390,7 +402,7 @@ function ee_negKind(text, weak){
 /* a mintaban mas szoval kifejezett magyar tagadas (tilos, soha, sem, nincs...): a valasz "nem"-je ilyenkor nem varatlan */
 var EE_HU_WEAK = ['sem','se','soha','sosem','semmi','semmit','senki','senkit','sehol','nincs','nincsen','nincsenek','tilos','ne'];
 function ee_huWeakNeg(text){
-  var words = String(text||'').toLowerCase().split(/[^a-z\\u00e0-\\u024f]+/), i;
+  var words = String(text||'').normalize('NFC').toLowerCase().split(/[^a-z\\u00e0-\\u024f]+/), i;
   for(i=0;i<words.length;i++){ if(EE_HU_WEAK.indexOf(words[i])!==-1) return true; }
   return false;
 }

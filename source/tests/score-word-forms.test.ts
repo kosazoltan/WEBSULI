@@ -34,6 +34,23 @@ test("a fosztóképzős (ellentétes) alak, a rövid szó, a szám és a véletl
   ] as const) assert.equal(scoreOf(word, answer), 0, `${word} ↛ „${answer}”`);
 });
 
+test("review #380: a rövidebb tő sem kerülheti meg a fosztóképzőt, és az ellentétes előtag/utótag (magyar, angol) nem talál", () => {
+  for (const [word, answer] of [
+    ["haszon", "haszontalan"],
+    ["vagyon", "vagyontalan"],
+    ["oxigén", "oxigénmentes"],
+    ["dohányzó", "nemdohányzó"],
+    ["agree", "disagree"],
+    ["appear", "disappear"],
+    ["honest", "dishonest"],
+    ["colour", "colourless"],
+    ["sugar", "sugarfree"],
+  ] as const) assert.equal(scoreOf(word, answer), 0, `${word} ↛ „${answer}”`);
+  for (const [word, answer] of [["agree", "agreement"], ["haszon", "hasznos haszonnal"], ["colour", "colourful"]] as const) {
+    assert.equal(scoreOf(word, answer), 1, `${word} ← „${answer}” (nem ellentétes alak)`);
+  }
+});
+
 test("a mintában más szóval kifejezett magyar tagadás mellett a válasz „nem”-je nem von le pontot; tagadás nélküli mintánál igen", () => {
   const forbidden: OpenTask = { ...task("eltemetni", "Polüneikészt tilos eltemetni."), required: [["Polüneikészt"], ["eltemetni"]] };
   assert.equal(evaluateOpenAnswer("Polüneikészt nem szabad eltemetni.", forbidden).score, 1);

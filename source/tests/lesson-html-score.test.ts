@@ -41,6 +41,12 @@ test("spec 2026-11-03-pontozo-szoalak: a HTML-pontozó a szóalak-tűrésben és
     { required: [["megkövezés"], ["kötél"]], sample: "megkövezés kötél", answers: ["megkövezéssel és kötéllel", "kötéltelen"] },
     { required: [["Polüneikészt"], ["eltemetni"]], sample: "Polüneikészt tilos eltemetni.", answers: ["Polüneikészt nem szabad eltemetni."] },
     { required: [["Antigoné"], ["eltemeti"]], sample: "Antigoné eltemeti a testvérét.", answers: ["Antigoné nem eltemeti a testvérét."] },
+    // Review #380: fosztóképző a rövidebb tő után, ellentétes előtag/utótag, NFD-minta.
+    { required: [["haszon"]], sample: "haszon", answers: ["haszontalan", "haszonnal"] },
+    { required: [["oxigén"]], sample: "oxigén", answers: ["oxigénmentes"] },
+    { required: [["agree"]], sample: "I agree.", answers: ["I disagree.", "agreement"] },
+    { required: [["colour"]], sample: "colour", answers: ["colourless", "colourful"] },
+    { required: [["név"], ["azonosítja"], ["szereplőt"]], sample: "A név azonosítja a szereplőt.".normalize("NFD"), answers: ["A név nem azonosítja a szereplőt."] },
   ];
   for (const c of cases) for (const answer of c.answers) {
     const t = { ...original, required: c.required, minWords: 1, needsSentence: false, sample: c.sample };
