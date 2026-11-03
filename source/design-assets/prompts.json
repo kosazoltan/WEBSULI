@@ -7923,9 +7923,9 @@
       "keywords": [
         "4. osztály - 💖 Az emberi test - Egészségünk 💖"
       ],
-      "alt": "Kipirult gyerekek ugrókötelet hajtanak a napos parkban, a padon vizespalack és alma.",
+      "alt": "Futó gyerek a parkban, mellkasán átsejlik a szív és az erek; előtte táplálkozási piramis, víz, szappan és elsősegély-doboz.",
       "aspect_ratio": "3:2",
-      "prompt": "Rosy-cheeked children skipping rope and running happily in a sunny park, dressed in light clothes for the warm weather, one child resting on a bench with a hand on their chest feeling the heartbeat, a water bottle and an apple beside them. Healthy, energetic atmosphere. Gentle, cheerful picture-book mood for young children, uncluttered background."
+      "prompt": "A happy child jogging in a sunny park, shown with a gentle friendly see-through glow on the chest revealing a red heart and soft red and blue blood vessels branching through the body; in front of them a picnic blanket with a colourful food pyramid of fruits, vegetables, bread, milk and fish, a water bottle, a bar of soap with bubbles and a small first-aid kit with a bandage. Healthy, cheerful atmosphere, not anatomical or scary. Gentle, cheerful picture-book mood for young children."
     },
     {
       "id": "cover-l-7d5124e582a8a8cb",
@@ -8315,9 +8315,9 @@
       "keywords": [
         "Fogalomjegyzék a feltöltött forrásokból"
       ],
-      "alt": "Mesebeli táj: fehér lovas hős hátulról, távoli hegyen barátságos sárkány és griffmadár.",
+      "alt": "Fehérlófia mesevilága: hős fehér lóval, háromfejű sárkány, griffmadár, hosszú szakállú törpe, aranyfürt és gyűrű.",
       "aspect_ratio": "3:2",
-      "prompt": "A magical fairy-tale landscape: a young hero on a white horse seen from behind on a winding path, a golden curl and a sparkling ring glowing in his hand, a friendly three-headed dragon resting far away on a misty hill and a griffin bird circling above. Nothing frightening. Gentle, cheerful picture-book mood for young children, uncluttered."
+      "prompt": "The creatures and symbols of the Hungarian folk tale Fehérlófia gathered in one storybook scene: a brave young hero in an embroidered shirt beside a shining white horse, a friendly green three-headed dragon peeking from a cave, a big griffin bird with spread wings on a rock, a tiny old man with an enormously long beard tangled around a tree stump, and a glowing golden curl of hair and a magic ring on a mossy stone in the foreground. Gentle, cheerful picture-book mood for young children, nothing frightening."
     },
     {
       "id": "cover-l-9e2a3b63a4dd8051",
@@ -8581,9 +8581,9 @@
       "keywords": [
         "5. osztály - A számírás fejlődése - Római számok"
       ],
-      "alt": "Ókori pásztorlány alkonyatkor terelő bárányokat számol kavicsokkal, hátulról nézve.",
+      "alt": "Római kőtábla a hét kőbe vésett római számjellel (I, V, X, L, C, D, M), előtte bronz abakusz.",
       "aspect_ratio": "3:2",
-      "prompt": "An ancient shepherd girl seen from behind at dusk, counting sheep as they return into a stone pen, dropping one pebble per lamb into a small pile, a carved bone with simple notches beside her, rolling hills and a warm orange sky. Adventurous, warm, lively mood for pre-teens, not babyish."
+      "prompt": "An ancient Roman stone tablet standing beside a paved Roman road in warm afternoon light, with exactly these seven Roman numeral symbols carved large and clear in classical capital letters in one row: I V X L C D M — these seven carved symbols are the only marks anywhere in the image, no other writing. A bronze Roman hand abacus with beads and a few counting pebbles rest on the tablet's base, a small Roman milestone and cypress trees behind. Adventurous, warm, lively mood for pre-teens, not babyish."
     },
     {
       "id": "cover-l-26cc2845a1d3e0d7",
@@ -8749,9 +8749,9 @@
       "keywords": [
         "A talaj kialakulása, összetevői és termékenysége"
       ],
-      "alt": "Fagytól repedezett sziklák mohával és zuzmóval, a törmelékben kis facsemete nő.",
+      "alt": "Talajszelvény a rét alatt: humuszos felső réteg gyökerekkel és gilisztákkal, alatta homok, alul aprózódó kőzet.",
       "aspect_ratio": "3:2",
-      "prompt": "A rocky hillside showing how soil forms: frost-cracked boulders crumbling into smaller stones, green moss and orange lichen on the rock, a thin layer of dark earth in the cracks where a tiny sapling and wildflowers take root, morning sun. Adventurous, warm, lively mood for pre-teens, not babyish."
+      "prompt": "A cutaway cross-section of the ground under a sunny meadow showing how soil forms: on top dark crumbly humus full of fine roots, earthworms and decaying fallen leaves, below it a lighter layer of sand and small stones, at the bottom cracked rock breaking into fragments; on the surface lichen and moss cover a frost-cracked stone and a young plant holds the soil with its roots, water droplets seeping down. Adventurous, warm, lively mood for pre-teens, not babyish."
     },
     {
       "id": "cover-l-a9365070be367842",
@@ -10082,6 +10082,48 @@
       "alt": "Esti munkaállomás laptoppal és monitorral, mellette lebegő lakat és kulcs, elágazó fénycsíkok.",
       "aspect_ratio": "3:2",
       "prompt": "A calm modern workspace at dusk: a laptop and a second monitor showing soft abstract coloured panels, a small glowing padlock and key floating beside them, and threads of light branching and merging like a river delta into a soft cloud. Serious, sophisticated, realistic mood for teenagers and adults. No logos, no brand UI, no code text."
+    },
+    {
+      "id": "cover-l-f898345f4953d861",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "English Grammar with Pictures - 4th Grade"
+      ],
+      "alt": "Színes képkártyák az asztalon mindennapi cselekvésekkel; egy gyerek felmutat egyet és elmondja, mi látható rajta.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny table covered with big colourful picture cards, each showing one everyday action: a cat jumping over a box, a girl reading under a tree, a dog sleeping in a basket, a boy eating an apple, children playing football; a child holds up one card with a big smile while a friend points at it, describing the picture aloud. No writing on the cards. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-6caaeaef196888ad",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Informatika"
+      ],
+      "keywords": [
+        "Suno AI - Zenekészítés mesterséges intelligenciával"
+      ],
+      "alt": "Esti otthoni zenestúdió: fejhallgatós alkotó hátulról, a laptopból fénylő hanghullámok és hangjegyek emelkednek.",
+      "aspect_ratio": "3:2",
+      "prompt": "A calm modern home music studio at night: a person seen from behind at a desk with studio headphones and a small keyboard, a laptop screen showing only soft abstract glowing sound waves, from which translucent ribbons of light shaped like waveforms and floating musical notes rise and swirl into the room, a guitar leaning against the wall. No logos, no readable screen content. Serious, sophisticated, realistic mood for teenagers and adults."
+    },
+    {
+      "id": "cover-l-73f08404442cb68e",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Magyar irodalom"
+      ],
+      "keywords": [
+        "Szabó Magda: Abigél"
+      ],
+      "alt": "Régi leányiskola elvadult kertje alkonyatkor: korsós lányszobor, tövében levél, felé egy egyenruhás diáklány sétál.",
+      "aspect_ratio": "3:2",
+      "prompt": "The overgrown garden of a strict old girls' boarding school in eastern Hungary in the 1940s at dusk: a weathered stone statue of a young girl holding a water jug stands among bushes and wild roses, a small folded letter tucked at its base, behind it the tall walls of the old school building with a few lit windows; a lone schoolgirl in a dark uniform seen from behind walks toward the statue along a gravel path. Mature, inspiring mood for young teenagers, no childish cartoon look."
     }
   ]
 }
