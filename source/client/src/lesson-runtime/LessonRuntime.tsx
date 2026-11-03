@@ -1,6 +1,6 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getClassroomLabel } from "@shared/classrooms";
-import { BookOpen, CheckCircle2, ChevronRight, HelpCircle, Leaf, Compass, Brain, FlaskConical, TrendingUp, Lightbulb, ListChecks, Sparkles, Target, Volume2, XCircle, PlayCircle, Hand } from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronRight, HelpCircle, Leaf, Lightbulb, ListChecks, Sparkles, Target, Volume2, XCircle, PlayCircle, Hand } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -36,13 +36,13 @@ import { experienceFingerprint } from "./useExperienceRound";
 // Websuli Design (docs/specs/2026-10-16-websuli-design.md): az öt évfolyamsávos arculat — a többi lecke-CSS UTÁN, hogy az azonos
 // specificitású szabályoknál is ez érvényesüljön.
 import "./lesson-design.css";
-import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom, type DesignThemeId } from "@shared/lesson-design";
+import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom } from "@shared/lesson-design";
+import { BAND_ICON } from "@/lib/band-icons";
 import { VerdictFeedback } from "./VerdictFeedback";
 import { explainIsLong, explainParagraphs } from "./explain-paragraphs";
 import { displayHeading } from "@shared/lesson-ui-text";
 
 /** A koncepciókép sávjelvényei: levél · iránytű · agy · lombik · emelkedő grafikon (szabályterv 1.2). */
-const BAND_ICON: Record<DesignThemeId, typeof Leaf> = { explorer: Leaf, adventure: Compass, studio: Brain, laboratory: FlaskConical, future: TrendingUp };
 
 /**
  * The Lesson Runtime: one audited renderer for every lesson.

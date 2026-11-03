@@ -24,7 +24,7 @@ betöltéskori újraválasztás nem írhatja felül a kézzel beállított képe
   témaköri borítók a témakört mutatják, nem a leckét („Családi kör”, „Hunyadi János”, „Ionvegyületek” → sávhős).
 
 ## Megoldás
-- **Tartalomkulcs** (`shared/lesson-cover.ts`): `lessonCoverId({ subject, title }, band)` = `cover-l-` + 16 hex (két FNV-1a 32 bites
+- **Tartalomkulcs** (`shared/lesson-cover-key.ts`): `lessonCoverId({ subject, title }, band)` = `cover-l-` + 16 hex (két FNV-1a 32 bites
   lenyomat) a (sáv, ékezet-/írásjel-/kis-nagybetű-tűrő tantárgy, ugyanígy a cím) hármasból; böngészőben és Node-ban azonos. Ugyanaz a
   tartalom (vázlat-másolatok) ugyanazt a képet kapja.
 - **Képek a katalógusban** (`kind: cover`, `band` = a lecke sávja, `topic` nincs, `subjects` = a lecke tantárgya, `keywords` = a cím),
@@ -92,6 +92,11 @@ betöltéskori újraválasztás nem írhatja felül a kézzel beállított képe
 - HA a csere lefutott, AKKOR minden publikált lecke (Antigoné kivételével) `art.picture` = a tartalomkulcsú borító (lista), és a
   lejátszó 390 és 1280 px szélességen ezt mutatja (képernyőképek).
 - HA `npm test`, `tsc` (app + teszt), `eslint --max-warnings 0`, `npm run build`, AKKOR zöld.
+
+## Összefésülés a #381-gyel (2026-11-03)
+- A #381 (főoldali borítókártyák) ugyanezen a néven vett fel `shared/lesson-cover.ts`-t (`shownPictureId`, a lejátszóval azonos
+  választás). Az a fájl változatlan; a tartalomkulcs (`lessonCoverId`, `isLessonCoverId`) a `shared/lesson-cover-key.ts`-be került
+  (a `design-assets` ↔ `lesson-cover` körkörös import elkerülésére is). A főoldal így a katalógusba került új borítókat mutatja.
 
 ## Spec-változás miatti tesztmódosítás
 - `tests/design-assets.test.ts` („sávkép…”): a „A vulkánok – vulkáni működés” (6. o.) eddig a sávhőst várta; a lecke most saját

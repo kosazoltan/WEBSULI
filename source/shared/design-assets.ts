@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { subjectIconIdForBand } from "./subject-icons";
-import { isLessonCoverId, lessonCoverAsset, lessonCoverId } from "./lesson-cover";
+import { isLessonCoverId, lessonCoverAsset, lessonCoverId } from "./lesson-cover-key";
 
 /**
  * Websuli képkészlet katalógusa (shared/design-assets.json) — MI-generált, kurált saját képek a szabályterv 2.3 szerint

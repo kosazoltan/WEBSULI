@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
 import { resolveStoredArt } from "../shared/design-assets";
-import { lessonCoverId } from "../shared/lesson-cover";
+import { lessonCoverId } from "../shared/lesson-cover-key";
 import { computeLessonArt } from "../shared/lesson-art-compute";
 import { loadStyle } from "../scripts/design-assets/lib";
 import type { CoverDeps, CoverStore, LessonLite } from "../server/lesson-covers";

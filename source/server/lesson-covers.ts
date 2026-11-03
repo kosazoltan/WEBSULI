@@ -4,7 +4,7 @@ import { db } from "./db";
 import { designAssets } from "../shared/schema";
 import { computeLessonArt } from "../shared/lesson-art-compute";
 import { designThemeForClassroom } from "../shared/lesson-design";
-import { lessonCoverId } from "../shared/lesson-cover";
+import { lessonCoverId } from "../shared/lesson-cover-key";
 import { hashWithoutArt, pinnedArt, SKIPPED_FILES, verifyPinned, type ArtPin } from "./lib/lesson-art-pin";
 import { logger } from "./lib/logger";
 

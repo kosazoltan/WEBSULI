@@ -12,7 +12,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { withReadOnlyDb, withWriteTransaction } from "../lib/read-only-db";
 import { DESIGN_ASSET_CATALOG } from "../../shared/design-asset-catalog";
-import { isLessonCoverId } from "../../shared/lesson-cover";
+import { isLessonCoverId } from "../../shared/lesson-cover-key";
 import { repairHash } from "../../server/lib/canonical-hash";
 import { hashWithoutArt, pinnedArt, planPins, verifyPinned, type PinPlan, type PinRow } from "./pin-lesson-covers-lib";
 

@@ -1,35 +1,29 @@
-import type { DesignAsset, DESIGN_ASSET_BANDS } from "./design-assets";
+import { DESIGN_ASSET_CATALOG } from "./design-asset-catalog";
+import { pickLessonArt, resolveStoredArt, type StoredLessonArt } from "./design-assets";
+import { designThemeForClassroom } from "./lesson-design";
 
 /**
- * Leckénkénti borítókép (docs/specs/2026-11-03-leckeborito.md): a lecke tartalomkulcsa — a (sáv, tantárgy, cím) hármas ékezet-,
- * írásjel- és kis-nagybetű-tűrő alakjából. Böngészőben és Node-ban azonos; ugyanaz a tartalom ugyanazt a képet kapja, a cím vagy
- * a sáv változása új kulcsot ad. A kép a verziókezelt katalógus `cover` eleme (`id` = a kulcs), mint a többi borító.
+ * Spec 2026-11-03-fooldal-boritokartyak (review #381): a főoldali kártya PONTOSAN azt a kezdőképet mutatja, amit a lecke-lejátszó
+ * (`lessonArtFor`: a tárolt kép, ha az új szabály szerint is illik, különben friss választás; a sáv az évfolyamé, a seed a lecke
+ * azonosítója). Csak a szerver használja — a képkatalógus így nem kerül a főoldal bundle-jébe.
  */
-type Band = (typeof DESIGN_ASSET_BANDS)[number];
-export const LESSON_COVER_ID = /^cover-l-[a-f0-9]{16}$/;
-
-// A `foldText` megfelelője — saját példány, hogy a design-assets ↔ lesson-cover import ne legyen körkörös.
-const basis = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-function fnv1a(text: string, seed: number): string {
-  let h = seed;
-  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
-  return (h >>> 0).toString(16).padStart(8, "0");
+export function shownPictureId(lesson: { subject?: unknown; title?: unknown; classroom?: unknown; art?: unknown }, seed: string): string | null {
+  if (typeof lesson.subject !== "string" || typeof lesson.title !== "string" || typeof lesson.classroom !== "number") return null;
+  const meta = { subject: lesson.subject, title: lesson.title };
+  const band = designThemeForClassroom(lesson.classroom);
+  const art = resolveStoredArt(lesson.art as StoredLessonArt | undefined, band, DESIGN_ASSET_CATALOG, meta) ?? pickLessonArt({ ...meta, seed }, band, DESIGN_ASSET_CATALOG);
+  return (art.cover ?? art.hero)?.id ?? null;
 }
-
-export function lessonCoverId(lesson: { subject: string; title: string }, band: Band): string {
-  const key = `${band}|${basis(lesson.subject)}|${basis(lesson.title)}`;
-  return `cover-l-${fnv1a(key, 0x811c9dc5)}${fnv1a(key, 0x01000193)}`;
-}
-
-export const isLessonCoverId = (id: string | undefined): id is string => !!id && LESSON_COVER_ID.test(id);
 
 /**
- * Spec 2026-11-03-leckeborito-auto: az adatbázisban gyártott (a katalógusban nem szereplő) leckeborító leírója a lejátszónak. A kép a
- * `/api/design-assets/<id>` végpontról jön; a `src` a katalógus szerinti tartalékkép statikus fájlja (az `ArtImage` hibánál erre vált).
+ * Fájlonként a LEGÚJABB publikált lecke számít (a sorok `published_at` szerint csökkenőek), akkor is, ha annak nincs megjeleníthető
+ * képe — egy régebbi lecke borítója nem kerülhet elé (review #381).
  */
-export function lessonCoverAsset(id: string, band: Band, lesson: { subject: string; title: string }, fallbackSrc: string): DesignAsset {
-  return {
-    id, kind: "cover", band, subjects: [lesson.subject], keywords: [], alt: `${lesson.title} — a lecke borítóképe.`, src: fallbackSrc,
-    origin: "MI-generált, saját (Seedream 5.0 Pro, automatikus leckeborító)", model: "bytedance-seed/seedream-5-0-pro", promptHash: "0000000000000000", approvedAt: "",
-  };
+export function coversByFile(rows: ReadonlyArray<{ id: string; htmlFileId: string | null; lesson: Parameters<typeof shownPictureId>[0] }>): Map<string, string | null> {
+  const covers = new Map<string, string | null>();
+  for (const row of rows) {
+    if (!row.htmlFileId || covers.has(row.htmlFileId)) continue;
+    covers.set(row.htmlFileId, shownPictureId(row.lesson, row.id));
+  }
+  return covers;
 }

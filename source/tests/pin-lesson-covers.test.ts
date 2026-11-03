@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { lessonCoverId } from "../shared/lesson-cover";
+import { lessonCoverId } from "../shared/lesson-cover-key";
 import { hashWithoutArt, pinnedArt, planPins, verifyPinned, type PinRow } from "../scripts/design-assets/pin-lesson-covers-lib";
 
 // docs/specs/2026-11-03-leckeborito.md — a kézi csere csak az `art.picture`-t írja; minden más bájtra (kanonikusan) változatlan.

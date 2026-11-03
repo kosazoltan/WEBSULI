@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { buildImageRequest, composePrompt, estimateUsd, loadStyle, redact, type AssetManifest } from "../scripts/design-assets/lib";
 import { designAssetSchema } from "../shared/design-assets";
-import { lessonCoverId } from "../shared/lesson-cover";
+import { lessonCoverId } from "../shared/lesson-cover-key";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
 
 // Websuli képkészlet (docs/specs/2026-10-17-websuli-kepkeszlet.md).

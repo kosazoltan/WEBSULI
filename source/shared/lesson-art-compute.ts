@@ -2,7 +2,7 @@ import { DESIGN_ASSET_CATALOG } from "./design-asset-catalog";
 import { lessonArtIds, pickLessonArt, type DesignAsset, type StoredLessonArt } from "./design-assets";
 import { topicCoverId, topicKeyOf } from "./topic-taxonomy";
 import { designThemeForClassroom } from "./lesson-design";
-import { isLessonCoverId, lessonCoverId } from "./lesson-cover";
+import { isLessonCoverId, lessonCoverId } from "./lesson-cover-key";
 
 /**
  * A mentéskori arculatválasztás tiszta magja (docs/specs/2026-10-18-arculat-backfill.md): a `withLessonArt` és a backfill-szkript

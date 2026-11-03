@@ -1,6 +1,6 @@
 import { hashWithoutArt, SKIPPED_FILES } from "../../server/lib/lesson-art-pin";
 import { designThemeForClassroom } from "../../shared/lesson-design";
-import { lessonCoverId } from "../../shared/lesson-cover";
+import { lessonCoverId } from "../../shared/lesson-cover-key";
 // A hash-ellenőrzés közös a szerver automatikus leckeborítójával (docs/specs/2026-11-03-leckeborito-auto.md).
 export { hashWithoutArt, pinnedArt, SKIPPED_FILES, verifyPinned } from "../../server/lib/lesson-art-pin";
 

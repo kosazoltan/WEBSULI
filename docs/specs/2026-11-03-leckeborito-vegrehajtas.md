@@ -19,10 +19,10 @@ Munkakönyvtár: `source/`. Tananyag-generálás és szövegmodell-hívás nincs
 - Ellenőrzés: `git diff shared/design-asset-catalog.ts` csak hozzáadás; `tests/design-assets.test.ts` zöld (séma, fájlok).
 
 ## T4 — választó- és védőlogika
-- `shared/lesson-cover.ts` (`lessonCoverId`, `isLessonCoverId`); `shared/design-assets.ts` (`pickLessonArt` kulcsos borító elsőbbsége,
+- `shared/lesson-cover-key.ts` (`lessonCoverId`, `isLessonCoverId`); `shared/design-assets.ts` (`pickLessonArt` kulcsos borító elsőbbsége,
   `pictureFits` a `cover-l-*` képre); `shared/lesson-art-compute.ts` (`pinned`); `server/design-assets.ts` `withLessonArt` átadja a
   korábbi `art.picture`-t.
-- Ellenőrzés: `node --import tsx --test tests/lesson-cover.test.ts tests/cover-gorog-drama.test.ts tests/design-assets.test.ts` → `ℹ fail 0`.
+- Ellenőrzés: `node --import tsx --test tests/lesson-cover-key.test.ts tests/cover-gorog-drama.test.ts tests/design-assets.test.ts` → `ℹ fail 0`.
 
 ## T5 — csereszkript
 - `scripts/design-assets/pin-lesson-covers.mts`: próbafutás / `--write <mentés.json>` / `--restore <mentés.json>`; a tiszta tervező és
