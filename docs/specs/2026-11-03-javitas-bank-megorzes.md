@@ -66,8 +66,17 @@
   meglévő út: `salvageSchema` + `validate`, a mostani kapuk. Bukás esetén a régi viselkedés (újragyártás) jön.
 - **Bélyegzés:** átvételkor a csomag és az egység `sourceHash`-e a korábbi hash marad. Így a tételazonosítók, a tanulói előzmények és
   a következő javítás átvétele is megmarad.
-- **Tartalék:** forrás-helyesbítés (`owner.corrections`) esetén az érintett fogalmú egység nem vehető át. A javítás végén a lektor a
-  teljes bankot ellenőrzi; a blokkoló tétel a meglévő `removeLektorBlockers` szerint kiesik.
+- **Tartalék:** forrás-helyesbítés (`owner.corrections`) esetén az érintett fogalmú egység nem vehető át. A kizárás
+  egységenként történik (`reuseExcludedConceptIds`), nem az egész fejezetre: a 6-nál több fogalmú fejezet több csomagra bomlik,
+  ezek közül a többi megmarad (review #379). A javítás végén a lektor a teljes bankot ellenőrzi; a blokkoló tétel a meglévő
+  `removeLektorBlockers` szerint kiesik.
+- **Azonosítók:** az átvett, már ezzel a hash-sel bélyegzett csomag tételei a saját azonosítójukat tartják, nem index szerint
+  számozódnak újra. Egy korábbi lektori kivétel hézaga így nem tolja el őket, és a kivett tétel azonosítója nem kerül másik
+  kérdésre (review #379). Vegyes vagy ütköző csomagnál marad a régi újraszámozás.
+- **Modelles kapuk az átvett csomagon:** a válaszkulcs-teszt és a kvíz vak előszűrő nem fut újra az átvett csomagon. Ez a meglévő
+  T6.1-szabály (`reusedPacket`) a hash-egyező átvételre is. A régi csomag a gyártásakor átment ezeken és a lektoron; a javítás végi
+  lektor most is a teljes bankot nézi. Az átvétel így modellhívás nélküli, ami a tulajdonos költségcélja (review #379, tudatos döntés).
+  A determinisztikus `validate` (séma, egy-helyes-válasz, mintaválasz-pontozás, aritmetika, ismétlődés) igenis lefut.
 - **Közös kapuk:** a `bankQualityGates` ugyanazokkal a vészfékekkel működik (`STUDIO_ANSWER_KEY_TESTS=0`, `STUDIO_QUIZ_BLIND=0`), mint
   eddig a gyártásban.
 - **Antigoné helyreállítása:**
