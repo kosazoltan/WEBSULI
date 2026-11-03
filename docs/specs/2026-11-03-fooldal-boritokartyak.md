@@ -123,6 +123,17 @@
 - **Kliens:** az `onLoad` visszaállítja a hiba után elrejtett képet (a lista frissítése új borítót hozhat).
 - **Bélyegkép-végpont:** a hibaválasz (500, a beolvasás közbeni 404) `Cache-Control: no-store`, ETag nélkül.
 - **Teszt:** `tests/lesson-cover.test.ts`.
+### Review #381: a `sharp` biztonsága és licence
+
+- **Sebezhetőségek** (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c, GHSA-wq5f-xc86-pv6w):
+  - `sharp ^0.35.5` (mért: libvips 8.18.7, libheif 1.23.5, librsvg 2.63.2, mind a javított verzió vagy újabb);
+  - mélységi védelemként a nem használt GIF/TIFF/VIPS/HEIF/SVG dekódolók tiltva (`sharp.block`), `failOn: "error"`;
+  - a bemenet csak a saját, adatbázisban tárolt katalógusképünk, nem felhasználói feltöltés;
+  - teszt: SVG/TIFF bemenetből nem készül bélyegkép.
+- **Licenc (LGPL-3.0-or-later, libvips előre fordított binárisa):**
+  - változatlan, dinamikusan betöltött könyvtár egy szerveroldali szolgáltatásban, a programot nem terjesztjük;
+  - az LGPL forrás-közzétételi kötelezettsége a könyvtár terjesztésekor vagy módosításakor lép életbe, itt egyik sem áll fenn;
+  - a saját kód közzététele nem szükséges. A `sharp` maga Apache-2.0.
 ## 8. Kockázatok / visszavonás
 
 - **`sharp` natív függőség:** a Render `npm ci` a linux-x64 előre fordított csomagját telepíti (az npm lockfile v3 rögzíti a
