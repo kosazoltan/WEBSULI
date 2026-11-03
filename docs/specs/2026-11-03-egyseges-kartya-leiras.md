@@ -71,6 +71,15 @@
 - Teljes kör: `tsc` (app + teszt), `eslint`, `npm test`. Élesben: `/api/html-files` (helyőrző-arány 213/217 → ~0), főoldal
   390/1280 px.
 
+### Review #383 (2026-11-03)
+
+- **Mondathatár:** csak szóköz vagy szövegvég előtti `[.!?…]`. A záró idézőjel és zárójel az előző mondathoz tartozik, a szöveg az
+  eredetiből szeletelődik, így az írásjelek változatlanok. Az „1.000”, a „$3.14$”, a „websuli.vip” és a „„Miért?””
+  nem törik szét. Regressziós teszt védi.
+- **SQL:** ugyanaz a választás, mint a `lessonTeaser`-ben: az első szöveges `explain` blokk, ennek hiányában az első szöveges
+  blokk, blokksorrendben (`with ordinality`).
+- **Javítás alkalmazása** (`applyStructuredImprovement`): a `descriptionAfterLessonChange` alapján az automatikus leírás
+  (helyőrző, üres vagy pontosan az előző lecke bevezetője) az új lecke bevezetőjére frissül. A kézzel írt leírás érintetlen.
 ## 8. Kockázatok / visszavonás
 
 - A lista egy további, kicsi oszlopot olvas (az első `explain` blokk szövege), a meglévő `HtmlFilesCache` alatt.
