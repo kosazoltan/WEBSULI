@@ -79,6 +79,7 @@
     "@types/pg": "^8.15.6",
     "@types/qrcode": "^1.5.6",
     "@types/web-push": "^3.6.4",
+    "@xmldom/xmldom": "^0.9.8",
     "acorn": "^8.15.0",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
@@ -106,6 +107,7 @@
     "hunspell-asm": "4.0.2",
     "input-otp": "^1.4.2",
     "isomorphic-dompurify": "^2.30.0",
+    "jszip": "3.10.1",
     "lucide-react": "^0.453.0",
     "mammoth": "^1.11.0",
     "nanoid": "^5.1.16",
@@ -126,6 +128,7 @@
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.2",
     "resend": "^6.2.2",
+    "sharp": "^0.34.5",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.184.0",
@@ -134,9 +137,7 @@
     "wouter": "^3.3.5",
     "ws": "^8.21.3",
     "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0",
-    "jszip": "3.10.1",
-    "@xmldom/xmldom": "^0.9.8"
+    "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -401,7 +401,7 @@ export class DatabaseStorage implements IStorage {
     // displayOrder=0 means no manual order (use createdAt)
     // OPTIMIZATION: Do NOT fetch the full 'content' (which can be 100MB+) for the list view
     // Return empty string for content to satisfy type interface
-    return await db
+    const rows = await db
       .select({
         id: htmlFiles.id,
         userId: htmlFiles.userId,
@@ -417,7 +417,18 @@ export class DatabaseStorage implements IStorage {
       .orderBy(
         sql`CASE WHEN ${htmlFiles.displayOrder} = 0 THEN NULL ELSE ${htmlFiles.displayOrder} END ASC`,
         desc(htmlFiles.createdAt)
-      ) as unknown as Promise<HtmlFile[]>;
+      ) as unknown as HtmlFile[];
+    // Spec 2026-11-03-fooldal-boritokartyak: a főoldali kártya borítója a publikált lecke `art.picture`-je (a legutóbbi publikálásé).
+    // A borító nélküli anyag (HTML/PDF) null — a kliens a sáv hős-képét mutatja; a borító hibája nem buktatja a listát.
+    const covers = new Map<string, string>();
+    try {
+      const pictures = await db.select({ htmlFileId: lessons.htmlFileId, picture: sql<string | null>`${lessons.json}->'art'->>'picture'` })
+        .from(lessons).where(sql`${lessons.publishedAt} IS NOT NULL`).orderBy(desc(lessons.publishedAt));
+      for (const p of pictures) if (p.htmlFileId && p.picture && !covers.has(p.htmlFileId)) covers.set(p.htmlFileId, p.picture);
+    } catch (error) {
+      logger.warn("[storage] A főoldali borítók nem olvashatók, a lista borító nélkül megy:", error);
+    }
+    return rows.map((row) => ({ ...row, cover: covers.get(row.id) ?? null })) as HtmlFile[];
   }
 
   async getHtmlFile(id: string): Promise<HtmlFile | undefined> {
