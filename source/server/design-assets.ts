@@ -3,9 +3,9 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
-import { designAssets } from "../shared/schema";
+import { designAssets, lessons } from "../shared/schema";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
 import { type DesignAsset } from "../shared/design-assets";
 import { computeLessonArt } from "../shared/lesson-art-compute";
@@ -90,23 +90,33 @@ export async function syncDesignAssets(catalog: readonly DesignAsset[] = DESIGN_
  * Mentés előtti arculat (docs/specs/2026-10-17-lecke-betoltes.md; az ikon a 2026-10-17-websuli-ikonkeszlet szerint): a lecke
  * a sáv ikonját, a rotációval választott hős- vagy borítóképet és (1–5. évfolyamon) a kabalát kapja — csak az adatbázisban
  * megvan elemekből. A lejátszó ezt olvassa, megjelenítéskor nem számol. Review #274: a javítás közvetlen mentése is ezen megy
- * át, a saját tranzakciójában. Ismeretlen tantárgy vagy nem tanított pár: ikon nélkül; hiba esetén a lecke `art` nélkül ment.
+ * át, a saját tranzakciójában. Ismeretlen tantárgy vagy nem tanított pár: ikon nélkül; hiba esetén a meglévő `art` marad (ha nincs: nélküle).
  */
 export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typeof db, "select"> = db): Promise<T> {
   if (!json || typeof json !== "object" || Array.isArray(json)) return json;
   const lesson = json as Record<string, unknown>;
   if (typeof lesson.subject !== "string" || typeof lesson.classroom !== "number" || typeof lesson.title !== "string") return json;
-  const { art: _previous, ...rest } = lesson;
+  const { art: previousArt, ...rest } = lesson;
   await initialSyncSettled();
   try {
     const stored = new Set((await executor.select({ id: designAssets.id }).from(designAssets)).map(r => r.id));
     // Arculati bank (S1): a lecke témaköre (tantárgy, évfolyam, cím) → a témakör borítója, ha az a táblában megvan.
     // A tiszta mag a backfill-szkripttel közös (docs/specs/2026-10-18-arculat-backfill.md).
-    const art = computeLessonArt(lesson, seed, stored) ?? {};
+    // Spec 2026-11-03-leckeborito: a kézzel beállított leckeborító (korábbi `art.picture`) az újraválasztás után is megmarad.
+    let previous = previousArt && typeof previousArt === "object" ? (previousArt as { picture?: unknown }).picture : undefined;
+    // Review #382: a javítási jelölt (modellkimenet) kihagyhatja az opcionális `art`-ot — ilyenkor a tárolt lecke képe számít
+    // (a seed meglévő leckénél az azonosítója; ugyanabban a tranzakcióban olvasva). Új leckénél nincs ilyen sor.
+    if (typeof previous !== "string") {
+      const [row] = await executor.select({ picture: sql<string | null>`${lessons.json}->'art'->>'picture'` }).from(lessons).where(eq(lessons.id, seed));
+      previous = row?.picture ?? undefined;
+    }
+    const art = computeLessonArt(lesson, seed, stored, undefined, previous) ?? {};
     return (Object.keys(art).length ? { ...rest, art } : rest) as T;
   } catch (error) {
-    logger.warn("[design-assets] Az arculat nem választható, a lecke art nélkül ment:", error);
-    return rest as T;
+    // Review #382: átmeneti hiba esetén a meglévő arculat (benne a kézi borító) marad; art nélkül csak az eddig arculat nélküli lecke ment.
+    const kept = previousArt && typeof previousArt === "object" && !Array.isArray(previousArt);
+    logger.warn(`[design-assets] Az arculat nem választható, a lecke ${kept ? "a meglévő arculatával" : "art nélkül"} ment:`, error);
+    return (kept ? { ...rest, art: previousArt } : rest) as T;
   }
 }
 

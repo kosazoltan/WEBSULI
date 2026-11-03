@@ -4,13 +4,14 @@
  *   npx tsx scripts/design-assets/generate.ts --trial --dry-run   # becsült ár és promptok, hívás nélkül
  *   npx tsx scripts/design-assets/generate.ts --trial              # a próbakör (legfeljebb --max kép)
  *   npx tsx scripts/design-assets/generate.ts --only hero-studio,cover-sejt
+ *   npx tsx scripts/design-assets/generate.ts --only cover-l-… --resolution 1K   # leckeborító (docs/specs/2026-11-03-leckeborito.md)
  * A kulcs (OPENROUTER_API_KEY) csak a memóriában él; sem a konzolra, sem a naplóba nem kerül.
  */
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildImageRequest, composePrompt, estimateUsd, loadStyle, parseMax, redact, type AssetItem, type AssetManifest } from "./lib";
+import { buildImageRequest, composePrompt, estimateUsd, loadStyle, parseMax, parseResolution, redact, type AssetItem, type AssetManifest } from "./lib";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const ASSETS = path.join(ROOT, "design-assets");
@@ -57,8 +58,9 @@ async function main() {
   const max = parseMax(process.argv.includes("--max") ? (arg("max") ?? "") : undefined);
   let items = manifest.items.filter(i => (only ? only.includes(i.id) : flag("trial") ? i.trial : true));
   if (items.length > max) { console.log(`Csak az első ${max} tétel fut (--max).`); items = items.slice(0, max); }
+  const resolution = parseResolution(process.argv.includes("--resolution") ? (arg("resolution") ?? "") : undefined);
   const refsCount = items.reduce((n, i) => n + (i.references?.length ?? 0), 0);
-  console.log(`${items.length} kép · becsült költség ≈ ${estimateUsd(items.length, refsCount).toFixed(2)} USD (${manifest.model}, 2K)`);
+  console.log(`${items.length} kép · becsült költség ≈ ${estimateUsd(items.length, refsCount, resolution).toFixed(2)} USD (${manifest.model}, ${resolution})`);
   if (flag("dry-run")) {
     for (const i of items) console.log(`- ${i.id} [${i.band}/${i.kind} ${i.aspect_ratio}]\n  ${composePrompt(i, style)}`);
     return;
@@ -70,7 +72,7 @@ async function main() {
   for (const item of items) {
     const refs = (item.references ?? []).map(id => referenceDataUrl({ ...item, id }, manifest)).filter((u): u is string => !!u);
     if ((item.references?.length ?? 0) > refs.length) console.log(`  ! ${item.id}: hiányzó referencia, nélküle generálok.`);
-    const body = buildImageRequest(manifest.model, item, style, refs);
+    const body = buildImageRequest(manifest.model, item, style, refs, resolution);
     let saved = false;
     for (let attempt = 1; attempt <= 2 && !saved; attempt++) {
       try {
@@ -89,7 +91,7 @@ async function main() {
         const ext = img.media_type === "image/jpeg" ? "jpg" : img.media_type === "image/webp" ? "webp" : "png";
         const file = path.join(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`);
         writeFileSync(file, Buffer.from(img.b64_json, "base64"));
-        const cost = estimateUsd(1, refs.length);
+        const cost = estimateUsd(1, refs.length, resolution);
         spent += cost;
         appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), id: item.id, model: manifest.model, promptHash: createHash("sha256").update(body.prompt).digest("hex").slice(0, 16), refs: refs.length, estUsd: cost, usage: json.usage ?? null, file: path.relative(CANDIDATES, file), status: "ok" }) + "\n");
         console.log(`  ✓ ${item.id} → ${path.relative(ROOT, file)}`);

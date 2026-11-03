@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { buildImageRequest, composePrompt, estimateUsd, loadStyle, redact, type AssetManifest } from "../scripts/design-assets/lib";
 import { designAssetSchema } from "../shared/design-assets";
+import { lessonCoverId } from "../shared/lesson-cover-key";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
 
 // Websuli képkészlet (docs/specs/2026-10-17-websuli-kepkeszlet.md).
@@ -150,7 +151,10 @@ test("sávkép: 9. o. matek → híd, 6–8. o. → Föld; a halloweeni borító
   const { pickLessonArt } = await import("../shared/design-assets");
   const pic = (subject: string, title: string, band: "studio" | "laboratory") => { const a = pickLessonArt({ subject, title, seed: "s" }, band, DESIGN_ASSET_CATALOG); return (a.cover ?? a.hero)?.id; };
   assert.equal(pic("Matematika", "Kéttagú kifejezések négyzete – azonos kifejezések párosítása", "laboratory"), "hero-laboratory");
-  assert.equal(pic("Természettudomány", "A vulkánok – vulkáni működés", "studio"), "hero-studio");
+  // Spec-változás 2026-11-03-leckeborito (tulajdonosi döntés): a saját, tartalomkulcsú borítóval rendelkező lecke azt kapja;
+  // a borító nélküli cím továbbra is a sáv hősét (idegen témaborítót nem).
+  assert.equal(pic("Természettudomány", "A vulkánok – vulkáni működés", "studio"), lessonCoverId({ subject: "Természettudomány", title: "A vulkánok – vulkáni működés" }, "studio"));
+  assert.equal(pic("Természettudomány", "A vulkánok – gyakorló feladatsor", "studio"), "hero-studio");
   for (let i = 0; i < 30; i++) assert.notEqual(pickLessonArt({ subject: "Matematika", title: `Feladatsor ${i}`, seed: `x${i}` }, "laboratory", DESIGN_ASSET_CATALOG).cover?.id, "cover-ismetlodes");
   assert.notEqual(pic("Matematika", "Ismétlődő minta és füzér", "laboratory"), "cover-ismetlodes", "más sáv témaborítója nem jöhet");
   assert.equal(pic("Matematika", "Ismétlődő minta és füzér", "studio"), "cover-ismetlodes", "a saját sávban a kulcsszóra igen");

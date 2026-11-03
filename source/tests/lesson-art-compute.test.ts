@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { lessonCoverId } from "../shared/lesson-cover-key";
 import { computeLessonArt } from "../shared/lesson-art-compute";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
 
@@ -7,10 +8,15 @@ import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
 const all = new Set(DESIGN_ASSET_CATALOG.map(a => a.id));
 
 test("a mag determinisztikus, a témaköri borítót választja, a kabala csak 1–5. évfolyamon; érvénytelen lecke: null", () => {
-  const egy = computeLessonArt({ subject: "Történelem", classroom: 5, title: "Az ókori Egyiptom" }, "lecke-1", all);
-  assert.deepEqual(egy, computeLessonArt({ subject: "Történelem", classroom: 5, title: "Az ókori Egyiptom" }, "lecke-1", all));
+  // Spec-változás 2026-11-03-leckeborito: a saját borítós „Az ókori Egyiptom” lecke azt kapja; a témaköri választást egy saját borító
+  // nélküli, ugyanahhoz a témakörhöz tartozó cím vizsgálja.
+  const egy = computeLessonArt({ subject: "Történelem", classroom: 5, title: "Az ókori Egyiptom piramisai" }, "lecke-1", all);
+  assert.deepEqual(egy, computeLessonArt({ subject: "Történelem", classroom: 5, title: "Az ókori Egyiptom piramisai" }, "lecke-1", all));
   assert.equal(egy?.topic, "okor");
   assert.match(egy?.picture ?? "", /^cover-tortenelem-adventure-okor/);
+  const own = computeLessonArt({ subject: "Történelem", classroom: 5, title: "Az ókori Egyiptom" }, "lecke-1", all);
+  assert.equal(own?.picture, lessonCoverId({ subject: "Történelem", title: "Az ókori Egyiptom" }, "adventure"));
+  assert.equal(own?.topic, "okor", "a témakör-kulcs megmarad");
   const hat = computeLessonArt({ subject: "Matematika", classroom: 6, title: "Oszthatóság 3-mal és 9-cel" }, "lecke-2", all);
   assert.ok(hat && !hat.mascot, "6. évfolyamon nincs kabala");
   assert.equal(computeLessonArt({ subject: "Matematika", title: "x" }, "s", all), null);

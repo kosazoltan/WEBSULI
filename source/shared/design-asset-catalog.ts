@@ -2449,6 +2449,3576 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "approvedAt": "2026-10-17T11:23:12.833Z"
   },
   {
+    "id": "cover-l-02ef86e2e3783b14",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Kivonás tízesátlépéssel – Autós Matek Kaland"
+    ],
+    "alt": "Játékautók tízes sorokban parkolnak a szőnyegen, gyerekkéz néhányat a garázs felé tol el.",
+    "src": "/design/adventure/cover-l-02ef86e2e3783b14.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "0dab11fff5a84460",
+    "approvedAt": "2026-11-03T06:59:42.625Z"
+  },
+  {
+    "id": "cover-l-02f8c09c5a1a9ae2",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Negatív számok kivonása"
+    ],
+    "alt": "Tóba nyúló stég, vízbe merülő rovátkás mérőoszlop, alatta búvár, fölötte sirály.",
+    "src": "/design/studio/cover-l-02f8c09c5a1a9ae2.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f0c66240c730c5fe",
+    "approvedAt": "2026-11-03T06:59:51.573Z"
+  },
+  {
+    "id": "cover-l-03e0862e1d339a88",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Sorozatok és koordináta-rendszer | 5. osztály - Cyber Mission"
+    ],
+    "alt": "Világító padlórács két fényes tengellyel négy részre osztva, rajta fénypontok és drón.",
+    "src": "/design/adventure/cover-l-03e0862e1d339a88.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "99d55cc444c57493",
+    "approvedAt": "2026-11-03T06:59:48.671Z"
+  },
+  {
+    "id": "cover-l-0480bf1cc72a019a",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Informatika"
+    ],
+    "keywords": [
+      "Informatika - Replit Fiók Létrehozása"
+    ],
+    "alt": "Világos irodai asztal laptoppal, egy fénylő kulcs nyitja ki a képernyőn megjelenő ajtót.",
+    "src": "/design/studio/cover-l-0480bf1cc72a019a.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "38889ee41071f202",
+    "approvedAt": "2026-11-03T06:59:40.721Z"
+  },
+  {
+    "id": "cover-l-08cf0cff4b35ee19",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "A víz körforgása a természetben"
+    ],
+    "alt": "Tenger, napfény, felhők a hegyek fölött, eső és a tengerbe visszafolyó folyó.",
+    "src": "/design/adventure/cover-l-08cf0cff4b35ee19.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "7919b4e0e4e49470",
+    "approvedAt": "2026-11-03T06:59:49.225Z"
+  },
+  {
+    "id": "cover-l-09185458b3afdc0e",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "Digitális kultúra"
+    ],
+    "keywords": [
+      "Programozási alapismeretek - Windows Fejlesztői Környezet"
+    ],
+    "alt": "Rendezett esti fejlesztői asztal monitorral, felirat nélküli billentyűzettel és teásbögrével.",
+    "src": "/design/laboratory/cover-l-09185458b3afdc0e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "bce69729cd7b5e5b",
+    "approvedAt": "2026-11-03T06:59:55.084Z"
+  },
+  {
+    "id": "cover-l-0af8c8713bf73013",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Jobs - Foglalkozások 🎨 | 3. osztály Angol - Teljes Tananyag"
+    ],
+    "alt": "Napos kisvárosi utca orvossal, kenyeret tartó pékkel, tűzoltóautóval és más dolgozókkal.",
+    "src": "/design/adventure/cover-l-0af8c8713bf73013.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "e562fd8491548763",
+    "approvedAt": "2026-11-03T06:59:41.320Z"
+  },
+  {
+    "id": "cover-l-0b28d4d4eec8aa3e",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv és irodalom"
+    ],
+    "keywords": [
+      "4. osztály - Igekötők és igék"
+    ],
+    "alt": "Gyerekek a parkban felmásznak, lecsúsznak, beugranak és kiszaladnak egy játszótéren.",
+    "src": "/design/adventure/cover-l-0b28d4d4eec8aa3e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "941bcd16943fb984",
+    "approvedAt": "2026-11-03T06:59:45.096Z"
+  },
+  {
+    "id": "cover-l-0e388e9e373563b8",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "biológia"
+    ],
+    "keywords": [
+      "Sejtosztódás, növényi sejtalkotók és a biológiai membránok"
+    ],
+    "alt": "Növényi sejt zöld színtestekkel és sejtfallal, mellette osztódó sejt széthúzódó kromoszómákkal.",
+    "src": "/design/laboratory/cover-l-0e388e9e373563b8.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "046bc64815704741",
+    "approvedAt": "2026-11-03T06:59:55.587Z"
+  },
+  {
+    "id": "cover-l-0e390beb99b99bc5",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "3. osztály - 🎬 Bandi bácsi Matek Órája"
+    ],
+    "alt": "Idős tanító háttal, helyiérték-kockákra mutat: százas lapok, tízes rudak és egyes kockák.",
+    "src": "/design/adventure/cover-l-0e390beb99b99bc5.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "3423c636c13466e3",
+    "approvedAt": "2026-11-03T06:59:41.838Z"
+  },
+  {
+    "id": "cover-l-10956bfe204d40f8",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "4. osztály - A légzés szervrendszere"
+    ],
+    "alt": "Gyerek mély levegőt vesz egy virágos hegyi réten, mellette pitypangot fúj egy barátja.",
+    "src": "/design/adventure/cover-l-10956bfe204d40f8.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "42804eaf6746a0ea",
+    "approvedAt": "2026-11-03T06:59:46.454Z"
+  },
+  {
+    "id": "cover-l-10f04f112345a543",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Full Blast 1 - Angol 4. osztály"
+    ],
+    "alt": "Napos táborrét, ahol különböző országokból jött gyerekek zsonglőrködnek, gitároznak és úsznak.",
+    "src": "/design/adventure/cover-l-10f04f112345a543.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "16b59e3efe6982d3",
+    "approvedAt": "2026-11-03T06:59:43.529Z"
+  },
+  {
+    "id": "cover-l-114be7b9646cacfb",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "A tömeg mérése, mértékegységei"
+    ],
+    "alt": "Kétkarú mérleg rézsúlyokkal, mellette almák, lisztes zsák és konyhai mérleg.",
+    "src": "/design/adventure/cover-l-114be7b9646cacfb.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "215a61def88d0165",
+    "approvedAt": "2026-11-03T06:59:48.293Z"
+  },
+  {
+    "id": "cover-l-116dab37705ee7e5",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "4 osztályos környezetismeret Budapest, barangolás, Alföld"
+    ],
+    "alt": "Széles folyó két partja, egyiken dombos városrész, másikon sík város, köztük lánchíd.",
+    "src": "/design/adventure/cover-l-116dab37705ee7e5.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "7495075d8fe4bfe2",
+    "approvedAt": "2026-11-03T06:59:44.124Z"
+  },
+  {
+    "id": "cover-l-117a1a45961d3e77",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Technika és tervezés"
+    ],
+    "keywords": [
+      "8. osztály - Csokis Muffin Készítés - Kezdőknek"
+    ],
+    "alt": "Konyhapult rácson hűlő csokis muffinokkal, keverőtálakkal, liszttel, tojással és fogpiszkálóval.",
+    "src": "/design/studio/cover-l-117a1a45961d3e77.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f09b87d7f5454984",
+    "approvedAt": "2026-11-03T06:59:54.383Z"
+  },
+  {
+    "id": "cover-l-11a92d6ef928e718",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "Az égés"
+    ],
+    "alt": "Laborasztalon két gyertya, az egyik üvegbúra alatt kialszik, a másik fényesen ég.",
+    "src": "/design/adventure/cover-l-11a92d6ef928e718.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "cd448ddecb92388c",
+    "approvedAt": "2026-11-03T06:59:49.305Z"
+  },
+  {
+    "id": "cover-l-11f57f0bb9cd8509",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Medve Szabadtéri Csapatverseny – gyakorló feladatsor"
+    ],
+    "alt": "Őszi park piknikasztalokkal, csapatban dolgozó diákokkal és ismétlődő töklámpás füzérrel.",
+    "src": "/design/laboratory/cover-l-11f57f0bb9cd8509.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "892ac9f875cc4255",
+    "approvedAt": "2026-11-03T06:59:55.527Z"
+  },
+  {
+    "id": "cover-l-124c7d5c06db4e62",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Biológia"
+    ],
+    "keywords": [
+      "Hívatlan látogatók a kertben"
+    ],
+    "alt": "Kerti ágyás közelről: burgonyabogár a krumplilevélen, csiga a salátán, káposztalepke.",
+    "src": "/design/adventure/cover-l-124c7d5c06db4e62.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "881f5c32391e536d",
+    "approvedAt": "2026-11-03T06:59:47.220Z"
+  },
+  {
+    "id": "cover-l-124ee55e07186220",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Erkölcstan"
+    ],
+    "keywords": [
+      "A család és a nemzeti identitás - 8. osztály"
+    ],
+    "alt": "Három generáció piknikezik egy hatalmas tölgy alatt, egy ágon piros-fehér-zöld szalag.",
+    "src": "/design/studio/cover-l-124ee55e07186220.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "08d3323f42597cae",
+    "approvedAt": "2026-11-03T06:59:52.297Z"
+  },
+  {
+    "id": "cover-l-1320d9701c258a2a",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "Fizika"
+    ],
+    "keywords": [
+      "Mozgások, erők, lendület és hőtan feladatokon keresztül"
+    ],
+    "alt": "Befagyott tó naplementekor csúszó curlingkövekkel, egyikről a másikra ugró kutyával és holddal.",
+    "src": "/design/laboratory/cover-l-1320d9701c258a2a.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "c805c558b48b9af7",
+    "approvedAt": "2026-11-03T06:59:55.211Z"
+  },
+  {
+    "id": "cover-l-13ff5d94b7efa9aa",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar irodalom"
+    ],
+    "keywords": [
+      "Arany János: Családi kör"
+    ],
+    "alt": "Alkonyati falusi udvar almafával, hazatérő tehénnel és meleg fényű ablakkal.",
+    "src": "/design/adventure/cover-l-13ff5d94b7efa9aa.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "fc70f4e393d71f8f",
+    "approvedAt": "2026-11-03T06:59:47.600Z"
+  },
+  {
+    "id": "cover-l-140d2bf84c22458a",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Informatika"
+    ],
+    "keywords": [
+      "Informatika - ChatGPT 2 PRO Tananyag"
+    ],
+    "alt": "Három világító fényoszlop egy laptop mellett, egyetlen fókuszált sugárrá egyesülnek.",
+    "src": "/design/studio/cover-l-140d2bf84c22458a.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "2dc6a9feb35c04bd",
+    "approvedAt": "2026-11-03T06:59:40.663Z"
+  },
+  {
+    "id": "cover-l-1524cc22c0e84a24",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Informatika"
+    ],
+    "keywords": [
+      "Tömbök, ciklusok, feltételek"
+    ],
+    "alt": "Sorba rendezett üvegdobozok dobókockákkal, körülöttük körbefutó és kettéváló fénycsík.",
+    "src": "/design/studio/cover-l-1524cc22c0e84a24.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "847769e239bac271",
+    "approvedAt": "2026-11-03T06:59:53.204Z"
+  },
+  {
+    "id": "cover-l-164b6c39842dcd33",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Fizika"
+    ],
+    "keywords": [
+      "A testek elektromos állapota"
+    ],
+    "alt": "Feldörzsölt léggömb felé emelkedő hajszálak, papírdarabkákat vonzó vonalzó.",
+    "src": "/design/studio/cover-l-164b6c39842dcd33.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "29376b9b83478805",
+    "approvedAt": "2026-11-03T06:59:52.481Z"
+  },
+  {
+    "id": "cover-l-179b45216f63bc3b",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "4. Osztály Alpokalja Dunántúl"
+    ],
+    "alt": "Zöld dombvidék gyors patakkal, háttérben erdős hegyek, egy dombon kis kőtorony.",
+    "src": "/design/adventure/cover-l-179b45216f63bc3b.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "666fe3484447f05c",
+    "approvedAt": "2026-11-03T06:59:44.193Z"
+  },
+  {
+    "id": "cover-l-180abc27077fa6dd",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Felszín és Térfogat – 5. osztály"
+    ],
+    "alt": "Csomagolópapírral becsomagolt doboz, félig töltött akvárium és átlátszó kockák.",
+    "src": "/design/adventure/cover-l-180abc27077fa6dd.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "812f34d871303175",
+    "approvedAt": "2026-11-03T06:59:48.369Z"
+  },
+  {
+    "id": "cover-l-1a48cbe64ca750ac",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelvtan"
+    ],
+    "keywords": [
+      "🎮 Főnevek és Tulajdonnevek – 3. osztály"
+    ],
+    "alt": "Napos falukép házzal, labdát kergető kutyával, sárkányt eregető fiúval és folyóhíddal.",
+    "src": "/design/adventure/cover-l-1a48cbe64ca750ac.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "cf1ff4a854fb877a",
+    "approvedAt": "2026-11-03T06:59:41.549Z"
+  },
+  {
+    "id": "cover-l-1b668a2b1f278aa9",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "3. osztály - 🎮 Matek Küldetés - Összeadás és Kivonás"
+    ],
+    "alt": "Kalandor gyerek aranycsillagokat gyűjt a réten, kedves kis szörnyek kukucskálnak a bokrokból.",
+    "src": "/design/adventure/cover-l-1b668a2b1f278aa9.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ee9a9ea72a5809e7",
+    "approvedAt": "2026-11-03T06:59:41.912Z"
+  },
+  {
+    "id": "cover-l-1d0b87be5aca1944",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Az ókori Hellász II - 8. osztály"
+    ],
+    "alt": "Ókori Athén délutáni fényben: háttal álló polgárok a népgyűlés dombján, mögöttük az Akropolisz.",
+    "src": "/design/studio/cover-l-1d0b87be5aca1944.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "c8d8d10d78dc174b",
+    "approvedAt": "2026-11-03T06:59:54.756Z"
+  },
+  {
+    "id": "cover-l-1d22b230ed676282",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "4. osztály - Matematika, Alakzatok Tananyag."
+    ],
+    "alt": "Kocka, gömb, henger és gúla fából egy asztalon, mellettük színes papír sokszögek és egy hangya.",
+    "src": "/design/adventure/cover-l-1d22b230ed676282.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "9bd7c1661d7ac204",
+    "approvedAt": "2026-11-03T06:59:45.520Z"
+  },
+  {
+    "id": "cover-l-1fd6dc0cd0dd1f3a",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "6. osztály - Oszthatóság – Matek 6."
+    ],
+    "alt": "Kavicsok egyenlő sorokba és téglalapokba rendezve egy fa asztalon, mellettük egy szita.",
+    "src": "/design/studio/cover-l-1fd6dc0cd0dd1f3a.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "52b0cd4e42f7f7e5",
+    "approvedAt": "2026-11-03T06:59:50.711Z"
+  },
+  {
+    "id": "cover-l-210cf0a73c9256f1",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "Betegség, gyógyulás"
+    ],
+    "alt": "Gyerek szappanhabos kézzel mosolyog a mosdónál, mellette törölköző és pohár meleg tea.",
+    "src": "/design/adventure/cover-l-210cf0a73c9256f1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "dbc4aecbae7b83cf",
+    "approvedAt": "2026-11-03T06:59:44.865Z"
+  },
+  {
+    "id": "cover-l-2337cfc3c3acb809",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Biológia"
+    ],
+    "keywords": [
+      "8.osztály  anyagforgalom jelentősége és az előbél felépítése"
+    ],
+    "alt": "Fogsor-modell fogkefével, körülötte citrom, méz, perec és csokoládé az ízekhez.",
+    "src": "/design/studio/cover-l-2337cfc3c3acb809.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "95ae1d1efe35883e",
+    "approvedAt": "2026-11-03T06:59:52.034Z"
+  },
+  {
+    "id": "cover-l-240fa66ec522d1bc",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Biológia"
+    ],
+    "keywords": [
+      "8. osztály - Anyagforgalom és Légzés - Interaktív Tananyag"
+    ],
+    "alt": "Átlátszó emberi törzsmodell tüdővel, gyomorral és belekkel, mellette víz és alma.",
+    "src": "/design/studio/cover-l-240fa66ec522d1bc.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "8d739a24bf7691dd",
+    "approvedAt": "2026-11-03T06:59:51.973Z"
+  },
+  {
+    "id": "cover-l-263096f3d895569d",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "8. Osztály Green war novell"
+    ],
+    "alt": "Két tinédzser palántákat ültet egy szürke belvárosi utcán, a szomszédok locsolókannával segítenek.",
+    "src": "/design/studio/cover-l-263096f3d895569d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "cfb3ac3a18e4c4f0",
+    "approvedAt": "2026-11-03T06:59:51.786Z"
+  },
+  {
+    "id": "cover-l-26b8792dfe07540f",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "There are – Angol 4. osztály"
+    ],
+    "alt": "Világos gyerekszoba, macska az asztalon, ceruzák az íróasztalon, labda az ágy alatt.",
+    "src": "/design/adventure/cover-l-26b8792dfe07540f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "563d69d891fb5b30",
+    "approvedAt": "2026-11-03T06:59:43.741Z"
+  },
+  {
+    "id": "cover-l-26cc2845a1d3e0d7",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "5. osztály törtek Egyszerűsítése és bővítése"
+    ],
+    "alt": "Két egyforma pizza: az egyik négy, a másik nyolc szeletre vágva, azonos rész hiányzik.",
+    "src": "/design/adventure/cover-l-26cc2845a1d3e0d7.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "22d9faeb2f45abd9",
+    "approvedAt": "2026-11-03T06:59:48.221Z"
+  },
+  {
+    "id": "cover-l-28cc7e173b785891",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "Informatika"
+    ],
+    "keywords": [
+      "Programozási alapismeretek - VS Code & GitHub Fejlesztői Útmutató - Claude Code-dal"
+    ],
+    "alt": "Esti munkaállomás laptoppal és monitorral, mellette lebegő lakat és kulcs, elágazó fénycsíkok.",
+    "src": "/design/laboratory/cover-l-28cc7e173b785891.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "76b29fc4537104af",
+    "approvedAt": "2026-11-03T06:59:55.646Z"
+  },
+  {
+    "id": "cover-l-28e99dd548411ef7",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Countable & Uncountable Nouns – Megszámolható és megszámolhatatlan főnevek"
+    ],
+    "alt": "Konyhapult almákkal, tojásokkal, kekszekkel, mellettük tej, rizs, liszt és méz.",
+    "src": "/design/adventure/cover-l-28e99dd548411ef7.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "6cfaa0714547e87c",
+    "approvedAt": "2026-11-03T06:59:43.450Z"
+  },
+  {
+    "id": "cover-l-2963bbd6cae10340",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Törtek, százalék, arányosság, szögek, téglalap, átlag és egész számok"
+    ],
+    "alt": "Szeletekre vágott torta, háromszög vonalzó, almás mérleg és hőmérő a deres ablaknál.",
+    "src": "/design/studio/cover-l-2963bbd6cae10340.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "c0338388be1156be",
+    "approvedAt": "2026-11-03T06:59:51.000Z"
+  },
+  {
+    "id": "cover-l-2bac2ec241678798",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "4. osztály - Októberi Matek Gyakorló 4."
+    ],
+    "alt": "Őszi asztal golyós számológéppel, mérlegen almákkal, mérőszalaggal és negyedelt pitével.",
+    "src": "/design/adventure/cover-l-2bac2ec241678798.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "fa34b7f06a0fb06a",
+    "approvedAt": "2026-11-03T06:59:45.599Z"
+  },
+  {
+    "id": "cover-l-2bc786c3c084c6e5",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "Biológia"
+    ],
+    "keywords": [
+      "9. osztály - Sejtmembrán, transzport, sejtmag, sejtosztódás – Biológia 9."
+    ],
+    "alt": "Sejthártya-metszet kettős lipidréteggel, csatornafehérjékkel és áthaladó részecskékkel.",
+    "src": "/design/laboratory/cover-l-2bc786c3c084c6e5.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "0b6e2842f6058106",
+    "approvedAt": "2026-11-03T06:59:55.033Z"
+  },
+  {
+    "id": "cover-l-302c489598c148f7",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar irodalom"
+    ],
+    "keywords": [
+      "5. osztály - A Pál utcai fiúk - Interaktív tananyag"
+    ],
+    "alt": "Régi budapesti grund fafarakásokkal és kis fészerrel, hátulról látott fiúkkal.",
+    "src": "/design/adventure/cover-l-302c489598c148f7.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "63141ccbbf290553",
+    "approvedAt": "2026-11-03T06:59:47.443Z"
+  },
+  {
+    "id": "cover-l-311cae2b0d78d3c1",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Fizika"
+    ],
+    "keywords": [
+      "Több fogyasztó az áramkörben | 8. osztály Fizika"
+    ],
+    "alt": "Esti nappali világító csillárral, az ablakon karácsonyi égősor, egy izzó a párkányon.",
+    "src": "/design/studio/cover-l-311cae2b0d78d3c1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "afd1e238758ea649",
+    "approvedAt": "2026-11-03T06:59:52.660Z"
+  },
+  {
+    "id": "cover-l-331b7fcb8de759e9",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "4. osztály - 🍎 Osztás Varázslat - Tanuljunk együtt!"
+    ],
+    "alt": "Négy barát egy pikniktakarón egyenlően osztja szét az almákat, egy cukorka a közepén marad.",
+    "src": "/design/adventure/cover-l-331b7fcb8de759e9.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ac2229b4808c8f5c",
+    "approvedAt": "2026-11-03T06:59:45.755Z"
+  },
+  {
+    "id": "cover-l-3494830174e1c34b",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "5. osztály - A számírás fejlődése - Római számok"
+    ],
+    "alt": "Ókori pásztorlány alkonyatkor terelő bárányokat számol kavicsokkal, hátulról nézve.",
+    "src": "/design/adventure/cover-l-3494830174e1c34b.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "6e28f7ef79168dbc",
+    "approvedAt": "2026-11-03T06:59:48.148Z"
+  },
+  {
+    "id": "cover-l-36173144165caf5e",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Kivonás 10-es átlépéssel - 3. osztály"
+    ],
+    "alt": "Tanyasi konyhában gyerek egy nagy dobozból kivesz egy tojástartót, és kosárba rakja a tojásokat.",
+    "src": "/design/adventure/cover-l-36173144165caf5e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "cfbd20b4173a1f34",
+    "approvedAt": "2026-11-03T06:59:42.404Z"
+  },
+  {
+    "id": "cover-l-3700f43eb5297488",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Have Got - Angol 5. osztály"
+    ],
+    "alt": "Nappali szőnyegén piros versenyautó-játék, körülötte kutya, macska és testvérek.",
+    "src": "/design/adventure/cover-l-3700f43eb5297488.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f931e649440e2adb",
+    "approvedAt": "2026-11-03T06:59:46.911Z"
+  },
+  {
+    "id": "cover-l-38176cb11693d80f",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Biológia"
+    ],
+    "keywords": [
+      "8. Osztály Az ember testfelépítése és mozgása"
+    ],
+    "alt": "Csontvázmodell és karizommodell egy világos laborban, az ablakon túl ugró sportoló.",
+    "src": "/design/studio/cover-l-38176cb11693d80f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "48cfb4ec425e305a",
+    "approvedAt": "2026-11-03T06:59:51.850Z"
+  },
+  {
+    "id": "cover-l-38ccae3544f5f0df",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv és irodalom"
+    ],
+    "keywords": [
+      "4. osztály Cselekvés, Történés, Igék - Témazáró Felkészítő"
+    ],
+    "alt": "Gyerekek fára festenek és futnak a réten, közben fúj a szél és szivárvány jelenik meg.",
+    "src": "/design/adventure/cover-l-38ccae3544f5f0df.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "bc2d53d4962d46c0",
+    "approvedAt": "2026-11-03T06:59:45.237Z"
+  },
+  {
+    "id": "cover-l-3c5635db065f99a9",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "3. osztály - 🏎️ Számoló Verseny - 1000-es számkör"
+    ],
+    "alt": "Kőlapokból álló versenypálya zöld dombokon, egy gyerek gokarttal több követ ugrik egyszerre.",
+    "src": "/design/adventure/cover-l-3c5635db065f99a9.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "993a53cbcf72d148",
+    "approvedAt": "2026-11-03T06:59:42.199Z"
+  },
+  {
+    "id": "cover-l-3ca951c2f74f3b84",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Földrajz"
+    ],
+    "keywords": [
+      "Dunántúli-középhegység"
+    ],
+    "alt": "Lankás erdős hegyek egy nagy, kék tó partján, a hegyoldalon szőlő és egy régi vár romja.",
+    "src": "/design/adventure/cover-l-3ca951c2f74f3b84.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "fd495463775fa4c1",
+    "approvedAt": "2026-11-03T06:59:44.054Z"
+  },
+  {
+    "id": "cover-l-3cb7eab4006ea39a",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Biológia"
+    ],
+    "keywords": [
+      "8. Osztály TESZT Az anyagforgalom jelentősége és az előbél felépítése"
+    ],
+    "alt": "Kiegyensúlyozott étkezés teljes kiőrlésű kenyérrel, tojással, hallal, zöldséggel, gyümölccsel és vízzel.",
+    "src": "/design/studio/cover-l-3cb7eab4006ea39a.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "d90feaef40621ba5",
+    "approvedAt": "2026-11-03T06:59:51.915Z"
+  },
+  {
+    "id": "cover-l-3d7b9652d18f7810",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "4. Osztály all about me english"
+    ],
+    "alt": "Napos gyerekszoba gördeszkával, görkorival, sapkával, fényképezőgéppel és biciklivel.",
+    "src": "/design/adventure/cover-l-3d7b9652d18f7810.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "35fd086224559f7f",
+    "approvedAt": "2026-11-03T06:59:42.918Z"
+  },
+  {
+    "id": "cover-l-3daf885047f977d6",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "Magyar irodalom"
+    ],
+    "keywords": [
+      "Az Íliászban megjelenő embereszmény"
+    ],
+    "alt": "Trója falai hajnalban, a parton görög hajók, egy páncélos hős háttal áll sátra mellett.",
+    "src": "/design/laboratory/cover-l-3daf885047f977d6.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "aad0bd87cdee6fac",
+    "approvedAt": "2026-11-03T06:59:55.389Z"
+  },
+  {
+    "id": "cover-l-3e6d1e328ae2163c",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Magyar irodalom"
+    ],
+    "keywords": [
+      "8. osztály - Nyugat költői - Tananyag"
+    ],
+    "alt": "Hajnali budapesti körút századfordulós bérházakkal, villamossínekkel és távolodó alakkal.",
+    "src": "/design/studio/cover-l-3e6d1e328ae2163c.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "356d2d87c696c021",
+    "approvedAt": "2026-11-03T06:59:53.528Z"
+  },
+  {
+    "id": "cover-l-3eb089eddf85bc2f",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "3. Osztályos Angol Témazáró - Decemberi Felkészítő"
+    ],
+    "alt": "Színes, nyitott babaház szobákkal, benne egy család tagjai, az asztal alatt egy macska ül.",
+    "src": "/design/adventure/cover-l-3eb089eddf85bc2f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "26a604a4d449f8f3",
+    "approvedAt": "2026-11-03T06:59:40.950Z"
+  },
+  {
+    "id": "cover-l-3ec23c4e4a99e32c",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv, matematika, angol nyelv"
+    ],
+    "keywords": [
+      "5. osztályos kompetenciamérés felkészítő"
+    ],
+    "alt": "Réten piknikplédon szeletekre vágott pizza, távcső, játékbusz és zárt mesekönyv.",
+    "src": "/design/adventure/cover-l-3ec23c4e4a99e32c.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "04f64ea3ac235fbf",
+    "approvedAt": "2026-11-03T06:59:48.077Z"
+  },
+  {
+    "id": "cover-l-4021479cb3526be2",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "🦋 Maradékos osztás és szorzás - 4. osztály"
+    ],
+    "alt": "Sorokba rendezett virágcserepek egy kertben, pillangók szállnak, egy cserép külön áll.",
+    "src": "/design/adventure/cover-l-4021479cb3526be2.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "2b74b35801e695bf",
+    "approvedAt": "2026-11-03T06:59:46.291Z"
+  },
+  {
+    "id": "cover-l-402dfab3fad1f655",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Számolás római számokkal - 5. osztály"
+    ],
+    "alt": "Római piaci asztalon bronz abakusz gyöngyökkel, számolókövek és mozaikpadló.",
+    "src": "/design/adventure/cover-l-402dfab3fad1f655.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a6acfee410fe68bb",
+    "approvedAt": "2026-11-03T06:59:48.751Z"
+  },
+  {
+    "id": "cover-l-40f741c5f3e66cdb",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "8. Osztály Az emberré válás folyamata és a történelem forrásai"
+    ],
+    "alt": "Őskori tábor alkonyatkor: távoli ősemberek a tűz körül, kőeszközök és sziklaeresz a síkság szélén.",
+    "src": "/design/studio/cover-l-40f741c5f3e66cdb.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "01fee5aa4ceb3495",
+    "approvedAt": "2026-11-03T06:59:54.531Z"
+  },
+  {
+    "id": "cover-l-410aa16637e5ebf0",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Földrajz"
+    ],
+    "keywords": [
+      "Az Alpok térsége: Ausztria és Svájc"
+    ],
+    "alt": "Alpesi U-alakú völgy türkiz folyóval, faházakkal, havas csúcsokkal és gáttal elzárt tóval.",
+    "src": "/design/studio/cover-l-410aa16637e5ebf0.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "7065757adeca36b3",
+    "approvedAt": "2026-11-03T06:59:52.961Z"
+  },
+  {
+    "id": "cover-l-4277f399648a2527",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Az Ókori Kelet Civilizációi - 8. osztály"
+    ],
+    "alt": "Ókori folyóvölgy hajnalban nádhajókkal, öntözőcsatornákkal, vályogházakkal és zikkurattal.",
+    "src": "/design/studio/cover-l-4277f399648a2527.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "c0efb7bc7b78d60c",
+    "approvedAt": "2026-11-03T06:59:54.602Z"
+  },
+  {
+    "id": "cover-l-4283f54c8dce1dda",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Kivonás Mester – írásbeli kivonás az 1000-es számkörben"
+    ],
+    "alt": "Színes fa golyós számológép három sorral, gyerekujj tolja a golyókat jobbról balra.",
+    "src": "/design/adventure/cover-l-4283f54c8dce1dda.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "6e1533ae091266e7",
+    "approvedAt": "2026-11-03T06:59:42.550Z"
+  },
+  {
+    "id": "cover-l-434a0db299b0fd20",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Life in Peru - 3. osztályos Angol Tananyag"
+    ],
+    "alt": "Machu Picchu kőteraszai ködös andoki hegyen, előtérben egy láma, távolban poncsós gyerek.",
+    "src": "/design/adventure/cover-l-434a0db299b0fd20.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "149590e707201e5e",
+    "approvedAt": "2026-11-03T06:59:41.390Z"
+  },
+  {
+    "id": "cover-l-459cab1068e92372",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Űrmértékek"
+    ],
+    "alt": "Konyhapulton kakaós bögre, mérőpohár, literes tejesüveg és kis kanál, mögöttük nagy vödör.",
+    "src": "/design/adventure/cover-l-459cab1068e92372.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ab38792daeb18da3",
+    "approvedAt": "2026-11-03T06:59:46.219Z"
+  },
+  {
+    "id": "cover-l-45b63f3e854829c0",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "Zöldségek növényi szervei és fejlődése"
+    ],
+    "alt": "Konyhakert paprikával, paradicsommal, káposztával, hagymával és földben látszó krumplival.",
+    "src": "/design/adventure/cover-l-45b63f3e854829c0.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f20bfc587559b567",
+    "approvedAt": "2026-11-03T06:59:49.382Z"
+  },
+  {
+    "id": "cover-l-4669b696c13694c8",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Geometriai Transzformációk – 8. osztály"
+    ],
+    "alt": "Hajnali tó tükrözi a fákat és a csónakházat, a parton vízikerék, a vízben sorban lépőkövek.",
+    "src": "/design/studio/cover-l-4669b696c13694c8.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f70046dce612cc41",
+    "approvedAt": "2026-11-03T06:59:54.184Z"
+  },
+  {
+    "id": "cover-l-470c11aca6826092",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Peru / Life in Peru - 3. osztályos Angol Tananyag"
+    ],
+    "alt": "Andoki falusi piac Peruban színes szőttesekkel, kukoricával, alpakával és havas hegyekkel.",
+    "src": "/design/adventure/cover-l-470c11aca6826092.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "c6f8549c0ecd3edf",
+    "approvedAt": "2026-11-03T06:59:41.469Z"
+  },
+  {
+    "id": "cover-l-4751049c894fd16e",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Ének-zene"
+    ],
+    "keywords": [
+      "Magyar Népzene - 8. osztály"
+    ],
+    "alt": "Esti erdélyi pajta lámpásfényben, népviseletes zenekar hegedűvel, brácsával és nagybőgővel.",
+    "src": "/design/studio/cover-l-4751049c894fd16e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "3f6477f2a0a83d61",
+    "approvedAt": "2026-11-03T06:59:54.968Z"
+  },
+  {
+    "id": "cover-l-47c15eb391f9f599",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar irodalom"
+    ],
+    "keywords": [
+      "5. osztály - Arany János: Családi kör - Interaktív Tananyag"
+    ],
+    "alt": "Esti parasztkonyha, a család a lámpafényes asztal körül ül, hátulról nézve.",
+    "src": "/design/adventure/cover-l-47c15eb391f9f599.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "88c77837a0b03e6a",
+    "approvedAt": "2026-11-03T06:59:47.521Z"
+  },
+  {
+    "id": "cover-l-49e1ba68da7e8f76",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "4. osztály - Testrészek, érzékszervek"
+    ],
+    "alt": "Kislány csukott szemmel tapint egy puha tollat, előtte citrom, rózsa és csengő az asztalon.",
+    "src": "/design/adventure/cover-l-49e1ba68da7e8f76.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "32ef90928e5d2cc9",
+    "approvedAt": "2026-11-03T06:59:44.413Z"
+  },
+  {
+    "id": "cover-l-4a8edc9a8bc2be3c",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Informatika"
+    ],
+    "keywords": [
+      "Programozási alapismeretek - GitHub Kezdőknek"
+    ],
+    "alt": "Laptop egy íróasztalon, fölötte elágazó, világító fénycsomópontok egy felhő felé futnak.",
+    "src": "/design/studio/cover-l-4a8edc9a8bc2be3c.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "157458e477b59c2a",
+    "approvedAt": "2026-11-03T06:59:53.146Z"
+  },
+  {
+    "id": "cover-l-4b27ba3194639217",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Present Simple és az időhasználat - 6. osztály angol"
+    ],
+    "alt": "Napfényes reggel: vekker, iskolatáska, reggeli az asztalon, a gyerek a cipőjét köti.",
+    "src": "/design/studio/cover-l-4b27ba3194639217.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f3657f2a55f5eae7",
+    "approvedAt": "2026-11-03T06:59:50.638Z"
+  },
+  {
+    "id": "cover-l-4ccfa09876ff0cf2",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Digitális kultúra"
+    ],
+    "keywords": [
+      "ChatGPT 3 – Mester Tananyag | Professzionális AI Promptolás"
+    ],
+    "alt": "Modern íróasztal monitorral, fölötte egymásba kapcsolódó, világító folyamatlépcsők lebegnek.",
+    "src": "/design/studio/cover-l-4ccfa09876ff0cf2.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "10901eb17e4db122",
+    "approvedAt": "2026-11-03T06:59:40.610Z"
+  },
+  {
+    "id": "cover-l-4d1d1fe463a6347e",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természettudomány"
+    ],
+    "keywords": [
+      "Melyik szervét fogyasztjuk zöldségféléinknek?"
+    ],
+    "alt": "Fa asztalon csoportosítva répa, petrezselyem, hagyma, káposzta, krumpli, paprika.",
+    "src": "/design/adventure/cover-l-4d1d1fe463a6347e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ee3f7f9f898a6651",
+    "approvedAt": "2026-11-03T06:59:49.765Z"
+  },
+  {
+    "id": "cover-l-4d6305c83ed97eb2",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Algebra – Témazáró Felkészítő"
+    ],
+    "alt": "Egyensúlyban álló rézmérleg zárt dobozokkal és kockákkal, mellette négyzetekbe rendezett kockák.",
+    "src": "/design/studio/cover-l-4d6305c83ed97eb2.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "bb78ee2803b19c8c",
+    "approvedAt": "2026-11-03T06:59:54.108Z"
+  },
+  {
+    "id": "cover-l-4de4a74b2884ba6d",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "4. osztály - 💖 Az emberi test - Egészségünk 💖"
+    ],
+    "alt": "Kipirult gyerekek ugrókötelet hajtanak a napos parkban, a padon vizespalack és alma.",
+    "src": "/design/adventure/cover-l-4de4a74b2884ba6d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "96d603fcf58dcb85",
+    "approvedAt": "2026-11-03T06:59:44.555Z"
+  },
+  {
+    "id": "cover-l-4e0daabda59d89ef",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "4. osztály angol present_continuous"
+    ],
+    "alt": "Napos park: egy lány ugrókötelezik, egy fiú fest, a gyerekek éppen fociznak.",
+    "src": "/design/adventure/cover-l-4e0daabda59d89ef.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "fa69973b110cd262",
+    "approvedAt": "2026-11-03T06:59:43.231Z"
+  },
+  {
+    "id": "cover-l-501a4baa43dbd1f4",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "3. osztály - 🏎️ Matek Verseny - Turbo Számolás"
+    ],
+    "alt": "Kis piros versenyautó száguld a játékpályán egy tíz kőből álló sor mellett, tovább a célig.",
+    "src": "/design/adventure/cover-l-501a4baa43dbd1f4.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "311d967e4b3289b1",
+    "approvedAt": "2026-11-03T06:59:42.125Z"
+  },
+  {
+    "id": "cover-l-510811224d16a804",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Szorzás és maradékos osztás"
+    ],
+    "alt": "Konyhaasztalon három kosár alma, mellettük babszemek egyenlő tálkákba osztva, néhány maradék.",
+    "src": "/design/adventure/cover-l-510811224d16a804.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "c7e344db58d15ec0",
+    "approvedAt": "2026-11-03T06:59:42.699Z"
+  },
+  {
+    "id": "cover-l-5159ff9077d39d6e",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természettudomány"
+    ],
+    "keywords": [
+      "A mézelő méh"
+    ],
+    "alt": "Mézelő méh egy virágon, mögötte fa méhkaptár és arany lépes méz.",
+    "src": "/design/adventure/cover-l-5159ff9077d39d6e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "01f5bca6ab9d9ce6",
+    "approvedAt": "2026-11-03T06:59:49.611Z"
+  },
+  {
+    "id": "cover-l-54a2d84afcb179f8",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "A Föld kering a Nap körül"
+    ],
+    "alt": "A kék-zöld Föld egy halvány pályán kering a ragyogó, sárga Nap körül a csillagos űrben.",
+    "src": "/design/adventure/cover-l-54a2d84afcb179f8.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "d1a921ef5f0ccb87",
+    "approvedAt": "2026-11-03T06:59:46.526Z"
+  },
+  {
+    "id": "cover-l-5558a0a14bd23173",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv és irodalom"
+    ],
+    "keywords": [
+      "5. osztály - Magyar Népmesék: Fehérlófia és Tündérszép Ilona"
+    ],
+    "alt": "Fehér kanca és népviseletes ifjú hős egy aranyalmákat termő fa előtt.",
+    "src": "/design/adventure/cover-l-5558a0a14bd23173.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "bae0bff89ff9641a",
+    "approvedAt": "2026-11-03T06:59:47.994Z"
+  },
+  {
+    "id": "cover-l-569a1aeb80fd54a5",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Közönséges és vegyes törtek"
+    ],
+    "alt": "Pékség pultján két egész pite és egy harmadik, amelyből egy szelet hiányzik.",
+    "src": "/design/adventure/cover-l-569a1aeb80fd54a5.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "e2f314b1a2b15894",
+    "approvedAt": "2026-11-03T06:59:48.450Z"
+  },
+  {
+    "id": "cover-l-581de33ea986a380",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "A víz körforgása"
+    ],
+    "alt": "Napsütötte tenger, felette felhők, a hegyek felett eső hull, a folyó visszafut a tengerbe.",
+    "src": "/design/adventure/cover-l-581de33ea986a380.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "eff57c3764c140ee",
+    "approvedAt": "2026-11-03T06:59:44.706Z"
+  },
+  {
+    "id": "cover-l-5968c248748e604e",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Francia nyelv"
+    ],
+    "keywords": [
+      "Október 7. – Fontos dátum Franciaországban és a világban (Le 7 octobre – Une date importante en France et dans le monde)"
+    ],
+    "alt": "Pamutnövény és fa rózsafüzér egy kőpárkányon, mögötte gótikus templom őszi fényben.",
+    "src": "/design/studio/cover-l-5968c248748e604e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "84a6e187a11289c8",
+    "approvedAt": "2026-11-03T06:59:52.735Z"
+  },
+  {
+    "id": "cover-l-5996ac0210ed5c54",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Francia nyelv"
+    ],
+    "keywords": [
+      "🇫🇷 8. Osztályos Francia Témazáró"
+    ],
+    "alt": "Napos párizsi tér: éneklő lány, zongorázó fiú, család kiskutyával, barátok kávézóasztalnál.",
+    "src": "/design/studio/cover-l-5996ac0210ed5c54.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f63c3084539673b4",
+    "approvedAt": "2026-11-03T06:59:52.816Z"
+  },
+  {
+    "id": "cover-l-5b19c19479f38fee",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Informatika"
+    ],
+    "keywords": [
+      "Replit AI – Professzionális Fejlesztés"
+    ],
+    "alt": "Fejlesztői munkaasztal monitorral, mellette háromrészes fénylő token és külön üvegszobák kulcsokkal.",
+    "src": "/design/studio/cover-l-5b19c19479f38fee.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "396ba9429f76c01a",
+    "approvedAt": "2026-11-03T06:59:40.818Z"
+  },
+  {
+    "id": "cover-l-5bc72b72d8bf8c34",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Kémia"
+    ],
+    "keywords": [
+      "Molekulák, ionok és vegyületek - 8. osztály"
+    ],
+    "alt": "Golyós-pálcás ionrácsmodell, vízmolekula-modell és csillogó sókristályok sötét palalapon.",
+    "src": "/design/studio/cover-l-5bc72b72d8bf8c34.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "1f4581faff33b57a",
+    "approvedAt": "2026-11-03T06:59:53.451Z"
+  },
+  {
+    "id": "cover-l-5bdf900f88b497d1",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Földrajz"
+    ],
+    "keywords": [
+      "Csehország · Lengyelország · Románia – Földrajz 8. osztály"
+    ],
+    "alt": "Ködös kárpáti hegygerincek, kanyargó folyó és piros tetős óváros kőhíddal a távolban.",
+    "src": "/design/studio/cover-l-5bdf900f88b497d1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "0b4a8caf65601132",
+    "approvedAt": "2026-11-03T06:59:53.029Z"
+  },
+  {
+    "id": "cover-l-5c0e1ff94c270d3f",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "4. Osztály Angol - Interactive Learning"
+    ],
+    "alt": "Napos park focizó, biciklis és gitározó gyerekekkel, egy fiú kutyát sétáltat.",
+    "src": "/design/adventure/cover-l-5c0e1ff94c270d3f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "4c042bc9e4cc04c2",
+    "approvedAt": "2026-11-03T06:59:42.852Z"
+  },
+  {
+    "id": "cover-l-5d5ea4113166c9d7",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "4. osztály - 📚 Írásbeli Osztás Mestere - Teljes Levezetés"
+    ],
+    "alt": "Gyerek egyenlő csomagokba rakja a gyöngyöket öt tálkába, egy gyöngy külön marad.",
+    "src": "/design/adventure/cover-l-5d5ea4113166c9d7.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "6c486923409add0a",
+    "approvedAt": "2026-11-03T06:59:45.834Z"
+  },
+  {
+    "id": "cover-l-5e4178f80dcb287e",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "5. osztály - Árpád-kori királyok: I. László, Könyves Kálmán, II. András"
+    ],
+    "alt": "Román kori kővár a dombon, lovag fehér lovon, előtérben korona és pecsétes tekercs.",
+    "src": "/design/adventure/cover-l-5e4178f80dcb287e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "d72d0121b801a816",
+    "approvedAt": "2026-11-03T06:59:50.066Z"
+  },
+  {
+    "id": "cover-l-5f713c1fae64b47d",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Kémia"
+    ],
+    "keywords": [
+      "8. osztály - Reakciótípusok - Kémia Kaland"
+    ],
+    "alt": "Pezsgő főzőpohár, sárga csapadékos kémcső, rozsdás lánc, patinás réz és láng egy asztalon.",
+    "src": "/design/studio/cover-l-5f713c1fae64b47d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "2e5cbf61c497391b",
+    "approvedAt": "2026-11-03T06:59:53.389Z"
+  },
+  {
+    "id": "cover-l-62254a44fce7b65e",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Törtrészek és mértékek"
+    ],
+    "alt": "Négy egyenlő szeletre vágott pizza, mellette félig telt kancsó, mérleg és homokóra.",
+    "src": "/design/adventure/cover-l-62254a44fce7b65e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "5cf4f51fce9202cb",
+    "approvedAt": "2026-11-03T06:59:46.065Z"
+  },
+  {
+    "id": "cover-l-62a2d60605d20ce8",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "A talaj"
+    ],
+    "alt": "Talajszelvény keresztmetszete gyökerekkel, gilisztákkal, sötét humusszal és kövekkel.",
+    "src": "/design/adventure/cover-l-62a2d60605d20ce8.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "d8fb0aa0e575525f",
+    "approvedAt": "2026-11-03T06:59:48.989Z"
+  },
+  {
+    "id": "cover-l-633424739d0dcdb1",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "A Naprendszer bolygói"
+    ],
+    "alt": "A Nap és körülötte a nyolc bolygó, a Szaturnusz gyűrűjével és a kisbolygóövvel.",
+    "src": "/design/adventure/cover-l-633424739d0dcdb1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "89381de7bb398228",
+    "approvedAt": "2026-11-03T06:59:48.897Z"
+  },
+  {
+    "id": "cover-l-63c4aa9223a9ede0",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "A talaj kialakulása, összetevői és termékenysége"
+    ],
+    "alt": "Fagytól repedezett sziklák mohával és zuzmóval, a törmelékben kis facsemete nő.",
+    "src": "/design/adventure/cover-l-63c4aa9223a9ede0.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "8cafaeb12f20bd4d",
+    "approvedAt": "2026-11-03T06:59:49.065Z"
+  },
+  {
+    "id": "cover-l-67200c6cbafd4372",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "8. Osztályos Matematika Témazáró | Interaktív Tananyag"
+    ],
+    "alt": "Piaci asztal mérleggel és almákkal, növekvő érmeoszlopokkal és egy szeletekre vágott pitével.",
+    "src": "/design/studio/cover-l-67200c6cbafd4372.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "e8120628fbbce830",
+    "approvedAt": "2026-11-03T06:59:53.969Z"
+  },
+  {
+    "id": "cover-l-67ee59c7625b1e3d",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv és irodalom"
+    ],
+    "keywords": [
+      "4. osztály - 🌸 Helyesírás – Kiejtéstől eltérően írjuk"
+    ],
+    "alt": "Gyerek tenyerét a füléhez emeli, közben fa építőkockákat illeszt egymáshoz egy napos asztalon.",
+    "src": "/design/adventure/cover-l-67ee59c7625b1e3d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a64ddb55a1d7cee1",
+    "approvedAt": "2026-11-03T06:59:45.159Z"
+  },
+  {
+    "id": "cover-l-693f9506673c5b68",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Magyar nyelv"
+    ],
+    "keywords": [
+      "Határozók A, Á - 8. osztályos nyelvtan"
+    ],
+    "alt": "Kamasz fiú biciklizik naplementekor a folyóparti úton egy távoli híd és város felé.",
+    "src": "/design/studio/cover-l-693f9506673c5b68.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "36f7c9749b084cad",
+    "approvedAt": "2026-11-03T06:59:53.841Z"
+  },
+  {
+    "id": "cover-l-6ad2c2a8cef24bd2",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "6. évfolyam matematika feladatlap – megoldási stratégiák"
+    ],
+    "alt": "Piaci stand gyümölccsel és mérleggel, mérőszalag és mérőkancsó, távolban piros kenu.",
+    "src": "/design/studio/cover-l-6ad2c2a8cef24bd2.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "78e7aa9384c752f9",
+    "approvedAt": "2026-11-03T06:59:50.861Z"
+  },
+  {
+    "id": "cover-l-6af6d640c84ae14a",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "Fizika"
+    ],
+    "keywords": [
+      "Mozgások vizsgálata feladatokon keresztül: sebesség, átlagsebesség, út–idő grafikon, szabadesés"
+    ],
+    "alt": "Egyenes vidéki úton közeledő kerékpáros és motoros, elöl egy almafáról lehulló alma.",
+    "src": "/design/laboratory/cover-l-6af6d640c84ae14a.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "57721cc49b99a1cf",
+    "approvedAt": "2026-11-03T06:59:55.150Z"
+  },
+  {
+    "id": "cover-l-6d4ae617b4c91465",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Kéttagú kifejezések négyzete – kifejezéskártyák"
+    ],
+    "alt": "Fából kirakott nagy négyzet egy nagy és egy kis négyzetből, valamint két egyforma téglalapból.",
+    "src": "/design/laboratory/cover-l-6d4ae617b4c91465.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f2134c593bf885da",
+    "approvedAt": "2026-11-03T06:59:55.447Z"
+  },
+  {
+    "id": "cover-l-6f4519c3409f976d",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Ókori Keleti Civilizációk 2 - 8. osztály"
+    ],
+    "alt": "Selyembálákat vivő tevekaraván kanyargó úton ködös hegyek, teraszos földek és palota mellett.",
+    "src": "/design/studio/cover-l-6f4519c3409f976d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "849b9cc7c288d152",
+    "approvedAt": "2026-11-03T06:59:54.833Z"
+  },
+  {
+    "id": "cover-l-6f589eb9cf577293",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "4. osztály - Who's vs Whose - Bilingual Interactive Lesson"
+    ],
+    "alt": "Parki padon talált tárgyak: hátizsák, maci, esernyő és kalap, egy gyerek a hátizsákra mutat.",
+    "src": "/design/adventure/cover-l-6f589eb9cf577293.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f18d35271192c5ea",
+    "approvedAt": "2026-11-03T06:59:43.068Z"
+  },
+  {
+    "id": "cover-l-708dafa8ec3c5a76",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "3. osztály - 🎮 Írásbeli Összeadás Mester"
+    ],
+    "alt": "Asztalon három oszlopban kék, zöld és sárga korongok, gyerekkéz újabb korongokat tesz hozzá.",
+    "src": "/design/adventure/cover-l-708dafa8ec3c5a76.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "c35b206adab30a88",
+    "approvedAt": "2026-11-03T06:59:41.973Z"
+  },
+  {
+    "id": "cover-l-70b3a30a44c29e04",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Első károly magyar király"
+    ],
+    "alt": "Középkori bányaváros erdős hegyek közt, bányászok érccel, előtérben friss aranyérmék.",
+    "src": "/design/studio/cover-l-70b3a30a44c29e04.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "92072cbfda894a54",
+    "approvedAt": "2026-11-03T06:59:51.300Z"
+  },
+  {
+    "id": "cover-l-72dae5ec1d1d0392",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Műveleti sorrend tanulása"
+    ],
+    "alt": "Műhelyasztalon fogaskerék-gépezet, a kerekek átlátszó dobozokban, egymásba ágyazva.",
+    "src": "/design/adventure/cover-l-72dae5ec1d1d0392.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "69d0ff8bc97bc7a4",
+    "approvedAt": "2026-11-03T06:59:48.606Z"
+  },
+  {
+    "id": "cover-l-7781b4948d10940a",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "4. osztály - 🌊 A víz, vízpart – Élet a vízben 🐸"
+    ],
+    "alt": "Nádas tópart fűzfákkal, vízen kacsák, sekély vízben gólya, a parton hód és béka.",
+    "src": "/design/adventure/cover-l-7781b4948d10940a.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "8c8f626484c65377",
+    "approvedAt": "2026-11-03T06:59:44.487Z"
+  },
+  {
+    "id": "cover-l-7964d5755946105b",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Angol nyelvtan: a „to be” ige és a birtokos melléknevek"
+    ],
+    "alt": "Napos játszótéren gyerekek bemutatkoznak, mindegyiknél ott a saját sárkánya, labdája vagy rollere.",
+    "src": "/design/adventure/cover-l-7964d5755946105b.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "fe5702934e4917e4",
+    "approvedAt": "2026-11-03T06:59:43.380Z"
+  },
+  {
+    "id": "cover-l-796de1b444b9cb62",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Műveleti sorrend - 5. osztály"
+    ],
+    "alt": "Konyhapulton sorba rakott tálak és hozzávalók, egy kisebb tál a nagyobba illesztve.",
+    "src": "/design/adventure/cover-l-796de1b444b9cb62.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "61fd1908ed3ea9ca",
+    "approvedAt": "2026-11-03T06:59:48.528Z"
+  },
+  {
+    "id": "cover-l-79f71f9654eb6598",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Írásbeli osztás"
+    ],
+    "alt": "Tizenkét színes cukorka három egyforma kupacba rendezve egy asztalon, három gyerek mellett.",
+    "src": "/design/adventure/cover-l-79f71f9654eb6598.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "140f10c916c25569",
+    "approvedAt": "2026-11-03T06:59:46.145Z"
+  },
+  {
+    "id": "cover-l-7adfe10309e4d9e9",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Angol 6. osztály – a / an / some / any"
+    ],
+    "alt": "Konyhaasztal felülről: alma, tojások, szendvicsek, tej, rizs és liszt címke nélküli edényekben.",
+    "src": "/design/studio/cover-l-7adfe10309e4d9e9.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "72b2cfd97fb460e1",
+    "approvedAt": "2026-11-03T06:59:50.572Z"
+  },
+  {
+    "id": "cover-l-7bb8850ee0d58510",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "26. Ismerj meg, fogadj el! - 4. osztály természetismeret"
+    ],
+    "alt": "Gyerekek együtt játszanak a parkban, köztük kerekesszékes kisfiú és vakvezető kutyás lány.",
+    "src": "/design/adventure/cover-l-7bb8850ee0d58510.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "692374cf2de9206d",
+    "approvedAt": "2026-11-03T06:59:46.378Z"
+  },
+  {
+    "id": "cover-l-7d5124e582a8a8cb",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "4. osztály - 🦋 A mező és rét csodálatos világa 🌸"
+    ],
+    "alt": "Virágos rét pipaccsal és pillangókkal, mögötte aranyló búzamező, a fűben mezei nyúl.",
+    "src": "/design/adventure/cover-l-7d5124e582a8a8cb.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "88adf193c0940928",
+    "approvedAt": "2026-11-03T06:59:44.641Z"
+  },
+  {
+    "id": "cover-l-7f84089a72b828ec",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Angol gyakorlás"
+    ],
+    "alt": "Szeptemberi reggel a kertkapunál, a család integetve köszönti a szomszédokat, mellettük macska és kutya.",
+    "src": "/design/adventure/cover-l-7f84089a72b828ec.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "c1a48b43b79dc2cc",
+    "approvedAt": "2026-11-03T06:59:43.309Z"
+  },
+  {
+    "id": "cover-l-80178dc6dfb68108",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Természettudomány"
+    ],
+    "keywords": [
+      "8. osztály - Bolyai Természettudományi Felkészítő"
+    ],
+    "alt": "Cseppköves barlang előtti munkaasztal cérnával tekert ceruzákkal, üvegvázával és jeges ablaküveggel.",
+    "src": "/design/studio/cover-l-80178dc6dfb68108.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f3c88a9e4deb0e21",
+    "approvedAt": "2026-11-03T06:59:54.456Z"
+  },
+  {
+    "id": "cover-l-826dcd1881408fca",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Harmadik osztályos matek angol-magyar"
+    ],
+    "alt": "Négy egyforma zöld építőlap, mindegyiken ugyanannyi színes kocka, gyerekkéz teszi le az utolsót.",
+    "src": "/design/adventure/cover-l-826dcd1881408fca.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "b7624829c857f4db",
+    "approvedAt": "2026-11-03T06:59:42.330Z"
+  },
+  {
+    "id": "cover-l-835581f017730132",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Ének-zene"
+    ],
+    "keywords": [
+      "Hangközök"
+    ],
+    "alt": "Lépcsőszerűen emelkedő színes xilofon egy napos zeneteremben, rajta két ütő.",
+    "src": "/design/adventure/cover-l-835581f017730132.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "101ffc6fa9994abe",
+    "approvedAt": "2026-11-03T06:59:50.508Z"
+  },
+  {
+    "id": "cover-l-84861b9d4b93cd87",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "Kémia"
+    ],
+    "keywords": [
+      "Ionvegyületek képlete – 9. osztály"
+    ],
+    "alt": "Ionrácsmodell, rozsdás vascsavar és konyhasókupac egy sötét laborasztalon hűvös fényben.",
+    "src": "/design/laboratory/cover-l-84861b9d4b93cd87.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "6d21d4ff4cefa231",
+    "approvedAt": "2026-11-03T06:59:55.269Z"
+  },
+  {
+    "id": "cover-l-88b6f2432f6ef165",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Irodalom"
+    ],
+    "keywords": [
+      "Odysseus"
+    ],
+    "alt": "Ókori görög hajó egyetlen vitorlával sziklás szigetek között, naplementében.",
+    "src": "/design/adventure/cover-l-88b6f2432f6ef165.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "0034000fba5b1434",
+    "approvedAt": "2026-11-03T06:59:47.296Z"
+  },
+  {
+    "id": "cover-l-89c54191c2da327f",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Digitális kultúra"
+    ],
+    "keywords": [
+      "🖥️ Tömbök és Véletlen Számok - Digitális Kultúra 8. osztály"
+    ],
+    "alt": "Egyforma fiókok hosszú sora színes golyókkal, mellettük golyókat keverő üvegdob és laptop.",
+    "src": "/design/studio/cover-l-89c54191c2da327f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "21dfcd51f90513ea",
+    "approvedAt": "2026-11-03T06:59:52.219Z"
+  },
+  {
+    "id": "cover-l-8a23e6feebc7c69c",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "Az Erdő - Környezetismeret 4. osztály 🦊"
+    ],
+    "alt": "Napfényes lombos erdő tisztása, rókával, őzzel, gombákkal és mohás fatörzzsel.",
+    "src": "/design/adventure/cover-l-8a23e6feebc7c69c.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "93d1a632e0799477",
+    "approvedAt": "2026-11-03T06:59:44.789Z"
+  },
+  {
+    "id": "cover-l-8a6c4662f667c644",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Magyar nyelv"
+    ],
+    "keywords": [
+      "8. osztály nyelvtan határozók"
+    ],
+    "alt": "Két hátizsákos kamasz kutyával indul reggel egy vasúti peronról, távolban közeledő vonat.",
+    "src": "/design/studio/cover-l-8a6c4662f667c644.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a08679d233c23a89",
+    "approvedAt": "2026-11-03T06:59:53.683Z"
+  },
+  {
+    "id": "cover-l-8c1d1175746a2c3f",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Magyar irodalom"
+    ],
+    "keywords": [
+      "Modern Magyar Líra | 8. osztály"
+    ],
+    "alt": "Napnyugtai ablak színes tintásüvegekkel az asztalon, kint magyar falusi táj templomtoronnyal.",
+    "src": "/design/studio/cover-l-8c1d1175746a2c3f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "40bf34412b06b60e",
+    "approvedAt": "2026-11-03T06:59:53.606Z"
+  },
+  {
+    "id": "cover-l-8d7736deaffc4c54",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Vegyes kivonás 1-2-3 jegyű számokkal – 10-es és 100-as átlépés"
+    ],
+    "alt": "Űrhajós gyerek világító ládákat rak ki az űrállomásnál, nagy és kis kötegekben.",
+    "src": "/design/adventure/cover-l-8d7736deaffc4c54.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "6d22a830b4c41741",
+    "approvedAt": "2026-11-03T06:59:42.773Z"
+  },
+  {
+    "id": "cover-l-8e11c013c689e23d",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "3. osztály - 🎯 Becslés Mester - 1000-es számkör"
+    ],
+    "alt": "Kis élelmiszerboltban gyerek kosárral áll háttal, a pulton mérleg és pénztárca érmékkel.",
+    "src": "/design/adventure/cover-l-8e11c013c689e23d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a17f7d6498c53d32",
+    "approvedAt": "2026-11-03T06:59:42.050Z"
+  },
+  {
+    "id": "cover-l-941a5f3f690694c5",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Mezopotámia: folyóvölgyi civilizáció"
+    ],
+    "alt": "Lépcsőzetes vályogtégla zikkurat két folyó között, csatornák és zöld árpaföldek.",
+    "src": "/design/studio/cover-l-941a5f3f690694c5.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "48bdd386b421a301",
+    "approvedAt": "2026-11-03T06:59:51.451Z"
+  },
+  {
+    "id": "cover-l-95ad7db1ee0cc5e7",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Biológia"
+    ],
+    "keywords": [
+      "🫁 Légzőrendszer - 8. osztály"
+    ],
+    "alt": "Házi tüdőmodell: műanyag palack két léggömbbel és gumihártyával, egy kéz húzza a hártyát.",
+    "src": "/design/studio/cover-l-95ad7db1ee0cc5e7.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "1bd35d66f66b2e84",
+    "approvedAt": "2026-11-03T06:59:52.164Z"
+  },
+  {
+    "id": "cover-l-95b96b9807866982",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Földrajz"
+    ],
+    "keywords": [
+      "Nagy-Britannia és Franciaország – 8. osztályos földrajz"
+    ],
+    "alt": "Fehér krétasziklák a tengerparton, átkelő komp és a túlparton levendulamezők hajnalban.",
+    "src": "/design/studio/cover-l-95b96b9807866982.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "b4e089b21c8f9565",
+    "approvedAt": "2026-11-03T06:59:53.094Z"
+  },
+  {
+    "id": "cover-l-95f12d0b91e3f0a9",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "10-es átlépéses kivonás"
+    ],
+    "alt": "Játékbolti pult, gyerekkéz egy szalaggal kötött pálcikakötegből tíz különálló pálcikát vált fel.",
+    "src": "/design/adventure/cover-l-95f12d0b91e3f0a9.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "dbefe0eff5f2b0e0",
+    "approvedAt": "2026-11-03T06:59:41.619Z"
+  },
+  {
+    "id": "cover-l-98eb311cbef68836",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "3. Osztály matek szorzás"
+    ],
+    "alt": "Napos faasztal egyforma kosarakkal, mindegyikben ugyanannyi alma, mellettük gombsorok.",
+    "src": "/design/adventure/cover-l-98eb311cbef68836.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "bd541601a484f126",
+    "approvedAt": "2026-11-03T06:59:41.689Z"
+  },
+  {
+    "id": "cover-l-999e436d210a0daf",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Magyar nyelv"
+    ],
+    "keywords": [
+      "Egyszerű mondat elemzése – 8. osztály"
+    ],
+    "alt": "Napos kertben egy kamasz lány piros labdát dob egy ugró kutyának egy öreg almafa alatt.",
+    "src": "/design/studio/cover-l-999e436d210a0daf.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f8ddc13ee337e80d",
+    "approvedAt": "2026-11-03T06:59:53.765Z"
+  },
+  {
+    "id": "cover-l-9b528c06f4f4c53c",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv"
+    ],
+    "keywords": [
+      "Tulajdonságot kifejező szavak"
+    ],
+    "alt": "Három léggömb egymás mellett: egy kicsi, egy nagyobb és egy hatalmas, piros, kék és sárga.",
+    "src": "/design/adventure/cover-l-9b528c06f4f4c53c.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "2c930fb4da5e5935",
+    "approvedAt": "2026-11-03T06:59:45.025Z"
+  },
+  {
+    "id": "cover-l-9b8d671aa94a73e4",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Az időszámítás és az emberiség kezdetei"
+    ],
+    "alt": "Hajnali táj távolodó ősemberekkel, előtérben pergamentekercs, homokóra és ammonitesz.",
+    "src": "/design/studio/cover-l-9b8d671aa94a73e4.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "0004006880191b2c",
+    "approvedAt": "2026-11-03T06:59:51.635Z"
+  },
+  {
+    "id": "cover-l-9c6bd37df8fda0c7",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv"
+    ],
+    "keywords": [
+      "Hagyomány szerinti és egyszerűsítő írásmód"
+    ],
+    "alt": "Régi íróasztalon lúdtoll, tintatartó, viaszpecsét és üres pergamen egy modern toll mellett.",
+    "src": "/design/adventure/cover-l-9c6bd37df8fda0c7.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "049cfc838118f60e",
+    "approvedAt": "2026-11-03T06:59:47.682Z"
+  },
+  {
+    "id": "cover-l-9cbd046599412be3",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Biológia"
+    ],
+    "keywords": [
+      "A gyümölcsöskert és a szőlő"
+    ],
+    "alt": "Tavaszi gyümölcsöskert virágzó almafákkal, méhekkel és egy sor szőlőtőkével.",
+    "src": "/design/adventure/cover-l-9cbd046599412be3.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "efdbaef94cce980c",
+    "approvedAt": "2026-11-03T06:59:47.144Z"
+  },
+  {
+    "id": "cover-l-9e2a3b63a4dd8051",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "5. osztály - My daily routine tananyag"
+    ],
+    "alt": "Napfényes reggeli szoba, egy fiú nyújtózik az ablaknál, mellette reggeli és iskolatáska.",
+    "src": "/design/adventure/cover-l-9e2a3b63a4dd8051.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "860e610c4713c463",
+    "approvedAt": "2026-11-03T06:59:46.745Z"
+  },
+  {
+    "id": "cover-l-a371f1f7f5278e3d",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Magyar nyelv"
+    ],
+    "keywords": [
+      "Összetett szavak"
+    ],
+    "alt": "Napkeltés ablakpárkány fogkefével, napraforgóval, esőkabáttal; a távolban világítótorony.",
+    "src": "/design/studio/cover-l-a371f1f7f5278e3d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "faac82c7670bcac9",
+    "approvedAt": "2026-11-03T06:59:53.911Z"
+  },
+  {
+    "id": "cover-l-a4fc68dcd7d4787a",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Kémia"
+    ],
+    "keywords": [
+      "8 osztályos tananyag Savak és savmaradékok"
+    ],
+    "alt": "Laborasztal félbevágott citrommal és szivárványszínű folyadékokat tartalmazó kémcsősorral.",
+    "src": "/design/studio/cover-l-a4fc68dcd7d4787a.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "84365c5e337d012a",
+    "approvedAt": "2026-11-03T06:59:53.332Z"
+  },
+  {
+    "id": "cover-l-a69c8a95cbb9657f",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természettudomány"
+    ],
+    "keywords": [
+      "5. osztály - Környezetünk anyagai - 5. osztály tananyag"
+    ],
+    "alt": "Réti kísérleti asztal: rétegezett talajos üveg, oldódó cukor a vízben, kis gyertya.",
+    "src": "/design/adventure/cover-l-a69c8a95cbb9657f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "509be36f44c08405",
+    "approvedAt": "2026-11-03T06:59:49.529Z"
+  },
+  {
+    "id": "cover-l-a85a917e4d198c08",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "5. Osztály Történelem görögország"
+    ],
+    "alt": "Akropolisz templomai a dombon az ókori Athén fölött, háttérben a tenger és szigetek.",
+    "src": "/design/adventure/cover-l-a85a917e4d198c08.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "b9c6c9b959659dbf",
+    "approvedAt": "2026-11-03T06:59:49.919Z"
+  },
+  {
+    "id": "cover-l-a8887124442112ba",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Hozzárendelések és függvények"
+    ],
+    "alt": "Ablakpárkányon sorban álló cserepes palánták, egyre magasabbak, tetejüket fénypontvonal köti össze.",
+    "src": "/design/studio/cover-l-a8887124442112ba.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "4b0768725a0f80f4",
+    "approvedAt": "2026-11-03T06:59:54.246Z"
+  },
+  {
+    "id": "cover-l-a9365070be367842",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "A talaj: kialakulása, összetétele és védelme"
+    ],
+    "alt": "Dombos szántóföldek teraszokkal és fasorokkal, sötét termőtalajjal.",
+    "src": "/design/adventure/cover-l-a9365070be367842.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "24b5f4edc1342880",
+    "approvedAt": "2026-11-03T06:59:49.145Z"
+  },
+  {
+    "id": "cover-l-a9d1c055f718bdff",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelvtan"
+    ],
+    "keywords": [
+      "A számot, mennyiséget kifejező szavak – 4. osztály"
+    ],
+    "alt": "Gyerekek futóversenyen sorban célba érnek, előtérben két alma és egy negyedére vágott torta.",
+    "src": "/design/adventure/cover-l-a9d1c055f718bdff.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "eea1a52871e5a606",
+    "approvedAt": "2026-11-03T06:59:45.460Z"
+  },
+  {
+    "id": "cover-l-ab16511c3410a5fa",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Irodalom"
+    ],
+    "keywords": [
+      "8. Osztály Ady endre tananyag teljes"
+    ],
+    "alt": "Századfordulós párizsi kávézó alkonyatkor, egy kalapos férfi háttal ül a gázlámpák fényében.",
+    "src": "/design/studio/cover-l-ab16511c3410a5fa.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "d3ddc23f1bc59cd8",
+    "approvedAt": "2026-11-03T06:59:53.267Z"
+  },
+  {
+    "id": "cover-l-ab4bfc331d077291",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "6. osztályos matematika gyakorló feladatlap"
+    ],
+    "alt": "Cukrászdapult süteményekkel, pirosra festett kockatorony, az ablakon túl kerítéses veteményes.",
+    "src": "/design/studio/cover-l-ab4bfc331d077291.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "4d98671c89f5eb91",
+    "approvedAt": "2026-11-03T06:59:50.788Z"
+  },
+  {
+    "id": "cover-l-ad49ec896507d66b",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv és irodalom"
+    ],
+    "keywords": [
+      "🌸 Magyar Nyelvtan – 4. osztály"
+    ],
+    "alt": "Gyerekek színes, felirat nélküli fakockákból mondatnak tűnő hosszú sort építenek a szőnyegen.",
+    "src": "/design/adventure/cover-l-ad49ec896507d66b.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "09bf1434fc9c26f5",
+    "approvedAt": "2026-11-03T06:59:45.385Z"
+  },
+  {
+    "id": "cover-l-ade98fbacd1c89b0",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv és irodalom"
+    ],
+    "keywords": [
+      "5 osztály Magyar Irodalom Jókai Mór"
+    ],
+    "alt": "Régi írószoba ablaka a Dunára néz, az asztalon lúdtoll és zárt könyvek.",
+    "src": "/design/adventure/cover-l-ade98fbacd1c89b0.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "30f8ab615e078735",
+    "approvedAt": "2026-11-03T06:59:47.835Z"
+  },
+  {
+    "id": "cover-l-ae27d6a4429a6f56",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természetismeret"
+    ],
+    "keywords": [
+      "természetismeret — 5. osztály"
+    ],
+    "alt": "Alföldi táj sekély szikes tóval, fehér sós talajjal és sötét termőfölddel.",
+    "src": "/design/adventure/cover-l-ae27d6a4429a6f56.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "d4499f0dbd0aaec1",
+    "approvedAt": "2026-11-03T06:59:49.456Z"
+  },
+  {
+    "id": "cover-l-b4e2e3891499bb1f",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Telling the Time – Az óra kifejezése"
+    ],
+    "alt": "Nagy, kerek falióra három mutatóval egy napsütötte gyerekszobában, mellette karóra az asztalon.",
+    "src": "/design/adventure/cover-l-b4e2e3891499bb1f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "3f31dddd7f3c0fa6",
+    "approvedAt": "2026-11-03T06:59:43.670Z"
+  },
+  {
+    "id": "cover-l-b5270f210795a28f",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Pitagorasz és a Koordináták Titkai"
+    ],
+    "alt": "Napsütötte görög udvar négyzethálós kövezettel, falnak támasztott létra és csomós kötélháromszög.",
+    "src": "/design/studio/cover-l-b5270f210795a28f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a99b92e6c2479c28",
+    "approvedAt": "2026-11-03T06:59:54.314Z"
+  },
+  {
+    "id": "cover-l-b6ecf0232b837dfd",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "4. osztály - Írásbeli műveletek és szöveges feladatok"
+    ],
+    "alt": "Gyerekek egy piaci standnál almás ládákat raknak oszlopokba és szétosztják a gyümölcsöt.",
+    "src": "/design/adventure/cover-l-b6ecf0232b837dfd.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "80cfdd6961b3d243",
+    "approvedAt": "2026-11-03T06:59:45.673Z"
+  },
+  {
+    "id": "cover-l-b7328c8b10b7779d",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Unit 2 – All About Me: birtoklás, képesség, személyleírás"
+    ],
+    "alt": "Két barát a parkban gördeszkával, napszemüveggel és kiskutyával, körülöttük bicikli és görkorcsolya.",
+    "src": "/design/adventure/cover-l-b7328c8b10b7779d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "7ef738c78b141d5f",
+    "approvedAt": "2026-11-03T06:59:43.818Z"
+  },
+  {
+    "id": "cover-l-b8364c62b6d7dbe4",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Kompetenciamérés-felkészítő (magyar, matematika, angol)"
+    ],
+    "keywords": [
+      "5. Osztályos Komplex Kompetenciamérés Felkészítő"
+    ],
+    "alt": "Napos asztalon nagyító, téglalap alakú kertmakett, színes kockaoszlopok és egy játékbusz.",
+    "src": "/design/adventure/cover-l-b8364c62b6d7dbe4.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "2652e5c66d4ffe1a",
+    "approvedAt": "2026-11-03T06:59:47.366Z"
+  },
+  {
+    "id": "cover-l-b8d65b166aac1aa0",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem és társadalmi ismeretek"
+    ],
+    "keywords": [
+      "Család és nemzeti identitás"
+    ],
+    "alt": "Többgenerációs család a kanapén egy régi fényképalbumot nézeget, a falon családfa.",
+    "src": "/design/studio/cover-l-b8d65b166aac1aa0.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "556f6bfa2ab223fd",
+    "approvedAt": "2026-11-03T06:59:51.709Z"
+  },
+  {
+    "id": "cover-l-bb2010ac1c14f636",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "földrajz"
+    ],
+    "keywords": [
+      "A Nagy-Britannia és az Egyesült Királyság földrajza"
+    ],
+    "alt": "Zöld, sziklás szigetpart világítótoronnyal, mögötte skót hegyek, egy folyó és egy vár.",
+    "src": "/design/adventure/cover-l-bb2010ac1c14f636.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "7a30d7290cb995d8",
+    "approvedAt": "2026-11-03T06:59:46.595Z"
+  },
+  {
+    "id": "cover-l-bc8729fc993e3c3e",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Az ókori Hellász - 8. osztály"
+    ],
+    "alt": "Tagolt görög partvidék olajligetekkel, dombtetői városállam templommal és ókori hajós kikötővel.",
+    "src": "/design/studio/cover-l-bc8729fc993e3c3e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "28606231b1e23374",
+    "approvedAt": "2026-11-03T06:59:54.676Z"
+  },
+  {
+    "id": "cover-l-be85b8b2c3bf6ac4",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Az időszámítás és az emberiség kezdetei"
+    ],
+    "alt": "Stonehenge kőköre hajnalban a halványuló holdsarlóval, előtérben homokóra és napóra.",
+    "src": "/design/adventure/cover-l-be85b8b2c3bf6ac4.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "3a3aabae1c65103d",
+    "approvedAt": "2026-11-03T06:59:50.365Z"
+  },
+  {
+    "id": "cover-l-c07b1a27035e963d",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "5. osztály - Honfoglalás ötödik osztály"
+    ],
+    "alt": "Lovas magyarok szekerekkel kelnek át egy ködös hegyhágón napfelkeltekor.",
+    "src": "/design/adventure/cover-l-c07b1a27035e963d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "5a3b3f5b09bf4d50",
+    "approvedAt": "2026-11-03T06:59:49.993Z"
+  },
+  {
+    "id": "cover-l-c12a49e5d7cede97",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Földrajz"
+    ],
+    "keywords": [
+      "8. Osztály földrajz Magyarország gazdasága"
+    ],
+    "alt": "Aranyló búzamező kombájnnal, pékség friss kenyerekkel és távoli gyár a láthatáron.",
+    "src": "/design/studio/cover-l-c12a49e5d7cede97.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "97eea5bc8dc5960b",
+    "approvedAt": "2026-11-03T06:59:52.889Z"
+  },
+  {
+    "id": "cover-l-c1c28235bab79f3b",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "⚽ Törtek - Focis matek 5. osztály"
+    ],
+    "alt": "Napsütéses focipálya egyenlő sávokra nyírt gyeppel, középen labdával.",
+    "src": "/design/adventure/cover-l-c1c28235bab79f3b.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "1ebfab19b465bdab",
+    "approvedAt": "2026-11-03T06:59:48.822Z"
+  },
+  {
+    "id": "cover-l-c24443572ed32551",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "3. osztály - Daily Routines - Napi Rutinok Angolul"
+    ],
+    "alt": "Napfényes reggel egy otthonban: ébredő kislány, fogkefe, palacsintás reggeli és iskolatáska.",
+    "src": "/design/adventure/cover-l-c24443572ed32551.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "2ae5a6ede126536a",
+    "approvedAt": "2026-11-03T06:59:41.025Z"
+  },
+  {
+    "id": "cover-l-c2d06f2d3966cdc7",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Fizika"
+    ],
+    "keywords": [
+      "8. osztály - Fizika 8. - Elektromos áram"
+    ],
+    "alt": "Egyszerű áramkör a munkapadon: elem, kapcsoló, világító izzó, mellette gumikesztyű.",
+    "src": "/design/studio/cover-l-c2d06f2d3966cdc7.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "71bb1faf2191e309",
+    "approvedAt": "2026-11-03T06:59:52.358Z"
+  },
+  {
+    "id": "cover-l-c629cd87c6cfd6d1",
+    "kind": "cover",
+    "band": "explorer",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "3. osztály - 🎮 Matek Aréna - 10-es Átlépés Mester"
+    ],
+    "alt": "Gyerekkéz piros gyöngyökkel tölti fel a tízes tálcát, a maradék gyöngyök egy másik tálcában várnak.",
+    "src": "/design/explorer/cover-l-c629cd87c6cfd6d1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "63946221eccb29a5",
+    "approvedAt": "2026-11-03T06:59:40.878Z"
+  },
+  {
+    "id": "cover-l-c69cfeca1299b9c8",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Informatika"
+    ],
+    "keywords": [
+      "Modern Authentikációs Rendszerek"
+    ],
+    "alt": "Biztonsági kulcs, okostelefon és világító ujjlenyomat-minta, fényvonalakkal egy pajzshoz kötve.",
+    "src": "/design/studio/cover-l-c69cfeca1299b9c8.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "63a2c69308cc6fd6",
+    "approvedAt": "2026-11-03T06:59:40.766Z"
+  },
+  {
+    "id": "cover-l-c7daac35d34b831f",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "I Built a Little Snowman - Angol 3. osztály"
+    ],
+    "alt": "Havas kertben kis hóember áll répaorral, egy fehér nyuszi éppen a répát rágcsálja.",
+    "src": "/design/adventure/cover-l-c7daac35d34b831f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "93db613a44e11bd4",
+    "approvedAt": "2026-11-03T06:59:41.245Z"
+  },
+  {
+    "id": "cover-l-cad2209d918eb8d3",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Informatika"
+    ],
+    "keywords": [
+      "Informatika - ChatGPT Használata Kezdőknek"
+    ],
+    "alt": "Laptop egy nyugodt asztalon, képernyőjén elvont buborékformák, fölötte fénylő hálózat.",
+    "src": "/design/studio/cover-l-cad2209d918eb8d3.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a37b18ceb0f2b512",
+    "approvedAt": "2026-11-03T06:59:51.507Z"
+  },
+  {
+    "id": "cover-l-cb04dbfae64ca0b4",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "3. osztályos matek űrkaland alapműveletek"
+    ],
+    "alt": "Kis rakéta landol egy színes bolygón, űrhajós gyerek csillagkavicsokat rak csoportokba.",
+    "src": "/design/adventure/cover-l-cb04dbfae64ca0b4.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "19171d673c554531",
+    "approvedAt": "2026-11-03T06:59:42.265Z"
+  },
+  {
+    "id": "cover-l-cb14fc90d77aeb62",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Hossz mértékegységei - 4. osztály"
+    ],
+    "alt": "Gyerek mérőszalaggal méri az asztal hosszát, mellette ceruza, vonalzó és távolba vezető út.",
+    "src": "/design/adventure/cover-l-cb14fc90d77aeb62.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ce19ddd9c8238bf1",
+    "approvedAt": "2026-11-03T06:59:45.911Z"
+  },
+  {
+    "id": "cover-l-cb2d459cb34f3632",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "3. osztály - VEGETABLES & FRUITS"
+    ],
+    "alt": "Napos konyhaasztal friss zöldségekkel és gyümölcsökkel, gyerekkezek két kosárba válogatják őket.",
+    "src": "/design/adventure/cover-l-cb2d459cb34f3632.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "d3309185478809ad",
+    "approvedAt": "2026-11-03T06:59:41.178Z"
+  },
+  {
+    "id": "cover-l-cb4c93d3cf1c5d5d",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Kristóf Matek – Összefoglaló lecke"
+    ],
+    "alt": "Napos asztal golyós számológéppel, fa testekkel, felszeletelt tortával és kis mérleggel.",
+    "src": "/design/adventure/cover-l-cb4c93d3cf1c5d5d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "3a2ed9b0abfe3526",
+    "approvedAt": "2026-11-03T06:59:45.990Z"
+  },
+  {
+    "id": "cover-l-cd92e0e2990020dc",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Földrajz"
+    ],
+    "keywords": [
+      "Az Északi-középhegység"
+    ],
+    "alt": "Erdős magyar hegyvonulatok napfényben, előtérben barlangbejárat és kis vízesés, távolban vár.",
+    "src": "/design/adventure/cover-l-cd92e0e2990020dc.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "b37994e38acd122a",
+    "approvedAt": "2026-11-03T06:59:43.978Z"
+  },
+  {
+    "id": "cover-l-cfff38cf4176f27d",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv és irodalom"
+    ],
+    "keywords": [
+      "5. Osztály kommunikáció tananyag teljes"
+    ],
+    "alt": "Iskolaudvaron két gyerek integet egymásnak, köztük konzervdoboz-telefon zsinórja.",
+    "src": "/design/adventure/cover-l-cfff38cf4176f27d.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "0139b98d8e3a27fc",
+    "approvedAt": "2026-11-03T06:59:47.916Z"
+  },
+  {
+    "id": "cover-l-d0228a7b52eb02a1",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "környezetismeret"
+    ],
+    "keywords": [
+      "Fogalomjegyzék a feltöltött forrásokból"
+    ],
+    "alt": "Mesebeli táj: fehér lovas hős hátulról, távoli hegyen barátságos sárkány és griffmadár.",
+    "src": "/design/adventure/cover-l-d0228a7b52eb02a1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "4bffce674f021471",
+    "approvedAt": "2026-11-03T06:59:46.675Z"
+  },
+  {
+    "id": "cover-l-d3049baab869a724",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Fizika"
+    ],
+    "keywords": [
+      "Elektromosságtan"
+    ],
+    "alt": "Üvegburás elektroszkóp széttartó lemezekkel, dörzsölt rúd és világító atommodell.",
+    "src": "/design/studio/cover-l-d3049baab869a724.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "bfb81ce82f80b417",
+    "approvedAt": "2026-11-03T06:59:52.533Z"
+  },
+  {
+    "id": "cover-l-d404d9531b2b3669",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "4. osztály - Bővített Az emberi test – Testrészek, érzékszervek, mozgás szervrendszere"
+    ],
+    "alt": "Gyerek nagyítóval nézi a virágot, szagolja, közben a parkban mások ugrálnak és futnak.",
+    "src": "/design/adventure/cover-l-d404d9531b2b3669.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "977a23d97f5f9643",
+    "approvedAt": "2026-11-03T06:59:44.346Z"
+  },
+  {
+    "id": "cover-l-d869c59f1f7c09f5",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Fizika"
+    ],
+    "keywords": [
+      "Energia és energiaváltozások"
+    ],
+    "alt": "Fatüzelésű tűzhelyen olvadó jég hőmérővel, gőzölgő kanna, vízben hűlő acélrúd.",
+    "src": "/design/studio/cover-l-d869c59f1f7c09f5.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "12c30f514a36c8a6",
+    "approvedAt": "2026-11-03T06:59:52.597Z"
+  },
+  {
+    "id": "cover-l-d8c0c79685f49c60",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "3. osztály - RÖVID VEGETABLES & FRUITS"
+    ],
+    "alt": "Színes piaci stand zöldségekkel és gyümölcsökkel, egy gyerek kosárral áll előtte háttal.",
+    "src": "/design/adventure/cover-l-d8c0c79685f49c60.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "c2d1a0a17f7ee79b",
+    "approvedAt": "2026-11-03T06:59:41.108Z"
+  },
+  {
+    "id": "cover-l-d8d4fcaacf652190",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Kivonás Mester – 10-es átlépés technika"
+    ],
+    "alt": "Napfényes dojóban kis nindzsa gyerek ugrál lefelé egy kőlapsoron, középen egy nagy kerek kőnél.",
+    "src": "/design/adventure/cover-l-d8d4fcaacf652190.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "0c54b6f6e3e63488",
+    "approvedAt": "2026-11-03T06:59:42.481Z"
+  },
+  {
+    "id": "cover-l-db9a17375c868ce1",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Természettudomány"
+    ],
+    "keywords": [
+      "A vulkánok – vulkáni működés"
+    ],
+    "alt": "Alkonyatkor működő kúpos vulkán izzó lávafolyammal, előtérben bazaltoszlopok.",
+    "src": "/design/studio/cover-l-db9a17375c868ce1.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "0e39dea7d19c73e9",
+    "approvedAt": "2026-11-03T06:59:51.150Z"
+  },
+  {
+    "id": "cover-l-dff9449d4b0a4acf",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Biológia"
+    ],
+    "keywords": [
+      "Légzőrendszer"
+    ],
+    "alt": "Áttetsző tüdőmodell elágazó hörgőkkel és léghólyagocskákkal, az ablakon túl futó.",
+    "src": "/design/studio/cover-l-dff9449d4b0a4acf.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "4e35eb79e0a4fd69",
+    "approvedAt": "2026-11-03T06:59:52.101Z"
+  },
+  {
+    "id": "cover-l-e149450df972b7af",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Ének-zene"
+    ],
+    "keywords": [
+      "8. osztály - 🎸 Gitár Alapok - Balkezes Útmutató"
+    ],
+    "alt": "Balkezes kamasz akusztikus gitáron játszik, jobb kézzel fog, ballal penget, meleg lámpafényben.",
+    "src": "/design/studio/cover-l-e149450df972b7af.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ef1714689e91e4ac",
+    "approvedAt": "2026-11-03T06:59:54.891Z"
+  },
+  {
+    "id": "cover-l-e1499f91f33d24e7",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Törtek, százalékok, sebesség, arányok és számolási stratégiák"
+    ],
+    "alt": "Szeletelt pizza pikniktakarón, L alakú gyep, golyós befőttesüvegek, távolban kerékpáros.",
+    "src": "/design/studio/cover-l-e1499f91f33d24e7.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "25d79aa8e4354aec",
+    "approvedAt": "2026-11-03T06:59:51.085Z"
+  },
+  {
+    "id": "cover-l-e1e83b2e20f10168",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv és irodalom"
+    ],
+    "keywords": [
+      "A főnév - Magyar nyelvtan 4. osztály"
+    ],
+    "alt": "Udvar kutyával, labdával, kosár almával és madárcsapattal, háttérben falu és folyó.",
+    "src": "/design/adventure/cover-l-e1e83b2e20f10168.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "52acc6744a990b06",
+    "approvedAt": "2026-11-03T06:59:45.312Z"
+  },
+  {
+    "id": "cover-l-e31b833655af38c0",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "3. osztály - ⚡ CYBER KIVONÁS – 100 küldetés"
+    ],
+    "alt": "Barátságos robot neonkék platformon világító energiagömböket vesz el egy kupacból.",
+    "src": "/design/adventure/cover-l-e31b833655af38c0.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "3bdc8ef11d9bb4cd",
+    "approvedAt": "2026-11-03T06:59:41.765Z"
+  },
+  {
+    "id": "cover-l-e3465664f5606806",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Where I Live – Module 4"
+    ],
+    "alt": "Kétszintes családi ház metszetben: hálószoba, konyha, fürdőszoba, nappali, lépcső és kert.",
+    "src": "/design/adventure/cover-l-e3465664f5606806.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ca48a2a7ef787e1a",
+    "approvedAt": "2026-11-03T06:59:43.901Z"
+  },
+  {
+    "id": "cover-l-e46db2ba531da108",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Magyar nyelv"
+    ],
+    "keywords": [
+      "🏎️ Elválasztás és Betűrend Verseny - 5. osztály"
+    ],
+    "alt": "Asztali versenypálya, kisautó halad két csoportra bontott színes fakockasor mellett.",
+    "src": "/design/adventure/cover-l-e46db2ba531da108.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "d97bb1bb6f7b9dd7",
+    "approvedAt": "2026-11-03T06:59:47.753Z"
+  },
+  {
+    "id": "cover-l-e477f7fa9011accc",
+    "kind": "cover",
+    "band": "laboratory",
+    "subjects": [
+      "Kémia"
+    ],
+    "keywords": [
+      "Képletírás gyakorlása: molekulák, savak, savmaradékionok és ionvegyületek"
+    ],
+    "alt": "Analitikai mérleg fehér kristályokkal, körülötte molekulamodellek és címke nélküli savas üvegek.",
+    "src": "/design/laboratory/cover-l-e477f7fa9011accc.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ee8a3e52ad4b4d44",
+    "approvedAt": "2026-11-03T06:59:55.326Z"
+  },
+  {
+    "id": "cover-l-e7679a9298865da8",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "There are - Focis tananyag 5. osztály"
+    ],
+    "alt": "Gyerekszoba íróasztallal, számítógéppel, szemeteskukával és a padlón egy focilabdával.",
+    "src": "/design/adventure/cover-l-e7679a9298865da8.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "77bb576e40a13466",
+    "approvedAt": "2026-11-03T06:59:46.982Z"
+  },
+  {
+    "id": "cover-l-e7bec843e1198585",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "5. osztály Angol - My Cousin Danny"
+    ],
+    "alt": "Napos kertben egy fiú focilabdát tart, mellette gitár egy padnak támasztva.",
+    "src": "/design/adventure/cover-l-e7bec843e1198585.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ae7e741756b92147",
+    "approvedAt": "2026-11-03T06:59:46.835Z"
+  },
+  {
+    "id": "cover-l-e7c9ec12d4ae7e0c",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "8. osztályos Matematika - Szöveges Feladatok"
+    ],
+    "alt": "Két kerékpáros közeledik egymás felé a vidéki úton, elöl fakocka és konyhai mérleg az asztalon.",
+    "src": "/design/studio/cover-l-e7c9ec12d4ae7e0c.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a00528b69738e910",
+    "approvedAt": "2026-11-03T06:59:54.048Z"
+  },
+  {
+    "id": "cover-l-e7d7a314177937c6",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természettudomány"
+    ],
+    "keywords": [
+      "Növények testfelépítése"
+    ],
+    "alt": "Kék vízben álló fehér virág kékülő szirmokkal, mellette napfényes cserepes növény.",
+    "src": "/design/adventure/cover-l-e7d7a314177937c6.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "b11013c0914249ee",
+    "approvedAt": "2026-11-03T06:59:49.842Z"
+  },
+  {
+    "id": "cover-l-e80fcc586ffd788e",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "4. osztály - Polish Christmas - 4th Grade English"
+    ],
+    "alt": "Lengyel szentesti asztal sok fogással és egy üres tányérral, a család az első csillagot nézi.",
+    "src": "/design/adventure/cover-l-e80fcc586ffd788e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "b69026b7090bf58e",
+    "approvedAt": "2026-11-03T06:59:43.001Z"
+  },
+  {
+    "id": "cover-l-e88d39c8d660670e",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "4. osztály - 🎄✨ Christmas in Poland - 4th Grade English ✨🎄"
+    ],
+    "alt": "Havas lengyel falu karácsony éjjel, a család lámpás úton sétál a kivilágított templom felé.",
+    "src": "/design/adventure/cover-l-e88d39c8d660670e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "180ebc9188bafd1f",
+    "approvedAt": "2026-11-03T06:59:43.148Z"
+  },
+  {
+    "id": "cover-l-ea3ada2952927e47",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Az emberré válás folyamata - 5. osztály"
+    ],
+    "alt": "Alkonyati szavanna akáciafákkal, ősemberek csoportja tűz körül, előtérben kőeszközök.",
+    "src": "/design/adventure/cover-l-ea3ada2952927e47.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "f68ca76a363e04b0",
+    "approvedAt": "2026-11-03T06:59:50.295Z"
+  },
+  {
+    "id": "cover-l-ebc19188e55dfece",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Matematika"
+    ],
+    "keywords": [
+      "Oszthatóság 3-mal és 9-cel"
+    ],
+    "alt": "Színes fagyöngyök hármas és kilences csoportokba rendezve, mellettük kilencüreges tartó.",
+    "src": "/design/studio/cover-l-ebc19188e55dfece.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "775f1017cace264a",
+    "approvedAt": "2026-11-03T06:59:50.923Z"
+  },
+  {
+    "id": "cover-l-f08b23c9ac8d687f",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "5. osztály - ĐURAĐ (GYÖRGY) BRANKOVIĆ"
+    ],
+    "alt": "Sok tornyos középkori erőd a széles Duna partján, aranyló esti fényben.",
+    "src": "/design/adventure/cover-l-f08b23c9ac8d687f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "67740cc5bcfa5ef6",
+    "approvedAt": "2026-11-03T06:59:50.137Z"
+  },
+  {
+    "id": "cover-l-f2f69977a4fef989",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Fizika"
+    ],
+    "keywords": [
+      "8. osztályos hőtan"
+    ],
+    "alt": "Pohárban olvadó jégkockák, gőzölgő vízforraló, jégvirágos ablak, kint sínpár.",
+    "src": "/design/studio/cover-l-f2f69977a4fef989.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "85961f07d13f9a9c",
+    "approvedAt": "2026-11-03T06:59:52.426Z"
+  },
+  {
+    "id": "cover-l-f4eaac41b8997be7",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Bibliaismeret"
+    ],
+    "keywords": [
+      "5. Osztály Bibliaismeret a biblia könyvei"
+    ],
+    "alt": "Kőfalú régi könyvtárban felgöngyölt tekercsek és zárt bőrkötéses könyvek egy állványon.",
+    "src": "/design/adventure/cover-l-f4eaac41b8997be7.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ecfa700371f29297",
+    "approvedAt": "2026-11-03T06:59:47.056Z"
+  },
+  {
+    "id": "cover-l-f69f656ebc96c538",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "4. osztály - A táplálkozás és légzés szervrendszere"
+    ],
+    "alt": "Mosolygó gyerek almába harap egy virágos kertben, mellette fogkefe és pohár víz.",
+    "src": "/design/adventure/cover-l-f69f656ebc96c538.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "8d5d7e34ab5f582d",
+    "approvedAt": "2026-11-03T06:59:44.274Z"
+  },
+  {
+    "id": "cover-l-f6a3a36714a5c681",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Az ókori Egyiptom"
+    ],
+    "alt": "Vitorlás csónak a Níluson, öntözött zöld földek, a háttérben a gízai piramisok.",
+    "src": "/design/adventure/cover-l-f6a3a36714a5c681.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "5a8ea216c1dbc3d2",
+    "approvedAt": "2026-11-03T06:59:50.435Z"
+  },
+  {
+    "id": "cover-l-fb035f2e340cc520",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "Halloween Poems – Halloween-versek angolul"
+    ],
+    "alt": "Gyertyafényes tökök egy veranda lépcsőjén, a holdas égen boszorkány seprűn és szelíd szellemek.",
+    "src": "/design/adventure/cover-l-fb035f2e340cc520.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ac02a10be258e7bd",
+    "approvedAt": "2026-11-03T06:59:43.602Z"
+  },
+  {
+    "id": "cover-l-fc5a149ca34463da",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Környezetismeret"
+    ],
+    "keywords": [
+      "Kert és Park – Életközösségek lakóhelyünk környezetében"
+    ],
+    "alt": "Falusi kert almafával, zöldségágyásokkal, komposztládával és madáretetővel.",
+    "src": "/design/adventure/cover-l-fc5a149ca34463da.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "57fd64dc4efe12e9",
+    "approvedAt": "2026-11-03T06:59:44.950Z"
+  },
+  {
+    "id": "cover-l-fd45208a875b8d4c",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "A középkori Magyar Királyság fénykora"
+    ],
+    "alt": "A visegrádi királyi palota és fellegvár a Dunakanyar fölött, előtérben aranyérmék.",
+    "src": "/design/studio/cover-l-fd45208a875b8d4c.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "01e861daf70ba3f8",
+    "approvedAt": "2026-11-03T06:59:51.221Z"
+  },
+  {
+    "id": "cover-l-fe0d6dddd3f2a36f",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Természettudomány"
+    ],
+    "keywords": [
+      "A virágos növények - 5. osztály"
+    ],
+    "alt": "Átlátszó cserépben virágzó növény látható gyökérzettel, a virágon méh.",
+    "src": "/design/adventure/cover-l-fe0d6dddd3f2a36f.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "a1194977da8bd892",
+    "approvedAt": "2026-11-03T06:59:49.685Z"
+  },
+  {
+    "id": "cover-l-fe66fe6aee6315bc",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "A kereszténység és az iszlám - Témazáró tananyag 5. osztály"
+    ],
+    "alt": "Mediterrán kisváros, ahol egy kőtemplom harangtornya és egy kupolás mecset áll egymás közelében.",
+    "src": "/design/adventure/cover-l-fe66fe6aee6315bc.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "0048b624d6be40d2",
+    "approvedAt": "2026-11-03T06:59:50.215Z"
+  },
+  {
+    "id": "cover-l-fef89d4ca3525156",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Történelem"
+    ],
+    "keywords": [
+      "Hunyadi János, a kormányzó"
+    ],
+    "alt": "Középkori erőd magas parton két folyó találkozásánál, előtérben bronz harang.",
+    "src": "/design/studio/cover-l-fef89d4ca3525156.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "cfbdfbf1c2076cc3",
+    "approvedAt": "2026-11-03T06:59:51.370Z"
+  },
+  {
     "id": "cover-magyar-irodalom-adventure-mitologia",
     "kind": "cover",
     "band": "adventure",
