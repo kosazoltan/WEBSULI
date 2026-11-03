@@ -1,10 +1,28 @@
 import { eq } from "drizzle-orm";
-import { lessons } from "../../shared/schema";
+import { lessons, type MaterialImprovementBackup } from "../../shared/schema";
 import { lessonRepairSchema } from "../../shared/lesson-repair";
 import { storage } from "../storage";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
+import { repairHash } from "../studio/structured-improvement";
 import { executeWorkflow, workflowPhase } from "./engine";
 import { workflowStore } from "./store";
+
+const withoutArt = (json: unknown) => {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return json;
+  const { art: _art, ...rest } = json as Record<string, unknown>;
+  return rest;
+};
+
+/**
+ * Spec 2026-11-03-apply-visszaolvasas: a mentés a jelöltet `withLessonArt`-tal írja, így az arculat eltérhet a jelöltétől.
+ * A lecke a tranzakció saját hash-ével (a javítás legkorábbi mentése; a későbbi visszaállítás is ide ír) és az arculaton
+ * kívül a jelölttel egyezik. `backups` csökkenő időrendben jön (`getAllMaterialImprovementBackups`).
+ */
+export function appliedLessonMatches(json: unknown, candidate: unknown, backups: readonly Pick<MaterialImprovementBackup, "improvedFileId" | "backupData">[], improvedFileId: string): boolean {
+  const own = backups.filter(b => b.improvedFileId === improvedFileId).at(-1);
+  const expected = (own?.backupData as { expectedCurrentHash?: unknown } | null | undefined)?.expectedCurrentHash;
+  return typeof expected === "string" && repairHash(json) === expected && repairHash(withoutArt(json)) === repairHash(withoutArt(candidate));
+}
 
 /** One guarded application path, including clients using the old force-apply URL. */
 export async function applyTrackedImprovement(id: string, owner: string, notes?: string) {
@@ -26,10 +44,10 @@ export async function applyTrackedImprovement(id: string, owner: string, notes?:
     if (!original || saved?.status !== "applied") throw new Error("Az alkalmazás nem igazolható visszaolvasással.");
     if (candidate.contentType === "lesson") {
       const { db } = await import("../db");
-      const { repairHash } = await import("../studio/structured-improvement");
       const repair = lessonRepairSchema.parse(JSON.parse(candidate.content));
       const [row] = await db.select().from(lessons).where(eq(lessons.id, repair.lessonId));
-      if (!row || repairHash(row.json) !== repairHash(repair.candidate)) throw new Error("Az alkalmazott lecke eltér a jelölttől.");
+      const backups = await storage.getAllMaterialImprovementBackups(original.id);
+      if (!row || !appliedLessonMatches(row.json, repair.candidate, backups, id)) throw new Error("Az alkalmazott lecke eltér a jelölttől.");
     } else if (original.content !== candidate.content) throw new Error("Az alkalmazott HTML eltér a jelölttől.");
     return { kind: "material", id: original.id };
   });
