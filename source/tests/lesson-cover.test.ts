@@ -76,9 +76,24 @@ test("withLessonArt: a valódi katalógusból a Hunyadi-lecke a saját borítój
   const { withLessonArt } = await import("../server/design-assets");
   const real = DESIGN_ASSET_CATALOG.find(a => a.id === coverId);
   assert.ok(real, "a Hunyadi-lecke borítója a katalógusban");
-  const executor = { select: () => ({ from: async () => DESIGN_ASSET_CATALOG.map(a => ({ id: a.id })) }) } as never;
+  const { designAssets } = await import("../shared/schema");
+  // A tábla szerint válaszoló hamis lekérdező: design_assets → a katalógus azonosítói; lessons → nincs tárolt lecke (a jelölt art-ja számít).
+  const executor = { select: () => ({ from: (table: unknown) => table === designAssets
+    ? Promise.resolve(DESIGN_ASSET_CATALOG.map(a => ({ id: a.id })))
+    : { where: async () => [] } }) } as never;
   const fresh = await withLessonArt({ ...lesson, art: { picture: "hero-studio" } }, "l1", executor) as { art?: { picture?: string } };
   assert.equal(fresh.art?.picture, coverId, "mentéskor a tartalomkulcsú borító");
   const renamed = await withLessonArt({ ...lesson, title: "Hunyadi János kormányzósága", art: { picture: coverId } }, "l1", executor) as { art?: { picture?: string } };
   assert.equal(renamed.art?.picture, coverId, "a kézi kép az újraválasztás után is marad");
+});
+
+test("review #382: a javítási jelölt art nélkül, átnevezve — a tárolt lecke kézi borítója marad", async () => {
+  const { withLessonArt } = await import("../server/design-assets");
+  const { designAssets } = await import("../shared/schema");
+  const executor = { select: () => ({ from: (table: unknown) => table === designAssets
+    ? Promise.resolve(DESIGN_ASSET_CATALOG.map(a => ({ id: a.id })))
+    : { where: async () => [{ picture: coverId }] } }) } as never;
+  const candidate = { ...lesson, title: "Hunyadi János kormányzósága" }; // nincs art mező
+  const saved = await withLessonArt(candidate, "lesson-uuid", executor) as { art?: { picture?: string } };
+  assert.equal(saved.art?.picture, coverId);
 });
