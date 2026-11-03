@@ -53,6 +53,8 @@ const ALLOWLIST: Record<string, Allowed> = {
   "module@server/updateClassroom0Titles.ts": { category: "cli-script", reason: "Egyszeri címfrissítő parancssori szkript; a szerver nem hívja." },
   // ── Ütemezett, tartalmat nem érintő írás.
   "value:runScheduledPublishingCheck@server/scheduledPublishing.ts": { category: "scheduled", reason: "Ütemezett közzététel: csak a tulajdonos (user_id) áll be a láthatósághoz, a tartalom nem változik." },
+  // Spec 2026-11-03-leckeborito-auto (tulajdonosi jóváhagyás): az indexből dinamikusan indított háttérfolyamat.
+  "unreferenced:startLessonCoverWorker@server/lesson-covers.ts": { category: "scheduled", reason: "Automatikus leckeborító: csak a lecke art.picture mezője íródik, tranzakcióban, az art nélküli hash-ellenőrzéssel; a tartalom nem változik." },
   // Spec 2026-10-18-admin-korszerusites: a deleteUser-nek mostantól hívója van (Felhasználók fül) — kézi admin-művelet.
   "route:DELETE /users/:id@server/admin-users.ts": { category: "manual-admin", reason: "Kézi felhasználótörlés az admin felületről; az anyagok tulajdonosát nullázza, a tartalom nem változik." },
   // ── Termelési összerakás: függvényérték, amelyet a workflow-n belül hívnak (gépi bizonyítékkal).
