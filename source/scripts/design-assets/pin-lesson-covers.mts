@@ -13,6 +13,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { withReadOnlyDb, withWriteTransaction } from "../lib/read-only-db";
 import { DESIGN_ASSET_CATALOG } from "../../shared/design-asset-catalog";
 import { isLessonCoverId } from "../../shared/lesson-cover";
+import { repairHash } from "../../server/lib/canonical-hash";
 import { hashWithoutArt, pinnedArt, planPins, verifyPinned, type PinPlan, type PinRow } from "./pin-lesson-covers-lib";
 
 type Query = <R>(sql: string, params?: unknown[]) => Promise<R[]>;
@@ -36,7 +37,8 @@ if (mode === "--write") {
     const byId = new Map(rows.map(r => [r.id, r]));
     const backup: Backup = { at: new Date().toISOString(), rows: plans.map(p => byId.get(p.id)!), art: plans.map(p => ({ id: p.id, title: p.title, before: p.art, after: p.to })) };
     // Kizárólagos létrehozás: meglévő mentést nem írunk felül.
-    writeFileSync(file, JSON.stringify(backup), { encoding: "utf8", flag: "wx" });
+    // Review #382: a mentés teljes lecke-json-okat tartalmaz — csak a futtató olvashatja.
+    writeFileSync(file, JSON.stringify(backup), { encoding: "utf8", flag: "wx", mode: 0o600 });
     console.log(`mentés: ${plans.length} lecke → ${file}`);
     for (const p of plans) {
       const [after] = await q<{ json: Record<string, unknown> }>("UPDATE lessons SET json = jsonb_set(json, '{art}', $2::jsonb, true) WHERE id = $1 RETURNING json", [p.id, JSON.stringify(pinnedArt(p))]);
@@ -57,6 +59,8 @@ if (mode === "--write") {
       if (!cur) throw new Error(`hiányzó lecke: ${item.id} — a visszaállítás leállt, semmi sem íródott`);
       const saved = backup.rows.find(r => r.id === item.id)!;
       if (hashWithoutArt(cur.json) !== hashWithoutArt(saved.json)) throw new Error(`a lecke azóta változott: ${item.id} — a visszaállítás leállt, semmi sem íródott`);
+      // Review #382: az `art` is pontosan a csere utáni állapot legyen (a csere óta más képet / art-mezőt kapott leckét nem írunk felül).
+      if (repairHash(cur.json.art) !== repairHash({ ...(item.before ?? {}), picture: item.after })) throw new Error(`a lecke art mezője a csere óta változott: ${item.id} — a visszaállítás leállt, semmi sem íródott`);
       const sqlText = item.before === null ? "UPDATE lessons SET json = json - 'art' WHERE id = $1 RETURNING json" : "UPDATE lessons SET json = jsonb_set(json, '{art}', $2::jsonb, true) WHERE id = $1 RETURNING json";
       const [after] = await q<{ json: Record<string, unknown> }>(sqlText, item.before === null ? [item.id] : [item.id, JSON.stringify(item.before)]);
       if (hashWithoutArt(after.json) !== hashWithoutArt(saved.json)) throw new Error(`visszaállítás utáni eltérés: ${item.id}`);

@@ -97,3 +97,13 @@ test("review #382: a javítási jelölt art nélkül, átnevezve — a tárolt l
   const saved = await withLessonArt(candidate, "lesson-uuid", executor) as { art?: { picture?: string } };
   assert.equal(saved.art?.picture, coverId);
 });
+
+test("review #382: átmeneti képtábla-hibánál a meglévő arculat (a kézi borító) marad", async () => {
+  const { withLessonArt } = await import("../server/design-assets");
+  const failing = { select: () => ({ from: () => Promise.reject(new Error("átmeneti DB-hiba")) }) } as never;
+  const art = { subjectIcon: "icon-x", picture: coverId };
+  const saved = await withLessonArt({ ...lesson, title: "Hunyadi kormányzósága", art }, "l1", failing) as { art?: unknown };
+  assert.deepEqual(saved.art, art);
+  const fresh = await withLessonArt({ ...lesson }, "l1", failing) as { art?: unknown };
+  assert.equal(fresh.art, undefined, "arculat nélküli lecke art nélkül ment (mint eddig)");
+});

@@ -9,9 +9,9 @@ export { hashWithoutArt, pinnedArt, SKIPPED_FILES, verifyPinned } from "../../se
  * csere után a `json` minden más része változatlan-e (`art` nélküli kanonikus hash).
  */
 export type PinRow = { id: string; html_file_id: string | null; json: Record<string, unknown> };
-export type PinPlan = { id: string; title: string; from: string | null; to: string; art: Record<string, unknown> | null; hash: string };
+export type PinPlan = { id: string; title: string; from: string | null; to: string; art: Record<string, unknown>; hash: string };
 
-/** Azok a leckék, amelyek tartalomkulcsú borítója a katalógusban van és még nem az a képük. */
+/** Azok a leckék, amelyeknek van tárolt `art`-ja, a tartalomkulcsú borítójuk a katalógusban van és még nem az a képük. */
 export function planPins(rows: readonly PinRow[], catalogCoverIds: ReadonlySet<string>, skipFiles: ReadonlySet<string> = SKIPPED_FILES): PinPlan[] {
   const plans: PinPlan[] = [];
   for (const r of rows) {
@@ -20,7 +20,10 @@ export function planPins(rows: readonly PinRow[], catalogCoverIds: ReadonlySet<s
     const to = lessonCoverId({ subject: j.subject, title: j.title }, designThemeForClassroom(j.classroom));
     if (!catalogCoverIds.has(to)) continue;
     const art = j.art && typeof j.art === "object" && !Array.isArray(j.art) ? (j.art as Record<string, unknown>) : null;
-    const from = typeof art?.picture === "string" ? art.picture : null;
+    // Review #382: `art` nélküli leckéhez nem írunk (egy csak `picture`-t tartalmazó `art` mellett a lejátszó nem pótolná a kabalát
+    // és az ikont); ott a lejátszó a katalógusból úgyis a tartalomkulcsú borítót választja, teljes arculattal.
+    if (!art) continue;
+    const from = typeof art.picture === "string" ? art.picture : null;
     if (from === to) continue;
     plans.push({ id: r.id, title: j.title, from, to, art, hash: hashWithoutArt(j) });
   }

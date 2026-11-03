@@ -90,7 +90,7 @@ export async function syncDesignAssets(catalog: readonly DesignAsset[] = DESIGN_
  * Mentés előtti arculat (docs/specs/2026-10-17-lecke-betoltes.md; az ikon a 2026-10-17-websuli-ikonkeszlet szerint): a lecke
  * a sáv ikonját, a rotációval választott hős- vagy borítóképet és (1–5. évfolyamon) a kabalát kapja — csak az adatbázisban
  * megvan elemekből. A lejátszó ezt olvassa, megjelenítéskor nem számol. Review #274: a javítás közvetlen mentése is ezen megy
- * át, a saját tranzakciójában. Ismeretlen tantárgy vagy nem tanított pár: ikon nélkül; hiba esetén a lecke `art` nélkül ment.
+ * át, a saját tranzakciójában. Ismeretlen tantárgy vagy nem tanított pár: ikon nélkül; hiba esetén a meglévő `art` marad (ha nincs: nélküle).
  */
 export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typeof db, "select"> = db): Promise<T> {
   if (!json || typeof json !== "object" || Array.isArray(json)) return json;
@@ -113,8 +113,10 @@ export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typ
     const art = computeLessonArt(lesson, seed, stored, undefined, previous) ?? {};
     return (Object.keys(art).length ? { ...rest, art } : rest) as T;
   } catch (error) {
-    logger.warn("[design-assets] Az arculat nem választható, a lecke art nélkül ment:", error);
-    return rest as T;
+    // Review #382: átmeneti hiba esetén a meglévő arculat (benne a kézi borító) marad; art nélkül csak az eddig arculat nélküli lecke ment.
+    const kept = previousArt && typeof previousArt === "object" && !Array.isArray(previousArt);
+    logger.warn(`[design-assets] Az arculat nem választható, a lecke ${kept ? "a meglévő arculatával" : "art nélkül"} ment:`, error);
+    return (kept ? { ...rest, art: previousArt } : rest) as T;
   }
 }
 
