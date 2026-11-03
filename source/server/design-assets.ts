@@ -181,19 +181,20 @@ export function thumbnailFor(id: string, load: (id: string) => Promise<{ sha256:
   if (hit) return Promise.resolve(hit);
   const running = thumbInflight.get(id);
   if (running) return running;
-  const job: Promise<Thumb | null> = (async () => {
+  const own: { job?: Promise<Thumb | null> } = {};
+  own.job = (async () => {
     const row = await load(id);
     if (!row) return null;
     const thumb = { sha256: row.sha256, buf: await withSharpSlot(() => make(row.bytes)) };
     // Csak a még regisztrált (közben nem érvénytelenített) generálás írhat a gyorsítótárba.
-    if (thumbInflight.get(id) === job) {
+    if (thumbInflight.get(id) === own.job) {
       thumbById.set(id, thumb);
       if (thumbById.size > THUMB_CACHE_MAX) thumbById.delete(thumbById.keys().next().value!);
     }
     return thumb;
-  })().finally(() => { if (thumbInflight.get(id) === job) thumbInflight.delete(id); });
-  thumbInflight.set(id, job);
-  return job;
+  })().finally(() => { if (thumbInflight.get(id) === own.job) thumbInflight.delete(id); });
+  thumbInflight.set(id, own.job);
+  return own.job;
 }
 
 export const designAssetsRouter = Router();
