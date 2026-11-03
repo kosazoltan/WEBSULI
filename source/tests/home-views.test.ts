@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DEFAULT_HOME_VIEW, groupBySubject, newestFirst, parseHomeView } from "../client/src/lib/home-views";
+import { DEFAULT_HOME_VIEW, groupBySubject, matchesHomeSearch, newestFirst, parseHomeView } from "../client/src/lib/home-views";
 import { OTHER_SUBJECT, SUBJECT_LABELS, subjectLabel } from "../shared/subjects";
 import tanmenet from "../server/data/tanmenet-2020.json";
 import nyelvi from "../server/data/nyelvi-tanmenet.json";
@@ -45,4 +45,15 @@ test("minden tanmenet-tantárgykulcsnak van megjelenített neve", () => {
   const keys = new Set([...tanmenet.plans, ...nyelvi.plans].map((plan) => plan.subject));
   for (const key of keys) assert.notEqual(subjectLabel(key), OTHER_SUBJECT, `hiányzó név: ${key}`);
   assert.equal(Object.keys(SUBJECT_LABELS).length >= keys.size, true);
+});
+
+test("keresés: cím, leírás és tantárgynév, kis-nagybetűtől és ékezettől függetlenül (tulajdonosi képernyőkép 2026-11-03)", () => {
+  const antigone = { title: "Szophoklész: Antigoné", description: "Egy ma is érvényes kérdés", subject: "magyar-irodalom" };
+  assert.equal(matchesHomeSearch(antigone, "Irodalom"), true, "a tantárgy neve alapján");
+  assert.equal(matchesHomeSearch(antigone, "antigone"), true, "ékezet nélkül a címben");
+  assert.equal(matchesHomeSearch(antigone, "ÉRVÉNYES"), true, "a leírásban");
+  assert.equal(matchesHomeSearch(antigone, "  "), true, "üres keresés mindent mutat");
+  assert.equal(matchesHomeSearch(antigone, "Matematika"), false);
+  assert.equal(matchesHomeSearch({ title: "Anyag", description: null, subject: null }, "Egyéb"), false, "tantárgy nélkül nincs tantárgynév-találat");
+  assert.equal(matchesHomeSearch({ title: "Ókori Róma", subject: "tortenelem" }, "tortenelem"), true);
 });

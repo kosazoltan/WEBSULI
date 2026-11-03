@@ -76,3 +76,13 @@ A keresés és az évfolyamszűrő minden nézetre érvényes. A választás esz
 - WHEN mindkettő, THEN felül legfeljebb 8 legújabb a „Legfrissebb” sávban, alatta a tantárgyi szakaszok legújabb elöl.
 - WHEN a nézet bekapcsolva és az oldal újratölt, THEN a választás megmarad.
 - WHEN 390×844 és 1366×768, THEN nincs vízszintes görgetés, a nézetgombok és a kártyák nem takarnak egymásra.
+
+## Kiegészítés (2026-11-03, tulajdonosi képernyőkép + review #393)
+
+- **Keresés a tantárgy nevére:** évfolyamra szűrve az „Irodalom” keresés semmit nem adott, pedig a 9. évfolyamon két irodalom
+  anyag van (Antigoné, Íliász) — a kereső csak a címet és a leírást nézte. Most cím, leírás ÉS tantárgynév
+  (`matchesHomeSearch`), kis-nagybetűtől és ékezettől függetlenül.
+  EARS: WHEN a keresés egy tantárgy nevét tartalmazza (ékezettel vagy nélküle), THEN az adott tantárgy anyagai megjelennek.
+- **Kontraszt (review):** a bekapcsolt nézetgomb a `ui/button` alapváltozatának mért háttere (orange-700 → amber-700, ≥ 4,5:1);
+  a fehér felirat sötét témában és rámutatva is rögzítve.
+- **Billentyűzet (review):** az ugrógomb a fókuszt is a szakaszra viszi (`tabIndex={-1}` + `focus`), a következő Tab a szakaszon belül marad.

@@ -88,6 +88,18 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1366, height: 768 
     for (const button of [newest, bySubject]) {
       await button.hover();
       expect(await button.evaluate((el) => getComputedStyle(el).color), "rámutatott gomb szövegszíne").toBe("rgb(255, 255, 255)");
+      // Review #393: a fehér felirat a gradiens minden színstopján ≥ 4,5:1 (WCAG AA, 12 px-es szöveg).
+      const ratios = await button.evaluate((el) => {
+        const lum = ([r, g, b]: number[]) => {
+          const c = [r, g, b].map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+          return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        };
+        const parse = (s: string) => [...s.matchAll(/rgba?\(([^)]+)\)/g)].map((m) => m[1].split(/[ ,/]+/).slice(0, 3).map(Number));
+        const fg = lum(parse(getComputedStyle(el).color)[0]);
+        return parse(getComputedStyle(el).backgroundImage).map((stop) => (Math.max(fg, lum(stop)) + 0.05) / (Math.min(fg, lum(stop)) + 0.05));
+      });
+      expect(ratios.length, "a bekapcsolt gombnak gradiens háttere van").toBeGreaterThanOrEqual(2);
+      for (const ratio of ratios) expect(ratio, "kontraszt").toBeGreaterThanOrEqual(4.5);
     }
     await page.screenshot({ path: `tests/screenshots/home-views-both-${viewport.width}.png`, fullPage: true });
 
@@ -132,6 +144,23 @@ test("évfolyamváltás és keresés minden nézetben szűr; ugrógomb a szakasz
   await page.getByTestId("input-search").fill("");
   await page.getByTestId("home-subject-jump-4").click();
   await expect(page.locator('[data-subject="Matematika"]')).toBeInViewport();
+  // Review #393: billentyűzettel az ugrás a fókuszt is a szakaszra viszi; a következő Tab a szakaszon belül marad.
+  await page.getByTestId("home-subject-jump-0").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator('[data-subject="Angol"]')).toBeFocused();
+  await page.keyboard.press("Tab");
+  expect(await page.locator('[data-subject="Angol"]').evaluate((el) => el.contains(document.activeElement) && el !== document.activeElement)).toBe(true);
+});
+
+// Tulajdonosi képernyőkép (2026-11-03): évfolyamra szűrve az „Irodalom” keresés semmit nem adott, mert a kereső csak a címet és a
+// leírást nézte. Itt a címek („Anyag t1”) nem tartalmazzák a tantárgy nevét — a találatot a tantárgy adja, ékezet nélkül is.
+test("keresés a tantárgy nevére, évfolyamon belül, ékezet nélkül is", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  await page.getByTestId("input-search").fill("tortenelem");
+  expect((await ids(page, '[data-testid="list-files"]')).sort()).toEqual(["t1", "t2"]);
+  await page.getByTestId("input-search").fill("Ének-zene");
+  expect(await ids(page, '[data-testid="list-files"]')).toEqual(["e1"]);
 });
 
 test("sérült tárolt nézet és tiltott tárhely: alapnézet, hiba nélkül", async ({ page }) => {

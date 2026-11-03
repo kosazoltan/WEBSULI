@@ -35,6 +35,18 @@ export function newestFirst<T extends { id: string; createdAt: string }>(files: 
   return [...files].sort((a, b) => time(b.createdAt) - time(a.createdAt) || a.id.localeCompare(b.id));
 }
 
+const fold = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+/**
+ * Főoldali keresés: cím, leírás ÉS a tantárgy neve, kis-nagybetűtől és ékezettől függetlenül. Tulajdonosi képernyőkép
+ * (2026-11-03): 9. osztályban az „Irodalom” keresés semmit nem adott, pedig az Antigoné és az Íliász irodalom anyag.
+ */
+export function matchesHomeSearch(file: { title: string; description?: string | null; subject?: string | null }, query: string): boolean {
+  const q = fold(query.trim());
+  if (!q) return true;
+  return [file.title, file.description ?? "", file.subject ? subjectLabel(file.subject) : ""].some((field) => fold(field).includes(q));
+}
+
 export type SubjectGroup<T> = { label: string; files: T[] };
 
 /** Tantárgyi szakaszok a megjelenített név szerint (magyar ábécé), az „Egyéb” mindig utolsó; a belső sorrendet `order` adja. */

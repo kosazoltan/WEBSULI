@@ -20,7 +20,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { useAuth } from "@/hooks/useAuth";
-import { groupBySubject, HOME_VIEW_STORAGE_KEY, newestFirst, NEWEST_STRIP, parseHomeView, type HomeView } from "@/lib/home-views";
+import { groupBySubject, HOME_VIEW_STORAGE_KEY, matchesHomeSearch, newestFirst, NEWEST_STRIP, parseHomeView, type HomeView } from "@/lib/home-views";
 
 /** A /api/materials/likes/batch szerveroldali korlátja (server/lib/public-input.ts MAX_MATERIAL_ID_BATCH). */
 export const LIKES_BATCH_LIMIT = 100;
@@ -113,9 +113,8 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   const filteredFiles = useMemo(() => {
     const filtered = files
       .filter((file) => {
-        const matchesSearch =
-          file.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (file.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+        // Cím, leírás és tantárgynév, ékezettől függetlenül (spec 2026-11-03-fooldal-nezetek).
+        const matchesSearch = matchesHomeSearch(file, searchQuery);
         const matchesClassroom = selectedClassroom === null || file.classroom === selectedClassroom;
         return matchesSearch && matchesClassroom;
       });
@@ -402,8 +401,10 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               data-testid={testId}
               className={`min-h-11 sm:min-h-8 h-auto px-3 text-xs font-semibold gap-1.5 rounded-full ${
                 view[key]
-                  ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white hover:text-white border-0 shadow-md"
-                  : "bg-white/20 hover:bg-white/30 text-white hover:text-white border-white/40"
+                  // Review #393: a ui/button alapváltozatának mért, ≥ 4,5:1 kontrasztú narancs–borostyán háttere; a fehér felirat
+                  // sötét témában és rámutatva is rögzítve (az outline változat saját dark/hover szövegszínt adna).
+                  ? "bg-gradient-to-r from-orange-700 to-amber-700 text-white hover:text-white dark:text-white dark:hover:text-white border-0 shadow-md"
+                  : "bg-white/20 hover:bg-white/30 text-white hover:text-white dark:text-white dark:hover:text-white border-white/40"
               }`}
             >
               <Icon className="w-3.5 h-3.5" aria-hidden />
@@ -443,7 +444,12 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                         key={group.label}
                         type="button"
                         className="home-subject-jump"
-                        onClick={() => document.getElementById(`home-subject-${i}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                        onClick={() => {
+                          // Review #393: a fókusz is a szakaszra kerül — a következő Tab a szakasz kártyáira lép, nem a következő ugrógombra.
+                          const target = document.getElementById(`home-subject-${i}`);
+                          target?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          target?.focus({ preventScroll: true });
+                        }}
                         data-testid={`home-subject-jump-${i}`}
                       >
                         {group.label} <span aria-hidden>· {group.files.length}</span>
@@ -455,7 +461,8 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                   <section
                     key={group.label}
                     id={`home-subject-${i}`}
-                    className="mb-5 scroll-mt-4"
+                    className="mb-5 scroll-mt-4 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-300"
+                    tabIndex={-1}
                     data-testid="home-subject-section"
                     data-subject={group.label}
                     aria-labelledby={`home-subject-heading-${i}`}
