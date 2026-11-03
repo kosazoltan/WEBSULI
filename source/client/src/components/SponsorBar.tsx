@@ -1,3 +1,4 @@
+import { Heart } from "lucide-react";
 import { SPONSORS } from "@shared/sponsors";
 
 /**
@@ -7,7 +8,11 @@ import { SPONSORS } from "@shared/sponsors";
 export default function SponsorBar() {
   return (
     <aside className="sponsor-bar" aria-label="Támogatóink" data-testid="sponsor-bar">
-      <span className="sponsor-bar-label">A tananyagkészítést támogatja</span>
+      <span className="sponsor-bar-label">
+        <Heart aria-hidden="true" fill="currentColor" />
+        A tananyagkészítést támogatja
+      </span>
+      <span className="sponsor-bar-divider" aria-hidden="true" />
       <div className="sponsor-bar-logos">
         {SPONSORS.map((s) => (
           <a
