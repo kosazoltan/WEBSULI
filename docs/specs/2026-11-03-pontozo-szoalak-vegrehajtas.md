@@ -19,11 +19,13 @@ Munkakönyvtár: `source/`. Ág: `fix/pontozo-szoalak`.
     utótagja is talál, a fosztóképzős (-talan/-telen/-tlan/-tlen, -mentes) alak nem”;
   - 4. pont: a minta magyar tagadószavai.
 
+- **Ellenőrzés:** `node --import tsx --test tests/score-word-forms.test.ts` → `ℹ fail 0`; `OPEN_ANSWER_RULES_HU.length < 3500` (`tests/scoring-v2.test.ts`) → zöld.
 ## T2: `server/ai/lesson-html-spec.ts`
 
 - Az `ee_wordHit` ugyanezt kapja (`ee_formHit`), a régi ágak után. Új `ee_privative` regex, azonos a TS-ével.
 - A tagadásőr sora (`unexpectedNegation`) kiegészül a magyar gyenge tagadószókkal (`ee_huWeakNeg(task.sample)`).
 
+- **Ellenőrzés:** `node --import tsx --test tests/lesson-html-score.test.ts tests/scorer-corpus.test.ts` → `ℹ fail 0` (az `ee_evaluate` minden új esetben = `evaluateOpenAnswer`).
 ## T3: tesztek
 
 - **Új `tests/score-word-forms.test.ts`, `evaluateOpenAnswer`-rel.**
@@ -57,7 +59,10 @@ Munkakönyvtár: `source/`. Ág: `fix/pontozo-szoalak`.
   (`.harness/live/blind-score.local.mts`-mintára).
 - Elfogadás: a helyes válaszok átlaga nő; a hibásaké ≤ +2 százalékpont.
 
+- **Ellenőrzés:** `npx tsx .harness/live/final-measure.local.mts <scratchpad>` (helyi harness, éles adatból; a repóból nem reprodukálható). Elvárt: a helyes sorok átlaga nő, a HIBÁS sorok átlaga ≤ +2 százalékpont.
 ## T5: PR → CI → merge → deploy
 
 - Docs-commit, utána fix-commit. Háromfázisú ellenőrzés, `.audit-ok` sentinel külön hívásban. A `main` védett: a 4 kötelező ellenőrzés
   után az automatikus merge olvasztja be. Ezután a Render-revízió ellenőrzése (`/api/health`).
+
+- **Ellenőrzés:** `gh pr checks <PR>` → mind a négy kötelező ellenőrzés `pass`; élesben `curl https://websuli.vip/api/health` → `revision` = a merge commit.

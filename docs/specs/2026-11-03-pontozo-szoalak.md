@@ -104,6 +104,33 @@
   (`temetni` ← „temetés”, amit a szóalak-tűrés sem ismer fel) igazolja, hogy az autofix a fel nem ismert alakot továbbra is a
   rubrikába teszi.
 
+### Review #380 (2026-11-03): javított rések és tudatos döntések
+
+- **Javítva:**
+  - **Fosztóképző a rövidebb tő után** („haszo|ntalan”, „oxige|nmentes”): a fosztóképzőt a teljes szó végéig vizsgáljuk
+    (`privativeBetween`).
+  - **Az angol `-less`/`-free` utótag**, valamint a jelentést megfordító előtag az összetétel-szabályban: `dis-`, `non-`, `mis-`,
+    `anti-`, `counter-`, `mal-`, `nem-` (agree/disagree, honest/dishonest, dohányzó/nemdohányzó).
+  - **A HTML-pontozó magyar tagadószó-keresése NFC-normalizál** (NFD-minta: „név” ≠ „ne”).
+  - Mindegyikre új negatív teszt készült (közös pontozó és HTML-paritás).
+- **Nem módosítva:**
+  - **Pontozási verzió:** a régi kliens nyitva hagyott lapja a deploy után régi szabállyal adhat azonnali visszajelzést. Ezt
+    tudatosan elfogadjuk, mert:
+    - a mentett gyakorlókör pontszámát a szerver számolja;
+    - a verzió emelése új feladattípus nélkül minden régi klienst kizárna;
+    - a különbség csak a lazább, helyes alak elfogadása.
+  - **Tűrés-lazítás statisztikája** (`maybeRelaxTightening`): a lazítás a pontos alakú kifejezések (`tightened`, `requiredPhrases`)
+    téves elutasításait számolja. Ezek pontozása (`phraseHit`, tűrés nélkül) NEM változott, ezért a régi sorok továbbra is
+    érvényesek.
+
+### A mérés bizonyíthatósága
+
+- **A repóból NEM reprodukálható (UNVERIFIED a repóból):** a vak válaszkészletek (2×111 helyes tervezési, 2×111 független helyes,
+  2×111 hibás) és az Antigoné lecke két változata éles adatból készült. Ezek a munkamenet ideiglenes könyvtárában vannak, nem
+  kerülnek a repóba (éles tananyag; a mérőszkriptek gitignore-olt harnessek: `.harness/live/final-measure.local.mts`,
+  `blind-score.local.mts`).
+- **Ami a repóból igazolható:** a viselkedés. A `tests/score-word-forms.test.ts` és a paritásteszt a mért szóalakokra és a
+  negatív esetekre fut.
 ## 8. Kockázatok / visszavonás
 
 - **Hamis elfogadás:** egy hosszabb, más jelentésű szó, amely a rubrikaszóval kezdődik (pl. `terem` → „teremt”). Csak ≥ 5 betűs
