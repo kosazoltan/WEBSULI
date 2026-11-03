@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
@@ -80,6 +80,7 @@ export async function syncDesignAssets(catalog: readonly DesignAsset[] = DESIGN_
       updatedAt: new Date(),
     };
     await db.insert(designAssets).values({ id: asset.id, ...row }).onConflictDoUpdate({ target: designAssets.id, set: row });
+    forgetThumb(asset.id);
     report.written++;
   }
   if (report.missing.length) logger.warn(`[design-assets] Hiányzó képfájl: ${report.missing.join(", ")}`);
@@ -137,30 +138,83 @@ export async function makeThumbnail(bytes: Buffer): Promise<Buffer> {
   const sharp = await loadSharp();
   return sharp(bytes, { failOn: "error" }).resize(THUMB_WIDTH, THUMB_HEIGHT, { fit: "cover" }).webp({ quality: 70 }).toBuffer();
 }
-/** Lenyomat → bélyegkép; a legrégebbi kiesik (≈ 400 × 15 KB). A lenyomat a képpel együtt változik, így nem avul el. */
-const thumbCache = new Map<string, Buffer>();
+/**
+ * Spec 2026-11-03-fooldal-sebesseg: a build által készített bélyegképek (scripts/build-design-thumbs.mjs) — a katalógus borítója és
+ * hős-képe statikus, tartalom-hash-es, immutable fájl; csak az adatbázisban lévő kép (pl. automatikus borító) megy a futásidejű végpontra.
+ */
+let thumbManifest: Record<string, string> | null = null;
+export function loadThumbManifest(roots = [path.resolve(process.cwd(), "dist", "public", "design-thumbs"), path.resolve(process.cwd(), "client", "public", "design-thumbs")]): Record<string, string> {
+  if (thumbManifest) return thumbManifest;
+  thumbManifest = {};
+  for (const root of roots) {
+    const file = path.join(root, "manifest.json");
+    if (!existsSync(file)) continue;
+    try { thumbManifest = JSON.parse(readFileSync(file, "utf8")) as Record<string, string>; break; }
+    catch (error) { logger.warn(`[design-assets] A bélyegkép-manifest nem olvasható (${file}):`, error); }
+  }
+  return thumbManifest;
+}
+export function thumbUrlFor(id: string, manifest = loadThumbManifest()): string {
+  const name = manifest[id];
+  return name ? `/design-thumbs/${name}` : `/api/design-assets/${id}/thumb`;
+}
+
+/** Azonosító → bélyegkép (lenyomattal); a legrégebbi kiesik (≈ 400 × 15 KB). A képszinkron a felülírt azonosítót üríti. */
+type Thumb = { sha256: string; buf: Buffer };
+const thumbById = new Map<string, Thumb>();
+const thumbInflight = new Map<string, Promise<Thumb | null>>();
 const THUMB_CACHE_MAX = 400;
+/** Egyszerre legfeljebb ennyi sharp-művelet: a CPU-t nem fojtja meg egy hideg főoldal-betöltés (mérve: 20 párhuzamos → 3,5 s). */
+const SHARP_SLOTS = 2;
+let sharpBusy = 0;
+const sharpWaiting: Array<() => void> = [];
+async function withSharpSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (sharpBusy >= SHARP_SLOTS) await new Promise<void>((resolve) => sharpWaiting.push(resolve));
+  sharpBusy++;
+  try { return await fn(); } finally { sharpBusy--; sharpWaiting.shift()?.(); }
+}
+/** Review #385: a futó generálás regisztrációját is törli — annak elavult eredménye így nem kerülhet vissza a gyorsítótárba. */
+export function forgetThumb(id: string) { thumbById.delete(id); thumbInflight.delete(id); }
+/** Memóriatalálat DB nélkül; egy azonosítót egyszerre csak egyszer generál (az egyidejű kérések ugyanazt a promise-t kapják). */
+export function thumbnailFor(id: string, load: (id: string) => Promise<{ sha256: string; bytes: Buffer } | null> = loadAssetBytes, make: (bytes: Buffer) => Promise<Buffer> = makeThumbnail): Promise<Thumb | null> {
+  const hit = thumbById.get(id);
+  if (hit) return Promise.resolve(hit);
+  const running = thumbInflight.get(id);
+  if (running) return running;
+  const own: { job?: Promise<Thumb | null> } = {};
+  own.job = (async () => {
+    const row = await load(id);
+    if (!row) return null;
+    const thumb = { sha256: row.sha256, buf: await withSharpSlot(() => make(row.bytes)) };
+    // Csak a még regisztrált (közben nem érvénytelenített) generálás írhat a gyorsítótárba.
+    if (thumbInflight.get(id) === own.job) {
+      thumbById.set(id, thumb);
+      if (thumbById.size > THUMB_CACHE_MAX) thumbById.delete(thumbById.keys().next().value!);
+    }
+    return thumb;
+  })().finally(() => { if (thumbInflight.get(id) === own.job) thumbInflight.delete(id); });
+  thumbInflight.set(id, own.job);
+  return own.job;
+}
 
 export const designAssetsRouter = Router();
 designAssetsRouter.get("/:id/thumb", async (req, res) => {
   const id = req.params.id;
   if (!ID.test(id)) return res.status(400).json({ message: "Érvénytelen képazonosító." });
   try {
-    const [meta] = await db.select({ sha256: designAssets.sha256 }).from(designAssets).where(eq(designAssets.id, id));
-    if (!meta) return res.status(404).json({ message: "Nincs ilyen kép." });
-    const etag = `"${meta.sha256}-t${THUMB_WIDTH}"`;
-    res.set({ "Cache-Control": "public, max-age=604800", ETag: etag, "X-Content-Type-Options": "nosniff" });
-    if (req.headers["if-none-match"] === etag) return res.status(304).end();
-    let thumb = thumbCache.get(meta.sha256);
-    if (!thumb) {
-      const [row] = await db.select({ sha256: designAssets.sha256, bytes: designAssets.bytes }).from(designAssets).where(eq(designAssets.id, id));
-      if (!row) { res.removeHeader("ETag"); res.set("Cache-Control", "no-store"); return res.status(404).json({ message: "Nincs ilyen kép." }); }
-      thumb = await makeThumbnail(row.bytes);
-      thumbCache.set(row.sha256, thumb);
-      if (thumbCache.size > THUMB_CACHE_MAX) thumbCache.delete(thumbCache.keys().next().value!);
-      res.set("ETag", `"${row.sha256}-t${THUMB_WIDTH}"`);
+    const headers = (sha256: string) => ({ "Cache-Control": "public, max-age=604800", ETag: `"${sha256}-t${THUMB_WIDTH}"`, "X-Content-Type-Options": "nosniff" });
+    // Spec 2026-10-19-eroforras-s2a: a böngésző érvényes példányára 304 a bájtok olvasása (és a sharp) nélkül — memóriatévesztésnél
+    // (pl. újraindulás után) is: előbb csak a lenyomat.
+    const inm = req.headers["if-none-match"];
+    if (inm && !thumbById.has(id)) {
+      const [meta] = await db.select({ sha256: designAssets.sha256 }).from(designAssets).where(eq(designAssets.id, id));
+      if (meta && inm === headers(meta.sha256).ETag) return res.set(headers(meta.sha256)).status(304).end();
     }
-    return res.type("image/webp").send(thumb);
+    const thumb = await thumbnailFor(id);
+    if (!thumb) { res.set("Cache-Control", "no-store"); return res.status(404).json({ message: "Nincs ilyen kép." }); }
+    res.set(headers(thumb.sha256));
+    if (inm === headers(thumb.sha256).ETag) return res.status(304).end();
+    return res.type("image/webp").send(thumb.buf);
   } catch (error) {
     logger.error("[design-assets] A bélyegkép nem készíthető:", error);
     // Review #381: a hibaválasz nem kerülhet egy hétre gyorsítótárba a kép ETag-jével.
@@ -189,3 +243,9 @@ designAssetsRouter.get("/:id", async (req, res) => {
     return res.status(500).json({ message: "A kép most nem érhető el." });
   }
 });
+
+/** A futásidejű bélyegkép forrása (a route-ok után: a 304-ág bájtolvasás nélkül fut, spec 2026-10-19-eroforras-s2a). */
+async function loadAssetBytes(id: string) {
+  const [row] = await db.select({ sha256: designAssets.sha256, bytes: designAssets.bytes }).from(designAssets).where(eq(designAssets.id, id));
+  return row ?? null;
+}
