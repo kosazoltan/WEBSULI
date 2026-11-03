@@ -2,7 +2,20 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import sharp from "sharp";
-import { makeThumbnail, THUMB_HEIGHT, THUMB_WIDTH } from "../server/design-assets";
+import { makeThumbnail, thumbnailFor, THUMB_HEIGHT, THUMB_WIDTH } from "../server/design-assets";
+
+test("spec 2026-11-03-fooldal-sebesseg: ugyanarra az azonosítóra 10 egyidejű kérés → egyetlen betöltés és generálás; utána memóriából", async () => {
+  let loads = 0, makes = 0;
+  const load = async () => { loads++; return { sha256: "abc", bytes: Buffer.from("x") }; };
+  const make = async () => { makes++; await new Promise((r) => setTimeout(r, 20)); return Buffer.from("thumb"); };
+  const results = await Promise.all(Array.from({ length: 10 }, () => thumbnailFor("cover-egyszeri-proba", load, make)));
+  assert.equal(loads, 1);
+  assert.equal(makes, 1);
+  assert.ok(results.every((r) => r?.buf.toString() === "thumb" && r.sha256 === "abc"));
+  await thumbnailFor("cover-egyszeri-proba", load, make);
+  assert.equal(loads, 1, "memóriatalálat: nincs újabb DB-olvasás");
+  assert.equal(await thumbnailFor("cover-nincs-ilyen", async () => null, make), null);
+});
 
 // Spec 2026-11-03-fooldal-boritokartyak: a főoldali kártya bélyegképe a tárolt borítóból — 480×320-as WebP, jóval kisebb a borítónál.
 test("a borítóból 480×320-as WebP bélyegkép készül, a borító méretének töredékével", async () => {

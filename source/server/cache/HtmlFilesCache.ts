@@ -54,10 +54,40 @@ export class HtmlFilesCache {
   }
 
   /**
+   * Spec 2026-11-03-fooldal-sebesseg: friss bejegyzés → azonnal; ELAVULT bejegyzés → azonnal a régi lista, és EGYETLEN háttér-újraépítés
+   * (mérve: a lejáratkor minden egyidejű kérés külön, párhuzamosan építette újra a teljes listát); nincs bejegyzés (indulás, érvénytelenítés
+   * után) → az egyidejű kérések egyetlen építésen osztoznak. Az érvénytelenítés előtt indult építés eredménye nem kerül be (generáció).
+   */
+  getOrBuild(build: () => Promise<HtmlFile[]>, onBackgroundError: (error: unknown) => void = () => {}): Promise<HtmlFile[]> {
+    const entry = this.cache;
+    if (entry && Date.now() - entry.timestamp <= this.ttl) return Promise.resolve([...entry.data]);
+    const running = this.building ?? this.startBuild(build);
+    if (entry) {
+      running.catch(onBackgroundError);
+      return Promise.resolve([...entry.data]);
+    }
+    return running.then((data) => [...data]);
+  }
+
+  private building: Promise<HtmlFile[]> | null = null;
+  private generation = 0;
+  private startBuild(build: () => Promise<HtmlFile[]>): Promise<HtmlFile[]> {
+    const generation = this.generation;
+    const job = build().then((data) => {
+      if (generation === this.generation) this.set(data);
+      return data;
+    }).finally(() => { if (this.building === job) this.building = null; });
+    this.building = job;
+    return job;
+  }
+
+  /**
    * Invalidate cache (call when files are created/updated/deleted)
    */
   invalidate(): void {
     this.cache = null;
+    this.generation++;
+    this.building = null;
     for (const listener of this.invalidateListeners) listener();
   }
 

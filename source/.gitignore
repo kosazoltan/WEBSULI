@@ -3,3 +3,6 @@ playwright-report/
 
 # Websuli képkészlet: a generált jelöltek nem kerülnek gitbe (docs/specs/2026-10-17-websuli-kepkeszlet.md)
 design-assets/candidates/
+
+# Spec 2026-11-03-fooldal-sebesseg: a build generálja (scripts/build-design-thumbs.mjs)
+client/public/design-thumbs/

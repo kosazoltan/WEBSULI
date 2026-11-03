@@ -34,6 +34,8 @@ interface HtmlFileApi {
   curriculum?: CurriculumHint;
   /** Spec 2026-11-03-fooldal-boritokartyak: a publikált lecke borítója (art.picture); hiányában a sáv hős-képe. */
   cover?: string | null;
+  /** Spec 2026-11-03-fooldal-sebesseg: kész bélyegkép-URL (a build statikus, immutable fájlja; régi szervernél hiányzik). */
+  coverThumb?: string;
 }
 
 interface UserFileListProps {
@@ -311,7 +313,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                   >
                     <div className="home-card-media">
                       <img
-                        src={`/api/design-assets/${coverIdFor(file.cover, classroom)}/thumb`}
+                        src={file.coverThumb ?? `/api/design-assets/${coverIdFor(file.cover, classroom)}/thumb`}
                         alt=""
                         width={480}
                         height={320}

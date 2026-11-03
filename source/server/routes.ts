@@ -1530,24 +1530,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/html-files", async (_req, res) => {
     try {
-      // Try cache first
-      const cache = getHtmlFilesCache();
-      const cachedFiles = cache.get();
-      
-      if (cachedFiles) {
-        // Spec 2026-09-20: nincs max-age — a mobil böngésző 60 mp-ig a saját cache-éből mutatta a régi
-        // listát; a no-cache + ETag (express) 304-gyel olcsó marad, de mindig a friss listát adja.
-        res.set('Cache-Control', 'no-cache, must-revalidate');
-        return res.json(cachedFiles);
-      }
-
-      // Cache miss - fetch from database
-      // Tanmenet-rendezés (docs/specs/2026-10-17-tanmenet-rendezes.md): anyagonként a NAT 2020 mintatanmenet szerinti pozíció
-      const files = await withCurriculum(await storage.getAllHtmlFiles(), loadCurriculumContent);
-
-      // Store in cache
-      cache.set(files);
-      
+      // Spec 2026-11-03-fooldal-sebesseg: elavult listánál azonnali válasz + egyetlen háttér-újraépítés; az egyidejű kérések egy építésen
+      // osztoznak. Tanmenet-rendezés (docs/specs/2026-10-17-tanmenet-rendezes.md): anyagonként a NAT 2020 mintatanmenet szerinti pozíció.
+      const files = await getHtmlFilesCache().getOrBuild(
+        async () => withCurriculum(await storage.getAllHtmlFiles(), loadCurriculumContent),
+        (error) => logger.warn("[html-files] A háttér-újraépítés nem sikerült, az előző lista marad:", error),
+      );
+      // Spec 2026-09-20: nincs max-age — a mobil böngésző 60 mp-ig a saját cache-éből mutatta a régi
+      // listát; a no-cache + ETag (express) 304-gyel olcsó marad, de mindig a friss listát adja.
       res.set('Cache-Control', 'no-cache, must-revalidate');
       res.json(files);
     } catch (error: unknown) {
