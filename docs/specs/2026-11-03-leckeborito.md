@@ -46,6 +46,11 @@ betöltéskori újraválasztás nem írhatja felül a kézzel beállított képe
   - Review #382: ha a mentendő json-ban nincs `art.picture` (a Stúdió-javítás jelöltje modellkimenet, az opcionális `art`-ot
     kihagyhatja), a `withLessonArt` a tárolt lecke `art.picture`-jét veszi (a seed meglévő leckénél az azonosítója; ugyanazzal a
     lekérdezővel, a javítás tranzakciójában) — így átnevező javításnál sem vész el a kézi kép.
+  - Review #382: átmeneti képtábla-hibánál a `withLessonArt` a meglévő `art`-ot megtartja (eddig eldobta); `art` nélkül csak az eddig
+    is arculat nélküli lecke ment.
+- Review #382 (csereszkript): `art` nélküli leckét nem ír (csak `picture`-ös `art` mellett a lejátszó nem pótolná a kabalát és az
+  ikont; ott a katalógusból úgyis a tartalomkulcsú borító jelenik meg); a mentésfájl `0600` jogosultságú; a visszaállítás leáll, ha
+  a lecke `art`-ja a csere óta bármiben változott.
 - **Éles csere** (`scripts/design-assets/pin-lesson-covers.mts`), a deploy UTÁN (amikor a kép a táblában és a statikus fájl a CDN-en):
   egy író tranzakcióban `SELECT … FOR UPDATE`, mentés (`--write <mentés.json>`: az érintett sorok teljes `json`-ja + `art`-lista),
   `jsonb_set(json, '{art}', art || {"picture": id})`, majd ugyanabban a tranzakcióban leckénként az `art` nélküli kanonikus hash

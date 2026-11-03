@@ -15,13 +15,12 @@ const rows: PinRow[] = [
   { id: "e", html_file_id: "f3", json: json("Mátyás király") },
 ];
 
-test("a terv: a katalógusban lévő kulcsú borító; a már kész, az Antigoné-anyag és a kulcs nélküli lecke kimarad", () => {
+test("a terv: a katalógusban lévő kulcsú borító; a már kész, az art nélküli, az Antigoné-anyag és a kulcs nélküli lecke kimarad", () => {
   const plans = planPins(rows, new Set([hunyadi]));
-  assert.deepEqual(plans.map(p => p.id), ["a", "b"]);
+  // Review #382: a „b” (art nélküli) lecke kimarad — csak picture-ös art mellett a lejátszó nem pótolná a kabalát és az ikont.
+  assert.deepEqual(plans.map(p => p.id), ["a"]);
   assert.equal(plans[0].from, "hero-studio");
-  assert.equal(plans[1].from, null);
   assert.deepEqual(pinnedArt(plans[0]), { subjectIcon: "icon-tortenelem-studio", picture: hunyadi, topic: "x" }, "az art többi mezője marad");
-  assert.deepEqual(pinnedArt(plans[1]), { picture: hunyadi });
 });
 
 test("az ellenőrzés: csak az art.picture változhat; bármely más eltérés hiba", () => {
