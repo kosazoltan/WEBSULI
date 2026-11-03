@@ -6,7 +6,7 @@ Munkakönyvtár: `source/`. Ág: `feat/szponzor-fejlec`.
 
 - `client/public/sponsors/exclusive-change.webp` és `expressz-zalog.webp` (kész).
 - `shared/sponsors.ts`: `SPONSORS = [{ id, name, url, logo, width, height }]`:
-  - `exclusive-change`, Exclusive Change, `https://exclusive.hu/`, `/sponsors/exclusive-change.webp`, 357×96;
+  - `exclusive-change`, Exclusive Change, `https://www.excbestchange.hu/hu/`, `/sponsors/exclusive-change.webp`, 357×96;
   - `expressz-zalog`, Expressz Zálog, `https://www.expresszzalog.hu/hu/`, `/sponsors/expressz-zalog.webp`, 287×96.
 - **Ellenőrzés:** `npx tsc --noEmit`.
 

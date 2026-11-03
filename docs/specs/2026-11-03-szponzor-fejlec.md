@@ -6,9 +6,11 @@
 
 ## Tények
 
-- **Honlapok** (2026-11-03, ellenőrizve):
-  - `https://exclusive.hu/`, címe „Főoldal – Exclusive Change”; a megadott névjegyen is `@exclusive.hu` e-mail-cím szerepel;
-  - `https://www.expresszzalog.hu/hu/`, címe „KEZDŐLAP – Expressz Zálog Zrt.”.
+- **Honlapok** — a tulajdonos megadta: „A bestchange.hu és az expresszzalog.hu a linkelendő címek.” (2026-11-03, ellenőrizve):
+  - bestchange.hu: a `https://bestchange.hu` önaláírt („NO_SSL”) tanúsítványt ad, ami a látogatónak biztonsági figyelmeztetést
+    jelentene; a `http://bestchange.hu` a `https://www.excbestchange.hu/hu/` lapra irányít („Exclusive Best Change – a megbízható
+    váltótárs”, érvényes tanúsítvány). A link ezért közvetlenül erre a végcélra mutat;
+  - expresszzalog.hu: a végcél `https://www.expresszzalog.hu/hu/`, címe „KEZDŐLAP – Expressz Zálog Zrt.”.
 - **Logóválasztás** (a tulajdonos által feltöltött 6 kép közül):
   - **Exclusive Change:** a fehér hátterű vízszintes logó (piros app-ikon, fekete felirat, „a megbízható váltótárs”). Világos lapon
     elegáns, és a sötét kozmikus háttéren is jól olvasható; a piros hátterű változat harsány lenne a kártyák mellett.
@@ -63,7 +65,7 @@
 ## 6. Elfogadás (EARS)
 
 - WHEN a főoldal betölt, THEN a fejléc alatt SHALL megjelenni a „A tananyagkészítést támogatja” sáv a két logóval.
-- WHEN a felhasználó egy logóra kattint, THEN a cég honlapja SHALL új lapon nyílni (`https://exclusive.hu/`,
+- WHEN a felhasználó egy logóra kattint, THEN a cég honlapja SHALL új lapon nyílni (`https://www.excbestchange.hu/hu/`,
   `https://www.expresszzalog.hu/hu/`).
 - WHEN a nézet 375 px vagy 1280 px széles, THEN SHALL nem lenni vízszintes túlcsordulás, és a logók SHALL olvashatók maradni.
 
