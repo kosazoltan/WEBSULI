@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, memo, type CSSProperties } from "react";
-import { Search, FileCode, ShieldCheck, BookOpen, ArrowRight, Gamepad2, RefreshCw } from "lucide-react";
+import { Search, FileCode, ShieldCheck, BookOpen, ArrowRight, Gamepad2, RefreshCw, Sparkles, Layers } from "lucide-react";
 import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { useAuth } from "@/hooks/useAuth";
+import { groupBySubject, HOME_VIEW_STORAGE_KEY, matchesHomeSearch, newestFirst, NEWEST_STRIP, parseHomeView, type HomeView } from "@/lib/home-views";
 
 /** A /api/materials/likes/batch szerveroldali korlátja (server/lib/public-input.ts MAX_MATERIAL_ID_BATCH). */
 export const LIKES_BATCH_LIMIT = 100;
@@ -38,6 +39,8 @@ interface HtmlFileApi {
   cover?: string | null;
   /** Spec 2026-11-03-fooldal-sebesseg: kész bélyegkép-URL (a build statikus, immutable fájlja; régi szervernél hiányzik). */
   coverThumb?: string;
+  /** Spec 2026-11-03-fooldal-nezetek: tantárgy-kulcs a „Tantárgyanként” nézethez (null / régi szerver: „Egyéb”). */
+  subject?: string | null;
 }
 
 interface UserFileListProps {
@@ -83,6 +86,21 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
     setSelectedClassroom(learnerGrade != null && files.some((f) => (f.classroom ?? 1) === learnerGrade) ? learnerGrade : null);
   }, [learnerGrade, files, isAdmin]);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
+  // Spec 2026-11-03-fooldal-nezetek: „Legfrissebb” és „Tantárgyanként” — külön (VAGY) és együtt (ÉS); eszközönként megmarad.
+  const [view, setView] = useState<HomeView>(() => {
+    try {
+      return parseHomeView(localStorage.getItem(HOME_VIEW_STORAGE_KEY));
+    } catch {
+      return parseHomeView(null);
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(HOME_VIEW_STORAGE_KEY, JSON.stringify(view));
+    } catch {
+      // privát mód / tiltott tárhely: a választás csak erre a megnyitásra szól
+    }
+  }, [view]);
 
   // Load fingerprint once on mount
   useEffect(() => {
@@ -95,15 +113,21 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   const filteredFiles = useMemo(() => {
     const filtered = files
       .filter((file) => {
-        const matchesSearch =
-          file.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (file.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+        // Cím, leírás és tantárgynév, ékezettől függetlenül (spec 2026-11-03-fooldal-nezetek).
+        const matchesSearch = matchesHomeSearch(file, searchQuery);
         const matchesClassroom = selectedClassroom === null || file.classroom === selectedClassroom;
         return matchesSearch && matchesClassroom;
       });
-    // A mai tananyag elöl (NAT 2020 mintatanmenet), a tanmenethez nem illeszthető anyag hátul, legújabb elöl.
-    return curriculumSort(filtered, today);
-  }, [files, searchQuery, selectedClassroom, today]);
+    // Csak „Legfrissebb” nézetben a legújabb elkészült elöl (spec 2026-11-03-fooldal-nezetek); egyébként a mai tananyag elöl
+    // (NAT 2020 mintatanmenet), a tanmenethez nem illeszthető anyag hátul, legújabb elöl.
+    return view.newest && !view.bySubject ? newestFirst(filtered) : curriculumSort(filtered, today);
+  }, [files, searchQuery, selectedClassroom, today, view.newest, view.bySubject]);
+
+  const newestFiles = useMemo(() => newestFirst(filteredFiles), [filteredFiles]);
+  const subjectGroups = useMemo(
+    () => (view.bySubject ? groupBySubject(filteredFiles, (list) => (view.newest ? newestFirst(list) : curriculumSort(list, today))) : []),
+    [filteredFiles, view.bySubject, view.newest, today],
+  );
 
   // Batch fetch likes for all visible files
   const materialIds = useMemo(() => filteredFiles.map((f) => f.id), [filteredFiles]);
@@ -128,6 +152,77 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   const allClassrooms = new Set(files.map((f) => f.classroom ?? 1));
   const totalClassrooms = allClassrooms.size;
   const availableClassrooms = Array.from(allClassrooms).sort((a, b) => a - b);
+
+  const gridClass = "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3";
+  // Spec 2026-11-03-fooldal-nezetek: a kártya minden nézetben ugyanaz (tartalom és data-testid változatlan).
+  const renderCard = (file: HtmlFileApi) => {
+    const classroom = file.classroom ?? 1;
+    // Spec 2026-11-03-fooldal-boritokartyak: az évfolyamsáv színe, formája és ikonja; a kezdőkép bélyegképe és a cím.
+    const theme = homeCardTheme(classroom);
+    const BandIcon = BAND_ICON[theme.band];
+    const style = {
+      "--hc-accent": theme.accent, "--hc-strong": theme.strong, "--hc-strong-ink": theme.strongInk, "--hc-panel": theme.panel,
+      "--hc-ink": theme.ink, "--hc-muted": theme.muted, "--hc-line": theme.line, "--hc-from": theme.from, "--hc-to": theme.to,
+      "--hc-radius": `${theme.radius}px`,
+    } as CSSProperties;
+
+    return (
+      // Spec 2026-10-18-nyilvanos-oldal-sebesseg: sima elem (nem framer-motion elem) — a hover-emelést CSS adja;
+      // a képernyőn kívüli kártya nem renderelődik (content-visibility a kártyán: review #297 — a burkolón levágná az árnyékot és a hover-emelést).
+      <div key={file.id}>
+        <Card
+          className="group cursor-pointer glass-card material-card-cell home-card h-full"
+          data-band={theme.band}
+          style={style}
+          onClick={() => onViewFile(file)}
+          data-testid={`link-file-${file.id}`}
+        >
+          <div className="home-card-media">
+            <img
+              src={file.coverThumb ?? `/api/design-assets/${coverIdFor(file.cover, classroom)}/thumb`}
+              alt=""
+              width={480}
+              height={320}
+              loading="lazy"
+              decoding="async"
+              onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+              // Review #381: egy korábbi hiba után a lista frissítése új borítót hozhat — a sikeres betöltés újra mutatja.
+              onLoad={(e) => { e.currentTarget.style.visibility = ""; }}
+              data-testid={`thumb-file-${file.id}`}
+            />
+            <span className="home-card-emblem" data-shape={theme.shape} title={theme.name} aria-hidden>
+              <BandIcon className="w-4 h-4" />
+            </span>
+            <span className="home-card-grade">{getClassroomLabel(classroom, true)}</span>
+          </div>
+          <CardContent className="home-card-body">
+            {isCurrent(file.curriculum, today) && (
+              <span
+                className="home-card-current"
+                title={displayTopic(file.curriculum?.label) ?? undefined}
+                data-testid={`badge-current-${file.id}`}
+              >
+                Most tanuljuk
+              </span>
+            )}
+            <h3 className="home-card-title line-clamp-2">{file.title}</h3>
+            <p className="home-card-desc line-clamp-2">{file.description || "Kattints a megtekintéshez"}</p>
+            <div className="home-card-footer">
+              <LikeButton
+                materialId={file.id}
+                initialLikeStatus={batchLikesData?.[file.id]}
+                suppressCheck={batchLikesLoading}
+                className="home-card-like"
+              />
+              <span className="home-card-go" aria-hidden>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
 
   const connectionError = isError ? (
     <div role="alert" className="mx-auto max-w-xl rounded-xl border border-amber-300 bg-slate-950 p-6 text-center text-white">
@@ -290,90 +385,101 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
           )}
         </div>
 
+        {/* Nézetválasztó (spec 2026-11-03-fooldal-nezetek): két független kapcsoló — külön és együtt is. */}
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Nézet" data-testid="home-view-switch">
+          <span className="text-xs font-semibold text-white/80">Nézet:</span>
+          {([
+            { key: "newest", label: "Legfrissebb", Icon: Sparkles, testId: "home-view-newest" },
+            { key: "bySubject", label: "Tantárgyanként", Icon: Layers, testId: "home-view-by-subject" },
+          ] as const).map(({ key, label, Icon, testId }) => (
+            <Button
+              key={key}
+              variant="outline"
+              size="sm"
+              aria-pressed={view[key]}
+              onClick={() => setView((v) => ({ ...v, [key]: !v[key] }))}
+              data-testid={testId}
+              className={`min-h-11 sm:min-h-8 h-auto px-3 text-xs font-semibold gap-1.5 rounded-full ${
+                view[key]
+                  // Review #393: a ui/button alapváltozatának mért, ≥ 4,5:1 kontrasztú narancs–borostyán háttere; a fehér felirat
+                  // sötét témában és rámutatva is rögzítve (az outline változat saját dark/hover szövegszínt adna).
+                  ? "bg-gradient-to-r from-orange-700 to-amber-700 text-white hover:text-white dark:text-white dark:hover:text-white border-0 shadow-md"
+                  : "bg-white/20 hover:bg-white/30 text-white hover:text-white dark:text-white dark:hover:text-white border-white/40"
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" aria-hidden />
+              {label}
+            </Button>
+          ))}
+          <span className="w-full text-center text-[11px] text-white/70 sm:w-auto">Egyszerre mindkettő is bekapcsolható.</span>
+        </div>
+
         {/* Tananyagok */}
         {filteredFiles.length > 0 ? (
           <>
+            {view.newest && view.bySubject && (
+              <section className="mb-5" data-testid="home-newest-strip" aria-labelledby="home-newest-heading">
+                <h2 id="home-newest-heading" className="text-base font-extrabold text-white/90 tracking-wide mb-2 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-orange-300 shrink-0" aria-hidden />
+                  Legfrissebb tananyagok
+                  <span className="home-count">{Math.min(NEWEST_STRIP, newestFiles.length)}</span>
+                </h2>
+                <div className={gridClass}>{newestFiles.slice(0, NEWEST_STRIP).map(renderCard)}</div>
+              </section>
+            )}
             <h2
               className="text-base font-extrabold text-white/90 tracking-wide mb-2 flex items-center gap-2"
               id="content-start"
             >
               <BookOpen className="w-4 h-4 text-orange-300 shrink-0" />
-              Tananyagok
+              {view.bySubject ? "Tantárgyanként" : view.newest ? "Legfrissebb tananyagok" : "Tananyagok"}
               <span className="home-count" data-testid="text-files-count">{filteredFiles.length}</span>
             </h2>
-            <div
-              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 list-enter"
-              data-testid="list-files"
-            >
-            {filteredFiles.map((file) => {
-              const classroom = file.classroom ?? 1;
-              // Spec 2026-11-03-fooldal-boritokartyak: az évfolyamsáv színe, formája és ikonja; a kezdőkép bélyegképe és a cím.
-              const theme = homeCardTheme(classroom);
-              const BandIcon = BAND_ICON[theme.band];
-              const style = {
-                "--hc-accent": theme.accent, "--hc-strong": theme.strong, "--hc-strong-ink": theme.strongInk, "--hc-panel": theme.panel,
-                "--hc-ink": theme.ink, "--hc-muted": theme.muted, "--hc-line": theme.line, "--hc-from": theme.from, "--hc-to": theme.to,
-                "--hc-radius": `${theme.radius}px`,
-              } as CSSProperties;
-
-              return (
-                // Spec 2026-10-18-nyilvanos-oldal-sebesseg: sima elem (nem framer-motion elem) — a hover-emelést CSS adja;
-                // a képernyőn kívüli kártya nem renderelődik (content-visibility a kártyán: review #297 — a burkolón levágná az árnyékot és a hover-emelést).
-                <div key={file.id}>
-                  <Card
-                    className="group cursor-pointer glass-card material-card-cell home-card h-full"
-                    data-band={theme.band}
-                    style={style}
-                    onClick={() => onViewFile(file)}
-                    data-testid={`link-file-${file.id}`}
+            {view.bySubject ? (
+              <>
+                {subjectGroups.length > 1 && (
+                  <nav className="mb-3 flex flex-wrap gap-1.5" aria-label="Ugrás tantárgyra" data-testid="home-subject-jumps">
+                    {subjectGroups.map((group, i) => (
+                      <button
+                        key={group.label}
+                        type="button"
+                        className="home-subject-jump"
+                        onClick={() => {
+                          // Review #393: a fókusz is a szakaszra kerül — a következő Tab a szakasz kártyáira lép, nem a következő ugrógombra.
+                          const target = document.getElementById(`home-subject-${i}`);
+                          target?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          target?.focus({ preventScroll: true });
+                        }}
+                        data-testid={`home-subject-jump-${i}`}
+                      >
+                        {group.label} <span aria-hidden>· {group.files.length}</span>
+                      </button>
+                    ))}
+                  </nav>
+                )}
+                {subjectGroups.map((group, i) => (
+                  <section
+                    key={group.label}
+                    id={`home-subject-${i}`}
+                    className="mb-5 scroll-mt-4 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-300"
+                    tabIndex={-1}
+                    data-testid="home-subject-section"
+                    data-subject={group.label}
+                    aria-labelledby={`home-subject-heading-${i}`}
                   >
-                    <div className="home-card-media">
-                      <img
-                        src={file.coverThumb ?? `/api/design-assets/${coverIdFor(file.cover, classroom)}/thumb`}
-                        alt=""
-                        width={480}
-                        height={320}
-                        loading="lazy"
-                        decoding="async"
-                        onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
-                        // Review #381: egy korábbi hiba után a lista frissítése új borítót hozhat — a sikeres betöltés újra mutatja.
-                        onLoad={(e) => { e.currentTarget.style.visibility = ""; }}
-                        data-testid={`thumb-file-${file.id}`}
-                      />
-                      <span className="home-card-emblem" data-shape={theme.shape} title={theme.name} aria-hidden>
-                        <BandIcon className="w-4 h-4" />
-                      </span>
-                      <span className="home-card-grade">{getClassroomLabel(classroom, true)}</span>
-                    </div>
-                    <CardContent className="home-card-body">
-                      {isCurrent(file.curriculum, today) && (
-                        <span
-                          className="home-card-current"
-                          title={displayTopic(file.curriculum?.label) ?? undefined}
-                          data-testid={`badge-current-${file.id}`}
-                        >
-                          Most tanuljuk
-                        </span>
-                      )}
-                      <h3 className="home-card-title line-clamp-2">{file.title}</h3>
-                      <p className="home-card-desc line-clamp-2">{file.description || "Kattints a megtekintéshez"}</p>
-                      <div className="home-card-footer">
-                        <LikeButton
-                          materialId={file.id}
-                          initialLikeStatus={batchLikesData?.[file.id]}
-                          suppressCheck={batchLikesLoading}
-                          className="home-card-like"
-                        />
-                        <span className="home-card-go" aria-hidden>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              );
-            })}
-          </div>
+                    <h3 id={`home-subject-heading-${i}`} className="text-sm font-extrabold text-white/90 mb-2 flex items-center gap-2">
+                      {group.label}
+                      <span className="home-count" data-testid="home-subject-count">{group.files.length}</span>
+                    </h3>
+                    <div className={gridClass}>{group.files.map(renderCard)}</div>
+                  </section>
+                ))}
+              </>
+            ) : (
+              <div className={`${gridClass} list-enter`} data-testid="list-files">
+                {filteredFiles.map(renderCard)}
+              </div>
+            )}
           <HomePracticeGames />
           </>
         ) : (

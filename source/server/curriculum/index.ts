@@ -1,6 +1,6 @@
 import tanmenet from "../data/tanmenet-2020.json";
 import nyelvi from "../data/nyelvi-tanmenet.json";
-import { buildIndex, matchMaterial, type CurriculumIndex, type CurriculumMatch, type TanmenetData } from "./match";
+import { buildIndex, matchMaterial, subjectOfMaterial, type CurriculumIndex, type CurriculumMatch, type TanmenetData } from "./match";
 import { hintsFromHtml, hintsFromLesson } from "./hints";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 
@@ -21,8 +21,10 @@ export type ContentLoader = (items: readonly Item[]) => Promise<Map<string, { ht
 
 const round = (m: CurriculumMatch) => ({ pos: Math.round(m.pos * 1000) / 1000, label: m.label });
 
+const matchOf = (file: { title: string; classroom: number; hints?: readonly string[] }) => matchMaterial(file, getIndex());
+
 export function curriculumOf(file: { title: string; classroom: number; hints?: readonly string[] }): CurriculumHint | null {
-  const m = matchMaterial(file, getIndex());
+  const m = matchOf(file);
   return m ? round(m) : null;
 }
 
@@ -36,12 +38,15 @@ export function clearCurriculumHints(): void {
 getHtmlFilesCache().onInvalidate(clearCurriculumHints);
 
 /**
- * A lista minden eleméhez hozzáadja a `curriculum` mezőt. A cím alapján nem illeszthető (évfolyammal rendelkező) anyagok tartalmát
+ * A lista minden eleméhez hozzáadja a `curriculum` és a `subject` (tantárgy-kulcs vagy null; docs/specs/2026-11-03-fooldal-nezetek.md) mezőt. A cím alapján nem illeszthető (évfolyammal rendelkező) anyagok tartalmát
  * egyszer olvassa be (`load`), és a címsorokból / kulcsfogalmakból próbál illeszteni. Hiba esetén null — a lista nem állhat meg.
  */
-export async function withCurriculum<T extends Item>(files: T[], load?: ContentLoader): Promise<Array<T & { curriculum: CurriculumHint | null }>> {
+export async function withCurriculum<T extends Item>(
+  files: T[],
+  load?: ContentLoader,
+): Promise<Array<T & { curriculum: CurriculumHint | null; subject: string | null }>> {
   const first = files.map(f => {
-    try { return curriculumOf(f); } catch { return null; }
+    try { return matchOf(f); } catch { return null; }
   });
   if (load) {
     const missing = files.filter((f, i) => !first[i] && f.classroom > 0 && !hintMemo.has(memoKey(f)));
@@ -56,9 +61,13 @@ export async function withCurriculum<T extends Item>(files: T[], load?: ContentL
     }
   }
   return files.map((f, i) => {
-    if (first[i]) return { ...f, curriculum: first[i] };
-    const hints = hintMemo.get(memoKey(f));
-    if (!hints?.length) return { ...f, curriculum: null };
-    try { return { ...f, curriculum: curriculumOf({ ...f, hints }) }; } catch { return { ...f, curriculum: null }; }
+    const hints = first[i] ? undefined : hintMemo.get(memoKey(f));
+    let match: CurriculumMatch | null = first[i];
+    if (!match && hints?.length) {
+      try { match = matchOf({ ...f, hints }); } catch { match = null; }
+    }
+    let subject: string | null = null;
+    try { subject = subjectOfMaterial({ ...f, hints }, getIndex(), match); } catch { /* tantárgy nélkül is kiszolgálható („Egyéb”) */ }
+    return { ...f, curriculum: match ? round(match) : null, subject };
   });
 }
