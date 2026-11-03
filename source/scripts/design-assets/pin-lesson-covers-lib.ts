@@ -1,6 +1,6 @@
 import { repairHash } from "../../server/lib/canonical-hash";
 import { designThemeForClassroom } from "../../shared/lesson-design";
-import { lessonCoverId } from "../../shared/lesson-cover";
+import { lessonCoverId } from "../../shared/lesson-cover-key";
 
 /**
  * A kézi leckeborító-csere tiszta magja (docs/specs/2026-11-03-leckeborito.md): melyik lecke `art.picture`-je mire változik, és a

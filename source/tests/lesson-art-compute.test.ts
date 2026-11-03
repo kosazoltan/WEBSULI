@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { lessonCoverId } from "../shared/lesson-cover";
+import { lessonCoverId } from "../shared/lesson-cover-key";
 import { computeLessonArt } from "../shared/lesson-art-compute";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
 
