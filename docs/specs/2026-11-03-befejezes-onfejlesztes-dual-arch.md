@@ -23,7 +23,7 @@ x64-en futnia kell a programnak és a fejlesztéseknek is”.
   Natív modulok: esbuild (gyökér + `tsx/node_modules`), `@rollup/rollup-*`, `sharp`, `better-sqlite3`;
   a `bufferutil` opcionális (JS fallback).
 - **Kanban-csapda:** a `docs/kanban.md` CLI-útvonala (`D:\repo\Hermes-agent\…`) nem létezik; a CLI
-  ténylegesen `C:\Repo\Jack\qualcomm\skills\hermes-kanban-workflow\scripts\kanban.mjs`, a tábla a
+  ténylegesen egy gépenként eltérő helyen lévő `hermes-kanban-workflow/scripts/kanban.mjs`, a tábla a
   repóban: `<git toplevel>/.hermes/kanban.db` (a CLI a `HERMES_HOME` alatti táblát elutasítja). A
   `.hermes/` nincs gitignore-olva. A doksiban említett #6–#11 jegyek (köztük a #11 STANDING) az új
   táblán nincsenek — UNKNOWN, hová kerültek.

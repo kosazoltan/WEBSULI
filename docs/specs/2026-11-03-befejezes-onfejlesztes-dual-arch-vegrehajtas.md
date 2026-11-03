@@ -5,22 +5,21 @@ Munkakönyvtár: repó gyökér, a Node-lépések `source/`-ban. Ág: `chore/bef
 ## T1: natív-architektúra ellenőrző — `source/scripts/check-native-arch.mjs`
 
 - Export: `checkNativeArch()` → `{ target: "<platform>-<arch>", results: [{ name, ok, detail }] }`.
-- Ellenőrzött modulok (mindegyik tényleges betöltéssel / futtatással):
-  - `esbuild` (gyökér): `require("esbuild").transformSync("let a=1")`;
-  - `tsx` beágyazott esbuild: `createRequire(require.resolve("tsx/package.json"))` → ugyanez, ha a
-    `tsx/node_modules/esbuild` létezik;
-  - `rollup`: `require("rollup/parseAst").parseAst("1")`;
-  - `sharp`: `require("sharp").versions`;
-  - `better-sqlite3`: `new (require("better-sqlite3"))(":memory:").prepare("select 1 as x").get()`.
-- Hiba esetén a `detail` a hibaüzenet első sora.
+- **Minden próba külön Node-folyamatban** (`spawnSync(process.execPath, ["-e", …])`, `cwd: source/`) — egy
+  folyamatba töltött több natív addon Windows-on kilépéskor időnként `0xC0000374`-gyel összeomlik (csapda C-09).
+  Tilos a modulokat az ellenőrző vagy a teszt saját folyamatába `require`-elni.
+- Próbák (6, mindegyik tényleges betöltéssel / futtatással, sikerkor egy sor a stdout-on):
+  `esbuild` (`transformSync`), `tsx` (feloldás — hiánya diagnózis, nem összeomlás), `tsx/esbuild` (a tsx saját
+  esbuildja, ha van), `rollup` (`rollup/parseAst`), `sharp` (`versions`), `better-sqlite3` (`:memory:` lekérdezés).
+- Hiba esetén a `detail` a gyerekfolyamat stderr-jének első hibasora, vagy a kilépési kód.
 - CLI-mód (`node scripts/check-native-arch.mjs`): soronként `OK|HIBA <név> — <detail>`; bármely hibánál
   `Javítás: npm ci` (win32-n `npm.cmd ci`) a `source/` mappában, exit 1; különben exit 0.
-- **Ellenőrzés:** `cd source && node scripts/check-native-arch.mjs` → exit 0, 5 `OK` sor.
+- **Ellenőrzés:** `cd source && node scripts/check-native-arch.mjs` → exit 0, 6 `OK` sor; 25 egymás utáni futás → 0 hiba.
 
 ## T2: teszt — `source/tests/native-arch.test.ts`
 
-- Importálja a `checkNativeArch`-ot (`../scripts/check-native-arch.mjs`), és minden eredményre
-  `assert.ok(r.ok, \`${r.name} (${target}): ${r.detail}\`)`.
+- **Nem importálja** a checkert: a CLI-t külön folyamatként indítja (`spawnSync`), bukáskor a teljes kimenetet kiírja.
+- Elvárás: kilépési kód 0; a kiírt cél pontosan `${process.platform}-${process.arch}`; mind a 6 próba neve `OK` sorral szerepel.
 - **Ellenőrzés:** `cd source && npx.cmd tsx --test tests/native-arch.test.ts` → pass 1.
 
 ## T3: `source/package.json`
@@ -75,3 +74,16 @@ Munkakönyvtár: repó gyökér, a Node-lépések `source/`-ban. Ág: `chore/bef
   `npm.cmd test`, `npm.cmd run check`, `npm.cmd run check:test`, `npm.cmd run build`.
 - `node scripts/qa/three-phase-check.mjs --base main` a gyökérből.
 - Diff visszamérése a spec EARS-pontjaihoz.
+
+## T9: review és CI #391 (2026-11-03)
+
+- **CI `Natív futás (windows-latest)` bukás:** gyökérok C-09 (`docs/agent-csapdak.md`). `check-native-arch.mjs`
+  modulonként külön folyamatban próbál (`spawnSync`); a `tsx` feloldása is védett próba. `tests/native-arch.test.ts`
+  az ellenőrzőt külön folyamatként futtatja. Mérve: 25 futásból 0 összeomlás (előtte ~40%); rejtett
+  `@esbuild/win32-x64` + hiányzó `tsx` → exit 1, modulonkénti HIBA sor + `npm.cmd ci` javaslat.
+- **NAT-térképek:** az idézet a kivonat szó szerinti (LF) szelete a témakör címsorától a definíció végéig; 13
+  definíció a saját szakaszából újraépítve; új `matematika-tortek` fogalom; a Digitális kultúra kivonatából
+  kikerült a 7–8. évfolyamos bevezető. Teszt + `validate_maps.py`: pontos térképlista, csak deklarált és
+  mappán belüli kivonat, az idézet alátámasztja a definíciót, nincs 7–8-as blokk, `unknown` a JSON-ra.
+- **Doksik:** személyes / géphez kötött adatok helyett helyőrző; a kanban CLI a `HERMES_KANBAN_CLI` változóból.
+- **SOURCE.md:** kivonat-bájtméret oszlop; a DOCX-méret UNVERIFIED (HEAD → 403, a letöltéskor nem rögzült).
