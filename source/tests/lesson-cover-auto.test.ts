@@ -26,6 +26,7 @@ function memoryStore(lessons: LessonLite[]) {
     insertCover: async row => { ids.add(row.id); inserted.push(row.id); },
     link: async (l, coverId) => { if (titles.get(l.id) !== l.title) return false; links.push([l.id, coverId]); return true; },
     insertedToday: async () => inserted.length,
+    exclusive: async work => work(),
   };
   return { store, inserted, links, titles };
 }
@@ -140,4 +141,28 @@ test("a szerver borítóstílusa a design-assets/style.md soraival egyezik; az �
   for (const [band, text] of Object.entries(COVER_STYLE.band)) assert.equal(text, style.band[band], band);
   assert.match(coverPrompt("A scene.", 3), /picture-book.*Painterly adventure/);
   assert.match(coverPrompt("A scene.", 10), /sophisticated.*photographic/);
+});
+
+test("review #384: a beolvasáskor már átnevezett lecke tartalma nem kerül a régi kulcs alá", async () => {
+  const { sweepLessonCovers } = await import("../server/lesson-covers");
+  const m = memoryStore([lesson("a")]);
+  m.titles.set("a", "Egészen más lecke"); // a lessonJson már az új címet adja
+  const f = fakeDeps([]);
+  const r = await sweepLessonCovers(m.store, f.deps, { maxImages: 1 });
+  assert.equal(f.calls.chat + f.calls.image, 0);
+  assert.equal(m.inserted.length, 0);
+  assert.equal(r.made.length, 0);
+});
+
+test("review #384: foglalt zárnál (másik példány) a kör kimarad; összekötés után a főoldali lista ürül", async () => {
+  const { runCoverRound } = await import("../server/lesson-covers");
+  const m = memoryStore([lesson("a")]);
+  const f = fakeDeps([]);
+  const locked = { ...m.store, exclusive: async () => null };
+  assert.equal(await runCoverRound(locked, f.deps, 5, { day: "", images: 0, failed: new Set() }), null);
+  assert.equal(f.calls.chat + f.calls.image, 0);
+  let invalidated = 0;
+  const r = await runCoverRound(m.store, f.deps, 5, { day: "", images: 0, failed: new Set() }, new Date(), () => { invalidated++; });
+  assert.equal(r?.linked, 1);
+  assert.equal(invalidated, 1);
 });

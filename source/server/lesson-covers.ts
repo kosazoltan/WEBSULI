@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "./db";
+import { db, dbPool } from "./db";
+import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { designAssets } from "../shared/schema";
 import { computeLessonArt } from "../shared/lesson-art-compute";
 import { designThemeForClassroom } from "../shared/lesson-design";
@@ -19,6 +20,8 @@ export const COVER_TEXT_MODEL = "anthropic/claude-haiku-5.5";
 export const COVER_IMAGE_USD = 0.045;
 export const AUTO_ORIGIN = "MI-generált, saját (Seedream 5.0 Pro, automatikus leckeborító)";
 const OPENROUTER = "https://openrouter.ai/api/v1";
+/** Az advisory lock kulcsa (tetszőleges, a projektben egyedi 64 bites egész). */
+const COVER_LOCK_KEY = 7_320_311_03;
 
 /** A `design-assets/style.md` borító-, sáv- és közös sora (a katalógusképekkel azonos képi nyelv; a teszt őrzi az egyezést). */
 export const COVER_STYLE = {
@@ -139,6 +142,8 @@ export type CoverStore = {
   /** CSAK az `art.picture` írása tranzakcióban; true: frissült, false: a lecke azóta változott (kihagyva). */
   link(lesson: LessonLite, coverId: string): Promise<boolean>;
   insertedToday(): Promise<number>;
+  /** Review #384: példányok közötti kizárás (Postgres advisory lock) — foglalt zárnál null, a kör kimarad. */
+  exclusive<T>(work: () => Promise<T>): Promise<T | null>;
 };
 
 /** A lecke tartalomkulcsa, ha automatikus borítót kap (ugyanaz a szabály, mint mentéskor; a mostani kép kézi pinként számít). */
@@ -164,7 +169,10 @@ export async function sweepLessonCovers(store: CoverStore, deps: CoverDeps, opts
     const lead = group[0];
     try {
       const json = await store.lessonJson(lead.id);
-      const made = json ? await makeCover(lessonDigest(json), deps) : null;
+      // Review #384: a listázás és a beolvasás között átnevezett lecke tartalma nem kerülhet a régi kulcs alá.
+      if (!json || typeof json.subject !== "string" || typeof json.title !== "string" || typeof json.classroom !== "number"
+        || lessonCoverId({ subject: json.subject, title: json.title }, designThemeForClassroom(json.classroom)) !== id) continue;
+      const made = await makeCover(lessonDigest(json), deps);
       if (!made) { report.failed.push(id); continue; }
       await store.insertCover({ id, band: designThemeForClassroom(lead.classroom), subject: lead.subject, title: lead.title, alt: made.alt, bytes: made.bytes, mime: made.mime, promptHash: createHash("sha256").update(made.prompt).digest("hex").slice(0, 16) });
       report.made.push(id);
@@ -229,6 +237,16 @@ export const dbCoverStore: CoverStore = {
       return true;
     });
   },
+  async exclusive(work) {
+    const client = await dbPool.connect();
+    try {
+      const { rows } = await client.query<{ ok: boolean }>("SELECT pg_try_advisory_lock($1) AS ok", [COVER_LOCK_KEY]);
+      if (!rows[0]?.ok) return null;
+      try { return await work(); } finally { await client.query("SELECT pg_advisory_unlock($1)", [COVER_LOCK_KEY]).catch(() => undefined); }
+    } finally {
+      client.release();
+    }
+  },
   async insertedToday() {
     const { rows } = await db.execute(sql`SELECT count(*)::int AS n FROM design_assets WHERE origin = ${AUTO_ORIGIN} AND approved_at >= date_trunc('day', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc'`);
     return Number((rows[0] as { n?: unknown } | undefined)?.n ?? 0);
@@ -244,7 +262,19 @@ export function coverWorkerConfig(env: Record<string, string | undefined> = proc
 
 /** A háttérfolyamat egy köre — a plafonnal; a `state` a folyamat napi számlálója (sikertelen kulcsok, fizetős képhívások). */
 export type WorkerState = { day: string; images: number; failed: Set<string> };
-export async function runCoverRound(store: CoverStore, deps: CoverDeps, dailyLimit: number, state: WorkerState, now = new Date()): Promise<SweepReport> {
+export async function runCoverRound(store: CoverStore, deps: CoverDeps, dailyLimit: number, state: WorkerState, now = new Date(), onLinked: () => void = invalidateHomeList): Promise<SweepReport | null> {
+  // Review #384: egyszerre egy példány költhet (a napi keret a táblából számol, a zár alatt pontos).
+  return store.exclusive(async () => {
+    const r = await coverRoundLocked(store, deps, dailyLimit, state, now);
+    // A főoldali lista (HtmlFilesCache, 5 perc) a cover mezőt tárolja — összekötés után ürül, hogy az új kép azonnal látsszon.
+    if (r.linked) onLinked();
+    return r;
+  });
+}
+function invalidateHomeList(): void {
+  try { getHtmlFilesCache().invalidate(); } catch (error) { logger.warn("[lesson-covers] a főoldali lista gyorsítótára nem üríthető:", error); }
+}
+async function coverRoundLocked(store: CoverStore, deps: CoverDeps, dailyLimit: number, state: WorkerState, now: Date): Promise<SweepReport> {
   const today = now.toISOString().slice(0, 10);
   if (today !== state.day) { state.day = today; state.images = 0; state.failed.clear(); }
   // Képhívás-plafon: naponta legfeljebb a plafon kétszerese (a minőségkapu bukása új képet kér).
@@ -270,6 +300,7 @@ export function startLessonCoverWorker(env: Record<string, string | undefined> =
     running = true;
     try {
       const r = await runCoverRound(store, deps, config.dailyLimit, state);
+      if (!r) return; // egy másik példány söpör
       if (r.made.length || r.failed.length || r.linked) logger.info(`[lesson-covers] söprés: ${r.made.length} kész, ${r.failed.length} sikertelen, ${r.linked} lecke összekötve, ${r.missing} hiányzott`);
     } catch (error) {
       logger.warn("[lesson-covers] a söprés nem sikerült:", error instanceof Error ? error.message : String(error));

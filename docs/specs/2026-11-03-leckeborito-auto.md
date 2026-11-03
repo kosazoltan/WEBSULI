@@ -29,6 +29,12 @@ csak az `art.picture` írható, vészfék env-kapcsolóval, a `json` többi rés
    pótolná a kabalát és az ikont), kihagyja; `jsonb_set(json, '{art}', art || {"picture": id})`, majd az `art` nélküli kanonikus
    hash és az `art` többi mezőjének ellenőrzése (a kézi cseréjével közös `verifyPinned`); eltérés → ROLLBACK.
 
+8. **Review #384:** a kör Postgres advisory lock alatt fut (`pg_try_advisory_lock`; foglalt zárnál — másik példány — kimarad), így a
+   napi keret példányok között is pontos; a beolvasott lecke tartalomkulcsát a képterv előtt újra ellenőrzi (közben átnevezett lecke
+   tartalma nem kerülhet a régi kulcs alá).
+9. **Főoldali lista:** összekötés után a saját folyamatban üríti a `HtmlFilesCache`-t (5 perces TTL), hogy a `cover` mező azonnal
+   frissüljön (a kézi szkriptes csere után a lista legkésőbb a TTL lejártával frissül).
+
 ## Megjelenítés és mentés
 - `resolveStoredArt`: a katalógusban nem szereplő `cover-l-*` (adatbázisban gyártott) borítót akkor fogadja el, ha az a lecke mostani
   tartalomkulcsa; a kép a `/api/design-assets/<id>` végpontról jön, hibánál a katalógus szerinti kép statikus fájlja.
