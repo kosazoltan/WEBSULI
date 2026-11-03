@@ -118,6 +118,14 @@ export type ExperienceBuildDeps = {
   /** Spec 2026-09-24: lecke-szintű különlegességek; alapból a korábbi, különben leckénként választott. */
   checkpoint?: ExperienceCheckpoint;
   previous?: LessonExperience;
+  /**
+   * Spec 2026-11-03-javitas-bank-megorzes: a `previous` bankhoz tartozó lecke fejezetei (a javító út adja; `undefined` elem = a fejezet
+   * nem vehető át, pl. forrás-helyesbítés). A tanításában változatlan fejezet csomagja a gyártási konfigurációtól (memória, katalógus,
+   * skill-verzió) függetlenül átvehető — mérve: e nélkül egy egymondatos javítás mind a 7 fejezet bankját újragyártotta, gyengébben.
+   */
+  previousSections?: ReadonlyArray<Lesson["sections"][number] | undefined>;
+  /** Review #379: e fogalmak egységei nem vehetők át (forrás-helyesbítés) — egységenként, nem a teljes fejezetre. */
+  reuseExcludedConceptIds?: ReadonlySet<string>;
   reviewFeedback?: BankReviewFeedback[];
   /** Spec 2026-10-21-ciklus6 (review #357): a tulajdonos pontozási szabálya (a csomag rendszerpromptjába és hash-ébe kerül). */
   scoringRules?: string;
@@ -441,6 +449,17 @@ function withoutFigures<S extends { blocks: Array<{ kind: string }> }>(section: 
   return section ? { ...section, blocks: section.blocks.filter((b) => b.kind !== "animate") } : section;
 }
 /**
+ * Spec 2026-11-03-javitas-bank-megorzes: a korábbi bank azonos fejezetű, azonos fogalmú egysége, ha a fejezet ábra nélküli tanítása
+ * változatlan — különben undefined (újragyártás). A csomag elfogadásáról a hívó a mostani kapukkal dönt.
+ */
+function unchangedPreviousUnit(previous: LessonExperience | undefined, deps: Pick<ExperienceBuildDeps, "previousSections" | "reuseExcludedConceptIds">, lesson: Lesson, unit: { sectionIndex: number; conceptIds: string[] }) {
+  const before = deps.previousSections?.[unit.sectionIndex];
+  if (!previous?.bankPlan || !before || unit.conceptIds.some(id => deps.reuseExcludedConceptIds?.has(id))) return undefined;
+  if (canonicalJson(withoutFigures(before)) !== canonicalJson(withoutFigures(lesson.sections[unit.sectionIndex]))) return undefined;
+  const ids = canonicalJson([...unit.conceptIds].sort());
+  return previous.bankPlan.units.find(u => u.sectionIndex === unit.sectionIndex && u.sourceHash && canonicalJson([...u.conceptIds].sort()) === ids);
+}
+/**
  * A minta-ellenőrzés javítóköri üzenete (tiszta). Spec 2026-10-21-ciklus4: a fogalmak mellett a mintából PONTOSAN hiányzó kifejezések és a
  * sorrendi eltérés is megnevezve — mért: e nélkül a modell ugyanarra a feladatra többször is javítókört futott (18 kör / 98 futás).
  */
@@ -515,8 +534,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     }) ?? [];
     const evidence = { ...teaching, ...(reviewFeedback.length ? { reviewFeedback } : {}) };
     // Once corrected, later rounds must never revive the rejected base packet.
-    const hash = reviewFeedback.length ? createHash("sha256").update(canonicalJson(evidence)).digest("hex") : checkpoint.reviewedHashes?.[baseHash] ?? baseHash;
+    let hash = reviewFeedback.length ? createHash("sha256").update(canonicalJson(evidence)).digest("hex") : checkpoint.reviewedHashes?.[baseHash] ?? baseHash;
     unit.sourceHash = hash;
+    // Spec 2026-11-03-javitas-bank-megorzes: a tanításában változatlan fejezet korábbi csomagja tartalom szerint (nem a konfigfüggő hash szerint).
+    const keptUnit = reviewFeedback.length ? undefined : unchangedPreviousUnit(deps.previous, deps, lesson, unit);
     // Spec 2026-09-30 (U2, B4): a csomag mérhető szerződése és a pontozó tényleges szabályai a KÓDBÓL generálva — egy szabály egy helyen.
     const contract = bankPacketContract({ sectionIndex: unit.sectionIndex, conceptIds: unit.conceptIds, methodKinds, taskCount, taskTarget, quizCount, quizTarget, language });
     const signRules = needsSignedNumberRules(lesson.subject, teaching.section) ? `${SIGNED_NUMBER_RULES_HU}\n` : "";
@@ -576,11 +597,12 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       for (const m of packet.methods) if (hasFigureReference(`${m.prompt}\n${m.answer}\n${(m.options ?? []).join("\n")}\n${(m.steps ?? []).join("\n")}`)) problems.push(`${m.id}: a módszer ábrára hivatkozik — a bank csak a tanítás szövegére hivatkozhat.`);
       return problems;
     };
+    const previousHash = keptUnit?.sourceHash ?? hash;
     const fromPrevious = deps.previous?.version === LESSON_METHOD_VERSION ? {
-      methods: deps.previous.methods.filter(i => i.sourceHash === hash),
-      tasks: deps.previous.tasks.filter(i => i.sourceHash === hash),
-      quiz: deps.previous.quiz.filter(i => i.sourceHash === hash),
-      glossary: deps.previous.glossary.filter(i => i.sourceHash === hash),
+      methods: deps.previous.methods.filter(i => i.sourceHash === previousHash),
+      tasks: deps.previous.tasks.filter(i => i.sourceHash === previousHash),
+      quiz: deps.previous.quiz.filter(i => i.sourceHash === previousHash),
+      glossary: deps.previous.glossary.filter(i => i.sourceHash === previousHash),
     } : undefined;
     let packet: Packet | undefined;
     let openIssues: string[] = [];
@@ -591,13 +613,15 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       if (!saved) return { packet: saved, fixes: [] };
       try { return (deps.autofix ?? autofixBankPacket)(saved, autofixContext); } catch { return { packet: saved, fixes: [] }; }
     };
-    for (const { packet: saved, fixes: savedFixes } of [fixSaved(checkpoint.parts[hash]), fixSaved(fromPrevious)]) {
+    for (const [source, { packet: saved, fixes: savedFixes }] of [["checkpoint", fixSaved(checkpoint.parts[hash])], ["previous", fixSaved(fromPrevious)]] as const) {
       // Review #245 (P2): a mentett csomag a tartalék terhére szűkülhetett (előszűrő, T2-kivétel, salvage) — az elfogadási minimummal olvassuk
       // vissza, különben folytatáskor fizetős teljes újragyártás jönne az ellenőrzött tételek helyett.
       const parsed = salvageSchema.safeParse(saved);
       if (parsed.success && validate(parsed.data).length === 0) {
         packet = parsed.data;
         if (savedFixes.length) deps.onToolFix?.("bank-packet-autofix", savedFixes);
+        // Az átvett korábbi csomag a saját hash-ével bélyegződik: a tételazonosítók és a tanulói előzmények változatlanok maradnak.
+        if (source === "previous" && keptUnit?.sourceHash) { hash = keptUnit.sourceHash; unit.sourceHash = hash; }
         break;
       }
     }
@@ -789,10 +813,15 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
     }
     // H52: a nyitott aritmetikai lelet a VÉGLEGES azonosítóval jut a hívóhoz (a modell azonosítója lent lecserélődik).
     const originalIds = { methods: packet.methods.map(i => i.id), tasks: packet.tasks.map(i => i.id), quiz: packet.quiz.map(i => i.id) };
-    // IDs are scoped to the exact source/teaching version; reused packets retain them.
-    packet.methods = packet.methods.map((i, n) => ({ ...i, id: `m-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
-    packet.tasks = packet.tasks.map((i, n) => ({ ...i, id: `t-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
-    packet.quiz = packet.quiz.map((i, n) => ({ ...i, id: `q-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
+    // IDs are scoped to the exact source/teaching version; reused packets retain them. Review #379: az átvett, már ezzel a hash-sel
+    // bélyegzett csomag a SAJÁT azonosítóit tartja — egy korábbi lektori kivétel hézaga nem számozódik át (a tanulói előzmény a tételé marad).
+    const stamp = <T extends { id: string; sourceHash?: string }>(items: T[], prefix: string) => {
+      const keep = reusedPacket && items.every(i => i.sourceHash === hash) && new Set(items.map(i => i.id)).size === items.length;
+      return items.map((i, n) => ({ ...i, id: keep ? i.id : `${prefix}-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
+    };
+    packet.methods = stamp(packet.methods, "m");
+    packet.tasks = stamp(packet.tasks, "t");
+    packet.quiz = stamp(packet.quiz, "q");
     packet.glossary = packet.glossary.map(i => ({ ...i, sourceHash: hash }));
     for (const report of answerKeyReport) {
       const n = originalIds.tasks.indexOf(report.modelId);
