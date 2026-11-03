@@ -5,27 +5,42 @@ export type ChatBlock =
   | { kind: "heading" | "paragraph"; inlines: ChatInline[] }
   | { kind: "list"; items: ChatInline[][] };
 
+// A bubble shows at most this much of a reply (the tail, where the newest progress is): an unusually long,
+// list-heavy reply would otherwise become tens of thousands of DOM nodes and freeze a phone (review #390).
+export const CHAT_MARKDOWN_MAX_CHARS = 8000;
+
+// Markdown delimiter rule: the opening ** is followed and the closing ** preceded by a non-space,
+// so spaced operators such as "2 ** 3 ** 4" stay literal text.
+const BOLD = /\*\*(?=\S)([\s\S]*?\S)\*\*/g;
+
 export function parseChatInline(text: string): ChatInline[] {
-  const parts = text.split("**");
-  // An odd number of markers would leave the last one unpaired: keep it as literal text.
-  if (parts.length % 2 === 0) {
-    const last = parts.pop()!;
-    parts[parts.length - 1] += `**${last}`;
+  const inlines: ChatInline[] = [];
+  let last = 0;
+  for (const match of text.matchAll(BOLD)) {
+    if (match.index > last) inlines.push({ text: text.slice(last, match.index), bold: false });
+    inlines.push({ text: match[1], bold: true });
+    last = match.index + match[0].length;
   }
-  return parts.map((part, index) => ({ text: part, bold: index % 2 === 1 })).filter((inline) => inline.text !== "");
+  if (last < text.length) inlines.push({ text: text.slice(last), bold: false });
+  return inlines;
 }
 
 const LIST_ITEM = /^\s*(?:[-*•])\s+(.*)$/;
 const HEADING = /^\s*#{1,6}\s+(.*)$/;
 
 export function parseChatMarkdown(text: string): ChatBlock[] {
+  let source = text.replace(/\r\n?/g, "\n");
+  if (source.length > CHAT_MARKDOWN_MAX_CHARS) {
+    const tail = source.slice(-CHAT_MARKDOWN_MAX_CHARS);
+    source = `…\n${tail.slice(tail.indexOf("\n") + 1)}`;
+  }
   const blocks: ChatBlock[] = [];
   let paragraph: string[] = [];
   const flush = () => {
     if (paragraph.length) blocks.push({ kind: "paragraph", inlines: parseChatInline(paragraph.join("\n")) });
     paragraph = [];
   };
-  for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
+  for (const line of source.split("\n")) {
     const item = LIST_ITEM.exec(line);
     const heading = HEADING.exec(line);
     if (item) {

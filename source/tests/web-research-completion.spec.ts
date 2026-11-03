@@ -213,7 +213,7 @@ test("mobil: a hosszú csevegés nem lóg ki a dobozából, a gombok és a mező
   const check = async (label: string) => {
     for (const id of ["chat-input", "chat-send-button", "web-research-save", "web-research-new"]) {
       const target = page.getByTestId(id);
-      if (await target.count() === 0) continue;
+      await expect(target, `${label}: ${id} hiányzik`).toHaveCount(1);
       await target.scrollIntoViewIfNeeded();
       const covered = await target.evaluate(el => {
         // A letiltott gomb (pointer-events: none) a találatvizsgálatból kiesne: a mérés idejére visszakapcsoljuk.
@@ -226,14 +226,23 @@ test("mobil: a hosszú csevegés nem lóg ki a dobozából, a gombok és a mező
       expect(covered, `${label}: ${id} takarva`).toBe("");
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    // Review #390: fekvő telefonon (844×390) a görgethető üzenetterület 0 px-re zsugorodott.
+    const messagesHeight = await page.getByTestId("chat-messages-scroll").evaluate(el => el.getBoundingClientRect().height);
+    expect(messagesHeight, `${label}: üzenetterület magassága`).toBeGreaterThanOrEqual(160);
   };
   await expect(page.getByTestId("web-research-status")).toBeVisible();
   await expect(page.locator('[data-testid^="chat-message-assistant"]')).toContainText("Új teljes letöltés:");
   await check("futás közben");
+  await page.setViewportSize({ width: 844, height: 390 });
+  await check("futás közben, fekvő");
+  await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('[data-testid^="chat-message-assistant"] strong').first()).toHaveText("Új teljes letöltés:");
   await expect(page.locator('[data-testid^="chat-message-assistant"]')).not.toContainText("**");
   await page.screenshot({ path: "tests/screenshots/web-research-mobile-running-390.png", fullPage: true });
   await expect(page.getByTestId("web-research-open-saved")).toBeVisible({ timeout: 8000 });
   await check("kész állapot");
+  await page.setViewportSize({ width: 844, height: 390 });
+  await check("kész állapot, fekvő");
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: "tests/screenshots/web-research-mobile-done-390.png", fullPage: true });
 });

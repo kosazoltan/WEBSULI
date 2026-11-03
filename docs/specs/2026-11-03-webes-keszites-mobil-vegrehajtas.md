@@ -45,3 +45,11 @@ Munkakönyvtár: `source/`.
 - `npx.cmd playwright test --config playwright.web-research.config.ts` → mind zöld; képernyőképek 390 px futás/kész.
 - `npm.cmd run check`, `npm.cmd run check:test`, `npm.cmd run lint`.
 - Csapda-bejegyzés: `docs/agent-csapdak.md` C-07 (flex `min-h-0`, csak vízszintes túlcsordulást mérő teszt).
+
+## T6: review #390 (Sourcery, Vercel)
+
+- `chat-markdown.ts`: félkövér csak Markdown-határolóval (`/\*\*(?=\S)([\s\S]*?\S)\*\*/`) — a `2 ** 3 ** 4` szöveg marad;
+  a buborék legfeljebb `CHAT_MARKDOWN_MAX_CHARS` (8000) karaktert renderel (a válasz végét, „…” jelöléssel) — korlátos DOM.
+- `WebResearchAgentPanel.tsx`: csevegődoboz `min-h-[460px]` — fekvő telefonon (844×390) az üzenetterület 0 px volt (mérve).
+- Teszt: a mobil-teszt mind a négy vezérlő jelenlétét megköveteli, és álló + fekvő nézetben az üzenetterület ≥ 160 px.
+  Fekvő RED a javítás előtt: „üzenetterület magassága — Received: 0”. Unit: +2 eset (`chat-markdown.test.ts`).

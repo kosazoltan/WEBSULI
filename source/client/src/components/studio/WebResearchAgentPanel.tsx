@@ -241,7 +241,8 @@ export function WebResearchAgentPanel() {
           </div>
         </div>
         <Badge variant="outline" className="text-xs">Tananyag · Módszerek · Feladatok · Kvíz</Badge>
-        <div className="h-[min(560px,72dvh)] sm:h-[min(480px,62dvh)]">
+        {/* min-h: fekvő telefonon (844×390) a dvh-alapú magasság nem fér el a fejléc és az 5 soros mező mellett (review #390). */}
+        <div className="h-[min(560px,72dvh)] min-h-[460px] sm:h-[min(480px,62dvh)]">
           <ChatInterface
             title="Tananyagkészítő ügynök"
             description="Pl.: Keress 5. osztályos törtes tananyagot, és készíts belőle interaktív HTML-t"

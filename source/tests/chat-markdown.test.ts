@@ -22,3 +22,21 @@ test("blokkok: bekezdés, lista, címsor; üres sor tagol", () => {
   ]);
   assert.deepEqual(parseChatMarkdown(""), []);
 });
+
+test("review #390: a szóközös ** műveleti jel szöveg marad, a félkövér csak határolóval", () => {
+  assert.deepEqual(parseChatInline("2 ** 3 ** 4"), [{ text: "2 ** 3 ** 4", bold: false }]);
+  assert.deepEqual(parseChatInline("a **b** és 2 ** 3"), [
+    { text: "a ", bold: false },
+    { text: "b", bold: true },
+    { text: " és 2 ** 3", bold: false },
+  ]);
+});
+
+test("review #390: nagyon hosszú, listás válaszból csak a vége renderelődik (korlátos DOM)", () => {
+  const long = Array.from({ length: 20000 }, (_, i) => `- tétel ${i}`).join("\n");
+  const blocks = parseChatMarkdown(long);
+  const items = blocks.flatMap((block) => (block.kind === "list" ? block.items : []));
+  assert.ok(items.length > 0 && items.length < 1000, `elemek: ${items.length}`);
+  assert.deepEqual(items.at(-1), [{ text: "tétel 19999", bold: false }]);
+  assert.equal(blocks[0].kind, "paragraph");
+});
