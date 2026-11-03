@@ -200,3 +200,40 @@ test("review #317: két lap — az egyik lap kész futása nem törli a másik l
   const stored = await other.evaluate(() => JSON.parse(localStorage.getItem("websuli:web-research:pending") || "null"));
   expect(stored?.id).toBe("00000000-0000-4000-8000-000000000002");
 });
+// Spec 2026-11-03-webes-keszites-mobil: a telefonos képernyőképen a csevegés buborékjai a gombokra és a beviteli
+// mezőre lógtak, a nyers markdown (**…**) olvashatatlan volt. A panel minden eleme a saját helyén, takarás nélkül.
+test("mobil: a hosszú csevegés nem lóg ki a dobozából, a gombok és a mező kattinthatók, a markdown formázott", async ({ page }) => {
+  const userMessage = "Nat 2020 alapján a földrajzi felszíni formák, a síkság, a dombság, a hegység és a magashegység témakörében, és készítsd el a tananyagot egy negyedik osztályos gyermek számára. Ne hivatkozásokat vagy linkeket tegyél bele, hanem magát a repo szabályai szerinti tananyagot készítsd el.";
+  const agentText = "A tananyagírás előtt a források teljes szövegének letöltése folyamatban van...\n\n**Új teljes letöltés:**\n- **Szabó János: Környezetismeret óravázlat 4. osztály (PDF).** A 14. óra „A felszíni formák és ábrázolásuk a térképen”.\n- **Második forrás:** a síkság 0–200 m, a dombság 200–500 m, a hegység 500 m felett.\n\n" + "A források összevetése és a tananyag szerkezetének kialakítása következik. ".repeat(12);
+  let reads = 0;
+  await page.route("**/api/studio/web-research/jobs", r => r.fulfill({ status: 202, json: { ...job, message: userMessage } }));
+  await page.route("**/api/studio/web-research/jobs/*", r => r.fulfill({ json: ++reads < 3 ? { ...job, message: userMessage, content: agentText } : { ...done, message: userMessage } }));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page); await send(page, userMessage);
+  const check = async (label: string) => {
+    for (const id of ["chat-input", "chat-send-button", "web-research-save", "web-research-new"]) {
+      const target = page.getByTestId(id);
+      if (await target.count() === 0) continue;
+      await target.scrollIntoViewIfNeeded();
+      const covered = await target.evaluate(el => {
+        // A letiltott gomb (pointer-events: none) a találatvizsgálatból kiesne: a mérés idejére visszakapcsoljuk.
+        const html = el as HTMLElement; const previous = html.style.pointerEvents; html.style.pointerEvents = "auto";
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        html.style.pointerEvents = previous;
+        return hit && (el === hit || el.contains(hit)) ? "" : (hit?.closest("[data-testid]")?.getAttribute("data-testid") ?? hit?.tagName ?? "semmi");
+      });
+      expect(covered, `${label}: ${id} takarva`).toBe("");
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  };
+  await expect(page.getByTestId("web-research-status")).toBeVisible();
+  await expect(page.locator('[data-testid^="chat-message-assistant"]')).toContainText("Új teljes letöltés:");
+  await check("futás közben");
+  await expect(page.locator('[data-testid^="chat-message-assistant"] strong').first()).toHaveText("Új teljes letöltés:");
+  await expect(page.locator('[data-testid^="chat-message-assistant"]')).not.toContainText("**");
+  await page.screenshot({ path: "tests/screenshots/web-research-mobile-running-390.png", fullPage: true });
+  await expect(page.getByTestId("web-research-open-saved")).toBeVisible({ timeout: 8000 });
+  await check("kész állapot");
+  await page.screenshot({ path: "tests/screenshots/web-research-mobile-done-390.png", fullPage: true });
+});

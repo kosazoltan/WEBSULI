@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Send, User, Bot } from "lucide-react";
+import { parseChatMarkdown, type ChatInline } from "@/lib/chat-markdown";
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -20,6 +21,29 @@ interface ChatInterfaceProps {
   aiName?: string;
   aiIcon?: React.ReactNode;
   disabled?: boolean;
+}
+
+function Inlines({ inlines }: { inlines: ChatInline[] }) {
+  return <>{inlines.map((inline, index) => (inline.bold ? <strong key={index}>{inline.text}</strong> : <span key={index}>{inline.text}</span>))}</>;
+}
+
+// Agent replies arrive as markdown; render the safe subset as elements so no raw "**" reaches the reader.
+function ChatMarkdown({ content }: { content: string }) {
+  return (
+    <div className="space-y-2 break-words">
+      {parseChatMarkdown(content).map((block, index) =>
+        block.kind === "list" ? (
+          <ul key={index} className="list-disc pl-5 space-y-1">
+            {block.items.map((item, itemIndex) => <li key={itemIndex}><Inlines inlines={item} /></li>)}
+          </ul>
+        ) : (
+          <p key={index} className={`whitespace-pre-wrap ${block.kind === "heading" ? "font-semibold" : ""}`}>
+            <Inlines inlines={block.inlines} />
+          </p>
+        ),
+      )}
+    </div>
+  );
 }
 
 export default function ChatInterface({
@@ -63,9 +87,10 @@ export default function ChatInterface({
     const messageText = input.trim();
     setInput("");
     
-    // Reset textarea height
+    // Reset textarea height and scroll, so the placeholder shows from its first line again
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
+      textareaRef.current.scrollTop = 0;
     }
     
     await onSendMessage(messageText);
@@ -79,20 +104,22 @@ export default function ChatInterface({
   };
 
   return (
-    <Card className="flex flex-col h-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    // min-h-0 on every flex level: without it the message list grows to its content height,
+    // spills out of the fixed-height parent and covers the controls below it (mobile, 2026-11-03).
+    <Card className="flex flex-col h-full min-h-0 overflow-hidden" data-testid="chat-interface">
+      <CardHeader className="p-3 pb-1 sm:p-6 sm:pb-2">
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
           {aiIcon}
           {title}
         </CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
+        {description && <CardDescription className="text-xs sm:text-sm">{description}</CardDescription>}
       </CardHeader>
       
-      <CardContent className="flex flex-col flex-1 gap-4 p-4">
+      <CardContent className="flex flex-col flex-1 min-h-0 gap-3 p-3 sm:gap-4 sm:p-4">
         {/* Messages area */}
         <ScrollArea 
           ref={scrollRef}
-          className="flex-1 pr-4"
+          className="flex-1 min-h-0 pr-2 sm:pr-4"
           data-testid="chat-messages-scroll"
         >
           <div className="space-y-4">
@@ -106,7 +133,7 @@ export default function ChatInterface({
                 .map((msg, index) => (
                   <div
                     key={index}
-                    className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    className={`flex gap-2 sm:gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     data-testid={`chat-message-${msg.role}-${index}`}
                   >
                     {msg.role === 'assistant' && (
@@ -116,18 +143,18 @@ export default function ChatInterface({
                     )}
                     
                     <div
-                      className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                      className={`max-w-[88%] sm:max-w-[80%] min-w-0 rounded-lg px-3 py-2 sm:px-4 text-sm sm:text-base ${
                         msg.role === 'user'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted'
                       }`}
                     >
-                      <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                      {msg.role === 'assistant' ? <ChatMarkdown content={msg.content} /> : <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                     </div>
                     
                     {msg.role === 'user' && (
                       <div className="flex-shrink-0">
-                        <User className="w-8 h-8 p-1.5 rounded-full bg-primary text-primary-foreground" />
+                        <User className="w-6 h-6 p-1 sm:w-8 sm:h-8 sm:p-1.5 rounded-full bg-primary text-primary-foreground" />
                       </div>
                     )}
                   </div>
@@ -148,7 +175,7 @@ export default function ChatInterface({
         </ScrollArea>
 
         {/* Input area */}
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <Textarea
             ref={textareaRef}
             value={input}
@@ -156,14 +183,14 @@ export default function ChatInterface({
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={isLoading || disabled}
-            className="min-h-[60px] max-h-[200px] resize-none"
+            className="min-w-0 min-h-[60px] max-h-[200px] resize-none"
             data-testid="chat-input"
           />
           <Button
             onClick={handleSend}
             disabled={!input.trim() || isLoading || disabled}
             size="icon"
-            className="flex-shrink-0 w-[60px] h-[60px]"
+            className="flex-shrink-0 w-[52px] h-[52px] sm:w-[60px] sm:h-[60px]"
             data-testid="chat-send-button"
           >
             {isLoading ? (
