@@ -27,3 +27,20 @@ export function coversByFile(rows: ReadonlyArray<{ id: string; htmlFileId: strin
   }
   return covers;
 }
+
+/**
+ * Spec 2026-11-03-leckeborito-utomunka: a lecke nélküli (régi HTML / PDF) anyagok kézzel választott borítója (`html_files.id` →
+ * katalógusborító). Csak akkor számít, ha az anyagnak nincs publikált leckéje (annak borítója elsőbbséget élvez).
+ */
+export const MATERIAL_COVERS: Readonly<Record<string, string>> = {
+  "baf280be-54ea-4707-84e4-048b9f089faa": "cover-l-f898345f4953d861", // English Grammar with Pictures – 4th Grade
+  "2ae90d2b-ab77-401b-bd9e-65e2ed94b8a9": "cover-l-6caaeaef196888ad", // Suno AI – Zenekészítés mesterséges intelligenciával
+  "8eca0ab6-571b-4562-a84d-3fc05dceb1e2": "cover-l-73f08404442cb68e", // Szabó Magda: Abigél – A regény (PDF)
+  "d1cbfb26-577a-4681-a828-86831a5f9886": "cover-l-73f08404442cb68e", // Abigél (HTML)
+};
+
+/** Az anyag kézi borítója, ha az a katalógusban van; különben null (a régi viselkedés). */
+export function materialCoverId(fileId: string, catalog: ReadonlyArray<{ id: string; kind: string }> = DESIGN_ASSET_CATALOG): string | null {
+  const id = Object.hasOwn(MATERIAL_COVERS, fileId) ? MATERIAL_COVERS[fileId] : undefined;
+  return id && catalog.some(a => a.id === id && a.kind === "cover") ? id : null;
+}

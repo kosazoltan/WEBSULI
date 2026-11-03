@@ -50,7 +50,7 @@ import { db } from "./db";
 import { eq, desc, gt, gte, lt, and, sql, inArray, getTableColumns } from "drizzle-orm";
 import { assertBackupFilesHaveContent } from "./lib/backup-guard";
 import { logger } from "./lib/logger";
-import { coversByFile } from "@shared/lesson-cover";
+import { coversByFile, materialCoverId } from "@shared/lesson-cover";
 import { isPlaceholderDescription, teaserFromText } from "@shared/lesson-teaser";
 import { designThemeForClassroom } from "@shared/lesson-design";
 import { thumbUrlFor } from "./design-assets";
@@ -444,7 +444,7 @@ export class DatabaseStorage implements IStorage {
     }
     return rows.map((row) => {
       const teaser = teasers.get(row.id);
-      const cover = covers.get(row.id) ?? null;
+      const cover = covers.get(row.id) ?? (covers.has(row.id) ? null : materialCoverId(row.id));
       // Spec 2026-11-03-fooldal-sebesseg: kész bélyegkép-URL (a build statikus, immutable fájlja; csak a DB-ben lévő kép megy a végpontra).
       const coverThumb = thumbUrlFor(cover ?? `hero-${designThemeForClassroom(row.classroom ?? 1)}`);
       return { ...row, ...(isPlaceholderDescription(row.description) && teaser ? { description: teaser } : {}), cover, coverThumb };

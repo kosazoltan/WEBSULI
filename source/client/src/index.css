@@ -836,3 +836,62 @@
   font-weight: 700;
 }
 
+/* Spec 2026-11-03-szponzor-fejlec: vékony támogatói sáv a főoldal fejléce alatt — ne vonja el a figyelmet a tananyagokról. */
+.sponsor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 18px;
+  margin: 0 auto 12px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.sponsor-bar-label {
+  color: #C7D2FE;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sponsor-bar-logos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.sponsor-bar-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.sponsor-bar-link img {
+  display: block;
+  height: 40px;
+  width: auto;
+  max-width: 100%;
+}
+.sponsor-bar-link:focus-visible {
+  outline: 3px solid #FDE68A;
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sponsor-bar-link:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  }
+}
+@media (max-width: 480px) {
+  .sponsor-bar { padding: 8px 10px; gap: 6px 10px; }
+  .sponsor-bar-label { width: 100%; text-align: center; font-size: 11.5px; }
+  .sponsor-bar-link img { height: 32px; }
+}

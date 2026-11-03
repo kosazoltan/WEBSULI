@@ -529,6 +529,11 @@ app.use((req, res, next) => {
         (r) => log(`[design-assets] ${r.written} kép írva, ${r.unchanged} változatlan, ${r.missing.length} hiányzó fájl`),
         (error) => logger.error("[STARTUP] A képkészlet szinkronja nem sikerült:", error),
       );
+      // Spec 2026-11-03-leckeborito-auto: az új, publikált leckék automatikus borítója — csak élesben, kulccsal, napi plafonnal
+      // (LESSON_COVER_DAILY_LIMIT, alap 20), LESSON_COVERS=0 vészfékkel.
+      if (process.env.NODE_ENV === "production" && !isE2eMode()) void import("./lesson-covers").then(({ startLessonCoverWorker }) => {
+        if (startLessonCoverWorker()) log("[lesson-covers] a leckeborító-háttérfolyamat elindult");
+      }, (error) => logger.error("[STARTUP] A leckeborító-háttérfolyamat nem indult:", error));
 
       // #168 — az előző folyamat halálakor árván maradt one-step futások hibára
       // zárása, hogy a kliens állapotjelzője ne ragadjon be némán.

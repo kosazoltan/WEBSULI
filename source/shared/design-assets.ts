@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { subjectIconIdForBand } from "./subject-icons";
-import { isLessonCoverId, lessonCoverId } from "./lesson-cover-key";
+import { isLessonCoverId, lessonCoverAsset, lessonCoverId } from "./lesson-cover-key";
 
 /**
  * Websuli képkészlet katalógusa (shared/design-assets.json) — MI-generált, kurált saját képek a szabályterv 2.3 szerint
@@ -133,7 +133,13 @@ export function resolveStoredArt(stored: StoredLessonArt | undefined, band: (typ
   if (!stored?.picture) return null;
   const byId = (id: string | undefined, kind: DesignAsset["kind"][]) => (id ? catalog.find(a => a.id === id && kind.includes(a.kind)) : undefined);
   const young = YOUNG_BANDS.has(band);
-  const picture = byId(stored.picture, ["hero", "cover"]);
+  let picture = byId(stored.picture, ["hero", "cover"]);
+  // Spec 2026-11-03-leckeborito-auto: az adatbázisban gyártott leckeborító (nincs a katalógusban) csak a lecke mostani kulcsával érvényes.
+  if (!picture && isLessonCoverId(stored.picture)) {
+    if (lesson && stored.picture !== lessonCoverId(lesson, band)) return null;
+    const fallback = pickLessonArt(lesson ?? { subject: "", title: "" }, band, catalog);
+    picture = lessonCoverAsset(stored.picture, band, lesson ?? { subject: "", title: "" }, (fallback.cover ?? fallback.hero)?.src ?? "");
+  }
   // Review #275: a kulcsszavas borító szándékosan lehet a másik korosztályé (a pickLessonArt is ezt választja, ha csak ott van);
   // a sávhős viszont csak a saját korosztályé lehet (a más korosztályú tárolt hős az évfolyam megváltozását jelzi).
   if (!picture || (picture.kind === "hero" && YOUNG_BANDS.has(picture.band) !== young)) return null;

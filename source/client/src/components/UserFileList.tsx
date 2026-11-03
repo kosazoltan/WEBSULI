@@ -10,6 +10,7 @@ import { BAND_ICON } from "@/lib/band-icons";
 import { coverIdFor, homeCardTheme } from "@shared/home-card-theme";
 import LikeButton from "@/components/LikeButton";
 import HeroSection from "@/components/HeroSection";
+import SponsorBar from "@/components/SponsorBar";
 import HomePracticeGames from "@/components/HomePracticeGames";
 import WelcomeCard from "@/components/WelcomeCard";
 import { displayTopic } from "@shared/daily-reminder";
@@ -198,6 +199,9 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
           totalClassrooms={totalClassrooms}
           showEmailSubscribe={true}
         />
+
+        {/* Támogatók (docs/specs/2026-11-03-szponzor-fejlec.md) */}
+        <SponsorBar />
 
         {/* Személyes üdvözlő ajánló (docs/specs/2026-10-18-nyilvanos-oldal-udvozlo.md) */}
         <WelcomeCard files={files} onViewFile={onViewFile} />
