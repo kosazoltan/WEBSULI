@@ -112,6 +112,17 @@
 - **E2E (meglévő, változatlanul):** `curriculum-order`, `welcome-card`, `public-perf` (210 kártya), `websuli`, `material-list-recovery`.
 - **Böngésző:** a helyi dev szerveren és élesben 390 és 1280 px (képernyőkép, túlcsordulás-mérés, betöltött bélyegképek mérete).
 
+### Review #381 (2026-11-03): a kártyakép = a lejátszó kezdőképe
+
+- **Képválasztás:** a főoldal nem a nyers `art.picture`-t mutatja, hanem ugyanazt, amit a lecke-lejátszó (`lessonArtFor`). A tárolt kép
+  csak akkor marad, ha a mostani szabály szerint is illik (`resolveStoredArt`), különben friss választás jön (`pickLessonArt`, sáv =
+  az évfolyamé, seed = a lecke azonosítója). Kód: `shared/lesson-cover.ts` `shownPictureId`. Csak a szerver használja, a
+  képkatalógus nem kerül a főoldal bundle-jébe.
+- **Lecke kiválasztása:** fájlonként a LEGÚJABB publikált lecke dönt (`coversByFile`), akkor is, ha nincs tárolt képe; egy régebbi
+  lecke borítója nem kerül elé. A listához csak a `subject`, `title`, `classroom`, `art` mezőt olvassuk (`jsonb_build_object`).
+- **Kliens:** az `onLoad` visszaállítja a hiba után elrejtett képet (a lista frissítése új borítót hozhat).
+- **Bélyegkép-végpont:** a hibaválasz (500, a beolvasás közbeni 404) `Cache-Control: no-store`, ETag nélkül.
+- **Teszt:** `tests/lesson-cover.test.ts`.
 ## 8. Kockázatok / visszavonás
 
 - **`sharp` natív függőség:** a Render `npm ci` a linux-x64 előre fordított csomagját telepíti (az npm lockfile v3 rögzíti a
