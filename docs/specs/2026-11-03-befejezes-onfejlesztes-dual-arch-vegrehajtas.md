@@ -75,3 +75,16 @@ Munkakönyvtár: repó gyökér, a Node-lépések `source/`-ban. Ág: `chore/bef
   `npm.cmd test`, `npm.cmd run check`, `npm.cmd run check:test`, `npm.cmd run build`.
 - `node scripts/qa/three-phase-check.mjs --base main` a gyökérből.
 - Diff visszamérése a spec EARS-pontjaihoz.
+
+## T9: review és CI #391 (2026-11-03)
+
+- **CI `Natív futás (windows-latest)` bukás:** gyökérok C-09 (`docs/agent-csapdak.md`). `check-native-arch.mjs`
+  modulonként külön folyamatban próbál (`spawnSync`); a `tsx` feloldása is védett próba. `tests/native-arch.test.ts`
+  az ellenőrzőt külön folyamatként futtatja. Mérve: 25 futásból 0 összeomlás (előtte ~40%); rejtett
+  `@esbuild/win32-x64` + hiányzó `tsx` → exit 1, modulonkénti HIBA sor + `npm.cmd ci` javaslat.
+- **NAT-térképek:** az idézet a kivonat szó szerinti (LF) szelete a témakör címsorától a definíció végéig; 13
+  definíció a saját szakaszából újraépítve; új `matematika-tortek` fogalom; a Digitális kultúra kivonatából
+  kikerült a 7–8. évfolyamos bevezető. Teszt + `validate_maps.py`: pontos térképlista, csak deklarált és
+  mappán belüli kivonat, az idézet alátámasztja a definíciót, nincs 7–8-as blokk, `unknown` a JSON-ra.
+- **Doksik:** személyes / géphez kötött adatok helyett helyőrző; a kanban CLI a `HERMES_KANBAN_CLI` változóból.
+- **SOURCE.md:** kivonat-bájtméret oszlop; a DOCX-méret UNVERIFIED (HEAD → 403, a letöltéskor nem rögzült).

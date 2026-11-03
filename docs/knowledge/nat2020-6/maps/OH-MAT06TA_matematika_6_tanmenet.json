@@ -13,8 +13,20 @@
     {
       "id": "matematika-egesz-szamok-oszthatosag",
       "term": "Egész Számok, Oszthatóság",
-      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: EGÉSZ SZÁMOK, OSZTHATÓSÁG. Új tananyag tervezett óraszáma: 12.",
-      "quote": "EGÉSZ SZÁMOK, OSZTHATÓSÁG",
+      "definition": "Műveletek az egész számok körében Mit tanultunk ötödik osztályban? A felmérés tapasztalatainak feldolgozása. Ismétlő, játékos feladatokkal az éves munka elkezdése. Közös munka, a hibák megbeszélése, javítása. Az egész számok szorzása Negatív számokkal való szorzás. Az algoritmus szabályainak megértése, alkalmazása. Játék, csoportmunka, tanári magyarázat. Gyakorlóóra: az egész számok szorzása Több tényező előjelének meghatározása, az írásbeli szorzás ismétlése. A tanult ismeretek alkalmazása. Páros és egyéni munka, gyakorlás. Az egész számok osztása Negatív osztandó, osztóval végzett műveletek algoritmusa. A hányados előjelének meghatározása a tanult szabály alapján.",
+      "quote": "EGÉSZ SZÁMOK, OSZTHATÓSÁG\nMűveletek az egész számok körében\nMit tanultunk ötödik osztályban?\nA felmérés tapasztalatainak feldolgozása.\nIsmétlő, játékos feladatokkal az éves munka elkezdése.\nKözös munka, a hibák megbeszélése, javítása.\nAz egész számok szorzása\nNegatív számokkal való szorzás.\nAz algoritmus szabályainak megértése, alkalmazása.\nJáték, csoportmunka, tanári magyarázat.\nGyakorlóóra: az egész számok szorzása\nTöbb tényező előjelének meghatározása, az írásbeli szorzás ismétlése.\nA tanult ismeretek alkalmazása.\nPáros és egyéni munka, gyakorlás.\nAz egész számok osztása\nNegatív osztandó, osztóval végzett műveletek algoritmusa.\nA hányados előjelének meghatározása a tanult szabály alapján.",
+      "sourceRef": {
+        "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-tortek",
+      "term": "Törtek",
+      "definition": "Mit tanultunk a törtekről? Ismétlés Az ötödik osztályban tanult ismeretek felelevenítése. Közönséges tört értelmezése, a törtek elhelyezése a számegyenesen. A törtek bővítése, egyszerűsítése, összehasonlítása. A törtekkel végzett összeadás, kivonás algoritmusának felidézése. Csoportmunka, játék, közös megbeszélés. Mit tanultunk a törtekről? Ismétlés Az ötödik osztályban tanult ismeretek megerősítése. Az átismételt fogalmak felhasználása, a tanult eljárások alkalmazása. Szövegértés fejlesztése. Páros munka, ellenőrzéshez önálló munka (Királykisasszony hétpróbája). Szorzás törttel, a reciprok Törtrész meghatározása, a tört törttel való szorzásának szabálya. A reciprok fogalma.",
+      "quote": "TÖRTEK\nMit tanultunk a törtekről? Ismétlés\nAz ötödik osztályban tanult ismeretek felelevenítése.\nKözönséges tört értelmezése, a törtek elhelyezése a számegyenesen. A törtek bővítése, egyszerűsítése, összehasonlítása. A törtekkel végzett összeadás, kivonás algoritmusának felidézése.\nCsoportmunka, játék, közös megbeszélés.\nMit tanultunk a törtekről? Ismétlés\nAz ötödik osztályban tanult ismeretek megerősítése.\nAz átismételt fogalmak felhasználása, a tanult eljárások alkalmazása. Szövegértés fejlesztése.\nPáros munka, ellenőrzéshez önálló munka (Királykisasszony hétpróbája).\nSzorzás törttel, a reciprok\nTörtrész meghatározása, a tört törttel való szorzásának szabálya.\nA reciprok fogalma.",
       "sourceRef": {
         "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
       },
@@ -25,8 +37,8 @@
     {
       "id": "matematika-geometria-tengelyes-tukrozes",
       "term": "Geometria, Tengelyes Tükrözés",
-      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: GEOMETRIA, TENGELYES TÜKRÖZÉS. Új tananyag tervezett óraszáma: 9.",
-      "quote": "GEOMETRIA, TENGELYES TÜKRÖZÉS",
+      "definition": "Síkbeli alakzatok Szögek fajtái. Háromszögek csoportosítása. Háromszög belső és külső szöge. A háromszög belső szögeinek összege. A szögek felismerése, a szögtartomány becslése. A háromszög belső szögei összegének meghatározása tapasztalati úton. A feladatoknak megfelelő ábra készítése. Síkbeli ábrák felismerése, megnevezése, csoportosítása. Az ismeretek megtapasztalása szívószálmodell segítségével, alakzatok kivágásával. Síkbeli alakzatok Négyszögek fajtái, tulajdonságai. Sokszögek felismerése, megnevezése. Négyszögek típusának meghatározása, szögösszeg megadása háromszögekre való visszavezetéssel. Szabályos sokszögek vizsgálata. Igaz-hamis állítások vizsgálata.",
+      "quote": "GEOMETRIA, TENGELYES TÜKRÖZÉS\nSíkbeli alakzatok\nSzögek fajtái. Háromszögek csoportosítása. Háromszög belső és külső szöge. A háromszög belső szögeinek összege.\nA szögek felismerése, a szögtartomány becslése. A háromszög belső szögei összegének meghatározása tapasztalati úton.\nA feladatoknak megfelelő ábra készítése. Síkbeli ábrák felismerése, megnevezése, csoportosítása.\nAz ismeretek megtapasztalása szívószálmodell segítségével, alakzatok kivágásával.\nSíkbeli alakzatok\nNégyszögek fajtái, tulajdonságai. Sokszögek felismerése, megnevezése.\nNégyszögek típusának meghatározása, szögösszeg megadása háromszögekre való visszavezetéssel.\nSzabályos sokszögek vizsgálata.\nIgaz-hamis állítások vizsgálata.",
       "sourceRef": {
         "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
       },
@@ -37,8 +49,8 @@
     {
       "id": "matematika-arany-szazalek-szoveges-feladatok",
       "term": "Arány, Százalék, Szöveges Feladatok",
-      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: ARÁNY, SZÁZALÉK, SZÖVEGES FELADATOK. Új tananyag tervezett óraszáma: 10.",
-      "quote": "ARÁNY, SZÁZALÉK, SZÖVEGES FELADATOK",
+      "definition": "Az arány fogalma Az arány fogalma. Az arány szó használata a hétköznapokban. Az arány fogalmának megértése. Az arány és a tört kapcsolatának megismerése. Páros munka, közös megbeszélés, gyűjtőmunka, játék. Arányos osztás Arányos osztás. A fogalom megértése példákon keresztül. Az arányos osztás eljárásának bemutatása. Kapcsolat a tört bővítésével, egyszerűsítésével. Tanári irányítású közös megbeszélés. Feladatok megoldása A tanult fogalom megerősítése, az eljárás gyakorlása. Hétköznapi példák megoldása arányos osztás felhasználásával. A tanulás segítése digitális lehetőségek segítségével. Egyenes arányosság Az egyenes arányosság fogalma, jellemzői.",
+      "quote": "ARÁNY, SZÁZALÉK, SZÖVEGES FELADATOK\nAz arány fogalma\nAz arány fogalma.\nAz arány szó használata a hétköznapokban.\nAz arány fogalmának megértése.\nAz arány és a tört kapcsolatának megismerése.\nPáros munka, közös megbeszélés, gyűjtőmunka, játék.\nArányos osztás\nArányos osztás.\nA fogalom megértése példákon keresztül. Az arányos osztás eljárásának bemutatása.\nKapcsolat a tört bővítésével, egyszerűsítésével.\nTanári irányítású közös megbeszélés.\nFeladatok megoldása\nA tanult fogalom megerősítése, az eljárás gyakorlása.\nHétköznapi példák megoldása arányos osztás felhasználásával.\nA tanulás segítése digitális lehetőségek segítségével.\nEgyenes arányosság\nAz egyenes arányosság fogalma, jellemzői.",
       "sourceRef": {
         "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
       },
@@ -49,8 +61,8 @@
     {
       "id": "matematika-kerulet-terulet-felszin-terfogat",
       "term": "Kerület, Terület, Felszín, Térfogat",
-      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: KERÜLET, TERÜLET, FELSZÍN, TÉRFOGAT. Új tananyag tervezett óraszáma: 8.",
-      "quote": "KERÜLET, TERÜLET, FELSZÍN, TÉRFOGAT",
+      "definition": "Hosszúság, tömeg, idő A tanult mértékegységek és átváltásuk. A hosszúság, a tömeg és az idő mérésének ismétlése a szabványmértékegységek segítségével. A mértékegységek alapos ismerete, átváltásuk gyakorlása. Gyakorlati mérések, mértékegység-átváltások helyes elvégzésének fejlesztése. Becslés, mérés, közös munkában. Átváltások egyéni munkában ellenőrzéssel. Hosszúság, tömeg, idő A tanult mértékegységek és átváltásuk. A mértékegységek alapos ismerete, átváltásuk gyakorlása. Digitális feladatlapok egyéni munkában. A sokszögek kerülete Négyzet, téglalap, sokszög kerülete. Adott sokszögek kerületének meghatározása méréssel, számolással. Számolási készség fejlesztése.",
+      "quote": "KERÜLET, TERÜLET, FELSZÍN, TÉRFOGAT\nHosszúság, tömeg, idő\nA tanult mértékegységek és átváltásuk.\nA hosszúság, a tömeg és az idő mérésének ismétlése a szabványmértékegységek segítségével. A mértékegységek alapos ismerete, átváltásuk gyakorlása. Gyakorlati mérések, mértékegység-átváltások helyes elvégzésének fejlesztése.\nBecslés, mérés, közös munkában.\nÁtváltások egyéni munkában ellenőrzéssel.\nHosszúság, tömeg, idő\nA tanult mértékegységek és átváltásuk.\nA mértékegységek alapos ismerete, átváltásuk gyakorlása.\nDigitális feladatlapok egyéni munkában.\nA sokszögek kerülete\nNégyzet, téglalap, sokszög kerülete.\nAdott sokszögek kerületének meghatározása méréssel, számolással. Számolási készség fejlesztése.",
       "sourceRef": {
         "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
       },
@@ -61,8 +73,8 @@
     {
       "id": "matematika-statisztika",
       "term": "Statisztika",
-      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: STATISZTIKA. Új tananyag tervezett óraszáma: 4.",
-      "quote": "STATISZTIKA",
+      "definition": "Játék A játékok megértéséhez kapcsolódó szavak. Ismerkedés matematikai játékokkal. Páros és csoportmunka. Grafikonok, diagramok, összefüggések Adat, táblázat, diagram, diagramtípusok. Az ötödik osztályban tanult ábrázolási, rendszerezési módozatok áttekintése. Tankönyvi példák megbeszélése közös munkában. Kördiagram A körcikk és a hozzá tartozó szög. Ismerkedés a kördiagrammal. Adatok leolvasása. Kördiagram készítése. Körző, szögmérő használata. Csoportmunka és egyéni munka. Adatok ábrázolása, átlag Átlag, oszlopdiagram, pontdiagram, kördiagram. Adatok ábrázolása megfelelő diagramon. Tankönyvi példák megbeszélése közös munkában. Feladatmegoldás kiscsoportban.",
+      "quote": "STATISZTIKA\nJáték\nA játékok megértéséhez kapcsolódó szavak.\nIsmerkedés matematikai játékokkal.\nPáros és csoportmunka.\nGrafikonok, diagramok, összefüggések\nAdat, táblázat, diagram, diagramtípusok.\nAz ötödik osztályban tanult ábrázolási, rendszerezési módozatok áttekintése.\nTankönyvi példák megbeszélése közös munkában.\nKördiagram\nA körcikk és a hozzá tartozó szög.\nIsmerkedés a kördiagrammal. Adatok leolvasása. Kördiagram készítése. Körző, szögmérő használata.\nCsoportmunka és egyéni munka.\nAdatok ábrázolása, átlag\nÁtlag, oszlopdiagram, pontdiagram, kördiagram.\nAdatok ábrázolása megfelelő diagramon.\nTankönyvi példák megbeszélése közös munkában.\nFeladatmegoldás kiscsoportban.",
       "sourceRef": {
         "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
       },
@@ -73,8 +85,8 @@
     {
       "id": "matematika-ev-vegi-ismetles",
       "term": "Év Végi Ismétlés",
-      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: ÉV VÉGI ISMÉTLÉS.",
-      "quote": "ÉV VÉGI ISMÉTLÉS",
+      "definition": "Az egész számokról tanultak összefoglalása, vegyes feladatok A tanult fogalmak, eljárások. Az év során tanultak ismétlése. Tanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása. Az oszthatóságról tanultak összefoglalása A tanult fogalmak, eljárások. Az év során tanultak ismétlése. Tanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása. A törtekről tanultak összefoglalása, vegyes feladatok A tanult fogalmak, eljárások. Az év során tanultak ismétlése. Tanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása. A geometriai ismeretek összefoglalása, vegyes feladatok A tanult fogalmak, eljárások. Az év során tanultak ismétlése.",
+      "quote": "ÉV VÉGI ISMÉTLÉS\nAz egész számokról tanultak összefoglalása, vegyes feladatok\nA tanult fogalmak, eljárások.\nAz év során tanultak ismétlése.\nTanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása.\nAz oszthatóságról tanultak összefoglalása\nA tanult fogalmak, eljárások.\nAz év során tanultak ismétlése.\nTanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása.\nA törtekről tanultak összefoglalása, vegyes feladatok\nA tanult fogalmak, eljárások.\nAz év során tanultak ismétlése.\nTanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása.\nA geometriai ismeretek összefoglalása, vegyes feladatok\nA tanult fogalmak, eljárások.\nAz év során tanultak ismétlése.",
       "sourceRef": {
         "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
       },

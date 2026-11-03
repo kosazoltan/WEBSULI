@@ -233,6 +233,3 @@ Javasolt tevékenységek
 A digitális eszközök feladatot segítő felhasználása projektfeladatokban
 Bemutatóhoz, projektfeladathoz tartozó állományok rendezett tárolása a lokális gépen, azok megosztása a társakkal a felhőszolgáltatáson keresztül
 Projektfeladathoz kacsolódóan használandó perifériák lehetőségeinek megismerése, használata
-A 7–8. évfolyam tananyaga szervesen kapcsolódik az 5–6. évfolyam tananyagához, annak spirális-teraszos logikát követő mélyítése, bővítése.
-A digitális írástudás témaköreinek feldolgozása – az életkornak, ezáltal a magasabb absztrakciós szintnek, valamint a nagyobb közismereti tudásnak megfelelően – lehetővé teszi összetettebb problémák megoldását. Új elemként jelenik meg az adatok táblázatos elrendezése, vektorgrafikus ábrák beillesztése, valamint kitekintés a webes dokumentumok világába. A digitális írástudás alapjainak elsajátítását a 8. évfolyam végére lényegében lezárjuk.
-A problémamegoldás fejlesztésében új témakörként jelenik meg a táblázatkezelés, amely alapszinten ugyan, de kerek egészet alkot. Az algoritmizálás, programozás témakörében a tanulók már csoportmunkában önállóan fejlesztenek blokkalapú programokat, megismerkednek az 5–6. osztályban tanulttól eltérő platformmal is. A 8. osztály végére a blokkprogramozás mint algoritmizálási, kódolási eszköz lezárásra kerül.
