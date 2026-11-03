@@ -1,4 +1,4 @@
-import type { DESIGN_ASSET_BANDS } from "./design-assets";
+import type { DesignAsset, DESIGN_ASSET_BANDS } from "./design-assets";
 
 /**
  * Leckénkénti borítókép (docs/specs/2026-11-03-leckeborito.md): a lecke tartalomkulcsa — a (sáv, tantárgy, cím) hármas ékezet-,
@@ -23,3 +23,13 @@ export function lessonCoverId(lesson: { subject: string; title: string }, band: 
 
 export const isLessonCoverId = (id: string | undefined): id is string => !!id && LESSON_COVER_ID.test(id);
 
+/**
+ * Spec 2026-11-03-leckeborito-auto: az adatbázisban gyártott (a katalógusban nem szereplő) leckeborító leírója a lejátszónak. A kép a
+ * `/api/design-assets/<id>` végpontról jön; a `src` a katalógus szerinti tartalékkép statikus fájlja (az `ArtImage` hibánál erre vált).
+ */
+export function lessonCoverAsset(id: string, band: Band, lesson: { subject: string; title: string }, fallbackSrc: string): DesignAsset {
+  return {
+    id, kind: "cover", band, subjects: [lesson.subject], keywords: [], alt: `${lesson.title} — a lecke borítóképe.`, src: fallbackSrc,
+    origin: "MI-generált, saját (Seedream 5.0 Pro, automatikus leckeborító)", model: "bytedance-seed/seedream-5-0-pro", promptHash: "0000000000000000", approvedAt: "",
+  };
+}
