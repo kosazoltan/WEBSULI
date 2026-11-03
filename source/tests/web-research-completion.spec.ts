@@ -243,6 +243,18 @@ test("mobil: a hosszú csevegés nem lóg ki a dobozából, a gombok és a mező
   await check("kész állapot");
   await page.setViewportSize({ width: 844, height: 390 });
   await check("kész állapot, fekvő");
+  // Review #390 (Copilot): fekvő nézetben hosszú kérés gépelésekor a növekvő mező sem nyomhatja nullára az
+  // üzenetterületet, és a mező alja sem vágódhat le a kártyán.
+  await page.getByTestId("chat-input").fill(userMessage + " " + userMessage);
+  await page.getByTestId("chat-input").dispatchEvent("input");
+  expect(await page.getByTestId("chat-input").evaluate(el => el.getBoundingClientRect().height), "a mező megnőtt").toBeGreaterThan(150);
+  await check("hosszú gépelt kérés, fekvő");
+  const clipped = await page.getByTestId("chat-input").evaluate(el => {
+    const card = el.closest('[data-testid="chat-interface"]')!.getBoundingClientRect();
+    return el.getBoundingClientRect().bottom - card.bottom;
+  });
+  expect(clipped, "a mező alja a kártyán belül").toBeLessThanOrEqual(0);
+  await page.getByTestId("chat-input").fill("");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: "tests/screenshots/web-research-mobile-done-390.png", fullPage: true });
 });
