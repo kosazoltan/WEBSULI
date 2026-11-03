@@ -50,6 +50,7 @@ import { db } from "./db";
 import { eq, desc, gt, gte, lt, and, sql, inArray, getTableColumns } from "drizzle-orm";
 import { assertBackupFilesHaveContent } from "./lib/backup-guard";
 import { logger } from "./lib/logger";
+import { coversByFile } from "@shared/lesson-cover";
 
 // PostgreSQL native arrays and jsonb - no JSON parsing helpers needed
 
@@ -401,7 +402,7 @@ export class DatabaseStorage implements IStorage {
     // displayOrder=0 means no manual order (use createdAt)
     // OPTIMIZATION: Do NOT fetch the full 'content' (which can be 100MB+) for the list view
     // Return empty string for content to satisfy type interface
-    return await db
+    const rows = await db
       .select({
         id: htmlFiles.id,
         userId: htmlFiles.userId,
@@ -417,7 +418,21 @@ export class DatabaseStorage implements IStorage {
       .orderBy(
         sql`CASE WHEN ${htmlFiles.displayOrder} = 0 THEN NULL ELSE ${htmlFiles.displayOrder} END ASC`,
         desc(htmlFiles.createdAt)
-      ) as unknown as Promise<HtmlFile[]>;
+      ) as unknown as HtmlFile[];
+    // Spec 2026-11-03-fooldal-boritokartyak: a főoldali kártya ugyanazt a kezdőképet mutatja, mint a lecke-lejátszó (review #381:
+    // `shownPictureId`, fájlonként a legutóbb publikált lecke). A lecke nélküli anyag (HTML/PDF) null — a kliens a sáv hős-képét
+    // mutatja; a borító hibája nem buktatja a listát. Csak a kép kiválasztásához szükséges mezőket olvassuk, nem a teljes leckét.
+    let covers = new Map<string, string | null>();
+    try {
+      const published = await db.select({
+        id: lessons.id, htmlFileId: lessons.htmlFileId,
+        lesson: sql<{ subject?: unknown; title?: unknown; classroom?: unknown; art?: unknown }>`jsonb_build_object('subject', ${lessons.json}->'subject', 'title', ${lessons.json}->'title', 'classroom', ${lessons.json}->'classroom', 'art', ${lessons.json}->'art')`,
+      }).from(lessons).where(sql`${lessons.publishedAt} IS NOT NULL`).orderBy(desc(lessons.publishedAt));
+      covers = coversByFile(published);
+    } catch (error) {
+      logger.warn("[storage] A főoldali borítók nem olvashatók, a lista borító nélkül megy:", error);
+    }
+    return rows.map((row) => ({ ...row, cover: covers.get(row.id) ?? null })) as HtmlFile[];
   }
 
   async getHtmlFile(id: string): Promise<HtmlFile | undefined> {

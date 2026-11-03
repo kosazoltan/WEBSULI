@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, memo } from "react";
+import { useState, useMemo, useEffect, useRef, memo, type CSSProperties } from "react";
 import { Search, FileCode, ShieldCheck, BookOpen, ArrowRight, Gamepad2, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { curriculumSort, isCurrent, todayPosition, type CurriculumHint } from "@/lib/curriculum-order";
-import { getFileIcon } from "@/lib/iconUtils";
+import { BAND_ICON } from "@/lib/band-icons";
+import { coverIdFor, homeCardTheme } from "@shared/home-card-theme";
 import LikeButton from "@/components/LikeButton";
 import HeroSection from "@/components/HeroSection";
 import HomePracticeGames from "@/components/HomePracticeGames";
@@ -31,6 +32,8 @@ interface HtmlFileApi {
   createdAt: string;
   /** Tanmenet-rendezés (docs/specs/2026-10-17-tanmenet-rendezes.md): tanévbeli pozíció a NAT 2020 mintatanmenet szerint. */
   curriculum?: CurriculumHint;
+  /** Spec 2026-11-03-fooldal-boritokartyak: a publikált lecke borítója (art.picture); hiányában a sáv hős-képe. */
+  cover?: string | null;
 }
 
 interface UserFileListProps {
@@ -219,11 +222,15 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               <Badge
                 key={classroom}
                 variant={selectedClassroom === classroom ? "default" : "outline"}
-                className={`cursor-pointer text-xs py-0.5 px-2 font-semibold ${
+                // Spec 2026-11-03-fooldal-boritokartyak: a chip a sáv színét viseli (aktívan a mért strong / strongInk pár).
+                style={selectedClassroom === classroom
+                  ? { background: homeCardTheme(classroom).strong, color: homeCardTheme(classroom).strongInk, borderColor: homeCardTheme(classroom).strong }
+                  : { borderColor: homeCardTheme(classroom).accent }}
+                className={`cursor-pointer text-xs py-0.5 px-2.5 font-semibold border-2 ${
                   selectedClassroom === classroom
-                    ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-md"
-                    : "bg-white/20 hover:bg-white/30 text-white border-white/40"
-                } transition-all duration-200`}
+                    ? "shadow-md"
+                    : "bg-white/15 hover:bg-white/25 text-white"
+                } transition-colors duration-200`}
                 onClick={() => setSelectedClassroom(classroom)}
                 // a11y (2026-09-02): kattintható jelvény → gomb-szerep és toggle-állapot gép által olvasható
                 role="button"
@@ -274,98 +281,74 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
             >
               <BookOpen className="w-4 h-4 text-orange-300 shrink-0" />
               Tananyagok
+              <span className="home-count" data-testid="text-files-count">{filteredFiles.length}</span>
             </h2>
             <div
-              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 auto-rows-fr list-enter"
+              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 list-enter"
               data-testid="list-files"
             >
             {filteredFiles.map((file) => {
-              const Icon = getFileIcon(file.title, file.description || undefined);
               const classroom = file.classroom ?? 1;
-              
-              // Korcsoport-specifikus téma
-              const {
-                themeClasses,
-                badgeGradient,
-                iconBg,
-                iconBorder,
-              } = classroom >= 1 && classroom <= 4
-                ? {
-                    // Kid theme - vibráló gradient-ek
-                    themeClasses: "rounded-3xl",
-                    badgeGradient: "from-[#8B5CF6] to-[#EC4899]",
-                    iconBg: "from-[#8B5CF6]/20 to-[#EC4899]/20",
-                    iconBorder: "border-[#8B5CF6]/40",
-                  }
-                : classroom >= 5 && classroom <= 8
-                  ? {
-                      // Teen theme - elsődleges gradient
-                      themeClasses: "rounded-2xl",
-                      badgeGradient: "from-[#8B5CF6] via-[#EC4899] to-[#F97316]",
-                      iconBg: "from-[#8B5CF6]/20 via-[#EC4899]/20 to-[#F97316]/20",
-                      iconBorder: "border-[#EC4899]/40",
-                    }
-                  : {
-                      // Senior theme - másodlagos gradient
-                      themeClasses: "rounded-xl",
-                      badgeGradient: "from-[#F97316] to-[#EAB308]",
-                      iconBg: "from-[#F97316]/20 to-[#EAB308]/20",
-                      iconBorder: "border-[#F97316]/40",
-                    };
+              // Spec 2026-11-03-fooldal-boritokartyak: az évfolyamsáv színe, formája és ikonja; a kezdőkép bélyegképe és a cím.
+              const theme = homeCardTheme(classroom);
+              const BandIcon = BAND_ICON[theme.band];
+              const style = {
+                "--hc-accent": theme.accent, "--hc-strong": theme.strong, "--hc-strong-ink": theme.strongInk, "--hc-panel": theme.panel,
+                "--hc-ink": theme.ink, "--hc-muted": theme.muted, "--hc-line": theme.line, "--hc-from": theme.from, "--hc-to": theme.to,
+                "--hc-radius": `${theme.radius}px`,
+              } as CSSProperties;
 
               return (
-                // Spec 2026-10-18-nyilvanos-oldal-sebesseg: sima elem (nem framer-motion elem) — a hover-emelést a .glass-card CSS adja;
+                // Spec 2026-10-18-nyilvanos-oldal-sebesseg: sima elem (nem framer-motion elem) — a hover-emelést CSS adja;
                 // a képernyőn kívüli kártya nem renderelődik (content-visibility a kártyán: review #297 — a burkolón levágná az árnyékot és a hover-emelést).
                 <div key={file.id}>
                   <Card
-                    className={`group cursor-pointer glass-card material-card-cell h-full ${themeClasses}`}
+                    className="group cursor-pointer glass-card material-card-cell home-card h-full"
+                    data-band={theme.band}
+                    style={style}
                     onClick={() => onViewFile(file)}
                     data-testid={`link-file-${file.id}`}
                   >
-                    <CardContent className="p-2.5 flex flex-col h-full">
-                      {/* Header */}
-                      <div className="flex justify-between items-start mb-1.5">
-                        <div className={`p-1.5 rounded-lg bg-gradient-to-br ${iconBg} border ${iconBorder} shadow-md transition-all group-hover:scale-110 relative z-10`}>
-                          <Icon className="w-4 h-4 text-white drop-shadow-lg" />
-                        </div>
-                        <Badge
-                          className="text-[11px] font-bold bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-sm border-0 px-1.5 py-0 h-5 group-hover:from-gray-900 group-hover:to-black transition-all duration-300"
-                        >
-                          {getClassroomLabel(classroom, true)}
-                        </Badge>
-                      </div>
+                    <div className="home-card-media">
+                      <img
+                        src={`/api/design-assets/${coverIdFor(file.cover, classroom)}/thumb`}
+                        alt=""
+                        width={480}
+                        height={320}
+                        loading="lazy"
+                        decoding="async"
+                        onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+                        // Review #381: egy korábbi hiba után a lista frissítése új borítót hozhat — a sikeres betöltés újra mutatja.
+                        onLoad={(e) => { e.currentTarget.style.visibility = ""; }}
+                        data-testid={`thumb-file-${file.id}`}
+                      />
+                      <span className="home-card-emblem" data-shape={theme.shape} title={theme.name} aria-hidden>
+                        <BandIcon className="w-4 h-4" />
+                      </span>
+                      <span className="home-card-grade">{getClassroomLabel(classroom, true)}</span>
+                    </div>
+                    <CardContent className="home-card-body">
                       {isCurrent(file.curriculum, today) && (
                         <span
-                          className="self-start mb-1 inline-flex items-center rounded-full bg-emerald-700 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white"
+                          className="home-card-current"
                           title={displayTopic(file.curriculum?.label) ?? undefined}
                           data-testid={`badge-current-${file.id}`}
                         >
                           Most tanuljuk
                         </span>
                       )}
-
-                      {/* Content */}
-                      <div className="flex-1 mb-1.5">
-                        <h3 className="text-sm font-bold text-orange-500 mb-0.5 line-clamp-2 group-hover:text-black transition-all duration-300 drop-shadow-lg leading-tight">
-                          {file.title}
-                        </h3>
-                        <p className="text-xs text-orange-400 font-medium line-clamp-2 group-hover:text-black transition-all duration-300 leading-tight">
-                          {file.description || "Kattints a megtekintéshez"}
-                        </p>
-                      </div>
-
-                      {/* Footer */}
-                      <div className={`flex items-center justify-between pt-1.5 border-t ${iconBorder}`}>
+                      <h3 className="home-card-title line-clamp-2">{file.title}</h3>
+                      <p className="home-card-desc line-clamp-2">{file.description || "Kattints a megtekintéshez"}</p>
+                      <div className="home-card-footer">
                         <LikeButton
                           materialId={file.id}
                           initialLikeStatus={batchLikesData?.[file.id]}
                           suppressCheck={batchLikesLoading}
+                          className="home-card-like"
                         />
-                        <div
-                          className={`w-6 h-6 rounded-full bg-gradient-to-r ${badgeGradient} flex items-center justify-center transition-transform duration-200 group-hover:scale-110`}
-                        >
-                          <ArrowRight className="w-3 h-3 text-white" />
-                        </div>
+                        <span className="home-card-go" aria-hidden>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </span>
                       </div>
                     </CardContent>
                   </Card>

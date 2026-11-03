@@ -110,7 +110,55 @@ export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typ
   }
 }
 
+/** Spec 2026-11-03-fooldal-boritokartyak: a főoldali kártya bélyegképe (3:2) — a borító 1200×800-as, ~100 KB-os WebP-je helyett. */
+export const THUMB_WIDTH = 480;
+export const THUMB_HEIGHT = 320;
+/**
+ * Review #381 (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c, GHSA-wq5f-xc86-pv6w): a sharp ≥ 0.35.5 a javított libvips / libheif / librsvg
+ * könyvtárakkal; mélységi védelemként a nem használt, kockázatos dekódolók tiltva — a katalógus csak WebP (és JPEG/PNG forrás) képet tárol.
+ */
+const BLOCKED_LOADERS = ["VipsForeignLoadNsgif", "VipsForeignLoadTiff", "VipsForeignLoadVips", "VipsForeignLoadHeif", "VipsForeignLoadSvg"];
+let sharpLoad: Promise<typeof import("sharp")["default"]> | null = null;
+function loadSharp() {
+  sharpLoad ??= import("sharp").then(({ default: sharp }) => { sharp.block({ operation: BLOCKED_LOADERS }); return sharp; });
+  return sharpLoad;
+}
+export async function makeThumbnail(bytes: Buffer): Promise<Buffer> {
+  const sharp = await loadSharp();
+  return sharp(bytes, { failOn: "error" }).resize(THUMB_WIDTH, THUMB_HEIGHT, { fit: "cover" }).webp({ quality: 70 }).toBuffer();
+}
+/** Lenyomat → bélyegkép; a legrégebbi kiesik (≈ 400 × 15 KB). A lenyomat a képpel együtt változik, így nem avul el. */
+const thumbCache = new Map<string, Buffer>();
+const THUMB_CACHE_MAX = 400;
+
 export const designAssetsRouter = Router();
+designAssetsRouter.get("/:id/thumb", async (req, res) => {
+  const id = req.params.id;
+  if (!ID.test(id)) return res.status(400).json({ message: "Érvénytelen képazonosító." });
+  try {
+    const [meta] = await db.select({ sha256: designAssets.sha256 }).from(designAssets).where(eq(designAssets.id, id));
+    if (!meta) return res.status(404).json({ message: "Nincs ilyen kép." });
+    const etag = `"${meta.sha256}-t${THUMB_WIDTH}"`;
+    res.set({ "Cache-Control": "public, max-age=604800", ETag: etag, "X-Content-Type-Options": "nosniff" });
+    if (req.headers["if-none-match"] === etag) return res.status(304).end();
+    let thumb = thumbCache.get(meta.sha256);
+    if (!thumb) {
+      const [row] = await db.select({ sha256: designAssets.sha256, bytes: designAssets.bytes }).from(designAssets).where(eq(designAssets.id, id));
+      if (!row) { res.removeHeader("ETag"); res.set("Cache-Control", "no-store"); return res.status(404).json({ message: "Nincs ilyen kép." }); }
+      thumb = await makeThumbnail(row.bytes);
+      thumbCache.set(row.sha256, thumb);
+      if (thumbCache.size > THUMB_CACHE_MAX) thumbCache.delete(thumbCache.keys().next().value!);
+      res.set("ETag", `"${row.sha256}-t${THUMB_WIDTH}"`);
+    }
+    return res.type("image/webp").send(thumb);
+  } catch (error) {
+    logger.error("[design-assets] A bélyegkép nem készíthető:", error);
+    // Review #381: a hibaválasz nem kerülhet egy hétre gyorsítótárba a kép ETag-jével.
+    res.removeHeader("ETag");
+    res.set("Cache-Control", "no-store");
+    return res.status(500).json({ message: "A bélyegkép most nem érhető el." });
+  }
+});
 designAssetsRouter.get("/:id", async (req, res) => {
   const id = req.params.id;
   if (!ID.test(id)) return res.status(400).json({ message: "Érvénytelen képazonosító." });
