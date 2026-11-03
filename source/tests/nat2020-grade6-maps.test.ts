@@ -26,8 +26,9 @@ const norm = (text: string) => text.replace(/\s+/g, " ").trim();
 
 function readExtract(name: string): string {
   assert.match(name, EXTRACT_NAME, `nem kivonat-fájlnév: ${name}`);
-  const file = path.resolve(extractsDir, name);
-  assert.equal(path.dirname(file), extractsDir, `a kivonat a mappán kívülre mutat: ${name}`);
+  // realpath: a symlink with a valid name must not smuggle in a file from outside extracts/ (review #392).
+  const file = fs.realpathSync(path.resolve(extractsDir, name));
+  assert.equal(path.dirname(file), fs.realpathSync(extractsDir), `a kivonat a mappán kívülre mutat: ${name}`);
   // Git stores LF; a Windows checkout may have CRLF — quotes are compared line-ending independently.
   return fs.readFileSync(file, "utf8").replace(/\r\n?/g, "\n");
 }

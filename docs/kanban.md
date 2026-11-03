@@ -28,14 +28,14 @@ emlékezetből soha ne jelents státuszt, mindig a `list` kimenetét idézd.
 cd "$(git rev-parse --show-toplevel)"    # a repó gyökeréből!
 K="$HERMES_KANBAN_CLI"                    # a saját gépen: …/hermes-kanban-workflow/scripts/kanban.mjs
 
-node --no-warnings $K list                         # tábla lekérdezése
-node --no-warnings $K add --title "BUG(...): rövid leírás"
-node --no-warnings $K start <id>                   # todo -> doing
-node --no-warnings $K note <id> "bizonyíték: PR, SHA, mérés"
-node --no-warnings $K review <id>                  # doing -> review
-node --no-warnings $K done <id>                    # review -> done
-node --no-warnings $K show <id>                    # előzmények
-node --no-warnings $K stats                        # összesítő
+node --no-warnings "$K" list                         # tábla lekérdezése
+node --no-warnings "$K" add --title "BUG(...): rövid leírás"
+node --no-warnings "$K" start <id>                   # todo -> doing
+node --no-warnings "$K" note <id> "bizonyíték: PR, SHA, mérés"
+node --no-warnings "$K" review <id>                  # doing -> review
+node --no-warnings "$K" done <id>                    # review -> done
+node --no-warnings "$K" show <id>                    # előzmények
+node --no-warnings "$K" stats                        # összesítő
 ```
 
 ## A munkafolyamat szabálya

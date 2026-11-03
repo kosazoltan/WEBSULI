@@ -5,22 +5,21 @@ Munkakönyvtár: repó gyökér, a Node-lépések `source/`-ban. Ág: `chore/bef
 ## T1: natív-architektúra ellenőrző — `source/scripts/check-native-arch.mjs`
 
 - Export: `checkNativeArch()` → `{ target: "<platform>-<arch>", results: [{ name, ok, detail }] }`.
-- Ellenőrzött modulok (mindegyik tényleges betöltéssel / futtatással):
-  - `esbuild` (gyökér): `require("esbuild").transformSync("let a=1")`;
-  - `tsx` beágyazott esbuild: `createRequire(require.resolve("tsx/package.json"))` → ugyanez, ha a
-    `tsx/node_modules/esbuild` létezik;
-  - `rollup`: `require("rollup/parseAst").parseAst("1")`;
-  - `sharp`: `require("sharp").versions`;
-  - `better-sqlite3`: `new (require("better-sqlite3"))(":memory:").prepare("select 1 as x").get()`.
-- Hiba esetén a `detail` a hibaüzenet első sora.
+- **Minden próba külön Node-folyamatban** (`spawnSync(process.execPath, ["-e", …])`, `cwd: source/`) — egy
+  folyamatba töltött több natív addon Windows-on kilépéskor időnként `0xC0000374`-gyel összeomlik (csapda C-09).
+  Tilos a modulokat az ellenőrző vagy a teszt saját folyamatába `require`-elni.
+- Próbák (6, mindegyik tényleges betöltéssel / futtatással, sikerkor egy sor a stdout-on):
+  `esbuild` (`transformSync`), `tsx` (feloldás — hiánya diagnózis, nem összeomlás), `tsx/esbuild` (a tsx saját
+  esbuildja, ha van), `rollup` (`rollup/parseAst`), `sharp` (`versions`), `better-sqlite3` (`:memory:` lekérdezés).
+- Hiba esetén a `detail` a gyerekfolyamat stderr-jének első hibasora, vagy a kilépési kód.
 - CLI-mód (`node scripts/check-native-arch.mjs`): soronként `OK|HIBA <név> — <detail>`; bármely hibánál
   `Javítás: npm ci` (win32-n `npm.cmd ci`) a `source/` mappában, exit 1; különben exit 0.
-- **Ellenőrzés:** `cd source && node scripts/check-native-arch.mjs` → exit 0, 5 `OK` sor.
+- **Ellenőrzés:** `cd source && node scripts/check-native-arch.mjs` → exit 0, 6 `OK` sor; 25 egymás utáni futás → 0 hiba.
 
 ## T2: teszt — `source/tests/native-arch.test.ts`
 
-- Importálja a `checkNativeArch`-ot (`../scripts/check-native-arch.mjs`), és minden eredményre
-  `assert.ok(r.ok, \`${r.name} (${target}): ${r.detail}\`)`.
+- **Nem importálja** a checkert: a CLI-t külön folyamatként indítja (`spawnSync`), bukáskor a teljes kimenetet kiírja.
+- Elvárás: kilépési kód 0; a kiírt cél pontosan `${process.platform}-${process.arch}`; mind a 6 próba neve `OK` sorral szerepel.
 - **Ellenőrzés:** `cd source && npx.cmd tsx --test tests/native-arch.test.ts` → pass 1.
 
 ## T3: `source/package.json`

@@ -17,6 +17,12 @@ EXPECTED_MAPS = {
     "elo_idegen_nyelv_F_egyben.json",
 }
 EXTRACT_NAME = re.compile(r"^[A-Za-z0-9_-]+(?:_[0-9]+)*\.grade6\.txt$")
+GRADE_7_8_BLOCK = "A 7–8. évfolyam tananyaga"
+TANMENET_MAP = "OH-MAT06TA_matematika_6_tanmenet.json"
+TANMENET_TOPICS = [
+    "EGÉSZ SZÁMOK, OSZTHATÓSÁG", "TÖRTEK", "GEOMETRIA, TENGELYES TÜKRÖZÉS", "ARÁNY, SZÁZALÉK, SZÖVEGES FELADATOK",
+    "KERÜLET, TERÜLET, FELSZÍN, TÉRFOGAT", "STATISZTIKA", "ÉV VÉGI ISMÉTLÉS",
+]
 
 
 def norm(text: str) -> str:
@@ -36,6 +42,11 @@ def read_extract(name: str) -> str | None:
 def main() -> int:
     files = {p.name for p in MAPS.glob("*.json")}
     errors = 0
+    # Same rules as source/tests/nat2020-grade6-maps.test.ts (review #392): no grade 7–8 block in any extract.
+    for extract in sorted(EXTRACTS.glob("*.txt")):
+        if GRADE_7_8_BLOCK in extract.read_text(encoding="utf-8"):
+            print(f"FAIL {extract.name} contains the grade 7–8 block")
+            errors += 1
     if files != EXPECTED_MAPS:
         print(f"FAIL maps missing={sorted(EXPECTED_MAPS - files)} extra={sorted(files - EXPECTED_MAPS)}")
         errors += 1
@@ -48,6 +59,12 @@ def main() -> int:
         if len(concepts) < 5:
             print(f"FAIL {name} concepts={len(concepts)}")
             errors += 1
+        if name == TANMENET_MAP:
+            headings = {str(c.get("quote", "")).replace("\r\n", "\n").split("\n")[0].strip() for c in concepts}
+            for topic in TANMENET_TOPICS:
+                if topic not in headings:
+                    print(f"FAIL {name} missing tanmenet topic {topic}")
+                    errors += 1
         ids = [c.get("id") for c in concepts]
         if len(ids) != len(set(ids)):
             print(f"FAIL {name} duplicate ids")
