@@ -43,6 +43,9 @@ betöltéskori újraválasztás nem írhatja felül a kézzel beállított képe
   - `computeLessonArt(…, pinned)` / `withLessonArt`: ha a lecke korábbi `art.picture`-je `cover-l-*`, a táblában megvan és a lecke
     mostani sávjáé, mentéskor megmarad (a kézi kép az újraválasztás után is ugyanaz, átnevezés után is). Sávváltáskor (más
     korosztály) nem marad — az a korosztálynak nem illő stílus lenne.
+  - Review #382: ha a mentendő json-ban nincs `art.picture` (a Stúdió-javítás jelöltje modellkimenet, az opcionális `art`-ot
+    kihagyhatja), a `withLessonArt` a tárolt lecke `art.picture`-jét veszi (a seed meglévő leckénél az azonosítója; ugyanazzal a
+    lekérdezővel, a javítás tranzakciójában) — így átnevező javításnál sem vész el a kézi kép.
 - **Éles csere** (`scripts/design-assets/pin-lesson-covers.mts`), a deploy UTÁN (amikor a kép a táblában és a statikus fájl a CDN-en):
   egy író tranzakcióban `SELECT … FOR UPDATE`, mentés (`--write <mentés.json>`: az érintett sorok teljes `json`-ja + `art`-lista),
   `jsonb_set(json, '{art}', art || {"picture": id})`, majd ugyanabban a tranzakcióban leckénként az `art` nélküli kanonikus hash

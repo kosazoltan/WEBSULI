@@ -3,9 +3,9 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
-import { designAssets } from "../shared/schema";
+import { designAssets, lessons } from "../shared/schema";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
 import { type DesignAsset } from "../shared/design-assets";
 import { computeLessonArt } from "../shared/lesson-art-compute";
@@ -103,7 +103,13 @@ export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typ
     // Arculati bank (S1): a lecke témaköre (tantárgy, évfolyam, cím) → a témakör borítója, ha az a táblában megvan.
     // A tiszta mag a backfill-szkripttel közös (docs/specs/2026-10-18-arculat-backfill.md).
     // Spec 2026-11-03-leckeborito: a kézzel beállított leckeborító (korábbi `art.picture`) az újraválasztás után is megmarad.
-    const previous = previousArt && typeof previousArt === "object" ? (previousArt as { picture?: unknown }).picture : undefined;
+    let previous = previousArt && typeof previousArt === "object" ? (previousArt as { picture?: unknown }).picture : undefined;
+    // Review #382: a javítási jelölt (modellkimenet) kihagyhatja az opcionális `art`-ot — ilyenkor a tárolt lecke képe számít
+    // (a seed meglévő leckénél az azonosítója; ugyanabban a tranzakcióban olvasva). Új leckénél nincs ilyen sor.
+    if (typeof previous !== "string") {
+      const [row] = await executor.select({ picture: sql<string | null>`${lessons.json}->'art'->>'picture'` }).from(lessons).where(eq(lessons.id, seed));
+      previous = row?.picture ?? undefined;
+    }
     const art = computeLessonArt(lesson, seed, stored, undefined, previous) ?? {};
     return (Object.keys(art).length ? { ...rest, art } : rest) as T;
   } catch (error) {
