@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import sharp from "sharp";
-import { makeThumbnail, thumbnailFor, THUMB_HEIGHT, THUMB_WIDTH } from "../server/design-assets";
+import { forgetThumb, makeThumbnail, thumbnailFor, THUMB_HEIGHT, THUMB_WIDTH } from "../server/design-assets";
 
 test("spec 2026-11-03-fooldal-sebesseg: ugyanarra az azonosítóra 10 egyidejű kérés → egyetlen betöltés és generálás; utána memóriából", async () => {
   let loads = 0, makes = 0;
@@ -40,4 +40,23 @@ test("más képarányú (16:9-es hős-) képből is 3:2-es, levágott bélyegké
   const meta = await sharp(await makeThumbnail(hero)).metadata();
   assert.equal(meta.width, THUMB_WIDTH);
   assert.equal(meta.height, THUMB_HEIGHT);
+});
+
+test("review #385: a generálás közbeni érvénytelenítés után az elavult bélyegkép nem kerül a gyorsítótárba", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => { release = r; });
+  let loads = 0;
+  const load = async () => { loads++; if (loads === 1) { await gate; return { sha256: "regi", bytes: Buffer.from("r") }; } return { sha256: "uj", bytes: Buffer.from("u") }; };
+  const make = async (bytes: Buffer) => Buffer.from(`thumb-${bytes.toString()}`);
+  const stale = thumbnailFor("cover-verseny-proba", load, make);
+  await new Promise((r) => setImmediate(r));
+  forgetThumb("cover-verseny-proba"); // a képszinkron közben felülírta a sort
+  release();
+  assert.equal((await stale)?.sha256, "regi", "a már futó kérés a saját eredményét kapja");
+  const fresh = await thumbnailFor("cover-verseny-proba", load, make);
+  assert.equal(fresh?.sha256, "uj", "a következő kérés újra betölt, nem az elavult példányt kapja");
+  assert.equal(fresh?.buf.toString(), "thumb-u");
+  assert.equal(loads, 2);
+  assert.equal((await thumbnailFor("cover-verseny-proba", load, make))?.sha256, "uj", "az új példány már a gyorsítótárból jön");
+  assert.equal(loads, 2);
 });

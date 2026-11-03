@@ -34,6 +34,10 @@
       "destination": "https://websuli-api-eu.onrender.com/download-source-static"
     },
     {
+      "source": "/design-thumbs/:path*",
+      "destination": "https://websuli-api-eu.onrender.com/design-thumbs/:path*"
+    },
+    {
       "source": "/:path*",
       "destination": "/index.html"
     }
@@ -60,6 +64,12 @@
     },
     {
       "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/design-thumbs/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]

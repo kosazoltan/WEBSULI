@@ -173,21 +173,25 @@ async function withSharpSlot<T>(fn: () => Promise<T>): Promise<T> {
   sharpBusy++;
   try { return await fn(); } finally { sharpBusy--; sharpWaiting.shift()?.(); }
 }
-export function forgetThumb(id: string) { thumbById.delete(id); }
+/** Review #385: a futó generálás regisztrációját is törli — annak elavult eredménye így nem kerülhet vissza a gyorsítótárba. */
+export function forgetThumb(id: string) { thumbById.delete(id); thumbInflight.delete(id); }
 /** Memóriatalálat DB nélkül; egy azonosítót egyszerre csak egyszer generál (az egyidejű kérések ugyanazt a promise-t kapják). */
 export function thumbnailFor(id: string, load: (id: string) => Promise<{ sha256: string; bytes: Buffer } | null> = loadAssetBytes, make: (bytes: Buffer) => Promise<Buffer> = makeThumbnail): Promise<Thumb | null> {
   const hit = thumbById.get(id);
   if (hit) return Promise.resolve(hit);
   const running = thumbInflight.get(id);
   if (running) return running;
-  const job = (async () => {
+  const job: Promise<Thumb | null> = (async () => {
     const row = await load(id);
     if (!row) return null;
     const thumb = { sha256: row.sha256, buf: await withSharpSlot(() => make(row.bytes)) };
-    thumbById.set(id, thumb);
-    if (thumbById.size > THUMB_CACHE_MAX) thumbById.delete(thumbById.keys().next().value!);
+    // Csak a még regisztrált (közben nem érvénytelenített) generálás írhat a gyorsítótárba.
+    if (thumbInflight.get(id) === job) {
+      thumbById.set(id, thumb);
+      if (thumbById.size > THUMB_CACHE_MAX) thumbById.delete(thumbById.keys().next().value!);
+    }
     return thumb;
-  })().finally(() => thumbInflight.delete(id));
+  })().finally(() => { if (thumbInflight.get(id) === job) thumbInflight.delete(id); });
   thumbInflight.set(id, job);
   return job;
 }

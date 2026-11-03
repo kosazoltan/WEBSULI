@@ -39,3 +39,12 @@ test("a manifestben lévő kép statikus URL-t kap, a többi a futásidejű vég
   assert.equal(thumbUrlFor("cover-gorog-drama", manifest), "/design-thumbs/cover-gorog-drama.e1c9cd69.webp");
   assert.equal(thumbUrlFor("cover-auto-123", manifest), "/api/design-assets/cover-auto-123/thumb");
 });
+
+test("review #385: a Vercel kliensbuildje is elkészíti a bélyegképeket, és a hiányzót a Renderhez továbbítja", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const vercel = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8"));
+  const clientBuild: string = pkg.scripts[vercel.buildCommand.replace(/^npm run /, "")];
+  assert.match(clientBuild, /^node scripts\/build-design-thumbs\.mjs && vite build$/);
+  const sources = vercel.rewrites.map((r: { source: string }) => r.source);
+  assert.ok(sources.indexOf("/design-thumbs/:path*") >= 0 && sources.indexOf("/design-thumbs/:path*") < sources.indexOf("/:path*"), "a catch-all előtt");
+});
