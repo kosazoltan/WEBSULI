@@ -21,8 +21,8 @@ import { applyVisualPatch } from "../visual-patch";
 import { stripUngroundedAnimateLabels } from "../grounding";
 import { ensureSectionVisuals } from "../section-visuals";
 import { scoringRulesOf } from "../../../shared/scoring-rules";
-import { bankStaticPrefix, buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceCheckpoint } from "../experience-builder";
-import { answerKeysFor, answerKeyTestsEnabled } from "../answer-key-writer";
+import { bankStaticPrefix, buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceBuildDeps, type ExperienceCheckpoint } from "../experience-builder";
+import { answerKeysFor, answerKeyTestsEnabled, type AnswerKeyContext } from "../answer-key-writer";
 import { answerKeyNotes } from "../../../shared/answer-key-tests";
 import { quizBlindProblems } from "../quiz-blind-check";
 import { lessonLengthBudget } from "../../../shared/lesson-length";
@@ -249,6 +249,24 @@ function freshJsonCall(fresh: SingleRunDeps["fresh"], label: string, telemetry?:
     const reply = await timed(telemetry, "ellenőrzés", () => fresh(freshSystemPrompt("check"), { effort: checkEffort() }).send([text(`${label}\n${system}\n\n${user}`)]), { fresh: true });
     if (reply.truncated) throw new Error("A válasz elérte a kimeneti keretet és levágódott.");
     return parseModelJson(reply.text).json;
+  };
+}
+
+/**
+ * Spec 2026-11-03-javitas-bank-megorzes: a banképítő vak minőségkapui egy helyen — a gyártás és a lecke-javítás is ezt kapja
+ * (mérve: a nélkülük gyártott javítási bank a helyes vak diákválaszok 66,5%-át fogadta el a korábbi 81,3% helyett).
+ * Kulcsmentes, friss beszélgetésben; vészfék: STUDIO_ANSWER_KEY_TESTS=0, STUDIO_QUIZ_BLIND=0.
+ */
+export function bankQualityGates(fresh: SingleRunDeps["fresh"], ctx: AnswerKeyContext, teachingOf: (sectionIndex: number) => string, log: (message: string) => void,
+  telemetry?: TelemetryRecorder, quizBlindCache = new Map<string, string | null>()): Pick<ExperienceBuildDeps, "answerKeys" | "quizBlind"> {
+  return {
+    ...(answerKeyTestsEnabled() ? { answerKeys: answerKeysFor(ctx, freshJsonCall(fresh, "VÁLASZKULCS-TESZTEK (a pontozó próbája).", telemetry), (w) => log(`Válaszkulcs-teszt: ${w}`)) } : {}),
+    ...(process.env.STUDIO_QUIZ_BLIND !== "0" ? {
+      quizBlind: (quiz: Array<{ id: string; question: string; options: string[]; correctIndex: number }>, sectionIndex: number) =>
+        quizBlindProblems(quiz, teachingOf(sectionIndex),
+          freshJsonCall(fresh, "KVÍZ VAK ELLENŐRZÉSE (a kulcsot szándékosan nem kapod; opciónként ítélj).", telemetry),
+          quizBlindCache, (w) => log(`Kvíz-előszűrő ${sectionIndex + 1}. fejezet: ${w}`)),
+    } : {}),
   };
 }
 
@@ -673,18 +691,20 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const quizBlindCache = new Map<string, string | null>();
   // J1/J3: a válaszkulcs-tesztek kulcsmentes, friss beszélgetésben; a pontozóval elvben megkülönböztethetetlen hibás próbák (nem blokkolók)
   // a naplóba és a telemetriába kerülnek.
-  const writeKeys = answerKeysFor(
+  // Spec 2026-11-03-javitas-bank-megorzes: a kapuk a közös `bankQualityGates`-ből (a lecke-javítás is ezt kapja); a kvíz-előszűrő a
+  // mindenkori bankalap (`buildBank` `base`) tanítását olvassa.
+  let teachingBase: Lesson = lesson;
+  const gates = bankQualityGates(deps.fresh,
     { classroom: promptMap.classroom, concepts: concepts.map((c) => ({ id: c.localId, term: c.term, definition: (c as { definition?: string }).definition })) },
-    freshJsonCall(deps.fresh, "VÁLASZKULCS-TESZTEK (a pontozó próbája).", telemetry),
-    (w) => log(`[EGYFUTÁS] Válaszkulcs-teszt: ${w}`),
-  );
+    (sectionIndex) => teachingTextOf(teachingBase.sections[sectionIndex]), (message) => log(`[EGYFUTÁS] ${message}`), telemetry, quizBlindCache);
+  const writeKeys = gates.answerKeys;
   // Spec 2026-10-21-ciklus1-csoportos-szigoritas: analitikai archívum — a válaszkulcs-esetek feladatonként a job kimenetébe (a drága
   // futások offline visszamérhetők; legfeljebb 200 feladat, a szövegek vágva). A folytatott futás a mentett archívumot bővíti.
   // Review #353: fejezet + modell-azonosító a kulcs (a csomagok azonosítói csak a csomagon belül egyediek).
   const archiveKey = (sectionIndex: number, id: string) => `${sectionIndex}:${id}`;
   const keyArchive = new Map<string, unknown>((Array.isArray(output.answerKeyArchive) ? output.answerKeyArchive as Array<{ id: string; sectionIndex: number }> : [])
     .map((e) => [archiveKey(e.sectionIndex, e.id), e]));
-  const answerKeysWithNotes: typeof writeKeys = async (tasks, sectionIndex) => {
+  const answerKeysWithNotes = writeKeys && (async (tasks: Parameters<typeof writeKeys>[0], sectionIndex: number) => {
     const keys = await writeKeys(tasks, sectionIndex);
     for (const t of tasks) {
       const k = keys.get(t.id);
@@ -696,7 +716,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     telemetry.gates.answerKeyNotes += notes.length;
     for (const n of notes) log(`[EGYFUTÁS] Válaszkulcs-teszt (tájékoztatás) ${sectionIndex + 1}. fejezet: ${n}`);
     return keys;
-  };
+  });
   // Review #260: a banképítő utolsó kísérletének nyitott aritmetikai leletei — a végkapu előtt a választásos kapu kezeli őket.
   // Review #263: folytatáskor a mentett nyitott leletek is (kész banknál a banképítés kimarad; a végkapu a már nem létező tételt figyelmen kívül hagyja).
   const savedFindings = Array.isArray(output.bankOpenFindings) ? output.bankOpenFindings as Array<{ sectionIndex: number; itemId: string; message: string }> : [];
@@ -705,6 +725,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     // Spec 2026-10-16-gyartas-haladas: a bank a leghosszabb szakasz — egységenként és javító kísérletenként jelez a felületnek.
     const label = extra.reviewFeedback?.length ? "Bankjavítás a lektor jelzései alapján" : "Gyakorlóbank";
     let progress = { done: 0, total: base.sections.length };
+    teachingBase = base;
     // Spec 2026-10-19 (S6/S5, kapcsolós): a bank a katalógus-poolt és a bank-szerep memória-blokkját kapja; üresen semmi.
     const catalogPool = await ensureCatalogPool("animator");
     const memoryBlock = snapshotPromptBlock(await ensureSubjectMemory("animator"), "bank");
@@ -724,13 +745,8 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
       // A régi útról áthozott, alapból bekapcsolt minőségkapuk — kulcsmentes, friss beszélgetésben, a döntés a kódé:
       // válaszkulcs-tesztek (helyes és hibás próbaválaszok a valódi pontozón; vészfék: STUDIO_ANSWER_KEY_TESTS=0) és a kvíz vak
       // előszűrője (kulcs nélküli, opciónkénti ítélet; vészfék: STUDIO_QUIZ_BLIND=0).
-      ...(answerKeyTestsEnabled() ? { answerKeys: answerKeysWithNotes } : {}),
-      ...(process.env.STUDIO_QUIZ_BLIND !== "0" ? {
-        quizBlind: (quiz: Array<{ id: string; question: string; options: string[]; correctIndex: number }>, sectionIndex: number) =>
-          quizBlindProblems(quiz, teachingTextOf(base.sections[sectionIndex]),
-            freshJsonCall(deps.fresh, "KVÍZ VAK ELLENŐRZÉSE (a kulcsot szándékosan nem kapod; opciónként ítélj).", telemetry),
-            quizBlindCache, (w) => log(`[EGYFUTÁS] Kvíz-előszűrő ${sectionIndex + 1}. fejezet: ${w}`)),
-      } : {}),
+      ...(answerKeysWithNotes ? { answerKeys: answerKeysWithNotes } : {}),
+      ...(gates.quizBlind ? { quizBlind: gates.quizBlind } : {}),
       ...(checkpoint ? { checkpoint } : {}),
       ...(extra.previous ? { previous: extra.previous } : {}),
       ...(extra.reviewFeedback?.length ? { reviewFeedback: extra.reviewFeedback } : {}),
