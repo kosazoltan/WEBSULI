@@ -31,7 +31,8 @@ test("bank-packet-autofix: formai hibák kódból, tartalom érintetlen", () => 
   assert.equal(p.methods[0].correctIndex, 1, "a helyes opció indexe követi az elhagyást");
   const task = p.tasks[0] as unknown as OpenTask;
   assert.deepEqual(task.required[0], ["szorzás"], "a szótő-illesztés (szorzást→szorzás) már felismeri, nincs mit hozzáadni");
-  assert.ok(task.required[1].includes("osszeadaskent"), "a minta ragozott alakja a rubrikába került");
+  // Spec 2026-11-03-pontozo-szoalak (dokumentált spec-változás): a szóalak-tűrés az „összeadásként” alakot már felismeri, mint a fenti „szorzást”.
+  assert.deepEqual(task.required[1], ["összeadás"], "a szóalak-tűrés (összeadásként→összeadás) már felismeri, nincs mit hozzáadni");
   assert.equal(task.minWords, 5, "a minWords NEM csökken (spec: rövid minta → a modell ír hosszabbat)");
   assert.equal(evaluateOpenAnswer(task.sample, task).score, 1, "a minta teljes pontot ér a javított rubrikán");
   assert.deepEqual(p.quiz[0].coversConceptIds, ["c1", "c2"], "két címke: a modell dolga, nem az eszközé");
@@ -40,7 +41,8 @@ test("bank-packet-autofix: formai hibák kódból, tartalom érintetlen", () => 
   assert.deepEqual(p.quiz[1].feedbackPerOption, ["f1", "f3", "f4"]);
   assert.equal((p.quiz[0] as { intent?: string }).intent, "recall");
   assert.equal((p.quiz[1] as { intent?: string }).intent, "apply");
-  assert.ok(fixes.length >= 5, fixes.join("; "));
+  // Spec 2026-11-03-pontozo-szoalak: a mintaalak-javítás itt már nem kell — a megmaradt négy formai javítás pontosan (szigorúbb, mint a ≥).
+  assert.deepEqual(fixes, ["m1: ismétlődő válaszlehetőség elhagyva", "q2: ismétlődő válaszlehetőség elhagyva", "q1: intent=recall", "q2: intent=apply"], fixes.join("; "));
   assert.equal(p.tasks[0].q, "Mi a szorzás?");
 });
 
@@ -107,4 +109,17 @@ test("az eszköz-skillek a megfelelő szerep-skillekben szerepelnek", () => {
   // Only producers get tool text: the lektor/author/extract/ocr calls stay lean (token discipline, 2026-09-19).
   for (const role of ["extract", "ocr", "author", "lektor"] as const) assert.ok(!ROLE_SKILLS[role].includes("## Eszközök"), role);
   assert.ok(ROLE_SKILLS.bank.includes("SZÓ SZERINT a fejezet példáját követi"), "a bank az irányt/lépéseket a példából másolja");
+});
+
+test("spec 2026-11-03-pontozo-szoalak: a pontozó által NEM felismert mintaalakot az autofix továbbra is a rubrikába teszi (temetni ← temetés)", () => {
+  const packet = {
+    methods: [], quiz: [], glossary: [],
+    tasks: [{ id: "t1", sectionIndex: 0, coversConceptIds: ["c1"], q: "Mi volt a rokonok kötelessége?", required: [["temetni"]], bonus: [], minWords: 3, needsSentence: false, sample: "A temetés a rokonok kötelessége volt.", mode: "written" }],
+  };
+  assert.equal(evaluateOpenAnswer(packet.tasks[0].sample, packet.tasks[0] as unknown as OpenTask).score, 0, "a szóalak-tűrés ezt az alakot nem ismeri fel");
+  const { packet: fixed, fixes } = autofixBankPacket(packet, { sectionIndex: 0, allowedConceptIds: ["c1"] });
+  const task = (fixed as typeof packet).tasks[0] as unknown as OpenTask;
+  assert.ok(task.required[0].includes("temetes"), "a minta szóalakja a rubrikába került");
+  assert.equal(evaluateOpenAnswer(task.sample, task).score, 1);
+  assert.ok(fixes.some((f) => f.includes("a minta szóalakja a rubrikába került")), fixes.join("; "));
 });

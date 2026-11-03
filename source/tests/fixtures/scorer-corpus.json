@@ -377,10 +377,8 @@
       "expected": 0
     },
     {
-      "name": "ismert korlát: összehasonuló -val/-vel (fotoszintézissel)",
-      "source": "R5 korpusz — ismert korlát: a -val/-vel hasonulás ékezet nélküli normalizálás mellett biztonságosan nem ismerhető fel (review #334: barrel/bar, reggel/rég); a rubrikában a ragos alak adható meg",
-      "knownGap": true,
-      "desired": 1,
+      "name": "összehasonuló -val/-vel (fotoszintézissel) — korábban ismert korlát",
+      "source": "R5 korpusz; megoldva: spec 2026-11-03-pontozo-szoalak (a ≥ 5 betűs szóval kezdődő alak talál; a review #334 negatív esetei változatlanok)",
       "task": {
         "required": [
           [
@@ -392,7 +390,7 @@
         "sample": "A növény a fotoszintézis során cukrot készít."
       },
       "answer": "A levél fotoszintézissel készít cukrot.",
-      "expected": 0
+      "expected": 1
     },
     {
       "name": "ismert korlát: összehasonuló -val (kulccsal, kétjegyű mássalhangzó)",
