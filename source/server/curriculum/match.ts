@@ -5,7 +5,8 @@ import { SCHOOL_YEARS, schoolYearPosition } from "../../shared/school-calendar";
  * paraméterként kapja. Eredmény: a tanévbeli pozíció (0–1) és egy rövid címke.
  */
 export type TanmenetData = { about: string; plans: Array<{ grade: number; subject: string; title: string; source: string; lessons: Array<[string, string]> }> };
-export type CurriculumMatch = { pos: number; label: string; kind: "tanmenet" | "seasonal"; score: number };
+/** `subject`: a nyertes tanmenet-terv tantárgy-kulcsa (csak `tanmenet` találatnál; docs/specs/2026-11-03-fooldal-nezetek.md). */
+export type CurriculumMatch = { pos: number; label: string; kind: "tanmenet" | "seasonal"; score: number; subject?: string };
 
 const STOP = new Set([
   "tananyag", "tananyagok", "interaktiv", "osztaly", "osztalyos", "osztalyosoknak", "evfolyam", "evfolyamos", "temazaro", "felkeszito",
@@ -44,7 +45,7 @@ const SUBJECT_PATTERNS: Array<[RegExp, string[]]> = [
   [/\b(digitalis kultura|informatika|programoz|tomb|ciklus|algoritm|robot|replit|github|chatgpt|vs code)/, ["informatika"]],
   [/\b(enek|zene|nepzene|hangkoz|gitar|dal\b)/, ["enek-zene"]],
   [/\b(biblia|hittan|etika|erkolcs)/, ["hit-es-erkolcstan"]],
-  [/\b(kemia|savak?|savmaradek|ion|molekul|vegyulet|reakcio|egese?|egesi)/, ["kemia", "termeszetismeret"]],
+  [/\b(kemia|savak?|savmaradek|ion|molekul|vegyulet|reakcio|egese?\b|egesi)/, ["kemia", "termeszetismeret"]],
   [/\b(fizika|elektrom|aram|energia|hotan|homerseklet|nyomas|fogyaszto)/, ["fizika", "termeszetismeret"]],
   [/\b(foldrajz|kozephegyseg|alfold|dunantul|alpokalja|alpok|tersege|orszag|gazdasag|nagy-britannia|csehorszag|naprendszer|fold kering)/, ["foldrajz", "termeszetismeret", "kornyezetismeret"]],
   [/\b(tortenel|okor|okori|kozepkor|kiraly|kiralyok|honfoglal|egyiptom|mezopotam|hellasz|gorog|arpad|hunyadi|karoly|emberre valas|idoszamit|civiliz|kereszteny|iszlam|brankovic|identitas)/, ["tortenelem", "tarsadalmi-ismeretek"]],
@@ -177,10 +178,37 @@ function bestLesson(index: CurriculumIndex, words: string[], hintWords: string[]
       if (titleMustHit && base === 0) return;
       const extra = hintWords.reduce((s, w) => s + tokenScore(w, lesson, index.idf), 0);
       const score = lesson.weight * (base + HINT_WEIGHT * extra);
-      if (score > (best?.score ?? 0)) best = { pos: (i + 0.5) / plan.lessons.length, label: `${plan.title}: ${lesson.label}`, kind: "tanmenet", score };
+      if (score > (best?.score ?? 0)) best = { pos: (i + 0.5) / plan.lessons.length, label: `${plan.title}: ${lesson.label}`, kind: "tanmenet", score, subject: plan.subject };
     });
   }
   return best;
+}
+
+type MaterialInput = { title: string; classroom: number; hints?: readonly string[] };
+
+/** Tantárgy: kimondott név / ismert kulcsszó a címben → a cím a tanmenet-szókincs alapján → ugyanez a tartalomból. */
+function subjectCandidates(input: MaterialInput, index: CurriculumIndex) {
+  const words = [...new Set(normalizeTokens(input.title))];
+  const hintWords = [...new Set((input.hints ?? []).flatMap(h => normalizeTokens(h)))].filter(w => !words.includes(w)).slice(0, 60);
+  const subjects = subjectsOfTitle(input.title)
+    ?? subjectByVocabulary(words, input.classroom, index)
+    ?? subjectsOfTitle((input.hints ?? []).join(" "))
+    ?? subjectByVocabulary(hintWords, input.classroom, index);
+  return { words, hintWords, subjects };
+}
+
+/**
+ * Az anyag tantárgy-kulcsa a főoldali „Tantárgyanként” nézethez (docs/specs/2026-11-03-fooldal-nezetek.md): tanmenet-találatnál a
+ * terv tantárgya, különben a felismerési lánc első jelöltje; ismeretlen: null („Egyéb”).
+ */
+export function subjectOfMaterial(
+  input: MaterialInput,
+  index: CurriculumIndex,
+  /** A már kiszámolt illesztés (a lista építésekor ne fusson kétszer). */
+  match: CurriculumMatch | null = matchMaterial(input, index),
+): string | null {
+  if (match?.kind === "tanmenet" && match.subject) return match.subject;
+  return subjectCandidates(input, index).subjects?.[0] ?? null;
 }
 
 /**
@@ -192,13 +220,7 @@ export function matchMaterial(input: { title: string; classroom: number; hints?:
   if (!input.classroom) return null;
   const seasonal = seasonalMatch(input.title);
   if (seasonal) return seasonal;
-  const words = [...new Set(normalizeTokens(input.title))];
-  const hintWords = [...new Set((input.hints ?? []).flatMap(h => normalizeTokens(h)))].filter(w => !words.includes(w)).slice(0, 60);
-  // Tantárgy: kimondott név / ismert kulcsszó a címben → a cím a tanmenet-szókincs alapján → ugyanez a tartalomból.
-  const subjects = subjectsOfTitle(input.title)
-    ?? subjectByVocabulary(words, input.classroom, index)
-    ?? subjectsOfTitle((input.hints ?? []).join(" "))
-    ?? subjectByVocabulary(hintWords, input.classroom, index);
+  const { words, hintWords, subjects } = subjectCandidates(input, index);
   const accept = (plan: IndexedPlan) => plan.grade === input.classroom && (!subjects || subjects.includes(plan.subject));
   if (words.length) {
     const byTitle = bestLesson(index, words, [], accept);

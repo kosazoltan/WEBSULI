@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { schoolYearPosition } from "../shared/school-calendar";
-import { buildIndex, matchMaterial, normalizeTokens, sameStem, seasonalMatch, subjectsOfTitle, type TanmenetData } from "../server/curriculum/match";
+import { buildIndex, matchMaterial, normalizeTokens, sameStem, seasonalMatch, subjectOfMaterial, subjectsOfTitle, type TanmenetData } from "../server/curriculum/match";
+import { withCurriculum } from "../server/curriculum/index";
 import { curriculumSort, isCurrent, NOW_WINDOW } from "../client/src/lib/curriculum-order";
 import tanmenet from "../server/data/tanmenet-2020.json";
 
@@ -105,4 +106,30 @@ test("review #282: a tanmenet évfolyama a dokumentumé, nem a tankönyvkódé; 
 test("review #282: „Franciaország” földrajz, nem francia nyelv", () => {
   assert.deepEqual(subjectsOfTitle("Nagy-Britannia és Franciaország – 8. osztályos földrajz"), ["foldrajz", "termeszetismeret", "kornyezetismeret"]);
   assert.deepEqual(subjectsOfTitle("🇫🇷 8. Osztályos Francia Témazáró"), ["francia"]);
+});
+
+// Főoldali „Tantárgyanként” nézet (docs/specs/2026-11-03-fooldal-nezetek.md): az anyag tantárgy-kulcsa.
+test("tantárgy a főoldalhoz: tanmenet-találatnál a terv kulcsa, különben a felismerési lánc, ismeretlen: null", () => {
+  assert.equal(subjectOfMaterial({ title: "Az ókori Egyiptom", classroom: 5 }, index), "tortenelem");
+  assert.equal(subjectOfMaterial({ title: "8. osztály - 🫁 Légzőrendszer - Interaktív Tananyag", classroom: 8 }, index), "biologia");
+  assert.equal(matchMaterial({ title: "Have Got - Angol 5. osztály", classroom: 5 }, index), null);
+  assert.equal(subjectOfMaterial({ title: "Have Got - Angol 5. osztály", classroom: 5 }, index), "angol", "illesztés nélkül is a címből");
+  assert.equal(subjectOfMaterial({ title: "Informatika - Replit Fiók Létrehozása", classroom: 0 }, index), "informatika");
+  assert.equal(subjectOfMaterial({ title: "Medve Szabadtéri Csapatverseny", classroom: 9 }, index), null);
+});
+
+test("regresszió: az „Egészségünk” nem kémia (az „égés” minta csak szóvégen illeszkedik)", () => {
+  assert.notDeepEqual(subjectsOfTitle("4. osztály - Az emberi test - Egészségünk")?.[0], "kemia");
+  assert.deepEqual(subjectsOfTitle("Az égés feltételei")?.[0], "kemia");
+  assert.equal(subjectOfMaterial({ title: "4. osztály - 💖 Az emberi test - Egészségünk 💖", classroom: 4 }, index) === "kemia", false);
+});
+
+test("a lista minden eleme kap tantárgy-mezőt (kulcs vagy null)", async () => {
+  const out = await withCurriculum([
+    { id: "a", title: "Törtek összeadása - 5. osztály", classroom: 5 },
+    { id: "b", title: "Medve Szabadtéri Csapatverseny", classroom: 9 },
+  ]);
+  assert.equal(out[0].subject, "matematika");
+  assert.equal(out[1].subject, null);
+  assert.ok(out.every((f) => "subject" in f));
 });

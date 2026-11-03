@@ -836,6 +836,22 @@
   font-size: 12px;
   font-weight: 700;
 }
+/* Spec 2026-11-03-fooldal-nezetek: tantárgyra ugró gombok — mobilon 44 px-es érintési cél. */
+.home-subject-jump {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.home-subject-jump:hover { background: rgba(255, 255, 255, 0.26); }
+.home-subject-jump:focus-visible { outline: 2px solid #fdba74; outline-offset: 2px; }
+@media (min-width: 640px) {
+  .home-subject-jump { min-height: 32px; }
+}
 
 /* Spec 2026-11-03-hero-szponzor-2026: a főoldal fejléce — üvegpanel a kártyák nyelvén (homályosítás nélkül, olcsó rajzolás). */
 .hero-bar {
