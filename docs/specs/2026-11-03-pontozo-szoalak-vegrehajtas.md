@@ -38,7 +38,6 @@ Munkakönyvtár: `source/`. Ág: `fix/pontozo-szoalak`.
   - Negatív esetek:
     - `boldog` ↛ „boldogtalan”;
     - `jogos` ↛ „jogtalan”;
-    - `lapos` ↛ „alapos”;
     - `alap` ↛ „kalap” (4 betű);
     - `442` ↛ „4420”;
     - `sír` ↛ „sírás”.

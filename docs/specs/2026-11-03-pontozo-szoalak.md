@@ -50,8 +50,8 @@
   nélküli alakkal számolunk.
 - **Képzés vagy több toldalék:** a válasz-token `w`-vel KEZDŐDIK, hosszabb nála, és a maradék NEM fosztóképző
   (`talan|telen|tlan|tlen|atlan|etlen|lan|len|mentes`, pl. „lelkiismeret+len”). A „boldogtalan” tehát nem `boldog`.
-- **Összetett szó utótagja:** a token (vagy egy toldalékkal levágott töve) `w`-re VÉGZŐDIK, és az előtag ≥ 3 betű. Az „alapos” így nem
-  `lapos`, a „kalap” nem `alap` (4 betű, a szabály nem érvényes).
+- **Összetett szó utótagja:** a token (vagy egy toldalékkal levágott töve) `w`-re VÉGZŐDIK, és az előtag ≥ 3 betű. A „kalap” nem `alap`
+  (4 betű, a szabály nem érvényes). (Az „alapos” ↔ `lapos` a MEGLÉVŐ 1-elütés tűrés miatt ma is talál — nem e szabály hatása.)
 - **Tő szintű elütés:** a két tő távolsága ≤ 1, illetve 8 betű fölött ≤ 2, ha mindkét tő ≥ 5 betű.
 - **Változatlan kizárások:** szám, tagadószó (`nem`, `ne`, `not`, `no`) és a < 5 betűs szó: csak a régi szabályok.
 - **Tagadásőr:** ha a válasz tagadó, a minta pedig a meglévő jelek szerint nem, de tartalmaz magyar gyenge tagadószót (`sem, se, soha,
@@ -81,12 +81,28 @@
 
 - **Új `tests/score-word-forms.test.ts`:**
   - pozitív esetek a mért alakokra;
-  - negatív esetek: fosztóképző, alap/kalap, lapos/alapos, szám, rövid szó, tagadószó;
+  - negatív esetek: fosztóképző, alap/kalap, szám, rövid szó, tagadószó;
   - tagadásőr: tilos ↔ nem, minta tagadás nélkül → továbbra is fél pont.
 - **`tests/lesson-html-score.test.ts`:** új paritásesetek ugyanezekre (a meglévők változatlanok).
 - **Teljes kör:** `tsc` (app + teszt), `eslint`, `npm test`. A bukó meglévő teszt kódhibát jelez: a tesztet átírni TILOS.
 - **Mérés:** `.harness/live/matcher-proto.local.mts` és a végleges kóddal a vak készletek (tervezési, független, hibás), előtte–utána
   számokkal a PR-ban.
+
+### Dokumentált spec-változás miatt módosuló meglévő tesztek (a teljes kör első futása után, 2026-11-03)
+
+- **`tests/fixtures/scorer-corpus.json`, „ismert korlát: összehasonuló -val/-vel (fotoszintézissel)”.** A korpusz ezt
+  `knownGap: true, desired: 1, expected: 0` jelöléssel dokumentált hiányként tartotta nyilván. A 4. pont képzés/többtoldalék szabálya
+  pontosan ezt oldja meg (`fotoszintezis` ≥ 5 betű, a „fotoszintézissel” vele kezdődik, a maradék nem fosztóképző). A korpusz szabálya
+  szerint (`desired !== expected` csak hiánynál) az eset rendes esetté válik: `expected: 1`, a `knownGap`/`desired` kikerül.
+  A review #334 negatív esetei (barrel/bar, reggel/rég) és a két másik ismert korlát (kulccsal: szószám, úttal: rövid szó) változatlanul
+  0 pontot kapnak.
+- **`tests/studio-tools.test.ts`, bank-packet-autofix.** Az autofix csak a pontozó által NEM felismert mintaalakot adja a rubrikához
+  (`missingAnswerConcepts`). Az „összeadásként” → `összeadás` az új szabállyal felismert, ezért nincs mit hozzáadni. Ugyanígy, ahogy a
+  teszt 33. sora a „szorzást” → `szorzás` esetre már rögzíti. Az elvárás ehhez igazodik; a minta továbbra is 1 pontot ér a rubrikán
+  (36. sor, változatlan). Ugyanebben a tesztben a `fixes.length >= 5` a megszűnt ötödik (mintaalak-) javítást számolta. Ehelyett a
+  maradék négy javítás PONTOS listája az elvárás (szigorúbb). A mintaalak-hozzáadó út lefedettsége nem vész el: ÚJ teszt
+  (`temetni` ← „temetés”, amit a szóalak-tűrés sem ismer fel) igazolja, hogy az autofix a fel nem ismert alakot továbbra is a
+  rubrikába teszi.
 
 ## 8. Kockázatok / visszavonás
 
