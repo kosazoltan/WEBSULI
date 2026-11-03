@@ -113,9 +113,19 @@ export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typ
 /** Spec 2026-11-03-fooldal-boritokartyak: a főoldali kártya bélyegképe (3:2) — a borító 1200×800-as, ~100 KB-os WebP-je helyett. */
 export const THUMB_WIDTH = 480;
 export const THUMB_HEIGHT = 320;
+/**
+ * Review #381 (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c, GHSA-wq5f-xc86-pv6w): a sharp ≥ 0.35.5 a javított libvips / libheif / librsvg
+ * könyvtárakkal; mélységi védelemként a nem használt, kockázatos dekódolók tiltva — a katalógus csak WebP (és JPEG/PNG forrás) képet tárol.
+ */
+const BLOCKED_LOADERS = ["VipsForeignLoadNsgif", "VipsForeignLoadTiff", "VipsForeignLoadVips", "VipsForeignLoadHeif", "VipsForeignLoadSvg"];
+let sharpLoad: Promise<typeof import("sharp")["default"]> | null = null;
+function loadSharp() {
+  sharpLoad ??= import("sharp").then(({ default: sharp }) => { sharp.block({ operation: BLOCKED_LOADERS }); return sharp; });
+  return sharpLoad;
+}
 export async function makeThumbnail(bytes: Buffer): Promise<Buffer> {
-  const { default: sharp } = await import("sharp");
-  return sharp(bytes).resize(THUMB_WIDTH, THUMB_HEIGHT, { fit: "cover" }).webp({ quality: 70 }).toBuffer();
+  const sharp = await loadSharp();
+  return sharp(bytes, { failOn: "error" }).resize(THUMB_WIDTH, THUMB_HEIGHT, { fit: "cover" }).webp({ quality: 70 }).toBuffer();
 }
 /** Lenyomat → bélyegkép; a legrégebbi kiesik (≈ 400 × 15 KB). A lenyomat a képpel együtt változik, így nem avul el. */
 const thumbCache = new Map<string, Buffer>();
