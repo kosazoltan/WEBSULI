@@ -1,6 +1,6 @@
 # Lecke-javítás alkalmazása: hamis „eltér a jelölttől” hiba borítóváltáskor
 
-Éles lelet 2026-11-03 (Antigoné célzott javítása, improved file `bb9dca4d…`): az „Alkalmazás” 500-at adott
+Éles lelet 2026-11-03 (egy 9. évfolyamos irodalom-lecke célzott javítása, `<javítás-azonosító>`): az „Alkalmazás” 500-at adott
 („Az alkalmazott lecke eltér a jelölttől.”), pedig a tranzakció teljesen lefutott (lecke 2. verzió, mentés, kvízexport,
 `status = applied`).
 
@@ -14,23 +14,27 @@
 - Az ismételt kérés (`status = applied` ág) ugyanígy bukik, tehát a futás nem zárható le.
 
 ## Cél
-- A visszaolvasás a tranzakció által ténylegesen írt állapotot igazolja: a lecke hash-e = az alkalmazáskori mentés
-  `expectedCurrentHash`-e, ÉS a lecke az `art` mezőn kívül megegyezik a jelölttel.
-- Az alkalmazáskori mentés: az adott javításhoz (`improvedFileId`) tartozó LEGKORÁBBI mentés (egy későbbi visszaállítás
-  is ugyanezzel az `improvedFileId`-vel ír mentést, annak `expectedCurrentHash`-e a visszaállított állapoté).
+- A visszaolvasás a tranzakció által ténylegesen írt állapotot igazolja: a lecke az `art` mezőn kívül megegyezik a jelölttel,
+  ÉS a hash-ét a javítás (`improvedFileId`) valamelyik mentése `expectedCurrentHash`-ként rögzítette.
+- Sorrendfüggetlen (review #378): a visszaállítás is ugyanezzel az `improvedFileId`-vel ír mentést, de annak hash-e a
+  visszaállított állapoté, amely a tartalmi feltételen bukik — a mentések időrendje (azonos `createdAt`) nem számít.
+- A leckét és a mentéseket egy `repeatable read`, csak-olvasó tranzakció pillanatképéből olvassa (review #378: közben lefutó
+  visszaállítás ne keveredjen a régi sorral).
+- A `canonicalJson` / `repairHash` semleges modulba (`server/lib/canonical-hash.ts`) kerül; a régi exportok megmaradnak.
 
 ## Nem-cél
 - Az arculatválasztás (`withLessonArt`) és a tranzakció logikája változatlan.
 - A HTML-anyagok ágának visszaolvasása változatlan.
 
 ## Edge case-ek
-- Nincs mentés vagy nincs benne `expectedCurrentHash` → hiba (nem igazolható).
+- Nincs mentés vagy nincs benne egyező `expectedCurrentHash` → hiba (nem igazolható).
 - A lecke a jelölthöz képest az `art`-on kívül is eltér → hiba.
 - Visszaállítás utáni ismételt alkalmazás-kérés → hiba marad (a lecke már nem a jelölt) — ez helyes.
 
 ## Elfogadás (EARS)
-- HA a mentett lecke = `withLessonArt(jelölt)` és a mentés hash-e egyezik, AKKOR a visszaolvasás sikeres akkor is, ha az `art` eltér a jelöltétől.
+- HA a mentett lecke = `withLessonArt(jelölt)` és a hash-ét a javítás mentése rögzítette, AKKOR a visszaolvasás sikeres akkor is,
+  ha az `art` eltér a jelöltétől.
 - HA a lecke tartalma (az `art`-on kívül) eltér a jelölttől, AKKOR hiba.
-- HA nincs alkalmazáskori mentés, AKKOR hiba.
-- HA több mentés tartozik a javításhoz, AKKOR a legkorábbi hash-e számít.
-- Élesben a `bb9dca4d…` alkalmazásának újrakérése a deploy után sikeres választ ad, és a futás `done` állapotú.
+- HA nincs a hash-t rögzítő mentés, AKKOR hiba.
+- HA több mentés tartozik a javításhoz, AKKOR a sorrendjük nem befolyásolja az eredményt; visszaállított lecke nem igazolt.
+- Élesben a 2026-11-03-i javítás alkalmazásának újrakérése a deploy után sikeres választ ad, és a futás `done` állapotú.
