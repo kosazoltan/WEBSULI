@@ -15,7 +15,9 @@
   .ws-studio { zoom: var(--creator-scale, 1); max-width: calc(1100px / var(--creator-scale, 1)); }
 }
 @media (max-width: 1023.98px) {
-  .ws-studio :is(button, a[href], [role="tab"], [role="combobox"], summary, select, textarea,
+  /* A textarea nincs ebben a listában: az :is() a legerősebb argumentum (input:not()…) specificitását kapja, ezért
+     felülírta a lenti 7.75em-es szabályt — mérve 2026-11-03: a csevegőmező 44 px volt, a helyőrző levágódott. */
+  .ws-studio :is(button, a[href], [role="tab"], [role="combobox"], summary, select,
     input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])) { min-height: 44px; }
   .ws-studio :is(button, a[href], [role="combobox"], summary) { min-width: 44px; }
   /* Review #278: a min-height az inline linkre nem hat — a stúdió linkjei mobilon méretezhető dobozok. */

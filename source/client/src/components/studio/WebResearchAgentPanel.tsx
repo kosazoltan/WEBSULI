@@ -241,7 +241,8 @@ export function WebResearchAgentPanel() {
           </div>
         </div>
         <Badge variant="outline" className="text-xs">Tananyag · Módszerek · Feladatok · Kvíz</Badge>
-        <div className="h-[min(480px,62dvh)]">
+        {/* min-h: fekvő telefonon (844×390) a dvh-alapú magasság nem fér el a fejléc és az 5 soros mező mellett (review #390). */}
+        <div className="h-[min(560px,72dvh)] min-h-[460px] sm:h-[min(480px,62dvh)]">
           <ChatInterface
             title="Tananyagkészítő ügynök"
             description="Pl.: Keress 5. osztályos törtes tananyagot, és készíts belőle interaktív HTML-t"
@@ -315,19 +316,19 @@ export function WebResearchAgentPanel() {
         <Button
           onClick={() => void handleSave()}
           disabled={(!generatedHtml && !canResume) || isSaving || isLoading || !!savedId}
-          className="flex-1 min-h-11"
+          className="w-full min-h-11 whitespace-normal sm:w-auto sm:flex-1"
           data-testid="web-research-save"
         >
           {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
           {savedId ? "Elmentve a tananyagok közé" : canResume ? "Folytatás a mentett eredményből" : "Mentés a tananyagok közé"}
         </Button>
         {savedId && (
-          <Button asChild variant="outline" className="min-h-11" data-testid="web-research-open-saved">
+          <Button asChild variant="outline" className="min-h-11 flex-1 !whitespace-nowrap sm:flex-none" data-testid="web-research-open-saved">
             <a href={`/preview/${savedId}`}>Megnyitás</a>
           </Button>
         )}
         {(pending || savedId || failure || messages.length > 0) && (
-          <Button variant="outline" className="min-h-11" onClick={startOver} disabled={isSaving} data-testid="web-research-new">
+          <Button variant="outline" className="min-h-11 flex-1 !whitespace-nowrap sm:flex-none" onClick={startOver} disabled={isSaving} data-testid="web-research-new">
             <RotateCcw className="w-4 h-4 mr-2" /> Új készítés
           </Button>
         )}
