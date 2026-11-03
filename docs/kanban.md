@@ -10,8 +10,9 @@ emlékezetből soha ne jelents státuszt, mindig a `list` kimenetét idézd.
   Feloldási sorrend a CLI szerint: `--db PATH` > `$HERMES_WORKFLOW_KANBAN_DB` > `<git toplevel>/.hermes/kanban.db`.
   A CLI a `HERMES_HOME` (`%LOCALAPPDATA%\hermes`) alatti táblát **elutasítja**; a régi
   `%LOCALAPPDATA%\hermes\kanban.db` a Hermes-diszpécser sora, WEBSULI-jegy nincs benne.
-- **CLI:** `C:\Repo\Jack\qualcomm\skills\hermes-kanban-workflow\scripts\kanban.mjs`
-  (2026-11-03: a korábbi `D:\repo\Hermes-agent\…` és `D:\Hermes\…` útvonal nem létezik — ellenőrizve).
+- **CLI:** a `hermes-kanban-workflow` skill `scripts/kanban.mjs` fájlja. Gépenként máshol van, ezért a
+  `HERMES_KANBAN_CLI` környezeti változó mutasson rá (a skill-mappában keresd a `kanban.mjs`-t).
+  (2026-11-03: a korábban ide írt, géphez kötött `D:\…` útvonalak elavultak — ezért nincs itt abszolút útvonal.)
   **A WEBSULI gyökeréből futtasd**, különben a CLI egy másik repó tábláját nyitja meg (csapda C-02).
 - **Státuszok (a CLI `stats` szerint):** `todo → doing → review → done`, plusz `blocked`.
 - A korábban hivatkozott #6–#11 jegyek (köztük a #11 STANDING) az új táblán nincsenek — hollétük UNKNOWN;
@@ -24,8 +25,8 @@ emlékezetből soha ne jelents státuszt, mindig a `list` kimenetét idézd.
 ## Alapparancsok
 
 ```bash
-cd /c/Repo/WEBSULI                       # a repó gyökeréből!
-K=/c/Repo/Jack/qualcomm/skills/hermes-kanban-workflow/scripts/kanban.mjs
+cd "$(git rev-parse --show-toplevel)"    # a repó gyökeréből!
+K="$HERMES_KANBAN_CLI"                    # a saját gépen: …/hermes-kanban-workflow/scripts/kanban.mjs
 
 node --no-warnings $K list                         # tábla lekérdezése
 node --no-warnings $K add --title "BUG(...): rövid leírás"
