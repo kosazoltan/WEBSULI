@@ -1,34 +1,35 @@
 # Végrehajtás — leckénkénti borítókép (terv: `docs/specs/2026-11-03-leckeborito.md`)
 
-Munkakönyvtár: `source/`.
+Munkakönyvtár: `source/`. Tananyag-generálás és szövegmodell-hívás nincs; fizetős hívás csak a képgyártás.
 
-## T1 — tartalomkulcs (`shared/lesson-cover.ts`)
-- `lessonCoverId({ subject, title }, band)`, `isLessonCoverId(id)`, `lessonCoverAsset(id, band, lesson, fallbackSrc)`.
-- Ellenőrzés: `node --import tsx --test tests/lesson-cover.test.ts` → `ℹ fail 0` (azonosság ékezet/írásjel-eltérésnél, eltérés
-  más címnél / sávnál, minta).
+## T1 — leckék kiolvasása és képtervek
+- Csak olvasó kivonat (`withReadOnlyDb`) minden publikált leckéről: cím, tantárgy, évfolyam, fejezetcímek, az első magyarázatok eleje;
+  tartalomkulcsonként egy sor (Antigoné nélkül).
+- Kulcsonként egy `design-assets/prompts.json` tétel: `id` = `lessonCoverId`, `kind: cover`, sáv, `subjects` (a lecke tantárgya),
+  `keywords` (a cím), magyar `alt`, `aspect_ratio: "3:2"`, a kivonat alapján kézzel írt angol jelenetleírás (a terv szabályai szerint).
+- Ellenőrzés: `npx tsx scripts/design-assets/generate.ts --only <id-k> --resolution 1K --dry-run` → „N kép · ≈ 0,045·N USD”.
 
-## T2 — választás és megjelenítés
-- `shared/lesson-art-compute.ts`: kulcsszavas borító híján a tárolt leckeborító nyer a témaköri borító és a sávhős előtt.
-- `shared/design-assets.ts` `resolveStoredArt`: a lecke mostani kulcsával egyező leckeborító-id → borító (a katalógus szerinti
-  tartalékkép `src`-jével); más leckeborító-id → `null`.
-- `client/src/lesson-runtime/LessonArt.tsx`: változatlan felület (a `fromDb` út a végpontról tölt, hibánál a tartalékra vált).
-- Ellenőrzés: `node --import tsx --test tests/lesson-cover.test.ts tests/cover-gorog-drama.test.ts tests/design-assets.test.ts`.
+## T2 — képek és szemle
+- `generate.ts --resolution 1K` (új kapcsoló; alapértelmezés 2K marad) kötegekben; `review-page.ts` válogatóoldal; a feliratos,
+  idegen tartalmú vagy ijesztő képek újragenerálása (javított leírással).
+- Ellenőrzés: minden kulcshoz pontosan egy elfogadott jelölt a választás-JSON-ban.
 
-## T3 — gyártó modul (`server/lesson-covers.ts`)
-- Kivonat → képterv (Haiku 5.5, JSON) → Seedream 5.0 Pro 1K 3:2 → minőségkapu (Haiku, képpel) → `design_assets` beszúrás → összekötés.
-- A hálózati hívások befecskendezhetők (tesztben hamis kliens); napi plafon a mai `cover-l-*` sorokból.
-- Ellenőrzés: `node --import tsx --test tests/lesson-covers-worker.test.ts` (kapu-bukás → újragenerálás, kétszeres bukás → nincs
-  beszúrás, plafon → nincs hívás, kulcsszavas borító → kimarad, cím-változás → nem köt össze).
+## T3 — jóváhagyás
+- `approve.ts <választás.json>` → `client/public/design/<sáv>/cover-l-*.webp` + katalógus.
+- Ellenőrzés: `git diff shared/design-asset-catalog.ts` csak hozzáadás; `tests/design-assets.test.ts` zöld (séma, fájlok).
 
-## T4 — háttérfolyamat és mentés utáni rúgás
-- `server/index.ts`: `startLessonCoverWorker()` az induló szinkron után; `server/studio/pipeline-store.ts`: mentés után `kickLessonCovers()`.
-- Ellenőrzés: `npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.test.json`.
+## T4 — választó- és védőlogika
+- `shared/lesson-cover.ts` (`lessonCoverId`, `isLessonCoverId`); `shared/design-assets.ts` (`pickLessonArt` kulcsos borító elsőbbsége,
+  `pictureFits` a `cover-l-*` képre); `shared/lesson-art-compute.ts` (`pinned`); `server/design-assets.ts` `withLessonArt` átadja a
+  korábbi `art.picture`-t.
+- Ellenőrzés: `node --import tsx --test tests/lesson-cover.test.ts tests/cover-gorog-drama.test.ts tests/design-assets.test.ts` → `ℹ fail 0`.
 
-## T5 — backfill-szkript (`scripts/design-assets/lesson-covers.mts`)
-- `--dry-run` (kulcsok, becsült ár), `--max N`, `--only <id,…>`, `--link-only`; kontaktlap HTML a jelöltekről (`--sheet <fájl>`).
-- Próbakör: 3 minta (5. o. irodalom, 6. o. történelem, 9. o. kémia) → kézi szemle → teljes futás.
-- Ellenőrzés: a futás végén minden éles lecke (a kulcsszavas borítósak kivételével) `art.picture` = `lessonCoverId`.
+## T5 — csereszkript
+- `scripts/design-assets/pin-lesson-covers.mts`: próbafutás / `--write <mentés.json>` / `--restore <mentés.json>`; a tiszta tervező és
+  hash-ellenőrző mag `scripts/design-assets/pin-lesson-covers-lib.ts`, tesztje `tests/pin-lesson-covers.test.ts`.
+- Ellenőrzés: a teszt (csak `art.picture` változik, hash-eltérés → hiba, Antigoné kimarad, visszaállítás) zöld.
 
 ## T6 — kapuk és élesítés
-- `npm test`, `npx tsc --noEmit` (+ teszt-tsconfig), `npx eslint client/src server --max-warnings 0`, `npm run build`.
-- PR → CI → merge; Render-revízió = merge commit (`https://websuli.vip/api/health`); képernyőképek 390 és 1280 px-en.
+- `npm test`, `npx tsc --noEmit` (+ `-p tsconfig.test.json`), `npx eslint client/src server --max-warnings 0`, `npm run build`.
+- PR → CI → merge; Render-revízió = merge commit (`https://websuli.vip/api/health`); `https://websuli.vip/design/<sáv>/cover-l-….webp` 200.
+- Ezután a csere: próbafutás → `--write` → leckénkénti hash-egyezés a kimenetben; mintaleckék a böngészőben 390 és 1280 px-en.
