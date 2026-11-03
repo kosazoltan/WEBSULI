@@ -134,7 +134,7 @@ designAssetsRouter.get("/:id/thumb", async (req, res) => {
     let thumb = thumbCache.get(meta.sha256);
     if (!thumb) {
       const [row] = await db.select({ sha256: designAssets.sha256, bytes: designAssets.bytes }).from(designAssets).where(eq(designAssets.id, id));
-      if (!row) return res.status(404).json({ message: "Nincs ilyen kép." });
+      if (!row) { res.removeHeader("ETag"); res.set("Cache-Control", "no-store"); return res.status(404).json({ message: "Nincs ilyen kép." }); }
       thumb = await makeThumbnail(row.bytes);
       thumbCache.set(row.sha256, thumb);
       if (thumbCache.size > THUMB_CACHE_MAX) thumbCache.delete(thumbCache.keys().next().value!);
@@ -143,6 +143,9 @@ designAssetsRouter.get("/:id/thumb", async (req, res) => {
     return res.type("image/webp").send(thumb);
   } catch (error) {
     logger.error("[design-assets] A bélyegkép nem készíthető:", error);
+    // Review #381: a hibaválasz nem kerülhet egy hétre gyorsítótárba a kép ETag-jével.
+    res.removeHeader("ETag");
+    res.set("Cache-Control", "no-store");
     return res.status(500).json({ message: "A bélyegkép most nem érhető el." });
   }
 });

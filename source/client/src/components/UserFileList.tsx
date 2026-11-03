@@ -318,6 +318,8 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                         loading="lazy"
                         decoding="async"
                         onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+                        // Review #381: egy korábbi hiba után a lista frissítése új borítót hozhat — a sikeres betöltés újra mutatja.
+                        onLoad={(e) => { e.currentTarget.style.visibility = ""; }}
                         data-testid={`thumb-file-${file.id}`}
                       />
                       <span className="home-card-emblem" data-shape={theme.shape} title={theme.name} aria-hidden>
