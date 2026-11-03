@@ -66,6 +66,8 @@
   „Mind”-re vált, utána a kézi választást nem írja felül.
 - **Kijelentkezés után:** az eszköz évfolyama újra érvényes.
 - **Adminnak nincs keresztneve a fiókban:** a névkérő űrlap jelenik meg (csak név, évfolyam nélkül).
+  - Review #389: a böngészőben tárolt név sem tartalék (a párosításkor a gyerekére állítódik) — csak a fióknév vagy a fiókhoz
+    kötött felülírás. Az ajánló bélyegképe sikeres újratöltéskor újra látszik (`onLoad`), mint a listán.
 - **Nincs bélyegkép-URL** (régi szerver): a `/api/design-assets/<borító vagy sávhős>/thumb` tartalék, mint a listán.
 - **Csökkentett mozgás:** nincs hover-emelés.
 
