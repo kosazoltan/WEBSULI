@@ -22,7 +22,8 @@
     "test:learning-db": "node --import tsx scripts/run-learning-db-tests.ts",
     "studio:tool": "node --import tsx scripts/studio-tool.ts",
     "test:e2e": "node --import tsx scripts/run-e2e-tests.ts",
-    "verify": "npm run check && npm run lint && npm run check:test && npm test && npm run build"
+    "doctor:arch": "node scripts/check-native-arch.mjs",
+    "verify": "npm run doctor:arch && npm run check && npm run lint && npm run check:test && npm test && npm run build"
   },
   "overrides": {
     "axios": "1.20.0",

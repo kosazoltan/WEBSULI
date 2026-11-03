@@ -1,0 +1,230 @@
+{
+  "title": "NAT 2020 Matematika 5–6. — 6. évfolyam",
+  "subject": "Matematika",
+  "classroom": 6,
+  "status": "draft",
+  "sourceFiles": [
+    {
+      "name": "Matematika_F.grade6.txt",
+      "kind": "text"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "matematika-halmazok",
+      "term": "Halmazok",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: elemeket halmazba rendez több szempont alapján; részhalmazokat konkrét esetekben felismer és ábrázol; véges halmaz kiegészítő halmazát (komplementerét), véges halmazok közös részét (metszetét), egyesítését (unióját) képezi és ábrázolja konkrét esetekben; számokat, számhalmazokat, halmazműveleti eredményeket számegyenesen ábrázol.",
+      "quote": "Témakör: Halmazok",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-matematikai-logika-kombinatorika",
+      "term": "Matematikai logika, kombinatorika",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: igaz és hamis állításokat fogalmaz meg; tanult minták alapján néhány lépésből álló bizonyítási gondolatsort megért és önállóan összeállít; a logikus érvelésben a matematikai szaknyelvet következetesen alkalmazza társai meggyőzésére; összeszámlálási feladatok megoldása során alkalmazza az összes eset áttekintéséhez szükséges módszereket.",
+      "quote": "Témakör: Matematikai logika, kombinatorika",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-termeszetes-szamok-halmaza-szamelmeleti-ismerete",
+      "term": "Természetes számok halmaza, számelméleti ismeretek",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: ismeri a prímszám és az összetett szám fogalmakat; el tudja készíteni összetett számok prímtényezős felbontását 1000-es számkörben; meghatározza természetes számok legnagyobb közös osztóját és legkisebb közös többszörösét. A témakör tanulása eredményeként a tanuló: érti és alkalmazza a számok helyi értékes írásmódját nagy számok esetén;",
+      "quote": "Témakör: Természetes számok halmaza, számelméleti ismeretek",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-alapmuveletek-termeszetes-szamokkal",
+      "term": "Alapműveletek természetes számokkal",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: írásban összead, kivon és szoroz; ismeri és helyesen alkalmazza a műveleti sorrendre és a zárójelezésre vonatkozó szabályokat fejben, írásban és géppel számolás esetén is a racionális számok körében; a műveleti szabályok ismeretében ellenőrzi számolását, a kapott eredményt észszerűen kerekíti; a gyakorlati problémákban előforduló mennyiségeket becsülni tudja, feladatmegoldásához ennek megfelelő tervet készít;",
+      "quote": "Témakör: Alapműveletek természetes számokkal",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-egesz-szamok-alapmuveletek-egesz-szamokkal",
+      "term": "Egész számok; alapműveletek egész számokkal",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: ismeri és helyesen alkalmazza a műveleti sorrendre és a zárójelezésre vonatkozó szabályokat fejben, írásban és géppel számolás esetén is a racionális számok körében; a műveleti szabályok ismeretében ellenőrzi számolását, a kapott eredményt észszerűen kerekíti; a gyakorlati problémákban előforduló mennyiségeket becsülni tudja, feladatmegoldásához ennek megfelelő tervet készít;",
+      "quote": "Témakör: Egész számok; alapműveletek egész számokkal",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-kozonseges-tortek-tizedes-tortek-racionalis-szam",
+      "term": "Közönséges törtek, tizedes törtek, racionális számok",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: ismeri a racionális számokat, tud példát végtelen nem szakaszos tizedes törtre. A témakör tanulása eredményeként a tanuló: ábrázol törtrészeket, meghatároz törtrészeknek megfelelő törtszámokat; érti és alkalmazza a számok helyi értékes írásmódját tizedes törtek esetén; megfelelteti egymásnak a racionális számok közönséges tört és tizedes tört alakját.",
+      "quote": "Témakör: Közönséges törtek, tizedes törtek, racionális számok",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-alapmuveletek-kozonseges-tortekkel",
+      "term": "Alapműveletek közönséges törtekkel",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: elvégzi az alapműveleteket a racionális számok körében, eredményét összeveti előzetes becslésével; ismeri és helyesen alkalmazza a műveleti sorrendre és a zárójelezésre vonatkozó szabályokat fejben, írásban és géppel számolás esetén is a racionális számok körében; a műveleti szabályok ismeretében ellenőrzi számolását, a kapott eredményt észszerűen kerekíti.",
+      "quote": "Témakör: Alapműveletek közönséges törtekkel",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-alapmuveletek-tizedes-tortekkel",
+      "term": "Alapműveletek tizedes törtekkel",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: elvégzi az alapműveleteket a racionális számok körében, eredményét összeveti előzetes becslésével; írásban összead, kivon és szoroz; ismeri és helyesen alkalmazza a műveleti sorrendre és a zárójelezésre vonatkozó szabályokat fejben, írásban és géppel számolás esetén is a racionális számok körében; a műveleti szabályok ismeretében ellenőrzi számolását, a kapott eredményt észszerűen kerekíti;",
+      "quote": "Témakör: Alapműveletek tizedes törtekkel",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-aranyossag-szazalekszamitas",
+      "term": "Arányosság, százalékszámítás",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: felismeri az egyenes és a fordított arányosságot konkrét helyzetekben; felismeri és megalkotja az egyenes arányosság grafikonját; ismeri a százalék fogalmát, gazdasági, pénzügyi és mindennapi élethez kötődő százalékszámítási feladatokat megold; ismeri az idő, a tömeg, a hosszúság, a terület, a térfogat és az űrtartalom szabványmértékegységeit, használja azokat mérések és számítások esetén;",
+      "quote": "Témakör: Arányosság, százalékszámítás",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-egyszeru-szoveges-feladatok",
+      "term": "Egyszerű szöveges feladatok",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: egyismeretlenes elsőfokú egyenletet lebontogatással és mérlegelvvel megold; különböző szövegekhez megfelelő modelleket készít; matematikából, más tantárgyakból és a mindennapi életből vett egyszerű szöveges feladatokat következtetéssel vagy egyenlettel megold; gazdasági, pénzügyi témájú egyszerű szöveges feladatokat következtetéssel vagy egyenlettel megold;",
+      "quote": "Témakör: Egyszerű szöveges feladatok",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-a-fuggveny-fogalmanak-elokeszitese",
+      "term": "A függvény fogalmának előkészítése",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: konkrét halmazok elemei között megfeleltetést hoz létre; felismeri az egyenes és a fordított arányosságot konkrét helyzetekben; felismeri és megalkotja az egyenes arányosság grafikonját. A témakör tanulása eredményeként a tanuló: tájékozódik a koordináta-rendszerben: koordinátáival adott pontot ábrázol, megadott pont koordinátáit leolvassa.",
+      "quote": "Témakör: A függvény fogalmának előkészítése",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-sorozatok",
+      "term": "Sorozatok",
+      "definition": "A témakör tanulása eredményeként a tanuló: sorozatokat adott szabály alapján folytat; néhány tagjával adott sorozat esetén felismer és megfogalmaz képzési szabályt. Sorozatok létrehozása számokból, jelekből, alakzatokból Szabálykövetés ritmusban, rajzban, számolásban Sorozatok adott szabály szerinti folytatása Adott sorozat esetén legalább egy szabály felismerése és megfogalmazása",
+      "quote": "Témakör: Sorozatok",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-meres-es-mertekegysegek",
+      "term": "Mérés és mértékegységek",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: meghatározza háromszögek és speciális négyszögek kerületét, területét; ismeri az idő, a tömeg, a hosszúság, a terület, a térfogat és az űrtartalom szabványmértékegységeit, használja azokat mérések és számítások esetén; egyenes hasáb, téglatest, kocka alakú tárgyak felszínét és térfogatát méréssel megadja, egyenes hasáb felszínét és térfogatát képlet segítségével kiszámolja; a képleteket megalapozó összefüggéseket érti.",
+      "quote": "Témakör: Mérés és mértékegységek",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-sikbeli-alakzatok",
+      "term": "Síkbeli alakzatok",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: ismeri a tengelyesen szimmetrikus háromszöget; ismeri a négyszögek tulajdonságait: belső és külső szögek összege, konvex és konkáv közti különbség, átló fogalma; ismeri a speciális négyszögeket: trapéz, paralelogramma, téglalap, deltoid, rombusz, húrtrapéz, négyzet; ismeri a speciális négyszögek legfontosabb tulajdonságait, ezek alapján elkészíti a halmazábrájukat;",
+      "quote": "Témakör: Síkbeli alakzatok",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-transzformaciok-szerkesztesek",
+      "term": "Transzformációk, szerkesztések",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: megszerkeszti alakzatok tengelyes és középpontos tükörképét; geometriai ismereteinek felhasználásával pontosan szerkeszt több adott feltételnek megfelelő ábrát; ismeri a tengelyesen szimmetrikus háromszöget; felismeri a kicsinyítést és a nagyítást hétköznapi helyzetekben; ismer és használ dinamikus geometriai szoftvereket, tisztában van alkalmazási lehetőségeikkel.",
+      "quote": "Témakör: Transzformációk, szerkesztések",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-tergeometria",
+      "term": "Térgeometria",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: a kocka, a téglatest, a hasáb és a gúla hálóját elkészíti; testeket épít képek, nézetek, alaprajzok, hálók alapján; ismeri a kocka, a téglatest, a hasáb és a gúla következő tulajdonságait: határoló lapok típusa, száma, egymáshoz viszonyított helyzete; csúcsok, élek száma; lapátló, testátló; ismeri a gömb tulajdonságait;",
+      "quote": "Témakör: Térgeometria",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-leiro-statisztika",
+      "term": "Leíró statisztika",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: értelmezi a táblázatok adatait, az adatoknak megfelelő ábrázolási módot kiválasztja, és az ábrát elkészíti; adatokat táblázatba rendez, diagramon ábrázol hagyományos és digitális eszközökkel is; különböző típusú diagramokat megfeleltet egymásnak; megadott szempont szerint adatokat gyűjt ki táblázatból, olvas le hagyományos vagy digitális forrásból származó diagramról, majd rendszerezés után következtetéseket fogalmaz meg;",
+      "quote": "Témakör: Leíró statisztika",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-valoszinuseg-szamitas",
+      "term": "Valószínűség-számítás",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: valószínűségi játékokat, kísérleteket végez, ennek során az adatokat tervszerűen gyűjti, rendezi és ábrázolja digitálisan is; valószínűségi játékokban érti a lehetséges kimeneteleket, játékában stratégiát követ; ismeri a gyakoriság és a relatív gyakoriság fogalmát. Ismereteit felhasználja a „lehetetlen”, a „biztos” és a „kisebb/nagyobb eséllyel lehetséges” kijelentések megfogalmazásánál.",
+      "quote": "Témakör: Valószínűség-számítás",
+      "sourceRef": {
+        "file": "Matematika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    }
+  ]
+}

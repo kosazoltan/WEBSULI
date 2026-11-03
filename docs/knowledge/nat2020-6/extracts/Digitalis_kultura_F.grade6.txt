@@ -1,0 +1,238 @@
+5–6. évfolyam
+Míg a digitális kultúra fejlesztése a 3–4. évfolyamon a tevékenykedtetés módszerével, gyakran digitális eszközök közvetlen használata nélkül történik, addig az 5–6. évfolyamon a tanulók már rendszeresen használják a számítógéptermet és az iskola számítógépes hálózatát.
+A tanulóktól már más tantárgyaknál is elvárás a digitális írástudás alapszintű ismerete, így a digitális kultúra tantárgy keretében a megfelelő szakmai-módszertani alapozásra, a tipográfiai ismeretekre, a diakockák megfelelő elrendezésére, a képek és ábrák célszerű beillesztésére kerül a hangsúly. Az ismeretek alkalmazása, mélyítése gyakran más tantárgyak keretében történik, ezért nélkülözhetetlen a tantárgyi koncentráció, a projektmunkák megvalósítása, a feladatok teammunkában történő megoldása.
+A problémamegoldás során a felső tagozatra áttérve az alsó tagozaton már megismert blokkprogramozást folytatjuk tovább, az életkornak megfelelő, az iskolában rendelkezésre álló eszközökkel. A vezérlőszerkezetek megismerése után azok tudatos választását, kezelésének jártasságát kell kialakítani. A hangsúlyt azonban nem a mélyebb összefüggésekre (pl. programozási tételekre) kell helyeznünk, hanem a problémák játékos, de átgondolt, kreatív megközelítésére, algoritmikus megoldására, többféle lehetőség végig gondolására.
+Az 5–6. évfolyamon a digitális kultúra tantárgy alapóraszáma: 68 óra.
+A témakörök áttekintő táblázata:
+Témakör neve
+Javasolt óraszám
+Algoritmizálás és blokkprogramozás
+14
+Online kommunikáció
+5
+Robotika
+11
+Szövegszerkesztés
+12
+Bemutatókészítés
+8
+Multimédiás elemek készítése
+8
+Az információs társadalom, e-Világ
+6
+A digitális eszközök használata
+4
+Összes óraszám:
+68
+Témakör: Algoritmizálás és blokkprogramozás
+Javasolt óraszám: 14 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+érti, hogyan történik az egyszerű algoritmusok végrehajtása a digitális eszközökön;
+egyszerű algoritmusokat elemez és készít;
+ismeri a kódolás eszközeit;
+adatokat kezel a programozás eszközeivel.
+A témakör tanulása eredményeként a tanuló:
+megkülönbözteti, kezeli és használja az elemi adatokat;
+ismeri és tanári segítséggel használja a blokkprogramozás alapvető építőelemeit;
+ismeri és használja a programozási környezet alapvető eszközeit;
+a probléma megoldásához vezérlési szerkezetet (szekvencia, elágazás és ciklus) alkalmaz a tanult blokkprogramozási nyelven;
+tapasztalatokkal rendelkezik az eseményvezérlésről;
+mozgásokat vezérel szimulált vagy valós környezetben.
+Fejlesztési feladatok és ismeretek
+Hétköznapi tevékenységek és információáramlási folyamatok algoritmusának elemzése, tervezése
+A problémamegoldáshoz tartozó algoritmuselemek megismerése; algoritmus leírásának módja
+Nem számítógéppel megoldandó feladatok algoritmizálása
+Az algoritmus végrehajtásához szükséges adatok és az eredmények kapcsolata
+Szekvencia, elágazások és ciklusok; egyszerű algoritmusok tervezése az alulról felfelé építkezés és a lépésenkénti finomítás elvei alapján
+A programozás építőkockái
+Számok és szöveges adatok
+A vezérlési szerkezetek megfelelői egy programozási környezetben
+Elágazások, feltételek kezelése; többirányú elágazás; ciklusok fajtái
+Animáció, grafika programozása
+A program megtervezése, kódolása
+Tesztelés, elemzés
+Fogalmak
+algoritmus, folyamat, adat, adattípus, szöveges adatok, számok, bemenet, kimenet, problémamegoldó tevékenység, változó, algoritmus leírása, szekvencia, elágazás, ciklus, ciklusok fajtái, feltétel, algoritmustervezés, lépésenkénti finomítás elve, fejlesztői felület, blokkprogramozás, kódolás, tesztelés, elemzés, hibajavítás
+Javasolt tevékenységek
+Életkornak és érdeklődési körnek megfelelő hétköznapi tevékenységek és információáramlási folyamatok algoritmusának elemzése, tervezése
+Az algoritmizálás nem számítógépes megvalósítása, az algoritmus eljátszása, személyes élmények szerzése
+Vezérlőszerkezetek tudatos választását igénylő blokkprogramozási feladatok megoldása
+Változók használatát igénylő folyamatok programozása, és a kimeneti eredmények elemzése szélsőséges bemeneti értékek esetén
+Projektmunkában egyszerű részekre bontott feladat elkészítése a részfeladatok megoldásával és összeállításával
+Jól részekre bontható projektfeladat megoldása páros vagy csoportmunkában
+Mozgások vezérlése valós és szimulált környezetben, az eredmények tesztelése, elemzése
+Objektum tulajdonságának és viselkedésének beállítását igénylő feladat megoldása blokkprogramozási környezetben
+Témakör: Online kommunikáció
+Javasolt óraszám: 5 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+ismeri, használja az elektronikus kommunikáció lehetőségeit, a családi és az iskolai környezetének elektronikus szolgáltatásait;
+ismeri és betartja az elektronikus kommunikációs szabályokat.
+A témakör tanulása eredményeként a tanuló:
+tisztában van a hálózatokat és a személyes információkat érintő fenyegetésekkel, alkalmazza az adatok védelmét biztosító lehetőségeket;
+önállóan kezeli az operációs rendszer mappáit, fájljait és a felhőszolgáltatásokat.
+Fejlesztési feladatok és ismeretek
+Online kommunikációs csatornák önálló használata, online kapcsolattartás
+Etikus és hatékony online kommunikáció a csoportmunka érdekében
+Online identitás védelmében teendő lépések, használható eszközök
+Adattárolás és -megosztás felhőszolgáltatások használatával
+Fogalmak
+online identitás, e-mail, chat, felhőszolgáltatások, adattárolás, megosztás
+Javasolt tevékenységek
+Elektronikus levél írása, üzenetküldő és csevegőprogram használata az elektronikus kommunikáció szabályainak betartásával
+Etikus és hatékony online kommunikáció az iskolai élethez és más tantárgyakhoz kapcsolódó csoportmunka érdekében
+Az adatok védelmét biztosító lehetőségek használata az online kommunikációs alkalmazásokban
+Személyes adatok, az iskolai élethez és más tantárgyakhoz kapcsolódó projektben adatok tárolása és megosztása a családi és az iskolai környezet elektronikus szolgáltatásai, felhőszolgáltatások segítségével
+Témakör: Robotika
+Javasolt óraszám: 11 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+ismeri és használja a blokkprogramozás alapvető építőelemeit;
+adatokat gyűjt szenzorok segítségével;
+mozgásokat vezérel szimulált vagy valós környezetben.
+A témakör tanulása eredményeként a tanuló:
+ismeri és használja a blokkprogramozás alapvető építőelemeit.
+Fejlesztési feladatok és ismeretek
+Az algoritmikus gondolkodás fejlesztése
+Algoritmus készítése lépésekre bontással
+Algoritmusok megvalósítása, modellezése egyszerű eszközök segítségével
+A gyakorlati életből vett egyszerű problémák megoldása algoritmusok segítségével
+Robotvezérlési alapfogalmak
+Szenzorok, robotok vezérlésének kódolása blokkprogramozással
+Az együttműködési készség fejlesztése csoportos feladatmegoldások és projektmunkák során
+Fogalmak
+robot, szenzor, algoritmus, blokkprogramozás, kódolás, vezérlés
+Javasolt tevékenységek
+Alapszolgáltatásokat nyújtó program előállítása blokkprogramozás segítségével
+Blokkprogramozás használatával az események és azok kezelésének megismerése egyszerű játékok készítése kapcsán
+Robotok vezérlése blokkprogramozással
+Geometrikus ábrák útján mozgó robot programozása
+A környezeti akadályokra reagáló robot programozása
+Témakör: Szövegszerkesztés
+Javasolt óraszám: 12 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+egy adott feladat kapcsán önállóan hoz létre szöveges vagy multimédiás dokumentumokat.
+A témakör tanulása eredményeként a tanuló:
+ismeri és tudatosan alkalmazza a szöveges és multimédiás dokumentum készítése során a szöveg formázására, tipográfiájára vonatkozó alapelveket;
+a tartalomnak megfelelően alakítja ki a szöveges vagy a multimédiás dokumentum szerkezetét, illeszti be, helyezi el és formázza meg a szükséges objektumokat;
+ismeri és kritikusan használja a nyelvi eszközöket (például helyesírás-ellenőrzés, elválasztás);
+etikus módon használja fel az információforrásokat, tisztában van a hivatkozás szabályaival.
+Fejlesztési feladatok és ismeretek
+Szövegszerkesztési alapelvek
+Szöveges dokumentumok létrehozása, formázása
+Feladatleírás, illetve minta alapján dokumentumok szerkesztése
+A dokumentum céljának megfelelően képek választása, beillesztése, átméretezése, elhelyezése
+Adott tanórai, iskolai, hétköznapi problémához dokumentum készítése
+Nyelvi funkciók kritikus használata, helyesírás-ellenőrzés, elválasztás
+Az információforrások etikus felhasználásának kérdései
+Fogalmak
+szövegbevitel, megnyitás, mentés, kijelölés, másolás, törlés, áthelyezés, szövegegységek, karakter, karakter formázása, karakter típusa, karakter stílusa, karakter mérete, bekezdés, bekezdés formázása, behúzás, margó, lapméret, helyesírás-ellenőrző, elválasztás, kép beillesztése, képméret változtatása, információforrások etikus felhasználása, idézés szabályai
+Javasolt tevékenységek
+Nyomtatott dokumentumokban alkalmazott betű- és bekezdésformátumok elemzése
+Egyszerű hétköznapi szöveges dokumentumok elkészítése, például: feliratok, tájékoztató táblák, napirend, menü
+Képeket, ábrákat, különböző karakter- és bekezdésformázással készült szövegeket, szimbólumokat tartalmazó dokumentumok készítése, például termékismertetők, címkék
+Részletes feladatleírás alapján dokumentumok önálló szerkesztése
+Az iskolai élethez, hétköznapi problémához, adott tanórai vagy más tantárgyakhoz kapcsolódó szöveges dokumentum készítése projektmunka keretében, például fogalmazás készítése vagy egy földrajzi terület bemutatása
+Témakör: Bemutatókészítés
+Javasolt óraszám: 8 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+egy adott feladat kapcsán önállóan hoz létre szöveges vagy multimédiás dokumentumokat;
+ismeri és tudatosan alkalmazza a szöveges és multimédiás dokumentum készítése során a szöveg formázására, tipográfiájára vonatkozó alapelveket;
+etikus módon használja fel az információforrásokat, tisztában van a hivatkozás szabályaival.
+A témakör tanulása eredményeként a tanuló:
+ismeri a prezentációkészítés alapszabályait, és azokat alkalmazza;
+a tartalomnak megfelelően alakítja ki a szöveges vagy a multimédiás dokumentum szerkezetét, illeszti be, helyezi el és formázza meg a szükséges objektumokat.
+Fejlesztési feladatok és ismeretek
+Szöveget, képet tartalmazó prezentáció létrehozása, formázása, paramétereinek beállítása
+Feladatleírás, illetve minta alapján prezentáció szerkesztése
+Bemutatószerkesztési alapelvek
+A bemutató objektumaira animációk beállítása
+Iskolai, hétköznapi problémák közös megoldása, a csoportmunka támogatása
+Az információforrások etikus felhasználásának kérdései
+Fogalmak
+prezentáció, animáció, dokumentumformátum, csoportmunka eszközei, lényegkiemelés, információforrások etikus felhasználása
+Javasolt tevékenységek
+Minta alapján bemutató létrehozása, paramétereinek beállítása
+Feladatleírás alapján prezentáció szerkesztése
+Prezentáció készítése kiselőadáshoz (a digitális kultúrához, más tantárgyakhoz, az iskolai élethez, hétköznapi problémához kapcsolódó feladat)
+Bemutató készítése projektmunkában végzett tevékenység összegzéséhez, bemutatásához, a megfelelő szerkezet kialakításával, az információforrások etikus használatával
+Témakör: Multimédiás elemek készítése
+Javasolt óraszám: 8 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+digitális eszközökkel önállóan rögzít és tárol képet, hangot és videót;
+digitális képeken képkorrekciót hajt végre.
+A témakör tanulása eredményeként a tanuló:
+ismeri egy bittérképes rajzolóprogram használatát, azzal ábrát készít;
+bemutatókészítő vagy szövegszerkesztő programban rajzeszközökkel ábrát készít.
+Fejlesztési feladatok és ismeretek
+Feladatleírás, illetve minta alapján rasztergrafikus ábra létrehozása, összehasonlítása, szerkesztése és illesztése különböző típusú dokumentumokba
+Digitalizáló eszközök megismerése. Kép, hang és video digitális rögzítése
+Képszerkesztési műveletek: beillesztés, vágás, kitöltés, kijelölés, színválasztás, feliratozás, retusálás, képméret változtatása, transzformációk
+Más tantárgyaknál felmerülő problémák megoldása grafikai programmal: ábrák készítése, képek, fotók szerkesztése
+Fogalmak
+rajz, rasztergrafika létrehozása, rasztergrafika szerkesztése, rajzeszközök; kép, hang, video digitális rögzítése; digitalizáló eszköz, képszerkesztési műveletek, transzformációk, színválasztás, retusálás, képméret változtatása
+Javasolt tevékenységek
+Kép, hang és video önálló rögzítése és tárolása digitális eszközökkel, digitális fényképezőgéppel, okostelefonnal más tantárgyak tananyagához kapcsolódó témában
+A tárolt multimédiás elemek megosztása társakkal, feldolgozása páros és kiscsoportos munkaformában
+A saját eszközzel készített képből, videóból képrészlet kivágása prezentációhoz való felhasználás céljából
+Képkorrekció végrehajtása saját készítésű digitális képeken, ami a további alkalmazáshoz vagy feldolgozáshoz szükséges
+Bittérképes rajzolóprogrammal ábrakészítés más tantárgyak tananyagához kapcsolódó témában
+Bemutatókészítő vagy szövegszerkesztő programban vektorgrafikus rajzeszközökkel ábrakészítés más tantárgyak tananyagához kapcsolódó témában
+Témakör: Az információs társadalom, e-Világ
+Javasolt óraszám: 6 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+ismeri a digitális környezet, az e-Világ etikai problémáit;
+ismeri az információs technológia fejlődésének gazdasági, környezeti, kulturális hatásait.
+A témakör tanulása eredményeként a tanuló:
+önállóan keres információt, a találatokat hatékonyan szűri;
+az internetes adatbázis-kezelő rendszerek keresési űrlapját helyesen tölti ki;
+ismeri az információs társadalom múltját, jelenét és várható jövőjét;
+védekezik az internetes zaklatás különböző formái ellen, szükség esetén segítséget kér.
+Fejlesztési feladatok és ismeretek
+Az információ szerepe a modern társadalomban
+Információkeresési technikák, stratégiák
+Adatok biztonságos kezelése, technikai és etikai problémák
+Az informatikai eszközök használatának következményei a személyiségre és az egészségre vonatkozóan
+Fogalmak
+e-Világ; e-ügyintézés; virtuális személyiség; információs társadalom; adatbiztonság; adatvédelem; digitális eszközöktől való függőség
+Javasolt tevékenységek
+Elektronikus levél írása hivatalos, iskolai, családi és baráti címzettnek
+Nyilvános és baráti fórumba hozzászólás, posztolás, mások hozzászólásának értékelése
+A családi és iskolai kapcsolatokban az elektronikus kommunikációs szabályok értékelése
+Az elektronikus kommunikáció gyakorlatában felmerülő problémák megismerése, valamint az ezeket megelőző vagy ezekre reagáló biztonságot szavatoló beállítások megismerése, használata
+Megfigyelések végzése és értelmezése a közösségi portálokon, keresőmotorok használata közben rögzített szokásokról, érdeklődési körökről, személyes profilokról
+Érdeklődési körnek, tanulmányoknak megfelelően információk keresése valamelyik keresőmotorban, és a találatok hatékony szűrése
+Témakör: A digitális eszközök használata
+Javasolt óraszám: 4 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+célszerűen választ a feladat megoldásához használható informatikai eszközök közül;
+önállóan használja az operációs rendszer felhasználói felületét;
+önállóan kezeli az operációs rendszer mappáit, fájljait és a felhőszolgáltatásokat;
+használja a digitális hálózatok alapszolgáltatásait.
+A témakör tanulása eredményeként a tanuló:
+önállóan kezeli az operációs rendszer mappáit, fájljait és a felhőszolgáltatásokat;
+az informatikai eszközöket önállóan használja, a tipikus felhasználói hibákat elkerüli, és elhárítja az egyszerűbb felhasználói szintű hibákat;
+értelmezi az informatikai eszközöket működtető szoftverek hibajelzéseit, és azokról beszámol.
+Fejlesztési feladatok és ismeretek
+Az informatikai eszközök egészségre gyakorolt hatásai
+Az informatikai eszközök működési elveinek megismerése és használata
+Az informatikai eszközök be- és kiviteli perifériái, a háttértárak, továbbá a kommunikációs eszközök. A felhasználás szempontjából fontos működési elvek és paraméterek
+Az informatikai eszközök, mobileszközök operációs rendszerei
+Tudatos felhasználói magatartás erősítése, a felelős eszközhasználat kialakítása, tudatosítása; etikus információkezelés
+Felhőszolgáltatások igénybevétele, felhasználási területei, virtuális személyiség és a hozzá tartozó jogosultságok szerepe, kezelése
+Állományok tárolása, kezelése és megosztása a felhőben
+Fogalmak
+adat, információ, hír, digitalizálás, minőség, ergonómia, be- és kiviteli periféria, háttértár, kommunikációs eszközök, fájl, fájlműveletek, mappa, mappaműveletek, mobileszközök operációs rendszere, helyi hálózat, jogosultságok, etikus információkezelés
+Javasolt tevékenységek
+A digitális eszközök feladatot segítő felhasználása projektfeladatokban
+Bemutatóhoz, projektfeladathoz tartozó állományok rendezett tárolása a lokális gépen, azok megosztása a társakkal a felhőszolgáltatáson keresztül
+Projektfeladathoz kacsolódóan használandó perifériák lehetőségeinek megismerése, használata
+A 7–8. évfolyam tananyaga szervesen kapcsolódik az 5–6. évfolyam tananyagához, annak spirális-teraszos logikát követő mélyítése, bővítése.
+A digitális írástudás témaköreinek feldolgozása – az életkornak, ezáltal a magasabb absztrakciós szintnek, valamint a nagyobb közismereti tudásnak megfelelően – lehetővé teszi összetettebb problémák megoldását. Új elemként jelenik meg az adatok táblázatos elrendezése, vektorgrafikus ábrák beillesztése, valamint kitekintés a webes dokumentumok világába. A digitális írástudás alapjainak elsajátítását a 8. évfolyam végére lényegében lezárjuk.
+A problémamegoldás fejlesztésében új témakörként jelenik meg a táblázatkezelés, amely alapszinten ugyan, de kerek egészet alkot. Az algoritmizálás, programozás témakörében a tanulók már csoportmunkában önállóan fejlesztenek blokkalapú programokat, megismerkednek az 5–6. osztályban tanulttól eltérő platformmal is. A 8. osztály végére a blokkprogramozás mint algoritmizálási, kódolási eszköz lezárásra kerül.

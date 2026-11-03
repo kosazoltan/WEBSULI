@@ -1,0 +1,505 @@
+5–6. évfolyam
+Az 5–6. évfolyam tanulásmódszertani szempontból átmenetet képez az alsó tagozat játékos, tevékenykedtető, felfedeztető módszerei és a matematika elméleti ismereteinek befogadását jelentő tanulási módszerek között. Továbbra is fontos szerepet játszik a szemléltetés, az eszközök használata. Elvárható a szerzett tapasztalatok értelmezése, rendszerezése, néhány területen az általánosítás lehetőségének felfedezése és megfogalmazása. A kezdeti, saját szavakkal történő megfogalmazásokat fokozatosan felváltja a matematikai fogalmakat megnevező szakkifejezések használata. Gyakorlati helyzetekben megjelenik a szakmai vita és az érvelés igénye.
+Az 5–6. évfolyamon tematikus elrendezésben követik egymást az egyes fejezetek: Halmazok; Matematikai logika, kombinatorika; Természetes számok halmaza, számelméleti ismeretek; Alapműveletek természetes számokkal; Egész számok, alapműveletek egész számokkal; Közönséges törtek, tizedes törtek, racionális számok; Alapműveletek közönséges törtekkel; Alapműveletek tizedes törtekkel; Arányosság, százalékszámítás; Egyszerű szöveges feladatok; A függvény fogalmának előkészítése; Sorozatok; Mérés és mértékegységek; Síkbeli alakzatok; Transzformációk, szerkesztések; Térgeometria; Leíró statisztika; Valószínűség-számítás. A témák egy része nemcsak az aktuális terület megalapozását jelenti a megadott óraszámban, hanem megjelenik más fejezetekben is, az eszközrendszer folyamatos gyarapodását biztosítva. Bővül a szöveggel megfogalmazott hétköznapi és matematikai problémák megoldása során alkalmazható modellek köre is.
+A szemléltetést és a megértést a tanulók által használható digitális eszközök, szoftverek és online felületek is támogatják.
+Az 5–6. évfolyamon a matematika tantárgy alapóraszáma: 272 óra. Az egyes témakörökhöz írt óraszámok javaslatok. Az új ismeretek a teljes óraszám négyötöd része alatt a legtöbb tanuló számára elsajátíthatók, így a fennmaradó órák felhasználhatók ismétlésre, gyakorlásra, felzárkóztatásra, tehetséggondozásra és számonkérésre.
+A témakörök áttekintő táblázata:
+Témakör neve
+Javasolt óraszám
+Halmazok
+10
+Matematikai logika, kombinatorika
+10
+Természetes számok halmaza, számelméleti ismeretek
+20
+Alapműveletek természetes számokkal
+16
+Egész számok; alapműveletek egész számokkal
+18
+Közönséges törtek, tizedes törtek, racionális számok
+18
+Alapműveletek közönséges törtekkel
+18
+Alapműveletek tizedes törtekkel
+14
+Arányosság, százalékszámítás
+20
+Egyszerű szöveges feladatok
+20
+A függvény fogalmának előkészítése
+10
+Sorozatok
+8
+Mérés és mértékegységek
+16
+Síkbeli alakzatok
+18
+Transzformációk, szerkesztések
+20
+Térgeometria
+16
+Leíró statisztika
+10
+Valószínűség-számítás
+10
+Összes óraszám:
+272
+Témakör: Halmazok
+Javasolt óraszám: 10 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+elemeket halmazba rendez több szempont alapján;
+részhalmazokat konkrét esetekben felismer és ábrázol;
+véges halmaz kiegészítő halmazát (komplementerét), véges halmazok közös részét (metszetét), egyesítését (unióját) képezi és ábrázolja konkrét esetekben;
+számokat, számhalmazokat, halmazműveleti eredményeket számegyenesen ábrázol.
+A témakör tanulása eredményeként a tanuló:
+konkrét esetekben halmazokat felismer és ábrázol.
+Fejlesztési feladatok és ismeretek
+Halmazokba rendezés egy-két szempont szerint
+Halmazábra készítése
+Számhalmazok szemléltetése számegyenesen
+Részhalmazok felismerése ábráról
+Halmazok közös részének és egyesítésének megállapítása ábrázolás segítségével.
+Fogalmak
+halmaz, elem, halmazábra, részhalmaz, közös rész, egyesítés, számegyenes
+Javasolt tevékenységek
+Konkrét elemek válogatása adott tulajdonság/tulajdonságok szerint, például csoport tagjai közül a szemüvegesek és a barna hajúak
+Egy konkrét válogatás (tárgyak, logikai készlet elemei, alakzatok, szavak…) szempontjának/szempontjainak felfedeztetése
+Konkrét halmaz elemeiből 1, 2, … elemű részhalmazok képzése, például néhány természetes szám közül 3-mal osztva 1 maradékot adó számok kiválasztásaPéldák és ellenpéldák mutatása részhalmazra
+Konkrét elemek két tulajdonság szerinti válogatása során a mindkét tulajdonsággal rendelkező elemek és a pontosan egy tulajdonsággal rendelkező elemek elhelyezése a halmazábrán A legalább egy tulajdonsággal rendelkező elemek felsorolása
+Játék logikai készlettel
+Témakör: Matematikai logika, kombinatorika
+Javasolt óraszám: 10 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+igaz és hamis állításokat fogalmaz meg;
+tanult minták alapján néhány lépésből álló bizonyítási gondolatsort megért és önállóan összeállít;
+a logikus érvelésben a matematikai szaknyelvet következetesen alkalmazza társai meggyőzésére;
+összeszámlálási feladatok megoldása során alkalmazza az összes eset áttekintéséhez szükséges módszereket.
+A témakör tanulása eredményeként a tanuló:
+állítások logikai értékét (igaz vagy hamis) megállapítja.
+Fejlesztési feladatok és ismeretek
+Egyszerű állítások logikai értékének (igaz vagy hamis) megállapítása
+Igaz és hamis állítások önálló megfogalmazása
+Nyitott mondatok igazsághalmazának megtalálása próbálgatással
+A matematikai logika egyszerű, a korosztály számára érthető szakkifejezéseinek ismerete és használata
+Egyszerű stratégiai, logikai és pénzügyi játékok, társasjátékok
+Kis elemszámú halmaz elemeinek sorba rendezése mindennapi életből vett példákkal
+Néhány számkártyát tartalmazó készlet elemeiből adott feltételeknek megfelelő számok alkotása
+Az összes eset előállítása során rendszerezési sémák használata: táblázat, ágrajz, szisztematikus felsorolás
+Fogalmak
+„igaz”, „hamis”; nyitott mondat, igazsághalmaz; „és”, „vagy”; „legalább”, „legfeljebb”; lehetőségek, összes lehetőség, rendszerező áttekintés, ágrajz
+Javasolt tevékenységek
+„Bírósági tárgyalás” játék: a vádlók hamis állításokat fogalmaznak meg például a páros számokról, a védők csoportja pedig cáfolja azokat
+„Füllentős” játék csoportban: a csoportok mondanak 3 állítást, egy hamis, kettő igaz; a többieknek ki kell találni, melyik a hamis
+Az igazsághalmaz elemeit is tartalmazó, néhány elemből álló halmaz elemeinek kipróbálása a nyitott mondat igazzá tételére
+„Rontó” játék: egy kiinduló halmaz elemeire igaz állítás megfogalmazása, ennek elrontása egy új elemmel, majd új igaz állítás megfogalmazása és így tovább
+„Einstein-fejtörő” típusú játék: a szereplőkre vonatkozó állítások alapján személyek és tulajdonságok párosítása
+Konkrét tárgyakkal, készletek elemeivel, geometriai alkotásokkal az adott feltételeknek megfelelő összes lehetőség kirakása és rendszerezése
+Adott ágrajz alapján feladat készítése és „feladatküldés” csoportmunkában
+Témakör: Természetes számok halmaza, számelméleti ismeretek
+Javasolt óraszám: 20 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+ismeri a prímszám és az összetett szám fogalmakat; el tudja készíteni összetett számok prímtényezős felbontását 1000-es számkörben;
+meghatározza természetes számok legnagyobb közös osztóját és legkisebb közös többszörösét.
+A témakör tanulása eredményeként a tanuló:
+érti és alkalmazza a számok helyi értékes írásmódját nagy számok esetén;
+ismeri a római számjelek közül az L, C, D, M jeleket, felismeri az ezekkel képzett számokat a hétköznapi helyzetekben;
+ismeri és alkalmazza a 2-vel, 3-mal, 4-gyel, 5-tel, 6-tal, 9-cel, 10-zel, 100-zal való oszthatóság szabályait;
+a természetes számokat osztóik száma alapján és adott számmal való osztási maradékuk szerint csoportosítja.
+Fejlesztési feladatok és ismeretek
+Számok helyi értékes írásmódjának megértése különböző alapú számrendszerekben csoportosítást, leltározást, helyiérték-táblázatba rögzítést tartalmazó feladatokon keresztül
+Számok helyi értékes írásmódjának használata nagy számok esetében
+Római számok írása, olvasása a következő jelekkel: I, V, X, L, C, D, M
+Osztók, többszörösök meghatározása; két szám közös osztóinak meghatározása; közös többszörösök meghatározása
+2-vel, 3-mal, 4-gyel, 5-tel, 6-tal, 9-cel, 10-zel, 100-zal való oszthatósági szabályok ismerete és alkalmazása
+A természetes számok csoportosítása osztóik száma alapján és adott számmal való osztási maradékuk szerint
+Fogalmak
+helyi érték, alaki érték, valódi érték, osztó, közös osztó, többszörös, közös többszörös
+Javasolt tevékenységek
+Vásárlás „fabatkával”, például tízes számrendszerbeli számokkal árazott termékek vásárlása a virtuális boltban 1, 3, 9, 27, … címletű játékpénz felhasználásával úgy, hogy minél kevesebb érmét használjunk fel; leltárkészítés a felhasznált címletekről
+Játék a „tökéletes pénztárgéppel” 10 000-nél nagyobb számokkal: a gép a tíz egyforma címletű pénzt kiveszi, és a következő fiókba beletesz egy tízszer akkora címletűt, majd kiírja a fiók tartalmát. Mit tettem a fiókba, és mit ír ki a gép?
+Páros munkában arab számok átírása római számokra és viszont; memóriajáték
+„Bumm” játék a közös többszörösök meghatározásához: a tanulók hangosan számlálnak, például az egyik csoport tagjai az 5 többszöröseinél tapsolnak, a másik csoport tagjai a 7 többszöröseinél dobbantanak
+Oszthatósági tulajdonságok megfigyelése 3, 4, 5, … oldalú hasábra felcsavart számegyenes segítségével
+„Osztó-fosztó” játék: az egyik játékos elvesz egy számkártyát, a másik elveheti ennek a számnak az összes, még az asztalon lévő osztóját, ezután a második játékos választ egy számot és így tovább
+Témakör: Alapműveletek természetes számokkal
+Javasolt óraszám: 16 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+írásban összead, kivon és szoroz;
+ismeri és helyesen alkalmazza a műveleti sorrendre és a zárójelezésre vonatkozó szabályokat fejben, írásban és géppel számolás esetén is a racionális számok körében;
+a műveleti szabályok ismeretében ellenőrzi számolását, a kapott eredményt észszerűen kerekíti;
+a gyakorlati problémákban előforduló mennyiségeket becsülni tudja, feladatmegoldásához ennek megfelelő tervet készít;
+a fejszámoláson és az írásban végzendő műveleteken túlmutató számolási feladatokhoz és azok ellenőrzéséhez számológépet használ.
+A témakör tanulása eredményeként a tanuló:
+gyakorlati feladatok megoldása során legfeljebb kétjegyű egész számmal írásban oszt. A hányadost megbecsüli.
+Fejlesztési feladatok és ismeretek
+Számkörbővítés; fejben számolás százezres számkörben kerek ezresekkel; analógiák alkalmazása
+Természetes számok összeadása, kivonása és szorzása írásban
+Írásbeli osztás algoritmusa kétjegyű természetes számmal
+Írásbeli osztás legfeljebb kétjegyű természetes számmal gyakorlati feladatok megoldása során; a hányados becslése
+A műveleti sorrendre és a zárójelezésre vonatkozó szabályok ismerete és helyes alkalmazása fejben, írásban és géppel számolás esetén
+Egyszerű szöveges feladat matematikai tartalmának felismerése, és az annak megfelelő műveletsor felírása
+A gyakorlati problémákban előforduló mennyiségek becslése
+Az alapműveletek tulajdonságainak (felcserélhetőség, csoportosíthatóság, széttagolhatóság) ismerete és alkalmazása a gyakorlatban
+Zárójeleket tartalmazó műveletsorok átalakítása, kiszámolása a természetes számok körében
+Kapott eredmény ellenőrzése; észszerű kerekítés
+Fogalmak
+összeadandók, az összeg tagjai, kisebbítendő, kivonandó, különbség, szorzandó, szorzó, szorzat, a szorzat tényezői, felcserélhetőség, csoportosíthatóság, széttagolhatóság, osztandó, osztó, hányados, maradék, zárójel, kerekítés, becslés, ellenőrzés
+Javasolt tevékenységek
+Fejben számolás gyakorlása „intelligens puff” játékkal
+Az írásbeli műveletvégzés algoritmusának segítése a „tökéletes pénztárgép” működési elvével„Számalkotó” játék írásbeli összeadáshoz, kivonáshoz: a műveletekben szereplő számokhoz számjegyek sorsolása dobókockával; a dobott értékek tetszőleges helyi értékre írhatók; az nyer, aki a legnagyobb, legkisebb vagy adott célszámhoz legközelebbi eredményt tudja kiszámolni a felírt számaiból
+A műveleti sorrend és a zárójelezési szabályok alkalmazása csoportmunkában, például ugyanazokat a számokat tartalmazó, csoportonként más-más zárójeles és zárójel nélküli műveletsorok elvégzése, majd az egyes csoportok eredményeinek összehasonlítása
+Adott szöveges feladathoz többféle műveletsor megadása, ezek közül a megfelelő kiválasztásaAdott szöveges feladathoz megfelelő műveletsor megalkotásaAdott műveletsorhoz szöveges feladat írása
+„Nem hiszem” páros játék: egyik játékos állításokat fogalmaz meg, a másik játékos dönt ennek igazságáról; például: két liter tej belefér egy 1 dm élű kocka alakú edénybe; a játékot az a tanuló nyeri, aki eltalálja az állítás igazságértékét
+Témakör: Egész számok; alapműveletek egész számokkal
+Javasolt óraszám: 18 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+ismeri és helyesen alkalmazza a műveleti sorrendre és a zárójelezésre vonatkozó szabályokat fejben, írásban és géppel számolás esetén is a racionális számok körében;
+a műveleti szabályok ismeretében ellenőrzi számolását, a kapott eredményt észszerűen kerekíti;
+a gyakorlati problémákban előforduló mennyiségeket becsülni tudja, feladatmegoldásához ennek megfelelő tervet készít;
+a fejszámoláson és az írásban végzendő műveleteken túlmutató számolási feladatokhoz és azok ellenőrzéséhez számológépet használ.
+A témakör tanulása eredményeként a tanuló:
+meghatározza konkrét számok ellentettjét, abszolút értékét;
+ismeri az egész számokat.
+Fejlesztési feladatok és ismeretek
+Negatív számok a gyakorlatban: adósság, tengerszint alatti mélység, fagypont alatti hőmérséklet
+Egész számok ismerete, összehasonlítása, ábrázolása számegyenesen. Ellentett, abszolút érték fogalmának ismerete és alkalmazása
+Alapműveletek értelmezése tárgyi tevékenységek, ábrázolások alapján a számkörbővítés során
+Alapműveletek elvégzése az egész számok körében
+Az alapműveletek tulajdonságainak (felcserélhetőség, csoportosíthatóság, széttagolhatóság) ismerete és alkalmazása a gyakorlatban
+A műveleti sorrendre és a zárójelezésre vonatkozó szabályok ismerete és helyes alkalmazása fejben, írásban és géppel számolás esetén
+Egyszerű szöveges feladat matematikai tartalmának felismerése, és az annak megfelelő műveletsor felírása
+Gyakorlati problémákban előforduló mennyiségek becslése
+Kapott eredmény ellenőrzése; észszerű kerekítés
+Fogalmak
+ellentett, negatív szám, előjel, egész szám, abszolút érték, kerekítés, becslés, ellenőrzés
+Javasolt tevékenységek
+Vagyoni helyzet megállapítása játékpénzzel és adósságcédulákkal
+Hőmérséklet-változás követése hőmérőmodellen
+Számok szemléltetéséhez, összehasonlításához, sorba rendezéséhez „élő számegyenes” létrehozása: a tanulók egy, a hátukra ragasztott számot képviselnek, és az értéküknek megfelelően foglalják el a helyüket
+Kukás játék: mindenki rajzol 5 négyzetet és egy kukát; számokat húznak például (–10)-től (+10)-ig számkártyákból; a húzott számot mindenki beírja valamelyik négyzetbe úgy, hogy a négyzetekben levő számok végül növekvő sorrendben legyenek; ha valaki nem tudja beírni a húzott számot, akkor az a szám megy a kukába; az győz, aki leghamarabb kitölti minden négyzetét
+Az előírt művelet szemléltetése játékpénzzel és adósságcédulákkal
+Az előírt művelet szemléltetése a számegyenesen való lépegetéssel, például „Hol van a kisautó, ha … ?”
+Gazdálkodj okosan! játék rövidített formája kevés, kis címletű készpénzzel úgy, hogy a játékos kénytelen legyen kölcsönt felvenni; szerencsekártya használata negatív szám kivonásának modellezésére: a bank elengedi 2 Ft adósságodat; ha nincs adósságod, vegyél fel kölcsönt
+A műveleti sorrend és a zárójelezési szabályok alkalmazása csoportmunkában, például ugyanazokat a számokat tartalmazó, csoportonként más-más zárójeles és zárójel nélküli műveletsorok elvégzése, majd az egyes csoportok eredményeinek összehasonlítása
+Adott szöveges feladathoz többféle műveletsor megadása, ezek közül a megfelelő kiválasztása
+Adott szöveges feladathoz megfelelő műveletsor megalkotása
+Adott műveletsorhoz szöveges feladat írása
+„Nem hiszem” páros játék előjeles mennyiségekkel
+Témakör: Közönséges törtek, tizedes törtek, racionális számok
+Javasolt óraszám: 18 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+ismeri a racionális számokat, tud példát végtelen nem szakaszos tizedes törtre.
+A témakör tanulása eredményeként a tanuló:
+ábrázol törtrészeket, meghatároz törtrészeknek megfelelő törtszámokat;
+érti és alkalmazza a számok helyi értékes írásmódját tizedes törtek esetén;
+megfelelteti egymásnak a racionális számok közönséges tört és tizedes tört alakját.
+Fejlesztési feladatok és ismeretek
+Törtrészek ábrázolása, törtrészeknek megfelelő törtszámok meghatározása
+Törtek összehasonlítása, egyszerűsítés, bővítés
+Különböző alakokban írt egyenlő törtek felismerése
+Számok helyi értékes írása tizedes törtek esetén
+Számok ábrázolása számegyenesen
+Fogalmak
+közönséges tört, számláló, nevező, törtvonal, vegyes szám, egyszerűsítés, bővítés, tizedes tört, tizedesvessző, helyi értékes írásmód, racionális szám, számegyenes
+Javasolt tevékenységek
+Kör (torta, pizza) és téglalap (tábla csokoládé) egyenlő részekre darabolása, adott törtnek megfelelő rész színezése; színezett részhez törtszám megfeleltetéseTörtek szemléltetése papírhajtogatással, színes rúd modellelAdott törtrészek ábrázolása tányérmodellel (2 különböző színű papírtányért egy sugár mentén bevágva összecsúsztatunk; az egyik tányéron például 12 egyenlő részt jelző beosztások vannak)
+Törtek összehasonlítása, például két egyenlő nagyságú és alakú téglalap közül az egyik 4, a másik 3 egyenlő részre osztása; az elsőben a 3 negyed, a másodikban a 2 harmad színezéseA téglalapon kívül más alakzatok színezése, modellek alkalmazásaEgyenlő és különböző törtek előállítása, összehasonlítása: játék az makaó-jellegű kártyajáték szabályai szerint a törtek, törtrészek különböző alakjaival
+A helyiérték-táblázat bővítése; a „tökéletes pénztárgép” „apró” címletekkel való kiegészítése (euró, eurócent)
+Törtek szemléltetése és összehasonlítása párhuzamos számegyeneseken
+Témakör: Alapműveletek közönséges törtekkel
+Javasolt óraszám: 18 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+elvégzi az alapműveleteket a racionális számok körében, eredményét összeveti előzetes becslésével;
+ismeri és helyesen alkalmazza a műveleti sorrendre és a zárójelezésre vonatkozó szabályokat fejben, írásban és géppel számolás esetén is a racionális számok körében;
+a műveleti szabályok ismeretében ellenőrzi számolását, a kapott eredményt észszerűen kerekíti.
+A témakör tanulása eredményeként a tanuló:
+meghatározza konkrét számok reciprokát.
+Fejlesztési feladatok és ismeretek
+Alapműveletek értelmezése tárgyi tevékenységek, ábrázolások alapján
+Reciprok fogalmának ismerete és alkalmazása
+Alapműveletek elvégzése a közönséges törtek körében
+Az alapműveletek tulajdonságainak (felcserélhetőség, csoportosíthatóság, széttagolhatóság) ismerete és alkalmazása a gyakorlatban
+A műveleti sorrendre és a zárójelezésre vonatkozó szabályok ismerete és helyes alkalmazása
+Egyszerű szöveges feladat matematikai tartalmának felismerése, és az annak megfelelő műveletsor felírása
+Kapott eredmény ellenőrzése
+Fogalmak
+közös nevező, reciprok
+Javasolt tevékenységek
+Kör- és téglalapmodell, tányérmodell, színes rúd modell alkalmazása alapműveletek értelmezésére„21-ezés” dominókkal: minden csoport kap egy kupac lefordított dominót; sorban húzunk, bármikor megállhatunk; a húzott dominót tetszőlegesen fordíthatjuk, egyik oldala a tört számlálója, másik a nevezője; a húzott és megfelelően fordított törteket összeadjuk; akinek az összege 2-nél több, kiesik; az győz, aki legjobban megközelíti a 2-t
+A műveleti sorrend és a zárójelezési szabályok alkalmazása csoportmunkában, például ugyanazokat a számokat tartalmazó, csoportonként más-más zárójeles és zárójel nélküli műveletsorok elvégzése, majd az egyes csoportok eredményeinek összehasonlítása
+Adott szöveges feladathoz többféle műveletsor megadása, ezek közül a megfelelő kiválasztása Adott szöveges feladathoz megfelelő műveletsor megalkotása Adott műveletsorhoz szöveges feladat írása
+Témakör: Alapműveletek tizedes törtekkel
+Javasolt óraszám: 14 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+elvégzi az alapműveleteket a racionális számok körében, eredményét összeveti előzetes becslésével;
+írásban összead, kivon és szoroz;
+ismeri és helyesen alkalmazza a műveleti sorrendre és a zárójelezésre vonatkozó szabályokat fejben, írásban és géppel számolás esetén is a racionális számok körében;
+a műveleti szabályok ismeretében ellenőrzi számolását, a kapott eredményt észszerűen kerekíti;
+a gyakorlati problémákban előforduló mennyiségeket becsülni tudja, feladatmegoldásához ennek megfelelő tervet készít;
+a fejszámoláson és az írásban végzendő műveleteken túlmutató számolási feladatokhoz és azok ellenőrzéséhez számológépet használ.
+A témakör tanulása eredményeként a tanuló:
+gyakorlati feladatok megoldása során tizedes törtet legfeljebb kétjegyű egész számmal írásban oszt. A hányadost megbecsüli.
+Fejlesztési feladatok és ismeretek
+Tizedes törtek összeadása, kivonása és szorzása írásban
+Tizedes törtek írásbeli osztása legfeljebb két tizedes jegyet tartalmazó számmal gyakorlati feladatok megoldása során; a hányados becslése
+Az alapműveletek tulajdonságainak (felcserélhetőség, csoportosíthatóság, széttagolhatóság) ismerete és alkalmazása a gyakorlatban
+A műveleti sorrendre és a zárójelezésre vonatkozó szabályok ismerete és helyes alkalmazása írásban és géppel számolás esetén
+Egyszerű szöveges feladat matematikai tartalmának felismerése, és az annak megfelelő műveletsor felírása
+Gyakorlati problémákban előforduló mennyiségek becslése
+Kapott eredmény ellenőrzése; észszerű kerekítés
+Fogalmak
+kerekítés
+Javasolt tevékenységek
+Az írásbeli műveletvégzés algoritmusának segítése a „tökéletes pénztárgép” működési elvével„Számalkotó” játék írásbeli összeadáshoz, kivonáshoz
+A tizedes törttel való osztás bemutatása és megtapasztalása mértékegység-átváltás segítségével
+A műveleti sorrend és a zárójelezési szabályok alkalmazása csoportmunkában, például ugyanazokat a számokat tartalmazó, csoportonként más-más zárójeles és zárójel nélküli műveletsorok elvégzése, majd az egyes csoportok eredményeinek összehasonlítása
+Adott szöveges feladathoz többféle műveletsor megadása, ezek közül a megfelelő kiválasztásaAdott szöveges feladathoz megfelelő műveletsor megalkotásaAdott műveletsorhoz szöveges feladat írása
+„Nem hiszem” páros játék tizedes törtekkel
+Témakör: Arányosság, százalékszámítás
+Javasolt óraszám: 20 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+felismeri az egyenes és a fordított arányosságot konkrét helyzetekben;
+felismeri és megalkotja az egyenes arányosság grafikonját;
+ismeri a százalék fogalmát, gazdasági, pénzügyi és mindennapi élethez kötődő százalékszámítási feladatokat megold;
+ismeri az idő, a tömeg, a hosszúság, a terület, a térfogat és az űrtartalom szabványmértékegységeit, használja azokat mérések és számítások esetén;
+idő, tömeg, hosszúság, terület, térfogat és űrtartalom mértékegységeket átvált helyi értékes gondolkodás alapján, gyakorlati célszerűség szerint.
+Fejlesztési feladatok és ismeretek
+Egyenes arányosság felismerése hétköznapi helyzetekben
+Az egyenesen arányos mennyiségek felismert tulajdonságainak alkalmazása konkrét gyakorlati feladatok megoldásában
+Az egyenes arányosság és a mérés kapcsolatának felismerése
+Hosszúság, űrtartalom, tömeg, idő szabványmértékegységeinek ismerete
+Az ismert szabványmértékegységek átváltása helyi értékes gondolkodás alapján
+Törtrészkiszámítási feladatok az egyenesen arányos mennyiségek kapcsolatainak alkalmazásával
+Századrész és százalék elnevezések párhuzamos használata gyakorlati helyzetekben
+Fogalmak
+arány, egyenes arányosság, hosszúság, űrtartalom, tömeg, idő szabványmértékegységei
+Javasolt tevékenységek
+Egyenesen arányos mennyiségpárok keresése például vásárlás, parkettázás, mérés esetén
+Hosszúság, űrtartalom, tömeg, idő mérése különböző alkalmi (például a ceruza hossza), objektív (például színes rúd) és szabványmértékegységekkelAnnak megtapasztalása, hogy adott egységgel mérve a kisebb mennyiséghez kevesebb, a nagyobb mennyiséghez több egység szükséges A mérőszám változásának megfigyelése adott mennyiség különböző mértékegységekkel való mérése esetén
+Törtrész előállításának megmutatása konkrét modelleken, például a ⅔ rész kiszámításakor először 3 egyenlő részre osztás az ⅓ rész kiszámításához, majd 2-vel szorzás
+Fogyasztási cikkek címkéin, reklámokban, társadalomismereti és természetismereti tanulmányokban előforduló százalékos adatok értelmezése
+Témakör: Egyszerű szöveges feladatok
+Javasolt óraszám: 20 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+egyismeretlenes elsőfokú egyenletet lebontogatással és mérlegelvvel megold;
+különböző szövegekhez megfelelő modelleket készít;
+matematikából, más tantárgyakból és a mindennapi életből vett egyszerű szöveges feladatokat következtetéssel vagy egyenlettel megold;
+gazdasági, pénzügyi témájú egyszerű szöveges feladatokat következtetéssel vagy egyenlettel megold;
+gyakorlati problémák megoldása során előforduló mennyiségeknél becslést végez.
+A témakör tanulása eredményeként a tanuló:
+megoldását ellenőrzi.
+Fejlesztési feladatok és ismeretek
+Matematikai tartalmú egyszerű szöveges feladatok megoldása különféle módszerekkel, például szakaszos ábrázolással, visszafelé gondolkodással
+Gazdasági területekről vett egyszerű szöveges feladatok megoldása különféle módszerekkel, például szakaszos ábrázolással, visszafelé gondolkodással
+A mindennapi életből vett egyszerű szöveges feladatok megoldása különféle módszerekkel, például szakaszos ábrázolással, visszafelé gondolkodással
+A megoldás ellenőrzése
+Gyakorlati problémákban előforduló mennyiségek becslése
+Fogalmak
+becslés, ellenőrzés
+Javasolt tevékenységek
+„Gondoltam egy számot” játék: a tanár néhány műveletből álló műveletsorral számoltatja a gyerekeket az általuk gondolt számmal; a tanulók megmondják a kapott végeredményt, és a tanár „kitalálja” a gondolt számot; a tanár többféle algoritmus után felajánlja a szerepcserét
+Törtrészek összehasonlítását tartalmazó szöveges feladatokban a törtrészek szemléltetése szakaszokkal
+Témakör: A függvény fogalmának előkészítése
+Javasolt óraszám: 10 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+konkrét halmazok elemei között megfeleltetést hoz létre;
+felismeri az egyenes és a fordított arányosságot konkrét helyzetekben;
+felismeri és megalkotja az egyenes arányosság grafikonját.
+A témakör tanulása eredményeként a tanuló:
+tájékozódik a koordináta-rendszerben: koordinátáival adott pontot ábrázol, megadott pont koordinátáit leolvassa.
+Fejlesztési feladatok és ismeretek
+A matematikából és a mindennapi életből vett megfeleltetések legalább egy lehetséges szabályának megadása
+A matematikából és a mindennapi életből vett megfeleltetések tulajdonságainak megfigyelése, elemzése
+Tájékozódás térképen, nézőtéren, sakktáblán és a koordináta-rendszerben
+Egyenes arányosság grafikonjának felismerése
+Fogalmak
+megfeleltetés, egyenes arányosság, koordináta-rendszer, pont koordinátái, grafikon
+Javasolt tevékenységek
+A tanár által adott megfeleltetés szabályának felismerése Páros munkában saját szabály alkotása és felismertetése a társsalA párok szabályainak megbeszélése, érdekességek megfigyelése
+Mozijegy, színházjegy adatainak értelmezése; saját útvonal berajzolása térképre; torpedó játék, kültéri tájékozódási verseny
+„Telefonos” játék párban vagy csoportban: az egyik játékos elkészít egy rajzot a koordináta-rendszerben úgy, hogy más ne láthassa; ezután az ábra néhány pontjának koordinátáit közli a többiekkel, ami alapján nekik is ugyanazt kell létrehozniuk
+Egyenes arányosság gyakorlati feladatainak adataiból grafikon készítése„Nem hiszem” páros játék: különböző grafikonok közül az egyenes arányosság grafikonjának kiválasztása
+Témakör: Sorozatok
+Javasolt óraszám: 8 óra
+Tanulási eredmények
+A témakör tanulása eredményeként a tanuló:
+sorozatokat adott szabály alapján folytat;
+néhány tagjával adott sorozat esetén felismer és megfogalmaz képzési szabályt.
+Fejlesztési feladatok és ismeretek
+Sorozatok létrehozása számokból, jelekből, alakzatokból
+Szabálykövetés ritmusban, rajzban, számolásban
+Sorozatok adott szabály szerinti folytatása
+Adott sorozat esetén legalább egy szabály felismerése és megfogalmazása
+Fogalmak
+sorozat, számsorozat, szabály
+Javasolt tevékenységek
+Számok, sorminták, díszítőelemek, kották, népi motívumok tanári bemutatása, tanulói saját munka készítése
+Megkezdett ritmusgyakorlat megismétlése, tovább fűzése Megkezdett díszítő motívum, sorminta folytatása„Bumm” játék: számolási szabály követése, például a 7-tel osztható és a 7-est tartalmazó számokra
+A tanár által megkezdett sorozat minél több szabályának gyűjtése csoportmunkábanPáros munkában saját szabály alkotása és felismertetése a társsalA párok szabályainak megbeszélése, érdekességek megfigyelése
+Témakör: Mérés és mértékegységek
+Javasolt óraszám: 16 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+meghatározza háromszögek és speciális négyszögek kerületét, területét;
+ismeri az idő, a tömeg, a hosszúság, a terület, a térfogat és az űrtartalom szabványmértékegységeit, használja azokat mérések és számítások esetén;
+egyenes hasáb, téglatest, kocka alakú tárgyak felszínét és térfogatát méréssel megadja, egyenes hasáb felszínét és térfogatát képlet segítségével kiszámolja; a képleteket megalapozó összefüggéseket érti.
+A témakör tanulása eredményeként a tanuló:
+síkbeli tartományok közül kiválasztja a szögtartományokat, nagyság szerint összehasonlítja, méri, csoportosítja azokat.
+Fejlesztési feladatok és ismeretek
+Szögtartomány ismerete; összehasonlítás, csoportosítás; szögmérés
+Terület, térfogat és űrtartalom mérése gyakorlati helyzetekben alkalmi és szabványegységekkel a természetes és az épített környezetben
+Téglalap, négyzet és háromszög kerületének, területének mérése a természetes és az épített környezetben
+Téglalap, négyzet kerületének, területének kiszámítása
+Sokszögek területének meghatározása átdarabolással
+Téglatest, kocka alakú tárgyak felszínének és térfogatának mérése a természetes és az épített környezetben
+Téglatest, kocka alakú tárgyak felszínének és térfogatának kiszámítása
+Fogalmak
+szög és mértékegységei (fok, szögperc), szögfajták, kerület, terület, űrtartalom és mértékegységei, felszín, térfogat és mértékegységei
+Javasolt tevékenységek
+Szívószál-modellel szögtartományok kijelöléseKönyv, füzet, ajtó nyitásával létrehozott szögtartományok megfigyelése; szögmérő használata
+Osztályterem adatainak becslése, mérése (hosszúság, szélesség, magasság, ablakok területe, a terem alapterülete, berendezés össztérfogata, a teremben lévő levegő becsült térfogata...)„Üreges testek” űrtartalmának becslése, mérése, összehasonlítása
+Kavicsok térfogatának mérése a mérőhengerben lévő víz vízszintemelkedése alapjánIskolaépület adatainak becslése, mérése (folyosók hossza, szélessége, alapterülete; lépcső magassága; tornaterem hossza, szélessége, alapterülete, becsült magassága, becsült térfogata; épület hossza, szélessége, alapterülete, becsült magassága, becsült térfogata…)Közeli játszótér, park, tó, épület adatainak becslése, mérése
+Papírból készült sokszögek átdarabolásának bemutatása, majd egyéni kipróbálás és a saját megoldások összehasonlítása
+Téglatest, kocka alakú dobozok készítéséhez szükséges papír területének becslése, mérése, számolása
+Téglatest, kocka alakú üreges test „feltöltése” egységkockákkal (becslés, mérés, számolás)
+Témakör: Síkbeli alakzatok
+Javasolt óraszám: 18 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+ismeri a tengelyesen szimmetrikus háromszöget;
+ismeri a négyszögek tulajdonságait: belső és külső szögek összege, konvex és konkáv közti különbség, átló fogalma;
+ismeri a speciális négyszögeket: trapéz, paralelogramma, téglalap, deltoid, rombusz, húrtrapéz, négyzet;
+ismeri a speciális négyszögek legfontosabb tulajdonságait, ezek alapján elkészíti a halmazábrájukat;
+a háromszögek és a speciális négyszögek tulajdonságait alkalmazza feladatok megoldásában;
+ismeri a Pitagorasz-tételt és alkalmazza számítási feladatokban;
+ismeri a kör részeit; különbséget tesz egyenes, félegyenes és szakasz között;
+ismeri a háromszögek tulajdonságait: belső és külső szögek összege, háromszög-egyenlőtlenség.
+A témakör tanulása eredményeként a tanuló:
+csoportosítja a háromszögeket szögeik és oldalaik szerint;
+felismeri a síkban az egybevágó alakzatokat.
+Fejlesztési feladatok és ismeretek
+Környezetünk tárgyaiban a geometriai alakzatok felfedezése
+Síkbeli görbék közül a kör kiválasztása
+Egyenes, félegyenes és szakasz megkülönböztetése
+Síkbeli alakzatok közül a sokszögek kiválasztása
+Háromszögek tulajdonságainak ismerete és alkalmazása: belső szögek összege, háromszög-egyenlőtlenség
+Tengelyesen szimmetrikus háromszögek ismerete
+Háromszögek csoportosítása szögeik és oldalaik szerint
+Téglalap és négyzet tulajdonságainak ismerete, alkalmazása
+Fogalmak
+síkidom, sokszög, belső szög, külső szög; hegyesszögű, derékszögű, tompaszögű, egyenlő szárú és szabályos háromszög; téglalap, négyzet
+Javasolt tevékenységek
+Osztályterem, iskola, iskola környékének megfigyelése geometriai szempontból (a lényegtelen tulajdonságok kizárása)
+Különböző készletekből adott szempontoknak megfelelő elemek válogatása
+Papír háromszög sarkainak levágása és egymás mellé helyezéseSzívószálból, hurkapálcából háromszög készítése (lehetséges és lehetetlen helyzetek)
+Papír háromszögek hajtogatásával vagy síktükör alkalmazásával szimmetriatulajdonságok megfigyelése
+Háromszögeket tartalmazó készletből adott szempontoknak megfelelő elemek válogatása
+Papír téglalap és négyzet tulajdonságainak gyűjtése páros munkában, a párok megoldásainak összehasonlítása
+Szabálytalan alakú papírból téglalap, négyzet hajtogatása
+Tangram játék
+Témakör: Transzformációk, szerkesztések
+Javasolt óraszám: 20 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+megszerkeszti alakzatok tengelyes és középpontos tükörképét;
+geometriai ismereteinek felhasználásával pontosan szerkeszt több adott feltételnek megfelelő ábrát;
+ismeri a tengelyesen szimmetrikus háromszöget;
+felismeri a kicsinyítést és a nagyítást hétköznapi helyzetekben;
+ismer és használ dinamikus geometriai szoftvereket, tisztában van alkalmazási lehetőségeikkel.
+A témakör tanulása eredményeként a tanuló:
+tapasztalatot szerez a síkbeli mozgásokról gyakorlati helyzetekben;
+felismeri a síkban az egybevágó alakzatokat;
+a szerkesztéshez tervet, előzetes ábrát készít;
+ismeri az alapszerkesztéseket: szakaszfelező merőlegest, szögfelezőt, merőleges és párhuzamos egyeneseket szerkeszt, szöget másol.
+Fejlesztési feladatok és ismeretek
+Tapasztalatszerzés síkbeli mozgásokról gyakorlati helyzetekben
+Egybevágó alakzatok felismerése a természetes és az épített környezetben
+Tengelyes tükrözés ismerete és alkalmazása
+Tengelyesen szimmetrikus alakzatok felismerése a természetes és az épített környezetben
+Alakzatok tengelyes tükörképének megszerkesztése
+Alapszerkesztések: szakaszfelező merőleges, merőleges és párhuzamos egyenesek szerkesztése; szögfelezés, szögmásolás
+Szerkesztéshez terv, előzetes ábra készítése
+Néhány adott feltételnek megfelelő ábra pontos szerkesztése
+Fogalmak
+szimmetriatengely, tengelyes szimmetria, merőlegesség, párhuzamosság, szakaszfelező merőleges, szögfelező félegyenes
+Javasolt tevékenységek
+Az osztályterem bútorainak mozgatása, tologatása, forgatása; saját eszközök mozgatása a padonÁbrák másolása másolópapír (például: sütőpapír) segítségével; a másolat mozgatása
+Szimmetrikus alkotások előállítása például tükör, hajtogatás, digitális eszköz segítségével
+Osztályterem, iskola, közeli játszótér, park, tó, épület egybevágó részeinek keresése, tengelyesen szimmetrikus alakzatok kiválasztása
+Tengelyes tükrözésen alapuló szerkesztések elvégzése saját eszközökkel (körző, egyélű vonalzó)
+Témakör: Térgeometria
+Javasolt óraszám: 16 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+a kocka, a téglatest, a hasáb és a gúla hálóját elkészíti;
+testeket épít képek, nézetek, alaprajzok, hálók alapján;
+ismeri a kocka, a téglatest, a hasáb és a gúla következő tulajdonságait: határoló lapok típusa, száma, egymáshoz viszonyított helyzete; csúcsok, élek száma; lapátló, testátló;
+ismeri a gömb tulajdonságait;
+a kocka, a téglatest, a hasáb, a gúla, a gömb tulajdonságait alkalmazza feladatok megoldásában.
+Fejlesztési feladatok és ismeretek
+Környezetünk tárgyaiban a geometriai testek felfedezése
+Téglatest, kocka tulajdonságainak ismerete és alkalmazása: határoló lapok típusa, száma, egymáshoz viszonyított helyzete; csúcsok, élek száma; lapátló, testátló
+Testek közül gömb kiválasztása
+Építmények készítése képek, nézetek, alaprajzok, hálók alapján
+Testekről, építményekről nézeti rajzok, alaprajzok, hálók készítése
+Fogalmak
+test, kocka, téglatest, lap, él, csúcs, lapátló, testátló, alaprajz, háló, nézet
+Javasolt tevékenységek
+Osztályterem, iskola, iskola környékének megfigyelése geometriai szempontból (a testek kiválasztása)
+Téglatest- és kockamodell tulajdonságainak gyűjtése páros munkában, a párok megoldásainak összehasonlítása; a tapasztalatok irányított összegzése
+Készletből adott szempontnak megfelelő elemek válogatása
+Építés dobozokból, színes rudakból, kis kockákból (kockacukor) feltételek alapján; lapok, élek, csúcsok, nézetek, hálók megfigyelése
+Egyéni munkában építmények, rajzok, hálók készítése; az alkotások összehasonlítása, megbeszélése, kiállítása az osztályterembenZsinóros térgeometriai modellek használata
+Témakör: Leíró statisztika
+Javasolt óraszám: 10 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+értelmezi a táblázatok adatait, az adatoknak megfelelő ábrázolási módot kiválasztja, és az ábrát elkészíti;
+adatokat táblázatba rendez, diagramon ábrázol hagyományos és digitális eszközökkel is;
+különböző típusú diagramokat megfeleltet egymásnak;
+megadott szempont szerint adatokat gyűjt ki táblázatból, olvas le hagyományos vagy digitális forrásból származó diagramról, majd rendszerezés után következtetéseket fogalmaz meg;
+konkrét adatsor esetén átlagot számol, megállapítja a leggyakoribb adatot (módusz), a középső adatot (medián), és ezeket összehasonlítja.
+Fejlesztési feladatok és ismeretek
+Adatokat, táblázatokat és diagramokat tartalmazó források felkutatása (például háztartás, sport, egészséges életmód, gazdálkodás)
+A táblázatok adatainak értelmezése és ábrázolása (oszlopdiagram, kördiagram, vonaldiagram, pontdiagram) kisméretű mintán
+A hétköznapi életből gyűjtött adatok táblázatba rendezése, ábrázolása hagyományos és digitális eszközökkel kisméretű minta esetén
+Azonos adathalmazon alapuló kördiagram és oszlopdiagram összehasonlítása becslés alapján kisméretű minta esetén
+Táblázatból adatgyűjtés adott szempont szerint
+Átlag fogalmának ismerete, alkalmazása
+Fogalmak
+adat, diagram, átlag
+Javasolt tevékenységek
+Projektmunka, például iskolai büfével vagy szelektív hulladékgyűjtéssel kapcsolatos felmérés készítése (gyűjtőmunka, a gyűjtött adatok bemutatása, megbeszélése, értelmezése, ábrázolása)
+Megadott vagy a tanulók által gyűjtött adatok ábrázolása és elemzése csoportmunkában
+Témakör: Valószínűség-számítás
+Javasolt óraszám: 10 óra
+Tanulási eredmények
+A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére:
+valószínűségi játékokat, kísérleteket végez, ennek során az adatokat tervszerűen gyűjti, rendezi és ábrázolja digitálisan is;
+valószínűségi játékokban érti a lehetséges kimeneteleket, játékában stratégiát követ;
+ismeri a gyakoriság és a relatív gyakoriság fogalmát. Ismereteit felhasználja a „lehetetlen”, a „biztos” és a „kisebb/nagyobb eséllyel lehetséges” kijelentések megfogalmazásánál.
+Fejlesztési feladatok és ismeretek
+Egyszerű valószínűségi játékok és kísérletek
+Valószínűségi játékok és kísérletek adatainak tervszerű gyűjtése
+A „biztos”, a „lehetséges, de nem biztos” és a „lehetetlen” események felismerése
+Fogalmak
+valószínűségi kísérlet, „biztos” esemény; „lehetséges, de nem biztos ” esemény; „lehetetlen” esemény
+Javasolt tevékenységek
+Játék dobókockákkal, dobótestekkel, pénzérmékkel, szerencsekerékkel, zsákba helyezett színes golyókkal
+Játék eseménykártyákkal a „biztos”, „lehetséges, de nem biztos”, „lehetetlen” események megkülönböztetésére, események gyakoriságának megfigyelésére csoportmunkában: valószínűségi kísérlethez (például 3 korongot feldobunk) tartozó eseményeket írunk kártyákra (például mindhárom kék; több a kék, mint a piros; nincs piros; van kék; van két egyforma szín; egyik színből sincs legalább kettő); kiosztjuk a kártyákat, elvégezzük a kísérletet, majd mindenki rátesz egy zsetont arra a kártyájára, amelyikre írt esemény bekövetkezett; a kísérletek végén elemzés: melyik a jó kártya, melyik rossz, melyiket választanád
+Tippelős játék eseménykártyákkal: minden kártyára mindenki odaírja a tippjét, hogy 20 kísérletből szerinte hányszor következik be; ellenőrizzük a kísérletek elvégzésével
+Bökős játék csoportban: minden körben a 100-as tábláról véletlenszerűen választunk egy számot (bökünk vagy papírgalacsint dobunk a táblára); a játék elején mindenkinek van 5 korongja; körönként a szám választása előtt minden játékos egy-egy koronggal tippel, például kékre fordítja, ha a szám 7-tel osztható, pirosra, ha nem; ha nem találta el, elvesztette a korongját, ha talált, akkor nem; az veszít, akinek hamarabb elfogynak a korongjai
+10 korongot feldobunk; a számegyenesen a 0-ból indulva annyit lépünk pozitív irányba, ahány pirosat dobtunk, majd innen annyit negatív irányba, ahány kéket; tippeld meg, hova jutsz; válassz 4 számkártyát, nyersz, ha ezek valamelyikére jutsz
+„Nem hiszem” páros játék: egyik játékos események bekövetkezésének esélyeiről fogalmaz meg állítást (például lehetséges, de nem biztos, hogy két dobókockával dobva a dobott számok összege 13), a másik játékos dönt ennek igazságáról; a játékot az a tanuló nyeri, aki igazat állít
+„Szavazós” játék: a tanár vagy egy tanuló állítást fogalmaz meg egy kísérlet kimenetelére (például két dobókockával a dobott számok szorzata 40); az osztály szavaz a „biztos”, a „lehetséges, de nem biztos” és a „lehetetlen” döntések valamelyikére.

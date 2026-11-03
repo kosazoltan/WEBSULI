@@ -5,6 +5,8 @@ description: Feltöltött forrásból vagy internetes keresésből készülő HT
 
 # Tananyag készítése — fúzió 7.4
 
+> **Befejezési mandátum (tulajdonosi utasítás 2026-11-01/03).** A megkezdett készítés/javítás nem hagyható félbe: a kiadott kérés teljes elkészültéig fut, a session végén tételes teljességellenőrzés kell, objektív blokkolónál NOT DONE + ok + kockázat. Minden hibából csapda-bejegyzés lesz ([`docs/agent-csapdak.md`](../../../docs/agent-csapdak.md)). Részletek: [`AGENTS.md`](../../../AGENTS.md) „Befejezési mandátum”.
+
 > **Utasításrendszer runtime-3 (2026-09-30).** A runtime-3 utasításrendszer (szerepre szűrt runbook, pontozó v2, BANKCSOMAG-SZERZŐDÉS, javítási jogosultság, tanári pontjegyzék, szigorú lektori jelentés, limit-tábla) tényleges működése: [közös módszer — „Utasításrendszer runtime-3”](../../../docs/lesson-improvement.md). Zárt matematikai feladatnál `typedAnswers`, „N példát” kérő feladatnál `requiredDistinct` a rubrika.
 
 Először olvasd el a [közös, forrásalapú módszert](../../../docs/lesson-improvement.md), majd a feladathoz szükséges [v7.4 referenciarészeket](../../../docs/specs/tananyag-keszito-SKILL-v7_4.md). A feltöltött v7.4 tudása kötelező minimum (tulajdonosi utasítás, 2026-09-12). A közös szerződés a biztonságos pontozást, automatikus besorolást és technikai formátumokat pontosítja, a pedagógiai minimumot nem csökkentheti.

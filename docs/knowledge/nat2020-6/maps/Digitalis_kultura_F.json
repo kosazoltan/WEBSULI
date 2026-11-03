@@ -1,0 +1,110 @@
+{
+  "title": "NAT 2020 Digitális kultúra 5–6. — 6. évfolyam",
+  "subject": "Digitális kultúra",
+  "classroom": 6,
+  "status": "draft",
+  "sourceFiles": [
+    {
+      "name": "Digitalis_kultura_F.grade6.txt",
+      "kind": "text"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "digitalis-ku-algoritmizalas-es-blokkprogramozas",
+      "term": "Algoritmizálás és blokkprogramozás",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: érti, hogyan történik az egyszerű algoritmusok végrehajtása a digitális eszközökön; egyszerű algoritmusokat elemez és készít; ismeri a kódolás eszközeit; adatokat kezel a programozás eszközeivel. A témakör tanulása eredményeként a tanuló: megkülönbözteti, kezeli és használja az elemi adatokat; ismeri és tanári segítséggel használja a blokkprogramozás alapvető építőelemeit;",
+      "quote": "Témakör: Algoritmizálás és blokkprogramozás",
+      "sourceRef": {
+        "file": "Digitalis_kultura_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "digitalis-ku-online-kommunikacio",
+      "term": "Online kommunikáció",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: ismeri, használja az elektronikus kommunikáció lehetőségeit, a családi és az iskolai környezetének elektronikus szolgáltatásait; ismeri és betartja az elektronikus kommunikációs szabályokat. A témakör tanulása eredményeként a tanuló: tisztában van a hálózatokat és a személyes információkat érintő fenyegetésekkel, alkalmazza az adatok védelmét biztosító lehetőségeket;",
+      "quote": "Témakör: Online kommunikáció",
+      "sourceRef": {
+        "file": "Digitalis_kultura_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "digitalis-ku-robotika",
+      "term": "Robotika",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: ismeri és használja a blokkprogramozás alapvető építőelemeit; adatokat gyűjt szenzorok segítségével; mozgásokat vezérel szimulált vagy valós környezetben. A témakör tanulása eredményeként a tanuló: ismeri és használja a blokkprogramozás alapvető építőelemeit. Az algoritmikus gondolkodás fejlesztése Algoritmus készítése lépésekre bontással",
+      "quote": "Témakör: Robotika",
+      "sourceRef": {
+        "file": "Digitalis_kultura_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "digitalis-ku-szovegszerkesztes",
+      "term": "Szövegszerkesztés",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: egy adott feladat kapcsán önállóan hoz létre szöveges vagy multimédiás dokumentumokat. A témakör tanulása eredményeként a tanuló: ismeri és tudatosan alkalmazza a szöveges és multimédiás dokumentum készítése során a szöveg formázására, tipográfiájára vonatkozó alapelveket; a tartalomnak megfelelően alakítja ki a szöveges vagy a multimédiás dokumentum szerkezetét, illeszti be, helyezi el és formázza meg a szükséges objektumokat;",
+      "quote": "Témakör: Szövegszerkesztés",
+      "sourceRef": {
+        "file": "Digitalis_kultura_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "digitalis-ku-bemutatokeszites",
+      "term": "Bemutatókészítés",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: egy adott feladat kapcsán önállóan hoz létre szöveges vagy multimédiás dokumentumokat; ismeri és tudatosan alkalmazza a szöveges és multimédiás dokumentum készítése során a szöveg formázására, tipográfiájára vonatkozó alapelveket; etikus módon használja fel az információforrásokat, tisztában van a hivatkozás szabályaival.",
+      "quote": "Témakör: Bemutatókészítés",
+      "sourceRef": {
+        "file": "Digitalis_kultura_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "digitalis-ku-multimedias-elemek-keszitese",
+      "term": "Multimédiás elemek készítése",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: digitális eszközökkel önállóan rögzít és tárol képet, hangot és videót; digitális képeken képkorrekciót hajt végre. A témakör tanulása eredményeként a tanuló: ismeri egy bittérképes rajzolóprogram használatát, azzal ábrát készít; bemutatókészítő vagy szövegszerkesztő programban rajzeszközökkel ábrát készít. Feladatleírás, illetve minta alapján rasztergrafikus ábra létrehozása, összehasonlítása, szerkesztése és illesztése különböző típusú dokumentumokba",
+      "quote": "Témakör: Multimédiás elemek készítése",
+      "sourceRef": {
+        "file": "Digitalis_kultura_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "digitalis-ku-az-informacios-tarsadalom-e-vilag",
+      "term": "Az információs társadalom, e-Világ",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: ismeri a digitális környezet, az e-Világ etikai problémáit; ismeri az információs technológia fejlődésének gazdasági, környezeti, kulturális hatásait. A témakör tanulása eredményeként a tanuló: önállóan keres információt, a találatokat hatékonyan szűri; az internetes adatbázis-kezelő rendszerek keresési űrlapját helyesen tölti ki;",
+      "quote": "Témakör: Az információs társadalom, e-Világ",
+      "sourceRef": {
+        "file": "Digitalis_kultura_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "digitalis-ku-a-digitalis-eszkozok-hasznalata",
+      "term": "A digitális eszközök használata",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: célszerűen választ a feladat megoldásához használható informatikai eszközök közül; önállóan használja az operációs rendszer felhasználói felületét; önállóan kezeli az operációs rendszer mappáit, fájljait és a felhőszolgáltatásokat; használja a digitális hálózatok alapszolgáltatásait. A témakör tanulása eredményeként a tanuló:",
+      "quote": "Témakör: A digitális eszközök használata",
+      "sourceRef": {
+        "file": "Digitalis_kultura_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    }
+  ]
+}

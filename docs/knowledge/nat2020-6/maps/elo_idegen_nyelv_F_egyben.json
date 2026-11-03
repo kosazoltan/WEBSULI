@@ -1,0 +1,122 @@
+{
+  "title": "NAT 2020 Angol nyelv 5–6. — 6. évfolyam",
+  "subject": "Angol nyelv",
+  "classroom": 6,
+  "status": "draft",
+  "sourceFiles": [
+    {
+      "name": "elo_idegen_nyelv_F_egyben.grade6.txt",
+      "kind": "text"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "angol-nyelv-personal-topics-and-topics-concerning-immediate-",
+      "term": "Personal topics and topics concerning immediate environment and nature",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: elmesél rövid, személyes történetet egyszerű nyelvi eszközökkel, önállóan, a cselekményt lineárisan összefűzve; rövid, egyszerű, összefüggő szövegeket ír a tanult nyelvi szerkezetek felhasználásával az ismert szövegtípusokban, az ajánlott tématartományokban; értelmez életkorának megfelelő nyelvi helyzeteket hallott szöveg alapján;",
+      "quote": "Témakör: Personal topics and topics concerning immediate environment and nature",
+      "sourceRef": {
+        "file": "elo_idegen_nyelv_F_egyben.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "angol-nyelv-public-matters",
+      "term": "Public matters",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: találkozik az érdeklődésének megfelelő, akár autentikus szövegekkel elektronikus/digitális csatornákon, tanórán kívül is. A témakör tanulása eredményeként a tanuló: a közéleti tématartományban megért egyszerű, többnyire ismert nyelvi elemeket tartalmazó célnyelvi szöveget; a közéleti tématartományban létrehoz egyszerű, többnyire ismert nyelvi elemeket tartalmazó célnyelvi szöveget, tanult és begyakorolt nyelvi eszközökkel;",
+      "quote": "Témakör: Public matters",
+      "sourceRef": {
+        "file": "elo_idegen_nyelv_F_egyben.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "angol-nyelv-topics-concerning-classroom-activities",
+      "term": "Topics concerning classroom activities",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: megérti a szintjének megfelelő, nonverbális vagy vizuális eszközökkel támogatott célnyelvi óravezetést és utasításokat, kérdéseket; felkészülést követően röviden, összefüggően beszél az ajánlott tématartományokhoz tartozó témákban; képet jellemez röviden, ismert nyelvi fordulatok segítségével, segítő tanári kérdések alapján;",
+      "quote": "Témakör: Topics concerning classroom activities",
+      "sourceRef": {
+        "file": "elo_idegen_nyelv_F_egyben.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "angol-nyelv-cross-curricular-topics-and-activities",
+      "term": "Cross-curricular topics and activities",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: papíralapú vagy IKT-eszközökkel segített írott projektmunkát készít önállóan, vagy kooperatív munkaformákban. A témakör tanulása eredményeként a tanuló: ismer szavakat, szókapcsolatokat a célnyelven a témakörre jellemző, életkorának és érdeklődésének megfelelő, más tudásterületen megcélzott tartalmakból. Alapvető szavak, szókapcsolatok használata célnyelven a témakörre jellemző, életkorának és érdeklődésének megfelelő tartalmakból.",
+      "quote": "Témakör: Cross-curricular topics and activities",
+      "sourceRef": {
+        "file": "elo_idegen_nyelv_F_egyben.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "angol-nyelv-english-and-language-learning",
+      "term": "English and language learning",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: ismeri a célnyelv főbb jellemzőit; értelmezi és használja az idegen nyelvű írott, olvasott és hallott tartalmakat a tanórán kívül is. A témakör tanulása eredményeként a tanuló: követi a célnyelvi normához illeszkedő kiejtést és intonációt a tanult nyelvi elemekben; alkalmazza a tanult nyelvi funkciókat társalgás megkezdéséhez, fenntartásához és befejezéséhez;",
+      "quote": "Témakör: English and language learning",
+      "sourceRef": {
+        "file": "elo_idegen_nyelv_F_egyben.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "angol-nyelv-intercultural-topics",
+      "term": "Intercultural topics",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: találkozik célnyelvi országismereti tartalmakkal. A témakör tanulása eredményeként a tanuló: megismeri a célnyelvi országok jellemzőit és kulturális sajátosságait a célnyelvi kultúrákhoz kapcsolódó tanult nyelvi elemeket használja. Főbb célnyelvi kulturális szokások, jellemzők ismerete, összehasonlítása alapvető hazai szokásainkkal",
+      "quote": "Témakör: Intercultural topics",
+      "sourceRef": {
+        "file": "elo_idegen_nyelv_F_egyben.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "angol-nyelv-current-topics",
+      "term": "Current topics",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: használja a célnyelvet életkorának és nyelvi szintjének megfelelő aktuális témákban és a hozzájuk tartozó szituációkban. A témakör tanulása eredményeként a tanuló: találkozik a célnyelvi, életkorának és érdeklődésének megfelelő hazai és nemzetközi legfőbb hírekkel, eseményekkel. Életkorának és érdeklődésének megfelelő hazai és nemzetközi eseményekre vonatkozó alapvető szókincs megértése célnyelven.",
+      "quote": "Témakör: Current topics",
+      "sourceRef": {
+        "file": "elo_idegen_nyelv_F_egyben.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "angol-nyelv-entertainment-and-playful-learning",
+      "term": "Entertainment and playful learning",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: hallgat az érdeklődésének megfelelő autentikus szövegeket elektronikus, digitális csatornákon, tanórán kívül is, szórakozásra vagy ismeretszerzésre; a nyomtatott vagy digitális alapú írott szöveget felhasználja szórakozásra és ismeretszerzésre. A témakör tanulása eredményeként a tanuló: találkozik életkorának és nyelvi szintjének megfelelő célnyelvi szórakoztató tartalmakkal;",
+      "quote": "Témakör: Entertainment and playful learning",
+      "sourceRef": {
+        "file": "elo_idegen_nyelv_F_egyben.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "angol-nyelv-gaining-and-sharing-knowledge",
+      "term": "Gaining and sharing knowledge",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: papíralapú vagy IKT-eszközökkel segített írott projektmunkát készít önállóan, vagy kooperatív munkaformákban; találkozik az érdeklődésének megfelelő, akár autentikus szövegekkel elektronikus/digitális csatornákon, tanórán kívül is; néhány szóból vagy mondatból álló jegyzetet készít írott szöveg alapján. A témakör tanulása eredményeként a tanuló:",
+      "quote": "Témakör: Gaining and sharing knowledge",
+      "sourceRef": {
+        "file": "elo_idegen_nyelv_F_egyben.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    }
+  ]
+}

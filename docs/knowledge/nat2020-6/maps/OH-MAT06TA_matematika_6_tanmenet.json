@@ -1,0 +1,86 @@
+{
+  "title": "OH-MAT06TA Matematika 6. tanmenet (NAT 2020)",
+  "subject": "Matematika",
+  "classroom": 6,
+  "status": "draft",
+  "sourceFiles": [
+    {
+      "name": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt",
+      "kind": "text"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "matematika-egesz-szamok-oszthatosag",
+      "term": "Egész Számok, Oszthatóság",
+      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: EGÉSZ SZÁMOK, OSZTHATÓSÁG. Új tananyag tervezett óraszáma: 12.",
+      "quote": "EGÉSZ SZÁMOK, OSZTHATÓSÁG",
+      "sourceRef": {
+        "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-geometria-tengelyes-tukrozes",
+      "term": "Geometria, Tengelyes Tükrözés",
+      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: GEOMETRIA, TENGELYES TÜKRÖZÉS. Új tananyag tervezett óraszáma: 9.",
+      "quote": "GEOMETRIA, TENGELYES TÜKRÖZÉS",
+      "sourceRef": {
+        "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-arany-szazalek-szoveges-feladatok",
+      "term": "Arány, Százalék, Szöveges Feladatok",
+      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: ARÁNY, SZÁZALÉK, SZÖVEGES FELADATOK. Új tananyag tervezett óraszáma: 10.",
+      "quote": "ARÁNY, SZÁZALÉK, SZÖVEGES FELADATOK",
+      "sourceRef": {
+        "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-kerulet-terulet-felszin-terfogat",
+      "term": "Kerület, Terület, Felszín, Térfogat",
+      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: KERÜLET, TERÜLET, FELSZÍN, TÉRFOGAT. Új tananyag tervezett óraszáma: 8.",
+      "quote": "KERÜLET, TERÜLET, FELSZÍN, TÉRFOGAT",
+      "sourceRef": {
+        "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-statisztika",
+      "term": "Statisztika",
+      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: STATISZTIKA. Új tananyag tervezett óraszáma: 4.",
+      "quote": "STATISZTIKA",
+      "sourceRef": {
+        "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "matematika-ev-vegi-ismetles",
+      "term": "Év Végi Ismétlés",
+      "definition": "Hatodik osztályos matematika témakör a NAT 2020 tanmenetjavaslatban: ÉV VÉGI ISMÉTLÉS.",
+      "quote": "ÉV VÉGI ISMÉTLÉS",
+      "sourceRef": {
+        "file": "OH-MAT06TA_matematika_6_tanmenet.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    }
+  ]
+}
