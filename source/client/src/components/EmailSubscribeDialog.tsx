@@ -119,7 +119,7 @@ export default function EmailSubscribeDialog() {
           aria-label="Értesítés új tananyagokról"
         >
           <Bell className="w-4 h-4 shrink-0" aria-hidden="true" />
-          <span className="hidden lg:inline">Értesítés</span>
+          <span>Értesítés</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]" data-testid="dialog-email-subscribe">

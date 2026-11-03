@@ -66,7 +66,7 @@ function HeroSection({
         initial="hidden"
         animate="visible"
       >
-        <div className="flex items-center justify-between gap-x-3 gap-y-2.5 flex-wrap md:flex-nowrap">
+        <div className="flex items-center justify-between gap-x-3 gap-y-2.5 flex-wrap xl:flex-nowrap">
           {/* Márka */}
           <motion.div variants={itemVariants} className="flex items-center gap-2.5 min-w-0">
             <span className="hero-mark" aria-hidden="true">
@@ -96,9 +96,10 @@ function HeroSection({
             </span>
           </motion.div>
 
-          {/* Gombok — LS-0b: 46 px-es érintőfelület és mindig látható felirat; mobilon teljes szélességű, egyenlő sor. */}
-          <motion.div variants={itemVariants} className="flex items-center gap-1.5 sm:gap-2 w-full md:w-auto md:ml-auto">
-            <Button asChild size="sm" className="hero-btn hero-btn--games flex-1 md:flex-none">
+          {/* Gombok — LS-0b: 46 px-es érintőfelület és mindig látható felirat. Review #388: egy sorba csak ott kerül minden, ahol
+              ténylegesen elfér (xl, mérve); alatta a gombok saját, teljes szélességű sort kapnak — nincs átfedés. */}
+          <motion.div variants={itemVariants} className="flex items-center gap-1.5 sm:gap-2 w-full xl:w-auto xl:ml-auto">
+            <Button asChild size="sm" className="hero-btn hero-btn--games flex-1 xl:flex-none">
               <a href="#gyakorlo-jatekok" data-testid="link-hero-games">
                 <Gamepad2 className="w-4 h-4 shrink-0" />
                 <span>Játékok</span>
@@ -107,7 +108,7 @@ function HeroSection({
             <Button
               size="sm"
               onClick={scrollToContent}
-              className="hero-btn hero-btn--primary flex-1 md:flex-none"
+              className="hero-btn hero-btn--primary flex-1 xl:flex-none"
               data-testid="button-hero-browse"
             >
               <span>Böngészés</span>
@@ -119,14 +120,14 @@ function HeroSection({
               </div>
             )}
             {isAdmin ? (
-              <Link href="/admin" className="flex-1 md:flex-none">
+              <Link href="/admin" className="flex-1 xl:flex-none">
                 <Button size="sm" className="hero-btn hero-btn--admin w-full">
                   <Shield className="w-4 h-4 shrink-0" />
                   <span>Admin</span>
                 </Button>
               </Link>
             ) : !isAuthenticated ? (
-              <Link href={`/login?returnTo=${encodeURIComponent("/")}`} className="flex-1 md:flex-none">
+              <Link href={`/login?returnTo=${encodeURIComponent("/")}`} className="flex-1 xl:flex-none">
                 <Button size="sm" className="hero-btn hero-btn--login w-full" data-testid="button-hero-login">
                   <LogIn className="w-4 h-4 shrink-0" />
                   <span>Belépés</span>
