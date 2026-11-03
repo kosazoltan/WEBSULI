@@ -19,6 +19,7 @@ import { ownerInstructionPromptBlock, type OwnerInventory } from "../../shared/o
 import { lektorLessonView } from "./lektor-view";
 import { correctionPromptLines, type SourceCorrection } from "./source-corrections";
 import { blindSolutionsPromptBlock, type BlindSolutions } from "./blind-solver";
+import { canonicalJson } from "../lib/canonical-hash";
 import { SECTION_ROLE_HEADING } from "../../shared/lesson-ui-text";
 
 /**
@@ -753,23 +754,9 @@ export type AnimatorCheck = {
  * Kulcssorrend-független JSON-alak az egyezés-vizsgálatokhoz. Éles mérés 2026-09-09:
  * az animátor (Terra, Grok) bájtra azonos nem-animate blokkokat adott vissza, csak a
  * kulcsok sorrendje tért el — a sorrend-érzékeny JSON.stringify ezt „szerződéssértésnek”
- * jelezte, és a runner MINDEN animált leckét eldobott.
+ * jelezte, és a runner MINDEN animált leckét eldobott. Spec 2026-11-03-apply-visszaolvasas: semleges modulban él.
  */
-export function canonicalJson(value: unknown): string {
-  return JSON.stringify(sortKeysDeep(value));
-}
-
-function sortKeysDeep(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeysDeep);
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-      out[key] = sortKeysDeep((value as Record<string, unknown>)[key]);
-    }
-    return out;
-  }
-  return value;
-}
+export { canonicalJson };
 
 export function checkAnimatorResult(original: Lesson, candidate: Lesson): AnimatorCheck {
   const reasons: string[] = [];

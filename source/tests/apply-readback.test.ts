@@ -28,8 +28,10 @@ test("nincs a javításhoz tartozó mentés vagy hiányzik a hash → nem igazol
   assert.equal(appliedLessonMatches(saved, candidate, [{ improvedFileId: "fix-1", backupData: null }], "fix-1"), false);
 });
 
-test("több mentés (csökkenő időrend): a legkorábbi, alkalmazáskori számít, nem a későbbi visszaállításé", () => {
-  const restoreBackup = { improvedFileId: "fix-1", backupData: { expectedCurrentHash: repairHash({ ...candidate, title: "Visszaállított" }) } };
+test("több mentés (alkalmazás + visszaállítás): sorrendtől függetlenül a tényleges állapot dönt", () => {
+  const restored = { ...candidate, title: "Visszaállított" };
+  const restoreBackup = { improvedFileId: "fix-1", backupData: { expectedCurrentHash: repairHash(restored) } };
   assert.equal(appliedLessonMatches(saved, candidate, [restoreBackup, applyBackup], "fix-1"), true);
-  assert.equal(appliedLessonMatches(saved, candidate, [applyBackup, restoreBackup], "fix-1"), false);
+  assert.equal(appliedLessonMatches(saved, candidate, [applyBackup, restoreBackup], "fix-1"), true);
+  assert.equal(appliedLessonMatches(restored, candidate, [applyBackup, restoreBackup], "fix-1"), false, "visszaállított lecke nem számít alkalmazottnak");
 });
