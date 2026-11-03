@@ -19,6 +19,7 @@ import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
+import { useAuth } from "@/hooks/useAuth";
 
 /** A /api/materials/likes/batch szerveroldali korlátja (server/lib/public-input.ts MAX_MATERIAL_ID_BATCH). */
 export const LIKES_BATCH_LIMIT = 100;
@@ -60,16 +61,27 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   // Tulajdonosi jelzés 2026-10-18 (docs/specs/2026-10-18-tanulo-evfolyam-szuro.md): a tanuló évfolyamára szűrve nyílik —
   // különben a „Mind” nézet más évfolyamok mai anyagát tenné elé (egy ötödikesnek 4. osztályosat).
   const { grade: learnerGrade } = useClassroomGrade();
+  // Spec 2026-11-03-udvozlo-jatekkartyak-szulo: az admin (szülő) mindig az összes tananyaggal nyit — a tanulóhoz párosított
+  // eszközön is (az eszköz évfolyama a gyereké).
+  const { isAdmin } = useAuth();
   const hasGrade = (g: number | null) => g != null && files.some((f) => (f.classroom ?? 1) === g);
-  const [selectedClassroom, setSelectedClassroom] = useState<number | null>(() => (hasGrade(learnerGrade) ? learnerGrade : null));
+  const [selectedClassroom, setSelectedClassroom] = useState<number | null>(() => (!isAdmin && hasGrade(learnerGrade) ? learnerGrade : null));
   // Csak az évfolyam változására (és az első betöltésre) vált — a lista frissítése nem írja felül a tanuló „Mind” választását.
-  const appliedGrade = useRef<number | null | undefined>(undefined);
+  const appliedGrade = useRef<number | null | undefined | "admin">(undefined);
   useEffect(() => {
+    if (isAdmin) {
+      // Egyszer vált „Mind”-re (az auth betöltése után is); a szülő kézi évfolyamválasztását utána nem írja felül.
+      if (appliedGrade.current !== "admin") {
+        appliedGrade.current = "admin";
+        setSelectedClassroom(null);
+      }
+      return;
+    }
     if (appliedGrade.current === learnerGrade || files.length === 0) return;
     appliedGrade.current = learnerGrade;
     // Review #291: törölt évfolyamnál vagy anyag nélküli évfolyamnál „Mind” (nem ragad az előző szűrőn).
     setSelectedClassroom(learnerGrade != null && files.some((f) => (f.classroom ?? 1) === learnerGrade) ? learnerGrade : null);
-  }, [learnerGrade, files]);
+  }, [learnerGrade, files, isAdmin]);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
 
   // Load fingerprint once on mount

@@ -1032,3 +1032,284 @@
   .sponsor-bar-label { width: 100%; justify-content: center; font-size: 11px; }
   .sponsor-bar-link img { height: 32px; border-radius: 10px; }
 }
+
+/* Spec 2026-11-03-udvozlo-jatekkartyak-szulo: a főoldali panelek (üdvözlő, játékok) a fejléc üvegnyelvén — minta és homályosítás nélkül. */
+.home-panel {
+  position: relative;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(110deg, rgba(15, 23, 62, 0.9) 0%, rgba(30, 27, 75, 0.78) 60%, rgba(49, 46, 129, 0.62) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 10px 30px -14px rgba(2, 6, 23, 0.9);
+}
+.welcome-panel { padding: 14px; }
+@media (min-width: 640px) { .welcome-panel { padding: 18px 20px; } }
+.welcome-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: #1f1300;
+  font-size: 20px;
+  font-weight: 900;
+  background: linear-gradient(140deg, #fde68a 0%, #f59e0b 55%, #ea580c 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+.welcome-sub {
+  margin-top: 4px;
+  color: rgba(226, 232, 240, 0.86);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.welcome-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fde68a;
+  font-size: 13px;
+  font-weight: 800;
+}
+.welcome-streak svg { color: #fb923c; }
+.welcome-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(241, 245, 249, 0.9);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+.welcome-edit-btn:hover { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.28); }
+.welcome-edit-btn:focus-visible, .welcome-pick:focus-visible { outline: 3px solid #fde68a; outline-offset: 2px; }
+.welcome-picks-title {
+  margin: 14px 0 8px;
+  color: #fde68a;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.welcome-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-height: 44px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  text-align: left;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+.welcome-pick:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(253, 230, 138, 0.45); }
+.welcome-pick-thumb {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.08);
+}
+.welcome-pick-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(203, 213, 225, 0.9);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.welcome-pick-new {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #047857;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+}
+.welcome-pick-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 2px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.welcome-input {
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff;
+}
+.welcome-input::placeholder { color: rgba(226, 232, 240, 0.65); }
+.welcome-ghost {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #ffffff !important;
+}
+.welcome-ghost:hover { background: rgba(255, 255, 255, 0.14) !important; }
+
+/* Gyakorló játékok */
+.games-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 14px;
+}
+.games-head-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: #a5f3fc;
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  background: linear-gradient(140deg, rgba(34, 211, 238, 0.22), rgba(99, 102, 241, 0.22));
+}
+.games-head-text {
+  flex-basis: 100%;
+  max-width: 100%;
+  color: rgba(203, 213, 225, 0.85);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.games-head-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  background: rgba(34, 211, 238, 0.1);
+  color: #a5f3fc;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.games-head-link:hover { background: rgba(34, 211, 238, 0.2); }
+.game-card {
+  --gc: #22d3ee;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  padding: 14px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--gc) 28%, rgba(255, 255, 255, 0.08));
+  background:
+    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--gc) 16%, transparent) 0%, transparent 60%),
+    linear-gradient(160deg, rgba(15, 23, 62, 0.92) 0%, rgba(17, 24, 39, 0.92) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 24px -16px rgba(2, 6, 23, 0.9);
+  color: #ffffff;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+a.game-card:hover, .game-card:focus-within {
+  border-color: color-mix(in srgb, var(--gc) 60%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 14px 30px -14px color-mix(in srgb, var(--gc) 45%, transparent);
+}
+a.game-card:focus-visible { outline: 3px solid #fde68a; outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) {
+  a.game-card:hover { transform: translateY(-2px); }
+}
+.game-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  color: var(--gc);
+  border: 1px solid color-mix(in srgb, var(--gc) 40%, transparent);
+  background: color-mix(in srgb, var(--gc) 16%, transparent);
+}
+.game-icon svg { width: 22px; height: 22px; }
+.game-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--gc) 45%, transparent);
+  background: color-mix(in srgb, var(--gc) 18%, transparent);
+  color: color-mix(in srgb, var(--gc) 55%, #ffffff);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.game-title {
+  margin-top: 12px;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.game-desc {
+  flex: 1;
+  margin-top: 4px;
+  color: rgba(203, 213, 225, 0.88);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.game-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: color-mix(in srgb, var(--gc) 70%, #ffffff);
+  font-size: 13px;
+  font-weight: 800;
+}
+.game-diffs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.game-diff {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  transition: filter 160ms ease;
+}
+.game-diff:hover { filter: brightness(1.15); }
+.game-diff:focus-visible { outline: 3px solid #fde68a; outline-offset: 2px; }
+.game-diff--easy { background: #047857; }
+.game-diff--normal { background: #0e7490; }
+.game-diff--hard { background: #be123c; }
+@media (max-width: 639px) {
+  .game-card { padding: 12px; border-radius: 16px; }
+  .game-icon { width: 40px; height: 40px; border-radius: 12px; }
+  .game-icon svg { width: 20px; height: 20px; }
+  .game-title { margin-top: 10px; font-size: 14.5px; }
+  .game-desc { font-size: 12.5px; }
+  .game-diff { padding: 0 8px; font-size: 12px; }
+}
