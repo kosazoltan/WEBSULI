@@ -98,7 +98,15 @@
 ## 8. Kockázatok / visszavonás
 
 - **Hosszabb build:** ~603 kép. Inkrementális, és a Render build-gyorsítótárában nem marad meg, ezért kb. 20–40 s.
-- **A Vercel-előnézet is `npm run build`-del készül:** ugyanaz a kimenet.
+- **Vercel (review #385, javítva):** a `source/vercel.json` a `build:client` scriptet futtatja, nem az `npm run build`-et.
+  - A korábbi feltevés hibás volt: a kliensbuild nem készítette el a bélyegképeket, így a Render által adott `/design-thumbs/…`
+    URL-ekre a Vercel catch-all szabálya `index.html`-t adott volna, és a kártyákról eltűnt volna a kép.
+  - Javítás: a `build:client` is futtatja a generátort. A fájlnév a forráskép tartalom-hash-éből készül, ezért mindkét buildben azonos.
+  - Tartalék: `vercel.json` rewrite `/design-thumbs/:path*` → Render, a catch-all előtt; a Vercel ezt csak akkor használja, ha a
+    fájl nála nincs meg (például deploy közbeni eltérésnél). Fejléc: `/design-thumbs/(.*)` immutable.
+- **Elavult bélyegkép a memóriában (review #385, javítva):** ha a képszinkron egy futó generálás közben írja felül a sort, a
+  `forgetThumb` a futó feladat regisztrációját is törli. A gyorsítótárba csak a még regisztrált feladat írhat, és csak az törölheti
+  a saját regisztrációját.
 - **Visszavonás:** a merge commit revertje.
 
 ## 9. Végrehajtási utasítás

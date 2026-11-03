@@ -43,6 +43,19 @@ Munkakönyvtár: `source/`. Ág: `perf/fooldal-sebesseg`.
 - **Új:** `tests/design-thumbs-build.test.ts`, `tests/html-files-cache.test.ts`; `tests/design-thumb.test.ts` bővül.
 - **Futtatás:** `npx tsc --noEmit` (app + teszt), `npx eslint client/src server --max-warnings 0`, `npm test`, `npm run build` (helyben).
 
+## T4b: review #385 javításai
+
+- `package.json`: `"build:client": "node scripts/build-design-thumbs.mjs && vite build"`.
+- `vercel.json`:
+  - rewrite `/design-thumbs/:path*` → `https://websuli-api-eu.onrender.com/design-thumbs/:path*` a `/:path*` catch-all előtt;
+  - fejléc `/design-thumbs/(.*)`: `public, max-age=31536000, immutable`.
+- `server/design-assets.ts`:
+  - a `forgetThumb` a `thumbInflight`-ból is töröl;
+  - a generálás csak `thumbInflight.get(id) === job` esetén ír a `thumbById`-be, és a `finally` is csak ekkor töröl.
+- **Teszt:**
+  - `tests/design-thumb.test.ts`: érvénytelenítés generálás közben → a következő kérés újratölt;
+  - `tests/design-thumbs-build.test.ts`: a Vercel-build parancs és a rewrite sorrendje.
+
 ## T5: PR → automatikus merge → éles visszamérés
 
 - **Élesben:**
