@@ -97,14 +97,15 @@
 .animate-rainbow-spectrum {
   background: linear-gradient(
     90deg,
-    #ff0000 0%,      /* Vörös */
-    #ff7f00 14.28%,  /* Narancs */
-    #ffff00 28.57%,  /* Sárga */
-    #00ff00 42.85%,  /* Zöld */
-    #0000ff 57.14%,  /* Kék */
-    #4b0082 71.42%,  /* Indigó */
-    #9400d3 85.71%,  /* Lila */
-    #ff0000 100%     /* Vörös (vissza) */
+    /* Spec 2026-11-03-hero-szponzor-2026: a sötét fejlécpanelen minden fázisban olvasható, világos spektrum (≥ 4,5:1). */
+    #ff6b6b 0%,      /* Vörös */
+    #ffa94d 14.28%,  /* Narancs */
+    #ffd43b 28.57%,  /* Sárga */
+    #69db7c 42.85%,  /* Zöld */
+    #4dabf7 57.14%,  /* Kék */
+    #9775fa 71.42%,  /* Indigó */
+    #da77f2 85.71%,  /* Lila */
+    #ff6b6b 100%     /* Vörös (vissza) */
   );
   background-size: 300% 100%;
   background-clip: text;
@@ -836,62 +837,198 @@
   font-weight: 700;
 }
 
-/* Spec 2026-11-03-szponzor-fejlec: vékony támogatói sáv a főoldal fejléce alatt — ne vonja el a figyelmet a tananyagokról. */
+/* Spec 2026-11-03-hero-szponzor-2026: a főoldal fejléce — üvegpanel a kártyák nyelvén (homályosítás nélkül, olcsó rajzolás). */
+.hero-bar {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #0b1030;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 10px 30px -12px rgba(2, 6, 23, 0.8);
+}
+.hero-bar-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.35;
+}
+.hero-bar-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(245, 158, 11, 0.18) 0%, transparent 45%),
+    linear-gradient(100deg, rgba(15, 23, 62, 0.92) 0%, rgba(30, 27, 75, 0.72) 45%, rgba(49, 46, 129, 0.55) 100%);
+}
+.hero-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: #1f1300;
+  background: linear-gradient(140deg, #fde68a 0%, #f59e0b 55%, #ea580c 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 4px 12px rgba(245, 158, 11, 0.35);
+}
+.hero-tagline {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 4px;
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(226, 232, 240, 0.85);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.hero-chip b {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+}
+.hero-bar .hero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 46px;
+  min-width: 46px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.hero-bar .hero-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.hero-bar .hero-btn:focus-visible {
+  outline: 3px solid #fde68a;
+  outline-offset: 2px;
+}
+.hero-bar .hero-btn--primary {
+  border-color: transparent;
+  color: #1f1300;
+  background: linear-gradient(135deg, #fcd34d 0%, #f59e0b 50%, #f97316 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 16px -4px rgba(249, 115, 22, 0.55);
+}
+.hero-bar .hero-btn--primary:hover {
+  background: linear-gradient(135deg, #fde68a 0%, #fbbf24 50%, #fb923c 100%);
+  border-color: transparent;
+}
+.hero-bar .hero-btn--games svg { color: #67e8f9; }
+.hero-bar .hero-btn--notify svg { color: #fcd34d; }
+.hero-bar .hero-btn--admin svg { color: #fda4af; }
+.hero-bar .hero-btn--admin { border-color: rgba(253, 164, 175, 0.35); }
+@media (prefers-reduced-motion: no-preference) {
+  .hero-bar .hero-btn:hover { transform: translateY(-1px); }
+}
+/* Review #388: a közös Button hover-emelését és nyomás-zsugorítását is kikapcsolja csökkentett mozgásnál. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-bar .hero-btn:hover,
+  .hero-bar .hero-btn:active { transform: none; }
+}
+@media (max-width: 639px) {
+  .hero-bar { border-radius: 16px; }
+  .hero-mark { width: 36px; height: 36px; border-radius: 11px; }
+  .hero-bar .hero-btn { padding: 0 10px; }
+}
+@media (max-width: 380px) {
+  .hero-bar .hero-btn { gap: 3px; padding: 0 7px; font-size: 12px; }
+}
+
+/* Spec 2026-11-03-szponzor-fejlec + 2026-11-03-hero-szponzor-2026: a támogatói sáv a fejléc üvegnyelvén. */
 .sponsor-bar {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 10px 18px;
+  gap: 10px 16px;
   margin: 0 auto 12px;
   width: fit-content;
   max-width: 100%;
-  padding: 10px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.06);
+  padding: 10px 12px 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  background: linear-gradient(100deg, rgba(15, 23, 62, 0.85) 0%, rgba(30, 27, 75, 0.7) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 24px -14px rgba(2, 6, 23, 0.9);
 }
 .sponsor-bar-label {
-  color: #C7D2FE;
-  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #e0e7ff;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+.sponsor-bar-label svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: #fb7185;
+}
+.sponsor-bar-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 4px 0;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.28), transparent);
 }
 .sponsor-bar-logos {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
 }
+/* A link átlátszó, ≥ 44 px-es érintőfelület; a lap kinézete (sarok, gyűrű, árnyék) magán a logón van — kisebb logónál se legyen üres keret. */
 .sponsor-bar-link {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  border-radius: 12px;
+  transition: transform 160ms ease;
 }
 .sponsor-bar-link img {
   display: block;
   height: 40px;
   width: auto;
   max-width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 4px 14px -4px rgba(0, 0, 0, 0.55);
+  transition: box-shadow 160ms ease;
 }
 .sponsor-bar-link:focus-visible {
   outline: 3px solid #FDE68A;
   outline-offset: 3px;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .sponsor-bar-link:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
-  }
+  .sponsor-bar-link:hover { transform: translateY(-2px); }
+  .sponsor-bar-link:hover img { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3), 0 10px 20px -6px rgba(0, 0, 0, 0.6); }
+}
+@media (max-width: 639px) {
+  .sponsor-bar-divider { display: none; }
 }
 @media (max-width: 480px) {
-  .sponsor-bar { padding: 8px 10px; gap: 6px 10px; }
-  .sponsor-bar-label { width: 100%; text-align: center; font-size: 11.5px; }
-  .sponsor-bar-link img { height: 32px; }
+  .sponsor-bar { padding: 8px 10px; gap: 6px 10px; border-radius: 16px; }
+  .sponsor-bar-label { width: 100%; justify-content: center; font-size: 11px; }
+  .sponsor-bar-link img { height: 32px; border-radius: 10px; }
 }

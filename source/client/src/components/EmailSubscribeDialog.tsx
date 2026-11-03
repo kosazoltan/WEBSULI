@@ -113,11 +113,13 @@ export default function EmailSubscribeDialog() {
       <DialogTrigger asChild>
         <Button
           size="sm"
-          className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 h-6 sm:h-7 px-2 sm:px-3 text-[10px] sm:text-xs rounded-full"
+          // Spec 2026-11-03-hero-szponzor-2026: a fejléc gombrendszerében (46 px, üveg, borostyán csengő).
+          className="hero-btn hero-btn--notify"
           data-testid="button-open-subscribe-dialog"
+          aria-label="Értesítés új tananyagokról"
         >
-          <Bell className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-          <span className="hidden md:inline">Értesítés</span>
+          <Bell className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span>Értesítés</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]" data-testid="dialog-email-subscribe">
