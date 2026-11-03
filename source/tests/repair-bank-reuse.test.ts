@@ -48,6 +48,31 @@ test("a tartalom szerinti átvétel nélkül (previousSections hiányzik) a konf
   assert.equal(calls, 2);
 });
 
+test("review #379: a lektori kivétel miatt hézagos régi csomag átvételkor a tételek a SAJÁT azonosítójukat tartják", async () => {
+  const { lesson, packets } = twoSectionLesson();
+  let calls = 0;
+  const first = await buildLessonExperience(lesson, [], { memory: "M", call: async () => structuredClone(packets[calls++ % 2]) });
+  const gapped = structuredClone(first);
+  const removed = inSection(gapped.tasks, 0)[1].id;
+  gapped.tasks = gapped.tasks.filter(t => t.id !== removed);
+  const changed = structuredClone(lesson); changed.sections[1].heading = "Javított második összefüggés";
+  calls = 0;
+  const repaired = await buildLessonExperience(changed, [], { previous: gapped, previousSections: lesson.sections, call: async () => { calls++; return structuredClone(packets[1]); } });
+  assert.equal(calls, 1);
+  assert.deepEqual(inSection(repaired.tasks, 0).map(t => t.id), inSection(gapped.tasks, 0).map(t => t.id), "a hézag nem számozódik át");
+  assert.ok(!repaired.tasks.some(t => t.id === removed), "a kivett tétel azonosítója nem kerül másik kérdésre");
+});
+
+test("review #379: a forrás-helyesbítés fogalmának egysége újragyártódik, a többi megmarad (reuseExcludedConceptIds)", async () => {
+  const { lesson, packets } = twoSectionLesson();
+  let calls = 0;
+  const first = await buildLessonExperience(lesson, [], { memory: "M", call: async () => structuredClone(packets[calls++ % 2]) });
+  calls = 0;
+  const repaired = await buildLessonExperience(lesson, [], { previous: first, previousSections: lesson.sections, reuseExcludedConceptIds: new Set(["height"]), call: async () => { calls++; return structuredClone(packets[1]); } });
+  assert.equal(calls, 1, "csak a helyesbített fogalom egysége");
+  assert.deepEqual(inSection(repaired.quiz, 0), inSection(first.quiz, 0));
+});
+
 test("a kihagyott fejezet (forrás-helyesbítés: undefined) és a mostani kapun bukó régi csomag újragyártódik", async () => {
   const { lesson, packets } = twoSectionLesson();
   let calls = 0;

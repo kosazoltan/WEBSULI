@@ -213,12 +213,11 @@ export async function finishStructuredImprovement(original: Lesson, candidate: L
   assertRepairTeaching(original, candidate, source, classroom);
   await workflowPhase("banks");
   const design = owner?.design;
-  // Spec 2026-11-03-javitas-bank-megorzes: a tanításában változatlan fejezet bankja megmarad (a helyesbített fogalmat tanító fejezeté nem);
-  // az újragyártott csomag a gyártás vak minőségkapuit kapja.
-  const corrected = new Set((owner?.corrections ?? []).map(c => c.localId));
-  const previousSections = original.sections.map(s => s.blocks.some(b => "coversConceptIds" in b && b.coversConceptIds.some(id => corrected.has(id))) ? undefined : s);
+  // Spec 2026-11-03-javitas-bank-megorzes: a tanításában változatlan fejezet bankja megmarad (a helyesbített fogalom egységéé nem — review
+  // #379: egységenként, a több csomagra bontott fejezet többi egysége megmarad); az újragyártott csomag a gyártás vak minőségkapuit kapja.
+  const reuseExcludedConceptIds = new Set((owner?.corrections ?? []).map(c => c.localId));
   // Review #160: a szigorú séma (U2/C8) a javító út bankhívásán is átmegy; a hívó dönt, hogy az út támogatja-e.
-  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, previousSections, call: (system, user, _attempt, extra) => call("author", system, user, "bank", extra),
+  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, previousSections: original.sections, reuseExcludedConceptIds, call: (system, user, _attempt, extra) => call("author", system, user, "bank", extra),
     ...gates?.({ classroom, concepts: source.concepts.map(c => ({ id: c.localId, term: c.term, definition: c.definition })) }, candidate),
     ...(design?.world ? { theme: design.world } : {}) });
   assertRepairCandidate(original, candidate, source, classroom);

@@ -124,6 +124,8 @@ export type ExperienceBuildDeps = {
    * skill-verzió) függetlenül átvehető — mérve: e nélkül egy egymondatos javítás mind a 7 fejezet bankját újragyártotta, gyengébben.
    */
   previousSections?: ReadonlyArray<Lesson["sections"][number] | undefined>;
+  /** Review #379: e fogalmak egységei nem vehetők át (forrás-helyesbítés) — egységenként, nem a teljes fejezetre. */
+  reuseExcludedConceptIds?: ReadonlySet<string>;
   reviewFeedback?: BankReviewFeedback[];
   /** Spec 2026-10-21-ciklus6 (review #357): a tulajdonos pontozási szabálya (a csomag rendszerpromptjába és hash-ébe kerül). */
   scoringRules?: string;
@@ -450,9 +452,9 @@ function withoutFigures<S extends { blocks: Array<{ kind: string }> }>(section: 
  * Spec 2026-11-03-javitas-bank-megorzes: a korábbi bank azonos fejezetű, azonos fogalmú egysége, ha a fejezet ábra nélküli tanítása
  * változatlan — különben undefined (újragyártás). A csomag elfogadásáról a hívó a mostani kapukkal dönt.
  */
-function unchangedPreviousUnit(previous: LessonExperience | undefined, previousSections: ExperienceBuildDeps["previousSections"], lesson: Lesson, unit: { sectionIndex: number; conceptIds: string[] }) {
-  const before = previousSections?.[unit.sectionIndex];
-  if (!previous?.bankPlan || !before) return undefined;
+function unchangedPreviousUnit(previous: LessonExperience | undefined, deps: Pick<ExperienceBuildDeps, "previousSections" | "reuseExcludedConceptIds">, lesson: Lesson, unit: { sectionIndex: number; conceptIds: string[] }) {
+  const before = deps.previousSections?.[unit.sectionIndex];
+  if (!previous?.bankPlan || !before || unit.conceptIds.some(id => deps.reuseExcludedConceptIds?.has(id))) return undefined;
   if (canonicalJson(withoutFigures(before)) !== canonicalJson(withoutFigures(lesson.sections[unit.sectionIndex]))) return undefined;
   const ids = canonicalJson([...unit.conceptIds].sort());
   return previous.bankPlan.units.find(u => u.sectionIndex === unit.sectionIndex && u.sourceHash && canonicalJson([...u.conceptIds].sort()) === ids);
@@ -535,7 +537,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     let hash = reviewFeedback.length ? createHash("sha256").update(canonicalJson(evidence)).digest("hex") : checkpoint.reviewedHashes?.[baseHash] ?? baseHash;
     unit.sourceHash = hash;
     // Spec 2026-11-03-javitas-bank-megorzes: a tanításában változatlan fejezet korábbi csomagja tartalom szerint (nem a konfigfüggő hash szerint).
-    const keptUnit = reviewFeedback.length ? undefined : unchangedPreviousUnit(deps.previous, deps.previousSections, lesson, unit);
+    const keptUnit = reviewFeedback.length ? undefined : unchangedPreviousUnit(deps.previous, deps, lesson, unit);
     // Spec 2026-09-30 (U2, B4): a csomag mérhető szerződése és a pontozó tényleges szabályai a KÓDBÓL generálva — egy szabály egy helyen.
     const contract = bankPacketContract({ sectionIndex: unit.sectionIndex, conceptIds: unit.conceptIds, methodKinds, taskCount, taskTarget, quizCount, quizTarget, language });
     const signRules = needsSignedNumberRules(lesson.subject, teaching.section) ? `${SIGNED_NUMBER_RULES_HU}\n` : "";
@@ -811,10 +813,15 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
     }
     // H52: a nyitott aritmetikai lelet a VÉGLEGES azonosítóval jut a hívóhoz (a modell azonosítója lent lecserélődik).
     const originalIds = { methods: packet.methods.map(i => i.id), tasks: packet.tasks.map(i => i.id), quiz: packet.quiz.map(i => i.id) };
-    // IDs are scoped to the exact source/teaching version; reused packets retain them.
-    packet.methods = packet.methods.map((i, n) => ({ ...i, id: `m-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
-    packet.tasks = packet.tasks.map((i, n) => ({ ...i, id: `t-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
-    packet.quiz = packet.quiz.map((i, n) => ({ ...i, id: `q-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
+    // IDs are scoped to the exact source/teaching version; reused packets retain them. Review #379: az átvett, már ezzel a hash-sel
+    // bélyegzett csomag a SAJÁT azonosítóit tartja — egy korábbi lektori kivétel hézaga nem számozódik át (a tanulói előzmény a tételé marad).
+    const stamp = <T extends { id: string; sourceHash?: string }>(items: T[], prefix: string) => {
+      const keep = reusedPacket && items.every(i => i.sourceHash === hash) && new Set(items.map(i => i.id)).size === items.length;
+      return items.map((i, n) => ({ ...i, id: keep ? i.id : `${prefix}-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
+    };
+    packet.methods = stamp(packet.methods, "m");
+    packet.tasks = stamp(packet.tasks, "t");
+    packet.quiz = stamp(packet.quiz, "q");
     packet.glossary = packet.glossary.map(i => ({ ...i, sourceHash: hash }));
     for (const report of answerKeyReport) {
       const n = originalIds.tasks.indexOf(report.modelId);
