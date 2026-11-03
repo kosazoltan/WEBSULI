@@ -21,6 +21,15 @@ const NEGATIONS = ["nem", "ne", "not", "no"] as const;
 export const ENGLISH_NEGATIONS = ["not", "cannot", "dont", "doesnt", "didnt", "cant", "couldnt", "wont", "wouldnt", "shouldnt", "mustnt", "isnt", "arent", "wasnt", "werent", "hasnt", "havent", "hadnt", "neednt"] as const;
 /** Review #330: gyenge (nem összevont) angol tagadószavak — a tagadó válasz felismeréséhez („There is no water”, „You must never run”). */
 export const ENGLISH_WEAK_NEGATIONS = ["no", "never", "nothing", "nobody", "none", "nowhere", "neither", "nor"] as const;
+/**
+ * Spec 2026-11-03-pontozo-szoalak: a mintában más szóval kifejezett magyar tagadás („tilos eltemetni”, „sosem hazudott”) — a válasz „nem”-je
+ * ilyenkor nem váratlan (mért: 6 helyes, tagadó válasz csak fél pontot kapott).
+ */
+export const HU_WEAK_NEGATIONS = ["sem", "se", "soha", "sosem", "semmi", "semmit", "senki", "senkit", "sehol", "nincs", "nincsen", "nincsenek", "tilos", "ne"] as const;
+/** Fosztóképző a tő után (normalizált alakon): a „boldogtalan”, „jogtalan”, „lelkiismeretlen”, „szénmentes” NEM a tő szava. */
+const PRIVATIVE_SUFFIX = /^(t?[ae]l[ae]n|[ae]?tl[ae]n|l[ae]n|mentes)/;
+/** Az alak-tűrés (képzés, több toldalék, összetett szó) legrövidebb rubrikaszava: rövidebbnél csak a régi szabályok. */
+const FORM_MIN_LENGTH = 5;
 
 /** A NYERS szöveg szavai: kisbetű, az ékezet és az aposztróf megmarad (a normalizálás „mustn t”, „pin t”, „dont” alakjai nem téveszthetők). */
 function rawWords(text: string): string[] {
@@ -45,7 +54,8 @@ export function negationKind(text: string, opts: { weak?: boolean } = {}): "none
  * a válaszban a gyenge tagadószó (no, never…) is tagadásnak számít. A magyar fordított irány változatlan.
  */
 function unexpectedNegation(answer: string, sample: string): boolean {
-  return (negationKind(answer) !== "none" && negationKind(sample, { weak: true }) === "none")
+  const sampleNegates = negationKind(sample, { weak: true }) !== "none" || rawWords(sample).some((w) => (HU_WEAK_NEGATIONS as readonly string[]).includes(w));
+  return (negationKind(answer) !== "none" && !sampleNegates)
     || (negationKind(sample) === "en" && negationKind(answer, { weak: true }) === "none");
 }
 
@@ -84,7 +94,21 @@ function wordHit(token: string, word: string): boolean {
   if (/\d/.test(token + word) || (NEGATIONS as readonly string[]).includes(word)) return false;
   if (Math.min(token.length, word.length) >= 4 && (stem(token) === word || token === stem(word) || stem(token) === stem(word))) return true;
   if (Math.min(token.length, word.length) < 5) return false;
-  return distance(token, word) <= (Math.max(token.length, word.length) > 8 ? 2 : 1);
+  return distance(token, word) <= (Math.max(token.length, word.length) > 8 ? 2 : 1) || formHit(token, word);
+}
+/**
+ * Spec 2026-11-03-pontozo-szoalak (mért: a vak helyes diákválaszok pontvesztésének fő oka): a ≥ 5 betűs rubrikaszó (vagy egytoldalékos töve)
+ * képzett / többszörösen ragozott alakja (a szóval kezdődő hosszabb szó — „makacsságában”, „lelkiismeretével”, „megkövezéssel”), kivéve a
+ * fosztóképzőset; az összetett szó utótagja (≥ 3 betűs előtaggal — „sziklabarlangba”); és a tövek elütése.
+ */
+function formHit(token: string, word: string): boolean {
+  for (const base of new Set([word, stem(word)])) {
+    if (base.length < FORM_MIN_LENGTH) continue;
+    if (token.length > base.length && token.startsWith(base) && !PRIVATIVE_SUFFIX.test(token.slice(base.length))) return true;
+    if ([token, stem(token)].some((t) => t.length - base.length >= 3 && t.endsWith(base))) return true;
+  }
+  const [a, b] = [stem(token), stem(word)];
+  return Math.min(a.length, b.length) >= FORM_MIN_LENGTH && distance(a, b) <= (Math.max(a.length, b.length) > 8 ? 2 : 1);
 }
 /**
  * J1 (docs/specs/2026-10-16-egyfutas-atvilagitas.md): a `candidate` válasz normalizált tokenjei között szerepel-e a `covered` válasz
@@ -269,9 +293,9 @@ export function evaluateOpenAnswer(answer: string, task: OpenTask): AnswerScore 
 export const OPEN_ANSWER_RULES_HU = [
   "A NYÍLT FELADAT PONTOZÓJA (program, nem ember — ezek a tényleges szabályok):",
   `1. Szó = szám vagy betűsor; a kötőjeles szó 2 szó, az írásjel 0 szó; csak az első 500 szó számít. minWords: ennél kevesebb szó = 0 pont — a minWords a LEGRÖVIDEBB teljes helyes válasz szószáma legyen, nem a minta hosszáé.`,
-  `2. required = ÉS-csoportok; egy csoporton belül VAGY-alternatívák. Többszavas alternatíva: minden szava külön, bármilyen sorrendben. Szóillesztés: azonos alak; ≥ 4 betűs szónál EGY toldalék (${STEM_SUFFIXES.join(", ")}) lehagyva is; ≥ 5 betűnél 1 elütés (8 betű fölött 2). Szám és a tagadószavak (${NEGATIONS.join(", ")}) csak pontosan.`,
+  `2. required = ÉS-csoportok; egy csoporton belül VAGY-alternatívák. Többszavas alternatíva: minden szava külön, bármilyen sorrendben. Szóillesztés: azonos alak; ≥ 4 betűs szónál EGY toldalék (${STEM_SUFFIXES.join(", ")}) lehagyva is; ≥ 5 betűnél 1 elütés (8 betű fölött 2); ≥ ${FORM_MIN_LENGTH} betűnél a képzett (makacsságában) és összetett (sziklabarlangba) alak is, -talan/-telen nem. Szám és a tagadószavak (${NEGATIONS.join(", ")}) csak pontosan.`,
   "3. Pontérték: a csoportok kevesebb mint felének találata → 0; nem mind → 0,5 („Még N kötelező fogalom hiányzik”); mind → 1, ha a needsSentence és a tagadás is rendben.",
-  `4. needsSentence: legalább egy kötőszó/névelő kell ezek közül: ${SENTENCE_CONNECTIVES.slice(0, 19).join(", ")}; különben 0,5. Tagadás: a nem/not, a cannot és az aposztrófos angol n't (don't, mustn't, can't…) tagadásnak számít; ha a válaszban van ilyen tagadás, a mintában semmilyen (no/never sem) → 0,5; ha a minta angolul tagadó (not / n't), a válaszban pedig nincs tagadás (a no, never, nothing… is annak számít) → 0,5. (A „must” és a „mustn't” így nem cserélhető fel.)`,
+  `4. needsSentence: legalább egy kötőszó/névelő kell ezek közül: ${SENTENCE_CONNECTIVES.slice(0, 19).join(", ")}; különben 0,5. Tagadás: a nem/not, a cannot és az aposztrófos angol n't (don't, mustn't, can't…) tagadásnak számít; ha a válaszban van ilyen tagadás, a mintában semmilyen (no/never/tilos/soha sem) → 0,5; ha a minta angolul tagadó (not / n't), a válaszban pedig nincs tagadás (a no, never, nothing… is annak számít) → 0,5. (A „must” és a „mustn't” így nem cserélhető fel.)`,
   "5. TÍPUSOS (zárt matematikai) feladat: typedAnswers = [{part, kind: number|fraction|expression, value, unit?, form?}] részfeladatonként, SORRENDBEN (felcserélt részeredmény hibás). Az érték dönt: 2/1 ≠ 1/2; 0,5 = 1/2 csak form: any esetén; form: simplified-fraction → csak egyszerűsített tört (2/4, 0,5 nem); form: decimal → tizedes/egész alak; form: intermediate-step → a KÉRT köztes kifejezés szerepeljen (35 + 64 − 12), az értékazonos más alak (35 + 8 · 8 − 12) nem; unit → a szám után a mértékegység kötelező. Betűs (algebrai) végeredmény: kind: polynomial, value a teljes kifejezés („x² + 10x + 25”); a program a kifejtett, összevont normálalakot hasonlítja (tagsorrend, szóköz, x^2/x² nem számít); form: expanded (alapértelmezés) → kifejtett, összevont alak kell, a zárójeles (a kérdés másolata) nem; form: factored → szorzattá alakított, zárójeles alak kell. A required ekkor csak a szöveges részt méri; a végeredményt NE tedd required-csoportba.",
   "6. requiredDistinct = [{category, from: [[szinonimák]…], count}]: kategóriánként legalább count KÜLÖNBÖZŐ elem; egy szinonimacsoport egy elem (két szinonima nem két példa). Ezt használd, ha a kérdés „N példát” kér egy halmazból — ne tegyél önkényes mintát kötelezővé.",
   "7. requiredPhrases = [[kifejezés, …]] (nyelvtani alak / szórend): a kifejezés szavai EGYMÁS UTÁN, PONTOSAN (tűrés nélkül; az aposztróf elválaszt: mustn't = mustn t); ÉS-csoportok, csoporton belül VAGY; kötelező feltétel, hiányában ≤ 0,5. A sample-ből vett 2–5 szavas kifejezés; a required a tartalmat méri.",
