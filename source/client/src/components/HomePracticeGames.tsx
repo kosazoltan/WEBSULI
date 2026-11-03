@@ -1,250 +1,103 @@
-import { memo } from "react";
+import { memo, type CSSProperties, type ReactNode } from "react";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
-import { Gamepad2, Waves, BookOpen, Zap, Box, Brain, Sparkles, Rocket, Tornado } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, Gamepad2, Waves, BookOpen, Zap, Box, Brain, Rocket, Tornado } from "lucide-react";
 
-const sectionVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.06, delayChildren: 0.05 },
-  },
-};
+/** Játékonkénti kiemelőszín (`--gc`) — a kártya keretét, fényét, ikonlapját és lábléc-feliratát színezi. */
+const accent = (color: string) => ({ "--gc": color }) as CSSProperties;
 
-const cardVariants = {
-  hidden: { opacity: 0, y: 16, scale: 0.97 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: { type: "spring", damping: 16, stiffness: 220 },
-  },
-};
+function GameCardBody({ icon, badge, title, children, cta }: { icon: ReactNode; badge: string; title: string; children: ReactNode; cta?: string }) {
+  return (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <span className="game-icon" aria-hidden="true">{icon}</span>
+        <span className="game-badge">{badge}</span>
+      </div>
+      <h3 className="game-title">{title}</h3>
+      <p className="game-desc">{children}</p>
+      {cta && (
+        <span className="game-cta">
+          {cta}
+          <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+        </span>
+      )}
+    </>
+  );
+}
 
+/**
+ * Spec 2026-11-03-udvozlo-jatekkartyak-szulo: a főoldali gyakorló játékok a fejléc üvegnyelvén — közös `.game-card`, játékonként
+ * saját kiemelőszín, olvasható betűméret, 40 px-es nehézségi gombok. JS-animáció nincs (a hover CSS, csökkentett mozgásnál kikapcsol).
+ */
 function HomePracticeGames() {
   return (
-    <section
-      id="gyakorlo-jatekok"
-      className="mt-8 pt-6 border-t border-white/20 scroll-mt-4"
-      aria-labelledby="heading-practice-games"
-    >
-      <div className="mb-3 text-center sm:text-left px-0.5">
-        <h2
-          id="heading-practice-games"
-          className="text-sm sm:text-base font-extrabold text-white flex items-center justify-center sm:justify-start gap-2 flex-wrap"
-        >
-          <Gamepad2 className="w-5 h-5 text-cyan-300 shrink-0" />
+    <section id="gyakorlo-jatekok" className="mt-8 pt-6 border-t border-white/10 scroll-mt-4" aria-labelledby="heading-practice-games">
+      <div className="games-head">
+        <span className="games-head-icon" aria-hidden="true">
+          <Gamepad2 className="w-5 h-5" />
+        </span>
+        <h2 id="heading-practice-games" className="flex-1 min-w-0 self-center text-lg sm:text-xl font-extrabold text-white leading-tight">
           Gyakorló játékok
-          <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
         </h2>
-        <p className="text-[11px] sm:text-xs text-white/75 mt-1.5 max-w-2xl mx-auto sm:mx-0 leading-snug">
-          A tananyagok mellett itt gyakorolhatsz: mindegyik játékban cél + akadály + kvíz vagy matekteszt van, és a jó válaszra azonnal jutalom (XP, sorozat) érkezik — a szülők a játék oldalán elolvashatják, mit fejleszt pontosan.
-          Teljes lista és ranglista:{" "}
-          <Link href="/games" className="text-cyan-200 underline-offset-2 hover:underline font-semibold">
-            Játékok menü
-          </Link>
-          .
+        <Link href="/games" className="games-head-link">
+          Játékok menü
+          <ArrowRight className="w-4 h-4" aria-hidden="true" />
+        </Link>
+        {/* A leírás saját, teljes szélességű sorban — mobilon sem szorul a gomb mellé. */}
+        <p className="games-head-text">
+          A tananyagok mellett itt gyakorolhatsz: mindegyik játékban cél + akadály + kvíz vagy matekteszt van, és a jó válaszra azonnal
+          jutalom (XP, sorozat) érkezik — a szülők a játék oldalán elolvashatják, mit fejleszt pontosan.
         </p>
       </div>
 
-      <motion.div
-        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-2 auto-rows-fr"
-        variants={sectionVariants}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-40px" }}
-      >
-        {/* Szökőár */}
-        <motion.div variants={cardVariants} className="min-w-0">
-          <Card className="glass-card h-full rounded-2xl border-cyan-400/35 hover:border-cyan-300/55 transition-colors shadow-lg">
-            <CardContent className="p-2.5 flex flex-col h-full">
-              <div className="flex justify-between items-start mb-1.5">
-                <div className="p-1.5 rounded-lg bg-gradient-to-br from-cyan-500/25 to-blue-600/25 border border-cyan-400/40">
-                  <Waves className="w-4 h-4 text-cyan-200" />
-                </div>
-                <span className="text-[9px] font-bold bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-1.5 py-0 rounded">
-                  MIX
-                </span>
-              </div>
-              <h3 className="text-xs font-bold text-cyan-100 mb-0.5 line-clamp-2 leading-tight">
-                Szökőár szökés — Tudáspróba
-              </h3>
-              <p className="text-[10px] text-white/70 line-clamp-2 mb-2 flex-1 leading-tight">
-                Angol, matek, nyelvtan, környezet vagy vegyes kihívás.
-              </p>
-              <div className="flex flex-wrap gap-1 pt-1.5 border-t border-white/15">
-                <Link href="/games/tsunami-english?difficulty=easy" className="min-w-0">
-                  <Button size="sm" variant="secondary" className="h-6 px-1.5 text-[9px] bg-emerald-700/50 text-white border-emerald-400/30">
-                    Könnyű
-                  </Button>
-                </Link>
-                <Link href="/games/tsunami-english?difficulty=normal" className="min-w-0">
-                  <Button size="sm" variant="secondary" className="h-6 px-1.5 text-[9px] bg-cyan-700/50 text-white border-cyan-400/30">
-                    Közepes
-                  </Button>
-                </Link>
-                <Link href="/games/tsunami-english?difficulty=hard" className="min-w-0">
-                  <Button size="sm" variant="secondary" className="h-6 px-1.5 text-[9px] bg-rose-700/50 text-white border-rose-400/30">
-                    Nehéz
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 auto-rows-fr">
+        {/* Szökőár — a kártya nem link: a három nehézségi szint külön indul */}
+        <div className="game-card" style={accent("#22d3ee")}>
+          <GameCardBody icon={<Waves />} badge="MIX" title="Szökőár szökés — Tudáspróba">
+            Angol, matek, nyelvtan, környezet vagy vegyes kihívás.
+          </GameCardBody>
+          <div className="game-diffs">
+            <Link href="/games/tsunami-english?difficulty=easy" className="game-diff game-diff--easy">Könnyű</Link>
+            <Link href="/games/tsunami-english?difficulty=normal" className="game-diff game-diff--normal">Közepes</Link>
+            <Link href="/games/tsunami-english?difficulty=hard" className="game-diff game-diff--hard">Nehéz</Link>
+          </div>
+        </div>
 
-        {/* Szólétra */}
-        <motion.div variants={cardVariants} className="min-w-0">
-          <Link href="/games/word-ladder-hu-en">
-            <Card className="glass-card h-full rounded-2xl border-fuchsia-400/35 hover:border-fuchsia-300/60 transition-colors cursor-pointer group shadow-lg">
-              <CardContent className="p-2.5 flex flex-col h-full">
-                <div className="flex justify-between items-start mb-1.5">
-                  <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500/25 to-fuchsia-600/25 border border-fuchsia-400/40 group-hover:scale-105 transition-transform">
-                    <BookOpen className="w-4 h-4 text-fuchsia-200" />
-                  </div>
-                  <span className="text-[9px] font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-1.5 py-0 rounded">
-                    HU↔EN
-                  </span>
-                </div>
-                <h3 className="text-xs font-bold text-fuchsia-100 mb-0.5 line-clamp-2 leading-tight group-hover:text-white">
-                  Szólétra (HU ↔ EN)
-                </h3>
-                <p className="text-[10px] text-white/70 line-clamp-3 flex-1 leading-tight">
-                  Szókincs és párosítás: minden jó válasz egy fokkal feljebb.
-                </p>
-                <p className="text-[9px] text-fuchsia-200/90 font-semibold pt-1.5 border-t border-white/15">Indítás →</p>
-              </CardContent>
-            </Card>
-          </Link>
-        </motion.div>
+        <Link href="/games/word-ladder-hu-en" className="game-card" style={accent("#e879f9")}>
+          <GameCardBody icon={<BookOpen />} badge="HU↔EN" title="Szólétra (HU ↔ EN)" cta="Indítás">
+            Szókincs és párosítás: minden jó válasz egy fokkal feljebb.
+          </GameCardBody>
+        </Link>
 
-        {/* Kockavadász */}
-        <motion.div variants={cardVariants} className="min-w-0">
-          <Link href="/games/block-craft-quiz">
-            <Card className="glass-card h-full rounded-2xl border-lime-400/35 hover:border-lime-300/60 transition-colors cursor-pointer group shadow-lg">
-              <CardContent className="p-2.5 flex flex-col h-full">
-                <div className="flex justify-between items-start mb-1.5">
-                  <div className="p-1.5 rounded-lg bg-gradient-to-br from-lime-500/25 to-emerald-700/25 border border-lime-400/40 group-hover:scale-105 transition-transform">
-                    <Box className="w-4 h-4 text-lime-200" />
-                  </div>
-                  <span className="text-[9px] font-bold bg-gradient-to-r from-lime-600 to-emerald-700 text-white px-1.5 py-0 rounded">
-                    KVÍZ
-                  </span>
-                </div>
-                <h3 className="text-xs font-bold text-lime-100 mb-0.5 line-clamp-2 leading-tight group-hover:text-white">
-                  Kockavadász kvíz
-                </h3>
-                <p className="text-[10px] text-white/70 line-clamp-3 flex-1 leading-tight">
-                  Minecraft hangulat: bányászat + angol kérdés blokkonként.
-                </p>
-                <p className="text-[9px] text-lime-200/90 font-semibold pt-1.5 border-t border-white/15">Blokkvilág →</p>
-              </CardContent>
-            </Card>
-          </Link>
-        </motion.div>
+        <Link href="/games/block-craft-quiz" className="game-card" style={accent("#a3e635")}>
+          <GameCardBody icon={<Box />} badge="KVÍZ" title="Kockavadász kvíz" cta="Blokkvilág">
+            Minecraft hangulat: bányászat + angol kérdés blokkonként.
+          </GameCardBody>
+        </Link>
 
-        {/* Matek sprint */}
-        <motion.div variants={cardVariants} className="min-w-0">
-          <Link href="/games/speed-quiz-math">
-            <Card className="glass-card h-full rounded-2xl border-amber-400/35 hover:border-amber-300/60 transition-colors cursor-pointer group shadow-lg">
-              <CardContent className="p-2.5 flex flex-col h-full">
-                <div className="flex justify-between items-start mb-1.5">
-                  <div className="p-1.5 rounded-lg bg-gradient-to-br from-amber-500/25 to-orange-600/25 border border-amber-400/40 group-hover:scale-105 transition-transform">
-                    <Zap className="w-4 h-4 text-amber-200" />
-                  </div>
-                  <span className="text-[9px] font-bold bg-gradient-to-r from-amber-600 to-orange-600 text-white px-1.5 py-0 rounded">
-                    MAT
-                  </span>
-                </div>
-                <h3 className="text-xs font-bold text-amber-100 mb-0.5 line-clamp-2 leading-tight group-hover:text-white">
-                  Gyors matek sprint
-                </h3>
-                <p className="text-[10px] text-white/70 line-clamp-3 flex-1 leading-tight">
-                  Gyors feladatok, kombó szorzó: 3–5. osztály szintek.
-                </p>
-                <p className="text-[9px] text-amber-200/90 font-semibold pt-1.5 border-t border-white/15">Sprint →</p>
-              </CardContent>
-            </Card>
-          </Link>
-        </motion.div>
+        <Link href="/games/speed-quiz-math" className="game-card" style={accent("#fbbf24")}>
+          <GameCardBody icon={<Zap />} badge="MAT" title="Gyors matek sprint" cta="Sprint">
+            Gyors feladatok, kombó szorzó: 3–5. osztály szintek.
+          </GameCardBody>
+        </Link>
 
-        {/* Brain Rot Lopas */}
-        <motion.div variants={cardVariants} className="min-w-0">
-          <Link href="/games/brain-rot-steal">
-            <Card className="glass-card h-full rounded-2xl border-purple-400/35 hover:border-purple-300/60 transition-colors cursor-pointer group shadow-lg">
-              <CardContent className="p-2.5 flex flex-col h-full">
-                <div className="flex justify-between items-start mb-1.5">
-                  <div className="p-1.5 rounded-lg bg-gradient-to-br from-purple-500/25 to-pink-600/25 border border-purple-400/40 group-hover:scale-105 transition-transform">
-                    <Brain className="w-4 h-4 text-purple-200" />
-                  </div>
-                  <span className="text-[9px] font-bold bg-gradient-to-r from-purple-600 to-pink-600 text-white px-1.5 py-0 rounded">
-                    MIX
-                  </span>
-                </div>
-                <h3 className="text-xs font-bold text-purple-100 mb-0.5 line-clamp-2 leading-tight group-hover:text-white">
-                  Brain Rot Lopas
-                </h3>
-                <p className="text-[10px] text-white/70 line-clamp-3 flex-1 leading-tight">
-                  Kapd el a Brain Rot-okat! Angol, matek, magyar kviz.
-                </p>
-                <p className="text-[9px] text-purple-200/90 font-semibold pt-1.5 border-t border-white/15">Vadaszat &rarr;</p>
-              </CardContent>
-            </Card>
-          </Link>
-        </motion.div>
+        <Link href="/games/brain-rot-steal" className="game-card" style={accent("#c084fc")}>
+          <GameCardBody icon={<Brain />} badge="MIX" title="Brain Rot Lopás" cta="Vadászat">
+            Kapd el a Brain Rot-okat! Angol, matek, magyar kvíz.
+          </GameCardBody>
+        </Link>
 
-        {/* Galaktikus Aszteroida */}
-        <motion.div variants={cardVariants} className="min-w-0">
-          <Link href="/games/space-asteroid-quiz">
-            <Card className="glass-card h-full rounded-2xl border-cyan-400/35 hover:border-fuchsia-300/60 transition-colors cursor-pointer group shadow-lg">
-              <CardContent className="p-2.5 flex flex-col h-full">
-                <div className="flex justify-between items-start mb-1.5">
-                  <div className="p-1.5 rounded-lg bg-gradient-to-br from-cyan-500/25 to-fuchsia-600/25 border border-cyan-400/40 group-hover:scale-105 transition-transform">
-                    <Rocket className="w-4 h-4 text-cyan-200" />
-                  </div>
-                  <span className="text-[9px] font-bold bg-gradient-to-r from-cyan-600 to-fuchsia-600 text-white px-1.5 py-0 rounded">
-                    3D
-                  </span>
-                </div>
-                <h3 className="text-xs font-bold text-cyan-100 mb-0.5 line-clamp-2 leading-tight group-hover:text-white">
-                  Galaktikus Aszteroida
-                </h3>
-                <p className="text-[10px] text-white/70 line-clamp-3 flex-1 leading-tight">
-                  Űrharc + kvíz a saját osztályod tananyagából.
-                </p>
-                <p className="text-[9px] text-cyan-200/90 font-semibold pt-1.5 border-t border-white/15">Indítás →</p>
-              </CardContent>
-            </Card>
-          </Link>
-        </motion.div>
+        <Link href="/games/space-asteroid-quiz" className="game-card" style={accent("#818cf8")}>
+          <GameCardBody icon={<Rocket />} badge="3D" title="Galaktikus Aszteroida" cta="Indítás">
+            Űrharc + kvíz a saját osztályod tananyagából.
+          </GameCardBody>
+        </Link>
 
-        {/* Tornado Hunter 200 */}
-        <motion.div variants={cardVariants} className="min-w-0">
-          <Link href="/games/tornado-hunter-200">
-            <Card className="glass-card h-full rounded-2xl border-sky-400/35 hover:border-sky-300/60 transition-colors cursor-pointer group shadow-lg">
-              <CardContent className="p-2.5 flex flex-col h-full">
-                <div className="flex justify-between items-start mb-1.5">
-                  <div className="p-1.5 rounded-lg bg-gradient-to-br from-sky-500/25 to-slate-600/25 border border-sky-400/40 group-hover:scale-105 transition-transform">
-                    <Tornado className="w-4 h-4 text-sky-200" />
-                  </div>
-                  <span className="text-[9px] font-bold bg-gradient-to-r from-sky-600 to-slate-600 text-white px-1.5 py-0 rounded">
-                    3D
-                  </span>
-                </div>
-                <h3 className="text-xs font-bold text-sky-100 mb-0.5 line-clamp-2 leading-tight group-hover:text-white">
-                  Tornado Hunter 200
-                </h3>
-                <p className="text-[10px] text-white/70 line-clamp-3 flex-1 leading-tight">
-                  Viharvadászat: 200 szint, járművek, matek/angol kvíz a horgonyzáskor.
-                </p>
-                <p className="text-[9px] text-sky-200/90 font-semibold pt-1.5 border-t border-white/15">Vadászat →</p>
-              </CardContent>
-            </Card>
-          </Link>
-        </motion.div>
-      </motion.div>
+        <Link href="/games/tornado-hunter-200" className="game-card" style={accent("#38bdf8")}>
+          <GameCardBody icon={<Tornado />} badge="3D" title="Tornado Hunter 200" cta="Vadászat">
+            Viharvadászat: 200 szint, járművek, matek/angol kvíz a horgonyzáskor.
+          </GameCardBody>
+        </Link>
+      </div>
     </section>
   );
 }

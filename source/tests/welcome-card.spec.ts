@@ -175,3 +175,44 @@ test("review #293: tárolt évfolyammal, de név nélkül a választó a tárolt
   await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 3 })).toHaveText("A legújabb tananyagaid (5. osztály)");
   expect(await page.evaluate(() => localStorage.getItem("websuli.classroomGrade"))).toBe("5");
 });
+
+// Spec 2026-11-03-udvozlo-jatekkartyak-szulo: a tulajdonos (admin, szülő) telefonja a gyerek tanulói linkjével párosítva van —
+// neki mindig az összes tananyag jár, a saját nevével; a tanulói (nem admin) viselkedés változatlan.
+test("admin a tanulóhoz párosított eszközön: „Mind”, saját név, minden évfolyam újdonsága, sorozat nélkül; nem admin: a tanuló nézete", async ({ page }) => {
+  // Formailag érvényes, kitalált párosító token (azonosító.szám.22 jel) — futásidőben rakjuk össze, nem titok.
+  const fakeToken = ["tanulo-proba", "1", "x".repeat(22)].join(".");
+  await page.addInitScript((t) => { try { localStorage.setItem("websuli.learnerToken", t); } catch { /* nincs tárhely */ } }, fakeToken);
+  const kristof = { firstName: "Kristóf", grade: 8, streak: { days: 2, today: true } };
+  const openAs = async (user: unknown) => {
+    await page.clock.setFixedTime(NOW);
+    await page.route("**/api/**", route => route.fulfill({ json: {} }));
+    await page.route("**/api/auth/user", route => route.fulfill({ json: user }));
+    await page.route("**/api/html-files", route => route.fulfill({ json: FILES }));
+    await page.route("**/api/learner/me", route => route.fulfill({ json: kristof }));
+    await page.goto("/");
+  };
+  await openAs({ id: "admin-1", firstName: "Zoltán", lastName: "Kósa", isAdmin: true });
+  const greet = page.getByTestId("welcome-greet");
+  await expect(greet.getByRole("heading", { level: 2 })).toHaveText("Szia, Zoltán!");
+  await expect(page.getByTestId("button-filter-all")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("link-file-r5-a")).toBeVisible();
+  await expect(page.getByTestId("link-file-r8-a")).toBeVisible();
+  await expect(greet.getByRole("heading", { level: 3 })).toHaveText("A legújabb tananyagok");
+  await expect(greet.locator('[data-testid^="welcome-pick-"]').first()).toHaveAttribute("data-testid", "welcome-pick-r8-a");
+  await expect(page.getByTestId("welcome-streak")).toHaveCount(0);
+  // a profil évfolyama az eszközön marad (a gyerek játékai azt használják), a szülő listáját nem szűri
+  expect(await page.evaluate(() => localStorage.getItem("websuli.classroomGrade"))).toBe("8");
+  await page.getByTestId("welcome-edit").click();
+  await expect(page.getByTestId("welcome-grade")).toHaveCount(0);
+  await page.getByTestId("welcome-dismiss").click();
+  // kézi évfolyamválasztás működik
+  await page.getByTestId("button-filter-classroom-5").click();
+  await expect(page.getByTestId("link-file-r8-a")).toHaveCount(0);
+
+  // ellenpróba: ugyanezen az eszközön nem admin fiókkal a tanuló nézete
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await openAs({ id: "u9", firstName: "Anna", lastName: "Kiss", isAdmin: false });
+  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 2 })).toHaveText("Szia, Kristóf!");
+  await expect(page.getByTestId("button-filter-classroom-8")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("welcome-streak")).toBeVisible();
+});
