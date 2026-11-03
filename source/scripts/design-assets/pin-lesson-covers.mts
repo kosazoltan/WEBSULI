@@ -49,6 +49,9 @@ if (mode === "--write") {
     return plans.length;
   });
   console.log(`csere kész: ${n} lecke (mindegyiknél az art nélküli hash egyezik)`);
+  // Spec 2026-11-03-leckeborito-utomunka: a főoldali lista a szerver memóriájában 5 percig tárolódik (HtmlFilesCache, TTL) — a közvetlen
+  // DB-írás nem üríti, ezért a főoldalt csak ezután érdemes ellenőrizni.
+  console.log(`a főoldali lista legkésőbb ${new Date(Date.now() + 5 * 60_000).toLocaleTimeString("hu-HU")}-kor frissül (HtmlFilesCache, 5 perc TTL) — az ellenőrzés csak ezután`);
 } else if (mode === "--restore") {
   if (!file) throw new Error("--restore <mentés.json>");
   const backup = JSON.parse(readFileSync(file, "utf8")) as Backup;

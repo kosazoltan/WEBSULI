@@ -3223,12 +3223,12 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "keywords": [
       "5. osztály - A számírás fejlődése - Római számok"
     ],
-    "alt": "Ókori pásztorlány alkonyatkor terelő bárányokat számol kavicsokkal, hátulról nézve.",
+    "alt": "Római kőtábla a hét kőbe vésett római számjellel (I, V, X, L, C, D, M), előtte bronz abakusz.",
     "src": "/design/adventure/cover-l-3494830174e1c34b.webp",
     "origin": "MI-generált, saját (Seedream 5.0 Pro)",
     "model": "bytedance-seed/seedream-5-0-pro",
-    "promptHash": "6e28f7ef79168dbc",
-    "approvedAt": "2026-11-03T06:59:48.148Z"
+    "promptHash": "bca3adc433111010",
+    "approvedAt": "2026-11-03T08:22:45.917Z"
   },
   {
     "id": "cover-l-36173144165caf5e",
@@ -3767,12 +3767,12 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "keywords": [
       "4. osztály - 💖 Az emberi test - Egészségünk 💖"
     ],
-    "alt": "Kipirult gyerekek ugrókötelet hajtanak a napos parkban, a padon vizespalack és alma.",
+    "alt": "Futó gyerek a parkban, mellkasán átsejlik a szív és az erek; előtte táplálkozási piramis, víz, szappan és elsősegély-doboz.",
     "src": "/design/adventure/cover-l-4de4a74b2884ba6d.webp",
     "origin": "MI-generált, saját (Seedream 5.0 Pro)",
     "model": "bytedance-seed/seedream-5-0-pro",
-    "promptHash": "96d603fcf58dcb85",
-    "approvedAt": "2026-11-03T06:59:44.555Z"
+    "promptHash": "40225a812484a18a",
+    "approvedAt": "2026-11-03T08:22:45.997Z"
   },
   {
     "id": "cover-l-4e0daabda59d89ef",
@@ -4124,12 +4124,12 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "keywords": [
       "A talaj kialakulása, összetevői és termékenysége"
     ],
-    "alt": "Fagytól repedezett sziklák mohával és zuzmóval, a törmelékben kis facsemete nő.",
+    "alt": "Talajszelvény a rét alatt: humuszos felső réteg gyökerekkel és gilisztákkal, alatta homok, alul aprózódó kőzet.",
     "src": "/design/adventure/cover-l-63c4aa9223a9ede0.webp",
     "origin": "MI-generált, saját (Seedream 5.0 Pro)",
     "model": "bytedance-seed/seedream-5-0-pro",
-    "promptHash": "8cafaeb12f20bd4d",
-    "approvedAt": "2026-11-03T06:59:49.065Z"
+    "promptHash": "5c0223926c0cd122",
+    "approvedAt": "2026-11-03T08:22:45.832Z"
   },
   {
     "id": "cover-l-67200c6cbafd4372",
@@ -4215,6 +4215,23 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "model": "bytedance-seed/seedream-5-0-pro",
     "promptHash": "57721cc49b99a1cf",
     "approvedAt": "2026-11-03T06:59:55.150Z"
+  },
+  {
+    "id": "cover-l-6caaeaef196888ad",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Informatika"
+    ],
+    "keywords": [
+      "Suno AI - Zenekészítés mesterséges intelligenciával"
+    ],
+    "alt": "Esti otthoni zenestúdió: fejhallgatós alkotó hátulról, a laptopból fénylő hanghullámok és hangjegyek emelkednek.",
+    "src": "/design/studio/cover-l-6caaeaef196888ad.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "ddda7dc62dce35d8",
+    "approvedAt": "2026-11-03T08:22:46.130Z"
   },
   {
     "id": "cover-l-6d4ae617b4c91465",
@@ -4317,6 +4334,23 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "model": "bytedance-seed/seedream-5-0-pro",
     "promptHash": "69d0ff8bc97bc7a4",
     "approvedAt": "2026-11-03T06:59:48.606Z"
+  },
+  {
+    "id": "cover-l-73f08404442cb68e",
+    "kind": "cover",
+    "band": "studio",
+    "subjects": [
+      "Magyar irodalom"
+    ],
+    "keywords": [
+      "Szabó Magda: Abigél"
+    ],
+    "alt": "Régi leányiskola elvadult kertje alkonyatkor: korsós lányszobor, tövében levél, felé egy egyenruhás diáklány sétál.",
+    "src": "/design/studio/cover-l-73f08404442cb68e.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "9c5f225eba001117",
+    "approvedAt": "2026-11-03T08:22:46.206Z"
   },
   {
     "id": "cover-l-7781b4948d10940a",
@@ -5450,12 +5484,12 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "keywords": [
       "Fogalomjegyzék a feltöltött forrásokból"
     ],
-    "alt": "Mesebeli táj: fehér lovas hős hátulról, távoli hegyen barátságos sárkány és griffmadár.",
+    "alt": "Fehérlófia mesevilága: hős fehér lóval, háromfejű sárkány, griffmadár, hosszú szakállú törpe, aranyfürt és gyűrű.",
     "src": "/design/adventure/cover-l-d0228a7b52eb02a1.webp",
     "origin": "MI-generált, saját (Seedream 5.0 Pro)",
     "model": "bytedance-seed/seedream-5-0-pro",
-    "promptHash": "4bffce674f021471",
-    "approvedAt": "2026-11-03T06:59:46.675Z"
+    "promptHash": "12d5d0dfd0b9ee6d",
+    "approvedAt": "2026-11-03T08:22:45.749Z"
   },
   {
     "id": "cover-l-d3049baab869a724",
@@ -5915,6 +5949,23 @@ export const DESIGN_ASSET_CATALOG: DesignAsset[] = [
     "model": "bytedance-seed/seedream-5-0-pro",
     "promptHash": "5a8ea216c1dbc3d2",
     "approvedAt": "2026-11-03T06:59:50.435Z"
+  },
+  {
+    "id": "cover-l-f898345f4953d861",
+    "kind": "cover",
+    "band": "adventure",
+    "subjects": [
+      "Angol nyelv"
+    ],
+    "keywords": [
+      "English Grammar with Pictures - 4th Grade"
+    ],
+    "alt": "Színes képkártyák az asztalon mindennapi cselekvésekkel; egy gyerek felmutat egyet és elmondja, mi látható rajta.",
+    "src": "/design/adventure/cover-l-f898345f4953d861.webp",
+    "origin": "MI-generált, saját (Seedream 5.0 Pro)",
+    "model": "bytedance-seed/seedream-5-0-pro",
+    "promptHash": "22a759f2ab785adb",
+    "approvedAt": "2026-11-03T08:22:46.072Z"
   },
   {
     "id": "cover-l-fb035f2e340cc520",

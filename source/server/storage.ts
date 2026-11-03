@@ -50,7 +50,7 @@ import { db } from "./db";
 import { eq, desc, gt, gte, lt, and, sql, inArray, getTableColumns } from "drizzle-orm";
 import { assertBackupFilesHaveContent } from "./lib/backup-guard";
 import { logger } from "./lib/logger";
-import { coversByFile } from "@shared/lesson-cover";
+import { coversByFile, materialCoverId } from "@shared/lesson-cover";
 import { isPlaceholderDescription, teaserFromText } from "@shared/lesson-teaser";
 
 // PostgreSQL native arrays and jsonb - no JSON parsing helpers needed
@@ -442,7 +442,7 @@ export class DatabaseStorage implements IStorage {
     }
     return rows.map((row) => {
       const teaser = teasers.get(row.id);
-      return { ...row, ...(isPlaceholderDescription(row.description) && teaser ? { description: teaser } : {}), cover: covers.get(row.id) ?? null };
+      return { ...row, ...(isPlaceholderDescription(row.description) && teaser ? { description: teaser } : {}), cover: covers.get(row.id) ?? (covers.has(row.id) ? null : materialCoverId(row.id)) };
     }) as HtmlFile[];
   }
 
