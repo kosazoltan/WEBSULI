@@ -48,6 +48,8 @@ betöltéskori újraválasztás nem írhatja felül a kézzel beállított képe
   `jsonb_set(json, '{art}', art || {"picture": id})`, majd ugyanabban a tranzakcióban leckénként az `art` nélküli kanonikus hash
   összevetése (előtte = utána); bármely eltérés → ROLLBACK. `--restore <mentés.json>`: az `art` visszaírása, ugyanazzal a
   hash-ellenőrzéssel. Próbafutás (alapértelmezés): csak olvas, kiírja a tervezett cseréket. Antigoné (`html_file_id 7900a871…`) kimarad.
+  Érintett: minden lecke, amelynek tartalomkulcsú borítója a katalógusban van — a publikáltakkal azonos tartalmú vázlatok is (így
+  publikáláskor sem kell újra hozzányúlni). A szkript leáll, ha egy katalógusborító még nincs a `design_assets` táblában.
 
 ## Új leckék
 - Ugyanazon tartalmú új lecke (azonos sáv + tantárgy + cím) mentéskor automatikusan megkapja a kész képet (`pickLessonArt`).

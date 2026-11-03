@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { subjectIconIdForBand } from "./subject-icons";
+import { isLessonCoverId, lessonCoverId } from "./lesson-cover";
 
 /**
  * Websuli képkészlet katalógusa (shared/design-assets.json) — MI-generált, kurált saját képek a szabályterv 2.3 szerint
@@ -70,6 +71,8 @@ export function pictureFits(picture: DesignAsset, lesson: { subject: string; tit
     return own ? picture.band === band : YOUNG_BANDS.has(picture.band) === YOUNG_BANDS.has(band);
   }
   if (picture.kind !== "cover" || picture.band !== band) return false;
+  // Spec 2026-11-03-leckeborito: a leckénkénti borító kézi választás — a sávján belül érvényes (átnevezés után is).
+  if (isLessonCoverId(picture.id)) return true;
   return (Boolean(topic) && picture.topic === topic) || coverFits(picture, lesson, band);
 }
 
@@ -80,7 +83,7 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
   const sameAge = (a: DesignAsset) => YOUNG_BANDS.has(a.band) === young;
   const subjectHit = (a: DesignAsset) => a.subjects.some(s => { const f = foldText(s); return f.length >= 4 && (subject.includes(f) || f.includes(subject.slice(0, Math.max(4, Math.min(subject.length, 8))))); });
   // A témaköri borítók csak a saját témakörükhöz járnak (nem kerülnek az általános rotációba és a kulcsszavas készletbe).
-  const covers = catalog.filter(a => a.kind === "cover" && !a.topic);
+  const covers = catalog.filter(a => a.kind === "cover" && !a.topic && !isLessonCoverId(a.id));
   // Review #273: a kulcsszavas borítóhoz a tantárgynak is egyeznie kell (a „Sejtések” matematika-lecke ne kapjon sejt-borítót).
   // Spec 2026-10-19-hos-kep-sav (tulajdonosi döntés): és a lecke SÁVJÁÉ legyen — a 6–8. o. halloweeni füzére („ismétlődő
   // minta”) nem kerülhet 9. o. matekra.
@@ -89,7 +92,10 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
   let hero: DesignAsset | undefined;
   // Arculati bank: a lecke témakörének borítója nyer (a hívó a topicKeyOf-ból adja; csak a lecke sávjáé).
   const topical = lesson.topicCoverId ? catalog.find(a => a.id === lesson.topicCoverId && a.kind === "cover" && a.band === band) : undefined;
-  if (topical) cover = topical;
+  // Spec 2026-11-03-leckeborito: a lecke tartalomkulcsú borítója (cím + tantárgy + sáv) minden más kép előtt.
+  const ownCover = catalog.find(a => a.kind === "cover" && a.band === band && a.id === lessonCoverId(lesson, band));
+  if (ownCover) cover = ownCover;
+  else if (topical) cover = topical;
   else if (keyedPool.length) cover = rotate(keyedPool, seed, "cover");
   else {
     // Spec 2026-10-19-hos-kep-sav: a sáv saját hős-képe (koncepciókép: 6–8. a Föld az űrből, 9–10. függőhíd…). A korábbi

@@ -29,16 +29,24 @@ export function composePrompt(item: AssetItem, style: Style): string {
 }
 
 /** A Seedream 5.0 Pro képkérése (POST /api/v1/images); a kulcs nem része a törzsnek. */
-export function buildImageRequest(model: string, item: AssetItem, style: Style, references: string[]) {
+export type Resolution = "1K" | "2K";
+export function buildImageRequest(model: string, item: AssetItem, style: Style, references: string[], resolution: Resolution = "2K") {
   return {
-    model, prompt: composePrompt(item, style), aspect_ratio: item.aspect_ratio, resolution: "2K", n: 1,
+    model, prompt: composePrompt(item, style), aspect_ratio: item.aspect_ratio, resolution, n: 1,
     ...(references.length ? { input_references: references.map(url => ({ type: "image_url", image_url: { url } })) } : {}),
   };
 }
 
-/** Az OpenRouter-ár (2026-10-17, /endpoints): 2K kép 0,09 USD, referenciakép 0,003 USD. */
-export function estimateUsd(images: number, references: number): number {
-  return images * 0.09 + references * 0.003;
+/** Az OpenRouter-ár (2026-10-17, /endpoints): 2K kép 0,09 USD, 1K kép 0,045 USD, referenciakép 0,003 USD. */
+export function estimateUsd(images: number, references: number, resolution: Resolution = "2K"): number {
+  return images * (resolution === "1K" ? 0.045 : 0.09) + references * 0.003;
+}
+
+/** Spec 2026-11-03-leckeborito: a `--resolution` kapcsoló (1K a 1200 px-es borítóhoz elég); hiányzó érték: 2K. */
+export function parseResolution(raw: string | undefined): Resolution {
+  if (raw === undefined) return "2K";
+  if (raw !== "1K" && raw !== "2K") throw new Error(`Hibás --resolution érték: ${raw} (1K vagy 2K).`);
+  return raw;
 }
 
 /** Review #273: a fizetős hívások darabkorlátja csak nemnegatív, biztonságos egész lehet; hiányzó érték esetén az alapértelmezés. */

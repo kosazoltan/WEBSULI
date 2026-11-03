@@ -96,13 +96,15 @@ export async function withLessonArt<T>(json: T, seed: string, executor: Pick<typ
   if (!json || typeof json !== "object" || Array.isArray(json)) return json;
   const lesson = json as Record<string, unknown>;
   if (typeof lesson.subject !== "string" || typeof lesson.classroom !== "number" || typeof lesson.title !== "string") return json;
-  const { art: _previous, ...rest } = lesson;
+  const { art: previousArt, ...rest } = lesson;
   await initialSyncSettled();
   try {
     const stored = new Set((await executor.select({ id: designAssets.id }).from(designAssets)).map(r => r.id));
     // Arculati bank (S1): a lecke témaköre (tantárgy, évfolyam, cím) → a témakör borítója, ha az a táblában megvan.
     // A tiszta mag a backfill-szkripttel közös (docs/specs/2026-10-18-arculat-backfill.md).
-    const art = computeLessonArt(lesson, seed, stored) ?? {};
+    // Spec 2026-11-03-leckeborito: a kézzel beállított leckeborító (korábbi `art.picture`) az újraválasztás után is megmarad.
+    const previous = previousArt && typeof previousArt === "object" ? (previousArt as { picture?: unknown }).picture : undefined;
+    const art = computeLessonArt(lesson, seed, stored, undefined, previous) ?? {};
     return (Object.keys(art).length ? { ...rest, art } : rest) as T;
   } catch (error) {
     logger.warn("[design-assets] Az arculat nem választható, a lecke art nélkül ment:", error);
