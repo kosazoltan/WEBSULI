@@ -25,7 +25,8 @@ csak az `art.picture` írható, vészfék env-kapcsolóval, a `json` többi rés
 6. **Tárolás:** `design_assets` sor (`id` = tartalomkulcs, `kind: cover`, a lecke sávja, `mime: image/jpeg`, `origin` „MI-generált,
    saját (Seedream 5.0 Pro, automatikus leckeborító)”), ütközésnél nem ír felül. A verziókezelt katalógusba nem kerül.
 7. **Összekötés — csak `art.picture`:** leckénként külön tranzakcióban `SELECT … FOR UPDATE`; ha a cím / tantárgy / évfolyam vagy a
-   tárolt `art.picture` azóta változott, kihagyja; `jsonb_set(json, '{art}', art || {"picture": id})`, majd az `art` nélküli kanonikus
+   tárolt `art.picture` azóta változott, vagy a leckének nincs `art`-ja (review #382: csak `picture`-ös `art` mellett a lejátszó nem
+   pótolná a kabalát és az ikont), kihagyja; `jsonb_set(json, '{art}', art || {"picture": id})`, majd az `art` nélküli kanonikus
    hash és az `art` többi mezőjének ellenőrzése (a kézi cseréjével közös `verifyPinned`); eltérés → ROLLBACK.
 
 ## Megjelenítés és mentés

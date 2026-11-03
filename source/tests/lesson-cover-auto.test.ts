@@ -116,6 +116,8 @@ test("összekötés: csak az art.picture változhat; a közben változott lecke 
   assert.throws(() => verifyPinned(pin, { ...json, title: "más", art: pinnedArt(pin) }), /art-on kívüli/);
   assert.equal(planLink({ ...json, title: "Átnevezve" }, l, newId), null);
   assert.equal(planLink({ ...json, art: { picture: "cover-mas" } }, l, newId), null);
+  const { art: _art, ...noArt } = json;
+  assert.equal(planLink(noArt, { ...l, picture: null }, newId), null, "art nélküli leckéhez nem ír");
 });
 
 test("a gyártott (katalógusban nem szereplő) borító: mentéskor nyer és megmarad, a lejátszó a kulcsával mutatja", () => {

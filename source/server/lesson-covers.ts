@@ -188,7 +188,9 @@ export async function sweepLessonCovers(store: CoverStore, deps: CoverDeps, opts
  */
 export function planLink(json: Record<string, unknown>, l: LessonLite, coverId: string): ArtPin | null {
   const art = json.art && typeof json.art === "object" && !Array.isArray(json.art) ? (json.art as Record<string, unknown>) : null;
-  const picture = typeof art?.picture === "string" ? art.picture : null;
+  // Review #382: art nélküli leckéhez nem írunk (csak picture-ös art mellett a lejátszó nem pótolná a kabalát és az ikont).
+  if (!art) return null;
+  const picture = typeof art.picture === "string" ? art.picture : null;
   if (json.title !== l.title || json.subject !== l.subject || json.classroom !== l.classroom || picture !== l.picture) return null;
   return { id: l.id, art, to: coverId, hash: hashWithoutArt(json) };
 }
