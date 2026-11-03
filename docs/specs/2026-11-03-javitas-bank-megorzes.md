@@ -70,6 +70,12 @@
   egységenként történik (`reuseExcludedConceptIds`), nem az egész fejezetre: a 6-nál több fogalmú fejezet több csomagra bomlik,
   ezek közül a többi megmarad (review #379). A javítás végén a lektor a teljes bankot ellenőrzi; a blokkoló tétel a meglévő
   `removeLektorBlockers` szerint kiesik.
+- **Módosult forrásfogalom:** az azonos fejezetszöveg és fogalom-azonosító nem bizonyítja, hogy a forrás is azonos. Egy közös
+  fogalmat módosíthat ugyanazon térkép másik leckéjének javítása vagy a tanári szerkesztés. Ezért kizárásra kerül az a fogalom
+  (és vele az egysége), amelynek `km_concepts.updated_at`-je a lecke utolsó írása (`lessons.updated_at`) utáni
+  (`conceptsChangedSince`, review #379). Minden fogalomíró út frissíti az `updatedAt`-et: `buildConceptUpdate`, a szó szerinti
+  újraellenőrzés és a javítás alkalmazása. A szabály a lenyomat nélküli régi leckékre is működik. A szó szerinti újraellenőrzés
+  tartalmi változás nélkül is kizár; ez óvatos irány, csak újragyártást okoz.
 - **Azonosítók:** az átvett, már ezzel a hash-sel bélyegzett csomag tételei a saját azonosítójukat tartják, nem index szerint
   számozódnak újra. Egy korábbi lektori kivétel hézaga így nem tolja el őket, és a kivett tétel azonosítója nem kerül másik
   kérdésre (review #379). Vegyes vagy ütköző csomagnál marad a régi újraszámozás.
