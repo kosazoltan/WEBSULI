@@ -57,6 +57,11 @@ export function assertRepairFresh(repair: LessonRepair, current: { id: string; v
   }
 }
 
+/** Review #379: a `since` (a lecke utolsó írása) után módosult fogalmak — a régi bank még a korábbi definícióból készült. */
+export function conceptsChangedSince(rows: ReadonlyArray<{ localId: string; updatedAt: Date }>, since: Date): string[] {
+  return rows.filter(c => c.updatedAt.getTime() > since.getTime()).map(c => c.localId);
+}
+
 async function loadSource(mapId: string) {
   const { db } = await import("../db");
   const [map] = await db.select({ subject: knowledgeMaps.subject, classroom: knowledgeMaps.classroom, sourceFiles: knowledgeMaps.sourceFiles }).from(knowledgeMaps).where(eq(knowledgeMaps.id, mapId));
@@ -86,7 +91,9 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const { createLessonConversation } = await import("./single-run/conversation");
   const gates: RepairBankGates = (ctx, lesson) => bankQualityGates((system, opts) => createLessonConversation(system, opts ?? {}), ctx,
     (sectionIndex) => teachingTextOf(lesson.sections[sectionIndex]), (message) => logger.info(`[STUDIO] Javítás: ${message}`));
-  const { candidate, review, owner, staleWarnings, lektorRemoved } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript, gates });
+  // Review #379: a lecke utolsó írása óta módosult térképfogalmak egysége nem vehető át (minden fogalomíró út frissíti az updatedAt-et).
+  const staleConceptIds = conceptsChangedSince(await db.select({ localId: kmConcepts.localId, updatedAt: kmConcepts.updatedAt }).from(kmConcepts).where(eq(kmConcepts.mapId, row.mapId)), row.updatedAt);
+  const { candidate, review, owner, staleWarnings, lektorRemoved } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript, gates, staleConceptIds });
   return lessonRepairSchema.parse({
     kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(hashedSource), previousLesson: original, candidate, reviewNotes: review.notes,
     ...(ownerInstruction ? { ownerInstruction } : {}), ...(owner.corrections.length ? { sourceCorrections: owner.corrections } : {}), ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}),
@@ -134,8 +141,13 @@ type RepairCall = (step: RepairStep, system: string, user: string, role?: Prompt
 export type RepairOwner = { instruction?: string; corrections: SourceCorrection[]; classroom?: number; design?: { world?: VisualWorldId } };
 /** Spec 2026-11-03-javitas-bank-megorzes: a banképítő vak minőségkapui a javító úton (éles: `bankQualityGates`; teszt: hiányzik). */
 export type RepairBankGates = (ctx: AnswerKeyContext, lesson: Lesson) => Pick<ExperienceBuildDeps, "answerKeys" | "quizBlind">;
+/**
+ * `staleConceptIds` (review #379): a lecke utolsó írása óta módosult térképfogalmak — az egységük nem vehető át (a régi bank a régi
+ * definícióból készült; a fejezetszöveg ettől még azonos lehet, pl. egy másik lecke javítása helyesbítette a közös fogalmat).
+ */
+export type RepairBankOptions = { gates?: RepairBankGates; staleConceptIds?: Iterable<string> };
 
-export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean; gates?: RepairBankGates } = {}) {
+export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } & RepairBankOptions = {}) {
   await workflowPhase("author");
   // Spec 2026-09-23: the teacher's request may carry documented source corrections and an explicit grade.
   const proposal = instruction || opts.transcript
@@ -204,18 +216,19 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
     }
   }
   if (!candidate) throw new Error("A javított tanítás hiányzik.");
-  return { ...await finishStructuredImprovement(original, candidate, corrected, call, progress, owner, opts.gates), owner, ...(staleWarnings.length ? { staleWarnings } : {}) };
+  return { ...await finishStructuredImprovement(original, candidate, corrected, call, progress, owner, { gates: opts.gates, staleConceptIds: opts.staleConceptIds }), owner, ...(staleWarnings.length ? { staleWarnings } : {}) };
 }
 
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
-export async function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, gates?: RepairBankGates) {
+export async function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, bank: RepairBankOptions = {}) {
   const classroom = owner?.classroom ?? original.classroom;
   assertRepairTeaching(original, candidate, source, classroom);
   await workflowPhase("banks");
   const design = owner?.design;
   // Spec 2026-11-03-javitas-bank-megorzes: a tanításában változatlan fejezet bankja megmarad (a helyesbített fogalom egységéé nem — review
   // #379: egységenként, a több csomagra bontott fejezet többi egysége megmarad); az újragyártott csomag a gyártás vak minőségkapuit kapja.
-  const reuseExcludedConceptIds = new Set((owner?.corrections ?? []).map(c => c.localId));
+  const reuseExcludedConceptIds = new Set([...(owner?.corrections ?? []).map(c => c.localId), ...(bank.staleConceptIds ?? [])]);
+  const gates = bank.gates;
   // Review #160: a szigorú séma (U2/C8) a javító út bankhívásán is átmegy; a hívó dönt, hogy az út támogatja-e.
   candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, previousSections: original.sections, reuseExcludedConceptIds, call: (system, user, _attempt, extra) => call("author", system, user, "bank", extra),
     ...gates?.({ classroom, concepts: source.concepts.map(c => ({ id: c.localId, term: c.term, definition: c.definition })) }, candidate),

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildLessonExperience } from "../server/studio/experience-builder";
+import { conceptsChangedSince } from "../server/studio/structured-improvement";
 import type { Lesson } from "../shared/lesson-schema";
 
 // Spec 2026-11-03-javitas-bank-megorzes: a javítás a tanításában változatlan fejezet bankját a gyártási konfigurációtól függetlenül
@@ -71,6 +72,16 @@ test("review #379: a forrás-helyesbítés fogalmának egysége újragyártódik
   const repaired = await buildLessonExperience(lesson, [], { previous: first, previousSections: lesson.sections, reuseExcludedConceptIds: new Set(["height"]), call: async () => { calls++; return structuredClone(packets[1]); } });
   assert.equal(calls, 1, "csak a helyesbített fogalom egysége");
   assert.deepEqual(inSection(repaired.quiz, 0), inSection(first.quiz, 0));
+});
+
+test("review #379: a lecke utolsó írása után módosult fogalom kizárja az egységét (más lecke javítása, tanári szerkesztés)", () => {
+  const written = new Date("2026-11-03T05:00:00Z");
+  const rows = [
+    { localId: "area", updatedAt: new Date("2026-11-02T10:00:00Z") },
+    { localId: "height", updatedAt: new Date("2026-11-03T06:00:00Z") },
+    { localId: "same", updatedAt: written },
+  ];
+  assert.deepEqual(conceptsChangedSince(rows, written), ["height"], "csak a később módosult; az azonos pillanatú (ugyanabban az alkalmazásban írt) nem");
 });
 
 test("a kihagyott fejezet (forrás-helyesbítés: undefined) és a mostani kapun bukó régi csomag újragyártódik", async () => {
