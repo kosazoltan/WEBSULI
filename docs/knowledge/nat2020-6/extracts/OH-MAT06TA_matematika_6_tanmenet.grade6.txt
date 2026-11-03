@@ -1,0 +1,655 @@
+Tanmenetjavaslat
+Matematika 6.
+OH-MAT06TA és OH-MAT06MA
+Bevezetés
+A tanmenetjavaslat a NAT 2020-hoz átdolgozott hatodik osztályos matematika-tankönyvhöz (raktári száma OH-MAT06TA) és matematika-munkafüzethez (raktári száma OH-MAT06MA) készült. A hatodik osztályos matematika-tananyag egy lehetséges feldolgozását 136 órára (34 tanítási hét, heti 4 óra) készítettük el.
+A tanmenetben szereplő óraszámok csak tervezett iránymutatók, mint a fedőlap is mutatja, ez csak javaslat. Szakmai-módszertani okok vagy pedagógiai indokok alapján megváltoztatható pl. a gyakorlóórák mennyisége, az egyes témakörök tanításának sorrendje vagy a feldolgozásukra szánt órakeret is. A konkrét osztály összetételétől (a tanulók képességei, motiválási lehetőségek, az osztály irányultsága [reál, humán]) függően bátran eltérhetünk az alábbi tanmenettől.
+Az óra témája oszlopban találhatók a megfelelő leckecímek. A tanmenet teljes egészében követi a tankönyv tematikáját.
+Általános elvként minden témakörbe néhány önálló gyakorlóórát szúrtunk be, a javasolt témazáró dolgozatokat pedig igyekeztünk arányosan elhelyezni. Ezekhez fel lehet használni a tankonyvkatalogus.hu oldalon elérhető A–B (normál) és C–D (érdeklődő) dolgozat-feladatsorokat, illetve ötleteket lehet meríteni belőlük.
+Ha az iskolában több tanítási hét lesz, akkor az óratöbbletet több helyre is beszúrhatjuk: beiktathatunk önálló gyakorlóórát, nehezebb témaköröknél megduplázhatjuk a gyakorlóórák számát vagy növelhetjük az év végi ismétlőórák számát is.
+Óraszámok felosztása
+Témák
+Új tananyag feldolgozása
+(óraszám)
+Képességfejlesztés, összefoglalás,
+gyakorlás, ellenőrzés
+(óraszám)
+Teljes
+óraszám
+EGÉSZ SZÁMOK, OSZTHATÓSÁG
+12
+15
+27
+TÖRTEK
+6
+14
+20
+GEOMETRIA, TENGELYES TÜKRÖZÉS
+9
+11
+20
+ARÁNY, SZÁZALÉK, SZÖVEGES FELADATOK
+10
+20
+30
+KERÜLET, TERÜLET, FELSZÍN, TÉRFOGAT
+8
+13
+21
+STATISZTIKA
+4
+5
+9
+Mindennapi pénzügyeink
+2
+2
+EGYÉB: ÉV VÉGI ISMÉTLÉS
+7
+7
+Az óra sorszáma
+Az óra témája
+Új fogalmak
+A kerettantervben megjelölt fejlesztési feladatok, ismeretek, tanulási eredmények
+Javasolt tevékenységek, munkaformák
+Az év bevezetése, ismétlés, játékos bevezető
+Az éves munka rendjével kapcsolatos tudnivalók.
+Az éves munkával kapcsolatos ismeretek, elvárások közlése.
+Tanulásra hangoló játékok, feladatok.
+Játékok
+Játékszabályok, stratégiák.
+Gondolkodás fejlesztése.
+Páros munka, csoportmunka.
+Év eleji diagnosztikus felmérés
+Az ötödik osztályban tanult ismeretek.
+A tanulók tudásszintjének felmérése, a hiányok feltérképezése.
+Önálló munka, alapvető ismeretek számonkérése.
+EGÉSZ SZÁMOK, OSZTHATÓSÁG
+Műveletek az egész számok körében
+Mit tanultunk ötödik osztályban?
+A felmérés tapasztalatainak feldolgozása.
+Ismétlő, játékos feladatokkal az éves munka elkezdése.
+Közös munka, a hibák megbeszélése, javítása.
+Az egész számok szorzása
+Negatív számokkal való szorzás.
+Az algoritmus szabályainak megértése, alkalmazása.
+Játék, csoportmunka, tanári magyarázat.
+Gyakorlóóra: az egész számok szorzása
+Több tényező előjelének meghatározása, az írásbeli szorzás ismétlése.
+A tanult ismeretek alkalmazása.
+Páros és egyéni munka, gyakorlás.
+Az egész számok osztása
+Negatív osztandó, osztóval végzett műveletek algoritmusa.
+A hányados előjelének meghatározása a tanult szabály alapján.
+Mintapéldák megbeszélése tanári irányítással.
+Az egész számok osztásának gyakorlása
+Az írásbeli osztás gyakorlása, az előjel meghatározása.
+A tanult eljárás alkalmazása egyéni munkában.
+Egyéni munka.
+Hány eset van? Számoljuk össze!
+Az összes eset meghatározása fagráffal (ágrajz), táblázattal, rendszerezett felsorolással.
+A matematikai szövegértés fejlesztése.
+A feladatok feltételeinek felhasználása, rendszerezés.
+Kártyák kirakása, ágrajz készítése, csoportmunka.
+Gyakorlóóra. Hány eset van? Számoljuk össze!
+Az összes eset meghatározása fagráffal (ágrajz), táblázattal, rendszerezett felsorolással.
+A matematikai szövegértés fejlesztése.
+A feladatok feltételeinek felhasználása, rendszerezés.
+Kártyák kirakása, ágrajz készítése, csoportmunka.
+Összeszámlálási feladatok megoldása
+Az összes eset meghatározása fagráffal (ágrajz), táblázattal, rendszerezett felsorolással.
+A matematikai szövegértés fejlesztése.
+A feladatok feltételeinek felhasználása, rendszerezés.
+Önálló munka.
+Számonkérés
+A tanult fogalmak ismerete és alkalmazása.
+Az eddig tanult fogalmak, eljárások számonkérése.
+Egyéni munka.
+Osztó, többszörös
+Osztó, többszörös fogalma.
+Osztópárok.
+Az új fogalmak megértése, osztók, többszörösök megtalálása.
+Igaz, hamis állítások vizsgálata.
+Játék, csoportmunka
+Számolás maradékokkal
+Az osztási maradék fogalma.
+Összeg osztási maradékának vizsgálata.
+A természetes számok csoportosítása adott számmal való osztási maradékuk szerint.
+Többtagú összeg paritásának vizsgálata.
+Matematikai szövegértés.
+Játék, páros munka, egyéni munka tanári irányítással.
+Hány osztója van?
+Az osztó fogalma.
+Szorzat osztóinak vizsgálata.
+A természetes számok csoportosítása osztóik száma alapján. Osztóláncok készítése.
+Játékos feladatok csoportmunkában. Páros munka.
+Feladatok az osztók számának meghatározására, számolás maradékokkal
+Az osztókról, osztási maradékokról tanultak rögzítése ismétlésen keresztül.
+A tanult fogalmak, eljárások felhasználása szöveges feladatok megoldásában.
+Páros és csoportmunka.
+Oszthatóság 2-vel, 5-tel, 10-zel
+Oszthatóság vizsgálata az utolsó számjegy alapján.
+A felfedeztetett szabályok alkalmazása feladatmegoldásokban. Fejben számolás fejlesztése.
+Számok halmazokba rendezése adott számmal való oszthatóságuk alapján.
+Igaz-hamis állítások vizsgálata egyéni és páros munkában.
+Oszthatóság 3-mal és 9-cel
+A számjegyek összegén alapuló oszthatósági szabályok ismerete és alkalmazása.
+A felfedeztetett szabályok alkalmazása feladatmegoldásokban. Fejben számolás fejlesztése.
+A bizonyítási igény felkeltése.
+Páros munka, igaz-hamis állítások vizsgálata egyéni munka formájában.
+Oszthatóság 4-gyel és 100-zal
+A 4-gyel és 100-zal való oszthatósági szabály.
+A szabályok felfedeztetése játékos feladaton keresztül.
+Fejben számolás fejlesztése. Pontos matematikai megfogalmazás.
+Játékos feladatok tanári irányítású csoportmunkában.
+Összetett oszthatósági szabályok
+A tanult oszthatósági szabályok alapján új szabályok alkotása. 6-tal való oszthatóság ismerete.
+A tanult szabályok integrálása. Halmazábrák készítése.
+A számok csoportokba rendezése oszthatóság szerint.
+Tanári irányítású közös munka, páros munka.
+Gyakorlóóra: a tanult oszthatósági szabályok alkalmazása
+A tanult oszthatósági szabályok alkalmazása feladatmegoldás során.
+A matematikai szövegértés fejlesztése.
+Halmazábrák készítése, igaz-hamis állítások vizsgálata.
+Bizonyítási igény erősítése.
+Páros és egyéni munka.
+Tanult ismeretek felelevenítése digitális lehetőségek segítségével.
+Többszörös, közös többszörös
+Többszörös, közös többszörös fogalma.
+Közös többszörösök felsorolása, a legkisebb közös többszörös kiválasztása.
+Közös nevező meghatározása a legkisebb közös többszörös segítségével.
+Csoportmunka, számok színezése, feladatok megoldása egyéni munkában.
+Osztó, közös osztó
+Közös osztó fogalma.
+A közös osztók meghatározása felsorolással. A legnagyobb közös osztó kiválasztása.
+Törtek egyszerűsítése a közös osztók, vagy a legnagyobb közös osztó segítségével.
+Halmazábrák készítése.
+Tanári irányítású közös munka, egyéni munka.
+Összefoglalás
+A tanult fogalmak.
+A tanult fogalmak ismétlése. Rendszerezés.
+Szövegértés, algoritmusos gondolkodás fejlesztése.
+Tanult ismeretek felelevenítése digitális lehetőségek segítségével.
+Tesztfeladatok megoldása
+A tanult fogalmak.
+A tanult fogalmak, eljárások alkalmazása feladatok megoldásában.
+Tesztfeladatsor önálló megoldása.
+A feladatok megbeszélése, a hibák javítása.
+Témazáró dolgozat
+A tanult fogalmak ismerete és alkalmazása.
+Az eddig tanult fogalmak számonkérése.
+Egyéni munka.
+Témazáró dolgozat értékelése
+A témazáró dolgozat feladatainak megbeszélése.
+Közös megbeszélés.
+TÖRTEK
+Mit tanultunk a törtekről? Ismétlés
+Az ötödik osztályban tanult ismeretek felelevenítése.
+Közönséges tört értelmezése, a törtek elhelyezése a számegyenesen. A törtek bővítése, egyszerűsítése, összehasonlítása. A törtekkel végzett összeadás, kivonás algoritmusának felidézése.
+Csoportmunka, játék, közös megbeszélés.
+Mit tanultunk a törtekről? Ismétlés
+Az ötödik osztályban tanult ismeretek megerősítése.
+Az átismételt fogalmak felhasználása, a tanult eljárások alkalmazása. Szövegértés fejlesztése.
+Páros munka, ellenőrzéshez önálló munka (Királykisasszony hétpróbája).
+Szorzás törttel, a reciprok
+Törtrész meghatározása, a tört törttel való szorzásának szabálya.
+A reciprok fogalma.
+Törtrész meghatározása ábrák, rajzok segítségével, a tapasztalatok megfogalmazása.
+Rajzkészítés közösen, majd egyéni munkában. A tanult szabály alkalmazása.
+A törtek szorzását alkalmazó feladatok megoldása
+A tanult ismeretek, szabály.
+A tanult ismeretek alkalmazása. Szövegértés fejlesztése. Megfelelő ábrakészítés.
+Páros és egyéni munka.
+A tanult ismeretek megerősítése digitális lehetőségek segítségével.
+Osztás törttel
+A törttel való osztás szabálya.
+A szabály megértése rajz segítségével, téglalap felosztásán keresztül. A szabály megfogalmazása, alkalmazása.
+Tevékenykedtetés csoportmunkában, páros munkában, közös megbeszéléssel.
+Hétköznapi problémák megoldása törtek osztásának felhasználásával
+A tanult szabály alkalmazása.
+Szöveges feladatok megoldása, ábrakészítés.
+Egyéni munka. Digitális lehetőségek felhasználása a gyakorláshoz.
+Gyakorlóóra
+A tanult szabályok alkalmazása.
+A tanult ismeretek rögzítése.
+Egyéni munka digitális taneszköz feladatlapjainak segítségével.
+Számonkérés
+A tanult fogalmak ismerete és alkalmazása.
+Az eddig tanult fogalmak, eljárások számonkérése.
+Egyéni munka.
+Matematikai játékok
+(szakkönyvek, internet segítségével)
+Stratégiák alkalmazása. Együttműködés, kommunikáció csoportban.
+Csoport- és páros munka.
+Mit tanultunk a tizedes törtekről?
+A tizedes törtekről tanult ismeretek.
+A törtek többféle alakjának átismétlése. A tizedesvessző, a tizedes tört egész része és törtrésze. Számok helyi értékes írása tizedes törtek esetén.
+Összeadás, kivonás tizedes törtekkel.
+Játék csoportban. Közös megbeszélés. Egyéni munka ellenőrzéssel.
+Szorzás tizedes törttel
+A tizedes törttel való szorzás szabálya.
+A tizedes törtekkel való szorzás szabályának megértése, elsajátítása és alkalmazása. Nagyságrendi ellenőrzés kerekítéssel, becsléssel.
+Matematikai szövegértés.
+Páros munka, feladatmegoldás közös megbeszéléssel, egyéni munka.
+Osztás tizedes törttel
+A tizedes törttel való osztás szabálya.
+A tizedes törtekkel való osztás szabályának megértése, elsajátítása és alkalmazása. Ellenőrzés szorzással.
+Páros munka, feladatmegoldás közös megbeszéléssel, egyéni munka.
+Hétköznapi problémák megoldása tizedes törtek szorzásának, osztásának felhasználásával
+A tanult szabályok alkalmazása.
+Hétköznapi feladatok értelmezése, szöveges feladatok megoldása, ábrakészítés. Ellenőrzés szövegbe való visszahelyettesítéssel.
+Egyéni munka. A digitális lehetőségek felhasználása a gyakorláshoz.
+Összetett műveletek, zárójelfelbontás
+Műveleti sorrend, zárójel felbontása.
+A műveleti sorrendre és a zárójelezésre vonatkozó szabályok átismétlése és helyes alkalmazása.
+Közös megbeszélés, feladatmegoldás egyéni és páros munkában.
+Összetett műveletek, zárójelfelbontás gyakorlása
+A tanult szabályok alkalmazása.
+A tanult ismeretek rögzítése.
+Egyéni munka digitális taneszköz feladatlapjainak segítségével.
+Összefoglalás
+A tanult fogalmak.
+A tanult fogalmak ismétlése. Rendszerezés.
+Szövegértés, algoritmusos gondolkodás fejlesztése.
+Memória fejlesztése.
+Tanult ismeretek felelevenítése digitális lehetőségek segítségével.
+Feladatmegoldás
+A tanult fogalmak.
+A tanult fogalmak ismétlése, elmélyítése.
+Feladatmegoldás egyéni munkában közös megbeszéléssel.
+Játékos feladatok törtekkel
+A tanult fogalmak.
+A tanult fogalmak, eljárások alkalmazása feladatok megoldásában.
+Társasjáték páros munkában.
+Folyamatos tanári ellenőrzés, a hibák javítása.
+Témazáró dolgozat
+A tanult fogalmak ismerete és alkalmazása.
+Az eddig tanult fogalmak számonkérése.
+Egyéni munka.
+Témazáró dolgozat értékelése
+A témazáró dolgozat feladatainak megbeszélése.
+Közös megbeszélés.
+GEOMETRIA, TENGELYES TÜKRÖZÉS
+Síkbeli alakzatok
+Szögek fajtái. Háromszögek csoportosítása. Háromszög belső és külső szöge. A háromszög belső szögeinek összege.
+A szögek felismerése, a szögtartomány becslése. A háromszög belső szögei összegének meghatározása tapasztalati úton.
+A feladatoknak megfelelő ábra készítése. Síkbeli ábrák felismerése, megnevezése, csoportosítása.
+Az ismeretek megtapasztalása szívószálmodell segítségével, alakzatok kivágásával.
+Síkbeli alakzatok
+Négyszögek fajtái, tulajdonságai. Sokszögek felismerése, megnevezése.
+Négyszögek típusának meghatározása, szögösszeg megadása háromszögekre való visszavezetéssel.
+Szabályos sokszögek vizsgálata.
+Igaz-hamis állítások vizsgálata.
+Rajzkészítés önálló munkában.
+Feladatmegoldás páros munkában.
+Egybevágóság
+Egybevágóság szemléletes fogalma.
+Egybevágó alakzatok felismerése. Egybevágó alakzatok fedésbe hozása mozgatással.
+Egybevágó alakzatok megtalálása a hétköznapi tárgyakban és a természetben.
+Csoportmunka, egyéni kutatómunka.
+A kör
+A kör és részeinek ismerete.
+Rajzkészítés, a kör részeinek felismerése.
+Hétköznapi tárgyakon a kör, vagy a kör részeinek megtalálása, felismerése.
+Körző használata.
+Legfeljebb, legalább szavak szakszerű használata távolságok megadásánál.
+Szerkesztések, rajzok egyéni munkában. Gyűjtőmunka csoportmunkában.
+A szakasz felezőmerőlegese
+A szakaszfelező merőleges és tulajdonságai.
+Papírhajtogatás során a felezőmerőleges tulajdonságainak felfedeztetése. Szabadkézi rajzok (vázlatok) és szerkesztések pontos elvégzése.
+Tanári irányítású közös munka.
+Szerkesztések
+Az alapszerkesztések ismerete, a szerkesztések elvégzése.
+Körző, vonalzó helyes használata. A pontosság igényének felkeltése, a kézügyesség fejlesztése.
+Egyéni munka, folyamatos tanári ellenőrzéssel.
+Szerkesztések
+Egyszerű szerkesztési feladatok megoldása.
+Vázlatkészítés, szerkesztés lépéseinek meghatározása, a szerkesztés elvégzése körzővel, vonalzóval. Pontos szerkesztés, esztétikus munka végzése.
+Egyéni munka, folyamatos tanári ellenőrzéssel.
+Számonkérés
+A tanult fogalmak ismerete, a szerkesztési eljárások alkalmazása.
+Az eddig tanult fogalmak, eljárások számonkérése.
+Egyéni munka.
+Matematikai játékok
+(szakkönyvek, internet segítségével)
+Stratégiák alkalmazása. Együttműködés, kommunikáció csoportban.
+Csoport- és páros munka.
+Tengelyes tükrözés
+Tengelyes tükrözés, tengely, tükörkép.
+Tengelyes tükrözés szemléltetése tevékenykedtetéssel. Pontok tükörképe koordináta-rendszerben.
+Tengelyes tükrözés szerkesztési eljárásának ismerete, alkalmazása szerkesztési feladatokban.
+Papírhajtogatás, rajzkészítés, szerkesztés egyéni munka formájában.
+A tengelyes tükrözés tulajdonságai
+Távolságtartás, szögtartás, a körüljárási irány megváltozása, egybevágósági transzformáció, egyenes és képének elhelyezkedése. Kör és képe.
+Alakzatok tengelyes tükörképének megszerkesztése. Szerkesztések során a tengelyes tükrözés tulajdonságainak felfedezése, megfogalmazása. Pontos szaknyelvhasználat.
+Egyéni munka tanári irányítással. Szerkesztések elvégzése körzővel, vonalzóval. Mérések.
+Gyakorlóóra
+A tengelyes tükörkép szerkesztésének gyakorlása, a tulajdonságok felsorolása.
+A tengelyes tükrözés tulajdonságainak felfedezése szerkesztések során. A tulajdonságok megfogalmazása. Pontos szaknyelvhasználat.
+Egyéni munka tanári irányítással. Szerkesztések elvégzése körzővel, vonalzóval.
+Tengelyes szimmetria
+Tengelyesen tükrös, tengelyesen szimmetrikus.
+A szögfelező tulajdonságai.
+A tengelyes szimmetria vizsgálata hajtogatással, tükörrel. A szimmetria felismerése a természetben, a művészetben és az építészetben.
+Játék, hajtogatás, képkiegészítés, gyűjtőmunka.
+Tengelyesen szimmetrikus háromszögek, négyszögek, sokszögek
+Az egyenlő szárú háromszög és a szimmetriatengelye.
+A tengelyesen szimmetrikus háromszög tulajdonságainak megfigyelése. A szimmetriatengelyek számának meghatározása. Egyenlő szárú háromszög szerkesztése.
+Matematikai logika: ha…, akkor… kapcsolat megértése.
+A tulajdonságok közös megbeszélése. Alakzatok tervezése, elkészítése.
+Szerkesztések önálló munkában
+Tengelyesen szimmetrikus háromszögek, négyszögek, sokszögek
+Tengelyesen szimmetrikus négyszögek, sokszögek.
+A tengelyesen szimmetrikus négyszögek, sokszögek megismerése, tulajdonságaik megfigyelése saját készítésű rajzon, ábrán. Tükrözés koordináta-rendszerben. Rendszerező képesség fejlesztése.
+Önálló munka: rajz és ábrakészítés.
+Tulajdonságok megfigyelése, összegyűjtése csoportmunkában. Játék.
+Szerkesztési feladatok
+A szerkesztés lépéseinek gyakorlása. Szakasz és szög másolása, felezése. Háromszögszerkesztések.
+Egyszerű geometriai ábrák szerkesztése. A megfelelő eszközök segítségével a figyelmes és a pontos munkavégzés fejlesztése.
+Önálló munka tanári irányítással.
+Dinamikus szerkesztőprogram megismerése
+Ismerkedés a szerkesztőprogrammal.
+A program használatának alapjai. Alakzatok megszerkesztése.
+Egyéni munka számítógépen, közvetlen tanári irányítással.
+Összefoglalás
+A tanult fogalmak, szerkesztési eljárások.
+A tanult fogalmak ismétlése. Rendszerezés.
+Szerkesztési alaplépések átismétlése.
+A tanult ismeretek felelevenítése digitális lehetőségek segítségével.
+Témazáró dolgozat
+A tanult fogalmak ismerete, a tanult szerkesztési eljárások alkalmazása.
+Az eddig tanult fogalmak, eljárások számonkérése.
+Egyéni munka.
+Témazáró dolgozat értékelése
+A témazáró dolgozat feladatainak megbeszélése.
+Közös megbeszélés.
+ARÁNY, SZÁZALÉK, SZÖVEGES FELADATOK
+Az arány fogalma
+Az arány fogalma.
+Az arány szó használata a hétköznapokban.
+Az arány fogalmának megértése.
+Az arány és a tört kapcsolatának megismerése.
+Páros munka, közös megbeszélés, gyűjtőmunka, játék.
+Arányos osztás
+Arányos osztás.
+A fogalom megértése példákon keresztül. Az arányos osztás eljárásának bemutatása.
+Kapcsolat a tört bővítésével, egyszerűsítésével.
+Tanári irányítású közös megbeszélés.
+Feladatok megoldása
+A tanult fogalom megerősítése, az eljárás gyakorlása.
+Hétköznapi példák megoldása arányos osztás felhasználásával.
+A tanulás segítése digitális lehetőségek segítségével.
+Egyenes arányosság
+Az egyenes arányosság fogalma, jellemzői.
+Az ötödik osztályban tanult fogalom felidézése, a fogalom és tulajdonságainak felhasználása feladatmegoldás során.
+Páros munka, tanári irányítású közös munka.
+Egyenes arányosság grafikonja
+Az egyenes arányosság grafikonja, a grafikon jellemzői.
+Matematikai és hétköznapi példák a grafikonkészítésre. Egyenesen arányos mennyiségek közötti összefüggés megállapítása grafikon alapján.
+Egyéni munka tanári irányítással.
+Gyakorlóóra
+A tanult ismeretek alkalmazása.
+Gyakorlati példák egyenes arányosságra. Megfigyelőképesség fejlesztése, összefüggések felismerése.
+A tanulás segítése digitális lehetőségek segítségével.
+Matematikai játékok
+(szakkönyvek, internet segítségével)
+Stratégiák alkalmazása. Együttműködés, kommunikáció csoportban.
+Csoport- és páros munka.
+Szabályok megfeleltetések
+Sorozat, számsorozat, szabály.
+Sorozatok létrehozása számokból, jelekből, alakzatokból. Sorozatok adott szabály szerinti folytatása.
+Sorozatok a természetben, a művészetekben és a hétköznapokban.
+Csoport- és páros munka. Gyűjtőmunka.
+Gyakorlóóra
+Sorozat, számsorozat, szabály.
+Adott sorozat esetén legalább egy szabály felismerése és megfogalmazása. Grafikon pontjai közötti összefüggések, megfeleltetések felismerése.
+Egyéni munka, feladatmegoldás digitális eszközök segítségével.
+Törtrész
+Törtrész kiszámítása.
+Törtrész előállításának megmutatása konkrét modelleken. A törttel való szorzás műveletének felidézése.
+A törtrész kiszámításának és az egyenes arányosság kapcsolatának bemutatása, megértetése.
+Közös munka, tanári magyarázat.
+Feladatmegoldás
+Törtrész meghatározása.
+A tanult eljárás alkalmazása egyszerű és összetett feladatokban.
+Egyéni munka, digitális taneszközök felhasználása.
+Számonkérés
+A tanult ismeretek.
+A tanult ismeretek számonkérése.
+Önálló munka.
+Létraverseny I.
+A fejezetben tanult ismeretek.
+Együttműködés, jó légkörű versenyszellem kialakítása.
+Páros munka, verseny.
+Százalékszámítás
+1 egész = 100%, 1% fogalma, a törtrész és a százalék kapcsolata.
+Hétköznapi példákból kiindulva a százalék fogalmának megértése, százalékos adatok értelmezése, adott mennyiség adott százalékának kiszámítása.
+Közös feldolgozás, egyéni feladatmegoldás.
+A százalékszámítás gyakorlása
+A százalékérték kiszámításának kétféle módja.
+Hétköznapi százalékszámítási problémák megoldása következtetéssel vagy törtrész kiszámításával.
+Páros, majd egyéni munka.
+Feladatmegoldás
+A százalék fogalma.
+A százalékszámítással kapcsolatos szöveges feladatok megoldása. Matematikai szövegértés fejlesztése.
+Egyéni munka.
+Feladatmegoldás
+A százalékérték.
+A százalékszámítással kapcsolatos szöveges feladatok megoldása. Matematikai szövegértés fejlesztése.
+Egyéni munka. Digitális taneszköz használata.
+Projektóra
+A tanult ismeretek alkalmazása.
+Családi költségvetés készítése tanár által megadott összegből.
+Csoportmunka.
+Nyitott mondatok
+A lebontogatás (visszafelé gondolkodás) és a próbálgatás módszere.
+Az ötödik osztályos ismeretek felelevenítése folyamatábrák segítségével. Becslés, ellenőrzés.
+Játék. Közös megbeszélés. Páros munka.
+Feladatmegoldás:
+Nyitott mondatok
+A lebontogatás (visszafelé gondolkodás) és a próbálgatás módszere.
+A lebontogatás módszerének gyakorlása.
+Egyéni munka.
+Gyakorlóóra
+A tanult módszerek alkalmazása.
+Gyakorlás. Ellenőrzés.
+Egyéni munka.
+Szöveges feladatok
+Szöveges feladatok megoldása nyitott mondatok felírásával.
+Szövegértelmezés fejlesztése. A szövegnek megfelelő ábra készítése. Összefüggések felírása. Becslés, ellenőrzés.
+Tanári irányítású közös munka.
+Gyakorlóóra
+Matematikai szövegezésű feladatok megoldása.
+Szövegértelmezés fejlesztése. A szövegnek megfelelő ábra készítése. Összefüggések felírása.
+Páros és egyéni munka.
+Feladatmegoldás
+Hétköznapi matematikai problémák megoldása.
+Szövegértelmezés fejlesztése. A szövegnek megfelelő ábra készítése. Összefüggések felírása.
+Egyéni munka.
+Több megoldás is lehet
+Nyitott mondatok több megoldásának keresése.
+Szövegértelmezés fejlesztése. A szövegnek megfelelő ábra készítése. Összefüggések felírása. Legalább, legfeljebb szavak használata a szövegértés során.
+Közös munka.
+Létraverseny II.
+A tanult ismeretek.
+A tanult ismeretek felhasználása feladatmegoldás során. Együttműködés, jó légkörű versenyszellem erősítése.
+Páros munka.
+Összefoglalás
+A tanult fogalmak.
+A tanult fogalmak, eljárások átismétlése. Rendszerezés.
+Szövegértés, algoritmusos gondolkodás fejlesztése.
+Memória fejlesztése.
+Tanult ismeretek felelevenítése digitális lehetőségek segítségével.
+Gyakorlóóra
+A tanult ismeretek alkalmazása.
+A tanult ismeretek alkalmazása. Becslés ellenőrzés.
+Egyéni munka, tanári ellenőrzéssel.
+Témazáró dolgozat
+A tanult fogalmak ismerete, a tanult eljárások, szabályok alkalmazása.
+Az eddig tanult fogalmak, eljárások számonkérése.
+Egyéni munka.
+Témazáró dolgozat értékelése
+A témazáró dolgozat feladatainak megbeszélése.
+Közös megbeszélés.
+KERÜLET, TERÜLET, FELSZÍN, TÉRFOGAT
+Hosszúság, tömeg, idő
+A tanult mértékegységek és átváltásuk.
+A hosszúság, a tömeg és az idő mérésének ismétlése a szabványmértékegységek segítségével. A mértékegységek alapos ismerete, átváltásuk gyakorlása. Gyakorlati mérések, mértékegység-átváltások helyes elvégzésének fejlesztése.
+Becslés, mérés, közös munkában.
+Átváltások egyéni munkában ellenőrzéssel.
+Hosszúság, tömeg, idő
+A tanult mértékegységek és átváltásuk.
+A mértékegységek alapos ismerete, átváltásuk gyakorlása.
+Digitális feladatlapok egyéni munkában.
+A sokszögek kerülete
+Négyzet, téglalap, sokszög kerülete.
+Adott sokszögek kerületének meghatározása méréssel, számolással. Számolási készség fejlesztése.
+Becslés, mérés közös munkában.
+Számolás egyéni munkában.
+Feladatmegoldás
+Sokszögek kerülete.
+Adott sokszögek kerületének meghatározása méréssel, számolással. Számolási készség fejlesztése.
+Számolás egyéni munkában
+A terület és a térfogat mérése
+A terület és a térfogat tanult mértékegységei, átváltásuk.
+Terület meghatározása lefedéssel, becsléssel, méréssel.
+Térfogat meghatározása egységkockák felhasználásával. Átváltások szabványmértékegységek felhasználásával.
+Mérés, lefedés, kiskocka felhasználása páros munkában.
+Számítások egyéni munkában.
+Gyakorlóóra. A terület és a térfogat mérése
+A tanult mértékegységek (terület, térfogat, űrmérték) és átváltásuk.
+A mértékegységek alapos ismerete, átváltásuk gyakorlása.
+Digitális feladatlapok egyéni munkában.
+A sokszögek területe
+Négyzet, téglalap, derékszögű háromszög területe.
+Sokszögek területének meghatározása átdarabolással.
+Gyakorlati problémák megoldása. Becslés.
+Csoportmunka, mérés, becslés.
+Feladatmegoldás
+A tanult ismeretek alkalmazása.
+Kerület- és területszámítási feladatok. Lakóház tervezése méretekkel.
+Egyéni és csoportmunka.
+Alakzatok a térben
+Testek elnevezései. Él, lap, lapátló, testátló, elölnézet, felülnézet, oldalnézet.
+Térbeli alakzatok vizsgálata. Testek építése, vetületi kép megrajzolása. Vetületi képből test megépítése.
+Térszemlélet fejlesztése.
+Csoportos és páros munka. Kockák, legók, duplók használata.
+Testek felszíne
+A téglatest és a kocka felszíne.
+A tanult terület-összefüggések felhasználása a felszínszámításnál. A leggyakrabban használt terület mértékegységek célszerű használata. A térszemlélet fejlesztése.
+Tanári irányítású közös munka.
+Gyakorlóóra
+Testek felszíne.
+Dinamikus szerkesztőprogram használata a szemléltetéshez.
+Tanári irányítású egyéni munka.
+Felszínszámítással kapcsolatos gyakorlati feladatok
+A tanult terület-összefüggések.
+Hétköznapi életből vett problémák megoldása. Testek hálójának megrajzolása. A matematikai szövegértés, a megfigyelőképesség és a számolási készség fejlesztése.
+Közös munka, számítási feladatok egyéni munkában.
+Testek térfogata
+Téglatest, kocka térfogata.
+Átdarabolással meghatározható testek térfogatának kiszámítása. Testek építése, és térfogatuk meghatározása.
+Csoportos és páros munka.
+Projektóra
+Épülettervezés
+Egy épület vetületének és makettjének elkészítése.
+Csoportmunka.
+Projektóra
+Épülettervezés
+Egy épület vetületének és makettjének elkészítése.
+Csoportmunka.
+Projektóra
+Az elkészített projektek bemutatása.
+Az elkészített épület vetületének és makettjének bemutatása csoportonként.
+Csoportmunka.
+Összefoglalás
+A tanult ismeretek és összefüggések.
+A fejezetben tanult ismeretek alkalmazása feladatmegoldásban.
+A témakör tanult fogalmainak, összefüggéseinek összegyűjtése kiscsoportos munkában.
+Gyakorlóóra
+A tanult ismeretek és összefüggések.
+A fejezetben tanult ismeretek alkalmazása feladatmegoldásban.
+Tesztfeladatsor megoldása.
+Tesztfeladatsor egyénileg, majd ellenőrzés, közös feladatmegoldás.
+Feladatmegoldás
+A tanult ismeretek és összefüggések.
+A fejezetben tanult ismeretek alkalmazása feladatmegoldásban.
+Egyéni munka.
+Témazáró dolgozat
+A tanult fogalmak ismerete, a tanult eljárások, szabályok alkalmazása.
+Az eddig tanult fogalmak, eljárások számonkérése.
+Egyéni munka.
+Témazáró dolgozat értékelése
+A témazáró dolgozat feladatainak megbeszélése.
+Közös megbeszélés.
+STATISZTIKA
+Játék
+A játékok megértéséhez kapcsolódó szavak.
+Ismerkedés matematikai játékokkal.
+Páros és csoportmunka.
+Grafikonok, diagramok, összefüggések
+Adat, táblázat, diagram, diagramtípusok.
+Az ötödik osztályban tanult ábrázolási, rendszerezési módozatok áttekintése.
+Tankönyvi példák megbeszélése közös munkában.
+Kördiagram
+A körcikk és a hozzá tartozó szög.
+Ismerkedés a kördiagrammal. Adatok leolvasása. Kördiagram készítése. Körző, szögmérő használata.
+Csoportmunka és egyéni munka.
+Adatok ábrázolása, átlag
+Átlag, oszlopdiagram, pontdiagram, kördiagram.
+Adatok ábrázolása megfelelő diagramon.
+Tankönyvi példák megbeszélése közös munkában.
+Feladatmegoldás kiscsoportban.
+Digitális eszközök használata az ábrázolásban.
+Dobáljunk kockákat!
+Táblázat, diagram.
+A csoport tagjai által kapott adatok rendszerezése, ábrázolása.
+Páros munka: egy kockával a dobott szám, majd két kockával az összeg és a szorzat vizsgálata.
+Dobáljunk pénzérmét!
+Táblázat, diagram.
+A csoport tagjai által kapott adatok rendszerezése, ábrázolása.
+Páros munka: dobálás 1, 2, 3 pénzérmével.
+Összefoglalás
+A tanult fogalmak.
+Az eddig tanult fogalmak ismétlése.
+Számonkérés
+A tanult fogalmak.
+Az eddig tanult fogalmak, eljárások számonkérése.
+Számonkérés projektmunka formájában. Digitális eszközök használata.
+A számonkérés értékelése
+Az elkészített munkák pozitívumainak, hiányosságainak megbeszélése.
+Közös megbeszélés, értékelés.
+Mindennapi pénzügyeink
+Mindennapi pénzügyeink
+Százalék, kamat, megtakarítás, futamidő. Valutavételi, -eladási árfolyam.
+A hétköznapokban használt pénzügyi alapfogalmak megértése, használata.
+Tanári irányítású közös munka.
+Mindennapi pénzügyeink
+Százalék, kamat, megtakarítás, futamidő. Valutavételi, -eladási árfolyam.
+A hétköznapokban használt pénzügyi alapfogalmak megértése, használata.
+Csoportmunka.
+ÉV VÉGI ISMÉTLÉS
+Az egész számokról tanultak összefoglalása, vegyes feladatok
+A tanult fogalmak, eljárások.
+Az év során tanultak ismétlése.
+Tanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása.
+Az oszthatóságról tanultak összefoglalása
+A tanult fogalmak, eljárások.
+Az év során tanultak ismétlése.
+Tanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása.
+A törtekről tanultak összefoglalása, vegyes feladatok
+A tanult fogalmak, eljárások.
+Az év során tanultak ismétlése.
+Tanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása.
+A geometriai ismeretek összefoglalása, vegyes feladatok
+A tanult fogalmak, eljárások.
+Az év során tanultak ismétlése.
+Tanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása.
+Arányosság, százalék, szöveges feladatok
+A tanult fogalmak, eljárások.
+Az év során tanultak ismétlése.
+Tanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása.
+A hosszúság, a kerület, a terület és a térfogat fogalmával kapcsolatos feladatok
+A tanult fogalmak, eljárások.
+Az év során tanultak ismétlése.
+Tanult fogalmakat, eljárásokat is tartalmazó feladatsorok megoldása.
+Az éves munka értékelése

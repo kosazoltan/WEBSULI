@@ -11,5 +11,7 @@ Magyarul válaszolj. A részletes szabály az `AGENTS.md` „Review guidelines�
   - regresszió a meglévő folyamatokban;
   - időzóna (Europe/Budapest);
   - migráció ↔ séma;
-  - indítás / cron / leállítás.
+  - indítás / cron / leállítás;
+  - félkész munka: a PR-hoz tartozó spec és `-vegrehajtas.md` minden pontja teljesült-e (befejezési mandátum);
+  - ARM64 + x64: architektúra-függő útvonal, bináris vagy csak egy CPU-n települő függőség.
 - **Evidencia:** csak fájl:sor hivatkozással és konkrét hibaforgatókönyvvel jelezz hibát.

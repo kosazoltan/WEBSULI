@@ -6,10 +6,16 @@ emlékezetből soha ne jelents státuszt, mindig a `list` kimenetét idézd.
 
 ## Hol van a tábla
 
-- **Adatbázis:** `%LOCALAPPDATA%\hermes\kanban.db` (a `HERMES_HOME`; felülírható a `KANBAN_DB` env-vel)
-- **CLI:** `D:\repo\Hermes-agent\skills\software-development\hermes-kanban-workflow\scripts\kanban.mjs`
-  (2026-10-14: a korábbi `D:\Hermes\…` útvonal nem létezik ezen a gépen — ellenőrizve)
-- **Státuszok (a CLI szerint):** `todo → in_progress → in_review → done`, plusz `blocked`; `reopen` → `todo`
+- **Adatbázis (2026-11-03, mérve):** a repóban, `<git toplevel>/.hermes/kanban.db` (gitignore-olt).
+  Feloldási sorrend a CLI szerint: `--db PATH` > `$HERMES_WORKFLOW_KANBAN_DB` > `<git toplevel>/.hermes/kanban.db`.
+  A CLI a `HERMES_HOME` (`%LOCALAPPDATA%\hermes`) alatti táblát **elutasítja**; a régi
+  `%LOCALAPPDATA%\hermes\kanban.db` a Hermes-diszpécser sora, WEBSULI-jegy nincs benne.
+- **CLI:** `C:\Repo\Jack\qualcomm\skills\hermes-kanban-workflow\scripts\kanban.mjs`
+  (2026-11-03: a korábbi `D:\repo\Hermes-agent\…` és `D:\Hermes\…` útvonal nem létezik — ellenőrizve).
+  **A WEBSULI gyökeréből futtasd**, különben a CLI egy másik repó tábláját nyitja meg (csapda C-02).
+- **Státuszok (a CLI `stats` szerint):** `todo → doing → review → done`, plusz `blocked`.
+- A korábban hivatkozott #6–#11 jegyek (köztük a #11 STANDING) az új táblán nincsenek — hollétük UNKNOWN;
+  a mandátum STANDING jegye az új táblán újra fel van véve.
 
 > **Ne keverd össze** a gyári `hermes kanban` CLI-vel: az egy több-profilos
 > diszpécser-sor, gyakran üres. Egy üres gyári lista **nem** jelenti, hogy semmi
@@ -18,16 +24,17 @@ emlékezetből soha ne jelents státuszt, mindig a `list` kimenetét idézd.
 ## Alapparancsok
 
 ```bash
-cd "D:/repo/Hermes-agent/skills/software-development/hermes-kanban-workflow/scripts"
+cd /c/Repo/WEBSULI                       # a repó gyökeréből!
+K=/c/Repo/Jack/qualcomm/skills/hermes-kanban-workflow/scripts/kanban.mjs
 
-node --no-warnings kanban.mjs list --repo WEBSULI      # tábla lekérdezése
-node --no-warnings kanban.mjs add --repo WEBSULI --title "BUG(...): rövid leírás"
-node --no-warnings kanban.mjs start <id>               # backlog -> doing
-node --no-warnings kanban.mjs note <id> "bizonyíték: PR, SHA, mérés"
-node --no-warnings kanban.mjs review <id>              # doing -> review
-node --no-warnings kanban.mjs done <id>                # review -> done
-node --no-warnings kanban.mjs show <id>                # előzmények
-node --no-warnings kanban.mjs stats                    # összesítő
+node --no-warnings $K list                         # tábla lekérdezése
+node --no-warnings $K add --title "BUG(...): rövid leírás"
+node --no-warnings $K start <id>                   # todo -> doing
+node --no-warnings $K note <id> "bizonyíték: PR, SHA, mérés"
+node --no-warnings $K review <id>                  # doing -> review
+node --no-warnings $K done <id>                    # review -> done
+node --no-warnings $K show <id>                    # előzmények
+node --no-warnings $K stats                        # összesítő
 ```
 
 ## A munkafolyamat szabálya

@@ -1,0 +1,86 @@
+{
+  "title": "NAT 2020 Etika 5–6. — 6. évfolyam",
+  "subject": "Etika",
+  "classroom": 6,
+  "status": "draft",
+  "sourceFiles": [
+    {
+      "name": "Etika_F.grade6.txt",
+      "kind": "text"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "etika-entudat-onismeret",
+      "term": "Éntudat – Önismeret",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére, adottságaihoz mérten, életkorának megfelelően: reálisan értékeli helyzetét, fejlődési célokat fogalmaz meg és a célok megvalósítását szolgáló terveket készít; felismeri a tudásszerzés módjait, különös tekintettel a forrás hitelességére; felismeri a helyzethez illeszkedő érzelmeket és kifejezésmódjukat, és ennek megfelelően viselkedik/cselekszik;",
+      "quote": "Témakör: Éntudat – Önismeret",
+      "sourceRef": {
+        "file": "Etika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "etika-csalad-helyem-a-csaladban",
+      "term": "Család – Helyem a családban",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére, adottságaihoz mérten, életkorának megfelelően: megfigyeli, hogy saját érzelmi állapota és viselkedése milyen következményekkel járhat, és milyen hatást gyakorolhat a társas kapcsolatai alakítására; képes a helyzetnek megfelelő érzelmek kifejezésére; a családjában és ismeretségi körében talál olyan mintákat, amelyek példaként szolgálnak számára;",
+      "quote": "Témakör: Család – Helyem a családban",
+      "sourceRef": {
+        "file": "Etika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "etika-tarsas-tudatossag-es-tarsas-kapcsolatok-helyem-a",
+      "term": "Társas tudatosság és társas kapcsolatok - Helyem a társas-lelkületi közösségekben",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére, adottságaihoz mérten, életkorának megfelelően: helyesen feltérképezi, hogy saját érzelmi állapota és viselkedése milyen következményekkel járhat, és milyen hatást gyakorolhat a társas kapcsolatai alakítására; képes a helyzetnek megfelelő érzelmek kifejezésére; a családjában és ismeretségi körében talál olyan mintákat, amelyek példaként szolgálnak számára;",
+      "quote": "Témakör: Társas tudatosság és társas kapcsolatok - Helyem a társas-lelkületi közösségekben",
+      "sourceRef": {
+        "file": "Etika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "etika-a-tarsas-egyutteles-kulturalis-gyokerei-nemzet-h",
+      "term": "A társas együttélés kulturális gyökerei: Nemzet – helyem a társadalomban",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére, adottságaihoz mérten, életkorának megfelelően: azonosítja a nemzet, a kulturális közösség számára fontos értékeket, indokolja, hogy ezek milyen szerepet játszanak a saját életében; érzelmileg azonosul az állami, nemzeti és egyházi ünnepkörök jelentőségével, értelmezi a hozzájuk kapcsolódó jelképeket, valamint az ünnepek közösségmegtartó szerepét;",
+      "quote": "Témakör: A társas együttélés kulturális gyökerei: Nemzet – helyem a társadalomban",
+      "sourceRef": {
+        "file": "Etika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "etika-a-termeszet-rendjenek-megorzese-es-a-fenntarthat",
+      "term": "A természet rendjének megőrzése és a fenntartható jövő",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére, adottságaihoz mérten, életkorának megfelelően: megfogalmazza személyes felelősségét a természeti és tárgyi környezet iránt, megoldási javaslatot tesz környezetének megőrzésére, esztétikus fejlesztésére felismeri az ökológiai, ökonómiai egyensúly hétköznapi szükségességét döntéseket hoz arról, hogy milyen szokások kialakulásával járul hozzá a fenntarthatóság megvalósításához, milyen cselekvéseket tehet a természeti, társadalmi problémák kezelése érdekében;",
+      "quote": "Témakör: A természet rendjének megőrzése és a fenntartható jövő",
+      "sourceRef": {
+        "file": "Etika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "etika-az-europai-kultura-hatasa-az-egyen-ertekrendjere",
+      "term": "Az európai kultúra hatása az egyén értékrendjére",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére, adottságaihoz mérten, életkorának megfelelően: egyéni cselekvési lehetőségeket fogalmaz meg a közös erkölcsi értékek érvényesítésére; képes az európai, a nemzeti kultúra közös eredetének, forrásainak értelmezésére reflektíven értékeli a tudásszerzés módjait, különös tekintettel a forrás hitelességére; képes a helyzetnek megfelelő érzelmek kifejezésére.",
+      "quote": "Témakör: Az európai kultúra hatása az egyén értékrendjére",
+      "sourceRef": {
+        "file": "Etika_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    }
+  ]
+}

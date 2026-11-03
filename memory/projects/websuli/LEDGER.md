@@ -738,3 +738,14 @@ feltételes sablon-fejezetek, TÉNYVÉDELEM, Próba csak ≥ 5 kérdésnél. Vé
 Specek: `docs/specs/2026-10-14-*`. Élesítés: Render 8851d41, 1071a1b, 31b9747 — élő ellenőrzés 200/401.
 **Nyitott:** S3–S4 (nagy forrás lefedettsége), `ocr` lépés cseréje (mérés kell), titok-rotáció (session-szivárgás), OpenRouter
 kvóta-átállás, `/maps/extract` térkép-újrahasznosítás. Kanban: WEBSULI #6–#11.
+
+## 2026-11-03 — befejezési mandátum minden belépési ponton, csapdakatalógus, ARM64 + x64 (Claude Code)
+**Mért:** az x64-es gépen (AMD64) a `source/node_modules` ARM64-es esbuildot tartalmazott → minden tsx-teszt bukott
+(„installed esbuild for another platform”); `npm.cmd ci` után zöld. A NAT 2020 6. évfolyamos munka 2026-09-29 óta
+commitolatlan volt (kanban #1 `review`). A `docs/kanban.md` CLI-útvonala nem létezett; a tábla a repóban van
+(`.hermes/kanban.db`). A Claude-projektmemória üres volt.
+**Javítás:** `npm run doctor:arch` (`source/scripts/check-native-arch.mjs`) + `tests/native-arch.test.ts` + CI `native-arch`
+job (windows-latest + windows-11-arm); mandátum + önfejlesztési hurok + ARM64/x64 szabály: AGENTS.md, 4 `.agents` skill,
+RUNBOOK §11–12, Copilot-review, globális CLAUDE.md, Claude-memória; új `docs/agent-csapdak.md` (C-01…C-05).
+Spec: `docs/specs/2026-11-03-befejezes-onfejlesztes-dual-arch(.md, -vegrehajtas.md)`. Kanban: #1 note, #2 STANDING, #3 DX.
+**Nyitott:** a `windows-11-arm` CI-futás csak push után mérhető; NAT 6. évf. éles publikálás BLOCKED (`/api/studio/maps` 401).

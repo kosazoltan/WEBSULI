@@ -1,0 +1,146 @@
+{
+  "title": "NAT 2020 Történelem 5–6. — 6. évfolyam",
+  "subject": "Történelem",
+  "classroom": 6,
+  "status": "draft",
+  "sourceFiles": [
+    {
+      "name": "Tortenelem_F.grade6.txt",
+      "kind": "text"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "tortenelem-szemelyes-tortenelem",
+      "term": "Személyes történelem",
+      "definition": "Ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Fejlesztési feladatok Körülöttem a történelem Családi fotóalbum és személyes tárgyak. Személyes történetek dokumentálása, elbeszélése. Egy nap dokumentálása.",
+      "quote": "Témakör: Személyes történelem",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "tortenelem-fejezetek-az-okor-tortenetebol",
+      "term": "Fejezetek az ókor történetéből",
+      "definition": "ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Fejlesztési feladatok Az ókori Egyiptom világa Földművelés a Nílus mentén. Hitvilág és halottkultusz a piramisok és a Királyok Völgye példáján: Memphis és Théba. A legjelentősebb találmány: az írás.",
+      "quote": "Témakör: Fejezetek az ókor történetéből",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "tortenelem-a-keresztenyseg",
+      "term": "A kereszténység",
+      "definition": "Ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Fejlesztési feladatok Az Ószövetség népe Az Ószövetség/Héber Biblia: Ábrahám és Mózes. Az önálló zsidó állam alapítói: Dávid és Salamon története. Fogalmak: egyistenhit, Biblia, Ószövetség/Héber Biblia, Újszövetség, zsidó vallás, keresztény vallás, keresztség és úrvacsora.",
+      "quote": "Témakör: A kereszténység",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "tortenelem-a-kozepkor-vilagai",
+      "term": "A középkor világai",
+      "definition": "Ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Fejlesztési feladatok Élet a várban – egy magyar vár (pl. Visegrád) és uradalom bemutatásával Királyok és nemesek Várépítészet – híres magyar középkori várak. Egy uradalom működése, a falvak világa (a jobbágyok élete).",
+      "quote": "Témakör: A középkor világai",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "tortenelem-kepek-es-portrek-az-arpad-kor-tortenetebol",
+      "term": "Képek és portrék az Árpád-kor történetéből",
+      "definition": "Ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Fejlesztési feladatok Történetek a magyarok eredetéről A hun-magyar eredettörténet a krónikákban: Hunor, Magor; Csaba királyfi. Az Árpád-ház eredettörténete: Emese álma, vérszerződés. Fogalmak: hunok, finnugor, törzs,  vérszerződés, fejedelem, honfoglalás, székelyek, kalandozások, vármegye, tized, ispán, Szent Korona, tatárok/mongolok, kunok.",
+      "quote": "Témakör: Képek és portrék az Árpád-kor történetéből",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "tortenelem-kepek-es-portrek-a-magyar-allam-viragkorabol",
+      "term": "Képek és portrék a magyar állam virágkorából",
+      "definition": "Ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Fejlesztési feladatok Magyar királyportrék a 14–15. századból Károly és az aranyforint. Nagy Lajos, a hódító. Luxemburgi Zsigmond, a császár.",
+      "quote": "Témakör: Képek és portrék a magyar állam virágkorából",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "tortenelem-uj-latohatarok",
+      "term": "Új látóhatárok",
+      "definition": "Ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Fejlesztési feladatok A földrajzi felfedezések A felfedezők útjai. A világkereskedelem kialakulása. Gyarmatosítás Amerikában: az őslakosság sorsa, ültetvények és rabszolgák.",
+      "quote": "Témakör: Új látóhatárok",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "tortenelem-portrek-es-tortenetek-magyarorszag-kora-ujkori-t",
+      "term": "Portrék és történetek Magyarország kora újkori történetéből",
+      "definition": "Ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Fejlesztés feladatok A török háborúk hősei II. Lajos és a mohácsi csata. Buda eleste és az ország három részre szakadása. A várháborúk hősei (pl. Dobó; Zrínyi, a szigetvári hős).",
+      "quote": "Témakör: Portrék és történetek Magyarország kora újkori történetéből",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "tortenelem-elet-a-kora-ujkori-magyarorszagon",
+      "term": "Élet a kora újkori Magyarországon",
+      "definition": "Ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Javasolt tevékenységek Élet a török hódoltság kori Magyarországon – egy konkrét település (pl. Debrecen vagy Kecskemét) bemutatásával A török uralom. A mezőváros élete. Szarvasmarha-kereskedelem.",
+      "quote": "Témakör: Élet a kora újkori Magyarországon",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "tortenelem-forradalmak-kora",
+      "term": "Forradalmak kora",
+      "definition": "Ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Fejlesztési feladatok Ipari forradalom Gyapotból pamut. A textilipar fejlődése. A gőzgép. Bányászat, gyáripar, vasútépítés.",
+      "quote": "Témakör: Forradalmak kora",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "tortenelem-a-magyar-nemzeti-ebredes-es-polgarosodas-kora",
+      "term": "A magyar nemzeti ébredés és polgárosodás kora",
+      "definition": "Ismeretek és fejlesztési feladatok: Részletes követelmények Témák Altémák Fogalmak és adatok/Lexikák Fejlesztési feladatok A reformkor Széchenyi István alkotásai. A jobbágyfelszabadítás kérdése. A magyar nyelv és a nemzeti kultúra ügye.",
+      "quote": "Témakör: A magyar nemzeti ébredés és polgárosodás kora",
+      "sourceRef": {
+        "file": "Tortenelem_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    }
+  ]
+}

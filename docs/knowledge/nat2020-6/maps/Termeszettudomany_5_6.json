@@ -1,0 +1,206 @@
+{
+  "title": "NAT 2020 Természettudomány 5–6. — 6. évfolyam",
+  "subject": "Természettudomány",
+  "classroom": 6,
+  "status": "draft",
+  "sourceFiles": [
+    {
+      "name": "Termeszettudomany_5_6.grade6.txt",
+      "kind": "text"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "termeszettud-anyagok-es-tulajdonsagaik",
+      "term": "Anyagok és tulajdonságaik",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: felismeri és megfigyeli a környezetben előforduló élő és élettelen anyagokat, megadott vagy önállóan kitalált szempontok alapján csoportosítja azokat; felismer és megfigyel különböző természetes és mesterséges anyagokat, ismeri azok tulajdonságait, felhasználhatóságukat, ismeri a természetes és mesterséges környezetre gyakorolt hatásukat;",
+      "quote": "Témakör: Anyagok és tulajdonságaik",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-meresek-mertekegysegek-meroeszkozok",
+      "term": "Mérések, mértékegységek, mérőeszközök",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: felismeri és megfigyeli a környezetben előforduló élő és élettelen anyagokat, megadott vagy önállóan kitalált szempontok alapján csoportosítja azokat; felismer és megfigyel különböző természetes és mesterséges anyagokat, ismeri azok tulajdonságait, felhasználhatóságukat, ismeri a természetes és mesterséges környezetre gyakorolt hatásukat;",
+      "quote": "Témakör: Mérések, mértékegységek, mérőeszközök",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-megfigyeles-kiserletezes-tapasztalas",
+      "term": "Megfigyelés, kísérletezés, tapasztalás",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: felismeri és megfigyeli a környezetben előforduló élő és élettelen anyagokat, megadott vagy önállóan kitalált szempontok alapján csoportosítja azokat; felismer és megfigyel különböző természetes és mesterséges anyagokat, ismeri azok tulajdonságait, felhasználhatóságukat, ismeri a természetes és mesterséges környezetre gyakorolt hatásukat;",
+      "quote": "Témakör: Megfigyelés, kísérletezés, tapasztalás",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-tajekozodas-az-idoben",
+      "term": "Tájékozódás az időben",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: felismeri az idő múlásával bekövetkező változásokat és ezek összefüggéseit az élő és élettelen környezet elemein; tudja értelmezni az időt különböző dimenziójú skálákon. A témakör tanulása eredményeként a tanuló: tervet készít saját időbeosztására vonatkozóan; megfigyeli a természet ciklikus változásait; megérti a Föld mozgásai és a napi, évi időszámítás közötti összefüggéseket;",
+      "quote": "Témakör: Tájékozódás az időben",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-alapveto-terkepeszeti-ismeretek",
+      "term": "Alapvető térképészeti ismeretek",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: meghatározza az irányt a valós térben; érti a térkép és a valóság közötti viszonyt; tájékozódik a térképen és a földgömbön. A témakör tanulása eredményeként a tanuló: mágneses kölcsönhatásként értelmezi az iránytű működését; felismeri a felszínformák ábrázolását a térképen; megérti a méretarány és az ábrázolás részletessége közötti összefüggéseket;",
+      "quote": "Témakör: Alapvető térképészeti ismeretek",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-topografiai-alapismeretek",
+      "term": "Topográfiai alapismeretek",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: meghatározza az irányt a valós térben; érti a térkép és a valóság közötti viszonyt; tájékozódik a térképen és a földgömbön. A témakör tanulása eredményeként a tanuló: felismeri a földrészeket és az óceánokat a különböző méretarányú és ábrázolásmódú térképeken; felismeri a nevezetes szélességi köröket a térképen; megfogalmazza Európa és Magyarország tényleges és viszonylagos földrajzi fekvését;",
+      "quote": "Témakör: Topográfiai alapismeretek",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-gyakorlati-jellegu-terkepeszeti-ismeretek-az-isk",
+      "term": "Gyakorlati jellegű térképészeti ismeretek (Az iskola környékének megismerése során, terepi munkában)",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: meghatározza az irányt a valós térben; érti a térkép és a valóság közötti viszonyt; tájékozódik a térképen és a földgömbön. A témakör tanulása eredményeként a tanuló: a valóságban megismert területről egyszerű, jelrendszerrel ellátott útvonaltervet, térképet készít; tájékozódik a terepen térképvázlat, iránytű és GPS segítségével;",
+      "quote": "Témakör: Gyakorlati jellegű térképészeti ismeretek (Az iskola környékének megismerése során, terepi munkában)",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-a-novenyek-testfelepitese",
+      "term": "A növények testfelépítése",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: komplex rendszerként értelmezi az élő szervezeteket és az ezekből felépülő élőlénytársulásokat; tisztában van az életfeltételek és a testfelépítés közti kapcsolattal; tisztában van azzal, hogy az élő rendszerekbe történő beavatkozás káros hatásokkal járhat. A témakör tanulása eredményeként a tanuló: felismeri és megnevezi a növények életfeltételeit, életjelenségeit;",
+      "quote": "Témakör: A növények testfelépítése",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-az-allatok-testfelepitese",
+      "term": "Az állatok testfelépítése",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: komplex rendszerként értelmezi az élő szervezeteket és az ezekből felépülő élőlénytársulásokat; tisztában van az életfeltételek és a testfelépítés közti kapcsolattal; tisztában van azzal, hogy az élő rendszerekbe történő beavatkozás káros hatásokkal járhat. A témakör tanulása eredményeként a tanuló: felismeri és megnevezi az állatok életfeltételeit és életjelenségeit;",
+      "quote": "Témakör: Az állatok testfelépítése",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-az-erdok-eletkozossege-es-termeszeti-kornyezeti-",
+      "term": "Az erdők életközössége és természeti-környezeti problémái",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: komplex rendszerként értelmezi az élő szervezeteket és az ezekből felépülő élőlénytársulásokat; tisztában van az életfeltételek és a testfelépítés közti kapcsolattal; tisztában van azzal, hogy az élő rendszerekbe történő beavatkozás káros hatásokkal járhat. A témakör tanulása eredményeként a tanuló: megfigyeli hazánk erdei élőlénytársulásainak főbb jellemzőit;",
+      "quote": "Témakör: Az erdők életközössége és természeti-környezeti problémái",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-a-mezok-es-a-szantofoldek-eletkozossege-termesze",
+      "term": "A mezők és a szántóföldek életközössége, természeti-környezeti problémái",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: komplex rendszerként értelmezi az élő szervezeteket és az ezekből felépülő élőlénytársulásokat; tisztában van az életfeltételek és a testfelépítés közti kapcsolattal; tisztában van azzal, hogy az élő rendszerekbe történő beavatkozás káros hatásokkal járhat. A témakör tanulása eredményeként a tanuló: megfigyeli hazánk fátlan élőlénytársulásainak főbb jellemzőit;",
+      "quote": "Témakör: A mezők és a szántóföldek életközössége, természeti-környezeti problémái",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-vizi-es-vizparti-eletkozossegek-es-termeszeti-ko",
+      "term": "Vízi és vízparti életközösségek és természeti-környezeti problémái",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: komplex rendszerként értelmezi az élő szervezeteket és az ezekből felépülő élőlénytársulásokat; tisztában van az életfeltételek és a testfelépítés közti kapcsolattal; tisztában van azzal, hogy az élő rendszerekbe történő beavatkozás káros hatásokkal járhat. A témakör tanulása eredményeként a tanuló: megfigyeli hazánk vízi és vízparti élőlénytársulásainak főbb jellemzőit;",
+      "quote": "Témakör: Vízi és vízparti életközösségek és természeti-környezeti problémái",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-az-emberi-szervezet-felepitese-mukodese-a-testi-",
+      "term": "Az emberi szervezet felépítése, működése, a testi-lelki egészség",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: érti, hogy a szervezet rendszerként működik; tisztában van a testi és lelki egészség védelmének fontosságával; tisztában van az egészséges környezet és az egészségmegőrzés közti összefüggéssel. A témakör tanulása eredményeként a tanuló: felismeri és megnevezi az emberi test fő részeit, szerveit; látja az összefüggéseket az egyes szervek működése között;",
+      "quote": "Témakör: Az emberi szervezet felépítése, működése, a testi-lelki egészség",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-az-energia",
+      "term": "Az energia",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: összetett rendszerként értelmezi az egyes földi szférák működését; ismeri a természeti erőforrások energiatermelésben betöltött szerepét; tisztában van a természeti erők szerepével a felszínalakításban. A témakör tanulása eredményeként a tanuló: csoportosítja az energiahordozókat különböző szempontok alapján; példákat hoz a megújuló és a nem megújuló energiaforrások felhasználására;",
+      "quote": "Témakör: Az energia",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-a-fold-kulso-es-belso-eroi-folyamatai",
+      "term": "A Föld külső és belső erői, folyamatai",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: összetett rendszerként értelmezi az egyes földi szférák működését; ismeri a természeti erőforrások energiatermelésben betöltött szerepét; tisztában van a természeti erők szerepével a felszínalakításban. A témakör tanulása eredményeként a tanuló: megállapítja, összehasonlítja és csoportosítja néhány jellegzetes hazai kőzet egyszerűen vizsgálható tulajdonságait;",
+      "quote": "Témakör: A Föld külső és belső erői, folyamatai",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "termeszettud-alapveto-legkori-jelensegek-es-folyamatok",
+      "term": "Alapvető légköri jelenségek és folyamatok",
+      "definition": "A témakör tanulása hozzájárul ahhoz, hogy a tanuló a nevelési-oktatási szakasz végére: összetett rendszerként értelmezi az egyes földi szférák működését; ismeri a természeti erőforrások energiatermelésben betöltött szerepét; tisztában van a természeti erők szerepével a felszínalakításban. A témakör tanulása eredményeként a tanuló: megnevezi az éghajlat fő elemeit; jellemzi és összehasonlítja az egyes éghajlati övezeteket (forró, mérsékelt, hideg);",
+      "quote": "Témakör: Alapvető légköri jelenségek és folyamatok",
+      "sourceRef": {
+        "file": "Termeszettudomany_5_6.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    }
+  ]
+}

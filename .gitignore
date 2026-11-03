@@ -64,3 +64,6 @@ test-results/
 *.tmp.mts
 *.tmp.ts
 source/.catalog/
+
+# Repo-saját kanban-tábla (SQLite, hermes-kanban-workflow CLI) — lokális állapot, nem verziózott
+.hermes/

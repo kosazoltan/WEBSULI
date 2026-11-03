@@ -1,0 +1,230 @@
+{
+  "title": "NAT 2020 Magyar nyelv és irodalom 5–6. — 6. évfolyam",
+  "subject": "Magyar nyelv és irodalom",
+  "classroom": 6,
+  "status": "draft",
+  "sourceFiles": [
+    {
+      "name": "Magyar_nyelv_es_irodalom_F.grade6.txt",
+      "kind": "text"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "magyar-nyelv-a-kommunikacio-alapjai",
+      "term": "A kommunikáció alapjai",
+      "definition": "A nyelvhasználati és a kommunikációs készség fejlesztése A kommunikáció nem nyelvi jeleinek megismerése, alkalmazása és üzenetének felismerése a mindennapi beszédhelyzetekben A nyelv zenei kifejezőeszközeinek megismerése, alkalmazása A hallás utáni szövegértési készség fejlesztése A szóbeli kifejezőkészség fejlesztése Szerep- és drámajátékok gyakoroltatása Aktív részvétel különböző kommunikációs helyzetekben",
+      "quote": "Témakör: A kommunikáció alapjai",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-helyesiras-nyelvhelyesseg-jatekosan",
+      "term": "Helyesírás, nyelvhelyesség játékosan",
+      "definition": "Az alapvető helyesírási szabályok megismerése (kiejtés elve, szóelemzés elve, hagyomány elve, egyszerűsítés elve) A megismert helyesírási esetek felismerése írott szövegekben, és tudatos alkalmazása a szövegalkotásban hang és betű, ábécé, helyesírási alapelv (kiejtés elve, szóelemzés elve, hagyomány elve, egyszerűsítés elve) elválasztás, helyes kiejtés, nyelvi normáknak megfelelő mondatalkotás, határozóragok megfelelő használata",
+      "quote": "Témakör: Helyesírás, nyelvhelyesség játékosan",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-allandosult-szokapcsolatok",
+      "term": "Állandósult szókapcsolatok",
+      "definition": "A szókincsfejlesztése, a nyelvhelyességi szabályok alkalmazása Az állandósult szókapcsolatok, szólások, közmondások értelmezése, szerkezetének, használati körének megfigyelése A leggyakoribb mindennapi metaforák jelentésszerkezetének megfigyelése a beszélt és írott szövegekben – játékos gyakorlatokkal állandósult szókapcsolat, szólás, szóláshasonlat, közmondás, szállóige, köznyelvi metaforák",
+      "quote": "Témakör: Állandósult szókapcsolatok",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-a-nyelvi-szintek-a-beszedhang-a-fonema-a-szoelem",
+      "term": "A nyelvi szintek: a beszédhang, a fonéma, a szóelemek, a szavak, az összetett szavak",
+      "definition": "A nyelv szerkezeti egységeinek és azok funkcióinak megismerése A nyelvi elemzőkészség fejlesztése A beszédhangok képzésének megismerése, csoportosításának alapjai A szavak szerkezetének felismerése A főbb szóelemek és funkciójuk (képző, jel, rag) felismerése, elkülönítése A szavak jelentésbeli és pragmatikai szerepének megfigyelése a kommunikációban Az alapszófajok (ige, főnév, melléknév, számnév, névmás) felismerése",
+      "quote": "Témakör: A nyelvi szintek: a beszédhang, a fonéma, a szóelemek, a szavak, az összetett szavak",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "core",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-hangalak-es-jelentes",
+      "term": "Hangalak és jelentés",
+      "definition": "A hangalak és a jelentés kapcsolatának, illetve a jelentésmezőnek a felismerése Az egyjelentésű, a többjelentésű, az azonos alakú, az ellentétes jelentésű szavak, a rokon értelmű szavak, a hasonló alakú szavak, a hangutánzó és a hangulatfestő szavak jelentése, felismerése Gyakorlatszerzés a szavak jelentésviszonyainak sokféleségében egyjelentésű, többjelentésű, hasonló alakú, ellentétes jelentésű, hangutánzó, hangulatfestő szavak, jelentésmező",
+      "quote": "Témakör: Hangalak és jelentés",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-szovegertes-es-szovegalkotas-a-gyakorlatban",
+      "term": "Szövegértés és szövegalkotás a gyakorlatban",
+      "definition": "Szöveghű, értő szövegolvasás gyakorlása Különféle megjelenésű és típusú szövegek megértése és alkotása Reflektálás a szöveg tartalmára Olvasási stratégiák alkalmazása A szóbeli és írásbeli szövegalkotási készség fejlesztése A kreatív írás gyakorlása Digitális és/vagy nyomtatott szótárak használata Szövegtípusok I. (feleletterv, felelet, szóbeli beszámoló, vázlat) jellemzőinek felismerése, alkalmazása Szövegtípusok II. (elbeszélés, leírás, jellemzés, könyvismertetés, hagyományos levél, elektronikus levél: e-mail) jellemzőinek felismerése, alkalmazása",
+      "quote": "Témakör: Szövegértés és szövegalkotás a gyakorlatban",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-konyv-es-konyvtarhasznalat-a-kultura-helyszinei",
+      "term": "Könyv- és könyvtárhasználat, a kultúra helyszínei",
+      "definition": "A könyvtárak típusaival és jellemzőivel való ismerkedés Megadott szempontok alapján önálló gyűjtőmunka végzése a könyvtárban és digitális felületeken Az információ-keresés, –gyűjtés alapvető technikáinak gyakorlása Képzőművészeti gyűjtemények megismerése vezetéssel Részvétel múzeumpedagógiai és könyvtárismereti foglalkozáson, és az azt előkészítő osztálytermi órán Néhány sajtótermék szerkezetének, tartalmának áttekintése",
+      "quote": "Témakör: Könyv- és könyvtárhasználat, a kultúra helyszínei",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-szofajok-a-nagyobb-nyelvi-egysegekben-a-mondatok",
+      "term": "Szófajok a nagyobb nyelvi egységekben: a mondatokban és a szövegben.  A szófajokhoz kapcsolódó helyesírási, nyelvhelyességi, szövegalkotási, szövegértési tudnivalók",
+      "definition": "Helyesírási készség fejlesztése A szójelentés, a metaforikus jelentés, a több szófajúság megismerése A szavak jelentésbeli szerepe és gyakorlati alkalmazása a szóbeli és írásbeli kommunikációban A szófajok felismerése helyes leírása a mondatban és a szövegben: ige, főnév, számnév, határozószó, igenevek, névmások, viszonyszók, mondatszók Az iskolai helyesírási segédeszközök: szótár, szabályzat és helyesírási portálok önálló használata",
+      "quote": "Témakör: Szófajok a nagyobb nyelvi egységekben: a mondatokban és a szövegben.  A szófajokhoz kapcsolódó helyesírási, nyelvhelyességi, szövegalkotási, szövegértési tudnivalók",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-csalad-otthon-nemzet-kisepikai-mese-monda-mitosz",
+      "term": "Család, otthon, nemzet – kisepikai (mese, monda, mítosz) és lírai alkotások",
+      "definition": "A családi és baráti kapcsolatok sokféleségének megismerése irodalmi szövegek által Különböző korokban keletkezett, különböző műfajú szövegek tematikus rokonságának, problémafelvetéseinek tanulmányozása A korábban megismert műfajokhoz (pl. mese, monda) kapcsolódó elemzési szempontok alkalmazása hasonló témájú szövegekben Személyes vélemény megfogalmazása a szövegekben felvetett problémákról, azok személyes élethelyzethez kapcsolása",
+      "quote": "Témakör: Család, otthon, nemzet – kisepikai (mese, monda, mítosz) és lírai alkotások",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-petofi-sandor-janos-vitez",
+      "term": "Petőfi Sándor: János vitéz",
+      "definition": "A mű szövegének közös órai feldolgozása A mű cselekményének megismerése, fő fordulópontjainak értelmezése A költői szöveg részletének és más médiumbeli megjelenítésének (rajzfilm, színmű, illusztráció, stb.) összehasonlítása A szöveg néhány részletében a poétikai eszközök felismerése, szerepük értelmezése: verselés, szóképek, alakzatok Alapvető verstani és műfaji fogalmak megismerése, alkalmazása a mű bemutatásakor",
+      "quote": "Témakör: Petőfi Sándor: János vitéz",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-szulofold-taj",
+      "term": "Szülőföld, táj",
+      "definition": "Fejlesztési feladatok és ismeretek: A tájhoz, környezethez fűződő érzéseket, gondolatokat kifejező szövegek megértése, összehasonlítása A táj- és környezetfestés eszközeiként szolgáló nyelvi formák megfigyelése lírai és prózai szövegekben A nyelv változó természetének megfigyelése különböző példák alapján A különböző korszakokban született szövegek nyelvi eltéréseinek összevetése Az irodalmi szövegek keletkezéséhez, megértéséhez, tartalmához kapcsolódó földrajzi kérdések megbeszélése",
+      "quote": "Témakör: Szülőföld, táj",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-prozai-nagyepika-molnar-ferenc-a-pal-utcai-fiuk",
+      "term": "Prózai nagyepika – Molnár Ferenc: A Pál utcai fiúk",
+      "definition": "Otthoni olvasás és közös órai szövegfeldolgozás: nagyobb szövegegység áttekintő megértése és egyes szövegrészletek részletes megfigyelése A cselekményben megjelenő élethelyzetek, erkölcsi konfliktusok azonosítása, véleményalkotás A cselekmény főbb fordulópontjainak felismerése Egyes szereplők jellemzése Főbb helyszínek, térbeli viszonyok azonosítása A cselekmény és térszerkezet vizuális megjelenítése analóg vagy digitális médiumban",
+      "quote": "Témakör: Prózai nagyepika – Molnár Ferenc: A Pál utcai fiúk",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-egy-szabadon-valasztott-magyar-mese-vagy-ifjusag",
+      "term": "Egy szabadon választott magyar mese- vagy ifjúsági regény elemzése",
+      "definition": "Otthoni olvasás és közös órai szövegfeldolgozás: nagyobb szövegegység áttekintő megértése, és egyes szövegrészletek részletes megfigyelése A cselekményben megjelenő élethelyzetek, erkölcsi konfliktusok azonosítása, véleményalkotás A cselekmény főbb fordulópontjainak felismerése Egyes szereplők jellemzése Főbb helyszínek, térbeli viszonyok azonosítása A cselekmény és térszerkezet vizuális megjelenítése analóg vagy digitális médiumban",
+      "quote": "Témakör: Egy szabadon választott magyar mese- vagy ifjúsági regény elemzése",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-hosok-az-irodalomban",
+      "term": "Hősök az irodalomban",
+      "definition": "Az olvasott szöveg szereplőiről, a megjelenített élethelyzetekről szóban és írásban véleményt fogalmaz meg A hősiesség különböző példáit kifejező szövegek megértése és összehasonlítása A különböző korokban és műfajokban megjelenő témák nyelvi formáinak elkülönítése A különböző korszakokban született szövegek nyelvi eltéréseinek összevetése Az irodalmi szövegek keletkezéséhez, megértéséhez, tartalmához kapcsolódó történelmi, földrajzi kérdések megbeszélése",
+      "quote": "Témakör: Hősök az irodalomban",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-arany-janos-toldi",
+      "term": "Arany János: Toldi",
+      "definition": "A mű szövegének közös órai feldolgozása Az olvasás és megértés nyelvi nehézségeinek feltárása, szókincsbővítés és olvasási stratégiák fejlesztése Az elbeszélő költemény műfaji jellemzőinek felismerése, értelmezése a mű vonatkozásában Az alkotás néhány stíluselemének megfigyelése (pl. verselés, szóképek, alakzatok) A mű erkölcsi kérdésfelvetéseinek (bűn, bosszú, megtisztulás, testvérviszály stb.) megtárgyalása",
+      "quote": "Témakör: Arany János: Toldi",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-szeretet-hazaszeretet-szerelem",
+      "term": "Szeretet, hazaszeretet, szerelem",
+      "definition": "Az olvasott szöveg szereplőinek érzelmeiről, gondolatairól, az élethelyzetekről vélemény megfogalmazása szóban és írásban A szeretet, szerelem, hazaszeretet különböző példáit kifejező szövegek megértése és összehasonlítása A téma megjelenítését különböző korokban és műfajokban szolgáló nyelvi formák elkülönítése lírai és prózai szövegekben A különböző korokban és műfajokban megjelenő témák nyelvi formáinak elkülönítése",
+      "quote": "Témakör: Szeretet, hazaszeretet, szerelem",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-prozai-nagyepika-gardonyi-geza-egri-csillagok",
+      "term": "Prózai nagyepika – Gárdonyi Géza: Egri csillagok",
+      "definition": "Otthoni olvasás és közös órai szövegfeldolgozás: nagyobb szövegegység áttekintő megértése és egyes szövegrészletek részletes megfigyelése A cselekményben megjelenő élethelyzetek, erkölcsi konfliktusok azonosítása, véleményalkotás A cselekmény fordulópontjainak összekapcsolása a műfaj jellegzetességeivel A főbb szereplők kapcsolatának értelmezése A szereplők közötti kapcsolatok vizuális megjelenítése analóg vagy digitális médiumban",
+      "quote": "Témakör: Prózai nagyepika – Gárdonyi Géza: Egri csillagok",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    },
+    {
+      "id": "magyar-nyelv-egy-szabadon-valasztott-vilagirodalmi-ifjusagi-r",
+      "term": "Egy szabadon választott világirodalmi ifjúsági regény",
+      "definition": "Otthoni olvasás és közös órai szövegfeldolgozás: nagyobb szövegegység áttekintő megértése és egyes szövegrészletek részletes megfigyelése A cselekményben megjelenő élethelyzetek, erkölcsi konfliktusok azonosítása, véleményalkotás A cselekmény fordulópontjainak összekapcsolása a műfaj jellegzetességeivel A főbb szereplők kapcsolatának értelmezése A szereplők közötti kapcsolatok vizuális megjelenítése analóg vagy digitális médiumban",
+      "quote": "Témakör: Egy szabadon választott világirodalmi ifjúsági regény",
+      "sourceRef": {
+        "file": "Magyar_nyelv_es_irodalom_F.grade6.txt"
+      },
+      "type": "fact",
+      "examWeight": "supporting",
+      "relatedIds": []
+    }
+  ]
+}

@@ -78,6 +78,44 @@ jobs:
       - name: Run unit tests
         run: node --import tsx --test "tests/*.test.ts"
 
+  # docs/specs/2026-11-03-befejezes-onfejlesztes-dual-arch.md: a program és a fejlesztés ARM64-en és x64-en is fusson.
+  native-arch:
+    name: Natív futás (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: lint-typecheck
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    defaults:
+      run:
+        working-directory: source
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: source/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Platform
+        run: node -p "process.platform + '-' + process.arch"
+
+      - name: Native dependencies load on this CPU
+        run: npm run doctor:arch
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
   e2e-tests:
     name: Playwright E2E
     runs-on: ubuntu-latest

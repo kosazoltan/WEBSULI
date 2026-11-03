@@ -133,6 +133,17 @@ Spec, végrehajtási utasítás, javítás, fejlesztés vagy implementáció **f
   összes kérés nem teljesült.
 - Ami objektív blokkoló miatt nem készült el, azt NOT DONE + ok + kockázat jelöléssel
   kell jelenteni (ld. Evidence-before-completion) — de a cél a befejezés, nem a jelentés.
+- **Session eleji söprés (2026-11-03):** `git status --short` + kanban `list`. Untracked spec /
+  `-vegrehajtas.md` vagy `review`-ban ragadt jegy félbehagyott munka gyanúja: a saját
+  végrehajtási utasítása szerint be kell fejezni.
+- **Önfejlesztési hurok (tulajdonosi utasítás 2026-11-03):** minden hibából, tévedésből, rossz
+  döntésből ugyanabban a körben csapda-bejegyzés lesz a [`docs/agent-csapdak.md`](docs/agent-csapdak.md)
+  katalógusban, és ha kell, javul a skill / runbook / kanban-leírás / memória. Várakozás (háttérfolyamat,
+  CI, alügynök) alatt ez a kitöltő munka — passzív várakozás helyett.
+- **ARM64 + x64 (tulajdonosi utasítás 2026-11-03):** a program és a fejlesztői eszközlánc mindkét
+  architektúrán fusson. A `node_modules` gépenként települ (`npm.cmd ci`), másolni tilos; gyanús natív
+  hibánál első lépés `npm run doctor:arch`. Architektúra-függő útvonal vagy bináris nem kerülhet kódba;
+  a CI `native-arch` jobja Windows x64-en és ARM64-en is fut.
 
 A mandátum a háromfázisú rend mindhárom fázisára és a kanban-jegyekre is vonatkozik
 (`docs/agent-haromfazisu-munka.md`, `docs/kanban.md`). A kezelt `agentic-qa-kit`
