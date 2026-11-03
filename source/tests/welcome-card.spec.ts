@@ -216,3 +216,14 @@ test("admin a tanulóhoz párosított eszközön: „Mind”, saját név, minde
   await expect(page.getByTestId("button-filter-classroom-8")).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("welcome-streak")).toBeVisible();
 });
+
+test("review #389: keresztnév nélküli admin a párosított eszközön névkérőt kap, nem a gyerek tárolt nevét", async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem("websuli.learnerName", "Kristóf"); } catch { /* nincs tárhely */ } });
+  await open(page, { id: "admin-2", firstName: null, lastName: "Kósa", isAdmin: true });
+  await expect(page.getByTestId("welcome-ask")).toBeVisible();
+  await expect(page.getByTestId("welcome-greet")).toHaveCount(0);
+  await expect(page.getByTestId("welcome-grade")).toHaveCount(0);
+  await page.getByTestId("welcome-name").fill("Zoltán");
+  await page.getByTestId("welcome-save").click();
+  await expect(page.getByTestId("welcome-greet").getByRole("heading", { level: 2 })).toHaveText("Szia, Zoltán!");
+});

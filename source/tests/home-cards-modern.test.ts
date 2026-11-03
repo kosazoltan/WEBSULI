@@ -25,7 +25,9 @@ test("admin: a lista „Mind”-del nyit, az üdvözlés a fiók nevével, az aj
   assert.match(list, /useState<number \| null>\(\(\) => \(!isAdmin && hasGrade\(learnerGrade\)/);
   assert.match(list, /if \(isAdmin\) \{[\s\S]*?setSelectedClassroom\(null\);/);
   const welcome = read("client/src/components/WelcomeCard.tsx");
-  assert.match(welcome, /const name = isAdmin \? accountName : profile\?\.firstName \?\? accountName;/);
+  // review #389: adminnál a böngészőben tárolt (gyerek)név sem tartalék; a bélyegkép sikeres újratöltéskor újra látszik
+  assert.match(welcome, /const name = isAdmin \? resolveLearnerName\(account, null, override\) : profile\?\.firstName \?\? accountName;/);
+  assert.match(welcome, /onLoad=\{\(e\) => \{ e\.currentTarget\.style\.visibility = ""; \}\}/);
   assert.match(welcome, /const pickGrade = isAdmin \? null : grade;/);
   assert.match(welcome, /const streakText = isAdmin \? null :/);
   assert.match(welcome, /\{!isAdmin && \(\s*<select/);

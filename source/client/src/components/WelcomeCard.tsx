@@ -46,7 +46,9 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
   const override = useMemo(() => (account ? loadNameOverride(account.id) : null), [account?.id, overrideTick]);
   // Review #301: a párosított eszközön a profil neve az irányadó (bejelentkezett fiók mellett is) — kivéve az admint (szülő).
   const accountName = resolveLearnerName(account, storedName, override);
-  const name = isAdmin ? accountName : profile?.firstName ?? accountName;
+  // Review #389: az admin a böngészőben tárolt (a párosításkor a gyerekére állított) nevet sem örökli — fióknév vagy a fiókhoz
+  // kötött felülírás, ezek hiányában a névkérő űrlap.
+  const name = isAdmin ? resolveLearnerName(account, null, override) : profile?.firstName ?? accountName;
   const pickGrade = isAdmin ? null : grade;
   const today = new Date();
   const picks = useMemo(() => newestMaterials(files, pickGrade, new Date()), [files, pickGrade]);
@@ -182,6 +184,8 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
                     loading="lazy"
                     decoding="async"
                     onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+                    // Review #389 (mint a listán, review #381): a frissítés új, működő borítót hozhat — a sikeres betöltés újra mutatja.
+                    onLoad={(e) => { e.currentTarget.style.visibility = ""; }}
                   />
                   <span className="flex-1 min-w-0">
                     <span className="welcome-pick-meta">
