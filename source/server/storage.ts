@@ -431,7 +431,9 @@ export class DatabaseStorage implements IStorage {
       const published = await db.select({
         id: lessons.id, htmlFileId: lessons.htmlFileId,
         lesson: sql<{ subject?: unknown; title?: unknown; classroom?: unknown; art?: unknown }>`jsonb_build_object('subject', ${lessons.json}->'subject', 'title', ${lessons.json}->'title', 'classroom', ${lessons.json}->'classroom', 'art', ${lessons.json}->'art')`,
-        teaserText: sql<string | null>`(select b->>'text' from jsonb_array_elements(case when jsonb_typeof(${lessons.json}->'sections'->0->'blocks') = 'array' then ${lessons.json}->'sections'->0->'blocks' else '[]'::jsonb end) b where b->>'kind' = 'explain' limit 1)`,
+        // Review #383: ugyanaz a választás, mint a `lessonTeaser`-ben — az első szöveges `explain` blokk, ennek hiányában az első
+        // szöveges blokk, a blokksorrend szerint.
+        teaserText: sql<string | null>`(select b->>'text' from jsonb_array_elements(case when jsonb_typeof(${lessons.json}->'sections'->0->'blocks') = 'array' then ${lessons.json}->'sections'->0->'blocks' else '[]'::jsonb end) with ordinality as e(b, i) where jsonb_typeof(b->'text') = 'string' order by (b->>'kind' = 'explain') desc, i limit 1)`,
       }).from(lessons).where(sql`${lessons.publishedAt} IS NOT NULL`).orderBy(desc(lessons.publishedAt));
       covers = coversByFile(published);
       for (const p of published) if (p.htmlFileId && !teasers.has(p.htmlFileId)) teasers.set(p.htmlFileId, teaserFromText(p.teaserText));

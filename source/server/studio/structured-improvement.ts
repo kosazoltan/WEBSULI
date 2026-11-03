@@ -22,6 +22,7 @@ import { designFromInstruction, visualWorld, type VisualWorldId } from "../../sh
 import { buildStaleJudgePrompt, parseStaleVerdicts, repairChecklistTail, sourceWordSet, staleFormCandidates, staleFormProblems, withRepairSkill, type StaleWarning } from "./repair-skill";
 import { logger } from "../lib/logger";
 import { repairHash } from "../lib/canonical-hash";
+import { descriptionAfterLessonChange } from "../../shared/lesson-teaser";
 import { withLessonArt } from "../design-assets";
 import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
@@ -296,7 +297,11 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     const exports = exportQuizItemsForPublish(candidate, current.id, conceptIdResolver(source.concepts));
     const inserted = exports.length ? await tx.insert(gameQuizItems).values(exports.map(item => ({ ...item, sourceMaterialId: original.id }))).returning() : [];
     if (inserted.length !== exports.length) throw new Error("Hiányos kvízexport; a művelet visszaáll.");
-    const [updated] = await tx.update(htmlFiles).set({ title: repair.candidate.title, ...(repair.classroom !== undefined ? { classroom: repair.classroom } : {}) }).where(eq(htmlFiles.id, original.id)).returning();
+    // Review #383 (spec 2026-11-03-egyseges-kartya-leiras): az automatikus leírás (helyőrző vagy az előző lecke bevezetője) a javított
+    // lecke bevezetőjére frissül; a kézzel írt leírás érintetlen.
+    const nextDescription = descriptionAfterLessonChange(original.description, current.json, repair.candidate);
+    const description = nextDescription !== undefined ? { description: nextDescription } : {};
+    const [updated] = await tx.update(htmlFiles).set({ title: repair.candidate.title, ...description, ...(repair.classroom !== undefined ? { classroom: repair.classroom } : {}) }).where(eq(htmlFiles.id, original.id)).returning();
     await tx.update(materialImprovementBackups).set({ backupData: { ...backupData, expectedQuizHash: quizHash(inserted), expectedMaterialHash: materialHash(updated) } }).where(eq(materialImprovementBackups.id, backup.id));
     await tx.update(improvedHtmlFiles).set({ status: "applied", appliedAt: new Date(), appliedBy: userId, improvementNotes: notes ?? improved.improvementNotes }).where(eq(improvedHtmlFiles.id, improved.id));
     await workflowFence(tx);
