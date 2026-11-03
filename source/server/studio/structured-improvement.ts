@@ -12,7 +12,8 @@ import { buildAuthorPrompt, buildLektorPrompt, lektorReportSchema } from "./step
 import { classifyNotes } from "./lektor";
 import { removeLektorBlockers } from "./choice-gate";
 import { lektorSkillCodes } from "../workflows/learning";
-import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
+import { buildLessonExperience, teachingTextOf, type ExperienceBuildDeps, type ExperienceCheckpoint } from "./experience-builder";
+import type { AnswerKeyContext } from "./answer-key-writer";
 import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, workflowFinding } from "../workflows/engine";
@@ -80,7 +81,12 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const ownerInstruction = normalizeOwnerInstruction(instruction);
   const { sourceFiles, ...hashedSource } = source;
   const transcript = Array.isArray(sourceFiles) && sourceFiles.some((f) => (f as { kind?: string } | null)?.kind === "image");
-  const { candidate, review, owner, staleWarnings, lektorRemoved } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript });
+  // Spec 2026-11-03-javitas-bank-megorzes: ugyanazok a bank-minőségkapuk, mint a gyártásban (friss, kulcsmentes beszélgetésben).
+  const { bankQualityGates } = await import("./single-run/engine");
+  const { createLessonConversation } = await import("./single-run/conversation");
+  const gates: RepairBankGates = (ctx, lesson) => bankQualityGates((system, opts) => createLessonConversation(system, opts ?? {}), ctx,
+    (sectionIndex) => teachingTextOf(lesson.sections[sectionIndex]), (message) => logger.info(`[STUDIO] Javítás: ${message}`));
+  const { candidate, review, owner, staleWarnings, lektorRemoved } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript, gates });
   return lessonRepairSchema.parse({
     kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(hashedSource), previousLesson: original, candidate, reviewNotes: review.notes,
     ...(ownerInstruction ? { ownerInstruction } : {}), ...(owner.corrections.length ? { sourceCorrections: owner.corrections } : {}), ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}),
@@ -126,8 +132,10 @@ type RepairStep = "author" | "lektor" | "pedagogue";
 /** `extra.responseFormat` (U2/C8): a bankhívás szigorú sémája — a megvalósító csak a támogató (közvetlen OpenAI) úton adja tovább. */
 type RepairCall = (step: RepairStep, system: string, user: string, role?: PromptRole, extra?: { responseFormat?: ResponseFormatJsonSchema }) => Promise<unknown>;
 export type RepairOwner = { instruction?: string; corrections: SourceCorrection[]; classroom?: number; design?: { world?: VisualWorldId } };
+/** Spec 2026-11-03-javitas-bank-megorzes: a banképítő vak minőségkapui a javító úton (éles: `bankQualityGates`; teszt: hiányzik). */
+export type RepairBankGates = (ctx: AnswerKeyContext, lesson: Lesson) => Pick<ExperienceBuildDeps, "answerKeys" | "quizBlind">;
 
-export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } = {}) {
+export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean; gates?: RepairBankGates } = {}) {
   await workflowPhase("author");
   // Spec 2026-09-23: the teacher's request may carry documented source corrections and an explicit grade.
   const proposal = instruction || opts.transcript
@@ -196,17 +204,22 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
     }
   }
   if (!candidate) throw new Error("A javított tanítás hiányzik.");
-  return { ...await finishStructuredImprovement(original, candidate, corrected, call, progress, owner), owner, ...(staleWarnings.length ? { staleWarnings } : {}) };
+  return { ...await finishStructuredImprovement(original, candidate, corrected, call, progress, owner, opts.gates), owner, ...(staleWarnings.length ? { staleWarnings } : {}) };
 }
 
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
-export async function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner) {
+export async function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, gates?: RepairBankGates) {
   const classroom = owner?.classroom ?? original.classroom;
   assertRepairTeaching(original, candidate, source, classroom);
   await workflowPhase("banks");
   const design = owner?.design;
+  // Spec 2026-11-03-javitas-bank-megorzes: a tanításában változatlan fejezet bankja megmarad (a helyesbített fogalmat tanító fejezeté nem);
+  // az újragyártott csomag a gyártás vak minőségkapuit kapja.
+  const corrected = new Set((owner?.corrections ?? []).map(c => c.localId));
+  const previousSections = original.sections.map(s => s.blocks.some(b => "coversConceptIds" in b && b.coversConceptIds.some(id => corrected.has(id))) ? undefined : s);
   // Review #160: a szigorú séma (U2/C8) a javító út bankhívásán is átmegy; a hívó dönt, hogy az út támogatja-e.
-  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, call: (system, user, _attempt, extra) => call("author", system, user, "bank", extra),
+  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, previousSections, call: (system, user, _attempt, extra) => call("author", system, user, "bank", extra),
+    ...gates?.({ classroom, concepts: source.concepts.map(c => ({ id: c.localId, term: c.term, definition: c.definition })) }, candidate),
     ...(design?.world ? { theme: design.world } : {}) });
   assertRepairCandidate(original, candidate, source, classroom);
   await workflowPhase("lektor");
