@@ -84,3 +84,14 @@ betöltéskori újraválasztás nem írhatja felül a kézzel beállított képe
 - HA a csere lefutott, AKKOR minden publikált lecke (Antigoné kivételével) `art.picture` = a tartalomkulcsú borító (lista), és a
   lejátszó 390 és 1280 px szélességen ezt mutatja (képernyőképek).
 - HA `npm test`, `tsc` (app + teszt), `eslint --max-warnings 0`, `npm run build`, AKKOR zöld.
+
+## Spec-változás miatti tesztmódosítás
+- `tests/design-assets.test.ts` („sávkép…”): a „A vulkánok – vulkáni működés” (6. o.) eddig a sávhőst várta; a lecke most saját
+  tartalomkulcsú borítót kap (e terv). Az eredeti szándék (borító nélküli címnél sávhős, idegen témaborító soha) egy borító nélküli
+  címmel („A vulkánok – gyakorló feladatsor” → `hero-studio`) megmarad; a mérce nem gyengült.
+- `tests/lesson-art-compute.test.ts` („a mag determinisztikus…”): „Az ókori Egyiptom” (5. o.) eddig a témaköri borítót várta; most a
+  saját borítóját kapja (új állítás), a témaköri választást az „Az ókori Egyiptom piramisai” cím vizsgálja ugyanazzal az elvárással.
+
+## Szemle (2026-11-03)
+- 210 kép (1K), mind a 210 kontaktlapon átnézve, a feliratgyanúsak (óra, térkép, könyv, pergamen, mérőléc) nagyítva. Újragenerálva
+  javított leírással: 3 (fogsor-modell ijesztő hatású; íróasztalon pisztoly; valós nemzeti zászlóra emlékeztető zászló). Költés ≈ 9,6 USD.

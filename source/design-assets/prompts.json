@@ -7142,6 +7142,2946 @@
       ],
       "batch": 4,
       "prompt": "Subject: the fox watching a small floating play button with wonder. Exactly the same fox character as in the reference image (same fur colors, eyes, proportions and little backpack). Full body, centered. No letters, digits, words or symbols with text."
+    },
+    {
+      "id": "cover-l-4ccfa09876ff0cf2",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Digitális kultúra"
+      ],
+      "keywords": [
+        "ChatGPT 3 – Mester Tananyag | Professzionális AI Promptolás"
+      ],
+      "alt": "Modern íróasztal monitorral, fölötte egymásba kapcsolódó, világító folyamatlépcsők lebegnek.",
+      "aspect_ratio": "3:2",
+      "prompt": "A calm modern studio desk at dusk with a large monitor showing soft abstract flowing shapes; above it hovers a glowing multi-stage pipeline of translucent panels linked by luminous lines, each layer refining the light of the previous one, while a person seen from behind orchestrates it. Uncluttered dark background, one clear central motif. Serious, sophisticated, realistic mood for teenagers and adults."
+    },
+    {
+      "id": "cover-l-140d2bf84c22458a",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Informatika"
+      ],
+      "keywords": [
+        "Informatika - ChatGPT 2 PRO Tananyag"
+      ],
+      "alt": "Három világító fényoszlop egy laptop mellett, egyetlen fókuszált sugárrá egyesülnek.",
+      "aspect_ratio": "3:2",
+      "prompt": "Three slender glowing pillars of light stand on a clean desk beside an open laptop whose screen shows only soft abstract shapes; their beams merge into one precise, focused ray aimed at a neat stack of blank cards. Calm minimalist workspace, soft morning light, uncluttered background. Serious, sophisticated, realistic mood for teenagers and adults."
+    },
+    {
+      "id": "cover-l-0480bf1cc72a019a",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Informatika"
+      ],
+      "keywords": [
+        "Informatika - Replit Fiók Létrehozása"
+      ],
+      "alt": "Világos irodai asztal laptoppal, egy fénylő kulcs nyitja ki a képernyőn megjelenő ajtót.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright, calm office desk with a laptop whose screen shows soft abstract shapes and a single glowing doorway; a small golden key of light floats from a smartphone toward the laptop, symbolising one sign-in that opens a new online workspace. A coffee cup and a green plant nearby, uncluttered background. Serious, sophisticated, realistic mood for teenagers and adults."
+    },
+    {
+      "id": "cover-l-c69cfeca1299b9c8",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Informatika"
+      ],
+      "keywords": [
+        "Modern Authentikációs Rendszerek"
+      ],
+      "alt": "Biztonsági kulcs, okostelefon és világító ujjlenyomat-minta, fényvonalakkal egy pajzshoz kötve.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sleek dark desk at night where a small hardware security key, a smartphone and a glowing fingerprint motif hover above the surface, each linked by fine luminous lines to an abstract shield-shaped network of nodes. Soft blue and teal light, clean empty background, one clear central motif. Serious, sophisticated, realistic mood for teenagers and adults."
+    },
+    {
+      "id": "cover-l-5b19c19479f38fee",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Informatika"
+      ],
+      "keywords": [
+        "Replit AI – Professzionális Fejlesztés"
+      ],
+      "alt": "Fejlesztői munkaasztal monitorral, mellette háromrészes fénylő token és külön üvegszobák kulcsokkal.",
+      "aspect_ratio": "3:2",
+      "prompt": "A modern developer workspace with a wide monitor showing soft abstract layered card shapes in pastel colours; beside it floats a glowing translucent capsule made of three sealed segments, and a row of separate illuminated glass rooms, each guarded by its own small key. Calm daylight, minimal clutter, one clear central motif. Serious, sophisticated, realistic mood for teenagers and adults."
+    },
+    {
+      "id": "cover-l-c629cd87c6cfd6d1",
+      "kind": "cover",
+      "band": "explorer",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "3. osztály - 🎮 Matek Aréna - 10-es Átlépés Mester"
+      ],
+      "alt": "Gyerekkéz piros gyöngyökkel tölti fel a tízes tálcát, a maradék gyöngyök egy másik tálcában várnak.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cheerful playroom table with a wooden tray of ten round hollows almost filled with red counting beads; a child's hand seen from above slides the last few beads in to fill it, while the remaining beads wait in a second empty tray beside it. Bright soft light, plain pastel background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-3eb089eddf85bc2f",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "3. Osztályos Angol Témazáró - Decemberi Felkészítő"
+      ],
+      "alt": "Színes, nyitott babaház szobákkal, benne egy család tagjai, az asztal alatt egy macska ül.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cosy cut-away dollhouse with colourful rooms, a kitchen, a living room and a bedroom, where a small family of mother, father, brother, sister and grandparents is busy; a cat sits under the kitchen table and a ball lies next to a bed, with a snowy December window. Bright colours, simple background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-c24443572ed32551",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "3. osztály - Daily Routines - Napi Rutinok Angolul"
+      ],
+      "alt": "Napfényes reggel egy otthonban: ébredő kislány, fogkefe, palacsintás reggeli és iskolatáska.",
+      "aspect_ratio": "3:2",
+      "prompt": "A child's sunny morning routine in one bright cosy home: a girl stretching beside her bed by a window with a rising sun, a toothbrush and cup at the bathroom sink, pancakes waiting on the kitchen table and a school bag ready by the front door. Warm golden light, uncluttered. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-d8c0c79685f49c60",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "3. osztály - RÖVID VEGETABLES & FRUITS"
+      ],
+      "alt": "Színes piaci stand zöldségekkel és gyümölcsökkel, egy gyerek kosárral áll előtte háttal.",
+      "aspect_ratio": "3:2",
+      "prompt": "A colourful outdoor market stall heaped with carrots, potatoes, tomatoes, mushrooms, pumpkins, apples, bananas and grapes in wooden crates under a striped awning, while a child seen from behind holds a small wicker basket. Sunny morning, softly blurred street behind, one clear central motif. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-cb2d459cb34f3632",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "3. osztály - VEGETABLES & FRUITS"
+      ],
+      "alt": "Napos konyhaasztal friss zöldségekkel és gyümölcsökkel, gyerekkezek két kosárba válogatják őket.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny kitchen table covered with fresh vegetables and fruits: corn, eggplant, broccoli, onions, garlic, a pumpkin, tomatoes, strawberries, oranges and a bowl of cherries, while two small hands sort them into two woven baskets, one for vegetables and one for fruits. Bright window light, plain background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-c7daac35d34b831f",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "I Built a Little Snowman - Angol 3. osztály"
+      ],
+      "alt": "Havas kertben kis hóember áll répaorral, egy fehér nyuszi éppen a répát rágcsálja.",
+      "aspect_ratio": "3:2",
+      "prompt": "A snowy garden on a bright winter day with a small round snowman wearing a carrot nose, and a fluffy little white bunny standing on its hind legs, happily nibbling the carrot. Soft falling snowflakes, pine trees far behind, calm open space around the central pair. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-0af8c8713bf73013",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Jobs - Foglalkozások 🎨 | 3. osztály Angol - Teljes Tananyag"
+      ],
+      "alt": "Napos kisvárosi utca orvossal, kenyeret tartó pékkel, tűzoltóautóval és más dolgozókkal.",
+      "aspect_ratio": "3:2",
+      "prompt": "A friendly small-town street where several workers are at their places: a doctor at a clinic door, a baker holding fresh bread outside a bakery, a firefighter beside a red fire engine, a police officer waving, and a farmer on a tractor in the distance. Plain building fronts, sunny day, gentle colours. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-434a0db299b0fd20",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Life in Peru - 3. osztályos Angol Tananyag"
+      ],
+      "alt": "Machu Picchu kőteraszai ködös andoki hegyen, előtérben egy láma, távolban poncsós gyerek.",
+      "aspect_ratio": "3:2",
+      "prompt": "The ancient stone terraces of Machu Picchu on a green Andes mountain ridge in soft morning mist, a friendly llama standing on the grass in the foreground, and far away a child in a colourful woven poncho seen from behind, looking at the peaks. Bright sky, calm open composition. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-470c11aca6826092",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Peru / Life in Peru - 3. osztályos Angol Tananyag"
+      ],
+      "alt": "Andoki falusi piac Peruban színes szőttesekkel, kukoricával, alpakával és havas hegyekkel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A lively Andean village market in Peru, with women in colourful woven shawls and round hats seen from a distance, piles of potatoes, corn and bright textiles, an alpaca resting nearby, and snowy mountains with a winding river behind. Sunny clear air, uncluttered sky. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-1a48cbe64ca750ac",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelvtan"
+      ],
+      "keywords": [
+        "🎮 Főnevek és Tulajdonnevek – 3. osztály"
+      ],
+      "alt": "Napos falukép házzal, labdát kergető kutyával, sárkányt eregető fiúval és folyóhíddal.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cheerful sunny village scene full of clearly nameable things: a little house with a red roof, a dog chasing a ball, a boy flying a kite, a small school building, a river with a wooden bridge and a big oak tree, each object clear and separate. Plain blue sky, picture-book clarity. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-95f12d0b91e3f0a9",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "10-es átlépéses kivonás"
+      ],
+      "alt": "Játékbolti pult, gyerekkéz egy szalaggal kötött pálcikakötegből tíz különálló pálcikát vált fel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A small toy shop counter where a child's hand exchanges one bundle of ten wooden sticks tied with a ribbon for ten loose sticks, while a few coins and small toys lie nearby and the shopkeeper's friendly hands wait across the counter. Warm afternoon light, tidy plain background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-98eb311cbef68836",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "3. Osztály matek szorzás"
+      ],
+      "alt": "Napos faasztal egyforma kosarakkal, mindegyikben ugyanannyi alma, mellettük gombsorok.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny wooden table with several identical small baskets, each holding the same number of shiny red apples, and beside them a pair of dice and neat rows of colourful buttons arranged in a tidy rectangle, showing equal groups at a glance. Soft daylight, simple background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-e31b833655af38c0",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "3. osztály - ⚡ CYBER KIVONÁS – 100 küldetés"
+      ],
+      "alt": "Barátságos robot neonkék platformon világító energiagömböket vesz el egy kupacból.",
+      "aspect_ratio": "3:2",
+      "prompt": "A friendly glowing cyber world: a small cheerful robot hero on a neon-blue floating platform takes glowing energy orbs from a pile one by one and drops them into a swirling portal, leaving a smaller pile behind. Dark-blue starry backdrop, soft neon light, one clear central motif. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-0e390beb99b99bc5",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "3. osztály - 🎬 Bandi bácsi Matek Órája"
+      ],
+      "alt": "Idős tanító háttal, helyiérték-kockákra mutat: százas lapok, tízes rudak és egyes kockák.",
+      "aspect_ratio": "3:2",
+      "prompt": "A warm study corner with a kind elderly teacher seen from behind, pointing at three columns of place-value blocks on a table: big flat squares, long rods and small unit cubes, with one rod being broken apart into loose cubes beside a little wooden balance scale. Cosy lamp light, plain wall. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-1b668a2b1f278aa9",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "3. osztály - 🎮 Matek Küldetés - Összeadás és Kivonás"
+      ],
+      "alt": "Kalandor gyerek aranycsillagokat gyűjt a réten, kedves kis szörnyek kukucskálnak a bokrokból.",
+      "aspect_ratio": "3:2",
+      "prompt": "A playful game meadow where a child adventurer seen from behind collects shiny golden stars into a cloth bag while a few stars float away from it, and friendly soft little monsters peek out from behind round bushes. Bright sky, open grassy path, one clear central motif. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-708dafa8ec3c5a76",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "3. osztály - 🎮 Írásbeli Összeadás Mester"
+      ],
+      "alt": "Asztalon három oszlopban kék, zöld és sárga korongok, gyerekkéz újabb korongokat tesz hozzá.",
+      "aspect_ratio": "3:2",
+      "prompt": "A tidy tabletop with three colourful columns of round counters: large blue discs, medium green discs and small yellow discs stacked in neat piles, while a child's hand adds more discs to each column and moves a full stack over to the next one. Bright window light, plain pale background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-8e11c013c689e23d",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "3. osztály - 🎯 Becslés Mester - 1000-es számkör"
+      ],
+      "alt": "Kis élelmiszerboltban gyerek kosárral áll háttal, a pulton mérleg és pénztárca érmékkel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cheerful small grocery shop where a child seen from behind holds a shopping basket with a loaf of bread, apples and a carton of milk, looking thoughtfully at a balance scale with weights and a small open purse of coins on the wooden counter. Warm light, plain shelves of goods. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-501a4baa43dbd1f4",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "3. osztály - 🏎️ Matek Verseny - Turbo Számolás"
+      ],
+      "alt": "Kis piros versenyautó száguld a játékpályán egy tíz kőből álló sor mellett, tovább a célig.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright toy race track winding across a green meadow where a small red race car speeds past a neat row of ten round stones and keeps going toward a few more stones further along, a little puff of turbo dust behind it and plain coloured pennants fluttering at the side. Sunny sky, open space. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-3c5635db065f99a9",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "3. osztály - 🏎️ Számoló Verseny - 1000-es számkör"
+      ],
+      "alt": "Kőlapokból álló versenypálya zöld dombokon, egy gyerek gokarttal több követ ugrik egyszerre.",
+      "aspect_ratio": "3:2",
+      "prompt": "A long sunny racetrack made of stepping stones winding over green hills toward a distant finish arch, a go-kart driven by a child seen from behind leaping ahead several stones at a time, with bundles of ten sticks and baskets of pebbles stacked along the side. Bright sky, open composition. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-cb04dbfae64ca0b4",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "3. osztályos matek űrkaland alapműveletek"
+      ],
+      "alt": "Kis rakéta landol egy színes bolygón, űrhajós gyerek csillagkavicsokat rak csoportokba.",
+      "aspect_ratio": "3:2",
+      "prompt": "A friendly little rocket landing on a colourful round planet, while an astronaut child seen from behind gathers glowing star pebbles, adds some to a pile, takes some away and splits others into equal little heaps. Soft planets and twinkling stars in a dark-blue sky, no flags or banners anywhere, uncluttered space. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-826dcd1881408fca",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Harmadik osztályos matek angol-magyar"
+      ],
+      "alt": "Négy egyforma zöld építőlap, mindegyiken ugyanannyi színes kocka, gyerekkéz teszi le az utolsót.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright table with four identical green building baseplates, each holding the same number of colourful plastic building bricks in neat rows, while a child's hands place the very last brick to complete the equal groups. Soft daylight, plain background, one clear central motif. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-36173144165caf5e",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Kivonás 10-es átlépéssel - 3. osztály"
+      ],
+      "alt": "Tanyasi konyhában gyerek egy nagy dobozból kivesz egy tojástartót, és kosárba rakja a tojásokat.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cosy farm kitchen where a child opens a big crate holding ten full egg cartons, takes one carton out and unpacks its ten eggs one by one into a wicker basket beside a few loose eggs already there. Warm morning light through the window, tidy plain background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-d8d4fcaacf652190",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Kivonás Mester – 10-es átlépés technika"
+      ],
+      "alt": "Napfényes dojóban kis nindzsa gyerek ugrál lefelé egy kőlapsoron, középen egy nagy kerek kőnél.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny little dojo with paper walls and a wooden floor where a young ninja child in a soft blue outfit, seen from the side, hops down a row of stepping stones, pausing on a big round stone in the middle before jumping further down. Gentle light, plain background, calm space. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-4283f54c8dce1dda",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Kivonás Mester – írásbeli kivonás az 1000-es számkörben"
+      ],
+      "alt": "Színes fa golyós számológép három sorral, gyerekujj tolja a golyókat jobbról balra.",
+      "aspect_ratio": "3:2",
+      "prompt": "A big colourful wooden abacus with three rows of beads in red, blue and yellow standing on a sunny desk, a child's finger sliding beads from right to left, with a small heap of removed beads resting beside it in a little bowl. Soft light, plain background, one clear central motif. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-02ef86e2e3783b14",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Kivonás tízesátlépéssel – Autós Matek Kaland"
+      ],
+      "alt": "Játékautók tízes sorokban parkolnak a szőnyegen, gyerekkéz néhányat a garázs felé tol el.",
+      "aspect_ratio": "3:2",
+      "prompt": "A toy car parking lot on a playroom rug with many small colourful toy cars parked in neat rows of ten, while a child's hand drives a few cars away along a toy road toward a little wooden garage. Warm sunny light, simple background, one clear central motif. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-510811224d16a804",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Szorzás és maradékos osztás"
+      ],
+      "alt": "Konyhaasztalon három kosár alma, mellettük babszemek egyenlő tálkákba osztva, néhány maradék.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny kitchen table with three wicker baskets each holding four red apples, and next to them a heap of brown beans being shared equally into small bowls by a child's hand, with a couple of leftover beans lying apart on the table. Soft light, plain background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-8d7736deaffc4c54",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Vegyes kivonás 1-2-3 jegyű számokkal – 10-es és 100-as átlépés"
+      ],
+      "alt": "Űrhajós gyerek világító ládákat rak ki az űrállomásnál, nagy és kis kötegekben.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cheerful astronaut child in a white spacesuit floating beside a friendly space station, unloading glowing cargo crates from big pallets, smaller bundles and single boxes into a waiting shuttle, the remaining crates neatly arranged. Colourful planets and stars around, calm dark-blue space. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-5c0e1ff94c270d3f",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "4. Osztály Angol - Interactive Learning"
+      ],
+      "alt": "Napos park focizó, biciklis és gitározó gyerekekkel, egy fiú kutyát sétáltat.",
+      "aspect_ratio": "3:2",
+      "prompt": "A busy afternoon in a sunny park: one child playing football, another riding a bike, a girl playing guitar on a bench and a boy walking his dog, with a clock tower showing only simple tick marks in the background. Bright colours, open green lawn, uncluttered. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-3d7b9652d18f7810",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "4. Osztály all about me english"
+      ],
+      "alt": "Napos gyerekszoba gördeszkával, görkorival, sapkával, fényképezőgéppel és biciklivel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cheerful child's bedroom with personal things neatly displayed: a skateboard, rollerblades, a cap, sunglasses, a camera, a wristwatch and a bike leaning against the wall, clothes on a hanger and a friendly dog resting on the rug. Sunny window, tidy space. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-e80fcc586ffd788e",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "4. osztály - Polish Christmas - 4th Grade English"
+      ],
+      "alt": "Lengyel szentesti asztal sok fogással és egy üres tányérral, a család az első csillagot nézi.",
+      "aspect_ratio": "3:2",
+      "prompt": "A warm Polish Christmas Eve dining room with a long white-clothed table set with many meatless dishes, red beetroot soup, dumplings, fish and poppy-seed cake, plus one extra empty plate; a family seen from behind gazes at the first evening star through a frosty window, a decorated tree nearby. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-6f589eb9cf577293",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "4. osztály - Who's vs Whose - Bilingual Interactive Lesson"
+      ],
+      "alt": "Parki padon talált tárgyak: hátizsák, maci, esernyő és kalap, egy gyerek a hátizsákra mutat.",
+      "aspect_ratio": "3:2",
+      "prompt": "A park bench holding forgotten things, a red backpack, a teddy bear, a blue umbrella and a yellow hat, while a curious child points at the backpack and another child runs toward it waving happily, as if to say it is theirs. Bright day, simple green background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-e88d39c8d660670e",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "4. osztály - 🎄✨ Christmas in Poland - 4th Grade English ✨🎄"
+      ],
+      "alt": "Havas lengyel falu karácsony éjjel, a család lámpás úton sétál a kivilágított templom felé.",
+      "aspect_ratio": "3:2",
+      "prompt": "A snowy Polish village on Christmas night with a small softly lit church in the distance, a family seen from behind walking along a lantern-lit path toward it, a glowing cottage window behind them showing a decorated tree, and the first bright star shining above. Calm deep-blue sky. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-4e0daabda59d89ef",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "4. osztály angol present_continuous"
+      ],
+      "alt": "Napos park: egy lány ugrókötelezik, egy fiú fest, a gyerekek éppen fociznak.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny park full of actions happening right now: a girl skipping rope, a boy painting at an easel, a dad reading on a bench and children playing football, while a finished sandcastle and a landed kite lying on the grass hint at what happened earlier. Bright colours, open lawn. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-7f84089a72b828ec",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Angol gyakorlás"
+      ],
+      "alt": "Szeptemberi reggel a kertkapunál, a család integetve köszönti a szomszédokat, mellettük macska és kutya.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cheerful September morning at a garden gate where a family, mother, father, a boy, a girl and grandma, waves hello to the neighbours, with a ginger cat and a playful puppy at their feet, colourful flowers and a few balloons in the garden. Gentle sun, simple background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-7964d5755946105b",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Angol nyelvtan: a „to be” ige és a birtokos melléknevek"
+      ],
+      "alt": "Napos játszótéren gyerekek bemutatkoznak, mindegyiknél ott a saját sárkánya, labdája vagy rollere.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny playground where children meet and introduce themselves: one child waving, two friends shaking hands, each holding their own colourful belonging, a green kite, a blue ball, a red scooter, so it is clear what belongs to whom. Soft light, uncluttered background, one clear central group. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-28e99dd548411ef7",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Countable & Uncountable Nouns – Megszámolható és megszámolhatatlan főnevek"
+      ],
+      "alt": "Konyhapult almákkal, tojásokkal, kekszekkel, mellettük tej, rizs, liszt és méz.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny kitchen counter divided into two groups: on one side countable things in neat rows, apples, eggs, bananas and cookies; on the other side things you cannot count one by one, a glass jug of milk, a bowl of rice, a sack of flour and a pot of honey. Bright window light, tidy plain background. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-10f04f112345a543",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Full Blast 1 - Angol 4. osztály"
+      ],
+      "alt": "Napos táborrét, ahol különböző országokból jött gyerekek zsonglőrködnek, gitároznak és úsznak.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny summer camp meadow where children from different countries, in varied clothes and each with a backpack, meet and show what they can do: one juggling, one playing guitar, one swimming in the lake behind, others brushing teeth by the tents in their morning routine. Bright, open composition. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-fb035f2e340cc520",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Halloween Poems – Halloween-versek angolul"
+      ],
+      "alt": "Gyertyafényes tökök egy veranda lépcsőjén, a holdas égen boszorkány seprűn és szelíd szellemek.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cosy autumn evening porch with a row of smiling carved pumpkins glowing with candlelight on wooden steps, a big friendly full moon above, a tiny witch silhouette flying far away on a broomstick and two soft, smiling little ghosts floating among the stars. Nothing frightening. Gentle, cheerful picture-book mood for young children, uncluttered starry background."
+    },
+    {
+      "id": "cover-l-b4e2e3891499bb1f",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Telling the Time – Az óra kifejezése"
+      ],
+      "alt": "Nagy, kerek falióra három mutatóval egy napsütötte gyerekszobában, mellette karóra az asztalon.",
+      "aspect_ratio": "3:2",
+      "prompt": "A large round wooden wall clock with only simple tick marks and three clearly different hands, hanging in a sunny child's bedroom; below it a small wristwatch lies on a tidy desk next to a school backpack, morning light through the window. No numerals anywhere. Gentle, cheerful picture-book mood for young children, calm uncluttered composition."
+    },
+    {
+      "id": "cover-l-26b8792dfe07540f",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "There are – Angol 4. osztály"
+      ],
+      "alt": "Világos gyerekszoba, macska az asztalon, ceruzák az íróasztalon, labda az ágy alatt.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright, tidy child's bedroom seen from the doorway: a ginger cat sitting on a table, five colourful pencils lying on a desk, a red ball under the bed, a teddy bear between two cushions and a lamp in front of the window. Each object clearly placed and easy to spot. Gentle, cheerful picture-book mood for young children, uncluttered."
+    },
+    {
+      "id": "cover-l-b7328c8b10b7779d",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Unit 2 – All About Me: birtoklás, képesség, személyleírás"
+      ],
+      "alt": "Két barát a parkban gördeszkával, napszemüveggel és kiskutyával, körülöttük bicikli és görkorcsolya.",
+      "aspect_ratio": "3:2",
+      "prompt": "Two smiling best friends in a sunny park, one balancing on a skateboard wearing a cap, the other in sunglasses holding a camera, a playful puppy on a leash beside them; a bicycle and a pair of rollerblades rest on the grass nearby. Colourful clothes, blue sky. Gentle, cheerful picture-book mood for young children, simple uncluttered background."
+    },
+    {
+      "id": "cover-l-e3465664f5606806",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Where I Live – Module 4"
+      ],
+      "alt": "Kétszintes családi ház metszetben: hálószoba, konyha, fürdőszoba, nappali, lépcső és kert.",
+      "aspect_ratio": "3:2",
+      "prompt": "A charming two-storey family house shown as a cutaway dollhouse view: bedroom and bathroom upstairs, kitchen and living room with sofa and table downstairs, a staircase connecting them, a small basement below, a balcony with flowers and a green garden with a garage at the side. Gentle, cheerful picture-book mood for young children, clear and uncluttered."
+    },
+    {
+      "id": "cover-l-cd92e0e2990020dc",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Földrajz"
+      ],
+      "keywords": [
+        "Az Északi-középhegység"
+      ],
+      "alt": "Erdős magyar hegyvonulatok napfényben, előtérben barlangbejárat és kis vízesés, távolban vár.",
+      "aspect_ratio": "3:2",
+      "prompt": "Rolling forested Hungarian mountains under a bright summer sky, a tall rounded peak with a slender lookout tower, a small waterfall tumbling over mossy rocks and a dark cave entrance in a limestone cliff in the foreground, a deer at the forest edge and a distant castle on a hill. Gentle, cheerful picture-book mood for young children, uncluttered."
+    },
+    {
+      "id": "cover-l-3ca951c2f74f3b84",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Földrajz"
+      ],
+      "keywords": [
+        "Dunántúli-középhegység"
+      ],
+      "alt": "Lankás erdős hegyek egy nagy, kék tó partján, a hegyoldalon szőlő és egy régi vár romja.",
+      "aspect_ratio": "3:2",
+      "prompt": "Gentle forested hills of western Hungary rising beside a wide shimmering blue lake with small white sailboats, vineyards on the sunny slopes, the ruins of an old stone castle on a hilltop and soft clouds drifting over the peaks. Calm, wide landscape with one clear view. Gentle, cheerful picture-book mood for young children, uncluttered sky."
+    },
+    {
+      "id": "cover-l-116dab37705ee7e5",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "4 osztályos környezetismeret Budapest, barangolás, Alföld"
+      ],
+      "alt": "Széles folyó két partja, egyiken dombos városrész, másikon sík város, köztük lánchíd.",
+      "aspect_ratio": "3:2",
+      "prompt": "A wide river flowing through a big city on a sunny day: on one bank green hills with an old castle and church towers, on the other flat land with a grand domed parliament-like building, an elegant stone chain bridge with lions linking them, a small boat on the water. Gentle, cheerful picture-book mood for young children, clear uncluttered view."
+    },
+    {
+      "id": "cover-l-179b45216f63bc3b",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "4. Osztály Alpokalja Dunántúl"
+      ],
+      "alt": "Zöld dombvidék gyors patakkal, háttérben erdős hegyek, egy dombon kis kőtorony.",
+      "aspect_ratio": "3:2",
+      "prompt": "Lush green rolling hills at the foot of forested mountains in western Hungary, a fast clear stream winding between meadows, a small stone lookout tower on the highest wooded peak, chestnut trees and a few red-roofed village houses in a valley, soft summer clouds. Gentle, cheerful picture-book mood for young children, wide and uncluttered landscape."
+    },
+    {
+      "id": "cover-l-f69f656ebc96c538",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "4. osztály - A táplálkozás és légzés szervrendszere"
+      ],
+      "alt": "Mosolygó gyerek almába harap egy virágos kertben, mellette fogkefe és pohár víz.",
+      "aspect_ratio": "3:2",
+      "prompt": "A happy child taking a big crunchy bite of a red apple in a sunny flower garden, breathing fresh air, with a small table beside them holding a toothbrush in a cup, a glass of water and a bowl of fruit and vegetables. Bright, healthy atmosphere, no anatomy. Gentle, cheerful picture-book mood for young children, uncluttered background."
+    },
+    {
+      "id": "cover-l-d404d9531b2b3669",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "4. osztály - Bővített Az emberi test – Testrészek, érzékszervek, mozgás szervrendszere"
+      ],
+      "alt": "Gyerek nagyítóval nézi a virágot, szagolja, közben a parkban mások ugrálnak és futnak.",
+      "aspect_ratio": "3:2",
+      "prompt": "A curious child in a sunny park looking at a flower through a magnifying glass and sniffing its scent, while behind them friends jump, run and stretch on the grass, a bird singing on a branch. The scene celebrates seeing, smelling, hearing and moving. Gentle, cheerful picture-book mood for young children, uncluttered green background."
+    },
+    {
+      "id": "cover-l-49e1ba68da7e8f76",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "4. osztály - Testrészek, érzékszervek"
+      ],
+      "alt": "Kislány csukott szemmel tapint egy puha tollat, előtte citrom, rózsa és csengő az asztalon.",
+      "aspect_ratio": "3:2",
+      "prompt": "A smiling girl at a sunny garden table exploring her five senses: eyes closed, gently touching a soft feather, while a sliced lemon, a fragrant rose, a little brass bell and a pair of colourful glasses lie in front of her. Warm daylight, calm curious atmosphere. Gentle, cheerful picture-book mood for young children, uncluttered background."
+    },
+    {
+      "id": "cover-l-7781b4948d10940a",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "4. osztály - 🌊 A víz, vízpart – Élet a vízben 🐸"
+      ],
+      "alt": "Nádas tópart fűzfákkal, vízen kacsák, sekély vízben gólya, a parton hód és béka.",
+      "aspect_ratio": "3:2",
+      "prompt": "A peaceful lake shore with weeping willows and poplars, a wide reed belt, water lilies on the open water, ducks swimming, a white stork wading in the shallows, a beaver gnawing a branch on the bank and a green frog sitting on a lily pad. Soft morning light. Gentle, cheerful picture-book mood for young children, calm composition."
+    },
+    {
+      "id": "cover-l-4de4a74b2884ba6d",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "4. osztály - 💖 Az emberi test - Egészségünk 💖"
+      ],
+      "alt": "Kipirult gyerekek ugrókötelet hajtanak a napos parkban, a padon vizespalack és alma.",
+      "aspect_ratio": "3:2",
+      "prompt": "Rosy-cheeked children skipping rope and running happily in a sunny park, dressed in light clothes for the warm weather, one child resting on a bench with a hand on their chest feeling the heartbeat, a water bottle and an apple beside them. Healthy, energetic atmosphere. Gentle, cheerful picture-book mood for young children, uncluttered background."
+    },
+    {
+      "id": "cover-l-7d5124e582a8a8cb",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "4. osztály - 🦋 A mező és rét csodálatos világa 🌸"
+      ],
+      "alt": "Virágos rét pipaccsal és pillangókkal, mögötte aranyló búzamező, a fűben mezei nyúl.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny flowering meadow full of poppies, cornflowers and chamomile with butterflies dancing above, a golden wheat field stretching behind it under a wide blue sky, a hare sitting up in the grass, a small molehill, a pheasant walking at the edge and a buzzard circling high. Gentle, cheerful picture-book mood for young children, open uncluttered sky."
+    },
+    {
+      "id": "cover-l-581de33ea986a380",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "A víz körforgása"
+      ],
+      "alt": "Napsütötte tenger, felette felhők, a hegyek felett eső hull, a folyó visszafut a tengerbe.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright landscape showing the water cycle: warm sun over a blue sea with soft wisps of vapour rising, fluffy white clouds gathering above, gentle rain falling over green hills and a snowy mountain top, and a sparkling river winding back down into the sea. Gentle, cheerful picture-book mood for young children, clear uncluttered composition, no arrows."
+    },
+    {
+      "id": "cover-l-8a23e6feebc7c69c",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "Az Erdő - Környezetismeret 4. osztály 🦊"
+      ],
+      "alt": "Napfényes lombos erdő tisztása, rókával, őzzel, gombákkal és mohás fatörzzsel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunlit clearing in a Hungarian oak and beech forest with tall trees, bushes and ferns forming layers like floors of a house, a red fox peeking from the undergrowth, a roe deer grazing, a woodpecker on a trunk, colourful mushrooms and soft moss on a fallen log. Gentle, cheerful picture-book mood for young children, uncluttered."
+    },
+    {
+      "id": "cover-l-210cf0a73c9256f1",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "Betegség, gyógyulás"
+      ],
+      "alt": "Gyerek szappanhabos kézzel mosolyog a mosdónál, mellette törölköző és pohár meleg tea.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cheerful child washing hands at a bright bathroom sink, covered in big shiny soap bubbles, a small nail brush and a fluffy towel nearby; on a little shelf a cup of steaming honey tea and an orange suggest staying healthy and getting well. Fresh, clean, reassuring atmosphere. Gentle, cheerful picture-book mood for young children, uncluttered."
+    },
+    {
+      "id": "cover-l-fc5a149ca34463da",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Környezetismeret"
+      ],
+      "keywords": [
+        "Kert és Park – Életközösségek lakóhelyünk környezetében"
+      ],
+      "alt": "Falusi kert almafával, zöldségágyásokkal, komposztládával és madáretetővel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny fenced village garden beside a farmhouse: an apple tree heavy with red fruit, neat vegetable beds with carrots, tomatoes and lettuce, a wooden compost box, a birdhouse with a little bird, a ladybird on a leaf and a hedgehog under a bush; a green park with paths visible beyond the fence. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-9b528c06f4f4c53c",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv"
+      ],
+      "keywords": [
+        "Tulajdonságot kifejező szavak"
+      ],
+      "alt": "Három léggömb egymás mellett: egy kicsi, egy nagyobb és egy hatalmas, piros, kék és sárga.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny meadow where three balloons float side by side, small, bigger and biggest, in red, blue and yellow; beside them a slow snail and a fast rabbit, a fluffy kitten and a spiky hedgehog invite comparing sizes, speeds and textures. Simple, contrast-rich scene. Gentle, cheerful picture-book mood for young children, uncluttered sky."
+    },
+    {
+      "id": "cover-l-0b28d4d4eec8aa3e",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv és irodalom"
+      ],
+      "keywords": [
+        "4. osztály - Igekötők és igék"
+      ],
+      "alt": "Gyerekek a parkban felmásznak, lecsúsznak, beugranak és kiszaladnak egy játszótéren.",
+      "aspect_ratio": "3:2",
+      "prompt": "A lively playground in a sunny park where children show varied directed actions: one climbing up a ladder, one sliding down a slide, one jumping into a sandpit, one running out through a gate, another throwing a ball over a hedge. Clear movement directions, happy faces. Gentle, cheerful picture-book mood for young children, uncluttered background."
+    },
+    {
+      "id": "cover-l-67ee59c7625b1e3d",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv és irodalom"
+      ],
+      "keywords": [
+        "4. osztály - 🌸 Helyesírás – Kiejtéstől eltérően írjuk"
+      ],
+      "alt": "Gyerek tenyerét a füléhez emeli, közben fa építőkockákat illeszt egymáshoz egy napos asztalon.",
+      "aspect_ratio": "3:2",
+      "prompt": "A thoughtful child at a sunny table with a hand cupped to one ear, listening carefully, while fitting together smooth letter-free wooden puzzle pieces and blocks that join into a neat tower; a magnifying glass rests nearby for checking. Cherry blossoms outside the window. Gentle, cheerful picture-book mood for young children, uncluttered composition."
+    },
+    {
+      "id": "cover-l-38ccae3544f5f0df",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv és irodalom"
+      ],
+      "keywords": [
+        "4. osztály Cselekvés, Történés, Igék - Témazáró Felkészítő"
+      ],
+      "alt": "Gyerekek fára festenek és futnak a réten, közben fúj a szél és szivárvány jelenik meg.",
+      "aspect_ratio": "3:2",
+      "prompt": "A meadow scene contrasting actions and happenings: children running, painting at an easel and eating a picnic, while around them nature acts by itself, wind bending the grass, a light shower falling from one cloud and a rainbow appearing over the hills. Lively and bright. Gentle, cheerful picture-book mood for young children, uncluttered background."
+    },
+    {
+      "id": "cover-l-e1e83b2e20f10168",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv és irodalom"
+      ],
+      "keywords": [
+        "A főnév - Magyar nyelvtan 4. osztály"
+      ],
+      "alt": "Udvar kutyával, labdával, kosár almával és madárcsapattal, háttérben falu és folyó.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny village courtyard full of nameable things: a playful dog chasing a ball, a grandmother seen from behind holding a basket of apples, a flock of birds over a tree, a wooden table with a jug of milk and a lump of clay, a river and church tower in the distance. Gentle, cheerful picture-book mood for young children, uncluttered."
+    },
+    {
+      "id": "cover-l-ad49ec896507d66b",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv és irodalom"
+      ],
+      "keywords": [
+        "🌸 Magyar Nyelvtan – 4. osztály"
+      ],
+      "alt": "Gyerekek színes, felirat nélküli fakockákból mondatnak tűnő hosszú sort építenek a szőnyegen.",
+      "aspect_ratio": "3:2",
+      "prompt": "Children on a sunny playroom rug building a long winding chain of colourful letter-free wooden blocks of different shapes and colours, each kind of block a different role, connecting them like a train; one child adds a final round block at the end. Spring flowers in the window. Gentle, cheerful picture-book mood for young children, uncluttered."
+    },
+    {
+      "id": "cover-l-a9d1c055f718bdff",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelvtan"
+      ],
+      "keywords": [
+        "A számot, mennyiséget kifejező szavak – 4. osztály"
+      ],
+      "alt": "Gyerekek futóversenyen sorban célba érnek, előtérben két alma és egy negyedére vágott torta.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny school sports field where children cross a ribbon finish line one after another in a happy race, while on a picnic blanket in the foreground lie two shiny apples, a pile of counting pebbles and a round cake cut into four equal slices. No numbers or text. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-1d22b230ed676282",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "4. osztály - Matematika, Alakzatok Tananyag."
+      ],
+      "alt": "Kocka, gömb, henger és gúla fából egy asztalon, mellettük színes papír sokszögek és egy hangya.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny wooden table with smooth wooden solids, a cube, a ball, a cylinder and a pyramid, beside flat colourful paper shapes: a square, a rectangle, a triangle and a star-like concave polygon; a tiny friendly ant walks along the edge of the square, tracing its outline. Gentle, cheerful picture-book mood for young children, uncluttered."
+    },
+    {
+      "id": "cover-l-2bac2ec241678798",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "4. osztály - Októberi Matek Gyakorló 4."
+      ],
+      "alt": "Őszi asztal golyós számológéppel, mérlegen almákkal, mérőszalaggal és negyedelt pitével.",
+      "aspect_ratio": "3:2",
+      "prompt": "An autumn workshop table by a window with falling orange leaves: a wooden bead abacus, a balance scale with apples on one side, a coiled tape measure without markings, stacked bundles of sticks in groups of ten and a pie cut into equal quarters. Warm and inviting. Gentle, cheerful picture-book mood for young children, no numbers or text."
+    },
+    {
+      "id": "cover-l-b6ecf0232b837dfd",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "4. osztály - Írásbeli műveletek és szöveges feladatok"
+      ],
+      "alt": "Gyerekek egy piaci standnál almás ládákat raknak oszlopokba és szétosztják a gyümölcsöt.",
+      "aspect_ratio": "3:2",
+      "prompt": "Children helping at a sunny village market stall, stacking crates of apples in neat columns, sorting single apples, bags of ten and boxes of a hundred, and sharing pears equally into baskets; one child counts coins without markings into piles. Busy but tidy. Gentle, cheerful picture-book mood for young children, no numbers or text."
+    },
+    {
+      "id": "cover-l-331b7fcb8de759e9",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "4. osztály - 🍎 Osztás Varázslat - Tanuljunk együtt!"
+      ],
+      "alt": "Négy barát egy pikniktakarón egyenlően osztja szét az almákat, egy cukorka a közepén marad.",
+      "aspect_ratio": "3:2",
+      "prompt": "Four friends sitting on a picnic blanket in a sunny orchard, sharing a heap of red apples so that each has an equal little pile in front of them, with a single leftover candy sparkling in the middle; a small magic wand rests beside the basket. Gentle, cheerful picture-book mood for young children, uncluttered background."
+    },
+    {
+      "id": "cover-l-5d5ea4113166c9d7",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "4. osztály - 📚 Írásbeli Osztás Mestere - Teljes Levezetés"
+      ],
+      "alt": "Gyerek egyenlő csomagokba rakja a gyöngyöket öt tálkába, egy gyöngy külön marad.",
+      "aspect_ratio": "3:2",
+      "prompt": "A child at a sunny craft table carefully dealing a large heap of colourful beads into five identical little bowls so each holds the same amount, step by step, with one leftover bead set aside on a saucer; bundles of sticks tied in tens wait nearby. Gentle, cheerful picture-book mood for young children, no numbers or text."
+    },
+    {
+      "id": "cover-l-cb14fc90d77aeb62",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Hossz mértékegységei - 4. osztály"
+      ],
+      "alt": "Gyerek mérőszalaggal méri az asztal hosszát, mellette ceruza, vonalzó és távolba vezető út.",
+      "aspect_ratio": "3:2",
+      "prompt": "A child measuring a wooden table with a yellow tape measure marked only by tick lines, a pencil, a tiny ant and a short ruler lying beside for comparison; through the window a long country road winds far away to a distant village. Shows lengths from tiny to very long. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-cb4c93d3cf1c5d5d",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Kristóf Matek – Összefoglaló lecke"
+      ],
+      "alt": "Napos asztal golyós számológéppel, fa testekkel, felszeletelt tortával és kis mérleggel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny workshop table uniting many maths topics: a wooden bead abacus, bundles of sticks in tens and hundreds, a cake cut into equal slices, wooden cubes and cylinders, a small balance scale and a tape measure with tick marks only. Calm and inviting arrangement. Gentle, cheerful picture-book mood for young children, no numbers or text."
+    },
+    {
+      "id": "cover-l-62254a44fce7b65e",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Törtrészek és mértékek"
+      ],
+      "alt": "Négy egyenlő szeletre vágott pizza, mellette félig telt kancsó, mérleg és homokóra.",
+      "aspect_ratio": "3:2",
+      "prompt": "A round pizza cut into four equal slices on a wooden board, one slice lifted away, next to a glass jug filled halfway with juice, a kitchen scale holding a small bag of flour, a ribbon cut in equal pieces and an hourglass. Friendly kitchen in sunlight. Gentle, cheerful picture-book mood for young children, no numbers or text."
+    },
+    {
+      "id": "cover-l-79f71f9654eb6598",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Írásbeli osztás"
+      ],
+      "alt": "Tizenkét színes cukorka három egyforma kupacba rendezve egy asztalon, három gyerek mellett.",
+      "aspect_ratio": "3:2",
+      "prompt": "Three smiling children at a sunny kitchen table sharing colourful wrapped candies fairly, the sweets arranged into three equal neat piles, one for each child, with an empty glass jar that held them standing in the middle. Clear, simple sharing scene. Gentle, cheerful picture-book mood for young children, uncluttered background, no numbers or text."
+    },
+    {
+      "id": "cover-l-459cab1068e92372",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Űrmértékek"
+      ],
+      "alt": "Konyhapulton kakaós bögre, mérőpohár, literes tejesüveg és kis kanál, mögöttük nagy vödör.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright kitchen counter with containers of different capacities lined up from small to large: a teaspoon, a mug of cocoa, a clear measuring jug with tick marks only, a big bottle of milk and a large bucket of water; a child pours milk carefully into the jug. Gentle, cheerful picture-book mood for young children, no numbers or text."
+    },
+    {
+      "id": "cover-l-4021479cb3526be2",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "🦋 Maradékos osztás és szorzás - 4. osztály"
+      ],
+      "alt": "Sorokba rendezett virágcserepek egy kertben, pillangók szállnak, egy cserép külön áll.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny garden where flower pots stand in neat equal rows like a grid, three rows of four, with one extra pot standing apart as a leftover; butterflies hover over the blossoms and a child with a watering can admires the arrangement, a tiny sandy pyramid model nearby. Gentle, cheerful picture-book mood for young children, no numbers."
+    },
+    {
+      "id": "cover-l-7bb8850ee0d58510",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "26. Ismerj meg, fogadj el! - 4. osztály természetismeret"
+      ],
+      "alt": "Gyerekek együtt játszanak a parkban, köztük kerekesszékes kisfiú és vakvezető kutyás lány.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny inclusive park where children play together happily: a boy in a wheelchair rolling up a gentle ramp to join friends, a girl walking with a calm guide dog in a harness, two friends talking with hand gestures, everyone laughing around a picnic blanket. Warm, accepting atmosphere. Gentle, cheerful picture-book mood for young children, uncluttered."
+    },
+    {
+      "id": "cover-l-10956bfe204d40f8",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "4. osztály - A légzés szervrendszere"
+      ],
+      "alt": "Gyerek mély levegőt vesz egy virágos hegyi réten, mellette pitypangot fúj egy barátja.",
+      "aspect_ratio": "3:2",
+      "prompt": "A child standing on a sunny mountain meadow with arms open wide, taking a deep breath of fresh air, while a friend gently blows a dandelion clock and its seeds float away; pine trees, clear blue sky and a wide-open window of a cottage behind them. Gentle, cheerful picture-book mood for young children, uncluttered background."
+    },
+    {
+      "id": "cover-l-54a2d84afcb179f8",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "A Föld kering a Nap körül"
+      ],
+      "alt": "A kék-zöld Föld egy halvány pályán kering a ragyogó, sárga Nap körül a csillagos űrben.",
+      "aspect_ratio": "3:2",
+      "prompt": "A friendly bright yellow Sun glowing in the centre of a deep blue starry space, with the blue and green Earth travelling along a soft dotted circular path around it, a tiny grey Moon beside the Earth; gentle sparkles of distant stars. Simple and clear. Gentle, cheerful picture-book mood for young children, uncluttered background."
+    },
+    {
+      "id": "cover-l-bb2010ac1c14f636",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "földrajz"
+      ],
+      "keywords": [
+        "A Nagy-Britannia és az Egyesült Királyság földrajza"
+      ],
+      "alt": "Zöld, sziklás szigetpart világítótoronnyal, mögötte skót hegyek, egy folyó és egy vár.",
+      "aspect_ratio": "3:2",
+      "prompt": "A green British island coastline with white chalk cliffs and a lighthouse, rolling hills with sheep, a winding river leading to a distant city with a tall clock tower drawn with tick marks only, misty Scottish mountains and a castle on a rock far behind, light drizzle clouds mixed with sunshine. Gentle, cheerful picture-book mood for young children."
+    },
+    {
+      "id": "cover-l-d0228a7b52eb02a1",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "környezetismeret"
+      ],
+      "keywords": [
+        "Fogalomjegyzék a feltöltött forrásokból"
+      ],
+      "alt": "Mesebeli táj: fehér lovas hős hátulról, távoli hegyen barátságos sárkány és griffmadár.",
+      "aspect_ratio": "3:2",
+      "prompt": "A magical fairy-tale landscape: a young hero on a white horse seen from behind on a winding path, a golden curl and a sparkling ring glowing in his hand, a friendly three-headed dragon resting far away on a misty hill and a griffin bird circling above. Nothing frightening. Gentle, cheerful picture-book mood for young children, uncluttered."
+    },
+    {
+      "id": "cover-l-9e2a3b63a4dd8051",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "5. osztály - My daily routine tananyag"
+      ],
+      "alt": "Napfényes reggeli szoba, egy fiú nyújtózik az ablaknál, mellette reggeli és iskolatáska.",
+      "aspect_ratio": "3:2",
+      "prompt": "A pre-teen boy's sunny weekday morning routine: stretching beside a bright bedroom window, a bowl of cereal and orange juice on a small table, a toothbrush cup nearby, a packed school backpack waiting by the door, a wall clock with simple tick marks only. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-e7bec843e1198585",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "5. osztály Angol - My Cousin Danny"
+      ],
+      "alt": "Napos kertben egy fiú focilabdát tart, mellette gitár egy padnak támasztva.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cheerful pre-teen boy cousin in a sunny backyard, holding a football under one arm, an acoustic guitar leaning against a garden bench, a small birthday cake with candles on a picnic table, green lawn and a fence behind, friendly relaxed atmosphere. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-3700f43eb5297488",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Have Got - Angol 5. osztály"
+      ],
+      "alt": "Nappali szőnyegén piros versenyautó-játék, körülötte kutya, macska és testvérek.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cosy family living room seen from a low angle: a shiny red toy race car on a patterned rug, a playful dog and a sleepy cat beside it, two siblings seen from behind sitting on the floor, parents relaxing on a sofa in the background. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-e7679a9298865da8",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "There are - Focis tananyag 5. osztály"
+      ],
+      "alt": "Gyerekszoba íróasztallal, számítógéppel, szemeteskukával és a padlón egy focilabdával.",
+      "aspect_ratio": "3:2",
+      "prompt": "A tidy pre-teen bedroom full of everyday household items: a wooden desk with a computer showing soft abstract shapes, a small bin beside it, a lamp, a chair, some plain books on a shelf, a bed, and a football resting on the floor near the window. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-f4eaac41b8997be7",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Bibliaismeret"
+      ],
+      "keywords": [
+        "5. Osztály Bibliaismeret a biblia könyvei"
+      ],
+      "alt": "Kőfalú régi könyvtárban felgöngyölt tekercsek és zárt bőrkötéses könyvek egy állványon.",
+      "aspect_ratio": "3:2",
+      "prompt": "An ancient stone library lit by warm window light: rolled parchment scrolls tied with cord and a row of closed leather-bound volumes on a carved wooden lectern, clay jars for storing scrolls, an oil lamp, no visible writing anywhere, calm and reverent atmosphere. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-9cbd046599412be3",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Biológia"
+      ],
+      "keywords": [
+        "A gyümölcsöskert és a szőlő"
+      ],
+      "alt": "Tavaszi gyümölcsöskert virágzó almafákkal, méhekkel és egy sor szőlőtőkével.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny Hungarian orchard in late spring: apple trees with pink-white blossoms visited by honeybees, a plum tree and a peach tree nearby, a large walnut tree at the edge, and a neat row of grapevines on wooden posts climbing a gentle slope. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-124c7d5c06db4e62",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Biológia"
+      ],
+      "keywords": [
+        "Hívatlan látogatók a kertben"
+      ],
+      "alt": "Kerti ágyás közelről: burgonyabogár a krumplilevélen, csiga a salátán, káposztalepke.",
+      "aspect_ratio": "3:2",
+      "prompt": "A close-up of a summer vegetable garden bed: a striped potato beetle on a green potato leaf, a slow garden snail on a lettuce leaf, a white cabbage butterfly hovering over cabbages, an apple with a small brown rot spot on a branch, curious explorer feeling. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-88b6f2432f6ef165",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Irodalom"
+      ],
+      "keywords": [
+        "Odysseus"
+      ],
+      "alt": "Ókori görög hajó egyetlen vitorlával sziklás szigetek között, naplementében.",
+      "aspect_ratio": "3:2",
+      "prompt": "An ancient Greek wooden ship with a single square sail and oars gliding across a deep blue sea at sunset, rocky islands and steep cliffs on the horizon, a lone sailor standing far away at the mast, seabirds overhead, a sense of a long voyage home. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-b8364c62b6d7dbe4",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Kompetenciamérés-felkészítő (magyar, matematika, angol)"
+      ],
+      "keywords": [
+        "5. Osztályos Komplex Kompetenciamérés Felkészítő"
+      ],
+      "alt": "Napos asztalon nagyító, téglalap alakú kertmakett, színes kockaoszlopok és egy játékbusz.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny explorer's worktable: a magnifying glass over a closed storybook, a small rectangular garden plot model with a little fence around its edge, colourful stacked block towers of different heights like a bar chart, and a red double-decker toy bus nearby. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-302c489598c148f7",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar irodalom"
+      ],
+      "keywords": [
+        "5. osztály - A Pál utcai fiúk - Interaktív tananyag"
+      ],
+      "alt": "Régi budapesti grund fafarakásokkal és kis fészerrel, hátulról látott fiúkkal.",
+      "aspect_ratio": "3:2",
+      "prompt": "An empty city lot in early 1900s Budapest: tall stacks of timber planks, a small wooden shed, old tenement walls around, a group of boys in period caps and short coats seen from behind, a plain red and green flag on a pole, golden afternoon light. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-47c15eb391f9f599",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar irodalom"
+      ],
+      "keywords": [
+        "5. osztály - Arany János: Családi kör - Interaktív Tananyag"
+      ],
+      "alt": "Esti parasztkonyha, a család a lámpafényes asztal körül ül, hátulról nézve.",
+      "aspect_ratio": "3:2",
+      "prompt": "A 19th-century Hungarian village farmhouse kitchen in the evening: a family gathered around a lamp-lit wooden table, seen softly from behind, a grandmother spinning by the hearth, a cat at her feet, an autumn dusk glowing through the small window. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-13ff5d94b7efa9aa",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar irodalom"
+      ],
+      "keywords": [
+        "Arany János: Családi kör"
+      ],
+      "alt": "Alkonyati falusi udvar almafával, hazatérő tehénnel és meleg fényű ablakkal.",
+      "aspect_ratio": "3:2",
+      "prompt": "A quiet 19th-century Hungarian village yard at autumn dusk: a whitewashed farmhouse with one warm lamp-lit window, an old apple tree, a cow returning to the barn, a cat on the doorstep, a beetle and a bat in the fading violet sky. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-9c6bd37df8fda0c7",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv"
+      ],
+      "keywords": [
+        "Hagyomány szerinti és egyszerűsítő írásmód"
+      ],
+      "alt": "Régi íróasztalon lúdtoll, tintatartó, viaszpecsét és üres pergamen egy modern toll mellett.",
+      "aspect_ratio": "3:2",
+      "prompt": "An old manor study desk bathed in warm light: a feather quill, an inkwell, a red wax seal and blank parchment from long ago, placed beside a modern fountain pen and a clean blank notebook, showing two eras of writing side by side, no letters visible. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-e46db2ba531da108",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv"
+      ],
+      "keywords": [
+        "🏎️ Elválasztás és Betűrend Verseny - 5. osztály"
+      ],
+      "alt": "Asztali versenypálya, kisautó halad két csoportra bontott színes fakockasor mellett.",
+      "aspect_ratio": "3:2",
+      "prompt": "A toy race track winding across a desk: a small racing car speeds past a long row of colourful plain wooden blocks that is split into two neat groups at a gap, more blank blocks lined up in a tidy order beside a plain wooden finish arch. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-ade98fbacd1c89b0",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv és irodalom"
+      ],
+      "keywords": [
+        "5 osztály Magyar Irodalom Jókai Mór"
+      ],
+      "alt": "Régi írószoba ablaka a Dunára néz, az asztalon lúdtoll és zárt könyvek.",
+      "aspect_ratio": "3:2",
+      "prompt": "A 19th-century writer's study in Komárom overlooking the wide Danube: a desk by the window with a feather quill, an inkwell, a brass oil lamp and a few closed leather books, baroque town rooftops and a church tower outside, a distant river boat, warm late-afternoon light, nothing else on the desk. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-cfff38cf4176f27d",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv és irodalom"
+      ],
+      "keywords": [
+        "5. Osztály kommunikáció tananyag teljes"
+      ],
+      "alt": "Iskolaudvaron két gyerek integet egymásnak, köztük konzervdoboz-telefon zsinórja.",
+      "aspect_ratio": "3:2",
+      "prompt": "Two pre-teens in a sunny park communicating: one waving with a big smile, the other holding a tin-can telephone with a taut string between them, a dog wagging its tail, a pedestrian traffic light glowing green in the background, dark clouds far away hinting rain. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-5558a0a14bd23173",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv és irodalom"
+      ],
+      "keywords": [
+        "5. osztály - Magyar Népmesék: Fehérlófia és Tündérszép Ilona"
+      ],
+      "alt": "Fehér kanca és népviseletes ifjú hős egy aranyalmákat termő fa előtt.",
+      "aspect_ratio": "3:2",
+      "prompt": "A Hungarian folk-tale scene: a young hero in traditional embroidered shirt seen from behind standing beside a majestic white mare at the edge of an enchanted forest, a glowing tree with golden apples ahead, a black raven on a branch, misty magical light. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-3ec23c4e4a99e32c",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Magyar nyelv, matematika, angol nyelv"
+      ],
+      "keywords": [
+        "5. osztályos kompetenciamérés felkészítő"
+      ],
+      "alt": "Réten piknikplédon szeletekre vágott pizza, távcső, játékbusz és zárt mesekönyv.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny meadow picnic blanket set up like an adventurer's camp: a pizza cut into equal slices, a pair of binoculars, a red double-decker toy bus, a closed storybook with a ribbon, a compass and a small backpack, wide green hills behind. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-3494830174e1c34b",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "5. osztály - A számírás fejlődése - Római számok"
+      ],
+      "alt": "Ókori pásztorlány alkonyatkor terelő bárányokat számol kavicsokkal, hátulról nézve.",
+      "aspect_ratio": "3:2",
+      "prompt": "An ancient shepherd girl seen from behind at dusk, counting sheep as they return into a stone pen, dropping one pebble per lamb into a small pile, a carved bone with simple notches beside her, rolling hills and a warm orange sky. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-26cc2845a1d3e0d7",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "5. osztály törtek Egyszerűsítése és bővítése"
+      ],
+      "alt": "Két egyforma pizza: az egyik négy, a másik nyolc szeletre vágva, azonos rész hiányzik.",
+      "aspect_ratio": "3:2",
+      "prompt": "Two identical round pizzas on a wooden kitchen table: one cut into four equal slices, the other into eight equal slices, with the same portion missing from both so the eaten parts match, a pizza cutter and basil leaves nearby. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-114be7b9646cacfb",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "A tömeg mérése, mértékegységei"
+      ],
+      "alt": "Kétkarú mérleg rézsúlyokkal, mellette almák, lisztes zsák és konyhai mérleg.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright kitchen counter with a classic two-pan balance scale holding a bag of flour on one side and plain brass weights on the other, a basket of apples, a dial kitchen scale with simple tick marks only, a child's hand adding one more apple. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-180abc27077fa6dd",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Felszín és Térfogat – 5. osztály"
+      ],
+      "alt": "Csomagolópapírral becsomagolt doboz, félig töltött akvárium és átlátszó kockák.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny workshop table: a gift box half-wrapped in colourful paper showing its six faces, a glass aquarium being filled with water from a jug, and a stack of small transparent unit cubes forming a larger block beside it. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-569a1aeb80fd54a5",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Közönséges és vegyes törtek"
+      ],
+      "alt": "Pékség pultján két egész pite és egy harmadik, amelyből egy szelet hiányzik.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cosy bakery counter: two whole round fruit pies and a third pie with one slice missing, cut into equal slices, a cake server lifting a piece, warm morning light, a small toy race car parked playfully beside the plates. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-796de1b444b9cb62",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Műveleti sorrend - 5. osztály"
+      ],
+      "alt": "Konyhapulton sorba rakott tálak és hozzávalók, egy kisebb tál a nagyobba illesztve.",
+      "aspect_ratio": "3:2",
+      "prompt": "A wooden kitchen counter where a pre-teen follows a recipe step by step: ingredients lined up in a clear order from left to right, a small bowl nested inside a larger bowl, eggs being whisked first, flour waiting, a mixing spoon. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-72dae5ec1d1d0392",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Műveleti sorrend tanulása"
+      ],
+      "alt": "Műhelyasztalon fogaskerék-gépezet, a kerekek átlátszó dobozokban, egymásba ágyazva.",
+      "aspect_ratio": "3:2",
+      "prompt": "A workshop table with a colourful gear machine: small groups of turning gears enclosed in transparent boxes, one box nested inside a larger box, the gears driving each other in a chain from left to right, a pre-teen's hands adjusting a gear. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-03e0862e1d339a88",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Sorozatok és koordináta-rendszer | 5. osztály - Cyber Mission"
+      ],
+      "alt": "Világító padlórács két fényes tengellyel négy részre osztva, rajta fénypontok és drón.",
+      "aspect_ratio": "3:2",
+      "prompt": "A futuristic cyber mission room: a glowing floor grid divided into four quadrants by two bright crossing axes, luminous dots marking points that form a simple triangle, a small drone hovering above, and a row of glowing pillars rising in regular steps. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-402dfab3fad1f655",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Számolás római számokkal - 5. osztály"
+      ],
+      "alt": "Római piaci asztalon bronz abakusz gyöngyökkel, számolókövek és mozaikpadló.",
+      "aspect_ratio": "3:2",
+      "prompt": "An ancient Roman market stall: a bronze hand abacus with sliding beads, small piles of counting stones and plain coins, a colourful mosaic floor beneath, marble columns and a sunny courtyard behind, a merchant seen from behind arranging goods. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-c1c28235bab79f3b",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "⚽ Törtek - Focis matek 5. osztály"
+      ],
+      "alt": "Napsütéses focipálya egyenlő sávokra nyírt gyeppel, középen labdával.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny football pitch seen from above, the grass mowed into equal light and dark stripes that divide the field into even parts, a ball resting on the centre spot, distant young players, an orange cut into equal slices on the sideline bench. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-633424739d0dcdb1",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "A Naprendszer bolygói"
+      ],
+      "alt": "A Nap és körülötte a nyolc bolygó, a Szaturnusz gyűrűjével és a kisbolygóövvel.",
+      "aspect_ratio": "3:2",
+      "prompt": "The Sun glowing at one side and the eight planets of the Solar System arranged outward against deep starry space: small rocky inner planets, an asteroid belt, giant banded Jupiter, ringed Saturn and pale blue ice giants, vivid but realistic colours. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-62a2d60605d20ce8",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "A talaj"
+      ],
+      "alt": "Talajszelvény keresztmetszete gyökerekkel, gilisztákkal, sötét humusszal és kövekkel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cut-away cross-section of soil beneath a grassy meadow: dark crumbly humus near the top, roots and earthworms, a beetle, a lighter middle layer, and broken rock fragments at the bottom, a garden trowel resting on the grass above. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-63c4aa9223a9ede0",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "A talaj kialakulása, összetevői és termékenysége"
+      ],
+      "alt": "Fagytól repedezett sziklák mohával és zuzmóval, a törmelékben kis facsemete nő.",
+      "aspect_ratio": "3:2",
+      "prompt": "A rocky hillside showing how soil forms: frost-cracked boulders crumbling into smaller stones, green moss and orange lichen on the rock, a thin layer of dark earth in the cracks where a tiny sapling and wildflowers take root, morning sun. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-a9365070be367842",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "A talaj: kialakulása, összetétele és védelme"
+      ],
+      "alt": "Dombos szántóföldek teraszokkal és fasorokkal, sötét termőtalajjal.",
+      "aspect_ratio": "3:2",
+      "prompt": "Rolling Hungarian farmland protected from erosion: curved terraces and contour-ploughed fields of dark fertile soil, rows of trees and hedges as windbreaks, green crops holding the earth, a small stream below, wide sunny sky. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-08cf0cff4b35ee19",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "A víz körforgása a természetben"
+      ],
+      "alt": "Tenger, napfény, felhők a hegyek fölött, eső és a tengerbe visszafolyó folyó.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sweeping landscape showing the water cycle: bright sun warming a blue sea, soft mist rising, white clouds gathering over green mountains, gentle rain falling on a forest, and a winding river flowing back down to the sea. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-11a92d6ef928e718",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "Az égés"
+      ],
+      "alt": "Laborasztalon két gyertya, az egyik üvegbúra alatt kialszik, a másik fényesen ég.",
+      "aspect_ratio": "3:2",
+      "prompt": "A safe classroom experiment on a wooden lab table: two candles, one covered by an upturned glass jar with its flame fading, the other burning brightly in open air, a rusty iron nail and a tuft of steel wool beside them. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-45b63f3e854829c0",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "Zöldségek növényi szervei és fejlődése"
+      ],
+      "alt": "Konyhakert paprikával, paradicsommal, káposztával, hagymával és földben látszó krumplival.",
+      "aspect_ratio": "3:2",
+      "prompt": "A summer vegetable garden bed: red peppers and ripe tomatoes on green plants, a round cabbage, onion and garlic tops, carrots and parsley with feathery leaves, and a cut-away view of the soil showing potato tubers under one plant. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-ae27d6a4429a6f56",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természetismeret"
+      ],
+      "keywords": [
+        "természetismeret — 5. osztály"
+      ],
+      "alt": "Alföldi táj sekély szikes tóval, fehér sós talajjal és sötét termőfölddel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A wide Hungarian Great Plain landscape: a shallow alkaline lake ringed by whitish salt-crusted ground, dark fertile fields of grassland soil in the distance, an oak woodland on one side, grey cattle grazing far away, a big open sky. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-a69c8a95cbb9657f",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természettudomány"
+      ],
+      "keywords": [
+        "5. osztály - Környezetünk anyagai - 5. osztály tananyag"
+      ],
+      "alt": "Réti kísérleti asztal: rétegezett talajos üveg, oldódó cukor a vízben, kis gyertya.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny outdoor nature table: a glass jar with layers of soil, a glass of water with a sugar cube dissolving, a small candle flame in a holder, and a bright kite flying in the breeze over the meadow behind, showing earth, water, air and fire. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-5159ff9077d39d6e",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természettudomány"
+      ],
+      "keywords": [
+        "A mézelő méh"
+      ],
+      "alt": "Mézelő méh egy virágon, mögötte fa méhkaptár és arany lépes méz.",
+      "aspect_ratio": "3:2",
+      "prompt": "A honeybee collecting nectar on a bright yellow flower in close-up, pollen on its legs, a wooden beehive in a sunny meadow behind, a golden honeycomb frame dripping honey on a crate, more bees flying between flowers. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-fe0d6dddd3f2a36f",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természettudomány"
+      ],
+      "keywords": [
+        "A virágos növények - 5. osztály"
+      ],
+      "alt": "Átlátszó cserépben virágzó növény látható gyökérzettel, a virágon méh.",
+      "aspect_ratio": "3:2",
+      "prompt": "A flowering plant in a transparent glass pot so its whole body is visible: white roots in the soil, a green stem, broad leaves catching sunlight, an open flower with stamens and pistil, a bee landing for pollination, soft garden background. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-4d1d1fe463a6347e",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természettudomány"
+      ],
+      "keywords": [
+        "Melyik szervét fogyasztjuk zöldségféléinknek?"
+      ],
+      "alt": "Fa asztalon csoportosítva répa, petrezselyem, hagyma, káposzta, krumpli, paprika.",
+      "aspect_ratio": "3:2",
+      "prompt": "A harvest table on a farmhouse porch with vegetables grouped by the part we eat: carrots and parsley roots, an onion bulb and garlic, a cabbage with layered leaves, potatoes still earthy, and red peppers and tomatoes, in wicker baskets. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-e7d7a314177937c6",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Természettudomány"
+      ],
+      "keywords": [
+        "Növények testfelépítése"
+      ],
+      "alt": "Kék vízben álló fehér virág kékülő szirmokkal, mellette napfényes cserepes növény.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright windowsill experiment: a white flower and a celery stalk standing in a glass of blue-coloured water, their petals and veins turning blue, beside a potted green plant bathed in sunlight with tiny oxygen bubbles rising from a leaf in a water dish. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-a85a917e4d198c08",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "5. Osztály Történelem görögország"
+      ],
+      "alt": "Akropolisz templomai a dombon az ókori Athén fölött, háttérben a tenger és szigetek.",
+      "aspect_ratio": "3:2",
+      "prompt": "The Acropolis of ancient Athens on its rocky hill, white marble temples with columns gleaming in the sun, the city's terracotta rooftops below, olive groves, and the blue Aegean Sea with islands on the horizon, small figures walking far away. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-c07b1a27035e963d",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "5. osztály - Honfoglalás ötödik osztály"
+      ],
+      "alt": "Lovas magyarok szekerekkel kelnek át egy ködös hegyhágón napfelkeltekor.",
+      "aspect_ratio": "3:2",
+      "prompt": "Ancient Magyar horsemen and families with covered carts and felt tents crossing a misty Carpathian mountain pass at sunrise, seen from behind and far away, a large falcon soaring above the green valley below, plain unmarked pennants, wide calm sky. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-5e4178f80dcb287e",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "5. osztály - Árpád-kori királyok: I. László, Könyves Kálmán, II. András"
+      ],
+      "alt": "Román kori kővár a dombon, lovag fehér lovon, előtérben korona és pecsétes tekercs.",
+      "aspect_ratio": "3:2",
+      "prompt": "A Romanesque stone royal castle on a green hill above a river in the twelfth century, a lone knight on a white horse seen from behind riding up the path, a jeweled crown on a velvet cushion and a sealed parchment scroll with a plain gold seal on a stone ledge in the foreground. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-f08b23c9ac8d687f",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "5. osztály - ĐURAĐ (GYÖRGY) BRANKOVIĆ"
+      ],
+      "alt": "Sok tornyos középkori erőd a széles Duna partján, aranyló esti fényben.",
+      "aspect_ratio": "3:2",
+      "prompt": "The massive medieval Smederevo fortress with many square towers rising from the bank of the wide Danube at golden hour, a small wooden boat drifting on calm water, gentle hills on the far shore, plain unmarked pennants on the towers, no people close up. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-fe66fe6aee6315bc",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "A kereszténység és az iszlám - Témazáró tananyag 5. osztály"
+      ],
+      "alt": "Mediterrán kisváros, ahol egy kőtemplom harangtornya és egy kupolás mecset áll egymás közelében.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunlit medieval Mediterranean hillside town where a Romanesque stone church with a bell tower and a domed mosque with a slender minaret stand near each other, cypress trees, a quiet monastery cloister garden in the foreground, tiny distant figures seen from behind. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-ea3ada2952927e47",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Az emberré válás folyamata - 5. osztály"
+      ],
+      "alt": "Alkonyati szavanna akáciafákkal, ősemberek csoportja tűz körül, előtérben kőeszközök.",
+      "aspect_ratio": "3:2",
+      "prompt": "A golden African savanna at dusk with acacia trees, a small group of early humans seen from far away and from behind gathered around a crackling campfire near a rocky shelter, simple stone hand axes lying on a flat rock in the foreground. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-be85b8b2c3bf6ac4",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Az időszámítás és az emberiség kezdetei"
+      ],
+      "alt": "Stonehenge kőköre hajnalban a halványuló holdsarlóval, előtérben homokóra és napóra.",
+      "aspect_ratio": "3:2",
+      "prompt": "The ancient stone circle of Stonehenge at dawn with a pale crescent moon still visible in the pink sky, the first sunrays passing between the standing stones, a simple hourglass and a small sundial with plain tick marks resting on the grass in the foreground. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-f6a3a36714a5c681",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Az ókori Egyiptom"
+      ],
+      "alt": "Vitorlás csónak a Níluson, öntözött zöld földek, a háttérben a gízai piramisok.",
+      "aspect_ratio": "3:2",
+      "prompt": "The Nile river in ancient Egypt in warm morning light, a wooden sailing boat on the water, green irrigated fields with small canals and a shaduf water lift on the bank, the pyramids of Giza rising beyond palm trees under a clear sky, farmers far away from behind. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-835581f017730132",
+      "kind": "cover",
+      "band": "adventure",
+      "subjects": [
+        "Ének-zene"
+      ],
+      "keywords": [
+        "Hangközök"
+      ],
+      "alt": "Lépcsőszerűen emelkedő színes xilofon egy napos zeneteremben, rajta két ütő.",
+      "aspect_ratio": "3:2",
+      "prompt": "A colourful wooden xylophone whose bars rise like a staircase toward the window of a sunny music room, a pre-teen seen from behind holding two felt mallets over two bars, a small brass tuning fork nearby, soft sound ripples shown as gentle glowing circles in the air. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-7adfe10309e4d9e9",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Angol 6. osztály – a / an / some / any"
+      ],
+      "alt": "Konyhaasztal felülről: alma, tojások, szendvicsek, tej, rizs és liszt címke nélküli edényekben.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright kitchen table seen from above with countable and uncountable foods side by side: a single red apple, a few eggs in a bowl, sandwiches on a plate, a jug of milk, a glass jar of rice, a sack of flour and a heap of sugar in plain unlabelled containers. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-4b27ba3194639217",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "Present Simple és az időhasználat - 6. osztály angol"
+      ],
+      "alt": "Napfényes reggel: vekker, iskolatáska, reggeli az asztalon, a gyerek a cipőjét köti.",
+      "aspect_ratio": "3:2",
+      "prompt": "A pre-teen's everyday school morning in a sunny bedroom: an unmade bed, a round alarm clock with simple tick marks, a backpack by the door, a bowl of cereal and orange juice on a small table, the child seen from behind tying shoelaces. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-1fd6dc0cd0dd1f3a",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "6. osztály - Oszthatóság – Matek 6."
+      ],
+      "alt": "Kavicsok egyenlő sorokba és téglalapokba rendezve egy fa asztalon, mellettük egy szita.",
+      "aspect_ratio": "3:2",
+      "prompt": "Smooth river pebbles on a wooden workshop table arranged into neat equal rows and rectangles of different sizes, a few leftover pebbles that fit no rectangle set apart, a wooden kitchen sieve and small cloth bags beside them, warm window light. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-ab4bfc331d077291",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "6. osztályos matematika gyakorló feladatlap"
+      ],
+      "alt": "Cukrászdapult süteményekkel, pirosra festett kockatorony, az ablakon túl kerítéses veteményes.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny pastry-shop counter with trays of Hungarian cream slices and layered walnut squares, beside it a big cube built from small wooden cubes painted red on the outside, and through the window a rectangular fenced vegetable garden with a gate and a bicycle leaning on it, no price tags. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-6ad2c2a8cef24bd2",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "6. évfolyam matematika feladatlap – megoldási stratégiák"
+      ],
+      "alt": "Piaci stand gyümölccsel és mérleggel, mérőszalag és mérőkancsó, távolban piros kenu.",
+      "aspect_ratio": "3:2",
+      "prompt": "A lively open-air market stall with baskets of apples, potatoes and peppers, an old balance scale with brass weights weighing fruit, a measuring tape and a glass measuring jug of water on the counter, a red canoe on a river in the distance, no price tags or signs. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-ebc19188e55dfece",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Oszthatóság 3-mal és 9-cel"
+      ],
+      "alt": "Színes fagyöngyök hármas és kilences csoportokba rendezve, mellettük kilencüreges tartó.",
+      "aspect_ratio": "3:2",
+      "prompt": "Colourful wooden beads on a workshop table sorted into neat groups of three and larger square groups of nine, an empty tray with nine hollows being filled, a few odd beads left over at the side, warm light and a calm uncluttered background. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-2963bbd6cae10340",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Törtek, százalék, arányosság, szögek, téglalap, átlag és egész számok"
+      ],
+      "alt": "Szeletekre vágott torta, háromszög vonalzó, almás mérleg és hőmérő a deres ablaknál.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny table with a round cake cut into equal slices, a triangular wooden ruler, a small rectangular garden plot marked with string and pegs, a basket of apples on a balance scale and an outdoor thermometer with plain tick marks hanging by a frosty window. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-e1499f91f33d24e7",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Törtek, százalékok, sebesség, arányok és számolási stratégiák"
+      ],
+      "alt": "Szeletelt pizza pikniktakarón, L alakú gyep, golyós befőttesüvegek, távolban kerékpáros.",
+      "aspect_ratio": "3:2",
+      "prompt": "A pizza cut into equal slices on a picnic blanket beside an L-shaped patch of fresh green lawn being sown with grass seed, two glass jars holding marbles in different proportions, and a cyclist riding at steady speed along a straight country road far in the background. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-db9a17375c868ce1",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Természettudomány"
+      ],
+      "keywords": [
+        "A vulkánok – vulkáni működés"
+      ],
+      "alt": "Alkonyatkor működő kúpos vulkán izzó lávafolyammal, előtérben bazaltoszlopok.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cone-shaped volcano erupting gently at dusk with glowing orange lava flowing down its dark slopes and a plume of ash rising, seen from a safe distance across a quiet valley, dark basalt columns and pumice stones in the foreground. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-fd45208a875b8d4c",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "A középkori Magyar Királyság fénykora"
+      ],
+      "alt": "A visegrádi királyi palota és fellegvár a Dunakanyar fölött, előtérben aranyérmék.",
+      "aspect_ratio": "3:2",
+      "prompt": "The Gothic royal palace and hilltop citadel of Visegrád above the Danube bend in late-afternoon light, a handful of shiny plain gold coins without markings and a small wooden chest on a stone windowsill in the foreground, distant boats on the river. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-70b3a30a44c29e04",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Első károly magyar király"
+      ],
+      "alt": "Középkori bányaváros erdős hegyek közt, bányászok érccel, előtérben friss aranyérmék.",
+      "aspect_ratio": "3:2",
+      "prompt": "A medieval Hungarian mining town nestled in forested mountains, miners far away pushing a wooden cart of ore from a mine entrance, a mint workshop with a glowing furnace, and a pile of freshly struck plain gold coins on a wooden table in the foreground. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-fef89d4ca3525156",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Hunyadi János, a kormányzó"
+      ],
+      "alt": "Középkori erőd magas parton két folyó találkozásánál, előtérben bronz harang.",
+      "aspect_ratio": "3:2",
+      "prompt": "The great medieval fortress of Nándorfehérvár on a high bluff where two wide rivers meet, seen at noon from far away, plain unmarked banners on its towers, and in the foreground a large bronze church bell hanging in a wooden belfry under a calm sunny sky. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-941a5f3f690694c5",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Mezopotámia: folyóvölgyi civilizáció"
+      ],
+      "alt": "Lépcsőzetes vályogtégla zikkurat két folyó között, csatornák és zöld árpaföldek.",
+      "aspect_ratio": "3:2",
+      "prompt": "A great stepped mud-brick ziggurat rising above the flat land between two rivers in ancient Mesopotamia, irrigation canals and green barley fields, palm trees, a reed boat on the river, small figures far away from behind, warm golden evening light. Adventurous, warm, lively mood for pre-teens, not babyish."
+    },
+    {
+      "id": "cover-l-cad2209d918eb8d3",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Informatika"
+      ],
+      "keywords": [
+        "Informatika - ChatGPT Használata Kezdőknek"
+      ],
+      "alt": "Laptop egy nyugodt asztalon, képernyőjén elvont buborékformák, fölötte fénylő hálózat.",
+      "aspect_ratio": "3:2",
+      "prompt": "A calm modern desk by a window with a laptop whose screen shows only soft abstract rounded bubble shapes, a glowing network of light threads and nodes floating above it like a thought, a closed notebook and a cup of tea beside it, no logos, no text. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-02f8c09c5a1a9ae2",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Negatív számok kivonása"
+      ],
+      "alt": "Tóba nyúló stég, vízbe merülő rovátkás mérőoszlop, alatta búvár, fölötte sirály.",
+      "aspect_ratio": "3:2",
+      "prompt": "A wooden pier on a calm lake with a tall measuring pole with plain tick marks standing half above and half below the waterline, a diver swimming below the surface and a seagull hovering above, a row of stepping stones crossing the water, clear morning light. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-9b8d671aa94a73e4",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Az időszámítás és az emberiség kezdetei"
+      ],
+      "alt": "Hajnali táj távolodó ősemberekkel, előtérben pergamentekercs, homokóra és ammonitesz.",
+      "aspect_ratio": "3:2",
+      "prompt": "A vast dawn landscape where a small band of early humans, seen from far behind, walk out of the savanna toward distant mountains, a crescent moon fading in the sky, and in the foreground a rolled parchment scroll, an hourglass and a fossil ammonite on a flat rock. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-b8d65b166aac1aa0",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem és társadalmi ismeretek"
+      ],
+      "keywords": [
+        "Család és nemzeti identitás"
+      ],
+      "alt": "Többgenerációs család a kanapén egy régi fényképalbumot nézeget, a falon családfa.",
+      "aspect_ratio": "3:2",
+      "prompt": "A warm living room where a multigenerational family, seen from behind, sits together on a sofa looking through an old photo album, a large hand-painted family tree with small blank frames hanging on the wall, a red-white-green ribbon cockade resting on a shelf. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-263096f3d895569d",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Angol nyelv"
+      ],
+      "keywords": [
+        "8. Osztály Green war novell"
+      ],
+      "alt": "Két tinédzser palántákat ültet egy szürke belvárosi utcán, a szomszédok locsolókannával segítenek.",
+      "aspect_ratio": "3:2",
+      "prompt": "Two teenagers seen from behind planting vegetable seedlings in raised beds along a grey city high street in early morning, neighbours joining with watering cans, bamboo and green plants spreading over concrete, a tall building with hanging gardens in the background, no signs or shop names. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-38176cb11693d80f",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Biológia"
+      ],
+      "keywords": [
+        "8. Osztály Az ember testfelépítése és mozgása"
+      ],
+      "alt": "Csontvázmodell és karizommodell egy világos laborban, az ablakon túl ugró sportoló.",
+      "aspect_ratio": "3:2",
+      "prompt": "An anatomical skeleton model standing in a bright biology lab beside a model of an arm showing biceps and triceps, and through the window a young athlete seen from behind leaping mid-stride on a sports track, soft daylight, uncluttered background. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-3cb7eab4006ea39a",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Biológia"
+      ],
+      "keywords": [
+        "8. Osztály TESZT Az anyagforgalom jelentősége és az előbél felépítése"
+      ],
+      "alt": "Kiegyensúlyozott étkezés teljes kiőrlésű kenyérrel, tojással, hallal, zöldséggel, gyümölccsel és vízzel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A healthy balanced meal arranged on a wooden table in bright clean daylight: whole-grain bread, boiled eggs, grilled fish, a bowl of nuts, fresh colourful vegetables, fruit and a glass of water, a sense of energy and nourishment for the growing body. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-240fa66ec522d1bc",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Biológia"
+      ],
+      "keywords": [
+        "8. osztály - Anyagforgalom és Légzés - Interaktív Tananyag"
+      ],
+      "alt": "Átlátszó emberi törzsmodell tüdővel, gyomorral és belekkel, mellette víz és alma.",
+      "aspect_ratio": "3:2",
+      "prompt": "A transparent anatomical torso model showing the lungs, windpipe, stomach and coiled intestines in soft colours, standing on a lab bench beside a glass of water and a fresh apple, gentle daylight and a calm uncluttered background. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-2337cfc3c3acb809",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Biológia"
+      ],
+      "keywords": [
+        "8.osztály  anyagforgalom jelentősége és az előbél felépítése"
+      ],
+      "alt": "Fogsor-modell fogkefével, körülötte citrom, méz, perec és csokoládé az ízekhez.",
+      "aspect_ratio": "3:2",
+      "prompt": "A still life about taste and chewing: a large model of a human jaw with healthy teeth and a toothbrush, surrounded by small bowls of lemon slices, honey, salted pretzels and dark chocolate for different tastes, a glass of milk and fresh fruit, bright clean light. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-dff9449d4b0a4acf",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Biológia"
+      ],
+      "keywords": [
+        "Légzőrendszer"
+      ],
+      "alt": "Áttetsző tüdőmodell elágazó hörgőkkel és léghólyagocskákkal, az ablakon túl futó.",
+      "aspect_ratio": "3:2",
+      "prompt": "A large translucent model of human lungs with bronchi branching like an upside-down tree into grape-like clusters of alveoli, on a lab bench by a window, and outside a runner seen from behind breathing cool morning air on a misty mountain trail. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-95ad7db1ee0cc5e7",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Biológia"
+      ],
+      "keywords": [
+        "🫁 Légzőrendszer - 8. osztály"
+      ],
+      "alt": "Házi tüdőmodell: műanyag palack két léggömbbel és gumihártyával, egy kéz húzza a hártyát.",
+      "aspect_ratio": "3:2",
+      "prompt": "A homemade lung model experiment on a lab table: a clear plastic bottle with two small balloons inside as lungs and a stretched rubber sheet at the bottom as the diaphragm, a hand gently pulling the sheet down, a glass of water nearby, bright daylight. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-89c54191c2da327f",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Digitális kultúra"
+      ],
+      "keywords": [
+        "🖥️ Tömbök és Véletlen Számok - Digitális Kultúra 8. osztály"
+      ],
+      "alt": "Egyforma fiókok hosszú sora színes golyókkal, mellettük golyókat keverő üvegdob és laptop.",
+      "aspect_ratio": "3:2",
+      "prompt": "A long row of identical small wooden drawers on a modern desk, each holding one marble of a different colour, a glass tumbler drum mixing marbles at random beside them, and a laptop screen glowing with soft abstract coloured bars, no text, no digits, no logos. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-124ee55e07186220",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Erkölcstan"
+      ],
+      "keywords": [
+        "A család és a nemzeti identitás - 8. osztály"
+      ],
+      "alt": "Három generáció piknikezik egy hatalmas tölgy alatt, egy ágon piros-fehér-zöld szalag.",
+      "aspect_ratio": "3:2",
+      "prompt": "A huge old oak tree with spreading roots on a hill above a Hungarian village at golden hour, three generations of a family seen from behind having a picnic in its shade, a red-white-green ribbon tied to a low branch, a church spire and fields in the distance. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-c2d06f2d3966cdc7",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Fizika"
+      ],
+      "keywords": [
+        "8. osztály - Fizika 8. - Elektromos áram"
+      ],
+      "alt": "Egyszerű áramkör a munkapadon: elem, kapcsoló, világító izzó, mellette gumikesztyű.",
+      "aspect_ratio": "3:2",
+      "prompt": "A simple electric circuit on a wooden workbench: a battery, a toggle switch and a glowing light bulb joined by copper wires, beside rubber insulating gloves, a screwdriver with an insulated handle and a coil of intact cable, warm workshop light, no labels. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-f2f69977a4fef989",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Fizika"
+      ],
+      "keywords": [
+        "8. osztályos hőtan"
+      ],
+      "alt": "Pohárban olvadó jégkockák, gőzölgő vízforraló, jégvirágos ablak, kint sínpár.",
+      "aspect_ratio": "3:2",
+      "prompt": "A kitchen window still life about states of matter: ice cubes melting in a glass of water, a kettle on a stove releasing steam, frost patterns on the window pane, and outside a railway track with small expansion gaps between the rails. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-164b6c39842dcd33",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Fizika"
+      ],
+      "keywords": [
+        "A testek elektromos állapota"
+      ],
+      "alt": "Feldörzsölt léggömb felé emelkedő hajszálak, papírdarabkákat vonzó vonalzó.",
+      "aspect_ratio": "3:2",
+      "prompt": "A teenager seen from behind holding a rubbed balloon above their head as hair strands rise toward it, beside them a plastic ruler lifting tiny scraps of paper from a table and a woollen sweater giving off faint sparks in a dim room. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-d3049baab869a724",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Fizika"
+      ],
+      "keywords": [
+        "Elektromosságtan"
+      ],
+      "alt": "Üvegburás elektroszkóp széttartó lemezekkel, dörzsölt rúd és világító atommodell.",
+      "aspect_ratio": "3:2",
+      "prompt": "A glass-dome electroscope with two thin metal leaves spread apart on a lab bench, a rubbed plastic rod beside it, a glowing model of an atom with a nucleus and orbiting electrons floating above, and a small lit bulb in a simple circuit in the background. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-d869c59f1f7c09f5",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Fizika"
+      ],
+      "keywords": [
+        "Energia és energiaváltozások"
+      ],
+      "alt": "Fatüzelésű tűzhelyen olvadó jég hőmérővel, gőzölgő kanna, vízben hűlő acélrúd.",
+      "aspect_ratio": "3:2",
+      "prompt": "A pot of ice slowly melting on a wood-burning stove with a glass thermometer with plain tick marks standing in it, a kettle releasing steam, a hot steel bar cooling in a bowl of water and a basket of firewood nearby, warm cosy light. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-311cae2b0d78d3c1",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Fizika"
+      ],
+      "keywords": [
+        "Több fogyasztó az áramkörben | 8. osztály Fizika"
+      ],
+      "alt": "Esti nappali világító csillárral, az ablakon karácsonyi égősor, egy izzó a párkányon.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cosy living room in the evening with a chandelier of several glowing bulbs hanging from the ceiling and a string of small warm Christmas lights draped along a window, one bulb removed and lying on the sill, a battery and wires on a small table. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-5968c248748e604e",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Francia nyelv"
+      ],
+      "keywords": [
+        "Október 7. – Fontos dátum Franciaországban és a világban (Le 7 octobre – Une date importante en France et dans le monde)"
+      ],
+      "alt": "Pamutnövény és fa rózsafüzér egy kőpárkányon, mögötte gótikus templom őszi fényben.",
+      "aspect_ratio": "3:2",
+      "prompt": "A quiet autumn scene in a French village: a cotton plant with fluffy white bolls in a terracotta pot on a stone windowsill, a wooden rosary resting beside it, and beyond the window a Gothic church and workers seen from far away walking home along a tree-lined lane in golden light. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-5996ac0210ed5c54",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Francia nyelv"
+      ],
+      "keywords": [
+        "🇫🇷 8. Osztályos Francia Témazáró"
+      ],
+      "alt": "Napos párizsi tér: éneklő lány, zongorázó fiú, család kiskutyával, barátok kávézóasztalnál.",
+      "aspect_ratio": "3:2",
+      "prompt": "A lively Parisian square on a sunny day where people seen from a distance do varied everyday actions: a girl singing, a boy playing an outdoor piano, a family with a small dog, friends exchanging gifts at a café table, plane trees and cream stone buildings, no signs or shop names. Mature, inspiring mood for young teenagers, no childish cartoon look."
+    },
+    {
+      "id": "cover-l-c12a49e5d7cede97",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Földrajz"
+      ],
+      "keywords": [
+        "8. Osztály földrajz Magyarország gazdasága"
+      ],
+      "alt": "Aranyló búzamező kombájnnal, pékség friss kenyerekkel és távoli gyár a láthatáron.",
+      "aspect_ratio": "3:2",
+      "prompt": "A wide Hungarian countryside view at golden hour: a ripe wheat field with a combine harvester, a small village bakery with fresh loaves on a wooden cart in the foreground, and a distant modern factory and solar panels on the horizon, the journey of bread from field to table. Mature, inspiring mood for young teenagers, no childish cartoon look. No text or signs."
+    },
+    {
+      "id": "cover-l-410aa16637e5ebf0",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Földrajz"
+      ],
+      "keywords": [
+        "Az Alpok térsége: Ausztria és Svájc"
+      ],
+      "alt": "Alpesi U-alakú völgy türkiz folyóval, faházakkal, havas csúcsokkal és gáttal elzárt tóval.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sweeping alpine valley in summer: a U-shaped glacial valley with a turquoise river flowing from a distant glacier, green meadows dotted with wooden chalets, snow-capped peaks above, and a hydroelectric dam holding a calm mountain lake. Mature, inspiring mood for young teenagers, no childish cartoon look. Uncluttered sky, no text or signs."
+    },
+    {
+      "id": "cover-l-5bdf900f88b497d1",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Földrajz"
+      ],
+      "keywords": [
+        "Csehország · Lengyelország · Románia – Földrajz 8. osztály"
+      ],
+      "alt": "Ködös kárpáti hegygerincek, kanyargó folyó és piros tetős óváros kőhíddal a távolban.",
+      "aspect_ratio": "3:2",
+      "prompt": "A panoramic Central European landscape: forested Carpathian ridges in soft morning mist, a wide river winding through a green plain toward a distant old town with red rooftops, church spires and a stone bridge. Mature, inspiring mood for young teenagers, no childish cartoon look. Calm composition, no flags, no text or signs."
+    },
+    {
+      "id": "cover-l-95b96b9807866982",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Földrajz"
+      ],
+      "keywords": [
+        "Nagy-Britannia és Franciaország – 8. osztályos földrajz"
+      ],
+      "alt": "Fehér krétasziklák a tengerparton, átkelő komp és a túlparton levendulamezők hajnalban.",
+      "aspect_ratio": "3:2",
+      "prompt": "A view across a calm sea channel at sunrise: white chalk cliffs and green rolling fields on one side, a distant opposite coastline with lavender fields and a stone farmhouse, a ferry crossing the water between them. Mature, inspiring mood for young teenagers, no childish cartoon look. Soft clouds, no flags, no text or signs."
+    },
+    {
+      "id": "cover-l-4a8edc9a8bc2be3c",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Informatika"
+      ],
+      "keywords": [
+        "Programozási alapismeretek - GitHub Kezdőknek"
+      ],
+      "alt": "Laptop egy íróasztalon, fölötte elágazó, világító fénycsomópontok egy felhő felé futnak.",
+      "aspect_ratio": "3:2",
+      "prompt": "A calm modern desk with a laptop whose screen shows soft abstract glowing shapes; above it a luminous branching tree of light nodes rises like a family tree of versions, linked by thin glowing lines to a soft cloud shape. Mature, inspiring mood for young teenagers, no childish cartoon look. No logos, no brand interface, no code or text."
+    },
+    {
+      "id": "cover-l-1524cc22c0e84a24",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Informatika"
+      ],
+      "keywords": [
+        "Tömbök, ciklusok, feltételek"
+      ],
+      "alt": "Sorba rendezett üvegdobozok dobókockákkal, körülöttük körbefutó és kettéváló fénycsík.",
+      "aspect_ratio": "3:2",
+      "prompt": "A row of ten identical translucent glass boxes lined up on a wooden table, each holding a small object such as a dotted die or a marble, a soft glowing loop of light circling the row and a light path forking in two directions. Mature, inspiring mood for young teenagers, no childish cartoon look. No letters, numbers or text."
+    },
+    {
+      "id": "cover-l-ab16511c3410a5fa",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Irodalom"
+      ],
+      "keywords": [
+        "8. Osztály Ady endre tananyag teljes"
+      ],
+      "alt": "Századfordulós párizsi kávézó alkonyatkor, egy kalapos férfi háttal ül a gázlámpák fényében.",
+      "aspect_ratio": "3:2",
+      "prompt": "An early 1900s Parisian street café at dusk: a lone gentleman in a dark coat and hat seen from behind at a small table with an inkwell and a closed notebook, gas lamps glowing, the Seine and grey rooftops in soft haze. Mature, inspiring mood for young teenagers, no childish cartoon look. No signs or text."
+    },
+    {
+      "id": "cover-l-a4fc68dcd7d4787a",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Kémia"
+      ],
+      "keywords": [
+        "8 osztályos tananyag Savak és savmaradékok"
+      ],
+      "alt": "Laborasztal félbevágott citrommal és szivárványszínű folyadékokat tartalmazó kémcsősorral.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright chemistry lab bench with halved lemons, a small glass bottle of vinegar and a row of test tubes holding liquids in a smooth rainbow of colours from red to purple, a strip of indicator paper beside them, gloved hands holding a dropper. Mature, inspiring mood for young teenagers, no childish cartoon look. No labels or text."
+    },
+    {
+      "id": "cover-l-5f713c1fae64b47d",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Kémia"
+      ],
+      "keywords": [
+        "8. osztály - Reakciótípusok - Kémia Kaland"
+      ],
+      "alt": "Pezsgő főzőpohár, sárga csapadékos kémcső, rozsdás lánc, patinás réz és láng egy asztalon.",
+      "aspect_ratio": "3:2",
+      "prompt": "A chemistry demonstration table showing several reactions at once: a glass beaker fizzing with rising bubbles, a test tube with a cloudy yellow precipitate settling, a rusty iron chain beside a green-patinated copper ornament, and a small warm flame under a flask. Mature, inspiring mood for young teenagers, no childish cartoon look. No labels or text."
+    },
+    {
+      "id": "cover-l-5bc72b72d8bf8c34",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Kémia"
+      ],
+      "keywords": [
+        "Molekulák, ionok és vegyületek - 8. osztály"
+      ],
+      "alt": "Golyós-pálcás ionrácsmodell, vízmolekula-modell és csillogó sókristályok sötét palalapon.",
+      "aspect_ratio": "3:2",
+      "prompt": "A crisp ball-and-stick model of a cubic salt crystal lattice with alternating large and small coloured spheres, beside it a small water molecule model and a heap of sparkling salt crystals on a dark slate surface, soft studio light. Mature, inspiring mood for young teenagers, no childish cartoon look. No labels or text."
+    },
+    {
+      "id": "cover-l-3e6d1e328ae2163c",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Magyar irodalom"
+      ],
+      "keywords": [
+        "8. osztály - Nyugat költői - Tananyag"
+      ],
+      "alt": "Hajnali budapesti körút századfordulós bérházakkal, villamossínekkel és távolodó alakkal.",
+      "aspect_ratio": "3:2",
+      "prompt": "Dawn over an early 20th-century Budapest boulevard: tall eclectic apartment buildings glowing pink and gold in the first sunlight, empty tram tracks, a lone figure in a long coat walking away, and a cosy literary café window warmly lit. Mature, inspiring mood for young teenagers, no childish cartoon look. No signs or text."
+    },
+    {
+      "id": "cover-l-8c1d1175746a2c3f",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Magyar irodalom"
+      ],
+      "keywords": [
+        "Modern Magyar Líra | 8. osztály"
+      ],
+      "alt": "Napnyugtai ablak színes tintásüvegekkel az asztalon, kint magyar falusi táj templomtoronnyal.",
+      "aspect_ratio": "3:2",
+      "prompt": "An open window of a quiet early 20th-century study at sunset, a wooden desk with several small bottles of coloured ink glowing in the light, and beyond the window a peaceful Hungarian landscape of fields, a village church tower and a winding river. Mature, inspiring mood for young teenagers, no childish cartoon look. No readable pages or text."
+    },
+    {
+      "id": "cover-l-8a6c4662f667c644",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Magyar nyelv"
+      ],
+      "keywords": [
+        "8. osztály nyelvtan határozók"
+      ],
+      "alt": "Két hátizsákos kamasz kutyával indul reggel egy vasúti peronról, távolban közeledő vonat.",
+      "aspect_ratio": "3:2",
+      "prompt": "Two teenagers with backpacks setting off together in the early morning from a small country railway platform, a dog trotting beside them, a train approaching in the distance and a winding path toward green hills, a scene full of when, where and with whom. Mature, inspiring mood for young teenagers, no childish cartoon look. No signs or text."
+    },
+    {
+      "id": "cover-l-999e436d210a0daf",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Magyar nyelv"
+      ],
+      "keywords": [
+        "Egyszerű mondat elemzése – 8. osztály"
+      ],
+      "alt": "Napos kertben egy kamasz lány piros labdát dob egy ugró kutyának egy öreg almafa alatt.",
+      "aspect_ratio": "3:2",
+      "prompt": "A single clear everyday moment: a teenage girl in a sunny garden throws a red ball to a jumping dog under an old apple tree, a calm uncluttered scene that reads like one simple sentence with a doer, an action and an object. Mature, inspiring mood for young teenagers, no childish cartoon look. No text."
+    },
+    {
+      "id": "cover-l-693f9506673c5b68",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Magyar nyelv"
+      ],
+      "keywords": [
+        "Határozók A, Á - 8. osztályos nyelvtan"
+      ],
+      "alt": "Kamasz fiú biciklizik naplementekor a folyóparti úton egy távoli híd és város felé.",
+      "aspect_ratio": "3:2",
+      "prompt": "A teenage boy cycling along a riverside path at sunset toward a distant stone bridge and small town, his long shadow stretching across the path, birds flying overhead, a moving scene full of where, when and how. Mature, inspiring mood for young teenagers, no childish cartoon look. No signs or text."
+    },
+    {
+      "id": "cover-l-a371f1f7f5278e3d",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Magyar nyelv"
+      ],
+      "keywords": [
+        "Összetett szavak"
+      ],
+      "alt": "Napkeltés ablakpárkány fogkefével, napraforgóval, esőkabáttal; a távolban világítótorony.",
+      "aspect_ratio": "3:2",
+      "prompt": "A cheerful still life by a window at sunrise: a toothbrush in a glass, a sunflower in a vase, a raincoat on a hook and a lighthouse visible on the distant coast, everyday objects whose names are built from two words. Mature, inspiring mood for young teenagers, no childish cartoon look. No text or labels."
+    },
+    {
+      "id": "cover-l-67200c6cbafd4372",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "8. Osztályos Matematika Témazáró | Interaktív Tananyag"
+      ],
+      "alt": "Piaci asztal mérleggel és almákkal, növekvő érmeoszlopokkal és egy szeletekre vágott pitével.",
+      "aspect_ratio": "3:2",
+      "prompt": "A small market table scene: a balance scale with red apples, stacks of plain unmarked coins growing taller one after another like savings earning interest, and a round pie cut into slices with one portion lifted out. Mature, inspiring mood for young teenagers, no childish cartoon look. No price tags, numbers or text."
+    },
+    {
+      "id": "cover-l-e7c9ec12d4ae7e0c",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "8. osztályos Matematika - Szöveges Feladatok"
+      ],
+      "alt": "Két kerékpáros közeledik egymás felé a vidéki úton, elöl fakocka és konyhai mérleg az asztalon.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunny countryside road where two cyclists ride toward each other from opposite villages, while in the foreground a wooden picnic table holds a solid wooden cube, a kitchen scale and a closed pocket notebook. Mature, inspiring mood for young teenagers, no childish cartoon look. No text or numbers."
+    },
+    {
+      "id": "cover-l-4d6305c83ed97eb2",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Algebra – Témazáró Felkészítő"
+      ],
+      "alt": "Egyensúlyban álló rézmérleg zárt dobozokkal és kockákkal, mellette négyzetekbe rendezett kockák.",
+      "aspect_ratio": "3:2",
+      "prompt": "A polished brass balance scale perfectly level on a wooden desk, small closed wooden boxes of unknown contents on one pan and stacks of plain cubes on the other, beside it cubes arranged into growing squares and one larger cube. Mature, inspiring mood for young teenagers, no childish cartoon look. No letters, numbers or text."
+    },
+    {
+      "id": "cover-l-4669b696c13694c8",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Geometriai Transzformációk – 8. osztály"
+      ],
+      "alt": "Hajnali tó tükrözi a fákat és a csónakházat, a parton vízikerék, a vízben sorban lépőkövek.",
+      "aspect_ratio": "3:2",
+      "prompt": "A still mountain lake at dawn perfectly mirroring trees and a wooden boathouse, a spoked water wheel turning at the shore, and identical stepping stones repeating at even intervals across the water, showing reflection, rotation and translation. Mature, inspiring mood for young teenagers, no childish cartoon look. No text."
+    },
+    {
+      "id": "cover-l-a8887124442112ba",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Hozzárendelések és függvények"
+      ],
+      "alt": "Ablakpárkányon sorban álló cserepes palánták, egyre magasabbak, tetejüket fénypontvonal köti össze.",
+      "aspect_ratio": "3:2",
+      "prompt": "A row of seedling pots on a sunny windowsill, each plant a little taller than the one before, a watering can beside them and soft dots of light connecting the plant tops into a smooth rising line. Mature, inspiring mood for young teenagers, no childish cartoon look. No numbers, labels or text."
+    },
+    {
+      "id": "cover-l-b5270f210795a28f",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Pitagorasz és a Koordináták Titkai"
+      ],
+      "alt": "Napsütötte görög udvar négyzethálós kövezettel, falnak támasztott létra és csomós kötélháromszög.",
+      "aspect_ratio": "3:2",
+      "prompt": "A sunlit ancient Greek courtyard paved with a square tile grid, a wooden ladder leaning against a whitewashed wall forming a right triangle with the ground, and a taut rope with evenly spaced knots stretched into a triangle on the tiles. Mature, inspiring mood for young teenagers, no childish cartoon look. No letters or text."
+    },
+    {
+      "id": "cover-l-117a1a45961d3e77",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Technika és tervezés"
+      ],
+      "keywords": [
+        "8. osztály - Csokis Muffin Készítés - Kezdőknek"
+      ],
+      "alt": "Konyhapult rácson hűlő csokis muffinokkal, keverőtálakkal, liszttel, tojással és fogpiszkálóval.",
+      "aspect_ratio": "3:2",
+      "prompt": "A bright home kitchen counter with freshly baked chocolate muffins cooling on a wire rack, one broken open with melting chocolate chips, two mixing bowls, flour, eggs and a wooden toothpick beside them, warm oven glow behind. Mature, inspiring mood for young teenagers, no childish cartoon look. No packaging labels or text."
+    },
+    {
+      "id": "cover-l-80178dc6dfb68108",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Természettudomány"
+      ],
+      "keywords": [
+        "8. osztály - Bolyai Természettudományi Felkészítő"
+      ],
+      "alt": "Cseppköves barlang előtti munkaasztal cérnával tekert ceruzákkal, üvegvázával és jeges ablaküveggel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A naturalist's workbench in front of a softly lit limestone cave with glistening stalactites and stalagmites; on the bench two pencils of different thickness wrapped with red thread, a freshly blown glass vase and a frosty window pane leaning nearby. Mature, inspiring mood for young teenagers, no childish cartoon look. No text or labels."
+    },
+    {
+      "id": "cover-l-40f741c5f3e66cdb",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "8. Osztály Az emberré válás folyamata és a történelem forrásai"
+      ],
+      "alt": "Őskori tábor alkonyatkor: távoli ősemberek a tűz körül, kőeszközök és sziklaeresz a síkság szélén.",
+      "aspect_ratio": "3:2",
+      "prompt": "A prehistoric camp at the edge of a savanna at dusk: a small group of early humans seen from far behind gathered around a glowing campfire, stone tools and animal hides near a rock shelter, distant herds grazing on the plain. Mature, inspiring mood for young teenagers, no childish cartoon look. No text."
+    },
+    {
+      "id": "cover-l-4277f399648a2527",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Az Ókori Kelet Civilizációi - 8. osztály"
+      ],
+      "alt": "Ókori folyóvölgy hajnalban nádhajókkal, öntözőcsatornákkal, vályogházakkal és zikkurattal.",
+      "aspect_ratio": "3:2",
+      "prompt": "A fertile river valley of the ancient Near East at sunrise: a wide river with reed boats, irrigation canals and green fields, mud-brick houses and a stepped ziggurat in the distance, a pyramid silhouette faint on the far horizon. Mature, inspiring mood for young teenagers, no childish cartoon look. No inscriptions or text."
+    },
+    {
+      "id": "cover-l-bc8729fc993e3c3e",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Az ókori Hellász - 8. osztály"
+      ],
+      "alt": "Tagolt görög partvidék olajligetekkel, dombtetői városállam templommal és ókori hajós kikötővel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A rugged Greek coastline in bright Aegean light: rocky hills dividing small valleys with olive groves, a walled hilltop city with a temple above a harbour of ancient wooden ships, and scattered islands on the deep blue sea. Mature, inspiring mood for young teenagers, no childish cartoon look. No text."
+    },
+    {
+      "id": "cover-l-1d0b87be5aca1944",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Az ókori Hellász II - 8. osztály"
+      ],
+      "alt": "Ókori Athén délutáni fényben: háttal álló polgárok a népgyűlés dombján, mögöttük az Akropolisz.",
+      "aspect_ratio": "3:2",
+      "prompt": "Ancient Athens in warm afternoon light: citizens in draped robes seen from behind gathered on a hillside assembly place facing a stone speaker's platform, the temple on the Acropolis rising in the background, olive trees at the edges. Mature, inspiring mood for young teenagers, no childish cartoon look. No inscriptions or text."
+    },
+    {
+      "id": "cover-l-6f4519c3409f976d",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Történelem"
+      ],
+      "keywords": [
+        "Ókori Keleti Civilizációk 2 - 8. osztály"
+      ],
+      "alt": "Selyembálákat vivő tevekaraván kanyargó úton ködös hegyek, teraszos földek és palota mellett.",
+      "aspect_ratio": "3:2",
+      "prompt": "Ancient Asia: a camel caravan carrying bundles of silk along a winding road through misty green mountains, past terraced rice fields and a distant palace with curved roofs, monsoon clouds gathering over the far river valley. Mature, inspiring mood for young teenagers, no childish cartoon look. No text or banners."
+    },
+    {
+      "id": "cover-l-e149450df972b7af",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Ének-zene"
+      ],
+      "keywords": [
+        "8. osztály - 🎸 Gitár Alapok - Balkezes Útmutató"
+      ],
+      "alt": "Balkezes kamasz akusztikus gitáron játszik, jobb kézzel fog, ballal penget, meleg lámpafényben.",
+      "aspect_ratio": "3:2",
+      "prompt": "A left-handed teenager seen from the side playing an acoustic guitar held mirrored for the left hand, fretting with the right hand and strumming with the left, sitting on a stool in a warm bedroom corner with soft lamp light. Mature, inspiring mood for young teenagers, no childish cartoon look. No chord charts, logos or text."
+    },
+    {
+      "id": "cover-l-4751049c894fd16e",
+      "kind": "cover",
+      "band": "studio",
+      "subjects": [
+        "Ének-zene"
+      ],
+      "keywords": [
+        "Magyar Népzene - 8. osztály"
+      ],
+      "alt": "Esti erdélyi pajta lámpásfényben, népviseletes zenekar hegedűvel, brácsával és nagybőgővel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A traditional Transylvanian village barn in the evening: a small folk band seen from behind in embroidered costumes playing fiddle, viola and double bass, a cimbalom and a wooden shepherd's flute resting nearby, warm lantern light on wooden beams. Mature, inspiring mood for young teenagers, no childish cartoon look. No text."
+    },
+    {
+      "id": "cover-l-2bc786c3c084c6e5",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "Biológia"
+      ],
+      "keywords": [
+        "9. osztály - Sejtmembrán, transzport, sejtmag, sejtosztódás – Biológia 9."
+      ],
+      "alt": "Sejthártya-metszet kettős lipidréteggel, csatornafehérjékkel és áthaladó részecskékkel.",
+      "aspect_ratio": "3:2",
+      "prompt": "A luminous cut-away model of a cell membrane: a double layer of rounded phospholipid heads with wavy tails, embedded channel proteins, tiny particles passing through, and a large cell nucleus glowing softly in the background. Serious, sophisticated, realistic mood for teenagers and adults. No labels or text."
+    },
+    {
+      "id": "cover-l-09185458b3afdc0e",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "Digitális kultúra"
+      ],
+      "keywords": [
+        "Programozási alapismeretek - Windows Fejlesztői Környezet"
+      ],
+      "alt": "Rendezett esti fejlesztői asztal monitorral, felirat nélküli billentyűzettel és teásbögrével.",
+      "aspect_ratio": "3:2",
+      "prompt": "A tidy modern developer desk at night: a widescreen monitor showing soft abstract coloured panels, glowing translucent cubes floating beside it like neatly organised folders, a keyboard with blank keys and a cup of tea under a desk lamp. Serious, sophisticated, realistic mood for teenagers and adults. No logos, no brand UI, no code text."
+    },
+    {
+      "id": "cover-l-6af6d640c84ae14a",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "Fizika"
+      ],
+      "keywords": [
+        "Mozgások vizsgálata feladatokon keresztül: sebesség, átlagsebesség, út–idő grafikon, szabadesés"
+      ],
+      "alt": "Egyenes vidéki úton közeledő kerékpáros és motoros, elöl egy almafáról lehulló alma.",
+      "aspect_ratio": "3:2",
+      "prompt": "A quiet countryside scene: a cyclist and a motorcyclist travelling toward each other on a long straight road between two distant villages, while in the foreground a red apple falls from a tree branch, caught mid-air above the grass. Serious, sophisticated, realistic mood for teenagers and adults. No signs or text."
+    },
+    {
+      "id": "cover-l-1320d9701c258a2a",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "Fizika"
+      ],
+      "keywords": [
+        "Mozgások, erők, lendület és hőtan feladatokon keresztül"
+      ],
+      "alt": "Befagyott tó naplementekor csúszó curlingkövekkel, egyikről a másikra ugró kutyával és holddal.",
+      "aspect_ratio": "3:2",
+      "prompt": "A frozen lake at winter sunset with polished granite curling stones gliding across smooth ice, a playful dog leaping from one stone to another, a sled resting on a gentle snowy slope and a pale moon rising above the hills. Serious, sophisticated, realistic mood for teenagers and adults. No text."
+    },
+    {
+      "id": "cover-l-84861b9d4b93cd87",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "Kémia"
+      ],
+      "keywords": [
+        "Ionvegyületek képlete – 9. osztály"
+      ],
+      "alt": "Ionrácsmodell, rozsdás vascsavar és konyhasókupac egy sötét laborasztalon hűvös fényben.",
+      "aspect_ratio": "3:2",
+      "prompt": "A large crystal lattice model of sodium chloride with alternating violet and green spheres, beside it a rust-covered iron bolt and a small heap of table salt crystals on a dark laboratory bench, cool clean light. Serious, sophisticated, realistic mood for teenagers and adults. No labels or text."
+    },
+    {
+      "id": "cover-l-e477f7fa9011accc",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "Kémia"
+      ],
+      "keywords": [
+        "Képletírás gyakorlása: molekulák, savak, savmaradékionok és ionvegyületek"
+      ],
+      "alt": "Analitikai mérleg fehér kristályokkal, körülötte molekulamodellek és címke nélküli savas üvegek.",
+      "aspect_ratio": "3:2",
+      "prompt": "A precise analytical balance on a laboratory bench weighing a small dish of white crystals, surrounded by ball-and-stick molecule models of different shapes and unlabelled glass bottles of clear acid solutions. Serious, sophisticated, realistic mood for teenagers and adults. No labels, numbers or text."
+    },
+    {
+      "id": "cover-l-3daf885047f977d6",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "Magyar irodalom"
+      ],
+      "keywords": [
+        "Az Íliászban megjelenő embereszmény"
+      ],
+      "alt": "Trója falai hajnalban, a parton görög hajók, egy páncélos hős háttal áll sátra mellett.",
+      "aspect_ratio": "3:2",
+      "prompt": "The plain of Troy at dawn: massive ancient city walls on the horizon, a Greek camp of beached wooden ships along the shore, and a lone bronze-armoured hero seen from behind standing by his tent, gazing at the sea. Serious, sophisticated, realistic mood for teenagers and adults. Peaceful, no fighting, no text."
+    },
+    {
+      "id": "cover-l-6d4ae617b4c91465",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Kéttagú kifejezések négyzete – kifejezéskártyák"
+      ],
+      "alt": "Fából kirakott nagy négyzet egy nagy és egy kis négyzetből, valamint két egyforma téglalapból.",
+      "aspect_ratio": "3:2",
+      "prompt": "A wooden puzzle board on a desk: a large square assembled from one big square tile, one small square tile and two equal rectangular tiles in contrasting wood colours, a few loose pieces beside it in soft daylight. Serious, sophisticated, realistic mood for teenagers and adults. No letters, numbers or text."
+    },
+    {
+      "id": "cover-l-11f57f0bb9cd8509",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "Matematika"
+      ],
+      "keywords": [
+        "Medve Szabadtéri Csapatverseny – gyakorló feladatsor"
+      ],
+      "alt": "Őszi park piknikasztalokkal, csapatban dolgozó diákokkal és ismétlődő töklámpás füzérrel.",
+      "aspect_ratio": "3:2",
+      "prompt": "An autumn park where small teams of teenagers seen from behind work together at picnic tables, a garland of glowing pumpkin lanterns in a repeating pattern hangs between trees, and a bar of chocolate squares lies on a table. Serious, sophisticated, realistic mood for teenagers and adults. No numbers or text."
+    },
+    {
+      "id": "cover-l-0e388e9e373563b8",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "biológia"
+      ],
+      "keywords": [
+        "Sejtosztódás, növényi sejtalkotók és a biológiai membránok"
+      ],
+      "alt": "Növényi sejt zöld színtestekkel és sejtfallal, mellette osztódó sejt széthúzódó kromoszómákkal.",
+      "aspect_ratio": "3:2",
+      "prompt": "A microscope-like composition: a large plant cell with green chloroplasts, a central vacuole and a firm cell wall, beside it a dividing cell whose paired chromosomes are pulled apart by fine spindle fibres, in soft luminous colours. Serious, sophisticated, realistic mood for teenagers and adults. No labels or text."
+    },
+    {
+      "id": "cover-l-28cc7e173b785891",
+      "kind": "cover",
+      "band": "laboratory",
+      "subjects": [
+        "Informatika"
+      ],
+      "keywords": [
+        "Programozási alapismeretek - VS Code & GitHub Fejlesztői Útmutató - Claude Code-dal"
+      ],
+      "alt": "Esti munkaállomás laptoppal és monitorral, mellette lebegő lakat és kulcs, elágazó fénycsíkok.",
+      "aspect_ratio": "3:2",
+      "prompt": "A calm modern workspace at dusk: a laptop and a second monitor showing soft abstract coloured panels, a small glowing padlock and key floating beside them, and threads of light branching and merging like a river delta into a soft cloud. Serious, sophisticated, realistic mood for teenagers and adults. No logos, no brand UI, no code text."
     }
   ]
 }

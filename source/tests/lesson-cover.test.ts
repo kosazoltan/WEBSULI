@@ -14,7 +14,9 @@ const own: DesignAsset = {
   src: `/design/studio/${coverId}.webp`, origin: "MI-generált, saját (Seedream 5.0 Pro)", model: "bytedance-seed/seedream-5-0-pro",
   promptHash: "0123456789abcdef", approvedAt: "2026-11-03T00:00:00.000Z",
 };
-const catalog = [...DESIGN_ASSET_CATALOG, own];
+/** A katalógus a leckeborítók nélkül (a választási szabály izolált vizsgálatához), és egy kézi leckeborítóval. */
+const base = DESIGN_ASSET_CATALOG.filter(a => !isLessonCoverId(a.id));
+const catalog = [...base, own];
 const ids = (list: readonly DesignAsset[]) => new Set(list.map(a => a.id));
 
 test("a tartalomkulcs ékezet-, írásjel- és kis-nagybetű-tűrő; más cím vagy sáv más kulcs", () => {
@@ -28,7 +30,7 @@ test("a tartalomkulcs ékezet-, írásjel- és kis-nagybetű-tűrő; más cím v
 });
 
 test("a katalógusban lévő tartalomkulcsú borító nyer a sávhős előtt; más lecke nem kapja", () => {
-  assert.equal(pickLessonArt(lesson, "studio", DESIGN_ASSET_CATALOG).hero?.kind, "hero", "nélküle sávhős");
+  assert.equal(pickLessonArt(lesson, "studio", base).hero?.kind, "hero", "nélküle sávhős");
   const art = pickLessonArt(lesson, "studio", catalog);
   assert.equal(art.cover?.id, coverId);
   assert.equal(art.hero, undefined);
@@ -42,7 +44,7 @@ test("a kézi leckeborító mentéskor megmarad (átnevezés után is), más sá
   assert.notEqual(computeLessonArt(renamed, "l1", ids(catalog), catalog)?.picture, coverId, "pin nélkül újraválasztás");
   assert.equal(computeLessonArt(renamed, "l1", ids(catalog), catalog, coverId)?.picture, coverId, "pin");
   assert.notEqual(computeLessonArt({ ...lesson, classroom: 9 }, "l1", ids(catalog), catalog, coverId)?.picture, coverId, "más sáv");
-  assert.notEqual(computeLessonArt(renamed, "l1", ids(DESIGN_ASSET_CATALOG), catalog, coverId)?.picture, coverId, "nincs a táblában");
+  assert.notEqual(computeLessonArt(renamed, "l1", ids(base), catalog, coverId)?.picture, coverId, "nincs a táblában");
   assert.notEqual(computeLessonArt(renamed, "l1", ids(catalog), catalog, "hero-studio")?.picture, "cover-l-0000000000000000", "nem leckeborító pin nem köt");
 });
 
@@ -68,4 +70,15 @@ test("a generátor 1K-s kérése fél áron megy, és csak 1K / 2K fogadható el
   assert.equal(parseResolution(undefined), "2K");
   assert.throws(() => parseResolution("4K"));
   assert.equal(estimateUsd(210, 0, "1K").toFixed(2), "9.45");
+});
+
+test("withLessonArt: a valódi katalógusból a Hunyadi-lecke a saját borítóját kapja, és az átnevezés után is megtartja", async () => {
+  const { withLessonArt } = await import("../server/design-assets");
+  const real = DESIGN_ASSET_CATALOG.find(a => a.id === coverId);
+  assert.ok(real, "a Hunyadi-lecke borítója a katalógusban");
+  const executor = { select: () => ({ from: async () => DESIGN_ASSET_CATALOG.map(a => ({ id: a.id })) }) } as never;
+  const fresh = await withLessonArt({ ...lesson, art: { picture: "hero-studio" } }, "l1", executor) as { art?: { picture?: string } };
+  assert.equal(fresh.art?.picture, coverId, "mentéskor a tartalomkulcsú borító");
+  const renamed = await withLessonArt({ ...lesson, title: "Hunyadi János kormányzósága", art: { picture: coverId } }, "l1", executor) as { art?: { picture?: string } };
+  assert.equal(renamed.art?.picture, coverId, "a kézi kép az újraválasztás után is marad");
 });
