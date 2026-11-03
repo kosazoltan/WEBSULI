@@ -51,6 +51,7 @@ import { eq, desc, gt, gte, lt, and, sql, inArray, getTableColumns } from "drizz
 import { assertBackupFilesHaveContent } from "./lib/backup-guard";
 import { logger } from "./lib/logger";
 import { coversByFile } from "@shared/lesson-cover";
+import { isPlaceholderDescription, teaserFromText } from "@shared/lesson-teaser";
 
 // PostgreSQL native arrays and jsonb - no JSON parsing helpers needed
 
@@ -423,16 +424,24 @@ export class DatabaseStorage implements IStorage {
     // `shownPictureId`, fájlonként a legutóbb publikált lecke). A lecke nélküli anyag (HTML/PDF) null — a kliens a sáv hős-képét
     // mutatja; a borító hibája nem buktatja a listát. Csak a kép kiválasztásához szükséges mezőket olvassuk, nem a teljes leckét.
     let covers = new Map<string, string | null>();
+    // Spec 2026-11-03-egyseges-kartya-leiras: a publikálás közös helyőrzője (vagy üres leírás) helyett a lecke bevezetője —
+    // csak az első fejezet első magyarázó blokkjának szövege jön le, nem a teljes lecke.
+    const teasers = new Map<string, string | null>();
     try {
       const published = await db.select({
         id: lessons.id, htmlFileId: lessons.htmlFileId,
         lesson: sql<{ subject?: unknown; title?: unknown; classroom?: unknown; art?: unknown }>`jsonb_build_object('subject', ${lessons.json}->'subject', 'title', ${lessons.json}->'title', 'classroom', ${lessons.json}->'classroom', 'art', ${lessons.json}->'art')`,
+        teaserText: sql<string | null>`(select b->>'text' from jsonb_array_elements(case when jsonb_typeof(${lessons.json}->'sections'->0->'blocks') = 'array' then ${lessons.json}->'sections'->0->'blocks' else '[]'::jsonb end) b where b->>'kind' = 'explain' limit 1)`,
       }).from(lessons).where(sql`${lessons.publishedAt} IS NOT NULL`).orderBy(desc(lessons.publishedAt));
       covers = coversByFile(published);
+      for (const p of published) if (p.htmlFileId && !teasers.has(p.htmlFileId)) teasers.set(p.htmlFileId, teaserFromText(p.teaserText));
     } catch (error) {
       logger.warn("[storage] A főoldali borítók nem olvashatók, a lista borító nélkül megy:", error);
     }
-    return rows.map((row) => ({ ...row, cover: covers.get(row.id) ?? null })) as HtmlFile[];
+    return rows.map((row) => {
+      const teaser = teasers.get(row.id);
+      return { ...row, ...(isPlaceholderDescription(row.description) && teaser ? { description: teaser } : {}), cover: covers.get(row.id) ?? null };
+    }) as HtmlFile[];
   }
 
   async getHtmlFile(id: string): Promise<HtmlFile | undefined> {

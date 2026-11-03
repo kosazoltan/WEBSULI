@@ -15,6 +15,7 @@ import { workflowFence, workflowSerialized } from "../workflows/engine";
 import type { Coverage, MapConcept } from "./coverage";
 import type { StudioStep } from "./pipeline";
 import { withLessonArt } from "../design-assets";
+import { LESSON_PLACEHOLDER_DESCRIPTION, lessonTeaser } from "../../shared/lesson-teaser";
 import type { CatalogRowLike } from "../catalog/retrieval";
 import type { MemoryCard } from "../memory/subject-memory";
 
@@ -205,10 +206,12 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       const result = await db.transaction(async (tx) => {
         await workflowFence(tx);
         const [existing] = await tx
-          .select({ htmlFileId: lessons.htmlFileId })
+          .select({ htmlFileId: lessons.htmlFileId, json: lessons.json })
           .from(lessons)
           .where(eq(lessons.id, input.lessonId))
           .limit(1);
+        // Spec 2026-11-03-egyseges-kartya-leiras: a főoldali kártya leírása a lecke bevezetője (a korábbi, minden leckén azonos helyőrző helyett).
+        const description = lessonTeaser(existing?.json) ?? LESSON_PLACEHOLDER_DESCRIPTION;
 
         let fileId = existing?.htmlFileId ?? null;
         let classroom = input.classroom;
@@ -237,7 +240,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
             .update(htmlFiles)
             .set({
               title: input.title,
-              description: "Websuli lecke — a lecke-futtató jeleníti meg.",
+              description,
               classroom,
               contentType: "lesson",
             })
@@ -248,7 +251,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
             .values({
               title: input.title,
               content: LESSON_PLACEHOLDER_HTML,
-              description: "Websuli lecke — a lecke-futtató jeleníti meg.",
+              description,
               classroom: input.classroom,
               contentType: "lesson",
             })
