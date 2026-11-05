@@ -11,13 +11,17 @@
 
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** A Render-szolgáltatás gyökérmappája (`rootDir`). */
 export const RENDER_ROOT_DIR = 'source';
 /** A Render build-szűrő kizárt útvonalai (`buildFilter.ignoredPaths`), a repó gyökeréhez képest. */
 export const RENDER_IGNORED_PATHS = ['docs/**', '**/*.md', 'source/tests/**', '.github/**'];
+
+/** A repó gyökere: a git innen fut, így a pathspec almappából indítva is a gyökérhez képest értendő (review #401). */
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const git = (args, opts = {}) => execFileSync('git', args, { encoding: 'utf8', cwd: REPO_ROOT, ...opts });
 
 /** git pathspec: a gyökérmappa, a kizárt útvonalak nélkül. */
 export function deployPathspec() {
@@ -34,11 +38,17 @@ export function expectedRevisionArgs(ref) {
 
 /** Döntés a mért értékekből (tiszta függvény, tesztelhető). */
 export function compareRevisions({ expected, live, uptimeSec }) {
-  if (!expected || !live) return { ok: false, code: 2, message: 'Nem ellenőrizhető: hiányzó várt vagy éles revízió.' };
+  // Review #401: nem szöveges `revision` (pl. hibás health-válasz) se dobjon TypeError-t.
+  if (typeof expected !== 'string' || typeof live !== 'string' || !expected || !live) return { ok: false, code: 2, message: 'Nem ellenőrizhető: hiányzó várt vagy éles revízió.' };
   if (expected === live) {
     return { ok: true, code: 0, message: `OK: az éles backend a várt ${live.slice(0, 7)} revíziót futtatja (uptime ${Math.round((uptimeSec ?? 0) / 60)} perc).` };
   }
   return { ok: false, code: 1, message: `ELTÉR: éles ${live.slice(0, 7)}, várt ${expected.slice(0, 7)} — a telepítés még fut (kb. 2 perc), vagy elmaradt (Render → Events).` };
+}
+
+/** Naplózható URL: hitelesítő adat, query és fragment nélkül (review #401 — titok ne kerüljön naplóba). */
+export function safeUrl(url) {
+  try { const u = new URL(url); return `${u.origin}${u.pathname}`; } catch { return '<érvénytelen URL>'; }
 }
 
 /** Kapcsoló értéke; hiányzó vagy másik kapcsolóval kezdődő érték esetén a tartalék (review #401). */
@@ -50,16 +60,16 @@ export function argValue(argv, name, fallback) {
 
 /** A várt revízió a megadott refen (sekély klón → hiba). */
 function expectedRevision(ref) {
-  if (execFileSync('git', ['rev-parse', '--is-shallow-repository'], { encoding: 'utf8' }).trim() === 'true') {
+  if (git(['rev-parse', '--is-shallow-repository']).trim() === 'true') {
     throw new Error('Sekély klón: a várt revízió nem állapítható meg megbízhatóan (git fetch --unshallow).');
   }
-  return execFileSync('git', expectedRevisionArgs(ref), { encoding: 'utf8' }).trim();
+  return git(expectedRevisionArgs(ref)).trim();
 }
 
 /** Review #401 (Sourcery): `origin/<ág>` refnél előbb frissít, hogy ne egy elavult helyi refhez mérjen. */
 function refreshRemoteRef(ref) {
   const m = /^origin\/(.+)$/.exec(ref);
-  if (m) execFileSync('git', ['fetch', '--quiet', 'origin', m[1]], { encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'] });
+  if (m) git(['fetch', '--quiet', 'origin', m[1]], { stdio: ['ignore', 'ignore', 'pipe'] });
 }
 
 async function main() {
@@ -82,7 +92,9 @@ async function main() {
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     health = await res.json();
   } catch (error) {
-    console.error(`[render-revízió] a ${url} nem érhető el: ${error instanceof Error ? error.message : error}`);
+    // A Node hibaüzenete maga is tartalmazhatja a teljes URL-t — abból is kivesszük.
+    const detail = String(error instanceof Error ? error.message : error).split(url).join(safeUrl(url));
+    console.error(`[render-revízió] a ${safeUrl(url)} nem érhető el: ${detail}`);
     process.exit(2);
   }
   // Review #401 (Sourcery): ha az ellenőrzés közben új commit érkezett, az eredmény nem dönthető el.

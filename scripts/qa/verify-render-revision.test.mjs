@@ -5,12 +5,21 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { argValue, compareRevisions, deployPathspec, expectedRevisionArgs } from './verify-render-revision.mjs';
+import { argValue, compareRevisions, deployPathspec, expectedRevisionArgs, safeUrl } from './verify-render-revision.mjs';
 
 test('összevetés: egyezés 0, eltérés 1, hiányzó adat 2', () => {
   assert.equal(compareRevisions({ expected: 'a'.repeat(40), live: 'a'.repeat(40), uptimeSec: 120 }).code, 0);
   assert.equal(compareRevisions({ expected: 'a'.repeat(40), live: 'b'.repeat(40) }).code, 1);
   assert.equal(compareRevisions({ expected: '', live: 'b'.repeat(40) }).code, 2);
+  // Review #401: nem szöveges éles revízió → 2, nem TypeError.
+  assert.equal(compareRevisions({ expected: 'a'.repeat(40), live: 42 }).code, 2);
+  assert.equal(compareRevisions({ expected: 'a'.repeat(40), live: { sha: 'x' } }).code, 2);
+});
+
+// Review #401: titok (hitelesítő adat, query, fragment) ne kerüljön a hibanaplóba.
+test('naplózható URL: csak origin + útvonal', () => {
+  assert.equal(safeUrl('https://user:pw@example.com/api/health?token=s3cret#x'), 'https://example.com/api/health');
+  assert.equal(safeUrl('nem url'), '<érvénytelen URL>');
 });
 
 test('a pathspec a source/-t nézi, a Render build-szűrő kizárt útvonalai nélkül', () => {

@@ -162,7 +162,7 @@ A tényleges beállítás a Render API-ból kiolvasva (2026-11-05, szolgáltatá
 |---|---|---|
 | **Vercel** (frontend) | a `main` minden commitjára | a `source/` SPA-t (`source/vercel.json`) |
 | **Render** (backend) | a `main` új commitjára (`autoDeploy: yes`, `autoDeployTrigger: commit`), **de csak ha** a commit a `source/` gyökérmappán belül változtat, és nem csak a build-szűrő kizárt útvonalain: `docs/**`, `**/*.md`, `source/tests/**`, `.github/**` | az Express API-t (`node dist/index.js`) |
-| **GitHub Actions** | minden push-ra és PR-re | semmit — csak ellenőriz (lint, típus, unit, DB-integráció, Playwright E2E, Windows x64/ARM64) |
+| **GitHub Actions** | push a `main` / `develop` ágra, és a `main`-re nyitott PR | semmit — csak ellenőriz (lint, típus, unit, DB-integráció, Playwright E2E, Windows x64/ARM64) |
 
 Következmények:
 
