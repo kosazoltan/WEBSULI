@@ -1,0 +1,35 @@
+name: Render-beállítás
+
+# docs/specs/2026-11-05-render-beallitas-ellenorzes.md (tulajdonosi döntés 2026-11-05): a Render-felület beállítása
+# (gyökérmappa, build-szűrő, build-parancs) egyezzen a repó feltevéseivel. Csak olvas.
+# Review #402: a RENDER_API_KEY titkot csak megbízható kód kapja — `main`-re összevont kód, napi ütemezés, kézi indítás;
+# pull_request eseményre (PR-ág kódja) ez a workflow szándékosan NEM fut.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render-settings:
+    name: Render-beállítás
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Kihagyva (nincs RENDER_API_KEY titok)
+        if: env.RENDER_API_KEY == ''
+        run: echo "A RENDER_API_KEY titok nincs beállítva — a Render-beállítás összevetése kihagyva."
+      - name: Render-beállítás összevetése
+        if: env.RENDER_API_KEY != ''
+        run: node scripts/qa/verify-render-settings.mjs

@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '24'
       - name: Unit test (az ellenőrző saját tesztje)
-        run: node --test scripts/qa/three-phase-check.test.mjs scripts/qa/repo-rules.test.mjs scripts/qa/verify-render-revision.test.mjs
+        run: node --test scripts/qa/three-phase-check.test.mjs scripts/qa/repo-rules.test.mjs scripts/qa/verify-render-revision.test.mjs scripts/qa/verify-render-settings.test.mjs
       - name: Háromfázisú rend ellenőrzése
         run: node scripts/qa/three-phase-check.mjs --base origin/${{ github.base_ref }}
 
