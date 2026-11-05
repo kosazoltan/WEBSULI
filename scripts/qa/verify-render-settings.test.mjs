@@ -25,6 +25,11 @@ test('a render.yaml build-parancsa kiolvasható', () => {
   // Review #402: sorvégi YAML-megjegyzés nem része az értéknek; idézett értékben a # megmarad.
   assert.equal(renderYamlBuildCommand('    buildCommand: npm run build # magyarázat\n'), 'npm run build');
   assert.equal(renderYamlBuildCommand("    buildCommand: 'npm run a#b' # m\n"), 'npm run a#b');
+  // Review #402 (Copilot): blokkos skalár.
+  const folded = 'services:\n  - name: x\n    buildCommand: >-\n      npm ci &&\n      npm run build\n    startCommand: node a.js\n';
+  assert.equal(renderYamlBuildCommand(folded), 'npm ci && npm run build');
+  const literal = 'services:\n  - buildCommand: |\n      npm ci\n      npm run build\n    plan: starter\n';
+  assert.equal(renderYamlBuildCommand(literal), 'npm ci\nnpm run build');
 });
 
 test('a build-parancs a tartalék mezőből is olvasható', () => {

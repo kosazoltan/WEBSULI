@@ -13,14 +13,30 @@ import { RENDER_IGNORED_PATHS, RENDER_ROOT_DIR } from './verify-render-revision.
 export const RENDER_SERVICE_ID = 'srv-d6h9oq9drdic73cied30';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/** A `render.yaml` (egyetlen szolgáltatás) `buildCommand` értéke. */
+/**
+ * A `render.yaml` (egyetlen szolgáltatás) `buildCommand` értéke. Review #402: sima skalár sorvégi ` # megjegyzés` nélkül,
+ * idézett skalár idézőjelek nélkül, blokkos skalár (`>` / `|`, `-` / `+` jelzővel) a következő, beljebb kezdett sorokból.
+ */
 export function renderYamlBuildCommand(text) {
-  const m = /^[ \t-]*buildCommand:[ \t]*(.*)$/m.exec(text);
-  if (!m) return '';
-  const raw = m[1].trim();
-  // Review #402: idézett skalár → az idézőjelek közötti rész; sima skalár → a sorvégi ` # megjegyzés` nélkül (YAML-szabály).
-  const quoted = /^(['"])(.*?)\1(?:\s+#.*)?$/.exec(raw);
-  return quoted ? quoted[2] : raw.replace(/\s+#.*$/, '');
+  const lines = text.split(/\r?\n/);
+  const i = lines.findIndex((l) => /^[ \t-]*buildCommand:/.test(l));
+  if (i < 0) return '';
+  const keyIndent = lines[i].indexOf('buildCommand'); // listaelemnél a kulcs oszlopa, nem a '-' jelé
+  const rest = lines[i].replace(/^[ \t-]*buildCommand:/, '').trim();
+  const quoted = /^(['"])(.*?)\1(?:\s+#.*)?$/.exec(rest);
+  if (quoted) return quoted[2];
+  const raw = rest.replace(/(^|\s+)#.*$/, '');
+  const block = /^([>|])[-+]?$/.exec(raw);
+  if (block) {
+    const body = [];
+    for (const l of lines.slice(i + 1)) {
+      if (l.trim() !== '' && l.search(/\S/) <= keyIndent) break;
+      body.push(l.trim());
+    }
+    while (body.length && body.at(-1) === '') body.pop();
+    return block[1] === '>' ? body.join(' ').replace(/ {2,}/g, ' ').trim() : body.join('\n');
+  }
+  return raw;
 }
 
 /** Tiszta összevetés: a Render API szolgáltatás-objektuma vs. a repó feltevései. Visszatér: eltérések listája. */
