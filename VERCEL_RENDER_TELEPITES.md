@@ -154,8 +154,36 @@ Most, hogy megvan a Vercel URL (pl. `https://websuli.vercel.app`):
 
 ---
 
-## CI/CD
+## CI/CD — hogyan jut ki egy változás élesre
 
-- **Vercel**: Automatikusan deployol minden `main` branch push-ra (frontend)
-- **Render**: Automatikusan deployol minden `main` branch push-ra (backend)
-- **GitHub Actions**: Build ellenőrzés fut minden push-ra és PR-re (nem deployol)
+A tényleges beállítás a Render API-ból kiolvasva (2026-11-05, szolgáltatás: `websuli-api-eu`, `srv-d6h9oq9drdic73cied30`).
+
+| Réteg | Mikor települ | Mit telepít |
+|---|---|---|
+| **Vercel** (frontend) | a `main` minden commitjára | a `source/` SPA-t (`source/vercel.json`) |
+| **Render** (backend) | a `main` új commitjára (`autoDeploy: yes`, `autoDeployTrigger: commit`), **de csak ha** a commit a `source/` gyökérmappán belül változtat, és nem csak a build-szűrő kizárt útvonalain: `docs/**`, `**/*.md`, `source/tests/**`, `.github/**` | az Express API-t (`node dist/index.js`) |
+| **GitHub Actions** | push a `main` / `develop` ágra, és a `main`-re nyitott PR | semmit — csak ellenőriz (lint, típus, unit, DB-integráció, Playwright E2E, Windows x64/ARM64) |
+
+Következmények:
+
+- Csak teszt-, dokumentáció-, CI- vagy a `source/`-on kívüli szkriptváltozás (pl. `scripts/qa/`) **nem** indít Render-telepítést,
+  és nem indítja újra a szervert — futó tananyaggyártást nem szakít meg.
+- Szerveroldali változás (`source/server`, `source/shared`, `source/client`, `source/package*.json`, `source/migrations`)
+  összevonása után a Render kb. 2 perc alatt telepít és újraindul. Közben futó gyártás megszakadhat: ilyen összevonás előtt
+  érdemes megvárni a futó gyártás végét.
+- A Render build-parancsa a **Render-felületen** él, nem a `render.yaml`-ban (a szolgáltatás nem Blueprint-szinkronizált):
+  `npm install --include=dev --legacy-peer-deps && (npm run db:migrate || echo MIGRATE_SKIPPED) && npm run build`.
+  A migráció tehát minden telepítéskor lefut, de **a hibája nem állítja meg a telepítést** — a build-naplóban
+  „MIGRATE_SKIPPED” jelzi. A `render.yaml` `buildCommand`-ja (`npm ci … && npm run db:migrate && …`) ettől eltér; a kettő
+  összehangolása tulajdonosi döntés.
+
+### Élesítés ellenőrzése
+
+```bash
+node scripts/qa/verify-render-revision.mjs   # 0 = az éles backend a várt commitot futtatja
+```
+
+A várt revízió a `main` utolsó olyan commitja, amely a fenti szabály szerint Render-telepítést indít; az éles
+`https://websuli.vip/api/health` `revision` mezőjének ezzel kell egyeznie (`uptime`: mióta fut). Eltérésnél a telepítés még
+fut (kb. 2 perc), vagy elmaradt: Render-felület → `websuli-api-eu` → Events / Deploys. Ha a Render build-szűrője vagy
+gyökérmappája változik, a szkript `RENDER_ROOT_DIR` / `RENDER_IGNORED_PATHS` állandóját is frissíteni kell.
