@@ -548,13 +548,20 @@ lessonPipelineRouter.post("/drafts/:jobId/remake", async (req: Request, res: Res
  * Spec 2026-11-05-gyartas-reszletes-kovetes (G3): a belépett admin épp futó egylépéses gyártása — a Készítés fül
  * visszalépéskor (üres böngészőtároló mellett is) ehhez csatlakozik. A `:runId` útvonal ELŐTT áll. Csak olvas.
  */
-lessonPipelineRouter.get("/lessons/one-step/active", async (req: Request, res: Response) => {
+export async function ownerActiveOneStepRunId(owner: string): Promise<string | null> {
   const { rows } = await db.execute(sql`SELECT r.id FROM one_step_runs r JOIN lesson_workflow_runs w ON w.id = r.id
-    WHERE w.owner_id = ${req.user!.id} AND w.state IN ('running', 'waiting')
-      AND r.phase NOT IN ('done', 'error', 'parked', 'draft') AND r.updated_at > now() - interval '1 hour'
+    WHERE w.owner_id = ${owner} AND w.state IN ('running', 'waiting')
+      -- Review #395 (R1): csak tananyaggyártás — a fogalomjavítás (concept) nem a Készítés fül futása.
+      AND w.snapshot->'definition'->>'mode' IN ('upload', 'studio', 'webStudio')
+      -- Review #395 (R3): az élő háttérfolyamat (lízing) dönt, nem a haladássor kora.
+      AND r.phase NOT IN ('done', 'error', 'parked', 'draft') AND w.lease_until > now()
     ORDER BY r.updated_at DESC LIMIT 1`);
   const id = (rows[0] as { id?: string } | undefined)?.id;
-  res.json({ runId: typeof id === "string" ? id : null });
+  return typeof id === "string" ? id : null;
+}
+
+lessonPipelineRouter.get("/lessons/one-step/active", async (req: Request, res: Response) => {
+  res.json({ runId: await ownerActiveOneStepRunId(req.user!.id) });
 });
 
 /** GET /api/studio/lessons/one-step/:runId — the progress poll. */

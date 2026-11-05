@@ -8,7 +8,7 @@ assert.equal(url.hostname, "127.0.0.1");
 assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 const { dbPool } = await import("../server/db");
-const { oneStepRunView, closeOrphanedOneStepRuns, ownerDrafts, discardDraft, discardDraftsWithPublished, redundantDraftCount, ownerDraftTotal } = await import("../server/studio/lesson-pipeline-routes");
+const { oneStepRunView, closeOrphanedOneStepRuns, ownerDrafts, discardDraft, discardDraftsWithPublished, redundantDraftCount, ownerDraftTotal, ownerActiveOneStepRunId } = await import("../server/studio/lesson-pipeline-routes");
 
 let n = 0;
 async function mapWithJob(job: { status?: string; published?: boolean; output?: Record<string, unknown>; age?: string; owner?: string | null; map?: string }) {
@@ -313,4 +313,32 @@ test("haladásjelzés: a futó tétel a legutóbbi futás részletét, eltelt id
     await dbPool.query("DELETE FROM one_step_runs WHERE id=$1", [runId]);
     await dbPool.query("DELETE FROM studio_jobs WHERE id=$1", [running.id]);
   }
+});
+
+// docs/specs/2026-11-05-gyartas-kovetes-review-javitas.md (R1, R3; review #396): az aktív futás csak gyártási módú, élő lízingű, saját futás.
+test("aktív futás: csak upload/studio/webStudio mód, élő lízing, saját; a régi haladássor nem zárja ki", async () => {
+  await dbPool.query("DELETE FROM one_step_runs WHERE id LIKE 'act-%'");
+  await dbPool.query("DELETE FROM lesson_workflow_runs WHERE id LIKE 'act-%'");
+  const add = async (id: string, mode: string, lease: string | null, owner = "draft-owner", phase = "author", age = "5 minutes") => {
+    await dbPool.query(`INSERT INTO lesson_workflow_runs(id,owner_id,state,snapshot,lease_until) VALUES ($1,$2,'running',$3::jsonb, CASE WHEN $4::text IS NULL THEN NULL ELSE now() + $4::interval END)`,
+      [id, owner, JSON.stringify({ definition: { mode } }), lease]);
+    await dbPool.query("INSERT INTO one_step_runs(id,phase,updated_at) VALUES ($1,$2, now() - $3::interval)", [id, phase, age]);
+  };
+  // Kizárandók: fogalomjavítás, lejárt / hiányzó lízing, más gazdája, lezárt fázis — mind frissebbek a jó futásnál.
+  await add("act-concept", "concept", "1 minute", "draft-owner", "author", "1 minute");
+  await add("act-expired", "upload", "-1 minute", "draft-owner", "author", "1 minute");
+  await add("act-nolease", "upload", null, "draft-owner", "author", "1 minute");
+  await add("act-other", "upload", "1 minute", "draft-other", "author", "1 minute");
+  await add("act-done", "upload", "1 minute", "draft-owner", "done", "1 minute");
+  assert.equal(await ownerActiveOneStepRunId("draft-owner"), null, "egyik sem aktív gyártás");
+  // Élő lízingű gyártás, egy óránál régebbi haladássorral (R3: a kor nem zár ki).
+  for (const mode of ["upload", "studio", "webStudio"]) {
+    await dbPool.query("DELETE FROM one_step_runs WHERE id LIKE 'act-live%'");
+    await dbPool.query("DELETE FROM lesson_workflow_runs WHERE id LIKE 'act-live%'");
+    await add(`act-live-${mode}`, mode, "1 minute", "draft-owner", "author", "2 hours");
+    assert.equal(await ownerActiveOneStepRunId("draft-owner"), `act-live-${mode}`, `${mode} mód élő lízinggel aktív`);
+  }
+  assert.equal(await ownerActiveOneStepRunId("draft-other"), "act-other", "mindenki csak a saját futását kapja");
+  await dbPool.query("DELETE FROM one_step_runs WHERE id LIKE 'act-%'");
+  await dbPool.query("DELETE FROM lesson_workflow_runs WHERE id LIKE 'act-%'");
 });

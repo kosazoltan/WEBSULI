@@ -274,3 +274,27 @@ test("a Készítés fül üres tárolóval is a futó gyártáshoz csatlakozik",
   await expect(page.getByTestId("one-step-progress")).toContainText("Tananyag készül");
   await expect(page.getByTestId("one-step-progress").getByTestId("creation-progress")).toBeVisible();
 });
+
+// Review #395 (R2): tárolóból visszaállított, megállt futás bezárása után az automatikus csatlakozás nem nyitja újra.
+test("a tárolóból visszaállított futás „Bezárás” után nem nyílik újra", async ({ page }) => {
+  let activeCalls = 0;
+  await page.addInitScript(() => { try { sessionStorage.setItem("websuli.studio.oneStepRunId", "run-live"); } catch { /* storage unavailable */ } });
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/studio/lessons/one-step/active") { activeCalls++; return route.fulfill({ json: { runId: "run-live" } }); }
+    if (path === "/api/studio/lessons/one-step/run-live") return route.fulfill({ json: { phase: "error", detail: null, error: "Váratlan hiba történt.", mapId: null, jobId: null, lessonId: null } });
+    if (path.startsWith("/api/studio/workflows/")) return route.fulfill({ json: { run: null } });
+    let data: unknown = [];
+    if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] };
+    if (path === "/api/csrf-token") data = { csrfToken: "test" };
+    await route.fulfill({ json: data });
+  });
+  await page.goto("/admin?tab=lesson-studio");
+  const progress = page.getByTestId("one-step-progress");
+  await expect(progress).toContainText("A gyártás megállt hibával");
+  await progress.getByRole("button", { name: "Bezárás" }).click();
+  await expect(progress).toHaveCount(0);
+  await page.waitForTimeout(500);
+  await expect(progress).toHaveCount(0);
+  expect(activeCalls).toBe(0);
+});
