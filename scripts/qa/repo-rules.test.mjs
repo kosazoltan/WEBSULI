@@ -17,7 +17,9 @@ test('a core.hooksPath felülírása parancssorból tiltott (mint a --no-verify)
     // Review #398 (Sourcery): ugyanez --config-env-vel és GIT_CONFIG_* környezeti változókkal.
     'git --config-env=core.hooksPath=HP commit -m x', 'git --config-env core.hooksPath=HP push',
     'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x',
-    `GIT_CONFIG_PARAMETERS="'core.hooksPath'='/dev/null'" git commit -m x`]) {
+    `GIT_CONFIG_PARAMETERS="'core.hooksPath'='/dev/null'" git commit -m x`,
+    // Review #398 (Vercel): a core.hooksPath nem az első beállítás a GIT_CONFIG_PARAMETERS-ben.
+    `GIT_CONFIG_PARAMETERS="'user.name'='A' 'core.hooksPath'='/dev/null'" git commit -m x`]) {
     assert.ok(denied(run(c)), c);
   }
   assert.ok(denied(run('git commit --no-verify -m x')), 'a meglévő --no-verify tiltás megmarad');

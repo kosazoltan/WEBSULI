@@ -16,7 +16,7 @@
     },
     {
       "tool": "Bash|PowerShell",
-      "pattern": "GIT_CONFIG_(?:KEY_\\d+|PARAMETERS)\\s*=\\s*['\"]*core\\.hookspath",
+      "pattern": "GIT_CONFIG_(?:KEY_\\d+\\s*=\\s*['\"]*|PARAMETERS\\s*=[^|;&]*)core\\.hookspath",
       "flags": "i",
       "level": "deny",
       "message": "GIT_CONFIG_KEY_n / GIT_CONFIG_PARAMETERS core.hooksPath-ra (a QA-hookok megkerülése környezeti változóval)"
