@@ -187,3 +187,13 @@ A várt revízió a `main` utolsó olyan commitja, amely a fenti szabály szerin
 `https://websuli.vip/api/health` `revision` mezőjének ezzel kell egyeznie (`uptime`: mióta fut). Eltérésnél a telepítés még
 fut (kb. 2 perc), vagy elmaradt: Render-felület → `websuli-api-eu` → Events / Deploys. Ha a Render build-szűrője vagy
 gyökérmappája változik, a szkript `RENDER_ROOT_DIR` / `RENDER_IGNORED_PATHS` állandóját is frissíteni kell.
+
+A Render-beállítás és a repó feltevéseinek összevetése (gyökérmappa, build-szűrő, `main`, automatikus telepítés, és hogy a
+felületi build-parancs a `render.yaml` `buildCommand`-ja-e):
+
+```bash
+RENDER_API_KEY=… node scripts/qa/verify-render-settings.mjs   # 0 = egyezik, 1 = eltér (mezőnként), 2 = nincs kulcs / API-hiba
+```
+
+A CI „Render-beállítás” jobja ugyanezt futtatja, ha a repóban be van állítva a `RENDER_API_KEY` Actions-titok
+(GitHub → Settings → Secrets and variables → Actions); titok nélkül a lépés kihagyva. A szkript csak olvas.
