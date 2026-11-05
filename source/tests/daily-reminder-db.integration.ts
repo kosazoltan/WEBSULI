@@ -94,14 +94,16 @@ test("review #292: sikeres küldés utáni mentési hiba nem vezet második lev�
 
 test("review #292: a sikertelen küldés anyaga nem számít ismétlésnek — másnap újra ő jön", async () => {
   sent.length = 0;
-  // 2026-11-03 (kedd) és 11-04: az őszi szünet utáni napok; mindkét próbálkozás meghiúsul az egyik címre.
-  const day1 = new Date("2026-11-03T06:00:00Z");
-  const day2 = new Date("2026-11-04T06:00:00Z");
+  // 2026-11-09 (hétfő) és 11-10: a fájl korábbi tesztjeinek kiküldései (10-19…10-22) a 14 napos ismétlés-tiltó ablakon
+  // kívül esnek (docs/specs/2026-11-05-napi-emlekezteto-teszt.md) — így csak a sikertelen küldés dönthetne. Mindkét
+  // próbálkozás meghiúsul az egyik címre.
+  const day1 = new Date("2026-11-09T06:00:00Z");
+  const day2 = new Date("2026-11-10T06:00:00Z");
   failOnce = new Set(["tanulo-ketto@example.test"]);
   await runDailyReminders(day1, { pauseMs: 0 });
   failOnce = new Set(["tanulo-ketto@example.test"]);
   await runDailyReminders(day1, { pauseMs: 0 });
-  const failedRow = (await db.select().from(dailyReminderEmails).where(eq(dailyReminderEmails.email, "tanulo-ketto@example.test"))).find(r => r.day === "2026-11-03")!;
+  const failedRow = (await db.select().from(dailyReminderEmails).where(eq(dailyReminderEmails.email, "tanulo-ketto@example.test"))).find(r => r.day === "2026-11-09")!;
   assert.equal(failedRow.status, "failed");
   sent.length = 0;
   await runDailyReminders(day2, { pauseMs: 0 });
