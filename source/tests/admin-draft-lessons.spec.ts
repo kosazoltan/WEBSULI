@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { workflowDefinition, type WorkflowView } from "../shared/lesson-workflow";
 
 // docs/specs/2026-10-15-admin-tananyag-draft.md (tulajdonosi kérés): a megszakadt gyártás piszkozata az adminfelületen „Tananyag draft”
 // jelzéssel látszik, és onnan folytatható. A nyilvános lista (html-files) mockja üres: a piszkozat NEM onnan jön.
@@ -32,7 +33,8 @@ test("a megszakadt piszkozat „Tananyag draft” jelzéssel látszik és egyetl
   await expect(page.getByTestId("draft-item-job-stopped")).toContainText("Mentett: 9 fejezetnyi tananyag, 4 kész gyakorlócsomag.");
   await expect(page.getByTestId("draft-item-job-stopped")).toContainText("Megállt: a szerver újraindult a gyártás közben.");
   await expect(page.getByTestId("draft-item-job-running").getByTestId("draft-running")).toBeVisible();
-  await expect(page.getByTestId("draft-item-job-running").getByRole("button")).toHaveCount(0);
+  // Spec 2026-11-05-gyartas-reszletes-kovetes: a futó tételen navigációs gomb (teljes készítési sor) van, továbblépő / törlő gomb nincs.
+  await expect(page.getByTestId("draft-item-job-running").getByRole("button", { name: /Folytatás|Újragyártás|Törlés/ })).toHaveCount(0);
   for (const size of [{ width: 390, height: 844 }, { width: 1366, height: 900 }]) {
     await page.setViewportSize(size);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
@@ -201,4 +203,74 @@ test("a tanulási terv jóváhagyására váró job látszik, és egyetlen kér�
   await page.waitForTimeout(300);
   expect(calls).toEqual(["/api/studio/drafts/job-wait/continue"]);
   expect(errors).toEqual([]);
+});
+
+// docs/specs/2026-11-05-gyartas-reszletes-kovetes.md (tulajdonosi kérés): kilépés és visszalépés után is látszik a teljes készítési sor,
+// és a futó gyártás a Készítés fülre visszalépve tovább követhető.
+test("futó gyártás: a teljes készítési sor látszik, és a Készítés fülre vissza lehet lépni ugyanahhoz a futáshoz", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
+  const now = Date.now();
+  const flow = { id: "run-live", definition: workflowDefinition("upload"), state: "running", createdAt: now - 6 * 60_000, updatedAt: now, revision: 4, visits: [
+    { step: "source", attempt: 1, startedAt: now - 360_000, finishedAt: now - 340_000, state: "done", cacheHits: 0 },
+    { step: "scope", attempt: 1, startedAt: now - 340_000, finishedAt: now - 320_000, state: "done", cacheHits: 0 },
+    { step: "knowledge", attempt: 1, startedAt: now - 320_000, finishedAt: now - 200_000, state: "done", cacheHits: 0 },
+    { step: "author", attempt: 1, startedAt: now - 200_000, state: "running", cacheHits: 0 },
+  ] } as unknown as WorkflowView;
+  const live = { jobId: "job-live", runId: "run-live", title: "Tájékozódás a kozmikus térben és az időben – csillagászat és térképészet (témazáró felkészítés)",
+    subject: "Földrajz", classroom: 9, draft: null, running: true, error: null, updatedAt: "2026-11-05T10:40:00.000Z", step: "author", ownerless: false,
+    hasPublished: false, resumable: false, progress: { detail: "A tananyag készül…", elapsedSec: 360, sinceUpdateSec: 60, alive: true } };
+  const stopped = { ...drafts[0], jobId: "job-old", runId: "run-old", step: "error", ownerless: false, hasPublished: false };
+  const workflowCalls: string[] = [];
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.startsWith("/api/studio/workflows/")) { workflowCalls.push(path); return route.fulfill({ json: { run: path.endsWith("/run-live") ? flow : null } }); }
+    if (path === "/api/studio/lessons/one-step/run-live") return route.fulfill({ json: { phase: "author", detail: "A tananyag készül…", error: null, mapId: "m1", jobId: "job-live", lessonId: null } });
+    if (path === "/api/studio/lessons/one-step/active") return route.fulfill({ json: { runId: null } });
+    let data: unknown = [];
+    if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] };
+    if (path === "/api/studio/drafts") data = { drafts: [live, stopped] };
+    if (path === "/api/csrf-token") data = { csrfToken: "test" };
+    await route.fulfill({ json: data });
+  });
+  await page.goto("/admin");
+  const item = page.getByTestId("draft-item-job-live");
+  // G1: futó tételnél a teljes sor alapból nyitva, a futó lépés kijelölve; a korábbi lépés kiválasztható (visszalépés a lépések között).
+  const graph = item.getByTestId("workflow-graph");
+  await expect(graph).toBeVisible();
+  await expect(graph.locator("[data-step]")).toHaveCount(10);
+  await expect(graph.locator('[data-step="author"]')).toHaveAttribute("aria-pressed", "true");
+  await graph.locator('[data-step="knowledge"]').click();
+  await expect(item.getByTestId("workflow-step-details")).toContainText("1. kör");
+  // A2: a megállt tétel sora csak kérésre töltődik.
+  expect(workflowCalls.filter(c => c.endsWith("/run-old"))).toEqual([]);
+  await page.getByTestId("draft-flow-toggle-job-old").click();
+  await expect(page.getByTestId("draft-item-job-old")).toContainText("még nincs új folyamatnapló");
+  for (const width of [322, 344, 412, 690, 744, 836, 860]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `${width}px`).toBeLessThanOrEqual(1);
+    await item.screenshot({ path: test.info().outputPath(`draft-flow-${width}.png`) });
+  }
+  // G2: vissza a készítéshez — a Készítés fül ugyanazt a futást követi (szakaszjelző + folyamatábra).
+  await page.setViewportSize({ width: 412, height: 900 });
+  await page.getByTestId("draft-open-studio-job-live").click();
+  await expect(page.getByTestId("one-step-progress")).toContainText("Tananyag készül");
+  await expect(page.getByTestId("source-upload-form").getByTestId("workflow-graph")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+// G3: üres böngészőtároló mellett (új lap / alkalmazás-újraindítás) a Készítés fül magától a saját futó gyártáshoz csatlakozik.
+test("a Készítés fül üres tárolóval is a futó gyártáshoz csatlakozik", async ({ page }) => {
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/studio/lessons/one-step/active") return route.fulfill({ json: { runId: "run-live" } });
+    if (path === "/api/studio/lessons/one-step/run-live") return route.fulfill({ json: { phase: "author", detail: "A tananyag készül…", error: null, mapId: "m1", jobId: "job-live", lessonId: null } });
+    if (path.startsWith("/api/studio/workflows/")) return route.fulfill({ json: { run: null } });
+    let data: unknown = [];
+    if (path === "/api/auth/user") data = { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] };
+    if (path === "/api/csrf-token") data = { csrfToken: "test" };
+    await route.fulfill({ json: data });
+  });
+  await page.goto("/admin?tab=lesson-studio");
+  await expect(page.getByTestId("one-step-progress")).toContainText("Tananyag készül");
+  await expect(page.getByTestId("one-step-progress").getByTestId("creation-progress")).toBeVisible();
 });

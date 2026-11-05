@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CreationProgress } from "./CreationProgress";
+import { WorkflowMonitor } from "./WorkflowMonitor";
+import { rememberOneStepRun } from "./studio-run-storage";
 
 /** docs/specs/2026-10-15-admin-tananyag-draft.md + 2026-10-16-draft-kezeles.md — a szerver `OwnerDraft` típusának kliensoldali tükre. */
 type OwnerDraft = {
@@ -16,6 +18,8 @@ type OwnerDraft = {
   resumable: boolean; stoppedAt?: string; nextRecovery?: { strategy: string; reason: string };
   /** Spec 2026-10-16-gyartas-haladas: futó tételnél a futás részlete és ideje. */
   progress?: { detail: string | null; elapsedSec?: number; sinceUpdateSec?: number; alive?: boolean };
+  /** Spec 2026-11-05-gyartas-reszletes-kovetes: a job legutóbbi egylépéses futása (folyamatábra, visszalépés a készítéshez). */
+  runId?: string;
 };
 
 type Action = "resume" | "continue" | "remake" | "discard" | "discard-published";
@@ -36,8 +40,11 @@ const CONFIRM_TEXT: Record<Exclude<Action, "resume" | "continue">, string> = {
  * oldalra nem kerül ki), minden piszkozat törölhető és továbbvihető (folytatás vagy újragyártás), és a futó gyártás haladása a három készítési
  * szakasszal látszik.
  */
-export default function DraftLessons() {
+export default function DraftLessons({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
   const { toast } = useToast();
+  // Spec 2026-11-05-gyartas-reszletes-kovetes (G1): a teljes készítési sor tételenként nyitható; futó tételnél alapból nyitva.
+  // A megállt tétel folyamatábrája csak kérésre töltődik (sok piszkozatnál sem indul tételenkénti lekérdezés).
+  const [flowOpen, setFlowOpen] = useState<Record<string, boolean>>({});
   // Review #255 (P2): folytatás / újragyártás után az új futás workflow-ja a 202-es válasz UTÁN jön létre — egy rövid ablakig akkor is
   // frissítünk, ha még nem látszik futó tétel (különben a haladás csak kézi frissítéssel jelenne meg).
   const [followUntil, setFollowUntil] = useState(0);
@@ -139,6 +146,27 @@ export default function DraftLessons() {
               <CreationProgress run={d.running ? { phase: d.step, error: null, ...d.progress, detail: d.progress?.detail ?? null }
                 : d.awaitingApproval ? { phase: "waiting", detail: null, error: null, stoppedAt: d.step }
                 : { phase: "error", detail: null, error: null, ...(d.stoppedAt ? { stoppedAt: d.stoppedAt } : {}) }} />
+              {(() => {
+                const open = flowOpen[d.jobId] ?? d.running;
+                return (
+                  <div className="space-y-2 min-w-0" data-testid={`draft-flow-${d.jobId}`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button size="sm" variant="ghost" className="min-h-11 gap-1 px-2" aria-expanded={open} data-testid={`draft-flow-toggle-${d.jobId}`}
+                        onClick={() => setFlowOpen((m) => ({ ...m, [d.jobId]: !open }))}>
+                        {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />} Teljes készítési sor
+                      </Button>
+                      {/* G2: a futó gyártás a Készítés fülön tovább követhető (ott a teljes élő nézet és a lépések). */}
+                      {d.running && d.runId && onOpenStudio && (
+                        <Button size="sm" variant="outline" className="min-h-11 gap-1" data-testid={`draft-open-studio-${d.jobId}`}
+                          onClick={() => { rememberOneStepRun(d.runId!); onOpenStudio(); }}>
+                          <ArrowLeft className="w-4 h-4" /> Vissza a készítéshez
+                        </Button>
+                      )}
+                    </div>
+                    {open && <WorkflowMonitor id={d.runId ?? d.jobId} />}
+                  </div>
+                );
+              })()}
               {d.running ? (
                 <p className="text-sm flex items-center gap-2" data-testid="draft-running" role="status"><Loader2 className="w-4 h-4 animate-spin" /> Folyamatban — a lista magától frissül.</p>
               ) : d.awaitingApproval ? (
