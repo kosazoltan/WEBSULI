@@ -24,6 +24,14 @@ export function deployPathspec() {
   return [RENDER_ROOT_DIR, ...RENDER_IGNORED_PATHS.map((p) => `:(exclude,glob)${p}`)];
 }
 
+/**
+ * A várt revízió lekérdezése. Review #401 (Codex, Vercel): `--first-parent` — merge committal összevont változásnál a
+ * Render a `main` merge commitját telepíti, nem az oldalág commitját; a merge az első szülőjéhez képest számít.
+ */
+export function expectedRevisionArgs(ref) {
+  return ['log', '-1', '--first-parent', '--format=%H', ref, '--', ...deployPathspec()];
+}
+
 /** Döntés a mért értékekből (tiszta függvény, tesztelhető). */
 export function compareRevisions({ expected, live, uptimeSec }) {
   if (!expected || !live) return { ok: false, code: 2, message: 'Nem ellenőrizhető: hiányzó várt vagy éles revízió.' };
@@ -45,7 +53,12 @@ async function main() {
   const ref = argValue(process.argv, '--ref', 'origin/main');
   let expected = '';
   try {
-    expected = execFileSync('git', ['log', '-1', '--format=%H', ref, '--', ...deployPathspec()], { encoding: 'utf8' }).trim();
+    // Review #401 (Vercel): sekély klónban a levágott előzmény határa téves várt revíziót adhat — ott nem ellenőrizhető.
+    if (execFileSync('git', ['rev-parse', '--is-shallow-repository'], { encoding: 'utf8' }).trim() === 'true') {
+      console.error('[render-revízió] Sekély klón: a várt revízió nem állapítható meg megbízhatóan (git fetch --unshallow).');
+      process.exit(2);
+    }
+    expected = execFileSync('git', expectedRevisionArgs(ref), { encoding: 'utf8' }).trim();
   } catch (error) {
     console.error(`[render-revízió] git hiba: ${error instanceof Error ? error.message : error}`);
     process.exit(2);
