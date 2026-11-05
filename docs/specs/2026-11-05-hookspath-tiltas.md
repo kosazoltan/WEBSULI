@@ -8,11 +8,19 @@ megkerülés; egy ügynök a #396-ban így commitolt (`docs/agent-csapdak.md` C-
 
 ## Cél / nem-cél
 
-- Cél: a `git -c core.hooksPath=…` parancs DENY (idézőjeles formában is).
+- Cél: a `git -c core.hooksPath=…` parancs DENY (idézőjeles formában is), valamint ugyanez `--config-env`-vel és
+  `GIT_CONFIG_KEY_n` / `GIT_CONFIG_PARAMETERS` környezeti változóval (review #398).
 - Review #398: WARN repo-szabály nincs — a kit hookja az első WARN-nál kilép, így elnyomná a későbbi DENY-t (pl.
   `git config --get core.hooksPath; git commit --no-verify`). A `git config core.hooksPath` ezért nem jelez.
 - Nem-cél: a kezelt `agentic-qa-kit` hookkódja (`scripts/qa/hooks/enforce-repo-rules.mjs`) nem változik — a bővítés a kit
   saját, erre szolgáló `scripts/qa/repo-rules.json` fájljában van. Git hook nem kerül a repóba (a repó nem ír elő ilyet).
+
+## Edge case-ek
+
+- Szöveg, amely csak idézi a tiltott parancsot (pl. `echo` / `rg` minta): a kit nyers parancsszöveget vizsgál, ezért ezt is
+  tiltja — ugyanígy viselkedik a meglévő `--no-verify` szabály is. Elfogadott kompromisszum: a hamis tiltás csak
+  megerősítést kér, a hamis engedés megkerülést enged.
+- Más kulcs `GIT_CONFIG_KEY_n`-ben (pl. `user.name`) és a `core.hooksPath` lekérdezése: nincs kimenet.
 
 ## Érintett fájlok
 
