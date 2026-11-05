@@ -32,8 +32,9 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { CreationProgress } from "./CreationProgress";
 import { WorkflowMonitor } from "./WorkflowMonitor";
+import { ONE_STEP_RUN_STORAGE_KEY } from "./studio-run-storage";
 
-const RUN_STORAGE_KEY = "websuli.studio.oneStepRunId";
+const RUN_STORAGE_KEY = ONE_STEP_RUN_STORAGE_KEY;
 function readPersistedRunId(): string | null {
   try { return sessionStorage.getItem(RUN_STORAGE_KEY); }
   catch { return null; } // Storage may be unavailable in a restricted browser.
@@ -208,6 +209,17 @@ export function SourceUploadForm({
       else sessionStorage.removeItem(RUN_STORAGE_KEY);
     } catch { /* The live status remains available without browser storage. */ }
   }, [runId, persistRun]);
+  // Spec 2026-11-05-gyartas-reszletes-kovetes (G3): kilépés és visszalépés után (új lap, alkalmazás-újraindítás, üres tároló)
+  // a saját, épp futó gyártás magától újra követhető — csatolásonként egyszer, hogy a „Bezárás” ne nyissa újra.
+  const adoptTried = useRef(false);
+  useEffect(() => {
+    if (!persistRun || runId !== null || adoptTried.current) return;
+    adoptTried.current = true;
+    // A funkcionális frissítés nem írja felül az időközben (pl. új indítással) beállt futást.
+    void apiRequest<{ runId?: string | null }>("GET", "/api/studio/lessons/one-step/active")
+      .then((r) => { if (typeof r?.runId === "string" && r.runId) setRunId((current) => current ?? r.runId!); })
+      .catch(() => { /* az aktív futás keresése nem kötelező: az űrlap enélkül is működik */ });
+  }, [persistRun, runId]);
   const oneStep = useMutation({
     // docs/specs/2026-10-15-hiba-gombok.md (E3): `forceNew` = kifejezett újragyártás ugyanabból a forrásból (a megszakadt piszkozat helyett).
     mutationFn: (opts?: { forceNew?: boolean }) =>
