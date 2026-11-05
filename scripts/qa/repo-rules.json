@@ -1,0 +1,18 @@
+{
+  "rules": [
+    {
+      "tool": "Bash|PowerShell",
+      "pattern": "\\bgit\\b[^|;&]*-c\\s*core\\.hookspath\\s*=",
+      "flags": "i",
+      "level": "deny",
+      "message": "git -c core.hooksPath=… (a QA-hookok megkerülése, a --no-verify megfelelője; docs/agent-csapdak.md C-17)"
+    },
+    {
+      "tool": "Bash|PowerShell",
+      "pattern": "\\bgit\\b[^|;&]*\\bconfig\\b[^|;&]*\\bcore\\.hookspath\\b",
+      "flags": "i",
+      "level": "warn",
+      "message": "git config core.hooksPath — a hookok helyének átállítása csak kifejezett kérésre (a megkerülés tilos)."
+    }
+  ]
+}
