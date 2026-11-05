@@ -10,6 +10,8 @@
 // Kilépés: 0 = egyezik, 1 = eltér (még fut a telepítés, vagy elmaradt), 2 = nem ellenőrizhető (hálózat / git).
 
 import { execFileSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** A Render-szolgáltatás gyökérmappája (`rootDir`). */
@@ -31,14 +33,16 @@ export function compareRevisions({ expected, live, uptimeSec }) {
   return { ok: false, code: 1, message: `ELTÉR: éles ${live.slice(0, 7)}, várt ${expected.slice(0, 7)} — a telepítés még fut (kb. 2 perc), vagy elmaradt (Render → Events).` };
 }
 
-function arg(name, fallback) {
-  const i = process.argv.indexOf(name);
-  return i >= 0 ? process.argv[i + 1] : fallback;
+/** Kapcsoló értéke; hiányzó vagy másik kapcsolóval kezdődő érték esetén a tartalék (review #401). */
+export function argValue(argv, name, fallback) {
+  const i = argv.indexOf(name);
+  const value = i >= 0 ? argv[i + 1] : undefined;
+  return value && !value.startsWith('--') ? value : fallback;
 }
 
 async function main() {
-  const url = arg('--url', 'https://websuli.vip/api/health');
-  const ref = arg('--ref', 'origin/main');
+  const url = argValue(process.argv, '--url', 'https://websuli.vip/api/health');
+  const ref = argValue(process.argv, '--ref', 'origin/main');
   let expected = '';
   try {
     expected = execFileSync('git', ['log', '-1', '--format=%H', ref, '--', ...deployPathspec()], { encoding: 'utf8' }).trim();
@@ -49,6 +53,8 @@ async function main() {
   let health;
   try {
     const res = await fetch(url, { headers: { 'cache-control': 'no-cache' } });
+    // Review #401: nem 2xx válasznál a státusz látszódjon, ne egy általános JSON-hiba.
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     health = await res.json();
   } catch (error) {
     console.error(`[render-revízió] a ${url} nem érhető el: ${error instanceof Error ? error.message : error}`);
@@ -59,4 +65,11 @@ async function main() {
   process.exit(result.code);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main();
+/** Közvetlen futtatás-e (review #401: relatív útvonal és symlink esetén is). */
+function isDirectRun() {
+  if (!process.argv[1]) return false;
+  try { return realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url)); }
+  catch { return false; }
+}
+
+if (isDirectRun()) await main();

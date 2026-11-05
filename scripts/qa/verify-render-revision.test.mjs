@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { compareRevisions, deployPathspec } from './verify-render-revision.mjs';
+import { argValue, compareRevisions, deployPathspec } from './verify-render-revision.mjs';
 
 test('összevetés: egyezés 0, eltérés 1, hiányzó adat 2', () => {
   assert.equal(compareRevisions({ expected: 'a'.repeat(40), live: 'a'.repeat(40), uptimeSec: 120 }).code, 0);
@@ -16,4 +16,12 @@ test('a pathspec a source/-t nézi, a Render build-szűrő kizárt útvonalai n�
   for (const p of ['docs/**', '**/*.md', 'source/tests/**', '.github/**']) assert.ok(spec.includes(`:(exclude,glob)${p}`), p);
   // A git elfogadja a pathspecet (érvénytelen magic esetén hibával kilépne).
   execFileSync('git', ['log', '-1', '--format=%H', 'HEAD', '--', ...spec], { encoding: 'utf8' });
+});
+
+// Review #401 (Copilot): hiányzó kapcsolóérték → tartalék, nem undefined.
+test('kapcsolóérték: megadott, hiányzó, másik kapcsoló utána', () => {
+  assert.equal(argValue(['node', 's', '--url', 'https://x/h'], '--url', 'D'), 'https://x/h');
+  assert.equal(argValue(['node', 's', '--url'], '--url', 'D'), 'D');
+  assert.equal(argValue(['node', 's', '--url', '--ref', 'main'], '--url', 'D'), 'D');
+  assert.equal(argValue(['node', 's'], '--url', 'D'), 'D');
 });
