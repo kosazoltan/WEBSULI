@@ -24,4 +24,4 @@ A `npm run test:learning-db` (9 integrációs fájl, 73 teszt, eldobható Postgr
 
 <!-- acceptance-checklist -->
 - [x] A1: a CI-ben új „DB integrációs tesztek” job fut `npm run test:learning-db`-vel.
-- [ ] A2: a job zöld a #397 összevonása utáni `main`-ről indított PR-on.
+- [x] A2: a job zöld a #397 összevonása utáni `main`-ről indított PR-on (#399, „DB integrációs tesztek” success).
