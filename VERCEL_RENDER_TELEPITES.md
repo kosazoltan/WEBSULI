@@ -195,5 +195,7 @@ felületi build-parancs a `render.yaml` `buildCommand`-ja-e):
 RENDER_API_KEY=… node scripts/qa/verify-render-settings.mjs   # 0 = egyezik, 1 = eltér (mezőnként), 2 = nincs kulcs / API-hiba
 ```
 
-A CI „Render-beállítás” jobja ugyanezt futtatja, ha a repóban be van állítva a `RENDER_API_KEY` Actions-titok
-(GitHub → Settings → Secrets and variables → Actions); titok nélkül a lépés kihagyva. A szkript csak olvas.
+A „Render-beállítás” workflow (`.github/workflows/render-settings.yml`) ugyanezt futtatja a `main`-re történő
+összevonás után, naponta és kézzel indítva, ha be van állítva a `RENDER_API_KEY` Actions-titok (GitHub → Settings →
+Secrets and variables → Actions); titok nélkül a lépés kihagyva. PR-ra szándékosan nem fut: a titkot csak a már
+összevont kód kapja meg. A szkript csak olvas, a build-parancs értékét nem naplózza.

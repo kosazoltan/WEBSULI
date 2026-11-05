@@ -15,8 +15,12 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** A `render.yaml` (egyetlen szolgáltatás) `buildCommand` értéke. */
 export function renderYamlBuildCommand(text) {
-  const m = /^[ \t-]*buildCommand:\s*(.+?)\s*$/m.exec(text);
-  return m ? m[1].replace(/^(['"])(.*)\1$/, '$2') : '';
+  const m = /^[ \t-]*buildCommand:[ \t]*(.*)$/m.exec(text);
+  if (!m) return '';
+  const raw = m[1].trim();
+  // Review #402: idézett skalár → az idézőjelek közötti rész; sima skalár → a sorvégi ` # megjegyzés` nélkül (YAML-szabály).
+  const quoted = /^(['"])(.*?)\1(?:\s+#.*)?$/.exec(raw);
+  return quoted ? quoted[2] : raw.replace(/\s+#.*$/, '');
 }
 
 /** Tiszta összevetés: a Render API szolgáltatás-objektuma vs. a repó feltevései. Visszatér: eltérések listája. */
@@ -31,8 +35,18 @@ export function compareRenderSettings(service, { buildCommand }) {
   check('rootDir', service?.rootDir, RENDER_ROOT_DIR);
   check('buildFilter.ignoredPaths', sortedJson(service?.buildFilter?.ignoredPaths), sortedJson(RENDER_IGNORED_PATHS));
   check('buildFilter.paths', sortedJson(service?.buildFilter?.paths), '[]');
-  check('buildCommand', service?.serviceDetails?.envSpecificDetails?.buildCommand, buildCommand);
+  // A Render API (és MCP) válaszában `serviceDetails.envSpecificDetails.buildCommand`; tartalék: `serviceDetails.buildCommand`.
+  const details = service?.serviceDetails;
+  check('buildCommand', details?.envSpecificDetails?.buildCommand ?? details?.buildCommand, buildCommand);
   return diffs;
+}
+
+/** Naplósor egy eltéréshez. Review #402: a build-parancs értéke titkot tartalmazhat — azt nem írjuk ki, csak a mezőt. */
+export function describeDiff(d) {
+  if (d.field === 'buildCommand') {
+    return `buildCommand: a Render-felület build-parancsa ${d.live ? 'eltér' : 'hiányzik'} a render.yaml-hoz képest (érték nem naplózva).`;
+  }
+  return `${d.field}: Render = ${d.live ?? '(nincs)'} | repó = ${d.expected}`;
 }
 
 async function main() {
@@ -61,7 +75,7 @@ async function main() {
     console.log('[render-beállítás] OK: a Render-beállítás egyezik a repó feltevéseivel.');
     process.exit(0);
   }
-  for (const d of diffs) console.log(`[render-beállítás] ELTÉR ${d.field}: Render = ${d.live ?? '(nincs)'} | repó = ${d.expected}`);
+  for (const d of diffs) console.log(`[render-beállítás] ELTÉR ${describeDiff(d)}`);
   console.log('[render-beállítás] Igazítsd a Render-felületet (Settings) vagy a repót (render.yaml, verify-render-revision.mjs).');
   process.exit(1);
 }

@@ -78,28 +78,6 @@ jobs:
       - name: Run unit tests
         run: node --import tsx --test "tests/*.test.ts"
 
-  # docs/specs/2026-11-05-render-beallitas-ellenorzes.md (tulajdonosi döntés 2026-11-05): a Render-felület beállítása
-  # (gyökérmappa, build-szűrő, build-parancs) egyezzen a repó feltevéseivel. Csak olvas; titok nélkül (fork PR,
-  # még be nem állított titok) a lépés kihagyva.
-  render-settings:
-    name: Render-beállítás
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - name: Kihagyva (nincs RENDER_API_KEY titok)
-        if: env.RENDER_API_KEY == ''
-        run: echo "A RENDER_API_KEY titok nincs beállítva — a Render-beállítás összevetése kihagyva."
-      - name: Render-beállítás összevetése
-        if: env.RENDER_API_KEY != ''
-        run: node scripts/qa/verify-render-settings.mjs
-
   # docs/specs/2026-11-05-ci-learning-db.md: az adatbázisos integrációs tesztek (npm run test:learning-db) eddig csak helyben
   # futottak, ezért egy bukó teszt észrevétlen maradt (#397). A harness saját, eldobható postgres:17 konténert indít
   # (loopback, projekt-ENV nélkül), a runner Dockerét használja.
