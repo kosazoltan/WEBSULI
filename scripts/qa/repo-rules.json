@@ -1,0 +1,25 @@
+{
+  "rules": [
+    {
+      "tool": "Bash|PowerShell",
+      "pattern": "\\bgit\\b[^|;&]*-c\\s*['\"]?core\\.hookspath\\s*=",
+      "flags": "i",
+      "level": "deny",
+      "message": "git -c core.hooksPath=… (a QA-hookok megkerülése, a --no-verify megfelelője; docs/agent-csapdak.md C-17)"
+    },
+    {
+      "tool": "Bash|PowerShell",
+      "pattern": "--config-env[=\\s]+['\"]?core\\.hookspath\\s*=",
+      "flags": "i",
+      "level": "deny",
+      "message": "git --config-env=core.hooksPath=… (a QA-hookok megkerülése)"
+    },
+    {
+      "tool": "Bash|PowerShell",
+      "pattern": "GIT_CONFIG_(?:KEY_\\d+\\s*=\\s*['\"]*|PARAMETERS\\s*=[^|;&]*)core\\.hookspath",
+      "flags": "i",
+      "level": "deny",
+      "message": "GIT_CONFIG_KEY_n / GIT_CONFIG_PARAMETERS core.hooksPath-ra (a QA-hookok megkerülése környezeti változóval)"
+    }
+  ]
+}
