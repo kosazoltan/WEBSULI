@@ -8,7 +8,9 @@ megkerülés; egy ügynök a #396-ban így commitolt (`docs/agent-csapdak.md` C-
 
 ## Cél / nem-cél
 
-- Cél: a `git -c core.hooksPath=…` parancs DENY; a hookok helyének tartós átállítása (`git config core.hooksPath`) WARN.
+- Cél: a `git -c core.hooksPath=…` parancs DENY (idézőjeles formában is).
+- Review #398: WARN repo-szabály nincs — a kit hookja az első WARN-nál kilép, így elnyomná a későbbi DENY-t (pl.
+  `git config --get core.hooksPath; git commit --no-verify`). A `git config core.hooksPath` ezért nem jelez.
 - Nem-cél: a kezelt `agentic-qa-kit` hookkódja (`scripts/qa/hooks/enforce-repo-rules.mjs`) nem változik — a bővítés a kit
   saját, erre szolgáló `scripts/qa/repo-rules.json` fájljában van. Git hook nem kerül a repóba (a repó nem ír elő ilyet).
 
@@ -19,5 +21,6 @@ lépés a új tesztet is futtatja).
 
 <!-- acceptance-checklist -->
 - [x] A1: `git -c core.hooksPath=… commit|push|merge` → DENY; a `--no-verify` tiltás megmarad.
-- [x] A2: `git config core.hooksPath …` → WARN; a szokásos `git commit` / `push` / `-c user.name=…` → nincs kimenet.
+- [x] A2: `git config --get core.hooksPath; git commit --no-verify …` → DENY; a szokásos `git commit` / `push` / `-c user.name=…`
+  és a `core.hooksPath` lekérdezése → nincs kimenet.
 - [x] A3: `node --test scripts/qa/three-phase-check.test.mjs scripts/qa/repo-rules.test.mjs` PASS, a CI is futtatja.
