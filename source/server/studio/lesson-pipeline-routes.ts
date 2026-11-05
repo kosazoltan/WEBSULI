@@ -551,7 +551,10 @@ lessonPipelineRouter.post("/drafts/:jobId/remake", async (req: Request, res: Res
 lessonPipelineRouter.get("/lessons/one-step/active", async (req: Request, res: Response) => {
   const { rows } = await db.execute(sql`SELECT r.id FROM one_step_runs r JOIN lesson_workflow_runs w ON w.id = r.id
     WHERE w.owner_id = ${req.user!.id} AND w.state IN ('running', 'waiting')
-      AND r.phase NOT IN ('done', 'error', 'parked', 'draft') AND r.updated_at > now() - interval '1 hour'
+      -- Review #395 (R1): csak tananyaggyártás — a fogalomjavítás (concept) nem a Készítés fül futása.
+      AND w.snapshot->'definition'->>'mode' IN ('upload', 'studio', 'webStudio')
+      -- Review #395 (R3): az élő háttérfolyamat (lízing) dönt, nem a haladássor kora.
+      AND r.phase NOT IN ('done', 'error', 'parked', 'draft') AND w.lease_until > now()
     ORDER BY r.updated_at DESC LIMIT 1`);
   const id = (rows[0] as { id?: string } | undefined)?.id;
   res.json({ runId: typeof id === "string" ? id : null });

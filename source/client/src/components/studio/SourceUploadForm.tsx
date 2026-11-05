@@ -213,7 +213,9 @@ export function SourceUploadForm({
   // a saját, épp futó gyártás magától újra követhető — csatolásonként egyszer, hogy a „Bezárás” ne nyissa újra.
   const adoptTried = useRef(false);
   useEffect(() => {
-    if (!persistRun || runId !== null || adoptTried.current) return;
+    // Review #395 (R2): a már követett (pl. tárolóból visszaállított) futás is elhasználja a csatlakozást — a „Bezárás” után ne nyíljon újra.
+    if (runId !== null) { adoptTried.current = true; return; }
+    if (!persistRun || adoptTried.current) return;
     adoptTried.current = true;
     // A funkcionális frissítés nem írja felül az időközben (pl. új indítással) beállt futást.
     void apiRequest<{ runId?: string | null }>("GET", "/api/studio/lessons/one-step/active")
