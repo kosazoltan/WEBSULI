@@ -87,7 +87,7 @@ const LessonRepairWorkbench = lazy(() => import("@/components/LessonRepairWorkbe
 const MaterialImprovementBackups = lazy(() => import("@/components/MaterialImprovementBackups"));
 
 // Admin Files Tab Component - handles file management
-function AdminFilesTab() {
+function AdminFilesTab({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showUploadZone, setShowUploadZone] = useState(false);
@@ -279,7 +279,7 @@ function AdminFilesTab() {
   return (
     <div className="space-y-6">
       {/* docs/specs/2026-10-15-admin-tananyag-draft.md: a megszakadt gyártások piszkozatai a fájllista fölött (csak adminnak). */}
-      <DraftLessons />
+      <DraftLessons onOpenStudio={onOpenStudio} />
       <Suspense fallback={<Card><CardContent className="pt-6"><Skeleton className="h-64" /></CardContent></Card>}>
         <AdminFileDashboard
           files={files}
@@ -720,7 +720,7 @@ export default function Admin() {
           <AdminTabBar hidden={isMobile} />
 
           <TabsContent value="files" className="space-y-2">
-            {activeTab === "files" && <AdminFilesTab />}
+            {activeTab === "files" && <AdminFilesTab onOpenStudio={() => { setActiveTab("lesson-studio"); window.scrollTo({ top: 0 }); }} />}
           </TabsContent>
 
           <TabsContent value="users" className="space-y-2">

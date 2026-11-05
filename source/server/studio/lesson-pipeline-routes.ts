@@ -374,7 +374,9 @@ async function workflowVisitsOfJob(jobId: string): Promise<{ visits: Array<{ ste
 export type OwnerDraft = { jobId: string; title: string; subject: string; classroom: number; draft: OneStepDraft | null; running: boolean;
   error: string | null; updatedAt: string; step: string; ownerless: boolean; hasPublished: boolean; awaitingApproval: boolean;
   /** Spec 2026-10-16-gyartas-haladas: futó tételnél a job legutóbbi futásának részlete és ideje. */
-  progress?: { detail: string | null } & RunTiming } & JobStopInfo;
+  progress?: { detail: string | null } & RunTiming;
+  /** Spec 2026-11-05-gyartas-reszletes-kovetes: a job legutóbbi egylépéses futása (folyamatábra, visszalépés a készítéshez). */
+  runId?: string } & JobStopInfo;
 
 /**
  * docs/specs/2026-10-16-draft-kezeles.md: a belépett admin által kezelhető job — nincs olyan workflow-sora, amelynek MÁS a gazdája
@@ -411,7 +413,7 @@ export async function ownerDraftTotal(owner: string): Promise<number> {
 export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
   const { rows } = await db.execute(sql`SELECT j.id, j.step, j.status, j.error, j.lesson_id, j.output, coalesce(j.finished_at, j.created_at) AS updated_at,
       m.title AS map_title, m.subject, m.classroom, wr.visits AS wf_visits, wr.executions AS wf_executions, wr.owner_id AS wf_owner,
-      osr.detail AS run_detail, osr.elapsed AS run_elapsed, osr.since AS run_since, osr.alive AS run_alive,
+      osr.id AS run_id, osr.detail AS run_detail, osr.elapsed AS run_elapsed, osr.since AS run_since, osr.alive AS run_alive,
       EXISTS (SELECT 1 FROM lessons p WHERE p.map_id = j.map_id AND p.published_at IS NOT NULL) AS has_published
     FROM studio_jobs j LEFT JOIN lessons l ON l.id = j.lesson_id JOIN knowledge_maps m ON m.id = j.map_id
     -- Review #253 (P2): a job legutóbbi workflow-pillanatképe ugyanebben a lekérdezésben (nincs tételenkénti 2 körút).
@@ -421,7 +423,7 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
     ) wr ON true
     -- Spec 2026-10-16-gyartas-haladas: a job legutóbbi futásának részlete, ideje (a szerver órája szerint) és a háttérfolyamat lízingje.
     LEFT JOIN LATERAL (
-      SELECT r.detail, extract(epoch FROM now() - r.started_at)::int AS elapsed, extract(epoch FROM now() - r.updated_at)::int AS since,
+      SELECT r.id, r.detail, extract(epoch FROM now() - r.started_at)::int AS elapsed, extract(epoch FROM now() - r.updated_at)::int AS since,
         (SELECT w.lease_until > now() FROM lesson_workflow_runs w WHERE w.id = r.id) AS alive
       FROM one_step_runs r WHERE r.job_id = j.id ORDER BY r.updated_at DESC LIMIT 1
     ) osr ON true
@@ -448,6 +450,7 @@ export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
       subject: String(raw.subject ?? ""), classroom: Number(raw.classroom ?? 0), draft: draftSummaryOf(raw.output), running,
       error: running ? null : job.error, updatedAt: new Date(String(raw.updated_at)).toISOString(), step: job.step,
       ownerless, hasPublished: raw.has_published === true, awaitingApproval,
+      ...(typeof raw.run_id === "string" && raw.run_id ? { runId: raw.run_id } : {}),
       ...(running && typeof raw.run_elapsed === "number" ? { progress: { detail: (raw.run_detail as string | null) ?? null, elapsedSec: Math.max(0, raw.run_elapsed),
         ...(typeof raw.run_since === "number" ? { sinceUpdateSec: Math.max(0, raw.run_since) } : {}), ...(typeof raw.run_alive === "boolean" ? { alive: raw.run_alive } : {}) } } : {}),
       ...stop, ...(ownerless ? { resumable: false } : {}),
@@ -539,6 +542,19 @@ lessonPipelineRouter.post("/drafts/:jobId/remake", async (req: Request, res: Res
   if (!rows.length) return res.status(409).json({ message: "Ez a piszkozat nem gyártható újra (fut, publikált, vagy másik készítőhöz tartozik)." });
   try { return res.status(202).json({ jobId: req.params.jobId, runId: await remakeAsSingleRun(req.params.jobId, owner), remanufactured: true }); }
   catch (error) { return res.status(409).json({ message: error instanceof Error ? error.message : "Az újragyártás nem indítható." }); }
+});
+
+/**
+ * Spec 2026-11-05-gyartas-reszletes-kovetes (G3): a belépett admin épp futó egylépéses gyártása — a Készítés fül
+ * visszalépéskor (üres böngészőtároló mellett is) ehhez csatlakozik. A `:runId` útvonal ELŐTT áll. Csak olvas.
+ */
+lessonPipelineRouter.get("/lessons/one-step/active", async (req: Request, res: Response) => {
+  const { rows } = await db.execute(sql`SELECT r.id FROM one_step_runs r JOIN lesson_workflow_runs w ON w.id = r.id
+    WHERE w.owner_id = ${req.user!.id} AND w.state IN ('running', 'waiting')
+      AND r.phase NOT IN ('done', 'error', 'parked', 'draft') AND r.updated_at > now() - interval '1 hour'
+    ORDER BY r.updated_at DESC LIMIT 1`);
+  const id = (rows[0] as { id?: string } | undefined)?.id;
+  res.json({ runId: typeof id === "string" ? id : null });
 });
 
 /** GET /api/studio/lessons/one-step/:runId — the progress poll. */

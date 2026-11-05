@@ -416,7 +416,7 @@ export default function AdminFileDashboard({
           </p>
         </div>
 
-        <div className="flex flex-row items-center gap-2 mb-3">
+        <div className="flex flex-row flex-wrap items-center gap-2 mb-3">
           {onUploadClick && (
             <Button
               onClick={onUploadClick}
