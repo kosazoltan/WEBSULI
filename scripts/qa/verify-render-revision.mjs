@@ -48,29 +48,52 @@ export function argValue(argv, name, fallback) {
   return value && !value.startsWith('--') ? value : fallback;
 }
 
+/** A várt revízió a megadott refen (sekély klón → hiba). */
+function expectedRevision(ref) {
+  if (execFileSync('git', ['rev-parse', '--is-shallow-repository'], { encoding: 'utf8' }).trim() === 'true') {
+    throw new Error('Sekély klón: a várt revízió nem állapítható meg megbízhatóan (git fetch --unshallow).');
+  }
+  return execFileSync('git', expectedRevisionArgs(ref), { encoding: 'utf8' }).trim();
+}
+
+/** Review #401 (Sourcery): `origin/<ág>` refnél előbb frissít, hogy ne egy elavult helyi refhez mérjen. */
+function refreshRemoteRef(ref) {
+  const m = /^origin\/(.+)$/.exec(ref);
+  if (m) execFileSync('git', ['fetch', '--quiet', 'origin', m[1]], { encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'] });
+}
+
 async function main() {
   const url = argValue(process.argv, '--url', 'https://websuli.vip/api/health');
   const ref = argValue(process.argv, '--ref', 'origin/main');
   let expected = '';
   try {
+    refreshRemoteRef(ref);
     // Review #401 (Vercel): sekély klónban a levágott előzmény határa téves várt revíziót adhat — ott nem ellenőrizhető.
-    if (execFileSync('git', ['rev-parse', '--is-shallow-repository'], { encoding: 'utf8' }).trim() === 'true') {
-      console.error('[render-revízió] Sekély klón: a várt revízió nem állapítható meg megbízhatóan (git fetch --unshallow).');
-      process.exit(2);
-    }
-    expected = execFileSync('git', expectedRevisionArgs(ref), { encoding: 'utf8' }).trim();
+    expected = expectedRevision(ref);
   } catch (error) {
     console.error(`[render-revízió] git hiba: ${error instanceof Error ? error.message : error}`);
     process.exit(2);
   }
   let health;
   try {
-    const res = await fetch(url, { headers: { 'cache-control': 'no-cache' } });
+    // Review #401 (Sourcery): időkorlát — a nem válaszoló végpont nem akasztja meg az ellenőrzést.
+    const res = await fetch(url, { headers: { 'cache-control': 'no-cache' }, signal: AbortSignal.timeout(15_000) });
     // Review #401: nem 2xx válasznál a státusz látszódjon, ne egy általános JSON-hiba.
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     health = await res.json();
   } catch (error) {
     console.error(`[render-revízió] a ${url} nem érhető el: ${error instanceof Error ? error.message : error}`);
+    process.exit(2);
+  }
+  // Review #401 (Sourcery): ha az ellenőrzés közben új commit érkezett, az eredmény nem dönthető el.
+  try {
+    refreshRemoteRef(ref);
+    if (expectedRevision(ref) !== expected) {
+      console.error('[render-revízió] A ref az ellenőrzés közben változott — futtasd újra néhány perc múlva.');
+      process.exit(2);
+    }
+  } catch (error) {
+    console.error(`[render-revízió] git hiba: ${error instanceof Error ? error.message : error}`);
     process.exit(2);
   }
   const result = compareRevisions({ expected, live: health?.revision ?? '', uptimeSec: health?.uptime });

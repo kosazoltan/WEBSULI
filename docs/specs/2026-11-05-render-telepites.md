@@ -24,6 +24,11 @@
 - A szűrő vagy a gyökérmappa változása: a szkript állandóit frissíteni kell (a leírás rögzíti).
 
 <!-- acceptance-checklist -->
-- [x] A1: `VERCEL_RENDER_TELEPITES.md` CI/CD szakasza a mért Render-beállítást és következményeit írja le.
-- [x] A2: `node --test scripts/qa/verify-render-revision.test.mjs` PASS; a CI QA-lépése futtatja.
-- [x] A3: a szkript a mai `main`-re `9aea145`-öt vár — egyezik az éles revízióval (Render API + `/api/health`).
+- [x] A1: AMIKOR valaki a `VERCEL_RENDER_TELEPITES.md`-ből tájékozódik, a CI/CD szakasz a Render API-ból mért szabályt
+  (`main`, `rootDir: source`, `buildFilter.ignoredPaths`) és következményeit írja le.
+  Mérés: `grep -c "build-szűrő kizárt útvonalain" VERCEL_RENDER_TELEPITES.md` → `1`.
+- [x] A2: AMIKOR a CI fut, a `verify-render-revision` tesztjei lefutnak.
+  Mérés: `node --test scripts/qa/verify-render-revision.test.mjs` → `# fail 0`; `.github/workflows/ci.yml` QA-lépése tartalmazza.
+- [x] A3: AMIKOR a `main` utolsó telepítést indító commitja élesben fut, a szkript 0-val lép ki; HA eltér, 1-gyel; HA
+  nem ellenőrizhető (hálózat, sekély klón, közbeeső commit), 2-vel. Mérés: a mai `main`-re a várt revízió `9aea145`
+  (`git log -1 --first-parent … -- <pathspec>`), egyezik a Render API élő deployjával.
