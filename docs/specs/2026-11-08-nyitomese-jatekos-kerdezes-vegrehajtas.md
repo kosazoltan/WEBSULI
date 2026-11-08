@@ -328,7 +328,12 @@ Bukásnál az implementációt javítod, a tesztet nem gyengíted; a bukó paran
 
 ## T12 — S2b mérés (jóváhagyva 2026-11-08; fizetős)
 
-1. Térképválasztás (csak olvasás): a végrehajtó a `source/scripts/lib/read-only-db.ts` (`withReadOnlyDb`) segítségével egy scratchpad-szkripttel
+0. Módosítás (2026-11-08, végrehajtás közben): a `source/.env`-be került `DATABASE_URL` egy régi adatbázisra mutatott
+   (`knowledge_maps` tábla nélkül), ezért a mérés a szkript helyi forrásfájlos módjával (`file:<útvonal>`) fut, éles adatbázis nélkül.
+   A három saját forrásszöveg: `docs/measurements/2026-11-08-nyitomese-sources/` (3., 6., 10. évfolyam, általánosan ismert tananyag).
+   A kézi rubrikához a `single-run-measure.mts` opcionális `MEASURE_SAVE_LESSON=1` kapcsolója a teljes lecke-JSON-t is kimenti
+   (alapból ki; a régi mérések kimenete változatlan). Mindkét ág ugyanazt a fájlt kapja; a kinyerés véletlenje ágonként eltérhet.
+1. Térképválasztás (csak olvasás, ha van érvényes éles `DATABASE_URL`): a végrehajtó a `source/scripts/lib/read-only-db.ts` (`withReadOnlyDb`) segítségével egy scratchpad-szkripttel
    listázza a közzétett leckével rendelkező térképeket évfolyammal; sávonként (1–4., 5–8., 9–12.) azt választja, amelynek forrásszövege
    300–2000 szó (közepes forrás, a 2026-10-14-i mérés sávja), azonos feltételnél a legutóbb frissítettet. A választás és indoka a mérési fájlba kerül.
 2. Térképenként, a `source/` mappából, háttérfolyamatként, egymás után (egy helyi Docker-Postgres egyszerre):

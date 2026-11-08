@@ -153,6 +153,9 @@ try {
     const map = (await pool.query("SELECT source_text FROM knowledge_maps WHERE id=$1", [result.mapId])).rows[0];
     out.lesson = { title: lesson.title, sections: lesson.sections.length, tasks: lesson.experience?.tasks?.length, quiz: lesson.experience?.quiz?.length, methods: lesson.experience?.methods?.length, concepts: concepts.length };
     out.metrics = measureLesson(lesson, { sourceText: sourceText || map.source_text, concepts });
+    // Spec 2026-11-08-nyitomese-jatekos-kerdezes (S2b): MEASURE_SAVE_LESSON=1 → a teljes lecke-JSON is a kimenetbe kerül (kézi rubrika:
+    // Célkártya, mini mese, IQ-formájú kérdések). Alapból nem — a régi mérések kimenete változatlan.
+    if (process.env.MEASURE_SAVE_LESSON === "1") out.lessonJson = lesson;
   }
   await pool.end();
   // Az alkalmazás saját kapcsolata (server/db) is lezárul a konténer eltávolítása előtt — különben a kilépéskor kezeletlen hibát dob.
