@@ -163,8 +163,8 @@ Hangnem: érett, mesélő hang és gyerekes elem nélkül; esetleírás, ütköz
 **Mini mese**
 > Ádám és Réka egy üres és egy teli bevásárlókocsit tolt végig a parkolón. Réka szerint a teli kocsi egyszerűen lassabb, mert
 > nehezebb, Ádám bizonytalanul Newton II. törvényére hivatkozott. Egyikük sem volt biztos a dolgában, és mindketten érezték, hogy
-> a meggyőződés még nem bizonyíték. Felrajzolták az erőket, majd ugyanakkora tolóerővel indították mindkét kocsit, és mérték, mennyi
-> idő alatt gyorsulnak fel. Mit mutatna a mérés, ha a teli kocsi tömege kétszerese lenne az üresének?
+> a meggyőződés még nem bizonyíték. Felrajzolták az erőket, a súrlódást is, majd úgy tolták a két kocsit, hogy mindkettőre ugyanakkora
+> eredő erő hasson, és mérték, mennyi idő alatt gyorsulnak fel. Mit mutatna a mérés, ha a teli kocsi tömege kétszerese lenne az üresének?
 
 **IQ-kérdés (analógia, kvíz)** — „Kétszeres erő ugyanakkora tömegre → kétszeres gyorsulás. Kétszeres tömeg ugyanakkora erővel → ?”
 A) kétszeres gyorsulás · B) fele akkora gyorsulás · C) ugyanakkora gyorsulás · D) négyszeres gyorsulás. Helyes: B. Visszajelzés rossz
