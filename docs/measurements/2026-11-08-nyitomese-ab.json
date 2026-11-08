@@ -1,0 +1,370 @@
+{
+  "meta": {
+    "spec": "docs/specs/2026-11-08-nyitomese-jatekos-kerdezes.md (S2b, A7)",
+    "date": "2026-11-08",
+    "tool": "source/scripts/measure/single-run-measure.mts, file: mód, MEASURE_SAVE_LESSON=1; gépi rubrika: regex-heurisztika (IQ-forma: kakukktojás, hamis állítás, sorminta, analógia, találós, ha…akkor, magyarázd el miért, ellenpélda, becslés)",
+    "sources": "docs/measurements/2026-11-08-nyitomese-sources/ (3., 6., 10. évfolyam, saját szöveg)",
+    "model": "MIND tartalék modellen: gpt-6.1-sol — az átmásolt ANTHROPIC_API_KEY érvénytelen volt (401), az éles fő modell (Opus 5.5) NEM mérve",
+    "runs": {
+      "off-3/on-3": "nyitomese-1 eredeti szerződés",
+      "off-6": "kapcsoló nélkül",
+      "on-6": "BUKOTT: bankcsomag (üres required a kulcs nélküli IQ-feladatoknál) → szerződés javítva",
+      "on-6b": "javított IQ-feladat szabály",
+      "off-10/on-10": "on-10 már a javított IQ-feladat szabállyal",
+      "on-10c": "+ lazított fogalomnév-szabály (a darabos, idézőjeles címalak megszűnt)"
+    },
+    "findings": [
+      "Célkártya: mind az 5 sikeres kapcsolós futásban 4/4 címke, a lépcső szerinti szóhasználattal (L2: Mit tanulunk ma?…, L3: Célunk…, L5: Cél / Tipikus buktató / Oka / Leküzdés).",
+      "Mini mese: 5/5 futásban pontosan 5 mondat, nyitott kérdéssel zárva; a recap első pontja mindegyikben visszatér a hőshöz és a célhoz.",
+      "IQ-formák: kapcsoló nélkül 0–1 / 98 kvízkérdés, kapcsolóval 6–9 / 98; szöveges feladat 0 → 4–8; ellenőrző (check) 0 → 1–2.",
+      "Ív (checkLessonArc): minden lefutott leckén rendben; a job mindegyik sikeres futásnál ok.",
+      "Hossz: 3. évf. 1113 → 1076 (−3%); 10. évf. 1710 → 1481 / 1540 (−13% / −10%); 6. évf. 650 → 988 (+52%), de a kinyerés eltérő: 7 → 11 fogalom (fogalmanként 93 → 90 szó). A két nyitóblokk 87–129 szó, a kikapcsolt ág első két blokkja 60–148 szó: a bevezetőt váltja ki.",
+      "Hiba 1 (javítva): a kulcs nélküli IQ-feladatok („mi lenne, ha”, „írj találós kérdést”) üres required-del buktatták a bankkaput (on-6).",
+      "Hiba 2 (javítva): a szó szerinti fogalomnév-szabály darabos, idézőjeles címalakot adott a Célkártyában és a mesében."
+    ],
+    "a7": "RÉSZBEN: kapu/ív nem rosszabb (a javítás után); hossz 2/3 évfolyamon ≤ +10%, a 6. évfolyamon a kinyerési eltérés miatt nem összevethető; az éles fő modell (Opus) nem mérve — érvényes Anthropic-kulccsal megismétlendő."
+  },
+  "rows": [
+    {
+      "arm": "off",
+      "band": 10,
+      "error": null,
+      "jobStatus": "ok",
+      "visibleWords": 1710,
+      "sections": 5,
+      "quiz": 98,
+      "tasks": 50,
+      "published": "ok",
+      "warnings": 3,
+      "qualityNotes": 0,
+      "arcOk": true,
+      "sourceInLessonPct": 90,
+      "requiredFactsPct": 100,
+      "repetitionPct": 5,
+      "seconds": null,
+      "block0": {
+        "kind": "explain",
+        "words": 148,
+        "goalLabelHits": 0,
+        "paragraphs": 4,
+        "text": "Egy láda vagy egy autó sebességváltozásának megértéséhez össze kell kapcsolnunk az erőt, a tömeget és a gyorsulást. Ez az összefüggés teszi lehetővé, hogy az erőből gyorsulást, a gyorsulásból pedig erőt számítsunk.\n\nErő és sebességváltozás: egy test sebessége csak akkor változik, ha erő hat rá. **Newton II. törvénye**, más néven a dinamika alaptörvénye pontosítja az összefüggést: a test gyorsulása egyenesen arányos a rá ható erők eredőjével, és fordítottan arányos a test tömegével. Képlete: **F = m · a**. A képletben tehát nem egy tetszőlegesen kiválasztott erő szerepel, hanem az eredő.\n\nAz F = m · a képlet mennyiségei és mértékegységei: F az eredő erő, mértékegysége a newton, jele N; m a tömeg, mértékegysége kg; a a gyorsulás, mértékegysége m/s².\n\nA newton meghatározása: 1 N az az erő, amely 1 kg tömegű testnek 1 m/s² gyorsulást ad. Ez a meghatározás az erő mértékegységét közvetlenül a "
+      },
+      "block1": {
+        "kind": "example",
+        "words": 0,
+        "sentences": 0,
+        "endsWithQuestion": false
+      },
+      "recapFirstBullet": "Megoldási sorrend: erőábra → eredő erő → F = m · a → mértékegység- és irányellenőrzés.",
+      "iq": {
+        "checks": 5,
+        "checksIq": 0,
+        "quiz": 98,
+        "quizIq": 1,
+        "tasks": 50,
+        "tasksIq": 0
+      },
+      "quizIqExamples": [
+        "A láda eredőjére helyesen 40 N-t kaptál. Mi a következő lépés a gyorsulás meghatározása előtt?"
+      ]
+    },
+    {
+      "arm": "off",
+      "band": 3,
+      "error": null,
+      "jobStatus": "ok",
+      "visibleWords": 1113,
+      "sections": 7,
+      "quiz": 98,
+      "tasks": 54,
+      "published": "ok",
+      "warnings": 2,
+      "qualityNotes": 0,
+      "arcOk": true,
+      "sourceInLessonPct": 84,
+      "requiredFactsPct": 100,
+      "repetitionPct": 4,
+      "seconds": null,
+      "block0": {
+        "kind": "explain",
+        "words": 69,
+        "goalLabelHits": 0,
+        "paragraphs": 4,
+        "text": "Ismerd meg a növény részeit! Így megérted, melyik rész mire szolgál.\n\n**A növény öt fő része**: gyökér, szár, levél, virág és termés. A legtöbb növénynek megvan ez az öt része. Mindegyiknek saját feladata van.\n\n**Gyökér**: a talajban találod. Rögzíti a növényt, hogy a szél ne döntse ki. A talajból vizet és benne oldott tápanyagokat szív fel.\n\n**Tartalék tápanyag a gyökérben** is gyűlhet. Ilyen a sárgarépa és a petrezselyem gyökere."
+      },
+      "block1": {
+        "kind": "animate",
+        "words": 0,
+        "sentences": 0,
+        "endsWithQuestion": false
+      },
+      "recapFirstBullet": "A magból új növény fejlődhet.",
+      "iq": {
+        "checks": 7,
+        "checksIq": 0,
+        "quiz": 98,
+        "quizIq": 0,
+        "tasks": 54,
+        "tasksIq": 0
+      },
+      "quizIqExamples": []
+    },
+    {
+      "arm": "off",
+      "band": 6,
+      "error": null,
+      "jobStatus": "ok",
+      "visibleWords": 650,
+      "sections": 3,
+      "quiz": 98,
+      "tasks": 47,
+      "published": "ok",
+      "warnings": 2,
+      "qualityNotes": 0,
+      "arcOk": true,
+      "sourceInLessonPct": 70,
+      "requiredFactsPct": 100,
+      "repetitionPct": 2,
+      "seconds": null,
+      "block0": {
+        "kind": "explain",
+        "words": 60,
+        "goalLabelHits": 0,
+        "paragraphs": 2,
+        "text": "Törtek összehasonlításakor jól jön, ha ugyanazt a mennyiséget más felírásban is felismered. **Egyenlő törtek** ugyanakkora részt jelölnek az egészből: 1/2 = 2/4 = 3/6. Egy torta fele ugyanannyi, mint négy egyenlő részéből kettő vagy hat egyenlő részéből három.\n\n**Törtek bővítése** során a számlálót és a nevezőt is ugyanazzal a 0-tól különböző számmal szorozzuk. Csak a felírás változik, az érték nem."
+      },
+      "block1": {
+        "kind": "example",
+        "words": 0,
+        "sentences": 0,
+        "endsWithQuestion": false
+      },
+      "recapFirstBullet": "Rajzzal az azonos egészekből jelölt részeket hasonlítjuk össze.",
+      "iq": {
+        "checks": 4,
+        "checksIq": 0,
+        "quiz": 98,
+        "quizIq": 1,
+        "tasks": 47,
+        "tasksIq": 0
+      },
+      "quizIqExamples": [
+        "A 2/9 és 8/36 ellenőrzésekor már kiszámítottad a 2 · 36 szorzatot. Mi a következő lépés?"
+      ]
+    },
+    {
+      "arm": "on",
+      "band": 10,
+      "error": null,
+      "jobStatus": "ok",
+      "visibleWords": 1481,
+      "sections": 5,
+      "quiz": 98,
+      "tasks": 45,
+      "published": "ok",
+      "warnings": 3,
+      "qualityNotes": 0,
+      "arcOk": true,
+      "sourceInLessonPct": 90,
+      "requiredFactsPct": 100,
+      "repetitionPct": 5,
+      "seconds": null,
+      "block0": {
+        "kind": "explain",
+        "words": 66,
+        "goalLabelHits": 4,
+        "paragraphs": 4,
+        "text": "**Cél**: Az Erő és sebességváltozás kapcsolatának megértésével a lecke végére ki tudod számítani a gyorsulást az eredő erőből és a tömegből.\n\n**Tipikus buktató**: A mozgás fenntartását összekeverheted a sebesség megváltoztatásával.\n\n**Oka**: A hétköznapi tapasztalatban a súrlódás fékez, ezért a folyamatos tolás szükségesnek tűnhet minden mozgáshoz.\n\n**Leküzdés**: Írd külön az adatokat, azonosítsd az eredő erőt, majd válaszd ki az összefüggést. Bizonytalanság esetén is ezekkel a lépésekkel kezdj."
+      },
+      "block1": {
+        "kind": "explain",
+        "words": 63,
+        "sentences": 5,
+        "endsWithQuestion": true,
+        "text": "Dóra egy láda tolásáról vitázik társával az Erő és sebességváltozás témájú feladat előtt. Attól tart, hogy hibázik, mert szerinte minden mozgáshoz kell eredő erő, társa viszont a sebesség változását emeli ki. Társa jelzi, hogy a hétköznapi súrlódás miatt érthető ez a bizonytalanság. Dóra különírja az adatokat, azonosítja az eredő erőt, majd kiválasztja az összefüggést. Hogyan döntheti el ezekből, hogy a láda sebessége változik-e?"
+      },
+      "recapFirstBullet": "Dóra az adatok elkülönítésével, az eredő azonosításával és a képlet kiválasztásával megtanulta: az eredőből dönthet a sebesség változásáról.",
+      "iq": {
+        "checks": 5,
+        "checksIq": 1,
+        "quiz": 98,
+        "quizIq": 9,
+        "tasks": 45,
+        "tasksIq": 6
+      },
+      "quizIqExamples": [
+        "Találós kérdés: erőegység vagyok, és 1 kg tömeghez 1 m/s² gyorsulást kapcsolok. Mi vagyok?",
+        "Melyik állítás hamis?",
+        "Találós kérdés: a testre ható erők vektori összege vagyok, és én határozom meg a gyorsulást. Mi vagyok?"
+      ]
+    },
+    {
+      "arm": "on-c",
+      "band": 10,
+      "error": null,
+      "jobStatus": "ok",
+      "visibleWords": 1540,
+      "sections": 5,
+      "quiz": 98,
+      "tasks": 48,
+      "published": "ok",
+      "warnings": 3,
+      "qualityNotes": 0,
+      "arcOk": true,
+      "sourceInLessonPct": 88,
+      "requiredFactsPct": 100,
+      "repetitionPct": 2,
+      "seconds": null,
+      "block0": {
+        "kind": "explain",
+        "words": 62,
+        "goalLabelHits": 4,
+        "paragraphs": 4,
+        "text": "**Cél** Az erő és sebességváltozás kapcsolatát értelmezve megtanuljuk meghatározni egy test gyorsulását vagy a rá ható eredő erőt.\n\n**Tipikus buktató** Könnyű a mozgás fenntartását összekeverni a sebesség megváltoztatásával.\n\n**Oka** A hétköznapi tapasztalatban a fékező erők hatása elterelheti a figyelmet az összes erő együttes hatásáról.\n\n**Leküzdés** Számolás előtt különítsd el az adatokat és a keresett mennyiséget, majd azonosítsd, melyik erő szerepel az összefüggésben."
+      },
+      "block1": {
+        "kind": "explain",
+        "words": 58,
+        "sentences": 5,
+        "endsWithQuestion": true,
+        "text": "Dóra egy láda mozgását elemzi egy tanulótársával. A társa a tolóerőből indulna ki, Dóra viszont bizonytalanságot érez, és fél hibás képletet választani. Társa felismeri, hogy több erő együttes hatásának értelmezése könnyen okozhat elakadást. Dóra külön leírja az adatokat és a keresett gyorsulást, majd ellenőrzi, melyik erőt kell a képletbe helyettesítenie. Hogyan döntheti el, hogy a láda sebessége megváltozik-e?"
+      },
+      "recapFirstBullet": "Dóra az adatok, a keresett mennyiség és a képletben szereplő erő elkülönítésével megértette az erő és sebességváltozás kapcsolatát: az eredőt kell vizsgálnia.",
+      "iq": {
+        "checks": 5,
+        "checksIq": 2,
+        "quiz": 98,
+        "quizIq": 8,
+        "tasks": 48,
+        "tasksIq": 6
+      },
+      "quizIqExamples": [
+        "Dóra a láda sebességének változását vizsgálja, társa csak azt mondja: „A láda már mozog.” Mi legyen a következő lépés?",
+        "Melyik állítás hamis az erő és a sebességváltozás kapcsolatáról?",
+        "Melyik állítás hamis az eredő erőről?"
+      ]
+    },
+    {
+      "arm": "on",
+      "band": 3,
+      "error": null,
+      "jobStatus": "ok",
+      "visibleWords": 1076,
+      "sections": 7,
+      "quiz": 98,
+      "tasks": 46,
+      "published": "ok",
+      "warnings": 2,
+      "qualityNotes": 0,
+      "arcOk": true,
+      "sourceInLessonPct": 86,
+      "requiredFactsPct": 100,
+      "repetitionPct": 2,
+      "seconds": null,
+      "block0": {
+        "kind": "explain",
+        "words": 47,
+        "goalLabelHits": 4,
+        "paragraphs": 4,
+        "text": "**Mit tanulunk ma?** A növény öt fő része lesz a felfedezésed tárgya. Megnevezed a részeket, és elmondod a feladatukat.\n\n**Mi lehet nehéz?** Összekeverheted a neveket és a feladatokat.\n\n**Miért?** Egyszerre több új kapcsolatra kell figyelned.\n\n**Így sikerül!** Haladj részenként: figyeld meg, nevezd meg, mondd el a feladatát!"
+      },
+      "block1": {
+        "kind": "explain",
+        "words": 40,
+        "sentences": 5,
+        "endsWithQuestion": true,
+        "text": "Lili növényfelfedező kalandra indult a kertben. Az „A növény öt fő része” feladatnál elbizonytalanodott, összekeverte a neveket. Társa megnyugtatta: egyszerre elég egy részt megfigyelni. Lili megfigyelte a gyökeret, megnevezte, majd elmondta a feladatát. Te hogyan folytatnád vele a növény felfedezését?"
+      },
+      "recapFirstBullet": "Lili megtanulta az öt fő részt és feladatukat. Segített a stratégia: megfigyelés, megnevezés, feladat.",
+      "iq": {
+        "checks": 7,
+        "checksIq": 1,
+        "quiz": 98,
+        "quizIq": 9,
+        "tasks": 46,
+        "tasksIq": 8
+      },
+      "quizIqExamples": [
+        "Kakukktojást keresünk: melyik nem az öt fő növényi rész neve?",
+        "Találós kérdés: leveleket, virágokat, terméseket tartok. Mi vagyok?",
+        "Találós kérdés: többnyire zöld vagyok, és napfénnyel tápanyagot készítek. Mi vagyok?"
+      ]
+    },
+    {
+      "arm": "on",
+      "band": 6,
+      "error": "A 4. fejezet bankcsomagja a javító kör után sem megfelelő: s3_t11: a javítás nem törölhet kötelező csoportot vagy korábbi elfogadott szóalakot, és nem vonhat össze kötelező csoportokat.",
+      "jobStatus": "error",
+      "visibleWords": null,
+      "sections": null,
+      "quiz": null,
+      "tasks": null,
+      "published": "error",
+      "warnings": 0,
+      "qualityNotes": 0,
+      "arcOk": null,
+      "sourceInLessonPct": null,
+      "requiredFactsPct": null,
+      "repetitionPct": null,
+      "seconds": null,
+      "block0": null,
+      "block1": null,
+      "recapFirstBullet": null,
+      "iq": {
+        "checks": 0,
+        "checksIq": 0,
+        "quiz": 0,
+        "quizIq": 0,
+        "tasks": 0,
+        "tasksIq": 0
+      },
+      "quizIqExamples": []
+    },
+    {
+      "arm": "on-b",
+      "band": 6,
+      "error": null,
+      "jobStatus": "ok",
+      "visibleWords": 988,
+      "sections": 4,
+      "quiz": 98,
+      "tasks": 47,
+      "published": "ok",
+      "warnings": 2,
+      "qualityNotes": 0,
+      "arcOk": true,
+      "sourceInLessonPct": 79,
+      "requiredFactsPct": 100,
+      "repetitionPct": 2,
+      "seconds": null,
+      "block0": {
+        "kind": "explain",
+        "words": 45,
+        "goalLabelHits": 4,
+        "paragraphs": 4,
+        "text": "**Célunk** az Egyenlő törtek felismerése, a törtek bővítése és egyszerűsítése, értékük megváltoztatása nélkül.\n\n**Ami nehezítheti** a munkát: a nagyobb számok nagyobb értéknek tűnhetnek.\n\n**Miért?** Könnyű a számokat figyelni a jelölt rész helyett.\n\n**Hogyan győzd le?** Rajzolj azonos nagyságú egészeket, és hasonlítsd össze a megjelölt részeket."
+      },
+      "block1": {
+        "kind": "explain",
+        "words": 46,
+        "sentences": 5,
+        "endsWithQuestion": true,
+        "text": "Nóri tortarajzokkal készül az osztály közös délutánjára. Az Egyenlő törtek feladatában nagyobbnak gondolja a 2/4-et az 1/2-nél, és elbizonytalanodik. Társa megnyugtatja: a különböző felírás könnyen megtéveszthet. Nóri azonos nagyságú tortákat rajzol, majd megjelöli a fél tortát és a négyből két részt. Vajon ugyanakkora részt jelölt meg?"
+      },
+      "recapFirstBullet": "Nórihoz hasonlóan rajzzal ellenőrzöm az egyenlő törteket; így nem a számok nagysága téveszt meg.",
+      "iq": {
+        "checks": 6,
+        "checksIq": 1,
+        "quiz": 98,
+        "quizIq": 6,
+        "tasks": 47,
+        "tasksIq": 4
+      },
+      "quizIqExamples": [
+        "Melyik állítás hamis az egyenlő törtekről?",
+        "Melyik a kakukktojás a helyes bővítések között?",
+        "Melyik állítás hamis?"
+      ]
+    }
+  ]
+}

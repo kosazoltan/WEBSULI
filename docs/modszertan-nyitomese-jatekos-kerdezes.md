@@ -23,7 +23,8 @@
 
 **Célkártya** — az 1. fejezet első blokkja (`explain`). A könyvek mesefejlécének (állapot – cél – tanulság) tanulói változata,
 négy rövid bekezdésben, a lépcső címkéivel:
-1. **Cél** — mit akarunk elérni a lecke végére; szó szerint megnevezi az 1. fejezet első fogalmát és a fő képességet. Ez az első
+1. **Cél** — mit akarunk elérni a lecke végére; természetes mondatba illesztve megnevezi az 1. fejezet első fogalmát (ragozva,
+   kisbetűvel is, címszerű alak bemásolása nélkül) és a fő képességet. Ez az első
    bekezdés, ezért ez lesz a főoldali kártya leírása is — egész mondat, címke nélkül is érthető.
 2. **Buktató** — mi az, ami miatt a cél esetleg nem sikerül (a térkép tévhitei, a téma tipikus nehézsége, a tanulási nehézség).
 3. **Oka** — miért történik ez, megszégyenítés nélkül.
@@ -36,7 +37,8 @@ négy rövid bekezdésben, a lépcső címkéivel:
 4. a Célkártya stratégiája működés közben;
 5. **nyitott kérdés**, amelyre a lecke adja meg a választ.
 
-A mese szó szerint tartalmazza az 1. fejezet első fogalmának nevét, és azt jelöli. A dramaturgia a terápiás mesék hét lépéséből
+A mese a fogalmat természetes szavakkal idézi fel, és azt jelöli; a pontos nevet a fejezet tanító blokkja mondja ki (a címkét
+az alapozza meg). A dramaturgia a terápiás mesék hét lépéséből
 (hős → probléma → kudarc és érzés → segítő → stratégia „varázstárgyban” → kis siker → továbbadás és tanulság) tömörített, öt
 mondatra szabott változat.
 
@@ -252,11 +254,11 @@ Egy, a tantárgyhoz és az évfolyamhoz illő **tanulási** nehézség; a strat�
 | sorminta / következő elem | kvíz, `check` | szabályfelismerés | 1.– | a szabály a tanított tartalomból következik |
 | analógia | kvíz, `check`, `analogy` módszer | összefüggés átvitele | 3.– | |
 | „Melyik állítás hamis?” / igaz-hamis csapda | kvíz, `check`, `myth` módszer | tévképzet javítása | 5.– | hihető, de hamis; a magyarázat megmondja, mi tévesztett meg |
-| találós kérdés | kvíz, `popup` módszer; fordítva szöveges feladat („Írj találós kérdést…”) | fogalom-előhívás | 3.– | |
+| találós kérdés | kvíz, `popup` módszer | fogalom-előhívás | 3.– | pontozott szöveges feladatként nem: nincs egyértelmű kulcs |
 | következtetés, nyomozós kizárás | kvíz, `check`, `gate` | dedukció | 5.– | egyértelmű, ellenőrzött megoldás |
 | előkérdés / becslés | `prediction` módszer, szöveges feladat indoklással | előzetes aktiválás, modellezés | 5.– | hibázni szabad |
 | „Magyarázd el, miért” / ellenpélda | szöveges feladat, `selfCheck` | mélyfeldolgozás | 7.– | a `required` a tanított fogalmat méri |
-| „Mi lenne, ha …?” | szöveges feladat (szóbeli is) | ok-okozat, transzfer | 3.– | a `required` a fogalom alkalmazását méri, a `sample` egy lehetséges jó válasz |
+| „Mi következik, ha …?” | szöveges feladat (szóbeli is) | ok-okozat, transzfer | 3.– | csak egyértelmű kulccsal; a `required` soha nem üres, és megkülönbözteti a helyes választ a tipikus hibástól |
 | dilemma | `conflict` módszer, szöveges feladat | érvelés, nézőpontváltás | 7.– | |
 
 ### Mennyiség és nehézségi ív

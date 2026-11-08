@@ -1,6 +1,6 @@
 # Spec: Célkártya, nyitómese és játékos (IQ-) kérdezés a tananyaggyártásban
 
-> Dátum: 2026-11-08 · Szerző: Claude (Opus 5.5) · Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-11-08)** — S1 és S2 KÉSZ (A1–A6, mérve 2026-11-08: célzott 144/144, teljes `npm test` 2599/2599, check/lint/check:test 0 hiba); S2b NOT DONE: ezen a gépen nincs `source/.env` (DATABASE_URL, ANTHROPIC_API_KEY)
+> Dátum: 2026-11-08 · Szerző: Claude (Opus 5.5) · Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-11-08)** — S1 és S2 KÉSZ (A1–A6, mérve 2026-11-08: célzott 144/144, teljes `npm test` 2599/2599, check/lint/check:test 0 hiba); S2b RÉSZBEN (`docs/measurements/2026-11-08-nyitomese-ab.json`): 3 évfolyam × 2 ág + 2 javító futás, a Célkártya, az 5 mondatos mese és az IQ-formák minden sikeres kapcsolós futásban megjelentek, kapu/ív rendben; a mérés a tartalék modellen (gpt-6.1-sol) futott, mert az átmásolt Anthropic-kulcs érvénytelen volt — az Opus-mérés érvényes kulccsal megismétlendő. Két hiba a mérés alapján javítva (kulcs nélküli IQ-feladat; szó szerinti fogalomnév)
 > Szabály: `docs/agent-haromfazisu-munka.md`. Végrehajtás: `docs/specs/2026-11-08-nyitomese-jatekos-kerdezes-vegrehajtas.md`.
 > Kanban: #6.
 
@@ -75,7 +75,8 @@ Kiegészítő tulajdonosi kérés (2026-11-08, szó szerint összefoglalva):
 
 **Célkártya** (az 1. fejezet ELSŐ blokkja, `explain`, depth "core"). A könyvek mesefejlécének (állapot – cél – tanulság) tanulói
 változata, négy rövid bekezdésben, a lépcső saját címkéivel (4.2):
-1. **Cél** — mit akarunk elérni a lecke végére; megnevezi az 1. fejezet első fogalmát (`term`, szó szerint) és a lecke fő képességét.
+1. **Cél** — mit akarunk elérni a lecke végére; megnevezi az 1. fejezet első fogalmát természetes mondatba illesztve (ragozva,
+   kisbetűvel is — címszerű alakot nem másol be; S2b mérés, 2026-11-08) és a lecke fő képességét.
    Ez az első bekezdés, ezért a főoldali kártya leírása is ez lesz (`lesson-teaser.ts`) — egész mondat, címke nélkül is érthető.
 2. **Buktató** — mi az, ami miatt a cél esetleg nem sikerül: a térkép tévhitei közül vagy a téma tipikus nehézségéből (tantárgyi)
    és/vagy a választott tanulási nehézségből (lelki réteg, 4.3).
@@ -85,7 +86,9 @@ változata, négy rövid bekezdésben, a lépcső saját címkéivel (4.2):
 **Mini mese** (az 1. fejezet MÁSODIK blokkja, `explain`, depth "core") — **pontosan 5 mondat**, a könyvek dramaturgiájának tömörítése:
 1. hős és helyzet; 2. a lecke tantárgyi problémája és az elakadás, az érzés megnevezésével; 3. segítő vagy felismerés, amely
 normalizál; 4. a Célkártya stratégiája működés közben; 5. **nyitott kérdés**, amelyre a lecke adja meg a választ.
-A mese tartalmazza az 1. fejezet első fogalmának nevét (`term`) és azt jelöli.
+A mese a fogalmat természetes szavakkal idézi fel és jelöli; a pontos nevét (`term`) a fejezet tanító blokkja mondja ki szó
+szerint, és az alapozza meg a címkét (`grounding.ts:330-361`, fejezeten belüli szabály). Módosítás az S2b mérés alapján
+(2026-11-08): a szó szerinti beillesztés mindhárom kapcsolós futásban darabos, idézőjeles címalakot adott.
 
 **Tanítás** — a harmadik blokktól a meglévő ív szerint (`LESSON_ARC_CONTRACT`).
 
@@ -157,11 +160,11 @@ Egy, a tantárgyhoz és az évfolyamhoz illő **tanulási** nehézség, konkrét
 | sorminta / következő elem | kvíz, `check` | a szabály a tanított tartalomból következik |
 | analógia („A úgy aránylik B-hez, mint C …-hoz”) | kvíz, `check`, `analogy` módszer | |
 | hamis állítás keresése („Melyik állítás hamis?”) / igaz-hamis csapda | kvíz, `check`, `myth` módszer | hihető, de hamis; a magyarázat megmondja, mi tévesztett meg |
-| találós kérdés (tulajdonságleírásból a fogalom) | kvíz, `popup` módszer; fordítva szöveges feladatként („Írj találós kérdést a … fogalomról!”) | |
+| találós kérdés (tulajdonságleírásból a fogalom) | kvíz, `popup` módszer | pontozott szöveges feladatként nem (nincs egyértelmű kulcs — S2b mérés, 2026-11-08) |
 | következtetés („Ha …, akkor mi igaz?”), nyomozós kizárás | kvíz, `check`, `gate` | egyértelmű, ellenőrzött megoldás |
 | előkérdés / becslés | `prediction` módszer, szöveges feladat (indoklással) | hibázni szabad |
 | „Magyarázd el, miért” / ellenpélda | szöveges feladat, `selfCheck` | a `required` a tanított fogalmat méri |
-| „Mi lenne, ha …?” | szöveges feladat (szóbeli is) | a `required` a fogalom alkalmazását méri, a `sample` egy lehetséges jó válasz |
+| „Mi következik, ha …?” | szöveges feladat (szóbeli is) | csak egyértelmű, a tanított tartalomból következő kulccsal; a `required` soha nem üres, megkülönbözteti a helyes választ a tipikus hibástól (S2b mérés, 2026-11-08: a kulcs nélküli „mi lenne, ha” és „írj találós kérdést” feladatok üres `required`-del buktatták a bankkaput) |
 | dilemma | `conflict` módszer, szöveges feladat | 7. évfolyamtól |
 
 **Mennyiség** (minimum, a meglévő darabszámokon belül, nem azokon felül): banki csomagonként legalább **egy** IQ-formájú kvízkérdés
@@ -247,7 +250,8 @@ A játékos keret **nem enged** új tényt: a „KIZÁRÓLAG a Tananyag lapon t�
 - [x] A5: WHEN a kapcsoló `on` és a hívás célzott javítás a 0. fejezet nélkül THEN a szerzői prompt SHALL kimondani, hogy most
   nincs Célkártya és mini mese. Mérés: `tests/lesson-opener.test.ts`.
 - [x] A6: WHEN a teljes ellenőrzés fut THEN `npm run check`, `npm run lint`, `npm run check:test`, `npm test` SHALL hibátlan legyen.
-- [ ] A7 (S2b): WHEN a három térkép mindkét ágon lefut THEN a mérési fájl SHALL rögzíteni ágonként a látható szót, a kapu- és
+- [ ] A7 (S2b) — RÉSZBEN, 2026-11-08: kapu/ív nem rosszabb; hossz a 3. (−3%) és a 10. (−13% / −10%) évfolyamon rendben, a 6.-on
+  (+52%) a kinyerés eltérése (7 → 11 fogalom; fogalmanként 93 → 90 szó) miatt nem összevethető; csak tartalék modellen mérve. WHEN a három térkép mindkét ágon lefut THEN a mérési fájl SHALL rögzíteni ágonként a látható szót, a kapu- és
   ív-eredményt, a Célkártya és a mese szó- és mondatszámát, az IQ-formájú kvíz/feladat/`check` darabszámát (kézi számolás), és a
   rubrikát (lépcsőhöz illő forma; négy Célkártya-elem; 5 mondat; nyitott kérdés; recap-visszatérés; biztonsági sértés; új tény) — és
   a kapcsolós ág kapu/ív eredménye SHALL nem rosszabb, a látható szó SHALL legfeljebb 10%-kal nagyobb.

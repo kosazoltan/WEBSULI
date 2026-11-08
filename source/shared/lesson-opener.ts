@@ -71,7 +71,7 @@ function stageLine(stage: OpenerStage): string {
 
 function goalCardLines(labels: readonly string[]): string[] {
   return [
-    `- CÉLKÁRTYA: az 1. fejezet ELSŐ blokkja egy \`explain\` blokk (depth "core"), négy rövid bekezdésben (bekezdésenként 1–2 mondat), a lépcső címkéivel, ebben a sorrendben: **${labels[0]}** mit akarunk elérni a lecke végére — megnevezi az 1. fejezet első fogalmát (term, szó szerint) és a fő képességet; **${labels[1]}** mi az, ami miatt a cél esetleg nem sikerül (a térkép tévhitei vagy a téma tipikus nehézsége, és/vagy a választott tanulási nehézség); **${labels[2]}** ennek az oka, megszégyenítés nélkül; **${labels[3]}** egy konkrét, megismételhető stratégia, amelyet a mini mese meg is mutat.`,
+    `- CÉLKÁRTYA: az 1. fejezet ELSŐ blokkja egy \`explain\` blokk (depth "core"), négy rövid bekezdésben (bekezdésenként 1–2 mondat), a lépcső címkéivel, ebben a sorrendben: **${labels[0]}** mit akarunk elérni a lecke végére — megnevezi az 1. fejezet első fogalmát természetes mondatba illesztve (ragozva, kisbetűvel is; címszerű, nagybetűs alakot ne másolj be) és a fő képességet; **${labels[1]}** mi az, ami miatt a cél esetleg nem sikerül (a térkép tévhitei vagy a téma tipikus nehézsége, és/vagy a választott tanulási nehézség); **${labels[2]}** ennek az oka, megszégyenítés nélkül; **${labels[3]}** egy konkrét, megismételhető stratégia, amelyet a mini mese meg is mutat.`,
     "- Az első bekezdés (a cél) egész mondat, címke nélkül is érthető: ez lesz a főoldali kártya leírása.",
   ];
 }
@@ -87,8 +87,8 @@ export function lessonOpenerContract(classroom: number, opts: { section0InScope?
     `CÉLKÁRTYA ÉS MINI MESE (${LESSON_OPENER_VERSION}; az 1. fejezet első két blokkja, utána a tanítás):`,
     `- ${stageLine(stage)}`,
     ...goalCardLines(s.goalLabels),
-    `- MINI MESE: az 1. fejezet MÁSODIK blokkja egy \`explain\` blokk (depth "core"). ${STORY_ARC} Mese: ${s.storyForm}. A mese szó szerint tartalmazza az 1. fejezet első fogalmának nevét (term), és azt jelöli.${isYoung(stage) ? " Az 5. mondat előtt egy félmondat arról is szólhat, mit érez a hős." : ""}`,
-    "- Mindkét blokk coversConceptIds-ben az 1. fejezet első fogalmát jelöli. A tanítás a HARMADIK blokktól a didaktikai ív szerint halad.",
+    `- MINI MESE: az 1. fejezet MÁSODIK blokkja egy \`explain\` blokk (depth "core"). ${STORY_ARC} Mese: ${s.storyForm}. A mese a fogalmat természetes szavakkal idézi fel (a pontos nevét, a term-et, nem kell szó szerint beillesztenie, és címszerű alakot ne másolj be idézőjelben), és azt jelöli.${isYoung(stage) ? " Az 5. mondat előtt egy félmondat arról is szólhat, mit érez a hős." : ""}`,
+    "- Mindkét blokk coversConceptIds-ben az 1. fejezet első fogalmát jelöli; a címkét a fejezet tanító blokkja alapozza meg, amely a fogalom nevét (term) szó szerint kimondja. A tanítás a HARMADIK blokktól a didaktikai ív szerint halad.",
     `- Két réteg: a hős a lecke saját tantárgyi problémájával találkozik, és közben egy tanulási nehézséggel küzd, ezek közül a tantárgyhoz illővel: ${learningThemesFor(classroom).join("; ")}.`,
     "- A Célkártya és a mese a szókereten BELÜL van: a fejezet bevezető mondatait váltják ki, nem adódnak hozzájuk.",
     "- VISSZATÉRÉS: a lecke utolsó recap blokkjának ELSŐ pontja visszatér a mese hőséhez és a Célkártya céljához: mit tanult meg, hogyan segített a stratégia.",
@@ -120,7 +120,7 @@ export const PLAYFUL_QUESTIONING_CONTRACT = [
   `JÁTÉKOS (IQ-) KÉRDEZÉS (${LESSON_OPENER_VERSION}; a bank minden tételére):`,
   "- Minden csomagban legalább EGY IQ-formájú kvízkérdés és legalább EGY IQ-formájú szöveges feladat — a meglévő darabszámokon belül, nem azokon felül.",
   "- IQ-formák a kvízben (egy helyes válasz): kakukktojás („Melyik nem illik közé?” — csak ha pontosan egy védhető helyes válasz van; a visszajelzés megnevezi a szempontot), sorminta / következő elem, analógia („A úgy aránylik B-hez, mint C …-hoz”), „Melyik állítás hamis?”, találós kérdés (tulajdonságleírásból a fogalom), következtetés („Ha …, akkor mi igaz?”).",
-  "- IQ-formák a szöveges feladatban: „Magyarázd el, miért…”, ellenpélda keresése, „Mi lenne, ha…?”, becslés indoklással, kakukktojás indoklással, „Írj találós kérdést a … fogalomról!”. A pontozás (required) a tanított fogalom alkalmazását méri, a sample egy lehetséges jó válasz.",
+  "- IQ-formák a szöveges feladatban: „Magyarázd el, miért…”, ellenpélda keresése, kakukktojás indoklással, becslés indoklással, „Mi következik, ha…?” — csak olyan kérdés, amelynek a tanított tartalomból EGYÉRTELMŰ kulcsa van. A required SOHA nem üres: legalább egy kötelező csoport a helyes válasz megkülönböztető eleme (amelyet a tipikus hibás válasz nem tartalmaz); a sample teljes pontot ér. Nyitott, kulcs nélküli kreatív kérdés (pl. „írj találós kérdést”) NEM pontozott szöveges feladat.",
   "- Módszerek: prediction = előkérdés, becslés vagy kíváncsiságrés (hibázni szabad); myth = igaz-hamis csapda (hihető, de hamis állítás; a magyarázat megmondja, mi tévesztett meg); popup = találós kérdés; gate = kapurejtvény, csak egyértelmű, általad ellenőrzött megoldással; analogy = analógia; conflict = dilemma (7. évfolyamtól); selfCheck = „magyarázd el, miért”.",
   "- Nehézségi ív: minden csomagban könnyű, sikerélményt adó tétel az első, utána közepes, végül kihívást jelentő.",
   "- Évfolyam szerinti forma: 1–2. konkrét, egylépéses, csapda nélkül (kakukktojás képszerű szavakkal, egyszerű sorminta); 3–4. találós kérdés, kakukktojás, egyszerű analógia; 5–6. hamis állítás keresése indoklással, kétlépéses következtetés; 7–8. többlépéses és laterális kérdés, nyomozós kizárás; 9–12. dilemma, becslés, ellenpélda, „magyarázd el, miért”.",

@@ -180,3 +180,9 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
 - **Megelőzés:** élő adatbázist használó mérés előtt csak olvasó azonosság-próba (tábla-jelzők: `knowledge_maps`, `km_concepts`,
   `studio_jobs`; az URL-t nem kiírva). Ha az éles térkép nem kell (új forrás mérése), a `single-run-measure.mts` `file:<útvonal>`
   módja éles adatbázis nélkül fut — ezt kell először választani. Titkot ügynök nem másol fájlok között; a kitöltés a tulajdonos lépése.
+- **Tünet 2:** a más repóból átmásolt `ANTHROPIC_API_KEY` érvénytelen volt (401 invalid x-api-key); a mérés hiba nélkül lefutott, mert a
+  motor csendben a tartalék modellre (gpt-6.1-sol) váltott — a kimenet `fallback` mezője mutatta.
+- **Tünet 3:** PowerShellből indított `bash -c "…"` a WSL-t hívta (nincs `/bin/bash`), nem a Git Bash-t → „execvpe(/bin/bash) failed”.
+- **Megelőzés 3:** POSIX-parancs (awk, diff, tr) a Bash eszközzel fut, nem PowerShellbe ágyazott `bash -c`-vel.
+- **Megelőzés 2:** fizetős mérés előtt egy 1 tokenes kulcspróba (a kulcsot nem kiírva), és minden futás után a `fallback` mező
+  ellenőrzése; tartalékmodelles futás eredménye csak így jelölve kerülhet a mérési fájlba.
