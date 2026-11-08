@@ -10,9 +10,9 @@
      [/kakukktojás|nem illik (?:közé|a sorba)/i, "Kakukktojás"],
      [/találós/i, "Találós kérdés"],
      [/analógia|úgy aránylik|úgy viszonyul/i, "Analógia"],
-     [/sorminta|következő elem/i, "Sorminta"],
+     [/sorminta|következő (?:elem|szám|tag)(?!\p{L})/iu, "Sorminta"],
      [/melyik (?:állítás )?hamis/i, "Melyik hamis?"],
-     [/\bha\b[^.?!]*\bakkor\b/i, "Következtetés"],
+     [/(?<!\p{L})ha(?!\p{L})[^.?!]*(?<!\p{L})akkor(?!\p{L})/iu, "Következtetés"],  // Unicode-biztos szóhatár (review #406)
    ];
    export function checkFormLabel(question: string): string | null { … első egyező címke, különben null }
    ```

@@ -40,9 +40,10 @@ export const CHECK_FORMS: ReadonlyArray<readonly [RegExp, string]> = [
   [/kakukktojás|nem illik (?:közé|a sorba)/i, "Kakukktojás"],
   [/találós/i, "Találós kérdés"],
   [/analógia|úgy aránylik|úgy viszonyul/i, "Analógia"],
-  [/sorminta|következő elem/i, "Sorminta"],
+  // Review #406: Unicode-biztos szóhatárok (a JS `\b` az ékezetnél is határt lát: „Néha” ≠ „ha”); „elemek közül” ≠ „következő elem”.
+  [/sorminta|következő (?:elem|szám|tag)(?!\p{L})/iu, "Sorminta"],
   [/melyik (?:állítás )?hamis/i, "Melyik hamis?"],
-  [/\bha\b[^.?!]*\bakkor\b/i, "Következtetés"],
+  [/(?<!\p{L})ha(?!\p{L})[^.?!]*(?<!\p{L})akkor(?!\p{L})/iu, "Következtetés"],
 ];
 
 export function checkFormLabel(question: string): string | null {

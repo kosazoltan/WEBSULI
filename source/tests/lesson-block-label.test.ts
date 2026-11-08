@@ -67,6 +67,12 @@ test("az ellenőrző kérdés fejléce az IQ-formából", () => {
   assert.equal(blockLabel([check("Ha esik. Akkor mi a szorzat?")], 0, 1, "teen"), BAND_THEME.teen.labels.check, "két mondat nem következtetés");
 });
 
+test("Review #406: részszó és ékezetes szóhatár nem ad hamis IQ-formát", () => {
+  assert.equal(blockLabel([check("Melyik nemfém a következő elemek közül: oxigén, vas, réz?")], 0, 1, "teen"), BAND_THEME.teen.labels.check);
+  assert.equal(blockLabel([check("Néha akkor is látszik a Hold, amikor világos van; melyik égitest világítja meg?")], 0, 1, "teen"), BAND_THEME.teen.labels.check);
+  assert.equal(blockLabel([check("2, 4, 8, 16 — mi a következő szám?")], 0, 1, "teen"), "Sorminta");
+});
+
 test("a lecke utolsó összefoglalója „A lecke tanulsága”, a többi a sáv címkéje", () => {
   const blocks = [explain("x"), recap(), recap()];
   assert.equal(blockLabel(blocks, 2, 4, "teen", 7, true), "A lecke tanulsága");
