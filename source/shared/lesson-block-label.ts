@@ -8,7 +8,8 @@ import { BAND_THEME } from "./lesson-band";
 const GOAL_LEAD = /^\s*(?:\*\*|__)?\s*(?:Mit tanulunk ma\?|Célunk\b|Cél\b)/u;
 
 export function isGoalCardText(text: string): boolean {
-  return GOAL_LEAD.test(text);
+  // Review #405: a Célkártya négy rövid bekezdés (cél / buktató / oka / leküzdés) — egy sima „Célunk az …” mondat nem az.
+  return GOAL_LEAD.test(text) && text.split(/\n\s*\n/).filter((p) => p.trim()).length >= 3;
 }
 
 export const ANIM_LABELS: Readonly<Record<string, string>> = {

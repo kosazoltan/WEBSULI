@@ -6,7 +6,7 @@ import type { Block } from "../shared/lesson-schema";
 
 // Spec 2026-11-08-borito-blokkcimkek: a blokkfejléc a tartalomból.
 const explain = (text: string, depth: "core" | "deeper" | "why" = "core") => ({ kind: "explain", text, depth, readAloud: false, coversConceptIds: ["c1"] }) as unknown as Block;
-const goal = explain("**Cél:** Megérted a harasztok felépítését.\n\n**Tipikus buktató:** …");
+const goal = explain("**Cél:** Megérted a harasztok felépítését.\n\n**Tipikus buktató:** …\n\n**Oka:** …\n\n**Leküzdés:** …");
 const story = explain("Dóra a kertben harasztot talált. … Vajon miért nincs virága?");
 const anim = (animKind: string) => ({ kind: "animate", animKind, params: {}, caption: "x", coversConceptIds: ["c1"] }) as unknown as Block;
 const tryB = (tryKind: string) => ({ kind: "try", tryKind, spec: {}, coversConceptIds: ["c1"] }) as unknown as Block;
@@ -27,6 +27,8 @@ test("másik fejezetben és Célkártya nélkül a sáv címkéje marad", () => 
   assert.equal(blockLabel([explain("Az oszthatóság alapja."), story], 0, 0, "teen"), BAND_THEME.teen.labels.explain);
   assert.equal(blockLabel([explain("Az oszthatóság alapja."), story], 1, 0, "teen"), BAND_THEME.teen.labels.explain);
   assert.equal(blockLabel([explain("Célszerű előbb összeadni.")], 0, 0, "teen"), BAND_THEME.teen.labels.explain, "a „Célszerű” nem célcímke");
+  // Review #405: egy sima „Célunk az …” bekezdés nem Célkártya (az stripOpenerGoalLabel-lel összhangban).
+  assert.equal(blockLabel([explain("Célunk az egyenlő törtek felismerése.")], 0, 0, "teen"), BAND_THEME.teen.labels.explain);
 });
 
 test("mélység, ábra- és feladatfajta szerinti címkék", () => {
