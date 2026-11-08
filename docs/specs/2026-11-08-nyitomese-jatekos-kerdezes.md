@@ -1,6 +1,6 @@
 # Spec: Célkártya, nyitómese és játékos (IQ-) kérdezés a tananyaggyártásban
 
-> Dátum: 2026-11-08 · Szerző: Claude (Opus 5.5) · Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-11-08)** — S1 és S2 KÉSZ (A1–A6, mérve 2026-11-08: célzott 144/144, teljes `npm test` 2599/2599, check/lint/check:test 0 hiba); S2b RÉSZBEN (`docs/measurements/2026-11-08-nyitomese-ab.json`): 3 évfolyam × 2 ág + 2 javító futás, a Célkártya, az 5 mondatos mese és az IQ-formák minden sikeres kapcsolós futásban megjelentek, kapu/ív rendben; a mérés a tartalék modellen (gpt-6.1-sol) futott, mert az átmásolt Anthropic-kulcs érvénytelen volt — az Opus-mérés érvényes kulccsal megismétlendő. Két hiba a mérés alapján javítva (kulcs nélküli IQ-feladat; szó szerinti fogalomnév)
+> Dátum: 2026-11-08 · Szerző: Claude (Opus 5.5) · Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-11-08)** — S1 és S2 KÉSZ (A1–A6, mérve 2026-11-08: célzott 144/144, teljes `npm test` 2599/2599, check/lint/check:test 0 hiba); S2b KÉSZ (`docs/measurements/2026-11-08-nyitomese-ab.json`): Opus 5.5-ön, 0 tartalékváltással, 3 évfolyam × KI/BE — Célkártya 4/4 és 5 mondatos mese minden kapcsolós futásban, IQ-kvíz 0–2 → 24–31 / 98, hossz +9% / +4% / −2%, ív rendben (A7 teljesül); a tartalék modelles előmérés két hibát hozott, mindkettő javítva
 > Szabály: `docs/agent-haromfazisu-munka.md`. Végrehajtás: `docs/specs/2026-11-08-nyitomese-jatekos-kerdezes-vegrehajtas.md`.
 > Kanban: #6.
 
@@ -250,8 +250,8 @@ A játékos keret **nem enged** új tényt: a „KIZÁRÓLAG a Tananyag lapon t�
 - [x] A5: WHEN a kapcsoló `on` és a hívás célzott javítás a 0. fejezet nélkül THEN a szerzői prompt SHALL kimondani, hogy most
   nincs Célkártya és mini mese. Mérés: `tests/lesson-opener.test.ts`.
 - [x] A6: WHEN a teljes ellenőrzés fut THEN `npm run check`, `npm run lint`, `npm run check:test`, `npm test` SHALL hibátlan legyen.
-- [ ] A7 (S2b) — RÉSZBEN, 2026-11-08: kapu/ív nem rosszabb; hossz a 3. (−3%) és a 10. (−13% / −10%) évfolyamon rendben, a 6.-on
-  (+52%) a kinyerés eltérése (7 → 11 fogalom; fogalmanként 93 → 90 szó) miatt nem összevethető; csak tartalék modellen mérve. WHEN a három térkép mindkét ágon lefut THEN a mérési fájl SHALL rögzíteni ágonként a látható szót, a kapu- és
+- [x] A7 (S2b) — TELJESÜL, 2026-11-08 (Opus 5.5): hossz +9% / +4% / −2%, ív és job rendben mind a 6 futásban. (Tartalék modelles előmérés: a 6.-on
+  (+52%) a kinyerés eltérése (7 → 11 fogalom; fogalmanként 93 → 90 szó) miatt nem összevethető volt.) WHEN a három térkép mindkét ágon lefut THEN a mérési fájl SHALL rögzíteni ágonként a látható szót, a kapu- és
   ív-eredményt, a Célkártya és a mese szó- és mondatszámát, az IQ-formájú kvíz/feladat/`check` darabszámát (kézi számolás), és a
   rubrikát (lépcsőhöz illő forma; négy Célkártya-elem; 5 mondat; nyitott kérdés; recap-visszatérés; biztonsági sértés; új tény) — és
   a kapcsolós ág kapu/ív eredménye SHALL nem rosszabb, a látható szó SHALL legfeljebb 10%-kal nagyobb.
