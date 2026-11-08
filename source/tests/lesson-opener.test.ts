@@ -10,6 +10,8 @@ import {
   learningThemesFor, lessonOpenerContract, lessonOpenerStageLine, openerStageForClassroom,
 } from "../shared/lesson-opener";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { stripOpenerGoalLabel } from "../shared/lesson-opener";
+import { teaserFromText } from "../shared/lesson-teaser";
 
 /* Spec 2026-11-08-nyitomese-jatekos-kerdezes (S2): Célkártya, 5 mondatos mini mese és játékos (IQ-) kérdezés — szerződések és kapcsoló. */
 
@@ -109,6 +111,27 @@ test("A3/A3b/A4: önálló HTML-út — a statikus spec évfolyamfüggetlen, a l
   const on9 = withFlag("on", () => lessonHtmlSpecParts(input9));
   assert.equal(on9.spec, on.spec);
   assert.equal(on.spec.match(/Lépcső: L[1-6]/g)?.length, 6);
+});
+
+test("Review #403: a két nyitóblokk kivétel a szó szerinti term-szabály alól; a conflict minden évfolyamon kötelező", () => {
+  const on = withFlag("on", () => buildAuthorPrompt(sections, map, []));
+  assert.ok(on.includes("erre a két nyitóblokkra NEM vonatkozik"));
+  assert.ok(on.includes("A TÖMÖRÍTÉS NEM BONT KAPUT"), "a hivatkozott későbbi szabály a promptban van");
+  assert.ok(PLAYFUL_QUESTIONING_CONTRACT.includes("conflict = MINDEN évfolyamon kötelező"));
+  assert.ok(!PLAYFUL_QUESTIONING_CONTRACT.includes("conflict = dilemma (7. évfolyamtól)"));
+});
+
+test("Review #403: a Célkártya célcímkéje nem marad a kártyaleírás egyetlen mondata", () => {
+  assert.equal(stripOpenerGoalLabel("Mit tanulunk ma? Ma megismered a növény részeit."), "Ma megismered a növény részeit.");
+  assert.equal(stripOpenerGoalLabel("Célunk: a lecke végére felismered az egyenlő törteket."), "A lecke végére felismered az egyenlő törteket.");
+  assert.equal(stripOpenerGoalLabel("Cél: érteni Newton II. törvényét."), "Érteni Newton II. törvényét.");
+  assert.equal(stripOpenerGoalLabel("Célunk az egyenlő törtek felismerése."), "Célunk az egyenlő törtek felismerése.", "kettőspont nélkül a címke a mondat része");
+  assert.equal(stripOpenerGoalLabel("A vulkánok a Föld belsejéből törnek elő."), "A vulkánok a Föld belsejéből törnek elő.");
+  const longGoal = `**Mit tanulunk ma?** Ma megismered a növény öt fő részét, a gyökeret, a szárat, a levelet, a virágot és a termést, és megtanulod, melyik rész mire való a növény életében.\n\n**Mi lehet nehéz?** Összekeverni.`;
+  const teaser = teaserFromText(longGoal)!;
+  assert.ok(!teaser.startsWith("Mit tanulunk ma?"), teaser);
+  assert.ok(teaser.startsWith("Ma megismered"), teaser);
+  assert.ok(teaser.length <= 160);
 });
 
 test("A3/A4: webes szerzői prompt — kapcsoló nélkül nincs Célkártya, bekapcsolva a HTML-szerződés és a lépcső-sor bekerül", () => {

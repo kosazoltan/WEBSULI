@@ -165,12 +165,12 @@ Egy, a tantárgyhoz és az évfolyamhoz illő **tanulási** nehézség, konkrét
 | előkérdés / becslés | `prediction` módszer, szöveges feladat (indoklással) | hibázni szabad |
 | „Magyarázd el, miért” / ellenpélda | szöveges feladat, `selfCheck` | a `required` a tanított fogalmat méri |
 | „Mi következik, ha …?” | szöveges feladat (szóbeli is) | csak egyértelmű, a tanított tartalomból következő kulccsal; a `required` soha nem üres, megkülönbözteti a helyes választ a tipikus hibástól (S2b mérés, 2026-11-08: a kulcs nélküli „mi lenne, ha” és „írj találós kérdést” feladatok üres `required`-del buktatták a bankkaput) |
-| dilemma | `conflict` módszer, szöveges feladat | 7. évfolyamtól |
+| feltevés–tény ütköztetés / dilemma | `conflict` módszer, szöveges feladat | a `conflict` minden évfolyamon kötelező (bankterv): tantárgyi feltevés és tény ütköztetése mindenkor, társas / erkölcsi dilemma csak 7. évfolyamtól (review #403) |
 
 **Mennyiség** (minimum, a meglévő darabszámokon belül, nem azokon felül): banki csomagonként legalább **egy** IQ-formájú kvízkérdés
 és legalább **egy** IQ-formájú szöveges feladat; a Tananyag lapon leckénként legalább **egy** IQ-formájú `check` kérdés (ha a
 leckében van `check`). A Módszerek lap leképezése: `prediction` = előkérdés/becslés, `myth` = igaz-hamis csapda, `popup` = találós
-kérdés, `gate` = kapurejtvény, `analogy` = analógia, `conflict` = dilemma, `selfCheck` = „magyarázd el, miért”.
+kérdés, `gate` = kapurejtvény, `analogy` = analógia, `conflict` = feltevés–tény ütköztetés (minden évfolyamon; dilemma 7.-től), `selfCheck` = „magyarázd el, miért”.
 
 **Nehézségi ív**: minden csomagban és fejezetben könnyű, sikerélményt adó tétel az első, utána közepes, végül kihívás.
 
@@ -250,7 +250,9 @@ A játékos keret **nem enged** új tényt: a „KIZÁRÓLAG a Tananyag lapon t�
 - [x] A5: WHEN a kapcsoló `on` és a hívás célzott javítás a 0. fejezet nélkül THEN a szerzői prompt SHALL kimondani, hogy most
   nincs Célkártya és mini mese. Mérés: `tests/lesson-opener.test.ts`.
 - [x] A6: WHEN a teljes ellenőrzés fut THEN `npm run check`, `npm run lint`, `npm run check:test`, `npm test` SHALL hibátlan legyen.
-- [x] A7 (S2b) — TELJESÜL, 2026-11-08 (Opus 5.5): hossz +9% / +4% / −2%, ív és job rendben mind a 6 futásban. (Tartalék modelles előmérés: a 6.-on
+- [x] A7 (S2b) — TELJESÜL, 2026-11-08 (Opus 5.5): hossz +9% / +4% / −2%, ív és job rendben mind a 6 futásban; a teljes kézi rubrika
+  (évfolyamhoz illő forma, 4 elem, 5 mondat, nyitott kérdés, visszatérés, biztonsági sértés, új tantárgyi tény) mindhárom kapcsolós
+  leckén rendben — `opus.rubrika` a mérési fájlban (review #403 után pótolva). (Tartalék modelles előmérés: a 6.-on
   (+52%) a kinyerés eltérése (7 → 11 fogalom; fogalmanként 93 → 90 szó) miatt nem összevethető volt.) WHEN a három térkép mindkét ágon lefut THEN a mérési fájl SHALL rögzíteni ágonként a látható szót, a kapu- és
   ív-eredményt, a Célkártya és a mese szó- és mondatszámát, az IQ-formájú kvíz/feladat/`check` darabszámát (kézi számolás), és a
   rubrikát (lépcsőhöz illő forma; négy Célkártya-elem; 5 mondat; nyitott kérdés; recap-visszatérés; biztonsági sértés; új tény) — és

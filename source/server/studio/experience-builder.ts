@@ -4,7 +4,7 @@ import { normalizeBankPacket } from "./bank-normalize";
 import { logger } from "../lib/logger";
 import { z } from "zod";
 import { LESSON_BANK_RESERVE, LESSON_BANK_SIZES, LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, bankPacketContract, experienceSchema, experiencePacketSchema, experienceTheme, experienceQuizSchema, glossaryEntrySchema, lessonLanguage, methodSchema, openTaskSchema, bankPlanSchema, type LessonExperience } from "../../shared/lesson-experience";
-import { PLAYFUL_QUESTIONING_CONTRACT } from "../../shared/lesson-opener";
+import { LESSON_OPENER_VERSION, PLAYFUL_QUESTIONING_CONTRACT } from "../../shared/lesson-opener";
 import { lessonOpenerEnabled } from "./lesson-opener-flag";
 import { OPEN_ANSWER_RULES_HU, evaluateOpenAnswer, missingAnswerConcepts, missingOrder, missingPhrases, normalizeAnswer } from "../../shared/lesson-experience-score";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
@@ -516,7 +516,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     const teaching = { version: LESSON_METHOD_VERSION, calibration: CALIBRATION_VERSION, roleSkill: roleSkillVersion("bank"), ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}), taskCount, quizCount, taskTarget, quizTarget, methodKinds, subject: lesson.subject, classroom: lesson.classroom, sectionIndex: unit.sectionIndex, section: withoutFigures(lesson.sections[unit.sectionIndex]), concepts: source, allowedConceptIds: unit.conceptIds,
       ...(catalogOf(unitIndex) ? { catalog: { version: unitCatalogVersion(catalogOf(unitIndex)!) } } : {}),
       ...(deps.memory ? { memory: { version: memoryBlockVersion(deps.memory) } } : {}),
-      ...(deps.scoringRules ? { scoringRules: deps.scoringRules } : {}) };
+      ...(deps.scoringRules ? { scoringRules: deps.scoringRules } : {}),
+      // Review #403 (P2): bekapcsolt nyitómesénél a szerződés verziója a csomag azonosságának része (KI ágon a hash változatlan).
+      ...(lessonOpenerEnabled() ? { opener: LESSON_OPENER_VERSION } : {}) };
     return { taskCount, quizCount, taskTarget, quizTarget, methodKinds, teaching, baseHash: createHash("sha256").update(canonicalJson(teaching)).digest("hex") };
   };
   // Élő futás 67a05970 (2026-09-24): a kifogás fogalom szerint minden olyan csomaghoz eljutott, amely ugyanazt a
@@ -541,7 +543,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     let hash = reviewFeedback.length ? createHash("sha256").update(canonicalJson(evidence)).digest("hex") : checkpoint.reviewedHashes?.[baseHash] ?? baseHash;
     unit.sourceHash = hash;
     // Spec 2026-11-03-javitas-bank-megorzes: a tanításában változatlan fejezet korábbi csomagja tartalom szerint (nem a konfigfüggő hash szerint).
-    const keptUnit = reviewFeedback.length ? undefined : unchangedPreviousUnit(deps.previous, deps, lesson, unit);
+    const contentKept = reviewFeedback.length ? undefined : unchangedPreviousUnit(deps.previous, deps, lesson, unit);
+    // Review #403 (P2): bekapcsolt nyitómesénél a korábbi csomag csak akkor vehető át, ha ugyanazzal a szerződéssel készült (pontos
+    // hash-egyezés) — a kapcsoló előtt gyártott bank nem kerülhet át az IQ-kérdezési szabályok nélkül (C döntés: a javított lecke is megkapja).
+    const keptUnit = contentKept && (!lessonOpenerEnabled() || contentKept.sourceHash === baseHash) ? contentKept : undefined;
     // Spec 2026-09-30 (U2, B4): a csomag mérhető szerződése és a pontozó tényleges szabályai a KÓDBÓL generálva — egy szabály egy helyen.
     const contract = bankPacketContract({ sectionIndex: unit.sectionIndex, conceptIds: unit.conceptIds, methodKinds, taskCount, taskTarget, quizCount, quizTarget, language });
     const signRules = needsSignedNumberRules(lesson.subject, teaching.section) ? `${SIGNED_NUMBER_RULES_HU}\n` : "";

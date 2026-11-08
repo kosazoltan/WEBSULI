@@ -259,7 +259,7 @@ Egy, a tantárgyhoz és az évfolyamhoz illő **tanulási** nehézség; a strat�
 | előkérdés / becslés | `prediction` módszer, szöveges feladat indoklással | előzetes aktiválás, modellezés | 5.– | hibázni szabad |
 | „Magyarázd el, miért” / ellenpélda | szöveges feladat, `selfCheck` | mélyfeldolgozás | 7.– | a `required` a tanított fogalmat méri |
 | „Mi következik, ha …?” | szöveges feladat (szóbeli is) | ok-okozat, transzfer | 3.– | csak egyértelmű kulccsal; a `required` soha nem üres, és megkülönbözteti a helyes választ a tipikus hibástól |
-| dilemma | `conflict` módszer, szöveges feladat | érvelés, nézőpontváltás | 7.– | |
+| feltevés–tény ütköztetés / dilemma | `conflict` módszer, szöveges feladat | érvelés, nézőpontváltás | mind | a `conflict` minden évfolyamon kötelező: tantárgyi feltevés és tény ütköztetése mindenkor, társas / erkölcsi dilemma csak 7.-től |
 
 ### Mennyiség és nehézségi ív
 

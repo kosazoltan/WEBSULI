@@ -2,6 +2,7 @@
  * Spec 2026-11-03-egyseges-kartya-leiras: a főoldali kártya leírása a lecke saját bevezetője (az első fejezet első magyarázó blokkja,
  * jelölés nélkül, egész mondatokra rövidítve) — a publikálás korábbi, minden leckén azonos helyőrzője helyett. DOM-mentes.
  */
+import { stripOpenerGoalLabel } from "./lesson-opener";
 export const LESSON_PLACEHOLDER_DESCRIPTION = "Websuli lecke — a lecke-futtató jeleníti meg.";
 export const TEASER_MAX = 160;
 
@@ -21,6 +22,11 @@ export function teaserFromText(text: unknown, max = TEASER_MAX): string | null {
     .map((p) => p.replace(/\s+/g, " ").trim())
     .find((p) => p.length > 0);
   if (!paragraph) return null;
+  // Review #403 (P2): a Célkártya vezető célcímkéje nem maradhat a leírás egyetlen „mondata” (spec 2026-11-08-nyitomese-jatekos-kerdezes).
+  return shortenTeaser(stripOpenerGoalLabel(paragraph), max);
+}
+
+function shortenTeaser(paragraph: string, max: number): string {
   if (paragraph.length <= max) return paragraph;
   // Review #383: mondathatár csak szóköz vagy szövegvég előtti zárójelnél (a „1.000”, „$3.14$”, „websuli.vip” pontja nem az), a záró
   // idézőjel / zárójel az előző mondaté; a szöveg az EREDETIBŐL szeletelődik (nincs újraösszefűzés, az írásjelek változatlanok).

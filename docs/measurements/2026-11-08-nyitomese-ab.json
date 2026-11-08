@@ -9,7 +9,7 @@
       "Hossz (KI → BE): 3. évf. 1353 → 1479 (+9%); 6. évf. 1186 → 1232 (+4%, azonos 12 fogalom); 10. évf. 1916 → 1869 (−2%). Mindhárom ≤ +10%.",
       "Ív (checkLessonArc) mind a 6 leckén rendben; job ok mind a 6-nál; requiredFactsPct 100 mindenhol."
     ],
-    "a7": "TELJESÜL (Opus): kapu/ív nem rosszabb, hossz mindhárom évfolyamon ≤ +10%.",
+    "a7": "TELJESÜL (Opus): kapu/ív nem rosszabb, hossz ≤ +10% mindhárom évfolyamon, és a teljes kézi rubrika (forma, 4 elem, 5 mondat, nyitott kérdés, visszatérés, biztonság, új tény) mindhárom kapcsolós leckén rendben — lásd opus.rubrika (review #403 után pótolva).",
     "rows": [
       {
         "arm": "off",
@@ -283,7 +283,37 @@
           "Mi a következő elem a sorban: 1/3, 2/6, 3/9, 4/12, …?"
         ]
       }
-    ]
+    ],
+    "rubrika": {
+      "method": "Kézi rubrika a 3 kapcsolós Opus-leckén (Célkártya + mini mese szövegének elolvasása, a forrásszöveggel összevetve) + gépi tiltólista-keresés a teljes látható szövegben és a bankban (halál, bántalmazás, válás, betegség, erőszak, diagnózis- és testi címkék, sértő szavak).",
+      "on-3": {
+        "lepcsohozIllo": "igen — L2: állat/fantázia-hős (kertész manó), meleg hang, rövid mondatok, 5. mondat „te mit tennél” kérdés",
+        "celkartya4elem": "igen",
+        "ot_mondat": "igen",
+        "nyitottKerdes": "igen",
+        "recapVisszater": "igen",
+        "biztonsagiSertes": "nincs (1 tiltólista-találat téves: „meghallgattad” ⊃ „meghal”, quiz.92 tévhitjavító kérdés)",
+        "ujTantargyiTeny": "nincs — a nyitóblokkok csak a forrás „öt fő rész” állítását említik"
+      },
+      "on-6": {
+        "lepcsohozIllo": "igen — L3: életszerű kortárs helyzet (házi feladat), a hős hibázik",
+        "celkartya4elem": "igen",
+        "ot_mondat": "igen",
+        "nyitottKerdes": "igen",
+        "recapVisszater": "igen",
+        "biztonsagiSertes": "nincs",
+        "ujTantargyiTeny": "nincs — 2/3 → 8/3 hiba és a keresztbe szorzás (2·3=6, 3·8=24) a forrás gyakori hibájából és ellenőrzési módszeréből; számolás helyes"
+      },
+      "on-10": {
+        "lepcsohozIllo": "igen — L5: esetleírás ütköző nézőpontokkal, mesélő hang nélkül",
+        "celkartya4elem": "igen",
+        "ot_mondat": "igen",
+        "nyitottKerdes": "igen",
+        "recapVisszater": "igen",
+        "biztonsagiSertes": "nincs",
+        "ujTantargyiTeny": "nincs — súrlódás/közegellenállás, erőábra, eredő erő: mind a forrásból"
+      }
+    }
   },
   "elozetes_tartalek_modell": {
     "meta": {

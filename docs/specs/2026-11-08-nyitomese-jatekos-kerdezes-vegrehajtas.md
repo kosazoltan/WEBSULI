@@ -101,6 +101,15 @@ export const OPENER_STAGES: Record<OpenerStage, StageSpec> = {
   L6: { grades: "11–12. évfolyam", storyForm: "érett eset vagy szakmai / erkölcsi dilemma, érettségi- és életpálya-vonatkozással", maxSentenceWords: 22, goalLabels: ["Cél", "Tipikus buktató", "Oka", "Leküzdés"], lesson: "nyitott; a recap szintézisként zárja", tone: "érett, akadémiai, mesélő hang és gyerekes elem nélkül" },
 };
 
+/**
+ * Review #403 (P2): a Célkártya első bekezdésének vezető célcímkéje (a kérdő „Mit tanulunk ma?”, vagy kettősponttal a „Célunk:” / „Cél:”)
+ * a kártyaleírásban nem állhat önálló mondatként — a rövidítő különben csak a címkét hagyná meg. A címke nélküli szöveg nagy kezdőbetűvel.
+ */
+export function stripOpenerGoalLabel(paragraph: string): string {
+  const stripped = paragraph.replace(/^(?:Mit tanulunk ma\?\s+|(?:Célunk|Cél)\s*:\s+)/u, "");
+  return stripped === paragraph ? paragraph : stripped.charAt(0).toLocaleUpperCase("hu-HU") + stripped.slice(1);
+}
+
 /** 0 (programozás) és minden nem pozitív / nem véges érték → L4 (a learningAgeGroup 0 → 7-8 szabályával egyezően); 12 fölött L6. */
 export function openerStageForClassroom(classroom: number): OpenerStage {
   if (!Number.isFinite(classroom) || classroom <= 0) return "L4";
@@ -164,7 +173,7 @@ export function lessonOpenerContract(classroom: number, opts: { section0InScope?
     `- ${stageLine(stage)}`,
     ...goalCardLines(s.goalLabels),
     `- MINI MESE: az 1. fejezet MÁSODIK blokkja egy \`explain\` blokk (depth "core"). ${STORY_ARC} Mese: ${s.storyForm}. A mese a fogalmat természetes szavakkal idézi fel (a pontos nevét, a term-et, nem kell szó szerint beillesztenie, és címszerű alakot ne másolj be idézőjelben), és azt jelöli.${isYoung(stage) ? " Az 5. mondat előtt egy félmondat arról is szólhat, mit érez a hős." : ""}`,
-    "- Mindkét blokk coversConceptIds-ben az 1. fejezet első fogalmát jelöli; a címkét a fejezet tanító blokkja alapozza meg, amely a fogalom nevét (term) szó szerint kimondja. A tanítás a HARMADIK blokktól a didaktikai ív szerint halad.",
+    "- Mindkét blokk coversConceptIds-ben az 1. fejezet első fogalmát jelöli; a címkét a fejezet tanító blokkja alapozza meg, amely a fogalom nevét (term) szó szerint kimondja. KIVÉTEL: a prompt későbbi, szó szerinti term-et kérő szabálya („A TÖMÖRÍTÉS NEM BONT KAPUT”) erre a két nyitóblokkra NEM vonatkozik — minden más blokkra igen. A tanítás a HARMADIK blokktól a didaktikai ív szerint halad.",
     `- Két réteg: a hős a lecke saját tantárgyi problémájával találkozik, és közben egy tanulási nehézséggel küzd, ezek közül a tantárgyhoz illővel: ${learningThemesFor(classroom).join("; ")}.`,
     "- A Célkártya és a mese a szókereten BELÜL van: a fejezet bevezető mondatait váltják ki, nem adódnak hozzájuk.",
     "- VISSZATÉRÉS: a lecke utolsó recap blokkjának ELSŐ pontja visszatér a mese hőséhez és a Célkártya céljához: mit tanult meg, hogyan segített a stratégia.",
@@ -197,7 +206,7 @@ export const PLAYFUL_QUESTIONING_CONTRACT = [
   "- Minden csomagban legalább EGY IQ-formájú kvízkérdés és legalább EGY IQ-formájú szöveges feladat — a meglévő darabszámokon belül, nem azokon felül.",
   "- IQ-formák a kvízben (egy helyes válasz): kakukktojás („Melyik nem illik közé?” — csak ha pontosan egy védhető helyes válasz van; a visszajelzés megnevezi a szempontot), sorminta / következő elem, analógia („A úgy aránylik B-hez, mint C …-hoz”), „Melyik állítás hamis?”, találós kérdés (tulajdonságleírásból a fogalom), következtetés („Ha …, akkor mi igaz?”).",
   "- IQ-formák a szöveges feladatban: „Magyarázd el, miért…”, ellenpélda keresése, kakukktojás indoklással, becslés indoklással, „Mi következik, ha…?” — csak olyan kérdés, amelynek a tanított tartalomból EGYÉRTELMŰ kulcsa van. A required SOHA nem üres: legalább egy kötelező csoport a helyes válasz megkülönböztető eleme (amelyet a tipikus hibás válasz nem tartalmaz); a sample teljes pontot ér. Nyitott, kulcs nélküli kreatív kérdés (pl. „írj találós kérdést”) NEM pontozott szöveges feladat.",
-  "- Módszerek: prediction = előkérdés, becslés vagy kíváncsiságrés (hibázni szabad); myth = igaz-hamis csapda (hihető, de hamis állítás; a magyarázat megmondja, mi tévesztett meg); popup = találós kérdés; gate = kapurejtvény, csak egyértelmű, általad ellenőrzött megoldással; analogy = analógia; conflict = dilemma (7. évfolyamtól); selfCheck = „magyarázd el, miért”.",
+  "- Módszerek: prediction = előkérdés, becslés vagy kíváncsiságrés (hibázni szabad); myth = igaz-hamis csapda (hihető, de hamis állítás; a magyarázat megmondja, mi tévesztett meg); popup = találós kérdés; gate = kapurejtvény, csak egyértelmű, általad ellenőrzött megoldással; analogy = analógia; conflict = MINDEN évfolyamon kötelező: tantárgyi feltevés és tény ütköztetése (pl. „Peti szerint…, de a lecke szerint…”), társas vagy erkölcsi dilemma csak 7. évfolyamtól; selfCheck = „magyarázd el, miért”.",
   "- Nehézségi ív: minden csomagban könnyű, sikerélményt adó tétel az első, utána közepes, végül kihívást jelentő.",
   "- Évfolyam szerinti forma: 1–2. konkrét, egylépéses, csapda nélkül (kakukktojás képszerű szavakkal, egyszerű sorminta); 3–4. találós kérdés, kakukktojás, egyszerű analógia; 5–6. hamis állítás keresése indoklással, kétlépéses következtetés; 7–8. többlépéses és laterális kérdés, nyomozós kizárás; 9–12. dilemma, becslés, ellenpélda, „magyarázd el, miért”.",
   "- Visszajelzés (feedbackPerOption és a módszer answer mezője): helyes válasznál röviden, miért jó; rossz válasznál az első mondat bátorító, utána mi tévesztett meg, mit kérdezett valójában a feladat, és a helyes gondolatmenet egy mondatban. Az erőfeszítést dicséred, nem minősítesz.",
@@ -348,3 +357,15 @@ Bukásnál az implementációt javítod, a tesztet nem gyengíted; a bukó paran
 3. Összesítés: `docs/measurements/2026-11-08-nyitomese-ab.json` (a futás tényleges dátumával): ágonként látható szó, kapu- és ív-eredmény,
    Célkártya és mese szó-/mondatszáma, IQ-formájú kvíz / feladat / `check` darabszám (kézi számolás), rubrika (spec A7). A specbe rövid
    összegzés (Állapot sor + 7. fejezet A7 pipa vagy NOT DONE + ok).
+
+## T13 — Review #403 javításai (Copilot, 2026-11-08)
+
+1. `source/server/studio/experience-builder.ts` `unitTeaching`: bekapcsolt kapcsolónál `opener: LESSON_OPENER_VERSION` a csomag
+   hash-bemenetében; a korábbi bank (`unchangedPreviousUnit`) bekapcsolva csak pontos `sourceHash === baseHash` egyezésnél vehető át.
+   Kikapcsolva a hash és az átvétel változatlan.
+2. `lessonOpenerContract`: kivétel a két nyitóblokkra a prompt későbbi szó szerinti term-szabálya („A TÖMÖRÍTÉS NEM BONT KAPUT”) alól.
+3. `PLAYFUL_QUESTIONING_CONTRACT`: a `conflict` minden évfolyamon kötelező (tantárgyi feltevés–tény ütköztetés), dilemma csak 7.-től.
+4. `stripOpenerGoalLabel` (`lesson-opener.ts`) + `source/shared/lesson-teaser.ts`: a vezető célcímke („Mit tanulunk ma?”, „Célunk:”,
+   „Cél:”) nem maradhat a kártyaleírás egyetlen mondata.
+5. `docs/measurements/2026-11-08-nyitomese-ab.json` `opus.rubrika`: a teljes kézi rubrika (forma, biztonság, új tény).
+Tesztek: `tests/lesson-opener.test.ts` két új eset (term-kivétel + conflict; célcímke és hosszú célbekezdés teaser).
