@@ -13,6 +13,8 @@ import { DEFAULT_REWARD_POLICY } from "../../shared/reward-policy";
 import { bandRegisterForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
+import { LESSON_OPENER_LEKTOR_CHECKLIST, PLAYFUL_AUTHOR_RULES, lessonOpenerContract } from "../../shared/lesson-opener";
+import { lessonOpenerEnabled } from "./lesson-opener-flag";
 import { VISUAL_WORLD_IDS, type VisualWorld } from "../../shared/lesson-visuals";
 import { evaluateOpenAnswer, missingAnswerConcepts } from "../../shared/lesson-experience-score";
 import { ownerInstructionPromptBlock, type OwnerInventory } from "../../shared/owner-instruction";
@@ -492,6 +494,8 @@ export function buildAuthorPrompt(
     "",
     LESSON_ARC_CONTRACT,
     LESSON_METHOD_CONTRACT,
+    // Spec 2026-11-08-nyitomese-jatekos-kerdezes (S2): kapcsolóval (alapból KI) — kikapcsolva a prompt bájtra változatlan.
+    ...(lessonOpenerEnabled() ? [lessonOpenerContract(map.classroom, { section0InScope: !repair || repair.targetSections.includes(0) }), PLAYFUL_AUTHOR_RULES] : []),
     // Spec 2026-10-14-tananyag-tomorseg-lefedettseg (S2): a korábbi „Ne rövidítsd vázlattá a bankok kedvéért” a hosszítás felé
     // tolt (mérve: medián 2210 látható szó); a tömörség és a teljesség együtt a mérce.
     "Most kizárólag a Tananyag lapot írd a sections tömbbe a hat megengedett blokktípussal. Az experience bankokat külön lépés gyártja; ha previousLesson experience mezőt tartalmaz, a bankszöveget nem kell újra kiírnod; a javított tanításból frissül.",
@@ -620,6 +624,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
     TRANSCRIPTION_RULE_TEXT,
     // U5 (H8): a minőségi szerződést a runbook adja a lektornak — itt nem ismétlődik (3× volt).
     SOURCE_REVIEW_RULES,
+    ...(lessonOpenerEnabled() ? [LESSON_OPENER_LEKTOR_CHECKLIST] : []),
     ...ownerLines(owner),
     "Minden eltéréshez adj konkrét blockPath értéket és ellenőrizhető indokot. A forrásszámok cseréje vagy hibás levezetés source_conflict/contradicts_source; valóban hiányzó tanítás coverage_gap. A látható feladatot és minden válaszhoz tartozó magyarázatot is ellenőrizd.",
     "Az algebrai egyezés mellett az adatok együttes megvalósíthatóságát is vizsgáld. Például a háromszög egyik oldalához tartozó magasság nem lehet nagyobb bármelyik másik oldalnál, és két oldalból T ≤ a·b/2. Ha a lehetetlen adatok már a kurált forrásban is így szerepelnek, konkrét számolással source_conflict/book_probably_wrong adminjegyzetet adj; a forrást és a tanuló leckéjét nem írhatod át. Ha a szerző találta ki az ellentmondást, az contradicts_source hiba.",

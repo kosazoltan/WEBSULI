@@ -169,3 +169,6 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   utána „Author identity unknown” (a C-14 már leírta, de commit előtt nem olvastam vissza a katalógust).
 - **Megelőzés 2:** commit előtt a C-06 / C-14 szerint `git -c user.name=… -c user.email=… commit -F <scratchpad-fájl>`; a
   commit-üzenet mindig fájlból megy, nem here-stringből.
+- **Tünet 3:** `[IO.File]::ReadAllText('docs\…')` relatív úttal a folyamat munkakönyvtárához (itt `source/`) oldódott fel, nem a
+  PowerShell aktuális mappájához → „Could not find a part of the path”.
+- **Megelőzés 3:** .NET fájlhívásnál mindig abszolút út (`C:\Repo\WEBSULI\…`).

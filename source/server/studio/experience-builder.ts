@@ -4,6 +4,8 @@ import { normalizeBankPacket } from "./bank-normalize";
 import { logger } from "../lib/logger";
 import { z } from "zod";
 import { LESSON_BANK_RESERVE, LESSON_BANK_SIZES, LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, bankPacketContract, experienceSchema, experiencePacketSchema, experienceTheme, experienceQuizSchema, glossaryEntrySchema, lessonLanguage, methodSchema, openTaskSchema, bankPlanSchema, type LessonExperience } from "../../shared/lesson-experience";
+import { PLAYFUL_QUESTIONING_CONTRACT } from "../../shared/lesson-opener";
+import { lessonOpenerEnabled } from "./lesson-opener-flag";
 import { OPEN_ANSWER_RULES_HU, evaluateOpenAnswer, missingAnswerConcepts, missingOrder, missingPhrases, normalizeAnswer } from "../../shared/lesson-experience-score";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { planLessonBank, bankUnitQuota } from "../../shared/lesson-bank-plan";
@@ -32,7 +34,9 @@ import type { OpenTask } from "../../shared/lesson-experience";
  * 12 %-a jött gyorsítótárból, mert az állandó rész a csomagonként egyedi szöveggel egy blokkban állt).
  */
 export function bankStaticPrefix(): string {
-  return `${roleSkillBlock("bank")}\n${LESSON_METHOD_CONTRACT}\n${OPEN_ANSWER_RULES_HU}`;
+  const base = `${roleSkillBlock("bank")}\n${LESSON_METHOD_CONTRACT}\n${OPEN_ANSWER_RULES_HU}`;
+  // Spec 2026-11-08-nyitomese-jatekos-kerdezes (S2): kapcsolóval; a bankRequestBlocks ugyanezt hívja, az előtag-egyezés megmarad.
+  return lessonOpenerEnabled() ? `${base}\n${PLAYFUL_QUESTIONING_CONTRACT}` : base;
 }
 
 /** Spec 2026-10-21-nyelvlecke-kiejtes: a nyelvlecke csomagjának szószedet-minimuma (a kiejtésgyakorló alapja). */

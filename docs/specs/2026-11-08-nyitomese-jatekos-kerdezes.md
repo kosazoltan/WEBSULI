@@ -1,6 +1,6 @@
 # Spec: Célkártya, nyitómese és játékos (IQ-) kérdezés a tananyaggyártásban
 
-> Dátum: 2026-11-08 · Szerző: Claude (Opus 5.5) · Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-11-08)** — S1, S2, S2b végrehajtás alatt
+> Dátum: 2026-11-08 · Szerző: Claude (Opus 5.5) · Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-11-08)** — S1 és S2 KÉSZ (A1–A6, mérve 2026-11-08: célzott 144/144, teljes `npm test` 2599/2599, check/lint/check:test 0 hiba); S2b NOT DONE: ezen a gépen nincs `source/.env` (DATABASE_URL, ANTHROPIC_API_KEY)
 > Szabály: `docs/agent-haromfazisu-munka.md`. Végrehajtás: `docs/specs/2026-11-08-nyitomese-jatekos-kerdezes-vegrehajtas.md`.
 > Kanban: #6.
 
@@ -228,25 +228,25 @@ A játékos keret **nem enged** új tényt: a „KIZÁRÓLAG a Tananyag lapon t�
 ## 7. Elfogadási kritériumok (EARS)
 
 <!-- acceptance-checklist -->
-- [ ] A1: WHEN a tudásbázis elkészül THEN SHALL tartalmazni a 4.1–4.6 pontokat, a hat lépcső mindegyikéhez egy saját mintát
+- [x] A1: WHEN a tudásbázis elkészül THEN SHALL tartalmazni a 4.1–4.6 pontokat, a hat lépcső mindegyikéhez egy saját mintát
   (Célkártya + pontosan 5 mondatos mini mese + egy IQ-kérdés), és a `docs/lesson-improvement.md` hivatkozzon rá.
   Mérés: `rg -c "^### L[1-6]" docs/modszertan-nyitomese-jatekos-kerdezes.md` → 6; `rg "modszertan-nyitomese" docs/lesson-improvement.md` → találat.
-- [ ] A2: WHEN `openerStageForClassroom(c)` hívódik c ∈ {0,1,…,12, −1, 13, NaN} értékekre THEN SHALL a 4.2 táblázat és a 6.
+- [x] A2: WHEN `openerStageForClassroom(c)` hívódik c ∈ {0,1,…,12, −1, 13, NaN} értékekre THEN SHALL a 4.2 táblázat és a 6.
   fejezet szerinti lépcsőt adja. Mérés: `tests/lesson-opener.test.ts`.
-- [ ] A3: WHEN `STUDIO_LESSON_OPENER` nincs beállítva (vagy nem `on`) THEN a `buildAuthorPrompt`, `buildLektorPrompt`,
+- [x] A3: WHEN `STUDIO_LESSON_OPENER` nincs beállítva (vagy nem `on`) THEN a `buildAuthorPrompt`, `buildLektorPrompt`,
   `bankStaticPrefix`, `lessonHtmlSpecParts`, `webLessonAuthorPrompt` kimenete SHALL bájtra megegyezni a változás előttivel.
   Mérés: a bekapcsolt kimenetből a beszúrt blokk(ok)at pontosan eltávolítva a kikapcsolt kimenetet kapjuk, és a meglévő prompttesztek
   (8. fejezet) változatlanul zöldek. (Rögzített hash szándékosan nincs: a runtime-3 élő szövegének jogos változása eltörné.)
-- [ ] A3b: WHEN a kapcsoló `on` THEN `lessonHtmlSpecParts(a).spec === lessonHtmlSpecParts(b).spec` SHALL igaz maradni két
+- [x] A3b: WHEN a kapcsoló `on` THEN `lessonHtmlSpecParts(a).spec === lessonHtmlSpecParts(b).spec` SHALL igaz maradni két
   különböző évfolyamra; a lépcső a téma-részbe kerül. Mérés: `tests/lesson-opener.test.ts`.
-- [ ] A4: WHEN `STUDIO_LESSON_OPENER=on` THEN a szerzői prompt SHALL tartalmazni a Célkártya négy elemét a lépcső címkéivel, az
+- [x] A4: WHEN `STUDIO_LESSON_OPENER=on` THEN a szerzői prompt SHALL tartalmazni a Célkártya négy elemét a lépcső címkéivel, az
   5 mondatos mini mese szabályát a lépcső formájával és mondathosszával, a `term`-szabályt, az „új tény nem” szabályt, a biztonsági
   korlátokat, a recap-visszatérést és a `check` blokkokra vonatkozó IQ- és visszajelzési szabályt; a lektor prompt a lektori
   ellenőrzőlistát; a bank előtag és a két HTML-prompt a játékos (IQ-) kérdezési szerződést a csomagonkénti minimummal (a HTML-promptok
   a Célkártya és mini mese szerződést is). Mérés: `tests/lesson-opener.test.ts`.
-- [ ] A5: WHEN a kapcsoló `on` és a hívás célzott javítás a 0. fejezet nélkül THEN a szerzői prompt SHALL kimondani, hogy most
+- [x] A5: WHEN a kapcsoló `on` és a hívás célzott javítás a 0. fejezet nélkül THEN a szerzői prompt SHALL kimondani, hogy most
   nincs Célkártya és mini mese. Mérés: `tests/lesson-opener.test.ts`.
-- [ ] A6: WHEN a teljes ellenőrzés fut THEN `npm run check`, `npm run lint`, `npm run check:test`, `npm test` SHALL hibátlan legyen.
+- [x] A6: WHEN a teljes ellenőrzés fut THEN `npm run check`, `npm run lint`, `npm run check:test`, `npm test` SHALL hibátlan legyen.
 - [ ] A7 (S2b): WHEN a három térkép mindkét ágon lefut THEN a mérési fájl SHALL rögzíteni ágonként a látható szót, a kapu- és
   ív-eredményt, a Célkártya és a mese szó- és mondatszámát, az IQ-formájú kvíz/feladat/`check` darabszámát (kézi számolás), és a
   rubrikát (lépcsőhöz illő forma; négy Célkártya-elem; 5 mondat; nyitott kérdés; recap-visszatérés; biztonsági sértés; új tény) — és

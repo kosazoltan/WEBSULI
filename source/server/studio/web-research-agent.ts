@@ -96,6 +96,8 @@ export type { WebSource, WebResearchEvent } from "../../shared/web-research-stre
 import { LESSON_HTML_SPEC_V74, lessonThemePrompt, pickLessonTheme } from "../ai/lesson-html-spec";
 import { LESSON_QUALITY_CONTRACT, HTML_TEACHING_CONTRACT } from "../../shared/lesson-quality";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
+import { LESSON_OPENER_HTML_CONTRACT, PLAYFUL_QUESTIONING_CONTRACT, lessonOpenerStageLine } from "../../shared/lesson-opener";
+import { lessonOpenerEnabled } from "./lesson-opener-flag";
 import { HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 
 /**
@@ -194,6 +196,7 @@ export function webLessonAuthorPrompt(classroom: number, title?: string, topicSe
     LESSON_QUALITY_CONTRACT,
     HTML_TEACHING_CONTRACT,
     LESSON_METHOD_CONTRACT,
+    ...(lessonOpenerEnabled() ? [LESSON_OPENER_HTML_CONTRACT, lessonOpenerStageLine(classroom), PLAYFUL_QUESTIONING_CONTRACT] : []),
     HTML_LESSON_DATA_CONTRACT,
   ].filter((line): line is string => line !== null).join("\n");
 }
