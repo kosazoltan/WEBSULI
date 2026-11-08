@@ -26,8 +26,8 @@ Kiegészítő tulajdonosi kérés (2026-11-08, szó szerint összefoglalva):
 - **E) Mini mese** — utána jön a tananyag, és minden tananyagban legyen egy **pici, 5 mondatos** minta mese.
 - **F) IQ-kérdések a számonkérésben** — a fejtörő-módszertan kérdései **a kvízekben, a kontrollkérdésekben és a szöveges
   feladatokban** jelenjenek meg (nem csak a Módszerek lapon).
-  Értelmezés: „kontrollkérdés” = a Tananyag lap `check` blokkjai és a Módszerek lap kapukérdései (`gate`). UNVERIFIED — a
-  tulajdonos megerősítésére vár; ha mást értett alatta, a szerződés szövege egy sorban módosul.
+  „Kontrollkérdés” = a Tananyag lap `check` blokkjai és a Módszerek lap kapukérdései (`gate`) — a tulajdonos 2026-11-08-án
+  megerősítette.
 
 ## 1. Cél
 
@@ -272,7 +272,7 @@ A játékos keret **nem enged** új tényt: a „KIZÁRÓLAG a Tananyag lapon t�
 
 ## 10. Nyitott kérdés a tulajdonosnak
 
-1. „Kontrollkérdés” értelmezése (0. fejezet, F): a Tananyag lap ellenőrző kérdései (`check`) és a Módszerek lap kapukérdései — így értetted?
+Nincs. (A „kontrollkérdés” értelmezését a tulajdonos 2026-11-08-án megerősítette: `check` + `gate`.)
 
 ## 11. Végrehajtási utasítás
 
