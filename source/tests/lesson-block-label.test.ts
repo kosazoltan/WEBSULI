@@ -29,6 +29,12 @@ test("másik fejezetben és Célkártya nélkül a sáv címkéje marad", () => 
   assert.equal(blockLabel([explain("Célszerű előbb összeadni.")], 0, 0, "teen"), BAND_THEME.teen.labels.explain, "a „Célszerű” nem célcímke");
   // Review #405: egy sima „Célunk az …” bekezdés nem Célkártya (az stripOpenerGoalLabel-lel összhangban).
   assert.equal(blockLabel([explain("Célunk az egyenlő törtek felismerése.")], 0, 0, "teen"), BAND_THEME.teen.labels.explain);
+  // Review #405: „Cél…” kezdetű, többbekezdéses sima magyarázat sem Célkártya (a buktató / ok / leküzdés címkék hiányoznak).
+  assert.equal(blockLabel([explain("Célunk az egyenlő törtek felismerése.\n\nA törtek értéke …\n\nPéldául 1/2 = 2/4.")], 0, 0, "teen"), BAND_THEME.teen.labels.explain);
+  assert.equal(blockLabel([explain("Célszerű előbb összeadni.\n\nMiért? Mert …\n\nOka: …")], 0, 0, "teen"), BAND_THEME.teen.labels.explain);
+  // A kicsik címkéi is felismerhetők.
+  const kidGoal = explain("Mit tanulunk ma? Az összeadást.\n\nMi lehet nehéz? A tízes átlépés.\n\nMiért? Sok szám.\n\nÍgy sikerül! Tízre egészítünk.");
+  assert.equal(blockLabel([kidGoal, story], 0, 0, "kid", 2), "A lecke célja");
 });
 
 test("mélység, ábra- és feladatfajta szerinti címkék", () => {
