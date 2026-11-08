@@ -147,6 +147,9 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
 - **Megelőzés:** a draftból kivett PR-nál a review-botok (Sourcery, Codex, Copilot) eredményét a CI mellett meg kell
   várni, és a megállapításaikat igazolni / megválaszolni az összevonás előtt.
 - **Mellékes:** commitot ne `core.hooksPath=/dev/null` kapcsolóval hozz létre — az a hookok megkerülése (AGENTS.md).
+- **Ismétlődés (2026-11-08, #403):** a Codex „nincs hiba” jelzése után bekapcsoltam az automatikus összevonást, de a Copilot review
+  később érkezett, 5 valós P2-vel; az összevonást vissza kellett kapcsolni. A Codex, a Copilot ÉS a Sourcery (vagy a keret-elfogyás
+  üzenete) is legyen meg a LEGUTOLSÓ commitra, mielőtt az automatikus összevonás bekapcsol.
 
 ## C-18 — Feltételezett telepítési szabály és „nem érem el” mérés nélkül (2026-11-05)
 
@@ -158,3 +161,34 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   `node scripts/qa/verify-render-revision.mjs` (éles revízió), `node scripts/qa/verify-render-settings.mjs`
   (beállítás vs. repó). A Render MCP a szolgáltatás beállítását (build-parancs) nem tudja módosítani, és a felhős
   munkamenetből az `api.render.com` tiltott (403) — ilyen módosítás a tulajdonos lépése a Render-felületen.
+
+## C-19 — Licenc általánosításból és commit identitás nélkül (2026-11-08)
+
+- **Tünet 1:** a nyílt forrásokat kereső ügynök az OpenStax *Psychology 2e* / *Lifespan Development* licencét a kiadó
+  „általában CC BY” gyakorlatából CC BY-nak vélte; a könyvek saját oldalán CC BY-NC-SA 4.0 áll (nem kereskedelmi).
+- **Megelőzés 1:** licencet csak a forrás saját oldalán olvasott licencsorral rögzítünk (böngészőben, `get_page_text` /
+  `javascript_tool`); keresési kivonat, kiadói általánosítás, tükörlap = UNVERIFIED, és a forrásjegyzékben így is szerepel.
+- **Tünet 2:** a commit kétszer bukott: PowerShellben a `git commit -F -` here-stringet nem a stdinre, hanem pathspecként adta át;
+  utána „Author identity unknown” (a C-14 már leírta, de commit előtt nem olvastam vissza a katalógust).
+- **Megelőzés 2:** commit előtt a C-06 / C-14 szerint `git -c user.name=… -c user.email=… commit -F <scratchpad-fájl>`; a
+  commit-üzenet mindig fájlból megy, nem here-stringből.
+- **Tünet 3:** `[IO.File]::ReadAllText('docs\…')` relatív úttal a folyamat munkakönyvtárához (itt `source/`) oldódott fel, nem a
+  PowerShell aktuális mappájához → „Could not find a part of the path”.
+- **Megelőzés 3:** .NET fájlhívásnál mindig abszolút út (`C:\Repo\WEBSULI\…`).
+
+## C-20 — Mérés előtt nem ellenőrzött adatbázis-azonosság (2026-11-08)
+
+- **Tünet:** a `source/.env`-be bemásolt `DATABASE_URL` egy régi adatbázisra mutatott (`neondb`, foglalási táblák, 99 `html_files`
+  sor 2025-12-ig, `knowledge_maps` nélkül); a térképválasztó „relation knowledge_maps does not exist” hibával állt le, kétszer.
+- **Megelőzés:** élő adatbázist használó mérés előtt csak olvasó azonosság-próba (tábla-jelzők: `knowledge_maps`, `km_concepts`,
+  `studio_jobs`; az URL-t nem kiírva). Ha az éles térkép nem kell (új forrás mérése), a `single-run-measure.mts` `file:<útvonal>`
+  módja éles adatbázis nélkül fut — ezt kell először választani. Titkot ügynök nem másol fájlok között; a kitöltés a tulajdonos lépése.
+- **Tünet 2:** a más repóból átmásolt `ANTHROPIC_API_KEY` érvénytelen volt (401 invalid x-api-key); a mérés hiba nélkül lefutott, mert a
+  motor csendben a tartalék modellre (gpt-6.1-sol) váltott — a kimenet `fallback` mezője mutatta.
+- **Tünet 3:** PowerShellből indított `bash -c "…"` a WSL-t hívta (nincs `/bin/bash`), nem a Git Bash-t → „execvpe(/bin/bash) failed”.
+- **Megelőzés 3:** POSIX-parancs (awk, diff, tr) a Bash eszközzel fut, nem PowerShellbe ágyazott `bash -c`-vel.
+- **Tünet 4:** a `Get-Date -Format o` parancsot a destruktív-parancs hook „meghajtó formázása”-ként tiltotta (a `-Format` szó miatt).
+- **Megelőzés 4:** időbélyeg PowerShellben `[DateTime]::Now.ToString('o')` alakban; a `.audit-ok` jelzőt a valódi kapuk
+  (lint, check, check:test, npm test, three-phase) után, külön hívásban írjuk.
+- **Megelőzés 2:** fizetős mérés előtt egy 1 tokenes kulcspróba (a kulcsot nem kiírva), és minden futás után a `fallback` mező
+  ellenőrzése; tartalékmodelles futás eredménye csak így jelölve kerülhet a mérési fájlba.

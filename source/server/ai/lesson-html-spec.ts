@@ -1,5 +1,7 @@
 import { LESSON_FONT_CSS, LESSON_FONT_FALLBACK, LESSON_TYPOGRAPHY_CONTRACT, lessonFontPair, type BundledFont } from "../../shared/lesson-typography";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
+import { LESSON_OPENER_HTML_CONTRACT, PLAYFUL_QUESTIONING_CONTRACT, lessonOpenerStageLine } from "../../shared/lesson-opener";
+import { lessonOpenerEnabled } from "../studio/lesson-opener-flag";
 import { HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 import { HTML_INTERACTION_CONTRACT } from "../../shared/lesson-interactions";
 /**
@@ -544,5 +546,10 @@ export function lessonHtmlSpecPrompt(opts: LessonSpecPromptOptions): string {
  */
 export function lessonHtmlSpecParts(opts: LessonSpecPromptOptions): { theme: string; spec: string } {
   const theme = opts.theme ?? pickLessonTheme(opts.seed, opts.classroom, opts.subjectHint);
-  return { theme: lessonThemePrompt(theme, opts.classroom), spec: `${LESSON_HTML_SPEC_V74}\n\n${LESSON_METHOD_CONTRACT}\n\n${HTML_LESSON_DATA_CONTRACT}` };
+  const themeText = lessonThemePrompt(theme, opts.classroom);
+  const spec = `${LESSON_HTML_SPEC_V74}\n\n${LESSON_METHOD_CONTRACT}\n\n${HTML_LESSON_DATA_CONTRACT}`;
+  // Spec 2026-11-08-nyitomese-jatekos-kerdezes (S2): a statikus spec évfolyamfüggetlen marad (KV-cache), a lépcső a téma-részbe kerül.
+  return lessonOpenerEnabled()
+    ? { theme: `${themeText}\n${lessonOpenerStageLine(opts.classroom)}`, spec: `${spec}\n\n${LESSON_OPENER_HTML_CONTRACT}\n\n${PLAYFUL_QUESTIONING_CONTRACT}` }
+    : { theme: themeText, spec };
 }
