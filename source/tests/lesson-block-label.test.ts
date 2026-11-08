@@ -46,3 +46,31 @@ test("mélység, ábra- és feladatfajta szerinti címkék", () => {
   assert.equal(blockLabel([tryB("match")], 0, 1, "teen"), "Párosítsd");
   assert.equal(blockLabel([tryB("ismeretlen")], 0, 1, "teen"), "Próbáld ki");
 });
+
+// Spec 2026-11-08-tartalmi-fejlecek-2: az ellenőrző kérdés és a záró összefoglaló fejléce a tartalomból.
+const check = (question: string) => ({ kind: "check", question, options: ["a", "b"], correctIndex: 0, feedbackPerOption: ["x", "y"], coversConceptIds: ["c1"] }) as unknown as Block;
+const recap = () => ({ kind: "recap", bullets: ["x"] }) as unknown as Block;
+
+test("az ellenőrző kérdés fejléce az IQ-formából", () => {
+  const cases: Array<[string, string]> = [
+    ["Igaz vagy hamis? A harasztok spórával szaporodnak.", "Igaz vagy hamis?"],
+    ["Kakukktojás! Melyik nem illik közé: levél, termés, víz, szár?", "Kakukktojás"],
+    ["Melyik nem illik a sorba?", "Kakukktojás"],
+    ["Találós kérdés: a talajban lakom. Ki vagyok?", "Találós kérdés"],
+    ["Analógia: a mohák úgy aránylik … Mi illik a helyére?", "Analógia"],
+    ["Sorminta: 1/7, 2/7, 4/7, … Mi a következő elem?", "Sorminta"],
+    ["Melyik állítás hamis a harasztokról?", "Melyik hamis?"],
+    ["Ha a számlálók szorzata 14, akkor mi a másik tört?", "Következtetés"],
+  ];
+  for (const [q, label] of cases) assert.equal(blockLabel([check(q)], 0, 1, "teen"), label, q);
+  assert.equal(blockLabel([check("Mennyi 3/4 · 2/3?")], 0, 1, "teen"), BAND_THEME.teen.labels.check);
+  assert.equal(blockLabel([check("Ha esik. Akkor mi a szorzat?")], 0, 1, "teen"), BAND_THEME.teen.labels.check, "két mondat nem következtetés");
+});
+
+test("a lecke utolsó összefoglalója „A lecke tanulsága”, a többi a sáv címkéje", () => {
+  const blocks = [explain("x"), recap(), recap()];
+  assert.equal(blockLabel(blocks, 2, 4, "teen", 7, true), "A lecke tanulsága");
+  assert.equal(blockLabel(blocks, 1, 4, "teen", 7, true), BAND_THEME.teen.labels.recap, "nem az utolsó recap");
+  assert.equal(blockLabel(blocks, 2, 2, "teen", 7, false), BAND_THEME.teen.labels.recap, "nem az utolsó fejezet");
+  assert.equal(blockLabel(blocks, 2, 4, "teen"), BAND_THEME.teen.labels.recap, "paraméter nélkül a régi viselkedés");
+});
