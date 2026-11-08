@@ -1,6 +1,6 @@
 # Spec: Célkártya, nyitómese és játékos (IQ-) kérdezés a tananyaggyártásban
 
-> Dátum: 2026-11-08 · Szerző: Claude (Opus 5.5) · Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-11-08)** — S1 és S2 KÉSZ (A1–A6, mérve 2026-11-08: célzott 144/144, teljes `npm test` 2599/2599, check/lint/check:test 0 hiba); S2b KÉSZ (`docs/measurements/2026-11-08-nyitomese-ab.json`): Opus 5.5-ön, 0 tartalékváltással, 3 évfolyam × KI/BE — Célkártya 4/4 és 5 mondatos mese minden kapcsolós futásban, IQ-kvíz 0–2 → 24–31 / 98, hossz +9% / +4% / −2%, ív rendben (A7 teljesül); a tartalék modelles előmérés két hibát hozott, mindkettő javítva
+> Dátum: 2026-11-08 · Szerző: Claude (Opus 5.5) · Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-11-08)** · **ÉLESBEN BEKAPCSOLVA 2026-11-08** (PR #403, `d599b1b`; Render env `STUDIO_LESSON_OPENER=on`) — S1 és S2 KÉSZ (A1–A6, mérve 2026-11-08: célzott 144/144, teljes `npm test` 2599/2599, check/lint/check:test 0 hiba); S2b KÉSZ (`docs/measurements/2026-11-08-nyitomese-ab.json`): Opus 5.5-ön, 0 tartalékváltással, 3 évfolyam × KI/BE — Célkártya 4/4 és 5 mondatos mese minden kapcsolós futásban, IQ-kvíz 0–2 → 24–31 / 98, hossz +9% / +4% / −2%, ív rendben (A7 teljesül); a tartalék modelles előmérés két hibát hozott, mindkettő javítva
 > Szabály: `docs/agent-haromfazisu-munka.md`. Végrehajtás: `docs/specs/2026-11-08-nyitomese-jatekos-kerdezes-vegrehajtas.md`.
 > Kanban: #6.
 
@@ -47,7 +47,7 @@ Kiegészítő tulajdonosi kérés (2026-11-08, szó szerint összefoglalva):
 - Meglévő leckék tömeges újragyártása.
 - A befagyasztott `websuli-runtime-2` csomag módosítása (`shared/instruction-bundles/roles.ts:50`).
 - A Tananyag Készítő skill átírása.
-- A kapcsoló élesben való bekapcsolása (az S2b mérés és tulajdonosi döntés után, külön lépés).
+- A kapcsoló élesben való bekapcsolása (az S2b mérés és tulajdonosi döntés után, külön lépés) — megtörtént: tulajdonosi utasítás 2026-11-08, `STUDIO_LESSON_OPENER=on` a Render `websuli-api-eu` szolgáltatáson (PR #403 összevonása után).
 
 ## 3. Mért tények (kódból ellenőrizve, 2026-11-08)
 
