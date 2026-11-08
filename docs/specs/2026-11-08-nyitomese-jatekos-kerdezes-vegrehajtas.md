@@ -286,13 +286,13 @@ Bukásnál: az implementációt javítod, a tesztet nem gyengíted; ugyanazt a b
 
 ## T11 — Csapda, kanban, commit
 
-1. `docs/agent-csapdak.md` végére új bejegyzés a meglévő formátumban (`## C-19 — …`, **Tünet** / **Megelőzés**): a kutatóügynök az OpenStax
-   *Psychology 2e* / *Lifespan Development* licencét általánosításból CC BY-nak vélte, az oldal szerint CC BY-NC-SA 4.0. Megelőzés: licencet
-   csak a forrás saját oldalán olvasott licencsorral rögzítünk; a keresési kivonat és a kiadói „általában” állítás UNVERIFIED.
+1. A csapda-bejegyzés (`docs/agent-csapdak.md`, C-19: licenc általánosításból; commit identitás nélkül) a tervezési körben KÉSZ.
+   Ha a végrehajtás közben új hiba, tévedés vagy rossz döntés történik, ugyanebben a körben új `C-2x` bejegyzés készül.
+   Commit: `git -c user.name="Kz" -c user.email="236001384+kosazoltan@users.noreply.github.com" commit -F <scratchpad-fájl>` (C-14, C-19).
 2. Kanban: `node C:\Repo\Jack\qualcomm\skills\hermes-kanban-workflow\scripts\kanban.mjs note 6 "<S1+S2 kész, parancseredményekkel>"` a
    `C:\Repo\WEBSULI` mappából, majd `review 6`.
 3. Commitok (atomi): `docs: nyitómese + játékos kérdezés — spec és végrehajtás` (ha még nincs), `docs: módszertani tudásbázis (S1)`,
-   `feat(studio): nyitómese és játékos kérdezés szerződései kapcsolóval (S2)`, `docs(csapdak): C-19 …`. A commit-üzenet a rendszer által
+   `feat(studio): nyitómese és játékos kérdezés szerződései kapcsolóval (S2)`. A commit-üzenet a rendszer által
    előírt Co-Authored-By sorral zárul. Push és PR csak tulajdonosi kérésre.
 
 ## T12 — S2b mérés (CSAK tulajdonosi jóváhagyás után; fizetős)
