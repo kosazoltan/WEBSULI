@@ -281,8 +281,9 @@ segítséget kap a tanuló.
 ### Visszajelzés és segítség
 
 - Helyes válasznál röviden: miért jó.
-- Rossz válasznál: az első mondat bátorító; utána mi tévesztett meg; egy mondat arról, **mit kérdezett valójában** a feladat; a
-  helyes gondolatmenet egy mondatban. Erőfeszítést dicsérünk, nem minősítünk.
+- Rossz válasznál: bátorító nyitás; mi tévesztett meg; **mit kérdezett valójában** a feladat. A bank kvízében ez opciónként EGY
+  mondatba sűrítve (≤ 200 karakter, a bank kimeneti kerete), módszernél legfeljebb 2 mondat; a Tananyag ellenőrző kérdésében több
+  mondat is lehet. Erőfeszítést dicsérünk, nem minősítünk.
 - A `check.hint` irányt mutat (kérdés vagy szempont), **nem árulja el** a választ.
 - A játékos keret nem enged új tényt: kizárólag a Tananyag lapon ténylegesen megtanított állítás kérdezhető.
 

@@ -119,6 +119,10 @@ test("Review #403: a két nyitóblokk kivétel a szó szerinti term-szabály al�
   assert.ok(on.includes("A TÖMÖRÍTÉS NEM BONT KAPUT"), "a hivatkozott későbbi szabály a promptban van");
   assert.ok(PLAYFUL_QUESTIONING_CONTRACT.includes("conflict = MINDEN évfolyamon kötelező"));
   assert.ok(!PLAYFUL_QUESTIONING_CONTRACT.includes("conflict = dilemma (7. évfolyamtól)"));
+  // Review #403 (Copilot): a visszajelzési szabály a bank kimeneti keretén belül marad (kvízopciónként 1 mondat, ≤ 200 karakter).
+  assert.ok(PLAYFUL_QUESTIONING_CONTRACT.includes("kvízopciónként 1 mondat, ≤ 200 karakter"));
+  assert.ok(PLAYFUL_QUESTIONING_CONTRACT.includes("EGY mondatba sűrítve"));
+  assert.ok(!PLAYFUL_QUESTIONING_CONTRACT.includes("rossz válasznál az első mondat bátorító"));
 });
 
 test("Review #403: a Célkártya célcímkéje nem marad a kártyaleírás egyetlen mondata", () => {

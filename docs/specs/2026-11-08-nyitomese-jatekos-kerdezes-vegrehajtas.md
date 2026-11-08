@@ -209,7 +209,7 @@ export const PLAYFUL_QUESTIONING_CONTRACT = [
   "- Módszerek: prediction = előkérdés, becslés vagy kíváncsiságrés (hibázni szabad); myth = igaz-hamis csapda (hihető, de hamis állítás; a magyarázat megmondja, mi tévesztett meg); popup = találós kérdés; gate = kapurejtvény, csak egyértelmű, általad ellenőrzött megoldással; analogy = analógia; conflict = MINDEN évfolyamon kötelező: tantárgyi feltevés és tény ütköztetése (pl. „Peti szerint…, de a lecke szerint…”), társas vagy erkölcsi dilemma csak 7. évfolyamtól; selfCheck = „magyarázd el, miért”.",
   "- Nehézségi ív: minden csomagban könnyű, sikerélményt adó tétel az első, utána közepes, végül kihívást jelentő.",
   "- Évfolyam szerinti forma: 1–2. konkrét, egylépéses, csapda nélkül (kakukktojás képszerű szavakkal, egyszerű sorminta); 3–4. találós kérdés, kakukktojás, egyszerű analógia; 5–6. hamis állítás keresése indoklással, kétlépéses következtetés; 7–8. többlépéses és laterális kérdés, nyomozós kizárás; 9–12. dilemma, becslés, ellenpélda, „magyarázd el, miért”.",
-  "- Visszajelzés (feedbackPerOption és a módszer answer mezője): helyes válasznál röviden, miért jó; rossz válasznál az első mondat bátorító, utána mi tévesztett meg, mit kérdezett valójában a feladat, és a helyes gondolatmenet egy mondatban. Az erőfeszítést dicséred, nem minősítesz.",
+  "- Visszajelzés a KIMENETI KERETEN belül (kvízopciónként 1 mondat, ≤ 200 karakter; módszer answer legfeljebb 2 mondat): helyes válasznál röviden, miért jó; rossz válasznál EGY mondatba sűrítve egy rövid bátorító nyitás és az, mi tévesztett meg, illetve mit kérdezett valójában a feladat (pl. „Jó próba, de itt a … a kérdés, ezért …”). Az erőfeszítést dicséred, nem minősítesz.",
   "- A játékos keret nem enged új tényt: továbbra is KIZÁRÓLAG a Tananyag lapon ténylegesen megtanított állítás kérdezhető.",
 ].join("\n");
 
@@ -372,3 +372,4 @@ Bukásnál az implementációt javítod, a tesztet nem gyengíted; a bukó paran
 5. `docs/measurements/2026-11-08-nyitomese-ab.json` `opus.rubrika`: a teljes kézi rubrika (forma, biztonság, új tény).
 Tesztek: `tests/lesson-opener.test.ts` két új eset (term-kivétel + conflict; célcímke és hosszú célbekezdés teaser).
 6. `source/shared/lesson-teaser.ts` `descriptionAfterLessonChange`: a címkeleválasztás előtti (régi) automatikus leírást is automatikusnak veszi (Copilot-review, 2026-11-08); teszt a `lesson-opener.test.ts`-ben (rövid és levágott célbekezdés).
+7. `PLAYFUL_QUESTIONING_CONTRACT`: a visszajelzés a bank kimeneti keretén belül (kvízopciónként 1 mondat ≤ 200 karakter, módszer ≤ 2 mondat) — Copilot-review, 2026-11-08.

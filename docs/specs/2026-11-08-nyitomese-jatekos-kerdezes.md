@@ -178,8 +178,10 @@ kérdés, `gate` = kapurejtvény, `analogy` = analógia, `conflict` = feltevés�
 3–4. találós kérdés, kakukktojás, egyszerű analógia; 5–6. hamis állítás keresése indoklással, kétlépéses következtetés;
 7–8. többlépéses és laterális kérdés, nyomozós kizárás; 9–12. dilemma, becslés, ellenpélda, „magyarázd el, miért”.
 
-**Visszajelzés** (`feedbackPerOption`, módszer `answer`): helyes válasznál röviden, miért jó; rossz válasznál az első mondat
-bátorító, utána mi tévesztett meg, mit kérdezett valójában a feladat, és a helyes gondolatmenet egy mondatban. A `check.hint` irányt
+**Visszajelzés** (`feedbackPerOption`, módszer `answer`): helyes válasznál röviden, miért jó; rossz válasznál bátorító nyitás,
+mi tévesztett meg, és mit kérdezett valójában a feladat. A bankban a kimeneti keret szerint (`lesson-experience.ts:321`) ez
+kvízopciónként EGY mondatba sűrítve (≤ 200 karakter), módszernél legfeljebb 2 mondat (review #403); a Tananyag `check` blokkjában
+(≤ 1000 karakter) több mondat is lehet. A `check.hint` irányt
 mutat, nem árulja el a választ. Erőfeszítést dicsér, nem minősít.
 
 A játékos keret **nem enged** új tényt: a „KIZÁRÓLAG a Tananyag lapon ténylegesen megtanított állítások kérdezhetők” szabály
