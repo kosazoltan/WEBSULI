@@ -13,6 +13,14 @@ export function isPlaceholderDescription(description: string | null | undefined)
 
 /** A tanítószöveg elejéből kártyaleírás: jelölés ki, első bekezdés, egész mondatok ≤ `max`; különben szóhatáron vágva „…”-tal. */
 export function teaserFromText(text: unknown, max = TEASER_MAX): string | null {
+  return teaserCore(text, max, true);
+}
+
+/**
+ * Review #403 (P2): `stripLabel: false` a címkeleválasztás ELŐTTI (régi) rövidítés — a korábban automatikusan mentett leírás
+ * felismeréséhez kell, különben a javítás kézzel írtnak venné és a régi cél maradna a kártyán.
+ */
+function teaserCore(text: unknown, max: number, stripLabel: boolean): string | null {
   if (typeof text !== "string") return null;
   const paragraph = text
     .replace(/^\s*#+\s*/gm, "")
@@ -23,7 +31,7 @@ export function teaserFromText(text: unknown, max = TEASER_MAX): string | null {
     .find((p) => p.length > 0);
   if (!paragraph) return null;
   // Review #403 (P2): a Célkártya vezető célcímkéje nem maradhat a leírás egyetlen „mondata” (spec 2026-11-08-nyitomese-jatekos-kerdezes).
-  return shortenTeaser(stripOpenerGoalLabel(paragraph), max);
+  return shortenTeaser(stripLabel ? stripOpenerGoalLabel(paragraph) : paragraph, max);
 }
 
 function shortenTeaser(paragraph: string, max: number): string {
@@ -47,14 +55,20 @@ function shortenTeaser(paragraph: string, max: number): string {
  * bevezetője — az új lecke bevezetőjére frissül; a kézzel írt leírásnál `undefined` (érintetlen).
  */
 export function descriptionAfterLessonChange(description: string | null | undefined, previousLesson: unknown, nextLesson: unknown): string | undefined {
-  const automatic = isPlaceholderDescription(description) || description === lessonTeaser(previousLesson);
+  // Review #403 (P2): a címkeleválasztás előtti (régi) automatikus leírás is automatikusnak számít.
+  const automatic = isPlaceholderDescription(description) || description === lessonTeaser(previousLesson)
+    || description === teaserCore(teaserSourceText(previousLesson), TEASER_MAX, false);
   return automatic ? lessonTeaser(nextLesson) ?? LESSON_PLACEHOLDER_DESCRIPTION : undefined;
 }
 
 /** A lecke első fejezetének első magyarázó blokkja (ennek hiányában az első szöveges blokk) → kártyaleírás. */
 export function lessonTeaser(json: unknown): string | null {
+  return teaserFromText(teaserSourceText(json));
+}
+
+function teaserSourceText(json: unknown): unknown {
   const sections = (json as { sections?: Array<{ blocks?: Array<{ kind?: unknown; text?: unknown }> }> } | null)?.sections;
   const blocks = Array.isArray(sections) && Array.isArray(sections[0]?.blocks) ? sections[0].blocks! : [];
   const block = blocks.find((b) => b?.kind === "explain" && typeof b.text === "string") ?? blocks.find((b) => typeof b?.text === "string");
-  return teaserFromText(block?.text);
+  return block?.text;
 }

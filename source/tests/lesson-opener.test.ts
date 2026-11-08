@@ -11,7 +11,7 @@ import {
 } from "../shared/lesson-opener";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { stripOpenerGoalLabel } from "../shared/lesson-opener";
-import { teaserFromText } from "../shared/lesson-teaser";
+import { descriptionAfterLessonChange, lessonTeaser, teaserFromText } from "../shared/lesson-teaser";
 
 /* Spec 2026-11-08-nyitomese-jatekos-kerdezes (S2): Célkártya, 5 mondatos mini mese és játékos (IQ-) kérdezés — szerződések és kapcsoló. */
 
@@ -132,6 +132,22 @@ test("Review #403: a Célkártya célcímkéje nem marad a kártyaleírás egyet
   assert.ok(!teaser.startsWith("Mit tanulunk ma?"), teaser);
   assert.ok(teaser.startsWith("Ma megismered"), teaser);
   assert.ok(teaser.length <= 160);
+});
+
+test("Review #403: a címkeleválasztás előtt automatikusan mentett leírás javításkor frissül (rövid és levágott célbekezdés)", () => {
+  const lessonWithText = (text: string) => ({ sections: [{ blocks: [{ kind: "explain", text }] }] });
+  // Rövid: a régi automatikus leírás a címkével együtt mentődött.
+  const prevShort = lessonWithText("**Cél:** Megérted a törtek bővítését.\n\n**Tipikus buktató:** csak a számláló.");
+  const next = lessonWithText("**Cél:** Megérted a törtek egyszerűsítését.\n\n**Tipikus buktató:** csak a nevező.");
+  assert.equal(descriptionAfterLessonChange("Cél: Megérted a törtek bővítését.", prevShort, next), lessonTeaser(next));
+  assert.equal(lessonTeaser(next), "Megérted a törtek egyszerűsítését.");
+  // Levágott: a régi rövidítés a címkés, 160 karakternél hosszabb bekezdésből készült.
+  const longGoal = "Mit tanulunk ma? Ma megismered a növény öt fő részét, a gyökeret, a szárat, a levelet, a virágot és a termést. Megtanulod azt is, melyik rész mire való a növény életében, és hogyan segítik egymást.";
+  const prevLong = lessonWithText(longGoal);
+  const legacy = "Mit tanulunk ma? Ma megismered a növény öt fő részét, a gyökeret, a szárat, a levelet, a virágot és a termést.";
+  assert.equal(descriptionAfterLessonChange(legacy, prevLong, next), lessonTeaser(next));
+  // A kézzel írt leírás továbbra is érintetlen.
+  assert.equal(descriptionAfterLessonChange("Kézzel írt kártyaszöveg.", prevShort, next), undefined);
 });
 
 test("A3/A4: webes szerzői prompt — kapcsoló nélkül nincs Célkártya, bekapcsolva a HTML-szerződés és a lépcső-sor bekerül", () => {

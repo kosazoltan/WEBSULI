@@ -371,3 +371,4 @@ Bukásnál az implementációt javítod, a tesztet nem gyengíted; a bukó paran
    „Cél:”) nem maradhat a kártyaleírás egyetlen mondata.
 5. `docs/measurements/2026-11-08-nyitomese-ab.json` `opus.rubrika`: a teljes kézi rubrika (forma, biztonság, új tény).
 Tesztek: `tests/lesson-opener.test.ts` két új eset (term-kivétel + conflict; célcímke és hosszú célbekezdés teaser).
+6. `source/shared/lesson-teaser.ts` `descriptionAfterLessonChange`: a címkeleválasztás előtti (régi) automatikus leírást is automatikusnak veszi (Copilot-review, 2026-11-08); teszt a `lesson-opener.test.ts`-ben (rövid és levágott célbekezdés).
