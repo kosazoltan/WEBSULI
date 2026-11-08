@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { subjectIconIdForBand } from "./subject-icons";
+import { subjectKeyOf } from "./subject-key";
 import { isLessonCoverId, lessonCoverAsset, lessonCoverId } from "./lesson-cover-key";
 
 /**
@@ -83,14 +84,14 @@ export function pictureFits(picture: DesignAsset, lesson: { subject: string; tit
  * matematikához (tulajdonosi döntés 2026-10-19, „9. o. matek → híd”) és földrajzhoz (tulajdonos 2026-11-08: „a híd a földrajzhoz oké,
  * de biológiához nem”) illik. A többi hős (üres tantárgylista) semleges, minden tantárgyhoz illik.
  */
-const HERO_SUBJECTS: Readonly<Record<string, readonly string[]>> = { "hero-laboratory": ["fizika", "matematika", "földrajz"] };
+const HERO_SUBJECTS: Readonly<Record<string, readonly string[]>> = { "hero-laboratory": ["fizika", "matematika", "foldrajz"] };
 
 export function heroFitsSubject(hero: DesignAsset, subject: string): boolean {
-  const allowed = HERO_SUBJECTS[hero.id] ?? hero.subjects;
-  const s = foldText(subject).trim();
-  // Ismeretlen / üres tantárgynál a régi viselkedés (a sáv hőse).
-  if (!allowed.length || s.length < 4) return true;
-  return allowed.some(a => { const f = foldText(a); return s.includes(f) || f.includes(s.slice(0, Math.max(4, Math.min(s.length, 8)))); });
+  const allowed = (HERO_SUBJECTS[hero.id] ?? hero.subjects).map(s => subjectKeyOf(s) ?? s);
+  // Review #405: a közös tantárgy-normalizálás (a „matek” szinonima is); ismeretlen / üres tantárgynál a régi viselkedés (a sáv hőse).
+  const key = subjectKeyOf(subject);
+  if (!allowed.length || !key) return true;
+  return allowed.includes(key);
 }
 
 export function pickLessonArt(lesson: { subject: string; title: string; seed?: string; topicCoverId?: string | null }, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): LessonArt {
@@ -124,8 +125,8 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
     const own = heroes.find(a => a.band === band);
     if (own && heroFitsSubject(own, lesson.subject)) hero = own;
     else {
-      const fitting = heroes.filter(a => a !== own && heroFitsSubject(a, lesson.subject));
-      hero = rotate(fitting.length ? fitting : heroes, seed, "art");
+      // Review #405: illő hős híján nincs kép (a tiltott híd nem kerülhet tartalékként az arculatba; a megjelenítő kezeli).
+      hero = rotate(heroes.filter(a => a !== own && heroFitsSubject(a, lesson.subject)), seed, "art");
     }
   }
   // Review #279: a blokktípushoz kötött pózok (mascot-explain…) a fejezetcímhez valók, nem az általános fejléc-rotációba.

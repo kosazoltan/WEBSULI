@@ -19,14 +19,18 @@ export const ANIM_LABELS: Readonly<Record<string, string>> = {
 
 export const TRY_LABELS: Readonly<Record<string, string>> = { dragSort: "Rendezd sorba", fillBlank: "Egészítsd ki", match: "Párosítsd" };
 
-export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: number, band: AgeBand): string {
+export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: number, band: AgeBand, classroom?: number): string {
   const block = blocks[index];
   const theme = BAND_THEME[band];
   switch (block.kind) {
     case "explain": {
       if (sectionIdx === 0 && index === 0 && isGoalCardText(block.text)) return "A lecke célja";
       const prev = blocks[index - 1];
-      if (sectionIdx === 0 && index === 1 && prev?.kind === "explain" && isGoalCardText(prev.text)) return band === "kid" ? "Mese" : "Történet";
+      if (sectionIdx === 0 && index === 1 && prev?.kind === "explain" && isGoalCardText(prev.text)) {
+        // Review #405: „Mese” csak 1–4. évfolyamon; a programozás (0) a kid sávba esik, de 7–8. korcsoport → „Történet”.
+        const young = classroom === undefined ? band === "kid" : classroom >= 1 && classroom <= 4;
+        return young ? "Mese" : "Történet";
+      }
       if (block.depth === "why") return "Miért?";
       if (block.depth === "deeper") return "Mélyebben";
       return theme.labels.explain;

@@ -32,4 +32,15 @@ test("A2: a tárolt híd a biológialeckén nem marad (friss választás), a mat
 
 test("ismeretlen / üres tantárgynál a régi viselkedés: a sáv hőse", () => {
   assert.equal(pickLessonArt({ subject: "", title: "Ismeretlen", seed: "x" }, "laboratory", C).hero?.id, "hero-laboratory");
+  // Review #405: az „Ismeretlen” tantárgy (nem katalógusbeli) is a régi viselkedést kapja.
+  assert.equal(pickLessonArt({ subject: "Ismeretlen", title: "X", seed: "x" }, "laboratory", C).hero?.id, "hero-laboratory");
+});
+
+test("Review #405: a „matek” szinonima a hidat kapja; szűkített katalógusban illő hős híján nincs kép (nem a tiltott híd)", () => {
+  assert.ok(heroFitsSubject(bridge, "matek"));
+  assert.equal(resolveStoredArt({ picture: "hero-laboratory" }, "laboratory", C, { subject: "matek", title: "Oszthatóság" })?.hero?.id, "hero-laboratory");
+  const onlyBridge = C.filter(a => a.kind !== "hero" || a.id === "hero-laboratory");
+  const art = pickLessonArt({ ...bio9, seed: "b" }, "laboratory", onlyBridge);
+  assert.equal(art.hero, undefined);
+  assert.equal(art.cover, undefined);
 });

@@ -329,6 +329,7 @@ function LessonSection({
   section,
   sectionIdx,
   band,
+  classroom,
   lessonId,
   conceptLabel,
   onProbaSuccess,
@@ -341,6 +342,8 @@ function LessonSection({
   section: Section;
   sectionIdx: number;
   band: AgeBand;
+  /** Review #405: a tartalom szerinti fejléchez (a „Mese” csak 1–4. évfolyamon). */
+  classroom: number;
   lessonId: string | null;
   conceptLabel: (id: string) => string;
   onProbaSuccess: () => void;
@@ -393,7 +396,7 @@ function LessonSection({
           onPick={(pickedIndex) => pick(bi, pickedIndex)}
           tryPersisted={tryBlocks[String(bi)]}
           onTryPersist={(snap) => onTryPersist(bi, snap)}
-          label={blockLabel(section.blocks, bi, sectionIdx, band)}
+          label={blockLabel(section.blocks, bi, sectionIdx, band, classroom)}
         />
       ))}
 
@@ -566,7 +569,7 @@ export function LessonRuntime({
 
         {lesson.experience ? <LessonExperienceView key={experienceKey} experience={lesson.experience} lessonId={lessonId} arbiterSource={arbiterSource} headings={lesson.sections.map(s => s.heading)} storageKey={`websuli:fusion:${experienceKey}`} reviewKey={persistId ?? lessonId ?? lesson.mapId}>
           {activeSection => <FullTeachingContext.Provider value={true}>
-          {lesson.sections.map((section, si) => <div key={si} hidden={activeSection !== null && activeSection !== si}><LessonSection section={section} sectionIdx={si} band={band} lessonId={lessonId ?? null} conceptLabel={id => conceptLabel(lesson, id)} initialAnswers={progress.snapshot.sections[String(si)]?.answers ?? {}} tryBlocks={progress.snapshot.sections[String(si)]?.tryBlocks ?? {}} onAnswersChange={answers => progress.setSectionAnswers(si, answers)} onTryPersist={(bi, snap) => progress.setTrySnapshot(si, bi, snap)} onProbaSuccess={() => setCurrent(c => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))} sectionRef={el => { sectionEls.current[si] = el; }} /></div>)}
+          {lesson.sections.map((section, si) => <div key={si} hidden={activeSection !== null && activeSection !== si}><LessonSection section={section} sectionIdx={si} band={band} classroom={lesson.classroom} lessonId={lessonId ?? null} conceptLabel={id => conceptLabel(lesson, id)} initialAnswers={progress.snapshot.sections[String(si)]?.answers ?? {}} tryBlocks={progress.snapshot.sections[String(si)]?.tryBlocks ?? {}} onAnswersChange={answers => progress.setSectionAnswers(si, answers)} onTryPersist={(bi, snap) => progress.setTrySnapshot(si, bi, snap)} onProbaSuccess={() => setCurrent(c => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))} sectionRef={el => { sectionEls.current[si] = el; }} /></div>)}
         </FullTeachingContext.Provider>}</LessonExperienceView> : <>
         <LessonProgress sections={lesson.sections} band={band} current={current} />
 
@@ -584,6 +587,7 @@ export function LessonRuntime({
               section={section}
               sectionIdx={si}
               band={band}
+              classroom={lesson.classroom}
               lessonId={lessonId ?? null}
               conceptLabel={(id) => conceptLabel(lesson, id)}
               initialAnswers={initialAnswers}

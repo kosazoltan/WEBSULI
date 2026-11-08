@@ -131,3 +131,10 @@ export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: 
 ## T7 — PR, review, merge, deploy
 - Audit-jelző a kapuk után, push, PR, a review-botok (Codex, Copilot) eredménye a legutolsó kódcommitra, javítás, automatikus összevonás,
   `node scripts/qa/verify-render-revision.mjs` a merge után. A `lesson-covers` következő söprésének naplója (A3) a merge után.
+
+## T8 — Review #405 javításai (Copilot, 2026-11-08)
+1. `heroFitsSubject`: a közös `subjectKeyOf` normalizálás (a „matek” szinonima is); nem katalógusbeli / ismeretlen tantárgy → a régi viselkedés.
+   `HERO_SUBJECTS["hero-laboratory"] = ["fizika", "matematika", "foldrajz"]` (katalóguskulcsok).
+2. `pickLessonArt`: illő hős híján nincs kép (`rotate` a szűrt készletből) — a tiltott híd nem kerülhet tartalékként az arculatba.
+3. `blockLabel(..., classroom?)`: „Mese” csak 1–4. évfolyamon; a `LessonSection` a lecke évfolyamát kapja (`classroom` prop).
+Tesztek: „matek”, „Ismeretlen”, szűkített katalógus, programozás (0) → „Történet”.

@@ -16,6 +16,9 @@ test("Célkártya és mese az 1. fejezet elején", () => {
   assert.equal(blockLabel(blocks, 0, 0, "senior"), "A lecke célja");
   assert.equal(blockLabel(blocks, 1, 0, "senior"), "Történet");
   assert.equal(blockLabel(blocks, 1, 0, "kid"), "Mese");
+  // Review #405: a „Mese” csak 1–4. évfolyamon — a programozás (0) a kid sávba esik, de „Történet”.
+  assert.equal(blockLabel(blocks, 1, 0, "kid", 3), "Mese");
+  assert.equal(blockLabel(blocks, 1, 0, "kid", 0), "Történet");
   assert.equal(blockLabel(blocks, 2, 0, "senior"), BAND_THEME.senior.labels.explain);
 });
 
