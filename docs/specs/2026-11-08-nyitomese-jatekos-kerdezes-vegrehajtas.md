@@ -361,8 +361,10 @@ Bukásnál az implementációt javítod, a tesztet nem gyengíted; a bukó paran
 ## T13 — Review #403 javításai (Copilot, 2026-11-08)
 
 1. `source/server/studio/experience-builder.ts` `unitTeaching`: bekapcsolt kapcsolónál `opener: LESSON_OPENER_VERSION` a csomag
-   hash-bemenetében; a korábbi bank (`unchangedPreviousUnit`) bekapcsolva csak pontos `sourceHash === baseHash` egyezésnél vehető át.
-   Kikapcsolva a hash és az átvétel változatlan.
+   hash-bemenetében; bekapcsolva a bankterv egysége `opener: LESSON_OPENER_VERSION` jelölőt kap (`bankUnitSchema.opener`, opcionális),
+   és a korábbi bank (`unchangedPreviousUnit`) csak azonos jelölővel vehető át (Vercel-review: a lektorált csomag `sourceHash`-e nem a
+   tanítás hash-e, ezért nem a hash-egyezés dönt). Kikapcsolva a hash, az átvétel és a kimenet változatlan.
+   Teszt: `tests/lesson-opener-bank-reuse.test.ts` (KI: nincs jelölő; KI → BE: újragyártás; BE → BE: átvétel azonos azonosítókkal).
 2. `lessonOpenerContract`: kivétel a két nyitóblokkra a prompt későbbi szó szerinti term-szabálya („A TÖMÖRÍTÉS NEM BONT KAPUT”) alól.
 3. `PLAYFUL_QUESTIONING_CONTRACT`: a `conflict` minden évfolyamon kötelező (tantárgyi feltevés–tény ütköztetés), dilemma csak 7.-től.
 4. `stripOpenerGoalLabel` (`lesson-opener.ts`) + `source/shared/lesson-teaser.ts`: a vezető célcímke („Mit tanulunk ma?”, „Célunk:”,

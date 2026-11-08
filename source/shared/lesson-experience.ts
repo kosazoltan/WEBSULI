@@ -117,6 +117,12 @@ export const glossaryEntrySchema = z.object({
 export const bankUnitSchema = z.object({
   sectionIndex: z.number().int().min(0), conceptIds: z.array(text(64)).min(1).max(6),
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  /**
+   * Spec 2026-11-08-nyitomese-jatekos-kerdezes, review #403: a csomag a nyitómese / IQ-kérdezési szerződés melyik verziójával készült
+   * (csak bekapcsolt kapcsolónál írva). A javító út ebből dönti el, hogy a korábbi csomag átvehető-e — a lektorált csomag hash-e nem
+   * a tanítás hash-e, ezért a hash-egyezés erre nem alkalmas.
+   */
+  opener: z.string().max(32).optional(),
 });
 export const bankPlanSchema = z.object({
   units: z.array(bankUnitSchema).min(1).max(80), taskRound: z.number().int().min(1).max(15), quizRound: z.number().int().min(1).max(25),

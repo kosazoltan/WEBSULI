@@ -542,11 +542,14 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // Once corrected, later rounds must never revive the rejected base packet.
     let hash = reviewFeedback.length ? createHash("sha256").update(canonicalJson(evidence)).digest("hex") : checkpoint.reviewedHashes?.[baseHash] ?? baseHash;
     unit.sourceHash = hash;
+    // Review #403: bekapcsolt nyitómesénél a csomag a szerződés verzióját is hordozza (kikapcsolva a mező nem jön létre — a kimenet változatlan).
+    if (lessonOpenerEnabled()) unit.opener = LESSON_OPENER_VERSION;
     // Spec 2026-11-03-javitas-bank-megorzes: a tanításában változatlan fejezet korábbi csomagja tartalom szerint (nem a konfigfüggő hash szerint).
     const contentKept = reviewFeedback.length ? undefined : unchangedPreviousUnit(deps.previous, deps, lesson, unit);
-    // Review #403 (P2): bekapcsolt nyitómesénél a korábbi csomag csak akkor vehető át, ha ugyanazzal a szerződéssel készült (pontos
-    // hash-egyezés) — a kapcsoló előtt gyártott bank nem kerülhet át az IQ-kérdezési szabályok nélkül (C döntés: a javított lecke is megkapja).
-    const keptUnit = contentKept && (!lessonOpenerEnabled() || contentKept.sourceHash === baseHash) ? contentKept : undefined;
+    // Review #403 (P2): bekapcsolt nyitómesénél a korábbi csomag csak akkor vehető át, ha ugyanazzal a szerződés-verzióval készült (a
+    // bankterv egységének `opener` jelölője — a lektorált csomag hash-e nem a tanítás hash-e, ezért nem a hash-egyezés dönt). A kapcsoló
+    // előtt gyártott bank így nem kerül át az IQ-kérdezési szabályok nélkül (C döntés: a javított lecke is megkapja).
+    const keptUnit = contentKept && (!lessonOpenerEnabled() || contentKept.opener === LESSON_OPENER_VERSION) ? contentKept : undefined;
     // Spec 2026-09-30 (U2, B4): a csomag mérhető szerződése és a pontozó tényleges szabályai a KÓDBÓL generálva — egy szabály egy helyen.
     const contract = bankPacketContract({ sectionIndex: unit.sectionIndex, conceptIds: unit.conceptIds, methodKinds, taskCount, taskTarget, quizCount, quizTarget, language });
     const signRules = needsSignedNumberRules(lesson.subject, teaching.section) ? `${SIGNED_NUMBER_RULES_HU}\n` : "";
