@@ -4,44 +4,40 @@
 > Parancsok a `source/` mappából. Commit: `git -c user.name="Kz" -c user.email="236001384+kosazoltan@users.noreply.github.com" commit -F <fájl>`.
 > Meglévő tesztet módosítani tilos.
 
-## T1 — Tantárgyi tartalék borító: `source/shared/design-assets.ts`
+## T1 — A sávhős tantárgyi köre: `source/shared/design-assets.ts`
 
-1. Új exportált függvény a `pickLessonArt` elé:
-   ```ts
-   /**
-    * Spec 2026-11-08-borito-blokkcimkek: a lecke tantárgyának borítói a sávban — saját borító híján ezek jönnek a sáv hőse (9–10.: függőhíd)
-    * előtt. Előbb a nem témaköri (általános / kulcsszavas) tantárgyi borítók; ha nincs, a tantárgy témaköri borítói. Tantárgy nélkül üres.
-    */
-   export function subjectCoverPool(lesson: { subject: string }, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): DesignAsset[] {
-     const subject = foldText(lesson.subject).trim();
-     if (subject.length < 4) return [];
-     const hit = (a: DesignAsset) => a.subjects.some(s => { const f = foldText(s); return f.length >= 4 && (subject.includes(f) || f.includes(subject.slice(0, Math.max(4, Math.min(subject.length, 8))))); });
-     const sameBand = catalog.filter(a => a.kind === "cover" && a.band === band && !isLessonCoverId(a.id) && hit(a));
-     const general = sameBand.filter(a => !a.topic);
-     return general.length ? general : sameBand;
-   }
-   ```
-2. `pickLessonArt` `else` ága (a sáv hőse előtt):
-   ```ts
-   } else {
-     // Spec 2026-11-08-borito-blokkcimkek: a tantárgy sávborítója a sáv hőse előtt (biológiához ne a híd jusson).
-     const subjectCover = rotate(subjectCoverPool(lesson, band, catalog), seed, "subject");
-     if (subjectCover) cover = subjectCover;
-     else {
-       const heroes = catalog.filter(a => a.kind === "hero" && sameAge(a));
-       hero = heroes.find(a => a.band === band) ?? rotate(heroes, seed, "art");
-     }
-   }
-   ```
-3. `pictureFits` hős-ága: a hős csak akkor illik, ha a tantárgynak nincs sávborítója:
-   ```ts
-   if (picture.kind === "hero") {
-     if (subjectCoverPool(lesson, band, catalog).length) return false;
-     const own = catalog.some(a => a.kind === "hero" && a.band === band);
-     return own ? picture.band === band : YOUNG_BANDS.has(picture.band) === YOUNG_BANDS.has(band);
-   }
-   ```
+> Módosítás a végrehajtás közben (2026-11-08): az eredeti „tantárgyi tartalék borító” két meglévő tesztet buktatott
+> (`design-assets.test.ts`: „kulcsszó nélkül a sáv saját hős-képe”, „9. o. matek → híd”), mert idegen témájú borítót adott — ezért
+> csak a hős tantárgyi szűrése maradt (lásd spec 4. pont).
 
+1. A `pickLessonArt` elé:
+   ```ts
+   const HERO_SUBJECTS: Readonly<Record<string, readonly string[]>> = { "hero-laboratory": ["fizika", "matematika", "földrajz"] };
+
+   export function heroFitsSubject(hero: DesignAsset, subject: string): boolean {
+     const allowed = HERO_SUBJECTS[hero.id] ?? hero.subjects;
+     const s = foldText(subject).trim();
+     // Ismeretlen / üres tantárgynál a régi viselkedés (a sáv hőse).
+     if (!allowed.length || s.length < 4) return true;
+     return allowed.some(a => { const f = foldText(a); return s.includes(f) || f.includes(s.slice(0, Math.max(4, Math.min(s.length, 8)))); });
+   }
+   ```
+2. `pickLessonArt` `else` ága:
+   ```ts
+   const heroes = catalog.filter(a => a.kind === "hero" && sameAge(a));
+   const own = heroes.find(a => a.band === band);
+   if (own && heroFitsSubject(own, lesson.subject)) hero = own;
+   else {
+     const fitting = heroes.filter(a => a !== own && heroFitsSubject(a, lesson.subject));
+     hero = rotate(fitting.length ? fitting : heroes, seed, "art");
+   }
+   ```
+3. `pictureFits` hős-ága:
+   ```ts
+   if (!heroFitsSubject(picture, lesson.subject)) return false;
+   const own = catalog.find(a => a.kind === "hero" && a.band === band);
+   return own && heroFitsSubject(own, lesson.subject) ? picture.band === band : YOUNG_BANDS.has(picture.band) === YOUNG_BANDS.has(band);
+   ```
 ## T2 — Borítóhiba-napló: `source/server/lesson-covers.ts`
 
 1. Exportált állandó a `COVER_TEXT_MODEL` mellé: `export const COVER_PLAN_MAX_TOKENS = 1200;` és az `openRouterDeps.chat` `max_tokens`
@@ -114,11 +110,11 @@ export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: 
 ## T5 — Tesztek (új fájlok)
 
 - `source/tests/subject-cover-fallback.test.ts`:
-  1. `pickLessonArt({ subject: "Biológia", title: "Harasztok, nyitvatermők és zárvatermők", seed: "b8b2" }, "laboratory", DESIGN_ASSET_CATALOG)`
-     → `cover` van, `cover.band === "laboratory"`, a `cover.subjects` biológiai, `hero` nincs.
+  1. Biológia 9 (`laboratory`), négy seeddel: `cover` nincs, `hero` nem `hero-laboratory`, és a `hero.subjects` üres (semleges).
+  1b. `heroFitsSubject(hero-laboratory, …)`: Matematika, Fizika, Földrajz → igaz; Biológia, Kémia, Történelem → hamis; matematika → híd.
   2. `resolveStoredArt({ picture: "hero-laboratory" }, "laboratory", C, { subject: "Biológia", title: "Harasztok" })` → `null`.
   3. Matematika 9 (`{ subject: "Matematika", title: "Oszthatóság" }`): `resolveStoredArt({ picture: "hero-laboratory" }, …)?.hero?.id === "hero-laboratory"`.
-  4. `subjectCoverPool({ subject: "" }, "laboratory", C)` → `[]`.
+  4. Üres tantárgy → `hero-laboratory` (régi viselkedés).
 - `source/tests/lesson-block-label.test.ts`: Célkártya (`"**Cél:** Megérted…"`, 0. fejezet 0. blokk) → „A lecke célja”; utána explain → „Történet”
   (`kid` sávban „Mese”); a 2. fejezet ugyanilyen blokkja → sáv-címke; `why` → „Miért?”; `deeper` → „Mélyebben”; animate `cycle` → „Körforgás”,
   `scene3d` → „3D-modell”; try `match` → „Párosítsd”; Célkártya nélküli első explain → `BAND_THEME.teen.labels.explain`.
@@ -128,8 +124,9 @@ export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: 
 ## T6 — Ellenőrzés
 1. `node --import tsx --test tests/subject-cover-fallback.test.ts tests/lesson-block-label.test.ts tests/lesson-covers-plan-log.test.ts tests/design-assets.test.ts tests/stored-art.test.ts tests/home-card-theme.test.ts tests/lesson-teaser.test.ts` → `# fail 0`.
 2. `npm.cmd run check`, `npm.cmd run lint`, `npm.cmd run check:test`, `npm.cmd test`.
-3. Böngésző (A5): a helyi fejlesztői szerver egy Célkártyás fixture-leckével (vagy az élő lecke a merge után): a fejlécek és a nyitókép
-   képernyőképpel; nincs vízszintes görgetés, nincs levágott fejléc.
+3. Böngésző (A5): az élő lecke a merge és a Render-telepítés után (a helyi fejlesztői szerver NEM indítható: a `source/.env`
+   `DATABASE_URL`-je egy idegen, régi adatbázisra mutat, a szerver indulása oda írhatna). A fejlécek és a nyitókép képernyőképpel;
+   nincs vízszintes görgetés, nincs levágott fejléc.
 
 ## T7 — PR, review, merge, deploy
 - Audit-jelző a kapuk után, push, PR, a review-botok (Codex, Copilot) eredménye a legutolsó kódcommitra, javítás, automatikus összevonás,

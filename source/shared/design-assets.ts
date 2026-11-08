@@ -67,13 +67,30 @@ export function coverFits(a: DesignAsset, lesson: { subject: string; title: stri
  */
 export function pictureFits(picture: DesignAsset, lesson: { subject: string; title: string }, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[], topic?: string): boolean {
   if (picture.kind === "hero") {
-    const own = catalog.some(a => a.kind === "hero" && a.band === band);
-    return own ? picture.band === band : YOUNG_BANDS.has(picture.band) === YOUNG_BANDS.has(band);
+    // Spec 2026-11-08-borito-blokkcimkek: a tárolt hős csak akkor marad, ha a lecke tantárgyához illik (a híd nem biológiához).
+    if (!heroFitsSubject(picture, lesson.subject)) return false;
+    const own = catalog.find(a => a.kind === "hero" && a.band === band);
+    return own && heroFitsSubject(own, lesson.subject) ? picture.band === band : YOUNG_BANDS.has(picture.band) === YOUNG_BANDS.has(band);
   }
   if (picture.kind !== "cover" || picture.band !== band) return false;
   // Spec 2026-11-03-leckeborito: a leckénkénti borító kézi választás — a sávján belül érvényes (átnevezés után is).
   if (isLessonCoverId(picture.id)) return true;
   return (Boolean(topic) && picture.topic === topic) || coverFits(picture, lesson, band);
+}
+
+/**
+ * Spec 2026-11-08-borito-blokkcimkek: a sávhősök tantárgyi köre. A 9–10. sáv hőse (függőhíd) mérnöki / fizikai kép: fizikához,
+ * matematikához (tulajdonosi döntés 2026-10-19, „9. o. matek → híd”) és földrajzhoz (tulajdonos 2026-11-08: „a híd a földrajzhoz oké,
+ * de biológiához nem”) illik. A többi hős (üres tantárgylista) semleges, minden tantárgyhoz illik.
+ */
+const HERO_SUBJECTS: Readonly<Record<string, readonly string[]>> = { "hero-laboratory": ["fizika", "matematika", "földrajz"] };
+
+export function heroFitsSubject(hero: DesignAsset, subject: string): boolean {
+  const allowed = HERO_SUBJECTS[hero.id] ?? hero.subjects;
+  const s = foldText(subject).trim();
+  // Ismeretlen / üres tantárgynál a régi viselkedés (a sáv hőse).
+  if (!allowed.length || s.length < 4) return true;
+  return allowed.some(a => { const f = foldText(a); return s.includes(f) || f.includes(s.slice(0, Math.max(4, Math.min(s.length, 8)))); });
 }
 
 export function pickLessonArt(lesson: { subject: string; title: string; seed?: string; topicCoverId?: string | null }, band: (typeof DESIGN_ASSET_BANDS)[number], catalog: readonly DesignAsset[]): LessonArt {
@@ -101,8 +118,15 @@ export function pickLessonArt(lesson: { subject: string; title: string; seed?: s
     // Spec 2026-10-19-hos-kep-sav: a sáv saját hős-képe (koncepciókép: 6–8. a Föld az űrből, 9–10. függőhíd…). A korábbi
     // sorsolás (más sávok hősei + a korosztály minden tárgyi borítója) témaspecifikus borítót tett idegen leckére. Ha a sávnak még
     // nincs hőse, a korosztály többi sávhőse közül (régi tartalék).
+    // Spec 2026-11-08-borito-blokkcimkek: a sáv hőse csak a hozzá illő tantárgyhoz (a 9–10. hídja nem biológiához); különben a
+    // korosztály semleges / illő hősei közül.
     const heroes = catalog.filter(a => a.kind === "hero" && sameAge(a));
-    hero = heroes.find(a => a.band === band) ?? rotate(heroes, seed, "art");
+    const own = heroes.find(a => a.band === band);
+    if (own && heroFitsSubject(own, lesson.subject)) hero = own;
+    else {
+      const fitting = heroes.filter(a => a !== own && heroFitsSubject(a, lesson.subject));
+      hero = rotate(fitting.length ? fitting : heroes, seed, "art");
+    }
   }
   // Review #279: a blokktípushoz kötött pózok (mascot-explain…) a fejezetcímhez valók, nem az általános fejléc-rotációba.
   const mascots = catalog.filter(a => a.kind === "mascot" && !BLOCK_POSE.test(a.id) && (band === "explorer" ? a.band === "explorer" : YOUNG_BANDS.has(a.band)));

@@ -26,8 +26,10 @@
   explain → a sáv „Magyarázat” címkéje, animate → „Mozgókép”, try → „Próbáld ki”.
 
 ## 2. Cél
-1. Saját (gyártott vagy katalógusos) borító híján a lecke **a saját tantárgyának** borítóját kapja a sávban; a sáv hőse (híd) csak
-   akkor, ha a tantárgynak a sávban nincs borítója. A mentett hídkép is lecserélődik a megjelenítésben, ha van tantárgyi borító.
+1. Saját (gyártott vagy katalógusos) borító híján a sáv hőse csak a hozzá illő tantárgyhoz jár: a 9–10. sáv hídja (a katalógusban
+   `subjects: ["fizika"]`, mérnöki kép) fizikához, matematikához (2026-10-19-i döntés) és földrajzhoz (2026-11-08-i döntés); más
+   tantárgy (biológia, kémia, történelem…) a korosztály semleges sávképét kapja. A mentett hídkép is lecserélődik a megjelenítésben.
+   A tantárgyhoz illő, tartalom szerinti kép forrása az automatikus leckeborító (2. cél) marad.
 2. Az automatikus borítókészítés néma bukása **naplózott** legyen (ok, `finish_reason`, a válasz hossza), és a képterv válaszkerete
    ne csonkolja a választ.
 3. A blokkfejléc a **tartalomból** származzon: Célkártya → „A lecke célja”, a mögötte álló mini mese → „Történet” (1–4. évfolyam:
@@ -40,9 +42,12 @@
 - A Stúdió vázlatnézetének címkéi (`OutlineReview.tsx`).
 
 ## 4. Döntések
-- Tantárgyi tartalék sorrend: (a) a sáv azonos tantárgyú, nem témaköri borítója; (b) a sáv azonos tantárgyú témaköri borítója;
-  (c) a sáv hőse. Választás a lecke seedjével (determinisztikus). A tantárgy-egyezés a meglévő `subjectHit` szabály.
-- A tárolt hős akkor nem illik (`pictureFits` → false, friss választás), ha a sávban van az (a) vagy (b) szerinti tantárgyi borító.
+- A sávhős tantárgyi köre: `HERO_SUBJECTS` (`hero-laboratory`: fizika, matematika, földrajz), egyébként a katalógus `subjects`
+  mezője; üres lista = semleges. `heroFitsSubject` dönt; ismeretlen / üres tantárgy → a régi viselkedés.
+- Tantárgyi (témaköri vagy általános) borító NEM kerül tartalékként a leckére: két meglévő teszt (`design-assets.test.ts`
+  „kulcsszó nélkül a sáv saját hős-képe”, „9. o. matek → híd”) és a 2026-10-19-i döntés szerint idegen témájú képet adna (mérve a
+  végrehajtás közben: matekra „függvények”, biológiára „sejt” borító).
+- A tárolt hős akkor nem illik (`pictureFits` → false, friss választás), ha nem illik a lecke tantárgyához.
 - A blokkcímke tiszta függvény: `shared/lesson-block-label.ts` `blockLabel(blocks, index, sectionIdx, band)`; a Célkártya felismerése
   az első bekezdés vezető célcímkéjéről (a `lesson-opener.ts` címkéi), a mese az 1. fejezet Célkártyát követő `explain` blokkja.
 - A sáv-címkék (`BAND_THEME.labels`) az alapértelmezettek maradnak minden más esetben.
@@ -55,10 +60,10 @@
 - A Célkártya nélküli (régi) lecke első `explain` blokkja „Magyarázat” marad.
 
 ## 6. Elfogadás (EARS)
-- [ ] A1: WHEN egy `laboratory` sávú biológialecke nem kap saját / témaköri / kulcsszavas borítót THEN a `pickLessonArt` SHALL
-  biológiai sávborítót adjon, nem a `hero-laboratory`-t. Mérés: új teszt.
-- [ ] A2: WHEN a tárolt kép `hero-laboratory` és a lecke tantárgyának van `laboratory` borítója THEN a `resolveStoredArt` SHALL `null`-t
-  adjon (friss választás). Matematikalecke (nincs `laboratory` matekborító) esetén a hős marad. Mérés: új teszt + a meglévő
+- [ ] A1: WHEN egy `laboratory` sávú biológialecke nem kap saját / témaköri / kulcsszavas borítót THEN a `pickLessonArt` SHALL semleges
+  (tantárgy nélküli) korosztályos hőst adjon, nem a `hero-laboratory`-t; matematika / fizika / földrajz továbbra is a hidat. Mérés: új teszt.
+- [ ] A2: WHEN a tárolt kép `hero-laboratory` és a lecke biológia THEN a `resolveStoredArt` SHALL `null`-t
+  adjon (friss választás). Matematikaleckén a híd marad. Mérés: új teszt + a meglévő
   `stored-art.test.ts:63` és `design-assets.test.ts:153` (matematika) változatlanul zöld.
 - [ ] A3: WHEN a képterv-válaszból nem olvasható ki jelenet THEN a `makeCover` SHALL figyelmeztetést naplózzon (a válasz hossza, a
   `finish_reason`), és a képterv `max_tokens` értéke SHALL legalább 1200 legyen. Mérés: új teszt (hamis `chat`).
