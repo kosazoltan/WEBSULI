@@ -70,7 +70,7 @@
 - [ ] A4: WHEN a `blockLabel` Célkártyát, mesét, `why`/`deeper` magyarázatot, ismert `animKind`/`tryKind`-ot kap THEN a 2. cél
   szerinti címkét SHALL adja; egyébként a sáv címkéjét. Mérés: új teszt.
 - [ ] A5: WHEN a lejátszó egy Célkártyás leckét mutat THEN a fejlécek „A lecke célja” és „Történet”, az ábráké a fajtájuk szerinti.
-  Mérés: valós böngészős render (helyi fejlesztői szerver), képernyőkép.
+  Mérés: valós böngészős render a PR Vercel-előnézetén, összevonás előtt (elvégezve 2026-11-08, 6c7b88b9).
 - [ ] A6: `npm run check`, `lint`, `check:test`, `npm test` hibátlan.
 
 ## 7. Kockázat / visszavonás

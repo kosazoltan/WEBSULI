@@ -124,10 +124,10 @@ export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: 
 ## T6 — Ellenőrzés
 1. `node --import tsx --test tests/subject-cover-fallback.test.ts tests/lesson-block-label.test.ts tests/lesson-covers-plan-log.test.ts tests/design-assets.test.ts tests/stored-art.test.ts tests/home-card-theme.test.ts tests/lesson-teaser.test.ts` → `# fail 0`.
 2. `npm.cmd run check`, `npm.cmd run lint`, `npm.cmd run check:test`, `npm.cmd test`.
-3. Böngésző (A5): az élő lecke a merge és a Render-telepítés után (a helyi fejlesztői szerver NEM indítható: a `source/.env`
-   `DATABASE_URL`-je egy idegen, régi adatbázisra mutat, a szerver indulása oda írhatna). A fejlécek és a nyitókép képernyőképpel;
-   nincs vízszintes görgetés, nincs levágott fejléc.
-
+3. Böngésző (A5) — ÖSSZEVONÁS ELŐTT, izolált környezetben: a PR Vercel-előnézete (megosztható, lejáró hozzáférési linkkel) az élő
+   lecke-adattal. A helyi fejlesztői szerver NEM indítható: a `source/.env` `DATABASE_URL`-je idegen, régi adatbázisra mutat (C-21).
+   Elvégezve 2026-11-08 (6c7b88b9): az élő 9. osztályos biológialecke fejlécei „A lecke célja”, „Történet”, „Miért?”, „Illusztráció”,
+   „Folyamat”; nyitókép a semleges `hero-future` (nem a híd); asztali és 375 px-es nézetben nincs vízszintes túlcsordulás.
 ## T7 — PR, review, merge, deploy
 - Audit-jelző a kapuk után, push, PR, a review-botok (Codex, Copilot) eredménye a legutolsó kódcommitra, javítás, automatikus összevonás,
   `node scripts/qa/verify-render-revision.mjs` a merge után. A `lesson-covers` következő söprésének naplója (A3) a merge után.
