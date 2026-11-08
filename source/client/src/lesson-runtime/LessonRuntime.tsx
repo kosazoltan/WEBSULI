@@ -12,6 +12,7 @@ import {
   type Section,
 } from "@shared/lesson-schema";
 import { BAND_THEME, learningAgeGroup } from "@shared/lesson-band";
+import { blockLabel } from "@shared/lesson-block-label";
 import { LESSON_FONT_FALLBACK, lessonFontPair, nfcDeep } from "@shared/lesson-typography";
 
 import { SectionProba } from "./SectionProba";
@@ -89,8 +90,10 @@ function RichText({ text }: { text: string }) {
   );
 }
 
-function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain" }>; band: AgeBand }) {
+function ExplainBlock({ block, band, label }: { block: Extract<Block, { kind: "explain" }>; band: AgeBand; label?: string }) {
   const theme = BAND_THEME[band];
+  // Spec 2026-11-08-borito-blokkcimkek: a fejléc a tartalomból (Célkártya, mese, mélység); a mélységjelző chip nem ismétli a fejlécet.
+  const head = label ?? theme.labels.explain;
   // The gate is computed once per mount: reduced motion and speech support do not
   // change mid-page in practice, and the button is the ONLY call site of speak() —
   // so speech can never start without a user gesture (LS-4 TTS contract).
@@ -104,8 +107,8 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
 
   return (
     <div className={cn("lesson-block space-y-1", theme.body)} data-block="explain" data-depth={block.depth} data-long={explainIsLong(block.text) ? "true" : undefined}>
-      <BlockHead icon={BookOpen} label={theme.labels.explain} kind="explain" />
-      {block.depth !== "core" && (
+      <BlockHead icon={BookOpen} label={head} kind="explain" />
+      {block.depth !== "core" && head === theme.labels.explain && (
         <span className="lesson-muted inline-flex items-center gap-1 text-xs">
           <Lightbulb className="w-3 h-3" />
           {block.depth === "why" ? "Miért?" : "Mélyebben"}
@@ -283,6 +286,7 @@ export function LessonBlock({
   picked,
   tryPersisted,
   onTryPersist,
+  label,
 }: {
   block: Block;
   band: AgeBand;
@@ -290,10 +294,12 @@ export function LessonBlock({
   picked?: number | null;
   tryPersisted?: TrySnapshot;
   onTryPersist?: (snap: TrySnapshot) => void;
+  /** Spec 2026-11-08-borito-blokkcimkek: a tartalom szerinti fejléc (`blockLabel`); hiányában a régi, típus szerinti. */
+  label?: string;
 }) {
   switch (block.kind) {
     case "explain":
-      return <ExplainBlock block={block} band={band} />;
+      return <ExplainBlock block={block} band={band} label={label} />;
     case "example":
       return <ExampleBlock block={block} band={band} />;
     case "check":
@@ -303,11 +309,11 @@ export function LessonBlock({
     case "animate": {
       const Anim = ANIMATE_REGISTRY[block.animKind];
       // Review #279: a mozgókép és a próba blokk is blokkfejlécet kap (a sáv jelzőjével), mint a többi négy típus.
-      return <div className="space-y-2" data-block="animate"><BlockHead icon={PlayCircle} label="Mozgókép" kind="animate" /><Anim params={block.params} caption={block.caption} /></div>;
+      return <div className="space-y-2" data-block="animate"><BlockHead icon={PlayCircle} label={label ?? "Mozgókép"} kind="animate" /><Anim params={block.params} caption={block.caption} /></div>;
     }
     case "try": {
       const Try = TRY_REGISTRY[block.tryKind];
-      return <div className="space-y-2" data-block="try"><BlockHead icon={Hand} label="Próbáld ki" kind="try" /><Try spec={block.spec} persisted={tryPersisted} onPersist={onTryPersist} /></div>;
+      return <div className="space-y-2" data-block="try"><BlockHead icon={Hand} label={label ?? "Próbáld ki"} kind="try" /><Try spec={block.spec} persisted={tryPersisted} onPersist={onTryPersist} /></div>;
     }
   }
 }
@@ -323,6 +329,7 @@ function LessonSection({
   section,
   sectionIdx,
   band,
+  classroom,
   lessonId,
   conceptLabel,
   onProbaSuccess,
@@ -335,6 +342,8 @@ function LessonSection({
   section: Section;
   sectionIdx: number;
   band: AgeBand;
+  /** Review #405: a tartalom szerinti fejléchez (a „Mese” csak 1–4. évfolyamon). */
+  classroom: number;
   lessonId: string | null;
   conceptLabel: (id: string) => string;
   onProbaSuccess: () => void;
@@ -387,6 +396,7 @@ function LessonSection({
           onPick={(pickedIndex) => pick(bi, pickedIndex)}
           tryPersisted={tryBlocks[String(bi)]}
           onTryPersist={(snap) => onTryPersist(bi, snap)}
+          label={blockLabel(section.blocks, bi, sectionIdx, band, classroom)}
         />
       ))}
 
@@ -559,7 +569,7 @@ export function LessonRuntime({
 
         {lesson.experience ? <LessonExperienceView key={experienceKey} experience={lesson.experience} lessonId={lessonId} arbiterSource={arbiterSource} headings={lesson.sections.map(s => s.heading)} storageKey={`websuli:fusion:${experienceKey}`} reviewKey={persistId ?? lessonId ?? lesson.mapId}>
           {activeSection => <FullTeachingContext.Provider value={true}>
-          {lesson.sections.map((section, si) => <div key={si} hidden={activeSection !== null && activeSection !== si}><LessonSection section={section} sectionIdx={si} band={band} lessonId={lessonId ?? null} conceptLabel={id => conceptLabel(lesson, id)} initialAnswers={progress.snapshot.sections[String(si)]?.answers ?? {}} tryBlocks={progress.snapshot.sections[String(si)]?.tryBlocks ?? {}} onAnswersChange={answers => progress.setSectionAnswers(si, answers)} onTryPersist={(bi, snap) => progress.setTrySnapshot(si, bi, snap)} onProbaSuccess={() => setCurrent(c => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))} sectionRef={el => { sectionEls.current[si] = el; }} /></div>)}
+          {lesson.sections.map((section, si) => <div key={si} hidden={activeSection !== null && activeSection !== si}><LessonSection section={section} sectionIdx={si} band={band} classroom={lesson.classroom} lessonId={lessonId ?? null} conceptLabel={id => conceptLabel(lesson, id)} initialAnswers={progress.snapshot.sections[String(si)]?.answers ?? {}} tryBlocks={progress.snapshot.sections[String(si)]?.tryBlocks ?? {}} onAnswersChange={answers => progress.setSectionAnswers(si, answers)} onTryPersist={(bi, snap) => progress.setTrySnapshot(si, bi, snap)} onProbaSuccess={() => setCurrent(c => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))} sectionRef={el => { sectionEls.current[si] = el; }} /></div>)}
         </FullTeachingContext.Provider>}</LessonExperienceView> : <>
         <LessonProgress sections={lesson.sections} band={band} current={current} />
 
@@ -577,6 +587,7 @@ export function LessonRuntime({
               section={section}
               sectionIdx={si}
               band={band}
+              classroom={lesson.classroom}
               lessonId={lessonId ?? null}
               conceptLabel={(id) => conceptLabel(lesson, id)}
               initialAnswers={initialAnswers}

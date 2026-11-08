@@ -192,3 +192,15 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   (lint, check, check:test, npm test, three-phase) után, külön hívásban írjuk.
 - **Megelőzés 2:** fizetős mérés előtt egy 1 tokenes kulcspróba (a kulcsot nem kiírva), és minden futás után a `fallback` mező
   ellenőrzése; tartalékmodelles futás eredménye csak így jelölve kerülhet a mérési fájlba.
+
+## C-21 — Képválasztási tartalék a korábbi döntések ellenőrzése nélkül; helyi szerver idegen adatbázissal (2026-11-08)
+
+- **Tünet 1:** a „biológiához ne a híd jusson” javításra először tantárgyi (témaköri / kulcsszavas / általános) borítót terveztem
+  tartaléknak; két meglévő teszt bukott (`design-assets.test.ts`), mert ez idegen témájú képet adott (matekra „függvények”, biológiára
+  „sejt”), és ütközött a 2026-10-19-i tulajdonosi döntéssel (`hos-kep-sav`).
+- **Megelőzés 1:** képválasztási (arculati) változás előtt a `design-assets.test.ts` / `stored-art.test.ts` állításait és a hivatkozott
+  specet (`2026-10-19-hos-kep-sav`) elolvasni; a tartalék sosem lehet témaspecifikus kép.
+- **Tünet 2:** a böngészős ellenőrzéshez a helyi fejlesztői szervert indítottam volna, de a `source/.env` `DATABASE_URL`-je egy idegen,
+  régi adatbázisra mutatott (foglalási táblák) — a szerver indulása (migráció, söprések) oda írhatott volna.
+- **Megelőzés 2:** helyi szerver indítása előtt az adatbázis azonossága (C-20 próba); idegen / éles adatbázissal NEM indul. Ilyenkor az
+  élő oldal csak olvasó ellenőrzése a telepítés után.

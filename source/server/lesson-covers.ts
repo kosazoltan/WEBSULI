@@ -16,6 +16,8 @@ import { logger } from "./lib/logger";
  */
 export const COVER_IMAGE_MODEL = "bytedance-seed/seedream-5-0-pro";
 export const COVER_TEXT_MODEL = "anthropic/claude-haiku-5.5";
+/** Spec 2026-11-08-borito-blokkcimkek: a képterv / minőségkapu válaszkerete (a korábbi 400 csonkolhatta a JSON-t). */
+export const COVER_PLAN_MAX_TOKENS = 1200;
 /** OpenRouter-ár (2026-10-17, /endpoints): 1K kép 0,045 USD. */
 export const COVER_IMAGE_USD = 0.045;
 export const AUTO_ORIGIN = "MI-generált, saját (Seedream 5.0 Pro, automatikus leckeborító)";
@@ -94,9 +96,14 @@ export type MadeCover = { bytes: Buffer; mime: string; prompt: string; alt: stri
 /** Egy borító: képterv, legfeljebb két kép, mindegyik a minőségkapun. Kétszeres bukás vagy hibás terv: null. */
 export async function makeCover(d: LessonDigest, deps: CoverDeps): Promise<MadeCover | null> {
   const brief = `Grade: ${d.classroom || "adult learners"}\nSubject: ${d.subject}\nTitle: ${d.title}\nChapters: ${d.headings.join(" | ")}\nTeaching text: ${d.text}`;
-  const plan = parseJsonObject(await deps.chat(PLAN_SYSTEM, [{ type: "text", text: brief }]));
+  const planText = await deps.chat(PLAN_SYSTEM, [{ type: "text", text: brief }]);
+  const plan = parseJsonObject(planText);
   const scene = typeof plan?.scene === "string" ? plan.scene.trim() : "";
-  if (scene.length < 20) return null;
+  if (scene.length < 20) {
+    // Spec 2026-11-08-borito-blokkcimkek: ez volt az egyetlen néma bukás — élesben „0 kész, N sikertelen” ok nélkül.
+    logger.warn(`[lesson-covers] a képterv nem adott használható jelenetet („${d.title.slice(0, 60)}”): válasz ${planText.length} karakter, JSON ${plan ? "igen" : "nem"}`);
+    return null;
+  }
   const alt = typeof plan?.alt === "string" && plan.alt.trim().length >= 8 ? plan.alt.trim().slice(0, 200) : `${d.title} — a lecke borítóképe.`;
   const prompt = coverPrompt(scene, d.classroom);
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -114,10 +121,12 @@ export function openRouterDeps(key: string): CoverDeps {
   const fail = (what: string, status: number, body: string) => new Error(`${what}: HTTP ${status} ${body.split(key).join("[kulcs]").slice(0, 200)}`);
   return {
     async chat(system, user) {
-      const res = await fetch(`${OPENROUTER}/chat/completions`, { method: "POST", headers, body: JSON.stringify({ model: COVER_TEXT_MODEL, max_tokens: 400, temperature: 0.4, messages: [{ role: "system", content: system }, { role: "user", content: user }] }) });
+      const res = await fetch(`${OPENROUTER}/chat/completions`, { method: "POST", headers, body: JSON.stringify({ model: COVER_TEXT_MODEL, max_tokens: COVER_PLAN_MAX_TOKENS, temperature: 0.4, messages: [{ role: "system", content: system }, { role: "user", content: user }] }) });
       const text = await res.text();
       if (!res.ok) throw fail("képterv", res.status, text);
-      return (JSON.parse(text) as { choices?: Array<{ message?: { content?: string } }> }).choices?.[0]?.message?.content ?? "";
+      const choice = (JSON.parse(text) as { choices?: Array<{ finish_reason?: string; message?: { content?: string } }> }).choices?.[0];
+      if (choice?.finish_reason === "length") logger.warn("[lesson-covers] a modellválasz csonkolódott (finish_reason=length)");
+      return choice?.message?.content ?? "";
     },
     async image(prompt) {
       const res = await fetch(`${OPENROUTER}/images`, { method: "POST", headers, body: JSON.stringify({ model: COVER_IMAGE_MODEL, prompt, aspect_ratio: "3:2", resolution: "1K", n: 1 }) });
