@@ -41,9 +41,9 @@ A szóbeli gyakorlás mikrofon nélkül is működik. Diktálás és felolvasás
 
 Az öt évfolyamsáv (1–2, 3–4, 5–6, 7–8, 9+) vezérli a színintenzitást és betűméretet: kisebbeknek színesebb, nagyobbaknak visszafogottabb. A témák árnyalata és az informatív ábrák megmaradnak; az osztály nélküli programozás a 7–8-as megjelenítést kapja. Csak a helyben csomagolt Nunito, Source Sans 3 és Source Serif 4, mért magyar karakterkészlettel; 320–2560 px, álló/fekvő nézet, legalább 44 px érintési terület. A hosszú tananyag természetesen görgethető; a négy lap navigációja elérhető marad.
 
-**Célkártya, nyitómese és játékos kérdezés (2026-11-08, kapcsolóval, alapból KI):** tudásbázis
+**Célkártya, nyitómese és játékos kérdezés (2026-11-08; élesben BEKAPCSOLVA 2026-11-08, Render `websuli-api-eu`):** tudásbázis
 `docs/modszertan-nyitomese-jatekos-kerdezes.md`; gyártási szerződések `source/shared/lesson-opener.ts`. Bekapcsolás:
-`STUDIO_LESSON_OPENER=on` — élesben csak az S2b mérés és tulajdonosi döntés után (spec: `docs/specs/2026-11-08-nyitomese-jatekos-kerdezes.md`).
+`STUDIO_LESSON_OPENER=on` — a tulajdonos döntésére az S2b mérés után élesben bekapcsolva; kikapcsolás: a változó törlése a Renderen (spec: `docs/specs/2026-11-08-nyitomese-jatekos-kerdezes.md`).
 
 ## Útvonalak, promptok, méret és hibakezelés
 
