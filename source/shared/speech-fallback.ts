@@ -68,6 +68,7 @@ export function isTtsAudioSubPath(path: string): boolean {
  */
 export class TtsAudioCache<V extends { length: number }> {
   private readonly items = new Map<string, V>();
+  private readonly pending = new Map<string, Promise<V>>();
   private bytes = 0;
   constructor(private readonly maxBytes = 16 * 1024 * 1024, private readonly maxEntries = 1000) {}
 
@@ -93,6 +94,23 @@ export class TtsAudioCache<V extends { length: number }> {
       this.items.delete(oldKey);
       this.bytes -= oldValue.length;
     }
+  }
+
+  /** Találat a tárból; hiánynál egyetlen közös betöltés fut kulcsonként (az egyszerre érkező kérések ugyanarra várnak). */
+  getOrLoad(key: string, load: () => Promise<V>): Promise<V> {
+    const hit = this.get(key);
+    if (hit !== undefined) return Promise.resolve(hit);
+    let loading = this.pending.get(key);
+    if (!loading) {
+      loading = load()
+        .then((value) => {
+          if (value.length) this.set(key, value);
+          return value;
+        })
+        .finally(() => this.pending.delete(key));
+      this.pending.set(key, loading);
+    }
+    return loading;
   }
 
   get size(): number {

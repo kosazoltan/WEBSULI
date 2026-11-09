@@ -85,3 +85,7 @@
 - **Szerveroldali hangtár:** a 206-os válasz nem kerül a Vercel CDN gyorsítótárába, ezért a szerver a teljes MP3-at memóriában
   őrzi (`TtsAudioCache`, LRU, legfeljebb 16 MB / 1000 elem), és a tartományt abból szeleteli. Újraindításkor a tár kiürül — ez elfogadott.
 - [ ] B6: WHEN ugyanarra a szóra ismételt (akár tartomány-) kérés jön THEN a szerver SHALL NOT hívja újra a külső szolgáltatást.
+- **Egyidejű hiány:** ugyanarra a szóra egyszerre érkező kérések egyetlen külső hívásra várnak (`TtsAudioCache.getOrLoad`); hiba nem ragad be.
+- **Elutasított review-javaslatok (indokkal):** (1) korlátkulcs a tanuló IP-címe szerint — a Render-cím közvetlenül is elérhető, az
+  `X-Forwarded-For` ott hamisítható, a `trust proxy` átállítása minden korlátot érint: külön, saját speccel rendelkező feladat;
+  (2) megosztott korlát-tároló — a szolgáltatás egy folyamatban fut, a repó összes korlátja memóriában számol; nem ennek a PR-nak a köre.

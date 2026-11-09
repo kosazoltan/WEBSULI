@@ -2541,12 +2541,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // A 206-os válasz nem kerül a CDN gyorsítótárába: a teljes hangot a szerver megőrzi, a tartományt abból szeleteli.
       const cacheKey = `${parsed.lang}\n${parsed.text}`;
-      let audio = ttsAudioCache.get(cacheKey);
-      if (!audio) {
+      const audio = await ttsAudioCache.getOrLoad(cacheKey, async () => {
         const segments = await getAllAudioBase64(parsed.text, { lang: parsed.lang, slow: false, host: "https://translate.google.com" });
-        audio = Buffer.concat(segments.map(seg => Buffer.from(seg.base64, "base64")));
-        if (audio.length) ttsAudioCache.set(cacheKey, audio);
-      }
+        return Buffer.concat(segments.map(seg => Buffer.from(seg.base64, "base64")));
+      });
       const range = parseAudioRange(req.headers.range, audio.length);
       if (range === "invalid") return res.status(416).set("Content-Range", `bytes */${audio.length}`).end();
       const body = range ? audio.subarray(range.start, range.end + 1) : audio;

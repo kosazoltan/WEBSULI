@@ -86,6 +86,29 @@ test("hangtár: találat, LRU-kiszorítás darabszám és bájtméret szerint", 
   assert.equal(cache.get("d")?.length, 2, "felülírás");
 });
 
+// Review #410: hideg tárnál az egyszerre érkező kérések egyetlen külső hívást indítsanak.
+test("hangtár: egyidejű hiány egyetlen betöltést indít; a hiba nem ragad be", async () => {
+  const cache = new TtsAudioCache<Uint8Array>();
+  let calls = 0;
+  let release: (value: Uint8Array) => void = () => {};
+  const load = () => { calls += 1; return new Promise<Uint8Array>((resolve) => { release = resolve; }); };
+  const first = cache.getOrLoad("en\nslender", load);
+  const second = cache.getOrLoad("en\nslender", load);
+  release(new Uint8Array(3));
+  assert.equal((await first).length, 3);
+  assert.equal((await second).length, 3);
+  assert.equal(calls, 1);
+  assert.equal((await cache.getOrLoad("en\nslender", load)).length, 3);
+  assert.equal(calls, 1, "a kész hang a tárból jön");
+
+  let failures = 0;
+  const failing = () => { failures += 1; return Promise.reject(new Error("szolgáltatáshiba")); };
+  await assert.rejects(cache.getOrLoad("en\nhiba", failing));
+  await assert.rejects(cache.getOrLoad("en\nhiba", failing));
+  assert.equal(failures, 2, "hiba után a következő kérés újra próbálkozik");
+  assert.equal((await cache.getOrLoad("en\nhiba", async () => new Uint8Array(1))).length, 1);
+});
+
 test("a Vercel nem tiltja a hangtartalék gyorsítótárazását, a többi /api válaszét igen", () => {
   const cfg = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as { headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> };
   const noStore = cfg.headers.filter(h => h.headers.some(x => x.key === "Cache-Control" && x.value.includes("no-store")));
