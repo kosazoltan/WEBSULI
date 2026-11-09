@@ -34,7 +34,23 @@ export const ANIM_LABELS: Readonly<Record<string, string>> = {
 
 export const TRY_LABELS: Readonly<Record<string, string>> = { dragSort: "Rendezd sorba", fillBlank: "Egészítsd ki", match: "Párosítsd" };
 
-export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: number, band: AgeBand, classroom?: number): string {
+/** Spec 2026-11-08-tartalmi-fejlecek-2: az ellenőrző kérdés IQ-formája a kérdés szövegéből (az első egyező). */
+export const CHECK_FORMS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/igaz vagy hamis/i, "Igaz vagy hamis?"],
+  [/kakukktojás|nem illik (?:közé|a sorba)/i, "Kakukktojás"],
+  [/találós/i, "Találós kérdés"],
+  [/analógia|úgy aránylik|úgy viszonyul/i, "Analógia"],
+  // Review #406: Unicode-biztos szóhatárok (a JS `\b` az ékezetnél is határt lát: „Néha” ≠ „ha”); „elemek közül” ≠ „következő elem”.
+  [/sorminta|következő (?:elem|szám|tag)(?!\p{L})/iu, "Sorminta"],
+  [/melyik (?:állítás )?hamis/i, "Melyik hamis?"],
+  [/(?<!\p{L})ha(?!\p{L})[^.?!]*(?<!\p{L})akkor(?!\p{L})/iu, "Következtetés"],
+];
+
+export function checkFormLabel(question: string): string | null {
+  return CHECK_FORMS.find(([re]) => re.test(question))?.[1] ?? null;
+}
+
+export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: number, band: AgeBand, classroom?: number, isLastSection?: boolean): string {
   const block = blocks[index];
   const theme = BAND_THEME[band];
   switch (block.kind) {
@@ -51,8 +67,12 @@ export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: 
       return theme.labels.explain;
     }
     case "example": return theme.labels.example;
-    case "check": return theme.labels.check;
-    case "recap": return theme.labels.recap;
+    case "check": return checkFormLabel(block.question) ?? theme.labels.check;
+    case "recap": {
+      // A lecke utolsó összefoglalója a mese-visszatérés helye: „A lecke tanulsága”.
+      const lastRecap = isLastSection && !blocks.slice(index + 1).some((b) => b.kind === "recap");
+      return lastRecap ? "A lecke tanulsága" : theme.labels.recap;
+    }
     case "animate": return ANIM_LABELS[block.animKind] ?? "Ábra";
     case "try": return TRY_LABELS[block.tryKind] ?? "Próbáld ki";
   }

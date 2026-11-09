@@ -171,12 +171,15 @@ function CheckBlock({
   band,
   onPick,
   picked: controlledPicked,
+  label,
 }: {
   block: Extract<Block, { kind: "check" }>;
   band: AgeBand;
   onPick?: (pickedIndex: number) => void;
   /** B7: restored pick from localStorage (controlled when provided). */
   picked?: number | null;
+  /** Spec 2026-11-08-tartalmi-fejlecek-2: a kérdés IQ-formája szerinti fejléc. */
+  label?: string;
 }) {
   const theme = BAND_THEME[band];
   const [localPicked, setLocalPicked] = useState<number | null>(controlledPicked ?? null);
@@ -198,7 +201,7 @@ function CheckBlock({
 
   return (
     <div className="lesson-block space-y-3" data-block="check">
-      <BlockHead icon={HelpCircle} label={theme.labels.check} kind="check" />
+      <BlockHead icon={HelpCircle} label={label ?? theme.labels.check} kind="check" />
       <p className={cn("font-medium", theme.body)}>{block.question}</p>
 
       <div className="grid gap-2">
@@ -260,11 +263,11 @@ function CheckBlock({
  * Recap as an infographic: one card per idea. A bullet list reads as homework; a card
  * with its own mark reads as something the child now owns (LS-9).
  */
-function RecapBlock({ block, band }: { block: Extract<Block, { kind: "recap" }>; band: AgeBand }) {
+function RecapBlock({ block, band, label }: { block: Extract<Block, { kind: "recap" }>; band: AgeBand; label?: string }) {
   const theme = BAND_THEME[band];
   return (
     <div className="lesson-block" data-block="recap">
-      <BlockHead icon={ListChecks} label={theme.labels.recap} kind="recap" />
+      <BlockHead icon={ListChecks} label={label ?? theme.labels.recap} kind="recap" />
       <div className="lesson-recap-cards">
         {block.bullets.map((b, i) => (
           <div key={i} className="lesson-recap-card" data-recap-item>
@@ -303,9 +306,9 @@ export function LessonBlock({
     case "example":
       return <ExampleBlock block={block} band={band} />;
     case "check":
-      return <CheckBlock block={block} band={band} onPick={onPick} picked={picked} />;
+      return <CheckBlock block={block} band={band} onPick={onPick} picked={picked} label={label} />;
     case "recap":
-      return <RecapBlock block={block} band={band} />;
+      return <RecapBlock block={block} band={band} label={label} />;
     case "animate": {
       const Anim = ANIMATE_REGISTRY[block.animKind];
       // Review #279: a mozgókép és a próba blokk is blokkfejlécet kap (a sáv jelzőjével), mint a többi négy típus.
@@ -330,6 +333,7 @@ function LessonSection({
   sectionIdx,
   band,
   classroom,
+  isLastSection,
   lessonId,
   conceptLabel,
   onProbaSuccess,
@@ -344,6 +348,8 @@ function LessonSection({
   band: AgeBand;
   /** Review #405: a tartalom szerinti fejléchez (a „Mese” csak 1–4. évfolyamon). */
   classroom: number;
+  /** Spec 2026-11-08-tartalmi-fejlecek-2: az utolsó fejezet utolsó összefoglalója „A lecke tanulsága”. */
+  isLastSection: boolean;
   lessonId: string | null;
   conceptLabel: (id: string) => string;
   onProbaSuccess: () => void;
@@ -396,7 +402,7 @@ function LessonSection({
           onPick={(pickedIndex) => pick(bi, pickedIndex)}
           tryPersisted={tryBlocks[String(bi)]}
           onTryPersist={(snap) => onTryPersist(bi, snap)}
-          label={blockLabel(section.blocks, bi, sectionIdx, band, classroom)}
+          label={blockLabel(section.blocks, bi, sectionIdx, band, classroom, isLastSection)}
         />
       ))}
 
@@ -569,7 +575,7 @@ export function LessonRuntime({
 
         {lesson.experience ? <LessonExperienceView key={experienceKey} experience={lesson.experience} lessonId={lessonId} arbiterSource={arbiterSource} headings={lesson.sections.map(s => s.heading)} storageKey={`websuli:fusion:${experienceKey}`} reviewKey={persistId ?? lessonId ?? lesson.mapId}>
           {activeSection => <FullTeachingContext.Provider value={true}>
-          {lesson.sections.map((section, si) => <div key={si} hidden={activeSection !== null && activeSection !== si}><LessonSection section={section} sectionIdx={si} band={band} classroom={lesson.classroom} lessonId={lessonId ?? null} conceptLabel={id => conceptLabel(lesson, id)} initialAnswers={progress.snapshot.sections[String(si)]?.answers ?? {}} tryBlocks={progress.snapshot.sections[String(si)]?.tryBlocks ?? {}} onAnswersChange={answers => progress.setSectionAnswers(si, answers)} onTryPersist={(bi, snap) => progress.setTrySnapshot(si, bi, snap)} onProbaSuccess={() => setCurrent(c => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))} sectionRef={el => { sectionEls.current[si] = el; }} /></div>)}
+          {lesson.sections.map((section, si) => <div key={si} hidden={activeSection !== null && activeSection !== si}><LessonSection section={section} sectionIdx={si} band={band} classroom={lesson.classroom} isLastSection={si === lesson.sections.length - 1} lessonId={lessonId ?? null} conceptLabel={id => conceptLabel(lesson, id)} initialAnswers={progress.snapshot.sections[String(si)]?.answers ?? {}} tryBlocks={progress.snapshot.sections[String(si)]?.tryBlocks ?? {}} onAnswersChange={answers => progress.setSectionAnswers(si, answers)} onTryPersist={(bi, snap) => progress.setTrySnapshot(si, bi, snap)} onProbaSuccess={() => setCurrent(c => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))} sectionRef={el => { sectionEls.current[si] = el; }} /></div>)}
         </FullTeachingContext.Provider>}</LessonExperienceView> : <>
         <LessonProgress sections={lesson.sections} band={band} current={current} />
 
@@ -588,6 +594,7 @@ export function LessonRuntime({
               sectionIdx={si}
               band={band}
               classroom={lesson.classroom}
+              isLastSection={si === lesson.sections.length - 1}
               lessonId={lessonId ?? null}
               conceptLabel={(id) => conceptLabel(lesson, id)}
               initialAnswers={initialAnswers}
