@@ -24,7 +24,8 @@ HU = LETTERS + COMBINING
 # Websuli Design (docs/specs/2026-10-16-websuli-design.md): Nunito Sans (1–5. o.) és Inter (0., 6–12. o.) a tananyagban; a
 # korábbi családok az alkalmazás más részei miatt maradnak.
 FAMILIES = [("nunito", "Nunito"), ("sourcesans3", "Source Sans 3"), ("sourceserif4", "Source Serif 4"),
-            ("nunitosans", "Nunito Sans"), ("inter", "Inter")]
+            ("nunitosans", "Nunito Sans"), ("inter", "Inter"),
+            ("atkinsonhyperlegiblenext", "Atkinson Hyperlegible Next"), ("figtree", "Figtree")]
 
 
 def get(url):

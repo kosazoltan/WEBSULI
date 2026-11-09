@@ -298,7 +298,7 @@ export function LabeledShapeAnim({ params, caption }: AnimProps) {
     text ? <text x={x} y={y} textAnchor={anchor} fontSize="16" fontWeight="700" fill="currentColor">{text}</text> : null;
   let body: ReactNode;
   // Websuli Design: az alakzat melletti feliratoknak (pl. a téglatest „6 egység” magassága) mindkét oldalon 36 egység hely jut —
-  // a feliratok az évfolyam fontjával (Inter / Nunito Sans) is a nézetdobozon belül maradnak (mérve: Interrel a bal szélen kilógott).
+  // a feliratok az évfolyam fontjával (Figtree / Atkinson Hyperlegible Next) is a nézetdobozon belül maradnak (mérve: Interrel a bal szélen kilógott).
   let view = "-36 0 392 240";
   if (p.shape === "circle") {
     const r = 80;
