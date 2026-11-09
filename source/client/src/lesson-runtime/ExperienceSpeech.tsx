@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, Square, Volume2 } from "lucide-react";
 import { pronunciationVerdict, type PronunciationVerdict } from "@shared/pronunciation";
+import { hasVoiceFor, isSoftSpeechError, SPEECH_START_TIMEOUT_MS, ttsAudioUrl } from "@shared/speech-fallback";
 
 type Alternative = { transcript: string };
 type Recognition = {
@@ -89,21 +90,63 @@ if (typeof window !== "undefined" && "speechSynthesis" in window && typeof windo
   } catch { /* hiányos felület: a lang beállítás dönt */ }
 }
 
+// Spec 2026-11-09-felolvasas-tartalek: egyszerre egy hang szól — az új gombnyomás az előző kimondást és a tartalék hangot is leállítja.
+let activeFallback: HTMLAudioElement | null = null;
+let cancelActiveSpeech: (() => void) | null = null;
+
+function stopSpeech(): void {
+  cancelActiveSpeech?.();
+  cancelActiveSpeech = null;
+  if (activeFallback) { activeFallback.pause(); activeFallback = null; }
+  const synth = "speechSynthesis" in window ? window.speechSynthesis : undefined;
+  // Android Chrome: a feltétel nélküli cancel() közvetlenül a speak() előtt az új kimondást is megszakíthatja.
+  if (synth && (synth.speaking || synth.pending)) synth.cancel();
+}
+
+/** A szerver MP3-a azonos eredetről (/api/tts/audio) — a böngésző beszédmotorja nélkül is szól. */
+function playFallback(text: string, language: string, rate: number, onError?: () => void): void {
+  const url = ttsAudioUrl(text, language);
+  if (!url) { onError?.(); return; }
+  const audio = new Audio(url);
+  audio.playbackRate = rate;
+  activeFallback = audio;
+  const fail = () => { if (activeFallback === audio) { activeFallback = null; onError?.(); } };
+  audio.onerror = fail;
+  audio.play().catch(fail);
+}
+
 export function speakText(text: string, language: string, rate: number, onError?: () => void): void {
-  window.speechSynthesis.cancel();
+  stopSpeech();
+  const synth = "speechSynthesis" in window ? window.speechSynthesis : undefined;
+  const voices = synth && typeof synth.getVoices === "function" ? synth.getVoices() ?? [] : [];
+  // Nincs beszédmotor, vagy van hanglista, de a nyelvhez nincs hang → azonnal a szerver hangja.
+  if (!synth || typeof SpeechSynthesisUtterance === "undefined" || !hasVoiceFor(voices, language)) { playFallback(text, language, rate, onError); return; }
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = language;
   utterance.rate = rate;
   const voice = pickVoice(language);
   if (voice) utterance.voice = voice;
-  if (onError) utterance.onerror = onError;
-  window.speechSynthesis.speak(utterance);
+  let settled = false;
+  let started = false;
+  const finish = () => { settled = true; clearTimeout(watchdog); if (cancelActiveSpeech === cancel) cancelActiveSpeech = null; };
+  const cancel = () => { settled = true; clearTimeout(watchdog); };
+  const fallBack = () => { finish(); if (synth.speaking || synth.pending) synth.cancel(); playFallback(text, language, rate, onError); };
+  // Néma motor (pl. Google-szolgáltatás nélküli Android): ha a kimondás nem indul el, a tartalék szól.
+  const watchdog = setTimeout(() => { if (!settled && !started) fallBack(); }, SPEECH_START_TIMEOUT_MS);
+  cancelActiveSpeech = cancel;
+  utterance.onstart = () => { started = true; };
+  utterance.onend = () => { if (!settled) finish(); };
+  utterance.onerror = (e: SpeechSynthesisErrorEvent) => {
+    if (settled) return;
+    // A megszakítás (új gombnyomás, fülváltás) nem hiba: se tartalék, se üzenet.
+    if (isSoftSpeechError(e?.error)) { finish(); return; }
+    fallBack();
+  };
+  synth.speak(utterance);
 }
 
 export function SpeakButton({ text, language, rate }: { text: string; language: string; rate: number }) {
-  const [available] = useState(() => "speechSynthesis" in window);
   const [error, setError] = useState("");
-  if (!available) return <span className="lesson-muted">Felolvasás ezen az eszközön nem elérhető.</span>;
   return <><button className="lesson-outline-btn" data-tts={text} aria-label={`${text} meghallgatása`} onClick={() => {
     setError("");
     speakText(text, language, rate, () => setError("A hang most nem érhető el ezen az eszközön."));
