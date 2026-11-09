@@ -1,17 +1,20 @@
 # Magyar tananyag-betűk
 
 Spec 2026-11-09-lecke-betucsere (a 2026-10-16-os Websuli Design fontválasztását váltja): a tananyagban
-**Atkinson Hyperlegible Next** (1–5. osztály) és **Figtree** (0. és 6–12. osztály) — törzsszöveg, címsor, feladat és vezérlő
-ugyanabból a családból; tartalék: Noto Sans, majd rendszer sans-serif. A Stúdió felülete is Figtree.
+**Atkinson Hyperlegible Next** (1–5. osztály) és **Lexend** (0. és 6–12. osztály; tulajdonosi módosítás 2026-11-09) — törzsszöveg,
+címsor, feladat és vezérlő ugyanabból a családból; tartalék: Noto Sans, majd rendszer sans-serif. A Stúdió felülete Inter.
+A Lexendnek nincs valódi dőlt változata (a forrásban sincs): a dőltet a böngésző ferdíti.
 
 | Betűcsalád | Szerep |
 | --- | --- |
 | Atkinson Hyperlegible Next | tananyag, 1–5. osztály |
-| Figtree | tananyag, 0. (programozás) és 6–12. osztály; Stúdió-felület |
-| Nunito Sans, Inter | a 2026-11-09 előtti tananyagcsaládok; régi tartalom miatt helyben maradnak |
+| Lexend | tananyag, 0. (programozás) és 6–12. osztály (csak normál) |
+| Inter | Stúdió-felület; a 2026-11-09 előtti 6–12. osztályos család |
+| Nunito Sans | a 2026-11-09 előtti 1–5. osztályos család; régi tartalom miatt helyben marad |
+| Figtree | kipróbált, de nem használt; helyben, bájtra ellenőrizve |
 | Nunito, Source Sans 3, Source Serif 4 | korábbi családok; az alkalmazás más részei miatt helyben maradnak |
 
-A családválasztást a `shared/lesson-typography.ts` szabályozza. Normál és valódi
+A családválasztást a `shared/lesson-typography.ts` szabályozza. Normál és (a Lexend kivételével) valódi
 dőlt változat, tananyagban 400–800 vastagság használható. Kötelező próbasor:
 **Árvíztűrő tükörfúrógép · ÁÉÍÓÖŐÚÜŰ áéíóöőúüű**. Az ő/ű nem helyettesíthető
 õ/û karakterrel. A helytelenül kódolt szöveg külön javítást igényel.
@@ -31,6 +34,6 @@ cmap-ellenőrzés és tényleges súlytartomány. A build nem tölti le őket ú
 A script meglévő manifest esetén ugyanazt a rögzített revíziót használja.
 
 A források a Google Fonts hivatalos repo-jának `ofl/nunito`, `ofl/sourcesans3`,
-`ofl/sourceserif4`, `ofl/nunitosans`, `ofl/inter`, `ofl/atkinsonhyperlegiblenext` és `ofl/figtree` mappái. A script a manifest szerint már ellenőrzött,
+`ofl/sourceserif4`, `ofl/nunitosans`, `ofl/inter`, `ofl/atkinsonhyperlegiblenext`, `ofl/figtree` és `ofl/lexend` mappái. A script a manifest szerint már ellenőrzött,
 bájtra egyező családot nem tölti le és nem kódolja újra. A Source családok Adobe-tervezésűek. A családok neve
 nem általános garancia minden más letöltésre: az ellenőrzés ezekre a fájlokra szól.

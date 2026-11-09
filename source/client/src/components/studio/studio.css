@@ -3,7 +3,7 @@
  * Mért kiindulás: 360–768 px-en 12 db 44 px alatti érintési célpont, 10–12 px-es szövegek, régi betűtípus, 1400 px-es sorok.
  */
 .ws-studio {
-  font-family: "Figtree", "Noto Sans", Roboto, "Droid Sans", "DejaVu Sans", Arial, sans-serif;
+  font-family: "Inter", "Noto Sans", Roboto, "Droid Sans", "DejaVu Sans", Arial, sans-serif;
   font-size: 15px;
   line-height: 1.5;
   max-width: 1100px;
@@ -32,7 +32,7 @@
 .ws-studio button { white-space: normal; height: auto; padding-block: 0.5rem; text-align: center; overflow-wrap: anywhere; }
 /* A segédszöveg 13 px alá nem mehet (mérve: 10–12 px volt) — review #278: az explicit 10/11 px-es osztályok is. */
 .ws-studio :is(.text-xs, .text-\[10px\], .text-\[11px\]) { font-size: 13px; line-height: 1.45; }
-.ws-studio-portal { font-family: "Figtree", "Noto Sans", Roboto, Arial, sans-serif; font-size: 15px; }
+.ws-studio-portal { font-family: "Inter", "Noto Sans", Roboto, Arial, sans-serif; font-size: 15px; }
 /* Letiltott gomb: tömör, halk felület, mért kontrasztú szöveg — 50%-os átlátszóság helyett (olvashatatlan volt). */
 .ws-studio button:disabled { opacity: 1; background: #E2E8F0; color: #334155; border-color: #CBD5E1; box-shadow: none; }
 .dark .ws-studio button:disabled { background: #1E293B; color: #CBD5E1; border-color: #334155; }

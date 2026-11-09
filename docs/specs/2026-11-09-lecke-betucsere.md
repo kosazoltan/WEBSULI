@@ -41,3 +41,21 @@
 - [ ] A5: Valós böngészős render (Vercel-előnézet) egy 1–5. és egy 6–12. évfolyamos leckén: a számított `font-family` az új
       család, a betű ténylegesen betöltődött (`document.fonts.check`), az ő/ű helyesen jelenik meg, nincs vízszintes túlcsordulás.
 - [ ] A6: `check`, `lint`, `check:test`, `npm test` hibátlan.
+
+## Módosítás (tulajdonos, 2026-11-09, a #407 összevonása után): „Az Inter betűtípus tökéletes” → „Maradjon az Inter”
+- 0. és 6–12. évfolyam, valamint a Stúdió felülete: **vissza Interre**. Az 1–5. évfolyam **Atkinson Hyperlegible Next** marad.
+- A Figtree WOFF2-fájljai helyben maradnak (bájtra változatlanok, manifestben), de tananyag nem használja.
+- A stíluslap (`lesson-fonts.css`) tartalma nem változik, így a `?v=hu-3` marad.
+- Elfogadás (A1 módosítva): WHEN 1–5 THEN „Atkinson Hyperlegible Next”; WHEN 0 vagy 6–12 THEN „Inter”. Az ékezet-elfogadás:
+  az Inter `combiningMissing: ["U+030B"]` (ismert; a megjelenítés NFC-re normalizál), az Atkinsonnál `[]`.
+- Végrehajtás: `docs/specs/2026-11-09-lecke-betucsere-vegrehajtas.md` „T6” szakasz.
+
+## Második módosítás (tulajdonos, 2026-11-09): „Lexend legyen a nagyoknak a betűtípusa”
+- 0. és 6–12. évfolyam: **Lexend** (az Inter-visszaállítás, PR #408, összevonás előtt erre módosul). Az 1–5. évfolyam Atkinson Hyperlegible
+  Next marad. A Stúdió felülete Inter marad (nem tananyag, a kérés a tanulóknak szólt).
+- Mért tény: a Google Fonts `ofl/lexend` csak `Lexend[wght].ttf`-et ad (100–900, 685 glifa); a magyar NFC-ábécé és a kombinálható
+  U+0301 / U+0308 / U+030B is megvan (`combiningMissing: []`). **Valódi dőlt változat nincs** — ezt a tulajdonos a betűminta-oldalon látta
+  („nincs valódi dőlt változata”). A dőlt szöveget a böngésző a normál binárisból ferdíti; a szerzői szerződés a dőltet rövid kiemelésre korlátozza.
+- A `lesson-fonts.css` új face-t kap → `?v=hu-4`.
+- Elfogadás (A1/A2 módosítva): WHEN 1–5 THEN „Atkinson Hyperlegible Next”; WHEN 0 vagy 6–12 THEN „Lexend”. A Lexendnél csak normál WOFF2
+  kötelező (hash, `hungarianVerified`, `combiningMissing: []`); dőlt kérésnél is a Lexend saját binárisa rajzol (CDP-ellenőrzés).

@@ -14,7 +14,7 @@ for (const [width, height] of [[390, 844], [844, 390], [1440, 900]]) {
     await page.goto("/__lesson-runtime-probe?candidate=1");
     await expect(page.getByRole("heading", { name: lesson.title, exact: true })).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    // Websuli Design: a font az évfolyamból (1–5. Atkinson Hyperlegible Next, 0. és 6–12. Figtree), Noto Sans tartalékkal.
+    // Websuli Design: a font az évfolyamból (1–5. Atkinson Hyperlegible Next, 0. és 6–12. Lexend), Noto Sans tartalékkal.
     const font = lessonFontPair(lesson.classroom).body;
     await expect(page.locator("[data-band]")).toHaveCSS("font-family", `${font.includes(" ") ? `"${font}"` : font}, "Noto Sans", sans-serif`);
     for (const tab of ["Tananyag", "Módszerek", "Feladatok", "Kvíz"]) {

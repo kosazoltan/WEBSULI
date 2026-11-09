@@ -36,8 +36,8 @@ for (const [width, height] of [[320, 568], [390, 844], [844, 390], [1440, 900]])
     const dialog = page.getByRole("dialog", { name: "Háromszög-labor" });
     await expect(dialog).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    // Spec 2026-11-09-lecke-betucsere: 7. évfolyam → Figtree, Noto Sans tartalékkal.
-    await expect(dialog).toHaveCSS("font-family", 'Figtree, "Noto Sans", sans-serif');
+    // Spec 2026-11-09-lecke-betucsere: 7. évfolyam → Lexend, Noto Sans tartalékkal.
+    await expect(dialog).toHaveCSS("font-family", 'Lexend, "Noto Sans", sans-serif');
     const next = dialog.getByRole("button", { name: "Megvizsgálom", exact: true });
     await expect(next).toBeDisabled();
     for (const button of await dialog.getByRole("button").all()) await fullyVisible(button, width, height);
