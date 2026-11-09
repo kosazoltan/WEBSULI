@@ -57,9 +57,15 @@
       ]
     },
     {
-      "source": "/api/(.*)",
+      "source": "/api/((?!tts/audio$).*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/api/tts/audio",
+      "headers": [
+        { "key": "x-vercel-enable-rewrite-caching", "value": "1" }
       ]
     },
     {

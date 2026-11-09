@@ -226,3 +226,18 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   A Vercel CSP (`default-src 'self'`) miatt hangtartalék csak azonos eredetű URL lehet (`data:` / `blob:` nem).
 - **Tünet 2:** a `google-tts-api` az `en-GB` kódot elutasítja („lang might not exist”), csak az alapnyelvet (`en`) fogadja el.
 - **Megelőzés 2:** külső szolgáltatás bemeneti formátumát élő próbával mérni a kódírás előtt, nem a fehérlistából feltételezni.
+
+## C-24 — „Gyorsítótárazható” végpont, amelyet a CDN-szabály némán `no-store`-ra írt; IP-korlát a proxy címén (2026-11-09)
+
+- **Tünet:** a `GET /api/tts/audio` a kódban `Cache-Control: public, max-age=86400` fejlécet küldött, élesben mégis `no-store` érkezett:
+  a `vercel.json` `/api/(.*)` fejlécszabálya felülírta. A PR-leírás a gyorsítótárra hivatkozott kockázatcsökkentésként — méretlenül.
+- **Megelőzés:** fejlécre épülő állítást (gyorsítótár, CSP, CORS) az éles címen `curl -D -` kimenettel kell igazolni, nem a szerverkódból.
+  Külső átírásnál (Vercel → Render) a CDN csak `x-vercel-enable-rewrite-caching: 1` mellett veszi figyelembe a forrás fejléceit.
+- **Tünet 2:** az IP-alapú korlát (`express-rate-limit`, `trust proxy: 1`) kulcsa a Vercel-proxy címe: a keret az összes látogatóé együtt.
+- **Megelőzés 2:** proxy mögötti korlátnál a `Ratelimit-Remaining` fejlécet két útvonalon (közvetlen és proxyn át) össze kell vetni.
+  A többi IP-alapú korlát (bejelentkezés stb.) ugyanígy érintett — nyitott, külön feladat.
+- **Tünet 3:** hangvégpont `Range` támogatás nélkül (iOS Safari `bytes=0-1` kéréssel tölt, 206-ot vár).
+- **Megelőzés 3:** média-végpontnál `Accept-Ranges` + 206 az alap; próba: `curl -H "Range: bytes=0-1"`.
+- **Tünet 4 (eljárási):** a kód a spec-módosítás előtt készült el; a shell heredoc → JS sablonszöveg út a regexekből kiette a `\`-t
+  (`\d` → `d`), a `sed`-javítás sem hatott.
+- **Megelőzés 4:** előbb a spec „Módosítás” szakasza, utána a kód. Regexet tartalmazó kódot az Edit eszközzel kell írni, nem shellből generálni.

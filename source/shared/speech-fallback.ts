@@ -35,6 +35,28 @@ export function parseTtsAudioQuery(query: Record<string, unknown>): { text: stri
   return { text, lang };
 }
 
+/** Böngésző-gyorsítótár: 1 nap. A szó hangja nem változik. */
+export const TTS_AUDIO_CACHE_CONTROL = "public, max-age=86400";
+/** A Vercel CDN gyorsítótára: 7 nap — ugyanazt a szót minden tanuló a CDN-ből kapja, nem a szervertől. */
+export const TTS_AUDIO_CDN_CACHE_CONTROL = "max-age=604800";
+
+/**
+ * Egyetlen bájttartomány a `Range` fejlécből (iOS Safari a hangot tartománykéréssel tölti: `bytes=0-1`).
+ * null: nincs (értelmezhető) tartomány → teljes válasz; "invalid": nem teljesíthető → 416.
+ */
+export function parseAudioRange(header: string | undefined, size: number): { start: number; end: number } | "invalid" | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? "");
+  if (!match || (!match[1] && !match[2])) return null;
+  if (size <= 0) return "invalid";
+  if (!match[1]) {
+    const suffix = Number(match[2]);
+    return suffix > 0 ? { start: Math.max(0, size - suffix), end: size - 1 } : "invalid";
+  }
+  const start = Number(match[1]);
+  const end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  return start < size && start <= end ? { start, end } : "invalid";
+}
+
 /** Nem hiba: a kimondást a lejátszó maga szakította meg (új gombnyomás, fülváltás). */
 export function isSoftSpeechError(code: string | undefined): boolean {
   return code === "interrupted" || code === "canceled";
