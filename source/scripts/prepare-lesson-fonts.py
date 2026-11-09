@@ -25,7 +25,7 @@ HU = LETTERS + COMBINING
 # korábbi családok az alkalmazás más részei miatt maradnak.
 FAMILIES = [("nunito", "Nunito"), ("sourcesans3", "Source Sans 3"), ("sourceserif4", "Source Serif 4"),
             ("nunitosans", "Nunito Sans"), ("inter", "Inter"),
-            ("atkinsonhyperlegiblenext", "Atkinson Hyperlegible Next"), ("figtree", "Figtree")]
+            ("atkinsonhyperlegiblenext", "Atkinson Hyperlegible Next"), ("figtree", "Figtree"), ("lexend", "Lexend")]
 
 
 def get(url):

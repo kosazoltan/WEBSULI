@@ -251,6 +251,24 @@
         300.0,
         900.0
       ]
+    },
+    {
+      "family": "Lexend",
+      "style": "normal",
+      "file": "lexend-normal.woff2",
+      "revision": "e2332cf862ac3145c0ee5f24f04f4c1819b2410b",
+      "source": "https://raw.githubusercontent.com/google/fonts/e2332cf862ac3145c0ee5f24f04f4c1819b2410b/ofl/lexend/Lexend%5Bwght%5D.ttf",
+      "sourceSha256": "3add53e641fbc81da64da4bb254285e2831b52b029527bc0714e2b9610832ee6",
+      "sha256": "76b2c869666f632a514eec47301cf6032d4ed0062e04699ed1c99add08c32f91",
+      "glyphCount": 685,
+      "hungarianVerified": true,
+      "combiningMissing": [],
+      "internalFamily": "Lexend",
+      "postScriptName": "Lexend-Regular",
+      "weight": [
+        100.0,
+        900.0
+      ]
     }
   ]
 }

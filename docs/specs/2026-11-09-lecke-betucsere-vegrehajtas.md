@@ -42,3 +42,11 @@
 2. `lesson-design.ts` studio / laboratory / future → Inter; `studio.css` → Inter; a promptszövegek és megjegyzések Interrel.
 3. Tesztek (dokumentált spec-változás): családnevek Inter; a `combiningMissing` állítás: Inter → `["U+030B"]`, más → `[]`.
 4. `README.md` (fonts) tábla. Ellenőrzés: `check`, `lint`, `check:test`, `npm test`, Playwright typography + labs + fusion; PR, összevonás, élő ellenőrzés.
+
+## T7 — Második módosítás: 0. és 6–12. évfolyam Lexend (ugyanazon az ágon, PR #408)
+1. `prepare-lesson-fonts.py` `FAMILIES` + `("lexend", "Lexend")`; futtatás → `lexend-normal.woff2`, `lexend-OFL.txt`, manifest 15 face, CSS.
+2. `lesson-typography.ts`: `LESSON_FONTS = ["Atkinson Hyperlegible Next", "Lexend"]`, `BundledFont` legacy + Inter, `hu-4`, a szerződés dőlt-mondata.
+3. `lesson-design.ts` studio / laboratory / future → Lexend; promptszövegek (`lesson-html-spec`, `improveAsync`, `lesson-skill`) Lexend; `studio.css` Inter marad.
+4. Tesztek: családnevek Lexend, `hu-4`; a manifest-teszt a Lexendnél csak normál face-t vár (`UPRIGHT_ONLY`), `combiningMissing: []`;
+   a böngészőteszt dőlt kérésnél a család normál binárisát fogadja el, ha dőlt face nincs.
+5. README tábla; ellenőrzés: `check`, `lint`, `check:test`, `npm test`, Playwright typography + labs + fusion; Vercel-előnézet; PR-cím / leírás frissítése.

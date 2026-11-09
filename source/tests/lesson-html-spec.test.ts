@@ -34,8 +34,8 @@ test("a v7.4 spec a skill kötelező elemeit tartalmazza", () => {
   assert.match(s, /window\.self !== window\.top/);
   // ékezetek / Android
   assert.match(s, /fonts\/lesson-fonts\.css/);
-  // Dokumentált spec-változás (docs/specs/2026-11-09-lecke-betucsere.md): Atkinson Hyperlegible Next (1–5.) és Inter (6–12.).
-  assert.match(s, /Atkinson Hyperlegible Next \(1–5\. évfolyam\) és Inter \(6–12\. évfolyam\)/);
+  // Dokumentált spec-változás (docs/specs/2026-11-09-lecke-betucsere.md): Atkinson Hyperlegible Next (1–5.) és Lexend (6–12.).
+  assert.match(s, /Atkinson Hyperlegible Next \(1–5\. évfolyam\) és Lexend \(6–12\. évfolyam\)/);
   assert.match(s, /http-equiv="Content-Type"/);
   assert.match(s, /Ne tölts be Google Fonts vagy más külső fontot/);
   // mennyiségek és szerkezet
@@ -82,7 +82,7 @@ test("a tantárgy és a korosztály irányítja a téma-jelölteket", () => {
 test("a téma-prompt csak a mért helyi magyar fontokat kéri (jóváhagyott tipográfiai szerződésváltás)", () => {
   for (const theme of LESSON_THEMES) {
     const link = lessonFontsLink();
-    assert.equal(link, "/fonts/lesson-fonts.css?v=hu-3", "verziózott stíluslap (review #266: immutable gyorsítótár)");
+    assert.equal(link, "/fonts/lesson-fonts.css?v=hu-4", "verziózott stíluslap (review #266: immutable gyorsítótár)");
     const p = lessonThemePrompt(theme, 5);
     assert.ok(p.includes(link));
     assert.match(p, /Atkinson Hyperlegible Next/);
@@ -94,7 +94,7 @@ test("a téma-prompt csak a mért helyi magyar fontokat kéri (jóváhagyott tip
   for (const theme of LESSON_THEMES) {
     assert.match(lessonThemePrompt(theme, 2), /font-family címsor: 'Atkinson Hyperlegible Next',"Noto Sans", sans-serif/);
     assert.match(lessonThemePrompt(theme, 4), /font-family törzs: 'Atkinson Hyperlegible Next',"Noto Sans", sans-serif/);
-    assert.match(lessonThemePrompt(theme, 7), /font-family törzs: 'Inter',"Noto Sans", sans-serif/);
+    assert.match(lessonThemePrompt(theme, 7), /font-family törzs: 'Lexend',"Noto Sans", sans-serif/);
     assert.doesNotMatch(lessonThemePrompt(theme, 7), /Source Serif 4/, "a téma nem írhatja felül az évfolyam fontját");
   }
   assert.match(lessonThemePrompt(LESSON_THEMES[0], 0), /programozási alapismeretek/);

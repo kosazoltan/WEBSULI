@@ -123,7 +123,7 @@ Tab navigáció: sticky, 4 gomb, reszponzív, min 44px magasság.
 10. **Feladatok pótlása** → Cél: a bankPlan szerinti teljes írásos/szóbeli fedettség, HÁROMRÉTEGŰ kiértékelő motor (required/bonus/minWords/needsSentence/sample, ✅/🟡/❌)
 11. **JavaScript funkciók kiegészítése** → Kiértékelés, pontozás, JSON mentés
 12. **CSS hiányosságok** → Reszponzivitás 320px–2560px, min-height: 44px, egyedi prefix
-13. **Magyar ékezetek Androidon** → Kizárólag a helyi, évfolyamhoz rendelt Atkinson Hyperlegible Next (1–5.) vagy Inter (6–12.); /fonts/lesson-fonts.css. Ellenőrzött magyar ő/Ő/ű/Ű, UTF-8; külső font és glyph-warmup helyett tényleges fontellenőrzés.
+13. **Magyar ékezetek Androidon** → Kizárólag a helyi, évfolyamhoz rendelt Atkinson Hyperlegible Next (1–5.) vagy Lexend (6–12.); /fonts/lesson-fonts.css. Ellenőrzött magyar ő/Ő/ű/Ű, UTF-8; külső font és glyph-warmup helyett tényleges fontellenőrzés.
 
 ${specBlock}
 

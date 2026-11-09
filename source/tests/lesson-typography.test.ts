@@ -20,7 +20,10 @@ test("rendered lessons replace the formerly immutable runtime URL without changi
 });
 test("every allowed font has the measured full Hungarian normal and italic artifact, unchanged since cmap verification", () => {
   const manifest = JSON.parse(read("client/public/fonts/manifest.json"));
-  for (const family of LESSON_FONTS) for (const style of ["normal", "italic"]) {
+  // Spec 2026-11-09-lecke-betucsere (Lexend-módosítás): a Lexendnek a Google Fonts-forrásban nincs dőlt változata — csak normál face
+  // létezik, a dőltet a böngésző szintetizálja. Minden más tananyagcsaládnál a valódi dőlt kötelező marad.
+  const UPRIGHT_ONLY = new Set<string>(["Lexend"]);
+  for (const family of LESSON_FONTS) for (const style of UPRIGHT_ONLY.has(family) ? ["normal"] : ["normal", "italic"]) {
     const face = manifest.fonts.find((f: { family: string; style: string }) => f.family === family && f.style === style);
     assert.ok(face, `${family} ${style}`);
     const bytes = readFileSync(new URL(`../client/public/fonts/${face.file}`, import.meta.url));
@@ -29,21 +32,21 @@ test("every allowed font has the measured full Hungarian normal and italic artif
     assert.equal(face.hungarianVerified, true);
     assert.ok(face.weight[0] <= 400 && face.weight[1] >= 800);
     for (const char of "ÁÉÍÓÖŐÚÜŰáéíóöőúüű") assert.ok(manifest.requiredCharacters.includes(char));
-    // A kombinálható ékezetjelek fedettsége a manifestben rögzített (spec 2026-11-09-lecke-betucsere, módosítás): az Interből az U+030B
-    // hiányzik (a megjelenítés NFC-re normalizál, így előre összetett glifát kap); az Atkinson Hyperlegible Next-ből semmi.
-    assert.deepEqual(face.combiningMissing, family === "Inter" ? ["U+030B"] : []);
+    // A kombinálható ékezetjelek fedettsége a manifestben rögzített (spec 2026-11-09-lecke-betucsere): a tananyag két családjából
+    // (Atkinson Hyperlegible Next, Lexend) egyik jel sem hiányozhat; a megjelenítés ettől függetlenül NFC-re normalizál.
+    assert.deepEqual(face.combiningMissing, []);
   }
   for (const char of "\u0301\u0308\u030b") assert.ok(manifest.combiningMarks.includes(char));
-  assert.equal(manifest.fonts.length, 14);
+  assert.equal(manifest.fonts.length, 15);
 });
-// Dokumentált spec-változás (docs/specs/2026-11-09-lecke-betucsere.md): 1–5. o. Atkinson Hyperlegible Next, 0. és 6–12. o. Inter.
-test("the lesson font comes from the grade band only (Atkinson Hyperlegible Next 1–5, Inter 0 and 6–12); authoring themes stay bundled", () => {
+// Dokumentált spec-változás (docs/specs/2026-11-09-lecke-betucsere.md): 1–5. o. Atkinson Hyperlegible Next, 0. és 6–12. o. Lexend.
+test("the lesson font comes from the grade band only (Atkinson Hyperlegible Next 1–5, Lexend 0 and 6–12); authoring themes stay bundled", () => {
   const bundled = new Set(JSON.parse(read("client/public/fonts/manifest.json")).fonts.map((f: { family: string }) => f.family));
   for (const theme of LESSON_THEMES) for (const font of [theme.bodyFont, theme.headingFont, theme.displayFont].filter(Boolean)) {
     assert.ok(bundled.has(font!), `${theme.id}: ${font}`);
   }
   for (const c of [1, 2, 3, 4, 5]) assert.deepEqual(lessonFontPair(c, "irodalom"), { body: "Atkinson Hyperlegible Next", heading: "Atkinson Hyperlegible Next" }, String(c));
-  for (const c of [0, 6, 7, 8, 9, 10, 11, 12]) assert.deepEqual(lessonFontPair(c, "irodalom"), { body: "Inter", heading: "Inter" }, String(c));
+  for (const c of [0, 6, 7, 8, 9, 10, 11, 12]) assert.deepEqual(lessonFontPair(c, "irodalom"), { body: "Lexend", heading: "Lexend" }, String(c));
 });
 // Review #266: a stíluslap URL-je verziózott (immutable gyorsítótár), és az index.html előtöltése ugyanezt kéri.
 test("the lesson font stylesheet URL is versioned and the app shell preloads the same URL", () => {
@@ -82,11 +85,11 @@ test("HTML typography is idempotent, same-origin and leaves lesson text and scri
   assert.equal(withLessonTypography(rendered), rendered);
   assert.ok(rendered.includes(code));
   assert.ok(rendered.includes(`<h1>${HUNGARIAN_FONT_PROBE}</h1>`));
-  assert.ok(rendered.includes('href="/fonts/lesson-fonts.css?v=hu-3"'));
+  assert.ok(rendered.includes('href="/fonts/lesson-fonts.css?v=hu-4"'));
   assert.doesNotMatch(rendered, /fonts\.googleapis/);
   assert.equal((rendered.match(/<body>/g) ?? []).length, 1);
   assert.match(withLessonTypography("<p>Árvíz</p>", 2), /font-family:"Atkinson Hyperlegible Next","Noto Sans", sans-serif!important/);
-  assert.match(withLessonTypography("<p>Árvíz</p>", 9), /font-family:"Inter","Noto Sans", sans-serif!important/);
-  assert.match(withLessonTypography("<p>ű</p>", 7, "", "https://websuli.vip/preview"), /href="https:\/\/websuli.vip\/fonts\/lesson-fonts.css\?v=hu-3"/);
+  assert.match(withLessonTypography("<p>Árvíz</p>", 9), /font-family:"Lexend","Noto Sans", sans-serif!important/);
+  assert.match(withLessonTypography("<p>ű</p>", 7, "", "https://websuli.vip/preview"), /href="https:\/\/websuli.vip\/fonts\/lesson-fonts.css\?v=hu-4"/);
   assert.throws(() => withLessonTypography("<p>ő</p>", 7, "", "javascript:alert(1)"));
 });
