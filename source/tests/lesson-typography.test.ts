@@ -29,21 +29,21 @@ test("every allowed font has the measured full Hungarian normal and italic artif
     assert.equal(face.hungarianVerified, true);
     assert.ok(face.weight[0] <= 400 && face.weight[1] >= 800);
     for (const char of "ÁÉÍÓÖŐÚÜŰáéíóöőúüű") assert.ok(manifest.requiredCharacters.includes(char));
-    // Websuli Design: a kombinálható ékezetjelek fedettsége a manifestben rögzített (az Interből az U+030B hiányzik; a megjelenítés
-    // NFC-re normalizál, így előre összetett glifát kap) — más hiány nem lehet.
-    assert.deepEqual(face.combiningMissing, family === "Inter" ? ["U+030B"] : []);
+    // A kombinálható ékezetjelek fedettsége a manifestben rögzített. Spec 2026-11-09-lecke-betucsere: a tananyag két családjából egyik
+    // jel sem hiányozhat (a korábbi Interből az U+030B hiányzott; a megjelenítés továbbra is NFC-re normalizál).
+    assert.deepEqual(face.combiningMissing, []);
   }
   for (const char of "\u0301\u0308\u030b") assert.ok(manifest.combiningMarks.includes(char));
-  assert.equal(manifest.fonts.length, 10);
+  assert.equal(manifest.fonts.length, 14);
 });
-// Websuli Design (dokumentált spec-változás, docs/specs/2026-10-16-websuli-design.md): 1–5. o. Nunito Sans, 0. és 6–12. o. Inter.
-test("the lesson font comes from the grade band only (Nunito Sans 1–5, Inter 0 and 6–12); authoring themes stay bundled", () => {
+// Dokumentált spec-változás (docs/specs/2026-11-09-lecke-betucsere.md): 1–5. o. Atkinson Hyperlegible Next, 0. és 6–12. o. Figtree.
+test("the lesson font comes from the grade band only (Atkinson Hyperlegible Next 1–5, Figtree 0 and 6–12); authoring themes stay bundled", () => {
   const bundled = new Set(JSON.parse(read("client/public/fonts/manifest.json")).fonts.map((f: { family: string }) => f.family));
   for (const theme of LESSON_THEMES) for (const font of [theme.bodyFont, theme.headingFont, theme.displayFont].filter(Boolean)) {
     assert.ok(bundled.has(font!), `${theme.id}: ${font}`);
   }
-  for (const c of [1, 2, 3, 4, 5]) assert.deepEqual(lessonFontPair(c, "irodalom"), { body: "Nunito Sans", heading: "Nunito Sans" }, String(c));
-  for (const c of [0, 6, 7, 8, 9, 10, 11, 12]) assert.deepEqual(lessonFontPair(c, "irodalom"), { body: "Inter", heading: "Inter" }, String(c));
+  for (const c of [1, 2, 3, 4, 5]) assert.deepEqual(lessonFontPair(c, "irodalom"), { body: "Atkinson Hyperlegible Next", heading: "Atkinson Hyperlegible Next" }, String(c));
+  for (const c of [0, 6, 7, 8, 9, 10, 11, 12]) assert.deepEqual(lessonFontPair(c, "irodalom"), { body: "Figtree", heading: "Figtree" }, String(c));
 });
 // Review #266: a stíluslap URL-je verziózott (immutable gyorsítótár), és az index.html előtöltése ugyanezt kéri.
 test("the lesson font stylesheet URL is versioned and the app shell preloads the same URL", () => {
@@ -82,11 +82,11 @@ test("HTML typography is idempotent, same-origin and leaves lesson text and scri
   assert.equal(withLessonTypography(rendered), rendered);
   assert.ok(rendered.includes(code));
   assert.ok(rendered.includes(`<h1>${HUNGARIAN_FONT_PROBE}</h1>`));
-  assert.ok(rendered.includes('href="/fonts/lesson-fonts.css?v=hu-2"'));
+  assert.ok(rendered.includes('href="/fonts/lesson-fonts.css?v=hu-3"'));
   assert.doesNotMatch(rendered, /fonts\.googleapis/);
   assert.equal((rendered.match(/<body>/g) ?? []).length, 1);
-  assert.match(withLessonTypography("<p>Árvíz</p>", 2), /font-family:"Nunito Sans","Noto Sans", sans-serif!important/);
-  assert.match(withLessonTypography("<p>Árvíz</p>", 9), /font-family:"Inter","Noto Sans", sans-serif!important/);
-  assert.match(withLessonTypography("<p>ű</p>", 7, "", "https://websuli.vip/preview"), /href="https:\/\/websuli.vip\/fonts\/lesson-fonts.css\?v=hu-2"/);
+  assert.match(withLessonTypography("<p>Árvíz</p>", 2), /font-family:"Atkinson Hyperlegible Next","Noto Sans", sans-serif!important/);
+  assert.match(withLessonTypography("<p>Árvíz</p>", 9), /font-family:"Figtree","Noto Sans", sans-serif!important/);
+  assert.match(withLessonTypography("<p>ű</p>", 7, "", "https://websuli.vip/preview"), /href="https:\/\/websuli.vip\/fonts\/lesson-fonts.css\?v=hu-3"/);
   assert.throws(() => withLessonTypography("<p>ő</p>", 7, "", "javascript:alert(1)"));
 });

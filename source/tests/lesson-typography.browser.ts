@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 const manifest = JSON.parse(readFileSync(new URL("../client/public/fonts/manifest.json", import.meta.url), "utf8")) as { fonts: Array<{ family: string; style: string; internalFamily: string; postScriptName: string }> };
 
-// Websuli Design (dokumentált spec-változás): 1–5. o. Nunito Sans, 6–12. o. Inter (irodalomnál is), Noto Sans tartalékkal.
+// Dokumentált spec-változás (docs/specs/2026-11-09-lecke-betucsere.md): 1–5. o. Atkinson Hyperlegible Next, 6–12. o. Figtree (irodalomnál is), Noto Sans tartalékkal.
 test("lesson theme cannot replace the age-appropriate Hungarian font", async ({ page }) => {
-  for (const [classroom, subject, body, heading] of [[2, "matematika", "Nunito Sans", "Nunito Sans"], [5, "irodalom", "Nunito Sans", "Nunito Sans"], [7, "irodalom", "Inter", "Inter"]] as const) {
+  for (const [classroom, subject, body, heading] of [[2, "matematika", "Atkinson Hyperlegible Next", "Atkinson Hyperlegible Next"], [5, "irodalom", "Atkinson Hyperlegible Next", "Atkinson Hyperlegible Next"], [7, "irodalom", "Figtree", "Figtree"]] as const) {
     const lesson = fusionFixture(); lesson.classroom = classroom; lesson.subject = subject;
     await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: lesson }));
     await page.goto("/__lesson-runtime-probe?candidate=1");
@@ -25,7 +25,7 @@ for (const [width, height] of [[390, 844], [844, 390], [1440, 1000]]) {
     await page.goto("/__lesson-runtime-probe?fusion=1");
     await expect(page.getByRole("tab", { name: "Tananyag", exact: true })).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    await expect(page.locator("[data-band]")).toHaveCSS("font-family", 'Inter, "Noto Sans", sans-serif');
+    await expect(page.locator("[data-band]")).toHaveCSS("font-family", 'Figtree, "Noto Sans", sans-serif');
     await page.screenshot({ path: `test-results/typography-lesson-${width}x${height}.png`, fullPage: false });
     const cards = LESSON_FONTS.map((font, fi) => `<article><div class="eyebrow">0${fi + 1} · ELLENŐRZÖTT MAGYAR KÉSZLET</div><h2 style='font-family:"${font}"'>${font}</h2>${["normal", "italic"].map((style, si) => [400, 600, 800].map(weight => `<p id="probe-${fi}-${si}-${weight}" style='font-family:"${font}";font-style:${style};font-weight:${weight}'>${HUNGARIAN_FONT_PROBE}</p>`).join("")).join("")}<div class="caption">Normál és dőlt · 400 / 600 / 800 · ő Ő ű Ű</div></article>`).join("");
     await page.setContent(`<!doctype html><html lang="hu"><head><meta charset="utf-8"><link href="/fonts/lesson-fonts.css" rel="stylesheet"><style>
@@ -51,12 +51,12 @@ for (const [width, height] of [[390, 844], [844, 390], [1440, 1000]]) {
     // The actual HTML adapter must survive the production same-origin CSP too.
     await page.setContent(withLessonTypography(`<html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'"></head><body><h1>${HUNGARIAN_FONT_PROBE}</h1><p id="combined">${HUNGARIAN_FONT_PROBE.normalize("NFD")}</p></body></html>`, 7));
     await page.evaluate(() => document.fonts.ready);
-    await expect(page.locator("h1")).toHaveCSS("font-family", 'Inter, "Noto Sans", sans-serif');
+    await expect(page.locator("h1")).toHaveCSS("font-family", 'Figtree, "Noto Sans", sans-serif');
     const current = await cdp.send("DOM.getDocument");
     const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: current.root.nodeId, selector: "#combined" });
     const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
-    // Websuli Design: a felbontott (NFD) szöveg is NFC-re normalizálva az Inter saját glifáit kapja.
-    const expected = manifest.fonts.find(f => f.family === "Inter" && f.style === "normal")!;
+    // A felbontott (NFD) szöveg is NFC-re normalizálva a Figtree saját glifáit kapja.
+    const expected = manifest.fonts.find(f => f.family === "Figtree" && f.style === "normal")!;
     expect(fonts.length).toBeGreaterThan(0);
     expect(fonts.every(f => f.isCustomFont && f.familyName === expected.internalFamily)).toBe(true);
   });

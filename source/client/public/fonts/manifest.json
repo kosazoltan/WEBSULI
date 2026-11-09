@@ -179,6 +179,78 @@
         100.0,
         900.0
       ]
+    },
+    {
+      "family": "Atkinson Hyperlegible Next",
+      "style": "italic",
+      "file": "atkinsonhyperlegiblenext-italic.woff2",
+      "revision": "95f4904fc8bcf26d3420fe315560c96417c6dec7",
+      "source": "https://raw.githubusercontent.com/google/fonts/95f4904fc8bcf26d3420fe315560c96417c6dec7/ofl/atkinsonhyperlegiblenext/AtkinsonHyperlegibleNext-Italic%5Bwght%5D.ttf",
+      "sourceSha256": "ce9cffed32742ad2d9238c561a93220385e5934cdc02b8eb4097a50efa957dc6",
+      "sha256": "229e4a1ea878f3be02aa274e6dea9ec0443b93cf082f04adfcf87d3fd0e11e35",
+      "glyphCount": 362,
+      "hungarianVerified": true,
+      "combiningMissing": [],
+      "internalFamily": "Atkinson Hyperlegible Next",
+      "postScriptName": "AtkinsonHyperlegibleNext-Italic",
+      "weight": [
+        200.0,
+        800.0
+      ]
+    },
+    {
+      "family": "Atkinson Hyperlegible Next",
+      "style": "normal",
+      "file": "atkinsonhyperlegiblenext-normal.woff2",
+      "revision": "95f4904fc8bcf26d3420fe315560c96417c6dec7",
+      "source": "https://raw.githubusercontent.com/google/fonts/95f4904fc8bcf26d3420fe315560c96417c6dec7/ofl/atkinsonhyperlegiblenext/AtkinsonHyperlegibleNext%5Bwght%5D.ttf",
+      "sourceSha256": "5a455d1cfa099b601ab70751bb9673e8fe1854dc4500c80e1a220d0d75e31745",
+      "sha256": "61db5e40c579cce0d7f570f68c096e4bdfcbc9444701cceb5b909076a9f55b7e",
+      "glyphCount": 362,
+      "hungarianVerified": true,
+      "combiningMissing": [],
+      "internalFamily": "Atkinson Hyperlegible Next",
+      "postScriptName": "AtkinsonHyperlegibleNext-Regular",
+      "weight": [
+        200.0,
+        800.0
+      ]
+    },
+    {
+      "family": "Figtree",
+      "style": "italic",
+      "file": "figtree-italic.woff2",
+      "revision": "a60a77e14f28abd4ef243a1b5dfc48df0cec5205",
+      "source": "https://raw.githubusercontent.com/google/fonts/a60a77e14f28abd4ef243a1b5dfc48df0cec5205/ofl/figtree/Figtree-Italic%5Bwght%5D.ttf",
+      "sourceSha256": "94dec1f18b9275d69e8b4a91b6514bdc18199048347e1c36e1285b11b0b87653",
+      "sha256": "8c2d7532f5b35f3bea096396eaacd0a8fe06420b580976b7d98c017af2d31ccd",
+      "glyphCount": 391,
+      "hungarianVerified": true,
+      "combiningMissing": [],
+      "internalFamily": "Figtree Light",
+      "postScriptName": "Figtree-LightItalic",
+      "weight": [
+        300.0,
+        900.0
+      ]
+    },
+    {
+      "family": "Figtree",
+      "style": "normal",
+      "file": "figtree-normal.woff2",
+      "revision": "a60a77e14f28abd4ef243a1b5dfc48df0cec5205",
+      "source": "https://raw.githubusercontent.com/google/fonts/a60a77e14f28abd4ef243a1b5dfc48df0cec5205/ofl/figtree/Figtree%5Bwght%5D.ttf",
+      "sourceSha256": "26ad3db9b31ff7dde67a91ff515d022d2f495cd506590699cf264f0bfe6fb714",
+      "sha256": "caa1f05dabe75a9f2d53992ab5d952fee438452b45e0e7b3175bac2b33d5ac49",
+      "glyphCount": 391,
+      "hungarianVerified": true,
+      "combiningMissing": [],
+      "internalFamily": "Figtree Light",
+      "postScriptName": "Figtree-Light",
+      "weight": [
+        300.0,
+        900.0
+      ]
     }
   ]
 }

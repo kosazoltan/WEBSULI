@@ -15,7 +15,7 @@ test("a sávhatárok a mesterutasítás szerint: 1–2 explorer, 3–5 adventure
   const expected: Array<[number, DesignThemeId]> = [[1, "explorer"], [2, "explorer"], [3, "adventure"], [5, "adventure"], [6, "studio"], [8, "studio"],
     [9, "laboratory"], [10, "laboratory"], [11, "future"], [12, "future"], [0, "studio"]];
   for (const [c, id] of expected) assert.equal(designThemeForClassroom(c), id, String(c));
-  // A téma fontja egyezik a tananyag fontválasztásával (1–5 Nunito Sans, 0 és 6–12 Inter).
+  // A téma fontja egyezik a tananyag fontválasztásával (1–5 Atkinson Hyperlegible Next, 0 és 6–12 Figtree; spec 2026-11-09-lecke-betucsere).
   for (let c = 0; c <= 12; c++) assert.equal(DESIGN_THEMES[designThemeForClassroom(c)].font, lessonFontPair(c).body, String(c));
 });
 

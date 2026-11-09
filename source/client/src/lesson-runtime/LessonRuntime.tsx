@@ -498,7 +498,7 @@ export function LessonRuntime({
   // Review #274: ha a végpont nem adja a képet (404/500/hálózat), egyszer a katalógusképre vált, nem marad törött ikon.
   const [failedDbIcon, setFailedDbIcon] = useState<string | null>(null);
   const subjectIconSrc = dbIcon && failedDbIcon !== dbIcon ? `/api/design-assets/${dbIcon}` : art.subjectIcon?.src;
-  // Websuli Design: a lecke fontja az évfolyamból (1–5. Nunito Sans, 0. és 6–12. Inter), téma szerinti kivétel nélkül.
+  // Websuli Design: a lecke fontja az évfolyamból (1–5. Atkinson Hyperlegible Next, 0. és 6–12. Figtree), téma szerinti kivétel nélkül.
   const fonts = lessonFontPair(lesson.classroom, lesson.subject);
   const typography = {
     "--lesson-font-body": `"${fonts.body}", ${LESSON_FONT_FALLBACK}`,

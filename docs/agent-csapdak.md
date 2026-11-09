@@ -204,3 +204,12 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   régi adatbázisra mutatott (foglalási táblák) — a szerver indulása (migráció, söprések) oda írhatott volna.
 - **Megelőzés 2:** helyi szerver indítása előtt az adatbázis azonossága (C-20 próba); idegen / éles adatbázissal NEM indul. Ilyenkor az
   élő oldal csak olvasó ellenőrzése a telepítés után.
+
+## C-22 — Helyi HTML-mintaoldal a beépített böngészőpanelben (2026-11-09)
+
+- **Tünet:** a betűtípus-összevetést `file://` oldalként nyitottam meg a beépített böngészőpanelben; a panel helyi fájlt csak statikus
+  pillanatképként mutat, képernyőkép nem készíthető róla, és a külső (Google Fonts) betűk sem töltődnek be.
+- **Megelőzés:** tulajdonosi választáshoz készülő vizuális minta → privát Artifact oldal (Google Fonts engedélyezett), vagy a repó
+  Playwright-konfigurációja (pl. `playwright.lesson-typography.config.ts`, csak Vite, adatbázis nélkül) a képernyőképpel.
+- **Megjegyzés:** betűcserénél a `scripts/prepare-lesson-fonts.py` eldobható venv-ben (`pip install "fonttools[woff]"`) fut; a meglévő
+  családokat hash-egyezésnél bájtra változatlanul hagyja.
