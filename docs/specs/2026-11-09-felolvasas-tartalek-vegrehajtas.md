@@ -55,3 +55,9 @@
 ### T11 — Ellenőrzés, szállítás
 - `check`, `lint`, `check:test`, `npm test`, `playwright -c playwright.lesson-fusion.config.ts`.
 - PR, automatikus összevonás; a Vercel előnézeten és élesben fejléc-próba: B1–B5 (curl `-D -`, kétszer ugyanarra a szóra; `-H "Range: bytes=0-1"`).
+
+### T12 — Review #410
+- `shared/speech-fallback.ts`: `isTtsAudioSubPath(path)`, `TtsAudioCache` (LRU, bájt- és darabkeret).
+- `server/index.ts`: `skip: (req) => isTtsAudioSubPath(req.path)`.
+- `server/routes.ts`: a `GET /api/tts/audio` előbb a tárból olvas (`kulcs: nyelv + szöveg`), csak hiány esetén hív külső szolgáltatást.
+- Tesztek: útvonal-illesztés, tár (találat, kiszorítás darab és bájt szerint, túl nagy elem, felülírás).

@@ -78,3 +78,10 @@
 - [ ] B3: WHEN `Range: bytes=0-1` THEN SHALL 206, `Content-Range: bytes 0-1/<méret>`, 2 bájt.
 - [ ] B4: WHEN teljesíthetetlen tartomány THEN SHALL 416.
 - [ ] B5: a `/api/tts/audio` korlátja 600 / 15 perc; a `POST /api/tts` korlátja változatlanul 60 / 15 perc.
+
+### Kiegészítés a #410 review alapján (2026-11-09)
+- **Korlát-útvonal:** a `ttsLimiter` kihagyása az Express útválasztásával egyezően illeszt (`/audio`, `/audio/`, `/Audio`) —
+  különben ezek a kérések a 60-as keretet is fogyasztanák (`isTtsAudioSubPath`).
+- **Szerveroldali hangtár:** a 206-os válasz nem kerül a Vercel CDN gyorsítótárába, ezért a szerver a teljes MP3-at memóriában
+  őrzi (`TtsAudioCache`, LRU, legfeljebb 16 MB / 1000 elem), és a tartományt abból szeleteli. Újraindításkor a tár kiürül — ez elfogadott.
+- [ ] B6: WHEN ugyanarra a szóra ismételt (akár tartomány-) kérés jön THEN a szerver SHALL NOT hívja újra a külső szolgáltatást.

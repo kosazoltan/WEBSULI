@@ -57,6 +57,49 @@ export function parseAudioRange(header: string | undefined, size: number): { sta
   return start < size && start <= end ? { start, end } : "invalid";
 }
 
+/** A külön hangkorlát útvonala a `/api/tts` előtag alatt — az Express útválasztásával egyezően (kis-/nagybetű, záró perjel). */
+export function isTtsAudioSubPath(path: string): boolean {
+  return /^\/audio\/?$/i.test(path);
+}
+
+/**
+ * Kis, méretkorlátos LRU-tár a kész MP3-aknak: a tartománykérés (206) nem kerül a CDN gyorsítótárába, ezért a szerver
+ * a teljes hangot megőrzi, és abból szeletel — ugyanazért a szóért nem megy újra a külső szolgáltatáshoz.
+ */
+export class TtsAudioCache<V extends { length: number }> {
+  private readonly items = new Map<string, V>();
+  private bytes = 0;
+  constructor(private readonly maxBytes = 16 * 1024 * 1024, private readonly maxEntries = 1000) {}
+
+  get(key: string): V | undefined {
+    const value = this.items.get(key);
+    if (value === undefined) return undefined;
+    this.items.delete(key);
+    this.items.set(key, value);
+    return value;
+  }
+
+  set(key: string, value: V): void {
+    const previous = this.items.get(key);
+    if (previous !== undefined) {
+      this.bytes -= previous.length;
+      this.items.delete(key);
+    }
+    if (value.length > this.maxBytes) return;
+    this.items.set(key, value);
+    this.bytes += value.length;
+    for (const [oldKey, oldValue] of this.items) {
+      if (this.bytes <= this.maxBytes && this.items.size <= this.maxEntries) break;
+      this.items.delete(oldKey);
+      this.bytes -= oldValue.length;
+    }
+  }
+
+  get size(): number {
+    return this.items.size;
+  }
+}
+
 /** Nem hiba: a kimondást a lejátszó maga szakította meg (új gombnyomás, fülváltás). */
 export function isSoftSpeechError(code: string | undefined): boolean {
   return code === "interrupted" || code === "canceled";

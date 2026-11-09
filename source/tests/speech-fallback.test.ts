@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { hasVoiceFor, isSoftSpeechError, parseAudioRange, parseTtsAudioQuery, ttsAudioUrl, ttsLang, TTS_AUDIO_CACHE_CONTROL, TTS_AUDIO_CDN_CACHE_CONTROL, TTS_AUDIO_MAX_CHARS } from "../shared/speech-fallback";
+import { hasVoiceFor, isSoftSpeechError, isTtsAudioSubPath, TtsAudioCache, parseAudioRange, parseTtsAudioQuery, ttsAudioUrl, ttsLang, TTS_AUDIO_CACHE_CONTROL, TTS_AUDIO_CDN_CACHE_CONTROL, TTS_AUDIO_MAX_CHARS } from "../shared/speech-fallback";
 
 // Spec 2026-11-09-felolvasas-tartalek.
 test("nyelvkód: a szolgáltatás alapnyelve (a régiós kódot nem fogadja el), ismeretlen nyelv → null", () => {
@@ -56,6 +56,34 @@ test("tartománykérés: iOS Safari `bytes=0-1`, nyitott vég, utótag, teljesí
   assert.equal(parseAudioRange("bytes=100-", 100), "invalid");
   assert.equal(parseAudioRange("bytes=5-2", 100), "invalid");
   assert.equal(parseAudioRange("bytes=-0", 100), "invalid");
+});
+
+// Review #410: az Express útválasztása nem érzékeny a kis-/nagybetűre és a záró perjelre — a korlát-kihagyás sem lehet az.
+test("a külön hangkorlát útvonala: /audio, /audio/, /Audio — más nem", () => {
+  for (const path of ["/audio", "/audio/", "/Audio", "/AUDIO/"]) assert.equal(isTtsAudioSubPath(path), true, path);
+  for (const path of ["/", "", "/audio/x", "/audiox", "/x/audio"]) assert.equal(isTtsAudioSubPath(path), false, path);
+});
+
+// Review #410: a tartománykérés (206) nem kerül a CDN-be, ezért a szerver őrzi a teljes hangot.
+test("hangtár: találat, LRU-kiszorítás darabszám és bájtméret szerint", () => {
+  const cache = new TtsAudioCache<Uint8Array>(10, 2);
+  const bytes = (n: number) => new Uint8Array(n);
+  cache.set("a", bytes(4));
+  cache.set("b", bytes(4));
+  assert.equal(cache.get("a")?.length, 4, "találat, és az „a” lesz a legfrissebb");
+  cache.set("c", bytes(4));
+  assert.equal(cache.get("b"), undefined, "a legrégebben használt esik ki");
+  assert.equal(cache.get("a")?.length, 4);
+  assert.equal(cache.size, 2);
+  cache.set("d", bytes(8));
+  assert.equal(cache.get("a"), undefined, "bájtkeret: 4 + 4 + 8 > 10");
+  assert.equal(cache.get("c"), undefined);
+  assert.equal(cache.get("d")?.length, 8);
+  cache.set("nagy", bytes(11));
+  assert.equal(cache.get("nagy"), undefined, "a keretnél nagyobb elem nem kerül be");
+  assert.equal(cache.get("d")?.length, 8, "és mást sem szorít ki");
+  cache.set("d", bytes(2));
+  assert.equal(cache.get("d")?.length, 2, "felülírás");
 });
 
 test("a Vercel nem tiltja a hangtartalék gyorsítótárazását, a többi /api válaszét igen", () => {

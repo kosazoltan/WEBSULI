@@ -13,7 +13,7 @@ import { z } from "zod";
 import { sendNewMaterialNotification, isResendConfigured, sendAdminNotification } from "./resend";
 import { sendNewMaterialNotification as sendPushNewMaterial } from "./pushNotifications";
 import { getAllAudioBase64 } from "google-tts-api";
-import { parseAudioRange, parseTtsAudioQuery, TTS_AUDIO_CACHE_CONTROL, TTS_AUDIO_CDN_CACHE_CONTROL } from "../shared/speech-fallback";
+import { parseAudioRange, parseTtsAudioQuery, TtsAudioCache, TTS_AUDIO_CACHE_CONTROL, TTS_AUDIO_CDN_CACHE_CONTROL } from "../shared/speech-fallback";
 
 import { eq, sql, and, or, ilike, desc, inArray } from "drizzle-orm";
 import { htmlFiles, users, materialComments, learners } from "@shared/schema";
@@ -2534,12 +2534,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Spec 2026-11-09-felolvasas-tartalek: a lecke „Meghallgatás” gombjának tartaléka, ha a böngésző beszédmotorja nem szól.
   // Azonos eredetű MP3 (a Vercel CSP data:/blob: hangot nem enged); mellékhatás nélküli, gyorsítótárazható (böngésző 1 nap,
   // Vercel CDN 7 nap); a ttsAudioLimiter (index.ts) védi. Tartománykérésre 206 (iOS Safari így tölti a hangot).
+  const ttsAudioCache = new TtsAudioCache<Buffer>();
   app.get("/api/tts/audio", async (req, res) => {
     const parsed = parseTtsAudioQuery(req.query as Record<string, unknown>);
     if ("error" in parsed) return res.status(400).json({ message: parsed.error });
     try {
-      const segments = await getAllAudioBase64(parsed.text, { lang: parsed.lang, slow: false, host: "https://translate.google.com" });
-      const audio = Buffer.concat(segments.map(seg => Buffer.from(seg.base64, "base64")));
+      // A 206-os válasz nem kerül a CDN gyorsítótárába: a teljes hangot a szerver megőrzi, a tartományt abból szeleteli.
+      const cacheKey = `${parsed.lang}\n${parsed.text}`;
+      let audio = ttsAudioCache.get(cacheKey);
+      if (!audio) {
+        const segments = await getAllAudioBase64(parsed.text, { lang: parsed.lang, slow: false, host: "https://translate.google.com" });
+        audio = Buffer.concat(segments.map(seg => Buffer.from(seg.base64, "base64")));
+        if (audio.length) ttsAudioCache.set(cacheKey, audio);
+      }
       const range = parseAudioRange(req.headers.range, audio.length);
       if (range === "invalid") return res.status(416).set("Content-Range", `bytes */${audio.length}`).end();
       const body = range ? audio.subarray(range.start, range.end + 1) : audio;

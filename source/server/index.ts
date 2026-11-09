@@ -3,6 +3,7 @@ import "./lib/load-env";
 import { randomBytes } from "node:crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
+import { isTtsAudioSubPath } from "../shared/speech-fallback";
 import compression from "compression";
 import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
@@ -380,7 +381,7 @@ const ttsLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   // A „Meghallgatás” hangtartalékának saját korlátja van (ttsAudioLimiter).
-  skip: (req) => req.path === "/audio",
+  skip: (req) => isTtsAudioSubPath(req.path),
 });
 
 // Spec 2026-11-09-felolvasas-tartalek (módosítás): a websuli.vip kérései a Vercel proxyn át érkeznek, ezért a korlát kulcsa
