@@ -213,3 +213,7 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   Playwright-konfigurációja (pl. `playwright.lesson-typography.config.ts`, csak Vite, adatbázis nélkül) a képernyőképpel.
 - **Megjegyzés:** betűcserénél a `scripts/prepare-lesson-fonts.py` eldobható venv-ben (`pip install "fonttools[woff]"`) fut; a meglévő
   családokat hash-egyezésnél bájtra változatlanul hagyja.
+- **Tünet 2 (review #407):** a betűnév-cserénél a hívók keresése `"Inter"` (idézőjeles) mintára szűrt, így a `tests/lesson-labs.browser.ts`
+  `'Inter, "Noto Sans", …'` elvárása kimaradt.
+- **Megelőzés 2:** családnév-cserénél idézőjel nélküli, szóhatáros keresés (`grep -rnw Inter tests client server shared`), és MINDEN
+  `playwright.*.config.ts` futtatása, amelynek tesztje `font-family`-t állít (`grep -l font-family tests/*.browser.ts`).
