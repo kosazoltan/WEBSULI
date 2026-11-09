@@ -1,12 +1,12 @@
 import { withLessonInteractions } from "./lesson-interactions";
 /**
  * Only these measured, bundled families may be used for lesson text. Websuli Design (docs/specs/2026-10-16-websuli-design.md,
- * docs/design/) + 2026-11-09-lecke-betucsere: Atkinson Hyperlegible Next az 1–5., Figtree a 0. és 6–12. évfolyamon — önhostolt WOFF2, a manifest ő/ű-ellenőrzésével.
+ * docs/design/) + 2026-11-09-lecke-betucsere: Atkinson Hyperlegible Next az 1–5., Inter a 0. és 6–12. évfolyamon — önhostolt WOFF2, a manifest ő/ű-ellenőrzésével.
  */
-export const LESSON_FONTS = ["Atkinson Hyperlegible Next", "Figtree"] as const;
+export const LESSON_FONTS = ["Atkinson Hyperlegible Next", "Inter"] as const;
 export type LessonFont = typeof LESSON_FONTS[number];
 /** Minden helyben kiszolgált család (client/public/fonts/lesson-fonts.css) — a régi HTML-témák leíró mezőihez. */
-export type BundledFont = LessonFont | "Nunito" | "Source Sans 3" | "Source Serif 4" | "Nunito Sans" | "Inter";
+export type BundledFont = LessonFont | "Nunito" | "Source Sans 3" | "Source Serif 4" | "Nunito Sans" | "Figtree";
 export const HUNGARIAN_FONT_PROBE = "Árvíztűrő tükörfúrógép · ÁÉÍÓÖŐÚÜŰ áéíóöőúüű";
 // Review #266: a stíluslap URL-je verziózott — a /fonts útvonal hosszú (immutable) gyorsítótárazást kap, a régi, Inter / Nunito Sans
 // nélküli CSS nem maradhat a visszatérő böngészőben. Az index.html előtöltése ugyanezt a címet használja (teszt őrzi).
@@ -15,9 +15,9 @@ export const LESSON_FONT_VERSION = "hu-3";
 /** A design-leírás tartaléklánca: a saját font után Noto Sans, majd rendszer sans-serif. */
 export const LESSON_FONT_FALLBACK = '"Noto Sans", sans-serif';
 
-/** Spec 2026-11-09-lecke-betucsere: 1–5. o. Atkinson Hyperlegible Next, 0. (programozás) és 6–12. o. Figtree; a címsor ugyanaz a család (serif-kivétel nincs). */
+/** Spec 2026-11-09-lecke-betucsere: 1–5. o. Atkinson Hyperlegible Next, 0. (programozás) és 6–12. o. Inter; a címsor ugyanaz a család (serif-kivétel nincs). */
 export function lessonFontPair(classroom: number, _subject = ""): { body: LessonFont; heading: LessonFont } {
-  const font: LessonFont = classroom >= 1 && classroom <= 5 ? "Atkinson Hyperlegible Next" : "Figtree";
+  const font: LessonFont = classroom >= 1 && classroom <= 5 ? "Atkinson Hyperlegible Next" : "Inter";
   return { body: font, heading: font };
 }
 
@@ -77,7 +77,7 @@ button,input,textarea,select { font-size:inherit; }
   return withLessonInteractions(out, origin);
 }
 
-export const LESSON_TYPOGRAPHY_CONTRACT = `Magyar tipográfia (${LESSON_FONT_VERSION}): kizárólag Atkinson Hyperlegible Next (1–5. évfolyam) és Figtree (6–12. évfolyam).
+export const LESSON_TYPOGRAPHY_CONTRACT = `Magyar tipográfia (${LESSON_FONT_VERSION}): kizárólag Atkinson Hyperlegible Next (1–5. évfolyam) és Inter (6–12. évfolyam).
 Helyi készlet: <link rel="stylesheet" href="${LESSON_FONT_CSS}">. Normál és dőlt változat, 400–800 súly; teljes magyar kis- és nagybetűk, köztük ő/Ő/ű/Ű.
 Ne tölts be Google Fonts vagy más külső fontot. Ne használj nem csomagolt díszbetűt. A fallback csak hálózati hibatűrés, nem bizonyíték az ékezethelyességre.
 UTF-8 és lang="hu"; hibásan kódolt szöveget fontcsere nem javít. Látható próbasor: ${HUNGARIAN_FONT_PROBE}. A próbasor a minőségellenőrzés része, nem kell minden tananyagba kiírni.

@@ -1,14 +1,15 @@
 # Magyar tananyag-betűk
 
 Spec 2026-11-09-lecke-betucsere (a 2026-10-16-os Websuli Design fontválasztását váltja): a tananyagban
-**Atkinson Hyperlegible Next** (1–5. osztály) és **Figtree** (0. és 6–12. osztály) — törzsszöveg, címsor, feladat és vezérlő
-ugyanabból a családból; tartalék: Noto Sans, majd rendszer sans-serif. A Stúdió felülete is Figtree.
+**Atkinson Hyperlegible Next** (1–5. osztály) és **Inter** (0. és 6–12. osztály; tulajdonosi módosítás 2026-11-09) — törzsszöveg,
+címsor, feladat és vezérlő ugyanabból a családból; tartalék: Noto Sans, majd rendszer sans-serif. A Stúdió felülete Inter.
 
 | Betűcsalád | Szerep |
 | --- | --- |
 | Atkinson Hyperlegible Next | tananyag, 1–5. osztály |
-| Figtree | tananyag, 0. (programozás) és 6–12. osztály; Stúdió-felület |
-| Nunito Sans, Inter | a 2026-11-09 előtti tananyagcsaládok; régi tartalom miatt helyben maradnak |
+| Inter | tananyag, 0. (programozás) és 6–12. osztály; Stúdió-felület |
+| Nunito Sans | a 2026-11-09 előtti 1–5. osztályos család; régi tartalom miatt helyben marad |
+| Figtree | kipróbált, de nem használt (tulajdonosi döntés: Inter marad); helyben, bájtra ellenőrizve |
 | Nunito, Source Sans 3, Source Serif 4 | korábbi családok; az alkalmazás más részei miatt helyben maradnak |
 
 A családválasztást a `shared/lesson-typography.ts` szabályozza. Normál és valódi

@@ -220,7 +220,7 @@ function ageBand(classroom: number): string {
 
 /** A kiválasztott téma promptba illő leírása (a modell ettől indokolt esetben eltérhet). */
 export function lessonThemePrompt(theme: LessonTheme, classroom: number): string {
-  // A font az évfolyamból (1–5. Atkinson Hyperlegible Next, 0. és 6–12. Figtree; spec 2026-11-09-lecke-betucsere), a témától függetlenül.
+  // A font az évfolyamból (1–5. Atkinson Hyperlegible Next, 0. és 6–12. Inter; spec 2026-11-09-lecke-betucsere), a témától függetlenül.
   const pair = lessonFontPair(classroom);
   const body = `'${pair.body}',${LESSON_FONT_FALLBACK}`;
   const heading = `'${pair.heading}',${LESSON_FONT_FALLBACK}`;
@@ -260,7 +260,7 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
 
 ## OLDAL 1 – TANANYAG
 - Folyamatos, érthetően tagolt szöveg — NEM vázlat. Teljes anyag fejezetekre bontva; definíciók, példák, felsorolások, összefoglalók.
-- Korosztály: 1–2. évf. egy rövid utasítás egyszerre; 3–4. évf. szemléletes példák és önálló próbálkozás; 5–6. évf. analógiák, hétköznapi alkalmazás; 7–8. évf. ok-okozat, elvont fogalmak. 1–5. évf. Atkinson Hyperlegible Next; a 6. évfolyamtól Figtree (törzs és címsor).
+- Korosztály: 1–2. évf. egy rövid utasítás egyszerre; 3–4. évf. szemléletes példák és önálló próbálkozás; 5–6. évf. analógiák, hétköznapi alkalmazás; 7–8. évf. ok-okozat, elvont fogalmak. 1–5. évf. Atkinson Hyperlegible Next; a 6. évfolyamtól Inter (törzs és címsor).
 - Info-boxok (érdekesség, figyelem, összefoglalás). Vizuális kártyák SZÖVEGES tartalommal (NEM emoji állatképek). Legalább 1 ciklus-diagram / folyamatábra / kártyasor CSS-ből vagy inline SVG-ből.
 - Fejezetek KÁRTYÁKON, alapból minden tanítási fejezet látható, természetesen görgethető. A fejezet tanítása látható, a releváns kiegészítő módszer külön megnyitható. Minden fejezet végén mini-összefoglaló box.
 - Az 1. oldal végén „Források" blokk a felhasznált URL-ekkel (ha voltak).
@@ -523,7 +523,7 @@ A <head> elején: <meta charset="utf-8"> és <meta http-equiv="Content-Type" con
 ## ÖNELLENŐRZÉS A HTML LEZÁRÁSA ELŐTT
 - 4 oldal, témához illő kognitív elemek, dragdrop touch + ujjkövetés, feladatok az 1. oldalból, háromrétegű motor + háromállapotú kimenet + mintaválasz gomb, Újragenerálás TETEJÉN / Kiértékelés ALJÁN, fél pontok, fogalomfedő kvízbank és bankPlan szerinti kör.
 - Nincs alert/confirm/prompt, nincs console.*/debugger, asztalon (≥1200px) többoszlopos, nem keskeny az elrendezés, a tanítás teljes áttekintése elérhető, minden interaktív elem 44px, prefix mindenhol, IIFE + 'use strict'.
-- Kizárólag az évfolyamhoz rendelt, helyben kiszolgált font (Atkinson Hyperlegible Next vagy Figtree), UTF-8 és lang="hu"; tényleges ő/Ő/ű/Ű renderpróba.
+- Kizárólag az évfolyamhoz rendelt, helyben kiszolgált font (Atkinson Hyperlegible Next vagy Inter), UTF-8 és lang="hu"; tényleges ő/Ő/ű/Ű renderpróba.
 - A dokumentum <!DOCTYPE html>-lel kezdődik és </html>-lel zárul, a <script> blokkok lezártak.`;
 
 export type LessonSpecPromptOptions = {
