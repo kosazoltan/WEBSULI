@@ -217,3 +217,12 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   `'Inter, "Noto Sans", …'` elvárása kimaradt.
 - **Megelőzés 2:** családnév-cserénél idézőjel nélküli, szóhatáros keresés (`grep -rnw Inter tests client server shared`), és MINDEN
   `playwright.*.config.ts` futtatása, amelynek tesztje `font-family`-t állít (`grep -l font-family tests/*.browser.ts`).
+
+## C-23 — Böngészős felolvasás tartalék nélkül; régiós nyelvkód a TTS-szolgáltatásnak (2026-11-09)
+
+- **Tünet:** Androidon a „Meghallgatás” „A hang most nem érhető el ezen az eszközön.” üzenetet adott: a lejátszó csak a böngésző
+  `speechSynthesis` motorjára támaszkodott (nincs motor / nincs angol hang → hiba), és a nem-hibás `interrupted` is hibának számított.
+- **Megelőzés:** böngésző-API-ra épülő funkcióhoz mindig legyen szerveroldali tartalék, és a puha hibakódokat (megszakítás) külön kell kezelni.
+  A Vercel CSP (`default-src 'self'`) miatt hangtartalék csak azonos eredetű URL lehet (`data:` / `blob:` nem).
+- **Tünet 2:** a `google-tts-api` az `en-GB` kódot elutasítja („lang might not exist”), csak az alapnyelvet (`en`) fogadja el.
+- **Megelőzés 2:** külső szolgáltatás bemeneti formátumát élő próbával mérni a kódírás előtt, nem a fehérlistából feltételezni.

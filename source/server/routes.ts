@@ -13,6 +13,7 @@ import { z } from "zod";
 import { sendNewMaterialNotification, isResendConfigured, sendAdminNotification } from "./resend";
 import { sendNewMaterialNotification as sendPushNewMaterial } from "./pushNotifications";
 import { getAllAudioBase64 } from "google-tts-api";
+import { parseTtsAudioQuery } from "../shared/speech-fallback";
 
 import { eq, sql, and, or, ilike, desc, inArray } from "drizzle-orm";
 import { htmlFiles, users, materialComments, learners } from "@shared/schema";
@@ -2527,6 +2528,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error("[EMAIL] Diagnosztika hiba:", err);
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Spec 2026-11-09-felolvasas-tartalek: a lecke „Meghallgatás” gombjának tartaléka, ha a böngésző beszédmotorja nem szól.
+  // Azonos eredetű MP3 (a Vercel CSP data:/blob: hangot nem enged); mellékhatás nélküli, gyorsítótárazható; a ttsLimiter
+  // (app.use("/api/tts")) ezt is védi.
+  app.get("/api/tts/audio", async (req, res) => {
+    const parsed = parseTtsAudioQuery(req.query as Record<string, unknown>);
+    if ("error" in parsed) return res.status(400).json({ message: parsed.error });
+    try {
+      const segments = await getAllAudioBase64(parsed.text, { lang: parsed.lang, slow: false, host: "https://translate.google.com" });
+      const audio = Buffer.concat(segments.map(seg => Buffer.from(seg.base64, "base64")));
+      res.set({ "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=86400", "Content-Length": String(audio.length) });
+      res.end(audio);
+    } catch (error: unknown) {
+      logger.error("TTS (GET) hiba:", error);
+      res.status(502).json({ message: "Szöveg felolvasása sikertelen" });
     }
   });
 

@@ -102,6 +102,86 @@ test("foreign-language glossary starts speech only on request, with the correct 
   expect((await calls())[1]).toEqual({ text: "This is a triangle.", lang: "en-GB", rate: Math.fround(.65) });
 });
 
+// Spec 2026-11-09-felolvasas-tartalek: a tartalék végpont helyett 0,1 mp csendes WAV (a Vite-próbaszerveren nincs /api/tts).
+const silentWav = () => {
+  const samples = 800, b = Buffer.alloc(44 + samples * 2);
+  b.write("RIFF", 0); b.writeUInt32LE(36 + samples * 2, 4); b.write("WAVEfmt ", 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write("data", 36); b.writeUInt32LE(samples * 2, 40);
+  return b;
+};
+const serveFallbackAudio = (page: import("@playwright/test").Page) => page.route("**/api/tts/audio**", route => route.fulfill({ contentType: "audio/wav", body: silentWav() }));
+// Spec 2026-11-09-felolvasas-tartalek: ha a böngésző hangja nem szól, a szerver MP3-a (azonos eredet) szól, hibaüzenet nélkül.
+const glossaryLesson = () => {
+  const lesson = fusionFixture(); lesson.subject = "angol";
+  lesson.experience!.language = "en-GB";
+  lesson.experience!.glossary = [{ word: "triangle", translation: "háromszög", partOfSpeech: "főnév", example: "This is a triangle.", exampleTranslation: "Ez egy háromszög." }];
+  return lesson;
+};
+for (const [name, mode] of [
+  ["a böngésző kimondása hibát ad (synthesis-failed)", "error"],
+  ["a böngésző kimondása el sem indul (néma motor)", "silent"],
+  ["nincs speechSynthesis", "absent"],
+  ["van hanglista, de angol hang nincs", "novoice"],
+] as const) {
+  test(`speech fallback: ${name} → a szerver hangja szól, hibaüzenet nélkül`, async ({ page }) => {
+    await page.addInitScript((mode) => {
+      const played: Array<{ src: string; rate: number }> = [];
+      Object.defineProperty(window, "__played", { value: played });
+      HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) { played.push({ src: this.src, rate: this.playbackRate }); return Promise.resolve(); };
+      if (mode === "absent") { Object.defineProperty(window, "speechSynthesis", { value: undefined, configurable: true }); delete (window as { speechSynthesis?: unknown }).speechSynthesis; return; }
+      Object.defineProperty(window, "speechSynthesis", { value: {
+        speaking: false, pending: false, cancel() {},
+        getVoices: () => mode === "novoice" ? [{ lang: "hu-HU" }] : [],
+        speak(u: SpeechSynthesisUtterance) { if (mode === "error") setTimeout(() => u.onerror?.({ error: "synthesis-failed" } as SpeechSynthesisErrorEvent), 50); },
+      } });
+    }, mode);
+    await serveFallbackAudio(page);
+    await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: glossaryLesson() }));
+    await page.goto("/__lesson-runtime-probe?candidate=1");
+    await page.getByTestId("pronounce-entry").click();
+    await page.getByRole("button", { name: "triangle meghallgatása", exact: true }).click();
+    const played = () => page.evaluate(() => (window as unknown as { __played: Array<{ src: string; rate: number }> }).__played);
+    await expect.poll(async () => (await played()).length, { timeout: 5000 }).toBe(1);
+    const [first] = await played();
+    expect(new URL(first.src).pathname + new URL(first.src).search).toBe("/api/tts/audio?text=triangle&lang=en");
+    expect(first.rate).toBeCloseTo(.85, 2);
+    await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
+  });
+}
+
+test("speech fallback: a megszakítás (interrupted) nem hiba — nincs tartalék, nincs üzenet", async ({ page }) => {
+  await page.addInitScript(() => {
+    const played: string[] = [];
+    Object.defineProperty(window, "__played", { value: played });
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) { played.push(this.src); return Promise.resolve(); };
+    Object.defineProperty(window, "speechSynthesis", { value: {
+      speaking: false, pending: false, cancel() {}, getVoices: () => [{ lang: "en-GB" }],
+      speak(u: SpeechSynthesisUtterance) { setTimeout(() => { u.onstart?.({} as SpeechSynthesisEvent); u.onerror?.({ error: "interrupted" } as SpeechSynthesisErrorEvent); }, 50); },
+    } });
+  });
+  await serveFallbackAudio(page);
+  await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: glossaryLesson() }));
+  await page.goto("/__lesson-runtime-probe?candidate=1");
+  await page.getByTestId("pronounce-entry").click();
+  await page.getByRole("button", { name: "triangle meghallgatása", exact: true }).click();
+  await page.waitForTimeout(3500);
+  expect(await page.evaluate(() => (window as unknown as { __played: string[] }).__played)).toEqual([]);
+  await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
+});
+
+test("speech fallback: ha a szerver hangja sem szól, érthető üzenet jelenik meg", async ({ page }) => {
+  await page.addInitScript(() => {
+    HTMLMediaElement.prototype.play = function () { return Promise.reject(new Error("NotSupportedError")); };
+    Object.defineProperty(window, "speechSynthesis", { value: undefined, configurable: true });
+    delete (window as { speechSynthesis?: unknown }).speechSynthesis;
+  });
+  await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: glossaryLesson() }));
+  await page.goto("/__lesson-runtime-probe?candidate=1");
+  await page.getByTestId("pronounce-entry").click();
+  await page.getByRole("button", { name: "triangle meghallgatása", exact: true }).click();
+  await expect(page.getByText("A hang most nem érhető el ezen az eszközön.").first()).toBeVisible();
+});
+
 // Spec 2026-10-21-nyelvlecke-kiejtes: kiejtésgyakorlás a lecke nyelvén; beszédfelismerés nélkül a billentyűzetes diktálás útja.
 const languageLesson = () => {
   const lesson = fusionFixture(); lesson.subject = "angol";
