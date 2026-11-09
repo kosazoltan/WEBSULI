@@ -3,6 +3,7 @@ import "./lib/load-env";
 import { randomBytes } from "node:crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
+import { isTtsAudioSubPath } from "../shared/speech-fallback";
 import compression from "compression";
 import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
@@ -379,6 +380,19 @@ const ttsLimiter = rateLimit({
   message: "Túl sok felolvasási kérés. Próbáld újra később!",
   standardHeaders: true,
   legacyHeaders: false,
+  // A „Meghallgatás” hangtartalékának saját korlátja van (ttsAudioLimiter).
+  skip: (req) => isTtsAudioSubPath(req.path),
+});
+
+// Spec 2026-11-09-felolvasas-tartalek (módosítás): a websuli.vip kérései a Vercel proxyn át érkeznek, ezért a korlát kulcsa
+// (req.ip) a proxy címe, nem a tanulóé — mérve: a közvetlen és a Vercelen át küldött kérések külön számlálót kaptak.
+// A 60-as keret így minden látogató között oszlana meg; a hangtartalék (≤ 300 karakter, CDN-ből gyorsítótárazva) bővebb keretet kap.
+const ttsAudioLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  message: "Túl sok felolvasási kérés. Próbáld újra később!",
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 // Tételgyár T7.1 (tulajdonosi döntés 2026-10-15): a döntőbíró IP-nként 60 kérés / 15 perc (a napi 2000-es fizetett plafon a szolgáltatásban).
@@ -404,6 +418,7 @@ const publicWriteLimiter = rateLimit({
 app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
 app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection
+app.use("/api/tts/audio", ttsAudioLimiter);
 app.use("/api/push/subscribe", publicWriteLimiter);
 app.use("/api/push/unsubscribe", publicWriteLimiter);
 

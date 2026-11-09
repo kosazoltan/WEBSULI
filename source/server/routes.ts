@@ -13,7 +13,7 @@ import { z } from "zod";
 import { sendNewMaterialNotification, isResendConfigured, sendAdminNotification } from "./resend";
 import { sendNewMaterialNotification as sendPushNewMaterial } from "./pushNotifications";
 import { getAllAudioBase64 } from "google-tts-api";
-import { parseTtsAudioQuery } from "../shared/speech-fallback";
+import { parseAudioRange, parseTtsAudioQuery, TtsAudioCache, TTS_AUDIO_CACHE_CONTROL, TTS_AUDIO_CDN_CACHE_CONTROL } from "../shared/speech-fallback";
 
 import { eq, sql, and, or, ilike, desc, inArray } from "drizzle-orm";
 import { htmlFiles, users, materialComments, learners } from "@shared/schema";
@@ -2532,16 +2532,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Spec 2026-11-09-felolvasas-tartalek: a lecke „Meghallgatás” gombjának tartaléka, ha a böngésző beszédmotorja nem szól.
-  // Azonos eredetű MP3 (a Vercel CSP data:/blob: hangot nem enged); mellékhatás nélküli, gyorsítótárazható; a ttsLimiter
-  // (app.use("/api/tts")) ezt is védi.
+  // Azonos eredetű MP3 (a Vercel CSP data:/blob: hangot nem enged); mellékhatás nélküli, gyorsítótárazható (böngésző 1 nap,
+  // Vercel CDN 7 nap); a ttsAudioLimiter (index.ts) védi. Tartománykérésre 206 (iOS Safari így tölti a hangot).
+  const ttsAudioCache = new TtsAudioCache<Buffer>();
   app.get("/api/tts/audio", async (req, res) => {
     const parsed = parseTtsAudioQuery(req.query as Record<string, unknown>);
     if ("error" in parsed) return res.status(400).json({ message: parsed.error });
     try {
-      const segments = await getAllAudioBase64(parsed.text, { lang: parsed.lang, slow: false, host: "https://translate.google.com" });
-      const audio = Buffer.concat(segments.map(seg => Buffer.from(seg.base64, "base64")));
-      res.set({ "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=86400", "Content-Length": String(audio.length) });
-      res.end(audio);
+      // A 206-os válasz nem kerül a CDN gyorsítótárába: a teljes hangot a szerver megőrzi, a tartományt abból szeleteli.
+      const cacheKey = `${parsed.lang}\n${parsed.text}`;
+      const audio = await ttsAudioCache.getOrLoad(cacheKey, async () => {
+        const segments = await getAllAudioBase64(parsed.text, { lang: parsed.lang, slow: false, host: "https://translate.google.com" });
+        return Buffer.concat(segments.map(seg => Buffer.from(seg.base64, "base64")));
+      });
+      const range = parseAudioRange(req.headers.range, audio.length);
+      if (range === "invalid") return res.status(416).set("Content-Range", `bytes */${audio.length}`).end();
+      const body = range ? audio.subarray(range.start, range.end + 1) : audio;
+      res.set({
+        "Content-Type": "audio/mpeg", "Accept-Ranges": "bytes", "Content-Length": String(body.length),
+        "Cache-Control": TTS_AUDIO_CACHE_CONTROL, "CDN-Cache-Control": TTS_AUDIO_CDN_CACHE_CONTROL,
+      });
+      if (range) res.status(206).set("Content-Range", `bytes ${range.start}-${range.end}/${audio.length}`);
+      res.end(body);
     } catch (error: unknown) {
       logger.error("TTS (GET) hiba:", error);
       res.status(502).json({ message: "Szöveg felolvasása sikertelen" });

@@ -35,6 +35,89 @@ export function parseTtsAudioQuery(query: Record<string, unknown>): { text: stri
   return { text, lang };
 }
 
+/** Böngésző-gyorsítótár: 1 nap. A szó hangja nem változik. */
+export const TTS_AUDIO_CACHE_CONTROL = "public, max-age=86400";
+/** A Vercel CDN gyorsítótára: 7 nap — ugyanazt a szót minden tanuló a CDN-ből kapja, nem a szervertől. */
+export const TTS_AUDIO_CDN_CACHE_CONTROL = "max-age=604800";
+
+/**
+ * Egyetlen bájttartomány a `Range` fejlécből (iOS Safari a hangot tartománykéréssel tölti: `bytes=0-1`).
+ * null: nincs (értelmezhető) tartomány → teljes válasz; "invalid": nem teljesíthető → 416.
+ */
+export function parseAudioRange(header: string | undefined, size: number): { start: number; end: number } | "invalid" | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? "");
+  if (!match || (!match[1] && !match[2])) return null;
+  if (size <= 0) return "invalid";
+  if (!match[1]) {
+    const suffix = Number(match[2]);
+    return suffix > 0 ? { start: Math.max(0, size - suffix), end: size - 1 } : "invalid";
+  }
+  const start = Number(match[1]);
+  const end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  return start < size && start <= end ? { start, end } : "invalid";
+}
+
+/** A külön hangkorlát útvonala a `/api/tts` előtag alatt — az Express útválasztásával egyezően (kis-/nagybetű, záró perjel). */
+export function isTtsAudioSubPath(path: string): boolean {
+  return /^\/audio\/?$/i.test(path);
+}
+
+/**
+ * Kis, méretkorlátos LRU-tár a kész MP3-aknak: a tartománykérés (206) nem kerül a CDN gyorsítótárába, ezért a szerver
+ * a teljes hangot megőrzi, és abból szeletel — ugyanazért a szóért nem megy újra a külső szolgáltatáshoz.
+ */
+export class TtsAudioCache<V extends { length: number }> {
+  private readonly items = new Map<string, V>();
+  private readonly pending = new Map<string, Promise<V>>();
+  private bytes = 0;
+  constructor(private readonly maxBytes = 16 * 1024 * 1024, private readonly maxEntries = 1000) {}
+
+  get(key: string): V | undefined {
+    const value = this.items.get(key);
+    if (value === undefined) return undefined;
+    this.items.delete(key);
+    this.items.set(key, value);
+    return value;
+  }
+
+  set(key: string, value: V): void {
+    const previous = this.items.get(key);
+    if (previous !== undefined) {
+      this.bytes -= previous.length;
+      this.items.delete(key);
+    }
+    if (value.length > this.maxBytes) return;
+    this.items.set(key, value);
+    this.bytes += value.length;
+    for (const [oldKey, oldValue] of this.items) {
+      if (this.bytes <= this.maxBytes && this.items.size <= this.maxEntries) break;
+      this.items.delete(oldKey);
+      this.bytes -= oldValue.length;
+    }
+  }
+
+  /** Találat a tárból; hiánynál egyetlen közös betöltés fut kulcsonként (az egyszerre érkező kérések ugyanarra várnak). */
+  getOrLoad(key: string, load: () => Promise<V>): Promise<V> {
+    const hit = this.get(key);
+    if (hit !== undefined) return Promise.resolve(hit);
+    let loading = this.pending.get(key);
+    if (!loading) {
+      loading = load()
+        .then((value) => {
+          if (value.length) this.set(key, value);
+          return value;
+        })
+        .finally(() => this.pending.delete(key));
+      this.pending.set(key, loading);
+    }
+    return loading;
+  }
+
+  get size(): number {
+    return this.items.size;
+  }
+}
+
 /** Nem hiba: a kimondást a lejátszó maga szakította meg (új gombnyomás, fülváltás). */
 export function isSoftSpeechError(code: string | undefined): boolean {
   return code === "interrupted" || code === "canceled";
