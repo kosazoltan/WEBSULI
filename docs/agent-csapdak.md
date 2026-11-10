@@ -319,3 +319,23 @@ Forrás: két élő gyártás mérése (`docs/specs/2026-11-10-gyartas-meres.md`
 - **Tünet 6 (eljárási):** az admin-munkamenet a tulajdonos saját Chrome-jában él, a beépített böngészőpanelen nem. **Megelőzés 6:**
   admin-védett élő lépéshez a Claude in Chrome bővítmény kell; a gyártás a Stúdió felületén indítható, a futás a
   `GET /api/studio/lessons/one-step/:runId` lekérdezésével követhető.
+
+## C-28 — Fejezet-kisfilmek: felhős munkamenet az éles leckéhez, fejléces végpont, hamis riasztás a parancsszövegre (2026-11-10)
+
+Forrás: `docs/specs/2026-11-10-fejezet-kisfilmek.md`.
+
+- **Tünet 1:** a „legutóbbi lecke” letöltése háromszor akadt el: a felhős munkamenet proxyja a `websuli.vip`-et 403-mal tiltotta; a
+  Render-fiók Postgres-példánya nem a Websuli adatbázisa (`lessons` tábla nincs benne); a fejlécet küldeni nem tudó lekérő eszköz
+  409-et kapott („újabb pontozó”).
+- **Megelőzés 1:** publikált lecke JSON-ja: `curl -H "x-websuli-scoring: <LESSON_SCORING_VERSION>" https://websuli.vip/api/lessons/by-file/<htmlFileId>`
+  (a lista: `GET /api/lessons`, de ~40 KB — fájlba kell menteni, nem a kontextusba). Felhős munkamenetben ehhez a „websuli”
+  környezet kell (engedélyezett hosztok: `websuli.vip`, `websuli-api-eu.onrender.com`). A Websuli adatbázisának helye UNKNOWN —
+  nem a Render-fiók `valuta-production` példánya.
+- **Tünet 2:** a destruktív-parancs hook egy migrációs fájl MEGJEGYZÉSÉBEN álló, táblaeldobást említő visszaállítási mondatra
+  tiltott (kétszer), mert a fájl tartalma heredocként a parancssorban állt.
+- **Megelőzés 2:** fájltartalmat a fájlíró / szerkesztő eszközzel kell létrehozni, nem shell-heredockal — a hook a parancs szövegét nézi.
+- **Tünet 3:** a széles (≥ 1200 px) leckenézetben a „Fejezet” legördülő rejtett (helyette oldalsó fejezetlista van): a böngészős
+  szkript 30 mp-ig várt rá.
+- **Megelőzés 3:** fejezetváltás tesztben a `chapter-nav` gombjaival széles nézetben, a legördülővel keskenyben.
+- **Tünet 4:** a tervezett „teljes lecke ≤ 5 perc” becslés karakterszámból készült; a valódi hang mérése 12 fejezetre 7,4 percet adott.
+- **Megelőzés 4:** hangos tartalom hosszát a valódi hangfájlok `ffprobe`-mérésével kell igazolni a forgatókönyv lezárása ELŐTT.

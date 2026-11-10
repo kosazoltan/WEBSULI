@@ -560,6 +560,12 @@ app.use((req, res, next) => {
       if (process.env.NODE_ENV === "production" && !isE2eMode()) void import("./lesson-covers").then(({ startLessonCoverWorker }) => {
         if (startLessonCoverWorker()) log("[lesson-covers] a leckeborító-háttérfolyamat elindult");
       }, (error) => logger.error("[STARTUP] A leckeborító-háttérfolyamat nem indult:", error));
+      // Spec 2026-11-10-fejezet-kisfilmek: a fejezetek rajzfilmes kisfilmjei — a kézi kisfilmek beírása, és LESSON_CLIPS_AUTO=on mellett
+      // a friss leckék háttérgyártása (napi plafon: LESSON_CLIP_DAILY_LIMIT, alap 10). Vészfék: LESSON_CLIPS=0.
+      if (process.env.NODE_ENV === "production" && !isE2eMode()) void Promise.all([import("./lesson-clips"), import("./lesson-clips-db")]).then(([{ startLessonClipWorker }, { dbClipStore }]) => {
+        const mode = startLessonClipWorker(dbClipStore);
+        if (mode !== "off") log(`[lesson-clips] a kisfilm-háttérfolyamat elindult (${mode === "auto" ? "gyártással" : "csak kézi kisfilmek"})`);
+      }, (error) => logger.error("[STARTUP] A kisfilm-háttérfolyamat nem indult:", error));
 
       // #168 — az előző folyamat halálakor árván maradt one-step futások hibára
       // zárása, hogy a kliens állapotjelzője ne ragadjon be némán.

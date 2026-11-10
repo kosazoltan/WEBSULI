@@ -1,4 +1,5 @@
 import { LessonRuntime } from "./LessonRuntime";
+import type { Clip, LessonClipsResponse } from "@shared/lesson-clip";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import type { CouponSession } from "@/game-engine/useCouponSession";
 import { lessonSchema, type AnimKind, type Lesson } from "@shared/lesson-schema";
@@ -208,6 +209,8 @@ function probeLesson(search: string): Lesson {
     if (icon && /^[a-z0-9-]{3,64}$/.test(icon)) lesson.art = { subjectIcon: icon };
     // Review #367: a párosító gyakorlat a témás leckén (`&match=1`) — a kijelölés fókuszban is látszik.
     if (q.has("match")) lesson.sections[0].blocks.unshift({ kind: "try", tryKind: "match", spec: { pairs: [{ left: "kutya", right: "dog" }, { left: "macska", right: "cat" }, ...(q.get("match") === "4" ? [{ left: "ló", right: "horse" }, { left: "madár", right: "bird" }] : [])] }, coversConceptIds: lesson.sections[0].blocks.flatMap((b) => ("coversConceptIds" in b ? b.coversConceptIds : [])).slice(0, 1) } as Lesson["sections"][number]["blocks"][number]);
+    // Spec 2026-11-10-fejezet-kisfilmek: a kisfilm-próbához két fejezet kell (lejátszási lista).
+    if (q.has("clips")) lesson.sections.push({ ...lesson.sections[0], heading: "Második fejezet a kisfilm-próbához" });
     return lesson;
   }
   const classroom = Number(q.get("classroom"));
@@ -238,7 +241,32 @@ export default function LessonRuntimeProbe() {
   if (live && !candidate) return <p>{error || "Helyi jelölt betöltése…"}</p>;
   // Stable persistId so B7 localStorage round-trips work; no lessonId → no Próba API.
   const practice = new URLSearchParams(window.location.search).get("practice") === "1";
-  return <LessonRuntime lesson={candidate ?? probeLesson(window.location.search)} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} />;
+  const lesson = candidate ?? probeLesson(window.location.search);
+  return <LessonRuntime lesson={lesson} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} clipsPreset={probeClips(window.location.search, lesson.sections.length)} />;
+}
+
+/**
+ * Spec 2026-11-10-fejezet-kisfilmek: a kisfilm-lejátszó próbája (`?fusion=1&clips=1`) — az első két fejezet kap kisfilmet, mind a hat
+ * képsablonnal; `&clips=pending`: csak az első kész, a többi „készül”. A rövid mondatok miatt a néma lejátszás is gyors.
+ */
+const PROBE_CLIP: Clip = { v: 1, title: "Próba-kisfilm", scenes: [
+  { say: "Ez a kisfilm első jelenete, a címkép.", visual: { kind: "title", emoji: "🎬", text: "Próba-kisfilm" } },
+  { say: "A második jelenet egy fogalmat mutat be.", visual: { kind: "idea", emoji: "💡", text: "Egy fogalom, egy mondatban, nagy rajzzal" } },
+  { say: "A harmadik jelenetben a képlet darabjai egymás után jelennek meg.", visual: { kind: "formula", parts: [{ t: "v", note: "sebesség" }, { t: "= s", note: "út" }, { t: "/ t", note: "idő" }], caption: "A sebesség az út és az idő hányadosa." } },
+  { say: "A negyedik jelenet lépéseket sorol fel.", visual: { kind: "steps", items: [{ emoji: "📝", text: "Írd fel az adatokat" }, { text: "Nevezd meg a törvényt" }, { emoji: "🧮", text: "Számolj mértékegységgel" }] } },
+  { say: "Az ötödik jelenet két dolgot állít szembe.", visual: { kind: "compare", left: { emoji: "〰️", label: "Út: a görbe hossza" }, right: { emoji: "➡️", label: "Elmozdulás: egy nyíl" }, verdict: "Nem ugyanaz!" } },
+  { say: "A hatodik jelenetben egy szereplő mozog.", visual: { kind: "motion", actor: "🚴", effect: "slide", caption: "Egyenletesen halad: kétszer annyi idő, kétszer annyi út" } },
+] };
+const PROBE_CLIP_SHORT: Clip = { v: 1, title: "Második próba-kisfilm", scenes: [
+  { say: "A második kisfilm címképe.", visual: { kind: "title", emoji: "🔑", text: "Második kisfilm" } },
+  { say: "Egy tárgy leesik a színpadon.", visual: { kind: "motion", actor: "🔑", effect: "fall", caption: "Nyugalomból indul, egyre gyorsabb" } },
+  { say: "Ezzel a kisfilm véget ér.", visual: { kind: "idea", emoji: "🏁", text: "Vége" } },
+] };
+function probeClips(search: string, sections: number): LessonClipsResponse | undefined {
+  const mode = new URLSearchParams(search).get("clips");
+  if (!mode) return undefined;
+  const pending = mode === "pending";
+  return { clips: [{ sectionIndex: 0, clip: PROBE_CLIP }, ...(sections > 1 && !pending ? [{ sectionIndex: 1, clip: PROBE_CLIP_SHORT }] : [])], pending };
 }
 
 /**

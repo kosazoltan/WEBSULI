@@ -29,6 +29,8 @@ import { balancedLayouts, choiceSeed, displayOrder } from "@shared/option-order"
 import "./triangle-lab.css";
 import "./decision-story.css";
 import { LessonExperienceView } from "./LessonExperienceView";
+import { ClipChapterButton, ClipProvider } from "./clips/ClipContext";
+import type { LessonClipsResponse } from "@shared/lesson-clip";
 import type { ArbiterSource } from "./arbiter";
 import "./lesson-grade.css";
 import { LessonArt, lessonArtFor } from "./LessonArt";
@@ -391,6 +393,8 @@ function LessonSection({
           </span>
         )}
         <span className="lesson-chapter-title">{displayHeading(section.heading)}</span>
+        {/* Spec 2026-11-10-fejezet-kisfilmek: a fejezet rajzfilmes kisfilmje — csak ha van kész. */}
+        <ClipChapterButton sectionIndex={sectionIdx} />
         <SectionMascot firstKind={section.blocks[0]?.kind} />
       </h2>
       {section.blocks.map((block, bi) => (
@@ -475,9 +479,12 @@ export function LessonRuntime({
   lessonId,
   persistId,
   arbiterSource,
+  clipsPreset,
 }: {
   lesson: Lesson;
   lessonId?: string;
+  /** Spec 2026-11-10-fejezet-kisfilmek: a próbaoldal beépített kisfilmjei (a valódi lejátszó a szervertől kéri). */
+  clipsPreset?: LessonClipsResponse;
   /** Tételgyár T7.2: a publikált lecke döntőbírójának forrása (csak a valódi lejátszóban; előnézetben nincs). */
   arbiterSource?: ArbiterSource;
   /** B7 storage key when there is no publish id (probe / offline preview). */
@@ -489,6 +496,7 @@ export function LessonRuntime({
   const band = ageBandForClassroom(lesson.classroom);
   const theme = BAND_THEME[band];
   const designTheme = designThemeForClassroom(lesson.classroom);
+  const clipHeadings = useMemo(() => lesson.sections.map((s) => s.heading), [lesson.sections]);
   // Változatos képválasztás: a lecke azonosítója szerint rotál (ugyanaz a lecke mindig ugyanazt kapja).
   const art = useMemo(() => lessonArtFor({ ...lesson, seed: lessonId ?? persistId ?? lesson.title }, designTheme), [lesson, designTheme, lessonId, persistId]);
   // Ikonkészlet: a mentéskor az adatbázisból rendelt ikon elsőbbséget kap; régi leckénél a katalógus-választás marad.
@@ -545,6 +553,7 @@ export function LessonRuntime({
     <DesignBandContext.Provider value={designTheme}>
     <ChoiceLayoutContext.Provider value={choiceLayout}>
     <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
+      <ClipProvider lessonId={lessonId} headings={clipHeadings} preset={clipsPreset}>
       <article className="mx-auto py-6 space-y-6" data-testid="lesson-runtime">
         {/* Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a koncepciókép sávfejléce — jelvény, évfolyam, téma, mottó. */}
         <div className="ws-bandhead" data-testid="ws-bandhead">
@@ -610,6 +619,7 @@ export function LessonRuntime({
         })}
         </>}
       </article>
+      </ClipProvider>
     </div>
     </ChoiceLayoutContext.Provider>
     </DesignBandContext.Provider>

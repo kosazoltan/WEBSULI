@@ -700,6 +700,30 @@ export const lessons = pgTable(
 );
 
 export type LessonRow = typeof lessons.$inferSelect;
+
+/**
+ * Fejezetenkénti rajzfilmes kisfilmek (migrations/0038, spec 2026-11-10-fejezet-kisfilmek): jelenet-JSON (shared/lesson-clip.ts).
+ * A lecke `json`-ja érintetlen; a sor a fejezet indexéhez, címéhez és a tanítószöveg lenyomatához kötött.
+ */
+export const lessonClips = pgTable(
+  "lesson_clips",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+    sectionIndex: integer("section_index").notNull(),
+    heading: varchar("heading", { length: 255 }).notNull(),
+    /** Kézi kisfilmnél NULL: azt csak a fejezetcím köti. */
+    sourceHash: char("source_hash", { length: 64 }),
+    status: varchar("status", { length: 8 }).notNull().$type<"ready" | "failed">(),
+    clip: jsonb("clip"),
+    origin: varchar("origin", { length: 8 }).notNull().$type<"handmade" | "auto">(),
+    model: varchar("model", { length: 80 }),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ sectionUnique: uniqueIndex("lesson_clips_section_unique").on(table.lessonId, table.sectionIndex) }),
+);
 export type InsertLessonRow = typeof lessons.$inferInsert;
 
 /**

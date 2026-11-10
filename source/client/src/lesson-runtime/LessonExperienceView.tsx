@@ -5,6 +5,7 @@ import { experienceRoundSizes, type LessonExperience } from "@shared/lesson-expe
 import { evaluateOpenAnswer, scoreSummary, sampleTaskIds } from "@shared/lesson-experience-score";
 import { CognitiveMethods } from "./CognitiveMethods";
 import { DictationButton, PronounceButton, SpeakButton, stopSpeech } from "./ExperienceSpeech";
+import { ClipPlayAllButton } from "./clips/ClipContext";
 import { useExperienceRound } from "./useExperienceRound";
 import { useResultReport } from "./resultReport";
 import { LearningMode, LearningPager, useLearningPreference } from "./LearningControls";
@@ -104,7 +105,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
         <nav className="fusion-chapter-nav" aria-label="Fejezetek" data-testid="chapter-nav"><ol>{headings.map((heading, index) => <li key={index}><button type="button" aria-current={index === teachingSection ? "true" : undefined} onClick={() => { jumpToChapter(index); }}><span className="fusion-chapter-no" aria-hidden>{index + 1}</span><span className="fusion-chapter-name">{displayHeading(heading)}</span></button></li>)}</ol></nav>
         <div className="fusion-teaching-main space-y-6">
           {e.language && <button type="button" className="fusion-pronounce-entry" data-testid="pronounce-entry" onClick={() => changeTab("pronounce")}><Volume2 size={22} /><span><strong>Kiejtésgyakorló</strong> · hallgasd meg a szavakat és a mondatokat, majd mondd ki őket — a program meghallgat és visszajelez.</span></button>}
-          <div className="learning-book-head"><label className="fusion-label">Fejezet<select aria-label="Fejezet" value={teachingSection} onChange={event => { setTeachingSection(Number(event.target.value)); setTeachingOverview(false); }}>{headings.map((heading, index) => <option key={index} value={index}>{index + 1}. {heading}</option>)}</select></label><LearningMode overview={teachingOverview} onChange={setTeachingOverview} label="tananyag" /></div>
+          <div className="learning-book-head"><label className="fusion-label">Fejezet<select aria-label="Fejezet" value={teachingSection} onChange={event => { setTeachingSection(Number(event.target.value)); setTeachingOverview(false); }}>{headings.map((heading, index) => <option key={index} value={index}>{index + 1}. {heading}</option>)}</select></label><LearningMode overview={teachingOverview} onChange={setTeachingOverview} label="tananyag" /><ClipPlayAllButton /></div>
           {children(teachingOverview ? null : teachingSection)}
           {!teachingOverview && <>
             <details className="learning-methods-inline"><summary>Próbáld ki az összefüggést!</summary><CognitiveMethods key={teachingSection} methods={e.methods.filter(m => m.sectionIndex === teachingSection)} /></details>
