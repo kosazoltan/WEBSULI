@@ -95,3 +95,20 @@ test("J3 — külön 0 jelölés, ha a tartomány átlépi a 0-t, de a 0 nem osz
   assert.equal(isLabel(0, 5e-10), true);
   assert.equal(isLabel(-0.3 + 3 * 0.1, 0.1), true, "lebegőpontos 0");
 });
+
+// Review #414 (Copilot): a tartalék ritkítás a 0-s osztáshoz igazodik.
+test("J3 — tartalék ritkítás: a létező 0-s osztás mindig feliratot kap", async () => {
+  const { numberLineLabelFlags } = await import("../shared/number-line-labels");
+  const labels = (from: number, to: number, step: number) => {
+    const t = Array.from({ length: Math.floor((to - from) / step + 1e-9) + 1 }, (_, i) => from + i * step);
+    const f = numberLineLabelFlags(t, step);
+    return t.filter((_, i) => f[i]);
+  };
+  assert.deepEqual(labels(-12, 16, 4), [-8, 0, 8, 16]);
+  for (const [from, to, step] of [[-12, 16, 4], [-9, 9, 3], [-21, 28, 7], [-6, 30, 3], [-45, 60, 15]] as const) {
+    const got = labels(from, to, step);
+    assert.ok(got.includes(0), `${from}..${to} / ${step}: a 0 feliratot kap (${got.join(", ")})`);
+    assert.ok(got.length >= 2 && got.length <= 8, `${from}..${to} / ${step}: ${got.length} felirat`);
+  }
+  assert.deepEqual(labels(1, 9, 2), [1, 3, 5, 7, 9], "0 nélküli rács: változatlan");
+});

@@ -167,3 +167,13 @@ test("J1 — bankok közt ismétlődő azonosítójú javítási alap: nincs cé
   assert.equal(calls.filter((c) => c.sectionIndex === 1).length, 2);
   assert.equal(result.tasks.filter((t) => t.sectionIndex === 1 && t.q.endsWith(" (C)")).length, e0.tasks.length, "a teljes csomag újraíródott");
 });
+
+// Review #414 (Copilot): relációjel, abszolút érték és tizedesjel az opciókulcsban.
+test("J1b — az opciókulcs megőrzi a relációjelet, az abszolútérték-jelet és a tizedesjelet", () => {
+  const stem = "Melyik állítás igaz?";
+  const key = (options: string[]) => quizDuplicateKey({ question: stem, options });
+  assert.notEqual(key(["2 < 3", "5 < 4", "1 > 2"]), key(["2 > 3", "5 > 4", "1 > 2"]));
+  assert.notEqual(key(["|−4| = 4", "7"]), key(["−4 = 4", "7"]));
+  assert.notEqual(key(["1,5 kg", "2 kg"]), key(["15 kg", "2 kg"]));
+  assert.notEqual(key(["3 ≤ 3", "1"]), key(["3 ≥ 3", "1"]));
+});

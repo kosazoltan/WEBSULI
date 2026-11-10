@@ -46,7 +46,10 @@ export function numberLineLabelFlags(ticks: readonly number[], step: number, max
   const flags = ticks.map((v) => isNumberLineLabel(v, labelStep));
   if (flags.filter(Boolean).length >= Math.min(2, ticks.length)) return flags;
   const every = Math.ceil(ticks.length / maxLabels);
-  return ticks.map((_, i) => i % every === 0);
+  // Review #414: ha van 0-s osztás, a ritkítás ahhoz igazodik (a 0 mindig feliratot kap); különben a bal széltől számol.
+  const zero = ticks.findIndex((v) => Math.abs(v) < step * TOL);
+  const anchor = zero >= 0 ? zero % every : 0;
+  return ticks.map((_, i) => i % every === anchor);
 }
 
 /**
