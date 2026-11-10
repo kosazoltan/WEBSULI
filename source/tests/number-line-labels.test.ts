@@ -79,3 +79,19 @@ test("J3 — numberLineLabelFlags: a 0-hoz nem igazodó osztásoknál is marad f
   assert.deepEqual(numberLineLabelFlags([], 1), []);
   assert.deepEqual(labels(5, 5, 1), [5]);
 });
+
+// Review #414.
+test("J3 — külön 0 jelölés, ha a tartomány átlépi a 0-t, de a 0 nem osztás; kis léptéknél a 0 tűrése a lépéshez mért", async () => {
+  const { needsExtraZero, isNumberLineLabel: isLabel } = await import("../shared/number-line-labels");
+  assert.equal(needsExtraZero([-5, -3, -1, 1, 3, 5], 2), true);
+  assert.equal(needsExtraZero([-4, -2, 0, 2, 4], 2), false, "a 0 osztás");
+  assert.equal(needsExtraZero([1, 3, 5], 2), false, "csak pozitív tartomány");
+  assert.equal(needsExtraZero([-5, -3, -1], 2), false, "csak negatív tartomány");
+  assert.equal(needsExtraZero([-0.3, -0.2, -0.1, -0.3 + 3 * 0.1, 0.1], 0.1), false, "lebegőpontos 0 osztásnak számít");
+  assert.equal(needsExtraZero([], 1), false);
+  // 1e-10 léptékű tengely: csak a lépés többszörösei kapnak feliratot, nem minden apró érték
+  assert.equal(isLabel(1e-10, 5e-10), false);
+  assert.equal(isLabel(5e-10, 5e-10), true);
+  assert.equal(isLabel(0, 5e-10), true);
+  assert.equal(isLabel(-0.3 + 3 * 0.1, 0.1), true, "lebegőpontos 0");
+});

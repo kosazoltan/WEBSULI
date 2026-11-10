@@ -100,3 +100,12 @@ test("J2: a címke nélküli első bekezdés mellett csak a félkövér címkés
   // Ha az első bekezdés maga buktató-címkés, nem célkártya.
   assert.equal(blockLabel([explain("**Miért?** Mert …\n\n**Oka:** …\n\n**Leküzdés:** …")], 0, 0, "teen"), BAND_THEME.teen.labels.explain);
 });
+
+// Review #414: a címke nélküli tartalék csak a Célkártya pontos alakjára illik.
+test("J2: közönséges magyarázat két kiemelt „Miért?” / „Hogyan győzd le?” sorral nem Célkártya", () => {
+  const two = explain("A törtek részeket jelölnek.\n\n**Miért?** Mert az egészet egyenlő részekre osztjuk.\n\n**Hogyan győzd le?** Rajzolj.");
+  assert.equal(blockLabel([two, explain("Folytatás.")], 0, 0, "teen", 6), BAND_THEME.teen.labels.explain);
+  assert.equal(blockLabel([two, explain("Folytatás.")], 1, 0, "teen", 6), BAND_THEME.teen.labels.explain);
+  const five = explain("A törtek részeket jelölnek.\n\n**Ami nehezítheti:** a.\n\n**Miért?** b.\n\n**Hogyan győzd le?** c.\n\nMég egy bekezdés.");
+  assert.equal(blockLabel([five], 0, 0, "teen", 6), BAND_THEME.teen.labels.explain, "öt bekezdés nem a Célkártya alakja");
+});

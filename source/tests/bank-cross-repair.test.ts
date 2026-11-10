@@ -133,3 +133,37 @@ test("J1b — csomagok közti „Melyik állítás hamis?” eltérő opciókkal
   assert.deepEqual(calls.sort(), [0, 1], "nincs harmadik hívás");
   assert.equal(result.quiz.filter((q) => q.question === stem).length, 2, "mindkét kiválasztó kérdés megmaradt");
 });
+
+// Review #414.
+test("J1b — az opciókulcs megőrzi az összehasonlító jeleket; a keresztütközés üzenete tételhez köthető", async () => {
+  const stem = "Melyik állítás igaz?";
+  assert.notEqual(quizDuplicateKey({ question: stem, options: ["x < 0", "x = 0", "x + 1 < 0"] }), quizDuplicateKey({ question: stem, options: ["x > 0", "x = 0", "x + 1 > 0"] }), "„<” és „>” nem ugyanaz");
+  assert.notEqual(quizDuplicateKey({ question: stem, options: ["2 < 3", "5"] }), quizDuplicateKey({ question: stem, options: ["2 = 3", "5"] }));
+  assert.equal(quizDuplicateKey({ question: stem, options: ["X  <  0", "x = 0"] }), quizDuplicateKey({ question: stem, options: ["x=0", "x < 0"] }), "szóköz, kis-/nagybetű és sorrend nem számít");
+  const { repairPermissions } = await import("../server/studio/bank-repair");
+  const packet = { methods: [{ id: "m2" }], tasks: [{ id: "t1" }], quiz: [{ id: "q1" }] };
+  const plan = repairPermissions([
+    "Ismétlődő kérdés egy korábbi csomaggal: q1 („Melyik műveletsor adja a háromszög területét?”) — ehhez a tételhez új, más kérdést írj.",
+    "Ismétlődő kérdés egy korábbi csomaggal: m2 („Hogyan számoljuk ki?”) — ehhez a kapukérdéshez új, más kérdést írj.",
+  ], packet);
+  assert.deepEqual(plan.packetLevel, [], "a keresztütközés nem csomagszintű hiba");
+  assert.deepEqual(plan.allows.map((a) => [a.itemId, a.bank]).sort(), [["m2", "methods"], ["q1", "quiz"]]);
+});
+
+test("J1 — bankok közt ismétlődő azonosítójú javítási alap: nincs célzott javítás (teljes újraírás marad)", async () => {
+  const e0 = standardFusionFixture().experience!;
+  const gateIds = e0.methods.filter((m) => m.kind === "gate").map((m) => m.id);
+  // a 2. egység első feladata egy kapukérdés azonosítóját viseli (bankok közti azonosító-ütközés), a kapukérdések ismétlődnek
+  const second = (suffix: string, gateSuffix = "") => ({
+    methods: e0.methods.map((m) => ({ ...m, sectionIndex: 1, title: m.title + suffix, prompt: m.kind === "gate" ? m.prompt + gateSuffix : m.prompt + suffix })),
+    tasks: e0.tasks.map((t, n) => ({ ...t, id: n === 0 ? gateIds[0] : t.id, sectionIndex: 1, q: t.q + suffix })),
+    quiz: e0.quiz.map((q) => ({ ...q, sectionIndex: 1, question: q.question + suffix })),
+    glossary: [],
+  });
+  const { calls, result } = await buildTwoUnits((suffix) => second(suffix), (user) => {
+    assert.doesNotMatch(user, /JAVÍTÁSI MÓD: a teljes csomag már megvan/, "közös azonosítónál nincs tételcsere");
+    return second(" (C)", " (másik kapu)");
+  });
+  assert.equal(calls.filter((c) => c.sectionIndex === 1).length, 2);
+  assert.equal(result.tasks.filter((t) => t.sectionIndex === 1 && t.q.endsWith(" (C)")).length, e0.tasks.length, "a teljes csomag újraíródott");
+});

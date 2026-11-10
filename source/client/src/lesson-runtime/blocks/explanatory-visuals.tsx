@@ -10,7 +10,7 @@ import {
   type VennParams,
 } from "@shared/lesson-visual-params";
 import { sanitizeIllustration } from "@shared/illustration-svg";
-import { numberLineLabelFlags } from "@shared/number-line-labels";
+import { needsExtraZero, numberLineLabelFlags } from "@shared/number-line-labels";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 1. szelet): magyarázó ábrák.
@@ -514,6 +514,12 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
             {labelled[i] && <text x={inside(x(v), fmt(v), 14)} y={base + 24} textAnchor="middle" fontSize="14" fill="currentColor">{fmt(v)}</text>}
           </g>
         ))}
+        {needsExtraZero(ticks, step) && (
+          <g data-zero-extra>
+            <line x1={x(0)} y1={base - 6} x2={x(0)} y2={base + 6} stroke="currentColor" strokeWidth="1.6" />
+            <text x={inside(x(0), "0", 14)} y={base + 24} textAnchor="middle" fontSize="14" fill="currentColor">0</text>
+          </g>
+        )}
         {jumpLabels.map(({ j, i, x0, x1, h, label }) => (
           <g key={`j${i}`}>
             <path d={`M${x0} ${base - 4} Q${(x0 + x1) / 2} ${base - 4 - h * 1.6} ${x1} ${base - 4}`} fill="none" stroke={PALETTE[i % PALETTE.length]} strokeWidth="2" />

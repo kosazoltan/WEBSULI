@@ -268,7 +268,10 @@ const SELECTOR_STEM = /^melyik(?:az?)?(?:(?:állítás|mondat|kijelentés|megál
 export function quizDuplicateKey(q: { question: string; options?: readonly string[] }): string {
   const stem = questionKey(q.question);
   if (!q.options?.length || !SELECTOR_STEM.test(stem)) return stem;
-  return `${stem}\u0000${q.options.map(questionKey).sort().join("\u0001")}`;
+  // Review #414: az opció kulcsa NEM a `questionKey` — az eldobná az összehasonlító jeleket („x < 0” és „x > 0” egyformának látszana).
+  // Itt csak a kis-/nagybetű és a szóköz nem számít; minden más jel a tartalom része.
+  const optionKey = (o: string) => o.normalize("NFC").toLocaleLowerCase("hu").replace(/\s+/g, "");
+  return `${stem}\u0000${q.options.map(optionKey).sort().join("\u0001")}`;
 }
 /** Spec 2026-09-30 (U2): a bank csak a tanítás SZÖVEGÉRE hivatkozhat — ábra-sorszámra, „az ábrán látható” fordulatra nem (a bank ábra nélkül épül). */
 // A JS `\b` csak ASCII-betűnél határ, ezért ékezetes szónál lookaround kell (az előző karakter `(?:^|[^\p{L}])`, a következő `(?!\p{L})`; visszatekintés nincs — régi Safari).

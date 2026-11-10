@@ -49,10 +49,20 @@ export function numberLineLabelFlags(ticks: readonly number[], step: number, max
   return ticks.map((_, i) => i % every === 0);
 }
 
+/**
+ * Review #414: ha a tartomány átlépi a 0-t, de a 0 nem esik osztásra (pl. −5, −3, −1, 1, 3, 5), a számegyenes külön 0 jelölést kap —
+ * a 0 a tanuló viszonyítási pontja.
+ */
+export function needsExtraZero(ticks: readonly number[], step: number): boolean {
+  if (ticks.length < 2 || !(step > 0)) return false;
+  return ticks[0] < 0 && ticks[ticks.length - 1] > 0 && !ticks.some((v) => Math.abs(v) < step * TOL);
+}
+
 /** A `value` a `labelStep` többszöröse (1e-9 tűréssel); a 0 mindig az. */
 export function isNumberLineLabel(value: number, labelStep: number): boolean {
-  if (Math.abs(value) < TOL) return true;
-  if (!(labelStep > 0)) return false;
+  if (!(labelStep > 0)) return Math.abs(value) < TOL;
+  // Review #414: a 0 felismerése a lépéshez mért (nem rögzített abszolút) tűréssel — nagyon kis léptékű tengelyen sem lesz minden osztás „0”.
+  if (Math.abs(value) < labelStep * TOL) return true;
   const r = value / labelStep;
   return Math.abs(r - Math.round(r)) < TOL;
 }

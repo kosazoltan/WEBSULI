@@ -677,7 +677,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     let seeded = false;
     if (seed && !packet && !reviewBase) {
       const base = salvageSchema.safeParse(seed.packet);
-      const uniqueSeedIds = base.success && BANKS.every(bank => new Set(base.data[bank].map(item => item.id)).size === base.data[bank].length);
+      // Review #414: a jogosultság azonosító szerint kulcsolt — a javítási alapban az azonosító a HÁROM bankon át együtt legyen egyedi,
+      // különben egy feladat és egy kvíztétel közös azonosítója a másik tétel átírását is engedné (ilyenkor marad a teljes újraírás).
+      const seedIds = base.success ? BANKS.flatMap(bank => base.data[bank].map(item => item.id)) : [];
+      const uniqueSeedIds = base.success && new Set(seedIds).size === seedIds.length;
       const seedPlan = base.success && uniqueSeedIds ? repairPermissions(seed.issues, base.data) : undefined;
       // Előbb modellhívás nélkül: ha a gépi normalizálás (ismétlődő tétel kivétele a tartalék terhére) a kész csomagot a valódi
       // előzményekhez mérve érvényessé teszi, a csomag javítókör nélkül átvehető.

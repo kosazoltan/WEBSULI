@@ -103,6 +103,13 @@ későbbi szelet: forrásőr a `try` nélküli aszinkron
 admin-nézete. Tulajdonosi lépés: a proxy-titok, a Render build-parancs és a `RENDER_API_KEY`, az Antigoné-lecke célzott javítása,
 a 62 függő fogalom tanári átnézése, iPhone-próba.
 
+## Review #414 utáni pontosítások
+
+- J1: a javítási alapban az azonosító a három bankon át együtt egyedi (különben teljes újraírás marad).
+- J1b: az opciókulcs megőrzi az összehasonlító és egyenlőségjeleket („x < 0” ≠ „x > 0”); csak a kis-/nagybetű és a szóköz nem számít.
+- J2: a címke nélküli tartalék csak a Célkártya pontos alakjára illik — négy bekezdés, a 2–4. mind félkövér címkés.
+- J3: ha a tartomány átlépi a 0-t, de a 0 nem osztás, külön 0 jelölés készül; a 0 tűrése a lépéshez mért.
+
 ## Nem cél
 
 - A kvíz- és feladatszám, a 45/75 kapu, a tartalék, a válaszkulcs-teszt vagy a lektor mércéjének változtatása.

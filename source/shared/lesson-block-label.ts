@@ -26,10 +26,11 @@ export function isGoalCardText(text: string): boolean {
   if (!paragraphs.length) return false;
   const rest = paragraphs.slice(1);
   if (startsWithLabel(paragraphs[0], GOAL_LABELS)) return rest.filter((p) => startsWithLabel(p, OTHER_LABELS)).length >= 2;
-  // Spec 2026-11-10-gyartas-meres (J2): a modell néha elhagyja a célcímkét. Címke nélküli első bekezdés akkor célkártya, ha maga nem
-  // buktató / ok / leküzdés címkés, és utána legalább két FÉLKÖVÉREN jelölt ilyen címkés bekezdés áll (a sima „Miért? …” sor nem elég).
+  // Spec 2026-11-10-gyartas-meres (J2): a modell néha elhagyja a célcímkét. Címke nélküli első bekezdés csak a Célkártya pontos alakjában
+  // számít annak (review #414): négy bekezdés, az első nem buktató / ok / leküzdés címkés, a másik HÁROM mind FÉLKÖVÉREN jelölt ilyen
+  // címkével kezdődik. Egy közönséges magyarázat, amelyben két ilyen kiemelt sor is van, nem Célkártya.
   if (startsWithLabel(paragraphs[0], OTHER_LABELS)) return false;
-  return rest.filter((p) => startsWithLabel(p, OTHER_LABELS, true)).length >= 2;
+  return rest.length === 3 && rest.every((p) => startsWithLabel(p, OTHER_LABELS, true));
 }
 
 export const ANIM_LABELS: Readonly<Record<string, string>> = {
