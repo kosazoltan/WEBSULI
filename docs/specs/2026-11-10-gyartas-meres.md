@@ -119,6 +119,18 @@ a 62 függő fogalom tanári átnézése, iPhone-próba.
 - J2: a címke nélküli tartalék csak a Célkártya pontos alakjára illik — négy bekezdés, a 2–4. mind félkövér címkés.
 - J3: ha a tartomány átlépi a 0-t, de a 0 nem osztás, külön 0 jelölés készül; a 0 tűrése a lépéshez mért.
 
+## Review #415 utáni pontosítások
+
+- J6 (végállapot kivárása): a lezáró frissítés (kész / hiba) után a hívó megvárja a futás összes sorba állított írását
+  (`flushRun`) — így a workflow, és vele a leállás kivárása (`server/index.ts`, `waitForActiveRuns`), nem ér véget, mielőtt a
+  végállapot az adatbázisban van. A kivárás sosem dob.
+- J6 (lecke feloldása egy helyen): `resolveRunLessonId` — a tárolt lecke-azonosító nyer; ha hiányzik, a futás jobjából jön, de
+  csak kész (`done`) jobnál. Ezt használja a lekérdezés, a boot-söprés és a webes gyártás újrahasznosító ága (a lecke nélkül
+  mentett kész futás nem indít új gyártást). Ha a folyamat a közzététel és a lezáró írás között halt meg, a boot-söprés a kész
+  jobú futást késznek jelöli (nem árvának), a lekérdezés pedig a hibás futást is késznek mutatja, ha a job leckéje közzétett — a
+  közzétett lecke sosem látszik megállt futásként. Hibás futásnál csak a job dönt (a fogalomjavítás futása indulástól a meglévő
+  leckére mutat, annak hibája nem lehet „kész”).
+
 ## Nem cél
 
 - A kvíz- és feladatszám, a 45/75 kapu, a tartalék, a válaszkulcs-teszt vagy a lektor mércéjének változtatása.

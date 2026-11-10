@@ -93,6 +93,14 @@ Külön ág és PR (`fix/kesz-futas-ujrainditas-utan`). Összevonni csak akkor s
 3. `oneStepRunView`: `done` + hiányzó `lessonId` + van `jobId` → `studio_jobs.lesson_id` pótolja; a válasz `lessonId` mezője is ezt adja.
 4. Új tesztek a `tests/studio-one-step-persist.test.ts`-ben (csak hozzáadás): lassú első írás mellett is az utolsó állapot marad;
    a `progressPatch` „done”-ra nem ad fázist; a hibás írás után a következő írás lefut.
+   - Review #415: `flushRun(id)` (a futás eddigi írásainak kivárása, sosem dob); a három `phase: "done"` lezárás és a mellettük álló
+     `phase: "error"` frissítés után `await flushRun(runId)`.
+   - Review #415: tiszta, injektált `resolveRunLessonId(run, loadJob)` (tárolt azonosító → különben kész job leckéje → különben null;
+     betöltési hiba → null) és a routes-beli `loadRunJob` (`studio_jobs.step`, `studio_jobs.lesson_id`). Használja: `oneStepRunView`
+     (a 3. pont helyett; hibás futás + kész job közzétett leckével → `done` nézet), `closeOrphanedOneStepRuns` (kész jobú árva →
+     `done` a leckével; a `markOrphanedRuns` változatlan), `runOneStepInWorkflow` (az újrahasznosítás előtt).
+   - Tesztek (csak a J6-tesztek): a rögzített várakozások helyett `await flushRun(id)`; `resolveRunLessonId` viselkedése; `flushRun`
+     lassú / hibás írással és ismeretlen futással; forrásőr a `flushRun` hívásokra és a feloldó három helyére.
 5. Élő ellenőrzés a telepítés után: a `5708791f` futás lekérdezése `htmlFileId: 49780f86-…`-t ad.
 
 ## Záró ellenőrzés és szállítás

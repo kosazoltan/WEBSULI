@@ -74,6 +74,32 @@ function persistQuietly(run: OneStepRun, persist?: PersistRunFn): void {
 }
 
 /**
+ * Review #415: a futás eddig sorba állított összes írásának kivárása. A lezáró állapot (kész / hiba) után a hívó ezt várja meg, hogy a
+ * workflow — és vele a leállás kivárása — ne érjen véget, mielőtt a végállapot az adatbázisban van. Sosem dob (a lánc elnyeli a hibát).
+ */
+export function flushRun(id: string): Promise<void> {
+  return persistChains.get(id) ?? Promise.resolve();
+}
+
+/** Review #415: a futás jobjának a lecke-feloldáshoz szükséges része (a hívó DB-ből tölti). */
+export type LoadRunJobFn = (jobId: string) => Promise<{ step: string; lessonId: string | null } | null>;
+
+/**
+ * Review #415: a futás leckéje. A tárolt azonosító nyer; ha hiányzik (hibás sorrendű régi mentés, vagy a folyamat a közzététel és a
+ * lezáró írás között halt meg), a futás jobjából jön — de CSAK kész (`done`) jobnál. A betöltő hibája null, sosem dob.
+ */
+export async function resolveRunLessonId(run: Pick<OneStepRun, "phase" | "lessonId" | "jobId">, loadJob: LoadRunJobFn): Promise<string | null> {
+  if (run.lessonId) return run.lessonId;
+  if (!run.jobId) return null;
+  try {
+    const job = await loadJob(run.jobId);
+    return job?.step === "done" && job.lessonId ? job.lessonId : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * J6: a motor haladásjelzéséből a futás frissítése. A motor saját „done” jelzése NEM zárja le a futást: a lezárást a hívó végzi a
  * lecke azonosítójával együtt — különben a lekérdezés egy pillanatra (és hibás írási sorrendnél tartósan) „kész, lecke nélkül”
  * állapotot látna.
