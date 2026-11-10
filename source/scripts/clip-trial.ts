@@ -37,9 +37,8 @@ async function main(): Promise<void> {
   };
   const deps: ClipDeps = {
     ...real, chat: timed("forgatókönyv", real.chat), image: timed("kép", real.image), check: timed("képkapu", real.check),
-    ...(real.speech ? { speech: timed("hang", real.speech) } : {}), ...(real.video ? { video: timed("mozgókép (nyers)", real.video) } : {}),
+    ...(real.speech ? { speech: timed("hang", real.speech) } : {}), ...(real.video ? { video: timed("mozgókép (átkódolva)", async (...args: Parameters<NonNullable<ClipDeps["video"]>>) => (await real.video!(...args)) ?? Buffer.alloc(0)) as ClipDeps["video"] } : {}),
     ...(real.hear ? { hear: timed("hangkapu", real.hear) } : {}),
-    shrink: timed("átkódolás", real.shrink),
   };
   const EXT: Record<string, string> = { "image/webp": "webp", "audio/mpeg": "mp3", "video/mp4": "mp4" };
   const stored: Array<{ id: string; kind: string; bytes: number }> = [];
@@ -53,6 +52,7 @@ async function main(): Promise<void> {
   const report = { sectionIndex, heading: lesson.sections[sectionIndex].heading, band, totalMs: Date.now() - started, ok: "clip" in result, ...("clip" in result ? { stats: result.stats } : { problems: result.problems }), stored, timings };
   writeFileSync(path.join(outDir, "report.json"), JSON.stringify(report, null, 1));
   if ("clip" in result) writeFileSync(path.join(outDir, "clip.json"), JSON.stringify(result.clip, null, 1));
+  console.log(`a folyamat csúcsmemóriája: ${Math.round(process.resourceUsage().maxRSS / 1024)} MB`);
   console.log(JSON.stringify({ ok: report.ok, band, totalMs: report.totalMs, ...("clip" in result ? { stats: result.stats, title: result.clip.title, says: result.clip.scenes.map((s) => s.say), overlays: result.clip.scenes.map((s) => s.overlay?.kind ?? "-") } : { problems: result.problems }) }, null, 1));
 }
 

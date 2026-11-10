@@ -1,5 +1,8 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
@@ -89,16 +92,27 @@ async function fetchPatiently(send: () => Promise<Response>, waitMs = 2500): Pro
 }
 
 let warnedNoFfmpeg = false;
-/** Átkódolás 960 px széles, kb. 700 kbit/s-os, hang nélküli H.264-re; `ffmpeg` hiányában vagy hibánál null. */
-export async function shrinkVideo(video: Buffer, ffmpeg = "ffmpeg"): Promise<Buffer | null> {
+/**
+ * Egyszerre EGY átkódolás fut, egy szálon. Élesben mérve (2026-11-10): nyolc párhuzamos átkódolás (egyenként 171 MB) a 512 MB-os
+ * példányt 3–4 percenként újraindította; egy szálon, előretekintés nélkül egy átkódolás 75 MB (alapbeállítással 171 MB).
+ */
+const ffmpegQueue = limiter(1);
+export const FFMPEG_ARGS = (input: string, output: string): string[] => ["-y", "-v", "error", "-threads", "1", "-i", input, "-an", "-vf", "scale=960:-2", "-c:v", "libx264", "-threads", "1",
+  "-preset", "veryfast", "-x264-params", "rc-lookahead=0:ref=1:bframes=0:sync-lookahead=0", "-b:v", "700k", "-maxrate", "900k", "-bufsize", "1400k", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
+/**
+ * A nyers mozgókép letöltése LEMEZRE (nem a memóriába), majd átkódolás 960 px széles, kb. 700 kbit/s-os, hang nélküli H.264-re.
+ * `ffmpeg` hiányában vagy hibánál null.
+ */
+export async function downloadAndShrink(download: () => Promise<Response>, ffmpeg = "ffmpeg"): Promise<Buffer | null> {
   const dir = await mkdtemp(path.join(tmpdir(), "clip-"));
   try {
     const input = path.join(dir, "in.mp4"), output = path.join(dir, "out.mp4");
-    await writeFile(input, video);
-    await new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, ["-y", "-v", "error", "-i", input, "-an", "-vf", "scale=960:-2", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "700k", "-maxrate", "900k", "-bufsize", "1400k", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output],
-        { timeout: 60_000 }, (error) => (error ? reject(error) : resolve()));
-    });
+    const res = await download();
+    if (!res.ok || !res.body) throw new Error(`mozgókép letöltése: HTTP ${res.status}`);
+    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(input));
+    await ffmpegQueue(() => new Promise<void>((resolve, reject) => {
+      execFile(ffmpeg, FFMPEG_ARGS(input, output), { timeout: 90_000 }, (error) => (error ? reject(error) : resolve()));
+    }));
     return await readFile(output);
   } catch (error) {
     const missing = (error as NodeJS.ErrnoException)?.code === "ENOENT";
@@ -156,7 +170,6 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
     },
     still: (image) => sharp(image.bytes).resize(1280, 720, { fit: "cover" }).webp({ quality: 74 }).toBuffer(),
     audioMs: mp3DurationMs,
-    shrink: (video) => shrinkVideo(video, keys.ffmpeg),
     async video(image, prompt, seconds) {
       const submit = await fetch(`${OPENROUTER}/videos`, { method: "POST", headers: orHeaders, signal: AbortSignal.timeout(120_000), body: JSON.stringify({ model: CLIP_VIDEO_MODEL, prompt, duration: seconds, resolution: "720p", aspect_ratio: "16:9", generate_audio: false, frame_images: [{ type: "image_url", image_url: { url: dataUrl(image) }, frame_type: "first_frame" }] }) });
       const submitted = await submit.text();
@@ -172,9 +185,8 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
         if (poll.ok) job = JSON.parse(await poll.text());
       }
       if (job.status !== "completed" || !job.unsigned_urls?.[0]) throw new Error(`mozgókép: ${job.status} ${scrub(JSON.stringify(job.error ?? ""))}`);
-      const file = await fetch(new URL(job.unsigned_urls[0], OPENROUTER), { headers: { Authorization: orHeaders.Authorization }, signal: AbortSignal.timeout(180_000) });
-      if (!file.ok) throw fail("mozgókép letöltése", file.status, "");
-      return Buffer.from(await file.arrayBuffer());
+      const url = new URL(job.unsigned_urls[0], OPENROUTER);
+      return downloadAndShrink(() => fetch(url, { headers: { Authorization: orHeaders.Authorization }, signal: AbortSignal.timeout(180_000) }), keys.ffmpeg);
     },
   };
   if (keys.elevenLabs) {
