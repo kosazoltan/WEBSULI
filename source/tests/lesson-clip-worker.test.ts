@@ -6,7 +6,7 @@ import { clipSource, type Clip2 } from "../shared/lesson-clip";
 import { CLIP_BAND_STYLE, clipBandFor } from "../shared/clip-style";
 import {
   CLIP_FRESH_DAYS, CLIP_MAX_ATTEMPTS, CLIP_VIDEO_MAX_BYTES, clipDailyLimit, clipMediaBudgetBytes, clipSourceHash, clipSystemPrompt, clipTodo, clipsMode,
-  eligibleSections, lessonClipsResponse, makeChapterClip, runClipRound, servableClips, type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
+  CLIP_SPEECH_ATTEMPTS, eligibleSections, lessonClipsResponse, makeChapterClip, runClipRound, servableClips, speakChecked, speechDistance, type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
 import { mediaId } from "../server/lesson-clip-media";
 import { clipKeys } from "../server/lesson-clips-providers";
@@ -101,11 +101,14 @@ test("egy fejezet kisfilmje: jelenetenként kezdőkép, a korosztály hangja, a 
   assert.deepEqual(clip.scenes.map((s) => s.shot), Array.from({ length: n }, (_, i) => i));
   assert.ok(clip.scenes.every((s) => s.audio && s.video && s.ms === 6400 && s.camera === "still"));
   assert.equal(clip.scenes[0].overlay?.kind, "title");
-  assert.deepEqual(stats, { images: n, imageRetries: 0, audio: n, videos: n, videoFailures: 0, bytes: [...media.values()].reduce((s, m) => s + m.size, 0) });
+  assert.deepEqual(stats, { images: n, imageRetries: 0, audio: n, audioRetries: 0, audioImperfect: 0, videos: n, videoFailures: 0, bytes: [...media.values()].reduce((s, m) => s + m.size, 0) });
   assert.deepEqual([...media.values()].map((m) => m.mime).sort(), [...Array(n).fill("audio/mpeg"), ...Array(n).fill("image/webp"), ...Array(n).fill("video/mp4")]);
   // A képbrief viszi a sáv stílusát és a tiltásokat; a hang a sáv hangja; a mozgókép 6,4 mp-es hanghoz 7 mp.
   assert.ok(deps.calls.image.every((p) => p.includes(STYLE.imageStyle) && /no text, letters, digits/i.test(p)));
   assert.ok(deps.calls.speech.every((c) => c.voice === STYLE.voice.name && c.text === SAY));
+  // A hangmodell a kiolvasott számot kapja, a kisfilm felirata a számjegyest őrzi.
+  const numbered = await speakChecked("A futó 400 métert tesz meg.", STYLE.voice, { speech: async (text) => Buffer.from(text) });
+  assert.equal(numbered.bytes.toString(), "A futó négyszáz métert tesz meg.");
   assert.ok(deps.calls.video.every((c) => c.seconds === 7 && c.prompt.includes("Something in the picture moves") && c.prompt.includes("No text")));
 });
 
@@ -151,6 +154,37 @@ test("a mozgókép hibája nem buktatja a kisfilmet: a jelenet állóképes, kam
   // A hangszolgáltató hibája: a jelenet hang nélkül, de mozgóképpel készül el.
   const mute = await makeChapterClip(input(), BAND, fakeDeps({ speech: async () => { throw new Error("HTTP 401"); } }), memoryStore([]).store.putMedia);
   assert.ok("clip" in mute && mute.clip.scenes.every((s) => !s.audio && s.video));
+});
+
+test("hangkapu: a félreolvasott mondat újra készül; a betűre egyező marad, különben a legpontosabb", async () => {
+  // Az ékezethiba hiba (mért eset: „síkság” helyett „síkség”); írásjel, szóköz, kis- és nagybetű nem számít.
+  assert.equal(speechDistance("Szabály: a síkság vízszintes.", "szabály a síkság vízszintes"), 0);
+  assert.equal(speechDistance("százhúsz méter", "Száz húsz méter!"), 0);
+  // A felismerő a kimondott számot számjeggyel adja vissza — ez nem eltérés; a rossz szám igen.
+  assert.equal(speechDistance("A magassága 0 és 200 méter között van.", "A magassága nulla és kétszáz méter között van"), 0);
+  assert.equal(speechDistance("nulla és kétszáz méter között", "0 és 200 méter között"), 0);
+  assert.ok(speechDistance("nulla és kétszáz méter között", "0 és 2000 méter között") > 0);
+  assert.equal(speechDistance("a síkság vízszintes", "a síkség vízszintes"), 1);
+  assert.ok(speechDistance("Szabály: a síkság vízszintes", "A széksek vízszintes") > 5);
+  const voice = STYLE.voice;
+  const heardFor = (script: string[]) => { let n = 0; const made: Buffer[] = []; return { made, speech: async () => { const b = Buffer.from(`változat-${made.length + 1}`); made.push(b); return b; }, hear: async () => script[Math.min(n++, script.length - 1)] }; };
+  const SENT = "A síkság vízszintes, belátható sík terület.";
+  const fixed = heardFor(["A síkség vízszintes, belátható sík terület.", SENT]);
+  const second = await speakChecked(SENT, voice, fixed);
+  assert.deepEqual([second.attempts, second.distance, second.bytes.toString()], [2, 0, "változat-2"], "a második, hibátlan változat marad");
+  const never = heardFor(["A széksek vízszintes belátható terület", "A síkség vízszintes, belátható sík terület.", "A sikseg vizszintes belathato sik terulet"]);
+  const best = await speakChecked(SENT, voice, never);
+  assert.deepEqual([best.attempts, best.distance, best.bytes.toString()], [CLIP_SPEECH_ATTEMPTS, 1, "változat-2"], "három próbálkozás után a legpontosabb marad");
+  assert.equal(never.made.length, CLIP_SPEECH_ATTEMPTS);
+  // Felismerő nélkül (vagy ha az hibázik) a hang ellenőrzés nélkül megy tovább — a kisfilm nem akad el.
+  const blind = await speakChecked(SENT, voice, { speech: async () => Buffer.from("x") });
+  assert.deepEqual([blind.attempts, blind.distance], [1, null]);
+  const broken = await speakChecked(SENT, voice, { speech: async () => Buffer.from("x"), hear: async () => { throw new Error("HTTP 500"); } });
+  assert.deepEqual([broken.attempts, broken.distance], [1, null]);
+  // A gyártósorban: a pontatlan hang számolódik és naplózódik.
+  let heard = 0;
+  const flaky = await makeChapterClip(input(), BAND, fakeDeps({ hear: async () => (heard++ === 0 ? "valami egészen más" : SAY) }), memoryStore([]).store.putMedia);
+  assert.ok("clip" in flaky && flaky.stats.audioRetries === 1 && flaky.stats.audioImperfect === 0);
 });
 
 test("a kiszolgálás csak a kész, v2, a fejezet mostani címéhez és szövegéhez illő kisfilmet adja ki", async () => {

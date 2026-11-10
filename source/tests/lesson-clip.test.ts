@@ -4,9 +4,10 @@ import { readFileSync } from "node:fs";
 import { getTableColumns } from "drizzle-orm";
 import { animateBlockIndexes, clip2Schema, clipDraftProblems, clipDraftSchema, clipMediaUrl, clipSource, silentSceneMs, type ClipDraft } from "../shared/lesson-clip";
 import { CLIP_BAND_STYLE } from "../shared/clip-style";
+import { huNumberWords, spokenHu } from "../shared/hu-numbers";
 import { lessonClipMedia, lessonClips } from "../shared/schema";
 import { CLIP_MEDIA_CACHE_CONTROL, mediaId, mediaReply } from "../server/lesson-clip-media";
-import { mp3DurationMs } from "../server/lesson-clips-providers";
+import { CLIP_AUDIO_FORMAT, ELEVENLABS_PARALLEL, limiter, mp3DurationMs } from "../server/lesson-clips-providers";
 
 // docs/specs/2026-11-10-fejezet-kisfilmek-v2.md — fejezetszöveg, forgatókönyv-kapuk, média, migrációk.
 
@@ -51,6 +52,9 @@ test("forgatókönyv-kapuk a korosztály szerint: jelenetszám, mondathossz, ös
   const wordy = "b".repeat(170);
   assert.match(clipDraftProblems(draft([scene(wordy, { kind: "title", text: "Cím" }), scene(wordy), scene(wordy), scene(wordy)]), "laboratory", SOURCE, "x", []).join(" "), /összesen legfeljebb 480/);
   assert.match(clipDraftProblems(draft([scene(SAY), scene(SAY), scene(SAY), scene(SAY)]), "laboratory", SOURCE, "x", []).join(" "), /első jelenet ábrája/);
+  // A mennyiség állhat számjeggyel (a program olvassa ki), a sorszám viszont szavakkal kell.
+  assert.deepEqual(clipDraftProblems(draft([draft().scenes[0], scene("A futó 400 métert tesz meg a pályán, egy kört."), scene(SAY), scene(SAY)]), "laboratory", SOURCE, "x", []), []);
+  assert.match(clipDraftProblems(draft([draft().scenes[0], scene("Newton 2. törvénye szerint ez így van, figyelj."), scene(SAY), scene(SAY)]), "laboratory", SOURCE, "Newton 2. törvénye", []).join(" "), /sorszámot szavakkal/);
   const invented = draft([draft().scenes[0], scene("A futó pontosan 999 métert tesz meg a pályán."), scene(SAY), scene(SAY)]);
   assert.match(clipDraftProblems(invented, "laboratory", SOURCE, "x", []).join(" "), /999/);
   const graph = draft([draft().scenes[0], scene(SAY, { kind: "graph", xLabel: "t (s)", yLabel: "s (m)", points: [[0, 0], [60, 777]] }), scene(SAY), scene(SAY)]);
@@ -61,6 +65,27 @@ test("forgatókönyv-kapuk a korosztály szerint: jelenetszám, mondathossz, ös
   for (const bad of ["Ez **félkövér** szöveg a jelenetben, ami tilos.", "Nézd meg itt: https://pelda.hu, mert érdekes.", "Ez <b>HTML</b> jelölés a mondatban, tilos."]) {
     assert.equal(clipDraftProblems(draft([draft().scenes[0], scene(bad), scene(SAY), scene(SAY)]), "laboratory", SOURCE, "x", []).length, 1, bad);
   }
+});
+
+test("a számok magyar kiolvasása a hanghoz: egészek, tizedes törtek; a szöveg többi része változatlan", () => {
+  const cases: Array<[number, string]> = [[0, "nulla"], [2, "kettő"], [10, "tíz"], [18, "tizennyolc"], [20, "húsz"], [25, "huszonöt"], [100, "száz"], [120, "százhúsz"], [200, "kétszáz"],
+    [240, "kétszáznegyven"], [400, "négyszáz"], [1000, "ezer"], [1200, "ezerkétszáz"], [2000, "kétezer"], [2500, "kétezer-ötszáz"], [12000, "tizenkétezer"]];
+  for (const [n, words] of cases) assert.equal(huNumberWords(n), words, String(n));
+  assert.equal(spokenHu("Egy terület 120 méter magasan van, 0 és 200 méter között."), "Egy terület százhúsz méter magasan van, nulla és kétszáz méter között.");
+  assert.equal(spokenHu("g értéke 9,8, a váltószám 3,6."), "g értéke kilenc egész nyolc tized, a váltószám három egész hat tized.");
+  assert.equal(spokenHu("Nincs benne szám."), "Nincs benne szám.");
+});
+
+test("a hangkérések sorba állnak: egyszerre legfeljebb annyi fut, amennyit az előfizetés enged", async () => {
+  assert.ok(ELEVENLABS_PARALLEL < 3, "az előfizetés 3 egyidejű kérést enged (mérve) — alatta kell maradni");
+  const queue = limiter(2);
+  let running = 0, peak = 0;
+  const results = await Promise.all(Array.from({ length: 7 }, (_, i) => queue(async () => { peak = Math.max(peak, ++running); await new Promise((r) => setTimeout(r, 5)); running--; return i; })));
+  assert.deepEqual(results, [0, 1, 2, 3, 4, 5, 6]);
+  assert.equal(peak, 2);
+  // Hibázó feladat nem akasztja meg a sort.
+  await assert.rejects(queue(async () => { throw new Error("hiba"); }));
+  assert.equal(await queue(async () => "megy tovább"), "megy tovább");
 });
 
 test("a néma jelenet legalább 2,5 mp, hosszabb mondatnál arányosan több", () => {
@@ -91,10 +116,14 @@ test("média: tartalomcímzett azonosító, korlátlan gyorsítótár, tartomán
   assert.equal(mediaReply("ABCDEF0123456789ABCDEF0123456789", media, undefined).status, 404, "csak kisbetűs hexa");
 });
 
-test("az MP3 hossza a keretfejléc bitrátájából (22,05 kHz, 32 kbit/s: 4 kB = 1 mp)", () => {
-  const frame = Buffer.alloc(4000); frame[0] = 0xff; frame[1] = 0xf3; frame[2] = 0x40; // MPEG-2 Layer III, 32 kbit/s
-  assert.equal(mp3DurationMs(frame), 1000);
+test("az MP3 hossza a keretek megszámolásával — eltérő bitrátájú első keret sem téveszti meg", () => {
+  // MPEG-1 Layer III, 44,1 kHz: egy keret 1152 minta; 128 kbit/s-on 417 bájt.
+  const frame = (kbpsIndex: number, length: number) => { const f = Buffer.alloc(length); f[0] = 0xff; f[1] = 0xfb; f[2] = kbpsIndex << 4; return f; };
+  const id3 = Buffer.concat([Buffer.from("ID3"), Buffer.from([4, 0, 0, 0, 0, 0, 20]), Buffer.alloc(20)]);
+  const hundred = Buffer.concat([id3, frame(5, 208), ...Array.from({ length: 99 }, () => frame(9, 417))]); // az első keret 64 kbit/s-os
+  assert.equal(mp3DurationMs(hundred), Math.round((100 * 1152 / 44100) * 1000));
   assert.equal(mp3DurationMs(Buffer.from("nem hang")), 0);
+  assert.equal(CLIP_AUDIO_FORMAT, "mp3_44100_128", "a jóváhagyott hangminőség");
 });
 
 test("a v2 kisfilm sémája a korosztály mondathosszát is ellenőrzi", () => {

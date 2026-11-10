@@ -142,6 +142,8 @@ export function clipDraftProblems(draft: ClipDraft, band: DesignThemeId, source:
   const problems: string[] = [];
   if (draft.scenes.length < scenes[0] || draft.scenes.length > scenes[1]) problems.push(`Ebben a korosztályban ${scenes[0] === scenes[1] ? scenes[0] : `${scenes[0]}–${scenes[1]}`} jelenet kell (most ${draft.scenes.length}).`);
   draft.scenes.forEach((scene, i) => { if (scene.say.length > sayMax) problems.push(`A(z) ${i + 1}. jelenet szövege legfeljebb ${sayMax} karakter lehet (most ${scene.say.length}).`); });
+  // A számjegyeket a program olvassa ki (shared/hu-numbers.ts); a sorszámot („2. törvény”) viszont nem tudná — az szavakkal álljon.
+  draft.scenes.forEach((scene, i) => { if (/\d\.\s*\p{Ll}/u.test(scene.say)) problems.push(`A(z) ${i + 1}. jelenet "say" szövegében a sorszámot szavakkal írd (pl. "második törvény").`); });
   const total = draft.scenes.reduce((sum, scene) => sum + scene.say.length, 0);
   if (total > totalMax) problems.push(`Az elmondott szöveg összesen legfeljebb ${totalMax} karakter lehet (most ${total}).`);
   if (draft.scenes[0].overlay?.kind !== "title") problems.push("Az első jelenet ábrája a kisfilm címe legyen (kind: \"title\").");

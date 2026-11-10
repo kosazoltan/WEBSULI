@@ -17,8 +17,9 @@ figurával, képi stílussal, mondathosszal és hanggal. Terv: [`docs/specs/2026
 ## Hogyan készül (a lecke közzététele után, a háttérben)
 
 Fejezetenként: forgatókönyv (szövegmodell, a korosztály szabályaival; kapuk: mondathossz, számhűség — új szám az ábrán sem születhet)
-→ jelenetenként kezdőkép (képmodell + minőségkapu: szöveg / nem gyerekbarát / nem a jelenet → újrapróba) → hang (ElevenLabs) →
-mozgókép a kezdőképből (Seedance 1.5) → átkódolás kicsire (`ffmpeg`) → tárolás. Mért idő: kb. 85 mp fejezetenként; két fejezet
+→ jelenetenként kezdőkép (képmodell + minőségkapu: szöveg / nem gyerekbarát / nem a jelenet → újrapróba) → hang (ElevenLabs; hangkapu:
+minden mondatot egy független beszédfelismerő visszaír, betűre összeveti, eltérésnél újragyártja) →
+mozgókép a kezdőképből (Seedance 1.5) → átkódolás kicsire (`ffmpeg`) → tárolás. Mért idő: kb. 2–2,5 perc fejezetenként; két fejezet
 készül egyszerre. A lecke szövege érintetlen: a kisfilm a `lesson_clips`, a média a `lesson_clip_media` táblában él.
 
 ## Kapcsolók (Render → `websuli-api-eu` → Environment)
@@ -28,7 +29,7 @@ készül egyszerre. A lecke szövege érintetlen: a kisfilm a `lesson_clips`, a 
 | *(semmi)* | Nem gyárt, nem költ; a már kész kisfilmeket kiszolgálja. |
 | `LESSON_CLIPS_AUTO=on` | A legfeljebb 3 napja közzétett leckékhez gyárt. Kell hozzá az `OPENROUTER_API_KEY` (megvan). |
 | `ELEVENLABS_API_KEY` | A mesélőhang. Nélküle a kisfilm a felolvasás tartalék (gépies) hangjával szól. |
-| `OPENAI_API_KEY` / `AI_INTEGRATIONS_OPENAI_API_KEY` | A jóváhagyott próba képmodellje. Nélküle a leckeborító képmodellje rajzol. |
+| `OPENAI_API_KEY` / `AI_INTEGRATIONS_OPENAI_API_KEY` | A jóváhagyott próba képmodellje ÉS a hangkapu független felismerője. Nélküle a leckeborító képmodellje rajzol, a hangot pedig az ElevenLabs saját (elnézőbb) felismerője ellenőrzi. |
 | `LESSON_CLIP_DAILY_LIMIT` | Naponta legfeljebb ennyi lecke kap gyártást (alap: 2). |
 | `LESSON_CLIP_MEDIA_MAX_MB` | A médiatábla mérethatára (alap: 400 MB); fölötte a gyártás megáll, a naplóban jelzi. |
 | `FFMPEG_PATH` | Az `ffmpeg` helye, ha nincs a PATH-on. `ffmpeg` nélkül a kisfilmek állóképesek (a naplóban jelzi). |
@@ -46,8 +47,8 @@ készül egyszerre. A lecke szövege érintetlen: a kisfilm a `lesson_clips`, a 
 
 - Mozgókép: kb. 0,026 USD / mp → 4 jelenet 5–7 mp-es klipekkel kb. 0,55–0,70 USD fejezetenként. Kép: kb. 0,01 USD / db.
   Hang: 0,5 kredit / karakter (fejezetenként kb. 150–250 kredit). Szöveg- és képkapu-hívások: fillérek.
-- Tárolt méret: 1,6–1,8 MB fejezetenként (a nyers klipek 4–7 MB-osak, átkódolva 0,3–0,4 MB).
-- Egy 12 fejezetes lecke: kb. 7–9 USD és kb. 20 MB.
+- Tárolt méret: kb. 3,3 MB fejezetenként (a nyers klipek 4–7 MB-osak, átkódolva 0,3–0,7 MB; a hang 128 kbit/s).
+- Egy 12 fejezetes lecke: kb. 7–9 USD és kb. 40 MB.
 
 ## Kipróbálás éles adat írása nélkül
 

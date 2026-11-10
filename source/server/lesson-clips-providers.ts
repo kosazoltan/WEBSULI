@@ -15,6 +15,10 @@ export const CLIP_VIDEO_MODEL = "bytedance/seedance-1-5-pro";
 export const CLIP_IMAGE_MODEL_OPENAI = "gpt-image-2.5-flare";
 export const CLIP_IMAGE_MODEL_OPENROUTER = "bytedance-seed/seedream-5-0-pro";
 const OPENROUTER = "https://openrouter.ai/api/v1";
+/** A tulajdonos által jóváhagyott hangminőség. A 22 kHz / 32 kbit/s-os változatot a szemle elutasította (elmosódott kiejtés). */
+export const CLIP_AUDIO_FORMAT = "mp3_44100_128";
+export const CLIP_HEAR_MODEL = "scribe_v1";
+export const CLIP_HEAR_MODEL_OPENAI = "gpt-4o-transcribe";
 const VIDEO_POLL_MS = 6000, VIDEO_TIMEOUT_MS = 6 * 60_000;
 
 export type ClipKeys = { openRouter: string; openAi?: string; elevenLabs?: string; ffmpeg?: string };
@@ -35,18 +39,53 @@ const QA_SYSTEM = `You check the first frame of a short animated lesson clip for
 - "unsafe": true if anything is scary, violent, gory, sexual, shows a weapon, or is otherwise unsuitable for school children.
 - "matches": true if the image clearly shows the planned scene.`;
 
-/** Az MP3 hossza ezredmásodpercben az első keretfejléc bitrátájából (állandó bitrátájú hangra); 0: nem megállapítható. */
+const MP3_KBPS = { 3: [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320], other: [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160] } as const;
+const MP3_HZ: Record<number, readonly number[]> = { 3: [44100, 48000, 32000], 2: [22050, 24000, 16000], 0: [11025, 12000, 8000] };
+/**
+ * Az MP3 (Layer III) hossza ezredmásodpercben a KERETEK megszámolásával. Az első keret bitrátájából becsülni nem megbízható (mérve
+ * 2026-11-10: a 32 kbit/s-os hang első kerete 56 kbit/s-ot jelzett, a számolt hossz a valódi 58%-a lett). 0: nem megállapítható.
+ */
 export function mp3DurationMs(bytes: Buffer): number {
-  let offset = 0;
-  if (bytes.length > 10 && bytes.toString("latin1", 0, 3) === "ID3") offset = 10 + ((bytes[6] & 0x7f) << 21 | (bytes[7] & 0x7f) << 14 | (bytes[8] & 0x7f) << 7 | (bytes[9] & 0x7f));
-  for (let i = offset; i + 4 <= bytes.length && i < offset + 8192; i++) {
-    if (bytes[i] !== 0xff || (bytes[i + 1] & 0xe0) !== 0xe0) continue;
-    const version = (bytes[i + 1] >> 3) & 3, layer = (bytes[i + 1] >> 1) & 3, index = bytes[i + 2] >> 4;
-    if (version === 1 || layer !== 1 || index === 0 || index === 15) continue;
-    const table = version === 3 ? [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320] : [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
-    return Math.round(((bytes.length - i) * 8) / table[index]);
+  let i = 0;
+  if (bytes.length > 10 && bytes.toString("latin1", 0, 3) === "ID3") i = 10 + ((bytes[6] & 0x7f) << 21 | (bytes[7] & 0x7f) << 14 | (bytes[8] & 0x7f) << 7 | (bytes[9] & 0x7f));
+  let samples = 0, rate = 0, misses = 0;
+  while (i + 4 <= bytes.length) {
+    const version = (bytes[i + 1] >> 3) & 3, layer = (bytes[i + 1] >> 1) & 3, kbpsIndex = bytes[i + 2] >> 4, hzIndex = (bytes[i + 2] >> 2) & 3;
+    const valid = bytes[i] === 0xff && (bytes[i + 1] & 0xe0) === 0xe0 && version !== 1 && layer === 1 && kbpsIndex > 0 && kbpsIndex < 15 && hzIndex < 3;
+    if (!valid) { if (++misses > 8192) break; i++; continue; }
+    const kbps = (version === 3 ? MP3_KBPS[3] : MP3_KBPS.other)[kbpsIndex], hz = MP3_HZ[version][hzIndex], padding = (bytes[i + 2] >> 1) & 1;
+    const frameSamples = version === 3 ? 1152 : 576;
+    const length = Math.floor(((frameSamples / 8) * kbps * 1000) / hz) + padding;
+    if (length < 24) { i++; continue; }
+    samples += frameSamples; rate = hz; i += length;
   }
-  return 0;
+  return rate ? Math.round((samples / rate) * 1000) : 0;
+}
+
+/**
+ * Egyszerre legfeljebb ennyi ElevenLabs-kérés fut (mérve 2026-11-10: az előfizetés 3 egyidejű kérést enged, a 4. HTTP 429-et kap —
+ * a gyártósor jelenetenként és fejezetenként párhuzamos, ezért a hangkérések közös sorba állnak).
+ */
+export const ELEVENLABS_PARALLEL = 2;
+/** Közös sorba állító: legfeljebb `limit` feladat fut egyszerre, a többi vár. */
+export function limiter(limit: number): <T>(work: () => Promise<T>) => Promise<T> {
+  let running = 0;
+  const waiting: Array<() => void> = [];
+  return async (work) => {
+    if (running >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
+    running++;
+    try { return await work(); } finally { running--; waiting.shift()?.(); }
+  };
+}
+const elevenLabsQueue = limiter(ELEVENLABS_PARALLEL);
+/** Torlódásnál (HTTP 429) rövid várakozás után újrapróbál, legfeljebb háromszor. */
+async function fetchPatiently(send: () => Promise<Response>, waitMs = 2500): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    const res = await send();
+    if (res.status !== 429 || attempt >= 3) return res;
+    await res.arrayBuffer().catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, waitMs * attempt));
+  }
 }
 
 let warnedNoFfmpeg = false;
@@ -92,7 +131,8 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
     return choice?.message?.content ?? "";
   };
   const deps: ClipDeps = {
-    chat: (system, user) => orChat(system, user, 2500),
+    // Spec 9e: a 2500-as keret a 9. osztályos forgatókönyvet kétszer csonkolta (finish_reason=length) — a kisfilm emiatt nem készült el.
+    chat: (system, user) => orChat(system, user, 5000),
     async image(prompt) {
       if (keys.openAi) {
         const res = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", signal: AbortSignal.timeout(120_000), headers: { Authorization: `Bearer ${keys.openAi}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: CLIP_IMAGE_MODEL_OPENAI, prompt, size: "1280x720", quality: "medium", output_format: "jpeg", n: 1 }) });
@@ -140,9 +180,38 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
   if (keys.elevenLabs) {
     const key = keys.elevenLabs;
     deps.speech = async (text, voice) => {
-      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}?output_format=mp3_22050_32`, { method: "POST", signal: AbortSignal.timeout(60_000), headers: { "xi-api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ text, model_id: voice.model, language_code: "hu" }) });
+      const res = await elevenLabsQueue(() => fetchPatiently(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}?output_format=${CLIP_AUDIO_FORMAT}`, { method: "POST", signal: AbortSignal.timeout(60_000), headers: { "xi-api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ text, model_id: voice.model, language_code: "hu" }) })));
       if (!res.ok) throw fail("hang", res.status, await res.text());
       return Buffer.from(await res.arrayBuffer());
+    };
+    // Hangkapu tartaléka: az ElevenLabs saját felismerője. Mérve 2026-11-10: a saját hangját a független felismerőnél elnézőbben
+    // hallja (egy érthetetlen mondatot hibátlannak írt vissza), ezért csak akkor ez a kapu, ha nincs OpenAI-kulcs.
+    deps.hear = async (audio) => {
+      const body = () => {
+        const form = new FormData();
+        form.append("file", new Blob([new Uint8Array(audio)], { type: "audio/mpeg" }), "hang.mp3");
+        form.append("model_id", CLIP_HEAR_MODEL);
+        form.append("language_code", "hu");
+        return form;
+      };
+      const res = await elevenLabsQueue(() => fetchPatiently(() => fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", signal: AbortSignal.timeout(60_000), headers: { "xi-api-key": key }, body: body() })));
+      const text = await res.text();
+      if (!res.ok) throw fail("hangkapu", res.status, text);
+      return String((JSON.parse(text) as { text?: unknown }).text ?? "");
+    };
+  }
+  if (keys.openAi) {
+    const key = keys.openAi;
+    // Hangkapu: FÜGGETLEN beszédfelismerő (a jóváhagyott hangokat hibátlanul, a rosszakat rosszul írja vissza — spec 9e).
+    deps.hear = async (audio) => {
+      const form = new FormData();
+      form.append("file", new Blob([new Uint8Array(audio)], { type: "audio/mpeg" }), "hang.mp3");
+      form.append("model", CLIP_HEAR_MODEL_OPENAI);
+      form.append("language", "hu");
+      const res = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", signal: AbortSignal.timeout(60_000), headers: { Authorization: `Bearer ${key}` }, body: form });
+      const text = await res.text();
+      if (!res.ok) throw fail("hangkapu", res.status, text);
+      return String((JSON.parse(text) as { text?: unknown }).text ?? "");
     };
   }
   return deps;

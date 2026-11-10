@@ -368,5 +368,14 @@ Forrás: tulajdonosi visszajelzés („borzasztó”) → `docs/specs/2026-11-10
 - **Tünet 6:** a hálózati titokként elmentett kulcsot az ügynök használni tudja, de kiolvasni nem — ezért másik rendszerbe (Render
   környezeti változó) nem tudja átírni. A tulajdonos ezt joggal nem értette.
 - **Megelőzés 6:** kulcskéréskor előre meg kell mondani: „ezt csak ebben a munkamenetben tudom használni; a szerverre neked kell beírnod”.
+- **Tünet 7:** a tulajdonos által jóváhagyott hangpróba után a gyártósorban „takarékosságból” megváltoztattam a hang formátumát
+  (128 → 32 kbit/s), és ellenőrzés nélkül adtam ki a hangot; a hangmodell közben félreolvasott („síkság” → „síkség”).
+- **Megelőzés 7:** jóváhagyott minta paraméterét (modell, formátum, hang) a gyártósor nem változtathatja meg csendben. Hangot csak
+  hangkapun át szabad kiadni: visszaírás FÜGGETLEN felismerővel, betűre összevetés, újrapróba. A szolgáltató saját felismerője a saját
+  hangjára elnéző — kapunak nem elég. A felismerőt előbb ismert jó és ismert rossz mintán kell kalibrálni.
+- **Tünet 8:** a hangmodellek összevetésekor a pontozóm a felismerő számjegy-írását („0 és 200”) hibának vette — a jó hangok is rossznak
+  látszottak. **Megelőzés 8:** mérőeszközt a mérés előtt ismert jó mintán kell ellenőrizni; ha a jó minta megbukik, a mérce a hibás.
+- **Tünet 9:** párhuzamos hívások a szolgáltató egyidejűségi korlátjába ütköztek (ElevenLabs: 3; HTTP 429), egy jelenet hang nélkül maradt.
+- **Megelőzés 9:** külső szolgáltató párhuzamos hívásai közös sorba állítóval, a mért korlát alatt; 429-re várakozás és újrapróba.
 - **Tünet 3:** a hangminőséget az ügynök nem tudja füllel megítélni — a „természetes hang” állítás mérés nélkül feltételezés.
 - **Megelőzés 3:** hangról csak mérhető tényt szabad állítani (elkészült, hossz, modell, hangazonosító); a minőség a tulajdonos szemléje.

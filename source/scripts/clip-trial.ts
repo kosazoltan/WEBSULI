@@ -38,6 +38,7 @@ async function main(): Promise<void> {
   const deps: ClipDeps = {
     ...real, chat: timed("forgatókönyv", real.chat), image: timed("kép", real.image), check: timed("képkapu", real.check),
     ...(real.speech ? { speech: timed("hang", real.speech) } : {}), ...(real.video ? { video: timed("mozgókép (nyers)", real.video) } : {}),
+    ...(real.hear ? { hear: timed("hangkapu", real.hear) } : {}),
     shrink: timed("átkódolás", real.shrink),
   };
   const EXT: Record<string, string> = { "image/webp": "webp", "audio/mpeg": "mp3", "video/mp4": "mp4" };

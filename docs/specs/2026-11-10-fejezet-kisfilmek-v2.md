@@ -176,6 +176,27 @@ NEM igazolt (élesben derül ki): van-e `ffmpeg` a Render-példányon (nélküle
 OpenAI-kulccsal megy-e a képgyártás (ha nem, a leckeborító képmodellje rajzol); a `dbClipStore` éles adatbázison (helyi Postgres 16-on
 igazolva).
 
+## 9e. Hangminőség: mért hibák és a hangkapu (2026-11-10, tulajdonosi szemle: „Vera hangja nem jó”)
+
+A tulajdonos az első automatikus Vera-kisfilmet hibásnak hallotta. A mérés (független beszédfelismerő, `gpt-4o-transcribe`; a korábban
+jóváhagyott Vera-hangokat hibátlanul, a rosszakat rosszul írja vissza) négy saját hibát tárt fel:
+
+| Hiba | Mérés | Javítás |
+|---|---|---|
+| Vera a `eleven_flash_v2_5` modellel félreolvas | 12 felolvasásból 4 betűre pontos („síkság” → „síkség”, „A kisebb vízszintes”) | Vera hangmodellje `eleven_v4` (10/12, a maradék 1 betű); Csaba marad flash (12/12) |
+| Nincs ellenőrzés a kész hangon | a gyártósor a hibás hangot kiadta | hangkapu: minden mondat visszaírva, betűre összevetve, legfeljebb 3 próbálkozás, a legpontosabb marad |
+| Az ElevenLabs saját felismerője elnéző a saját hangjával | egy érthetetlen mondatot hibátlannak írt vissza | a kapu felismerője független (OpenAI), az ElevenLabsé csak tartalék |
+| A hang 22 kHz / 32 kbit/s volt (a jóváhagyott 44,1 kHz / 128 kbit/s helyett) | tárhelykímélés miatt állítottam át | vissza a jóváhagyott minőségre (`mp3_44100_128`) |
+
+További, ugyanekkor mért hibák: a hang hosszát az első MP3-keret bitrátájából számoltam (a valódi 58%-a lett → rövid mozgókép) — most
+keretszámlálás (a valódi fájlokon ≤ 30 ms eltérés); az előfizetés 3 egyidejű ElevenLabs-kérést enged (a 4. HTTP 429) — a hangkérések
+közös sorban, egyszerre 2; a forgatókönyvíró elgépelte a kiírt számot („Százthúsz”) — a számjegyeket a program olvassa ki
+(`shared/hu-numbers.ts`), a felirat a számjegyest mutatja; a 2500 tokenes válaszkeret a 9. osztályos forgatókönyvet csonkolta — 5000.
+
+Eredmény a javított gyártósorral (két új fejezet): mind a 8 mondat hangja két felismerővel (OpenAI, ElevenLabs) betűre egyezik; a
+4. osztályos fejezetnél a kapu egy mondatot újragyártatott. Gyártási idő 134–143 mp, tárolt média 3,3 MB fejezetenként (a jobb
+hangminőség miatt több, mint a 9d mérésben).
+
 ## 10. Edge case-ek
 
 - A képmodell szöveget rajzol a képre → minőségkapu, újrapróba; kétszeres bukásnál a jelenet képe a sáv semleges háttere.

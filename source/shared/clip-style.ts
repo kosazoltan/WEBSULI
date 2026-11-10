@@ -34,9 +34,12 @@ export type ClipBandStyle = {
 /** Minden sávban érvényes képi tiltások (a leckeborító szabályaival egyezően). */
 export const CLIP_IMAGE_COMMON = "Wide 16:9 scene with calm empty space in the lower third for an overlay. Absolutely no text, letters, digits, numerals, symbols, equations, labels, signs, logos, watermarks or UI elements anywhere in the image. No brands or copyrighted characters. Gender-neutral and inclusive, no stereotypes. Safe for school children: nothing scary, violent or sad. Original artwork.";
 
-export const CLIP_VOICE_MODEL = "eleven_flash_v2_5";
-const VERA = { id: "xjlfQQ3ynqiEyRpArrT8", name: "Vera", model: CLIP_VOICE_MODEL } as const;
-const CSABA = { id: "TCjj4QxGBFJeq0ODYm1f", name: "Csaba", model: CLIP_VOICE_MODEL } as const;
+/**
+ * A hangmodell hangonként más (mérve 2026-11-10, független beszédfelismerővel, 12–12 felolvasáson): Csaba a flash modellel 12/12
+ * betűre pontos; Vera a flash modellel csak 4/12 (a tulajdonos is hibásnak hallotta), az `eleven_v4` modellel 10/12, a maradék 1 betű.
+ */
+const VERA = { id: "xjlfQQ3ynqiEyRpArrT8", name: "Vera", model: "eleven_v4" } as const;
+const CSABA = { id: "TCjj4QxGBFJeq0ODYm1f", name: "Csaba", model: "eleven_flash_v2_5" } as const;
 /** A nagyok közös képi nyelve: stilizált 2D rajzfilm, nem fotó (tulajdonosi irány 2026-11-10: minden korosztály rajzfilmszerű). */
 const FLAT_2D = "Clean modern stylized 2D animation illustration, flat shading with subtle gradients, crisp shapes, like a contemporary science explainer animation, not photographic, not childish.";
 

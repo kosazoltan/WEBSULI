@@ -27,7 +27,9 @@ test("a mesélés a korral komolyodik: nő a mondathossz, más a hang, más a me
   assert.ok(sayMax[0] < sayMax[4]);
   // Tulajdonosi választás (2026-11-10): a kicsiknek Vera, a 6. évfolyamtól Csaba; a hangmodell közös.
   assert.deepEqual(order.map((b) => CLIP_BAND_STYLE[b].voice.name), ["Vera", "Vera", "Csaba", "Csaba", "Csaba"]);
-  assert.ok(order.every((b) => CLIP_BAND_STYLE[b].voice.model === "eleven_flash_v2_5" && /^[A-Za-z0-9]{20}$/.test(CLIP_BAND_STYLE[b].voice.id)));
+  // A hangmodell hangonként a mért megbízhatóság szerint: Vera az eleven_v4-gyel, Csaba a flash modellel pontos.
+  assert.deepEqual(order.map((b) => CLIP_BAND_STYLE[b].voice.model), ["eleven_v4", "eleven_v4", "eleven_flash_v2_5", "eleven_flash_v2_5", "eleven_flash_v2_5"]);
+  assert.ok(order.every((b) => /^[A-Za-z0-9]{20}$/.test(CLIP_BAND_STYLE[b].voice.id)));
   const totals = order.map((b) => CLIP_BAND_STYLE[b].narration.totalMax);
   assert.ok(order.every((b, i) => totals[i] <= CLIP_BAND_STYLE[b].narration.sayMax * CLIP_BAND_STYLE[b].narration.scenes[1]) && totals[0] < totals[4]);
   // Minden korosztály rajzfilmszerű: a nagyoknál stilizált 2D, nem fotó.

@@ -5,6 +5,7 @@ import {
 } from "../shared/lesson-clip";
 import { CLIP_BAND_STYLE, clipBandFor, clipImagePrompt, type ClipBandStyle } from "../shared/clip-style";
 import type { DesignThemeId } from "../shared/lesson-design";
+import { spokenHu } from "../shared/hu-numbers";
 import { logger } from "./lib/logger";
 import type { ClipMediaKind } from "./lesson-clip-media";
 
@@ -108,6 +109,8 @@ export type ClipDeps = {
   /** A tárolásra szánt kép (1280×720 WebP). */
   still(image: { bytes: Buffer; mime: string }): Promise<Buffer>;
   speech?: (text: string, voice: ClipBandStyle["voice"]) => Promise<Buffer>;
+  /** A kész hang visszaírása szöveggé (a hangkapuhoz); hiányában a hang ellenőrzés nélkül megy tovább. */
+  hear?: (audio: Buffer) => Promise<string>;
   /** A hang hossza ezredmásodpercben (0: nem megállapítható). */
   audioMs(bytes: Buffer): number;
   video?: (image: { bytes: Buffer; mime: string }, prompt: string, seconds: number) => Promise<Buffer>;
@@ -134,7 +137,8 @@ Válaszod KIZÁRÓLAG egyetlen JSON-objektum, előtte és utána semmi:
 
 Mezők jelenetenként:
 - "say": a mesélő hangosan elhangzó magyar szövege. Legfeljebb ${style.narration.sayMax} karakter; az összes "say" együtt legfeljebb ${style.narration.totalMax}.
-  Képletet, jelet, mértékegység-rövidítést SZAVAKKAL írj ("négyszáz méter", "a sebesség az út és az idő hányadosa"); zárójel, emoji nincs benne.
+  Képletet, jelet, mértékegység-rövidítést SZAVAKKAL írj ("méter per másodperc", "a sebesség az út és az idő hányadosa"). A mennyiség
+  állhat számjeggyel ("120 méter", "9,8"), a sorszám viszont szavakkal ("második törvény"); zárójel és emoji nincs benne.
 - "image": a jelenet KEZDŐKÉPÉNEK angol leírása (1–2 mondat): konkrét, lerajzolható helyzet a fejezet szövegéből. Stílust NE írj (automatikusan hozzáadódik).
   A képen soha nincs szöveg, szám, betű, felirat, képlet. ${style.cast ? "A képen mindig szerepeljenek a kisfilm állandó szereplői (\"the two children\" / a megadott figura) — a leírásuk automatikusan hozzáadódik." : "Kabala, rajzfilmfigura nincs; ember legfeljebb hátulról vagy távolról."}
 - "motion": angolul, 1–2 mondat: mi MOZOG a képen a jelenet alatt (a szereplők, a tárgy, a kamera). A mozgás azt mutassa meg, amiről a "say" szól.
@@ -178,8 +182,43 @@ export async function writeDraft(input: ClipInput, band: DesignThemeId, deps: Pi
   return checkDraftAnswer(await deps.chat(system, repair), band, input);
 }
 
-export type ChapterStats = { images: number; imageRetries: number; audio: number; videos: number; videoFailures: number; bytes: number };
+export type ChapterStats = { images: number; imageRetries: number; audio: number; audioRetries: number; audioImperfect: number; videos: number; videoFailures: number; bytes: number };
+
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 200);
+
+/** Egy mondat hangja legfeljebb ennyiszer készül el, amíg a visszaírt szöveg betűre nem egyezik. */
+export const CLIP_SPEECH_ATTEMPTS = 3;
+const letters = (text: string) => spokenHu(text).normalize("NFC").toLocaleLowerCase("hu").replace(/[^\p{L}]/gu, "");
+/**
+ * A hangkapu mértéke: az elmondandó és a visszahallott szöveg szerkesztési távolsága, csak a betűkön (írásjel, szóköz, kis- és nagybetű
+ * nem számít; az ékezet IGEN — mérve 2026-11-10: a hangmodell „síkság” helyett „síkség”-et mondott). A számjegyek mindkét oldalon
+ * szavakká íródnak (a felismerő a kimondott számot számjeggyel adja vissza). 0: betűre egyezik.
+ */
+export function speechDistance(expected: string, heard: string): number {
+  const a = letters(expected), b = letters(heard);
+  let row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length];
+}
+
+/** Egy mondat hangja a hangkapuval: a betűre egyező változat, különben a próbálkozások közül a legpontosabb. */
+export async function speakChecked(say: string, voice: ClipBandStyle["voice"], deps: Pick<ClipDeps, "speech" | "hear">): Promise<{ bytes: Buffer; attempts: number; distance: number | null }> {
+  let best: { bytes: Buffer; distance: number | null } | null = null;
+  for (let attempt = 1; attempt <= CLIP_SPEECH_ATTEMPTS; attempt++) {
+    // A hangmodell a kiolvasott számot kapja („százhúsz méter”), a felirat a számjegyest mutatja.
+    const bytes = await deps.speech!(spokenHu(say), voice);
+    if (!deps.hear) return { bytes, attempts: attempt, distance: null };
+    let distance: number | null;
+    try { distance = speechDistance(say, await deps.hear(bytes)); } catch (error) { logger.warn(`[lesson-clips] a hangkapu nem érhető el, a hang ellenőrzés nélkül megy tovább: ${describe(error)}`); return { bytes, attempts: attempt, distance: null }; }
+    if (!best || best.distance === null || distance < best.distance) best = { bytes, distance };
+    if (distance === 0) return { bytes, attempts: attempt, distance: 0 };
+  }
+  return { ...best!, attempts: CLIP_SPEECH_ATTEMPTS };
+}
 
 /**
  * Egy fejezet kisfilmje: forgatókönyv → jelenetenként párhuzamosan kezdőkép (+ minőségkapu, egy újrapróba) → hang → mozgókép
@@ -189,7 +228,7 @@ export async function makeChapterClip(input: ClipInput, band: DesignThemeId, dep
   const written = await writeDraft(input, band, deps);
   if ("problems" in written) return written;
   const style = CLIP_BAND_STYLE[band];
-  const stats: ChapterStats = { images: 0, imageRetries: 0, audio: 0, videos: 0, videoFailures: 0, bytes: 0 };
+  const stats: ChapterStats = { images: 0, imageRetries: 0, audio: 0, audioRetries: 0, audioImperfect: 0, videos: 0, videoFailures: 0, bytes: 0 };
   const put: PutMedia = async (kind, mime, bytes) => { stats.bytes += bytes.length; return putMedia(kind, mime, bytes); };
   try {
     const scenes = await Promise.all(written.draft.scenes.map(async (scene) => {
@@ -207,7 +246,10 @@ export async function makeChapterClip(input: ClipInput, band: DesignThemeId, dep
       let audio: string | undefined, ms: number | undefined;
       if (deps.speech) {
         try {
-          const bytes = await deps.speech(scene.say, style.voice);
+          const spoken = await speakChecked(scene.say, style.voice, deps);
+          const bytes = spoken.bytes;
+          stats.audioRetries += spoken.attempts - 1;
+          if (spoken.distance) { stats.audioImperfect++; logger.warn(`[lesson-clips] a hang ${spoken.attempts} próbálkozás után sem egyezik betűre (eltérés: ${spoken.distance} betű): „${scene.say.slice(0, 60)}”`); }
           const length = deps.audioMs(bytes);
           audio = await put("audio", "audio/mpeg", bytes);
           if (length >= 500) ms = Math.min(60_000, length);
@@ -272,7 +314,7 @@ export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipM
         if ("clip" in result) {
           await store.upsert({ ...base, status: "ready", clip: result.clip });
           report.made++; report.videos += result.stats.videos;
-          logger.info(`[lesson-clips] kész: ${lesson.id} / ${section.sectionIndex + 1}. fejezet — ${result.stats.images} kép (${result.stats.imageRetries} újrapróba), ${result.stats.audio} hang, ${result.stats.videos} mozgókép (${result.stats.videoFailures} nélkül), ${Math.round(result.stats.bytes / 1024)} kB`);
+          logger.info(`[lesson-clips] kész: ${lesson.id} / ${section.sectionIndex + 1}. fejezet — ${result.stats.images} kép (${result.stats.imageRetries} újrapróba), ${result.stats.audio} hang (${result.stats.audioRetries} újrapróba, ${result.stats.audioImperfect} pontatlan), ${result.stats.videos} mozgókép (${result.stats.videoFailures} nélkül), ${Math.round(result.stats.bytes / 1024)} kB`);
           return;
         }
         await store.upsert({ ...base, status: "failed", clip: null });
