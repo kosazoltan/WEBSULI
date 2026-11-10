@@ -267,3 +267,28 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   elutasította, így a commit sem készült el. A hook a parancs SZÖVEGÉT nézi: egy heredocban szereplő „git” + „push” szópár is tiltást vált ki.
 - **Megelőzés 5:** commit, `.audit-ok` jelző és feltöltés három külön hívás (ld. a `.audit-ok` szabályt fent); dokumentumot az
   Edit / Write eszközzel kell írni, nem shell heredocból.
+
+## C-26 — Hibavadászat tanulságai: visszatekintő regex a kliensben, `try` nélküli aszinkron kezelő, hamis tesztkettős (2026-11-10)
+
+- **Tünet 1:** a kliens darabjaiba (`LessonRuntime-*.js`, `game-quiz-contract-*.js`) visszatekintő reguláris kifejezés (`(?<!…)`,
+  `(?<=…)`) került a `shared/` modulokból. A 16.4 előtti Safari ezt szintaktikai hibának veszi: az egész darab nem fut, a lecke üres.
+  A #348 review egy helyen már javította, de őr nem készült, így a minta visszaszivárgott.
+- **Megelőzés 1:** kliensből elérhető fájlba visszatekintő regex nem kerülhet — a `tests/no-lookbehind-client.test.ts` a kliens
+  importgráfját bejárva kikényszeríti. Helyette `(?:^|[^\p{L}])X`, vagy határ nélküli minta + az előző karakter ellenőrzése kódból.
+  Egyszeri javítás őr nélkül nem javítás: az ismétlődő hibafajtához forrásőr-teszt kell.
+- **Tünet 2:** Express 4 alatt a `try` nélküli `async` kezelő elutasított ígérete kezeletlen marad; Node 24 alatt ez leállítja a
+  folyamatot (egy megszakadt adatbázis-kapcsolat egy névtelen GET-en át az egész szervert).
+- **Megelőzés 2:** új `async` útvonal csak `try/catch`-csel vagy `asyncRoute` burkolóval (`server/lib/async-route.ts`); a
+  `process.on('unhandledRejection')` csak védőháló, a kérés attól még válasz nélkül maradna.
+- **Tünet 3:** „ma” ablak `setHours(0,0,0,0)`-val és időzóna nélküli `cron.schedule` — a Renderen UTC, a levél rossz órában megy,
+  az esti adatok kiesnek. A többi ütemezés már `Europe/Budapest` volt; ez az egy kimaradt.
+- **Megelőzés 3:** minden `cron.schedule` kapjon `timezone`-t, és a napablak tiszta, tesztelt függvény legyen (óraátállítással).
+- **Tünet 4 (eljárási):** két új böngészős tesztem azért bukott, mert a hamis `getVoices()` sima objektumot adott, amelyet a valódi
+  `SpeechSynthesisUtterance.voice` beállító elutasít — a `speak()` meg sem hívódott. A javítás jó volt, a tesztkettős volt hamis.
+- **Megelőzés 4:** böngésző-API-t utánzó tesztkettősnél ellenőrizni kell, hogy a vizsgált ág tényleg lefut (pl. számláló a
+  `speak()` hívásra); valódi típust váró beállítóhoz üres lista vagy valódi objektum kell.
+- **Tünet 5:** a mértékegység-, a hálózatihiba- és a fülváltás-hiba közös gyökere a „részleges egyezés”: határ nélküli részlánc
+  (`m` ⊂ `mm`), böngészőfüggő hibaszöveg (`includes('fetch')`), és a leállítás megkerülése (`speechSynthesis.cancel()` a közös
+  `stopSpeech` helyett).
+- **Megelőzés 5:** szöveges egyezésnél mindig mindkét oldali határ; hibát típus, nem szöveg alapján kell felismerni; erőforrást
+  egyetlen közös leállító szabadítson fel, a hívók azt használják.
