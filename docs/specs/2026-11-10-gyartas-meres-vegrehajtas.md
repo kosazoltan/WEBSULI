@@ -84,6 +84,25 @@ implementációt kell igazítani.
 3. `resultReport.ts`: `apiRequest(..., { retries: RESULT_REPORT_RETRIES })`, `RESULT_REPORT_RETRIES = 3`.
 4. Új teszt `tests/request-retry.test.ts` (tiszta függvény + forrásőr).
 
+## J6 — kész futás újraindulás után (`server/studio/one-step-progress.ts`, `server/studio/lesson-pipeline-routes.ts`)
+
+Külön ág és PR (`fix/kesz-futas-ujrainditas-utan`). Összevonni csak akkor szabad, ha nincs futó gyártás (a telepítés megszakítaná).
+
+1. `persistQuietly`: futásonkénti ígéretlánc — a pillanatképek a hívás sorrendjében íródnak ki; a hiba nem szakítja meg a láncot.
+2. Új `progressPatch(p)`: a motor „done” jelzéséből nem lesz `phase` / `detail` (csak `mapId` / `jobId`); a három haladás-visszahívás ezt használja.
+3. `oneStepRunView`: `done` + hiányzó `lessonId` + van `jobId` → `studio_jobs.lesson_id` pótolja; a válasz `lessonId` mezője is ezt adja.
+4. Új tesztek a `tests/studio-one-step-persist.test.ts`-ben (csak hozzáadás): lassú első írás mellett is az utolsó állapot marad;
+   a `progressPatch` „done”-ra nem ad fázist; a hibás írás után a következő írás lefut.
+   - Review #415: `flushRun(id)` (a futás eddigi írásainak kivárása, sosem dob); a három `phase: "done"` lezárás és a mellettük álló
+     `phase: "error"` frissítés után `await flushRun(runId)`.
+   - Review #415: tiszta, injektált `resolveRunLessonId(run, loadJob)` (tárolt azonosító → különben kész job leckéje → különben null;
+     betöltési hiba → null) és a routes-beli `loadRunJob` (`studio_jobs.step`, `studio_jobs.lesson_id`). Használja: `oneStepRunView`
+     (a 3. pont helyett; hibás futás + kész job közzétett leckével → `done` nézet), `closeOrphanedOneStepRuns` (kész jobú árva →
+     `done` a leckével; a `markOrphanedRuns` változatlan), `runOneStepInWorkflow` (az újrahasznosítás előtt).
+   - Tesztek (csak a J6-tesztek): a rögzített várakozások helyett `await flushRun(id)`; `resolveRunLessonId` viselkedése; `flushRun`
+     lassú / hibás írással és ismeretlen futással; forrásőr a `flushRun` hívásokra és a feloldó három helyére.
+5. Élő ellenőrzés a telepítés után: a `5708791f` futás lekérdezése `htmlFileId: 49780f86-…`-t ad.
+
 ## Záró ellenőrzés és szállítás
 
 1. `npm.cmd run check`, `npm.cmd run lint`, `npm.cmd run check:test`, `npm.cmd test` (teljes), a lecke böngészős tesztjei

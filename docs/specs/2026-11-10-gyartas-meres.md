@@ -95,6 +95,15 @@ felirat nélkül. Egy hatodikosnak a 0 nélküli számegyenes félrevezető.
   láncot is nézi), és az eredménybeküldés 3 újrapróbálást kér. Biztonságos, mert a szerver a kört egyedi kulccsal egyszer rögzíti
   (`server/lesson-result-email.ts:50`, `onConflictDoNothing`). Az írási műveletek alapértéke (0 újrapróbálás) nem változik.
 
+- **J6 (élő mérésből, 2026-11-10 07:38 UTC) · a kész futás a szerver újraindulása után „kész, de nincs lecke”.** A #414 telepítése
+  után a korábban sikeresen lezárt futás (`5708791f`) lekérdezése `phase: "done", lessonId: null, htmlFileId: null`-t adott
+  (újraindulás előtt mindkettő megvolt); a Stúdió ezért „A futás lezárult, de nincs elérhető, közzétett tananyag” hibát mutatott,
+  és az indítógomb a panel bezárásáig tiltva maradt. Ok: a motor saját „done” haladásjelzése (`single-run/engine.ts:894`) és a
+  lezáró frissítés (`lesson-pipeline-routes.ts:634`, a lecke azonosítójával) két független, egyszerre futó adatbázis-írás
+  (`one-step-progress.ts`, `persistQuietly`), és a korábbi pillanatkép ért később célba. Javítás: (1) az írások futásonként sorban
+  mennek; (2) a motor „done” jelzése nem zárja le a futást (a lezárás a lecke azonosítójával együtt történik); (3) a lekérdezés a
+  már hibásan mentett sorokat a futás jobjából pótolja.
+
 ## A felmérés további tételei (ebben a körben nem készülnek el)
 
 A félbemaradt munkák felmérése (2026-11-10, 15 tétel) szerint nyitott PR és kihagyott teszt nincs. Ügynök által elvégezhető,
@@ -109,6 +118,18 @@ a 62 függő fogalom tanári átnézése, iPhone-próba.
 - J1b: az opciókulcs megőrzi az összehasonlító és egyenlőségjeleket („x < 0” ≠ „x > 0”); csak a kis-/nagybetű és a szóköz nem számít.
 - J2: a címke nélküli tartalék csak a Célkártya pontos alakjára illik — négy bekezdés, a 2–4. mind félkövér címkés.
 - J3: ha a tartomány átlépi a 0-t, de a 0 nem osztás, külön 0 jelölés készül; a 0 tűrése a lépéshez mért.
+
+## Review #415 utáni pontosítások
+
+- J6 (végállapot kivárása): a lezáró frissítés (kész / hiba) után a hívó megvárja a futás összes sorba állított írását
+  (`flushRun`) — így a workflow, és vele a leállás kivárása (`server/index.ts`, `waitForActiveRuns`), nem ér véget, mielőtt a
+  végállapot az adatbázisban van. A kivárás sosem dob.
+- J6 (lecke feloldása egy helyen): `resolveRunLessonId` — a tárolt lecke-azonosító nyer; ha hiányzik, a futás jobjából jön, de
+  csak kész (`done`) jobnál. Ezt használja a lekérdezés, a boot-söprés és a webes gyártás újrahasznosító ága (a lecke nélkül
+  mentett kész futás nem indít új gyártást). Ha a folyamat a közzététel és a lezáró írás között halt meg, a boot-söprés a kész
+  jobú futást késznek jelöli (nem árvának), a lekérdezés pedig a hibás futást is késznek mutatja, ha a job leckéje közzétett — a
+  közzétett lecke sosem látszik megállt futásként. Hibás futásnál csak a job dönt (a fogalomjavítás futása indulástól a meglévő
+  leckére mutat, annak hibája nem lehet „kész”).
 
 ## Nem cél
 
@@ -139,3 +160,34 @@ a 62 függő fogalom tanári átnézése, iPhone-próba.
 - A meglévő tesztek változatlanul zöldek (tesztet gyengíteni tilos).
 - WHEN a javítás élesben van, THEN egy új élő gyártás bankideje mérhetően rövidebb a mai 862–1113 mp-nél (UNVERIFIED az
   összevonásig; a mérés a végrehajtási utasítás utolsó lépése).
+
+## Élő visszamérés a #414 telepítése után (2026-11-10, futás `3d1106fb`, job `ca1f317b`)
+
+Szólások és közmondások (Magyar nyelv, 6. évfolyam), anyag `476065ba-cf54-428e-8076-3ab704a2468b`: 3 fejezet, 59 feladat, 98 kvíz.
+
+| | Érték | Megjegyzés |
+|---|---|---|
+| Teljes idő | 21,4 perc | nem rövidebb a korábbi 21,9 / 20,9 percnél |
+| Becsült költség | 5,83 USD | magasabb (5,27 / 5,10 volt) |
+| Gyakorlóbank | 1059 mp, 7 kör, 2 javító, 3,03 USD | |
+| Ellenőrzés | 781 mp, 31 hívás, 2,08 USD | a költség 36%-a |
+| Lektorálás | 85 mp, 2 kör | a lektor javítást kért → 2 fejezet csomagja újraépült |
+
+**Őszinte értékelés:** a J1 (célzott javítás keresztütközésnél) hatása ezen a futáson NEM mérhető — a naplóban nincs
+`Bank keresztütközés` sor, vagyis a drága ág nem futott le. A futás alakja is más: 3 nagy fejezet (csomagonként több tétel), és a
+lektor kifogása után az 1–2. fejezet teljes csomagja újraépült (kb. 6 perc). A bankidő-csökkenés ezért továbbra is UNVERIFIED.
+
+**Ami igazolódott élesben:**
+
+- J1b: a közzétett kvízbankban a „Melyik állítás hamis?” kérdés háromszor szerepel eltérő opciókkal — a korábbi szabály szerint
+  ez javítókört vagy újragyártást váltott volna ki; keresztütközés nem volt.
+- J2: az új gyártás célkártyája „Célunk:” címkével kezdődik, a fejlécek „A lecke célja” és „Történet”; a korábbi (címke nélküli)
+  matematika leckén is helyes a fejléc.
+- J3: a matematika lecke számegyenesei: −10, −5, 0, 5, 10 (korábban −10, −7, −4, −1, 2, 5, 8).
+- J4: `POST /api/admin/materials/bulk-email` admin-munkamenettel → 501, „A tömeges e-mail küldés még nem érhető el.”
+- A9: az előnézeti oldalon `scrollWidth === clientWidth` (825) 847 px széles ablakban.
+- J5 (eredmény-újrapróbálás) élesben NOT RUN: hálózati hibát kellene előidézni; egységteszt fedi.
+
+**Következő mérhető pazarlás (nem ebben a körben):** a lektori kifogás után a módosított fejezetek teljes bankcsomagja újraépül,
+és a válaszkulcs-tesztek újra lefutnak (az ellenőrzés a költség 36%-a). Ez a `docs/specs/2026-11-03-javitas-bank-megorzes`
+folytatása lehet: csak a kifogásolt tételek cseréje, ha a tanítás változása kicsi.

@@ -25,8 +25,11 @@ import { outlineSchema } from "./step-io";
 import { decideOneStepAction, parseOneStepRequest, type OneStepRequest } from "./one-step";
 import {
   createRun as createRunBase,
+  flushRun,
   getRun as getRunBase,
   markOrphanedRuns,
+  progressPatch,
+  resolveRunLessonId,
   updateRun as updateRunBase,
   type OneStepPhase,
   type OneStepRun,
@@ -99,6 +102,12 @@ const updateRun = (id: string, patch: Parameters<typeof updateRunBase>[1]) =>
   updateRunBase(id, patch, persistRun);
 const getRun = (id: string) => getRunBase(id, loadRun);
 
+/** Review #415: a `resolveRunLessonId` DB-betöltője — a futás jobjának lépése és leckéje. */
+async function loadRunJob(jobId: string): Promise<{ step: string; lessonId: string | null } | null> {
+  const [job] = await db.select({ step: studioJobs.step, lessonId: studioJobs.lessonId }).from(studioJobs).where(eq(studioJobs.id, jobId)).limit(1);
+  return job ?? null;
+}
+
 
 
 /**
@@ -129,15 +138,24 @@ export async function closeOrphanedOneStepRuns(): Promise<number> {
       if (sweepDecision(row, now, true) === "leave") driven.add(row.id);
     }
   }
-  const orphans = markOrphanedRuns(open.filter((r) => !(r.jobId && driven.has(r.jobId))));
+  const candidates = open.filter((r) => !(r.jobId && driven.has(r.jobId)));
+  const orphans = markOrphanedRuns(candidates);
+  let closedDone = 0;
   for (const o of orphans) {
+    // Review #415: ha a folyamat a közzététel és a lezáró írás között halt meg, a job már kész és a leckére mutat — a futás akkor kész,
+    // nem árva. Csak a job dönt (a tárolt azonosító nem: a fogalomjavítás futása indulástól a meglévő leckére mutat).
+    const jobId = candidates.find((r) => r.id === o.id)?.jobId ?? null;
+    const lessonId = await resolveRunLessonId({ phase: "error", lessonId: null, jobId }, loadRunJob);
+    if (lessonId) closedDone++;
     await db
       .update(oneStepRuns)
-      .set({ phase: "error", error: o.error, updatedAt: new Date() })
+      .set(lessonId
+        ? { phase: "done", lessonId, error: null, detail: "A tananyag elkészült és közzétéve.", updatedAt: new Date() }
+        : { phase: "error", error: o.error, updatedAt: new Date() })
       .where(eq(oneStepRuns.id, o.id));
   }
   if (orphans.length > 0) {
-    logger.warn(`[STUDIO/1STEP] ${orphans.length} árva futás hibára zárva (szerver-újraindulás).`);
+    logger.warn(`[STUDIO/1STEP] ${orphans.length - closedDone} árva futás hibára zárva, ${closedDone} kész lecke miatt késznek jelölve (szerver-újraindulás).`);
   }
   return orphans.length;
 }
@@ -282,11 +300,23 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
   // Audit 2026-09-05 (A): a finished run points at the published material so the teacher
   // (and the child) can open it — the html_files id lives on the lessons row.
   let htmlFileId: string | null = null;
-  if (run.phase === "done" && run.lessonId) {
+  // J6 (spec 2026-11-10-gyartas-meres): a korábban hibás sorrendben mentett kész futás sorából hiányozhat a lecke azonosítója —
+  // ilyenkor a futás (kész) jobjából pótoljuk (a job a közzétett leckére mutat), hogy a kész tananyag megnyitható maradjon.
+  const lessonId = run.phase === "done" ? await resolveRunLessonId(run, loadRunJob) : run.lessonId;
+  // Review #415: közzétett lecke sosem látszhat megállt futásként — ha a folyamat a közzététel és a lezáró írás között halt meg, a
+  // boot-söprés árvának jelölhette. Csak a kész job dönt (a tárolt azonosító nem: a fogalomjavítás futása indulástól a leckére mutat).
+  if (run.phase === "error" && run.jobId) {
+    const recovered = await resolveRunLessonId({ ...run, lessonId: null }, loadRunJob);
+    const [lesson] = recovered ? await db.select({ htmlFileId: lessons.htmlFileId, publishedAt: lessons.publishedAt }).from(lessons).where(eq(lessons.id, recovered)).limit(1) : [];
+    if (recovered && lesson?.publishedAt && lesson.htmlFileId) {
+      return { phase: "done", detail: "A tananyag elkészült és közzétéve.", error: null, mapId: run.mapId, jobId: run.jobId, lessonId: recovered, htmlFileId: lesson.htmlFileId };
+    }
+  }
+  if (run.phase === "done" && lessonId) {
     const [lesson] = await db
       .select({ htmlFileId: lessons.htmlFileId })
       .from(lessons)
-      .where(eq(lessons.id, run.lessonId))
+      .where(eq(lessons.id, lessonId))
       .limit(1);
     htmlFileId = lesson?.htmlFileId ?? null;
   }
@@ -326,7 +356,7 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     const alive = (lease.rows[0] as { alive?: boolean | null } | undefined)?.alive;
     timing = { elapsedSec: Math.max(0, Math.round((now - run.startedAt) / 1000)), sinceUpdateSec: Math.max(0, Math.round((now - run.updatedAt) / 1000)), ...(typeof alive === "boolean" ? { alive } : {}) };
   }
-  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...timing, ...(draft ? { draft } : {}),
+  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId, htmlFileId, ...timing, ...(draft ? { draft } : {}),
     ...(draftRunId ? { draftRunId } : {}), ...(ownerInstruction ? { ownerInstruction } : {}),
     ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.resumeKind ? { resumeKind: stop.resumeKind } : {}),
       ...(stop.nextRecovery ? { nextRecovery: stop.nextRecovery } : {}) } : {}) };
@@ -599,9 +629,11 @@ export async function runOneStep(
  */
 export async function runOneStepInWorkflow(runId: string, data: OneStepRequest, userId: string): Promise<void> {
   const previous = await getRun(runId);
-  if (previous?.phase === "done" && previous.lessonId) {
+  // Review #415: a tárolt azonosító nélküli kész futás leckéje a kész jobból jön — különben a gyártás feleslegesen újraindulna.
+  const previousLessonId = previous?.phase === "done" ? await resolveRunLessonId(previous, loadRunJob) : null;
+  if (previous?.phase === "done" && previousLessonId) {
     const [published] = await db.select({ id: lessons.id }).from(lessons)
-      .where(and(eq(lessons.id, previous.lessonId), isNotNull(lessons.publishedAt))).limit(1);
+      .where(and(eq(lessons.id, previousLessonId), isNotNull(lessons.publishedAt))).limit(1);
     if (published) {
       for (const phase of ["source", "scope", "knowledge", "sourceCheck", "pedagogue", "author", "animator", "lektor", "gate"]) await workflowPhase(phase);
       logger.info(`[STUDIO/WEB] A futás korábbi végrehajtásának kész leckéje újrahasznosítva (${runId} → ${published.id}).`);
@@ -629,12 +661,15 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
   try {
     const result = await runSingleUpload(
       { files: data.files as ExtractorFile[], instruction: normalizeOwnerInstruction(data.instructions), title: data.title, ownerId: userId, ...(target ? { targetHtmlFileId: target.htmlFileId, targetBaseline: target.baseline } : {}) },
-      (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }),
+      (p) => updateRun(runId, progressPatch(p)),
     );
+    // Review #415: a végállapot (kész / hiba) az adatbázisban legyen, mielőtt a workflow (és a leállás kivárása) véget ér — `flushRun`.
     updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });
+    await flushRun(runId);
   } catch (error) {
     logger.error(`[EGYFUTÁS] A gyártás megállt (${runId}): ${error instanceof Error ? error.message : String(error)}`);
     updateRun(runId, { phase: "error", error: error instanceof Error ? error.message.slice(0, 1500) : "Az egyfutásos gyártás megállt." });
+    await flushRun(runId);
   }
 }
 
@@ -776,12 +811,14 @@ export async function resumeSingleRun(jobId: string, owner: string): Promise<str
     const { runSingleResume } = await import("./single-run/live");
     try {
       const result = await runSingleResume({ jobId, ownerId: owner },
-        (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }));
+        (p) => updateRun(runId, progressPatch(p)));
       updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });
+      await flushRun(runId);
       return readPublishedLesson(result.lessonId);
     } catch (error) {
       logger.error(`[EGYFUTÁS] A folytatás megállt (${runId}, job ${jobId}): ${error instanceof Error ? error.message : String(error)}`);
       updateRun(runId, { phase: "error", jobId, error: error instanceof Error ? error.message.slice(0, 1500) : "A folytatás megállt." });
+      await flushRun(runId);
       // A motor a saját hibáját a jobra írja; ha a motor el sem indult, a foglalás itt áll vissza (a job nem ragad „fut” állapotban).
       // Review #263: csak az érvényes lízingű végrehajtó állíthatja vissza (egy későbbi folytatás futását nem zárhatja le).
       await db.transaction(async (tx) => { await workflowFence(tx); await tx.execute(release(error)); }).catch(() => undefined);
@@ -815,12 +852,14 @@ export function startMapRun(mapId: string, owner: string, extra: { instruction?:
     const { runSingleFromMap } = await import("./single-run/live");
     try {
       const result = await runSingleFromMap({ mapId, ownerId: owner, ...(extra.instruction ? { instruction: extra.instruction } : {}), ...(extra.approvedOutline !== undefined ? { approvedOutline: extra.approvedOutline } : {}) },
-        (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }));
+        (p) => updateRun(runId, progressPatch(p)));
       updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });
+      await flushRun(runId);
       return readPublishedLesson(result.lessonId);
     } catch (error) {
       logger.error(`[EGYFUTÁS] A gyártás megállt (${runId}): ${error instanceof Error ? error.message : String(error)}`);
       updateRun(runId, { phase: "error", error: error instanceof Error ? error.message.slice(0, 1500) : "Az egyfutásos gyártás megállt." });
+      await flushRun(runId);
       throw error;
     }
   }).catch((error) => {
