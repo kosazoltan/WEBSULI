@@ -7,7 +7,7 @@
  * A felismerés szűk, Unicode-betűhatárokkal: a „leírás”, „helyesen jellemzi” NEM helyesírási kontextus.
  */
 // Review #361: a gyakori kérdésformák is („helyesen leírva”, „írja helyesen”, „helyesen van írva”); a „leírás” továbbra sem.
-const SPELLING_CONTEXT = /helyesír|kezdőbetű|nagybetű|kisbetű|írásmód|toldalékos alak|helyes alak|(?<!\p{L})(?:írás|írjuk|írjuk-e|írod|írd|írja|írva|leírva|írt|írandó)(?!\p{L})/u;
+const SPELLING_CONTEXT = /helyesír|kezdőbetű|nagybetű|kisbetű|írásmód|toldalékos alak|helyes alak|(?:^|[^\p{L}])(?:írás|írjuk|írjuk-e|írod|írd|írja|írva|leírva|írt|írandó)(?!\p{L})/u;
 
 export const isSpellingPrompt = (prompt: string | undefined): boolean =>
   SPELLING_CONTEXT.test((prompt ?? "").normalize("NFC").toLocaleLowerCase("hu"));

@@ -40,7 +40,7 @@ export function ladderBankProblems(items: readonly LadderItem[], lang: WordLadde
     const keyWords = key.split(/[\s,.;:!?'’()„”"«»-]+/u).filter((w) => w.length >= 2);
     const whyLower = why.normalize("NFC").toLocaleLowerCase();
     if (!keyWords.some((w) => whyLower.includes(w))) problems.push(`${at}: a magyarázat nem említi a helyes választ („${item.options[item.correctIndex]}”)`);
-    if (/(?<!\p{L})(első|második|harmadik|negyedik)\s+(válasz|opció|lehetőség)|(?<![\p{L}])[ABCD]\)/u.test(why)) {
+    if (/(?:^|[^\p{L}])(első|második|harmadik|negyedik)\s+(válasz|opció|lehetőség)|(?:^|[^\p{L}])[ABCD]\)/u.test(why)) {
       problems.push(`${at}: a magyarázat sorrendre hivatkozik`);
     }
   }

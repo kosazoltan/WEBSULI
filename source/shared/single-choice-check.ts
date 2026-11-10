@@ -61,7 +61,7 @@ const listed = (options: readonly string[], indexes: number[]) => indexes.map((i
 const ABOUT_FORM = /egyszerűs|bővít|alak|formá|írásmód|felír|tizedes tört|közönséges tört|vegyes tört|vegyes szám/u;
 /** Spec 2026-10-05-s3-katalogus-bank (mérve a szülő-ellenőrzött korpuszon): „Melyik NEM egyenlő 1/2-vel?” — itt az egyenértékű
  *  disztraktorok (2/4, 3/6, 4/8) SZÁNDÉKOSAK; az érték-egyezés nem hiba (a szó szerinti ismétlődés továbbra is az). */
-const NEGATED_EQUALITY = /(?<!\p{L})nem\s+(?:egyenlő|egyenértékű|ugyanannyi|ugyanakkora|azonos értékű)/u;
+const NEGATED_EQUALITY = /(?:^|[^\p{L}])nem\s+(?:egyenlő|egyenértékű|ugyanannyi|ugyanakkora|azonos értékű)/u;
 /** Spec 2026-10-05-s3-katalogus-bank (mérve: „24/36 = ?” → 4/6 | 2/3 | 12/18 | „Mind helyes”): ha van gyűjtő-opció, az egyenértékű
  *  alakok SZÁNDÉKOSAK (épp az a kérdés, hogy mindegyik helyes-e). */
 // Review #193 (7): az „Egyik sem” NEM gyűjtő-opció — nem teszi szándékossá a másik opciók érték-egyezését; számértéke nincs,
@@ -103,9 +103,9 @@ function exactlyOne(item: SingleChoiceItem, satisfying: number[], what: string):
 function divisibilityProblems(item: SingleChoiceItem): string[] {
   const p = norm(item.prompt);
   if ((p.match(/oszthat/g) ?? []).length !== 1) return [];
-  if (!/(?<!\p{L})melyik(?!\p{L})|válaszd ki|jelöld|karikázd/u.test(p)) return [];
+  if (!/(?:^|[^\p{L}])melyik(?!\p{L})|válaszd ki|jelöld|karikázd/u.test(p)) return [];
   // További feltétel vagy más kérdésfajta → nem biztosan kiszámolható (hallgat).
-  if (/(?<![\p{L}\d])(?:hány|mennyi|ha|és|de|vagy|valamint|illetve|páros|páratlan|prím\p{L}*|négyzetszám|maradék\p{L}*|között)(?![\p{L}\d])|(?<!\p{L})leg\p{L}+|jegy/u.test(p)) return [];
+  if (/(?:^|[^\p{L}\d])(?:hány|mennyi|ha|és|de|vagy|valamint|illetve|páros|páratlan|prím\p{L}*|négyzetszám|maradék\p{L}*|között)(?![\p{L}\d])|(?:^|[^\p{L}])leg\p{L}+|jegy/u.test(p)) return [];
   const m = p.match(/(\d+)\s*-\s*\p{L}{2,4}\s+(?:nem\s+)?oszthat|oszthat[óo]k?\s+(\d+)\s*-\s*\p{L}{2,4}(?!\p{L})/u);
   if (!m) return [];
   const divisor = Number(m[1] ?? m[2]);
@@ -116,7 +116,7 @@ function divisibilityProblems(item: SingleChoiceItem): string[] {
   if (values.some((v) => v === null)) return [];
   // Review R3 (2026-09-29): a tagadás csak az állításhoz kötve érvényes („nem osztható”, „NEM 3-mal osztható”) —
   // egy szabad „Nem kell indokolni.” mondat nem fordítja meg a kérdést.
-  const negated = /(?<!\p{L})nem\s+(?:\d+\s*-\s*\p{L}{2,4}\s+)?oszthat/u.test(p);
+  const negated = /(?:^|[^\p{L}])nem\s+(?:\d+\s*-\s*\p{L}{2,4}\s+)?oszthat/u.test(p);
   const satisfying = values.flatMap((v, i) => ((v! % divisor === 0) !== negated ? [i] : []));
   const suffix = (m[0].match(/-\s*(\p{L}{2,4})/u) ?? [])[1] ?? "";
   return exactlyOne(item, satisfying, `${negated ? "NEM osztható" : "osztható"} ${divisor}-${suffix}`);
@@ -144,16 +144,48 @@ function arithmeticProblems(item: SingleChoiceItem): string[] {
  */
 // Az ATOM legfelső szinten alternáció („a|b”) — csoportba kell zárni, különben a zárójeles ág szétesik.
 const SIGNED_TERM = `(?:\\(\\s*[+\\-−–]?\\s*(?:${ATOM})\\s*\\)|(?:${ATOM}))`;
-const EMBEDDED_EXPR = new RegExp(`(?<![\\p{L}\\d.,/])(?:[\\-−–](?=\\s*[\\d(]))?\\s*${SIGNED_TERM}(?:\\s*[+\\-−–·×*:÷]\\s*${SIGNED_TERM})+(?![\\p{L}\\d]|\\s*-\\s*\\p{L})`, "gu");
+// A régi Safari (< 16.4) a visszatekintő kikötést szintaktikai hibának veszi, ezért az előző karaktert a `matchAllAfterBoundary` ellenőrzi
+// (az előző karakter nem lehet betű, számjegy, pont, vessző, per jel).
+const EMBEDDED_EXPR = new RegExp(`(?:[\\-−–](?=\\s*[\\d(]))?\\s*${SIGNED_TERM}(?:\\s*[+\\-−–·×*:÷]\\s*${SIGNED_TERM})+(?![\\p{L}\\d]|\\s*-\\s*\\p{L})`, "gu");
+/**
+ * Globális `matchAll`, amelynek találata elé tiltott karakter nem állhat — visszatekintő kikötés nélkül: a `source` globális minta,
+ * a `forbiddenBefore` azt a karaktert írja le, amely a találat ELŐTT nem állhat. Az elutasított találat után a keresés eggyel később folytatódik (kódpontra lépve),
+ * pontosan úgy, mint a visszatekintéses motor — így a belső kezdetű találatok sem vesznek el.
+ */
+function matchAllAfterBoundary(text: string, source: RegExp, forbiddenBefore: RegExp): RegExpExecArray[] {
+  const re = new RegExp(source.source, source.flags.includes("g") ? source.flags : `${source.flags}g`);
+  const out: RegExpExecArray[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const i = m.index;
+    const lo = i >= 2 && /[\uD800-\uDBFF]/.test(text[i - 2]) && /[\uDC00-\uDFFF]/.test(text[i - 1]) ? i - 2 : i - 1;
+    if (i === 0 || !forbiddenBefore.test(text.slice(lo, i))) {
+      out.push(m);
+      if (m[0].length === 0) re.lastIndex = i + 1;
+    } else {
+      re.lastIndex = i + (text.codePointAt(i)! > 0xffff ? 2 : 1);
+    }
+  }
+  return out;
+}
 /** Az eredményre kérdez — és nem feltételes / összehasonlító / tagadó kérdés (akkor hallgatunk). */
-const ASKS_RESULT = /(?<!\p{L})(?:eredmény\p{L}*|érték\p{L}*|mennyi|egyenlő|tartozik|kapjuk|kapod|lesz)(?!\p{L})/u;
+const ASKS_RESULT = /(?:^|[^\p{L}])(?:eredmény\p{L}*|érték\p{L}*|mennyi|egyenlő|tartozik|kapjuk|kapod|lesz)(?!\p{L})/u;
 // T5.2 mérés (`docs/measurements/2026-10-15-t5-szamolos-kulcs.json`): a RÉSZeredményre kérdező tétel („az osztás részeredménye”, „közbülső
 // eredmény”, „az első eredmény”) nem a teljes kifejezés értékét kéri — hallgatunk.
 // Review #244 (P1): az eredmény TULAJDONSÁGÁRA kérdező tétel („osztható 6-tal”, „páros”) sem a pontos értéket kéri — hallgatunk.
-const NOT_COMPUTABLE = /(?<!\p{L})(?:nem|ha|nagyobb|kisebb|között|legalább|legfeljebb|kerekít\p{L}*|becsül\p{L}*|közelít\p{L}*|hány\s+(?:szám|opció|lépés)|részeredmény\p{L}*|közbülső|közbenső|első|először|utolsó|lépés\p{L}*|oszthat\p{L}*|páros|páratlan|prím\p{L}*|négyzetszám\p{L}*|többszörös\p{L}*|osztó\p{L}*)(?!\p{L})/u;
+const NOT_COMPUTABLE = /(?:^|[^\p{L}])(?:nem|ha|nagyobb|kisebb|között|legalább|legfeljebb|kerekít\p{L}*|becsül\p{L}*|közelít\p{L}*|hány\s+(?:szám|opció|lépés)|részeredmény\p{L}*|közbülső|közbenső|első|először|utolsó|lépés\p{L}*|oszthat\p{L}*|páros|páratlan|prím\p{L}*|négyzetszám\p{L}*|többszörös\p{L}*|osztó\p{L}*)(?!\p{L})/u;
 /** Review #244 (P1): a kérdő mondat (az utolsó „?”-es mondat, különben az utolsó) — az eredménykérésnek ehhez kell kötődnie. */
 function questionSentence(prompt: string): string {
-  const sentences = prompt.normalize("NFC").split(/(?<=[.!?])\s+/u).map((s) => s.trim()).filter(Boolean);
+  // Mondathatár: [.!?] után szóközök (régi Safari miatt visszatekintés nélkül; a jel a mondatnál marad, a szóközök elmaradnak).
+  const text = prompt.normalize("NFC");
+  const parts: string[] = [];
+  let last = 0;
+  for (const m of text.matchAll(/[.!?]\s+/gu)) {
+    parts.push(text.slice(last, m.index! + 1));
+    last = m.index! + m[0].length;
+  }
+  parts.push(text.slice(last));
+  const sentences = parts.map((s) => s.trim()).filter(Boolean);
   return [...sentences].reverse().find((s) => s.includes("?")) ?? sentences.at(-1) ?? "";
 }
 /**
@@ -210,7 +242,7 @@ function signedNumberOf(option: string): number | null {
 }
 function expressionsIn(text: string): string[] {
   const t = text.normalize("NFC");
-  return [...t.matchAll(EMBEDDED_EXPR)]
+  return matchAllAfterBoundary(t, EMBEDDED_EXPR, /[\p{L}\d.,/]/u)
     // Review #244 (P1): a szóköz nélküli kötőjeles számpár, amely után szó áll („6–8 éves”), TARTOMÁNY, nem kivonás.
     .filter((m) => !(/^\d+(?:[.,]\d+)?[\-−–]\d+(?:[.,]\d+)?$/.test(m[0].trim()) && /^\s+\p{L}/u.test(t.slice(m.index! + m[0].length))))
     .map((m) => m[0].trim()).filter((e) => new RegExp(`\\d\\s*\\)?\\s*[+\\-−–·×*:÷]\\s*\\(?\\s*[+\\-−–]?\\s*\\d`).test(e));
@@ -234,7 +266,7 @@ function embeddedArithmeticProblems(item: SingleChoiceItem): string[] {
   if (division && !Number.isInteger(result) && values.every((v) => Number.isInteger(v))) {
     const [a, b] = [Number(division[1]), Number(division[2])];
     // Review #364 (Copilot): a műveletet megnevező „maradékos (osztás)” nem maradék-kérdés — csak a „maradék/-a/-ot …” alak.
-    const remainderAsked = [...norm(question).matchAll(/(?<!\p{L})maradék\p{L}*/gu)].some((m) => !m[0].startsWith("maradékos"));
+    const remainderAsked = matchAllAfterBoundary(norm(question), /maradék\p{L}*/gu, /\p{L}/u).some((m) => !m[0].startsWith("maradékos"));
     const expected = remainderAsked ? a % b : Math.floor(a / b);
     const hits = values.flatMap((v, i) => (v === expected ? [i] : []));
     return exactlyOne(item, hits, remainderAsked ? `egyenlő a maradékkal (${exprs[0]} maradéka ${expected})` : `egyenlő a maradékos osztás egész hányadosával (${exprs[0]} = ${expected} maradék ${a % b})`);
@@ -246,8 +278,8 @@ function embeddedArithmeticProblems(item: SingleChoiceItem): string[] {
 /** E2: a válaszok kifejezések, a kérdés egy eredményre kérdez („Melyik kifejezés … eredménye +6?”). */
 function reverseArithmeticProblems(item: SingleChoiceItem): string[] {
   const p = norm(item.prompt);
-  if (!/(?<!\p{L})melyik\s+(?:kifejezés|művelet|számítás|kivonás|összeadás|szorzás|osztás)/u.test(p) || !ASKS_RESULT.test(p) || NOT_COMPUTABLE.test(p) || hasGroupingBrackets(item.prompt) || item.options.some(hasGroupingBrackets)) return [];
-  const numbers = [...item.prompt.normalize("NFC").matchAll(new RegExp(`(?<![\\p{L}\\d])([+\\-−–]?)\\s*((?:${ATOM}))(?![\\d/])`, "gu"))];
+  if (!/(?:^|[^\p{L}])melyik\s+(?:kifejezés|művelet|számítás|kivonás|összeadás|szorzás|osztás)/u.test(p) || !ASKS_RESULT.test(p) || NOT_COMPUTABLE.test(p) || hasGroupingBrackets(item.prompt) || item.options.some(hasGroupingBrackets)) return [];
+  const numbers = matchAllAfterBoundary(item.prompt.normalize("NFC"), new RegExp(`([+\\-−–]?)\\s*((?:${ATOM}))(?![\\d/])`, "gu"), /[\p{L}\d]/u);
   if (numbers.length !== 1 || expressionsIn(item.prompt).length) return [];
   // Review #244 (P1): csak KONKRÉT célérték — az eredménykérő szó közvetlenül a szám előtt, a kérdő mondat végén („… eredménye +6?”).
   if (!/(?:eredmény\p{L}*|érték\p{L}*|egyenlő|adja)\s*(?:az?\s+)?[+\-−–]?\s*\d[\d\s.,/]*\s*\??\s*$/u.test(questionSentence(item.prompt))) return [];
