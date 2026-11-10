@@ -256,6 +256,8 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   `transforms`, `op: set`), mert a közvetlen Render-cím nyilvános.
 - **Megelőzés 2:** „megbízható fejléc” állítás előtt a szolgáltató dokumentációja + élő mérés; ha a dokumentáció hallgat, a
   specben a mérés legyen elfogadási feltétel, és a kódnak legyen biztonságos tartaléka (itt: `req.ip`).
+  Mérve élesben (2026-11-10, #411 után): a Render továbbítja a Cloudflare `CF-Connecting-IP` fejlécét — közvetlen hívásnál 8 kérés
+  egyetlen számlálót csökkentett, hamis XFF / hamis titok mellett is. A Vercelen át a keret a titok beállításáig szóródik.
 - **Tünet 3:** az első kulcsteszt a helyi Expresst közvetlenül hívta, és hamis XFF-fel új keretet kapott — a tesztkörnyezetben
   nincs terheléselosztó, amely a lánc végére fűzné a valódi címet.
 - **Megelőzés 3:** proxyfüggő viselkedés tesztjében a termelési láncot kell modellezni (`behindLoadBalancer` a tesztben).
