@@ -1,6 +1,6 @@
 # Spec: az IP-alapú kéréskorlátok a valódi kliens címe szerint számoljanak
 
-> Dátum: 2026-11-10 · Állapot: **JÓVÁHAGYVA (a #410 review elhalasztott tétele; tulajdonosi állandó felhatalmazás 2026-11-09)**
+> Dátum: 2026-11-10 · Állapot: **RÉSZBEN KÉSZ — a kód éles (#411, `55006b05`); a titok beállítása tulajdonosi lépés (ld. „Élő mérés”)** · JÓVÁHAGYVA (a #410 review elhalasztott tétele; tulajdonosi állandó felhatalmazás 2026-11-09)**
 > Végrehajtás: `docs/specs/2026-11-10-korlat-kliens-ip-vegrehajtas.md`. Előzmény: csapda C-24 (2. tünet).
 
 ## Mért tény (2026-11-10, élő próba, `GET /api/learner/me`, `learnerMeLimiter` 1500 / 15 perc)
@@ -74,17 +74,31 @@
 - A Render nem továbbítja a `CF-Connecting-IP`-t → a közvetlen ág `req.ip`-re esik vissza (mai viselkedés); A6 méri.
 
 ## Elfogadás (EARS)
-- [ ] A1: WHEN a kérés érvényes titokfejléccel érkezik THEN a kulcs SHALL az XFF bal szélső (érvényes) címe; két különböző
+- [x] A1: WHEN a kérés érvényes titokfejléccel érkezik THEN a kulcs SHALL az XFF bal szélső (érvényes) címe; két különböző
       cím két külön keretet fogyaszt, ugyanaz a cím ugyanazt.
-- [ ] A2: WHEN a titokfejléc hiányzik vagy hibás THEN a kliens által írt `X-Forwarded-For` / `x-real-ip` SHALL NOT változtatja
+- [x] A2: WHEN a titokfejléc hiányzik vagy hibás THEN a kliens által írt `X-Forwarded-For` / `x-real-ip` SHALL NOT változtatja
       a kulcsot (egységteszt: hamisított XFF közvetlen hívásnál nem ad új keretet).
-- [ ] A3: WHEN a szerveren nincs (vagy 32 karakternél rövidebb) titok THEN semmilyen fejlécérték SHALL NOT számít érvényes titoknak.
-- [ ] A4: WHEN `RENDER=true` és nincs érvényes titok THEN a kulcs SHALL a `CF-Connecting-IP`; Renderen kívül ezt a fejlécet a szerver figyelmen kívül hagyja.
-- [ ] A5: IPv6-címnél a kulcs SHALL a /56 alhálózat; `::ffff:`-előtagos cím IPv4-ként számol.
+- [x] A3: WHEN a szerveren nincs (vagy 32 karakternél rövidebb) titok THEN semmilyen fejlécérték SHALL NOT számít érvényes titoknak.
+- [x] A4: WHEN `RENDER=true` és nincs érvényes titok THEN a kulcs SHALL a `CF-Connecting-IP`; Renderen kívül ezt a fejlécet a szerver figyelmen kívül hagyja.
+- [x] A5: IPv6-címnél a kulcs SHALL a /56 alhálózat; `::ffff:`-előtagos cím IPv4-ként számol.
 - [ ] A6 (élő): a `websuli.vip`-en át két különböző kliens külön `Ratelimit-Remaining` számlálót kap, és ugyanaz a kliens
       egymás utáni kérései egyetlen számlálót csökkentenek; közvetlen Render-hívásnál a hamisított `X-Forwarded-For` és a
       hamis titokfejléc nem ad új keretet, és az egymás utáni kérések egyetlen számlálót csökkentenek.
-- [ ] A7: a `server/` alatt minden `rateLimit(` hívásnak SHALL van `keyGenerator`-a (forrásőr-teszt).
-- [ ] A8: a `vercel.json` `/api/` szabálya SHALL `set` művelettel állítja a titokfejlécet a `WEBSULI_PROXY_SECRET` változóból;
+- [x] A7: a `server/` alatt minden `rateLimit(` hívásnak SHALL van `keyGenerator`-a (forrásőr-teszt).
+- [x] A8: a `vercel.json` `/api/` szabálya SHALL `set` művelettel állítja a titokfejlécet a `WEBSULI_PROXY_SECRET` változóból;
       a fájl a titok értékét nem tartalmazza; a meglévő átírások és fejlécszabályok változatlanok.
-- [ ] A9: `check`, `lint`, `check:test`, `npm test` zöld.
+- [x] A9: `check`, `lint`, `check:test`, `npm test` zöld.
+
+## Élő mérés (2026-11-10, `55006b05` élesben, `GET /api/learner/me`)
+- **Közvetlen Render-hívás — KÉSZ (A6 közvetlen fele, A4 élőben):** 8 egymás utáni kérés ugyanarról a gépről:
+  `Ratelimit-Remaining` 1499, 1498, 1497, 1496, 1495, 1494, 1493, 1492 — egyetlen számláló. Az 5–6. kérés hamisított
+  `X-Forwarded-For` / `X-Real-IP` fejléccel, a 7. hamis titokfejléccel + hamis XFF-fel ment: új keretet egyik sem kapott.
+  A Render tehát továbbítja a `CF-Connecting-IP` fejlécet (a dokumentáció erről hallgat — ez mérés).
+- **Vercelen át — NOT DONE (A6 Vercel-fele, A1 élőben):** 6 kérés: 1499, 1498, 1499, 1498, 1497, 1499 — a keret még a Vercel
+  váltakozó kimenő címei szerint szóródik, mert a `WEBSULI_PROXY_SECRET` nincs beállítva. Ok: az éles titoktár írását az ügynök
+  jogosultsági őre letiltotta. Kockázat: a `websuli.vip` látogatói addig a Vercel kimenő címei szerinti közös kereteken
+  osztoznak (a korábbi állapotnál nem rosszabb; a hamisítás így sem lehetséges).
+- **Lezárás (tulajdonos):** `node scripts/qa/set-proxy-secret.mjs` → Render-újratelepítés (Manual Deploy) → Vercel-újratelepítés
+  (Redeploy) → próba: a `websuli.vip`-en át ugyanarról a gépről 4 kérés egyesével csökkenő számlálót ad, egy másik hálózatról
+  (pl. mobilnet) érkező kérés pedig friss, 1499-es számlálót. Ha a számláló továbbra is szóródik, a `routes` transform nem
+  juttatja el a fejlécet a Renderig → a spec „Módosítás” szakaszában új megoldás kell (`vercel.ts` `requestHeaders`).
