@@ -112,3 +112,19 @@ Külön ág és PR (`fix/kesz-futas-ujrainditas-utan`). Összevonni csak akkor s
 3. Atomi commitok szeletenként, PR, zöld CI, összevonás (a tulajdonos állandó felhatalmazása szerint), élő visszaolvasás.
 4. Mérés élesben: egy új gyártás (kb. 5 USD) bankideje a mai 862–1113 mp-hez mérve; a naplóban `Bank keresztütközés` sor.
 5. `docs/agent-csapdak.md` új bejegyzés, kanban #9 jegyzet és lezárás.
+
+## J6 — élő ellenőrzés (2026-11-10, a #415 telepítése után) — KÉSZ
+
+`GET /api/studio/lessons/one-step/:runId` admin-munkamenettel (Chrome), a #415 összevonása (7152d299) és telepítése után:
+
+| Futás | Előtte (a #414 telepítése után) | Utána |
+|---|---|---|
+| `5708791f` (Egész számok) | `done`, `lessonId: null`, `htmlFileId: null` | `done`, `lessonId: ad23e2d1-…`, `htmlFileId: 49780f86-…` |
+| `f7188df1` (Az energia) | nem mértem | `done`, `htmlFileId: f7bcf035-…` |
+| `3d1106fb` (Szólások és közmondások) | — (későbbi futás) | `done`, `htmlFileId: 476065ba-…` |
+
+A hibásan mentett sor leckéje tehát a kész jobból helyreállt. Nyilvános füstpróba ugyanekkor: `/api/html-files` 200 (232 anyag,
+19 hatodikos), `/preview/476065ba-…` 200, `/api/lessons/by-file/49780f86-…` 200.
+
+NOT RUN élesben: a leállítás közbeni lezáró írás kivárása (`flushRun`) és a söprés „kész job → kész futás” ága — ezekhez egy
+gyártás közbeni újraindítás kellene; egységteszt és forrásőr fedi.
