@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { clipSchema, type Clip, type LessonClipsResponse } from "@shared/lesson-clip";
+import { parseAnyClip, type Clip, type Clip2, type LessonClipsResponse } from "@shared/lesson-clip";
 
 /**
  * A lecke kész kisfilmjei (spec 2026-11-10-fejezet-kisfilmek, 4.8). Amíg a szerver szerint készül még kisfilm (`pending`), 20 mp-enként
@@ -8,15 +8,15 @@ import { clipSchema, type Clip, type LessonClipsResponse } from "@shared/lesson-
  */
 export const CLIP_POLL_MS = 20_000;
 export const CLIP_POLL_MAX_MS = 30 * 60_000;
-export type LessonClipsState = { clips: ReadonlyMap<number, Clip>; pending: boolean };
+export type LessonClipsState = { clips: ReadonlyMap<number, Clip | Clip2>; pending: boolean };
 const EMPTY: LessonClipsState = { clips: new Map(), pending: false };
 
 function toState(body: unknown): LessonClipsState {
   const raw = body as Partial<LessonClipsResponse> | null;
-  const clips = new Map<number, Clip>();
+  const clips = new Map<number, Clip | Clip2>();
   for (const entry of Array.isArray(raw?.clips) ? raw.clips : []) {
-    const parsed = clipSchema.safeParse(entry?.clip);
-    if (parsed.success && Number.isInteger(entry.sectionIndex)) clips.set(entry.sectionIndex, parsed.data);
+    const parsed = parseAnyClip(entry?.clip);
+    if (parsed && Number.isInteger(entry.sectionIndex)) clips.set(entry.sectionIndex, parsed);
   }
   return { clips, pending: raw?.pending === true };
 }

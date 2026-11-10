@@ -339,3 +339,21 @@ Forrás: `docs/specs/2026-11-10-fejezet-kisfilmek.md`.
 - **Megelőzés 3:** fejezetváltás tesztben a `chapter-nav` gombjaival széles nézetben, a legördülővel keskenyben.
 - **Tünet 4:** a tervezett „teljes lecke ≤ 5 perc” becslés karakterszámból készült; a valódi hang mérése 12 fejezetre 7,4 percet adott.
 - **Megelőzés 4:** hangos tartalom hosszát a valódi hangfájlok `ffprobe`-mérésével kell igazolni a forgatókönyv lezárása ELŐTT.
+
+## C-29 — Az első kisfilm-próba megbukott: forma a tartalom előtt, a repo saját arculati szabálya figyelmen kívül (2026-11-10)
+
+Forrás: tulajdonosi visszajelzés („borzasztó”) → `docs/specs/2026-11-10-fejezet-kisfilmek-v2.md`.
+
+- **Tünet 1:** a v1 kisfilm emojis diasor lett gépi hanggal és egyetlen, gyerekes kabalával — a 9. osztályos fizikához is. A teljes
+  lejátszó, tábla, háttérgyártás és 12 fejezetnyi forgatókönyv elkészült, mielőtt a tulajdonos egyetlen képkockát látott volna.
+- **Gyökérok 1:** a legolcsóbb megvalósítható formát (meglévő hangvégpont, emoji) választottam, és a „stílus egységes” célt
+  összekevertem a „minőség jó” céllal. A repo már tartalmazta a korosztályos képi szabályt (`server/lesson-covers.ts`
+  `COVER_STYLE.band`: 6. évfolyamtól nincs rajzfilmfigura) — nem olvastam hozzá.
+- **Megelőzés 1:** új, látható / hallható élményt adó funkciónál ELŐBB egyetlen valódi minta (kép + hang) megy a tulajdonos elé, és
+  csak a szemle után épül tárolás, gyártósor, tömeges tartalom. Megjelenést érintő munkánál a meglévő arculati szabályok
+  (`shared/lesson-design.ts`, `COVER_STYLE`, `design-assets/style.md`) elolvasása a terv része.
+- **Tünet 2:** a Node beépített `fetch`-e a felhős munkamenetben nem megy át a proxyn (`ENOTFOUND api.openai.com`), miközben a `curl` igen.
+- **Megelőzés 2:** szkriptből indított külső hívásnál `NODE_USE_ENV_PROXY=1` (Node ≥ 22.21); a kulcs a proxy hálózati titka, a
+  fejlécbe helykitöltő kerül (`Bearer proxy-injected`), valódi kulcs soha.
+- **Tünet 3:** a hangminőséget az ügynök nem tudja füllel megítélni — a „természetes hang” állítás mérés nélkül feltételezés.
+- **Megelőzés 3:** hangról csak mérhető tényt szabad állítani (elkészült, hossz, modell, hangazonosító); a minőség a tulajdonos szemléje.

@@ -231,6 +231,15 @@ function probeLesson(search: string): Lesson {
 export default function LessonRuntimeProbe() {
   const [candidate, setCandidate] = useState<Lesson | null>(null);
   const [error, setError] = useState("");
+  // Spec 2026-11-10-fejezet-kisfilmek-v2 (P0): `&clips2=1` — a helyi jelölt mellé a kisfilmek is helyi fájlból jönnek (`/tmp/lesson-clips2.json`).
+  const [clips2, setClips2] = useState<LessonClipsResponse | null>(null);
+  const wantClips2 = new URLSearchParams(window.location.search).has("clips2");
+  useEffect(() => {
+    if (!wantClips2) return;
+    const abort = new AbortController();
+    void fetch("/tmp/lesson-clips2.json", { signal: abort.signal }).then(r => r.json()).then(value => setClips2(value as LessonClipsResponse)).catch(() => undefined);
+    return () => abort.abort();
+  }, [wantClips2]);
   const live = new URLSearchParams(window.location.search).get("candidate") === "1";
   useEffect(() => {
     if (!live) return;
@@ -242,7 +251,7 @@ export default function LessonRuntimeProbe() {
   // Stable persistId so B7 localStorage round-trips work; no lessonId → no Próba API.
   const practice = new URLSearchParams(window.location.search).get("practice") === "1";
   const lesson = candidate ?? probeLesson(window.location.search);
-  return <LessonRuntime lesson={lesson} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} clipsPreset={probeClips(window.location.search, lesson.sections.length)} />;
+  return <LessonRuntime lesson={lesson} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} clipsPreset={wantClips2 ? clips2 ?? undefined : probeClips(window.location.search, lesson.sections.length)} />;
 }
 
 /**

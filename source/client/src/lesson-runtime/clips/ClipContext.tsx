@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { Clapperboard } from "lucide-react";
-import type { LessonClipsResponse } from "@shared/lesson-clip";
+import { clipMediaUrl, type Clip, type Clip2, type LessonClipsResponse } from "@shared/lesson-clip";
+import type { Section } from "@shared/lesson-schema";
+import { Clip2Player } from "./Clip2Player";
 import { ttsAudioUrl } from "@shared/speech-fallback";
 import { stopSpeech } from "../ExperienceSpeech";
 import { ClipPlayer, type ClipPlaylistItem } from "./ClipPlayer";
@@ -14,27 +16,31 @@ import "./lesson-clips.css";
 type ClipContextValue = LessonClipsState & { open(sectionIndexes: number[]): void };
 const ClipContext = createContext<ClipContextValue | null>(null);
 
-export function ClipProvider({ lessonId, headings, preset, children }: { lessonId?: string; headings: readonly string[]; preset?: LessonClipsResponse; children: ReactNode }) {
+export function ClipProvider({ lessonId, headings, sections, preset, children }: { lessonId?: string; headings: readonly string[]; sections?: readonly Section[]; preset?: LessonClipsResponse; children: ReactNode }) {
   const state = useLessonClips(lessonId, preset);
-  const [session, setSession] = useState<{ playlist: ClipPlaylistItem[]; audio: HTMLAudioElement } | null>(null);
+  const [session, setSession] = useState<{ playlist: Array<{ sectionIndex: number; heading: string; clip: Clip | Clip2; section?: Section }>; audio: HTMLAudioElement } | null>(null);
   const open = useCallback((sectionIndexes: number[]) => {
     const playlist = sectionIndexes.flatMap((sectionIndex) => {
       const clip = state.clips.get(sectionIndex);
-      return clip ? [{ sectionIndex, heading: headings[sectionIndex] ?? clip.title, clip }] : [];
+      return clip ? [{ sectionIndex, heading: headings[sectionIndex] ?? clip.title, clip, section: sections?.[sectionIndex] }] : [];
     });
     if (!playlist.length) return;
     stopSpeech();
     // iOS Safari: a hangelemnek a gombnyomás kezelőjében kell elindulnia, különben a későbbi jelenetek hangja némán elbukik.
     const audio = new Audio();
-    const first = ttsAudioUrl(playlist[0].clip.scenes[0].say, "hu");
+    const opening = playlist[0].clip.scenes[0];
+    const first = "audio" in opening && opening.audio ? clipMediaUrl(opening.audio) : ttsAudioUrl(opening.say, "hu");
     if (first) { audio.src = first; void audio.play().catch(() => undefined); }
     setSession({ playlist, audio });
-  }, [state.clips, headings]);
+  }, [state.clips, headings, sections]);
   const close = useCallback(() => setSession((old) => { old?.audio.pause(); return null; }), []);
   const value = useMemo(() => ({ ...state, open }), [state, open]);
   return <ClipContext.Provider value={value}>
     {children}
-    {session && <ClipPlayer playlist={session.playlist} audio={session.audio} onClose={close} />}
+    {/* Egy lejátszási lista egyféle változatból áll: az első kisfilm változata dönt, az eltérők kimaradnak. */}
+    {session && (session.playlist[0].clip.v === 2
+      ? <Clip2Player playlist={session.playlist.flatMap((item) => (item.clip.v === 2 ? [{ ...item, clip: item.clip }] : []))} audio={session.audio} onClose={close} />
+      : <ClipPlayer playlist={session.playlist.flatMap((item): ClipPlaylistItem[] => (item.clip.v === 1 ? [{ sectionIndex: item.sectionIndex, heading: item.heading, clip: item.clip }] : []))} audio={session.audio} onClose={close} />)}
   </ClipContext.Provider>;
 }
 

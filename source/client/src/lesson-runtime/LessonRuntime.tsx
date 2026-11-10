@@ -553,7 +553,7 @@ export function LessonRuntime({
     <DesignBandContext.Provider value={designTheme}>
     <ChoiceLayoutContext.Provider value={choiceLayout}>
     <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
-      <ClipProvider lessonId={lessonId} headings={clipHeadings} preset={clipsPreset}>
+      <ClipProvider lessonId={lessonId} headings={clipHeadings} sections={lesson.sections} preset={clipsPreset}>
       <article className="mx-auto py-6 space-y-6" data-testid="lesson-runtime">
         {/* Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a koncepciókép sávfejléce — jelvény, évfolyam, téma, mottó. */}
         <div className="ws-bandhead" data-testid="ws-bandhead">

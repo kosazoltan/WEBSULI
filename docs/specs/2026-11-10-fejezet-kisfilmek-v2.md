@@ -48,9 +48,9 @@ kikapcsolható (redundancia), fejezetenként egy gondolatmenet (szegmentálás).
 |---|---|---|---|---|---|
 | explorer (1–2.) | állandó mesefigura: **Bodza, a kíváncsi sün** — minden képen | lágy, kerek mesekönyv, menta és napsárga | nagy, kerek, vastag körvonal; legfeljebb 1 ábraelem egyszerre | 3 jelenet, ≤ 90 karakter / jelenet, egy gondolat; megszólít, kérdez; nincs szakszó magyarázat nélkül | meleg, lassú, mesélő |
 | adventure (3–5.) | **két gyerek felfedező** (Zsófi és Marci) hátizsákkal — a képeken | festett kalandillusztráció, homok–barack–türkiz | kerek sarkok, kézzel rajzolt hatású vonal | 3–4 jelenet, ≤ 130 karakter; „gyere, nézzük meg”; kihívás → megfigyelés → szabály | élénk, barátságos |
-| studio (6–8.) | nincs kabala; kortárs kamaszok hétköznapi helyzetben, arc közelről nem | félrealisztikus, indigó–lila–türkiz | tiszta vonal, visszafogott mozgás | 4 jelenet, ≤ 170 karakter; „miért van ez így?”; nem gyerekes, nem kioktató | természetes, fiatalos |
+| studio (6–8., 0) | nincs kabala; kortárs kamaszok hétköznapi helyzetben, arc közelről nem | félrealisztikus, indigó–lila–türkiz | tiszta vonal, visszafogott mozgás | 4 jelenet, ≤ 170 karakter; „miért van ez így?”; nem gyerekes, nem kioktató | természetes, fiatalos |
 | laboratory (9–10.) | **nincs figura**; a jelenség a főszereplő (ember legfeljebb távolról / hátulról) | éles, valósághű, hideg kék és grafit | mérnöki: vékony vonal, rács, mértékegységek | 4 jelenet, ≤ 200 karakter; jelenség → törvény → számolás; tárgyszerű, pontos | nyugodt, felnőttes |
-| future (11–12., 0) | nincs figura; emberek csak távolról | filmszerű, mélykék, meleg ellenfény | minimalista, sötét alapon világos | 4 jelenet, ≤ 220 karakter; összefüggés, alkalmazás, vizsgahelyzet | felnőtt, dokumentumfilmes |
+| future (11–12.) | nincs figura; emberek csak távolról | filmszerű, mélykék, meleg ellenfény | minimalista, sötét alapon világos | 4 jelenet, ≤ 220 karakter; összefüggés, alkalmazás, vizsgahelyzet | felnőtt, dokumentumfilmes |
 
 A profil egyetlen adatszerkezet: `imageStyle` (angol stílusmondat a képmodellnek), `cast` (a figura szó szerinti, minden
 képbriefbe bemásolt leírása vagy `null`), `narration` (jelenetszám, karakterplafon, hangnem-szabályok a forgatókönyvíró
@@ -113,6 +113,28 @@ Költségbecslés (UNVERIFIED, a P0 méri): 3 kép + 4 hang + 1–2 szöveghív�
   bemutató felvétel mindkettőről; mért költség és idő. **Tulajdonosi szemle:** kép, hang, hangnem.
 - **P1 — tárolás és kiszolgálás:** `lesson_clip_media`, médiavégpont, a v1 sablonok és kézi kisfilmek kivezetése.
 - **P2 — háttérgyártás:** a 7. pont csővezetéke kapcsolóval, napi plafonnal; élő mérés egy új leckén.
+
+## 9b. A P0 mérése (2026-11-10)
+
+Két kézi kisfilm készült el a tervezett módon (a média a munkamenet ideiglenes mappájában él, a repóba nem került):
+
+| | Felszínformák 4. o. (adventure) | Dinamika 9. o. (laboratory) |
+|---|---|---|
+| Beállítás / jelenet | 3 kép / 4 jelenet | 3 kép / 4 jelenet |
+| Elmondott szöveg | 329 karakter | 564 karakter |
+| A kisfilm hossza (hangfájlokból) | 29,4 mp | 56,6 mp |
+| Ábrák | cím, lépések ×2, szembeállítás | cím, a fejezet saját pálya–elmozdulás ábrája, szembeállítás, képlet |
+
+- **Gyártási idő:** a két fejezet 14 hívása (6 kép + 8 hang) párhuzamosan 13,2 mp alatt készült el; egy kép 10,9–13,2 mp, egy hang 2,8–4,7 mp.
+- **Modellek (a kulccsal lekérdezve):** kép `gpt-image-2.5-flare` (`1536x864`, `quality: medium`, `webp`), hang `gpt-4o-mini-tts`
+  (sávonkénti hang + hangnem-utasítás + sebesség). A magyar hang tehát elérhető; a MINŐSÉGÉT fül dönti el (tulajdonosi szemle).
+- **Költség:** egy kép a válasz szerint 280 kimeneti képtoken; a hivatalos díjtáblával (30 USD / 1M kimeneti képtoken) ez kb.
+  0,0084 USD / kép, azaz kb. 0,025 USD / fejezet a képekre. A hang díja UNVERIFIED (a díjtáblát nem ellenőriztem).
+- **Kép:** mind a hat kép szöveg nélküli; a két gyerek mindhárom képen felismerhetően ugyanaz (csak szöveges leírásból, referenciakép
+  nélkül); a 9. osztályos képeken nincs figura, a futó csak hátulról / távolról látszik.
+- **Lejátszó:** mindkét kisfilm végigment a valódi leckében (hangmód `mp3`, lapméretű túlcsordulás és levágás nélkül, oldalhiba nélkül).
+- **Tanulság:** a 9. osztályos kisfilm a tervezett 30–45 mp-nél hosszabb (négy, plafon közeli mondat + nyugodt hang) → a P2-ben
+  a laboratory / future sávban a kisfilm összes szövege legfeljebb 450 karakter legyen.
 
 ## 10. Edge case-ek
 

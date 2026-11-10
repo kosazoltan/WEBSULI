@@ -137,3 +137,104 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await expect(page.getByTestId("clip-next")).toBeDisabled();
   });
 }
+
+// ── v2 (docs/specs/2026-11-10-fejezet-kisfilmek-v2.md): korosztályos kisfilm — rajzolt kép, pontos ábra, sávonkénti megjelenés ──
+const MEDIA = (n: number) => String(n).repeat(32);
+/** 1×1-es PNG a rajzolt kép helyén. */
+const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+const v2Clip = (band: "adventure" | "laboratory") => ({ v: 2, band, title: band === "adventure" ? "Kaland-próba" : "Labor-próba",
+  shots: [{ image: MEDIA(1), alt: "Első rajzolt kép" }, { image: MEDIA(2), alt: "Második rajzolt kép" }],
+  scenes: [
+    { say: "Az első jelenet a címet mutatja a rajzolt képen.", shot: 0, camera: "in", audio: MEDIA(7), ms: 900, overlay: { kind: "title", text: "A próba címe" } },
+    { say: "A második jelenetben a képlet darabjai sorban érkeznek.", shot: 0, camera: "left", audio: MEDIA(7), ms: 900, overlay: { kind: "formula", parts: [{ t: "s = 400 m", note: "megtett út" }, { t: "Δs = 0 m", note: "elmozdulás" }], caption: "Egy teljes kör után." } },
+    { say: "A harmadik jelenet grafikont rajzol a pontokból.", shot: 1, camera: "right", audio: MEDIA(7), ms: 900, overlay: { kind: "graph", xLabel: "t (s)", yLabel: "s (m)", points: [[0, 0], [60, 300], [120, 600]] } },
+    { say: "A negyedik jelenet erőnyilakat mutat egy testen.", shot: 1, camera: "out", audio: MEDIA(7), ms: 900, overlay: { kind: "vectors", body: "kiskocsi", arrows: [{ dir: "right", label: "10 N", size: 3 }, { dir: "left", label: "2 N", size: 1 }, { dir: "down", label: "G", size: 2 }] } },
+    { say: "Az ötödik jelenet két dolgot állít szembe.", shot: 1, camera: "still", audio: MEDIA(7), ms: 900, overlay: { kind: "compare", left: { label: "Út: a görbe hossza" }, right: { label: "Elmozdulás: egy nyíl" }, verdict: "Nem ugyanaz" } },
+  ] });
+const serveV2 = async (page: Page, band: "adventure" | "laboratory", audio: "ok" | "broken" = "ok") => {
+  await page.route("**/tmp/lesson-clips2.json", (route) => route.fulfill({ json: { clips: [{ sectionIndex: 0, clip: v2Clip(band) }], pending: false } }));
+  await page.route("**/api/lesson-clips/media/**", (route) => {
+    const id = new URL(route.request().url()).pathname.split("/").pop();
+    if (id === MEDIA(7)) return audio === "ok" ? route.fulfill({ contentType: "audio/wav", body: silentWav() }) : route.abort();
+    return route.fulfill({ contentType: "image/png", body: PIXEL });
+  });
+};
+
+test("v2: a kisfilm a korosztály megjelenésével játszik, a jelenet a hang végén vált, a felirat kikapcsolható", async ({ page }) => {
+  await serveV2(page, "laboratory");
+  await page.goto("/__lesson-runtime-probe?fusion=1&clips2=1");
+  await page.getByTestId("clip-play-0").click();
+  await expect(player(page)).toHaveAttribute("data-clip-band", "laboratory");
+  await expect(player(page).locator(".clip2-shot[data-active='true']")).toHaveAttribute("alt", "Első rajzolt kép");
+  await expect(page.getByTestId("clip-caption")).toBeVisible();
+  await page.getByTestId("clip-cc").click();
+  await expect(page.getByTestId("clip-caption")).toHaveCount(0);
+  await expect(page.getByTestId("clip-cc")).toHaveAttribute("aria-pressed", "false");
+  await expect(player(page)).toHaveAttribute("data-state", "finished", { timeout: 20000 });
+  await expect(player(page)).toHaveAttribute("data-scene", "4");
+  await expect(player(page)).toHaveAttribute("data-audio", "mp3");
+  // A kabala a v2 lejátszóban nincs: a figura a rajzon él.
+  await expect(page.locator(".clip-narrator")).toHaveCount(0);
+});
+
+test("v2: a két korosztály megjelenése eltér (keret, vonalvastagság, feliratméret)", async ({ page }) => {
+  const look = async (band: "adventure" | "laboratory") => {
+    await serveV2(page, band);
+    await page.goto("/__lesson-runtime-probe?fusion=1&clips2=1");
+    await page.getByTestId("clip-play-0").click();
+    await page.getByTestId("clip-toggle").click();
+    await page.getByTestId("clip-next").click();
+    const out = await page.evaluate(() => {
+      const panel = getComputedStyle(document.querySelector(".clip2-panel")!);
+      return { radius: panel.borderTopLeftRadius, stroke: panel.borderTopWidth, ink: panel.color, caption: getComputedStyle(document.querySelector(".clip2-caption")!).fontSize };
+    });
+    await page.unrouteAll();
+    return out;
+  };
+  const young = await look("adventure"), old = await look("laboratory");
+  expect(young).toEqual({ radius: "20px", stroke: "4px", ink: "rgb(112, 60, 27)", caption: "19px" });
+  expect(old).toEqual({ radius: "8px", stroke: "2px", ink: "rgb(20, 59, 98)", caption: "16px" });
+});
+
+test("v2: hang nélkül néma időzítővel megy végig", async ({ page }) => {
+  await page.addInitScript(() => { Object.defineProperty(window, "speechSynthesis", { value: undefined, configurable: true }); });
+  await serveV2(page, "adventure", "broken");
+  await page.goto("/__lesson-runtime-probe?fusion=1&clips2=1");
+  await page.getByTestId("clip-play-0").click();
+  await expect(player(page)).toHaveAttribute("data-audio", "silent");
+  await expect(player(page)).toHaveAttribute("data-scene", "1", { timeout: 8000 });
+});
+
+for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) for (const band of ["adventure", "laboratory"] as const) {
+  test(`v2: az ábrapanel a színpadon belül marad, semmi sem vágódik le (${band}, ${viewport.width} px)`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await serveV2(page, band);
+    await page.goto("/__lesson-runtime-probe?fusion=1&clips2=1");
+    await page.getByTestId("clip-play-0").click();
+    await page.getByTestId("clip-toggle").click();
+    await expect(player(page)).toHaveAttribute("data-state", "paused");
+    await page.getByTestId("clip-prev").click();
+    for (let scene = 0; scene < 5; scene++) {
+      await expect(player(page)).toHaveAttribute("data-scene", String(scene));
+      const report = await page.evaluate(() => {
+        // Szünetben az ábra belépő mozgásai állnak: a végállapotukra ugratjuk őket, és azt mérjük.
+        for (const a of document.querySelector(".clip2-stage")!.getAnimations({ subtree: true })) if (a.effect?.getComputedTiming().iterations !== Infinity) a.finish();
+        const stage = document.querySelector<HTMLElement>(".clip2-stage")!.getBoundingClientRect();
+        const panel = document.querySelector<HTMLElement>(".clip2-panel")!;
+        const p = panel.getBoundingClientRect();
+        const dialog = document.querySelector<HTMLElement>(".clip-player")!.getBoundingClientRect();
+        const caption = document.querySelector<HTMLElement>(".clip-caption")!;
+        return {
+          panelInside: p.left >= stage.left - 1 && p.right <= stage.right + 1 && p.top >= stage.top - 1 && p.bottom <= stage.bottom + 1,
+          panelOverflowX: panel.scrollWidth - panel.clientWidth, panelOverflowY: panel.scrollHeight - panel.clientHeight,
+          pageOverflowX: document.documentElement.scrollWidth - window.innerWidth,
+          dialogInside: dialog.left >= -1 && dialog.right <= window.innerWidth + 1 && dialog.bottom <= window.innerHeight + 1,
+          captionOverflow: caption.scrollHeight - caption.clientHeight,
+        };
+      });
+      expect(report, `jelenet ${scene}`).toEqual({ panelInside: true, panelOverflowX: 0, panelOverflowY: 0, pageOverflowX: 0, dialogInside: true, captionOverflow: 0 });
+      if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `v2-${band}-${viewport.width}-${scene}.png`) });
+      if (scene < 4) await page.getByTestId("clip-next").click();
+    }
+  });
+}

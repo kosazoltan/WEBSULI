@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { Lesson } from "./lesson-schema";
 import { isGoalCardText } from "./lesson-block-label";
+import { DESIGN_THEME_IDS } from "./lesson-design";
+import { CLIP_BAND_STYLE } from "./clip-style";
 
 /**
  * Spec docs/specs/2026-11-10-fejezet-kisfilmek.md: a fejezet rajzfilmes kisfilmje ADAT — jelenetek (elmondott mondat + egy képsablon),
@@ -39,7 +41,7 @@ export const clipSchema = z.object({
 export type ClipVisual = z.infer<typeof clipVisualSchema>;
 export type ClipScene = z.infer<typeof clipSceneSchema>;
 export type Clip = z.infer<typeof clipSchema>;
-export type LessonClipsResponse = { clips: Array<{ sectionIndex: number; clip: Clip }>; pending: boolean };
+export type LessonClipsResponse = { clips: Array<{ sectionIndex: number; clip: Clip | Clip2 }>; pending: boolean };
 
 /**
  * A fejezet tanítószövege a kisfilmhez: magyarázat, példa, összefoglaló. Az 1. fejezet Célkártyája és az azt követő mese kimarad
@@ -98,4 +100,93 @@ export function clipContentProblems(clip: Clip, source: string, heading: string)
 /** Hang nélkül ennyi ideig áll egy jelenet (a felirat elolvasható). */
 export function silentSceneMs(say: string): number {
   return Math.max(2500, say.length * 65);
+}
+
+/**
+ * v2 (spec docs/specs/2026-11-10-fejezet-kisfilmek-v2.md, 5.): korosztályos kisfilm három rétegben — rajzolt beállítások (`shots`),
+ * rájuk úszó, programból rajzolt pontos ábra (`overlay`), sávhangú mesélés (`say` + `audio`). Szám és jelölés csak az ábrán él.
+ */
+export const CLIP_CAMERAS = ["in", "out", "left", "right", "still"] as const;
+const mediaId = z.string().regex(/^[a-f0-9]{32}$/);
+
+export const clipOverlaySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("title"), text: text(70) }).strict(),
+  z.object({ kind: z.literal("formula"), parts: z.array(z.object({ t: text(28), note: text(44).optional() }).strict()).min(1).max(4), caption: text(110).optional() }).strict(),
+  z.object({ kind: z.literal("steps"), items: z.array(z.object({ text: text(70) }).strict()).min(2).max(4) }).strict(),
+  z.object({ kind: z.literal("compare"), left: z.object({ label: text(44) }).strict(), right: z.object({ label: text(44) }).strict(), verdict: text(70).optional() }).strict(),
+  z.object({ kind: z.literal("graph"), xLabel: text(24), yLabel: text(24), points: z.array(z.tuple([z.number().finite(), z.number().finite()])).min(2).max(8) }).strict(),
+  z.object({ kind: z.literal("vectors"), body: text(24), arrows: z.array(z.object({ dir: z.enum(["left", "right", "up", "down"]), label: text(24), size: z.number().int().min(1).max(3) }).strict()).min(1).max(4) }).strict(),
+  /** A fejezet saját `animate` blokkja (a blokk indexe a fejezetben). */
+  z.object({ kind: z.literal("lessonVisual"), blockIndex: z.number().int().min(0).max(40) }).strict(),
+]);
+
+export const clip2SceneSchema = z.object({
+  say: z.string().trim().min(CLIP_LIMITS.sayMin).max(CLIP_LIMITS.say),
+  /** A jelenet hangja (tárolt média); hiányában a lejátszó a felolvasás hangvégpontját használja. */
+  audio: mediaId.optional(),
+  /** A hang hossza ezredmásodpercben — a kameramozgás és az ábra ütemezéséhez. */
+  ms: z.number().int().min(500).max(60_000).optional(),
+  shot: z.number().int().min(0).max(3),
+  camera: z.enum(CLIP_CAMERAS),
+  overlay: clipOverlaySchema.optional(),
+}).strict();
+
+export const clip2Schema = z.object({
+  v: z.literal(2),
+  band: z.enum(DESIGN_THEME_IDS),
+  title: text(120),
+  shots: z.array(z.object({ image: mediaId, alt: text(160) }).strict()).min(2).max(4),
+  scenes: z.array(clip2SceneSchema).min(3).max(5),
+}).strict().superRefine((clip, ctx) => {
+  const sayMax = CLIP_BAND_STYLE[clip.band].narration.sayMax;
+  clip.scenes.forEach((scene, i) => {
+    if (scene.shot >= clip.shots.length) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scenes", i, "shot"], message: "A jelenet nem létező beállításra mutat." });
+    if (scene.say.length > sayMax) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scenes", i, "say"], message: `Ebben a korosztályban egy jelenet szövege legfeljebb ${sayMax} karakter (most ${scene.say.length}).` });
+    if (scene.overlay?.kind === "graph" && scene.overlay.points.some((p, j, all) => j > 0 && p[0] <= all[j - 1][0])) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scenes", i, "overlay", "points"], message: "A grafikon pontjai x szerint növekvő sorrendben álljanak." });
+  });
+});
+
+export type ClipOverlay = z.infer<typeof clipOverlaySchema>;
+export type Clip2Scene = z.infer<typeof clip2SceneSchema>;
+export type Clip2 = z.infer<typeof clip2Schema>;
+
+/** A tárolt kép / hang azonos eredetű címe (tartalomcímzett, ezért korlátlanul gyorsítótárazható). */
+export const clipMediaUrl = (id: string): string => `/api/lesson-clips/media/${id}`;
+
+/** Bármelyik változat érvényes kisfilmje, vagy null. */
+export function parseAnyClip(value: unknown): Clip | Clip2 | null {
+  const v2 = clip2Schema.safeParse(value);
+  if (v2.success) return v2.data;
+  const v1 = clipSchema.safeParse(value);
+  return v1.success ? v1.data : null;
+}
+
+/** A v2 kisfilm minden szövege (elmondott és képernyőre kerülő) — a tartalmi kapukhoz. */
+export function clip2Texts(clip: Clip2): string[] {
+  const out: string[] = [clip.title];
+  for (const { say, overlay } of clip.scenes) {
+    out.push(say);
+    switch (overlay?.kind) {
+      case "title": out.push(overlay.text); break;
+      case "formula": for (const p of overlay.parts) out.push(p.t, ...(p.note ? [p.note] : [])); if (overlay.caption) out.push(overlay.caption); break;
+      case "steps": for (const item of overlay.items) out.push(item.text); break;
+      case "compare": out.push(overlay.left.label, overlay.right.label, ...(overlay.verdict ? [overlay.verdict] : [])); break;
+      case "graph": out.push(overlay.xLabel, overlay.yLabel, ...overlay.points.flat().map(String)); break;
+      case "vectors": out.push(overlay.body, ...overlay.arrows.map((a) => a.label)); break;
+      default: break;
+    }
+  }
+  return out;
+}
+
+/** A v2 tartalmi kapui: nincs új szám, nincs jelölőnyelv vagy webcím; a `lessonVisual` létező ábrablokkra mutat. */
+export function clip2ContentProblems(clip: Clip2, source: string, heading: string, animateBlockIndexes: readonly number[]): string[] {
+  const problems: string[] = [];
+  const known = new Set(numbersOf(`${heading}\n${source}`));
+  const texts = clip2Texts(clip);
+  const unknown = [...new Set(texts.flatMap(numbersOf))].filter((n) => !known.has(n));
+  if (unknown.length) problems.push(`Ezek a számok nem szerepelnek a fejezet szövegében: ${unknown.join(", ")}. Csak a fejezet számadatait használd.`);
+  for (const [pattern, name] of FORBIDDEN) if (texts.some((t) => pattern.test(t))) problems.push(`A szövegekben nem lehet ${name}.`);
+  for (const scene of clip.scenes) if (scene.overlay?.kind === "lessonVisual" && !animateBlockIndexes.includes(scene.overlay.blockIndex)) problems.push(`A(z) ${scene.overlay.blockIndex}. blokk nem ábra ebben a fejezetben.`);
+  return problems;
 }

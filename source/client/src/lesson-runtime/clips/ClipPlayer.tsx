@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw, X } from "lucide-react";
-import { silentSceneMs, type Clip } from "@shared/lesson-clip";
+import type { Clip } from "@shared/lesson-clip";
 import { ttsAudioUrl } from "@shared/speech-fallback";
 import { ClipStage } from "./clip-scenes";
+import { CLIP_AUDIO_RATE, narrate, type ClipAudioMode } from "./narrate";
 import "./lesson-clips.css";
 
 /**
@@ -10,50 +11,6 @@ import "./lesson-clips.css";
  * Hanglánc: azonos eredetű MP3 (`/api/tts/audio`) → a böngésző beszédmotorja → néma időzítő (a felirat miatt hang nélkül is végignézhető).
  */
 export type ClipPlaylistItem = { sectionIndex: number; heading: string; clip: Clip };
-export type ClipAudioMode = "mp3" | "speech" | "silent";
-const SPEECH_START_MS = 3000;
-export const CLIP_AUDIO_RATE = 1.1;
-
-/** Egy mondat elmondása; a visszaadott függvény megszakítja. `onDone` pontosan egyszer fut, megszakításkor nem. */
-function narrate(audio: HTMLAudioElement, say: string, onMode: (mode: ClipAudioMode) => void, onDone: () => void): () => void {
-  let over = false;
-  let stage: ClipAudioMode = "mp3";
-  const timers: Array<ReturnType<typeof setTimeout>> = [];
-  const synth = "speechSynthesis" in window ? window.speechSynthesis : undefined;
-  const quiet = () => { audio.onended = null; audio.onerror = null; audio.pause(); timers.forEach(clearTimeout); if (stage === "speech") synth?.cancel(); };
-  const finish = () => { if (over) return; over = true; quiet(); onDone(); };
-  const silent = () => {
-    if (over || stage === "silent") return;
-    if (stage === "speech") synth?.cancel();
-    stage = "silent"; onMode("silent");
-    timers.push(setTimeout(finish, silentSceneMs(say)));
-  };
-  const speech = () => {
-    if (over || stage !== "mp3") return;
-    if (!synth || typeof SpeechSynthesisUtterance === "undefined") { silent(); return; }
-    stage = "speech";
-    const utterance = new SpeechSynthesisUtterance(say);
-    utterance.lang = "hu-HU";
-    let started = false;
-    utterance.onstart = () => { started = true; if (!over && stage === "speech") onMode("speech"); };
-    utterance.onboundary = () => { started = true; };
-    utterance.onend = () => { if (stage === "speech") finish(); };
-    utterance.onerror = () => { if (stage === "speech") silent(); };
-    // Néma motor: ha a kimondás nem indul el, vagy végtelenbe nyúlik, a néma időzítő viszi tovább a kisfilmet.
-    timers.push(setTimeout(() => { if (!started) silent(); }, SPEECH_START_MS));
-    timers.push(setTimeout(() => { if (stage === "speech") finish(); }, silentSceneMs(say) * 3));
-    synth.speak(utterance);
-  };
-  const url = ttsAudioUrl(say, "hu");
-  if (!url) { speech(); return () => { over = true; quiet(); }; }
-  audio.onended = finish;
-  audio.onerror = speech;
-  audio.src = url;
-  // A gépi hang kissé lassú: 10%-kal gyorsabban természetesebb (mérve: a Dinamika-lecke fejezetei 31–44 mp-ről 28–40 mp-re).
-  audio.playbackRate = CLIP_AUDIO_RATE;
-  audio.play().then(() => { if (!over && stage === "mp3") onMode("mp3"); }, speech);
-  return () => { over = true; quiet(); };
-}
 
 export function ClipPlayer({ playlist, audio, onClose }: { playlist: ClipPlaylistItem[]; audio: HTMLAudioElement; onClose: () => void }) {
   const [chapter, setChapter] = useState(0);
@@ -84,7 +41,7 @@ export function ClipPlayer({ playlist, audio, onClose }: { playlist: ClipPlaylis
   useEffect(() => {
     if (!playing) { setSpeaking(false); return; }
     setSpeaking(true);
-    const cancel = narrate(audio, scene.say, setMode, () => { setSpeaking(false); next(); });
+    const cancel = narrate(audio, ttsAudioUrl(scene.say, "hu"), scene.say, CLIP_AUDIO_RATE, setMode, () => { setSpeaking(false); next(); });
     // A következő jelenet hangja előre letöltődik (a CDN / böngésző gyorsítótárába), hogy a váltás ne akadjon.
     const upcoming = lastScene ? playlist[chapter + 1]?.clip.scenes[0] : item.clip.scenes[sceneIdx + 1];
     const url = upcoming ? ttsAudioUrl(upcoming.say, "hu") : null;
