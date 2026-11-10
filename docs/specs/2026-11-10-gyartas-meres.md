@@ -148,3 +148,34 @@ a 62 függő fogalom tanári átnézése, iPhone-próba.
 - A meglévő tesztek változatlanul zöldek (tesztet gyengíteni tilos).
 - WHEN a javítás élesben van, THEN egy új élő gyártás bankideje mérhetően rövidebb a mai 862–1113 mp-nél (UNVERIFIED az
   összevonásig; a mérés a végrehajtási utasítás utolsó lépése).
+
+## Élő visszamérés a #414 telepítése után (2026-11-10, futás `3d1106fb`, job `ca1f317b`)
+
+Szólások és közmondások (Magyar nyelv, 6. évfolyam), anyag `476065ba-cf54-428e-8076-3ab704a2468b`: 3 fejezet, 59 feladat, 98 kvíz.
+
+| | Érték | Megjegyzés |
+|---|---|---|
+| Teljes idő | 21,4 perc | nem rövidebb a korábbi 21,9 / 20,9 percnél |
+| Becsült költség | 5,83 USD | magasabb (5,27 / 5,10 volt) |
+| Gyakorlóbank | 1059 mp, 7 kör, 2 javító, 3,03 USD | |
+| Ellenőrzés | 781 mp, 31 hívás, 2,08 USD | a költség 36%-a |
+| Lektorálás | 85 mp, 2 kör | a lektor javítást kért → 2 fejezet csomagja újraépült |
+
+**Őszinte értékelés:** a J1 (célzott javítás keresztütközésnél) hatása ezen a futáson NEM mérhető — a naplóban nincs
+`Bank keresztütközés` sor, vagyis a drága ág nem futott le. A futás alakja is más: 3 nagy fejezet (csomagonként több tétel), és a
+lektor kifogása után az 1–2. fejezet teljes csomagja újraépült (kb. 6 perc). A bankidő-csökkenés ezért továbbra is UNVERIFIED.
+
+**Ami igazolódott élesben:**
+
+- J1b: a közzétett kvízbankban a „Melyik állítás hamis?” kérdés háromszor szerepel eltérő opciókkal — a korábbi szabály szerint
+  ez javítókört vagy újragyártást váltott volna ki; keresztütközés nem volt.
+- J2: az új gyártás célkártyája „Célunk:” címkével kezdődik, a fejlécek „A lecke célja” és „Történet”; a korábbi (címke nélküli)
+  matematika leckén is helyes a fejléc.
+- J3: a matematika lecke számegyenesei: −10, −5, 0, 5, 10 (korábban −10, −7, −4, −1, 2, 5, 8).
+- J4: `POST /api/admin/materials/bulk-email` admin-munkamenettel → 501, „A tömeges e-mail küldés még nem érhető el.”
+- A9: az előnézeti oldalon `scrollWidth === clientWidth` (825) 847 px széles ablakban.
+- J5 (eredmény-újrapróbálás) élesben NOT RUN: hálózati hibát kellene előidézni; egységteszt fedi.
+
+**Következő mérhető pazarlás (nem ebben a körben):** a lektori kifogás után a módosított fejezetek teljes bankcsomagja újraépül,
+és a válaszkulcs-tesztek újra lefutnak (az ellenőrzés a költség 36%-a). Ez a `docs/specs/2026-11-03-javitas-bank-megorzes`
+folytatása lehet: csak a kifogásolt tételek cseréje, ha a tanítás változása kicsi.

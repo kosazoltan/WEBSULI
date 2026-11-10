@@ -53,5 +53,8 @@ hívással, amit a Task 3 előír.
   válasza a várt visszajelzést adja. Valódi telefonon NOT RUN.
 - A próbán talált megjelenítési hiba (az előnézet eszköztára kilóg): `docs/specs/2026-11-10-hibavadaszat.md` A9.
 - A két futás mérése és a belőle következő javítások: `docs/specs/2026-11-10-gyartas-meres.md`.
-- A többi tantárgy (Magyar, Történelem, Digitális kultúra, Angol) élő gyártása ebben a körben NOT RUN: az elfogadási feltétel
+- **3. futás** `3d1106fb-…` (Magyar nyelv és irodalom kerettanterv, „Állandósult szókapcsolatok” témakör; a #414 utáni visszamérés):
+  21,4 perc, kész és közzétéve. Anyag `476065ba-cf54-428e-8076-3ab704a2468b`, 3 fejezet, 59 feladat, 98 kvízkérdés. Nyilvános
+  visszaolvasás: 232 anyag, `classroom=6` → 19; `by-file` és `/preview` 200; Chrome-ban konzolhiba nélkül megnyílik.
+- A további tantárgyak (Történelem, Digitális kultúra, Angol) élő gyártása ebben a körben NOT RUN: az elfogadási feltétel
   („legalább egy 6. osztályos fúziós tananyag”) teljesült, a további futás tantárgyanként kb. 21 perc és kb. 5 USD.
