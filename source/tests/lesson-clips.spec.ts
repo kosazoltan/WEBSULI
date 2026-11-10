@@ -4,6 +4,10 @@ import path from "node:path";
 
 // Spec docs/specs/2026-11-10-fejezet-kisfilmek.md (E1–E6): a kisfilm-lejátszó valódi böngészőben, a próbaoldalon.
 // CLIP_SHOTS=<mappa>: jelenetenkénti képernyőképek a szemrevételezéshez.
+// A szolgáltatásmunkás a page.route csonkjait megkerülné (az /api/* kéréseket maga kéri le) — az alap e2e-futásban is tiltjuk,
+// nem csak a saját konfigurációban (CI: 10 teszt bukott emiatt, a csonkolt hang és kisfilm-válasz helyett a valódi szerver felelt).
+test.use({ serviceWorkers: "block" });
+
 const SHOTS = process.env.CLIP_SHOTS;
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 

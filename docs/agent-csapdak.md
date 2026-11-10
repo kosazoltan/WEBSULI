@@ -355,5 +355,11 @@ Forrás: tulajdonosi visszajelzés („borzasztó”) → `docs/specs/2026-11-10
 - **Tünet 2:** a Node beépített `fetch`-e a felhős munkamenetben nem megy át a proxyn (`ENOTFOUND api.openai.com`), miközben a `curl` igen.
 - **Megelőzés 2:** szkriptből indított külső hívásnál `NODE_USE_ENV_PROXY=1` (Node ≥ 22.21); a kulcs a proxy hálózati titka, a
   fejlécbe helykitöltő kerül (`Bearer proxy-injected`), valódi kulcs soha.
+- **Tünet 4:** az új `tests/lesson-clips.spec.ts` helyben (saját Vite-konfigurációval) zöld volt, a CI alap e2e-futásában 10 tesztje
+  bukott: a `**/*.spec.ts` minta miatt az alap `playwright.config.ts` is felveszi, ott az épített szerver szolgáltatásmunkása él, és
+  az `/api/*` kéréseket maga kéri le — a `page.route` csonkok helyett a valódi szerver felelt.
+- **Megelőzés 4:** hálózatot csonkoló új spec ELSŐ sora `test.use({ serviceWorkers: "block" })` (a `lesson-fusion.spec.ts` mintája), és
+  push előtt az alap konfigurációval is le kell futtatni: helyi Postgres 16 (`pg_ctlcluster 16 main start`), `DATABASE_URL` a
+  loopbackre, `npm run db:migrate`, `node --import tsx tests/e2e-seed.ts`, `npx playwright test tests/<spec>`.
 - **Tünet 3:** a hangminőséget az ügynök nem tudja füllel megítélni — a „természetes hang” állítás mérés nélkül feltételezés.
 - **Megelőzés 3:** hangról csak mérhető tényt szabad állítani (elkészült, hossz, modell, hangazonosító); a minőség a tulajdonos szemléje.
