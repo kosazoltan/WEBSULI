@@ -88,10 +88,17 @@ felirat nélkül. Egy hatodikosnak a 0 nélküli számegyenes félrevezető.
   501-et ad magyar üzenettel, a kliens a hibát mutatja (nem sikert). A tényleges tömeges küldés megvalósítása nem cél (külső
   címzetteknek menne; külön döntés).
 
+- **J5 (felmérésből) · a tanuló eredménye hálózati hibánál elvész.** `client/src/lesson-runtime/resultReport.ts:39`: a beküldés
+  egyszer próbálkozik, a hiba csendes. Ráadásul az `apiRequest` beépített újrapróbálása (`client/src/lib/queryClient.ts:232-240`)
+  épp a hálózati hibát és az időtúllépést nem ismeri fel, mert azokat előbb magyar szövegű `Error`-ba csomagolja (`:216-225`), a
+  feltétel pedig a csomagolatlan `TypeError` / `AbortError` típust keresi. Javítás: közös `isRetryableRequestError` (a `cause`
+  láncot is nézi), és az eredménybeküldés 3 újrapróbálást kér. Biztonságos, mert a szerver a kört egyedi kulccsal egyszer rögzíti
+  (`server/lesson-result-email.ts:50`, `onConflictDoNothing`). Az írási műveletek alapértéke (0 újrapróbálás) nem változik.
+
 ## A felmérés további tételei (ebben a körben nem készülnek el)
 
 A félbemaradt munkák felmérése (2026-11-10, 15 tétel) szerint nyitott PR és kihagyott teszt nincs. Ügynök által elvégezhető,
-későbbi szelet: az eredménybeküldés újrapróbálása hálózati hibánál (idempotencia kell hozzá), forrásőr a `try` nélküli aszinkron
+későbbi szelet: forrásőr a `try` nélküli aszinkron
 útvonalakra, a nyitómese S3 / S4 szelete (`docs/specs/2026-11-08-nyitomese-jatekos-kerdezes.md:214-216`), a katalógus-eredmények
 admin-nézete. Tulajdonosi lépés: a proxy-titok, a Render build-parancs és a `RENDER_API_KEY`, az Antigoné-lecke célzott javítása,
 a 62 függő fogalom tanári átnézése, iPhone-próba.

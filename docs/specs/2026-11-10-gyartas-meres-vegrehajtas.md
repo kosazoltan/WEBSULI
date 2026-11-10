@@ -75,6 +75,15 @@ implementációt kell igazítani.
 3. Új teszt `tests/bulk-email-honest.test.ts`: forrásőr — a `routes.ts`-ben nincs `not yet implemented` sikerválasz, a végpont
    501-et ad.
 
+## J5 — eredménybeküldés újrapróbálása (`shared/request-retry.ts`, `client/src/lib/queryClient.ts`, `client/src/lesson-runtime/resultReport.ts`)
+
+1. Új tiszta függvény `isRetryableRequestError(error)`: a hiba és a `cause` lánc bármely eleme `TypeError` vagy `AbortError` →
+   igaz; státuszos hiba: csak 5xx; egyébként hamis. Körkörös lánc ellen védett.
+2. `apiRequest` újrapróbálási feltétele ezt használja (a meglévő `hibavadaszat-a.test.ts` A4 forrásőre — két
+   `error instanceof TypeError` — változatlanul zöld marad).
+3. `resultReport.ts`: `apiRequest(..., { retries: RESULT_REPORT_RETRIES })`, `RESULT_REPORT_RETRIES = 3`.
+4. Új teszt `tests/request-retry.test.ts` (tiszta függvény + forrásőr).
+
 ## Záró ellenőrzés és szállítás
 
 1. `npm.cmd run check`, `npm.cmd run lint`, `npm.cmd run check:test`, `npm.cmd test` (teljes), a lecke böngészős tesztjei
