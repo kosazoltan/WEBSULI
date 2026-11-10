@@ -361,5 +361,12 @@ Forrás: tulajdonosi visszajelzés („borzasztó”) → `docs/specs/2026-11-10
 - **Megelőzés 4:** hálózatot csonkoló új spec ELSŐ sora `test.use({ serviceWorkers: "block" })` (a `lesson-fusion.spec.ts` mintája), és
   push előtt az alap konfigurációval is le kell futtatni: helyi Postgres 16 (`pg_ctlcluster 16 main start`), `DATABASE_URL` a
   loopbackre, `npm run db:migrate`, `node --import tsx tests/e2e-seed.ts`, `npx playwright test tests/<spec>`.
+- **Tünet 5:** a generált mozgókép nyersen 4–17 MB klipenként (mérve); a próba idején ez nem tűnt fel, mert helyi fájlból játszott.
+  Tárolás előtt derült ki, hogy egy lecke így több száz MB lenne az adatbázisban.
+- **Megelőzés 5:** generált média MÉRETÉT a próba része mérni (nem csak az árát és az idejét); tárolás csak átkódolva, mérethatárral és
+  tárkerettel (`CLIP_VIDEO_MAX_BYTES`, `LESSON_CLIP_MEDIA_MAX_MB`).
+- **Tünet 6:** a hálózati titokként elmentett kulcsot az ügynök használni tudja, de kiolvasni nem — ezért másik rendszerbe (Render
+  környezeti változó) nem tudja átírni. A tulajdonos ezt joggal nem értette.
+- **Megelőzés 6:** kulcskéréskor előre meg kell mondani: „ezt csak ebben a munkamenetben tudom használni; a szerverre neked kell beírnod”.
 - **Tünet 3:** a hangminőséget az ügynök nem tudja füllel megítélni — a „természetes hang” állítás mérés nélkül feltételezés.
 - **Megelőzés 3:** hangról csak mérhető tényt szabad állítani (elkészült, hossz, modell, hangazonosító); a minőség a tulajdonos szemléje.

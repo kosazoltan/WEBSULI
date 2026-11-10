@@ -152,6 +152,30 @@ Két kézi kisfilm készült el a tervezett módon (a média a munkamenet ideigl
   P1-ben stilizált 2D-re kell írni (a próba 9. osztályos képei már így készültek, a profil még nem).
 - **Kód:** a v2 jelenet opcionális `video` médiaazonosítót kap; a lejátszó némított videót játszik a kép fölött, hibánál a kép marad.
 
+## 9d. P1–P2 megépítve; élő próba a valódi gyártósorral (2026-11-10)
+
+Végrehajtás: `docs/specs/2026-11-10-fejezet-kisfilmek-v2-p1p2-vegrehajtas.md`. Tulajdonosi szemle: a videók, a tartalom és Vera hangja
+rendben; a férfihang Csaba. A `source/scripts/clip-trial.ts` a VALÓDI gyártósort futtatta két fejezetre (éles adat írása nélkül):
+
+| | Felszínformák 4. o., „A síkság” | Dinamika 9. o., „Egyenes vonalú egyenletes mozgás” |
+|---|---|---|
+| Teljes gyártási idő | 85,0 mp | 87,3 mp |
+| Forgatókönyv | 1 hívás (10,7 mp) | 2 hívás (javítókör; 12,1 mp a hosszabb) |
+| Kép / képkapu | 4 / 4, újrapróba nélkül | 4 / 4, újrapróba nélkül |
+| Hang (ElevenLabs flash, 32 kbit/s) | 4 db, együtt 87 kB | 4 db, együtt 102 kB |
+| Mozgókép nyersen → átkódolva | 5,0–6,5 MB → 0,33–0,37 MB | 3,8–6,9 MB → 0,29–0,41 MB |
+| Tárolt média összesen | 1,81 MB | 1,62 MB |
+| A kisfilm hossza | 24 mp | 27 mp |
+| Ábrák | cím, lépések, képlet, a fejezet számegyenese | cím, képlet, a fejezet számegyenese, képlet |
+
+Mindkét kisfilm végigment a lejátszóban a valódi leckében (hangmód `mp3`, a mozgókép 960 px széles, az ábrapanel a színpadon belül,
+oldalhiba nélkül). A leghosszabb lépés a mozgókép (55–60 mp jelenetenként, párhuzamosan). A számhűség-kapu a 9. osztályos
+forgatókönyv első változatát visszadobta, a javítókör után átment.
+
+NEM igazolt (élesben derül ki): van-e `ffmpeg` a Render-példányon (nélküle állóképes kisfilm készül, a napló jelzi); a szerveren lévő
+OpenAI-kulccsal megy-e a képgyártás (ha nem, a leckeborító képmodellje rajzol); a `dbClipStore` éles adatbázison (helyi Postgres 16-on
+igazolva).
+
 ## 10. Edge case-ek
 
 - A képmodell szöveget rajzol a képre → minőségkapu, újrapróba; kétszeres bukásnál a jelenet képe a sáv semleges háttere.

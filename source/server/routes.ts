@@ -51,6 +51,8 @@ import { webResearchRouter } from "./studio/web-research-routes";
 import { workflowRouter } from "./workflows/routes";
 import { applyTrackedImprovement } from "./workflows/apply";
 import { lessonPublicRouter } from "./studio/lesson-routes";
+import { registerLessonClipMedia } from "./lesson-clip-media";
+import { loadClipMedia } from "./lesson-clips-db";
 import { createArbiterRouter } from "./arbiter/routes";
 import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
@@ -850,6 +852,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — CSRF-fel, mint a Próba (vendég is).
   app.use("/api/lessons", lessonResultsRouter);
   app.use("/api/lessons", lessonPublicRouter);
+  // Spec 2026-11-10-fejezet-kisfilmek-v2 (6.): a kisfilmek tartalomcímzett médiája (kép, hang, mozgókép) — azonos eredet, korlátlanul gyorsítótárazható.
+  registerLessonClipMedia(app, loadClipMedia);
 
   // Spec 2026-10-05-s3-katalogus-bank: a tantárgyi katalógus-bankok csak olvasó admin-nézete.
   app.use("/api/admin/catalog", catalogAdminRouter);

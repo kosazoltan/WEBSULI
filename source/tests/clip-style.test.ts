@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CLIP_BAND_STYLE, CLIP_IMAGE_COMMON, clipBandFor, clipImagePrompt } from "../shared/clip-style";
 import { DESIGN_THEME_IDS } from "../shared/lesson-design";
-import { clip2ContentProblems, clip2Schema, clipMediaUrl, parseAnyClip, type Clip2 } from "../shared/lesson-clip";
+import { clip2ContentProblems, clip2Schema, clipMediaUrl, type Clip2 } from "../shared/lesson-clip";
 
 // docs/specs/2026-11-10-fejezet-kisfilmek-v2.md — korosztályos profil és a v2 adatszerződés.
 
@@ -25,9 +25,13 @@ test("a mesélés a korral komolyodik: nő a mondathossz, más a hang, más a me
   const sayMax = order.map((b) => CLIP_BAND_STYLE[b].narration.sayMax);
   assert.deepEqual(sayMax, [...sayMax].sort((a, b) => a - b));
   assert.ok(sayMax[0] < sayMax[4]);
-  assert.equal(new Set(order.map((b) => CLIP_BAND_STYLE[b].voice.id)).size, 5, "sávonként más hang");
-  assert.equal(new Set(order.map((b) => CLIP_BAND_STYLE[b].voice.instructions)).size, 5, "sávonként más hangnem");
-  assert.ok(order.every((b) => /Hungarian/.test(CLIP_BAND_STYLE[b].voice.instructions)));
+  // Tulajdonosi választás (2026-11-10): a kicsiknek Vera, a 6. évfolyamtól Csaba; a hangmodell közös.
+  assert.deepEqual(order.map((b) => CLIP_BAND_STYLE[b].voice.name), ["Vera", "Vera", "Csaba", "Csaba", "Csaba"]);
+  assert.ok(order.every((b) => CLIP_BAND_STYLE[b].voice.model === "eleven_flash_v2_5" && /^[A-Za-z0-9]{20}$/.test(CLIP_BAND_STYLE[b].voice.id)));
+  const totals = order.map((b) => CLIP_BAND_STYLE[b].narration.totalMax);
+  assert.ok(order.every((b, i) => totals[i] <= CLIP_BAND_STYLE[b].narration.sayMax * CLIP_BAND_STYLE[b].narration.scenes[1]) && totals[0] < totals[4]);
+  // Minden korosztály rajzfilmszerű: a nagyoknál stilizált 2D, nem fotó.
+  for (const b of ["laboratory", "future"] as const) { assert.match(CLIP_BAND_STYLE[b].imageStyle, /2D animation/); assert.ok(!/photographic look/.test(CLIP_BAND_STYLE[b].imageStyle)); }
   const captions = order.map((b) => CLIP_BAND_STYLE[b].look.captionPx);
   assert.deepEqual(captions, [...captions].sort((a, b) => b - a), "a kisebbeknek nagyobb felirat");
   assert.ok(parseInt(CLIP_BAND_STYLE.explorer.look.radius) > parseInt(CLIP_BAND_STYLE.laboratory.look.radius), "a kicsiknél kerekebb, a nagyoknál mérnöki");
@@ -39,7 +43,7 @@ test("a képbrief tartalmazza a helyzetet, a figurát (ahol van), a sáv stílus
   assert.ok(young.startsWith("Two children look at a hill."));
   assert.ok(young.includes(CLIP_BAND_STYLE.adventure.cast!) && young.includes(CLIP_BAND_STYLE.adventure.imageStyle) && young.includes(CLIP_IMAGE_COMMON));
   const lab = clipImagePrompt("A running track.", "laboratory");
-  assert.ok(!lab.includes("null") && lab.includes("No cartoon characters") && /no text, letters, digits/i.test(lab));
+  assert.ok(!lab.includes("null") && lab.includes("No mascots") && /no text, letters, digits/i.test(lab));
 });
 
 const ID = (n: number) => String(n).repeat(32);
@@ -60,8 +64,6 @@ test("v2 séma: érvényes minta; hibás beállítás-index, sáv feletti mondat
   // Mozgóképes jelenet: a videó tárolt média azonosítója; hibás azonosítóval elutasítva.
   assert.equal(clip2Schema.safeParse(clip({ scenes: [{ ...scenes[0], video: ID(5) }, scenes[1], scenes[2]] })).success, true);
   assert.equal(clip2Schema.safeParse(clip({ scenes: [{ ...scenes[0], video: "film.mp4" }, scenes[1], scenes[2]] })).success, false);
-  assert.equal(parseAnyClip(clip())?.v, 2);
-  assert.equal(parseAnyClip({ v: 3 }), null);
   assert.equal(clipMediaUrl(ID(4)), `/api/lesson-clips/media/${ID(4)}`);
 });
 

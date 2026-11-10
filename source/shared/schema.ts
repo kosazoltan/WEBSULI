@@ -1270,3 +1270,13 @@ export const learnerActivity = pgTable(
   },
   (table) => ({ learnerCreated: index("learner_activity_learner_created_idx").on(table.learnerId, table.createdAt) }),
 );
+
+/** A kisfilmek médiája (migrations/0039): tartalomcímzett kép / hang / mozgókép; a sor soha nem módosul. */
+export const lessonClipMedia = pgTable("lesson_clip_media", {
+  id: char("id", { length: 32 }).primaryKey(),
+  kind: varchar("kind", { length: 8 }).notNull().$type<"image" | "audio" | "video">(),
+  mime: varchar("mime", { length: 40 }).notNull(),
+  bytes: bytea("bytes").notNull(),
+  size: integer("size").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

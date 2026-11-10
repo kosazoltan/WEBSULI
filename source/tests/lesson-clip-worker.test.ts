@@ -2,176 +2,222 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 import { lessonSchema } from "../shared/lesson-schema";
-import { clipSource, type Clip } from "../shared/lesson-clip";
+import { clipSource, type Clip2 } from "../shared/lesson-clip";
+import { CLIP_BAND_STYLE, clipBandFor } from "../shared/clip-style";
 import {
-  CLIP_FRESH_DAYS, CLIP_MAX_ATTEMPTS, CLIP_SYSTEM, CLIP_TEXT_MODEL, autoTodo, clipDailyLimit, clipSourceHash, clipsMode, eligibleSections, lessonClipsResponse,
-  makeClip, runClipRound, seedHandmade, servableClips, type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
+  CLIP_FRESH_DAYS, CLIP_MAX_ATTEMPTS, CLIP_VIDEO_MAX_BYTES, clipDailyLimit, clipMediaBudgetBytes, clipSourceHash, clipSystemPrompt, clipTodo, clipsMode,
+  eligibleSections, lessonClipsResponse, makeChapterClip, runClipRound, servableClips, type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
-import type { ClipSeed } from "../server/lesson-clip-seeds";
+import { mediaId } from "../server/lesson-clip-media";
+import { clipKeys } from "../server/lesson-clips-providers";
 
-// docs/specs/2026-11-10-fejezet-kisfilmek.md — kiszolgálási szűrő, kézi beírás, háttérgyártás (hálózat és adatbázis nélkül).
+// docs/specs/2026-11-10-fejezet-kisfilmek-v2.md — gyártósor, kiszolgálás, plafonok (hálózat és adatbázis nélkül, hamis szolgáltatókkal).
 
 const NOW = new Date("2026-11-10T12:00:00Z");
-const SAY = "Ez egy elég hosszú, elmondható mondat a jelenethez.";
-const goodClip = (title = "Kisfilm"): Clip => ({ v: 1, title, scenes: [
-  { say: SAY, visual: { kind: "title", emoji: "🎬", text: "Cím" } },
-  { say: SAY, visual: { kind: "idea", emoji: "💡", text: "Kulcsmondat" } },
-  { say: SAY, visual: { kind: "steps", items: [{ text: "Első" }, { text: "Második" }] } },
-] });
-
 function twoChapterLesson() {
   const lesson = fusionFixture();
   lesson.sections.push({ ...lesson.sections[0], heading: "Második fejezet" });
   return lessonSchema.parse(lesson);
 }
+const BAND = clipBandFor(twoChapterLesson().classroom);
+const STYLE = CLIP_BAND_STYLE[BAND];
+const SAY = "Ez egy elég hosszú, elmondható mondat a jelenethez.";
+const draftScene = (i: number) => ({ say: SAY, image: `A clear drawable situation number ${"x".repeat(i + 1)} from the chapter.`, motion: "Something in the picture moves smoothly while the narrator speaks.", alt: "A jelenet képe.", ...(i === 0 ? { overlay: { kind: "title", text: "A kisfilm címe" } } : {}) });
+const draft = () => JSON.stringify({ title: "Próba-kisfilm", scenes: Array.from({ length: STYLE.narration.scenes[0] }, (_, i) => draftScene(i)) });
 const makeLesson = (id: string, publishedAt: Date | null = new Date(NOW.getTime() - 3_600_000), json: unknown = twoChapterLesson()): ClipLesson => ({ id, publishedAt, json });
 
 function memoryStore(lessons: ClipLesson[], initial: ClipRow[] = []) {
   const rows = [...initial];
-  const autoToday = new Set<string>();
-  const put = (row: ClipRow) => { const i = rows.findIndex((r) => r.lessonId === row.lessonId && r.sectionIndex === row.sectionIndex); if (i >= 0) rows[i] = row; else rows.push(row); };
+  const media = new Map<string, { kind: string; mime: string; size: number }>();
+  const today = new Set<string>();
   const store: ClipStore = {
     lesson: async (id) => lessons.find((l) => l.id === id) ?? null,
     freshLessons: async (days) => lessons.filter((l) => l.publishedAt && NOW.getTime() - l.publishedAt.getTime() <= days * 86_400_000).sort((a, b) => b.publishedAt!.getTime() - a.publishedAt!.getTime()),
     rows: async (lessonId) => rows.filter((r) => r.lessonId === lessonId),
-    upsertHandmade: async (row) => put({ ...row, sourceHash: null, status: "ready", origin: "handmade", attempts: 0 }),
-    upsertAuto: async ({ model: _model, ...row }) => {
-      const old = rows.find((r) => r.lessonId === row.lessonId && r.sectionIndex === row.sectionIndex);
-      if (old?.origin === "handmade") return; // ugyanaz a szabály, mint az éles tár WHERE … origin = 'auto' feltétele
-      put({ ...row, origin: "auto" }); autoToday.add(row.lessonId);
-    },
-    autoLessonsToday: async () => [...autoToday],
+    upsert: async ({ model: _model, ...row }) => { const i = rows.findIndex((r) => r.lessonId === row.lessonId && r.sectionIndex === row.sectionIndex); if (i >= 0) rows[i] = row; else rows.push(row); today.add(row.lessonId); },
+    lessonsToday: async () => [...today],
+    putMedia: async (kind, mime, bytes) => { const id = mediaId(bytes); media.set(id, { kind, mime, size: bytes.length }); return id; },
+    mediaBytes: async () => [...media.values()].reduce((sum, m) => sum + m.size, 0),
     exclusive: async (work) => work(),
   };
-  return { store, rows, autoToday };
+  return { store, rows, media };
 }
-const deps = (answers: Array<string | Error>): ClipDeps & { calls: Array<{ system: string; user: string }> } => {
-  const calls: Array<{ system: string; user: string }> = [];
-  return { calls, chat: async (system, user) => { calls.push({ system, user }); const a = answers[Math.min(calls.length - 1, answers.length - 1)]; if (a instanceof Error) throw a; return a; } };
-};
-
-test("kapcsolók: vészfék, kézi alapállapot, gyártás csak kapcsolóval és kulccsal (E10)", () => {
-  assert.equal(clipsMode({}), "seeds");
-  assert.equal(clipsMode({ LESSON_CLIPS_AUTO: "on" }), "seeds", "kulcs nélkül nincs gyártás");
-  assert.equal(clipsMode({ LESSON_CLIPS_AUTO: "on", OPENROUTER_API_KEY: "k" }), "auto");
-  assert.equal(clipsMode({ LESSON_CLIPS_AUTO: "1", OPENROUTER_API_KEY: "k" }), "seeds", "csak a pontos \"on\" kapcsol be");
-  assert.equal(clipsMode({ LESSON_CLIPS: "0", LESSON_CLIPS_AUTO: "on", OPENROUTER_API_KEY: "k" }), "off");
-  assert.equal(clipDailyLimit({}), 10);
-  assert.equal(clipDailyLimit({ LESSON_CLIP_DAILY_LIMIT: "3" }), 3);
-  assert.equal(clipDailyLimit({ LESSON_CLIP_DAILY_LIMIT: "sok" }), 10);
-});
-
-test("a kiszolgálás csak a kész, a fejezet mostani címéhez és szövegéhez illő kisfilmet adja ki (E9, E11)", () => {
-  const lesson = twoChapterLesson();
-  const [first, second] = eligibleSections(lesson);
-  const row = (over: Partial<ClipRow>): ClipRow => ({ lessonId: "l", sectionIndex: 0, heading: first.heading, sourceHash: first.hash, status: "ready", clip: goodClip(), origin: "auto", attempts: 1, ...over });
-  assert.deepEqual(servableClips(lesson, [row({})]).map((c) => c.sectionIndex), [0]);
-  assert.deepEqual(servableClips(lesson, [row({ status: "failed", clip: null })]), [], "sikertelen sor");
-  assert.deepEqual(servableClips(lesson, [row({ heading: "Régi cím" })]), [], "megváltozott fejezetcím");
-  assert.deepEqual(servableClips(lesson, [row({ sourceHash: clipSourceHash("régi szöveg") })]), [], "megváltozott fejezetszöveg");
-  assert.deepEqual(servableClips(lesson, [row({ clip: { v: 1, title: "x", scenes: [] } })]), [], "a sémának nem megfelelő tárolt kisfilm");
-  assert.deepEqual(servableClips(lesson, [row({ sectionIndex: 9 })]), [], "túlnyúló fejezetindex");
-  // Kézi sor: a lenyomat NULL, csak a cím köti. A válasz fejezetsorrendben megy ki.
-  const both = servableClips(lesson, [row({ sectionIndex: 1, heading: second.heading, sourceHash: null, origin: "handmade" }), row({})]);
-  assert.deepEqual(both.map((c) => c.sectionIndex), [0, 1]);
-});
-
-test("a végpont válasza: 404 a nem publikált leckére, vészféknél üres, gyártás közben pending", async () => {
-  const { store } = memoryStore([makeLesson("pub"), makeLesson("draft", null), makeLesson("old", new Date(NOW.getTime() - (CLIP_FRESH_DAYS + 1) * 86_400_000))]);
-  assert.equal(await lessonClipsResponse(store, "nincs", "auto", NOW), null);
-  assert.equal(await lessonClipsResponse(store, "draft", "auto", NOW), null);
-  assert.deepEqual(await lessonClipsResponse(store, "pub", "off", NOW), { clips: [], pending: false });
-  assert.deepEqual(await lessonClipsResponse(store, "pub", "auto", NOW), { clips: [], pending: true }, "friss lecke, gyártás bekapcsolva");
-  assert.deepEqual(await lessonClipsResponse(store, "pub", "seeds", NOW), { clips: [], pending: false }, "gyártás nélkül nincs mire várni");
-  assert.deepEqual(await lessonClipsResponse(store, "old", "auto", NOW), { clips: [], pending: false }, "a friss ablakon kívül nincs gyártás");
-});
-
-test("a kézi kisfilmek beírása: publikált lecke, egyező fejezetcím; ismételt kör nem ír újra (E7)", async () => {
-  const lesson = twoChapterLesson();
-  const seeds: Record<string, ClipSeed[]> = {
-    pub: [{ sectionIndex: 0, heading: lesson.sections[0].heading, clip: goodClip("Kézi") }, { sectionIndex: 1, heading: "Nem ez a cím", clip: goodClip() }],
-    draft: [{ sectionIndex: 0, heading: lesson.sections[0].heading, clip: goodClip() }],
-    missing: [{ sectionIndex: 0, heading: "x", clip: goodClip() }],
+type Calls = { chat: string[]; image: string[]; check: number; speech: Array<{ text: string; voice: string }>; video: Array<{ prompt: string; seconds: number }> };
+function fakeDeps(over: Partial<ClipDeps> & { answers?: string[]; verdicts?: boolean[] } = {}): ClipDeps & { calls: Calls } {
+  const calls: Calls = { chat: [], image: [], check: 0, speech: [], video: [] };
+  const answers = over.answers ?? [draft()];
+  const verdicts = over.verdicts ?? [true];
+  let n = 0;
+  const deps: ClipDeps & { calls: Calls } = {
+    calls,
+    chat: async (_system, user) => { calls.chat.push(user); return answers[Math.min(calls.chat.length - 1, answers.length - 1)]; },
+    image: async (prompt) => { calls.image.push(prompt); return { bytes: Buffer.from(`kép-${++n}`), mime: "image/jpeg" }; },
+    check: async () => ({ ok: verdicts[Math.min(calls.check++, verdicts.length - 1)], note: "teszt" }),
+    still: async (image) => Buffer.concat([Buffer.from("webp:"), image.bytes]),
+    speech: async (text, voice) => { calls.speech.push({ text, voice: voice.name }); return Buffer.from(`hang:${text}:${calls.speech.length}`); },
+    audioMs: () => 6400,
+    video: async (image, prompt, seconds) => { calls.video.push({ prompt, seconds }); return Buffer.concat([Buffer.from("nyers:"), image.bytes]); },
+    shrink: async (video) => Buffer.concat([Buffer.from("kicsi:"), video]),
+    ...over,
   };
-  const { store, rows } = memoryStore([makeLesson("pub"), makeLesson("draft", null)]);
-  assert.equal(await seedHandmade(store, seeds), 1);
-  assert.deepEqual(rows.map((r) => [r.lessonId, r.sectionIndex, r.origin, r.status, r.sourceHash]), [["pub", 0, "handmade", "ready", null]]);
-  assert.equal(await seedHandmade(store, seeds), 0, "már be van írva");
-  // A kézi kisfilm módosítása a repóban felülírja a tárolt sort; a végpont azt adja ki, és jelzi a még be nem írt kézi kisfilmet.
-  seeds.pub[0] = { ...seeds.pub[0], clip: goodClip("Kézi, javítva") };
-  assert.equal(await seedHandmade(store, seeds), 1);
-  assert.equal((rows[0].clip as Clip).title, "Kézi, javítva");
+  return deps;
+}
+const input = () => { const lesson = twoChapterLesson(); return { title: lesson.title, subject: lesson.subject, classroom: lesson.classroom, heading: lesson.sections[0].heading, source: clipSource(lesson, 0)!, animateIndexes: [] }; };
+const OPTS = { dailyLimit: 5, mediaBudgetBytes: 10_000_000, model: "teszt-modell" };
+
+test("kapcsolók: vészfék, gyártás csak kapcsolóval és kulccsal; plafonok alapértéke", () => {
+  assert.equal(clipsMode({}), "idle");
+  assert.equal(clipsMode({ LESSON_CLIPS_AUTO: "on" }), "idle", "kulcs nélkül nincs gyártás");
+  assert.equal(clipsMode({ LESSON_CLIPS_AUTO: "on", OPENROUTER_API_KEY: "k" }), "auto");
+  assert.equal(clipsMode({ LESSON_CLIPS_AUTO: "1", OPENROUTER_API_KEY: "k" }), "idle", "csak a pontos \"on\" kapcsol be");
+  assert.equal(clipsMode({ LESSON_CLIPS: "0", LESSON_CLIPS_AUTO: "on", OPENROUTER_API_KEY: "k" }), "off");
+  assert.equal(clipDailyLimit({}), 2);
+  assert.equal(clipDailyLimit({ LESSON_CLIP_DAILY_LIMIT: "7" }), 7);
+  assert.equal(clipMediaBudgetBytes({}), 400 * 1024 * 1024);
+  assert.equal(clipMediaBudgetBytes({ LESSON_CLIP_MEDIA_MAX_MB: "50" }), 50 * 1024 * 1024);
+  assert.equal(clipKeys({}), null);
+  assert.deepEqual(clipKeys({ OPENROUTER_API_KEY: " or ", ELEVENLABS_API_KEY: "el", OPENAI_API_KEY: "oa", FFMPEG_PATH: "/opt/ffmpeg" }), { openRouter: "or", openAi: "oa", elevenLabs: "el", ffmpeg: "/opt/ffmpeg" });
+  assert.equal(clipKeys({ OPENROUTER_API_KEY: "or" })?.elevenLabs, undefined);
 });
 
-test("háttérgyártás: a friss lecke minden jogosult fejezete kisfilmet kap, a Célkártya és a mese szövege nélkül (E8)", async () => {
-  const { store, rows } = memoryStore([makeLesson("pub")]);
-  const model = deps([JSON.stringify(goodClip())]);
-  const report = await runClipRound(store, model, "auto", { dailyLimit: 10, seeds: {} });
-  assert.deepEqual(report, { seeded: 0, made: 2, failed: 0, lessons: 1 });
-  assert.deepEqual(rows.map((r) => [r.sectionIndex, r.status, r.origin, r.attempts]), [[0, "ready", "auto", 1], [1, "ready", "auto", 1]]);
-  assert.equal(model.calls.length, 2, "fejezetenként egy hívás");
-  assert.equal(model.calls[0].system, CLIP_SYSTEM);
+test("a forgatókönyvíró utasítása a korosztály profilját viszi: figura, mondathossz, szabályok", () => {
+  const young = clipSystemPrompt("adventure"), old = clipSystemPrompt("laboratory");
+  assert.ok(young.includes("Legfeljebb 130 karakter") && old.includes("Legfeljebb 200 karakter"));
+  assert.ok(young.includes("állandó szereplői") && old.includes("Kabala, rajzfilmfigura nincs"));
+  assert.ok(CLIP_BAND_STYLE.adventure.narration.rules.every((rule) => young.includes(rule)));
+  assert.ok(!old.includes(CLIP_BAND_STYLE.adventure.narration.rules[0]));
+});
+
+test("egy fejezet kisfilmje: jelenetenként kezdőkép, a korosztály hangja, a hang hosszához igazított mozgókép, tárolt média", async () => {
+  const { store, media } = memoryStore([]);
+  const deps = fakeDeps();
+  const result = await makeChapterClip(input(), BAND, deps, store.putMedia);
+  assert.ok("clip" in result, JSON.stringify(result));
+  const { clip, stats } = result;
+  const n = STYLE.narration.scenes[0];
+  assert.equal(clip.v, 2);
+  assert.equal(clip.band, BAND);
+  assert.equal(clip.scenes.length, n);
+  assert.deepEqual(clip.scenes.map((s) => s.shot), Array.from({ length: n }, (_, i) => i));
+  assert.ok(clip.scenes.every((s) => s.audio && s.video && s.ms === 6400 && s.camera === "still"));
+  assert.equal(clip.scenes[0].overlay?.kind, "title");
+  assert.deepEqual(stats, { images: n, imageRetries: 0, audio: n, videos: n, videoFailures: 0, bytes: [...media.values()].reduce((s, m) => s + m.size, 0) });
+  assert.deepEqual([...media.values()].map((m) => m.mime).sort(), [...Array(n).fill("audio/mpeg"), ...Array(n).fill("image/webp"), ...Array(n).fill("video/mp4")]);
+  // A képbrief viszi a sáv stílusát és a tiltásokat; a hang a sáv hangja; a mozgókép 6,4 mp-es hanghoz 7 mp.
+  assert.ok(deps.calls.image.every((p) => p.includes(STYLE.imageStyle) && /no text, letters, digits/i.test(p)));
+  assert.ok(deps.calls.speech.every((c) => c.voice === STYLE.voice.name && c.text === SAY));
+  assert.ok(deps.calls.video.every((c) => c.seconds === 7 && c.prompt.includes("Something in the picture moves") && c.prompt.includes("No text")));
+});
+
+test("hibás forgatókönyv: egy javító hívás a hibalistával; ha az is bukik, nincs kisfilm és nincs médiaköltés", async () => {
+  const repaired = fakeDeps({ answers: ["nem JSON", draft()] });
+  assert.ok("clip" in (await makeChapterClip(input(), BAND, repaired, memoryStore([]).store.putMedia)));
+  assert.equal(repaired.calls.chat.length, 2);
+  assert.match(repaired.calls.chat[1], /Ez nem felelt meg/);
+  const invented = JSON.parse(draft()); invented.scenes[1].say = "Ebben a mondatban egy kitalált szám áll: 98765 darab.";
+  const stubborn = fakeDeps({ answers: [JSON.stringify(invented)] });
+  const failed = await makeChapterClip(input(), BAND, stubborn, memoryStore([]).store.putMedia);
+  assert.ok("problems" in failed && /98765/.test(failed.problems.join(" ")), "új szám nem születhet");
+  assert.equal(stubborn.calls.image.length, 0, "bukott forgatókönyvre nem készül kép");
+});
+
+test("a kezdőkép minőségkapuja: egy újrapróba; kétszeres bukásnál a kisfilm sikertelen", async () => {
+  const n = STYLE.narration.scenes[0];
+  const retry = fakeDeps({ verdicts: [false, ...Array(2 * n).fill(true)] });
+  const ok = await makeChapterClip(input(), BAND, retry, memoryStore([]).store.putMedia);
+  assert.ok("clip" in ok && ok.stats.imageRetries === 1 && retry.calls.image.length === n + 1);
+  const bad = await makeChapterClip(input(), BAND, fakeDeps({ verdicts: [false] }), memoryStore([]).store.putMedia);
+  assert.ok("problems" in bad && /minőségkapun/.test(bad.problems.join(" ")));
+});
+
+test("a mozgókép hibája nem buktatja a kisfilmet: a jelenet állóképes, kameramozgással", async () => {
+  const cases: Array<[string, Partial<ClipDeps>]> = [
+    ["a videószolgáltató hibázik", { video: async () => { throw new Error("HTTP 500"); } }],
+    ["nincs ffmpeg", { shrink: async () => null }],
+    ["az átkódolt klip túl nagy", { shrink: async () => Buffer.alloc(CLIP_VIDEO_MAX_BYTES + 1) }],
+  ];
+  for (const [name, over] of cases) {
+    const { store, media } = memoryStore([]);
+    const result = await makeChapterClip(input(), BAND, fakeDeps(over), store.putMedia);
+    assert.ok("clip" in result, name);
+    assert.ok(result.clip.scenes.every((s) => !s.video && s.audio && s.camera !== "still"), name);
+    assert.equal(result.stats.videos, 0, name);
+    assert.ok(![...media.values()].some((m) => m.kind === "video"), `${name}: nyers vagy túl nagy mozgókép nem tárolódik`);
+  }
+  // Kulcs nélkül (nincs hang- és videószolgáltató) is kész kisfilm: tartalék hang, állókép.
+  const bare = fakeDeps(); delete bare.speech; delete bare.video;
+  const plain = await makeChapterClip(input(), BAND, bare, memoryStore([]).store.putMedia);
+  assert.ok("clip" in plain && plain.clip.scenes.every((s) => !s.audio && !s.video && s.ms === undefined));
+  // A hangszolgáltató hibája: a jelenet hang nélkül, de mozgóképpel készül el.
+  const mute = await makeChapterClip(input(), BAND, fakeDeps({ speech: async () => { throw new Error("HTTP 401"); } }), memoryStore([]).store.putMedia);
+  assert.ok("clip" in mute && mute.clip.scenes.every((s) => !s.audio && s.video));
+});
+
+test("a kiszolgálás csak a kész, v2, a fejezet mostani címéhez és szövegéhez illő kisfilmet adja ki", async () => {
   const lesson = twoChapterLesson();
-  assert.ok(model.calls.some((c) => c.user.includes(clipSource(lesson, 0)!.slice(0, 60))));
-  assert.ok(model.calls.every((c) => c.user.includes(`A lecke címe: ${lesson.title}`)));
-  assert.deepEqual((await lessonClipsResponse(store, "pub", "auto", NOW))!.clips.map((c) => c.sectionIndex), [0, 1]);
-  assert.equal((await lessonClipsResponse(store, "pub", "auto", NOW))!.pending, false);
-  // A következő kör nem gyárt újra.
-  assert.deepEqual(await runClipRound(store, model, "auto", { dailyLimit: 10, seeds: {} }), { seeded: 0, made: 0, failed: 0, lessons: 0 });
-  assert.equal(model.calls.length, 2);
-  assert.match(CLIP_TEXT_MODEL, /haiku/);
+  const [first] = eligibleSections(lesson);
+  const made = await makeChapterClip(input(), BAND, fakeDeps(), memoryStore([]).store.putMedia);
+  assert.ok("clip" in made);
+  const row = (over: Partial<ClipRow>): ClipRow => ({ lessonId: "l", sectionIndex: 0, heading: first.heading, sourceHash: first.hash, status: "ready", clip: made.clip, attempts: 1, ...over });
+  assert.deepEqual(servableClips(lesson, [row({})]).map((c) => c.sectionIndex), [0]);
+  assert.deepEqual(servableClips(lesson, [row({ status: "failed", clip: null })]), []);
+  assert.deepEqual(servableClips(lesson, [row({ heading: "Régi cím" })]), []);
+  assert.deepEqual(servableClips(lesson, [row({ sourceHash: clipSourceHash("régi szöveg") })]), []);
+  assert.deepEqual(servableClips(lesson, [row({ sourceHash: null })]), [], "lenyomat nélküli (régi kézi) sor nem megy ki");
+  assert.deepEqual(servableClips(lesson, [row({ clip: { v: 1, title: "régi", scenes: [] } })]), [], "a régi (v1) kisfilm nem megy ki");
+  assert.deepEqual(servableClips(lesson, [row({ sectionIndex: 9 })]), []);
+  // Egy tárolt, de már érvénytelen (v1) kész sor újragyártandó.
+  assert.deepEqual(clipTodo(lesson, [row({ clip: { v: 1 } })]).map((t) => t.sectionIndex), [0, 1]);
 });
 
-test("hibás modellválasz: egy javító hívás a hibalistával; ha az is bukik, a sor sikertelen, és legfeljebb két körben próbálkozik (E9)", async () => {
-  const input = { title: "Lecke", subject: "Fizika", classroom: 9, heading: "Fejezet", source: "A futó 400 m-t tesz meg." };
-  const repaired = deps(["nem JSON", JSON.stringify(goodClip())]);
-  assert.ok("clip" in (await makeClip(input, repaired)));
-  assert.equal(repaired.calls.length, 2);
-  assert.match(repaired.calls[1].user, /Ez nem felelt meg/);
-  const invented = { ...goodClip(), scenes: [goodClip().scenes[0], { say: "A futó pontosan 999 métert tesz meg a pályán.", visual: { kind: "idea", emoji: "🏃", text: "999 m" } }, goodClip().scenes[2]] };
-  const stubborn = deps([JSON.stringify(invented)]);
-  const failed = await makeClip(input, stubborn);
-  assert.ok("problems" in failed && /999/.test(failed.problems.join(" ")), "új szám nem születhet");
+test("háttérkör: a friss lecke minden fejezete kisfilmet kap; a végpont kiadja; a következő kör nem gyárt újra", async () => {
+  const { store, rows } = memoryStore([makeLesson("pub"), makeLesson("draft", null), makeLesson("old", new Date(NOW.getTime() - (CLIP_FRESH_DAYS + 1) * 86_400_000))]);
+  assert.deepEqual(await lessonClipsResponse(store, "pub", "auto", NOW), { clips: [], pending: true });
+  assert.equal(await lessonClipsResponse(store, "draft", "auto", NOW), null);
+  assert.equal(await lessonClipsResponse(store, "nincs", "auto", NOW), null);
+  assert.deepEqual(await lessonClipsResponse(store, "pub", "off", NOW), { clips: [], pending: false });
+  assert.deepEqual(await lessonClipsResponse(store, "pub", "idle", NOW), { clips: [], pending: false }, "gyártás nélkül nincs mire várni");
+  assert.deepEqual(await lessonClipsResponse(store, "old", "auto", NOW), { clips: [], pending: false });
+  const deps = fakeDeps();
+  const report = await runClipRound(store, deps, "auto", OPTS);
+  assert.deepEqual(report, { made: 2, failed: 0, lessons: 1, videos: 2 * STYLE.narration.scenes[0], stoppedByBudget: false });
+  assert.deepEqual(rows.map((r) => [r.lessonId, r.sectionIndex, r.status, r.attempts]), [["pub", 0, "ready", 1], ["pub", 1, "ready", 1]]);
+  const served = await lessonClipsResponse(store, "pub", "auto", NOW);
+  assert.deepEqual(served!.clips.map((c) => [c.sectionIndex, (c.clip as Clip2).v]), [[0, 2], [1, 2]]);
+  assert.equal(served!.pending, false);
+  const chats = deps.calls.chat.length;
+  assert.deepEqual(await runClipRound(store, deps, "auto", OPTS), { made: 0, failed: 0, lessons: 0, videos: 0, stoppedByBudget: false });
+  assert.equal(deps.calls.chat.length, chats);
+  assert.equal(await runClipRound(store, deps, "idle", OPTS), null);
+  assert.equal(await runClipRound(store, deps, "off", OPTS), null);
+});
 
+test("sikertelen fejezet legfeljebb két körben próbálkozik; a megváltozott fejezet újragyártandó", async () => {
   const { store, rows } = memoryStore([makeLesson("pub")]);
-  const bad = deps(["{}"]);
-  assert.deepEqual(await runClipRound(store, bad, "auto", { dailyLimit: 10, seeds: {} }), { seeded: 0, made: 0, failed: 2, lessons: 1 });
-  assert.deepEqual(rows.map((r) => [r.status, r.attempts, r.clip]), [["failed", 1, null], ["failed", 1, null]]);
-  assert.deepEqual(await lessonClipsResponse(store, "pub", "auto", NOW), { clips: [], pending: true }, "van még próbálkozás");
-  await runClipRound(store, bad, "auto", { dailyLimit: 10, seeds: {} });
-  assert.deepEqual(rows.map((r) => r.attempts), [CLIP_MAX_ATTEMPTS, CLIP_MAX_ATTEMPTS]);
-  assert.deepEqual(await lessonClipsResponse(store, "pub", "auto", NOW), { clips: [], pending: false }, "végleg sikertelen: a kliens nem kérdez tovább");
-  const callsBefore = bad.calls.length;
-  await runClipRound(store, bad, "auto", { dailyLimit: 10, seeds: {} });
-  assert.equal(bad.calls.length, callsBefore, "a harmadik körben nincs több hívás");
-  // A hálózati hiba is sikertelen sor, nem elszálló kör.
-  const net = memoryStore([makeLesson("pub")]);
-  assert.deepEqual(await runClipRound(net.store, deps([new Error("HTTP 500")]), "auto", { dailyLimit: 10, seeds: {} }), { seeded: 0, made: 0, failed: 2, lessons: 1 });
-});
-
-test("napi plafon, friss ablak, a kézi sor védelme, megváltozott fejezet újragyártása", async () => {
-  const older = makeLesson("b", new Date(NOW.getTime() - 7_200_000));
-  const stale = makeLesson("old", new Date(NOW.getTime() - (CLIP_FRESH_DAYS + 1) * 86_400_000));
-  const lesson = twoChapterLesson();
-  const handmade: ClipRow = { lessonId: "a", sectionIndex: 0, heading: lesson.sections[0].heading, sourceHash: null, status: "ready", clip: goodClip("Kézi"), origin: "handmade", attempts: 0 };
-  const { store, rows } = memoryStore([older, makeLesson("a"), stale], [handmade]);
-  const model = deps([JSON.stringify(goodClip("Gépi"))]);
-  // Plafon 1: csak a legfrissebb lecke („a”) kap gyártást, és csak a kézi sor nélküli fejezete.
-  assert.deepEqual(await runClipRound(store, model, "auto", { dailyLimit: 1, seeds: {} }), { seeded: 0, made: 1, failed: 0, lessons: 1 });
-  assert.deepEqual(rows.map((r) => [r.lessonId, r.sectionIndex, r.origin, (r.clip as Clip).title]), [["a", 0, "handmade", "Kézi"], ["a", 1, "auto", "Gépi"]]);
-  // Nagyobb plafonnal a „b” is sorra kerül; a friss ablakon kívüli „old” soha.
-  await runClipRound(store, model, "auto", { dailyLimit: 5, seeds: {} });
-  assert.deepEqual([...new Set(rows.map((r) => r.lessonId))].sort(), ["a", "b"]);
-  // A fejezet szövege megváltozik: a régi kisfilm nem megy ki, és a sor újragyártandó (a próbálkozások elölről indulnak).
+  const bad = fakeDeps({ answers: ["{}"] });
+  assert.deepEqual(await runClipRound(store, bad, "auto", OPTS), { made: 0, failed: 2, lessons: 1, videos: 0, stoppedByBudget: false });
+  assert.equal((await lessonClipsResponse(store, "pub", "auto", NOW))!.pending, true, "van még próbálkozás");
+  await runClipRound(store, bad, "auto", OPTS);
+  assert.deepEqual(rows.map((r) => [r.status, r.attempts]), [["failed", CLIP_MAX_ATTEMPTS], ["failed", CLIP_MAX_ATTEMPTS]]);
+  assert.equal((await lessonClipsResponse(store, "pub", "auto", NOW))!.pending, false, "végleg sikertelen: a kliens nem kérdez tovább");
+  const chats = bad.calls.chat.length;
+  await runClipRound(store, bad, "auto", OPTS);
+  assert.equal(bad.calls.chat.length, chats, "a harmadik körben nincs több hívás");
   const changed = twoChapterLesson();
   const block = changed.sections[1].blocks.find((b) => b.kind === "explain")!;
   if (block.kind === "explain") block.text += " Ez egy új mondat a fejezet végén.";
-  const autoRows = rows.filter((r) => r.lessonId === "b");
-  assert.deepEqual(servableClips(changed, autoRows).map((c) => c.sectionIndex), [0]);
-  assert.deepEqual(autoTodo(changed, autoRows).map((t) => [t.sectionIndex, t.attempts]), [[1, 0]]);
-  // Kézi módban és vészféknél nincs modellhívás.
-  const calls = model.calls.length;
-  assert.deepEqual(await runClipRound(memoryStore([makeLesson("x")]).store, model, "seeds", { dailyLimit: 5, seeds: {} }), { seeded: 0, made: 0, failed: 0, lessons: 0 });
-  assert.equal(await runClipRound(memoryStore([makeLesson("x")]).store, model, "off", { dailyLimit: 5, seeds: {} }), null);
-  assert.equal(model.calls.length, calls);
+  assert.deepEqual(clipTodo(changed, rows).map((t) => [t.sectionIndex, t.attempts]), [[1, 0]]);
+});
+
+test("napi plafon és tárkeret: a plafon fölötti lecke kimarad, betelt tárnál a gyártás megáll", async () => {
+  const lessons = [makeLesson("b", new Date(NOW.getTime() - 7_200_000)), makeLesson("a")];
+  const capped = memoryStore(lessons);
+  assert.deepEqual((await runClipRound(capped.store, fakeDeps(), "auto", { ...OPTS, dailyLimit: 1 }))!.lessons, 1);
+  assert.deepEqual([...new Set(capped.rows.map((r) => r.lessonId))], ["a"], "a legfrissebb lecke kap gyártást");
+  const full = memoryStore(lessons);
+  const report = await runClipRound(full.store, fakeDeps(), "auto", { ...OPTS, mediaBudgetBytes: 1 });
+  // Az első két (párhuzamos) fejezet még a keret alatt indul; utána a tár betelt, és a gyártás megáll.
+  assert.equal(report!.stoppedByBudget, true);
+  assert.equal(report!.made, 2);
+  assert.deepEqual([...new Set(full.rows.map((r) => r.lessonId))], ["a"]);
 });
