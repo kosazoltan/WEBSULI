@@ -136,6 +136,22 @@ Két kézi kisfilm készült el a tervezett módon (a média a munkamenet ideigl
 - **Tanulság:** a 9. osztályos kisfilm a tervezett 30–45 mp-nél hosszabb (négy, plafon közeli mondat + nyugodt hang) → a P2-ben
   a laboratory / future sávban a kisfilm összes szövege legfeljebb 450 karakter legyen.
 
+## 9c. Mozgóképes próba (2026-11-10, tulajdonosi kérés: dinamikusabb kép, jobb hang)
+
+- **Videómodellek mérése** (OpenRouter `POST /api/v1/videos`, kezdőképből, 720p, 4–5 mp; a díj a válasz `usage.cost` mezője):
+  `tbc/mischief-1` 0,05 USD / 16 mp gyártás (a tárgyak menet közben átalakulnak), `x-ai/grok-imagine-video-1.5-lite` 0,16 / 28 mp,
+  `google/veo-3.1-lite` 0,12 / 34–47 mp (stabil, de kevés mozgás), **`bytedance/seedance-1-5-pro` 0,13 / 54 mp (a kockák alapján a
+  legjobb arány)**, `bytedance/seedance-2.0-mini` 0,38 / 94–103 mp, `alibaba/wan-2.6` 0,50 / 66 mp.
+- **Hang:** ElevenLabs `eleven_flash_v2_5` (0,5 kredit / karakter, 0,5 mp / jelenet) a fiók magyar hangjaival: 3–5. évfolyam „Vera”,
+  9–10. évfolyam „Magyar Férfi”. A hangminőség megítélése tulajdonosi szemle.
+- **A két próbafejezet teljes újragyártása** (minden jelenet Seedance 1.5-tel mozog, jelenetenként a hang hosszához igazított klip):
+  4. osztály 22 mp / 0,55 USD, 9. osztály 41 mp / 1,04 USD; a két fejezet 6,7 perc alatt készült el (a klip díja kb. 0,026 USD / mp).
+- **Tanulság:** a szereplő csak akkor marad meg, ha a klip kezdőképén rajta van — az előző klip utolsó kockájáról indított jelenetben
+  a modell más gyerekeket rajzolt (újragyártva az eredeti kezdőképből). A P2-ben minden jelenet saját, szereplős kezdőképből induljon.
+- **Tulajdonosi irány:** minden korosztály rajzfilmszerű legyen (ne fotószerű) → a `laboratory` / `future` sáv `imageStyle` értékét a
+  P1-ben stilizált 2D-re kell írni (a próba 9. osztályos képei már így készültek, a profil még nem).
+- **Kód:** a v2 jelenet opcionális `video` médiaazonosítót kap; a lejátszó némított videót játszik a kép fölött, hibánál a kép marad.
+
 ## 10. Edge case-ek
 
 - A képmodell szöveget rajzol a képre → minőségkapu, újrapróba; kétszeres bukásnál a jelenet képe a sáv semleges háttere.

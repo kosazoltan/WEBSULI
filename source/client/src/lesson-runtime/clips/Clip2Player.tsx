@@ -26,6 +26,7 @@ export function Clip2Player({ playlist, audio, onClose }: { playlist: Clip2Playl
   const [run, setRun] = useState(0);
   const [broken, setBroken] = useState<ReadonlySet<string>>(new Set());
   const dialog = useRef<HTMLDivElement>(null);
+  const film = useRef<HTMLVideoElement>(null);
   const item = playlist[chapter];
   const { clip } = item;
   const scene = clip.scenes[sceneIdx];
@@ -65,6 +66,13 @@ export function Clip2Player({ playlist, audio, onClose }: { playlist: Clip2Playl
     return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; };
   }, [onClose]);
 
+  // Szünetben a mozgókép is megáll, folytatáskor továbbmegy.
+  useEffect(() => {
+    const v = film.current;
+    if (!v) return;
+    if (playing) void v.play().catch(() => undefined); else v.pause();
+  }, [playing, run]);
+
   const toggle = () => {
     if (finished) { goTo(0, 0); setPlaying(true); return; }
     setPlaying((p) => !p);
@@ -82,6 +90,10 @@ export function Clip2Player({ playlist, audio, onClose }: { playlist: Clip2Playl
         {clip.shots.map((shot, i) => broken.has(shot.image) ? null : <img key={`${chapter}:${i}:${i === scene.shot ? run : "idle"}`} className="clip2-shot" src={clipMediaUrl(shot.image)} alt={i === scene.shot ? shot.alt : ""} aria-hidden={i !== scene.shot}
           data-active={i === scene.shot} data-camera={i === scene.shot ? scene.camera : "still"} style={{ animationDuration: `${ms + 600}ms` }} decoding="async"
           onError={() => setBroken((old) => new Set([...old, shot.image]))} />)}
+        {/* Mozgóképes jelenet: némított videó a kép fölött; ha a hang hosszabb, a videó arányosan lassul, hogy végig mozogjon. */}
+        {scene.video && !broken.has(scene.video) && <video key={`v:${chapter}:${sceneIdx}:${run}`} ref={film} className="clip2-film" src={clipMediaUrl(scene.video)} muted playsInline autoPlay preload="auto" aria-hidden
+          data-testid="clip-film" onLoadedMetadata={(event) => { const v = event.currentTarget; if (Number.isFinite(v.duration) && v.duration > 0) v.playbackRate = Math.min(1, Math.max(0.5, (v.duration * 1000) / ms)); }}
+          onError={() => setBroken((old) => new Set([...old, scene.video!]))} />}
         {scene.overlay && <div className="clip2-panel" data-kind={scene.overlay.kind} key={`${chapter}:${sceneIdx}:${run}`}><ClipOverlay overlay={scene.overlay} ms={ms} section={item.section} /></div>}
       </div>
       {captions && <p className="clip-caption clip2-caption" data-testid="clip-caption" aria-live="polite">{scene.say}</p>}

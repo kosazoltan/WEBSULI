@@ -57,6 +57,9 @@ test("v2 séma: érvényes minta; hibás beállítás-index, sáv feletti mondat
   assert.equal(clip2Schema.safeParse(clip({ scenes: [scenes[0], scenes[1], { ...scenes[2], overlay: { kind: "graph", xLabel: "t", yLabel: "s", points: [[5, 1], [2, 3]] } }] })).success, false, "x szerint nem növekvő");
   assert.equal(clip2Schema.safeParse({ ...clip(), extra: 1 }).success, false);
   assert.equal(clip2Schema.safeParse(clip({ shots: [{ image: "nem-azonosito", alt: "x" }, { image: ID(2), alt: "y" }] })).success, false, "hibás médiaazonosító");
+  // Mozgóképes jelenet: a videó tárolt média azonosítója; hibás azonosítóval elutasítva.
+  assert.equal(clip2Schema.safeParse(clip({ scenes: [{ ...scenes[0], video: ID(5) }, scenes[1], scenes[2]] })).success, true);
+  assert.equal(clip2Schema.safeParse(clip({ scenes: [{ ...scenes[0], video: "film.mp4" }, scenes[1], scenes[2]] })).success, false);
   assert.equal(parseAnyClip(clip())?.v, 2);
   assert.equal(parseAnyClip({ v: 3 }), null);
   assert.equal(clipMediaUrl(ID(4)), `/api/lesson-clips/media/${ID(4)}`);

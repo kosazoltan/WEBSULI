@@ -177,6 +177,24 @@ test("v2: a kisfilm a korosztály megjelenésével játszik, a jelenet a hang v�
   await expect(page.locator(".clip-narrator")).toHaveCount(0);
 });
 
+test("v2: a mozgóképes jelenet némított videót játszik a kép fölött; hibás videónál a kép marad", async ({ page }) => {
+  const withFilm = v2Clip("adventure");
+  (withFilm.scenes[0] as Record<string, unknown>).video = MEDIA(8);
+  await page.route("**/tmp/lesson-clips2.json", (route) => route.fulfill({ json: { clips: [{ sectionIndex: 0, clip: withFilm }], pending: false } }));
+  await page.route("**/api/lesson-clips/media/**", (route) => {
+    const id = new URL(route.request().url()).pathname.split("/").pop();
+    if (id === MEDIA(7)) return route.fulfill({ contentType: "audio/wav", body: silentWav() });
+    if (id === MEDIA(8)) return route.abort();
+    return route.fulfill({ contentType: "image/png", body: PIXEL });
+  });
+  await page.goto("/__lesson-runtime-probe?fusion=1&clips2=1");
+  await page.getByTestId("clip-play-0").click();
+  // A videó nem tölthető be: a jelenet a rajzolt képpel megy tovább, a kisfilm nem akad el.
+  await expect(page.getByTestId("clip-film")).toHaveCount(0);
+  await expect(player(page).locator(".clip2-shot[data-active='true']")).toBeVisible();
+  await expect(player(page)).toHaveAttribute("data-state", "finished", { timeout: 20000 });
+});
+
 test("v2: a két korosztály megjelenése eltér (keret, vonalvastagság, feliratméret)", async ({ page }) => {
   const look = async (band: "adventure" | "laboratory") => {
     await serveV2(page, band);

@@ -126,7 +126,9 @@ export const clip2SceneSchema = z.object({
   audio: mediaId.optional(),
   /** A hang hossza ezredmásodpercben — a kameramozgás és az ábra ütemezéséhez. */
   ms: z.number().int().min(500).max(60_000).optional(),
-  shot: z.number().int().min(0).max(3),
+  /** A jelenet mozgóképe (hang nélküli MP4, a beállítás képéből indítva); hiányában a kép lassú kameramozgással áll. */
+  video: mediaId.optional(),
+  shot: z.number().int().min(0).max(4),
   camera: z.enum(CLIP_CAMERAS),
   overlay: clipOverlaySchema.optional(),
 }).strict();
@@ -135,7 +137,7 @@ export const clip2Schema = z.object({
   v: z.literal(2),
   band: z.enum(DESIGN_THEME_IDS),
   title: text(120),
-  shots: z.array(z.object({ image: mediaId, alt: text(160) }).strict()).min(2).max(4),
+  shots: z.array(z.object({ image: mediaId, alt: text(160) }).strict()).min(2).max(5),
   scenes: z.array(clip2SceneSchema).min(3).max(5),
 }).strict().superRefine((clip, ctx) => {
   const sayMax = CLIP_BAND_STYLE[clip.band].narration.sayMax;
