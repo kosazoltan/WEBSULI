@@ -288,7 +288,9 @@ export default function AdminFileDashboard({
 
     setIsBulkOperating(true);
     try {
-      await apiRequest("POST", "/api/admin/materials/bulk-email", { 
+      // Nem 2xx válasznál (pl. 501, a küldés még nem érhető el) az apiRequest hibát dob,
+      // így a siker-értesítés nem jelenik meg, hanem a catch ágban a szerver üzenete.
+      await apiRequest("POST", "/api/admin/materials/bulk-email", {
         materialIds: Array.from(selectedIds),
         customEmails: customEmails ? customEmails.split(",").map(e => e.trim()).filter(e => e) : undefined
       });
