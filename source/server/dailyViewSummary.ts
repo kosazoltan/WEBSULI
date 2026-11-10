@@ -9,30 +9,59 @@ import { sanitizeText } from "./utils/sanitize";
 import type { MaterialView, HtmlFile } from "@shared/schema";
 import { logger } from "./lib/logger";
 
+const SUMMARY_TIMEZONE = "Europe/Budapest";
+
+/** Egy időpont budapesti falióra-összetevői (év, hónap, nap, óra, perc, mp). */
+function budapestWall(ms: number): { y: number; mo: number; d: number; h: number; mi: number; s: number } {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: SUMMARY_TIMEZONE, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(new Date(ms)).map(p => [p.type, Number(p.value)]));
+  return { y: parts.year, mo: parts.month, d: parts.day, h: parts.hour, mi: parts.minute, s: parts.second };
+}
+
+/** A budapesti falióra-idő (a naptári nap eltolható) UTC pillanata; az óraátállítás alatt is determinisztikus. */
+function budapestWallToInstant(y: number, mo: number, d: number, h: number, mi: number, s: number): number {
+  const wallAsUtc = Date.UTC(y, mo - 1, d, h, mi, s);
+  let guess = wallAsUtc;
+  for (let i = 0; i < 3; i++) {
+    const w = budapestWall(guess);
+    const offset = Date.UTC(w.y, w.mo - 1, w.d, w.h, w.mi, w.s) - Math.floor(guess / 1000) * 1000;
+    guess = wallAsUtc - offset;
+  }
+  return guess;
+}
+
+/**
+ * Hibavadászat B2: az összesítő ablaka — `end` = most, `start` = az előző budapesti naptári nap ugyanazon falióra-időpontja
+ * (óraátállításkor 23 / 25 óra), így két egymást követő futás ablaka hézag és átfedés nélkül illeszkedik.
+ */
+export function summaryWindow(now: Date): { start: Date; end: Date } {
+  const w = budapestWall(now.getTime());
+  const prev = new Date(Date.UTC(w.y, w.mo - 1, w.d - 1));
+  const start = budapestWallToInstant(prev.getUTCFullYear(), prev.getUTCMonth() + 1, prev.getUTCDate(), w.h, w.mi, w.s);
+  return { start: new Date(start), end: new Date(now.getTime()) };
+}
+
 /**
  * Daily summary email for material views
- * Sends one email per day (at 20:00) with all views from that day
+ * Sends one email per day (at 20:00 Budapest time) with all views since the previous run
  */
 export function setupDailyViewSummary() {
-  // Run every day at 20:00 (8 PM)
+  // Run every day at 20:00 (8 PM) Budapest time — a szerver UTC-ben fut, ezért az időzóna kötelező
   cron.schedule("0 20 * * *", async () => {
     try {
       logger.info('[DAILY SUMMARY] Starting daily view summary email generation...');
-      
-      // Get today's material views
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      
+
+      // Views since the previous run (previous day 20:00 → now, Budapest time)
+      const { start, end } = summaryWindow(new Date());
+
       // AUDIT 2026-09-01: dátumszűrt lekérdezés a globális 1000-es limit helyett
       const todayViews: Array<MaterialView & { material?: HtmlFile }> =
-        await storage.getMaterialViewsBetween(today, tomorrow);
-      
-      // If no views today, skip email
+        await storage.getMaterialViewsBetween(start, end);
+
+      // If no views in the window, skip email
       if (todayViews.length === 0) {
-        logger.info('[DAILY SUMMARY] No views today, skipping email.');
+        logger.info('[DAILY SUMMARY] No views in the window, skipping email.');
         return;
       }
       
@@ -83,8 +112,8 @@ export function setupDailyViewSummary() {
       const emailSubject = `📊 Napi összesítő: ${todayViews.length} megtekintés`;
       const emailBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #4F46E5;">📚 Mai anyag megtekintések</h2>
-          <p>Ma összesen <strong>${todayViews.length} megtekintés</strong> történt ${Object.keys(viewsByMaterial).length} különböző anyagon.</p>
+          <h2 style="color: #4F46E5;">📚 Anyag megtekintések az előző összesítő óta</h2>
+          <p>Az előző összesítő óta összesen <strong>${todayViews.length} megtekintés</strong> történt ${Object.keys(viewsByMaterial).length} különböző anyagon.</p>
           
           <div style="margin: 20px 0;">
             ${materialSections}
@@ -109,7 +138,7 @@ export function setupDailyViewSummary() {
     } catch (error: unknown) {
       logger.error('[DAILY SUMMARY] Error sending daily summary:', error);
     }
-  });
+  }, { timezone: "Europe/Budapest" });
 
   logger.info("Daily view summary email job started (runs daily at 20:00)");
 }

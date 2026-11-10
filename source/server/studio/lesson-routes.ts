@@ -7,6 +7,7 @@ import { lessons, htmlFiles } from "../../shared/schema";
 import { lessonSchema } from "../../shared/lesson-schema";
 import { SCORING_HEADER, scoringGate } from "../../shared/answer-value";
 import { logger } from "../lib/logger";
+import { asyncRoute } from "../lib/async-route";
 import { normalizeFingerprint } from "../lib/public-input";
 import { gradeProba } from "../rewards/grade";
 import { remainingSeconds, shouldIssueCoupon } from "../rewards/coupons";
@@ -41,7 +42,7 @@ lessonPublicRouter.use("/practice", practiceRouter);
 lessonPublicRouter.use("/review", reviewRouter);
 
 /** GET /api/lessons/by-file/:htmlFileId — the lesson behind a `contentType:'lesson'` material. */
-lessonPublicRouter.get("/by-file/:htmlFileId", async (req: Request, res: Response) => {
+lessonPublicRouter.get("/by-file/:htmlFileId", asyncRoute(async (req: Request, res: Response) => {
   const [row] = await db
     .select({
       id: lessons.id,
@@ -75,10 +76,10 @@ lessonPublicRouter.get("/by-file/:htmlFileId", async (req: Request, res: Respons
   if (!gate.ok) return res.status(gate.status).json({ message: gate.message, requiredScoringVersion: gate.requiredScoringVersion });
 
   res.json({ lessonId: row.id, version: row.version, lesson: parsed.data });
-});
+}));
 
 /** GET /api/lessons — published lessons, for listings. */
-lessonPublicRouter.get("/", async (_req: Request, res: Response) => {
+lessonPublicRouter.get("/", asyncRoute(async (_req: Request, res: Response) => {
   const rows = await db
     .select({
       id: lessons.id,
@@ -94,14 +95,14 @@ lessonPublicRouter.get("/", async (_req: Request, res: Response) => {
     .limit(200);
 
   res.json({ lessons: rows });
-});
+}));
 
 /**
  * GET /api/lessons/:id/material — audit 2026-09-05 (A): resolve a lesson id to the material
  * (html_files) id the SPA renders at /preview/:id. Published lessons only; used by the
  * /lesson/:id route the coupon HUD links back to.
  */
-lessonPublicRouter.get("/:id/material", async (req: Request, res: Response) => {
+lessonPublicRouter.get("/:id/material", asyncRoute(async (req: Request, res: Response) => {
   const [row] = await db
     .select({ htmlFileId: lessons.htmlFileId, publishedAt: lessons.publishedAt })
     .from(lessons)
@@ -111,7 +112,7 @@ lessonPublicRouter.get("/:id/material", async (req: Request, res: Response) => {
     return res.status(404).json({ message: "Ez a lecke nem érhető el." });
   }
   res.json({ htmlFileId: row.htmlFileId });
-});
+}));
 
 /* ------------------------------------------------------------------ *
  * LS-3a — Próba, kupon, bónusz.
@@ -153,7 +154,7 @@ function learnerOf(req: Request, fingerprint?: string): Learner | null {
 }
 
 /** POST /api/lessons/:id/proba — the server marks the section and decides the reward. */
-lessonPublicRouter.post("/:id/proba", async (req: Request, res: Response) => {
+lessonPublicRouter.post("/:id/proba", asyncRoute(async (req: Request, res: Response) => {
   const parsed = probaBody.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: "Hibás beküldés." });
@@ -228,7 +229,7 @@ lessonPublicRouter.post("/:id/proba", async (req: Request, res: Response) => {
     // a hibátlan Próbája után egy üres „nézd át ezeket" listát kapna.
     minCorrectForCoupon: policy.minCorrectForCoupon,
   });
-});
+}));
 
 /** POST /api/lessons/coupons/:id/start — the clock starts here, and only once. */
 lessonPublicRouter.post("/coupons/:id/start", async (req: Request, res: Response) => {
@@ -245,7 +246,7 @@ lessonPublicRouter.post("/coupons/:id/start", async (req: Request, res: Response
 });
 
 /** GET /api/lessons/coupons/active — what the game HUD counts down. */
-lessonPublicRouter.get("/coupons/active", async (req: Request, res: Response) => {
+lessonPublicRouter.get("/coupons/active", asyncRoute(async (req: Request, res: Response) => {
   const learner = learnerOf(req, typeof req.query.fingerprint === "string" ? req.query.fingerprint : undefined);
   if (!learner) return res.json({ coupon: null });
 
@@ -263,7 +264,7 @@ lessonPublicRouter.get("/coupons/active", async (req: Request, res: Response) =>
       remainingSeconds: remainingSeconds(coupon, now),
     },
   });
-});
+}));
 
 /** POST /api/lessons/coupons/:id/bonus — extra seconds for a verified correct answer. */
 lessonPublicRouter.post("/coupons/:id/bonus", async (req: Request, res: Response) => {

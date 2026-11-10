@@ -60,7 +60,7 @@ export const liveArbiterDeps: ArbiterDeps = {
       .onConflictDoNothing();
   },
   async reserveDailyCall() {
-    const { rows } = await db.execute(sql`INSERT INTO arbiter_daily_usage (day, calls) VALUES (CURRENT_DATE, 1)
+    const { rows } = await db.execute(sql`INSERT INTO arbiter_daily_usage (day, calls) VALUES ((now() AT TIME ZONE 'Europe/Budapest')::date, 1)
       ON CONFLICT (day) DO UPDATE SET calls = arbiter_daily_usage.calls + 1 WHERE arbiter_daily_usage.calls < ${ARBITER_DAILY_LIMIT} RETURNING calls`);
     return (rows as unknown[]).length > 0;
   },

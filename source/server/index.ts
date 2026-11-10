@@ -34,6 +34,11 @@ import { isLessonRoute, lessonCspDirectives } from "./lib/csp-profiles";
 import { needsLargeBody } from "./lib/body-limits";
 import { describeE2eDatabase, isE2eMode } from "./lib/e2e-mode";
 
+// Hibavadászat B1: végső védőháló — egy kezeletlen elutasított ígéret ne állítsa le a szervert (naplóz, nem lép ki).
+process.on("unhandledRejection", (reason) => {
+  logger.error("[UNHANDLED REJECTION]", reason);
+});
+
 const app = express();
 
 // SECURITY: Helmet middleware for security headers
