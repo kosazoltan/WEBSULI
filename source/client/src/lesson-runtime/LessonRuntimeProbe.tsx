@@ -1,4 +1,5 @@
 import { LessonRuntime } from "./LessonRuntime";
+import type { LessonClipsResponse } from "@shared/lesson-clip";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import type { CouponSession } from "@/game-engine/useCouponSession";
 import { lessonSchema, type AnimKind, type Lesson } from "@shared/lesson-schema";
@@ -208,6 +209,8 @@ function probeLesson(search: string): Lesson {
     if (icon && /^[a-z0-9-]{3,64}$/.test(icon)) lesson.art = { subjectIcon: icon };
     // Review #367: a párosító gyakorlat a témás leckén (`&match=1`) — a kijelölés fókuszban is látszik.
     if (q.has("match")) lesson.sections[0].blocks.unshift({ kind: "try", tryKind: "match", spec: { pairs: [{ left: "kutya", right: "dog" }, { left: "macska", right: "cat" }, ...(q.get("match") === "4" ? [{ left: "ló", right: "horse" }, { left: "madár", right: "bird" }] : [])] }, coversConceptIds: lesson.sections[0].blocks.flatMap((b) => ("coversConceptIds" in b ? b.coversConceptIds : [])).slice(0, 1) } as Lesson["sections"][number]["blocks"][number]);
+    // Spec 2026-11-10-fejezet-kisfilmek-v2: a kisfilm-próbához két fejezet kell (lejátszási lista).
+    if (q.has("clips2")) lesson.sections.push({ ...lesson.sections[0], heading: "Második fejezet a kisfilm-próbához" });
     return lesson;
   }
   const classroom = Number(q.get("classroom"));
@@ -228,6 +231,15 @@ function probeLesson(search: string): Lesson {
 export default function LessonRuntimeProbe() {
   const [candidate, setCandidate] = useState<Lesson | null>(null);
   const [error, setError] = useState("");
+  // Spec 2026-11-10-fejezet-kisfilmek-v2 (P0): `&clips2=1` — a helyi jelölt mellé a kisfilmek is helyi fájlból jönnek (`/tmp/lesson-clips2.json`).
+  const [clips2, setClips2] = useState<LessonClipsResponse | null>(null);
+  const wantClips2 = new URLSearchParams(window.location.search).has("clips2");
+  useEffect(() => {
+    if (!wantClips2) return;
+    const abort = new AbortController();
+    void fetch("/tmp/lesson-clips2.json", { signal: abort.signal }).then(r => r.json()).then(value => setClips2(value as LessonClipsResponse)).catch(() => undefined);
+    return () => abort.abort();
+  }, [wantClips2]);
   const live = new URLSearchParams(window.location.search).get("candidate") === "1";
   useEffect(() => {
     if (!live) return;
@@ -238,8 +250,10 @@ export default function LessonRuntimeProbe() {
   if (live && !candidate) return <p>{error || "Helyi jelölt betöltése…"}</p>;
   // Stable persistId so B7 localStorage round-trips work; no lessonId → no Próba API.
   const practice = new URLSearchParams(window.location.search).get("practice") === "1";
-  return <LessonRuntime lesson={candidate ?? probeLesson(window.location.search)} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} />;
+  const lesson = candidate ?? probeLesson(window.location.search);
+  return <LessonRuntime lesson={lesson} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} clipsPreset={wantClips2 ? clips2 ?? undefined : undefined} />;
 }
+
 
 /**
  * The coupon HUD, rendered with a fixed session (LS-3b).

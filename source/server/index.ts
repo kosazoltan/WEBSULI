@@ -560,6 +560,14 @@ app.use((req, res, next) => {
       if (process.env.NODE_ENV === "production" && !isE2eMode()) void import("./lesson-covers").then(({ startLessonCoverWorker }) => {
         if (startLessonCoverWorker()) log("[lesson-covers] a leckeborító-háttérfolyamat elindult");
       }, (error) => logger.error("[STARTUP] A leckeborító-háttérfolyamat nem indult:", error));
+      // Spec 2026-11-10-fejezet-kisfilmek-v2: a fejezetek kisfilmjeinek háttérgyártása — csak LESSON_CLIPS_AUTO=on és OpenRouter-kulcs
+      // mellett (napi plafon: LESSON_CLIP_DAILY_LIMIT, tárkeret: LESSON_CLIP_MEDIA_MAX_MB). Vészfék: LESSON_CLIPS=0.
+      if (process.env.NODE_ENV === "production" && !isE2eMode()) void Promise.all([import("./lesson-clips"), import("./lesson-clips-db"), import("./lesson-clips-providers")]).then(([{ startLessonClipWorker }, { dbClipStore }, { clipKeys, clipProviders, CLIP_VIDEO_MODEL }]) => {
+        const keys = clipKeys();
+        if (!keys) return;
+        const mode = startLessonClipWorker(dbClipStore, () => ({ deps: clipProviders(keys), model: CLIP_VIDEO_MODEL }));
+        if (mode === "auto") log(`[lesson-clips] a kisfilm-háttérgyártás elindult (hang: ${keys.elevenLabs ? "ElevenLabs" : "tartalék"}, kép: ${keys.openAi ? "OpenAI" : "OpenRouter"})`);
+      }, (error) => logger.error("[STARTUP] A kisfilm-háttérfolyamat nem indult:", error));
 
       // #168 — az előző folyamat halálakor árván maradt one-step futások hibára
       // zárása, hogy a kliens állapotjelzője ne ragadjon be némán.

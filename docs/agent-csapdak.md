@@ -319,3 +319,63 @@ Forrás: két élő gyártás mérése (`docs/specs/2026-11-10-gyartas-meres.md`
 - **Tünet 6 (eljárási):** az admin-munkamenet a tulajdonos saját Chrome-jában él, a beépített böngészőpanelen nem. **Megelőzés 6:**
   admin-védett élő lépéshez a Claude in Chrome bővítmény kell; a gyártás a Stúdió felületén indítható, a futás a
   `GET /api/studio/lessons/one-step/:runId` lekérdezésével követhető.
+
+## C-28 — Fejezet-kisfilmek: felhős munkamenet az éles leckéhez, fejléces végpont, hamis riasztás a parancsszövegre (2026-11-10)
+
+Forrás: `docs/specs/2026-11-10-fejezet-kisfilmek.md`.
+
+- **Tünet 1:** a „legutóbbi lecke” letöltése háromszor akadt el: a felhős munkamenet proxyja a `websuli.vip`-et 403-mal tiltotta; a
+  Render-fiók Postgres-példánya nem a Websuli adatbázisa (`lessons` tábla nincs benne); a fejlécet küldeni nem tudó lekérő eszköz
+  409-et kapott („újabb pontozó”).
+- **Megelőzés 1:** publikált lecke JSON-ja: `curl -H "x-websuli-scoring: <LESSON_SCORING_VERSION>" https://websuli.vip/api/lessons/by-file/<htmlFileId>`
+  (a lista: `GET /api/lessons`, de ~40 KB — fájlba kell menteni, nem a kontextusba). Felhős munkamenetben ehhez a „websuli”
+  környezet kell (engedélyezett hosztok: `websuli.vip`, `websuli-api-eu.onrender.com`). A Websuli adatbázisának helye UNKNOWN —
+  nem a Render-fiók `valuta-production` példánya.
+- **Tünet 2:** a destruktív-parancs hook egy migrációs fájl MEGJEGYZÉSÉBEN álló, táblaeldobást említő visszaállítási mondatra
+  tiltott (kétszer), mert a fájl tartalma heredocként a parancssorban állt.
+- **Megelőzés 2:** fájltartalmat a fájlíró / szerkesztő eszközzel kell létrehozni, nem shell-heredockal — a hook a parancs szövegét nézi.
+- **Tünet 3:** a széles (≥ 1200 px) leckenézetben a „Fejezet” legördülő rejtett (helyette oldalsó fejezetlista van): a böngészős
+  szkript 30 mp-ig várt rá.
+- **Megelőzés 3:** fejezetváltás tesztben a `chapter-nav` gombjaival széles nézetben, a legördülővel keskenyben.
+- **Tünet 4:** a tervezett „teljes lecke ≤ 5 perc” becslés karakterszámból készült; a valódi hang mérése 12 fejezetre 7,4 percet adott.
+- **Megelőzés 4:** hangos tartalom hosszát a valódi hangfájlok `ffprobe`-mérésével kell igazolni a forgatókönyv lezárása ELŐTT.
+
+## C-29 — Az első kisfilm-próba megbukott: forma a tartalom előtt, a repo saját arculati szabálya figyelmen kívül (2026-11-10)
+
+Forrás: tulajdonosi visszajelzés („borzasztó”) → `docs/specs/2026-11-10-fejezet-kisfilmek-v2.md`.
+
+- **Tünet 1:** a v1 kisfilm emojis diasor lett gépi hanggal és egyetlen, gyerekes kabalával — a 9. osztályos fizikához is. A teljes
+  lejátszó, tábla, háttérgyártás és 12 fejezetnyi forgatókönyv elkészült, mielőtt a tulajdonos egyetlen képkockát látott volna.
+- **Gyökérok 1:** a legolcsóbb megvalósítható formát (meglévő hangvégpont, emoji) választottam, és a „stílus egységes” célt
+  összekevertem a „minőség jó” céllal. A repo már tartalmazta a korosztályos képi szabályt (`server/lesson-covers.ts`
+  `COVER_STYLE.band`: 6. évfolyamtól nincs rajzfilmfigura) — nem olvastam hozzá.
+- **Megelőzés 1:** új, látható / hallható élményt adó funkciónál ELŐBB egyetlen valódi minta (kép + hang) megy a tulajdonos elé, és
+  csak a szemle után épül tárolás, gyártósor, tömeges tartalom. Megjelenést érintő munkánál a meglévő arculati szabályok
+  (`shared/lesson-design.ts`, `COVER_STYLE`, `design-assets/style.md`) elolvasása a terv része.
+- **Tünet 2:** a Node beépített `fetch`-e a felhős munkamenetben nem megy át a proxyn (`ENOTFOUND api.openai.com`), miközben a `curl` igen.
+- **Megelőzés 2:** szkriptből indított külső hívásnál `NODE_USE_ENV_PROXY=1` (Node ≥ 22.21); a kulcs a proxy hálózati titka, a
+  fejlécbe helykitöltő kerül (`Bearer proxy-injected`), valódi kulcs soha.
+- **Tünet 4:** az új `tests/lesson-clips.spec.ts` helyben (saját Vite-konfigurációval) zöld volt, a CI alap e2e-futásában 10 tesztje
+  bukott: a `**/*.spec.ts` minta miatt az alap `playwright.config.ts` is felveszi, ott az épített szerver szolgáltatásmunkása él, és
+  az `/api/*` kéréseket maga kéri le — a `page.route` csonkok helyett a valódi szerver felelt.
+- **Megelőzés 4:** hálózatot csonkoló új spec ELSŐ sora `test.use({ serviceWorkers: "block" })` (a `lesson-fusion.spec.ts` mintája), és
+  push előtt az alap konfigurációval is le kell futtatni: helyi Postgres 16 (`pg_ctlcluster 16 main start`), `DATABASE_URL` a
+  loopbackre, `npm run db:migrate`, `node --import tsx tests/e2e-seed.ts`, `npx playwright test tests/<spec>`.
+- **Tünet 5:** a generált mozgókép nyersen 4–17 MB klipenként (mérve); a próba idején ez nem tűnt fel, mert helyi fájlból játszott.
+  Tárolás előtt derült ki, hogy egy lecke így több száz MB lenne az adatbázisban.
+- **Megelőzés 5:** generált média MÉRETÉT a próba része mérni (nem csak az árát és az idejét); tárolás csak átkódolva, mérethatárral és
+  tárkerettel (`CLIP_VIDEO_MAX_BYTES`, `LESSON_CLIP_MEDIA_MAX_MB`).
+- **Tünet 6:** a hálózati titokként elmentett kulcsot az ügynök használni tudja, de kiolvasni nem — ezért másik rendszerbe (Render
+  környezeti változó) nem tudja átírni. A tulajdonos ezt joggal nem értette.
+- **Megelőzés 6:** kulcskéréskor előre meg kell mondani: „ezt csak ebben a munkamenetben tudom használni; a szerverre neked kell beírnod”.
+- **Tünet 7:** a tulajdonos által jóváhagyott hangpróba után a gyártósorban „takarékosságból” megváltoztattam a hang formátumát
+  (128 → 32 kbit/s), és ellenőrzés nélkül adtam ki a hangot; a hangmodell közben félreolvasott („síkság” → „síkség”).
+- **Megelőzés 7:** jóváhagyott minta paraméterét (modell, formátum, hang) a gyártósor nem változtathatja meg csendben. Hangot csak
+  hangkapun át szabad kiadni: visszaírás FÜGGETLEN felismerővel, betűre összevetés, újrapróba. A szolgáltató saját felismerője a saját
+  hangjára elnéző — kapunak nem elég. A felismerőt előbb ismert jó és ismert rossz mintán kell kalibrálni.
+- **Tünet 8:** a hangmodellek összevetésekor a pontozóm a felismerő számjegy-írását („0 és 200”) hibának vette — a jó hangok is rossznak
+  látszottak. **Megelőzés 8:** mérőeszközt a mérés előtt ismert jó mintán kell ellenőrizni; ha a jó minta megbukik, a mérce a hibás.
+- **Tünet 9:** párhuzamos hívások a szolgáltató egyidejűségi korlátjába ütköztek (ElevenLabs: 3; HTTP 429), egy jelenet hang nélkül maradt.
+- **Megelőzés 9:** külső szolgáltató párhuzamos hívásai közös sorba állítóval, a mért korlát alatt; 429-re várakozás és újrapróba.
+- **Tünet 3:** a hangminőséget az ügynök nem tudja füllel megítélni — a „természetes hang” állítás mérés nélkül feltételezés.
+- **Megelőzés 3:** hangról csak mérhető tényt szabad állítani (elkészült, hossz, modell, hangazonosító); a minőség a tulajdonos szemléje.

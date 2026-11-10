@@ -72,13 +72,19 @@
       ]
     },
     {
-      "source": "/api/((?!tts/audio$).*)",
+      "source": "/api/((?!tts/audio$|lesson-clips/media/).*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
       ]
     },
     {
       "source": "/api/tts/audio",
+      "headers": [
+        { "key": "x-vercel-enable-rewrite-caching", "value": "1" }
+      ]
+    },
+    {
+      "source": "/api/lesson-clips/media/(.*)",
       "headers": [
         { "key": "x-vercel-enable-rewrite-caching", "value": "1" }
       ]

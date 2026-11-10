@@ -25,6 +25,8 @@ import {
 import { computeCoupon } from "../../shared/reward-policy";
 import { practiceRouter } from "../rewards/practice-router";
 import { reviewRouter } from "../rewards/review-router";
+import { clipsMode, lessonClipsResponse } from "../lesson-clips";
+import { dbClipStore } from "../lesson-clips-db";
 
 /**
  * Public read side of the Lesson Studio (LS-2).
@@ -95,6 +97,19 @@ lessonPublicRouter.get("/", asyncRoute(async (_req: Request, res: Response) => {
     .limit(200);
 
   res.json({ lessons: rows });
+}));
+
+/**
+ * GET /api/lessons/:id/clips — a fejezetek rajzfilmes kisfilmjei (spec 2026-11-10-fejezet-kisfilmek, 4.4). Csak publikált lecke; a kész,
+ * a fejezet mostani címéhez és szövegéhez illő kisfilmek mennek ki. `pending`: készül még kisfilm, a kliens újra kérdezhet. Nincs mellékhatás.
+ */
+lessonPublicRouter.get("/:id/clips", asyncRoute(async (req: Request, res: Response) => {
+  const mode = clipsMode();
+  // Vészfék (LESSON_CLIPS=0): adatbázis-olvasás nélkül üres válasz.
+  if (mode === "off") return res.json({ clips: [], pending: false });
+  const body = await lessonClipsResponse(dbClipStore, req.params.id, mode);
+  if (!body) return res.status(404).json({ message: "Nincs ilyen publikált lecke." });
+  res.json(body);
 }));
 
 /**
