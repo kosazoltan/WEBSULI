@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { isTtsAudioSubPath } from "../shared/speech-fallback";
+import { clientIpKeyGenerator } from "./lib/client-ip";
 import compression from "compression";
 import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
@@ -354,6 +355,7 @@ app.use((req, res, next) => {
 
 // Strict rate limiter for public email subscriptions (spam protection)
 const subscriptionLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Maximum 5 subscription attempts per IP per 15 minutes
   message: "Túl sok feliratkozási kísérlet. Próbáld újra 15 perc múlva!",
@@ -364,6 +366,7 @@ const subscriptionLimiter = rateLimit({
 
 // Rate limiter for login endpoint (brute force protection)
 const loginLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // Maximum 10 login attempts per IP per 15 minutes
   message: "Túl sok bejelentkezési kísérlet. Próbáld újra 15 perc múlva!",
@@ -375,6 +378,7 @@ const loginLimiter = rateLimit({
 // Rate limiter for the public text-to-speech proxy.
 // Without it anyone can use the server as a free, unthrottled Google TTS relay.
 const ttsLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 60,
   message: "Túl sok felolvasási kérés. Próbáld újra később!",
@@ -384,10 +388,10 @@ const ttsLimiter = rateLimit({
   skip: (req) => isTtsAudioSubPath(req.path),
 });
 
-// Spec 2026-11-09-felolvasas-tartalek (módosítás): a websuli.vip kérései a Vercel proxyn át érkeznek, ezért a korlát kulcsa
-// (req.ip) a proxy címe, nem a tanulóé — mérve: a közvetlen és a Vercelen át küldött kérések külön számlálót kaptak.
-// A 60-as keret így minden látogató között oszlana meg; a hangtartalék (≤ 300 karakter, CDN-ből gyorsítótárazva) bővebb keretet kap.
+// Spec 2026-11-09-felolvasas-tartalek (módosítás): a hangtartalék (≤ 300 karakter, CDN-ből gyorsítótárazva) bővebb keretet kap.
+// Spec 2026-11-10-korlat-kliens-ip: minden IP-alapú korlát kulcsa a valódi kliens címe (lib/client-ip.ts), nem a proxyé.
 const ttsAudioLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   max: 600,
   message: "Túl sok felolvasási kérés. Próbáld újra később!",
@@ -397,6 +401,7 @@ const ttsAudioLimiter = rateLimit({
 
 // Tételgyár T7.1 (tulajdonosi döntés 2026-10-15): a döntőbíró IP-nként 60 kérés / 15 perc (a napi 2000-es fizetett plafon a szolgáltatásban).
 const arbiterLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   max: 60,
   message: "Túl sok ellenőrzési kérés. Próbáld újra később!",
@@ -407,6 +412,7 @@ const arbiterLimiter = rateLimit({
 // Rate limiter for public write endpoints (comments, likes, push subscriptions).
 // These are unauthenticated and write to the database — throttle spam/flooding.
 const publicWriteLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
   message: "Túl sok kérés. Próbáld újra később!",

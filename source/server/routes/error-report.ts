@@ -5,6 +5,7 @@
 import crypto from "crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
+import { clientIpKeyGenerator } from "../lib/client-ip";
 import type { ErrorReportPayload } from "../lib/error-mailer";
 import { logger } from "../lib/logger";
 
@@ -25,6 +26,7 @@ export const MAX_LENGTHS = {
 
 function createErrorReportLimiter() {
   return rateLimit({
+    keyGenerator: clientIpKeyGenerator,
     windowMs: 60 * 1000,
     max: 5,
     message: { error: "Too many error reports" },

@@ -41,6 +41,11 @@ services:
       # HTML-javítás, fájlelemzés, Tudás-térkép) az első kattintásnál dőlt volna el.
       # Ellenőrzés: `npx tsx server/scripts/checkAIConfig.ts`, vagy admin-ként
       # GET /api/studio/ai-status.
+      # Spec 2026-11-10-korlat-kliens-ip: a Vercel-proxy megosztott titka (≥ 32 karakter; a Vercel projektben ugyanez a
+      # változó). Ezzel igazolja a szerver, hogy az X-Forwarded-For a Vercelről jön — nélküle a kéréskorlát a közvetlen
+      # (Cloudflare) cím szerint számol. Csere: vesszővel tagolva régi + új érték, majd Vercel-csere és újratelepítés.
+      - key: WEBSULI_PROXY_SECRET
+        sync: false
       - key: AI_INTEGRATIONS_ANTHROPIC_API_KEY
         sync: false
       - key: AI_INTEGRATIONS_OPENAI_API_KEY

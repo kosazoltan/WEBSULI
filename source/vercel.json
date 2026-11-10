@@ -4,6 +4,21 @@
   "buildCommand": "npm run build:client",
   "outputDirectory": "dist/public",
   "framework": "vite",
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "continue": true,
+      "transforms": [
+        {
+          "type": "request.headers",
+          "op": "set",
+          "target": { "key": "x-websuli-proxy-secret" },
+          "args": "$WEBSULI_PROXY_SECRET",
+          "env": ["WEBSULI_PROXY_SECRET"]
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",

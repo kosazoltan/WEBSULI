@@ -51,6 +51,7 @@ A Render Dashboard-on > **Environment** menüpont alatt add meg az alábbi vált
 | `RESEND_FROM_EMAIL` | Feladó email cím | pl. `WEBSULI <noreply@websuli.org>` |
 | `PUBLIC_VAPID_KEY` | Push notification publikus kulcs | `npx web-push generate-vapid-keys` |
 | `PRIVATE_VAPID_KEY` | Push notification privát kulcs | Ugyanott |
+| `WEBSULI_PROXY_SECRET` | A Vercel-proxy megosztott titka (a Vercel projektben is ugyanez, Production + Preview): ettől számol a kéréskorlát a látogató címe szerint | `node scripts/qa/set-proxy-secret.mjs` (mindkét helyre beírja, az értéket nem írja ki) |
 
 > **FONTOS**: A `BASE_URL` és `FRONTEND_URL` értékét csak a Vercel deploy után tudod kitölteni!
 
