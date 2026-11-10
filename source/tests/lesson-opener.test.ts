@@ -161,3 +161,18 @@ test("A3/A4: webes szerzői prompt — kapcsoló nélkül nincs Célkártya, bek
   assert.ok(on.includes(LESSON_OPENER_HTML_CONTRACT));
   assert.ok(on.includes("Nyitány — Lépcső: L3"));
 });
+
+// Spec 2026-11-10-gyartas-meres (J2): a cél bekezdése is címkével kezdődik; címke nélküli célkártyán a leírás a teljes első mondat.
+test("J2: a gyártási utasítás megköveteli a cél címkéjét, és nem engedi el", () => {
+  const l4 = lessonOpenerContract(7, { section0InScope: true });
+  assert.ok(l4.includes("Az első bekezdés (a cél) is a címkével kezdődik"));
+  assert.ok(!l4.includes("címke nélkül is érthető"));
+  assert.ok(lessonOpenerContract(2, { section0InScope: true }).includes("**Mit tanulunk ma?**"));
+});
+
+test("J2: címke nélküli célkártyán a címkeleválasztás és a leírás a teljes első bekezdést adja", () => {
+  const first = "A lecke végére érted, mit jelent egy negatív szám a mindennapokban.";
+  assert.equal(stripOpenerGoalLabel(first), first);
+  const text = `${first}\n\n**Ami nehezítheti:** a sietség.\n\n**Miért?** Nincs rutinod.\n\n**Hogyan győzd le?** Lassíts.`;
+  assert.equal(teaserFromText(text), first);
+});

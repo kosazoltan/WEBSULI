@@ -81,7 +81,7 @@ function stageLine(stage: OpenerStage): string {
 function goalCardLines(labels: readonly string[]): string[] {
   return [
     `- CÉLKÁRTYA: az 1. fejezet ELSŐ blokkja egy \`explain\` blokk (depth "core"), négy rövid bekezdésben (bekezdésenként 1–2 mondat), a lépcső címkéivel, ebben a sorrendben: **${labels[0]}** mit akarunk elérni a lecke végére — megnevezi az 1. fejezet első fogalmát természetes mondatba illesztve (ragozva, kisbetűvel is; címszerű, nagybetűs alakot ne másolj be) és a fő képességet; **${labels[1]}** mi az, ami miatt a cél esetleg nem sikerül (a térkép tévhitei vagy a téma tipikus nehézsége, és/vagy a választott tanulási nehézség); **${labels[2]}** ennek az oka, megszégyenítés nélkül; **${labels[3]}** egy konkrét, megismételhető stratégia, amelyet a mini mese meg is mutat.`,
-    "- Az első bekezdés (a cél) egész mondat, címke nélkül is érthető: ez lesz a főoldali kártya leírása.",
+    `- Az első bekezdés (a cél) is a címkével kezdődik (**${labels[0]}**; a „Célunk” / „Cél” címke után kettősponttal); a címke utáni rész egész mondat: ez lesz a főoldali kártya leírása.`,
   ];
 }
 
