@@ -48,6 +48,24 @@ test("B2 · summaryWindow: normál nap 24 óra, óraátállításkor 23 / 25 ór
   assert.equal(summaryWindow(new Date("2026-10-25T19:00:00Z")).start.toISOString(), "2026-10-24T18:00:00.000Z");
 });
 
+// Review #413: az ablak a tervezett 20:00-hoz rögzített — a cron eltérő késése nem okoz hézagot vagy átfedést.
+test("B2 · summaryWindow: késve induló futások ablakai hézag és átfedés nélkül illeszkednek", async () => {
+  const { summaryWindow } = await import("../server/dailyViewSummary");
+  const day1 = summaryWindow(new Date("2026-06-15T18:00:00.100Z"));
+  const day2 = summaryWindow(new Date("2026-06-16T18:00:30.100Z"));
+  const day3 = summaryWindow(new Date("2026-06-17T18:00:00.000Z"));
+  assert.equal(day1.end.toISOString(), "2026-06-15T18:00:00.000Z");
+  assert.equal(day2.start.toISOString(), day1.end.toISOString());
+  assert.equal(day2.end.toISOString(), "2026-06-16T18:00:00.000Z");
+  assert.equal(day3.start.toISOString(), day2.end.toISOString());
+  // 20:00 előtti (kézi / korai) futás: az előző lezárt ablak
+  const early = summaryWindow(new Date("2026-06-16T17:59:59.000Z"));
+  assert.deepEqual([early.start.toISOString(), early.end.toISOString()], ["2026-06-14T18:00:00.000Z", "2026-06-15T18:00:00.000Z"]);
+  // az óraátállítás napjain is folytonos
+  assert.equal(summaryWindow(new Date("2026-03-30T18:00:05Z")).start.toISOString(), summaryWindow(new Date("2026-03-29T18:00:20Z")).end.toISOString());
+  assert.equal(summaryWindow(new Date("2026-10-26T19:00:05Z")).start.toISOString(), summaryWindow(new Date("2026-10-25T19:00:20Z")).end.toISOString());
+});
+
 test("B1-B3 · forrásőrök", () => {
   assert.match(read("dailyViewSummary.ts"), /timezone: "Europe\/Budapest"/);
   assert.doesNotMatch(read("routes.ts"), /req\.ip/);

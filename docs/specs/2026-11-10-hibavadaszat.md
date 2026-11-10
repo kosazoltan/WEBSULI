@@ -42,7 +42,8 @@ Ide csak a megerősített hiba került; a nem igazolható vagy eszközpróbát i
   `process.on('unhandledRejection')`, amely naplóz és nem lép ki.
 - **B2 · a napi megtekintés-összesítő UTC szerint fut.** `dailyViewSummary.ts`: a cron időzóna nélküli, az ablak
   `setHours(0,0,0,0)` (a Renderen UTC) → a levél 21 / 22 órakor megy, és a 20:00 utáni megtekintések egyik levélbe sem kerülnek.
-  Javítás: `timezone: "Europe/Budapest"`, az ablak az előző futás budapesti időpontjától mostanáig (előző nap 20:00 → ma 20:00).
+  Javítás: `timezone: "Europe/Budapest"`, az ablak a tervezett budapesti 20:00-hoz rögzítve (előző nap 20:00 → ma 20:00).
+  Review #413: a határ nem a futás tényleges pillanata — a cron naponta eltérő késése így nem okoz hézagot vagy átfedést.
 - **B3 · megmaradt `req.ip` kulcsok.** `routes.ts` (megtekintés-ismétlésvédelem, eredménybeküldés kulcsa és `ip` mezője),
   `lesson-result-email.ts:118, 126`: a C-25 szerint a `req.ip` váltakozó közbenső cím. Javítás: `clientIpKey(req)`.
 - **B4 · nem létező anyaghoz írt hozzászólás 500.** `POST /api/materials/:id/comments`: nincs létezés-ellenőrzés → idegen kulcs

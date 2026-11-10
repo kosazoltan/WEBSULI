@@ -32,14 +32,19 @@ function budapestWallToInstant(y: number, mo: number, d: number, h: number, mi: 
 }
 
 /**
- * Hibavadászat B2: az összesítő ablaka — `end` = most, `start` = az előző budapesti naptári nap ugyanazon falióra-időpontja
- * (óraátállításkor 23 / 25 óra), így két egymást követő futás ablaka hézag és átfedés nélkül illeszkedik.
+ * Hibavadászat B2: az összesítő ablaka a TERVEZETT budapesti 20:00-hoz rögzítve — `end` = a legutóbbi 20:00 (a futás pillanatában vagy
+ * előtte), `start` = az azt megelőző nap 20:00-ja (óraátállításkor 23 / 25 óra). Review #413: a cron néhány másodperces, naponta eltérő
+ * késése így sem hézagot, sem átfedést nem okoz két egymást követő ablak között; a 20:00 utáni megtekintés a következő levélbe kerül.
  */
+export const SUMMARY_HOUR = 20;
 export function summaryWindow(now: Date): { start: Date; end: Date } {
   const w = budapestWall(now.getTime());
-  const prev = new Date(Date.UTC(w.y, w.mo - 1, w.d - 1));
-  const start = budapestWallToInstant(prev.getUTCFullYear(), prev.getUTCMonth() + 1, prev.getUTCDate(), w.h, w.mi, w.s);
-  return { start: new Date(start), end: new Date(now.getTime()) };
+  const boundary = (dayOffset: number) => {
+    const day = new Date(Date.UTC(w.y, w.mo - 1, w.d + dayOffset));
+    return budapestWallToInstant(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), SUMMARY_HOUR, 0, 0);
+  };
+  const endOffset = boundary(0) <= now.getTime() ? 0 : -1;
+  return { start: new Date(boundary(endOffset - 1)), end: new Date(boundary(endOffset)) };
 }
 
 /**

@@ -31,8 +31,8 @@
   Alkalmazás: `studio/lesson-routes.ts` `try` nélküli `async` kezelői, `routes.ts` `GET /api/learner/view/:materialId` és
   `POST /api/admin/daily-reminders/run`. `server/index.ts`: `process.on('unhandledRejection', …)` — naplóz (`logger.error`), nem lép ki.
 - **TB2** `server/dailyViewSummary.ts`: `cron.schedule("0 20 * * *", …, { timezone: "Europe/Budapest" })`; tiszta
-  `summaryWindow(now)` → `{ start, end }`: `end = now`, `start` = az előző budapesti naptári nap ugyanazon falióra-időpontja
-  (óraátállításkor 23 / 25 óra). A levél szövege az ablakhoz igazodik, ha „ma”-t állít.
+  `summaryWindow(now)` → `{ start, end }`: `end` = a legutóbbi budapesti 20:00 (`now`-kor vagy előtte), `start` = az azt megelőző
+  nap 20:00-ja (óraátállításkor 23 / 25 óra; review #413: a tervezett határhoz rögzítve, nem a futás pillanatához). A levél szövege az ablakhoz igazodik, ha „ma”-t állít.
 - **TB3** `routes.ts`, `lesson-result-email.ts`: a `req.ip` kulcsok helyett `clientIpKey(req)`.
 - **TB4** `POST /api/materials/:id/comments`: `storage.getHtmlFile` → hiányzó anyagra 404 (a kedvelés útvonalának üzenetével).
 - **TB5** `routes.ts` osztály-ellenőrzés (feliratkozás, extra címek): `Number.isInteger(c)`.
