@@ -1875,12 +1875,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const CHUNK = 5;
         for (let i = 0; i < items.length; i += CHUNK) {
           const chunk = items.slice(i, i + CHUNK);
-          const chunkResults = await Promise.all(
+          // Review #413: a blokk MINDEN elindított írását megvárjuk (allSettled) — különben a `finally` érvénytelenítése után még
+          // befejeződő írás részleges sorrendet hagyna a gyorsítótárban.
+          const settled = await Promise.allSettled(
             chunk.map(item =>
               storage.updateHtmlFile(item.id, userId, { displayOrder: item.displayOrder })
             )
           );
-          results.push(...chunkResults);
+          const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+          if (failed) throw failed.reason;
+          results.push(...settled.map(r => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof storage.updateHtmlFile>>>).value));
         }
       } finally {
         // hiba esetén is: a már alkalmazott részmódosítás ne maradjon gyorsítótárazott régi sorrenddel
@@ -3567,7 +3571,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { body: commentBody, authorName, authorEmail } = validationResult.data;
 
       // Hibavadászat B4: nem létező anyaghoz írt hozzászólás idegenkulcs-hiba (500) helyett 404
-      const commentedFile = await storage.getHtmlFile(materialId);
+      // Review #413: csak az azonosítót kérdezzük le — a teljes sor a (nagy) PDF-tartalmat is beolvasná.
+      const [commentedFile] = await db.select({ id: htmlFiles.id }).from(htmlFiles).where(eq(htmlFiles.id, materialId)).limit(1);
       if (!commentedFile) {
         return res.status(404).json({ message: "Tananyag nem található" });
       }
