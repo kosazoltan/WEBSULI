@@ -34,6 +34,7 @@ import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
 import { clientIpKey, clientIpKeyGenerator } from "./lib/client-ip";
+import { asyncRoute } from "./lib/async-route";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, percentOf, withLearnerSubject, type MaterialResultPayload } from "./lib/material-result";
 import { learnerStreak, learnerTokenFor, recordLearnerActivity, resolveLearner, rotateLearnerToken, syncLearners, type ResolvedLearner } from "./learners";
 import { buildLearnerReports, runWeeklySummary, sendPairingGuides } from "./learner-reports";
@@ -1024,16 +1025,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!resendStatus.ok || recipients.length === 0) {
         logger.warn('[MATERIAL-RESULT] nincs konfigurált küldő/címzett', { resend: resendStatus.reason, recipients: recipients.length });
         // Átfogó review: e-mail-kiesésnél is a tanuló naplójába kerül az eredmény (riport, ismétlés).
-        if (!value.auto) await recordMaterialResult({ value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients, learner });
+        if (!value.auto) await recordMaterialResult({ value, ip: clientIpKey(req), title: file.title, fileId: file.id, recipients, learner });
         return res.status(503).json({ message: "Az eredményküldés jelenleg nem elérhető." });
       }
       // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: az automatikus beolvasás minden új állapotot azonnal küld; a levél
       // kulcsonként (anyag + kliens) összevárva megy, a legutolsó állapottal.
       if (value.auto) {
-        const queued = materialResultCoalescer.submit(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`, { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients, learner });
+        const queued = materialResultCoalescer.submit(`${value.materialId}|${value.clientId ?? clientIpKey(req)}`, { value, ip: clientIpKey(req), title: file.title, fileId: file.id, recipients, learner });
         return res.status(202).json({ success: true, queued });
       }
-      const direct: QueuedMaterialResult = { value, ip: req.ip ?? '', title: file.title, fileId: file.id, recipients, learner };
+      const direct: QueuedMaterialResult = { value, ip: clientIpKey(req), title: file.title, fileId: file.id, recipients, learner };
       await recordMaterialResult(direct);
       const outcome = await deliverMaterialResult(direct);
       if (outcome.duplicate) {
@@ -1044,7 +1045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       // a tanuló maga küldte el (mailto) → az ugyanazon oldalbetöltés automatikus levele nem megy ki: a függő törlődik, és a
       // később beérkező automatikus beküldés sem kerül sorba (review #300)
-      materialResultCoalescer.suppress(`${value.materialId}|${value.clientId ?? req.ip ?? ''}`);
+      materialResultCoalescer.suppress(`${value.materialId}|${value.clientId ?? clientIpKey(req)}`);
       res.json({ success: true, delivered: outcome.delivered });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -1073,7 +1074,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   // Review #302: a Stúdió-lecke és a PDF-nézet nem a /dev/:id-n át nyílik — a kliens ezzel jelzi a megnyitást (ugyanaz a tanuló +
   // anyag kulcsú, óránkénti ismétlésvédelem, mint a /dev/:id-nél). Mellékhatás GET-en: csak ellenőrzött tokennel, korlátozva.
-  app.get('/api/learner/view/:materialId', learnerMeLimiter, async (req, res) => {
+  app.get('/api/learner/view/:materialId', learnerMeLimiter, asyncRoute(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(req.params.materialId)) return res.status(400).json({ message: "Érvénytelen anyag." });
     const learner = await resolveLearner(req.get('x-learner-token')).catch(() => null);
@@ -1082,7 +1083,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!file) return res.status(404).json({ message: "Tananyag nem található" });
     if (learnerViewDedup.shouldRecord(`${learner.id}|${file.id}`)) await recordLearnerActivity({ learnerId: learner.id, materialId: file.id, kind: 'view', summary: file.title });
     res.status(204).end();
-  });
+  }));
   // Az e-mail-címek minden sikeres módosítása után a tanulók és a címek kapcsolata újraszinkronizálódik.
   app.use(['/api/extra-emails', '/api/admin/extra-emails'], (req, res, next) => {
     if (req.method !== 'GET') res.on('finish', () => { if (res.statusCode < 300) void syncLearners(); });
@@ -1438,7 +1439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validate all classrooms are valid numbers 0-12 (0=Programming, 1-12=Grades)
-      if (!classrooms.every((c: unknown) => typeof c === 'number' && c >= 0 && c <= 12)) {
+      if (!classrooms.every((c: unknown) => typeof c === 'number' && Number.isInteger(c) && c >= 0 && c <= 12)) {
         return res.status(400).json({ message: "Minden osztálynak 0 és 12 között kell lennie" });
       }
 
@@ -1489,7 +1490,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validate all classrooms are valid numbers 0-12 (0=Programming, 1-12=Grades)
-      if (!classrooms.every((c: unknown) => typeof c === 'number' && c >= 0 && c <= 12)) {
+      if (!classrooms.every((c: unknown) => typeof c === 'number' && Number.isInteger(c) && c >= 0 && c <= 12)) {
         return res.status(400).json({ message: "Minden osztálynak 0 és 12 között kell lennie" });
       }
 
@@ -1856,9 +1857,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Validate each item
       for (const item of items) {
-        if (!item.id || typeof item.displayOrder !== 'number') {
+        // Hibavadászat B6: egész, int32 tartományú sorrend — a módosítás előtt, hogy ne alkalmazódjon félig
+        if (!item || !item.id || typeof item.displayOrder !== 'number' || !Number.isInteger(item.displayOrder) || Math.abs(item.displayOrder) > 2147483647) {
           return res.status(400).json({
-            message: "Each item must have id and displayOrder"
+            message: "Each item must have id and an integer displayOrder"
           });
         }
       }
@@ -1869,21 +1871,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // AUDIT 2026-09-01: N párhuzamos (get+update) lekérdezés a 10-es poolt kimerítette;
       // 5-ös blokkokban, szekvenciálisan.
       const results: Awaited<ReturnType<typeof storage.updateHtmlFile>>[] = [];
-      const CHUNK = 5;
-      for (let i = 0; i < items.length; i += CHUNK) {
-        const chunk = items.slice(i, i + CHUNK);
-        const chunkResults = await Promise.all(
-          chunk.map(item =>
-            storage.updateHtmlFile(item.id, userId, { displayOrder: item.displayOrder })
-          )
-        );
-        results.push(...chunkResults);
+      try {
+        const CHUNK = 5;
+        for (let i = 0; i < items.length; i += CHUNK) {
+          const chunk = items.slice(i, i + CHUNK);
+          // Review #413: a blokk MINDEN elindított írását megvárjuk (allSettled) — különben a `finally` érvénytelenítése után még
+          // befejeződő írás részleges sorrendet hagyna a gyorsítótárban.
+          const settled = await Promise.allSettled(
+            chunk.map(item =>
+              storage.updateHtmlFile(item.id, userId, { displayOrder: item.displayOrder })
+            )
+          );
+          const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+          if (failed) throw failed.reason;
+          results.push(...settled.map(r => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof storage.updateHtmlFile>>>).value));
+        }
+      } finally {
+        // hiba esetén is: a már alkalmazott részmódosítás ne maradjon gyorsítótárazott régi sorrenddel
+        await invalidateHtmlFilesCache();
       }
 
       const successCount = results.filter(r => r !== null).length;
       logger.info(`[REORDER] ✅ Updated ${successCount}/${items.length} materials`);
-
-      await invalidateHtmlFilesCache();
 
       res.json({
         success: true,
@@ -2071,13 +2080,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/daily-reminders/run", isAuthenticatedAdmin, async (_req: Request, res) => {
+  app.post("/api/admin/daily-reminders/run", isAuthenticatedAdmin, asyncRoute(async (_req: Request, res) => {
     const { runDailyReminders } = await import("./daily-reminder");
     // Review #365: a kézi küldés ugyanazt a (csak ismétlés) tervet küldi, amit az előnézet jóváhagyásra mutat.
     const result = await runDailyReminders(new Date(), { repeatOnly: true });
     // Review #292: a futásszintű hiba HTTP-hibaként jelenik meg (a részleges számlálókkal együtt).
     res.status(result.error ? 500 : 200).json(result.error ? { ...result, message: `A kiküldés megszakadt: ${result.error}` } : result);
-  });
+  }));
 
   // ADMIN-ONLY: Tömeges osztály-léptetés ("Új tanév" gomb).
   // Minden aktív extra-email rekord classrooms-ét egyel feljebb lépteti
@@ -2996,7 +3005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Spec 2026-10-20-robot-megtekintes: robot / link-előnézet / parancssor nem számít megtekintésnek (a tartalmat megkapja).
         if (isAutomatedUserAgent(userAgent)) {
           logger.debug(`[TRACKING] Automatikus kliens, a megtekintés nem rögzül: ${String(userAgent ?? '').slice(0, 80)}`);
-        } else if (materialViewDedup.shouldRecord(`${req.ip ?? 'unknown'}|${file.id}`)) {
+        } else if (materialViewDedup.shouldRecord(`${clientIpKey(req) || 'unknown'}|${file.id}`)) {
           // Create material view record with NULL userId for anonymous
           await storage.createMaterialView({
             userId: null, // NULL for anonymous users (schema allows nullable)
@@ -3560,6 +3569,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { body: commentBody, authorName, authorEmail } = validationResult.data;
+
+      // Hibavadászat B4: nem létező anyaghoz írt hozzászólás idegenkulcs-hiba (500) helyett 404
+      // Review #413: csak az azonosítót kérdezzük le — a teljes sor a (nagy) PDF-tartalmat is beolvasná.
+      const [commentedFile] = await db.select({ id: htmlFiles.id }).from(htmlFiles).where(eq(htmlFiles.id, materialId)).limit(1);
+      if (!commentedFile) {
+        return res.status(404).json({ message: "Tananyag nem található" });
+      }
 
       // Sanitize inputs to prevent XSS attacks
       const sanitizedComment = {

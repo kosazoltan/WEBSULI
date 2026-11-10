@@ -43,7 +43,7 @@ export const CHECK_FORMS: ReadonlyArray<readonly [RegExp, string]> = [
   // Review #406: Unicode-biztos szóhatárok (a JS `\b` az ékezetnél is határt lát: „Néha” ≠ „ha”); „elemek közül” ≠ „következő elem”.
   [/sorminta|következő (?:elem|szám|tag)(?!\p{L})/iu, "Sorminta"],
   [/melyik (?:állítás )?hamis/i, "Melyik hamis?"],
-  [/(?<!\p{L})ha(?!\p{L})[^.?!]*(?<!\p{L})akkor(?!\p{L})/iu, "Következtetés"],
+  [/(?:^|[^\p{L}])ha(?!\p{L})[^.?!]*[^\p{L}.?!]akkor(?!\p{L})/iu, "Következtetés"],
 ];
 
 export function checkFormLabel(question: string): string | null {

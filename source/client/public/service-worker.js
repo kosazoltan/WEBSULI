@@ -190,7 +190,8 @@ self.addEventListener('notificationclick', (event) => {
   
   event.notification.close();
   
-  const urlToOpen = event.notification.data?.url || '/';
+  // A client.url abszolút: a (jellemzően relatív) célt az oldal eredetéhez kell feloldani, különben sosem egyezik.
+  const urlToOpen = new URL(event.notification.data?.url || '/', self.location.origin).href;
   
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })

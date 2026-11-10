@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
-import { clientIpKeyGenerator } from "./lib/client-ip";
+import { clientIpKey, clientIpKeyGenerator } from "./lib/client-ip";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
@@ -115,7 +115,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
   // Tanulói profil (S2): a párosított eszköz tanulója (ellenőrzött token). Átfogó review: bejelentkezve is a tanuló naplójába kerül
   // (mint a régi anyagnál); a levél neve bejelentkezve a fiók neve marad.
   const paired = body.learner ? await resolveLearner(body.learner).catch(() => null) : null;
-  const who = userId ?? (paired ? `learner:${paired.id}` : `guest:${body.fingerprint ?? req.ip ?? "?"}`);
+  const who = userId ?? (paired ? `learner:${paired.id}` : `guest:${body.fingerprint ?? (clientIpKey(req) || "?")}`);
   const roundKey = roundKeyOf(who, body.kind, body.roundId);
   // Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény (a levéltől független), utána a szigorítás automatikus lazítása. Nem
   // várjuk meg; a hiba csak napló.
@@ -123,7 +123,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
     const tasksGraded = graded;
     const tightened = experience.tasks.filter(t => (t.tightened?.length || t.tightenedPhrases?.length || t.tightenedOrder) && tasksGraded.rows.some(r => r.taskId === t.id)).map(t => t.id);
     // Review #340 (P1): a közreműködő a szerver által ismert identitás (a kliens ujjlenyomata nem — azt szabadon választhatja).
-    const contributor = contributorKey(userId ? `user:${userId}` : paired ? `learner:${paired.id}` : `ip:${req.ip ?? "?"}`);
+    const contributor = contributorKey(userId ? `user:${userId}` : paired ? `learner:${paired.id}` : `ip:${clientIpKey(req) || "?"}`);
     void recordTaskResults(req.params.lessonId, roundKey, contributor, tasksGraded.rows)
       .then(() => maybeRelaxTightening(req.params.lessonId, tightened))
       .catch(error => logger.error("[S4] feladatszintű eredmény / lazítás hiba:", error));

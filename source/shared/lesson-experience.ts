@@ -257,8 +257,8 @@ export function questionKey(text: string): string {
   return text.normalize("NFC").toLocaleLowerCase("hu").replace(/[×*]/g, "·").replace(/÷/g, ":").replace(/[−–]/g, "-").replace(/[^\p{L}\p{N}+\-·:/]/gu, "");
 }
 /** Spec 2026-09-30 (U2): a bank csak a tanítás SZÖVEGÉRE hivatkozhat — ábra-sorszámra, „az ábrán látható” fordulatra nem (a bank ábra nélkül épül). */
-// A JS `\b` csak ASCII-betűnél határ, ezért ékezetes szónál lookaround kell (`(?<!\p{L})…(?!\p{L})`).
-export const FIGURE_REFERENCE = /(?<!\p{L})(?:\d+\.\s*)?ábr(?:a|án|át|ája|ának|ához|ára|ából)(?!\p{L})|az ábrán látható|a rajzon látható/iu;
+// A JS `\b` csak ASCII-betűnél határ, ezért ékezetes szónál lookaround kell (az előző karakter `(?:^|[^\p{L}])`, a következő `(?!\p{L})`; visszatekintés nincs — régi Safari).
+export const FIGURE_REFERENCE = /(?:^|[^\p{L}])(?:\d+\.\s*)?ábr(?:a|án|át|ája|ának|ához|ára|ából)(?!\p{L})|az ábrán látható|a rajzon látható/iu;
 export const hasFigureReference = (text: string): boolean => FIGURE_REFERENCE.test(text);
 
 export function gateQuestionProblems(methods: { kind: string; prompt: string }[]): string[] {

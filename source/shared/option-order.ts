@@ -38,8 +38,8 @@ export function optionOrder(seed: string, count: number): number[] {
 // Review #375: a betűjel NAGYBETŰ (kis-nagybetű-érzékeny minta), és az „A” csak névelővel („az A válasz”) jelöl opciót — a mondatkezdő
 // „A válasz téves” és a közönséges „a válasz” nem hivatkozás.
 const LETTER_REFERENCE =
-  /(^|[\s(„])[A-E]\)|(^|\s)[A-E] (és|vagy) [A-E](?![\p{L}])|„[A-E]”|(?<![\p{L}])[Aa]z? [A-E] (válasz|opció|lehetőség)|(?<![\p{L}])[B-E] (válasz|opció|lehetőség)/u;
-const WORD_REFERENCE = /(?<![\p{L}])(első|második|harmadik|negyedik|ötödik|utolsó) (válasz|opció|lehetőség)|fenti|előző válasz/iu;
+  /(^|[\s(„])[A-E]\)|(^|\s)[A-E] (és|vagy) [A-E](?![\p{L}])|„[A-E]”|(?:^|[^\p{L}])[Aa]z? [A-E] (válasz|opció|lehetőség)|(?:^|[^\p{L}])[B-E] (válasz|opció|lehetőség)/u;
+const WORD_REFERENCE = /(?:^|[^\p{L}])(első|második|harmadik|negyedik|ötödik|utolsó) (válasz|opció|lehetőség)|fenti|előző válasz/iu;
 
 export const refersToOtherOptions = (options: readonly string[], feedback: readonly string[] = []): boolean =>
   [...options, ...feedback].some((text) => LETTER_REFERENCE.test(text) || WORD_REFERENCE.test(text));
