@@ -33,3 +33,25 @@ Ellenőrzés: `ls docs/knowledge/nat2020-6/extracts` ≥ 8 txt.
   épül e térképekre, UNVERIFIED. Kockázat: a térképek a repóban vannak, de a Studióban még nem használtak.
   Feloldás: a tulajdonos admin-munkamenetében `POST /api/studio/lessons/one-step` a Task 3 szerint.
 - Task 4 — KÉSZ: kanban #1 jegyzet a fenti mért kimenettel.
+
+## Állapot (2026-11-10, Task 3 lezárva)
+
+A tulajdonos admin-munkamenete a saját Chrome-jában él; a Claude in Chrome bővítményen át `GET /api/studio/maps` → 200.
+A gyártás a Stúdió felületén indult (Admin → Készítés → Tananyag készítése), ugyanazzal a `POST /api/studio/lessons/one-step`
+hívással, amit a Task 3 előír.
+
+- **Eltérés a tervtől (indokkal):** DOCX data-URL helyett a repóban tárolt, ellenőrzött kivonat (`extracts/*.grade6.txt`, `text`
+  fajta) ment fel — az a DOCX bekezdésszövege a 7–8. évfolyamos blokk nélkül. A teljes kerettanterv helyett futásonként egy
+  témakör a „Kérés az ügynöknek” mezőben (a kerettanterv egésze nem egy lecke anyaga).
+- **1. futás** `f7188df1-…` (Természettudomány, „Az energia” témakör): 21,9 perc, kész és közzétéve. Anyag
+  `f7bcf035-d293-475b-82e9-6da145a192b2`, 8 fejezet, 58 feladat, 97 kvízkérdés.
+- **2. futás** `5708791f-…` (Matematika kerettanterv + OH-MAT06TA tanmenet, „Egész számok” témakör): 20,9 perc, kész és
+  közzétéve. Anyag `49780f86-3ffb-4e50-a7a6-86dca9fa2b21`, 6 fejezet, 59 feladat, 97 kvízkérdés.
+- **Visszaolvasás (nyilvános, munkamenet nélkül):** `GET /api/html-files` → 231 anyag, `classroom=6` → 18; mindkét új azonosító
+  benne, `classroom: 6`. `GET /api/lessons/by-file/:id` (`X-Websuli-Scoring: 5`) → 200 mindkettőre; `/preview/:id` → 200.
+- **Böngészős próba (Chrome):** mindkét lecke megnyílik, konzolhiba nincs; az 1. leckén egy ellenőrző kérdés hibás, majd helyes
+  válasza a várt visszajelzést adja. Valódi telefonon NOT RUN.
+- A próbán talált megjelenítési hiba (az előnézet eszköztára kilóg): `docs/specs/2026-11-10-hibavadaszat.md` A9.
+- A két futás mérése és a belőle következő javítások: `docs/specs/2026-11-10-gyartas-meres.md`.
+- A többi tantárgy (Magyar, Történelem, Digitális kultúra, Angol) élő gyártása ebben a körben NOT RUN: az elfogadási feltétel
+  („legalább egy 6. osztályos fúziós tananyag”) teljesült, a további futás tantárgyanként kb. 21 perc és kb. 5 USD.
