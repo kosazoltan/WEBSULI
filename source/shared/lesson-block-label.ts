@@ -11,7 +11,8 @@ const GOAL_LABELS = [...new Set(STAGES.map((s) => s.goalLabels[0]))];
 const OTHER_LABELS = [...new Set(STAGES.flatMap((s) => s.goalLabels.slice(1)))];
 
 /** A bekezdés a címkével kezdődik-e (jelölés nélkül), és utána nem betű folytatja (Unicode-biztos: a „Célszerű” nem „Cél”). */
-function startsWithLabel(paragraph: string, labels: readonly string[]): boolean {
+function startsWithLabel(paragraph: string, labels: readonly string[], boldOnly = false): boolean {
+  if (boldOnly && !/^\s*(?:\*\*|__)/.test(paragraph)) return false;
   const p = paragraph.replace(/^\s*(?:\*\*|__)?\s*/, "");
   return labels.some((l) => p.startsWith(l) && !/^\p{L}/u.test(p.slice(l.length)));
 }
@@ -22,8 +23,14 @@ function startsWithLabel(paragraph: string, labels: readonly string[]): boolean 
  */
 export function isGoalCardText(text: string): boolean {
   const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim());
-  if (!paragraphs.length || !startsWithLabel(paragraphs[0], GOAL_LABELS)) return false;
-  return paragraphs.slice(1).filter((p) => startsWithLabel(p, OTHER_LABELS)).length >= 2;
+  if (!paragraphs.length) return false;
+  const rest = paragraphs.slice(1);
+  if (startsWithLabel(paragraphs[0], GOAL_LABELS)) return rest.filter((p) => startsWithLabel(p, OTHER_LABELS)).length >= 2;
+  // Spec 2026-11-10-gyartas-meres (J2): a modell néha elhagyja a célcímkét. Címke nélküli első bekezdés csak a Célkártya pontos alakjában
+  // számít annak (review #414): négy bekezdés, az első nem buktató / ok / leküzdés címkés, a másik HÁROM mind FÉLKÖVÉREN jelölt ilyen
+  // címkével kezdődik. Egy közönséges magyarázat, amelyben két ilyen kiemelt sor is van, nem Célkártya.
+  if (startsWithLabel(paragraphs[0], OTHER_LABELS)) return false;
+  return rest.length === 3 && rest.every((p) => startsWithLabel(p, OTHER_LABELS, true));
 }
 
 export const ANIM_LABELS: Readonly<Record<string, string>> = {

@@ -10,6 +10,7 @@ import {
   type VennParams,
 } from "@shared/lesson-visual-params";
 import { sanitizeIllustration } from "@shared/illustration-svg";
+import { needsExtraZero, numberLineLabelFlags } from "@shared/number-line-labels";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 1. szelet): magyarázó ábrák.
@@ -458,7 +459,8 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
   const x = (v: number) => pad + ((v - p.from) / (p.to - p.from)) * (W - 2 * pad);
   const step = p.step ?? (p.to - p.from) / 10;
   const ticks = Array.from({ length: Math.floor((p.to - p.from) / step + 1e-9) + 1 }, (_, i) => p.from + i * step);
-  const labelEvery = Math.ceil(ticks.length / 7);
+  // Spec 2026-11-10 (J3): a feliratok a szép lépés (1/2/5 × 10^k) többszörösei, 0-ra horgonyozva; az osztásvonalak a szerzői lépést követik.
+  const labelled = numberLineLabelFlags(ticks, step);
   const fmt = (v: number) => `${Math.round(v * 100) / 100}`.replace(".", ",");
   // Élő mérés (Opus 5.5-ábra, 2026-09-24): a jobb szélső jelölés felirata („1 évszázad”) levágódott.
   // A felirat középpontját a becsült szélesség felével a rajzterületen belül tartjuk.
@@ -509,9 +511,15 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
         {ticks.map((v, i) => (
           <g key={i}>
             <line x1={x(v)} y1={base - 6} x2={x(v)} y2={base + 6} stroke="currentColor" strokeWidth="1.6" />
-            {i % labelEvery === 0 && <text x={inside(x(v), fmt(v), 14)} y={base + 24} textAnchor="middle" fontSize="14" fill="currentColor">{fmt(v)}</text>}
+            {labelled[i] && <text x={inside(x(v), fmt(v), 14)} y={base + 24} textAnchor="middle" fontSize="14" fill="currentColor">{fmt(v)}</text>}
           </g>
         ))}
+        {needsExtraZero(ticks, step) && (
+          <g data-zero-extra>
+            <line x1={x(0)} y1={base - 6} x2={x(0)} y2={base + 6} stroke="currentColor" strokeWidth="1.6" />
+            <text x={inside(x(0), "0", 14)} y={base + 24} textAnchor="middle" fontSize="14" fill="currentColor">0</text>
+          </g>
+        )}
         {jumpLabels.map(({ j, i, x0, x1, h, label }) => (
           <g key={`j${i}`}>
             <path d={`M${x0} ${base - 4} Q${(x0 + x1) / 2} ${base - 4 - h * 1.6} ${x1} ${base - 4}`} fill="none" stroke={PALETTE[i % PALETTE.length]} strokeWidth="2" />

@@ -70,19 +70,21 @@ export function alignTaskToSample(t: Task): boolean {
  * A csomag gépies hibáinak javítása HELYBEN (a hívó `validate`-je után fut a meglévő ellenőrzés). Visszaadja a naplózandó lépéseket.
  * `prior`: a korábban kész csomagok kérdései (az ismétlődés-ellenőrzés kulcsával); `min`: a csomag minimális darabszámai.
  */
-export function normalizeBankPacket(packet: Packet, prior: { tasks: string[]; quiz: string[] }, min: { tasks: number; quiz: number }, keyOf: (text: string) => string): string[] {
+export function normalizeBankPacket(packet: Packet, prior: { tasks: string[]; quiz: Array<string | Pick<Quiz, "question" | "options">> }, min: { tasks: number; quiz: number }, keyOf: (text: string) => string,
+  // Spec 2026-11-10-gyartas-meres (J1b): a kvíz saját kulcsa (kiválasztó kérdésnél az opciókkal); alapból a kérdés szövege.
+  quizKeyOf: (q: Pick<Quiz, "question" | "options">) => string = (q) => keyOf(q.question)): string[] {
   const notes: string[] = [];
   for (const t of packet.tasks) {
     const before = JSON.stringify([t.minWords, t.required, t.needsSentence]);
     // a javíthatatlan feladat marad: a meglévő hibaút (javítókör, majd mentőkör) dönt róla
     if (alignTaskToSample(t) && JSON.stringify([t.minWords, t.required, t.needsSentence]) !== before) notes.push(`${t.id}: rubrika a mintához igazítva`);
   }
-  const drop = <T extends { id: string }>(items: T[], textOf: (x: T) => string, past: string[], bad: (x: T) => boolean, floor: number, label: string) => {
-    const seen = new Set(past.map(keyOf));
+  const drop = <T extends { id: string }>(items: T[], itemKey: (x: T) => string, pastKeys: string[], floor: number, label: string) => {
+    const seen = new Set(pastKeys);
     const remove = new Set<T>();
     for (const item of items) {
-      const key = keyOf(textOf(item));
-      if (seen.has(key) || bad(item)) remove.add(item);
+      const key = itemKey(item);
+      if (seen.has(key)) remove.add(item);
       seen.add(key);
     }
     for (const item of [...remove]) {
@@ -91,7 +93,7 @@ export function normalizeBankPacket(packet: Packet, prior: { tasks: string[]; qu
       notes.push(`${item.id}: kivéve (${label})`);
     }
   };
-  drop(packet.tasks, (t) => t.q, prior.tasks, () => false, min.tasks, "ismétlődő feladat");
-  drop(packet.quiz, (q) => q.question, prior.quiz, () => false, min.quiz, "ismétlődő kérdés");
+  drop(packet.tasks, (t) => keyOf(t.q), prior.tasks.map(keyOf), min.tasks, "ismétlődő feladat");
+  drop(packet.quiz, quizKeyOf, prior.quiz.map((p) => (typeof p === "string" ? keyOf(p) : quizKeyOf(p))), min.quiz, "ismétlődő kérdés");
   return notes;
 }

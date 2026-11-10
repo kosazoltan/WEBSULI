@@ -3463,8 +3463,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // TODO: Implement bulk email sending logic (result.data holds materialIds + email)
-      res.json({ success: true, message: "Bulk email sending not yet implemented" });
+      // A tömeges küldés még nincs megvalósítva: őszintén 501-et adunk, hamis siker helyett.
+      res.status(501).json({ message: "A tömeges e-mail küldés még nem érhető el." });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       res.status(500).json({ message: err.message });

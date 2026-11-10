@@ -294,3 +294,28 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   `stopSpeech` helyett).
 - **Megelőzés 5:** szöveges egyezésnél mindig mindkét oldali határ; hibát típus, nem szöveg alapján kell felismerni; erőforrást
   egyetlen közös leállító szabadítson fel, a hívók azt használják.
+
+## C-27 — Gyártás-mérés tanulságai: néma teljes újragyártás, kiválasztó kérdés hamis ismétlődése, önellentmondó utasítás (2026-11-10)
+
+Forrás: két élő gyártás mérése (`docs/specs/2026-11-10-gyartas-meres.md`).
+
+- **Tünet 1:** a bank a futásidő 66–89%-a. A párhuzamosan épült csomagok keresztellenőrzése egyetlen ismétlődő kérdés miatt a
+  TELJES kifizetett csomagot eldobta és újraírta (2 csomag = 7 perc), naplósor nélkül — a telemetria csak „javítókört” mutatott.
+- **Megelőzés 1:** ahol van célzott javítómód, a drága út (teljes újraírás) csak tételhez nem köthető hibánál maradhat; minden
+  ilyen ágnak legyen naplósora az okkal. Mérésnél a naplót időrendben is olvasni kell (mi fut 2–4 percig), nem csak a hibasorokat.
+- **Tünet 2:** az ismétlődés-kulcs csak a kérdés szövegét nézte; a „Melyik állítás hamis?” típusú kérdés tartalma az opciókban van,
+  ezért két különböző kérdés ismétlődésnek számított (7 javítókörből 4).
+- **Megelőzés 2:** azonosság-kulcsot a tétel TELJES tartalmából kell képezni ott, ahol a megkülönböztető rész nem a címben van;
+  a lazítás zárt mintára szóljon (ne heurisztikára), hogy a valódi ismétlődés-ellenőrzés ne gyengüljön.
+- **Tünet 3:** a nyitó célkártya fejléce „Magyarázat” lett, mert az utasítás két egymás utáni sora ellentmondott („címkékkel, ebben
+  a sorrendben” ↔ „címke nélkül is érthető”), a felismerő pedig a címkét megkövetelte.
+- **Megelőzés 3:** ha a megjelenítés a modell kimenetének egy jelére épül, az utasítás azt a jelet egyértelműen követelje meg, ÉS a
+  felismerő tűrje a hiányát (a már közzétett leckék nem gyárthatók újra egy fejléc miatt).
+- **Tünet 4:** a számegyenes feliratai a bal széltől számolt minden n-edik osztásra kerültek — a 0 és a jelölt értékek felirat nélkül.
+- **Megelőzés 4:** tengelyfelirat „szép” lépésközzel, a 0-hoz igazítva; a ritkítás utáni üres eredményre (nem a 0 rácsán álló
+  osztások) legyen tartalék.
+- **Tünet 5 (eljárási):** a böngészős tesztet `npx playwright test`-tel indítva a szerver megtagadja az indulást (a `source/.env`
+  éles adatbázisa miatt, szándékos őr). **Megelőzés 5:** mindig `npm.cmd run test:e2e -- <fájl>` (eldobható adatbázist indít).
+- **Tünet 6 (eljárási):** az admin-munkamenet a tulajdonos saját Chrome-jában él, a beépített böngészőpanelen nem. **Megelőzés 6:**
+  admin-védett élő lépéshez a Claude in Chrome bővítmény kell; a gyártás a Stúdió felületén indítható, a futás a
+  `GET /api/studio/lessons/one-step/:runId` lekérdezésével követhető.

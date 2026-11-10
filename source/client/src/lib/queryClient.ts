@@ -1,6 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { logger } from "./logger";
 import { LESSON_SCORING_VERSION } from "@shared/answer-value";
+import { isRetryableRequestError } from "@shared/request-retry";
 
 // A `preReadText` paraméter azért kell, mert a 403-as CSRF-ág már beolvasta
 // a body-t (res.text()) — a Response body csak egyszer olvasható, ismételt
@@ -229,15 +230,9 @@ export async function apiRequest<T = unknown>(
     },
     retries,
     1000, // 1 second base delay
-    (error: unknown) => {
-      // Retry on network errors and server errors (5xx), but not on client errors (4xx)
-      const status = typeof error === "object" && error !== null && "status" in error
-        ? (error as { status?: unknown }).status
-        : undefined;
-      return (error instanceof Error && error.name === 'AbortError') ||
-             error instanceof TypeError ||
-             (typeof status === "number" && status >= 500);
-    }
+    // Hálózati hiba, időtúllépés és 5xx újrapróbálható; 4xx nem. A fenti ág a hálózati hibát és az időtúllépést magyar szövegű
+    // Error-ba csomagolja — azt a `cause` alapján az isRetryableRequestError ismeri fel (J5: korábban épp ezek nem próbálkoztak újra).
+    (error: unknown) => error instanceof TypeError || isRetryableRequestError(error)
   );
 }
 

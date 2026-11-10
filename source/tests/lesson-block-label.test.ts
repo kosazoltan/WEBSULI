@@ -80,3 +80,32 @@ test("a lecke utolsó összefoglalója „A lecke tanulsága”, a többi a sáv
   assert.equal(blockLabel(blocks, 2, 2, "teen", 7, false), BAND_THEME.teen.labels.recap, "nem az utolsó fejezet");
   assert.equal(blockLabel(blocks, 2, 4, "teen"), BAND_THEME.teen.labels.recap, "paraméter nélkül a régi viselkedés");
 });
+
+// Spec 2026-11-10-gyartas-meres (J2): a modell által elhagyott célcímke — a mért 2. futás szövege.
+test("J2: címke nélküli cél + félkövér buktató / ok / leküzdés bekezdések → Célkártya, utána Történet", () => {
+  const measured = explain("A lecke végére érted, mit jelent egy negatív szám a mindennapokban, és biztosan számolsz az egész számokkal.\n\n**Ami nehezítheti:** a sietség. Fejben gyorsan rávágod az eredményt, és közben elveszik a mínusz jel.\n\n**Miért?** A 0 alatti értékekhez még nincs olyan rutinod, mint a pozitív számokhoz.\n\n**Hogyan győzd le?** Lassíts, és rajzolj egy számegyenest.");
+  const measuredStory = explain("Bence reggel az időjárás-alkalmazást nézi, és megakad a szeme a mínusz négy fokon.");
+  const blocks = [measured, measuredStory, explain("A negatív számok a nulla alatt vannak.")];
+  assert.equal(blockLabel(blocks, 0, 0, "teen", 6), "A lecke célja");
+  assert.equal(blockLabel(blocks, 1, 0, "teen", 6), "Történet");
+  assert.equal(blockLabel(blocks, 1, 0, "kid", 3), "Mese");
+  assert.equal(blockLabel(blocks, 2, 0, "teen", 6), BAND_THEME.teen.labels.explain);
+  assert.equal(blockLabel([measured], 0, 1, "teen", 6), BAND_THEME.teen.labels.explain, "másik fejezetben nem célkártya");
+});
+
+test("J2: a címke nélküli első bekezdés mellett csak a félkövér címkés sorok számítanak", () => {
+  // Egyetlen címkés bekezdés kevés; a sima (nem félkövér) „Miért?” / „Oka:” sor nem Célkártya (review #405 szerinti magyarázat).
+  assert.equal(blockLabel([explain("A lecke végére érted a törteket.\n\n**Miért?** Mert …")], 0, 0, "teen"), BAND_THEME.teen.labels.explain);
+  assert.equal(blockLabel([explain("A lecke végére érted a törteket.\n\nMiért? Mert …\n\nOka: …")], 0, 0, "teen"), BAND_THEME.teen.labels.explain);
+  // Ha az első bekezdés maga buktató-címkés, nem célkártya.
+  assert.equal(blockLabel([explain("**Miért?** Mert …\n\n**Oka:** …\n\n**Leküzdés:** …")], 0, 0, "teen"), BAND_THEME.teen.labels.explain);
+});
+
+// Review #414: a címke nélküli tartalék csak a Célkártya pontos alakjára illik.
+test("J2: közönséges magyarázat két kiemelt „Miért?” / „Hogyan győzd le?” sorral nem Célkártya", () => {
+  const two = explain("A törtek részeket jelölnek.\n\n**Miért?** Mert az egészet egyenlő részekre osztjuk.\n\n**Hogyan győzd le?** Rajzolj.");
+  assert.equal(blockLabel([two, explain("Folytatás.")], 0, 0, "teen", 6), BAND_THEME.teen.labels.explain);
+  assert.equal(blockLabel([two, explain("Folytatás.")], 1, 0, "teen", 6), BAND_THEME.teen.labels.explain);
+  const five = explain("A törtek részeket jelölnek.\n\n**Ami nehezítheti:** a.\n\n**Miért?** b.\n\n**Hogyan győzd le?** c.\n\nMég egy bekezdés.");
+  assert.equal(blockLabel([five], 0, 0, "teen", 6), BAND_THEME.teen.labels.explain, "öt bekezdés nem a Célkártya alakja");
+});

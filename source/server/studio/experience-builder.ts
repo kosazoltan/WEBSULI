@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { gateQuestionProblems, hasFigureReference, questionKey, scoringVersionFor } from "../../shared/lesson-experience";
+import { gateQuestionProblems, hasFigureReference, questionKey, quizDuplicateKey, scoringVersionFor } from "../../shared/lesson-experience";
 import { normalizeBankPacket } from "./bank-normalize";
 import { logger } from "../lib/logger";
 import { z } from "zod";
@@ -489,21 +489,26 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
   type Prior = { methods: LessonExperience["methods"]; tasks: LessonExperience["tasks"]; quiz: LessonExperience["quiz"] };
   /** Questions/methods a packet must not repeat: the packets that were complete before it started. */
   const crossProblems = (packet: PacketContent, prior: Prior): string[] => {
-    const problems = gateQuestionProblems([...prior.methods, ...packet.methods]);
+    // Spec 2026-11-10-gyartas-meres (J1): a csomagon BELÜLI kapukérdés-ismétlődés csomagszintű hiba marad; a csomagok KÖZTI
+    // ismétlődés tételt nevez meg (lent), így a célzott javítómód cseréli — nem a teljes csomag épül újra.
+    const problems = gateQuestionProblems(packet.methods);
+    const isGate = (m: { kind: string }) => m.kind === "gate";
     // Élő mérés 2026-09-24 (run 9c0169b7): a névtelen „Ismétlődő kérdés” hibát a javító kör nem
     // tudta tételhez kötni — 4 kísérlet ugyanazzal a hibával, a futás elhalt. A hiba megnevezi a
     // csomag ismétlődő tételét és a kérdés szövegét, hogy a javítás célzott legyen.
-    const pairs: Array<[string[], Array<{ id: string; text: string }>]> = [
-      [prior.tasks.map(t => t.q), packet.tasks.map(t => ({ id: t.id, text: t.q }))],
-      [prior.quiz.map(q => q.question), packet.quiz.map(q => ({ id: q.id, text: q.question }))],
+    // Spec 2026-09-30 (U2, H44): közös kulcs, a műveleti jel megmarad — „15 + 4” és „15 · 4” nem ismétlődés.
+    // Spec 2026-11-10-gyartas-meres (J1b): a kvíz kulcsa `quizDuplicateKey` (kiválasztó kérdésnél az opciókészlettel).
+    const pairs: Array<[string[], Array<{ id: string; text: string; key: string }>, string]> = [
+      [prior.tasks.map(t => questionKey(t.q)), packet.tasks.map(t => ({ id: t.id, text: t.q, key: questionKey(t.q) })), "tételhez"],
+      [prior.quiz.map(quizDuplicateKey), packet.quiz.map(q => ({ id: q.id, text: q.question, key: quizDuplicateKey(q) })), "tételhez"],
+      [prior.methods.filter(isGate).map(m => questionKey(m.prompt)), packet.methods.filter(isGate).map(m => ({ id: m.id, text: m.prompt, key: questionKey(m.prompt) })), "kapukérdéshez"],
     ];
-    for (const [past, added] of pairs) {
-      // Spec 2026-09-30 (U2, H44): közös kulcs, a műveleti jel megmarad — „15 + 4” és „15 · 4” nem ismétlődés.
-      const seen = new Set(past.map(questionKey));
+    for (const [past, added, what] of pairs) {
+      const seen = new Set(past);
       for (const item of added) {
-        const key = questionKey(item.text);
-        if (seen.has(key)) problems.push(`Ismétlődő kérdés egy korábbi csomaggal: ${item.id} („${item.text.slice(0, 120)}”) — ehhez a tételhez új, más kérdést írj.`);
-        seen.add(key);
+        if (seen.has(item.key)) problems.push(`Ismétlődő kérdés egy korábbi csomaggal: ${item.id} („${item.text.slice(0, 120)}”) — ehhez a ${what} új, más kérdést írj.`);
+        // A csomagon belüli kapukérdés-ismétlődést a fenti általános ellenőrzés jelzi; itt csak a korábbi csomagokhoz mérünk.
+        if (what !== "kapukérdéshez") seen.add(item.key);
       }
     }
     return problems;
@@ -531,7 +536,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     const prior = checkpoint.parts[checkpoint.reviewedHashes?.[baseHash] ?? baseHash] as Partial<Record<typeof BANKS[number], Array<{ id?: unknown }>>> | undefined;
     for (const bank of BANKS) for (const item of Array.isArray(prior?.[bank]) ? prior[bank] : []) if (typeof item?.id === "string") itemOwner.set(item.id, unitIndex);
   });
-  const buildUnit = async (unitIndex: number, unit: (typeof plan.units)[number], before: Prior): Promise<{ packet: PacketContent; hash: string }> => {
+  // Spec 2026-11-10-gyartas-meres (J1): `seed` — a keresztellenőrzésen megakadt KÉSZ csomag (a modell saját azonosítóival) és a
+  // tételhez kötött hibái; ilyenkor az első kísérlet célzott javítómód, nem teljes újragyártás.
+  const buildUnit = async (unitIndex: number, unit: (typeof plan.units)[number], before: Prior, seed?: { packet: unknown; issues: string[] }): Promise<{ packet: PacketContent; hash: string; raw: PacketContent }> => {
     const { taskCount, quizCount, taskTarget, quizTarget, methodKinds, teaching, baseHash } = unitTeaching(unitIndex, unit);
     const reviewFeedback = deps.reviewFeedback?.filter(f => {
       if (!f.conceptIds?.some(id => taughtIds.has(id))) return true;
@@ -578,11 +585,12 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     type Packet = z.infer<typeof packetSchema>;
     const validate = (packet: Packet): string[] => {
       // Spec 2026-10-05-bank-determinisztikus-normalizalas: a gépies hibák (rubrika↔minta, ismétlődés) javítása modellhívás NÉLKÜL.
-      const normalized = normalizeBankPacket(packet, { tasks: before.tasks.map((t) => t.q), quiz: before.quiz.map((q) => q.question) }, { tasks: taskTarget, quiz: quizTarget }, questionKey); // a tartalékos célig (spec 2026-10-04): a kapu kivétele így sem sérti a 45/75-öt
+      const normalized = normalizeBankPacket(packet, { tasks: before.tasks.map((t) => t.q), quiz: before.quiz }, { tasks: taskTarget, quiz: quizTarget }, questionKey, quizDuplicateKey); // a tartalékos célig (spec 2026-10-04): a kapu kivétele így sem sérti a 45/75-öt
       if (normalized.length) logger.info(`[STUDIO] Bankcsomag gépi normalizálás (${unit.sectionIndex + 1}. fejezet): ${normalized.slice(0, 12).join("; ")}`);
       const local = experiencePacketSchema.safeParse({ version: LESSON_METHOD_VERSION, theme: "ocean", ...packet, scoringVersion: scoringVersionFor(packet.tasks), bankPlan: { units: [unit], taskRound: Math.min(plan.taskRound, packet.tasks.length), quizRound: Math.min(plan.quizRound, packet.quiz.length) }, language });
       const problems = local.success ? [] : local.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
-      problems.push(...gateQuestionProblems([...before.methods, ...packet.methods]));
+      // J1 (2026-11-10): itt csak a csomagon belüli kapukérdés-ismétlődés; a korábbi csomagokkal ütközőt a `crossProblems` tétellel nevezi meg.
+      problems.push(...gateQuestionProblems(packet.methods));
       // Spec 2026-10-21-nyelvlecke-kiejtes (review #360): nyelvleckén a csomag szószedete a kiejtésgyakorló alapja — legalább 4 elem.
       if (language && (packet.glossary?.length ?? 0) < GLOSSARY_MIN_PER_PACKET) problems.push(`glossary: nyelvleckén legalább ${GLOSSARY_MIN_PER_PACKET} szószedet-elem kell (most ${packet.glossary?.length ?? 0}) — a fejezet tanított idegen szavai / kifejezései, példamondattal.`);
       problems.push(...quizCorrectIndexProblems(packet.quiz));
@@ -664,6 +672,26 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // Spec 2026-10-20-elakadas-r3-ismetlodo-hiba: az előző kísérlet hibalistájának lenyomata (elakadás-felismerés).
     let previousIssueKey: string | null = null;
     let sameIssueRuns = 0;
+    // J1: a megakadt kész csomag javítási alap. A csomagot a vak kvízszűrő már a tartalék terhére szűkíthette, ezért amíg a javítás
+    // ebből az alapból halad (`seeded`), az elfogadási minimum a mentő séma; teljes újraírásnál újra a tartalékos séma él.
+    let seeded = false;
+    if (seed && !packet && !reviewBase) {
+      const base = salvageSchema.safeParse(seed.packet);
+      // Review #414: a jogosultság azonosító szerint kulcsolt — a javítási alapban az azonosító a HÁROM bankon át együtt legyen egyedi,
+      // különben egy feladat és egy kvíztétel közös azonosítója a másik tétel átírását is engedné (ilyenkor marad a teljes újraírás).
+      const seedIds = base.success ? BANKS.flatMap(bank => base.data[bank].map(item => item.id)) : [];
+      const uniqueSeedIds = base.success && new Set(seedIds).size === seedIds.length;
+      const seedPlan = base.success && uniqueSeedIds ? repairPermissions(seed.issues, base.data) : undefined;
+      // Előbb modellhívás nélkül: ha a gépi normalizálás (ismétlődő tétel kivétele a tartalék terhére) a kész csomagot a valódi
+      // előzményekhez mérve érvényessé teszi, a csomag javítókör nélkül átvehető.
+      const settledSeed = base.success ? structuredClone(base.data) : undefined;
+      if (settledSeed && validate(settledSeed).length === 0) packet = settledSeed;
+      else if (base.success && seedPlan?.allows.length && !seedPlan.packetLevel.length) {
+        repairBase = base.data; previous = base.data; seeded = true;
+        repairAllowed = new Map<string, string[] | "*">(seedPlan.allows.map(a => [a.itemId, a.fields] as const));
+        errors = `${packetCounts(base.data)}; elvárt: methods=${methodKinds.length}, tasks=${taskTarget}, quiz=${quizTarget}. ${seed.issues.join("; ")}`;
+      }
+    }
     // Spec 2026-09-19: three attempts per packet — on 36–48 concept maps a second miss
     // on one packet killed whole runs (studio_jobs 41a94054, 222202f1, 4f853db8).
     for (let attempt = 0; !packet && attempt < PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS; attempt++) {
@@ -722,7 +750,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         if (autofix.fixes.length) { candidate = autofix.packet; deps.onToolFix?.("bank-packet-autofix", autofix.fixes); }
       } catch (error) { toolFailure = `a csomag alakja hibás (az előfeldolgozó nem tudta értelmezni): ${error instanceof Error ? error.message : String(error)}`; }
       previous = candidate;
-      const parsed = toolFailure ? undefined : packetSchema.safeParse(candidate);
+      const parsed = toolFailure ? undefined : (seeded ? salvageSchema : packetSchema).safeParse(candidate);
       let issues: string[];
       if (toolFailure || !parsed) issues = [toolFailure ?? "a csomag alakja hibás"];
       else if (!parsed?.success) issues = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
@@ -794,6 +822,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         // tételcserével nem javítható → teljes újraírás, nem elvesztegetett javító kör.
         const plan = parsed?.success && uniqueIds ? repairPermissions(issues, parsed!.data) : { allows: [] as RepairPermission[], packetLevel: issues };
         repairBase = parsed?.success && uniqueIds && plan.allows.length && !plan.packetLevel.length ? parsed!.data : undefined;
+        if (!repairBase) seeded = false; // J1: teljes újraírás következik — arra a tartalékos séma vonatkozik
         bindingRepairIds = new Set(repairBase?.tasks.filter(t => t.sectionIndex !== unit.sectionIndex || t.coversConceptIds.some(id => !unit.conceptIds.includes(id))).map(t => t.id));
         repairAllowed = repairBase ? new Map<string, string[] | "*">([
           ...[...(allowedReviewIds ?? [])].map(id => [id, "*"] as const),
@@ -823,6 +852,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         deps.onToolFix?.("quiz-blind", [`${unit.sectionIndex + 1}. fejezet: ${removed.length} kvíztétel kivéve a vak előszűrő szerint (${removed.map((id) => failed.get(id)!).join(" | ").slice(0, 600)})${kept.length ? `; ${kept.length} a padló / a csomagszabályok miatt bent maradt` : ""}`]);
       }
     }
+    // J1: a bélyegzés ELŐTTI csomag (a modell saját azonosítóival) — keresztütközésnél ez a célzott javítás alapja.
+    const raw = structuredClone(packet) as PacketContent;
     // H52: a nyitott aritmetikai lelet a VÉGLEGES azonosítóval jut a hívóhoz (a modell azonosítója lent lecserélődik).
     const originalIds = { methods: packet.methods.map(i => i.id), tasks: packet.tasks.map(i => i.id), quiz: packet.quiz.map(i => i.id) };
     // IDs are scoped to the exact source/teaching version; reused packets retain them. Review #379: az átvett, már ezzel a hash-sel
@@ -849,7 +880,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
     checkpoint.parts[hash] = packet;
     if (reviewFeedback.length) checkpoint.reviewedHashes![baseHash] = hash;
     await deps.save?.(checkpoint);
-    return { packet, hash };
+    return { packet, hash, raw };
   };
   // Spec 2026-09-19 (mérve run 525b2797: 10 csomag SOROSAN 1 795 s): a csomagok függetlenek, ezért
   // legfeljebb `concurrency` egyszerre épül. Az egyszerre készülők nem látják egymást, ezért a
@@ -876,10 +907,16 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
     const built = settled.map((s) => (s as PromiseFulfilledResult<Awaited<ReturnType<typeof buildUnit>>>).value);
     for (const [i, result] of built.entries()) {
       let { packet } = result;
-      if (i > 0 && crossProblems(packet, { methods, tasks, quiz }).length) {
+      // Spec 2026-11-10-gyartas-meres (J1; mérve: job e375332b — két csomag teljes újragyártása 7 perc a bank 18,5 percéből, miközben
+      // ugyanazt a hibát a célzott javítómód 7 mp alatt javította): az ütköző csomag javítási alapként megy vissza. A hibák a
+      // bélyegzés előtti (`raw`) csomagra számolva a modell saját azonosítóit nevezik meg.
+      const conflicts = i > 0 ? crossProblems(result.raw, { methods, tasks, quiz }) : [];
+      if (conflicts.length) {
         progress({ done: start + i, total: plan.units.length, current: chunk[i].sectionIndex, building: [chunk[i].sectionIndex] });
+        const targeted = !repairPermissions(conflicts, result.raw).packetLevel.length;
+        logger.info(`[STUDIO] Bank keresztütközés (${chunk[i].sectionIndex + 1}. fejezet): ${conflicts.length} hiba → ${targeted ? "célzott javítás" : "teljes újragyártás"}: ${conflicts.slice(0, 3).join("; ").slice(0, 400)}`);
         delete checkpoint.parts[result.hash];
-        ({ packet } = await buildUnit(start + i, chunk[i], { methods: [...methods], tasks: [...tasks], quiz: [...quiz] }));
+        ({ packet } = await buildUnit(start + i, chunk[i], { methods: [...methods], tasks: [...tasks], quiz: [...quiz] }, { packet: result.raw, issues: conflicts }));
       }
       methods.push(...packet.methods); tasks.push(...packet.tasks); quiz.push(...packet.quiz); glossary.push(...packet.glossary);
     }

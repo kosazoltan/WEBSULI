@@ -18,6 +18,9 @@
 - **TA7** `client/public/service-worker.js` `notificationclick`: `const target = new URL(urlToOpen, self.location.origin).href;`
   az összehasonlítás és az `openWindow` ezt használja.
 - **TA8** `shared/newsletter.ts`: `[...t].slice(0, 69).join("")`, a hossz kódpontban mérve.
+- **TA9** (utólagos tétel) `client/src/pages/Preview.tsx`: az URL + gombok csoportjának osztálya `hidden sm:flex items-center
+  gap-2 flex-1 max-w-xl` (a `min-w-0` törölve). Új forrásőr a `tests/hibavadaszat-a.test.ts`-ben. Ellenőrzés: `npm.cmd run check`,
+  a célzott teszt, majd a telepítés után élesben 847 px széles ablakban `scrollWidth === clientWidth` az előnézeti oldalon.
 - **Tesztek (új):** `tests/hibavadaszat-a.test.ts` — `matchRightOrder` (permutáció, determinisztikus, ≥ 3 párnál nem azonos),
   `gradeTypedAnswers` mértékegység-határ (H5), `speechStartTimeoutMs`, `newsletterSubject` emojival (nincs árva helyettesítő),
   forrásőr: a `service-worker.js` `new URL(` feloldást használ; a `queryClient.ts` nem tartalmaz `includes('fetch')`-et.

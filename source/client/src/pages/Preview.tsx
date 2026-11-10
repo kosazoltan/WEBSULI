@@ -194,8 +194,8 @@ export default function Preview() {
             </Button>
           </div>
           
-          {/* URL Display + Action Buttons */}
-          <div className="hidden sm:flex items-center gap-2 flex-1 min-w-0 max-w-xl">
+          {/* URL Display + Action Buttons. Nincs `min-w-0`: ha a gombok nem férnek ki, a csoport új sorba törik (nem lóg ki a lapról). */}
+          <div className="hidden sm:flex items-center gap-2 flex-1 max-w-xl">
             <div className="flex-1 bg-muted/50 px-3 py-1.5 rounded-md text-xs font-mono text-muted-foreground truncate border">
               {fullUrl}
             </div>
