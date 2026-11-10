@@ -208,10 +208,11 @@ export const experiencePacketSchema = z.object({
     if (new Set(items.map(i => i.id)).size !== items.length) ctx.addIssue({ code: "custom", path: [bank], message: "Ismétlődő tételazonosító." });
   }
   // Spec 2026-09-30 (U2, C9): az ismétlődés a MÁSODIK tételt nevezi meg (javítási jogosultság), az elsőt hivatkozza.
-  for (const [bank, items] of [["tasks", e.tasks.map(t => ({ id: t.id, text: t.q }))], ["quiz", e.quiz.map(q => ({ id: q.id, text: q.question }))]] as const) {
+  // Spec 2026-11-10-gyartas-meres (J1b): a kvíz kulcsa `quizDuplicateKey` — a kiválasztó kérdés tartalma az opciókban van.
+  for (const [bank, items] of [["tasks", e.tasks.map(t => ({ id: t.id, key: questionKey(t.q) }))], ["quiz", e.quiz.map(q => ({ id: q.id, key: quizDuplicateKey(q) }))]] as const) {
     const seen = new Map<string, string>();
     for (const item of items) {
-      const key = questionKey(item.text), first = seen.get(key);
+      const key = item.key, first = seen.get(key);
       if (first !== undefined) ctx.addIssue({ code: "custom", path: [bank], message: `${item.id}: Ismétlődő kérdés (megegyezik: ${first}); valódi változat szükséges.` });
       else seen.set(key, item.id);
     }
@@ -255,6 +256,19 @@ export type LessonBankPlan = z.infer<typeof bankPlanSchema>;
  */
 export function questionKey(text: string): string {
   return text.normalize("NFC").toLocaleLowerCase("hu").replace(/[×*]/g, "·").replace(/÷/g, ":").replace(/[−–]/g, "-").replace(/[^\p{L}\p{N}+\-·:/]/gu, "");
+}
+/**
+ * Spec 2026-11-10-gyartas-meres (J1b): a kvízkérdés ismétlődés-kulcsa. A kiválasztó kérdés („Melyik állítás hamis?”) tartalma az
+ * OPCIÓKBAN van: két ilyen kérdés eltérő opciókészlettel két különböző kérdés (mérve 2026-11-10: 7 bank-javítókörből 4 ilyen hamis
+ * ismétlődés volt). Zárt minta, nem heurisztika — minden más kérdés kulcsa változatlanul a `questionKey`; azonos kiválasztó kérdés
+ * azonos opciókészlettel (bármilyen sorrendben) továbbra is ismétlődés.
+ */
+// A `questionKey` kimenetére illik (kisbetűs, szóköz és írásjel nélkül): „melyik [az] állítás [a] hamis” vagy „melyik [az] igaz állítás”.
+const SELECTOR_STEM = /^melyik(?:az?)?(?:(?:állítás|mondat|kijelentés|megállapítás)a?(?:hamis|igaz|helyes|helytelen|téves)|(?:hamis|igaz|helyes|helytelen|téves)(?:állítás|mondat|kijelentés|megállapítás))$/u;
+export function quizDuplicateKey(q: { question: string; options?: readonly string[] }): string {
+  const stem = questionKey(q.question);
+  if (!q.options?.length || !SELECTOR_STEM.test(stem)) return stem;
+  return `${stem}\u0000${q.options.map(questionKey).sort().join("\u0001")}`;
 }
 /** Spec 2026-09-30 (U2): a bank csak a tanítás SZÖVEGÉRE hivatkozhat — ábra-sorszámra, „az ábrán látható” fordulatra nem (a bank ábra nélkül épül). */
 // A JS `\b` csak ASCII-betűnél határ, ezért ékezetes szónál lookaround kell (az előző karakter `(?:^|[^\p{L}])`, a következő `(?!\p{L})`; visszatekintés nincs — régi Safari).
