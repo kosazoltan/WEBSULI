@@ -5,7 +5,7 @@ import { lessonSchema } from "../shared/lesson-schema";
 import { clipSource, type Clip2 } from "../shared/lesson-clip";
 import { CLIP_BAND_STYLE, clipBandFor } from "../shared/clip-style";
 import {
-  CLIP_FRESH_DAYS, CLIP_MAX_ATTEMPTS, CLIP_VIDEO_MAX_BYTES, clipDailyLimit, clipMediaBudgetBytes, clipSourceHash, clipSystemPrompt, clipTodo, clipsMode,
+  CLIP_FRESH_DAYS, CLIP_MAX_ATTEMPTS, CLIP_PARALLEL, CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, clipDailyLimit, clipMediaBudgetBytes, clipSourceHash, clipSystemPrompt, clipTodo, clipsMode,
   CLIP_SPEECH_ATTEMPTS, eligibleSections, lessonClipsResponse, makeChapterClip, runClipRound, servableClips, speakChecked, speechDistance, type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
 import { mediaId } from "../server/lesson-clip-media";
@@ -56,8 +56,7 @@ function fakeDeps(over: Partial<ClipDeps> & { answers?: string[]; verdicts?: boo
     still: async (image) => Buffer.concat([Buffer.from("webp:"), image.bytes]),
     speech: async (text, voice) => { calls.speech.push({ text, voice: voice.name }); return Buffer.from(`hang:${text}:${calls.speech.length}`); },
     audioMs: () => 6400,
-    video: async (image, prompt, seconds) => { calls.video.push({ prompt, seconds }); return Buffer.concat([Buffer.from("nyers:"), image.bytes]); },
-    shrink: async (video) => Buffer.concat([Buffer.from("kicsi:"), video]),
+    video: async (image, prompt, seconds) => { calls.video.push({ prompt, seconds }); return Buffer.concat([Buffer.from("kicsi:"), image.bytes]); },
     ...over,
   };
   return deps;
@@ -136,8 +135,8 @@ test("a kezdőkép minőségkapuja: egy újrapróba; kétszeres bukásnál a kis
 test("a mozgókép hibája nem buktatja a kisfilmet: a jelenet állóképes, kameramozgással", async () => {
   const cases: Array<[string, Partial<ClipDeps>]> = [
     ["a videószolgáltató hibázik", { video: async () => { throw new Error("HTTP 500"); } }],
-    ["nincs ffmpeg", { shrink: async () => null }],
-    ["az átkódolt klip túl nagy", { shrink: async () => Buffer.alloc(CLIP_VIDEO_MAX_BYTES + 1) }],
+    ["nincs ffmpeg", { video: async () => null }],
+    ["az átkódolt klip túl nagy", { video: async () => Buffer.alloc(CLIP_VIDEO_MAX_BYTES + 1) }],
   ];
   for (const [name, over] of cases) {
     const { store, media } = memoryStore([]);
@@ -243,6 +242,19 @@ test("sikertelen fejezet legfeljebb két körben próbálkozik; a megváltozott 
   assert.deepEqual(clipTodo(changed, rows).map((t) => [t.sectionIndex, t.attempts]), [[1, 0]]);
 });
 
+test("memóriaőr és terhelés: egyszerre egy fejezet készül; túl nagy memóriafoglalásnál a kör kimarad", async () => {
+  assert.equal(CLIP_PARALLEL, 1, "élesben mérve: két párhuzamos fejezet betöltötte az 512 MB-os példány memóriáját");
+  const { store, rows } = memoryStore([makeLesson("pub")]);
+  const deps = fakeDeps();
+  assert.equal(await runClipRound(store, deps, "auto", { ...OPTS, rss: () => CLIP_RSS_LIMIT_BYTES + 1 }), null);
+  assert.equal(deps.calls.chat.length, 0, "a kimaradt kör semmit sem hív és semmit sem költ");
+  assert.equal(rows.length, 0);
+  let active = 0, peak = 0;
+  const slow = fakeDeps({ chat: async () => { peak = Math.max(peak, ++active); await new Promise((r) => setTimeout(r, 5)); active--; return draft(); } });
+  assert.equal((await runClipRound(store, slow, "auto", { ...OPTS, rss: () => CLIP_RSS_LIMIT_BYTES - 1 }))!.made, 2);
+  assert.equal(peak, 1, "a fejezetek egymás után készülnek");
+});
+
 test("napi plafon és tárkeret: a plafon fölötti lecke kimarad, betelt tárnál a gyártás megáll", async () => {
   const lessons = [makeLesson("b", new Date(NOW.getTime() - 7_200_000)), makeLesson("a")];
   const capped = memoryStore(lessons);
@@ -250,8 +262,8 @@ test("napi plafon és tárkeret: a plafon fölötti lecke kimarad, betelt tárn�
   assert.deepEqual([...new Set(capped.rows.map((r) => r.lessonId))], ["a"], "a legfrissebb lecke kap gyártást");
   const full = memoryStore(lessons);
   const report = await runClipRound(full.store, fakeDeps(), "auto", { ...OPTS, mediaBudgetBytes: 1 });
-  // Az első két (párhuzamos) fejezet még a keret alatt indul; utána a tár betelt, és a gyártás megáll.
+  // Az első fejezet még a keret alatt indul; utána a tár betelt, és a gyártás megáll.
   assert.equal(report!.stoppedByBudget, true);
-  assert.equal(report!.made, 2);
+  assert.equal(report!.made, 1);
   assert.deepEqual([...new Set(full.rows.map((r) => r.lessonId))], ["a"]);
 });

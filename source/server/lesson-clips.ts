@@ -16,8 +16,13 @@ import type { ClipMediaKind } from "./lesson-clip-media";
  */
 export const CLIP_FRESH_DAYS = 3;
 export const CLIP_MAX_ATTEMPTS = 2;
-/** Egyszerre ennyi fejezet készül (egy fejezet jelenetei párhuzamosak). */
-export const CLIP_PARALLEL = 2;
+/**
+ * Egyszerre ennyi fejezet készül (egy fejezet jelenetei párhuzamosak). Élesben mérve (2026-11-10): két fejezet párhuzamos
+ * mozgóképeivel a 512 MB-os példány memóriája betelt, és a szerver újraindult — ezért egy.
+ */
+export const CLIP_PARALLEL = 1;
+/** Ennyi saját memória fölött a kör kimarad (a példány korlátja 512 MB; az átkódolás további ~110 MB-ot kér). */
+export const CLIP_RSS_LIMIT_BYTES = 360 * 1024 * 1024;
 /** Egy tárolt mozgókép legfeljebb ekkora lehet (átkódolás után) — fölötte a jelenet állóképes marad. */
 export const CLIP_VIDEO_MAX_BYTES = 2_500_000;
 
@@ -113,9 +118,11 @@ export type ClipDeps = {
   hear?: (audio: Buffer) => Promise<string>;
   /** A hang hossza ezredmásodpercben (0: nem megállapítható). */
   audioMs(bytes: Buffer): number;
-  video?: (image: { bytes: Buffer; mime: string }, prompt: string, seconds: number) => Promise<Buffer>;
-  /** A nyers mozgókép átkódolása kicsire; null: nem sikerült (nincs ffmpeg). */
-  shrink(video: Buffer): Promise<Buffer | null>;
+  /**
+   * A jelenet mozgóképe MÁR ÁTKÓDOLVA, kicsiben; null: nem tárolható (nincs ffmpeg / az átkódolás nem sikerült). A nyers (4–17 MB-os)
+   * klip soha nem kerül a folyamat memóriájába: a szolgáltató lemezre tölti, és onnan kódolja át.
+   */
+  video?: (image: { bytes: Buffer; mime: string }, prompt: string, seconds: number) => Promise<Buffer | null>;
 };
 
 const OVERLAYS = `- {"kind":"title","text":"<legfeljebb 70 karakter>"} — a kisfilm címe; az ELSŐ jelenet ábrája mindig ez.
@@ -262,7 +269,7 @@ export async function makeChapterClip(input: ClipInput, band: DesignThemeId, dep
       if (deps.video) {
         try {
           const seconds = Math.min(12, Math.max(4, Math.ceil((ms ?? scene.say.length * 65) / 1000)));
-          const small = await deps.shrink(await deps.video(image, `${scene.motion} Keep exactly the art style, colours and characters of the first frame. Smooth, lively cartoon animation. No text, no captions.`, seconds));
+          const small = await deps.video(image, `${scene.motion} Keep exactly the art style, colours and characters of the first frame. Smooth, lively cartoon animation. No text, no captions.`, seconds);
           if (small && small.length <= CLIP_VIDEO_MAX_BYTES) { video = await put("video", "video/mp4", small); stats.videos++; }
           else { stats.videoFailures++; logger.warn(`[lesson-clips] a mozgókép nem tárolható (${small ? `${small.length} bájt` : "nincs ffmpeg / az átkódolás nem sikerült"}) — a jelenet állóképes`); }
         } catch (error) {
@@ -290,8 +297,11 @@ async function inBatches<T>(items: readonly T[], size: number, work: (item: T) =
 
 export type ClipRoundReport = { made: number; failed: number; lessons: number; videos: number; stoppedByBudget: boolean };
 /** A háttérfolyamat egy köre, zár alatt: a friss leckék hiányzó kisfilmjei a napi plafonig és a tárkeretig. */
-export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipMode, opts: { dailyLimit: number; mediaBudgetBytes: number; model: string }): Promise<ClipRoundReport | null> {
+export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipMode, opts: { dailyLimit: number; mediaBudgetBytes: number; model: string; rss?: () => number }): Promise<ClipRoundReport | null> {
   if (mode !== "auto") return null;
+  // Memóriaőr: ha a folyamat már sokat foglal, a kör kimarad — a gyártás soha nem dönthetik be a szervert.
+  const rss = opts.rss?.() ?? 0;
+  if (rss > CLIP_RSS_LIMIT_BYTES) { logger.warn(`[lesson-clips] a kör kimarad: a folyamat memóriája ${Math.round(rss / 1048576)} MB (határ: ${Math.round(CLIP_RSS_LIMIT_BYTES / 1048576)} MB)`); return null; }
   return store.exclusive(async () => {
     const report: ClipRoundReport = { made: 0, failed: 0, lessons: 0, videos: 0, stoppedByBudget: false };
     const today = new Set(await store.lessonsToday());
@@ -335,7 +345,7 @@ export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: 
   if (mode !== "auto" || started) return mode;
   started = true;
   const { deps, model } = makeDeps();
-  const opts = { dailyLimit: clipDailyLimit(env), mediaBudgetBytes: clipMediaBudgetBytes(env), model };
+  const opts = { dailyLimit: clipDailyLimit(env), mediaBudgetBytes: clipMediaBudgetBytes(env), model, rss: () => process.memoryUsage().rss };
   let running = false;
   const run = async () => {
     if (running) return;

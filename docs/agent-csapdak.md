@@ -377,5 +377,11 @@ Forrás: tulajdonosi visszajelzés („borzasztó”) → `docs/specs/2026-11-10
   látszottak. **Megelőzés 8:** mérőeszközt a mérés előtt ismert jó mintán kell ellenőrizni; ha a jó minta megbukik, a mérce a hibás.
 - **Tünet 9:** párhuzamos hívások a szolgáltató egyidejűségi korlátjába ütköztek (ElevenLabs: 3; HTTP 429), egy jelenet hang nélkül maradt.
 - **Megelőzés 9:** külső szolgáltató párhuzamos hívásai közös sorba állítóval, a mért korlát alatt; 429-re várakozás és újrapróba.
+- **Tünet 10 (éles hiba):** a gyártás bekapcsolása után az éles szerver 3–4 percenként újraindult: nyolc párhuzamos `ffmpeg`
+  (egyenként 171 MB) betöltötte az 512 MB-os példányt. A helyi próba nem mutatta ki — ott nincs memóriakorlát.
+- **Megelőzés 10:** háttérmunkát az éles példány KORLÁTJÁHOZ kell méretezni (`render.yaml` / a példány terve), nem a fejlesztői
+  géphez: alfolyamat csúcsmemóriáját mérni kell (`os.wait4` → `ru_maxrss`), nehéz lépés közös sorban, egyesével; nagy fájl lemezre,
+  nem memóriába; memóriaőr a kör elején. Új háttérmunka bekapcsolása után az első kört a Render memória- és eseménymérésével
+  azonnal ellenőrizni kell, és a kikapcsolásnak egy lépésben meg kell lennie.
 - **Tünet 3:** a hangminőséget az ügynök nem tudja füllel megítélni — a „természetes hang” állítás mérés nélkül feltételezés.
 - **Megelőzés 3:** hangról csak mérhető tényt szabad állítani (elkészült, hossz, modell, hangazonosító); a minőség a tulajdonos szemléje.
