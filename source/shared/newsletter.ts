@@ -37,7 +37,9 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 /** S2: a hírlevél tárgya — a keresztnév és a cikk címe (a cím vágva). */
 export function newsletterSubject(first: string, title: string): string {
   const t = title.trim().replace(/\s+/g, " ");
-  return `🔭 ${first}, mai felfedezésed: ${t.length > 70 ? `${t.slice(0, 69)}…` : t}`;
+  // Kódpont szerinti vágás: a `slice` félbevágna egy emojit (árva helyettesítő a levél tárgyában).
+  const points = [...t];
+  return `🔭 ${first}, mai felfedezésed: ${points.length > 70 ? `${points.slice(0, 69).join("")}…` : t}`;
 }
 
 /** S2: a hírlevél törzse a reggeli levél stílusában; minden külső szöveg escape-elve. */

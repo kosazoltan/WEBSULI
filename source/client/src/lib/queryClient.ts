@@ -218,7 +218,8 @@ export async function apiRequest<T = unknown>(
           throw new Error(`A kérés túllépte az időkorlátot (${timeout / 1000}s). Kérlek ellenőrizd az internetkapcsolatot!`, { cause: error });
         }
         
-        if (error instanceof TypeError && error.message.includes('fetch')) {
+        // A fetch minden TypeError-ja hálózati hiba — a szövege böngészőnként más (Chrome: „Failed to fetch”, Safari: „Load failed”).
+        if (error instanceof TypeError) {
           logger.error('[API REQUEST] Network error:', error.message);
           throw new Error('Hálózati hiba: Nincs internetkapcsolat vagy a szerver nem érhető el.', { cause: error });
         }
@@ -234,7 +235,7 @@ export async function apiRequest<T = unknown>(
         ? (error as { status?: unknown }).status
         : undefined;
       return (error instanceof Error && error.name === 'AbortError') ||
-             (error instanceof TypeError && error.message.includes('fetch')) ||
+             error instanceof TypeError ||
              (typeof status === "number" && status >= 500);
     }
   );

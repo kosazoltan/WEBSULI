@@ -186,7 +186,8 @@ export function containsExpressionState(haystack: string, want: string): boolean
 
 function unitPresent(answer: string, atomText: string, unit: string): boolean {
   const escaped = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
-  return new RegExp(`${escaped(atomText)}\\s*${escaped(fold(unit))}`, "u").test(fold(answer));
+  // Spec 2026-11-10-hibavadaszat A6: a mértékegység után nem folytatódhat betű, számjegy, kitevő vagy törtvonal — az „m” nem „mm”, „másodperc”, „m²” vagy „m/s”.
+  return new RegExp(`${escaped(atomText)}\\s*${escaped(fold(unit))}(?![\\p{L}\\d²³^/])`, "u").test(fold(answer));
 }
 
 /**

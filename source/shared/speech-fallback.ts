@@ -12,6 +12,12 @@ export const TTS_LANGS = ["hu", "en", "de", "fr", "es", "it", "pl", "ro", "sk", 
 export const TTS_AUDIO_MAX_CHARS = 300;
 /** Ennyi idő alatt el kell indulnia a böngésző kimondásának, különben a tartalék szól. */
 export const SPEECH_START_TIMEOUT_MS = 3000;
+/** Hálózati (nem helyi) böngészőhang lassabban indul: annak több idő jár, mielőtt a tartalék levágná. */
+export const SPEECH_START_TIMEOUT_REMOTE_MS = 6000;
+/** Az indulási őr ideje a kiválasztott hang szerint (`localService === false`: hálózati hang; ismeretlen: az alapérték). */
+export function speechStartTimeoutMs(localService: boolean | undefined): number {
+  return localService === false ? SPEECH_START_TIMEOUT_REMOTE_MS : SPEECH_START_TIMEOUT_MS;
+}
 
 /** A lecke nyelvkódja a TTS-szolgáltatás kódjára: az alapnyelv (en-GB → en), ha támogatott; egyébként null. */
 export function ttsLang(language: string): string | null {

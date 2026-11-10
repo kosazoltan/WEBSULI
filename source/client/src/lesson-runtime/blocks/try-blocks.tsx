@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import { ArrowDown, ArrowUp, CheckCircle2, RotateCcw, XCircle } from "lucide-react";
 
 import type { TryKind } from "@shared/lesson-schema";
+import { matchRightOrder } from "@shared/match-order";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TrySnapshot } from "../useLessonProgress";
@@ -184,6 +185,8 @@ function Match({ spec, persisted, onPersist }: TryProps) {
         .map((p) => ({ left: p.left as string, right: p.right as string }))
     : [];
   const restored = persisted?.kind === "match" ? persisted : null;
+  // Spec 2026-11-10-hibavadaszat A5: a jobb oszlop kevert sorrendben jelenik meg; az azonosító az eredeti index marad.
+  const rightOrder = matchRightOrder(pairs);
   const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
   const [matched, setMatched] = useState<Set<number>>(() => new Set(restored?.matched ?? []));
   const [failed, setFailed] = useState<Set<number>>(new Set());
@@ -234,7 +237,7 @@ function Match({ spec, persisted, onPersist }: TryProps) {
           ))}
         </div>
         <div className="space-y-2">
-          {pairs.map((pair, i) => (
+          {rightOrder.map((i) => { const pair = pairs[i]; return (
             <button
               key={`r-${i}`}
               onClick={() => pickRight(i)}
@@ -246,7 +249,7 @@ function Match({ spec, persisted, onPersist }: TryProps) {
             >
               {pair.right}
             </button>
-          ))}
+          ); })}
         </div>
       </div>
       {matched.size === pairs.length && (

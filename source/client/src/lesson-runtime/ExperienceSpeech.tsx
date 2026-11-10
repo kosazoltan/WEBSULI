@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, Square, Volume2 } from "lucide-react";
 import { pronunciationVerdict, type PronunciationVerdict } from "@shared/pronunciation";
-import { hasVoiceFor, isSoftSpeechError, SPEECH_START_TIMEOUT_MS, ttsAudioUrl } from "@shared/speech-fallback";
+import { hasVoiceFor, isSoftSpeechError, speechStartTimeoutMs, ttsAudioUrl } from "@shared/speech-fallback";
 
 type Alternative = { transcript: string };
 type Recognition = {
@@ -94,7 +94,8 @@ if (typeof window !== "undefined" && "speechSynthesis" in window && typeof windo
 let activeFallback: HTMLAudioElement | null = null;
 let cancelActiveSpeech: (() => void) | null = null;
 
-function stopSpeech(): void {
+/** Minden hang leállítása: böngészőhang, tartalék MP3 és az indulási őr (új gombnyomás, fülváltás, a lecke elhagyása). */
+export function stopSpeech(): void {
   cancelActiveSpeech?.();
   cancelActiveSpeech = null;
   if (activeFallback) { activeFallback.pause(); activeFallback = null; }
@@ -131,15 +132,19 @@ export function speakText(text: string, language: string, rate: number, onError?
   const finish = () => { settled = true; clearTimeout(watchdog); if (cancelActiveSpeech === cancel) cancelActiveSpeech = null; };
   const cancel = () => { settled = true; clearTimeout(watchdog); };
   const fallBack = () => { finish(); if (synth.speaking || synth.pending) synth.cancel(); playFallback(text, language, rate, onError); };
-  // Néma motor (pl. Google-szolgáltatás nélküli Android): ha a kimondás nem indul el, a tartalék szól.
-  const watchdog = setTimeout(() => { if (!settled && !started) fallBack(); }, SPEECH_START_TIMEOUT_MS);
+  // Néma motor (pl. Google-szolgáltatás nélküli Android): ha a kimondás nem indul el, a tartalék szól. Hálózati hangnak több idő jár.
+  const watchdog = setTimeout(() => { if (!settled && !started) fallBack(); }, speechStartTimeoutMs(voice?.localService));
   cancelActiveSpeech = cancel;
   utterance.onstart = () => { started = true; };
+  // Egyes motorok `onstart` nélkül szólnak: a szóhatár-esemény is indulás.
+  utterance.onboundary = () => { started = true; };
   utterance.onend = () => { if (!settled) finish(); };
   utterance.onerror = (e: SpeechSynthesisErrorEvent) => {
     if (settled) return;
-    // A megszakítás (új gombnyomás, fülváltás) nem hiba: se tartalék, se üzenet.
-    if (isSoftSpeechError(e?.error)) { finish(); return; }
+    // A megszakítás (új gombnyomás, fülváltás) nem hiba: se tartalék, se üzenet. Az új gombnyomás és a fülváltás ezt a kimondást előbb
+    // lezárja (`settled`), ide tehát csak a motor saját megszakítása jut: ha a kimondás el sem indult (Android Chrome: a `cancel()` utáni
+    // azonnali `speak()`), a tanuló semmit sem hallott — a tartalék szól.
+    if (isSoftSpeechError(e?.error) && started) { finish(); return; }
     fallBack();
   };
   synth.speak(utterance);

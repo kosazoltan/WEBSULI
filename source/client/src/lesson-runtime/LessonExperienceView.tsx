@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { experienceRoundSizes, type LessonExperience } from "@shared/lesson-experience";
 import { evaluateOpenAnswer, scoreSummary, sampleTaskIds } from "@shared/lesson-experience-score";
 import { CognitiveMethods } from "./CognitiveMethods";
-import { DictationButton, PronounceButton, SpeakButton } from "./ExperienceSpeech";
+import { DictationButton, PronounceButton, SpeakButton, stopSpeech } from "./ExperienceSpeech";
 import { useExperienceRound } from "./useExperienceRound";
 import { useResultReport } from "./resultReport";
 import { LearningMode, LearningPager, useLearningPreference } from "./LearningControls";
@@ -86,7 +86,8 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   useResultReport(lessonId, "tasks", taskState.round, storageKey, arbiterSettled);
   useResultReport(lessonId, "quiz", quizState.round, storageKey);
   const quizPoints = quiz.filter(q => quizState.round.picks[q.id] === q.correctIndex).length;
-  useEffect(() => () => { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }, [tab]);
+  // Fülváltáskor és a lecke elhagyásakor minden hang leáll — a tartalék MP3 és az indulási őr is (spec 2026-11-10-hibavadaszat A1).
+  useEffect(() => () => { stopSpeech(); }, [tab]);
   const seconds = (round: typeof taskState.round) => Math.max(0, Math.floor(((round.finishedAt ?? Date.now()) - round.startedAt) / 1000));
   return <div className="fusion-view" data-quiet={quiet} data-quiz-guided={false}>
     <nav className="fusion-tabs" role="tablist" aria-label="A tananyag oldalai" data-tabs={tabs.length}>{tabs.map(({ id, label, icon: Icon }, i) => <button key={id} id={`${prefix}-fusion-tab-${id}`} role="tab" aria-selected={tab === id} aria-controls={`${prefix}-fusion-panel-${id}`} tabIndex={tab === id ? 0 : -1} onClick={() => changeTab(id)} onKeyDown={event => {

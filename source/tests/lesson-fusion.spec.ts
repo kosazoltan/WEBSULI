@@ -169,6 +169,81 @@ test("speech fallback: a megszakítás (interrupted) nem hiba — nincs tartalé
   await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
 });
 
+// Spec 2026-11-10-hibavadaszat A2: a motor az el nem indult kimondást jelzi megszakítottnak (Android Chrome) — a tanuló semmit sem hallott.
+test("speech fallback: az el nem indult kimondás megszakítása (interrupted) → a szerver hangja szól", async ({ page }) => {
+  await page.addInitScript(() => {
+    const played: string[] = [];
+    Object.defineProperty(window, "__played", { value: played });
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) { played.push(this.src); return Promise.resolve(); };
+    Object.defineProperty(window, "speechSynthesis", { value: {
+      speaking: false, pending: false, cancel() {}, getVoices: () => [],
+      speak(u: SpeechSynthesisUtterance) { setTimeout(() => u.onerror?.({ error: "interrupted" } as SpeechSynthesisErrorEvent), 50); },
+    } });
+  });
+  await serveFallbackAudio(page);
+  await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: glossaryLesson() }));
+  await page.goto("/__lesson-runtime-probe?candidate=1");
+  await page.getByTestId("pronounce-entry").click();
+  await page.getByRole("button", { name: "triangle meghallgatása", exact: true }).click();
+  const played = () => page.evaluate(() => (window as unknown as { __played: string[] }).__played);
+  await expect.poll(async () => (await played()).length, { timeout: 2000 }).toBe(1);
+  expect(new URL((await played())[0]).pathname).toBe("/api/tts/audio");
+  await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
+});
+
+// Spec 2026-11-10-hibavadaszat A5: a párosító jobb oszlopa nem a bal oszlop sorrendjében áll; a párosítás az eredeti párokkal működik.
+test("párosító: a jobb oszlop kevert sorrendű, a párok mégis helyesen köthetők össze", async ({ page }) => {
+  await page.goto("/__lesson-runtime-probe?fusion=1&classroom=5&match=4");
+  const pairs = [["kutya", "dog"], ["macska", "cat"], ["ló", "horse"], ["madár", "bird"]];
+  const match = page.locator('[data-try="match"]').first();
+  await expect(match).toBeVisible();
+  const columns = match.locator(".grid > div");
+  const left = await columns.nth(0).locator("button").allInnerTexts();
+  const right = await columns.nth(1).locator("button").allInnerTexts();
+  expect(left).toEqual(pairs.map(([l]) => l));
+  expect([...right].sort()).toEqual(pairs.map(([, r]) => r).sort());
+  expect(right).not.toEqual(pairs.map(([, r]) => r));
+  // Hibás pár: nem lesz kész; helyes párok: mind megvan.
+  await columns.nth(0).getByRole("button", { name: "kutya", exact: true }).click();
+  await columns.nth(1).getByRole("button", { name: "cat", exact: true }).click();
+  await expect(match.getByText("Minden pár megvan!")).toHaveCount(0);
+  for (const [l, r] of pairs) {
+    await columns.nth(0).getByRole("button", { name: l, exact: true }).click();
+    await columns.nth(1).getByRole("button", { name: r, exact: true }).click();
+  }
+  await expect(match.getByText("Minden pár megvan!")).toBeVisible();
+});
+
+// Spec 2026-11-10-hibavadaszat A1: fülváltáskor a tartalék hang és az indulási őr is leáll.
+for (const [name, mode] of [["a már szóló tartalék hang megáll", "playing"], ["a néma motor őre nem indít hangot a másik fülön", "pending"]] as const) {
+  test(`speech fallback: fülváltás — ${name}`, async ({ page }) => {
+    await page.addInitScript((mode) => {
+      const log = { played: 0, paused: 0 };
+      Object.defineProperty(window, "__audio", { value: log });
+      HTMLMediaElement.prototype.play = function () { log.played += 1; return Promise.resolve(); };
+      HTMLMediaElement.prototype.pause = function () { log.paused += 1; };
+      Object.defineProperty(window, "speechSynthesis", { value: {
+        speaking: false, pending: false, cancel() {}, getVoices: () => [],
+        speak(u: SpeechSynthesisUtterance) { if (mode === "playing") setTimeout(() => u.onerror?.({ error: "synthesis-failed" } as SpeechSynthesisErrorEvent), 50); },
+      } });
+    }, mode);
+    await serveFallbackAudio(page);
+    await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: glossaryLesson() }));
+    await page.goto("/__lesson-runtime-probe?candidate=1");
+    await page.getByTestId("pronounce-entry").click();
+    await page.getByRole("button", { name: "triangle meghallgatása", exact: true }).click();
+    const audio = () => page.evaluate(() => (window as unknown as { __audio: { played: number; paused: number } }).__audio);
+    if (mode === "playing") await expect.poll(async () => (await audio()).played, { timeout: 2000 }).toBe(1);
+    await page.getByRole("tab", { selected: false }).first().click();
+    if (mode === "playing") {
+      await expect.poll(async () => (await audio()).paused).toBe(1);
+    } else {
+      await page.waitForTimeout(3500);
+      expect((await audio()).played).toBe(0);
+    }
+  });
+}
+
 test("speech fallback: ha a szerver hangja sem szól, érthető üzenet jelenik meg", async ({ page }) => {
   await page.addInitScript(() => {
     HTMLMediaElement.prototype.play = function () { return Promise.reject(new Error("NotSupportedError")); };
