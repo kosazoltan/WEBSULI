@@ -72,6 +72,14 @@ test("A4 — forrásőr: a hálózati hiba felismerése nem függ a böngésző 
   assert.equal(client.match(/error instanceof TypeError/g)?.length, 2);
 });
 
+test("A9 — forrásőr: az előnézet eszköztárának gombcsoportja új sorba törhet (nincs min-w-0)", () => {
+  const preview = source("../client/src/pages/Preview.tsx");
+  const group = preview.match(/<div className="([^"]*)">\s*<div className="[^"]*truncate[^"]*">\s*\{fullUrl\}/);
+  assert.ok(group, "az URL + gombok csoportja megvan");
+  assert.match(group[1], /\bflex-1\b/);
+  assert.doesNotMatch(group[1], /\bmin-w-0\b/);
+});
+
 test("A7 — forrásőr: az értesítés célcíme az oldal eredetéhez oldódik fel", () => {
   const worker = source("../client/public/service-worker.js");
   assert.match(worker, /new URL\(event\.notification\.data\?\.url \|\| '\/', self\.location\.origin\)\.href/);

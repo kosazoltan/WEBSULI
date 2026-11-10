@@ -33,6 +33,11 @@ Ide csak a megerősített hiba került; a nem igazolható vagy eszközpróbát i
   relatív `'/'` értékkel hasonlítódik össze. Javítás: a cél URL feloldása a `self.location.origin`-hez.
 - **A8 · a hírlevél tárgya félbevágott emojit kaphat.** `shared/newsletter.ts:40`: `slice(0, 69)` szétvághat egy
   helyettesítő párt. Javítás: kódpont szerinti vágás.
+- **A9 · az előnézet eszköztára vízszintes görgetősávot okoz (utólagos tétel, 2026-11-10, a Kanban #1 élesítésének
+  böngészős próbáján mérve).** `client/src/pages/Preview.tsx:198`: a cím + három gomb csoportja `flex-1 min-w-0`, ezért a
+  sortörés helyett a tartalma alá zsugorodik, és a `shrink-0` gombok kilógnak. Mérve élesben 847 px széles ablakban:
+  `scrollWidth` 852 a 825 px `clientWidth` mellett, a „Másol” gomb jobb széle 852. Javítás: a csoportról lekerül a `min-w-0`,
+  így ha nem fér ki, a `flex-wrap` új sorba teszi (élő DOM-próbán: `scrollWidth` 825, a csoport a második sorban 30–750).
 
 ### B szelet — szerver
 - **B1 · kezeletlen aszinkron hiba leállítja a szervert.** Express 4 + Node 24: a `try` nélküli `async` kezelő elutasított
