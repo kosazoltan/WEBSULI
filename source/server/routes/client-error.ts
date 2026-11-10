@@ -7,6 +7,7 @@
  */
 import { Router, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
+import { clientIpKeyGenerator } from "../lib/client-ip";
 import type { ErrorReportPayload } from "../lib/error-mailer";
 import { redactCredentials } from "../lib/error-sanitize";
 import { logger } from "../lib/logger";
@@ -71,6 +72,7 @@ export function createClientErrorRouter({
   let count = 0;
 
   const limiter = rateLimit({
+    keyGenerator: clientIpKeyGenerator,
     windowMs: 60 * 1000,
     max: 10,
     message: { error: "Too many error reports" },

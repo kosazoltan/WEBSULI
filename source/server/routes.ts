@@ -32,7 +32,8 @@ import { triggerEventBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import rateLimit from "express-rate-limit";
+import { clientIpKey, clientIpKeyGenerator } from "./lib/client-ip";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail, materialResultDedupKey, deliverToRecipients, ResultCoalescer, percentOf, withLearnerSubject, type MaterialResultPayload } from "./lib/material-result";
 import { learnerStreak, learnerTokenFor, recordLearnerActivity, resolveLearner, rotateLearnerToken, syncLearners, type ResolvedLearner } from "./learners";
 import { buildLearnerReports, runWeeklySummary, sendPairingGuides } from "./learner-reports";
@@ -992,13 +993,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     max: 60,
     keyGenerator: (req) => {
       const clientId = (req.body as { clientId?: unknown } | undefined)?.clientId;
-      return typeof clientId === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(clientId) ? `c:${clientId}` : `ip:${ipKeyGenerator(req.ip ?? '')}`;
+      return typeof clientId === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(clientId) ? `c:${clientId}` : `ip:${clientIpKey(req)}`;
     },
     message: { message: "Túl sok eredményküldés. Próbáld újra később!" },
     standardHeaders: true,
     legacyHeaders: false,
   });
   const materialResultIpLimiter = rateLimit({
+    keyGenerator: clientIpKeyGenerator,
     windowMs: 15 * 60 * 1000,
     max: 900,
     message: { message: "Túl sok eredményküldés. Próbáld újra később!" },
@@ -1053,7 +1055,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S1): a párosított eszköz tanulója — csak keresztnév és évfolyam.
   // Átfogó review: egy iskolai NAT mögötti osztály tabletjei is beleférjenek (fókusz + 5 perces frissítés + megnyitások).
-  const learnerMeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1500, standardHeaders: true, legacyHeaders: false });
+  const learnerMeLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, max: 1500, standardHeaders: true, legacyHeaders: false });
   app.get('/api/learner/me', learnerMeLimiter, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     let learner: ResolvedLearner | null;

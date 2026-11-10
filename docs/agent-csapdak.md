@@ -235,9 +235,35 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
   Külső átírásnál (Vercel → Render) a CDN csak `x-vercel-enable-rewrite-caching: 1` mellett veszi figyelembe a forrás fejléceit.
 - **Tünet 2:** az IP-alapú korlát (`express-rate-limit`, `trust proxy: 1`) kulcsa a Vercel-proxy címe: a keret az összes látogatóé együtt.
 - **Megelőzés 2:** proxy mögötti korlátnál a `Ratelimit-Remaining` fejlécet két útvonalon (közvetlen és proxyn át) össze kell vetni.
-  A többi IP-alapú korlát (bejelentkezés stb.) ugyanígy érintett — nyitott, külön feladat.
+  A többi IP-alapú korlát (bejelentkezés stb.) ugyanígy érintett — kezelve: spec 2026-11-10-korlat-kliens-ip, részletek: C-25.
 - **Tünet 3:** hangvégpont `Range` támogatás nélkül (iOS Safari `bytes=0-1` kéréssel tölt, 206-ot vár).
 - **Megelőzés 3:** média-végpontnál `Accept-Ranges` + 206 az alap; próba: `curl -H "Range: bytes=0-1"`.
 - **Tünet 4 (eljárási):** a kód a spec-módosítás előtt készült el; a shell heredoc → JS sablonszöveg út a regexekből kiette a `\`-t
   (`\d` → `d`), a `sed`-javítás sem hatott.
 - **Megelőzés 4:** előbb a spec „Módosítás” szakasza, utána a kód. Regexet tartalmazó kódot az Edit eszközzel kell írni, nem shellből generálni.
+
+## C-25 — Proxylánc mögötti kliens-IP: a `req.ip` egy váltakozó közbenső cím; titoktár-írás az ügynöknek tiltott (2026-11-10)
+
+- **Tünet:** a C-24 feltevése („a kulcs a Vercel-proxy címe”) pontatlan volt. Mérve (`GET /api/learner/me`, 5 egymás utáni kérés
+  ugyanarról a gépről): a `Ratelimit-Remaining` 1499, 1498, 1499, 1497, 1498 — a közvetlen Render-hívás is több számlálóra szóródott.
+  A lánc Vercel → Cloudflare → Render terheléselosztó → Express; `trust proxy: 1` mellett a `req.ip` az `X-Forwarded-For` jobb
+  szélső, kérésenként váltakozó eleme, nem a kliens és nem is egyetlen proxy címe.
+- **Megelőzés:** IP-alapú kulcsot élesben úgy kell mérni, hogy UGYANAZ a kliens többször kér: a számlálónak egyesével, megszakítás
+  nélkül kell csökkennie. Két út összevetése (C-24) ehhez kevés. Új `rateLimit(` csak `clientIpKeyGenerator`-ral
+  (`server/lib/client-ip.ts`) — a `tests/client-ip.test.ts` forrásőre kikényszeríti.
+- **Tünet 2:** a Render dokumentációja a kliens-IP fejlécekről nem ír; fejléc-visszhang végpont nincs. A proxy által írt fejléc
+  (XFF bal széle) csak akkor hihető, ha a kérés bizonyítottan a proxytól jön — ehhez megosztott titok kell (Vercel `routes` →
+  `transforms`, `op: set`), mert a közvetlen Render-cím nyilvános.
+- **Megelőzés 2:** „megbízható fejléc” állítás előtt a szolgáltató dokumentációja + élő mérés; ha a dokumentáció hallgat, a
+  specben a mérés legyen elfogadási feltétel, és a kódnak legyen biztonságos tartaléka (itt: `req.ip`).
+- **Tünet 3:** az első kulcsteszt a helyi Expresst közvetlenül hívta, és hamis XFF-fel új keretet kapott — a tesztkörnyezetben
+  nincs terheléselosztó, amely a lánc végére fűzné a valódi címet.
+- **Megelőzés 3:** proxyfüggő viselkedés tesztjében a termelési láncot kell modellezni (`behindLoadBalancer` a tesztben).
+- **Tünet 4 (eljárási):** a titok éles beírását (Render / Vercel környezeti változó) az ügynök munkamenetében a jogosultsági őr
+  letiltotta („Secret-Store Writes”), miután a kód már erre épült.
+- **Megelőzés 4:** titoktár-írást igénylő munkánál ezt a tervben tulajdonosi lépésként kell jelölni, futtatható szkripttel
+  (`scripts/qa/set-proxy-secret.mjs`), és a kódnak a titok nélkül is biztonságosan kell futnia. A tiltást megkerülni tilos.
+- **Tünet 5 (eljárási):** a commitot és a feltöltést (push) egy parancsba fűztem; a feltöltés előtti audit-hook az egész parancsot
+  elutasította, így a commit sem készült el. A hook a parancs SZÖVEGÉT nézi: egy heredocban szereplő „git” + „push” szópár is tiltást vált ki.
+- **Megelőzés 5:** commit, `.audit-ok` jelző és feltöltés három külön hívás (ld. a `.audit-ok` szabályt fent); dokumentumot az
+  Edit / Write eszközzel kell írni, nem shell heredocból.
