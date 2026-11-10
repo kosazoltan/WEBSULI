@@ -53,11 +53,39 @@ const TTL_STALE_MS = 60 * 60 * 1000; // a run silent for an hour is dead either 
 
 const runs = new Map<string, OneStepRun>();
 
+/**
+ * Spec 2026-11-10-gyartas-meres (J6): az írások futásonként SORBAN mennek ki. Mérve élesben (futás 5708791f, 2026-11-10): a motor
+ * „done” haladásjelzése és a lezáró frissítés (a lecke azonosítójával) két független, egyszerre futó írás volt; a korábbi pillanatkép
+ * ért később az adatbázisba, és a sorból eltűnt a `lessonId` — újraindulás után a kész futás „kész, de nincs lecke” állapotban töltődött
+ * vissza. A lánc garantálja, hogy mindig az utolsó állapot marad.
+ */
+const persistChains = new Map<string, Promise<void>>();
+
 function persistQuietly(run: OneStepRun, persist?: PersistRunFn): void {
   if (!persist) return;
-  void persist({ ...run }).catch(() => {
-    /* a progress-írás sosem döntheti be a gyártást */
-  });
+  const snapshot = { ...run };
+  const chain = (persistChains.get(run.id) ?? Promise.resolve())
+    .then(() => persist(snapshot))
+    .catch(() => {
+      /* a progress-írás sosem döntheti be a gyártást */
+    });
+  persistChains.set(run.id, chain);
+  void chain.then(() => { if (persistChains.get(run.id) === chain) persistChains.delete(run.id); });
+}
+
+/**
+ * J6: a motor haladásjelzéséből a futás frissítése. A motor saját „done” jelzése NEM zárja le a futást: a lezárást a hívó végzi a
+ * lecke azonosítójával együtt — különben a lekérdezés egy pillanatra (és hibás írási sorrendnél tartósan) „kész, lecke nélkül”
+ * állapotot látna.
+ */
+export function progressPatch(p: { phase: OneStepPhase; detail?: string | null; mapId?: string | null; jobId?: string | null }): Partial<Pick<OneStepRun, "phase" | "detail" | "mapId" | "jobId">> {
+  const closing = p.phase === "done";
+  return {
+    ...(closing ? {} : { phase: p.phase }),
+    ...(!closing && p.detail !== undefined ? { detail: p.detail } : {}),
+    ...(p.mapId ? { mapId: p.mapId } : {}),
+    ...(p.jobId ? { jobId: p.jobId } : {}),
+  };
 }
 
 /** Spec 2026-10-06-s7: a webes Studio-út a saját job-azonosítóját adja (a haladás és a workflow ugyanazzal az azonosítóval követhető). */

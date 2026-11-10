@@ -95,6 +95,15 @@ felirat nélkül. Egy hatodikosnak a 0 nélküli számegyenes félrevezető.
   láncot is nézi), és az eredménybeküldés 3 újrapróbálást kér. Biztonságos, mert a szerver a kört egyedi kulccsal egyszer rögzíti
   (`server/lesson-result-email.ts:50`, `onConflictDoNothing`). Az írási műveletek alapértéke (0 újrapróbálás) nem változik.
 
+- **J6 (élő mérésből, 2026-11-10 07:38 UTC) · a kész futás a szerver újraindulása után „kész, de nincs lecke”.** A #414 telepítése
+  után a korábban sikeresen lezárt futás (`5708791f`) lekérdezése `phase: "done", lessonId: null, htmlFileId: null`-t adott
+  (újraindulás előtt mindkettő megvolt); a Stúdió ezért „A futás lezárult, de nincs elérhető, közzétett tananyag” hibát mutatott,
+  és az indítógomb a panel bezárásáig tiltva maradt. Ok: a motor saját „done” haladásjelzése (`single-run/engine.ts:894`) és a
+  lezáró frissítés (`lesson-pipeline-routes.ts:634`, a lecke azonosítójával) két független, egyszerre futó adatbázis-írás
+  (`one-step-progress.ts`, `persistQuietly`), és a korábbi pillanatkép ért később célba. Javítás: (1) az írások futásonként sorban
+  mennek; (2) a motor „done” jelzése nem zárja le a futást (a lezárás a lecke azonosítójával együtt történik); (3) a lekérdezés a
+  már hibásan mentett sorokat a futás jobjából pótolja.
+
 ## A felmérés további tételei (ebben a körben nem készülnek el)
 
 A félbemaradt munkák felmérése (2026-11-10, 15 tétel) szerint nyitott PR és kihagyott teszt nincs. Ügynök által elvégezhető,

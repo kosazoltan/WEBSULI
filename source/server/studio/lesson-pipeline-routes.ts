@@ -27,6 +27,7 @@ import {
   createRun as createRunBase,
   getRun as getRunBase,
   markOrphanedRuns,
+  progressPatch,
   updateRun as updateRunBase,
   type OneStepPhase,
   type OneStepRun,
@@ -282,11 +283,18 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
   // Audit 2026-09-05 (A): a finished run points at the published material so the teacher
   // (and the child) can open it — the html_files id lives on the lessons row.
   let htmlFileId: string | null = null;
-  if (run.phase === "done" && run.lessonId) {
+  // J6 (spec 2026-11-10-gyartas-meres): a korábban hibás sorrendben mentett kész futás sorából hiányozhat a lecke azonosítója —
+  // ilyenkor a futás jobjából pótoljuk (a job a közzétett leckére mutat), hogy a kész tananyag megnyitható maradjon.
+  let lessonId = run.lessonId;
+  if (run.phase === "done" && !lessonId && run.jobId) {
+    const [job] = await db.select({ lessonId: studioJobs.lessonId }).from(studioJobs).where(eq(studioJobs.id, run.jobId)).limit(1);
+    lessonId = job?.lessonId ?? null;
+  }
+  if (run.phase === "done" && lessonId) {
     const [lesson] = await db
       .select({ htmlFileId: lessons.htmlFileId })
       .from(lessons)
-      .where(eq(lessons.id, run.lessonId))
+      .where(eq(lessons.id, lessonId))
       .limit(1);
     htmlFileId = lesson?.htmlFileId ?? null;
   }
@@ -326,7 +334,7 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     const alive = (lease.rows[0] as { alive?: boolean | null } | undefined)?.alive;
     timing = { elapsedSec: Math.max(0, Math.round((now - run.startedAt) / 1000)), sinceUpdateSec: Math.max(0, Math.round((now - run.updatedAt) / 1000)), ...(typeof alive === "boolean" ? { alive } : {}) };
   }
-  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...timing, ...(draft ? { draft } : {}),
+  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId, htmlFileId, ...timing, ...(draft ? { draft } : {}),
     ...(draftRunId ? { draftRunId } : {}), ...(ownerInstruction ? { ownerInstruction } : {}),
     ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.resumeKind ? { resumeKind: stop.resumeKind } : {}),
       ...(stop.nextRecovery ? { nextRecovery: stop.nextRecovery } : {}) } : {}) };
@@ -629,7 +637,7 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
   try {
     const result = await runSingleUpload(
       { files: data.files as ExtractorFile[], instruction: normalizeOwnerInstruction(data.instructions), title: data.title, ownerId: userId, ...(target ? { targetHtmlFileId: target.htmlFileId, targetBaseline: target.baseline } : {}) },
-      (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }),
+      (p) => updateRun(runId, progressPatch(p)),
     );
     updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });
   } catch (error) {
@@ -776,7 +784,7 @@ export async function resumeSingleRun(jobId: string, owner: string): Promise<str
     const { runSingleResume } = await import("./single-run/live");
     try {
       const result = await runSingleResume({ jobId, ownerId: owner },
-        (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }));
+        (p) => updateRun(runId, progressPatch(p)));
       updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });
       return readPublishedLesson(result.lessonId);
     } catch (error) {
@@ -815,7 +823,7 @@ export function startMapRun(mapId: string, owner: string, extra: { instruction?:
     const { runSingleFromMap } = await import("./single-run/live");
     try {
       const result = await runSingleFromMap({ mapId, ownerId: owner, ...(extra.instruction ? { instruction: extra.instruction } : {}), ...(extra.approvedOutline !== undefined ? { approvedOutline: extra.approvedOutline } : {}) },
-        (p) => updateRun(runId, { phase: p.phase, ...(p.detail !== undefined ? { detail: p.detail } : {}), ...(p.mapId ? { mapId: p.mapId } : {}), ...(p.jobId ? { jobId: p.jobId } : {}) }));
+        (p) => updateRun(runId, progressPatch(p)));
       updateRun(runId, { phase: "done", lessonId: result.lessonId, mapId: result.mapId, jobId: result.jobId, detail: "A tananyag elkészült és közzétéve." });
       return readPublishedLesson(result.lessonId);
     } catch (error) {
