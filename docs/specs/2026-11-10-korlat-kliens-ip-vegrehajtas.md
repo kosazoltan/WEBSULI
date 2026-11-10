@@ -52,4 +52,13 @@
   `/api/tts/audio` fejlécei változatlanok. Összevonás; Render-telepítés megvárása (`verify-render-revision.mjs`).
 - Élő próba (A6), `curl -D -`: közvetlenül 6 kérés (köztük hamis XFF és hamis titok) → egyetlen, folyamatosan csökkenő számláló;
   `websuli.vip`-en át 4 kérés → egyetlen csökkenő számláló; második kliens (más kimenő cím) → saját, friss számláló.
+- Előnézeti mérés (2026-11-10, #411): a `routes` + `rewrites` + `headers` együttes telepítése zöld; `/valami-oldal` → 200
+  `index.html`; `/api/tts/audio` → 200 `audio/mpeg`, `cache-control: public, max-age=86400`, `x-render-origin-server: Render`;
+  `/api/tts` → `no-store`; `/manifest.json` → `no-store`. (A Copilot P1 „a `routes` nem használható együtt” állítását ez cáfolja.)
+
+## T7 — Review #411
+- P2 (jogos): `--rotate` az ÖSSZES korábban elfogadott értéket megtartja (`rotatedRenderValue`), a régiek törlése külön
+  `--prune` lépés (`prunedRenderValue`). Teszt: `scripts/qa/set-proxy-secret.test.mjs`, a CI `node --test` listájában.
+- P1 (cáfolva): ld. az előnézeti mérést fent.
+
 - `docs/agent-csapdak.md`: új bejegyzés (C-25) a mérésből adódó tanulságokkal; a C-24 nyitott tételének lezárása.
