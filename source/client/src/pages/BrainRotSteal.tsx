@@ -1,14 +1,11 @@
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import CollectibleAvatar from "@/components/CollectibleAvatar";
-import { ArrowLeft, Brain, Star, Flame, RotateCcw, Zap, Trophy, ShieldAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { ArrowLeft, ShieldAlert, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
-import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
 import { useClassroomGrade } from "@/lib/classroomStore";
@@ -16,7 +13,6 @@ import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { levelAdaptBand, levelStartBand } from "@/game-engine/levelTuning";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
-import AudioToggleButton from "@/components/AudioToggleButton";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
 import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
@@ -29,6 +25,24 @@ import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { xpForAttempt } from "@/game-engine/retry-policy";
 import { stepBrainRot } from "@/lib/brainRotPhysics";
+import {
+  BRAIN_ROT_WARNING_MS,
+  brainRotAgeMs,
+  brainRotLifetimeFor,
+  brainRotSizeFor,
+  brainRotSpeedScaleFor,
+} from "@/lib/brainRotTuning";
+import {
+  GameHud,
+  GameShell,
+  PauseMenu,
+  ResultScreen,
+  StartScreen,
+  useBestScore,
+  useHaptics,
+  type GameScreenState,
+} from "@/game-engine/mobile";
+import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
 import {
   createGradeQuizSeen,
@@ -38,7 +52,7 @@ import {
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
-import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import { correctDataAttrs, installGameTestApi, type GameForcePatch } from "@/game-engine/game-test-hooks";
 import BrainRotArena3D, { type ArenaBurst } from "@/game-engine/scenes/BrainRotArena3D";
 
 /* --- Típusok --- */
@@ -69,6 +83,10 @@ type BrainRot = {
   rotSpeed: number;
   xpValue: number;
   spawnTime: number;
+  /** S8: élettartam (ms) az évfolyamból — kisebb gyereknek tovább marad. */
+  lifetime: number;
+  /** S8: a futás befagyott (kvíz / szünet) idejének összege a születéskor — a kor ezt nem számolja. */
+  pausedTotalAtSpawn: number;
   caught: boolean;
   escaping: boolean;
   pulsePhase: number;
@@ -102,7 +120,6 @@ const ROUND_LIMIT = 90;
 const STREAK_GOAL = 7;
 const SPAWN_INTERVAL_BASE = 2200;
 const SPAWN_INTERVAL_MIN = 900;
-const BRAIN_ROT_LIFETIME = 6000;
 const MAX_BRAIN_ROTS = 8;
 /** Sikeres futás: ennyi elkapás (a napi kihívás meglévő küszöbe) — ez oldja fel a következő pályát is. */
 const BRAIN_ROT_CLEAR_CATCHES = 10;
@@ -238,12 +255,18 @@ function pickRandom<T>(arr: T[]): T {
 
 let nextId = 0;
 
-function spawnBrainRot(boardW: number, boardH: number): BrainRot {
+/**
+ * S8: a lény mérete a táblához és az évfolyamhoz, élettartama és sebessége az évfolyamhoz igazodik
+ * (`lib/brainRotTuning.ts`). A pozíció a lény FELE + 4 px-es peremen belül sorsolódik (a régi kód teljes
+ * átmérőnyi peremet hagyott, ami nagy lénynél kis táblán üres sávot — vagy fordított tartományt — adott).
+ */
+function spawnBrainRot(boardW: number, boardH: number, grade: number | null | undefined, pausedTotal: number): BrainRot {
   const template = pickRandom(BRAIN_ROT_EMOJIS);
-  const size = randInt(60, 80);
-  const x = randInt(size, boardW - size);
-  const y = randInt(size, boardH - size);
-  const speed = 0.3 + Math.random() * 1.2;
+  const size = brainRotSizeFor({ grade, boardW, boardH });
+  const margin = Math.ceil(size / 2) + 4;
+  const x = randInt(margin, Math.max(margin, Math.floor(boardW - margin)));
+  const y = randInt(margin, Math.max(margin, Math.floor(boardH - margin)));
+  const speed = (0.3 + Math.random() * 1.2) * brainRotSpeedScaleFor(grade);
   const angle = Math.random() * Math.PI * 2;
   return {
     id: nextId++,
@@ -258,6 +281,8 @@ function spawnBrainRot(boardW: number, boardH: number): BrainRot {
     rotSpeed: (Math.random() - 0.5) * 4,
     xpValue: template.xp,
     spawnTime: Date.now(),
+    lifetime: brainRotLifetimeFor(grade),
+    pausedTotalAtSpawn: pausedTotal,
     caught: false,
     escaping: false,
     pulsePhase: Math.random() * Math.PI * 2,
@@ -268,6 +293,13 @@ function spawnBrainRot(boardW: number, boardH: number): BrainRot {
 export default function BrainRotSteal() {
   const boardRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>("menu");
+  /** S8 / terv 4.5: szünet (a `Phase` változatlan) — szünetben az időzítő és a rAF-ciklus áll. */
+  const [paused, setPaused] = useState(false);
+  const [, navigate] = useLocation();
+  const haptics = useHaptics();
+  const best = useBestScore("brain-rot-steal");
+  /** A tesztes API a legutóbbi renderelés `forceState`-jét hívja (az effekt csak egyszer települ). */
+  const forceStateRef = useRef<(patch: GameForcePatch) => void>(() => {});
 
   useEffect(() => {
     return installGameTestApi({
@@ -275,12 +307,10 @@ export default function BrainRotSteal() {
         level: runLevelRef.current,
         band: difficultyRef.current,
         paceScale: 1.4 - difficultyRef.current * 0.55,
+        paused: pausedRef.current ? 1 : 0,
+        pausedTotal: pausedTotalRef.current,
       }),
-      forceState: (patch) => {
-        if (patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
-          setPhase(patch.phase);
-        }
-      },
+      forceState: (patch) => forceStateRef.current(patch),
     });
   }, []);
 
@@ -326,6 +356,9 @@ export default function BrainRotSteal() {
    */
   // Tananyag-kvíz: a játékos osztályának legutóbbi 3 anyagából (Claude-generált).
   const { grade: userGrade } = useClassroomGrade();
+  /** A rAF-ciklus (egyszer települ futásonként) a mostani évfolyamot olvassa a lény méretéhez / élettartamához. */
+  const gradeRef = useRef(userGrade);
+  gradeRef.current = userGrade;
   // Spec 2026-09-29: a kezdő sáv a játékos évfolyamából (évfolyam nélkül a régi 4. osztályos sáv).
   const difficultyRef = useRef(startingDifficulty(userGrade ?? 4));
   const answerHistoryRef = useRef<boolean[]>([]);
@@ -359,6 +392,25 @@ export default function BrainRotSteal() {
   const wrongQuizAnswersRef = useRef(0);
   // D5: RAF re-render throttle — utolsó setState hívás időpontja (ms)
   const lastRenderMsRef = useRef(0);
+  /** A futás jó / rossz kvízválaszai az eredményképernyő „Jó válaszok: x/y” sorához. */
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [wrongAnswers, setWrongAnswers] = useState(0);
+  /** Az új rekord-jelzés az eredményképernyőn (futásonként egyszer számolva). */
+  const [isNewBest, setIsNewBest] = useState(false);
+  const bestSubmittedRef = useRef(false);
+
+  /**
+   * S8 hibajavítás: a lények kora a kvíz és a szünet alatt NEM telik.
+   *
+   * A régi kód a kort `Date.now() - spawnTime`-mal számolta; a mozgatóciklus a kvíz alatt állt, a falióra nem,
+   * így aki 6 másodpercig gondolkodott egy kérdésen, annak a pályán maradt lényei a kvíz után azonnal
+   * elszöktek. `pausedAtRef` a most folyó befagyás kezdete, `pausedTotalRef` a futás lezárt befagyásainak összege
+   * (a kor: `brainRotAgeMs`).
+   */
+  const pausedAtRef = useRef<number | null>(null);
+  const pausedTotalRef = useRef(0);
+  const pausedRef = useRef(false);
+  pausedRef.current = paused;
 
   // Unmountkor az összes pending timeout törlése (beragadó state megelőzése)
   useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);
@@ -397,31 +449,77 @@ export default function BrainRotSteal() {
    * 3–12. évfolyamon: nem látott tananyag-kvíz → közös évfolyam-bank (a sáv szerinti szinten,
    * minden tárgyból) → a régi véletlen választás, ha a közös bank üres/kimerült.
    */
+  /**
+   * S8 / terv A8: az angol kérdés-hely a központi szóbankból (közös napló mind a hét játékra). `null`, amíg
+   * tölt, vagy ha a betöltés hibázott — ilyenkor a kézi `ENGLISH_QUIZZES` / évfolyam-bank megy, változatlanul.
+   * A bekötés EGY helyen kapcsolható ki: itt (`enabled`).
+   */
+  const vocab = useVocabQuizSource("en", true);
+
   const pickQuiz = useCallback((): Quiz => {
     const sharedGrade = gradeForGame(userGrade);
     const couponMaterialOnly = coupon.active && fullQuizPool.some((q) => q.fromMaterial);
+    const seen = gradeSeenRef.current;
     if (sharedGrade != null && !couponMaterialOnly) {
-      const seen = gradeSeenRef.current;
       const material = pickUnseenMaterial(fullQuizPool.filter((q) => q.fromMaterial), seen);
       if (material) {
         markGradeQuizSeen(seen, material);
         return material;
       }
+    }
+    if (couponMaterialOnly) return pickRandom(fullQuizPool);
+
+    // A tananyag-ág UTÁN: ha a kérdés-hely angol, a szóbankból kérdez (a kategória a meglévő választásból
+    // derül ki — a lap nem sorsol kategóriát előre, ezért az eloszlás a régi marad, csak az angol tétel forrása
+    // cserélődik). A kiválasztott, de fel nem tett kézi tétel NEM kerül a `seen`-be.
+    const fromVocab = (): Quiz | null => {
+      const vq = vocab?.next(vocabLevelForGrade(userGrade, difficultyRef.current)) ?? null;
+      if (!vq) return null;
+      markGradeQuizSeen(seen, vq);
+      return {
+        id: vq.id,
+        prompt: vq.prompt,
+        options: [...vq.options],
+        correctIndex: vq.correctIndex,
+        explanation: vq.explanation,
+        category: "english",
+      };
+    };
+    /** Kézi angol kérdés: a helyes válasza a közös naplóba, hogy a szóbank ne kérdezze vissza ugyanazt a szót. */
+    const manualEnglish = (q: Quiz): Quiz => {
+      if (q.category === "english" && !q.fromMaterial) vocab?.markExternal(q.options[q.correctIndex]!);
+      return q;
+    };
+
+    if (sharedGrade != null) {
       const item = pickGradeQuiz({ grade: sharedGrade, band: difficultyRef.current, seen });
       if (item) {
+        if (item.subject === "english") {
+          const vq = fromVocab();
+          if (vq) return vq;
+        }
         markGradeQuizSeen(seen, item);
-        return {
+        return manualEnglish({
           id: item.id,
           prompt: item.prompt,
           options: [...item.options],
           correctIndex: item.correctIndex,
           explanation: item.explanation,
           category: item.subject,
-        };
+        });
       }
     }
-    return pickRandom(fullQuizPool);
-  }, [fullQuizPool, userGrade, coupon.active]);
+    const fallback = pickRandom(fullQuizPool);
+    if (fallback.category === "english" && !fallback.fromMaterial) {
+      const vq = fromVocab();
+      if (vq) return vq;
+    }
+    return manualEnglish(fallback);
+  }, [fullQuizPool, userGrade, coupon.active, vocab]);
+
+  // G-5: a mérés szerint ez a játék nulla helyen vette figyelembe a
+  // prefers-reduced-motion beállítást. S8: a pop, a pulzálás, a villanás és a rázás is ehhez igazodik.
+  const reducedMotion = useReducedMotion();
 
   /* --- Reszecskek --- */
   const spawnParticles = useCallback((x: number, y: number, color: string, count: number, emoji?: string) => {
@@ -448,22 +546,30 @@ export default function BrainRotSteal() {
     setFloatingTexts((prev) => [...prev, { id, x, y, text, color, life: 1.5 }]);
   }, []);
 
+  /** 3D aréna-robbanás: elkapáskor arany szikraeső, elszökéskor rövid piros füst (csak látvány). */
+  const pushArenaBurst = useCallback((x: number, y: number, kind: ArenaBurst["kind"]) => {
+    const burstId = arenaBurstIdRef.current++;
+    setArenaBursts((prev) => [...prev.slice(-5), { id: burstId, x, y, kind }]);
+    timeoutsRef.current.push(
+      window.setTimeout(() => setArenaBursts((prev) => prev.filter((b) => b.id !== burstId)), 1200),
+    );
+  }, []);
+
   /* --- Brain rot elkap --- */
   const handleCatchBrainRot = useCallback(
     (rot: BrainRot) => {
-      if (phase !== "play" || rot.caught) return;
+      if (phase !== "play" || paused || rot.caught) return;
+      haptics("hit");
+      // Azonnali visszajelzés a koppintásra: lila szikra a lény helyén (a kvíz előtt is látszik).
+      if (!reducedMotion) spawnParticles(rot.x, rot.y, "#c084fc", 12);
       setBrainRots((prev) => prev.map((r) => (r.id === rot.id ? { ...r, caught: true } : r)));
       setCaughtRot(rot);
       setQuiz(pickQuiz());
       quizAttemptRef.current = 0;
       setPhase("quiz");
     },
-    [phase, pickQuiz],
+    [phase, paused, pickQuiz, haptics, spawnParticles],
   );
-
-  // G-5: a mérés szerint ez a játék nulla helyen vette figyelembe a
-  // prefers-reduced-motion beállítást.
-  const reducedMotion = useReducedMotion();
 
   /**
    * G-1: magyarázó kártya rossz válaszra.
@@ -488,9 +594,14 @@ export default function BrainRotSteal() {
       if (quizAttemptRef.current === 0) maybeClaimCouponBonus(coupon, quiz.id, idx);
       if (idx !== quiz.correctIndex) {
         sfxError();
+        haptics("error");
         wrongQuizAnswersRef.current += 1;
-        setWrongShake(true);
-        timeoutsRef.current.push(window.setTimeout(() => setWrongShake(false), 400));
+        setWrongAnswers((n) => n + 1);
+        // Csökkentett mozgásnál nincs rázás (M9): a piros keret és a magyarázókártya jelzi a hibát.
+        if (!reducedMotion) {
+          setWrongShake(true);
+          timeoutsRef.current.push(window.setTimeout(() => setWrongShake(false), 400));
+        }
         setRevealCorrectIdx(quiz.correctIndex);
         setWrongIdx(idx);
         recordDifficultyAnswer(false);
@@ -525,6 +636,8 @@ export default function BrainRotSteal() {
       // Helyes válasz!
       recordDifficultyAnswer(true);
       sfxSuccess();
+      haptics("success");
+      setCorrectAnswers((n) => n + 1);
 
       setRevealCorrectIdx(null);
       setWrongIdx(null);
@@ -549,18 +662,18 @@ export default function BrainRotSteal() {
       quizAttemptRef.current = 0;
 
       // Vizuális visszajelzés
-      spawnParticles(caughtRot.x, caughtRot.y, "#fbbf24", 20, "\u2B50");
+      spawnParticles(caughtRot.x, caughtRot.y, "#fbbf24", reducedMotion ? 6 : 24,"\u2B50");
       addFloatingText(caughtRot.x, caughtRot.y - 30, `+${xpGain} XP`, "#fbbf24");
-      const burstId = arenaBurstIdRef.current++;
-      setArenaBursts((prev) => [...prev.slice(-3), { id: burstId, x: caughtRot.x, y: caughtRot.y }]);
-      timeoutsRef.current.push(
-        window.setTimeout(() => setArenaBursts((prev) => prev.filter((b) => b.id !== burstId)), 1200),
-      );
+      // 3D robbanás az arénában (a jelenet a `particleScale` költségkerettel méretezi).
+      pushArenaBurst(caughtRot.x, caughtRot.y, "catch");
 
       if (multiplier >= 2) {
         sfxLevelUp();
-        setScreenFlash("rgba(251, 191, 36, 0.15)");
-        timeoutsRef.current.push(window.setTimeout(() => setScreenFlash(null), 300));
+        // Csökkentett mozgásnál nincs villanás (M9).
+        if (!reducedMotion) {
+          setScreenFlash("rgba(251, 191, 36, 0.15)");
+          timeoutsRef.current.push(window.setTimeout(() => setScreenFlash(null), 300));
+        }
       }
 
       // Brain rot törlése
@@ -569,7 +682,7 @@ export default function BrainRotSteal() {
       setQuiz(null);
       setPhase("play");
     },
-    [quiz, caughtRot, comboMultiplier, spawnParticles, addFloatingText, revealCorrectIdx, streak, streakProtector],
+    [quiz, caughtRot, comboMultiplier, spawnParticles, addFloatingText, revealCorrectIdx, streak, streakProtector, haptics, reducedMotion, pushArenaBurst],
   );
 
   /* --- Játék indítása --- */
@@ -598,10 +711,81 @@ export default function BrainRotSteal() {
     setComboMultiplier(1);
     maxComboRef.current = 1;
     wrongQuizAnswersRef.current = 0;
+    setCorrectAnswers(0);
+    setWrongAnswers(0);
+    setIsNewBest(false);
+    bestSubmittedRef.current = false;
+    pausedAtRef.current = null;
+    pausedTotalRef.current = 0;
+    setPaused(false);
+    setQuiz(null);
+    setCaughtRot(null);
+    setFeedback(null);
     setScreenFlash(null);
     lastSpawnRef.current = 0;
     setPhase("play");
   }, [streakProtector, userGrade, levels.level]);
+
+  /**
+   * A lények korának „befagyasztása” (S8 hibajavítás): kvíz alatt (a magyarázókártyával együtt) és szünetben
+   * a kor nem telik. A befagyás végén az eltelt idő a `pausedTotalRef`-be kerül, és a következő spawn ideje
+   * is ennyivel tolódik — különben a kvíz után azonnal új lény ugrana be.
+   */
+  useEffect(() => {
+    const frozen = phase === "quiz" || (phase === "play" && paused);
+    if (frozen && pausedAtRef.current == null) {
+      pausedAtRef.current = Date.now();
+    } else if (!frozen && pausedAtRef.current != null) {
+      const frozenFor = Math.max(0, Date.now() - pausedAtRef.current);
+      pausedAtRef.current = null;
+      if (phase === "play") {
+        pausedTotalRef.current += frozenFor;
+        lastSpawnRef.current += frozenFor;
+      }
+    }
+  }, [phase, paused]);
+
+  /** A lény kora (ms) a befagyott idő nélkül — a lejárat, a figyelmeztetés és a halványodás közös mércéje. */
+  const ageOf = (rot: BrainRot, now: number) =>
+    brainRotAgeMs({
+      now,
+      spawnTime: rot.spawnTime,
+      pausedTotal: pausedTotalRef.current,
+      pausedTotalAtSpawn: rot.pausedTotalAtSpawn,
+      pausedAt: pausedAtRef.current,
+    });
+
+  const pause = useCallback(() => {
+    if (phase === "play" || phase === "quiz") setPaused(true);
+  }, [phase]);
+  const resume = useCallback(() => setPaused(false), []);
+  const exitToGames = useCallback(() => {
+    setPaused(false);
+    navigate("/games");
+  }, [navigate]);
+
+  /* --- Tesztes API: a `forceState` a mostani állapotra épít (lásd fent) --- */
+  forceStateRef.current = (patch) => {
+    if (patch.phase === "quiz") {
+      // M9 / M10 mérés: kvíz egy (nem a pályán lévő) lénnyel, a valós választóból.
+      const boardEl = boardRef.current;
+      const rot = spawnBrainRot(boardEl?.clientWidth ?? 360, boardEl?.clientHeight ?? 400, userGrade, pausedTotalRef.current);
+      setPaused(false);
+      setCaughtRot({ ...rot, caught: true });
+      setQuiz(pickQuiz());
+      quizAttemptRef.current = 0;
+      setPhase("quiz");
+      return;
+    }
+    if (patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
+      if (patch.phase === "over" && typeof patch.correctCount === "number") {
+        setTotalCaught(patch.correctCount);
+        setCorrectAnswers(patch.correctCount);
+      }
+      setPaused(false);
+      setPhase(patch.phase);
+    }
+  };
 
   // R = quick-restart az "over" / "menu" képernyőn.
   useEffect(() => {
@@ -618,7 +802,7 @@ export default function BrainRotSteal() {
 
   /* --- Idozito --- */
   useEffect(() => {
-    if (phase !== "play") return;
+    if (phase !== "play" || paused) return;
     const id = setInterval(() => {
       runSecondsRef.current += 1;
       setRunSeconds((s) => s + 1);
@@ -631,12 +815,14 @@ export default function BrainRotSteal() {
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [phase, paused]);
 
   /* --- Animacio + spawn --- */
   useEffect(() => {
-    if (phase !== "play") return;
+    if (phase !== "play" || paused) return;
     let lastTime = performance.now();
+    // Szünet / kvíz után az első fojtott lépés ne a teljes kihagyott időt kapja (a fizika úgyis vágja 120 ms-ra).
+    lastRenderMsRef.current = lastTime;
 
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - lastTime) / 1000);
@@ -660,7 +846,7 @@ export default function BrainRotSteal() {
         lastSpawnRef.current = now;
         setBrainRots((prev) => {
           if (prev.filter((r) => !r.caught).length >= MAX_BRAIN_ROTS) return prev;
-          return [...prev, spawnBrainRot(boardW, boardH)];
+          return [...prev, spawnBrainRot(boardW, boardH, gradeRef.current, pausedTotalRef.current)];
         });
       }
 
@@ -679,8 +865,8 @@ export default function BrainRotSteal() {
             .map((rot) => {
               if (rot.caught) return rot;
 
-              // Check if expired
-              if (nowMs - rot.spawnTime > BRAIN_ROT_LIFETIME && !rot.escaping) {
+              // Lejárat: az évfolyamhoz igazított élettartam, a kvíz- és szünetidő nélkül (S8).
+              if (ageOf(rot, nowMs) > rot.lifetime && !rot.escaping) {
                 return { ...rot, escaping: true };
               }
 
@@ -709,6 +895,9 @@ export default function BrainRotSteal() {
                 setTotalMissed((m) => m + 1);
                 setStreak(0);
                 setComboMultiplier(1);
+                // Látható „elszökött” visszajelzés: piros füst az arénában + felirat.
+                pushArenaBurst(rot.x, rot.y, "escape");
+                addFloatingText(rot.x, rot.y - 20, "Elszökött!", "#fb7185");
                 return false;
               }
               return true;
@@ -745,7 +934,7 @@ export default function BrainRotSteal() {
 
     animRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animRef.current);
-  }, [phase]);
+  }, [phase, paused]);
 
   /* --- Eredmény beküldése --- */
   useEffect(() => {
@@ -802,13 +991,38 @@ export default function BrainRotSteal() {
     }
   }, [phase, totalCaught]);
 
+  /* --- Legjobb eredmény: helyi mentés (névtelen látogatónál is működik), futásonként egyszer --- */
+  useEffect(() => {
+    if (phase !== "over" || bestSubmittedRef.current) return;
+    bestSubmittedRef.current = true;
+    const res = best.submit(sessionXp);
+    setIsNewBest(res.isNewBest && sessionXp > 0);
+  }, [phase, sessionXp, best]);
+
   /* --- Render --- */
-  const timePercent = (timeLeft / ROUND_LIMIT) * 100;
+  const screenState: GameScreenState =
+    phase === "menu" ? "start" : phase === "over" ? "result" : paused ? "paused" : "playing";
+  const inRun = phase === "play" || phase === "quiz";
+  const won = totalCaught >= BRAIN_ROT_CLEAR_CATCHES;
+  const nowMs = Date.now();
+  const liveRots = brainRots.filter((r) => !r.caught);
+  /** A lény látható állapota: figyelmeztetés az utolsó 1,5 s-ban, halványodás az élettartam utolsó ötödében. */
+  const rotView = (rot: BrainRot) => {
+    const age = ageOf(rot, nowMs);
+    const frac = age / rot.lifetime;
+    return {
+      warning: rot.lifetime - age <= BRAIN_ROT_WARNING_MS,
+      // Kisebb gyereknek is látható marad a végéig (legalább 40%): a lény nem „tűnik el” a koppintás előtt.
+      opacity: frac > 0.8 ? Math.max(0.4, 1 - ((frac - 0.8) / 0.2) * 0.6) : 1,
+    };
+  };
+  const timeTone = timeLeft <= ROUND_LIMIT * 0.15 ? "bad" : timeLeft <= ROUND_LIMIT * 0.3 ? "warn" : "default";
 
   return (
-    <div
-      data-game="BrainRotSteal" data-playing={phase === "play" || phase === "quiz"}
-      className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
+    <GameShell
+      gameId="BrainRotSteal"
+      state={screenState}
+      onAutoPause={pause}
       style={{
         background:
           "radial-gradient(circle at 20% 20%, rgba(147, 51, 234, 0.25), transparent 45%), radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.2), transparent 40%), radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.12), transparent 50%), linear-gradient(180deg, #0c0118 0%, #1a0a2e 50%, #0f172a 100%)",
@@ -816,12 +1030,12 @@ export default function BrainRotSteal() {
     >
       <ClassroomGateModal accent="fuchsia" />
       <AchievementToast achievements={newlyUnlocked} />
-      {/* Background animated stars */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {/* Háttér: halványan pulzáló csillagok (csökkentett mozgásnál állnak) */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
         {Array.from({ length: 30 }).map((_, i) => (
           <div
             key={`star-${i}`}
-            className="absolute rounded-full opacity-20 animate-pulse"
+            className={`absolute rounded-full opacity-20 ${reducedMotion ? "" : "animate-pulse"}`}
             style={{
               left: `${(i * 3.7 + 11) % 100}%`,
               top: `${(i * 7.3 + 5) % 100}%`,
@@ -839,7 +1053,7 @@ export default function BrainRotSteal() {
       <CouponHud session={coupon} />
       <CouponExpiredOverlay session={coupon} />
 
-      {/* Screen flash effect */}
+      {/* Képernyő-felvillanás nagy kombónál (csökkentett mozgásnál nincs) */}
       <AnimatePresence>
         {screenFlash && (
           <motion.div
@@ -853,124 +1067,25 @@ export default function BrainRotSteal() {
         )}
       </AnimatePresence>
 
-      <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-screen flex flex-col pb-20 sm:pb-10">
-        <header className="flex items-center justify-between gap-2 mb-2">
-          <Link href="/games">
-            <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2 h-11 px-3">
-              <ArrowLeft className="w-4 h-4" />
-              Játékok
-            </Button>
-          </Link>
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <AudioToggleButton size="icon" />
-            <span className="flex items-center gap-1 text-amber-300">
-              <Star className="w-4 h-4" />
-              {sessionXp}
-            </span>
-            <span className="flex items-center gap-1 text-orange-300">
-              <Flame className="w-4 h-4" />
-              {streak}
-            </span>
-            {comboMultiplier > 1 && (
-              <motion.span
-                className="flex items-center gap-1 text-yellow-300 bg-yellow-400/15 px-1.5 py-0.5 rounded-md"
-                initial={{ scale: 0.5 }}
-                animate={{ scale: 1 }}
-                key={comboMultiplier}
-              >
-                <Zap className="w-3 h-3" />
-                x{comboMultiplier.toFixed(1)}
-              </motion.span>
-            )}
-          </div>
-        </header>
-
-        <Card className="border border-purple-400/45 bg-slate-950/85 backdrop-blur-md shadow-[0_16px_48px_rgba(0,0,0,0.45)] flex-1 flex flex-col min-h-0">
-          <CardContent data-game-card-content className="p-2 sm:p-3 flex flex-col flex-1 min-h-0">
-            <div className="flex items-center gap-2 mb-1">
-              <Brain className="w-5 h-5 text-purple-400" />
-              <h1 className="text-sm sm:text-base font-extrabold bg-gradient-to-r from-purple-300 via-pink-300 to-amber-300 bg-clip-text text-transparent">
-                Brain Rot Lopás
-              </h1>
-            </div>
-
-            {/* Hide pedagogy + mission during active gameplay on mobile to maximize game area */}
-            {phase !== "play" && (
-              <GamePedagogyPanel
-                accent="fuchsia"
-                className="mb-2"
-                kidMission="Kapd el a Brain Rot-okat, mielőtt eltűnnek! Minden elkapás után kvíz: angol, matek, vagy magyar nyelvtan. Helyes válasz = XP + kombó szorzó! Minél gyorsabb vagy, annál több pont!"
-                parentBody={
-                  <>
-                    <strong className="text-fuchsia-100/90">Tananyag:</strong> angol szókincs (3-5. oszt.), alap matematika
-                    (műveletek, mértékegységek, geometria), magyar nyelvtan (szófajok, ragozás, helyesírás).
-                    <br />
-                    <strong className="text-fuchsia-100/90">Fejleszt:</strong> gyors döntéshozatal, olvasásértés, kéz-szem
-                    koordináció, matematikai készségek, magyar nyelvtan.
-                    <br />
-                    <span className="text-white/55">
-                      A lopás motiváció + kvíz + azonnali jutalom (XP, kombó) ciklus tartja fenn a figyelmet.
-                    </span>
-                  </>
-                }
-              />
-            )}
-
-            <p data-game-sync className="text-[10px] sm:text-[11px] text-purple-100/90 mb-1.5 sm:mb-2 border border-purple-700/45 rounded px-2 py-1 sm:py-1.5 bg-slate-900/95">
-              {syncBanner}
-            </p>
-
-            {/* --- MENU --- */}
-            {phase === "menu" && (
-              <div data-game-menu="brain" className="flex flex-col items-center justify-center flex-1 gap-4 sm:gap-5 py-4 sm:py-6">
-                <motion.div
-                  className="text-5xl sm:text-7xl"
-                  animate={{
-                    rotate: [0, -10, 10, -10, 0],
-                    scale: [1, 1.1, 1, 1.1, 1],
-                  }}
-                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  {"\u{1F9E0}"}
-                </motion.div>
-
-                <div className="text-center space-y-2 max-w-sm">
-                  <h2 className="text-xl font-extrabold bg-gradient-to-r from-purple-300 via-pink-300 to-amber-200 bg-clip-text text-transparent">
-                    Brain Rot Lopás
-                  </h2>
-                  <p className="text-sm text-white/80">
-                    Kapd el a <span className="text-purple-300 font-bold">Brain Rot</span>-okat, amíg el nem tűnnek! {"\u{1F9E0}\u{1F480}\u{1F47E}"}
-                  </p>
-                  <p className="text-xs text-white/60">
-                    Minden elkapás előtt válaszolj angol, matek, vagy magyar kérdésre.
-                    Jó válasz = <span className="text-amber-300 font-bold">XP</span> +{" "}
-                    <span className="text-yellow-300 font-bold">kombó szorzó</span>!
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-black/40 border border-purple-700/40">
-                  <div className="flex flex-col items-center gap-1 text-center">
-                    <span className="text-2xl">{"\u{1F1EC}\u{1F1E7}"}</span>
-                    <span className="text-[10px] text-cyan-300 font-bold">Angol</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 text-center">
-                    <span className="text-2xl">{"\u{1F522}"}</span>
-                    <span className="text-[10px] text-amber-300 font-bold">Matek</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 text-center">
-                    <span className="text-2xl">{"\u{1F4DD}"}</span>
-                    <span className="text-[10px] text-emerald-300 font-bold">Magyar</span>
-                  </div>
-                </div>
-
-                <Button
-                  size="lg"
-                  className="bg-gradient-to-r from-purple-600 via-pink-600 to-amber-600 hover:from-purple-500 hover:via-pink-500 hover:to-amber-500 border border-purple-200/35 font-bold text-white shadow-lg shadow-purple-500/25 text-base px-8"
-                  onClick={startGame}
-                >
-                  <Brain className="w-5 h-5 mr-2" />
-                  Vadászat indítása!{levels.level != null ? ` · ${levels.level}. pálya` : ""}
-                </Button>
+      {/* --- KEZDŐKÉPERNYŐ --- */}
+      {phase === "menu" && (
+        <main className="relative z-10 w-full">
+          <StartScreen
+            title="Brain Rot Lopás"
+            subtitle="Kapd el a lényeket, mielőtt eltűnnek! Minden elkapás után egy gyors kvíz jön."
+            icon={<span className="brainrot-start-icon">{"\u{1F9E0}"}</span>}
+            startLabel="Vadászat indítása!"
+            onStart={startGame}
+            best={best.best}
+            menuKey="brain"
+            secondary={
+              <Link href="/games" className="game-btn game-btn-secondary" data-testid="br-back">
+                <ArrowLeft className="h-5 w-5" strokeWidth={2.5} aria-hidden="true" />
+                Játékok
+              </Link>
+            }
+            settings={
+              <div className="flex flex-col gap-3">
                 {levels.active && levels.level != null ? (
                   <GradeLevelPicker
                     value={levels.level}
@@ -979,360 +1094,260 @@ export default function BrainRotSteal() {
                     label={`Pálya — ${userGrade}. osztály`}
                   />
                 ) : null}
-              </div>
-            )}
-
-            {/* --- GAME --- */}
-            {phase === "play" && (
-              <div className="brain-run flex flex-col items-center gap-1.5 sm:gap-2 flex-1 min-h-0">
-                <GameNextGoalBar
+                <GamePedagogyPanel
                   accent="fuchsia"
-                  headline={
-                    streak >= STREAK_GOAL
-                      ? "Szuper sorozat – tartsd így!"
-                      : `Gyűjts ${STREAK_GOAL} jó választ egymás után!`
+                  kidMission="Kapd el a Brain Rot-okat, mielőtt eltűnnek! Minden elkapás után kvíz: angol, matek, vagy magyar nyelvtan. Helyes válasz = XP + kombó szorzó! Minél gyorsabb vagy, annál több pont!"
+                  parentBody={
+                    <>
+                      <strong className="text-fuchsia-100/90">Tananyag:</strong> angol szókincs (a központi szóbankból,
+                      az évfolyamhoz illő szinten), alap matematika (műveletek, mértékegységek, geometria), magyar
+                      nyelvtan (szófajok, ragozás, helyesírás).
+                      <br />
+                      <strong className="text-fuchsia-100/90">Fejleszt:</strong> gyors döntéshozatal, olvasásértés, kéz-szem
+                      koordináció, matematikai készségek, magyar nyelvtan.
+                      <br />
+                      <span className="text-white/70">
+                        A kisebbeknek nagyobb és lassabb lények jönnek, amelyek tovább maradnak a pályán.
+                      </span>
+                    </>
                   }
-                  subtitle={`${timeLeft}s | ${totalCaught} elkapva | ${totalMissed} elszökött`}
-                  current={Math.min(streak, STREAK_GOAL)}
-                  target={STREAK_GOAL}
-                  className="w-full"
                 />
-
-                {/* Stats */}
-                <div className="w-full grid grid-cols-2 gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-semibold">
-                  <div className="rounded-lg border border-white/20 bg-slate-900/95 px-1.5 sm:px-2 py-1 sm:py-1.5">
-                    XP: {sessionXp} | Elkapva: {totalCaught}
-                  </div>
-                  <div className="rounded-lg border border-white/20 bg-slate-900/95 px-1.5 sm:px-2 py-1 sm:py-1.5 text-right">
-                    Idő: {timeLeft}s | Szorzó: x{comboMultiplier.toFixed(1)}
-                  </div>
-                </div>
-
-                {/* Time bar */}
-                <div className="w-full h-2 sm:h-2.5 rounded-full bg-white/10 overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full"
-                    style={{
-                      background:
-                        timePercent > 50
-                          ? "linear-gradient(to right, #a855f7, #ec4899)"
-                          : timePercent > 25
-                            ? "linear-gradient(to right, #f59e0b, #ef4444)"
-                            : "linear-gradient(to right, #ef4444, #991b1b)",
-                      width: `${timePercent}%`,
-                    }}
-                    transition={{ duration: 0.3 }}
-                  />
-                </div>
-
-                {/* Game board */}
-                <div
-                  ref={boardRef}
-                  data-collectible-world
-                  className="relative w-full rounded-xl sm:rounded-2xl overflow-hidden border-2 border-purple-500/40 shadow-[0_0_40px_rgba(147,51,234,0.2)] bg-gradient-to-br from-slate-900/90 via-purple-950/40 to-slate-900/90 backdrop-blur-sm flex-1"
-                  style={{ minHeight: 0, touchAction: "manipulation" }}
-                >
-                  {/* Grid background */}
-                  <div className="absolute inset-0 opacity-[0.04]" style={{
-                    backgroundImage: "linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)",
-                    backgroundSize: "40px 40px",
-                  }} />
-
-                  {/* 3D arena background (decorative; the creatures stay DOM buttons above it) */}
-                  <BrainRotArena3D
-                    rots={brainRots
-                      .filter((r) => !r.caught)
-                      .map((r) => {
-                        const age = (Date.now() - r.spawnTime) / BRAIN_ROT_LIFETIME;
-                        return {
-                          id: r.id,
-                          x: r.x,
-                          y: r.y,
-                          size: r.size,
-                          warning: age > 0.6,
-                          opacity: age > 0.7 ? Math.max(0, 1 - (age - 0.7) / 0.3) : 1,
-                        };
-                      })}
-                    bursts={arenaBursts}
-                  />
-
-                  {/* Brain Rots */}
-                  {brainRots
-                    .filter((r) => !r.caught)
-                    .map((rot) => {
-                      const age = (Date.now() - rot.spawnTime) / BRAIN_ROT_LIFETIME;
-                      const opacity = age > 0.7 ? 1 - (age - 0.7) / 0.3 : 1;
-                      const isWarning = age > 0.6;
-
-                      return (
-                        <motion.button
-                          key={rot.id}
-                          className="absolute flex items-center justify-center cursor-pointer select-none focus:outline-none"
-                          style={{
-                            left: rot.x - rot.size / 2,
-                            top: rot.y - rot.size / 2,
-                            width: rot.size,
-                            height: rot.size,
-                            transform: `rotate(${rot.rotation}deg)`,
-                            // G-10: a fojtott (100 ms-os) lépések között a
-                            // böngésző interpolál, így a szem folyamatosnak
-                            // látja a mozgást anélkül, hogy 60 FPS-en kellene
-                            // React-állapotot írni. Mozgáscsökkentésnél kikapcsol.
-                            transition: reducedMotion
-                              ? undefined
-                              : "left 100ms linear, top 100ms linear",
-                            opacity,
-                            filter: isWarning ? "hue-rotate(40deg)" : "none",
-                            /* Enlarge touch target on mobile for easier tapping */
-                            padding: "2px",
-                          }}
-                          whileHover={{ scale: 1.2 }}
-                          whileTap={{ scale: 0.85 }}
-                          onClick={() => handleCatchBrainRot(rot)}
-                          aria-label={`Kapd el: ${rot.name}`}
-                        >
-                          {/* Glowing aura */}
-                          <div
-                            className="absolute inset-0 rounded-full"
-                            style={{
-                              background: `radial-gradient(circle, ${isWarning ? "rgba(239,68,68,0.4)" : "rgba(147,51,234,0.35)"} 0%, transparent 70%)`,
-                              animation: `pulse ${1 + Math.sin(rot.pulsePhase) * 0.5}s ease-in-out infinite`,
-                            }}
-                          />
-                          <CollectibleAvatar name={rot.name} value={rot.xpValue} />
-                          {/* XP badge */}
-                          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[9px] font-black bg-black/70 text-amber-300 px-1 rounded-sm whitespace-nowrap">
-                            {rot.xpValue} XP
-                          </span>
-                          {/* Warning indicator */}
-                          {isWarning && (
-                            <motion.div
-                              className="absolute -top-1 -right-1"
-                              animate={{ scale: [1, 1.3, 1] }}
-                              transition={{ duration: 0.5, repeat: Infinity }}
-                            >
-                              <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
-                            </motion.div>
-                          )}
-                        </motion.button>
-                      );
-                    })}
-
-                  {/* Particles */}
-                  {particles.map((p, i) => (
-                    <div
-                      key={`p-${i}`}
-                      className="absolute pointer-events-none"
-                      style={{
-                        left: p.x,
-                        top: p.y,
-                        opacity: p.life / p.maxLife,
-                        transform: `scale(${p.life / p.maxLife})`,
-                      }}
-                    >
-                      {p.emoji ? (
-                        <span style={{ fontSize: p.size * 2 }}>{p.emoji}</span>
-                      ) : (
-                        <div
-                          className="rounded-full"
-                          style={{
-                            width: p.size,
-                            height: p.size,
-                            backgroundColor: p.color,
-                          }}
-                        />
-                      )}
-                    </div>
-                  ))}
-
-                  {/* Floating texts */}
-                  {floatingTexts.map((ft) => (
-                    <motion.div
-                      key={ft.id}
-                      className="absolute pointer-events-none font-black text-sm"
-                      style={{
-                        left: ft.x,
-                        top: ft.y,
-                        color: ft.color,
-                        opacity: ft.life / 1.5,
-                        textShadow: "0 2px 8px rgba(0,0,0,0.8)",
-                      }}
-                      initial={{ scale: 0.5, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                    >
-                      {ft.text}
-                    </motion.div>
-                  ))}
-
-                  {/* Empty state */}
-                  {brainRots.filter((r) => !r.caught).length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <motion.p
-                        className="text-white/40 text-sm font-medium"
-                        animate={{ opacity: [0.3, 0.7, 0.3] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                      >
-                        Brain Rot-ok közelednek... {"\u{1F9E0}"}
-                      </motion.p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Hint */}
-                <p className="text-[10px] text-white/50 text-center">
-                  Koppints a Brain Rot-okra, mielőtt eltűnnek! Minden szerzés kvízt hoz.
+                <p data-game-sync className="text-sm text-purple-100/90 rounded-lg border border-purple-700/45 px-3 py-2 bg-slate-900/80">
+                  {syncBanner}
                 </p>
               </div>
+            }
+          >
+            {levels.level != null && (
+              <p className="flex justify-center mb-2">
+                <span className="brainrot-level" data-testid="br-level">
+                  {"\u{1F3AF}"} {levels.level}. pálya{userGrade != null ? ` · ${userGrade}. osztály` : ""}
+                </span>
+              </p>
             )}
+            <ul className="brainrot-topics" aria-label="Kvíztémák">
+              <li><span aria-hidden="true">{"\u{1F1EC}\u{1F1E7}"}</span> Angol</li>
+              <li><span aria-hidden="true">{"\u{1F522}"}</span> Matek</li>
+              <li><span aria-hidden="true">{"\u{1F4DD}"}</span> Magyar</li>
+            </ul>
+          </StartScreen>
+        </main>
+      )}
 
-            {/* --- GAME OVER --- */}
-            {phase === "over" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-4 py-8 text-center" data-testid="br-over">
-                <motion.div
-                  initial={{ scale: 0, rotate: -180 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: "spring", damping: 10 }}
+      {/* --- JÁTÉK --- */}
+      {inRun && (
+        <>
+          <GameHud
+            onPause={pause}
+            stats={[
+              { id: "xp", label: "Pont", value: sessionXp },
+              {
+                id: "streak",
+                label: "Sorozat",
+                value: streak >= STREAK_GOAL ? `${streak} \u{1F525}` : `${streak}/${STREAK_GOAL}`,
+                tone: streak >= STREAK_GOAL ? "good" : "default",
+              },
+              { id: "caught", label: "Elkapva", value: totalCaught },
+            ]}
+            progress={{ value: timeLeft, max: ROUND_LIMIT, label: `${timeLeft} mp`, tone: timeTone }}
+          />
+          <main className="relative z-10 w-full mx-auto flex flex-col" style={{ paddingTop: 6 }}>
+            <div
+              ref={boardRef}
+              data-collectible-world
+              data-testid="br-board"
+              className="relative w-full flex-1 rounded-2xl overflow-hidden border-2 border-purple-500/40 shadow-[0_0_40px_rgba(147,51,234,0.25)]"
+              style={{ minHeight: 0, touchAction: "manipulation" }}
+            >
+              {/* 3D aréna-háttér (dekoráció; a lények DOM-gombok fölötte) */}
+              <BrainRotArena3D
+                rots={liveRots.map((r) => {
+                  const v = rotView(r);
+                  return { id: r.id, x: r.x, y: r.y, size: r.size, warning: v.warning, opacity: v.opacity };
+                })}
+                bursts={arenaBursts}
+              />
+
+              {/* Kombó-szorzó jelvény a pálya sarkában (csak ha él; változáskor „pop”) */}
+              {comboMultiplier > 1 && (
+                <span
+                  key={comboMultiplier}
+                  data-testid="br-combo"
+                  className={`brainrot-combo ${reducedMotion ? "" : "brainrot-pop"}`}
+                  aria-label={`Kombó szorzó ×${comboMultiplier.toFixed(2)}`}
                 >
-                  <Trophy className="w-16 h-16 text-amber-400 mx-auto" />
-                </motion.div>
+                  <Zap className="h-4 w-4" aria-hidden="true" />×{String(Number(comboMultiplier.toFixed(2)))}
+                </span>
+              )}
 
-                <div className="space-y-1">
-                  <h2 className="text-xl font-extrabold bg-gradient-to-r from-amber-300 via-orange-300 to-pink-300 bg-clip-text text-transparent">
-                    Vadászat vége!
-                  </h2>
-                  <p className="text-sm text-white/70 max-w-sm">
-                    Minden jó kvíz a tudásodat erősítette: angol, matek, magyar, természettudomány és történelem!
+              {/* Lények: átlátszó, legalább 56×56-os koppintási doboz a rajz körül (M2) */}
+              {liveRots.map((rot) => {
+                const v = rotView(rot);
+                const hit = Math.max(56, rot.size + 12);
+                return (
+                  <button
+                    key={rot.id}
+                    type="button"
+                    data-brainrot={rot.id}
+                    data-warning={v.warning ? "true" : "false"}
+                    className="brainrot-creature absolute flex items-center justify-center select-none focus:outline-none"
+                    style={{
+                      left: rot.x - hit / 2,
+                      top: rot.y - hit / 2,
+                      width: hit,
+                      height: hit,
+                      // G-10: a fojtott (100 ms-os) lépések között a böngésző interpolál. Mozgáscsökkentésnél kikapcsol.
+                      transition: reducedMotion ? undefined : "left 100ms linear, top 100ms linear, transform 120ms ease-out",
+                      opacity: v.opacity,
+                    }}
+                    onClick={() => handleCatchBrainRot(rot)}
+                    aria-label={`Kapd el: ${rot.name}`}
+                  >
+                    <span className={`brainrot-body ${reducedMotion ? "" : "brainrot-pop"}`} style={{ width: rot.size, height: rot.size }}>
+                      <span
+                        aria-hidden="true"
+                        className={`brainrot-aura ${reducedMotion ? "" : v.warning ? "brainrot-aura-warn" : "brainrot-aura-idle"}`}
+                        data-warning={v.warning ? "true" : "false"}
+                        style={{ animationDelay: `${(rot.pulsePhase % 1).toFixed(2)}s` }}
+                      />
+                      <span className="brainrot-sprite" style={{ transform: `rotate(${rot.rotation}deg)` }}>
+                        <CollectibleAvatar name={rot.name} value={rot.xpValue} />
+                      </span>
+                    </span>
+                    <span className="brainrot-xp">{rot.xpValue} XP</span>
+                    {v.warning && (
+                      <span className="brainrot-alert" aria-hidden="true">
+                        <ShieldAlert className="h-5 w-5" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
+              {/* DOM-részecskék */}
+              {particles.map((p, i) => (
+                <div
+                  key={`p-${i}`}
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: p.x,
+                    top: p.y,
+                    opacity: p.life / p.maxLife,
+                    transform: `scale(${p.life / p.maxLife})`,
+                  }}
+                >
+                  {p.emoji ? (
+                    <span style={{ fontSize: Math.max(14, p.size * 2) }}>{p.emoji}</span>
+                  ) : (
+                    <div
+                      className="rounded-full"
+                      style={{ width: p.size, height: p.size, backgroundColor: p.color, boxShadow: `0 0 8px ${p.color}` }}
+                    />
+                  )}
+                </div>
+              ))}
+
+              {/* Lebegő feliratok (+XP, Elszökött!) */}
+              {floatingTexts.map((ft) => (
+                <motion.div
+                  key={ft.id}
+                  className="absolute pointer-events-none font-black text-lg whitespace-nowrap -translate-x-1/2"
+                  style={{
+                    left: ft.x,
+                    top: ft.y,
+                    color: ft.color,
+                    opacity: ft.life / 1.5,
+                    textShadow: "0 2px 8px rgba(0,0,0,0.85)",
+                  }}
+                  initial={reducedMotion ? false : { scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                >
+                  {ft.text}
+                </motion.div>
+              ))}
+
+              {/* Üres pálya: rövid útmutató */}
+              {liveRots.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center px-6 pointer-events-none">
+                  <p className={`text-base font-semibold text-white/75 text-center ${reducedMotion ? "" : "animate-pulse"}`}>
+                    Koppints a lényekre, mielőtt eltűnnek! {"\u{1F9E0}"}
                   </p>
                 </div>
+              )}
+            </div>
+          </main>
+        </>
+      )}
 
-                <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
-                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center">
-                    <p className="text-2xl font-black text-amber-300">{sessionXp}</p>
-                    <p className="text-[10px] text-white/60 font-semibold">SZERZETT XP</p>
-                  </div>
-                  <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 p-3 text-center">
-                    <p className="text-2xl font-black text-orange-300">{totalCaught}</p>
-                    <p className="text-[10px] text-white/60 font-semibold">ELKAPOTT</p>
-                  </div>
-                  <div className="rounded-xl border border-pink-500/30 bg-pink-500/10 p-3 text-center">
-                    <p className="text-2xl font-black text-pink-300">{bestStreak}</p>
-                    <p className="text-[10px] text-white/60 font-semibold">LEGJOBB SOROZAT</p>
-                  </div>
-                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center">
-                    <p className="text-2xl font-black text-red-300">{totalMissed}</p>
-                    <p className="text-[10px] text-white/60 font-semibold">ELSZÖKÖTT</p>
-                  </div>
-                </div>
-
-                {syncEligibility?.eligible ? (
-                  <p className="text-xs text-emerald-300/90">Eredmény elküldve!</p>
-                ) : (
-                  <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>
-                )}
-
-                <div className="flex gap-2">
-                  <Button
-                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 shadow-lg"
-                    onClick={startGame}
-                  >
-                    <RotateCcw className="w-4 h-4 mr-1" />
-                    Újra!
-                  </Button>
-                  <Link href="/games">
-                    <Button variant="outline" className="border-white/40 text-white">
-                      Lista
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </main>
-
-      {/* --- QUIZ OVERLAY --- */}
+      {/* --- KVÍZ --- */}
       <AnimatePresence>
         {phase === "quiz" && quiz && caughtRot && (
           <motion.div
-            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-2 sm:p-3 bg-black/80 backdrop-blur-sm"
-            style={{ paddingBottom: "env(safe-area-inset-bottom, 8px)" }}
-            initial={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm"
+            style={{
+              padding:
+                "max(8px, var(--game-safe-top)) max(8px, var(--game-safe-right)) max(8px, var(--game-safe-bottom)) max(8px, var(--game-safe-left))",
+            }}
+            initial={reducedMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <motion.div
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              className={`w-full max-w-md rounded-t-2xl sm:rounded-2xl ${CATEGORY_BORDERS[quiz.category]} border-2 bg-slate-950/95 p-3 sm:p-4 shadow-2xl ${wrongShake ? "animate-brshake" : ""}`}
+              data-testid="br-quiz"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="br-quiz-prompt"
+              initial={reducedMotion ? false : { y: 40, opacity: 0, scale: 0.96 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 420, damping: 30 }}
+              className={`brainrot-quiz w-full max-w-lg max-h-full overflow-y-auto rounded-3xl ${CATEGORY_BORDERS[quiz.category]} border-2 p-3 sm:p-4 shadow-2xl ${wrongShake ? "animate-brshake" : ""}`}
             >
-              {/* Header */}
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{caughtRot.emoji}</span>
-                  <div>
-                    <p className={`text-xs font-bold uppercase ${CATEGORY_LABELS[quiz.category].color}`}>
-                      {CATEGORY_LABELS[quiz.category].icon} {quiz.topic || CATEGORY_LABELS[quiz.category].label} kvíz
-                    </p>
-                    <p className="text-[10px] text-white/50">
-                      {caughtRot.name} | {Math.round(caughtRot.xpValue * comboMultiplier)} XP
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  {comboMultiplier > 1 && (
-                    <span className="text-[10px] font-bold text-yellow-300 bg-yellow-400/15 px-1.5 py-0.5 rounded">
-                      x{comboMultiplier.toFixed(1)} szorzó
-                    </span>
-                  )}
+              <div className="flex items-center gap-3 mb-2">
+                <span className="brainrot-quiz-avatar" aria-hidden="true">
+                  <CollectibleAvatar name={caughtRot.name} value={caughtRot.xpValue} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm font-extrabold uppercase tracking-wide ${CATEGORY_LABELS[quiz.category].color}`}>
+                    {CATEGORY_LABELS[quiz.category].icon} {quiz.topic || CATEGORY_LABELS[quiz.category].label} kvíz
+                  </p>
+                  <p className="text-sm text-white/75">
+                    {caughtRot.name} · <span className="text-amber-300 font-bold">{Math.round(caughtRot.xpValue * comboMultiplier)} XP</span>
+                    {comboMultiplier > 1 && <span className="text-yellow-300 font-bold"> · ×{comboMultiplier.toFixed(1)}</span>}
+                  </p>
                 </div>
               </div>
 
-              <p className="text-[10px] sm:text-[11px] text-white/60 mb-1.5 sm:mb-2">
-                Helyes válasz: a Brain Rot a tied + XP! Rossz válasz: próbáld újra.
+              <p id="br-quiz-prompt" className="text-lg sm:text-xl font-bold leading-snug mb-3">
+                {quiz.prompt}
               </p>
 
-              {/* Question */}
-              <p className="text-sm sm:text-base font-semibold mb-3 sm:mb-4">{quiz.prompt}</p>
-
-              {/* Answers */}
-              <div className="grid gap-1.5 sm:gap-2">
+              <div className="brainrot-answers grid gap-2">
                 {quiz.options.map((o, i) => {
                   const isCorrect = revealCorrectIdx === i;
                   const isWrong = wrongIdx === i;
                   const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
-                  const baseCat =
-                    quiz.category === "english"
-                      ? "border-cyan-900/40 hover:border-cyan-500/50"
-                      : quiz.category === "math"
-                        ? "border-amber-900/40 hover:border-amber-500/50"
-                        : "border-emerald-900/40 hover:border-emerald-500/50";
-                  const cls = isCorrect
-                    ? "h-auto min-h-[48px] py-2.5 sm:py-3 text-left bg-emerald-700/70 hover:bg-emerald-700/70 text-white border-2 border-emerald-300 text-[14px] sm:text-[15px] font-bold"
-                    : isWrong
-                      ? "h-auto min-h-[48px] py-2.5 sm:py-3 text-left bg-rose-800/70 hover:bg-rose-800/70 text-white border-2 border-rose-300 text-[14px] sm:text-[15px]"
-                      : dim
-                        ? "h-auto min-h-[48px] py-2.5 sm:py-3 text-left bg-white/5 text-white/40 border border-white/10 text-[14px] sm:text-[15px]"
-                        : `h-auto min-h-[48px] py-2.5 sm:py-3 text-left bg-white/10 hover:bg-purple-800/50 active:bg-purple-700/60 text-white border text-[14px] sm:text-[15px] ${baseCat}`;
                   return (
-                    <Button
+                    <button
                       key={`${o}-${i}`}
-                      variant="secondary"
-                      className={cls}
+                      type="button"
+                      className="game-answer-btn brainrot-answer"
+                      data-state={isCorrect ? "correct" : isWrong ? "wrong" : dim ? "dim" : "idle"}
+                      data-category={quiz.category}
                       disabled={revealCorrectIdx !== null}
                       onClick={() => onAnswer(i)}
                       {...correctDataAttrs(i === quiz.correctIndex)}
                     >
-                      <span className="text-white/40 mr-2 font-mono text-xs">{String.fromCharCode(65 + i)})</span>
-                      {o}
-                    </Button>
+                      <span className="brainrot-answer-key" aria-hidden="true">{String.fromCharCode(65 + i)}</span>
+                      <span className="min-w-0 flex-1 text-left">{o}</span>
+                    </button>
                   );
                 })}
               </div>
               {streakProtector.warning && (
-                <p className="mt-2 text-[11px] text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>
+                <p className="mt-2 text-sm text-amber-300 font-semibold">⚠ {streakProtector.warning}</p>
               )}
               {revealCorrectIdx !== null && wrongIdx !== null && (
-                <p className="mt-2 text-[11px] text-emerald-300/95">
+                <p className="mt-2 text-sm text-emerald-300">
                   A helyes válasz: <strong>{quiz.options[revealCorrectIdx]}</strong>
                 </p>
               )}
@@ -1343,6 +1358,53 @@ export default function BrainRotSteal() {
 
       {feedback && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
 
+      <PauseMenu
+        open={paused && inRun}
+        onResume={resume}
+        onRestart={startGame}
+        onExit={exitToGames}
+        exitLabel="Vissza a játékokhoz"
+      />
+
+      <ResultScreen
+        open={phase === "over"}
+        testId="br-over"
+        title={won ? "Szuper vadászat!" : "Vadászat vége!"}
+        won={won}
+        score={sessionXp}
+        best={best.best}
+        isNewBest={isNewBest}
+        correct={correctAnswers}
+        total={correctAnswers + wrongAnswers}
+        onRetry={startGame}
+        retryLabel="Újra!"
+        onBack={() => navigate("/games")}
+        extra={
+          <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl bg-white/5 border border-white/10 px-1 py-1.5">
+                <p className="text-xl font-black text-orange-300 leading-tight">{totalCaught}</p>
+                <p className="text-sm text-white/70">elkapva</p>
+              </div>
+              <div className="rounded-xl bg-white/5 border border-white/10 px-1 py-1.5">
+                <p className="text-xl font-black text-rose-300 leading-tight">{totalMissed}</p>
+                <p className="text-sm text-white/70">elszökött</p>
+              </div>
+              <div className="rounded-xl bg-white/5 border border-white/10 px-1 py-1.5">
+                <p className="text-xl font-black text-pink-300 leading-tight">{bestStreak}</p>
+                <p className="text-sm text-white/70">sorozat</p>
+              </div>
+            </div>
+            {!won && (
+              <p className="text-sm text-white/75">
+                {BRAIN_ROT_CLEAR_CATCHES} elkapás nyitja a következő pályát — még {Math.max(0, BRAIN_ROT_CLEAR_CATCHES - totalCaught)}!
+              </p>
+            )}
+            <p className="text-sm text-white/70">{syncEligibility?.eligible ? "Eredmény elküldve!" : syncBanner}</p>
+          </div>
+        }
+      />
+
       <style>{`
         @keyframes brshake {
           0%, 100% { transform: translateX(0); }
@@ -1350,7 +1412,49 @@ export default function BrainRotSteal() {
           75% { transform: translateX(6px); }
         }
         .animate-brshake { animation: brshake 0.16s ease-in-out 2; }
+        .brainrot-start-icon { display: inline-block; filter: drop-shadow(0 4px 10px #0008); }
+        [data-game="BrainRotSteal"] .game-start-icon { background: radial-gradient(circle at 30% 25%, #ffffff40, transparent 55%), linear-gradient(160deg, #c026d3, #7c3aed 55%, #f59e0b); box-shadow: 0 14px 34px #c026d34d, inset 0 1px 0 #ffffff66; }
+        [data-game="BrainRotSteal"] .game-start-settings button { min-height: 48px; min-width: 48px; }
+        /* A közös jelvény-értesítő 10–11 px-es sorai (M3) és rétege: az eredménykártya FÖLÖTT, olvasható méretben. */
+        [data-game="BrainRotSteal"] [data-testid^="achievement-toast-"] { z-index: 85; }
+        [data-game="BrainRotSteal"] [data-testid^="achievement-toast-"] p { font-size: 12px; }
+        [data-game="BrainRotSteal"] [data-testid^="achievement-toast-"] p.text-sm { font-size: 14px; }
+        .brainrot-topics { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+        .brainrot-topics li { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9999px; font-size: 14px; font-weight: 800; color: #f5d0fe; background: #a21caf26; border: 1px solid #e879f940; }
+        [data-collectible-world][data-testid="br-board"] { background: radial-gradient(ellipse at 50% 15%, #8d60cc55, transparent 65%), linear-gradient(160deg, #191944, #241046) !important; }
+        .brainrot-creature { -webkit-tap-highlight-color: transparent; touch-action: manipulation; cursor: pointer; z-index: 2; }
+        .brainrot-creature:active { transform: scale(.86); }
+        .brainrot-creature:focus-visible { outline: 3px solid #fef08a; outline-offset: 2px; border-radius: 9999px; }
+        .brainrot-body { position: relative; display: block; }
+        .brainrot-pop { animation: brpop 240ms cubic-bezier(.2,.9,.3,1.3) both; }
+        @keyframes brpop { 0% { transform: scale(0); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
+        .brainrot-aura { position: absolute; inset: -14%; border-radius: 9999px; background: radial-gradient(circle, rgba(168,85,247,.55) 0%, rgba(236,72,153,.18) 45%, transparent 70%); }
+        .brainrot-aura[data-warning="true"] { background: radial-gradient(circle, rgba(244,63,94,.75) 0%, rgba(244,63,94,.25) 45%, transparent 72%); }
+        .brainrot-aura-idle { animation: brglow 2.2s ease-in-out infinite; }
+        .brainrot-aura-warn { animation: brwarn .42s ease-in-out infinite; }
+        @keyframes brglow { 0%, 100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.1); opacity: 1; } }
+        @keyframes brwarn { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.32); opacity: .45; } }
+        .brainrot-sprite { position: absolute; inset: 0; display: block; filter: drop-shadow(0 6px 10px #0009); }
+        .brainrot-xp { position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%); padding: 0 6px; border-radius: 6px; font-size: 12px; line-height: 16px; font-weight: 900; white-space: nowrap; color: #fcd34d; background: #000000b3; pointer-events: none; }
+        .brainrot-alert { position: absolute; top: 0; right: 0; color: #fb7185; filter: drop-shadow(0 0 6px #f43f5e); pointer-events: none; }
+        .brainrot-combo { position: absolute; top: 8px; left: 8px; z-index: 3; display: inline-flex; align-items: center; gap: 2px; padding: 4px 10px; border-radius: 9999px; font-size: 16px; font-weight: 900; color: #422006; background: linear-gradient(180deg, #fde047, #f59e0b); box-shadow: 0 4px 14px #f59e0b66; pointer-events: none; }
+        [data-game="BrainRotSteal"] [data-testid^="achievement-toast-"] { top: max(8px, var(--game-safe-top)); }
+        .brainrot-level { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 9999px; font-size: 14px; font-weight: 800; color: #fde68a; background: #f59e0b1f; border: 1px solid #f59e0b40; }
+        .brainrot-quiz { background: linear-gradient(160deg, #1c1238 0%, #0f0a24 60%, #0b172d 100%); }
+        .brainrot-quiz-avatar { display: block; width: 48px; height: 48px; flex: 0 0 auto; }
+        @media (min-width: 560px) { .brainrot-answers { grid-template-columns: 1fr 1fr; } }
+        .brainrot-answer { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border-radius: 16px; font-weight: 700; color: #fff; background: #ffffff14; border: 1.5px solid #ffffff2e; box-shadow: inset 0 -3px 0 #0006; -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: background-color .15s ease, transform .1s ease, border-color .15s ease; }
+        .brainrot-answer:not(:disabled):active { transform: translateY(1px) scale(.98); }
+        .brainrot-answer[data-category="english"] { border-color: #22d3ee59; }
+        .brainrot-answer[data-category="math"] { border-color: #f59e0b59; }
+        .brainrot-answer[data-category="hungarian"] { border-color: #10b98159; }
+        .brainrot-answer:not(:disabled):hover { background: #7c3aed40; }
+        .brainrot-answer[data-state="correct"] { background: #047857; border-color: #6ee7b7; }
+        .brainrot-answer[data-state="wrong"] { background: #9f1239; border-color: #fda4af; }
+        .brainrot-answer[data-state="dim"] { opacity: .45; }
+        .brainrot-answer-key { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: 0 0 auto; border-radius: 10px; font-size: 14px; font-weight: 900; color: #e9d5ff; background: #ffffff1a; }
+        @media (max-height: 500px) { .brainrot-quiz-avatar { width: 36px; height: 36px; } }
       `}</style>
-    </div>
+    </GameShell>
   );
 }
