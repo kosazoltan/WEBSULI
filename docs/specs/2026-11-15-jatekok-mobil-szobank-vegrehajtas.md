@@ -1333,8 +1333,8 @@ az intervallum-callback tartalmazza a `paused` feltételt; `sq-won`, `sq-over`, 
 **Állapot:** review — ág feat/jatekok-s9-szokoar, munkafa .claude/worktrees/jatekok-s9, kanban #26. Eltérések: a szóbank
 angol ÉS vegyes módban is be van kapcsolva (a vegyes kör is ad angol kérdést); a mobil-eset `path`-ja
 `/games/tsunami-english?difficulty=easy` (a játéklistán a Szökőárnak csak nehézség-linkjei vannak); az új jelvények a
-közös toast (10–11 px) helyett az eredménykártyán; a szünet- / eredménykártya gombjai a lapon 56 px-esek (a rugós
-belépő 0,92-es méretén is ≥ 48 px).
+eredménykártyán is (olvasható, megmaradó jutalom; a közös toast helyett); a kezdőképernyő érintési céljai 52 px-esek (a
+belépő animáció közben is ≥ 48 px). A szünet- / eredménykártya helyi 56 px-es felülírása a #429 után kikerült.
 
 - **Cél:** 4.5 keret; érintővezérlés csak érintős eszközön; a könnyű grafika az eszköz képességétől függ, nem a
   szélességtől; látványosabb hullám, part és futó; ismétlés-szűrés a teljes futásra; angol kérdések a szóbankból (A8).

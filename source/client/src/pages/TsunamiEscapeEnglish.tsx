@@ -1959,15 +1959,12 @@ export default function TsunamiEscapeEnglish() {
         .animate-shake {
           animation: shake 0.18s ease-in-out 2;
         }
-        /* M2: a közös pályaválasztó 44 px-es gombjai itt is legalább 48 px-esek (érintési cél). */
-        .tsunami-level-picker button { min-height: 52px; min-width: 52px; }
         /* Mért (Pixel 7, 2,625-ös képpontarány): a pontosan 48 px-es elemek a kezdőképernyő belépője közben
-           47,9 px-nek is mérődnek — 52 px-szel van tartalék. */
-        .game-start-settings > summary, .game-start-secondary > *, .tsunami-settings-btn { min-height: 52px; }
+           47,9 px-nek is mérődnek (a közös mérő csak a szünet- és eredménykártyát várja meg) — a kezdőképernyő
+           érintési céljai itt 52 px-esek. */
+        .game-start-settings > summary, .game-start-secondary > *, .tsunami-settings-btn,
+        .tsunami-level-picker button { min-height: 52px; }
         .tsunami-level-picker p { font-size: 14px; }
-        /* A szünet- és eredménykártya rugós belépője 0,9–0,92-es méretről indul: 56 px-es gombbal a
-           belépés közben is legalább 48 px az érintési cél (mért: 52 px × 0,92 = 47,9 px). */
-        .game-pause-actions .game-btn, .game-pause-sound > button, .game-result-actions .game-btn { min-height: 56px; }
         @media (min-width: 700px), (min-width: 560px) and (max-height: 500px) {
           .tsunami-answers { grid-template-columns: 1fr 1fr; }
           .tsunami-quiz { max-width: 720px; }
