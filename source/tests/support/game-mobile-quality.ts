@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
+import { isBenignWebglEnvWarning } from "./webgl-noise";
+
 /**
  * S2 — a hét játék közös mobil-minőségi mérése (terv M1–M11; végrehajtás K.4, K.7.3, S2 5. lépés).
  *
@@ -171,6 +173,7 @@ function collectErrors(page: Page): { errors: string[] } {
   page.on("console", (msg) => {
     const type = msg.type();
     // A WebGL-hibák a Chrome-ban gyakran „warning” szinten jönnek (GL_INVALID_…, CONTEXT_LOST).
+    if (isBenignWebglEnvWarning(msg.text())) return; // CI szoftveres WebGL környezeti zaja (webgl-noise.ts)
     if (type === "error" || (type === "warning" && WEBGL_ERROR.test(msg.text()))) {
       bag.errors.push(`console.${type}: ${msg.text()}`);
     }
