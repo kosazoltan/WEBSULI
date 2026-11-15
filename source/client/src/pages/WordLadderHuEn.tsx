@@ -1014,7 +1014,7 @@ export default function WordLadderHuEn() {
                           aria-label={`${WORD_LADDER_LANGUAGE_LABELS[l].name}${available ? "" : " (hamarosan)"}`}
                           disabled={!available}
                           onClick={() => pickLanguage(l)}
-                          className={`min-h-[48px] rounded-xl border px-2 py-1.5 text-base font-bold leading-tight transition-colors ${
+                          className={`min-h-[52px] rounded-xl border px-2 py-1.5 text-base font-bold leading-tight transition-colors ${
                             selected
                               ? "bg-sky-500 border-sky-200 text-slate-950"
                               : available
@@ -1041,7 +1041,7 @@ export default function WordLadderHuEn() {
                         aria-pressed={ladderGrade === g}
                         aria-label={`${g}. évfolyam`}
                         onClick={() => pickGrade(g)}
-                        className={`min-h-[48px] rounded-xl border px-1 py-1.5 text-base font-bold transition-colors ${
+                        className={`min-h-[52px] rounded-xl border px-1 py-1.5 text-base font-bold transition-colors ${
                           ladderGrade === g
                             ? "bg-amber-500 border-amber-200 text-slate-950"
                             : "bg-black/30 border-white/25 text-white hover:bg-white/10"
@@ -1345,7 +1345,7 @@ export default function WordLadderHuEn() {
         .wl-achievements [data-testid^="achievement-toast-"] { z-index: 90; top: max(8px, var(--game-safe-top)); }
         .wl-achievements [data-testid^="achievement-toast-"] p:not(.text-sm) { font-size: 13px; }
         /* A közös pályaválasztó 44 px-es gombjai a Szólétra kezdőképernyőjén is érjék el a 48 px-t (M2). */
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="level-picker"] button { min-height: 48px; min-width: 48px; font-size: 16px; }
+        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="level-picker"] button { min-height: 52px; min-width: 52px; font-size: 16px; }
         .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="level-picker"] > p { font-size: 14px; }
         /* 3D kérdés (spec 7. döntés): a DOM-gomb átlátszó érintési réteg a 3D lap fölött; a fókuszkeret látszik. */
         .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] {
