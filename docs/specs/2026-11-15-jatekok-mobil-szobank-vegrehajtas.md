@@ -1229,7 +1229,7 @@ az intervallum-callback tartalmazza a `paused` feltételt; `sq-won`, `sq-over`, 
 
 ## S8 — Brain Rot Lopás mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #25. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s8-brainrot, munkafa .claude/worktrees/jatekok-s8, kanban #25
 
 - **Cél:** 4.5 keret; a lények mérete és élettartama a képernyőhöz és az évfolyamhoz igazodik; látványosabb lények;
   angol kérdések a szóbankból (A8).
