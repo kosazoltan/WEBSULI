@@ -69,8 +69,9 @@ import {
   useHaptics,
   type GameScreenState,
 } from "@/game-engine/mobile";
-import { useVocabQuizSource } from "@/game-engine/vocab";
-import { mergeVocabTiers, VOCAB_POOL_PER_LEVEL, vocabIdOfLadderItem } from "@/lib/wordLadderVocab";
+import { createSeenHistory, externalKey, safeLocalStorage, useVocabQuizSource } from "@/game-engine/vocab";
+import { mergeVocabTiers, VOCAB_POOL_PER_LEVEL, vocabIdOfLadderItem, type VocabMeaning } from "@/lib/wordLadderVocab";
+import { loadVocabBank } from "@/data/vocabBank/loader";
 
 const LS_XP = "websuli-wordladder-xp";
 const LS_BEST = "websuli-wordladder-streak";
@@ -413,7 +414,36 @@ export default function WordLadderHuEn() {
     return LADDER_LEVELS.map((l) => vocab.buildPool(l, VOCAB_POOL_PER_LEVEL).map((q) => vocab.toLadderItem(q)));
     // A runSeq szándékosan függőség: futásonként új készlet.
   }, [vocab, lang, runSeq]);
-  const allTiers = useMemo(() => mergeVocabTiers(tiers, vocabTiers), [tiers, vocabTiers]);
+  /**
+   * A bejegyzések két nyelvi alakja (term, hu) a kézi bankkal való ütközés-szűréshez, fordítási iránytól függetlenül
+   * (review #430). A betöltő gyorsítótáraz: ez ugyanaz az ígéret, amelyet a szóbank-forrás is használ.
+   */
+  const [vocabMeanings, setVocabMeanings] = useState<Map<string, VocabMeaning> | null>(null);
+  useEffect(() => {
+    setVocabMeanings(null);
+    if (!vocab) return;
+    let cancelled = false;
+    loadVocabBank(lang).then(
+      (entries) => {
+        if (!cancelled) setVocabMeanings(new Map(entries.map((e) => [e.id, { term: e.term, hu: e.hu }])));
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [vocab, lang]);
+  const allTiers = useMemo(() => {
+    // A tartós, játékok között közös napló egyetlen olvasása a készlet építésekor (futásonként, a runSeq miatt):
+    // látott a bejegyzés, ha az azonosítója vagy (kézi kérdésből) a term / hu kulcsa szerepel (terv 4.4).
+    const snap = createSeenHistory(safeLocalStorage()).snapshot(lang);
+    const isSeen = (id: string) => {
+      if (snap[id] !== undefined) return true;
+      const m = vocabMeanings?.get(id);
+      return !!m && (snap[externalKey(m.term)] !== undefined || snap[externalKey(m.hu)] !== undefined);
+    };
+    return mergeVocabTiers(tiers, vocabMeanings ? vocabTiers : vocabTiers.map(() => []), (id) => vocabMeanings?.get(id), isSeen);
+  }, [tiers, vocabTiers, vocabMeanings, lang]);
   const tiersRef = useRef(allTiers);
   tiersRef.current = allTiers;
 
