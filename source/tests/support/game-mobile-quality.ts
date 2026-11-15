@@ -65,13 +65,14 @@ export async function waitForStable(page: Page, selector: string, timeout = 5_00
   await page.waitForFunction(
     (sel) => {
       const w = window as unknown as { __stableKey?: string; __stableN?: number };
-      const key = Array.from(document.querySelectorAll(sel))
+      const els = Array.from(document.querySelectorAll(sel));
+      const key = els
         .map((el) => {
           const r = el.getBoundingClientRect();
           return `${r.x.toFixed(2)},${r.y.toFixed(2)},${r.width.toFixed(2)},${r.height.toFixed(2)}`;
         })
         .join("|");
-      const running = document.getAnimations().some((a) => a.playState === "running");
+      const running = els.some((el) => el.getAnimations({ subtree: true }).some((a) => a.playState === "running" && a.effect?.getComputedTiming().iterations !== Infinity));
       if (!running && key !== "" && key === w.__stableKey) w.__stableN = (w.__stableN ?? 0) + 1;
       else w.__stableN = 0;
       w.__stableKey = key;
