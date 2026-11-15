@@ -69,12 +69,12 @@ export default function AchievementToast({ achievements, durationMs = 3500 }: Pr
         >
           <div className="text-3xl flex-shrink-0">{current.icon}</div>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-300 mb-0.5">
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-300 mb-0.5">
               ✨ Új jelvény
             </p>
             <p className="text-sm font-extrabold text-white leading-tight">{current.title}</p>
-            <p className="text-[11px] text-white/75 leading-snug mt-0.5">{current.description}</p>
-            <p className="text-[10px] text-amber-200/80 mt-1">+{current.points} pont</p>
+            <p className="text-xs text-white/75 leading-snug mt-0.5">{current.description}</p>
+            <p className="text-xs text-amber-200/80 mt-1">+{current.points} pont</p>
           </div>
         </motion.div>
       )}
