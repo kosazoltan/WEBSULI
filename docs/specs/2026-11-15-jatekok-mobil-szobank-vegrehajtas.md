@@ -497,7 +497,11 @@ valós szerződést kövessék:**
    `waitForPlaying(page)` (általános jel: `[data-game][data-playing="true"]`, a baseline esetek ezt használják),
    `MOBILE_VIEWPORTS`, `SafeInsets`.
 9. **Mérő-részletek:** a `smallTargets` a `position: fixed` elemet akkor is méri, ha `offsetParent === null`; a
-   `collectErrors` a `console.error`-t és a WebGL-mintájú `console.warning`-ot gyűjti; az M5 két leírója
+   `collectErrors` a `console.error`-t és a WebGL-mintájú `console.warning`-ot gyűjti, KIVÉVE a CI futtató (GPU nélküli,
+   szoftveres WebGL) két környezeti figyelmeztetését (#425 CI-napló): „Automatic fallback to software WebGL has been
+   deprecated” és „GL Driver Message (OpenGL, Performance, …): GPU stall due to ReadPixels”; ezeket az
+   `isBenignWebglEnvWarning` (`tests/support/webgl-noise.ts`) szűri, minden más WebGL-hiba (CONTEXT_LOST, shaderhiba,
+   `GL_INVALID_*`, nem „Performance” driver-üzenet) továbbra is hiba; az M5 két leírója
    („nem érintős”, „érintős laptop”) csak `status: "full"` és megadott `touchControlsTestId` mellett fut.
    Képernyőkép: mindig `testInfo.outputPath()`, és ha `GAME_MOBILE_SHOT_DIR` meg van adva, oda is
    `<id>-<sz>x<m>-<állapot>.jpg` néven (JPEG 70).
