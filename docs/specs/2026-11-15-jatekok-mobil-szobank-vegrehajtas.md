@@ -497,10 +497,27 @@ valós szerződést kövessék:**
    `waitForPlaying(page)` (általános jel: `[data-game][data-playing="true"]`, a baseline esetek ezt használják),
    `MOBILE_VIEWPORTS`, `SafeInsets`.
 9. **Mérő-részletek:** a `smallTargets` a `position: fixed` elemet akkor is méri, ha `offsetParent === null`; a
-   `collectErrors` a `console.error`-t és a WebGL-mintájú `console.warning`-ot gyűjti; az M5 két leírója
+   `collectErrors` a `console.error`-t és a WebGL-mintájú `console.warning`-ot gyűjti, KIVÉVE a CI futtató (GPU nélküli,
+   szoftveres WebGL) két környezeti figyelmeztetését (#425 CI-napló): „Automatic fallback to software WebGL has been
+   deprecated” és „GL Driver Message (OpenGL, Performance, …): GPU stall due to ReadPixels”; ezeket az
+   `isBenignWebglEnvWarning` (`tests/support/webgl-noise.ts`) szűri, minden más WebGL-hiba (CONTEXT_LOST, shaderhiba,
+   `GL_INVALID_*`, nem „Performance” driver-üzenet) továbbra is hiba; az M5 két leírója
    („nem érintős”, „érintős laptop”) csak `status: "full"` és megadott `touchControlsTestId` mellett fut.
    Képernyőkép: mindig `testInfo.outputPath()`, és ha `GAME_MOBILE_SHOT_DIR` meg van adva, oda is
    `<id>-<sz>x<m>-<állapot>.jpg` néven (JPEG 70).
+9/a. **Mérő-utójavítás (#429 bővítés, Brain Rot szelet mérése):** a `full` mód a játéktól független hibákat is kimért:
+    (1) M8 — a hálózati csonk a `/api/games/leaderboard` GET-re `{ ok: true }` objektumot adott, a valódi végpont
+    tömböt ad (`server/routes.ts`), ezért a `/games` lap „leaderboard.map is not a function” hibával összeomlott; a
+    csonk most `[]`-t ad, a pontszám-küldés (`POST /api/games/score`) külön ágon `{ ok: true }`-t;
+    (2) M2 — a mérő a `PauseMenu` / `ResultScreen` belépő animációja (scale 0,9 → 1) közben mért, így a 48 px-es gombok
+    47,x px-nek látszottak; a `smallTargets` előtt `waitForStable` vár (a párbeszéd mérete két egymást követő
+    mintavételnél azonos, nincs futó animáció) — a 48 px-es mérce nem lazult;
+    (3) helyi Windows-futásnál az ANGLE/D3D shader-fordító `THREE.WebGLProgram: Program Info Log: … warning X4122: sum
+    of … cannot be represented accurately in double precision` figyelmeztetése jelenik meg (Linux CI-ban nincs);
+    az `isBenignWebglEnvWarning` harmadik, szűk mintaként csak az olyan Program Info Log-ot engedi át, amelynek
+    minden sora `warning X4122` (egyetlen `error` sor is hibává teszi);
+    (4) közös kliens-komponensek mérete: `AchievementToast` 10–11 px-es szövegei ≥ 12 px-re, a `GradeLevelPicker`
+    gombjai és a `GamePedagogyPanel` súgó-gombja 44 → 48 px minimum magasságra (csak méret, viselkedés nem változik).
 10. **`playwright.game-mobile.config.ts`:** a port `GAME_MOBILE_PORT` környezeti változóval állítható (alap 5184), hogy
     párhuzamos munkafák ne ütközzenek.
 11. **Közös CSS-osztályok a változókon túl** (index.css, a `.game-shell-fixed > main` szabály elé): `.game-btn`,
@@ -1002,7 +1019,7 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
 
 ## S4 — Német szóbank-tartalom (2000 bejegyzés) + vak megoldó
 
-**Állapot:** nincs elkezdve. Kanban #21. Gyártó: Sonnet; vak megoldó: Opus. Függőség: S1 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s4-szobank-de, munkafa .claude/worktrees/jatekok-s4, kanban #21. Gyártó: Sonnet; vak megoldó: Opus. Függőség: S1 összevonva.
 
 - **Cél:** `data/vocabBank/de/level-0..4.ts` a K.8.2 kvóta-tábla és a K.8.3 kifejezés-kvóta szerint (összesen ≥ 2000),
   `de/stage.ts` → `"full"`, jegyzőkönyv.
@@ -1043,7 +1060,7 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
 
 ## S5 — Francia szóbank-tartalom (2000 bejegyzés) + vak megoldó
 
-**Állapot:** nincs elkezdve. Kanban #22. Gyártó: Sonnet; vak megoldó: Opus. Függőség: S1 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s5-szobank-fr, munkafa .claude/worktrees/jatekok-s5, kanban #22. Gyártó: Sonnet; vak megoldó: Opus. Függőség: S1 összevonva.
 
 - **Cél:** `data/vocabBank/fr/level-0..4.ts` a K.8.2 kvóta-tábla (a német és a francia kvóta azonos) és a K.8.3
   kifejezés-kvóta szerint (összesen ≥ 2000), `fr/stage.ts` → `"full"`, jegyzőkönyv.
@@ -1051,7 +1068,7 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
 - **Módosítandó:** `source/client/src/data/vocabBank/fr/level-0.ts … level-4.ts`, `fr/stage.ts`.
   **Létrehozandó:** `docs/measurements/2026-11-15-szobank-fr-vakmegoldo.md`. Más fájl nem változhat.
 - **Ellenőrzött horgonyok:** az S1 validátora franciában a `?`, `!`, `:`, `;` előtti sima szóközt (`/ [?!:;]/`) és a
-  szóköz nélküli írásjelet (`/[\p{L}\d][?!:;]/u`) is hibának veszi; csak ` ` vagy ` ` elfogadott. A meglévő
+  szóköz nélküli írásjelet (`/[\p{L}\d][?!:;]/u`) is hibának veszi; csak `\u00A0` vagy `\u202F` elfogadott. A meglévő
   francia Szólétra-bank: `data/wordLadder/fr.ts` (`WORD_LADDER_FR`), érintetlen marad.
 
 **Lépések:**
@@ -1059,7 +1076,10 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
 2. Gyártás a K.8.4 adagolással: 5 Sonnet-alügynök (L0 400, L1 450, L2 450, L3 400, L4 300), a K.8.2 tábla saját oszlopa
    szerint, a K.8.5 közös szabályokkal és az alábbi francia szabályokkal:
    - főnév névelővel (`le chien`, `la maison`, `l'école`, `les parents`); `l'` névelőnél a `hu` jelzi a nemet (`iskola (nn.)`);
-   - **nem törő szóköz** `?`, `!`, `:`, `;` előtt, a forrásban ` ` escape-pel (`"Comment ça va ?"`);
+     **spec-pontosítás (S5, 2026-11-15):** a `(hn.)`/`(nn.)` jelölés a `hu` mezőből egységesen kikerült, mert a
+     játékban a `hu` válaszlehetőség, és a csak az `l'`-es főneveken álló jelölés elárulta a megoldást
+     (`docs/measurements/2026-11-15-szobank-fr-vakmegoldo.md`);
+   - **nem törő szóköz** `?`, `!`, `:`, `;` előtt, a forrásban `\u00A0` escape-pel (`"Comment ça va\u00A0?"`);
    - ékezetek helyesen (`é è ê à ç ô û ï`), az aposztróf egyenes `'` (U+0027); ragozott igealak a példában → `alt`;
    - standard (franciaországi) francia.
 3. Ütközés-kezelés és kvóta-ellenőrzés: K.8.6 `--lang fr`.
