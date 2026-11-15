@@ -1084,7 +1084,7 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
 
 ## S6 — Szólétra mobilra + központi szóbank
 
-**Állapot:** nincs elkezdve. Kanban #23. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s6-szoletra, munkafa .claude/worktrees/jatekok-s6, kanban #23. Modell: Opus. Függőség: S1 és S2 összevonva.
 
 - **Cél:** a terv 4.5 keret és 4.6/2: nagy, hüvelykujjal elérhető válaszgombok, látványos lépés- és zuhanás-animáció,
   mindhárom nyelv kérdései a központi szóbankból is (A7), a meglévő bankok megmaradnak.
