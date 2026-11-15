@@ -1043,7 +1043,7 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
 
 ## S5 — Francia szóbank-tartalom (2000 bejegyzés) + vak megoldó
 
-**Állapot:** nincs elkezdve. Kanban #22. Gyártó: Sonnet; vak megoldó: Opus. Függőség: S1 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s5-szobank-fr, munkafa .claude/worktrees/jatekok-s5, kanban #22. Gyártó: Sonnet; vak megoldó: Opus. Függőség: S1 összevonva.
 
 - **Cél:** `data/vocabBank/fr/level-0..4.ts` a K.8.2 kvóta-tábla (a német és a francia kvóta azonos) és a K.8.3
   kifejezés-kvóta szerint (összesen ≥ 2000), `fr/stage.ts` → `"full"`, jegyzőkönyv.
@@ -1051,7 +1051,7 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
 - **Módosítandó:** `source/client/src/data/vocabBank/fr/level-0.ts … level-4.ts`, `fr/stage.ts`.
   **Létrehozandó:** `docs/measurements/2026-11-15-szobank-fr-vakmegoldo.md`. Más fájl nem változhat.
 - **Ellenőrzött horgonyok:** az S1 validátora franciában a `?`, `!`, `:`, `;` előtti sima szóközt (`/ [?!:;]/`) és a
-  szóköz nélküli írásjelet (`/[\p{L}\d][?!:;]/u`) is hibának veszi; csak ` ` vagy ` ` elfogadott. A meglévő
+  szóköz nélküli írásjelet (`/[\p{L}\d][?!:;]/u`) is hibának veszi; csak `\u00A0` vagy `\u202F` elfogadott. A meglévő
   francia Szólétra-bank: `data/wordLadder/fr.ts` (`WORD_LADDER_FR`), érintetlen marad.
 
 **Lépések:**
@@ -1059,7 +1059,7 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
 2. Gyártás a K.8.4 adagolással: 5 Sonnet-alügynök (L0 400, L1 450, L2 450, L3 400, L4 300), a K.8.2 tábla saját oszlopa
    szerint, a K.8.5 közös szabályokkal és az alábbi francia szabályokkal:
    - főnév névelővel (`le chien`, `la maison`, `l'école`, `les parents`); `l'` névelőnél a `hu` jelzi a nemet (`iskola (nn.)`);
-   - **nem törő szóköz** `?`, `!`, `:`, `;` előtt, a forrásban ` ` escape-pel (`"Comment ça va ?"`);
+   - **nem törő szóköz** `?`, `!`, `:`, `;` előtt, a forrásban `\u00A0` escape-pel (`"Comment ça va\u00A0?"`);
    - ékezetek helyesen (`é è ê à ç ô û ï`), az aposztróf egyenes `'` (U+0027); ragozott igealak a példában → `alt`;
    - standard (franciaországi) francia.
 3. Ütközés-kezelés és kvóta-ellenőrzés: K.8.6 `--lang fr`.
