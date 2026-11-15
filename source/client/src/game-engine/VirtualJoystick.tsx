@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
-import { createJoystickDrag, type JoystickVector } from "./joystick";
+import { createJoystickDrag, retireJoystickDrag, type JoystickVector } from "./joystick";
 import { controlRadiusFor } from "./mobile/controlSize";
 import { useReducedMotion } from "./useReducedMotion";
 
@@ -79,6 +79,22 @@ export default function VirtualJoystick({
   // A reset-effekt a legfrissebb onChange-et hívja, de csak a jelre fut le.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+
+  // Review PR #422: sugárváltáskor (radius="auto", elforgatás) új `drag` jön létre. A régi futó húzást
+  // lezárjuk, a capture-t elengedjük, a gombot töröljük és nulla vektort küldünk — különben a felengedés
+  // az új, inaktív példányon elnyelődne, és a játék tartaná az utolsó irányt.
+  const prevDragRef = useRef(drag);
+  useEffect(() => {
+    const prev = prevDragRef.current;
+    prevDragRef.current = drag;
+    if (!retireJoystickDrag(prev, drag)) return;
+    const el = elementRef.current;
+    const id = pointerIdRef.current;
+    if (el && id !== null && el.hasPointerCapture?.(id)) el.releasePointerCapture?.(id);
+    pointerIdRef.current = null;
+    setKnob(null);
+    onChangeRef.current(ZERO_VECTOR);
+  }, [drag]);
 
   const handleDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
