@@ -260,6 +260,68 @@ export function vocabLevelForGrade(grade: number | null | undefined, band: numbe
   `vocab?.markExternal(q.options[q.correctIndex])`. A szóbankos kérdés a játék saját `seen`-listájába is bekerül
   (`markGradeQuizSeen(gradeSeenRef.current, q)` vagy a játék meglévő megfelelője), így a meglévő tartalmi
   duplikátum-szűrők is látják. A bekötés EGY helyen kapcsolható ki: a `useVocabQuizSource(…, enabled)` hívás.
+- **A szóbank-forrás változójának neve `vocab`-bal kezdődik** (`vocab`, `vocabSource`, `vocabRef.current` …): a
+  `vocab-game-wiring.test.ts` a sorrendet a `/\bvocab[\w.]*\??\.(?:next|buildPool)\(/` mintán méri.
+
+#### K.7.2/a S1 megvalósítás — a szerződéshez képesti eltérések és kiegészítések (S1, 2026-11-15; a valós szerződés)
+
+Minden K.7.1–K.7.2 export a fenti néven és szignatúrával létezik. Eltérés csak additív bővítés vagy pontosítás:
+
+- `types.ts`: + `VOCAB_LEVELS`, `VOCAB_POS` (tömbök), + `VocabMinimums` típus
+  (`{ total; perLevel: readonly [n,n,n,n,n]; phraseRatio; perTopic }` — a K.7.1 `minimums.ts`-hez).
+- `quotas.ts`: + `phraseQuotaForCell(cell) = ceil(0,32 × cell)` (K.8.3; a riport méri).
+- `validate.ts`: + `BLOCKED_TERMS` (exportált; a K.7-es lista + `whiskey, casino, drunk` / `Kasino, betrunken` /
+  `casino, ivre`), + `exampleWordCount(example)`, + `formInExample(entry)`, + `findFormInText(form, text)` (a
+  generátorral KÖZÖS szóhatáros kereső: kis-/nagybetű független, mindkét oldalon szóhatár, bármely (nem törő) szóköz;
+  review #421 — a „példa tartalmazza a term-et vagy egy alt alakot” szabály is ezzel mér, így „cat” nem megy át a
+  „This category is new.” mondaton), + `VocabStats` típus. A tiltott szót a
+  term MINDEN szaván is keresi (a német névelős „das Bier” így is fennakad). A K.8.5 szabályaiból a validátor ezeket is
+  hibának jelzi: ASCII `"` bármely szövegmezőben; a példamondat nem nagybetűvel/számmal kezdődik; nem `.`, `!`, `?`,
+  `…` (+ esetleg `”`/`»`) zárja; az `alt` üres eleme.
+- `loader.ts`: hibánál az ígéret kiesik a gyorsítótárból (a következő hívás újrapróbál).
+- `seenHistory.ts`: + `snapshot(lang): Readonly<Record<string, number>>` a `SeenHistory`-n (a nyelv naplója EGY
+  tárolóolvasással — a választó ezzel nézi végig a szintet; enélkül bejegyzésenként parse-olná a tárolót),
+  + `externalKey(text)` (= `"ext:" + normalizeTerm(text)`). Az időbélyeg nyelvenként szigorúan növekvő
+  (`max(now(), eddigi max + 1)`), hogy az azonos ms-on belüli jelölések sorrendje is egyértelmű legyen. A változatlan
+  nyers JSON-t nem parse-olja újra (minden olvasás továbbra is a tárolóból). **Két külön korlát (review #421):** a
+  `setCap(lang, bankméret)` csak a szóbankos azonosítókra vonatkozik; a kézi (`ext:`) kulcsoké a rögzített
+  `EXTERNAL_CAP = 2000` (exportált); mindkét csoportban a legrégebbi törlődik, és kézi kulcs soha nem töröl szóbankos
+  bejegyzést (különben a bank kimerülése előtt ismétlés jönne). `size(lang)` az összes kulcs, + `bankSize(lang)` csak
+  a szóbankos kulcsok száma.
+- `questionGenerator.ts`: + `findTermInExample(entry)` (a review #419 szerinti cloze-szabály: csak a `term`,
+  kis-/nagybetű függetlenül, szóhatáron, a szóköz bármely (nem törő) szóközzel egyezik; visszatekintés NÉLKÜL — a
+  `no-lookbehind-client.test.ts` tiltja), + `langOfEntry(entry)` (a nyelv az azonosító előtagjából). A
+  `generateVocabQuestion` `null`-t ad, ha a típus nem alkalmazható (cloze term nélkül, phrase-meaning nem phrase-re
+  vagy L0–L1-re), és ha a kész kérdés `isPlayableQuestion`-on elbukna. A rossz válaszok egymás között is különböző
+  `term`-, `hu`- és opció-szövegűek.
+- `vocabSource.ts`: `next(level, { types })` — ha a véletlen típus nincs a `types`-ban, a `types`-ból választ; ha a
+  választott típus nem készíthető, egyszer `hu-to-target`-tel próbál. Kimerülésnél a „legrégebben látott” a
+  bejegyzés azonosítójának ÉS a term/hu kézi kulcsának legkésőbbi időbélyege szerint számít. `markAsked` csak a bank
+  saját azonosítóját naplózza. `buildPool` a tartós napló szerint a még nem látottakat veszi előre (szint, majd
+  `tierSearchOrder` szomszéd), és csak ha elfogytak, a legrégebben látottakat.
+- `useVocabQuizSource.ts`: + `safeLocalStorage()` export.
+- `index.ts`: a fentieken túl a `VocabEntry`, `VocabKind`, `VocabLang`, `VocabLevel`, `VocabPos`, `VocabTopic` típusokat is
+  újraexportálja.
+- `scripts/vocab-bank.ts`: + `report --terms` (szintenkénti term-lista a K.8.6/1 foglalási listához); a riport a
+  `phrase`-kvóta cellánkénti hiányát és a terv 4.2 minimum-hiányt is kiírja. `blind-export`: a kérdés- és kulcsfájl
+  alakja `{ lang, level, seed, count|canary, items: [...] }`; a kulcs tételében + `questionType`. `blind-score`: a
+  válaszfájl lehet tömb vagy `{ items|answers: [...] }`; kanári-észlelés csak a TÉNYLEGES, a rontott kulcstól eltérő
+  válasz (a hiányzó nem); a kanárik nem kerülnek a jelzettek közé; kilépési kód 2, ha nem mind észlelt (kapu).
+  Exportált tiszta függvények: `reportLines`, `blindExport`, `blindScore`.
+- Tesztsegéd: `tests/support/vocab-fixture.ts` + `seededRng(seed)`, `memoryStorage({ failGet, failSet, initial })`.
+  Az esetfájl-típus `tests/support/vocab-wiring-case.ts`-ben él (`VocabWiringCase`; a `tests/vocab-wiring-cases/`
+  mappában CSAK esetfájl állhat), + opcionális `materialFirst?: RegExp` (a tananyag-ág mintája; alapértelmezés
+  `/pickUnseenMaterial\(/`). A `materialFirstFile` a `client/src/`-hez relatív útvonal. A Szólétra esete
+  `materialFirst: /useMaterialQuizzes\(/`, a Tornadóé `materialFirstFile: "lib/tornado/questions.ts"`,
+  `materialFirst: /args\.material\b/`.
+- Forrás-szabály (új őr a `vocab-bank-validate.test.ts`-ben): a `data/vocabBank/` fájljaiban nyers U+00A0 / U+202F
+  nem állhat, csak escape. FIGYELEM, tartalomgyártók (S5): az ügynök Write/Edit eszköze a forrásba írt escape-et
+  nyers karakterré alakíthatja (mérve S1-ben) — írás után `grep -c $'\xc2\xa0'` a fájlon, és ha > 0, cseréld
+  `perl -CSD -pi -e 's/\x{00A0}/\x5Cu00A0/g'`-vel (a `\x5C` kell: a perl a `\\u`-t nagybetűsítésnek veszi).
+- Csomagméret-ellenőrzés: a Vite fő belépési darabja `main-<hash>.js` (nem `index-*`). Amíg egyetlen lap sem
+  importálja a `@/game-engine/vocab`-ot (S1 állapot), a `vocab-*` darabok a valós buildben NEM jönnek létre (a Rollup
+  kiszórja); az első bekötő szelet (S6) után kell `ls source/dist/public/assets | grep -E "vocab-(en|de|fr)-"` → 3
+  darab, és `grep -l "en0-family-001" source/dist/public/assets/main-*.js` → nincs találat.
 
 #### K.7.3 Mobilos játékkeret (S2) — `source/client/src/game-engine/mobile/`
 
@@ -621,7 +683,7 @@ minimumait követeli az adott nyelvre (A1).
 
 ## S1 — Szóbank-infrastruktúra
 
-**Állapot:** nincs elkezdve. Kanban #18. Modell: Opus. Függőség: S0 összevonva.
+**Állapot:** kész, review-ra vár (PR) — ág `feat/jatekok-s1-szobank-infra`, munkafa `.claude/worktrees/jatekok-s1`, kanban #18. A szerződéshez képesti eltérések: K.7.2/a. Modell: Opus. Függőség: S0 összevonva.
 
 - **Cél:** a K.7.1–K.7.2 szerinti típusok, betöltő, validátor, kérdésgenerátor, közös ismétlés-napló és
   játék-adapter, nyelvenként szintenként 8 mintabejegyzéssel; egységtesztek; riport- és vakmegoldó-szkript a
@@ -684,7 +746,9 @@ minimumait követeli az adott nyelvre (A1).
      mondatot jelölne helyesnek). A kihagyás helye tehát mindig a `term` szó szerinti előfordulása, a helyes opció a `term`.
    - Prompt-sablonok (nyelvnév: angolul / németül / franciául):
      `hu-to-target`: `„<hu>” <nyelvnév>:`; `target-to-hu`: `Mit jelent: „<term>”?`;
-     `cloze`: `Melyik illik a mondatba? <példa, a talált alak helyén „_____”>`;
+     `cloze`: `Melyik illik a mondatba? <példa, a talált alak helyén „_____”> (Magyarul: <exampleHu>)` (review #421:
+     a fordítás teszi egyértelművé, melyik opció illik; a cloze rossz válaszai közül kimarad, amelynek a `hu`-ja szó
+     elején — toldalékkal is — szerepel az `exampleHu`-ban);
      `phrase-meaning`: `Mit jelent ez a mondat? „<example>”`.
    - Opciók: `hu-to-target` és `cloze` → term-ek; `target-to-hu` → `hu`-k; `phrase-meaning` → `exampleHu`-k.
    - Rossz válaszok (pontosan 3): azonos nyelv és `kind`, szint = kérdés szintje vagy ±1; elsőként azonos `pos`;
