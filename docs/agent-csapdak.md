@@ -379,3 +379,18 @@ Forrás: tulajdonosi visszajelzés („borzasztó”) → `docs/specs/2026-11-10
 - **Megelőzés 9:** külső szolgáltató párhuzamos hívásai közös sorba állítóval, a mért korlát alatt; 429-re várakozás és újrapróba.
 - **Tünet 3:** a hangminőséget az ügynök nem tudja füllel megítélni — a „természetes hang” állítás mérés nélkül feltételezés.
 - **Megelőzés 3:** hangról csak mérhető tényt szabad állítani (elkészült, hossz, modell, hangazonosító); a minőség a tulajdonos szemléje.
+
+## C-30 — A játék-mobil mérő: a helyi zöld nem a CI zöldje (2026-11-16)
+
+Forrás: #425 / #429 CI-bukások, `docs/specs/2026-11-15-jatekok-mobil-szobank-vegrehajtas.md` K.7.3 „9/a”.
+
+- **Tünet 1:** a mérő helyben (Vite, valódi GPU) zöld volt, a CI Playwright E2E-je GPU nélkül, buildelt szerverrel futva
+  megbukott (szoftveres WebGL figyelmeztetések). **Megelőzés 1:** a helyi zöld nem bizonyítja a CI zöldjét; környezeti
+  zajt (SwiftShader, driver „Performance” üzenet) csak szűken körülírt mintával, dokumentálva szabad kiszűrni.
+- **Tünet 2:** a Chrome a zárt `<details>` tartalmát is „láthatónak” méri (`content-visibility`), ezért a StartScreen
+  `settings` alá tett elemeknek is ≥ 48 px-esnek kell lenniük. **Megelőzés 2:** a mérő nem tekinthet el a zárt részektől.
+- **Tünet 3:** közös scratchpadben az alügynökök felülírták egymás segédfájljait. **Megelőzés 3:** mindenki saját
+  almappát használ.
+- **Tünet 4:** a mérő belépő animáció közben mért (47,x px), a hálózati csonk rossz válaszalakot adott (`{ ok: true }` a
+  tömb helyett). **Megelőzés 4:** mérés előtt stabilitás-várakozás (nem fix `waitForTimeout`); a csonk a valódi API
+  válaszalakját utánozza.
