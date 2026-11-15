@@ -137,6 +137,29 @@ meg újra: integrátori visszaolvasás történt.
 | két védhető opció (hu összehangolva / csere) | 10 | mutter–murmur, afterwards–subsequently, percentage–per cent, pull down–knock down, drift apart–grow apart, light–pale, tuck in–plug in, patron→benefactor, get away from it all–chill out, take it easy–keep calm |
 | szintek közötti ismétlés | 1 | sell out (L3) / sold out (L4) → pay through the nose |
 
+## Célzott audit a vak megoldó után (idiómák, szinonimák)
+
+A német PR review-tapasztalata (idióma tükörfordítása; azonos jelentésű kifejezéspár eltérő `hu`-val, amelyet a generátor
+egymás mellé tehet) alapján, a PR #431 review-botjainak két jelzésével (`sleet` = havas eső, nem ónos eső; `mumble` /
+`mutter` / `murmur` eltérő `hu`) együtt:
+
+- **Idiómák:** az L3 mind a 183 és az L4 mind a 155 `phrase` bejegyzése (338) végigolvasva, az L0–L2 szólásszerű kifejezései a
+  korábbi teljes átolvasásból. Átvitt jelentésre / természetes fordításra javítva 6: steal the show („mindenkit lepipál”),
+  once in a blue moon („nagyon ritkán”), ahead of schedule („a tervezettnél korábban”), feel under the weather
+  („gyengélkedik”), snap out of it („összeszedi magát”), turn out („bizonyul valaminek, kiderül, hogy”). Kicserélve 5
+  ismétlődő vagy szinonim kifejezés: it's raining cats and dogs (azonos a „rain cats and dogs”-szal) → every cloud has a
+  silver lining; be into (≈ I'm into) → make the most of; pouring with rain (≈ pour with rain) → a heavy shower; win a match
+  (≈ win a game) → be knocked out; pay through the nose (≈ cost an arm and a leg) → make ends meet.
+- **Közel azonos `hu`:** saját szkript (vesszővel tagolt jelentésrészek zárójel, írásjel és névmás nélkül; azonos `kind`,
+  szintkülönbség ≤ 1) 95 párt talált. Azonos jelentésű pároknál a `hu` betűre azonos lett (a generátor így kizárja egymás
+  mellől; pl. granny = grandmother „nagymama”, sick = ill „beteg”, scared = afraid „fél, ijedt”, persuade = convince
+  „meggyőz”, take care of = look after „vigyáz valakire”, mutter = murmur = mumble „motyog, mormol”), eltérő jelentésűeknél
+  pontosítva, hogy ne fedjék egymást (pl. hat „kalap” / cap „sapka”, ticket „jegy (belépő, menet)” / mark „osztályzat”,
+  grandson „fiúunoka”). Összesen 86 bejegyzés `hu`-ja változott; a maradó 22 pár homonima vagy eltérő jelentésű (nap / nap (égitest), sarok /
+  sarok (lábé), óra stb.), zárójeles megkülönböztetéssel.
+- Javítás után: riport 0 hiba, kvóták rendben, írásjel- és közeli duplikátum-kereső tiszta, a két vocab-teszt `# fail 0`.
+  Ezt a kört vak megoldó nem ellenőrizte újra (integrátori visszaolvasás).
+
 ## Integrátori előkészítés (a vak megoldó előtt)
 
 - 28 duplikált term (K.8.6), 14 írásjel-független és 24 közeli duplikátum feloldva (a magasabb szint cserélve; mintabejegyzés
@@ -158,4 +181,7 @@ phrase-kvóta hiány nincs, terv 4.2 minimum teljesül, hibák 0.
   ezt csak utasítással kezeli.
 - Tükörfordításokra és tartalmilag hibás példákra nincs automatikus kereső: csak a megoldók által jelzett tételek és a fenti
   mintákra keresett rendszerszintű hibák javultak; a q1-készlet bejegyzésenként egy kérdéstípust vizsgált.
-- A fix-körben módosított 4 bejegyzést csak integrátori visszaolvasás ellenőrizte, újabb vak megoldás nem.
+- A fix-körben módosított 4 bejegyzést és a célzott audit javításait csak integrátori visszaolvasás ellenőrizte, újabb vak
+  megoldás nem.
+- Az idiómák tükörfordítását és az eltérő `hu`-jú szinonimapárokat a vak megoldó nem fogja meg megbízhatóan (egy kérdésben
+  csak a felkínált négy opciót látja); ezekre a célzott audit és a review-botok jelzése volt a védelem.
