@@ -1893,16 +1893,12 @@ export default function SpeedQuizMath() {
                 </div>
               </div>
               {levels.active && levels.level != null ? (
-                // A közös választó 44 px-es gombjai a játékban 48 px-esek (terv M2); a Chrome a zárt
-                // <details> tartalmát is lerendeli, ezért a mérés összecsukva is látja őket.
-                <div className="[&_button]:min-h-[52px] [&_p]:text-sm">
-                  <GradeLevelPicker
-                    value={levels.level}
-                    unlocked={levels.unlocked}
-                    onChange={levels.select}
-                    label={`Pálya — ${grade}. osztály`}
-                  />
-                </div>
+                <GradeLevelPicker
+                  value={levels.level}
+                  unlocked={levels.unlocked}
+                  onChange={levels.select}
+                  label={`Pálya — ${grade}. osztály`}
+                />
               ) : null}
               <p className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2.5 text-sm text-white/90">
                 <span className="font-bold text-amber-200">A pálya célja:</span> <strong>{target}</strong> helyes
@@ -1911,7 +1907,7 @@ export default function SpeedQuizMath() {
               </p>
               <GamePedagogyPanel
                 accent="cyan"
-                className="w-full min-h-[52px] text-sm"
+                className="w-full text-sm"
                 kidMission={`Válaszolj gyorsan és jól (${grade}. osztály szint)! Minden helyes válasz közelebb visz a torony tetejéhez a pályán. Van 3 életed — rossz válasz egy szívecskét elvesz. A láng = sorozat: minél több jó válasz egymás után, annál nagyobb a pontszorzó érzése.`}
                 parentBody={
                   <>
