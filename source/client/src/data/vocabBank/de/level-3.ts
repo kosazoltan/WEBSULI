@@ -107,7 +107,7 @@ export const VOCAB_DE_L3: VocabEntry[] = [
   { id: "de3-time-016", term: "wie im Flug", hu: "repülve (múlik az idő)", kind: "phrase", level: 3, topic: "time", pos: "phrase", example: "Die Ferien sind wie im Flug vergangen.", exampleHu: "A szünet repülve telt el." },
   { id: "de3-time-017", term: "rund um die Uhr", hu: "éjjel-nappal", kind: "phrase", level: 3, topic: "time", pos: "phrase", example: "Das Geschäft ist rund um die Uhr geöffnet.", exampleHu: "Az üzlet éjjel-nappal nyitva van." },
   // ── body ──
-  { id: "de3-body-001", term: "der Muskel", hu: "izom", kind: "word", level: 3, topic: "body", pos: "noun", example: "Mir tut der Muskel im Bein weh.", exampleHu: "Fáj az izom a lábamban." },
+  { id: "de3-body-001", term: "der Muskel", hu: "izom", kind: "word", level: 3, topic: "body", pos: "noun", example: "Mir tut ein Muskel im Bein weh.", exampleHu: "Fáj egy izom a lábamban.", alt: ["Muskel"] },
   { id: "de3-body-002", term: "die Wirbelsäule", hu: "gerinc", kind: "word", level: 3, topic: "body", pos: "noun", example: "Die Wirbelsäule trägt den ganzen Körper.", exampleHu: "A gerinc az egész testet tartja." },
   { id: "de3-body-003", term: "die Lunge", hu: "tüdő", kind: "word", level: 3, topic: "body", pos: "noun", example: "Die Lunge braucht frische Luft.", exampleHu: "A tüdőnek friss levegőre van szüksége." },
   { id: "de3-body-004", term: "das Gelenk", hu: "ízület", kind: "word", level: 3, topic: "body", pos: "noun", example: "Das Gelenk im Knie schmerzt beim Laufen.", exampleHu: "A térdízület fáj futás közben." },

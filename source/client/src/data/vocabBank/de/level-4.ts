@@ -48,7 +48,7 @@ export const VOCAB_DE_L4: VocabEntry[] = [
   { id: "de4-home-005", term: "beengt", hu: "szűk, zsúfolt", kind: "word", level: 4, topic: "home", pos: "adj", example: "Die Wohnung ist für fünf Personen zu beengt.", exampleHu: "A lakás öt személynek túl szűk." },
   { id: "de4-home-006", term: "geräumig", hu: "tágas", kind: "word", level: 4, topic: "home", pos: "adj", example: "Die Küche ist hell und geräumig.", exampleHu: "A konyha világos és tágas." },
   { id: "de4-home-007", term: "in eine neue Wohnung ziehen", hu: "új lakásba költözik", kind: "phrase", level: 4, topic: "home", pos: "phrase", example: "Meine Familie möchte bald in eine neue Wohnung ziehen.", exampleHu: "A családom hamarosan új lakásba szeretne költözni." },
-  { id: "de4-home-008", term: "die Heizung aufdrehen", hu: "felkapcsolja a fűtést", kind: "phrase", level: 4, topic: "home", pos: "phrase", example: "Es ist kalt, ich muss die Heizung aufdrehen.", exampleHu: "Hideg van, fel kell kapcsolnom a fűtést." },
+  { id: "de4-home-008", term: "in den eigenen vier Wänden", hu: "a saját otthonában", kind: "phrase", level: 4, topic: "home", pos: "phrase", example: "Am wohlsten fühle ich mich in den eigenen vier Wänden.", exampleHu: "A saját otthonomban érzem magam a legjobban." },
   { id: "de4-home-009", term: "unter einem Dach leben", hu: "egy fedél alatt él", kind: "phrase", level: 4, topic: "home", pos: "phrase", example: "Drei Generationen können unter einem Dach leben.", exampleHu: "Három generáció élhet egy fedél alatt." },
   { id: "de4-home-010", term: "die Wohnung kündigen", hu: "felmondja a lakást", kind: "phrase", level: 4, topic: "home", pos: "phrase", example: "Wir müssen die Wohnung kündigen.", exampleHu: "Fel kell mondanunk a lakást." },
   // ── city ──
