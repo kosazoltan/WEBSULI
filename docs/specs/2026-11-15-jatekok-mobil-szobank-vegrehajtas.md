@@ -731,7 +731,7 @@ alapállapotban fut; terv 8. „Csomagméret” ellenőrzés.
 
 ## S2 — Közös mobilos játékkeret
 
-**Állapot:** nincs elkezdve. Kanban #19. Modell: Opus. Függőség: S0 összevonva (S1-gyel párhuzamos).
+**Állapot:** folyamatban — ág feat/jatekok-s2-mobil-keret, munkafa .claude/worktrees/jatekok-s2, kanban #19
 
 - **Cél:** a K.7.3 szerinti komponensek, hookok, CSS-változók, a `VirtualJoystick`/`HoldButton` méretezése, a
   `useCoarsePointer` átkötése, a `QuizFeedbackCard` gombjainak 48 px-re emelése, egységtesztek, a
