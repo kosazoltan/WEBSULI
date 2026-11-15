@@ -149,11 +149,21 @@ test("a szóbank forrásfájljaiban nincs nyers nem törő szóköz — csak esc
   }
 });
 
-test("riport-szkript: a minta-bankon 0 hiba, total 40 (S1 parancs-elvárás)", () => {
+// SPEC-VÁLTOZÁS 2026-11-15 (docs/specs/2026-11-15-jatekok-mobil-szobank.md 4.2 / A1): a riport-elvárás a nyelv stage-éhez igazodik, hogy a tartalomszeletek tesztmódosítás nélkül élesíthessenek.
+test("riport-szkript: 0 hiba; sample → total 40, full → total ≥ a terv nyelvi minimuma (S1 parancs-elvárás)", () => {
   for (const lang of ["en", "de", "fr"] as const) {
-    const { lines, problems } = reportLines(lang, BANKS[lang].entries, BANKS[lang].stage, true);
+    const stage = BANKS[lang].stage;
+    const { lines, problems } = reportLines(lang, BANKS[lang].entries, stage, true);
     assert.deepEqual(problems, []);
-    assert.ok(lines.includes("total 40"), `${lang}: total 40`);
+    if (stage === "sample") {
+      assert.ok(lines.includes("total 40"), `${lang} (sample): total 40`);
+    } else {
+      const m = lines.map(l => /^total (\d+)$/.exec(l)).find(x => x !== null && x !== undefined);
+      assert.ok(m, `${lang} (full): hiányzik a „total N” sor`);
+      const total = Number(m[1]);
+      assert.ok(total >= PLAN_MINIMUMS[lang].total, `${lang} (full): total ${total} < ${PLAN_MINIMUMS[lang].total}`);
+      assert.ok(lines.includes("terv 4.2 minimum: teljesül"), `${lang} (full): a terv 4.2 minimuma nem teljesül`);
+    }
     assert.ok(lines.some(l => l.startsWith("term-lista")), "a --terms foglalási listát ad (K.8.6)");
   }
 });
