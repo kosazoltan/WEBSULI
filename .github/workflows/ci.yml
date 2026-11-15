@@ -146,7 +146,9 @@ jobs:
 
   e2e-tests:
     name: Playwright E2E
-    runs-on: ubuntu-latest
+    # Rögzített futtatókép: az ubuntu-latest már Ubuntu 26.04, amit a Playwright 1.57 nem támogat
+    # (`playwright install --with-deps` elbukik). A rögzítés a Playwright frissítéséig marad.
+    runs-on: ubuntu-24.04
     needs: lint-typecheck
     defaults:
       run:
