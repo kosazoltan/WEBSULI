@@ -127,8 +127,8 @@ export default function QuizFeedbackCard({
             ref={primaryRef}
             type="button"
             onClick={onDismiss}
-            // 44 px érintési cél — ugyanaz a mérce, amit a lecke-futtató is tart (#198).
-            className="min-h-[44px] flex-1 rounded-xl bg-slate-100 px-4 text-base font-semibold text-slate-900 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-100"
+            // 48 px érintési cél (S2, terv 4.5 „Érintés”; korábban 44 px, #198).
+            className="min-h-12 flex-1 rounded-xl bg-slate-100 px-4 text-base font-semibold text-slate-900 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-100"
             data-testid="quiz-feedback-dismiss"
           >
             {card.outcome === "correct" ? "Tovább" : "Értem, megyek tovább"}
@@ -137,7 +137,7 @@ export default function QuizFeedbackCard({
             <button
               type="button"
               onClick={onRetry}
-              className="min-h-[44px] flex-1 rounded-xl border border-slate-500 px-4 text-base font-semibold text-slate-100 hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+              className="min-h-12 flex-1 rounded-xl border border-slate-500 px-4 text-base font-semibold text-slate-100 hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
               data-testid="quiz-feedback-retry"
             >
               Újrapróbálom

@@ -1,37 +1,16 @@
 /**
- * C2 — true when the primary pointer is touch-like.
+ * C2 — true when the device has a touch-capable pointer.
  *
- * Mirrors TsunamiEscapeEnglish's coarse detection, without the low-memory /
- * reduced-motion branches (those are graphics knobs, not control layout).
+ * S2 (docs/specs/2026-11-15-jatekok-mobil-szobank.md 4.5): the detection now lives in
+ * `@/game-engine/mobile` (`useTouchCapable`), which also reads `any-pointer: coarse` and
+ * `navigator.maxTouchPoints`, so a touch laptop gets touch controls too.
+ *
+ * @deprecated Use `useTouchCapable` from `@/game-engine/mobile`. Kept so BlockCraft and
+ * SpaceAsteroid switch to the new detection without a page change.
  */
 
-import { useEffect, useState } from "react";
-
-function readCoarsePointer(): boolean {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(hover: none)").matches ||
-    window.matchMedia("(pointer: coarse)").matches
-  );
-}
+import { useTouchCapable } from "@/game-engine/mobile/touch";
 
 export function useCoarsePointer(): boolean {
-  const [coarse, setCoarse] = useState<boolean>(() => readCoarsePointer());
-
-  useEffect(() => {
-    const hover = window.matchMedia("(hover: none)");
-    const pointer = window.matchMedia("(pointer: coarse)");
-    const apply = () => setCoarse(readCoarsePointer());
-    apply();
-    hover.addEventListener("change", apply);
-    pointer.addEventListener("change", apply);
-    window.addEventListener("resize", apply);
-    return () => {
-      hover.removeEventListener("change", apply);
-      pointer.removeEventListener("change", apply);
-      window.removeEventListener("resize", apply);
-    };
-  }, []);
-
-  return coarse;
+  return useTouchCapable();
 }

@@ -399,6 +399,54 @@ export function useBestScore(gameId: string): { best: number | null; submit(scor
   futtatja; `status: "full"` → a teljes M1–M7, M9–M11 mérést. A játékszelet CSAK a saját esetfájlját írja át `"full"`-ra.
   Az S13 egy őr-tesztben megköveteli, hogy mind a 7 `"full"` legyen.
 
+**S2 megvalósítási eltérések és pontosítások (2026-11-15, ág `feat/jatekok-s2-mobil-keret`) — a játékszeletek EZT a
+valós szerződést kövessék:**
+1. **Biztonsági sáv a HUD-on és a vezérlősávon eltolással, nem belső margóval.** A `safeAreaViolations` az elem
+   DOBOZÁT méri; belső margóval a doboz a képernyő széléig ér, és mindig hibát adna. Ezért: `GameHud` gyökere
+   (`.game-hud`) KÜLSŐ margót kap (`margin: max(4px, var(--game-safe-top)) max(8px, var(--game-safe-right)) 0
+   max(8px, var(--game-safe-left))`); a `.game-touch-layer` `position: absolute` réteg `left/right/bottom:
+   max(8px, var(--game-safe-*))` eltolással, `z-index: 30`, `display: flex; justify-content: space-between;
+   align-items: flex-end`, a rétegen `pointer-events: none`, a közvetlen gyerekein `auto`. Pozicionált ős kell
+   (a `GameShell` gyökere `relative`). Ha a játék a vezérlőt a `main`-en belül, folyásban akarja, ne ezt az
+   osztályt használja, hanem saját elrendezést a `--game-safe-*` változókkal.
+2. **`useTouchCapable`: a `maxTouchPoints` csak akkor számít, ha `"ontouchstart" in window`.** Mért (érintőkijelzős
+   Windows gép, Chrome): érintés nélküli környezetben `maxTouchPoints = 10`, `any-pointer: coarse` hamis — a nyers
+   érték miatt a `games-pointer-controls.spec.ts` két „fine pointer” tesztje bukott. A tiszta `detectTouchCapable`
+   képlete és tesztje VÁLTOZATLAN; csak a hook környezet-olvasása szűri a jelet. Érintős laptopon az
+   `any-pointer: coarse` adja a jelet.
+3. **`PauseMenu` és `ResultScreen` portálon a `document.body`-ba kerül** (mint a `QuizFeedbackCard`): a játékok
+   transzformált / `overflow: hidden` tárolói nem vágják le. Következmény: a két fedőréteg a `[data-game]` gyökéren
+   KÍVÜL van a DOM-ban (a `.game-shell-fixed …` szelektorok rájuk nem hatnak; testid-kereséshez ez közömbös).
+   Réteg: `.game-overlay` `position: fixed; z-index: 80` (a `QuizFeedbackCard` `z-[90]` fölötte marad).
+4. **`ResultScreen`:** a `testId` és a `data-game-result="true"` a teljes képernyős fedőréteg gyökerén van; a
+   „Újra” gomb MINDIG `data-game-retry="true"`-t kap (nem csak `retryTestId` esetén); megnyitáskor a fókusz a
+   párbeszédre kerül (`tabIndex=-1`), nem a gombra. `best === null` esetén a „Legjobb” a `score`-t mutatja.
+5. **`GameHud`:** 5–8 stat esetén telefonon soronként `ceil(n/2)` (≤ 4) kártya — 5 → 3 + 2, nem 4 + 1; ≥ 700 px
+   szélességben mind egy sorban. Az érték változáskor rugós „pop” animációt kap (csökkentett mozgásnál nem).
+6. **`GameShell`:** ha a `style` nem ad hátteret, a háttér `var(--game-surface)`. A `data-playing` /
+   `data-fixed-screen` / `data-touch` értéke a „true” / „false” szöveg.
+7. **`StartScreen`:** a gyökér `<section data-game-start="true" data-game-menu={menuKey}>`; az első gyereke `<header>`,
+   a gombok beágyazott tárolóban vannak (a régi `[data-game-menu] > div:first-child` / `> button` / `> .grid`
+   szabályok nem érik el). A StartScreent tartalmazó héj (`.game-shell-fixed:has(> [data-game-start])` vagy
+   `:has(> main > [data-game-start])`) oszlopos flexet kap, így a kezdőképernyő függőlegesen középre kerül; a régi
+   menük nem változnak.
+8. **Új típus és segédek:** `StorageLike = Pick<Storage, "getItem" | "setItem">` a `types.ts`-ben (a szerződés
+   hivatkozta, de nem definiálta); `TouchEnv` exportálva. A `tests/support/game-mobile-quality.ts` exportálja még:
+   `waitForPlaying(page)` (általános jel: `[data-game][data-playing="true"]`, a baseline esetek ezt használják),
+   `MOBILE_VIEWPORTS`, `SafeInsets`.
+9. **Mérő-részletek:** a `smallTargets` a `position: fixed` elemet akkor is méri, ha `offsetParent === null`; a
+   `collectErrors` a `console.error`-t és a WebGL-mintájú `console.warning`-ot gyűjti; az M5 két leírója
+   („nem érintős”, „érintős laptop”) csak `status: "full"` és megadott `touchControlsTestId` mellett fut.
+   Képernyőkép: mindig `testInfo.outputPath()`, és ha `GAME_MOBILE_SHOT_DIR` meg van adva, oda is
+   `<id>-<sz>x<m>-<állapot>.jpg` néven (JPEG 70).
+10. **`playwright.game-mobile.config.ts`:** a port `GAME_MOBILE_PORT` környezeti változóval állítható (alap 5184), hogy
+    párhuzamos munkafák ne ütközzenek.
+11. **Közös CSS-osztályok a változókon túl** (index.css, a `.game-shell-fixed > main` szabály elé): `.game-btn`,
+    `.game-btn-primary` (cián színátmenet), `.game-btn-secondary`, `.game-btn-ghost` (mind ≥ 48 px, 16 px felirat),
+    `.game-hud*`, `.game-overlay`, `.game-dialog`, `.game-pause*`, `.game-result*`, `.game-start*`, `.game-rotate*`.
+    Fekvő, alacsony nézetben (`max-height: 500px` és `min-width: 560px`) a szünet menü két oszlopos, az
+    eredménykártya és a kezdőképernyő kéthasábos.
+
 ```ts
 // source/tests/support/game-mobile-quality.ts (S2)
 export type GameMobileCase = {
@@ -731,7 +779,8 @@ alapállapotban fut; terv 8. „Csomagméret” ellenőrzés.
 
 ## S2 — Közös mobilos játékkeret
 
-**Állapot:** folyamatban — ág feat/jatekok-s2-mobil-keret, munkafa .claude/worktrees/jatekok-s2, kanban #19
+**Állapot:** review — ág feat/jatekok-s2-mobil-keret, munkafa .claude/worktrees/jatekok-s2, kanban #19; a K.7.3
+szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltérések”).
 
 - **Cél:** a K.7.3 szerinti komponensek, hookok, CSS-változók, a `VirtualJoystick`/`HoldButton` méretezése, a
   `useCoarsePointer` átkötése, a `QuizFeedbackCard` gombjainak 48 px-re emelése, egységtesztek, a
