@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
-import { createJoystickDrag, type JoystickVector } from "./joystick";
+import { createJoystickDrag, retireJoystickDrag, type JoystickVector } from "./joystick";
+import { controlRadiusFor } from "./mobile/controlSize";
 import { useReducedMotion } from "./useReducedMotion";
 
 /**
@@ -26,8 +27,11 @@ import { useReducedMotion } from "./useReducedMotion";
 export type VirtualJoystickProps = {
   /** Minden változásnál meghívódik; felengedéskor nulla vektorral. */
   onChange: (v: JoystickVector) => void;
-  /** A tárca sugara pixelben. */
-  radius?: number;
+  /**
+   * A tárca sugara pixelben, vagy "auto" (S2): `controlRadiusFor` a nézet méretéből (52–76 px),
+   * átméretezéskor frissül.
+   */
+  radius?: number | "auto";
   className?: string;
   label?: string;
   /**
@@ -40,13 +44,33 @@ export type VirtualJoystickProps = {
 
 const ZERO_VECTOR: JoystickVector = { x: 0, y: 0, magnitude: 0 };
 
+function viewportRadius(): number {
+  if (typeof window === "undefined") return 56;
+  return controlRadiusFor({ width: window.innerWidth, height: window.innerHeight });
+}
+
+/** "auto" → a nézethez igazított sugár (resize-ra frissül); szám → változatlanul az. */
+function useResolvedRadius(radius: number | "auto"): number {
+  const auto = radius === "auto";
+  const [autoRadius, setAutoRadius] = useState<number>(viewportRadius);
+  useEffect(() => {
+    if (!auto || typeof window === "undefined") return;
+    const apply = () => setAutoRadius(viewportRadius());
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, [auto]);
+  return auto ? autoRadius : radius;
+}
+
 export default function VirtualJoystick({
   onChange,
-  radius = 56,
+  radius: radiusProp = 56,
   className = "",
   label = "Irányítás",
   resetSignal,
 }: VirtualJoystickProps) {
+  const radius = useResolvedRadius(radiusProp);
   const reduced = useReducedMotion();
   const drag = useMemo(() => createJoystickDrag(radius), [radius]);
   const [knob, setKnob] = useState<{ x: number; y: number } | null>(null);
@@ -55,6 +79,22 @@ export default function VirtualJoystick({
   // A reset-effekt a legfrissebb onChange-et hívja, de csak a jelre fut le.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+
+  // Review PR #422: sugárváltáskor (radius="auto", elforgatás) új `drag` jön létre. A régi futó húzást
+  // lezárjuk, a capture-t elengedjük, a gombot töröljük és nulla vektort küldünk — különben a felengedés
+  // az új, inaktív példányon elnyelődne, és a játék tartaná az utolsó irányt.
+  const prevDragRef = useRef(drag);
+  useEffect(() => {
+    const prev = prevDragRef.current;
+    prevDragRef.current = drag;
+    if (!retireJoystickDrag(prev, drag)) return;
+    const el = elementRef.current;
+    const id = pointerIdRef.current;
+    if (el && id !== null && el.hasPointerCapture?.(id)) el.releasePointerCapture?.(id);
+    pointerIdRef.current = null;
+    setKnob(null);
+    onChangeRef.current(ZERO_VECTOR);
+  }, [drag]);
 
   const handleDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {

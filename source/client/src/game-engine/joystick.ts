@@ -133,6 +133,17 @@ export function createJoystickDrag(radius: number): JoystickDrag {
 }
 
 /**
+ * Példánycsere sugárváltáskor (review PR #422): a `radius="auto"` tárcsa elforgatáskor új húzás-példányt
+ * kap. A régi futó húzását le kell zárni, különben a későbbi felengedés az új, inaktív példányon `false`-szal
+ * tér vissza, nem megy ki nulla vektor, és a játék az ujj felemelése után is tartja az utolsó irányt.
+ * Igaz, ha volt megszakított húzás — ilyenkor a hívó nulla vektort küld és törli a gombot.
+ */
+export function retireJoystickDrag(prev: JoystickDrag | null, next: JoystickDrag): boolean {
+  if (!prev || prev === next) return false;
+  return prev.reset();
+}
+
+/**
  * Négyirányú lebontás a joystickból.
  *
  * A meglévő játékok logikája négy logikai gombot vár (`fwd/back/left/right`),
