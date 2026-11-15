@@ -157,6 +157,12 @@ egymás mellé tehet) alapján, a PR #431 review-botjainak két jelzésével (`s
   pontosítva, hogy ne fedjék egymást (pl. hat „kalap” / cap „sapka”, ticket „jegy (belépő, menet)” / mark „osztályzat”,
   grandson „fiúunoka”). Összesen 86 bejegyzés `hu`-ja változott; a maradó 22 pár homonima vagy eltérő jelentésű (nap / nap (égitest), sarok /
   sarok (lábé), óra stb.), zárójeles megkülönböztetéssel.
+- **Szinonima-védelem két szinten:** (A) a generátor javítása külön PR-ban (a rossz válasz kizárva, ha a `hu`-ja a helyes
+  bejegyzésével vessző / pontosvessző / perjel mentén darabolt jelentés-kulcsban átfed); (B) az adatoldalon az azonos
+  jelentésű bejegyzések `hu`-jának legalább egy betűre azonos tagja van (itt: a teljes `hu` azonos).
+- **Szakszói megfeleltetés** (időjárás, állat, növény, étel): a teljes bankban átnézve; javítva: sleet „havas eső” (nem
+  ónos eső = freezing rain), hawk „héja, ölyv” (nem sólyom = falcon), peach „őszibarack” (nem általában barack). Rendben:
+  hail „jégeső”, drizzle, frost, tortoise „szárazföldi teknős”, mouse, frog, bee / wasp, jam „lekvár”, biscuit „keksz”.
 - Javítás után: riport 0 hiba, kvóták rendben, írásjel- és közeli duplikátum-kereső tiszta, a két vocab-teszt `# fail 0`.
   Ezt a kört vak megoldó nem ellenőrizte újra (integrátori visszaolvasás).
 

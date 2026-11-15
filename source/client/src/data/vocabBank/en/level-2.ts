@@ -73,7 +73,7 @@ export const VOCAB_EN_L2: VocabEntry[] = [
   { id: "en2-food-018", term: "a packet of", hu: "egy csomag", kind: "phrase", level: 2, topic: "food", pos: "phrase", example: "We need a packet of rice.", exampleHu: "Szükségünk van egy csomag rizsre." },
   { id: "en2-food-019", term: "a carton of", hu: "egy doboz", kind: "phrase", level: 2, topic: "food", pos: "phrase", example: "Please buy a carton of milk.", exampleHu: "Kérlek, végy egy doboz tejet." },
   { id: "en2-food-020", term: "have a sweet tooth", hu: "édesszájú", kind: "phrase", level: 2, topic: "food", pos: "phrase", example: "My brother has a sweet tooth.", exampleHu: "A bátyám édesszájú.", alt: ["has a sweet tooth"] },
-  { id: "en2-food-021", term: "peach", hu: "barack, őszibarack", kind: "word", level: 2, topic: "food", pos: "noun", example: "This peach is sweet and juicy.", exampleHu: "Ez a barack édes és lédús." },
+  { id: "en2-food-021", term: "peach", hu: "őszibarack", kind: "word", level: 2, topic: "food", pos: "noun", example: "This peach is sweet and juicy.", exampleHu: "Ez az őszibarack édes és lédús." },
   { id: "en2-food-022", term: "garlic", hu: "fokhagyma", kind: "word", level: 2, topic: "food", pos: "noun", example: "This soup has too much garlic.", exampleHu: "Ebben a levesben túl sok a fokhagyma." },
   { id: "en2-food-023", term: "plum", hu: "szilva", kind: "word", level: 2, topic: "food", pos: "noun", example: "I picked a ripe plum from the tree.", exampleHu: "Szedtem egy érett szilvát a fáról." },
   { id: "en2-food-024", term: "melon", hu: "dinnye", kind: "word", level: 2, topic: "food", pos: "noun", example: "A cold melon is great in summer.", exampleHu: "Egy hideg dinnye nyáron nagyszerű." },
