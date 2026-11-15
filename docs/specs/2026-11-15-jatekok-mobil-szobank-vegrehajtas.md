@@ -316,6 +316,10 @@ Minden K.7.1–K.7.2 export a fenti néven és szignatúrával létezik. Eltér�
     tisztításhoz; a kilépési kód és a meglévő sorok változatlanok. Exportált: `overlapPairs(entries)`.
   - Teszt: `tests/vocab-distractor-overlap.test.ts` (táblázatos kulcs-esetek, a négy review-forgatókönyv 500 seeden,
     és bank-szintű invariáns a fában lévő MINDEN bankra, minden generálható típusra, 5 seeddel).
+  - Futásidő (a teljes bankokon mérve): a bank nyelv + kind csoportjai bankonként egyszer (`WeakMap`, hossz-eltérésnél
+    újraépül); a kizárási szabályok lustán, a keverés sorrendjében futnak (lusta Fisher–Yates); a cloze magyar
+    szó-keresése regex-építés nélkül; `findTermInExample` objektumonként gyorsítótárazott. A kiválasztás eloszlása
+    változatlanul egyenletes az érvényes jelöltek között, azonos seed → azonos kérdés.
 - `vocabSource.ts`: `next(level, { types })` — ha a véletlen típus nincs a `types`-ban, a `types`-ból választ; ha a
   választott típus nem készíthető, egyszer `hu-to-target`-tel próbál. Kimerülésnél a „legrégebben látott” a
   bejegyzés azonosítójának ÉS a term/hu kézi kulcsának legkésőbbi időbélyege szerint számít. `markAsked` csak a bank
