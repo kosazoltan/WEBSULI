@@ -28,6 +28,7 @@ import { stepBrainRot } from "@/lib/brainRotPhysics";
 import {
   BRAIN_ROT_WARNING_MS,
   brainRotAgeMs,
+  pickGradeSlotWithVocab,
   brainRotLifetimeFor,
   brainRotSizeFor,
   brainRotSpeedScaleFor,
@@ -471,7 +472,7 @@ export default function BrainRotSteal() {
 
     // A tananyag-ág UTÁN: ha a kérdés-hely angol, a szóbankból kérdez (a kategória a meglévő választásból
     // derül ki — a lap nem sorsol kategóriát előre, ezért az eloszlás a régi marad, csak az angol tétel forrása
-    // cserélődik). A kiválasztott, de fel nem tett kézi tétel NEM kerül a `seen`-be.
+    // cserélődik). A kiváltott évfolyam-banki tétel is fogy (lent), hogy a választó továbblépjen.
     const fromVocab = (): Quiz | null => {
       const vq = vocab?.next(vocabLevelForGrade(userGrade, difficultyRef.current)) ?? null;
       if (!vq) return null;
@@ -492,13 +493,16 @@ export default function BrainRotSteal() {
     };
 
     if (sharedGrade != null) {
-      const item = pickGradeQuiz({ grade: sharedGrade, band: difficultyRef.current, seen });
-      if (item) {
-        if (item.subject === "english") {
-          const vq = fromVocab();
-          if (vq) return vq;
-        }
-        markGradeQuizSeen(seen, item);
+      // A kiválasztott tétel MINDIG fogy (review #424), akkor is, ha a szóbank váltja ki — különben a
+      // `pickGradeQuiz` a legelső nem üres sávban ragadna, és a nem angol tételek elfogyta után csak angolt adna.
+      const slot = pickGradeSlotWithVocab({
+        pick: () => pickGradeQuiz({ grade: sharedGrade, band: difficultyRef.current, seen }),
+        seen,
+        vocabNext: fromVocab,
+      });
+      if (slot?.kind === "vocab") return slot.quiz;
+      if (slot) {
+        const item = slot.item;
         return manualEnglish({
           id: item.id,
           prompt: item.prompt,

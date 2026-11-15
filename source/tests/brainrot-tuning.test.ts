@@ -9,7 +9,10 @@ import {
   brainRotLifetimeFor,
   brainRotSizeFor,
   brainRotSpeedScaleFor,
+  pickGradeSlotWithVocab,
 } from "../client/src/lib/brainRotTuning";
+import { createGradeQuizSeen, isGradeQuizSeen, pickGradeQuiz } from "../client/src/game-engine/gradeQuiz";
+import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank";
 
 /**
  * S8 — a Brain Rot lények mérete, élettartama és sebessége (terv 4.6/5; végrehajtás S8 / 2–3. lépés).
@@ -125,6 +128,64 @@ test("lap: a méret, az élettartam, a sebesség és a kor a hangolóból jön",
   has(code, /brainRotAgeMs\(/, "nincs brainRotAgeMs( hívás");
   assert.ok(!/randInt\(60,\s*80\)/.test(code), "a régi rögzített 60–80 px-es méret visszajött");
   assert.ok(!/Date\.now\(\)\s*-\s*\w+\.spawnTime/.test(code), "a kor újra a falióra szerint telik (kvíz alatt is)");
+});
+
+test("lap: az évfolyam-bank kérdés-helye a fogyást nyilvántartó segéden át megy (review #424)", () => {
+  const code = pageCode();
+  has(code, /pickGradeSlotWithVocab\(\{\s*pick: \(\) => pickGradeQuiz\(\{ grade: sharedGrade/, "a lap nem a pickGradeSlotWithVocab-ot használja");
+});
+
+/* ---------- szimuláció: a szóbankos kiváltás nem akasztja meg a többtantárgyas választást (review #424) ---------- */
+
+function simulate(grade: number, band: number) {
+  const seen = createGradeQuizSeen();
+  const inGrade = GRADE_QUIZ_ITEMS.filter((q) => q.grade === grade);
+  const picks: Array<{ subject: string; tier: number; vocab: boolean }> = [];
+  let vocabN = 0;
+  // Felső korlát: a hibás változat (a kiváltott angol tétel nem fogy) itt végtelen angol sorozatot adna.
+  for (let i = 0; i < inGrade.length + 5; i++) {
+    const slot = pickGradeSlotWithVocab({
+      pick: () => pickGradeQuiz({ grade, band, seen, rng: () => 0.37 }),
+      seen,
+      vocabNext: () => ({ id: `vocab-${vocabN++}` }),
+    });
+    if (!slot) break;
+    const item = slot.kind === "vocab" ? slot.replaced : slot.item;
+    if (item.grade !== grade) break;
+    picks.push({ subject: item.subject, tier: item.tier, vocab: slot.kind === "vocab" });
+  }
+  return { inGrade, picks, seen };
+}
+
+for (const [grade, band] of [[3, 0.9], [3, 0.1], [7, 0.5], [12, 0.9]] as const) {
+  test(`szimuláció: ${grade}. évf., sáv ${band} — minden sáv minden tétele sorra kerül, a tantárgy-arány nem torzul`, () => {
+    const { inGrade, picks, seen } = simulate(grade, band);
+    assert.ok(inGrade.length > 0, "üres évfolyam-bank — a minta elavult");
+    // 1) Az évfolyam MINDEN tétele (mindhárom nehézségi sávból) pontosan egyszer került sorra.
+    assert.equal(picks.length, inGrade.length, `${picks.length} húzás ${inGrade.length} tételre (a hibás változat itt ugyanazt az angol helyet ismétli)`);
+    for (const q of inGrade) assert.ok(isGradeQuizSeen(seen, q), `nem fogyott: ${q.id}`);
+    // 2) A tantárgyak aránya = a bank aránya (az angol helyek a szóbankból jöttek, a többi tantárgy nem szorult ki).
+    const count = (arr: Array<{ subject: string }>, s: string) => arr.filter((x) => x.subject === s).length;
+    for (const s of new Set(inGrade.map((q) => q.subject))) {
+      assert.equal(count(picks, s), count(inGrade, s), `${s}: ${count(picks, s)} ≠ ${count(inGrade, s)}`);
+    }
+    assert.equal(picks.filter((p) => p.vocab).length, count(inGrade, "english"), "minden angol hely a szóbankból jött");
+    // 3) A sávok sorban fogynak: egy sáv tételei után nem tér vissza egy korábban elhagyott sávra.
+    const order: number[] = [];
+    for (const p of picks) if (order[order.length - 1] !== p.tier) order.push(p.tier);
+    assert.equal(new Set(order).size, order.length, `a sávok sorrendje ugrál: ${order.join(" → ")}`);
+  });
+}
+
+test("szimuláció: szóbank nélkül (vocabNext → null) a kézi angol tétel megy, és az is fogy", () => {
+  const seen = createGradeQuizSeen();
+  const first = pickGradeSlotWithVocab({
+    pick: () => pickGradeQuiz({ grade: 3, band: 0.9, seen, subjects: ["english"] }),
+    seen,
+    vocabNext: () => null,
+  });
+  assert.equal(first?.kind, "grade");
+  assert.ok(first && first.kind === "grade" && isGradeQuizSeen(seen, first.item));
 });
 
 test("lap: mobilos keret, szünet és visszajelzés (terv 4.5)", () => {
