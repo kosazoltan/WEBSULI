@@ -1,19 +1,27 @@
 import MathTowerScene3D from "@/components/MathTowerScene3D";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
-import { ArrowLeft, Flame, Gauge, Heart, Rocket, RotateCcw, Star, Trophy } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Link, useLocation } from "wouter";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowLeft, Clock, Flame, Heart, Rocket } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
-import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
-import AchievementToast from "@/components/AchievementToast";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import { useReducedMotion } from "@/game-engine/useReducedMotion";
+import {
+  GameHud,
+  GameShell,
+  PauseMenu,
+  ResultScreen,
+  StartScreen,
+  useBestScore,
+  useHaptics,
+  type GameScreenState,
+} from "@/game-engine/mobile";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { scoreCorrectAnswer } from "@/game-engine/retry-policy";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
@@ -1340,7 +1348,44 @@ function pickTask(level: GradeLevel, seenPrompts: readonly string[], band?: numb
   return pickByBand(candidates, band, (t) => digitComplexity(t.prompt));
 }
 
+/**
+ * S7 — a kérdés betűmérete a hosszához igazodik: a rövid műveletet („36 : 4”) nagyon nagyban mutatjuk, a
+ * szöveges feladat (akár ~160 karakter) viszont 360 px-es telefonon is férjen el görgetés nélkül.
+ * Telefonon sosem 16 px alatt (terv 4.5 „Olvashatóság”).
+ */
+function promptSizeClass(prompt: string): string {
+  if (prompt.length <= 22) return "text-[clamp(28px,8vmin,44px)] tracking-wide";
+  if (prompt.length <= 60) return "text-[clamp(20px,5.4vmin,28px)]";
+  return "text-[clamp(16px,4.4vmin,21px)]";
+}
+
+/**
+ * A négy válaszcsempe saját színt kap (cián, ibolya, borostyán, rózsa), hogy a szem gyorsan megtalálja a
+ * helyét; a zöld a helyes válasz visszajelzésének marad fenntartva.
+ */
+const ANSWER_ACCENTS = [
+  "border-cyan-300/70 from-cyan-600/90 to-sky-900 shadow-cyan-500/20",
+  "border-violet-300/70 from-violet-600/90 to-indigo-900 shadow-violet-500/20",
+  "border-amber-300/70 from-amber-500/90 to-orange-800 shadow-amber-500/20",
+  "border-pink-300/70 from-pink-600/90 to-fuchsia-900 shadow-pink-500/20",
+] as const;
+
+/** A kombó-felirat ennyi ideig látszik (S7 6. lépés). */
+const COMBO_SHOW_MS = 600;
+/** Jó válasz után ennyi idő múlva jön a következő feladat: a zöld „pop” még látsszon. */
+const CORRECT_ADVANCE_MS = 260;
+
 export default function SpeedQuizMath() {
+  const [, navigate] = useLocation();
+  const reducedMotion = useReducedMotion();
+  const haptics = useHaptics();
+  const { submit: submitBest, best: storedBest } = useBestScore("speed-quiz-math");
+  const [bestResult, setBestResult] = useState<{ best: number; isNewBest: boolean } | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [chosenIdx, setChosenIdx] = useState<number | null>(null);
+  const [combo, setCombo] = useState<{ id: number; value: number } | null>(null);
+  const [gain, setGain] = useState<{ id: number; value: number } | null>(null);
+  const fxIdRef = useRef(0);
   const [grade, setGrade] = useState<GradeLevel>(4);
   const gradeRef = useRef<GradeLevel>(grade);
   gradeRef.current = grade;
@@ -1357,7 +1402,6 @@ export default function SpeedQuizMath() {
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
-  const [totalXp, setTotalXp] = useState(0);
   const [wrongFlash, setWrongFlash] = useState(false);
   const [answerState, setAnswerState] = useState<AnswerState>("idle");
   // G-1: a rossz válasz magyarázata. Amíg ez áll, az órák megállnak — a gyerek
@@ -1438,6 +1482,7 @@ export default function SpeedQuizMath() {
     setTask(next);
     setQuestionTimeLeft(questionSecondsFor(grade));
     setAnswerState("idle");
+    setChosenIdx(null);
     attemptRef.current = 0;
   }, [grade, questionSecondsFor]);
 
@@ -1494,6 +1539,7 @@ export default function SpeedQuizMath() {
     attemptRef.current += 1;
     setFeedback(null);
     setAnswerState("idle");
+    setChosenIdx(null);
     pendingOverRef.current = false;
     setQuestionTimeLeft(questionSecondsFor(grade));
   }, [dismissFeedback, grade, questionSecondsFor]);
@@ -1513,6 +1559,11 @@ export default function SpeedQuizMath() {
     setBestStreak(0);
     setWrongFlash(false);
     setAnswerState("idle");
+    setChosenIdx(null);
+    setCombo(null);
+    setGain(null);
+    setPaused(false);
+    setBestResult(null);
     setTimeLeft(ROUND_SECONDS[grade]);
     runLevelRef.current = levels.level;
     levelClearedRef.current = false;
@@ -1557,6 +1608,8 @@ export default function SpeedQuizMath() {
     // A magyarázat olvasása közben minden óra áll. Enélkül a kártya elolvasása
     // életbe és köridőbe kerülne — vagyis a tanulást büntetnénk.
     if (feedback) return;
+    // S7: szünetben (gomb, háttérbe kerülés, elfordítás) sem fogy az idő.
+    if (paused) return;
     const id = window.setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -1593,10 +1646,10 @@ export default function SpeedQuizMath() {
     // closure-ral a lejárt kérdés az ELŐZŐ feladat megoldását magyarázná el.
     // (Az exhaustive-deps szabály ebben a repóban ki van kapcsolva — #310 osztály —,
     // a függőségeket kézzel tartjuk karban.)
-  }, [phase, grade, endAsLose, feedback, showFeedbackFor, questionSecondsFor, recordDifficultyAnswer]);
+  }, [phase, paused, grade, endAsLose, feedback, showFeedbackFor, questionSecondsFor, recordDifficultyAnswer]);
 
   const handleAnswer = (idx: number) => {
-    if (phase !== "play" || livesRef.current <= 0 || feedback) return;
+    if (phase !== "play" || paused || livesRef.current <= 0 || feedback) return;
     // VÁLASZ-LOCK: az answerState csak a nextTask()-ban áll vissza "idle"-re —
     // dupla kattintás nem dolgozza fel kétszer ugyanazt a feladatot
     // (dupla correct/score/answered, korai győzelem).
@@ -1606,11 +1659,17 @@ export default function SpeedQuizMath() {
       setAnswered((n) => n + 1);
     }
 
+    setChosenIdx(idx);
     if (idx !== task.correctIndex) {
       sfxError();
+      haptics("error");
       setAnswerState("wrong");
-      setWrongFlash(true);
-      timeoutsRef.current.push(window.setTimeout(() => setWrongFlash(false), 220));
+      // Csökkentett mozgásnál nincs képernyő-villanás: a választott gomb piros kerete jelzi a hibát (M9).
+      if (!reducedMotion) {
+        setWrongFlash(true);
+        timeoutsRef.current.push(window.setTimeout(() => setWrongFlash(false), 220));
+      }
+      setCombo(null);
       setStreak(0);
       const nextLives = Math.max(0, livesRef.current - 1);
       livesRef.current = nextLives;
@@ -1626,6 +1685,7 @@ export default function SpeedQuizMath() {
     }
 
     sfxSuccess();
+    haptics("success");
     recordDifficultyAnswer(true);
     setAnswerState("correct");
     const base = grade === 3 ? 30 : grade === 4 ? 36 : 44 + (grade - 5) * 2;
@@ -1639,7 +1699,17 @@ export default function SpeedQuizMath() {
     });
 
     setScore((s) => s + add);
-    setTotalXp((x) => x + add);
+    fxIdRef.current += 1;
+    setGain({ id: fxIdRef.current, value: add });
+    // A2: retry után a kombó nem nő — ugyanaz a feltétel, mint a setStreak-ben.
+    const nextStreak = attemptRef.current > 0 ? streak : streak + 1;
+    if (nextStreak >= 3 && nextStreak > streak) {
+      const comboId = fxIdRef.current;
+      setCombo({ id: comboId, value: nextStreak });
+      timeoutsRef.current.push(
+        window.setTimeout(() => setCombo((c) => (c && c.id === comboId ? null : c)), COMBO_SHOW_MS),
+      );
+    }
     setStreak((s) => {
       // A2: retry után a kombó nem nő.
       if (attemptRef.current > 0) return s;
@@ -1652,11 +1722,39 @@ export default function SpeedQuizMath() {
       if (next >= TARGET_CORRECT[grade]) {
         endAsWin();
       } else {
-        timeoutsRef.current.push(window.setTimeout(nextTask, 120));
+        timeoutsRef.current.push(window.setTimeout(nextTask, CORRECT_ADVANCE_MS));
       }
       return next;
     });
   };
+
+  const pauseGame = useCallback(() => {
+    if (phase === "play") setPaused(true);
+  }, [phase]);
+  const resumeGame = useCallback(() => setPaused(false), []);
+  const exitToGames = useCallback(() => {
+    setPaused(false);
+    navigate("/games");
+  }, [navigate]);
+
+  // Asztali gépen: 1–4 a válaszokra, P / Escape a szünetre (a szünet menü Escape-re folytat).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (phase !== "play" || paused || feedback) return;
+      if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+        e.preventDefault();
+        setPaused(true);
+        return;
+      }
+      const n = Number(e.key);
+      if (Number.isInteger(n) && n >= 1 && n <= task.options.length) {
+        e.preventDefault();
+        handleAnswer(n - 1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   useEffect(() => {
     if (phase !== "over" && phase !== "won") return;
@@ -1686,6 +1784,8 @@ export default function SpeedQuizMath() {
   useEffect(() => {
     if (phase !== "over" && phase !== "won") {
       achievementCheckedRef.current = false;
+      // Az eredménylap a futás SAJÁT jelvényeit mutatja: új futásnál a régiek eltűnnek.
+      setNewlyUnlocked((prev) => (prev.length > 0 ? [] : prev));
       return;
     }
     if (achievementCheckedRef.current) return;
@@ -1707,50 +1807,111 @@ export default function SpeedQuizMath() {
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
   }, [phase, score, correct, answered, bestStreak]);
 
-  const runProgress = Math.max(0, Math.min(100, (timeLeft / ROUND_SECONDS[grade]) * 100));
-  const qProgress = Math.max(0, Math.min(100, (questionTimeLeft / questionSecondsFor(grade)) * 100));
+  // S7: egységes eredményképernyő — a helyi legjobb eredmény egyszer, a futás végén íródik.
+  const bestSubmittedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "over" && phase !== "won") {
+      bestSubmittedRef.current = false;
+      return;
+    }
+    if (bestSubmittedRef.current) return;
+    bestSubmittedRef.current = true;
+    setBestResult(submitBest(score));
+  }, [phase, score, submitBest]);
+
+  const isResult = phase === "over" || phase === "won";
+  const screenState: GameScreenState =
+    phase === "menu" ? "start" : isResult ? "result" : paused ? "paused" : "playing";
+  const runSeconds = ROUND_SECONDS[grade];
+  const runRatio = Math.max(0, Math.min(1, timeLeft / runSeconds));
+  const qSeconds = questionSecondsFor(grade);
+  const qRatio = Math.max(0, Math.min(1, questionTimeLeft / qSeconds));
+  const qTone: "default" | "warn" | "bad" = qRatio < 0.15 ? "bad" : qRatio < 0.3 ? "warn" : "default";
+  const target = TARGET_CORRECT[grade];
+  // A lejárt kérdés is rossz válasz (a statisztikával azonos szabály); kényszerített eredménynél sem lehet
+  // a jó válaszok száma nagyobb az összesnél.
+  const totalAnswered = Math.max(correct, answered + timeoutCountRef.current);
+  const shellBackground =
+    "radial-gradient(circle at 18% 12%, rgba(56,189,248,0.26), transparent 36%), radial-gradient(circle at 85% 8%, rgba(244,114,182,0.28), transparent 40%), linear-gradient(180deg, #070c1d 0%, #11173a 100%)";
 
   return (
-    <div
-      data-game="SpeedQuizMath" data-playing={phase === "play"}
-      className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
-      style={{
-        background:
-          "radial-gradient(circle at 20% 15%, rgba(56,189,248,0.28), transparent 34%), radial-gradient(circle at 82% 9%, rgba(244,114,182,0.3), transparent 38%), linear-gradient(180deg, #090f21 0%, #131a3a 100%)",
-      }}
+    <GameShell
+      gameId="SpeedQuizMath"
+      state={screenState}
+      onAutoPause={pauseGame}
+      style={{ background: shellBackground }}
     >
-      <AchievementToast achievements={newlyUnlocked} />
-      <main className="relative z-10 w-full max-w-3xl xl:max-w-4xl mx-auto px-3 sm:px-5 py-3 min-h-dvh min-h-screen flex flex-col pb-8 sm:pb-10">
-        <header className="flex items-center justify-between gap-2 mb-2">
-          <Link href="/games">
-            <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2 h-11 px-3">
-              <ArrowLeft className="w-4 h-4" />
-              Játékok
-            </Button>
-          </Link>
-          <div className="flex items-center gap-3 text-xs font-semibold">
-            <AudioToggleButton size="icon" />
-            <span className="flex items-center gap-1 text-amber-300">
-              <Star className="w-4 h-4" />
-              {totalXp}
-            </span>
-            <span className="flex items-center gap-1 text-orange-300">
-              <Flame className="w-4 h-4" />
-              {streak}
-            </span>
-          </div>
-        </header>
-
-        <Card className="border border-cyan-300/45 bg-slate-950/90 backdrop-blur-md shadow-[0_16px_50px_rgba(0,0,0,0.48)] flex-1 flex flex-col min-h-0">
-          <CardContent data-game-card-content className="p-3 flex flex-col flex-1 min-h-0">
-            <div className="flex items-center gap-2 mb-1">
-              <Rocket className="w-5 h-5 text-cyan-300" />
-              <h1 className="text-lg font-black tracking-wide">Neon matek torony</h1>
-            </div>
-            {phase !== "play" && (
+      {phase === "menu" && (
+        <StartScreen
+          title="Neon matek torony"
+          subtitle={[
+            LEVEL_LABEL[grade],
+            `${target} jó válasz a csúcsig`,
+            levels.level != null ? `${levels.level}. pálya` : null,
+          ]
+            .filter(Boolean)
+            .map((part) => String(part).replace(/ /g, " "))
+            .join(" · ")}
+          icon={<Rocket className="h-12 w-12 text-white drop-shadow" aria-hidden="true" />}
+          startLabel="Indul a torony — rajta!"
+          startTestId="sq-start"
+          onStart={startGame}
+          best={storedBest}
+          secondary={
+            <>
+              <Link href="/games" className="game-btn game-btn-ghost">
+                <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+                Játékok
+              </Link>
+              <AudioToggleButton
+                showLabel
+                className="game-btn game-btn-secondary h-12 min-w-12 w-full [&_span]:text-base [&_span]:font-extrabold"
+              />
+            </>
+          }
+          settings={
+            <div className="flex flex-col gap-4">
+              <div>
+                <p className="mb-2 text-sm font-bold uppercase tracking-wide text-cyan-100/85">Évfolyam</p>
+                <div className="grid grid-cols-5 gap-2" data-testid="sq-grade-picker" role="group" aria-label="Évfolyam">
+                  {GRADE_LEVELS.map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      aria-pressed={grade === g}
+                      aria-label={LEVEL_LABEL[g]}
+                      className={`flex min-h-12 min-w-12 items-center justify-center rounded-xl border text-base font-black transition-colors ${
+                        grade === g
+                          ? "border-cyan-100/60 bg-gradient-to-b from-cyan-400 to-fuchsia-600 text-white shadow-[0_0_18px_rgba(34,211,238,0.4)]"
+                          : "border-white/20 bg-slate-900/80 text-white hover:bg-slate-800"
+                      }`}
+                      onClick={() => setGrade(g)}
+                    >
+                      {g}.
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {levels.active && levels.level != null ? (
+                // A közös választó 44 px-es gombjai a játékban 48 px-esek (terv M2); a Chrome a zárt
+                // <details> tartalmát is lerendeli, ezért a mérés összecsukva is látja őket.
+                <div className="[&_button]:min-h-12 [&_p]:text-sm">
+                  <GradeLevelPicker
+                    value={levels.level}
+                    unlocked={levels.unlocked}
+                    onChange={levels.select}
+                    label={`Pálya — ${grade}. osztály`}
+                  />
+                </div>
+              ) : null}
+              <p className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2.5 text-sm text-white/90">
+                <span className="font-bold text-amber-200">A pálya célja:</span> <strong>{target}</strong> helyes
+                válasz a torony tetejéig · <strong>3</strong> szív = három hibalehetőség · szint:{" "}
+                <strong>{LEVEL_LABEL[grade]}</strong>
+              </p>
               <GamePedagogyPanel
                 accent="cyan"
-                className="mb-2"
+                className="w-full min-h-12 text-sm"
                 kidMission={`Válaszolj gyorsan és jól (${grade}. osztály szint)! Minden helyes válasz közelebb visz a torony tetejéhez a pályán. Van 3 életed — rossz válasz egy szívecskét elvesz. A láng = sorozat: minél több jó válasz egymás után, annál nagyobb a pontszorzó érzése.`}
                 parentBody={
                   <>
@@ -1764,179 +1925,281 @@ export default function SpeedQuizMath() {
                   </>
                 }
               />
-            )}
-            <p data-game-sync className={`text-[11px] text-cyan-100/95 border border-cyan-700/45 rounded px-2 ${phase === "play" ? "py-1 mb-2" : "py-1.5 mb-3"} bg-slate-900/95`}>
-              {syncBanner}
-            </p>
+              <p data-game-sync className="rounded-lg border border-cyan-700/45 bg-slate-900/90 px-3 py-2 text-sm text-cyan-100/95">
+                {syncBanner}
+              </p>
+            </div>
+          }
+        >
+          <ul className="flex flex-wrap justify-center gap-2 text-sm font-bold text-white/90" aria-label="Szabályok">
+            <li className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1">⚡ Gyorsabb = több pont</li>
+            <li className="rounded-full border border-orange-300/30 bg-orange-500/10 px-3 py-1">🔥 3 jó sorban = kombó</li>
+            <li className="rounded-full border border-rose-300/30 bg-rose-500/10 px-3 py-1">❤️ 3 élet</li>
+          </ul>
+        </StartScreen>
+      )}
 
-            {phase === "menu" && (
-              <div data-game-menu="math" className="flex-1 flex flex-col items-center justify-center gap-4 py-6">
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 w-full max-w-xl" data-testid="sq-grade-picker">
-                  {GRADE_LEVELS.map((g) => (
-                    <Button
-                      key={g}
-                      type="button"
-                      className={`px-1.5 whitespace-nowrap ${
-                        grade === g
-                          ? "bg-gradient-to-r from-cyan-500 to-fuchsia-600 text-white font-bold border border-cyan-100/40 shadow-[0_0_20px_rgba(34,211,238,0.35)]"
-                          : "bg-slate-900/95 border border-white/30 text-white hover:bg-slate-800"
-                      }`}
-                      onClick={() => setGrade(g)}
-                    >
-                      {g}. osztály
-                    </Button>
-                  ))}
-                </div>
-                <div className="w-full max-w-xl rounded-xl border border-amber-400/35 bg-gradient-to-r from-amber-500/10 to-fuchsia-500/10 px-3 py-2.5 text-sm text-white/90">
-                  <span className="font-bold text-amber-200">A pálya célja:</span>{" "}
-                  <strong>{TARGET_CORRECT[grade]}</strong> helyes válasz a torony tetejéig · <strong>3</strong> szív =
-                  három hibalehetőség · szint: <strong>{LEVEL_LABEL[grade]}</strong>
-                </div>
-                <Button
-                  type="button"
-                  size="lg"
-                  className="bg-gradient-to-r from-cyan-500 via-blue-500 to-fuchsia-600 hover:from-cyan-400 hover:to-fuchsia-500 font-bold text-white px-8 border border-cyan-100/40 text-base"
-                  onClick={startGame}
-                  data-testid="sq-start"
-                >
-                  <Gauge className="w-4 h-4 mr-2" />
-                  Indul a torony — rajta!{levels.level != null ? ` · ${levels.level}. pálya` : ""}
-                </Button>
-                {levels.active && levels.level != null ? (
-                  <GradeLevelPicker
-                    value={levels.level}
-                    unlocked={levels.unlocked}
-                    onChange={levels.select}
-                    label={`Pálya — ${grade}. osztály`}
-                  />
-                ) : null}
-              </div>
-            )}
-
-            {phase === "play" && (
-              <div className="math-run flex-1 min-h-0">
-                <div className="math-stats grid grid-cols-4 gap-1.5 text-[11px] font-semibold">
-                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Szint: {LEVEL_LABEL[grade]}</div>
-                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Kör: {timeLeft}s</div>
-                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Kérdés: {questionTimeLeft}s</div>
-                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5" data-testid="sq-score">Pont: {score}</div>
-                </div>
-
-                <div className="math-lives flex flex-wrap items-center gap-2 text-xs">
-                  <div className="flex items-center gap-1 text-rose-300">
-                    {[0, 1, 2].map((i) => (
-                      <Heart key={i} className={`w-4 h-4 ${i < lives ? "fill-rose-400 text-rose-300" : "text-white/20"}`} />
-                    ))}
-                    <span className="ml-1 text-white/75 font-semibold">Életek</span>
-                  </div>
-                  <span className="rounded-full border border-orange-400/40 bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-200">
-                    Sorozat: {streak}
+      {phase !== "menu" && (
+        <div className="flex min-h-0 flex-1 flex-col" aria-hidden={isResult ? true : undefined}>
+          <GameHud
+            onPause={pauseGame}
+            stats={[
+              {
+                id: "score",
+                label: "Pont",
+                value: (
+                  <span data-testid="sq-score">
+                    <span className="sr-only">Pont: </span>
+                    {score}
                   </span>
-                </div>
+                ),
+              },
+              {
+                id: "streak",
+                label: "Kombó",
+                tone: streak >= 3 ? "good" : "default",
+                value: (
+                  <span className="inline-flex items-center gap-1">
+                    <Flame
+                      className={`h-4 w-4 ${streak >= 3 ? "fill-orange-400 text-orange-300" : "text-orange-300/70"}`}
+                      aria-hidden="true"
+                    />
+                    {streak}
+                  </span>
+                ),
+              },
+              {
+                id: "lives",
+                label: "Élet",
+                tone: lives <= 1 ? "bad" : "default",
+                value: (
+                  <span className="inline-flex items-center gap-0.5" aria-label={`${lives} élet a háromból`}>
+                    {[0, 1, 2].map((i) => (
+                      <Heart
+                        key={i}
+                        aria-hidden="true"
+                        className={`h-4 w-4 ${i < lives ? "fill-rose-500 text-rose-300" : "text-white/25"}`}
+                      />
+                    ))}
+                  </span>
+                ),
+              },
+            ]}
+            progress={{
+              value: questionTimeLeft,
+              max: qSeconds,
+              label: `Kérdés ${questionTimeLeft} mp`,
+              tone: qTone,
+            }}
+          />
 
-                <GameNextGoalBar
-                  accent="fuchsia"
-                  headline={
-                    correct >= TARGET_CORRECT[grade]
-                      ? "Megvan a torony teteje — még gyűjts pontot, amíg tart a kör!"
-                      : `${TARGET_CORRECT[grade] - correct} helyes válasz még a célhoz`
-                  }
-                  subtitle={`${LEVEL_LABEL[grade]} · ${timeLeft}s a körből · ${lives} élet · kombó: ${streak}`}
-                  current={correct}
-                  target={TARGET_CORRECT[grade]}
-                  className="math-goal w-full"
-                />
-
-                <div className="math-clock h-1.5 rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${runProgress}%` }} />
-                </div>
-                <div className="math-clock h-1.5 rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-fuchsia-400 to-pink-500" style={{ width: `${qProgress}%` }} />
-                </div>
-
-                <MathTowerScene3D current={correct} target={TARGET_CORRECT[grade]} />
-
+          <div className="flex min-h-0 flex-1 flex-col gap-2 px-[max(8px,var(--game-safe-left))] pb-[max(8px,var(--game-safe-bottom))] pt-2 pr-[max(8px,var(--game-safe-right))]">
+            <div className="flex items-center gap-2 text-sm font-bold text-cyan-100/90" aria-label={`Kör: ${timeLeft} másodperc`}>
+              <Clock className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" />
+              <span className="shrink-0">Kör</span>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/10 bg-slate-950/70">
                 <div
-                  className={`math-question rounded-xl border ${
+                  className="h-full origin-left rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-fuchsia-500 shadow-[0_0_10px_rgba(56,189,248,0.6)]"
+                  style={{
+                    transform: `scaleX(${runRatio})`,
+                    transition: reducedMotion ? "none" : "transform 0.9s linear",
+                  }}
+                />
+              </div>
+              <span className="w-12 shrink-0 text-right tabular-nums">{timeLeft} mp</span>
+            </div>
+
+            <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-2 landscape:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] landscape:grid-rows-1 landscape:gap-3">
+              <div className="relative flex min-h-[96px] flex-col overflow-hidden rounded-2xl border border-cyan-300/25 shadow-[0_10px_30px_rgba(0,0,0,0.45)] [&>.math-world]:flex-1">
+                <MathTowerScene3D current={correct} target={target} />
+              </div>
+
+              <div className="relative flex min-h-0 flex-col justify-end gap-2 landscape:justify-center">
+                <div
+                  className={`relative rounded-2xl border-2 bg-slate-950/85 px-3 py-2.5 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur-sm transition-colors ${
                     answerState === "correct"
                       ? "border-emerald-400"
-                      : wrongFlash || answerState === "wrong"
+                      : answerState === "wrong"
                         ? "border-rose-400"
-                        : "border-cyan-300/45"
-                  } bg-slate-950/90 p-2.5 transition-colors`}
+                        : qTone === "bad"
+                          ? "border-rose-400/70"
+                          : "border-cyan-300/40"
+                  }`}
                 >
-                  <p className="text-[11px] text-white/60 mb-1">
-                    Gyors teszt #{answered + 1} — válaszd ki a helyes választ!
-                  </p>
-                  <p className="text-lg sm:text-xl font-black tracking-wide text-cyan-50 leading-tight">{task.prompt}</p>
-                  <p className="text-[10px] text-white/55 mt-1">
-                    Forrás: {task.source === "teacher" ? "Tanári kérdésbank" : "Generált feladat"}
-                  </p>
-                </div>
-
-                <div className="math-answers grid grid-cols-2 gap-1.5" data-testid="sq-answers">
-                  {task.options.map((opt, idx) => (
-                    <Button
-                      key={`${opt}-${idx}`}
-                      type="button"
-                      className={`h-12 text-lg font-black border text-white shadow-sm transition-colors ${
-                        answerState === "correct"
-                          ? "bg-emerald-700/40 border-emerald-200/40 hover:bg-emerald-600/45"
-                          : wrongFlash || answerState === "wrong"
-                            ? "bg-rose-900/35 border-rose-200/40 hover:bg-rose-800/45"
-                            : "bg-slate-900/95 hover:bg-cyan-700/45 border-cyan-200/35"
+                  <div className="mb-1.5 flex items-center gap-2 text-xs font-bold text-cyan-200/85">
+                    <span className="uppercase tracking-wider">{answered + 1}. feladat</span>
+                    <span className="text-white/55">
+                      {task.source === "teacher" ? "Tanári bank" : "Generált"}
+                    </span>
+                    <span
+                      className={`ml-auto rounded-full border px-2 py-0.5 tabular-nums ${
+                        correct >= target
+                          ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
+                          : "border-amber-300/50 bg-amber-500/15 text-amber-100"
                       }`}
-                      onClick={() => handleAnswer(idx)}
-                      {...correctDataAttrs(idx === task.correctIndex)}
+                      aria-label={`Cél: ${correct} a ${target} jó válaszból`}
                     >
-                      {formatMathNumber(opt)}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {(phase === "over" || phase === "won") && (
-              <div
-                className="flex-1 flex flex-col justify-center items-center text-center gap-3 py-8"
-                data-testid={phase === "won" ? "sq-won" : "sq-over"}
-              >
-                {phase === "won" ? (
-                  <Trophy className="w-14 h-14 text-amber-300" />
-                ) : (
-                  <Gauge className="w-14 h-14 text-rose-300" />
-                )}
-                <p className="text-xl font-bold">{phase === "won" ? "Célba értél a neon toronyban!" : "Vége a futamnak"}</p>
-                {phase === "won" && (
-                  <p className="text-sm font-semibold text-cyan-100/90 max-w-sm">
-                    Annyi helyes matektesztet raktál össze, hogy a pálya tetejére értél — ügyes vagy, ez a fő jutalom!
+                      🏁 {correct}/{target}
+                    </span>
+                  </div>
+                  <p
+                    data-testid="sq-prompt"
+                    className={`font-black leading-tight text-white [text-wrap:balance] ${promptSizeClass(task.prompt)}`}
+                  >
+                    {task.prompt}
                   </p>
-                )}
-                <p className="text-sm text-white/80">
-                  Pont: <strong className="text-amber-300">{score}</strong> · Helyes: <strong>{correct}</strong> · Kombó:{" "}
-                  <strong>{bestStreak}</strong>
-                </p>
-                {syncEligibility?.eligible ? (
-                  <p className="text-xs text-emerald-300/90">Eredmény elküldve a felhő ranglistára.</p>
-                ) : (
-                  <p className="text-xs text-white/60 max-w-xs">{syncBanner}</p>
-                )}
-                <div className="flex gap-2">
-                  <Button type="button" className="bg-cyan-600 hover:bg-cyan-500" onClick={startGame}>
-                    <RotateCcw className="w-4 h-4 mr-1" />
-                    Új futam
-                  </Button>
-                  <Link href="/games">
-                    <Button variant="outline" className="border-white/30 text-white">
-                      Lista
-                    </Button>
-                  </Link>
+                  <div className="pointer-events-none absolute inset-x-0 -top-4 z-20 flex justify-center">
+                    <AnimatePresence>
+                      {gain && answerState === "correct" && (
+                        <motion.span
+                          key={gain.id}
+                          className="rounded-full border border-amber-100/80 bg-gradient-to-b from-amber-300 to-amber-500 px-3 py-0.5 text-lg font-black tabular-nums text-slate-950 shadow-[0_0_18px_rgba(251,191,36,0.6)]"
+                          initial={reducedMotion ? false : { opacity: 0, y: 8, scale: 0.8 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={reducedMotion ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: -18 }}
+                          transition={{ duration: 0.25, ease: "easeOut" }}
+                        >
+                          +{gain.value} pont
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-x-0 -top-5 z-20 flex justify-center">
+                    <AnimatePresence>
+                      {combo && (
+                        <motion.span
+                          key={combo.id}
+                          data-testid="sq-combo"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/70 bg-gradient-to-r from-orange-500 via-amber-400 to-fuchsia-500 px-4 py-1 text-lg font-black text-slate-950 shadow-[0_0_24px_rgba(251,191,36,0.65)]"
+                          initial={reducedMotion ? false : { scale: 0.8, opacity: 0, y: 6 }}
+                          animate={{ scale: 1, opacity: 1, y: 0 }}
+                          exit={
+                            reducedMotion
+                              ? { opacity: 0, transition: { duration: 0 } }
+                              : { scale: 1.1, opacity: 0, transition: { duration: 0.16, ease: "easeIn" } }
+                          }
+                          transition={{ type: "spring", stiffness: 520, damping: 22 }}
+                        >
+                          <Flame className="h-5 w-5 fill-white text-white" aria-hidden="true" />
+                          Kombó ×{combo.value}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2" data-testid="sq-answers">
+                    {task.options.map((opt, idx) => {
+                      const chosen = chosenIdx === idx;
+                      const state = chosen ? answerState : "idle";
+                      return (
+                        <motion.button
+                          key={`${task.prompt}-${opt}-${idx}`}
+                          type="button"
+                          data-state={state}
+                          className={`game-answer-btn flex h-[clamp(56px,9dvh,80px)] items-center justify-center rounded-2xl border-2 bg-gradient-to-b px-2 !text-[clamp(22px,7vmin,32px)] font-black tabular-nums text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-5px_0_rgba(0,0,0,0.35),0_8px_18px_var(--tw-shadow-color)] transition-[filter,opacity,background-color] duration-150 [-webkit-tap-highlight-color:transparent] [text-shadow:0_2px_0_rgba(0,0,0,0.35)] [touch-action:manipulation] ${
+                            state === "correct"
+                              ? "border-emerald-100 from-emerald-400 to-emerald-700 shadow-emerald-400/50 ring-4 ring-emerald-300/50"
+                              : state === "wrong"
+                                ? "border-rose-100 from-rose-500 to-rose-800 shadow-rose-500/40 ring-4 ring-rose-300/50"
+                                : answerState !== "idle"
+                                  ? `${ANSWER_ACCENTS[idx % ANSWER_ACCENTS.length]} opacity-50 saturate-50`
+                                  : `${ANSWER_ACCENTS[idx % ANSWER_ACCENTS.length]} hover:brightness-110 active:brightness-125`
+                          }`}
+                          initial={false}
+                          animate={
+                            reducedMotion
+                              ? undefined
+                              : state === "correct"
+                                ? { scale: [1, 1.08, 1] }
+                                : state === "wrong"
+                                  ? { x: [0, -7, 7, -5, 5, 0] }
+                                  : { scale: 1, x: 0 }
+                          }
+                          whileTap={reducedMotion || answerState !== "idle" ? undefined : { scale: 0.95 }}
+                          transition={{ duration: state === "wrong" ? 0.32 : 0.24 }}
+                          onClick={() => handleAnswer(idx)}
+                          {...correctDataAttrs(idx === task.correctIndex)}
+                        >
+                          {formatMathNumber(opt)}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {wrongFlash && !reducedMotion && (
+          <motion.div
+            key="sq-wrong-vignette"
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0 z-[70] shadow-[inset_0_0_120px_rgba(244,63,94,0.75)]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+          />
+        )}
+      </AnimatePresence>
+
+      <PauseMenu
+        open={phase === "play" && paused}
+        onResume={resumeGame}
+        onRestart={startGame}
+        onExit={exitToGames}
+        exitLabel="Vissza a játékokhoz"
+      >
+        <p className="text-center text-base text-white/80">
+          {LEVEL_LABEL[grade]} · {correct}/{target} jó válasz · {lives} élet
+        </p>
+      </PauseMenu>
+
+      <ResultScreen
+        open={isResult}
+        testId={phase === "won" ? "sq-won" : "sq-over"}
+        title={phase === "won" ? "Célba értél a neon toronyban!" : "Vége a futamnak"}
+        won={phase === "won"}
+        score={score}
+        best={bestResult?.best ?? storedBest}
+        isNewBest={bestResult?.isNewBest ?? false}
+        correct={correct}
+        total={totalAnswered}
+        onRetry={startGame}
+        retryLabel="Új futam"
+        onBack={exitToGames}
+        extra={
+          <div className="grid gap-2">
+            <p className="game-result-stat">
+              <Flame className="h-5 w-5 text-orange-300" aria-hidden="true" />
+              <span>
+                Legjobb kombó: <strong>{bestStreak}</strong>
+              </span>
+            </p>
+            {newlyUnlocked.length > 0 && (
+              <p
+                className="game-result-stat border-amber-300/30 bg-amber-500/10"
+                title={newlyUnlocked.map((a) => a.title).join(", ")}
+              >
+                <span className="min-w-0 flex-1 line-clamp-2 landscape:line-clamp-1">
+                  <span aria-hidden="true">{newlyUnlocked.map((a) => a.icon).join(" ")} </span>
+                  {newlyUnlocked.length > 1 ? "Új jelvények" : "Új jelvény"}:{" "}
+                  <strong className="text-amber-100">{newlyUnlocked.map((a) => a.title).join(", ")}</strong>
+                </span>
+              </p>
             )}
-          </CardContent>
-        </Card>
-      </main>
+            {/* A szinkron-tájékoztató a Beállításokban él; ide csak a sikeres beküldés kerül (kis kijelzőn hely). */}
+            {syncEligibility?.eligible && (
+              <p className="px-1 text-sm text-emerald-200/90">Eredmény elküldve a felhő ranglistára.</p>
+            )}
+          </div>
+        }
+      />
 
       {feedback && (
         <QuizFeedbackCard
@@ -1945,6 +2208,6 @@ export default function SpeedQuizMath() {
           onRetry={lives > 0 ? retryTask : undefined}
         />
       )}
-    </div>
+    </GameShell>
   );
 }

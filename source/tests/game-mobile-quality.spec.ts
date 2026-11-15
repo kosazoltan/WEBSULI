@@ -31,7 +31,9 @@ test.beforeEach(async ({ page }) => {
     }
     if (p.includes("quiz-bank") || p.includes("material-quizzes")) data = { items: [], materials: [] };
     if (p.includes("sync-eligibility")) data = { eligible: false };
-    if (p.includes("leaderboard") || p.includes("/api/game/score")) data = { ok: true };
+    // A ranglista tömb (Games.tsx `leaderboard.map`): objektummal a /games lap összeomlik, és az M8 nem fut le.
+    if (p.includes("leaderboard")) data = [];
+    if (p.includes("/api/game/score")) data = { ok: true };
     await route.fulfill({ json: data });
   });
 });
