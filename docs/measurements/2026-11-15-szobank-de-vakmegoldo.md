@@ -191,6 +191,12 @@ megoldó csak 3 jelzést adott). Ezért célzott audit a teljes német bankon:
   „ein Brot schmieren”, `de1-food-013` Durst haben → „eine Suppe kochen” (az L0 „ich habe Hunger / Durst”
   szinonimái voltak), `de1-shopping-010` mit Karte bezahlen → „Brauchen Sie eine Tüte” (az L0 „mit Karte zahlen”
   szinonimája volt).
+- Szabály (kétszintű védelem, orkesztrátori döntés): (A) a generátor külön PR-ban kizárja azt a rossz választ,
+  amelynek `hu`-ja jelentés-kulcsban átfed a helyes bejegyzésével (vessző / pontosvessző / perjel mentén darabolva,
+  zárójeles rész és írásjel nélkül); (B) az adatban az azonos jelentésű bejegyzések `hu`-jának legalább egy,
+  vesszővel elválasztott tagja betűre azonos. A fenti „betűre azonos hu” javítások ezt teljesítik; a „szétválasztott
+  hu” esetek nem azonos jelentésűek (pl. der Stadtplan ↔ die Landkarte, das Rennen ↔ der Wettkampf), ott a cél
+  épp az, hogy ne legyen közös tag.
 - Ellenőrzés: a Codex-review reprodukciója (a két árkérdés hu→német kérdése 2 × 500 seeddel) → 1000 kérdés, egyikben
   sem szerepel egyszerre a két szinonima.
 - Ezek a javítások integrátori ellenőrzéssel zárultak, újabb vak kör nélkül.
