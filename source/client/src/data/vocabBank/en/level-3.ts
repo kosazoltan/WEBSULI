@@ -417,7 +417,7 @@ export const VOCAB_EN_L3: VocabEntry[] = [
   // ── technology ──
   { id: "en3-technology-002", term: "touchscreen", hu: "érintőképernyő", kind: "word", level: 3, topic: "technology", pos: "noun", example: "The touchscreen is very responsive.", exampleHu: "Az érintőképernyő nagyon érzékeny." },
   { id: "en3-technology-003", term: "software", hu: "szoftver", kind: "word", level: 3, topic: "technology", pos: "noun", example: "We use free software for drawing.", exampleHu: "Ingyenes szoftvert használunk rajzoláshoz." },
-  { id: "en3-technology-004", term: "adapter", hu: "adapter", kind: "word", level: 3, topic: "technology", pos: "noun", example: "I need an adapter for this plug.", exampleHu: "Szükségem van egy adapterre ehhez a dugóhoz." },
+  { id: "en3-technology-004", term: "hard disk", hu: "merevlemez", kind: "word", level: 3, topic: "technology", pos: "noun", example: "My files are on the hard disk.", exampleHu: "A fájljaim a merevlemezen vannak." },
   { id: "en3-technology-005", term: "username", hu: "felhasználónév", kind: "word", level: 3, topic: "technology", pos: "noun", example: "Choose a username for your account.", exampleHu: "Válassz felhasználónevet a fiókodhoz." },
   { id: "en3-technology-006", term: "microphone", hu: "mikrofon", kind: "word", level: 3, topic: "technology", pos: "noun", example: "Speak into the microphone.", exampleHu: "Beszélj a mikrofonba." },
   { id: "en3-technology-007", term: "storage", hu: "tárhely", kind: "word", level: 3, topic: "technology", pos: "noun", example: "This phone has very little storage.", exampleHu: "Ennek a telefonnak nagyon kevés a tárhelye." },
@@ -487,7 +487,7 @@ export const VOCAB_EN_L3: VocabEntry[] = [
   { id: "en3-culture-012", term: "ancient", hu: "ókori, ősi", kind: "word", level: 3, topic: "culture", pos: "adj", example: "We saw ancient Roman coins in the museum.", exampleHu: "Ókori római érméket láttunk a múzeumban." },
   { id: "en3-culture-013", term: "artefact", hu: "műtárgy, lelet", kind: "word", level: 3, topic: "culture", pos: "noun", example: "The museum keeps an ancient artefact.", exampleHu: "A múzeum egy ősi műtárgyat őriz." },
   { id: "en3-culture-014", term: "poet", hu: "költő", kind: "word", level: 3, topic: "culture", pos: "noun", example: "The poet wrote about the river Tisza.", exampleHu: "A költő a Tiszáról írt." },
-  { id: "en3-culture-015", term: "opera", hu: "opera", kind: "word", level: 3, topic: "culture", pos: "noun", example: "We saw an opera at the theatre.", exampleHu: "A színházban megnéztünk egy operát." },
+  { id: "en3-culture-015", term: "ballet", hu: "balett", kind: "word", level: 3, topic: "culture", pos: "noun", example: "We watched a ballet at the theatre.", exampleHu: "Egy balettet néztünk a színházban." },
   { id: "en3-culture-016", term: "architecture", hu: "építészet", kind: "word", level: 3, topic: "culture", pos: "noun", example: "I love the architecture of old churches.", exampleHu: "Szeretem a régi templomok építészetét." },
   { id: "en3-culture-017", term: "folk music", hu: "népzene", kind: "word", level: 3, topic: "culture", pos: "noun", example: "My grandmother loves folk music.", exampleHu: "A nagymamám szereti a népzenét." },
   { id: "en3-culture-018", term: "folk dance", hu: "néptánc", kind: "word", level: 3, topic: "culture", pos: "noun", example: "We learn a folk dance at school.", exampleHu: "Az iskolában néptáncot tanulunk." },

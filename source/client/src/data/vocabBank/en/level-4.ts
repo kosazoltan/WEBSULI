@@ -158,7 +158,7 @@ export const VOCAB_EN_L4: VocabEntry[] = [
   // ── nature ──
   { id: "en4-nature-002", term: "biodiversity", hu: "biológiai sokféleség", kind: "word", level: 4, topic: "nature", pos: "noun", example: "The rainforest has incredible biodiversity.", exampleHu: "Az esőerdő biológiai sokfélesége hihetetlen." },
   { id: "en4-nature-003", term: "erosion", hu: "erózió", kind: "word", level: 4, topic: "nature", pos: "noun", example: "Erosion slowly wears away the coastline.", exampleHu: "Az erózió lassan koptatja a partvonalat." },
-  { id: "en4-nature-004", term: "tundra", hu: "tundra", kind: "word", level: 4, topic: "nature", pos: "noun", example: "Very few trees grow in the Arctic tundra.", exampleHu: "A sarkvidéki tundrán nagyon kevés fa nő." },
+  { id: "en4-nature-004", term: "wetland", hu: "vizes élőhely", kind: "word", level: 4, topic: "nature", pos: "noun", example: "Many birds live in the wetland.", exampleHu: "Sok madár él a vizes élőhelyen." },
   { id: "en4-nature-005", term: "tributary", hu: "mellékfolyó", kind: "word", level: 4, topic: "nature", pos: "noun", example: "The river has several small tributaries.", exampleHu: "A folyónak több kis mellékfolyója van.", alt: ["tributaries"] },
   { id: "en4-nature-006", term: "renewable", hu: "megújuló", kind: "word", level: 4, topic: "nature", pos: "adj", example: "Wind and solar power are renewable energy sources.", exampleHu: "A szél- és a napenergia megújuló energiaforrások." },
   { id: "en4-nature-007", term: "terrain", hu: "terep", kind: "word", level: 4, topic: "nature", pos: "noun", example: "The rough terrain made walking difficult.", exampleHu: "A rögös terep megnehezítette a gyaloglást." },

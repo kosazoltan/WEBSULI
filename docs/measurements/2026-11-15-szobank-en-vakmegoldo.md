@@ -166,6 +166,21 @@ egymás mellé tehet) alapján, a PR #431 review-botjainak két jelzésével (`s
 - Javítás után: riport 0 hiba, kvóták rendben, írásjel- és közeli duplikátum-kereső tiszta, a két vocab-teszt `# fail 0`.
   Ezt a kört vak megoldó nem ellenőrizte újra (integrátori visszaolvasás).
 
+## Szivárgás- és kognát-kör (orkesztrátori merge előtti ellenőrzés után)
+
+- A `hu` a `hu-to-target` kérdés promptja és a `target-to-hu` kérdés válaszlehetősége, ezért nem tartalmazhatja a term-et
+  vagy angol példát. Szkript a teljes bankon: a `hu` tartalmazza-e a term-et (szóhatáron), egyik vesszővel elválasztott
+  tagja azonos-e vele, van-e benne angol példa vagy „=”.
+- Javítva 21 bejegyzés (azonosító, téma, `kind` marad; új term bankszinten egyedi):
+  - **angol példa a `hu`-ban:** half past → this morning, quarter past → after school (L0 time);
+  - **azonos alakú kognát (tartalmatlan kérdés):** tea → fruit, park → police officer, film → drawing, robot → mobile phone
+    (L0); pizza → omelette, ketchup → mustard, bank → bench, taxi → post box, zebra → hippo, panda → polar bear,
+    penny → shop window, laptop → remote control, internet → memory stick, baseball → table tennis, golf → badminton (L1);
+    vitamin → eye drops (L2); adapter → hard disk, opera → ballet (L3); tundra → wetland (L4).
+- Maradt (a `hu`-nak van nem azonos alakú tagja): farm („farm, gazdaság”), marker („marker, filctoll”).
+- Javítás után: riport 0 hiba, kvóták rendben, írásjel- és közeli duplikátum-kereső tiszta, a `hu`-átfedés-kereső új párt nem
+  talált, a két vocab-teszt `# fail 0`. Integrátori ellenőrzés; vak megoldó nem oldotta meg újra.
+
 ## Integrátori előkészítés (a vak megoldó előtt)
 
 - 28 duplikált term (K.8.6), 14 írásjel-független és 24 közeli duplikátum feloldva (a magasabb szint cserélve; mintabejegyzés

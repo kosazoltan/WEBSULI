@@ -387,7 +387,7 @@ export const VOCAB_EN_L2: VocabEntry[] = [
   { id: "en2-health-016", term: "bruise", hu: "kék folt", kind: "word", level: 2, topic: "health", pos: "noun", example: "I have a big bruise on my leg.", exampleHu: "Nagy kék folt van a lábamon." },
   { id: "en2-health-017", term: "allergy", hu: "allergia", kind: "word", level: 2, topic: "health", pos: "noun", example: "My friend has a nut allergy.", exampleHu: "A barátomnak diófélékre van allergiája." },
   { id: "en2-health-018", term: "virus", hu: "vírus", kind: "word", level: 2, topic: "health", pos: "noun", example: "A virus can spread very fast.", exampleHu: "Egy vírus nagyon gyorsan terjedhet." },
-  { id: "en2-health-019", term: "vitamin", hu: "vitamin", kind: "word", level: 2, topic: "health", pos: "noun", example: "Oranges have a lot of vitamin C.", exampleHu: "A narancsban sok C-vitamin van." },
+  { id: "en2-health-019", term: "eye drops", hu: "szemcsepp", kind: "word", level: 2, topic: "health", pos: "noun", example: "The doctor gave me eye drops.", exampleHu: "Az orvos szemcseppet adott nekem." },
   { id: "en2-health-020", term: "backache", hu: "hátfájás", kind: "word", level: 2, topic: "health", pos: "noun", example: "A heavy bag can cause backache.", exampleHu: "Egy nehéz táska hátfájást okozhat." },
   { id: "en2-health-021", term: "take your temperature", hu: "megméri a lázát", kind: "phrase", level: 2, topic: "health", pos: "phrase", example: "The nurse will take your temperature.", exampleHu: "A nővér megméri a lázadat." },
   // ── feelings ──
