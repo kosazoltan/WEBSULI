@@ -56,6 +56,32 @@ export async function measureOverflow(page: Page): Promise<{ x: number; y: numbe
   }));
 }
 
+/**
+ * Megvárja, hogy a belépő animációk (PauseMenu / ResultScreen: scale 0,9 → 1) lecsengjenek: a megadott elemek
+ * mérete és helye 4 egymást követő képkockán azonos, és nincs futó Web Animation. Nem fix `waitForTimeout`;
+ * a mérce (≥ 48 px) nem lazul, csak a mérés ideje kerül az animáció utánra.
+ */
+export async function waitForStable(page: Page, selector: string, timeout = 5_000): Promise<void> {
+  await page.waitForFunction(
+    (sel) => {
+      const w = window as unknown as { __stableKey?: string; __stableN?: number };
+      const key = Array.from(document.querySelectorAll(sel))
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return `${r.x.toFixed(2)},${r.y.toFixed(2)},${r.width.toFixed(2)},${r.height.toFixed(2)}`;
+        })
+        .join("|");
+      const running = document.getAnimations().some((a) => a.playState === "running");
+      if (!running && key !== "" && key === w.__stableKey) w.__stableN = (w.__stableN ?? 0) + 1;
+      else w.__stableN = 0;
+      w.__stableKey = key;
+      return (w.__stableN ?? 0) >= 4;
+    },
+    selector,
+    { polling: "raf", timeout },
+  );
+}
+
 /** Látható kattintható elemek, amelyek szélessége vagy magassága < `min` (alap 48; M2). */
 export async function smallTargets(
   page: Page,
@@ -260,6 +286,7 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
           await page.getByTestId("game-pause").click();
           await expect(page.getByTestId("game-pause-menu")).toBeVisible();
           expectNoOverflow(await measureOverflow(page), "szünet", true);
+          await waitForStable(page, '[data-testid="game-pause-menu"]');
           expect(await smallTargets(page), "M2 szünet").toEqual([]);
           expect(await smallFonts(page), "M3 szünet").toEqual([]);
           await shot(page, testInfo, c, "pause");
@@ -272,6 +299,7 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
           await expect(page.locator('[data-testid="game-result-retry"], [data-game-retry]').first()).toBeVisible();
           await expect(page.getByTestId("game-result-back")).toBeVisible();
           expectNoOverflow(await measureOverflow(page), "eredmény", true);
+          await waitForStable(page, "[data-game-result]");
           expect(await smallTargets(page), "M2 eredmény").toEqual([]);
           expect(await smallFonts(page), "M3 eredmény").toEqual([]);
           await shot(page, testInfo, c, "result");
