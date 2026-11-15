@@ -33,7 +33,7 @@ export function GradeLevelPicker(props: {
               aria-pressed={selected}
               disabled={locked}
               onClick={() => props.onChange(level)}
-              className={`flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-lg border text-sm font-bold transition-colors ${
+              className={`flex min-h-[48px] min-w-[48px] items-center justify-center gap-1 rounded-lg border text-sm font-bold transition-colors ${
                 selected
                   ? "border-amber-200 bg-amber-500 text-slate-950"
                   : locked
