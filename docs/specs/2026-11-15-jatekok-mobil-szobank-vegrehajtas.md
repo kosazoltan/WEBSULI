@@ -294,6 +294,28 @@ Minden K.7.1–K.7.2 export a fenti néven és szignatúrával létezik. Eltér�
   `generateVocabQuestion` `null`-t ad, ha a típus nem alkalmazható (cloze term nélkül, phrase-meaning nem phrase-re
   vagy L0–L1-re), és ha a kész kérdés `isPlayableQuestion`-on elbukna. A rossz válaszok egymás között is különböző
   `term`-, `hu`- és opció-szövegűek.
+- **Jelentés-átfedés szabály (S1 utójavítás, 2026-11-16; terv 4.3 „a rossz válasz nem lehet a helyes válasz
+  szinonimája”; a #427, #428, #431 review-jai):** a teljes `hu`-egyezés nem elég, mert a nagy bankokban a jelentések
+  vesszős felsorolások („dzseki, bomberdzseki” ↔ „dzseki”; „motyog, mormol” ↔ „motyog”), illetve csak írásjelben térnek
+  el („mennyibe kerül ez?” ↔ „mennyibe kerül ez”). Exportált tiszta függvények a `questionGenerator.ts`-ben:
+  - `meaningKeys(hu: string): string[]` — a zárójeles részek (`(…)`) kiesnek; darabolás `,` `;` `/` mentén;
+    darabonként NFC, kisbetű, szóköz-összevonás, a szélekről (a végéről is) a `? ! . … „ ” " '` írásjelek levágva; az
+    üres darab kimarad. Pl. „dzseki, bomberdzseki” → [„dzseki”, „bomberdzseki”]; „óra (időegység)” → [„óra”];
+    „sok (valamiből)” → [„sok”], tehát a „sok” bejegyzéssel ÁTFED (szándékos: a zárójel csak pontosítás).
+  - `meaningsOverlap(a: string, b: string): boolean` — igaz, ha a két kulcshalmaznak van közös eleme; csak TELJES
+    kulcs-egyezés számít, részszó nem („ág” ≠ „világ”, „arc” ≠ „arcfesték”).
+  - `termKey(term: string): string` — `normalizeTerm` + a szélső írásjelek levágása („How old are you?” = „how old
+    are you”). A névelő nélküli alak összevetése NEM a generátor dolga (az adatoldal kezeli).
+  - `pickDistractors` minden kérdéstípusnál kizárja a jelöltet, ha (a) `hu`-ja átfed a helyes bejegyzés `hu`-jával,
+    (b) a `termKey`-e egyezik a helyesével vagy egy már választott elterelőével, (c) `hu`-ja átfed egy már választott
+    elterelő `hu`-jával — a 4 opció bejegyzéseinek jelentés-kulcsai páronként diszjunktak. A `phrase-meaning`
+    `exampleHu`-különbözősége és a cloze-szűrés változatlanul megmarad. A tartalék-lánc (szomszéd szint → bármely
+    szint → `null`) változatlan; a szigorúbb szűrés miatt gyakrabban lép tartalékra.
+  - `scripts/vocab-bank.ts report`: + nem-hiba összesítő sor `jelentés-átfedő párok (azonos szint±1, azonos kind): N`,
+    és `--overlaps` kapcsolóval a párok listája (`azonosító — term — hu ↔ azonosító — term — hu`) az adat-szintű
+    tisztításhoz; a kilépési kód és a meglévő sorok változatlanok. Exportált: `overlapPairs(entries)`.
+  - Teszt: `tests/vocab-distractor-overlap.test.ts` (táblázatos kulcs-esetek, a négy review-forgatókönyv 500 seeden,
+    és bank-szintű invariáns a fában lévő MINDEN bankra, minden generálható típusra, 5 seeddel).
 - `vocabSource.ts`: `next(level, { types })` — ha a véletlen típus nincs a `types`-ban, a `types`-ból választ; ha a
   választott típus nem készíthető, egyszer `hu-to-target`-tel próbál. Kimerülésnél a „legrégebben látott” a
   bejegyzés azonosítójának ÉS a term/hu kézi kulcsának legkésőbbi időbélyege szerint számít. `markAsked` csak a bank
