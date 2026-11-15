@@ -1418,11 +1418,8 @@ export default function BrainRotSteal() {
         .animate-brshake { animation: brshake 0.16s ease-in-out 2; }
         .brainrot-start-icon { display: inline-block; filter: drop-shadow(0 4px 10px #0008); }
         [data-game="BrainRotSteal"] .game-start-icon { background: radial-gradient(circle at 30% 25%, #ffffff40, transparent 55%), linear-gradient(160deg, #c026d3, #7c3aed 55%, #f59e0b); box-shadow: 0 14px 34px #c026d34d, inset 0 1px 0 #ffffff66; }
-        [data-game="BrainRotSteal"] .game-start-settings button { min-height: 48px; min-width: 48px; }
-        /* A közös jelvény-értesítő 10–11 px-es sorai (M3) és rétege: az eredménykártya FÖLÖTT, olvasható méretben. */
+        /* A jelvény-értesítő az eredménykártya FÖLÖTT jelenjen meg (a betűméretet a közös komponens adja, #429). */
         [data-game="BrainRotSteal"] [data-testid^="achievement-toast-"] { z-index: 85; }
-        [data-game="BrainRotSteal"] [data-testid^="achievement-toast-"] p { font-size: 12px; }
-        [data-game="BrainRotSteal"] [data-testid^="achievement-toast-"] p.text-sm { font-size: 14px; }
         .brainrot-topics { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
         .brainrot-topics li { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9999px; font-size: 14px; font-weight: 800; color: #f5d0fe; background: #a21caf26; border: 1px solid #e879f940; }
         [data-collectible-world][data-testid="br-board"] { background: radial-gradient(ellipse at 50% 15%, #8d60cc55, transparent 65%), linear-gradient(160deg, #191944, #241046) !important; }
