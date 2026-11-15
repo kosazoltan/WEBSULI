@@ -1002,7 +1002,7 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
 
 ## S4 — Német szóbank-tartalom (2000 bejegyzés) + vak megoldó
 
-**Állapot:** nincs elkezdve. Kanban #21. Gyártó: Sonnet; vak megoldó: Opus. Függőség: S1 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s4-szobank-de, munkafa .claude/worktrees/jatekok-s4, kanban #21. Gyártó: Sonnet; vak megoldó: Opus. Függőség: S1 összevonva.
 
 - **Cél:** `data/vocabBank/de/level-0..4.ts` a K.8.2 kvóta-tábla és a K.8.3 kifejezés-kvóta szerint (összesen ≥ 2000),
   `de/stage.ts` → `"full"`, jegyzőkönyv.
