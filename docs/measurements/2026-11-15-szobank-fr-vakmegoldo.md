@@ -144,6 +144,62 @@ pontosítva.
   fr1-time-008, fr1-numbers-014 (a példa a „többé-kevésbé” jelentéshez igazítva: „Mon dessin est plus ou moins
   réussi.”), fr2-animals-009, fr4-shopping-005, fr4-technology-015.
 
+## Célzott audit: idiómák és szinonimapárok (a vak körök után)
+
+A német PR reviewjában két olyan hibatípus derült ki, amelyet a vak megoldók nem fogtak meg (idióma
+tükörfordítása; azonos jelentésű kifejezéspár eltérő `hu`-val), ezért a teljes francia bankon célzott audit
+készült.
+
+- **Idiómák:** az L3 és L4 mind a 268 `phrase` bejegyzése, valamint az L0–L2 112 szólásszerű / igei kifejezése
+  végigolvasva (a `hu` az átvitt jelentést adja-e, a példa fordítása természetes-e). 12 javítás:
+  - avoir la boule au ventre: „gombóc van a gyomrában” (tükörfordítás) → „görcsben van a gyomra (izgul)”;
+  - sur un nuage: „a mennyekben jár” → „a hetedik mennyországban van”;
+  - avoir les jambes lourdes: „nehéz a lába” (a magyarban „nehéz lábú” = várandós) → „elnehezül, elfárad a lába”;
+  - hors des sentiers battus: szó szerinti „kitaposott ösvényeken kívül” → „a megszokott turistautaktól távol”;
+  - relever un défi: „kihívásnak megfelel” → „vállalja a kihívást”;
+  - reprendre le dessus: a példa a reprendre des forces jelentését adta → „talpra áll, felülkerekedik”, új példa;
+  - avoir la flemme, avoir le cafard: természetes példa és pontosabb `hu`;
+  - prendre un raccourci → „levágja az utat”; se changer les idées, faire partie d'un club: `hu` pontosítva;
+    se trouver près de: természetellenes példa javítva;
+  - comme deux gouttes d'eau (L4) a se ressembler comme deux gouttes d'eau (L3) közeli duplikátuma és szó
+    szerinti fordítású volt („mint két csepp víz”) → csere: avoir un air de famille.
+- **Szinonimapárok és azonos szavú `hu`-k** (szkript: az írásjel / zárójel nélkül azonos, illetve egymás
+  részhalmazát képező `hu`-k, plusz ismert párok listája; 171 jelölt kézzel átnézve). Csak az számított hibának,
+  ahol a két bejegyzés azonos `kind`-ú (a generátor csak azonos `kind`-ból választ rossz választ), és mindkettő
+  védhető válasz lenne:
+  - azonos jelentésű, eltérő alakú termpárok cseréje a magasabb szinten (6): avoir faim / j'ai faim,
+    avoir soif / j'ai soif, avoir peur / j'ai peur, avoir mal à la tête / j'ai mal à la tête,
+    être enfant unique / enfant unique, à temps partiel / travailler à temps partiel;
+  - betűre azonos `hu` igazi szinonimáknál, hogy a generátor ne tegye őket egymás mellé (9 bejegyzés):
+    ça me fait plaisir = je suis content („örülök”), je vous en prie = avec plaisir = de rien („szívesen”),
+    étonné = surpris („meglepett”), recruter = embaucher, cuire = faire la cuisine = cuisiner („főz”),
+    le pourcentage = pour cent („százalék”), la journée = le jour („nap”), la soirée = le soir („este”),
+    brun = marron („barna”);
+  - homonimák (azonos magyar szó, eltérő jelentés) `hu`-jának szűkítése, hogy ne legyenek egymás védhető
+    elterelői: le château „kastély” (attendre = vár), le quartier „városrész” (le quart = negyed),
+    la note „osztályzat” (le billet = jegy), le but „gól” (le portail = kapu), la patte „mancs”, la poupée
+    „játékbaba” (le bébé = baba), l'atelier „műhely”, le rayon „áruházi részleg”, le panneau „jelzőtábla”,
+    le courrier „levelek, küldemények”, la falaise „sziklafal, szirt”, s'inscrire „beiratkozik”, annuler
+    „lemond, visszavon”, réussir „sikerül”, le patron „főnök”, à bientôt „viszlát hamarosan” stb.;
+  - **kétszintű szinonima-védelem (orkesztrátori döntés, #428 review):** (A) a generátor külön PR-ban
+    kizárja azt a rossz választ, amelynek `hu`-ja a helyes bejegyzésével jelentés-kulcsban átfed (vessző /
+    pontosvessző / perjel mentén darabolva, zárójeles rész és írásjel nélkül); (B) az adatoldalon minden
+    azonos vagy erősen átfedő jelentésű bejegyzéspár `hu`-jában van legalább egy betűre azonos, vesszővel
+    elválasztott tag. Ellenőrizve (szkript): surpris / étonné „meglepett”, inquiet / soucieux „aggódó”,
+    nerveux / énervé „ideges”, la veste / le blouson „dzseki”, calme / détendu „nyugodt”, rassuré / apaisé
+    „megnyugodott”, fâché / furieux „dühös”, fatigué / épuisé „fáradt”, le médecin / le docteur „orvos”,
+    délicieux / savoureux „ízletes”, la blague / la plaisanterie „vicc”, la statue / la sculpture „szobor”,
+    polluer / contaminer „szennyez”, valamint le métier / la profession, l'emploi / le travail, le magasin /
+    la boutique, le portable / le téléphone, content / heureux, la conversation / la discussion / le débat,
+    l'excursion / l'escapade / la sortie, le guide / le guide touristique, faire du shopping / faire un achat,
+    nettoyer / faire le ménage, faire des travaux / rénover, le trajet / l'itinéraire, éclatant / vif,
+    le règlement / le règlement intérieur, l'armoire / le placard, le rendement / la performance,
+    maintenant / en ce moment.
+- Szándékosan azonos `hu` ugyanabban a cellában (valódi szinonimák, a generátor kizárja az együttes
+  megjelenést): avec plaisir / je vous en prie, cuire / faire la cuisine, le pourcentage / pour cent.
+- Összesen 78 különböző bejegyzés módosult (68 az első audit-körben, ebből 7 csere; 32 a közös jelentés-kulcs kialakításakor, részben ugyanazok); a riport utána is 0 hiba. Ezeket a változtatásokat
+  vak megoldó nem ellenőrizte: integrátori ellenőrzéssel zárultak.
+
 ## Záró állapot
 
 `report --lang fr`: total 2064 (L0 411, L1 461, L2 462, L3 416, L4 314), phrase 746 (36,1%), kvóta-hiány nincs,
@@ -157,5 +213,8 @@ phrase-kvóta hiány nincs, terv 4.2 minimum teljesül, hibák: 0. `fr/stage.ts`
   csak utasítással kezeli.
 - A fix-kör 10 kanáris bejegyzése és a fix-kör három javítása csak integrátori ellenőrzésen ment át, nem
   független megoldón.
+- Az idiómák tükörfordítását és a szinonimapárokat a vak megoldó nem fogja meg megbízhatóan (a vak körök
+  ezeket nem jelezték, a célzott audit talált rájuk); az audit utáni módosítások csak integrátori
+  ellenőrzésen ment át.
 - A fr4-family-005 „la famille d'accueil” `phrase`-ként szerepel, bár főnévi összetétel (K.8.5 szerint `word`);
   a kifejezés-kvóta védelmében nem módosítva.

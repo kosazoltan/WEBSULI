@@ -135,7 +135,7 @@ export const VOCAB_FR_L0: VocabEntry[] = [
   { id: "fr0-city-016", term: "près d'ici", hu: "itt a közelben", kind: "phrase", level: 0, topic: "city", pos: "phrase", example: "Il y a un parc près d'ici.", exampleHu: "Van egy park itt a közelben." },
   { id: "fr0-city-017", term: "où est la gare", hu: "hol van a pályaudvar", kind: "phrase", level: 0, topic: "city", pos: "phrase", example: "Pardon, où est la gare\u00A0?", exampleHu: "Bocsánat, hol van a pályaudvar?" },
   // ── time ──
-  { id: "fr0-time-001", term: "le jour", hu: "nap (24 óra)", kind: "word", level: 0, topic: "time", pos: "noun", example: "Quel jour sommes-nous aujourd'hui\u00A0?", exampleHu: "Milyen nap van ma?", alt: ["jour"] },
+  { id: "fr0-time-001", term: "le jour", hu: "nap", kind: "word", level: 0, topic: "time", pos: "noun", example: "Quel jour sommes-nous aujourd'hui\u00A0?", exampleHu: "Milyen nap van ma?", alt: ["jour"] },
   { id: "fr0-time-002", term: "la semaine", hu: "hét", kind: "word", level: 0, topic: "time", pos: "noun", example: "La semaine a sept jours.", exampleHu: "A hétnek hét napja van." },
   { id: "fr0-time-003", term: "le mois", hu: "hónap", kind: "word", level: 0, topic: "time", pos: "noun", example: "Le mois de mai est joli.", exampleHu: "A május szép hónap." },
   { id: "fr0-time-004", term: "l'année", hu: "év", kind: "word", level: 0, topic: "time", pos: "noun", example: "L'année a douze mois.", exampleHu: "Az évnek tizenkét hónapja van." },
@@ -226,7 +226,7 @@ export const VOCAB_FR_L0: VocabEntry[] = [
   { id: "fr0-freetime-004", term: "le film", hu: "film", kind: "word", level: 0, topic: "freetime", pos: "noun", example: "Le film commence à six heures.", exampleHu: "A film hatkor kezdődik." },
   { id: "fr0-freetime-005", term: "le dessin", hu: "rajz", kind: "word", level: 0, topic: "freetime", pos: "noun", example: "Le dessin est très joli.", exampleHu: "A rajz nagyon szép." },
   { id: "fr0-freetime-006", term: "le vélo", hu: "bicikli", kind: "word", level: 0, topic: "freetime", pos: "noun", example: "Le vélo de Tom est rouge.", exampleHu: "Tomi biciklije piros." },
-  { id: "fr0-freetime-007", term: "la poupée", hu: "baba (játék)", kind: "word", level: 0, topic: "freetime", pos: "noun", example: "La poupée est sur le lit.", exampleHu: "A baba az ágyon van." },
+  { id: "fr0-freetime-007", term: "la poupée", hu: "játékbaba", kind: "word", level: 0, topic: "freetime", pos: "noun", example: "La poupée est sur le lit.", exampleHu: "A baba az ágyon van." },
   { id: "fr0-freetime-008", term: "la promenade", hu: "séta", kind: "word", level: 0, topic: "freetime", pos: "noun", example: "La promenade est agréable.", exampleHu: "A séta kellemes." },
   { id: "fr0-freetime-009", term: "la chanson", hu: "dal", kind: "word", level: 0, topic: "freetime", pos: "noun", example: "La chanson est facile.", exampleHu: "A dal könnyű." },
   { id: "fr0-freetime-010", term: "la télévision", hu: "televízió", kind: "word", level: 0, topic: "freetime", pos: "noun", example: "La télévision est dans le salon.", exampleHu: "A tévé a nappaliban van." },
@@ -306,20 +306,20 @@ export const VOCAB_FR_L0: VocabEntry[] = [
   // ── health ──
   { id: "fr0-health-001", term: "le médecin", hu: "orvos", kind: "word", level: 0, topic: "health", pos: "noun", example: "Le médecin est très gentil.", exampleHu: "Az orvos nagyon kedves." },
   { id: "fr0-health-002", term: "la santé", hu: "egészség", kind: "word", level: 0, topic: "health", pos: "noun", example: "La santé est importante.", exampleHu: "Az egészség fontos." },
-  { id: "fr0-health-003", term: "le docteur", hu: "doktor", kind: "word", level: 0, topic: "health", pos: "noun", example: "Le docteur regarde ma gorge.", exampleHu: "A doktor megnézi a torkomat." },
+  { id: "fr0-health-003", term: "le docteur", hu: "doktor, orvos", kind: "word", level: 0, topic: "health", pos: "noun", example: "Le docteur regarde ma gorge.", exampleHu: "A doktor megnézi a torkomat." },
   { id: "fr0-health-004", term: "malade", hu: "beteg", kind: "word", level: 0, topic: "health", pos: "adj", example: "Le chat est malade.", exampleHu: "A macska beteg." },
   { id: "fr0-health-005", term: "l'hôpital", hu: "kórház", kind: "word", level: 0, topic: "health", pos: "noun", example: "L'hôpital est près du parc.", exampleHu: "A kórház a park mellett van." },
   { id: "fr0-health-006", term: "j'ai mal", hu: "fáj valamim", kind: "phrase", level: 0, topic: "health", pos: "phrase", example: "J'ai mal, maman\u00A0!", exampleHu: "Fáj, anya!" },
   { id: "fr0-health-007", term: "je suis malade", hu: "beteg vagyok", kind: "phrase", level: 0, topic: "health", pos: "phrase", example: "Je suis malade, je reste au lit.", exampleHu: "Beteg vagyok, az ágyban maradok." },
   { id: "fr0-health-008", term: "chez le médecin", hu: "az orvosnál", kind: "phrase", level: 0, topic: "health", pos: "phrase", example: "Nous sommes chez le médecin.", exampleHu: "Az orvosnál vagyunk." },
   // ── feelings ──
-  { id: "fr0-feelings-001", term: "content", hu: "elégedett", kind: "word", level: 0, topic: "feelings", pos: "adj", example: "Léo est content aujourd'hui.", exampleHu: "Leó ma elégedett." },
+  { id: "fr0-feelings-001", term: "content", hu: "elégedett, boldog", kind: "word", level: 0, topic: "feelings", pos: "adj", example: "Léo est content aujourd'hui.", exampleHu: "Leó ma elégedett." },
   { id: "fr0-feelings-002", term: "gentil", hu: "kedves", kind: "word", level: 0, topic: "feelings", pos: "adj", example: "Mon grand frère est très gentil.", exampleHu: "A bátyám nagyon kedves." },
   { id: "fr0-feelings-003", term: "fatigué", hu: "fáradt", kind: "word", level: 0, topic: "feelings", pos: "adj", example: "Papa est fatigué ce soir.", exampleHu: "Apa fáradt ma este." },
   { id: "fr0-feelings-004", term: "heureux", hu: "boldog", kind: "word", level: 0, topic: "feelings", pos: "adj", example: "Les enfants sont heureux.", exampleHu: "A gyerekek boldogok." },
   { id: "fr0-feelings-005", term: "la peur", hu: "félelem", kind: "word", level: 0, topic: "feelings", pos: "noun", example: "La peur du noir est normale.", exampleHu: "A sötéttől való félelem természetes." },
   { id: "fr0-feelings-006", term: "la joie", hu: "öröm", kind: "word", level: 0, topic: "feelings", pos: "noun", example: "La joie des enfants est grande.", exampleHu: "A gyerekek öröme nagy." },
-  { id: "fr0-feelings-007", term: "fâché", hu: "haragos", kind: "word", level: 0, topic: "feelings", pos: "adj", example: "Papa est fâché, mais pas longtemps.", exampleHu: "Apa haragos, de nem sokáig." },
+  { id: "fr0-feelings-007", term: "fâché", hu: "haragos, mérges, dühös", kind: "word", level: 0, topic: "feelings", pos: "adj", example: "Papa est fâché, mais pas longtemps.", exampleHu: "Apa haragos, de nem sokáig." },
   { id: "fr0-feelings-008", term: "calme", hu: "nyugodt", kind: "word", level: 0, topic: "feelings", pos: "adj", example: "Le lac est calme ce matin.", exampleHu: "A tó ma reggel nyugodt." },
   { id: "fr0-feelings-009", term: "aimer", hu: "szeretni", kind: "word", level: 0, topic: "feelings", pos: "verb", example: "Il faut aimer les animaux.", exampleHu: "Szeretni kell az állatokat." },
   { id: "fr0-feelings-010", term: "je suis content", hu: "örülök", kind: "phrase", level: 0, topic: "feelings", pos: "phrase", example: "Je suis content, j'ai un cadeau\u00A0!", exampleHu: "Örülök, ajándékot kaptam!" },
@@ -328,7 +328,7 @@ export const VOCAB_FR_L0: VocabEntry[] = [
   { id: "fr0-feelings-013", term: "je t'aime", hu: "szeretlek", kind: "phrase", level: 0, topic: "feelings", pos: "phrase", example: "Je t'aime, maman\u00A0!", exampleHu: "Szeretlek, anya!" },
   // ── work ──
   { id: "fr0-work-001", term: "le travail", hu: "munka", kind: "word", level: 0, topic: "work", pos: "noun", example: "Le travail de papa est intéressant.", exampleHu: "Apa munkája érdekes." },
-  { id: "fr0-work-002", term: "le métier", hu: "szakma", kind: "word", level: 0, topic: "work", pos: "noun", example: "Le métier de boulanger est difficile.", exampleHu: "A pékmesterség nehéz." },
+  { id: "fr0-work-002", term: "le métier", hu: "szakma, foglalkozás", kind: "word", level: 0, topic: "work", pos: "noun", example: "Le métier de boulanger est difficile.", exampleHu: "A pékmesterség nehéz." },
   { id: "fr0-work-003", term: "au travail", hu: "a munkahelyen", kind: "phrase", level: 0, topic: "work", pos: "phrase", example: "Papa est au travail jusqu'à six heures.", exampleHu: "Apa hatig a munkahelyen van." },
   { id: "fr0-work-004", term: "il travaille ici", hu: "itt dolgozik", kind: "phrase", level: 0, topic: "work", pos: "phrase", example: "Mon père\u00A0? Il travaille ici.", exampleHu: "Az apám? Itt dolgozik." },
   // ── technology ──
@@ -436,5 +436,5 @@ export const VOCAB_FR_L0: VocabEntry[] = [
   { id: "fr0-communication-014", term: "s'il vous plaît", hu: "kérem", kind: "phrase", level: 0, topic: "communication", pos: "phrase", example: "Un verre d'eau, s'il vous plaît.", exampleHu: "Egy pohár vizet, kérem." },
   { id: "fr0-communication-015", term: "de rien", hu: "szívesen", kind: "phrase", level: 0, topic: "communication", pos: "phrase", example: "Merci. De rien\u00A0!", exampleHu: "Köszönöm. Szívesen!" },
   { id: "fr0-communication-016", term: "excuse-moi", hu: "bocsáss meg", kind: "phrase", level: 0, topic: "communication", pos: "phrase", example: "Excuse-moi, je suis en retard.", exampleHu: "Bocsáss meg, késtem." },
-  { id: "fr0-communication-017", term: "à bientôt", hu: "hamarosan találkozunk", kind: "phrase", level: 0, topic: "communication", pos: "phrase", example: "Salut, à bientôt\u00A0!", exampleHu: "Szia, hamarosan találkozunk!" },
+  { id: "fr0-communication-017", term: "à bientôt", hu: "viszlát hamarosan", kind: "phrase", level: 0, topic: "communication", pos: "phrase", example: "Salut, à bientôt\u00A0!", exampleHu: "Szia, hamarosan találkozunk!" },
 ];
