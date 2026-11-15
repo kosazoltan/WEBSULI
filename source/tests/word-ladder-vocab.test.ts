@@ -4,7 +4,7 @@ import test from "node:test";
 import { WORD_LADDER_DE } from "../client/src/data/wordLadder/de";
 import { ladderTiersFromBank } from "../client/src/data/wordLadder/banks";
 import type { LadderItem } from "../client/src/data/wordLadder/types";
-import type { VocabLevel } from "../client/src/data/vocabBank/types";
+import type { VocabEntry, VocabLevel } from "../client/src/data/vocabBank/types";
 import { normalizePrompt, pickUnseen, type SeenItem } from "../client/src/game-engine/no-repeat";
 import { createSeenHistory } from "../client/src/game-engine/vocab/seenHistory";
 import { createVocabSource } from "../client/src/game-engine/vocab/vocabSource";
@@ -224,6 +224,47 @@ test("review #430 (A4): nagy bankkal 10 futás × 20 kérdés alatt egyetlen ism
   assert.equal(asked.length, 200);
   assert.equal(new Set(asked).size, 200);
 });
+
+for (const lang of ["de", "fr"] as const) {
+  test(`valódi ${lang} bank + kézi bank: 12 futás × 20 kérdés — nincs szóbank-ismétlés, és a kézi és a szóbankos kérdés nem ugyanazt a szót kérdezi`, async () => {
+    const vocabMod = lang === "de" ? await import("../client/src/data/vocabBank/vocab-de") : await import("../client/src/data/vocabBank/vocab-fr");
+    const entries = lang === "de" ? (vocabMod as { VOCAB_DE: VocabEntry[] }).VOCAB_DE : (vocabMod as { VOCAB_FR: VocabEntry[] }).VOCAB_FR;
+    const manualBank = lang === "de" ? WORD_LADDER_DE : (await import("../client/src/data/wordLadder/fr")).WORD_LADDER_FR;
+    const manual = ladderTiersFromBank(manualBank);
+    const history = createSeenHistory(memoryStorage());
+    const source = createVocabSource({ lang, entries, history, rng: seededRng(71) });
+    const meanings = new Map(entries.map((e) => [e.id, { term: e.term, hu: e.hu }]));
+    const norm = (s: string) => s.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
+    const askedVocab: string[] = [];
+    const manualAnswers = new Set<string>();
+    for (let run = 0; run < 12; run++) {
+      const pools = LEVELS.map((l) => source.buildPool(l, POOL_PER_LEVEL).map((q) => source.toLadderItem(q)));
+      const snap = history.snapshot(lang);
+      const tiers = mergeVocabTiers(manual, pools, (id) => meanings.get(id), (id) => snap[id] !== undefined);
+      const seen: SeenItem[] = [];
+      const rng = seededRng(700 + run);
+      for (let i = 0; i < 20; i++) {
+        const item = pickUnseen(tiers, run % LEVELS.length, seen, rng)!;
+        seen.push({ id: item.id, prompt: item.prompt });
+        const vocabId = vocabIdOf(item.id);
+        if (vocabId) {
+          source.markAsked({ vocabId });
+          askedVocab.push(vocabId);
+        } else {
+          source.markExternal(item.options[item.correctIndex]!);
+          manualAnswers.add(norm(item.options[item.correctIndex]!));
+        }
+      }
+    }
+    assert.ok(askedVocab.length > 0, "a szóbank is kérdezett");
+    assert.equal(new Set(askedVocab).size, askedVocab.length, "szóbankos bejegyzés ismétlődött");
+    const clash = askedVocab.filter((id) => {
+      const m = meanings.get(id)!;
+      return manualAnswers.has(norm(m.term)) || manualAnswers.has(norm(m.hu));
+    });
+    assert.deepEqual(clash, [], "a szóbank a kézi kérdés szavát (bármelyik irányban) is megkérdezte");
+  });
+}
 
 test("S6/7: a földet érés guggolás-nyújtása 1 → 0,85 → 1,08 → 1 (végrehajtás S6/7. lépés)", () => {
   assert.equal(landSquashY(0), 1);

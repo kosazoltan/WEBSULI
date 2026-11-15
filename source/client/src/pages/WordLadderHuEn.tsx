@@ -409,10 +409,27 @@ export default function WordLadderHuEn() {
    * és a `buildPool` a tartós napló szerint a még nem látott bejegyzéseket adja (review #419).
    */
   const [runSeq, setRunSeq] = useState(0);
-  const vocabTiers = useMemo<LadderItem[][]>(() => {
-    if (!vocab) return LADDER_LEVELS.map(() => []);
-    return LADDER_LEVELS.map((l) => vocab.buildPool(l, VOCAB_POOL_PER_LEVEL).map((q) => vocab.toLadderItem(q)));
-    // A runSeq szándékosan függőség: futásonként új készlet.
+  /** A futás kezdő szintje (a startGame írja): a készlet csak e körül épül (±1 szint — a sáv ennyit mozdulhat). */
+  const runTierRef = useRef(0);
+  const [vocabTiers, setVocabTiers] = useState<LadderItem[][]>(() => LADDER_LEVELS.map(() => []));
+  /**
+   * A készlet a futás kezdete UTÁN, a koppintás visszajelzése után épül (setTimeout 0): a teljes, ~2000 bejegyzéses
+   * bankon szintenként 60 kérdés generálása asztali gépen ~0,1 s / szint, telefonon ennek többszöröse — a lépés így nem
+   * akasztja meg az indítást. Addig (az első kérdésnél) a kézi bank kérdez. A runSeq szándékosan függőség: futásonként
+   * új készlet, a tartós napló aktuális állapotából.
+   */
+  useEffect(() => {
+    setVocabTiers(LADDER_LEVELS.map(() => []));
+    if (!vocab || runSeq === 0) return;
+    const timer = setTimeout(() => {
+      const tier = runTierRef.current;
+      setVocabTiers(
+        LADDER_LEVELS.map((l) =>
+          Math.abs(l - tier) <= 1 ? vocab.buildPool(l, VOCAB_POOL_PER_LEVEL).map((q) => vocab.toLadderItem(q)) : [],
+        ),
+      );
+    }, 0);
+    return () => clearTimeout(timer);
   }, [vocab, lang, runSeq]);
   /**
    * A bejegyzések két nyelvi alakja (term, hu) a kézi bankkal való ütközés-szűréshez, fordítási iránytól függetlenül
@@ -543,6 +560,7 @@ export default function WordLadderHuEn() {
     setResult(null);
     runRef.current = { lang, grade: ladderGradeRef.current, level, rungs: ladderRungsForLevel(level) };
     levelSessionRef.current.reset(level);
+    runTierRef.current = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
     seenRef.current = [];
     const total = runRef.current.rungs;
     setRunRungs(total);
@@ -562,6 +580,8 @@ export default function WordLadderHuEn() {
     setBanner(null);
     setLastXpGain(null);
     // Új futás → új szóbank-készlet; az első kérdést az újraépült készletből a lenti effekt választja.
+    // Az előző futás készlete azonnal kiürül (az első kérdés így nem jöhet a régi, elavult készletből).
+    setVocabTiers(LADDER_LEVELS.map(() => []));
     setRunSeq((n) => n + 1);
     firstQuestionPendingRef.current = true;
     setCurrent(null);
@@ -1335,18 +1355,8 @@ export default function WordLadderHuEn() {
           .game-shell-fixed[data-game="WordLadderHuEn"] .wl-answers { grid-template-columns: 1fr 1fr; }
         }
         .game-start .wl-start-icon canvas { border-radius: inherit; }
-        /*
-         * A szünet- és az eredménykártya rugós beúszása (0,9–0,92-es skáláról) alatt a 52 px-es gombok egy pillanatig
-         * 48 px alá zsugorodnak; 56 px-szel a beúszás közben is hüvelykujj-méretűek (M2). A stílus csak a Szólétra
-         * lapjával él (a lap <style> eleme).
-         */
-        .game-pause-actions .game-btn, .game-pause-sound > button, .game-result-actions .game-btn { min-height: 56px; }
-        /* A közös jelvény-értesítő az eredménykártya fölött jelenjen meg, és ne legyen 12 px alatti szövege (M3). */
+        /* A közös jelvény-értesítő az eredménykártya fölött, a felső biztonsági sávon belül jelenjen meg. */
         .wl-achievements [data-testid^="achievement-toast-"] { z-index: 90; top: max(8px, var(--game-safe-top)); }
-        .wl-achievements [data-testid^="achievement-toast-"] p:not(.text-sm) { font-size: 13px; }
-        /* A közös pályaválasztó 44 px-es gombjai a Szólétra kezdőképernyőjén is érjék el a 48 px-t (M2). */
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="level-picker"] button { min-height: 52px; min-width: 52px; font-size: 16px; }
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="level-picker"] > p { font-size: 14px; }
         /* 3D kérdés (spec 7. döntés): a DOM-gomb átlátszó érintési réteg a 3D lap fölött; a fókuszkeret látszik. */
         .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] {
           background: #071b2d;
