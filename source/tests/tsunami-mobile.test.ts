@@ -105,6 +105,30 @@ test("keret: GameShell, szünet, eredményképernyő a meglévő testid-kkel", (
   assert.match(page, /startLabel=\{`Indítás: /, "a felirat az e2e-regexekhez „Indítás:”-sal kezdődik");
 });
 
+test("review #426: a kvízrétegen is van szünetgomb (a HUD-ét eltakarja)", () => {
+  assert.match(page, /data-testid="ts-quiz-pause"[\s\S]{0,80}onClick=\{pauseGame\}/);
+  assert.match(page, /const pauseGame = useCallback\(\(\) => \{\s*if \(phase !== "play" && phase !== "quiz"\) return;/, "kvíz közben is szüneteltethető");
+});
+
+test("review #426: a helyes válasz utáni késleltetett folytatás kilépéskor és újrakezdéskor törlődik", () => {
+  assert.match(page, /continueTimerRef\.current = window\.setTimeout\(/, "a folytatás időzítője nincs eltárolva");
+  for (const fn of [/const exitToMenu = useCallback\(\(\) =>/, /const startGame = useCallback\(\(\) =>/]) {
+    const body = functionBody(page, fn);
+    assert.match(body, /clearTimeout\(continueTimerRef\.current\)/, `${fn}: nem törli a függő folytatást`);
+    assert.match(body, /runIdRef\.current \+= 1;/, `${fn}: nem lép új futás-azonosítóra`);
+  }
+  // A callback a saját futásához és a kvíz-fázishoz kötött.
+  assert.match(page, /if \(runIdRef\.current !== runId \|\| phaseNowRef\.current !== "quiz"\) return;/);
+});
+
+test("review #426: elavult képkocka / hívás nem válthat fázist (szinkron fázis-tükör)", () => {
+  // Minden fázis- és szünetváltás a szinkron tükröt is írja: a nyers setter csak a goPhase / goPaused törzsében áll.
+  assert.equal((page.match(/\bsetPhase\(/g) ?? []).length, 1, "nyers setPhase( a goPhase-en kívül");
+  assert.equal((page.match(/\bsetPaused\(/g) ?? []).length, 1, "nyers setPaused( a goPaused-on kívül");
+  const loop = functionBody(page, /const gameLoop = useCallback\(\s*\(t: number\) =>/);
+  assert.match(loop, /if \(phaseNowRef\.current !== "play" \|\| pausedNowRef\.current\) return;/, "a képkocka a régi zárlattal futhatna tovább");
+});
+
 test("játék közben nincs 12 px alatti fix betűméret a lapon", () => {
   assert.doesNotMatch(page, /text-\[(?:9|10|11)px\]/);
 });

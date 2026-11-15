@@ -29,7 +29,7 @@ import { useCouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
-import { ArrowLeft, Check, Flame, Shield, Timer, Waves, Wind, X } from "lucide-react";
+import { ArrowLeft, Check, Flame, Pause, Shield, Timer, Waves, Wind, X } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import HoldButton from "@/game-engine/HoldButton";
 import { joystickToDirections } from "@/game-engine/joystick";
@@ -611,6 +611,16 @@ export default function TsunamiEscapeEnglish() {
   }, []);
   const [subject, setSubject] = useState<TsunamiSubject>("mixed");
   const [phase, setPhase] = useState<Phase>("menu");
+  /**
+   * S9 / review #426: a fázis és a szünet SZINKRON tükre. A már ütemezett animációs képkocka és a késleltetett
+   * folytatás a régi zárlattal futhat le a következő renderelés előtt (mérve: a győzelem után egy elavult képkocka
+   * még kvízt nyitott); ezek a refet olvassák, ezért elavult hívás nem válthat fázist.
+   */
+  const phaseNowRef = useRef<Phase>("menu");
+  const goPhase = useCallback((p: Phase) => {
+    phaseNowRef.current = p;
+    setPhase(p);
+  }, []);
 
   /**
    * LS-3b: the play-time coupon earned in a lesson, if there is one.
@@ -648,6 +658,13 @@ export default function TsunamiEscapeEnglish() {
   const domScene = scene3d === false;
   /** S9 / terv 4.5: szünet (kézi vagy automatikus, ha a lap háttérbe kerül). */
   const [paused, setPaused] = useState(false);
+  const pausedNowRef = useRef(false);
+  const goPaused = useCallback((p: boolean) => {
+    pausedNowRef.current = p;
+    setPaused(p);
+  }, []);
+  /** Futás-azonosító: minden indítás / kilépés növeli — a késleltetett hívás csak a saját futásában hat. */
+  const runIdRef = useRef(0);
   /** Érintővezérlés csak érintős eszközön (S9 / terv 4.6/1, M5). */
   const touch = useTouchCapable();
   const haptics = useHaptics();
@@ -661,6 +678,9 @@ export default function TsunamiEscapeEnglish() {
   const [answerFx, setAnswerFx] = useState<{ index: number; ok: boolean } | null>(null);
   /** A futás összes megválaszolt kérdése (jó + rossz + lejárt) — az eredményképernyő arányához. */
   const answeredCountRef = useRef(0);
+  /** A helyes válasz utáni késleltetett folytatás időzítője (kilépéskor / újrakezdéskor törlendő). */
+  const continueTimerRef = useRef(0);
+  useEffect(() => () => clearTimeout(continueTimerRef.current), []);
   /** G-1: magyarázó kártya rossz válaszra. */
   const [explainCard, setExplainCard] = useState<FeedbackCard | null>(null);
 
@@ -881,6 +901,9 @@ export default function TsunamiEscapeEnglish() {
   }, []);
 
   const startGame = useCallback(() => {
+    clearTimeout(continueTimerRef.current);
+    continueTimerRef.current = 0;
+    runIdRef.current += 1;
     runLevelRef.current = levels.level;
     levelClearedRef.current = false;
     adaptiveRef.current.reset(userGrade ?? 4, runLevelRef.current);
@@ -910,7 +933,7 @@ export default function TsunamiEscapeEnglish() {
     answeredCountRef.current = 0;
     runSeenRef.current = [];
     gradeSeenRef.current = createGradeQuizSeen();
-    setPaused(false);
+    goPaused(false);
     setAnswerFx(null);
     setExplainCard(null);
     setBestResult(null);
@@ -923,7 +946,7 @@ export default function TsunamiEscapeEnglish() {
     stormTimerRef.current = 0;
     lastRef.current = null;
     setQuiz(null);
-    setPhase("play");
+    goPhase("play");
   }, [difficulty, subject, userGrade, levels.level]);
 
   /** S9 / terv 4.5: szünet — a játékciklus és a kvízóra áll, a vezérlés elenged. */
@@ -933,21 +956,24 @@ export default function TsunamiEscapeEnglish() {
     keysRef.current.right = false;
     keysRef.current.sprint = false;
     setJoyReset((n) => n + 1);
-    setPaused(true);
+    goPaused(true);
   }, [phase]);
 
   const resumeGame = useCallback(() => {
     lastRef.current = null;
-    setPaused(false);
+    goPaused(false);
   }, []);
 
   const exitToMenu = useCallback(() => {
-    setPaused(false);
+    clearTimeout(continueTimerRef.current);
+    continueTimerRef.current = 0;
+    runIdRef.current += 1;
+    goPaused(false);
     setQuiz(null);
     setExplainCard(null);
     setAnswerFx(null);
     answerLockedRef.current = false;
-    setPhase("menu");
+    goPhase("menu");
   }, []);
 
   useEffect(() => {
@@ -974,11 +1000,11 @@ export default function TsunamiEscapeEnglish() {
           const secs = tsunamiQuizSeconds(runDifficultyRef.current, adaptiveRef.current.band);
           setQuizTimeLeft(secs);
           setQuizTimeTotal(secs);
-          setPhase("quiz");
+          goPhase("quiz");
           return;
         }
         if (patch.phase === "won" || patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
-          setPhase(patch.phase);
+          goPhase(patch.phase);
         }
       },
     });
@@ -1006,7 +1032,7 @@ export default function TsunamiEscapeEnglish() {
   }, [phase, startGame]);
 
   const endGame = useCallback(() => {
-    setPhase("over");
+    goPhase("over");
     cancelAnimationFrame(rafRef.current);
     lastRef.current = null;
   }, []);
@@ -1075,6 +1101,8 @@ export default function TsunamiEscapeEnglish() {
   const gameLoop = useCallback(
     (t: number) => {
       if (phase !== "play" || paused) return;
+      // Review #426: egy már ütemezett, elavult képkocka (régi zárlat) se futtassa tovább a kört.
+      if (phaseNowRef.current !== "play" || pausedNowRef.current) return;
 
       const last = lastRef.current;
       lastRef.current = t;
@@ -1141,7 +1169,7 @@ export default function TsunamiEscapeEnglish() {
         const secs = tsunamiQuizSeconds(runDifficultyRef.current, adaptiveRef.current.band);
         setQuizTimeLeft(secs);
         setQuizTimeTotal(secs);
-        setPhase("quiz");
+        goPhase("quiz");
         return;
       }
 
@@ -1180,7 +1208,7 @@ export default function TsunamiEscapeEnglish() {
     setExplainCard(null);
     setAnswerFx(null);
     setQuiz(null);
-    setPhase("play");
+    goPhase("play");
     lastRef.current = null;
     answerLockedRef.current = false;
   }, []);
@@ -1260,20 +1288,25 @@ export default function TsunamiEscapeEnglish() {
       cancelAnimationFrame(rafRef.current);
       lastRef.current = null;
       answerLockedRef.current = false;
-      setPhase("won");
+      goPhase("won");
       return;
     }
 
     // S9: a zöld pipa egy pillanatig látszik a választott gombon (azonnali, látható jutalom), utána fut tovább.
-    timeoutsRef.current.push(
-      window.setTimeout(() => {
-        setQuiz(null);
-        setAnswerFx(null);
-        setPhase("play");
-        lastRef.current = null;
-        answerLockedRef.current = false;
-      }, reducedMotion ? 150 : 420),
-    );
+    // Review #426: az időzítő a `continueTimerRef`-ben él, így a menübe lépés / újrakezdés törli — különben az
+    // elhagyott kör a menü helyett újraindulna.
+    clearTimeout(continueTimerRef.current);
+    const runId = runIdRef.current;
+    continueTimerRef.current = window.setTimeout(() => {
+      continueTimerRef.current = 0;
+      // Csak a saját futásában és még kvíz-fázisban hat (kilépés, újrakezdés, eredmény után nem).
+      if (runIdRef.current !== runId || phaseNowRef.current !== "quiz") return;
+      setQuiz(null);
+      setAnswerFx(null);
+      goPhase("play");
+      lastRef.current = null;
+      answerLockedRef.current = false;
+    }, reducedMotion ? 150 : 420);
   };
 
   const answerRef = useRef(onAnswer);
@@ -1336,7 +1369,7 @@ export default function TsunamiEscapeEnglish() {
   useEffect(() => {
     if (phase !== "quiz") return;
     const t = window.setTimeout(() => {
-      const first = quizDialogRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]");
+      const first = quizDialogRef.current?.querySelector<HTMLElement>("[data-testid^=\"ts-option-\"]");
       first?.focus();
     }, 50);
     const onKey = (e: KeyboardEvent) => {
@@ -1815,6 +1848,16 @@ export default function TsunamiEscapeEnglish() {
                   <Timer className="h-4 w-4" aria-hidden="true" />
                   Idő: {quizTimeLeft}s
                 </span>
+                {/* Review #426: a teljes képernyős kvízréteg eltakarja a HUD szünetgombját — itt is lehet megállni. */}
+                <button
+                  type="button"
+                  data-testid="ts-quiz-pause"
+                  aria-label="Szünet"
+                  onClick={pauseGame}
+                  className="ml-auto inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/10 text-white hover:bg-white/20"
+                >
+                  <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                </button>
               </div>
               <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden" aria-hidden="true">
                 <div
