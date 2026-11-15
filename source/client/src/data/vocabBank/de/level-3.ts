@@ -104,7 +104,7 @@ export const VOCAB_DE_L3: VocabEntry[] = [
   { id: "de3-time-013", term: "von Zeit zu Zeit", hu: "időről időre", kind: "phrase", level: 3, topic: "time", pos: "phrase", example: "Wir besuchen sie von Zeit zu Zeit.", exampleHu: "Időről időre meglátogatjuk őt." },
   { id: "de3-time-014", term: "ab und zu", hu: "néha-néha", kind: "phrase", level: 3, topic: "time", pos: "phrase", example: "Ab und zu gehe ich ins Kino.", exampleHu: "Néha-néha moziba megyek." },
   { id: "de3-time-015", term: "in letzter Zeit", hu: "az utóbbi időben", kind: "phrase", level: 3, topic: "time", pos: "phrase", example: "In letzter Zeit schlafe ich schlecht.", exampleHu: "Az utóbbi időben rosszul alszom." },
-  { id: "de3-time-016", term: "wie im Flug", hu: "repülve (múlik az idő)", kind: "phrase", level: 3, topic: "time", pos: "phrase", example: "Die Ferien sind wie im Flug vergangen.", exampleHu: "A szünet repülve telt el." },
+  { id: "de3-time-016", term: "wie im Flug", hu: "pillanatok alatt (elrepül az idő)", kind: "phrase", level: 3, topic: "time", pos: "phrase", example: "Die Ferien sind wie im Flug vergangen.", exampleHu: "A szünet pillanatok alatt elrepült." },
   { id: "de3-time-017", term: "rund um die Uhr", hu: "éjjel-nappal", kind: "phrase", level: 3, topic: "time", pos: "phrase", example: "Das Geschäft ist rund um die Uhr geöffnet.", exampleHu: "Az üzlet éjjel-nappal nyitva van." },
   // ── body ──
   { id: "de3-body-001", term: "der Muskel", hu: "izom", kind: "word", level: 3, topic: "body", pos: "noun", example: "Mir tut ein Muskel im Bein weh.", exampleHu: "Fáj egy izom a lábamban.", alt: ["Muskel"] },
@@ -145,7 +145,7 @@ export const VOCAB_DE_L3: VocabEntry[] = [
   { id: "de3-weather-008", term: "frieren", hu: "fázik", kind: "word", level: 3, topic: "weather", pos: "verb", example: "Im Winter muss niemand frieren.", exampleHu: "Télen senkinek sem kell fáznia." },
   { id: "de3-weather-009", term: "in Strömen regnen", hu: "szakad az eső", kind: "phrase", level: 3, topic: "weather", pos: "phrase", example: "Es kann tagelang in Strömen regnen.", exampleHu: "Napokig szakadhat az eső." },
   { id: "de3-weather-010", term: "wie aus Eimern", hu: "dézsából öntve", kind: "phrase", level: 3, topic: "weather", pos: "phrase", example: "Es gießt wie aus Eimern.", exampleHu: "Mintha dézsából öntenék az esőt." },
-  { id: "de3-weather-011", term: "Auf Regen folgt Sonnenschein", hu: "eső után napsütés jön", kind: "phrase", level: 3, topic: "weather", pos: "phrase", example: "Auf Regen folgt Sonnenschein, sagt meine Oma.", exampleHu: "Eső után napsütés jön, mondja a nagymamám." },
+  { id: "de3-weather-011", term: "Auf Regen folgt Sonnenschein", hu: "borúra derű", kind: "phrase", level: 3, topic: "weather", pos: "phrase", example: "Auf Regen folgt Sonnenschein, sagt meine Oma.", exampleHu: "Borúra derű, mondja a nagymamám." },
   { id: "de3-weather-012", term: "unter null", hu: "fagypont alatt", kind: "phrase", level: 3, topic: "weather", pos: "phrase", example: "Nachts fällt die Temperatur unter null.", exampleHu: "Éjjel a hőmérséklet fagypont alá esik." },
   { id: "de3-weather-013", term: "bei Glatteis", hu: "jégen, síkos úton", kind: "phrase", level: 3, topic: "weather", pos: "phrase", example: "Bei Glatteis fahren wir besonders langsam.", exampleHu: "Síkos úton különösen lassan megyünk." },
   // ── freetime ──
@@ -169,7 +169,7 @@ export const VOCAB_DE_L3: VocabEntry[] = [
   { id: "de3-freetime-018", term: "Karten spielen", hu: "kártyázik", kind: "phrase", level: 3, topic: "freetime", pos: "phrase", example: "Opa kann stundenlang Karten spielen.", exampleHu: "Nagypapa órákig tud kártyázni." },
   { id: "de3-freetime-019", term: "ein Instrument spielen", hu: "hangszeren játszik", kind: "phrase", level: 3, topic: "freetime", pos: "phrase", example: "Ich möchte gern ein Instrument spielen.", exampleHu: "Szeretnék hangszeren játszani." },
   { id: "de3-freetime-020", term: "eine Radtour machen", hu: "kerékpártúrát tesz", kind: "phrase", level: 3, topic: "freetime", pos: "phrase", example: "Am Sonntag wollen wir eine Radtour machen.", exampleHu: "Vasárnap kerékpártúrára akarunk menni." },
-  { id: "de3-freetime-021", term: "ins Grüne fahren", hu: "természetbe kimegy", kind: "phrase", level: 3, topic: "freetime", pos: "phrase", example: "Am Sonntag wollen wir ins Grüne fahren.", exampleHu: "Vasárnap a zöldbe akarunk kimenni." },
+  { id: "de3-freetime-021", term: "ins Grüne fahren", hu: "kimegy a zöldbe", kind: "phrase", level: 3, topic: "freetime", pos: "phrase", example: "Am Sonntag wollen wir ins Grüne fahren.", exampleHu: "Vasárnap a zöldbe akarunk kimenni." },
   { id: "de3-freetime-022", term: "im Freien", hu: "a szabadban", kind: "phrase", level: 3, topic: "freetime", pos: "phrase", example: "Im Sommer essen wir oft im Freien.", exampleHu: "Nyáron gyakran a szabadban eszünk." },
   // ── animals ──
   { id: "de3-animals-001", term: "das Reh", hu: "őz", kind: "word", level: 3, topic: "animals", pos: "noun", example: "Das Reh steht am Waldrand.", exampleHu: "Az őz az erdő szélén áll." },
@@ -218,7 +218,7 @@ export const VOCAB_DE_L3: VocabEntry[] = [
   { id: "de3-shopping-008", term: "umtauschen", hu: "becserél", kind: "word", level: 3, topic: "shopping", pos: "verb", example: "Kann ich die Hose bitte umtauschen?", exampleHu: "Becserélhetem a nadrágot?" },
   { id: "de3-shopping-009", term: "liefern", hu: "szállít", kind: "word", level: 3, topic: "shopping", pos: "verb", example: "Der Laden kann das Sofa nach Hause liefern.", exampleHu: "Az üzlet házhoz tudja szállítani a kanapét." },
   { id: "de3-shopping-010", term: "reklamieren", hu: "reklamál", kind: "word", level: 3, topic: "shopping", pos: "verb", example: "Man sollte kaputte Ware sofort reklamieren.", exampleHu: "A hibás árut azonnal reklamálni kell." },
-  { id: "de3-shopping-011", term: "preiswert", hu: "olcsó, jó árú", kind: "word", level: 3, topic: "shopping", pos: "adj", example: "Das Hemd ist sehr preiswert.", exampleHu: "Az ing nagyon jó árú." },
+  { id: "de3-shopping-011", term: "preiswert", hu: "jó árú, kedvező árú", kind: "word", level: 3, topic: "shopping", pos: "adj", example: "Das Hemd ist sehr preiswert.", exampleHu: "Az ing nagyon jó árú." },
   { id: "de3-shopping-012", term: "im Angebot", hu: "akciós", kind: "phrase", level: 3, topic: "shopping", pos: "phrase", example: "Die Jacken sind gerade im Angebot.", exampleHu: "A dzsekik éppen akciósak." },
   { id: "de3-shopping-013", term: "Preise vergleichen", hu: "árakat összehasonlít", kind: "phrase", level: 3, topic: "shopping", pos: "phrase", example: "Man sollte vor dem Kauf Preise vergleichen.", exampleHu: "Vásárlás előtt érdemes árakat összehasonlítani." },
   { id: "de3-shopping-014", term: "auf Raten zahlen", hu: "részletre fizet", kind: "phrase", level: 3, topic: "shopping", pos: "phrase", example: "Man kann auch auf Raten zahlen.", exampleHu: "Részletre is lehet fizetni." },
@@ -393,13 +393,13 @@ export const VOCAB_DE_L3: VocabEntry[] = [
   { id: "de3-numbers-005", term: "ungefähr", hu: "nagyjából", kind: "word", level: 3, topic: "numbers", pos: "adv", example: "Die Fahrt dauert ungefähr zwei Stunden.", exampleHu: "Az út nagyjából két óráig tart." },
   { id: "de3-numbers-006", term: "mehr als die Hälfte", hu: "több mint a fele", kind: "phrase", level: 3, topic: "numbers", pos: "phrase", example: "Mehr als die Hälfte der Schüler fährt mit.", exampleHu: "A diákok több mint fele velünk tart." },
   { id: "de3-numbers-007", term: "doppelt so viel", hu: "kétszer annyi", kind: "phrase", level: 3, topic: "numbers", pos: "phrase", example: "Mein Bruder isst doppelt so viel wie ich.", exampleHu: "A bátyám kétszer annyit eszik, mint én." },
-  { id: "de3-numbers-008", term: "eins zu null", hu: "egy a nullához", kind: "phrase", level: 3, topic: "numbers", pos: "phrase", example: "Das Spiel steht eins zu null.", exampleHu: "A mérkőzés egy a nullára áll." },
+  { id: "de3-numbers-008", term: "eins zu null", hu: "egy-null", kind: "phrase", level: 3, topic: "numbers", pos: "phrase", example: "Das Spiel steht eins zu null.", exampleHu: "A mérkőzés egy-nullára áll." },
   { id: "de3-numbers-009", term: "hundert Prozent", hu: "száz százalék", kind: "phrase", level: 3, topic: "numbers", pos: "phrase", example: "Ich bin mir hundert Prozent sicher.", exampleHu: "Száz százalékig biztos vagyok benne." },
   // ── colors ──
   { id: "de3-colors-001", term: "knallig", hu: "rikító", kind: "word", level: 3, topic: "colors", pos: "adj", example: "Der Pullover ist mir zu knallig.", exampleHu: "A pulóver túl rikító nekem." },
   { id: "de3-colors-002", term: "blass", hu: "sápadt", kind: "word", level: 3, topic: "colors", pos: "adj", example: "Du siehst heute ganz blass aus.", exampleHu: "Ma egészen sápadtnak látszol." },
   { id: "de3-colors-003", term: "mischen", hu: "kever (színt)", kind: "word", level: 3, topic: "colors", pos: "verb", example: "Aus Blau und Gelb kann man Grün mischen.", exampleHu: "Kékből és sárgából zöldet lehet keverni." },
-  { id: "de3-colors-004", term: "grün vor Neid", hu: "zöld az irigységtől", kind: "phrase", level: 3, topic: "colors", pos: "phrase", example: "Er wurde grün vor Neid.", exampleHu: "Zöld lett az irigységtől." },
+  { id: "de3-colors-004", term: "grün vor Neid", hu: "sárga az irigységtől", kind: "phrase", level: 3, topic: "colors", pos: "phrase", example: "Er wurde grün vor Neid.", exampleHu: "Sárga lett az irigységtől." },
   { id: "de3-colors-005", term: "ins Blaue fahren", hu: "találomra elindul", kind: "phrase", level: 3, topic: "colors", pos: "phrase", example: "Am Sonntag wollen wir ins Blaue fahren.", exampleHu: "Vasárnap találomra el akarunk indulni valamerre." },
   // ── everyday ──
   { id: "de3-everyday-001", term: "der Alltag", hu: "hétköznapok", kind: "word", level: 3, topic: "everyday", pos: "noun", example: "Der Alltag ist manchmal ziemlich stressig.", exampleHu: "A hétköznapok néha elég stresszesek." },

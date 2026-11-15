@@ -154,6 +154,47 @@ A jelzett tételeken felül 19 bejegyzés + 2 kétértelműség-partner:
 - **Kétértelmű válaszlehetőség partnere:** `de1-communication-005` (das Telefon; a fix-kör után die Adresse), `de3-technology-013` (löschen → „töröl (adatot, fájlt)”).
 - Átnézve, hiba nélkül: „watschelt”, tegező/magázó keverés, értelmetlen „kann/wollen” akaratlan cselekvésnél — csak a már jelzett tételek voltak hibásak.
 
+## PR-review utáni idióma- és szinonima-audit (#427)
+
+Két jogos review-észrevétel: `de4-feelings-013` „aus der Haut fahren” = „kifut a bőréből” (szó szerinti, téves
+jelentés), és a „was kostet das” / „wie viel kostet das” pár csak a záró kérdőjelben eltérő `hu`-ja (a generátor
+csak a betűre azonos normalizált `hu`-t zárja ki a rossz válaszok közül, így mindkét helyes kifejezés egy
+kérdésben szerepelhetett). Tanulság: a vak megoldó az idiómák tükörfordítását nem fogta meg megbízhatóan (az L4
+megoldó csak 3 jelzést adott). Ezért célzott audit a teljes német bankon:
+
+- **Idiómák:** mind a 275 L3–L4 `phrase` bejegyzés (L3 156, L4 119) átolvasva, valamint az L0–L2 473 `phrase`
+  bejegyzése (147 + 166 + 160) a szólásszerűekre szűrve. Javítva 11 (a valódi, átvitt jelentésre / a magyar
+  megfelelő szólásra):
+  `de4-feelings-013` „kifut a bőréből” → „kijön a sodrából, dühbe gurul”;
+  `de4-weather-010` vom Regen in die Traufe → „csöbörből vödörbe esik”;
+  `de4-freetime-011` über den Tellerrand blicken → „kitekint a saját kis világából”;
+  `de4-freetime-012` auf den Geschmack kommen → „rákap az ízére”;
+  `de4-animals-007` wie Hund und Katze → „mint a kutya meg a macska”;
+  `de4-communication-018` um den heißen Brei herumreden → „kerülgeti a forró kását”;
+  `de3-colors-004` grün vor Neid → „sárga az irigységtől”;
+  `de3-weather-011` Auf Regen folgt Sonnenschein → „borúra derű”;
+  `de3-numbers-008` eins zu null → „egy-null”;
+  `de3-time-016` wie im Flug → „pillanatok alatt (elrepül az idő)”;
+  `de3-freetime-021` ins Grüne fahren → „kimegy a zöldbe”.
+  A felsoroltakon kívül (Hals über Kopf, auf der Zunge zergehen, die Seele baumeln lassen, aus allen Wolken fallen,
+  den Kopf hängen lassen, sich in Schale werfen, über beide Ohren verliebt, einen Kloß im Hals haben, am Ball
+  bleiben, Hand anlegen, wie aus Eimern, wie angegossen, wie aus dem Gesicht geschnitten, Kopf hoch, schwarz auf
+  weiß stb.) a `hu` és a példafordítás rendben volt.
+- **Szinonimapárok:** szkript (azonos kind, |szintkülönbség| ≤ 1, a normalizált `hu` egyezése / részhalmaza /
+  közös vesszős alakja) + kézi elbírálás. Javítva 16 bejegyzés: betűre azonos `hu` — `de0-shopping-009` /
+  `de1-shopping-001` („mennyibe kerül ez?”), `de0-everyday-019` / `de0-communication-016` („hogy vagy?”),
+  `de1-sports-006` („sportolni”, = Sport machen), `de1-feelings-007` / `de2-feelings-018` („fél (valamitől)”),
+  `de1-feelings-005` froh („örül”); szétválasztott `hu` — `de2-feelings-006` („előre örül (valaminek)” ↔ Das freut
+  mich), `de1-city-020` („várostérkép” ↔ die Landkarte), `de2-sports-013` („futam, versenyfutás” ↔ der Wettkampf),
+  `de2-numbers-002` („sorszám, házszám” ↔ die Zahl), `de2-shopping-020` („egyéb? (az eladó kérdése)” ↔ Möchtest
+  du noch etwas), `de3-shopping-011` („jó árú, kedvező árú” ↔ billig); csere — `de1-food-012` Hunger haben →
+  „ein Brot schmieren”, `de1-food-013` Durst haben → „eine Suppe kochen” (az L0 „ich habe Hunger / Durst”
+  szinonimái voltak), `de1-shopping-010` mit Karte bezahlen → „Brauchen Sie eine Tüte” (az L0 „mit Karte zahlen”
+  szinonimája volt).
+- Ellenőrzés: a Codex-review reprodukciója (a két árkérdés hu→német kérdése 2 × 500 seeddel) → 1000 kérdés, egyikben
+  sem szerepel egyszerre a két szinonima.
+- Ezek a javítások integrátori ellenőrzéssel zárultak, újabb vak kör nélkül.
+
 ## Záró állapot
 
 - `report --lang de`: `total 2080`, szintenként L0 409 / L1 478 / L2 461 / L3 424 / L4 308, `phrase 748 (36.0%)`,
@@ -164,7 +205,11 @@ A jelzett tételeken felül 19 bejegyzés + 2 kétértelműség-partner:
 ## Maradó kockázat
 
 - Anyanyelvi (német és magyar) lektorálás nem történt (terv 8.); a minőséget modellek ítélték meg.
-- A fix-kör utáni 4 javítás integrátori ellenőrzéssel zárult, újabb vak kör nélkül.
+- A fix-kör utáni 4 javítás és a PR-review utáni idióma-/szinonima-audit 27 javítása integrátori ellenőrzéssel
+  zárult, újabb vak kör nélkül.
+- Az idiómák szó szerinti (tükör)fordítását a vak megoldó nem fogta meg megbízhatóan (a PR-review talált rá); a
+  célzott audit után is maradhat ilyen. A szinonima-keresés heurisztikus (a `hu` szövegére épül), az eltérő
+  szóhasználatú szinonimapárokat nem garantáltan találja meg.
 - A megoldó elvben elérhette volna a repó fájljait (utasítással tiltva, technikailag nem zárva ki).
 - A kérdésfájl példamondatából a helyes opció többnyire kiolvasható; a „előbb prompt + opciók” szabály ezt csak
   mérsékli. A vak kör ezért elsősorban a példamondatok, a fordítások és a kétértelmű opciók hibáit fogja meg, a
