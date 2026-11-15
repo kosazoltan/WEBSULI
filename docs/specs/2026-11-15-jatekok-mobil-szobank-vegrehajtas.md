@@ -1310,7 +1310,7 @@ az intervallum-callback tartalmazza a `paused` feltételt; `sq-won`, `sq-over`, 
 
 ## S9 — Szökőár szökés mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #26. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s9-szokoar, munkafa .claude/worktrees/jatekok-s9, kanban #26
 
 - **Cél:** 4.5 keret; érintővezérlés csak érintős eszközön; a könnyű grafika az eszköz képességétől függ, nem a
   szélességtől; látványosabb hullám, part és futó; ismétlés-szűrés a teljes futásra; angol kérdések a szóbankból (A8).
