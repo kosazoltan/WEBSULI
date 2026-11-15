@@ -3,10 +3,9 @@ import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
 import { QUIZ_TIMEOUT_SEC, tsunamiQuizSeconds, tsunamiWaterPace } from "@/game-engine/tsunamiTiming";
 import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Link } from "wouter";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
-import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
@@ -23,31 +22,32 @@ import {
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
-import AudioToggleButton from "@/components/AudioToggleButton";
 import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
-import AchievementToast from "@/components/AchievementToast";
 import { useCouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
-import {
-  ArrowLeft,
-  Waves,
-  Trophy,
-  Flame,
-  Star,
-  RotateCcw,
-  Wind,
-  Timer,
-  Shield,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, Check, Flame, Shield, Timer, Waves, Wind, X } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import HoldButton from "@/game-engine/HoldButton";
 import { joystickToDirections } from "@/game-engine/joystick";
-import { Card, CardContent } from "@/components/ui/card";
-import CosmicBackground from "@/components/CosmicBackground";
+import { useReducedMotion } from "@/game-engine/useReducedMotion";
+import { detectLookTier } from "@/game-engine/three-look";
+import { pickUnseen, type SeenItem } from "@/game-engine/no-repeat";
+import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
+import {
+  GameHud,
+  GameShell,
+  PauseMenu,
+  ResultScreen,
+  StartScreen,
+  useBestScore,
+  useHaptics,
+  useTouchCapable,
+  type GameScreenState,
+} from "@/game-engine/mobile";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   tsunamiQuizEasyMore,
@@ -573,6 +573,31 @@ function tsunamiSubjectFromGradeSubject(subject: GradeSubject): TsunamiCoreSubje
   return subject;
 }
 
+/**
+ * S9 / terv 4.6/1 — „könnyű grafika”: az ESZKÖZ képessége dönt (a `three-look` szintje, csökkentett mozgás, kevés
+ * memória), nem az ablak szélessége vagy a mutató fajtája. Egyszer, betöltéskor fut: a jelenet így futás közben nem
+ * épül újra (a `TsunamiScene3D` a `light` változására újraépülne).
+ */
+function isLowEnd(): boolean {
+  if (typeof window === "undefined") return false;
+  const lowTier = detectLookTier() === "low";
+  const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  const lowMem = typeof memory === "number" && memory <= 4;
+  return lowTier || reduced || lowMem;
+}
+
+/** A régi szintes ág: a menet előrehaladása → a kívánt szint (0 könnyű, 1 közepes, 2 nehéz). */
+function tierForProgress(eff: number): number {
+  if (eff < 0.45) return 0;
+  return eff < 0.82 ? 1 : 2;
+}
+
+/** A víz és a menekülési határ (88 %) közti távolság „méterben” a HUD-hoz (12 % → 38 m, 88 % → 0 m). */
+function waveDistanceMeters(water: number): number {
+  return Math.max(0, Math.round((88 - water) / 2));
+}
+
 export default function TsunamiEscapeEnglish() {
   // Spec 2026-09-29: URL-paraméter nélkül a könnyű/közepes/nehéz alapértéke az évfolyamból jön.
   const [difficulty, setDifficulty] = useState<GameDifficulty>(
@@ -612,31 +637,32 @@ export default function TsunamiEscapeEnglish() {
   const runLevelRef = useRef<number | null>(null);
   const levelClearedRef = useRef(false);
   const [quizTimeLeft, setQuizTimeLeft] = useState(QUIZ_TIMEOUT_SEC.normal);
+  /** A kérdés teljes ideje (az időcsík arányához). */
+  const [quizTimeTotal, setQuizTimeTotal] = useState(QUIZ_TIMEOUT_SEC.normal);
   const [stormFlash, setStormFlash] = useState(false);
   const [driftDir, setDriftDir] = useState(0);
-  const [lightGraphics, setLightGraphics] = useState(false);
+  /** S9: az eszköz képességéből, egyszer (lásd `isLowEnd`). */
+  const [lightGraphics] = useState<boolean>(isLowEnd);
   /** 3D scene layer: null until probed; false → the DOM scene below is drawn instead (spec E7). */
   const [scene3d, setScene3d] = useState<boolean | null>(null);
   const domScene = scene3d === false;
-
-  useEffect(() => {
-    return installGameTestApi({
-      probe: () => {
-        const band = adaptiveRef.current.band;
-        return {
-          level: runLevelRef.current,
-          band,
-          waterPace: runLevelRef.current == null ? 1 : tsunamiWaterPace(band),
-          quizSeconds: tsunamiQuizSeconds(runDifficultyRef.current, band),
-        };
-      },
-      forceState: (patch) => {
-        if (patch.phase === "won" || patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
-          setPhase(patch.phase);
-        }
-      },
-    });
-  }, []);
+  /** S9 / terv 4.5: szünet (kézi vagy automatikus, ha a lap háttérbe kerül). */
+  const [paused, setPaused] = useState(false);
+  /** Érintővezérlés csak érintős eszközön (S9 / terv 4.6/1, M5). */
+  const touch = useTouchCapable();
+  const haptics = useHaptics();
+  const reducedMotion = useReducedMotion();
+  const [, navigate] = useLocation();
+  const bestScore = useBestScore("tsunami-english");
+  const [bestResult, setBestResult] = useState<{ best: number; isNewBest: boolean } | null>(null);
+  /** A tárcsa nullázása szünetkor / fázisváltáskor (beragadt irány ellen). */
+  const [joyReset, setJoyReset] = useState(0);
+  /** Rövid visszajelzés a választott gombon (jó: zöld pipa; rossz: piros). */
+  const [answerFx, setAnswerFx] = useState<{ index: number; ok: boolean } | null>(null);
+  /** A futás összes megválaszolt kérdése (jó + rossz + lejárt) — az eredményképernyő arányához. */
+  const answeredCountRef = useRef(0);
+  /** G-1: magyarázó kártya rossz válaszra. */
+  const [explainCard, setExplainCard] = useState<FeedbackCard | null>(null);
 
   const keysRef = useRef({ left: false, right: false, sprint: false });
   const playerXRef = useRef(playerX);
@@ -650,7 +676,8 @@ export default function TsunamiEscapeEnglish() {
   const runTimerRef = useRef(0);
   const safeZoneTimerRef = useRef(0);
   const stormTimerRef = useRef(0);
-  const recentQuizIdsRef = useRef<string[]>([]);
+  /** S9: a futás MINDEN kiadott kérdése (`{ id, prompt }`) — az ismétlés-szűrés a teljes futásra érvényes. */
+  const runSeenRef = useRef<SeenItem[]>([]);
   const driftDirRef = useRef(0);
   const rafRef = useRef<number>(0);
   const paramsRef = useRef(PRESETS.normal);
@@ -686,6 +713,13 @@ export default function TsunamiEscapeEnglish() {
   const { grade: userGrade } = useClassroomGrade();
   const levels = useGradeLevel("tsunami", userGrade);
   const { items: materialItems } = useMaterialQuizzes(userGrade, undefined, coupon.lessonId);
+  /**
+   * S9 / A8: angol kérdések a központi szóbankból, a közös naplóval. Bekapcsolva angol ÉS vegyes módban (a vegyes
+   * kör is ad angol kérdést); a bekötés ezzel az egy hívással kapcsolható ki. `null` → a kézi bank megy.
+   */
+  const vocab = useVocabQuizSource("en", subject === "english" || subject === "mixed");
+  const vocabRef = useRef(vocab);
+  vocabRef.current = vocab;
 
   // Évfolyam-váltáskor (pl. a ClassroomGateModal után) az alapérték követi az évfolyamot,
   // amíg a játékos nem választott kézzel.
@@ -774,26 +808,42 @@ export default function TsunamiEscapeEnglish() {
     if (d === "hard") eff = Math.min(1, p * 1.22);
     if (d === "easy") eff = p * 0.78;
 
-    // Spec 2026-09-29: 3–12. évfolyamon (kupon-tananyag nélkül) nem látott tananyag-kvíz → a közös
-    // évfolyam-bank a tárgy-mód tárgyaiból, a sávot a nehézség-gomb eltolja → a régi szintes választás.
+    /**
+     * S9: minden kiadott kérdés a futás listájába (`runSeenRef`) és az évfolyam-bank `seen`-jébe kerül, így a
+     * teljes futásban egyik ág sem ismétel. A kézi (nem szóbankos) angol kérdés helyes válasza a közös szóbank-
+     * naplóba is bekerül (`markExternal`), hogy ugyanaz a szó ne jöjjön vissza a bankból.
+     */
+    const issue = (q: Quiz): Quiz => {
+      runSeenRef.current.push({ id: q.id, prompt: q.prompt });
+      markGradeQuizSeen(gradeSeenRef.current, q);
+      if (q.subject === "english" && !q.id.startsWith("vocab:")) {
+        vocabRef.current?.markExternal(q.options[q.correctIndex] ?? "");
+      }
+      return shuffleQuiz(q);
+    };
+    const englishLevel = (band: number) => vocabLevelForGrade(userGradeRef.current, band);
+
+    // Spec 2026-09-29: 3–12. évfolyamon (kupon-tananyag nélkül) nem látott tananyag-kvíz → (S9) angol helyen a
+    // központi szóbank → a közös évfolyam-bank a tárgy-mód tárgyaiból, a sávot a nehézség-gomb eltolja → a régi
+    // szintes választás.
     const sharedGrade = gradeForGame(userGradeRef.current);
     if (sharedGrade != null && rewardQuestionsRef.current.length === 0) {
       const seen = gradeSeenRef.current;
       if (activeSubject === "english" || activeSubject === "mixed") {
         const material = pickUnseenMaterial(materialQuizzesRef.current, seen);
-        if (material) {
-          markGradeQuizSeen(seen, material);
-          return shuffleQuiz(material);
-        }
+        if (material) return issue(material);
       }
       const subjects = TSUNAMI_GRADE_SUBJECTS[activeSubject];
       const band = clampBand(adaptiveRef.current.band + bandShiftForDifficulty(d));
       for (let i = 0; i < subjects.length; i++) {
         const gradeSubject = subjects[gradeSubjectRoundRef.current++ % subjects.length]!;
+        if (gradeSubject === "english" && vocabRef.current) {
+          const fromBank = vocabRef.current.next(englishLevel(band));
+          if (fromBank) return issue({ ...fromBank, subject: "english", topic: null });
+        }
         const item = pickGradeQuiz({ grade: sharedGrade, band, subjects: [gradeSubject], seen });
         if (!item) continue;
-        markGradeQuizSeen(seen, item);
-        return shuffleQuiz({
+        return issue({
           id: item.id,
           prompt: item.prompt,
           options: [...item.options],
@@ -804,33 +854,30 @@ export default function TsunamiEscapeEnglish() {
       }
     }
 
+    // Kupon-tananyag: a lecke kérdései, futáson belül ismétlés nélkül (kimerülésnél a legrégebben látott).
+    if (rewardQuestionsRef.current.length) {
+      const reward = pickUnseen([rewardQuestionsRef.current], 0, runSeenRef.current);
+      if (reward) return issue(reward);
+    }
+
     const subjectKey =
       activeSubject === "mixed"
         ? TSUNAMI_SUBJECT_ORDER[subjectRoundRef.current++ % TSUNAMI_SUBJECT_ORDER.length]!
         : activeSubject;
-    const { easy: poolE, med: poolM, hard: poolH } = mergedPoolsRef.current[subjectKey];
-    let pool: Quiz[];
-    if (eff < 0.32) pool = [...poolE];
-    else if (eff < 0.58) pool = [...poolE, ...poolM];
-    else if (eff < 0.82) pool = [...poolM, ...poolH];
-    else pool = [...poolH];
-
-    if (rewardQuestionsRef.current.length) pool = rewardQuestionsRef.current;
-    if (pool.length === 0) pool = [...poolE];
-
-    const recent = recentQuizIdsRef.current;
-    let selected = pool[Math.floor(Math.random() * pool.length)]!;
-    if (pool.length > 3) {
-      for (let tries = 0; tries < 8; tries++) {
-        const cand = pool[Math.floor(Math.random() * pool.length)]!;
-        if (!recent.includes(cand.id)) {
-          selected = cand;
-          break;
-        }
+    if (subjectKey === "english") {
+      // A tananyag elsőbbsége ebben az ágban is (1–2. évfolyam, leckéből indított játék), utána a szóbank.
+      const material = pickUnseenMaterial(materialQuizzesRef.current, gradeSeenRef.current);
+      if (material) return issue(material);
+      if (vocabRef.current) {
+        const fromBank = vocabRef.current.next(englishLevel(adaptiveRef.current.band));
+        if (fromBank) return issue({ ...fromBank, subject: "english", topic: null });
       }
     }
-    recentQuizIdsRef.current = [...recent.slice(-4), selected.id];
-    return shuffleQuiz(selected);
+    const { easy: poolE, med: poolM, hard: poolH } = mergedPoolsRef.current[subjectKey];
+    // S9: a teljes futás kiadott kérdéseit kerüli (nem csak az utolsó ötöt); a kívánt szint elfogyása után a
+    // szomszéd szint jön, és csak teljes kimerülésnél ismétel (a legrégebben látottat).
+    const picked = pickUnseen([poolE, poolM, poolH], tierForProgress(eff), runSeenRef.current);
+    return issue(picked ?? poolE[0]!);
   }, []);
 
   const startGame = useCallback(() => {
@@ -860,8 +907,14 @@ export default function TsunamiEscapeEnglish() {
     runBestStreakRef.current = 0;
     wrongAnswersRef.current = 0;
     answerLockedRef.current = false;
-    recentQuizIdsRef.current = [];
+    answeredCountRef.current = 0;
+    runSeenRef.current = [];
     gradeSeenRef.current = createGradeQuizSeen();
+    setPaused(false);
+    setAnswerFx(null);
+    setExplainCard(null);
+    setBestResult(null);
+    setNewlyUnlocked([]);
     gradeSubjectRoundRef.current = 0;
     // Give an early first quiz so the run does not feel empty at the start.
     quizTimerRef.current = Math.max(0, PRESETS[difficulty].quizEverySec * 0.72);
@@ -872,6 +925,64 @@ export default function TsunamiEscapeEnglish() {
     setQuiz(null);
     setPhase("play");
   }, [difficulty, subject, userGrade, levels.level]);
+
+  /** S9 / terv 4.5: szünet — a játékciklus és a kvízóra áll, a vezérlés elenged. */
+  const pauseGame = useCallback(() => {
+    if (phase !== "play" && phase !== "quiz") return;
+    keysRef.current.left = false;
+    keysRef.current.right = false;
+    keysRef.current.sprint = false;
+    setJoyReset((n) => n + 1);
+    setPaused(true);
+  }, [phase]);
+
+  const resumeGame = useCallback(() => {
+    lastRef.current = null;
+    setPaused(false);
+  }, []);
+
+  const exitToMenu = useCallback(() => {
+    setPaused(false);
+    setQuiz(null);
+    setExplainCard(null);
+    setAnswerFx(null);
+    answerLockedRef.current = false;
+    setPhase("menu");
+  }, []);
+
+  useEffect(() => {
+    return installGameTestApi({
+      probe: () => {
+        const band = adaptiveRef.current.band;
+        return {
+          level: runLevelRef.current,
+          band,
+          waterPace: runLevelRef.current == null ? 1 : tsunamiWaterPace(band),
+          quizSeconds: tsunamiQuizSeconds(runDifficultyRef.current, band),
+        };
+      },
+      forceState: (patch) => {
+        if (typeof patch.correctCount === "number") {
+          correctQuizCountRef.current = patch.correctCount;
+          answeredCountRef.current = Math.max(answeredCountRef.current, patch.correctCount);
+          setCorrectQuizzesInRun(patch.correctCount);
+        }
+        if (patch.phase === "quiz") {
+          // S9 (M9, M10): egy kérdés azonnal, a valós választóból.
+          answerLockedRef.current = false;
+          setQuiz(pickQuiz());
+          const secs = tsunamiQuizSeconds(runDifficultyRef.current, adaptiveRef.current.band);
+          setQuizTimeLeft(secs);
+          setQuizTimeTotal(secs);
+          setPhase("quiz");
+          return;
+        }
+        if (patch.phase === "won" || patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
+          setPhase(patch.phase);
+        }
+      },
+    });
+  }, [pickQuiz]);
 
   // A győzelem (a nehézség célszámú jó válasza) a következő pályát oldja fel; a menü azt ajánlja.
   useEffect(() => {
@@ -917,24 +1028,6 @@ export default function TsunamiEscapeEnglish() {
   }, [bestStreak]);
 
   useEffect(() => {
-    const isLowEnd = () => {
-      const mobileLike =
-        window.matchMedia("(hover: none)").matches ||
-        window.matchMedia("(pointer: coarse)").matches ||
-        window.innerWidth < 1024;
-      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const lowMem = typeof navigator !== "undefined" && "deviceMemory" in navigator
-        ? ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) <= 4
-        : false;
-      return mobileLike || reduced || lowMem;
-    };
-    const apply = () => setLightGraphics(isLowEnd());
-    apply();
-    window.addEventListener("resize", apply);
-    return () => window.removeEventListener("resize", apply);
-  }, []);
-
-  useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keysRef.current.left = true;
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keysRef.current.right = true;
@@ -967,33 +1060,21 @@ export default function TsunamiEscapeEnglish() {
     keysRef.current.sprint = false;
   }, [phase]);
 
-  const setControlState = useCallback((key: "left" | "right" | "sprint", active: boolean) => {
-    keysRef.current[key] = active;
+  const sprintStart = useCallback(() => {
+    keysRef.current.sprint = true;
   }, []);
-
-  const pressStart = useCallback(
-    (e: ReactPointerEvent<HTMLButtonElement>, key: "left" | "right" | "sprint") => {
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      setControlState(key, true);
-    },
-    [setControlState],
-  );
-
-  const pressEnd = useCallback(
-    (e: ReactPointerEvent<HTMLButtonElement>, key: "left" | "right" | "sprint") => {
-      e.preventDefault();
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      }
-      setControlState(key, false);
-    },
-    [setControlState],
-  );
+  const sprintEnd = useCallback(() => {
+    keysRef.current.sprint = false;
+  }, []);
+  const onJoystick = useCallback((v: Parameters<typeof joystickToDirections>[0]) => {
+    const dirs = joystickToDirections(v);
+    keysRef.current.left = dirs.left;
+    keysRef.current.right = dirs.right;
+  }, []);
 
   const gameLoop = useCallback(
     (t: number) => {
-      if (phase !== "play") return;
+      if (phase !== "play" || paused) return;
 
       const last = lastRef.current;
       lastRef.current = t;
@@ -1046,7 +1127,8 @@ export default function TsunamiEscapeEnglish() {
       stormTimerRef.current += dt;
       if (stormTimerRef.current >= (runDifficultyRef.current === "hard" ? 5.6 : 7.2)) {
         stormTimerRef.current = 0;
-        if (Math.random() < 0.42 + prog * 0.3) {
+        // Csökkentett mozgásnál nincs villámlás-villanás (M9).
+        if (!reducedMotion && Math.random() < 0.42 + prog * 0.3) {
           setStormFlash(true);
           timeoutsRef.current.push(window.setTimeout(() => setStormFlash(false), 170));
         }
@@ -1056,7 +1138,9 @@ export default function TsunamiEscapeEnglish() {
       if (quizTimerRef.current >= quizEveryDyn) {
         quizTimerRef.current = 0;
         setQuiz(pickQuiz());
-        setQuizTimeLeft(tsunamiQuizSeconds(runDifficultyRef.current, adaptiveRef.current.band));
+        const secs = tsunamiQuizSeconds(runDifficultyRef.current, adaptiveRef.current.band);
+        setQuizTimeLeft(secs);
+        setQuizTimeTotal(secs);
         setPhase("quiz");
         return;
       }
@@ -1079,24 +1163,22 @@ export default function TsunamiEscapeEnglish() {
 
       rafRef.current = requestAnimationFrame(gameLoop);
     },
-    [phase, pickQuiz, endGame],
+    [phase, paused, reducedMotion, pickQuiz, endGame],
   );
 
   useEffect(() => {
-    if (phase !== "play") {
+    if (phase !== "play" || paused) {
       cancelAnimationFrame(rafRef.current);
       return;
     }
     lastRef.current = null;
     rafRef.current = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [phase, gameLoop]);
-
-  /** G-1: magyarázó kártya rossz válaszra. */
-  const [explainCard, setExplainCard] = useState<FeedbackCard | null>(null);
+  }, [phase, paused, gameLoop]);
 
   const dismissExplain = useCallback(() => {
     setExplainCard(null);
+    setAnswerFx(null);
     setQuiz(null);
     setPhase("play");
     lastRef.current = null;
@@ -1111,9 +1193,12 @@ export default function TsunamiEscapeEnglish() {
     answerLockedRef.current = true;
     adaptiveRef.current.answer(index === quiz.correctIndex);
     maybeClaimCouponBonus(coupon, quiz.id, quiz.optionIndices?.[index] ?? index);
+    answeredCountRef.current += 1;
     if (index !== quiz.correctIndex) {
       wrongAnswersRef.current += 1;
       sfxError();
+      haptics("error");
+      if (index >= 0) setAnswerFx({ index, ok: false });
       setWrongShake(true);
       timeoutsRef.current.push(window.setTimeout(() => setWrongShake(false), 320));
       setStreak(0);
@@ -1140,6 +1225,8 @@ export default function TsunamiEscapeEnglish() {
     }
 
     sfxSuccess();
+    haptics("success");
+    setAnswerFx({ index, ok: true });
 
     setRewardBurst(true);
     timeoutsRef.current.push(window.setTimeout(() => setRewardBurst(false), 900));
@@ -1169,6 +1256,7 @@ export default function TsunamiEscapeEnglish() {
       setSessionXp((x) => x + WIN_BONUS_XP);
       setTotalXp((t) => t + WIN_BONUS_XP);
       setQuiz(null);
+      setAnswerFx(null);
       cancelAnimationFrame(rafRef.current);
       lastRef.current = null;
       answerLockedRef.current = false;
@@ -1176,23 +1264,29 @@ export default function TsunamiEscapeEnglish() {
       return;
     }
 
-    setQuiz(null);
-    setPhase("play");
-    lastRef.current = null;
-    answerLockedRef.current = false;
+    // S9: a zöld pipa egy pillanatig látszik a választott gombon (azonnali, látható jutalom), utána fut tovább.
+    timeoutsRef.current.push(
+      window.setTimeout(() => {
+        setQuiz(null);
+        setAnswerFx(null);
+        setPhase("play");
+        lastRef.current = null;
+        answerLockedRef.current = false;
+      }, reducedMotion ? 150 : 420),
+    );
   };
 
   const answerRef = useRef(onAnswer);
   answerRef.current = onAnswer;
 
   useEffect(() => {
-    if (phase !== "quiz" || explainCard) return;
+    if (phase !== "quiz" || explainCard || paused) return;
     const id = setInterval(() => {
       if (answerLockedRef.current) return;
       setQuizTimeLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(id);
-  }, [phase, explainCard]);
+  }, [phase, explainCard, paused]);
 
   useEffect(() => {
     if (phase === "quiz" && !explainCard && quizTimeLeft <= 0) answerRef.current(-1);
@@ -1225,6 +1319,13 @@ export default function TsunamiEscapeEnglish() {
         scoreSubmittedRef.current = false;
       });
   }, [phase, syncEligibility, sessionXp, streak, runSeconds]);
+
+  // S9: helyi legjobb pontszám (névtelen látogatónak is) — egyszer, az eredményképernyő megnyitásakor.
+  useEffect(() => {
+    if (phase !== "over" && phase !== "won") return;
+    if (bestResult) return;
+    setBestResult(bestScore.submit(sessionXp));
+  }, [phase, bestResult, bestScore, sessionXp]);
 
   // Achievement + Daily — egyszer fut "over" / "won" átmenetkor.
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
@@ -1271,204 +1372,186 @@ export default function TsunamiEscapeEnglish() {
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
   }, [phase, sessionXp, streak]);
 
+  const target = winQuizTarget(runDifficultyRef.current);
+  const remaining = Math.max(0, target - correctQuizzesInRun);
+  const playingPhase = phase === "play" || phase === "quiz";
+  const shellState: GameScreenState =
+    phase === "menu" ? "start" : playingPhase ? (paused ? "paused" : "playing") : "result";
+  const distance = waveDistanceMeters(water);
+  const danger = distance <= 8;
+  const distanceTone = danger ? "bad" : distance <= 16 ? "warn" : "default";
+  const inSafeZone = Math.abs(playerX - safeZoneX) <= 9;
+  const resultOpen = phase === "won" || phase === "over";
+  const quizRatio = quizTimeTotal > 0 ? Math.max(0, Math.min(1, quizTimeLeft / quizTimeTotal)) : 0;
+
   return (
-    <div
-      data-game="TsunamiEscapeEnglish" data-playing={phase === "play" || phase === "quiz"}
-      className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
+    <GameShell
+      gameId="TsunamiEscapeEnglish"
+      state={shellState}
+      onAutoPause={pauseGame}
       style={{
         background:
           "radial-gradient(circle at 8% 14%, rgba(14,165,233,0.34), transparent 34%), radial-gradient(circle at 90% 8%, rgba(250,204,21,0.26), transparent 30%), linear-gradient(180deg, #03203f 0%, #05325f 48%, #0b4d8f 100%)",
       }}
     >
       <ClassroomGateModal accent="cyan" />
-      <AchievementToast achievements={newlyUnlocked} />
-      <div className="absolute inset-0 opacity-35 pointer-events-none">
-        <CosmicBackground />
-      </div>
-      <div className="absolute inset-0 pointer-events-none">
-        {[0, 1, 2, 3, 4, 5].slice(0, lightGraphics ? 3 : 6).map((i) => (
-          <motion.div
-            key={`bubble-${i}`}
-            className="absolute rounded-full border border-cyan-100/35 bg-cyan-100/10"
-            style={{
-              width: `${20 + i * 8}px`,
-              height: `${20 + i * 8}px`,
-              left: `${8 + i * 15}%`,
-              bottom: `${4 + (i % 3) * 9}%`,
-              boxShadow: "inset 0 0 14px rgba(255,255,255,0.25)",
-            }}
-            animate={{ y: [0, -18 - i * 4, 0], opacity: [0.35, 0.8, 0.35] }}
-            transition={{ duration: 4 + i * 0.8, repeat: Infinity, ease: "easeInOut" }}
-          />
-        ))}
-      </div>
 
-      <main className="relative z-10 w-full max-w-2xl lg:max-w-3xl mx-auto px-3 sm:px-5 py-4 min-h-dvh min-h-screen flex flex-col pb-6 sm:pb-8">
-        {/* LS-3b: earned play time. Renders nothing when the child has no coupon. */}
-        <CouponHud session={coupon} />
-        <CouponExpiredOverlay session={coupon} />
-        <header className="flex items-center justify-between gap-2 mb-3">
-          <Link href="/games">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white bg-slate-900/45 border border-white/20 hover:bg-slate-800/70 gap-1 -ml-2 h-11 px-3"
-              data-testid="link-tsunami-back-games"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Játékok
-            </Button>
-          </Link>
-          <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold">
-            <AudioToggleButton size="icon" />
-            <span className="flex items-center gap-1 text-amber-300">
-              <Star className="w-4 h-4" />
-              {totalXp} XP
-            </span>
-            <span className="flex items-center gap-1 text-orange-400">
-              <Flame className="w-4 h-4" />
-              {streak}
-            </span>
-          </div>
-        </header>
-
-        <Card className="border border-cyan-200/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0 mb-3 shadow-[0_20px_60px_rgba(6,182,212,0.22)]">
-          <CardContent data-game-card-content className="tsunami-layout p-3 sm:p-4 flex flex-col flex-1 min-h-0">
-            <div className="game-title flex items-center gap-2 mb-2">
-              <Waves className="w-5 h-5 text-cyan-300" />
-              <h1 className="text-base sm:text-lg font-extrabold leading-tight">
-                Szökőár szökés — Tudáspróba (3–5. o.)
-              </h1>
+      {phase === "menu" && (
+        <>
+          {!reducedMotion && (
+            <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+              {[0, 1, 2, 3, 4, 5].slice(0, lightGraphics ? 3 : 6).map((i) => (
+                <motion.div
+                  key={`bubble-${i}`}
+                  className="absolute rounded-full border border-cyan-100/35 bg-cyan-100/10"
+                  style={{
+                    width: `${20 + i * 8}px`,
+                    height: `${20 + i * 8}px`,
+                    left: `${8 + i * 15}%`,
+                    bottom: `${4 + (i % 3) * 9}%`,
+                    boxShadow: "inset 0 0 14px rgba(255,255,255,0.25)",
+                  }}
+                  animate={{ y: [0, -18 - i * 4, 0], opacity: [0.35, 0.8, 0.35] }}
+                  transition={{ duration: 4 + i * 0.8, repeat: Infinity, ease: "easeInOut" }}
+                />
+              ))}
             </div>
-            <GamePedagogyPanel
-              accent="cyan"
-              className="mb-2"
-              kidMission={`Fuss el a víz elől! Válassz tantárgyat vagy Vegyes kihívást: jó válasz = XP + lejjebb megy a hullám. Egy körben szerezz ${winQuizTarget(difficulty)} helyes kvízt, és győztél — jár a nagy bónusz XP!`}
-              parentBody={
+          )}
+          <main className="relative z-10 w-full">
+            {/* LS-3b: earned play time. Renders nothing when the child has no coupon. */}
+            <CouponHud session={coupon} />
+            <CouponExpiredOverlay session={coupon} />
+            <StartScreen
+              title="Szökőár szökés"
+              subtitle={`Fuss a hullám elől! Minden jó válasz lejjebb nyomja a vizet — ${winQuizTarget(difficulty)} helyes válasz, és megmenekültél.`}
+              icon={<Waves className="h-9 w-9" aria-hidden="true" />}
+              startLabel={`Indítás: ${selectedSubjectMeta.label} · ${difficultyLabel(difficulty)}`}
+              startTestId="button-tsunami-start"
+              onStart={startGame}
+              best={bestScore.best}
+              secondary={
                 <>
-                  <strong className="text-cyan-100/90">Tananyag:</strong> 3–5. osztályos angol, matek, magyar nyelvtan és környezetismeret. A Vegyes kihívás körön belül váltogatja a tantárgyakat.
-                  <br />
-                  <strong className="text-cyan-100/90">Fejleszt:</strong> gyors döntés, olvasásértés, fejszámolás, helyesírási figyelem, természettudományos kapcsolatok és stratégia (biztonsági zóna).
-                  <br />
-                  <span className="text-white/55">
-                    Felépítés: cél (menekülés) → akadály (víz, sodrás) → rövid teszt → azonnali jutalom (XP, vízcsökkenés) vagy következmény — a gyakorlás és a visszajelzés szorosan összekapcsolva.
-                  </span>
+                  <button
+                    type="button"
+                    className="game-btn game-btn-secondary"
+                    data-testid="link-tsunami-back-games"
+                    onClick={() => navigate("/games")}
+                  >
+                    <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+                    Játékok
+                  </button>
+                  <GamePedagogyPanel
+                    accent="cyan"
+                    className="game-btn game-btn-secondary min-h-12 text-base text-center"
+                    kidMission={`Fuss el a víz elől! Válassz tantárgyat vagy Vegyes kihívást: jó válasz = XP + lejjebb megy a hullám. Egy körben szerezz ${winQuizTarget(difficulty)} helyes kvízt, és győztél — jár a nagy bónusz XP!`}
+                    parentBody={
+                      <>
+                        <strong className="text-cyan-100/90">Tananyag:</strong> 3–5. osztályos angol, matek, magyar nyelvtan és környezetismeret; az angol kérdések a központi szóbankból is jönnek, ismétlés nélkül. A Vegyes kihívás körön belül váltogatja a tantárgyakat.
+                        <br />
+                        <strong className="text-cyan-100/90">Fejleszt:</strong> gyors döntés, olvasásértés, fejszámolás, helyesírási figyelem, természettudományos kapcsolatok és stratégia (biztonsági zóna).
+                        <br />
+                        <span className="text-white/70">
+                          Felépítés: cél (menekülés) → akadály (víz, sodrás) → rövid teszt → azonnali jutalom (XP, vízcsökkenés) vagy következmény — a gyakorlás és a visszajelzés szorosan összekapcsolva.
+                        </span>
+                      </>
+                    }
+                  />
                 </>
               }
-            />
-            <p data-game-sync className="text-[11px] text-cyan-100/95 mb-3 leading-snug border border-cyan-400/35 rounded-lg px-2 py-1.5 bg-slate-900/90">
-              {syncBanner}
-            </p>
-
-            {phase === "menu" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-2 py-2 min-h-0">
-                <Button
-                  size="lg"
-                  className="bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-white font-bold rounded-full px-8 border border-cyan-100/50 shadow-[0_10px_24px_rgba(56,189,248,0.4)] min-h-[44px]"
-                  onClick={startGame}
-                  data-testid="button-tsunami-start"
-                >
-                  Indítás: {selectedSubjectMeta.label} · {difficultyLabel(difficulty)}
-                </Button>
-                <p className="text-sm text-center text-white/75 max-w-xs">
-                  Legjobb sorozat: <strong className="text-orange-300">{bestStreak}</strong>
-                </p>
-                <div className="w-full max-w-xl">
-                  <p className="text-xs text-cyan-100/90 text-center font-semibold mb-1.5">Tantárgy mód</p>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(["mixed", ...TSUNAMI_SUBJECT_ORDER] as TsunamiSubject[]).map((id) => {
-                      const meta = TSUNAMI_SUBJECT_META[id];
-                      const active = subject === id;
-                      return (
-                        <Button
+              settings={
+                <div className="space-y-4 text-left">
+                  <div>
+                    <p className="text-sm text-cyan-100/90 font-bold mb-2">Tantárgy mód</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {(["mixed", ...TSUNAMI_SUBJECT_ORDER] as TsunamiSubject[]).map((id) => {
+                        const meta = TSUNAMI_SUBJECT_META[id];
+                        const active = subject === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            aria-pressed={active}
+                            data-testid={`tsunami-subject-${id}`}
+                            className={`tsunami-settings-btn min-h-12 flex flex-col items-start justify-center gap-0.5 text-left rounded-xl border px-3 py-2 transition-colors ${
+                              active
+                                ? "bg-gradient-to-br from-cyan-500 to-blue-700 text-white border-cyan-100/60 shadow-[0_0_20px_rgba(34,211,238,0.28)]"
+                                : "bg-slate-900/75 border-white/20 text-white hover:bg-slate-800/90"
+                            }`}
+                            onClick={() => setSubject(id)}
+                          >
+                            <span className="text-xs font-black tracking-wide text-amber-200">{meta.chip}</span>
+                            <span className="text-sm font-extrabold leading-tight">{meta.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-2 text-sm text-cyan-100/80">{selectedSubjectMeta.mission}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-cyan-100/90 font-bold mb-2">Nehézség</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(
+                        [
+                          ["easy", "Könnyű", "bg-emerald-600 border-emerald-100/40"],
+                          ["normal", "Közepes", "bg-cyan-600 border-cyan-100/40"],
+                          ["hard", "Nehéz", "bg-rose-600 border-rose-100/40"],
+                        ] as const
+                      ).map(([id, label, activeCls]) => (
+                        <button
                           key={id}
                           type="button"
-                          variant={active ? "default" : "outline"}
-                          className={`h-auto min-h-[44px] flex flex-col items-start justify-center gap-0.5 text-left rounded-xl border px-2 py-1.5 ${
-                            active
-                              ? "bg-gradient-to-br from-cyan-500 to-blue-700 text-white border-cyan-100/60 shadow-[0_0_20px_rgba(34,211,238,0.28)]"
-                              : "bg-slate-900/75 border-white/20 text-white hover:bg-slate-800/90"
+                          aria-pressed={difficulty === id}
+                          className={`tsunami-settings-btn min-h-12 rounded-xl border px-2 text-base font-bold text-white ${
+                            difficulty === id ? activeCls : "bg-slate-900/95 border-white/35 hover:bg-slate-800"
                           }`}
-                          onClick={() => setSubject(id)}
+                          onClick={() => chooseDifficulty(id)}
                         >
-                          <span className="text-[10px] font-black tracking-wide text-amber-200">{meta.chip}</span>
-                          <span className="text-xs font-extrabold leading-tight">{meta.label}</span>
-                        </Button>
-                      );
-                    })}
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <p className="mt-1.5 text-[11px] text-cyan-100/80 text-center">{selectedSubjectMeta.mission}</p>
+                  {levels.active && levels.level != null ? (
+                    <div className="tsunami-level-picker">
+                      <GradeLevelPicker
+                        value={levels.level}
+                        unlocked={levels.unlocked}
+                        onChange={levels.select}
+                        label={`Pálya — ${userGrade}. osztály`}
+                      />
+                    </div>
+                  ) : null}
+                  <p data-game-sync className="text-sm text-cyan-100/95 leading-snug border border-cyan-400/35 rounded-lg px-3 py-2 bg-slate-900/90">
+                    {syncBanner}
+                  </p>
                 </div>
-                <div className="w-full max-w-xs space-y-1.5">
-                  <p className="text-xs text-cyan-100/90 text-center font-semibold">Nehézség</p>
-                  <div className="flex gap-2 justify-center flex-wrap">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={difficulty === "easy" ? "default" : "outline"}
-                      className={`h-11 px-4 ${difficulty === "easy" ? "bg-emerald-600 text-white border border-emerald-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}`}
-                      onClick={() => chooseDifficulty("easy")}
-                    >
-                      Könnyű
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={difficulty === "normal" ? "default" : "outline"}
-                      className={`h-11 px-4 ${difficulty === "normal" ? "bg-cyan-600 text-white border border-cyan-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}`}
-                      onClick={() => chooseDifficulty("normal")}
-                    >
-                      Közepes
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={difficulty === "hard" ? "default" : "outline"}
-                      className={`h-11 px-4 ${difficulty === "hard" ? "bg-rose-600 text-white border border-rose-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}`}
-                      onClick={() => chooseDifficulty("hard")}
-                    >
-                      Nehéz
-                    </Button>
-                  </div>
-                </div>
-                {levels.active && levels.level != null ? (
-                  <GradeLevelPicker
-                    value={levels.level}
-                    unlocked={levels.unlocked}
-                    onChange={levels.select}
-                    label={`Pálya — ${userGrade}. osztály`}
-                  />
-                ) : null}
-              </div>
-            )}
+              }
+            >
+              <p className="text-center text-sm font-semibold text-cyan-100/90">
+                Összes XP: <strong className="text-amber-300">{totalXp}</strong> · Legjobb sorozat:{" "}
+                <strong className="text-orange-300">{bestStreak}</strong>
+              </p>
+            </StartScreen>
+          </main>
+        </>
+      )}
 
-            {(phase === "play" || phase === "quiz") && (
+      {playingPhase && (
+        <main className="relative flex-1 min-h-0 overflow-hidden" style={{ padding: 0 }} data-testid="tsunami-stage">
+          {/* A játéktér a teljes képernyőt kitölti; a HUD és a vezérlők fölötte lebegnek. */}
+          <div className="absolute inset-0 z-0 overflow-hidden">
+            <TsunamiScene3D
+              water={surfacePct}
+              playerX={playerX}
+              safeZoneX={safeZoneX}
+              stormFlash={stormFlash}
+              sprinting={keysRef.current.sprint}
+              phase={paused ? "paused" : phase}
+              light={lightGraphics}
+              onSupportedChange={setScene3d}
+            />
+            {domScene && (
               <>
-                <GameNextGoalBar
-                  accent="cyan"
-                  headline={
-                    correctQuizzesInRun >= winQuizTarget(runDifficultyRef.current)
-                      ? "Megvan a győzelem ebben a körben — fuss tovább, gyűjts XP-et!"
-                      : `${Math.max(0, winQuizTarget(runDifficultyRef.current) - correctQuizzesInRun)} helyes kvíz még a célhoz`
-                  }
-                  subtitle={`${runSubjectMeta.label} · Futás: ${runSeconds} mp · ${difficultyLabel(runDifficultyRef.current)} · jó válasz = víz lejjebb`}
-                  current={correctQuizzesInRun}
-                  target={winQuizTarget(runDifficultyRef.current)}
-                  className="mb-2"
-                />
-                <div className="relative flex-1 game-scene min-h-0 rounded-2xl overflow-hidden border border-cyan-200/45 shadow-[0_0_45px_rgba(34,211,238,0.22)]">
-                <TsunamiScene3D
-                  water={surfacePct}
-                  playerX={playerX}
-                  safeZoneX={safeZoneX}
-                  stormFlash={stormFlash}
-                  sprinting={keysRef.current.sprint}
-                  phase={phase}
-                  light={lightGraphics}
-                  onSupportedChange={setScene3d}
-                />
-                {domScene && (
-                <>
                 {/* Ég + nap */}
                 <div
                   className="absolute inset-0"
@@ -1480,14 +1563,12 @@ export default function TsunamiEscapeEnglish() {
                 <div
                   className="absolute w-28 h-28 rounded-full pointer-events-none opacity-95"
                   style={{
-                    top: "4%",
+                    top: "14%",
                     right: "7%",
                     background: "radial-gradient(circle, #fffdea 0%, #fde68a 36%, transparent 72%)",
-                    filter: "blur(0.3px)",
                     boxShadow: "0 0 80px rgba(253,224,71,0.58)",
                   }}
                 />
-                {/* Felhők */}
                 {[0, 1, 2].map((i) => (
                   <motion.div
                     key={i}
@@ -1495,14 +1576,13 @@ export default function TsunamiEscapeEnglish() {
                     style={{
                       width: `${56 + i * 24}px`,
                       height: `${22 + i * 6}px`,
-                      top: `${12 + i * 14}%`,
+                      top: `${18 + i * 12}%`,
                       left: `${8 + i * 28}%`,
                     }}
-                    animate={{ x: [0, 16 + i * 8, 0], opacity: [0.45, 0.7, 0.45] }}
+                    animate={reducedMotion ? undefined : { x: [0, 16 + i * 8, 0], opacity: [0.45, 0.7, 0.45] }}
                     transition={{ duration: 10 + i * 4, repeat: Infinity, ease: "easeInOut" }}
                   />
                 ))}
-                {/* Távoli hegyek */}
                 <div
                   className="absolute bottom-[38%] left-0 right-0 h-[28%] opacity-35 pointer-events-none"
                   style={{
@@ -1510,45 +1590,6 @@ export default function TsunamiEscapeEnglish() {
                     clipPath: "polygon(0 100%, 0 60%, 15% 45%, 30% 70%, 45% 40%, 60% 65%, 75% 35%, 90% 55%, 100% 45%, 100% 100%)",
                   }}
                 />
-                <div
-                  className="absolute inset-0 opacity-30"
-                  style={{
-                    background:
-                      "repeating-linear-gradient(90deg, transparent, transparent 26px, rgba(255,255,255,0.06) 26px, rgba(255,255,255,0.06) 27px)",
-                  }}
-                />
-                </>
-                )}
-                <div className="absolute top-3 left-0 right-0 flex justify-center z-10">
-                  <span className="text-[10px] uppercase tracking-[0.2em] text-slate-900/90 font-black drop-shadow-sm rounded-full border border-white/45 bg-white/50 px-3 py-1">
-                    Maradj szárazon — kvíz = esély a víz ellen
-                  </span>
-                </div>
-                <div className="absolute top-9 left-2 right-2 text-[11px] text-slate-900/90 font-semibold z-10 flex flex-wrap gap-2 justify-between">
-                  <span className="rounded-md bg-amber-100/75 px-2 py-1 border border-amber-300/55 text-amber-950 font-black">
-                    {runSubjectMeta.chip}: {runSubjectMeta.label}
-                  </span>
-                  <span className="rounded-md bg-white/45 px-2 py-1 backdrop-blur-sm border border-white/40">
-                    Futás: {runSeconds}s · {difficultyLabel(runDifficultyRef.current)}
-                  </span>
-                  <span className="rounded-md bg-emerald-100/65 px-2 py-1 border border-emerald-300/55 text-emerald-900 font-bold">
-                    Győzelem: {correctQuizzesInRun}/{winQuizTarget(runDifficultyRef.current)} kvíz
-                  </span>
-                </div>
-                <div className="absolute top-[66px] left-2 right-2 text-[10px] text-slate-900 font-semibold z-10 flex justify-between">
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white/45 px-2 py-1 backdrop-blur-sm border border-white/35">
-                    <Wind className="w-3 h-3" />
-                    Sodrás: {driftDir >= 0 ? "jobbra" : "balra"}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100/65 px-2 py-1 border border-emerald-300/55 text-emerald-900">
-                    <Shield className="w-3 h-3" />
-                    Biztonsági zóna aktív
-                  </span>
-                </div>
-
-                {domScene && (
-                <>
-                {/* Erkélyek / platformok - eltérő anyagokkal */}
                 {[
                   { top: 18, type: "ice" },
                   { top: 38, type: "steel" },
@@ -1566,31 +1607,18 @@ export default function TsunamiEscapeEnglish() {
                           : type === "steel"
                             ? "linear-gradient(180deg, #dbeafe 0%, #64748b 45%, #334155 100%)"
                             : "linear-gradient(180deg, #fef3c7 0%, #b45309 45%, #78350f 100%)",
-                      boxShadow:
-                        "0 6px 14px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.72), 0 0 18px rgba(56,189,248,0.35)",
+                      boxShadow: "0 6px 14px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.72)",
                     }}
                   />
                 ))}
-                <motion.div
+                <div
                   className="absolute z-[7] top-[63%] h-2 rounded-full bg-emerald-300/90 border border-emerald-100/80"
-                  style={{
-                    left: `${Math.max(8, safeZoneX - 8)}%`,
-                    width: "16%",
-                    boxShadow: "0 0 20px rgba(16,185,129,0.55)",
-                  }}
-                  animate={{ opacity: [0.55, 0.95, 0.55] }}
-                  transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                  style={{ left: `${Math.max(8, safeZoneX - 8)}%`, width: "16%", boxShadow: "0 0 20px rgba(16,185,129,0.55)" }}
                 />
-
-                {/* Játékos */}
                 <motion.div
                   className="absolute z-20 flex flex-col items-center select-none"
-                  style={{
-                    left: `${playerX}%`,
-                    bottom: `calc(${surfacePct}% + 14px)`,
-                    translateX: "-50%",
-                  }}
-                  animate={phase === "play" ? { y: [0, -5, 0] } : {}}
+                  style={{ left: `${playerX}%`, bottom: `calc(${surfacePct}% + 14px)`, translateX: "-50%" }}
+                  animate={phase === "play" && !paused && !reducedMotion ? { y: [0, -5, 0] } : {}}
                   transition={{ repeat: Infinity, duration: 0.55, ease: "easeInOut" }}
                 >
                   <div className="relative drop-shadow-[0_8px_14px_rgba(0,0,0,0.35)]">
@@ -1608,209 +1636,146 @@ export default function TsunamiEscapeEnglish() {
                     </div>
                   </div>
                 </motion.div>
-
-                {/* Víz + hullám */}
                 <div
                   className="absolute left-0 right-0 bottom-0 pointer-events-none transition-[height] duration-100 ease-linear z-[4]"
                   style={{ height: `${surfacePct}%` }}
                 >
                   <div
                     className="absolute inset-0"
-                    style={{
-                      background:
-                        "linear-gradient(to top, #0c4a6e 0%, #0369a1 35%, #0ea5e9 65%, rgba(125,211,252,0.85) 100%)",
-                    }}
+                    style={{ background: "linear-gradient(to top, #0c4a6e 0%, #0369a1 35%, #0ea5e9 65%, rgba(125,211,252,0.85) 100%)" }}
                   />
                   <div
-                    className="absolute inset-0 opacity-45"
-                    style={{
-                      background:
-                        "linear-gradient(120deg, rgba(14,165,233,0.05) 0%, rgba(255,255,255,0.22) 40%, rgba(14,116,144,0.09) 100%)",
-                    }}
-                  />
-                  <motion.div
-                    className="absolute left-0 right-0 top-0 h-6 opacity-70"
-                    style={{
-                      background:
-                        "repeating-linear-gradient(90deg, transparent, transparent 18px, rgba(255,255,255,0.15) 18px, rgba(255,255,255,0.15) 36px)",
-                    }}
-                    animate={{ x: [0, -36, 0] }}
-                    transition={{ duration: 2.8, repeat: Infinity, ease: "linear" }}
-                  />
-                  <motion.div
-                    className="absolute left-0 right-0 top-2 h-4 opacity-45"
-                    style={{
-                      background:
-                        "repeating-radial-gradient(circle at 10% 50%, rgba(255,255,255,0.35) 0 2px, transparent 2px 10px)",
-                    }}
-                    animate={{ x: [0, -24, 0] }}
-                    transition={{ duration: 3.4, repeat: Infinity, ease: "linear" }}
-                  />
-                  <div
-                    className="absolute top-0 left-0 right-0 h-4 -translate-y-1/2 rounded-full bg-cyan-200/60 blur-md"
+                    className="absolute top-0 left-0 right-0 h-5 -translate-y-1/2 rounded-full bg-white/80 blur-[3px]"
                     style={{ boxShadow: "0 -12px 32px rgba(34,211,238,0.45)" }}
                   />
                 </div>
-                {[...Array(lightGraphics ? 6 : 12)].map((_, i) => (
-                  <motion.div
-                    key={`rain-${i}`}
-                    className="absolute w-[2px] h-10 bg-cyan-100/45 z-[6] pointer-events-none"
-                    style={{ left: `${4 + i * 5.2}%`, top: "-10%" }}
-                    animate={{ y: ["0%", "470%"], opacity: [0.1, 0.55, 0.1] }}
-                    transition={{
-                      duration: 1 + (i % 4) * 0.22,
-                      repeat: Infinity,
-                      ease: "linear",
-                      delay: (i % 5) * 0.1,
-                    }}
-                  />
-                ))}
                 {stormFlash && <div className="absolute inset-0 z-[25] bg-white/35 pointer-events-none" />}
-                </>
-                )}
-
-                {rewardBurst && (
-                  <motion.div
-                    className="absolute right-3 top-20 pointer-events-none z-30"
-                    initial={{ y: 12, opacity: 0, scale: 0.8 }}
-                    animate={{ y: 0, opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <div className="rounded-full bg-amber-300 text-slate-950 px-4 py-1.5 text-lg font-black border border-amber-100 shadow-[0_8px_18px_rgba(245,158,11,0.55)]">
-                      +{lastQuizXp} XP
-                    </div>
-                  </motion.div>
-                )}
-              </div>
               </>
             )}
+            {/* A HUD olvashatóságáért sötétedő sáv a képernyő tetején. */}
+            <div
+              className="absolute inset-x-0 top-0 h-32 pointer-events-none z-[1]"
+              style={{ background: "linear-gradient(180deg, rgba(2,6,23,0.55) 0%, rgba(2,6,23,0) 100%)" }}
+              aria-hidden="true"
+            />
+            {/* Veszélyjelzés: közel a hullám → piros szél (villogás nélkül). */}
+            <div
+              className="absolute inset-0 pointer-events-none z-[2] transition-opacity duration-500"
+              style={{ boxShadow: "inset 0 0 70px 18px rgba(244,63,94,0.55)", opacity: danger ? 1 : 0 }}
+              aria-hidden="true"
+              data-testid="tsunami-danger"
+              data-active={danger ? "true" : "false"}
+            />
+          </div>
 
-            {phase === "play" && (
-              <>
-                <p className="game-key-hint hidden md:block text-[11px] text-white/65 text-center mt-2 mb-1">
-                  Billentyűzet: <kbd className="px-1 rounded bg-white/15">←</kbd>{" "}
-                  <kbd className="px-1 rounded bg-white/15">→</kbd> vagy <kbd className="px-1 rounded bg-white/15">A</kbd>{" "}
-                  <kbd className="px-1 rounded bg-white/15">D</kbd>, sprint: <kbd className="px-1 rounded bg-white/15">Shift</kbd>
-                </p>
-                {/* G-8: touch-action:none — hosszú nyomásra a böngésző eddig kijelölt
-                    és görgetett, a futás pedig megállt. */}
-                <div
-                  className="tsunami-controls flex items-center justify-between gap-3 mt-1 sm:mt-3"
-                  style={{
-                    touchAction: "none",
-                    userSelect: "none",
-                    WebkitTouchCallout: "none",
-                    WebkitTapHighlightColor: "transparent",
-                  }}
+          <GameHud
+            onPause={pauseGame}
+            stats={[
+              { id: "goal", label: "Cél", value: `${correctQuizzesInRun}/${target}`, tone: "good" },
+              { id: "wave", label: "Hullám", value: `${distance} m`, tone: distanceTone },
+              { id: "xp", label: "Pont", value: sessionXp },
+            ]}
+            progress={{
+              value: correctQuizzesInRun,
+              max: target,
+              label: remaining > 0 ? `Még ${remaining} jó válasz` : "Megvan a győzelem!",
+            }}
+          >
+            <CouponHud session={coupon} />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="rounded-full border border-amber-200/60 bg-slate-950/70 px-2.5 py-1 text-[13px] font-black text-amber-200 backdrop-blur-sm">
+                {runSubjectMeta.chip}: {runSubjectMeta.label}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-slate-950/70 px-2.5 py-1 text-[13px] font-bold text-white backdrop-blur-sm">
+                <Wind className="h-4 w-4" aria-hidden="true" />
+                Sodrás: {driftDir >= 0 ? "jobbra" : "balra"}
+              </span>
+              {streak >= 2 && (
+                <span
+                  data-testid="tsunami-streak"
+                  className="inline-flex items-center gap-1 rounded-full border border-orange-200/70 bg-orange-500/85 px-2.5 py-1 text-[13px] font-black text-white"
                 >
-                {/*
-                 * Egységes köralakú vezérlés (spec 2026-09-20): a Balra/Jobbra gombok helyett
-                 * ugyanaz a tárcsa, mint az Aszteroidában. A sprint SZÁNDÉKOSAN külön gomb marad:
-                 * ha a tárcsa is állítaná, a felengedése kikapcsolná a gombbal tartott sprintet.
-                 */}
-                <VirtualJoystick
-                  label="Futás iránya"
-                  radius={52}
-                  onChange={(v) => {
-                    const dirs = joystickToDirections(v);
-                    keysRef.current.left = dirs.left;
-                    keysRef.current.right = dirs.right;
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  className="h-[104px] w-[104px] rounded-full touch-manipulation border-amber-100/60 bg-gradient-to-b from-amber-400 to-orange-500 text-slate-950 hover:brightness-110 active:scale-95 shadow-md shadow-amber-900/60 font-extrabold"
-                  onPointerDown={(e) => pressStart(e, "sprint")}
-                  onPointerUp={(e) => pressEnd(e, "sprint")}
-                  onPointerCancel={(e) => pressEnd(e, "sprint")}
-                  aria-label="Sprint"
+                  <Flame className="h-4 w-4" aria-hidden="true" />
+                  {streak}× sorozat
+                </span>
+              )}
+              {inSafeZone && phase === "play" && (
+                <span
+                  data-testid="tsunami-safe-zone"
+                  className="inline-flex items-center gap-1 rounded-full border border-emerald-200/70 bg-emerald-600/85 px-2.5 py-1 text-[13px] font-black text-white"
                 >
-                  <Wind className="w-8 h-8" />
-                </Button>
-              </div>
-              </>
-            )}
+                  <Shield className="h-4 w-4" aria-hidden="true" />
+                  Zónában: lassabb víz
+                </span>
+              )}
+            </div>
+          </GameHud>
+          <CouponExpiredOverlay session={coupon} />
 
-            {phase === "won" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-6 text-center" data-testid="ts-won">
-                <Trophy className="w-16 h-16 text-amber-300 drop-shadow-lg" />
-                <p className="text-xl font-black text-amber-200">Sikerült elmenekülni!</p>
-                <p className="text-sm font-semibold text-emerald-200/95 max-w-sm">
-                  Ez a nagy jutalom-kör: elég tudáspróba sikerült {runSubjectMeta.label.toLowerCase()} módban — így néz ki, amikor a gyakorlás meghozza a győzelmet!
-                </p>
-                <p className="text-sm text-white/80 max-w-xs">
-                  {correctQuizzesInRun} helyes kvíz · +{WIN_BONUS_XP} győzelmi bónusz XP · összesen ebben a körben:{" "}
-                  <strong className="text-amber-300">{sessionXp}</strong> XP
-                </p>
-                <p className="text-xs text-white/60">
-                  Futás: {runSeconds} mp · {difficultyLabel(runDifficultyRef.current)}
-                </p>
-                {syncEligibility?.eligible ? (
-                  <p className="text-xs text-emerald-300/90">
-                    A kör eredménye fel lett küldve a szervernek (ranglista frissülhet néhány másodperc alatt).
-                  </p>
-                ) : (
-                  <p className="text-xs text-white/45 max-w-xs mx-auto">{syncBanner}</p>
-                )}
-                <div className="flex flex-wrap gap-2 justify-center mt-2">
-                  <Button
-                    className="gap-1 bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 border border-amber-100/50"
-                    onClick={startGame}
-                    data-testid="button-tsunami-retry-won"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    Következő kör
-                  </Button>
-                  <Link href="/games">
-                    <Button variant="outline" className="border-white/40 text-white bg-slate-900/70 hover:bg-slate-800">
-                      Játéklista
-                    </Button>
-                  </Link>
+          <AnimatePresence>
+            {rewardBurst && (
+              <motion.div
+                key="reward"
+                className="absolute left-1/2 top-[38%] z-30 pointer-events-none -translate-x-1/2"
+                initial={reducedMotion ? false : { y: 16, opacity: 0, scale: 0.6 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, y: reducedMotion ? 0 : -24 }}
+                transition={{ type: "spring", stiffness: 420, damping: 18 }}
+              >
+                <div className="flex flex-col items-center gap-1">
+                  <span className="rounded-full bg-amber-300 text-slate-950 px-5 py-2 text-2xl font-black border-2 border-amber-100 shadow-[0_10px_28px_rgba(245,158,11,0.6)]">
+                    +{lastQuizXp} XP
+                  </span>
+                  <span className="rounded-full bg-slate-950/70 px-3 py-1 text-sm font-bold text-cyan-100">Lejjebb ment a víz!</span>
                 </div>
-              </div>
+              </motion.div>
             )}
+          </AnimatePresence>
 
-            {phase === "over" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-6 text-center">
-                <Waves className="w-12 h-12 text-cyan-400" />
-                <p className="text-lg font-bold">Utolért a hullám!</p>
-                <p className="text-sm text-white/80 max-w-sm font-medium">
-                  Legközelebb a kvízeknél is számít a gyors jó válasz — próbáld újra, már tudod, mire kell figyelni!
-                </p>
-                <p className="text-sm text-white/70">
-                  Kör XP: <strong className="text-amber-300">{sessionXp}</strong> · Futás:{" "}
-                  <strong>{runSeconds}</strong> mp · {difficultyLabel(runDifficultyRef.current)} · helyes kvíz:{" "}
-                  {correctQuizzesInRun}/{winQuizTarget(runDifficultyRef.current)}
-                </p>
-                {syncEligibility?.eligible ? (
-                  <p className="text-xs text-emerald-300/90">
-                    A kör eredménye fel lett küldve a szervernek (ranglista frissülhet néhány másodperc alatt).
-                  </p>
-                ) : (
-                  <p className="text-xs text-white/45 max-w-xs mx-auto">{syncBanner}</p>
-                )}
-                <div className="flex flex-wrap gap-2 justify-center mt-2">
-                  <Button
-                    className="gap-1 bg-gradient-to-r from-cyan-400 to-blue-600 border border-cyan-100/45"
-                    onClick={startGame}
-                    data-testid="button-tsunami-retry"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    Újra
-                  </Button>
-                  <Link href="/games">
-                    <Button variant="outline" className="border-white/40 text-white bg-slate-900/70 hover:bg-slate-800">
-                      Játéklista
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </main>
+          {phase === "play" && touch && (
+            /* G-8: touch-action:none — hosszú nyomásra a böngésző eddig kijelölt és görgetett, a futás megállt.
+               S9: csak érintős eszközön; a sáv a biztonsági sávon belül, a hüvelykujjak alatt. */
+            <div
+              className="tsunami-controls game-touch-layer"
+              data-game-controls
+              data-testid="tsunami-touch-controls"
+              style={{
+                touchAction: "none",
+                userSelect: "none",
+                WebkitTouchCallout: "none",
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              {/*
+               * Egységes köralakú vezérlés (spec 2026-09-20). A sprint SZÁNDÉKOSAN külön gomb marad: ha a tárcsa is
+               * állítaná, a felengedése kikapcsolná a gombbal tartott sprintet.
+               */}
+              <VirtualJoystick label="Futás iránya" radius="auto" resetSignal={joyReset} onChange={onJoystick} />
+              <HoldButton
+                label="Sprint"
+                size="auto"
+                onHoldStart={sprintStart}
+                onHoldEnd={sprintEnd}
+                className="flex-col gap-0.5 border-2 border-amber-100/70 bg-gradient-to-b from-amber-300 to-orange-500 text-slate-950 font-black shadow-[0_8px_24px_rgba(245,158,11,0.55)] active:scale-95 transition-transform"
+              >
+                <Wind className="h-7 w-7" aria-hidden="true" />
+                <span className="text-[13px] leading-none tracking-wide">SPRINT</span>
+              </HoldButton>
+            </div>
+          )}
+          {phase === "play" && !touch && (
+            <p
+              data-testid="tsunami-key-hint"
+              className="game-key-hint absolute left-1/2 z-30 -translate-x-1/2 rounded-full border border-white/20 bg-slate-950/75 px-4 py-2 text-sm font-semibold text-white/90 backdrop-blur-sm whitespace-nowrap"
+              style={{ bottom: "max(12px, var(--game-safe-bottom))" }}
+            >
+              Futás: <kbd className="px-1.5 rounded bg-white/15">←</kbd> <kbd className="px-1.5 rounded bg-white/15">→</kbd> vagy{" "}
+              <kbd className="px-1.5 rounded bg-white/15">A</kbd> <kbd className="px-1.5 rounded bg-white/15">D</kbd> · sprint:{" "}
+              <kbd className="px-1.5 rounded bg-white/15">Shift</kbd>
+            </p>
+          )}
+        </main>
+      )}
 
       <AnimatePresence>
         {phase === "quiz" && quiz && (
@@ -1818,60 +1783,129 @@ export default function TsunamiEscapeEnglish() {
             role="dialog"
             aria-modal="true"
             aria-label="Kvíz kérdés"
-            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/70 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-950/70 backdrop-blur-[2px]"
+            style={{
+              padding:
+                "max(8px, var(--game-safe-top)) max(8px, var(--game-safe-right)) max(8px, var(--game-safe-bottom)) max(8px, var(--game-safe-left))",
+            }}
+            initial={reducedMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <motion.div
-              initial={{ y: 40, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
+              initial={reducedMotion ? false : { y: 48, opacity: 0, scale: 0.98 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 420, damping: 32 }}
               ref={quizDialogRef}
               role="dialog"
               aria-modal="true"
               aria-label="Mini-teszt"
-              className={`w-full max-w-md rounded-2xl border border-cyan-200/50 bg-slate-950/95 p-4 shadow-[0_20px_56px_rgba(14,165,233,0.35)] ${
-                wrongShake ? "animate-shake" : ""
+              data-testid="ts-quiz"
+              className={`tsunami-quiz w-full max-w-lg max-h-full overflow-y-auto rounded-3xl border border-cyan-200/50 bg-slate-950/95 p-4 shadow-[0_20px_56px_rgba(14,165,233,0.35)] ${
+                wrongShake && !reducedMotion ? "animate-shake" : ""
               }`}
             >
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <span className="rounded-full border border-amber-200/60 bg-amber-300/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-200">
+              <div className="flex items-center justify-between gap-2">
+                <span className="rounded-full border border-amber-200/60 bg-amber-300/15 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-amber-200">
                   {quizSubjectMeta.chip} · {quizSubjectMeta.label}
                 </span>
-                <span className="text-xs font-bold text-cyan-300 uppercase tracking-wider">
-                  Mini-teszt — találd el, és jön a jutalom
+                <span
+                  className={`inline-flex items-center gap-1 text-sm font-black tabular-nums ${quizTimeLeft <= 3 ? "text-rose-300" : "text-amber-200"}`}
+                >
+                  <Timer className="h-4 w-4" aria-hidden="true" />
+                  Idő: {quizTimeLeft}s
                 </span>
               </div>
-              <p className="text-[11px] text-white/70 mb-1">Helyes válasz: XP + lejjebb a hullám. Figyelj az órára!</p>
-              <p className="text-[11px] text-amber-200/90 mb-1 inline-flex items-center gap-1">
-                <Timer className="w-3 h-3" />
-                Idő: {quizTimeLeft}s
-              </p>
-              <p className="text-[11px] text-emerald-300/90 mb-2">
-                Győzelemhez még:{" "}
-                {Math.max(0, winQuizTarget(runDifficultyRef.current) - correctQuizzesInRun)} helyes válasz ebben a körben
-              </p>
-              <p className="text-base font-semibold mb-4 leading-snug">{quiz.prompt}</p>
-              <div className="grid gap-2">
-                {quiz.options.map((opt, i) => (
-                  <Button
-                    key={i}
-                    variant="secondary"
-                    className="h-auto py-3 text-left justify-start whitespace-normal bg-slate-900/95 hover:bg-cyan-700/45 text-white border border-cyan-200/35"
-                    onClick={() => onAnswer(i)}
-                    {...correctDataAttrs(i === quiz.correctIndex)}
-                  >
-                    {opt}
-                  </Button>
-                ))}
+              <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden" aria-hidden="true">
+                <div
+                  className={`h-full w-full origin-left rounded-full ${quizTimeLeft <= 3 ? "bg-rose-400" : "bg-gradient-to-r from-cyan-300 to-sky-500"}`}
+                  style={{ transform: `scaleX(${quizRatio})`, transition: reducedMotion ? "none" : "transform 1s linear" }}
+                />
               </div>
-              <p className="text-[11px] text-white/60 mt-3 text-center leading-snug">
-                Rossz válasz vagy lejáró idő: a víz egy kicsit feljebb jön — de mehetsz tovább futni, és jön a következő esély. Ne add fel!
+              <p className="mt-3 text-lg sm:text-xl font-bold leading-snug text-white" data-testid="ts-prompt">
+                {quiz.prompt}
+              </p>
+              <div className="tsunami-answers mt-3 grid gap-2">
+                {quiz.options.map((opt, i) => {
+                  const fx = answerFx && answerFx.index === i ? (answerFx.ok ? "correct" : "wrong") : null;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      data-testid={`ts-option-${i}`}
+                      data-state={fx ?? "idle"}
+                      className={`game-answer-btn relative flex w-full items-center gap-3 rounded-2xl border px-3 py-2 text-left font-semibold text-white transition-colors ${
+                        fx === "correct"
+                          ? "border-emerald-200 bg-emerald-600"
+                          : fx === "wrong"
+                            ? "border-rose-200 bg-rose-700"
+                            : "border-cyan-200/35 bg-slate-900/95 hover:bg-cyan-700/45 active:bg-cyan-700/60"
+                      }`}
+                      onClick={() => onAnswer(i)}
+                      {...correctDataAttrs(i === quiz.correctIndex)}
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-black text-cyan-100">
+                        {fx === "correct" ? (
+                          <Check className="h-5 w-5" aria-hidden="true" />
+                        ) : fx === "wrong" ? (
+                          <X className="h-5 w-5" aria-hidden="true" />
+                        ) : (
+                          "ABCD"[i] ?? i + 1
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">{opt}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="tsunami-quiz-hint mt-3 text-sm text-white/70 text-center leading-snug">
+                Jó válasz: XP és lejjebb megy a hullám. Rossz vagy lejárt: kicsit feljebb jön — de mehetsz tovább!
               </p>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ResultScreen
+        open={resultOpen}
+        testId={phase === "won" ? "ts-won" : "ts-over"}
+        title={phase === "won" ? "Sikerült elmenekülni!" : "Utolért a hullám!"}
+        won={phase === "won"}
+        score={sessionXp}
+        best={bestResult?.best ?? bestScore.best}
+        isNewBest={bestResult?.isNewBest ?? false}
+        correct={correctQuizzesInRun}
+        total={Math.max(answeredCountRef.current, correctQuizzesInRun)}
+        onRetry={startGame}
+        retryTestId={phase === "won" ? "button-tsunami-retry-won" : "button-tsunami-retry"}
+        retryLabel={phase === "won" ? "Következő kör" : "Újra"}
+        onBack={() => navigate("/games")}
+        extra={
+          <div className="space-y-2">
+            <p className="text-sm text-white/80 leading-snug">
+              {phase === "won" ? `+${WIN_BONUS_XP} győzelmi bónusz XP` : `Még ${remaining} jó válasz kellett volna`} · Futás: {runSeconds} mp ·{" "}
+              {difficultyLabel(runDifficultyRef.current)}
+              {syncEligibility?.eligible ? " · felkerült a ranglistára" : ""}
+            </p>
+            {/* S9: az új jelvények az eredménykártyán, olvasható méretben (a közös toast 10–11 px-es). */}
+            {newlyUnlocked.length > 0 && (
+              <ul className="flex flex-wrap justify-center gap-1.5" data-testid="tsunami-new-badges">
+                {newlyUnlocked.map((a) => (
+                  <li
+                    key={a.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/60 bg-amber-300/15 px-3 py-1 text-sm font-bold text-amber-100"
+                  >
+                    <span aria-hidden="true">{a.icon}</span>
+                    Új jelvény: {a.title} (+{a.points} pont)
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        }
+      />
+
+      <PauseMenu open={paused && playingPhase} onResume={resumeGame} onRestart={startGame} onExit={exitToMenu} exitLabel="Kilépés a menübe" />
 
       <style>{`
         @keyframes shake {
@@ -1882,9 +1916,24 @@ export default function TsunamiEscapeEnglish() {
         .animate-shake {
           animation: shake 0.18s ease-in-out 2;
         }
+        /* M2: a közös pályaválasztó 44 px-es gombjai itt is legalább 48 px-esek (érintési cél). */
+        .tsunami-level-picker button { min-height: 52px; min-width: 52px; }
+        /* Mért (Pixel 7, 2,625-ös képpontarány): a pontosan 48 px-es elemek a kezdőképernyő belépője közben
+           47,9 px-nek is mérődnek — 52 px-szel van tartalék. */
+        .game-start-settings > summary, .game-start-secondary > *, .tsunami-settings-btn { min-height: 52px; }
+        .tsunami-level-picker p { font-size: 14px; }
+        /* A szünet- és eredménykártya rugós belépője 0,9–0,92-es méretről indul: 56 px-es gombbal a
+           belépés közben is legalább 48 px az érintési cél (mért: 52 px × 0,92 = 47,9 px). */
+        .game-pause-actions .game-btn, .game-pause-sound > button, .game-result-actions .game-btn { min-height: 56px; }
+        @media (min-width: 700px), (min-width: 560px) and (max-height: 500px) {
+          .tsunami-answers { grid-template-columns: 1fr 1fr; }
+          .tsunami-quiz { max-width: 720px; }
+        }
+        @media (max-height: 500px) {
+          .tsunami-quiz-hint { display: none; }
+        }
       `}</style>
       {explainCard && <QuizFeedbackCard card={explainCard} onDismiss={dismissExplain} />}
-
-    </div>
+    </GameShell>
   );
 }
