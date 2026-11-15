@@ -271,7 +271,10 @@ Minden K.7.1–K.7.2 export a fenti néven és szignatúrával létezik. Eltér�
   (`{ total; perLevel: readonly [n,n,n,n,n]; phraseRatio; perTopic }` — a K.7.1 `minimums.ts`-hez).
 - `quotas.ts`: + `phraseQuotaForCell(cell) = ceil(0,32 × cell)` (K.8.3; a riport méri).
 - `validate.ts`: + `BLOCKED_TERMS` (exportált; a K.7-es lista + `whiskey, casino, drunk` / `Kasino, betrunken` /
-  `casino, ivre`), + `exampleWordCount(example)`, + `formInExample(entry)`, + `VocabStats` típus. A tiltott szót a
+  `casino, ivre`), + `exampleWordCount(example)`, + `formInExample(entry)`, + `findFormInText(form, text)` (a
+  generátorral KÖZÖS szóhatáros kereső: kis-/nagybetű független, mindkét oldalon szóhatár, bármely (nem törő) szóköz;
+  review #421 — a „példa tartalmazza a term-et vagy egy alt alakot” szabály is ezzel mér, így „cat” nem megy át a
+  „This category is new.” mondaton), + `VocabStats` típus. A tiltott szót a
   term MINDEN szaván is keresi (a német névelős „das Bier” így is fennakad). A K.8.5 szabályaiból a validátor ezeket is
   hibának jelzi: ASCII `"` bármely szövegmezőben; a példamondat nem nagybetűvel/számmal kezdődik; nem `.`, `!`, `?`,
   `…` (+ esetleg `”`/`»`) zárja; az `alt` üres eleme.
@@ -280,7 +283,11 @@ Minden K.7.1–K.7.2 export a fenti néven és szignatúrával létezik. Eltér�
   tárolóolvasással — a választó ezzel nézi végig a szintet; enélkül bejegyzésenként parse-olná a tárolót),
   + `externalKey(text)` (= `"ext:" + normalizeTerm(text)`). Az időbélyeg nyelvenként szigorúan növekvő
   (`max(now(), eddigi max + 1)`), hogy az azonos ms-on belüli jelölések sorrendje is egyértelmű legyen. A változatlan
-  nyers JSON-t nem parse-olja újra (minden olvasás továbbra is a tárolóból). A cap a kézi (`ext:`) kulcsokat is számolja.
+  nyers JSON-t nem parse-olja újra (minden olvasás továbbra is a tárolóból). **Két külön korlát (review #421):** a
+  `setCap(lang, bankméret)` csak a szóbankos azonosítókra vonatkozik; a kézi (`ext:`) kulcsoké a rögzített
+  `EXTERNAL_CAP = 2000` (exportált); mindkét csoportban a legrégebbi törlődik, és kézi kulcs soha nem töröl szóbankos
+  bejegyzést (különben a bank kimerülése előtt ismétlés jönne). `size(lang)` az összes kulcs, + `bankSize(lang)` csak
+  a szóbankos kulcsok száma.
 - `questionGenerator.ts`: + `findTermInExample(entry)` (a review #419 szerinti cloze-szabály: csak a `term`,
   kis-/nagybetű függetlenül, szóhatáron, a szóköz bármely (nem törő) szóközzel egyezik; visszatekintés NÉLKÜL — a
   `no-lookbehind-client.test.ts` tiltja), + `langOfEntry(entry)` (a nyelv az azonosító előtagjából). A
@@ -691,7 +698,9 @@ minimumait követeli az adott nyelvre (A1).
      mondatot jelölne helyesnek). A kihagyás helye tehát mindig a `term` szó szerinti előfordulása, a helyes opció a `term`.
    - Prompt-sablonok (nyelvnév: angolul / németül / franciául):
      `hu-to-target`: `„<hu>” <nyelvnév>:`; `target-to-hu`: `Mit jelent: „<term>”?`;
-     `cloze`: `Melyik illik a mondatba? <példa, a talált alak helyén „_____”>`;
+     `cloze`: `Melyik illik a mondatba? <példa, a talált alak helyén „_____”> (Magyarul: <exampleHu>)` (review #421:
+     a fordítás teszi egyértelművé, melyik opció illik; a cloze rossz válaszai közül kimarad, amelynek a `hu`-ja szó
+     elején — toldalékkal is — szerepel az `exampleHu`-ban);
      `phrase-meaning`: `Mit jelent ez a mondat? „<example>”`.
    - Opciók: `hu-to-target` és `cloze` → term-ek; `target-to-hu` → `hu`-k; `phrase-meaning` → `exampleHu`-k.
    - Rossz válaszok (pontosan 3): azonos nyelv és `kind`, szint = kérdés szintje vagy ±1; elsőként azonos `pos`;

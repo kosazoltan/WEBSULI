@@ -1,5 +1,5 @@
 /** Szóbank-motor (szerződés: docs/specs/2026-11-15-jatekok-mobil-szobank-vegrehajtas.md K.7.2). */
-export { VOCAB_SEEN_KEY, createSeenHistory, externalKey, type SeenHistory, type StorageLike } from "./seenHistory";
+export { EXTERNAL_CAP, VOCAB_SEEN_KEY, createSeenHistory, externalKey, type SeenHistory, type StorageLike } from "./seenHistory";
 export {
   findTermInExample,
   generateVocabQuestion,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { VOCAB_SEEN_KEY, createSeenHistory } from "../client/src/game-engine/vocab/seenHistory";
+import { EXTERNAL_CAP, VOCAB_SEEN_KEY, createSeenHistory } from "../client/src/game-engine/vocab/seenHistory";
+import { VOCAB_EN } from "../client/src/data/vocabBank/vocab-en";
 import { createVocabSource } from "../client/src/game-engine/vocab/vocabSource";
 import { vocabLevelForGrade } from "../client/src/game-engine/vocab/level";
 import { startingDifficulty } from "../client/src/game-engine/difficulty";
@@ -148,24 +149,46 @@ test("A6: a localStorage hibája után a napló memóriában folytatódik, a kor
   assert.equal(history.size("en"), 2);
 });
 
-test("cap: 30 bejegyzéses banknál a napló mérete ≤ 30, a legrégebbiek törlődnek", () => {
+// SPEC-VÁLTOZÁS 2026-11-15 (review #421): a szóbankos azonosítók korlátja a bankméret, a kézi (ext:) kulcsoké külön
+// EXTERNAL_CAP — a követelmény nem lazul: a szóbankos rész továbbra is ≤ bankméret, és a kézi rész is korlátos.
+test("cap: 30 bejegyzéses banknál a szóbankos napló ≤ 30, a kézi kulcsok külön korlátban, a legrégebbiek törlődnek", () => {
   const bank = makeSyntheticBank("fr", [6, 6, 6, 6, 6], 6);
   const storage = memoryStorage();
   const history = createSeenHistory(storage, tickClock());
   const source = createVocabSource({ lang: "fr", entries: bank, history, rng: seededRng(6) });
+  let externals = 0;
   for (let i = 0; i < 100; i++) {
     source.next((i % 5) as VocabLevel);
-    if (i % 7 === 0) source.markExternal(`kézi válasz ${i}`);
-    assert.ok(history.size("fr") <= 30, `napló mérete ${history.size("fr")}`);
+    if (i % 7 === 0) { source.markExternal(`kézi válasz ${i}`); externals++; }
+    assert.ok(history.bankSize("fr") <= 30, `szóbankos napló mérete ${history.bankSize("fr")}`);
+    assert.equal(history.size("fr") - history.bankSize("fr"), externals, "a kézi kulcsok megmaradnak (≤ EXTERNAL_CAP)");
   }
   const stored = JSON.parse(storage.data.get(VOCAB_SEEN_KEY)!);
-  assert.ok(Object.keys(stored.langs.fr).length <= 30);
-  // A már tárolt, nagyobb naplót a setCap azonnal visszavágja.
+  assert.ok(Object.keys(stored.langs.fr).filter(k => !k.startsWith("ext:")).length <= 30);
+  // A már tárolt, nagyobb naplót a setCap azonnal visszavágja (csak a szóbankos részt).
   const h2 = createSeenHistory(storage, tickClock(9e12));
   for (let i = 0; i < 40; i++) h2.mark("fr", `fr0-family-${String(100 + i)}`);
   h2.setCap("fr", 10);
-  assert.equal(h2.size("fr"), 10);
+  assert.equal(h2.bankSize("fr"), 10);
+  assert.equal(h2.size("fr") - h2.bankSize("fr"), externals, "a setCap kézi kulcsot nem töröl");
   assert.equal(h2.has("fr", "fr0-family-139"), true, "a legújabb megmarad");
+  // A kézi kulcsok saját korlátja: EXTERNAL_CAP fölött a legrégebbi kézi kulcs törlődik, szóbankos soha.
+  for (let i = 0; i < EXTERNAL_CAP + 5; i++) h2.markExternal("fr", `tömeges ${i}`);
+  assert.equal(h2.size("fr") - h2.bankSize("fr"), EXTERNAL_CAP);
+  assert.equal(h2.bankSize("fr"), 10);
+  assert.equal(h2.hasExternal("fr", `tömeges ${EXTERNAL_CAP + 4}`), true);
+  assert.equal(h2.hasExternal("fr", "tömeges 0"), false);
+});
+
+test("review #421: 20 látott bejegyzés + 20 különböző kézi válasz után a next(0) nem látottat ad, amíg van", () => {
+  // A kommentben leírt forgatókönyv a 40 elemű angol mintabankon.
+  const storage = memoryStorage();
+  const source = createVocabSource({ lang: "en", entries: VOCAB_EN, history: createSeenHistory(storage, tickClock()), rng: seededRng(421) });
+  const ids: string[] = [];
+  for (let i = 0; i < 20; i++) ids.push(source.next(0)!.vocabId);
+  for (let i = 0; i < 20; i++) source.markExternal(`kézi válasz ${i}`);
+  for (let i = 0; i < 20; i++) ids.push(source.next(0)!.vocabId);
+  assert.equal(new Set(ids).size, 40, "a bank kimerüléséig nincs ismétlés");
 });
 
 test("markExternal: a kézi kérdés helyes válasza (term vagy hu) kizárja a bejegyzést", () => {

@@ -9,7 +9,7 @@ import { VOCAB_FR, VOCAB_FR_STAGE } from "../client/src/data/vocabBank/vocab-fr"
 import { PLAN_MINIMUMS, SAMPLE_MINIMUMS } from "../client/src/data/vocabBank/minimums";
 import { TOPIC_LEVEL_QUOTAS } from "../client/src/data/vocabBank/quotas";
 import { VOCAB_TOPICS } from "../client/src/data/vocabBank/topics";
-import { minimumProblems, normalizeTerm, vocabBankProblems, vocabBankStats } from "../client/src/data/vocabBank/validate";
+import { findFormInText, minimumProblems, normalizeTerm, vocabBankProblems, vocabBankStats } from "../client/src/data/vocabBank/validate";
 import { loadVocabBank, resetVocabBankCache } from "../client/src/data/vocabBank/loader";
 import type { VocabEntry, VocabLang, VocabMinimums, VocabStage } from "../client/src/data/vocabBank/types";
 import { blindExport, blindScore, reportLines } from "../scripts/vocab-bank";
@@ -95,6 +95,9 @@ test("a validátor elkapja a hibákat", () => {
     ["2 szavas példa", [{ ...GOOD_EN, example: "Dog barks." }], "en"],
     ["15 szavas példa", [{ ...GOOD_EN, example: "The dog is in the garden and it plays with a red ball all day long." }], "en"],
     ["term nélküli példa", [{ ...GOOD_EN, example: "The cat is in the garden." }], "en"],
+    // Review #421: a term csak szóhatáron számít — „cat” nincs benne a „category” szóban.
+    ["term csak szó belsejében", [{ ...GOOD_EN, term: "cat", example: "This category is new." }], "en"],
+    ["alt csak szó belsejében", [{ ...GOOD_EN, term: "go", example: "The government went home.", alt: ["gov"] }], "en"],
     ["de névelő nélküli főnév", [{ ...GOOD_DE, term: "Hund" }], "de"],
     ["fr sima szóköz ? előtt", [{ ...GOOD_FR, example: "Tu viens avec nous ?" }], "fr"],
     ["fr írásjel szóköz nélkül", [{ ...GOOD_FR, example: "Tu viens avec nous?" }], "fr"],
@@ -113,6 +116,14 @@ test("a validátor elkapja a hibákat", () => {
   for (const [name, entries, lang] of cases) {
     assert.ok(vocabBankProblems(entries, lang).length >= 1, `nem jelzett: ${name}`);
   }
+});
+
+test("szóhatáros keresés: névelős német term mondatkezdő nagybetűvel és francia nem törő szóközös példa átmegy", () => {
+  assert.deepEqual(vocabBankProblems([{ ...GOOD_DE, example: "Der Hund bellt." }], "de"), []);
+  assert.deepEqual(vocabBankProblems([GOOD_FR], "fr"), []);
+  assert.ok(findFormInText("tu viens", GOOD_FR.example), "a francia példában megtalálja");
+  assert.equal(findFormInText("cat", "This category is new."), null);
+  assert.deepEqual(findFormInText("cat", "My cat, Tom, is old."), { start: 3, end: 6 });
 });
 
 test("az alt alak elfogadott a példában (ragozott alak)", () => {

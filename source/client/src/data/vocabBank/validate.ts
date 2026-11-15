@@ -33,12 +33,34 @@ function wordsOf(s: string): string[] {
   return normalizeTerm(s).split(/[^\p{L}\d]+/u).filter(Boolean);
 }
 
-/** A példamondatban szó szerint (normalizálva) megtalálható alak: a term vagy az első illeszkedő `alt`. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Szóköz-osztály a mintákhoz: bármely (nem törő) szóköz. Sztringben, hogy a forrásban escape maradjon. */
+const SPACE_CLASS = "[\\s\\u00A0\\u202F]+";
+const NOT_WORD_CHAR = "[^\\p{L}\\p{N}]";
+
+/**
+ * Egy alak szó szerinti előfordulása a szövegben: kis-/nagybetűtől függetlenül, MINDKÉT oldalon szóhatáron, a
+ * szóközök bármely (nem törő) szóközzel egyeznek. Visszatekintés nélkül (régi Safari; no-lookbehind-client.test.ts):
+ * a bal határt elfogyasztott előtag adja. A generátor (cloze) és a validátor közös keresője (review #421).
+ */
+export function findFormInText(form: string, text: string): { start: number; end: number } | null {
+  const f = normalizeTerm(form);
+  if (!f) return null;
+  const pattern = f.split(" ").map(escapeRegExp).join(SPACE_CLASS);
+  const re = new RegExp(`(^|${NOT_WORD_CHAR})(${pattern})(?![\\p{L}\\p{N}])`, "iu");
+  const m = re.exec(text.normalize("NFC"));
+  if (!m) return null;
+  const start = m.index + m[1]!.length;
+  return { start, end: start + m[2]!.length };
+}
+
+/** A példamondatban szóhatáron megtalálható alak: a term vagy az első illeszkedő `alt`. */
 export function formInExample(entry: Pick<VocabEntry, "term" | "example" | "alt">): string | null {
-  const ex = normalizeTerm(entry.example);
   for (const form of [entry.term, ...(entry.alt ?? [])]) {
-    const f = normalizeTerm(form);
-    if (f && ex.includes(f)) return form;
+    if (findFormInText(form, entry.example)) return form;
   }
   return null;
 }

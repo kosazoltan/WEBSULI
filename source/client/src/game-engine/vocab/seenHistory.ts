@@ -18,9 +18,15 @@ export type SeenHistory = {
   /** Kézi kérdés helyes válasza; kulcs "ext:" + normalizeTerm(text). */
   markExternal(lang: VocabLang, text: string): void;
   hasExternal(lang: VocabLang, text: string): boolean;
-  /** Nyelvenként legfeljebb a bank mérete; túllépéskor a legrégebbiek törlődnek. */
+  /**
+   * A szóbankos azonosítók száma nyelvenként legfeljebb a bank mérete; túllépéskor a legrégebbiek törlődnek. A kézi
+   * (`ext:`) kulcsokra külön, rögzített korlát (`EXTERNAL_CAP`) vonatkozik; a kettő nem szorítja ki egymást.
+   */
   setCap(lang: VocabLang, bankSize: number): void;
+  /** Az összes kulcs (szóbankos + kézi) száma. */
   size(lang: VocabLang): number;
+  /** K.7.2-n túli, additív: csak a szóbankos (nem `ext:`) kulcsok száma. */
+  bankSize(lang: VocabLang): number;
   /**
    * K.7.2-n túli, additív: a nyelv naplója EGY tárolóolvasással (kulcs → ms; a kézi kulcsok "ext:" előtaggal).
    * A választó ezzel nézi végig a szintet, hogy ne bejegyzésenként olvassa és parse-olja a tárolót.
@@ -32,6 +38,8 @@ type LangLog = Record<string, number>;
 type Stored = { v: 1; langs: Partial<Record<VocabLang, LangLog>> };
 
 const EXTERNAL_PREFIX = "ext:";
+/** A kézi (`ext:`) kulcsok saját, rögzített felső korlátja nyelvenként (review #421). */
+export const EXTERNAL_CAP = 2000;
 
 function emptyStore(): Stored {
   return { v: 1, langs: {} };
@@ -98,12 +106,23 @@ export function createSeenHistory(storage: StorageLike | null, now: () => number
     }
   }
 
-  function trim(log: LangLog, cap: number | undefined): void {
-    if (cap === undefined) return;
-    const keys = Object.keys(log);
-    if (keys.length <= cap) return;
-    keys.sort((a, b) => log[a]! - log[b]!);
-    for (const k of keys.slice(0, keys.length - cap)) delete log[k];
+  /**
+   * Két külön korlát (review #421): a szóbankos azonosítókra a bankméret (`setCap`), a kézi (`ext:`) kulcsokra a
+   * rögzített `EXTERNAL_CAP`. Mindkét csoportban a legrégebbiek törlődnek, és egyik csoport sem szorítja ki a másikat
+   * — így a kézi válaszok nem felejttetik el a látott szóbankos bejegyzéseket a bank kimerülése előtt.
+   */
+  function trim(log: LangLog, bankCap: number | undefined): boolean {
+    let changed = false;
+    const cut = (keys: string[], cap: number) => {
+      if (keys.length <= cap) return;
+      keys.sort((a, b) => log[a]! - log[b]!);
+      for (const k of keys.slice(0, keys.length - cap)) delete log[k];
+      changed = true;
+    };
+    const all = Object.keys(log);
+    cut(all.filter(k => k.startsWith(EXTERNAL_PREFIX)), EXTERNAL_CAP);
+    if (bankCap !== undefined) cut(all.filter(k => !k.startsWith(EXTERNAL_PREFIX)), bankCap);
+    return changed;
   }
 
   function stamp(lang: VocabLang, key: string): void {
@@ -134,13 +153,13 @@ export function createSeenHistory(storage: StorageLike | null, now: () => number
       caps[lang] = cap;
       const store = read();
       const log = store.langs[lang];
-      if (log && Object.keys(log).length > cap) {
+      if (log) {
         const next = { ...log };
-        trim(next, cap);
-        write({ v: 1, langs: { ...store.langs, [lang]: next } });
+        if (trim(next, cap)) write({ v: 1, langs: { ...store.langs, [lang]: next } });
       }
     },
     size: lang => Object.keys(read().langs[lang] ?? {}).length,
+    bankSize: lang => Object.keys(read().langs[lang] ?? {}).filter(k => !k.startsWith(EXTERNAL_PREFIX)).length,
     // Másolás nélkül: minden írás új napló-objektumot épít (copy-on-write), így a visszaadott példány nem változik.
     snapshot: lang => read().langs[lang] ?? {},
   };

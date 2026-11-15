@@ -1,6 +1,6 @@
 import type { FourChoiceQuiz } from "../../types/gameQuiz";
 import type { VocabEntry, VocabKind, VocabLang, VocabLevel, VocabTopic } from "../../data/vocabBank/types";
-import { normalizeTerm } from "../../data/vocabBank/validate";
+import { findFormInText, normalizeTerm } from "../../data/vocabBank/validate";
 import { isPlayableQuestion } from "../../../../shared/game-quiz-contract";
 
 /**
@@ -40,16 +40,18 @@ function escapeRegExp(s: string): string {
  * review: ragozott alakból hiányos mondat nem készül, mert a helyes opció a term).
  */
 export function findTermInExample(entry: Pick<VocabEntry, "term" | "example">): { start: number; end: number } | null {
-  const term = normalizeTerm(entry.term);
-  if (!term) return null;
-  const pattern = term.split(" ").map(escapeRegExp).join("[\\s\\u00A0\\u202F]+");
-  // Bal szóhatár visszatekintés nélkül (a régi Safari nem ismeri, no-lookbehind-client.test.ts): elfogyasztott előtag.
-  const re = new RegExp(`(^|[^\\p{L}\\p{N}])(${pattern})(?![\\p{L}\\p{N}])`, "iu");
-  const text = entry.example.normalize("NFC");
-  const m = re.exec(text);
-  if (!m) return null;
-  const start = m.index + m[1]!.length;
-  return { start, end: start + m[2]!.length };
+  return findFormInText(entry.term, entry.example);
+}
+
+/**
+ * Magyar szó a magyar mondatban szó ELEJÉN (a toldalék megengedett: „kutya” ~ „A kutyát”) — a cloze rossz válaszai
+ * közül kizárja azt, amelyik a fordítás alapján is illene (review #421). Visszatekintés nélkül.
+ */
+function huAppearsIn(hu: string, sentenceHu: string): boolean {
+  const h = normalizeTerm(hu).replace(/[?!.…,;:]+$/u, "");
+  if (!h) return false;
+  const pattern = h.split(" ").map(escapeRegExp).join("[\\s\\u00A0\\u202F]+");
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${pattern}`, "iu").test(sentenceHu.normalize("NFC"));
 }
 
 function canCloze(entry: VocabEntry): boolean {
@@ -108,7 +110,9 @@ function pickDistractors(entry: VocabEntry, bank: readonly VocabEntry[], type: V
   const lang = langOfEntry(entry);
   const { term: termKey, hu: huKey } = keysOf(entry);
   const pool = bank.filter(c => c.id !== entry.id && c.kind === entry.kind && c.id.startsWith(lang ?? "")
-    && keysOf(c).term !== termKey && keysOf(c).hu !== huKey);
+    && keysOf(c).term !== termKey && keysOf(c).hu !== huKey
+    // Cloze: a fordítás alapján is illő rossz válasz kizárva (pl. a „kutya” jelentésű, ha a mondat „A kutya …”).
+    && !(type === "cloze" && huAppearsIn(c.hu, entry.exampleHu)));
   const near = (c: VocabEntry) => Math.abs(c.level - entry.level) <= 1;
   // Sorrend: (1) szomszéd szint + azonos szófaj, (2) szomszéd szint, (3) bármely szint — mindegyik a kind-on belül.
   const tiers = [
@@ -142,7 +146,8 @@ function promptFor(entry: VocabEntry, type: VocabQuestionType, lang: VocabLang):
       const hit = findTermInExample(entry);
       if (!hit) return null;
       const text = entry.example.normalize("NFC");
-      return `Melyik illik a mondatba? ${text.slice(0, hit.start)}${BLANK}${text.slice(hit.end)}`;
+      // A magyar fordítás egyértelművé teszi, melyik opció illik (review #421: nyelvtanilag több is illhetne).
+      return `Melyik illik a mondatba? ${text.slice(0, hit.start)}${BLANK}${text.slice(hit.end)} (Magyarul: ${entry.exampleHu})`;
     }
   }
 }

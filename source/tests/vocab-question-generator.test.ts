@@ -65,6 +65,8 @@ test("A3: 4000 seedelt kérdés minden típusból — 4 különböző opció, eg
       assert.equal(q.lang, "en");
       assert.equal(q.questionType, type);
       assert.equal(q.answerTerm, entry.term);
+      // Review #421: a cloze prompt a példamondat magyar fordítását is tartalmazza (egyértelmű a helyes kiegészítés).
+      if (type === "cloze") assert.ok(q.prompt.endsWith(`(Magyarul: ${entry.exampleHu})`), q.prompt);
     }
   }
   assert.equal(made, 4000);
@@ -112,8 +114,26 @@ test("cloze: „der Hund” → „Der Hund bellt.” (kis-/nagybetű független
   const bank = [HUND, ...DE_FILL];
   const q = generateVocabQuestion(HUND, bank, "cloze", seededRng(1));
   assert.ok(q);
-  assert.equal(q.prompt, "Melyik illik a mondatba? _____ bellt.");
+  // SPEC-VÁLTOZÁS 2026-11-15 (review #421, végrehajtás S1/7.): a cloze prompt a példa magyar fordítását is adja.
+  assert.equal(q.prompt, "Melyik illik a mondatba? _____ bellt. (Magyarul: A kutya ugat.)");
   assert.equal(q.options[q.correctIndex], "der Hund");
+});
+
+test("cloze: a fordítás alapján is illő rossz válasz (a hu-ja szó elején áll az exampleHu-ban) kizárva (review #421)", () => {
+  // „Der Hund und die Katze spielen.” — a „macska” a fordításban is szerepel, ezért a „die Katze” nem lehet rossz válasz.
+  const hund: VocabEntry = { ...HUND, example: "Der Hund und die Katze spielen.", exampleHu: "A kutya és a macska játszik." };
+  const extra: VocabEntry = { id: "de0-animals-005", term: "die Maus", hu: "egér", kind: "word", level: 0, topic: "animals", pos: "noun", example: "Die Maus ist klein.", exampleHu: "Az egér kicsi." };
+  const bank = [hund, ...DE_FILL, extra];
+  const rng = seededRng(12);
+  for (let i = 0; i < 200; i++) {
+    const q = generateVocabQuestion(hund, bank, "cloze", rng);
+    assert.ok(q);
+    assert.ok(!q.options.includes("die Katze"), "a fordításban szereplő jelentésű opció kimarad");
+  }
+  // A többi típusnál a „die Katze” továbbra is lehet rossz válasz.
+  const seen = new Set<string>();
+  for (let i = 0; i < 200; i++) generateVocabQuestion(hund, bank, "hu-to-target", rng)!.options.forEach(o => seen.add(o));
+  assert.ok(seen.has("die Katze"));
 });
 
 test("cloze: csak alt (ragozott) alak a példában → 500 próbából egyszer sem jön hiányos mondat", () => {
@@ -146,7 +166,7 @@ test("cloze: a francia nem törő szóköz megmarad (`Tu viens\\u00A0?`)", () =>
   ];
   const q = generateVocabQuestion(viens, [viens, ...fill], "cloze", seededRng(3));
   assert.ok(q);
-  assert.equal(q.prompt, "Melyik illik a mondatba? _____\u00A0?");
+  assert.equal(q.prompt, "Melyik illik a mondatba? _____\u00A0? (Magyarul: Jössz?)");
   const pm = generateVocabQuestion(viens, [viens, ...fill], "phrase-meaning", seededRng(3));
   assert.ok(pm);
   assert.ok(pm.prompt.includes("Tu viens\u00A0?"), "a phrase-meaning prompt is megtartja");
