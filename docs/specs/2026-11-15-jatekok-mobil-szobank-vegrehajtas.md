@@ -678,7 +678,10 @@ minimumait követeli az adott nyelvre (A1).
    kivételt soha nem enged ki. `setCap`: ha egy nyelv kulcsainak száma > cap, a legkisebb időbélyegűek törlődnek.
 7. `questionGenerator.ts` (terv 4.3):
    - `pickQuestionType`: `phrase` és `level ≥ 2` → a négy típusból egyenletesen; különben `hu-to-target`,
-     `target-to-hu`, `cloze` közül egyenletesen; `cloze` csak ha a term vagy egy `alt` megtalálható a példában.
+     `target-to-hu`, `cloze` közül egyenletesen; `cloze` CSAK akkor, ha a példamondat magát a
+     `term`-et tartalmazza (kis-/nagybetűtől függetlenül, szóhatáron). Ha a példában csak egy `alt` (ragozott) alak
+     szerepel, abból a bejegyzésből `cloze` NEM készül (review #419: a kihagyott „went” helyére a szótári „go” hibás
+     mondatot jelölne helyesnek). A kihagyás helye tehát mindig a `term` szó szerinti előfordulása, a helyes opció a `term`.
    - Prompt-sablonok (nyelvnév: angolul / németül / franciául):
      `hu-to-target`: `„<hu>” <nyelvnév>:`; `target-to-hu`: `Mit jelent: „<term>”?`;
      `cloze`: `Melyik illik a mondatba? <példa, a talált alak helyén „_____”>`;
@@ -740,7 +743,8 @@ minimumait követeli az adott nyelvre (A1).
   különböző opció; `correctIndex` 0–3, és az a helyes; nincs a helyessel azonos `hu`/`term` rossz válasz;
   magyarázat 30–300 karakter, tartalmazza a helyes opciót; `isPlayableQuestion(q) === true`; a helyes index
   eloszlása mind a 4 helyen 20–30% (egyenletes: 25% ± 5); azonos seed → azonos kérdés; `phrase-meaning` csak
-  `phrase` és `level ≥ 2`; `cloze` a „der Hund” → „Der Hund bellt.” esetre és `alt` alakra (`den Hund`), francia
+  `phrase` és `level ≥ 2`; `cloze` a „der Hund” → „Der Hund bellt.” esetre készül, de ha a példában csak `alt` alak áll
+  (`den Hund`, `went`), abból a bejegyzésből 500 próbálkozásból egyszer sem jön `cloze`; francia
   `Tu viens\u00A0?` mondatban a `\u00A0` megmarad; kevés jelöltnél a szomszéd szintről jön a rossz válasz.
 - `vocab-seen-history.test.ts`:
   - A4: szintetikus bank (szintenként 500), 10 egymás utáni `createVocabSource` UGYANAZON a memória-tárolón
@@ -1062,7 +1066,12 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
    (amplitúdó 0,06, 250 ms) — `reducedMotion` mellett forgás és remegés nélkül, csak elmozdulás. A DOM-mászó
    (921–937) ugyanezt 2D-ben (`rotate` és `scale`), `useReducedMotion` mellett nélküle.
 8. Szóbank (A7): `const vocab = useVocabQuizSource(lang, true)`. A `tiers` `useMemo` (348–369) után egy
-   `vocabTiers` `useMemo` `[vocab, lang]` függéssel: ha `vocab` van, `[0,1,2,3,4].map(l => vocab.buildPool(l, 60).map(q => vocab.toLadderItem(q)))`;
+   `vocabTiers` `useMemo` `[vocab, lang, runSeq]` függéssel, ahol a `runSeq` egy új `useState` számláló, amelyet a
+   `startGame` MINDEN futáskezdetkor (első indítás és „Újra” is) eggyel növel — így a készlet futásonként újraépül,
+   és a `buildPool` a tartós napló szerint a még nem látott bejegyzéseket adja (review #419: a laponként egyszer
+   épített készlet az „Újra” után már látott szavakat adott volna vissza, miközben a bankban még volt új). Új
+   teszteset a `word-ladder-vocab.test.ts`-ben: két egymást követő futás készlete (a köztes `markAsked` hívásokkal)
+   nem tartalmazza az első futásban megkérdezett bejegyzéseket, amíg a szinten van nem látott. Ha `vocab` van, `[0,1,2,3,4].map(l => vocab.buildPool(l, 60).map(q => vocab.toLadderItem(q)))`;
    a végső szintlista `dedupeTiersByContent(tiers.map((t, i) => [...t, ...vocabTiers[i]]))` (a meglévő tételek
    elöl). Amikor a kiválasztott tétel (`pickUnseen` eredménye, 425–428) szóbankos (`id` `vocab:` előtagú), a
    megjelenítéskor `vocab.markAsked({ vocabId })` (a `vocabId` az azonosító 2. mezője). Ha a tétel kézi, a helyes
