@@ -505,6 +505,19 @@ valós szerződést kövessék:**
    („nem érintős”, „érintős laptop”) csak `status: "full"` és megadott `touchControlsTestId` mellett fut.
    Képernyőkép: mindig `testInfo.outputPath()`, és ha `GAME_MOBILE_SHOT_DIR` meg van adva, oda is
    `<id>-<sz>x<m>-<állapot>.jpg` néven (JPEG 70).
+9/a. **Mérő-utójavítás (#429 bővítés, Brain Rot szelet mérése):** a `full` mód a játéktól független hibákat is kimért:
+    (1) M8 — a hálózati csonk a `/api/games/leaderboard` GET-re `{ ok: true }` objektumot adott, a valódi végpont
+    tömböt ad (`server/routes.ts`), ezért a `/games` lap „leaderboard.map is not a function” hibával összeomlott; a
+    csonk most `[]`-t ad, a pontszám-küldés (`POST /api/games/score`) külön ágon `{ ok: true }`-t;
+    (2) M2 — a mérő a `PauseMenu` / `ResultScreen` belépő animációja (scale 0,9 → 1) közben mért, így a 48 px-es gombok
+    47,x px-nek látszottak; a `smallTargets` előtt `waitForStable` vár (a párbeszéd mérete két egymást követő
+    mintavételnél azonos, nincs futó animáció) — a 48 px-es mérce nem lazult;
+    (3) helyi Windows-futásnál az ANGLE/D3D shader-fordító `THREE.WebGLProgram: Program Info Log: … warning X4122: sum
+    of … cannot be represented accurately in double precision` figyelmeztetése jelenik meg (Linux CI-ban nincs);
+    az `isBenignWebglEnvWarning` harmadik, szűk mintaként csak az olyan Program Info Log-ot engedi át, amelynek
+    minden sora `warning X4122` (egyetlen `error` sor is hibává teszi);
+    (4) közös kliens-komponensek mérete: `AchievementToast` 10–11 px-es szövegei ≥ 12 px-re, a `GradeLevelPicker`
+    gombjai és a `GamePedagogyPanel` súgó-gombja 44 → 48 px minimum magasságra (csak méret, viselkedés nem változik).
 10. **`playwright.game-mobile.config.ts`:** a port `GAME_MOBILE_PORT` környezeti változóval állítható (alap 5184), hogy
     párhuzamos munkafák ne ütközzenek.
 11. **Közös CSS-osztályok a változókon túl** (index.css, a `.game-shell-fixed > main` szabály elé): `.game-btn`,
