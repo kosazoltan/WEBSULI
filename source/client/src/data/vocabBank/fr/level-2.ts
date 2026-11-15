@@ -137,7 +137,7 @@ export const VOCAB_FR_L2: VocabEntry[] = [
   // ── body ──
   { id: "fr2-body-001", term: "la cheville", hu: "boka", kind: "word", level: 2, topic: "body", pos: "noun", example: "Elle a mal à la cheville après le match.", exampleHu: "A meccs után fáj a bokája." },
   { id: "fr2-body-002", term: "le coude", hu: "könyök", kind: "word", level: 2, topic: "body", pos: "noun", example: "Ne mets pas le coude sur la table.", exampleHu: "Ne tedd a könyöködet az asztalra." },
-  { id: "fr2-body-003", term: "la joue", hu: "orca (arcfél)", kind: "word", level: 2, topic: "body", pos: "noun", example: "Maman m'embrasse sur la joue.", exampleHu: "Anya arcon puszil." },
+  { id: "fr2-body-003", term: "la joue", hu: "orca, arcfél", kind: "word", level: 2, topic: "body", pos: "noun", example: "Maman m'embrasse sur la joue.", exampleHu: "Anya arcon puszil." },
   { id: "fr2-body-004", term: "le poignet", hu: "csukló", kind: "word", level: 2, topic: "body", pos: "noun", example: "J'ai mal au poignet après le tennis.", exampleHu: "Fáj a csuklóm a tenisz után.", alt: ["poignet"] },
   { id: "fr2-body-005", term: "le front", hu: "homlok", kind: "word", level: 2, topic: "body", pos: "noun", example: "Le front de Paul est chaud, il a de la fièvre.", exampleHu: "Pál homloka meleg, lázas." },
   { id: "fr2-body-006", term: "lever le bras", hu: "felemeli a karját", kind: "phrase", level: 2, topic: "body", pos: "phrase", example: "Le gardien peut lever le bras très haut.", exampleHu: "A kapus nagyon magasra tudja emelni a karját." },
