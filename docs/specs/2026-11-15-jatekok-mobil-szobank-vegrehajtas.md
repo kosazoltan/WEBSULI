@@ -573,7 +573,7 @@ minimumait követeli az adott nyelvre (A1).
 
 ## S1 — Szóbank-infrastruktúra
 
-**Állapot:** nincs elkezdve. Kanban #18. Modell: Opus. Függőség: S0 összevonva.
+**Állapot:** folyamatban — ág `feat/jatekok-s1-szobank-infra`, munkafa `.claude/worktrees/jatekok-s1`, kanban #18. Modell: Opus. Függőség: S0 összevonva.
 
 - **Cél:** a K.7.1–K.7.2 szerinti típusok, betöltő, validátor, kérdésgenerátor, közös ismétlés-napló és
   játék-adapter, nyelvenként szintenként 8 mintabejegyzéssel; egységtesztek; riport- és vakmegoldó-szkript a
