@@ -31,7 +31,9 @@ test.beforeEach(async ({ page }) => {
     }
     if (p.includes("quiz-bank") || p.includes("material-quizzes")) data = { items: [], materials: [] };
     if (p.includes("sync-eligibility")) data = { eligible: false };
-    if (p.includes("leaderboard") || p.includes("/api/game/score")) data = { ok: true };
+    // A valódi `GET /api/games/leaderboard` tömböt ad (server/routes.ts) — a csonk is tömb (`[]`), különben a
+    // `/games` lap „leaderboard.map is not a function” hibával összeomlik. A pontszám-küldés külön ág.
+    if (p === "/api/games/score" && route.request().method() === "POST") data = { ok: true };
     await route.fulfill({ json: data });
   });
 });

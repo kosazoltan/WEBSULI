@@ -49,7 +49,7 @@ function GamePedagogyPanel({ kidMission, parentBody, accent = "amber", className
   const a = accentStyles[accent];
   return (
     <Dialog>
-      <DialogTrigger className={cn("game-help shrink-0 min-h-[44px] rounded-lg border border-white/25 bg-slate-900 px-3 py-2 text-xs font-bold text-white text-left", className)}>
+      <DialogTrigger className={cn("game-help shrink-0 min-h-[48px] rounded-lg border border-white/25 bg-slate-900 px-3 py-2 text-xs font-bold text-white text-left", className)}>
         <Target className="inline h-4 w-4 mr-2" aria-hidden /> Hogyan játsszak?
       </DialogTrigger>
       <DialogContent className="border-slate-600 bg-slate-950 text-white">
@@ -64,7 +64,7 @@ function GamePedagogyPanel({ kidMission, parentBody, accent = "amber", className
         role="status"
         aria-live="polite"
       >
-        <p className={cn("flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider mb-1", a.label)}>
+        <p className={cn("flex items-center gap-1.5 text-xs font-black uppercase tracking-wider mb-1", a.label)}>
           <Target className="w-3.5 h-3.5 shrink-0" aria-hidden />
           A te küldetésed
         </p>
