@@ -1105,7 +1105,7 @@ M12/2 (nagy gombok, animáció, három nyelv a szóbankból); P2.
 
 ## S7 — Gyors matek sprint mobilra
 
-**Állapot:** nincs elkezdve. Kanban #24. Modell: Opus. Függőség: S1 és S2 összevonva. Nyelvi kérdés nincs (terv 4.6/4).
+**Állapot:** folyamatban — ág feat/jatekok-s7-matek-sprint, munkafa .claude/worktrees/jatekok-s7, kanban #24. Modell: Opus. Függőség: S1 és S2 összevonva. Nyelvi kérdés nincs (terv 4.6/4).
 
 - **Cél:** 4.5 keret; érintésre szabott nagy válaszrács, időcsík, sorozat- és kombó-visszajelzés, csökkentett mozgás.
 - **Ág:** `feat/jatekok-s7-matek-sprint`.
