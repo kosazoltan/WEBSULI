@@ -257,9 +257,7 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
           await page.getByTestId("game-pause").click();
           await expect(page.getByTestId("game-pause-menu")).toBeVisible();
           expectNoOverflow(await measureOverflow(page), "szünet", true);
-          // A párbeszéd rugós belépő animációja (scale 0,92 → 1) alatt a 52 px-es gomb 48 px alá mérhet:
-          // ugyanaz az elvárás, csak az animáció végéig újramérve (S7, 2026-11-15 mérve: 47,8 px).
-          await expect.poll(() => smallTargets(page), { message: "M2 szünet" }).toEqual([]);
+          expect(await smallTargets(page), "M2 szünet").toEqual([]);
           expect(await smallFonts(page), "M3 szünet").toEqual([]);
           await shot(page, testInfo, c, "pause");
           await page.getByTestId("game-resume").click();
@@ -271,7 +269,7 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
           await expect(page.locator('[data-testid="game-result-retry"], [data-game-retry]').first()).toBeVisible();
           await expect(page.getByTestId("game-result-back")).toBeVisible();
           expectNoOverflow(await measureOverflow(page), "eredmény", true);
-          await expect.poll(() => smallTargets(page), { message: "M2 eredmény" }).toEqual([]);
+          expect(await smallTargets(page), "M2 eredmény").toEqual([]);
           expect(await smallFonts(page), "M3 eredmény").toEqual([]);
           await shot(page, testInfo, c, "result");
         });
