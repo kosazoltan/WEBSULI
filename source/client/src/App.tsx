@@ -43,7 +43,6 @@ const SpeedQuizMath = lazy(() => import("@/pages/SpeedQuizMath"));
 const BrainRotSteal = lazy(() => import("@/pages/BrainRotSteal"));
 const SpaceAsteroidQuiz = lazy(() => import("@/pages/SpaceAsteroidQuiz"));
 const TornadoHunter200 = lazy(() => import("@/pages/TornadoHunter200"));
-const DuelArena = lazy(() => import("@/pages/DuelArena"));
 // JM7b: a /profile bejelentkezett játékosnál a „kis fiók”, vendégnél (és kikapcsolt flagnél) a régi helyi Profil oldal.
 const PlayerAccount = lazy(() => import("@/pages/PlayerAccount"));
 // JM7a: játékos belépés (PLAYER_ACCOUNTS flag mögött; kikapcsolva a „nem található” oldal jelenik meg).
@@ -109,7 +108,6 @@ function Router() {
         <Route path="/games/brain-rot-steal" component={BrainRotSteal} />
         <Route path="/games/space-asteroid-quiz" component={SpaceAsteroidQuiz} />
         <Route path="/games/tornado-hunter-200" component={TornadoHunter200} />
-        <Route path="/games/parbaj" component={DuelArena} />
         <Route path="/profile" component={PlayerAccount} />
         <Route path="/fiok" component={PlayerAccount} />
         <Route path="/belepes" component={PlayerLogin} />

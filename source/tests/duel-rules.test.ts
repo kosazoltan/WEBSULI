@@ -282,7 +282,7 @@ test("acceptedTimeMs: a kliens állítása sosem tesz gyorsabbá, mint a mérés
   }
 });
 
-test("az ablakon túl érkező válasz ROUND_CLOSED — a motor elutasítja, nem kerül a pontozásba (lásd duel-match.test.ts)", () => {
-  // A `scoreRound` védekezésből is 0-t ad rá (fent), a tényleges elutasítást a `reduceMatch` végzi.
+test("az ablakon túl érkező válasz ROUND_CLOSED — a motor elutasítja, nem kerül a pontozásba (lásd rt-room-machine.test.ts)", () => {
+  // A `scoreRound` védekezésből is 0-t ad rá (fent), a tényleges elutasítást a `reduceRoom` végzi (JM1r: a `reduceMatch` megszűnt).
   assert.equal(scoreRound([ans("a", true, W + 1)], ["a", "b"]).damageTo.b, 0);
 });
