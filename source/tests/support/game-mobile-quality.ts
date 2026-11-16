@@ -97,6 +97,30 @@ export async function waitForStable(page: Page, selector: string, timeout = 5_00
   );
 }
 
+/**
+ * Review #466 (J4b): egymást FEDŐ válaszcélok párjai (a doboz-metszet legalább 1 px mindkét irányban). Egy takart cél
+ * érintéssel nem választható — a mérő ezért a kérdés-állapotban (M2) ezt is méri. Üres tömb = nincs átfedés.
+ */
+export async function overlappingTargets(page: Page, selector: string): Promise<string[]> {
+  return page.evaluate((sel) => {
+    const els = Array.from(document.querySelectorAll(sel)).filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+    const out: string[] = [];
+    for (let i = 0; i < els.length; i++) {
+      for (let j = i + 1; j < els.length; j++) {
+        const a = els[i]!.getBoundingClientRect();
+        const b = els[j]!.getBoundingClientRect();
+        const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (ix >= 1 && iy >= 1) out.push(`${els[i]!.textContent?.trim()} × ${els[j]!.textContent?.trim()}`);
+      }
+    }
+    return out;
+  }, selector);
+}
+
 /** Ennyi egymást követő (rAF) mintán kell a mozgó céloknak érintési méretűnek és láthatónak lenniük. */
 export const MOVING_SAMPLES = 6;
 
@@ -425,6 +449,11 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
             // abban a kvízóra csíkja futó játékban jogosan folyamatosan mozog (lásd SETTLE_SELECTOR).
             if (c.quizMoving) await waitForTargetsInView(page, `${c.quizScope} [data-correct]`);
             else await waitForStable(page, `${c.quizScope} [data-correct]`);
+            // M2 (review #466): a válaszcélok nem fedhetik egymást — mozgó célnál több mintán is.
+            for (let k = 0; k < (c.quizMoving ? 5 : 1); k++) {
+              expect(await overlappingTargets(page, `${c.quizScope} [data-correct]`), "M2 egymást fedő válaszcélok").toEqual([]);
+              if (c.quizMoving) await page.waitForTimeout(200);
+            }
             expectNoOverflow(await measureOverflow(page), "kvíz", true);
             expect(await smallTargets(page), "M2 kvíz").toEqual([]);
             expect(await smallFonts(page), "M3 kvíz").toEqual([]);
