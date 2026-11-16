@@ -294,6 +294,32 @@ Minden K.7.1–K.7.2 export a fenti néven és szignatúrával létezik. Eltér�
   `generateVocabQuestion` `null`-t ad, ha a típus nem alkalmazható (cloze term nélkül, phrase-meaning nem phrase-re
   vagy L0–L1-re), és ha a kész kérdés `isPlayableQuestion`-on elbukna. A rossz válaszok egymás között is különböző
   `term`-, `hu`- és opció-szövegűek.
+- **Jelentés-átfedés szabály (S1 utójavítás, 2026-11-16; terv 4.3 „a rossz válasz nem lehet a helyes válasz
+  szinonimája”; a #427, #428, #431 review-jai):** a teljes `hu`-egyezés nem elég, mert a nagy bankokban a jelentések
+  vesszős felsorolások („dzseki, bomberdzseki” ↔ „dzseki”; „motyog, mormol” ↔ „motyog”), illetve csak írásjelben térnek
+  el („mennyibe kerül ez?” ↔ „mennyibe kerül ez”). Exportált tiszta függvények a `questionGenerator.ts`-ben:
+  - `meaningKeys(hu: string): string[]` — a zárójeles részek (`(…)`) kiesnek; darabolás `,` `;` `/` mentén;
+    darabonként NFC, kisbetű, szóköz-összevonás, a szélekről (a végéről is) a `? ! . … „ ” " '` írásjelek levágva; az
+    üres darab kimarad. Pl. „dzseki, bomberdzseki” → [„dzseki”, „bomberdzseki”]; „óra (időegység)” → [„óra”];
+    „sok (valamiből)” → [„sok”], tehát a „sok” bejegyzéssel ÁTFED (szándékos: a zárójel csak pontosítás).
+  - `meaningsOverlap(a: string, b: string): boolean` — igaz, ha a két kulcshalmaznak van közös eleme; csak TELJES
+    kulcs-egyezés számít, részszó nem („ág” ≠ „világ”, „arc” ≠ „arcfesték”).
+  - `termKey(term: string): string` — `normalizeTerm` + a szélső írásjelek levágása („How old are you?” = „how old
+    are you”). A névelő nélküli alak összevetése NEM a generátor dolga (az adatoldal kezeli).
+  - `pickDistractors` minden kérdéstípusnál kizárja a jelöltet, ha (a) `hu`-ja átfed a helyes bejegyzés `hu`-jával,
+    (b) a `termKey`-e egyezik a helyesével vagy egy már választott elterelőével, (c) `hu`-ja átfed egy már választott
+    elterelő `hu`-jával — a 4 opció bejegyzéseinek jelentés-kulcsai páronként diszjunktak. A `phrase-meaning`
+    `exampleHu`-különbözősége és a cloze-szűrés változatlanul megmarad. A tartalék-lánc (szomszéd szint → bármely
+    szint → `null`) változatlan; a szigorúbb szűrés miatt gyakrabban lép tartalékra.
+  - `scripts/vocab-bank.ts report`: + nem-hiba összesítő sor `jelentés-átfedő párok (azonos szint±1, azonos kind): N`,
+    és `--overlaps` kapcsolóval a párok listája (`azonosító — term — hu ↔ azonosító — term — hu`) az adat-szintű
+    tisztításhoz; a kilépési kód és a meglévő sorok változatlanok. Exportált: `overlapPairs(entries)`.
+  - Teszt: `tests/vocab-distractor-overlap.test.ts` (táblázatos kulcs-esetek, a négy review-forgatókönyv 500 seeden,
+    és bank-szintű invariáns a fában lévő MINDEN bankra, minden generálható típusra, 5 seeddel).
+  - Futásidő (a teljes bankokon mérve): a bank nyelv + kind csoportjai bankonként egyszer (`WeakMap`, hossz-eltérésnél
+    újraépül); a kizárási szabályok lustán, a keverés sorrendjében futnak (lusta Fisher–Yates); a cloze magyar
+    szó-keresése regex-építés nélkül; `findTermInExample` objektumonként gyorsítótárazott. A kiválasztás eloszlása
+    változatlanul egyenletes az érvényes jelöltek között, azonos seed → azonos kérdés.
 - `vocabSource.ts`: `next(level, { types })` — ha a véletlen típus nincs a `types`-ban, a `types`-ból választ; ha a
   választott típus nem készíthető, egyszer `hu-to-target`-tel próbál. Kimerülésnél a „legrégebben látott” a
   bejegyzés azonosítójának ÉS a term/hu kézi kulcsának legkésőbbi időbélyege szerint számít. `markAsked` csak a bank
@@ -1189,7 +1215,7 @@ M12/2 (nagy gombok, animáció, három nyelv a szóbankból); P2.
 
 ## S7 — Gyors matek sprint mobilra
 
-**Állapot:** nincs elkezdve. Kanban #24. Modell: Opus. Függőség: S1 és S2 összevonva. Nyelvi kérdés nincs (terv 4.6/4).
+**Állapot:** folyamatban — ág feat/jatekok-s7-matek-sprint, munkafa .claude/worktrees/jatekok-s7, kanban #24. Modell: Opus. Függőség: S1 és S2 összevonva. Nyelvi kérdés nincs (terv 4.6/4).
 
 - **Cél:** 4.5 keret; érintésre szabott nagy válaszrács, időcsík, sorozat- és kombó-visszajelzés, csökkentett mozgás.
 - **Ág:** `feat/jatekok-s7-matek-sprint`.
@@ -1249,7 +1275,7 @@ az intervallum-callback tartalmazza a `paused` feltételt; `sq-won`, `sq-over`, 
 
 ## S8 — Brain Rot Lopás mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #25. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** review — ág feat/jatekok-s8-brainrot, munkafa .claude/worktrees/jatekok-s8, kanban #25, PR #424
 
 - **Cél:** 4.5 keret; a lények mérete és élettartama a képernyőhöz és az évfolyamhoz igazodik; látványosabb lények;
   angol kérdések a szóbankból (A8).
@@ -1330,7 +1356,11 @@ az intervallum-callback tartalmazza a `paused` feltételt; `sq-won`, `sq-over`, 
 
 ## S9 — Szökőár szökés mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #26. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** review — ág feat/jatekok-s9-szokoar, munkafa .claude/worktrees/jatekok-s9, kanban #26. Eltérések: a szóbank
+angol ÉS vegyes módban is be van kapcsolva (a vegyes kör is ad angol kérdést); a mobil-eset `path`-ja
+`/games/tsunami-english?difficulty=easy` (a játéklistán a Szökőárnak csak nehézség-linkjei vannak); az új jelvények a
+eredménykártyán is (olvasható, megmaradó jutalom; a közös toast helyett); a kezdőképernyő érintési céljai 52 px-esek (a
+belépő animáció közben is ≥ 48 px). A szünet- / eredménykártya helyi 56 px-es felülírása a #429 után kikerült.
 
 - **Cél:** 4.5 keret; érintővezérlés csak érintős eszközön; a könnyű grafika az eszköz képességétől függ, nem a
   szélességtől; látványosabb hullám, part és futó; ismétlés-szűrés a teljes futásra; angol kérdések a szóbankból (A8).

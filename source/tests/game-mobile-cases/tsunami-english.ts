@@ -1,12 +1,42 @@
-import { waitForPlaying, type GameMobileCase } from "../support/game-mobile-quality";
+import { expect, type Page } from "@playwright/test";
 
-/** S2 alapállapot; az S9 állítja "full"-ra (pontos playReady, érintővezérlő, answerWrong). */
+import type { GameMobileCase } from "../support/game-mobile-quality";
+
+type GameTestWindow = { __websuliGame?: { forceState: (patch: Record<string, unknown>) => void } };
+
+/**
+ * S9 — Szökőár szökés, teljes mérés. Játszható: érintős eszközön a vezérlősáv, egérrel a billentyű-súgó
+ * (érintővezérlés csak érintős eszközön — terv 4.6/1, M5).
+ */
 export const CASE: GameMobileCase = {
   id: "tsunami-english",
-  path: "/games/tsunami-english",
-  status: "baseline",
+  /*
+   * A játéklistán a Szökőár kártyája nem egy közös hivatkozás, hanem három nehézség-link
+   * (`Games.tsx`: `/games/tsunami-english?difficulty=easy|normal|hard`). Az M8 („a listáról legfeljebb két
+   * koppintás”) ezért a valós belépési úttal mér: „Könnyű” → „Indítás”.
+   */
+  path: "/games/tsunami-english?difficulty=easy",
+  status: "full",
+  startTestId: "button-tsunami-start",
   startName: /indít|indul|start|menekül|rajta/i,
-  playReady: waitForPlaying,
+  playReady: async (page: Page) => {
+    await expect(page.locator('[data-testid="tsunami-touch-controls"], [data-testid="tsunami-key-hint"]').first()).toBeVisible({
+      timeout: 15_000,
+    });
+  },
+  touchControlsTestId: "tsunami-touch-controls",
   resultForce: { phase: "won", correctCount: 8 },
   resultTestId: "ts-won",
+  answerWrong: async (page: Page) => {
+    await page.waitForFunction(
+      () => typeof (window as unknown as GameTestWindow).__websuliGame?.forceState === "function",
+      undefined,
+      { timeout: 15_000 },
+    );
+    await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame?.forceState({ phase: "quiz" }));
+    const wrong = page.locator('[data-testid="ts-quiz"] [data-correct="false"]').first();
+    await expect(wrong).toBeVisible({ timeout: 10_000 });
+    await wrong.click();
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible({ timeout: 10_000 });
+  },
 };
