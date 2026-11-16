@@ -11,7 +11,9 @@
  * A dinamikus (HTTP) mátrix: tests/admin-authz-matrix-db.integration.ts (eldobható adatbázison).
  */
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import express, { type RequestHandler } from "express";
 import { ADMIN_PREFIXES, isUnderAdminPrefix, routeInventory, type Endpoint } from "./support/route-inventory";
 
@@ -24,7 +26,7 @@ process.env.GOOGLE_CLIENT_SECRET ??= "guard-test-client-secret";
 
 const { isAuthenticatedAdmin } = await import("../server/auth");
 const { mountAppRoutes } = await import("../server/app-routes");
-const { isPlayerGuard, requirePlayerAccountsFlag } = await import("../server/player/require-player");
+const { isOwnDataGuard, isPlayerGuard, requirePlayerAccountsFlag } = await import("../server/player/require-player");
 
 function unguardedAdminEndpoints(endpoints: readonly Endpoint[], guard: RequestHandler): string[] {
   return endpoints.filter((e) => isUnderAdminPrefix(e.path) && !e.chain.includes(guard)).map((e) => `${e.method} ${e.path}`);
@@ -50,6 +52,9 @@ const PINNED_ADMIN_ENDPOINTS = [
  * admin előtag / rögzített adminvégpont / szándékosan nyilvános (más őrrel). Elavult (már nem létező vagy azóta
  * admin-őrzött) tétel is bukás, így a lista mindig a valós állapot.
  */
+/** N2 (tulajdonosi döntés 2026-11-16): a tiltott játékost is beengedő „saját adat” őr (`requireOwnData`) végpontjai — CSAK ezek. */
+const OWN_DATA = new Set(["POST /api/player/export", "POST /api/player/account/delete/start", "POST /api/player/account/delete"]);
+
 const PUBLIC_ENDPOINTS: Record<string, string> = {
   "GET /auth/google": "Google-belépés indítása (OAuth)",
   "GET /auth/google/callback": "Google OAuth visszahívás (Passport, session-regenerate)",
@@ -93,9 +98,9 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   // ÚJ független biztonsági review-t igényel (közös eszköz, testvér-forgatókönyv).
   "POST /api/player/link-learner": "JM7b: tanulói profil összekapcsolása — flag + requirePlayer + CSRF + Origin + aláírt tanulói token + megerősítés + friss belépés",
   "POST /api/player/unlink-learner": "JM7b: összekapcsolás bontása — flag + requirePlayer + CSRF + Origin",
-  "POST /api/player/export": "JM7b: adatletöltés (csak saját) — flag + requirePlayer + CSRF + Origin + óránkénti korlát",
-  "POST /api/player/account/delete/start": "JM7b: törlési kód a fiók címére — flag + requirePlayer + CSRF + Origin + korlát, a belépőkód-keret",
-  "POST /api/player/account/delete": "JM7b: fióktörlés — flag + requirePlayer + CSRF + Origin + megerősítő szó + e-mailben küldött egyszeri kód",
+  "POST /api/player/export": "JM7b: adatletöltés (csak saját) — flag + requireOwnData (N2: tiltott is) + CSRF + Origin + óránkénti korlát",
+  "POST /api/player/account/delete/start": "JM7b: törlési kód a fiók címére — flag + requireOwnData (N2: tiltott is) + CSRF + Origin + korlát, a belépőkód-keret",
+  "POST /api/player/account/delete": "JM7b: fióktörlés — flag + requireOwnData (N2: tiltott is) + CSRF + Origin + megerősítő szó + e-mailben küldött egyszeri kód",
   "POST /api/rt/ticket": "JM2/JM3a: valós idejű belépőjegy — MP_MODE (off → 404; admin → szobát csak admin nyit, csatlakozni bárki; on → nyitás fiók / tanulói profil / admin, ACCOUNT_REQUIRED), Origin-allowlist, IP-korlát; csatlakozó vendég generált becenévvel",
   "GET /api/rt/status": "JM2: { enabled, mode, szoba- és meccsszám } — nyilvános, PII nélkül (telepítés előtti őr)",
   "GET /api/auth/user": "saját felhasználó (vagy null)",
@@ -194,20 +199,35 @@ describe("JM7a — admin-útvonal regressziós őr", () => {
       "POST /api/player/auth/verify", "POST /api/player/auth/logout", "GET /api/player/me"]);
     const player = inventory.filter((e) => e.path.startsWith("/api/player/"));
     assert.ok(player.length >= 13, `legalább 13 játékos-végpont várt, ennyi lett: ${player.length}`);
-    const unguarded = player.filter((e) => !PRE_LOGIN.has(key(e)) && !e.chain.some(isPlayerGuard)).map(key);
+    const guarded = (e: (typeof player)[number]) => e.chain.some(isPlayerGuard) || (OWN_DATA.has(key(e)) && e.chain.some(isOwnDataGuard));
+    const unguarded = player.filter((e) => !PRE_LOGIN.has(key(e)) && !guarded(e)).map(key);
     assert.deepEqual(unguarded, []);
     // Az őr a flag-őr UTÁN áll (kikapcsolt flag mellett előbb a 404, DB-hívás nélkül).
-    for (const e of player.filter((x) => x.chain.some(isPlayerGuard))) {
+    for (const e of player.filter((x) => x.chain.some(isPlayerGuard) || x.chain.some(isOwnDataGuard))) {
       const flagAt = e.chain.indexOf(requirePlayerAccountsFlag);
-      assert.ok(flagAt >= 0 && flagAt < e.chain.findIndex(isPlayerGuard), `${key(e)}: a flag-őr a requirePlayer előtt kell`);
+      const guardAt = e.chain.findIndex((fn) => isPlayerGuard(fn) || isOwnDataGuard(fn));
+      assert.ok(flagAt >= 0 && flagAt < guardAt, `${key(e)}: a flag-őr a játékos-őr előtt kell`);
     }
+  });
+
+  it("N2: a tiltottat is beengedő „saját adat” őr PONTOSAN az export / törlési kód / törlés végponton van, máshol sehol", () => {
+    const withOwnData = inventory.filter((e) => e.chain.some(isOwnDataGuard)).map(key).sort();
+    assert.deepEqual(withOwnData, [...OWN_DATA].sort());
+    // Ezeken nincs requirePlayer is (a tiltott különben 403-at kapna) — és a forrásban az őrt csak a fiók-router hozza létre.
+    for (const e of inventory.filter((x) => x.chain.some(isOwnDataGuard))) assert.ok(!e.chain.some(isPlayerGuard), key(e));
+    const serverDir = fileURLToPath(new URL("../server/", import.meta.url));
+    const users = readdirSync(serverDir, { recursive: true, encoding: "utf8" })
+      .filter((f) => f.endsWith(".ts") && readFileSync(`${serverDir}${f}`, "utf8").includes("createRequireOwnData("))
+      .map((f) => f.split("\\").join("/")).sort();
+    assert.deepEqual(users, ["player/account-routes.ts", "player/require-player.ts"]);
   });
 
   it("JM7b: az admin „Játékosok” végpontjai admin előtag alatt, isAuthenticatedAdmin-nal", () => {
     const admin = inventory.filter((e) => e.path.startsWith("/api/admin/game-accounts"));
     assert.deepEqual(admin.map(key).sort(), [
       "GET /api/admin/game-accounts", "GET /api/admin/game-accounts/:id/email",
-      "POST /api/admin/game-accounts/:id/ban", "POST /api/admin/game-accounts/:id/unban", "POST /api/admin/game-accounts/:id/unlink-learner",
+      "POST /api/admin/game-accounts/:id/ban", "POST /api/admin/game-accounts/:id/delete", "POST /api/admin/game-accounts/:id/unban",
+      "POST /api/admin/game-accounts/:id/unlink-learner",
     ]);
     for (const e of admin) assert.ok(e.chain.includes(isAuthenticatedAdmin), `${key(e)}: hiányzik az admin-őr`);
   });
