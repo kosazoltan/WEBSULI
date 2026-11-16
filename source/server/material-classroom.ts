@@ -6,8 +6,8 @@
  * 0-s kategória (`legacyClassroom`, server/studio/pipeline-store.ts): 0-ra állításkor csak a `html_files` változik — a lecke
  * és a forrásjegyzék a tartalmi évfolyamot tartja (a Stúdió korosztály-regisztere abból számol).
  */
-import { and, eq, inArray } from "drizzle-orm";
-import { htmlFiles, improvedHtmlFiles, knowledgeMaps, lessons, studioJobs } from "../shared/schema";
+import { and, eq, gt, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
+import { htmlFiles, improvedHtmlFiles, knowledgeMaps, lessons, oneStepRuns, studioJobs } from "../shared/schema";
 import { isValidClassroom } from "../shared/classrooms";
 import { withLessonArt } from "./design-assets";
 import { db } from "./db";
@@ -28,6 +28,34 @@ export function normalizeMaterialIds(ids: readonly string[]): string[] {
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export const BUSY_MESSAGE = "Ezen az anyagon épp gyártás, javítás vagy okosítás fut; próbáld újra, ha véget ért.";
+
+/**
+ * Review #465 (Codex P2): futó munka, amely az anyagra, a leckéjére VAGY a forrásjegyzékére hivatkozik. Egy publikált lecke
+ * forrásjegyzékéből indított új gyártás (`from-map`) a jobban csak a `map_id`-t hordozza (a `lesson_id` csak publikáláskor kerül
+ * bele), és a korábban betöltött évfolyammal dolgozik — alatta az évfolyam nem módosítható. A határok a futás-őrrel azonosak
+ * (gyártás: 6 óra, egylépéses futás: 30 perc frissesség), hogy egy elárvult sor ne zárja le örökre az anyagot.
+ */
+async function hasActiveWork(tx: Tx, ids: string[], lessonIds: string[], mapIds: string[]): Promise<boolean> {
+  const improving = await tx.select({ id: improvedHtmlFiles.id }).from(improvedHtmlFiles)
+    .where(and(inArray(improvedHtmlFiles.originalFileId, ids), eq(improvedHtmlFiles.status, "processing"))).limit(1);
+  if (improving.length) return true;
+  if (!lessonIds.length) return false;
+  const jobs = await tx.select({ id: studioJobs.id }).from(studioJobs).where(and(
+    or(inArray(studioJobs.lessonId, lessonIds), inArray(studioJobs.mapId, mapIds)),
+    inArray(studioJobs.status, ["pending", "queued", "running", "processing"]),
+    isNull(studioJobs.finishedAt),
+    gt(studioJobs.createdAt, sql`now() - interval '6 hours'`),
+  )).limit(1);
+  if (jobs.length) return true;
+  const runs = await tx.select({ id: oneStepRuns.id }).from(oneStepRuns).where(and(
+    or(inArray(oneStepRuns.lessonId, lessonIds), inArray(oneStepRuns.mapId, mapIds)),
+    notInArray(oneStepRuns.phase, ["done", "parked", "error"]),
+    gt(oneStepRuns.updatedAt, sql`now() - interval '30 minutes'`),
+  )).limit(1);
+  return runs.length > 0;
+}
 export type MaterialClassroomResult = { files: number; lessons: number; maps: number };
 
 export async function setMaterialClassroomTx(tx: Tx, rawIds: readonly string[], classroom: number): Promise<MaterialClassroomResult> {
@@ -39,22 +67,15 @@ export async function setMaterialClassroomTx(tx: Tx, rawIds: readonly string[], 
   const files = await tx.select({ id: htmlFiles.id }).from(htmlFiles).where(inArray(htmlFiles.id, ids)).for("update");
   if (files.length !== ids.length) throw new MaterialClassroomError(`${ids.length - files.length} tananyag nem található`, 404);
 
-  const improving = await tx.select({ id: improvedHtmlFiles.id }).from(improvedHtmlFiles)
-    .where(and(inArray(improvedHtmlFiles.originalFileId, ids), eq(improvedHtmlFiles.status, "processing")));
-  if (improving.length) throw new MaterialClassroomError("Egy kijelölt tananyag okosítása folyamatban van; várd meg a végét.", 409);
-
   const rows = await tx.select({ id: lessons.id, mapId: lessons.mapId, json: lessons.json, version: lessons.version })
     .from(lessons).where(inArray(lessons.htmlFileId, ids)).for("update");
-  if (rows.length) {
-    const active = await tx.select({ id: studioJobs.id }).from(studioJobs)
-      .where(and(inArray(studioJobs.lessonId, rows.map((r) => r.id)), inArray(studioJobs.status, ["queued", "running", "processing"])));
-    if (active.length) throw new MaterialClassroomError("Egy kijelölt lecke gyártása még fut; várd meg a befejezését.", 409);
-  }
+  const lessonIds = rows.map((r) => r.id);
+  const mapIds = [...new Set(rows.map((r) => r.mapId))];
+  if (await hasActiveWork(tx, ids, lessonIds, mapIds)) throw new MaterialClassroomError(BUSY_MESSAGE, 409);
 
   let lessonWrites = 0;
   let mapWrites = 0;
   if (classroom !== 0 && rows.length) {
-    const mapIds = [...new Set(rows.map((r) => r.mapId))];
     const users = await tx.select({ mapId: lessons.mapId, htmlFileId: lessons.htmlFileId }).from(lessons).where(inArray(lessons.mapId, mapIds));
     if (users.some((u) => u.htmlFileId !== null && !ids.includes(u.htmlFileId))) {
       throw new MaterialClassroomError("A lecke forrásjegyzékét egy másik tananyag is használja; az évfolyamot együtt kell áthelyezni.", 409);

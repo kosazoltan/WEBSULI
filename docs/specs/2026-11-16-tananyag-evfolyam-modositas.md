@@ -106,6 +106,9 @@ vagy maradjon a tartalmi évfolyam?
 - [ ] M4 WHEN az évfolyam érvénytelen THEN the system SHALL 400-at adni, és semmit nem írni.
 - [ ] M5 WHEN bármely tétel hiányzik, futó gyártás / okosítás alatt áll vagy a forrásjegyzéke megosztott THEN the system SHALL az
   egész kérést visszagörgetni (404 / 409).
+  Review #465: futó munkának számít az anyagra, a leckéjére VAGY a forrásjegyzékére hivatkozó Stúdió-job (a `from-map` gyártás
+  csak `map_id`-t hordoz), a friss egylépéses futás (`one_step_runs`) és a folyamatban lévő okosítás; tömegesen egyetlen érintett
+  tétel is az egész kérést visszagörgeti (a részleges áthelyezés a kijelölés egy részét csendben kihagyná).
 - [ ] M6 WHEN nem admin hívja THEN the system SHALL 401 / 403-at adni, és az adatbázis változatlan.
 - [ ] M7 WHEN az évfolyam megváltozott THEN the system SHALL a főoldali lista-gyorsítótárat mindkét úton üríteni.
 - [ ] M8 WHEN az admin felületen átállított Studio-lecke oldalát megnyitják THEN the system SHALL az új évfolyamot mutatni.

@@ -41,6 +41,11 @@ before(async () => {
   // Futó gyártás alatt álló lecke.
   await seedLesson(`${P}busy`, `${P}map-busy`, `${P}lesson-busy`, 5);
   await dbPool.query(`INSERT INTO studio_jobs (lesson_id, map_id, step, status, input_hash) VALUES ('mc-lesson-busy', 'mc-map-busy', 'author', 'running', 'mc')`);
+  // Review #465: publikált lecke forrásjegyzékéből indított, még csak map_id-s gyártás; és egy futó egylépéses gyártás.
+  await seedLesson(`${P}frommap`, `${P}map-frommap`, `${P}lesson-frommap`, 4);
+  await dbPool.query(`INSERT INTO studio_jobs (id, map_id, step, status, input_hash) VALUES ('mc-job-frommap', 'mc-map-frommap', 'pedagogue', 'running', 'mc-fm')`);
+  await seedLesson(`${P}onestep`, `${P}map-onestep`, `${P}lesson-onestep`, 4);
+  await dbPool.query(`INSERT INTO one_step_runs (id, phase, map_id) VALUES ('mc-run-onestep', 'author', 'mc-map-onestep')`);
   // Megosztott forrásjegyzék: két különböző anyag leckéje ugyanazon a jegyzéken.
   await seedLesson(`${P}shared-a`, `${P}map-shared`, `${P}lesson-shared-a`, 6);
   await seedLesson(`${P}shared-b`, `${P}map-shared`, `${P}lesson-shared-b`, 6);
@@ -97,6 +102,29 @@ describe("szerkesztő (PATCH /api/html-files/:id)", () => {
     const r = await admin.request("PATCH", `/api/html-files/${P}busy`, { classroom: 7, title: "Új cím" });
     assert.equal(r.status, 409, r.text);
     assert.deepEqual(await databaseFingerprint(), fp);
+  });
+});
+
+describe("futó munka a forrásjegyzéken (review #465)", () => {
+  it("csak map_id-s futó gyártás → 409 érthető üzenettel, semmi nem íródik; a gyártás lezárása után sikerül", async () => {
+    const fp = await databaseFingerprint();
+    const r = await admin.request("PATCH", `/api/html-files/${P}frommap`, { classroom: 6 });
+    assert.equal(r.status, 409, r.text);
+    assert.match((r.json as { message: string }).message, /épp gyártás, javítás vagy okosítás fut/);
+    assert.deepEqual(await databaseFingerprint(), fp);
+    await dbPool.query(`UPDATE studio_jobs SET status = 'ok', finished_at = now() WHERE id = 'mc-job-frommap'`);
+    const ok = await admin.request("PATCH", `/api/html-files/${P}frommap`, { classroom: 6 });
+    assert.equal(ok.status, 200, ok.text);
+    const s = await state(`${P}frommap`);
+    assert.deepEqual({ html: s.html, json: s.json, map: s.map }, { html: 6, json: 6, map: 6 });
+  });
+
+  it("futó egylépéses gyártás a forrásjegyzéken → 409; tömegesen egyetlen érintett tétel miatt az egész visszagörög", async () => {
+    const fp = await databaseFingerprint();
+    assert.equal((await admin.request("PATCH", `/api/html-files/${P}onestep`, { classroom: 6 })).status, 409);
+    const bulk = await admin.request("POST", "/api/admin/materials/bulk-move", { materialIds: ["mc-plain", `${P}bulk-lesson`, `${P}onestep`], classroom: 11 });
+    assert.equal(bulk.status, 409, bulk.text);
+    assert.deepEqual(await databaseFingerprint(), fp, "a nem érintett tételek sem íródhatnak");
   });
 });
 
