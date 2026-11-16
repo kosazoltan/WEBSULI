@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "wouter";
 import { Clock, Timer } from "lucide-react";
 
@@ -46,34 +48,61 @@ export function CouponHud({ session }: { session: CouponSession }) {
  * The child is not thrown out of the game — the overlay sits on top, so an unfinished
  * run stays visible behind it. What it offers is the route back to the lesson, because
  * that is where the next minute comes from.
+ *
+ * Layering: portalled into `document.body` and stacked by `--game-z-coupon-expired`
+ * (index.css), above every game layer — the shared pause menu and result screen
+ * (`.game-overlay`, z 80) and the quiz feedback card (z 90) included. Otherwise the
+ * child would reach "play again" instead of the way back to the lesson. The dialog is
+ * modal: the full-screen backdrop takes every pointer event and focus lands on the link.
  */
 export function CouponExpiredOverlay({ session }: { session: CouponSession }) {
-  if (!session.expired) return null;
+  const backRef = useRef<HTMLButtonElement>(null);
+  const expired = session.expired;
+
+  useEffect(() => {
+    if (!expired) return;
+    backRef.current?.focus({ preventScroll: true });
+    // The only focusable control is the way back: keep Tab on it instead of the layers below.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        backRef.current?.focus({ preventScroll: true });
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [expired]);
+
+  if (!expired || typeof document === "undefined") return null;
 
   const back =
     session.lessonId !== null
       ? `/lesson/${session.lessonId}${session.sectionIdx != null && session.sectionIdx >= 0 ? `#section-${session.sectionIdx + 1}` : ""}`
       : "/games";
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+      className="game-coupon-expired"
       data-testid="coupon-expired"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="coupon-expired-title"
     >
-      <div className="max-w-sm w-full rounded-2xl bg-card p-6 text-center space-y-4">
+      <div className="max-w-sm w-full rounded-2xl bg-card p-6 text-center text-card-foreground space-y-4">
         <Clock className="w-10 h-10 mx-auto text-amber-500" />
-        <h2 className="text-xl font-bold">Idő lejárt</h2>
+        <h2 id="coupon-expired-title" className="text-xl font-bold">
+          Idő lejárt
+        </h2>
         <p className="text-sm text-muted-foreground">
           Elfogyott a játékidőd. Egy újabb próba a leckében újabb perceket ér.
         </p>
         <Link href={back}>
-          <Button className="w-full min-h-11" data-testid="coupon-expired-back">
+          <Button ref={backRef} className="w-full min-h-12 text-base" data-testid="coupon-expired-back">
             Vissza a leckéhez
           </Button>
         </Link>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -403,6 +403,8 @@
   --game-good: #22c55e;
   --game-bad: #f43f5e;
   --game-warn: #f59e0b;
+  /* Rétegrend: .game-overlay (szünet, eredmény) 80 < kvíz-visszajelzés 90 < kupon-lejárat. */
+  --game-z-coupon-expired: 95;
 }
 .game-action-btn {
   width: var(--game-action-size);
@@ -523,6 +525,14 @@
 .game-hud-progress[data-tone="warn"] .game-hud-progress-fill { background: linear-gradient(90deg, #f59e0b, #fbbf24); box-shadow: 0 0 12px #f59e0b99; }
 .game-hud-progress[data-tone="bad"] .game-hud-progress-fill { background: linear-gradient(90deg, #e11d48, #fb7185); box-shadow: 0 0 12px #f43f5e99; }
 .game-hud-progress-label { flex: 0 0 auto; font-size: max(12px, calc(var(--game-hud-font) - 2px)); font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; }
+
+/* A lejárt játékidő párbeszéde: minden játékréteg (HUD, kvíz, szünet, eredmény) fölött, modális. */
+.game-coupon-expired {
+  position: fixed; inset: 0; z-index: var(--game-z-coupon-expired, 95);
+  display: flex; align-items: center; justify-content: center;
+  padding: max(16px, var(--game-safe-top)) max(16px, var(--game-safe-right)) max(16px, var(--game-safe-bottom)) max(16px, var(--game-safe-left));
+  background: rgb(0 0 0 / 0.78); pointer-events: auto; overflow: auto;
+}
 
 /* Fedőréteg és párbeszédkártya (szünet, eredmény) — portálon a body-ban. */
 .game-overlay {
