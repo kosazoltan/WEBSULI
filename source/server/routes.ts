@@ -81,6 +81,7 @@ const materialViewDedup = new ViewDedup();
 // Tanulói profil (S2): tanuló + anyag megtekintése óránként egyszer, minden útvonalon (/dev/:id, Stúdió-lecke, PDF) közösen.
 const learnerViewDedup = new ViewDedup();
 import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
+import { vapidSubject } from "./lib/vapid-subject";
 import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
 import { hasHtmlLessonData } from "../shared/lesson-html-data";
 import { extractClassroomFromTitle } from "@shared/classrooms";
@@ -3006,7 +3007,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       webPush.setVapidDetails(
-        'mailto:mszilva78@gmail.com',
+        vapidSubject(),
         vapidPublicKey,
         vapidPrivateKey
       );

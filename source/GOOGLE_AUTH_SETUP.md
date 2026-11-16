@@ -19,7 +19,7 @@ GOOGLE_CLIENT_SECRET=***REMOVED***
 BASE_URL=https://websuli.vip
 
 # Admin email - ez a felhasználó automatikusan admin jogokat kap Google login után
-ADMIN_EMAIL=kosa.zoltan.ebc@gmail.com
+ADMIN_EMAIL=<ADMIN_EMAIL>
 
 # Session secret (legalább 32 karakter)
 SESSION_SECRET=your-super-secret-session-key-here

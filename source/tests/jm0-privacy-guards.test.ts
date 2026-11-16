@@ -85,7 +85,7 @@ describe("JM0 — ranglista: a valódi név és e-mail nem kerül a válaszba", 
 describe("JM0 — e-mail a naplókban", () => {
   it("maskEmail: a cím nem fejthető vissza, hibás bemenet nem szivárog", () => {
     assert.equal(maskEmail("anna@example.com"), "a***@e***.com");
-    assert.equal(maskEmail("  Zoli.Kosa@iskola.edu.hu "), "Z***@i***.hu");
+    assert.equal(maskEmail("  Zsuzsa.Teszt@iskola.pelda.hu "), "Z***@i***.hu");
     assert.equal(maskEmail("nincs-kukac"), "***");
     assert.equal(maskEmail("@example.com"), "***");
     assert.equal(maskEmail("anna@"), "***");

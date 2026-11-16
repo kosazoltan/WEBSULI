@@ -190,7 +190,7 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
   tanulónak hibaüzenetet ad (korábban mailto nyílt). Teendő: Render env beállítása (user).
 - 2026-09-02: Resend-kulcs megkapva (helyi gitignore-olt .env-be került, chatbe/commitba NEM).
   Helyi próba: POST /api/material-result → 200 delivered:1, Resend id 58364b34-… a
-  kosa.zoltan.ebc@gmail.com címre (feladó: WebSuli <onboarding@resend.dev>). render.yaml:
+  az admin-címre (ADMIN_EMAILS) (feladó: WebSuli <onboarding@resend.dev>). render.yaml:
   RESEND_API_KEY / RESEND_FROM_EMAIL / ADMIN_EMAILS sync:false. ÉLESBEN a Render
   dashboardon kell beállítani (nincs Render API-token) — amíg nincs, az endpoint 503.
 

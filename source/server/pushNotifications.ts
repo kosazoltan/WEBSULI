@@ -4,11 +4,12 @@
 import webPush from 'web-push';
 import { storage } from './storage';
 import { logger } from "./lib/logger";
+import { vapidSubject } from "./lib/vapid-subject";
 
 // Initialize VAPID configuration
 const vapidPublicKey = process.env.PUBLIC_VAPID_KEY;
 const vapidPrivateKey = process.env.PRIVATE_VAPID_KEY;
-const vapidEmail = 'mailto:mszilva78@gmail.com';
+const vapidEmail = vapidSubject();
 
 let vapidConfigured = false;
 

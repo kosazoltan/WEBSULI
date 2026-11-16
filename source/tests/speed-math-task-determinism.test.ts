@@ -58,3 +58,29 @@ test("azonos seed → bitre azonos feladatsor minden évfolyamon (tanári + gene
     }
   }
 });
+
+test("J4b — 3–4. évfolyamon az olvashatósági szűrőn átmenő feladatsor nem egyhangú: van benne rövid szöveges feladat", async () => {
+  const { towerDirectorConfig } = await import("../client/src/lib/speedMath/core");
+  const m = load() as Mod & { pickTask: Mod["pickTask"] };
+  for (const grade of [3, 4]) {
+    const fits = towerDirectorConfig(grade).promptFits!;
+    m.setTaskRandom(createRng(seedFrom("speed-quiz-math", "variety", grade)).next);
+    const seen: string[] = [];
+    let word = 0;
+    let total = 0;
+    const accept = (t: Task) => fits({ id: "", prompt: t.prompt, options: t.options.map(String), correctIndex: t.correctIndex });
+    for (let i = 0; i < 120; i++) {
+      const t = (m.pickTask as unknown as (g: number, s: readonly string[], b?: number, a?: (t: Task) => boolean) => Task)(grade, seen, undefined, accept);
+      seen.push(t.prompt);
+      if (!accept(t)) continue;
+      total += 1;
+      // szöveges: van benne legalább két (≥ 4 betűs) magyar szó a „Mennyi” / „Hány” kérdőszón kívül
+      const words = (t.prompt.match(/[a-záéíóöőúüű]{4,}/gi) ?? []).filter((w) => !/^(mennyi|hány)$/i.test(w));
+      if (words.length >= 2) word += 1;
+    }
+    console.log(`[speed-math-variety] ${grade}. évf.: ${total} elfogadott feladatból ${word} szöveges`);
+    // az `accept` csak sorrend: ha 6 próbára sincs beférő, más is jöhet
+    assert.ok(total >= 90, `${grade}: elfogadott ${total}/120`);
+    assert.ok(word / total >= 0.25, `${grade}: szöveges arány ${(word / total).toFixed(2)}`);
+  }
+});
