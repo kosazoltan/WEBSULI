@@ -1215,7 +1215,7 @@ M12/2 (nagy gombok, animáció, három nyelv a szóbankból); P2.
 
 ## S7 — Gyors matek sprint mobilra
 
-**Állapot:** nincs elkezdve. Kanban #24. Modell: Opus. Függőség: S1 és S2 összevonva. Nyelvi kérdés nincs (terv 4.6/4).
+**Állapot:** folyamatban — ág feat/jatekok-s7-matek-sprint, munkafa .claude/worktrees/jatekok-s7, kanban #24. Modell: Opus. Függőség: S1 és S2 összevonva. Nyelvi kérdés nincs (terv 4.6/4).
 
 - **Cél:** 4.5 keret; érintésre szabott nagy válaszrács, időcsík, sorozat- és kombó-visszajelzés, csökkentett mozgás.
 - **Ág:** `feat/jatekok-s7-matek-sprint`.
@@ -1275,7 +1275,7 @@ az intervallum-callback tartalmazza a `paused` feltételt; `sq-won`, `sq-over`, 
 
 ## S8 — Brain Rot Lopás mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #25. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** review — ág feat/jatekok-s8-brainrot, munkafa .claude/worktrees/jatekok-s8, kanban #25, PR #424
 
 - **Cél:** 4.5 keret; a lények mérete és élettartama a képernyőhöz és az évfolyamhoz igazodik; látványosabb lények;
   angol kérdések a szóbankból (A8).
@@ -1356,7 +1356,11 @@ az intervallum-callback tartalmazza a `paused` feltételt; `sq-won`, `sq-over`, 
 
 ## S9 — Szökőár szökés mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #26. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** review — ág feat/jatekok-s9-szokoar, munkafa .claude/worktrees/jatekok-s9, kanban #26. Eltérések: a szóbank
+angol ÉS vegyes módban is be van kapcsolva (a vegyes kör is ad angol kérdést); a mobil-eset `path`-ja
+`/games/tsunami-english?difficulty=easy` (a játéklistán a Szökőárnak csak nehézség-linkjei vannak); az új jelvények a
+eredménykártyán is (olvasható, megmaradó jutalom; a közös toast helyett); a kezdőképernyő érintési céljai 52 px-esek (a
+belépő animáció közben is ≥ 48 px). A szünet- / eredménykártya helyi 56 px-es felülírása a #429 után kikerült.
 
 - **Cél:** 4.5 keret; érintővezérlés csak érintős eszközön; a könnyű grafika az eszköz képességétől függ, nem a
   szélességtől; látványosabb hullám, part és futó; ismétlés-szűrés a teljes futásra; angol kérdések a szóbankból (A8).

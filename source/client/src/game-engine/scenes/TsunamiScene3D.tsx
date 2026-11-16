@@ -385,6 +385,9 @@ type Kid = {
   rider: THREE.Group;
   armL: THREE.Group;
   armR: THREE.Group;
+  /** S9: hip pivots, so the ride cycle can pump the legs. */
+  legL: THREE.Group;
+  legR: THREE.Group;
   head: THREE.Group;
 };
 
@@ -403,10 +406,18 @@ function buildKid(): Kid {
   const skin = std("#f7c6a0", { roughness: 0.7 });
   const legMat = std("#4f46e5", { roughness: 0.7 });
   const legGeo = new RoundedBoxGeometry(0.13, 0.27, 0.14, 2, 0.03);
-  rider.add(mesh(legGeo, legMat, -0.1, 0.135, 0), mesh(legGeo, legMat, 0.1, 0.135, 0));
   const shoeGeo = new RoundedBoxGeometry(0.15, 0.06, 0.18, 2, 0.02);
   const shoeMat = std("#f8fafc", { roughness: 0.5 });
-  rider.add(mesh(shoeGeo, shoeMat, -0.1, 0.03, 0.02), mesh(shoeGeo, shoeMat, 0.1, 0.03, 0.02));
+  // S9: each leg hangs from a hip pivot (y = 0.27), so the ride cycle can swing it.
+  const makeLeg = (side: number) => {
+    const hip = new THREE.Group();
+    hip.position.set(side * 0.1, 0.27, 0);
+    hip.add(mesh(legGeo, legMat, 0, -0.135, 0), mesh(shoeGeo, shoeMat, 0, -0.24, 0.02));
+    rider.add(hip);
+    return hip;
+  };
+  const legL = makeLeg(-1);
+  const legR = makeLeg(1);
   rider.add(mesh(new RoundedBoxGeometry(0.38, 0.34, 0.25, 2, 0.05), std("#fb7a1c", { roughness: 0.6 }), 0, 0.44, 0));
   rider.add(mesh(new RoundedBoxGeometry(0.39, 0.07, 0.26, 2, 0.02), std("#fde68a", { roughness: 0.6 }), 0, 0.47, 0));
 
@@ -445,7 +456,7 @@ function buildKid(): Kid {
   const smile = new THREE.TorusGeometry(0.05, 0.012, 6, 14, Math.PI);
   smile.rotateZ(Math.PI);
   head.add(mesh(smile, std("#9f1239"), 0, 0.125, 0.166));
-  return { group, rider, armL, armR, head };
+  return { group, rider, armL, armR, legL, legR, head };
 }
 
 type Buoy = { group: THREE.Group; light: THREE.MeshStandardMaterial; glow: THREE.Sprite };
@@ -779,8 +790,11 @@ function setupTsunami(
         float zz = -vWorld.z;
         float onLand = smoothstep(4.5, 6.0, zz) * (1.0 - smoothstep(106.0, 112.0, zz));
         float gap = vWorld.y - terrainH(vWorld.x, vWorld.z);
-        float shore = (1.0 - smoothstep(0.0, 0.55 + 0.25 * grain, gap)) * onLand;
-        float foam = clamp(max(max(crest * 0.75, edge), shore * 0.9), 0.0, 1.0);
+        // S9: a wider surf line where the sea meets the beach.
+        float shore = (1.0 - smoothstep(0.0, 0.9 + 0.35 * grain, gap)) * onLand;
+        // S9: whitecaps where the wave face is steep (foam follows the waveH slope).
+        float steep = smoothstep(0.16, 0.42, length(vSlope) + 0.06 * grain) * near;
+        float foam = clamp(max(max(max(crest * 0.75, edge), shore * 0.9), steep * 0.6), 0.0, 1.0);
         col = mix(col, vec3(0.96, 0.99, 1.0), foam);
         col = mix(col, uFogColor, smoothstep(${FOG_NEAR.toFixed(1)}, ${FOG_FAR.toFixed(1)}, dist));
         col = mix(col, vec3(0.92, 0.95, 1.0), uFlash * 0.45);
@@ -790,6 +804,21 @@ function setupTsunami(
       }
     `,
   });
+  // S9: wet sand — the terrain darkens in a band just above the (moving) waterline.
+  terrainMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uLevel = waterUniforms.uLevel;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying float vWetY;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWetY = (modelMatrix * vec4(transformed, 1.0)).y;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform float uLevel;\nvarying float vWetY;")
+      .replace(
+        "#include <color_fragment>",
+        "#include <color_fragment>\nfloat wetBand = (1.0 - smoothstep(0.0, 1.15, vWetY - uLevel)) * step(uLevel - 0.6, vWetY);\ndiffuseColor.rgb *= mix(1.0, 0.68, wetBand);",
+      );
+  };
+  terrainMat.customProgramCacheKey = () => "tsunami-wet-sand";
+
   const surface = new THREE.Mesh(buildWaterSurface(xs, zs), surfaceMat);
   surface.frustumCulled = false;
   scene.add(surface);
@@ -972,11 +1001,18 @@ function setupTsunami(
   let zoneAcc = 0;
   let waveTime = 0;
   let kidScale = 0.5;
+  /** S9: ride-cycle phase (legs, arms, bob) — its rate follows the board speed. */
+  let ridePhase = 0;
+  let prevPumpSign = 1;
+  let frontSprayAcc = 0;
+  /** S9: reduced motion keeps 30 % of the rider's swing (and no spray / dust). */
+  const motionK = reducedMotion ? 0.3 : 1;
 
   const layout = () => {
     // Screen-anchored pieces
     waterUniforms.uHw.value = hw;
-    waterUniforms.uFoamW.value = Math.max(0.1, 5.5 * worldPerPx);
+    // S9: a thicker white crest band on top of the wave face.
+    waterUniforms.uFoamW.value = Math.max(0.14, 8.5 * worldPerPx);
     terrain.geometry.dispose();
     terrain.geometry = buildTerrain(hw, lean);
     for (const d of decor) {
@@ -1072,20 +1108,50 @@ function setupTsunami(
       const slope = waveSlopeX(kx, PLAYER_Z, t, amp);
       leanZ = damp(leanZ, THREE.MathUtils.clamp(-vx * 0.05, -0.32, 0.32), 8, dt);
       turnY = damp(turnY, THREE.MathUtils.clamp(vx * 0.07, -0.55, 0.55), 6, dt);
-      const bob = reducedMotion ? 0 : Math.sin(elapsed * 3.3) * 0.025;
+      // S9 ride cycle: the faster the board, the quicker and bigger the pump of legs and arms.
+      const speed = Math.abs(vx);
+      const effort = Math.min(1, speed / 6) + (p.sprinting && playing ? 0.35 : 0);
+      ridePhase += dt * (2.6 + effort * 7);
+      const swing = Math.sin(ridePhase);
+      const bob = Math.sin(ridePhase * 2) * (0.02 + 0.025 * effort) * motionK;
       kid.group.position.set(kx, ky + 0.035 * kidScale, PLAYER_Z);
       kid.group.rotation.set(0, turnY, Math.atan(slope) * 0.8);
       kid.rider.rotation.z = leanZ;
       const crouch = p.sprinting && playing ? 0.9 : 1;
-      kid.rider.scale.y = damp(kid.rider.scale.y, crouch, 10, dt);
+      kid.rider.scale.y = damp(kid.rider.scale.y, crouch - Math.abs(swing) * 0.04 * effort * motionK, 10, dt);
       kid.rider.position.y = 0.05 + bob;
-      const armSwing = reducedMotion ? 0 : Math.sin(elapsed * 2.6) * 0.18;
+      const armSwing = swing * (0.18 + 0.32 * effort) * motionK;
       kid.armL.rotation.z = -1.05 - armSwing + leanZ;
       kid.armR.rotation.z = 1.05 - armSwing + leanZ;
-      kid.head.rotation.z = reducedMotion ? 0 : Math.sin(elapsed * 1.7) * 0.06;
+      const legSwing = swing * (0.08 + 0.26 * effort) * motionK;
+      kid.legL.rotation.z = -0.06 + legSwing;
+      kid.legR.rotation.z = 0.06 + legSwing;
+      kid.head.rotation.z = Math.sin(elapsed * 1.7) * 0.06 * motionK;
+
+      // S9: every pump kicks a puff of spray off the board tail (the surfer's "footprints").
+      const pumpSign = swing >= 0 ? 1 : -1;
+      if (pumpSign !== prevPumpSign) {
+        prevPumpSign = pumpSign;
+        if (!reducedMotion && playing && speed > 0.6) {
+          const dir = Math.sign(vx) || 1;
+          tmp.set(kx - dir * 0.5 * kidScale, ky + 0.02 * kidScale, PLAYER_Z + 0.08);
+          sparkles.emit(tmp, { count: Math.max(1, Math.round(5 * particleScale)), color: "#e0f7ff", speed: 1.6, life: 0.55, gravity: 4, size: 0.16 * kidScale + 0.05, direction: sprayDir.set(-dir, 0.7, 0.1), directionality: 0.4, spread: 0.5 });
+        }
+      }
+
+      // S9: spray blown off the wave front (≈ 60 × particleScale per second along the crest).
+      if (!reducedMotion && playing) {
+        frontSprayAcc += dt * 60 * particleScale;
+        while (frontSprayAcc >= 1) {
+          frontSprayAcc -= 1;
+          const fx = Math.random();
+          const wx = worldX(fx);
+          tmp.set(wx, surfaceAt(wx, FRONT_Z) + 0.05, FRONT_Z + 0.15);
+          sparkles.emit(tmp, { count: 1, color: Math.random() < 0.6 ? "#ffffff" : "#c7f4ff", speed: 1.3 + Math.random() * 1.4, life: 0.75, gravity: 3.2, size: 0.14 + Math.random() * 0.12, direction: UP, directionality: 0.75, spread: 0.4 });
+        }
+      }
 
       // Spray behind the board while riding.
-      const speed = Math.abs(vx);
       if (!reducedMotion && playing && speed > 0.4) {
         sprayAcc += dt * Math.min(60, speed * 7 + (p.sprinting ? 20 : 0)) * particleScale;
         const dir = Math.sign(vx);
