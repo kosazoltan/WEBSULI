@@ -520,10 +520,15 @@
   .play-question-icon-btn:focus-visible, .play-question-more:focus-visible, .play-why:focus-visible { outline: 3px solid #fef08a; outline-offset: 2px; }
   .play-question-prompt {
     margin: 4px 2px 0; font-size: clamp(16px, 4.6vmin, 21px); font-weight: 800; line-height: 1.28; color: #fff;
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--pq-lines, 5); line-clamp: var(--pq-lines, 5); overflow: hidden;
     overflow-wrap: anywhere; hyphens: auto; text-shadow: 0 1px 2px #0009;
   }
   .play-question-prompt[data-long="true"] { font-size: clamp(15px, 4vmin, 18px); }
+  /* J0c-b (kanban #46): a kérdés koppintás nélkül végigolvasható — 5 sor; ha a valódi mérés szerint sem fér, 15 px-en 7 sor
+     (a kártya nő); a „Mutasd” csak végső tartalék (data-fit="2"). A promptFit.ts ugyanezt a geometriát becsli. */
+  .play-question[data-fit="1"] .play-question-prompt, .play-question[data-fit="2"] .play-question-prompt { font-size: 15px; --pq-lines: 7; }
+  /* Fekvő nézetben a 2 sornál hosszabb gombfelirat kisebb betűt kap (álló nézetben egy oszlopra vált: data-cols). */
+  .play-question[data-option-fit="1"] .play-question-option { font-size: 15px; }
   .play-question[data-expanded="true"] .play-question-prompt { display: block; -webkit-line-clamp: unset; line-clamp: none; max-height: 30vh; overflow: auto; }
   .play-question-more {
     flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
@@ -600,7 +605,7 @@
       display: block; padding: 0;
     }
     .play-question > .play-question-card {
-      position: absolute; top: var(--play-question-top); left: 0; right: 0; width: min(46vw, 440px); margin-inline: auto;
+      position: absolute; top: var(--play-question-top); left: 0; right: 0; width: min(40vw, 400px); margin-inline: auto;
     }
     .play-question[data-mode="buttons"] .play-question-options {
       position: absolute; top: var(--play-question-top); bottom: var(--play-question-bottom);
@@ -608,7 +613,7 @@
       display: flex; align-items: center; justify-content: space-between; pointer-events: none;
     }
     .play-question[data-mode="buttons"] .play-question-col {
-      display: flex; flex-direction: column; gap: 8px; width: min(25vw, 220px); pointer-events: auto;
+      display: flex; flex-direction: column; gap: 8px; width: min(28vw, 250px); pointer-events: auto;
     }
     .play-question-prompt { font-size: clamp(15px, 4.4vmin, 19px); }
     .play-question-prompt[data-long="true"] { font-size: 15px; }

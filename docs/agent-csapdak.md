@@ -570,7 +570,20 @@ Forrás: J0c (kérdés-sáv, `play-lab.spec.ts`).
   / a hibához kötött „Miért?”-határidő külön), és valódi időléptetéses teszt az ütemezővel együtt (`game-play-question-ui.test.ts`
   „review #446/…”), nem csak kézzel léptetett, ütemezés nélküli eset.
 
-## C-43 — A `\uXXXX` escape az eszközparaméterben dekódolódik: nyers sorelválasztó került a regexbe (2026-11-16)
+## C-43 — „Mutasd” gombos, két sorra vágott kérdés: a képernyőképen látszott, mégis átment (2026-11-16)
+
+Forrás: J0c (#446) → J0c-b (kanban #46), orkesztrátori képátnézés.
+
+- **Tünet:** a kérdés-sáv a hosszabb kérdést két sorra vágta („…a szén-dioxidból és…”), végigolvasni csak a „Mutasd” gombbal
+  lehetett. Egy gyerek 9 mp-es ablakban, játék közben ezt nem nyomja meg → a kérdés megválaszolhatatlan.
+- **Gyökérok:** a szerződés „line-clamp 2 + Mutasd” mondatát betű szerint vettem, és a saját képernyőképeimet a „szép,
+  nem lóg ki” mércével néztem, nem azzal, hogy a gyerek el tudja-e olvasni a kérdést koppintás nélkül.
+- **Megelőzés:** a tanulási felület mércéje a tanulási cél: a képátnézésnél minden szöveges elemre külön kérdés: „olvasható-e
+  teljesen, koppintás nélkül, az ablakon belül?”. Mérés a bankok LEGHOSSZABB valódi tételével (`promptFit.ts` +
+  `play-lab.spec.ts` „J0c-b …”), nem egy rövid mintával; a tartalék-mechanizmus (pl. „Mutasd”) csak mesterségesen túlhosszú
+  bemenetre jelenhet meg.
+
+## C-44 — A `\uXXXX` escape az eszközparaméterben dekódolódik: nyers sorelválasztó került a regexbe (2026-11-16)
 
 - **Tünet (JM7b):** a becenév-szűrő `INVISIBLE` regexébe `(backslash-u)2028(backslash-u)2029`-et írtam (Write eszköz) — a fájlba a két NYERS
   Unicode-sorelválasztó került, a `tsc` „Unterminated regular expression literal” hibát adott. Ugyanez a `node -e "…(backslash-u)2028…"`

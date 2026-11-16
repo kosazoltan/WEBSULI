@@ -20,6 +20,7 @@ export * from "./questionDirector";
 export { wallClockMs } from "./clock";
 // J0c — közös UI: kérdés-sáv, „Miért?”, eredmény-lista, felolvasás, beállítás, React-kötés.
 export * from "./gameSettings";
+export * from "./promptFit";
 export * from "./speech";
 export * from "./useQuestionDirector";
 export { default as InlineQuestion, INLINE_QUESTION_SKINS, PlaySpeechToggle, type InlineQuestionProps, type InlineQuestionSkin } from "./InlineQuestion";
