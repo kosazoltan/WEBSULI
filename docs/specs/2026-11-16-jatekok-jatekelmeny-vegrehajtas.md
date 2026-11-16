@@ -2256,8 +2256,11 @@ a „Játékosok” panel és a fiókoldal törlési szövege; tesztek: `T/playe
    helyett. Indok: a külön `PLAYER_BAN_KEY` új, élesben beállítandó titkot jelentene, és a bevezetése / cseréje ugyanígy
    érvénytelenítené a megőrzött ujjlenyomatokat (a HMAC visszafejthetetlen, nem migrálható) — kisebb kockázat a meglévő titok
    és egy dokumentált lépés: rotáció előtt az admin listázza a törölt-tiltott bejegyzéseket, és tudomásul veszi, hogy elvesznek
-   (az élő tiltott fiókok tiltása a `banned_at`-ben megmarad, és az ujjlenyomatuk a fiók következő belépésekor az új kulccsal
-   önmagát javítva újraképződik — `ensureBanFingerprint`; teszt rögzíti).
+   (az élő tiltott fiókok tiltása a `banned_at`-ben megmarad). **Rendszerszintű kezelés (#471 review):** a tábla `key_id`
+   oszlopa a kulcs rövid azonosítója; a takarító induláskor és óránként (`reconcileBanFingerprints`) törli a régi kulcsú
+   sorokat (a törölt fiókoké tudottan elvész — `warn` napló darabszámmal, cím nélkül), és MINDEN élő tiltott fiók ujjlenyomatát
+   újraszámolja — így nem egy-egy belépési ágon múlik; emellett minden belépési út (kód, link, Google új és ismert azonosító)
+   önjavító. Teszt: rotáció szimulálva, ismert Google-azonosítós és kódos úton az alias-regisztráció tiltott.
 **Tesztek:** DB — tiltott saját törlés → ugyanaz a cím (kis- / nagybetű, gmail-pont, `+alias`) újra tiltott; admin-törlés
 után ugyanez (Google-úton is); feloldás (élő fióknál és a törölt bejegyzésnél) után rendes fiók; nem tiltott törlés nem hagy
 ujjlenyomatot; idegen cím érintetlen; a lista nem ad ki címet; a mátrix és az `admin-route-guard` új sorai; migráció ↔ séma

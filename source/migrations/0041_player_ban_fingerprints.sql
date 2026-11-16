@@ -8,8 +8,11 @@
 --   DROP TABLE IF EXISTS player_ban_fingerprints;
 SET LOCAL lock_timeout = '5s';
 --> statement-breakpoint
+-- `key_id`: a HMAC-kulcs rövid azonosítója — a `SESSION_SECRET` rotációja után a régi kulcsú sorok felismerhetők: az ÉLŐ tiltott
+-- fiókoké újraszámolódik, a törölt fiókoké (visszafejthetetlen) tudottan elvész (a takarító darabszámmal, cím nélkül naplózza).
 CREATE TABLE IF NOT EXISTS player_ban_fingerprints (
   fingerprint char(64) PRIMARY KEY,
+  key_id char(16) NOT NULL,
   banned_at timestamp with time zone NOT NULL,
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );

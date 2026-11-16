@@ -10,7 +10,7 @@ import {
   CODE_RETENTION_MS, CODE_TTL_MS, DAY_MS, LINK_TTL_MS, MAX_CODE_ATTEMPTS, MAX_FAILED_ATTEMPTS_PER_DAY,
   START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_WINDOW_MS, banFingerprint, loginEmailDailyMax, playerAuthKey,
 } from "./codes";
-import { createPlayerAccountStore, ensureBanFingerprint, lockBanAddress } from "./account-store";
+import { createPlayerAccountStore, ensureBanFingerprint, lockBanAddress, reconcileBanFingerprints } from "./account-store";
 
 export type CodeInput = { emailNormalized: string; emailHash: string; limitHash: string; codeHash: string; linkHash: string };
 const INSERT_CODE_SQL = `INSERT INTO player_auth_codes (email_normalized, email_hash, limit_hash, code_hash, link_hash, expires_at)
@@ -93,12 +93,15 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
      * Adattakarékosság (ütemezve is fut, a flagtől függetlenül — sweeper.ts): a lejárt, be nem váltott rekordokból a nyílt
      * cím törlődik, a 24 óránál régebbi rekordok teljesen. Visszaadja: [címtelenített, törölt].
      */
-    async purgeOldCodes(): Promise<[number, number, number]> {
+    async purgeOldCodes(): Promise<[number, number, number, number, number]> {
       const blanked = await pool.query(`UPDATE player_auth_codes SET email_normalized = '' WHERE email_normalized <> '' AND expires_at <= now()`);
       const deleted = await pool.query(`DELETE FROM player_auth_codes WHERE created_at < now() - ($1::int * interval '1 millisecond')`, [CODE_RETENTION_MS]);
       // K1-c: a megőrzési időn túli tiltás-ujjlenyomatok (élő tiltott fiók nélkül) is ebben a körben törlődnek.
+      // K1 (#471 review): a kulcsrotáció rendszerszintű egyeztetése is itt (induláskor és óránként) — előbb az egyeztetés,
+      // hogy a lejárat-vizsgálat már a jelenlegi kulcsú sorokon fusson.
+      const [lost, restored] = await reconcileBanFingerprints(pool);
       const bans = await createPlayerAccountStore(pool).purgeExpiredBanFingerprints();
-      return [blanked.rowCount ?? 0, deleted.rowCount ?? 0, bans];
+      return [blanked.rowCount ?? 0, deleted.rowCount ?? 0, bans, lost, restored];
     },
 
     /**

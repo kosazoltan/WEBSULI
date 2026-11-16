@@ -1336,6 +1336,8 @@ export const playerAuthCodes = pgTable(
  */
 export const playerBanFingerprints = pgTable("player_ban_fingerprints", {
   fingerprint: char("fingerprint", { length: 64 }).primaryKey(),
+  /** A HMAC-kulcs rövid azonosítója (rotáció felismerése — codes.ts `banKeyId`). */
+  keyId: char("key_id", { length: 16 }).notNull(),
   bannedAt: timestamp("banned_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

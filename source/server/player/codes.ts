@@ -102,6 +102,11 @@ export function banFingerprint(key: Buffer, normalizedEmail: string): string {
   return hmacHex(key, `ban:${limitKey(normalizedEmail)}`);
 }
 
+/** A tiltás-ujjlenyomat kulcsának rövid azonosítója (nem fedi fel a kulcsot) — a rotáció rendszerszintű felismeréséhez. */
+export function banKeyId(key: Buffer): string {
+  return hmacHex(key, "ban-key-id").slice(0, 16);
+}
+
 /**
  * K1-c: a törölt fiók után megmaradt tiltás-ujjlenyomat megőrzési ideje hónapban, a tiltástól számítva
  * (`PLAYER_BAN_RETENTION_MONTHS`, 1–120 egész; hiányzó / hibás érték → 12). Az ÉLŐ tiltott fiók tiltása ettől nem jár le.

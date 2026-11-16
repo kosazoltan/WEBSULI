@@ -12,7 +12,7 @@ import { getNoFollow, installAdminGoogleStub, playerGoogleLogin } from "./suppor
 
 const { emailHash, playerAuthKey, codeHash, limitHash, deleteLimitHash, linkHash, generateLinkToken, purposeEmailHash, allPurposeEmailHashes, MAX_FAILED_ATTEMPTS_PER_DAY } = await import("../server/player/codes");
 const { createPlayerStore } = await import("../server/player/store");
-const { banFingerprint, normalizeEmail } = await import("../server/player/codes");
+const { banFingerprint, banKeyId, normalizeEmail } = await import("../server/player/codes");
 const { createPlayerAccountStore } = await import("../server/player/account-store");
 const { learnerTokenFor, rotateLearnerToken } = await import("../server/learners");
 const { logger } = await import("../server/lib/logger");
@@ -741,7 +741,7 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
     assert.deepEqual([restricted.status, restricted.body], [403, BANNED_BODY]);
     await selfDelete(restricted.client, email);
     assert.equal((await fpRows(email)).length, 1, "az ujjlenyomat megmaradt");
-    assert.deepEqual(Object.keys((await q(`SELECT * FROM player_ban_fingerprints WHERE fingerprint = $1`, [fp(email)]))[0]!).sort(), ["banned_at", "created_at", "fingerprint"], "cím nem tárolódik");
+    assert.deepEqual(Object.keys((await q(`SELECT * FROM player_ban_fingerprints WHERE fingerprint = $1`, [fp(email)]))[0]!).sort(), ["banned_at", "created_at", "fingerprint", "key_id"], "cím nem tárolódik");
     for (const variant of [email, "K1.Tiltott@Gmail.com", "k1tiltott@gmail.com", "k1.tiltott+uj@gmail.com"]) {
       const again = await codeLogin(variant);
       assert.deepEqual([again.status, again.body], [403, BANNED_BODY], variant);
@@ -820,7 +820,7 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
       try {
         await c1.query("BEGIN");
         await c1.query(LOCK_SQL, [fp(email)]);
-        await c1.query(`INSERT INTO player_ban_fingerprints (fingerprint, banned_at) VALUES ($1, now())`, [fp(email)]);
+        await c1.query(`INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $2, now())`, [fp(email), banKeyId(playerAuthKey())]);
         await c1.query(`DELETE FROM player_accounts WHERE email = $1`, [email]);
         const creating = via === "code"
           ? createPlayerStore(dbPool).confirmVerifiedEmail(email).then((r) => r.banned)
@@ -922,7 +922,7 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
     const admin = await adminClient();
     const accounts = createPlayerAccountStore(dbPool);
     const oldGone = "k1-lejart@pelda.hu", fresh = "k1-friss@pelda.hu", liveOld = "k1-elo-regi@pelda.hu";
-    await dbPool.query(`INSERT INTO player_ban_fingerprints (fingerprint, banned_at) VALUES ($1, now() - interval '13 months'), ($2, now() - interval '1 month')`, [fp(oldGone), fp(fresh)]);
+    await dbPool.query(`INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $3, now() - interval '13 months'), ($2, $3, now() - interval '1 month')`, [fp(oldGone), fp(fresh), banKeyId(playerAuthKey())]);
     assert.equal((await codeLogin(liveOld)).status, 200);
     const liveId = (await idOf(liveOld))!;
     assert.equal((await admin.request("POST", `/api/admin/game-accounts/${liveId}/ban`, {})).status, 200);
@@ -947,6 +947,38 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
     assert.equal((await codeLogin(email)).status, 403);
     assert.equal((await fpRows(email)).length, 1, "a belépéskor újraképződött");
     assert.equal((await codeLogin("k1-onjavito+x@pelda.hu")).status, 403, "és az alias-változat ismét tiltott");
+  });
+
+  it("kulcsrotáció (SESSION_SECRET): az élő tiltott fiók — ismert Google-azonosítóval és a kódos úton is — tiltva marad, alias-regisztráció tiltott; a törölt-tiltott tudottan elvész", async () => {
+    const admin = await adminClient();
+    const accounts = createPlayerAccountStore(dbPool);
+    const store = createPlayerStore(dbPool);
+    const googleBanned = "rotgoogle@gmail.com", codeBanned = "rotkod@gmail.com", deletedBanned = "rot-torolt@pelda.hu";
+    const g = await accounts.upsertGooglePlayer("g-sub-rot", googleBanned);
+    assert.equal(g.kind, "OK");
+    assert.equal((await codeLogin(codeBanned)).status, 200);
+    assert.equal((await codeLogin(deletedBanned)).status, 200);
+    for (const e of [googleBanned, codeBanned, deletedBanned]) assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(e)}/ban`, {})).status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(deletedBanned)}/delete`, { confirm: "TÖRLÉS" })).status, 200);
+    const original = process.env.SESSION_SECRET;
+    try {
+      process.env.SESSION_SECRET = `${original}-rotalt`;
+      // Ismert Google-azonosítós belépés a rotáció után (a gyors ág is önjavító), majd alias-regisztráció → tiltott.
+      const again = await accounts.upsertGooglePlayer("g-sub-rot", googleBanned);
+      assert.deepEqual([again.kind, again.kind === "OK" && again.banned], ["OK", true]);
+      assert.deepEqual([(await codeLogin("rot.google+x@gmail.com")).status], [403], "Google-ág: az alias tiltott");
+      // Rendszerszintű egyeztetés (a takarító induláskor és óránként futtatja): a kódos tiltott fiók belépés NÉLKÜL is helyreáll.
+      const [, , , lost, restored] = await store.purgeOldCodes();
+      assert.ok(lost >= 1, `elveszett régi kulcsú ujjlenyomat: ${lost}`);
+      assert.ok(restored >= 1, `helyreállított: ${restored}`);
+      assert.equal((await codeLogin("rot.kod+1@googlemail.com")).status, 403, "kódos ág: az alias tiltott");
+      assert.equal((await codeLogin(deletedBanned)).status, 200, "a törölt-tiltott ujjlenyomata a rotációval tudottan elveszett (dokumentált)");
+      const stale = await q(`SELECT 1 FROM player_ban_fingerprints WHERE key_id <> $1`, [banKeyId(playerAuthKey())]);
+      assert.equal(stale.length, 0, "régi kulcsú sor nem maradt");
+    } finally {
+      process.env.SESSION_SECRET = original;
+      await store.purgeOldCodes(); // vissza az eredeti kulcsra (a többi teszt adatai)
+    }
   });
 
   it("a kódkérési korlát kulcsa a kanonikus cím: alias-címekkel nem sokszorozható", async () => {
