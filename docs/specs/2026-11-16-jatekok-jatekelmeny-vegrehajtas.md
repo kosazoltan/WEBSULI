@@ -1997,6 +1997,78 @@ küldött egyszeri, célhoz kötött kódot kér, és értesítő levél megy r�
 
 ---
 
+### JM7c — Hibrid jogosultság (terv 10.4a): admin kizárólag az engedélylistáról; meglévő tanulók / szülők játékos-joggal
+
+Két szelet; a JM7c-2 a JM7c-1 összevonása után indul. **Biztonságkritikus** (az admin-belépést érinti): a legnagyobb
+kockázat az admin kizárása, a második a jogosultság-keveredés. Mindkét szeletre független biztonsági review megy.
+
+#### JM7c-1 — Az admin-jog egyetlen forrása az engedélylista + `state` a meglévő `/auth/google` úton
+
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-jm7c1-admin-engedelylista, munkafa .claude/worktrees/jatek-jm7c1,
+kanban #55 · **Függ:** JM7b · **Modell:** Opus · **Kiindulás:** biztonsági review #449 K3
+**Felmért tények (main 62f50954):** admin-jog ma = `users.is_admin` (`source/shared/schema.ts`); új Google-sornál az
+`ADMIN_EMAIL` pontos egyezése adja, meglévő sornál megmarad (`S/auth.ts:34-69` `createGoogleVerify`); kézi beállítás:
+`S/admin-users.ts:103-117` (toggle-admin), `S/storage.ts:256-259` (upsert) és `:390-399` (toggle), `S/create-admin.ts`,
+`S/scripts/setAdmin.ts`. Olvasók: `S/auth.ts:305-315` `isAuthenticatedAdmin` (csak `req.user.isAdmin`), `:200` (belépés
+utáni cél), `S/routes.ts:938-971` `/api/auth/user`, `S/routes/rt.ts:75-77` (valós idejű `admin` mód),
+`S/lib/web-lesson-quality-notice.ts:19` (adminfelirat), `S/admin-users.ts:8-22` (lista + utolsó-admin őr),
+`S/studio/legacy-migration.ts:190-197` (tulajdonos-hozzárendelés, nem jogosultság-döntés). A routerek (Stúdió, katalógus,
+memória, statikus audit, munkafolyamat, `/api/admin`) mind az `isAuthenticatedAdmin`-t használják. A `/auth/google`
+stratégiának nincs `state`-je (login-CSRF, review #449 K3). Az `ADMIN_EMAILS` csak értesítési lista.
+**Fájlok:** új `S/lib/admin-access.ts` (engedélylista + a képlet + kizárás elleni őr), új `S/lib/admin-oauth-state.ts`
+(`AdminStateStore`, `a.` előtag); módosul: `S/auth.ts`, `S/routes.ts` (`/api/auth/user`), `S/routes/rt.ts`,
+`S/admin-users.ts`, `S/lib/web-lesson-quality-notice.ts`, `S/create-admin.ts`, `S/scripts/setAdmin.ts` (figyelmeztetés),
+`source/client/src/pages/Login.tsx` (érthető hibaüzenet + újrapróba), `render.yaml` (csak kommentelt, érték nélküli
+`ADMIN_ALLOWLIST`), `source/playwright.config.ts` (e2e-teszt-lista); tesztek: új `T/admin-access.test.ts`,
+`T/admin-access-source-guard.test.ts`, `T/admin-allowlist.spec.ts`; bővül: `T/admin-authz-matrix-db.integration.ts`,
+`T/player-account-db.integration.ts` (az admin-visszahívás `state`-tel — SPEC-VÁLTOZÁS), `T/support/player-google-stub.ts`
+(`adminGoogleLogin`), `T/player-google-flow.test.ts`.
+**Lépések:**
+1. `admin-access.ts`: `parseAdminAllowlist` (vessző / pontosvessző / szóköz, `trim` + kisbetű, hibás elem eldobva és
+   számolva), `adminPolicy()` (forrás: `ADMIN_ALLOWLIST` → üres / csupa hibás esetén `ADMIN_EMAIL` → egyik sem: `none`),
+   `isAllowlistedAdminEmail`, és a KÉPLET: `isAdminUser(user)` = `is_admin === true` ÉS nem tiltott ÉS (listán VAN, vagy a
+   kizárás elleni őr aktív). Őr: `none` forrásnál a jelző marad; beállított listánál csak akkor, ha a lista egyetlen létező,
+   nem tiltott `is_admin` fiókra sem illik (DB-lekérdezés, a pozitív eredmény 60 s-ig, a negatív 5 s-ig él;
+   `prepareAdminAccess` frissíti a kérés elején). Induláskori jelentés maszkolt címekkel (`reportAdminAccessStatus`).
+2. Minden olvasó a képletet hívja: `isAuthenticatedAdmin`, `deserializeUser` (a `req.user.isAdmin` a számolt értékre
+   íródik — mélységi védelem), belépés utáni cél, `/api/login` válasza, `/api/auth/user`, `rt.ts`, adminfelirat,
+   Felhasználók-lista (`isAdmin` = számolt jog) és az utolsó-admin őr (számolt adminokat számol).
+3. Új admin-jog csak listán lévő címnek: Google-os első belépés (`createGoogleVerify` a listát nézi, megerősített
+   e-maillel), toggle-admin (listán kívüli címre érthető 400-as hiba), a szkriptek figyelmeztetnek.
+4. `/auth/google`: `state: true`, `pkce: true`, `store: new AdminStateStore()` (`a.` + 32 base64url karakter, munkamenethez
+   kötött, egyszer használható, 15 perc, legfeljebb 5 függő); a callback `p.` → játékos-ág, minden más → admin-ág, ahol az
+   ismeretlen / hiányzó / idegen `state` belépés nélkül `/login?hiba=google`-ra visz (a telepítéskor folyamatban lévő
+   belépés így egyszer elbukik, érthető üzenettel és újrapróba gombbal).
+5. Forrás-őr teszt: a szerverkódban `.isAdmin` / `is_admin` olvasás csak a tételesen engedélyezett sorokban lehet.
+**Tesztek:** egységteszt a képletre (minden kombináció, kis- / nagybetű, szóköz, üres és hibás lista, `ADMIN_EMAIL`
+alapérték, kizárás elleni őr); mátrix új szerepei: „`is_admin`, de nincs a listán”, „listán van, de `is_admin = false`”,
+„futás közben levett admin” → minden admin-végponton 401 / 403, mellékhatás nélkül; „admin Google-lel (state-tel)” → admin;
+a meglévő szerepek változatlanul; regresszió: admin jelszóval és Google-lel, nem admin Google-felhasználó belépése
+változatlan; e2e: listás admin jelszóval eléri az `/admin`-t, a listán kívüli `is_admin` és a nem admin nem; a Google-indítás
+`state`-et küld; `state` nélküli visszahívás → érthető hibaoldal.
+**Parancsok:** `npm run check`, `npm run check:test`, `npm run lint`, `node --import tsx --test tests/admin-access*.test.ts
+tests/admin-route-guard.test.ts tests/google-email-verified.test.ts tests/player-google-flow.test.ts`,
+`npm run test:learning-db`, `npm run test:e2e -- tests/admin-allowlist.spec.ts`.
+**Elfogadás:** (1) admin = jelző ÉS lista ÉS nem tiltott, egy függvényben, minden kérésnél; (2) a telepítéshez a Renderen
+nincs teendő (`ADMIN_EMAIL` az alapérték, teszt rögzíti); (3) listáról levett admin a következő kérésnél nem admin; (4) a
+kizárás elleni őr dokumentált és tesztelt; (5) `/auth/google` `state`-es, hamis / hiányzó `state` → senki nem lép be;
+(6) mátrix és a meglévő szerepek zöldek; (7) nincs séma-módosítás, migráció; `PLAYER_ACCOUNTS` KI marad.
+
+#### JM7c-2 — Meglévő nem admin `users` sorok kapcsolása játékos-miniprofilhoz (KÜLÖN, későbbi szelet)
+
+**Állapot:** nem kezdődött · **Függ:** JM7c-1 · **Modell:** Opus
+**Cél:** a programban rögzített tanulók / szülők (`users`, nem admin) játékos-jogot kapjanak: saját `player_accounts`
+miniprofilt (becenév + avatar), admin-jog nélkül. **Fájlok (tervezett):** új additív migráció (`player_accounts.legacy_user_id`
+→ `users.id`, egyedi, `ON DELETE SET NULL`), `S/auth.ts` (a nem admin `users`-belépés a játékos-munkamenetet is beállítja /
+a játékos-útra terel), `S/player/account-store.ts`, a kupon / gyakorlás (`S/rewards/*`) jogosultságának átvezetése, tesztek
+(DB: kapcsolás idempotens; listás admin címe soha nem kap automatikus kapcsolást; tiltott `users` sor → tiltott játékos).
+**Lépések (vázlat):** (1) felmérés: mely funkciók függnek a nem admin `req.user`-től; (2) migráció + kapcsolás az első
+belépéskor (megerősített e-mail); (3) a nyilvános „Belépés” gomb a játékos-útra; (4) név / profilkép nem kerül új sorba
+(review #449 K3 (2)). **Elfogadás:** egy meglévő tanuló belép → miniprofilja van, admin-végpont 401 / 403; a mátrix új
+„kapcsolt tanuló” szereppel zöld. Új független biztonsági review kötelező.
+
+---
+
 ### JM8a — Pontkönyv (szerver) — `PLAYER_POINTS` flag
 
 **Állapot:** nem kezdődött · **Függ:** JM7b · **Modell:** Opus · **Elfogadás:** JM-A13
