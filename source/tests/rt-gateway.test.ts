@@ -424,3 +424,44 @@ describe("JM2 gateway — leállítás (drain)", () => {
     harnesses.splice(harnesses.indexOf(h), 1);
   });
 });
+
+describe("JM2 gateway — kapcsolat-plafon és lassú kliens", () => {
+  it("MP_MAX_CONNECTIONS: a plafon felett a kézfogás CAPACITY (403); IP-nkénti plafon RATE_LIMITED", async () => {
+    const h = await harness({ env: { MP_MAX_CONNECTIONS: "1" } });
+    await join(h, { intent: "create" });
+    const raw = await fetch(`http://127.0.0.1:${h.port}${RT_PATH}?EIO=4&transport=polling`, { headers: { origin: h.origin } });
+    assert.equal(raw.status, 403);
+    assert.match(await raw.text(), /CAPACITY/);
+    h.env.MP_MAX_CONNECTIONS = "100";
+    h.env.MP_MAX_CONNECTIONS_PER_IP = "1";
+    const perIp = await fetch(`http://127.0.0.1:${h.port}${RT_PATH}?EIO=4&transport=polling`, { headers: { origin: h.origin } });
+    assert.equal(perIp.status, 403);
+    assert.match(await perIp.text(), /RATE_LIMITED/);
+  });
+
+  it("lassú kliens: a nem olvasó (nem lekérdező) kapcsolat visszatartott üzenetei a plafon felett → a szerver bontja, a többiek látják", async () => {
+    const h = await harness();
+    const { host, code } = await createRoom(h);
+    // Nyers Engine.IO polling-kliens: kézfogás, csatlakozás jeggyel, belépés a szobába — utána SOHA többé nem kérdez le.
+    const t = await getTicket(h, { intent: "join", code });
+    const url = `http://127.0.0.1:${h.port}${RT_PATH}?EIO=4&transport=polling`;
+    const hs = await (await fetch(url, { headers: { origin: h.origin } })).text();
+    const sid = JSON.parse(hs.slice(1)).sid as string;
+    const post = (body: string) => fetch(`${url}&sid=${sid}`, { method: "POST", headers: { origin: h.origin, "content-type": "text/plain;charset=UTF-8" }, body });
+    assert.equal(await (await post(`40${JSON.stringify({ v: 1, ticket: t.json.ticket })}`)).text(), "ok");
+    await (await fetch(`${url}&sid=${sid}`, { headers: { origin: h.origin } })).text(); // a csatlakozási nyugta + welcome
+    assert.equal(await (await post(`421${JSON.stringify(["room:join", { cid: "s1", code, grade: 5 }])}`)).text(), "ok");
+    const joined = await host.waitFor("room:state", (s) => s.players.length === 2);
+    const slowId = joined.players[1].id as string;
+    // A gazda állapot-változásokat okoz (a korláton belüli ütemben); a lassú kliens felé gyűlnek a csomagok.
+    for (let i = 0; i < 80; i++) {
+      await host.request("room:ready", { ready: i % 2 === 0 });
+      await sleep(55);
+      const st = host.events("room:state").at(-1);
+      if (st.players.find((p: any) => p.id === slowId)?.connected === false) break;
+    }
+    const gone = await host.waitFor("room:state", (s) => s.players.some((p: any) => p.id === slowId && !p.connected), 5000);
+    assert.ok(gone, "a lassú kliens kapcsolata bontva");
+    assert.ok((h.rt.metrics.rejectedSnapshot().SLOW_CLIENT ?? 0) >= 1);
+  });
+});

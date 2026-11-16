@@ -202,7 +202,16 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
   });
 
   // Minden Engine.IO kérésre és upgrade-re (nem csak a kézfogásra): idegen eredet → elutasítás.
-  io.engine.use((req: IncomingMessage, _res: unknown, next: (err?: Error) => void) => {
+  io.engine.use((req: IncomingMessage, res: { writeHead?: (code: number, headers?: Record<string, string>) => { end: (body?: string) => void } }, next: (err?: Error) => void) => {
+    // Az Engine.IO előtag-egyezéssel szűr (`/api/rt/io…`); csak a pontos útvonal (záró perjellel vagy anélkül) a miénk.
+    const pathname = (req.url ?? "").split("?")[0];
+    if (pathname !== RT_PATH && pathname !== `${RT_PATH}/`) {
+      if (typeof res.writeHead === "function" && !req.headers.upgrade) {
+        res.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Not found" }));
+        return;
+      }
+      return next(new Error("NOT_FOUND"));
+    }
     if (!originAllowed(req.headers)) return next(new Error("ORIGIN_NOT_ALLOWED"));
     next();
   });
