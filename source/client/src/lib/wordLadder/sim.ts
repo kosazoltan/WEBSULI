@@ -24,6 +24,7 @@ import {
   type QuestionDirector,
 } from "../../game-engine/play/questionDirector";
 import { createReviewQueue } from "../../game-engine/play/reviewQueue";
+import { fitsAllViewports } from "../../game-engine/play/promptFit";
 import type { RunStatsSnapshot } from "../../game-engine/play/runStats";
 import type { QuestionOutcome } from "../../game-engine/play/types";
 import type { FourChoiceQuiz } from "../../types/gameQuiz";
@@ -56,6 +57,10 @@ export function wordLadderDirectorConfig(grade: number | null): DirectorConfig {
     slowMo: 1,
     grade,
     warmupMs: FIRST_HOLD_MS,
+    // J0c-b (#450): olvasás-tudatos ablak (≤ 9 mp) és a sávban beférő / elolvasható tétel elsőbbsége (a kapaszkodó-
+    // feliratokkal együtt: `optionsFit`).
+    readingAware: true,
+    promptFits: (quiz) => fitsAllViewports(quiz, { grade, baseWindowMs: 4500 }).ok,
   };
 }
 

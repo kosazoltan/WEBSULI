@@ -477,18 +477,26 @@ export default function WordLadderHuEn() {
   const provider = useMemo<QuestionProvider>(
     () => ({
       couponOnly: false,
-      material: () => {
+      material: (ctx) => {
         const seen = new Set(seenRef.current.map((s) => s.id));
-        const m = materialRef.current.find((q) => !seen.has(String(q.id)));
+        const unseen = materialRef.current.filter((q) => !seen.has(String(q.id)));
+        // J0c-b: a sávban elolvasható / beférő tétel előbb; a többi hátra kerül (nem jelöljük látottnak).
+        const m = unseen.find((q) => !ctx?.accept || ctx.accept(q)) ?? unseen[0];
         if (!m) return null;
         seenRef.current = [...seenRef.current, { id: String(m.id), prompt: m.prompt }];
         return materialPlayQuestion(m, { subject: "english" });
       },
-      fresh: () => {
+      fresh: (ctx) => {
         // A meglévő választó: a futás sávjának szintjéről, a futásban még nem látott tétel (#135).
-        // A futásban már megjelent szó (más irányú szóbank-kérdésként sem) nem jön újra új tételként.
+        // A futásban már megjelent szó (más irányú szóbank-kérdésként sem) nem jön újra új tételként. A sávban
+        // elolvasható / beférő tétel (J0c-b `accept` = `fitsAllViewports(...).ok`) előbb; ha ilyen nincs, a többi.
+        const tier = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
+        const isSeen = (item: { id?: string | number; prompt: string }) => seenRef.current.some((x) => x.id === String(item.id));
+        const accept = ctx.accept;
+        const accepted = accept ? tiersRef.current.map((t) => t.filter((q) => accept(q))) : null;
         for (let attempt = 0; attempt < 8; attempt++) {
-          const item = pickUnseen(tiersRef.current, ladderTierIndex(runRef.current.grade, levelSessionRef.current.band), seenRef.current);
+          let item = accepted ? pickUnseen(accepted, tier, seenRef.current) : null;
+          if (!item || isSeen(item)) item = pickUnseen(tiersRef.current, tier, seenRef.current);
           if (!item) return null;
           seenRef.current = [...seenRef.current, { id: String(item.id), prompt: item.prompt }];
           const q = toPlayQuestion(item);
