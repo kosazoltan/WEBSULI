@@ -708,7 +708,7 @@ változás”).
 
 ## J0c — Közös UI: kérdés-sáv, „Miért?”, eredmény-lista, felolvasás, beállítás, teszt-kampó, hang, próbaoldal
 
-**Állapot:** folyamatban — ág feat/jatek-j0c-play-ui, munkafa .claude/worktrees/jatek-j0c, kanban #40
+**Állapot:** kész (#446) · **Állapot (J0c-b — hosszú kérdés koppintás nélkül olvasható):** folyamatban — ág fix/jatek-j0c-b-hosszu-kerdes, munkafa .claude/worktrees/jatek-j0c, kanban #46
 **Függ:** J0b merge. **Cél-mondatok:** G3, G6. **Elfogadás:** J1 (próbaoldalon), J5, J14, J16 (komponens-szinten).
 
 ### Fájlok (csak ezek)
