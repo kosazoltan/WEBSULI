@@ -117,6 +117,8 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
       why: "a feladat-sorsolás lusta alapértéke: a menet indításakor `setTaskRandom(createRng(…).next)` felülírja",
     },
   ],
+  // J2a: a Szólétra lapján nincs kivétel (a kapaszkodó-tétel sorsolása a menet seedelt RNG-jéből: `pickRngRef`).
+  "WordLadderHuEn.tsx": [],
 };
 
 const PAGE_FORBIDDEN = FORBIDDEN.filter(({ name }) => name === "Math.random" || name === "Date.now");

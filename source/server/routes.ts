@@ -30,6 +30,7 @@ import { db, dbPool } from "./db";
 import { getMaterialPreviewUrl, getBaseUrl } from "./utils/config";
 import { triggerEventBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
+import { MATERIAL_ID_PATTERN, MaterialClassroomError, setMaterialClassroom, setMaterialClassroomTx } from "./material-classroom";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
@@ -138,7 +139,8 @@ const bulkEmailSchema = z.object({
 });
 
 const bulkMoveSchema = z.object({
-  materialIds: z.array(z.string().uuid()).min(1, "Legalább egy material ID kötelező"),
+  // A régi (nem UUID) anyag-azonosító is áthelyezhető (docs/specs/2026-11-16-tananyag-evfolyam-modositas.md).
+  materialIds: z.array(z.string().regex(MATERIAL_ID_PATTERN, "Érvénytelen tananyag-azonosító")).min(1, "Legalább egy material ID kötelező"),
   classroom: z.number().int().min(0).max(12, "Osztály 0 (Programozási alapismeretek) és 12 között kell legyen"),
 });
 
@@ -1900,7 +1902,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Nincs módosítandó mező" });
       }
 
-      const updatedFile = await storage.updateHtmlFile(req.params.id, userId, updates);
+      // Az évfolyam Studio-leckénél a lecke adatában és a forrásjegyzékben is — egy tranzakcióban, a többi mezővel együtt
+      // (docs/specs/2026-11-16-tananyag-evfolyam-modositas.md).
+      const { classroom: newClassroom, ...rest } = updates;
+      const updatedFile = newClassroom === undefined
+        ? await storage.updateHtmlFile(req.params.id, userId, updates)
+        : await db.transaction(async (tx) => {
+          const [exists] = await tx.select({ id: htmlFiles.id }).from(htmlFiles).where(eq(htmlFiles.id, req.params.id));
+          if (!exists) return null;
+          await setMaterialClassroomTx(tx, [req.params.id], newClassroom);
+          const [row] = Object.keys(rest).length
+            ? await tx.update(htmlFiles).set(rest).where(eq(htmlFiles.id, req.params.id)).returning()
+            : await tx.select().from(htmlFiles).where(eq(htmlFiles.id, req.params.id));
+          return row ?? null;
+        });
       if (!updatedFile) {
         return res.status(404).json({ message: "Fájl nem található vagy nem engedélyezett" });
       }
@@ -1911,6 +1926,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Trigger event-driven backup (debounced, non-blocking)
       triggerEventBackup();
     } catch (error: unknown) {
+      if (error instanceof MaterialClassroomError) return res.status(error.status).json({ message: error.message });
       const err = error instanceof Error ? error : new Error(String(error));
       res.status(500).json({ message: err.message });
     }
@@ -3556,19 +3572,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { materialIds, classroom } = result.data;
 
-      // C3: atomic bulk update — single UPDATE ... WHERE id IN (...) instead of N round-trips
-      let movedCount = 0;
-      if (materialIds.length > 0) {
-        const moved = await db
-          .update(htmlFiles)
-          .set({ classroom })
-          .where(inArray(htmlFiles.id, materialIds))
-          .returning({ id: htmlFiles.id });
-        movedCount = moved.length;
-      }
-
-      res.json({ success: true, movedCount });
+      // Egy tranzakció: a Studio-leckék adata és forrásjegyzéke is; bármely hiba → semmi nem íródik
+      // (docs/specs/2026-11-16-tananyag-evfolyam-modositas.md).
+      const moved = await setMaterialClassroom(materialIds, classroom);
+      await invalidateHtmlFilesCache();
+      res.json({ success: true, movedCount: moved.files });
     } catch (error: unknown) {
+      if (error instanceof MaterialClassroomError) return res.status(error.status).json({ message: error.message });
       const err = error instanceof Error ? error : new Error(String(error));
       res.status(500).json({ message: err.message });
     }

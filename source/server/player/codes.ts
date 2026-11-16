@@ -95,7 +95,8 @@ export function emailHash(key: Buffer, normalizedEmail: string): string {
 /**
  * JM7b (review #449): a kódrekordok CÉL szerinti elkülönítése — a fióktörlés kódjai külön e-mail-hash-tartományban élnek,
  * így a belépő- és a törlési kód egymás „legutóbbi kód” keresését nem zavarja, és egymás helyett nem váltható be.
- * A belépés hash-e változatlan (`emailHash`). A korlát-kulcs (`limitHash`) KÖZÖS: a levélkeret célonként összesítve érvényes.
+ * A belépés hash-e változatlan (`emailHash`). A levélkeret: a belépő kérés a két cél kéréseit összesítve számolja, a törlési
+ * kérés csak a sajátjait (`deleteLimitHash`, N3).
  */
 export type CodePurpose = "login" | "delete";
 export function purposeEmailHash(key: Buffer, normalizedEmail: string, purpose: CodePurpose): string {
@@ -109,6 +110,15 @@ export function allPurposeEmailHashes(key: Buffer, normalizedEmail: string): str
 
 export function limitHash(key: Buffer, normalizedEmail: string): string {
   return hmacHex(key, `limit:${limitKey(normalizedEmail)}`);
+}
+
+/**
+ * JM7b-utójavítás (N3): a törlési kódkérések SAJÁT címenkénti levélkerete. A törlési kódot csak a fiók bejelentkezett
+ * munkamenete kérheti, ezért a névtelen belépőkód-kérések nem fogyaszthatják el; a belépő kérés kerete viszont a törlési
+ * kéréseket is beszámítja (`[limitHash, deleteLimitHash]`), így a levélbomba elleni védelem nem gyengül.
+ */
+export function deleteLimitHash(key: Buffer, normalizedEmail: string): string {
+  return hmacHex(key, `limit-delete:${limitKey(normalizedEmail)}`);
 }
 
 /** A kód hash-e a címhez kötve (ugyanaz a kód más címre nem érvényes). */

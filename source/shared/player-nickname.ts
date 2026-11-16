@@ -15,7 +15,8 @@
  *    $→s) és ismétlés-független („kuuurva”) összevetéssel, a szóközök / jelek kihagyásával („f a s z”);
  *  - megtévesztő, hivatalosnak látszó név (admin, moderátor, websuli, tanár, igazgató, support …) tiltva.
  * A foglaltság kulcsa (`nicknameKey`) kis-/nagybetű-, ékezet- és elválasztó-független, és a vizuálisan összetéveszthető
- * karaktereket (0/o, 1/l/i/I/|) egybevonja („Kata” = „Kátá” = „K a t a”; „Leo” = „1eo”); az adatbázisban EGYEDI index
+ * karaktereket (0/o, 1/l/i/I/|) egybevonja („Kata” = „Kátá” = „K a t a”; „Leo” = „1eo”) — ugyanazzal a `confusableFold`-dal,
+ * amelyen a trágárság- és a foglalt-név szűrő is fut (N1: az „ADMlN” / „GECl” így nem csúszik át); az adatbázisban EGYEDI index
  * véd a versenyhelyzet ellen (`player_accounts.nickname_key`).
  * A megjelenítés mindenhol szövegként történik (React-szövegcsomópont) — HTML-ként soha.
  */
@@ -59,11 +60,22 @@ function stripMarks(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 }
 
-const LEET: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "@": "a", "$": "s", "!": "i", "|": "i" };
+/**
+ * Az EGYETLEN összetéveszthetőség-normalizálás (review #449 újraellenőrzés, N1): ékezet nélkül, kisbetűvel, a vizuálisan
+ * összetéveszthető jelek egybevonva (0 → o; 1, l, I, |, ! → i — talpatlan betűtípusban a kis L és a nagy I azonos). Erre
+ * épül a foglaltsági kulcs (`nicknameKey`) ÉS a tartalomszűrő alakja (`foldNickname`) is, így a becenév MINDEN l / I / 1
+ * olvasata egyszerre vizsgált, és a kettő nem térhet el egymástól.
+ */
+export function confusableFold(text: string): string {
+  return stripMarks(text).replace(/0/g, "o").replace(/[1l|!]/g, "i");
+}
 
-/** A tartalomszűrő alakja: ékezet nélkül, kisbetűvel, leet visszafordítva, csak a–z. */
+/** A többi leet-csere (a 0 / 1 / | / ! a `confusableFold`-ban). */
+const LEET: Record<string, string> = { "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "@": "a", "$": "s" };
+
+/** A tartalomszűrő alakja: az összetéveszthetők egybevonva, leet visszafordítva, csak a–z. */
 export function foldNickname(text: string): string {
-  return stripMarks(text).replace(/[0134578@$!|]/g, (c) => LEET[c] ?? c).replace(/[^a-z]/g, "");
+  return confusableFold(text).replace(/[34578@$]/g, (c) => LEET[c] ?? c).replace(/[^a-z]/g, "");
 }
 
 /** Az egymást követő azonos betűk egyre („kuuurva” → „kurva”). */
@@ -73,7 +85,7 @@ const collapse = (s: string) => s.replace(/(.)\1+/g, "$1");
  * Trágár / sértő szótövek (ékezet nélkül, kisbetűvel). A „szar” / „fos” csak toldalékkal szerepel (a „Szarvas”,
  * „Fosztó” ne essen ki). Bővítés: csak kézzel ellenőrzött tő, ellenpróbával (tests/nickname-filter.test.ts).
  */
-const BLOCKED_ROOTS: readonly string[] = [
+export const BLOCKED_ROOTS: readonly string[] = [
   // magyar
   "fasz", "pina", "punci", "picsa", "geci", "kurva", "kurvi", "buzi", "szaros", "szarhazi", "szarfej", "fosos", "fospisztoly",
   "bazd", "bazm", "baszd", "baszo", "baszni", "basztam", "kocsog", "csicska", "ribanc", "hulye", "idiota", "nyomorek",
@@ -95,17 +107,27 @@ const ROOT_EXCEPTIONS: Record<string, readonly string[]> = {
   nazi: ["ignazi"],
 };
 
-function containsRoot(folded: string, root: string): boolean {
-  const exceptions = ROOT_EXCEPTIONS[root] ?? [];
-  const scrub = (s: string) => exceptions.reduce((acc, ex) => acc.split(ex).join(""), s);
-  // A dupla betűs tő („segg”) csak pontos egyezéssel (összevonva „seg” lenne — a „Segítő” kiesne);
-  // a többi az ismétlés-összevont alakban is keresendő („kuuurva”).
-  if (/(.)\1/.test(root)) return scrub(folded).includes(root);
-  return scrub(folded).includes(root) || scrub(collapse(folded)).includes(root);
+/** Egy tő a becenévvel AZONOS normalizálással (N1): a tő és a kivétel-szavai is `foldNickname`-en át hasonlítódnak. */
+type CompiledRoot = { exact: string; loose: string | null; exceptions: readonly string[] };
+
+function compileRoots(roots: readonly string[], exceptionsFor: (root: string) => readonly string[]): CompiledRoot[] {
+  return roots.map((root) => ({
+    exact: foldNickname(root),
+    // Az EREDETILEG dupla betűs tő („segg”, „root”, „staff”) csak pontos egyezéssel (összevonva „seg” lenne — a „Segítő”
+    // kiesne); a többi az ismétlés-összevont alakban is („kuuurva”) — a normalizált tövet is összevonva („websuli” →
+    // „websuii” → „websui”), hogy a „WEBSULl” és a „Websuuli” is fennakadjon.
+    loose: /(.)\1/.test(root) ? null : collapse(foldNickname(root)),
+    exceptions: exceptionsFor(root).map(foldNickname),
+  }));
+}
+
+function containsRoot(folded: string, root: CompiledRoot): boolean {
+  const scrubbed = root.exceptions.reduce((acc, ex) => acc.split(ex).join(""), folded);
+  return scrubbed.includes(root.exact) || (root.loose !== null && collapse(scrubbed).includes(root.loose));
 }
 
 /** Hivatalosnak / szervezőnek látszó nevek (megszemélyesítés ellen). */
-const RESERVED_ROOTS: readonly string[] = [
+export const RESERVED_ROOTS: readonly string[] = [
   "admin", "adminisztrator", "moderator", "moderalo", "websuli", "webiskola", "tanar", "tanito", "igazgato", "oktato",
   "rendszer", "system", "support", "staff", "official", "hivatalos", "owner", "tulajdonos", "sysop", "root", "ugyfelszolgalat",
   "operator", "fejleszto", "developer", "teacher", "principal", "anthropic", "claude",
@@ -115,7 +137,10 @@ const RESERVED_WORDS = new Set(["mod", "mods", "gm", "dev"]);
 /** Ártatlan szavak, amelyekben egy foglalt tő szerepel („Badminton”). */
 const RESERVED_EXCEPTIONS: readonly string[] = ["badminton"];
 
-const EMAIL_PROVIDERS = ["gmail", "freemail", "citromail", "hotmail", "outlook", "yahoo", "icloud", "protonmail"];
+const BLOCKED = compileRoots(BLOCKED_ROOTS, (root) => ROOT_EXCEPTIONS[root] ?? []);
+const RESERVED = compileRoots(RESERVED_ROOTS, () => RESERVED_EXCEPTIONS);
+
+const EMAIL_PROVIDERS = ["gmail", "freemail", "citromail", "hotmail", "outlook", "yahoo", "icloud", "protonmail"].map(foldNickname);
 
 function isEmailLike(raw: string, folded: string): boolean {
   if (raw.includes("@")) return true;
@@ -136,10 +161,7 @@ export function prepareNickname(raw: string): string {
 
 /** A foglaltság kulcsa: ékezet- és kisbetű-független, elválasztók nélkül, az összetéveszthetők (0/o, 1/l/i/|) egybevonva. */
 export function nicknameKey(nickname: string): string {
-  return stripMarks(prepareNickname(nickname))
-    .replace(/0/g, "o")
-    .replace(/[1l|]/g, "i")
-    .replace(/[\s_#-]/g, "");
+  return confusableFold(prepareNickname(nickname)).replace(/[\s_#-]/g, "");
 }
 
 /** A becenév ellenőrzése. Siker → a tárolandó (előkészített) alak és a foglaltsági kulcs. */
@@ -170,15 +192,10 @@ export function checkPlayerNickname(raw: unknown): NicknameCheck {
   if (len > PLAYER_NICK_MAX) problems.push("LENGTH_LONG");
   if (len > 0 && !Array.from(base).some((ch) => LETTER.test(ch))) problems.push("NO_LETTER");
   if (base.replace(/\D/g, "").length >= 6) problems.push("PHONE");
-  // Az „1” leet-alakja i és l is lehet: mindkét olvasatot vizsgáljuk.
-  const folds = [folded, foldNickname(base.replace(/1/g, "l"))];
-  if (folds.some((f) => BLOCKED_ROOTS.some((root) => containsRoot(f, root)))) problems.push("BLOCKED");
-  const words = stripMarks(base).split(/[\s_-]+/).filter(Boolean);
-  const reservedHit = folds.some((f) => {
-    const scan = RESERVED_EXCEPTIONS.reduce((acc, ex) => acc.split(ex).join(""), f);
-    return RESERVED_ROOTS.some((root) => scan.includes(root) || collapse(scan).includes(root));
-  });
-  if (reservedHit || words.some((w) => RESERVED_WORDS.has(w))) problems.push("RESERVED");
+  // N1: a `folded` már az l / I / 1 / i összevont alak, a tövek ugyanígy normalizáltak — minden olvasat egyszerre vizsgált.
+  if (BLOCKED.some((root) => containsRoot(folded, root))) problems.push("BLOCKED");
+  const words = confusableFold(base).split(/[\s_-]+/).filter(Boolean);
+  if (RESERVED.some((root) => containsRoot(folded, root)) || words.some((w) => RESERVED_WORDS.has(w))) problems.push("RESERVED");
 
   if (problems.length > 0) return { ok: false, problems };
   return { ok: true, nickname, key: nicknameKey(nickname) };
