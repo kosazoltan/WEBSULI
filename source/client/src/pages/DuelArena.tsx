@@ -503,6 +503,7 @@ export default function DuelArena() {
     };
   }, []);
   const inFlight = useRef(false);
+  const loadFails = useRef(0);
   const lastStartAt = useRef(-Infinity);
 
   /**
@@ -540,7 +541,15 @@ export default function DuelArena() {
         }
         if (!stillValid()) return;
         if (failed || !vocab) {
-          setLoadError("Nem sikerült betölteni a szavakat (lehet, hogy nincs internet). Próbáld újra, vagy játsszatok az évfolyam-bank kérdéseivel!");
+          // A közös betöltő a hibás ígéretet eldobja, így az újrapróba tényleg újra kér (tests/duel-vocab-retry.test.ts);
+          // ha egy böngésző a meghiúsult modul-lekérést mégis megjegyzi, a második hiba után az oldal-újratöltést és az
+          // évfolyam-banki tartalékot ajánljuk.
+          loadFails.current += 1;
+          setLoadError(
+            loadFails.current > 1
+              ? "Megint nem sikerült betölteni a szavakat. Ha már van internet, töltsd újra az oldalt, vagy játsszatok most az évfolyam-bank kérdéseivel!"
+              : "Nem sikerült betölteni a szavakat (lehet, hogy nincs internet). Próbáld újra, vagy játsszatok az évfolyam-bank kérdéseivel!",
+          );
           return;
         }
       }
