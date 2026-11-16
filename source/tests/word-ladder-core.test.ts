@@ -290,3 +290,36 @@ test("review #454: felolvasás a kérdés szerkezetéből — megjelenéskor soh
   assert.deepEqual(speechPlan("en0-001", "dog"), { atShow: null, afterAnswer: null }, "kézi tételnél nincs találgatás");
   assert.deepEqual(speechPlan("vocab:en-x:target-to-hu", "go"), { atShow: "go", afterAnswer: null });
 });
+
+test("a lap meghajtója (createFixedLoop) és a sim közvetlen léptetése bitre azonos állapotot ad, eltérő képkocka-időkkel is", async () => {
+  const { createFixedLoop, SIM_STEP_MS } = await import("../client/src/game-engine/play/loop");
+  const N = 60 * 75;
+  const inputAt = (k: number) => (k % 170 === 40 ? (k % 510 === 40 ? "wrong" : "correct") : null);
+  // a sim útja: közvetlen lépések
+  const a = createLadderState({ targetRung: 40 });
+  const ra = createRng(99);
+  for (let k = 0; k < N; k++) {
+    step(a, SIM_STEP_MS, 0.5, ra);
+    const inp = inputAt(k);
+    if (inp) answer(a, inp);
+  }
+  // a lap útja: fix lépésű hurok, egyenetlen képkockákkal (30 / 60 / 144 Hz, akadozás)
+  for (const frames of [[33.3], [16.7], [6.94], [16.7, 7, 41, 3, 250, 16.7]]) {
+    const b = createLadderState({ targetRung: 40 });
+    const rb = createRng(99);
+    let k = 0;
+    const loop = createFixedLoop(() => {
+      if (k >= N) return;
+      step(b, SIM_STEP_MS, 0.5, rb);
+      const inp = inputAt(k);
+      if (inp) answer(b, inp);
+      k += 1;
+    });
+    let t = 0;
+    for (let f = 0; k < N && f < 200_000; f++) {
+      t += frames[f % frames.length]!;
+      loop.frame(t);
+    }
+    assert.equal(stateFingerprint(b), stateFingerprint(a), `képkockák: ${frames.join(",")}`);
+  }
+});

@@ -19,7 +19,7 @@ import {
   pickUnseen,
   type SeenItem,
 } from "@/game-engine/no-repeat";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, Flame, X } from "lucide-react";
@@ -152,6 +152,10 @@ const LONG_HOLD = 24;
  */
 const HOLD_SCOPE = '.game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"]';
 const HOLD = `${HOLD_SCOPE} .wl-hold`;
+
+/** Felengedéskor ennyi px-en belül még a fogáson van az ujj; ennyi mozdulásig „koppintás” (Matek-pilot értékei). */
+const HOLD_UP_SLOP_PX = 10;
+const HOLD_STILL_PX = 12;
 
 /** A részecske-készlet mérete (KSZ-6: előre rögzített pool). */
 const PARTICLE_POOL = 18;
@@ -473,11 +477,19 @@ export default function WordLadderHuEn() {
 
   /** A menet szó-őre: egy szó egy menetben csak egy irányban (review #454). */
   const wordGuardRef = useRef(createRunWordGuard<PlayQuestion>());
+  /** A tétel-sorsolás seedelt RNG-je (menetenként újra; a determinizmus-őr a lapra is fut). */
+  const pickRngRef = useRef<Rng>(createRng(seedFrom(WORD_LADDER_GAME_ID, "init", "pick")));
   /** A menet új (nem ismétlő) tételeinek száma: minden második a szóbankból. */
   const freshCountRef = useRef(0);
 
-  const provider = useMemo<QuestionProvider>(
-    () => ({
+  const provider = useMemo<QuestionProvider>(() => {
+    const ownCtx = () => ({
+      gameId: WORD_LADDER_GAME_ID,
+      lang,
+      bankIds: new Set(tiersRef.current.flat().map((q) => String(q.id))),
+      materialKeys: new Set(materialRef.current.map((m) => `mat:${m.id}`)),
+    });
+    return {
       couponOnly: false,
       material: (ctx) => {
         const seen = new Set(seenRef.current.map((s) => s.id));
@@ -493,6 +505,7 @@ export default function WordLadderHuEn() {
         // A futásban már megjelent szó (más irányú szóbank-kérdésként sem) nem jön újra új tételként. A sávban
         // elolvasható / beférő tétel (J0c-b `accept` = `fitsAllViewports(...).ok`) előbb; ha ilyen nincs, a többi.
         const tier = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
+        const pickRandom = () => pickRngRef.current.next();
         const isSeen = (item: { id?: string | number; prompt: string }) => seenRef.current.some((x) => x.id === String(item.id));
         // Minden második új tétel a központi szóbankból jön, ha van (a kézi bank nagyobb, és a gyors tempó mellett
         // különben a menet eleje szinte csak kézi tételt adna — a szóbank a játék fő forrása).
@@ -507,13 +520,13 @@ export default function WordLadderHuEn() {
         for (let attempt = 0; attempt < 8; attempt++) {
           let item: Quiz | LadderItem | null = null;
           for (const pool of pools) {
-            const c = pickUnseen(pool, tier, seenRef.current);
+            const c = pickUnseen(pool, tier, seenRef.current, pickRandom);
             if (c && !isSeen(c)) {
               item = c;
               break;
             }
           }
-          if (!item) item = pickUnseen(tiers, tier, seenRef.current);
+          if (!item) item = pickUnseen(tiers, tier, seenRef.current, pickRandom);
           if (!item) return null;
           seenRef.current = [...seenRef.current, { id: String(item.id), prompt: item.prompt }];
           const q = toPlayQuestion(item);
@@ -524,16 +537,14 @@ export default function WordLadderHuEn() {
         }
         return null;
       },
+      // Régi (évfolyam nélkül tárolt) tétel: csak a saját játék, a MOSTANI nyelv tétele (a kulcs hordozza a nyelvet:
+      // `vocab:<lang>:`, kézi banknál az id `en0-` / `de0-` / `fr0-` előtagja — a szintlistában ellenőrizve).
+      legacyReviewFits: (it) => ownsReviewKey(it.key, ownCtx()),
       restore: (it) => {
         // A közös ismétlési sorból csak a SAJÁT tétel jön vissza (a nyelv szóbankja, a saját kézi bank, a saját
         // tananyag); a más játék / más nyelv tételét a director a menetre átugorja.
-        const own = ownsReviewKey(it.key, {
-          gameId: WORD_LADDER_GAME_ID,
-          lang,
-          bankIds: new Set(tiersRef.current.flat().map((q) => String(q.id))),
-          materialKeys: new Set(materialRef.current.map((m) => `mat:${m.id}`)),
-        });
-        if (!own) return null;
+        // Az évfolyamot a közös szabály (`reviewFitsGrade`, a director) már szűrte; itt a játék + NYELV.
+        if (!ownsReviewKey(it.key, ownCtx())) return null;
         // Menet közbeni ismétlés: pontosan a már látott kérdés (ugyanaz az irány), nem újragenerált fordított változat.
         const again = wordGuardRef.current.sameAsShown(it.key);
         if (again) return again;
@@ -543,8 +554,8 @@ export default function WordLadderHuEn() {
         if (q.source === "vocab") return withSpeech(q, q.speakText);
         return q;
       },
-    }),
-    [lang, toPlayQuestion, withSpeech],
+    };
+  }, [lang, toPlayQuestion, withSpeech]
   );
 
   /* ------------------------------------------------------------------------------------------------------------ */
@@ -708,6 +719,39 @@ export default function WordLadderHuEn() {
     qRef.current?.pick(idx, clockRef.current);
   }, []);
 
+  /**
+   * Kapaszkodó-koppintás (KSZ-13/14, a Matek-pilot mintája): `pointerdown`-ra azonnali vizuális „megfogás” (`:active`),
+   * a válasz FELENGEDÉSKOR véglegesedik, ha az ujj a fogás dobozán belül (± `HOLD_UP_SLOP_PX`) engedett fel, vagy alig
+   * mozdult (≤ `HOLD_STILL_PX`); elhúzás / `pointercancel` = visszavonás. Nem a `click`-re épül (több ujjnál a böngésző a
+   * nem elsődleges mutatóra nem ad `click`-et); billentyűhöz a `click` `detail === 0` ága.
+   */
+  const holdPressRef = useRef(new Map<number, { i: number; x: number; y: number }>());
+  const holdHandlers = useCallback(
+    (i: number, act: () => void) => ({
+      onPointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => {
+        holdPressRef.current.set(e.pointerId, { i, x: e.clientX, y: e.clientY });
+      },
+      onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => {
+        const pressed = holdPressRef.current.get(e.pointerId);
+        holdPressRef.current.delete(e.pointerId);
+        if (!pressed || pressed.i !== i) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        const inside =
+          e.clientX >= r.left - HOLD_UP_SLOP_PX && e.clientX <= r.right + HOLD_UP_SLOP_PX &&
+          e.clientY >= r.top - HOLD_UP_SLOP_PX && e.clientY <= r.bottom + HOLD_UP_SLOP_PX;
+        const still = Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) <= HOLD_STILL_PX;
+        if (inside || still) act();
+      },
+      onPointerCancel: (e: ReactPointerEvent<HTMLButtonElement>) => {
+        holdPressRef.current.delete(e.pointerId);
+      },
+      onClick: (e: ReactMouseEvent<HTMLButtonElement>) => {
+        if (e.detail === 0) act();
+      },
+    }),
+    [],
+  );
+
   /** Szabad fogás (nincs kérdés). */
   const grabFree = useCallback(() => {
     if (pausedRef.current || phaseRef.current !== "play") return;
@@ -785,6 +829,7 @@ export default function WordLadderHuEn() {
     coreRef.current = createLadderState({ targetRung: total, startRung, baseRungPerSec: rivalBaseRungPerSec(rivalSecPerRungForLevel(level)) });
     worldRngRef.current = createRng(seedFrom(WORD_LADDER_GAME_ID, seed, "world", n));
     fxRngRef.current = createRng(seedFrom(WORD_LADDER_GAME_ID, seed, "fx", n));
+    pickRngRef.current = createRng(seedFrom(WORD_LADDER_GAME_ID, seed, "pick", n));
     clockRef.current = 0;
     lastStartRef.current = null;
     freeAtRef.current = Number.POSITIVE_INFINITY;
@@ -1330,7 +1375,7 @@ export default function WordLadderHuEn() {
                         data-state={st}
                         disabled={!answering}
                         aria-keyshortcuts={ANSWER_KEYS[idx]}
-                        onClick={() => grab(idx)}
+                        {...holdHandlers(idx, () => grab(idx))}
                         {...correctDataAttrs(opt.correct)}
                       >
                         <span className="wl-hold-key" aria-hidden="true">
@@ -1344,7 +1389,7 @@ export default function WordLadderHuEn() {
                 </div>
               ) : freeHold ? (
                 <div className="wl-answers wl-answers-free">
-                  <button type="button" className="wl-hold wl-hold-free" data-testid="wl-free-hold" data-free-hold onClick={grabFree}>
+                  <button type="button" className="wl-hold wl-hold-free" data-testid="wl-free-hold" data-free-hold {...holdHandlers(-1, grabFree)}>
                     <span className="wl-hold-label">Kapaszkodj! ⬆</span>
                   </button>
                 </div>
