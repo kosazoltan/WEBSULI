@@ -150,6 +150,16 @@ async function installRecorder(page: Page, probe: string): Promise<void> {
   }, probe);
 }
 
+/** Vár, amíg a rögzítő legalább `n` képkockát gyűjtött (legfeljebb 6 s). */
+async function waitFrames(page: Page, n: number): Promise<void> {
+  await page
+    .waitForFunction((min) => ((window as unknown as { __joyRec?: Rec }).__joyRec?.frames.length ?? 0) >= min, n, {
+      timeout: 6_000,
+      polling: 50,
+    })
+    .catch(() => undefined);
+}
+
 async function readRec(page: Page): Promise<Rec> {
   return page.evaluate(() => {
     const rec = (window as unknown as { __joyRec: Rec }).__joyRec;
@@ -176,6 +186,44 @@ async function touch(cdp: CDPSession, type: "touchStart" | "touchMove" | "touchE
     type,
     touchPoints: type === "touchEnd" ? [] : [{ x: x!, y: y!, id: 1, radiusX: 4, radiusY: 4, force: 1 }],
   });
+}
+
+/**
+ * Mérés előtti bizonyíték, hogy a játék tényleg fogadja a tárcsát: egy teljes jobbra húzásra a játék bemenet-mezője
+ * (`probe()[g.input]`) megváltozik. Ha nem, a teszt diagnosztikával bukik (képernyőkép, a látható fedőrétegek, a pont
+ * alatti elem) — így egy fedőréteg vagy egy rossz helyre eső érintés nem „lassú mérésként”, hanem okkal jelenik meg.
+ */
+async function assertStickReachesGame(page: Page, cdp: CDPSession, g: GameSpec): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await clearQuiz(page, g);
+    const s = await stickGeometry(page);
+    await touch(cdp, "touchStart", s.cx, s.cy);
+    await touch(cdp, "touchMove", s.cx + 0.9 * s.r, s.cy);
+    const ok = await page
+      .waitForFunction(
+        ({ id, key }) => Math.abs((window as unknown as InputWindow).__websuliInput?.probes[id]?.()[key] ?? 0) > 0.05,
+        { id: g.probe, key: g.input },
+        { timeout: 8_000, polling: 50 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    await touch(cdp, "touchEnd");
+    await page.waitForTimeout(300);
+    if (ok) return;
+  }
+  const s = await stickGeometry(page);
+  const diag = await page.evaluate(
+    ({ x, y }) => {
+      const el = document.elementFromPoint(x, y);
+      const overlays = Array.from(document.querySelectorAll('[role="dialog"], [aria-modal="true"], [data-testid*="quiz"], [data-testid*="rotate"], [data-testid*="gate"]'))
+        .filter((e) => (e as HTMLElement).offsetParent !== null)
+        .map((e) => (e as HTMLElement).dataset.testid ?? e.getAttribute("role") ?? e.tagName);
+      return { under: el ? `${el.tagName}[data-testid=${(el as HTMLElement).dataset.testid ?? ""}]` : "semmi", overlays };
+    },
+    { x: s.cx, y: s.cy },
+  );
+  await page.screenshot({ path: test.info().outputPath(`${g.case.id}-no-input.png`) });
+  throw new Error(`${g.case.id}: a tárcsa húzása nem jut el a játékhoz (${g.input} nem változik). A tárcsa közepe alatt: ${diag.under}; látható fedőrétegek: ${JSON.stringify(diag.overlays)}`);
 }
 
 const median = (a: number[]) => {
@@ -221,9 +269,10 @@ function analyseStep(rec: Rec, g: GameSpec, t0: number, sign: number, d0 = NaN):
   })();
   const end = after[after.length - 1]!.t;
   const tail = (from: number) => after.filter((f) => f.t >= from);
-  const steadyFrames = tail(end - 200);
+  const steadyWin = Math.max(200, 3 * fm);
+  const steadyFrames = tail(end - steadyWin);
   const steadyInput = median(steadyFrames.map((f) => sign * f[g.input]!));
-  const steadyMotion = median(motions.filter((m) => m.t >= end - 200).map((m) => m.v));
+  const steadyMotion = median(motions.filter((m) => m.t >= end - steadyWin).map((m) => m.v));
   const firstT = (pred: (f: Frame) => boolean) => after.find(pred)?.t ?? NaN;
   const knobMs = firstT((f) => Math.abs(f.knobX - base.knobX) > 0.5) - t0;
   const inputMs = firstT((f) => Math.abs(f[g.input]! - base[g.input]!) > 1e-6) - t0;
@@ -263,6 +312,8 @@ async function stepRun(page: Page, cdp: CDPSession, g: GameSpec, fx: number): Pr
     try {
       return await stepOnce(page, cdp, g, fx);
     } catch (err) {
+      // Bezárt oldalon (időtúllépés, összeomlás) nincs mit mérni: az eredeti hibát adjuk tovább, nem egy CDP-hibát.
+      if (page.isClosed()) throw err;
       // Mérés közben felugró kérdés: elhárítjuk és megismételjük (legfeljebb háromszor).
       if (attempt >= 3 || !(await clearQuiz(page, g))) throw err;
     }
@@ -283,8 +334,12 @@ async function stepOnce(page: Page, cdp: CDPSession, g: GameSpec, fx: number): P
   }
   await readRec(page); // a lépcső előtti rész eldobva — de az utolsó néhány képkocka kell az alapértékhez:
   await page.waitForTimeout(120);
+  await waitFrames(page, 3);
   await touch(cdp, "touchMove", s.cx + fx * s.r, y);
   await page.waitForTimeout(g.holdMs);
+  // A CI szoftveres WebGL-je lassú (Kockavadász ~10 fps): a tartás legalább 15 képkockáig tart, hogy az állandósult
+  // érték és a 63 / 90%-os pont mérhető legyen.
+  await waitFrames(page, 18);
   const rec = await readRec(page);
   await touch(cdp, "touchEnd");
   await page.waitForTimeout(400);
@@ -292,7 +347,8 @@ async function stepOnce(page: Page, cdp: CDPSession, g: GameSpec, fx: number): P
   const t0 = moves[moves.length - 1]?.t ?? NaN;
   const d0 = moves[moves.length - 1]?.d ?? NaN;
   if (!Number.isFinite(t0) || rec.frames.length < 5 || (await page.locator(g.case.quizScope ?? "[data-joy-no-quiz]").first().isVisible().catch(() => false))) {
-    throw new Error(`${g.case.id}: nincs mérhető lépcső (események: ${JSON.stringify(rec.events.map((e) => e.type))}, képkockák: ${rec.frames.length})`);
+    // A rögzítő a lépcső ELŐTT ürül (a lenyomás és a gáz eldobva), ezért itt csak a lépcső `pointermove`-ja várható.
+    throw new Error(`${g.case.id}: nincs mérhető lépcső (a lépcső óta: események ${JSON.stringify(rec.events.map((e) => e.type))}, képkockák ${rec.frames.length})`);
   }
   return { rec, t0, d0 };
 }
@@ -300,6 +356,7 @@ async function stepOnce(page: Page, cdp: CDPSession, g: GameSpec, fx: number): P
 async function measureGame(page: Page, g: GameSpec, cpu: number) {
   const cdp = await page.context().newCDPSession(page);
   await installRecorder(page, g.probe);
+  if (cpu === 1) await assertStickReachesGame(page, cdp, g);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpu });
   const steps: Step[] = [];
   for (let i = 0; i < 2; i++) {
@@ -405,7 +462,7 @@ function assertAccepted(g: GameSpec, m: Awaited<ReturnType<typeof measureGame>>)
 
 for (const g of GAMES) {
   test(`joystick-reakció: ${g.case.id}`, async ({ page }) => {
-    test.setTimeout(MEASURE ? 240_000 : 120_000);
+    test.setTimeout(MEASURE ? 240_000 : 180_000);
     await startGame(page, g);
     const cpus = MEASURE ? [1, 4, 6] : [1];
     for (const cpu of cpus) {
