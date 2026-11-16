@@ -87,6 +87,15 @@ export function classroomDisplayLabel(value: unknown): string {
 }
 
 /**
+ * A lecke oldalának évfolyam-felirata (docs/specs/2026-11-16-tananyag-programozas-felirat.md): a programozási kategóriába
+ * (`html_files.classroom = 0`) tartozó lecke „Programozás”; egyébként a lecke pontos (tartalmi) évfolyama — sosem sávtartomány.
+ * A lecke adata (és az abból számolt arculat, korosztály) ettől független.
+ */
+export function lessonHeaderGradeLabel(lessonClassroom: number, categoryClassroom?: number | null): string {
+  return categoryClassroom === 0 ? classroomDisplayLabel(0) : getClassroomLabel(lessonClassroom);
+}
+
+/**
  * Extracts the classroom a material belongs to from its title.
  * Returns 0 for the "Programozási alapismeretek" track, 1-12 for a grade, and null when
  * the title carries no classroom marker.
