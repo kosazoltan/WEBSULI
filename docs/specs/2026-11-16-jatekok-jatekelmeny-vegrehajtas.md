@@ -283,6 +283,40 @@ sora az adott játék „a” al-szeletének kötelező része.
 | Aszteroida (J6a) | 17 | `P/SpaceAsteroidQuiz.tsx:1340` | változó `dt` (`:1503`) | közepes |
 | Tornado (J7a) | 4 (+ `L/tornado/questions.ts` 3, `wind.ts` 1) | `P/TornadoHunter200.tsx:1438` | futás-seed `Math.random`-mal (`:1924`); változó `dt` (`:1547`) | közepes |
 
+### K.7 Cloze rövid játék-alak (hibajavítás)
+
+**Állapot:** folyamatban — ág fix/jatek-cloze-rovid-alak, munkafa .claude/worktrees/jatek-cloze, kanban #50
+
+- **Tünet:** a szóbank hiányos mondatos kérdése a játékban „Melyik illik a mondatba? <mondat _____-val> (Magyarul:
+  <teljes fordítás>)”. (1) Hosszú: a `fitsAllViewports(...).ok` (a szint évfolyamán: 0→3., 1→5., 2→7., 3→9., 4→11.)
+  a 6614 cloze-tételből csak 38,3% (a 0. szinten 0%, az 1.-en 4–14%); a `promptFits` szűrő hátrasorolja, így a cloze
+  eltűnne a játékokból. (2) Elárulja a választ: a fordításban a helyes opció `hu`-ja szó szerint 71,4%-ban, tő-egyezéssel
+  85,2%-ban benne van (nyelvenként 83–87%).
+- **Mérés (teljes bank, scratchpad `cloze/`):** a prompt részei (medián szó): előtag 4 / mondat 5–7 / fordítás 5–7. A
+  fordítás nélküli mondat 98,9%-ban `ok`. A fordítás NÉLKÜL, a mostani (azonos szófajú, bármely témájú) elterelőkkel
+  150 tételes kézi mintán (nyelvenként 50) 36 tételnél (24%) több opció is védhető; a hibák zöme rövid keret
+  („_____ ist warm.”, „Je lis _____.”) vagy azonos / rokon témájú elterelő (szín, szám, ruha, időjárás). A fordítás
+  kitakart szóval sem segítene: a „_____ ist warm” → „A _____ meleg” ugyanúgy kétértelmű, és a hossz a 0. szinten
+  27–46%-ra vinné az `ok` arányt.
+- **Terv (additív `clozeStyle: "full" | "game"`; a „full” a mostani viselkedés és az alapértelmezés):** a játék-alak
+  (a) csak a mondat a hiányjellel — előtag és fordítás nélkül; (b) csak ha a hiányon kívül ≥ 4 szó van a mondatban
+  (különben a bejegyzés más kérdéstípust kap); (c) elterelő: azonos kind és szófaj (a névelő / szófaj ne árulja el), de
+  sem azonos, sem rokon téma (szómező-párok), és a hiány előtti „a / an”, francia elízió („d’”, „l’”) vagy teljes alak
+  („de”, „le”, „je” …) hangtani kényszerének megfelel; a `meaningsOverlap` és a fordítás-alapú kizárás megmarad; ha
+  nincs 3 ilyen elterelő, a forrás az alaptípusra esik vissza; (d) a teljes mondat + fordítás a magyarázatban marad
+  („Miért?”, megoldás-kijelzés). A játékok a `useVocabQuizSource`-on át kapják. Mellékes lelet: a `vocabPlayQuestion`
+  `speakText`-je mindig a helyes term, a felolvasás (alap BE) így a magyar→cél és a cloze kérdésnél a kérdés
+  megjelenésekor kimondja a választ — a generátor additív `VocabQuiz.speakText` mezőt ad (nem áruló szöveg), a
+  bekötés közös fájlt és meglévő tesztet érint: ORKESZTRÁTOR-KÉRÉS.
+- **Érintett fájlok:** `GE/vocab/questionGenerator.ts`, `GE/vocab/vocabSource.ts`, `GE/vocab/useVocabQuizSource.ts`,
+  új `T/vocab-cloze-game.test.ts`, `P/PlayLab.tsx` (egy additív `?q=cloze-game` próbatétel a böngészős próbához). A hét
+  játéklap, a `GE/play/*` és a meglévő tesztek nem változnak.
+- **Elfogadás:** a teljes bankon mindhárom nyelven minden játék-alakú cloze: pontosan egy helyes opció; a prompt nem
+  tartalmazza a helyes opciót, sem a `hu`-t; elterelő-invariánsok (szófaj, téma, hangtan, jelentés); a játék-alakú
+  cloze-ok `fitsAllViewports(...).ok` aránya szintenként ≥ 88% (mért: 89,7–100%); a „full” alak és a meglévő vocab-tesztek
+  változatlanul zöldek; 150 tételes kézi minta és 200 tételes vak megoldó: a több védhető opció aránya számottevően a
+  fordítás nélküli régi elterelőké (24%) alatt; böngészős próba a play-labban 360×640, 390×844, 844×390.
+
 ---
 
 ## J0a — Determinizmus és játékérzet: seedelt RNG, fix lépés, rázás / hitstop, mini-Director, őrök
