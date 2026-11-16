@@ -266,7 +266,7 @@ test("determinizmus: azonos seed + azonos bemenet-sorozat → bitre azonos meccs
   );
 });
 
-test("bot-szimuláció (3000 meccs): mindig véget ér, legfeljebb 7 + 2 kör; a pontosabb nyer túlnyomórészt; a gyorsaság önmagában nem veri a pontosságot", () => {
+test("bot-szimuláció (3000 meccs): mindig véget ér, legfeljebb 7 + 2 kör; a pontosabb nyer túlnyomórészt; a gyorsaság önmagában nem veri a pontosságot", (t) => {
   const players: MatchPlayer[] = [{ id: "a", grade: 5 }, { id: "b", grade: 5 }];
   const tally = (bots: Record<string, Bot>, n: number, tag: string) => {
     const wins = { a: 0, b: 0, co: 0 };
@@ -298,7 +298,7 @@ test("bot-szimuláció (3000 meccs): mindig véget ér, legfeljebb 7 + 2 kör; a
   assert.ok(same.a > same.b, "azonos pontosságnál a gyorsabb többször nyer");
   assert.ok(same.b / 1000 >= 0.1, `a lassabb is nyerhet (${same.b / 1000})`);
   // eredmény a jelentéshez
-  console.log(`[duel-sim] acc=${JSON.stringify(acc)} speed=${JSON.stringify(speed)} same=${JSON.stringify(same)}`);
+  t.diagnostic(`[duel-sim] acc=${JSON.stringify(acc)} speed=${JSON.stringify(speed)} same=${JSON.stringify(same)}`);
 });
 
 test("bot-szimuláció a valódi bankkal, vegyes évfolyammal (4. vs 8.): 200 meccs hibátlanul véget ér, ismétlés nélkül", () => {

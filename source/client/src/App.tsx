@@ -39,6 +39,7 @@ const SpeedQuizMath = lazy(() => import("@/pages/SpeedQuizMath"));
 const BrainRotSteal = lazy(() => import("@/pages/BrainRotSteal"));
 const SpaceAsteroidQuiz = lazy(() => import("@/pages/SpaceAsteroidQuiz"));
 const TornadoHunter200 = lazy(() => import("@/pages/TornadoHunter200"));
+const DuelArena = lazy(() => import("@/pages/DuelArena"));
 const Profile = lazy(() => import("@/pages/Profile"));
 
 function LoadingSpinner() {
@@ -100,6 +101,7 @@ function Router() {
         <Route path="/games/brain-rot-steal" component={BrainRotSteal} />
         <Route path="/games/space-asteroid-quiz" component={SpaceAsteroidQuiz} />
         <Route path="/games/tornado-hunter-200" component={TornadoHunter200} />
+        <Route path="/games/parbaj" component={DuelArena} />
         <Route path="/profile" component={Profile} />
         <Route component={NotFound} />
       </Switch>
