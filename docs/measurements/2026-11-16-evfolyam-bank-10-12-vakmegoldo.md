@@ -126,6 +126,11 @@ vak körben.
 - `g11-history-053` (Kassa): a hadiállapotot Horthy június 26-án még aznap bejelentette, Bárdossy pedig június 27-én az
   országgyűlésben jelentette be (hu.wikipedia: Kassa bombázása). A magyarázat most mindkét dátumot tartalmazza.
 
+**Célzott söprés a review hibatípusaira** (a 10–12. évf. 234 új magyar és történelmi tételén, friss Opus lektor, 9 megnyitott forrás):
+két helyes válasz szereplő- / szerzőkérdésnél: 0 további; dátum-összemosás: 2 magyarázat javítva — `g12-history-032` (a helsinki
+záróokmányt augusztus 1-jén, a július 30-án kezdődött csúcstalálkozó zárónapján írták alá; hu.wikipedia, en.wikipedia),
+`g10-hungarian-025` (Csokonai és Lilla megismerkedésének évszaka forrásonként eltér → csak az év, 1797).
+
 A csak a magyarázatot érintő javítások a vak megoldónak láthatatlanok (ő csak kérdést és opciót kap), ezekre nem volt újra-vak kör.
 
 ## A független számoló bővítése (10–12.)
