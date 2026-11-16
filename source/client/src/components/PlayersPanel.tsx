@@ -20,6 +20,9 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+/** K1: a törölt, de tiltva maradt fiók bejegyzése — cím és maszk nélkül. */
+type DeletedBan = { ref: string; bannedAt: string; deletedAt: string };
+
 type AdminPlayer = {
   id: string; nickname: string | null; avatar: string | null; maskedEmail: string; createdAt: string; lastSeenAt: string | null;
   banned: boolean; bannedAt: string | null; googleLinked: boolean; learnerLinked: boolean;
@@ -47,7 +50,7 @@ export default function PlayersPanel() {
   const toggleBan = useMutation({
     mutationFn: (p: AdminPlayer) => apiRequest("POST", `/api/admin/game-accounts/${encodeURIComponent(p.id)}/${p.banned ? "unban" : "ban"}`, {}),
     onSuccess: async (_r, p) => {
-      toast({ title: p.banned ? "Tiltás feloldva" : "Játékos tiltva", description: p.nickname ?? "becenév nélküli fiók" });
+      toast({ title: p.banned ? "Tiltás feloldva" : "Játékos tiltva", description: `${p.nickname ?? "becenév nélküli fiók"} — az azonos postafiókhoz tartozó fiókokra is vonatkozik.` });
       await queryClient.invalidateQueries({ queryKey: ["/api/admin/game-accounts"] });
     },
     onError: (e: Error) => toast({ title: "Nem sikerült", description: e.message, variant: "destructive" }),
@@ -58,6 +61,21 @@ export default function PlayersPanel() {
     mutationFn: (p: AdminPlayer) => apiRequest("POST", `/api/admin/game-accounts/${encodeURIComponent(p.id)}/unlink-learner`, {}),
     onSuccess: async (_r, p) => {
       toast({ title: "Tanulói kapcsolat bontva", description: p.nickname ?? "becenév nélküli fiók" });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/game-accounts"] });
+    },
+    onError: (e: Error) => toast({ title: "Nem sikerült", description: e.message, variant: "destructive" }),
+  });
+
+  // K1: a „törölt, de tiltva maradt” bejegyzések (cím nélkül) és feloldásuk. A kulcs a lista prefixe alatt van, így a
+  // tiltás / törlés utáni frissítés ezt is újratölti.
+  const deletedBans = useQuery<{ entries: DeletedBan[] }>({
+    queryKey: ["/api/admin/game-accounts", { deletedBans: true }],
+    queryFn: () => apiRequest("GET", "/api/admin/game-accounts/deleted-bans"),
+  });
+  const unbanDeleted = useMutation({
+    mutationFn: (e: DeletedBan) => apiRequest("POST", `/api/admin/game-accounts/deleted-bans/${encodeURIComponent(e.ref)}/unban`, {}),
+    onSuccess: async () => {
+      toast({ title: "Tiltás feloldva", description: "A törölt fiók címével ismét nyitható rendes fiók." });
       await queryClient.invalidateQueries({ queryKey: ["/api/admin/game-accounts"] });
     },
     onError: (e: Error) => toast({ title: "Nem sikerült", description: e.message, variant: "destructive" }),
@@ -140,6 +158,28 @@ export default function PlayersPanel() {
               </li>
             ))}
           </ul>
+        )}
+        {(deletedBans.data?.entries?.length ?? 0) > 0 && (
+          <section className="space-y-2" data-testid="deleted-bans">
+            <h3 className="text-sm font-semibold">Törölt, de tiltva maradt fiókok</h3>
+            <p className="text-xs text-muted-foreground">
+              A fiók törlődött, de a tiltás megmaradt (a tiltástól legfeljebb 12 hónapig): ugyanazzal a postafiókkal csak tiltott fiók
+              nyitható. Cím nincs tárolva — csak egy visszafejthetetlen ujjlenyomat és a dátumok. A feloldás az azonos postafiókhoz
+              tartozó (más okból tiltott) élő fiókok tiltását is feloldja.
+            </p>
+            <ul className="divide-y rounded-md border">
+              {(deletedBans.data?.entries ?? []).map((e) => (
+                <li key={e.ref} className="flex flex-wrap items-center gap-3 p-3 text-sm" data-testid={`deleted-ban-${e.ref}`}>
+                  <span className="font-mono text-xs text-muted-foreground">#{e.ref.slice(0, 8)}</span>
+                  <span>tiltva: {fmt(e.bannedAt)} · törölve: {fmt(e.deletedAt)}</span>
+                  <Button size="sm" variant="secondary" className="ml-auto gap-1" disabled={unbanDeleted.isPending}
+                    onClick={() => unbanDeleted.mutate(e)} data-testid={`button-deleted-ban-unban-${e.ref}`}>
+                    <RotateCcw className="h-4 w-4" /> Feloldás
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
         <AlertDialog open={toDelete !== null} onOpenChange={(open) => { if (!open) setToDelete(null); }}>
           <AlertDialogContent className="text-slate-900" data-testid="dialog-player-delete">

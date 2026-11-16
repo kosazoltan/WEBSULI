@@ -9,7 +9,7 @@
  * magyar üzenetként jelenik meg; belépés után a „Fiókom” (/fiok) gomb, becenév nélkül oda vezet elsőként.
  */
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -263,6 +263,11 @@ export default function PlayerLogin() {
           )}
           {error && step !== "link-error" && (
             <p role="alert" className="text-sm text-destructive" data-testid="player-login-error">{error}</p>
+          )}
+          {!signedIn && (
+            <Button asChild variant="ghost" className="w-full">
+              <Link href="/games" data-testid="link-player-login-back">Vissza a játékokhoz</Link>
+            </Button>
           )}
         </CardContent>
       </Card>

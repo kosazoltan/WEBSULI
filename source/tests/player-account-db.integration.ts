@@ -12,6 +12,8 @@ import { getNoFollow, installAdminGoogleStub, playerGoogleLogin } from "./suppor
 
 const { emailHash, playerAuthKey, codeHash, limitHash, deleteLimitHash, linkHash, generateLinkToken, purposeEmailHash, allPurposeEmailHashes, MAX_FAILED_ATTEMPTS_PER_DAY } = await import("../server/player/codes");
 const { createPlayerStore } = await import("../server/player/store");
+const { banFingerprint, banKeyId, normalizeEmail } = await import("../server/player/codes");
+const { createPlayerAccountStore, reconcileBanFingerprints } = await import("../server/player/account-store");
 const { learnerTokenFor, rotateLearnerToken } = await import("../server/learners");
 const { logger } = await import("../server/lib/logger");
 
@@ -367,7 +369,11 @@ describe("JM7b — adatletöltés és fióktörlés (JM-A15)", () => {
     assert.equal(data.account.avatar, "hex-lime");
     assert.ok(!text.includes("masik-exporthoz") && !text.includes("Titkos Holló"), "más játékos adata nincs benne");
     // Review #449 (A2): engedélylistás séma — belső azonosító (fiók, Google, tanuló, foglaltsági kulcs) nincs benne.
-    assert.deepEqual(Object.keys(data).sort(), ["account", "exportedAt", "format", "gameRuns", "loginCodes"]);
+    // SPEC-VÁLTOZÁS 2026-11-16 (végrehajtás „JM7b-utójavítás K1” 6. lépés): + `retentionNote` — statikus adatvédelmi tájékoztató
+    // szöveg a tiltás-ujjlenyomatról; az engedélylista továbbra is pontos, és a szöveg semmilyen személyes adatot nem tartalmaz.
+    assert.deepEqual(Object.keys(data).sort(), ["account", "exportedAt", "format", "gameRuns", "loginCodes", "retentionNote"]);
+    const note = (data as unknown as { retentionNote: string }).retentionNote;
+    assert.ok(/ujjlenyomat/.test(note) && !note.includes("@") && !note.includes("export"), "statikus, PII nélküli tájékoztató");
     assert.deepEqual(Object.keys(data.account).sort(), ["avatar", "bannedAt", "createdAt", "email", "emailVerifiedAt", "googleLinked", "lastSeenAt", "learnerProfileLinked", "nickname"]);
     const ownId = ((await c.request("GET", "/api/player/me")).json as { id: string }).id;
     assert.ok(!text.includes(ownId), "a fiók belső azonosítója nincs az exportban");
@@ -698,6 +704,425 @@ describe("JM7b-utójavítás N2 — tiltott játékos saját adatai, admin végl
       }
     }
     assert.equal((await q(`SELECT 1 FROM player_accounts WHERE id IN ($1, $2)`, [victimId, bannedId])).length, 2);
+  });
+});
+
+describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (ujjlenyomat; tulajdonosi döntés 2026-11-16)", () => {
+  const fp = (email: string) => banFingerprint(playerAuthKey(), normalizeEmail(email)!);
+  const fpRows = async (email: string) => q(`SELECT 1 FROM player_ban_fingerprints WHERE fingerprint = $1`, [fp(email)]);
+  /** VALÓDI kódos beváltás tetszőleges (nem normalizált) címmel; a státuszt és a választ adja vissza. */
+  async function codeLogin(raw: string): Promise<{ client: Client; status: number; body: unknown }> {
+    const key = playerAuthKey();
+    const email = normalizeEmail(raw)!;
+    const eh = emailHash(key, email);
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, "75319864"), linkHash: linkHash(key, generateLinkToken()) });
+    const c = new Client(app.base);
+    const r = await c.request("POST", "/api/player/auth/verify", { kind: "code", email: raw, code: "75319864" });
+    await c.fetchCsrf();
+    return { client: c, status: r.status, body: r.json };
+  }
+  const BANNED_BODY = { ok: false, code: "BANNED", restricted: true };
+  async function selfDelete(c: Client, email: string) {
+    const k = playerAuthKey();
+    const deh = purposeEmailHash(k, normalizeEmail(email)!, "delete");
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: normalizeEmail(email)!, emailHash: deh, limitHash: limitHash(k, email), codeHash: codeHash(k, deh, "del:86429753"), linkHash: linkHash(k, generateLinkToken()) });
+    const r = await c.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "86429753" });
+    assert.equal(r.status, 200, r.text);
+  }
+  const idOf = async (email: string) => (await q<{ id: string }>(`SELECT id FROM player_accounts WHERE email = $1`, [normalizeEmail(email)!]))[0]?.id;
+
+  it("tiltott saját törlés → ugyanaz a cím (és kis- / nagybetű, gmail-pont, +alias változata) újra belépve TILTOTT marad", async () => {
+    const admin = await adminClient();
+    const email = "k1.tiltott@gmail.com";
+    const first = await codeLogin(email);
+    assert.equal(first.status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(email)}/ban`, {})).status, 200);
+    const restricted = await codeLogin(email);
+    assert.deepEqual([restricted.status, restricted.body], [403, BANNED_BODY]);
+    await selfDelete(restricted.client, email);
+    assert.equal((await fpRows(email)).length, 1, "az ujjlenyomat megmaradt");
+    assert.deepEqual(Object.keys((await q(`SELECT * FROM player_ban_fingerprints WHERE fingerprint = $1`, [fp(email)]))[0]!).sort(), ["banned_at", "created_at", "fingerprint", "key_id"], "cím nem tárolódik");
+    for (const variant of [email, "K1.Tiltott@Gmail.com", "k1tiltott@gmail.com", "k1.tiltott+uj@gmail.com"]) {
+      const again = await codeLogin(variant);
+      assert.deepEqual([again.status, again.body], [403, BANNED_BODY], variant);
+      assert.equal((await again.client.request("POST", "/api/player/profile", { nickname: "Újra Itt" })).status, 403, `${variant}: profil tiltva`);
+      const row = (await q<{ banned_at: Date | null }>(`SELECT banned_at FROM player_accounts WHERE email = $1`, [normalizeEmail(variant)!]))[0]!;
+      assert.ok(row.banned_at !== null, `${variant}: az új fiók tiltottként jött létre`);
+    }
+  });
+
+  it("admin-törlés után ugyanez — a Google-úton létrejövő új fiók is tiltott; idegen cím érintetlen", async () => {
+    const admin = await adminClient();
+    const email = "k1-admin-torles@pelda.hu";
+    assert.equal((await codeLogin(email)).status, 200);
+    const id = (await idOf(email))!;
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/ban`, {})).status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/delete`, { confirm: "TÖRLÉS" })).status, 200);
+    assert.equal((await fpRows(email)).length, 1);
+    const google = await createPlayerAccountStore(dbPool).upsertGooglePlayer("g-sub-k1", email);
+    assert.deepEqual([google.kind, google.kind === "OK" && google.banned], ["OK", true], "Google-úton is tiltott");
+    const stranger = await codeLogin("k1-idegen@pelda.hu");
+    assert.equal(stranger.status, 200, "idegen címre nincs hatás");
+  });
+
+  it("NEM tiltott fiók törlése nem hagy ujjlenyomatot; újra belépve rendes fiók", async () => {
+    const email = "k1-rendes@pelda.hu";
+    const c = await codeLogin(email);
+    assert.equal(c.status, 200);
+    await selfDelete(c.client, email);
+    assert.equal((await fpRows(email)).length, 0);
+    assert.equal((await codeLogin(email)).status, 200);
+  });
+
+  it("feloldás: a „törölt, de tiltva maradt” bejegyzés cím nélkül listázódik és feloldható; élő fiók feloldása is törli az ujjlenyomatot", async () => {
+    const admin = await adminClient();
+    const email = "k1-feloldas@pelda.hu";
+    assert.equal((await codeLogin(email)).status, 200);
+    let id = (await idOf(email))!;
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/ban`, {})).status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/delete`, { confirm: "TÖRLÉS" })).status, 200);
+    const list = await admin.request("GET", "/api/admin/game-accounts/deleted-bans");
+    assert.equal(list.status, 200);
+    const entries = (list.json as { entries: { ref: string; bannedAt: string; deletedAt: string }[] }).entries;
+    const mine = entries.find((e) => fp(email).startsWith(e.ref));
+    assert.ok(mine, "a bejegyzés listázódik");
+    assert.deepEqual(Object.keys(mine).sort(), ["bannedAt", "deletedAt", "ref"]);
+    assert.ok(!list.text.includes("k1-feloldas") && !list.text.includes("pelda.hu") && !list.text.includes(fp(email)), "se cím, se maszk, se teljes ujjlenyomat");
+    assert.equal((await admin.request("POST", "/api/admin/game-accounts/deleted-bans/zz/unban", {})).status, 400);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/deleted-bans/${"0".repeat(16)}/unban`, {})).status, 404);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/deleted-bans/${mine.ref}/unban`, {})).status, 200);
+    assert.equal((await fpRows(email)).length, 0);
+    assert.equal((await codeLogin(email)).status, 200, "feloldás után rendes fiók");
+    // Élő fiók: tiltott törlés → tiltottként újra létrejön → az élő fiók feloldása az ujjlenyomatot is viszi.
+    id = (await idOf(email))!;
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/ban`, {})).status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/delete`, { confirm: "TÖRLÉS" })).status, 200);
+    assert.equal((await codeLogin(email)).status, 403);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${(await idOf(email))!}/unban`, {})).status, 200);
+    assert.equal((await fpRows(email)).length, 0, "az élő fiók feloldása az ujjlenyomatot is törölte");
+    assert.ok(!logged.some((l) => l.includes(email)), "a napló maszkolt");
+  });
+
+  // #471 review (1.): a törlés és a létrehozás közös címenkénti zárral sorosított.
+  const LOCK_SQL = `SELECT pg_advisory_xact_lock(hashtextextended($1, 7041))`;
+  const settled = <T>(p: Promise<T>) => { const s = { done: false }; void p.then(() => { s.done = true; }, () => { s.done = true; }); return s; };
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  async function bannedRow(email: string): Promise<string> {
+    const { rows } = await dbPool.query<{ id: string }>(`INSERT INTO player_accounts (email, email_verified_at, banned_at) VALUES ($1, now(), now()) RETURNING id`, [email]);
+    return rows[0]!.id;
+  }
+
+  it("verseny (1. sorrend): a nem commitolt tiltott-törlés alatt induló létrehozás VÁR, és tiltottként jön létre (kód / link és Google)", async () => {
+    for (const via of ["code", "google"] as const) {
+      const email = `k1-verseny-a-${via}@pelda.hu`;
+      await bannedRow(email);
+      const c1 = await dbPool.connect();
+      try {
+        await c1.query("BEGIN");
+        await c1.query(LOCK_SQL, [fp(email)]);
+        await c1.query(`INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $2, now())`, [fp(email), banKeyId(playerAuthKey())]);
+        await c1.query(`DELETE FROM player_accounts WHERE email = $1`, [email]);
+        const creating = via === "code"
+          ? createPlayerStore(dbPool).confirmVerifiedEmail(email).then((r) => r.banned)
+          : createPlayerAccountStore(dbPool).upsertGooglePlayer(`g-sub-race-${email}`, email).then((r) => r.kind === "OK" && r.banned);
+        const state = settled(creating);
+        await pause(300);
+        assert.equal(state.done, false, `${via}: a létrehozás a törlés commitjáig vár`);
+        await c1.query("COMMIT");
+        assert.equal(await creating, true, `${via}: tiltottként jött létre`);
+      } finally {
+        c1.release();
+      }
+      assert.ok((await q<{ banned_at: Date | null }>(`SELECT banned_at FROM player_accounts WHERE email = $1`, [email]))[0]!.banned_at !== null);
+    }
+  });
+
+  it("verseny (2. sorrend): a folyamatban lévő létrehozás alatt induló törlés VÁR; utána a törlés tiltott fióknál ujjlenyomatot hagy", async () => {
+    const email = "k1-verseny-b@pelda.hu";
+    const id = await bannedRow(email);
+    const c1 = await dbPool.connect();
+    try {
+      await c1.query("BEGIN");
+      await c1.query(LOCK_SQL, [fp(email)]);
+      const deleting = createPlayerAccountStore(dbPool).deleteAccount(id, (e) => allPurposeEmailHashes(playerAuthKey(), e));
+      const state = settled(deleting);
+      await pause(300);
+      assert.equal(state.done, false, "a törlés a létrehozó zárjáig vár");
+      await c1.query("COMMIT");
+      assert.equal((await deleting)!.account, 1);
+    } finally {
+      c1.release();
+    }
+    assert.equal((await fpRows(email)).length, 1);
+  });
+
+  it("verseny, sokszor ismételve (valódi párhuzamos törlés + létrehozás): soha nem marad tiltás nélküli fiók", async () => {
+    const accounts = createPlayerAccountStore(dbPool);
+    const store = createPlayerStore(dbPool);
+    for (let i = 0; i < 25; i++) {
+      const email = `k1-ismetelt-${i}@pelda.hu`;
+      const id = await bannedRow(email);
+      const create = i % 2 === 0 ? store.confirmVerifiedEmail(email) : accounts.upsertGooglePlayer(`g-sub-rep-${i}`, email);
+      await Promise.all([accounts.deleteAccount(id, (e) => allPurposeEmailHashes(playerAuthKey(), e)), create]);
+      const rows = await q<{ banned_at: Date | null }>(`SELECT banned_at FROM player_accounts WHERE email = $1`, [email]);
+      assert.ok(rows.every((r) => r.banned_at !== null), `${i}: tiltás nélküli fiók maradt`);
+      assert.equal((await fpRows(email)).length, 1, `${i}: az ujjlenyomat megmaradt`);
+    }
+  });
+
+  it("állapotgép: MINDEN tiltást író / olvas-dönt-ír művelet megvárja a címenkénti zárat (párhuzamos DB-teszt műveletenként)", async () => {
+    const accounts = createPlayerAccountStore(dbPool);
+    const store = createPlayerStore(dbPool);
+    const hashes = (e: string) => allPurposeEmailHashes(playerAuthKey(), e);
+    type Op = { name: string; email: string; setup: () => Promise<void>; run: () => Promise<unknown> };
+    const ops: Op[] = [];
+    const add = (name: string, email: string, setup: () => Promise<void>, run: () => Promise<unknown>) => ops.push({ name, email, setup, run });
+    let id = "";
+    add("tiltás", "k1-zar-tilt@pelda.hu", async () => { id = (await store.confirmVerifiedEmail("k1-zar-tilt@pelda.hu")).id; }, () => accounts.setBanned(id, true));
+    add("feloldás élő", "k1-zar-old@pelda.hu", async () => { id = await bannedRow("k1-zar-old@pelda.hu"); }, () => accounts.setBanned(id, false));
+    add("feloldás törölt", "k1-zar-torolt@pelda.hu", async () => {
+      await dbPool.query(`INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $2, now())`, [fp("k1-zar-torolt@pelda.hu"), banKeyId(playerAuthKey())]);
+    }, () => accounts.unbanDeleted(fp("k1-zar-torolt@pelda.hu").slice(0, 16)));
+    add("törlés", "k1-zar-del@pelda.hu", async () => { id = await bannedRow("k1-zar-del@pelda.hu"); }, () => accounts.deleteAccount(id, hashes));
+    add("létrehozás kód / link", "k1-zar-kod@pelda.hu", async () => {}, () => store.confirmVerifiedEmail("k1-zar-kod@pelda.hu"));
+    add("Google új", "k1-zar-gnew@pelda.hu", async () => {}, () => accounts.upsertGooglePlayer("g-zar-new", "k1-zar-gnew@pelda.hu"));
+    add("Google ismert", "k1-zar-gold@pelda.hu", async () => {
+      await accounts.upsertGooglePlayer("g-zar-old", "k1-zar-gold@pelda.hu");
+      await dbPool.query(`UPDATE player_accounts SET banned_at = now() WHERE email = $1`, ["k1-zar-gold@pelda.hu"]);
+    }, () => accounts.upsertGooglePlayer("g-zar-old", "k1-zar-gold@pelda.hu"));
+    add("helyreállítás", "k1-zar-rec@pelda.hu", async () => { await bannedRow("k1-zar-rec@pelda.hu"); }, () => reconcileBanFingerprints(dbPool));
+    add("takarítás", "k1-zar-purge@pelda.hu", async () => {
+      await dbPool.query(`INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $2, now() - interval '13 months')`, [fp("k1-zar-purge@pelda.hu"), banKeyId(playerAuthKey())]);
+    }, () => accounts.purgeExpiredBanFingerprints(12));
+    for (const op of ops) {
+      await op.setup();
+      const c1 = await dbPool.connect();
+      try {
+        await c1.query("BEGIN");
+        await c1.query(LOCK_SQL, [fp(op.email)]);
+        const p = op.run();
+        const state = settled(p);
+        await pause(250);
+        assert.equal(state.done, false, `${op.name}: a tartott címenkénti zárig vár`);
+        await c1.query("COMMIT");
+        await p;
+      } finally {
+        c1.release();
+      }
+    }
+  });
+
+  it("verseny: Google ismert azonosítós belépés (helyreállítás) ↔ párhuzamos admin-feloldás — a feloldott játékos NEM lesz újra tiltott", async () => {
+    const accounts = createPlayerAccountStore(dbPool);
+    const email = "k1-gold-unban@gmail.com";
+    await accounts.upsertGooglePlayer("g-sub-gold-unban", email);
+    const id = (await idOf(email))!;
+    await accounts.setBanned(id, true);
+    const c1 = await dbPool.connect();
+    let login: Promise<unknown>;
+    try {
+      await c1.query("BEGIN");
+      await c1.query(LOCK_SQL, [fp(email)]); // az admin-feloldás tranzakciója (a valódi művelettel azonos lépések)
+      await c1.query(`UPDATE player_accounts SET banned_at = NULL WHERE id = $1`, [id]);
+      await c1.query(`DELETE FROM player_ban_fingerprints WHERE fingerprint = $1`, [fp(email)]);
+      login = accounts.upsertGooglePlayer("g-sub-gold-unban", email);
+      await pause(250);
+      await c1.query("COMMIT");
+    } finally {
+      c1.release();
+    }
+    const r = (await login!) as { kind: string; banned?: boolean };
+    assert.equal(r.banned, false);
+    assert.equal((await fpRows(email)).length, 0, "a helyreállítás nem írta vissza az ujjlenyomatot");
+    assert.equal((await codeLogin("k1goldunban+x@gmail.com")).status, 200, "az alias-belépés rendes");
+  });
+
+  it("verseny: helyreállítás (rotáció után) ↔ párhuzamos feloldás — nem ír vissza ujjlenyomatot a feloldott fiókra", async () => {
+    const email = "k1-rec-unban@pelda.hu";
+    const id = await bannedRow(email); // tiltott, ujjlenyomat nélkül (mint egy rotáció után)
+    const c1 = await dbPool.connect();
+    let rec: Promise<unknown>;
+    try {
+      await c1.query("BEGIN");
+      await c1.query(LOCK_SQL, [fp(email)]);
+      await c1.query(`UPDATE player_accounts SET banned_at = NULL WHERE id = $1`, [id]);
+      rec = reconcileBanFingerprints(dbPool);
+      await pause(250);
+      await c1.query("COMMIT");
+    } finally {
+      c1.release();
+    }
+    await rec!;
+    assert.equal((await fpRows(email)).length, 0);
+  });
+
+  it("verseny: megőrzés-takarítás ↔ párhuzamos újratiltás — a frissen tiltott fiók ujjlenyomata megmarad", async () => {
+    const email = "k1-purge-reban@pelda.hu";
+    const id = (await createPlayerStore(dbPool).confirmVerifiedEmail(email)).id;
+    await dbPool.query(`INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $2, now() - interval '13 months')`, [fp(email), banKeyId(playerAuthKey())]);
+    const c1 = await dbPool.connect();
+    let purge: Promise<number>;
+    try {
+      await c1.query("BEGIN");
+      await c1.query(LOCK_SQL, [fp(email)]); // a tiltás tranzakciója (a valódi művelettel azonos lépések)
+      await c1.query(`UPDATE player_ban_fingerprints SET banned_at = now() WHERE fingerprint = $1`, [fp(email)]);
+      await c1.query(`UPDATE player_accounts SET banned_at = now() WHERE id = $1`, [id]);
+      purge = createPlayerAccountStore(dbPool).purgeExpiredBanFingerprints(12);
+      await pause(250);
+      await c1.query("COMMIT");
+    } finally {
+      c1.release();
+    }
+    await purge!;
+    assert.equal((await fpRows(email)).length, 1, "a takarító nem törölte a frissen tiltott fiók ujjlenyomatát");
+  });
+
+  it("újratiltás egy lejárt ujjlenyomatú címen a tiltás idejét frissíti (a megőrzés a tiltástól számít)", async () => {
+    const accounts = createPlayerAccountStore(dbPool);
+    const email = "k1-reban-fresh@pelda.hu";
+    const id = (await createPlayerStore(dbPool).confirmVerifiedEmail(email)).id;
+    await dbPool.query(`INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $2, now() - interval '13 months')`, [fp(email), banKeyId(playerAuthKey())]);
+    await accounts.setBanned(id, true);
+    const row = (await q<{ fresh: boolean }>(`SELECT banned_at > now() - interval '1 minute' AS fresh FROM player_ban_fingerprints WHERE fingerprint = $1`, [fp(email)]))[0]!;
+    assert.equal(row.fresh, true);
+  });
+
+  it("#471 review (2.): tiltás → törlés → újrabelépés (tiltott) → a törölt-tiltott feloldása az élő fiókot is feloldja; utána a törlés nyomtalan", async () => {
+    const admin = await adminClient();
+    const email = "k1.felold2@gmail.com";
+    assert.equal((await codeLogin(email)).status, 200);
+    let id = (await idOf(email))!;
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/ban`, {})).status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/delete`, { confirm: "TÖRLÉS" })).status, 200);
+    const variant = "k1felold2+x@gmail.com";
+    const again = await codeLogin(variant);
+    assert.deepEqual([again.status, again.body], [403, BANNED_BODY], "a változattal újra létrejött fiók tiltott");
+    assert.equal((await fpRows(email)).length, 1, "az ujjlenyomat megmarad (egy MÁSIK változat is tiltott maradjon)");
+    assert.deepEqual([(await codeLogin("k1.felold2@gmail.com")).status], [403], "a harmadik változat is tiltott");
+    const ref = fp(email).slice(0, 16);
+    const unban = await admin.request("POST", `/api/admin/game-accounts/deleted-bans/${ref}/unban`, {});
+    assert.deepEqual([unban.status, (unban.json as { unbannedAccounts: number }).unbannedAccounts], [200, 2], "mindkét élő változat feloldva");
+    const normal = await codeLogin(variant);
+    assert.equal(normal.status, 200, "a játékos rendesen belép");
+    assert.equal((await normal.client.request("POST", "/api/player/profile", { nickname: "Feloldott Fóka" })).status, 200);
+    id = (await idOf(variant))!;
+    await selfDelete(normal.client, variant);
+    assert.equal((await fpRows(email)).length, 0, "feloldás után a törlés nem hagy ujjlenyomatot");
+    assert.equal((await q(`SELECT 1 FROM player_accounts WHERE id = $1`, [id])).length, 0);
+  });
+
+  it("K1-b (#469/#471 review): ÉLŐ tiltott fióknál a cím-változatok (gmail-pont, +alias, googlemail) és a Google-út is tiltott; a korábbi alias-fiók is; a feloldás mindet visszaadja", async () => {
+    const admin = await adminClient();
+    const email = "aliasproba@gmail.com";
+    const older = await codeLogin("aliasproba+regi@gmail.com"); // a tiltás ELŐTT nyitott alias-fiók
+    assert.equal(older.status, 200);
+    assert.equal((await codeLogin(email)).status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(email)}/ban`, {})).status, 200);
+    assert.equal((await fpRows(email)).length, 1, "az ujjlenyomat már a tiltáskor létrejön");
+    assert.equal((await older.client.request("GET", "/api/player/me")).status, 403, "a korábbi alias-fiók élő munkamenete is tiltott");
+    for (const variant of ["alias.proba+2@gmail.com", "aliasproba@googlemail.com", "Alias.Proba@Gmail.com", "a.l.i.a.s.proba@gmail.com"]) {
+      const r = await codeLogin(variant);
+      assert.deepEqual([r.status, r.body], [403, BANNED_BODY], variant);
+    }
+    const google = await createPlayerAccountStore(dbPool).upsertGooglePlayer("g-sub-alias", "alias.proba+g@gmail.com");
+    assert.deepEqual([google.kind, google.kind === "OK" && google.banned], ["OK", true], "Google-úton is tiltott");
+    const listed = ((await admin.request("GET", "/api/admin/game-accounts/deleted-bans")).json as { entries: { ref: string }[] }).entries;
+    assert.ok(!listed.some((e) => fp(email).startsWith(e.ref)), "élő tiltott fiók ujjlenyomata nem a „törölt” listán van");
+    // Feloldás az élő fiókon: minden változat és az ujjlenyomat egyszerre.
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(email)}/unban`, {})).status, 200);
+    assert.equal((await fpRows(email)).length, 0);
+    assert.equal((await older.client.request("GET", "/api/player/me")).status, 200, "a régi alias-fiók is feloldva");
+    for (const variant of ["alias.proba+2@gmail.com", "aliasproba@googlemail.com"]) assert.equal((await codeLogin(variant)).status, 200, variant);
+  });
+
+  it("K1-c: megőrzési idő — a lejárt (élő fiók nélküli) ujjlenyomat törlődik, a friss marad, az élő tiltás nem jár le; a takarító is futtatja", async () => {
+    const admin = await adminClient();
+    const accounts = createPlayerAccountStore(dbPool);
+    const oldGone = "k1-lejart@pelda.hu", fresh = "k1-friss@pelda.hu", liveOld = "k1-elo-regi@pelda.hu";
+    await dbPool.query(`INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $3, now() - interval '13 months'), ($2, $3, now() - interval '1 month')`, [fp(oldGone), fp(fresh), banKeyId(playerAuthKey())]);
+    assert.equal((await codeLogin(liveOld)).status, 200);
+    const liveId = (await idOf(liveOld))!;
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${liveId}/ban`, {})).status, 200);
+    await dbPool.query(`UPDATE player_ban_fingerprints SET banned_at = now() - interval '13 months' WHERE fingerprint = $1`, [fp(liveOld)]);
+    await dbPool.query(`UPDATE player_accounts SET banned_at = now() - interval '13 months' WHERE id = $1`, [liveId]);
+    const [, , purged] = await createPlayerStore(dbPool).purgeOldCodes();
+    assert.ok(purged >= 1, `a takarító törölt: ${purged}`);
+    assert.equal((await fpRows(oldGone)).length, 0, "a 12 hónapnál régebbi, élő fiók nélküli ujjlenyomat törlődött");
+    assert.equal((await fpRows(fresh)).length, 1, "a friss megmaradt");
+    assert.equal((await fpRows(liveOld)).length, 1, "élő tiltott fiók ujjlenyomata nem jár le");
+    assert.ok((await q<{ banned_at: Date | null }>(`SELECT banned_at FROM player_accounts WHERE id = $1`, [liveId]))[0]!.banned_at !== null, "az élő tiltás érintetlen");
+    assert.equal(await accounts.purgeExpiredBanFingerprints(12), 0, "újrafuttatva nincs több");
+    assert.equal((await codeLogin(oldGone)).status, 200, "a lejárt tiltás után rendes fiók");
+  });
+
+  it("SESSION_SECRET-rotáció után önjavító: az élő tiltott fiók ujjlenyomata a következő belépéskor újraképződik", async () => {
+    const admin = await adminClient();
+    const email = "k1-onjavito@pelda.hu";
+    assert.equal((await codeLogin(email)).status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(email)}/ban`, {})).status, 200);
+    await dbPool.query(`DELETE FROM player_ban_fingerprints WHERE fingerprint = $1`, [fp(email)]); // a régi kulcsú ujjlenyomat „elveszett”
+    assert.equal((await codeLogin(email)).status, 403);
+    assert.equal((await fpRows(email)).length, 1, "a belépéskor újraképződött");
+    assert.equal((await codeLogin("k1-onjavito+x@pelda.hu")).status, 403, "és az alias-változat ismét tiltott");
+  });
+
+  it("kulcsrotáció (SESSION_SECRET): az élő tiltott fiók — ismert Google-azonosítóval és a kódos úton is — tiltva marad, alias-regisztráció tiltott; a törölt-tiltott tudottan elvész", async () => {
+    const admin = await adminClient();
+    const accounts = createPlayerAccountStore(dbPool);
+    const store = createPlayerStore(dbPool);
+    const googleBanned = "rotgoogle@gmail.com", codeBanned = "rotkod@gmail.com", deletedBanned = "rot-torolt@pelda.hu";
+    const g = await accounts.upsertGooglePlayer("g-sub-rot", googleBanned);
+    assert.equal(g.kind, "OK");
+    assert.equal((await codeLogin(codeBanned)).status, 200);
+    assert.equal((await codeLogin(deletedBanned)).status, 200);
+    for (const e of [googleBanned, codeBanned, deletedBanned]) assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(e)}/ban`, {})).status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(deletedBanned)}/delete`, { confirm: "TÖRLÉS" })).status, 200);
+    const original = process.env.SESSION_SECRET;
+    try {
+      process.env.SESSION_SECRET = `${original}-rotalt`;
+      // Ismert Google-azonosítós belépés a rotáció után (a gyors ág is önjavító), majd alias-regisztráció → tiltott.
+      const again = await accounts.upsertGooglePlayer("g-sub-rot", googleBanned);
+      assert.deepEqual([again.kind, again.kind === "OK" && again.banned], ["OK", true]);
+      assert.deepEqual([(await codeLogin("rot.google+x@gmail.com")).status], [403], "Google-ág: az alias tiltott");
+      // Rendszerszintű egyeztetés (a takarító induláskor és óránként futtatja): a kódos tiltott fiók belépés NÉLKÜL is helyreáll.
+      const [, , , lost, restored] = await store.purgeOldCodes();
+      assert.ok(lost >= 1, `elveszett régi kulcsú ujjlenyomat: ${lost}`);
+      assert.ok(restored >= 1, `helyreállított: ${restored}`);
+      assert.equal((await codeLogin("rot.kod+1@googlemail.com")).status, 403, "kódos ág: az alias tiltott");
+      assert.equal((await codeLogin(deletedBanned)).status, 200, "a törölt-tiltott ujjlenyomata a rotációval tudottan elveszett (dokumentált)");
+      const stale = await q(`SELECT 1 FROM player_ban_fingerprints WHERE key_id <> $1`, [banKeyId(playerAuthKey())]);
+      assert.equal(stale.length, 0, "régi kulcsú sor nem maradt");
+    } finally {
+      process.env.SESSION_SECRET = original;
+      await store.purgeOldCodes(); // vissza az eredeti kulcsra (a többi teszt adatai)
+    }
+  });
+
+  it("a kódkérési korlát kulcsa a kanonikus cím: alias-címekkel nem sokszorozható", async () => {
+    const guest = new Client(app.base);
+    for (const v of ["limitp@gmail.com", "limit.p@gmail.com", "limitp+1@gmail.com", "limitp@googlemail.com", "LIMIT.P+2@gmail.com"]) {
+      assert.equal((await guest.request("POST", "/api/player/auth/start", { email: v })).status, 202, v);
+    }
+    const n = (await q(`SELECT 1 FROM player_auth_codes WHERE limit_hash = $1`, [limitHash(playerAuthKey(), "limitp@gmail.com")])).length;
+    assert.equal(n, 3, "a kanonikus címre 15 percenként legfeljebb 3 kód készült");
+  });
+
+  it("nem admin (játékos, vendég) nem éri el a törölt-tiltott végpontokat, és semmi nem törlődik", async () => {
+    const admin = await adminClient();
+    const email = "k1-vedett@pelda.hu";
+    assert.equal((await codeLogin(email)).status, 200);
+    const id = (await idOf(email))!;
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/ban`, {})).status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/delete`, { confirm: "TÖRLÉS" })).status, 200);
+    const ref = fp(email).slice(0, 16);
+    const player = (await codeLogin("k1-kivancsi@pelda.hu")).client;
+    const guest = new Client(app.base);
+    await guest.fetchCsrf();
+    for (const c of [player, guest]) {
+      assert.equal((await c.request("GET", "/api/admin/game-accounts/deleted-bans")).status, 401);
+      assert.equal((await c.request("POST", `/api/admin/game-accounts/deleted-bans/${ref}/unban`, {})).status, 401);
+    }
+    assert.equal((await fpRows(email)).length, 1);
   });
 });
 
