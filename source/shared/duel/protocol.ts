@@ -27,6 +27,11 @@ export const RT_STATUS_PATH = "/api/rt/status";
 export const RT_MAX_MESSAGE_BYTES = 4096;
 /** Kapcsolatonként ennyi esemény / másodperc (token-vödör, ugyanennyi löket). */
 export const RT_MESSAGES_PER_SEC = 20;
+/**
+ * A kliens állította válaszidő legfeljebb ennyivel lehet kevesebb a szerver mérésénél (review #452, SPEC-VÁLTOZÁS a terv
+ * 10.5-höz: a 400 ms-os plafon helyett 120 ms, a szerver által mért oda-vissza idők MINIMUMÁBÓL). 120 < TIE_MS (200).
+ */
+export const RT_LATENCY_SLACK_CAP_MS = 120;
 /** A belépőjegy élettartama (≤ 60 s). */
 export const RT_TICKET_TTL_MS = 60_000;
 /** Ennyi ideig tartjuk a megszakadt játékos helyét (újracsatlakozás teljes pillanatképpel). */
@@ -79,8 +84,34 @@ export const ERROR_CODES = [
   "BAD_OPTION",
   "SERVER_RESTART",
   "ORIGIN_NOT_ALLOWED",
+  "KICKED",
 ] as const;
 export type RtErrorCode = (typeof ERROR_CODES)[number];
+
+/** Gyereknek érthető magyar szöveg a hibakódokhoz (a JM3 felülete ezt mutatja; a kód a protokollban marad). */
+export const RT_ERROR_TEXT: Record<RtErrorCode, string> = {
+  BAD_MESSAGE: "Valami nem sikerült. Próbáld újra!",
+  UNSUPPORTED_VERSION: "Frissítsd az oldalt, új változat érkezett.",
+  RATE_LIMITED: "Túl gyorsan próbálkozol. Várj egy kicsit!",
+  ROOM_NOT_FOUND: "Ez a szoba már nem létezik. Nyiss újat, vagy kérj új kódot!",
+  ROOM_FULL: "A szoba megtelt (legfeljebb 4 játékos).",
+  ROOM_STARTED: "Ebben a szobában már elkezdődött a játék.",
+  NOT_HOST: "Ezt csak a szoba gazdája teheti meg.",
+  ALREADY_IN_ROOM: "Már egy másik szobában vagy.",
+  ALREADY_ANSWERED: "Erre a kérdésre már válaszoltál.",
+  ROUND_CLOSED: "Ez a kör már lezárult.",
+  INVALID_TICKET: "A belépés lejárt. Próbáld újra!",
+  CAPACITY: "Most nagyon sokan játszanak. Próbáld újra néhány perc múlva!",
+  FEATURE_DISABLED: "Az online játék most nem elérhető.",
+  GAME_NOT_ENABLED: "Ez a játék online még nem elérhető.",
+  NOT_IN_ROOM: "Nem vagy ebben a szobában.",
+  BAD_PHASE: "Ezt most nem lehet megtenni.",
+  NOT_ENOUGH_PLAYERS: "Legalább 2 kész játékos kell az induláshoz.",
+  BAD_OPTION: "Ilyen válasz nincs.",
+  SERVER_RESTART: "A szerver frissül — a meccs itt véget ért. Próbáld újra egy perc múlva!",
+  ORIGIN_NOT_ALLOWED: "Az online játék csak a WebSuli oldalán érhető el.",
+  KICKED: "A szoba gazdája kivett a játékból.",
+};
 
 export const NOTICE_CODES = ["SERVER_RESTART", "ROOM_EXPIRING", "RUNS_PRIORITY", "PLAYER_LEFT", "KICKED", "ROOM_CLOSED"] as const;
 export type RtNoticeCode = (typeof NOTICE_CODES)[number];
@@ -317,18 +348,31 @@ export const ticketRequestSchema = z.discriminatedUnion("intent", [
 ]);
 export type RtTicketRequest = z.infer<typeof ticketRequestSchema>;
 
-/** A `GET /api/rt/status` válasza: számok, személyes adat nélkül. */
+/**
+ * A nyilvános `GET /api/rt/status` válasza (review #452 ALACSONY-8): be van-e kapcsolva, szabad-e (`available`), és a futó
+ * meccsek száma — ez a telepítés előtti őr bemenete. Hogy fut-e tananyaggyártás, a kapcsolatszám stb. csak az admin
+ * státuszban (`GET /api/admin/rt/status`) látszik.
+ */
 export const statusSchema = z
   .object({
     enabled: z.boolean(),
     mode: z.enum(["off", "admin", "on"]),
     games: z.array(z.enum(RT_GAME_IDS)),
-    activeRooms: z.number().int(),
+    available: z.enum(["ok", "full", "draining", "off"]),
     activeMatches: z.number().int(),
-    connections: z.number().int(),
-    draining: z.boolean(),
-    runsPriority: z.boolean(),
     protocol: z.literal(PROTOCOL_VERSION),
   })
   .strict();
 export type RtStatus = z.infer<typeof statusSchema>;
+
+export const adminStatusSchema = statusSchema
+  .extend({
+    activeRooms: z.number().int(),
+    connections: z.number().int(),
+    draining: z.boolean(),
+    runsPriority: z.boolean(),
+    capacity: z.number().int(),
+    bankLoaded: z.boolean(),
+  })
+  .strict();
+export type RtAdminStatus = z.infer<typeof adminStatusSchema>;

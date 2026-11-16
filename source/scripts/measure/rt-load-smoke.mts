@@ -65,7 +65,7 @@ async function runServer(): Promise<void> {
       loopP50: loop.percentile(50) / 1e6,
       loopP99: loop.percentile(99) / 1e6,
       loopMax: loop.max / 1e6,
-      status: rt.status(),
+      status: rt.adminStatus(),
       counters: rt.metrics.counters,
       rejected: rt.metrics.rejectedSnapshot(),
     });
@@ -76,7 +76,7 @@ async function runServer(): Promise<void> {
     }
   });
   const server = http.createServer(app);
-  rt.attach(server);
+  await rt.attach(server);
   server.listen(0, "127.0.0.1", () => process.send?.({ port: (server.address() as AddressInfo).port }));
 }
 

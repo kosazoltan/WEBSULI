@@ -30,13 +30,17 @@ export type Harness = {
   close(): Promise<void>;
 };
 
-export async function startHarness(opts: { env?: Record<string, string>; timing?: Partial<RoomTiming>; windowMs?: number; destroyUpgrade?: boolean } = {}): Promise<Harness> {
+export async function startHarness(
+  opts: { env?: Record<string, string>; timing?: Partial<RoomTiming>; windowMs?: number; destroyUpgrade?: boolean; failGrade?: number } = {},
+): Promise<Harness> {
   const env: Record<string, string> = { MP_MODE: "on", ...(opts.env ?? {}) };
   const runs = { count: 0 };
   const clock = { offsetMs: 0 };
   const base = createQuestionProvider();
   const roomConfig: RoomConfig = {
     provider: (req) => {
+      // Hibainjektálás (review #452 KÖZEPES-4): ennél az évfolyamnál a kérdés-szolgáltató kivételt dob.
+      if (opts.failGrade !== undefined && req.grade === opts.failGrade) throw new Error("injected provider failure");
       const q = base(req);
       return q && opts.windowMs ? { ...q, windowMs: opts.windowMs } : q;
     },
@@ -72,7 +76,7 @@ export async function startHarness(opts: { env?: Record<string, string>; timing?
     }),
   );
   const server = http.createServer(app);
-  rt.attach(server, { destroyUpgrade: opts.destroyUpgrade ?? true });
+  await rt.attach(server, { destroyUpgrade: opts.destroyUpgrade ?? true });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as AddressInfo).port;
   const origin = `http://localhost:${port}`;

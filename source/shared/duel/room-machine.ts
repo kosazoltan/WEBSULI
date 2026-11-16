@@ -55,6 +55,8 @@ export type RoomTiming = {
   reconnectGraceMs: number;
   /** Tétlen váróterem élettartama. */
   lobbyTtlMs: number;
+  /** Tétlen váróterem, ahová második játékos nem lépett be (kapacitás-kímélés, review #452). */
+  lobbyAloneTtlMs: number;
   /** A befejezett meccs után a visszavágó-ablak. */
   finishedTtlMs: number;
   /** A megszakított meccs eredményének kijelzése a lezárás előtt. */
@@ -69,6 +71,7 @@ export const DEFAULT_ROOM_TIMING: RoomTiming = {
   answerGraceMs: MAX_LATENCY_SLACK_MS,
   reconnectGraceMs: RT_RECONNECT_GRACE_MS,
   lobbyTtlMs: 15 * 60_000,
+  lobbyAloneTtlMs: 5 * 60_000,
   finishedTtlMs: 5 * 60_000,
   abortedTtlMs: 10_000,
   drainCloseMs: 5_000,
@@ -147,6 +150,8 @@ export type RoomMatch = {
   answers: Record<string, RoomAnswer>;
   lastReveal: RoomReveal | null;
   result: RoomResult | null;
+  /** A leggyorsabb HELYES válasz a szerver NYERS mérésével (review #452: a statisztika nem a kliens-kiegyenlített idő). */
+  rawFastestMs: Record<string, number | null>;
   /** Évfolyamonként az EBBEN a meccsben feltett kulcsok (bank-kimerüléskor csak a korábbi meccsek kulcsai szabadulnak fel). */
   matchUsed: Record<string, string[]>;
 };
@@ -166,6 +171,8 @@ export type RoomState = {
   /** Az állapotváltozások sorszáma (minden kimenő állapot-üzenet hordozza; a kliens a régebbit eldobja). */
   seq: number;
   hostId: string | null;
+  /** A szoba nyitója (vagy a gazdaság végleges örököse): rövid kiesés után visszakapja a gazdaságot. */
+  ownerId: string | null;
   players: RoomPlayer[];
   nextOrder: number;
   /** Évfolyamonként a már feltett kulcsok (a visszavágók között is megmarad). */
@@ -201,7 +208,7 @@ export type RoomEffect =
   | { type: "notice"; code: RtNoticeCode; deadlineMs: number | null; to?: string }
   | { type: "kicked"; playerId: string }
   | { type: "removed"; playerId: string }
-  | { type: "close"; reason: "EMPTY" | "EXPIRED" | "SERVER_RESTART" | "FINISHED" };
+  | { type: "close"; reason: "EMPTY" | "EXPIRED" | "SERVER_RESTART" | "FINISHED" | "ERROR" };
 
 export type RoomReduceResult = { state: RoomState; effects: RoomEffect[]; error?: RtErrorCode };
 
@@ -238,6 +245,7 @@ export function createRoom(args: CreateRoomArgs): RoomState {
     lastActivityMs: args.nowMs,
     seq: 1,
     hostId: args.host.playerId,
+    ownerId: args.host.playerId,
     players: [
       {
         id: args.host.playerId,
@@ -278,6 +286,7 @@ function clone(s: RoomState): RoomState {
           deadlines: { ...s.match.deadlines },
           questions: { ...s.match.questions },
           answers: { ...s.match.answers },
+          rawFastestMs: { ...s.match.rawFastestMs },
           matchUsed: Object.fromEntries(Object.entries(s.match.matchUsed).map(([k, v]) => [k, v.slice()])),
         }
       : null,
@@ -315,7 +324,7 @@ function err(state: RoomState, code: RtErrorCode): RoomReduceResult {
   return { state, effects: [], error: code };
 }
 
-function closeRoom(s: RoomState, reason: "EMPTY" | "EXPIRED" | "SERVER_RESTART" | "FINISHED", effects: RoomEffect[]): void {
+function closeRoom(s: RoomState, reason: "EMPTY" | "EXPIRED" | "SERVER_RESTART" | "FINISHED" | "ERROR", effects: RoomEffect[]): void {
   s.closed = true;
   effects.push({ type: "close", reason });
 }
@@ -450,6 +459,14 @@ function revealRound(s: RoomState, nowMs: number, t: RoomTiming, effects: RoomEf
   });
   const outcome = scoreRound(answers, alive);
   m.duel = applyRound(m.duel, outcome, answers);
+  for (const id of alive) {
+    const a = m.answers[id];
+    const q = m.questions[id];
+    if (a && q && a.correct && !a.suspicious && a.acceptedMs <= q.windowMs) {
+      const cur = m.rawFastestMs[id];
+      m.rawFastestMs[id] = cur === null || cur === undefined ? a.serverRtMs : Math.min(cur, a.serverRtMs);
+    }
+  }
   m.lastReveal = {
     round: m.roundNo,
     tiebreak: m.tiebreak,
@@ -493,6 +510,7 @@ function removePlayer(s: RoomState, id: string, nowMs: number, effects: RoomEffe
     delete s.match!.deadlines[id];
     effects.push({ type: "removed", playerId: id }, { type: "notice", code: "PLAYER_LEFT", deadlineMs: null });
     ensureHost(s);
+    if (s.ownerId === id) s.ownerId = s.hostId;
     if (activeIds(s).length < RT_MIN_PLAYERS) {
       finishMatch(s, "OPPONENT_LEFT", nowMs, effects, false);
       return;
@@ -514,6 +532,7 @@ function removePlayer(s: RoomState, id: string, nowMs: number, effects: RoomEffe
   effects.push({ type: "removed", playerId: id });
   if (s.hostId === id) s.hostId = null;
   ensureHost(s);
+  if (s.ownerId === id) s.ownerId = s.hostId;
   if (s.players.filter((x) => !x.left).length === 0) {
     closeRoom(s, "EMPTY", effects);
     return;
@@ -532,6 +551,10 @@ function maybeEarlyReveal(s: RoomState, nowMs: number, cfg: RoomConfig, effects:
   if (waiting.length === 0) revealRound(s, nowMs, timingOf(cfg), effects);
 }
 
+function lobbyTtl(s: RoomState, t: RoomTiming): number {
+  return s.players.filter((p) => !p.left).length < 2 ? t.lobbyAloneTtlMs : t.lobbyTtlMs;
+}
+
 /** A következő időpont, amikor a szerver-rétegnek `tick`-et kell küldenie (`null`: nincs időzített teendő). */
 export function nextWakeMs(s: RoomState, cfg: RoomConfig): number | null {
   if (s.closed) return null;
@@ -539,7 +562,7 @@ export function nextWakeMs(s: RoomState, cfg: RoomConfig): number | null {
   const times: number[] = [];
   switch (s.phase) {
     case "lobby":
-      times.push(s.lastActivityMs + t.lobbyTtlMs);
+      times.push(s.lastActivityMs + lobbyTtl(s, t));
       break;
     case "countdown":
       times.push(s.phaseStartMs + t.countdownMs);
@@ -581,7 +604,7 @@ function tick(s: RoomState, nowMs: number, cfg: RoomConfig, effects: RoomEffect[
   // 3) Fázis-időzítők (egy tick több lépést is megtehet, ha a szerver sokat késett).
   for (let guard = 0; guard < 4 && !s.closed; guard++) {
     if (s.phase === "lobby") {
-      if (nowMs >= s.lastActivityMs + t.lobbyTtlMs) {
+      if (nowMs >= s.lastActivityMs + lobbyTtl(s, t)) {
         effects.push({ type: "notice", code: "ROOM_EXPIRING", deadlineMs: null });
         closeRoom(s, "EXPIRED", effects);
       }
@@ -674,7 +697,10 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
       if (!p || p.left) return err(state, "NOT_IN_ROOM");
       p.connected = true;
       p.disconnectedAtMs = null;
-      if (!s.hostId) ensureHost(s);
+      // Review #452: a szoba nyitója a türelmi időn belül visszatérve visszakapja a gazdaságot (egy rövid kiesés alatt
+      // gazdává lett — akár frissen belépett — játékos nem tarthatja meg).
+      if (s.ownerId === p.id) s.hostId = p.id;
+      else if (!s.hostId) ensureHost(s);
       s.lastActivityMs = nowMs;
       effects.push({ type: "emitState" });
       break;
@@ -710,6 +736,7 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
         lastReveal: null,
         result: null,
         matchUsed: {},
+        rawFastestMs: Object.fromEntries(ids.map((id) => [id, null])),
       };
       s.phase = "countdown";
       s.phaseStartMs = nowMs;
@@ -756,17 +783,15 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
       break;
     }
     case "drain": {
+      // Orkesztrátori döntés (review #452): a leállítás RÖVID és rendezett — a futó meccs AZONNAL lezárul a pillanatnyi
+      // állással (részeredmény, győztes a szabály szerint, `reason: SERVER_RESTART`), a váróterem / befejezett szoba is
+      // zárul. Hosszú kifutás nincs: a Render a SIGTERM előtt már az új példányra váltja a forgalmat, a polling-kliens
+      // következő kérése oda megy, így a régi példányon a meccs úgysem folytatódhatna.
       if (s.drainDeadlineMs !== null) return { state, effects: [] };
       s.drainDeadlineMs = ev.deadlineMs;
-      if (isMatchPhase(s.phase)) {
-        effects.push({ type: "notice", code: "SERVER_RESTART", deadlineMs: ev.deadlineMs }, { type: "emitState" });
-      } else if (s.phase === "finished") {
-        // A már kihirdetett eredmény még látható marad egy rövid ideig (drainCloseMs), utána a szoba zárul.
-        effects.push({ type: "notice", code: "SERVER_RESTART", deadlineMs: s.phaseStartMs + t.drainCloseMs }, { type: "emitState" });
-      } else {
-        effects.push({ type: "notice", code: "SERVER_RESTART", deadlineMs: null });
-        closeRoom(s, "SERVER_RESTART", effects);
-      }
+      if (isMatchPhase(s.phase)) finishMatch(s, "SERVER_RESTART", nowMs, effects, true);
+      effects.push({ type: "notice", code: "SERVER_RESTART", deadlineMs: null });
+      closeRoom(s, "SERVER_RESTART", effects);
       break;
     }
     case "tick":
@@ -862,7 +887,7 @@ export function resultView(s: RoomState): RtMatchResult | null {
         accuracy: Math.round(accuracyOf(st) * 1000) / 1000,
         correct: st.correct,
         asked: st.asked,
-        fastestMs: st.fastestMs,
+        fastestMs: m.rawFastestMs[id] ?? null,
         bestStreak: st.bestStreak,
       };
     }),

@@ -887,6 +887,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // JM2 (terv 10.3, 10.8): a valós idejű réteg jegy- és státusz-végpontja; a Socket.IO-t az index.ts csatolja fel a
   // HTTP-szerverre. MP_MODE=off (alap) → a jegy-végpont 404, a státusz { enabled: false }.
   const rtPlayerStore = createPlayerStore(dbPool);
+  // Review #452 ALACSONY-8: a részletes valós idejű státusz (szobák, kapcsolatok, gyártási elsőbbség, kapacitás) csak adminnak.
+  app.get("/api/admin/rt/status", isAuthenticatedAdmin, (_req: Request, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(getRealtime().adminStatus());
+  });
   app.use("/api/rt", createRtRouter(getRealtime(), {
     resolveLearner: (token) => resolveLearner(token),
     getPlayer: async (req) => {

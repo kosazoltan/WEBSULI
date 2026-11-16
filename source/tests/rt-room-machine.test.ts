@@ -330,29 +330,70 @@ describe("JM2 room-machine — leállítás (drain)", () => {
     assert.ok(r.effects.some((e) => e.type === "notice" && e.code === "SERVER_RESTART"));
   });
 
-  it("futó meccs: értesítés a határidővel, kifuthat; a határidőn túl részeredménnyel (aborted) zárul", () => {
+  // Orkesztrátori döntés (review #452): hosszú kifutás helyett rövid, rendezett lezárás — a futó meccs AZONNAL zárul.
+  it("futó meccs: AZONNAL részeredménnyel (aborted, SERVER_RESTART) zárul, a felfedett körök állása szerint; a szoba lezárul", () => {
     let { s, t } = started();
     s = ok(s, { type: "answer", playerId: A, round: 1, optionIndex: correctOf(s, A), clientRtMs: 1000, medianRttMs: 0 }, t + 1000);
     s = ok(s, { type: "answer", playerId: B, round: 1, optionIndex: wrongOf(s, B), medianRttMs: 0 }, t + 1100);
-    const r = step(s, { type: "drain", deadlineMs: t + 5000 }, t + 1200);
-    assert.ok(r.effects.some((e) => e.type === "notice" && e.code === "SERVER_RESTART" && e.deadlineMs === t + 5000));
-    s = r.state;
-    assert.equal(roomStateView(s, A, t + 1200, cfg).draining, true);
-    assert.equal(step(s, { type: "rematch", playerId: A }, t + 1300).error, "BAD_PHASE");
-    let at = t + 1200;
-    while (s.phase !== "aborted" && s.phase !== "finished") {
-      at = nextWakeMs(s, cfg)!;
-      s = ok(s, { type: "tick" }, at);
-    }
-    assert.equal(s.phase, "aborted");
-    assert.ok(at <= t + 5000);
-    const res = resultView(s)!;
+    assert.equal(s.phase, "round_reveal");
+    const r = step(s, { type: "drain", deadlineMs: t + 1200 }, t + 1200);
+    const order = r.effects.map((e) => e.type);
+    assert.ok(order.indexOf("result") >= 0 && order.indexOf("result") < order.indexOf("close"), `a részeredmény a lezárás előtt megy ki: ${order.join(",")}`);
+    assert.ok(r.effects.some((e) => e.type === "notice" && e.code === "SERVER_RESTART"));
+    assert.equal(r.state.closed, true);
+    assert.equal(r.state.phase, "aborted");
+    const res = resultView(r.state)!;
     assertSchema("match:result", res);
     assert.equal(res.aborted, true);
     assert.equal(res.reason, "SERVER_RESTART");
     assert.deepEqual(res.winners, [A], "részeredmény: az állás szerinti vezető");
-    const closed = ok(s, { type: "tick" }, nextWakeMs(s, cfg)!);
-    assert.equal(closed.closed, true);
+  });
+
+  it("befejezett meccs (visszavágó-ablak): a drain azonnal lezárja a szobát", () => {
+    let { s, t } = started();
+    s = ok(s, { type: "leave", playerId: B }, t + 10);
+    assert.equal(s.phase, "finished");
+    const r = step(s, { type: "drain", deadlineMs: t + 20 }, t + 20);
+    assert.equal(r.state.closed, true);
+    assert.equal(r.effects.some((e) => e.type === "result"), false, "a már kihirdetett eredmény nem ismétlődik");
+  });
+});
+
+describe("JM2 room-machine — kapacitás-kímélés, gazdaság, statisztika (review #452)", () => {
+  it("egyedül maradt váróterem 5 perc után zárul (a teljes váróterem 15 perc)", () => {
+    const alone = room();
+    assert.equal(nextWakeMs(alone, cfg), T0 + DEFAULT_ROOM_TIMING.lobbyAloneTtlMs);
+    assert.equal(step(alone, { type: "tick" }, T0 + DEFAULT_ROOM_TIMING.lobbyAloneTtlMs).state.closed, true);
+    const two = lobby();
+    assert.equal(nextWakeMs(two, cfg), T0 + 20 + DEFAULT_ROOM_TIMING.lobbyTtlMs);
+  });
+
+  it("a nyitó rövid kiesés után visszakapja a gazdaságot; végleges kilépésekor a gazdaság örökös marad", () => {
+    let s = lobby([[B, 5], [C, 5]]);
+    s = ok(s, { type: "disconnect", playerId: A }, T0 + 30);
+    assert.equal(s.hostId, B);
+    s = ok(s, { type: "reconnect", playerId: A }, T0 + 40);
+    assert.equal(s.hostId, A, "visszakapta");
+    s = ok(s, { type: "leave", playerId: A }, T0 + 50);
+    assert.equal(s.hostId, B);
+    assert.equal(s.ownerId, B);
+    s = ok(s, { type: "disconnect", playerId: B }, T0 + 60);
+    s = ok(s, { type: "reconnect", playerId: B }, T0 + 70);
+    assert.equal(s.hostId, B);
+  });
+
+  it("a „leggyorsabb helyes válasz” statisztika a szerver NYERS mérése (nem a kliens-kiegyenlített idő)", () => {
+    let { s, t } = started();
+    s = ok(s, { type: "answer", playerId: A, round: 1, optionIndex: correctOf(s, A), clientRtMs: 1000, medianRttMs: 120 }, t + 1100);
+    assert.equal(s.match!.answers[A]!.acceptedMs, 1000);
+    s = ok(s, { type: "leave", playerId: B }, t + 1200);
+    // B kilépett a kör közben → azonnali zárás; a statisztika az eddig felfedett körökből (itt: egy sem) — ezért egy teljes kör:
+    let r = started();
+    r.s = ok(r.s, { type: "answer", playerId: A, round: 1, optionIndex: correctOf(r.s, A), clientRtMs: 1000, medianRttMs: 120 }, r.t + 1100);
+    r.s = ok(r.s, { type: "answer", playerId: B, round: 1, optionIndex: wrongOf(r.s, B), medianRttMs: 0 }, r.t + 1300);
+    r.s = ok(r.s, { type: "leave", playerId: B }, r.t + 1400);
+    const res = resultView(r.s)!;
+    assert.equal(res.stats.find((x) => x.playerId === A)!.fastestMs, 1100, "nyers szerveridő (1100), nem az elfogadott 1000");
   });
 });
 

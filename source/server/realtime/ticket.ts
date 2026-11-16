@@ -32,10 +32,12 @@ export type TicketClaims = {
 
 export type TicketVerifyResult = { ok: true; claims: TicketClaims } | { ok: false; reason: "MALFORMED" | "SIGNATURE" | "EXPIRED" | "REUSED" };
 
-/** A jegy-kulcs forrása: SESSION_SECRET (élesben kötelező); fejlesztésben / tesztben rögzített kulcs. */
+/**
+ * A jegy-kulcs forrása: SESSION_SECRET. Titok nélkül NINCS jegy (review #452 ALACSONY-7: a repóban látható állandó kulccsal
+ * egy staging / preview példányon bárki hamisíthatna jegyet) — a réteg ilyenkor kikapcsoltként viselkedik.
+ */
 export function ticketSecret(env: NodeJS.ProcessEnv = process.env): string | null {
-  if (env.SESSION_SECRET) return env.SESSION_SECRET;
-  return env.NODE_ENV === "production" ? null : "websuli-dev-rt-ticket";
+  return env.SESSION_SECRET && env.SESSION_SECRET.length >= 16 ? env.SESSION_SECRET : null;
 }
 
 const b64 = (buf: Buffer | string) => Buffer.from(buf).toString("base64url");

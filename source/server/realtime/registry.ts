@@ -38,6 +38,8 @@ export type RegistryDeps = {
   /** A reducer hatásai (a szoba ÚJ állapotával); lezárásnál a szoba már nincs a nyilvántartásban. */
   onEffects: (room: RoomState, effects: RoomEffect[]) => void;
   codeGenerator?: () => string;
+  /** Hiba a reducerben / a hatások kiküldésében (review #452 KÖZEPES-4): napló személyes adat nélkül. */
+  onError?: (where: string, room: RoomState | undefined, error: unknown) => void;
 };
 
 export function createRegistry(deps: RegistryDeps) {
@@ -56,7 +58,12 @@ export function createRegistry(deps: RegistryDeps) {
     const delay = Math.max(0, Math.min(2_147_000_000, at - deps.now() + 5));
     const t = setTimeout(() => {
       timers.delete(room.code);
-      dispatch(room.code, { type: "tick" });
+      // Időzítő-visszahívás: semmilyen hiba nem juthat ki a Node eseményhurkába (a folyamat a gyártással együtt élne tovább).
+      try {
+        dispatch(room.code, { type: "tick" });
+      } catch (error) {
+        deps.onError?.("timer", rooms.get(room.code), error);
+      }
     }, delay);
     t.unref?.();
     timers.set(room.code, t);
@@ -76,12 +83,38 @@ export function createRegistry(deps: RegistryDeps) {
     if (result.effects.length > 0) deps.onEffects(room, result.effects);
   }
 
+  /** Kényszerzárás hiba után: a szoba eltűnik a nyilvántartásból, a játékosok `ROOM_CLOSED`-ot kapnak. */
+  function forceClose(room: RoomState, where: string, error: unknown): RoomReduceResult {
+    deps.onError?.(where, room, error);
+    rooms.delete(room.code);
+    const t = timers.get(room.code);
+    if (t) clearTimeout(t);
+    timers.delete(room.code);
+    const closed: RoomState = { ...room, closed: true };
+    const effects: RoomEffect[] = [{ type: "close", reason: "ERROR" }];
+    try {
+      deps.onEffects(closed, effects);
+    } catch (e) {
+      deps.onError?.("close-effects", closed, e);
+    }
+    return { state: closed, effects, error: "ROOM_NOT_FOUND" };
+  }
+
   function dispatch(code: string, ev: RoomEvent): RoomReduceResult {
     const room = rooms.get(code);
     if (!room) return { state: undefined as unknown as RoomState, effects: [], error: "ROOM_NOT_FOUND" };
-    const result = reduceRoom(room, ev, deps.now(), deps.roomConfig);
+    let result: RoomReduceResult;
+    try {
+      result = reduceRoom(room, ev, deps.now(), deps.roomConfig);
+    } catch (error) {
+      return forceClose(room, `reduce:${ev.type}`, error);
+    }
     if (result.error) return result;
-    commit(result);
+    try {
+      commit(result);
+    } catch (error) {
+      return forceClose(result.state, `effects:${ev.type}`, error);
+    }
     return result;
   }
 

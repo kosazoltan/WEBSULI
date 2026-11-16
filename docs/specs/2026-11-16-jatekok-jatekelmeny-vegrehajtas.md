@@ -1723,6 +1723,22 @@ learner-token HMAC-mintája `S/lib/learner-token.ts:14-32`; vészfék-minta `S/i
 (lejárt, újrahasznált, hamis aláírás → `INVALID_TICKET`), `T/rt-gateway.test.ts` (folyamaton belüli szerver: idegen origin →
 elutasítás; `MP_MODE=off` → `FEATURE_DISABLED`; `admin` módban vendég nem hoz létre szobát; két kliens egy szobában 3 kört
 lejátszik; a `round:open` nem tartalmaz `correctIndex`-et; 4 KB feletti üzenet → bontás; `drain` → részeredmény).
+**SPEC-VÁLTOZÁS 2026-11-16 (review #452, független biztonsági review, orkesztrátori döntés):**
+- Socket.IO-út: `/api/rt/io` (nem `/api/rt/`) — az Engine.IO előtag-egyezéssel szűr, különben a `/api/rt/ticket` és
+  `/api/rt/status` HTTP-végpontot is elnyelné; `addTrailingSlash: false`, pontos útvonal-egyezés.
+- `MP_MODE=off`: a Socket.IO egyáltalán nem csatolódik fel, a kérdésbank nem töltődik be (az út az Expresshez jut, 404) — a
+  JM-A4 „`FEATURE_DISABLED`” elutasítása a futás közben kikapcsolt (`off`-ra állított) felcsatolt rétegre él.
+- Leállítás: a 240 s-os kifutás helyett RÖVID, rendezett lezárás — SIGTERM-re a futó meccs azonnal részeredménnyel zárul
+  (`reason: SERVER_RESTART`), a lezáró üzenetre `MP_DRAIN_WINDOW_MS` (alap 2,5 s) ablak, utána a meglévő sorrend; szoba
+  nélkül azonnal. Indok: a Render a SIGTERM előtt az új példányra váltja a forgalmat, a régi memóriájában élő meccs a
+  polling-klienseknek úgysem folytatódhatna, a nyitva hagyott listener viszont új munkát fogadhatna. Védelem: a telepítés
+  előtti őr a `GET /api/rt/status` `activeMatches` értékére.
+- Gyorsaság (10.5): a késés-keret a szerver által mért `clock:probe` oda-vissza idők MINIMUMA, plafon `RT_LATENCY_SLACK_CAP_MS`
+  = 120 ms (nem a medián, nem 400 ms) — a nyugta késleltetésével nem fújható fel; a „leggyorsabb helyes válasz” statisztika
+  a szerver nyers mérése. A `shared/duel/rules.ts` `acceptedTimeMs`-e változatlan (a hívó adja a kisebb keretet).
+- Nyilvános státusz: `{ enabled, mode, games, available, activeMatches, protocol }`; a részletes (szobák, kapcsolatok,
+  gyártási elsőbbség) `GET /api/admin/rt/status` admin-őr mögött. Jegy SESSION_SECRET nélkül sehol (nincs tartalék-kulcs).
+
 **UNKNOWN:** U-JM2-1: a Vercel-rewrite a Socket.IO polling-kéréseit (GET hosszú várakozással, POST) gond nélkül
 továbbítja-e (dokumentáció szerint ≤ 120 s proxy-idő, a long-poll ≤ 25 s) — felderítés: a JM3 előtt egy Vercel Preview-
 deployon (`MP_MODE=admin`) a `transports: ["polling"]` kényszerítésével két böngészőből egy meccs; mérés: kör-késés.

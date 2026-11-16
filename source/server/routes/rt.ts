@@ -67,7 +67,7 @@ export function createRtRouter(rt: RealtimeService, deps: RtRouterDeps = {}): Ro
     async (req: Request, res: Response) => {
       noStore(res);
       const cfg = rt.config();
-      if (!rt.tickets) return res.status(503).json({ code: "FEATURE_DISABLED" });
+      if (!rt.tickets || !rt.gateway) return res.status(503).json({ code: "FEATURE_DISABLED" });
       if (rt.draining) return res.status(503).json({ code: "SERVER_RESTART" });
       const body = ticketRequestSchema.safeParse(req.body ?? {});
       if (!body.success) return res.status(400).json({ code: "BAD_MESSAGE" });
@@ -81,15 +81,21 @@ export function createRtRouter(rt: RealtimeService, deps: RtRouterDeps = {}): Ro
       let nickname = guestNickname(randomBytes(8).toString("hex"));
       let grade: number | null = null;
       try {
-        const player = deps.getPlayer ? await deps.getPlayer(req) : null;
+        // Review #452 ALACSONY-6: az admin-munkamenet elsőbbséget élvez (admin módban akkor is belép, ha játékos-fiókja is
+        // él); a jegy `admin` jogcíme csak a mód kapuját nyitja, a szobában semmilyen jogot nem ad.
+        const player = !isAdmin && deps.getPlayer ? await deps.getPlayer(req) : null;
         if (player?.banned) return res.status(403).json({ code: "FEATURE_DISABLED" });
-        if (player) {
+        if (isAdmin && user) {
+          kind = "admin";
+          sub = `user:${user.id}`;
+          nickname = guestNickname(stableSeed(secretForSeeds, "user", String(user.id)));
+        } else if (player) {
           kind = "player";
           sub = `player:${player.id}`;
           const nick = (player.nickname ?? "").trim();
           nickname = nick && nicknameProblems(nick).length === 0 ? nick : guestNickname(stableSeed(secretForSeeds, "player", player.id));
         } else if (user) {
-          kind = isAdmin ? "admin" : "user";
+          kind = "user";
           sub = `user:${user.id}`;
           nickname = guestNickname(stableSeed(secretForSeeds, "user", String(user.id)));
         } else {

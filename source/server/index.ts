@@ -10,7 +10,9 @@ import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
 import { flushPendingMaterialResults } from "./routes";
 import { mountAppRoutes } from "./app-routes";
-import { beginRealtimeShutdown, drainMsFromEnv, getRealtime } from "./realtime";
+import { beginRealtimeShutdown, drainWindowMsFromEnv, getRealtime } from "./realtime";
+import { mpMode } from "./realtime/config";
+import { ticketSecret } from "./realtime/ticket";
 import { startPlayerCodeSweeper } from "./player/sweeper";
 import { createPlayerStore } from "./player/store";
 import { setupVite, serveStatic, log } from "./vite";
@@ -617,12 +619,25 @@ app.use((req, res, next) => {
 
     // Munkamenet (Passport) + minden útvonal — JM7a: egy helyen, a jogosultsági őr-tesztek ugyanezt járják be.
     const server = await mountAppRoutes(app);
-    // JM2 (terv 10.3): Socket.IO a /api/rt/io úton, ugyanazon a HTTP-szerveren. MP_MODE=off (alap) mellett minden
-    // kézfogást FEATURE_DISABLED-del utasít el. Fejlesztésben a Vite HMR is ezen a szerveren upgrade-el: az idegen
-    // upgrade-et a Socket.IO ott nem bonthatja. A gyártás alatti szoba-plafonhoz a workflow-motor élő számlálója kell.
-    const realtime = getRealtime();
-    realtime.attach(server, { destroyUpgrade: app.get("env") !== "development" });
-    void import("./workflows/engine").then(({ activeWorkflowRuns }) => realtime.setActiveRunCount(activeWorkflowRuns)).catch((err: unknown) => logger.warn("[RT] a gyártási számláló nem köthető be", err));
+    // JM2 (terv 10.3; review #452 ALACSONY-2, -7): a Socket.IO a /api/rt/io úton CSAK bekapcsolt módban csatolódik fel
+    // (MP_MODE=off — az alap — mellett a szerver a mostanival azonos: nincs figyelő, a kérdésbank nincs a memóriában), és
+    // SESSION_SECRET nélkül nem indul. Az inicializálás hibája nem akaszthatja meg a szerver indulását (napló, a réteg ki).
+    // Fejlesztésben a Vite HMR is ezen a szerveren upgrade-el: az idegen upgrade-et a Socket.IO ott nem bonthatja.
+    if (mpMode() !== "off") {
+      if (!ticketSecret()) {
+        logger.error("[RT] MP_MODE be van kapcsolva, de SESSION_SECRET nélkül a valós idejű réteg nem indul (kikapcsolva marad)");
+      } else {
+        try {
+          const realtime = getRealtime();
+          await realtime.attach(server, { destroyUpgrade: app.get("env") !== "development" });
+          // A gyártás alatti szoba-plafonhoz a workflow-motor élő számlálója.
+          void import("./workflows/engine").then(({ activeWorkflowRuns }) => realtime.setActiveRunCount(activeWorkflowRuns)).catch((err: unknown) => logger.warn("[RT] a gyártási számláló nem köthető be", err));
+          log(`[RT] valós idejű réteg: ${mpMode()}`);
+        } catch (err) {
+          logger.error("[RT] a valós idejű réteg nem indult el (kikapcsolva marad)", err);
+        }
+      }
+    }
     // E2E: no background jobs (they write, send e-mail or make backups).
     const stopSkillLearningAudit = e2e ? () => {} : startSkillLearningAudit();
 
@@ -711,14 +726,13 @@ app.use((req, res, next) => {
       } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
       // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a régi anyagok sora sem indít új gyártást a leálló példányon.
       try { (await import("./studio/legacy-migration")).stopLegacyMigration(); } catch (err) { logger.warn("A régi anyagok sora nem állítható le", err); }
-      // JM2 (terv 10.8, JM-A8; review #452): a valós idejű réteg leállítása — új szoba / csatlakozás tiltva, a futó meccs
-      // legfeljebb MP_DRAIN_MS-ig (alap és plafon 240 s) kifut, utána részeredménnyel zárul, és MINDEN kapcsolat bontódik.
-      // Futó online meccs mellett a HTTP-listener a drain végéig nyitva marad (long-polling!), és csak utána jön a
-      // server.close(); futó meccs nélkül (MP_MODE=off — az alap) a server.close() azonnal, a régi sorrendben fut.
-      // A workflow-várakozással párhuzamosan fut; a pool zárása előtt kivárjuk.
+      // JM2 (terv 10.8; orkesztrátori döntés, review #452): a valós idejű réteg RÖVID, rendezett lezárása — új szoba /
+      // belépés azonnal tiltva, a futó meccsek azonnal lezárulnak a pillanatnyi állással (részeredmény, „a szerver frissül”);
+      // ha volt szoba, a server.close() a legfeljebb MP_DRAIN_WINDOW_MS (alap 2,5 s) üzenet-ablak után jön, különben
+      // (MP_MODE=off — az alap — / nincs szoba) azonnal, a mostani sorrendben. Új kapcsolatot nem fogadunk; a nyitott
+      // kérések közben lefuthatnak.
       const { drained: realtimeDrained } = beginRealtimeShutdown(getRealtime(), server, {
-        drainMs: drainMsFromEnv(),
-        onDrainError: (err) => logger.warn("[RT] drain hiba", err),
+        windowMs: drainWindowMsFromEnv(),
         onHttpClosed: () => log("HTTP server closed"),
       });
       try {

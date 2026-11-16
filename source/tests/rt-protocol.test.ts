@@ -111,9 +111,10 @@ describe("JM2 protokoll — szerver → kliens (szigorú sémák)", () => {
   });
 
   it("státusz: csak számok és kapcsolók", () => {
-    const st = { enabled: false, mode: "off", games: [], activeRooms: 0, activeMatches: 0, connections: 0, draining: false, runsPriority: false, protocol: 1 };
+    const st = { enabled: false, mode: "off", games: [], available: "off", activeMatches: 0, protocol: 1 };
     assert.ok(statusSchema.safeParse(st).success);
     assert.equal(statusSchema.safeParse({ ...st, rooms: ["ABC234"] }).success, false);
+    assert.equal(statusSchema.safeParse({ ...st, runsPriority: true }).success, false, "a gyártási állapot nem nyilvános");
   });
 });
 

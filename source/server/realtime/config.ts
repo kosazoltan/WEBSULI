@@ -27,9 +27,17 @@ export type RtConfig = {
   maxConnectionsPerIp: number;
   ticketsPerMinPerIp: number;
   roomsPerMinPerIp: number;
+  /** IP-nként egyszerre nyitott szobák (közös iskolai NAT mögött egy osztály ~8 négyfős szobát nyit: alap 8). */
+  concurrentRoomsPerIp: number;
   joinAttemptsPerMinPerIp: number;
   handshakeFailuresPerMinPerIp: number;
   directUrl: string | null;
+  /** Jegy nélküli (CONNECT nélküli) kapcsolat időkorlátja — `MP_CONNECT_TIMEOUT_MS`, alap 10 s. */
+  connectTimeoutMs: number;
+  /** Jeggyel csatlakozott, szobába nem lépő kapcsolat időkorlátja — `MP_NO_ROOM_TIMEOUT_MS`, alap 15 s. */
+  noRoomTimeoutMs: number;
+  /** Szobahely nélkül maradt kapcsolat bontása — `MP_SEATLESS_DISCONNECT_MS`, alap 3 s. */
+  seatlessDisconnectMs: number;
 };
 
 export function mpMode(env: NodeJS.ProcessEnv = process.env): MpMode {
@@ -68,8 +76,12 @@ export function rtConfig(env: NodeJS.ProcessEnv = process.env): RtConfig {
     maxConnectionsPerIp: int(env, "MP_MAX_CONNECTIONS_PER_IP", 40, 1, 5000),
     ticketsPerMinPerIp: int(env, "MP_TICKETS_PER_MIN_PER_IP", 10, 1, 10000),
     roomsPerMinPerIp: int(env, "MP_ROOMS_PER_MIN_PER_IP", 5, 1, 10000),
+    concurrentRoomsPerIp: int(env, "MP_CONCURRENT_ROOMS_PER_IP", 8, 1, 10000),
     joinAttemptsPerMinPerIp: int(env, "MP_JOINS_PER_MIN_PER_IP", 20, 1, 10000),
-    handshakeFailuresPerMinPerIp: int(env, "MP_HANDSHAKE_FAILURES_PER_MIN_PER_IP", 30, 1, 10000),
+    handshakeFailuresPerMinPerIp: int(env, "MP_HANDSHAKE_FAILURES_PER_MIN_PER_IP", 60, 1, 10000),
     directUrl: directUrl(env.MP_DIRECT_URL),
+    connectTimeoutMs: int(env, "MP_CONNECT_TIMEOUT_MS", 10_000, 100, 60_000),
+    noRoomTimeoutMs: int(env, "MP_NO_ROOM_TIMEOUT_MS", 15_000, 100, 300_000),
+    seatlessDisconnectMs: int(env, "MP_SEATLESS_DISCONNECT_MS", 3_000, 50, 60_000),
   };
 }

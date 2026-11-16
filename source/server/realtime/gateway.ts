@@ -22,6 +22,7 @@ import {
   RT_MESSAGES_PER_SEC,
   RT_MIN_PLAYERS,
   RT_PATH,
+  RT_LATENCY_SLACK_CAP_MS,
   RT_RECONNECT_GRACE_MS,
   RT_SUPPORTED_MODES,
   authSchema,
@@ -38,7 +39,6 @@ import { isOriginAllowed, isSameOriginRequest } from "../lib/allowed-origins";
 import { clientIpKey } from "../lib/client-ip";
 import type { RtConfig } from "./config";
 import type { Metrics } from "./metrics";
-import { roomHash } from "./metrics";
 import { generateMatchSeed, type Registry } from "./registry";
 import type { TicketClaims, TicketService } from "./ticket";
 
@@ -48,6 +48,8 @@ export const RT_MAX_PENDING_PACKETS = 64;
 export const RT_FLOOD_DISCONNECT_AFTER = 40;
 /** Reakció: kapcsolatonként legfeljebb ennyi ms-onként egy. */
 export const RT_REACTION_MIN_GAP_MS = 1000;
+// Időkorlátok (review #452 KÖZEPES-3; `config.ts`): jegy nélküli kapcsolat `connectTimeoutMs` (10 s), szobába nem lépő
+// `noRoomTimeoutMs` (15 s), szobahely nélkül maradt (kilépés, kirúgás, lezárt szoba) `seatlessDisconnectMs` (3 s).
 
 type Logger = { info: (msg: string, meta?: Record<string, unknown>) => void; warn: (msg: string, meta?: Record<string, unknown>) => void };
 
@@ -59,6 +61,9 @@ type Seat = {
   resumeToken: string;
   socketId: string | null;
   rtt: number[];
+  /** A helyet foglaló kapcsolat IP-kulcsa (kitiltáshoz, IP-nkénti szobaplafonhoz) — kifelé soha nem megy. */
+  ip: string;
+  kind: TicketClaims["kind"] | null;
 };
 
 type SocketData = {
@@ -84,6 +89,8 @@ export type GatewayDeps = {
   /** Az aktív gyártási futások száma (a workflow-motor számlálója); a gyártás alatti szoba-plafonhoz. */
   activeRunCount: () => number;
   isDraining: () => boolean;
+  /** Kulcsolt (HMAC) szobakód-hash a naplóhoz (review #452: só nélküli hash a kis kódtér miatt visszafejthető). */
+  roomHash: (code: string) => string;
 };
 
 /** Egyszerű fix ablakos számláló kulcsonként (IP-korlátok); a lejárt kulcsok olvasáskor törlődnek. */
@@ -132,13 +139,6 @@ function ipOf(req: { headers: IncomingHttpHeaders; socket?: { remoteAddress?: st
   return clientIpKey({ headers: req.headers, ip: req.socket?.remoteAddress ?? fallback });
 }
 
-function median(xs: readonly number[]): number {
-  if (xs.length === 0) return 0;
-  const s = xs.slice().sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
-}
-
 const PLAYER_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 function newPlayerId(): string {
   let id = "P";
@@ -152,8 +152,35 @@ function rtError(code: RtErrorCode): Error & { data: { code: RtErrorCode } } {
   return e;
 }
 
+/**
+ * A késés-keret (review #452 KÖZEPES-1, SPEC-VÁLTOZÁS a terv 10.5-höz): a szerver által mért `clock:probe` oda-vissza
+ * idők MINIMUMA (a kliens a nyugta késleltetésével a mintákat csak NÖVELNI tudja, a minimumot nem csökkentheti), és a
+ * plafon `RT_LATENCY_SLACK_CAP_MS` (120 ms) — a kliens állítása így legfeljebb 120 ms-mal mehet a szerver mérése alá.
+ * 120 < TIE_MS (200): a „leggyorsabb” címet így csak az nyerheti, aki a szerver mérése szerint sem lassabb; a sávos bónusznál
+ * (sávszélesség ≥ 625 ms) legfeljebb egy sávhatár menti, egy lépcsős eltérés lehetséges.
+ */
+export function latencyAllowanceMs(samples: readonly number[]): number {
+  const finite = samples.filter((x) => Number.isFinite(x) && x >= 0);
+  if (finite.length === 0) return 0;
+  return Math.min(RT_LATENCY_SLACK_CAP_MS, Math.min(...finite));
+}
+
 export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: { destroyUpgrade: boolean }) {
   const { registry, tickets, metrics, logger } = deps;
+  const roomHash = deps.roomHash;
+  /** Szobánként a kirúgottak (jegy-alany; vendégnél az IP-kulcs is) a szoba élettartamára. */
+  const bans = new Map<string, Set<string>>();
+  /** Szobánként a nyitó IP-kulcsa (IP-nkénti egyidejű szobaplafon). */
+  const roomOwnerIp = new Map<string, string>();
+  /** Védett futtatás: a valós idejű réteg hibája SOHA nem juthat ki a folyamatba (review #452 KÖZEPES-4). */
+  const guard = (where: string, fn: () => void) => {
+    try {
+      fn();
+    } catch (error) {
+      metrics.reject("INTERNAL");
+      logger.warn("rt.error", { where, error: error instanceof Error ? error.message : String(error) });
+    }
+  };
   const seatsByIdentity = new Map<string, Seat>();
   const seatsByResume = new Map<string, Seat>();
   const seatsByPlayer = new Map<string, Seat>();
@@ -173,6 +200,7 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
     perMessageDeflate: false,
     httpCompression: false,
     cookie: false,
+    connectTimeout: deps.config().connectTimeoutMs,
     // A kapcsolat-állapot visszaállítást (connectionStateRecovery) szándékosan NEM kapcsoljuk be: az a névtér-köztes
     // réteget (jegy, kapacitás) átugorná, és a játékosonként küldött üzeneteket nem pufferelné. Helyette újracsatlakozáskor
     // a szerver a teljes szobaállapotot küldi (`room:state`), a folytatási token alapján.
@@ -249,7 +277,18 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
     seatsByResume.delete(seat.resumeToken);
     seatsByPlayer.delete(seat.playerId);
     const s = socketOfSeat(seat);
-    if (s) (s.data as SocketData).seat = null;
+    if (s) {
+      (s.data as SocketData).seat = null;
+      // Szobahely nélkül a kapcsolat nem foglalhat kapacitást (a jegy szándéka felhasználva — új szobához új jegy kell).
+      const t = setTimeout(
+        () =>
+          guard("seatless", () => {
+            if (!(s.data as SocketData).seat && s.connected) s.disconnect(true);
+          }),
+        deps.config().seatlessDisconnectMs,
+      );
+      t.unref?.();
+    }
   }
 
   function roomSeats(room: RoomState): Seat[] {
@@ -264,7 +303,11 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
   function onEffects(room: RoomState, effects: RoomEffect[]): void {
     const now = deps.now();
     const seats = roomSeats(room);
-    for (const e of effects) {
+    for (const e of effects) guard(`effect:${e.type}`, () => applyEffect(room, e, seats, now));
+  }
+
+  function applyEffect(room: RoomState, e: RoomEffect, seats: Seat[], now: number): void {
+    {
       switch (e.type) {
         case "openRound":
           for (const seat of seats) {
@@ -296,7 +339,14 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
           break;
         case "kicked": {
           const seat = seatsByPlayer.get(e.playerId);
-          if (seat) send(socketOfSeat(seat), "notice", { code: "KICKED", deadlineTs: null });
+          if (seat) {
+            send(socketOfSeat(seat), "notice", { code: "KICKED", deadlineTs: null });
+            // Kitiltás a szoba élettartamára: a jegy-alany, vendégnél az IP-kulcs is (új vendégjeggyel se jöhessen vissza).
+            const set = bans.get(room.code) ?? new Set<string>();
+            set.add(seat.identity);
+            if (seat.kind === "guest") set.add(`ip:${seat.ip}`);
+            bans.set(room.code, set);
+          }
           break;
         }
         case "removed": {
@@ -309,6 +359,8 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
             send(socketOfSeat(seat), "notice", { code: "ROOM_CLOSED", deadlineTs: null });
             releaseSeat(seat);
           }
+          bans.delete(room.code);
+          roomOwnerIp.delete(room.code);
           logger.info("rt.room.closed", { room: roomHash(room.code), reason: e.reason });
           break;
         case "persist":
@@ -322,13 +374,15 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
   function probe(socket: Socket | undefined): void {
     if (!socket || !socket.connected) return;
     const sentAt = deps.now();
-    socket.timeout(5_000).emit("clock:probe", { serverTs: sentAt }, (err: Error | null) => {
-      if (err) return;
-      const data = socket.data as SocketData;
-      if (!data.seat) return;
-      data.seat.rtt.push(deps.now() - sentAt);
-      if (data.seat.rtt.length > 5) data.seat.rtt.shift();
-    });
+    socket.timeout(5_000).emit("clock:probe", { serverTs: sentAt }, (err: Error | null) =>
+      guard("probe", () => {
+        if (err) return;
+        const data = socket.data as SocketData;
+        if (!data.seat) return;
+        data.seat.rtt.push(deps.now() - sentAt);
+        if (data.seat.rtt.length > 5) data.seat.rtt.shift();
+      }),
+    );
   }
 
   function capacityFor(cfg: RtConfig): number {
@@ -337,7 +391,8 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
   }
 
   function newSeat(identity: string, roomCode: string, playerId: string, socket: Socket): Seat {
-    const seat: Seat = { identity, roomCode, playerId, resumeToken: randomBytes(24).toString("base64url"), socketId: socket.id, rtt: [] };
+    const data = socket.data as SocketData;
+    const seat: Seat = { identity, roomCode, playerId, resumeToken: randomBytes(24).toString("base64url"), socketId: socket.id, rtt: [], ip: data.ip, kind: data.claims?.kind ?? null };
     seatsByIdentity.set(identity, seat);
     seatsByResume.set(seat.resumeToken, seat);
     seatsByPlayer.set(playerId, seat);
@@ -376,11 +431,24 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
 
   // --- Kézfogás: jegy vagy folytatási token -------------------------------------------------------------------------
   io.use((socket, next) => {
+    try {
+      handshake(socket, next);
+    } catch (error) {
+      guard("handshake", () => {
+        throw error;
+      });
+      next(rtError("BAD_MESSAGE"));
+    }
+  });
+
+  function handshake(socket: Socket, next: (err?: Error) => void): void {
     const cfg = deps.config();
     const ip = ipOf(socket.request);
-    const fail = (code: RtErrorCode) => {
+    /** `count`: csak a hamisításra utaló hiba (rossz aláírás / alak) számít a szigorú IP-korlátba — a lejárt / felhasznált
+     *  jegy és a megszűnt szoba folytatási tokenje (pl. telepítés után egy egész osztály) nem zárhat ki egy közös NAT-ot. */
+    const fail = (code: RtErrorCode, count = false) => {
       metrics.reject(code);
-      if (code === "INVALID_TICKET" || code === "UNSUPPORTED_VERSION") handshakeFailures.hit(ip);
+      if (count) handshakeFailures.hit(ip);
       next(rtError(code));
     };
     if (cfg.mode === "off") return fail("FEATURE_DISABLED");
@@ -389,12 +457,13 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
     const auth = authSchema.safeParse(rawAuth);
     if (!auth.success) {
       const v = rawAuth && typeof rawAuth === "object" ? (rawAuth as { v?: unknown }).v : undefined;
-      return fail(v !== undefined && v !== PROTOCOL_VERSION ? "UNSUPPORTED_VERSION" : "INVALID_TICKET");
+      return v !== undefined && v !== PROTOCOL_VERSION ? fail("UNSUPPORTED_VERSION") : fail("INVALID_TICKET", true);
     }
     const data: SocketData = { claims: null, ip, seat: null, intentUsed: false, tokens: RT_MESSAGES_PER_SEC, tokensAt: deps.now(), overflow: 0, lastReactionAt: 0 };
     if ("resume" in auth.data) {
+      // Ismeretlen / visszavont folytatási token: a szoba megszűnt (pl. telepítés, lezárás) — egyértelmű kód, hely nem jön létre.
       const seat = seatsByResume.get(auth.data.resume);
-      if (!seat || !registry.get(seat.roomCode)) return fail("INVALID_TICKET");
+      if (!seat || !registry.get(seat.roomCode)) return fail("ROOM_NOT_FOUND");
       data.seat = seat;
       data.intentUsed = true;
       socket.data = data;
@@ -402,14 +471,16 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
     }
     if (deps.isDraining()) return fail("SERVER_RESTART");
     const result = tickets.consume(auth.data.ticket);
-    if (!result.ok) return fail("INVALID_TICKET");
+    if (!result.ok) return fail("INVALID_TICKET", result.reason === "SIGNATURE" || result.reason === "MALFORMED");
     if (cfg.mode === "admin" && result.claims.kind !== "admin") return fail("FEATURE_DISABLED");
     data.claims = result.claims;
     socket.data = data;
     next();
-  });
+  }
 
-  io.on("connection", (socket) => {
+  io.on("connection", (socket) => guard("connection", () => onConnection(socket)));
+
+  function onConnection(socket: Socket): void {
     const data = socket.data as SocketData;
     metrics.counters.connections++;
     metrics.counters.handshakesOk++;
@@ -440,7 +511,7 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
       if (room) send(socket, "room:state", roomStateView(room, data.seat.playerId, deps.now(), deps.roomConfig));
     }
     // Kezdeti késésminták (3 próba), utána körönként egy.
-    for (let i = 0; i < 3; i++) setTimeout(() => probe(socket), 50 + i * 300).unref?.();
+    for (let i = 0; i < 3; i++) setTimeout(() => guard("probe-start", () => probe(socket)), 50 + i * 300).unref?.();
 
     // Csomagonkénti korlát (token-vödör): a túllépő csomag eldobva; tartós elárasztásnál bontás.
     socket.use((packet, next) => {
@@ -491,13 +562,30 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
       });
     }
 
-    socket.on("disconnect", () => {
-      const seat = data.seat;
-      if (!seat || seat.socketId !== socket.id) return;
-      seat.socketId = null;
-      registry.dispatch(seat.roomCode, { type: "disconnect", playerId: seat.playerId });
-    });
-  });
+    socket.on("disconnect", () =>
+      guard("disconnect", () => {
+        const seat = data.seat;
+        if (!seat || seat.socketId !== socket.id) return;
+        seat.socketId = null;
+        registry.dispatch(seat.roomCode, { type: "disconnect", playerId: seat.playerId });
+      }),
+    );
+
+    // Jeggyel csatlakozott, de szobába nem lépő kapcsolat nem foglalhat kapacitást (review #452 KÖZEPES-3).
+    if (!data.seat) {
+      const t = setTimeout(
+        () =>
+          guard("no-room", () => {
+            if (!data.seat && socket.connected) {
+              metrics.reject("NO_ROOM_TIMEOUT");
+              socket.disconnect(true);
+            }
+          }),
+        deps.config().noRoomTimeoutMs,
+      );
+      t.unref?.();
+    }
+  }
 
   type ReplyExtra = { roomCode?: string; playerId?: string; resumeToken?: string };
   type Reply = (code: RtErrorCode | null, extra?: ReplyExtra) => void;
@@ -523,6 +611,9 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
           const mode = payload.mode as RoomState["mode"];
           if (!cfg.games.includes(gameId) || !RT_SUPPORTED_MODES.includes(mode)) return reply("GAME_NOT_ENABLED");
           if (roomsPerIp.hit(data.ip) > cfg.roomsPerMinPerIp) return reply("RATE_LIMITED");
+          let mine = 0;
+          for (const [c, ownerIp] of roomOwnerIp) if (ownerIp === data.ip && registry.get(c)) mine++;
+          if (mine >= cfg.concurrentRoomsPerIp) return reply("RATE_LIMITED");
           if (registry.counts().activeRooms >= capacityFor(cfg)) return reply("CAPACITY");
           const settings = payload.settings as { band?: number; subjects?: string[] };
           const playerId = newPlayerId();
@@ -535,6 +626,7 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
             host: { playerId, nickname: claims.nickname, avatar: claims.avatar, grade },
           });
           const seat = newSeat(claims.sub, code, playerId, socket);
+          roomOwnerIp.set(code, data.ip);
           metrics.counters.roomsCreated++;
           logger.info("rt.room.created", { room: roomHash(code), gameId });
           reply(null, { roomCode: code, playerId, resumeToken: seat.resumeToken });
@@ -548,6 +640,8 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
         if (joinsPerIp.hit(data.ip) > cfg.joinAttemptsPerMinPerIp) return reply("RATE_LIMITED");
         data.intentUsed = true;
         if (!registry.get(code)) return reply("ROOM_NOT_FOUND");
+        const banned = bans.get(code);
+        if (banned && (banned.has(claims.sub) || (claims.kind === "guest" && banned.has(`ip:${data.ip}`)))) return reply("KICKED");
         const playerId = newPlayerId();
         const seat = newSeat(claims.sub, code, playerId, socket);
         const r = registry.dispatch(code, { type: "join", playerId, nickname: claims.nickname, avatar: claims.avatar, grade });
@@ -589,7 +683,7 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
               round: payload.round as number,
               optionIndex: payload.optionIndex as number,
               clientRtMs: (payload.clientRtMs as number | null | undefined) ?? null,
-              medianRttMs: median(seat.rtt),
+              medianRttMs: latencyAllowanceMs(seat.rtt),
             });
             break;
           case "room:leave":

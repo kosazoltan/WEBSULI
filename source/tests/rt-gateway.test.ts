@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 
 import { RT_PATH } from "../shared/duel/protocol";
-import { beginRealtimeShutdown, drainMsFromEnv } from "../server/realtime";
+import { beginRealtimeShutdown, createRealtimeService, drainWindowMsFromEnv } from "../server/realtime";
+import { rtConfig } from "../server/realtime/config";
+import { latencyAllowanceMs } from "../server/realtime/gateway";
+import { createRoomHasher } from "../server/realtime/metrics";
+import { ticketSecret } from "../server/realtime/ticket";
 import {
   LEARNER_REAL_NAME,
   LEARNER_TOKEN,
@@ -148,7 +152,8 @@ describe("JM2 gateway — teljes meccs", () => {
     assert.notEqual(hostOpen.prompt, guestOpen.prompt);
     const st = await (await fetch(`http://127.0.0.1:${h.port}/api/rt/status`)).json();
     assert.equal(st.activeMatches, 0);
-    assert.equal(st.activeRooms, 1, "a befejezett szoba a visszavágó-ablakig él");
+    assert.deepEqual(Object.keys(st).sort(), ["activeMatches", "available", "enabled", "games", "mode", "protocol"], "nyilvánosan csak ennyi (ALACSONY-8)");
+    assert.equal(h.rt.adminStatus().activeRooms, 1, "a befejezett szoba a visszavágó-ablakig él");
   });
 
   it("4 kliens CSAK long-pollinggal (a Vercel-továbbítás szimulációja): teljes meccs, dobogó, mindenki a saját évfolyamán", async () => {
@@ -364,8 +369,10 @@ describe("JM2 gateway — csalás-próbák és korlátok", () => {
     const h = await harness({ env: { MP_MAX_ROOMS: "2", MP_MAX_ROOMS_DURING_RUNS: "1" } });
     await createRoom(h);
     h.runs.count = 1;
-    let st = await (await fetch(`http://127.0.0.1:${h.port}/api/rt/status`)).json();
-    assert.equal(st.runsPriority, true);
+    assert.equal(h.rt.adminStatus().runsPriority, true);
+    const pub = await (await fetch(`http://127.0.0.1:${h.port}/api/rt/status`)).json();
+    assert.equal("runsPriority" in pub, false, "a nyilvános státusz nem árulja el a gyártást");
+    assert.equal(pub.available, "full");
     const blocked = await join(h, { intent: "create" });
     assert.deepEqual(await blocked.request("room:create", { gameId: "parbaj", mode: "duel", grade: 5, settings: {} }), { ok: false, code: "CAPACITY" });
     h.runs.count = 0;
@@ -373,9 +380,8 @@ describe("JM2 gateway — csalás-próbák és korlátok", () => {
     const full = await join(h, { intent: "create" });
     assert.deepEqual(await full.request("room:create", { gameId: "parbaj", mode: "duel", grade: 5, settings: {} }), { ok: false, code: "CAPACITY" });
     h.env.MP_RUNS_PRIORITY = "on";
-    st = await (await fetch(`http://127.0.0.1:${h.port}/api/rt/status`)).json();
-    assert.equal(st.runsPriority, true);
-    assert.equal(st.activeRooms, 2);
+    assert.equal(h.rt.adminStatus().runsPriority, true);
+    assert.equal(h.rt.adminStatus().activeRooms, 2);
   });
 
   it("jegy-korlát: IP-nként 10 / perc → 429", async () => {
@@ -384,47 +390,6 @@ describe("JM2 gateway — csalás-próbák és korlátok", () => {
     for (let i = 0; i < 12; i++) codes.push((await getTicket(h, { intent: "create" })).status);
     assert.deepEqual(codes.slice(0, 10), Array(10).fill(200));
     assert.equal(codes[11], 429);
-  });
-});
-
-describe("JM2 gateway — leállítás (drain)", () => {
-  it("SIGTERM-út: új jegy / szoba tiltva, a váróterem zárul, a futó meccs a határidőig fut, utána részeredmény; a nyitott kapcsolatok NEM akasztják meg a server.close()-t", async () => {
-    const h = await harness({ windowMs: 5000, timing: { revealMs: 200 } });
-    const { host, code } = await createRoom(h, 5, { transports: ["websocket"] });
-    const guest = await addPlayer(h, code, 5, { transports: ["polling"] });
-    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players[1].ready);
-    await host.request("room:start", {});
-    await host.waitFor("round:open");
-    const { host: lobbyHost } = await createRoom(h);
-    const st = await (await fetch(`http://127.0.0.1:${h.port}/api/rt/status`)).json();
-    assert.equal(st.activeMatches, 1);
-    assert.equal(st.activeRooms, 2);
-
-    const t0 = Date.now();
-    const drained = h.rt.drain(1200, 50);
-    assert.equal((await getTicket(h, { intent: "create" })).status, 503);
-    const lobbyNotice = await lobbyHost.waitFor("notice", (n) => n.code === "SERVER_RESTART");
-    assert.equal(lobbyNotice.deadlineTs, null);
-    const matchNotice = await host.waitFor("notice", (n) => n.code === "SERVER_RESTART");
-    assert.ok(matchNotice.deadlineTs > t0, "a kliens érthető okot és határidőt kap");
-    const res = await host.waitFor("match:result", () => true, 5000);
-    assert.equal(res.aborted, true);
-    assert.equal(res.reason, "SERVER_RESTART");
-    await guest.waitFor("match:result", () => true, 5000);
-    await drained;
-    assert.ok(Date.now() - t0 < 1200 + 2500, `drain ideje: ${Date.now() - t0} ms`);
-
-    // A meglévő leállítás: server.close() — a drain után a nyitott WebSocket / polling már nem tartja fel.
-    const c0 = Date.now();
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("server.close() nem fejeződött be 3 s alatt")), 3000);
-      h.server.close(() => {
-        clearTimeout(timer);
-        resolve();
-      });
-    });
-    assert.ok(Date.now() - c0 < 3000);
-    harnesses.splice(harnesses.indexOf(h), 1);
   });
 });
 
@@ -469,63 +434,64 @@ describe("JM2 gateway — kapcsolat-plafon és lassú kliens", () => {
   });
 });
 
-describe("JM2 gateway — éles SIGTERM-sorrend (beginRealtimeShutdown, review #452)", () => {
-  it("futó meccs, CSAK long-polling: a drain alatt a listener nyitva marad, a játékos még válaszol, megkapja a (rész)eredményt; utána a server.close() határidőn belül", async () => {
-    const h = await harness({ windowMs: 6000, timing: { revealMs: 200 } });
-    const opts = { transports: ["polling" as const] };
-    const { host, code } = await createRoom(h, 5, opts);
-    const guest = await addPlayer(h, code, 5, opts);
-    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players[1].ready);
-    await host.request("room:start", {});
-    const open = await guest.waitFor("round:open");
-    const t0 = Date.now();
-    const sd = beginRealtimeShutdown(h.rt, h.server, { drainMs: 1500 });
-    assert.equal(sd.delayedClose, true);
-    assert.equal(h.server.listening, true, "futó meccs mellett a listener nyitva marad");
-    await guest.waitFor("notice", (n) => n.code === "SERVER_RESTART");
-    // Új HTTP-kérés (polling POST) a drain alatt: a válasz átmegy.
-    assert.deepEqual(await guest.request("round:answer", { round: open.round, optionIndex: correctFor(h, code, guest.playerId!), clientRtMs: 500 }), { ok: true });
-    assert.deepEqual(await host.request("round:answer", { round: open.round, optionIndex: 0, clientRtMs: 500 }), { ok: true });
-    await guest.waitFor("round:reveal", (r) => r.round === open.round, 5000);
-    // Új belépés tilos: jegy 503.
-    assert.equal((await getTicket(h, { intent: "create" })).status, 503);
-    const res = await guest.waitFor("match:result", () => true, 6000);
-    assert.equal(res.aborted, true);
-    assert.equal(res.reason, "SERVER_RESTART");
-    await host.waitFor("match:result", () => true, 6000);
-    await sd.drained;
-    await Promise.race([sd.httpClosed, sleep(3000).then(() => Promise.reject(new Error("a server.close() nem fejeződött be")))]);
-    assert.equal(h.server.listening, false);
-    assert.ok(Date.now() - t0 < 1500 + 2000 + 3000, `leállás: ${Date.now() - t0} ms`);
-    harnesses.splice(harnesses.indexOf(h), 1);
-  });
+describe("JM2 gateway — leállítás: rövid, rendezett lezárás (orkesztrátori döntés, review #452)", () => {
+  for (const transport of ["websocket", "polling"] as const) {
+    it(`SIGTERM-út futó meccsel (${transport}): új jegy tiltva, a meccs AZONNAL részeredménnyel zárul, mindkét kliens megkapja az ablakon belül; utána a server.close() gyorsan befejeződik`, async () => {
+      const h = await harness({ windowMs: 6000, timing: { revealMs: 200 } });
+      const opts = { transports: [transport] as ("polling" | "websocket")[] };
+      const { host, code } = await createRoom(h, 5, opts);
+      const guest = await addPlayer(h, code, 5, opts);
+      await host.waitFor("room:state", (s) => s.players.length === 2 && s.players[1].ready);
+      await host.request("room:start", {});
+      const open = await guest.waitFor("round:open");
+      await guest.request("round:answer", { round: open.round, optionIndex: correctFor(h, code, guest.playerId!), clientRtMs: 500 });
+      const { host: lobbyHost } = await createRoom(h);
+      assert.equal(h.rt.status().activeMatches, 1);
 
-  it("nincs futó meccs (csak váróterem / MP_MODE=off): a server.close() AZONNAL, a régi sorrendben", async () => {
-    const h = await harness();
-    await createRoom(h);
-    const sd = beginRealtimeShutdown(h.rt, h.server, { drainMs: 240_000 });
-    assert.equal(sd.delayedClose, false);
-    assert.equal(h.server.listening, false, "azonnal bezár");
-    await Promise.race([sd.drained, sleep(2000).then(() => Promise.reject(new Error("a drain nem azonnali")))]);
-    await Promise.race([sd.httpClosed, sleep(3000).then(() => Promise.reject(new Error("a server.close() nem fejeződött be")))]);
-    harnesses.splice(harnesses.indexOf(h), 1);
+      const ids = [host.playerId!, guest.playerId!].sort();
+      const t0 = Date.now();
+      const sd = beginRealtimeShutdown(h.rt, h.server, { windowMs: 1000 });
+      assert.equal(sd.delayedClose, true);
+      assert.equal((await getTicket(h, { intent: "create" })).status, 503, "új belépés azonnal tilos");
+      for (const p of [host, guest]) {
+        const res = await p.waitFor("match:result", () => true, 1500);
+        assert.equal(res.aborted, true);
+        assert.equal(res.reason, "SERVER_RESTART");
+        // A nyitott kör nem értékelődik (a lezárás pillanatnyi állás szerint): mindkettő 100 életerő → közös első hely.
+        assert.deepEqual(res.winners.slice().sort(), ids);
+        assert.equal(res.coWin, true);
+        await p.waitFor("notice", (n) => n.code === "SERVER_RESTART", 1500);
+      }
+      await lobbyHost.waitFor("notice", (n) => n.code === "SERVER_RESTART", 1500);
+      assert.ok(Date.now() - t0 < 1000, `a lezáró üzenetek az ablakon belül: ${Date.now() - t0} ms`);
+      await sd.drained;
+      await Promise.race([sd.httpClosed, sleep(3000).then(() => Promise.reject(new Error("a server.close() nem fejeződött be")))]);
+      assert.ok(Date.now() - t0 < 1000 + 1500, `teljes leállás: ${Date.now() - t0} ms`);
+      // A kliens a megszűnt szobához nem próbál végtelenül visszatérni.
+      await sleep(300);
+      assert.equal(guest.status, "closed");
+      harnesses.splice(harnesses.indexOf(h), 1);
+    });
+  }
 
+  it("nincs szoba (MP_MODE=off / üresjárat): a server.close() AZONNAL, a mostani sorrendben; az üzenet-ablak nem késleltet", async () => {
     const off = await harness({ env: { MP_MODE: "off" } });
     const t0 = Date.now();
-    const sd2 = beginRealtimeShutdown(off.rt, off.server, { drainMs: drainMsFromEnv({}) });
-    assert.equal(sd2.delayedClose, false);
-    assert.equal(off.server.listening, false);
-    await sd2.drained;
-    await sd2.httpClosed;
-    assert.ok(Date.now() - t0 < 1000, `off: ${Date.now() - t0} ms`);
+    const sd = beginRealtimeShutdown(off.rt, off.server, { windowMs: drainWindowMsFromEnv({}) });
+    assert.equal(sd.delayedClose, false);
+    assert.equal(off.server.listening, false, "azonnal bezár");
+    await sd.drained;
+    await sd.httpClosed;
+    assert.ok(Date.now() - t0 < 500, `off: ${Date.now() - t0} ms`);
     harnesses.splice(harnesses.indexOf(off), 1);
   });
 
-  it("MP_DRAIN_MS: alap és plafon 240 s, érvénytelen érték → alap", () => {
-    assert.equal(drainMsFromEnv({}), 240_000);
-    assert.equal(drainMsFromEnv({ MP_DRAIN_MS: "60000" }), 60_000);
-    assert.equal(drainMsFromEnv({ MP_DRAIN_MS: "999999" }), 240_000);
-    assert.equal(drainMsFromEnv({ MP_DRAIN_MS: "abc" }), 240_000);
+  it("MP_DRAIN_WINDOW_MS: alap 2,5 s, plafon 5 s, érvénytelen → alap", () => {
+    assert.equal(drainWindowMsFromEnv({}), 2500);
+    assert.equal(drainWindowMsFromEnv({ MP_DRAIN_WINDOW_MS: "1000" }), 1000);
+    assert.equal(drainWindowMsFromEnv({ MP_DRAIN_WINDOW_MS: "0" }), 0);
+    assert.equal(drainWindowMsFromEnv({ MP_DRAIN_WINDOW_MS: "60000" }), 2500);
+    assert.equal(drainWindowMsFromEnv({ MP_DRAIN_WINDOW_MS: "abc" }), 2500);
   });
 });
 
@@ -557,7 +523,7 @@ describe("JM2 gateway — kilépés utáni kliensállapot és halott folytatási
         resolve(e);
       });
     });
-    assert.equal(err.data?.code, "INVALID_TICKET");
+    assert.equal(err.data?.code, "ROOM_NOT_FOUND", "egyértelmű kód: a hely megszűnt (nem számít hamisítási próbának)");
     assert.equal(h.rt.registry.get(code)!.players.length, 1);
   });
 
@@ -574,7 +540,7 @@ describe("JM2 gateway — kilépés utáni kliensállapot és halott folytatási
     assert.equal(guest.status, "closed");
   });
 
-  it("visszautasított folytatás (a szoba közben megszűnt): status closed + INVALID_TICKET, végtelen próbálkozás nincs", async () => {
+  it("visszautasított folytatás (a szoba közben megszűnt): status closed + ROOM_NOT_FOUND, végtelen próbálkozás nincs", async () => {
     const h = await harness({ timing: { reconnectGraceMs: 200 } });
     const { code } = await createRoom(h);
     const guest = await addPlayer(h, code);
@@ -583,7 +549,140 @@ describe("JM2 gateway — kilépés utáni kliensállapot és halott folytatási
     guest.socket.io.engine.close();
     await sleep(1500);
     assert.equal(guest.status, "closed");
-    assert.ok(["INVALID_TICKET", "ROOM_CLOSED", "DISCONNECTED"].includes(String(guest.closedCode)), String(guest.closedCode));
+    assert.ok(["ROOM_NOT_FOUND", "ROOM_CLOSED", "DISCONNECTED"].includes(String(guest.closedCode)), String(guest.closedCode));
     assert.equal(guest.resumeToken, null);
+  });
+});
+
+describe("JM2 gateway — biztonsági review #452 javításai", () => {
+  it("KÖZEPES-4: időzítőből (kör megnyitása) dobó kérdés-szolgáltató → az érintett szoba rendezetten zárul, a folyamat él, a másik szoba zavartalanul végigmegy", async () => {
+    const h = await harness({ windowMs: 3000, failGrade: 11 });
+    const bad = await createRoom(h, 11);
+    const badGuest = await addPlayer(h, bad.code, 11);
+    await bad.host.waitFor("room:state", (s) => s.players.length === 2 && s.players[1].ready);
+    const good = await createRoom(h, 5);
+    const goodGuest = await addPlayer(h, good.code, 6);
+    await good.host.waitFor("room:state", (s) => s.players.length === 2 && s.players[1].ready);
+    await bad.host.request("room:start", {}); // a visszaszámlálás végén, időzítőből nyílik a kör → dob
+    await bad.host.waitFor("notice", (n) => n.code === "ROOM_CLOSED", 3000);
+    await badGuest.waitFor("notice", (n) => n.code === "ROOM_CLOSED", 3000);
+    assert.equal(h.rt.registry.get(bad.code), undefined);
+    assert.ok((h.rt.metrics.rejectedSnapshot().INTERNAL ?? 0) >= 0);
+    await good.host.request("room:start", {});
+    const results = await playMatch(h, good.code, [good.host, goodGuest], (i) => i === 0);
+    assert.equal(results[0].reason, "COMPLETED");
+  });
+
+  it("KÖZEPES-3: jegy nélküli Engine.IO-kapcsolat a connectTimeout után, szobába nem lépő kapcsolat a tétlenségi idő után bontva; IP-nkénti egyidejű szobaplafon", async () => {
+    const h = await harness({ env: { MP_CONNECT_TIMEOUT_MS: "300", MP_NO_ROOM_TIMEOUT_MS: "400", MP_CONCURRENT_ROOMS_PER_IP: "2" } });
+    // (1) nyers Engine.IO-kézfogás CONNECT nélkül
+    const url = `http://127.0.0.1:${h.port}${RT_PATH}?EIO=4&transport=polling`;
+    const hs = await (await fetch(url, { headers: { origin: h.origin } })).text();
+    const sid = JSON.parse(hs.slice(1)).sid as string;
+    assert.equal(h.rt.adminStatus().connections, 1);
+    // Függő long-poll GET (a kapcsolat „él”, de CONNECT csomagot nem küld): a connectTimeout-kor a szerver lezárja.
+    // (Függő GET nélkül az Engine.IO a polling-szállítást a következő lekérdezésig, legfeljebb 30 s-ig tartja.)
+    const pending = fetch(`${url}&sid=${sid}`, { headers: { origin: h.origin } }).then((r) => r.text());
+    assert.equal(await Promise.race([pending, sleep(2000).then(() => "timeout")]), "1", "close-csomag a connectTimeout után");
+    await sleep(50);
+    assert.equal(h.rt.adminStatus().connections, 0, "jegy nélküli kapcsolat bontva");
+    const after = await fetch(`${url}&sid=${sid}`, { headers: { origin: h.origin } });
+    assert.equal(after.status, 400, "a munkamenet megszűnt");
+    // (2) jeggyel csatlakozott, de szobába nem lépő
+    const idle = await join(h, { intent: "create" });
+    idle.socket.io.reconnection(false);
+    const gone = new Promise<string>((resolve) => idle.socket.once("disconnect", (r) => resolve(r)));
+    assert.match(await gone, /io server disconnect/);
+    // (3) IP-nként legfeljebb 2 egyidejű szoba
+    await createRoom(h);
+    await createRoom(h);
+    const third = await join(h, { intent: "create" });
+    assert.deepEqual(await third.request("room:create", { gameId: "parbaj", mode: "duel", grade: 5, settings: {} }), { ok: false, code: "RATE_LIMITED" });
+  });
+
+  it("KÖZEPES-1: a késésmérés nyugtájának késleltetése nem ad előnyt — a keret a minták MINIMUMA, plafon 120 ms; a „leggyorsabb” statisztika a szerver nyers mérése", async () => {
+    const { io } = await import("socket.io-client");
+    const h = await harness({ windowMs: 6000 });
+    const { host, code } = await createRoom(h);
+    // Csaló kliens: minden clock:probe nyugtát 450 ms-mal késleltet, és clientRtMs: 1-et állít.
+    const t = await getTicket(h, { intent: "join", code });
+    const cheat = io(`http://127.0.0.1:${h.port}`, { path: RT_PATH, addTrailingSlash: false, reconnection: false, auth: { v: 1, ticket: t.json.ticket }, extraHeaders: { origin: h.origin } });
+    cheat.on("clock:probe", (_p: unknown, ack: () => void) => setTimeout(ack, 450));
+    await new Promise<void>((resolve) => cheat.once("connect", () => resolve()));
+    const joinAck = await new Promise<any>((resolve) => cheat.emit("room:join", { cid: "j", code, grade: 5 }, resolve));
+    assert.equal(joinAck.ok, true);
+    await new Promise((resolve) => cheat.emit("room:ready", { cid: "r", ready: true }, resolve));
+    await sleep(1600); // a 3 kezdeti (késleltetett) mérés lefut
+    await host.request("room:start", {});
+    const open = await host.waitFor("round:open");
+    await sleep(800);
+    const right = correctFor(h, code, joinAck.playerId);
+    const cheatAck = await new Promise<any>((resolve) => cheat.emit("round:answer", { cid: "a", round: open.round, optionIndex: right, clientRtMs: 1 }, resolve));
+    assert.equal(cheatAck.ok, true);
+    const ans = h.rt.registry.get(code)!.match!.answers[joinAck.playerId]!;
+    assert.ok(ans.serverRtMs - ans.acceptedMs <= 120, `a kliens állítása legfeljebb 120 ms-mal mehet a szerveridő alá: ${ans.serverRtMs} → ${ans.acceptedMs}`);
+    await host.request("round:answer", { round: open.round, optionIndex: correctFor(h, code, host.playerId!), clientRtMs: null });
+    cheat.close();
+    // Egységszinten is: a minimum és a plafon.
+    assert.equal(latencyAllowanceMs([450, 460, 470]), 120);
+    assert.equal(latencyAllowanceMs([30, 450, 470]), 30);
+    assert.equal(latencyAllowanceMs([]), 0);
+    assert.equal(latencyAllowanceMs([Number.NaN, -5]), 0);
+  });
+
+  it("ALACSONY-4: a kirúgott vendég új jeggyel sem jöhet vissza (KICKED); a nyitó rövid kiesés után visszakapja a gazdaságot", async () => {
+    const h = await harness();
+    const { host, code } = await createRoom(h);
+    const intruder = await addPlayer(h, code);
+    const friend = await addPlayer(h, code);
+    assert.deepEqual(await host.request("room:kick", { playerId: intruder.playerId! }), { ok: true });
+    const again = await join(h, { intent: "join", code });
+    assert.deepEqual(await again.request("room:join", { code, grade: 5 }), { ok: false, code: "KICKED" });
+    // Gazda rövid kiesése: a gazdaság átmenetileg a következő tagra száll, visszatéréskor visszakerül.
+    const hostId = host.playerId!;
+    host.socket.io.engine.close();
+    await friend.waitFor("room:state", (s) => s.hostId !== hostId);
+    await friend.waitFor("room:state", (s) => s.hostId === hostId, 8000);
+  });
+
+  it("ALACSONY-5: lejárt / felhasznált jegyek sorozata (pl. egy NAT mögötti osztály) nem zárja ki az IP-t; a hamisított jegy számít", async () => {
+    const h = await harness({ env: { MP_HANDSHAKE_FAILURES_PER_MIN_PER_IP: "5" } });
+    const t = await getTicket(h, { intent: "create" });
+    players.push(await connectPlayer(h, t.json.ticket as string));
+    for (let i = 0; i < 8; i++) await assert.rejects(connectPlayer(h, t.json.ticket as string), (e: Error & { code?: string }) => e.code === "INVALID_TICKET");
+    const fresh = await getTicket(h, { intent: "create" });
+    players.push(await connectPlayer(h, fresh.json.ticket as string)); // a felhasznált jegyek nem zártak ki
+    for (let i = 0; i < 5; i++) await assert.rejects(connectPlayer(h, "Zm9vZm9vZm9vZm9vZm9v.YmFy"), (e: Error & { code?: string }) => e.code === "INVALID_TICKET");
+    const blocked = await getTicket(h, { intent: "create" });
+    await assert.rejects(connectPlayer(h, blocked.json.ticket as string), (e: Error & { code?: string }) => e.code === "RATE_LIMITED");
+  });
+
+  it("ALACSONY-6: admin módban az admin akkor is belép, ha játékos-munkamenete is van (admin-jogot a szoba nem ad)", async () => {
+    const h = await harness({ env: { MP_MODE: "admin" } });
+    const t = await getTicket(h, { intent: "create" }, { "x-test-user": "admin", "x-test-player": "Gyors%20Csiga" });
+    assert.equal(t.status, 200);
+    const p = await connectPlayer(h, t.json.ticket as string);
+    players.push(p);
+    const ack = await p.request("room:create", { gameId: "parbaj", mode: "duel", grade: 5, settings: {} });
+    assert.equal(ack.ok, true);
+  });
+
+  it("ALACSONY-7: SESSION_SECRET nélkül nincs jegy, a réteg nem indul (kikapcsoltként viselkedik)", async () => {
+    assert.equal(ticketSecret({}), null);
+    assert.equal(ticketSecret({ NODE_ENV: "development" }), null);
+    assert.equal(ticketSecret({ SESSION_SECRET: "x".repeat(32) }), "x".repeat(32));
+    const rt = createRealtimeService({ secret: null, config: () => rtConfig({ MP_MODE: "on" }), logger: { info: () => {}, warn: () => {} } });
+    assert.equal(rt.tickets, null);
+    assert.equal(rt.status().enabled, false);
+    await assert.rejects(rt.attach({} as never), /SESSION_SECRET/);
+  });
+
+  it("ALACSONY-3: a naplóbeli szobakód-hash kulcsolt (más titokkal más; nem a sima SHA-256)", async () => {
+    const { createHash } = await import("node:crypto");
+    const a = createRoomHasher("a".repeat(32))("ABC234");
+    const b = createRoomHasher("b".repeat(32))("ABC234");
+    assert.notEqual(a, b);
+    assert.equal(a, createRoomHasher("a".repeat(32))("ABC234"));
+    assert.equal(createHash("sha256").update("rt-room:ABC234").digest("hex").startsWith(a), false);
   });
 });

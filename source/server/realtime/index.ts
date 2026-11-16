@@ -1,52 +1,74 @@
 /**
  * JM2 — a valós idejű réteg összeállítása (végrehajtás JM2; terv 10.3, 10.8).
  *
- *   const rt = createRealtimeService({ ... });
- *   app.use("/api/rt", createRtRouter(rt));   // POST /api/rt/ticket, GET /api/rt/status  (S/routes/rt.ts)
- *   rt.attach(httpServer);                     // Socket.IO a RT_PATH-on (index.ts, a registerRoutes után)
- *   await rt.drain(240_000);                   // SIGTERM: új szoba / csatlakozás tiltva, a futó meccs kifuthat
+ *   const rt = getRealtime();                       // olcsó: sem a Socket.IO, sem a kérdésbank nem töltődik be
+ *   app.use("/api/rt", createRtRouter(rt));         // POST /api/rt/ticket, GET /api/rt/status  (S/routes/rt.ts)
+ *   if (MP_MODE !== "off") await rt.attach(server); // CSAK bekapcsolt módban: Socket.IO + a kérdésbank lusta betöltése
+ *   beginRealtimeShutdown(rt, server, { windowMs }) // SIGTERM: rövid, rendezett lezárás, utána a meglévő sorrend
  *
- * Az élesben használt példány a modul-szintű `realtime` (lusta: csak az első használatkor jön létre); a tesztek saját
- * példányt építenek injektált órával, bankkal és konfigurációval.
+ * A tesztek saját példányt építenek injektált órával, bankkal és konfigurációval.
  */
-import { randomBytes } from "node:crypto";
 import type { Server as HttpServer } from "node:http";
-import { PROTOCOL_VERSION, type RtStatus } from "../../shared/duel/protocol";
-import type { RoomConfig } from "../../shared/duel/room-machine";
+import { PROTOCOL_VERSION, type RtAdminStatus, type RtStatus } from "../../shared/duel/protocol";
+import type { RoomConfig, RoomQuestionRequest } from "../../shared/duel/room-machine";
+import type { DuelQuestion } from "../../shared/duel/questions";
 import { logger as appLogger } from "../lib/logger";
 import { rtConfig, type RtConfig } from "./config";
-import { createGateway, type Gateway } from "./gateway";
-import { createMetrics } from "./metrics";
-import { createQuestionProvider } from "./question-provider";
+import type { Gateway } from "./gateway";
+import { createMetrics, createRoomHasher } from "./metrics";
 import { createRegistry } from "./registry";
 import { createTicketService, ticketSecret, type TicketService } from "./ticket";
 
 export type RealtimeOptions = {
   config?: () => RtConfig;
   now?: () => number;
+  /** Tesztekhez: kész kérdés-szolgáltató / időzítés. Hiányában az éles bank az `attach()`-kor töltődik be (lustán). */
   roomConfig?: RoomConfig;
   activeRunCount?: () => number;
   secret?: string | null;
   logger?: { info: (msg: string, meta?: Record<string, unknown>) => void; warn: (msg: string, meta?: Record<string, unknown>) => void };
 };
 
+/** A leállítási üzenet-ablak alapja: ennyi ideig marad nyitva a listener, hogy a lezáró üzenet a polling-klienshez is
+ *  eljusson (orkesztrátori döntés, review #452). `MP_DRAIN_WINDOW_MS`, 0–5000. */
+export const RT_DRAIN_WINDOW_MS = 2_500;
+export function drainWindowMsFromEnv(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.MP_DRAIN_WINDOW_MS;
+  const n = raw === undefined || raw.trim() === "" ? NaN : Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 5_000 ? n : RT_DRAIN_WINDOW_MS;
+}
+
 export function createRealtimeService(opts: RealtimeOptions = {}) {
   const config = opts.config ?? (() => rtConfig());
   const now = opts.now ?? Date.now;
   const log = opts.logger ?? appLogger;
-  const roomConfig: RoomConfig = opts.roomConfig ?? { provider: createQuestionProvider() };
   const secret = opts.secret === undefined ? ticketSecret() : opts.secret;
   const tickets: TicketService | null = secret ? createTicketService({ secret, now }) : null;
+  const roomHash = createRoomHasher(secret);
   const metrics = createMetrics();
   let activeRunCount = opts.activeRunCount ?? (() => 0);
   let gateway: Gateway | null = null;
   let draining = false;
   let drainPromise: Promise<void> | null = null;
+  let bankLoaded = !!opts.roomConfig;
+  let provider: (req: RoomQuestionRequest) => DuelQuestion | null = opts.roomConfig?.provider ?? (() => {
+    throw new Error("a kérdésbank nincs betöltve (a réteg nincs felcsatolva)");
+  });
+  const roomConfig: RoomConfig = { provider: (req) => provider(req), timing: opts.roomConfig?.timing };
 
-  const registry = createRegistry({ roomConfig, now, onEffects: (room, effects) => gateway?.onEffects(room, effects) });
+  const registry = createRegistry({
+    roomConfig,
+    now,
+    onEffects: (room, effects) => gateway?.onEffects(room, effects),
+    onError: (where, room, error) =>
+      log.warn("rt.error", { where, room: room ? roomHash(room.code) : null, error: error instanceof Error ? error.message : String(error) }),
+  });
 
   function runsPriorityActive(cfg: RtConfig): boolean {
     return cfg.runsPriority === "on" || (cfg.runsPriority === "auto" && activeRunCount() > 0);
+  }
+  function capacity(cfg: RtConfig): number {
+    return runsPriorityActive(cfg) ? cfg.maxRoomsDuringRuns : cfg.maxRooms;
   }
 
   const service = {
@@ -55,70 +77,100 @@ export function createRealtimeService(opts: RealtimeOptions = {}) {
     registry,
     metrics,
     now,
+    roomHash,
     get draining() {
       return draining;
-    },
-    setActiveRunCount(fn: () => number) {
-      activeRunCount = fn;
-    },
-    /** A Socket.IO felcsatolása a HTTP-szerverre (egyszer). `MP_MODE=off` mellett is felcsatolódik, de minden kézfogást
-     *  `FEATURE_DISABLED`-del utasít el (a kapcsoló kérésenként, újraindítás nélkül is olvasható). */
-    attach(httpServer: HttpServer, attachOpts: { destroyUpgrade?: boolean } = {}): Gateway {
-      if (gateway) return gateway;
-      gateway = createGateway(
-        httpServer,
-        { registry, tickets: tickets ?? createTicketService({ secret: randomBytes(32).toString("hex") }), metrics, config, roomConfig, now, logger: log, activeRunCount: () => activeRunCount(), isDraining: () => draining },
-        { destroyUpgrade: attachOpts.destroyUpgrade ?? true },
-      );
-      return gateway;
     },
     get gateway() {
       return gateway;
     },
+    get bankLoaded() {
+      return bankLoaded;
+    },
+    setActiveRunCount(fn: () => number) {
+      activeRunCount = fn;
+    },
+    /**
+     * A Socket.IO felcsatolása (egyszer) — CSAK bekapcsolt módban hívandó (review #452 ALACSONY-2: `off` mellett a szerver
+     * a mostanival azonos: nincs figyelő az útvonalon, a bank nincs a memóriában). A Socket.IO és a bank itt, lustán töltődik.
+     * Titok nélkül (SESSION_SECRET) nem csatol fel (a réteg kikapcsoltként viselkedik).
+     */
+    async attach(httpServer: HttpServer, attachOpts: { destroyUpgrade?: boolean } = {}): Promise<Gateway> {
+      if (gateway) return gateway;
+      if (!tickets) throw new Error("SESSION_SECRET nélkül a valós idejű réteg nem indul");
+      if (!bankLoaded) {
+        const { createQuestionProvider } = await import("./question-provider");
+        provider = createQuestionProvider();
+        bankLoaded = true;
+      }
+      const { createGateway } = await import("./gateway");
+      gateway = createGateway(
+        httpServer,
+        { registry, tickets, metrics, config, roomConfig, now, logger: log, activeRunCount: () => activeRunCount(), isDraining: () => draining, roomHash },
+        { destroyUpgrade: attachOpts.destroyUpgrade ?? true },
+      );
+      return gateway;
+    },
+    /** Nyilvános: elérhető-e, és hány meccs fut (telepítés előtti őr) — gyártási állapot, kapcsolatszám nélkül. */
     status(): RtStatus {
       const cfg = config();
+      const enabled = cfg.mode !== "off" && !!tickets && !!gateway;
       const counts = registry.counts();
       return {
-        enabled: cfg.mode !== "off" && !!tickets,
+        enabled,
         mode: cfg.mode,
-        games: cfg.mode === "off" ? [] : cfg.games,
-        activeRooms: counts.activeRooms,
+        games: enabled ? cfg.games : [],
+        available: !enabled ? "off" : draining ? "draining" : counts.activeRooms >= capacity(cfg) ? "full" : "ok",
         activeMatches: counts.activeMatches,
-        connections: gateway ? gateway.connections() : 0,
-        draining,
-        runsPriority: runsPriorityActive(cfg),
         protocol: PROTOCOL_VERSION,
       };
     },
+    /** Admin-őr mögött (`GET /api/admin/rt/status`): a részletes számok. */
+    adminStatus(): RtAdminStatus {
+      const cfg = config();
+      const counts = registry.counts();
+      return {
+        ...service.status(),
+        activeRooms: counts.activeRooms,
+        connections: gateway ? gateway.connections() : 0,
+        draining,
+        runsPriority: runsPriorityActive(cfg),
+        capacity: capacity(cfg),
+        bankLoaded,
+      };
+    },
     /**
-     * Leállítás (SIGTERM): új jegy / szoba / csatlakozás tiltva, a váróterem azonnal zárul, a futó meccs legfeljebb
-     * `deadlineMs`-ig kifut (a kliens `notice SERVER_RESTART`-ot kap a határidővel), utána részeredménnyel zárul; végül
-     * MINDEN kapcsolat bontódik, hogy a nyitott WebSocket / polling ne tartsa fel a `server.close()`-t.
+     * Leállítás (SIGTERM; orkesztrátori döntés, review #452): új jegy / szoba / belépés AZONNAL tiltva, minden futó meccs
+     * AZONNAL, rendezetten lezárul a pillanatnyi állással (`match:result` részeredménnyel, `reason: SERVER_RESTART`, majd
+     * `notice SERVER_RESTART` + `ROOM_CLOSED`); a `windowMs` ablak a lezáró üzenet kiküldésére való, utána MINDEN
+     * kapcsolat bontódik. Szoba nélkül (pl. `MP_MODE=off`) azonnal kész.
      */
-    drain(deadlineMs: number, pollMs = 250): Promise<void> {
+    drain(windowMs: number = RT_DRAIN_WINDOW_MS): Promise<void> {
       if (drainPromise) return drainPromise;
       draining = true;
-      const until = now() + deadlineMs;
-      registry.drainAll(until);
-      log.info("rt.drain.start", { rooms: registry.counts().activeRooms, matches: registry.counts().activeMatches, deadlineMs });
+      const hadRooms = registry.counts().activeRooms > 0;
+      if (hadRooms) {
+        log.info("rt.drain.start", { rooms: registry.counts().activeRooms, matches: registry.counts().activeMatches, windowMs });
+        registry.drainAll(now());
+      }
       drainPromise = new Promise<void>((resolve) => {
         const finish = () => {
-          gateway?.disconnectAll();
+          try {
+            gateway?.disconnectAll();
+          } catch (error) {
+            log.warn("rt.error", { where: "drain", error: error instanceof Error ? error.message : String(error) });
+          }
           registry.clear();
-          log.info("rt.drain.done", {});
+          if (hadRooms) log.info("rt.drain.done", {});
           resolve();
         };
-        const check = () => {
-          if (registry.counts().activeRooms === 0) return finish();
-          if (now() >= until + 2_000) return finish();
-          const t = setTimeout(check, pollMs);
-          t.unref?.();
-        };
-        check();
+        if (!hadRooms) return finish();
+        const t = setTimeout(finish, windowMs);
+        t.unref?.();
       });
       return drainPromise;
     },
-    /** Teljes leállítás (tesztek): kapcsolatok bontása, a Socket.IO lezárása a HTTP-szerver bezárása NÉLKÜL. */
+    /** Teljes leállítás (tesztek): kapcsolatok bontása, a HTTP-szerver bezárása NÉLKÜL. */
     close(): void {
       gateway?.disconnectAll();
       registry.clear();
@@ -129,27 +181,22 @@ export function createRealtimeService(opts: RealtimeOptions = {}) {
 
 export type RealtimeService = ReturnType<typeof createRealtimeService>;
 
-/** A leállítási kifutás alapja (terv 10.8: 240 s); `MP_DRAIN_MS`-sel szűkíthető, plafon 240 s (a Render 300 s-os türelmi
- *  idejéből — `index.ts` 295 s-os kényszerkilépése — a pool zárására és a függő levelekre is marad idő). */
-export function drainMsFromEnv(env: NodeJS.ProcessEnv = process.env): number {
-  const n = Number(env.MP_DRAIN_MS);
-  return Number.isInteger(n) && n >= 0 && n <= 240_000 ? n : 240_000;
-}
-
 /**
- * SIGTERM-sorrend (review #452): a drain indul, és
- *  - ha FUT online meccs, a HTTP-listener a drain végéig nyitva marad (a long-polling játékos minden lekérdezése /
- *    válasza új HTTP-kérés — a korai `server.close()` elvágná a kifutás és az eredmény elől; az új belépést a drain-őrök
- *    utasítják el), és a `server.close()` a drain után jön;
- *  - ha nincs futó meccs (pl. `MP_MODE=off`, ez az alap), a `server.close()` AZONNAL, a régi sorrendben fut.
+ * SIGTERM-sorrend (orkesztrátori döntés, review #452): a réteg rövid, rendezett lezárása, utána a meglévő sorrend.
+ *  - Volt szoba (futó meccs / váróterem): a meccsek azonnal lezárulnak; a `server.close()` a `windowMs` üzenet-ablak UTÁN
+ *    jön (a polling-kliens következő lekérdezése még a lezáró üzenetet kapja), utána minden a régi rendben.
+ *  - Nem volt szoba (pl. `MP_MODE=off` — az alap): a `server.close()` AZONNAL, pontosan a mostani sorrendben.
+ * Hosszú kifutás nincs: a Render a SIGTERM előtt az új példányra váltja a forgalmat, a régi példány memóriájában élő meccs
+ * úgysem folytatódhatna, egy percekig nyitva hagyott listener viszont új munkát (pl. gyártásindítást) fogadhatna.
+ * A valódi védelem a telepítés ELŐTTI őr: `GET /api/rt/status` → `activeMatches`.
  */
 export function beginRealtimeShutdown(
-  rt: Pick<RealtimeService, "status" | "drain">,
+  rt: Pick<RealtimeService, "registry" | "drain">,
   server: { close: (cb?: (err?: Error) => void) => unknown },
-  opts: { drainMs: number; onDrainError?: (err: unknown) => void; onHttpClosed?: () => void },
+  opts: { windowMs: number; onHttpClosed?: () => void },
 ): { drained: Promise<void>; httpClosed: Promise<void>; delayedClose: boolean } {
-  const delayedClose = rt.status().activeMatches > 0;
-  const drained = rt.drain(opts.drainMs).catch((err: unknown) => opts.onDrainError?.(err));
+  const delayedClose = rt.registry.counts().activeRooms > 0;
+  const drained = rt.drain(opts.windowMs);
   let resolveClosed: () => void = () => {};
   const httpClosed = new Promise<void>((resolve) => {
     resolveClosed = resolve;
@@ -166,7 +213,7 @@ export function beginRealtimeShutdown(
 
 let singleton: RealtimeService | null = null;
 
-/** Az éles példány (lusta). */
+/** Az éles példány (lusta, olcsó: a Socket.IO és a bank csak az `attach()`-kor töltődik). */
 export function getRealtime(): RealtimeService {
   if (!singleton) singleton = createRealtimeService();
   return singleton;

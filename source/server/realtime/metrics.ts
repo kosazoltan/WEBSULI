@@ -2,10 +2,15 @@
  * JM2 — a valós idejű réteg számlálói (végrehajtás JM2 9–10. lépés; terv 10.8 „Telepítés-őr”, kutatás 3.7).
  * Csak számok: szobakód-hash, játékosszám, okkód — név, e-mail, IP, szobakód nyíltan soha nem kerül ide vagy a naplóba.
  */
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 
-export function roomHash(code: string): string {
-  return createHash("sha256").update(`rt-room:${code}`).digest("hex").slice(0, 10);
+/**
+ * Kulcsolt szobakód-hash a naplóhoz (review #452 ALACSONY-3): a kódtér kicsi (31⁶), egy só nélküli hash percek alatt
+ * visszafejthető lenne. A kulcs a szerver-titokból levezetett (titok nélkül folyamatonként véletlen).
+ */
+export function createRoomHasher(secret: string | null): (code: string) => string {
+  const key = createHmac("sha256", secret ?? randomBytes(32).toString("hex")).update("rt-room-log-v1").digest();
+  return (code) => createHmac("sha256", key).update(code).digest("hex").slice(0, 12);
 }
 
 export function createMetrics() {

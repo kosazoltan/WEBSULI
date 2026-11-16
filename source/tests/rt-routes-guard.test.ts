@@ -1,7 +1,10 @@
 /**
- * JM2 — a valós idejű réteg a VALÓDI felcsatoláson (`mountAppRoutes` — ugyanaz, amit az index.ts hív) + a valódi
- * `getRealtime().attach()`: a CSRF-kivétel Origin-engedélylistával őrzött, `MP_MODE` alapból kikapcsolt (jegy 404, a
- * Socket.IO-kézfogás FEATURE_DISABLED), bekapcsolva a vendég jegyet kap. Adatbázishoz nem kapcsolódunk.
+ * JM2 — a valós idejű réteg a VALÓDI felcsatoláson (`mountAppRoutes` — ugyanaz, amit az index.ts hív):
+ *  - `MP_MODE` alapból kikapcsolt: a Socket.IO NEM csatolódik fel (nincs figyelő az úton), a kérdésbank nincs a
+ *    memóriában, a jegy-végpont 404 (review #452 ALACSONY-2);
+ *  - bekapcsolva (`getRealtime().attach()`): a jegy-végpont CSRF-token nélkül, de csak engedélyezett eredetről;
+ *  - a leállítási sorrend az index.ts-ben a `beginRealtimeShutdown`-on át megy.
+ * Adatbázishoz nem kapcsolódunk.
  */
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
@@ -19,7 +22,6 @@ const { RT_PATH } = await import("../shared/duel/protocol");
 const app = express();
 app.use(express.json());
 const server = await mountAppRoutes(app);
-getRealtime().attach(server);
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 const port = (server.address() as AddressInfo).port;
 const base = `http://127.0.0.1:${port}`;
@@ -34,36 +36,43 @@ after(async () => {
 const post = (headers: Record<string, string>) =>
   fetch(`${base}/api/rt/ticket`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ intent: "create" }) });
 
-describe("JM2 — leállítási sorrend (index.ts, review #452)", () => {
-  it("a gracefulShutdown a beginRealtimeShutdown-on át zár (a server.close sorrendjét az dönti el), és a pool előtt kivárja a drain-t", async () => {
+describe("JM2 — leállítási sorrend (index.ts)", () => {
+  it("a gracefulShutdown a beginRealtimeShutdown-on át zár (rövid üzenet-ablak, a server.close sorrendjét az dönti el), és a pool előtt kivárja", async () => {
     const { readFile } = await import("node:fs/promises");
     const src = (await readFile(new URL("../server/index.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
     const shutdown = src.slice(src.indexOf("const gracefulShutdown"), src.indexOf('process.on("SIGTERM"'));
     const code = shutdown.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
-    assert.match(code, /beginRealtimeShutdown\(getRealtime\(\), server, \{\s*drainMs: drainMsFromEnv\(\)/);
-    assert.equal((code.match(/server\.close\(/g) ?? []).length, 0, "közvetlen server.close() nincs (különben a polling-játékos leszakad)");
-    assert.ok(code.indexOf("await realtimeDrained") > 0 && code.indexOf("await realtimeDrained") < code.indexOf("dbPool.end()"), "a drain a pool zárása előtt kivárva");
+    assert.match(code, /beginRealtimeShutdown\(getRealtime\(\), server, \{\s*windowMs: drainWindowMsFromEnv\(\)/);
+    assert.equal((code.match(/server\.close\(/g) ?? []).length, 0, "közvetlen server.close() nincs (a beginRealtimeShutdown dönti el: szoba nélkül azonnal)");
+    assert.ok(code.indexOf("await realtimeDrained") > 0 && code.indexOf("await realtimeDrained") < code.indexOf("dbPool.end()"), "a pool zárása előtt kivárva");
+    // Az indításnál a felcsatolás feltételes és hibatűrő.
+    const startup = src.slice(0, src.indexOf("const gracefulShutdown"));
+    assert.match(startup, /if \(mpMode\(\) !== "off"\) \{/);
+    assert.match(startup, /await realtime\.attach\(server/);
+    assert.match(startup, /catch \(err\) \{\s*logger\.error\("\[RT\] a valós idejű réteg nem indult el/);
   });
 });
 
 describe("JM2 — valódi felcsatolás", () => {
-  it("MP_MODE nincs beállítva (alap: off): jegy 404, státusz { enabled: false }, Socket.IO-kézfogás FEATURE_DISABLED", async () => {
+  it("MP_MODE nincs beállítva (alap: off): nincs Socket.IO-figyelő, a bank nincs betöltve, jegy 404, státusz { enabled: false }", async () => {
+    assert.equal(server.listeners("upgrade").length, 0, "nincs upgrade-figyelő");
+    assert.equal(server.listeners("request").length, 1, "csak az Express kérés-figyelője");
+    assert.equal(getRealtime().gateway, null);
+    assert.equal(getRealtime().bankLoaded, false, "a kérdésbank nincs a memóriában");
     assert.equal((await post({ origin: sameOrigin })).status, 404);
     const st = await (await fetch(`${base}/api/rt/status`)).json();
-    assert.equal(st.enabled, false);
-    assert.equal(st.mode, "off");
-    assert.equal(st.activeMatches, 0);
+    assert.deepEqual(st, { enabled: false, mode: "off", games: [], available: "off", activeMatches: 0, protocol: 1 });
     const raw = await fetch(`${base}${RT_PATH}?EIO=4&transport=polling`, { headers: { origin: sameOrigin } });
-    assert.equal(raw.status, 403);
-    assert.match(await raw.text(), /FEATURE_DISABLED/);
-    // A többi útvonal érintetlen (a Socket.IO csak a saját útvonalát fogja el).
+    assert.equal(raw.status, 404, "az út az Expresshez jut (mintha a réteg nem is létezne)");
     assert.equal((await fetch(`${base}/api/rt/ticket`)).status, 404, "GET a jegy-végponton nincs");
-    assert.equal((await fetch(`${base}/api/rt/iox`)).status, 404, "a Socket.IO-útvonal előtagja nem nyel el idegen utat… (Express 404)");
   });
 
-  it("MP_MODE=on: a jegy-végpont CSRF-token nélkül, de csak engedélyezett eredetről (idegen / hiányzó Origin → 403)", async () => {
+  it("MP_MODE=on + attach: a jegy-végpont CSRF-token nélkül, de csak engedélyezett eredetről (idegen / hiányzó Origin → 403); az előtag nem nyel el idegen utat", async () => {
     process.env.MP_MODE = "on";
     try {
+      assert.equal((await post({ origin: sameOrigin })).status, 503, "felcsatolás nélkül nincs jegy");
+      await getRealtime().attach(server);
+      assert.equal(getRealtime().bankLoaded, true);
       assert.equal((await post({ origin: "https://evil.example" })).status, 403);
       assert.equal((await post({})).status, 403, "Origin / Referer nélkül sem");
       const ok = await post({ origin: sameOrigin });
@@ -73,6 +82,9 @@ describe("JM2 — valódi felcsatolás", () => {
       assert.equal(body.path, RT_PATH);
       assert.equal(ok.headers.get("cache-control"), "no-store");
       assert.equal(JSON.stringify(body).includes("@"), false);
+      assert.equal((await fetch(`${base}/api/rt/iox`)).status, 404, "a Socket.IO-útvonal előtagja nem nyel el idegen utat");
+      const adminSt = await fetch(`${base}/api/admin/rt/status`);
+      assert.equal(adminSt.status, 401, "a részletes státusz admin-őr mögött");
     } finally {
       delete process.env.MP_MODE;
     }

@@ -55,9 +55,12 @@ describe("JM2 belépőjegy", () => {
     assert.match(ticket, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
   });
 
-  it("titok: élesben SESSION_SECRET nélkül nincs jegy (null), fejlesztésben rögzített kulcs", () => {
+  // Review #452 ALACSONY-7: rögzített (a repóban látható) tartalék-kulcs SEHOL — titok nélkül nincs jegy.
+  it("titok: SESSION_SECRET nélkül (bármely környezetben) nincs jegy; túl rövid titok sem elég", () => {
     assert.equal(ticketSecret({ NODE_ENV: "production" }), null);
+    assert.equal(ticketSecret({ NODE_ENV: "development" }), null);
+    assert.equal(ticketSecret({}), null);
+    assert.equal(ticketSecret({ SESSION_SECRET: "rövid" }), null);
     assert.equal(ticketSecret({ NODE_ENV: "production", SESSION_SECRET: "x".repeat(32) }), "x".repeat(32));
-    assert.equal(typeof ticketSecret({}), "string");
   });
 });
