@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { correctDataAttrs } from "@/game-engine/game-test-hooks";
 
 import { useGameSettings } from "./gameSettings";
+import { LONG_PROMPT_CHARS, OPTION_MAX_LINES, optionColumns } from "./promptFit";
 import type { QuestionPresentation } from "./types";
 import WhyButton from "./WhyButton";
 
@@ -86,10 +87,12 @@ const SKIN_ICON: Record<InlineQuestionSkin, LucideIcon> = {
 /** Bátorító, determinisztikus dicséret (a kérdés-azonosító szerint váltakozik; nincs `Math.random`). */
 const PRAISE = ["Telitalálat!", "Szuper!", "Ügyes!", "Így van!", "Pontosan!"];
 
-/** Hosszú prompt (karakter) fölött kisebb betű, hogy két sorban minél több elférjen (≥ 15 px marad). */
-const LONG_PROMPT = 70;
-/** Ennél hosszabb válasz-felirat esetén a gombrács egy oszlopos. */
-const LONG_OPTION = 28;
+/** A gombfelirat sormagassága a szülő betűméretéhez képest (`.play-question-label` line-height). */
+const LABEL_LH = 1.2;
+
+function viewportNow(): { width: number; height: number } {
+  return typeof window === "undefined" ? { width: 390, height: 844 } : { width: window.innerWidth, height: window.innerHeight };
+}
 
 function isTypingTarget(t: EventTarget | null): boolean {
   if (!(t instanceof HTMLElement)) return false;
@@ -124,26 +127,77 @@ export default function InlineQuestion({
   portal = true,
 }: InlineQuestionProps) {
   const promptRef = useRef<HTMLParagraphElement>(null);
-  const [clamped, setClamped] = useState(false);
+  const optionsRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const qid = presentation?.id ?? null;
+  /**
+   * J0c-b (kanban #46): a kérdés KOPPINTÁS NÉLKÜL végigolvasható. Valódi mérés, kérdésenként: 0 = legfeljebb 5 sor a
+   * saját betűméreten; 1 = 15 px-en legfeljebb 7 sor (a kártya nő); 2 = még ez sem elég → végső tartalék a „Mutasd”.
+   * A válaszgomboknál: 0 = alap; 1 = egy oszlop (álló) / kisebb betű (fekvő), ha egy felirat 2 sornál hosszabb.
+   */
+  const [fit, setFit] = useState<{ id: number | null; prompt: 0 | 1 | 2; options: 0 | 1; epoch: number }>({ id: null, prompt: 0, options: 0, epoch: 0 });
+  const promptFit = fit.id === qid ? fit.prompt : 0;
+  const optionFit = fit.id === qid ? fit.options : 0;
+  const clamped = promptFit === 2;
 
-  // Új kérdésnél a prompt újra két sorra vágva indul.
+  // Új kérdésnél a prompt kibontatlanul indul.
   useEffect(() => {
     setExpanded(false);
   }, [qid]);
 
-  // Kilóg-e a két sorból? (átméretezéskor / forgatáskor újramérve)
+  /**
+   * Átméretezés / elforgatás / webfont-betöltés → újramérés az alapról (review #450): az `epoch` nő, ez a mérő effekt
+   * függősége, így a mérés akkor is lefut, ha a szintek értéke nem változik. Végtelen hurok nincs: egy epochon belül a
+   * szint csak nőhet (0 → 1 → 2, legfeljebb 3 mérés), új epoch csak valódi nézetméret-változásra / betűkészlet-betöltésre jön.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let last = `${window.innerWidth}x${window.innerHeight}`;
+    let alive = true;
+    const remeasure = () => setFit((cur) => ({ id: cur.id, prompt: 0, options: 0, epoch: cur.epoch + 1 }));
+    const onResize = () => {
+      const now = `${window.innerWidth}x${window.innerHeight}`;
+      if (now === last) return;
+      last = now;
+      remeasure();
+    };
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      void document.fonts.ready.then(() => {
+        if (alive) remeasure();
+      });
+    }
+    return () => {
+      alive = false;
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, []);
+
+  // Mérés a festés ELŐTT (nincs villanás).
   useLayoutEffect(() => {
     const el = promptRef.current;
-    if (!el || expanded) return;
-    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 1);
+    if (!el || expanded || qid === null) return;
+    const measure = () => {
+      const overflow = el.scrollHeight > el.clientHeight + 1;
+      let optOverflow = false;
+      const box = optionsRef.current;
+      if (box && getComputedStyle(box).opacity !== "0") {
+        for (const label of Array.from(box.querySelectorAll<HTMLElement>(".play-question-label"))) {
+          const lh = parseFloat(getComputedStyle(label).fontSize) * LABEL_LH;
+          if (label.getBoundingClientRect().height > lh * OPTION_MAX_LINES + 2) optOverflow = true;
+        }
+      }
+      setFit((cur) => {
+        const base = cur.id === qid ? cur : { id: qid, prompt: 0 as const, options: 0 as const, epoch: cur.epoch };
+        const prompt = overflow && base.prompt < 2 ? ((base.prompt + 1) as 1 | 2) : base.prompt;
+        const options = optOverflow ? 1 : base.options;
+        return prompt === base.prompt && options === base.options && cur.id === qid ? cur : { id: qid, prompt, options, epoch: base.epoch };
+      });
+    };
     measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [qid, expanded, presentation?.question.quiz.prompt]);
+  }, [qid, expanded, promptFit, optionFit, fit.epoch, presentation?.question.quiz.prompt]);
 
   const answering = !!presentation && !reveal && !disabled && !expanded;
   const pick = useCallback(
@@ -193,12 +247,11 @@ export default function InlineQuestion({
   const ratio = Math.max(0, Math.min(1, remainingMs / total));
   const secs = Math.ceil(Math.max(0, remainingMs) / 1000);
   const low = !reveal && ratio <= 0.35;
-  const longPrompt = quiz.prompt.length > LONG_PROMPT;
+  const longPrompt = quiz.prompt.length > LONG_PROMPT_CHARS;
   const showMore = (clamped || expanded) && !reveal;
   // Az előző hiba „Miért?”-je az új kérdés mellett is elérhető marad (a kijelzés vége + 4 mp), külön felirattal.
   const previousWhy = showWhy && (whyFor === "previous" || (whyFor === undefined && !reveal));
-  const maxLabel = options.reduce((m, o) => Math.max(m, o.label.length), 0);
-  const cols = maxLabel > LONG_OPTION ? 1 : 2;
+  const cols = optionFit === 1 ? 1 : optionColumns(options.map((o) => o.label), viewportNow());
 
   let status = "";
   let tone: "good" | "bad" | "" = "";
@@ -265,6 +318,8 @@ export default function InlineQuestion({
       data-disabled={disabled ? "true" : "false"}
       data-expanded={expanded ? "true" : "false"}
       data-cols={cols}
+      data-fit={promptFit}
+      data-option-fit={optionFit}
       data-count={options.length}
       role="group"
       aria-label={presentation.isReview ? "Ismétlő kérdés" : "Kérdés"}
@@ -327,7 +382,7 @@ export default function InlineQuestion({
           {showWhy && <WhyButton visible onOpen={onWhy!} label={previousWhy ? "Előző: miért?" : undefined} />}
         </div>
       </div>
-      <div className="play-question-options" role="group" aria-label="Válaszok">
+      <div className="play-question-options" ref={optionsRef} role="group" aria-label="Válaszok">
         <div className="play-question-col" data-side="left">{left.map(renderOption)}</div>
         <div className="play-question-col" data-side="right">{right.map(renderOption)}</div>
       </div>
