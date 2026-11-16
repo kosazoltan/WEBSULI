@@ -5,6 +5,7 @@ import {
   gradeForGame,
   markGradeQuizSeen,
   pickGradeQuiz,
+  pickGradeSlotWithVocab,
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
 import { loadClassroomGrade, saveClassroomGrade } from "@/lib/classroomStore";
@@ -30,7 +31,6 @@ import {
 } from "@/game-engine/mobile";
 import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
 import { aimAssistVx } from "@/lib/spaceAsteroid/aimAssist";
-import { pickGradeSlotWithVocab } from "@/lib/brainRotTuning";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";

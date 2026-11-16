@@ -127,3 +127,43 @@ export function bandShiftForDifficulty(difficulty: GradeGameDifficulty): number 
 export function clampBand(band: number): number {
   return Number.isFinite(band) ? Math.min(1, Math.max(0, band)) : 0;
 }
+
+type GradeSlotArgs<V> = {
+  /** `pickGradeQuiz` hívása ugyanazzal a `seen`-nel. */
+  pick: () => GradeQuizItem | null;
+  seen: GradeQuizSeen;
+  /** A szóbank-forrás hívása; `null`, ha nincs szóbank / még tölt / nem ad kérdést — ilyenkor a kézi tétel megy. */
+  vocabNext: () => V | null;
+};
+
+/**
+ * S13 / E23 — az évfolyam-bank kérdés-helye szóbankos kiváltással, EGY közös helyen (a Brain Rot, az Aszteroida, a
+ * Kockavadász és a Tornado ezt hívja; korábban három külön változat élt: `lib/brainRotTuning.ts`,
+ * `lib/blockCraftSubjects.ts`, `lib/tornado/questions.ts`).
+ *
+ * A választott tétel MINDIG a `seen`-be kerül (fogy) — akkor is, ha angol, és a szóbank váltja ki (review #424):
+ * különben a választó az első nem üres sávban ragadna, és ugyanazt a tételt kínálná újra (egy szóbank-kiesés után is).
+ *
+ * Két változat:
+ *  - `subject` nélkül (Brain Rot, Aszteroida, Tornado): a tétel tárgya dönt; ha nincs tétel, nincs hely (`null`);
+ *  - `subject`-tel (Kockavadász tárgy-körforgása): az angol HELY akkor is a szóbankból kérdez, ha az évfolyam-bank
+ *    angol tételei elfogytak (`replaced: null`) — a körforgás minden körében egy angol hely marad, az arány nem torzul.
+ */
+export function pickGradeSlotWithVocab<V>(
+  args: GradeSlotArgs<V> & { subject: GradeSubject },
+): { kind: "vocab"; quiz: V; replaced: GradeQuizItem | null } | { kind: "grade"; item: GradeQuizItem } | null;
+export function pickGradeSlotWithVocab<V>(
+  args: GradeSlotArgs<V>,
+): { kind: "vocab"; quiz: V; replaced: GradeQuizItem } | { kind: "grade"; item: GradeQuizItem } | null;
+export function pickGradeSlotWithVocab<V>(
+  args: GradeSlotArgs<V> & { subject?: GradeSubject },
+): { kind: "vocab"; quiz: V; replaced: GradeQuizItem | null } | { kind: "grade"; item: GradeQuizItem } | null {
+  const item = args.pick();
+  if (item) markGradeQuizSeen(args.seen, item);
+  const englishSlot = args.subject !== undefined ? args.subject === "english" : item?.subject === "english";
+  if (englishSlot) {
+    const quiz = args.vocabNext();
+    if (quiz != null) return { kind: "vocab", quiz, replaced: item };
+  }
+  return item ? { kind: "grade", item } : null;
+}

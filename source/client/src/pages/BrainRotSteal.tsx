@@ -28,7 +28,6 @@ import { stepBrainRot } from "@/lib/brainRotPhysics";
 import {
   BRAIN_ROT_WARNING_MS,
   brainRotAgeMs,
-  pickGradeSlotWithVocab,
   brainRotLifetimeFor,
   brainRotSizeFor,
   brainRotSpeedScaleFor,
@@ -50,6 +49,7 @@ import {
   gradeForGame,
   markGradeQuizSeen,
   pickGradeQuiz,
+  pickGradeSlotWithVocab,
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";

@@ -4,8 +4,8 @@ import {
   createGradeQuizSeen,
   gradeForGame,
   isGradeQuizSeen,
-  markGradeQuizSeen,
   pickGradeQuiz,
+  pickGradeSlotWithVocab,
   type GradeQuizSeen,
 } from "../../game-engine/gradeQuiz";
 /**
@@ -489,24 +489,23 @@ export function pickQuestion(args: PickArgs): Question {
   if (!materialOnly && unseenMaterial.length === 0 && sharedGrade != null && sharedGrade > OWN_BANK_MAX_GRADE) {
     const seen = args.gradeSeen ?? createGradeQuizSeen();
     if (!args.gradeSeen) for (const id of recent) seen.ids.add(id);
-    const item = pickGradeQuiz({
-      grade: sharedGrade,
-      band: args.adaptiveBand ?? 0.5,
-      subjects: [subject],
+    // S13 / E23: the shared slot picker (game-engine/gradeQuiz.ts). It marks the bank item seen even when the vocab
+    // bank replaces it (measured trap, Brain Rot PR #424), so the same item is not offered again after a vocab outage.
+    const slot = pickGradeSlotWithVocab({
+      pick: () =>
+        pickGradeQuiz({
+          grade: sharedGrade,
+          band: args.adaptiveBand ?? 0.5,
+          subjects: [subject],
+          seen,
+          rng,
+          items: args.gradeBank,
+        }),
       seen,
-      rng,
-      items: args.gradeBank,
+      vocabNext: () => (vocabSlot ? args.vocab?.next() ?? null : null),
     });
-    if (item && vocabSlot) {
-      const fromVocab = args.vocab?.next() ?? null;
-      if (fromVocab) {
-        // Measured trap (Brain Rot PR #424): the replaced bank item is marked seen as well, otherwise the shared
-        // bank would offer the very same item again on every English draw (and after a vocab outage).
-        markGradeQuizSeen(seen, item);
-        return fromVocab;
-      }
-    }
-    if (item) return fromGradeItem(item, subject);
+    if (slot?.kind === "vocab") return slot.quiz;
+    if (slot?.kind === "grade") return fromGradeItem(slot.item, subject);
   }
 
   if (vocabSlot) {

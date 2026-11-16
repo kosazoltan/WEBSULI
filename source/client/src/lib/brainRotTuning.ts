@@ -1,29 +1,8 @@
-import { markGradeQuizSeen, type GradeQuizSeen } from "../game-engine/gradeQuiz";
-import type { GradeQuizItem } from "../data/gradeQuizBank";
-
 /**
- * S8 / A8 — az évfolyam-bank kérdés-helye, szóbankos kiváltással (review #424).
- *
- * A `pickGradeQuiz` választ; a tétel MINDIG a `seen`-be kerül (fogy) — akkor is, ha angol, és a szóbank
- * váltja ki. Ha a kiváltott tétel nem fogyna, a választó az első nem üres nehézségi sávban ragadna: a sáv
- * nem angol tételeinek elfogyta után csak angolt adna, és soha nem lépne tovább a többi sávra.
- * `pick` a `pickGradeQuiz` hívása ugyanazzal a `seen`-nel; `vocabNext` a szóbank-forrás hívása (`null`, ha nincs
- * szóbank / nem ad kérdést) — ilyenkor a kézi tétel megy.
+ * S8 / A8 — az évfolyam-bank kérdés-helye, szóbankos kiváltással (review #424). S13 / E23: az egyetlen
+ * megvalósítás a `game-engine/gradeQuiz.ts`-ben él; ez a régi import-útvonal (a meglévő szimulációs tesztekhez).
  */
-export function pickGradeSlotWithVocab<V>(args: {
-  pick: () => GradeQuizItem | null;
-  seen: GradeQuizSeen;
-  vocabNext: () => V | null;
-}): { kind: "vocab"; quiz: V; replaced: GradeQuizItem } | { kind: "grade"; item: GradeQuizItem } | null {
-  const item = args.pick();
-  if (!item) return null;
-  markGradeQuizSeen(args.seen, item);
-  if (item.subject === "english") {
-    const quiz = args.vocabNext();
-    if (quiz != null) return { kind: "vocab", quiz, replaced: item };
-  }
-  return { kind: "grade", item };
-}
+export { pickGradeSlotWithVocab } from "../game-engine/gradeQuiz";
 
 /**
  * S8 — a Brain Rot lények mérete, élettartama és sebessége a képernyőhöz és az évfolyamhoz igazodik
