@@ -77,6 +77,7 @@ import {
   type LadderState,
 } from "@/lib/wordLadder/core";
 import { WORD_LADDER_GAME_ID, wordLadderDirectorConfig } from "@/lib/wordLadder/sim";
+import { createRunWordGuard, ownsReviewKey, promptHasTerm } from "@/lib/wordLadder/review";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { loadUnlockedLevel, unlockNextLevel } from "@/game-engine/gradeLevels";
 import { detectLookTier } from "@/game-engine/three-look/tier";
@@ -452,7 +453,7 @@ export default function WordLadderHuEn() {
     const rest: PlayQuestion = { ...q };
     delete rest.speakText;
     if (!term) return rest;
-    if (q.quiz.prompt.toLowerCase().includes(term.toLowerCase())) return { ...rest, lang, speakText: term };
+    if (promptHasTerm(q.quiz.prompt, term)) return { ...rest, lang, speakText: term };
     speakAfterRef.current.set(q.key, term);
     return { ...rest, lang };
   }, [lang]);
@@ -470,6 +471,9 @@ export default function WordLadderHuEn() {
     [lang, withSpeech],
   );
 
+  /** A menet szó-őre: egy szó egy menetben csak egy irányban (review #454). */
+  const wordGuardRef = useRef(createRunWordGuard<PlayQuestion>());
+
   const provider = useMemo<QuestionProvider>(
     () => ({
       couponOnly: false,
@@ -482,18 +486,29 @@ export default function WordLadderHuEn() {
       },
       fresh: () => {
         // A meglévő választó: a futás sávjának szintjéről, a futásban még nem látott tétel (#135).
-        const item = pickUnseen(tiersRef.current, ladderTierIndex(runRef.current.grade, levelSessionRef.current.band), seenRef.current);
-        if (!item) return null;
-        seenRef.current = [...seenRef.current, { id: String(item.id), prompt: item.prompt }];
-        return toPlayQuestion(item);
+        // A futásban már megjelent szó (más irányú szóbank-kérdésként sem) nem jön újra új tételként.
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const item = pickUnseen(tiersRef.current, ladderTierIndex(runRef.current.grade, levelSessionRef.current.band), seenRef.current);
+          if (!item) return null;
+          seenRef.current = [...seenRef.current, { id: String(item.id), prompt: item.prompt }];
+          const q = toPlayQuestion(item);
+          if (wordGuardRef.current.freshAllowed(q.key)) return q;
+        }
+        return null;
       },
       restore: (it) => {
         // A közös ismétlési sorból csak a SAJÁT tétel jön vissza (a nyelv szóbankja, a saját kézi bank, a saját
         // tananyag); a más játék / más nyelv tételét a director a menetre átugorja.
-        if (it.key.startsWith("vocab:") && !it.key.startsWith(`vocab:${lang}:`)) return null;
-        if (it.key.startsWith("bank:") && !it.key.startsWith(`bank:${WORD_LADDER_GAME_ID}:`)) return null;
-        if (it.key.startsWith("mat:") && !materialRef.current.some((m) => `mat:${m.id}` === it.key)) return null;
-        if (it.key.startsWith("grade:")) return null;
+        const own = ownsReviewKey(it.key, {
+          gameId: WORD_LADDER_GAME_ID,
+          lang,
+          bankIds: new Set(tiersRef.current.flat().map((q) => String(q.id))),
+          materialKeys: new Set(materialRef.current.map((m) => `mat:${m.id}`)),
+        });
+        if (!own) return null;
+        // Menet közbeni ismétlés: pontosan a már látott kérdés (ugyanaz az irány), nem újragenerált fordított változat.
+        const again = wordGuardRef.current.sameAsShown(it.key);
+        if (again) return again;
         const q = restoreReviewQuestion(it, { vocab: (l) => (l === lang ? vocabRef.current : null) });
         if (!q) return null;
         seenRef.current = [...seenRef.current, { id: String(q.quiz.id ?? q.key), prompt: q.quiz.prompt }];
@@ -647,6 +662,7 @@ export default function WordLadderHuEn() {
     speech,
     onShow: (p) => {
       lastStartRef.current = p.startedAtSimMs;
+      wordGuardRef.current.remember(p.question.key, p.question);
       // A tartós, játékok közötti szóbank-napló a MEGJELENÍTÉSKOR (a szóbank-motor szerződése, A7): szóbankos tételnél
       // `markAsked`, kézi tételnél a helyes válasz `markExternal`-lal (így ugyanaz a szó a bankból sem jön vissza).
       const vocabId = vocabIdOfLadderItem(String(p.question.quiz.id ?? ""));
@@ -728,6 +744,7 @@ export default function WordLadderHuEn() {
     levelSessionRef.current.reset(level);
     runTierRef.current = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
     seenRef.current = [];
+    wordGuardRef.current.reset();
     speakAfterRef.current.clear();
     // Csak fejlesztői módban: ?rung=N kezdőfok a zónaváltások / cél gyors ellenőrzéséhez.
     let startRung = 0;

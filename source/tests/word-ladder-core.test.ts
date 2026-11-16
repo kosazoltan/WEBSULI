@@ -184,3 +184,89 @@ test("pálya-hosszak: 24 (1. pálya) … 42 fok (10. pálya), monoton; a riváli
   s.rival.pos = 3.26;
   assert.equal(leadRungs(s), 1.7);
 });
+
+test("review #454: a közös ismétlési sorból csak a mostani nyelv saját tétele jön vissza (a bankkulcs gameId-je minden nyelven azonos)", async () => {
+  const { ownsReviewKey } = await import("../client/src/lib/wordLadder/review");
+  const ctx = { gameId: "word-ladder-hu-en", lang: "de", bankIds: new Set(["de0-001", "de1-004"]), materialKeys: new Set<string>() };
+  assert.equal(ownsReviewKey("bank:word-ladder-hu-en:de0-001", ctx), true);
+  assert.equal(ownsReviewKey("bank:word-ladder-hu-en:en0-001", ctx), false, "angol kézi tétel német menetben");
+  assert.equal(ownsReviewKey("bank:speed-quiz-math:x1", ctx), false, "más játék tétele");
+  assert.equal(ownsReviewKey("vocab:de:de-hund", ctx), true);
+  assert.equal(ownsReviewKey("vocab:en:en-dog", ctx), false, "más nyelv szóbankja");
+  assert.equal(ownsReviewKey("mat:m1", ctx), false, "nem a mostani tananyag");
+  assert.equal(ownsReviewKey("mat:m1", { ...ctx, materialKeys: new Set(["mat:m1"]) }), true);
+  assert.equal(ownsReviewKey("grade:g1", ctx), false, "évfolyam-bank tétele nem a Szólétráé");
+});
+
+test("review #454: angol menetben elrontott kézi tétel → német menetben nem tér vissza (a sorban marad), angolra váltva visszajön", async () => {
+  const { ownsReviewKey } = await import("../client/src/lib/wordLadder/review");
+  const { createQuestionDirector, bankPlayQuestion, restoreReviewQuestion } = await import("../client/src/game-engine/play/questionDirector");
+  const { createReviewQueue } = await import("../client/src/game-engine/play/reviewQueue");
+  const { wordLadderDirectorConfig } = await import("../client/src/lib/wordLadder/sim");
+  const { seedFrom } = await import("../shared/game-rng");
+  const T0 = 1_800_000_000_000;
+  const mem = new Map<string, string>();
+  const storage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) };
+  const bank = (lang: string) => Array.from({ length: 30 }, (_, i) => ({ id: `${lang}0-${String(i + 1).padStart(3, "0")}`, prompt: `${lang} kérdés ${i}?`, options: ["a", "b", "c", "d"], correctIndex: 0 }));
+  const run = (lang: string, wrongFirst: boolean) => {
+    const items = bank(lang);
+    let i = 0;
+    const d = createQuestionDirector({
+      config: wordLadderDirectorConfig(7),
+      provider: {
+        couponOnly: false,
+        material: () => null,
+        fresh: () => (i < items.length ? bankPlayQuestion("word-ladder-hu-en", items[i++]!) : null),
+        restore: (it) =>
+          ownsReviewKey(it.key, { gameId: "word-ladder-hu-en", lang, bankIds: new Set(items.map((q) => q.id)), materialKeys: new Set() })
+            ? restoreReviewQuestion(it, {})
+            : null,
+      },
+      review: createReviewQueue(storage, { now: () => T0, rng: createRng(seedFrom("rv", lang)) }),
+      rng: createRng(seedFrom("q", lang)),
+      startBand: 0.4,
+      now: () => T0,
+    });
+    const keys: string[] = [];
+    for (let n = 0; n < 12; n++) {
+      const p = d.request("trigger", 10_000 + n * 2000);
+      if (!p) break;
+      keys.push(p.question.key);
+      const pick = wrongFirst && n === 0 ? p.options.findIndex((o) => !o.correct) : p.options.findIndex((o) => o.correct);
+      d.answer(p.id, pick, 10_000 + n * 2000 + 500);
+    }
+    return keys;
+  };
+  const en1 = run("en", true);
+  const missed = en1[0]!;
+  assert.ok(missed.startsWith("bank:word-ladder-hu-en:en0-"));
+  const de = run("de", false);
+  assert.ok(!de.includes(missed), "az angol tétel nem jöhet a német menetben");
+  assert.ok(de.every((k) => k.startsWith("bank:word-ladder-hu-en:de0-")));
+  assert.ok(mem.get("websuli.gameReview.v1")?.includes(missed), "a tétel a sorban maradt");
+  const en2 = run("en", false);
+  assert.ok(en2.slice(0, 10).includes(missed), "angol menetben visszatér (a következő menet első 10 kérdésében)");
+});
+
+test("review #454: egy menetben egy szó csak egy irányban — az ismétlés a már látott kérdés, új tételként nem jön újra", async () => {
+  const { createRunWordGuard } = await import("../client/src/lib/wordLadder/review");
+  const g = createRunWordGuard<{ prompt: string }>();
+  const huToEn = { prompt: "Hogy mondod angolul: kutya?" };
+  g.remember("vocab:en:en-dog", huToEn);
+  assert.equal(g.freshAllowed("vocab:en:en-dog"), false, "az EN→HU változat (ugyanaz a bejegyzés) nem jöhet új tételként");
+  assert.equal(g.sameAsShown("vocab:en:en-dog"), huToEn, "az ismétlés ugyanaz a (HU→EN) kérdés");
+  assert.equal(g.freshAllowed("vocab:en:en-cat"), true);
+  g.reset();
+  assert.equal(g.freshAllowed("vocab:en:en-dog"), true, "új menetben újra jöhet");
+});
+
+test("review #454: a felolvasás csak akkor a megjelenéskor, ha a célnyelvi szó ÖNÁLLÓ szóként a promptban van", async () => {
+  const { promptHasTerm } = await import("../client/src/lib/wordLadder/review");
+  assert.equal(promptHasTerm("„Megy” angolul:", "go"), false, "a „go” az „angolul” részszava — nem árulhatja el a választ");
+  assert.equal(promptHasTerm("Mit jelent: „go”?", "go"), true);
+  assert.equal(promptHasTerm("Mit jelent: brush your teeth?", "brush your teeth"), true);
+  assert.equal(promptHasTerm("Mit jelent: der Hund?", "Hund"), true);
+  assert.equal(promptHasTerm("Hogy mondod németül: kutya?", "Hund"), false);
+  assert.equal(promptHasTerm("Mit jelent: l'école?", "école"), true);
+  assert.equal(promptHasTerm("Bármi", ""), false);
+});
