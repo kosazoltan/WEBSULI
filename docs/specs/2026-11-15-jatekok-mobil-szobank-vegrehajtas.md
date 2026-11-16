@@ -1445,7 +1445,9 @@ van `detectLookTier`; a vezérlősáv feltétele tartalmazza a `useTouchCapable`
 
 ## S10 — Galaktikus Aszteroida mobilra + szóbank
 
-**Állapot:** folyamatban — ág feat/jatekok-s10-aszteroida, munkafa .claude/worktrees/jatekok-s10, kanban #27
+**Állapot:** review — ág feat/jatekok-s10-aszteroida, munkafa .claude/worktrees/jatekok-s10, kanban #27, PR #434. Eltérés: a
+kérdés-hely kiváltása a mainen lévő `pickGradeSlotWithVocab`-bal (`lib/brainRotTuning.ts`, #424); a `remaining-learning.spec.ts`
+aszteroida-tesztje a szóbankos első kérdést is ellenőrzi (orkesztrátori engedéllyel, SPEC-VÁLTOZÁS a teszt kommentjében).
 
 - **Cél:** 4.5 keret; képernyőhöz méretezett joystick és tűzgomb, automatikus célzássegéd érintésnél, látványosabb
   robbanások; angol kérdések a szóbankból (A8).
