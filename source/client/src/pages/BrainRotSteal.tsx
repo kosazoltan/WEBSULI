@@ -2,7 +2,7 @@ import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import CollectibleAvatar from "@/components/CollectibleAvatar";
-import { ArrowLeft, ShieldAlert, Zap } from "lucide-react";
+import { ArrowLeft, Pause, ShieldAlert, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -593,6 +593,8 @@ export default function BrainRotSteal() {
   const onAnswer = useCallback(
     (idx: number) => {
       if (!quiz || !caughtRot) return;
+      // S13 / review K1: szünetben nincs válasz (a háttér inert, de a billentyűs út ellen is védünk).
+      if (pausedRef.current) return;
       if (revealCorrectIdx !== null) return;
 
       if (quizAttemptRef.current === 0) maybeClaimCouponBonus(coupon, quiz.id, idx);
@@ -1319,6 +1321,16 @@ export default function BrainRotSteal() {
                     {comboMultiplier > 1 && <span className="text-yellow-300 font-bold"> · ×{comboMultiplier.toFixed(1)}</span>}
                   </p>
                 </div>
+                {/* S13 / C10: a z-60-as kvízréteg eltakarja a HUD szünetgombját — saját szünetgomb (a Szökőár mintája). */}
+                <button
+                  type="button"
+                  data-testid="br-quiz-pause"
+                  aria-label="Szünet"
+                  onClick={pause}
+                  className="ml-auto inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/10 text-white hover:bg-white/20"
+                >
+                  <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                </button>
               </div>
 
               <p id="br-quiz-prompt" className="text-lg sm:text-xl font-bold leading-snug mb-3">

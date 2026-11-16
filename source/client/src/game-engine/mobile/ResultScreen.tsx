@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useReducedMotion } from "../useReducedMotion";
+import { useModalLayer } from "./modalLayer";
 import { computeStars } from "./stars";
 
 /**
@@ -75,6 +76,9 @@ export default function ResultScreen({
   // A fókusz a párbeszédre kerül (képernyőolvasó felolvassa, Tab az „Újra” gombra visz), nem a gombra:
   // a programozott gombfókusz érintős eszközön is kirajzolná a fókuszkeretet.
   const dialogRef = useRef<HTMLDivElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+  // S13 / review K1: inert háttér, fókuszcsapda, fókusz vissza bezáráskor.
+  useModalLayer(open, layerRef, dialogRef);
   const starCount = stars ?? computeStars({ correct, total, won });
   const percent = total > 0 ? Math.round((correct / total) * 100) : 0;
 
@@ -87,6 +91,7 @@ export default function ResultScreen({
       {open && (
         <motion.div
           key="game-result"
+          ref={layerRef}
           data-testid={testId}
           data-game-result="true"
           data-won={won ? "true" : "false"}

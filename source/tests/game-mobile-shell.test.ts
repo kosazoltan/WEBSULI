@@ -174,6 +174,15 @@ test("readBest / writeBest: kivételt dobó tárolón kivétel nélkül { best: 
   assert.deepEqual(writeBest(throwing, "a", 42), { best: 42, isNewBest: true });
 });
 
+test("writeBest: az első, 0 pontos futás tárolódik, de nem „Új rekord!” (S13 / review L5)", () => {
+  const s = memoryStorage();
+  assert.deepEqual(writeBest(s, "a", 0), { best: 0, isNewBest: false });
+  assert.equal(readBest(s, "a"), 0);
+  // utána az első pozitív eredmény már rekord
+  assert.deepEqual(writeBest(s, "a", 5), { best: 5, isNewBest: true });
+  assert.deepEqual(writeBest(s, "a", 0), { best: 5, isNewBest: false });
+});
+
 /* -------------------------------- forrásőr -------------------------------- */
 
 test("forrásőr: a useCoarsePointer az új useTouchCapable-t hívja", () => {

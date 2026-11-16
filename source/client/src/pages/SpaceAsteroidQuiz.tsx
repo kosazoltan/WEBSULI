@@ -1269,7 +1269,8 @@ export default function SpaceAsteroidQuiz() {
   /* ============== Quiz választ feldolgoz ============== */
 
   const onAnswer = (idx: number) => {
-    if (!activeQuiz || phase !== "quiz" || answerLockedRef.current) return;
+    // S13 / review K1: szünetben nincs válasz (a háttér inert, de a billentyűs út ellen is védünk).
+    if (!activeQuiz || phase !== "quiz" || answerLockedRef.current || pausedRef.current) return;
     answerLockedRef.current = true;
     adaptiveRef.current.answer(idx === activeQuiz.correctIndex);
     if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz

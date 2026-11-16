@@ -532,7 +532,11 @@ export default function WordLadderHuEn() {
     [],
   );
 
-  /** A futás első kérdése a futásonként újraépülő készletből jön (a runSeq-render után, lásd a lenti effektet). */
+  /**
+   * Jelző a futás első kérdéséhez. S13 / átfogó review L6 (pontosítás): a futásonként újraépülő szóbank-készlet
+   * `setTimeout(0)`-ban épül (lásd fent), ezért a futás ELSŐ kérdése a kézi bankból jön; a szóbank a második kérdéstől
+   * kérdez. A lenti effekt a runSeq-render commitjában fut, amikor a készlet még üres.
+   */
   const firstQuestionPendingRef = useRef(false);
 
   const clearRunTimers = useCallback(() => {

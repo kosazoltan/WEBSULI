@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import AudioToggleButton from "@/components/AudioToggleButton";
 
 import { useReducedMotion } from "../useReducedMotion";
+import { setPauseMenuOpen, useModalLayer } from "./modalLayer";
 
 /**
  * S2 / terv 4.5 „Folyamat” — szünet menü: folytatás, újrakezdés, hang, kilépés.
@@ -31,6 +32,17 @@ export default function PauseMenu({ open, onResume, onRestart, onExit, exitLabel
   const resumeRef = useRef<HTMLButtonElement>(null);
   const onResumeRef = useRef(onResume);
   onResumeRef.current = onResume;
+  const layerRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // S13 / review K1: inert háttér, fókuszcsapda, fókusz vissza bezáráskor (a kupon-lejárati réteg mintája).
+  useModalLayer(open, layerRef, dialogRef);
+
+  // S13 / review K3: a magyarázókártya szünetben rejtve marad (különben a z 90-es kártya a menü fölé kerülne).
+  useEffect(() => {
+    if (!open) return;
+    setPauseMenuOpen(true);
+    return () => setPauseMenuOpen(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -50,6 +62,7 @@ export default function PauseMenu({ open, onResume, onRestart, onExit, exitLabel
       {open && (
         <motion.div
           key="game-pause-menu"
+          ref={layerRef}
           className="game-overlay"
           initial={reduced ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -57,6 +70,8 @@ export default function PauseMenu({ open, onResume, onRestart, onExit, exitLabel
           transition={{ duration: 0.18 }}
         >
           <motion.div
+            ref={dialogRef}
+            tabIndex={-1}
             data-testid="game-pause-menu"
             role="dialog"
             aria-modal="true"

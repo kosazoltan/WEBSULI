@@ -403,7 +403,11 @@
   --game-good: #22c55e;
   --game-bad: #f43f5e;
   --game-warn: #f59e0b;
-  /* Rétegrend: .game-overlay (szünet, eredmény) 80 < kvíz-visszajelzés 90 < kupon-lejárat. */
+  /* Rétegrend: .game-overlay (szünet, eredmény) 80 < kvíz-visszajelzés 90 < kupon-lejárat.
+     S13 / review K3: a kvíz-visszajelzés szünetben NEM látszik (usePauseMenuOpen), így nem takarja a menüt; a
+     QuizFeedbackCard a z-[90] osztályt tartja (a game-feedback-wiring-guard a lapok rétegeivel veti össze). */
+  --game-z-overlay: 80;
+  --game-z-feedback: 90;
   --game-z-coupon-expired: 95;
 }
 .game-action-btn {
@@ -530,6 +534,11 @@
 .game-hud-progress[data-tone="bad"] .game-hud-progress-fill { background: linear-gradient(90deg, #e11d48, #fb7185); box-shadow: 0 0 12px #f43f5e99; }
 .game-hud-progress-label { flex: 0 0 auto; font-size: max(12px, calc(var(--game-hud-font) - 2px)); font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; }
 
+/* S13 / átfogó review L3: a kupon-visszaszámláló a biztonsági sávon belül, és a közös HUD-ot a pirula alá tolja
+   (különben a HUD középső statját takarná). A pirula: min. 44 px + 12 px felső hely → a HUD 60 px-szel lejjebb. */
+.game-coupon-hud { top: max(12px, var(--game-safe-top)); }
+:root:has(.game-coupon-hud) .game-hud { margin-top: calc(max(12px, var(--game-safe-top)) + 52px); }
+
 /* A lejárt játékidő párbeszéde: minden játékréteg (HUD, kvíz, szünet, eredmény) fölött, modális. */
 .game-coupon-expired {
   position: fixed; inset: 0; z-index: var(--game-z-coupon-expired, 95);
@@ -540,7 +549,7 @@
 
 /* Fedőréteg és párbeszédkártya (szünet, eredmény) — portálon a body-ban. */
 .game-overlay {
-  position: fixed; inset: 0; z-index: 80;
+  position: fixed; inset: 0; z-index: var(--game-z-overlay, 80);
   display: flex; align-items: center; justify-content: center;
   padding: max(12px, var(--game-safe-top)) max(12px, var(--game-safe-right)) max(12px, var(--game-safe-bottom)) max(12px, var(--game-safe-left));
   background: radial-gradient(ellipse at 50% 30%, #0f2a4acc, #020617e6);

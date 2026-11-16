@@ -1677,6 +1677,9 @@ function PlayScreen(props: {
   const tryAnchorRef = useRef<() => void>(() => {});
   tryAnchorRef.current = () => {
     if (pausedRef.current) return;
+    // S13 / C9: sikeres horgonyzás után a győzelem már ütemezve van (2,6 s, játékóra) — új horgony-kvíz ne nyíljon,
+    // különben az ütemezett eredmény a nyitott kvíz alatt futna le.
+    if (playerRef.current.anchored) return;
     if (phaseRef.current !== "approach" && phaseRef.current !== "seeking") return;
     const p = playerRef.current;
     const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
@@ -1718,6 +1721,9 @@ function PlayScreen(props: {
       pausedRef.current = false;
       setPaused(false);
       setFeedback(null);
+      // S13 / C9: egy ütemezett eredmény alatt nyitva maradt kvíz ne maradjon az eredményképernyő alatt.
+      setActiveQuiz(null);
+      pendingAnchorRef.current = null;
       pendingResolveRef.current = null;
       const bestNow = props.onSubmitBest(reward.score);
       setResult({

@@ -796,6 +796,13 @@ export default function TsunamiEscapeEnglish() {
   );
   const materialQuizzesRef = useRef(materialQuizzes);
   materialQuizzesRef.current = materialQuizzes;
+  /**
+   * S13 / átfogó review L1: a lecke-tananyagból jövő kérdés (bármely tárgyú, a játékban „english” címkével fut) NEM
+   * kézi angol kérdés — a helyes válasza nem kerülhet a közös szóbank-naplóba (a többi játék is kizárja a tananyagot).
+   * A tananyag három úton jut be (tananyag-elsőbbség, kupon-jutalom, a közepes készlet), ezért a kérdésszöveg a kulcs.
+   */
+  const materialPromptsRef = useRef<Set<string>>(new Set());
+  materialPromptsRef.current = useMemo(() => new Set(materialItems.map((q) => q.prompt)), [materialItems]);
 
   const { data: syncEligibility } = useQuery<SyncEligibility>({
     queryKey: ["/api/games/sync-eligibility"],
@@ -836,7 +843,7 @@ export default function TsunamiEscapeEnglish() {
     const issue = (q: Quiz): Quiz => {
       runSeenRef.current.push({ id: q.id, prompt: q.prompt });
       markGradeQuizSeen(gradeSeenRef.current, q);
-      if (q.subject === "english" && !q.id.startsWith("vocab:")) {
+      if (q.subject === "english" && !q.id.startsWith("vocab:") && !materialPromptsRef.current.has(q.prompt)) {
         vocabRef.current?.markExternal(q.options[q.correctIndex] ?? "");
       }
       return shuffleQuiz(q);
@@ -1214,7 +1221,8 @@ export default function TsunamiEscapeEnglish() {
   }, []);
 
   const onAnswer = (index: number) => {
-    if (!quiz) return;
+    // S13 / review K1: szünetben nincs válasz (a háttér inert, de a billentyűs út ellen is védünk).
+    if (!quiz || paused) return;
     // VÁLASZ-LOCK: dupla kattintás ne dolgozza fel kétszer ugyanazt a kvízt
     // (dupla XP/streak/correctCount, akár korai "won" is lehetett).
     if (answerLockedRef.current) return;
