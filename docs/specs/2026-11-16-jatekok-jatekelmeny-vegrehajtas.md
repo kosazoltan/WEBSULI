@@ -2044,6 +2044,23 @@ Jelölés: A a gazda, B a vendég, X a kérő, Y a másik fél. „Lát” = a k
 | **L** kilépett | a maradó: eredmény + „a barátod kilépett — a visszavágó most elmarad” (`duel-rematch-gone`), „Új szoba” | `NOT_ENOUGH_PLAYERS` | — | no-op | — | no-op | — | `ROOM_STARTED` | marad **L** (a váróterem-TTL zárja) | marad **L** |
 | **countdown** (kölcsönös / elfogadott) | mindkettő: visszaszámlálás, `rematch=null` | — | — | — | — | — | — | — | — | — |
 
+**Független review (315a4abf) javításai ebben a PR-ban:**
+- **K1 — nyugtázott token-forgatás (döntés).** Két lehetőség volt: (a) a forgatás a kliens nyugtájával véglegesedik; (b) időalapú átfedés, amíg a helynek nincs élő kapcsolata. **Az (a)-t választjuk.** Indok: az elveszett `welcome` után a szerver a halott kapcsolatot még a ping-időtúllépésig élőnek látja, így a (b) feltétele épp a hiba esetén nem teljesülne; a nyugta viszont pontosan azt méri, hogy az új token megérkezett-e.
+  - Működés: a `welcome` Socket.IO-nyugtát kér. A kliens a token átvétele után nyugtáz.
+  - Amíg a nyugta nem jön meg, a hely ELŐZŐ tokenje is visszaültet. Ez legfeljebb `RT_RECONNECT_GRACE_MS` (60 s) ideig tart, és csak ugyanarra a helyre szól. Ismételt elvesztésnél az előző token marad a tartalék, a közbülső, soha meg nem érkezett token érvénytelen.
+  - A nyugta után az előző token azonnal érvénytelen. A `room:join` saját helyre ülése (új jegy) azonnali, kemény forgatás marad.
+  - A meglévő garanciák megmaradnak. Két egyidejű visszaülésből egy hely-birtokos marad, a másik `SESSION_MOVED`-ot kap. Lecserélt, nyugtázott tokennel nem lehet visszaülni. A 6 órás lejárat marad. A token nem kerül URL-be, naplóba vagy más játékos `room:state`-jébe.
+- **K3:** lejáratkor (`expired`) mindenki „kész” jelzése törlődik, így a gazda `start`-ja nem indíthat egy lejárt kérésre. A táblázat kiegészül a `start` és a `kick` eseménnyel (lent).
+- **K4:** az „Új szoba” gomb a győzteshirdetésen csak annak látszik, aki szobát nyithat (ugyanaz a `canCreate`, mint a megtelt-szoba képernyőn). A vendég a „Párbaj” kezdőlapra jut (kód beírása / belépés).
+
+| Állapot | `start` (gazda, nyers) | `kick` (gazda, nyers) |
+|---|---|---|
+| **R** | `BAD_PHASE` | kivett fél → R (a maradó „Visszavágó”-ja → **L**) |
+| **P(X)** | X = vendég (kész) → `countdown` (a gazda indítása = elfogadás); X = gazda → `NOT_ENOUGH_PLAYERS` (Y nem fogadott el) | → **L** |
+| **ACC** | `NOT_ENOUGH_PLAYERS` (X nincs kapcsolatban) | → **L** |
+| **E(X)** | `NOT_ENOUGH_PLAYERS` (lejáratkor senki sem kész — K3) | → **L** |
+| **L** | `NOT_ENOUGH_PLAYERS` | `NOT_IN_ROOM` (nincs kit) |
+
 **Tesztek:** `tests/rt-room-machine.test.ts` tábla-vezérelt blokk (minden cella egy eset: kiinduló állapot + esemény → várt
 `rematch.status` / fázis / hiba); nyers Socket.IO-próba a `tests/support/rt-harness.ts`-szel (kérő + kérő `room:ready` → nincs
 indulás; egyidejű `room:rematch` → visszaszámlálás); e2e két kontextussal egyszerre nyomva (mindkettő `duel-countdown`), és a
