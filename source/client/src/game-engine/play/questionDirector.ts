@@ -53,7 +53,7 @@ import { normalizePrompt } from "../gradeQuiz";
 import { wallClockMs } from "./clock";
 import { READING_WINDOW_CAP_MS, readingMsFor } from "./reading";
 import { createFlowController, type FlowController } from "./flow";
-import { RETURN_MAX, type ReviewItem, type ReviewQueue } from "./reviewQueue";
+import { RETURN_MAX, reviewFitsGrade, type ReviewItem, type ReviewQueue } from "./reviewQueue";
 import { createRunStats, type RunStatsSnapshot } from "./runStats";
 import {
   toRandom,
@@ -81,6 +81,12 @@ export type QuestionProvider = {
   restore(item: ReviewItem): PlayQuestion | null;
   /** Kupon mód: csak material() adhat kérdést. */
   couponOnly: boolean;
+  /**
+   * J4a (additív, review #451): évfolyam nélkül tárolt RÉGI ismétlési tételnél a játék dönti el, hogy a forrása ma is
+   * ugyanezt a tételt adná-e a `config.grade` évfolyamon (`reviewFitsGrade` harmadik paramétere). Hiányában az ilyen
+   * (nem szóbanki) tétel a J0b-viselkedés szerint visszatérhet.
+   */
+  legacyReviewFits?: (item: ReviewItem) => boolean;
 };
 export type DirectorConfig = {
   gameId: PlayGameId;
@@ -251,6 +257,12 @@ export function createQuestionDirector(opts: {
    * (review #444): az ilyen kulcs a menet hátralevő részére kimarad, így nem torlaszolja el a mögötte esedékes tételeket.
    */
   function restore(item: ReviewItem): PlayQuestion | null {
+    // Közös évfolyam-szabály (review #451): más évfolyam tétele ebben a menetben nem jön vissza — a sorban marad a
+    // saját évfolyamú menetének (ugyanúgy átugorva, mint az idegen játék tétele).
+    if (!reviewFitsGrade(item, config.grade, provider.legacyReviewFits)) {
+      unrestorable.add(item.key);
+      return null;
+    }
     const q = provider.restore(item);
     if (usable(q) && q.key === item.key) return q;
     unrestorable.add(item.key);
@@ -347,7 +359,10 @@ export function createQuestionDirector(opts: {
       correctOriginalIndex: quiz.correctIndex,
       responseMs: Math.max(0, endMs - p.startedAtSimMs),
     };
-    review.record(p.question, result, pos);
+    // Review #451: a tétel évfolyama a menet évfolyama, ha a forrás nem adott sajátot (a közös sor csak azonos
+    // évfolyamon hozza vissza — `reviewFitsGrade`).
+    const recorded = config.grade !== null && p.question.grade === undefined ? { ...p.question, grade: config.grade } : p.question;
+    review.record(recorded, result, pos);
     if (result !== "aborted") {
       flow.push({ kind: "answer", correct: result === "correct", responseMs: result === "timeout" ? p.windowMs : outcome.responseMs, windowMs: p.windowMs });
     }
@@ -430,23 +445,32 @@ export function gradePlayQuestion(item: GradeQuizItem): PlayQuestion {
     quiz: { id: item.id, prompt: item.prompt, options: item.options.slice(), correctIndex: item.correctIndex, explanation: item.explanation },
     source: "grade",
     subject: item.subject,
+    ...(Number.isInteger(item.grade) ? { grade: item.grade } : {}),
   };
 }
 
 /** Tananyag-kvíz (`pickUnseenMaterial`) → kulcs `mat:<id vagy normalizePrompt>`; kupon módban `source: "coupon"`. */
-export function materialPlayQuestion(quiz: FourChoiceQuiz, opts?: { subject?: string; couponItemId?: string; coupon?: boolean }): PlayQuestion {
+export function materialPlayQuestion(quiz: FourChoiceQuiz, opts?: { subject?: string; couponItemId?: string; coupon?: boolean; grade?: number }): PlayQuestion {
   return {
     key: `mat:${idOrPrompt(quiz)}`,
     quiz: quizOf(quiz),
     source: opts?.coupon || opts?.couponItemId ? "coupon" : "material",
     ...(opts?.subject ? { subject: opts.subject } : {}),
     ...(opts?.couponItemId ? { couponItemId: opts.couponItemId } : {}),
+    ...(opts?.grade !== undefined && Number.isInteger(opts.grade) ? { grade: opts.grade } : {}),
   };
 }
 
 /** A játék saját (kézi) bankja → kulcs `bank:<gameId>:<id vagy normalizePrompt>`. */
-export function bankPlayQuestion(gameId: PlayGameId, quiz: FourChoiceQuiz, subject?: string): PlayQuestion {
-  return { key: `bank:${gameId}:${idOrPrompt(quiz)}`, quiz: quizOf(quiz), source: "bank", ...(subject ? { subject } : {}) };
+export function bankPlayQuestion(gameId: PlayGameId, quiz: FourChoiceQuiz, subject?: string, grade?: number): PlayQuestion {
+  return {
+    key: `bank:${gameId}:${idOrPrompt(quiz)}`,
+    quiz: quizOf(quiz),
+    source: "bank",
+    ...(subject ? { subject } : {}),
+    // J4a (additív, review #451): az évfolyam a tételbe kerül (az ismétlési sor csak azonos évfolyamon hozza vissza).
+    ...(grade !== undefined && Number.isInteger(grade) ? { grade } : {}),
+  };
 }
 
 /**
@@ -466,5 +490,11 @@ export function restoreReviewQuestion(
     const g = deps.gradeItem?.(p.id) ?? null;
     return g ? { ...gradePlayQuestion(g), key: item.key } : null;
   }
-  return { key: item.key, quiz: quizOf(p.quiz), source: p.source, ...(p.subject ? { subject: p.subject } : {}) };
+  return {
+    key: item.key,
+    quiz: quizOf(p.quiz),
+    source: p.source,
+    ...(p.subject ? { subject: p.subject } : {}),
+    ...(typeof item.grade === "number" ? { grade: item.grade } : {}),
+  };
 }

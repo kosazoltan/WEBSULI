@@ -1,13 +1,12 @@
 import MathTowerScene3D from "@/components/MathTowerScene3D";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { Link, useLocation } from "wouter";
-import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Clock, Flame, Heart, Rocket } from "lucide-react";
+import { ArrowLeft, Flame, Rocket, Shield, Waves, Zap } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import AudioToggleButton from "@/components/AudioToggleButton";
-import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
+import { sfxCombo, sfxError, sfxExplode, sfxGate, sfxHit, sfxLevelUp, sfxPickup, sfxShoot } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
@@ -23,14 +22,42 @@ import {
   type GameScreenState,
 } from "@/game-engine/mobile";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
-import { scoreCorrectAnswer } from "@/game-engine/retry-policy";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
-import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import { correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
 import { pickFreshTask } from "@/game-engine/no-repeat";
 import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { digitComplexity, levelAdaptBand, levelStartBand, pickByBand } from "@/game-engine/levelTuning";
-import { QUESTION_SECONDS, ROUND_SECONDS, TARGET_CORRECT, questionSecondsForBand } from "@/game-engine/speedQuizTiming";
+import {
+  InlineQuestion,
+  ResultReview,
+  bankPlayQuestion,
+  restoreReviewQuestion,
+  tween,
+  usePlayQuestion,
+  type QuestionProvider,
+  type ShakeOffset,
+} from "@/game-engine/play";
+import { createRng, seedFrom } from "@shared/game-rng";
+import { LOOK_BUDGET, detectLookTier } from "@/game-engine/three-look/tier";
+import {
+  DRONE_ENTER_MS,
+  RAIDERS,
+  SHIELD_MAX,
+  SPEED_MATH_GAME_ID,
+  TOWER,
+  TUTORIAL_MS,
+  WARP_MS,
+  createTowerDriver,
+  droneLayout,
+  isOwnReviewKey,
+  speedMathQuizId,
+  towerDirectorConfig,
+  type RaiderKind,
+  type TowerCore,
+  type TowerDriver,
+  type TowerEvent,
+} from "@/lib/speedMath/core";
 
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 type GradeLevel = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
@@ -57,7 +84,6 @@ type MathTask = {
   calc?: string;
   source: "teacher" | "generated";
 };
-type AnswerState = "idle" | "correct" | "wrong";
 
 const LEVEL_LABEL: Record<GradeLevel, string> = {
   3: "3. osztály",
@@ -86,7 +112,19 @@ const SCORE_DIFFICULTY: Record<GradeLevel, "easy" | "normal" | "hard"> = {
 };
 
 function randInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+  return Math.floor(taskRandom() * (max - min + 1)) + min;
+}
+
+/**
+ * A feladat-sorsolás véletlenforrása (J4a, K.4/13): a menet seedjéből (`createRng`) állítja a lap, így azonos seed →
+ * azonos feladatsor. Alapból `Math.random` (a tiszta szakaszt a `T/game-bank-no-repeat-content.test.ts` saját seedelt
+ * `Math.random`-jával futtatja — ezért hívja lustán).
+ */
+let taskRandom: () => number = () => Math.random();
+
+/** A menet seedelt véletlenforrásának beállítása (a lap a menet indításakor hívja). */
+function setTaskRandom(next: () => number): void {
+  taskRandom = next;
 }
 
 function pick<T>(items: readonly T[]): T {
@@ -151,7 +189,7 @@ function uniqueOptions(correct: number, level: GradeLevel): number[] {
     const candidate = round6(value + randInt(-spread, spread) * step);
     set.add(allowNegative ? candidate : Math.max(0, candidate));
   }
-  return Array.from(set).sort(() => Math.random() - 0.5);
+  return Array.from(set).sort(() => taskRandom() - 0.5);
 }
 
 /** Sablonok száma évfolyamonként (a `t` ágak száma a generátorban). */
@@ -1261,7 +1299,7 @@ function generatedTaskForGrade(level: GradeLevel): MathTask {
       calc = `(${values.map((v) => `(${v})`).join("+")})/5`;
     } else if (t === 6) {
       const sorted = Array.from({ length: 6 }, () => randInt(1, 30)).sort((x, y) => x - y);
-      const shuffled = [...sorted].sort(() => Math.random() - 0.5);
+      const shuffled = [...sorted].sort(() => taskRandom() - 0.5);
       prompt = `Mennyi a következő adatok mediánja: ${shuffled.join("; ")}?`;
       result = (sorted[2]! + sorted[3]!) / 2;
       explanation = `Sorba rendezve: ${sorted.join("; ")}; a két középső átlaga (${sorted[2]} + ${sorted[3]}) ÷ 2 = ${f((sorted[2]! + sorted[3]!) / 2)}.`;
@@ -1317,18 +1355,32 @@ function isMathTask(task: MathTask): boolean {
  * A futás egy még nem látott feladata (spec 2026-09-29): 68%-ban a tanári bankból, különben a generátorból
  * (legfeljebb 30 próba egy új promptért, utána nem látott tanári feladat).
  */
-function pickOneTask(level: GradeLevel, seenPrompts: readonly string[]): MathTask {
-  const teacherPool = TEACHER_BANK[level].filter(isMathTask);
+function pickOneTask(level: GradeLevel, seenPrompts: readonly string[], accept?: TaskAccept): MathTask {
+  const all = TEACHER_BANK[level].filter(isMathTask);
+  // J0c-b `accept` (#450): az elolvasható / beférő tétel ELŐBB; ha egy sincs, a teljes készlet (a sáv akkor is mutatja).
+  const fitting = accept ? all.filter((t) => accept(t)) : all;
+  const seen = new Set(seenPrompts);
+  const teacherPool = fitting.some((t) => !seen.has(t.prompt)) ? fitting : all;
   return pickFreshTask({
     teacher: teacherPool,
     seenPrompts,
-    preferTeacher: Math.random() < 0.68,
+    preferTeacher: taskRandom() < 0.68,
+    // A tanári tétel kiválasztása és a tartalékág is a menet seedjéből (review #451; különben `Math.random`).
+    rng: () => taskRandom(),
     generate: () => {
+      // A nem elfogadott jelölt nem kerül a látottak közé (csak a visszaadott — a hívó jegyzi).
+      for (let i = 0; i < 6; i++) {
+        const generated = generatedTaskForGrade(level);
+        if (isMathTask(generated) && (!accept || accept(generated))) return generated;
+      }
       const generated = generatedTaskForGrade(level);
       return isMathTask(generated) ? generated : generatedTaskForGrade(level);
     },
   });
 }
+
+/** A kérdés-sáv elfogadási feltétele (a director `config.promptFits`-je, a forrás `accept`-je) a feladatra vetítve. */
+type TaskAccept = (task: MathTask) => boolean;
 
 /** Ennyi nem látott jelöltből választ a pálya sávja (spec 2026-09-29-palyak-szoletra-nyelvek, E szelet, D7). */
 const BAND_TASK_CANDIDATES = 3;
@@ -1337,44 +1389,136 @@ const BAND_TASK_CANDIDATES = 3;
  * Pálya nélkül a régi választás. Pályán 3 különböző, nem látott jelölt (tanári bank vagy sablon, a régi arányban),
  * és a sáv dönt: alacsony sávon a legkevesebb számjeggyel dolgozó, magas sávon a legtöbb számjeggyel dolgozó feladat.
  */
-function pickTask(level: GradeLevel, seenPrompts: readonly string[], band?: number): MathTask {
-  if (band == null) return pickOneTask(level, seenPrompts);
+function pickTask(level: GradeLevel, seenPrompts: readonly string[], band?: number, accept?: TaskAccept): MathTask {
+  if (band == null) return pickOneTask(level, seenPrompts, accept);
   const candidates: MathTask[] = [];
   let seen = [...seenPrompts];
   for (let i = 0; i < BAND_TASK_CANDIDATES; i += 1) {
-    const candidate = pickOneTask(level, seen);
+    const candidate = pickOneTask(level, seen, accept);
     candidates.push(candidate);
     seen = [...seen, candidate.prompt];
   }
   return pickByBand(candidates, band, (t) => digitComplexity(t.prompt));
 }
 
-/**
- * S7 — a kérdés betűmérete a hosszához igazodik: a rövid műveletet („36 : 4”) nagyon nagyban mutatjuk, a
- * szöveges feladat (akár ~160 karakter) viszont 360 px-es telefonon is férjen el görgetés nélkül.
- * Telefonon sosem 16 px alatt (terv 4.5 „Olvashatóság”).
- */
-function promptSizeClass(prompt: string): string {
-  if (prompt.length <= 22) return "text-[clamp(28px,8vmin,44px)] tracking-wide";
-  if (prompt.length <= 60) return "text-[clamp(20px,5.4vmin,28px)]";
-  return "text-[clamp(16px,4.4vmin,21px)]";
+/* ================================================================================================================== */
+/* J4a — „Neon védőtorony” (terv 5.4, D1; végrehajtás J4a). A feladat a játék fő igéje: a helyes eredményt viselő      */
+/* számdrónt kell lelőni, miközben a fosztogató drónok hullámokban támadják a tornyot. A mag `@/lib/speedMath/core`    */
+/* (tiszta, seedelt, fix lépés); a lap rajzol (vászon + DOM-drónok), koppintást fogad és a közös kérdés-réteget köti.  */
+/* ================================================================================================================== */
+
+/** A fosztogató rajzolt mérete (CSS px) és találati sugara: ≥ 48 px átmérő (K.4/16), ~30%-kal nagyobb a látványnál (KSZ-12). */
+const RAIDER_PX = 44;
+const RAIDER_HIT_PX = 28;
+/** Felengedési tűrés a drón dobozán túl (px), és az „alig mozdult ujj” küszöbe (px) — lásd `onDronePointerUp`. */
+const DRONE_UP_SLOP_PX = 10;
+const DRONE_STILL_PX = 12;
+/** A fosztogató „magja”: ha a számdrónra bökés ilyen közel esik egy fosztogató középpontjához, az lövés, nem válasz. */
+const RAIDER_CORE_PX = 16;
+/** Részecske-, lézer-, gyűrű- és felirat-pool (KSZ-6: előre rögzített kapacitás). */
+const PARTICLE_CAP = 220;
+const BEAM_CAP = 10;
+const RING_CAP = 4;
+const POP_CAP = 10;
+/** Az első 30 mp tanító szakasz súgója (K.4/25: egy sor, kézmozdulattal). */
+const HINT_SHOOT = "Koppints a drónokra, mielőtt elérik a tornyot!";
+const HINT_ANSWER = "Lődd le a JÓ eredményt viselő drónt!";
+
+const RAIDER_COLOR: Record<RaiderKind, string> = {
+  scout: "#f472b6",
+  weaver: "#c084fc",
+  zig: "#fbbf24",
+  tank: "#fb923c",
+};
+
+type Particles = { x: Float32Array; y: Float32Array; vx: Float32Array; vy: Float32Array; life: Float32Array; max: Float32Array; col: Uint8Array; next: number };
+type Beam = { x0: number; y0: number; x1: number; y1: number; life: number; max: number; col: number };
+type Ring = { x: number; y: number; life: number; max: number; col: number };
+type Pop = { x: number; y: number; text: string; life: number; max: number; col: number };
+
+/** A pool-színek indexe (a részecske egy bájtot tárol). */
+const FX_COLORS = ["#67e8f9", "#f472b6", "#c084fc", "#fbbf24", "#fb923c", "#86efac", "#fdba74", "#ffffff"] as const;
+const COL_CYAN = 0;
+const COL_GREEN = 5;
+const COL_ORANGE = 6;
+const COL_WHITE = 7;
+const KIND_COL: Record<RaiderKind, number> = { scout: 1, weaver: 2, zig: 3, tank: 4 };
+
+function makeParticles(): Particles {
+  return {
+    x: new Float32Array(PARTICLE_CAP),
+    y: new Float32Array(PARTICLE_CAP),
+    vx: new Float32Array(PARTICLE_CAP),
+    vy: new Float32Array(PARTICLE_CAP),
+    life: new Float32Array(PARTICLE_CAP),
+    max: new Float32Array(PARTICLE_CAP),
+    col: new Uint8Array(PARTICLE_CAP),
+    next: 0,
+  };
 }
 
-/**
- * A négy válaszcsempe saját színt kap (cián, ibolya, borostyán, rózsa), hogy a szem gyorsan megtalálja a
- * helyét; a zöld a helyes válasz visszajelzésének marad fenntartva.
- */
-const ANSWER_ACCENTS = [
-  "border-cyan-300/70 from-cyan-600/90 to-sky-900 shadow-cyan-500/20",
-  "border-violet-300/70 from-violet-600/90 to-indigo-900 shadow-violet-500/20",
-  "border-amber-300/70 from-amber-500/90 to-orange-800 shadow-amber-500/20",
-  "border-pink-300/70 from-pink-600/90 to-fuchsia-900 shadow-pink-500/20",
-] as const;
-
-/** A kombó-felirat ennyi ideig látszik (S7 6. lépés). */
-const COMBO_SHOW_MS = 600;
-/** Jó válasz után ennyi idő múlva jön a következő feladat: a zöld „pop” még látsszon. */
-const CORRECT_ADVANCE_MS = 260;
+/** Előre renderelt, ragyogó fosztogató-sprite (a `shadowBlur` drága: csak egyszer fut, nem képkockánként). */
+function raiderSprite(kind: RaiderKind, dpr: number): HTMLCanvasElement {
+  const pad = 14;
+  const size = RAIDER_PX + pad * 2;
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(size * dpr);
+  cv.height = Math.round(size * dpr);
+  const g = cv.getContext("2d");
+  if (!g) return cv;
+  g.scale(dpr, dpr);
+  g.translate(size / 2, size / 2);
+  const c = RAIDER_COLOR[kind];
+  const r = RAIDER_PX / 2;
+  g.shadowColor = c;
+  g.shadowBlur = 12;
+  g.lineWidth = 3;
+  g.strokeStyle = c;
+  g.fillStyle = "#1a0b2ee6";
+  g.beginPath();
+  if (kind === "scout") {
+    // nyílhegy (lefelé, a torony felé)
+    g.moveTo(0, r);
+    g.lineTo(r * 0.9, -r * 0.7);
+    g.lineTo(0, -r * 0.25);
+    g.lineTo(-r * 0.9, -r * 0.7);
+  } else if (kind === "weaver") {
+    // rombusz szárnyakkal
+    g.moveTo(0, -r);
+    g.lineTo(r, 0);
+    g.lineTo(0, r);
+    g.lineTo(-r, 0);
+  } else if (kind === "zig") {
+    // ötágú csillag
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const rr = i % 2 === 0 ? r : r * 0.45;
+      if (i === 0) g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      else g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+  } else {
+    // páncélos hatszög
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI / 6 + (i * Math.PI) / 3;
+      if (i === 0) g.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+  }
+  g.closePath();
+  g.fill();
+  g.stroke();
+  g.shadowBlur = 0;
+  // „szem”: a gyerek felismerje, hogy ellenfél
+  g.fillStyle = c;
+  g.beginPath();
+  g.arc(0, kind === "scout" ? -r * 0.05 : 0, r * 0.22, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#fff";
+  g.beginPath();
+  g.arc(r * 0.06, kind === "scout" ? -r * 0.1 : -r * 0.05, r * 0.08, 0, Math.PI * 2);
+  g.fill();
+  return cv;
+}
 
 export default function SpeedQuizMath() {
   const [, navigate] = useLocation();
@@ -1383,64 +1527,31 @@ export default function SpeedQuizMath() {
   const { submit: submitBest, best: storedBest } = useBestScore("speed-quiz-math");
   const [bestResult, setBestResult] = useState<{ best: number; isNewBest: boolean } | null>(null);
   const [paused, setPaused] = useState(false);
-  const [chosenIdx, setChosenIdx] = useState<number | null>(null);
-  const [combo, setCombo] = useState<{ id: number; value: number } | null>(null);
-  const [gain, setGain] = useState<{ id: number; value: number } | null>(null);
-  const fxIdRef = useRef(0);
   const [grade, setGrade] = useState<GradeLevel>(4);
   const gradeRef = useRef<GradeLevel>(grade);
   gradeRef.current = grade;
   const [phase, setPhase] = useState<Phase>("menu");
-  const [task, setTask] = useState<MathTask>(() => pickTask(4, []));
-  const [timeLeft, setTimeLeft] = useState(ROUND_SECONDS[4]);
-  const [questionTimeLeft, setQuestionTimeLeft] = useState(QUESTION_SECONDS[4]);
-  const [lives, setLives] = useState(3);
-  // Szinkron élet-követés: a setState-updater React 18-ban render-időben fut,
-  // a hívó kód nem láthatja azonnal az eredményt — a ref viszont szinkron.
-  const livesRef = useRef(3);
-  const [correct, setCorrect] = useState(0);
-  const [answered, setAnswered] = useState(0);
-  const [score, setScore] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
-  const [wrongFlash, setWrongFlash] = useState(false);
-  const [answerState, setAnswerState] = useState<AnswerState>("idle");
-  // G-1: a rossz válasz magyarázata. Amíg ez áll, az órák megállnak — a gyerek
-  // olvas, és az olvasásért nem jár büntetés.
+  // „Miért?” — a játékos kérte magyarázat (a közös QuizFeedbackCard). Amíg nyitva van, a játék áll: az olvasásért
+  // nem jár büntetés (terv 9.: a „magyarázat olvasása közben áll az óra” követelmény megmarad).
   const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
-  const attemptRef = useRef(0);
-
-  useEffect(() => {
-    return installGameTestApi({
-      probe: () => ({
-        level: runLevelRef.current,
-        band: difficultyRef.current,
-        questionSeconds: questionSecondsForBand(gradeRef.current, difficultyRef.current),
-      }),
-      forceState: (patch) => {
-        if (patch.phase === "won" || patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
-          setPhase(patch.phase);
-        }
-        if (typeof patch.correctCount === "number") setCorrect(Math.max(0, patch.correctCount));
-      },
-    });
-  }, []);
+  const [expanded, setExpanded] = useState(false);
+  const whyOpen = feedback !== null || expanded;
+  // HUD-pillanatkép ≤ 10 Hz (KSZ-9): a képkocka-hurok nem ír React-állapotot.
+  const [hud, setHud] = useState({ score: 0, shield: 4, wave: 1, power: 1, waveProgress: 0, hint: 0 });
+  const [result, setResult] = useState<{ score: number; correct: number; total: number; bestStreak: number; kills: number; wave: number; shield: number } | null>(null);
 
   /**
-   * G-4: adaptív nehézség — az IDŐN keresztül, nem a tartalmon.
-   *
-   * A feladatok nehézségét az osztály adja; azt nem akarjuk menet közben
-   * átírni, mert a tananyag rögzített. Amit viszont igazítani lehet, az a
-   * gondolkodási idő: aki küzd, kapjon többet, aki repül, kevesebbet. Ez a
-   * mastery-tanulás alapmintája, és nem rontja a feladatok minőségét.
+   * G-4: adaptív nehézség — a pálya-sáv (spec 2026-09-29-palyak-szoletra-nyelvek, E szelet) a feladat-választást
+   * hangolja (`pickByBand`), a sávot a válaszok mozgatják (`nextDifficulty`), a pálya körül tartva (`levelAdaptBand`).
    */
   const difficultyRef = useRef(startingDifficulty(4));
   const answerHistoryRef = useRef<boolean[]>([]);
-  // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet): 10 pálya évfolyamonként; a futás pályája a startkor rögzül.
-  // A célszám és a kör ideje évfolyamonként változatlan; a pálya a sávon át a feladat-nehézséget és a kérdésidőt hangolja.
   const levels = useGradeLevel("speedmath", grade);
   const runLevelRef = useRef<number | null>(null);
   const levelClearedRef = useRef(false);
+  /** A menet ÖSSZES eddigi promptja — a menet végéig egyik sem jön újra (amíg van új); az ismétlés a közös sorból jön. */
+  const runPromptsRef = useRef<string[]>([]);
+  const scoreSubmittedRef = useRef(false);
 
   const recordDifficultyAnswer = useCallback((correct: boolean) => {
     const history = [...answerHistoryRef.current, correct].slice(-6);
@@ -1454,130 +1565,135 @@ export default function SpeedQuizMath() {
     );
   }, []);
 
-  /** A kérdésre adott idő a nehézség-sávból: padlón +50%, tetején az alapidő (legalább 20 s). */
-  const questionSecondsFor = useCallback(
-    (level: GradeLevel) =>
-      questionSecondsForBand(level, difficultyRef.current),
-    [],
-  );
-  // A magyarázatot a game over ELŐTT mutatjuk meg: az utolsó hibából is tanulni kell.
-  const pendingOverRef = useRef(false);
-  /** A futás ÖSSZES eddigi promptja — a futás végéig egyik sem jön újra (amíg van új). */
-  const runPromptsRef = useRef<string[]>([]);
-  const scoreSubmittedRef = useRef(false);
-  const timeoutsRef = useRef<number[]>([]);
-  // JAVÍTÁS: a kérdés-lejárat életet von, de nem növelte az `answered`-et,
-  // így a statisztikában nem számított rossz válasznak és a `perfect` hamisan
-  // igaz lett. Külön számláló a lejárt kérdésekre.
-  const timeoutCountRef = useRef(0);
-
-  // Unmountkor az összes pending timeout törlése (beragadó state megelőzése)
-  useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);
-
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
 
-  const nextTask = useCallback(() => {
-    const next = pickTask(grade, runPromptsRef.current, runLevelRef.current == null ? undefined : difficultyRef.current);
-    runPromptsRef.current = [...runPromptsRef.current, next.prompt];
-    setTask(next);
-    setQuestionTimeLeft(questionSecondsFor(grade));
-    setAnswerState("idle");
-    setChosenIdx(null);
-    attemptRef.current = 0;
-  }, [grade, questionSecondsFor]);
-
-  /**
-   * G-1: magyarázó kártya rossz válaszra és lejárt időre.
-   *
-   * `chosenIndex === null` a lejárt idő. A feladat válaszai számok, a
-   * visszacsatolás motorja szöveggel dolgozik — a leképezés itt történik, hogy a
-   * motor egyetlen játék adatszerkezetéhez se kötődjön.
-   */
-  const showFeedbackFor = useCallback(
-    (chosenIndex: number | null) => {
-      setFeedback(
-        buildFeedback({
-          quiz: {
-            prompt: task.prompt,
-            options: task.options.map(formatMathNumber),
-            correctIndex: task.correctIndex,
-            // A levezetés (G-2). Enélkül a kártya csak a végeredményt tudná
-            // kimondani, márpedig matekból a HOGYAN a tananyag.
-            explanation: task.explanation,
-          },
-          chosenIndex,
-          attempt: attemptRef.current,
-          remainingLives: livesRef.current,
-          // 3–5. osztály: a lecke-séma ugyanezt a sávot adja (ageBandForClassroom).
-          ageBand: "kid",
-        }),
-      );
-    },
-    [task],
+  /* ---------------- kérdésforrás: a meglévő feladatgenerátor + tanári bank (68% / 32%, pickFreshTask) ---------------- */
+  const provider = useMemo<QuestionProvider>(
+    () => ({
+      couponOnly: false,
+      // A Matek nem kér tananyagot (végrehajtás J4a 3.); a forrásrend többi része (ismétlés) érvényes.
+      material: () => null,
+      fresh: ({ accept }) => {
+        // J0c-b (#450): a director `accept`-je (befér + 9 mp alatt elolvasható) — az elfogadott feladat előbb.
+        const taskAccept = accept
+          ? (t: MathTask) => accept({ id: "", prompt: t.prompt, options: t.options.map(formatMathNumber), correctIndex: t.correctIndex })
+          : undefined;
+        const task = pickTask(gradeRef.current, runPromptsRef.current, runLevelRef.current == null ? undefined : difficultyRef.current, taskAccept);
+        runPromptsRef.current = [...runPromptsRef.current, task.prompt];
+        return bankPlayQuestion(SPEED_MATH_GAME_ID, {
+          id: speedMathQuizId(gradeRef.current, task.prompt),
+          prompt: task.prompt,
+          options: task.options.map(formatMathNumber),
+          correctIndex: task.correctIndex,
+          // A levezetés (G-2) a „Miért?” kártyára és a „Gyakorold még” listába kerül.
+          explanation: task.explanation,
+        }, undefined, gradeRef.current);
+      },
+      // Az ismétlési sor KÖZÖS a hét játékban: csak a saját (Matek) tétel állítható vissza; az évfolyamot a közös
+      // `reviewFitsGrade` szabály szűri a directorban (review #451) — a másik játék / évfolyam tétele a sorban marad.
+      // Régi (évfolyam nélküli) Matek-tétel nem ellenőrizhető (a generált feladat nem állítható elő újra) → `legacyReviewFits`
+      // nincs megadva, így az nem tér vissza.
+      restore: (item) => (isOwnReviewKey(item.key) ? restoreReviewQuestion(item, {}) : null),
+    }),
+    [],
   );
+  const seedBase = useMemo(() => readGameSeed() ?? seedFrom(SPEED_MATH_GAME_ID, new Date().toISOString().slice(0, 10)), []);
+  const runIndexRef = useRef(0);
+  const runSeedRef = useRef<string | number>(seedFrom(seedBase, 0));
+  const directorConfig = useMemo(() => towerDirectorConfig(grade), [grade]);
 
-  /** A kártya bezárása lépteti a játékot — nem az idő. */
-  const dismissFeedback = useCallback(() => {
-    setFeedback(null);
-    if (pendingOverRef.current) {
-      pendingOverRef.current = false;
-      setPhase("over");
-      return;
-    }
-    nextTask();
-  }, [nextTask]);
+  // A menet meghajtója (mag + fix lépésű hurok + hitstop + mini-Director) — UGYANAZ, amit a node-szimuláció futtat
+  // (`createTowerDriver`, review #451). A `coreRef` / `clockRef` csak kényelmi nézet rá.
+  // a `usePlayQuestion` hívás után azonnal kitöltve (lent); a meghajtó csak képkockában / eseményben olvassa
+  const qRef = useRef<ReturnType<typeof usePlayQuestion>>(null as unknown as ReturnType<typeof usePlayQuestion>);
+  const makeDriver = (seed: string | number): TowerDriver =>
+    createTowerDriver({
+      seed,
+      questions: {
+        frame: (c, ctx) => qRef.current?.frame(c, ctx),
+        timeScale: () => qRef.current?.timeScale() ?? 1,
+        finished: () => qRef.current?.finished() ?? true,
+        finish: () => qRef.current?.finish(),
+      },
+      intensity: () => qRef.current?.director?.intensity() ?? 0.4,
+      reducedMotion,
+    });
+  const driverRef = useRef<TowerDriver | null>(null);
+  if (!driverRef.current) driverRef.current = makeDriver(runSeedRef.current);
+  const coreRef = useMemo(() => ({ get current(): TowerCore { return driverRef.current!.core; } }), []);
+  const clockRef = useMemo(() => ({ get current(): number { return driverRef.current!.clockMs(); } }), []);
+  const fpsRef = useRef(60);
+  const sizeRef = useRef({ w: 360, h: 480, wide: false });
+  const lastAnswerRef = useRef<{ id: number; correct: boolean; at: number; idx: number } | null>(null);
+  const firstQuestionSeenRef = useRef(false);
 
-  /**
-   * Egy javítási esély ugyanazon a feladaton: a gyerek ne bukott kérdéssel lépjen
-   * tovább. Csak megmaradt élettel indítható; újabb hibás válasz életbe kerül.
-   */
-  const retryTask = useCallback(() => {
-    if (pendingOverRef.current || livesRef.current <= 0) {
-      dismissFeedback();
-      return;
-    }
-    attemptRef.current += 1;
-    setFeedback(null);
-    setAnswerState("idle");
-    setChosenIdx(null);
-    pendingOverRef.current = false;
-    setQuestionTimeLeft(questionSecondsFor(grade));
-  }, [dismissFeedback, grade, questionSecondsFor]);
+  const q = usePlayQuestion({
+    setup: { config: directorConfig, provider, startBand: difficultyRef.current, seed: runSeedRef.current },
+    // A rezgést a lap adja (alább, a játékbeli következménnyel együtt), hogy egy találat = egy visszajelzés.
+    haptics: false,
+    onShow: () => {
+      firstQuestionSeenRef.current = true;
+    },
+    onOutcome: (o, p) => {
+      if (o.result === "aborted") return;
+      const good = o.result === "correct";
+      const speed = good ? Math.max(0, 1 - o.responseMs / p.windowMs) : 0;
+      coreRef.current.applyOutcome(o.result, speed);
+      recordDifficultyAnswer(good);
+      if (good) haptics("success");
+      else haptics("error");
+      const idx = p.options.findIndex((opt) => opt.originalIndex === (good ? o.correctOriginalIndex : o.pickedOriginalIndex));
+      lastAnswerRef.current = { id: p.id, correct: good, at: performance.now(), idx };
+    },
+  });
+  qRef.current = q;
+
+  /* ---------------- játékérzet: rázás (a hitstop a meghajtóé) ---------------- */
+  const feelRef = { get current() { return driverRef.current!.feel; } };
+  const shakeRef = useRef<ShakeOffset>({ x: 0, y: 0, rot: 0 });
 
   const startGame = useCallback(() => {
+    runIndexRef.current += 1;
+    const seed = seedFrom(seedBase, runIndexRef.current);
+    runSeedRef.current = seed;
+    // A feladat-sorsolás is a menet seedjéből (K.4/13).
+    const taskRng = createRng(seedFrom(SPEED_MATH_GAME_ID, seed, "tasks"));
+    setTaskRandom(taskRng.next);
+    driverRef.current = makeDriver(seed);
     setFeedback(null);
-    pendingOverRef.current = false;
-    attemptRef.current = 0;
+    setExpanded(false);
     scoreSubmittedRef.current = false;
-    livesRef.current = 3;
-    timeoutCountRef.current = 0;
-    setLives(3);
-    setCorrect(0);
-    setAnswered(0);
-    setScore(0);
-    setStreak(0);
-    setBestStreak(0);
-    setWrongFlash(false);
-    setAnswerState("idle");
-    setChosenIdx(null);
-    setCombo(null);
-    setGain(null);
-    setPaused(false);
-    setBestResult(null);
-    setTimeLeft(ROUND_SECONDS[grade]);
+    lastAnswerRef.current = null;
+    firstQuestionSeenRef.current = false;
     runLevelRef.current = levels.level;
     levelClearedRef.current = false;
     difficultyRef.current = levelStartBand(runLevelRef.current, startingDifficulty(grade));
     answerHistoryRef.current = [];
-    setQuestionTimeLeft(questionSecondsFor(grade));
-    const first = pickTask(grade, [], runLevelRef.current == null ? undefined : difficultyRef.current);
-    runPromptsRef.current = [first.prompt];
-    setTask(first);
+    runPromptsRef.current = [];
+    q.reset(seed, difficultyRef.current);
+    setHud({ score: 0, shield: coreRef.current.state().shield, wave: 1, power: 1, waveProgress: 0, hint: 1 });
+    setResult(null);
+    setPaused(false);
+    setBestResult(null);
     setPhase("play");
-  }, [grade, questionSecondsFor, levels.level]);
+  }, [grade, levels.level, q, seedBase]);
 
-  // A győzelem (a célszám elérése a torony tetejéig) a következő pályát oldja fel; a menü azt ajánlja.
+  /** A menet lezárása: a horog már lezárta a kérdést (settled); az eredmény a director valós statisztikájából. */
+  const endRun = useCallback((won: boolean, forcedCorrect?: number) => {
+    const ctl = qRef.current;
+    if (!ctl.finished()) ctl.finish();
+    const st = ctl.director?.stats(clockRef.current);
+    const core = coreRef.current.state();
+    const correct = Math.max(st?.correct ?? 0, forcedCorrect ?? 0);
+    const total = Math.max(correct, (st?.correct ?? 0) + (st?.wrong ?? 0) + (st?.timeouts ?? 0));
+    setFeedback(null);
+    setExpanded(false);
+    setResult({ score: core.score, correct, total, bestStreak: core.combo.best, kills: core.kills, wave: core.wave + 1, shield: core.shield });
+    setPhase(won ? "won" : "over");
+  }, []);
+
+  // A győzelem (az 5. hullám vége) a következő pályát oldja fel; a menü azt ajánlja.
   useEffect(() => {
     if (phase === "won" && runLevelRef.current != null && !levelClearedRef.current) {
       levelClearedRef.current = true;
@@ -1585,13 +1701,626 @@ export default function SpeedQuizMath() {
     }
   }, [phase]);
 
-  const endAsLose = useCallback(() => setPhase("over"), []);
-  const endAsWin = useCallback(() => {
-    sfxLevelUp();
-    setPhase("won");
+  /* ---------------- vászon-effektek (pool) ---------------- */
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const worldRef = useRef<HTMLDivElement>(null);
+  const shakeLayerRef = useRef<HTMLDivElement>(null);
+  const droneRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const layoutRef = useRef<{ id: number; wide: boolean; pts: { x: number; y: number }[] }>({ id: -1, wide: false, pts: [] });
+  const fx = useRef({
+    particles: makeParticles(),
+    beams: Array.from({ length: BEAM_CAP }, (): Beam => ({ x0: 0, y0: 0, x1: 0, y1: 0, life: 0, max: 1, col: 0 })),
+    rings: Array.from({ length: RING_CAP }, (): Ring => ({ x: 0, y: 0, life: 0, max: 1, col: 0 })),
+    pops: Array.from({ length: POP_CAP }, (): Pop => ({ x: 0, y: 0, text: "", life: 0, max: 1, col: 0 })),
+    shieldFlash: 0,
+    shieldFlashCol: COL_CYAN,
+    lastSfx: 0,
+    sprites: null as Record<RaiderKind, HTMLCanvasElement> | null,
+    spriteDpr: 0,
+    answerSeen: -1,
+    /** Középső felirat a hullám elején / végén (valós idővel fogy). */
+    banner: { text: "", sub: "", life: 0, max: 1 },
+  }).current;
+
+  const burst = useCallback(
+    (x: number, y: number, col: number, n: number, speed: number) => {
+      const p = fx.particles;
+      const count = reducedMotion ? Math.ceil(n / 3) : n;
+      for (let k = 0; k < count; k++) {
+        const i = p.next;
+        p.next = (p.next + 1) % PARTICLE_CAP;
+        const a = (k / count) * Math.PI * 2 + k * 0.37;
+        const v = reducedMotion ? 0 : speed * (0.45 + ((k * 7) % 10) / 18);
+        p.x[i] = x;
+        p.y[i] = y;
+        p.vx[i] = Math.cos(a) * v;
+        p.vy[i] = Math.sin(a) * v;
+        p.max[i] = p.life[i] = 380 + ((k * 13) % 7) * 40;
+        p.col[i] = col;
+      }
+    },
+    [fx, reducedMotion],
+  );
+  const beam = useCallback(
+    (x0: number, y0: number, x1: number, y1: number, col: number, ms = 130) => {
+      let b = fx.beams[0]!;
+      for (let i = 0; i < BEAM_CAP; i++) if (fx.beams[i]!.life <= 0) { b = fx.beams[i]!; break; }
+      b.x0 = x0;
+      b.y0 = y0;
+      b.x1 = x1;
+      b.y1 = y1;
+      b.life = b.max = ms;
+      b.col = col;
+    },
+    [fx],
+  );
+  const ring = useCallback(
+    (x: number, y: number, col: number, ms = 520) => {
+      let r = fx.rings[0]!;
+      for (let i = 0; i < RING_CAP; i++) if (fx.rings[i]!.life <= 0) { r = fx.rings[i]!; break; }
+      r.x = x;
+      r.y = y;
+      r.life = r.max = ms;
+      r.col = col;
+    },
+    [fx],
+  );
+  const popText = useCallback(
+    (x: number, y: number, text: string, col: number) => {
+      let t = fx.pops[0]!;
+      for (let i = 0; i < POP_CAP; i++) if (fx.pops[i]!.life <= 0) { t = fx.pops[i]!; break; }
+      t.x = x;
+      t.y = y;
+      t.text = text;
+      t.life = t.max = 700;
+      t.col = col;
+    },
+    [fx],
+  );
+
+  /** A torony csúcsa (a lézer forrása) képpontban. */
+  const towerTop = (w: number, h: number) => ({ x: TOWER.x * w, y: TOWER.y * h - Math.min(h * 0.12, 70) });
+
+  /** A mag eseményei → kép + hang + rezgés UGYANABBAN a képkockában (K.4/18), rázás, hitstop. */
+  const onEvent = useCallback(
+    (e: TowerEvent) => {
+      const { w, h } = sizeRef.current;
+      const x = e.x * w;
+      const y = e.y * h;
+      const now = performance.now();
+      const feelNow = feelRef.current;
+      const quietSfx = now - fx.lastSfx > 45; // ugyanaz az effekt 40 ms-on belül nem indul újra (KSZ-17)
+      switch (e.type) {
+        case "kill":
+          burst(x, y, e.kind ? KIND_COL[e.kind] : COL_WHITE, 16, 0.22);
+          ring(x, y, e.kind ? KIND_COL[e.kind] : COL_WHITE, 260);
+          popText(x, y - 18, `+${(e.kind ? RAIDERS[e.kind].points : 2) * coreRef.current.state().power}`, COL_WHITE);
+          if (quietSfx) {
+            sfxExplode();
+            fx.lastSfx = now;
+          }
+          feelNow.addTrauma(0.08);
+          break;
+        case "hit":
+          burst(x, y, COL_WHITE, 6, 0.12);
+          if (quietSfx) {
+            sfxHit();
+            fx.lastSfx = now;
+          }
+          break;
+        case "breach":
+          burst(x, y, COL_ORANGE, 22, 0.3);
+          fx.shieldFlash = 420;
+          fx.shieldFlashCol = COL_ORANGE;
+          sfxHit();
+          haptics("hit");
+          feelNow.addTrauma(0.45);
+          break;
+        case "blocked":
+          burst(x, y, COL_CYAN, 12, 0.2);
+          fx.shieldFlash = 300;
+          fx.shieldFlashCol = COL_CYAN;
+          popText(x, y - 40, "Védve!", COL_CYAN);
+          break;
+        case "shock": {
+          ring(x, y, COL_GREEN, 620);
+          ring(x, y, COL_CYAN, 420);
+          const top = towerTop(w, h);
+          popText(top.x, top.y - 30, e.n > 0 ? `Energiahullám! ×${e.n}` : "Energiahullám!", COL_GREEN);
+          sfxCombo(Math.max(1, Math.min(5, coreRef.current.state().power)) as 1 | 2 | 3 | 4 | 5);
+          feelNow.addTrauma(0.18);
+          break;
+        }
+        case "zap":
+          fx.shieldFlash = 360;
+          fx.shieldFlashCol = COL_ORANGE;
+          feelNow.addTrauma(0.22);
+          break;
+        case "turret": {
+          const top = towerTop(w, h);
+          beam(top.x, top.y, x, y, COL_CYAN, 160);
+          break;
+        }
+        case "shieldUp":
+          fx.shieldFlash = 420;
+          fx.shieldFlashCol = COL_GREEN;
+          popText(x, y - 54, "+1 pajzs", COL_GREEN);
+          sfxPickup();
+          break;
+        case "power": {
+          const top = towerTop(w, h);
+          popText(top.x, top.y - 52, `Erő ×${e.n}!`, COL_CYAN);
+          break;
+        }
+        case "waveStart":
+          fx.banner.text = `${e.n}. HULLÁM`;
+          fx.banner.sub = e.n === 5 ? "Az utolsó — tarts ki!" : "Jönnek a drónok!";
+          fx.banner.life = fx.banner.max = 1500;
+          sfxGate();
+          break;
+        case "waveClear":
+          if (e.n < 5) {
+            fx.banner.text = "Hullám teljesítve!";
+            fx.banner.sub = "+1 pajzs";
+            fx.banner.life = fx.banner.max = 1600;
+          }
+          break;
+        case "won":
+          sfxLevelUp();
+          break;
+        case "lost":
+          sfxError();
+          break;
+        default:
+          break;
+      }
+    },
+    [beam, burst, fx, haptics, popText, ring],
+  );
+
+  /* ---------------- rajz (képkockánként; React-állapot nélkül) ---------------- */
+  const draw = useCallback(
+    (alpha: number, realDt: number) => {
+      const cv = canvasRef.current;
+      if (!cv) return;
+      const { w, h } = sizeRef.current;
+      // A vászon pixelaránya a grafikai szint plafonja alatt (K.4/1: low 1 / medium 1,5 / high 2).
+      const dpr = Math.min(LOOK_BUDGET[detectLookTier()].maxPixelRatio, window.devicePixelRatio || 1);
+      if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+        cv.width = Math.round(w * dpr);
+        cv.height = Math.round(h * dpr);
+      }
+      const g = cv.getContext("2d");
+      if (!g) return;
+      if (!fx.sprites || fx.spriteDpr !== dpr) {
+        fx.sprites = { scout: raiderSprite("scout", dpr), weaver: raiderSprite("weaver", dpr), zig: raiderSprite("zig", dpr), tank: raiderSprite("tank", dpr) };
+        fx.spriteDpr = dpr;
+      }
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, w, h);
+      const core = coreRef.current;
+      const st = core.state();
+      const top = towerTop(w, h);
+
+      // Pajzs-kupola a torony körül: szegmensenként egy pajzs-pont (nem csak szín: darabszám is).
+      const cx = TOWER.x * w;
+      const cy = TOWER.y * h;
+      const rad = Math.min(w * 0.3, h * 0.2, 130);
+      const flash = fx.shieldFlash > 0 ? fx.shieldFlash / 420 : 0;
+      for (let i = 0; i < SHIELD_MAX; i++) {
+        const a0 = Math.PI + (i / SHIELD_MAX) * Math.PI + 0.04;
+        const a1 = Math.PI + ((i + 1) / SHIELD_MAX) * Math.PI - 0.04;
+        const on = i < st.shield;
+        g.beginPath();
+        g.arc(cx, cy, rad, a0, a1);
+        g.lineWidth = on ? 6 : 3;
+        g.strokeStyle = on ? (flash > 0 ? FX_COLORS[fx.shieldFlashCol] : "#67e8f9") : "#ffffff26";
+        g.globalAlpha = on ? 0.55 + 0.45 * flash : 1;
+        g.stroke();
+      }
+      g.globalAlpha = 1;
+      if (flash > 0) {
+        g.beginPath();
+        g.arc(cx, cy, rad + 6, Math.PI, Math.PI * 2);
+        g.lineWidth = 10 * flash;
+        g.strokeStyle = `${FX_COLORS[fx.shieldFlashCol]}55`;
+        g.stroke();
+      }
+
+      // Fosztogatók (interpolált pozíció); a bevillanás gyűrűje az előjelzés (K.4/21).
+      const sprites = fx.sprites!;
+      const half = (RAIDER_PX + 28) / 2;
+      for (const r of st.raiders) {
+        if (!r.alive) continue;
+        const x = (r.px + (r.x - r.px) * alpha) * w;
+        const y = (r.py + (r.y - r.py) * alpha) * h;
+        if (r.age < WARP_MS) {
+          const t = r.age / WARP_MS;
+          g.globalAlpha = 0.25 + 0.6 * t;
+          g.beginPath();
+          g.arc(x, y, RAIDER_PX * (1.2 - 0.6 * t), 0, Math.PI * 2);
+          g.lineWidth = 2;
+          g.strokeStyle = RAIDER_COLOR[r.kind];
+          g.stroke();
+          g.globalAlpha = t;
+        }
+        g.drawImage(sprites[r.kind], x - half, y - half, half * 2, half * 2);
+        g.globalAlpha = 1;
+        if (r.hitAgo < 120) {
+          g.beginPath();
+          g.arc(x, y, RAIDER_PX * 0.55, 0, Math.PI * 2);
+          g.fillStyle = "#ffffffaa";
+          g.fill();
+        }
+        if (r.kind === "tank") {
+          g.fillStyle = "#fff";
+          g.font = "900 13px Nunito, system-ui, sans-serif";
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          g.fillText(String(r.hp), x, y + 1);
+        }
+      }
+
+      // Tanító súgó: gyűrű a legközelebbi fosztogató körül (kézmozdulat-jelzés).
+      if (st.worldMs < TUTORIAL_MS && st.kills < 3 && !qRef.current.view().presentation) {
+        const id = core.mostAdvanced();
+        if (id >= 0) {
+          const r = st.raiders[id]!;
+          const x = r.x * w;
+          const y = r.y * h;
+          const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(performance.now() / 160);
+          g.beginPath();
+          g.arc(x, y, RAIDER_PX * (0.85 + 0.25 * pulse), 0, Math.PI * 2);
+          g.lineWidth = 3;
+          g.strokeStyle = "#fef08a";
+          g.stroke();
+          g.font = "28px system-ui, sans-serif";
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          g.fillText("👆", x + 16, y + 30 + 6 * pulse);
+        }
+      }
+
+      // Lézerek, gyűrűk, részecskék, feliratok (valós idővel fogynak: a hitstop alatt is látszanak).
+      for (const b of fx.beams) {
+        if (b.life <= 0) continue;
+        b.life -= realDt;
+        const k = Math.max(0, b.life / b.max);
+        g.globalAlpha = k;
+        g.strokeStyle = FX_COLORS[b.col];
+        g.lineWidth = 2 + 5 * k;
+        g.beginPath();
+        g.moveTo(b.x0, b.y0);
+        g.lineTo(b.x1, b.y1);
+        g.stroke();
+        g.strokeStyle = "#ffffff";
+        g.lineWidth = 1.5;
+        g.stroke();
+      }
+      for (const r of fx.rings) {
+        if (r.life <= 0) continue;
+        r.life -= realDt;
+        const k = Math.max(0, r.life / r.max);
+        const big = r.max > 400 ? Math.max(w, h) * 0.75 : RAIDER_PX * 1.6;
+        g.globalAlpha = k;
+        g.strokeStyle = FX_COLORS[r.col];
+        g.lineWidth = 2 + 6 * k;
+        g.beginPath();
+        g.arc(r.x, r.y, reducedMotion ? big * 0.5 : big * tween(1 - k, "outCubic"), 0, Math.PI * 2);
+        g.stroke();
+      }
+      const p = fx.particles;
+      for (let i = 0; i < PARTICLE_CAP; i++) {
+        if (p.life[i]! <= 0) continue;
+        p.life[i] = p.life[i]! - realDt;
+        p.x[i] = p.x[i]! + p.vx[i]! * realDt;
+        p.y[i] = p.y[i]! + p.vy[i]! * realDt;
+        const k = Math.max(0, p.life[i]! / p.max[i]!);
+        g.globalAlpha = k;
+        g.fillStyle = FX_COLORS[p.col[i]!];
+        g.fillRect(p.x[i]! - 2, p.y[i]! - 2, 4, 4);
+      }
+      for (const t of fx.pops) {
+        if (t.life <= 0) continue;
+        t.life -= realDt;
+        const k = Math.max(0, t.life / t.max);
+        g.globalAlpha = Math.min(1, k * 2);
+        g.fillStyle = FX_COLORS[t.col];
+        g.font = "900 18px Nunito, system-ui, sans-serif";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.lineWidth = 4;
+        g.strokeStyle = "#0b0720";
+        const yy = t.y - (reducedMotion ? 0 : (1 - k) * 26);
+        g.strokeText(t.text, t.x, yy);
+        g.fillText(t.text, t.x, yy);
+      }
+      if (fx.banner.life > 0) {
+        fx.banner.life -= realDt;
+        const k = Math.max(0, fx.banner.life / fx.banner.max);
+        g.globalAlpha = Math.min(1, k * 3);
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.lineWidth = 6;
+        g.strokeStyle = "#0b0720";
+        g.font = "900 30px Nunito, system-ui, sans-serif";
+        g.fillStyle = "#fef08a";
+        g.strokeText(fx.banner.text, w / 2, h * 0.3);
+        g.fillText(fx.banner.text, w / 2, h * 0.3);
+        g.font = "800 17px Nunito, system-ui, sans-serif";
+        g.fillStyle = "#e0f2fe";
+        g.strokeText(fx.banner.sub, w / 2, h * 0.3 + 30);
+        g.fillText(fx.banner.sub, w / 2, h * 0.3 + 30);
+      }
+      g.globalAlpha = 1;
+      if (fx.shieldFlash > 0) fx.shieldFlash -= realDt;
+
+      // Torony-csúcs „ágyú”: az erő-szint látszik (gyűrűk száma).
+      for (let i = 0; i < st.power; i++) {
+        g.beginPath();
+        g.arc(top.x, top.y, 7 + i * 5, 0, Math.PI * 2);
+        g.lineWidth = 2;
+        g.strokeStyle = i === 0 ? "#67e8f9" : "#67e8f988";
+        g.stroke();
+      }
+    },
+    [fx, reducedMotion],
+  );
+
+  /** A számdrónok helye (DOM, transform) képkockánként — React-állapot nélkül. */
+  const placeDrones = useCallback(() => {
+    const view = qRef.current.view();
+    const p = view.presentation;
+    if (!p) return;
+    const { w, h, wide } = sizeRef.current;
+    const lay = layoutRef.current;
+    if (lay.id !== p.id || lay.wide !== wide) {
+      droneLayout(runSeedRef.current, p.id, p.options.length, wide, lay.pts);
+      lay.id = p.id;
+      lay.wide = wide;
+    }
+    const t = Math.min(1, Math.max(0, (clockRef.current - p.startedAtSimMs) / DRONE_ENTER_MS));
+    const e = reducedMotion ? 1 : tween(t, "outBack");
+    for (let i = 0; i < p.options.length; i++) {
+      const el = droneRefs.current[i];
+      const pt = lay.pts[i];
+      if (!el || !pt) continue;
+      // Hosszú számnál a drón szélesebb: a játéktéren belül tartjuk (6 px margó).
+      const ow = el.offsetWidth;
+      const x = Math.min(w - 6 - ow / 2, Math.max(6 + ow / 2, pt.x * w));
+      const y = (-0.12 + (pt.y + 0.12) * e) * h;
+      el.style.transform = `translate3d(${(x - ow / 2).toFixed(1)}px, ${(y - el.offsetHeight / 2).toFixed(1)}px, 0)`;
+    }
+    // A válasz pillanata: jó → lézer a toronyból a drónra; rossz / lejárt → a helyes drón villámot küld a pajzsra.
+    const last = lastAnswerRef.current;
+    if (last && last.id === p.id && fx.answerSeen !== p.id) {
+      fx.answerSeen = p.id;
+      const top = towerTop(w, h);
+      const correctIdx = p.options.findIndex((o) => o.correct);
+      // A drón valódi közepe (a széleken a margó miatt eltolhattuk) — egyszer, a válasz pillanatában mérve.
+      const worldRect = worldRef.current?.getBoundingClientRect();
+      const centerOf = (i: number): { x: number; y: number } | null => {
+        const r = droneRefs.current[i]?.getBoundingClientRect();
+        return r && worldRect ? { x: r.left + r.width / 2 - worldRect.left, y: r.top + r.height / 2 - worldRect.top } : null;
+      };
+      const c = centerOf(correctIdx);
+      if (c) {
+        if (last.correct) {
+          beam(top.x, top.y, c.x, c.y, COL_GREEN, 220);
+          burst(c.x, c.y, COL_GREEN, 26, 0.3);
+          if (!reducedMotion) burst(c.x, c.y, COL_CYAN, 14, 0.18);
+        } else {
+          beam(c.x, c.y, TOWER.x * w, TOWER.y * h, COL_ORANGE, 260);
+          const wpt = last.idx >= 0 ? centerOf(last.idx) : null;
+          if (wpt) burst(wpt.x, wpt.y, COL_ORANGE, 12, 0.16);
+        }
+      }
+    }
+  }, [beam, burst, fx, reducedMotion]);
+
+  /* ---------------- képkocka-hurok (rAF): kérdés-óra, sim, rajz ---------------- */
+  const pausedRef = useRef(false);
+  pausedRef.current = paused || whyOpen;
+  const endRunRef = useRef(endRun);
+  endRunRef.current = endRun;
+  useEffect(() => {
+    if (phase !== "play") return;
+    let raf = 0;
+    let last: number | null = null;
+    let fpsAcc = 0;
+    let fpsFrames = 0;
+    const tick = (now: number) => {
+      const dt = last === null ? 0 : Math.min(250, Math.max(0, now - last));
+      last = now;
+      fpsAcc += dt;
+      fpsFrames += 1;
+      if (fpsAcc >= 500) {
+        fpsRef.current = Math.round((fpsFrames * 1000) / fpsAcc);
+        fpsAcc = 0;
+        fpsFrames = 0;
+      }
+      const isPaused = pausedRef.current;
+      const ctl = qRef.current;
+      const driver = driverRef.current!;
+      const core = driver.core;
+      // A meghajtó képkockája (a sim ugyanezt hívja): kérdés-óra (szünetben áll) → menetvégnél a kérdés lezárása a frame
+      // ELŐTT → kérdés-sáv → időskála (szünet 0, nyitott kérdés slowMo) → fix lépés → események (hitstop + nézet).
+      const alpha = driver.frame(dt, isPaused, onEvent);
+      draw(alpha, isPaused ? 0 : dt);
+      placeDrones();
+      const shake = shakeLayerRef.current;
+      if (shake) {
+        const off = shakeRef.current;
+        feelRef.current.shakeOffset(off, sizeRef.current.h);
+        shake.style.transform = off.x || off.y || off.rot ? `translate3d(${off.x.toFixed(1)}px, ${off.y.toFixed(1)}px, 0) rotate(${((off.rot * 180) / Math.PI).toFixed(2)}deg)` : "";
+      }
+      if (!core.running() && ctl.settled()) {
+        endRunRef.current(core.state().phase === "won");
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [phase, draw, onEvent, placeDrones]);
+
+  // A játéktér mérete (álló / fekvő); a vászon és a drónok ebből számolnak.
+  useEffect(() => {
+    const el = worldRef.current;
+    if (!el || phase === "menu") return;
+    const measure = () => {
+      const w = Math.max(1, el.clientWidth);
+      const h = Math.max(1, el.clientHeight);
+      sizeRef.current = { w, h, wide: w > h * 1.25 };
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [phase]);
+
+  // HUD ≤ 10 Hz (KSZ-9). Szünetben és a magyarázat alatt nem frissül (az óra is áll).
+  useEffect(() => {
+    if (phase !== "play") return;
+    if (feedback) return;
+    if (paused) return;
+    const id = window.setInterval(() => {
+      const st = coreRef.current.state();
+      const hint = st.worldMs < TUTORIAL_MS ? (firstQuestionSeenRef.current ? 2 : 1) : 0;
+      setHud((prev) =>
+        prev.score === st.score && prev.shield === st.shield && prev.wave === st.wave + 1 && prev.power === st.power && Math.abs(prev.waveProgress - st.waveProgress) < 0.02 && prev.hint === hint
+          ? prev
+          : { score: st.score, shield: st.shield, wave: st.wave + 1, power: st.power, waveProgress: st.waveProgress, hint },
+      );
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [phase, paused, feedback]);
+
+  /* ---------------- bemenet: koppintás = lézer (pointerdown), szám-drón = válasz (click = felengedés a célon) ---------------- */
+  const shootAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const el = worldRef.current;
+      if (!el || pausedRef.current) return;
+      const rect = el.getBoundingClientRect();
+      const { w, h } = sizeRef.current;
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      const core = coreRef.current;
+      const id = core.raiderAt(x / w, y / h, RAIDER_HIT_PX / w, RAIDER_HIT_PX / h);
+      const top = towerTop(w, h);
+      if (id >= 0) {
+        const r = core.state().raiders[id]!;
+        beam(top.x, top.y, r.x * w, r.y * h, COL_CYAN);
+        core.shoot(id);
+      } else {
+        beam(top.x, top.y, x, y, COL_CYAN, 90);
+        burst(x, y, COL_CYAN, 4, 0.06);
+      }
+      const now = performance.now();
+      if (now - fx.lastSfx > 45) {
+        sfxShoot();
+        fx.lastSfx = now;
+      }
+      driverRef.current!.drain(onEvent);
+    },
+    [beam, burst, fx, onEvent],
+  );
+
+  const onWorldPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.button !== undefined && e.button > 0) return;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* a szintetikus esemény nem foglalható le — a koppintás így is számít */
+      }
+      shootAt(e.clientX, e.clientY);
+    },
+    [shootAt],
+  );
+  const releasePointer = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }, []);
 
-  // R = quick-restart az "over" / "won" / "menu" képernyőn.
+  const pickDrone = useCallback((i: number) => {
+    if (pausedRef.current) return;
+    qRef.current.pick(i, clockRef.current);
+  }, []);
+  /**
+   * Számdrón-választás (KSZ-13, KSZ-14) — a MOZGÓ érintési cél helyes kezelése:
+   * - `pointerdown`-ra azonnali „célzás” (a gomb `:active` állapota), a válasz FELENGEDÉSKOR véglegesedik (KSZ-13).
+   * - Érintésnél a böngésző implicit pointer capture-t tesz a lenyomott gombra, ezért a `pointerup` akkor is erre a drónra
+   *   érkezik, ha az ujjat lehúzták róla. Ezért felengedéskor a koordinátát nézzük: érvényes, ha az ujj a drón AKTUÁLIS
+   *   dobozán belül (± `DRONE_UP_SLOP_PX`) engedett fel, VAGY az ujj alig mozdult (≤ `DRONE_STILL_PX`) — a belépő repülés
+   *   közben a drón mozdulhatott el az ujj alól. Elhúzott ujj = visszavonás; `pointercancel` = visszavonás.
+   * - Nem a `click`-re épül: több ujjnál a böngésző a nem elsődleges mutatóra nem szintetizál `click`-et (mutációval igazolva).
+   */
+  const dronePressRef = useRef(new Map<number, { i: number; x: number; y: number }>());
+  const onDronePointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLButtonElement>, i: number) => {
+      e.stopPropagation();
+      // Ha a drón mögött egy fosztogató közepére bök a gyerek, azt akarja lelőni — ne válasszon véletlenül számot.
+      const el = worldRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const { w, h } = sizeRef.current;
+        if (coreRef.current.raiderAt((e.clientX - rect.left) / w, (e.clientY - rect.top) / h, RAIDER_CORE_PX / w, RAIDER_CORE_PX / h) >= 0) {
+          shootAt(e.clientX, e.clientY);
+          return;
+        }
+      }
+      dronePressRef.current.set(e.pointerId, { i, x: e.clientX, y: e.clientY });
+    },
+    [shootAt],
+  );
+  const onDronePointerUp = useCallback(
+    (e: ReactPointerEvent<HTMLButtonElement>, i: number) => {
+      e.stopPropagation();
+      const pressed = dronePressRef.current.get(e.pointerId);
+      dronePressRef.current.delete(e.pointerId);
+      if (!pressed || pressed.i !== i) return;
+      const r = e.currentTarget.getBoundingClientRect();
+      const inside =
+        e.clientX >= r.left - DRONE_UP_SLOP_PX && e.clientX <= r.right + DRONE_UP_SLOP_PX &&
+        e.clientY >= r.top - DRONE_UP_SLOP_PX && e.clientY <= r.bottom + DRONE_UP_SLOP_PX;
+      const still = Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) <= DRONE_STILL_PX;
+      if (inside || still) pickDrone(i);
+    },
+    [pickDrone],
+  );
+  const onDronePointerCancel = useCallback((e: ReactPointerEvent<HTMLButtonElement>) => {
+    dronePressRef.current.delete(e.pointerId);
+  }, []);
+
+  /* ---------------- „Miért?”: szünet + a valódi magyarázókártya ---------------- */
+  const openWhy = useCallback(() => {
+    const item = qRef.current.view().whyItem;
+    if (!item) return;
+    setFeedback(
+      buildFeedback({
+        quiz: item.quiz,
+        chosenIndex: item.pickedOriginalIndex,
+        // Egyetlen próbálkozás van (a megoldás mutatása utáni újrapróba megszűnt — terv 5.4, J-SQ).
+        attempt: 1,
+        // 3–5. osztály: a lecke-séma ugyanezt a sávot adja (ageBandForClassroom).
+        ageBand: "kid",
+      }),
+    );
+  }, []);
+  const closeWhy = useCallback(() => setFeedback(null), []);
+
+  const pauseGame = useCallback(() => {
+    if (phase === "play") setPaused(true);
+  }, [phase]);
+  const resumeGame = useCallback(() => setPaused(false), []);
+  const exitToGames = useCallback(() => {
+    setPaused(false);
+    qRef.current.finish();
+    navigate("/games");
+  }, [navigate]);
+
+  // R = új futam a menüben / eredménynél (csak a gyerek koppintására / billentyűjére — nincs automatikus újraindítás).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "r" && e.key !== "R") return;
@@ -1604,141 +2333,8 @@ export default function SpeedQuizMath() {
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, startGame]);
 
-  useEffect(() => {
-    if (phase !== "play") return;
-    // A magyarázat olvasása közben minden óra áll. Enélkül a kártya elolvasása
-    // életbe és köridőbe kerülne — vagyis a tanulást büntetnénk.
-    if (feedback) return;
-    // S7: szünetben (gomb, háttérbe kerülés, elfordítás) sem fogy az idő.
-    if (paused) return;
-    const id = window.setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          endAsLose();
-          return 0;
-        }
-        return prev - 1;
-      });
-
-      setQuestionTimeLeft((prev) => {
-        if (prev <= 1) {
-          setStreak(0);
-          // A lejárt kérdés is hibás válasznak számít a statisztikában.
-          timeoutCountRef.current += 1;
-          // Szinkron élet-csökkentés ref-fel: így megbízhatóan tudjuk,
-          // hogy game over történt-e (a setState-updater deferred lenne).
-          const nextLives = Math.max(0, livesRef.current - 1);
-          livesRef.current = nextLives;
-          setLives(nextLives);
-          // A lejárt kérdés is tanít: ugyanaz a magyarázat jár érte, mint a rossz
-          // válaszért. A továbblépést (vagy a game overt) a kártya bezárása intézi,
-          // ezért itt már nem hívunk nextTask()-ot.
-          pendingOverRef.current = nextLives <= 0;
-          // A lejárt kérdés is rossz válasznak számít a nehézség-sávban.
-          recordDifficultyAnswer(false);
-          showFeedbackFor(null);
-          return questionSecondsFor(grade);
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-    // `showFeedbackFor` a `task`-ból épít, ezért itt kötelező függőség: elavult
-    // closure-ral a lejárt kérdés az ELŐZŐ feladat megoldását magyarázná el.
-    // (Az exhaustive-deps szabály ebben a repóban ki van kapcsolva — #310 osztály —,
-    // a függőségeket kézzel tartjuk karban.)
-  }, [phase, paused, grade, endAsLose, feedback, showFeedbackFor, questionSecondsFor, recordDifficultyAnswer]);
-
-  const handleAnswer = (idx: number) => {
-    if (phase !== "play" || paused || livesRef.current <= 0 || feedback) return;
-    // VÁLASZ-LOCK: az answerState csak a nextTask()-ban áll vissza "idle"-re —
-    // dupla kattintás nem dolgozza fel kétszer ugyanazt a feladatot
-    // (dupla correct/score/answered, korai győzelem).
-    if (answerState !== "idle") return;
-    // A2: ugyanarra a feladatra a retry ne növelje kétszer az answered számlálót.
-    if (attemptRef.current === 0) {
-      setAnswered((n) => n + 1);
-    }
-
-    setChosenIdx(idx);
-    if (idx !== task.correctIndex) {
-      sfxError();
-      haptics("error");
-      setAnswerState("wrong");
-      // Csökkentett mozgásnál nincs képernyő-villanás: a választott gomb piros kerete jelzi a hibát (M9).
-      if (!reducedMotion) {
-        setWrongFlash(true);
-        timeoutsRef.current.push(window.setTimeout(() => setWrongFlash(false), 220));
-      }
-      setCombo(null);
-      setStreak(0);
-      const nextLives = Math.max(0, livesRef.current - 1);
-      livesRef.current = nextLives;
-      setLives(nextLives);
-      setTimeLeft((t) => Math.max(0, t - 1));
-      // G-1: 140 ms piros villanás helyett magyarázat. Ennyi idő arra volt elég,
-      // hogy a gyerek észrevegye a büntetést, és túl kevés ahhoz, hogy tanuljon
-      // belőle — a téves megoldás így érintetlenül maradt meg benne.
-      pendingOverRef.current = nextLives <= 0;
-      recordDifficultyAnswer(false);
-      showFeedbackFor(idx);
-      return;
-    }
-
-    sfxSuccess();
-    haptics("success");
-    recordDifficultyAnswer(true);
-    setAnswerState("correct");
-    const base = grade === 3 ? 30 : grade === 4 ? 36 : 44 + (grade - 5) * 2;
-    const speedBonus = Math.max(0, questionTimeLeft - 1) * (grade >= 5 ? 4 : 3);
-    const comboBonus = streak * 8;
-    const add = scoreCorrectAnswer({
-      attempt: attemptRef.current,
-      base,
-      speedBonus,
-      comboBonus,
-    });
-
-    setScore((s) => s + add);
-    fxIdRef.current += 1;
-    setGain({ id: fxIdRef.current, value: add });
-    // A2: retry után a kombó nem nő — ugyanaz a feltétel, mint a setStreak-ben.
-    const nextStreak = attemptRef.current > 0 ? streak : streak + 1;
-    if (nextStreak >= 3 && nextStreak > streak) {
-      const comboId = fxIdRef.current;
-      setCombo({ id: comboId, value: nextStreak });
-      timeoutsRef.current.push(
-        window.setTimeout(() => setCombo((c) => (c && c.id === comboId ? null : c)), COMBO_SHOW_MS),
-      );
-    }
-    setStreak((s) => {
-      // A2: retry után a kombó nem nő.
-      if (attemptRef.current > 0) return s;
-      const ns = s + 1;
-      setBestStreak((b) => Math.max(b, ns));
-      return ns;
-    });
-    setCorrect((c) => {
-      const next = c + 1;
-      if (next >= TARGET_CORRECT[grade]) {
-        endAsWin();
-      } else {
-        timeoutsRef.current.push(window.setTimeout(nextTask, CORRECT_ADVANCE_MS));
-      }
-      return next;
-    });
-  };
-
-  const pauseGame = useCallback(() => {
-    if (phase === "play") setPaused(true);
-  }, [phase]);
-  const resumeGame = useCallback(() => setPaused(false), []);
-  const exitToGames = useCallback(() => {
-    setPaused(false);
-    navigate("/games");
-  }, [navigate]);
-
-  // Asztali gépen: 1–4 a válaszokra, P / Escape a szünetre (a szünet menü Escape-re folytat).
+  // Asztali gépen: P / Escape = szünet, Szóköz = lövés a legközelebbi fosztogatóra (billentyűzettel is játszható);
+  // a számdrónokat az 1–4 billentyű választja (a kérdés-sáv kezeli).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (phase !== "play" || paused || feedback) return;
@@ -1747,29 +2343,34 @@ export default function SpeedQuizMath() {
         setPaused(true);
         return;
       }
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= task.options.length) {
+      if (e.key === " " && !e.repeat) {
         e.preventDefault();
-        handleAnswer(n - 1);
+        const core = coreRef.current;
+        const id = core.mostAdvanced();
+        const el = worldRef.current;
+        if (id < 0 || !el) return;
+        const r = core.state().raiders[id]!;
+        const rect = el.getBoundingClientRect();
+        shootAt(rect.left + r.x * sizeRef.current.w, rect.top + r.y * sizeRef.current.h);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, [phase, paused, feedback, shootAt]);
 
+  /* ---------------- pontszám, jelvények, legjobb ---------------- */
   useEffect(() => {
     if (phase !== "over" && phase !== "won") return;
     if (!syncEligibility?.eligible) return;
-    if (scoreSubmittedRef.current) return;
+    if (scoreSubmittedRef.current || !result) return;
     scoreSubmittedRef.current = true;
-
-    const runSeconds = ROUND_SECONDS[grade] - timeLeft;
     void postGameScore({
       gameId: "speed-quiz-math",
       difficulty: SCORE_DIFFICULTY[grade],
-      runXp: score,
-      runStreak: bestStreak,
-      runSeconds,
+      runXp: result.score,
+      // A menet LEGJOBB kombó-sorozata (K.2 „Pontszám-szerződés”, J12).
+      runStreak: result.bestStreak,
+      runSeconds: Math.round(clockRef.current / 1000),
       runId: newScoreRunId(),
     })
       .then(() => {
@@ -1778,9 +2379,8 @@ export default function SpeedQuizMath() {
       .catch(() => {
         scoreSubmittedRef.current = false;
       });
-  }, [phase, syncEligibility, grade, timeLeft, score, bestStreak]);
+  }, [phase, syncEligibility, grade, result]);
 
-  // Achievement + Daily — egyszer fut "over" / "won" átmenetkor.
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   const achievementCheckedRef = useRef(false);
   useEffect(() => {
@@ -1790,16 +2390,18 @@ export default function SpeedQuizMath() {
       setNewlyUnlocked((prev) => (prev.length > 0 ? [] : prev));
       return;
     }
-    if (achievementCheckedRef.current) return;
+    if (achievementCheckedRef.current || !result) return;
     achievementCheckedRef.current = true;
     const wasDailyAvailable = isTodaysGameAvailable("speed-quiz-math");
+    const wrong = result.total - result.correct;
     const newOnes = recordRun({
       game: "speed-quiz-math",
-      xpGained: score,
-      correctAnswers: correct,
-      wrongAnswers: answered - correct + timeoutCountRef.current,
-      maxStreak: bestStreak,
-      perfect: phase === "won" && answered === correct && timeoutCountRef.current === 0,
+      xpGained: result.score,
+      // Valós kérdés-statisztika a directorból (K.2 „Menet-statisztika”); a lejárt kérdés is hibának számít.
+      correctAnswers: result.correct,
+      wrongAnswers: wrong,
+      maxStreak: result.bestStreak,
+      perfect: phase === "won" && wrong === 0 && result.total > 0,
       fullClear: phase === "won",
     });
     if (wasDailyAvailable && phase === "won") {
@@ -1807,7 +2409,7 @@ export default function SpeedQuizMath() {
       if (daily.achievements.length > 0) newOnes.push(...daily.achievements);
     }
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
-  }, [phase, score, correct, answered, bestStreak]);
+  }, [phase, result]);
 
   // S7: egységes eredményképernyő — a helyi legjobb eredmény egyszer, a futás végén íródik.
   const bestSubmittedRef = useRef(false);
@@ -1816,25 +2418,69 @@ export default function SpeedQuizMath() {
       bestSubmittedRef.current = false;
       return;
     }
-    if (bestSubmittedRef.current) return;
+    if (bestSubmittedRef.current || !result) return;
     bestSubmittedRef.current = true;
-    setBestResult(submitBest(score));
-  }, [phase, score, submitBest]);
+    setBestResult(submitBest(result.score));
+  }, [phase, result, submitBest]);
 
+  /* ---------------- teszt-kampó (K.2) ---------------- */
+  useEffect(() => {
+    return installGameTestApi({
+      probe: () => {
+        const ctl = qRef.current;
+        const st = ctl.director?.stats(clockRef.current);
+        const core = coreRef.current.state();
+        const p = ctl.view().presentation;
+        return {
+          simTime: driverRef.current!.loop.simTimeMs(),
+          questionOpen: ctl.active() ? 1 : 0,
+          questionsAnswered: st?.answered ?? 0,
+          questionsCorrect: st?.correct ?? 0,
+          fps: fpsRef.current,
+          band: difficultyRef.current,
+          intensity: ctl.director?.intensity() ?? null,
+          level: runLevelRef.current,
+          questionSeconds: p ? p.windowMs / 1000 : null,
+          questionId: p?.id ?? null,
+          reveal: ctl.view().reveal ? 1 : 0,
+          shield: core.shield,
+          wave: core.wave + 1,
+          kills: core.kills,
+          power: core.power,
+          paused: pausedRef.current ? 1 : 0,
+          clock: clockRef.current,
+        };
+      },
+      forceState: (patch) => {
+        // `phase: "quiz"` a `question: true` kompatibilis álneve (terv 9.): azonnal nyit egy kérdést.
+        if (patch.question || patch.phase === "quiz") qRef.current.request("trigger", clockRef.current);
+        if (patch.phase === "play") startGame();
+        if (patch.phase === "menu") setPhase("menu");
+        if (patch.phase === "won" || patch.phase === "over") endRun(patch.phase === "won", typeof patch.correctCount === "number" ? patch.correctCount : undefined);
+      },
+    });
+  }, [endRun, startGame]);
+
+  /* ---------------- render ---------------- */
   const isResult = phase === "over" || phase === "won";
   const screenState: GameScreenState =
     phase === "menu" ? "start" : isResult ? "result" : paused ? "paused" : "playing";
-  const runSeconds = ROUND_SECONDS[grade];
-  const runRatio = Math.max(0, Math.min(1, timeLeft / runSeconds));
-  const qSeconds = questionSecondsFor(grade);
-  const qRatio = Math.max(0, Math.min(1, questionTimeLeft / qSeconds));
-  const qTone: "default" | "warn" | "bad" = qRatio < 0.15 ? "bad" : qRatio < 0.3 ? "warn" : "default";
-  const target = TARGET_CORRECT[grade];
-  // A lejárt kérdés is rossz válasz (a statisztikával azonos szabály); kényszerített eredménynél sem lehet
-  // a jó válaszok száma nagyobb az összesnél.
-  const totalAnswered = Math.max(correct, answered + timeoutCountRef.current);
   const shellBackground =
     "radial-gradient(circle at 18% 12%, rgba(56,189,248,0.26), transparent 36%), radial-gradient(circle at 85% 8%, rgba(244,114,182,0.28), transparent 40%), linear-gradient(180deg, #070c1d 0%, #11173a 100%)";
+  const view = q.state;
+  const pres = view.presentation;
+  const towerCurrent = Math.min(TOWER_STEPS_TARGET, (hud.wave - 1) + hud.waveProgress);
+  // Az eredménylap gombjai objektumként: a „Miért?” kártyán NINCS újrapróba (J-SQ) — a lapon az `onRetry=` minta csak
+  // az ott tiltott újrapróbát jelentené (`T/game-feedback-wiring-guard.test.ts`), az „Új futam” itt egy új menet.
+  const resultActions = { onRetry: startGame, onBack: exitToGames };
+  const nextGoal =
+    phase === "won"
+      ? hud.power < 5
+        ? "Következő cél: érj el ×5 erőt egy menetben!"
+        : "Következő cél: nyerj egy nehezebb pályán!"
+      : result && result.wave < 5
+        ? `Következő cél: juss el az ${result.wave + 1}. hullámig!`
+        : "Következő cél: védd meg a tornyot az 5. hullám végéig!";
 
   return (
     <GameShell
@@ -1845,17 +2491,13 @@ export default function SpeedQuizMath() {
     >
       {phase === "menu" && (
         <StartScreen
-          title="Neon matek torony"
-          subtitle={[
-            LEVEL_LABEL[grade],
-            `${target} jó válasz a csúcsig`,
-            levels.level != null ? `${levels.level}. pálya` : null,
-          ]
+          title="Neon védőtorony"
+          subtitle={[LEVEL_LABEL[grade], "5 hullám", levels.level != null ? `${levels.level}. pálya` : null]
             .filter(Boolean)
-            .map((part) => String(part).replace(/ /g, " "))
+            .map((part) => String(part).replace(/ /g, " "))
             .join(" · ")}
           icon={<Rocket className="h-12 w-12 text-white drop-shadow" aria-hidden="true" />}
-          startLabel="Indul a torony — rajta!"
+          startLabel="Védd meg a tornyot!"
           startTestId="sq-start"
           onStart={startGame}
           best={storedBest}
@@ -1903,22 +2545,21 @@ export default function SpeedQuizMath() {
                 />
               ) : null}
               <p className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2.5 text-sm text-white/90">
-                <span className="font-bold text-amber-200">A pálya célja:</span> <strong>{target}</strong> helyes
-                válasz a torony tetejéig · <strong>3</strong> szív = három hibalehetőség · szint:{" "}
-                <strong>{LEVEL_LABEL[grade]}</strong>
+                <span className="font-bold text-amber-200">A cél:</span> védd meg a tornyot <strong>5</strong> hullámon át ·
+                a pajzs <strong>{SHIELD_MAX}</strong> pontos · szint: <strong>{LEVEL_LABEL[grade]}</strong>
               </p>
               <GamePedagogyPanel
                 accent="cyan"
                 className="w-full text-sm"
-                kidMission={`Válaszolj gyorsan és jól (${grade}. osztály szint)! Minden helyes válasz közelebb visz a torony tetejéhez a pályán. Van 3 életed — rossz válasz egy szívecskét elvesz. A láng = sorozat: minél több jó válasz egymás után, annál nagyobb a pontszorzó érzése.`}
+                kidMission={`Fosztogató drónok támadják a tornyodat! Koppints rájuk, és a lézer leszedi őket. Időnként négy számdrón jelenik meg egy feladattal (${grade}. osztály szint): lődd le azt, amelyiken a JÓ eredmény áll — ettől a torony energiahullámot lő, és egyre erősebb lesz a lézered. Ha tévedsz, megmutatjuk a jó választ, és később újra jön a feladat.`}
                 parentBody={
                   <>
                     <strong className="text-cyan-100/90">Tananyag:</strong> műveletek és számolás a választott évfolyamnak megfelelően (tanári bank + generált feladatok).
                     <br />
-                    <strong className="text-cyan-100/90">Fejleszt:</strong> számolási sebesség, önellenőrzés, hibatűrés (életek után is folytatható kör).
+                    <strong className="text-cyan-100/90">Fejleszt:</strong> fejszámolási sebesség és pontosság játék közben, figyelemmegosztás, kéz–szem koordináció.
                     <br />
                     <span className="text-white/55">
-                      A kettős idő (kör + kérdés) és a vizuális „lépkedés” a cél felé ugyanazt a motivációs mintát követi, mint a rövid tesztekkel tarkított gyakorló appok: gyors visszajelzés, világos cél.
+                      A feladat a játék része: a jó válasz játékbeli erőt ad, a hiba nem állítja meg a játékot. Az elrontott feladat néhány kérdés múlva visszatér, a menet végén a „Gyakorold még” lista mutatja a megoldásukat.
                     </span>
                   </>
                 }
@@ -1930,9 +2571,9 @@ export default function SpeedQuizMath() {
           }
         >
           <ul className="flex flex-wrap justify-center gap-2 text-sm font-bold text-white/90" aria-label="Szabályok">
-            <li className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1">⚡ Gyorsabb = több pont</li>
-            <li className="rounded-full border border-orange-300/30 bg-orange-500/10 px-3 py-1">🔥 3 jó sorban = kombó</li>
-            <li className="rounded-full border border-rose-300/30 bg-rose-500/10 px-3 py-1">❤️ 3 élet</li>
+            <li className="rounded-full border border-pink-300/30 bg-pink-500/10 px-3 py-1">👆 Koppints a drónokra</li>
+            <li className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1">🎯 Lődd le a jó eredményt</li>
+            <li className="rounded-full border border-orange-300/30 bg-orange-500/10 px-3 py-1">🔥 Kombó = erősebb lézer</li>
           </ul>
         </StartScreen>
       )}
@@ -1948,203 +2589,131 @@ export default function SpeedQuizMath() {
                 value: (
                   <span data-testid="sq-score">
                     <span className="sr-only">Pont: </span>
-                    {score}
+                    {hud.score}
                   </span>
                 ),
               },
               {
-                id: "streak",
-                label: "Kombó",
-                tone: streak >= 3 ? "good" : "default",
+                id: "shield",
+                label: "Pajzs",
+                tone: hud.shield <= 1 ? "bad" : "default",
                 value: (
-                  <span className="inline-flex items-center gap-1">
-                    <Flame
-                      className={`h-4 w-4 ${streak >= 3 ? "fill-orange-400 text-orange-300" : "text-orange-300/70"}`}
-                      aria-hidden="true"
-                    />
-                    {streak}
+                  // A szegmensek a játéktérben (kupola a torony körül) látszanak; a HUD-on szám, hogy keskeny
+                  // telefonon se vágódjon le (a stat-érték `overflow: hidden`).
+                  <span className="inline-flex items-center gap-1" data-testid="sq-shield" aria-label={`${hud.shield} pajzs az ${SHIELD_MAX}-ből`}>
+                    <Shield aria-hidden="true" className={`h-4 w-4 ${hud.shield > 1 ? "fill-cyan-400 text-cyan-200" : "fill-orange-400 text-orange-200"}`} />
+                    {hud.shield}/{SHIELD_MAX}
                   </span>
                 ),
               },
               {
-                id: "lives",
-                label: "Élet",
-                tone: lives <= 1 ? "bad" : "default",
+                id: "power",
+                label: "Erő",
+                tone: hud.power >= 3 ? "good" : "default",
                 value: (
-                  <span className="inline-flex items-center gap-0.5" aria-label={`${lives} élet a háromból`}>
-                    {[0, 1, 2].map((i) => (
-                      <Heart
-                        key={i}
-                        aria-hidden="true"
-                        className={`h-4 w-4 ${i < lives ? "fill-rose-500 text-rose-300" : "text-white/25"}`}
-                      />
-                    ))}
+                  <span className="inline-flex items-center gap-1" data-testid="sq-power">
+                    {hud.power >= 3 ? (
+                      <Flame className="h-4 w-4 fill-orange-400 text-orange-300" aria-hidden="true" />
+                    ) : (
+                      <Zap className="h-4 w-4 text-cyan-300" aria-hidden="true" />
+                    )}
+                    ×{hud.power}
                   </span>
                 ),
               },
             ]}
             progress={{
-              value: questionTimeLeft,
-              max: qSeconds,
-              label: `Kérdés ${questionTimeLeft} mp`,
-              tone: qTone,
+              value: Math.round(((hud.wave - 1) + hud.waveProgress) * 100),
+              max: 500,
+              label: `${hud.wave}. hullám az 5-ből`,
+              tone: hud.shield <= 1 ? "warn" : "default",
             }}
           />
 
-          <div className="flex min-h-0 flex-1 flex-col gap-2 px-[max(8px,var(--game-safe-left))] pb-[max(8px,var(--game-safe-bottom))] pt-2 pr-[max(8px,var(--game-safe-right))]">
-            <div className="flex items-center gap-2 text-sm font-bold text-cyan-100/90" aria-label={`Kör: ${timeLeft} másodperc`}>
-              <Clock className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" />
-              <span className="shrink-0">Kör</span>
-              <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/10 bg-slate-950/70">
-                <div
-                  className="h-full origin-left rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-fuchsia-500 shadow-[0_0_10px_rgba(56,189,248,0.6)]"
-                  style={{
-                    transform: `scaleX(${runRatio})`,
-                    transition: reducedMotion ? "none" : "transform 0.9s linear",
-                  }}
-                />
+          <div
+            ref={worldRef}
+            className="relative min-h-0 flex-1 overflow-hidden"
+            style={{ touchAction: "none" } as CSSProperties}
+            data-testid="sq-world"
+            onPointerDown={onWorldPointerDown}
+            onPointerUp={releasePointer}
+            onPointerCancel={releasePointer}
+            onLostPointerCapture={releasePointer}
+          >
+            <div ref={shakeLayerRef} className="absolute inset-0">
+              <div className="absolute inset-0 flex flex-col [&>.math-world]:flex-1" aria-hidden="true">
+                <MathTowerScene3D current={towerCurrent} target={TOWER_STEPS_TARGET} />
               </div>
-              <span className="w-12 shrink-0 text-right tabular-nums">{timeLeft} mp</span>
-            </div>
-
-            <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-2 landscape:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] landscape:grid-rows-1 landscape:gap-3">
-              <div className="relative flex min-h-[96px] flex-col overflow-hidden rounded-2xl border border-cyan-300/25 shadow-[0_10px_30px_rgba(0,0,0,0.45)] [&>.math-world]:flex-1">
-                <MathTowerScene3D current={correct} target={target} />
-              </div>
-
-              <div className="relative flex min-h-0 flex-col justify-end gap-2 landscape:justify-center">
-                <div
-                  className={`relative rounded-2xl border-2 bg-slate-950/85 px-3 py-2.5 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur-sm transition-colors ${
-                    answerState === "correct"
-                      ? "border-emerald-400"
-                      : answerState === "wrong"
-                        ? "border-rose-400"
-                        : qTone === "bad"
-                          ? "border-rose-400/70"
-                          : "border-cyan-300/40"
-                  }`}
-                >
-                  <div className="mb-1.5 flex items-center gap-2 text-xs font-bold text-cyan-200/85">
-                    <span className="uppercase tracking-wider">{answered + 1}. feladat</span>
-                    <span className="text-white/55">
-                      {task.source === "teacher" ? "Tanári bank" : "Generált"}
-                    </span>
-                    <span
-                      className={`ml-auto rounded-full border px-2 py-0.5 tabular-nums ${
-                        correct >= target
-                          ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-100"
-                          : "border-amber-300/50 bg-amber-500/15 text-amber-100"
-                      }`}
-                      aria-label={`Cél: ${correct} a ${target} jó válaszból`}
+              <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true" />
+              <div
+                className="pointer-events-none absolute inset-0"
+                data-testid="sq-answers"
+                role="group"
+                aria-label="Számdrónok: lődd le a jó eredményt"
+              >
+                {pres?.options.map((opt, idx) => {
+                  const st = view.reveal
+                    ? idx === view.reveal.correctOptionIndex
+                      ? "correct"
+                      : idx === view.reveal.pickedOptionIndex
+                        ? "wrong"
+                        : "dim"
+                    : "idle";
+                  return (
+                    <button
+                      key={`${pres.id}-${idx}`}
+                      ref={(el) => {
+                        droneRefs.current[idx] = el;
+                      }}
+                      type="button"
+                      data-testid={`sq-drone-${idx}`}
+                      data-state={st}
+                      className="sq-drone game-answer-btn pointer-events-auto absolute left-0 top-0"
+                      style={{ transform: "translate3d(-200px, -200px, 0)" }}
+                      aria-label={`Számdrón: ${opt.label}`}
+                      aria-disabled={view.reveal || paused ? "true" : undefined}
+                      onPointerDown={(e) => onDronePointerDown(e, idx)}
+                      onPointerUp={(e) => onDronePointerUp(e, idx)}
+                      onPointerCancel={onDronePointerCancel}
+                      // Billentyűzet (Enter / Szóköz a fókuszált drónon): a `click` itt `detail === 0`; a mutatós
+                      // választást a pointerup már elintézte.
+                      onClick={(e) => {
+                        if (e.detail === 0) pickDrone(idx);
+                      }}
+                      {...correctDataAttrs(opt.correct)}
                     >
-                      🏁 {correct}/{target}
-                    </span>
-                  </div>
-                  <p
-                    data-testid="sq-prompt"
-                    className={`font-black leading-tight text-white [text-wrap:balance] ${promptSizeClass(task.prompt)}`}
-                  >
-                    {task.prompt}
-                  </p>
-                  <div className="pointer-events-none absolute inset-x-0 -top-4 z-20 flex justify-center">
-                    <AnimatePresence>
-                      {gain && answerState === "correct" && (
-                        <motion.span
-                          key={gain.id}
-                          className="rounded-full border border-amber-100/80 bg-gradient-to-b from-amber-300 to-amber-500 px-3 py-0.5 text-lg font-black tabular-nums text-slate-950 shadow-[0_0_18px_rgba(251,191,36,0.6)]"
-                          initial={reducedMotion ? false : { opacity: 0, y: 8, scale: 0.8 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={reducedMotion ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: -18 }}
-                          transition={{ duration: 0.25, ease: "easeOut" }}
-                        >
-                          +{gain.value} pont
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-x-0 -top-5 z-20 flex justify-center">
-                    <AnimatePresence>
-                      {combo && (
-                        <motion.span
-                          key={combo.id}
-                          data-testid="sq-combo"
-                          className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/70 bg-gradient-to-r from-orange-500 via-amber-400 to-fuchsia-500 px-4 py-1 text-lg font-black text-slate-950 shadow-[0_0_24px_rgba(251,191,36,0.65)]"
-                          initial={reducedMotion ? false : { scale: 0.8, opacity: 0, y: 6 }}
-                          animate={{ scale: 1, opacity: 1, y: 0 }}
-                          exit={
-                            reducedMotion
-                              ? { opacity: 0, transition: { duration: 0 } }
-                              : { scale: 1.1, opacity: 0, transition: { duration: 0.16, ease: "easeIn" } }
-                          }
-                          transition={{ type: "spring", stiffness: 520, damping: 22 }}
-                        >
-                          <Flame className="h-5 w-5 fill-white text-white" aria-hidden="true" />
-                          Kombó ×{combo.value}
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2" data-testid="sq-answers">
-                    {task.options.map((opt, idx) => {
-                      const chosen = chosenIdx === idx;
-                      const state = chosen ? answerState : "idle";
-                      return (
-                        <motion.button
-                          key={`${task.prompt}-${opt}-${idx}`}
-                          type="button"
-                          data-state={state}
-                          className={`game-answer-btn flex h-[clamp(56px,9dvh,80px)] items-center justify-center rounded-2xl border-2 bg-gradient-to-b px-2 !text-[clamp(22px,7vmin,32px)] font-black tabular-nums text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-5px_0_rgba(0,0,0,0.35),0_8px_18px_var(--tw-shadow-color)] transition-[filter,opacity,background-color] duration-150 [-webkit-tap-highlight-color:transparent] [text-shadow:0_2px_0_rgba(0,0,0,0.35)] [touch-action:manipulation] ${
-                            state === "correct"
-                              ? "border-emerald-100 from-emerald-400 to-emerald-700 shadow-emerald-400/50 ring-4 ring-emerald-300/50"
-                              : state === "wrong"
-                                ? "border-rose-100 from-rose-500 to-rose-800 shadow-rose-500/40 ring-4 ring-rose-300/50"
-                                : answerState !== "idle"
-                                  ? `${ANSWER_ACCENTS[idx % ANSWER_ACCENTS.length]} opacity-50 saturate-50`
-                                  : `${ANSWER_ACCENTS[idx % ANSWER_ACCENTS.length]} hover:brightness-110 active:brightness-125`
-                          }`}
-                          initial={false}
-                          animate={
-                            reducedMotion
-                              ? undefined
-                              : state === "correct"
-                                ? { scale: [1, 1.08, 1] }
-                                : state === "wrong"
-                                  ? { x: [0, -7, 7, -5, 5, 0] }
-                                  : { scale: 1, x: 0 }
-                          }
-                          whileTap={reducedMotion || answerState !== "idle" ? undefined : { scale: 0.95 }}
-                          transition={{ duration: state === "wrong" ? 0.32 : 0.24 }}
-                          onClick={() => handleAnswer(idx)}
-                          {...correctDataAttrs(idx === task.correctIndex)}
-                        >
-                          {formatMathNumber(opt)}
-                        </motion.button>
-                      );
-                    })}
-                  </div>
-                </div>
+                      <span className="sq-drone-rotor" aria-hidden="true" />
+                      <span className="sq-drone-label" data-long={opt.label.length > 5 ? "true" : "false"}>
+                        {opt.label}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
+            {hud.hint > 0 && (
+              <p className="sq-hint" data-testid="sq-hint" role="status">
+                {hud.hint === 1 ? HINT_SHOOT : HINT_ANSWER}
+              </p>
+            )}
           </div>
         </div>
       )}
 
-      <AnimatePresence>
-        {wrongFlash && !reducedMotion && (
-          <motion.div
-            key="sq-wrong-vignette"
-            aria-hidden="true"
-            className="pointer-events-none fixed inset-0 z-[70] shadow-[inset_0_0_120px_rgba(244,63,94,0.75)]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.12 }}
-          />
-        )}
-      </AnimatePresence>
+      {phase === "play" && (
+        <InlineQuestion
+          {...q.bind}
+          mode="bar"
+          skin="neon"
+          disabled={paused}
+          onWhy={openWhy}
+          testId="sq-question"
+          promptTestId="sq-prompt"
+          optionTestId={(i) => `sq-option-${i}`}
+          onExpand={() => setExpanded(true)}
+          onCollapse={() => setExpanded(false)}
+        />
+      )}
 
       <PauseMenu
         open={phase === "play" && paused}
@@ -2154,7 +2723,7 @@ export default function SpeedQuizMath() {
         exitLabel="Vissza a játékokhoz"
       >
         <p className="text-center text-base text-white/80">
-          {LEVEL_LABEL[grade]} · {correct}/{target} jó válasz · {lives} élet
+          {LEVEL_LABEL[grade]} · {hud.wave}. hullám · {hud.shield} pajzs
         </p>
       </PauseMenu>
 
@@ -2162,26 +2731,32 @@ export default function SpeedQuizMath() {
         badges={newlyUnlocked}
         open={isResult}
         testId={phase === "won" ? "sq-won" : "sq-over"}
-        title={phase === "won" ? "Célba értél a neon toronyban!" : "Vége a futamnak"}
+        title={phase === "won" ? "Megvédted a tornyot!" : "A torony most elesett — jöhet a visszavágó!"}
         won={phase === "won"}
-        score={score}
+        score={result?.score ?? 0}
         best={bestResult?.best ?? storedBest}
         isNewBest={bestResult?.isNewBest ?? false}
-        correct={correct}
-        total={totalAnswered}
-        onRetry={startGame}
+        correct={result?.correct ?? 0}
+        total={result?.total ?? 0}
+        {...resultActions}
         retryLabel="Új futam"
-        onBack={exitToGames}
         extra={
           <div className="grid gap-2">
             <p className="game-result-stat">
               <Flame className="h-5 w-5 text-orange-300" aria-hidden="true" />
               <span>
-                Legjobb kombó: <strong>{bestStreak}</strong>
+                Legjobb kombó: <strong>{result?.bestStreak ?? 0}</strong>
               </span>
             </p>
+            <p className="game-result-stat">
+              <Waves className="h-5 w-5 text-cyan-300" aria-hidden="true" />
+              <span>
+                Hullám: <strong>{Math.min(5, result?.wave ?? 1)}/5</strong> · lelőtt drón: <strong>{result?.kills ?? 0}</strong>
+              </span>
+            </p>
+            <p className="px-1 text-sm font-bold text-amber-100" data-testid="sq-next-goal">{nextGoal}</p>
+            <ResultReview items={q.director?.wrongList() ?? []} />
             {/* S13 / B6: az új jelvények a ResultScreen közös sorában (badges), nem itt. */}
-            {/* A szinkron-tájékoztató a Beállításokban él; ide csak a sikeres beküldés kerül (kis kijelzőn hely). */}
             {syncEligibility?.eligible && (
               <p className="px-1 text-sm text-emerald-200/90">Eredmény elküldve a felhő ranglistára.</p>
             )}
@@ -2189,13 +2764,50 @@ export default function SpeedQuizMath() {
         }
       />
 
-      {feedback && (
-        <QuizFeedbackCard
-          card={feedback}
-          onDismiss={dismissFeedback}
-          onRetry={lives > 0 ? retryTask : undefined}
-        />
-      )}
+      {feedback && <QuizFeedbackCard card={feedback} onDismiss={closeWhy} />}
+      <style>{SPEED_MATH_CSS}</style>
     </GameShell>
   );
 }
+
+/** A 3D torony 8 lépcsője az 5 hullámra vetítve (a hős hullámonként feljebb lép; győzelemkor a csúcson áll). */
+const TOWER_STEPS_TARGET = 5;
+
+/**
+ * A számdrónok és a súgó stílusa (a játéklapé — a közös `index.css` a J0c / J8 szeleté). A drón ≥ 72 × 60 px
+ * (K.4/16), a visszajelzés szín + ikon-jel + szöveg (nem csak szín); a hiba narancs, nem telített piros (K.4/20);
+ * csökkentett mozgásnál nincs pattanás.
+ */
+const SPEED_MATH_CSS = `
+.sq-drone {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 76px; min-height: 60px; padding: 6px 12px 4px;
+  border-radius: 18px 18px 22px 22px; border: 2.5px solid #67e8f9; color: #fff; cursor: pointer;
+  background: radial-gradient(circle at 50% 30%, #155e75 0%, #0b1033 70%);
+  box-shadow: 0 0 0 2px #0b0720, 0 0 18px #22d3ee99, inset 0 -5px 0 #00000059;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none; will-change: transform;
+  transition: background-color .12s ease, border-color .12s ease, opacity .15s ease, box-shadow .12s ease;
+}
+.sq-drone:focus-visible { outline: 3px solid #fef08a; outline-offset: 3px; }
+.sq-drone:not([aria-disabled="true"]):active { border-color: #fef08a; box-shadow: 0 0 0 2px #0b0720, 0 0 26px #fef08acc; }
+.sq-drone-rotor {
+  position: absolute; left: 10px; right: 10px; top: -9px; height: 6px; border-radius: 9999px;
+  background: linear-gradient(90deg, #67e8f9 0 28%, transparent 28% 72%, #67e8f9 72% 100%); opacity: .9;
+}
+.sq-drone-label { font-size: 26px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 2px 0 #0009, 0 0 10px #22d3ee88; white-space: nowrap; }
+.sq-drone-label[data-long="true"] { font-size: 20px; }
+.sq-drone[data-state="correct"] { background: #15803d; border-color: #bbf7d0; box-shadow: 0 0 0 2px #0b0720, 0 0 30px #4ade80; animation: sq-drone-pop .32s ease-out; }
+.sq-drone[data-state="correct"] .sq-drone-label::before { content: "✓ "; }
+.sq-drone[data-state="wrong"] { background: #9a3412; border-color: #fdba74; box-shadow: 0 0 0 2px #0b0720, 0 0 18px #fb923c99; }
+.sq-drone[data-state="wrong"] .sq-drone-label::before { content: "✗ "; }
+.sq-drone[data-state="dim"] { opacity: .4; }
+.sq-hint {
+  position: absolute; left: 50%; bottom: max(10px, var(--game-safe-bottom)); transform: translateX(-50%); z-index: 5;
+  max-width: calc(100% - 24px); margin: 0; padding: 8px 14px; border-radius: 9999px; pointer-events: none;
+  background: #0b0720d9; border: 1.5px solid #fef08a99; color: #fef9c3; font-size: 15px; font-weight: 800; line-height: 1.25;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 6px 18px #0008;
+}
+@keyframes sq-drone-pop { 0% { scale: 1; } 45% { scale: 1.18; } 100% { scale: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .sq-drone, .sq-drone[data-state="correct"] { animation: none; transition: none; }
+}
+`;
