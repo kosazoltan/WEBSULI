@@ -225,6 +225,33 @@ for (const viewport of [
   });
 }
 
+test.describe("390x844 beragadt ujj", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test("a kör lejártáig nyomva tartott ujj nem blokkolja a következő kört", async ({ page }) => {
+    await openSetup(page, { g1: 5, g2: 5 });
+    await page.getByTestId("duel-go").click();
+    const p = await nextQuestion(page, 0);
+    expect(p).not.toBeNull();
+    const cdp = await page.context().newCDPSession(page);
+    // az 1. játékos lenyomja, de nem engedi fel; a 2. válaszol → a kör az 1. ablakának végén zárul (a gomb letiltódik)
+    const a = await center(page, option("p1", true));
+    await touch(cdp, "touchStart", [{ ...a, id: 9 }]);
+    await page.waitForTimeout(300);
+    // a 2. játékos közben egérrel válaszol (külön mutató) — az 1. ujja végig lent marad
+    const b = await center(page, option("p2", true));
+    await page.mouse.click(b.x, b.y);
+    await expect.poll(async () => (await probe(page)).lockedP2, { timeout: 5_000 }).toBe(1);
+    await expect.poll(async () => (await probe(page)).round, { timeout: 15_000, intervals: [100] }).toBe(1);
+    await touch(cdp, "touchEnd", []);
+    // következő kör: az 1. játékos ugyanúgy tud válaszolni
+    const q2 = await nextQuestion(page, 1);
+    expect(q2).not.toBeNull();
+    await page.waitForTimeout(300);
+    await tapTogether(cdp, await center(page, option("p1", true)), await center(page, option("p2", false)));
+    await expect.poll(async () => (await probe(page)).correctP1, { timeout: 5_000 }).toBe(1);
+  });
+});
+
 /** A csapás rázása (feel.addTrauma) a sebzett térfélen: normál módban mozdul, csökkentett mozgásnál nem (K.4/19, M9). */
 async function sampleShake(page: Page): Promise<string[]> {
   return page.evaluate(

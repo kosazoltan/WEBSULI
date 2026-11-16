@@ -414,6 +414,11 @@ export default function DuelArena() {
           setCountdown(null);
           if (e.round === 1) beep(990, 0.18, "sine", 0.06);
           if (e.tiebreak) sfxWarning();
+        } else if (e.type === "open") {
+          // Új kör: a félbemaradt lenyomás (pl. a gomb letiltódott, mielőtt az ujj felemelkedett volna, és így nem jött
+          // pointerup / lostpointercapture) nem blokkolhatja a következő kört.
+          press.current = { p1: null, p2: null };
+          for (const el of Array.from(document.querySelectorAll<HTMLElement>(".duel-option[data-pressed]"))) delete el.dataset.pressed;
         } else if (e.type === "locked") {
           sfxClick();
           haptic("tap");
