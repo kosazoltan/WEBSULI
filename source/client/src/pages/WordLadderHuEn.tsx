@@ -473,6 +473,8 @@ export default function WordLadderHuEn() {
 
   /** A menet szó-őre: egy szó egy menetben csak egy irányban (review #454). */
   const wordGuardRef = useRef(createRunWordGuard<PlayQuestion>());
+  /** A menet új (nem ismétlő) tételeinek száma: minden második a szóbankból. */
+  const freshCountRef = useRef(0);
 
   const provider = useMemo<QuestionProvider>(
     () => ({
@@ -492,15 +494,33 @@ export default function WordLadderHuEn() {
         // elolvasható / beférő tétel (J0c-b `accept` = `fitsAllViewports(...).ok`) előbb; ha ilyen nincs, a többi.
         const tier = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
         const isSeen = (item: { id?: string | number; prompt: string }) => seenRef.current.some((x) => x.id === String(item.id));
+        // Minden második új tétel a központi szóbankból jön, ha van (a kézi bank nagyobb, és a gyors tempó mellett
+        // különben a menet eleje szinte csak kézi tételt adna — a szóbank a játék fő forrása).
         const accept = ctx.accept;
-        const accepted = accept ? tiersRef.current.map((t) => t.filter((q) => accept(q))) : null;
+        const isVocab = (q: { id?: string | number }) => String(q.id ?? "").startsWith("vocab:");
+        const wantVocab = freshCountRef.current % 2 === 1;
+        const tiers = tiersRef.current;
+        const pools: (readonly (readonly (Quiz | LadderItem)[])[])[] = [];
+        if (wantVocab) pools.push(tiers.map((t) => t.filter((q) => isVocab(q) && (!accept || accept(q)))));
+        if (accept) pools.push(tiers.map((t) => t.filter((q) => accept(q))));
+        pools.push(tiers);
         for (let attempt = 0; attempt < 8; attempt++) {
-          let item = accepted ? pickUnseen(accepted, tier, seenRef.current) : null;
-          if (!item || isSeen(item)) item = pickUnseen(tiersRef.current, tier, seenRef.current);
+          let item: Quiz | LadderItem | null = null;
+          for (const pool of pools) {
+            const c = pickUnseen(pool, tier, seenRef.current);
+            if (c && !isSeen(c)) {
+              item = c;
+              break;
+            }
+          }
+          if (!item) item = pickUnseen(tiers, tier, seenRef.current);
           if (!item) return null;
           seenRef.current = [...seenRef.current, { id: String(item.id), prompt: item.prompt }];
           const q = toPlayQuestion(item);
-          if (wordGuardRef.current.freshAllowed(q.key)) return q;
+          if (wordGuardRef.current.freshAllowed(q.key)) {
+            freshCountRef.current += 1;
+            return q;
+          }
         }
         return null;
       },
@@ -753,6 +773,7 @@ export default function WordLadderHuEn() {
     runTierRef.current = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
     seenRef.current = [];
     wordGuardRef.current.reset();
+    freshCountRef.current = 0;
     speakAfterRef.current.clear();
     // Csak fejlesztői módban: ?rung=N kezdőfok a zónaváltások / cél gyors ellenőrzéséhez.
     let startRung = 0;

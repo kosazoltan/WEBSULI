@@ -600,3 +600,8 @@ Forrás: J2a (Szólétra „Szikla-verseny”).
 - **Tünet 3:** Bash-ban egy elfelejtett `cat > fájl` (heredoc nélkül) a stdin-re várt, a parancs a háttérbe került és
   végtelenül futott. **Megelőzés:** fájlt csak a Write eszközzel vagy heredoc-kal írj; a háttérbe került, gyanúsan néma
   parancsot nézd meg, mielőtt várnál rá.
+- **Tünet 4:** a gyorsabb tempó (nincs 1,5 mp-es kötelező lánc) és a `promptFits`-szűrés (4. évfolyamon a cloze kiesik)
+  után a `vocab-cross-game-log.spec.ts` 6 gyors válaszából 6/18 futásban egy sem volt szóbankos (a kézi bank nagyobb, a
+  választás véletlen a szinten belül) — a teszt 33%-ban bukott. **Megelőzés:** forráskeverésnél a kis, de fő forrás
+  (szóbank) kapjon garantált helyet (Szólétra: minden második új tétel); véletlen választós e2e-t `--repeat-each 10`-zel
+  mérj, mielőtt zöldnek mondod.
