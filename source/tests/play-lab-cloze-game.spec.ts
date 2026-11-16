@@ -50,7 +50,7 @@ for (const vp of MOBILE_VIEWPORTS) {
       .toBe(1);
     const root = page.getByTestId("play-question");
     const prompt = page.getByTestId("play-question-prompt");
-    await expect(prompt).toContainText("_____ des Menschen besteht aus über zweihundert Knochen.");
+    await expect(prompt).toContainText("He failed the first exam but _____ passed the retake.");
     await expect(prompt).not.toContainText("Magyarul");
     await expect(root.locator(".play-question-option").first()).toBeVisible();
     await page.waitForTimeout(250);
