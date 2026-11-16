@@ -1770,6 +1770,17 @@ táblázat szerint), P1, P2, P3, P4 (retro + csapda; a kanban- és munkafa-higi�
 
 **Tiltások:** játékoldal érdemi módosítása (csak a review megerősített findingja javítható, a PR-ban megnevezve); meglévő teszt gyengítése.
 
+**E24 — Tornado Hunter 200: magyar felület (2026-11-16, ág `fix/jatekok-tornado-hud-magyar`).** Az S13 utómunkája; a terv 4.3–4.6
+(olvasható HUD, játékérzet) és a `docs/specs/tornado-hunter-200-2026-09-06.md` 14. pontja (a felhasználói felület magyar) alapján.
+Cél: a játékos számára látható összes angol felirat magyarra (HUD: SZINT / VIHAR / SZÉLSEBESSÉG / HORGONY, Kamera gomb, égtájak,
+viharfokozatok, járműkategóriák, ritkaság, Rekordok és Statisztika sorai, grafikai szint, kérdéstípus, eredménycím), 360 px-en is
+átfedés nélkül. Nem változik: `data-testid`, kódazonosítók (`id`-k, localStorage-kulcsok), a járműnevek, a „Storm Coin” pénznév és a
+nyelvtanulási tartalom (angol kérdés / válasz). Érintett fájlok: `pages/TornadoHunter200.tsx`, `lib/tornado/{levels,vehicles,wind,questions}.ts`,
+`lib/achievements.ts` (csak a `tornado_ultimate` címe). Az angol szöveget váró meglévő tesztek az új magyar szövegre íródnak át
+`// SPEC-VÁLTOZÁS 2026-11-16 (tornado-spec 14. pont: a felület magyar)` jelöléssel, a szigor nem csökken. Ellenőrzés: `npm run check`,
+`npm run lint`, célzott Tornado-egységtesztek, `game-mobile-quality.spec.ts -g tornado` (`GAME_MOBILE_PORT`), képernyőképek 360×640 és 844×390
+méretben játék közben.
+
 ---
 
 ## F — Függőségi gráf és hullámterv
