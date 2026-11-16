@@ -139,7 +139,7 @@ test("jó válasz (K.4/23): energiahullám a toronyból (a közeli fosztogatók 
   assert.equal(core.state().score - score0, 13 + killPoints);
 });
 
-test("kombó → erő ×1…×5 (közös combo.ts), lépcsőnként +1 pajzs (max 5); 3. erőtől automata ágyú, 2.-tól szórólövés", () => {
+test("kombó → erő ×1…×5 (közös combo.ts), lépcsőnként +1 pajzs (max 5); 2. erőtől automata ágyú és szórólövés", () => {
   const core = createTowerCore({ seed: 7 });
   run(core, TUTORIAL_MS + 100);
   for (let i = 0; i < 3; i++) core.applyOutcome("wrong", 0); // pajzs le 1-ig
@@ -155,8 +155,8 @@ test("kombó → erő ×1…×5 (közös combo.ts), lépcsőnként +1 pajzs (max
   // +1 pajzs a 3., 6., 10., 15. egymás utáni jónál (1 → 5)
   assert.deepEqual([shields[1], shields[2], shields[5], shields[9], shields[14]], [1, 2, 3, 4, 5]);
   assert.equal(core.state().combo.best, 15);
-  assert.equal(turretIntervalMs(2), Number.POSITIVE_INFINITY);
-  assert.ok(Number.isFinite(turretIntervalMs(3)) && turretIntervalMs(5) < turretIntervalMs(3));
+  assert.equal(turretIntervalMs(1), Number.POSITIVE_INFINITY);
+  assert.ok(Number.isFinite(turretIntervalMs(2)) && turretIntervalMs(5) < turretIntervalMs(2));
   const ev = events(core, 8000);
   assert.ok(ev.some((e) => e.type === "turret"), "5-ös erőn az automata ágyú tüzel");
 });
@@ -277,4 +277,72 @@ test("egy válasz / kérdés (terv 8.4, multitouch): két egyidejű koppintásb�
   assert.equal(st.answered, 1);
   assert.equal(st.correct, 0);
   assert.equal(sim.core.state().combo.count, 0);
+});
+
+test("ismétlési kulcs évfolyammal (review #451): a Matek-tétel az évfolyamot hordozza, idegen játék tétele nem állítható vissza", async () => {
+  const { bankPlayQuestion } = await import("../client/src/game-engine/play/questionDirector");
+  const { inferReviewGrade, reviewFitsGrade, payloadFor } = await import("../client/src/game-engine/play/reviewQueue");
+  const { isOwnReviewKey, speedMathQuizId } = await import("../client/src/lib/speedMath/core");
+  const q12 = bankPlayQuestion("speed-quiz-math", { id: speedMathQuizId(12, "Mennyi 2⁸?"), prompt: "Mennyi 2⁸?", options: ["256", "128", "64", "512"], correctIndex: 0 }, undefined, 12);
+  assert.equal(q12.grade, 12);
+  assert.equal(inferReviewGrade(q12.key), 12, "a kulcsból is visszafejthető");
+  const item = { key: q12.key, box: 0 as const, dueAt: 0, dueInRun: null, lastSeen: 0, wrong: 1, correct: 0, payload: payloadFor(q12), grade: 12 };
+  assert.equal(reviewFitsGrade(item, 12), true);
+  assert.equal(reviewFitsGrade(item, 3), false, "12. évfolyamos hiba nem jön vissza 3. osztályban");
+  const a = bankPlayQuestion("speed-quiz-math", { id: speedMathQuizId(3, "7 × 8 = ?"), prompt: "7 × 8 = ?", options: ["56", "54", "63", "48"], correctIndex: 0 });
+  const b = bankPlayQuestion("speed-quiz-math", { ...a.quiz, id: speedMathQuizId(4, "7 × 8 = ?") });
+  assert.notEqual(a.key, b.key, "ugyanaz a prompt két évfolyamon két tétel");
+  assert.equal(isOwnReviewKey(a.key), true);
+  assert.equal(isOwnReviewKey("bank:tornado-hunter-200:g3:x"), false);
+});
+
+test("meghajtó (review #451): azonos seed + lépés-indexhez kötött bemenet → bitre azonos mag-állapot 16,67 / 33 ms-os és egyenetlen képkockákkal", async () => {
+  const { createTowerDriver } = await import("../client/src/lib/speedMath/core");
+  const TARGET = 3000;
+  const runWithFrames = (frames: () => number) => {
+    let step = 0;
+    let snapshot = "";
+    let driver: ReturnType<typeof createTowerDriver> | null = null;
+    // A bemenet a LÉPÉS elején érkezik (az intenzitás-visszahívás lépésenként egyszer fut a mag lépése előtt): így a
+    // képkocka-felosztás nem számít, csak a lépés sorszáma.
+    driver = createTowerDriver({
+      seed: 77,
+      questions: null,
+      intensity: () => {
+        step += 1;
+        const core = driver!.core;
+        if (step === TARGET + 1) {
+          const st = core.state();
+          snapshot = JSON.stringify({ ms: st.worldMs, s: st.shield, sc: st.score, k: st.kills, w: st.wave, r: st.raiders.map((r) => [r.alive, r.kind, r.hp, r.x, r.y]) });
+        }
+        if (step % 37 === 0) {
+          const id = core.mostAdvanced();
+          if (id >= 0) core.shoot(id);
+        }
+        if (step === 400) core.applyOutcome("correct", 0.5);
+        if (step === 900) core.applyOutcome("wrong", 0);
+        return 0.5;
+      },
+    });
+    for (let guard = 0; guard < 400_000 && !snapshot && driver.core.running(); guard++) driver.frame(frames(), false);
+    return snapshot;
+  };
+  const a = runWithFrames(() => 1000 / 60);
+  assert.ok(a.length > 0, "elérte a 3000. lépést");
+  assert.equal(runWithFrames(() => 33), a, "33 ms-os képkockák");
+  let k = 0;
+  const uneven = [7, 33, 16.7, 50, 3, 24, 120];
+  assert.equal(runWithFrames(() => uneven[k++ % uneven.length]!), a, "egyenetlen képkockák (a hitstop-tartással együtt)");
+});
+
+test("meghajtó: a sim (createSimGame) és a lap útja (createTowerDriver + createQuestionUi) ugyanazt az állapotot adja", async () => {
+  const { createTowerDriver } = await import("../client/src/lib/speedMath/core");
+  const sim = createSimGame({ seed: 5, grade: 7, questions: false });
+  const d = createTowerDriver({ seed: 5, questions: null, intensity: () => 0.4 });
+  for (let i = 0; i < 4000 && sim.core.running(); i++) {
+    sim.step(STEP, { skillRoll: 2 }); // skillRoll 2: a bot sosem talál — csak a léptetés hasonlítható
+    d.frame(STEP, false);
+  }
+  const pick = (c: TowerCore) => JSON.stringify({ ms: c.state().worldMs, s: c.state().shield, w: c.state().wave, r: c.state().raiders.map((r) => [r.alive, r.x, r.y]) });
+  assert.equal(pick(sim.core), pick(d.core));
 });

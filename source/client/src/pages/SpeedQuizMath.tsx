@@ -32,9 +32,6 @@ import {
   InlineQuestion,
   ResultReview,
   bankPlayQuestion,
-  createFeel,
-  createFixedLoop,
-  createIntensityDirector,
   restoreReviewQuestion,
   tween,
   usePlayQuestion,
@@ -51,12 +48,14 @@ import {
   TOWER,
   TUTORIAL_MS,
   WARP_MS,
-  createTowerCore,
+  createTowerDriver,
   droneLayout,
-  towerCalm,
+  isOwnReviewKey,
+  speedMathQuizId,
   towerDirectorConfig,
   type RaiderKind,
   type TowerCore,
+  type TowerDriver,
   type TowerEvent,
 } from "@/lib/speedMath/core";
 
@@ -122,6 +121,11 @@ function randInt(min: number, max: number) {
  * `Math.random`-jával futtatja — ezért hívja lustán).
  */
 let taskRandom: () => number = () => Math.random();
+
+/** A menet seedelt véletlenforrásának beállítása (a lap a menet indításakor hívja). */
+function setTaskRandom(next: () => number): void {
+  taskRandom = next;
+}
 
 function pick<T>(items: readonly T[]): T {
   return items[randInt(0, items.length - 1)]!;
@@ -1357,6 +1361,8 @@ function pickOneTask(level: GradeLevel, seenPrompts: readonly string[]): MathTas
     teacher: teacherPool,
     seenPrompts,
     preferTeacher: taskRandom() < 0.68,
+    // A tanári tétel kiválasztása és a tartalékág is a menet seedjéből (review #451; különben `Math.random`).
+    rng: () => taskRandom(),
     generate: () => {
       for (let i = 0; i < 6; i++) {
         const generated = generatedTaskForGrade(level);
@@ -1408,6 +1414,9 @@ function pickTask(level: GradeLevel, seenPrompts: readonly string[], band?: numb
 /** A fosztogató rajzolt mérete (CSS px) és találati sugara: ≥ 48 px átmérő (K.4/16), ~30%-kal nagyobb a látványnál (KSZ-12). */
 const RAIDER_PX = 44;
 const RAIDER_HIT_PX = 28;
+/** Felengedési tűrés a drón dobozán túl (px), és az „alig mozdult ujj” küszöbe (px) — lásd `onDronePointerUp`. */
+const DRONE_UP_SLOP_PX = 10;
+const DRONE_STILL_PX = 12;
 /** A fosztogató „magja”: ha a számdrónra bökés ilyen közel esik egy fosztogató középpontjához, az lövés, nem válasz. */
 const RAIDER_CORE_PX = 16;
 /** Részecske-, lézer-, gyűrű- és felirat-pool (KSZ-6: előre rögzített kapacitás). */
@@ -1573,16 +1582,19 @@ export default function SpeedQuizMath() {
         const task = pickTask(gradeRef.current, runPromptsRef.current, runLevelRef.current == null ? undefined : difficultyRef.current);
         runPromptsRef.current = [...runPromptsRef.current, task.prompt];
         return bankPlayQuestion(SPEED_MATH_GAME_ID, {
-          id: "",
+          id: speedMathQuizId(gradeRef.current, task.prompt),
           prompt: task.prompt,
           options: task.options.map(formatMathNumber),
           correctIndex: task.correctIndex,
           // A levezetés (G-2) a „Miért?” kártyára és a „Gyakorold még” listába kerül.
           explanation: task.explanation,
-        });
+        }, undefined, gradeRef.current);
       },
-      // Az ismétlési sor KÖZÖS a hét játékban: csak a saját (Matek) tétel állítható vissza, a másik játéké kimarad.
-      restore: (item) => (item.key.startsWith(`bank:${SPEED_MATH_GAME_ID}:`) ? restoreReviewQuestion(item, {}) : null),
+      // Az ismétlési sor KÖZÖS a hét játékban: csak a saját (Matek) tétel állítható vissza; az évfolyamot a közös
+      // `reviewFitsGrade` szabály szűri a directorban (review #451) — a másik játék / évfolyam tétele a sorban marad.
+      // Régi (évfolyam nélküli) Matek-tétel nem ellenőrizhető (a generált feladat nem állítható elő újra) → `legacyReviewFits`
+      // nincs megadva, így az nem tér vissza.
+      restore: (item) => (isOwnReviewKey(item.key) ? restoreReviewQuestion(item, {}) : null),
     }),
     [],
   );
@@ -1591,9 +1603,26 @@ export default function SpeedQuizMath() {
   const runSeedRef = useRef<string | number>(seedFrom(seedBase, 0));
   const directorConfig = useMemo(() => towerDirectorConfig(grade), [grade]);
 
-  const coreRef = useRef<TowerCore>(createTowerCore({ seed: runSeedRef.current }));
-  const paceRef = useRef(createIntensityDirector());
-  const clockRef = useRef(0);
+  // A menet meghajtója (mag + fix lépésű hurok + hitstop + mini-Director) — UGYANAZ, amit a node-szimuláció futtat
+  // (`createTowerDriver`, review #451). A `coreRef` / `clockRef` csak kényelmi nézet rá.
+  // a `usePlayQuestion` hívás után azonnal kitöltve (lent); a meghajtó csak képkockában / eseményben olvassa
+  const qRef = useRef<ReturnType<typeof usePlayQuestion>>(null as unknown as ReturnType<typeof usePlayQuestion>);
+  const makeDriver = (seed: string | number): TowerDriver =>
+    createTowerDriver({
+      seed,
+      questions: {
+        frame: (c, ctx) => qRef.current?.frame(c, ctx),
+        timeScale: () => qRef.current?.timeScale() ?? 1,
+        finished: () => qRef.current?.finished() ?? true,
+        finish: () => qRef.current?.finish(),
+      },
+      intensity: () => qRef.current?.director?.intensity() ?? 0.4,
+      reducedMotion,
+    });
+  const driverRef = useRef<TowerDriver | null>(null);
+  if (!driverRef.current) driverRef.current = makeDriver(runSeedRef.current);
+  const coreRef = useMemo(() => ({ get current(): TowerCore { return driverRef.current!.core; } }), []);
+  const clockRef = useMemo(() => ({ get current(): number { return driverRef.current!.clockMs(); } }), []);
   const fpsRef = useRef(60);
   const sizeRef = useRef({ w: 360, h: 480, wide: false });
   const lastAnswerRef = useRef<{ id: number; correct: boolean; at: number; idx: number } | null>(null);
@@ -1614,32 +1643,14 @@ export default function SpeedQuizMath() {
       recordDifficultyAnswer(good);
       if (good) haptics("success");
       else haptics("error");
-      if (!good) paceRef.current.signal("wrong");
       const idx = p.options.findIndex((opt) => opt.originalIndex === (good ? o.correctOriginalIndex : o.pickedOriginalIndex));
       lastAnswerRef.current = { id: p.id, correct: good, at: performance.now(), idx };
     },
   });
-  const qRef = useRef(q);
   qRef.current = q;
 
-  /* ---------------- játékérzet: fix lépés, rázás, hitstop ---------------- */
-  const loop = useMemo(
-    () =>
-      createFixedLoop((dt) => {
-        const core = coreRef.current;
-        const pace = paceRef.current;
-        const before = core.state().breaches;
-        core.step(dt, qRef.current.director?.intensity() ?? 0.4);
-        if (core.state().breaches > before) pace.signal("damage");
-        const lead = core.mostAdvanced();
-        if (lead >= 0 && core.progressOf(lead) > 0.7) pace.signal("nearThreat", dt / 1000);
-        pace.update(dt / 1000);
-      }),
-    [],
-  );
-  const feel = useMemo(() => createFeel({ reducedMotion, loop, fxRng: createRng(seedFrom(seedBase, "fx")).next }), [reducedMotion, loop, seedBase]);
-  const feelRef = useRef(feel);
-  feelRef.current = feel;
+  /* ---------------- játékérzet: rázás (a hitstop a meghajtóé) ---------------- */
+  const feelRef = { get current() { return driverRef.current!.feel; } };
   const shakeRef = useRef<ShakeOffset>({ x: 0, y: 0, rot: 0 });
 
   const startGame = useCallback(() => {
@@ -1648,11 +1659,8 @@ export default function SpeedQuizMath() {
     runSeedRef.current = seed;
     // A feladat-sorsolás is a menet seedjéből (K.4/13).
     const taskRng = createRng(seedFrom(SPEED_MATH_GAME_ID, seed, "tasks"));
-    taskRandom = taskRng.next;
-    coreRef.current = createTowerCore({ seed });
-    paceRef.current = createIntensityDirector();
-    clockRef.current = 0;
-    loop.reset();
+    setTaskRandom(taskRng.next);
+    driverRef.current = makeDriver(seed);
     setFeedback(null);
     setExpanded(false);
     scoreSubmittedRef.current = false;
@@ -1669,7 +1677,7 @@ export default function SpeedQuizMath() {
     setPaused(false);
     setBestResult(null);
     setPhase("play");
-  }, [grade, levels.level, loop, q, seedBase]);
+  }, [grade, levels.level, q, seedBase]);
 
   /** A menet lezárása: a horog már lezárta a kérdést (settled); az eredmény a director valós statisztikájából. */
   const endRun = useCallback((won: boolean, forcedCorrect?: number) => {
@@ -1807,7 +1815,6 @@ export default function SpeedQuizMath() {
           sfxHit();
           haptics("hit");
           feelNow.addTrauma(0.45);
-          feelNow.hitstop(60);
           break;
         case "blocked":
           burst(x, y, COL_CYAN, 12, 0.2);
@@ -1822,7 +1829,6 @@ export default function SpeedQuizMath() {
           popText(top.x, top.y - 30, e.n > 0 ? `Energiahullám! ×${e.n}` : "Energiahullám!", COL_GREEN);
           sfxCombo(Math.max(1, Math.min(5, coreRef.current.state().power)) as 1 | 2 | 3 | 4 | 5);
           feelNow.addTrauma(0.18);
-          feelNow.hitstop(80);
           break;
         }
         case "zap":
@@ -2135,15 +2141,11 @@ export default function SpeedQuizMath() {
       }
       const isPaused = pausedRef.current;
       const ctl = qRef.current;
-      const core = coreRef.current;
-      if (!isPaused) clockRef.current += dt;
-      feelRef.current.update(isPaused ? 0 : dt);
-      // Menetvég: a frame ELŐTT (új kérdés nem indul; a nyitott kérdés „megszakítva”, nem hiba).
-      if (!core.running() && !ctl.finished()) ctl.finish();
-      if (!isPaused) ctl.frame(clockRef.current, { calm: towerCalm(paceRef.current) });
-      loop.setTimeScale(isPaused ? 0 : ctl.timeScale());
-      const alpha = loop.frame(now);
-      core.drainEvents(onEvent);
+      const driver = driverRef.current!;
+      const core = driver.core;
+      // A meghajtó képkockája (a sim ugyanezt hívja): kérdés-óra (szünetben áll) → menetvégnél a kérdés lezárása a frame
+      // ELŐTT → kérdés-sáv → időskála (szünet 0, nyitott kérdés slowMo) → fix lépés → események (hitstop + nézet).
+      const alpha = driver.frame(dt, isPaused, onEvent);
       draw(alpha, isPaused ? 0 : dt);
       placeDrones();
       const shake = shakeLayerRef.current;
@@ -2160,7 +2162,7 @@ export default function SpeedQuizMath() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [phase, loop, draw, onEvent, placeDrones]);
+  }, [phase, draw, onEvent, placeDrones]);
 
   // A játéktér mérete (álló / fekvő); a vászon és a drónok ebből számolnak.
   useEffect(() => {
@@ -2220,7 +2222,7 @@ export default function SpeedQuizMath() {
         sfxShoot();
         fx.lastSfx = now;
       }
-      core.drainEvents(onEvent);
+      driverRef.current!.drain(onEvent);
     },
     [beam, burst, fx, onEvent],
   );
@@ -2246,11 +2248,15 @@ export default function SpeedQuizMath() {
     qRef.current.pick(i, clockRef.current);
   }, []);
   /**
-   * Számdrón-választás (KSZ-13, KSZ-14): `pointerdown`-ra azonnali „célzás” (a gomb `:active` állapota), a válasz a
-   * felengedéskor véglegesedik, ha ugyanaz a mutató ugyanazon a drónon engedett fel. Nem a `click`-re épül: több ujjnál
-   * (pl. a telefont tartó hüvelykujj a képernyőn) a böngésző a nem elsődleges mutatóra nem szintetizál `click`-et.
+   * Számdrón-választás (KSZ-13, KSZ-14) — a MOZGÓ érintési cél helyes kezelése:
+   * - `pointerdown`-ra azonnali „célzás” (a gomb `:active` állapota), a válasz FELENGEDÉSKOR véglegesedik (KSZ-13).
+   * - Érintésnél a böngésző implicit pointer capture-t tesz a lenyomott gombra, ezért a `pointerup` akkor is erre a drónra
+   *   érkezik, ha az ujjat lehúzták róla. Ezért felengedéskor a koordinátát nézzük: érvényes, ha az ujj a drón AKTUÁLIS
+   *   dobozán belül (± `DRONE_UP_SLOP_PX`) engedett fel, VAGY az ujj alig mozdult (≤ `DRONE_STILL_PX`) — a belépő repülés
+   *   közben a drón mozdulhatott el az ujj alól. Elhúzott ujj = visszavonás; `pointercancel` = visszavonás.
+   * - Nem a `click`-re épül: több ujjnál a böngésző a nem elsődleges mutatóra nem szintetizál `click`-et (mutációval igazolva).
    */
-  const dronePressRef = useRef(new Map<number, number>());
+  const dronePressRef = useRef(new Map<number, { i: number; x: number; y: number }>());
   const onDronePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLButtonElement>, i: number) => {
       e.stopPropagation();
@@ -2264,7 +2270,7 @@ export default function SpeedQuizMath() {
           return;
         }
       }
-      dronePressRef.current.set(e.pointerId, i);
+      dronePressRef.current.set(e.pointerId, { i, x: e.clientX, y: e.clientY });
     },
     [shootAt],
   );
@@ -2273,7 +2279,13 @@ export default function SpeedQuizMath() {
       e.stopPropagation();
       const pressed = dronePressRef.current.get(e.pointerId);
       dronePressRef.current.delete(e.pointerId);
-      if (pressed === i) pickDrone(i);
+      if (!pressed || pressed.i !== i) return;
+      const r = e.currentTarget.getBoundingClientRect();
+      const inside =
+        e.clientX >= r.left - DRONE_UP_SLOP_PX && e.clientX <= r.right + DRONE_UP_SLOP_PX &&
+        e.clientY >= r.top - DRONE_UP_SLOP_PX && e.clientY <= r.bottom + DRONE_UP_SLOP_PX;
+      const still = Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) <= DRONE_STILL_PX;
+      if (inside || still) pickDrone(i);
     },
     [pickDrone],
   );
@@ -2420,7 +2432,7 @@ export default function SpeedQuizMath() {
         const core = coreRef.current.state();
         const p = ctl.view().presentation;
         return {
-          simTime: loop.simTimeMs(),
+          simTime: driverRef.current!.loop.simTimeMs(),
           questionOpen: ctl.active() ? 1 : 0,
           questionsAnswered: st?.answered ?? 0,
           questionsCorrect: st?.correct ?? 0,
@@ -2447,7 +2459,7 @@ export default function SpeedQuizMath() {
         if (patch.phase === "won" || patch.phase === "over") endRun(patch.phase === "won", typeof patch.correctCount === "number" ? patch.correctCount : undefined);
       },
     });
-  }, [endRun, loop, startGame]);
+  }, [endRun, startGame]);
 
   /* ---------------- render ---------------- */
   const isResult = phase === "over" || phase === "won";

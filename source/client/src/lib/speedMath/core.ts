@@ -28,15 +28,30 @@ import { COMBO_STEPS, comboBreak, comboCorrect, createCombo, type ComboState } f
 import { createWaveDirector, type WaveDirector, type WaveSpec } from "@/game-engine/play/waves";
 import type { QuestionResult } from "@/game-engine/play/types";
 import type { DirectorConfig } from "@/game-engine/play/questionDirector";
-import { RELAX_ENTER, type IntensityDirector } from "@/game-engine/play/director";
+import { RELAX_ENTER, createIntensityDirector, type IntensityDirector } from "@/game-engine/play/director";
+import { createFixedLoop, type FixedLoop } from "@/game-engine/play/loop";
+import { createFeel, type Feel } from "@/game-engine/play/feel";
 
 export const SPEED_MATH_GAME_ID = "speed-quiz-math";
+
+/**
+ * A feladat azonosítója az ismétlési sorban: az évfolyam is benne van (review #451), így egy 12. évfolyamon elrontott
+ * feladat nem tér vissza egy 3. osztályos menetben. A kulcs: `bank:speed-quiz-math:<évfolyam>:<prompt>`.
+ */
+export function speedMathQuizId(grade: number, prompt: string): string {
+  return `g${grade}:${prompt}`;
+}
+
+/** Csak a saját játék tétele állítható vissza ismétlésként (a sor a hét játékban közös; az évfolyamot a közös `reviewFitsGrade` szűri). */
+export function isOwnReviewKey(key: string): boolean {
+  return key.startsWith(`bank:${SPEED_MATH_GAME_ID}:`);
+}
 
 /**
  * A kérdés alatti lassítás (terv 4.1/3: ≥ 0,35×). A számdrónok a kérdés-órán érkeznek, a fosztogatók a lassított
  * világban: a gyerek gondolkodhat, de a világ nem áll meg.
  */
-export const TOWER_SLOW_MO = 0.6;
+export const TOWER_SLOW_MO = 0.5;
 
 /**
  * A kérdés-ütemező beállítása (végrehajtás J4a 3.): 10 kérdés/perc cél, 1,5–6 mp rés (terv 6.2 Matek: ≤ 6 mp kérdés
@@ -69,6 +84,9 @@ export function towerCalm(pace: Pick<IntensityDirector, "calm" | "intensity">): 
   return pace.calm() || pace.intensity() < RELAX_ENTER;
 }
 
+/** Ennél közelebb járó fosztogató „közeli veszély” a mini-Directornak. */
+export const NEAR_THREAT = 0.7;
+
 export const SHIELD_START = 4;
 export const SHIELD_MAX = 5;
 /** Az első 30 mp tanító szakasz: a pajzs nem fogy (K.4/25). */
@@ -89,9 +107,9 @@ export const EVENT_CAP = 64;
 export const SHOCK_RADIUS = 0.75;
 /** Szórólövés sugara erő-szintenként (2. szinttől). */
 export const SPLASH_PER_LEVEL = 0.045;
-/** Automata ágyú (3. erő-szinttől): tüzelési köz ms-ban az erő függvényében. */
+/** Automata ágyú (2. erő-szinttől, azaz 3 egymás utáni jó választól): tüzelési köz ms-ban az erő függvényében. */
 export function turretIntervalMs(power: number): number {
-  return power >= 3 ? 3400 - 500 * (power - 3) : Number.POSITIVE_INFINITY;
+  return power >= 2 ? 3000 - 450 * (power - 2) : Number.POSITIVE_INFINITY;
 }
 
 export type RaiderKind = "scout" | "weaver" | "zig" | "tank";
@@ -154,6 +172,7 @@ export type TowerEventType =
   | "blocked" // becsapódott a tanító szakaszban (nincs sebzés)
   | "shock" // jó válasz: energiahullám a toronyból (n = hány fosztogató semmisült meg)
   | "zap" // rossz válasz / lejárat: a torony pajzsa villan (−1 vagy védve)
+  | "wrongAnswer" // rossz válasz / lejárat (a mini-Director jelzése; a zap mellett)
   | "turret" // automata ágyú lövése (x, y)
   | "shieldUp" // +1 pajzs (kombó-lépcső / hullám vége)
   | "power" // új erő-szint (n)
@@ -489,6 +508,7 @@ export function createTowerCore(opts: { seed: number | string }): TowerCore {
       st.power = 1;
       if (st.worldMs >= TUTORIAL_MS && st.shield > 1) setShield(st.shield - 1);
       emit("zap", TOWER.x, TOWER.y, st.shield);
+      emit("wrongAnswer", TOWER.x, TOWER.y, st.shield);
     },
     drainEvents(visit) {
       for (let i = 0; i < eventCount; i++) visit(events[i]!);
@@ -532,3 +552,95 @@ export function droneLayout(seed: number | string, presentationId: number, count
 
 /** Az energiahullám és a becsapódás „bevillanó” megjelenése 0..1 a belépő animációhoz (a nézet használja). */
 export const DRONE_ENTER_MS = 520;
+
+/* ------------------------------------------------------------------------------------------------------------------ */
+/* A menet meghajtója: a lap ÉS a node-szimuláció ugyanezt hívja (review #451)                                        */
+/* ------------------------------------------------------------------------------------------------------------------ */
+
+/** A becsapódás és az energiahullám hitstopja (valós ms; a hurok `holdFor`-ja a sim lépéseit tolja el, nem a tartalmukat). */
+export const HITSTOP_BREACH_MS = 60;
+export const HITSTOP_SHOCK_MS = 80;
+
+/** A kérdés-sáv állapotgépének az a része, amit a meghajtó használ (`createQuestionUi` / `usePlayQuestion` adja). */
+export type TowerQuestionUi = {
+  frame(clockMs: number, ctx: { calm: boolean }): void;
+  timeScale(): number;
+  finished(): boolean;
+  finish(): unknown;
+};
+
+export type TowerDriver = {
+  core: TowerCore;
+  loop: FixedLoop;
+  feel: Feel;
+  pace: IntensityDirector;
+  /**
+   * Egy képkocka: `realDtMs` a valós eltelt idő. Sorrend (mindkét úton azonos): kérdés-óra (szünetben áll) → hitstop-óra →
+   * menetvég esetén a kérdés lezárása → a kérdés-sáv képkockája → időskála (szünet 0, nyitott kérdés `slowMo`) → fix
+   * lépésű hurok → az események ürítése (hitstop a becsapódásra / energiahullámra, majd a nézet `onEvent`-je).
+   * Visszaadja az interpolációs alphát.
+   */
+  frame(realDtMs: number, paused: boolean, onEvent?: (e: TowerEvent) => void): number;
+  /** Az események ürítése képkockán kívül (koppintás után azonnal) — ugyanazzal a hitstop-szabállyal. */
+  drain(onEvent?: (e: TowerEvent) => void): void;
+  /** A lassítatlan kérdés-óra (ms; szünetben áll) — a director / kérdés-sáv `simNowMs`-e. */
+  clockMs(): number;
+};
+
+/**
+ * A menet egyetlen meghajtója: a játéklogika a magban fut, a fix lépésű hurok (`createFixedLoop`, 1/60 s, időskála,
+ * `holdFor`) és a hitstop-szabály is itt van, így a lap (rAF) és a sim (`sim.ts`) bitre ugyanazt a lépéssort futtatja
+ * ugyanazon képkocka-időkkel; eltérő képkocka-időknél a mag állapota a LÉPÉSSZÁMTÓL és a lépésekhez kötött bemenettől
+ * függ (J0a determinizmus-szabály) — `T/speed-math-core.test.ts` „meghajtó”.
+ */
+export function createTowerDriver(opts: {
+  seed: number | string;
+  questions: TowerQuestionUi | null;
+  /** A director áramlat-intenzitása (a fosztogató-tempóhoz); kérdés nélkül 0,4. */
+  intensity: () => number;
+  reducedMotion?: boolean;
+}): TowerDriver {
+  const core = createTowerCore({ seed: opts.seed });
+  const pace = createIntensityDirector();
+  const loop = createFixedLoop((dt) => {
+    const before = core.state().breaches;
+    core.step(dt, opts.intensity());
+    if (core.state().breaches > before) pace.signal("damage");
+    const lead = core.mostAdvanced();
+    if (lead >= 0 && core.progressOf(lead) > NEAR_THREAT) pace.signal("nearThreat", dt / 1000);
+    pace.update(dt / 1000);
+  });
+  // A rázás-zaj kozmetikai (KSZ-2: külön fxRng); a hitstop determinisztikus (a hurok tartása).
+  const feel = createFeel({ reducedMotion: opts.reducedMotion ?? false, loop, fxRng: createRng(seedFrom(SPEED_MATH_GAME_ID, opts.seed, "fx")).next });
+  let clock = 0;
+  let real = 0;
+  const drain = (onEvent?: (e: TowerEvent) => void) => {
+    core.drainEvents((e) => {
+      if (e.type === "breach") feel.hitstop(HITSTOP_BREACH_MS);
+      else if (e.type === "shock") feel.hitstop(HITSTOP_SHOCK_MS);
+      if (e.type === "wrongAnswer") pace.signal("wrong");
+      onEvent?.(e);
+    });
+  };
+  return {
+    core,
+    loop,
+    feel,
+    pace,
+    frame(realDtMs, paused, onEvent) {
+      const dt = Number.isFinite(realDtMs) && realDtMs > 0 ? realDtMs : 0;
+      real += dt;
+      if (!paused) clock += dt;
+      feel.update(paused ? 0 : dt);
+      const q = opts.questions;
+      if (q && !core.running() && !q.finished()) q.finish();
+      if (q && !paused) q.frame(clock, { calm: towerCalm(pace) });
+      loop.setTimeScale(paused ? 0 : q ? q.timeScale() : 1);
+      const alpha = loop.frame(real);
+      drain(onEvent);
+      return alpha;
+    },
+    drain,
+    clockMs: () => clock,
+  };
+}

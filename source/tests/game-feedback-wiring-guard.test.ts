@@ -104,8 +104,12 @@ function guardGame(file: string) {
     assert.match(why.slice(0, 900), /setFeedback\(\s*buildFeedback\(/, "a „Miért?” nem a valódi magyarázatot építi");
     assert.match(code, /const whyOpen = feedback !== null/, "a nyitott kártya nem számít szünetnek");
     assert.match(code, /pausedRef\.current = paused \|\| whyOpen/, "a játékhurok nem áll meg a kártya alatt");
-    assert.match(code, /if \(!isPaused\) clockRef\.current \+= dt/, "a kérdés-óra a kártya alatt is járna");
-    assert.match(code, /loop\.setTimeScale\(isPaused \? 0 : /, "a szimuláció a kártya alatt is futna");
+    assert.match(code, /const isPaused = pausedRef\.current;/, "a képkocka nem a szünet-állapotot olvassa");
+    assert.match(code, /driver\.frame\(dt, isPaused, onEvent\)/, "a meghajtó nem kapja meg a szünetet");
+    // A meghajtó (a lap és a sim közös útja, `lib/speedMath/core.ts`): szünetben áll a kérdés-óra és a szimuláció.
+    const core = stripComments(readFileSync(join(root, "client/src/lib/speedMath/core.ts"), "utf8"));
+    assert.match(core, /if \(!paused\) clock \+= dt;/, "a kérdés-óra a kártya alatt is járna");
+    assert.match(core, /loop\.setTimeScale\(paused \? 0 : /, "a szimuláció a kártya alatt is futna");
     assert.match(code, /if\s*\(\s*feedback\s*\)\s*return;/, "a HUD-óra a kártya alatt is frissülne");
   });
 

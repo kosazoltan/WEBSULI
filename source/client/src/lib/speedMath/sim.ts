@@ -4,8 +4,9 @@
  * (`createQuestionDirector`) és ugyanazt a kérdés-sáv állapotgépet (`createQuestionUi`: megoldás-kijelzés ≥ 1,8 mp, csak
  * nyitott kérdésnél lassít) hajtja, mint a lap — a lap rajzol és koppintást fogad, a sim a botot kérdezi.
  *
- * Időkezelés (mint a lapon): a `step(dtMs)` a lassítatlan kérdés-óra lépése; a világ `dtMs × timeScale`-lel lép (nyitott
- * kérdésnél `TOWER_SLOW_MO`, egyébként 1 — a lapon a `loop.setTimeScale` ugyanezt teszi).
+ * Időkezelés: a `step(dtMs)` egy „képkocka” `dtMs` valós idővel; a lappal AZONOS `createTowerDriver` (`core.ts`) lépteti a
+ * magot a fix lépésű hurkon át (1/60 s, nyitott kérdésnél `TOWER_SLOW_MO` időskála, hitstop) — review #451: korábban a sim
+ * `dtMs × timeScale` méretű lépésekkel futott, és a hullám-RNG lépésenkénti fogyasztása miatt más ellenfélsort mért.
  *
  * A kérdésforrás itt egy seedelt, évfolyamtól független számolási bank (≥ 300 különböző feladat): a sim az ütemezést, az
  * ismétlést és a játékmenetet méri, a feladatok minőségét a lap saját őrei (`T/game-bank-no-repeat-content.test.ts`,
@@ -16,7 +17,6 @@
  * figyelme megoszlik a feladat és a pálya között).
  */
 import { createRng, seedFrom } from "@shared/game-rng";
-import { createIntensityDirector } from "@/game-engine/play/director";
 import {
   bankPlayQuestion,
   createQuestionDirector,
@@ -27,12 +27,10 @@ import { createReviewQueue } from "@/game-engine/play/reviewQueue";
 import { createQuestionUi } from "@/game-engine/play/useQuestionDirector";
 import type { RunStatsSnapshot } from "@/game-engine/play/runStats";
 
-import { RAIDERS, SPEED_MATH_GAME_ID, createTowerCore, towerCalm, towerDirectorConfig, type TowerCore } from "./core";
+import { RAIDERS, SPEED_MATH_GAME_ID, createTowerDriver, towerDirectorConfig, type TowerCore, type TowerDriver } from "./core";
 
 /** A bot koppintási üteme (valós ms). */
 export const TAP_MS = 800;
-/** Ennél közelebb járó fosztogató „közeli veszély” a mini-Directornak (a lap ugyanezt jelzi). */
-export const NEAR_THREAT = 0.7;
 
 type SimQuestion = { id: number; correctOption: number; windowMs: number; optionCount: number };
 
@@ -77,7 +75,6 @@ export type SpeedMathSim = {
 };
 
 export function createSimGame(opts: { seed: number; grade: number; questions: boolean }): SpeedMathSim {
-  const core = createTowerCore({ seed: opts.seed });
   const director = createQuestionDirector({
     config: towerDirectorConfig(opts.grade),
     provider: simProvider(opts.seed),
@@ -86,10 +83,10 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
     startBand: 0.4,
     now: () => 0,
   });
-  const pace = createIntensityDirector();
-  let clock = 0;
   let tapAcc = 0;
   let answeredOpen = false;
+  // A lappal AZONOS meghajtó (fix lépésű hurok, időskála, hitstop): a sim ugyanazt a lépéssort futtatja (review #451).
+  let driver: TowerDriver | null = null;
   const ui = createQuestionUi({
     director: () => (opts.questions ? director : null),
     onView: () => {},
@@ -98,14 +95,13 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
     },
     onOutcome: (o, p) => {
       const speed = o.result === "correct" ? Math.max(0, 1 - o.responseMs / p.windowMs) : 0;
-      core.applyOutcome(o.result, speed);
-      if (o.result === "wrong" || o.result === "timeout") pace.signal("wrong");
+      driver!.core.applyOutcome(o.result, speed);
     },
   });
-
-  function over(): boolean {
-    return !core.running();
-  }
+  driver = createTowerDriver({ seed: opts.seed, questions: opts.questions ? ui : null, intensity: () => (opts.questions ? director.intensity() : 0.4) });
+  const d = driver;
+  const core = d.core;
+  const over = () => !core.running();
 
   return {
     core,
@@ -114,17 +110,7 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
         if (!ui.finished()) ui.finish();
         return;
       }
-      clock += dtMs;
-      ui.frame(clock, { calm: towerCalm(pace) });
-      const worldDt = dtMs * ui.timeScale();
-      const intensity = director.intensity();
-      const before = core.state().breaches;
-      core.step(worldDt, intensity);
-      core.drainEvents(() => {});
-      if (core.state().breaches > before) pace.signal("damage");
-      const lead = core.mostAdvanced();
-      if (lead >= 0 && core.progressOf(lead) > NEAR_THREAT) pace.signal("nearThreat", worldDt / 1000);
-      pace.update(worldDt / 1000);
+      d.frame(dtMs, false);
       // A bot lövése (valós időben).
       tapAcc += dtMs;
       const busy = ui.active() !== null && !answeredOpen;
@@ -134,6 +120,7 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
         if (id >= 0) {
           const r = core.state().raiders[id]!;
           if (input.skillRoll < RAIDERS[r.kind].ease) core.shoot(id);
+          d.drain();
         }
       }
       if (over() && !ui.finished()) ui.finish();
@@ -147,12 +134,12 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
       const p = ui.active();
       if (!p || p.id !== id) return;
       answeredOpen = true;
-      ui.pick(option, clock);
+      ui.pick(option, d.clockMs());
     },
     done: () => over(),
     won: () => core.state().phase === "won",
-    stats: () => director.stats(clock),
-    simTimeMs: () => clock,
+    stats: () => director.stats(d.clockMs()),
+    simTimeMs: () => d.clockMs(),
     band: () => director.band(),
     intensity: () => director.intensity(),
   };

@@ -86,12 +86,17 @@ test("kérdés nélküli mód (K.6): a menet végigjátszható, és van vesztés
   for (const r of avg) assert.equal(r.stats.asked, 0, "kérdés nélküli módban nincs kérdés");
 });
 
-test("a kérdés segít, nem büntet: a jó válasz energiahulláma és ereje mellett kevesebb vereség, mint kérdés nélkül (SIM_WEAK)", () => {
-  const withQ = runSimSeeds(factory, { ...SIM_WEAK, accuracy: 0.75 }, { gameId: GAME, seconds: 600, grade: 7 });
-  const noQ = runSimSeeds(factory, { ...SIM_WEAK, accuracy: 0.75 }, { gameId: GAME, seconds: 600, questions: false });
+test("a kérdés segít, nem büntet: ügyetlenebb kéz (skill 0,6), átlagos számolás (75%, 2,8 s) — kérdéssel kevesebb vereség", () => {
+  // Mért (review #451 után, a lap léptetésével): a lassú számoló (SIM_WEAK, 4 s medián reakció a 4,5 s-os ablakhoz) sokat
+  // késik, ott a kérdés teher — ezt a flow-sáv könnyíti, nem a játék; a mérés a jelentésben szerepel.
+  const player = { ...SIM_AVERAGE, skill: 0.6 };
+  const withQ = runSimSeeds(factory, player, { gameId: GAME, seconds: 600, grade: 7 });
+  const noQ = runSimSeeds(factory, player, { gameId: GAME, seconds: 600, questions: false });
   const lostQ = withQ.filter((r) => !r.won).length;
   const lostNoQ = noQ.filter((r) => !r.won).length;
-  console.log(`[speed-math-sim] gyenge ügyesség, 75% pontosság: vereség kérdéssel ${lostQ}/20, kérdés nélkül ${lostNoQ}/20`);
+  const slowQ = runSimSeeds(factory, { ...SIM_WEAK, accuracy: 0.75 }, { gameId: GAME, seconds: 600, grade: 7 }).filter((r) => !r.won).length;
+  const slowNoQ = runSimSeeds(factory, { ...SIM_WEAK, accuracy: 0.75 }, { gameId: GAME, seconds: 600, questions: false }).filter((r) => !r.won).length;
+  console.log(`[speed-math-sim] skill 0,6 / 75% / 2,8 s: vereség kérdéssel ${lostQ}/20, kérdés nélkül ${lostNoQ}/20; lassú számoló (4 s): ${slowQ}/20 vs ${slowNoQ}/20`);
   assert.ok(lostQ <= lostNoQ, `kérdéssel ${lostQ}, kérdés nélkül ${lostNoQ}`);
 });
 

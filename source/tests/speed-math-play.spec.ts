@@ -159,4 +159,24 @@ test.describe("két ujj egyszerre (K.4/15, terv 8.4)", () => {
     // A két mutató közül az egyik nem elsődleges: ha a választás `click`-re épülne, egyik sem számítana (mutáció-ellenőrzés).
     await expect(page.locator('[data-testid="sq-answers"] [data-state="correct"]')).toHaveCount(1);
   });
+
+  test("mozgó érintési cél: lenyomás a drónon → elhúzás → felengedés máshol = NINCS válasz; utána sima koppintás = válasz", async ({ page }) => {
+    await page.goto("/games/speed-quiz-math?seed=6");
+    await page.getByTestId("sq-start").tap();
+    await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
+    await page.waitForTimeout(650);
+    const box = (await page.locator('[data-testid="sq-answers"] [data-correct="true"]').boundingBox())!;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: cy, id: 1 }] });
+    for (let k = 1; k <= 6; k++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx, y: cy + 25 * k, id: 1 }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    const probe = () => page.evaluate(() => (window as unknown as { __websuliGame: { probe: () => { questionsAnswered: number; reveal: number } } }).__websuliGame.probe());
+    await page.waitForTimeout(150);
+    expect((await probe()).questionsAnswered, "az elhúzott (visszavont) érintés nem válasz").toBe(0);
+    await expect(page.locator('[data-testid="sq-answers"] [data-state="correct"]')).toHaveCount(0);
+    await page.touchscreen.tap(cx, cy);
+    await expect.poll(async () => (await probe()).questionsAnswered).toBe(1);
+  });
 });
