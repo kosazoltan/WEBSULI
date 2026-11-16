@@ -110,13 +110,15 @@ export {
   VIEW_STEP_MS,
   WHY_LINGER_MS,
   createQuestionUi,
+  speechAfterOutcome,
+  speechOnShow,
   type QuestionRequestReason,
   type QuestionReveal,
   type QuestionUi,
   type QuestionUiView,
   type QuestionWhyItem,
 } from "./questionUi";
-import { EMPTY_VIEW, createQuestionUi, type QuestionReveal, type QuestionUi, type QuestionUiView } from "./questionUi";
+import { EMPTY_VIEW, createQuestionUi, speechAfterOutcome, speechOnShow, type QuestionReveal, type QuestionUi, type QuestionUiView } from "./questionUi";
 
 /* ------------------------------------------------------------------------------------------------------------------ */
 /* usePlayQuestion — a játéklap egyetlen horga                                                                        */
@@ -194,7 +196,8 @@ export function usePlayQuestion(opts: UsePlayQuestionOptions): PlayQuestionApi {
           const o = optsRef.current;
           if (o.sound !== false) sfxWhoosh();
           const q = p.question;
-          if (o.speech && q.speakText && q.lang) o.speech.say(q.speakText, q.lang);
+          const show = speechOnShow(p); // a választ el nem áruló szöveg (vagy semmi)
+          if (o.speech && show && q.lang) o.speech.say(show, q.lang);
           o.onShow?.(p);
         },
         onOutcome: (out, p) => {
@@ -203,6 +206,9 @@ export function usePlayQuestion(opts: UsePlayQuestionOptions): PlayQuestionApi {
             const good = out.result === "correct";
             if (o.sound !== false) (good ? sfxSuccess : sfxStumble)();
             if (o.haptics !== false) vibrateRef.current(good ? "success" : "error");
+            // A helyes szó CSAK a kimenetel után hangzik el (megerősítés / a megoldás kijelzése).
+            const after = speechAfterOutcome(p, out);
+            if (o.speech && after && p.question.lang) o.speech.say(after, p.question.lang);
           }
           o.onOutcome?.(out, p);
         },
@@ -229,13 +235,14 @@ export function usePlayQuestion(opts: UsePlayQuestionOptions): PlayQuestionApi {
 
   const p = state.presentation;
   const speech = opts.speech;
-  const canSpeak = !!(p && p.question.speakText && p.question.lang && speech && speech.available());
+  const canSpeak = !!(p && speechOnShow(p) && p.question.lang && speech && speech.available());
   const onSpeak = useCallback(() => {
     const cur = store.get().presentation;
     const s = optsRef.current.speech;
-    if (!cur || !s || !cur.question.speakText || !cur.question.lang) return;
+    const text = cur ? speechOnShow(cur) : null;
+    if (!cur || !s || !text || !cur.question.lang) return;
     s.arm(); // a 🔊 koppintás maga is felhasználói gesztus
-    s.say(cur.question.speakText, cur.question.lang);
+    s.say(text, cur.question.lang);
   }, [store]);
 
   const ownReset = own.reset;

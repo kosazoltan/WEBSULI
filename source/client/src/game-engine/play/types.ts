@@ -27,8 +27,13 @@ export type PlayQuestion = {
   source: QuestionSourceKind;
   subject?: string;
   lang?: VocabLang;
-  /** A felolvasandó célnyelvi szöveg (nyelvi tételnél). */
+  /**
+   * A kérdés MEGJELENÉSEKOR felolvasható célnyelvi szöveg — SOHA nem árulhatja el a helyes választ (közös utójavítás,
+   * #454 / #455 review): cél→magyar: a célnyelvi szó; hiányos mondat: a mondat a hiány helyén szünettel; magyar→cél: nincs.
+   */
   speakText?: string;
+  /** A KIMENETEL UTÁN felolvasható helyes célnyelvi szó (megerősítés jó válasznál, a megoldás hibánál). */
+  speakAfter?: string;
   /** Kupon-bónuszhoz: a szerver által kiadott tétel azonosítója (`GE/claimCouponBonus.ts`). */
   couponItemId?: string;
   /**

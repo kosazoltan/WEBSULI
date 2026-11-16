@@ -294,3 +294,33 @@ export function createQuestionUi(opts: {
   return api;
 }
 
+
+/* ------------------------------------------------------------------------------------------------------------------ */
+/* Felolvasás-terv (közös utójavítás, #454 / #455 review): MIT mondhat a gép, és MIKOR                                 */
+/* ------------------------------------------------------------------------------------------------------------------ */
+
+function norm(t: string): string {
+  return t.trim().toLocaleLowerCase("hu").replace(/\s+/g, " ");
+}
+
+/**
+ * A kérdés MEGJELENÉSEKOR felolvasható szöveg, vagy null. Szabály (mind a hét játékra): nem egyezhet a helyes opcióval és
+ * nem tartalmazhatja azt (különben a gép kimondaná a választ), és csak célnyelvi tételnél (van `lang`). Biztonsági háló a
+ * forrás hibájára is: ha a `speakText` mégis elárulná a választ, nem hangzik el.
+ */
+export function speechOnShow(p: QuestionPresentation): string | null {
+  const q = p.question;
+  if (!q.lang || !q.speakText) return null;
+  const said = norm(q.speakText);
+  const correct = norm(q.quiz.options[q.quiz.correctIndex] ?? "");
+  if (said.length === 0) return null;
+  if (correct.length > 0 && (said === correct || said.includes(correct))) return null;
+  return q.speakText;
+}
+
+/** A KIMENETEL UTÁN felolvasható helyes szó (helyes, hibás és lejárt válasznál), vagy null (megszakítva: semmi). */
+export function speechAfterOutcome(p: QuestionPresentation, o: QuestionOutcome): string | null {
+  if (o.result === "aborted") return null;
+  const q = p.question;
+  return q.lang && q.speakAfter ? q.speakAfter : null;
+}
