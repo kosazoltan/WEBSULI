@@ -551,6 +551,12 @@ valós szerződést kövessék:**
     `.game-hud*`, `.game-overlay`, `.game-dialog`, `.game-pause*`, `.game-result*`, `.game-start*`, `.game-rotate*`.
     Fekvő, alacsony nézetben (`max-height: 500px` és `min-width: 560px`) a szünet menü két oszlopos, az
     eredménykártya és a kezdőképernyő kéthasábos.
+12. **Rétegrend (S2 utójavítás, #433 Codex-komment 4581035479):** a kupon-lejárati párbeszéd (`CouponExpiredOverlay`)
+    minden játékréteg FÖLÖTT van: HUD (z 40), kvíz-visszajelzés (z 90), szünet menü és eredményképernyő (`.game-overlay`,
+    z 80). Lejáratkor az alatta lévő játék-fedőréteg gombjai (Újra, Folytatás, következő szint) nem érhetők el: a
+    párbeszéd `document.body`-ba portálozott, teljes képernyős modális réteg, a z-indexe a közös `--game-z-coupon-expired`
+    változóból jön (`.game-coupon-expired`, index.css), a fókusz a „Vissza a leckéhez” gombra kerül. Új fedőréteg
+    z-indexét a `.game-overlay` (80) és a lejárati réteg (95) közé kell tenni, nem fölé.
 
 ```ts
 // source/tests/support/game-mobile-quality.ts (S2)
