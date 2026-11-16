@@ -1067,7 +1067,7 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
 
 ## J2 — Szólétra: „Szikla-verseny” (J2a, J2b)
 
-**Állapot (J2a):** nem kezdődött · **Állapot (J2b):** nem kezdődött
+**Állapot (J2a):** folyamatban — ág feat/jatek-j2a-szoletra, munkafa .claude/worktrees/jatek-j2a, kanban #45 · **Állapot (J2b):** nem kezdődött
 **Függ:** J0c merge. Párhuzamosan futhat a J4-gyel. **Elfogadás:** J-WL, J1–J10, J14, J16, M1–M12. Terv: 5.2.
 
 ### Fájlok
