@@ -1415,7 +1415,7 @@ van `detectLookTier`; a vezérlősáv feltétele tartalmazza a `useTouchCapable`
 
 ## S10 — Galaktikus Aszteroida mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #27. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s10-aszteroida, munkafa .claude/worktrees/jatekok-s10, kanban #27
 
 - **Cél:** 4.5 keret; képernyőhöz méretezett joystick és tűzgomb, automatikus célzássegéd érintésnél, látványosabb
   robbanások; angol kérdések a szóbankból (A8).
