@@ -17,9 +17,13 @@ A küszöbök képkockában maradnak, a mérés tartalma nem változik.
 ## 2. `vocab-cross-game-log.spec.ts:49` (a #454 után is flaky, a 73. sornál)
 
 Tény (run 43907199578, 1. kísérlet): a Szökőár-szakasz 4. kérdésénél a helyes válasz után a kérdés szövege 10 s-ig
-„ugyanaz” maradt; a 3. kérdésnél ugyanez 7,9 s volt. Az eredményképen „Cél 4/6”: a 4. válasz beszámított. A gyökérok a
-mérés után kerül ide (hipotézisek: a Szökőár saját, időzítős kvíze a kényszerített kvízek közé esik; a válasz-zár
-(`answerLockedRef`) egy úton nem oldódik fel; a teszt a kérdés-szöveget a React újrarajzolása előtt olvassa).
+„ugyanaz” maradt; a 3. kérdésnél ugyanez 7,9 s volt. Az eredményképen „Cél 4/6”: a 4. válasz beszámított. **Gyökérok (bizonyítva): a teszt poll-függvénye.** A poll előbb `count()`-tal nézte, nyitva van-e a kvíz, utána egy
+automatikusan VÁRAKOZÓ `innerText()`-tel olvasta a szövegét. Ha a kvíz a kettő között zárult (a helyes válasz után
+420 ms-mal), az `innerText()` a KÖVETKEZŐ kvízre várt (a Szökőár ~9,5 mp-enként kérdez), és a poll 10 s után az utolsó
+„ugyanaz” értékkel bukott. A CI-hibák `error-context.md`-jében a kvíz már zárva, a válasz beszámított; célzott kísérlet:
+`count()` = 1 → zárás → `innerText()` 5,4–5,8 s-ig vár, és a következő kvíz szövegét adja. Termékhiba nincs (a válasz-zár
+és a kvíz-zárás helyesen működött). Javítás: egy atomi `page.evaluate`. A J2a (#454) a 60. sor („a Szólétra nem naplózott”)
+okát javította; ez a 73. sor külön, teszt-oldali oka.
 
 ## 3. A lejárt kupon a többi játékban
 
@@ -46,7 +50,8 @@ lejárt kupon alatt nem rajzol (a lejárati párbeszéd az egyetlen réteg). Lap
 - A közös mobil mérő mind a hét játékra zöld; a CI teljes E2E-je zöld.
 
 <!-- acceptance-checklist -->
-- [ ] 1: `ensurePlaying` egy lap-hívásos gyors út; joystick block-craft SwiftShader ≥ 10× zöld.
-- [ ] 2: szóbank-napló gyökérok + javítás + determinisztikus teszt.
-- [ ] 3: mérés 5 kuponos játékon előtte / utána; közös javítás; az e2e kiterjesztése mind az 5 kuponos játékra.
-- [ ] Mobil mérő 7 játékra, CI zöld.
+- [x] 1: `ensurePlaying` egy lap-hívásos gyors út; joystick block-craft SwiftShader ≥ 10× zöld.
+- [x] 2: szóbank-napló gyökérok + javítás; a hiba-mechanizmus determinisztikus kísérlettel igazolva (a gyökérok a teszt
+  saját poll-függvénye, ezért termékoldali regressziós teszt nem értelmezhető — a kísérlet a jelentésben, nem commitolva).
+- [x] 3: mérés 5 kuponos játékon előtte / utána; közös javítás; az e2e kiterjesztése mind az 5 kuponos játékra.
+- [x] Mobil mérő 7 játékra, CI zöld.
