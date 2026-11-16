@@ -70,16 +70,44 @@ export function confusableFold(text: string): string {
   return stripMarks(text).replace(/0/g, "o").replace(/[1l|!]/g, "i");
 }
 
-/** A többi leet-csere (a 0 / 1 / | / ! a `confusableFold`-ban). */
-const LEET: Record<string, string> = { "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "@": "a", "$": "s" };
+/**
+ * A többi leet-csere (a 0 / 1 / | / ! a `confusableFold`-ban). N1b: a 2 / 6 / 9 is (2 ~ z, 6 / 9 ~ g) — CSAK a szűrőben;
+ * a foglaltsági kulcs (`nicknameKey`) ezeket nem cseréli, így a tárolt nevek kulcsa változatlan.
+ */
+const LEET: Record<string, string> = { "2": "z", "3": "e", "4": "a", "5": "s", "6": "g", "7": "t", "8": "b", "9": "g", "@": "a", "$": "s" };
 
 /** A tartalomszűrő alakja: az összetéveszthetők egybevonva, leet visszafordítva, csak a–z. */
 export function foldNickname(text: string): string {
-  return confusableFold(text).replace(/[34578@$]/g, (c) => LEET[c] ?? c).replace(/[^a-z]/g, "");
+  return confusableFold(text).replace(/[2-9@$]/g, (c) => LEET[c] ?? c).replace(/[^a-z]/g, "");
 }
 
-/** Az egymást követő azonos betűk egyre („kuuurva” → „kurva”). */
-const collapse = (s: string) => s.replace(/(.)\1+/g, "$1");
+/**
+ * N1b: többkarakteres hasonmások (rn ~ m, vv ~ w, cl ~ d) — a szűrő TOVÁBBI olvasatai (a kulcsban nem). Az előfordulásonként
+ * választható csere minden kombinációja (egy valódi „cl” mellett egy hasonmás is lehet: „Claucle”); a név akkor tiltott, ha
+ * bármely olvasata az („adrnin”, „vvebsuli”, „Moclerator”). Legfeljebb 8 előfordulás kombinálódik (2^8 olvasat; egy
+ * 16 karakteres névben ennél több nem fér el) — efölött csak a „mind” és a „semmi” olvasat.
+ */
+const MULTI_CHAR: Record<string, string> = { rn: "m", vv: "w", cl: "d" };
+const MAX_MULTI_CHAR_SITES = 8;
+
+function multiCharReadings(text: string): string[] {
+  const plain = stripMarks(text);
+  const sites = [...plain.matchAll(/rn|vv|cl/g)].map((m) => m.index!);
+  if (sites.length === 0) return [];
+  const build = (mask: (i: number) => boolean) => {
+    let out = "";
+    let at = 0;
+    sites.forEach((pos, i) => {
+      out += plain.slice(at, pos) + (mask(i) ? MULTI_CHAR[plain.slice(pos, pos + 2)]! : plain.slice(pos, pos + 2));
+      at = pos + 2;
+    });
+    return out + plain.slice(at);
+  };
+  if (sites.length > MAX_MULTI_CHAR_SITES) return [build(() => true)];
+  const readings: string[] = [];
+  for (let m = 1; m < 1 << sites.length; m++) readings.push(build((i) => (m & (1 << i)) !== 0));
+  return readings;
+}
 
 /**
  * Trágár / sértő szótövek (ékezet nélkül, kisbetűvel). A „szar” / „fos” csak toldalékkal szerepel (a „Szarvas”,
@@ -95,6 +123,8 @@ export const BLOCKED_ROOTS: readonly string[] = [
   "fuck", "shit", "bitch", "cunt", "dick", "cock", "pussy", "whore", "slut", "bastard", "asshole", "nigger", "nigga",
   "faggot", "retard", "rape", "porn", "sex", "nazi", "hitler", "kkk", "penis", "vagina", "boob", "tits", "wank", "jerkoff",
   "killyou",
+  // N1b: helyesírási változatok
+  "kurwa", "curva", "phasz", "phuck", "biatch", "fuk",
 ];
 
 /** Kivétel-szavak, amelyekben egy tiltott tő ártatlanul szerepel (ellenpróbák: tests/nickname-filter.test.ts). */
@@ -105,25 +135,67 @@ const ROOT_EXCEPTIONS: Record<string, readonly string[]> = {
   rape: ["grape", "drape", "trapez"],
   cock: ["peacock", "cockatoo"],
   nazi: ["ignazi"],
+  fuk: ["fuksz"], // N1b: „Fukszia”
 };
 
 /** Egy tő a becenévvel AZONOS normalizálással (N1): a tő és a kivétel-szavai is `foldNickname`-en át hasonlítódnak. */
-type CompiledRoot = { exact: string; loose: string | null; exceptions: readonly string[] };
+/** Futam: egy betű és az egymás utáni ismétlődéseinek száma („kuuurva” → k1 u3 r1 v1 a1). */
+type Run = { ch: string; n: number };
 
-function compileRoots(roots: readonly string[], exceptionsFor: (root: string) => readonly string[]): CompiledRoot[] {
-  return roots.map((root) => ({
-    exact: foldNickname(root),
-    // Az EREDETILEG dupla betűs tő („segg”, „root”, „staff”) csak pontos egyezéssel (összevonva „seg” lenne — a „Segítő”
-    // kiesne); a többi az ismétlés-összevont alakban is („kuuurva”) — a normalizált tövet is összevonva („websuli” →
-    // „websuii” → „websui”), hogy a „WEBSULl” és a „Websuuli” is fennakadjon.
-    loose: /(.)\1/.test(root) ? null : collapse(foldNickname(root)),
-    exceptions: exceptionsFor(root).map(foldNickname),
-  }));
+function runsOf(text: string): Run[] {
+  const runs: Run[] = [];
+  for (const ch of text) {
+    const last = runs[runs.length - 1];
+    if (last && last.ch === ch) last.n++;
+    else runs.push({ ch, n: 1 });
+  }
+  return runs;
 }
 
-function containsRoot(folded: string, root: CompiledRoot): boolean {
-  const scrubbed = root.exceptions.reduce((acc, ex) => acc.split(ex).join(""), folded);
-  return scrubbed.includes(root.exact) || (root.loose !== null && collapse(scrubbed).includes(root.loose));
+type CompiledRoot = { runs: Run[]; exceptions: readonly string[] };
+
+/**
+ * N1b: futam-tűrő tő. A normalizált tő futamaihoz a MINIMÁLIS hossz: 1, de ahol az EREDETI tőben dupla betű áll, az
+ * eredeti futam hossza — „nigger” → n i g≥2 e r (a „NIGGGER” is fennakad), „segg” → s e g≥2 (a „Segítő” átmegy), „kuuurva”
+ * a „kurva”-ra illik. Az l / i összevonásból eredő futam („websuli” → „websuii”) nem dupla. A tövek csak a–z betűk, így a
+ * normalizált tő hossza az eredetiével azonos. Az illesztés futamlistán, regex nélkül → lineáris, visszalépés nincs.
+ */
+function compileRoot(root: string, exceptions: readonly string[]): CompiledRoot {
+  const folded = foldNickname(root);
+  const runs: Run[] = [];
+  let i = 0;
+  for (const run of runsOf(folded)) {
+    let originalRun = 1;
+    for (let k = i; k < i + run.n;) {
+      let m = k;
+      while (m < i + run.n && root[m] === root[k]) m++;
+      originalRun = Math.max(originalRun, m - k);
+      k = m;
+    }
+    runs.push({ ch: run.ch, n: originalRun >= 2 ? originalRun : 1 });
+    i += run.n;
+  }
+  return { runs, exceptions: exceptions.map(foldNickname) };
+}
+
+function compileRoots(roots: readonly string[], exceptionsFor: (root: string) => readonly string[]): CompiledRoot[] {
+  return roots.map((root) => compileRoot(root, exceptionsFor(root)));
+}
+
+/** A normalizált név futamai (egyszer számolva); a kivétel-szó kiszedése után újraszámolva. */
+type FoldedName = { text: string; runs: Run[] };
+const foldedName = (text: string): FoldedName => ({ text, runs: runsOf(text) });
+
+function containsRoot(name: FoldedName, root: CompiledRoot): boolean {
+  const scrubbed = root.exceptions.reduce((acc, ex) => acc.split(ex).join(""), name.text);
+  const runs = scrubbed === name.text ? name.runs : runsOf(scrubbed);
+  const need = root.runs;
+  for (let p = 0; p + need.length <= runs.length; p++) {
+    let k = 0;
+    while (k < need.length && runs[p + k]!.ch === need[k]!.ch && runs[p + k]!.n >= need[k]!.n) k++;
+    if (k === need.length) return true;
+  }
+  return false;
 }
 
 /** Hivatalosnak / szervezőnek látszó nevek (megszemélyesítés ellen). */
@@ -133,7 +205,7 @@ export const RESERVED_ROOTS: readonly string[] = [
   "operator", "fejleszto", "developer", "teacher", "principal", "anthropic", "claude",
 ];
 
-const RESERVED_WORDS = new Set(["mod", "mods", "gm", "dev"]);
+const RESERVED_WORDS = new Set(["mod", "mods", "modi", "gm", "dev"]);
 /** Ártatlan szavak, amelyekben egy foglalt tő szerepel („Badminton”). */
 const RESERVED_EXCEPTIONS: readonly string[] = ["badminton"];
 
@@ -193,9 +265,15 @@ export function checkPlayerNickname(raw: unknown): NicknameCheck {
   if (len > 0 && !Array.from(base).some((ch) => LETTER.test(ch))) problems.push("NO_LETTER");
   if (base.replace(/\D/g, "").length >= 6) problems.push("PHONE");
   // N1: a `folded` már az l / I / 1 / i összevont alak, a tövek ugyanígy normalizáltak — minden olvasat egyszerre vizsgált.
-  if (BLOCKED.some((root) => containsRoot(folded, root))) problems.push("BLOCKED");
-  const words = confusableFold(base).split(/[\s_-]+/).filter(Boolean);
-  if (RESERVED.some((root) => containsRoot(folded, root)) || words.some((w) => RESERVED_WORDS.has(w))) problems.push("RESERVED");
+  // N1b: + a többkarakteres hasonmások olvasata (rn → m, vv → w, cl → d).
+  const readings = [base, ...multiCharReadings(base)];
+  const folds = readings.map(foldNickname);
+  const names = folds.map(foldedName);
+  if (names.some((f) => BLOCKED.some((root) => containsRoot(f, root)))) problems.push("BLOCKED");
+  // A foglalt SZAVAK („mod”, „gm”, „dev”) a leet-normalizált szavakon ÉS az elválasztók nélküli teljes néven („M o d”, „G M”).
+  const words = readings.flatMap((r) => r.split(/[\s_-]+/)).map(foldNickname).filter(Boolean);
+  const reservedWord = [...words, ...folds].some((w) => RESERVED_WORDS.has(w));
+  if (names.some((f) => RESERVED.some((root) => containsRoot(f, root))) || reservedWord) problems.push("RESERVED");
 
   if (problems.length > 0) return { ok: false, problems };
   return { ok: true, nickname, key: nicknameKey(nickname) };

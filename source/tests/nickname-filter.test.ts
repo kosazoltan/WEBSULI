@@ -187,6 +187,69 @@ describe("JM7b-utójavítás N1 — kis L / nagy I / 1 felcserélés (review #44
   });
 });
 
+describe("JM7b-utójavítás N1b — a maradék kijátszások (review #461/#463 A1–A4)", () => {
+  it("a review szondájában még átmenő 28 kísérlet MIND elutasítva", () => {
+    const cases: [string, NicknameProblem][] = [
+      // A1: harmadik betű a dupla betűs tőben
+      ["NIGGGER", "BLOCKED"], ["NIGGGA", "BLOCKED"], ["Fagggot", "BLOCKED"], ["Pusssy", "BLOCKED"], ["Asssshole", "BLOCKED"], ["Rooot", "RESERVED"],
+      // A3: többkarakteres hasonmás (rn ~ m, vv ~ w, cl ~ d)
+      ["adrnin", "RESERVED"], ["vvebsuli", "RESERVED"], ["vvhore", "BLOCKED"], ["vvank", "BLOCKED"], ["aclmin", "RESERVED"], ["Moclerator", "RESERVED"],
+      // A2: 2 ~ z, 6 / 9 ~ g
+      ["BU2I", "BLOCKED"], ["6ECI", "BLOCKED"], ["9ECI", "BLOCKED"], ["NI66ER", "BLOCKED"], ["NI99ER", "BLOCKED"], ["F4S2", "BLOCKED"],
+      // A4: helyesírási változat, szétszedett / leet foglalt szó
+      ["Kurwa", "BLOCKED"], ["Curva", "BLOCKED"], ["Phasz", "BLOCKED"], ["Fuk", "BLOCKED"], ["Phuck", "BLOCKED"], ["Biatch", "BLOCKED"],
+      ["M o d", "RESERVED"], ["Modi", "RESERVED"], ["G M", "RESERVED"], ["D3V", "RESERVED"],
+    ];
+    for (const [n, p] of cases) rejectsWith(n, p);
+  });
+
+  it("tulajdonság: minden dupla betűs tő a dupla betű megismétlésével (3–4 db) is elutasítva", () => {
+    let checked = 0;
+    for (const [roots, problem] of [[BLOCKED_ROOTS, "BLOCKED"], [RESERVED_ROOTS, "RESERVED"]] as const) {
+      for (const root of roots.filter((r) => /(.)\1/.test(r))) {
+        for (const times of [3, 4]) {
+          const v = root.replace(/(.)\1/, (m) => m[0]!.repeat(times));
+          rejectsWith(v.length <= PLAYER_NICK_MAX ? v : v.slice(0, PLAYER_NICK_MAX), problem);
+          checked++;
+        }
+      }
+    }
+    assert.ok(checked >= 16, `ellenőrzött: ${checked}`);
+  });
+
+  it("tulajdonság: a z → 2 és a g → 6 / 9 leet, valamint az m → rn, w → vv, d → cl hasonmás minden tőben elutasítva", () => {
+    let checked = 0;
+    for (const [roots, problem] of [[BLOCKED_ROOTS, "BLOCKED"], [RESERVED_ROOTS, "RESERVED"]] as const) {
+      for (const root of roots) {
+        const variants = new Set([
+          root.replace(/z/g, "2"), root.replace(/g/g, "6"), root.replace(/g/g, "9"),
+          root.replace(/m/g, "rn"), root.replace(/w/g, "vv"), root.replace(/d/g, "cl"),
+        ]);
+        variants.delete(root);
+        for (const v of variants) {
+          if (v.length > PLAYER_NICK_MAX || v.replace(/\D/g, "").length >= 6 || !/[a-z]/.test(v)) continue;
+          rejectsWith(v, problem);
+          checked++;
+        }
+      }
+    }
+    assert.ok(checked >= 40, `ellenőrzött: ${checked}`);
+  });
+
+  it("ellenpróba: a többkarakteres olvasat és a számjegy-leet nem tilt ártatlan nevet", () => {
+    for (const n of ["Kornél", "Bernát", "Ernő", "Arnold", "Clara", "Claudia", "Miklós", "Marci", "Ervin", "Vivien", "Barnabás", "Bernadett",
+      "Orsolya", "Kata2012", "Lili2012", "Fanni96", "Sziszi2009", "Fukszia", "Segítő", "Szarvas", "Gergő", "Zsombor", "Clementina"]) ok(n);
+  });
+
+  it("a foglaltsági kulcs NEM változott (a tárolt nevek kulcsa stabil): rögzített minták", () => {
+    const expected: Record<string, string> = {
+      "Kornél": "kornei", "Kata2012": "kata2oi2", "NI66ER": "ni66er", "adrnin": "adrnin", "vvebsuli": "vvebsuii", "F4S2": "f4s2",
+      "Lili#0042": "iiiioo42", "Bátor Róka": "batorroka", "Ödön_99": "odon99", "Clara": "ciara",
+    };
+    for (const [name, key] of Object.entries(expected)) assert.equal(nicknameKey(name), key, name);
+  });
+});
+
 describe("JM7b — egyetlen becenév-szabály (a JM1 nicknameProblems erre delegál)", () => {
   it("a vendég-szűrő ugyanazt a szabályt és hossz-határt használja; a vendégnevek a közös listákból jönnek", async () => {
     const jm1 = await import("../shared/nicknames");
