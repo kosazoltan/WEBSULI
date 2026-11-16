@@ -1766,7 +1766,7 @@ ugyanazzal a seeddel játszik, a végén „A barátod: 1240 pont — te: 1310 p
 
 ### JM7a — Admin-jogosultsági mátrix + játékos-fiók alap (e-mailes kód) — `PLAYER_ACCOUNTS` bevezetési flag
 
-**Állapot:** nem kezdődött · **Függ:** JM0 · **Modell:** Opus · **Elfogadás:** JM-A12 (teljes), JM-A11 (e-mail út)
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-jm7a-fiok, munkafa .claude/worktrees/jatek-jm7a, kanban #39 · **Függ:** JM0 · **Modell:** Opus · **Elfogadás:** JM-A12 (teljes), JM-A11 (e-mail út)
 **Fájlok:** `source/migrations/0040_player_accounts.sql`, `source/shared/schema.ts` (új táblák: `player_accounts`,
 `player_auth_codes`), új `S/player/{auth-routes,session,require-player,codes,email-template}.ts`, `S/routes.ts` (bekötés
 `/api/player/*`), `S/resend.ts` (új levél-sablon hívása — a meglévő küldő), kliens: `P/PlayerLogin.tsx` (`/belepes`),
