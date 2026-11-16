@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import type { FeedbackCard } from "./feedback";
+import { usePauseMenuOpen } from "./mobile/modalLayer";
 import { useReducedMotion } from "./useReducedMotion";
 
 /**
@@ -50,20 +51,28 @@ export default function QuizFeedbackCard({
   const reduced = useReducedMotion();
   const primaryRef = useRef<HTMLButtonElement | null>(null);
   const tone = TONE[card.outcome];
+  /**
+   * S13 / átfogó review K3: amíg a szünet menü nyitva van, a kártya nem látszik, nem fogad billentyűt, és a helyes
+   * válasz automatikus bezárása sem fut — különben a z 90-es kártya a z 80-as menü fölé kerülne (a Folytatás /
+   * Újrakezdés / Kilépés elérhetetlen, az Esc a láthatatlan menüt folytatná), a játék pedig szünetben lépne tovább.
+   * Folytatás után a kártya ugyanott áll, ahol volt (a Tornado lapszintű `feedback && !paused` közös változata).
+   */
+  const pausedByMenu = usePauseMenuOpen();
 
   useEffect(() => {
-    primaryRef.current?.focus();
-  }, []);
+    if (!pausedByMenu) primaryRef.current?.focus();
+  }, [pausedByMenu]);
 
   // Csak a helyes válasz zárul magától. Rossz válasznál a gyerek olvas — az
   // automatikus továbblépés pont a tanulás idejét venné el.
   useEffect(() => {
-    if (card.outcome !== "correct") return;
+    if (card.outcome !== "correct" || pausedByMenu) return;
     const id = window.setTimeout(onDismiss, autoDismissMs);
     return () => window.clearTimeout(id);
-  }, [card.outcome, autoDismissMs, onDismiss]);
+  }, [card.outcome, autoDismissMs, onDismiss, pausedByMenu]);
 
   useEffect(() => {
+    if (pausedByMenu) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.key === "Enter") {
         e.preventDefault();
@@ -72,7 +81,7 @@ export default function QuizFeedbackCard({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onDismiss]);
+  }, [onDismiss, pausedByMenu]);
 
   const showRetry = card.retryable && typeof onRetry === "function";
 
@@ -147,6 +156,7 @@ export default function QuizFeedbackCard({
       </div>
     </div>
   );
+  if (pausedByMenu) return null;
   // Escape transformed/isolated game containers: the explanation must remain
   // above the question overlay, and its continue button must receive the click.
   return typeof document === "undefined" ? content : createPortal(content, document.body);

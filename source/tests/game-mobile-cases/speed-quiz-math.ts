@@ -13,6 +13,7 @@ export const CASE: GameMobileCase = {
   },
   resultForce: { phase: "won", correctCount: 18 },
   resultTestId: "sq-won",
+  quizScope: '[data-testid="sq-answers"]',
   answerWrong: async (page: Page) => {
     await page.locator('[data-testid="sq-answers"] [data-correct="false"]').first().click();
   },

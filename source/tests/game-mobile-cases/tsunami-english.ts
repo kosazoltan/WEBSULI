@@ -27,6 +27,8 @@ export const CASE: GameMobileCase = {
   touchControlsTestId: "tsunami-touch-controls",
   resultForce: { phase: "won", correctCount: 8 },
   resultTestId: "ts-won",
+  quizScope: '[data-testid="ts-quiz"]',
+  quizForce: { phase: "quiz" },
   answerWrong: async (page: Page) => {
     await page.waitForFunction(
       () => typeof (window as unknown as GameTestWindow).__websuliGame?.forceState === "function",

@@ -17,6 +17,7 @@ export const CASE: GameMobileCase = {
   },
   resultForce: { phase: "won" },
   resultTestId: "wl-won",
+  quizScope: '[data-testid="wl-quiz"]',
   answerWrong: async (page) => {
     const wrong = page.locator('[data-testid^="wl-option-"][data-correct="false"]').first();
     await expect(wrong).toBeEnabled({ timeout: 15_000 });

@@ -34,9 +34,11 @@ export function writeBest(
   score: number,
 ): { best: number; isNewBest: boolean } {
   const prev = readBest(storage, gameId);
-  const isNewBest = prev === null || score > prev;
-  const best = isNewBest ? score : prev;
-  if (storage && isNewBest) {
+  const improved = prev === null || score > prev;
+  const best = improved ? score : prev;
+  // S13 / átfogó review L5: a 0 pontos (első) futás tárolódik, de nem „Új rekord!”.
+  const isNewBest = improved && score > 0;
+  if (storage && improved) {
     try {
       storage.setItem(GAME_BEST_KEY, JSON.stringify({ ...readMap(storage), [gameId]: best }));
     } catch {

@@ -26,6 +26,8 @@ export const CASE: GameMobileCase = {
   touchControlsTestId: "sa-touch-controls",
   resultForce: { phase: "over", gameWon: true, correctCount: 12 },
   resultTestId: "sa-over",
+  quizScope: '[role="dialog"][aria-label="Mini-teszt"]',
+  quizForce: { phase: "quiz" },
   answerWrong: async (page: Page) => {
     await page.waitForFunction(
       () => typeof (window as unknown as GameTestWindow).__websuliGame?.forceState === "function",

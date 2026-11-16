@@ -1818,10 +1818,7 @@ export default function BlockCraftQuiz() {
     const budget = LOOK_BUDGET[tier];
     applyRendererLook(renderer, tier, { exposure: 1.0 });
     const shadowsOn = renderer.shadowMap.enabled;
-    // S11 (M11): a three r184 a PCFSoftShadowMap-et elavultnak jelzi, első rajzoláskor „THREE.WebGLShadowMap: … deprecated”
-    // konzol-figyelmeztetéssel PCF-re vált. Ugyanazt az eredményt adjuk előre, figyelmeztetés nélkül (a közös
-    // three-look/renderer.ts javítása orkesztrátori kérés).
-    if (shadowsOn && renderer.shadowMap.type === THREE.PCFSoftShadowMap) renderer.shadowMap.type = THREE.PCFShadowMap;
+    // Az árnyék-térkép típusa (PCFShadowMap) a közös applyRendererLook-ból jön (S13 / E21).
     // A világ statikus (csak bányászáskor/lerakáskor változik) → az árnyék-térképet
     // csak újraépítéskor rajzoljuk újra, nem minden frame-ben.
     renderer.shadowMap.autoUpdate = false;
@@ -3210,6 +3207,7 @@ export default function BlockCraftQuiz() {
       />
 
       <ResultScreen
+        badges={newlyUnlocked}
         open={phase === "levelComplete"}
         testId="bc-level-complete"
         title="Pálya teljesítve!"
@@ -3239,6 +3237,7 @@ export default function BlockCraftQuiz() {
       />
 
       <ResultScreen
+        badges={newlyUnlocked}
         open={phase === "over"}
         testId="bc-over"
         title={gameWon ? "Bajnok lettél! Mind az 5 pálya kész!" : "Bányászat vége"}

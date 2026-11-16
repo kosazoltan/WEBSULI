@@ -796,6 +796,13 @@ export default function TsunamiEscapeEnglish() {
   );
   const materialQuizzesRef = useRef(materialQuizzes);
   materialQuizzesRef.current = materialQuizzes;
+  /**
+   * S13 / átfogó review L1: a lecke-tananyagból jövő kérdés (bármely tárgyú, a játékban „english” címkével fut) NEM
+   * kézi angol kérdés — a helyes válasza nem kerülhet a közös szóbank-naplóba (a többi játék is kizárja a tananyagot).
+   * A tananyag három úton jut be (tananyag-elsőbbség, kupon-jutalom, a közepes készlet), ezért a kérdésszöveg a kulcs.
+   */
+  const materialPromptsRef = useRef<Set<string>>(new Set());
+  materialPromptsRef.current = useMemo(() => new Set(materialItems.map((q) => q.prompt)), [materialItems]);
 
   const { data: syncEligibility } = useQuery<SyncEligibility>({
     queryKey: ["/api/games/sync-eligibility"],
@@ -836,7 +843,7 @@ export default function TsunamiEscapeEnglish() {
     const issue = (q: Quiz): Quiz => {
       runSeenRef.current.push({ id: q.id, prompt: q.prompt });
       markGradeQuizSeen(gradeSeenRef.current, q);
-      if (q.subject === "english" && !q.id.startsWith("vocab:")) {
+      if (q.subject === "english" && !q.id.startsWith("vocab:") && !materialPromptsRef.current.has(q.prompt)) {
         vocabRef.current?.markExternal(q.options[q.correctIndex] ?? "");
       }
       return shuffleQuiz(q);
@@ -1214,7 +1221,8 @@ export default function TsunamiEscapeEnglish() {
   }, []);
 
   const onAnswer = (index: number) => {
-    if (!quiz) return;
+    // S13 / review K1: szünetben nincs válasz (a háttér inert, de a billentyűs út ellen is védünk).
+    if (!quiz || paused) return;
     // VÁLASZ-LOCK: dupla kattintás ne dolgozza fel kétszer ugyanazt a kvízt
     // (dupla XP/streak/correctCount, akár korai "won" is lehetett).
     if (answerLockedRef.current) return;
@@ -1910,6 +1918,7 @@ export default function TsunamiEscapeEnglish() {
       </AnimatePresence>
 
       <ResultScreen
+        badges={newlyUnlocked}
         open={resultOpen}
         testId={phase === "won" ? "ts-won" : "ts-over"}
         title={phase === "won" ? "Sikerült elmenekülni!" : "Utolért a hullám!"}
@@ -1930,20 +1939,7 @@ export default function TsunamiEscapeEnglish() {
               {difficultyLabel(runDifficultyRef.current)}
               {syncEligibility?.eligible ? " · felkerült a ranglistára" : ""}
             </p>
-            {/* S9: az új jelvények az eredménykártyán, olvasható méretben (a közös toast 10–11 px-es). */}
-            {newlyUnlocked.length > 0 && (
-              <ul className="flex flex-wrap justify-center gap-1.5" data-testid="tsunami-new-badges">
-                {newlyUnlocked.map((a) => (
-                  <li
-                    key={a.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/60 bg-amber-300/15 px-3 py-1 text-sm font-bold text-amber-100"
-                  >
-                    <span aria-hidden="true">{a.icon}</span>
-                    Új jelvény: {a.title} (+{a.points} pont)
-                  </li>
-                ))}
-              </ul>
-            )}
+            {/* S13 / B6: az új jelvények a ResultScreen közös sorában (badges) — az S9-es lista közös változata. */}
           </div>
         }
       />

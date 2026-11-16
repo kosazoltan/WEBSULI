@@ -34,6 +34,13 @@ export type GameMobileCase = {
   /** Rossz válasz kiváltása (M9, M10); hiányában a két mérés nem fut, és az S13 őr ezt hibának veszi. */
   answerWrong?: (page: Page) => Promise<void>;
   orientation?: "any" | "landscape";
+  /**
+   * S13 / átfogó review K2: a kvíz válaszgombjainak tárolója (CSS-szelektor; az opciók `data-correct` attribútumot
+   * kapnak a teszt-kampós buildben). Ezzel mér a spec kvíz-állapotban (M2/M3) és jó válaszra (M10).
+   */
+  quizScope?: string;
+  /** A kvíz-állapot kikényszerítése (`forceState` patch); hiányában a játék eleve kérdez (Szólétra, Matek sprint). */
+  quizForce?: Record<string, unknown>;
 };
 
 export type SafeInsets = { top: number; right: number; bottom: number; left: number };
@@ -92,10 +99,18 @@ export async function settleIfPresent(page: Page, selector: string): Promise<voi
   if ((await page.locator(selector).count()) > 0) await waitForStable(page, selector);
 }
 
-/** Állapotonként az a gyökér, amelynek beállt állapotát a mérés és a képernyőkép előtt megvárjuk. */
+/**
+ * Állapotonként az a gyökér, amelynek beállt állapotát a képernyőkép előtt megvárjuk (B5).
+ *
+ * A „play” (és a „quiz”) állapot SZÁNDÉKOSAN nincs itt (main CI #437 után, b5041240: a Kockavadász 3 nézetben 3
+ * újrapróbán bukott): futó játékban a HUD jogosan mozog folyamatosan — másodpercenként új időérték, ehhez a
+ * `.game-hud-progress-fill` 0,25 s-os `transform`-átmenete és a változott stat rugós „pop”-animációja. A szoftveres
+ * WebGL-es CI-gépen a 3D jelenet mellett kevés rAF-képkocka fut, így a tick-ek között nincs 4 animációmentes képkocka,
+ * és a `waitForStable` 5 s után időtúllépéssel bukik. Élő játékot nem lehet „beállt” állapotban fotózni; a játék
+ * közbeni M2/M3 mérés amúgy sem várt erre (a mérce nem változik), csak a képernyőkép időzítése.
+ */
 const SETTLE_SELECTOR: Record<string, string> = {
   start: "[data-game-start]",
-  play: "[data-game-hud]",
   pause: '[data-testid="game-pause-menu"]',
   result: "[data-game-result]",
 };
@@ -241,7 +256,9 @@ async function shot(page: Page, testInfo: TestInfo, c: GameMobileCase, state: st
   const dir = process.env.GAME_MOBILE_SHOT_DIR;
   if (dir) {
     mkdirSync(dir, { recursive: true });
-    await page.screenshot({ path: join(dir, name), type: "jpeg", quality: 70 });
+    // S13: CSS-pixeles kép a commitolt mátrixhoz (7 játék × 3 nézet × 5 állapot); a Pixel 7 2,6-os sűrűségén a
+    // teljes felbontású JPEG túllépné a K.4 150 KB-os keretét. A tesztkimenetben (outputPath) teljes felbontás marad.
+    await page.screenshot({ path: join(dir, name), type: "jpeg", quality: 70, scale: "css" });
   }
 }
 
@@ -264,6 +281,24 @@ async function forceResult(page: Page, c: GameMobileCase): Promise<void> {
   );
   await page.evaluate((patch) => (window as unknown as GameTestWindow).__websuliGame?.forceState(patch), c.resultForce);
   await expect(page.locator("[data-game-result]").first()).toBeVisible({ timeout: 10_000 });
+}
+
+/** A kvíz-állapot megnyitása (K2): `quizForce` → `forceState`, utána a rossz opció látható. */
+async function openQuiz(page: Page, c: GameMobileCase): Promise<void> {
+  if (c.quizForce) {
+    await page.waitForFunction(
+      () => typeof (window as unknown as GameTestWindow).__websuliGame?.forceState === "function",
+      undefined,
+      { timeout: 15_000 },
+    );
+    await page.evaluate((patch) => (window as unknown as GameTestWindow).__websuliGame?.forceState(patch), c.quizForce);
+  }
+  await expect(page.locator(`${c.quizScope} [data-correct="false"]`).first()).toBeVisible({ timeout: 15_000 });
+}
+
+/** A HUD szövege (stat-értékek, idő); szünetben nem változhat (M6). */
+async function hudText(page: Page): Promise<string> {
+  return page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>("[data-game-hud]")).map((el) => el.innerText).join("|"));
 }
 
 function expectNoOverflow(o: { x: number; y: number }, where: string, withY: boolean) {
@@ -320,6 +355,8 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
           await expect(page.getByTestId("game-result-stars")).toBeVisible();
           await expect(page.locator('[data-testid="game-result-retry"], [data-game-retry]').first()).toBeVisible();
           await expect(page.getByTestId("game-result-back")).toBeVisible();
+          // S13 / B6: az eredményképernyő alatt jelvény-toast nem lóghat a kártya gombjaira.
+          await expect(page.locator('[data-testid^="achievement-toast-"]')).toHaveCount(0);
           expectNoOverflow(await measureOverflow(page), "eredmény", true);
           await waitForStable(page, "[data-game-result]");
           expect(await smallTargets(page), "M2 eredmény").toEqual([]);
@@ -328,18 +365,48 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
         });
 
         test(`full: M4 biztonsági sáv játék közben`, async ({ page }) => {
-          const insets = { top: 44, right: 0, bottom: 34, left: 0 };
+          // S13 / review K2: fekvő nézetben a kivágás oldalt van (bal / jobb 44 px, alul a kezelősáv 21 px).
+          const insets = viewport.width > viewport.height ? { top: 0, right: 44, bottom: 21, left: 44 } : { top: 44, right: 0, bottom: 34, left: 0 };
           await startPlaying(page, c);
           await emulateSafeArea(page, insets);
           await page.waitForTimeout(100);
           expect(await safeAreaViolations(page, insets)).toEqual([]);
         });
 
-        test(`full: M6 háttérbe kerülés → szünet menü`, async ({ page }) => {
+        test(`full: M6 háttérbe kerülés → szünet menü, és szünetben áll az óra`, async ({ page }) => {
           await startPlaying(page, c);
           await hideAndShowPage(page);
           await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+          // S13 / review K2: a menü megjelenése nem elég — szünetben a HUD (idő, pont, élet) nem változhat.
+          await waitForStable(page, '[data-testid="game-pause-menu"]');
+          const before = await hudText(page);
+          await page.waitForTimeout(1_500);
+          expect(await hudText(page), "M6 szünetben változott a HUD (fut az óra)").toBe(before);
         });
+
+        if (c.quizScope) {
+          test(`full: M2 M3 kvíz-állapotban`, async ({ page }, testInfo) => {
+            await startPlaying(page, c);
+            await openQuiz(page, c);
+            // A válaszgombok dobozának beállását várjuk (a belépő animáció a dobozt mozgatja), nem a teljes kvízrétegét:
+            // abban a kvízóra csíkja futó játékban jogosan folyamatosan mozog (lásd SETTLE_SELECTOR).
+            await waitForStable(page, `${c.quizScope} [data-correct]`);
+            expectNoOverflow(await measureOverflow(page), "kvíz", true);
+            expect(await smallTargets(page), "M2 kvíz").toEqual([]);
+            expect(await smallFonts(page), "M3 kvíz").toEqual([]);
+            await shot(page, testInfo, c, "quiz");
+          });
+
+          test(`full: M10 jó válaszra „success” (18 ms) rezgés`, async ({ page }) => {
+            await stubVibrate(page);
+            await startPlaying(page, c);
+            await openQuiz(page, c);
+            await page.locator(`${c.quizScope} [data-correct="true"]`).first().click();
+            await expect
+              .poll(() => page.evaluate(() => (window as unknown as { __vibrateCalls?: unknown[] }).__vibrateCalls ?? []), { timeout: 5_000 })
+              .toContainEqual(18);
+          });
+        }
 
         test(`full: M8 a játéklistáról legfeljebb két koppintás`, async ({ page }) => {
           await page.goto("/games");
@@ -350,6 +417,10 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
 
         if (c.answerWrong) {
           const answerWrong = c.answerWrong;
+          // M9 KORLÁT (S13 / review K2, dokumentálva): a mérő csak a CSS-animáció / Web Animation nevét látja. Az
+          // állapotvezérelt villanásokat (Szökőár `stormFlash`, Brain Rot `screenFlash`) nem — ezeket a lapok
+          // `useReducedMotion`-ös feltétele védi (TsunamiEscapeEnglish / BrainRotSteal), és a forrásőr-tesztek
+          // (`s13-review-guards.test.ts` „M9”) tartják meg. Pixel-alapú villanásmérés nem olcsó.
           test(`full: M9 csökkentett mozgásnál nincs rázás / villogás`, async ({ page }) => {
             await page.emulateMedia({ reducedMotion: "reduce" });
             await startPlaying(page, c);
@@ -369,6 +440,28 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
             await answerWrong(page);
             const calls = await page.evaluate(() => (window as unknown as { __vibrateCalls?: unknown[] }).__vibrateCalls ?? []);
             expect(calls).toContainEqual([30, 40, 30]);
+          });
+
+          test(`full: K1 K3 szünet a magyarázókártya fölött — inert háttér, fókuszcsapda, a kártya szünetben rejtve`, async ({ page }) => {
+            await startPlaying(page, c);
+            await answerWrong(page);
+            await expect(page.getByTestId("quiz-feedback")).toBeVisible({ timeout: 10_000 });
+            await hideAndShowPage(page);
+            const menu = page.getByTestId("game-pause-menu");
+            await expect(menu).toBeVisible();
+            // K3: a z 90-es kártya nem kerülhet a menü fölé — szünetben nem látszik.
+            await expect(page.getByTestId("quiz-feedback")).toHaveCount(0);
+            // K1: a játék gyökere inert, a fókusz Tab-bal sem hagyja el a menüt.
+            await expect(page.locator("#root")).toHaveAttribute("inert", "");
+            for (let i = 0; i < 8; i++) {
+              await page.keyboard.press(i % 3 === 2 ? "Shift+Tab" : "Tab");
+              expect(await page.evaluate(() => !!document.activeElement?.closest('[data-testid="game-pause-menu"]')), `Tab #${i + 1} kiszökött`).toBe(true);
+            }
+            await page.getByTestId("game-resume").click();
+            await expect(menu).toHaveCount(0);
+            await expect(page.locator("#root")).not.toHaveAttribute("inert", "");
+            // Folytatás után a kártya ugyanott áll.
+            await expect(page.getByTestId("quiz-feedback")).toBeVisible();
           });
         }
       });

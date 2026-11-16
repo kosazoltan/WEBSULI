@@ -465,6 +465,7 @@ export default function TornadoHunter200() {
             vehicle={selectedVehicle}
             progress={progress}
             coupon={coupon}
+            newlyUnlocked={newlyUnlocked}
             syncEligible={Boolean(syncEligibility?.eligible)}
             forceResult={forceResult}
             forceQuiz={forceQuiz}
@@ -1113,6 +1114,8 @@ function PlayScreen(props: {
   vehicle: Vehicle;
   progress: TornadoProgress;
   coupon: CouponSession;
+  /** S13 / B6: a futás új jelvényei az eredménykártya közös sorában. */
+  newlyUnlocked: Achievement[];
   syncEligible: boolean;
   /** Teszt-kampó (növekvő sorszám): > 0 és változik → győzelmi eredmény. */
   forceResult: number;
@@ -1337,6 +1340,7 @@ function PlayScreen(props: {
         level: props.level,
         school: settingsRef.current.school,
         mode: props.coupon.active ? "mixed" : settingsRef.current.quizMode,
+        materialOnly: props.coupon.active,
         material: materialRef.current,
         recent: recentQuizRef.current,
         gradeSeen: gradeSeenRef.current,
@@ -1676,6 +1680,9 @@ function PlayScreen(props: {
   const tryAnchorRef = useRef<() => void>(() => {});
   tryAnchorRef.current = () => {
     if (pausedRef.current) return;
+    // S13 / C9: sikeres horgonyzás után a győzelem már ütemezve van (2,6 s, játékóra) — új horgony-kvíz ne nyíljon,
+    // különben az ütemezett eredmény a nyitott kvíz alatt futna le.
+    if (playerRef.current.anchored) return;
     if (phaseRef.current !== "approach" && phaseRef.current !== "seeking") return;
     const p = playerRef.current;
     const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
@@ -1717,6 +1724,9 @@ function PlayScreen(props: {
       pausedRef.current = false;
       setPaused(false);
       setFeedback(null);
+      // S13 / C9: egy ütemezett eredmény alatt nyitva maradt kvíz ne maradjon az eredményképernyő alatt.
+      setActiveQuiz(null);
+      pendingAnchorRef.current = null;
       pendingResolveRef.current = null;
       const bestNow = props.onSubmitBest(reward.score);
       setResult({
@@ -2388,6 +2398,7 @@ function PlayScreen(props: {
       </PauseMenu>
 
       <ResultScreen
+        badges={props.newlyUnlocked}
         open={result != null}
         testId="th-result"
         title={result?.won ? "Intercept sikeres!" : "Sikertelen intercept"}

@@ -34,5 +34,7 @@ export const CASE: GameMobileCase = {
   touchControlsTestId: "bc-touch-controls",
   resultForce: { phase: "levelComplete" },
   resultTestId: "bc-level-complete",
+  quizScope: '[data-testid="bc-quiz"]',
+  quizForce: { phase: "quiz" },
   answerWrong,
 };

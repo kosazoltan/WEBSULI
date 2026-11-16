@@ -40,6 +40,8 @@ export const CASE: GameMobileCase = {
   touchControlsTestId: "tornado-touch-controls",
   resultForce: { screen: "play", phase: "result_win" },
   resultTestId: "th-result",
+  quizScope: '[data-testid="tornado-quiz"]',
+  quizForce: { screen: "play", phase: "quiz" },
   answerWrong,
   orientation: "landscape",
 };

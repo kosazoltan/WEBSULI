@@ -1,5 +1,5 @@
 import type { GradeQuizItem, GradeSubject } from "@/data/gradeQuizBank/types";
-import { markGradeQuizSeen, type GradeQuizSeen } from "../game-engine/gradeQuiz";
+import { pickGradeSlotWithVocab, type GradeQuizSeen } from "../game-engine/gradeQuiz";
 
 export type BlockCraftSubject = "english" | "english-math" | "math" | "nature" | "hungarian" | "science" | "history";
 
@@ -37,11 +37,6 @@ export function pickBlockCraftGradeSlot<V>(args: {
   seen: GradeQuizSeen;
   vocabNext: () => V | null;
 }): { kind: "vocab"; quiz: V; replaced: GradeQuizItem | null } | { kind: "grade"; item: GradeQuizItem } | null {
-  const item = args.pick();
-  if (item) markGradeQuizSeen(args.seen, item);
-  if (args.subject === "english") {
-    const quiz = args.vocabNext();
-    if (quiz != null) return { kind: "vocab", quiz, replaced: item };
-  }
-  return item ? { kind: "grade", item } : null;
+  // S13 / E23: a közös megvalósítás tárgy-helyes változata (game-engine/gradeQuiz.ts).
+  return pickGradeSlotWithVocab(args);
 }

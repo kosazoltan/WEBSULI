@@ -2157,6 +2157,7 @@ export default function SpeedQuizMath() {
       </PauseMenu>
 
       <ResultScreen
+        badges={newlyUnlocked}
         open={isResult}
         testId={phase === "won" ? "sq-won" : "sq-over"}
         title={phase === "won" ? "Célba értél a neon toronyban!" : "Vége a futamnak"}
@@ -2177,18 +2178,7 @@ export default function SpeedQuizMath() {
                 Legjobb kombó: <strong>{bestStreak}</strong>
               </span>
             </p>
-            {newlyUnlocked.length > 0 && (
-              <p
-                className="game-result-stat border-amber-300/30 bg-amber-500/10"
-                title={newlyUnlocked.map((a) => a.title).join(", ")}
-              >
-                <span className="min-w-0 flex-1 line-clamp-2 landscape:line-clamp-1">
-                  <span aria-hidden="true">{newlyUnlocked.map((a) => a.icon).join(" ")} </span>
-                  {newlyUnlocked.length > 1 ? "Új jelvények" : "Új jelvény"}:{" "}
-                  <strong className="text-amber-100">{newlyUnlocked.map((a) => a.title).join(", ")}</strong>
-                </span>
-              </p>
-            )}
+            {/* S13 / B6: az új jelvények a ResultScreen közös sorában (badges), nem itt. */}
             {/* A szinkron-tájékoztató a Beállításokban él; ide csak a sikeres beküldés kerül (kis kijelzőn hely). */}
             {syncEligibility?.eligible && (
               <p className="px-1 text-sm text-emerald-200/90">Eredmény elküldve a felhő ranglistára.</p>

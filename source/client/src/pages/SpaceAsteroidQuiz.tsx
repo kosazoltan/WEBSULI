@@ -5,6 +5,7 @@ import {
   gradeForGame,
   markGradeQuizSeen,
   pickGradeQuiz,
+  pickGradeSlotWithVocab,
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
 import { loadClassroomGrade, saveClassroomGrade } from "@/lib/classroomStore";
@@ -30,7 +31,6 @@ import {
 } from "@/game-engine/mobile";
 import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
 import { aimAssistVx } from "@/lib/spaceAsteroid/aimAssist";
-import { pickGradeSlotWithVocab } from "@/lib/brainRotTuning";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
@@ -1269,7 +1269,8 @@ export default function SpaceAsteroidQuiz() {
   /* ============== Quiz választ feldolgoz ============== */
 
   const onAnswer = (idx: number) => {
-    if (!activeQuiz || phase !== "quiz" || answerLockedRef.current) return;
+    // S13 / review K1: szünetben nincs válasz (a háttér inert, de a billentyűs út ellen is védünk).
+    if (!activeQuiz || phase !== "quiz" || answerLockedRef.current || pausedRef.current) return;
     answerLockedRef.current = true;
     adaptiveRef.current.answer(idx === activeQuiz.correctIndex);
     if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz
@@ -3116,6 +3117,7 @@ export default function SpaceAsteroidQuiz() {
       </PauseMenu>
 
       <ResultScreen
+        badges={newlyUnlocked}
         open={phase === "over"}
         testId="sa-over"
         title={gameWon ? "Mind a 12 hullám teljesítve!" : "Kör vége"}

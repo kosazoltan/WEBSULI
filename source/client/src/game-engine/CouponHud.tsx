@@ -27,7 +27,8 @@ export function CouponHud({ session }: { session: CouponSession }) {
   return (
     <div
       className={cn(
-        "pointer-events-none fixed top-3 left-1/2 -translate-x-1/2 z-40",
+        // S13 / átfogó review L3: a hely (biztonsági sáv, a HUD alá tolása) a közös .game-coupon-hud CSS-ben.
+        "game-coupon-hud pointer-events-none fixed left-1/2 -translate-x-1/2 z-40",
         "flex items-center gap-2 rounded-full px-4 py-2 min-h-11",
         "font-bold tabular-nums shadow-lg backdrop-blur",
         urgent ? "bg-red-600/90 text-white" : "bg-emerald-600/90 text-white",

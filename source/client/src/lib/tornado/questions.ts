@@ -3,8 +3,9 @@ import type { GradeQuizItem } from "../../data/gradeQuizBank/types";
 import {
   createGradeQuizSeen,
   gradeForGame,
-  markGradeQuizSeen,
+  isGradeQuizSeen,
   pickGradeQuiz,
+  pickGradeSlotWithVocab,
   type GradeQuizSeen,
 } from "../../game-engine/gradeQuiz";
 /**
@@ -400,6 +401,11 @@ export type PickArgs = {
    * or nothing playable) falls through to the old order unchanged.
    */
   vocab?: TornadoVocab;
+  /**
+   * Coupon run (a game launched from a lesson): the lesson material is the point of the run, so once every
+   * material question has been asked the material is repeated before any bank — the pre-S13 order.
+   */
+  materialOnly?: boolean;
 };
 
 /** The page's adapter over the vocab source: one ready-made English `Question` per call, or `null`. */
@@ -454,7 +460,7 @@ function subjectFor(mode: QuizMode, rng: Rng): Subject {
 /**
  * Draw the next question.
  *
- * Order of preference: unseen material question → any material question →
+ * Order of preference: unseen material question → (coupon run only) any material question →
  * (English slot, S12) the central vocab bank → (grades 7..12) the shared grade bank →
  * unseen bank question → any bank question.
  * Material rows carry no reliable grade of their own, so the grade filter only
@@ -469,32 +475,37 @@ export function pickQuestion(args: PickArgs): Question {
   const recent = new Set(args.recent ?? []);
 
   const material = (args.material ?? []).filter((q) => args.mode === "mixed" || q.subject === subject);
-  // S12 / A8: an English slot with no lesson material left asks from the central vocab bank.
-  const vocabSlot = material.length === 0 && subject === "english" && args.vocab != null;
+  const materialOnly = args.materialOnly === true && material.length > 0;
+  // S13 / átfogó review H1: the priority goes to material NOT asked yet (recent window or this run's
+  // gradeSeen), as in the other games' `pickUnseenMaterial`. Gating on the whole list made the vocab bank
+  // unreachable next to any lesson material and repeated the ≤ 3 material questions for the whole run.
+  const gradeSeen = args.gradeSeen;
+  const unseenMaterial = material.filter((q) => !recent.has(q.id) && !(gradeSeen && isGradeQuizSeen(gradeSeen, q)));
+  // S12 / A8: an English slot with no unseen lesson material left asks from the central vocab bank.
+  const vocabSlot = !materialOnly && unseenMaterial.length === 0 && subject === "english" && args.vocab != null;
 
   // Spec 2026-09-29: 7..12 → the shared grade bank, after the lesson material.
   const sharedGrade = gradeForGame(Math.max(...resolved));
-  if (material.length === 0 && sharedGrade != null && sharedGrade > OWN_BANK_MAX_GRADE) {
+  if (!materialOnly && unseenMaterial.length === 0 && sharedGrade != null && sharedGrade > OWN_BANK_MAX_GRADE) {
     const seen = args.gradeSeen ?? createGradeQuizSeen();
     if (!args.gradeSeen) for (const id of recent) seen.ids.add(id);
-    const item = pickGradeQuiz({
-      grade: sharedGrade,
-      band: args.adaptiveBand ?? 0.5,
-      subjects: [subject],
+    // S13 / E23: the shared slot picker (game-engine/gradeQuiz.ts). It marks the bank item seen even when the vocab
+    // bank replaces it (measured trap, Brain Rot PR #424), so the same item is not offered again after a vocab outage.
+    const slot = pickGradeSlotWithVocab({
+      pick: () =>
+        pickGradeQuiz({
+          grade: sharedGrade,
+          band: args.adaptiveBand ?? 0.5,
+          subjects: [subject],
+          seen,
+          rng,
+          items: args.gradeBank,
+        }),
       seen,
-      rng,
-      items: args.gradeBank,
+      vocabNext: () => (vocabSlot ? args.vocab?.next() ?? null : null),
     });
-    if (item && vocabSlot) {
-      const fromVocab = args.vocab?.next() ?? null;
-      if (fromVocab) {
-        // Measured trap (Brain Rot PR #424): the replaced bank item is marked seen as well, otherwise the shared
-        // bank would offer the very same item again on every English draw (and after a vocab outage).
-        markGradeQuizSeen(seen, item);
-        return fromVocab;
-      }
-    }
-    if (item) return fromGradeItem(item, subject);
+    if (slot?.kind === "vocab") return slot.quiz;
+    if (slot?.kind === "grade") return fromGradeItem(slot.item, subject);
   }
 
   if (vocabSlot) {
@@ -505,8 +516,9 @@ export function pickQuestion(args: PickArgs): Question {
   const bankPool = QUESTION_BANK.filter((q) => q.subject === subject && grades.has(q.grade));
 
   const tiers = [
-    material.filter((q) => !recent.has(q.id)),
-    material,
+    unseenMaterial,
+    // Seen material is repeated before the banks only in a coupon run (see `materialOnly`).
+    materialOnly ? material : [],
     bankPool.filter((q) => !recent.has(q.id)),
     bankPool,
     // Last resort: the whole bank, ignoring grade — never leave the player

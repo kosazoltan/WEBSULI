@@ -1,7 +1,7 @@
 import type { LadderCategory, LadderItem, LadderTier } from "../../data/wordLadder/types";
 import type { VocabEntry, VocabLang, VocabLevel, VocabTopic } from "../../data/vocabBank/types";
 import { tierSearchOrder } from "../no-repeat";
-import { generateVocabQuestion, pickQuestionType, type VocabQuestionType, type VocabQuiz } from "./questionGenerator";
+import { generateVocabQuestion, meaningKeys, pickQuestionType, type VocabQuestionType, type VocabQuiz } from "./questionGenerator";
 import { externalKey, type SeenHistory } from "./seenHistory";
 import { normalizeTerm } from "../../data/vocabBank/validate";
 
@@ -86,6 +86,23 @@ export function createVocabSource(opts: {
     return rest.map((e, i) => ({ e, i, s: last(e) })).sort((a, b) => a.s - b.s || a.i - b.i).map(x => x.e);
   }
 
+  /** Az utoljára kérdezett bejegyzések jelentés-kulcsai (L2; ennyi bejegyzésnyi ablak — egy futás nagyságrendje). */
+  const RECENT_MEANINGS = 50;
+  const recentEntries: string[][] = [];
+  const recentKeys = new Map<string, number>();
+  function rememberMeaning(entry: VocabEntry): void {
+    const keys = meaningKeys(entry.hu);
+    recentEntries.push(keys);
+    for (const k of keys) recentKeys.set(k, (recentKeys.get(k) ?? 0) + 1);
+    if (recentEntries.length > RECENT_MEANINGS) {
+      for (const k of recentEntries.shift()!) {
+        const n = (recentKeys.get(k) ?? 1) - 1;
+        if (n <= 0) recentKeys.delete(k);
+        else recentKeys.set(k, n);
+      }
+    }
+  }
+
   function question(entry: VocabEntry, types?: VocabQuestionType[]): VocabQuiz | null {
     const allowed = types?.length ? types : null;
     let type = pickQuestionType(entry, rng);
@@ -102,12 +119,15 @@ export function createVocabSource(opts: {
       const tried = new Set<string>();
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const list = candidates(level, o?.topic, tried);
-        const entry = list[0];
+        // S13 / átfogó review L2: a nemrég kérdezett bejegyzések jelentés-kulcsával ütköző jelölt (szinonima, pl.
+        // grandmother / granny = „nagymama”) kimarad, amíg van más — ne jöjjön ugyanaz a prompt más helyes válasszal.
+        const entry = list.find(e => !meaningKeys(e.hu).some(k => recentKeys.has(k))) ?? list[0];
         if (!entry) return null;
         tried.add(entry.id);
         const q = question(entry, o?.types);
         if (q) {
           history.mark(lang, entry.id);
+          rememberMeaning(entry);
           return q;
         }
       }

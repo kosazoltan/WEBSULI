@@ -106,7 +106,14 @@ test("szóbank: a pickQuestion törzsében a tananyag-ág a szóbank-hívás el�
   assert.ok(material >= 0, "nincs tananyag-ág");
   assert.ok(vocab >= 0, "nincs szóbank-hívás");
   assert.ok(material < vocab, "a szóbank a tananyag előtt kérdez");
-  assert.match(body, /markGradeQuizSeen\(seen,\s*item\)/, "a kiváltott évfolyam-banki tétel nincs látottnak jelölve (#424)");
+  // SPEC-VÁLTOZÁS 2026-11-15 (docs/specs/2026-11-15-jatekok-mobil-szobank-vegrehajtas.md S13, orkesztrátori E23): a
+  // kiváltott tétel látottnak jelölése a közös `pickGradeSlotWithVocab`-ba költözött (game-engine/gradeQuiz.ts) — a
+  // követelmény nem lazul: a Tornado azt hívja, és a közös függvény MINDIG jelöl (a jelölést a brainrot-tuning /
+  // space-asteroid-quiz-slot / blockcraft-mobile szimulációs tesztjei mérik, és lent forrásból is ellenőrizzük).
+  assert.match(body, /pickGradeSlotWithVocab\(\{/, "a Tornado nem a közös évfolyam-hely választót hívja (E23)");
+  const shared = readFileSync(join(root, "client/src/game-engine/gradeQuiz.ts"), "utf8");
+  const slotFn = shared.slice(shared.lastIndexOf("export function pickGradeSlotWithVocab"));
+  assert.match(slotFn, /if \(item\) markGradeQuizSeen\(args\.seen, item\);/, "a kiváltott évfolyam-banki tétel nincs látottnak jelölve (#424)");
   assert.match(page, /useVocabQuizSource\("en",\s*true\)/);
   assert.match(page, /markExternal\(q\.options\[q\.correctIndex\]!?\)/);
 });
