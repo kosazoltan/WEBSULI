@@ -42,7 +42,7 @@ fi
 
 HOST=$(printf '%s' "$URL" | sed -E 's#^[a-z]+://[^@]*@([^/:?]+).*#\1#')
 case "$HOST" in
-  ""|*"://"*) fail "a DATABASE_URL gazdaneve nem olvasható ki" ;;
+  ""|*"://"*|"$URL")fail "nem sikerült a DATABASE_URL értelmezése (a gazdanév nem olvasható ki; az érték nincs kiírva)" ;;
 esac
 
 SQL="SELECT (SELECT count(*) FROM lesson_workflow_runs WHERE state IN ('running','waiting') AND lease_until > now()) AS workflow, (SELECT count(*) FROM studio_jobs WHERE status IN ('pending','running') AND finished_at IS NULL AND created_at > now() - interval '6 hours') AS studio, (SELECT count(*) FROM improved_html_files WHERE status = 'processing') AS improve, (SELECT count(*) FROM one_step_runs WHERE phase NOT IN ('done','parked','error') AND updated_at > now() - interval '30 minutes') AS onestep"
@@ -53,6 +53,7 @@ OUT=$(printf 'header = "Neon-Connection-String: %s"\nheader = "Neon-Batch-Read-O
 
 if ! printf '%s' "$OUT" | grep -q '"rows"'; then
   # A hibaüzenetből a kapcsolati szöveg mintája is kiszűrve, rövidítve.
+  [ -n "$OUT" ] || echo "GUARD_ERROR: üres válasz (hálózat / TLS / időtúllépés)" >&2
   echo "GUARD_ERROR: $(printf '%s' "$OUT" | sed -E 's#postgres(ql)?://[^"[:space:]]*#<rejtve>#g' | cut -c1-300)" >&2
   exit 2
 fi
