@@ -1,34 +1,46 @@
 import { apiRequest } from "./queryClient";
+import { newScoreRunId, sendScoreWithRetry } from "./gameScoreRetry";
 
-/**
- * JM0: menetenkénti újraküldés-azonosító a `POST /api/games/score` híváshoz. A szerver ugyanazzal a runId-vel és tartalommal
- * érkező második kérést írás nélkül, ugyanazzal a válasszal fogadja. Nem biztonságos környezetben (nincs crypto.randomUUID)
- * a mező elmarad — a régi, runId nélküli út is érvényes.
- */
-export function newScoreRunId(): string | undefined {
-  try {
-    return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : undefined;
-  } catch {
-    return undefined;
-  }
+export { newScoreRunId };
+
+/** A függő újrapróba-várakozások; az oldal elhagyásakor (pagehide) mind megszakad, nincs utólagos hálózati hívás. */
+const pending = new Set<AbortController>();
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => {
+    for (const controller of pending) controller.abort();
+    pending.clear();
+  });
 }
 
-/** Az első kísérlet után ennyit várunk az egyszeri újrapróbával: 429-nél a korlát-ablak oldódásához, hálózati / szerverhibánál rövidebben. */
-const RETRY_AFTER_429_MS = 20_000;
-const RETRY_AFTER_OTHER_MS = 3_000;
+function waitMs(ms: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve(false);
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve(true);
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 /**
- * A pontbeküldés egyszeri, késleltetett újrapróbával: csak 429-re, 5xx-re és hálózati hibára (nincs `status`), ugyanazzal a
- * tartalommal (azonos runId → a szerver idempotens, nem ír kétszer). 4xx-re (403 nem jogosult, 400, 409) nincs újrapróba.
- * Ha az újrapróba is elbukik, a hiba a hívóhoz kerül (a lapok eddigi `.catch`-e változatlan).
+ * A pontbeküldés egyszeri, késleltetett újrapróbával (szabályok: gameScoreRetry.ts). Ha az újrapróba is elbukik vagy nincs,
+ * a hiba a hívóhoz kerül (a lapok eddigi `.catch`-e változatlan). A függő eredményt nem tároljuk helyben (→ JM8b).
  */
 export async function postGameScore(payload: Record<string, unknown>): Promise<unknown> {
+  const controller = new AbortController();
+  pending.add(controller);
   try {
-    return await apiRequest("POST", "/api/games/score", payload);
-  } catch (error) {
-    const status = (error as { status?: number } | null)?.status;
-    if (status !== undefined && status !== 429 && status < 500) throw error;
-    await new Promise((resolve) => setTimeout(resolve, status === 429 ? RETRY_AFTER_429_MS : RETRY_AFTER_OTHER_MS));
-    return apiRequest("POST", "/api/games/score", payload);
+    return await sendScoreWithRetry((body) => apiRequest("POST", "/api/games/score", body), payload, {
+      wait: waitMs,
+      jitterMs: () => Math.random() * 1000,
+      signal: controller.signal,
+    });
+  } finally {
+    pending.delete(controller);
   }
 }
