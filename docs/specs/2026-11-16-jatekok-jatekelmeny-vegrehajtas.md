@@ -59,6 +59,10 @@ tilalma), **K.2** (háromfázisú kapu), **K.3** (tesztintegritás), **K.4** (b�
 2. **Háromfázisú kapu (K.2 megfelelője):** a szelet ELSŐ commitja ebben a fájlban a saját fejezeted `**Állapot:**` sorát
    írja át: `**Állapot:** folyamatban — ág <ág>, munkafa <útvonal>, kanban #<id>`. Csak a saját soradat. A kód külön,
    későbbi commitban. PR előtt: `node scripts/qa/three-phase-check.mjs --base origin/main` → `[három-fázis] OK: …`.
+   **A kapu szabálya (CI „Háromfázisú rend”):** a PR SAJÁT diffjének tartalmaznia kell `docs/specs/*-vegrehajtas.md`
+   változást, és ez nem lehet későbbi commitban, mint az első kódcommit — ezért az első commit mindig a szelet
+   állapotsora. Pusholt ágon a sorrend utólag nem javítható (rebase / force-push tilos): csak új ággal és új PR-ral
+   (`docs/agent-csapdak.md` C-37).
 3. **Képernyőképek (K.4 megfelelője):** `docs/measurements/jatekok-jatekelmeny/J<n><x>/<játék>-<sz>x<m>-<állapot>.jpg`,
    JPEG q70, szeletenként ≤ 10 db, egyenként ≤ 150 KB. Kötelező állapotok játékszeletben: `start`, `play`,
    `question` (nyitott, nem blokkoló kérdés a játék közben), `wrong` (hibás válasz utáni megoldás-kijelzés), `boss`
@@ -119,12 +123,45 @@ jóváhagyással szabad:
   A kérdés-sáv gyökere `data-testid="play-question"`, a válaszcélok DOM-gombjai `data-testid="play-option-<i>"`
   `correctDataAttrs`-szal (vászonra rajzolt célpontnál is van láthatatlan, de elérhető DOM-gomb-réteg a
   billentyűzetes / akadálymentes választáshoz — terv 8.11).
-- **Determinizmus:** a játékmag RNG-je `mulberry32(readGameSeed() ?? Date.now())` (`GE/game-test-hooks.ts:34-52`).
+- **Determinizmus:** a játékmag RNG-je `createRng(readGameSeed() ?? seedFrom(gameId, …))` (`createRng`, `seedFrom` a
+  `@shared/game-rng`-ből; `readGameSeed` a `GE/game-test-hooks.ts`-ből). A seedet a játéklap állítja elő és adja át a
+  magnak; a sim-magban `Date.now` / `Math.random` tilos (őr: `T/game-sim-determinism-guard.test.ts`). A régi
+  `mulberry32(… ?? Date.now())` minta csak a meglévő hívóknál marad, új kódba nem kerül.
   Jutalom-kiosztásban `Math.random` tilos (őr: J0b `game-ethics-guard`).
 - **Menet-statisztika:** a `ResultScreen` `correct` / `total` a director `stats()`-ából jön; a `recordRun`
   (`L/achievements.ts:250`) `correctAnswers` / `wrongAnswers` mezői valós kérdés-számok.
 - **Pontszám-szerződés:** `POST /api/games/score` zod-sémája (`S/routes.ts:1298-1304`) és a `gameId`-k változatlanok;
   `runStreak` = a menet legjobb kombó-sorozata (`ComboState.best`).
+
+#### Megvalósult eltérések (J0a #442, J0b #444) — ezek az érvényesek a fenti szerződés helyett
+
+A pontos szignatúrát mindig a forrásból olvasd (`GE/play/*`, gyűjtő-export `@/game-engine/play`; `source/shared/game-rng.ts`;
+`T/support/game-sim.ts`).
+
+- **Hitstop = a hurok tartása:** `FixedLoop.holdFor(ms)` + `holdRemainingMs()` (additív); a `feel.hitstop` ezt kéri, NEM a
+  `setTimeScale(0)`-t (az felülírná a hitstop alatt kért szünetet, és a lejárat a hívási sorrendtől függne). A hitstop csak azt
+  tolja el, MIKOR fut egy lépés a valós időben, azt nem, MI történik benne. Valós időhöz kötött óra (kupon, menet-időkorlát) ne a
+  sim-időből számoljon.
+- **`setTimeScale` korlátoz:** (0; 0,35) → 0,35, > 1 → 1, negatív → 0, NaN → `RangeError`.
+- **`shakeOffset().rot` radián** (CSS-hez `rot * 180 / Math.PI`).
+- **RNG:** `createRng(3)` ≡ `createRng("3")`; `seedFrom` `:`-tal fűz, a részen belüli `:` és `\` escape-elt. Minden `rng`
+  paraméter `RandomSource` (`() => number` vagy `Rng`), `toRandom(rng)` egységesít.
+- **Director-küszöbök:** csúcs `PEAK_ENTER = 0.7`, pihenő `RELAX_ENTER = 0.25`.
+- **A `simNowMs` a LASSÍTATLAN kérdés-óra:** szünetben áll, a `slowMo` NEM lassítja (különben a 4 mp-es ablak 0,35×-nél
+  11,4 valós mp lenne, J10). A játék a nem szüneteltetett valós időt (vagy lépésszám × `SIM_STEP_MS`-t) adja át, ne a
+  lassított világ-időt.
+- **Egy director = egy menet:** a `createQuestionDirector` maga hívja a `review.startRun()`-t; hibás konfigurációra `RangeError`.
+- **Ismétlés arány-korláttal:** a menet bármely pontján `ismétlések + 1 ≤ 0,3 × (sorszám + 1)` (nem merev „minden 3.”); menet
+  közbeni sorrend három sávban (időben visszahozható → késő → többi); `dueInRun(runIndex, exclude?)`,
+  `dueAcrossRuns(now, exclude?)`; a `record(q, "correct", …)` sorban nem lévő kulcsra nem csinál semmit.
+- **Az ismétlési sor KÖZÖS a hét játékban:** a provider által vissza nem állítható (idegen) kulcsot a director a menet végéig
+  átugorja és a sorban hagyja (nem torlaszolja el a sort); 60 nappal az esedékesség után kikerül (`REVIEW_STALE_MS`).
+- **`play/clock.ts` `wallClockMs()`:** CSAK a menetek közötti (naptári) térközhöz; szimulációban tilos.
+- **`RunStatsSnapshot`:** új mezők `minGapBossSec`, `reviewReturnWithin10`; `minGapSec` csak az ütemezett / játék kérte
+  indításokat méri; `perMinute` a teljes menetidőre vetít; adat híján a minimumok `Infinity`.
+- **Harness:** `skillRoll = u / skill`, a játék akkor ítél sikert, ha `skillRoll < 1`; a `SimGame` maga hívja a director
+  `expire`-jét lejáratkor.
+- **Új score-hívás** `runId: newScoreRunId()`-vel (JM0, `game-score-contract-guard`).
 
 ### K.3 Etikai ellenőrzőlista (minden játékszelet PR-leírásában pipálva)
 
@@ -365,7 +402,8 @@ helyett új eset a `T/game-question-director.test.ts`-ben (a meglévő vocab-tes
 - `StorageLike` + hibatűrő tároló-minta: `GE/vocab/seenHistory.ts:37-42, 69, 77-107`.
 - Adaptív sáv: `GE/difficulty.ts:28-37` (`DIFFICULTY_FLOOR = 0.15`, +0,10 / −0,15), `nextDifficulty` `:57`,
   `startingDifficulty` `:82`; `GE/adaptiveSession.ts:10-34`.
-- Seedelt RNG: `GE/game-test-hooks.ts:34-52` (`readGameSeed`, `mulberry32`).
+- Seedelt RNG: `createRng(readGameSeed() ?? seedFrom(gameId, …))` — `createRng`, `seedFrom` a `@shared/game-rng`-ből
+  (J0a), `readGameSeed` a `GE/game-test-hooks.ts`-ből; a `mulberry32` csak a meglévő hívóké.
 - Score zod-séma: `S/routes.ts:1298-1304`.
 
 ### Szerződés (TypeScript — pontosan így)
@@ -670,7 +708,7 @@ változás”).
 
 ## J0c — Közös UI: kérdés-sáv, „Miért?”, eredmény-lista, felolvasás, beállítás, teszt-kampó, hang, próbaoldal
 
-**Állapot:** nem kezdődött
+**Állapot:** folyamatban — ág feat/jatek-j0c-play-ui, munkafa .claude/worktrees/jatek-j0c, kanban #40
 **Függ:** J0b merge. **Cél-mondatok:** G3, G6. **Elfogadás:** J1 (próbaoldalon), J5, J14, J16 (komponens-szinten).
 
 ### Fájlok (csak ezek)
@@ -1966,7 +2004,7 @@ origin / CSRF, leállítás / e2e-mód, migráció ↔ Drizzle, Europe/Budapest 
 
 ### JB — Évfolyam-bank bővítése (JBa: 3–6., JBb: 7–9., JBc: 10–12. évfolyam)
 
-**Állapot:** nem kezdődött · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
+**Állapot:** JBa folyamatban — ág feat/jatek-jba-evfolyam-bank, munkafa .claude/worktrees/jatek-jba, kanban #42 (2026-11-16); JBb, JBc nem kezdődött · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
 **Elfogadás:** JB-A1 · **Fájlok:** `source/client/src/data/gradeQuizBank/grade-NN.ts` (bővítés, a meglévő tételek
 azonosítója változatlan), `docs/measurements/2026-11-xx-evfolyam-bank-<sáv>-vakmegoldo.md`, a meglévő őrök
 (`T/quiz-bank-integrity.test.ts`, `T/game-bank-no-repeat-content.test.ts`, `T/grade-quiz-select.test.ts`) zöldek + új
