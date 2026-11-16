@@ -58,6 +58,9 @@ import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
 import { createPlayerRouter, defaultPlayerMailer } from "./player/auth-routes";
 import { createPlayerStore } from "./player/store";
+import { createPlayerAccountStore } from "./player/account-store";
+import { createPlayerAccountRouter } from "./player/account-routes";
+import { createPlayerAdminRouter } from "./player/admin-routes";
 import { playerLinkBaseUrl } from "./player/email-template";
 import { ViewDedup } from "./lib/view-dedup";
 import { maskEmail } from "./lib/mask-email";
@@ -873,10 +876,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // JM7a (docs/specs/2026-11-16-jatekok-jatekelmeny.md 10.4): játékos-fiók — külön tábla, külön munkamenet-kulcs, admin-jog
   // semmilyen úton; a PLAYER_ACCOUNTS flag (alapból KI) mellett a végpontok 404-et adnak (a /status kivételével).
-  app.use("/api/player", createPlayerRouter({ store: createPlayerStore(dbPool), mailer: defaultPlayerMailer, baseUrl: () => playerLinkBaseUrl() }));
+  const playerStore = createPlayerStore(dbPool);
+  const playerAccounts = createPlayerAccountStore(dbPool);
+  app.use("/api/player", createPlayerRouter({ store: playerStore, mailer: defaultPlayerMailer, baseUrl: () => playerLinkBaseUrl() }));
+  // JM7b: „kis fiók” (becenév, avatar, tanulói összekapcsolás, adatletöltés, törlés) — flag + requirePlayer mögött.
+  app.use("/api/player", createPlayerAccountRouter({
+    store: playerStore,
+    accounts: playerAccounts,
+    resolveLearnerId: async (token) => (await resolveLearner(token))?.id ?? null,
+  }));
 
   // Create admin router with authentication middleware
   const adminRouter = express.Router();
+  // JM7b: admin „Játékosok” (lista maszkolt címmel, tiltás / feloldás) — az adminRouter isAuthenticatedAdmin-őre alatt.
+  adminRouter.use("/game-accounts", createPlayerAdminRouter(playerAccounts));
   // Spec 2026-10-18-admin-korszerusites: a Felhasználók fül végpontjai (a kliens régóta hívta, a szerveren hiányoztak).
   // Review #287: az ellenőrzés és az írás egy adatbázis-zár alatt fut (több példány esetén is sorosít).
   registerAdminUserRoutes(adminRouter, storage, async () => {
