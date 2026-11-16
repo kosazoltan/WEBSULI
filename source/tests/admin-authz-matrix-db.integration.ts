@@ -23,6 +23,8 @@ import { Client, databaseFingerprint, dbPool, injectSession, mapLimit, startApp 
 import { isUnderAdminPrefix, routeInventory, samplePath, type Endpoint } from "./support/route-inventory";
 
 const { isAuthenticatedAdmin } = await import("../server/auth");
+const { codeHash, emailHash, linkHash, generateLinkToken, playerAuthKey } = await import("../server/player/codes");
+const { createPlayerStore } = await import("../server/player/store");
 
 const ADMIN_EMAIL = "authz-admin@websuli.example";
 const ADMIN_PASSWORD = `pw-${Math.random().toString(36).slice(2)}-A1!`;
@@ -38,6 +40,18 @@ let adminEndpoints: Endpoint[] = [];
 const roles: Role[] = [];
 let admin: Client;
 
+async function realEmailPlayer(base: string, email: string): Promise<Client> {
+  // A belépőkód VALÓDI beváltása: a kódrekordot a szerverrel azonos kulccsal (SESSION_SECRET) ültetjük el, a beváltás HTTP-n.
+  const key = playerAuthKey();
+  const eh = emailHash(key, email);
+  await createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, codeHash: codeHash(key, eh, "424242"), linkHash: linkHash(key, generateLinkToken()) });
+  const c = new Client(base);
+  const r = await c.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "424242" });
+  assert.equal(r.status, 200, `játékos-beváltás: ${r.text}`);
+  await c.fetchCsrf();
+  return c;
+}
+
 async function sessionClient(base: string, data: Record<string, unknown>): Promise<Client> {
   const c = new Client(base, await injectSession(data));
   await c.fetchCsrf();
@@ -45,6 +59,7 @@ async function sessionClient(base: string, data: Record<string, unknown>): Promi
 }
 
 before(async () => {
+  process.env.PLAYER_ACCOUNTS = "on";
   const hash = await bcrypt.hash(ADMIN_PASSWORD, 4);
   await dbPool.query(
     `INSERT INTO users (id, email, password, is_admin, is_banned) VALUES
@@ -56,6 +71,11 @@ before(async () => {
   );
   await dbPool.query(`UPDATE users SET google_id = 'g-authz-user' WHERE id = 'authz-user'`);
   await dbPool.query(`INSERT INTO html_files (id, title, content, classroom) VALUES ($1, 'Mátrix-áldozat', '<p>x</p>', 3)`, [VICTIM]);
+  await dbPool.query(
+    `INSERT INTO player_accounts (id, email, email_verified_at, google_sub, banned_at) VALUES
+       ('authz-google-player', 'authz-gplayer@websuli.example', now(), 'g-sub-authz', NULL),
+       ('authz-banned-player', 'authz-bplayer@websuli.example', now(), NULL, now())`,
+  );
 
   stubApp = await startApp((app) => {
     adminEndpoints = routeInventory(app).filter((e) => isUnderAdminPrefix(e.path) || e.chain.includes(isAuthenticatedAdmin));
@@ -75,7 +95,8 @@ before(async () => {
   const guest = new Client(stubApp.base);
   await guest.fetchCsrf();
   roles.push({ name: "vendég", client: guest });
-  roles.push({ name: "e-mail-kódos játékos (szimulált munkamenet)", client: await sessionClient(stubApp.base, { player: { id: "authz-email-player" } }) });
+  roles.push({ name: "e-mail-kódos játékos", client: await realEmailPlayer(stubApp.base, "authz-player@websuli.example") });
+  roles.push({ name: "e-mail-kódos játékos az admin címével", client: await realEmailPlayer(stubApp.base, ADMIN_EMAIL) });
   roles.push({ name: "Google-os játékos (szimulált, JM7b)", client: await sessionClient(stubApp.base, { player: { id: "authz-google-player" } }) });
   roles.push({ name: "tiltott játékos", client: await sessionClient(stubApp.base, { player: { id: "authz-banned-player" } }) });
   roles.push({ name: "nem admin Google-felhasználó", client: await sessionClient(stubApp.base, { passport: { user: "authz-user" } }) });
@@ -85,6 +106,7 @@ before(async () => {
 after(async () => {
   await stubApp?.close();
   await realApp?.close();
+  delete process.env.PLAYER_ACCOUNTS;
   await dbPool.end();
 });
 
