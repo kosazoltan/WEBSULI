@@ -580,3 +580,7 @@ Forrás: J0c (kérdés-sáv, `play-lab.spec.ts`).
 - **Megelőzés:** forrásban Unicode-tartományt kategóriával írj (`\p{Cf}`, `\p{Zl}`, `\p{Zp}`, `\p{Cc}`), ne `\uXXXX`-szel; tesztben
   a különleges karaktert `String.fromCodePoint(0x200b)`-vel állítsd elő; írás után `cat -A <fájl> | sed -n <sor>p` (a `M-bM-^@M-(`
   alak nyers U+2028-at jelez). Javítás csak karakterkóddal (`String.fromCharCode(0x2028)`) kereső szkripttel, nem escape-pel.
+- **Tünet 2 (JM7b, #449 CI):** az új admin-fül miatt a `admin-korszerusites.test.ts` fülszámát (16 → 17) dokumentáltan átírtam,
+  de az ugyanazt mérő e2e-párját (`admin-korszerusites.spec.ts`) nem — a helyben futtatott e2e-k között nem szerepelt, csak a CI
+  ~40 perces Playwright-jobja fogta meg. **Megelőzés:** egy számlált / felsorolt elvárás (fülszám, végpontlista) módosításakor
+  `grep -rn "<régi szám vagy kulcs>" tests/` a `*.test.ts` ÉS a `*.spec.ts` fájlokra, és a találatokat mind futtasd helyben.
