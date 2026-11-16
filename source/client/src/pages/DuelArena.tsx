@@ -11,7 +11,8 @@ import { Link, useLocation } from "wouter";
 import { ArrowLeft, Dices, Pause, Swords, Trophy } from "lucide-react";
 
 import AudioToggleButton from "@/components/AudioToggleButton";
-import { GRADE_QUIZ_ITEMS, type GradeSubject } from "@/data/gradeQuizBank";
+import type { GradeSubject } from "@/data/gradeQuizBank/types";
+import { isGradeBankLoaded, loadGradeBank, loadedGradeItems } from "@/data/gradeQuizBank/loader";
 import { loadVocabBank } from "@/data/vocabBank/loader";
 import type { VocabLang } from "@/data/vocabBank/types";
 import { correctDataAttrs, installGameTestApi, readGameSeed, GAME_TEST_HOOKS_ENABLED } from "@/game-engine/game-test-hooks";
@@ -174,7 +175,8 @@ function makeProvider(args: {
   const fromBank = (round: number, grade: number): DuelQuestion | null => {
     let used = args.usedByGrade.get(grade);
     if (!used) args.usedByGrade.set(grade, (used = new Set()));
-    const build = () => buildRoundQuestion({ seed: args.seed, round, grade, band, subjects, used: used!, items: GRADE_QUIZ_ITEMS, windowMs: rule });
+    // JBb: az évfolyam-bank évfolyamonként lusta; a `startMatch` a meccs előtt betölti a szükséges évfolyamokat.
+    const build = () => buildRoundQuestion({ seed: args.seed, round, grade, band, subjects, used: used!, items: loadedGradeItems(), windowMs: rule });
     let q = build();
     if (!q) {
       // Hosszú visszavágó-sorozat: a bank elfogyott → elölről (a meccsen belül így sincs ismétlés, mert a used friss).
@@ -552,6 +554,25 @@ export default function DuelArena() {
           );
           return;
         }
+      }
+    }
+    // JBb: a játékosok évfolyamának (és szomszédainak) bankdarabja a meccs előtt; hibánál újrapróbálható üzenet.
+    const bankGrades = [...new Set(SEATS.flatMap((id) => [s.seats[id].grade - 1, s.seats[id].grade, s.seats[id].grade + 1]))]
+      .filter((g) => g >= 3 && g <= 12);
+    if (!bankGrades.every(isGradeBankLoaded)) {
+      inFlight.current = true;
+      setLoading(true);
+      try {
+        await Promise.allSettled(bankGrades.map((g) => loadGradeBank(g)));
+      } finally {
+        inFlight.current = false;
+        if (mountedRef.current) setLoading(false);
+      }
+      if (!stillValid()) return;
+      const own = SEATS.map((id) => s.seats[id].grade).filter((g) => g >= 3 && g <= 12);
+      if (!own.every(isGradeBankLoaded)) {
+        setLoadError("Nem sikerült betölteni a kérdéseket (lehet, hogy nincs internet). Próbáld újra!");
+        return;
       }
     }
     matchIndex.current += 1;
