@@ -28,7 +28,7 @@ import { logger } from "../lib/logger";
 import { maskEmail } from "../lib/mask-email";
 import { enforceOriginAllowlist } from "../lib/origin-guard";
 import type { PlayerAccountStore } from "./account-store";
-import { CODE_PATTERN, allPurposeEmailHashes, codeHash, generateCode, generateLinkToken, limitHash, linkHash, playerAuthKey, purposeEmailHash } from "./codes";
+import { CODE_PATTERN, allPurposeEmailHashes, codeHash, deleteLimitHash, generateCode, generateLinkToken, linkHash, playerAuthKey, purposeEmailHash } from "./codes";
 import type { PlayerMailer } from "./auth-routes";
 import { buildAccountDeletedEmail, buildDeleteCodeEmail } from "./email-template";
 import { createRequireOwnData, createRequirePlayer, requirePlayerAccountsFlag } from "./require-player";
@@ -242,7 +242,8 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
       const eh = purposeEmailHash(key, email, "delete");
       const code = generateCode();
       const reserved = await deps.store.reserveCode({
-        emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email),
+        // N3: saját levélkeret — a névtelen belépőkód-kérések nem fogyaszthatják el a tulajdonos törlési kódját.
+        emailNormalized: email, emailHash: eh, limitHash: deleteLimitHash(key, email),
         codeHash: codeHash(key, eh, `${DELETE_CODE_PREFIX}${code}`), linkHash: linkHash(key, generateLinkToken()),
       });
       if (reserved !== "OK") {
@@ -282,10 +283,11 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
       const key = playerAuthKey();
       const email = await deps.accounts.playerEmailById(id);
       if (!email) return res.status(401).json({ message: "Unauthorized" });
-      // A kérő munkamenet játékosának címéhez kötött céltartomány: más fiók munkamenetéből nem váltható be. A hibás próbák a
-      // cím közös (belépés + törlés) napi plafonjába számítanak.
+      // A kérő munkamenet játékosának címéhez kötött céltartomány: más fiók munkamenetéből nem váltható be. N3: a törlés napi
+      // hibás-próba plafonja CSAK a törlési tartományt számolja (egy idegen belépési hibái nem zárják le), a zár közös; a
+      // belépés plafonja továbbra is beszámítja a törlési hibákat.
       const eh = purposeEmailHash(key, email, "delete");
-      if ((await deps.store.consumeCode(eh, codeHash(key, eh, `${DELETE_CODE_PREFIX}${code}`), allPurposeEmailHashes(key, email))) === null) {
+      if ((await deps.store.consumeCode(eh, codeHash(key, eh, `${DELETE_CODE_PREFIX}${code}`), [eh], allPurposeEmailHashes(key, email))) === null) {
         return res.status(400).json({ ok: false, code: "CODE_INVALID" });
       }
       const result = await deps.accounts.deleteAccount(id, (e) => allPurposeEmailHashes(key, e));
