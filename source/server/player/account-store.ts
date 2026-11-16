@@ -49,6 +49,15 @@ export async function bannedVariantId(client: Pick<PoolClient, "query">, normali
   return ids[0] ?? null;
 }
 
+/**
+ * (B) Fiók-létrehozáskor (a kanonikus címzár alatt, az INSERT ELŐTT): a törölt-tiltott sor `FOR SHARE` olvasása — egy
+ * párhuzamos törölt-tiltott feloldással (sorzáras DELETE) így sorosodik (#475 ellenőrző kör, Ú-a). A tiltás idejét a hívó
+ * INSERT-je a saját, új pillanatképéből veszi át (mikroszekundumra pontosan).
+ */
+export async function lockDeletedBanRow(client: Pick<PoolClient, "query">, fingerprint: string): Promise<void> {
+  await client.query(`SELECT 1 FROM player_ban_fingerprints WHERE fingerprint = $1 FOR SHARE`, [fingerprint]);
+}
+
 /** (B) A törölt, tiltott fiók címének ujjlenyomata (a tiltás-kulccsal). */
 export function deletedBanFingerprint(normalizedEmail: string): string {
   return banFingerprint(playerBanKey(), normalizedEmail);
@@ -150,6 +159,7 @@ export function createPlayerAccountStore(pool: Db) {
             // vissza egy feloldott fiók tiltását).
             await lockBanCanonical(client, emailNormalized);
             const variant = await bannedVariantId(client, emailNormalized);
+            await lockDeletedBanRow(client, deletedBanFingerprint(emailNormalized));
             const { rows } = await client.query<{ id: string; google_sub: string | null }>(
               `INSERT INTO player_accounts (email, email_verified_at, google_sub, banned_at)
                  VALUES ($1, now(), $2, COALESCE((SELECT banned_at FROM player_accounts WHERE id = $3::varchar),
@@ -379,8 +389,23 @@ export function createPlayerAccountStore(pool: Db) {
           if (live) {
             await lockBanCanonical(client, live);
             accounts += await unbanCanonical(client, live, fingerprint);
-          } else {
-            await client.query(`DELETE FROM player_ban_fingerprints WHERE fingerprint = $1`, [fingerprint]);
+            continue;
+          }
+          // Élő fiók nélkül a kanonikus cím nem ismert (nincs zár-kulcs). #475 ellenőrző kör (Ú-a): a sor törlése SORZÁRAT vesz,
+          // a fiók-létrehozás pedig az ujjlenyomatot `FOR SHARE`-rel olvassa (`lockDeletedBanRow`) — így a kettő sorosodik:
+          //  - ha a létrehozás olvasott előbb, ez a törlés megvárja a commitját (a fiók tiltottként jött létre), és az utána
+          //    következő keresés (új pillanatkép) megtalálja és feloldja;
+          //  - ha ez a törlés előbb jár, a létrehozás a commitunkig vár, és már nem látja a sort → tiltatlanul jön létre.
+          // A közben megtalált fiók feloldása a kanonikus zár NÉLKÜL történik (egy létrehozó tranzakció a zárát tartva a mi
+          // sorzárunkra várhat — holtpont elkerülése); a megtalált fiók már commitolt.
+          await client.query(`DELETE FROM player_ban_fingerprints WHERE fingerprint = $1`, [fingerprint]);
+          const created = await liveAccountByFingerprint(client, fingerprint);
+          if (created) {
+            const ids = await canonicalVariantIds(client, created, true);
+            if (ids.length > 0) {
+              const u = await client.query(`UPDATE player_accounts SET banned_at = NULL WHERE id = ANY($1::varchar[])`, [ids]);
+              accounts += u.rowCount ?? 0;
+            }
           }
         }
         return { entries: rows.length, accounts };

@@ -984,6 +984,66 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
     assert.equal((await codeLogin("k1-reban-fresh+x@pelda.hu")).status, 403, "az alias tiltott ujjlenyomat nélkül is");
   });
 
+  it("#475 ellenőrző kör (Ú-a): törölt-tiltott feloldás ‖ regisztráció — a végállapotban nincs tiltott fiók és nincs ujjlenyomat, mindkét sorrendben", async () => {
+    const accounts = createPlayerAccountStore(dbPool);
+    const store = createPlayerStore(dbPool);
+    const plantDeleted = async (email: string) => {
+      await dbPool.query(`INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $2, now())`, [fp(email), keyIdNow()]);
+    };
+    const finalState = async (email: string, variant: string) => ({
+      banned: (await q<{ banned_at: Date | null }>(`SELECT banned_at FROM player_accounts WHERE email IN ($1, $2)`, [normalizeEmail(email)!, normalizeEmail(variant)!])).some((r) => r.banned_at !== null),
+      fingerprints: (await fpRows(email)).length,
+    });
+    // 1. sorrend: a regisztráció olvasta előbb az ujjlenyomatot (FOR SHARE) → a feloldás megvárja a commitját, majd feloldja.
+    {
+      const email = "k1-ua-elso@pelda.hu", variant = "k1-ua-elso+uj@pelda.hu";
+      await plantDeleted(email);
+      const c1 = await dbPool.connect();
+      let unban: Promise<unknown>;
+      try {
+        await c1.query("BEGIN");
+        await c1.query(`SELECT 1 FROM player_ban_fingerprints WHERE fingerprint = $1 FOR SHARE`, [fp(email)]);
+        unban = accounts.unbanDeleted(fp(email).slice(0, 16));
+        const state = settled(unban);
+        await pause(250);
+        assert.equal(state.done, false, "a feloldás a regisztráció commitjáig vár");
+        await c1.query(`INSERT INTO player_accounts (email, email_verified_at, banned_at) SELECT $1, now(), banned_at FROM player_ban_fingerprints WHERE fingerprint = $2`, [normalizeEmail(variant)!, fp(email)]);
+        await c1.query("COMMIT");
+      } finally {
+        c1.release();
+      }
+      await unban!;
+      assert.deepEqual(await finalState(email, variant), { banned: false, fingerprints: 0 });
+    }
+    // 2. sorrend: a feloldás törölt előbb → a regisztráció a commitjáig vár, és már tiltatlanul jön létre.
+    {
+      const email = "k1-ua-masodik@pelda.hu", variant = "k1-ua-masodik+uj@pelda.hu";
+      await plantDeleted(email);
+      const c1 = await dbPool.connect();
+      let creating: Promise<{ banned: boolean }>;
+      try {
+        await c1.query("BEGIN");
+        await c1.query(`DELETE FROM player_ban_fingerprints WHERE fingerprint = $1`, [fp(email)]);
+        creating = store.confirmVerifiedEmail(normalizeEmail(variant)!);
+        const state = settled(creating);
+        await pause(250);
+        assert.equal(state.done, false, "a regisztráció a feloldás commitjáig vár");
+        await c1.query("COMMIT");
+      } finally {
+        c1.release();
+      }
+      assert.equal((await creating!).banned, false);
+      assert.deepEqual(await finalState(email, variant), { banned: false, fingerprints: 0 });
+    }
+    // Valódi párhuzamosság, 25 kör.
+    for (let i = 0; i < 25; i++) {
+      const email = `k1-ua-kor${i}@pelda.hu`, variant = `k1-ua-kor${i}+uj@pelda.hu`;
+      await plantDeleted(email);
+      await Promise.all([accounts.unbanDeleted(fp(email).slice(0, 16)), store.confirmVerifiedEmail(normalizeEmail(variant)!)]);
+      assert.deepEqual(await finalState(email, variant), { banned: false, fingerprints: 0 }, `${i}. kör`);
+    }
+  });
+
   it("#471 review (2.): tiltás → törlés → újrabelépés (tiltott) → a törölt-tiltott feloldása az élő fiókot is feloldja; utána a törlés nyomtalan", async () => {
     const admin = await adminClient();
     const email = "k1.felold2@gmail.com";

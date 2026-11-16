@@ -20,6 +20,20 @@ Háttér: `docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md` „JM7b-ut�
 Tartósan magas arány (pl. a kérések > 30 %-a) hamis tiltásra utalhat — ilyenkor a konkrét neveket a tulajdonos jelezze, és a
 szűrő ellenpróba-listája bővüljön (`tests/nickname-filter.test.ts`).
 
+## A `PLAYER_BAN_KEY` beállítása (a törölt fiókok tiltás-ujjlenyomatának kulcsa)
+
+- **NEM szabad ugyanabban a telepítésben beállítani, amelyik a K1b-kódot (`fix/jatek-fiok-tiltas-kulcsrotacio`) élesíti.** A Render
+  nulla állásidős telepítése rövid ideig átfedi a régi és az új példányt; a régi bináris takarítója (a K1b előtti kód) a saját
+  kulcsától eltérő `key_id`-jű sorokat TÖRLI — így az új kulccsal közben írt sorokat is. A kulcsot egy KÜLÖN, későbbi telepítésben
+  állítsd be (Render → Environment), amikor a K1b-kód már fut.
+- Lehetőleg akkor állítsd be, amikor **0 törölt-tiltott bejegyzés** van (Admin → „Játékosok” → „Törölt, de tiltva maradt fiókok”
+  üres; vagy a lenti lekérdezés `ujjlenyomat = 0`).
+- A kulcs beállítása maga is **kulcsváltás** a meglévő sorokra nézve: a korábban (a `SESSION_SECRET`-ből levezetett kulccsal) készült
+  törölt-tiltott sorok ezután nem illenek (a takarító `kulcsrotáció: N régi kulcsú …` figyelmeztetést ír), és 12 hónap után törlődnek.
+  Visszaállításkor (a kulcs törlése / a régi visszaállítása) a régi sorok újra érvényesek — szándékos.
+- A kulcsot később NE cseréld; ha mégis kell, ugyanez érvényes (a régi sorok nem illenek, nem törlődnek, 12 hónap után lejárnak).
+- Az élő tiltott fiókok tiltását egyik lépés sem érinti (az kulcstól független).
+
 ## Csak olvasó ellenőrző lekérdezés (heti)
 
 ```sql

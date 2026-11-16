@@ -10,7 +10,7 @@ import {
   CODE_RETENTION_MS, CODE_TTL_MS, DAY_MS, LINK_TTL_MS, MAX_CODE_ATTEMPTS, MAX_FAILED_ATTEMPTS_PER_DAY,
   START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_WINDOW_MS, loginEmailDailyMax,
 } from "./codes";
-import { bannedVariantId, countForeignBanKeys, createPlayerAccountStore, deletedBanFingerprint, lockBanCanonical } from "./account-store";
+import { bannedVariantId, countForeignBanKeys, createPlayerAccountStore, deletedBanFingerprint, lockBanCanonical, lockDeletedBanRow } from "./account-store";
 
 export type CodeInput = { emailNormalized: string; emailHash: string; limitHash: string; codeHash: string; linkHash: string };
 const INSERT_CODE_SQL = `INSERT INTO player_auth_codes (email_normalized, email_hash, limit_hash, code_hash, link_hash, expires_at)
@@ -189,6 +189,7 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
         // nem írja vissza egy feloldott fiók tiltását.
         await lockBanCanonical(client, emailNormalized);
         const variant = await bannedVariantId(client, emailNormalized);
+        await lockDeletedBanRow(client, deletedBanFingerprint(emailNormalized));
         const { rows } = await client.query<{ id: string; nickname: string | null; banned_at: Date | null }>(
           `INSERT INTO player_accounts (email, email_verified_at, banned_at)
              VALUES ($1, now(), COALESCE((SELECT banned_at FROM player_accounts WHERE id = $2::varchar),
