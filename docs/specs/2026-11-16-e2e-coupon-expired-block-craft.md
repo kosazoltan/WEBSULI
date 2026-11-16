@@ -63,6 +63,20 @@ pörög a GPU / akku), ellentétben a szünettel, ahol a S11 óta a render-ciklu
 - Lejárat szünetben: a szünet menü a párbeszéd alatt inert marad; a ciklus eddig is állt.
 - Kupon nélkül (szabad játék) a `coupon.expired` mindig hamis: a viselkedés változatlan.
 
+## Bővítés: a main run 43916330845 (fej ba9c666c) többi ingadozása
+
+Besorolás a napló, a riport lépésidői és az `error-context.md` / képernyőkép alapján:
+
+| teszt | tény | besorolás | javítás |
+| --- | --- | --- | --- |
+| `vocab-cross-game-log.spec.ts:49` (1 failed) | „a Szólétra nem naplózott szóbank-bejegyzést” | a #454 hatóköre | itt nincs; a mainen a #454 összevonásáig bukhat |
+| `block-art.spec.ts:18` (flaky) | az `img.complete`-ellenőrzés 46 ms-mal a `src` beállítása után EGYSZER fut; helyben SwiftShaderrel 2/20 bukás | a teszt pillanatképet néz feltétel helyett (terhelésfüggő) | `expect.poll` ugyanarra a feltételre (minden jelzőkép betölt, valós mérettel) |
+| `joystick-response.spec.ts:538` space-asteroid (flaky) | 0. kísérlet: „Kör vége” (hullám 1/12, 0 kilőtt) — a lövés nélkül vezetett hajó elfogyott, a `boundingBox` 153 s-ig várt a tárcsára; 1. kísérlet: kvíz nyílt a lépcső érintése alá, az érintés a D (rossz) választ koppintotta, a magyarázókártya nyitva, a `clearQuiz` a letiltott helyes gombra 168 s-ig kattintott | a mérőkeret nem kezeli a játékállapotot (kör vége, rossz válasz kártyája); a valós idő terhelés alatt nő → több találat | `clearQuiz`: kártya bezárása, csak engedélyezett gomb, korlátos körök; `ensurePlaying`: kör végén új kör; `boundingBox` 15 s-os korláttal. A küszöbök (képkockában) változatlanok |
+| `block-craft-real-touch.spec.ts:46` (flaky) | 6 koppintás (~1 s / koppintás) után sincs kvíz, ~9 s; a „Bányász” fókuszban, fedőréteg nincs | a gyökérok UNVERIFIED (a bukott kísérletnek nincs trace-e; helyben GPU-val 2×30, SwiftShaderrel 2×20 zöld (első kvíz 2,2–3,8 s), egy idővonal-próbán 8/8-szor már az első koppintásra kvíz; szimuláció: 3000 világon a kezdő nézés leérkezés után is bányászható blokkra mutat) | a darabszám-korlát helyett a teszt saját 20 mp-es elvárásáig koppint, és bukáskor diagnosztikát ad (célkereszt-tipp, render-lépések) |
+
+A négy bukás gyökéroka NEM közös: a coupon-expired termékhiba (háttérben futó render-ciklus), a többi mérő / teszt
+oldali állapotkezelés, illetve feltétel nélküli pillanatkép.
+
 ## Elfogadás (EARS)
 
 - AMIKOR a kupon lejár játék közben, a Kockavadász render-ciklusa megáll (`probe().frames` nem nő), és a játékóra nem

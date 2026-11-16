@@ -8,6 +8,8 @@
 - `source/client/src/pages/BlockCraftQuiz.tsx` — a javítás.
 - `source/tests/coupon-expired-all-games.spec.ts` — ÚJ eset a Kockavadászra (a meglévő esetek változatlanok).
 - `docs/specs/2026-11-16-e2e-coupon-expired-block-craft*.md` — terv, utasítás, mérési eredmények.
+- Bővítés (orkesztrátor, main run 43916330845 — ld. a terv „Bővítés” részét), csak tesztfájlok:
+  `source/tests/block-art.spec.ts`, `source/tests/joystick-response.spec.ts`, `source/tests/block-craft-real-touch.spec.ts`.
 
 Közös fájlt (`game-engine/CouponHud.tsx`, `useCouponSession.ts`, `game-test-hooks.ts`, `index.css`, közös tesztsegéd) NEM
 módosítunk.
