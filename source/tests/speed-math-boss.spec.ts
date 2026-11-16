@@ -79,3 +79,38 @@ test("kampó nélkül, érintéssel: hullámok → Hibagyár → Zéró-robot (m
   await expect(page.getByTestId("sq-score")).toContainText("Pont: 0");
   expect(errors.filter((e) => !/401|Failed to fetch/i.test(e))).toEqual([]);
 });
+
+/**
+ * Review #466: a Hibagyár négy válasza páronként egymásra került — a takart helyes válasz érintéssel nem volt választható
+ * (a kampó nélküli menet ezt elfedte: a „jó” koppintás néha a fedő, rossz drónra esett, és csak a pontosság romlott).
+ * Itt a főellenfél-állapotot kampóval nyitjuk, de a VÁLASZTÁS valódi érintés: MINDEN indexen a megérintett drón kerül
+ * a megoldás-kijelzésbe (jó → `correct`, rossz → `wrong`), és a doboza nem fedi a többit.
+ */
+for (const kind of ["factory", "boss"] as const) {
+  test(`${kind === "factory" ? "Hibagyár" : "Zéró-robot"}: a négy válaszcél közül bármelyik kiválasztható érintéssel (nincs takart cél)`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/speed-quiz-math?seed=8");
+    await page.getByTestId("sq-start").tap();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: { forceState?: unknown } }).__websuliGame?.forceState === "function");
+    await page.evaluate((phase) => (window as unknown as { __websuliGame: { forceState: (p: object) => void } }).__websuliGame.forceState({ phase }), kind);
+    const tested = new Map<number, string>();
+    for (let round = 0; round < 12 && tested.size < 4; round++) {
+      const drones = page.locator('[data-testid="sq-answers"] [data-correct][data-state="idle"]');
+      await expect(drones).toHaveCount(4, { timeout: 15_000 });
+      await page.waitForTimeout(300);
+      // a még nem próbált indexek közül előbb a rosszat (a jó válasz sebez — a Hibagyár 2 találattól elesne)
+      let pick = -1;
+      for (let i = 0; i < 4 && pick < 0; i++) if (!tested.has(i) && (await page.getByTestId(`sq-drone-${i}`).getAttribute("data-correct")) === "false") pick = i;
+      for (let i = 0; i < 4 && pick < 0; i++) if (!tested.has(i)) pick = i;
+      const el = page.getByTestId(`sq-drone-${pick}`);
+      const correct = (await el.getAttribute("data-correct")) === "true";
+      const box = (await el.boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(el, `${pick}. index`).toHaveAttribute("data-state", correct ? "correct" : "wrong");
+      tested.set(pick, correct ? "correct" : "wrong");
+      // a következő gyenge-pont kérdésig (a megoldás-kijelzés + a ritmus-szünet)
+      await expect(page.locator('[data-testid="sq-answers"] [data-correct]')).toHaveCount(0, { timeout: 10_000 });
+    }
+    expect([...tested.keys()].sort()).toEqual([0, 1, 2, 3]);
+  });
+}

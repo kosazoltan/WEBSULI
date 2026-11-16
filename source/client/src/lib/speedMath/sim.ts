@@ -90,6 +90,8 @@ export type SpeedMathSim = {
   core: TowerCore;
   /** J4b: a Zéró-robot harcának kezdete és vége (kérdés-óra ms; null, ha nem jött el / nem ért véget). */
   bossFight(): { startMs: number | null; endMs: number | null };
+  /** A menetben ténylegesen feltett Becslő-bombák száma. */
+  bombs(): number;
 };
 
 export function createSimGame(opts: { seed: number; grade: number; questions: boolean }): SpeedMathSim {
@@ -103,14 +105,16 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
     now: () => 0,
   });
   let tapAcc = 0;
+  let bombs = 0;
   let answeredOpen = false;
   // A lappal AZONOS meghajtó (fix lépésű hurok, időskála, hitstop): a sim ugyanazt a lépéssort futtatja (review #451).
   let driver: TowerDriver | null = null;
   const ui = createQuestionUi({
     director: () => (opts.questions ? director : null),
     onView: () => {},
-    onShow: () => {
+    onShow: (p) => {
       answeredOpen = false;
+      if (towerQuestionKind(p) === "bomb") bombs += 1;
     },
     onOutcome: (o, p) => {
       const speed = o.result === "correct" ? Math.max(0, 1 - o.responseMs / p.windowMs) : 0;
@@ -169,6 +173,7 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
       answeredOpen = true;
       ui.pick(option, d.clockMs());
     },
+    bombs: () => bombs,
     bossFight: () => ({ startMs: bossStart, endMs: bossEnd ?? (bossStart !== null && over() ? d.clockMs() : null) }),
     done: () => over(),
     won: () => core.state().phase === "won",

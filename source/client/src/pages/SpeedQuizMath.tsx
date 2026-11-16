@@ -2317,13 +2317,30 @@ export default function SpeedQuizMath() {
     }
     const t = Math.min(1, Math.max(0, (clockRef.current - p.startedAtSimMs) / DRONE_ENTER_MS));
     const e = reducedMotion ? 1 : tween(t, "outBack");
+    // A főellenfél gyenge pontjai CSOPORTKÉNT maradnak a képernyőn belül (a ringás szélén az egész csoport tolódik, nem
+    // egyenként szorulnak — review #466: az egyenkénti szorítás összetolta, és egymásra tehette a célokat).
+    let groupShift = 0;
+    if (onBoss) {
+      let minL = Number.POSITIVE_INFINITY;
+      let maxR = Number.NEGATIVE_INFINITY;
+      for (let i = 0; i < p.options.length; i++) {
+        const el = droneRefs.current[i];
+        const pt = lay.pts[i];
+        if (!el || !pt) continue;
+        const cx = (boss.x + pt.x) * w;
+        minL = Math.min(minL, cx - el.offsetWidth / 2);
+        maxR = Math.max(maxR, cx + el.offsetWidth / 2);
+      }
+      if (minL < 6) groupShift = 6 - minL;
+      else if (maxR > w - 6) groupShift = w - 6 - maxR;
+    }
     for (let i = 0; i < p.options.length; i++) {
       const el = droneRefs.current[i];
       const pt = lay.pts[i];
       if (!el || !pt) continue;
       // Hosszú számnál a drón szélesebb: a játéktéren belül tartjuk (6 px margó).
       const ow = el.offsetWidth;
-      const nx = onBoss ? boss.x + pt.x : pt.x;
+      const nx = onBoss ? boss.x + pt.x + groupShift / w : pt.x;
       const ny = onBoss ? boss.y + bossDy() + pt.y : pt.y;
       const x = Math.min(w - 6 - ow / 2, Math.max(6 + ow / 2, nx * w));
       const y = onBoss ? ny * h : (-0.12 + (ny + 0.12) * e) * h;
@@ -2691,9 +2708,9 @@ export default function SpeedQuizMath() {
         if (patch.question || patch.phase === "quiz") qRef.current.request("trigger", clockRef.current);
         if (patch.phase === "play") startGame();
         // Teszt-kampó (mobil mérő „mozgó cél” esete, képernyőképek): azonnal a Zéró-robot harca.
-        if (patch.phase === "boss") {
+        if (patch.phase === "boss" || patch.phase === "factory") {
           qRef.current.abort(); // a nyitott rendes kérdés „megszakítva” (nem hiba) — a következő a gyenge pont
-          driverRef.current?.core.forceBoss("zero");
+          driverRef.current?.core.forceBoss(patch.phase === "factory" ? "factory" : "zero");
         }
         if (patch.phase === "menu") setPhase("menu");
         if (patch.phase === "won" || patch.phase === "over") endRun(patch.phase === "won", typeof patch.correctCount === "number" ? patch.correctCount : undefined);

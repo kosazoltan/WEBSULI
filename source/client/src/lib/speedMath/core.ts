@@ -825,17 +825,17 @@ export function droneLayout(seed: number | string, presentationId: number, count
     const p = out[i] ?? (out[i] = { x: 0, y: 0 });
     // Kis, seedelt szórás: minden kérdésnél kicsit máshol, de két drón sosem fedi egymást (76 × 60 px, 360 px-en is).
     const jx = (rng.next() - 0.5) * 0.016;
-    const jy = (rng.next() - 0.5) * 0.024;
+    const jy = (rng.next() - 0.5) * 0.016;
     if (wide) {
       // bal oldalt az első fele, jobb oldalt a többi; két magasságban
       const left = i < Math.ceil(n / 2);
       const k = left ? i : i - Math.ceil(n / 2);
       p.x = (left ? 0.08 + k * 0.12 : 0.8 + k * 0.12) + jx;
-      p.y = 0.42 + (k % 2) * 0.22 + jy;
+      p.y = 0.4 + (k % 2) * 0.26 + jy;
     } else {
       // cikcakk-sor: a szomszédok függőlegesen is eltolva, hogy hosszú szám mellett se érjenek össze
       p.x = (n === 1 ? 0.5 : 0.15 + (0.7 * i) / (n - 1)) + jx;
-      p.y = 0.38 + (i % 2) * 0.14 + jy;
+      p.y = 0.37 + (i % 2) * 0.16 + jy;
     }
   }
 }
@@ -852,13 +852,19 @@ export function bossWeakPoints(kind: BossKind, count: number, wide: boolean, out
   const sx = wide ? 0.11 : 0.2;
   for (let i = 0; i < n; i++) {
     const p = out[i] ?? (out[i] = { x: 0, y: 0 });
-    if (kind === "factory" || n <= 2) {
+    // Két opciónál két oldalt; NÉGY opciónál (a Hibagyárnál is — review #466: korábban a Hibagyár négy válasza páronként
+    // egymásra került, és a takart helyes válasz nem volt kiválasztható) mindig négy külön, egymást nem fedő hely.
+    if (n <= 2) {
       p.x = (i % 2 === 0 ? -1 : 1) * sx * 1.05;
       p.y = 0.02;
+    } else if (wide) {
+      // fekvő nézet (alacsony játéktér): egy sorban, a test két oldalán (−0,21 … +0,21)
+      p.x = -0.21 + (0.42 * i) / Math.max(1, n - 1);
+      p.y = 0.03;
     } else {
       // 2×2: felső pár szélesebben, alsó pár szűkebben (két drón soha nem fedi egymást — ld. teszt)
       const top = i < 2;
-      p.x = (i % 2 === 0 ? -1 : 1) * (top ? sx * 1.15 : sx * 0.65);
+      p.x = (i % 2 === 0 ? -1 : 1) * (top ? sx * 1.15 : sx * 0.85);
       p.y = top ? -0.07 : 0.11;
     }
   }
@@ -1042,7 +1048,7 @@ export type TowerQuestionUi = {
   finished(): boolean;
   finish(): unknown;
   /** J4b: azonnali kérés (főellenfél: „boss”, Becslő-bomba: „trigger”), és hogy most indulhat-e kérdés. */
-  request(reason: "trigger" | "boss", clockMs: number): unknown;
+  request(reason: "trigger" | "boss", clockMs: number): QuestionPresentation | null;
   canAsk(): boolean;
   /** Nyitott-e kérdés (a főellenfél ilyenkor nem támad). */
   active(): unknown;
@@ -1124,7 +1130,10 @@ export function createTowerDriver(opts: {
             q.request("boss", clock);
           } else if (core.bombDue()) {
             core.setNextKind("bomb");
-            if (q.request("trigger", clock)) core.takeBomb();
+            // Review #466: a director az esedékes ISMÉTLÉST a forrás előtt választja — ilyenkor a kérés nem bomba, és az
+            // esedékesség megmarad a következő lehetséges kérdésig (az ismétlés sem vész el, és nem is éhezik ki).
+            const p = q.request("trigger", clock);
+            if (p && towerQuestionKind(p) === "bomb") core.takeBomb();
           }
           core.setNextKind("normal");
         }

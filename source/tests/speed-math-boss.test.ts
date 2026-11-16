@@ -288,3 +288,101 @@ test("noReview (közös, additív): a Becslő-bomba nem kerül az ismétlési so
   assert.equal(s.wrong, 1);
   assert.equal(s.reviewReturnWithin6, 1, "a visszatérési mérés nem számolja (szándékosan nem tér vissza)");
 });
+
+/**
+ * Review #466 — célpont–célpont átfedés: a lap a gombokat a `droneLayout` / `bossWeakPoints` helyére teszi (fekvőben a
+ * főellenfél `BOSS_WIDE_DY`-vel lejjebb), és a széleken a képernyőbe szorítja (6 px margó). Itt ugyanezzel a szabállyal,
+ * a legrosszabb gombmérettel (110 × 64 px, hosszú szám) és a főellenfél teljes ringás-tartományán ellenőrizzük, hogy
+ * BÁRMELY két célpont között van hézag — minden kérdésfajtára, nézetre, seedre és indexre. (A J4b-ben a Hibagyár négy
+ * válasza páronként egymásra került: a takart helyes válasz érintéssel nem volt választható.)
+ */
+test("célpontok: minden kérdésfajtánál (rendes, bomba, Hibagyár, Zéró-robot) négy / két külön, egymást nem fedő hely, minden nézetben", async () => {
+  const { droneLayout } = await import("../client/src/lib/speedMath/core");
+  const DW = 110;
+  const DH = 64;
+  const GAP = 6;
+  const views = [
+    { name: "360×640", w: 360, h: 560, wide: false },
+    { name: "390×844", w: 390, h: 760, wide: false },
+    { name: "844×390", w: 844, h: 315, wide: true },
+  ];
+  const place = (nx: number, ny: number, w: number, h: number) => ({ x: Math.min(w - 6 - DW / 2, Math.max(6 + DW / 2, nx * w)), y: ny * h });
+  const checkSet = (label: string, pts: { x: number; y: number }[]) => {
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const sepX = Math.abs(pts[i]!.x - pts[j]!.x) >= DW + GAP;
+        const sepY = Math.abs(pts[i]!.y - pts[j]!.y) >= DH + GAP;
+        assert.ok(sepX || sepY, `${label}: ${i}–${j} átfed (${pts[i]!.x.toFixed(0)},${pts[i]!.y.toFixed(0)} / ${pts[j]!.x.toFixed(0)},${pts[j]!.y.toFixed(0)})`);
+      }
+    }
+  };
+  for (const v of views) {
+    // rendes kérdés (4) és Becslő-bomba (2), sok seed / kérdés-azonosító
+    for (const count of [4, 2]) {
+      for (let id = 1; id <= 150; id++) {
+        const raw: { x: number; y: number }[] = [];
+        droneLayout("s", id, count, v.wide, raw);
+        checkSet(`${v.name} rendes/${count} #${id}`, raw.map((p) => place(p.x, p.y, v.w, v.h)));
+      }
+    }
+    // főellenfelek: a gyenge pontok a test körül, a ringás teljes tartományán (x 0,30–0,70)
+    for (const kind of ["factory", "zero"] as const) {
+      for (const count of [4, 2]) {
+        const off: { x: number; y: number }[] = [];
+        bossWeakPoints(kind, count, v.wide, off);
+        for (let k = 0; k <= 20; k++) {
+          const bx = kind === "factory" ? 0.5 : 0.3 + 0.02 * k;
+          const by = 0.36 + (v.wide ? 0.24 : 0);
+          // a lap a gyenge pontokat CSOPORTKÉNT tolja a képernyőn belülre
+          const xs = off.map((o) => (bx + o.x) * v.w);
+          const minL = Math.min(...xs) - DW / 2;
+          const maxR = Math.max(...xs) + DW / 2;
+          const shift = minL < 6 ? 6 - minL : maxR > v.w - 6 ? v.w - 6 - maxR : 0;
+          checkSet(`${v.name} ${kind}/${count} x=${bx.toFixed(2)}`, off.map((o) => place(bx + o.x + shift / v.w, by + o.y, v.w, v.h)));
+        }
+      }
+    }
+  }
+});
+
+test("Becslő-bomba (review #466): ha az ismétlés előzi meg, az esedékesség megmarad, és a következő kérdés a bomba", async () => {
+  const { createTowerDriver, BOMB_EVERY_MS: EVERY } = await import("../client/src/lib/speedMath/core");
+  let requests = 0;
+  let open = false;
+  const pres = (bomb: boolean): QuestionPresentation => ({
+    id: ++requests, isReview: !bomb, windowMs: 4000, slowMo: 0.5, startedAtSimMs: 0, reason: "trigger",
+    question: { key: bomb ? "bank:speed-quiz-math:est:x" : "bank:speed-quiz-math:review", source: "bank", noReview: bomb || undefined, quiz: { id: "x", prompt: "?", options: ["a", "b"], correctIndex: 0 } },
+    options: [{ label: "a", originalIndex: 0, correct: true }, { label: "b", originalIndex: 1, correct: false }],
+  });
+  const asked: QuestionPresentation[] = [];
+  const ui = {
+    frame: () => {},
+    timeScale: () => 1,
+    finished: () => false,
+    finish: () => null,
+    canAsk: () => !open,
+    active: () => null,
+    // az 1. kérésre a director egy esedékes ismétlést ad, a 2.-ra a forrás bombáját
+    request: () => {
+      const p = pres(asked.length > 0);
+      asked.push(p);
+      open = true;
+      return p;
+    },
+  };
+  const d = createTowerDriver({ seed: 1, questions: ui, intensity: () => 0.4 });
+  const core = d.core;
+  for (let t = 0; t < TUTORIAL_MS + EVERY + 30_000 && core.running() && asked.length === 0; t += STEP) {
+    d.frame(STEP, false);
+    for (const r of core.state().raiders) if (r.alive && r.age > 450) core.shoot(r.id);
+    d.drain();
+  }
+  assert.equal(asked.length, 1, "az esedékes bombára kérés indult");
+  assert.equal(asked[0]!.isReview, true, "a director az ismétlést adta");
+  assert.equal(core.bombDue(), true, "az ismétlés nem fogyasztotta el a bombát");
+  open = false; // az ismétlés lezárult
+  d.frame(STEP, false);
+  assert.equal(asked.length, 2);
+  assert.equal(towerQuestionKind(asked[1]!), "bomb", "a következő lehetséges kérdés a bomba");
+  assert.equal(core.bombDue(), false);
+});
