@@ -179,7 +179,17 @@ pl. ezres tagolás, mértékegység a kérdésbe). A rövidített tételek **új
 megoldói tévedés); a kör jelzései alapján még 3 tétel javult (`g04-history-052` „közvetlen előd”, `g04-hungarian-027`,
 `g04-hungarian-034`), ezek újra vak körben: 3/3 · kanári 10/10. A review (Vercel Agent) egy rövidítés okozta kétértelműséget talált
 (`g04-english-053`: a „Hány óra?” a How many hours?-szal is fordítható) → „Hány óra van?”, a How many hours? elterelő cserélve;
-újra vak kör 1/1 · kanári 10/10. A teszt küszöbe: a bővített évfolyamokon ≥ 95% játszható, a
+újra vak kör 1/1 · kanári 10/10.
+
+**Egyértelműség-újraellenőrzés a rövidítés után** (a review kérésére): a **224 rövidített tétel** (3–9. évf.) (a) előtte / utána
+párban egy független Opus-lektornál (több védhető válasz, elveszett kontextus, többjelentésű magyar szavak: óra, nap, ég, vár, él,
+levél, toll, fog …), (b) egy FRISS, független Opus vak megoldónál (csak kérdés + opciók, `chosen`): 114/114 és 110/110 egyezés,
+kanári 10/10 és 10/10. Lelet összesen 6 tétel → javítva: `g04-hungarian-034` és `g04-hungarian-051` (a csonkolt közmondás
+jelentése nem volt levezethető, a teljes alak a 4. évfolyam olvasási keretébe nem fér → rövidebb közmondás: „Aki keres, talál.”,
+„Jó munkához idő kell.”), `g03-hungarian-055` (a „Jelentése:” utasítás visszakerült), `g05-math-032` (a magyarázat a régi
+sorrendet írta), `g08-math-047` („hasonlósági arány” — területarányként is érthető volt), `g08-english-011` (a where nem
+névmás). A 6 javított tétel újra vak körben: 6/6 · kanári 10/10. Többjelentésű szó miatti kétértelműséget a 224 tételben a review
+`g04-english-053`-án kívül nem találtak. A teszt küszöbe: a bővített évfolyamokon ≥ 95% játszható, a
 bővítés tételei mind, cellánként ≥ 15. A 10–12. évfolyam (JBc) még 93–96%.
 
 **4. A független számoló javítva** (mohó számrész; önellenőrzés: `2³` = 8, `3 · 10³` = 3000, `2³ cm³` = 8, `10⁻² m` = 0,01, és a
