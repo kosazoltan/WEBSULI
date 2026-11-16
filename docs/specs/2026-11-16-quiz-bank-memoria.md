@@ -116,6 +116,11 @@ kliens-szerződést érinti → tulajdonosi döntés, külön jegy.
 ## 9. Elfogadás (EARS)
 
 - [ ] A1 — HA 300 közzétett lecke van (2 verzióval), AKKOR a hideg kérés ≤ 2 s és a heap-többlet < 100 MB (mérő).
+      **ELTÉRÉS (2026-11-17):** a heap-többlet teljesül (+86–89 MB 200 MB-os halommal); a hideg idő fejlesztői gépen
+      1 977–3 495 ms (terheléstől függően) — a ≤ 2 s NEM igazolt, 0,5 CPU-n NEM mérve (élesben várhatóan több másodperc).
+      Enyhítés: adatváltozásonként egyetlen építés, single-flight + legfeljebb egy egyidejű építés (M1), a kötegek között
+      az eseményhurok szabad.
+- [ ] M1 — Egyszerre legfeljebb egy építés fut; eltérő lenyomatú kérések egyetlen követő építésbe vonódnak össze (teszt).
 - [ ] A2 — HA a gyorsítótár meleg, AKKOR a kérés ≤ 200 ms, és egyetlen `lessons.json`-olvasás sem fut (teszt).
 - [ ] A3 — HA 10 hideg kérés érkezik egyszerre, AKKOR pontosan 1 építés fut (teszt).
 - [ ] A4 — HA egy lecke közzététele / módosítása / visszavonása / törlése megtörténik (bármely úton), AKKOR a következő

@@ -67,6 +67,32 @@ options, correctIndex, explanation, sourceMaterialId })) })` — a route mostani
 `npm run lint` · `npm run check` · `npm run check:test` · `npm test` · `npm run test:learning-db` · `npm run build` ·
 `node scripts/qa/three-phase-check.mjs --base origin/main` (a git-gyökérből) · e2e: a kérdésbankot hívó lapok specjei.
 
+## M1 — legfeljebb egy építés egyszerre (független review #478, 2026-11-17)
+
+**Lelet (verifikálva):** `source/server/gameQuizBankService.ts` `snapshotFor()` (@ `d2641467`, :239-258): építés közben érkező,
+eltérő lenyomatú kérés új `flight`-ot indít, a futót nem állítja le → sorozatos írás + játékkérések mellett 2–3 átfedő teljes
+építés (egyenként +86–89 MB halom) → OOM-út. L1: egy későn visszatérő, régebbi lenyomatú kérés a frissebb `current`-et
+fölöslegesen újraépíttetné.
+
+**Kért viselkedés / megvalósítás:**
+1. Egyszerre legfeljebb EGY `buildSnapshot` fut (`building`). Ha közben más lenyomat jön, egyetlen várakozó követő építés
+   (`next`) jön létre; a további eltérő lenyomatok csak a `next` lenyomatát frissítik („a legutóbbi nyer”). A követő a futó
+   UTÁN indul (sikertől / hibától függetlenül); a várakozók a követő (friss) eredményét kapják.
+2. Lenyomat-sorrend: a kérés a lenyomat-lekérdezés INDÍTÁSÁNAK idejét (`fpAt`, monoton számláló) is viszi; a pillanatkép és
+   a futó / várakozó építés a saját `fpAt`-jét tárolja. Ha a kérés `fpAt`-je régebbi a `current`-énél (vagy a futó / várakozó
+   építésénél), nem indít építést, hanem azt kapja (L1). A `current` csak nagyobb `fpAt`-ű pillanatképre cserélődik.
+3. A tartalom mindig legalább olyan friss, mint a címkéje (a lenyomat az építés ELŐTT készül), így építés közbeni írás után
+   az új lenyomat a következő kérésnél új építést kér — elavult tartalom új címkével nem rögzül.
+4. Mérőpont: `quizBankCacheStats().maxConcurrentBuilds` (az egyidejű építések csúcsa).
+
+**Tesztek (`quiz-bank-scale-db.integration.ts`):** (a) párhuzamos, ELTÉRŐ lenyomatú kérések (írás az építés közben, a
+lecke-JSON lekérdezések késleltetve) → `maxConcurrentBuilds === 1`, legfeljebb 2 építés, a késői kérések a legutolsó írást
+látják; mutációs ellenpróba: a korlát nélkül a teszt bukik. (b) Elbukott építés (egy lecke-JSON lekérdezés hibára állítva)
+után a következő kérés újrapróbál és sikeres. (c) Építés közbeni írás után a következő kérés az új tartalmat adja.
+
+**Terv-igazítás (L5):** az A1 hideg-idő célja (≤ 2 s) fejlesztői gépen 2,0–3,5 s-ot mért, 0,5 CPU-n NEM mérve → eltérésként
+jelölve a tervben és a PR-ban (a mérce nem lazul).
+
 ## UNKNOWN
 
 - Az éles adatmennyiség (sorok, verziók, JSON-méret, kvízkérdések száma) — UNVERIFIED; csak olvasó lekérdezés a jelentésben.
