@@ -59,18 +59,21 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
      * (korlát-kulcsonként 15 perc és 24 óra, szerverszinten 24 óra) és szúr be — párhuzamos kérésekből sem lesz több kód
      * vagy levél a keretnél. Csak `"OK"` után szabad levelet küldeni.
      */
-    async reserveCode(input: CodeInput, limits: Partial<ReserveLimits> = {}): Promise<ReserveResult> {
+    async reserveCode(input: CodeInput, limits: Partial<ReserveLimits> = {}, countLimitHashes: readonly string[] = [input.limitHash]): Promise<ReserveResult> {
       const perWindow = limits.perWindow ?? START_PER_EMAIL_MAX;
       const perDay = limits.perDay ?? START_PER_EMAIL_DAILY_MAX;
       const globalPerDay = limits.globalPerDay ?? loginEmailDailyMax();
+      // N3: a címenkénti keret a megadott korlát-kulcsok MINDEGYIKÉT számolja (a belépés a törlési kéréseket is), a saját
+      // korlát-kulcs mindig benne van.
+      const counted = [...new Set([input.limitHash, ...countLimitHashes])];
       return inTransaction(pool, async (client) => {
         await client.query(`SELECT pg_advisory_xact_lock($1)`, [START_LOCK_KEY]);
         const { rows } = await client.query<{ win: string; day: string; global: string }>(
-          `SELECT count(*) FILTER (WHERE limit_hash = $1 AND ${since("$2")})::text AS win,
-                  count(*) FILTER (WHERE limit_hash = $1 AND ${since("$3")})::text AS day,
+          `SELECT count(*) FILTER (WHERE limit_hash = ANY($1::text[]) AND ${since("$2")})::text AS win,
+                  count(*) FILTER (WHERE limit_hash = ANY($1::text[]) AND ${since("$3")})::text AS day,
                   count(*) FILTER (WHERE ${since("$3")})::text AS global
              FROM player_auth_codes`,
-          [input.limitHash, START_WINDOW_MS, DAY_MS],
+          [counted, START_WINDOW_MS, DAY_MS],
         );
         const r = rows[0]!;
         if (Number(r.global) >= globalPerDay) return "GLOBAL_LIMIT";
@@ -102,12 +105,17 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
      *    (rekordonként legfeljebb 5), jó kód → elhasználva és a nyílt cím törölve.
      * Siker → a megerősítendő (normalizált) cím, minden más → null (kívülről egységes válasz).
      */
-    async consumeCode(emailHashHex: string, codeHashHex: string, failScope: readonly string[] = [emailHashHex]): Promise<string | null> {
-      // JM7b (review #449): a hibás-próba plafon a cím MINDEN céltartományára (belépés + törlés) összesítve számol; a zár is
-      // közös (a tartomány legkisebb hash-e), így a két cél párhuzamos próbái sem kerülhetik meg a plafont.
-      const scope = [...new Set([emailHashHex, ...failScope])].sort();
+    async consumeCode(
+      emailHashHex: string, codeHashHex: string, failScope: readonly string[] = [emailHashHex], lockScope: readonly string[] = failScope,
+    ): Promise<string | null> {
+      // JM7b (review #449): a belépés hibás-próba plafonja a cím MINDEN céltartományára (belépés + törlés) összesítve számol.
+      // JM7b-utójavítás (N3): a törlés csak a SAJÁT tartományát számolja (`failScope = [törlési hash]`) — egy idegen belépési
+      // hibái így nem zárják le a tulajdonos törlését —, a zár viszont közös marad (`lockScope` = mindkét tartomány, a
+      // legkisebb hash), így a két cél párhuzamos próbái sem kerülhetik meg a belépés plafonját.
+      const scope = [...new Set([emailHashHex, ...failScope])];
+      const lockOn = [...new Set([emailHashHex, ...lockScope])].sort()[0]!;
       return inTransaction(pool, async (client) => {
-        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 7040))`, [scope[0]]);
+        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 7040))`, [lockOn]);
         const failed = await client.query<{ n: string }>(
           `SELECT coalesce(sum(attempts), 0)::text AS n FROM player_auth_codes WHERE email_hash = ANY($1::text[]) AND ${since("$2")}`,
           [scope, DAY_MS],

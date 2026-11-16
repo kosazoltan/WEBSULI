@@ -1,3 +1,17 @@
+/**
+ * Szólétra → „Szikla-verseny” (terv docs/specs/2026-11-16-jatekok-jatekelmeny.md 5.2; végrehajtás J2a).
+ *
+ * VALÓDI mászóverseny: a gyerek egy sziklafalon mászik a gépi rivális („Villám”) ellen. A VÁLASZ MAGA A KAPASZKODÓ: a
+ * kérdés-sáv (`InlineQuestion mode="bar"`) csak a promptot és az időcsíkot mutatja, a négy válasz a falon lévő fogás
+ * (`wl-option-<i>`). Jó fogás → feljebb (kombó ×2-től kettőt), rossz → a fogás letörik, egy fok csúszás, a helyes fogás
+ * 2 mp-ig zölden világít — a rivális közben mászik tovább. Nincs kötelező várakozás: a következő fogás a megoldás-kijelzés
+ * után azonnal megragadható. Veszíteni is lehet (a rivális ér fel előbb); a végén eredmény „Gyakorold még” listával és
+ * visszavágóval.
+ *
+ * Rétegek (KSZ-1): a mag tiszta TS (`L/wordLadder/core.ts`, fix 1/60 s lépés, seedelt RNG) → a 3D jelenet csak olvas
+ * (`LadderScene3D variant="race"`, a `live` refen át, React-render nélkül) → React UI (HUD ≤ 10 Hz, kérdés-sáv, menük).
+ * A kérdés-életciklus a közös `usePlayQuestion` (J0c): minden fogás egy kérdés — amint lehet, a lap kér egyet.
+ */
 import {
   dedupeTiersByContent,
   ladderTierIndex,
@@ -8,14 +22,15 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Flame, Check, X } from "lucide-react";
-import { motion, AnimatePresence, useAnimationControls, useReducedMotion } from "framer-motion";
+import { ArrowLeft, Check, Flame, X } from "lucide-react";
+import { useReducedMotion } from "framer-motion";
+import { createRng, seedFrom, type Rng } from "@shared/game-rng";
 import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
 import { useClassroomGrade } from "@/lib/classroomStore";
-import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
+import { sfxCombo, sfxGate, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
@@ -34,15 +49,8 @@ import {
 import type { LadderItem } from "@/data/wordLadder/types";
 import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
-import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
-import {
-  LADDER_ZONES,
-  xpForCorrect,
-  nextRung as computeNextRung,
-  streakMessage,
-  encouragement,
-  confettiParticles,
-} from "@/lib/wordLadderLogic";
+import { correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
+import { LADDER_ZONES, xpForCorrect } from "@/lib/wordLadderLogic";
 import {
   createLadderLevelSession,
   ladderRungsForLevel,
@@ -51,11 +59,30 @@ import {
   wordLadderGameId,
   zoneForProgress,
 } from "@/lib/wordLadderLevels";
+import {
+  FIRST_HOLD_MS,
+  FREE_GRIP_COOLDOWN_MS,
+  RIVAL_WARMUP_MS,
+  answer as applyLadderAnswer,
+  climbTarget,
+  createLadderState,
+  drainEvents,
+  finishBonusXp,
+  freeGrab,
+  lossTitle,
+  rivalBaseRungPerSec,
+  rivalSecPerRungForLevel,
+  step as stepLadder,
+  type LadderEvent,
+  type LadderState,
+} from "@/lib/wordLadder/core";
+import { WORD_LADDER_GAME_ID, wordLadderDirectorConfig } from "@/lib/wordLadder/sim";
+import { createRunWordGuard, ownsReviewKey } from "@/lib/wordLadder/review";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { loadUnlockedLevel, unlockNextLevel } from "@/game-engine/gradeLevels";
 import { detectLookTier } from "@/game-engine/three-look/tier";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
-import LadderScene3D from "@/game-engine/scenes/LadderScene3D";
+import LadderScene3D, { type LadderLive } from "@/game-engine/scenes/LadderScene3D";
 import QuizBoard3D from "@/game-engine/scenes/QuizBoard3D";
 import { quiz3dEnabled, type TileState } from "@/game-engine/scenes/quizBoardLayout";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
@@ -67,11 +94,31 @@ import {
   StartScreen,
   useBestScore,
   useHaptics,
+  useOrientation,
   type GameScreenState,
 } from "@/game-engine/mobile";
 import { createSeenHistory, externalKey, safeLocalStorage, useVocabQuizSource } from "@/game-engine/vocab";
 import { mergeVocabTiers, VOCAB_POOL_PER_LEVEL, vocabIdOfLadderItem, type VocabMeaning } from "@/lib/wordLadderVocab";
 import { loadVocabBank } from "@/data/vocabBank/loader";
+import {
+  InlineQuestion,
+  PlaySpeechToggle,
+  createPointerTapTracker,
+  pointerTapHandlers,
+  ResultReview,
+  bankPlayQuestion,
+  createFeel,
+  createFixedLoop,
+  materialPlayQuestion,
+  restoreReviewQuestion,
+  useGameSpeech,
+  usePlayQuestion,
+  type PlayQuestion,
+  type PlayQuestionApi,
+  type QuestionOutcome,
+  type QuestionProvider,
+  type ShakeOffset,
+} from "@/game-engine/play";
 
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 const LS_XP = "websuli-wordladder-xp";
@@ -79,32 +126,59 @@ const LS_BEST = "websuli-wordladder-streak";
 
 type Quiz = FourChoiceQuiz;
 
-/** A válasz-felfedés ideje (a helyes zölden, a hibás pirosan látszik). */
-const REVEAL_MS = 900;
-/** A lépés-animáció ideje (a figura ugrik / megcsúszik). */
-const STEP_MS = 620;
+/** A rivális neve (kedves, nem gúnyos — terv 4.2). */
+const RIVAL_NAME = "Villám";
 
 /** A Szólétra évfolyam-választója: 3–12. */
 const LADDER_GRADES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 
-/** Billentyűzet: az 1–4 szám a négy választ jelöli (a lapokon is ez a jelvény). */
+/** Billentyűzet: az 1–4 szám a négy kapaszkodót jelöli (a fogásokon is ez a jelvény; a kérdés-sáv kezeli). */
 const ANSWER_KEYS = ["1", "2", "3", "4"];
 
 const LADDER_LEVELS = [0, 1, 2, 3, 4] as const;
+
+/** A tanító sor (K.4/25: egy mechanika, szöveg ≤ 1 sor) — az első 30 mp-ben látszik. */
+const TEACH_HINT = "Koppints a jó szóra — azzal kapaszkodsz feljebb!";
 
 /** A kezdőképernyő sötét égbolt-háttere: a világos réti színen a fehér feliratok nem olvashatók. */
 const MENU_BACKGROUND =
   "radial-gradient(ellipse 90% 55% at 50% 18%, #38bdf84d, transparent 70%), linear-gradient(175deg, #0c2a5c 0%, #10406a 45%, #0f5a4a 80%, #14532d 100%)";
 
+/** Ennél hosszabb kapaszkodó-felirat (kifejezés, mondat) esetén álló nézetben egy oszlopban jönnek a fogások. */
+const LONG_HOLD = 24;
+
+/**
+ * A fogások CSS-hatóköre: az index.css régi Szólétra-szabálya (`[data-testid="wl-quiz"] button`, kék lap) erősebb egy
+ * puszta osztálynál — a hatókörrel a kapaszkodó-stílus nyer (a közös fájl rendbetétele: ORKESZTRÁTOR-KÉRÉS).
+ */
+const HOLD_SCOPE = '.game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"]';
+const HOLD = `${HOLD_SCOPE} .wl-hold`;
+
+/** A részecske-készlet mérete (KSZ-6: előre rögzített pool). */
+const PARTICLE_POOL = 18;
+
 function clampLadderGrade(grade: number): number {
   return Math.min(12, Math.max(3, Math.round(grade)));
 }
 
-/**
- * Fázisok: menu → quiz → reveal (a válasz felfedése, gombok letiltva) → step (a figura
- * ugrik/csúszik) → quiz … → won.
- */
-type Phase = "menu" | "quiz" | "reveal" | "step" | "won";
+/** Fázisok (K.4/11): menu → play (a kérdés a play al-állapota) → result. A szünet a play fölötti réteg. */
+type Phase = "menu" | "play" | "result";
+
+type RunResult = {
+  won: boolean;
+  missing: number;
+  xp: number;
+  bonus: number;
+  correct: number;
+  total: number;
+  seconds: number;
+  bestCombo: number;
+  best: number;
+  isNewBest: boolean;
+  level: number;
+};
+
+type HudSnap = { rung: number; rival: number; target: number; combo: number; xp: number };
 
 function loadNum(key: string, d: number) {
   try {
@@ -117,137 +191,44 @@ function loadNum(key: string, d: number) {
   }
 }
 
+/** A nap kulcsa a seedhez (KSZ-3: `seedFrom(gameId, dátum, kör)`), helyi idő szerint. */
+function dayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** A pálya nehézségi sávja a score-hoz (meglévő enum): 1–3 könnyű, 4–7 normál, 8–10 nehéz. */
+function difficultyForLevel(level: number): "easy" | "normal" | "hard" {
+  return level <= 3 ? "easy" : level <= 7 ? "normal" : "hard";
+}
+
 // ---------------------------------------------------------------------------------
-// Grafikai részek
+// WebGL nélküli tartalék: két létra, két mászó (SVG), a HUD 10 Hz-es pillanatképéből
 // ---------------------------------------------------------------------------------
 
-/** Mosolygó, kerek fejű mászó figura (SVG). A sorozatnál kis láng a hátán. */
-function Climber({ streak, mood }: { streak: number; mood: "happy" | "oops" | "idle" }) {
-  const mouth = mood === "oops" ? "M 17 26 q 5 -3 10 0" : "M 16 24 q 6 6 12 0";
-  return (
-    <svg viewBox="0 0 44 56" width="44" height="56" aria-hidden="true" className="drop-shadow-[0_6px_10px_rgba(0,0,0,0.45)]">
-      {streak >= 3 && (
-        <g transform="translate(30 30)">
-          <path d="M0 0 C -4 -6, 4 -10, 0 -18 C 6 -12, 8 -6, 3 0 Z" fill="#fb923c" />
-          <path d="M0 -2 C -2 -5, 2 -8, 0 -12 C 3 -8, 4 -5, 2 -2 Z" fill="#fde047" />
-        </g>
-      )}
-      {/* test */}
-      <rect x="12" y="28" width="20" height="16" rx="6" fill="#38bdf8" stroke="#0369a1" strokeWidth="1.5" />
-      {/* lábak */}
-      <rect x="14" y="42" width="7" height="12" rx="3" fill="#4f46e5" stroke="#312e81" strokeWidth="1.2" />
-      <rect x="23" y="42" width="7" height="12" rx="3" fill="#4f46e5" stroke="#312e81" strokeWidth="1.2" />
-      {/* kezek a létrán */}
-      <circle cx="8" cy="30" r="3.5" fill="#fcd9b6" stroke="#b45309" strokeWidth="1" />
-      <circle cx="36" cy="30" r="3.5" fill="#fcd9b6" stroke="#b45309" strokeWidth="1" />
-      {/* fej */}
-      <circle cx="22" cy="17" r="12" fill="#fde2c4" stroke="#b45309" strokeWidth="1.5" />
-      {/* haj */}
-      <path d="M 11 12 q 11 -12 22 0 q -4 -4 -11 -4 q -7 0 -11 4 z" fill="#7c2d12" />
-      {/* szemek */}
-      <circle cx="17.5" cy="17" r="1.8" fill="#1f2937" />
-      <circle cx="26.5" cy="17" r="1.8" fill="#1f2937" />
-      {/* arcpír */}
-      <circle cx="14" cy="21" r="2" fill="#fca5a5" opacity="0.7" />
-      <circle cx="30" cy="21" r="2" fill="#fca5a5" opacity="0.7" />
-      {/* száj */}
-      <path d={mouth} stroke="#7f1d1d" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** Zóna-dekoráció (emojik a háttérben), a mászással változik. */
-function ZoneDecor({ decor, reduced }: { decor: string[]; reduced: boolean }) {
-  const spots = [
-    { left: "6%", top: "12%" },
-    { left: "84%", top: "18%" },
-    { left: "12%", top: "62%" },
-    { left: "88%", top: "70%" },
-    { left: "50%", top: "8%" },
-    { left: "70%", top: "88%" },
-  ];
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      {spots.map((s, i) => (
-        <motion.span
-          key={`${decor[i % decor.length]}-${i}`}
-          className="absolute text-2xl sm:text-3xl opacity-70 select-none"
-          style={{ left: s.left, top: s.top }}
-          animate={reduced ? undefined : { y: [0, -6, 0] }}
-          transition={{ duration: 3 + i * 0.6, repeat: Infinity, ease: "easeInOut" }}
-        >
-          {decor[i % decor.length]}
-        </motion.span>
-      ))}
-    </div>
-  );
-}
-
-/** Konfetti-eső (CSS animáció), reduced-motion esetén nem jelenik meg. Az eredménykártya fölé esik. */
-function Confetti() {
-  const parts = useMemo(() => confettiParticles(40), []);
-  return (
-    <div className="pointer-events-none fixed inset-0 z-[85] overflow-hidden" aria-hidden="true">
-      {parts.map((p, i) => (
-        <span
-          key={i}
-          className="wl-confetti absolute -top-4 rounded-sm"
-          style={{
-            left: `${p.left}%`,
-            width: p.size,
-            height: p.size * 0.6,
-            background: `hsl(${p.hue} 90% 60%)`,
-            animationDelay: `${p.delay}s`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/** A létra: két sín + zóna-színű fokok; a megmászottak világítanak, a következő pulzál. */
-function Ladder({ rung, total }: { rung: number; total: number }) {
-  const W = 84;
+function RaceFallback({ rung, rival, total }: { rung: number; rival: number; total: number }) {
   const H = 400;
-  const top = 26;
-  const bottom = H - 14;
-  const gap = (bottom - top) / total;
-  const rungY = (i: number) => bottom - i * gap;
+  const top = 24;
+  const bottom = H - 16;
+  const y = (r: number) => bottom - (Math.min(total, Math.max(0, r)) / Math.max(1, total)) * (bottom - top);
+  const ladder = (x: number, color: string) => (
+    <g>
+      <rect x={x - 22} y={8} width={7} height={H - 10} rx={3} fill={color} />
+      <rect x={x + 15} y={8} width={7} height={H - 10} rx={3} fill={color} />
+      {Array.from({ length: Math.min(40, total) }).map((_, i) => (
+        <rect key={i} x={x - 16} y={y(i + 1) - 2} width={32} height={4} rx={2} fill={color} opacity={0.75} />
+      ))}
+    </g>
+  );
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none" aria-hidden="true">
-      <defs>
-        <linearGradient id="wl-rail" x1="0" x2="1">
-          <stop offset="0" stopColor="#5b3a1e" />
-          <stop offset="0.5" stopColor="#9a6335" />
-          <stop offset="1" stopColor="#4a2e16" />
-        </linearGradient>
-      </defs>
-      <rect x="10" y="8" width="9" height={H - 10} rx="4" fill="url(#wl-rail)" />
-      <rect x={W - 19} y="8" width="9" height={H - 10} rx="4" fill="url(#wl-rail)" />
-      {Array.from({ length: total }).map((_, i) => {
-        const y = rungY(i + 1);
-        const zone = zoneForProgress(i + 1, total);
-        const climbed = i + 1 <= rung;
-        const isNext = i + 1 === rung + 1;
-        return (
-          <g key={i}>
-            <rect
-              x="14"
-              y={y - 4}
-              width={W - 28}
-              height="8"
-              rx="3"
-              fill={zone.rungColor}
-              opacity={climbed ? 1 : 0.55}
-              stroke={climbed ? "#fde68a" : "rgba(0,0,0,0.25)"}
-              strokeWidth={climbed ? 1.5 : 1}
-              className={isNext ? "wl-rung-next" : undefined}
-            />
-          </g>
-        );
-      })}
-      {/* zászló a tetején */}
-      <text x={W / 2} y="16" textAnchor="middle" fontSize="16">🏁</text>
+    <svg viewBox={`0 0 200 ${H}`} className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <rect x={20} y={0} width={70} height={H} rx={14} fill="#8a6a4f" opacity={0.55} />
+      <rect x={110} y={0} width={70} height={H} rx={14} fill="#8a6a4f" opacity={0.55} />
+      {ladder(55, "#c98b4a")}
+      {ladder(145, "#a47a52")}
+      <text x={100} y={18} textAnchor="middle" fontSize={16}>🏁</text>
+      <circle cx={55} cy={y(rung) - 10} r={10} fill="#38bdf8" stroke="#0369a1" strokeWidth={2} />
+      <circle cx={145} cy={y(rival) - 10} r={10} fill="#a855f7" stroke="#6b21a8" strokeWidth={2} />
     </svg>
   );
 }
@@ -259,94 +240,45 @@ export default function WordLadderHuEn() {
   const reducedMotion = useReducedMotion() ?? false;
   const [, navigate] = useLocation();
   const haptics = useHaptics();
+  const orientation = useOrientation();
   const { best: bestScore, submit: submitBest } = useBestScore("word-ladder-hu-en");
   const [phase, setPhase] = useState<Phase>("menu");
-  /** S6: szünet (a 4.5 keret szünet menüje); a lépés-lánc és a futamidő ilyenkor áll. */
-  const [paused, setPaused] = useState(false);
-  const pausedRef = useRef(false);
-  /** A szünet alatt esedékessé vált lépés-lánc-lépés: folytatáskor fut le. */
-  const deferredStepRef = useRef<(() => void) | null>(null);
-  const [rung, setRung] = useState(0);
-  /** A futás kérdés-sorszáma (az XP-felirat kulcsa). */
-  const [cursor, setCursor] = useState(0);
-  const [current, setCurrent] = useState<Quiz | null>(null);
-  const [streak, setStreak] = useState(0);
-  const [sessionXp, setSessionXp] = useState(0);
+  const phaseRef = useRef<Phase>("menu");
+  phaseRef.current = phase;
+  /** Szünet menü (HUD gomb, P billentyű, háttérbe kerülés). */
+  const [menuOpen, setMenuOpen] = useState(false);
+  /** „Miért?”: a magyarázókártya — alatta áll a menet (a kérdés-óra is). */
+  const [why, setWhy] = useState<FeedbackCard | null>(null);
+  /** A kérdés-sáv „Mutasd” (hosszú prompt kinyitva): ilyenkor is áll a menet (terv 8.9). */
+  const [expanded, setExpanded] = useState(false);
+  const paused = phase === "play" && (menuOpen || why !== null || expanded);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const [totalXp, setTotalXp] = useState(() => loadNum(LS_XP, 0));
   const [bestStreak, setBestStreak] = useState(() => loadNum(LS_BEST, 0));
-  const [celebrate, setCelebrate] = useState(false);
-  const [runSeconds, setRunSeconds] = useState(0);
-  const [stepDelta, setStepDelta] = useState<1 | -1>(1);
-  /** A felfedés alatt: melyik gombot választotta a gyerek. */
-  const [chosenIdx, setChosenIdx] = useState<number | null>(null);
-  /** Bátorító üzenet a kvíz-panel alján. */
-  const [feedback, setFeedback] = useState<string | null>(null);
-  /** Mérföldkő / sorozat felirat (rövid ideig). */
-  const [banner, setBanner] = useState<string | null>(null);
-  const [lastXpGain, setLastXpGain] = useState<number | null>(null);
-  /** Az eredményképernyő legjobb-adata (a győzelemkor egyszer rögzítve). */
-  const [result, setResult] = useState<{ best: number; isNewBest: boolean } | null>(null);
-  /** A 3D létra él-e (WebGL); különben az SVG-létra és a DOM-mászó látszik. */
-  const [ladder3d, setLadder3d] = useState(false);
-  const ladderColumnRef = useRef<HTMLDivElement | null>(null);
-  const quizControls = useAnimationControls();
-  const onLadderSupported = useCallback((s: boolean | null) => {
-    setLadder3d(s === true);
-    if (s !== true) ladderColumnRef.current?.style.removeProperty("--wl-climber-pct");
-  }, []);
-  // A 3D mászó képernyő-magassága (%) — az XP-felirat ehhez igazodik, React-render nélkül.
-  const onClimberScreenPct = useCallback((pct: number) => {
-    ladderColumnRef.current?.style.setProperty("--wl-climber-pct", `${pct}%`);
-  }, []);
+  const [result, setResult] = useState<RunResult | null>(null);
+  const [hud, setHud] = useState<HudSnap>({ rung: 0, rival: 0, target: 1, combo: 0, xp: 0 });
+  /** Nincs kérdés (üres forrás, terv 8.1): szabad fogás látszik. */
+  const [freeHold, setFreeHold] = useState(false);
+  /** A 3D jelenet él-e (WebGL); különben az SVG-tartalék látszik. */
+  const [scene3d, setScene3d] = useState<boolean | null>(null);
+  const [teach, setTeach] = useState(false);
   /**
-   * 3D kérdések (spec 7. döntés): csak valódi WebGL-lel és nem low szinten; különben a DOM-kártya.
-   * A szint oldalbetöltésenként egyszer dől el (`detectLookTier` gyorsítótáraz).
+   * 3D kapaszkodó-lapok (spec 2026-09-29 7. döntés): csak valódi WebGL-lel és nem low szinten; különben a DOM-fogás
+   * látszik. A szint oldalbetöltésenként egyszer dől el (`detectLookTier` gyorsítótáraz).
    */
   const [quiz3dWanted] = useState(() => quiz3dEnabled(detectLookTier(), null));
   const [quiz3dSupported, setQuiz3dSupported] = useState<boolean | null>(null);
-  const quiz3dOn = quiz3dWanted && quiz3dSupported === true;
-  const quizPanelRef = useRef<HTMLDivElement | null>(null);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // A válasz-lock szinkron ref: két gyors kattintás ne dolgozódjon fel duplán.
-  const answerLockedRef = useRef(false);
-  /** A futás sávja: a pálya sávjából indul, a pálya ±0,15-én belül mozog (spec 6. döntés). */
-  const levelSessionRef = useRef(createLadderLevelSession(1));
-  /** A futás ÖSSZES eddigi kérdése (azonosító + prompt) — ezek a futás végéig nem jönnek újra. */
-  const seenRef = useRef<SeenItem[]>([]);
-  // Az ad-hoc setTimeout-ok gyűjtve, unmountkor törölve.
-  const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Keskeny álló telefonon (< 600 px) a 2×2 rácsban a 3D lap nem tördeli a hosszú szót (20 px-es betű, vágott felirat —
+  // képernyőkép 360×640): ott a DOM-kapaszkodó (tördel, ≥ 48 px) marad; szélesebb nézetben jön a 3D lap.
+  const holds3dWanted = quiz3dWanted && (typeof window === "undefined" || window.innerWidth >= 600);
+  const quiz3dOn = holds3dWanted && quiz3dSupported === true;
+  const holdsRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const particlesRef = useRef<HTMLDivElement | null>(null);
+  const bannerRef = useRef<HTMLDivElement | null>(null);
+  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreSubmittedRef = useRef(false);
-  /** Rossz válasz után a lépés-lánc a magyarázó kártya bezárásáig vár. */
-  const pendingStepRef = useRef<(() => void) | null>(null);
-  /** A futamidő-óra refen olvassa, hogy a kártya alatt ne ketyegjen. */
-  const explainOpenRef = useRef(false);
-  /** Futáson belüli max streak — leaderboard/achievement-hez. */
-  const runBestStreakRef = useRef(0);
-  /** Helyes / hibás válaszok száma a futásban (a streak NEM egyenlő ezekkel). */
-  const correctCountRef = useRef(0);
-  const wrongCountRef = useRef(0);
-  /**
-   * G-1: magyarázó kártya rossz válaszra. A `feedback` állapot a bátorító mondaté,
-   * ezért ez külön néven él. A kártya bezárása után indul a létra lépése (A1).
-   */
-  const [explainCard, setExplainCard] = useState<FeedbackCard | null>(null);
-  const startGameRef = useRef<() => void>(() => {});
-
-  useEffect(() => {
-    return installGameTestApi({
-      forceState: (patch) => {
-        if (patch.phase === "won" || patch.phase === "menu") {
-          setPaused(false);
-          pausedRef.current = false;
-          setPhase(patch.phase);
-        }
-        if (patch.phase === "play") {
-          startGameRef.current();
-        }
-      },
-    });
-  }, []);
 
   /** Nyelv (spec 4. döntés): a menüben választható, tárolva `websuli.wordladder.lang`. */
   const [lang, setLang] = useState<WordLadderLanguage>(() => loadLadderLanguage(AVAILABLE_LANGUAGES));
@@ -367,36 +299,39 @@ export default function WordLadderHuEn() {
     staleTime: 10 * 60 * 1000,
   });
 
-  // Csak `topic === "english"` material-tételeket fogad (a Word Ladder szókincs-orientált).
+  // Csak `topic === "english"` material-tételeket fogad (a Szólétra szókincs-orientált); a forrásrend 1. helye (J7).
   const { grade: userGrade, setGrade: setClassroomGrade } = useClassroomGrade();
   const { items: materialItems } = useMaterialQuizzes(userGrade, "english");
+  const materialQuizzes = useMemo<Quiz[]>(
+    () =>
+      lang !== "en"
+        ? []
+        : materialItems
+            .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+            .map((q, idx) => ({
+              id: q.id ?? `mat-${idx}`,
+              prompt: q.prompt,
+              options: q.options.slice(0, 4) as [string, string, string, string],
+              correctIndex: q.correctIndex,
+              // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
+              explanation: q.explanation ?? undefined,
+            })),
+    [lang, materialItems],
+  );
+  const materialRef = useRef(materialQuizzes);
+  materialRef.current = materialQuizzes;
 
   /**
-   * A nyelv bankjának öt szintje (A1 … B2, a `tier` mező szerint). Az angolhoz a szerver-bank és a tananyag-kvízek
-   * (mind angolok) is hozzájönnek; a statikus és a szerver-bank azonos tartalmú tételei egyszer szerepelnek.
+   * A nyelv bankjának öt szintje (A1 … B2, a `tier` mező szerint). Az angolhoz a szerver-bank is hozzájön; a statikus és
+   * a szerver-bank azonos tartalmú tételei egyszer szerepelnek. A tananyag-kvízek a director `material()` ágán jönnek
+   * (forrásrend), nem a szintlistában — így egy tétel nem jöhet két kulccsal kétszer.
    */
   const tiers = useMemo(() => {
     const base: Quiz[][] = ladderTiersFromBank(WORD_LADDER_BANKS[lang] ?? []);
     if (lang !== "en") return dedupeTiersByContent(base);
     const { easy, medium, hard } = splitBankItemsByTier(quizBankResponse?.items);
-    const matMed = materialItems
-      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
-      .map((q, idx) => ({
-        id: q.id ?? `mat-${idx}`,
-        prompt: q.prompt,
-        options: q.options.slice(0, 4) as [string, string, string, string],
-        correctIndex: q.correctIndex,
-        // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
-        explanation: q.explanation ?? undefined,
-      }));
-    return dedupeTiersByContent([
-      [...base[0]!, ...easy],
-      [...base[1]!, ...medium, ...matMed],
-      [...base[2]!, ...hard],
-      base[3]!,
-      base[4]!,
-    ]);
-  }, [lang, quizBankResponse, materialItems]);
+    return dedupeTiersByContent([[...base[0]!, ...easy], [...base[1]!, ...medium], [...base[2]!, ...hard], base[3]!, base[4]!]);
+  }, [lang, quizBankResponse]);
 
   /**
    * S6 / A7 — a központi szóbank (mindhárom nyelven) a kézi bank MÖGÉ kerül. `null`, amíg tölt vagy ha a betöltés
@@ -405,19 +340,16 @@ export default function WordLadderHuEn() {
   const vocab = useVocabQuizSource(lang, true);
   const vocabRef = useRef(vocab);
   vocabRef.current = vocab;
-  /**
-   * Futásonkénti számláló: a `startGame` minden futáskezdetkor növeli, így a szóbank-készlet futásonként újraépül,
-   * és a `buildPool` a tartós napló szerint a még nem látott bejegyzéseket adja (review #419).
-   */
+  /** Futásonkénti számláló: a szóbank-készlet futásonként újraépül a tartós napló aktuális állapotából (review #419). */
   const [runSeq, setRunSeq] = useState(0);
-  /** A futás kezdő szintje (a startGame írja): a készlet csak e körül épül (±1 szint — a sáv ennyit mozdulhat). */
+  /** A futás kezdő szintje: a készlet csak e körül épül (±1 szint — a sáv ennyit mozdulhat). */
   const runTierRef = useRef(0);
   const [vocabTiers, setVocabTiers] = useState<LadderItem[][]>(() => LADDER_LEVELS.map(() => []));
+  /** A szóbank-kérdések felolvasás-mezői azonosító szerint (a `toLadderItem` nem viszi tovább őket). */
+  const speechByIdRef = useRef(new Map<string, { speakText?: string; speakAfter?: string }>());
   /**
-   * A készlet a futás kezdete UTÁN, a koppintás visszajelzése után épül (setTimeout 0): a teljes, ~2000 bejegyzéses
-   * bankon szintenként 60 kérdés generálása asztali gépen ~0,1 s / szint, telefonon ennek többszöröse — a lépés így nem
-   * akasztja meg az indítást. Addig (az első kérdésnél) a kézi bank kérdez. A runSeq szándékosan függőség: futásonként
-   * új készlet, a tartós napló aktuális állapotából.
+   * A készlet a futás kezdete UTÁN épül (setTimeout 0): a teljes bankon szintenként 60 kérdés generálása telefonon
+   * érezhető — az indítást nem akaszthatja meg. Addig (az első fogás előtt) a kézi bank kérdez.
    */
   useEffect(() => {
     setVocabTiers(LADDER_LEVELS.map(() => []));
@@ -426,16 +358,18 @@ export default function WordLadderHuEn() {
       const tier = runTierRef.current;
       setVocabTiers(
         LADDER_LEVELS.map((l) =>
-          Math.abs(l - tier) <= 1 ? vocab.buildPool(l, VOCAB_POOL_PER_LEVEL).map((q) => vocab.toLadderItem(q)) : [],
+          Math.abs(l - tier) <= 1 ? vocab.buildPool(l, VOCAB_POOL_PER_LEVEL).map((q) => {
+                  // A közös felolvasás-mezők (#455 / #457: `speakText` a válasz előtt, `speakAfter` a kimenet után) a
+                  // szintlista-alakból kimaradnak — azonosító szerint megőrizzük őket.
+                  speechByIdRef.current.set(q.id, { speakText: q.speakText, speakAfter: q.speakAfter });
+                  return vocab.toLadderItem(q);
+                }) : [],
         ),
       );
     }, 0);
     return () => clearTimeout(timer);
   }, [vocab, lang, runSeq]);
-  /**
-   * A bejegyzések két nyelvi alakja (term, hu) a kézi bankkal való ütközés-szűréshez, fordítási iránytól függetlenül
-   * (review #430). A betöltő gyorsítótáraz: ez ugyanaz az ígéret, amelyet a szóbank-forrás is használ.
-   */
+  /** A bejegyzések két nyelvi alakja (term, hu): ütközés-szűrés, felolvasás (a betöltő gyorsítótáraz). */
   const [vocabMeanings, setVocabMeanings] = useState<Map<string, VocabMeaning> | null>(null);
   useEffect(() => {
     setVocabMeanings(null);
@@ -451,9 +385,10 @@ export default function WordLadderHuEn() {
       cancelled = true;
     };
   }, [vocab, lang]);
+  const vocabMeaningsRef = useRef(vocabMeanings);
+  vocabMeaningsRef.current = vocabMeanings;
   const allTiers = useMemo(() => {
-    // A tartós, játékok között közös napló egyetlen olvasása a készlet építésekor (futásonként, a runSeq miatt):
-    // látott a bejegyzés, ha az azonosítója vagy (kézi kérdésből) a term / hu kulcsa szerepel (terv 4.4).
+    // A tartós, játékok között közös napló egyetlen olvasása a készlet építésekor (futásonként, a runSeq miatt).
     const snap = createSeenHistory(safeLocalStorage()).snapshot(lang);
     const isSeen = (id: string) => {
       if (snap[id] !== undefined) return true;
@@ -470,10 +405,6 @@ export default function WordLadderHuEn() {
   const ladderGrade = pickedGrade ?? clampLadderGrade(userGrade ?? 4);
   const ladderGradeRef = useRef(ladderGrade);
   ladderGradeRef.current = ladderGrade;
-  /**
-   * S6 / M8: a blokkoló osztály-modal helyett a kezdőképernyő évfolyam-választója. Ha még nincs tárolt osztály,
-   * a választás azt is beállítja (mint a modal), így a többi játék is tudja.
-   */
   const pickGrade = useCallback(
     (g: number) => {
       setPickedGrade(g);
@@ -490,11 +421,14 @@ export default function WordLadderHuEn() {
     setUnlocked(u);
     setLevel(u);
   }, [lang, ladderGrade]);
-  const runRef = useRef({ lang, grade: ladderGrade, level, rungs: ladderRungsForLevel(level) });
-  /** A futás létrájának hossza: a pályából, a futás elején rögzítve. */
-  const [runRungs, setRunRungs] = useState(() => ladderRungsForLevel(level));
-  const menuRungs = ladderRungsForLevel(level);
-  const RUNGS = phase === "menu" ? menuRungs : runRungs;
+  /** A fal magassága: a pálya régi létrahosszából (`ladderRungsForLevel`, 8–20) a verseny-falra hangolva (core). */
+  const wallFor = (l: number) => climbTarget(ladderRungsForLevel(l));
+  const menuRungs = wallFor(level);
+  const runRef = useRef({ lang, grade: ladderGrade, level, rungs: menuRungs });
+  /** A futás sávja: a pálya sávjából indul, a pálya ±0,15-én belül mozog (spec 6. döntés). */
+  const levelSessionRef = useRef(createLadderLevelSession(1));
+  /** A futás ÖSSZES eddigi kérdése (azonosító + prompt) — ezek a futás végéig nem jönnek újra. */
+  const seenRef = useRef<SeenItem[]>([]);
 
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
@@ -515,366 +449,600 @@ export default function WordLadderHuEn() {
     }
   }, [bestStreak]);
 
-  const pushTimeout = useCallback((fn: () => void, ms: number) => {
-    timeoutsRef.current.push(setTimeout(fn, ms));
-  }, []);
+  /* ------------------------------------------------------------------------------------------------------------ */
+  /* Kérdésforrás (K.2 forrásrend): tananyag → (ismétlés: a director) → kézi bank + szóbank a pálya sávja szerint   */
+  /* ------------------------------------------------------------------------------------------------------------ */
 
-  const showBanner = useCallback(
-    (text: string, ms = 1500) => {
-      setBanner(text);
-      pushTimeout(() => setBanner((b) => (b === text ? null : b)), ms);
+  const toPlayQuestion = useCallback(
+    (item: Quiz | LadderItem): PlayQuestion => {
+      const vocabId = vocabIdOfLadderItem(String(item.id ?? ""));
+      const quiz: Quiz = { id: item.id, prompt: item.prompt, options: item.options.slice(), correctIndex: item.correctIndex, ...(item.explanation ? { explanation: item.explanation } : {}) };
+      if (vocabId) {
+        // Felolvasás a KÖZÖS szabály szerint (`speechOnShow` / `speechAfterOutcome`, a `usePlayQuestion` hívja): a
+        // generátor `speakText`-je (választ el nem áruló) a megjelenéskor, a `speakAfter` (a helyes szó) a kimenet után.
+        const sp = speechByIdRef.current.get(String(item.id));
+        return {
+          key: `vocab:${lang}:${vocabId}`,
+          quiz,
+          source: "vocab",
+          lang,
+          ...(sp?.speakText ? { speakText: sp.speakText } : {}),
+          ...(sp?.speakAfter ? { speakAfter: sp.speakAfter } : {}),
+        };
+      }
+      return bankPlayQuestion(WORD_LADDER_GAME_ID, quiz);
     },
-    [pushTimeout],
+    [lang],
   );
 
-  /** A következő, a futásban még nem látott kérdés a futás sávjának szintjéről. */
-  const nextUnseen = useCallback(
-    () => pickUnseen(tiersRef.current, ladderTierIndex(runRef.current.grade, levelSessionRef.current.band), seenRef.current),
+  /** A menet szó-őre: egy szó egy menetben csak egy irányban (review #454). */
+  const wordGuardRef = useRef(createRunWordGuard<PlayQuestion>());
+  /** A tétel-sorsolás seedelt RNG-je (menetenként újra; a determinizmus-őr a lapra is fut). */
+  const pickRngRef = useRef<Rng>(createRng(seedFrom(WORD_LADDER_GAME_ID, "init", "pick")));
+  /** A menet új (nem ismétlő) tételeinek száma: minden második a szóbankból. */
+  const freshCountRef = useRef(0);
+
+  const provider = useMemo<QuestionProvider>(() => {
+    const ownCtx = () => ({
+      gameId: WORD_LADDER_GAME_ID,
+      lang,
+      bankIds: new Set(tiersRef.current.flat().map((q) => String(q.id))),
+      materialKeys: new Set(materialRef.current.map((m) => `mat:${m.id}`)),
+    });
+    return {
+      couponOnly: false,
+      material: (ctx) => {
+        const seen = new Set(seenRef.current.map((s) => s.id));
+        const unseen = materialRef.current.filter((q) => !seen.has(String(q.id)));
+        // J0c-b: a sávban elolvasható / beférő tétel előbb; a többi hátra kerül (nem jelöljük látottnak).
+        const m = unseen.find((q) => !ctx?.accept || ctx.accept(q)) ?? unseen[0];
+        if (!m) return null;
+        seenRef.current = [...seenRef.current, { id: String(m.id), prompt: m.prompt }];
+        return materialPlayQuestion(m, { subject: "english" });
+      },
+      fresh: (ctx) => {
+        // A meglévő választó: a futás sávjának szintjéről, a futásban még nem látott tétel (#135).
+        // A futásban már megjelent szó (más irányú szóbank-kérdésként sem) nem jön újra új tételként. A sávban
+        // elolvasható / beférő tétel (J0c-b `accept` = `fitsAllViewports(...).ok`) előbb; ha ilyen nincs, a többi.
+        const tier = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
+        const pickRandom = () => pickRngRef.current.next();
+        const isSeen = (item: { id?: string | number; prompt: string }) => seenRef.current.some((x) => x.id === String(item.id));
+        // Minden második új tétel a központi szóbankból jön, ha van (a kézi bank nagyobb, és a gyors tempó mellett
+        // különben a menet eleje szinte csak kézi tételt adna — a szóbank a játék fő forrása).
+        const accept = ctx.accept;
+        const isVocab = (q: { id?: string | number }) => String(q.id ?? "").startsWith("vocab:");
+        const wantVocab = freshCountRef.current % 2 === 1;
+        const tiers = tiersRef.current;
+        const pools: (readonly (readonly (Quiz | LadderItem)[])[])[] = [];
+        if (wantVocab) pools.push(tiers.map((t) => t.filter((q) => isVocab(q) && (!accept || accept(q)))));
+        if (accept) pools.push(tiers.map((t) => t.filter((q) => accept(q))));
+        pools.push(tiers);
+        for (let attempt = 0; attempt < 8; attempt++) {
+          let item: Quiz | LadderItem | null = null;
+          for (const pool of pools) {
+            const c = pickUnseen(pool, tier, seenRef.current, pickRandom);
+            if (c && !isSeen(c)) {
+              item = c;
+              break;
+            }
+          }
+          if (!item) item = pickUnseen(tiers, tier, seenRef.current, pickRandom);
+          if (!item) return null;
+          seenRef.current = [...seenRef.current, { id: String(item.id), prompt: item.prompt }];
+          const q = toPlayQuestion(item);
+          if (wordGuardRef.current.freshAllowed(q.key)) {
+            freshCountRef.current += 1;
+            return q;
+          }
+        }
+        return null;
+      },
+      // Régi (évfolyam nélkül tárolt) tétel: csak a saját játék, a MOSTANI nyelv tétele (a kulcs hordozza a nyelvet:
+      // `vocab:<lang>:`, kézi banknál az id `en0-` / `de0-` / `fr0-` előtagja — a szintlistában ellenőrizve).
+      legacyReviewFits: (it) => ownsReviewKey(it.key, ownCtx()),
+      restore: (it) => {
+        // A közös ismétlési sorból csak a SAJÁT tétel jön vissza (a nyelv szóbankja, a saját kézi bank, a saját
+        // tananyag); a más játék / más nyelv tételét a director a menetre átugorja.
+        // Az évfolyamot a közös szabály (`reviewFitsGrade`, a director) már szűrte; itt a játék + NYELV.
+        if (!ownsReviewKey(it.key, ownCtx())) return null;
+        // Menet közbeni ismétlés: pontosan a már látott kérdés (ugyanaz az irány), nem újragenerált fordított változat.
+        const again = wordGuardRef.current.sameAsShown(it.key);
+        if (again) return again;
+        const q = restoreReviewQuestion(it, { vocab: (l) => (l === lang ? vocabRef.current : null) });
+        if (!q) return null;
+        seenRef.current = [...seenRef.current, { id: String(q.quiz.id ?? q.key), prompt: q.quiz.prompt }];
+        return q;
+      },
+    };
+  }, [lang, toPlayQuestion]
+  );
+
+  /* ------------------------------------------------------------------------------------------------------------ */
+  /* A mag, a hurok, a kérdés-sáv                                                                                  */
+  /* ------------------------------------------------------------------------------------------------------------ */
+
+  const coreRef = useRef<LadderState>(createLadderState({ targetRung: menuRungs }));
+  const worldRngRef = useRef<Rng>(createRng(seedFrom(WORD_LADDER_GAME_ID, "init", "world")));
+  const fxRngRef = useRef<Rng>(createRng(seedFrom(WORD_LADDER_GAME_ID, "init", "fx")));
+  const liveRef = useRef<LadderLive | null>(null);
+  const clockRef = useRef(0);
+  const fpsRef = useRef(60);
+  const lastStartRef = useRef<number | null>(null);
+  const freeAtRef = useRef<number>(Number.POSITIVE_INFINITY);
+  const moodUntilRef = useRef(0);
+  const sessionXpRef = useRef(0);
+  const runCounterRef = useRef(0);
+  const seedRef = useRef<number | string>(readGameSeed() ?? seedFrom(WORD_LADDER_GAME_ID, dayKey()));
+  const pickedHoldRef = useRef<number | null>(null);
+
+  const speech = useGameSpeech();
+  const qRef = useRef<PlayQuestionApi | null>(null);
+  /** A menet vége egyszer fut (a teszt-kampó és a képkocka-hurok is kérheti). */
+  const endedRef = useRef(false);
+  const directorConfig = useMemo(() => wordLadderDirectorConfig(ladderGrade), [ladderGrade]);
+
+  const loop = useMemo(
+    () =>
+      createFixedLoop((dt) => {
+        const st = coreRef.current;
+        stepLadder(st, dt, qRef.current?.director?.intensity() ?? 0.5, worldRngRef.current);
+      }),
     [],
   );
+  const feel = useMemo(() => createFeel({ reducedMotion, loop, fxRng: () => fxRngRef.current.next() }), [reducedMotion, loop]);
+  const feelRef = useRef(feel);
+  feelRef.current = feel;
 
-  /**
-   * Jelző a futás első kérdéséhez. S13 / átfogó review L6 (pontosítás): a futásonként újraépülő szóbank-készlet
-   * `setTimeout(0)`-ban épül (lásd fent), ezért a futás ELSŐ kérdése a kézi bankból jön; a szóbank a második kérdéstől
-   * kérdez. A lenti effekt a runSeq-render commitjában fut, amikor a készlet még üres.
-   */
-  const firstQuestionPendingRef = useRef(false);
-
-  const clearRunTimers = useCallback(() => {
-    if (tickRef.current) {
-      clearInterval(tickRef.current);
-      tickRef.current = null;
-    }
-    if (stepTimerRef.current) {
-      clearTimeout(stepTimerRef.current);
-      stepTimerRef.current = null;
-    }
-    deferredStepRef.current = null;
-    pendingStepRef.current = null;
+  /** Rövid felirat a fal fölött (mérföldkő, előzés, lendület) — közvetlen DOM-írás, React-render nélkül (KSZ-9). */
+  const showBanner = useCallback((text: string, ms = 1400) => {
+    const el = bannerRef.current;
+    if (!el) return;
+    el.textContent = text;
+    el.dataset.show = "true";
+    if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+    bannerTimerRef.current = setTimeout(() => {
+      if (bannerRef.current) bannerRef.current.dataset.show = "false";
+    }, ms);
   }, []);
 
+  /** Részecske-löket a fogásnál (KSZ-6: pool; csökkentett mozgásnál nincs). */
+  const particleCursor = useRef(0);
+  const burst = useCallback(
+    (x: number, y: number, color: string, count: number) => {
+      if (reducedMotion) return;
+      const host = particlesRef.current;
+      if (!host) return;
+      const nodes = host.children;
+      for (let k = 0; k < count && nodes.length > 0; k++) {
+        const el = nodes[particleCursor.current % nodes.length] as HTMLElement;
+        particleCursor.current += 1;
+        const a = fxRngRef.current.next() * Math.PI * 2;
+        const d = 34 + fxRngRef.current.next() * 46;
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        el.style.background = color;
+        el.animate(
+          [
+            { transform: "translate(-50%, -50%) scale(1)", opacity: 1 },
+            { transform: `translate(calc(-50% + ${Math.cos(a) * d}px), calc(-50% + ${Math.sin(a) * d - 18}px)) scale(0.3)`, opacity: 0 },
+          ],
+          { duration: 520, easing: "cubic-bezier(.2,.7,.3,1)" },
+        );
+      }
+    },
+    [reducedMotion],
+  );
+
+  /** A mag eseményei → kép + hang (+ rezgés) ugyanabban a képkockában (K.4/18). A kérdés-hangot a közös sáv adja. */
+  const applyEvents = useCallback(
+    (events: readonly LadderEvent[]) => {
+      for (const ev of events) {
+        if (ev.kind === "climb") {
+          const target = coreRef.current.targetRung;
+          const ms = milestoneForProgress(ev.from, ev.to, target);
+          if (ms) showBanner(ms, 1800);
+          else if (ev.gain >= 2) showBanner(`Lendület! +${ev.gain} fok`, 900);
+          if (ev.gain >= 2) {
+            feelRef.current.hitstop(50);
+            sfxCombo(Math.min(5, Math.max(1, Math.floor(ev.combo / 3))) as 1 | 2 | 3 | 4 | 5);
+          }
+          moodUntilRef.current = clockRef.current + 700;
+          const holds = holdsRef.current;
+          const idx = pickedHoldRef.current;
+          const btn = idx !== null ? holds?.querySelector<HTMLElement>(`[data-hold-index="${idx}"]`) : holds?.querySelector<HTMLElement>("[data-free-hold]");
+          if (btn) {
+            const r = btn.getBoundingClientRect();
+            burst(r.left + r.width / 2, r.top + r.height / 2, ev.gain >= 2 ? "#fde047" : "#86efac", ev.gain >= 2 ? 12 : 8);
+          }
+        } else if (ev.kind === "slip") {
+          feelRef.current.addTrauma(0.45);
+          moodUntilRef.current = clockRef.current + 1200;
+        } else if (ev.kind === "fumble" && ev.reason === "free-miss") {
+          feelRef.current.addTrauma(0.25);
+        } else if (ev.kind === "overtake") {
+          if (ev.by === "player") {
+            showBanner(`Megelőzted ${RIVAL_NAME}t! 🎉`, 1500);
+            sfxGate();
+          } else {
+            showBanner(`${RIVAL_NAME} előzött — kapaszkodj utána!`, 1500);
+            sfxWarning();
+          }
+        }
+      }
+    },
+    [burst, showBanner],
+  );
+
+  const onOutcome = useCallback(
+    (o: QuestionOutcome) => {
+      if (o.result === "aborted") return;
+      const st = coreRef.current;
+      if (st.phase !== "play") return;
+      const correct = o.result === "correct";
+      levelSessionRef.current.answer(correct);
+      if (correct) {
+        const add = xpForCorrect(st.combo.count);
+        sessionXpRef.current += add;
+        setTotalXp((t) => t + add);
+      }
+      applyLadderAnswer(st, o.result);
+      if (st.combo.best > 0) setBestStreak((b) => (st.combo.best > b ? st.combo.best : b));
+      applyEvents(drainEvents(st));
+    },
+    [applyEvents],
+  );
+
+  const q = usePlayQuestion({
+    setup: { config: directorConfig, provider, startBand: 0.4, seed: seedRef.current },
+    speech,
+    onShow: (p) => {
+      lastStartRef.current = p.startedAtSimMs;
+      wordGuardRef.current.remember(p.question.key, p.question);
+      // A tartós, játékok közötti szóbank-napló a MEGJELENÍTÉSKOR (a szóbank-motor szerződése, A7): szóbankos tételnél
+      // `markAsked`, kézi tételnél a helyes válasz `markExternal`-lal (így ugyanaz a szó a bankból sem jön vissza).
+      const vocabId = vocabIdOfLadderItem(String(p.question.quiz.id ?? ""));
+      if (vocabId) vocabRef.current?.markAsked({ vocabId });
+      else vocabRef.current?.markExternal(p.question.quiz.options[p.question.quiz.correctIndex] ?? "");
+    },
+    onOutcome,
+  });
+  qRef.current = q;
+
+  /** Egy fogás megragadása (a kapaszkodó koppintása / kattintása). */
+  const grab = useCallback((idx: number) => {
+    if (pausedRef.current || phaseRef.current !== "play") return;
+    pickedHoldRef.current = idx;
+    qRef.current?.pick(idx, clockRef.current);
+  }, []);
+
+  /**
+   * Kapaszkodó-koppintás (KSZ-13/14) a közös `pointerTapHandlers`-szel (#457): `pointerdown`-ra azonnali „megfogás”
+   * (`:active`), a válasz FELENGEDÉSKOR véglegesedik, ha az ujj a fogás dobozán belül (± `TAP_UP_SLOP_PX`) engedett fel, vagy
+   * alig mozdult (≤ `TAP_STILL_PX`); elhúzás / `pointercancel` = visszavonás. Nem a `click`-re épül (több ujjnál a böngésző a
+   * nem elsődleges mutatóra nem ad `click`-et); billentyűhöz a `click` `detail === 0` ága.
+   */
+  const holdTaps = useMemo(() => createPointerTapTracker(), []);
+  const holdHandlers = useCallback((i: number, act: () => void) => pointerTapHandlers(holdTaps, i, act), [holdTaps]);
+
+  /** Szabad fogás (nincs kérdés). */
+  const grabFree = useCallback(() => {
+    if (pausedRef.current || phaseRef.current !== "play") return;
+    const st = coreRef.current;
+    pickedHoldRef.current = null;
+    freeGrab(st, true);
+    applyEvents(drainEvents(st));
+    freeAtRef.current = clockRef.current + FREE_GRIP_COOLDOWN_MS;
+    setFreeHold(false);
+  }, [applyEvents]);
+
+  const endRun = useCallback(
+    (won: boolean) => {
+      if (endedRef.current) return;
+      endedRef.current = true;
+      const st = coreRef.current;
+      const ctl = qRef.current;
+      const stats = ctl?.director?.stats(clockRef.current);
+      const bonus = finishBonusXp(st);
+      const xp = sessionXpRef.current + bonus;
+      if (bonus > 0) setTotalXp((t) => t + bonus);
+      const run = runRef.current;
+      const best = submitBest(xp);
+      const missing = Math.max(1, st.targetRung - st.rung);
+      setResult({
+        won,
+        missing,
+        xp,
+        bonus,
+        correct: stats?.correct ?? 0,
+        total: (stats?.answered ?? 0) + (stats?.timeouts ?? 0),
+        seconds: Math.round(clockRef.current / 1000),
+        bestCombo: st.combo.best,
+        best: best.best,
+        isNewBest: best.isNewBest,
+        level: run.level,
+      });
+      if (won) {
+        sfxLevelUp();
+        haptics("success");
+        // A pálya teljesítése a következő pályát nyitja (nyelvenként és évfolyamonként).
+        const next = unlockNextLevel(wordLadderGameId(run.lang), run.grade, run.level);
+        setUnlocked(next);
+        setLevel(Math.min(next, run.level + 1));
+      }
+      setMenuOpen(false);
+      setWhy(null);
+      setExpanded(false);
+      setFreeHold(false);
+      setPhase("result");
+    },
+    [submitBest, haptics],
+  );
+
   const startGame = useCallback(() => {
-    clearRunTimers();
     scoreSubmittedRef.current = false;
-    answerLockedRef.current = false;
-    runBestStreakRef.current = 0;
-    correctCountRef.current = 0;
-    wrongCountRef.current = 0;
-    pausedRef.current = false;
-    setPaused(false);
-    setResult(null);
-    runRef.current = { lang, grade: ladderGradeRef.current, level, rungs: ladderRungsForLevel(level) };
+    endedRef.current = false;
+    runCounterRef.current += 1;
+    const n = runCounterRef.current;
+    const total = wallFor(level);
+    runRef.current = { lang, grade: ladderGradeRef.current, level, rungs: total };
     levelSessionRef.current.reset(level);
     runTierRef.current = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
     seenRef.current = [];
-    const total = runRef.current.rungs;
-    setRunRungs(total);
-    setCursor(0);
-    // Csak fejlesztői módban: ?rung=N kezdőfok a zónaváltások/cél gyors ellenőrzéséhez.
+    wordGuardRef.current.reset();
+    freshCountRef.current = 0;
+    // Csak fejlesztői módban: ?rung=N kezdőfok a zónaváltások / cél gyors ellenőrzéséhez.
     let startRung = 0;
     if (import.meta.env.DEV) {
-      const p = parseInt(new URLSearchParams(window.location.search).get("rung") ?? "", 10);
-      if (Number.isFinite(p)) startRung = Math.max(0, Math.min(total - 1, p));
+      const v = parseInt(new URLSearchParams(window.location.search).get("rung") ?? "", 10);
+      if (Number.isFinite(v)) startRung = Math.max(0, Math.min(total - 1, v));
     }
-    setRung(startRung);
-    setStreak(0);
-    setSessionXp(0);
-    setRunSeconds(0);
-    setChosenIdx(null);
-    setFeedback(null);
-    setBanner(null);
-    setLastXpGain(null);
-    // Új futás → új szóbank-készlet; az első kérdést az újraépült készletből a lenti effekt választja.
-    // Az előző futás készlete azonnal kiürül (az első kérdés így nem jöhet a régi, elavult készletből).
+    const seed = seedRef.current;
+    coreRef.current = createLadderState({ targetRung: total, startRung, baseRungPerSec: rivalBaseRungPerSec(rivalSecPerRungForLevel(level)) });
+    worldRngRef.current = createRng(seedFrom(WORD_LADDER_GAME_ID, seed, "world", n));
+    fxRngRef.current = createRng(seedFrom(WORD_LADDER_GAME_ID, seed, "fx", n));
+    pickRngRef.current = createRng(seedFrom(WORD_LADDER_GAME_ID, seed, "pick", n));
+    clockRef.current = 0;
+    lastStartRef.current = null;
+    freeAtRef.current = Number.POSITIVE_INFINITY;
+    moodUntilRef.current = 0;
+    sessionXpRef.current = 0;
+    pickedHoldRef.current = null;
+    loop.reset();
+    qRef.current?.reset(seedFrom(seed, n), 0.4);
     setVocabTiers(LADDER_LEVELS.map(() => []));
-    setRunSeq((n) => n + 1);
-    firstQuestionPendingRef.current = true;
-    setCurrent(null);
-    setPhase("quiz");
-    setExplainCard(null);
-    explainOpenRef.current = false;
-    tickRef.current = setInterval(() => {
-      // A magyarázat olvasása és a szünet nem büntethető idővel.
-      if (explainOpenRef.current) return;
-      if (pausedRef.current) return;
-      setRunSeconds((s) => s + 1);
-    }, 1000);
-  }, [lang, level, clearRunTimers]);
+    setRunSeq((v) => v + 1);
+    setResult(null);
+    setMenuOpen(false);
+    setWhy(null);
+    setExpanded(false);
+    setFreeHold(false);
+    setTeach(true);
+    setHud({ rung: startRung, rival: 0, target: total, combo: 0, xp: 0 });
+    setPhase("play");
+  }, [lang, level, loop]);
+  const startGameRef = useRef(startGame);
   startGameRef.current = startGame;
+  const endRunRef = useRef(endRun);
+  endRunRef.current = endRun;
 
+  const freeHoldRef = useRef(false);
+  const directorConfigRef = useRef(directorConfig);
+  directorConfigRef.current = directorConfig;
+
+  /* ---------------- képkocka-hurok (rAF): kérdés-óra, sim, rázás, élő 3D-állapot ---------------- */
   useEffect(() => {
-    if (!firstQuestionPendingRef.current) return;
-    firstQuestionPendingRef.current = false;
-    setCurrent(nextUnseen());
-  }, [runSeq, nextUnseen]);
-
-  /**
-   * S6 / A7: a ténylegesen megjelenő kérdés naplózása a közös szóbank-naplóba — szóbankos tételnél `markAsked`,
-   * kézi tételnél a helyes válasz `markExternal`-lal (így ugyanaz a szó a bankból sem jön vissza).
-   */
-  useEffect(() => {
-    if (!current) return;
-    const vocabId = vocabIdOfLadderItem(current.id);
-    if (vocabId) vocabRef.current?.markAsked({ vocabId });
-    else vocabRef.current?.markExternal(current.options[current.correctIndex] ?? "");
-  }, [current]);
-
-  useEffect(() => {
-    return () => {
-      if (tickRef.current) clearInterval(tickRef.current);
-      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
-      timeoutsRef.current.forEach((t) => clearTimeout(t));
-      timeoutsRef.current = [];
-      pendingStepRef.current = null;
-      deferredStepRef.current = null;
-    };
-  }, []);
-
-  const finishWon = useCallback(() => {
-    if (tickRef.current) {
-      clearInterval(tickRef.current);
-      tickRef.current = null;
-    }
-    sfxLevelUp();
-    haptics("success");
-    // A pálya teljesítése a következő pályát nyitja (nyelvenként és évfolyamonként).
-    const run = runRef.current;
-    const next = unlockNextLevel(wordLadderGameId(run.lang), run.grade, run.level);
-    setUnlocked(next);
-    setLevel(Math.min(next, run.level + 1));
-    setPhase("won");
-    setCelebrate(true);
-    pushTimeout(() => setCelebrate(false), 3000);
-  }, [pushTimeout, haptics]);
-
-  const inRun = phase === "quiz" || phase === "reveal" || phase === "step";
-  const inRunRef = useRef(inRun);
-  inRunRef.current = inRun;
-
-  /** Szünet: a lap háttérbe kerülésekor (GameShell) és a HUD gombjával. */
-  const pauseGame = useCallback(() => {
-    if (!inRunRef.current || pausedRef.current) return;
-    pausedRef.current = true;
-    setPaused(true);
-  }, []);
-  const resumeGame = useCallback(() => {
-    if (!pausedRef.current) return;
-    pausedRef.current = false;
-    setPaused(false);
-    const deferred = deferredStepRef.current;
-    deferredStepRef.current = null;
-    deferred?.();
-  }, []);
-  const exitToMenu = useCallback(() => {
-    clearRunTimers();
-    pausedRef.current = false;
-    setPaused(false);
-    setExplainCard(null);
-    explainOpenRef.current = false;
-    setCurrent(null);
-    setChosenIdx(null);
-    setFeedback(null);
-    setBanner(null);
-    setPhase("menu");
-  }, [clearRunTimers]);
-
-  // R = quick-restart a "won" / "menu" képernyőn; P = szünet játék közben.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.key === "p" || e.key === "P") && inRunRef.current) {
-        e.preventDefault();
-        if (pausedRef.current) resumeGame();
-        else pauseGame();
+    if (phase !== "play") return;
+    let raf = 0;
+    let last: number | null = null;
+    let fpsAcc = 0;
+    let fpsFrames = 0;
+    const shake: ShakeOffset = { x: 0, y: 0, rot: 0 };
+    let shaking = false;
+    const tick = (now: number) => {
+      const dt = last === null ? 0 : Math.min(250, Math.max(0, now - last));
+      last = now;
+      fpsAcc += dt;
+      fpsFrames += 1;
+      if (fpsAcc >= 500) {
+        fpsRef.current = Math.round((fpsFrames * 1000) / fpsAcc);
+        fpsAcc = 0;
+        fpsFrames = 0;
+      }
+      const isPaused = pausedRef.current;
+      if (!isPaused) clockRef.current += dt;
+      const clock = clockRef.current;
+      const ctl = qRef.current!;
+      const st = coreRef.current;
+      // Menetvég a frame ELŐTT (J0c): a nyitott kérdés „megszakítva” zárul, a futó megoldás-kijelzés kifut.
+      if (st.phase !== "play" && !ctl.finished()) ctl.finish();
+      if (!isPaused) {
+        ctl.frame(clock, { tick: false });
+        // Minden fogás egy kérdés: amint nincs nyitott kérdés és lejárt a kijelzés, azonnal kérünk (a director a
+        // minGap-et tartja; kijelzés alatt a kérés függőben vár és a kijelzés végén indul).
+        if (st.phase === "play" && clock >= FIRST_HOLD_MS && !ctl.active()) {
+          const v = ctl.view();
+          // Kijelzés alatt egyszer kérünk (a kérés függőben vár) — képkockánkénti újrakérés React-frissítést okozna.
+          if (!v.presentation || (v.reveal && v.pending === null)) {
+            const p = ctl.request("trigger", clock);
+            const minGap = directorConfigRef.current.minGapMs;
+            const empty = !p && ctl.canAsk() && (lastStartRef.current === null || clock - lastStartRef.current >= minGap);
+            if (empty && freeAtRef.current === Number.POSITIVE_INFINITY) freeAtRef.current = clock + (st.climbs === 0 ? 0 : FREE_GRIP_COOLDOWN_MS);
+            if (p) freeAtRef.current = Number.POSITIVE_INFINITY;
+          }
+        }
+        const wantFree = st.phase === "play" && !ctl.active() && clock >= freeAtRef.current;
+        if (wantFree !== freeHoldRef.current) {
+          freeHoldRef.current = wantFree;
+          setFreeHold(wantFree);
+        }
+      }
+      loop.setTimeScale(isPaused ? 0 : ctl.timeScale());
+      loop.frame(now);
+      feelRef.current.update(isPaused ? 0 : dt);
+      // A rivális lépései (és a vég) a mag eseményeiből.
+      const evs = drainEvents(st);
+      if (evs.length) applyEvents(evs);
+      // Élő állapot a 3D jelenetnek (React-render nélkül).
+      const mood = clock < moodUntilRef.current ? (st.stunMs > 0 ? "oops" : "happy") : "idle";
+      liveRef.current = {
+        rung: st.rung,
+        rivalRung: st.rival.rung,
+        streak: st.combo.count,
+        mood,
+        zoneId: zoneForProgress(st.rung, st.targetRung).id,
+      };
+      // Rázás (KSZ-10: a közös trauma-modell; csökkentett mozgásnál 0).
+      const stage = stageRef.current;
+      if (stage) {
+        feelRef.current.shakeOffset(shake, stage.clientHeight || 600);
+        const moving = shake.x !== 0 || shake.y !== 0 || shake.rot !== 0;
+        if (moving) {
+          stage.style.transform = `translate3d(${shake.x.toFixed(2)}px, ${shake.y.toFixed(2)}px, 0) rotate(${shake.rot.toFixed(4)}rad)`;
+          shaking = true;
+        } else if (shaking) {
+          stage.style.transform = "";
+          shaking = false;
+        }
+      }
+      if (ctl.settled()) {
+        endRunRef.current(st.phase === "won");
         return;
       }
-      if (e.key !== "r" && e.key !== "R") return;
-      if (phase === "won" || phase === "menu") {
-        e.preventDefault();
-        startGame();
-      }
+      raf = requestAnimationFrame(tick);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [phase, startGame, pauseGame, resumeGame]);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [phase, loop, applyEvents]);
 
-  /**
-   * A1: a lépés-lánc és a magyarázó kártya összekötése.
-   * Rossz válasznál a kérdéscsere a kártya bezárásáig vár.
-   */
-  explainOpenRef.current = explainCard !== null;
-
-  /** Szünetben az esedékes lépés nem fut le: a folytatásig vár (S6/2. lépés). */
-  const whenNotPaused = useCallback(
-    (fn: () => void) => () => {
-      if (pausedRef.current) {
-        deferredStepRef.current = fn;
-        return;
-      }
-      fn();
-    },
-    [],
-  );
-
-  const runStepChain = useCallback(
-    (
-      target: number,
-      nextCursor: number,
-      nextQuestion: Quiz | null,
-      isCorrect: boolean,
-      fromRung: number,
-    ) => {
-      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
-      const total = runRef.current.rungs;
-      // 2) LÉPÉS: a felfedés után a figura ugrik/csúszik.
-      stepTimerRef.current = setTimeout(
-        whenNotPaused(() => {
-          const ms = milestoneForProgress(fromRung, target, total);
-          setRung(target);
-          setStepDelta(isCorrect ? 1 : -1);
-          setPhase("step");
-          if (ms) showBanner(ms, 1800);
-
-          // 3) KÖVETKEZŐ KÉRDÉS vagy CÉL. A kérdéscsere CSAK itt történik: a lépés alatt még az
-          // előző kérdés látszik a zöld/piros jelöléssel (különben a következő kérdés helyes
-          // válasza szivárogna ki a felfedő színezéssel).
-          stepTimerRef.current = setTimeout(
-            whenNotPaused(() => {
-              if (target >= total) {
-                finishWon();
-                setCurrent(null);
-                return;
-              }
-              setCursor(nextCursor);
-              setCurrent(nextQuestion);
-              setChosenIdx(null);
-              answerLockedRef.current = false;
-              setFeedback(null);
-              setLastXpGain(null);
-              setPhase("quiz");
-            }),
-            STEP_MS,
-          );
-        }),
-        REVEAL_MS,
-      );
-    },
-    [finishWon, showBanner, whenNotPaused],
-  );
-
-  const dismissExplain = useCallback(() => {
-    setExplainCard(null);
-    explainOpenRef.current = false;
-    const pending = pendingStepRef.current;
-    pendingStepRef.current = null;
-    pending?.();
-  }, []);
-
-  const onAnswer = (i: number) => {
-    if (!current) return;
-    if (phase !== "quiz") return;
-    if (pausedRef.current) return;
-    if (answerLockedRef.current) return;
-    if (i < 0 || i >= current.options.length) return;
-    answerLockedRef.current = true;
-    const isCorrect = i === current.correctIndex;
-    levelSessionRef.current.answer(isCorrect);
-    seenRef.current = [...seenRef.current, { id: current.id, prompt: current.prompt }];
-
-    // 1) FELFEDÉS: a gyerek látja a zöld (helyes) és piros (hibás) választ.
-    setChosenIdx(i);
-    setPhase("reveal");
-    setFeedback(encouragement(isCorrect, rung));
-
-    if (!isCorrect) {
-      wrongCountRef.current += 1;
-      sfxError();
-      haptics("error");
-      if (!reducedMotion) void quizControls.start({ x: [0, -10, 9, -6, 4, 0], transition: { duration: 0.42 } });
-      setStreak(0);
-      setLastXpGain(null);
-      // G-1: a bátorító mondat („Semmi baj!") kedves, de nem tanít. A kártya
-      // megmondja, mi a helyes szó, és mit választott helyette a gyerek.
-      // A `feedback` név itt már foglalt (a bátorítás szövege), ezért explainCard.
-      setExplainCard(
-        buildFeedback({
-          quiz: {
-            prompt: current.prompt,
-            options: current.options,
-            correctIndex: current.correctIndex,
-            // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
-            explanation: current.explanation ?? undefined,
-          },
-          chosenIndex: i,
-          attempt: 0,
-          ageBand: "kid",
-        }),
-      );
-      explainOpenRef.current = true;
-    } else {
-      correctCountRef.current += 1;
-      sfxSuccess();
-      haptics("success");
-      if (!reducedMotion) void quizControls.start({ scale: [1, 1.025, 1], transition: { duration: 0.3 } });
-      const add = xpForCorrect(streak);
-      setLastXpGain(add);
-      setSessionXp((x) => x + add);
-      setTotalXp((t) => t + add);
-      const n = streak + 1;
-      if (n > runBestStreakRef.current) runBestStreakRef.current = n;
-      setBestStreak((b) => (n > b ? n : b));
-      setStreak(n);
-      const sm = streakMessage(n);
-      if (sm) showBanner(sm, 1400);
-    }
-
-    const target = computeNextRung(rung, isCorrect, runRef.current.rungs);
-    const nextCursor = cursor + 1;
-    // Futáson belül nincs ismétlés (#135): a következő kérdés a futás sávjának szintjéről, még nem látott.
-    const nextQuestion = nextUnseen();
-
-    const fromRung = rung;
-    const startStep = () => runStepChain(target, nextCursor, nextQuestion, isCorrect, fromRung);
-    if (!isCorrect) {
-      // A1: a lépés és a kérdéscsere a kártya bezárásáig vár — különben a gyerek
-      // a magyarázatot egy már kicserélt kérdés mögött olvassa.
-      pendingStepRef.current = startStep;
-    } else {
-      pendingStepRef.current = null;
-      startStep();
-    }
-  };
-  const onAnswerRef = useRef(onAnswer);
-  onAnswerRef.current = onAnswer;
-  const answerFromBoard = useCallback((i: number) => onAnswerRef.current(i), []);
-
-  // Billentyűzet: 1–4 = a négy válasz (a lapok jelvénye), csak kérdés közben.
+  // HUD ≤ 10 Hz (KSZ-9) + a tanító sor lekapcsolása 30 mp után.
   useEffect(() => {
-    if (phase !== "quiz") return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.altKey || e.ctrlKey || e.metaKey) return;
-      if (pausedRef.current) return;
-      const idx = ANSWER_KEYS.indexOf(e.key);
-      if (idx < 0) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      e.preventDefault();
-      onAnswerRef.current(idx);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    if (phase !== "play") return;
+    const id = window.setInterval(() => {
+      const st = coreRef.current;
+      const next: HudSnap = { rung: st.rung, rival: Math.round(st.rival.pos * 10) / 10, target: st.targetRung, combo: st.combo.count, xp: sessionXpRef.current };
+      setHud((h) => (h.rung === next.rung && h.rival === next.rival && h.target === next.target && h.combo === next.combo && h.xp === next.xp ? h : next));
+      if (clockRef.current >= RIVAL_WARMUP_MS) setTeach(false);
+    }, 100);
+    return () => window.clearInterval(id);
   }, [phase]);
 
+  /* ---------------- szünet, kilépés, billentyűk ---------------- */
+  const pauseGame = useCallback(() => {
+    if (phaseRef.current !== "play") return;
+    setMenuOpen(true);
+  }, []);
+  const resumeGame = useCallback(() => setMenuOpen(false), []);
+  const exitToMenu = useCallback(() => {
+    qRef.current?.finish();
+    setMenuOpen(false);
+    setWhy(null);
+    setExpanded(false);
+    setFreeHold(false);
+    setPhase("menu");
+  }, []);
+
+  // P = szünet játék közben; R = gyors újraindítás az eredmény- / kezdőképernyőn; Szóköz / ↑ = szabad fogás.
   useEffect(() => {
-    if (phase !== "won") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if ((e.key === "p" || e.key === "P") && phaseRef.current === "play") {
+        e.preventDefault();
+        setMenuOpen((m) => !m);
+        return;
+      }
+      if ((e.key === " " || e.key === "ArrowUp") && freeHoldRef.current) {
+        e.preventDefault();
+        grabFree();
+        return;
+      }
+      if ((e.key === "r" || e.key === "R") && (phaseRef.current === "result" || phaseRef.current === "menu")) {
+        e.preventDefault();
+        startGameRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [grabFree]);
+
+  /* ---------------- „Miért?”: szünet + a valódi magyarázókártya (G-1) ---------------- */
+  const openWhy = useCallback(() => {
+    const item = qRef.current?.view().whyItem; // a vezérlő őrzi: az új kérdés nem írja felül (review #446)
+    if (!item) return;
+    setWhy(
+      buildFeedback({
+        quiz: {
+          prompt: item.quiz.prompt,
+          options: item.quiz.options,
+          correctIndex: item.quiz.correctIndex,
+          // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
+          explanation: item.quiz.explanation ?? undefined,
+        },
+        chosenIndex: item.pickedOriginalIndex,
+        attempt: 1,
+        ageBand: "kid",
+      }),
+    );
+  }, []);
+  const closeWhy = useCallback(() => setWhy(null), []);
+
+  /* ---------------- teszt-kampó (K.2) ---------------- */
+  useEffect(() => {
+    return installGameTestApi({
+      forceState: (patch) => {
+        if (patch.phase === "menu") exitToMenu();
+        if (patch.phase === "play") startGameRef.current();
+        if (patch.question || patch.phase === "quiz") qRef.current?.request("trigger", clockRef.current);
+        if (patch.phase === "won" || patch.phase === "lost") {
+          if (phaseRef.current !== "play") startGameRef.current();
+          const st = coreRef.current;
+          if (patch.phase === "won") st.rung = st.targetRung;
+          else st.rival.pos = st.targetRung;
+          st.phase = patch.phase;
+          qRef.current?.finish();
+          endRunRef.current(patch.phase === "won");
+        }
+      },
+      probe: () => {
+        const ctl = qRef.current;
+        const st = coreRef.current;
+        const stats = ctl?.director?.stats(clockRef.current);
+        const p = ctl?.view().presentation ?? null;
+        return {
+          simTime: loop.simTimeMs(),
+          questionOpen: ctl?.active() ? 1 : 0,
+          questionsAnswered: stats?.answered ?? 0,
+          questionsCorrect: stats?.correct ?? 0,
+          fps: fpsRef.current,
+          band: ctl?.director?.band() ?? null,
+          intensity: ctl?.director?.intensity() ?? null,
+          rung: st.rung,
+          rivalRung: st.rival.rung,
+          target: st.targetRung,
+          combo: st.combo.count,
+          phase: phaseRef.current === "play" ? st.phase : phaseRef.current,
+          questionId: p?.id ?? null,
+          reveal: ctl?.view().reveal ? 1 : 0,
+          paused: pausedRef.current ? 1 : 0,
+          clock: clockRef.current,
+        };
+      },
+    });
+  }, [exitToMenu, loop]);
+
+  /* ---------------- pontszám, jelvények, napi kihívás — a menet végén egyszer ---------------- */
+  useEffect(() => {
+    if (phase !== "result" || !result) return;
     if (!syncEligibility?.eligible) return;
     if (scoreSubmittedRef.current) return;
     scoreSubmittedRef.current = true;
     void postGameScore({
       gameId: "word-ladder-hu-en",
-      difficulty: "normal",
-      runXp: sessionXp,
-      runStreak: runBestStreakRef.current,
-      runSeconds,
+      difficulty: difficultyForLevel(result.level),
+      runXp: result.xp,
+      runStreak: result.bestCombo,
+      runSeconds: result.seconds,
       runId: newScoreRunId(),
     })
       .then(() => {
@@ -883,50 +1051,54 @@ export default function WordLadderHuEn() {
       .catch(() => {
         scoreSubmittedRef.current = false;
       });
-  }, [phase, syncEligibility, sessionXp, streak, runSeconds]);
+  }, [phase, result, syncEligibility]);
 
-  // Achievement + Daily + helyi legjobb — egyszer fut "won" átmenetkor.
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   const achievementCheckedRef = useRef(false);
   useEffect(() => {
-    if (phase !== "won") {
+    if (phase !== "result" || !result) {
       achievementCheckedRef.current = false;
       return;
     }
     if (achievementCheckedRef.current) return;
     achievementCheckedRef.current = true;
-    setResult(submitBest(sessionXp));
     const wasDailyAvailable = isTodaysGameAvailable("word-ladder-hu-en");
     const newOnes = recordRun({
       game: "word-ladder-hu-en",
-      xpGained: sessionXp,
-      correctAnswers: correctCountRef.current,
-      wrongAnswers: wrongCountRef.current,
-      maxStreak: runBestStreakRef.current,
-      perfect: wrongCountRef.current === 0 && correctCountRef.current >= 5,
-      fullClear: true,
+      xpGained: result.xp,
+      correctAnswers: result.correct,
+      wrongAnswers: Math.max(0, result.total - result.correct),
+      maxStreak: result.bestCombo,
+      perfect: result.won && result.total === result.correct && result.correct >= 5,
+      fullClear: result.won,
     });
-    if (wasDailyAvailable) {
+    if (result.won && wasDailyAvailable) {
       const daily = markDailyCompleted();
       if (daily.achievements.length > 0) newOnes.push(...daily.achievements);
     }
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
-  }, [phase, sessionXp, streak, submitBest]);
+  }, [phase, result]);
 
-  const zone = zoneForProgress(rung, RUNGS);
-  const revealing = phase === "reveal" || phase === "step";
-  const climberMood: "happy" | "oops" | "idle" =
-    phase === "reveal" || phase === "step" ? (stepDelta > 0 && phase === "step" ? "happy" : chosenIdx !== null && current && chosenIdx !== current.correctIndex ? "oops" : "happy") : "idle";
-  // A figura függőleges helye a létrán (%): 0. fok = alul, RUNGS = a zászlónál.
-  const climberBottomPct = 3 + (rung / RUNGS) * 88;
-  const tileStates: TileState[] = (current?.options ?? []).map((_, idx) =>
-    !revealing ? "idle" : idx === current!.correctIndex ? "correct" : idx === chosenIdx ? "wrong" : "dim",
-  );
+  /* ---------------- render ---------------- */
+  const view = q.state;
+  const presentation = view.presentation;
+  const reveal = view.reveal;
+  const answering = !!presentation && !reveal && !paused;
+  const holdState = (i: number): TileState => (!reveal ? "idle" : i === reveal.correctOptionIndex ? "correct" : i === reveal.pickedOptionIndex ? "wrong" : "dim");
+  const tileStates: TileState[] = (presentation?.options ?? []).map((_, i) => holdState(i));
+  const zone = zoneForProgress(hud.rung, hud.target);
   const levelTierLabel = LADDER_TIER_LABELS[ladderTierForLevel(ladderGrade, level)];
-  const screenState: GameScreenState =
-    phase === "menu" ? "start" : phase === "won" ? "result" : paused ? "paused" : "playing";
-  const stepping = phase === "step" && !reducedMotion;
-  const answered = correctCountRef.current + wrongCountRef.current;
+  // A keret „paused” állapota csak a szünet menüé: a „Miért?”-kártya / kinyitott kérdés alatt is áll a menet, de a
+  // háttérbe kerülés ilyenkor is szünet menüt nyit (K1/K3: a menü a kártya fölé kerül).
+  const screenState: GameScreenState = phase === "menu" ? "start" : phase === "result" ? "result" : menuOpen ? "paused" : "playing";
+  const lead = Math.round((hud.rung - hud.rival) * 10) / 10;
+  const leadText = lead >= 1 ? `+${Math.floor(lead)} fok előnyöd van` : lead <= -1 ? `${RIVAL_NAME} ${Math.floor(-lead)} fokkal előtted` : "Fej fej mellett!";
+  const rivalPct = Math.min(100, (hud.rival / Math.max(1, hud.target)) * 100);
+  const youPct = Math.min(100, (hud.rung / Math.max(1, hud.target)) * 100);
+  const wrongItems = q.director?.wrongList() ?? [];
+  // Fekvő telefonon a fogások a két szélen vannak, a kártya fent: a mászók lejjebb ülnek a képen.
+  const landscapePhone = orientation === "landscape" && typeof window !== "undefined" && window.innerHeight <= 520;
+  const retryLabel = result?.won ? (level > result.level ? `Tovább: ${level}. pálya` : "Újra") : "Visszavágó!";
 
   return (
     <GameShell
@@ -935,34 +1107,13 @@ export default function WordLadderHuEn() {
       onAutoPause={pauseGame}
       style={{
         background:
-          phase === "menu"
-            ? MENU_BACKGROUND
-            : phase === "won"
-              ? LADDER_ZONES[LADDER_ZONES.length - 1]!.background
-              : zone.background,
+          phase === "menu" ? MENU_BACKGROUND : phase === "result" && result?.won ? LADDER_ZONES[LADDER_ZONES.length - 1]!.background : zone.background,
         transition: "background 800ms ease",
       }}
     >
       <div className="wl-achievements">
         <AchievementToast achievements={newlyUnlocked} />
       </div>
-      {phase !== "menu" && (
-        <ZoneDecor decor={phase === "won" ? ["🎉", "⭐", "🏆", "✨"] : zone.decor} reduced={reducedMotion} />
-      )}
-      {!reducedMotion && phase !== "menu" && (
-        <>
-          <motion.div
-            className="pointer-events-none absolute w-40 h-20 rounded-full bg-white/15 blur-xl top-[8%] left-[10%]"
-            animate={{ x: [0, 30, 0], opacity: [0.4, 0.7, 0.4] }}
-            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <motion.div
-            className="pointer-events-none absolute w-56 h-24 rounded-full bg-white/15 blur-2xl top-[14%] right-[5%]"
-            animate={{ x: [0, -40, 0] }}
-            transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
-          />
-        </>
-      )}
 
       <main
         className={`relative z-10 w-full min-h-dvh flex flex-col ${phase === "menu" ? "" : "wl-play"}`}
@@ -973,30 +1124,27 @@ export default function WordLadderHuEn() {
         {phase === "menu" ? (
           <StartScreen
             title="Szólétra"
-            subtitle={`Mássz fel a 🏁 zászlóig! Magyar ↔ ${langLabel.name.toLowerCase()} szavak, ${ladderGrade}. évfolyam.`}
+            subtitle={`Szikla-verseny: mássz fel a 🏁 zászlóig ${RIVAL_NAME} előtt! Magyar ↔ ${langLabel.name.toLowerCase()} szavak, ${ladderGrade}. évfolyam.`}
             icon={
               <div className="wl-start-icon relative h-full w-full overflow-hidden rounded-[28px]">
                 <LadderScene3D
                   variant="preview"
                   rung={0}
-                  total={RUNGS}
+                  rivalRung={0}
+                  total={menuRungs}
                   zoneId="meadow"
                   streak={0}
                   mood="idle"
-                  fallback={
-                    <>
-                      <Ladder rung={0} total={RUNGS} />
-                      <div className="absolute left-1/2 -translate-x-1/2 scale-75" style={{ bottom: "2%" }}>
-                        <Climber streak={0} mood="idle" />
-                      </div>
-                    </>
-                  }
+                  fallback={<RaceFallback rung={0} rival={0} total={menuRungs} />}
                 />
               </div>
             }
             startLabel={`Indítás — ${level}. pálya`}
             startTestId="wl-start"
-            onStart={startGame}
+            onStart={() => {
+              speech.arm(); // J14 / LS-4: a felolvasás csak a játékos koppintása után élesedik
+              startGame();
+            }}
             best={bestScore}
             menuKey="ladder"
             secondary={
@@ -1008,15 +1156,15 @@ export default function WordLadderHuEn() {
                 <GamePedagogyPanel
                   accent="amber"
                   className="game-btn game-btn-secondary min-h-[48px] w-full justify-center border-white/20 bg-white/10 text-base"
-                  kidMission={`Mássz fel a létra tetejére a 🏁 zászlóig! Minden jó válasz egy fokkal feljebb visz és XP-t ad. Ha tévedsz, megcsúszol egy fokot — de a zöld lap megmutatja a jó választ, és jön a következő kérdés. Minden évfolyamon 10 pálya vár: a pálya teljesítése nyitja a következőt. Válaszolhatsz az 1–4 gombbal is.`}
+                  kidMission={`Verseny a sziklafalon! ${RIVAL_NAME} a szomszéd létrán mászik — érj fel előbb a 🏁 zászlóhoz! A kapaszkodókon szavak vannak: a jó szót megragadva feljebb mászol, három jó egymás után lendületet ad (két fokot ugrasz). Ha rossz fogást fogsz, megcsúszol egy fokot, és a helyes kapaszkodó zölden világít. Ha ${RIVAL_NAME} ér fel előbb, visszavágót kérhetsz. Válaszolhatsz az 1–4 gombbal is.`}
                   parentBody={
                     <>
-                      <strong className="text-amber-100/90">Tananyag:</strong> magyar–{langLabel.name.toLowerCase()} szavak, témakör-szószedetek, kifejezések, rendhagyó és szabályos alakok, hétköznapi helyzetek, mindkét fordítási irányban; évfolyamonként 10, fokozatosan nehezedő pálya (progresszív gyakorlás). A kérdések a kézi bankból és a központi szóbankból jönnek; a már látott szavak a következő futásokban sem ismétlődnek, amíg van új.
+                      <strong className="text-amber-100/90">Tananyag:</strong> magyar–{langLabel.name.toLowerCase()} szavak, témakör-szószedetek, kifejezések, mindkét fordítási irányban; évfolyamonként 10, fokozatosan nehezedő pálya. A kérdések a tananyagból, a kézi bankból és a központi szóbankból jönnek; az elrontott szó a menetben 3–6 kérdésen belül visszatér, és a következő napokon is előkerül (térközös ismétlés).
                       <br />
-                      <strong className="text-amber-100/90">Fejleszt:</strong> memória, kontextusból következtetés, kitartás a hiba után is.
+                      <strong className="text-amber-100/90">Fejleszt:</strong> szókincs, gyors felismerés, kitartás a hiba után is.
                       <br />
                       <span className="text-white/70">
-                        Hibás válasznál a helyes megoldás zölden felvillan (azonnali korrekció), a látható mászás és a tájváltások tartják a figyelmet.
+                        Minden fogás egy kérdés (percenként 10+), a rivális tempója a gyerek szintjéhez igazodik: szoros, de legyőzhető verseny. A „Miért?” gomb megállítja a játékot és elmagyarázza a hibát.
                       </span>
                     </>
                   }
@@ -1084,11 +1232,12 @@ export default function WordLadderHuEn() {
                   onChange={setLevel}
                   label={`Pálya — ${ladderGrade}. évfolyam, ${langLabel.name.toLowerCase()}`}
                 />
+                <PlaySpeechToggle />
               </div>
             }
           >
             <p className="wl-menu-info text-center text-base font-semibold text-white/90" data-testid="wl-menu-info">
-              {RUNGS} fok a zászlóig · szint: <span className="text-amber-200">{levelTierLabel}</span> · legjobb sorozat:{" "}
+              {menuRungs} fok a zászlóig · szint: <span className="text-amber-200">{levelTierLabel}</span> · legjobb sorozat:{" "}
               <strong className="text-orange-300">{bestStreak}</strong>
             </p>
             <p data-game-sync className="wl-menu-sync mt-2 text-center text-sm text-amber-100/80">
@@ -1097,319 +1246,293 @@ export default function WordLadderHuEn() {
           </StartScreen>
         ) : (
           <>
+            {/* A FAL: a 3D verseny-jelenet a teljes képernyőn, a HUD és a fogások mögött. */}
+            <div ref={stageRef} className="wl-stage" data-testid="wl-stage" aria-hidden="true">
+              <LadderScene3D
+                variant="race"
+                rung={hud.rung}
+                rivalRung={Math.floor(hud.rival)}
+                total={runRef.current.rungs}
+                zoneId={zone.id}
+                streak={hud.combo}
+                mood="idle"
+                live={liveRef}
+                focus={landscapePhone ? 0.14 : 0.42}
+                fallback={<RaceFallback rung={hud.rung} rival={hud.rival} total={hud.target} />}
+                onSupportedChange={setScene3d}
+              />
+            </div>
             <GameHud
               onPause={pauseGame}
               stats={[
                 {
-                  id: "xp",
-                  label: "XP",
+                  id: "rung",
+                  label: "Fok",
                   value: (
-                    <span data-testid="wl-total-xp" className="inline-flex items-center gap-1 text-amber-200">
-                      {totalXp}
+                    <span data-testid="wl-rung" className="tabular-nums">
+                      {hud.rung}/{hud.target}
                     </span>
                   ),
                 },
                 {
-                  id: "streak",
-                  label: "Sorozat",
-                  tone: streak >= 3 ? "warn" : "default",
+                  id: "combo",
+                  label: "Kombó",
+                  tone: hud.combo >= 3 ? "warn" : "default",
                   value: (
                     <span data-testid="wl-streak" className="inline-flex items-center gap-1">
-                      <Flame className={streak >= 5 ? "h-5 w-5 text-orange-300" : "h-4 w-4 text-orange-300"} aria-hidden="true" />
-                      {streak}
+                      <Flame className={hud.combo >= 3 ? "h-5 w-5 text-orange-300" : "h-4 w-4 text-orange-300"} aria-hidden="true" />
+                      {hud.combo >= 3 ? "×2" : hud.combo}
                     </span>
                   ),
                 },
-                { id: "level", label: "Pálya", value: `${runRef.current.level}.` },
+                {
+                  id: "xp",
+                  label: "XP",
+                  value: (
+                    <span data-testid="wl-run-xp" className="text-amber-200 tabular-nums">
+                      {hud.xp}
+                    </span>
+                  ),
+                },
               ]}
-              progress={{
-                value: rung,
-                max: RUNGS,
-                label: `${rung}/${RUNGS} fok`,
-              }}
-            />
-            <div className="wl-stage flex-1 flex gap-2 sm:gap-3 min-h-0 mt-2">
-              {/* LÉTRA */}
-              <div
-                ref={ladderColumnRef}
-                className={`wl-ladder relative shrink-0 ${ladder3d ? "rounded-2xl overflow-hidden border border-white/15" : ""}`}
-                data-testid="wl-ladder"
-              >
-                <LadderScene3D
-                  rung={rung}
-                  total={RUNGS}
-                  zoneId={zone.id}
-                  streak={streak}
-                  mood={climberMood}
-                  fallback={<Ladder rung={rung} total={RUNGS} />}
-                  onSupportedChange={onLadderSupported}
-                  onClimberScreenPct={onClimberScreenPct}
-                />
-                {/* A 3D mászó látszik; ez a DOM-mászó (testid) akkor átlátszó helyőrző, de együtt mozog. */}
-                <motion.div
-                  className="absolute left-1/2 z-10"
-                  style={{ x: "-50%", opacity: ladder3d ? 0 : 1 }}
-                  animate={{
-                    bottom: `${climberBottomPct}%`,
-                    // S6/7: zuhanásnál bukfenc, lépésnél guggolás-nyújtás; csökkentett mozgásnál csak elmozdulás.
-                    rotate: stepping && stepDelta < 0 ? [0, 360] : 0,
-                    scaleY: stepping && stepDelta > 0 ? [1, 1, 0.85, 1.08, 1] : 1,
-                    scaleX: stepping && stepDelta > 0 ? [1, 1, 1.1, 0.95, 1] : 1,
-                  }}
-                  transition={
-                    reducedMotion
-                      ? { duration: 0 }
-                      : {
-                          bottom: { type: "spring", stiffness: 260, damping: 18 },
-                          rotate: { duration: 0.55, ease: "easeInOut" },
-                          scaleY: { duration: 0.64, times: [0, 0.75, 0.85, 0.93, 1] },
-                          scaleX: { duration: 0.64, times: [0, 0.75, 0.85, 0.93, 1] },
-                        }
-                  }
-                  data-testid="wl-climber"
-                >
-                  <Climber streak={streak} mood={climberMood} />
-                </motion.div>
-                <AnimatePresence>
-                  {lastXpGain !== null && (
-                    <motion.div
-                      key={`${cursor}-${lastXpGain}`}
-                      className="absolute left-1/2 z-20 -translate-x-1/2 rounded-full bg-amber-400/90 px-2 py-0.5 text-base font-black text-slate-950 shadow-lg"
-                      style={{ bottom: `min(92%, calc(var(--wl-climber-pct, ${climberBottomPct}%) + 14%))` }}
-                      initial={reducedMotion ? false : { opacity: 0, y: 8, scale: 0.6 }}
-                      animate={{ opacity: 1, y: reducedMotion ? 0 : -18, scale: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: reducedMotion ? 0 : 0.6, type: "spring", stiffness: 380, damping: 16 }}
-                    >
-                      +{lastXpGain}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* KVÍZ — a létra mellett, mindig látszik a mászás. 3D módban a DOM átlátszó érintési réteg. */}
-              <motion.div
-                ref={quizPanelRef}
-                animate={quizControls}
-                className="relative flex-1 flex flex-col rounded-2xl border border-white/15 bg-black/35 p-3 sm:p-4 min-w-0 min-h-0"
-                data-testid="wl-quiz"
-                data-quiz3d={quiz3dOn ? "true" : "false"}
-              >
-                {quiz3dWanted && current ? (
-                  <QuizBoard3D
-                    questionKey={`${cursor}:${current.id}`}
-                    prompt={current.prompt}
-                    options={current.options}
-                    states={tileStates}
-                    interactive={phase === "quiz" && !paused}
-                    layoutRef={quizPanelRef}
-                    onAnswer={answerFromBoard}
-                    onSupportedChange={setQuiz3dSupported}
-                  />
-                ) : null}
-                <p className="wl-zone-line relative mb-1 flex items-center justify-between gap-2 text-sm font-bold text-amber-200/90">
-                  <span className="truncate">{zone.name}</span>
-                  <span className="shrink-0 tabular-nums text-white/75">{runSeconds} mp</span>
+            >
+              <div className="wl-race" data-testid="wl-race" role="img" aria-label={`Te: ${hud.rung}. fok, ${RIVAL_NAME}: ${Math.floor(hud.rival)}. fok, cél: ${hud.target}. fok. ${leadText}`}>
+                <div className="wl-race-track">
+                  <span className="wl-race-flag" aria-hidden="true">🏁</span>
+                  <span className="wl-race-dot wl-race-rival" style={{ left: `${rivalPct}%` }} aria-hidden="true" />
+                  <span className="wl-race-dot wl-race-you" style={{ left: `${youPct}%` }} aria-hidden="true" />
+                </div>
+                <p className="wl-race-text" data-lead={lead >= 1 ? "ahead" : lead <= -1 ? "behind" : "even"}>
+                  <span className="wl-race-key wl-race-key-you">Te</span>
+                  <span className="wl-race-lead">{leadText}</span>
+                  <span className="wl-race-key wl-race-key-rival">{RIVAL_NAME}</span>
                 </p>
-                {current ? (
-                  <>
-                    <div className="wl-prompt-area relative flex min-h-0 flex-1 flex-col justify-center">
-                      <p
-                        className={`relative mb-2 ${
-                          quiz3dOn
-                            ? "wl-prompt3d px-4 py-3 text-center text-[22px] leading-[29px] font-extrabold opacity-0"
-                            : "wl-prompt text-center text-xl sm:text-2xl font-extrabold leading-snug"
-                        }`}
-                        data-testid="wl-prompt"
-                        data-quiz3d-prompt
+              </div>
+            </GameHud>
+
+            {/* A FOGÁSOK: a négy válasz a falon (2×2; fekvőben a két szélen), hüvelykujjal elérhetően. */}
+            <div
+              ref={holdsRef}
+              className="wl-holds"
+              data-testid="wl-quiz"
+              data-quiz3d={quiz3dOn ? "true" : "false"}
+              data-scene3d={scene3d === true ? "true" : "false"}
+            >
+              {holds3dWanted && presentation ? (
+                <QuizBoard3D
+                  questionKey={`${presentation.id}:${presentation.question.key}`}
+                  prompt=""
+                  options={presentation.options.map((o) => o.label)}
+                  states={tileStates}
+                  interactive={answering}
+                  layoutRef={holdsRef}
+                  onAnswer={grab}
+                  onSupportedChange={setQuiz3dSupported}
+                />
+              ) : null}
+              {teach && <p className="wl-teach" data-testid="wl-teach">{TEACH_HINT}</p>}
+              {presentation ? (
+                <div className="wl-answers" data-count={presentation.options.length} data-long={presentation.options.some((o) => o.label.length > LONG_HOLD) ? "true" : "false"}>
+                  {presentation.options.map((opt, idx) => {
+                    const st = holdState(idx);
+                    return (
+                      <button
+                        key={`${presentation.id}-${idx}`}
+                        type="button"
+                        className="wl-hold"
+                        data-testid={`wl-option-${idx}`}
+                        data-hold-index={idx}
+                        data-quiz3d-option={idx}
+                        data-state={st}
+                        disabled={!answering}
+                        aria-keyshortcuts={ANSWER_KEYS[idx]}
+                        {...holdHandlers(idx, () => grab(idx))}
+                        {...correctDataAttrs(opt.correct)}
                       >
-                        {current.prompt}
-                      </p>
-                      <div className="relative min-h-[1.75rem] text-center">
-                        <AnimatePresence mode="wait">
-                          {feedback && (
-                            <motion.p
-                              key={feedback}
-                              initial={reducedMotion ? false : { opacity: 0, y: 6 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0 }}
-                              className={`text-base font-bold ${chosenIdx !== null && chosenIdx !== current.correctIndex ? "text-rose-200" : "text-emerald-200"}`}
-                              data-testid="wl-feedback"
-                            >
-                              {feedback}
-                            </motion.p>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </div>
-                    <div className="wl-answers relative mt-auto grid gap-2 pt-2">
-                      {current.options.map((opt, idx) => {
-                        const isCorrectOpt = idx === current.correctIndex;
-                        const isChosen = chosenIdx === idx;
-                        let cls = quiz3dOn
-                          ? "wl-opt3d relative h-auto py-2.5 pl-[50px] pr-3 text-left justify-start whitespace-normal text-[20px] leading-[25px] font-bold border rounded-2xl "
-                          : "wl-opt game-answer-btn relative flex items-center h-auto py-2.5 px-3 text-left justify-start whitespace-normal font-bold border rounded-2xl ";
-                        if (revealing && isCorrectOpt) cls += "bg-emerald-500 text-white border-emerald-200 ring-2 ring-emerald-200";
-                        else if (revealing && isChosen) cls += "bg-rose-500 text-white border-rose-200";
-                        else if (revealing) cls += "bg-white/5 text-white/60 border-white/10";
-                        else cls += "text-white border-white/20";
-                        return (
-                          <button
-                            key={idx}
-                            type="button"
-                            className={cls}
-                            disabled={phase !== "quiz" || paused}
-                            onClick={() => onAnswer(idx)}
-                            data-testid={`wl-option-${idx}`}
-                            data-quiz3d-option={idx}
-                            data-state={revealing ? (isCorrectOpt ? "correct" : isChosen ? "wrong" : "idle") : "idle"}
-                            aria-keyshortcuts={ANSWER_KEYS[idx]}
-                            {...correctDataAttrs(idx === current.correctIndex)}
-                          >
-                            <span
-                              className={`wl-badge inline-flex w-8 h-8 items-center justify-center rounded-full bg-black/30 text-sm font-black shrink-0 ${
-                                quiz3dOn ? "absolute left-3 top-1/2 -translate-y-1/2" : "mr-3"
-                              }`}
-                            >
-                              {revealing && isCorrectOpt ? <Check className="w-5 h-5" /> : revealing && isChosen ? <X className="w-5 h-5" /> : ANSWER_KEYS[idx]}
-                            </span>
-                            <span>{opt}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : phase === "won" ? null : (
-                  <p className="text-base text-white/80">Egy pillanat…</p>
-                )}
-              </motion.div>
+                        <span className="wl-hold-key" aria-hidden="true">
+                          {st === "correct" ? <Check className="h-5 w-5" strokeWidth={3} /> : st === "wrong" ? <X className="h-5 w-5" strokeWidth={3} /> : ANSWER_KEYS[idx]}
+                        </span>
+                        <span className="wl-hold-label">{opt.label}</span>
+                        {st === "correct" && <span className="sr-only"> — a jó kapaszkodó</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : freeHold ? (
+                <div className="wl-answers wl-answers-free">
+                  <button type="button" className="wl-hold wl-hold-free" data-testid="wl-free-hold" data-free-hold {...holdHandlers(-1, grabFree)}>
+                    <span className="wl-hold-label">Kapaszkodj! ⬆</span>
+                  </button>
+                </div>
+              ) : null}
             </div>
+
+            <div ref={particlesRef} className="wl-particles" aria-hidden="true">
+              {Array.from({ length: PARTICLE_POOL }).map((_, i) => (
+                <span key={i} className="wl-particle" />
+              ))}
+            </div>
+            <div ref={bannerRef} className="wl-banner" data-testid="wl-banner" data-show="false" role="status" aria-live="polite" />
+
+            {phase === "play" && (
+              <InlineQuestion
+                {...q.bind}
+                onPick={grab}
+                mode="bar"
+                skin="rock"
+                disabled={paused}
+                onWhy={openWhy}
+                onExpand={() => setExpanded(true)}
+                onCollapse={() => setExpanded(false)}
+                testId="wl-question"
+                promptTestId="wl-prompt"
+              />
+            )}
           </>
         )}
       </main>
 
-      {/* Mérföldkő / sorozat felirat */}
-      <AnimatePresence>
-        {banner && (
-          <motion.div
-            key={banner}
-            className="pointer-events-none fixed inset-x-0 top-[18%] z-[58] flex justify-center px-4"
-            initial={reducedMotion ? false : { opacity: 0, scale: 0.8, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: -10 }}
-            transition={{ type: "spring", stiffness: 300, damping: 18 }}
-            role="status"
-            data-testid="wl-banner"
-          >
-            <div className="rounded-2xl bg-black/70 border-2 border-amber-300/70 px-5 py-3 text-lg sm:text-xl font-black text-amber-100 shadow-2xl backdrop-blur-sm text-center">
-              {banner}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {celebrate && !reducedMotion && <Confetti />}
-
       <style>{`
-        @keyframes wl-fall {
-          0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
-          100% { transform: translateY(110vh) rotate(720deg); opacity: 0.2; }
-        }
-        .wl-confetti { animation: wl-fall 2.6s ease-in forwards; }
-        @keyframes wl-pulse {
-          0%, 100% { opacity: 0.55; }
-          50% { opacity: 1; }
-        }
-        .wl-rung-next { animation: wl-pulse 1.1s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) {
-          .wl-rung-next { animation: none; opacity: 0.85; }
-        }
-        /* S6 — játék közben: a HUD a biztonsági sávot a saját margójával tartja, ezért a main nem ad még egy felső sávot. */
+        /* J2a — a verseny-jelenet a teljes képernyőn, a HUD és a fogások mögött. */
         .game-shell-fixed[data-game="WordLadderHuEn"] > main.wl-play { padding-top: 0; }
-        .game-shell-fixed[data-game="WordLadderHuEn"] > main.wl-play > .game-hud { margin-left: 0; margin-right: 0; }
-        .game-shell-fixed[data-game="WordLadderHuEn"] .wl-ladder { width: clamp(76px, 22vw, 112px); }
-        @media (max-height: 500px) and (min-width: 560px) {
-          .game-shell-fixed[data-game="WordLadderHuEn"] .wl-ladder { width: clamp(84px, 14vw, 128px); }
-        }
-        /* S6 / terv 4.6/2 — nagy, hüvelykujjal elérhető válaszgombok: min. 56 px, 1 oszlop ≤ 390 px, fölötte 2. */
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] .wl-answers button {
-          min-height: 56px;
-          -webkit-tap-highlight-color: transparent;
-          touch-action: manipulation;
-          transition: transform .12s ease, background-color .15s ease, box-shadow .15s ease;
-        }
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] .wl-answers button.wl-opt[data-state="idle"] {
-          background-color: #17406a;
-          border-color: #6fc3d6aa;
-          box-shadow: inset 0 1px 0 #ffffff26, inset 0 -4px 0 #0a2540, 0 4px 12px #0006;
-        }
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] .wl-answers button.wl-opt[data-state="idle"]:not(:disabled):hover { background-color: #1f5486; }
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] .wl-answers button.wl-opt:not(:disabled):active {
-          transform: translateY(2px) scale(.985);
-          box-shadow: inset 0 1px 0 #ffffff1a, inset 0 -1px 0 #0a2540;
-        }
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] .wl-answers button.wl-opt .wl-badge {
-          background: linear-gradient(180deg, #fbbf24, #f59e0b); color: #1f1300; box-shadow: 0 2px 0 #92400e;
-        }
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] .wl-answers button.wl-opt[data-state="correct"] .wl-badge,
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] .wl-answers button.wl-opt[data-state="wrong"] .wl-badge {
-          background: #ffffff33; color: #fff; box-shadow: none;
-        }
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] .wl-answers button:disabled { opacity: 1; }
-        .game-shell-fixed[data-game="WordLadderHuEn"] .wl-answers { grid-template-columns: 1fr; }
-        @media (min-width: 391px) {
-          .game-shell-fixed[data-game="WordLadderHuEn"] .wl-answers { grid-template-columns: 1fr 1fr; }
-        }
+        .game-shell-fixed[data-game="WordLadderHuEn"] > main.wl-play > .game-hud { position: relative; z-index: 12; margin-left: 0; margin-right: 0; }
+        .game-shell-fixed[data-game="WordLadderHuEn"] .wl-stage { position: absolute; inset: 0; z-index: 0; touch-action: none; will-change: transform; }
         .game-start .wl-start-icon canvas { border-radius: inherit; }
+        .wl-race { margin-top: 6px; }
+        .wl-race-track { position: relative; height: 10px; border-radius: 9999px; background: #0f172a99; border: 1px solid #ffffff2e; margin: 0 22px 0 4px; }
+        .wl-race-flag { position: absolute; right: -22px; top: 50%; transform: translateY(-50%); font-size: 14px; line-height: 1; }
+        .wl-race-dot { position: absolute; top: 50%; width: 16px; height: 16px; border-radius: 9999px; transform: translate(-50%, -50%); transition: left .25s ease; box-shadow: 0 0 0 2px #fff, 0 2px 6px #0008; }
+        .wl-race-you { background: #38bdf8; z-index: 2; }
+        .wl-race-rival { background: #a855f7; }
+        .wl-race-text { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 2px 0; font-size: 13px; font-weight: 800; color: #f8fafc; text-shadow: 0 1px 2px #000a; }
+        .wl-race-key { display: inline-flex; align-items: center; gap: 4px; }
+        .wl-race-key::before { content: ""; width: 10px; height: 10px; border-radius: 9999px; display: inline-block; }
+        .wl-race-key-you::before { background: #38bdf8; }
+        .wl-race-key-rival::before { background: #a855f7; }
+        .wl-race-text[data-lead="behind"] .wl-race-lead { color: #fed7aa; }
+        .wl-race-text[data-lead="ahead"] .wl-race-lead { color: #bbf7d0; }
+        @media (prefers-reduced-motion: reduce) { .wl-race-dot { transition: none; } }
+
+        /* A kérdés-kártya a HUD + verseny-csík alatt (a közös sáv változója). */
+        .play-question[data-testid="wl-question"] { --play-question-top: calc(max(4px, var(--game-safe-top)) + 112px); }
+
+        /* FOGÁSOK — álló nézet: alul, hüvelykujjnyira; sötét sziklapárkány. */
+        .game-shell-fixed[data-game="WordLadderHuEn"] .wl-holds {
+          position: absolute; z-index: 20; left: max(8px, var(--game-safe-left)); right: max(8px, var(--game-safe-right));
+          bottom: calc(max(8px, var(--game-safe-bottom)) + 4px); padding: 10px; border-radius: 22px;
+          background-color: #24160dd9; background-image: linear-gradient(180deg, #ffffff12, #00000033);
+          border: 1.5px solid #fbbf2455; box-shadow: 0 -6px 24px #0007, inset 0 1px 0 #ffffff1f;
+        }
+        .wl-teach { margin: 0 0 8px; text-align: center; font-size: 15px; font-weight: 800; color: #fde68a; line-height: 1.25; }
+        .wl-answers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .wl-answers[data-long="true"] { grid-template-columns: 1fr; gap: 8px; }
+        ${HOLD} {
+          position: relative; display: flex; align-items: center; gap: 8px; min-height: 64px; min-width: 48px; padding: 8px 10px;
+          text-align: left; border-radius: 18px 22px 16px 24px; color: #fff; font-weight: 900; cursor: pointer;
+          font-size: clamp(16px, 4.4vw, 20px); line-height: 1.15; overflow-wrap: anywhere; hyphens: auto;
+          background: radial-gradient(120% 90% at 30% 20%, #c08a5a, #8a5a34 55%, #5b3a1c);
+          border: 2px solid #fcd34d88; box-shadow: inset 0 2px 0 #ffffff33, inset 0 -5px 0 #3b2412, 0 6px 14px #0008;
+          -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none;
+          transition: transform .08s ease, background-color .12s ease, opacity .15s ease, box-shadow .12s ease;
+        }
+        ${HOLD_SCOPE} .wl-answers[data-long="true"] .wl-hold { font-size: clamp(15px, 3.9vw, 18px); min-height: 52px; padding-block: 6px; }
+        ${HOLD}:not(:disabled):active { transform: translateY(2px) scale(.97); box-shadow: inset 0 1px 0 #ffffff26, inset 0 -2px 0 #3b2412, 0 3px 8px #0008; }
+        ${HOLD}:disabled { cursor: default; opacity: 1; }
+        ${HOLD}:focus-visible { outline: 4px solid #fef08a; outline-offset: 2px; }
+        ${HOLD}-key {
+          flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9999px;
+          background: linear-gradient(180deg, #fbbf24, #f59e0b); color: #1f1300; font-size: 15px; box-shadow: 0 2px 0 #92400e;
+        }
+        ${HOLD}-label { flex: 1 1 auto; min-width: 0; text-shadow: 0 1px 2px #0009; }
+        ${HOLD}[data-state="correct"] { background: radial-gradient(120% 90% at 30% 20%, #4ade80, #16a34a 60%, #14532d); border-color: #bbf7d0; box-shadow: 0 0 0 3px #86efac, 0 0 24px #22c55e99; animation: wl-grab .28s ease-out; }
+        ${HOLD}[data-state="wrong"] { background: radial-gradient(120% 90% at 30% 20%, #b45309, #7c2d12 70%); border-color: #fdba74; animation: wl-crumble .5s ease-in forwards; }
+        ${HOLD}[data-state="dim"] { opacity: .45; }
+        ${HOLD}[data-state="correct"] .wl-hold-key, ${HOLD}[data-state="wrong"] .wl-hold-key { background: #ffffff33; color: #fff; box-shadow: none; }
+        ${HOLD}-free { grid-column: 1 / -1; justify-content: center; font-size: 22px; min-height: 72px; }
+        @keyframes wl-grab { 0% { transform: scale(1); } 45% { transform: scale(1.06); } 100% { transform: scale(1); } }
+        @keyframes wl-crumble { 0% { transform: none; } 30% { transform: rotate(-4deg) translateY(2px); } 100% { transform: rotate(7deg) translateY(10px); opacity: .55; } }
+        @media (prefers-reduced-motion: reduce) {
+          ${HOLD}, ${HOLD}[data-state] { animation: none !important; transition: none; }
+        }
+
+        /* Fekvő telefon: a fogások a két szélen (bal: 1–2., jobb: 3–4.), középen a fal látszik. */
+        @media (orientation: landscape) and (max-height: 520px) {
+          .play-question[data-testid="wl-question"] { --play-question-top: calc(max(4px, var(--game-safe-top)) + 96px); }
+          .game-shell-fixed[data-game="WordLadderHuEn"] .wl-holds {
+            top: calc(max(4px, var(--game-safe-top)) + 96px); bottom: calc(max(6px, var(--game-safe-bottom)) + 2px);
+            padding: 0; background: transparent; border: 0; box-shadow: none; pointer-events: none;
+          }
+          .wl-answers, .wl-answers[data-long="true"] { height: 100%; grid-template-columns: min(25vw, 230px) 1fr min(25vw, 230px); grid-template-rows: 1fr auto auto; gap: 8px; }
+          ${HOLD_SCOPE} .wl-answers > .wl-hold { pointer-events: auto; }
+          ${HOLD_SCOPE} .wl-answers > .wl-hold[data-hold-index="0"] { grid-column: 1; grid-row: 2; }
+          ${HOLD_SCOPE} .wl-answers > .wl-hold[data-hold-index="1"] { grid-column: 1; grid-row: 3; }
+          ${HOLD_SCOPE} .wl-answers > .wl-hold[data-hold-index="2"] { grid-column: 3; grid-row: 2; }
+          ${HOLD_SCOPE} .wl-answers > .wl-hold[data-hold-index="3"] { grid-column: 3; grid-row: 3; }
+          .wl-answers-free > .wl-hold-free { grid-column: 3; grid-row: 3; }
+          .wl-teach { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: min(44vw, 420px); padding: 6px 10px; border-radius: 12px; background: #24160dd9; pointer-events: none; }
+          ${HOLD} { min-height: 58px; font-size: 16px; }
+        }
+
+        .wl-particles { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
+        .wl-particle { position: absolute; left: -40px; top: -40px; width: 10px; height: 10px; border-radius: 3px; opacity: 0; }
+        .wl-banner {
+          position: fixed; left: 50%; top: 31%; z-index: 58; transform: translate(-50%, -50%) scale(.9); opacity: 0; pointer-events: none;
+          max-width: calc(100vw - 32px); padding: 10px 18px; border-radius: 18px; background: #000000b3; border: 2px solid #fcd34db3;
+          color: #fef3c7; font-size: clamp(18px, 5vw, 24px); font-weight: 900; text-align: center; box-shadow: 0 10px 30px #0009;
+          transition: opacity .18s ease, transform .18s ease;
+        }
+        .wl-banner[data-show="true"] { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        @media (prefers-reduced-motion: reduce) { .wl-banner { transition: none; transform: translate(-50%, -50%); } }
+
         /* A közös jelvény-értesítő az eredménykártya fölött, a felső biztonsági sávon belül jelenjen meg. */
         .wl-achievements [data-testid^="achievement-toast-"] { z-index: 90; top: max(8px, var(--game-safe-top)); }
-        /* 3D kérdés (spec 7. döntés): a DOM-gomb átlátszó érintési réteg a 3D lap fölött; a fókuszkeret látszik. */
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] {
-          background: #071b2d;
-        }
+
+        /* 3D kapaszkodó-lapok (spec 7. döntés): a DOM-gomb átlátszó érintési réteg a 3D lap fölött; a fókuszkeret látszik. */
         .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button,
         .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button[data-state] {
           background: transparent !important;
           border-color: transparent !important;
           color: transparent !important;
           box-shadow: none !important;
-          --tw-ring-shadow: 0 0 #0000 !important;
+          text-shadow: none !important;
+          animation: none !important;
         }
         .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button:focus-visible {
           outline: 4px solid #fbbf24 !important;
           outline-offset: 3px;
         }
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button .wl-badge {
+        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button .wl-hold-key {
           opacity: 0;
         }
-        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button:disabled {
-          opacity: 1;
-        }
       `}</style>
-      {explainCard && <QuizFeedbackCard card={explainCard} onDismiss={dismissExplain} />}
+      {why && <QuizFeedbackCard card={why} onDismiss={closeWhy} />}
 
-      <PauseMenu open={paused && inRun} onResume={resumeGame} onRestart={startGame} onExit={exitToMenu} exitLabel="Kilépés a menübe" />
+      <PauseMenu open={menuOpen && phase === "play"} onResume={resumeGame} onRestart={startGame} onExit={exitToMenu} exitLabel="Kilépés a menübe">
+        <PlaySpeechToggle />
+      </PauseMenu>
       <ResultScreen
         badges={newlyUnlocked}
-        open={phase === "won"}
+        open={phase === "result"}
         testId="wl-won"
-        title="🏁 Elérted a csúcsot!"
-        won
-        score={sessionXp}
+        title={result?.won ? `🏁 Elérted a csúcsot! Legyőzted ${RIVAL_NAME}t!` : lossTitle(result?.missing ?? 1)}
+        won={result?.won ?? false}
+        score={result?.xp ?? 0}
         best={result?.best ?? bestScore}
         isNewBest={result?.isNewBest ?? false}
-        correct={correctCountRef.current}
-        total={answered}
+        correct={result?.correct ?? 0}
+        total={result?.total ?? 0}
         onRetry={startGame}
         retryTestId="wl-restart"
-        retryLabel={level > runRef.current.level ? `Tovább: ${level}. pálya` : "Újra"}
+        retryLabel={retryLabel}
         onBack={() => navigate("/games")}
         extra={
           <div className="flex flex-col gap-1">
-            <span>
-              {RUNGS} fok · {runSeconds} mp · legjobb sorozat: {runBestStreakRef.current}
+            <span data-testid="wl-result-line">
+              {result?.won ? `${result.bonus} XP győzelmi jutalom · ` : `${RIVAL_NAME} most gyorsabb volt — a visszavágóban utolérheted! · `}
+              {result?.seconds ?? 0} mp · legjobb kombó: {result?.bestCombo ?? 0}
             </span>
             <span className="text-white/75">{syncEligibility?.eligible ? "Eredmény elküldve a szervernek." : syncBanner}</span>
+            <ResultReview items={wrongItems} />
           </div>
         }
       />
