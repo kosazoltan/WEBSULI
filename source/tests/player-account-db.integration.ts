@@ -1045,7 +1045,7 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
     assert.equal((await admin.request("POST", `/api/admin/game-accounts/${liveId}/ban`, {})).status, 200);
     await dbPool.query(`UPDATE player_ban_fingerprints SET banned_at = now() - interval '13 months' WHERE fingerprint = $1`, [fp(liveOld)]);
     await dbPool.query(`UPDATE player_accounts SET banned_at = now() - interval '13 months' WHERE id = $1`, [liveId]);
-    const [, , purged] = await createPlayerStore(dbPool).purgeOldCodes();
+    const purged = await createPlayerStore(dbPool).banMaintenance.purgeExpired();
     assert.ok(purged >= 1, `a takarító törölt: ${purged}`);
     assert.equal((await fpRows(oldGone)).length, 0, "a 12 hónapnál régebbi, élő fiók nélküli ujjlenyomat törlődött");
     assert.equal((await fpRows(fresh)).length, 1, "a friss megmaradt");
@@ -1085,16 +1085,71 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
       assert.deepEqual([again.kind, again.kind === "OK" && again.banned], ["OK", true]);
       assert.deepEqual([(await codeLogin("rot.google+x@gmail.com")).status], [403], "Google-ág: az alias tiltott");
       // Rendszerszintű egyeztetés (a takarító induláskor és óránként futtatja): a kódos tiltott fiók belépés NÉLKÜL is helyreáll.
-      const [, , , lost, restored] = await store.purgeOldCodes();
-      assert.ok(lost >= 1, `elveszett régi kulcsú ujjlenyomat: ${lost}`);
+      const [legacy, restored] = await store.banMaintenance.reconcile();
+      assert.ok(legacy >= 1, `régi kulcsú (megőrzött) ujjlenyomat: ${legacy}`);
       assert.ok(restored >= 1, `helyreállított: ${restored}`);
       assert.equal((await codeLogin("rot.kod+1@googlemail.com")).status, 403, "kódos ág: az alias tiltott");
-      assert.equal((await codeLogin(deletedBanned)).status, 200, "a törölt-tiltott ujjlenyomata a rotációval tudottan elveszett (dokumentált)");
+      // SPEC-VÁLTOZÁS 2026-11-16 (végrehajtás „JM7b-utójavítás K1b” 1.): a régi kulcsú sorok NEM törlődnek az egyeztetésben —
+      // egy eltérő titkú példány nem semmisítheti meg őket; a megőrzés-takarító viszi el őket 12 hónap után. (Szigorúbb: a
+      // törölt-tiltott sor az eredeti kulcsú példány számára megmarad.)
       const stale = await q(`SELECT 1 FROM player_ban_fingerprints WHERE key_id <> $1`, [banKeyId(playerAuthKey())]);
-      assert.equal(stale.length, 0, "régi kulcsú sor nem maradt");
+      assert.ok(stale.length >= 1, "a régi kulcsú sorok megmaradtak");
     } finally {
       process.env.SESSION_SECRET = original;
-      await store.purgeOldCodes(); // vissza az eredeti kulcsra (a többi teszt adatai)
+    }
+    // Vissza az eredeti kulcsra: a törölt-tiltott bejegyzés (régi kulcsú sor) épen megvan, és tilt.
+    await store.banMaintenance.reconcile();
+    assert.equal((await fpRows(deletedBanned)).length, 1, "a törölt-tiltott ujjlenyomata megmaradt");
+    assert.equal((await codeLogin(deletedBanned)).status, 403, "és az eredeti kulccsal továbbra is tilt");
+  });
+
+  it("K1b (Ú1): két különböző kulccsal egymás után futtatott egyeztetés után MINDKÉT kulcs ujjlenyomatai megvannak", async () => {
+    const admin = await adminClient();
+    const store = createPlayerStore(dbPool);
+    const live = "k1b-ket-kulcs-elo@pelda.hu", gone = "k1b-ket-kulcs-torolt@pelda.hu";
+    for (const e of [live, gone]) {
+      assert.equal((await codeLogin(e)).status, 200);
+      assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(e)}/ban`, {})).status, 200);
+    }
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(gone)}/delete`, { confirm: "TÖRLÉS" })).status, 200);
+    const original = process.env.SESSION_SECRET;
+    const keyA = banKeyId(playerAuthKey());
+    const countFor = async (keyId: string) => Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM player_ban_fingerprints WHERE key_id = $1`, [keyId]))[0]!.n);
+    const beforeA = await countFor(keyA);
+    let keyB = "";
+    try {
+      process.env.SESSION_SECRET = `${original}-masik-peldany`; // pl. helyi fejlesztés eltérő titokkal, az éles adatbázison
+      keyB = banKeyId(playerAuthKey());
+      await store.banMaintenance.reconcile();
+      await store.banMaintenance.purgeExpired();
+    } finally {
+      process.env.SESSION_SECRET = original;
+    }
+    await store.banMaintenance.reconcile();
+    assert.equal(await countFor(keyA), beforeA, "az A-kulcsú sorok (a törölt-tiltott is) mind megvannak");
+    assert.ok(await countFor(keyB) >= 1, "a B-kulcsú példány saját sorai is megmaradtak");
+    assert.equal((await fpRows(gone)).length, 1);
+    assert.equal((await codeLogin(gone)).status, 403, "a törölt-tiltott továbbra is tilt");
+  });
+
+  it("K1b (Ú2): rotáció után az egyeztetés ELŐTT létrehozott alias-fiók az egyeztetés után tiltott", async () => {
+    const admin = await adminClient();
+    const store = createPlayerStore(dbPool);
+    const email = "k1baliaselotte@gmail.com";
+    assert.equal((await codeLogin(email)).status, 200);
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${await idOf(email)}/ban`, {})).status, 200);
+    const original = process.env.SESSION_SECRET;
+    try {
+      process.env.SESSION_SECRET = `${original}-rotalt-u2`;
+      const alias = "k1b.alias.elotte+uj@gmail.com";
+      assert.equal((await codeLogin(alias)).status, 200, "az egyeztetés előtt még tiltatlanul létrejön (az új kulccsal nincs ujjlenyomat)");
+      await store.banMaintenance.reconcile();
+      const row = (await q<{ banned_at: Date | null }>(`SELECT banned_at FROM player_accounts WHERE email = $1`, [normalizeEmail(alias)!]))[0]!;
+      assert.ok(row.banned_at !== null, "az egyeztetés kanonikusan tiltotta az alias-fiókot");
+      assert.equal((await codeLogin(alias)).status, 403);
+    } finally {
+      process.env.SESSION_SECRET = original;
+      await store.banMaintenance.reconcile();
     }
   });
 

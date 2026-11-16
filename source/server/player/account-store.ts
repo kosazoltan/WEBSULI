@@ -55,25 +55,41 @@ async function restoreFingerprintIfBanned(pool: Pick<Pool, "connect">, accountId
     const now = await client.query<{ banned_at: Date | null }>(`SELECT banned_at FROM player_accounts WHERE id = $1`, [accountId]);
     const bannedAt = now.rows[0]?.banned_at ?? null;
     if (bannedAt === null) return false;
-    return insertBanFingerprint(client, fingerprint, bannedAt);
+    const inserted = await insertBanFingerprint(client, fingerprint, bannedAt);
+    // K1b (Ú2): kanonikus helyreállítás — az azonos postafiókú élő változatok is tiltottak (egy rotáció után, az egyeztetés
+    // előtt létrejött alias is); a tiltás idejét nem frissíti (helyreállítás, nem új tiltás).
+    const variants = await accountsWithFingerprint(client, fingerprint, false);
+    await client.query(`UPDATE player_accounts SET banned_at = COALESCE(banned_at, $2) WHERE id = ANY($1::varchar[])`, [variants, bannedAt]);
+    return inserted;
   });
 }
 
 /**
  * K1 (#471 review): a kulcsrotáció RENDSZERSZINTŰ kezelése — nem egy-egy belépési ágon múlik. A takarító induláskor és
- * óránként futtatja: (1) a más kulccsal készült sorok törlése — a TÖRÖLT fiókoké visszafejthetetlen, tudottan elvész
- * (darabszám a naplóban, cím nélkül); (2) MINDEN élő tiltott fiók ujjlenyomatának (újra)számolása a jelenlegi kulccsal —
- * fiókonként külön, rövid tranzakcióban, a címenkénti zár UTÁN újraolvasott `banned_at` alapján.
- * Visszaadja: [elveszett, helyreállított] darabszám.
+ * óránként futtatja (élesben vagy `PLAYER_BAN_MAINTENANCE=on` mellett): MINDEN élő tiltott fiók ujjlenyomatának
+ * (újra)számolása a jelenlegi kulccsal — fiókonként külön, rövid tranzakcióban, a címenkénti zár UTÁN újraolvasott `banned_at`
+ * alapján, kanonikusan (az élő változatok is tiltottak).
+ * K1b (Ú1): a más kulccsal készült sorokat SOHA nem törli — egy eltérő titkú példány (helyi fejlesztés az éles adatbázissal,
+ * előnézet, átfedő régi példány) így nem semmisítheti meg a törölt fiókok megőrzött tiltásait; csak megszámolja őket, és a
+ * 12 hónapos megőrzés-takarító távolítja el. Visszaadja: [más kulcsú (megőrzött), helyreállított] darabszám.
  */
 export async function reconcileBanFingerprints(pool: Pick<Pool, "query" | "connect">): Promise<[number, number]> {
   const keyId = banKeyId(playerAuthKey());
-  // A régi kulcsú sorok egyetlen jelenlegi kulcsú művelettel sem ütközhetnek (más az ujjlenyomatuk) — zár nélkül törölhetők.
-  const lost = await pool.query(`DELETE FROM player_ban_fingerprints WHERE key_id <> $1`, [keyId]);
+  const legacy = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM player_ban_fingerprints WHERE key_id <> $1`, [keyId]);
   const banned = await pool.query<{ id: string; email: string }>(`SELECT id, email FROM player_accounts WHERE banned_at IS NOT NULL`);
   let restored = 0;
   for (const r of banned.rows) if (await restoreFingerprintIfBanned(pool, r.id, r.email)) restored++;
-  return [lost.rowCount ?? 0, restored];
+  return [Number(legacy.rows[0]!.n), restored];
+}
+
+/**
+ * K1b (Ú1): a tiltás-karbantartás (rotáció-egyeztetés + megőrzés-takarítás) CSAK élesben (`NODE_ENV=production`) vagy
+ * kifejezett kapcsolóval (`PLAYER_BAN_MAINTENANCE=on`) fut — egy helyi indítás (akár az éles adatbázissal) nem nyúl hozzá.
+ */
+export function banMaintenanceEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const flag = (env.PLAYER_BAN_MAINTENANCE ?? "").trim().toLowerCase();
+  if (flag === "off") return false;
+  return env.NODE_ENV === "production" || flag === "on";
 }
 
 /** K1: a törölt-tiltott bejegyzés rövid hivatkozása (az ujjlenyomat első hexa jegyei; a teljes ujjlenyomat nem megy ki). */

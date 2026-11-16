@@ -93,15 +93,20 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
      * Adattakarékosság (ütemezve is fut, a flagtől függetlenül — sweeper.ts): a lejárt, be nem váltott rekordokból a nyílt
      * cím törlődik, a 24 óránál régebbi rekordok teljesen. Visszaadja: [címtelenített, törölt].
      */
-    async purgeOldCodes(): Promise<[number, number, number, number, number]> {
+    async purgeOldCodes(): Promise<[number, number]> {
       const blanked = await pool.query(`UPDATE player_auth_codes SET email_normalized = '' WHERE email_normalized <> '' AND expires_at <= now()`);
       const deleted = await pool.query(`DELETE FROM player_auth_codes WHERE created_at < now() - ($1::int * interval '1 millisecond')`, [CODE_RETENTION_MS]);
-      // K1-c: a megőrzési időn túli tiltás-ujjlenyomatok (élő tiltott fiók nélkül) is ebben a körben törlődnek.
-      // K1 (#471 review): a kulcsrotáció rendszerszintű egyeztetése is itt (induláskor és óránként) — előbb az egyeztetés,
-      // hogy a lejárat-vizsgálat már a jelenlegi kulcsú sorokon fusson.
-      const [lost, restored] = await reconcileBanFingerprints(pool);
-      const bans = await createPlayerAccountStore(pool).purgeExpiredBanFingerprints();
-      return [blanked.rowCount ?? 0, deleted.rowCount ?? 0, bans, lost, restored];
+      return [blanked.rowCount ?? 0, deleted.rowCount ?? 0];
+    },
+
+    /**
+     * K1 / K1b: a tiltás-karbantartás két, egymástól FÜGGETLEN lépése (a takarító külön `try`-ban hívja őket, csak élesben vagy
+     * `PLAYER_BAN_MAINTENANCE=on` mellett — `banMaintenanceEnabled`): a kulcsrotáció egyeztetése (más kulcsú sort nem töröl) és a
+     * 12 hónapos megőrzés-takarítás.
+     */
+    banMaintenance: {
+      reconcile: () => reconcileBanFingerprints(pool),
+      purgeExpired: () => createPlayerAccountStore(pool).purgeExpiredBanFingerprints(),
     },
 
     /**

@@ -15,6 +15,7 @@ import { mpMode } from "./realtime/config";
 import { ticketSecret } from "./realtime/ticket";
 import { startPlayerCodeSweeper } from "./player/sweeper";
 import { createPlayerStore } from "./player/store";
+import { banMaintenanceEnabled } from "./player/account-store";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
@@ -663,7 +664,9 @@ app.use((req, res, next) => {
       setupCleanupImprovedFiles();
 
       // JM7a (review #445, A3): a játékos-belépőkódok takarítása (lejárt → cím törölve, 24 óra után a sor) — flagtől függetlenül.
-      startPlayerCodeSweeper(() => createPlayerStore(dbPool).purgeOldCodes());
+      // K1b: a tiltás-karbantartás (kulcsrotáció-egyeztetés, megőrzés) csak élesben / PLAYER_BAN_MAINTENANCE=on mellett.
+      const playerStore = createPlayerStore(dbPool);
+      startPlayerCodeSweeper(() => playerStore.purgeOldCodes(), globalThis, banMaintenanceEnabled() ? playerStore.banMaintenance : null);
     }
 
     // Express error handler (4 params required for Express to identify it as error middleware)

@@ -2315,8 +2315,8 @@ a „Játékosok” panel és a fiókoldal törlési szövege; tesztek: `T/playe
    | Létrehozás / belépés kód, link (`confirmVerifiedEmail`) | ujjlenyomat (a zár UTÁN) | fiók (`banned_at` öröklés, `ON CONFLICT … COALESCE`), ujjlenyomat (ha a fiók tiltott) | igen | igen |
    | Google, új azonosító (`upsertGooglePlayer`) | ujjlenyomat (a zár UTÁN) | ugyanaz | igen | igen |
    | Google, ismert azonosító (`upsertGooglePlayer`) | fiók címe, majd `banned_at` ÚJRA a zár UTÁN | ujjlenyomat (csak ha MOST is tiltott) | igen | igen |
-   | Helyreállítás rotáció után (`reconcileBanFingerprints`) | régi kulcsú sorok; a tiltott fiókok listája, majd fiókonként `banned_at` ÚJRA a zár UTÁN | régi kulcsú sorok törlése; ujjlenyomat (csak ha MOST is tiltott) | igen (fiókonként) | fiókonként külön, rövid tranzakció |
-   | Megőrzés-takarítás (`purgeExpiredBanFingerprints`) | lejárt ujjlenyomatok, majd ujjlenyomatonként ÚJRA: lejárt-e, van-e tiltott élő változat | lejárt, élő változat nélküli ujjlenyomat törlése | igen (ujjlenyomatonként) | ujjlenyomatonként külön |
+   | Helyreállítás rotáció után (`reconcileBanFingerprints`; K1b: csak élesben / `PLAYER_BAN_MAINTENANCE=on`) | a régi kulcsú sorok SZÁMA (zár nélkül, csak olvas); a tiltott fiókok listája, majd fiókonként `banned_at` ÚJRA a zár UTÁN | NEM töröl (K1b, Ú1); ujjlenyomat az aktuális kulccsal + az élő változatok kanonikus tiltása (csak ha MOST is tiltott; K1b, Ú2) | igen (fiókonként) | fiókonként külön, rövid tranzakció |
+   | Megőrzés-takarítás (`purgeExpiredBanFingerprints`; K1b: csak élesben / kapcsolóval, a rotáció-egyeztetéstől külön `try`) | lejárt ujjlenyomatok, majd ujjlenyomatonként ÚJRA: lejárt-e, van-e tiltott élő változat (az aktuális kulccsal — más kulcsú lejárt sornál nem ellenőrizhető: azt is törli, a saját kulcsú példány helyreállítja, ha élő tiltott fiókhoz tartozott) | lejárt, élő változat nélküli ujjlenyomat törlése (a régi kulcsú sorok is innen tűnnek el) | igen (ujjlenyomatonként) | ujjlenyomatonként külön |
    | `getPlayer` / `requirePlayer`, törölt-tiltott lista | `banned_at` / ujjlenyomatok | — | nem kell (csak olvas, nem dönt írásról) | — |
 
    **Páronkénti ellenőrzés:** az összes író és „olvas-dönt-ír” művelet ugyanazt a címenkénti zárat veszi, és a döntéshez
@@ -2337,7 +2337,7 @@ egyezés, additív / idempotens migráció.
 átfedő régi példány) ne törölhesse a más kulcsú tiltás-ujjlenyomatokat; (Ú2) a rotáció után, az első egyeztetés előtt létrejött
 alias-fiók is tiltott legyen; (Ú3) pontos napló, egymástól független karbantartó lépések; (Ú4) az állapotgép-táblázat a kódhoz
 igazítva; üzemeltetési runbook. **Nem cél:** séma / migráció; a `PLAYER_ACCOUNTS` (KI marad); a kódrekord-takarítás szabálya.
-**Fájlok:** `S/player/account-store.ts`, `S/player/store.ts`, `S/player/sweeper.ts`, `docs/jatek-fiok-uzemeltetes.md` (új),
+**Fájlok:** `S/player/account-store.ts`, `S/player/store.ts`, `S/player/sweeper.ts`, `S/index.ts` (a takarító bekötése), `docs/jatek-fiok-uzemeltetes.md` (új),
 ez a fejezet (K1 10. táblázat), tesztek: `T/player-account-db.integration.ts`, `T/player-codes.test.ts`.
 **Lépések:**
 1. Ú1: a `reconcileBanFingerprints` a más kulcsú sorokat SOHA nem törli — csak megszámolja (a napló „régi kulcsú, megőrizve”);
