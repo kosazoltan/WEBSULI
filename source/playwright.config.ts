@@ -65,6 +65,11 @@ export default defineConfig({
             NODE_ENV: 'production',
             PORT: port,
             WEBSULI_E2E: '1',
+            // JM7c-1 (tests/admin-allowlist.spec.ts): az admin-engedélylista tesztértéke (kitalált cím), és csonk
+            // Google-kliensazonosító — a Google-oldalt a teszt a böngészőben elfogja, valódi Google-hívás nem megy ki.
+            ADMIN_ALLOWLIST: 'e2e-allowlisted-admin@websuli.example',
+            GOOGLE_CLIENT_ID: 'e2e-google-client-id',
+            GOOGLE_CLIENT_SECRET: 'e2e-google-client-secret',
         },
     },
 });

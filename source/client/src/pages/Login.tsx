@@ -12,6 +12,9 @@ export default function Login() {
     const [password, setPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [, setLocation] = useLocation();
+    // JM7c-1: a Google-visszahívás sikertelen (lejárt / megszakadt / hamis `state`, pl. a telepítéskor folyamatban lévő
+    // belépés) → a szerver ide irányít `?hiba=google`-lal; érthető üzenet + újrapróba, nem fehér képernyő.
+    const [googleFailed] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("hiba") === "google");
     const { toast } = useToast();
     // We can't use useAuth's login method directly because standard simple auth usually involves a direct fetch
     // or we need to update useAuth to support password login.
@@ -70,6 +73,11 @@ export default function Login() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
+                    {googleFailed && (
+                        <div role="alert" data-testid="login-google-error" className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-foreground">
+                            A Google-belépés nem sikerült, vagy közben lejárt. Próbáld újra a lenti „Bejelentkezés Google fiókkal” gombbal.
+                        </div>
+                    )}
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="email" className="text-foreground font-semibold">Email cím</Label>

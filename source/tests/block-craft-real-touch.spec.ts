@@ -22,15 +22,32 @@ async function startLikeAChild(page: Page): Promise<void> {
   await expect(page.getByTestId("bc-touch-controls")).toBeVisible({ timeout: 20_000 });
 }
 
+/**
+ * A gyerek addig koppint, amíg kvíz nem jön — legfeljebb a mért 20 mp-es kereten belül (a tesztek ezt az időt mérik).
+ * #58 (run 43916330845): a korábbi „6 koppintás” darabszám-korlát a CI szoftveres WebGL-jén (~1 s / koppintás) ~9 s
+ * után feladta, a 20 mp-es elvárás előtt. Bukáskor diagnosztika: a célkereszt-tipp megjelent-e (= nem volt célzott blokk)
+ * és fut-e a render-ciklus (`probe().frames`, teszt-kampós buildben).
+ */
 async function tapUntilQuiz(page: Page, tapOnce: () => Promise<void>): Promise<number> {
   const t0 = Date.now();
   const quiz = page.getByTestId("bc-quiz");
-  for (let i = 0; i < 6 && !(await quiz.isVisible()); i++) {
+  const frames = () =>
+    page.evaluate(() => Number((window as unknown as { __websuliGame?: { probe?: () => Record<string, number | string | null> } }).__websuliGame?.probe?.().frames ?? Number.NaN));
+  let taps = 0;
+  let hintSeen = false;
+  const f0 = await frames();
+  while (Date.now() - t0 < 20_000 && !(await quiz.isVisible())) {
     await tapOnce();
+    taps++;
     await page.waitForTimeout(500);
+    hintSeen ||= await page.getByTestId("bc-mine-hint").isVisible();
   }
-  await expect(quiz).toBeVisible();
-  return Date.now() - t0;
+  const ms = Date.now() - t0;
+  if (!(await quiz.isVisible())) {
+    const f1 = await frames();
+    throw new Error(`nincs kvíz ${ms} ms alatt: ${taps} koppintás, célkereszt-tipp ${hintSeen ? "megjelent" : "nem jelent meg"}, render-lépések ${f0} → ${f1}`);
+  }
+  return ms;
 }
 
 async function answerRight(page: Page): Promise<void> {

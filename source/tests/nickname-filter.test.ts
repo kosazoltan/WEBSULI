@@ -3,6 +3,7 @@
  * A láthatatlan / kétirányú karaktereket `String.fromCodePoint`-tal állítjuk elő (a forrásban nyers vezérlőjel ne legyen).
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   BLOCKED_ROOTS, NICKNAME_MESSAGES, PLAYER_NICK_MAX, RESERVED_ROOTS, checkPlayerNickname, confusableFold, nicknameKey, prepareNickname,
@@ -184,6 +185,109 @@ describe("JM7b-utójavítás N1 — kis L / nagy I / 1 felcserélés (review #44
 
   it("ellenpróba: gyakori, ártatlan nevek NEM esnek ki (hamis tiltás nincs)", () => {
     for (const n of ["Lili", "Lilla", "Ildikó", "Bálint", "Vili", "Milán", "Illés", "Olivér", "Emil", "Kitti", "Niki", "Kolibri", "Liliom", "Pilóta", "Csilla", "Gellért", "Villám Róka", "Kis Lili", "Ili_07"]) ok(n);
+  });
+});
+
+describe("JM7b-utójavítás N1b — a maradék kijátszások (review #461/#463 A1–A4)", () => {
+  it("a review szondájában még átmenő 28 kísérlet MIND elutasítva", () => {
+    const cases: [string, NicknameProblem][] = [
+      // A1: harmadik betű a dupla betűs tőben
+      ["NIGGGER", "BLOCKED"], ["NIGGGA", "BLOCKED"], ["Fagggot", "BLOCKED"], ["Pusssy", "BLOCKED"], ["Asssshole", "BLOCKED"], ["Rooot", "RESERVED"],
+      // A3: többkarakteres hasonmás (rn ~ m, vv ~ w, cl ~ d)
+      ["adrnin", "RESERVED"], ["vvebsuli", "RESERVED"], ["vvhore", "BLOCKED"], ["vvank", "BLOCKED"], ["aclmin", "RESERVED"], ["Moclerator", "RESERVED"],
+      // A2: 2 ~ z, 6 / 9 ~ g
+      ["BU2I", "BLOCKED"], ["6ECI", "BLOCKED"], ["9ECI", "BLOCKED"], ["NI66ER", "BLOCKED"], ["NI99ER", "BLOCKED"], ["F4S2", "BLOCKED"],
+      // A4: helyesírási változat, szétszedett / leet foglalt szó
+      ["Kurwa", "BLOCKED"], ["Curva", "BLOCKED"], ["Phasz", "BLOCKED"], ["Fuk", "BLOCKED"], ["Phuck", "BLOCKED"], ["Biatch", "BLOCKED"],
+      ["M o d", "RESERVED"], ["Modi", "RESERVED"], ["G M", "RESERVED"], ["D3V", "RESERVED"],
+    ];
+    for (const [n, p] of cases) rejectsWith(n, p);
+  });
+
+  it("tulajdonság: minden dupla betűs tő a dupla betű megismétlésével (3–4 db) is elutasítva", () => {
+    let checked = 0;
+    for (const [roots, problem] of [[BLOCKED_ROOTS, "BLOCKED"], [RESERVED_ROOTS, "RESERVED"]] as const) {
+      for (const root of roots.filter((r) => /(.)\1/.test(r))) {
+        for (const times of [3, 4]) {
+          const v = root.replace(/(.)\1/, (m) => m[0]!.repeat(times));
+          rejectsWith(v.length <= PLAYER_NICK_MAX ? v : v.slice(0, PLAYER_NICK_MAX), problem);
+          checked++;
+        }
+      }
+    }
+    assert.ok(checked >= 16, `ellenőrzött: ${checked}`);
+  });
+
+  it("tulajdonság: a z → 2 és a g → 6 / 9 leet, valamint az m → rn, w → vv, d → cl hasonmás minden tőben elutasítva", () => {
+    let checked = 0;
+    for (const [roots, problem] of [[BLOCKED_ROOTS, "BLOCKED"], [RESERVED_ROOTS, "RESERVED"]] as const) {
+      for (const root of roots) {
+        const variants = new Set([
+          root.replace(/z/g, "2"), root.replace(/g/g, "6"), root.replace(/g/g, "9"),
+          root.replace(/m/g, "rn"), root.replace(/w/g, "vv"), root.replace(/d/g, "cl"),
+        ]);
+        variants.delete(root);
+        for (const v of variants) {
+          if (v.length > PLAYER_NICK_MAX || v.replace(/\D/g, "").length >= 6 || !/[a-z]/.test(v)) continue;
+          rejectsWith(v, problem);
+          checked++;
+        }
+      }
+    }
+    assert.ok(checked >= 40, `ellenőrzött: ${checked}`);
+  });
+
+  it("ellenpróba: a többkarakteres olvasat és a számjegy-leet nem tilt ártatlan nevet", () => {
+    for (const n of ["Kornél", "Bernát", "Ernő", "Arnold", "Clara", "Claudia", "Miklós", "Marci", "Ervin", "Vivien", "Barnabás", "Bernadett",
+      "Orsolya", "Kata2012", "Lili2012", "Fanni96", "Sziszi2009", "Fukszia", "Segítő", "Szarvas", "Gergő", "Zsombor", "Clementina"]) ok(n);
+  });
+
+  it("REGRESSZIÓ (#469 review): ami a főág szűrőjén fennakadt, az az újon is fennakad — a régi elutasítási halmaz ADATKÉNT", () => {
+    // tests/fixtures/nickname-main-rejected.json: az origin/main (d5c91060) szűrője által elutasított nevek — minden tiltott /
+    // foglalt tő minden pozíciójára beszúrt 0–9 számjeggyel (kis- és nagybetűvel), a review-szondák kísérletei és a #469
+    // review példái. A régi kódot NEM importáljuk: a viselkedése rögzített adat.
+    // Mintacsoportonként (foglalt / trágár / e-mail-szolgáltató / URL / egyéb), mindegyikben minden pozícióra beszúrt 0–9 számjegy.
+    const fixture = JSON.parse(readFileSync(new URL("./fixtures/nickname-main-rejected.json", import.meta.url), "utf8")) as { count: number; groups: Record<string, string[]> };
+    assert.deepEqual(Object.keys(fixture.groups).sort(), ["blocked", "email", "other", "reserved", "url"]);
+    assert.equal(Object.values(fixture.groups).reduce((n, g) => n + g.length, 0), fixture.count);
+    assert.ok(fixture.count > 9000, `rögzített elutasított nevek: ${fixture.count}`);
+    for (const [group, names] of Object.entries(fixture.groups)) {
+      assert.ok(names.length > 50, `${group}: ${names.length}`);
+      const nowAccepted = names.filter((n) => checkPlayerNickname(n).ok);
+      assert.deepEqual(nowAccepted.slice(0, 20), [], `${group}: a régi szűrő elutasította, az új elfogadja (${nowAccepted.length} db)`);
+    }
+  });
+
+  it("#469 review: az e-mail- és URL-minta is minden olvasaton fut (számjeggyel tagolt szolgáltatónév / www / http)", () => {
+    for (const n of ["Kata g2mail", "Kata gma6il", "Kata hot9mail"]) rejectsWith(n, "EMAIL");
+    for (const n of ["w6ww Kata", "ht2tpKata", "w9ww Kata"]) rejectsWith(n, "URL");
+  });
+
+  it("#469 review: a számjegy elválasztóként (elhagyva) ÉS betűként is olvasva — mindkettő tilt", () => {
+    for (const [n, p] of [["fa2sz", "BLOCKED"], ["f6asz", "BLOCKED"], ["fas6z", "BLOCKED"], ["ge9ci", "BLOCKED"], ["ad9min", "RESERVED"], ["ad2min", "RESERVED"],
+      ["6E2CI", "BLOCKED"], ["BU2I", "BLOCKED"], ["N1G9G6ER", "BLOCKED"]] as [string, NicknameProblem][]) rejectsWith(n, p);
+  });
+
+  it("#469 review: a cl / rn / vv hasonmás a nagy I / 1 → l csere UTÁN is felismerve", () => {
+    for (const [n, p] of [["acImin", "RESERVED"], ["ac1min", "RESERVED"], ["cIlck", "BLOCKED"], ["acIrnin", "RESERVED"], ["AcIrnIn", "RESERVED"],
+      ["vvebsuIi", "RESERVED"], ["Moc1erator", "RESERVED"]] as [string, NicknameProblem][]) rejectsWith(n, p);
+  });
+
+  it("az olvasatok száma korlátos: 64 karakteres rosszindulatú bemenet is gyors", () => {
+    for (const s of ["rn".repeat(32), "c1".repeat(32), "2a6b9c".repeat(10) + "rnvv", "cIrnvv269".repeat(7), "f6a2s9z".repeat(9)]) {
+      const t = performance.now();
+      for (let i = 0; i < 20; i++) checkPlayerNickname(s);
+      const ms = (performance.now() - t) / 20;
+      assert.ok(ms < 50, `${s.slice(0, 12)}…: ${ms.toFixed(2)} ms / hívás`);
+    }
+  });
+
+  it("a foglaltsági kulcs NEM változott (a tárolt nevek kulcsa stabil): rögzített minták", () => {
+    const expected: Record<string, string> = {
+      "Kornél": "kornei", "Kata2012": "kata2oi2", "NI66ER": "ni66er", "adrnin": "adrnin", "vvebsuli": "vvebsuii", "F4S2": "f4s2",
+      "Lili#0042": "iiiioo42", "Bátor Róka": "batorroka", "Ödön_99": "odon99", "Clara": "ciara",
+    };
+    for (const [name, key] of Object.entries(expected)) assert.equal(nicknameKey(name), key, name);
   });
 });
 
