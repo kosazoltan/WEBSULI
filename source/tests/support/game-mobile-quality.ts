@@ -83,6 +83,23 @@ export async function waitForStable(page: Page, selector: string, timeout = 5_00
   );
 }
 
+/**
+ * `waitForStable`, de csak ha a szelektorra van találat (S13 / B5): a közös `StartScreen` (`[data-game-start]`)
+ * belépő animációja alatt a gombok még kisebbnek látszanak; a régi, saját menüs kezdőképernyőn nincs ilyen gyökér,
+ * ott nincs mire várni (a `waitForStable` üres találatra sosem lenne stabil).
+ */
+export async function settleIfPresent(page: Page, selector: string): Promise<void> {
+  if ((await page.locator(selector).count()) > 0) await waitForStable(page, selector);
+}
+
+/** Állapotonként az a gyökér, amelynek beállt állapotát a mérés és a képernyőkép előtt megvárjuk. */
+const SETTLE_SELECTOR: Record<string, string> = {
+  start: "[data-game-start]",
+  play: "[data-game-hud]",
+  pause: '[data-testid="game-pause-menu"]',
+  result: "[data-game-result]",
+};
+
 /** Látható kattintható elemek, amelyek szélessége vagy magassága < `min` (alap 48; M2). */
 export async function smallTargets(
   page: Page,
@@ -217,6 +234,9 @@ function startLocator(page: Page, c: GameMobileCase) {
 async function shot(page: Page, testInfo: TestInfo, c: GameMobileCase, state: string): Promise<void> {
   const vp = page.viewportSize();
   const name = `${c.id}-${vp?.width ?? 0}x${vp?.height ?? 0}-${state}.jpg`;
+  // B5: beállt állapotot fotózunk (belépő animáció után), nem a köztes képkockát.
+  const settle = SETTLE_SELECTOR[state];
+  if (settle) await settleIfPresent(page, settle);
   await page.screenshot({ path: testInfo.outputPath(name), type: "jpeg", quality: 70 });
   const dir = process.env.GAME_MOBILE_SHOT_DIR;
   if (dir) {
@@ -274,6 +294,7 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
           const bag = collectErrors(page);
           await openStart(page, c);
           expectNoOverflow(await measureOverflow(page), "kezdőképernyő", true);
+          await settleIfPresent(page, SETTLE_SELECTOR.start);
           expect(await smallTargets(page), "M2 kezdőképernyő").toEqual([]);
 
           await startLocator(page, c).click();

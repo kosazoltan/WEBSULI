@@ -67,7 +67,7 @@ export const VOCAB_EN_L1: VocabEntry[] = [
   { id: "en1-school-025", term: "student", hu: "tanuló, diák", kind: "word", level: 1, topic: "school", pos: "noun", example: "My sister is a student at university.", exampleHu: "A nővérem egyetemi hallgató." },
   { id: "en1-school-026", term: "do an exercise", hu: "megold egy feladatot", kind: "phrase", level: 1, topic: "school", pos: "phrase", example: "Now we do an exercise on page ten.", exampleHu: "Most megoldunk egy feladatot a tizedik oldalon." },
   { id: "en1-school-027", term: "go to the board", hu: "kimegy a táblához", kind: "phrase", level: 1, topic: "school", pos: "phrase", example: "Please go to the board and write the word.", exampleHu: "Kérlek, menj ki a táblához, és írd fel a szót." },
-  { id: "en1-school-028", term: "marker", hu: "marker, filctoll", kind: "word", level: 1, topic: "school", pos: "noun", example: "Use a red marker for the title.", exampleHu: "Használj piros markert a címhez." },
+  { id: "en1-school-028", term: "marker", hu: "filctoll", kind: "word", level: 1, topic: "school", pos: "noun", example: "Use a red marker for the title.", exampleHu: "Használj piros filctollat a címhez." },
   // ── food ──
   { id: "en1-food-001", term: "butter", hu: "vaj", kind: "word", level: 1, topic: "food", pos: "noun", example: "I put butter on my bread.", exampleHu: "Vajat teszek a kenyeremre." },
   { id: "en1-food-002", term: "pasta", hu: "tészta", kind: "word", level: 1, topic: "food", pos: "noun", example: "My brother loves pasta with tomato sauce.", exampleHu: "A bátyám imádja a paradicsomszószos tésztát." },

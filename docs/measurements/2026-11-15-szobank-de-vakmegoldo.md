@@ -222,3 +222,23 @@ megoldó csak 3 jelzést adott). Ezért célzott audit a teljes német bankon:
   term–hu párosítás hibáit gyengébben.
 - A szűkítés miatt bejegyzésenként csak egy kérdéstípus futott vakon; a többi típus (pl. hiányos mondat) disztraktorait
   a generátor futásidőben választja, ezeket vakon nem ellenőriztük.
+
+## S13 utójavítás (2026-11-16, ág `feat/jatekok-s13a-lista-adat-mero`)
+
+- Szisztematikus keresés a teljes német bankon: a `hu` egyik jelentés-kulcsa betűre azonos a névelő nélküli term-mel,
+  vagy a `hu` tartalmazza a term-et. 14 találat, mind javítva (azonosító marad, cellája és szófaja változatlan, ha a
+  csere más szó): `de0-city-005` der Park → die Feuerwehr (tűzoltóság, tűzoltók); `de0-freetime-008` der Film → die
+  Schaukel (hinta); `de0-sports-001` der Sport → der Sieger (győztes); `de0-colors-011` lila → violett (lila,
+  ibolyaszínű); `de1-food-021` der Joghurt → die Sahne (tejszín); `de1-technology-001` das Internet → einschalten
+  (bekapcsol); `de1-technology-004` der Laptop → die Taste (billentyű); `de2-animals-012` der Delfin → der Biber (hód);
+  `de2-animals-013` das Krokodil → der Specht (harkály); `de2-technology-007` das Tablet → die Festplatte
+  (merevlemez); `de2-sports-002` das Stadion → die Tribüne (lelátó); `de1-nature-001` der Strand: „tengerpart, homokos
+  part”; `de1-technology-003` die Kamera: „fényképezőgép”; `de4-sports-008` fair: „sportszerű, tisztességes”.
+  Az ékezetben eltérő nemzetközi szavak (Auto–autó, Kakao–kakaó, Kabel–kábel stb., 7 db) maradnak.
+- `report --overlaps` (37 → 35 pár) átnézve; valódi duplikátum kettő volt, cserélve: `de0-everyday-019` „wie geht's”
+  (= `de0-communication-016` „wie geht es dir”, és a „mir geht es gut” is megvan) → „viel Spaß” — „jó szórakozást”;
+  `de3-weather-009` „in Strömen regnen” (= `de2-weather-003` „es regnet in Strömen”) → „es nieselt” — „szemerkél az
+  eső”. A többi pár szinonima vagy zárójellel pontosított homonima (a generátor kizárja őket egymás elterelői közül).
+- Integrátori ellenőrzés: `report --lang de` → 2080 bejegyzés, kvóta- és `phrase`-hiány nincs, terv 4.2 teljesül, hibák
+  0; új őr: `tests/vocab-bank-cognates.test.ts`; a cserélt bejegyzések vak megoldáson nem mentek át újra (integrátori
+  visszaolvasás: term a példában szó szerint vagy `alt`-tal, az `exampleHu` pontos fordítás).

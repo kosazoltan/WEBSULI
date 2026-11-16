@@ -561,6 +561,16 @@ valós szerződést kövessék:**
     eseményt (az alsó rétegek bubble-fázisú `window` figyelői — kvíz-visszajelzés, szünet menü, játékok — nem kapják
     meg), az alatta lévő `body`-gyerekek `inert`-ek, és a `document.documentElement.dataset.gameCouponExpired` = "true".
     Aki `window`-on capture-fázisú billentyűfigyelőt tesz, ezt a jelzőt nézze.
+13. **`.game-answer-btn` felülírhatósága (S13 / B7, 2026-11-16).** A szabály eredetileg rétegen kívül állt az
+    `index.css`-ben, ezért a forrásban később álló, azonos fajlagosságú szabályként felülírta a gombra tett Tailwind
+    `text-*` / `leading-*` / `min-h-*` segédosztályt (a Matek sprint ezért `!text-[…]` kerülőutat használt). Most
+    `@layer components` blokkban áll: alapként továbbra is `min-height: 56px`, `font-size: var(--game-answer-font)`,
+    `line-height: 1.2`, de a játék segédosztálya (utilities réteg) felülírja — `!` nem kell. Őr:
+    `tests/game-answer-btn-layer.test.ts`. A meglévő `!text-[…]` ártalmatlan, a játékoldalakat ez a szelet nem módosítja.
+14. **Mérő: kezdőképernyő és képernyőkép beállt állapotban (S13 / B5, 2026-11-16).** A `smallTargets` a
+    kezdőképernyőn is a belépő animáció után mér (`settleIfPresent(page, "[data-game-start]")`: csak ha a közös
+    `StartScreen` jelen van), és a `shot()` állapotonként megvárja a gyökér (`[data-game-start]`, `[data-game-hud]`,
+    `game-pause-menu`, `[data-game-result]`) beállását, mielőtt fotóz. A 48 px-es mérce nem változott.
 
 ```ts
 // source/tests/support/game-mobile-quality.ts (S2)
@@ -1708,7 +1718,7 @@ a `GameShell` `orientation="landscape"`-et kap; a `pickQuestion` törzsében a t
 
 ## S13 — Játéklista és főoldali kártyák arculata, teljes mátrix, verify, átfogó review, retro
 
-**Állapot:** nincs elkezdve. Kanban #30. Modell: Opus. Függőség: S1–S12 mind összevonva.
+**Állapot:** folyamatban — 1. rész: ág feat/jatekok-s13a-lista-adat-mero, munkafa .claude/worktrees/jatekok-s13, kanban #30. Modell: Opus. Függőség: S1–S12 mind összevonva.
 
 - **Cél:** közös arculat a játéklistán és a főoldali kártyákon; a mobil mátrix mind a 7 játékra `"full"`, a szóbank mindhárom
   nyelven `"full"`, a szóbank-bekötés mind a 6 nyelvi játékban — őr-tesztekkel; `npm run verify` zöld; átfogó review
