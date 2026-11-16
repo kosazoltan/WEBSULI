@@ -640,6 +640,26 @@ function SessionView(props: { session: DuelSession; snap: DuelSnapshot; feedback
   const rival = st.players.find((p) => p.id !== me) ?? null;
   const mine = st.players.find((p) => p.id === me) ?? null;
   const reconnecting = snap.conn === "reconnecting";
+  // Visszavágó-kérés követése: az utolsó győzteshirdetés állapota, és hogy ÉN kértem-e.
+  const iAskedRematch = useRef(false);
+  const [rematch, setRematch] = useState<{ lastResult: RtRoomState | null; pending: boolean }>({ lastResult: null, pending: false });
+  useEffect(() => {
+    if (snap.kind !== "online") return;
+    if (st.result && (st.phase === "finished" || st.phase === "aborted")) {
+      iAskedRematch.current = false;
+      setRematch((r) => (r.lastResult === st ? r : { lastResult: st, pending: false }));
+    } else if (st.phase === "lobby") {
+      setRematch((r) => (r.lastResult && !r.pending && !iAskedRematch.current && !r.lastResult.result?.aborted && r.lastResult.code === st.code ? { ...r, pending: true } : r));
+    } else if (rematch.lastResult) {
+      setRematch({ lastResult: null, pending: false });
+    }
+  }, [st.phase, st.seq, snap.kind]);
+  // Egyoldalú kérés időkorláttal lejár: 45 s válasz nélkül „Most nem” (kilépés a szobából, az ellenfél váróterme értesül).
+  useEffect(() => {
+    if (!rematch.pending) return;
+    const t = window.setTimeout(() => void session.leave().then(props.onExit), 45_000);
+    return () => window.clearTimeout(t);
+  }, [rematch.pending, session, props.onExit]);
   const banner = reconnecting ? (
     <div className="dm-banner" role="status" data-testid="duel-reconnecting">
       <Wifi className="h-4 w-4" aria-hidden="true" /> Kapcsolódás újra… A helyed egy percig megmarad.
@@ -650,9 +670,29 @@ function SessionView(props: { session: DuelSession; snap: DuelSnapshot; feedback
     </div>
   ) : null;
 
+  // Kétoldalú visszavágó (review #464 K4): ha a MÁSIK fél kéri, a győzteshirdetés marad, és rákérdezünk.
+  if (st.phase === "lobby" && rematch.pending && rematch.lastResult)
+    return (
+      <ResultView
+        session={session}
+        snap={{ ...snap, state: rematch.lastResult }}
+        me={me}
+        onExit={props.onExit}
+        onNewSetup={props.onNewSetup}
+        feedback={props.feedback}
+        prompt={{
+          name: rival?.nickname ?? "A barátod",
+          onAccept: () => {
+            setRematch({ lastResult: null, pending: false });
+            void session.setReady(true);
+          },
+          onDecline: () => void session.leave().then(props.onExit),
+        }}
+      />
+    );
   if (st.phase === "lobby") return <LobbyView session={session} st={st} me={me} banner={banner} onExit={props.onExit} />;
   if ((st.phase === "finished" || st.phase === "aborted") && st.result)
-    return <ResultView session={session} snap={snap} me={me} onExit={props.onExit} onNewSetup={props.onNewSetup} feedback={props.feedback} />;
+    return <ResultView session={session} snap={snap} me={me} onExit={props.onExit} onNewSetup={props.onNewSetup} feedback={props.feedback} onRematchClick={() => (iAskedRematch.current = true)} />;
   return <MatchView session={session} snap={snap} me={me} mine={mine} rival={rival} banner={banner} feedback={props.feedback} onExit={props.onExit} />;
 }
 
@@ -801,6 +841,29 @@ function MatchView(props: {
   const reveal = st.phase === "round_reveal" ? st.lastReveal : null;
   const [pending, setPending] = useState<{ round: number; index: number } | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
+  // Review #464 K3: az Android „vissza” gesztus / böngésző-vissza meccs közben ne léptessen ki megerősítés nélkül —
+  // egy történet-bejegyzés „csapda”: a vissza ezt veszi le, mi visszatesszük és rákérdezünk. Lap bezárásakor (online)
+  // a böngésző saját megerősítése.
+  useEffect(() => {
+    const trap = { duelTrap: true };
+    window.history.pushState(trap, "");
+    const onPop = () => {
+      window.history.pushState(trap, "");
+      setConfirmExit(true);
+    };
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (snap.kind !== "online") return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("beforeunload", onUnload);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("beforeunload", onUnload);
+      if ((window.history.state as { duelTrap?: boolean } | null)?.duelTrap) window.history.back();
+    };
+  }, [snap.kind]);
   const shownAt = useRef<{ round: number; at: number } | null>(null);
   const lastQuestion = useRef<NonNullable<RtRoomState["you"]["question"]> | null>(null);
   const timerRef = useRef<HTMLDivElement | null>(null);
@@ -966,7 +1029,10 @@ function MatchView(props: {
             <p id="duel-exit-title" className="dm-modal-title">
               Biztosan kilépsz?
             </p>
-            <p className="dm-hint">{isBot ? "A gép elleni meccs itt véget ér." : "A meccs a barátodnak is véget ér — ő nyer."}</p>
+            <p className="dm-hint">
+              {isBot ? "A gép elleni meccs itt véget ér." : "A meccs a barátodnak is véget ér — ő nyer."} Amíg döntesz, a meccs fut tovább
+              {isBot ? "." : " (online nincs szünet)."}
+            </p>
             <div className="dm-actions">
               <button type="button" className="game-btn game-btn-primary" data-testid="duel-exit-stay" onClick={() => setConfirmExit(false)}>
                 Maradok
@@ -982,7 +1048,17 @@ function MatchView(props: {
   );
 }
 
-function ResultView(props: { session: DuelSession; snap: DuelSnapshot; me: string; onExit: () => void; onNewSetup: () => void; feedback: ReturnType<typeof useDuelFeedback> }) {
+function ResultView(props: {
+  session: DuelSession;
+  snap: DuelSnapshot;
+  me: string;
+  onExit: () => void;
+  onNewSetup: () => void;
+  feedback: ReturnType<typeof useDuelFeedback>;
+  onRematchClick?: () => void;
+  /** A másik fél visszavágót kér (K4): a győzteshirdetés marad, a gombok helyén a kérdés. */
+  prompt?: { name: string; onAccept: () => void; onDecline: () => void };
+}) {
   const { session, snap, me, feedback } = props;
   const st = snap.state!;
   const r = st.result!;
@@ -1015,11 +1091,12 @@ function ResultView(props: { session: DuelSession; snap: DuelSnapshot; me: strin
   }, [r.seq, won, r.coWin, feedback]);
 
   const rematch = async () => {
+    props.onRematchClick?.();
     setBusy(true);
     await session.rematch();
     setBusy(false);
   };
-  const canRematch = !closed && r.reason !== "SERVER_RESTART" && (isBot || st.phase === "finished");
+  const canRematch = !closed && r.reason !== "SERVER_RESTART" && (isBot || (st.phase === "finished" && r.reason !== "OPPONENT_LEFT"));
 
   return (
     <div className="dm-page dm-result" data-testid="duel-result" data-cowin={r.coWin ? "true" : "false"} data-won={won ? "true" : "false"}>
@@ -1059,7 +1136,23 @@ function ResultView(props: { session: DuelSession; snap: DuelSnapshot; me: strin
         ))}
       </div>
       <div className="dm-actions dm-result-actions">
-        {canRematch ? (
+        {props.prompt ? (
+          <div className="dm-rematch-ask" role="alertdialog" aria-labelledby="duel-rematch-ask" data-testid="duel-rematch-ask">
+            <p id="duel-rematch-ask" className="dm-modal-title">
+              {props.prompt.name} visszavágót kér!
+            </p>
+            <div className="dm-actions">
+              <button type="button" className="game-btn game-btn-primary" data-testid="duel-rematch-accept" onClick={props.prompt.onAccept}>
+                <Swords className="h-5 w-5" aria-hidden="true" />
+                Benne vagyok
+              </button>
+              <button type="button" className="game-btn game-btn-secondary" data-testid="duel-rematch-decline" onClick={props.prompt.onDecline}>
+                Most nem
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {canRematch && !props.prompt ? (
           <button type="button" className="game-btn game-btn-primary" data-testid="duel-rematch" disabled={busy} onClick={() => void rematch()}>
             <Swords className="h-5 w-5" aria-hidden="true" />
             Visszavágó
@@ -1165,6 +1258,7 @@ const PAGE_CSS = `
 @keyframes dm-hit { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 @keyframes dm-clash { 0% { transform: scale(1); } 40% { transform: scale(1.35) rotate(-12deg); box-shadow: 0 0 40px #fde047; } 100% { transform: scale(1); } }
 @media (max-height: 700px) and (orientation: portrait) { .dm-vs-fighter { width: 56px; height: 56px; font-size: 26px; } .dm-vs-mark { width: 44px; height: 44px; } }
+.dm-rematch-ask { width: 100%; padding: 12px; border-radius: 16px; text-align: center; background: #14532dcc; border: 2px solid #4ade80; }
 .dm-big-emoji { font-size: 44px; line-height: 1; }
 .dm-trophy { filter: drop-shadow(0 0 14px #f59e0b); animation: dm-pop .6s ease-out 1; }
 .dm-tiebreak { padding: 6px 10px; border-radius: 12px; text-align: center; font-size: 15px; font-weight: 900; color: #0b1020; background: #fde047; }
@@ -1193,6 +1287,8 @@ const PAGE_CSS = `
   .dm-result-cards { grid-template-columns: 1fr 1fr; align-items: start; }
   .dm-code { font-size: 44px; }
   .dm-vs { display: none; }
+  /* Review #464 A5: fekvő váróteremben a ragadós gomb ne takarja a játékoslistát (a lap végén áll). */
+  .dm-lobby .dm-go { position: static; }
 }
 @media (prefers-reduced-motion: reduce) {
   .dm-count-num, .dm-spinner, .dm-trophy, .dm-vs-fighter, .dm-vs-mark { animation: none !important; }

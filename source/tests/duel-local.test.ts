@@ -93,7 +93,7 @@ function playBotMatch(seed: string, skill: BotSkill, humanAcc: number, humanRati
 }
 
 test("bot-profilok: a gép sosem válaszol 900 ms alatt, mindig a saját ablakán belül; azonos seed + kör → azonos válasz", () => {
-  for (const skill of ["easy", "normal", "hard"] as const) {
+  for (const skill of ["beginner", "easy", "normal", "hard"] as const) {
     for (let r = 1; r <= 200; r++) {
       const p = planBotAnswer("s", r, { correctIndex: r % 4, optionCount: 4, windowMs: 2500 + (r % 7) * 900 }, BOT_PROFILES[skill]);
       assert.ok(p.atOffsetMs >= BOT_MIN_REACT_MS && p.atOffsetMs < 2500 + (r % 7) * 900, `${skill} ${r}: ${p.atOffsetMs}`);
@@ -107,7 +107,7 @@ test("bot-profilok: a gép sosem válaszol 900 ms alatt, mindig a saját ablaká
     for (let r = 0; r < 4000; r++) if (planBotAnswer(`a${r}`, 1, { correctIndex: 0, optionCount: 4, windowMs: 6000 }, BOT_PROFILES[skill]).correct) ok++;
     return ok / 4000;
   };
-  assert.ok(Math.abs(acc("easy") - 0.55) < 0.03 && Math.abs(acc("normal") - 0.7) < 0.03 && Math.abs(acc("hard") - 0.85) < 0.03);
+  assert.ok(Math.abs(acc("beginner") - 0.36) < 0.03 && Math.abs(acc("easy") - 0.55) < 0.03 && Math.abs(acc("normal") - 0.7) < 0.03 && Math.abs(acc("hard") - 0.85) < 0.03);
 });
 
 test("áramlat-elv: két győzelem után nehezebb, két vereség után könnyebb, különben marad; első alkalom Közepes", () => {
@@ -119,7 +119,9 @@ test("áramlat-elv: két győzelem után nehezebb, két vereség után könnyebb
   r = recordBotResult(r, "hard", "loss");
   r = recordBotResult(r, "hard", "loss");
   assert.equal(suggestBotSkill(r), "normal");
-  assert.equal(suggestBotSkill(recordBotResult(recordBotResult(null, "easy", "loss"), "easy", "loss")), "easy", "a legkönnyebbnél nincs lejjebb");
+  // SPEC-VÁLTOZÁS 2026-11-16 (review #464 K1): a Könnyű alatt van még egy „Kezdő” szint — két vereség oda visz; alatta nincs lejjebb.
+  assert.equal(suggestBotSkill(recordBotResult(recordBotResult(null, "easy", "loss"), "easy", "loss")), "beginner");
+  assert.equal(suggestBotSkill(recordBotResult(recordBotResult(null, "beginner", "loss"), "beginner", "loss")), "beginner", "a legkönnyebbnél nincs lejjebb");
   assert.equal(recordBotResult({ skill: "hard", results: Array(10).fill("win") }, "hard", "co").results.length, 10);
 });
 
@@ -147,24 +149,28 @@ test("determinizmus (J19): azonos seed + azonos bemenet → bitre azonos meccs (
   assert.notDeepEqual(a.session.getSnapshot().state!.lastReveal, c.session.getSnapshot().state!.lastReveal);
 });
 
-test("legyőzhető, de nem ajándék: egy 70%-os pontosságú gyerek a Könnyű gépet többnyire legyőzi, a Nehéztől többnyire kikap, a Közepes kiegyenlített", (t) => {
-  const rate = (skill: BotSkill) => {
+test("legyőzhető, de nem ajándék (300 meccs / cella): a 40%-os, lassú gyerek a Kezdőt többnyire legyőzi; a 70%-os a Könnyűt többnyire, a Nehéztől többnyire kikap, a Közepes kiegyenlített", (t) => {
+  const rate = (skill: BotSkill, acc: number, ratio: [number, number]) => {
     let wins = 0;
-    const n = 120;
+    const n = 300;
     for (let i = 0; i < n; i++) {
-      const r = playBotMatch(`flow-${skill}-${i}`, skill, 0.7, [0.35, 0.75]).result!;
+      const r = playBotMatch(`flow-${skill}-${acc}-${i}`, skill, acc, ratio).result!;
       if (!r.coWin && r.winners[0] === BOT_ME_ID) wins++;
     }
     return wins / n;
   };
-  const easy = rate("easy");
-  const normal = rate("normal");
-  const hard = rate("hard");
-  assert.ok(easy >= 0.6, `Könnyű ellen a gyerek nyerési aránya ${easy}`);
+  const weakBeginner = rate("beginner", 0.4, [0.5, 0.95]);
+  const beginner = rate("beginner", 0.7, [0.35, 0.75]);
+  const easy = rate("easy", 0.7, [0.35, 0.75]);
+  const normal = rate("normal", 0.7, [0.35, 0.75]);
+  const hard = rate("hard", 0.7, [0.35, 0.75]);
+  assert.ok(weakBeginner >= 0.5 && weakBeginner <= 0.8, `a 40%-os, lassú gyerek a Kezdő ellen: ${weakBeginner}`);
+  assert.ok(beginner >= 0.85, `a 70%-os gyerek a Kezdő ellen: ${beginner}`);
+  assert.ok(easy >= 0.6, `Könnyű ellen a 70%-os gyerek nyerési aránya ${easy}`);
   assert.ok(hard <= 0.4, `Nehéz ellen a gyerek nyerési aránya ${hard}`);
   assert.ok(hard >= 0.05, `a Nehéz gép is legyőzhető (${hard})`);
   assert.ok(normal > hard && normal < easy, `Közepes: ${normal}`);
-  t.diagnostic(`[duel-bot] a 70%-os gyerek nyerési aránya: Könnyű ${easy.toFixed(2)} · Közepes ${normal.toFixed(2)} · Nehéz ${hard.toFixed(2)}`);
+  t.diagnostic(`[duel-bot] 40%-os lassú gyerek: Kezdő ${weakBeginner.toFixed(2)} · 70%-os gyerek: Kezdő ${beginner.toFixed(2)} · Könnyű ${easy.toFixed(2)} · Közepes ${normal.toFixed(2)} · Nehéz ${hard.toFixed(2)}`);
 });
 
 test("visszavágó a gép ellen: új meccs ugyanazokkal, új kérdésekkel; kilépés után a munkamenet zárva", async () => {

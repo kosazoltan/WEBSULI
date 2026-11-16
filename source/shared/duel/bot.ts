@@ -10,7 +10,7 @@
  */
 import { createRng, seedFrom } from "../game-rng";
 
-export type BotSkill = "easy" | "normal" | "hard";
+export type BotSkill = "beginner" | "easy" | "normal" | "hard";
 
 export type BotProfile = {
   skill: BotSkill;
@@ -23,12 +23,14 @@ export type BotProfile = {
 };
 
 export const BOT_PROFILES: Record<BotSkill, BotProfile> = {
+  // Review #464 K1: a gyengébb (≈ 40%-os, lassú) gyereknek is kell sikerélmény — a „Kezdő” gép ritkán talál, lassan válaszol.
+  beginner: { skill: "beginner", label: "Kezdő", accuracy: 0.36, reactMin: 0.7, reactMax: 0.98 },
   easy: { skill: "easy", label: "Könnyű", accuracy: 0.55, reactMin: 0.45, reactMax: 0.9 },
   normal: { skill: "normal", label: "Közepes", accuracy: 0.7, reactMin: 0.3, reactMax: 0.8 },
   hard: { skill: "hard", label: "Nehéz", accuracy: 0.85, reactMin: 0.2, reactMax: 0.6 },
 };
 
-export const BOT_SKILLS: readonly BotSkill[] = ["easy", "normal", "hard"];
+export const BOT_SKILLS: readonly BotSkill[] = ["beginner", "easy", "normal", "hard"];
 
 /** A gép soha nem válaszol ennél gyorsabban (emberi alsó határ fölött, `HUMAN_MIN_MS` = 200). */
 export const BOT_MIN_REACT_MS = 900;

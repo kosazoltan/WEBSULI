@@ -213,9 +213,14 @@ test("A nyit, B kóddal csatlakozik: váróterem → teljes meccs érintéssel �
     await assertMobileQuality(A.page, "győzteshirdetés");
     await shot(A.page, "online-result");
     await shot(B.page, "online-result");
-    // Visszavágó: bárki kérheti → váróterem, a csatlakozó újra „Kész”, a gazda indít.
+    // Visszavágó (review #464 K4, kétoldalú): B kéri → B a váróterembe kerül, A-nál a győzteshirdetés MARAD a kérdéssel;
+    // A „Benne vagyok” → váróterem, B „Kész”, a gazda indít.
     await B.page.getByTestId("duel-rematch").tap();
     await expect(B.page.getByTestId("duel-lobby")).toBeVisible({ timeout: 10_000 });
+    await expect(A.page.getByTestId("duel-rematch-ask")).toBeVisible({ timeout: 10_000 });
+    await expect(A.page.getByTestId("duel-result")).toBeVisible();
+    await shot(A.page, "online-rematch-ask");
+    await A.page.getByTestId("duel-rematch-accept").tap();
     await expect(A.page.getByTestId("duel-lobby")).toBeVisible({ timeout: 10_000 });
     await B.page.getByTestId("duel-ready").tap();
     await expect(A.page.getByTestId("duel-start")).toBeEnabled({ timeout: 10_000 });
@@ -284,6 +289,9 @@ test("review #464: kapcsolódás közben a Vissza gombbal elnavigálva a későn
       }
       await route.continue();
     });
+    const status = async () => (await fetch(`${on.url}/api/admin/rt/status`, { headers: { cookie: adminCookie } })).json();
+    // Kiindulás: az előző tesztek (polling-kliensei a szerver ping-időkorlátjáig) még élhetnek — ehhez mérünk.
+    const base = await status();
     await A.page.getByTestId("duel-create").tap();
     await A.page.getByTestId("duel-go").tap();
     await expect(A.page.getByTestId("duel-busy")).toBeVisible();
@@ -291,9 +299,9 @@ test("review #464: kapcsolódás közben a Vissza gombbal elnavigálva a későn
     await expect(A.page.getByTestId("games-duel-entry")).toBeVisible();
     await A.page.waitForTimeout(4_000); // a lassú indítás ezalatt befejeződik — és lezárul
     // Nincs élő, gazdátlan kapcsolat és szoba (a részletes státusz admin-munkamenettel; a munkamenet-tár közös adatbázis).
-    const st = await (await fetch(`${on.url}/api/admin/rt/status`, { headers: { cookie: adminCookie } })).json();
-    expect(st.connections, JSON.stringify(st)).toBe(0);
-    expect(st.activeRooms, JSON.stringify(st)).toBe(0);
+    const st = await status();
+    expect(st.connections, `${JSON.stringify(base)} → ${JSON.stringify(st)}`).toBeLessThanOrEqual(base.connections);
+    expect(st.activeRooms, `${JSON.stringify(base)} → ${JSON.stringify(st)}`).toBeLessThanOrEqual(base.activeRooms);
     await A.page.getByTestId("games-duel-entry").tap();
     const code = await openRoom(A.page);
     expect(code).toMatch(/^[A-Z0-9]{6}$/);

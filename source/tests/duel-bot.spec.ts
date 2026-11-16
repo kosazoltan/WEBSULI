@@ -133,6 +133,12 @@ test("kilépés megerősítéssel a meccs közben: „Maradok” folytatja, „K
   await shot(page, "bot-exit-confirm");
   await page.getByTestId("duel-exit-stay").tap();
   await expect(page.getByTestId("duel-exit-confirm")).toHaveCount(0);
+  // Review #464 K3: a böngésző / Android „vissza” sem léptet ki megerősítés nélkül.
+  await page.goBack();
+  await expect(page.getByTestId("duel-exit-confirm")).toBeVisible();
+  await expect(page.getByTestId("duel-match")).toBeVisible();
+  await expect(page).toHaveURL(/\/games\/parbaj/);
+  await page.getByTestId("duel-exit-stay").tap();
   await page.getByTestId("duel-exit").tap();
   await page.getByTestId("duel-exit-leave").tap();
   await expect(page.getByTestId("duel-home")).toBeVisible();
