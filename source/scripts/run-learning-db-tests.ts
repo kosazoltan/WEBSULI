@@ -93,11 +93,12 @@ try {
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {
     // The reconciler intentionally scans all workflow rows; isolate suite-owned lifecycle tests.
-    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts", "tests/daily-reminder-db.integration.ts", "tests/newsletter-db.integration.ts"], {
+    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts", "tests/daily-reminder-db.integration.ts", "tests/newsletter-db.integration.ts", "tests/admin-authz-matrix-db.integration.ts"], {
       cwd, env: { ...env, DATABASE_URL: databaseUrl, NODE_ENV: "test", WEBSULI_DISPOSABLE_DB: name },
       windowsHide: true, stdio: "inherit",
     });
-    const timeout = setTimeout(() => { child.kill(); reject(new Error("Database integration tests timed out")); }, 120_000);
+    // JM7a: az admin-jogosultsági mátrix (~110 végpont × 7 szerep × 2 menet, valódi HTTP) miatt 120 s → 300 s.
+    const timeout = setTimeout(() => { child.kill(); reject(new Error("Database integration tests timed out")); }, 300_000);
     child.once("error", error => { clearTimeout(timeout); reject(error); });
     child.once("exit", status => { clearTimeout(timeout); resolve(status ?? 1); });
   });
