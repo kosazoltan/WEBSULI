@@ -73,6 +73,7 @@ import { createSeenHistory, externalKey, safeLocalStorage, useVocabQuizSource } 
 import { mergeVocabTiers, VOCAB_POOL_PER_LEVEL, vocabIdOfLadderItem, type VocabMeaning } from "@/lib/wordLadderVocab";
 import { loadVocabBank } from "@/data/vocabBank/loader";
 
+import { newScoreRunId } from "@/lib/gameScoreRunId";
 const LS_XP = "websuli-wordladder-xp";
 const LS_BEST = "websuli-wordladder-streak";
 
@@ -874,6 +875,7 @@ export default function WordLadderHuEn() {
       runXp: sessionXp,
       runStreak: runBestStreakRef.current,
       runSeconds,
+      runId: newScoreRunId(),
     })
       .then(() => {
         void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] });

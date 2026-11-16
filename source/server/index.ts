@@ -425,7 +425,18 @@ const publicWriteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// JM0: a pontbeküldés IP-nként 60 / 15 perc (a meglévő kliensek menetenként egyet küldenek; a korlát a szórást fogja meg).
+const gameScoreLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: { message: "Túl sok pontbeküldés. Próbáld újra később!" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Apply rate limiting only to specific endpoints
+app.use("/api/games/score", gameScoreLimiter); // JM0
 app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
 app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection
