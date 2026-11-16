@@ -66,6 +66,13 @@ function noStore(res: Response) {
 
 const errMsg = (error: unknown) => (error instanceof Error ? error.message : "ismeretlen hiba");
 
+/** Levélküldési hiba naplózása: a cím csak maszkolva, a hibaüzenetből is kicserélve. */
+function logMailFailure(what: string, address: string, mailError: unknown): void {
+  const masked = maskEmail(address);
+  const reason = errMsg(mailError).replaceAll(address, masked);
+  logger.error(`[PLAYER] ${what} (${masked}): ${reason}`);
+}
+
 /** Játékosonként (munkamenet-azonosítóval), annak hiányában IP-nként számolt korlát. */
 function playerLimiter(windowMs: number, max: number, message: string): RequestHandler {
   return rateLimit({
@@ -238,7 +245,7 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
         return res.status(202).json({ ok: true });
       }
       void deps.mailer(email, buildDeleteCodeEmail({ code })).catch((mailError: unknown) => {
-        logger.error(`[PLAYER] a törlési kód levele nem ment ki (${maskEmail(email)}): ${(mailError instanceof Error ? mailError.message : "ismeretlen hiba").replaceAll(email, maskEmail(email))}`);
+        logMailFailure("a törlési kód levele nem ment ki", email, mailError);
       });
       return res.status(202).json({ ok: true });
     } catch (error) {
@@ -282,7 +289,7 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
       logger.info(`[PLAYER] fiók törölve: ${maskEmail(email)} (kódrekord: ${result.codes}, munkamenet: ${result.sessions})`);
       if (noticeAllowed()) {
         void deps.mailer(email, buildAccountDeletedEmail()).catch((mailError: unknown) => {
-          logger.error(`[PLAYER] a törlés-értesítő nem ment ki (${maskEmail(email)}): ${(mailError instanceof Error ? mailError.message : "ismeretlen hiba").replaceAll(email, maskEmail(email))}`);
+          logMailFailure("a törlés-értesítő nem ment ki", email, mailError);
         });
       } else {
         logger.warn("[PLAYER] a törlés-értesítők napi plafonja betelt — értesítő nem ment ki");
