@@ -51,6 +51,8 @@ export type DuelSession = {
   rematch(): Promise<RtAck>;
   leave(): Promise<void>;
   dispose(): void;
+  /** Csak gépi módban (review #464 A6): a lap háttérbe kerülésekor a meccs-óra áll (online nincs szünet). */
+  setPaused?(paused: boolean): void;
 };
 
 /** Egyszerű tár a pillanatképhez (`useSyncExternalStore`-hoz). */
@@ -94,7 +96,11 @@ export type BotSessionArgs = {
 };
 
 export function createBotSession(args: BotSessionArgs): DuelSession {
-  const now = args.now ?? (() => Date.now());
+  const baseNow = args.now ?? (() => Date.now());
+  // Szünet (A6): a meccs-óra a szünetek összegével késik; szünet alatt áll.
+  let pausedAt: number | null = null;
+  let pausedTotal = 0;
+  const now = () => (pausedAt ?? baseNow()) - pausedTotal;
   const schedule =
     args.schedule ??
     ((fn: () => void, ms: number) => {
@@ -197,6 +203,22 @@ export function createBotSession(args: BotSessionArgs): DuelSession {
     },
     async leave() {
       this.dispose();
+    },
+    setPaused(paused: boolean) {
+      if (disposed) return;
+      if (paused && pausedAt === null) {
+        pausedAt = baseNow();
+        cancelWake?.();
+        cancelBot?.();
+        cancelWake = null;
+        cancelBot = null;
+      } else if (!paused && pausedAt !== null) {
+        pausedTotal += baseNow() - pausedAt;
+        pausedAt = null;
+        plannedRound = -1; // a gép válaszát az eltolt órához újratervezzük (a már adott válasz megmarad)
+        store.set({ clockOffsetMs: -pausedTotal });
+        afterChange();
+      }
     },
     dispose() {
       disposed = true;

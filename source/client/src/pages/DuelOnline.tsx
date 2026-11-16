@@ -311,6 +311,14 @@ export default function DuelOnline() {
     setScreen({ name: "error", code: snap.closedCode ?? "DISCONNECTED", retry: null });
   }, [screen.name, session, snap.conn, snap.closedCode, snap.state]);
 
+  // Gépi módban a lap háttérbe kerülésekor a meccs áll (review #464 A6); online nincs szünet (a szerver órája megy).
+  useEffect(() => {
+    if (!session?.setPaused) return;
+    const onVis = () => session.setPaused!(document.visibilityState === "hidden");
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [session]);
+
   // Gépi meccs vége → áramlat-ajánlás frissítése (egyszer meccsenként; ember elleni győzelemnek sehol nem számít, D22).
   // A dedup kulcsa a munkamenet azonossága + a meccs sorszáma: egy új munkamenet („Új beállítás”) számlálója újra 1-ről
   // indul, így két azonos `seq`-ű meccs is külön rögzül (review #464).

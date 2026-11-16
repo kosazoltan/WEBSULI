@@ -185,3 +185,22 @@ test("visszavágó a gép ellen: új meccs ugyanazokkal, új kérdésekkel; kil�
   assert.equal(s.getSnapshot().conn, "closed");
   assert.deepEqual(await s.answer(1, 0, 100), { ok: false, code: "ROOM_NOT_FOUND" });
 });
+
+test("gépi módban a szünet (háttérbe kerülés) megállítja a meccs-órát és a gépet; folytatáskor onnan megy tovább (review #464 A6)", () => {
+  const clock = manualClock();
+  const s = createBotSession({ grade: 5, band: 0.55, subjects: [], skill: "hard", seed: "szunet", nickname: "Te", provider, now: clock.now, schedule: clock.schedule });
+  for (let i = 0; i < 50 && s.getSnapshot().state!.phase !== "round_open"; i++) clock.step();
+  const before = s.getSnapshot().state!;
+  assert.equal(before.phase, "round_open");
+  s.setPaused!(true);
+  clock.advance(120_000); // két percig háttérben
+  const during = s.getSnapshot().state!;
+  assert.equal(during.seq, before.seq, "szünet alatt semmi nem történik");
+  assert.equal(during.players.find((p) => p.id === BOT_ID)!.answered, false, "a gép sem válaszol");
+  s.setPaused!(false);
+  const resumed = s.getSnapshot().state!;
+  assert.equal(resumed.phase, "round_open", "a kör folytatódik, nem járt le");
+  assert.ok(s.getSnapshot().clockOffsetMs <= -120_000, "az időjelző az eltolt órához igazodik");
+  for (let i = 0; i < 400 && s.getSnapshot().state!.phase !== "finished"; i++) clock.step();
+  assert.equal(s.getSnapshot().state!.phase, "finished");
+});
