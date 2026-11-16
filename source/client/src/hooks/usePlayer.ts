@@ -37,17 +37,34 @@ export function usePlayerStatus() {
   return { enabled: data?.enabled === true, isLoading };
 }
 
+/** N2: a tiltott fiók korlátozott munkamenete (a /me 403 `BANNED`) — csak az adatletöltés és a fióktörlés érhető el. */
+type MeResult = PlayerMe | { banned: true } | null;
+
+async function fetchMe(): Promise<MeResult> {
+  const res = await fetch(PLAYER_ME_KEY[0], { credentials: "include", headers: { accept: "application/json" } });
+  if (res.status === 403) {
+    const body = (await res.json().catch(() => null)) as { code?: string } | null;
+    if (body?.code === "BANNED") return { banned: true };
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as PlayerMe | null;
+}
+
 export function usePlayer() {
   const status = usePlayerStatus();
-  const { data, isLoading } = useQuery<PlayerMe | null>({
+  const { data, isLoading } = useQuery<MeResult>({
     queryKey: PLAYER_ME_KEY,
-    queryFn: () => getJson<PlayerMe | null>(PLAYER_ME_KEY[0], null),
+    queryFn: fetchMe,
     enabled: status.enabled,
     retry: false,
   });
+  const banned = status.enabled && !!data && "banned" in data;
   return {
     enabled: status.enabled,
-    player: status.enabled ? data ?? null : null,
+    // A tiltott fiók NEM játékos (játék, profil, szoba, pont tiltva) — csak a `banned` jelző igaz.
+    player: status.enabled && data && !("banned" in data) ? data : null,
+    banned,
     isLoading: status.isLoading || (status.enabled && isLoading),
   };
 }

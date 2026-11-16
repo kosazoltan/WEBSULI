@@ -3,15 +3,19 @@
  * létrehozással, utolsó belépéssel és tiltási állapottal; tiltás / feloldás (a már belépett játékosra azonnal hat).
  * A teljes cím csak külön gombnyomásra töltődik le (admin-végpont), és csak ezen a képernyőn látszik.
  * A becenév szövegként jelenik meg (React-szövegcsomópont).
+ * N2 (tulajdonosi döntés 2026-11-16): VÉGLEGES törlés megerősítő párbeszéddel (a beírt „TÖRLÉS” szó nélkül nem küldhető).
  */
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Ban, Eye, Gamepad2, RotateCcw, Search, Unlink } from "lucide-react";
+import { Ban, Eye, Gamepad2, RotateCcw, Search, Trash2, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +25,9 @@ type AdminPlayer = {
   banned: boolean; bannedAt: string | null; googleLinked: boolean; learnerLinked: boolean;
 };
 
+/** A szerver `ADMIN_DELETE_CONFIRM_WORD`-jével azonos (server/player/admin-routes.ts). */
+const DELETE_WORD = "TÖRLÉS";
+
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString("hu-HU", { timeZone: "Europe/Budapest", dateStyle: "short", timeStyle: "short" }) : "—");
 
 export default function PlayersPanel() {
@@ -28,6 +35,9 @@ export default function PlayersPanel() {
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [revealed, setRevealed] = useState<Record<string, string>>({});
+  const [toDelete, setToDelete] = useState<AdminPlayer | null>(null);
+  const [word, setWord] = useState("");
+  const wordOk = word.trim().normalize("NFC").toLocaleUpperCase("hu-HU") === DELETE_WORD;
   const key = ["/api/admin/game-accounts", search] as const;
   const { data, isLoading, isError } = useQuery<{ players: AdminPlayer[] }>({
     queryKey: key,
@@ -51,6 +61,16 @@ export default function PlayersPanel() {
       await queryClient.invalidateQueries({ queryKey: ["/api/admin/game-accounts"] });
     },
     onError: (e: Error) => toast({ title: "Nem sikerült", description: e.message, variant: "destructive" }),
+  });
+
+  const remove = useMutation({
+    mutationFn: (p: AdminPlayer) => apiRequest("POST", `/api/admin/game-accounts/${encodeURIComponent(p.id)}/delete`, { confirm: DELETE_WORD }),
+    onSuccess: async (_r, p) => {
+      setToDelete(null);
+      toast({ title: "Fiók véglegesen törölve", description: p.nickname ?? "becenév nélküli fiók" });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/game-accounts"] });
+    },
+    onError: (e: Error) => toast({ title: "Nem sikerült törölni", description: e.message, variant: "destructive" }),
   });
 
   const reveal = async (p: AdminPlayer) => {
@@ -112,11 +132,34 @@ export default function PlayersPanel() {
                     onClick={() => toggleBan.mutate(p)} data-testid={`button-player-ban-${p.id}`}>
                     {p.banned ? <><RotateCcw className="h-4 w-4" /> Feloldás</> : <><Ban className="h-4 w-4" /> Tiltás</>}
                   </Button>
+                  <Button size="sm" variant="outline" className="gap-1 border-destructive text-destructive" disabled={remove.isPending}
+                    onClick={() => { setWord(""); setToDelete(p); }} data-testid={`button-player-delete-${p.id}`}>
+                    <Trash2 className="h-4 w-4" /> Törlés
+                  </Button>
                 </div>
               </li>
             ))}
           </ul>
         )}
+        <AlertDialog open={toDelete !== null} onOpenChange={(open) => { if (!open) setToDelete(null); }}>
+          <AlertDialogContent className="text-slate-900" data-testid="dialog-player-delete">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Végleges törlés</AlertDialogTitle>
+              <AlertDialogDescription>
+                Törlődik a(z) „{toDelete?.nickname ?? "becenév nélküli"}” fiók: becenév, avatar, e-mail-cím, a belépőkódok, és minden
+                eszközön kilép. A tanulói profil megmarad. Ez nem vonható vissza.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <label htmlFor="player-delete-word" className="text-sm font-semibold">Írd be: <strong>{DELETE_WORD}</strong></label>
+            <Input id="player-delete-word" value={word} onChange={(e) => setWord(e.target.value)} autoComplete="off" data-testid="input-player-delete-confirm" />
+            <AlertDialogFooter>
+              <AlertDialogCancel>Mégse</AlertDialogCancel>
+              <Button variant="destructive" disabled={!wordOk || remove.isPending} onClick={() => { if (toDelete) remove.mutate(toDelete); }} data-testid="button-player-delete-confirm">
+                Végleges törlés
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );
