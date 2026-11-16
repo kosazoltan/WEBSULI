@@ -102,6 +102,15 @@ export function banFingerprint(key: Buffer, normalizedEmail: string): string {
   return hmacHex(key, `ban:${limitKey(normalizedEmail)}`);
 }
 
+/**
+ * K1b: a törölt, tiltott fiókok ujjlenyomatának kulcsa — külön, stabil változó (`PLAYER_BAN_KEY`), hogy a munkamenet-titok
+ * (`SESSION_SECRET`) rotációja ne érintse; hiányában visszaesés a `SESSION_SECRET`-ből levezetett kulcsra (`playerAuthKey`).
+ */
+export function playerBanKey(env: NodeJS.ProcessEnv = process.env): Buffer {
+  const secret = (env.PLAYER_BAN_KEY ?? "").trim();
+  return secret ? createHmac("sha256", secret).update("player-ban-v1").digest() : playerAuthKey(env);
+}
+
 /** A tiltás-ujjlenyomat kulcsának rövid azonosítója (nem fedi fel a kulcsot) — a rotáció rendszerszintű felismeréséhez. */
 export function banKeyId(key: Buffer): string {
   return hmacHex(key, "ban-key-id").slice(0, 16);

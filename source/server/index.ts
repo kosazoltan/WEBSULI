@@ -667,6 +667,9 @@ app.use((req, res, next) => {
       // K1b: a tiltás-karbantartás (kulcsrotáció-egyeztetés, megőrzés) csak élesben / PLAYER_BAN_MAINTENANCE=on mellett.
       const playerStore = createPlayerStore(dbPool);
       startPlayerCodeSweeper(() => playerStore.purgeOldCodes(), globalThis, banMaintenanceEnabled() ? playerStore.banMaintenance : null);
+      if (banMaintenanceEnabled() && !process.env.PLAYER_BAN_KEY) {
+        logger.info("[PLAYER] PLAYER_BAN_KEY nincs beállítva — a törölt fiókok tiltás-ujjlenyomata a SESSION_SECRET-ből levezetett kulccsal készül (rotációja ezeket érvényteleníti)");
+      }
     }
 
     // Express error handler (4 params required for Express to identify it as error middleware)

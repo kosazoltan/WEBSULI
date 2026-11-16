@@ -12,8 +12,8 @@ export const PLAYER_CODE_SWEEP_INTERVAL_MS = 60 * 60_000;
 type Timers = { setInterval: (fn: () => void, ms: number) => { unref?: () => void } };
 
 export type BanMaintenance = {
-  /** [más kulcsú (megőrzött) sorok száma, helyreállított élő tiltott fiók]. */
-  reconcile: () => Promise<[number, number]>;
+  /** A más kulccsal készült (törölt fiókhoz tartozó) ujjlenyomatok száma — csak naplózásra, semmit nem töröl. */
+  countForeign: () => Promise<number>;
   /** A megőrzési időn túli (élő tiltott fiók nélküli) ujjlenyomatok törlése; a törölt sorok száma. */
   purgeExpired: () => Promise<number>;
 };
@@ -32,12 +32,12 @@ export function startPlayerCodeSweeper(
     }
     if (!bans) return;
     try {
-      const [legacy, restored] = await bans.reconcile();
-      // K1b (Ú1, Ú3): a más kulcsú sorok MEGMARADNAK (a megőrzés-takarító viszi el őket 12 hónap után) — figyelmeztetés, ha vannak.
-      if (legacy) logger.warn(`[PLAYER] kulcsrotáció: ${legacy} régi kulcsú tiltás-ujjlenyomat megőrizve (az élő tiltott fiókoké az új kulccsal helyreállt)`);
-      if (restored) logger.info(`[PLAYER] tiltás-ujjlenyomat helyreállítva élő tiltott fiókhoz: ${restored}`);
+      const foreign = await bans.countForeign();
+      // K1b: a más kulcsú sorok MEGMARADNAK (a megőrzés-takarító viszi el őket 12 hónap után); a törölt fiókok tiltása ezekre a
+      // kulcs megváltozása miatt nem érvényes. Az élő fiókok tiltása kulcstól független (`banned_at`).
+      if (foreign) logger.warn(`[PLAYER] kulcsrotáció: ${foreign} régi kulcsú tiltás-ujjlenyomat megőrizve (a törölt fiókok tiltása ezekre nem érvényes)`);
     } catch (error) {
-      logger.error("[PLAYER] tiltás-ujjlenyomat egyeztetés hiba:", errText(error));
+      logger.error("[PLAYER] tiltás-ujjlenyomat számlálás hiba:", errText(error));
     }
     try {
       const expired = await bans.purgeExpired();

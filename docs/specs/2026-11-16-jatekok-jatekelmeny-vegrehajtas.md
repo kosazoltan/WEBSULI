@@ -2302,28 +2302,39 @@ a „Játékosok” panel és a fiókoldal törlési szövege; tesztek: `T/playe
    sorokat (a törölt fiókoké tudottan elvész — `warn` napló darabszámmal, cím nélkül), és MINDEN élő tiltott fiók ujjlenyomatát
    újraszámolja — így nem egy-egy belépési ágon múlik; emellett minden belépési út (kód, link, Google új és ismert azonosító)
    önjavító. Teszt: rotáció szimulálva, ismert Google-azonosítós és kódos úton az alias-regisztráció tiltott.
-10. **A tiltás állapotgépe (#471 review, 4. lelet után).** Zár = `lockBanAddress` (tranzakciós advisory-zár a KANONIKUS cím
-   ujjlenyomatára, `hashtextextended(fp, 7041)`); minden író / „olvas-dönt-ír” művelet a zár megszerzése UTÁN, ugyanabban a
-   tranzakcióban olvas — így bármely két művelet ugyanarra a címre sorosított.
+10. **A tiltás állapotgépe — K1b („A + B” terv, #475 review után; a korábbi, ujjlenyomat-alapú élő tiltás helyett).**
+   (A) ÉLŐ tiltott fiók: az egyetlen igazságforrás a `player_accounts.banned_at`; az alias-védelem a kanonikus cím (`limitKey`)
+   KÖZVETLEN összevetése a tiltott élő fiókokkal. (B) TÖRÖLT tiltott fiók: csak itt van ujjlenyomat (`player_ban_fingerprints`,
+   `PLAYER_BAN_KEY`-jel, visszaesés a `SESSION_SECRET`-ből levezetettre). Zár = `lockBanCanonical`: tranzakciós advisory-zár a
+   kanonikus cím SIMA (titok nélküli) SHA-256-jára — kulcsfüggetlen, így eltérő titkú példányok is ugyanazt a zárat kapják;
+   minden más zár / sorzár / INSERT ELŐTT.
 
    | Művelet | Olvas | Ír | Zár | Egy tranzakció |
    |---|---|---|---|---|
-   | Tiltás (`setBanned(true)`) | fiók címe; az azonos ujjlenyomatú élő fiókok | ujjlenyomat (beszúr / a tiltás idejét frissíti), az élő változatok `banned_at`-je | igen | igen |
-   | Feloldás élő fiókon (`setBanned(false)`) | fiók címe; a tiltott élő változatok | ujjlenyomat törlése, a változatok `banned_at = NULL` | igen | igen |
-   | Feloldás törölt-tiltotton (`unbanDeleted`) | ujjlenyomat (hivatkozással); a tiltott élő változatok | ujjlenyomat törlése, a változatok `banned_at = NULL` | igen (ujjlenyomatonként) | igen |
-   | Saját és admin-törlés (`deleteAccount`) | fiók címe, `banned_at` (a zár UTÁN, `FOR UPDATE`) | ujjlenyomat (ha tiltott), kódok, munkamenetek, fiók | igen (a sorzár ELŐTT) | igen |
-   | Létrehozás / belépés kód, link (`confirmVerifiedEmail`) | ujjlenyomat (a zár UTÁN) | fiók (`banned_at` öröklés, `ON CONFLICT … COALESCE`), ujjlenyomat (ha a fiók tiltott) | igen | igen |
-   | Google, új azonosító (`upsertGooglePlayer`) | ujjlenyomat (a zár UTÁN) | ugyanaz | igen | igen |
-   | Google, ismert azonosító (`upsertGooglePlayer`) | fiók címe, majd `banned_at` ÚJRA a zár UTÁN | ujjlenyomat (csak ha MOST is tiltott) | igen | igen |
-   | Helyreállítás rotáció után (`reconcileBanFingerprints`; K1b: csak élesben / `PLAYER_BAN_MAINTENANCE=on`) | a régi kulcsú sorok SZÁMA (zár nélkül, csak olvas); a tiltott fiókok listája, majd fiókonként `banned_at` ÚJRA a zár UTÁN | NEM töröl (K1b, Ú1); ujjlenyomat az aktuális kulccsal + az élő változatok kanonikus tiltása (csak ha MOST is tiltott; K1b, Ú2) | igen (fiókonként) | fiókonként külön, rövid tranzakció |
-   | Megőrzés-takarítás (`purgeExpiredBanFingerprints`; K1b: csak élesben / kapcsolóval, a rotáció-egyeztetéstől külön `try`) | lejárt ujjlenyomatok, majd ujjlenyomatonként ÚJRA: lejárt-e, van-e tiltott élő változat (az aktuális kulccsal — más kulcsú lejárt sornál nem ellenőrizhető: azt is törli, a saját kulcsú példány helyreállítja, ha élő tiltott fiókhoz tartozott) | lejárt, élő változat nélküli ujjlenyomat törlése (a régi kulcsú sorok is innen tűnnek el) | igen (ujjlenyomatonként) | ujjlenyomatonként külön |
-   | `getPlayer` / `requirePlayer`, törölt-tiltott lista | `banned_at` / ujjlenyomatok | — | nem kell (csak olvas, nem dönt írásról) | — |
+   | Tiltás (`setBanned(true)`) | az azonos kanonikus című élő fiókok | `banned_at = COALESCE(banned_at, now())` mindegyiken | kanonikus | igen |
+   | Feloldás élő fiókon (`setBanned(false)`) | a tiltott élő változatok; a cím (B) ujjlenyomata | változatok `banned_at = NULL`; a (B) sor és az azonos tiltásidejű más kulcsú sor törlése | kanonikus | igen |
+   | Feloldás törölt-tiltotton (`unbanDeleted`) | a sor; a hozzá tartozó (újra létrejött) élő fiók | a sor törlése; ha van élő fiók: mint a feloldás élőn | kanonikus (ha van élő fiók); élő fiók nélkül nincs — lásd lent | igen |
+   | Saját és admin-törlés (`deleteAccount`) | a fiók címe, `banned_at` (a zár UTÁN, `FOR UPDATE`) | (B) sor, ha tiltott (a tiltás ideje SQL-ben); kódok, munkamenetek, fiók | kanonikus (a sorzár ELŐTT) | igen |
+   | Létrehozás / belépés kód, link (`confirmVerifiedEmail`) | tiltott élő változat (A); a cím (B) ujjlenyomata | új fiók: `banned_at` (A) vagy (B) alapján; meglévő: csak (A) | kanonikus | igen |
+   | Google, új azonosító (`upsertGooglePlayer`) | ugyanaz | ugyanaz | kanonikus | igen |
+   | Google, ismert azonosító | a fiók `banned_at`-je | — | kanonikus (csak olvasás a friss állapotért) | igen |
+   | Eltérő kulcsú sorok számlálása (takarító) | `count(*) … key_id <> aktuális` | — (SEMMIT nem töröl) | nem kell (csak olvas) | — |
+   | Megőrzés-takarítás (takarító) | — | a 12 hónapnál régebbi (B) sorok törlése (bármely kulcs) | nem kell (élő tiltást nem érinthet) | egy utasítás |
+   | `getPlayer` / `requirePlayer`, törölt-tiltott lista | `banned_at` / (B) sorok | — | nem kell (csak olvas) | — |
 
-   **Páronkénti ellenőrzés:** az összes író és „olvas-dönt-ír” művelet ugyanazt a címenkénti zárat veszi, és a döntéshez
-   szükséges állapotot a zár UTÁN olvassa → bármely pár (pl. helyreállítás ↔ feloldás, takarítás ↔ tiltás, létrehozás ↔
-   törlés, Google ismert ↔ feloldás) sorosított. A 4. lelet előtt zár nélkül futott: a Google ismert ága, a helyreállítás és
-   a takarítás — ezek most a táblázat szerint. Teszt: minden művelet megvárja a tartott zárat (párhuzamos DB-teszt
-   műveletenként), és a szemantikus versenyek (helyreállítás ↔ feloldás, takarítás ↔ újratiltás, Google ismert ↔ feloldás).
+   **Páronkénti ellenőrzés:** minden író a kanonikus címzárat veszi, és a döntéshez szükséges állapotot a zár UTÁN olvassa →
+   tiltás ↔ létrehozás, feloldás ↔ létrehozás, törlés ↔ létrehozás, tiltás ↔ feloldás, feloldás-törölt ↔ létrehozás (élő fiókkal),
+   Google ismert ↔ feloldás sorosított — eltérő titkú példányok között is (a zár-kulcs titokfüggetlen). Írást nem végző lépés
+   (számlálás, `getPlayer`) zár nélkül is helyes. A megőrzés-takarítás ↔ létrehozás: a takarító csak LEJÁRT (B) sort töröl; ha a
+   létrehozás még látta, a fiók tiltottként jön létre (konzervatív), ha már nem, a tiltás a döntés szerint lejárt — mindkettő
+   megengedett. A feloldás-törölt élő fiók NÉLKÜL ↔ párhuzamos létrehozás: ha a létrehozás előbb olvasta a sort, az új fiók
+   tiltottként jön létre, és a rendes listán (élő tiltottként) látszik / oldható fel — elfogadott, ritka eset (nem marad
+   „sikert mutat, de tiltva marad” állapot rejtve: a fiók a rendes listán tiltottként jelenik meg).
+   **Megszűnt** (az ujjlenyomat-alapú élő tiltással együtt): a tiltáskori ujjlenyomat, a helyreállítás / rotáció-egyeztetés, az
+   önjavító belépési ágak és a kulcsfüggő ujjlenyomat-zár — ezzel a „helyreállítás ↔ feloldás”, a „két kulcs két zárja” és a
+   „feloldás után visszatérő tiltás” leletosztály.
+   **Teszt:** minden író megvárja a tartott kanonikus címzárat (párhuzamos DB-teszt műveletenként, az alias-létrehozással együtt),
+   eltérő titkú példány ugyanazt a zárat kapja, Google ismert ↔ feloldás, törlés ↔ létrehozás mindkét sorrendben + 25 ismétlés.
 **Tesztek:** DB — tiltott saját törlés → ugyanaz a cím (kis- / nagybetű, gmail-pont, `+alias`) újra tiltott; admin-törlés
 után ugyanez (Google-úton is); feloldás (élő fióknál és a törölt bejegyzésnél) után rendes fiók; nem tiltott törlés nem hagy
 ujjlenyomatot; idegen cím érintetlen; a lista nem ad ki címet; a mátrix és az `admin-route-guard` új sorai; migráció ↔ séma
@@ -2337,24 +2348,35 @@ egyezés, additív / idempotens migráció.
 átfedő régi példány) ne törölhesse a más kulcsú tiltás-ujjlenyomatokat; (Ú2) a rotáció után, az első egyeztetés előtt létrejött
 alias-fiók is tiltott legyen; (Ú3) pontos napló, egymástól független karbantartó lépések; (Ú4) az állapotgép-táblázat a kódhoz
 igazítva; üzemeltetési runbook. **Nem cél:** séma / migráció; a `PLAYER_ACCOUNTS` (KI marad); a kódrekord-takarítás szabálya.
-**Fájlok:** `S/player/account-store.ts`, `S/player/store.ts`, `S/player/sweeper.ts`, `S/index.ts` (a takarító bekötése), `docs/jatek-fiok-uzemeltetes.md` (új),
-ez a fejezet (K1 10. táblázat), tesztek: `T/player-account-db.integration.ts`, `T/player-codes.test.ts`.
+**Fájlok:** `S/player/account-store.ts`, `S/player/store.ts`, `S/player/codes.ts` (`playerBanKey`), `S/player/sweeper.ts`,
+`S/index.ts` (a takarító bekötése, tájékoztató napló), `docs/jatek-fiok-uzemeltetes.md` (új), `docs/specs/2026-11-16-jatekok-jatekelmeny.md`
+(10.4: a döntés), ez a fejezet (K1 10. táblázat), tesztek: `T/player-account-db.integration.ts`, `T/player-codes.test.ts`.
+**Átdolgozás (#475 review, 2026-11-16) — „A + B” terv.** Az első változat (az ujjlenyomat-alapú élő tiltás javítgatása) után
+ugyanabból a gyökérből újabb leletek jöttek (a #471-en 4, a #475-ön Codex + Sourcery 1–3): az ÉLŐ tiltás kulcsolt ujjlenyomaton
+múlt, így a kulcsváltás, a több kulcs együttélése, a helyreállítás és a feloldás versenyzett. Ezért a két eset szétválik:
+(A) ÉLŐ tiltott fiók — az egyetlen igazságforrás a `banned_at`; az alias-védelem a kanonikus cím közvetlen összevetése a tiltott
+élő fiókokkal (az alkalmazásban kanonizálva; mérve 10 000 fiók / 100 tiltott mellett: létrehozás ~10 ms, tiltás ~18 ms).
+(B) TÖRÖLT tiltott fiók — csak itt ujjlenyomat, a törléskor; a kulcs `PLAYER_BAN_KEY` (visszaesés a `SESSION_SECRET`-ből
+levezetettre + induláskori tájékoztató napló); semmi nem töröl kulcs alapján, a 12 hónapos takarító törli. A zár a kanonikus cím
+titok nélküli SHA-256-jára szól (kulcsfüggetlen). Séma nem változik.
 **Lépések:**
-1. Ú1: a `reconcileBanFingerprints` a más kulcsú sorokat SOHA nem törli — csak megszámolja (a napló „régi kulcsú, megőrizve”);
-   az élő tiltott fiókokhoz az aktuális kulccsal ÚJ sor kerül a régi mellé. A más kulcsú sorokat a megőrzés-takarító távolítja
-   el 12 hónap után (élő változat nem ellenőrizhető más kulccsal; ha a sor élő tiltott fiókhoz tartozott, a saját kulcsú példány
-   a következő egyeztetéskor helyreállítja). A tiltás-karbantartás (egyeztetés + megőrzés-takarítás) CSAK `NODE_ENV=production`
-   mellett vagy `PLAYER_BAN_MAINTENANCE=on` kapcsolóval fut — helyi indítás nem nyúl hozzá. A kódrekord-takarítás (lejárt →
-   cím törölve, 24 óra után a sor) marad: ugyanaz a szabály, mint élesben, a szabályon túl nem töröl.
-2. Ú2: az egyeztetés a helyreállításkor kanonikusan tilt (az élő változatokat is, a zár alatt, a `banned_at` újraolvasásával;
-   a tiltás idejét nem frissíti). Választás indoka: az indulást nem nyújtja (nincs „várj az első egyeztetésre” kapu).
-3. Ú3: napló: „N régi kulcsú ujjlenyomat megőrizve (ebből élő fiókhoz helyreállítva M)”; az egyeztetés és a megőrzés-takarítás
-   külön `try` — az egyik hibája nem akasztja meg a másikat.
-4. Ú4: a K1 10. táblázat Helyreállítás és Megőrzés sora a kódhoz igazítva.
-5. Runbook (`docs/jatek-fiok-uzemeltetes.md`): a bekapcsolás után figyelendő naplósorok és a csak olvasó ellenőrző lekérdezés.
-**Tesztek:** két különböző kulccsal egymás után futtatott egyeztetés után MINDKÉT kulcs ujjlenyomatai megvannak; rotáció után
-az egyeztetés előtt létrehozott alias az egyeztetés után tiltott; a karbantartás fejlesztői módban kapcsoló nélkül nem fut; a
-takarító egyik lépésének hibája a másikat nem akasztja meg; a meglévő tesztek változatlanul zöldek.
+1. Ú1: kulcs alapján SEMMI nem törlődik — a takarító csak megszámolja a más kulcsú (B) sorokat és naplózza; a 12 hónapos
+   megőrzés-takarító távolítja el őket. A tiltás-karbantartás (számlálás + megőrzés) CSAK `NODE_ENV=production` vagy
+   `PLAYER_BAN_MAINTENANCE=on` mellett fut — helyi indítás nem nyúl hozzá. A kódrekord-takarítás (lejárt → cím törölve, 24 óra után
+   a sor) marad: ugyanaz a szabály, mint élesben, a szabályon túl nem töröl (felmérve: `sweeper.ts` + `store.purgeOldCodes`).
+2. Ú2: az alias az élő tiltott fiók mellett a LÉTREHOZÁSKOR azonnal tiltott (A) — nincs egyeztetés, nincs indulási ablak.
+3. Ú3: a takarító három lépése (kódok, számlálás, megőrzés) külön `try`; a napló „régi kulcsú … megőrizve”.
+4. Ú4: a K1 10. táblázat újraírva az új tervre.
+5. Runbook (`docs/jatek-fiok-uzemeltetes.md`): figyelendő naplósorok, csak olvasó ellenőrző lekérdezés, `PLAYER_BAN_KEY`.
+**Tesztek:** a meglévő alias-, verseny-, törlés- és megőrzési tesztek elvárásai maradnak; ahol a helyreállítás / tiltáskori
+ujjlenyomat elvárása értelmét vesztette, `// SPEC-VÁLTOZÁS` megjegyzéssel arra írva át, amit az új terv garantál (rotáció után az
+élő tiltott fiók aliasa kulcs nélkül is tiltott; élő tiltás nem ír ujjlenyomatot; a takarító az élő tiltást nem érintheti). Új:
+két kulccsal futó példány után mindkét kulcs (B) sorai megvannak; B kulccsal feloldott, A kulccsal törölt-tiltott-újra-létrejött
+fiókot a megőrzött A sor nem tiltja újra; eltérő titkú példány ugyanazt a zárat kapja; minden író megvárja a kanonikus zárat;
+teljesítmény 10 000 fiókkal; `banMaintenanceEnabled`; a takarító lépései függetlenek.
+**Parancsok és várt kimenet:** `node --import tsx --test tests/player-codes.test.ts` → `fail 0`;
+`npm run test:learning-db` → `fail 0` (a „K1b” esetek is); `npm run lint`, `npm run check`, `npm run check:test` → kilépési kód 0;
+`node scripts/qa/three-phase-check.mjs --base origin/main` → `OK`.
 **Elfogadás:** a fenti tesztek zöldek; nincs séma-változás; a CI zöld.
 
 ---

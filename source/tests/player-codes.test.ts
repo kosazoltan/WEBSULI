@@ -145,12 +145,12 @@ describe("JM7a — review #445 (A3): ütemezett kódrekord-takarítás", () => {
     const timers = { setInterval: () => ({ unref: () => {} }) };
     const seen: string[] = [];
     const run = startPlayerCodeSweeper(async () => { seen.push("codes"); throw new Error("kód le"); }, timers, {
-      reconcile: async () => { seen.push("reconcile"); throw new Error("egyeztetés le"); },
+      countForeign: async () => { seen.push("count"); throw new Error("számlálás le"); },
       purgeExpired: async () => { seen.push("purge"); return 0; },
     });
-    await run;
+    void run; // az indulási futást a sweeper maga indítja; itt csak a befejezését várjuk meg (nem hívjuk újra)
     await new Promise((r) => setTimeout(r, 0));
-    assert.deepEqual(seen.slice(0, 3), ["codes", "reconcile", "purge"], "mindhárom lépés lefutott a hibák ellenére");
+    assert.deepEqual(seen, ["codes", "count", "purge"], "pontosan egy futás, mindhárom lépés a hibák ellenére");
     const none: string[] = [];
     startPlayerCodeSweeper(async () => { none.push("codes"); return [0, 0]; }, timers, null);
     await new Promise((r) => setTimeout(r, 0));
