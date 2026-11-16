@@ -1310,6 +1310,24 @@ függvényeket (feladatgenerátor, időzítés) nézők változatlanok.
 6. `ResultReview`, csillag, hang (`sfxCombo`, `sfxBossHit`, `sfxBossDefeat`), rezgés.
 7. Tesztek: core (lánc, bomba, boss-fázisok), sim (J2/J3 a bossokkal is), spec (boss képernyőkép, J11 fps).
 
+#### Megvalósult eltérések (J4b, mérés alapján)
+
+- **A rossz válasz / lejárat nem visz pajzsot** (a terv 5.4 „rossz drón = pajzs −1” helyett): a kombó és vele a lövés ereje
+  vész el (≤ 2 s látható következmény). A 20 seedes mérés szerint −1 pajzzsal a gyengébb és a lassú számoló rosszabbul járt a
+  kérdésekkel, mint nélkülük; most minden játékosmodellnél kérdéssel ≤ annyi a vereség (`T/speed-math-sim.test.ts` „J4b —
+  a kérdés egyik játékosmodellnél sem büntet”). A pajzs az ügyességi játék (fosztogatók, kísérők) tétje.
+- **Zéró-robot ritmusa:** 6 szegmens (a felénél 2. fázis), két főellenfél-kérdés között 3,2 mp; jó válasz = szegmens + kábulat,
+  rossz = előjelzett (≥ 600 ms) ellencsapás, amelyet a töltő mag megérintése kivéd; a főellenfél lövése az utolsó pajzsot nem
+  viszi el (a vereség a kísérőktől jöhet); nyitott kérdés alatt nem támad. A „3 láncolt feladat” a Számlánc: minden
+  főellenfél-feladat első operandusa az előző eredménye (`createTowerTasks`).
+- **Hibagyár:** két fogaskerék (két gyenge-pont kérdés egymás után, a kérdés-rés a ritmus szerint), közben gyárt; nincs két
+  egyidejű kérdés (a director egyszerre egyet kezel).
+- **Kérdés nélkül is legyőzhető** (K.6): a mag-találatok repesztik a páncélt (Zéró-robot: 2 megszakított töltés = 1 szegmens;
+  Hibagyár: 5 mag-találat = 1 fogaskerék).
+- **Becslő-bomba:** a director `request("trigger")` a forrás kétopciós tételével (a `buildOptions` két célt ad); közös,
+  additív `PlayQuestion.noReview` — nem kerül az ismétlési sorba, és a `runStats` visszatérési / változatossági mérése sem
+  számolja.
+
 ### Elfogadás (J4)
 
 - [ ] J-SQ teljesül; `grep -nE "Tanári bank|<QuizFeedbackCard[^>]*onRetry=|retryTask" P/SpeedQuizMath.tsx` → 0 találat (a
