@@ -295,6 +295,38 @@ export const PLAYER_HALF_W = 0.3;
 export const PLAYER_HEIGHT = 1.8;
 /** Szem-magasság a láb fölött (Minecraft: 1.62). */
 export const PLAYER_EYE = 1.62;
+
+/** A kamera (YXZ Euler) nézési iránya yaw/pitch szögből — ugyanaz, amit a játék a célkereszt-sugárhoz használ. */
+export function lookDirection(yaw: number, pitch: number): { x: number; y: number; z: number } {
+  return { x: -Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: -Math.cos(yaw) * Math.cos(pitch) };
+}
+
+/**
+ * E24 (éles próba): a pálya kezdetén a célkereszt alatt nem volt elérhető blokk (a játékos a horizontra nézett), a
+ * „Bányász” gomb és a koppintás semmit sem csinált, így nem jött kvíz. A kezdő nézést úgy választjuk, hogy a
+ * célkereszt egy bányászható blokkra mutasson `maxDist` távolságon belül: az alap nézéssel kezdünk, majd egyre
+ * lejjebb billentünk és körbeforgunk. Ha sehol nincs találat, az alap nézés marad.
+ */
+export function pickStartLook(
+  w: VoxelWorld,
+  spawn: { x: number; y: number; z: number },
+  baseYaw: number,
+  basePitch: number,
+  maxDist = 3.2,
+): { yaw: number; pitch: number } {
+  const ex = spawn.x, ey = spawn.y + PLAYER_EYE, ez = spawn.z;
+  const pitches = [basePitch, -0.35, -0.55, -0.75, -0.95, -1.15];
+  const yawSteps = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8];
+  for (const pitch of pitches) {
+    for (const k of yawSteps) {
+      const yaw = baseYaw + (k * Math.PI) / 8;
+      const d = lookDirection(yaw, pitch);
+      const hit = raycastVoxel(w, ex, ey, ez, d.x, d.y, d.z, maxDist);
+      if (hit && vMineable(hit.t)) return { yaw, pitch };
+    }
+  }
+  return { yaw: baseYaw, pitch: basePitch };
+}
 export const MOVE_SPEED_BPS = 4.3;
 export const JUMP_VELOCITY = 8.2;
 export const GRAVITY_BPS2 = 24;

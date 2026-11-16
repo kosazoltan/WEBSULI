@@ -35,7 +35,7 @@ import {
   type VoxelWorld, type VoxelGenConfig, type PlayerState, type VoxelHit,
   generateVoxelWorld, findVoxelSpawn, stepPlayerPhysics, raycastVoxel,
   vGet, vSet, vIdx, vMineable, collidesAt, isExposed,
-  PLAYER_EYE, MOVE_SPEED_BPS, JUMP_VELOCITY,
+  PLAYER_EYE, MOVE_SPEED_BPS, JUMP_VELOCITY, pickStartLook,
 } from "@/lib/voxelcraft";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
@@ -1193,6 +1193,8 @@ export default function BlockCraftQuiz() {
   const [totalXp, setTotalXp] = useState(0);
   const [runSeconds, setRunSeconds] = useState(0);
   const [blocksMined, setBlocksMined] = useState(0);
+  /** E24: a „Bányász” gomb / koppintás célpont nélkül magyar segítő üzenetet ad (nem néma). */
+  const [mineHint, setMineHint] = useState(false);
   const [rareBlocks, setRareBlocks] = useState(0);
   // Achievement-toast queue: az "over" phase-be lépéskor töltődik fel.
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
@@ -1606,10 +1608,12 @@ export default function BlockCraftQuiz() {
     worldRef.current = generateVoxelWorld(genCfgFor(cfg));
     worldVersionRef.current++;
     const spawn = findVoxelSpawn(worldRef.current);
+    // E24: a kezdő nézés egy elérhető, bányászható blokkra mutat — a gyerek az első koppintásra kvízt kap.
+    const startLook = pickStartLook(worldRef.current, spawn, Math.PI * 0.25, -0.15);
     playerRef.current = {
       x: spawn.x, y: spawn.y, z: spawn.z,
       vx: 0, vy: 0, vz: 0,
-      yaw: Math.PI * 0.25, pitch: -0.15, onGround: false,
+      yaw: startLook.yaw, pitch: startLook.pitch, onGround: false,
     };
     pendingBurstRef.current = null;
     lookHitRef.current = null;
@@ -2654,9 +2658,22 @@ export default function BlockCraftQuiz() {
   /** Crosshair-célzott blokk bányászása (E / bal klikk / Bányász gomb / tap). */
   const tryMineLook = useCallback(() => {
     const hit = lookHitRef.current;
-    if (!hit || !vMineable(hit.t)) return;
+    if (!hit || !vMineable(hit.t)) {
+      // E24: nem néma — a gyerek megtudja, mit tegyen (menjen közelebb / nézzen egy blokkra).
+      if (!pausedRef.current && phaseRef.current === "play") {
+        haptics("error");
+        setMineHint(true);
+      }
+      return;
+    }
     tryMineAt(hit.x, hit.y, hit.z);
-  }, [tryMineAt]);
+  }, [tryMineAt, haptics]);
+
+  useEffect(() => {
+    if (!mineHint) return;
+    const id = window.setTimeout(() => setMineHint(false), 3200);
+    return () => window.clearTimeout(id);
+  }, [mineHint]);
 
   /** Blokk-lerakás a célzott blokk megcélzott lapjára (F / jobb klikk / Lerak gomb). */
   const tryPlaceLook = useCallback(() => {
@@ -2971,6 +2988,15 @@ export default function BlockCraftQuiz() {
                       </span>
                     )}
                   </span>
+                  {mineHint && phase === "play" && !paused && (
+                    <span
+                      role="status"
+                      data-testid="bc-mine-hint"
+                      className="rounded-full border border-amber-300/60 bg-slate-950/85 px-3 py-1 text-xs font-bold text-amber-100 backdrop-blur-sm"
+                    >
+                      Nincs blokk a célkereszt alatt — menj közelebb, és nézz egy blokkra!
+                    </span>
+                  )}
                   {showHint && phase === "play" && (
                     <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-sm">
                       {touchCapable ? "Bal: mozgás · jobb: nézelődés · koppintás: bányászás" : "Kattints a vászonra · bal klikk: bányász · jobb: lerak"}
