@@ -144,6 +144,32 @@ export function retireJoystickDrag(prev: JoystickDrag | null, next: JoystickDrag
 }
 
 /**
+ * Joystick-reakció (kanban #49) — folytonos válaszgörbe.
+ *
+ * Mért gyökérok: a játékok a holtsáv UTÁN még egy saját küszöböt raktak a tárcsára (`joystickToDirections` 0,35;
+ * a Tornado kormánya 0,2 + négyzetes görbe), így az ujjnak a sugár ~32–45%-áig kellett mennie, mire bármi
+ * történt, utána pedig egyszerre teljes sebesség jött. A görbe ehelyett a holtsáv szélétől folytonos:
+ * `(1 − expo)·t + expo·t³` — kis kitérésnél finom (expo 0,4 mellett 10% → 6%), teljes kitérésnél pontosan 1,
+ * szigorúan monoton, ugrás nélkül. Második holtsávot a hívó NE tegyen rá.
+ */
+export const JOYSTICK_EXPO = 0.4;
+
+export function joystickCurve(t: number, expo = JOYSTICK_EXPO): number {
+  if (!(t > 0)) return 0;
+  const u = Math.min(1, t);
+  const e = Math.max(0, Math.min(1, expo));
+  return (1 - e) * u + e * u * u * u;
+}
+
+/** Analóg tárcsa-érték a görbével: az irány marad, a nagyság `joystickCurve(magnitude)`. */
+export function shapeJoystick(v: JoystickVector, expo = JOYSTICK_EXPO): JoystickVector {
+  if (!(v.magnitude > 0)) return ZERO;
+  const m = joystickCurve(v.magnitude, expo);
+  const k = m / v.magnitude;
+  return { x: v.x * k, y: v.y * k, magnitude: m };
+}
+
+/**
  * Négyirányú lebontás a joystickból.
  *
  * A meglévő játékok logikája négy logikai gombot vár (`fwd/back/left/right`),

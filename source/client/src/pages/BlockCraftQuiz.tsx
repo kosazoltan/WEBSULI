@@ -8,8 +8,9 @@ import { applyRendererLook, createGradientSky, detectLookTier, disposeObjectTree
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Pause, Blocks } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import HoldButton from "@/game-engine/HoldButton";
-import { joystickToDirections } from "@/game-engine/joystick";
+import { shapeJoystick } from "@/game-engine/joystick";
 import { motion, AnimatePresence } from "framer-motion";
 import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -1147,6 +1148,21 @@ export default function BlockCraftQuiz() {
   });
   // First-person irányítás (Minecraft-séma): W/A/S/D + Space.
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, jump: false });
+  /** Joystick-reakció (#49): az analóg tárcsa-érték (x jobbra, y előre; −1…1, a görbével). */
+  const stickRef = useRef({ x: 0, y: 0 });
+  // Joystick-reakció (#49): a bemenet → válasz mérő kampója (csak teszt-kampós buildben él). A sebesség a nézés
+  // irányához mért oldal- (strafe) és előre-komponensre bontva.
+  countRender("blockcraft-page");
+  useEffect(
+    () =>
+      registerInputProbe("blockcraft", () => {
+        const p = playerRef.current;
+        const s = Math.sin(p.yaw);
+        const c = Math.cos(p.yaw);
+        return { x: p.x, z: p.z, yaw: p.yaw, strafe: p.vx * c - p.vz * s, fwd: -(p.vx * s + p.vz * c), inX: stickRef.current.x };
+      }),
+    [],
+  );
   const lastTRef = useRef<number | null>(null);
   const rafRef = useRef(0);
   // G1 JAVÍTÁS: a render-loop futásának egyetlen forrása. A step() a rekurzív
@@ -1238,7 +1254,7 @@ export default function BlockCraftQuiz() {
           timeBudget: adaptiveTimeBudget(LEVELS[0]!.timeLimit, band),
           // S11 kétujjas mérés: a nézés iránya és az előre-mozgás jelzője (1 / 0 — a probe típusa szám / szöveg).
           yaw: playerRef.current.yaw,
-          moveFwd: keysRef.current.fwd ? 1 : 0,
+          moveFwd: keysRef.current.fwd || stickRef.current.y > 0 ? 1 : 0,
           phase: phaseRef.current,
           paused: pausedRef.current ? 1 : 0,
         };
@@ -1566,6 +1582,8 @@ export default function BlockCraftQuiz() {
     k.left = false;
     k.right = false;
     k.jump = false;
+    stickRef.current.x = 0;
+    stickRef.current.y = 0;
     touchLookRef.current = null;
     setJoyReset((n) => n + 1);
   }, []);
@@ -2237,8 +2255,12 @@ export default function BlockCraftQuiz() {
         if (k.back) { mx += sinY; mz += cosY; }
         if (k.left) { mx -= cosY; mz += sinY; }
         if (k.right) { mx += cosY; mz -= sinY; }
+        // Joystick-reakció (#49): a tárcsa analóg — a nagysága a sebesség (finom lépés kis kitérésnél).
+        const st = stickRef.current;
+        mx += st.x * cosY - st.y * sinY;
+        mz += -st.x * sinY - st.y * cosY;
         const ml = Math.hypot(mx, mz);
-        if (ml > 0) {
+        if (ml > 1) {
           mx /= ml;
           mz /= ml;
         }
@@ -3028,11 +3050,10 @@ export default function BlockCraftQuiz() {
                   className="bc-joystick"
                   onChange={(v) => {
                     if (pausedRef.current || phaseRef.current !== "play") return;
-                    const dirs = joystickToDirections(v);
-                    keysRef.current.left = dirs.left;
-                    keysRef.current.right = dirs.right;
-                    keysRef.current.fwd = dirs.fwd;
-                    keysRef.current.back = dirs.back;
+                    // Joystick-reakció (#49): analóg, folytonos görbe — nem négy logikai gomb 0,35-ös küszöbbel.
+                    const s = shapeJoystick(v);
+                    stickRef.current.x = s.x;
+                    stickRef.current.y = s.y;
                   }}
                 />
                 {/* Akciógombok ívben a jobb alsó sarokban: Ugrás a legnagyobb, mellette Bányász, fölötte Lerak. */}

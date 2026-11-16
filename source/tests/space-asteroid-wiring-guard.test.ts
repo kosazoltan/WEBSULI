@@ -38,13 +38,12 @@ test("a lefelé irány a vezérlésben is megvan", () => {
   // váltotta, mert az átlós irány két gomb egyidejű nyomását követelte, ami egy
   // hüvelykujjal nem megy. A `startHold(..., "down")` helyett most a joystick
   // vektorát képezzük irányokra.
-  assert.match(code, /touchRef[\s\S]{0,200}down/);
-  assert.match(
-    code,
-    /touchRef\.current\.down\s*=/,
-    "a lefelé irányt semmi nem állítja — a hajó nem tud hátrálni",
-  );
-  assert.match(code, /joystickToDirections\s*\(/, "a joystick nincs bekötve");
+  // SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md „Joystick-reakció”, kanban #49):
+  // a tárcsa analóg (`shapeJoystick`), nem négy logikai irány — a lefelé irány a tárcsa negatív `y`-ja, amely a hurok
+  // `my` értékébe kerül. A szándék változatlan: a lefelé irányt a vezérlés továbbítja.
+  assert.match(code, /stickRef\.current\.y\s*=\s*s\.y/, "a tárcsa függőleges (le/fel) értékét semmi nem állítja — a hajó nem tud hátrálni");
+  assert.match(code, /let mx = stickRef\.current\.x, my = stickRef\.current\.y;/, "a hurok nem olvassa a tárcsa függőleges értékét");
+  assert.match(code, /shapeJoystick\s*\(/, "a joystick nincs bekötve");
 });
 
 test("a komment-szűrő önellenőrzése: kikommentezett hívás nem számít", () => {
