@@ -21,8 +21,15 @@ export const requirePlayerAccountsFlag: RequestHandler = (_req, res, next) => {
  * Bejelentkezett, nem tiltott játékos kell (`req.session.player`). Admin-munkamenet (req.user) itt NEM számít játékosnak,
  * és a játékos-munkamenet sem ad semmilyen más jogot. Nincs munkamenet → 401; tiltott → 403.
  */
+/** JM7b: a `requirePlayer` példányok jelölője — a regressziós őr (admin-route-guard) a router-veremben erről ismeri fel. */
+export const PLAYER_GUARD = Symbol.for("websuli.requirePlayer");
+
+export function isPlayerGuard(fn: unknown): boolean {
+  return typeof fn === "function" && (fn as unknown as Record<symbol, unknown>)[PLAYER_GUARD] === true;
+}
+
 export function createRequirePlayer(store: Pick<PlayerStore, "getPlayer">): RequestHandler {
-  return (req, res, next) => {
+  const guard: RequestHandler = (req, res, next) => {
     const id = getPlayerSessionId(req);
     if (!id) return res.status(401).json({ message: "Unauthorized" });
     store.getPlayer(id).then((player: PlayerRow | null) => {
@@ -32,4 +39,6 @@ export function createRequirePlayer(store: Pick<PlayerStore, "getPlayer">): Requ
       next();
     }, next);
   };
+  Object.defineProperty(guard, PLAYER_GUARD, { value: true });
+  return guard;
 }

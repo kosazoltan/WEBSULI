@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
-import { extraEmailAddresses, learnerActivity, learners, type Learner } from "../shared/schema";
+import { extraEmailAddresses, learnerActivity, learners, playerAccounts, type Learner } from "../shared/schema";
 import { firstNameOf } from "../shared/daily-reminder";
 import { learningStreak, type LearningStreak } from "../shared/learner-streak";
 import { learnerLinkSecret, parseLearnerToken, signLearnerToken } from "./lib/learner-token";
@@ -117,5 +117,10 @@ export async function recordLearnerActivity(entry: { learnerId: string; material
 
 /** Minden eszköz párosításának visszavonása (S4 admin). */
 export async function rotateLearnerToken(id: string): Promise<void> {
-  await db.update(learners).set({ tokenVersion: sql`${learners.tokenVersion} + 1`, updatedAt: new Date() }).where(eq(learners.id, id));
+  await db.transaction(async (tx) => {
+    await tx.update(learners).set({ tokenVersion: sql`${learners.tokenVersion} + 1`, updatedAt: new Date() }).where(eq(learners.id, id));
+    // JM7b (review #449 K2): az újrapárosítás a régi tokennel létrehozott játékos-fiók-kapcsolatot is bontja — az új, érvényes
+    // tokennel érkező (jogos) tulajdonos köthet újra.
+    await tx.update(playerAccounts).set({ linkedLearnerId: null }).where(eq(playerAccounts.linkedLearnerId, id));
+  });
 }

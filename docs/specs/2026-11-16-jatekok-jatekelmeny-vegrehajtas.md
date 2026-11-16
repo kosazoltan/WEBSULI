@@ -283,6 +283,69 @@ sora az adott játék „a” al-szeletének kötelező része.
 | Aszteroida (J6a) | 17 | `P/SpaceAsteroidQuiz.tsx:1340` | változó `dt` (`:1503`) | közepes |
 | Tornado (J7a) | 4 (+ `L/tornado/questions.ts` 3, `wind.ts` 1) | `P/TornadoHunter200.tsx:1438` | futás-seed `Math.random`-mal (`:1924`); változó `dt` (`:1547`) | közepes |
 
+### K.7 Cloze rövid játék-alak (hibajavítás)
+
+**Állapot:** folyamatban — ág fix/jatek-cloze-rovid-alak, munkafa .claude/worktrees/jatek-cloze, kanban #50
+
+- **Tünet:** a szóbank hiányos mondatos kérdése a játékban „Melyik illik a mondatba? <mondat _____-val> (Magyarul:
+  <teljes fordítás>)”. (1) Hosszú: a `fitsAllViewports(...).ok` (a szint évfolyamán: 0→3., 1→5., 2→7., 3→9., 4→11.)
+  a 6614 cloze-tételből csak 38,3% (a 0. szinten 0%, az 1.-en 4–14%); a `promptFits` szűrő hátrasorolja, így a cloze
+  eltűnne a játékokból. (2) Elárulja a választ: a fordításban a helyes opció `hu`-ja szó szerint 71,4%-ban, tő-egyezéssel
+  85,2%-ban benne van (nyelvenként 83–87%).
+- **Mérés (teljes bank, scratchpad `cloze/`):** a prompt részei (medián szó): előtag 4 / mondat 5–7 / fordítás 5–7. A
+  fordítás nélküli mondat 98,9%-ban `ok`. A fordítás NÉLKÜL, a mostani (azonos szófajú, bármely témájú) elterelőkkel
+  150 tételes kézi mintán (nyelvenként 50) 36 tételnél (24%) több opció is védhető; a hibák zöme rövid keret
+  („_____ ist warm.”, „Je lis _____.”) vagy azonos / rokon témájú elterelő (szín, szám, ruha, időjárás). A fordítás
+  kitakart szóval sem segítene: a „_____ ist warm” → „A _____ meleg” ugyanúgy kétértelmű, és a hossz a 0. szinten
+  27–46%-ra vinné az `ok` arányt.
+- **Terv (additív `clozeStyle: "full" | "game"`; a „full” a mostani viselkedés és az alapértelmezés):** a játék-alak
+  (a) csak a mondat a hiányjellel — előtag és fordítás nélkül; (b) csak ha a hiányon kívül ≥ 4 szó van a mondatban
+  (különben a bejegyzés más kérdéstípust kap); (c) elterelő: azonos kind és szófaj (a névelő / szófaj ne árulja el), de
+  sem azonos, sem rokon téma (szómező-párok), és a hiány előtti „a / an”, francia elízió („d’”, „l’”) vagy teljes alak
+  („de”, „le”, „je” …) hangtani kényszerének megfelel; a `meaningsOverlap` és a fordítás-alapú kizárás megmarad; ha
+  nincs 3 ilyen elterelő, a forrás az alaptípusra esik vissza; (d) a teljes mondat + fordítás a magyarázatban marad
+  („Miért?”, megoldás-kijelzés). A játékok a `useVocabQuizSource`-on át kapják. Mellékes lelet: a `vocabPlayQuestion`
+  `speakText`-je mindig a helyes term, a felolvasás (alap BE) így a magyar→cél és a cloze kérdésnél a kérdés
+  megjelenésekor kimondja a választ — a generátor additív `VocabQuiz.speakText` mezőt ad (nem áruló szöveg), a
+  bekötés közös fájlt és meglévő tesztet érint: ORKESZTRÁTOR-KÉRÉS.
+- **Finomítás a vak ellenőrzés után (3 × 200 tétel, független megoldó, kulcs nélkül):** (e) szűk létigés keret
+  („_____ ist alt und groß.”, „Our teacher is always _____.”: pontosan 4 szó, benne létige) csak 5 szóval — e keretekben
+  17% volt a több védhető opció, a többiben 6%; (f) visszaható ige mellé visszaható, nem visszaható mellé nem
+  visszaható elterelő; (g) kifejezésnél azonos mondattani alak (mondat / igei / határozói / névszói, zárt szólisták +
+  végződés) — a határozós egyetlen opció felszíni jelből kitalálható volt; (h) német / francia főnévnél azonos névelő
+  (nem, szám; névelő nélküli mellé névelő nélküli). Eredmény (végső szabály, teljes bank): a cloze-képes bejegyzések
+  57,6%-a kap játék-alakú cloze-t (EN 71,7 / DE 45,9 / FR 51,6%; a többi más kérdéstípust), ezek 98,3%-a `ok`
+  (szintenként 84,1–100%); a vak megoldó 200/200 egyezés, 7% több védhető, 2% triviális.
+- **Második kör — review #455 (Codex, „I go to school _____.” + „by bus” / „every morning”):** a fenti (e)–(h) szabályok
+  után is maradt 7% több védhető opció, és a hibás „rossz” jelzés tanulási kárt okoz, ezért az egyértelműség
+  ELSŐBBSÉGET kap a mennyiséggel szemben. Az új, ezt felváltó EGYÉRTELMŰSÉGI SZABÁLY: játék-alakú cloze csak akkor
+  készül, ha mindhárom elterelő a hiány helyére NYELVTANILAG nem illik — (1) csak angol, egyszavas, kisbetűs bejegyzés
+  (kifejezésből soha: a határozós / igei kifejezés szabad bővítmény, a mondat nélküle is teljes; a hiányos magyar
+  fordítás itt nem segít, mert a „_____ járok iskolába.” a „minden reggel”-t sem zárja ki); (2) az elterelő más,
+  a célszófaj helyén nem álló szófajú (főnév → melléknév, melléknév → ige, ige → melléknév, határozószó → ige);
+  (3) kettős szófajú szó nem elterelő (a bankban a célszófajjal is szerepel; `DUAL_USE` lista; szín; felsőfok);
+  (4) a keret nem enged átjárást (jelzői melléknév / főnév, „make / keep / get / be” után ige, segédige / „to” / „go”
+  után határozószó); (5) „a / an” hangtani kényszer. Német / francia játék-alakú cloze NINCS: a rétegzett vak mintán a
+  más szófajú elterelős német / francia tételek 97%-a a végződésből (-en / -er) megoldható volt, az azonos szófajú
+  pedig a keretbe illhet. Érintett bejegyzések (a teljes bank, nyelv × szint, scratchpad `cloze/kizarasi-okok.md`):
+  kifejezés EN 861 / DE 737 / FR 704; szófaj (DE / FR: minden) EN 41 / DE 1306 / FR 1294; keret-őr EN 461; rövid EN 11;
+  nagybetűs EN 5. Marad: EN 1194 (a cloze-képes angol bejegyzések 46,4%-a; szintenként 39,8–49,4%), DE 0, FR 0; a
+  játék-alakú cloze-ok 100%-a `ok`. A játékban a szóbank-kérdések közt a cloze aránya (3000 `next()`, mért) angolul 29,9% → 14,5%,
+  németül 30,9% → 0, franciául 31,8% → 0. A felolvasás: megjelenéskor `speakText` (cloze: a mondat „…”-tal), a helyes szó a
+  kimenetel után (`speakAfter`) — ugyanaz a felosztás, mint a Szólétra `speechPlan`-je (#454). Vak megoldó körök
+  (200 tétel, rétegzett, a fele határeset; „több helyes” jelölés): S1 2 (1,0%, „violet” főnévként) → színek ki, DE / FR
+  ki; S2 0; S3 2 (1,0%, „my eldest”, „the damp”) → felsőfok, főnevesülő melléknév ki; S4 4 (2,0%, „a cross”) → a bank
+  melléknevei közül a főnévként / igeként is élők ki; S5 0; S6 (végső szabály) 0. Egyezés minden körben 100%.
+- **Érintett fájlok:** `GE/vocab/questionGenerator.ts`, `GE/vocab/vocabSource.ts`, `GE/vocab/useVocabQuizSource.ts`,
+  új `T/vocab-cloze-game.test.ts`, új `T/play-lab-cloze-game.spec.ts`, `P/PlayLab.tsx` (egy additív `?q=cloze-game`
+  próbatétel). A hét játéklap, a `GE/play/*` és a meglévő tesztek nem változnak.
+- **Elfogadás:** a teljes bankon minden alkalmas bejegyzés × MINDEN lehetséges elterelő-jelölt a szabálynak megfelel
+  (független szófaj-tábla, kettős szófaj, szín, felsőfok, hangtan); minden generált játék-alakú cloze: pontosan egy
+  helyes opció, nincs fordítás, a prompt és a felolvasás nem tartalmazza a választ; DE / FR: nincs játék-alak;
+  `en0-city-024` regresszió; `fitsAllViewports(...).ok` szintenként ≥ 95% (mért 100%); a „full” alak és a meglévő
+  vocab-tesztek változatlanul zöldek; a rétegzett vak mintán a „több helyes” jelzés < 1% (S6: 0/200); böngészős próba
+  a play-labban 360×640, 390×844, 844×390.
+
 ---
 
 ## J0a — Determinizmus és játékérzet: seedelt RNG, fix lépés, rázás / hitstop, mini-Director, őrök
@@ -1903,7 +1966,7 @@ A Drizzle-séma és a migráció egyezése: a meglévő migrációs ellenőrzés
 
 ### JM7b — Játékos Google-út, becenév + avatar, tanulói profil összekapcsolása, fiókoldal, adatletöltés / törlés, admin-tiltás
 
-**Állapot:** nem kezdődött · **Függ:** JM7a · **Modell:** Opus · **Elfogadás:** JM-A11, JM-A12 (Google-ág), JM-A15
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-jm7b-fiok, munkafa .claude/worktrees/jatek-jm7b, kanban #43 · **Függ:** JM7a · **Modell:** Opus · **Elfogadás:** JM-A11, JM-A12 (Google-ág), JM-A15
 **Fájlok:** `S/player/google.ts`, `S/auth.ts` (csak a callback elágazás — lásd lent), `S/player/account-routes.ts`,
 `S/routes.ts` (admin „Játékosok” végpontok az `adminRouter` alatt → az `isAuthenticatedAdmin` automatikusan véd),
 `source/shared/nicknames.ts` (szűrő), kliens: `P/PlayerAccount.tsx` (a `/profile` utódja; a régi `Profile.tsx` helyi adatai
@@ -1923,6 +1986,14 @@ gyártott SVG-ből (a design-asset bank mintájára; fotófeltöltés nincs); `P
 `websuli.learnerToken`-t fejlécben küldi, a szerver `resolveLearner`-rel ellenőrzi, `S/learners.ts:83`); `GET
 /api/player/export` (JSON: fiók + pontkönyv, e-mail csak a saját exportban); `DELETE /api/player/account` (kaszkád;
 megerősítő párbeszéd a kliensen); tiltás: admin „Játékosok” fül → `banned_at`.
+**Rögzítve a független biztonsági review (#449) után:** (1) közös callback URL marad (Google-konzolban nincs teendő), de a
+folyamat fajtáját a `state` dönti el (`p.` előtag + a munkamenetben state-enként tárolt PKCE-rekord; egyetlen, felülírható
+munkamenet-jelző nincs) — egy párhuzamos játékos-folyamat az admin-belépést nem hiúsítja meg; (2) a becenév ENGEDÉLYLISTÁS
+(ASCII betű / számjegy, magyar ékezetes betűk, szóköz, `_`, `-`), a JM1 `nicknameProblems` erre delegál; (3) a tanulói
+összekapcsolás friss belépést és a fiók becenevét megnevező megerősítést kér, a tokenrotáció bontja, admin is bonthatja;
+**a játékos-felületre tanulói adat (név, évfolyam, eredmény) ebben a szeletben NEM kerül — ha egy későbbi szelet hozna,
+új független biztonsági review kell**; (4) az export engedélylistás, belső azonosító nélkül; (5) a fióktörlés a fiók címére
+küldött egyszeri, célhoz kötött kódot kér, és értesítő levél megy róla.
 
 ---
 
