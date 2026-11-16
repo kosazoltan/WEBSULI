@@ -43,6 +43,8 @@ export function useModalLayer(open: boolean, layerRef: RefObject<HTMLElement | n
     const keepFocus = (e: FocusEvent) => {
       const dialog = dialogRef.current;
       if (!dialog || document.documentElement.dataset.gameCouponExpired === "true") return;
+      // A kupon-lejárati párbeszéd a jelzője beállítása ELŐTT már fókuszt kér: azt nem húzzuk vissza.
+      if (e.target instanceof Element && e.target.closest(".game-coupon-expired")) return;
       if (e.target instanceof Node && !dialog.contains(e.target)) dialog.focus({ preventScroll: true });
     };
     document.addEventListener("focusin", keepFocus, true);
