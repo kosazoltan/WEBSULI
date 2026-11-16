@@ -372,6 +372,45 @@ test("review #464: újratöltés a váróteremben (vendég, tárolt tokennel) é
     await expect(B.page.getByTestId("duel-rematch-gone")).toBeVisible({ timeout: 10_000 });
     await expect(B.page.getByTestId("duel-result")).toBeVisible();
     await expect(B.page.getByTestId("duel-rematch-accept")).toHaveCount(0);
+    // PR #476 review + JM3a-2/R tervezési döntés: meccs után a kód csak visszavágóra él — az ugyanazzal a kóddal érkező
+    // idegen érthető hibát kap (ROOM_STARTED), B-nél marad a „kilépett” szöveg és az „Új szoba” kiút (nem ragad be).
+    const C = await phone(browser, on.url, { width: 360, height: 640 });
+    try {
+      await C.page.goto(`/games/parbaj/${code}`);
+      await C.page.getByTestId("duel-join-go").tap();
+      await expect(C.page.getByTestId("duel-error")).toHaveAttribute("data-code", "ROOM_STARTED", { timeout: 15_000 });
+      await expect(B.page.getByTestId("duel-rematch-gone")).toBeVisible();
+      await expect(B.page.getByTestId("duel-new")).toBeVisible();
+    } finally {
+      await C.ctx.close();
+    }
+  } finally {
+    await A.ctx.close();
+    await B.ctx.close();
+  }
+});
+
+test("PR #476 review (Codex 4591991467): mindkét játékos EGYSZERRE nyomja a Visszavágót — kölcsönös elfogadás, mindkettőnél azonnali visszaszámlálás", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const A = await phone(browser, on.url, { width: 390, height: 844 }, { learner: true });
+  const B = await phone(browser, on.url, { width: 360, height: 640 });
+  try {
+    const code = await openRoom(A.page);
+    await joinRoom(B.page, code, "link", 4);
+    await expect(A.page.getByTestId("duel-start")).toBeEnabled({ timeout: 10_000 });
+    await A.page.getByTestId("duel-start").tap();
+    let lastA = 0;
+    let lastB = 0;
+    for (let i = 0; i < 12; i++) {
+      const [ra, rb] = await Promise.all([answerNextRound(A.page, lastA, 0), answerNextRound(B.page, lastB, 1)]);
+      if (ra === "result" || rb === "result") break;
+      lastA = ra;
+      lastB = rb;
+    }
+    for (const p of [A.page, B.page]) await expect(p.getByTestId("duel-rematch")).toBeVisible({ timeout: 30_000 });
+    // Egyszerre: egyik kliens sem látja még a másik kérését, amikor a sajátját elküldi.
+    await Promise.all([A.page.getByTestId("duel-rematch").tap(), B.page.getByTestId("duel-rematch").tap()]);
+    for (const p of [A.page, B.page]) await expect(p.getByTestId("duel-countdown")).toBeVisible({ timeout: 10_000 });
   } finally {
     await A.ctx.close();
     await B.ctx.close();

@@ -299,6 +299,19 @@ export const roomStateSchema = z
       .strict(),
     lastReveal: revealSchema.nullable(),
     result: matchResultSchema.nullable(),
+    /**
+     * JM3a-2/R: a visszavágó-folyamat (a szerver az egyetlen igazságforrás): ki kért, hol tart (`pending` / `accepted` /
+     * `expired` / `left`), a kérés lejárata, és a lezárt meccs győzteshirdetése. Nincs folyamat → `null`.
+     */
+    rematch: z
+      .object({
+        by: playerId.nullable(),
+        status: z.enum(["pending", "accepted", "expired", "left"]),
+        deadlineTs: z.number().nullable(),
+        result: matchResultSchema,
+      })
+      .strict()
+      .nullable(),
   })
   .strict();
 export type RtRoomState = z.infer<typeof roomStateSchema>;

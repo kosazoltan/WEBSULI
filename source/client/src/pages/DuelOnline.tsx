@@ -733,37 +733,26 @@ function SessionView(props: { session: DuelSession; snap: DuelSnapshot; feedback
   const rival = st.players.find((p) => p.id !== me) ?? null;
   const mine = st.players.find((p) => p.id === me) ?? null;
   const reconnecting = snap.conn === "reconnecting";
-  // Visszavágó-kérés követése (JM3a-2, K4): az utolsó győzteshirdetés állapota és a kérés állapota.
-  //  asked   — a MÁSIK fél kért, rákérdezünk („Benne vagyok” = kész → a szerver azonnal indít);
-  //  waiting — ÉN kértem, várjuk a választ;
-  //  expired — a kérdés 45 s után lejárt (az eredmény marad, a gyerek nem kerül a kezdőre);
-  //  gone    — a másik fél közben kilépett (a kérdés azonnal zárul érthető szöveggel).
-  const iAskedRematch = useRef(false);
-  type RematchMode = "none" | "asked" | "waiting" | "expired" | "gone";
-  const [rematch, setRematch] = useState<{ lastResult: RtRoomState | null; mode: RematchMode }>({ lastResult: null, mode: "none" });
-  useEffect(() => {
-    if (snap.kind !== "online") return;
-    if (st.result && (st.phase === "finished" || st.phase === "aborted")) {
-      iAskedRematch.current = false;
-      setRematch((r) => (r.lastResult === st ? r : { lastResult: st, mode: "none" }));
-    } else if (st.phase === "lobby") {
-      setRematch((r) => {
-        if (!r.lastResult || r.lastResult.code !== st.code || r.lastResult.result?.aborted) return r;
-        const rivalHere = st.players.some((p) => p.id !== me && !p.left);
-        if (r.mode === "none") return { ...r, mode: !rivalHere ? "gone" : iAskedRematch.current ? "waiting" : "asked" };
-        if ((r.mode === "asked" || r.mode === "waiting" || r.mode === "expired") && !rivalHere) return { ...r, mode: "gone" };
-        return r;
-      });
-    } else if (rematch.lastResult) {
-      setRematch({ lastResult: null, mode: "none" });
-    }
-  }, [st.phase, st.seq, snap.kind]);
-  // Egyoldalú kérés időkorláttal lejár: 45 s után a kérdés eltűnik, az eredmény marad (nincs kidobás a kezdőre).
-  useEffect(() => {
-    if (rematch.mode !== "asked") return;
-    const t = window.setTimeout(() => setRematch((r) => (r.mode === "asked" ? { ...r, mode: "expired" } : r)), 45_000);
-    return () => window.clearTimeout(t);
-  }, [rematch.mode]);
+  // Visszavágó (JM3a-2/R): a nézet KIZÁRÓLAG a szerver `rematch` mezőjéből számolódik (a végrehajtási fájl állapottáblája):
+  //  asked   — a MÁSIK fél kért (`pending`, by ≠ én): „Benne vagyok” = elfogadás → a szerver azonnal indít;
+  //  waiting — én kértem (`pending`, by = én), vagy elfogadva, a másik fél épp nincs kapcsolatban (`accepted`);
+  //  expired — a kérés 45 s alatt lejárt (a szerver dönti el): a kérdés eltűnik, az eredmény marad, bárki újra kérhet;
+  //  gone    — valamelyik fél kilépett (`left`): érthető szöveg + „Új szoba”.
+  // Csak megjelenítési névtár (nem visszavágó-állapot): a már kilépett ellenfél neve is kiírható maradjon a győzteshirdetésen.
+  const lastNames = useRef<Record<string, string>>({});
+  for (const p of st.players) lastNames.current[p.id] = p.nickname;
+  const lastRivalName = useRef<string | null>(null);
+  if (rival) lastRivalName.current = rival.nickname;
+  const rm = snap.kind === "online" && st.phase === "lobby" ? st.rematch : null;
+  const rematchMode: "asked" | "waiting" | "expired" | "gone" | null = !rm
+    ? null
+    : rm.status === "left"
+      ? "gone"
+      : rm.status === "expired"
+        ? "expired"
+        : rm.status === "accepted" || rm.by === me
+          ? "waiting"
+          : "asked";
   const banner = reconnecting ? (
     <div className="dm-banner" role="status" data-testid="duel-reconnecting">
       <Wifi className="h-4 w-4" aria-hidden="true" /> Kapcsolódás újra… A helyed egy percig megmarad.
@@ -775,26 +764,31 @@ function SessionView(props: { session: DuelSession; snap: DuelSnapshot; feedback
   ) : null;
 
   // Kétoldalú visszavágó (review #464 K4, JM3a-2): a visszavágó-kérés körül a győzteshirdetés marad.
-  if (st.phase === "lobby" && rematch.mode !== "none" && rematch.lastResult)
+  if (rm && rematchMode) {
+    const rivalName = rival?.nickname ?? lastRivalName.current ?? "A barátod";
     return (
       <ResultView
         session={session}
-        snap={{ ...snap, state: rematch.lastResult }}
+        snap={{ ...snap, state: { ...st, result: rm.result } }}
         me={me}
         onExit={props.onExit}
         onNewSetup={props.onNewSetup}
         feedback={props.feedback}
+        nameHint={lastNames.current}
         rematchUi={{
-          mode: rematch.mode,
-          name: rival?.nickname ?? rematch.lastResult.players.find((p) => p.id !== me)?.nickname ?? "A barátod",
-          onAccept: () => void session.setReady(true),
+          mode: rematchMode,
+          byMe: rm.by === me,
+          name: rivalName,
+          // Elfogadás: függő kérésre `ready:true`; lejárt kérésnél új kérés (a szerver mindkettőt a táblája szerint kezeli).
+          onAccept: () => void (rematchMode === "expired" ? session.rematch() : session.setReady(true)),
           onDecline: () => void session.leave().then(props.onExit),
         }}
       />
     );
+  }
   if (st.phase === "lobby") return <LobbyView session={session} st={st} me={me} banner={banner} onExit={props.onExit} />;
   if ((st.phase === "finished" || st.phase === "aborted") && st.result)
-    return <ResultView session={session} snap={snap} me={me} onExit={props.onExit} onNewSetup={props.onNewSetup} feedback={props.feedback} onRematchClick={() => (iAskedRematch.current = true)} />;
+    return <ResultView session={session} snap={snap} me={me} onExit={props.onExit} onNewSetup={props.onNewSetup} feedback={props.feedback} />;
   return <MatchView session={session} snap={snap} me={me} mine={mine} rival={rival} banner={banner} feedback={props.feedback} onExit={props.onExit} />;
 }
 
@@ -1159,9 +1153,10 @@ function ResultView(props: {
   onExit: () => void;
   onNewSetup: () => void;
   feedback: ReturnType<typeof useDuelFeedback>;
-  onRematchClick?: () => void;
+  /** Megjelenítési névtár (a már kilépett játékos neve is kiírható). */
+  nameHint?: Record<string, string>;
   /** Visszavágó-kérés állapota (K4, JM3a-2): a győzteshirdetés marad, alatta a kérdés / várakozás / lezárás. */
-  rematchUi?: { mode: "asked" | "waiting" | "expired" | "gone"; name: string; onAccept: () => void; onDecline: () => void };
+  rematchUi?: { mode: "asked" | "waiting" | "expired" | "gone"; byMe: boolean; name: string; onAccept: () => void; onDecline: () => void };
 }) {
   const { session, snap, me, feedback } = props;
   const st = snap.state!;
@@ -1171,7 +1166,8 @@ function ResultView(props: {
   const [busy, setBusy] = useState(false);
   const won = r.winners.includes(me);
   const place = (id: string) => r.podium.findIndex((g) => g.includes(id)) + 1 || r.podium.length + 1;
-  const nameOf = (id: string) => (id === me ? (isBot ? "Te" : st.players.find((p) => p.id === id)?.nickname ?? "Te") : st.players.find((p) => p.id === id)?.nickname ?? "Ellenfél");
+  const nickOf = (id: string) => st.players.find((p) => p.id === id)?.nickname ?? props.nameHint?.[id];
+  const nameOf = (id: string) => (id === me ? (isBot ? "Te" : nickOf(id) ?? "Te") : nickOf(id) ?? "Ellenfél");
   const headline = r.coWin ? "Közös győzelem!" : won ? "Győztél!" : `${nameOf(r.winners[0] ?? "")} nyerte a párbajt!`;
   const reasonText =
     r.reason === "OPPONENT_LEFT"
@@ -1195,7 +1191,6 @@ function ResultView(props: {
   }, [r.seq, won, r.coWin, feedback]);
 
   const rematch = async () => {
-    props.onRematchClick?.();
     setBusy(true);
     await session.rematch();
     setBusy(false);
@@ -1233,9 +1228,13 @@ function ResultView(props: {
         <div className="dm-rematch-ask dm-rematch-ask--info" role="status" data-testid={`duel-rematch-${ui.mode}`}>
           <p className="dm-modal-title">
             {ui.mode === "waiting"
-              ? `Visszavágót kértél — várjuk ${ui.name} válaszát…`
+              ? ui.byMe
+                ? `Visszavágót kértél — várjuk ${ui.name} válaszát…`
+                : `Benne vagy! Várjuk, hogy ${ui.name} visszakapcsolódjon…`
               : ui.mode === "expired"
-                ? `${ui.name} visszavágót kért — ha mégis kedved van, nyomd meg a Visszavágót!`
+                ? ui.byMe
+                  ? `${ui.name} most nem válaszolt — ha kéred, nyomd meg újra a Visszavágót!`
+                  : `${ui.name} visszavágót kért — ha mégis kedved van, nyomd meg a Visszavágót!`
                 : `${ui.name} kilépett — a visszavágó most elmarad.`}
           </p>
           {ui.mode === "expired" ? (

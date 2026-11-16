@@ -398,6 +398,38 @@ describe("JM2 gateway — teljes meccs", () => {
   });
 });
 
+describe("JM3a-2/R gateway — visszavágó nyers Socket.IO-val (PR #476 review)", () => {
+  it("a kérő ismételt `room:ready`-je nem indít (vercel 4592016885); a másik fél egyidejű `room:rematch`-e kölcsönös elfogadás → visszaszámlálás; meccs után idegen nem ülhet be", async () => {
+    const h = await harness({ windowMs: 3000 });
+    const { host, code } = await createRoom(h);
+    const guest = await addPlayer(h, code);
+    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players.every((p: any) => p.ready));
+    assert.equal((await host.request("room:start", {})).ok, true);
+    await playMatch(h, code, [host, guest], (i) => i === 0);
+    // A vendég kér, majd kétszer „kész”-t küld: a szerveren NEM indul (a gazda nem fogadta el).
+    assert.equal((await guest.request("room:rematch", {})).ok, true);
+    for (let i = 0; i < 2; i++) assert.equal((await guest.request("room:ready", { ready: true })).ok, true);
+    assert.equal((await guest.request("room:rematch", {})).ok, true, "a saját kérés ismétlése no-op");
+    await sleep(50);
+    const room = h.rt.registry.get(code)!;
+    assert.equal(room.phase, "lobby");
+    assert.equal(room.rematch?.status, "pending");
+    assert.equal(room.rematch?.by, guest.playerId);
+    const seen = await host.waitFor("room:state", (s) => s.rematch?.status === "pending");
+    assert.equal(seen.rematch.by, guest.playerId, "a gazda a szervertől tudja, ki kért");
+    assert.ok(seen.rematch.result.podium.length > 0, "a győzteshirdetés a visszavágó alatt is a nézetben");
+    // Idegen a régi kóddal: ROOM_STARTED (a kód meccs után csak visszavágóra él).
+    const stranger = await join(h, { intent: "join", code });
+    const sAck = await stranger.request("room:join", { code, grade: 5 });
+    assert.equal(sAck.ok, false);
+    assert.equal((sAck as { code?: string }).code, "ROOM_STARTED");
+    // A gazda egyidejű „kérés”-e = elfogadás → mindkét kliens visszaszámlálást kap.
+    assert.equal((await host.request("room:rematch", {})).ok, true);
+    for (const p of [host, guest]) await p.waitFor("room:state", (s) => s.phase === "countdown" && s.rematch === null);
+    for (const p of [host, guest]) assertAllSchemas(p);
+  });
+});
+
 describe("JM2 gateway — kapcsolat-kiesés, kilépés, gazda-váltás", () => {
   it("újracsatlakozás kör közben (hálózatkiesés): a folytatási tokennel teljes pillanatkép — hátralévő idő, a már adott válasz", async () => {
     const h = await harness({ windowMs: 4000 });
