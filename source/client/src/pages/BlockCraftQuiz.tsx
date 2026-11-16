@@ -2,22 +2,20 @@ import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import * as THREE from "three";
 import { applyRendererLook, createGradientSky, detectLookTier, disposeObjectTree, LOOK_BUDGET, SparkleField } from "@/game-engine/three-look";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
-import { ArrowLeft, Box, Pickaxe, Star, Flame, RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Pause, Blocks } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import HoldButton from "@/game-engine/HoldButton";
 import { joystickToDirections } from "@/game-engine/joystick";
-import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { useCouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
-import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
 import { useClassroomGrade } from "@/lib/classroomStore";
@@ -41,7 +39,12 @@ import {
 } from "@/lib/voxelcraft";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
-import { blockCraftSubjectFromGradeSubject, blockCraftSubjectFromTopic, type BlockCraftSubject } from "@/lib/blockCraftSubjects";
+import {
+  blockCraftSubjectFromGradeSubject,
+  blockCraftSubjectFromTopic,
+  pickBlockCraftGradeSlot,
+  type BlockCraftSubject,
+} from "@/lib/blockCraftSubjects";
 import { GRADE_SUBJECTS } from "@/data/gradeQuizBank";
 import {
   createGradeQuizSeen,
@@ -50,8 +53,20 @@ import {
   pickGradeQuiz,
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
-import { useCoarsePointer } from "@/hooks/useCoarsePointer";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import {
+  GameHud,
+  GameShell,
+  PauseMenu,
+  ResultScreen,
+  StartScreen,
+  useBestScore,
+  useHaptics,
+  useTouchCapable,
+  type GameHudStat,
+  type GameScreenState,
+} from "@/game-engine/mobile";
+import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
 
 /** 2D pixel-minta cellaméret — a menü-előnézet (MenuBlock) rajzolásához. */
 const TILE = 24;
@@ -1102,9 +1117,22 @@ function MenuBlock({ t }: { t: number }) {
 
 type Phase = "menu" | "play" | "quiz" | "levelComplete" | "over";
 
+/**
+ * S11 kétujjas vezérlés: érintéssel a körbenézés csak a vászon JOBB 60%-án indulhat (a bal 40% a joystick
+ * hüvelykujjáé). `x` a vászonhoz relatív érintési pont, `width` a vászon szélessége.
+ */
+const LOOK_ZONE_START = 0.4;
+function isLookZone(x: number, width: number): boolean {
+  return width <= 0 || x >= width * LOOK_ZONE_START;
+}
+
 export default function BlockCraftQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const coarsePointer = useCoarsePointer();
+  // S11: a közös érintés-észlelés (any-pointer: coarse + maxTouchPoints) — érintős laptop is kap vezérlőt.
+  const touchCapable = useTouchCapable();
+  const haptics = useHaptics();
+  const bestScore = useBestScore("block-craft-quiz");
+  const [, navigate] = useLocation();
 
   // LS-4 (D3): the play-time coupon earned in a lesson, exactly as in BrainRot —
   // without a coupon this is inert and free play stays the default.
@@ -1179,16 +1207,48 @@ export default function BlockCraftQuiz() {
   const totalDiamondsRef = useRef(0);   // total real DIAMOND tiles mined during the whole run
   const [levelStartXp, setLevelStartXp] = useState(0);
   const [gameWon, setGameWon] = useState(false);
+  /** S11: szünet (a játékóra, a fizika és a render-ciklus áll; a kvíz-fázis megmarad). */
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  pausedRef.current = paused;
+  /** G-1: magyarázó kártya rossz válaszra. */
+  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
+  /** S11: a futás jó / összes válasza (az eredményképernyő csillagaihoz). */
+  const answeredRef = useRef(0);
+  const [correctInRun, setCorrectInRun] = useState(0);
+  /** S11: a joystick futó húzásának megszakítása (szünet, kvíz, fókuszvesztés) — a VirtualJoystick resetSignal-ja. */
+  const [joyReset, setJoyReset] = useState(0);
+  const [bestResult, setBestResult] = useState<{ best: number; isNewBest: boolean } | null>(null);
+  const bestSubmittedRef = useRef(false);
+  /** S11: a vezérlés-tipp minden pálya elején néhány másodpercig látszik (utána a vászon tiszta). */
+  const [showHint, setShowHint] = useState(false);
+  /** A teszt-API a mindenkori kérdésválasztót hívja (a telepítő effekt csak egyszer fut). */
+  const pickQuizRef = useRef<() => Quiz>(() => QUIZ_FALLBACK[0]!);
 
   useEffect(() => {
     return installGameTestApi({
       probe: () => {
         const band = adaptiveRef.current.band;
-        return { level: runLevelRef.current, band, timeBudget: adaptiveTimeBudget(LEVELS[0]!.timeLimit, band) };
+        return {
+          level: runLevelRef.current,
+          band,
+          timeBudget: adaptiveTimeBudget(LEVELS[0]!.timeLimit, band),
+          // S11 kétujjas mérés: a nézés iránya és az előre-mozgás jelzője (1 / 0 — a probe típusa szám / szöveg).
+          yaw: playerRef.current.yaw,
+          moveFwd: keysRef.current.fwd ? 1 : 0,
+          phase: phaseRef.current,
+          paused: pausedRef.current ? 1 : 0,
+        };
       },
       forceState: (patch) => {
         if (patch.phase === "menu" || patch.phase === "play" || patch.phase === "levelComplete" || patch.phase === "over") {
           setPhase(patch.phase);
+        }
+        // S11 (M9, M10): kvíz kiváltása blokk nélkül (a válasz nem bányász ki semmit).
+        if (patch.phase === "quiz") {
+          mineTargetRef.current = null;
+          setQuiz(pickQuizRef.current());
+          setPhase("quiz");
         }
         if (typeof patch.gameWon === "boolean") setGameWon(patch.gameWon);
         if (typeof patch.correctCount === "number") setSessionXp(Math.max(0, patch.correctCount) * 10);
@@ -1237,6 +1297,14 @@ export default function BlockCraftQuiz() {
       setSelType(hotbarTypes[0]!);
     }
   }, [hotbarTypes, selType]);
+
+  // S11: az elismerő felirat eltüntetése feliratonként — egy korábbi felirat időzítője nem törölheti a későbbit
+  // (a régi, hívásonkénti setTimeout a 2,5 s-on belül érkező új feliratot is idő előtt eltüntette).
+  useEffect(() => {
+    if (!achievement) return;
+    const id = window.setTimeout(() => setAchievement(null), 2500);
+    return () => window.clearTimeout(id);
+  }, [achievement]);
 
   // XP-felirat automatikus eltüntetése.
   useEffect(() => {
@@ -1346,8 +1414,16 @@ export default function BlockCraftQuiz() {
     rebuildSubjectPools();
   }, [rebuildSubjectPools, userGrade]);
 
+  // S11: a pálya eleji vezérlés-tipp 6 s játékidő után eltűnik (kvíz / szünet alatt az időzítő nem fut).
   useEffect(() => {
-    if (phase !== "play") return;
+    if (!showHint || phase !== "play" || paused) return;
+    const id = window.setTimeout(() => setShowHint(false), 6000);
+    return () => window.clearTimeout(id);
+  }, [showHint, phase, paused]);
+
+  // A játékóra csak játék közben jár: kvíz és szünet alatt áll (S11).
+  useEffect(() => {
+    if (phase !== "play" || paused) return;
     const id = setInterval(() => {
       setRunSeconds((s) => s + 1);
       setTimeLeft((s) => {
@@ -1359,7 +1435,13 @@ export default function BlockCraftQuiz() {
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [phase, paused]);
+
+  /**
+   * S11 / A8 — központi szóbank (közös napló a hét játékkal). `null`, amíg tölt / ha a betöltés hibázott: akkor a
+   * kézi bankok mennek változatlanul. A bekötés EGY helyen kapcsolható ki: itt (`enabled`).
+   */
+  const vocab = useVocabQuizSource("en", true);
 
   /**
    * Stratified + non-repeating quiz picker.
@@ -1375,26 +1457,56 @@ export default function BlockCraftQuiz() {
     // tárgyak körforgásával (üres tárgy kimarad) → a saját bank kiegészítésként (alább).
     const sharedGrade = gradeForGame(userGrade);
     const couponMaterialOnly = coupon.active && bank.some((q) => q.fromMaterial);
+    const seen = gradeSeenRef.current;
+    // A tananyag-kvíz elsőbbsége (terv 4.4): a nem látott lecke-kérdés a szóbank ÉS az évfolyam-bank előtt.
+    const material = sharedGrade != null && !couponMaterialOnly ? pickUnseenMaterial(bank.filter((q) => q.fromMaterial), seen) : null;
+    if (material) {
+      markGradeQuizSeen(seen, material);
+      return material;
+    }
+    /**
+     * S11 / A8: angol kérdés-helyen a központi szóbank (a tananyag-ág UTÁN). A szóbankos kérdés a futás saját
+     * `seen`-jébe is bekerül, így a meglévő tartalmi duplikátum-szűrő is látja.
+     */
+    const fromVocab = (): Quiz | null => {
+      const vq = vocab?.next(vocabLevelForGrade(userGrade, adaptiveRef.current.band)) ?? null;
+      if (!vq) return null;
+      markGradeQuizSeen(seen, vq);
+      return {
+        id: vq.id,
+        prompt: vq.prompt,
+        options: [...vq.options],
+        correctIndex: vq.correctIndex,
+        explanation: vq.explanation,
+        subject: "english",
+      };
+    };
+    /** Kézi angol kérdés: a helyes válasza a közös naplóba, hogy a szóbank ne kérdezze vissza ugyanazt a szót. */
+    const manualEnglish = (q: Quiz): Quiz => {
+      if ((q.subject ?? "english") === "english" && !q.fromMaterial) vocab?.markExternal(q.options[q.correctIndex]!);
+      return q;
+    };
     if (sharedGrade != null && !couponMaterialOnly) {
-      const seen = gradeSeenRef.current;
-      const material = pickUnseenMaterial(bank.filter((q) => q.fromMaterial), seen);
-      if (material) {
-        markGradeQuizSeen(seen, material);
-        return material;
-      }
       for (let i = 0; i < GRADE_SUBJECTS.length; i++) {
         const subject = GRADE_SUBJECTS[gradeSubjectRoundRef.current++ % GRADE_SUBJECTS.length]!;
-        const item = pickGradeQuiz({ grade: sharedGrade, band: adaptiveRef.current.band, subjects: [subject], seen });
-        if (!item) continue;
-        markGradeQuizSeen(seen, item);
-        return {
+        // A választott tétel MINDIG fogy, akkor is, ha a szóbank váltja ki (Brain Rot #424 review-lelet).
+        const slot = pickBlockCraftGradeSlot({
+          subject,
+          pick: () => pickGradeQuiz({ grade: sharedGrade, band: adaptiveRef.current.band, subjects: [subject], seen }),
+          seen,
+          vocabNext: fromVocab,
+        });
+        if (!slot) continue;
+        if (slot.kind === "vocab") return slot.quiz;
+        const item = slot.item;
+        return manualEnglish({
           id: item.id,
           prompt: item.prompt,
           options: [...item.options],
           correctIndex: item.correctIndex,
           explanation: item.explanation,
           subject: blockCraftSubjectFromGradeSubject(item.subject),
-        };
+        });
       }
     }
     const pools = subjectPoolsRef.current;
@@ -1427,29 +1539,61 @@ export default function BlockCraftQuiz() {
           subjectCursorsRef.current.set(subj, cursor);
           recent.push(candidate.prompt);
           while (recent.length > RECENT_WINDOW) recent.shift();
-          return candidate;
+          // S11 / A8: a saját bank angol helyén (nem tananyag) is a szóbank kérdez, ha van; különben a kézi tétel.
+          if (subj === "english" && !candidate.fromMaterial && !couponMaterialOnly) {
+            const vq = fromVocab();
+            if (vq) return vq;
+          }
+          return manualEnglish(candidate);
         }
       }
       subjectCursorsRef.current.set(subj, cursor);
     }
     // Végső fallback — sose kellene idejutnunk.
-    return bank[Math.floor(Math.random() * bank.length)] ?? QUIZ_FALLBACK[0]!;
-  }, [bank, rebuildSubjectPools, subjectOrder, userGrade, coupon.active]);
+    return manualEnglish(bank[Math.floor(Math.random() * bank.length)] ?? QUIZ_FALLBACK[0]!);
+  }, [bank, rebuildSubjectPools, subjectOrder, userGrade, coupon.active, vocab]);
+  pickQuizRef.current = pickQuiz;
+
+  /** S11: minden mozgásjelző nullázása + a joystick futó húzásának és a körbenézésnek a megszakítása. */
+  const touchLookRef = useRef<{ id: number; lastX: number; lastY: number; moved: number; look: boolean } | null>(null);
+  const releaseMovement = useCallback(() => {
+    const k = keysRef.current;
+    k.fwd = false;
+    k.back = false;
+    k.left = false;
+    k.right = false;
+    k.jump = false;
+    touchLookRef.current = null;
+    setJoyReset((n) => n + 1);
+  }, []);
+  /** A játék saját pointer-lock elengedése (kvíz, szünet, kör vége) — ez NEM vált ki automatikus szünetet. */
+  const selfUnlockRef = useRef(false);
+  const releasePointerLock = useCallback(() => {
+    if (typeof document === "undefined" || !document.pointerLockElement) return;
+    selfUnlockRef.current = true;
+    document.exitPointerLock?.();
+  }, []);
 
   /** Bányász-kvíz indítása egy konkrét voxelre (a crosshair-cél). */
   const tryMineAt = useCallback(
     (x: number, y: number, z: number): boolean => {
       const t = vGet(worldRef.current, x, y, z);
       if (!vMineable(t)) return false;
+      if (pausedRef.current) return false;
       const p = playerRef.current;
       p.vx = 0;
       p.vz = 0;
+      // S11: a kvíz alatt áll a játék — a futó mozgás (joystick, billentyű) nem viszi tovább a játékost.
+      releaseMovement();
+      // Egérrel a kvíz válaszaihoz szabad kurzor kell (különben Esc-et kellene nyomni a kattintáshoz).
+      releasePointerLock();
+      haptics("tap");
       mineTargetRef.current = { x, y, z, t };
       setQuiz(pickQuiz());
       setPhase("quiz");
       return true;
     },
-    [pickQuiz],
+    [pickQuiz, haptics, releaseMovement],
   );
 
   /**
@@ -1469,12 +1613,25 @@ export default function BlockCraftQuiz() {
     };
     pendingBurstRef.current = null;
     lookHitRef.current = null;
+    mineTargetRef.current = null;
     setInventory({});
     setXpFloat(null);
     setAchievement(null);
+    // S11: egy előző futás / pálya függő kvíze, magyarázókártyája és szünete nem marad át.
+    setQuiz(null);
+    setFeedback(null);
+    setRevealCorrectIdx(null);
+    setWrongIdx(null);
+    setPaused(false);
+    setShowHint(true);
+    releaseMovement();
     if (options.resetSession) {
       adaptiveRef.current.reset(userGrade ?? 4, runLevelRef.current);
       gradeSeenRef.current = createGradeQuizSeen();
+      answeredRef.current = 0;
+      setCorrectInRun(0);
+      bestSubmittedRef.current = false;
+      setBestResult(null);
       setSessionXp(0);
       setStreak(0);
       setRunSeconds(0);
@@ -1495,7 +1652,7 @@ export default function BlockCraftQuiz() {
     lastTRef.current = null;
     // Minden pályán friss kérdés-sorrend.
     rebuildSubjectPools();
-  }, [rebuildSubjectPools, userGrade]);
+  }, [rebuildSubjectPools, userGrade, releaseMovement]);
 
   const startGame = useCallback(() => {
     runLevelRef.current = levels.level;
@@ -1526,9 +1683,40 @@ export default function BlockCraftQuiz() {
     runningRef.current = false; // G1: loop stop (újraindítás a phase-effectből)
     cancelAnimationFrame(rafRef.current);
     lookHitRef.current = null;
+    // S11: a kör vége a szünet menüből is jöhet — a függő kvíz / kártya / szünet nem marad az eredmény alatt.
+    mineTargetRef.current = null;
+    setQuiz(null);
+    setFeedback(null);
+    setRevealCorrectIdx(null);
+    setWrongIdx(null);
+    setPaused(false);
+    releaseMovement();
+    releasePointerLock();
     setGameWon(false);
     setPhase("over");
+  }, [releaseMovement]);
+
+  /**
+   * S11 — szünet: a játékóra, a fizika és a render-ciklus áll; a pointer lock elenged (az egér szabad a menühöz),
+   * minden mozgásjelző és a joystick futó húzása nullázódik (visszatéréskor nem ragad be a vezérlés).
+   */
+  const pauseGame = useCallback(() => {
+    const ph = phaseRef.current;
+    if (ph !== "play" && ph !== "quiz") return;
+    releaseMovement();
+    releasePointerLock();
+    setPaused(true);
+  }, [releaseMovement]);
+
+  const resumeGame = useCallback(() => {
+    lastTRef.current = null; // dt-ugrás elkerülése a szünet után
+    setPaused(false);
   }, []);
+  /** A mount-szintű billentyű-kezelő hídjai (stale-closure-mentes). */
+  const pauseActionRef = useRef(pauseGame);
+  pauseActionRef.current = pauseGame;
+  const releaseMovementRef = useRef(releaseMovement);
+  releaseMovementRef.current = releaseMovement;
 
   // Globális billentyűzet (Minecraft-séma): WASD/nyilak + Space + E (bányász)
   // + F (lerakás) + 1-9 (hotbar) + egér-nézelődés pointer lock alatt.
@@ -1545,7 +1733,12 @@ export default function BlockCraftQuiz() {
       }
     };
     const kd = (e: KeyboardEvent) => {
-      if (phaseRef.current !== "play") return;
+      if (phaseRef.current !== "play" || pausedRef.current) return;
+      if (e.code === "KeyP") {
+        e.preventDefault();
+        pauseActionRef.current();
+        return;
+      }
       if (setKey(e.code, true)) {
         e.preventDefault();
         return;
@@ -1565,27 +1758,37 @@ export default function BlockCraftQuiz() {
     };
     const mm = (e: MouseEvent) => {
       if (document.pointerLockElement !== canvasRef.current) return;
+      if (pausedRef.current || phaseRef.current !== "play") return;
       const p = playerRef.current;
       p.yaw -= e.movementX * 0.0024;
       p.pitch = Math.max(-1.45, Math.min(1.45, p.pitch - e.movementY * 0.0022));
     };
-    // D4: reset all movement flags on window blur (prevents stuck keys on tab/window switch)
+    // D4: reset all movement flags on window blur (prevents stuck keys on tab/window switch).
+    // S11: a joystick futó húzása és a körbenézés is megszakad (releaseMovement).
     const onBlur = () => {
-      keysRef.current.fwd = false;
-      keysRef.current.back = false;
-      keysRef.current.left = false;
-      keysRef.current.right = false;
-      keysRef.current.jump = false;
+      releaseMovementRef.current();
+    };
+    // S11: ha játék közben a böngésző elengedi a pointer lockot (Esc), a játék szünetre vált — a szünet menüből
+    // folytatható (a kvíz megnyitásakor a lockot a játék maga engedi el, az nem szünet).
+    let wasLocked = false;
+    const onLockChange = () => {
+      const locked = document.pointerLockElement === canvasRef.current;
+      const byGame = selfUnlockRef.current;
+      selfUnlockRef.current = false;
+      if (wasLocked && !locked && !byGame && phaseRef.current === "play" && !pausedRef.current) pauseActionRef.current();
+      wasLocked = locked;
     };
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
     window.addEventListener("blur", onBlur);
     document.addEventListener("mousemove", mm);
+    document.addEventListener("pointerlockchange", onLockChange);
     return () => {
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("mousemove", mm);
+      document.removeEventListener("pointerlockchange", onLockChange);
     };
   }, []);
 
@@ -1615,6 +1818,10 @@ export default function BlockCraftQuiz() {
     const budget = LOOK_BUDGET[tier];
     applyRendererLook(renderer, tier, { exposure: 1.0 });
     const shadowsOn = renderer.shadowMap.enabled;
+    // S11 (M11): a three r184 a PCFSoftShadowMap-et elavultnak jelzi, első rajzoláskor „THREE.WebGLShadowMap: … deprecated”
+    // konzol-figyelmeztetéssel PCF-re vált. Ugyanazt az eredményt adjuk előre, figyelmeztetés nélkül (a közös
+    // three-look/renderer.ts javítása orkesztrátori kérés).
+    if (shadowsOn && renderer.shadowMap.type === THREE.PCFSoftShadowMap) renderer.shadowMap.type = THREE.PCFShadowMap;
     // A világ statikus (csak bányászáskor/lerakáskor változik) → az árnyék-térképet
     // csak újraépítéskor rajzoljuk újra, nem minden frame-ben.
     renderer.shadowMap.autoUpdate = false;
@@ -2016,33 +2223,36 @@ export default function BlockCraftQuiz() {
       }
 
       // --- Mozgás (yaw-relatív WASD, mint a Minecraftban) ---
+      // S11: kvíz alatt a játékos áll (a világ tovább rajzolódik, a fizika nem lép) — a kvíz alatt áll a játék.
       const p = playerRef.current;
       const k = keysRef.current;
-      const sinY = Math.sin(p.yaw);
-      const cosY = Math.cos(p.yaw);
-      let mx = 0;
-      let mz = 0;
-      if (k.fwd) { mx -= sinY; mz -= cosY; }
-      if (k.back) { mx += sinY; mz += cosY; }
-      if (k.left) { mx -= cosY; mz += sinY; }
-      if (k.right) { mx += cosY; mz -= sinY; }
-      const ml = Math.hypot(mx, mz);
-      if (ml > 0) {
-        mx /= ml;
-        mz /= ml;
-      }
-      p.vx = mx * MOVE_SPEED_BPS;
-      p.vz = mz * MOVE_SPEED_BPS;
-      if (k.jump && p.onGround) {
-        p.vy = JUMP_VELOCITY;
-        p.onGround = false;
-      }
-      stepPlayerPhysics(worldRef.current, p, dt);
-      // Biztonsági háló: ha bármi miatt a világ alá esne, vissza a spawnra.
-      if (p.y < -4) {
-        const s = findVoxelSpawn(worldRef.current);
-        p.x = s.x; p.y = s.y; p.z = s.z;
-        p.vx = 0; p.vy = 0; p.vz = 0;
+      if (phaseRef.current === "play") {
+        const sinY = Math.sin(p.yaw);
+        const cosY = Math.cos(p.yaw);
+        let mx = 0;
+        let mz = 0;
+        if (k.fwd) { mx -= sinY; mz -= cosY; }
+        if (k.back) { mx += sinY; mz += cosY; }
+        if (k.left) { mx -= cosY; mz += sinY; }
+        if (k.right) { mx += cosY; mz -= sinY; }
+        const ml = Math.hypot(mx, mz);
+        if (ml > 0) {
+          mx /= ml;
+          mz /= ml;
+        }
+        p.vx = mx * MOVE_SPEED_BPS;
+        p.vz = mz * MOVE_SPEED_BPS;
+        if (k.jump && p.onGround) {
+          p.vy = JUMP_VELOCITY;
+          p.onGround = false;
+        }
+        stepPlayerPhysics(worldRef.current, p, dt);
+        // Biztonsági háló: ha bármi miatt a világ alá esne, vissza a spawnra.
+        if (p.y < -4) {
+          const s = findVoxelSpawn(worldRef.current);
+          p.x = s.x; p.y = s.y; p.z = s.z;
+          p.vx = 0; p.vy = 0; p.vz = 0;
+        }
       }
 
       // --- Kamera a szemnél ---
@@ -2187,7 +2397,8 @@ export default function BlockCraftQuiz() {
    * is újraindul, míg levelComplete/over/menu alatt nem pörgeti a GPU-t.
    */
   useEffect(() => {
-    const shouldRun = phase === "play" || phase === "quiz";
+    // S11: szünetben a render-ciklus is áll (gyenge eszközön akkut is kímél).
+    const shouldRun = (phase === "play" || phase === "quiz") && !paused;
     if (!shouldRun) {
       runningRef.current = false;
       cancelAnimationFrame(rafRef.current);
@@ -2197,10 +2408,7 @@ export default function BlockCraftQuiz() {
     runningRef.current = true;
     lastTRef.current = null; // dt-ugrás elkerülése a szünet után
     rafRef.current = requestAnimationFrame(stepRef.current);
-  }, [phase]);
-
-  /** G-1: magyarázó kártya rossz válaszra. */
-  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
+  }, [phase, paused]);
 
   const dismissFeedback = useCallback(() => {
     setFeedback(null);
@@ -2211,8 +2419,9 @@ export default function BlockCraftQuiz() {
   }, [pickQuiz]);
 
   const onAnswer = (idx: number) => {
-    if (!quiz || phase !== "quiz" || answerLockedRef.current || revealCorrectIdx !== null) return;
+    if (!quiz || phase !== "quiz" || paused || answerLockedRef.current || revealCorrectIdx !== null) return;
     answerLockedRef.current = true;
+    answeredRef.current += 1;
     const previousBudget = adaptiveTimeBudget(activeLevelRef.current.timeLimit, adaptiveRef.current.band);
     adaptiveRef.current.answer(idx === quiz.correctIndex);
     const nextBudget = adaptiveTimeBudget(activeLevelRef.current.timeLimit, adaptiveRef.current.band);
@@ -2220,6 +2429,7 @@ export default function BlockCraftQuiz() {
     maybeClaimCouponBonus(coupon, quiz.id, idx);
     if (idx !== quiz.correctIndex) {
       sfxError();
+      haptics("error");
       setWrongShake(true);
       setTimeout(() => setWrongShake(false), 320);
       // Helyes válasz felfedése + 1.5s "freeze" → utána új kvíz
@@ -2252,6 +2462,8 @@ export default function BlockCraftQuiz() {
     }
 
     sfxSuccess();
+    haptics("success");
+    setCorrectInRun((n) => n + 1);
 
     const tgt = mineTargetRef.current;
     let levelGoalReached = false;
@@ -2305,16 +2517,12 @@ export default function BlockCraftQuiz() {
 
       if (tgt.t === DIAMOND && rareBlocks === 0) {
         setAchievement("Első gyémánt megtalálva!");
-        setTimeout(() => setAchievement(null), 2500);
       } else if (newBlocks === 10) {
         setAchievement("10. blokk kibányászva!");
-        setTimeout(() => setAchievement(null), 2500);
       } else if (newStreak === 5) {
         setAchievement("5-ös sorozat elérve!");
-        setTimeout(() => setAchievement(null), 2500);
       } else if (isCreeper) {
         setAchievement("Creeper legyőzve! Dupla XP!");
-        setTimeout(() => setAchievement(null), 2500);
       }
     }
     mineTargetRef.current = null;
@@ -2362,6 +2570,13 @@ export default function BlockCraftQuiz() {
         scoreSubmittedRef.current = false;
       });
   }, [phase, syncEligibility, sessionXp, streak, runSeconds]);
+
+  /* S11 — legjobb eredmény: helyi mentés (névtelen látogatónál is működik), futásonként egyszer. */
+  useEffect(() => {
+    if (phase !== "over" || bestSubmittedRef.current) return;
+    bestSubmittedRef.current = true;
+    setBestResult(bestScore.submit(sessionXp));
+  }, [phase, sessionXp, bestScore]);
 
   // Achievement + Daily Challenge tracking — az "over" phase átmenetnél egyszer fut.
   const achievementCheckedRef = useRef(false);
@@ -2426,17 +2641,16 @@ export default function BlockCraftQuiz() {
     keysRef.current[k] = v;
   };
 
-  const startHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "fwd" | "back" | "left" | "right" | "jump") => {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
+  /**
+   * S11: esemény nélküli nyomva tartás — a capture-t és a böngésző-gesztusok tiltását a `HoldButton` végzi
+   * (pointerdown-ra azonnal aktivál, pointerup / pointercancel enged el, pointerleave nincs).
+   */
+  const startHold = (k: "fwd" | "back" | "left" | "right" | "jump") => {
+    if (pausedRef.current || phaseRef.current !== "play") return;
     hold(k, true);
   };
 
-  const endHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "fwd" | "back" | "left" | "right" | "jump") => {
-    e.preventDefault();
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
+  const endHold = (k: "fwd" | "back" | "left" | "right" | "jump") => {
     hold(k, false);
   };
 
@@ -2480,12 +2694,15 @@ export default function BlockCraftQuiz() {
     if (t != null) setSelType(t);
   };
 
-  /** Mobil look-drag állapot (egy ujjas húzás a canvason = körbenézés). */
-  const touchLookRef = useRef<{ id: number; lastX: number; lastY: number; moved: number } | null>(null);
-
+  /*
+   * Mobil look-drag (a `touchLookRef` fent): egy ujjas húzás a vászon JOBB 60%-án = körbenézés. S11 kétujjas
+   * vezérlés: a bal hüvelykujj a joystické (saját elem, saját pointerId + capture), a jobb a vászoné — a két
+   * érintés külön pointerId-t követ, így egyszerre működnek. A vászon bal 40%-án induló érintés nem forgat
+   * (ott a joystick-zóna van), de a rövid koppintás ott is bányászik.
+   */
   const onCanvasPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
-      if (phase !== "play") return;
+      if (phase !== "play" || paused) return;
       e.preventDefault();
       const canvas = e.currentTarget;
       if (e.pointerType === "mouse") {
@@ -2498,10 +2715,14 @@ export default function BlockCraftQuiz() {
         else tryMineLook();
         return;
       }
-      canvas.setPointerCapture(e.pointerId);
-      touchLookRef.current = { id: e.pointerId, lastX: e.clientX, lastY: e.clientY, moved: 0 };
+      // Egy már futó körbenéző ujj mellett a második vászon-érintés nem veszi át a nézést.
+      if (touchLookRef.current) return;
+      canvas.setPointerCapture?.(e.pointerId);
+      const rect = canvas.getBoundingClientRect();
+      const look = isLookZone(e.clientX - rect.left, rect.width);
+      touchLookRef.current = { id: e.pointerId, lastX: e.clientX, lastY: e.clientY, moved: 0, look };
     },
-    [phase, tryMineLook, tryPlaceLook],
+    [phase, paused, tryMineLook, tryPlaceLook],
   );
 
   const onCanvasPointerMove = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -2512,6 +2733,7 @@ export default function BlockCraftQuiz() {
     tl.lastX = e.clientX;
     tl.lastY = e.clientY;
     tl.moved += Math.abs(dx) + Math.abs(dy);
+    if (!tl.look || pausedRef.current || phaseRef.current !== "play") return;
     const p = playerRef.current;
     p.yaw -= dx * 0.006;
     p.pitch = Math.max(-1.45, Math.min(1.45, p.pitch - dy * 0.005));
@@ -2522,7 +2744,7 @@ export default function BlockCraftQuiz() {
       const tl = touchLookRef.current;
       if (!tl || tl.id !== e.pointerId) return;
       touchLookRef.current = null;
-      if (tl.moved >= 12) return;
+      if (tl.moved >= 12 || pausedRef.current || phaseRef.current !== "play") return;
       // Rövid tap = bányászás. A koppintott képernyőpont felé lövünk sugarat
       // (Minecraft mobil-viselkedés), fallback a crosshair-célra.
       const cam = cameraRef.current;
@@ -2548,304 +2770,530 @@ export default function BlockCraftQuiz() {
     [tryMineAt, tryMineLook],
   );
 
-  const onCanvasPointerCancel = useCallback(() => {
-    touchLookRef.current = null;
+  const onCanvasPointerCancel = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (touchLookRef.current?.id === e.pointerId) touchLookRef.current = null;
   }, []);
 
+  // S11 — a keret állapota és a HUD adatai.
+  const cfg = activeLevelRef.current;
+  const timeBudget = adaptiveTimeBudget(cfg.timeLimit, adaptiveRef.current.band);
+  const inRun = phase === "play" || phase === "quiz";
+  const screenState: GameScreenState =
+    phase === "menu" ? "start" : inRun ? (paused ? "paused" : "playing") : "result";
+  const timeTone: "default" | "warn" | "bad" =
+    timeLeft <= timeBudget * 0.15 ? "bad" : timeLeft <= timeBudget * 0.3 ? "warn" : "default";
+  const hudStats: GameHudStat[] = [
+    { id: "xp", label: "XP", value: sessionXp },
+    { id: "streak", label: "Sorozat", value: `🔥 ${streak}`, tone: streak >= 5 ? "good" : "default" },
+    {
+      id: "blocks",
+      label: "Blokk",
+      value: `${levelBlocks}/${cfg.goalBlocks}`,
+      tone: levelBlocks >= cfg.goalBlocks ? "good" : "default",
+    },
+    ...(cfg.goalRareBlocks > 0
+      ? [{
+          id: "ore",
+          label: "Érc",
+          value: `${levelRare}/${cfg.goalRareBlocks}`,
+          tone: levelRare >= cfg.goalRareBlocks ? ("good" as const) : ("default" as const),
+        }]
+      : []),
+    ...((cfg.goalDiamonds ?? 0) > 0
+      ? [{
+          id: "diamond",
+          label: "Gyémánt",
+          value: `💎 ${levelDiamonds}/${cfg.goalDiamonds}`,
+          tone: levelDiamonds >= (cfg.goalDiamonds ?? 0) ? ("good" as const) : ("default" as const),
+        }]
+      : []),
+  ];
+  const isLastLevel = levelIdx >= LEVELS.length - 1;
+  const totalAnswered = Math.max(answeredRef.current, correctInRun);
+  const levelName = cfg.name.replace(/^\d+\.\s*/, "");
+  const selCount = inventory[selType] ?? 0;
+
   return (
-    <div data-game="BlockCraftQuiz" data-playing={phase === "play" || phase === "quiz"}
-      className="game-shell-fixed min-h-screen relative overflow-hidden text-white" style={{ background: "radial-gradient(circle at 15% 15%, rgba(34,197,94,0.18), transparent 38%), radial-gradient(circle at 88% 8%, rgba(34,211,238,0.2), transparent 42%), linear-gradient(180deg, #0b1727 0%, #1b2f45 100%)" }}>
+    <GameShell
+      gameId="BlockCraftQuiz"
+      state={screenState}
+      onAutoPause={pauseGame}
+      style={{ background: "radial-gradient(circle at 15% 15%, rgba(34,197,94,0.18), transparent 38%), radial-gradient(circle at 88% 8%, rgba(34,211,238,0.2), transparent 42%), linear-gradient(180deg, #0b1727 0%, #1b2f45 100%)" }}
+    >
       <ClassroomGateModal accent="lime" />
       <AchievementToast achievements={newlyUnlocked} />
-      <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
+      <main
+        className="relative z-10 w-full mx-auto min-h-dvh min-h-screen flex flex-col"
+        // Játék közben a vászon kitölti a képernyőt (a HUD rajta lebeg); a biztonsági sávot a HUD, a vezérlősáv és az
+        // alsó sáv saját eltolása tartja (S2 szerződés: csak a --game-safe-* változók).
+        style={inRun ? { padding: 0, maxWidth: "none" } : undefined}
+      >
         {/* LS-4: earned play time — renders nothing without a coupon. */}
         <CouponHud session={coupon} />
         <CouponExpiredOverlay session={coupon} />
-        <header className="flex items-center justify-between gap-1 mb-1">
-          <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2 h-11 px-3"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <AudioToggleButton size="icon" />
-            <span className="flex items-center gap-1 text-amber-300"><Star className="w-4 h-4" />{totalXp}</span>
-            <span className="flex items-center gap-1 text-lime-300"><Flame className="w-4 h-4" />{streak}</span>
-          </div>
-        </header>
 
-        <Card className="border border-lime-400/45 bg-slate-950/85 backdrop-blur-md shadow-[0_16px_48px_rgba(0,0,0,0.45)] flex-1 flex flex-col min-h-0"><CardContent data-game-card-content className={`flex flex-col flex-1 min-h-0 ${phase === "play" ? "p-1.5 sm:p-3" : "p-3"}`}>
-          {phase !== "play" && <div className="flex items-center gap-2 mb-1"><Box className="w-5 h-5 text-lime-400" /><h1 className="text-base font-extrabold">Kockavadász kvíz</h1></div>}
-          {phase !== "play" && <><GamePedagogyPanel
-            accent="lime"
-            className="mb-2"
-            kidMission="Bányássz blokkokat egy kockavilágban! Minden blokk előtt rövid kvíz jön: angol szókincs, angol matek, magyar matek vagy környezetismeret. Csak helyes válaszra tűnik el a kő (és kapsz XP-et + sorozat-lángot). Időre is figyelj — a kör végén összesítjük a pontjaidat."
-            parentBody={
+        {phase === "menu" && (
+          <StartScreen
+            title="Kockavadász kvíz"
+            subtitle="Bányássz a kockavilágban! Minden blokk előtt egy gyors kvíz — jó válaszra jár az XP."
+            icon={<Pickaxe className="h-10 w-10" strokeWidth={2.4} aria-hidden="true" />}
+            startLabel={`Indulhat a bányászat!${levels.level != null ? ` · ${levels.level}. pálya` : ""}`}
+            startTestId="bc-start"
+            onStart={startGame}
+            best={bestScore.best}
+            menuKey="blockcraft"
+            secondary={
               <>
-                <strong className="text-lime-100/90">Tananyag:</strong> 4 tárgy kvízformában — angol szókincs (tárgyak, helyzetek), angol matek (vocabulary + műveletek), egyszerű magyar matek (1–4. oszt.) és környezetismeret (növény/állat/természet). A bányászat motivációt ad az ismétléshez.
-                <br />
-                <strong className="text-lime-100/90">Fejleszt:</strong> olvasásértés gyors döntés mellett, fejszámolás, idegen nyelvi gondolkozás, természettudományos összefüggés-látás, térbeli tájékozódás és kéz-szem koordináció (billentyű / érintés).
-                <br />
-                <span className="text-white/55">
-                  Akadály (fizikai pálya) + teszt (kvíz) + jutalom (XP, blokk eltűnik) minden lépésnél összekapcsolva — erős, azonnali visszajelzés.
-                </span>
+                <Link href="/games" className="game-btn game-btn-secondary">
+                  <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+                  Játékok
+                </Link>
+                <GamePedagogyPanel
+                  accent="lime"
+                  className="game-btn game-btn-secondary min-h-12 text-base text-center"
+                  kidMission="Bányássz blokkokat egy kockavilágban! Minden blokk előtt rövid kvíz jön: angol szókincs, angol matek, magyar matek vagy környezetismeret. Csak helyes válaszra tűnik el a kő (és kapsz XP-et + sorozat-lángot). Időre is figyelj — a kör végén összesítjük a pontjaidat."
+                  parentBody={
+                    <>
+                      <strong className="text-lime-100/90">Tananyag:</strong> 4 tárgy kvízformában — angol szókincs (tárgyak, helyzetek; a központi szóbankból, ismétlés nélkül), angol matek (vocabulary + műveletek), egyszerű magyar matek (1–4. oszt.) és környezetismeret (növény/állat/természet). A bányászat motivációt ad az ismétléshez.
+                      <br />
+                      <strong className="text-lime-100/90">Fejleszt:</strong> olvasásértés gyors döntés mellett, fejszámolás, idegen nyelvi gondolkozás, természettudományos összefüggés-látás, térbeli tájékozódás és kéz-szem koordináció (billentyű / érintés).
+                      <br />
+                      <span className="text-white/70">
+                        Akadály (fizikai pálya) + teszt (kvíz) + jutalom (XP, blokk eltűnik) minden lépésnél összekapcsolva — erős, azonnali visszajelzés.
+                      </span>
+                    </>
+                  }
+                />
               </>
             }
-          />
-          <p className="text-[11px] text-lime-100/90 mb-2 border border-lime-700/45 rounded px-2 py-1.5 bg-slate-900/95">{syncBanner}</p></>}
-
-          {phase === "menu" && (
-            <div className="flex flex-col items-center justify-center flex-1 gap-3 py-2 min-h-0">
-              <Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg text-base min-h-[44px]" onClick={startGame} data-testid="bc-start">
-                <Pickaxe className="w-4 h-4 mr-2" />Indulhat a bányászat!{levels.level != null ? ` · ${levels.level}. pálya` : ""}
-              </Button>
-              {levels.active && levels.level != null ? (
-                <GradeLevelPicker
-                  value={levels.level}
-                  unlocked={levels.unlocked}
-                  onChange={levels.select}
-                  label={`Nehézségi pálya — ${userGrade}. osztály`}
-                />
-              ) : null}
-              <div className="grid grid-cols-5 gap-2 p-2 rounded-xl bg-black/45 border border-lime-700/45">
-                {[GRASS, DIRT, SAND, STONE, WATER, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}
-              </div>
-              <div className="w-full max-w-sm rounded-xl border border-lime-600/45 bg-slate-900/85 p-3 min-h-0 overflow-hidden">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-lime-200 mb-1.5">5 pálya — XP halmozódik</p>
-                <ul className="space-y-1 text-[11px] text-white/85">
-                  {LEVELS.map((lv) => (
-                    <li key={lv.id} className="flex items-center justify-between gap-2 border-b border-lime-900/30 last:border-b-0 pb-1 last:pb-0">
-                      <span className="font-semibold text-lime-100/95">{lv.name}</span>
-                      <span className="text-white/60 tabular-nums">
-                        {lv.goalBlocks} blokk{lv.goalRareBlocks > 0 ? ` + ${lv.goalRareBlocks} érc` : ""} · {Math.floor(lv.timeLimit / 60)}:{String(lv.timeLimit % 60).padStart(2, "0")}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <p className="hidden sm:block text-xs text-white/80 text-center max-w-xs">
-                WASD mozgás, Space ugrás, E bányász-kvíz. Mobilon: gombok + koppintás a blokkra.
-              </p>
-            </div>
-          )}
-
-          {/*
-            G1: a canvas MINDIG a DOM-ban marad (más fázisokban csak elrejtjük),
-            különben a mount-szintű Three.js effect nem találná meg a canvas-t,
-            és a scene sosem épülne fel. (Ugyanaz a minta, mint SpaceAsteroidQuiz.)
-          */}
-          {(() => {
-            const cfg = activeLevelRef.current;
-            const timePct = Math.min(100, (timeLeft / adaptiveTimeBudget(cfg.timeLimit, adaptiveRef.current.band)) * 100);
-            const blocksPct = Math.min(100, (levelBlocks / cfg.goalBlocks) * 100);
-            const rarePct = cfg.goalRareBlocks > 0 ? Math.min(100, (levelRare / cfg.goalRareBlocks) * 100) : 100;
-            const showPlay = phase === "play" || phase === "quiz";
-            return (
-              <div className={`game-play-stack flex flex-1 min-h-0 flex-col items-center gap-1.5 ${showPlay ? "" : "hidden"}`}>
-                {/* === CANVAS LEGFELÜL (mobil-first) === */}
-                <div className="relative rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black game-scene flex-1 min-h-0">
-                  <canvas
-                    ref={canvasRef}
-                    className="block touch-none w-full h-full max-w-full cursor-crosshair select-none"
-                    onPointerDown={onCanvasPointerDown}
-                    onPointerMove={onCanvasPointerMove}
-                    onPointerUp={onCanvasPointerUp}
-                    onPointerCancel={onCanvasPointerCancel}
-                    onContextMenu={(e) => e.preventDefault()}
+            settings={
+              <div className="flex flex-col gap-3">
+                {levels.active && levels.level != null ? (
+                  <GradeLevelPicker
+                    value={levels.level}
+                    unlocked={levels.unlocked}
+                    onChange={levels.select}
+                    label={`Nehézségi pálya — ${userGrade}. osztály`}
                   />
-                  <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_54%,rgba(0,0,0,0.22)_100%)]" />
-                  {/* Crosshair (Minecraft-stílusú kereszt) */}
-                  <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                    <span className="absolute left-1/2 top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-white/80 mix-blend-difference" />
-                    <span className="absolute left-1/2 top-1/2 h-0.5 w-4 -translate-x-1/2 -translate-y-1/2 bg-white/80 mix-blend-difference" />
-                  </div>
-                  {xpFloat && (
-                    <div key={xpFloat.key} className="pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 text-amber-300 font-extrabold text-lg drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] animate-bounce">
-                      +{xpFloat.amount} XP
-                    </div>
-                  )}
-                  <div className={`pointer-events-none absolute left-2 top-2 rounded-lg border bg-slate-950/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                    cfg.isBossLevel
-                      ? "border-rose-400 text-rose-200 animate-pulse"
-                      : "border-lime-300/40 text-lime-100"
-                  }`}>
-                    {cfg.isBossLevel ? `★ BOSS ★ ${cfg.name.replace(/^\d+\.\s*/, "")}` : `Pálya ${cfg.id}/${LEVELS.length} · ${cfg.name.replace(/^\d+\.\s*/, "")}`}
-                  </div>
-                  <div className="pointer-events-none absolute right-2 top-2 rounded-lg border border-cyan-200/25 bg-slate-950/65 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-100 flex items-center gap-1">
-                    <span>3D FP</span>
+                ) : null}
+                <div>
+                  <p className="text-sm font-bold uppercase tracking-wide text-lime-200 mb-1.5">5 bánya — az XP halmozódik</p>
+                  <ul className="space-y-1 text-sm text-white/85">
+                    {LEVELS.map((lv) => (
+                      <li key={lv.id} className="flex items-center justify-between gap-2 border-b border-lime-900/30 last:border-b-0 pb-1 last:pb-0">
+                        <span className="font-semibold text-lime-100/95">{lv.name}</span>
+                        <span className="text-white/65 tabular-nums">
+                          {lv.goalBlocks} blokk{lv.goalRareBlocks > 0 ? ` + ${lv.goalRareBlocks} érc` : ""} · {Math.floor(lv.timeLimit / 60)}:{String(lv.timeLimit % 60).padStart(2, "0")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="flex flex-wrap gap-1.5" aria-hidden="true">
+                  {[GRASS, DIRT, SAND, STONE, WATER, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}
+                </div>
+                <p className="text-sm text-white/80">
+                  {touchCapable
+                    ? "Bal hüvelykujj: mozgás (tárcsa) · jobb hüvelykujj: körbenézés húzással · koppintás a blokkra vagy Bányász gomb: kvíz."
+                    : "WASD mozgás, Space ugrás, E bányász-kvíz, F lerakás, 1–9 blokkválasztás, P szünet."}
+                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-white/80">Hang</span>
+                  <AudioToggleButton showLabel className="h-12 min-w-12" />
+                </div>
+                <p className="text-sm text-lime-100/90 border border-lime-700/45 rounded-lg px-3 py-2 bg-slate-900/95">{syncBanner}</p>
+              </div>
+            }
+          >
+            <p className="text-sm text-lime-100/85 text-center">
+              Összes XP ebben a munkamenetben: <strong className="text-amber-300">{totalXp}</strong>
+            </p>
+          </StartScreen>
+        )}
+
+        {/*
+          G1: a canvas MINDIG a DOM-ban marad (más fázisokban csak elrejtjük),
+          különben a mount-szintű Three.js effect nem találná meg a canvas-t,
+          és a scene sosem épülne fel. (Ugyanaz a minta, mint SpaceAsteroidQuiz.)
+          S11: játék közben a vászon teljes képernyős; a HUD és az érintővezérlő rajta lebeg.
+        */}
+        <div className={`bc-play relative flex flex-1 min-h-0 flex-col ${inRun ? "" : "hidden"}`}>
+          <div className="game-scene relative flex-1 min-h-0 w-full overflow-hidden bg-black">
+            <canvas
+              ref={canvasRef}
+              className="block touch-none w-full h-full max-w-full cursor-crosshair select-none"
+              onPointerDown={onCanvasPointerDown}
+              onPointerMove={onCanvasPointerMove}
+              onPointerUp={onCanvasPointerUp}
+              onPointerCancel={onCanvasPointerCancel}
+              onContextMenu={(e) => e.preventDefault()}
+            />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_58%,rgba(0,0,0,0.28)_100%)]" />
+            {/* Célkereszt (Minecraft-stílusú kereszt, sötét kontúrral minden háttéren látható) */}
+            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" aria-hidden="true">
+              <span className="absolute left-1/2 top-1/2 h-6 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 shadow-[0_0_0_1.5px_rgba(0,0,0,0.55)]" />
+              <span className="absolute left-1/2 top-1/2 h-[3px] w-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 shadow-[0_0_0_1.5px_rgba(0,0,0,0.55)]" />
+            </div>
+            <AnimatePresence>
+              {xpFloat && (
+                <motion.div
+                  key={xpFloat.key}
+                  className="pointer-events-none absolute left-1/2 top-[40%] -translate-x-1/2 text-amber-300 font-black text-2xl drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)]"
+                  initial={reducedMotion ? false : { opacity: 0, y: 12, scale: 0.7 }}
+                  animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: -28, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: reducedMotion ? 0 : 0.6, ease: "easeOut" }}
+                >
+                  +{xpFloat.amount} XP
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* HUD a vászon tetején (S2 GameHud: idő, XP, sorozat, blokk-cél; 48 px-es szünet gomb). */}
+            {inRun && (
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col">
+                <GameHud
+                  stats={hudStats}
+                  onPause={pauseGame}
+                  progress={{ value: timeLeft, max: timeBudget, label: `${timeLeft} mp`, tone: timeTone }}
+                />
+                <div
+                  className="mt-1.5 flex flex-wrap items-center gap-1.5"
+                  style={{ paddingLeft: "max(8px, var(--game-safe-left))", paddingRight: "max(8px, var(--game-safe-right))" }}
+                >
+                  <span
+                    className={`rounded-full border bg-slate-950/75 px-3 py-1 text-xs font-extrabold uppercase tracking-wide backdrop-blur-sm ${
+                      cfg.isBossLevel ? "border-rose-400 text-rose-200" : "border-lime-300/45 text-lime-100"
+                    }`}
+                    data-testid="bc-level-chip"
+                  >
+                    {cfg.isBossLevel ? `★ Boss · ${levelName}` : `Pálya ${cfg.id}/${LEVELS.length} · ${levelName}`}
                     {cfg.weather !== "clear" && (
-                      <span title={cfg.weather}>
+                      <span className="ml-1.5" title={cfg.weather}>
                         {cfg.weather === "rain" ? "🌧" : cfg.weather === "snow" ? "❄" : "🏜"}
                       </span>
                     )}
-                  </div>
-                  <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-white/75">
-                    <span className="rounded bg-black/45 px-2 py-1 hidden sm:inline">Klikk: irányítás · bal: bányász · jobb: lerak</span>
-                    <span className="rounded bg-black/45 px-2 py-1 sm:hidden">Húzás: nézelődés · tap: bányász</span>
-                    <span className="rounded bg-black/45 px-2 py-1">Sárga keret = célzott blokk</span>
-                  </div>
+                  </span>
+                  {showHint && phase === "play" && (
+                    <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-sm">
+                      {touchCapable ? "Bal: mozgás · jobb: nézelődés · koppintás: bányászás" : "Kattints a vászonra · bal klikk: bányász · jobb: lerak"}
+                    </span>
+                  )}
                 </div>
-                {/* === HOTBAR (kibányászott blokkok, lerakáshoz) === */}
-                {hotbarTypes.length > 0 && (
-                  <div className="flex flex-wrap gap-1 w-full justify-center">
-                    {hotbarTypes.map((t, i) => (
+              </div>
+            )}
+
+            {/* === ÉRINTŐVEZÉRLŐ (csak érintős eszközön — egérnél a vászon kapja a helyet) === */}
+            {touchCapable && inRun ? (
+              <div
+                className="game-touch-layer bc-touch-layer"
+                data-game-controls
+                data-testid="bc-touch-controls"
+                style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }}
+              >
+                {/*
+                 * Egységes köralakú vezérlés (spec 2026-09-20): a négy irány-gomb helyett ugyanaz a
+                 * tárcsa, mint az Aszteroidában. S11: a sugár a képernyőhöz igazodik (radius="auto"), és
+                 * a joystick a bal hüvelykujjé — a jobb hüvelykujj közben a vászon jobb részén néz körbe.
+                 */}
+                <VirtualJoystick
+                  label="Mozgás"
+                  radius="auto"
+                  resetSignal={joyReset}
+                  className="bc-joystick"
+                  onChange={(v) => {
+                    if (pausedRef.current || phaseRef.current !== "play") return;
+                    const dirs = joystickToDirections(v);
+                    keysRef.current.left = dirs.left;
+                    keysRef.current.right = dirs.right;
+                    keysRef.current.fwd = dirs.fwd;
+                    keysRef.current.back = dirs.back;
+                  }}
+                />
+                {/* Akciógombok ívben a jobb alsó sarokban: Ugrás a legnagyobb, mellette Bányász, fölötte Lerak. */}
+                <div className="bc-actions" style={{ pointerEvents: "none" }}>
+                  <button
+                    type="button"
+                    className="game-action-btn bc-act bc-act-place pointer-events-auto"
+                    onClick={tryPlaceLook}
+                    disabled={selCount <= 0}
+                    aria-label={selCount > 0 ? `Lerak: ${BLOCK_NAME[selType] ?? "blokk"} (${selCount})` : "Lerak — előbb bányássz blokkot"}
+                    style={{ touchAction: "none" }}
+                  >
+                    {selCount > 0 ? (
+                      <span
+                        className="h-6 w-6 rounded-md border-2 border-black/40 shadow-inner"
+                        style={{ background: MC_PAL[selType]?.main ?? "#999" }}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Blocks className="h-6 w-6" aria-hidden="true" />
+                    )}
+                    <span className="bc-act-label" aria-hidden="true">Lerak</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="game-action-btn bc-act bc-act-mine pointer-events-auto"
+                    onClick={tryMineLook}
+                    aria-label="Bányász"
+                    style={{ touchAction: "none" }}
+                  >
+                    <Pickaxe className="h-7 w-7" aria-hidden="true" />
+                    <span className="bc-act-label" aria-hidden="true">Bányász</span>
+                  </button>
+                  <HoldButton
+                    size="auto"
+                    label="Ugrás"
+                    className="bc-act bc-act-jump pointer-events-auto"
+                    onHoldStart={() => startHold("jump")}
+                    onHoldEnd={() => endHold("jump")}
+                  >
+                    <ArrowBigUp className="h-8 w-8" aria-hidden="true" />
+                    <span className="bc-act-label" aria-hidden="true">Ugrás</span>
+                  </HoldButton>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* === Alsó sáv: hotbar (kibányászott blokkok, lerakáshoz) + billentyű-tipp === */}
+          {inRun && (
+            <div
+              className="bc-bottom flex shrink-0 flex-col gap-1 bg-slate-950/90 border-t border-lime-700/40"
+              data-touch={touchCapable ? "true" : "false"}
+              style={{
+                padding: "6px max(8px, var(--game-safe-right)) max(6px, var(--game-safe-bottom)) max(8px, var(--game-safe-left))",
+              }}
+            >
+              <div className="overflow-x-auto">
+                {hotbarTypes.length === 0 ? (
+                  <p className="bc-hotbar-empty flex min-h-12 items-center justify-center px-2 text-center text-sm leading-snug text-white/70">
+                    Ide kerülnek a kibányászott blokkok — {touchCapable ? "a Lerak gombbal" : "F-fel"} építhetsz velük.
+                  </p>
+                ) : (
+                <div className="mx-auto flex w-max items-center gap-1.5" data-testid="bc-hotbar">
+                  {hotbarTypes.map((t, i) => (
                       <button
                         key={t}
                         type="button"
                         onClick={() => setSelType(t)}
-                        className={`flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-bold transition-colors ${
+                        aria-label={`${BLOCK_NAME[t] ?? "Blokk"}: ${inventory[t] ?? 0} db`}
+                        aria-pressed={selType === t}
+                        className={`flex h-12 min-w-12 items-center justify-center gap-1.5 rounded-xl border-2 px-2 text-sm font-extrabold transition-colors ${
                           selType === t
-                            ? "border-amber-300 bg-amber-500/25 text-amber-100"
-                            : "border-white/20 bg-black/40 text-white/75 hover:bg-white/10"
+                            ? "border-amber-300 bg-amber-500/25 text-amber-100 shadow-[0_0_14px_rgba(251,191,36,0.35)]"
+                            : "border-white/20 bg-black/40 text-white/85 hover:bg-white/10"
                         }`}
                         title={`${BLOCK_NAME[t] ?? "?"} (${i + 1})`}
                       >
-                        <span className="inline-block h-3.5 w-3.5 rounded-sm border border-black/40" style={{ background: MC_PAL[t]?.main ?? "#999" }} />
-                        {BLOCK_NAME[t] ?? "?"}
-                        <span className="tabular-nums text-white/60">×{inventory[t] ?? 0}</span>
+                        <span className="inline-block h-6 w-6 rounded-md border-2 border-black/40" style={{ background: MC_PAL[t]?.main ?? "#999" }} aria-hidden="true" />
+                        <span className="hidden sm:inline text-xs">{BLOCK_NAME[t] ?? "?"}</span>
+                        <span className="tabular-nums">×{inventory[t] ?? 0}</span>
                       </button>
                     ))}
-                  </div>
+                </div>
                 )}
-                {/* === KONTROLLGOMBOK (csak coarse pointer — C2: egérnél a vászon kapja a helyet) === */}
-                {coarsePointer ? (
-                <div
-                  className="flex w-full items-center justify-between gap-2"
-                  data-testid="bc-touch-controls"
-                  style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }}
-                >
-                  {/*
-                   * Egységes köralakú vezérlés (spec 2026-09-20): a négy irány-gomb helyett ugyanaz a
-                   * tárcsa, mint az Aszteroidában. A négy gombbal az ÁTLÓS mozgás két gomb egyidejű
-                   * nyomását követelte, ami egy hüvelykujjal nem megy. A nézelődés (vászon-húzás) és
-                   * a nem irányjellegű gombok változatlanok.
-                   */}
-                  <VirtualJoystick
-                    label="Mozgás"
-                    radius={52}
-                    onChange={(v) => {
-                      const dirs = joystickToDirections(v);
-                      keysRef.current.left = dirs.left;
-                      keysRef.current.right = dirs.right;
-                      keysRef.current.fwd = dirs.fwd;
-                      keysRef.current.back = dirs.back;
-                    }}
-                  />
-                  <div className="grid grid-cols-2 gap-1.5 flex-1 max-w-[260px]">
-                    <Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md py-3 text-xs col-span-2" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")}>Ugrás</Button>
-                    <Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={tryMineLook}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász</Button>
-                    <Button type="button" size="sm" className="bg-amber-700 hover:bg-amber-600 text-white border border-amber-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={tryPlaceLook} disabled={(inventory[selType] ?? 0) <= 0}>Lerak</Button>
-                  </div>
-                </div>
-                ) : (
-                  <p className="w-full text-center text-[11px] text-white/55" data-testid="bc-keyboard-hint">
-                    Billentyűzet: WASD mozgás · Space ugrás · E bányász · F lerak
-                  </p>
-                )}
-                {/* === KOMPAKT HUD === */}
-                <div className="w-full flex items-center gap-1.5">
-                  <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div className={`h-full transition-all ${timePct < 25 ? "bg-gradient-to-r from-rose-500 to-amber-400" : "bg-gradient-to-r from-cyan-400 to-lime-500"}`} style={{ width: `${timePct}%` }} />
-                  </div>
-                  <span className="text-[10px] font-bold text-white/80 tabular-nums min-w-[32px] text-right">{timeLeft}s</span>
-                </div>
-                <div className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70">
-                  <span>XP: <strong className="text-amber-300">{sessionXp}</strong></span>
-                  <span>Cél: <strong className="text-lime-300">{levelBlocks}/{cfg.goalBlocks}</strong>{cfg.goalRareBlocks > 0 && <> · <strong className="text-cyan-300">{levelRare}/{cfg.goalRareBlocks}</strong> érc</>}{(cfg.goalDiamonds ?? 0) > 0 && <> · <strong className="text-sky-200">{levelDiamonds}/{cfg.goalDiamonds}</strong> 💎</>}</span>
-                  <span className="flex items-center gap-0.5"><Flame className="w-3 h-3 text-orange-400" />{streak}</span>
-                </div>
-                {/* === Cél sáv: blokk-célt mutat (a streak helyett) === */}
-                <GameNextGoalBar
-                  accent="lime"
-                  headline={blocksPct >= 100 && rarePct >= 100 ? "Cél elérve!" : `Pálya cél: ${levelBlocks}/${cfg.goalBlocks} blokk${cfg.goalRareBlocks > 0 ? ` + ${levelRare}/${cfg.goalRareBlocks} érc` : ""}`}
-                  subtitle=""
-                  current={Math.min(levelBlocks, cfg.goalBlocks)}
-                  target={cfg.goalBlocks}
-                  className="w-full"
-                />
-                <div className="flex gap-2 justify-center w-full">
-                  <Button type="button" size="sm" className="bg-amber-600/80 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md text-xs px-3 py-1" onClick={endRun}>Kör vége</Button>
-                </div>
               </div>
-            );
-          })()}
-
-          {phase === "levelComplete" && (() => {
-            const cfg = activeLevelRef.current;
-            const isLast = levelIdx >= LEVELS.length - 1;
-            const earned = sessionXp - levelStartXp;
-            return (
-              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-6 text-center" data-testid="bc-level-complete">
-                <div className="flex items-center gap-2"><Star className="w-9 h-9 text-amber-300" /><Star className="w-12 h-12 text-amber-200" /><Star className="w-9 h-9 text-amber-300" /></div>
-                <p className="text-lg font-extrabold text-lime-200">Pálya teljesítve!</p>
-                <p className="text-sm font-semibold text-white/90">{cfg.name}</p>
-                <div className="flex flex-wrap gap-2 justify-center text-[12px] text-white/85">
-                  <span className="rounded bg-lime-700/55 px-2 py-1"><strong className="text-lime-100">{levelBlocks}</strong> blokk</span>
-                  <span className="rounded bg-cyan-700/55 px-2 py-1"><strong className="text-cyan-100">{levelRare}</strong> érc</span>
-                  <span className="rounded bg-amber-700/55 px-2 py-1"><strong className="text-amber-100">+{earned}</strong> XP</span>
-                  <span className="rounded bg-orange-700/55 px-2 py-1 flex items-center gap-1"><Flame className="w-3 h-3 text-orange-300" /><strong>{streak}</strong></span>
-                </div>
-                {!isLast && (
-                  <p className="text-xs text-white/70 max-w-sm">Következő: <strong className="text-lime-200">{LEVELS[levelIdx + 1]!.name}</strong> — {LEVELS[levelIdx + 1]!.description}</p>
-                )}
-                <div className="flex gap-2 flex-wrap justify-center">
-                  {!isLast ? (
-                    <Button className="bg-gradient-to-r from-lime-600 to-emerald-700 hover:from-lime-500 hover:to-emerald-600 font-bold" onClick={startNextLevel}>
-                      <Pickaxe className="w-4 h-4 mr-1" />Tovább a {levelIdx + 2}. pályára
-                    </Button>
-                  ) : (
-                    <Button className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 font-bold text-slate-950" onClick={startNextLevel}>
-                      <Star className="w-4 h-4 mr-1" />Befejezés — összesítés!
-                    </Button>
-                  )}
-                  <Button variant="outline" className="border-white/40 text-white" onClick={endRun}>Befejezés most</Button>
-                </div>
-              </div>
-            );
-          })()}
-
-          {phase === "over" && (
-            <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center" data-testid="bc-over">
-              <Box className={`w-12 h-12 ${gameWon ? "text-amber-300" : "text-lime-400"}`} />
-              <p className="text-lg font-bold">{gameWon ? "Bajnok lettél! Mind az 5 pálya teljesítve!" : "Bányászat vége"}</p>
-              <p className="text-sm font-semibold text-lime-100/90 max-w-sm">
-                {gameWon
-                  ? `Eljutottál az utolsó pályáig — ${LEVELS.length}/${LEVELS.length} pálya kipipálva. Próbáld meg újra még magasabb pontszámért!`
-                  : "Minden jó kvíz egy-egy tantárgyból erősített — nézd meg az XP-t, a sorozatot és a tantárgyi lebontást!"}
-              </p>
-              <p className="text-sm text-white/75">XP: <strong className="text-amber-300">{sessionXp}</strong> · Blokkok: <strong>{blocksMined}</strong> · Érc: <strong>{rareBlocks}</strong> · Pálya: <strong>{levelIdx + 1}/{LEVELS.length}</strong></p>
-              <div className="flex flex-wrap gap-1.5 justify-center max-w-sm">
-                <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-lime-600/70 text-lime-50 border-lime-300/60">Angol: {subjectStats.english}</span>
-                <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-cyan-600/70 text-cyan-50 border-cyan-300/60">Angol-matek: {subjectStats["english-math"]}</span>
-                <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-amber-600/70 text-amber-50 border-amber-300/60">Matek: {subjectStats.math}</span>
-                <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-emerald-600/70 text-emerald-50 border-emerald-300/60">Környezet: {subjectStats.nature}</span>
-                {subjectStats.science > 0 && <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-sky-600/70 text-sky-50 border-sky-300/60">Természettudomány: {subjectStats.science}</span>}
-                {subjectStats.history > 0 && <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-rose-600/70 text-rose-50 border-rose-300/60">Történelem: {subjectStats.history}</span>}
-              </div>
-              {syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}
-              <div className="flex gap-2">
-                <Button className="bg-lime-700 hover:bg-lime-600" onClick={startGame}><RotateCcw className="w-4 h-4 mr-1" />Új próbálkozás</Button>
-                <Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link>
-              </div>
+              {!touchCapable && (
+                <p className="w-full text-center text-xs text-white/65" data-testid="bc-keyboard-hint">
+                  Billentyűzet: WASD mozgás · Space ugrás · E bányász · F lerak · 1–9 blokk · P szünet
+                </p>
+              )}
             </div>
           )}
-        </CardContent></Card>
+        </div>
       </main>
 
-      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div ref={quizDialogRef} role="dialog" aria-modal="true" aria-label="Mini-teszt" initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`game-quiz w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : s === "science" ? "Természettudomány" : s === "history" ? "Történelem" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="game-quiz-answers grid gap-2">{quiz.options.map((o, i) => {
-        const isCorrect = revealCorrectIdx === i;
-        const isWrong = wrongIdx === i;
-        const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
-        const cls = isCorrect
-          ? "h-auto py-3 text-left bg-emerald-700/70 hover:bg-emerald-700/70 text-white border-2 border-emerald-300 text-[15px] font-bold"
-          : isWrong
-            ? "h-auto py-3 text-left bg-rose-800/70 hover:bg-rose-800/70 text-white border-2 border-rose-300 text-[15px]"
-            : dim
-              ? "h-auto py-3 text-left bg-white/5 text-white/40 border border-lime-900/20 text-[15px]"
-              : "h-auto py-3 text-left bg-white/10 hover:bg-lime-800/50 text-white border border-lime-900/40 text-[15px]";
-        return <Button key={`${o}-${i}`} variant="secondary" className={cls} disabled={revealCorrectIdx !== null} onClick={() => onAnswer(i)} {...correctDataAttrs(i === quiz.correctIndex)}>{o}</Button>;
-      })}</div>{streakProtector.warning && <p className="mt-2 text-[11px] text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>}{revealCorrectIdx !== null && wrongIdx !== null && <p className="mt-2 text-[11px] text-emerald-300/95">A helyes válasz: <strong>{quiz.options[revealCorrectIdx]}</strong></p>}</motion.div></motion.div>}</AnimatePresence>
+      <AnimatePresence>
+        {phase === "quiz" && quiz && (
+          <motion.div
+            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm"
+            style={{
+              padding:
+                "max(8px, var(--game-safe-top)) max(8px, var(--game-safe-right)) max(8px, var(--game-safe-bottom)) max(8px, var(--game-safe-left))",
+            }}
+            initial={reducedMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              ref={quizDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Mini-teszt"
+              data-testid="bc-quiz"
+              initial={reducedMotion ? false : { y: 36, opacity: 0, scale: 0.98 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 420, damping: 32 }}
+              className={`game-quiz bc-quiz w-full max-w-lg max-h-full overflow-y-auto rounded-3xl border-2 border-lime-400/55 bg-slate-950/95 p-4 shadow-[0_20px_56px_rgba(34,197,94,0.28)] ${
+                wrongShake && !reducedMotion ? "animate-shake" : ""
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const s = quiz.subject;
+                  const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : s === "science" ? "Természettudomány" : s === "history" ? "Történelem" : s === "hungarian" ? "Magyar" : "Kvíz";
+                  const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60";
+                  return <span className={`text-xs font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-full border ${chipClass}`}>{label}</span>;
+                })()}
+                <span className="text-sm font-black text-lime-300 uppercase">Mini-teszt</span>
+                {/* A teljes képernyős kvízréteg eltakarja a HUD szünetgombját — itt is lehet megállni (#426 review-lelet). */}
+                <button
+                  type="button"
+                  data-testid="bc-quiz-pause"
+                  aria-label="Szünet"
+                  onClick={pauseGame}
+                  className="ml-auto inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/10 text-white hover:bg-white/20"
+                >
+                  <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                </button>
+              </div>
+              <p className="bc-quiz-hint mt-1 text-sm text-white/70 leading-snug">Jó válasz: eltűnik a blokk, és jár az XP. Rossznál megmutatjuk, miért.</p>
+              <p className="mt-2 mb-3 text-lg sm:text-xl font-bold leading-snug text-white" data-testid="bc-prompt">{quiz.prompt}</p>
+              <div className="game-quiz-answers bc-quiz-answers grid gap-2">
+                {quiz.options.map((o, i) => {
+                  const isCorrect = revealCorrectIdx === i;
+                  const isWrong = wrongIdx === i;
+                  const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
+                  const cls = isCorrect
+                    ? "bg-emerald-700/80 hover:bg-emerald-700/80 text-white border-2 border-emerald-300 font-bold"
+                    : isWrong
+                      ? "bg-rose-800/80 hover:bg-rose-800/80 text-white border-2 border-rose-300"
+                      : dim
+                        ? "bg-white/5 text-white/40 border border-lime-900/20"
+                        : "bg-slate-900/95 hover:bg-lime-800/55 active:bg-lime-700/70 text-white border border-lime-500/45 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
+                  return (
+                    <button
+                      key={`${o}-${i}`}
+                      type="button"
+                      className={`game-answer-btn flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-300 ${cls}`}
+                      disabled={revealCorrectIdx !== null}
+                      data-state={isCorrect ? "correct" : isWrong ? "wrong" : "idle"}
+                      onClick={() => onAnswer(i)}
+                      {...correctDataAttrs(i === quiz.correctIndex)}
+                    >
+                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/35 text-sm font-black text-lime-100" aria-hidden="true">{"ABCD"[i] ?? i + 1}</span>
+                      <span className="min-w-0 flex-1">{o}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {streakProtector.warning && <p className="mt-2 text-sm text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>}
+              {revealCorrectIdx !== null && wrongIdx !== null && <p className="mt-2 text-sm text-emerald-300/95">A helyes válasz: <strong>{quiz.options[revealCorrectIdx]}</strong></p>}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <AnimatePresence>{achievement && <motion.div className="fixed top-16 left-1/2 -translate-x-1/2 z-[70] bg-amber-500/95 text-slate-950 font-bold text-sm px-4 py-2 rounded-xl shadow-xl border border-amber-200/60 whitespace-nowrap" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>{achievement}</motion.div>}</AnimatePresence>
-      {feedback && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
+      <AnimatePresence>
+        {achievement && (
+          <motion.div
+            className="fixed left-1/2 -translate-x-1/2 z-[70] bg-amber-500/95 text-slate-950 font-extrabold text-sm px-4 py-2 rounded-xl shadow-xl border border-amber-200/60 whitespace-nowrap pointer-events-none"
+            style={{ top: "calc(max(4px, var(--game-safe-top)) + 104px)" }}
+            initial={reducedMotion ? false : { opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+          >
+            {achievement}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Szünetben a kártya a menü alá nem kerülhet (z-90 > z-80): addig elrejtjük, folytatáskor visszajön. */}
+      {feedback && !paused && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
 
-      <style>{`@keyframes shake {0%,100% { transform: translateX(0); }25% { transform: translateX(-5px); }75% { transform: translateX(5px); }} .animate-shake { animation: shake 0.16s ease-in-out 2; }`}</style>
-    </div>
+      <PauseMenu
+        open={paused && inRun}
+        onResume={resumeGame}
+        onRestart={startGame}
+        onExit={endRun}
+        exitLabel="Kör vége"
+      />
+
+      <ResultScreen
+        open={phase === "levelComplete"}
+        testId="bc-level-complete"
+        title="Pálya teljesítve!"
+        won
+        score={sessionXp}
+        best={bestScore.best}
+        correct={correctInRun}
+        total={totalAnswered}
+        onRetry={startNextLevel}
+        retryLabel={isLastLevel ? "Befejezés — összesítés!" : `Tovább a ${levelIdx + 2}. pályára`}
+        onBack={endRun}
+        backLabel="Befejezés most"
+        extra={
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-base font-bold text-lime-100">{cfg.name}</p>
+            <div className="flex flex-wrap justify-center gap-1.5 text-sm text-white/90">
+              <span className="rounded-full bg-lime-700/55 px-2.5 py-1"><strong className="text-lime-100">{levelBlocks}</strong> blokk</span>
+              <span className="rounded-full bg-cyan-700/55 px-2.5 py-1"><strong className="text-cyan-100">{levelRare}</strong> érc</span>
+              <span className="rounded-full bg-amber-700/55 px-2.5 py-1"><strong className="text-amber-100">+{sessionXp - levelStartXp}</strong> XP</span>
+              <span className="rounded-full bg-orange-700/55 px-2.5 py-1 inline-flex items-center gap-1"><Flame className="w-4 h-4 text-orange-300" /><strong>{streak}</strong></span>
+            </div>
+            {!isLastLevel && (
+              <p className="text-sm text-white/75 max-w-sm">Következő: <strong className="text-lime-200">{LEVELS[levelIdx + 1]!.name}</strong> — {LEVELS[levelIdx + 1]!.description}</p>
+            )}
+          </div>
+        }
+      />
+
+      <ResultScreen
+        open={phase === "over"}
+        testId="bc-over"
+        title={gameWon ? "Bajnok lettél! Mind az 5 pálya kész!" : "Bányászat vége"}
+        won={gameWon}
+        score={sessionXp}
+        best={bestResult?.best ?? bestScore.best}
+        isNewBest={(bestResult?.isNewBest ?? false) && sessionXp > 0}
+        correct={correctInRun}
+        total={totalAnswered}
+        onRetry={startGame}
+        retryLabel="Új próbálkozás"
+        onBack={() => navigate("/games")}
+        extra={
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-sm text-white/85">
+              Blokkok: <strong>{blocksMined}</strong> · Érc: <strong>{rareBlocks}</strong> · Pálya: <strong>{levelIdx + 1}/{LEVELS.length}</strong>
+            </p>
+            <div className="flex flex-wrap gap-1.5 justify-center max-w-sm">
+              <span className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border bg-lime-600/70 text-lime-50 border-lime-300/60">Angol: {subjectStats.english}</span>
+              <span className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border bg-cyan-600/70 text-cyan-50 border-cyan-300/60">Angol-matek: {subjectStats["english-math"]}</span>
+              <span className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border bg-amber-600/70 text-amber-50 border-amber-300/60">Matek: {subjectStats.math}</span>
+              <span className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border bg-emerald-600/70 text-emerald-50 border-emerald-300/60">Környezet: {subjectStats.nature}</span>
+              {subjectStats.hungarian > 0 && <span className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border bg-fuchsia-600/70 text-fuchsia-50 border-fuchsia-300/60">Magyar: {subjectStats.hungarian}</span>}
+              {subjectStats.science > 0 && <span className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border bg-sky-600/70 text-sky-50 border-sky-300/60">Természettudomány: {subjectStats.science}</span>}
+              {subjectStats.history > 0 && <span className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border bg-rose-600/70 text-rose-50 border-rose-300/60">Történelem: {subjectStats.history}</span>}
+            </div>
+            {syncEligibility?.eligible ? <p className="text-sm text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-sm text-white/60 max-w-xs">{syncBanner}</p>}
+          </div>
+        }
+      />
+
+      <style>{`
+        @keyframes shake {0%,100% { transform: translateX(0); }25% { transform: translateX(-5px); }75% { transform: translateX(5px); }}
+        .animate-shake { animation: shake 0.16s ease-in-out 2; }
+        /* S11 — akciógombok ívben (Ugrás a legnagyobb: --game-action-size × 1,15), felirat-kapszula a kör alján. */
+        .bc-actions { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; align-items: end; justify-items: center; column-gap: 12px; row-gap: 14px; }
+        .bc-act { position: relative; color: #fff; border: 2px solid rgba(255,255,255,.35); box-shadow: 0 6px 18px rgba(0,0,0,.45), inset 0 2px 0 rgba(255,255,255,.25), inset 0 -4px 0 rgba(0,0,0,.25); -webkit-tap-highlight-color: transparent; user-select: none; transition: transform .08s ease, filter .12s ease; }
+        .bc-act:active { transform: scale(.92); filter: brightness(1.15); }
+        .bc-act:disabled { opacity: .45; filter: grayscale(.6); }
+        .bc-act-place { grid-column: 2; grid-row: 1; background: radial-gradient(circle at 35% 30%, #fbbf24, #b45309 70%); }
+        .bc-act-mine { grid-column: 1; grid-row: 2; margin-bottom: 18px; background: radial-gradient(circle at 35% 30%, #4ade80, #047857 70%); }
+        .bc-act-jump.game-action-btn { grid-column: 2; grid-row: 2; width: calc(var(--game-action-size) * 1.15); height: calc(var(--game-action-size) * 1.15); background: radial-gradient(circle at 35% 30%, #a78bfa, #5b21b6 70%); }
+        .bc-act-label { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); white-space: nowrap; font-size: 14px; line-height: 1; font-weight: 800; padding: 3px 8px; border-radius: 9999px; background: rgba(2,6,23,.82); border: 1px solid rgba(255,255,255,.22); color: #fff; pointer-events: none; }
+        @media (prefers-reduced-motion: reduce) { .bc-act { transition: none; } .bc-act:active { transform: none; } }
+        /* Alacsony fekvő nézet: a kvíz válaszai két oszlopban, a súgó-sor elrejtve, hogy minden kiférjen.
+           Érintős fekvő nézetben a hotbar a vászonra kerül, a joystick és az akciógombok közé (a vászon kapja a magasságot). */
+        @media (max-height: 500px) and (min-width: 560px) {
+          .bc-bottom[data-touch="true"] { position: absolute; z-index: 25; left: 50%; transform: translateX(-50%); bottom: max(8px, var(--game-safe-bottom)); max-width: 52%; padding: 0 !important; background: transparent; border: 0; pointer-events: none; }
+          .bc-bottom[data-touch="true"] button { pointer-events: auto; }
+          .bc-bottom[data-touch="true"] .bc-hotbar-empty { display: none; }
+          .bc-quiz-answers { grid-template-columns: 1fr 1fr; }
+          .bc-quiz-hint { display: none; }
+          .bc-quiz { padding: 12px; }
+        }
+      `}</style>
+    </GameShell>
   );
 }
