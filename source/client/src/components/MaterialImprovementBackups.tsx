@@ -32,6 +32,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { hu } from "date-fns/locale";
+import { classroomDisplayLabel } from "@shared/classrooms";
 
 interface Backup {
   id: string;
@@ -180,7 +181,7 @@ export default function MaterialImprovementBackups() {
                       <TableCell className="font-medium">
                         {backup.backupData.title}
                       </TableCell>
-                      <TableCell>{backup.backupData.classroom}. osztály</TableCell>
+                      <TableCell>{classroomDisplayLabel(backup.backupData.classroom)}</TableCell>
                       <TableCell>
                         {backup.notes ? (
                           <span className="text-sm text-muted-foreground">{backup.notes}</span>

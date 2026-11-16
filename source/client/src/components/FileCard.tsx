@@ -7,6 +7,7 @@ import { getFileIcon } from "@/lib/iconUtils";
 import LikeButton from "./LikeButton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import ClassroomBadge from "./ClassroomBadge";
 
 interface FileCardProps {
   id: string;
@@ -15,6 +16,8 @@ interface FileCardProps {
   description?: string;
   createdAt: Date;
   contentType?: string;
+  /** A tananyag évfolyama (html_files.classroom) — a kártyán jelvényként (docs/specs/2026-11-16-tananyag-evfolyam-jeloles.md). */
+  classroom?: unknown;
   currentUserId?: string;
   isAdmin?: boolean;
   onView: () => void;
@@ -30,6 +33,7 @@ export default function FileCard({
   description,
   createdAt,
   contentType = 'html',
+  classroom,
   currentUserId,
   isAdmin = false,
   onView,
@@ -97,7 +101,10 @@ export default function FileCard({
             <div className="w-8 h-8 sm:w-9 sm:h-9 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
               <FileIcon className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600 dark:text-orange-400" />
             </div>
-            <h3 className="font-semibold text-xs sm:text-sm text-foreground break-words leading-tight">{title}</h3>
+            <div className="flex flex-col items-start gap-1 min-w-0">
+              <h3 className="font-semibold text-xs sm:text-sm text-foreground break-words leading-tight">{title}</h3>
+              <ClassroomBadge classroom={classroom} warnMissing={isAdmin} />
+            </div>
           </div>
           <Badge 
             variant="secondary" 
