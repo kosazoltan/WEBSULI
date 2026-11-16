@@ -4,7 +4,6 @@
  * Socket.IO-kézfogás FEATURE_DISABLED), bekapcsolva a vendég jegyet kap. Adatbázishoz nem kapcsolódunk.
  */
 import assert from "node:assert/strict";
-import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, describe, it } from "node:test";
 import express from "express";
@@ -34,6 +33,18 @@ after(async () => {
 
 const post = (headers: Record<string, string>) =>
   fetch(`${base}/api/rt/ticket`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ intent: "create" }) });
+
+describe("JM2 — leállítási sorrend (index.ts, review #452)", () => {
+  it("a gracefulShutdown a beginRealtimeShutdown-on át zár (a server.close sorrendjét az dönti el), és a pool előtt kivárja a drain-t", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const src = (await readFile(new URL("../server/index.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+    const shutdown = src.slice(src.indexOf("const gracefulShutdown"), src.indexOf('process.on("SIGTERM"'));
+    const code = shutdown.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+    assert.match(code, /beginRealtimeShutdown\(getRealtime\(\), server, \{\s*drainMs: drainMsFromEnv\(\)/);
+    assert.equal((code.match(/server\.close\(/g) ?? []).length, 0, "közvetlen server.close() nincs (különben a polling-játékos leszakad)");
+    assert.ok(code.indexOf("await realtimeDrained") > 0 && code.indexOf("await realtimeDrained") < code.indexOf("dbPool.end()"), "a drain a pool zárása előtt kivárva");
+  });
+});
 
 describe("JM2 — valódi felcsatolás", () => {
   it("MP_MODE nincs beállítva (alap: off): jegy 404, státusz { enabled: false }, Socket.IO-kézfogás FEATURE_DISABLED", async () => {

@@ -69,6 +69,11 @@ export type RtConnection = {
   readonly resumeToken: string | null;
   readonly playerId: string | null;
   readonly state: RtRoomState | null;
+  /** `open`: kapcsolódva; `reconnecting`: hálózati kiesés, a folytatási tokennel próbál; `closed`: végleges (kilépés után
+   *  megszakadt kapcsolat, kirúgás, lezárt szoba, visszautasított folytatás) — új szobához új jegy és új `connectRt` kell. */
+  readonly status: "open" | "reconnecting" | "closed";
+  /** A végleges lezárás oka (pl. `INVALID_TICKET`, `ROOM_CLOSED`, `KICKED`, `LEFT`), különben `null`. */
+  readonly closedCode: string | null;
   on<E extends RtServerEvent>(event: E, handler: (payload: RtServerPayload<E>) => void): () => void;
   onState(handler: (state: RtRoomState) => void): () => void;
   request<E extends Exclude<RtClientEvent, "clock:ping">>(event: E, payload: Omit<RtClientPayload<E>, "cid">): Promise<RtAck>;
@@ -86,6 +91,8 @@ export async function connectRt(opts: ConnectRtOptions): Promise<RtConnection> {
   let resumeToken: string | null = null;
   let playerId: string | null = null;
   let state: RtRoomState | null = null;
+  let status: "open" | "reconnecting" | "closed" = "open";
+  let closedCode: string | null = null;
   const stateHandlers = new Set<(s: RtRoomState) => void>();
 
   const socket = io(opts.url ?? "", {
@@ -116,8 +123,24 @@ export async function connectRt(opts: ConnectRtOptions): Promise<RtConnection> {
   socket.on("clock:probe", (_p: unknown, ack?: () => void) => {
     if (typeof ack === "function") ack();
   });
+  /** A szobatagság törlése (a szerver a helyet felszabadította); a jegy egyszer használatos, ezért ezután nincs mivel
+   *  újracsatlakozni: egy későbbi kiesés végleges lezárás. */
+  const forgetSeat = () => {
+    resumeToken = null;
+    playerId = null;
+    state = null;
+  };
+  const closeFor = (code: string) => {
+    forgetSeat();
+    status = "closed";
+    closedCode = code;
+    socket.io.reconnection(false);
+  };
   socket.on("notice", (n: RtServerPayload<"notice">) => {
-    if (n.code === "ROOM_CLOSED" || n.code === "KICKED") resumeToken = null;
+    if (n.code === "ROOM_CLOSED" || n.code === "KICKED") {
+      forgetSeat();
+      closedCode = n.code;
+    }
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -134,6 +157,20 @@ export async function connectRt(opts: ConnectRtOptions): Promise<RtConnection> {
     socket.once("connect_error", onError);
   });
 
+  // Az első kapcsolat után: kiesésnél csak érvényes folytatási tokennel próbálkozunk; a felhasznált jeggyel soha.
+  socket.on("disconnect", (reason: string) => {
+    if (status === "closed") return;
+    if (reason === "io client disconnect" || !resumeToken) closeFor(closedCode ?? "DISCONNECTED");
+    else status = "reconnecting";
+  });
+  socket.on("connect", () => {
+    if (status === "reconnecting") status = "open";
+  });
+  // A szerver kézfogási elutasítása (pl. visszavont / lejárt folytatási token → INVALID_TICKET) végleges: nem próbálkozunk tovább.
+  socket.on("connect_error", (err: Error & { data?: { code?: string } }) => {
+    if (err.data?.code) closeFor(err.data.code);
+  });
+
   return {
     socket,
     get resumeToken() {
@@ -144,6 +181,12 @@ export async function connectRt(opts: ConnectRtOptions): Promise<RtConnection> {
     },
     get state() {
       return state;
+    },
+    get status() {
+      return status;
+    },
+    get closedCode() {
+      return closedCode;
     },
     on(event, handler) {
       socket.on(event as string, handler as (...args: unknown[]) => void);
@@ -158,11 +201,18 @@ export async function connectRt(opts: ConnectRtOptions): Promise<RtConnection> {
         socket.timeout(opts.ackTimeoutMs ?? 8000).emit(event, { ...payload, cid: nextCid() }, (err: Error | null, ack: RtAck) => {
           if (!err && ack.ok && ack.resumeToken) resumeToken = ack.resumeToken;
           if (!err && ack.ok && ack.playerId) playerId = ack.playerId;
+          // Review #452: sikeres kilépés után a szerver a helyet felszabadította — a helyi tagság is törlődik (egy
+          // későbbi újracsatlakozás ne a visszavont tokent küldje).
+          if (!err && ack.ok && event === "room:leave") {
+            forgetSeat();
+            closedCode = "LEFT";
+          }
           resolve(err ? { ok: false, code: "RATE_LIMITED" } : ack);
         });
       });
     },
     close() {
+      closeFor(closedCode ?? "CLOSED");
       socket.close();
     },
   };

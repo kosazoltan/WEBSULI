@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 
 import { RT_PATH } from "../shared/duel/protocol";
+import { beginRealtimeShutdown, drainMsFromEnv } from "../server/realtime";
 import {
   LEARNER_REAL_NAME,
   LEARNER_TOKEN,
@@ -219,8 +220,10 @@ describe("JM2 gateway — kapcsolat-kiesés, kilépés, gazda-váltás", () => {
     await host.waitFor("room:state", (s) => s.players.length === 3 && s.players.every((p: any) => p.ready));
     await host.request("room:start", {});
     await p2.waitFor("round:open");
+    const oldHost = host.playerId;
     assert.equal((await host.request("room:leave", {})).ok, true);
-    const st = await p2.waitFor("room:state", (s) => s.hostId !== null && s.hostId !== host.playerId);
+    assert.equal(host.playerId, null, "kilépés után a kliens elfelejti a helyét");
+    const st = await p2.waitFor("room:state", (s) => s.hostId !== null && s.hostId !== oldHost);
     assert.equal(st.hostId, p2.playerId, "a legrégebben csatlakozott aktív játékos");
     assert.equal(st.phase, "round_open");
     const results = await playMatch(h, code, [p2, p3], (i) => i === 1);
@@ -463,5 +466,124 @@ describe("JM2 gateway — kapcsolat-plafon és lassú kliens", () => {
     const gone = await host.waitFor("room:state", (s) => s.players.some((p: any) => p.id === slowId && !p.connected), 5000);
     assert.ok(gone, "a lassú kliens kapcsolata bontva");
     assert.ok((h.rt.metrics.rejectedSnapshot().SLOW_CLIENT ?? 0) >= 1);
+  });
+});
+
+describe("JM2 gateway — éles SIGTERM-sorrend (beginRealtimeShutdown, review #452)", () => {
+  it("futó meccs, CSAK long-polling: a drain alatt a listener nyitva marad, a játékos még válaszol, megkapja a (rész)eredményt; utána a server.close() határidőn belül", async () => {
+    const h = await harness({ windowMs: 6000, timing: { revealMs: 200 } });
+    const opts = { transports: ["polling" as const] };
+    const { host, code } = await createRoom(h, 5, opts);
+    const guest = await addPlayer(h, code, 5, opts);
+    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players[1].ready);
+    await host.request("room:start", {});
+    const open = await guest.waitFor("round:open");
+    const t0 = Date.now();
+    const sd = beginRealtimeShutdown(h.rt, h.server, { drainMs: 1500 });
+    assert.equal(sd.delayedClose, true);
+    assert.equal(h.server.listening, true, "futó meccs mellett a listener nyitva marad");
+    await guest.waitFor("notice", (n) => n.code === "SERVER_RESTART");
+    // Új HTTP-kérés (polling POST) a drain alatt: a válasz átmegy.
+    assert.deepEqual(await guest.request("round:answer", { round: open.round, optionIndex: correctFor(h, code, guest.playerId!), clientRtMs: 500 }), { ok: true });
+    assert.deepEqual(await host.request("round:answer", { round: open.round, optionIndex: 0, clientRtMs: 500 }), { ok: true });
+    await guest.waitFor("round:reveal", (r) => r.round === open.round, 5000);
+    // Új belépés tilos: jegy 503.
+    assert.equal((await getTicket(h, { intent: "create" })).status, 503);
+    const res = await guest.waitFor("match:result", () => true, 6000);
+    assert.equal(res.aborted, true);
+    assert.equal(res.reason, "SERVER_RESTART");
+    await host.waitFor("match:result", () => true, 6000);
+    await sd.drained;
+    await Promise.race([sd.httpClosed, sleep(3000).then(() => Promise.reject(new Error("a server.close() nem fejeződött be")))]);
+    assert.equal(h.server.listening, false);
+    assert.ok(Date.now() - t0 < 1500 + 2000 + 3000, `leállás: ${Date.now() - t0} ms`);
+    harnesses.splice(harnesses.indexOf(h), 1);
+  });
+
+  it("nincs futó meccs (csak váróterem / MP_MODE=off): a server.close() AZONNAL, a régi sorrendben", async () => {
+    const h = await harness();
+    await createRoom(h);
+    const sd = beginRealtimeShutdown(h.rt, h.server, { drainMs: 240_000 });
+    assert.equal(sd.delayedClose, false);
+    assert.equal(h.server.listening, false, "azonnal bezár");
+    await Promise.race([sd.drained, sleep(2000).then(() => Promise.reject(new Error("a drain nem azonnali")))]);
+    await Promise.race([sd.httpClosed, sleep(3000).then(() => Promise.reject(new Error("a server.close() nem fejeződött be")))]);
+    harnesses.splice(harnesses.indexOf(h), 1);
+
+    const off = await harness({ env: { MP_MODE: "off" } });
+    const t0 = Date.now();
+    const sd2 = beginRealtimeShutdown(off.rt, off.server, { drainMs: drainMsFromEnv({}) });
+    assert.equal(sd2.delayedClose, false);
+    assert.equal(off.server.listening, false);
+    await sd2.drained;
+    await sd2.httpClosed;
+    assert.ok(Date.now() - t0 < 1000, `off: ${Date.now() - t0} ms`);
+    harnesses.splice(harnesses.indexOf(off), 1);
+  });
+
+  it("MP_DRAIN_MS: alap és plafon 240 s, érvénytelen érték → alap", () => {
+    assert.equal(drainMsFromEnv({}), 240_000);
+    assert.equal(drainMsFromEnv({ MP_DRAIN_MS: "60000" }), 60_000);
+    assert.equal(drainMsFromEnv({ MP_DRAIN_MS: "999999" }), 240_000);
+    assert.equal(drainMsFromEnv({ MP_DRAIN_MS: "abc" }), 240_000);
+  });
+});
+
+describe("JM2 gateway — kilépés utáni kliensállapot és halott folytatási token (review #452)", () => {
+  it("sikeres room:leave → a kliens tagsága üres; egy későbbi hálózati kiesés nem küld tokent és nem lép vissza (status closed); szellem-játékos nincs", async () => {
+    const h = await harness();
+    const { host, code } = await createRoom(h);
+    const guest = await addPlayer(h, code);
+    const oldToken = guest.resumeToken!;
+    assert.ok(oldToken && guest.playerId && guest.state);
+    assert.deepEqual(await guest.request("room:leave", {}), { ok: true });
+    assert.equal(guest.resumeToken, null);
+    assert.equal(guest.playerId, null);
+    assert.equal(guest.state, null);
+    assert.equal(guest.closedCode, "LEFT");
+    await host.waitFor("room:state", (s) => s.players.length === 1);
+    // Hálózati kiesés kilépés után: a kliens NEM próbál újra (a jegy egyszer használatos, a token visszavont).
+    guest.socket.io.engine.close();
+    await sleep(800);
+    assert.equal(guest.status, "closed");
+    assert.equal(guest.socket.connected, false);
+    assert.equal(h.rt.registry.get(code)!.players.length, 1, "nincs szellem-játékos");
+    // A szerver oldal: a visszavont token beváltása egyértelmű INVALID_TICKET, és nem hoz létre helyet.
+    const { io } = await import("socket.io-client");
+    const err = await new Promise<{ message: string; data?: { code?: string } }>((resolve) => {
+      const s = io(`http://127.0.0.1:${h.port}`, { path: RT_PATH, addTrailingSlash: false, reconnection: false, auth: { v: 1, resume: oldToken }, extraHeaders: { origin: h.origin } });
+      s.on("connect_error", (e: Error & { data?: { code?: string } }) => {
+        s.close();
+        resolve(e);
+      });
+    });
+    assert.equal(err.data?.code, "INVALID_TICKET");
+    assert.equal(h.rt.registry.get(code)!.players.length, 1);
+  });
+
+  it("kirúgás / szoba-lezárás: a kliens elfelejti a helyét (ROOM_CLOSED / KICKED), hálózati kiesésnél nem próbálkozik a halott tokennel", async () => {
+    const h = await harness();
+    const { host, code } = await createRoom(h);
+    const guest = await addPlayer(h, code);
+    assert.deepEqual(await host.request("room:kick", { playerId: guest.playerId! }), { ok: true });
+    await guest.waitFor("notice", (n) => n.code === "KICKED");
+    assert.equal(guest.resumeToken, null);
+    assert.equal(guest.closedCode, "KICKED");
+    guest.socket.io.engine.close();
+    await sleep(500);
+    assert.equal(guest.status, "closed");
+  });
+
+  it("visszautasított folytatás (a szoba közben megszűnt): status closed + INVALID_TICKET, végtelen próbálkozás nincs", async () => {
+    const h = await harness({ timing: { reconnectGraceMs: 200 } });
+    const { code } = await createRoom(h);
+    const guest = await addPlayer(h, code);
+    // A szerver oldalon a szoba megszűnik, miközben a kliens kapcsolata megszakad.
+    h.rt.registry.dispatch(code, { type: "drain", deadlineMs: Date.now() });
+    guest.socket.io.engine.close();
+    await sleep(1500);
+    assert.equal(guest.status, "closed");
+    assert.ok(["INVALID_TICKET", "ROOM_CLOSED", "DISCONNECTED"].includes(String(guest.closedCode)), String(guest.closedCode));
+    assert.equal(guest.resumeToken, null);
   });
 });

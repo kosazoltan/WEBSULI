@@ -10,7 +10,7 @@ import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
 import { flushPendingMaterialResults } from "./routes";
 import { mountAppRoutes } from "./app-routes";
-import { getRealtime } from "./realtime";
+import { beginRealtimeShutdown, drainMsFromEnv, getRealtime } from "./realtime";
 import { startPlayerCodeSweeper } from "./player/sweeper";
 import { createPlayerStore } from "./player/store";
 import { setupVite, serveStatic, log } from "./vite";
@@ -711,12 +711,16 @@ app.use((req, res, next) => {
       } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
       // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a régi anyagok sora sem indít új gyártást a leálló példányon.
       try { (await import("./studio/legacy-migration")).stopLegacyMigration(); } catch (err) { logger.warn("A régi anyagok sora nem állítható le", err); }
-      // JM2 (terv 10.8, JM-A8): a valós idejű réteg leállítása — új szoba / csatlakozás tiltva, a futó meccs legfeljebb 240 s-ig
-      // kifut, utána részeredménnyel zárul, és MINDEN kapcsolat bontódik (a nyitott WebSocket / polling különben a
-      // server.close() visszahívását a kényszerkilépésig feltartaná). A workflow-várakozással párhuzamosan fut.
-      const realtimeDrained = getRealtime().drain(240_000).catch((err: unknown) => logger.warn("[RT] drain hiba", err));
-      // Új kapcsolatot nem fogadunk; a nyitott kérések közben lefuthatnak.
-      server.close(() => log("HTTP server closed"));
+      // JM2 (terv 10.8, JM-A8; review #452): a valós idejű réteg leállítása — új szoba / csatlakozás tiltva, a futó meccs
+      // legfeljebb MP_DRAIN_MS-ig (alap és plafon 240 s) kifut, utána részeredménnyel zárul, és MINDEN kapcsolat bontódik.
+      // Futó online meccs mellett a HTTP-listener a drain végéig nyitva marad (long-polling!), és csak utána jön a
+      // server.close(); futó meccs nélkül (MP_MODE=off — az alap) a server.close() azonnal, a régi sorrendben fut.
+      // A workflow-várakozással párhuzamosan fut; a pool zárása előtt kivárjuk.
+      const { drained: realtimeDrained } = beginRealtimeShutdown(getRealtime(), server, {
+        drainMs: drainMsFromEnv(),
+        onDrainError: (err) => logger.warn("[RT] drain hiba", err),
+        onHttpClosed: () => log("HTTP server closed"),
+      });
       try {
         const { activeWorkflowRuns, waitForActiveRuns } = await import("./workflows/engine");
         if (activeWorkflowRuns() > 0) {

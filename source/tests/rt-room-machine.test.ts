@@ -284,8 +284,9 @@ describe("JM2 room-machine — kapcsolat, kilépés, gazda-váltás meccs közbe
     s = ok(s, { type: "answer", playerId: C, round: 1, optionIndex: wrongOf(s, C), medianRttMs: 0 }, t + 1100);
     assert.equal(s.phase, "round_reveal", "a kilépett játékosra nem várunk");
     const rv = revealView(s, B)!;
-    assert.equal(rv.results.find((r) => r.playerId === A)!.answered, false);
-    assert.ok(rv.results.find((r) => r.playerId === A)!.damage > 0, "a kilépő is kap sebzést (élő, de üres körök)");
+    // Review #452: a kilépett köre üres, nem sebezhető, és nem hígítja a bent maradók közti sebzést.
+    assert.equal(rv.results.some((r) => r.playerId === A), false);
+    assert.equal(rv.results.find((r) => r.playerId === C)!.damage, 10 + rv.results.find((r) => r.playerId === B)!.speedBonus);
     assert.equal(step(s, { type: "answer", playerId: A, round: 1, optionIndex: 0, medianRttMs: 0 }, t + 1200).error, "NOT_IN_ROOM");
   });
 
@@ -352,5 +353,180 @@ describe("JM2 room-machine — leállítás (drain)", () => {
     assert.deepEqual(res.winners, [A], "részeredmény: az állás szerinti vezető");
     const closed = ok(s, { type: "tick" }, nextWakeMs(s, cfg)!);
     assert.equal(closed.closed, true);
+  });
+});
+
+describe("JM2 room-machine — kilépett játékos a végeredményben (review #452)", () => {
+  /** Lejátssza a meccset: `pick(id, round)` → helyes-e; `actions(round)` → a kör elején végrehajtandó események. */
+  function play(s0: RoomState, t0: number, pick: (id: string, round: number) => boolean | null, actions: (s: RoomState, round: number, at: number) => RoomState = (s) => s): RoomState {
+    let s = s0;
+    let t = t0;
+    for (let guard = 0; guard < 40 && (s.phase === "round_open" || s.phase === "round_reveal"); guard++) {
+      if (s.phase === "round_open") {
+        s = actions(s, s.match!.roundNo, t);
+        if (s.phase !== "round_open") continue;
+        for (const id of Object.keys(s.match!.questions)) {
+          const p = s.players.find((x) => x.id === id)!;
+          if (p.left || !p.connected || s.phase !== "round_open") continue;
+          const right = pick(id, s.match!.roundNo);
+          if (right === null) continue;
+          s = ok(s, { type: "answer", playerId: id, round: s.match!.roundNo, optionIndex: right ? correctOf(s, id) : wrongOf(s, id), clientRtMs: 1000, medianRttMs: 0 }, t + 1000);
+        }
+        if (s.phase === "round_open") {
+          t = nextWakeMs(s, cfg)!;
+          s = ok(s, { type: "tick" }, t);
+        }
+      } else {
+        t = nextWakeMs(s, cfg)!;
+        s = ok(s, { type: "tick" }, t);
+      }
+    }
+    return s;
+  }
+
+  it("repro: A egyedül helyes az 1. körben, kilép; B és C végig hibázik → A NEM győztes, a dobogón a bent maradók mögött", () => {
+    const { s, t } = started([[B, 5], [C, 5]]);
+    const end = play(s, t, (id) => id === A, (st, round, at) => (round === 2 && !st.players.find((p) => p.id === A)!.left ? ok(st, { type: "leave", playerId: A }, at + 1) : st));
+    assert.equal(end.phase, "finished");
+    const res = resultView(end)!;
+    assert.equal(res.reason, "COMPLETED");
+    assert.equal(res.winners.includes(A), false);
+    assert.equal(res.coWin, true, "B és C holtversenyben (2 döntő után közös győzelem)");
+    assert.deepEqual(res.winners.sort(), [B, C].sort());
+    assert.deepEqual(res.podium[res.podium.length - 1], [A]);
+    assert.equal(end.players.find((p) => p.id === A)!.left, true);
+    assert.equal(res.stats.find((x) => x.playerId === A)!.correct, 1, "a kilépett statisztikája megmarad");
+  });
+
+  it("kilépett + holtverseny a bent maradók közt: a döntő kérdés csak köztük, a kilépett nem kap kérdést", () => {
+    const { s, t } = started([[B, 5], [C, 5]]);
+    let tiebreakAsked = 0;
+    const end = play(
+      s,
+      t,
+      (id) => id === A,
+      (st, round, at) => {
+        if (st.match!.tiebreak) {
+          tiebreakAsked++;
+          assert.deepEqual(Object.keys(st.match!.questions).sort(), [B, C].sort());
+        }
+        return round === 2 && !st.players.find((p) => p.id === A)!.left ? ok(st, { type: "leave", playerId: A }, at + 1) : st;
+      },
+    );
+    assert.equal(tiebreakAsked, 2);
+    assert.equal(resultView(end)!.coWin, true);
+  });
+
+  it("mindenki kilép egy kivételével (4 főből 3): azonnali „ellenfél kilépett” zárás, a maradó győz", () => {
+    let { s, t } = started([[B, 5], [C, 5], [D, 5]]);
+    s = ok(s, { type: "answer", playerId: B, round: 1, optionIndex: correctOf(s, B), clientRtMs: 500, medianRttMs: 0 }, t + 500);
+    s = ok(s, { type: "leave", playerId: B }, t + 600);
+    s = ok(s, { type: "leave", playerId: C }, t + 700);
+    assert.equal(s.phase, "round_open");
+    s = ok(s, { type: "leave", playerId: A }, t + 800);
+    assert.equal(s.phase, "finished");
+    const res = resultView(s)!;
+    assert.equal(res.reason, "OPPONENT_LEFT");
+    assert.deepEqual(res.winners, [D]);
+    assert.deepEqual(res.podium[0], [D]);
+  });
+
+  it("kilépés a felfedés pillanatában: a következő kör már nélküle indul, győztes nem lehet", () => {
+    let { s, t } = started([[B, 5], [C, 5]]);
+    s = ok(s, { type: "answer", playerId: A, round: 1, optionIndex: correctOf(s, A), clientRtMs: 500, medianRttMs: 0 }, t + 500);
+    s = ok(s, { type: "answer", playerId: B, round: 1, optionIndex: wrongOf(s, B), medianRttMs: 0 }, t + 600);
+    s = ok(s, { type: "answer", playerId: C, round: 1, optionIndex: wrongOf(s, C), medianRttMs: 0 }, t + 700);
+    assert.equal(s.phase, "round_reveal");
+    s = ok(s, { type: "leave", playerId: A }, t + 701);
+    s = ok(s, { type: "tick" }, nextWakeMs(s, cfg)!);
+    assert.equal(s.phase, "round_open");
+    assert.deepEqual(Object.keys(s.match!.questions).sort(), [B, C].sort());
+    const end = play(s, s.phaseStartMs, () => false);
+    assert.equal(resultView(end)!.winners.includes(A), false);
+  });
+
+  it("átmeneti kiesés: a 7. kör előtt visszatérő teljes jogú (győzhet); aki a meccs végén sincs kapcsolatban, nem győztes", () => {
+    // Visszatér a 3. körben → győz.
+    let { s, t } = started([[B, 5]]);
+    const back = play(s, t, (id, round) => (id === A ? (round >= 2 && round <= 2 ? null : true) : false), (st, round, at) => {
+      if (round === 2 && st.players.find((p) => p.id === A)!.connected) return ok(st, { type: "disconnect", playerId: A }, at + 1);
+      if (round === 3 && !st.players.find((p) => p.id === A)!.connected) return ok(st, { type: "reconnect", playerId: A }, at + 1);
+      return st;
+    });
+    assert.deepEqual(resultView(back)!.winners, [A]);
+    // A 7. körben esik ki és nem tér vissza a meccs végéig (a türelmi időn belül ér véget a meccs) → nem győztes.
+    ({ s, t } = started([[B, 5]]));
+    const gone = play(s, t, (id, round) => (id === A ? (round >= 7 ? null : true) : false), (st, round, at) =>
+      round === 7 && st.players.find((p) => p.id === A)!.connected ? ok(st, { type: "disconnect", playerId: A }, at + 1) : st,
+    );
+    const res = resultView(gone)!;
+    assert.equal(gone.players.find((p) => p.id === A)!.left, false, "még a türelmi időn belül");
+    assert.deepEqual(res.winners, [B]);
+    assert.deepEqual(res.podium[res.podium.length - 1], [A]);
+  });
+});
+
+describe("JM2 room-machine — bank-kimerülés visszavágók közben (review #452)", () => {
+  /** Kis bank: évfolyamonként `n` tétel (mindhárom tierben), így néhány visszavágó után kimerül. */
+  function tinyBank(n: number) {
+    const items = [];
+    for (const g of [4, 5, 9]) for (let i = 0; i < n; i++) items.push({ id: `g${g}-t-${i}`, grade: g, subject: "math", tier: ((i % 3) + 1) as 1 | 2 | 3, prompt: `${g}. évf. kérdés ${i}?`, options: ["a", "b", "c", "d"], correctIndex: 0 });
+    return items;
+  }
+
+  it("invariáns: tetszőleges seed, kis bank (11 / évfolyam — a 2. meccs közepén kimerül), több visszavágó, vegyes évfolyam — egy meccsen belül játékosonként nincs ismételt kérdés", () => {
+    for (const seed of ["s1", "s2", "s3", "x-42"]) {
+      const c: RoomConfig = { provider: createQuestionProvider(tinyBank(11)) };
+      let s = createRoom({ code: "ABCDEF", gameId: "parbaj", mode: "duel", seed, host: { playerId: A, nickname: "A", avatar: null, grade: 4 }, nowMs: T0 });
+      s = reduceRoom(s, { type: "join", playerId: B, nickname: "B", avatar: null, grade: 9 }, T0 + 1, c).state;
+      s = reduceRoom(s, { type: "join", playerId: C, nickname: "C", avatar: null, grade: 4 }, T0 + 2, c).state;
+      let t = T0 + 10;
+      for (let match = 0; match < 5; match++) {
+        for (const id of [B, C]) s = reduceRoom(s, { type: "ready", playerId: id, ready: true }, t, c).state;
+        const st = reduceRoom(s, { type: "start", playerId: A }, t, c);
+        assert.equal(st.error, undefined, `start: ${st.error}`);
+        s = st.state;
+        const seen: Record<string, Set<string>> = { [A]: new Set(), [B]: new Set(), [C]: new Set() };
+        for (let guard = 0; guard < 60 && s.phase !== "finished" && s.phase !== "aborted"; guard++) {
+          if (s.phase === "round_open") {
+            for (const [id, q] of Object.entries(s.match!.questions)) {
+              assert.equal(seen[id]!.has(q.key), false, `seed ${seed}, meccs ${match + 1}: ismételt kérdés ${q.key} (${id})`);
+              seen[id]!.add(q.key);
+            }
+            // mindenki rosszul válaszol → holtverseny → döntők is lefutnak (több kérdés / meccs)
+            for (const id of Object.keys(s.match!.questions)) s = reduceRoom(s, { type: "answer", playerId: id, round: s.match!.roundNo, optionIndex: (s.match!.questions[id]!.correctIndex + 1) % 4, medianRttMs: 0 }, t + 500, c).state;
+          }
+          t = Math.max(t + 1, nextWakeMs(s, c)!);
+          s = reduceRoom(s, { type: "tick" }, t, c).state;
+        }
+        assert.equal(s.phase, "finished", `seed ${seed}, meccs ${match + 1}: ${s.phase} ${resultView(s)?.reason}`);
+        assert.ok(seen[A]!.size === 9, `9 kérdés / meccs (7 + 2 döntő): ${seen[A]!.size}`);
+        s = reduceRoom(s, { type: "rematch", playerId: A }, t + 10, c).state;
+        t += 20;
+      }
+    }
+  });
+
+  it("ha a bank még a korábbi meccsek kérdéseinek felszabadítása után is kevés egy meccshez → NO_QUESTIONS lezárás (nem ismétel)", () => {
+    const c: RoomConfig = { provider: createQuestionProvider(tinyBank(4)) };
+    let s = createRoom({ code: "ABCDEF", gameId: "parbaj", mode: "duel", seed: "q", host: { playerId: A, nickname: "A", avatar: null, grade: 5 }, nowMs: T0 });
+    s = reduceRoom(s, { type: "join", playerId: B, nickname: "B", avatar: null, grade: 5 }, T0 + 1, c).state;
+    s = reduceRoom(s, { type: "ready", playerId: B, ready: true }, T0 + 2, c).state;
+    s = reduceRoom(s, { type: "start", playerId: A }, T0 + 3, c).state;
+    let t = T0 + 3;
+    const keys = new Set<string>();
+    for (let guard = 0; guard < 60 && s.phase !== "finished" && s.phase !== "aborted"; guard++) {
+      if (s.phase === "round_open") {
+        const k = s.match!.questions[A]!.key;
+        assert.equal(keys.has(k), false);
+        keys.add(k);
+        for (const id of [A, B]) s = reduceRoom(s, { type: "answer", playerId: id, round: s.match!.roundNo, optionIndex: (s.match!.questions[id]!.correctIndex + 1) % 4, medianRttMs: 0 }, t + 500, c).state;
+      }
+      t = Math.max(t + 1, nextWakeMs(s, c)!);
+      s = reduceRoom(s, { type: "tick" }, t, c).state;
+    }
+    assert.equal(s.phase, "aborted");
+    assert.equal(resultView(s)!.reason, "NO_QUESTIONS");
+    assert.ok(keys.size <= 4 + 4 + 4, "csak a 4–5–6. évfolyam tartalékából, ismétlés nélkül");
   });
 });

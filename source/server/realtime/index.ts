@@ -129,6 +129,41 @@ export function createRealtimeService(opts: RealtimeOptions = {}) {
 
 export type RealtimeService = ReturnType<typeof createRealtimeService>;
 
+/** A leállítási kifutás alapja (terv 10.8: 240 s); `MP_DRAIN_MS`-sel szűkíthető, plafon 240 s (a Render 300 s-os türelmi
+ *  idejéből — `index.ts` 295 s-os kényszerkilépése — a pool zárására és a függő levelekre is marad idő). */
+export function drainMsFromEnv(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env.MP_DRAIN_MS);
+  return Number.isInteger(n) && n >= 0 && n <= 240_000 ? n : 240_000;
+}
+
+/**
+ * SIGTERM-sorrend (review #452): a drain indul, és
+ *  - ha FUT online meccs, a HTTP-listener a drain végéig nyitva marad (a long-polling játékos minden lekérdezése /
+ *    válasza új HTTP-kérés — a korai `server.close()` elvágná a kifutás és az eredmény elől; az új belépést a drain-őrök
+ *    utasítják el), és a `server.close()` a drain után jön;
+ *  - ha nincs futó meccs (pl. `MP_MODE=off`, ez az alap), a `server.close()` AZONNAL, a régi sorrendben fut.
+ */
+export function beginRealtimeShutdown(
+  rt: Pick<RealtimeService, "status" | "drain">,
+  server: { close: (cb?: (err?: Error) => void) => unknown },
+  opts: { drainMs: number; onDrainError?: (err: unknown) => void; onHttpClosed?: () => void },
+): { drained: Promise<void>; httpClosed: Promise<void>; delayedClose: boolean } {
+  const delayedClose = rt.status().activeMatches > 0;
+  const drained = rt.drain(opts.drainMs).catch((err: unknown) => opts.onDrainError?.(err));
+  let resolveClosed: () => void = () => {};
+  const httpClosed = new Promise<void>((resolve) => {
+    resolveClosed = resolve;
+  });
+  const closeHttp = () =>
+    server.close(() => {
+      opts.onHttpClosed?.();
+      resolveClosed();
+    });
+  if (delayedClose) void drained.finally(closeHttp);
+  else closeHttp();
+  return { drained, httpClosed, delayedClose };
+}
+
 let singleton: RealtimeService | null = null;
 
 /** Az éles példány (lusta). */

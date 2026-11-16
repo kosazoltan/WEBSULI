@@ -147,6 +147,8 @@ export type RoomMatch = {
   answers: Record<string, RoomAnswer>;
   lastReveal: RoomReveal | null;
   result: RoomResult | null;
+  /** Évfolyamonként az EBBEN a meccsben feltett kulcsok (bank-kimerüléskor csak a korábbi meccsek kulcsai szabadulnak fel). */
+  matchUsed: Record<string, string[]>;
 };
 
 export type RoomSettings = { rounds: number; band: number; subjects: string[] };
@@ -276,6 +278,7 @@ function clone(s: RoomState): RoomState {
           deadlines: { ...s.match.deadlines },
           questions: { ...s.match.questions },
           answers: { ...s.match.answers },
+          matchUsed: Object.fromEntries(Object.entries(s.match.matchUsed).map(([k, v]) => [k, v.slice()])),
         }
       : null,
   };
@@ -332,27 +335,45 @@ function markUsed(s: RoomState, grade: number, q: DuelQuestion): void {
   const set = usedSet(s, grade);
   markDuelQuestionUsed(set, q);
   s.used[String(grade)] = Array.from(set);
+  if (s.match) {
+    const mine = new Set(s.match.matchUsed[String(grade)] ?? []);
+    markDuelQuestionUsed(mine, q);
+    s.match.matchUsed[String(grade)] = Array.from(mine);
+  }
 }
 
+/**
+ * A szabálymotor ítélete csak a megadott játékosok között (a `verdict` az ülésrendből — `players` — számol, a többi
+ * mező kulcsait figyelmen kívül hagyja): a kilépettek így nem dönthetnek a meccs végéről, a döntő kérdésről és a győzelemről.
+ */
+function verdictAmong(duel: DuelState, ids: readonly string[]): ReturnType<typeof verdict> {
+  return verdict({ ...duel, players: ids.slice() });
+}
+
+/**
+ * Végleges kilépés szabálya (review #452): a kilépett (`left`) játékos nem lehet győztes, és a dobogón a bent maradók MÖGÉ
+ * kerül (egymás közt az állás szerint); a statisztikája megmarad, a `players[].left` jelöli. Átmeneti kapcsolatvesztés: aki
+ * a türelmi időn belül visszatér, teljes jogú; aki a meccs végén sincs kapcsolatban, a végeredményben kilépettként
+ * rangsorolódik (győztes nem lehet), de amíg a meccs tart, a körei üresek, és a sorsa a türelmi idő végén dől el.
+ */
 function finishMatch(s: RoomState, reason: ResultReason, nowMs: number, effects: RoomEffect[], aborted: boolean): void {
   const m = s.match!;
-  const v = verdict(m.duel);
-  let podium = v.podium.map((g) => g.slice());
+  const present = m.ids.filter((id) => {
+    const p = player(s, id);
+    return !!p && !p.left && p.connected;
+  });
+  const absent = m.ids.filter((id) => !present.includes(id));
+  const ranked = present.length > 0 ? present : m.ids;
+  const vp = verdictAmong(m.duel, ranked);
+  const podium = [...vp.podium.map((g) => g.slice()), ...(present.length > 0 && absent.length > 0 ? verdictAmong(m.duel, absent).podium.map((g) => g.slice()) : [])];
   let winners: string[];
   let coWin: boolean;
-  if (reason === "OPPONENT_LEFT") {
-    const left = new Set(m.ids.filter((id) => player(s, id)?.left !== false));
-    const stay = podium.map((g) => g.filter((id) => !left.has(id))).filter((g) => g.length > 0);
-    const gone = podium.map((g) => g.filter((id) => left.has(id))).filter((g) => g.length > 0);
-    podium = [...stay, ...gone];
-    winners = (stay[0] ?? []).slice();
-    coWin = winners.length > 1;
-  } else if (aborted || reason === "NO_QUESTIONS") {
+  if (reason === "COMPLETED" && vp.finished) {
+    winners = vp.winners.slice();
+    coWin = vp.coWin;
+  } else {
     winners = (podium[0] ?? []).slice();
     coWin = winners.length > 1;
-  } else {
-    winners = v.winners.slice();
-    coWin = v.coWin;
   }
   m.result = { podium, winners, coWin, aborted, reason };
   m.questions = {};
@@ -366,8 +387,9 @@ function finishMatch(s: RoomState, reason: ResultReason, nowMs: number, effects:
 
 function openRound(s: RoomState, nowMs: number, cfg: RoomConfig, effects: RoomEffect[]): void {
   const m = s.match!;
-  const alive = new Set(aliveOf(m.duel));
-  const v = verdict(m.duel);
+  const active = activeIds(s);
+  const alive = new Set(aliveOf({ ...m.duel, players: active }));
+  const v = verdictAmong(m.duel, active);
   m.roundNo = m.duel.round + 1;
   m.tiebreak = v.needTiebreak;
   m.openedAtMs = nowMs;
@@ -396,8 +418,9 @@ function openRound(s: RoomState, nowMs: number, cfg: RoomConfig, effects: RoomEf
     });
     let q = cfg.provider(req());
     if (!q) {
-      // Hosszú visszavágó-sorozat: az évfolyam bankja elfogyott → elölről (a meccsen belül így sincs ismétlés).
-      s.used[String(p.grade)] = [];
+      // Hosszú visszavágó-sorozat: az évfolyam bankja elfogyott → a KORÁBBI meccsek kérdései felszabadulnak, az ebben a
+      // meccsben már feltettek nem (review #452: a meccsen belül nincs ismétlés); ha így sincs kérdés: NO_QUESTIONS.
+      s.used[String(p.grade)] = (m.matchUsed[String(p.grade)] ?? []).slice();
       q = cfg.provider(req());
     }
     if (!q) {
@@ -416,7 +439,9 @@ function openRound(s: RoomState, nowMs: number, cfg: RoomConfig, effects: RoomEf
 
 function revealRound(s: RoomState, nowMs: number, t: RoomTiming, effects: RoomEffect[]): void {
   const m = s.match!;
-  const alive = aliveOf(m.duel);
+  // A kilépettek nem válaszolnak és nem is sebezhetők: a sebzés a bent maradók közt oszlik (a körük üres).
+  const active = activeIds(s);
+  const alive = aliveOf(m.duel).filter((id) => active.includes(id));
   const answers: DuelAnswer[] = alive.map((id) => {
     const a = m.answers[id];
     const q = m.questions[id];
@@ -447,7 +472,7 @@ function afterReveal(s: RoomState, nowMs: number, cfg: RoomConfig, effects: Room
     finishMatch(s, "OPPONENT_LEFT", nowMs, effects, false);
     return;
   }
-  const v = verdict(m.duel);
+  const v = verdictAmong(m.duel, active);
   if (v.finished) {
     finishMatch(s, "COMPLETED", nowMs, effects, false);
     return;
@@ -684,6 +709,7 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
         answers: {},
         lastReveal: null,
         result: null,
+        matchUsed: {},
       };
       s.phase = "countdown";
       s.phaseStartMs = nowMs;
