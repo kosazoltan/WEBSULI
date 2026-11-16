@@ -38,6 +38,7 @@ const probe = (page: Page) => page.evaluate(() => (window as unknown as GameWind
 const simTime = async (page: Page) => Number((await probe(page))?.simTime ?? Number.NaN);
 
 test("Szólétra: hibás fogás után a helyes kapaszkodó ≥ 1,8 mp-ig zöld, kártya csak a „Miért?”-re, alatta áll a menet", async ({ page }) => {
+  test.setTimeout(90_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/games/word-ladder-hu-en");
   await page.getByTestId("wl-start").click();
@@ -47,15 +48,26 @@ test("Szólétra: hibás fogás után a helyes kapaszkodó ≥ 1,8 mp-ig zöld, 
   await expect(wrong).toBeEnabled({ timeout: 15_000 });
   const correct = page.locator('[data-testid^="wl-option-"][data-correct="true"]').first();
   const correctId = await correct.getAttribute("data-testid");
+  // (a) a helyes kapaszkodó zöld, és legalább 1,8 mp-ig az marad. A lapon belül, képkockánként mérve (a CI szoftveres
+  // WebGL-lel és buildelt szerverrel lassú: a Playwright-oldali várakozás + oda-vissza út a mérést torzítaná).
+  await page.evaluate((id) => {
+    const w = window as unknown as { __wlReveal?: { start: number | null; end: number | null } };
+    w.__wlReveal = { start: null, end: null };
+    const tick = () => {
+      const st = document.querySelector(`[data-testid="${id}"]`)?.getAttribute("data-state");
+      const r = w.__wlReveal!;
+      if (r.start === null && st === "correct") r.start = performance.now();
+      if (r.start !== null && r.end === null && st !== "correct") r.end = performance.now();
+      if (r.end === null) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, correctId!);
   await wrong.click();
-
-  // (a) a helyes kapaszkodó zöld, és legalább 1,8 mp-ig az marad
-  const shownCorrect = page.getByTestId(correctId!);
-  await expect(shownCorrect).toHaveAttribute("data-state", "correct", { timeout: 1_000 });
-  const t0 = Date.now();
-  await page.waitForTimeout(1_700);
-  await expect(shownCorrect).toHaveAttribute("data-state", "correct");
-  expect(Date.now() - t0).toBeGreaterThanOrEqual(1_700);
+  const reveal = () => page.evaluate(() => (window as unknown as { __wlReveal: { start: number | null; end: number | null } }).__wlReveal);
+  await expect.poll(async () => (await reveal()).start !== null, { timeout: 5_000 }).toBe(true);
+  await expect.poll(async () => (await reveal()).end !== null, { timeout: 20_000 }).toBe(true);
+  const r = await reveal();
+  expect(r.end! - r.start!, "a helyes kapaszkodó legalább 1,8 mp-ig zöld").toBeGreaterThanOrEqual(1_800);
 
   // (b) a „Miért?” nélkül nincs párbeszédablak, és a játék fut (a rivális mászik: a sim-idő nő)
   await expect(page.locator('[role="dialog"]')).toHaveCount(0);
@@ -64,7 +76,7 @@ test("Szólétra: hibás fogás után a helyes kapaszkodó ≥ 1,8 mp-ig zöld, 
   await page.waitForTimeout(400);
   expect(await simTime(page)).toBeGreaterThan(s1);
 
-  // (c) „Miért?” → kártya, alatta áll a sim-idő és a kérdés
+  // (c) „Miért?” → kártya, alatta áll a sim-idő és a kérdés (a „Miért?” a kijelzés után még 4 mp-ig elérhető)
   await page.getByTestId("play-why").click();
   await expect(page.getByTestId("quiz-feedback")).toBeVisible();
   const frozenSim = await simTime(page);
@@ -78,5 +90,7 @@ test("Szólétra: hibás fogás után a helyes kapaszkodó ≥ 1,8 mp-ig zöld, 
   await expect(page.getByTestId("quiz-feedback")).toHaveCount(0);
   const qid = Number((await probe(page))?.questionId ?? 0);
   await expect.poll(async () => simTime(page), { timeout: 5_000 }).toBeGreaterThan(frozenSim);
-  await expect.poll(async () => Number((await probe(page))?.questionId ?? 0), { timeout: 10_000 }).toBeGreaterThan(qid);
+  // Az új kérdéshez a már nyitott kérdés ablaka (≤ 9 mp kérdés-óra) + kijelzés kellhet; a kérdés-óra a lassú CI-n a
+  // falióránál lassabban jár (képkockánként ≤ 250 ms), ezért bőven mért várakozás — a feltétel ugyanaz.
+  await expect.poll(async () => Number((await probe(page))?.questionId ?? 0), { timeout: 30_000 }).toBeGreaterThan(qid);
 });
