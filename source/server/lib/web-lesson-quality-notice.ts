@@ -5,6 +5,7 @@ import {
 } from "../../shared/lesson-html-data";
 import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
+import { isAdminUser, type AdminCandidate } from "./admin-access";
 
 export type WebLessonQualityNotice = {
   kind: "legacy" | "invalid";
@@ -16,7 +17,8 @@ export type WebLessonQualityNotice = {
  * Old material remains readable, but cannot look like a current v7.4-4 release.
  */
 /** Spec 2026-10-21-ciklus6b: a belső minőség-felirat csak adminnak szól — a tanuló / névtelen látogató felirat nélkül látja az anyagot. */
-export const showQualityNotice = (user: unknown): boolean => Boolean((user as { isAdmin?: boolean } | undefined)?.isAdmin);
+/** JM7c-1: az admin-döntés az egyetlen képlettel (jelző ÉS engedélylista ÉS nem tiltott). */
+export const showQualityNotice = (user: unknown): boolean => isAdminUser(user as AdminCandidate | null | undefined);
 
 /** Review #358: a `/dev/:id` route döntése — a felirat csak adminnak (a teszt ugyanezt a függvényt hívja, nem csak a segédet). */
 export const qualityNoticeFor = (user: unknown, html: string): WebLessonQualityNotice | null =>

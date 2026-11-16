@@ -9,6 +9,7 @@ import { db } from "../db";
 import { htmlFiles, oneStepRuns, scheduledJobs, studioJobs, users } from "../../shared/schema";
 import { SCORING_RULE_MARK } from "../../shared/scoring-rules";
 import { logger } from "../lib/logger";
+import { isAdminUser, prepareAdminAccess } from "../lib/admin-access";
 import { htmlToText } from "./safe-fetch";
 
 export type LegacyMode = "off" | "pilot" | "all";
@@ -187,13 +188,16 @@ type QueueRow = { id: string; status: string; payload: Payload };
 export const retryPayload = (prev: Payload, runId: string, attempt: number, startedAt: number, jobId?: string): Payload =>
   ({ htmlFileId: prev.htmlFileId, runId, attempt, startedAt, ...(prev.requeued ? { requeued: true } : {}), ...(prev.redo ? { redo: prev.redo } : {}), ...(jobId ? { jobId } : {}) });
 
+/** JM7c-1: a tulajdonos csak SZÁMOLT admin lehet (jelző ÉS engedélylista ÉS nem tiltott — server/lib/admin-access.ts). */
 async function ownerFor(fileUserId: string | null): Promise<string | null> {
+  await prepareAdminAccess();
+  const candidate = { id: users.id, email: users.email, isAdmin: users.isAdmin, isBanned: users.isBanned };
   if (fileUserId) {
-    const [u] = await db.select({ id: users.id, isAdmin: users.isAdmin }).from(users).where(eq(users.id, fileUserId)).limit(1);
-    if (u?.isAdmin) return u.id;
+    const [u] = await db.select(candidate).from(users).where(eq(users.id, fileUserId)).limit(1);
+    if (isAdminUser(u)) return u!.id;
   }
-  const [admin] = await db.select({ id: users.id }).from(users).where(eq(users.isAdmin, true)).limit(1);
-  return admin?.id ?? null;
+  const flagged = await db.select(candidate).from(users).where(eq(users.isAdmin, true));
+  return flagged.find((u) => isAdminUser(u))?.id ?? null;
 }
 
 /** A futás indítása a MÁR rögzített azonosítóval (review #349: a sor előbb rögzít, utána indít). */

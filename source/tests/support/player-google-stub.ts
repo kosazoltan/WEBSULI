@@ -69,13 +69,39 @@ export async function playerGoogleLogin(client: Client, profile: FakeGoogleProfi
 
 /**
  * Review #449 (A1): a MEGLÉVŐ admin „google” stratégia helyettesítése ugyanígy (csak a két Google-hívás), hogy a közös
- * callbacken párhuzamos admin- és játékos-folyamat vizsgálható legyen. Az admin-út viselkedése (state nélkül) változatlan.
+ * callbacken párhuzamos admin- és játékos-folyamat vizsgálható legyen. JM7c-1: az admin-út is `state` + PKCE-s — a csonk a
+ * Google viselkedését utánozza: `code_verifier` nélküli tokencsere → invalid_grant.
  */
-export function installAdminGoogleStub(profile: FakeGoogleProfile): void {
+export function installAdminGoogleStub(profile: FakeGoogleProfile, opts: { tokenError?: boolean } = {}): void {
   const strategy = (passport as unknown as { _strategy(name: string): OAuthStrategy | undefined })._strategy("google");
   assert.ok(strategy, "a google (admin) stratégia nincs regisztrálva");
-  strategy._oauth2.getOAuthAccessToken = (code, _params, cb) => cb(null, `at:${code}`, "rt", {});
-  strategy.userProfile = (_accessToken, done) => done(null, { provider: "google", id: profile.id, emails: profile.emails, name: {}, photos: [] });
+  strategy._oauth2.getOAuthAccessToken = (code, params, cb) => {
+    if (opts.tokenError || typeof (params as { code_verifier?: unknown } | undefined)?.code_verifier !== "string") return cb({ statusCode: 400, data: "invalid_grant" });
+    cb(null, `at:${code}`, "rt", {});
+  };
+  strategy.userProfile = (_accessToken, done) => done(null, { provider: "google", id: profile.id, emails: profile.emails, name: { givenName: "Valódi", familyName: "Név" }, photos: [] });
+}
+
+/**
+ * JM7c-1: egy teljes admin / felhasználói Google-belépés a MEGLÉVŐ `/auth/google` úton (a szerver valódi stratégiája,
+ * `state` + PKCE a munkamenetben, közös visszahívás; csak a Google hálózati része helyettesítve).
+ * `state`: "valid" (alap), "tampered" (más érték), "missing" (a telepítéskor folyamatban lévő, régi belépés), vagy
+ * egy konkrét érték (pl. idegen munkamenet state-je).
+ */
+export async function adminGoogleLogin(client: Client, profile: FakeGoogleProfile, opts: { returnTo?: string; state?: "valid" | "tampered" | "missing" | { value: string }; tokenError?: boolean } = {}): Promise<GoogleRun> {
+  installAdminGoogleStub(profile, { tokenError: opts.tokenError });
+  const start = await rawGet(client, `/auth/google${opts.returnTo === undefined ? "" : `?returnTo=${encodeURIComponent(opts.returnTo)}`}`);
+  assert.equal(start.status, 302);
+  assert.ok(start.location?.startsWith("https://accounts.google.com/"), "a Google felé irányít");
+  const url = new URL(start.location!);
+  const state = url.searchParams.get("state");
+  assert.match(state ?? "", /^a\.[A-Za-z0-9_-]{32}$/, "az admin-kérésben `a.` előtagú state van");
+  assert.equal(url.searchParams.get("code_challenge_method"), "S256", "PKCE");
+  const mode = opts.state ?? "valid";
+  const sent = typeof mode === "object" ? mode.value : mode === "valid" ? state : mode === "tampered" ? `${state!.slice(0, -2)}xx` : null;
+  const code = `admin-code-${++seq}-${profile.id}`;
+  const callback = await rawGet(client, `/auth/google/callback?code=${encodeURIComponent(code)}${sent === null ? "" : `&state=${encodeURIComponent(sent!)}`}`);
+  return { start, state, callback };
 }
 
 /** Nyers GET a kliens sütijével (átirányítás követése nélkül). */

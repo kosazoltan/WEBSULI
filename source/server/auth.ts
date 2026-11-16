@@ -15,6 +15,8 @@ import { maskEmail } from "./lib/mask-email";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { isPlayerState, registerPlayerGoogle } from "./player/google";
 import { createPlayerAccountStore } from "./player/account-store";
+import { adminPolicy, configureAdminAccess, isAdminUser, prepareAdminAccess, reportAdminAccessStatus } from "./lib/admin-access";
+import { AdminStateStore } from "./lib/admin-oauth-state";
 
 type GoogleProfileLike = {
     id: string;
@@ -27,11 +29,16 @@ type GoogleUserStore = Pick<typeof storage, "getUserByEmail" | "upsertUser">;
 
 /**
  * JM7a (G11 / D12): a Google-profil e-mailje csak akkor köthető meglévő fiókhoz (e-mail-egyezés — storage.upsertUser), és
- * csak akkor hozhat létre új `users` sort (az ADMIN_EMAIL-egyezés admin-jogot ad!), ha a Google MEGERŐSÍTETTNEK jelöli
- * (`email_verified` → `profile.emails[0].verified`). Megerősítetlen címmel egy idegen Google-fiók átvehetné a meglévő
- * (akár admin) fiókot — ezért ilyenkor nincs belépés.
+ * csak akkor hozhat létre új `users` sort, ha a Google MEGERŐSÍTETTNEK jelöli (`email_verified` → `profile.emails[0].verified`).
+ * Megerősítetlen címmel egy idegen Google-fiók átvehetné a meglévő (akár admin) fiókot — ezért ilyenkor nincs belépés.
+ * JM7c-1 (terv 10.4a): új sor `is_admin` jelzőt CSAK az admin-engedélylistán lévő címmel kap (`adminEmails`, alapból az
+ * `adminPolicy()` listája: ADMIN_ALLOWLIST → ADMIN_EMAIL). A tényleges admin-jogot ettől függetlenül minden kérésnél az
+ * `isAdminUser` képlet dönti el (jelző ÉS lista ÉS nem tiltott).
  */
-export function createGoogleVerify(store: GoogleUserStore, adminEmail: () => string | undefined = () => process.env.ADMIN_EMAIL) {
+export function createGoogleVerify(
+    store: GoogleUserStore,
+    adminEmails: () => string | readonly string[] | undefined = () => [...adminPolicy().emails],
+) {
     return async (profile: GoogleProfileLike, done: GoogleVerifyDone): Promise<void> => {
         try {
             const primary = profile.emails?.[0];
@@ -48,6 +55,9 @@ export function createGoogleVerify(store: GoogleUserStore, adminEmail: () => str
 
             // Check if user already exists to preserve their admin status
             const existingUser = await store.getUserByEmail(email);
+            const allowlist = adminEmails();
+            const listed = (typeof allowlist === "string" ? [allowlist] : allowlist ?? [])
+                .some((a) => a.trim().toLowerCase() === email.trim().toLowerCase());
 
             // Upsert user with Google ID
             const user = await store.upsertUser({
@@ -56,8 +66,8 @@ export function createGoogleVerify(store: GoogleUserStore, adminEmail: () => str
                 firstName: profile.name?.givenName || '',
                 lastName: profile.name?.familyName || '',
                 profileImageUrl: profile.photos?.[0]?.value,
-                // Only set isAdmin if: 1) new user AND matches ADMIN_EMAIL, or 2) existing user keeps their status
-                isAdmin: existingUser ? existingUser.isAdmin : (email === adminEmail())
+                // A meglévő sor jelzője változatlan (a jogot az isAdminUser képlet dönti el); új sor csak listás címmel kap jelzőt.
+                isAdmin: existingUser ? existingUser.isAdmin : listed
             });
 
             return done(null, user);
@@ -124,6 +134,10 @@ export function setupAuth(app: Express) {
     app.use(passport.initialize());
     app.use(passport.session());
 
+    // JM7c-1: a kizárás elleni őr a meglévő adminokat innen kérdezi le; induláskor maszkolt állapotjelentés a naplóba.
+    configureAdminAccess(dbPool);
+    void reportAdminAccessStatus();
+
     passport.use(new LocalStrategy({ usernameField: 'email', passwordField: 'password' }, async (email, password, done) => {
         try {
             logger.info(`[AUTH] Login attempt for ${maskEmail(email)}`);
@@ -152,11 +166,16 @@ export function setupAuth(app: Express) {
         logger.info('[AUTH] Setting up Google OAuth Strategy...');
         logger.info(`[AUTH] Callback URL: ${baseUrl}/auth/google/callback`);
 
+        // JM7c-1 (review #449 K3): login-CSRF ellen `state` + PKCE, a játékos-út mintájára (`a.` előtag, munkamenethez kötött,
+        // egyszer használható, lejáró rekord — server/lib/admin-oauth-state.ts).
         passport.use(new GoogleStrategy({
             clientID: googleClientId,
             clientSecret: googleClientSecret,
             callbackURL: `${baseUrl}/auth/google/callback`,
-            scope: ['profile', 'email']
+            scope: ['profile', 'email'],
+            state: true,
+            pkce: true,
+            store: new AdminStateStore() as never,
         }, (accessToken, refreshToken, profile, done) => googleVerify(profile, done)));
 
         // Google Auth Routes
@@ -185,9 +204,16 @@ export function setupAuth(app: Express) {
         app.get('/auth/google/callback', (req, res, next) => {
             // JM7b: a játékos-út visszahívása — csak játékos-munkamenet, req.login nélkül (server/player/google.ts).
             if (isPlayerState(req.query.state)) return playerGoogleCallback(req, res, next);
+            // JM7c-1: minden más az admin-ágra megy, ahol az AdminStateStore csak a munkamenetben tárolt `a.` rekordot fogadja el;
+            // hiányzó (pl. a telepítéskor folyamatban lévő belépés) / hamis / idegen `state` → belépés nélkül, érthető üzenettel.
             passport.authenticate('google',(err: Error | null, user: Express.User | false) => {
-                if (err) return next(err);
-                if (!user) return res.redirect('/login');
+                // Google-oldali hiba (pl. tokencsere: újratöltött / lejárt kód) → ne hibaoldal, hanem újrapróba.
+                if (err) {
+                    // Csak a hiba fajtája kerül a naplóba (az üzenet adatbázis-hibánál személyes adatot is tartalmazhatna).
+                    logger.warn(`[AUTH] Google callback error: ${err.name}${(err as { code?: unknown }).code ? ` (${String((err as { code?: unknown }).code)})` : ""}`);
+                    return res.redirect('/login?hiba=google');
+                }
+                if (!user) return res.redirect('/login?hiba=google');
                 // LS-0a: read the stored path BEFORE regenerate() — regenerating the session
                 // discards its contents, so reading it afterwards always yields undefined.
                 const storedReturnTo = sanitizeReturnTo(req.session.oauthReturnTo);
@@ -196,10 +222,10 @@ export function setupAuth(app: Express) {
                     req.login(user, (loginErr) => {
                         if (loginErr) return next(loginErr);
                         logger.info('[AUTH] Google auth successful, redirecting...');
-                        res.redirect(resolvePostLoginRedirect({
-                            isAdmin: !!user.isAdmin,
+                        prepareAdminAccess(user).then(() => res.redirect(resolvePostLoginRedirect({
+                            isAdmin: isAdminUser(user),
                             stored: storedReturnTo,
-                        }));
+                        })), next);
                     });
                 });
             })(req, res, next);
@@ -218,6 +244,12 @@ export function setupAuth(app: Express) {
             // B1: Ban enforcement — reject banned users on every request
             if (user && (user as unknown as { isBanned?: boolean }).isBanned) {
                 return done(null, false);
+            }
+            if (user) {
+                // JM7c-1: az admin-jog minden kérésnél újraszámolva (jelző ÉS engedélylista ÉS nem tiltott). A `req.user.isAdmin`
+                // mező a SZÁMOLT értéket kapja (mélységi védelem: egy közvetlen olvasás sem láthatja a nyers jelzőt).
+                await prepareAdminAccess(user);
+                user.isAdmin = isAdminUser(user);
             }
             done(null, user);
         } catch (err) {
@@ -265,7 +297,8 @@ export function setupAuth(app: Express) {
                     if (err) return next(err);
                     // SECURITY: Strip password hash before sending to client
                     const { password: _, ...safeUser } = user;
-                    return res.json(safeUser);
+                    // JM7c-1: a válasz `isAdmin` mezője a számolt jog (a kliens ebből választ célt: /admin vagy /games).
+                    prepareAdminAccess(user).then(() => res.json({ ...safeUser, isAdmin: isAdminUser(user) }), next);
                 });
             });
         })(req, res, next);
@@ -306,9 +339,8 @@ export const isAuthenticatedAdmin: RequestHandler = (req, res, next) => {
     if (!req.isAuthenticated()) {
         return res.status(401).json({ message: "Unauthorized" });
     }
-    const user = req.user;
-    // Check isAdmin flag from database user record
-    if (!user?.isAdmin) {
+    // JM7c-1: az egyetlen admin-képlet (jelző ÉS engedélylista ÉS nem tiltott) — server/lib/admin-access.ts.
+    if (!isAdminUser(req.user)) {
         return res.status(403).json({ message: "Forbidden - Admin access required" });
     }
     next();

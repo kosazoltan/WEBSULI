@@ -2017,10 +2017,11 @@ memória, statikus audit, munkafolyamat, `/api/admin`) mind az `isAuthenticatedA
 stratégiának nincs `state`-je (login-CSRF, review #449 K3). Az `ADMIN_EMAILS` csak értesítési lista.
 **Fájlok:** új `S/lib/admin-access.ts` (engedélylista + a képlet + kizárás elleni őr), új `S/lib/admin-oauth-state.ts`
 (`AdminStateStore`, `a.` előtag); módosul: `S/auth.ts`, `S/routes.ts` (`/api/auth/user`), `S/routes/rt.ts`,
-`S/admin-users.ts`, `S/lib/web-lesson-quality-notice.ts`, `S/create-admin.ts`, `S/scripts/setAdmin.ts` (figyelmeztetés),
+`S/admin-users.ts`, `S/lib/web-lesson-quality-notice.ts`, `S/studio/legacy-migration.ts` (tulajdonos csak számolt admin),
+`S/create-admin.ts`, `S/scripts/setAdmin.ts` (figyelmeztetés), `source/scripts/run-learning-db-tests.ts` (új DB-teszt),
 `source/client/src/pages/Login.tsx` (érthető hibaüzenet + újrapróba), `render.yaml` (csak kommentelt, érték nélküli
 `ADMIN_ALLOWLIST`), `source/playwright.config.ts` (e2e-teszt-lista); tesztek: új `T/admin-access.test.ts`,
-`T/admin-access-source-guard.test.ts`, `T/admin-allowlist.spec.ts`; bővül: `T/admin-authz-matrix-db.integration.ts`,
+`T/admin-access-source-guard.test.ts`, `T/admin-allowlist-db.integration.ts`, `T/admin-allowlist.spec.ts`; bővül: `T/admin-authz-matrix-db.integration.ts`,
 `T/player-account-db.integration.ts` (az admin-visszahívás `state`-tel — SPEC-VÁLTOZÁS), `T/support/player-google-stub.ts`
 (`adminGoogleLogin`), `T/player-google-flow.test.ts`.
 **Lépések:**
@@ -2028,8 +2029,9 @@ stratégiának nincs `state`-je (login-CSRF, review #449 K3). Az `ADMIN_EMAILS` 
    számolva), `adminPolicy()` (forrás: `ADMIN_ALLOWLIST` → üres / csupa hibás esetén `ADMIN_EMAIL` → egyik sem: `none`),
    `isAllowlistedAdminEmail`, és a KÉPLET: `isAdminUser(user)` = `is_admin === true` ÉS nem tiltott ÉS (listán VAN, vagy a
    kizárás elleni őr aktív). Őr: `none` forrásnál a jelző marad; beállított listánál csak akkor, ha a lista egyetlen létező,
-   nem tiltott `is_admin` fiókra sem illik (DB-lekérdezés, a pozitív eredmény 60 s-ig, a negatív 5 s-ig él;
-   `prepareAdminAccess` frissíti a kérés elején). Induláskori jelentés maszkolt címekkel (`reportAdminAccessStatus`).
+   nem tiltott `is_admin` fiókra sem illik (DB-lekérdezés; a pozitív eredmény 60 s-ig újrahasznosítható, a negatív
+   (őr-aktív) soha nem öröklődik — `prepareAdminAccess` minden kérés elején újraellenőrzi). Induláskori jelentés maszkolt
+   címekkel (`reportAdminAccessStatus`).
 2. Minden olvasó a képletet hívja: `isAuthenticatedAdmin`, `deserializeUser` (a `req.user.isAdmin` a számolt értékre
    íródik — mélységi védelem), belépés utáni cél, `/api/login` válasza, `/api/auth/user`, `rt.ts`, adminfelirat,
    Felhasználók-lista (`isAdmin` = számolt jog) és az utolsó-admin őr (számolt adminokat számol).
