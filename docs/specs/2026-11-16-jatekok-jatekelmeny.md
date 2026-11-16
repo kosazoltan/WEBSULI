@@ -345,7 +345,7 @@ a műfajok általános mechanikáira (sávfutó, mászó, túlélő-bányász, t
   átsorolása (`L/tornado/questions.ts:356-366`); `runStreak` = legjobb sorozat.
 - **Kérdés/perc:** cél ≥ 4/perc.
 
-## 6. Közös réteg (J0) és mérőszámok
+## 6. Közös réteg (J0 = J0a determinizmus + J0b tanulási mag + J0c UI) és mérőszámok
 
 ### 6.1 Modulok (`source/client/src/game-engine/play/`)
 
