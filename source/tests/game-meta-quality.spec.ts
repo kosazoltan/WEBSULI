@@ -2,6 +2,7 @@ import { devices, expect, test, type Page } from "@playwright/test";
 
 import { emulateSafeArea, waitForStable } from "./support/game-mobile-quality";
 import { expectMetaScreenOk, insetsFor, metaShot } from "./support/game-meta-quality";
+import { playToResult } from "./support/duel-e2e";
 
 test.use({ serviceWorkers: "block" });
 
@@ -211,5 +212,35 @@ test.describe("Viharvadász további meta-képernyői", () => {
         await expectMetaScreenOk(page, `Viharvadász ${s.name}`, { insets });
       });
     }
+  }
+});
+
+/**
+ * JM3a-2: a Párbaj nem-játék képernyői (kezdő, beállítás, gépi győzteshirdetés) a meta-mérő alatt — itt az API hálózat nélkül
+ * (a `/api/rt/status` üres → online réteg ki), ahogy élesben `MP_MODE=off` mellett. Az online képernyőket (váróterem, megtelt
+ * szoba, online győzteshirdetés, visszavágó-kérés) ugyanez a mérő a valódi szerveren méri: `tests/duel-online.spec.ts`.
+ */
+test.describe("Párbaj meta-képernyői (gépi mód)", () => {
+  for (const viewport of [META_VIEWPORTS[0], META_VIEWPORTS[3], META_VIEWPORTS[4]]) {
+    test(`kezdő, beállítás és gépi győzteshirdetés ${viewport.width}x${viewport.height}: X1–X8`, async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize(viewport);
+      const insets = insetsFor(viewport);
+      await page.goto("/games/parbaj?duelSpeed=fast");
+      await expect(page.getByTestId("duel-home")).toBeVisible({ timeout: 20_000 });
+      await waitForStable(page, "[data-game-start]");
+      await emulateSafeArea(page, insets);
+      await metaShot(page, "parbaj-kezdo", true);
+      await expectMetaScreenOk(page, "Párbaj kezdő", { insets });
+      await page.getByTestId("duel-bot").tap();
+      await expect(page.getByTestId("duel-setup")).toBeVisible();
+      await metaShot(page, "parbaj-beallitas", true);
+      await expectMetaScreenOk(page, "Párbaj beállítás (gép ellen)", { insets });
+      await page.getByTestId("duel-go").tap();
+      await playToResult(page, 0);
+      await waitForStable(page, '[data-testid="duel-result"]');
+      await metaShot(page, "parbaj-gepi-eredmeny", true);
+      await expectMetaScreenOk(page, "Párbaj gépi győzteshirdetés", { insets });
+    });
   }
 });

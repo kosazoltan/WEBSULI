@@ -7,7 +7,7 @@
  */
 import { devices, expect, test } from "@playwright/test";
 
-import { emulateSafeArea, safeAreaViolations } from "./support/game-mobile-quality";
+import { emulateSafeArea, safeAreaViolations, waitForStable } from "./support/game-mobile-quality";
 import { assertMobileQuality, assertQuestionFits, longestBankItems, playToResult, probe, shot } from "./support/duel-e2e";
 
 test.use({ ...devices["Pixel 7"], serviceWorkers: "block" });
@@ -44,7 +44,8 @@ for (const vp of VIEWPORTS) {
     // Kikapcsolt online réteg: nincs szobanyitás / csatlakozás gomb, a gép elleni játék az elsődleges.
     await expect(page.getByTestId("duel-join")).toHaveCount(0);
     await expect(page.getByTestId("duel-create")).toHaveCount(0);
-    await page.waitForTimeout(500);
+    // A kezdőképernyő belépő animációja után mérünk (a doboz 4 képkockán át változatlan) — fix várakozás helyett.
+    await waitForStable(page, "[data-game-start]");
     await assertMobileQuality(page, "kezdő");
     await shot(page, "bot-home");
 

@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Bot, Check, Copy, Crown, DoorOpen, KeyRound, LogIn, QrCode, Share2, Swords, Trophy, Users, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronDown, Copy, Crown, DoorOpen, KeyRound, LogIn, MonitorSmartphone, QrCode, Share2, Swords, Trophy, Users, Wifi, WifiOff } from "lucide-react";
 
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { QrImage } from "@/components/QrImage";
@@ -137,6 +137,7 @@ export function cleanRoomCode(raw: string): string {
 
 const ERROR_EXTRA: Record<string, string> = {
   NETWORK: "Nem érjük el a szervert. Van internet? Próbáld újra!",
+  SESSION_MOVED: "Ugyanezt a játékot egy másik lapon vagy eszközön nyitottad meg, ott folytatódik. Ezt a lapot bezárhatod.",
   RECONNECT_TIMEOUT: "Megszakadt a kapcsolat, és egy percen belül nem jött vissza. Nyiss új szobát, vagy csatlakozz újra!",
   DISCONNECTED: "Megszakadt a kapcsolat a szobával.",
   ROOM_CLOSED: "A szoba bezárult.",
@@ -318,7 +319,7 @@ export default function DuelOnline() {
   useEffect(() => {
     if (screen.name !== "session" || !session || snap.conn !== "closed") return;
     if (snap.closedCode === "LEFT") return;
-    if (snap.state?.result) return;
+    if (snap.state?.result && snap.closedCode !== "SESSION_MOVED") return;
     setScreen({ name: "error", code: snap.closedCode ?? "DISCONNECTED", retry: null });
   }, [screen.name, session, snap.conn, snap.closedCode, snap.state]);
 
@@ -400,7 +401,9 @@ export default function DuelOnline() {
         <JoinScreen code={joinCode} onCode={(c) => setJoinCode(cleanRoomCode(c))} grade={setup.grade} onGrade={(g) => setSetup((s) => ({ ...s, grade: g }))} onBack={backHome} onGo={joinRoom} onlineEnabled={onlineEnabled || statusQuery.isLoading} />
       ) : null}
       {screen.name === "connecting" ? <BusyScreen label={screen.label} onCancel={backHome} /> : null}
-      {screen.name === "error" ? <ErrorScreen code={screen.code} onRetry={screen.retry} onBack={backHome} /> : null}
+      {screen.name === "error" ? (
+        <ErrorScreen code={screen.code} onRetry={screen.code === "ROOM_FULL" ? null : screen.retry} onBack={backHome} onNewRoom={canCreate ? () => setScreen({ name: "setup", mode: "create" }) : null} />
+      ) : null}
       {screen.name === "session" && session && st ? (
         <SessionView
           session={session}
@@ -415,6 +418,45 @@ export default function DuelOnline() {
       ) : null}
       {screen.name === "session" && session && !st ? <BusyScreen label="Kapcsolódás…" onCancel={backHome} /> : null}
     </GameShell>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Görgethető lap túlcsordulás-jelzéssel (JM3a-2, meta-mérő X8)
+
+/**
+ * A `.dm-page` saját görgető: amíg az alja nincs elérve, `data-scroll-hint="more"` és egy átúszó jelzés (nyíllal) mutatja,
+ * hogy van még lent tartalom; az aljára érve eltűnik. A tartalom változását (pl. a QR kinyitása) is követi.
+ */
+function usePageScrollHint(): [(el: HTMLDivElement | null) => void, boolean] {
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    if (!el) return;
+    const update = () => setMore(el.scrollHeight - el.clientHeight - el.scrollTop > 2);
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    ro?.observe(el);
+    for (const c of Array.from(el.children)) ro?.observe(c);
+    const mo = typeof MutationObserver === "undefined" ? null : new MutationObserver(update);
+    mo?.observe(el, { childList: true, subtree: true });
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro?.disconnect();
+      mo?.disconnect();
+    };
+  }, [el]);
+  return [setEl, more];
+}
+
+/** Átúszó jelzés a görgető alján (díszítés; nem fogja el az érintést). `aboveFooter`: a ragadós alsó gomb fölött. */
+function PageScrollFade({ show, aboveFooter = false }: { show: boolean; aboveFooter?: boolean }) {
+  if (!show) return null;
+  return (
+    <div aria-hidden="true" data-scroll-fade="true" className={`dm-scroll-fade${aboveFooter ? " dm-scroll-fade--above" : ""}`}>
+      <ChevronDown className="h-5 w-5" />
+    </div>
   );
 }
 
@@ -529,8 +571,9 @@ function GradeGrid({ grade, onGrade }: { grade: number; onGrade: (g: number) => 
 function SetupScreen(props: { mode: "bot" | "create"; setup: Setup; suggestedSkill: BotSkill; onChange: (fn: (s: Setup) => Setup) => void; onBack: () => void; onGo: () => void }) {
   const { mode, setup } = props;
   const skill = setup.skill ?? props.suggestedSkill;
+  const [pageRef, more] = usePageScrollHint();
   return (
-    <div className="dm-page" data-testid="duel-setup">
+    <div className="dm-page" data-testid="duel-setup" ref={pageRef} data-scroll-hint={more ? "more" : "end"}>
       <header className="dm-head">
         <button type="button" className="game-btn game-btn-ghost dm-back" onClick={props.onBack}>
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
@@ -557,6 +600,7 @@ function SetupScreen(props: { mode: "bot" | "create"; setup: Setup; suggestedSki
           <p className="dm-hint">A barátod a saját évfolyamából kap kérdést, ugyanebből a nehézségből.</p>
         )}
       </section>
+      <PageScrollFade show={more} aboveFooter />
       <button type="button" className="game-btn game-btn-primary dm-go" data-testid="duel-go" onClick={props.onGo}>
         {mode === "bot" ? <Bot className="h-6 w-6" aria-hidden="true" /> : <Users className="h-6 w-6" aria-hidden="true" />}
         {mode === "bot" ? "Kezdődjön a párbaj!" : "Szoba nyitása"}
@@ -567,8 +611,9 @@ function SetupScreen(props: { mode: "bot" | "create"; setup: Setup; suggestedSki
 
 function JoinScreen(props: { code: string; onCode: (c: string) => void; grade: number; onGrade: (g: number) => void; onBack: () => void; onGo: () => void; onlineEnabled: boolean }) {
   const valid = ROOM_CODE_PATTERN.test(props.code);
+  const [pageRef, more] = usePageScrollHint();
   return (
-    <div className="dm-page" data-testid="duel-join-screen">
+    <div className="dm-page" data-testid="duel-join-screen" ref={pageRef} data-scroll-hint={more ? "more" : "end"}>
       <header className="dm-head">
         <button type="button" className="game-btn game-btn-ghost dm-back" onClick={props.onBack}>
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
@@ -605,6 +650,7 @@ function JoinScreen(props: { code: string; onCode: (c: string) => void; grade: n
           {RT_ERROR_TEXT.FEATURE_DISABLED} Addig játssz a gép ellen!
         </p>
       ) : null}
+      <PageScrollFade show={more} aboveFooter />
       <button type="button" className="game-btn game-btn-primary dm-go" data-testid="duel-join-go" disabled={!valid || !props.onlineEnabled} onClick={props.onGo}>
         <DoorOpen className="h-6 w-6" aria-hidden="true" />
         Belépek
@@ -626,7 +672,35 @@ function BusyScreen({ label, onCancel }: { label: string; onCancel: () => void }
   );
 }
 
-function ErrorScreen({ code, onRetry, onBack }: { code: string; onRetry: (() => void) | null; onBack: () => void }) {
+function ErrorScreen({ code, onRetry, onBack, onNewRoom }: { code: string; onRetry: (() => void) | null; onBack: () => void; onNewRoom: (() => void) | null }) {
+  // JM3a-2 (ÚJ-5): a „megtelt a szoba” és a „másik lapon folytatódik” nem hálózati hiba — saját ikon, saját kiút.
+  if (code === "ROOM_FULL" || code === "SESSION_MOVED") {
+    const full = code === "ROOM_FULL";
+    return (
+      <div className="dm-center" data-testid="duel-error" data-code={code} role="alert">
+        {full ? <Users className="h-12 w-12 text-amber-300" aria-hidden="true" /> : <MonitorSmartphone className="h-12 w-12 text-cyan-300" aria-hidden="true" />}
+        <h1 className="dm-title">{full ? "Ez a szoba megtelt" : "A játék egy másik lapon folytatódik"}</h1>
+        <p className="dm-error-text">{full ? "Kérj új kódot a barátodtól, vagy nyiss saját szobát!" : errorText(code)}</p>
+        <div className="dm-actions">
+          {full && onNewRoom ? (
+            <button type="button" className="game-btn game-btn-primary" data-testid="duel-new-room" onClick={onNewRoom}>
+              <Users className="h-5 w-5" aria-hidden="true" />
+              Új szoba nyitása
+            </button>
+          ) : null}
+          {full ? (
+            <button type="button" className="game-btn game-btn-secondary" data-testid="duel-error-back" onClick={onBack}>
+              Vissza a párbajhoz
+            </button>
+          ) : null}
+          <Link href="/games" className="game-btn game-btn-ghost" data-testid="duel-error-games">
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+            Vissza a játékokhoz
+          </Link>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="dm-center" data-testid="duel-error" data-code={code} role="alert">
       <WifiOff className="h-12 w-12 text-amber-300" aria-hidden="true" />
@@ -659,26 +733,37 @@ function SessionView(props: { session: DuelSession; snap: DuelSnapshot; feedback
   const rival = st.players.find((p) => p.id !== me) ?? null;
   const mine = st.players.find((p) => p.id === me) ?? null;
   const reconnecting = snap.conn === "reconnecting";
-  // Visszavágó-kérés követése: az utolsó győzteshirdetés állapota, és hogy ÉN kértem-e.
+  // Visszavágó-kérés követése (JM3a-2, K4): az utolsó győzteshirdetés állapota és a kérés állapota.
+  //  asked   — a MÁSIK fél kért, rákérdezünk („Benne vagyok” = kész → a szerver azonnal indít);
+  //  waiting — ÉN kértem, várjuk a választ;
+  //  expired — a kérdés 45 s után lejárt (az eredmény marad, a gyerek nem kerül a kezdőre);
+  //  gone    — a másik fél közben kilépett (a kérdés azonnal zárul érthető szöveggel).
   const iAskedRematch = useRef(false);
-  const [rematch, setRematch] = useState<{ lastResult: RtRoomState | null; pending: boolean }>({ lastResult: null, pending: false });
+  type RematchMode = "none" | "asked" | "waiting" | "expired" | "gone";
+  const [rematch, setRematch] = useState<{ lastResult: RtRoomState | null; mode: RematchMode }>({ lastResult: null, mode: "none" });
   useEffect(() => {
     if (snap.kind !== "online") return;
     if (st.result && (st.phase === "finished" || st.phase === "aborted")) {
       iAskedRematch.current = false;
-      setRematch((r) => (r.lastResult === st ? r : { lastResult: st, pending: false }));
+      setRematch((r) => (r.lastResult === st ? r : { lastResult: st, mode: "none" }));
     } else if (st.phase === "lobby") {
-      setRematch((r) => (r.lastResult && !r.pending && !iAskedRematch.current && !r.lastResult.result?.aborted && r.lastResult.code === st.code ? { ...r, pending: true } : r));
+      setRematch((r) => {
+        if (!r.lastResult || r.lastResult.code !== st.code || r.lastResult.result?.aborted) return r;
+        const rivalHere = st.players.some((p) => p.id !== me && !p.left);
+        if (r.mode === "none") return { ...r, mode: !rivalHere ? "gone" : iAskedRematch.current ? "waiting" : "asked" };
+        if ((r.mode === "asked" || r.mode === "waiting" || r.mode === "expired") && !rivalHere) return { ...r, mode: "gone" };
+        return r;
+      });
     } else if (rematch.lastResult) {
-      setRematch({ lastResult: null, pending: false });
+      setRematch({ lastResult: null, mode: "none" });
     }
   }, [st.phase, st.seq, snap.kind]);
-  // Egyoldalú kérés időkorláttal lejár: 45 s válasz nélkül „Most nem” (kilépés a szobából, az ellenfél váróterme értesül).
+  // Egyoldalú kérés időkorláttal lejár: 45 s után a kérdés eltűnik, az eredmény marad (nincs kidobás a kezdőre).
   useEffect(() => {
-    if (!rematch.pending) return;
-    const t = window.setTimeout(() => void session.leave().then(props.onExit), 45_000);
+    if (rematch.mode !== "asked") return;
+    const t = window.setTimeout(() => setRematch((r) => (r.mode === "asked" ? { ...r, mode: "expired" } : r)), 45_000);
     return () => window.clearTimeout(t);
-  }, [rematch.pending, session, props.onExit]);
+  }, [rematch.mode]);
   const banner = reconnecting ? (
     <div className="dm-banner" role="status" data-testid="duel-reconnecting">
       <Wifi className="h-4 w-4" aria-hidden="true" /> Kapcsolódás újra… A helyed egy percig megmarad.
@@ -689,8 +774,8 @@ function SessionView(props: { session: DuelSession; snap: DuelSnapshot; feedback
     </div>
   ) : null;
 
-  // Kétoldalú visszavágó (review #464 K4): ha a MÁSIK fél kéri, a győzteshirdetés marad, és rákérdezünk.
-  if (st.phase === "lobby" && rematch.pending && rematch.lastResult)
+  // Kétoldalú visszavágó (review #464 K4, JM3a-2): a visszavágó-kérés körül a győzteshirdetés marad.
+  if (st.phase === "lobby" && rematch.mode !== "none" && rematch.lastResult)
     return (
       <ResultView
         session={session}
@@ -699,12 +784,10 @@ function SessionView(props: { session: DuelSession; snap: DuelSnapshot; feedback
         onExit={props.onExit}
         onNewSetup={props.onNewSetup}
         feedback={props.feedback}
-        prompt={{
-          name: rival?.nickname ?? "A barátod",
-          onAccept: () => {
-            setRematch({ lastResult: null, pending: false });
-            void session.setReady(true);
-          },
+        rematchUi={{
+          mode: rematch.mode,
+          name: rival?.nickname ?? rematch.lastResult.players.find((p) => p.id !== me)?.nickname ?? "A barátod",
+          onAccept: () => void session.setReady(true),
           onDecline: () => void session.leave().then(props.onExit),
         }}
       />
@@ -725,6 +808,7 @@ function LobbyView({ session, st, me, banner, onExit }: { session: DuelSession; 
   const present = st.players.filter((p) => !p.left);
   const canStart = isHost && present.length >= 2 && present.every((p) => p.id === st.hostId || p.ready);
   const link = `${window.location.origin}/games/parbaj/${st.code}`;
+  const [pageRef, more] = usePageScrollHint();
 
   const share = async () => {
     const data = { title: "Párbaj a WebSulin", text: `Gyere párbajozni! A szoba kódja: ${st.code}`, url: link };
@@ -756,7 +840,7 @@ function LobbyView({ session, st, me, banner, onExit }: { session: DuelSession; 
   };
 
   return (
-    <div className="dm-page dm-lobby" data-testid="duel-lobby">
+    <div className="dm-page dm-lobby" data-testid="duel-lobby" ref={pageRef} data-scroll-hint={more ? "more" : "end"}>
       {banner}
       <header className="dm-head">
         <button type="button" className="game-btn game-btn-ghost dm-back" data-testid="duel-leave" onClick={() => void session.leave().then(onExit)}>
@@ -822,6 +906,7 @@ function LobbyView({ session, st, me, banner, onExit }: { session: DuelSession; 
           {err}
         </p>
       ) : null}
+      <PageScrollFade show={more} aboveFooter />
       {isHost ? (
         <button type="button" className="game-btn game-btn-primary dm-go" data-testid="duel-start" disabled={!canStart || busy} onClick={() => void act(() => session.start())}>
           <Swords className="h-6 w-6" aria-hidden="true" />
@@ -1075,8 +1160,8 @@ function ResultView(props: {
   onNewSetup: () => void;
   feedback: ReturnType<typeof useDuelFeedback>;
   onRematchClick?: () => void;
-  /** A másik fél visszavágót kér (K4): a győzteshirdetés marad, a gombok helyén a kérdés. */
-  prompt?: { name: string; onAccept: () => void; onDecline: () => void };
+  /** Visszavágó-kérés állapota (K4, JM3a-2): a győzteshirdetés marad, alatta a kérdés / várakozás / lezárás. */
+  rematchUi?: { mode: "asked" | "waiting" | "expired" | "gone"; name: string; onAccept: () => void; onDecline: () => void };
 }) {
   const { session, snap, me, feedback } = props;
   const st = snap.state!;
@@ -1116,9 +1201,11 @@ function ResultView(props: {
     setBusy(false);
   };
   const canRematch = !closed && r.reason !== "SERVER_RESTART" && (isBot || (st.phase === "finished" && r.reason !== "OPPONENT_LEFT"));
+  const ui = props.rematchUi;
+  const [pageRef, more] = usePageScrollHint();
 
   return (
-    <div className="dm-page dm-result" data-testid="duel-result" data-cowin={r.coWin ? "true" : "false"} data-won={won ? "true" : "false"}>
+    <div className="dm-page dm-result" data-testid="duel-result" data-cowin={r.coWin ? "true" : "false"} data-won={won ? "true" : "false"} ref={pageRef} data-scroll-hint={more ? "more" : "end"}>
       <section className="dm-result-head" aria-label="Győzteshirdetés">
         {r.coWin ? <span className="dm-big-emoji" aria-hidden="true">🤝</span> : won ? <Trophy className="h-12 w-12 text-amber-300 dm-trophy" aria-hidden="true" /> : <span className="dm-big-emoji" aria-hidden="true">🥈</span>}
         <h1 className="dm-headline" data-testid="duel-winner">
@@ -1126,6 +1213,41 @@ function ResultView(props: {
         </h1>
         {reasonText ? <p className="dm-hint" data-testid="duel-result-reason">{reasonText}</p> : null}
       </section>
+      {/* JM3a-2: a visszavágó-kérdés a kártyák FÖLÖTT — fekvő nézetben is azonnal látszik (ÚJ-3). */}
+      {ui?.mode === "asked" ? (
+        <div className="dm-rematch-ask" role="alertdialog" aria-labelledby="duel-rematch-ask" data-testid="duel-rematch-ask">
+          <p id="duel-rematch-ask" className="dm-modal-title">
+            {ui.name} visszavágót kér!
+          </p>
+          <div className="dm-actions">
+            <button type="button" className="game-btn game-btn-primary" data-testid="duel-rematch-accept" onClick={ui.onAccept}>
+              <Swords className="h-5 w-5" aria-hidden="true" />
+              Benne vagyok
+            </button>
+            <button type="button" className="game-btn game-btn-secondary" data-testid="duel-rematch-decline" onClick={ui.onDecline}>
+              Most nem
+            </button>
+          </div>
+        </div>
+      ) : ui ? (
+        <div className="dm-rematch-ask dm-rematch-ask--info" role="status" data-testid={`duel-rematch-${ui.mode}`}>
+          <p className="dm-modal-title">
+            {ui.mode === "waiting"
+              ? `Visszavágót kértél — várjuk ${ui.name} válaszát…`
+              : ui.mode === "expired"
+                ? `${ui.name} visszavágót kért — ha mégis kedved van, nyomd meg a Visszavágót!`
+                : `${ui.name} kilépett — a visszavágó most elmarad.`}
+          </p>
+          {ui.mode === "expired" ? (
+            <div className="dm-actions">
+              <button type="button" className="game-btn game-btn-primary" data-testid="duel-rematch-accept" onClick={ui.onAccept}>
+                <Swords className="h-5 w-5" aria-hidden="true" />
+                Visszavágó
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="dm-result-cards">
         {mineStats ? (
           <ResultCard
@@ -1155,23 +1277,7 @@ function ResultView(props: {
         ))}
       </div>
       <div className="dm-actions dm-result-actions">
-        {props.prompt ? (
-          <div className="dm-rematch-ask" role="alertdialog" aria-labelledby="duel-rematch-ask" data-testid="duel-rematch-ask">
-            <p id="duel-rematch-ask" className="dm-modal-title">
-              {props.prompt.name} visszavágót kér!
-            </p>
-            <div className="dm-actions">
-              <button type="button" className="game-btn game-btn-primary" data-testid="duel-rematch-accept" onClick={props.prompt.onAccept}>
-                <Swords className="h-5 w-5" aria-hidden="true" />
-                Benne vagyok
-              </button>
-              <button type="button" className="game-btn game-btn-secondary" data-testid="duel-rematch-decline" onClick={props.prompt.onDecline}>
-                Most nem
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {canRematch && !props.prompt ? (
+        {canRematch && !ui ? (
           <button type="button" className="game-btn game-btn-primary" data-testid="duel-rematch" disabled={busy} onClick={() => void rematch()}>
             <Swords className="h-5 w-5" aria-hidden="true" />
             Visszavágó
@@ -1185,6 +1291,7 @@ function ResultView(props: {
           Játékok
         </Link>
       </div>
+      <PageScrollFade show={more} />
     </div>
   );
 }
@@ -1277,6 +1384,7 @@ const PAGE_CSS = `
 @keyframes dm-hit { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 @keyframes dm-clash { 0% { transform: scale(1); } 40% { transform: scale(1.35) rotate(-12deg); box-shadow: 0 0 40px #fde047; } 100% { transform: scale(1); } }
 @media (max-height: 700px) and (orientation: portrait) { .dm-vs-fighter { width: 56px; height: 56px; font-size: 26px; } .dm-vs-mark { width: 44px; height: 44px; } }
+.dm-rematch-ask--info { background: #0f172acc; border-color: #fcd34d; }
 .dm-rematch-ask { width: 100%; padding: 12px; border-radius: 16px; text-align: center; background: #14532dcc; border: 2px solid #4ade80; }
 .dm-big-emoji { font-size: 44px; line-height: 1; }
 .dm-trophy { filter: drop-shadow(0 0 14px #f59e0b); animation: dm-pop .6s ease-out 1; }
@@ -1293,7 +1401,13 @@ const PAGE_CSS = `
 .dm-result-head { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .dm-headline { font-size: clamp(24px, 7vmin, 36px); font-weight: 900; line-height: 1.15; color: #fde047; text-shadow: 0 0 24px #f59e0b88; }
 .dm-result-cards { display: grid; gap: 10px; text-align: left; }
-.dm-result-actions { position: sticky; bottom: max(4px, var(--game-safe-bottom)); }
+/* JM3a-2: az eredménylap gombsora nem ragadós (a túlcsordulást az alsó átúszó jelzés mutatja, X8). */
+.dm-result-actions { position: static; }
+.dm-scroll-fade { position: sticky; bottom: 0; z-index: 4; display: flex; align-items: flex-end; justify-content: center; height: 32px;
+  margin-top: -32px; flex: none; pointer-events: none; color: #a5f3fc; background: linear-gradient(to top, #070b1d, #070b1dcc 55%, transparent); }
+.dm-scroll-fade--above { bottom: calc(max(8px, var(--game-safe-bottom)) + 64px); }
+.dm-scroll-fade svg { animation: dm-bob 1.2s ease-in-out infinite; }
+@keyframes dm-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
 
 /* Fekvő telefon (844×390): két oszlop — bal: kör, ellenfél, saját sáv, idő; jobb: a kérdés és a 2×2 rács teljes magasságban. */
 @media (orientation: landscape) and (max-height: 560px) {
@@ -1306,10 +1420,13 @@ const PAGE_CSS = `
   .dm-result-cards { grid-template-columns: 1fr 1fr; align-items: start; }
   .dm-code { font-size: 44px; }
   .dm-vs { display: none; }
+  /* JM3a-2 ÚJ-3: fekvő nézetben az eredménylap gombsora sem ragadós — a visszavágó-doboz nem csúszik a kártyára. */
+  .dm-result-actions { position: static; }
   /* Review #464 A5: fekvő váróteremben a ragadós gomb ne takarja a játékoslistát (a lap végén áll). */
   .dm-lobby .dm-go { position: static; }
+  .dm-lobby .dm-scroll-fade--above { bottom: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .dm-count-num, .dm-spinner, .dm-trophy, .dm-vs-fighter, .dm-vs-mark { animation: none !important; }
+  .dm-count-num, .dm-spinner, .dm-trophy, .dm-vs-fighter, .dm-vs-mark, .dm-scroll-fade svg { animation: none !important; }
 }
 `;
