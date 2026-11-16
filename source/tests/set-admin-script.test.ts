@@ -34,6 +34,14 @@ describe("setAdmin szkript — kötelező cím-argumentum", () => {
     const src = readFileSync(fileURLToPath(new URL(`../${SCRIPT}`, import.meta.url)), "utf8");
     assert.doesNotMatch(src, /['"`][^'"`\s]+@[^'"`\s]+\.[a-z]{2,}['"`]/i, "sztringliterálban e-mail-cím");
     assert.doesNotMatch(src, /first_name|last_name/, "beégetett név (az új sor nevét a Google-belépés tölti ki)");
-    assert.match(src, /const email = normalizeAdminEmail\(process\.argv\[2\]\);/);
+    assert.match(src, /const email = normalizeAdminEmail\(rawArg\) \? rawArg : null;/);
+  });
+
+  it("review #474: a meglévő fiókot írásmódtól függetlenül találja meg, és azt (id szerint) emeli — nem hoz létre új sort mellé", () => {
+    const src = readFileSync(fileURLToPath(new URL(`../${SCRIPT}`, import.meta.url)), "utf8");
+    assert.match(src, /SELECT id, is_admin FROM users WHERE lower\(email\) = lower\(\$1\)/);
+    assert.match(src, /UPDATE users SET is_admin = true WHERE id = \$1/);
+    assert.doesNotMatch(src, /WHERE email = \$1/, "kis- / nagybetű-érzékeny keresés");
+    assert.match(src, /if \(check\.rows\.length > 1\)[\s\S]*process\.exit\(1\)/, "több illeszkedő fióknál nem dönt helyettünk");
   });
 });

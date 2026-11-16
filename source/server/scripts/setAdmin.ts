@@ -12,7 +12,10 @@ import { isAllowlistedAdminEmail, normalizeAdminEmail } from "../lib/admin-acces
 import { maskEmail } from "../lib/mask-email";
 config();
 
-const email = normalizeAdminEmail(process.argv[2]);
+// A cím-ellenőrzés a normalizált alakon fut, de a tárolt sort az írásmódjától függetlenül keressük (review #474): egy
+// nagybetűs írásmóddal tárolt meglévő fiók ugyanezt kapja, nem jön létre mellé új sor.
+const rawArg = (process.argv[2] ?? "").trim();
+const email = normalizeAdminEmail(rawArg) ? rawArg : null;
 if (!email) {
     logger.error("Használat: node --import tsx server/scripts/setAdmin.ts <email> — a cím kötelező, és érvényes e-mail-cím legyen.");
     process.exit(1);
@@ -22,10 +25,15 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
 async function run(target: string) {
     const masked = maskEmail(target);
-    // First check if user exists
-    const check = await pool.query(`SELECT id, is_admin FROM users WHERE email = $1`, [target]);
-    logger.info(`Current user (${masked}):`, check.rows[0] || 'NOT FOUND');
+    // First check if user exists (kis- / nagybetűtől függetlenül)
+    const check = await pool.query(`SELECT id, is_admin FROM users WHERE lower(email) = lower($1)`, [target]);
+    logger.info(`Current user (${masked}):`, check.rows[0] || "NOT FOUND");
 
+    if (check.rows.length > 1) {
+        logger.error(`HIBA: ${check.rows.length} fiók illik erre a címre (kis- / nagybetű eltéréssel) — nem döntöm el helyetted, melyik legyen admin; nem módosítottam semmit.`);
+        await pool.end();
+        process.exit(1);
+    }
     if (check.rows.length === 0) {
         // Create admin user (a nevet a Google-belépés tölti ki)
         const insert = await pool.query(`
@@ -35,10 +43,10 @@ async function run(target: string) {
         `, [target]);
         logger.info(`Created admin user (${masked}):`, insert.rows[0]);
     } else {
-        // Update existing to admin
+        // Update existing to admin (a meglévő sor, az írásmódja változatlan)
         const update = await pool.query(`
-            UPDATE users SET is_admin = true WHERE email = $1 RETURNING id, is_admin
-        `, [target]);
+            UPDATE users SET is_admin = true WHERE id = $1 RETURNING id, is_admin
+        `, [check.rows[0].id]);
         logger.info(`Updated to admin (${masked}):`, update.rows[0]);
     }
     if (!isAllowlistedAdminEmail(target)) logger.warn("FIGYELEM: a cím nincs az admin-engedélylistán (ADMIN_ALLOWLIST, alapból ADMIN_EMAIL): az admin-jelző beállt, de admin-jogot csak a listára vétel után ad (JM7c-1, terv 10.4a).");

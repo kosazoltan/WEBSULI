@@ -17,6 +17,9 @@ parancskimenetet `sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<cím>/g'`-vel szű
 - `const email = normalize(process.argv[2])`; hiányzó / hibás → `console.error("Használat: …setAdmin.ts <email>")`, `process.exit(1)`
   a `pg.Pool` létrehozása ELŐTT. A cím-ellenőrzés: `normalizeAdminEmail` (`server/lib/admin-access.ts`).
 - INSERT `first_name` / `last_name` nélkül; naplóban `maskEmail`.
+- Review #474: keresés `lower(email) = lower($1)`, frissítés a megtalált sor `id`-jára (a tárolt írásmód marad); több illeszkedő
+  sor → hiba, exit 1, módosítás nélkül; új sor csak, ha nincs egyező (a megadott írásmóddal). DB-teszt:
+  `tests/set-admin-script-db.integration.ts` (a `test:learning-db` futtatóban).
 - Forrás-őr: a `scripts/setAdmin.ts` `is_admin` engedélye marad (a sorok továbbra is illenek).
 - Teszt `tests/set-admin-script.test.ts`: `spawnSync(process.execPath, ["--import", "tsx", "server/scripts/setAdmin.ts"])` argumentum
   nélkül és hibás címmel → status 1, a kimenet a „Használat” szót tartalmazza; a forrásban nincs `@` karakterű sztringliterál.
