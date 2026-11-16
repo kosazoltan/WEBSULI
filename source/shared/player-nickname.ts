@@ -245,14 +245,16 @@ const RESERVED = compileRoots(RESERVED_ROOTS, () => RESERVED_EXCEPTIONS);
 
 const EMAIL_PROVIDERS = ["gmail", "freemail", "citromail", "hotmail", "outlook", "yahoo", "icloud", "protonmail"].map(foldNickname);
 
-function isEmailLike(raw: string, folded: string): boolean {
+/** Az e-mail-minta a nyers szövegen ÉS a szűrő MINDEN olvasatán (`folds`) — a szolgáltatónév számjeggyel tagolva sem megy át. */
+function isEmailLike(raw: string, folds: readonly string[]): boolean {
   if (raw.includes("@")) return true;
-  if (EMAIL_PROVIDERS.some((p) => folded.includes(p))) return true;
+  if (folds.some((f) => EMAIL_PROVIDERS.some((p) => f.includes(p)))) return true;
   return /(^|\s)(kukac|at)\s+\S+\s+(pont|dot)\s+\S+/i.test(raw);
 }
 
-function isUrlLike(raw: string, folded: string): boolean {
-  if (/(https?|www)/i.test(raw) || folded.includes("http") || folded.includes("www")) return true;
+/** Az URL-minta a nyers szövegen ÉS a szűrő MINDEN olvasatán (`folds`): „w6ww”, „ht2tp” is. */
+function isUrlLike(raw: string, folds: readonly string[]): boolean {
+  if (/(https?|www)/i.test(raw) || folds.some((f) => f.includes("http") || f.includes("www"))) return true;
   if (/\.(hu|com|net|org|eu|io)\b/i.test(raw)) return true;
   return /(^|\s)(pont|dot)\s*(hu|com|net|org|eu|io)(\s|$)/i.test(raw);
 }
@@ -278,11 +280,15 @@ export function checkPlayerNickname(raw: unknown): NicknameCheck {
   const disc = DISCRIMINATOR.exec(nickname);
   const base = disc ? nickname.slice(0, disc.index) : nickname;
   // A tartalomszűrő a megkülönböztető NÉLKÜLI részen fut (a „#1234” leet-fordítása ne adjon ki véletlen tövet).
-  const folded = foldNickname(base);
+  // A szűrő olvasatai EGY helyen, HALMAZKÉNT: a nyers alak és a többkarakteres hasonmás-olvasatok (rn → m, vv → w, cl → d),
+  // mindegyik a 2 / 6 / 9 elhagyva ÉS betűként. MINDEN tartalom-ellenőrzés (e-mail, URL, trágár, foglalt) mindegyiken fut —
+  // egy új olvasat így soha nem vesz el régit.
+  const readings = [base, ...multiCharReadings(base)];
+  const folds = [...new Set(readings.flatMap(foldReadings))];
   const len = Array.from(base).length;
 
-  if (isEmailLike(nickname, folded)) problems.push("EMAIL");
-  else if (isUrlLike(nickname, folded)) problems.push("URL");
+  if (isEmailLike(nickname, folds)) problems.push("EMAIL");
+  else if (isUrlLike(nickname, folds)) problems.push("URL");
   // Review #449 (K1): ENGEDÉLYLISTA — csak ASCII betű / számjegy, a magyar ékezetes betűk, szóköz, `_`, `-` (az NFKC UTÁN).
   // Minden más kódpont — a latin írású hasonmás betűk is (IPA, kiskapitális, pont nélküli i) — elutasítva.
   if (COMBINING.test(base) || !ALLOWED.test(base)) {
@@ -295,11 +301,7 @@ export function checkPlayerNickname(raw: unknown): NicknameCheck {
   if (len > PLAYER_NICK_MAX) problems.push("LENGTH_LONG");
   if (len > 0 && !Array.from(base).some((ch) => LETTER.test(ch))) problems.push("NO_LETTER");
   if (base.replace(/\D/g, "").length >= 6) problems.push("PHONE");
-  // N1: a `folded` már az l / I / 1 / i összevont alak, a tövek ugyanígy normalizáltak — minden olvasat egyszerre vizsgált.
-  // N1b: + a többkarakteres hasonmások olvasata (rn → m, vv → w, cl → d).
-  // A szűrő olvasatai HALMAZT alkotnak (minden olvasatban keres; egy új olvasat soha nem vesz el régit).
-  const readings = [base, ...multiCharReadings(base)];
-  const folds = [...new Set(readings.flatMap(foldReadings))];
+  // N1: az olvasatok már az l / I / 1 / i összevont alakok, a tövek ugyanígy normalizáltak.
   const names = folds.map(foldedName);
   if (names.some((f) => BLOCKED.some((root) => containsRoot(f, root)))) problems.push("BLOCKED");
   // A foglalt SZAVAK („mod”, „gm”, „dev”) a leet-normalizált szavakon ÉS az elválasztók nélküli teljes néven („M o d”, „G M”).

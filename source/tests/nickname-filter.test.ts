@@ -246,11 +246,21 @@ describe("JM7b-utójavítás N1b — a maradék kijátszások (review #461/#463 
     // tests/fixtures/nickname-main-rejected.json: az origin/main (d5c91060) szűrője által elutasított nevek — minden tiltott /
     // foglalt tő minden pozíciójára beszúrt 0–9 számjeggyel (kis- és nagybetűvel), a review-szondák kísérletei és a #469
     // review példái. A régi kódot NEM importáljuk: a viselkedése rögzített adat.
-    const fixture = JSON.parse(readFileSync(new URL("./fixtures/nickname-main-rejected.json", import.meta.url), "utf8")) as { count: number; rejected: string[] };
-    assert.equal(fixture.rejected.length, fixture.count);
-    assert.ok(fixture.count > 5000, `rögzített elutasított nevek: ${fixture.count}`);
-    const nowAccepted = fixture.rejected.filter((n) => checkPlayerNickname(n).ok);
-    assert.deepEqual(nowAccepted.slice(0, 20), [], `a régi szűrő elutasította, az új elfogadja (${nowAccepted.length} db)`);
+    // Mintacsoportonként (foglalt / trágár / e-mail-szolgáltató / URL / egyéb), mindegyikben minden pozícióra beszúrt 0–9 számjegy.
+    const fixture = JSON.parse(readFileSync(new URL("./fixtures/nickname-main-rejected.json", import.meta.url), "utf8")) as { count: number; groups: Record<string, string[]> };
+    assert.deepEqual(Object.keys(fixture.groups).sort(), ["blocked", "email", "other", "reserved", "url"]);
+    assert.equal(Object.values(fixture.groups).reduce((n, g) => n + g.length, 0), fixture.count);
+    assert.ok(fixture.count > 9000, `rögzített elutasított nevek: ${fixture.count}`);
+    for (const [group, names] of Object.entries(fixture.groups)) {
+      assert.ok(names.length > 50, `${group}: ${names.length}`);
+      const nowAccepted = names.filter((n) => checkPlayerNickname(n).ok);
+      assert.deepEqual(nowAccepted.slice(0, 20), [], `${group}: a régi szűrő elutasította, az új elfogadja (${nowAccepted.length} db)`);
+    }
+  });
+
+  it("#469 review: az e-mail- és URL-minta is minden olvasaton fut (számjeggyel tagolt szolgáltatónév / www / http)", () => {
+    for (const n of ["Kata g2mail", "Kata gma6il", "Kata hot9mail"]) rejectsWith(n, "EMAIL");
+    for (const n of ["w6ww Kata", "ht2tpKata", "w9ww Kata"]) rejectsWith(n, "URL");
   });
 
   it("#469 review: a számjegy elválasztóként (elhagyva) ÉS betűként is olvasva — mindkettő tilt", () => {
