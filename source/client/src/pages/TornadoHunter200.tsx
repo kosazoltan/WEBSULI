@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import { Card, CardContent } from "@/components/ui/card";
 import { correctDataAttrs, installGameTestApi, GAME_TEST_HOOKS_ENABLED } from "@/game-engine/game-test-hooks";
 import AudioToggleButton from "@/components/AudioToggleButton";
@@ -1289,6 +1290,16 @@ function PlayScreen(props: {
   const camGroundRef = useRef(Number.NaN);
   /** Bumped on blur / hidden tab: the VirtualJoystick drops a drag that is still in progress. */
   const [touchReset, setTouchReset] = useState(0);
+  // Joystick-reakció (#49): a bemenet → válasz mérő kampója (csak teszt-kampós buildben él).
+  countRender("tornado-play");
+  useEffect(
+    () =>
+      registerInputProbe("tornado", () => {
+        const p = playerRef.current;
+        return { heading: p.heading, speed: p.speed, x: p.x, z: p.z, steerIn: touchRef.current.steer, throttleIn: touchRef.current.throttle };
+      }),
+    [],
+  );
   const padAnchorPrevRef = useRef(false);
   const padGateRef = useRef(createGamepadRestGate());
   const finishedRef = useRef(false);

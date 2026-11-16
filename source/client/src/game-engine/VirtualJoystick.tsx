@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
-import { createJoystickDrag, retireJoystickDrag, type JoystickVector } from "./joystick";
+import { JOYSTICK_DEAD_ZONE, createJoystickDrag, retireJoystickDrag, type JoystickVector } from "./joystick";
 import { controlRadiusFor } from "./mobile/controlSize";
 import { useReducedMotion } from "./useReducedMotion";
+import { countRender } from "./inputProbe";
 
 /**
  * G-8 — virtuális joystick telefonra.
@@ -63,6 +64,7 @@ function useResolvedRadius(radius: number | "auto"): number {
   return auto ? autoRadius : radius;
 }
 
+
 export default function VirtualJoystick({
   onChange,
   radius: radiusProp = 56,
@@ -70,15 +72,34 @@ export default function VirtualJoystick({
   label = "Irányítás",
   resetSignal,
 }: VirtualJoystickProps) {
+  countRender("joystick");
   const radius = useResolvedRadius(radiusProp);
   const reduced = useReducedMotion();
   const drag = useMemo(() => createJoystickDrag(radius), [radius]);
-  const [knob, setKnob] = useState<{ x: number; y: number } | null>(null);
   const elementRef = useRef<HTMLDivElement>(null);
+  const knobRef = useRef<HTMLSpanElement>(null);
   const pointerIdRef = useRef<number | null>(null);
-  // A reset-effekt a legfrissebb onChange-et hívja, de csak a jelre fut le.
+  // Az eseménykezelők és az effektek a legfrissebb onChange-et hívják — a hívó inline függvénye miatt
+  // a kezelők nem jönnek létre újra minden renderben.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const reducedRef = useRef(reduced);
+  reducedRef.current = reduced;
+
+  /**
+   * Joystick-reakció (#49): a gomb a DOM-on át, ugyanabban az eseményben követi az ujjat — React-render nélkül.
+   * Mérve (Pixel 7 emuláció): a régi `setKnob` állapot minden `pointermove`-ra újrarenderelte a tárcsát, és a gomb
+   * egy képkockával a játék bemenete UTÁN jelent meg. `null` = elengedve (visszaugrik középre, áttűnéssel).
+   */
+  const paintKnobRef = useRef((knob: { x: number; y: number } | null) => {
+    const el = elementRef.current;
+    const k = knobRef.current;
+    if (el) el.dataset.active = knob ? "true" : "false";
+    if (!k) return;
+    k.style.transition = reducedRef.current || knob ? "none" : "transform 120ms ease-out";
+    k.style.transform = `translate3d(${knob?.x ?? 0}px, ${knob?.y ?? 0}px, 0)`;
+  });
+  const setKnob = paintKnobRef.current;
 
   // Review PR #422: sugárváltáskor (radius="auto", elforgatás) új `drag` jön létre. A régi futó húzást
   // lezárjuk, a capture-t elengedjük, a gombot töröljük és nulla vektort küldünk — különben a felengedés
@@ -88,10 +109,11 @@ export default function VirtualJoystick({
     const prev = prevDragRef.current;
     prevDragRef.current = drag;
     if (!retireJoystickDrag(prev, drag)) return;
+    const setKnob = paintKnobRef.current;
     const el = elementRef.current;
     const id = pointerIdRef.current;
-    if (el && id !== null && el.hasPointerCapture?.(id)) el.releasePointerCapture?.(id);
     pointerIdRef.current = null;
+    if (el && id !== null && el.hasPointerCapture?.(id)) el.releasePointerCapture?.(id);
     setKnob(null);
     onChangeRef.current(ZERO_VECTOR);
   }, [drag]);
@@ -99,39 +121,43 @@ export default function VirtualJoystick({
   const handleDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       e.preventDefault();
+      // Több ujj: a tárcsát az első ujj birtokolja; egy második ujj leérése nem rántja át a közepét.
+      if (pointerIdRef.current !== null && drag.active) return;
       e.currentTarget.setPointerCapture?.(e.pointerId);
       pointerIdRef.current = e.pointerId;
       // Dinamikus tárca: ahol a hüvelykujj leér, ott a közép.
       drag.down({ x: e.clientX, y: e.clientY });
       setKnob({ x: 0, y: 0 });
     },
-    [drag],
+    [drag, setKnob],
   );
 
   const handleMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.pointerId !== pointerIdRef.current) return;
       const moved = drag.move({ x: e.clientX, y: e.clientY });
       if (!moved) return;
       e.preventDefault();
-      onChange(moved.vector);
+      onChangeRef.current(moved.vector);
       setKnob(moved.knob);
     },
-    [drag, onChange],
+    [drag, setKnob],
   );
 
   const handleUp = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.pointerId !== pointerIdRef.current) return;
+      pointerIdRef.current = null;
       if (!drag.up()) return;
       if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
         e.currentTarget.releasePointerCapture?.(e.pointerId);
       }
-      pointerIdRef.current = null;
       setKnob(null);
       // Felengedéskor MINDIG nullázunk: enélkül a hajó a legutolsó irányba
       // sodródna tovább, és a gyerek azt hinné, elromlott a vezérlés.
-      onChange(ZERO_VECTOR);
+      onChangeRef.current({ x: 0, y: 0, magnitude: 0 });
     },
-    [drag, onChange],
+    [drag, setKnob],
   );
 
   // Review PR #137: fókuszvesztéskor a hívó nullázta a saját irányait, de a tárcsa megtartotta a
@@ -139,16 +165,15 @@ export default function VirtualJoystick({
   useEffect(() => {
     if (resetSignal === undefined) return;
     if (!drag.reset()) return;
+    const setKnob = paintKnobRef.current;
     const el = elementRef.current;
     const id = pointerIdRef.current;
-    if (el && id !== null && el.hasPointerCapture?.(id)) el.releasePointerCapture?.(id);
     pointerIdRef.current = null;
+    if (el && id !== null && el.hasPointerCapture?.(id)) el.releasePointerCapture?.(id);
     setKnob(null);
     onChangeRef.current(ZERO_VECTOR);
     // A `drag` csak sugárváltáskor új; egy friss húzás-objektumon a reset nem csinál semmit.
   }, [resetSignal, drag]);
-
-  const active = knob !== null;
 
   return (
     <div
@@ -156,11 +181,13 @@ export default function VirtualJoystick({
       role="application"
       aria-label={label}
       data-testid="virtual-joystick"
-      data-active={active ? "true" : "false"}
+      data-active="false"
       onPointerDown={handleDown}
       onPointerMove={handleMove}
       onPointerUp={handleUp}
       onPointerCancel={handleUp}
+      // KSZ-14: ha a rendszer elveszi a capture-t (pl. értesítés, gesztus), az is elengedés.
+      onLostPointerCapture={handleUp}
       onContextMenu={(e) => e.preventDefault()}
       className={`relative flex items-center justify-center rounded-full border-2 border-white/25 bg-slate-900/50 ${className}`}
       style={{
@@ -174,15 +201,18 @@ export default function VirtualJoystick({
       }}
     >
       {/* Holtsáv-jelzés: a gyerek látja, meddig „nem történik semmi". */}
-      <span className="absolute rounded-full border border-white/10" style={{ width: radius * 0.3, height: radius * 0.3 }} />
       <span
+        className="absolute rounded-full border border-white/10"
+        style={{ width: radius * 2 * JOYSTICK_DEAD_ZONE, height: radius * 2 * JOYSTICK_DEAD_ZONE }}
+      />
+      <span
+        ref={knobRef}
         aria-hidden="true"
         className="absolute rounded-full bg-sky-400/85 shadow-lg"
         style={{
           width: radius * 0.72,
           height: radius * 0.72,
-          transform: `translate(${knob?.x ?? 0}px, ${knob?.y ?? 0}px)`,
-          transition: reduced || active ? "none" : "transform 120ms ease-out",
+          willChange: "transform",
         }}
       />
     </div>
