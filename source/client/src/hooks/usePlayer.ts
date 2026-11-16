@@ -9,7 +9,10 @@ export type PlayerMe = { id: string; nickname: string | null; needsProfile: bool
 export type VerifyRequest = { kind: "code"; email: string; code: string } | { kind: "link"; linkToken: string };
 export type VerifyResult =
   | { ok: true; player: PlayerMe }
-  | { ok: false; code: "INVALID_OR_EXPIRED" | "BANNED" | "RATE_LIMITED" | "UNAVAILABLE" | "SERVER_ERROR" | "NETWORK" };
+  | { ok: false; code: "INVALID_OR_EXPIRED" | "BANNED" | "RATE_LIMITED" | "UNAVAILABLE" | "SERVER_ERROR" | "NETWORK" | "ACCOUNT_SESSION" };
+export type LinkInfo =
+  | { ok: true; maskedEmail: string; current: "none" | "same" | "other"; accountSession: boolean }
+  | { ok: false; code: "INVALID_OR_EXPIRED" | "RATE_LIMITED" | "UNAVAILABLE" | "SERVER_ERROR" | "NETWORK" };
 
 /** A belépő kérések időkorlátja: lassú / megszakadt hálózaton se ragadjon „folyamatban” állapotban a felület. */
 export const PLAYER_REQUEST_TIMEOUT_MS = 15_000;
@@ -86,6 +89,20 @@ export async function verifyPlayerLogin(body: VerifyRequest): Promise<VerifyResu
 }
 
 /** Kijelentkezés; hálózati hibánál `false` (a felület jelezheti), nem dob. */
+/** A link megerősítő képernyőjéhez (beváltás NÉLKÜL): maszkolt cím, és él-e már munkamenet. Nem dob. */
+export async function checkPlayerLink(linkToken: string): Promise<LinkInfo> {
+  let res: Response;
+  try {
+    res = await fetch("/api/player/auth/link-info", { method: "POST", credentials: "include", headers: JSON_HEADERS, body: JSON.stringify({ linkToken }), signal: AbortSignal.timeout(PLAYER_REQUEST_TIMEOUT_MS) });
+  } catch {
+    return { ok: false, code: "NETWORK" };
+  }
+  if (res.status === 429) return { ok: false, code: "RATE_LIMITED" };
+  if (res.status === 404) return { ok: false, code: "UNAVAILABLE" };
+  const data = (await res.json().catch(() => null)) as LinkInfo | null;
+  return data ?? { ok: false, code: "SERVER_ERROR" };
+}
+
 export async function logoutPlayer(): Promise<boolean> {
   try {
     const res = await fetch("/api/player/auth/logout", { method: "POST", credentials: "include", headers: JSON_HEADERS, signal: AbortSignal.timeout(PLAYER_REQUEST_TIMEOUT_MS) });

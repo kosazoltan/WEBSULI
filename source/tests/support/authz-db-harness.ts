@@ -20,6 +20,7 @@ for (const key of Object.keys(process.env)) {
   if (/RESEND|OPENAI|OPENROUTER|ANTHROPIC|ELEVENLABS|GEMINI|GOOGLE_API|VAPID|BACKUP|NEON|PRODUCTION|SOURCE_DATABASE|DEV_DATABASE_URL|PROXY_SECRET/i.test(key)) delete process.env[key];
 }
 process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+process.env.FRONTEND_URL = "https://websuli.vip"; // a belépő link várt alapcíme (playerLinkBaseUrl)
 process.env.GOOGLE_CLIENT_ID = "authz-test-client-id";
 process.env.GOOGLE_CLIENT_SECRET = "authz-test-client-secret";
 

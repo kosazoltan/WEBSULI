@@ -1304,7 +1304,8 @@ export type PlayerAccount = typeof playerAccounts.$inferSelect;
 
 /**
  * JM7a egyszeri belépőkódok (migrations/0040): a kód és a link-token csak HMAC-hash-ként; a megerősítendő cím a rekordban
- * (a kódos és a linkes út ugyanabba a közös, atomikus megerősítésbe fut). Egyszer használható, lejár, 5 próbálkozás.
+ * (a kódos és a linkes út ugyanabba a közös, atomikus megerősítésbe fut), beváltáskor / lejáratkor üresre törölve.
+ * Egyszer használható, lejár; `attempts` = a rekord HIBÁS próbái (≤ 5).
  */
 export const playerAuthCodes = pgTable(
   "player_auth_codes",
@@ -1312,6 +1313,8 @@ export const playerAuthCodes = pgTable(
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
     emailNormalized: varchar("email_normalized", { length: 254 }).notNull(),
     emailHash: char("email_hash", { length: 64 }).notNull(),
+    /** A korlátok kulcsa: a kanonizált cím (aliasok összevonva) HMAC-je — nem fiók-azonosító. */
+    limitHash: char("limit_hash", { length: 64 }).notNull(),
     codeHash: char("code_hash", { length: 64 }).notNull(),
     linkHash: char("link_hash", { length: 64 }).notNull().unique(),
     attempts: integer("attempts").notNull().default(0),
@@ -1319,5 +1322,9 @@ export const playerAuthCodes = pgTable(
     usedAt: timestamp("used_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => ({ emailIdx: index("player_auth_codes_email_idx").on(table.emailHash, table.createdAt) }),
+  (table) => ({
+    emailIdx: index("player_auth_codes_email_idx").on(table.emailHash, table.createdAt),
+    limitIdx: index("player_auth_codes_limit_idx").on(table.limitHash, table.createdAt),
+    createdIdx: index("player_auth_codes_created_idx").on(table.createdAt),
+  }),
 );

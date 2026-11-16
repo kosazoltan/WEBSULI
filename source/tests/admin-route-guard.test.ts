@@ -43,6 +43,85 @@ const PINNED_ADMIN_ENDPOINTS = [
   "GET /download-source-static",
 ] as const;
 
+/**
+ * Biztonsági review #445 (A1): MINDEN nem admin-őrzött végpont tételesen, indoklással. Új, be nem sorolt végpont
+ * (bármely metódus — az állapotváltoztató és az érzékeny GET is) → a teszt bukik: a szerzőnek döntenie kell, hogy
+ * admin előtag / rögzített adminvégpont / szándékosan nyilvános (más őrrel). Elavult (már nem létező vagy azóta
+ * admin-őrzött) tétel is bukás, így a lista mindig a valós állapot.
+ */
+const PUBLIC_ENDPOINTS: Record<string, string> = {
+  "GET /auth/google": "Google-belépés indítása (OAuth)",
+  "GET /auth/google/callback": "Google OAuth visszahívás (Passport, session-regenerate)",
+  "POST /api/login": "helyi belépés — Origin-allowlist + login-korlát",
+  "POST /api/logout": "kijelentkezés — Origin-allowlist",
+  "POST /api/error-report": "szerver-szerver hibajelentés — HMAC-aláírás (verifyErrorReportSignature)",
+  "POST /api/client-error": "böngészős hibajelentés — Origin-allowlist + IP-korlát + napi plafon",
+  "GET /api/design-assets/:id/thumb": "nyilvános arculati kép (csak olvasás)",
+  "GET /api/design-assets/:id": "nyilvános arculati kép (csak olvasás)",
+  "POST /api/lessons/arbiter": "nyilvános döntőbíró — Origin-allowlist + IP-korlát, munkamenet-jog nélkül",
+  "POST /api/lessons/:lessonId/results": "tanulói eredmény e-mail az adminoknak — CSRF + korlát",
+  "POST /api/lessons/practice/:lessonId/start": "gyakorlás — bejelentkezett users-felhasználó (saját sor)",
+  "GET /api/lessons/practice/:lessonId/review": "gyakorlás — saját adat",
+  "GET /api/lessons/practice/:id": "gyakorlás — saját adat",
+  "POST /api/lessons/practice/:id/answer": "gyakorlás — saját sor, CSRF",
+  "POST /api/lessons/practice/:id/finish": "gyakorlás — saját sor, CSRF",
+  "POST /api/lessons/practice/:id/hint": "gyakorlás — saját sor, CSRF",
+  "GET /api/lessons/review/:lessonId": "ismétlés — saját adat",
+  "POST /api/lessons/review/:lessonId/rate": "ismétlés — saját sor, CSRF",
+  "GET /api/lessons/by-file/:htmlFileId": "publikált lecke olvasása",
+  "GET /api/lessons": "publikált leckék listája",
+  "GET /api/lessons/:id/clips": "publikált lecke kisfilmjei",
+  "GET /api/lessons/:id/material": "publikált lecke anyaga",
+  "POST /api/lessons/:id/proba": "Próba kiértékelése (nyilvános, CSRF)",
+  "POST /api/lessons/coupons/:id/start": "kupon — bejelentkezett users-felhasználó, saját sor, CSRF",
+  "GET /api/lessons/coupons/active": "kupon — saját adat",
+  "POST /api/lessons/coupons/:id/bonus": "kupon — saját sor, CSRF",
+  "GET /api/lesson-clips/media/:id": "tartalomcímzett kisfilm-média (nyilvános olvasás)",
+  "GET /api/player/status": "JM7a: { enabled } — nyilvános, PII nélkül",
+  "POST /api/player/auth/start": "JM7a: kódkérés — flag, Origin-allowlist, IP- és címenkénti korlát, globális levélplafon",
+  "POST /api/player/auth/link-info": "JM7a: link-ellenőrzés beváltás nélkül — flag, Origin-allowlist, IP-korlát",
+  "POST /api/player/auth/verify": "JM7a: beváltás — flag, Origin-allowlist, IP-korlát, fiókonkénti hibás-próba plafon",
+  "POST /api/player/auth/logout": "JM7a: kijelentkezés — flag, Origin-allowlist",
+  "GET /api/player/me": "JM7a: saját játékos (requirePlayer), e-mail nélkül",
+  "GET /api/auth/user": "saját felhasználó (vagy null)",
+  "GET /api/csrf-token": "CSRF-token",
+  "GET /api/health": "állapot",
+  "GET /health": "állapot",
+  "GET /api/config": "nyilvános kliens-beállítás",
+  "POST /api/material-result": "tananyag-iframe eredmény — Origin-allowlist + korlátok",
+  "GET /api/learner/me": "tanulói profil — aláírt tanulói token + korlát",
+  "GET /api/learner/view/:materialId": "tanulói megtekintés — aláírt tanulói token + korlát",
+  "GET /api/games/catalog": "játékkatalógus (nyilvános)",
+  "GET /api/games/quiz-bank/:gameId": "játék kérdésbank (nyilvános)",
+  "GET /api/games/material-quizzes": "tananyag-kvízek (nyilvános)",
+  "GET /api/games/leaderboard": "ranglista — becenév, PII nélkül (JM0)",
+  "GET /api/games/sync-eligibility": "saját jogosultság",
+  "POST /api/games/score": "pontmentés — isAuthenticated + korlátok + runId-dedup (JM0)",
+  "GET /api/push/vapid-public-key": "nyilvános VAPID-kulcs",
+  "POST /api/subscribe-email": "feliratkozás — CSRF + feliratkozási korlát",
+  "GET /api/html-files": "publikus tananyaglista",
+  "GET /api/html-files/search": "publikus keresés",
+  "GET /api/html-files/:id": "publikus tananyag",
+  "GET /api/tts/audio": "felolvasás — korlát",
+  "POST /api/tts": "felolvasás — CSRF + korlát",
+  "POST /api/push/subscribe": "push-feliratkozás — CSRF + korlát",
+  "POST /api/push/unsubscribe": "push-leiratkozás — CSRF + korlát",
+  "GET /dev/:id": "tananyag nyers HTML-je az iframe-nek (nyilvános olvasás)",
+  "GET /api/pdf/:id": "publikus PDF",
+  "GET /api/tags": "címkék (nyilvános)",
+  "GET /api/materials/:id/tags": "címkék (nyilvános)",
+  "GET /api/materials/:id/likes": "kedvelésszám (nyilvános)",
+  "POST /api/materials/:id/likes/check": "kedvelés-állapot (nem ír) — Origin-allowlist",
+  "POST /api/materials/:id/likes": "kedvelés — CSRF + korlát",
+  "DELETE /api/materials/:id/likes": "kedvelés visszavonása — CSRF + korlát",
+  "POST /api/materials/likes/batch": "kedvelés-állapot csomagban (nem ír) — Origin-allowlist",
+  "GET /api/materials/:id/comments": "kommentek (nyilvános)",
+  "POST /api/materials/:id/comments": "komment — CSRF + korlát",
+  "GET /api/materials/:id/qr": "QR-kód (nyilvános)",
+  "GET /sitemap.xml": "oldaltérkép",
+  "GET /robots.txt": "robots",
+};
+
 const app = express();
 await mountAppRoutes(app);
 const inventory = routeInventory(app);
@@ -80,6 +159,15 @@ describe("JM7a — admin-útvonal regressziós őr", () => {
     assert.deepEqual(stray, []);
   });
 
+  it("review #445 (A1): minden NEM admin-őrzött végpont tételesen, indoklással a nyilvános listán — új, be nem sorolt végpont bukás", () => {
+    const unguarded = inventory.filter((e) => !e.chain.includes(isAuthenticatedAdmin)).map(key);
+    const unlisted = unguarded.filter((k) => !(k in PUBLIC_ENDPOINTS));
+    assert.deepEqual(unlisted, [], "új, admin-őr nélküli végpont: tedd admin előtag alá / őrizd, vagy indokold a PUBLIC_ENDPOINTS-ban");
+    const stale = Object.keys(PUBLIC_ENDPOINTS).filter((k) => !unguarded.includes(k));
+    assert.deepEqual(stale, [], "elavult nyilvános tétel (már nincs, vagy azóta admin-őrzött) — töröld a listából");
+    for (const [k, why] of Object.entries(PUBLIC_ENDPOINTS)) assert.ok(why.trim().length >= 5, `${k}: hiányzó indoklás`);
+  });
+
   it("a játékos-végpontok nem kerülnek admin előtag alá", () => {
     const misplaced = inventory.filter((e) => e.path.includes("/player") && isUnderAdminPrefix(e.path)).map(key);
     assert.deepEqual(misplaced, []);
@@ -107,6 +195,13 @@ describe("JM7a — az őr maga is bukik, ha kell (önellenőrzés)", () => {
     probe.use("/api/admin/x", isAuthenticatedAdmin, pathGuarded);
     const found = unguardedAdminEndpoints(routeInventory(probe), isAuthenticatedAdmin);
     assert.deepEqual(found.sort(), ["GET /api/admin/open", "GET /api/studio/late", "GET /api/studio/sibling"]);
+  });
+
+  it("review #445 (A1): egy admin előtagon KÍVÜLI, őr nélküli új írás-végpontot a nyilvános lista-szabály elkap", () => {
+    const probe = express();
+    probe.post("/api/materials/:id/approve-comment", (_req, res) => res.end());
+    const unlisted = routeInventory(probe).filter((e) => !e.chain.includes(isAuthenticatedAdmin)).map(key).filter((k) => !(k in PUBLIC_ENDPOINTS));
+    assert.deepEqual(unlisted, ["POST /api/materials/:id/approve-comment"]);
   });
 
   it("az admin előtagok listája a terv szerinti", () => {

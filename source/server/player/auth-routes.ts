@@ -3,7 +3,9 @@
  *
  *   GET  /api/player/status        → { enabled }  (mindig válaszol; a kliens ebből tudja, mutasson-e „Belépés” gombot)
  *   POST /api/player/auth/start    → 202 mindig (nem árulja el, létezik-e a fiók); kód + link e-mailben
- *   POST /api/player/auth/verify   → { kind: "code", email, code } | { kind: "link", linkToken } — egy közös, atomikus út
+ *   POST /api/player/auth/link-info → a link megerősítő képernyőjéhez: maszkolt cím, beváltás NÉLKÜL
+ *   POST /api/player/auth/verify   → { kind: "code", email, code } | { kind: "link", linkToken } — egy közös, atomikus út;
+ *                                    élő fiók-munkamenet (req.user, pl. admin) mellett 409, a munkamenet érintetlen
  *   POST /api/player/auth/logout   → a munkamenet megszűnik
  *   GET  /api/player/me            → a bejelentkezett játékos (null, ha nincs) — e-mail nélkül
  * A flag (`PLAYER_ACCOUNTS`) kikapcsolt állapotában a status kivételével minden 404.
@@ -20,8 +22,8 @@ import { logger } from "../lib/logger";
 import { maskEmail } from "../lib/mask-email";
 import { isResendConfigured, sendPlayerLoginEmail } from "../resend";
 import {
-  CODE_PATTERN, LINK_TOKEN_PATTERN, START_PER_EMAIL_MAX, START_PER_IP_MAX, START_WINDOW_MS, VERIFY_PER_IP_MAX,
-  codeHash, emailHash, generateCode, generateLinkToken, linkHash, normalizeEmail, playerAuthKey,
+  CODE_PATTERN, DAY_MS, LINK_TOKEN_PATTERN, START_PER_IP_DAILY_MAX, START_PER_IP_MAX, START_WINDOW_MS, VERIFY_PER_IP_MAX,
+  codeHash, emailHash, generateCode, generateLinkToken, limitHash, linkHash, normalizeEmail, playerAuthKey,
 } from "./codes";
 import { buildPlayerLoginEmail, playerLoginLink, type PlayerLoginEmail } from "./email-template";
 import { createRequirePlayer, playerAccountsEnabled, requirePlayerAccountsFlag } from "./require-player";
@@ -33,7 +35,8 @@ export type PlayerMailer = (to: string, mail: PlayerLoginEmail) => Promise<void>
 export type PlayerRouterDeps = {
   store: PlayerStore;
   mailer: PlayerMailer;
-  baseUrl: () => string;
+  /** A belépő link alapcíme; null → nincs érvényes (https, várt eredetű) FRONTEND_URL, levél nem megy ki. */
+  baseUrl: () => string | null;
 };
 
 /** Éles küldő: a meglévő Resend-kliens. Beállítatlan Resend (helyi / e2e futás) mellett nem küld — valódi levél tesztből nem megy. */
@@ -51,6 +54,7 @@ const verifySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("code"), email: z.string().max(320), code: z.string().regex(CODE_PATTERN) }).strict(),
   z.object({ kind: z.literal("link"), linkToken: z.string().regex(LINK_TOKEN_PATTERN) }).strict(),
 ]);
+const linkInfoSchema = z.object({ linkToken: z.string().regex(LINK_TOKEN_PATTERN) }).strict();
 
 const INVALID = { ok: false, code: "INVALID_OR_EXPIRED" } as const;
 
@@ -67,6 +71,10 @@ export function createPlayerRouter(deps: PlayerRouterDeps): Router {
     keyGenerator: clientIpKeyGenerator, windowMs: START_WINDOW_MS, max: START_PER_IP_MAX,
     message: { message: "Túl sok kódkérés. Próbáld újra később!" }, standardHeaders: true, legacyHeaders: false,
   });
+  const startIpDailyLimiter = rateLimit({
+    keyGenerator: clientIpKeyGenerator, windowMs: DAY_MS, max: START_PER_IP_DAILY_MAX,
+    message: { message: "Túl sok kódkérés. Próbáld újra később!" }, standardHeaders: true, legacyHeaders: false,
+  });
   const verifyIpLimiter = rateLimit({
     keyGenerator: clientIpKeyGenerator, windowMs: START_WINDOW_MS, max: VERIFY_PER_IP_MAX,
     message: { message: "Túl sok próbálkozás. Próbáld újra később!" }, standardHeaders: true, legacyHeaders: false,
@@ -76,24 +84,32 @@ export function createPlayerRouter(deps: PlayerRouterDeps): Router {
     res.json({ enabled: playerAccountsEnabled() });
   });
 
-  router.post("/auth/start", requirePlayerAccountsFlag, startIpLimiter, async (req: Request, res: Response) => {
+  router.post("/auth/start", requirePlayerAccountsFlag, startIpLimiter, startIpDailyLimiter, async (req: Request, res: Response) => {
     noStore(res);
     const parsed = startSchema.safeParse(req.body);
     const email = parsed.success ? normalizeEmail(parsed.data.email) : null;
     if (!email) return res.status(400).json({ ok: false, code: "INVALID_EMAIL" });
     try {
+      const base = deps.baseUrl();
+      if (!base) {
+        logger.error(`[PLAYER] a FRONTEND_URL hiányzik vagy nem a várt https-eredet — belépő levél nem megy ki (${maskEmail(email)})`);
+        return res.status(202).json({ ok: true });
+      }
       const key = playerAuthKey();
       const eh = emailHash(key, email);
-      await deps.store.purgeOldCodes();
       const code = generateCode();
       const token = generateLinkToken();
-      // Címenkénti korlát, atomikusan lefoglalva: betelt keretnél csendben (a válasz ugyanaz a 202), levél nélkül.
-      const reserved = await deps.store.reserveCode({ emailNormalized: email, emailHash: eh, codeHash: codeHash(key, eh, code), linkHash: linkHash(key, token) }, START_PER_EMAIL_MAX);
-      if (!reserved) {
+      // Keret (korlát-kulcsonként és szerverszinten), atomikusan lefoglalva: betelt keretnél csendben (ugyanaz a 202), levél nélkül.
+      const reserved = await deps.store.reserveCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, code), linkHash: linkHash(key, token) });
+      if (reserved === "GLOBAL_LIMIT") {
+        logger.warn("[PLAYER] a belépő levelek napi szerverszintű plafonja betelt (PLAYER_LOGIN_EMAIL_DAILY_MAX) — küldés szünetel");
+        return res.status(202).json({ ok: true });
+      }
+      if (reserved === "KEY_LIMIT") {
         logger.info(`[PLAYER] belépőkód-kérés címenkénti korláton: ${maskEmail(email)}`);
         return res.status(202).json({ ok: true });
       }
-      const mail = buildPlayerLoginEmail({ code, link: playerLoginLink(deps.baseUrl(), token) });
+      const mail = buildPlayerLoginEmail({ code, link: playerLoginLink(base, token) });
       // A levél a válasz UTÁN megy ki (nem várjuk meg): a válaszidő így nem árulja el, hogy a keret betelt-e (időzítés
       // alapú felsorolás ellen); a küldési hiba csak maszkolva naplózódik.
       void deps.mailer(email, mail).catch((mailError: unknown) => {
@@ -108,10 +124,34 @@ export function createPlayerRouter(deps: PlayerRouterDeps): Router {
     }
   });
 
+  router.post("/auth/link-info", requirePlayerAccountsFlag, verifyIpLimiter, async (req: Request, res: Response) => {
+    noStore(res);
+    const parsed = linkInfoSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(INVALID);
+    try {
+      const email = await deps.store.peekLink(linkHash(playerAuthKey(), parsed.data.linkToken));
+      if (!email) return res.status(400).json(INVALID);
+      const currentId = getPlayerSessionId(req);
+      const currentEmail = currentId ? await deps.store.playerEmail(currentId) : null;
+      return res.json({
+        ok: true,
+        maskedEmail: maskEmail(email),
+        current: currentEmail === null ? "none" : currentEmail === email ? "same" : "other",
+        accountSession: req.isAuthenticated?.() === true,
+      });
+    } catch (error) {
+      logger.error("[PLAYER] link-info hiba:", error instanceof Error ? error.message : "ismeretlen hiba");
+      return res.status(500).json({ ok: false, code: "SERVER_ERROR" });
+    }
+  });
+
   router.post("/auth/verify", requirePlayerAccountsFlag, verifyIpLimiter, async (req: Request, res: Response) => {
     noStore(res);
     const parsed = verifySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(INVALID);
+    // Review #445 (K3): élő fiók-munkamenet (Passport req.user — admin vagy meglévő felhasználó) mellett a játékos-belépés
+    // NEM szünteti meg csendben: elutasítjuk, mielőtt a kódot / linket elhasználnánk; előbb ki kell lépni.
+    if (req.isAuthenticated?.() === true) return res.status(409).json({ ok: false, code: "ACCOUNT_SESSION" });
     try {
       const key = playerAuthKey();
       let confirmedEmail: string | null = null;

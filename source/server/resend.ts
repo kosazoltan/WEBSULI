@@ -8,7 +8,7 @@ import { maskEmail } from "./lib/mask-email";
 let resendClient: Resend | null = null;
 let fromEmail: string = '';
 
-export function resolveAppBaseUrl(): string {
+function resolveAppBaseUrl(): string {
   const frontend = process.env.FRONTEND_URL?.trim();
   if (frontend) {
     return frontend.replace(/\/+$/, '');

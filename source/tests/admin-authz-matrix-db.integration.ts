@@ -23,7 +23,7 @@ import { Client, databaseFingerprint, dbPool, injectSession, mapLimit, startApp 
 import { isUnderAdminPrefix, routeInventory, samplePath, type Endpoint } from "./support/route-inventory";
 
 const { isAuthenticatedAdmin } = await import("../server/auth");
-const { codeHash, emailHash, linkHash, generateLinkToken, playerAuthKey } = await import("../server/player/codes");
+const { codeHash, emailHash, limitHash, linkHash, generateLinkToken, playerAuthKey } = await import("../server/player/codes");
 const { createPlayerStore } = await import("../server/player/store");
 
 const ADMIN_EMAIL = "authz-admin@websuli.example";
@@ -37,6 +37,9 @@ type Role = { name: string; client: Client };
 let stubApp: Awaited<ReturnType<typeof startApp>>;
 let realApp: Awaited<ReturnType<typeof startApp>>;
 let adminEndpoints: Endpoint[] = [];
+/** Review #445 (A2): a csonkolt végső kezelők eredetije — a valódi menet előtt visszaállítjuk (a modul-szintű routerek
+ *  Layer-objektumai a két alkalmazásban közösek, ezért a csonk különben a valódi menetben is élne). */
+const originalHandles = new Map<Endpoint["finalLayer"], Endpoint["finalLayer"]["handle"]>();
 const roles: Role[] = [];
 let admin: Client;
 
@@ -44,9 +47,9 @@ async function realEmailPlayer(base: string, email: string): Promise<Client> {
   // A belépőkód VALÓDI beváltása: a kódrekordot a szerverrel azonos kulccsal (SESSION_SECRET) ültetjük el, a beváltás HTTP-n.
   const key = playerAuthKey();
   const eh = emailHash(key, email);
-  await createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, codeHash: codeHash(key, eh, "424242"), linkHash: linkHash(key, generateLinkToken()) });
+  await createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, "42424242"), linkHash: linkHash(key, generateLinkToken()) });
   const c = new Client(base);
-  const r = await c.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "424242" });
+  const r = await c.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "42424242" });
   assert.equal(r.status, 200, `játékos-beváltás: ${r.text}`);
   await c.fetchCsrf();
   return c;
@@ -80,6 +83,7 @@ before(async () => {
   stubApp = await startApp((app) => {
     adminEndpoints = routeInventory(app).filter((e) => isUnderAdminPrefix(e.path) || e.chain.includes(isAuthenticatedAdmin));
     for (const e of adminEndpoints) {
+      if (!originalHandles.has(e.finalLayer)) originalHandles.set(e.finalLayer, e.finalLayer.handle);
       e.finalLayer.handle = (_req, res) => { res.status(STUB_STATUS).json({ reached: true }); };
     }
   });
@@ -138,7 +142,18 @@ describe("JM7a — admin-jogosultsági mátrix", () => {
     assert.deepEqual(failures, []);
   });
 
-  it("valódi menet (csonkolás nélkül): nem admin kérésre 401 / 403, és az adatbázisban semmi nem változik", async () => {
+  it("valódi menet (csonkolás nélkül): nem admin kérésre 401 / 403, a kezelő MEG SEM hívódik, és az adatbázisban semmi nem változik", async () => {
+    // A2: a csonkok visszaállítása, majd a VALÓDI végső kezelők köré hívásszámláló — az őr valódi, a kezelő valódi.
+    for (const [layer, handle] of originalHandles) layer.handle = handle;
+    const realEndpoints = routeInventory(realApp.app).filter((e) => isUnderAdminPrefix(e.path) || e.chain.includes(isAuthenticatedAdmin));
+    assert.equal(realEndpoints.length, adminEndpoints.length);
+    const reached = new Set<string>();
+    const spied: [Endpoint["finalLayer"], Endpoint["finalLayer"]["handle"]][] = [];
+    for (const e of realEndpoints) {
+      const original = e.finalLayer.handle;
+      spied.push([e.finalLayer, original]);
+      e.finalLayer.handle = (req, res, next) => { reached.add(label(e)); return original(req, res, next); };
+    }
     const realRoles = roles.map((r) => ({ name: r.name, client: new Client(realApp.base, r.client.cookie) }));
     for (const r of realRoles) r.client.csrf = roles.find((x) => x.name === r.name)!.client.csrf;
     const beforeState = await databaseFingerprint();
@@ -153,8 +168,15 @@ describe("JM7a — admin-jogosultsági mátrix", () => {
     });
     const afterState = await databaseFingerprint();
     assert.deepEqual(failures, []);
+    assert.deepEqual([...reached], [], "nem admin szerepnél a végső kezelő nem hívódhat meg");
     const changed = Object.keys(afterState).filter((t) => afterState[t] !== beforeState[t]);
     assert.deepEqual(changed, [], "nem admin kérés után változott tábla");
+    // Ellenpróba: az admin a valódi (nem csonkolt) kezelőt éri el egy közös routeren (csak olvasó végpont).
+    const realAdmin = new Client(realApp.base, admin.cookie);
+    const summary = await realAdmin.request("GET", "/api/admin/catalog/summary");
+    assert.notEqual(summary.status, STUB_STATUS, "a valódi menetben nem élhet csonk");
+    assert.ok(reached.has("GET /api/admin/catalog/summary"), "az admin kérése a valódi kezelőig jut");
+    for (const [layer, handle] of spied) layer.handle = handle;
   });
 
   it("a játékos-munkamenet nem állít req.user-t: /api/auth/user null; a nem admin felhasználó nem admin", async () => {

@@ -10,6 +10,8 @@ import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
 import { flushPendingMaterialResults } from "./routes";
 import { mountAppRoutes } from "./app-routes";
+import { startPlayerCodeSweeper } from "./player/sweeper";
+import { createPlayerStore } from "./player/store";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
@@ -637,6 +639,9 @@ app.use((req, res, next) => {
 
       // Phase 11: Start cleanup job for old applied improved files (daily at midnight)
       setupCleanupImprovedFiles();
+
+      // JM7a (review #445, A3): a játékos-belépőkódok takarítása (lejárt → cím törölve, 24 óra után a sor) — flagtől függetlenül.
+      startPlayerCodeSweeper(() => createPlayerStore(dbPool).purgeOldCodes());
     }
 
     // Express error handler (4 params required for Express to identify it as error middleware)

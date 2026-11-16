@@ -1,7 +1,9 @@
 /**
- * JM7a — játékos belépés / regisztráció (`/belepes`, `/belepes/link`; terv 10.4, D11). E-mail-cím + 6 jegyű kód VAGY a
+ * JM7a — játékos belépés / regisztráció (`/belepes`, `/belepes/link`; terv 10.4, D11). E-mail-cím + 8 jegyű kód VAGY a
  * levélben kapott link; jelszó, név, életkor nincs. A link tokenje a URL-töredékben (`#t=`) érkezik: azonnal törlődik a
- * címsorból, és POST-tal váltjuk be (a levelező linkellenőrzője így nem használja el). A `PLAYER_ACCOUNTS` flag KI
+ * címsorból. Biztonsági review #445 (K3): a link megnyitása SOHA nem léptet be magától — megerősítő képernyőt mutat
+ * („Belépés mint a***@p***.hu?”), és csak a gombnyomás váltja be POST-tal; élő fiók-munkamenet (admin / felnőtt fiók)
+ * mellett nincs beváltás, és ha már egy MÁSIK játékfiókkal van belépve, külön figyelmeztet. A `PLAYER_ACCOUNTS` flag KI
  * állapotában az oldal nem létezik (a „nem található” oldal jelenik meg).
  */
 import { useEffect, useRef, useState } from "react";
@@ -13,10 +15,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import NotFound from "@/pages/not-found";
 import {
-  PLAYER_ME_KEY, logoutPlayer, startPlayerLogin, usePlayer, verifyPlayerLogin, type VerifyResult,
+  PLAYER_ME_KEY, checkPlayerLink, logoutPlayer, startPlayerLogin, usePlayer, verifyPlayerLogin, type LinkInfo, type VerifyResult,
 } from "@/hooks/usePlayer";
 
-type Step = "email" | "code" | "link" | "done" | "link-error";
+type Step = "email" | "code" | "link-checking" | "link-confirm" | "link" | "done" | "link-error";
+type LinkDetails = Extract<LinkInfo, { ok: true }>;
+
+const CODE_LENGTH = 8;
 
 const ERRORS: Record<Exclude<VerifyResult, { ok: true }>["code"] | "INVALID_EMAIL", string> = {
   INVALID_OR_EXPIRED: "Ez a kód nem jó, vagy már lejárt. Nézd meg újra a leveled, vagy kérj új kódot!",
@@ -25,6 +30,7 @@ const ERRORS: Record<Exclude<VerifyResult, { ok: true }>["code"] | "INVALID_EMAI
   UNAVAILABLE: "A belépés most nem elérhető.",
   SERVER_ERROR: "Valami elromlott. Próbáld újra egy kicsit később!",
   NETWORK: "Nem sikerült elérni a szervert. Nézd meg, van-e internet, és próbáld újra!",
+  ACCOUNT_SESSION: "Ebben a böngészőben most egy másik (felnőtt vagy admin) fiók van belépve. Előbb abból lépj ki, utána tudsz játékosként belépni.",
   INVALID_EMAIL: "Ez nem tűnik e-mail-címnek. Nézd meg, jól írtad-e!",
 };
 
@@ -42,15 +48,16 @@ export default function PlayerLogin() {
   const queryClient = useQueryClient();
   const { enabled, player, isLoading } = usePlayer();
   const isLinkRoute = location === "/belepes/link";
-  const [step, setStep] = useState<Step>(isLinkRoute ? "link" : "email");
+  const [step, setStep] = useState<Step>(isLinkRoute ? "link-checking" : "email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [linkInfo, setLinkInfo] = useState<LinkDetails | null>(null);
   const linkHandled = useRef(false);
-  /** A link tokenje a címsorból törlődik, de hálózati hibánál újrapróbálható — ezért csak memóriában marad meg. */
+  /** A link tokenje a címsorból törlődik, de a megerősítéshez / újrapróbához memóriában marad. */
   const linkToken = useRef<string | null>(null);
-  const [linkRetryable, setLinkRetryable] = useState(false);
+  const [linkRetry, setLinkRetry] = useState<null | "check" | "redeem">(null);
   // Review #445: lecsatolás után ne írjunk állapotot (a válasz / időtúllépés később érkezhet).
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
@@ -60,23 +67,40 @@ export default function PlayerLogin() {
     if (mounted.current) setStep("done");
   };
 
+  const linkFailed = (codeName: string, retry: "check" | "redeem") => {
+    const retryable = codeName === "NETWORK" || codeName === "SERVER_ERROR";
+    setLinkRetry(retryable ? retry : null);
+    setError(codeName === "INVALID_OR_EXPIRED" ? LINK_INVALID : ERRORS[codeName as keyof typeof ERRORS] ?? ERRORS.SERVER_ERROR);
+    setStep("link-error");
+  };
+
+  /** 1. lépés: a link ellenőrzése beváltás NÉLKÜL → megerősítő képernyő. */
+  const checkLink = async () => {
+    const token = linkToken.current;
+    if (!token) { setError(LINK_INVALID); setStep("link-error"); return; }
+    setStep("link-checking"); setError(null); setLinkRetry(null);
+    const r = await checkPlayerLink(token);
+    if (!mounted.current) return;
+    if (r.ok) { setLinkInfo(r); setStep("link-confirm"); return; }
+    linkFailed(r.code, "check");
+  };
+
+  /** 2. lépés: a felhasználó gombnyomására a beváltás. */
   const redeemLink = async () => {
     const token = linkToken.current;
-    if (!token) { setStep("link-error"); return; }
-    setStep("link"); setError(null); setLinkRetryable(false);
+    if (!token) { setError(LINK_INVALID); setStep("link-error"); return; }
+    setStep("link"); setError(null); setLinkRetry(null);
     const r = await verifyPlayerLogin({ kind: "link", linkToken: token });
     if (!mounted.current) return;
     if (r.ok) { linkToken.current = null; await finish(); return; }
-    setLinkRetryable(r.code === "NETWORK" || r.code === "SERVER_ERROR");
-    setError(r.code === "INVALID_OR_EXPIRED" ? LINK_INVALID : ERRORS[r.code]);
-    setStep("link-error");
+    linkFailed(r.code, "redeem");
   };
 
   useEffect(() => {
     if (!isLinkRoute || !enabled || linkHandled.current) return;
     linkHandled.current = true;
     linkToken.current = takeLinkToken();
-    void redeemLink();
+    void checkLink();
   }, [isLinkRoute, enabled]);
 
   if (isLoading) return <div className="min-h-screen bg-background" data-testid="player-login-loading" />;
@@ -116,7 +140,8 @@ export default function PlayerLogin() {
     else setError(ERRORS.NETWORK);
   };
 
-  const signedIn = step === "done" || (player && step !== "code");
+  const toNewCode = () => { linkToken.current = null; setLinkInfo(null); setError(null); setStep("email"); setLocation("/belepes"); };
+  const signedIn = step === "done" || (!!player && step === "email");
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background" data-testid="page-player-login">
@@ -125,7 +150,7 @@ export default function PlayerLogin() {
           <div className="text-4xl [@media(max-height:480px)]:hidden" aria-hidden="true">🎮</div>
           <CardTitle className="text-2xl">{signedIn ? "Bent vagy!" : "Belépés a játékokhoz"}</CardTitle>
           {!signedIn && step === "email" && (
-            <CardDescription>Írd be az e-mail-címed, és küldünk egy 6 jegyű kódot. Jelszó nem kell.</CardDescription>
+            <CardDescription>Írd be az e-mail-címed, és küldünk egy {CODE_LENGTH} jegyű kódot. Jelszó nem kell.</CardDescription>
           )}
         </CardHeader>
         <CardContent className="space-y-4">
@@ -151,27 +176,51 @@ export default function PlayerLogin() {
             <form onSubmit={submitCode} className="space-y-3">
               <p className="text-sm">Elküldtük a kódot az e-mail-címedre. A levélben lévő gombbal is beléphetsz. Ha nem látod a levelet, nézd meg a Spam mappát is!</p>
               <div className="space-y-1.5">
-                <Label htmlFor="player-code">6 jegyű kód</Label>
-                <Input id="player-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required
-                  className="h-14 text-center text-2xl tracking-[0.4em]" value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} data-testid="input-player-code" />
+                <Label htmlFor="player-code">{CODE_LENGTH} jegyű kód</Label>
+                <Input id="player-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={9} required
+                  className="h-14 text-center text-2xl tracking-[0.3em]" value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, CODE_LENGTH))} data-testid="input-player-code" />
               </div>
-              <Button type="submit" className="w-full" disabled={busy || code.length !== 6} data-testid="button-player-verify">
+              <Button type="submit" className="w-full" disabled={busy || code.length !== CODE_LENGTH} data-testid="button-player-verify">
                 {busy ? "Ellenőrzés…" : "Belépés"}
               </Button>
               <Button type="button" variant="ghost" className="w-full" onClick={() => { setStep("email"); setError(null); }} data-testid="button-player-new-code">
                 Új kódot kérek / másik cím
               </Button>
             </form>
-          ) : step === "link" ? (
-            <p className="text-center" data-testid="player-login-linking">Belépés folyamatban…</p>
+          ) : step === "link-checking" || step === "link" ? (
+            <p className="text-center" data-testid="player-login-linking">{step === "link" ? "Belépés folyamatban…" : "A link ellenőrzése…"}</p>
+          ) : step === "link-confirm" && linkInfo ? (
+            <div className="space-y-3 text-center" data-testid="player-login-link-confirm">
+              {linkInfo.accountSession ? (
+                <>
+                  <p role="alert" data-testid="player-login-account-session">{ERRORS.ACCOUNT_SESSION}</p>
+                  <Button className="w-full" onClick={() => setLocation("/")}>Vissza a főoldalra</Button>
+                </>
+              ) : linkInfo.current === "same" ? (
+                <>
+                  <p>Már ezzel a fiókkal vagy belépve.</p>
+                  <Button className="w-full" onClick={() => setLocation("/games")}>Irány a játékok!</Button>
+                </>
+              ) : (
+                <>
+                  <p>Belépés ezzel a fiókkal: <strong data-testid="player-login-link-account">{linkInfo.maskedEmail}</strong></p>
+                  {linkInfo.current === "other" && (
+                    <p className="text-sm text-destructive" data-testid="player-login-link-switch">Most egy másik játékfiókkal vagy belépve. Ha folytatod, abból kilépsz.</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">Csak akkor lépj be, ha te kérted ezt a linket, és ez a te címed.</p>
+                  <Button className="w-full" onClick={() => void redeemLink()} data-testid="button-player-link-confirm">Belépek</Button>
+                  <Button variant="ghost" className="w-full" onClick={() => setLocation("/")}>Mégse</Button>
+                </>
+              )}
+            </div>
           ) : (
             <div className="space-y-3 text-center" data-testid="player-login-link-error">
               <p role="alert">{error ?? LINK_INVALID}</p>
-              {linkRetryable && (
-                <Button className="w-full" onClick={() => void redeemLink()} data-testid="button-player-link-retry">Újrapróbálom</Button>
+              {linkRetry && (
+                <Button className="w-full" onClick={() => void (linkRetry === "check" ? checkLink() : redeemLink())} data-testid="button-player-link-retry">Újrapróbálom</Button>
               )}
-              <Button className="w-full" variant={linkRetryable ? "ghost" : "default"} onClick={() => { linkToken.current = null; setError(null); setStep("email"); setLocation("/belepes"); }}>Új kódot kérek</Button>
+              <Button className="w-full" variant={linkRetry ? "ghost" : "default"} onClick={toNewCode}>Új kódot kérek</Button>
             </div>
           )}
           {error && step !== "link-error" && (

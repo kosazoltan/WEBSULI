@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS player_auth_codes (
   id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
   email_normalized varchar(254) NOT NULL,
   email_hash char(64) NOT NULL,
+  limit_hash char(64) NOT NULL,
   code_hash char(64) NOT NULL,
   link_hash char(64) NOT NULL,
   attempts integer NOT NULL DEFAULT 0,
@@ -42,3 +43,7 @@ CREATE TABLE IF NOT EXISTS player_auth_codes (
 );
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS player_auth_codes_email_idx ON player_auth_codes (email_hash, created_at);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS player_auth_codes_limit_idx ON player_auth_codes (limit_hash, created_at);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS player_auth_codes_created_idx ON player_auth_codes (created_at);

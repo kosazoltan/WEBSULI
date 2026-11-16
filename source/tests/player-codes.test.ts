@@ -8,10 +8,12 @@ import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  CODE_PATTERN, CODE_TTL_MS, LINK_TOKEN_PATTERN, LINK_TTL_MS, MAX_CODE_ATTEMPTS, START_PER_EMAIL_MAX, START_PER_IP_MAX,
+  CODE_PATTERN, CODE_TTL_MS, DEFAULT_LOGIN_EMAIL_DAILY_MAX, LINK_TOKEN_PATTERN, LINK_TTL_MS, MAX_CODE_ATTEMPTS, MAX_FAILED_ATTEMPTS_PER_DAY,
+  START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_PER_IP_DAILY_MAX, START_PER_IP_MAX, VERIFY_PER_IP_MAX, limitKey, loginEmailDailyMax,
   codeHash, emailHash, generateCode, generateLinkToken, linkHash, normalizeEmail, playerAuthKey,
 } from "../server/player/codes";
-import { buildPlayerLoginEmail, playerLoginLink } from "../server/player/email-template";
+import { buildPlayerLoginEmail, playerLinkBaseUrl, playerLoginLink } from "../server/player/email-template";
+import { PLAYER_CODE_SWEEP_INTERVAL_MS, startPlayerCodeSweeper } from "../server/player/sweeper";
 import { playerAccountsEnabled } from "../server/player/require-player";
 import { getTableColumns } from "drizzle-orm";
 import { playerAccounts, playerAuthCodes } from "../shared/schema";
@@ -20,10 +22,14 @@ const KEY = playerAuthKey({ SESSION_SECRET: "player-codes-test-secret" } as Node
 
 describe("JM7a — normalizálás és korlátok", () => {
   it("normalizeEmail: trim + kisbetű + NFC; hibás / túl hosszú → null", () => {
-    assert.equal(normalizeEmail("  Anna.Kovacs@Example.COM "), "anna.kovacs@example.com");
-    // NFD (e + kombináló ékezet) → NFC: ugyanaz a cím ugyanaz a fiók
-    assert.equal(normalizeEmail("éva@pelda.hu"), normalizeEmail("éva@pelda.hu"));
-    for (const bad of ["", "nincs-kukac", "a@b", "a b@c.hu", "@c.hu", 42, null, undefined, `${"a".repeat(250)}@b.hu`]) {
+    // Nem ASCII helyi rész / domain (IDN) nem fogadható — az NFC-alakok így nem okozhatnak két fiókot.
+    assert.equal(normalizeEmail("éva@pelda.hu"), null);
+    assert.equal(normalizeEmail("éva@pelda.hu"), null);
+    // Review #445 (K2): szigorú, egyetlen cím — „Név <cím>”, elválasztók, idézőjel, szóköz, vezérlőkarakter, sortörés
+    // (fejléc-injektálás), több @, IDN / nem ASCII, pont a szélén, hosszkorlát.
+    for (const bad of ["", "nincs-kukac", "a@b", "a b@c.hu", "@c.hu", 42, null, undefined, `${"a".repeat(250)}@b.hu`, `${"a".repeat(65)}@b.hu`,
+      "a<b@c.hu>", "Anna <anna@pelda.hu>", "a,b@c.hu", "a;b@c.hu", "\"a\"@c.hu", "a\u0001@b.hu", "a\r\nbcc:x@c.hu", "a@b@c.hu", "a(b)@c.hu",
+      "a:b@c.hu", "a[b]@c.hu", "a\\b@c.hu", ".a@c.hu", "a.@c.hu", "a..b@c.hu", "árvíztűrő@pelda.hu", "a@példa.hu", "a@c.h", "a@-c.hu", "a@c-.hu"]) {
       assert.equal(normalizeEmail(bad), null, `elutasítandó: ${String(bad).slice(0, 20)}`);
     }
   });
@@ -33,13 +39,41 @@ describe("JM7a — normalizálás és korlátok", () => {
     assert.equal(LINK_TTL_MS, 15 * 60_000);
     assert.equal(MAX_CODE_ATTEMPTS, 5);
     assert.equal(START_PER_EMAIL_MAX, 3);
-    assert.equal(START_PER_IP_MAX, 10);
+    assert.equal(START_PER_EMAIL_DAILY_MAX, 10);
+    assert.equal(START_PER_IP_MAX, 50);
+    assert.equal(START_PER_IP_DAILY_MAX, 150);
+    assert.equal(VERIFY_PER_IP_MAX, 120);
+    assert.equal(MAX_FAILED_ATTEMPTS_PER_DAY, 10);
+  });
+
+  it("review #445 (K1): a kitalálási esély a korlátokkal ≤ 0,1 % / év / fiók (8 jegy, napi 10 hibás próba)", () => {
+    const space = 10 ** 8;
+    assert.match("12345678", CODE_PATTERN);
+    assert.doesNotMatch("123456", CODE_PATTERN);
+    const perYear = 1 - (1 - MAX_FAILED_ATTEMPTS_PER_DAY / space) ** 365;
+    assert.ok(perYear <= 0.001, `éves esély: ${perYear}`);
+    assert.ok(perYear < 0.00004, "≈ 0,0037 %");
+  });
+
+  it("review #445 (K2): korlát-kulcs — aliasok összevonva (Gmail pont, +címke, googlemail), a fiók-cím változatlan", () => {
+    assert.equal(limitKey("a.b+x@gmail.com"), "ab@gmail.com");
+    assert.equal(limitKey("ab@googlemail.com"), "ab@gmail.com");
+    assert.equal(limitKey("anna+suli@pelda.hu"), "anna@pelda.hu");
+    assert.equal(limitKey("a.nna@pelda.hu"), "a.nna@pelda.hu", "nem Gmail: a pont jelentéses");
+    assert.equal(normalizeEmail("A.B+X@Gmail.com"), "a.b+x@gmail.com", "a tárolt / fiók-cím nem kanonizált");
+  });
+
+  it("review #445 (K2): a belépő levelek napi plafonja környezetből, biztonságos alapértékkel", () => {
+    assert.equal(loginEmailDailyMax({} as NodeJS.ProcessEnv), DEFAULT_LOGIN_EMAIL_DAILY_MAX);
+    assert.equal(loginEmailDailyMax({ PLAYER_LOGIN_EMAIL_DAILY_MAX: "50" } as NodeJS.ProcessEnv), 50);
+    for (const bad of ["0", "-1", "abc", "1.5", "999999999"]) assert.equal(loginEmailDailyMax({ PLAYER_LOGIN_EMAIL_DAILY_MAX: bad } as NodeJS.ProcessEnv), DEFAULT_LOGIN_EMAIL_DAILY_MAX, bad);
   });
 });
 
 describe("JM7a — kód, link-token, hash", () => {
   it("a kód 6 számjegy, a link-token 43 jeles base64url, és mindkettő változatos", () => {
     const codes = new Set(Array.from({ length: 200 }, () => generateCode()));
+    assert.ok([...codes].every((c) => c.length === 8));
     for (const c of codes) assert.match(c, CODE_PATTERN);
     assert.ok(codes.size > 190, "200 kódból legfeljebb néhány ismétlődhet");
     const tokens = new Set(Array.from({ length: 50 }, () => generateLinkToken()));
@@ -68,14 +102,43 @@ describe("JM7a — belépő levél", () => {
     const link = playerLoginLink("https://websuli.vip/", token);
     assert.equal(link, `https://websuli.vip/belepes/link#t=${token}`);
     assert.ok(!link.includes("?"), "nincs lekérdezési paraméter (szerver- és proxynaplóba kerülne)");
-    const mail = buildPlayerLoginEmail({ code: "042137", link });
-    assert.match(mail.subject, /042137/);
-    assert.ok(mail.html.includes("042137") && mail.text.includes("042137"));
+    const mail = buildPlayerLoginEmail({ code: "04213799", link });
+    assert.match(mail.subject, /0421 3799/);
+    assert.ok(mail.html.includes("0421 3799") && mail.text.includes("0421 3799"));
     assert.ok(mail.html.includes(link) && mail.text.includes(link));
     assert.match(mail.text, /10 percig/);
     assert.match(mail.text, /15 percig/);
     assert.doesNotMatch(mail.html + mail.text, /@/, "a levél törzsében nincs e-mail-cím");
     assert.doesNotMatch(mail.html + mail.text, /életkor|születési|jelszó/i);
+  });
+});
+
+describe("JM7a — review #445 (üzemeltetés): a belépő link alapcíme", () => {
+  it("csak https FRONTEND_URL a várt felületi domainen (vagy CUSTOM_DOMAIN); minden más → nincs levél", () => {
+    const env = (o: Record<string, string>) => o as NodeJS.ProcessEnv;
+    assert.equal(playerLinkBaseUrl(env({ FRONTEND_URL: "https://websuli.vip/" })), "https://websuli.vip");
+    assert.equal(playerLinkBaseUrl(env({ FRONTEND_URL: "https://www.websuli.org" })), "https://www.websuli.org");
+    assert.equal(playerLinkBaseUrl(env({ FRONTEND_URL: "https://suli.example", CUSTOM_DOMAIN: "suli.example" })), "https://suli.example");
+    for (const bad of [{}, { FRONTEND_URL: "" }, { FRONTEND_URL: "http://websuli.vip" }, { FRONTEND_URL: "https://websuli-api.onrender.com" },
+      { FRONTEND_URL: "https://websuli.vip.tamado.example" }, { FRONTEND_URL: "https://localhost:5000" }, { FRONTEND_URL: "https://websuli.vip:8443" },
+      { FRONTEND_URL: "https://user:pw@websuli.vip" }, { FRONTEND_URL: "nem url" }, { BASE_URL: "https://websuli.vip" }]) {
+      assert.equal(playerLinkBaseUrl(env(bad as Record<string, string>)), null, JSON.stringify(bad));
+    }
+  });
+});
+
+describe("JM7a — review #445 (A3): ütemezett kódrekord-takarítás", () => {
+  it("induláskor azonnal és óránként fut (unref-elt időzítő), a hibát elnyeli és naplózza", async () => {
+    let calls = 0;
+    let scheduled: { ms: number; unref: boolean } | null = null;
+    const timers = { setInterval: (_fn: () => void, ms: number) => { scheduled = { ms, unref: false }; return { unref: () => { scheduled!.unref = true; } }; } };
+    const run = startPlayerCodeSweeper(async () => { calls++; if (calls === 2) throw new Error("db le"); return [1, 1]; }, timers);
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(calls, 1, "induláskor lefut");
+    assert.deepEqual(scheduled, { ms: PLAYER_CODE_SWEEP_INTERVAL_MS, unref: true });
+    assert.equal(PLAYER_CODE_SWEEP_INTERVAL_MS, 60 * 60_000);
+    await run(); // a hiba nem dob ki
+    assert.equal(calls, 2);
   });
 });
 

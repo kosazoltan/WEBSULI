@@ -10,7 +10,7 @@ import { registerAdminUserRoutes } from "./admin-users";
 import { insertHtmlFileSchema, insertMaterialCommentSchema, type User, type HtmlFile } from "@shared/schema";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
-import { sendNewMaterialNotification, isResendConfigured, sendAdminNotification, resolveAppBaseUrl } from "./resend";
+import { sendNewMaterialNotification, isResendConfigured, sendAdminNotification } from "./resend";
 import { sendNewMaterialNotification as sendPushNewMaterial } from "./pushNotifications";
 import { getAllAudioBase64 } from "google-tts-api";
 import { parseAudioRange, parseTtsAudioQuery, TtsAudioCache, TTS_AUDIO_CACHE_CONTROL, TTS_AUDIO_CDN_CACHE_CONTROL } from "../shared/speech-fallback";
@@ -58,6 +58,7 @@ import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
 import { createPlayerRouter, defaultPlayerMailer } from "./player/auth-routes";
 import { createPlayerStore } from "./player/store";
+import { playerLinkBaseUrl } from "./player/email-template";
 import { ViewDedup } from "./lib/view-dedup";
 import { maskEmail } from "./lib/mask-email";
 import { createGameScoreUserLimiter } from "./lib/game-score-limits";
@@ -872,7 +873,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // JM7a (docs/specs/2026-11-16-jatekok-jatekelmeny.md 10.4): játékos-fiók — külön tábla, külön munkamenet-kulcs, admin-jog
   // semmilyen úton; a PLAYER_ACCOUNTS flag (alapból KI) mellett a végpontok 404-et adnak (a /status kivételével).
-  app.use("/api/player", createPlayerRouter({ store: createPlayerStore(dbPool), mailer: defaultPlayerMailer, baseUrl: resolveAppBaseUrl }));
+  app.use("/api/player", createPlayerRouter({ store: createPlayerStore(dbPool), mailer: defaultPlayerMailer, baseUrl: () => playerLinkBaseUrl() }));
 
   // Create admin router with authentication middleware
   const adminRouter = express.Router();
