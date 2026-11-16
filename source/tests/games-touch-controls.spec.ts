@@ -52,6 +52,15 @@ async function startFirstLevel(page: Page) {
     timeout: 15_000,
   });
 
+  /*
+   * SPEC-VÁLTOZÁS 2026-11-15 (docs/specs/2026-11-15-jatekok-mobil-szobank.md 4.5 „Képernyő”, 4.6/7 „fekvő tájolás
+   * ajánlása”): álló telefonon a Tornado forgatási kérést mutat, amely a vezérlőt is takarja. A gyerek ilyenkor
+   * „Így is játszom”-ot választ (vagy elforgatja a telefont) — a mérés ugyanezt teszi, utána a mérce változatlan.
+   */
+  const rotate = page.getByTestId("game-rotate-continue");
+  if (await rotate.isVisible()) await rotate.click();
+  await expect(page.getByTestId("game-rotate-hint")).toHaveCount(0);
+
   // MÉRÉSI TANULSÁG (2026-09-20): a szint indulásakor a tornádó BELÉP a pályára, és a HUD távolsága
   // 0-ról a valódi értékre ugrik (mérve: 0.00 → 3.58 km egyetlen másodperc alatt). Az első mérés
   // ezt az ugrást kapta el, nem a sodródást, és a tétlen alapérték százszorosan túlbecsült lett.

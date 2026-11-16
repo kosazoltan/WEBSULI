@@ -7,14 +7,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import * as THREE from "three";
 import {
   ArrowLeft,
   Tornado as TornadoIcon,
-  Wind,
-  Gauge,
   Anchor,
   Car,
   Trophy,
@@ -45,12 +43,24 @@ import HoldButton from "@/game-engine/HoldButton";
 import { targetMarker } from "@/lib/tornado/targetMarker";
 import { tornadoLevelTimeScale, tornadoWorldLevel } from "@/lib/tornado/gradeWorld";
 import { useClassroomGrade } from "@/lib/classroomStore";
-import { levelBand } from "@/game-engine/gradeLevels";
+import { GRADE_LEVEL_COUNT, levelBand } from "@/game-engine/gradeLevels";
 import { useGradeLevel, type GradeLevelState } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
+import {
+  GameHud,
+  GameShell,
+  PauseMenu,
+  ResultScreen,
+  StartScreen,
+  useBestScore,
+  useHaptics,
+  useTouchCapable,
+  type GameScreenState,
+} from "@/game-engine/mobile";
+import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
 import {
   sfxSuccess,
   sfxError,
@@ -86,6 +96,8 @@ import {
   schoolLevelLabel,
   QUIZ_MODE_LABEL,
   SUBJECT_LABEL,
+  isVocabQuestion,
+  vocabToQuestion,
   type Question,
   type SchoolLevel,
   type QuizMode,
@@ -130,6 +142,7 @@ import {
   addDistance,
   updateSettings,
   upgradesFor,
+  STORAGE_KEY as TORNADO_STORAGE_KEY,
   type TornadoProgress,
   type GraphicsQuality,
 } from "@/lib/tornado/progress";
@@ -162,6 +175,7 @@ import {
   disposeObjectTree,
   SparkleField,
   LOOK_BUDGET,
+  detectLookTier,
   type PostFx,
 } from "@/game-engine/three-look";
 import {
@@ -210,11 +224,41 @@ function fmt(n: number): string {
   return Math.round(n).toLocaleString("hu-HU");
 }
 
+/**
+ * S12 / végrehajtás 7. lépés: a kézi grafikai beállítás marad; ha a játékos még sosem mentett minőséget, az alapérték az
+ * eszköz képessége (`detectLookTier`), nem a rögzített „medium” — gyenge telefonon így LOW-ról indul.
+ */
+function hasStoredQuality(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.localStorage.getItem(TORNADO_STORAGE_KEY);
+    if (!raw) return false;
+    const quality = (JSON.parse(raw) as { settings?: { quality?: unknown } } | null)?.settings?.quality;
+    return quality === "low" || quality === "medium" || quality === "high";
+  } catch {
+    return false;
+  }
+}
+
+function initialProgress(): TornadoProgress {
+  const loaded = loadProgress();
+  return hasStoredQuality() ? loaded : updateSettings(loaded, { quality: detectLookTier() });
+}
+
 export default function TornadoHunter200() {
-  const [progress, setProgress] = useState<TornadoProgress>(() => loadProgress());
+  const [progress, setProgress] = useState<TornadoProgress>(initialProgress);
   const [screen, setScreen] = useState<Screen>("menu");
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
-  const [forceResult, setForceResult] = useState<boolean | null>(null);
+  /** Teszt-kampó jelzők (növekvő sorszám): a PlayScreen csak a változásra reagál, újraindításkor nem. */
+  const [forceResult, setForceResult] = useState(0);
+  const [forceQuiz, setForceQuiz] = useState(0);
+  /** A közös keret állapota játék közben (játszik / szünet / eredmény) — a PlayScreen jelenti. */
+  const [playState, setPlayState] = useState<GameScreenState>("playing");
+  /** A „Következő szint” új futást indít: a kulcs váltása újraszereli a PlayScreent. */
+  const [playKey, setPlayKey] = useState(0);
+  const autoPauseRef = useRef<() => void>(() => {});
+  const best = useBestScore(GAME_ID);
+  const [, setLocation] = useLocation();
   // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet, D6): 10 pálya az évfolyam AUTO-tartományában. Évfolyam: a
   // Beállítások számmal megadott iskolai szintje, AUTO esetén a közös évfolyam. A „Szintek” képernyő változatlan.
   const { grade: classroomGrade } = useClassroomGrade();
@@ -241,66 +285,155 @@ export default function TornadoHunter200() {
         }
         if (patch.phase === "result_win") {
           setScreen("play");
-          setForceResult(true);
+          setForceResult((n) => n + 1);
+        }
+        if (patch.phase === "quiz") {
+          setScreen("play");
+          setForceQuiz((n) => n + 1);
         }
       },
     });
   }, []);
 
+  // A futáson kívül a kampó-jelzők nullázódnak: a következő futás ne induljon kényszerített állapotból.
+  useEffect(() => {
+    if (screen !== "play") {
+      setForceResult(0);
+      setForceQuiz(0);
+      setPlayState("playing");
+    }
+  }, [screen]);
+
   const selectedVehicle = vehicleById(progress.selectedVehicleId) ?? VEHICLES[0]!;
 
   const commit = useCallback((next: TornadoProgress) => setProgress(next), []);
 
+  const startLevel = (level: number, gradeLevel: number | null) => {
+    setSelectedLevelRef(level);
+    setRunGradeLevel(gradeLevel);
+    setPlayKey((k) => k + 1);
+    setScreen("play");
+  };
+  const playGradeLevel = () => {
+    if (levelWorld == null || levels.level == null) return;
+    startLevel(levelWorld, levels.level);
+  };
+  /** Egy koppintásos indítás (M8): évfolyampályán a kiválasztott pálya, különben a legmagasabb feloldott szint. */
+  const quickStart = () => {
+    sfxClick();
+    if (levels.active && levelWorld != null && levels.level != null) playGradeLevel();
+    else startLevel(progress.highestLevelUnlocked, null);
+  };
+  const quickLabel =
+    levels.active && levelWorld != null && levels.level != null
+      ? `${levels.level}. pálya · ${levelWorld}. szint`
+      : `Folytatás · ${progress.highestLevelUnlocked}. szint`;
+
+  const shellState: GameScreenState = screen === "play" ? playState : "start";
+
+  /** Győzelem utáni „Tovább”: évfolyampályán a következő pálya (a győzelem feloldja), különben a következő szint. */
+  const runLevel = getSelectedLevelRef();
+  const nextGradeLevel = runGradeLevel != null && runGradeLevel < GRADE_LEVEL_COUNT ? runGradeLevel + 1 : null;
+  const nextGradeWorld = levelGrade != null && nextGradeLevel != null ? tornadoWorldLevel(levelGrade, nextGradeLevel) : null;
+  const nextRun: { label: string; go: () => void } | null =
+    runGradeLevel != null
+      ? nextGradeLevel != null && nextGradeWorld != null
+        ? {
+            label: `${nextGradeLevel}. pálya`,
+            go: () => {
+              levels.select(nextGradeLevel);
+              startLevel(nextGradeWorld, nextGradeLevel);
+            },
+          }
+        : null
+      : runLevel < 200
+        ? { label: `${runLevel + 1}. szint`, go: () => startLevel(runLevel + 1, null) }
+        : null;
+
   return (
-    <div
-      data-game="TornadoHunter200" data-playing={screen === "play"} data-fixed-screen={screen !== "menu"}
-      className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
+    <GameShell
+      gameId="TornadoHunter200"
+      state={shellState}
+      fixedScreen={screen !== "menu"}
+      orientation="landscape"
+      onAutoPause={() => autoPauseRef.current()}
       style={{
         background:
           "radial-gradient(ellipse at 20% 12%, rgba(56,189,248,0.16), transparent 40%), radial-gradient(ellipse at 82% 8%, rgba(148,163,184,0.16), transparent 44%), linear-gradient(180deg, #0b1220 0%, #0a0f1c 100%)",
       }}
     >
       <AchievementToast achievements={newlyUnlocked} />
-      <main className="relative z-10 w-full max-w-2xl xl:max-w-4xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
+      <main
+        className={
+          screen === "play"
+            ? "w-full flex-1 min-h-0"
+            : "relative z-10 w-full max-w-2xl xl:max-w-4xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10"
+        }
+      >
         <CouponHud session={coupon} />
         <CouponExpiredOverlay session={coupon} />
 
-        <header className="flex items-center justify-between gap-1 mb-2">
-          <Link href="/games">
-            <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2 h-11 px-3">
-              <ArrowLeft className="w-4 h-4" />
-              Játékok
-            </Button>
-          </Link>
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <AudioToggleButton size="icon" />
-            <span className="flex items-center gap-1 text-amber-300" data-testid="tornado-coins">
-              <Coins className="w-4 h-4" />
-              {fmt(progress.coins)} SC
-            </span>
-          </div>
-        </header>
+        {screen !== "play" && (
+          <header className="flex items-center justify-between gap-1 mb-2">
+            <Link href="/games">
+              <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2 h-12 px-3 text-sm">
+                <ArrowLeft className="w-4 h-4" />
+                Játékok
+              </Button>
+            </Link>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <AudioToggleButton size="icon" className="h-12 w-12" />
+              <span className="flex items-center gap-1 text-amber-300" data-testid="tornado-coins">
+                <Coins className="w-4 h-4" />
+                {fmt(progress.coins)} SC
+              </span>
+            </div>
+          </header>
+        )}
 
         {screen === "menu" && (
-          <MenuScreen
-            progress={progress}
-            selectedVehicle={selectedVehicle}
-            syncBanner={syncBanner}
-            onPlay={() => setScreen("levels")}
-            levels={levels}
-            levelGrade={levelGrade}
-            levelWorld={levelWorld}
-            onPlayLevel={() => {
-              if (levelWorld == null || levels.level == null) return;
-              setSelectedLevelRef(levelWorld);
-              setRunGradeLevel(levels.level);
-              setScreen("play");
+          <StartScreen
+            title="Tornado Hunter 200"
+            subtitle="3D viharvadászat — 200 szint, 160 jármű, Storm Coin"
+            icon={<TornadoIcon className="h-12 w-12" strokeWidth={2.2} />}
+            startLabel="Vadászat indítása"
+            onStart={() => {
+              sfxClick();
+              setScreen("levels");
             }}
-            onGarage={() => setScreen("garage")}
-            onLevels={() => setScreen("levels")}
-            onHighscore={() => setScreen("highscore")}
-            onStats={() => setScreen("stats")}
-            onSettings={() => setScreen("settings")}
+            best={best.best}
+            secondary={
+              <>
+                <button type="button" className="game-btn game-btn-secondary" data-testid="tornado-quick-start" onClick={quickStart}>
+                  <Play className="h-5 w-5 shrink-0" fill="currentColor" aria-hidden="true" />
+                  {quickLabel}
+                </button>
+                <button
+                  type="button"
+                  className="game-btn game-btn-secondary"
+                  onClick={() => {
+                    sfxClick();
+                    setScreen("garage");
+                  }}
+                >
+                  <Car className="h-5 w-5 shrink-0" aria-hidden="true" />
+                  Storm Garage
+                </button>
+              </>
+            }
+            settings={
+              <MenuExtras
+                progress={progress}
+                selectedVehicle={selectedVehicle}
+                syncBanner={syncBanner}
+                levels={levels}
+                levelGrade={levelGrade}
+                levelWorld={levelWorld}
+                onHighscore={() => setScreen("highscore")}
+                onStats={() => setScreen("stats")}
+                onSettings={() => setScreen("settings")}
+              />
+            }
           />
         )}
 
@@ -312,11 +445,7 @@ export default function TornadoHunter200() {
           <LevelsScreen
             progress={progress}
             onBack={() => setScreen("menu")}
-            onPick={(level) => {
-              setSelectedLevelRef(level);
-              setRunGradeLevel(null);
-              setScreen("play");
-            }}
+            onPick={(level) => startLevel(level, null)}
           />
         )}
 
@@ -332,26 +461,33 @@ export default function TornadoHunter200() {
 
         {screen === "play" && (
           <PlayScreen
+            key={playKey}
             level={getSelectedLevelRef()}
             vehicle={selectedVehicle}
             progress={progress}
             coupon={coupon}
             syncEligible={Boolean(syncEligibility?.eligible)}
             forceResult={forceResult}
+            forceQuiz={forceQuiz}
             gradeLevel={runGradeLevel}
             onGradeLevelWin={() => {
               if (runGradeLevel != null) levels.complete(runGradeLevel);
             }}
             onExit={() => setScreen(runGradeLevel != null ? "menu" : "levels")}
+            onBackToGames={() => setLocation("/games")}
+            next={nextRun}
             onComplete={(next, unlocked) => {
               setProgress(next);
               if (unlocked.length > 0) setNewlyUnlocked(unlocked);
             }}
             onProgress={setProgress}
+            onSubmitBest={best.submit}
+            onShellState={setPlayState}
+            autoPauseRef={autoPauseRef}
           />
         )}
       </main>
-    </div>
+    </GameShell>
   );
 }
 
@@ -367,34 +503,63 @@ function getSelectedLevelRef(): number {
 
 /* ============================ Menu ============================ */
 
-function MenuScreen(props: {
+/**
+ * S12 — a kezdőképernyő összecsukott „Beállítások” része (StartScreen `settings`): pályaválasztó, aktuális jármű,
+ * rekordok, statisztika, iskolai szint, szülői leírás. Az indításhoz nem kell megnyitni (M8).
+ */
+function MenuExtras(props: {
   progress: TornadoProgress;
   selectedVehicle: Vehicle;
   syncBanner: string;
-  onPlay: () => void;
   levels: GradeLevelState;
   levelGrade: number | null;
   levelWorld: number | null;
-  onPlayLevel: () => void;
-  onGarage: () => void;
-  onLevels: () => void;
   onHighscore: () => void;
   onStats: () => void;
   onSettings: () => void;
 }) {
   const { progress, selectedVehicle } = props;
   return (
-    <Card className="border border-sky-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
-      <CardContent data-game-card-content className="p-3 sm:p-5 flex flex-col gap-4 flex-1 overflow-y-auto">
-        <div className="flex items-center gap-2">
-          <TornadoIcon className="w-7 h-7 text-sky-300" />
-          <div>
-            <h1 className="text-xl font-extrabold tracking-tight text-white">Tornado Hunter 200</h1>
-            <p className="text-xs text-white/60">3D viharvadászat — 200 szint, 160 jármű, Storm Coin</p>
-          </div>
+    <div className="flex flex-col gap-3">
+      {props.levels.active && props.levels.level != null && props.levelWorld != null ? (
+        <div className="rounded-xl border border-sky-400/30 bg-slate-900/60 p-3 flex flex-col gap-2" data-testid="tornado-grade-levels">
+          <GradeLevelPicker
+            value={props.levels.level}
+            unlocked={props.levels.unlocked}
+            onChange={props.levels.select}
+            label={`Pálya — ${props.levelGrade}. osztály`}
+          />
+          <p className="text-sm text-white/70">
+            A {props.levels.level}. pálya a {props.levelWorld}. szinten indul — a fenti gyorsgomb ezt indítja.
+          </p>
         </div>
+      ) : null}
 
-        <GamePedagogyPanel
+      <div className="rounded-xl border border-white/10 bg-slate-900/60 p-3 flex items-center gap-3">
+        <div
+          className="w-12 h-12 rounded-lg shrink-0"
+          style={{ background: `linear-gradient(135deg, ${selectedVehicle.colors.body}, ${selectedVehicle.colors.accent})` }}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-white/60 uppercase tracking-wide">Aktuális jármű</p>
+          <p className="font-bold truncate text-white">{selectedVehicle.name}</p>
+          <p className="text-sm" style={{ color: RARITY_COLOR[selectedVehicle.rarity] }}>
+            {RARITY_LABEL[selectedVehicle.rarity]} · {categoryLabel(selectedVehicle.category)}
+          </p>
+        </div>
+        <div className="text-right text-sm text-white/70">
+          <p>Szint {progress.highestLevelUnlocked}/200</p>
+          <p className="text-amber-300 font-semibold">{fmt(progress.totalScore)} pont</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <MenuButton icon={<Trophy className="w-4 h-4" />} label="Highscore" onClick={props.onHighscore} />
+        <MenuButton icon={<BarChart3 className="w-4 h-4" />} label="Statisztika" onClick={props.onStats} />
+        <MenuButton icon={<SettingsIcon className="w-4 h-4" />} label="Iskolai szint, grafika, irányítás" onClick={props.onSettings} className="col-span-2" />
+      </div>
+
+      <GamePedagogyPanel
           accent="cyan"
           kidMission="Válassz járművet, keresd meg a tornádót, és állj meg biztonságos távolságra! Amikor pontot kapsz, egy gyors matek- vagy angolkérdés dönti el, sikerül-e a horgonyzás. Jó válasz → rögzülsz és túléled a vihart, rossz válasz → új kérdés, próbáld újra!"
           parentBody={
@@ -406,58 +571,10 @@ function MenuScreen(props: {
           }
         />
 
-        <div className="rounded-lg border border-white/10 bg-slate-900/60 p-3 flex items-center gap-3">
-          <div
-            className="w-12 h-12 rounded-lg shrink-0"
-            style={{ background: `linear-gradient(135deg, ${selectedVehicle.colors.body}, ${selectedVehicle.colors.accent})` }}
-          />
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] text-white/50 uppercase tracking-wide">Aktuális jármű</p>
-            <p className="font-bold truncate text-white">{selectedVehicle.name}</p>
-            <p className="text-xs" style={{ color: RARITY_COLOR[selectedVehicle.rarity] }}>
-              {RARITY_LABEL[selectedVehicle.rarity]} · {categoryLabel(selectedVehicle.category)}
-            </p>
-          </div>
-          <div className="text-right text-xs text-white/60">
-            <p>Szint {progress.highestLevelUnlocked}/200</p>
-            <p className="text-amber-300 font-semibold">{fmt(progress.totalScore)} pont</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <Button className="col-span-2 h-14 text-base font-extrabold bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400" onClick={props.onPlay}>
-            <Play className="w-5 h-5 mr-1" /> Vadászat indítása
-          </Button>
-          <MenuButton icon={<Car className="w-4 h-4" />} label="Storm Garage" onClick={props.onGarage} />
-          <MenuButton icon={<ChevronRight className="w-4 h-4" />} label="Szintek" onClick={props.onLevels} />
-          <MenuButton icon={<Trophy className="w-4 h-4" />} label="Highscore" onClick={props.onHighscore} />
-          <MenuButton icon={<BarChart3 className="w-4 h-4" />} label="Statisztika" onClick={props.onStats} />
-          <MenuButton icon={<SettingsIcon className="w-4 h-4" />} label="Beállítások (iskolai szint)" onClick={props.onSettings} className="col-span-2" />
-        </div>
-
-        {props.levels.active && props.levels.level != null && props.levelWorld != null ? (
-          <div className="rounded-lg border border-sky-400/30 bg-slate-900/60 p-3 flex flex-col gap-2" data-testid="tornado-grade-levels">
-            <GradeLevelPicker
-              value={props.levels.level}
-              unlocked={props.levels.unlocked}
-              onChange={props.levels.select}
-              label={`Pálya — ${props.levelGrade}. osztály`}
-            />
-            <Button
-              className="h-12 text-sm font-bold bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400"
-              onClick={props.onPlayLevel}
-              data-testid="tornado-level-start"
-            >
-              <Play className="w-4 h-4 mr-1" /> {props.levels.level}. pálya indítása · {props.levelWorld}. szint
-            </Button>
-          </div>
-        ) : null}
-
-        <p className="text-[11px] text-cyan-100/80 border border-cyan-700/40 rounded px-2 py-1.5 bg-slate-900/80">
-          {props.syncBanner}
-        </p>
-      </CardContent>
-    </Card>
+      <p data-game-sync className="text-sm text-cyan-100/80 border border-cyan-700/40 rounded-lg px-3 py-2 bg-slate-900/80">
+        {props.syncBanner}
+      </p>
+    </div>
   );
 }
 
@@ -559,7 +676,7 @@ function GarageScreen(props: { progress: TornadoProgress; commit: (p: TornadoPro
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-extrabold text-white">{detail.name}</h3>
-                <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: `${RARITY_COLOR[detail.rarity]}22`, color: RARITY_COLOR[detail.rarity] }}>
+                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: `${RARITY_COLOR[detail.rarity]}22`, color: RARITY_COLOR[detail.rarity] }}>
                   {RARITY_LABEL[detail.rarity]}
                 </span>
               </div>
@@ -580,13 +697,13 @@ function GarageScreen(props: { progress: TornadoProgress; commit: (p: TornadoPro
 
           <div className="flex flex-wrap gap-2 mt-3">
             {!isOwned && (
-              <Button size="sm" className="bg-lime-600 hover:bg-lime-500 text-slate-950 font-bold gap-1" disabled={isLocked} onClick={doBuy}>
+              <Button size="sm" className="h-12 px-4 text-sm bg-lime-600 hover:bg-lime-500 text-slate-950 font-bold gap-1" disabled={isLocked} onClick={doBuy}>
                 {isLocked ? <Lock className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
                 {isLocked ? `Zárolva (${detail.unlockLevel}. szint)` : `Vásárlás — ${fmt(detail.price)} SC`}
               </Button>
             )}
             {isOwned && progress.selectedVehicleId !== detail.id && (
-              <Button size="sm" className="bg-sky-600 hover:bg-sky-500 font-bold" onClick={doSelect}>
+              <Button size="sm" className="h-12 px-4 text-sm bg-sky-600 hover:bg-sky-500 font-bold" onClick={doSelect}>
                 Kiválasztás
               </Button>
             )}
@@ -598,7 +715,7 @@ function GarageScreen(props: { progress: TornadoProgress; commit: (p: TornadoPro
           {/* Upgrades — only for owned vehicles */}
           {isOwned && (
             <div className="mt-3 border-t border-white/10 pt-2">
-              <p className="text-[11px] uppercase tracking-wide text-white/50 mb-1.5 flex items-center gap-1">
+              <p className="text-xs uppercase tracking-wide text-white/50 mb-1.5 flex items-center gap-1">
                 <Wrench className="w-3.5 h-3.5" /> Fejlesztés
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -608,13 +725,13 @@ function GarageScreen(props: { progress: TornadoProgress; commit: (p: TornadoPro
                     <button
                       key={t.id}
                       onClick={() => doUpgrade(t.id)}
-                      className="flex items-center justify-between rounded border border-white/10 bg-slate-800/60 hover:bg-slate-700/70 px-2 py-1.5 text-left"
+                      className="min-h-12 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-slate-800/60 hover:bg-slate-700/70 px-3 py-2 text-left"
                     >
                       <span className="text-xs">
                         <span className="font-semibold text-white">{t.label}</span>
                         <span className="text-white/50"> · {t.effectLabel}</span>
                       </span>
-                      <span className="text-[11px] font-mono text-white/80">
+                      <span className="text-xs font-mono text-white/80">
                         {Array.from({ length: 5 }, (_, i) => (i < lvl ? "●" : "○")).join("")}
                       </span>
                     </button>
@@ -654,21 +771,21 @@ function GarageScreen(props: { progress: TornadoProgress; commit: (p: TornadoPro
                 }`}
               >
                 <div
-                  className="w-full h-8 rounded mb-1 relative"
+                  className="w-full min-h-12 rounded mb-1 relative"
                   style={{ background: `linear-gradient(135deg, ${v.colors.body}, ${v.colors.accent})` }}
                 >
                   {vLocked && !vOwned && <Lock className="w-3.5 h-3.5 absolute top-1 right-1 text-white/80" />}
-                  {vOwned && <span className="absolute top-0.5 right-1 text-[10px] text-emerald-200 font-bold">✓</span>}
+                  {vOwned && <span className="absolute top-0.5 right-1 text-xs text-emerald-200 font-bold">✓</span>}
                 </div>
-                <p className="text-[11px] font-semibold truncate text-white">{v.name}</p>
-                <p className="text-[10px]" style={{ color: RARITY_COLOR[v.rarity] }}>
+                <p className="text-xs font-semibold truncate text-white">{v.name}</p>
+                <p className="text-xs" style={{ color: RARITY_COLOR[v.rarity] }}>
                   {fmt(v.price)} SC
                 </p>
               </button>
             );
           })}
         </div>
-        <p className="text-[10px] text-white/40 text-center">
+        <p className="text-xs text-white/40 text-center">
           Feloldható most: {purchasableVehicles(progress.highestLevelUnlocked, progress.ownedVehicleIds).length} jármű
         </p>
       </CardContent>
@@ -680,7 +797,7 @@ function StatBar(props: { label: string; value: number; max: number }) {
   const pct = Math.max(4, Math.min(100, (props.value / props.max) * 100));
   return (
     <div>
-      <div className="flex justify-between text-[10px] text-white/60">
+      <div className="flex justify-between text-xs text-white/60">
         <span>{props.label}</span>
         <span>{Math.round(props.value)}</span>
       </div>
@@ -695,7 +812,7 @@ function FilterChip(props: { active: boolean; onClick: () => void; children: Rea
   return (
     <button
       onClick={props.onClick}
-      className={`text-xs px-2.5 py-1 rounded-full border ${
+      className={`min-h-12 text-sm font-semibold px-4 py-2 rounded-full border ${
         props.active ? "border-lime-400/70 bg-lime-900/30 text-lime-200" : "border-white/15 bg-slate-900/50 text-white/70"
       }`}
     >
@@ -721,7 +838,7 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
             return (
               <div key={stage.id} className="rounded-lg border border-white/10 bg-slate-900/50">
                 <button
-                  className="w-full flex items-center justify-between px-3 py-2"
+                  className="w-full min-h-12 flex items-center justify-between px-3 py-2"
                   onClick={() => {
                     sfxClick();
                     setOpenStage(open ? "" : stage.id);
@@ -730,11 +847,11 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
                   <span className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
                     <span className="font-bold text-sm text-white">{stage.label}</span>
-                    <span className="text-[11px] text-white/50">
+                    <span className="text-xs text-white/50">
                       {stage.from}–{stage.to}
                     </span>
                   </span>
-                  <span className="text-[11px] text-white/60">
+                  <span className="text-xs text-white/60">
                     {unlockedInStage}/{levels.length}
                   </span>
                 </button>
@@ -751,7 +868,7 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
                             sfxClick();
                             props.onPick(l.level);
                           }}
-                          className={`aspect-square rounded flex flex-col items-center justify-center text-[11px] font-bold border ${
+                          className={`aspect-square rounded flex flex-col items-center justify-center text-xs font-bold border ${
                             unlocked
                               ? "border-white/15 bg-slate-800/80 text-white hover:bg-sky-900/50 hover:border-sky-400/50"
                               : "border-white/5 bg-slate-950/60 text-white/25"
@@ -759,7 +876,7 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
                           title={record ? `Rekord: ${fmt(record.score)}` : undefined}
                         >
                           {unlocked ? l.level : <Lock className="w-3 h-3" />}
-                          {record && <span className="text-[8px] text-emerald-300 leading-none">★</span>}
+                          {record && <span className="text-xs text-emerald-300 leading-none">★</span>}
                         </button>
                       );
                     })}
@@ -769,7 +886,7 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
             );
           })}
         </div>
-        <p className="text-[10px] text-white/40 text-center">A 200. szint — THE ULTIMATE STORM — a legnehezebb kihívás.</p>
+        <p className="text-xs text-white/40 text-center">A 200. szint — THE ULTIMATE STORM — a legnehezebb kihívás.</p>
       </CardContent>
     </Card>
   );
@@ -806,7 +923,7 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
               </ToggleChip>
             ))}
           </div>
-          <p className="text-[11px] text-white/45 mt-1">
+          <p className="text-xs text-white/45 mt-1">
             AUTO: a szint alapján választja az osztályt (1–16 → 1. o. … 184–200 → 12. o.).
           </p>
         </div>
@@ -831,7 +948,7 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
               </ToggleChip>
             ))}
           </div>
-          <p className="text-[11px] text-white/45 mt-1">Gyengébb gépen / mobilon a LOW ad nagyobb FPS-t.</p>
+          <p className="text-xs text-white/45 mt-1">Gyengébb gépen / mobilon a LOW ad nagyobb FPS-t.</p>
         </div>
 
         <div>
@@ -858,7 +975,7 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
           </div>
         </div>
 
-        <div className="text-[11px] text-white/50 border border-white/10 rounded p-2 bg-slate-900/50">
+        <div className="text-xs text-white/50 border border-white/10 rounded p-2 bg-slate-900/50">
           <p className="font-semibold text-white/70 mb-1">Irányítás PC-n</p>
           <p>W/S — gáz/fék · A/D — kormány · Szóköz — kézifék · F — horgony · C — kamera · Esc — menü</p>
           <p className="font-semibold text-white/70 mt-2 mb-1">Mobil</p>
@@ -877,7 +994,7 @@ function ToggleChip(props: { active: boolean; onClick: () => void; children: Rea
         props.onClick();
       }}
       aria-pressed={props.active}
-      className={`text-sm px-3 py-1.5 rounded-lg border font-semibold ${
+      className={`min-h-12 text-sm px-3 py-2 rounded-lg border font-semibold ${
         props.active ? "border-sky-400/70 bg-sky-900/40 text-sky-100" : "border-white/15 bg-slate-900/50 text-white/70"
       } ${props.className ?? ""}`}
     >
@@ -961,7 +1078,7 @@ function StatsScreen(props: { progress: TornadoProgress; onBack: () => void }) {
 function BigStat(props: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-white/10 bg-slate-900/50 p-2.5">
-      <p className="text-[10px] uppercase tracking-wide text-white/50">{props.label}</p>
+      <p className="text-xs uppercase tracking-wide text-white/50">{props.label}</p>
       <p className="text-lg font-extrabold text-white">{props.value}</p>
     </div>
   );
@@ -975,7 +1092,7 @@ function ScreenHeader(props: { icon: React.ReactNode; title: string; onBack: () 
       <Button
         variant="ghost"
         size="sm"
-        className="text-white/80 hover:bg-white/10 gap-1 -ml-2"
+        className="text-white/80 hover:bg-white/10 gap-1 -ml-2 h-12 px-3 text-sm"
         onClick={() => {
           sfxClick();
           props.onBack();
@@ -999,13 +1116,25 @@ function PlayScreen(props: {
   progress: TornadoProgress;
   coupon: CouponSession;
   syncEligible: boolean;
-  forceResult?: boolean | null;
+  /** Teszt-kampó (növekvő sorszám): > 0 és változik → győzelmi eredmény. */
+  forceResult: number;
+  /** Teszt-kampó (növekvő sorszám): > 0 és változik → kvíz feldobása (M9/M10 rossz válasz). */
+  forceQuiz: number;
   /** A menü pályaválasztójából indított futás pályája (1–10), különben `null`. */
   gradeLevel: number | null;
   onGradeLevelWin: () => void;
+  /** „Szintek” (szünet menü): vissza a szintlistára / menübe. */
   onExit: () => void;
+  /** Eredményképernyő „Vissza a játékokhoz”. */
+  onBackToGames: () => void;
+  /** Győzelem után a következő szint / pálya indítása (felirat + művelet), ha van ilyen. */
+  next: { label: string; go: () => void } | null;
   onComplete: (next: TornadoProgress, unlocked: Achievement[]) => void;
   onProgress: (next: TornadoProgress) => void;
+  onSubmitBest: (score: number) => { best: number; isNewBest: boolean };
+  onShellState: (state: GameScreenState) => void;
+  /** A közös keret automatikus szünete (háttérbe kerülés, elforgatás) ezt hívja. */
+  autoPauseRef: React.MutableRefObject<() => void>;
 }) {
   const spec = useMemo<LevelSpec>(() => levelSpec(props.level), [props.level]);
   /** Pályás futásban a sáv mérsékelten szűkíti/bővíti az időkeretet (E szelet, D6); a „Szintek”-ből indítva a régi. */
@@ -1047,7 +1176,26 @@ function PlayScreen(props: {
   const [quizReason, setQuizReason] = useState<QuizReason>("roam");
   const [quizFlash, setQuizFlash] = useState<{ idx: number; correct: boolean } | null>(null);
   const [anchorMsg, setAnchorMsg] = useState<string | null>(null);
-  const [result, setResult] = useState<{ score: number; coins: number; won: boolean } | null>(null);
+  const [result, setResult] = useState<{
+    score: number;
+    coins: number;
+    won: boolean;
+    correct: number;
+    total: number;
+    best: number;
+    isNewBest: boolean;
+  } | null>(null);
+  /**
+   * S12: a szünet KÜLÖN állapot, nem fázis — így a kvíz / horgonyzás közben kért szünet után a fázis érintetlen,
+   * és a késleltetett fázisváltások (játékóra-időzítők) sem tudják eltüntetni a szünet menüt.
+   */
+  const [paused, setPaused] = useState(false);
+  const touch = useTouchCapable();
+  const haptics = useHaptics();
+  /** A központi szóbank (A8); `null`, amíg tölt vagy ha nem tölthető — ilyenkor a kézi bank kérdez. */
+  const vocab = useVocabQuizSource("en", true);
+  const vocabRef = useRef(vocab);
+  vocabRef.current = vocab;
 
   // Material quizzes for this grade.
   const grades = resolveGrades(props.progress.settings.school, props.level);
@@ -1086,20 +1234,45 @@ function PlayScreen(props: {
   const distanceTravelledRef = useRef(0);
   const timeoutsRef = useRef<number[]>([]);
   const pausedRef = useRef(false);
-  const prevPhaseRef = useRef<PlayPhase>("seeking");
+  /**
+   * Review-lelet (#426, elavult időzítők): a futás azonosítója. Újrakezdés növeli; minden késleltetett visszahívás
+   * a saját futásához kötött, így egy előző futás időzítője nem vált fázist az újban.
+   */
+  const runIdRef = useRef(0);
+  /** Játékóra (s): csak szünet nélkül halad — a fázisváltó időzítők ehhez mérnek, ezért szünetben állnak. */
+  const gameClockRef = useRef(0);
+  const gameTimersRef = useRef<Array<{ at: number; run: number; fn: () => void }>>([]);
+  const primaryGradeRef = useRef(primaryGrade);
+  primaryGradeRef.current = primaryGrade;
+  /** Látszik-e a közös forgatási kérés (10 Hz-en mintavételezve a képkocka-ciklusban). */
+  const rotateBlockRef = useRef(false);
+  const hintCheckRef = useRef(0);
+  /** Látvány: befogáskori kitörés hátralévő ideje (s) — a tölcsér addig gyorsabban pörög. */
+  const burstRef = useRef(0);
   const progressRef = useRef(props.progress);
   progressRef.current = props.progress;
   const onExitRef = useRef(props.onExit);
   onExitRef.current = props.onExit;
   const onProgressRef = useRef(props.onProgress);
   onProgressRef.current = props.onProgress;
+  /** Kozmetikai (üzenet-eltüntető) időzítő valós időben; csak a saját futásában fut le. */
   const scheduleTimeout = (fn: () => void, ms: number) => {
+    const run = runIdRef.current;
     const id = window.setTimeout(() => {
       timeoutsRef.current = timeoutsRef.current.filter((x) => x !== id);
-      fn();
+      if (run === runIdRef.current) fn();
     }, ms);
     timeoutsRef.current.push(id);
     return id;
+  };
+  /** Fázist váltó időzítő a játékórán: szünetben áll, újrakezdés / befejezés után nem fut le. */
+  const scheduleGame = (fn: () => void, ms: number) => {
+    gameTimersRef.current.push({ at: gameClockRef.current + ms / 1000, run: runIdRef.current, fn });
+  };
+  const clearPendingTimers = () => {
+    timeoutsRef.current.forEach((id) => window.clearTimeout(id));
+    timeoutsRef.current = [];
+    gameTimersRef.current = [];
   };
   const recentQuizRef = useRef<string[]>([]);
   /** Spec 2026-09-29: a futásban feltett kérdések — a 7–12. évfolyamos közös bank nem ismétel. */
@@ -1160,6 +1333,7 @@ function PlayScreen(props: {
   const raiseQuiz = useCallback(
     (reason: QuizReason) => {
       answerLockedRef.current = false;
+      const vocabNow = vocabRef.current;
       const q = pickQuestion({
         adaptiveBand: adaptiveRef.current.band,
         level: props.level,
@@ -1169,7 +1343,19 @@ function PlayScreen(props: {
         recent: recentQuizRef.current,
         gradeSeen: gradeSeenRef.current,
         rng: drawRng,
+        vocab: vocabNow
+          ? {
+              next: () => {
+                const vq = vocabNow.next(vocabLevelForGrade(primaryGradeRef.current, adaptiveRef.current.band));
+                return vq ? vocabToQuestion(vq, primaryGradeRef.current) : null;
+              },
+            }
+          : undefined,
       });
+      // Kézi (nem szóbankos) angol kérdés helyes válasza a közös naplóba: ugyanaz a szó ne jöjjön vissza a bankból.
+      if (q.subject === "english" && q.source === "bank" && !isVocabQuestion(q)) {
+        vocabRef.current?.markExternal(q.options[q.correctIndex]!);
+      }
       const shuffled = shuffleOptions(q, drawRng);
       recentQuizRef.current = [...recentQuizRef.current.slice(-8), q.id];
       markGradeQuizSeen(gradeSeenRef.current, q);
@@ -1207,6 +1393,39 @@ function PlayScreen(props: {
     setActiveQuiz(null);
     setPhase("seeking");
   }, [props.level]);
+
+  /* ------- pause (S12: HUD gomb, Esc, háttérbe kerülés, elforgatás) ------- */
+  const releaseInputs = () => {
+    releaseDriveKeys(keysRef.current);
+    const t = touchRef.current;
+    t.throttle = t.steer = 0;
+    setTouchReset((n) => n + 1);
+  };
+  const pauseGame = () => {
+    if (finishedRef.current || pausedRef.current) return;
+    pausedRef.current = true;
+    setPaused(true);
+    releaseInputs();
+  };
+  const resumeGame = () => {
+    pausedRef.current = false;
+    setPaused(false);
+  };
+  const pauseRef = useRef(pauseGame);
+  pauseRef.current = pauseGame;
+  useEffect(() => {
+    const ref = props.autoPauseRef;
+    ref.current = () => pauseRef.current();
+    return () => {
+      ref.current = () => {};
+    };
+  }, [props.autoPauseRef]);
+
+  const shellState: GameScreenState = result ? "result" : paused ? "paused" : "playing";
+  const onShellState = props.onShellState;
+  useEffect(() => {
+    onShellState(shellState);
+  }, [shellState, onShellState]);
 
   /* ------- Three.js scene setup ------- */
   useEffect(() => {
@@ -1412,15 +1631,12 @@ function PlayScreen(props: {
           break;
         }
         case "escape": {
-          const current: PlayPhase = pausedRef.current ? "paused" : phaseRef.current;
-          const action = escAction(current);
-          if (action === "pause") {
-            prevPhaseRef.current = phaseRef.current;
-            pausedRef.current = true;
-            setPhase("paused");
-          } else if (action === "exit") {
-            onExitRef.current();
-          }
+          // Szünetben az Esc a közös PauseMenu-é (folytatás); itt csak a játék közbeni szünet és az eredményből
+          // kilépés marad — különben egy Esc egyszerre folytatna és kilépne.
+          if (pausedRef.current) break;
+          const action = escAction(phaseRef.current);
+          if (action === "pause") pauseRef.current();
+          else if (action === "exit") onExitRef.current();
           break;
         }
         case "r":
@@ -1461,6 +1677,7 @@ function PlayScreen(props: {
   /* ------- anchoring ------- */
   const tryAnchorRef = useRef<() => void>(() => {});
   tryAnchorRef.current = () => {
+    if (pausedRef.current) return;
     if (phaseRef.current !== "approach" && phaseRef.current !== "seeking") return;
     const p = playerRef.current;
     const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
@@ -1497,10 +1714,26 @@ function PlayScreen(props: {
           })
         : { score: Math.round(scoreRef.current), coins: 0, breakdown: { base: 0, speedBonus: 0, stormBonus: 0, answerBonus: 0, positionBonus: 0 } };
 
-      setResult({ score: reward.score, coins: reward.coins, won });
+      // A futás véget ért: a még függő fázisváltások (pl. egy kvíz utáni továbblépés) nem írhatják felül.
+      clearPendingTimers();
+      pausedRef.current = false;
+      setPaused(false);
+      setFeedback(null);
+      pendingResolveRef.current = null;
+      const bestNow = props.onSubmitBest(reward.score);
+      setResult({
+        score: reward.score,
+        coins: reward.coins,
+        won,
+        correct: correctRef.current,
+        total: correctRef.current + wrongRef.current,
+        best: bestNow.best,
+        isNewBest: bestNow.isNewBest,
+      });
       setPhase(won ? "result_win" : "result_lose");
       if (won) sfxLevelUp();
       else sfxError();
+      haptics(won ? "success" : "error");
 
       // Persist progress.
       let next = props.progress;
@@ -1549,11 +1782,18 @@ function PlayScreen(props: {
     [props, spec],
   );
 
+  // Teszt-kampók: csak a jelző VÁLTOZÁSÁRA futnak (a régi `forceResult === true` minden renderkor újra lefutott,
+  // így az „Újra” után azonnal visszaugrott az eredményre).
+  const finishRunRef = useRef(finishRun);
+  finishRunRef.current = finishRun;
+  const raiseQuizRef = useRef(raiseQuiz);
+  raiseQuizRef.current = raiseQuiz;
   useEffect(() => {
-    if (props.forceResult === true) {
-      finishRun(true);
-    }
-  }, [props.forceResult, finishRun]);
+    if (props.forceResult > 0) finishRunRef.current(true);
+  }, [props.forceResult]);
+  useEffect(() => {
+    if (props.forceQuiz > 0 && !finishedRef.current) raiseQuizRef.current("roam");
+  }, [props.forceQuiz]);
 
   const resolveAnchor = useCallback(
     (answerCorrect: boolean) => {
@@ -1572,11 +1812,16 @@ function PlayScreen(props: {
       if (outcome.ok) {
         playerRef.current.anchored = true;
         const sc = sceneRef.current;
-        if (sc) setAnchorsVisible(sc.vehicle, true);
+        if (sc) {
+          setAnchorsVisible(sc.vehicle, true);
+          interceptBurst(sc, playerRef.current, tornadoPosRef.current, quality, reducedMotionRef.current);
+        }
+        burstRef.current = 0.6;
         sfxSuccess();
+        haptics("hit");
         setPhase("approach");
-        // Hold the anchor until the funnel's lifetime elapses → win.
-        scheduleTimeout(() => finishRun(true), 2600);
+        // Hold the anchor until the funnel's lifetime elapses → win. Játékórán: szünetben áll, újrakezdés törli.
+        scheduleGame(() => finishRun(true), 2600);
       } else {
         anchorAttemptsRef.current += 1;
         sfxError();
@@ -1584,14 +1829,14 @@ function PlayScreen(props: {
       }
       pendingAnchorRef.current = null;
     },
-    [spec, finishRun],
+    [spec, finishRun, haptics, quality],
   );
 
   /* ------- answer handling ------- */
   const answerQuiz = useCallback(
     (idx: number) => {
       const quiz = activeQuiz;
-      if (!quiz || answerLockedRef.current) return;
+      if (!quiz || answerLockedRef.current || pausedRef.current) return;
       answerLockedRef.current = true;
       const correct = idx === quiz.correctIndex;
       adaptiveRef.current.answer(correct);
@@ -1600,9 +1845,11 @@ function PlayScreen(props: {
         correctRef.current += 1;
         scoreRef.current += quizReason === "roam" ? freeRoamAnswerScore(spec) : 0;
         sfxSuccess();
+        haptics("success");
       } else {
         wrongRef.current += 1;
         sfxError();
+        haptics("error");
       }
       props.onProgress(recordAnswer(props.progress, correct));
 
@@ -1619,7 +1866,7 @@ function PlayScreen(props: {
       };
 
       if (correct) {
-        scheduleTimeout(advance, 750);
+        scheduleGame(advance, 750);
         return;
       }
 
@@ -1640,7 +1887,7 @@ function PlayScreen(props: {
         }),
       );
     },
-    [activeQuiz, quizReason, spec, props.coupon, props.progress],
+    [activeQuiz, quizReason, spec, props.coupon, props.progress, haptics],
   );
 
   const dismissFeedback = useCallback(() => {
@@ -1652,6 +1899,16 @@ function PlayScreen(props: {
 
   const restartRef = useRef<() => void>(() => {});
   restartRef.current = () => {
+    // Az előző futás minden függő időzítője és félbehagyott kvíze érvénytelen (review-lelet #426).
+    runIdRef.current += 1;
+    clearPendingTimers();
+    pendingAnchorRef.current = null;
+    pendingResolveRef.current = null;
+    setFeedback(null);
+    setQuizFlash(null);
+    pausedRef.current = false;
+    setPaused(false);
+    burstRef.current = 0;
     adaptiveRef.current.reset(primaryGrade, props.gradeLevel);
     answerLockedRef.current = false;
     finishedRef.current = false;
@@ -1683,14 +1940,38 @@ function PlayScreen(props: {
   /* ------- the frame step ------- */
   const stepRef = useRef<(dt: number) => void>(() => {});
   stepRef.current = (dt: number) => {
+    // A közös keret forgatási kérése (álló telefon) a jelenetet takarja: amíg látszik, a futás áll, mint szünetben.
+    hintCheckRef.current += dt;
+    if (hintCheckRef.current > 0.1) {
+      hintCheckRef.current = 0;
+      rotateBlockRef.current = typeof document !== "undefined" && document.querySelector('[data-testid="game-rotate-hint"]') != null;
+    }
+    const halted = pausedRef.current || rotateBlockRef.current;
+    // Játékóra + a fázisváltó időzítők: szünetben állnak, és csak a saját futásuk időzítői futnak le.
+    if (!halted) {
+      gameClockRef.current += dt;
+      const timers = gameTimersRef.current;
+      if (timers.length > 0) {
+        const now = gameClockRef.current;
+        const run = runIdRef.current;
+        const due = timers.filter((t) => t.run === run && t.at <= now);
+        if (due.length > 0 || timers.some((t) => t.run !== run)) {
+          gameTimersRef.current = timers.filter((t) => t.run === run && t.at > now);
+          for (const t of due) t.fn();
+        }
+      }
+    }
     const sc = sceneRef.current;
     if (!sc) return;
     const { camera, vehicle, tornado, rain, lightning } = sc;
     const ph = phaseRef.current;
-    const playing = (ph === "seeking" || ph === "approach") && !pausedRef.current;
+    const playing = (ph === "seeking" || ph === "approach") && !halted;
 
-    // Always spin the funnel and rain so paused screens still feel alive.
-    animateTornado(tornado, dt, spec.tornadoIntensity, reducedMotionRef.current ? 0.35 : 1);
+    // Always spin the funnel and rain so paused screens still feel alive. Befogáskor (600 ms) a tölcsér
+    // felpörög; csökkentett mozgásnál a kitörés 0,4-szeres.
+    const burstBoost = burstRef.current > 0 ? 1.6 * (burstRef.current / 0.6) * (reducedMotionRef.current ? 0.4 : 1) : 0;
+    if (burstRef.current > 0) burstRef.current = Math.max(0, burstRef.current - dt);
+    animateTornado(tornado, dt, spec.tornadoIntensity, (reducedMotionRef.current ? 0.35 : 1) * (1 + burstBoost));
 
     if (playing) {
       elapsedRef.current += dt;
@@ -1888,65 +2169,66 @@ function PlayScreen(props: {
 
   const compass = compassFor(hud.windDir);
 
+  const stage = stageForLevel(props.level);
+  const timeTone = hud.timeLeft <= 10 ? "bad" : hud.timeLeft <= 30 ? "warn" : "default";
+  const stormTone = hud.stormPct >= 80 ? "bad" : hud.stormPct >= 50 ? "warn" : "default";
+  /*
+   * A vezérlősáv fölé kerülő feliratok alsó eltolása érintős eszközön: a tárcsa átmérője
+   * 2 × clamp(round(0,16 × min(w,h)), 52, 76) px (`controlRadiusFor`), a `--game-action-size` = clamp(56px, 16vmin, 88px)
+   * ugyanazzal a 0,16-os tényezővel nő, így 2 × action-size ≥ a tárcsa átmérője minden nézetben.
+   */
+  const aboveControls = touch
+    ? "calc(max(8px, var(--game-safe-bottom)) + 2 * var(--game-action-size) + 12px)"
+    : "max(8px, var(--game-safe-bottom))";
+  const next = result?.won ? props.next : null;
+
   return (
-    <Card className="border border-sky-400/45 bg-slate-950/85 backdrop-blur-md flex-1 flex flex-col min-h-0">
-      <CardContent data-game-card-content className="p-1.5 sm:p-2 flex flex-col flex-1 min-h-0 gap-1.5">
-        {/* Top HUD row */}
-        <div className="flex items-center justify-between text-[11px] sm:text-xs font-semibold gap-1 flex-wrap">
-          <Button variant="ghost" size="sm" className="text-white/80 hover:bg-white/10 gap-1 -ml-1 h-7" onClick={props.onExit}>
-            <ArrowLeft className="w-4 h-4" /> Szintek
-          </Button>
-          <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-white/10">
-            LEVEL {props.level}/200
-          </span>
-          <span className="px-2 py-0.5 rounded" style={{ backgroundColor: `${stageForLevel(props.level).color}22`, color: stageForLevel(props.level).color }}>
-            STORM: {stormLabel(props.level)}
-          </span>
-          <span className="flex items-center gap-1 text-cyan-200">
-            <Wind className="w-3.5 h-3.5" /> {hud.wind} km/h
-          </span>
-          <span className="text-sky-200">
-            {compass.arrow} {compass.label}
-          </span>
-          <span className="flex items-center gap-1 text-white/80">
-            <Gauge className="w-3.5 h-3.5" /> {hud.distanceKm.toFixed(2)} km
-          </span>
-          <span className="text-amber-300">{fmt(hud.score)} pont</span>
-        </div>
+    <div className="absolute inset-0 flex flex-col overflow-hidden" data-tornado-play>
+      {/* Teljes képernyős 3D jelenet: a HUD és a vezérlők áttetszően fölötte (mobiljáték-elrendezés). */}
+      <div className="absolute inset-0 bg-black">
+        <canvas ref={canvasRef} className="w-full h-full block touch-none" />
+      </div>
+      {/* Felső sötétítés: a HUD felirata (pl. „Vihar 12%”) világos égbolt előtt is olvasható marad. */}
+      <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-slate-950/70 via-slate-950/30 to-transparent pointer-events-none" aria-hidden="true" />
 
-        {/* Canvas */}
-        <div className="relative flex-1 min-h-0 rounded-lg overflow-hidden border border-white/10 bg-black">
-          <canvas ref={canvasRef} className="w-full h-full block touch-none" />
+      <GameHud
+        stats={[
+          { id: "distance", label: "Tornádó", value: `${hud.distanceKm.toFixed(2)} km` },
+          { id: "time", label: "Idő", value: `${Math.ceil(hud.timeLeft)} s`, tone: timeTone },
+          { id: "score", label: "Pont", value: fmt(hud.score), tone: "good" },
+        ]}
+        onPause={pauseGame}
+        progress={{ value: Math.round(hud.stormPct), max: 100, label: `Vihar ${Math.round(hud.stormPct)}%`, tone: stormTone }}
+      />
 
-          {/* Wind / anchor overlay */}
-          <div className="absolute top-2 left-2 flex flex-col gap-1 text-[11px] font-bold pointer-events-none">
-            <div className="px-2 py-1 rounded bg-black/55 backdrop-blur-sm">
-              WIND SPEED: <span className="text-cyan-300">{hud.wind} km/h</span>
+      <div className="relative flex-1 min-h-0">
+          {/* Level / wind / anchor overlay */}
+          <div className="absolute top-2 left-2 flex flex-col items-start gap-1 text-xs font-bold pointer-events-none max-w-[70%] z-10">
+            <div className="px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm" style={{ color: stage.color }}>
+              LEVEL {props.level}/200 · STORM: {stormLabel(props.level)}
             </div>
-            <div className="px-2 py-1 rounded bg-black/55 backdrop-blur-sm">
-              MAX: <span className="text-sky-300">{hud.maxWind}</span> · {SURFACE_LABEL[hud.surface]}
+            <div className="px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm">
+              WIND SPEED: <span className="text-cyan-300">{hud.wind} km/h</span>{" "}
+              <span className="text-sky-200">
+                {compass.arrow} {compass.label}
+              </span>{" "}
+              · MAX <span className="text-sky-300">{hud.maxWind}</span>
             </div>
             <div
-              className={`px-2 py-1 rounded backdrop-blur-sm flex items-center gap-1 ${
-                hud.anchorReady ? "bg-emerald-600/70" : "bg-black/55"
+              className={`px-2 py-1 rounded-lg backdrop-blur-sm flex items-center gap-1 transition-colors ${
+                hud.anchorReady ? "bg-emerald-600/80" : "bg-black/60"
               }`}
             >
-              <Anchor className="w-3.5 h-3.5" /> ANCHOR: {hud.anchorReady ? "READY" : playerRef.current.anchored ? "SET" : "…"}
+              <Anchor className="w-3.5 h-3.5" /> ANCHOR: {hud.anchorReady ? "READY" : playerRef.current.anchored ? "SET" : "…"} ·{" "}
+              {SURFACE_LABEL[hud.surface]}
             </div>
           </div>
 
-          {/* Time + storm meter */}
-          <div className="absolute top-2 right-2 flex flex-col items-end gap-1 pointer-events-none">
-            <div className="px-2 py-1 rounded bg-black/55 text-[11px] font-bold">
-              ⏱ {Math.ceil(hud.timeLeft)}s
-            </div>
-            <div className="w-24 h-2 rounded bg-black/50 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500" style={{ width: `${hud.stormPct}%` }} />
-            </div>
-          </div>
-
-          {/* Vehicle name */}
-          <div className="absolute bottom-32 sm:bottom-20 left-2 px-2 py-1 rounded bg-black/55 text-[11px] font-semibold pointer-events-none z-10">
+          {/* Vehicle name — alacsony fekvő nézetben elhagyva, ott minden képpont a jeleneté. */}
+          <div
+            className="absolute left-2 px-2 py-1 rounded-lg bg-black/60 text-xs font-semibold pointer-events-none z-10 [@media(max-height:500px)]:hidden"
+            style={{ bottom: aboveControls }}
+          >
             {props.vehicle.name.toUpperCase()}
           </div>
 
@@ -1964,14 +2246,15 @@ function PlayScreen(props: {
             if (!marker.visible) return null;
             return (
               <div
-                className={`absolute top-1/2 -translate-y-1/2 ${marker.side === "right" ? "right-2" : "left-2"} z-10 pointer-events-none flex flex-col items-center gap-1`}
+                className={`absolute top-[40%] -translate-y-1/2 ${marker.side === "right" ? "right-2" : "left-2"} z-10 pointer-events-none flex flex-col items-center gap-1`}
                 data-testid="tornado-target-marker"
                 data-side={marker.side}
               >
-                <div className="px-2 py-1 rounded-full bg-amber-500/90 text-slate-950 text-lg font-black leading-none">
+                {/* Pulzáló irányjelző (csökkentett mozgásnál áll): a hüvelykujj-távolságból is feltűnő. */}
+                <div className="px-3 py-2 rounded-full bg-amber-500/90 text-slate-950 text-2xl font-black leading-none shadow-[0_0_18px_rgba(245,158,11,0.75)] motion-safe:animate-pulse">
                   {marker.side === "right" ? "▶" : "◀"}
                 </div>
-                <span className="px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-bold text-amber-200">
+                <span className="px-2 py-0.5 rounded-lg bg-black/70 text-xs font-bold text-amber-200">
                   {hud.distanceKm.toFixed(1)} km
                 </span>
               </div>
@@ -1980,11 +2263,18 @@ function PlayScreen(props: {
 
           {/* Anchor guidance */}
           {(phase === "seeking" || phase === "approach") && !activeQuiz && !result && (
-            <div className="absolute bottom-32 sm:bottom-20 right-2 px-2 py-1 rounded bg-sky-900/70 text-[11px] font-semibold pointer-events-none max-w-[60%] text-right z-10">
+            <div
+              className={`absolute right-2 px-3 py-1.5 rounded-lg text-sm font-bold pointer-events-none max-w-[60%] text-right z-10 transition-colors ${
+                hud.anchorReady ? "bg-emerald-600/85 text-white" : "bg-sky-900/75"
+              }`}
+              style={{ bottom: aboveControls }}
+            >
               {playerRef.current.anchored
                 ? "Horgony rögzítve — tartsd ki a vihart!"
                 : hud.anchorReady
-                  ? "Jó pozíció! Nyomd az F / Horgony gombot!"
+                  ? touch
+                    ? "Jó pozíció! Nyomd a ⚓ gombot!"
+                    : "Jó pozíció! Nyomd az F / Horgony gombot!"
                   : hud.distanceKm > spec.anchorBand.max
                     ? "Menj közelebb a tornádóhoz!"
                     : hud.distanceKm < spec.anchorBand.min
@@ -2001,122 +2291,142 @@ function PlayScreen(props: {
             </div>
           )}
 
-          {feedback && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
+          {/* Szünet alatt a magyarázó kártya rejtve: a z-[90]-es kártya különben a szünet menü fölé kerülne. */}
+          {feedback && !paused && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
 
-          {/* Quiz overlay */}
+          {/* Quiz overlay — a HUD alatti sávban, így a szünet gomb kvíz közben is elérhető. */}
           {activeQuiz && (
-            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 z-30">
-              <div className="w-full max-w-md rounded-xl border border-sky-400/50 bg-slate-900/95 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-sky-300">
-                    {quizReason === "anchor" ? "Horgonyzási kérdés" : "Viharkérdés"} · {activeQuiz.topic || SUBJECT_LABEL[activeQuiz.subject]}
-                    {activeQuiz.source === "material" ? " · tananyag" : ""}
-                  </span>
-                </div>
-                <p className="text-base font-bold mb-3 text-white">{activeQuiz.prompt}</p>
-                <div className="grid grid-cols-1 gap-2">
+            <div className="absolute inset-0 z-40 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-3">
+              <div
+                data-testid="tornado-quiz"
+                className="w-full max-w-md sm:max-w-2xl max-h-full overflow-y-auto rounded-2xl border border-sky-400/50 bg-slate-900/95 p-3 sm:p-4 shadow-[0_18px_50px_rgba(0,0,0,0.6)]"
+              >
+                <p className="text-xs font-bold uppercase tracking-wide text-sky-300 mb-1">
+                  {quizReason === "anchor" ? "⚓ Horgonyzási kérdés" : "🌪 Viharkérdés"} · {activeQuiz.topic || SUBJECT_LABEL[activeQuiz.subject]}
+                  {activeQuiz.source === "material" ? " · tananyag" : ""}
+                </p>
+                <p className="text-lg font-extrabold mb-2 sm:mb-3 text-white leading-snug">{activeQuiz.prompt}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {activeQuiz.options.map((opt, i) => {
                     const isFlash = quizFlash?.idx === i;
                     const showCorrect = quizFlash && i === activeQuiz.correctIndex;
                     return (
                       <button
                         key={i}
+                        type="button"
                         disabled={Boolean(quizFlash)}
                         onClick={() => answerQuiz(i)}
-                        className={`text-left rounded-lg border px-3 py-2 text-sm font-semibold text-white transition-colors ${
+                        className={`game-answer-btn text-left rounded-xl border-2 px-3 py-2 font-bold text-white transition-[transform,background-color,border-color] duration-150 active:scale-[0.98] ${
                           showCorrect
-                            ? "border-emerald-400 bg-emerald-700/40"
+                            ? "border-emerald-300 bg-emerald-600/60 motion-safe:scale-[1.02]"
                             : isFlash && !quizFlash?.correct
-                              ? "border-rose-400 bg-rose-800/40"
-                              : "border-white/15 bg-slate-800/70 hover:border-sky-400/60 hover:bg-slate-700/70"
+                              ? "border-rose-300 bg-rose-700/60"
+                              : "border-white/15 bg-slate-800/80 hover:border-sky-400/70 hover:bg-slate-700/80"
                         }`}
                         {...correctDataAttrs(i === activeQuiz.correctIndex)}
                       >
-                        {String.fromCharCode(65 + i)}. {opt}
+                        <span className="mr-2 inline-flex h-[1.75rem] w-[1.75rem] items-center justify-center rounded-lg bg-white/10 text-base">
+                          {String.fromCharCode(65 + i)}
+                        </span>
+                        {opt}
                       </button>
                     );
                   })}
                 </div>
                 {quizReason === "anchor" && (
-                  <p className="text-[11px] text-white/50 mt-2">Helyes válasz = sikeres horgonyzás. Hibás válasz = új kérdés.</p>
+                  <p className="text-sm text-white/65 mt-2">Helyes válasz = sikeres horgonyzás. Hibás válasz = új kérdés.</p>
                 )}
               </div>
             </div>
           )}
+      </div>
 
-          {phase === "paused" && !result && (
-            <div className="absolute inset-0 bg-black/75 flex items-center justify-center p-4 z-30">
-              <div className="w-full max-w-sm rounded-xl border border-white/15 bg-slate-900/95 p-5 text-center">
-                <h3 className="text-xl font-extrabold text-white mb-2">Szünet</h3>
-                <p className="text-sm text-white/70 mb-4">A vihar vár. Folytasd, vagy lépj ki a szintekhez.</p>
-                <div className="flex gap-2">
-                  <Button
-                    className="flex-1 bg-sky-600 hover:bg-sky-500 font-bold"
-                    onClick={() => {
-                      pausedRef.current = false;
-                      setPhase(prevPhaseRef.current === "paused" ? "seeking" : prevPhaseRef.current);
-                    }}
-                  >
-                    Folytatás
-                  </Button>
-                  <Button variant="secondary" className="flex-1 bg-slate-700 hover:bg-slate-600" onClick={props.onExit}>
-                    Szintek
-                  </Button>
-                </div>
-              </div>
+      {touch && (
+        <TouchControls
+          leftHanded={props.progress.settings.leftHanded}
+          touchRef={touchRef}
+          resetSignal={touchReset}
+          anchorReady={hud.anchorReady && !playerRef.current.anchored}
+          onAnchor={() => tryAnchorRef.current()}
+          onCamera={() => {
+            const next = toggleCamera(settingsRef.current.cameraMode);
+            settingsRef.current = { ...settingsRef.current, cameraMode: next };
+            props.onProgress(updateSettings(props.progress, { cameraMode: next }));
+          }}
+        />
+      )}
+
+      <PauseMenu
+        open={paused && !result}
+        onResume={resumeGame}
+        onRestart={() => restartRef.current()}
+        onExit={props.onExit}
+        exitLabel="Szintek"
+      >
+        <div className="grid gap-3 [@media(max-height:500px)_and_(min-width:560px)]:grid-cols-[2fr_3fr]">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-white/70 mb-1.5">Irányítás</p>
+            <div className="grid grid-cols-2 gap-2">
+              <ToggleChip active={!props.progress.settings.leftHanded} onClick={() => props.onProgress(updateSettings(props.progress, { leftHanded: false }))}>
+                Jobbkezes
+              </ToggleChip>
+              <ToggleChip active={props.progress.settings.leftHanded} onClick={() => props.onProgress(updateSettings(props.progress, { leftHanded: true }))}>
+                Balkezes
+              </ToggleChip>
             </div>
-          )}
+          </div>
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-white/70 mb-1.5">Grafika</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(["low", "medium", "high"] as const).map((q) => (
+                <ToggleChip key={q} active={quality === q} onClick={() => props.onProgress(updateSettings(props.progress, { quality: q }))}>
+                  {q === "low" ? "LOW" : q === "medium" ? "MEDIUM" : "HIGH"}
+                </ToggleChip>
+              ))}
+            </div>
+          </div>
+        </div>
+      </PauseMenu>
 
-          {/* Result overlay */}
-          <TouchControls
-            leftHanded={props.progress.settings.leftHanded}
-            touchRef={touchRef}
-            resetSignal={touchReset}
-            onAnchor={() => tryAnchorRef.current()}
-            onCamera={() => {
-              const next = toggleCamera(settingsRef.current.cameraMode);
-              settingsRef.current = { ...settingsRef.current, cameraMode: next };
-              props.onProgress(updateSettings(props.progress, { cameraMode: next }));
-            }}
-          />
-
-          {result && (
-            <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-30" data-testid="th-result">
-              <div className="w-full max-w-sm rounded-xl border border-white/15 bg-slate-900/95 p-5 text-center">
-                <h3 className={`text-2xl font-extrabold mb-1 ${result.won ? "text-emerald-300" : "text-rose-300"}`}>
-                  {result.won ? "Intercept sikeres!" : "Sikertelen intercept"}
-                </h3>
-                <p className="text-sm text-white/70 mb-3">
+      <ResultScreen
+        open={result != null}
+        testId="th-result"
+        title={result?.won ? "Intercept sikeres!" : "Sikertelen intercept"}
+        won={Boolean(result?.won)}
+        score={result?.score ?? 0}
+        best={result?.best ?? null}
+        isNewBest={result?.isNewBest}
+        correct={result?.correct ?? 0}
+        total={result?.total ?? 0}
+        onRetry={() => restartRef.current()}
+        retryLabel="Újra"
+        onBack={props.onBackToGames}
+        extra={
+          result ? (
+            <div className="flex flex-col gap-2 text-sm">
+              <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+                <span className="inline-flex items-center gap-1 font-bold text-emerald-300">
+                  <Coins className="w-4 h-4" aria-hidden="true" /> +{fmt(result.coins)} Storm Coin
+                </span>
+                <span className="text-white/75">
                   {result.won
                     ? props.level === 200
                       ? "Legyőzted THE ULTIMATE STORM-ot!"
                       : `${props.level + 1}. szint feloldva!`
                     : "A tornádó elhaladt. Próbáld újra!"}
-                </p>
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  <div className="rounded-lg bg-slate-800/70 p-2">
-                    <p className="text-[10px] uppercase text-white/50">Pont</p>
-                    <p className="text-lg font-bold text-amber-300">{fmt(result.score)}</p>
-                  </div>
-                  <div className="rounded-lg bg-slate-800/70 p-2">
-                    <p className="text-[10px] uppercase text-white/50">Storm Coin</p>
-                    <p className="text-lg font-bold text-emerald-300">+{fmt(result.coins)}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1 bg-sky-600 hover:bg-sky-500 font-bold" onClick={() => restartRef.current()}>
-                    Újra (R)
-                  </Button>
-                  <Button variant="secondary" className="flex-1 bg-slate-700 hover:bg-slate-600" onClick={props.onExit}>
-                    Szintek
-                  </Button>
-                </div>
-              </div>
+                </span>
+              </p>
+              {next && (
+                <button type="button" data-testid="tornado-next-level" className="game-btn game-btn-secondary w-full" onClick={next.go}>
+                  Tovább: {next.label}
+                  <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                </button>
+              )}
             </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+          ) : null
+        }
+      />
+    </div>
   );
 }
 
@@ -2179,6 +2489,54 @@ function emitWheelDust(
       spread: 0.6,
     });
   }
+}
+
+/**
+ * S12 / végrehajtás 8. lépés — befogáskori látvány a `three-look` keretén belül: porgyűrű a horgonyzó jármű körül
+ * és törmelék-kitörés a tölcsér tövénél, ugyanabból a (már meglévő) pontfelhőből. A darabszám a minőségi szint
+ * `particleScale`-jével, csökkentett mozgásnál 0,4-szeresen skálázódik; képernyőrázás nincs (M9).
+ */
+const burstOrigin = new THREE.Vector3();
+const burstDirection = new THREE.Vector3();
+function interceptBurst(
+  sc: { vehicle: THREE.Group; dust: SparkleField },
+  p: { x: number; z: number },
+  tornado: { x: number; z: number },
+  quality: GraphicsQuality,
+  reducedMotion: boolean,
+) {
+  const scale = LOOK_BUDGET[quality].particleScale * (reducedMotion ? 0.4 : 1);
+  const ground = sc.vehicle.position.y;
+  const ring = Math.max(4, Math.round(10 * scale));
+  for (let i = 0; i < ring; i++) {
+    const a = (i / ring) * Math.PI * 2;
+    burstOrigin.set(p.x + Math.cos(a) * 2.2, ground + 0.4, p.z + Math.sin(a) * 2.2);
+    burstDirection.set(Math.cos(a), 0.35, Math.sin(a));
+    sc.dust.emit(burstOrigin, {
+      count: 3,
+      color: i % 2 === 0 ? "#fde68a" : "#c9b489",
+      speed: 5,
+      life: 0.9,
+      gravity: 2,
+      size: 0.9,
+      direction: burstDirection,
+      directionality: 0.85,
+      spread: 0.35,
+    });
+  }
+  burstOrigin.set(tornado.x, groundHeight(tornado.x, tornado.z) + 3, tornado.z);
+  burstDirection.set(0, 1, 0);
+  sc.dust.emit(burstOrigin, {
+    count: Math.max(8, Math.round(48 * scale)),
+    color: "#6e5840",
+    speed: 14,
+    life: 0.6,
+    gravity: 6,
+    size: 3.2,
+    direction: burstDirection,
+    directionality: 0.3,
+    spread: 1,
+  });
 }
 
 /* ------- world chunk streaming (imperative, no React) ------- */
@@ -2247,6 +2605,8 @@ function TouchControls(props: {
   leftHanded: boolean;
   touchRef: React.MutableRefObject<TouchDrive>;
   resetSignal: number;
+  /** Jó horgonyzási pozíció: a ⚓ gomb világít és pulzál (csökkentett mozgásnál csak világít). */
+  anchorReady: boolean;
   onAnchor: () => void;
   onCamera: () => void;
 }) {
@@ -2257,7 +2617,7 @@ function TouchControls(props: {
     <VirtualJoystick
       label="Vezetés"
       resetSignal={props.resetSignal}
-      radius={52}
+      radius="auto"
       onChange={(v) => {
         // Spec 2026-09-29-tornado-ut-kormanyzas D3: analog, not four booleans — a small thumb angle is
         // a small correction, not nothing-or-full-lock.
@@ -2268,16 +2628,17 @@ function TouchControls(props: {
     />
   );
   const pedals = (
-    <div className="tornado-pedals flex gap-2 items-end">
-      <TouchBtn onDown={() => props.onAnchor()} onUp={() => {}} label="⚓" accent />
+    <div className={`flex gap-3 items-end ${props.leftHanded ? "flex-row-reverse" : ""}`}>
       <TouchBtn onDown={() => props.onCamera()} onUp={() => {}} label="Cam" small />
+      <TouchBtn onDown={() => props.onAnchor()} onUp={() => {}} label="⚓" accent glow={props.anchorReady} />
     </div>
   );
 
   return (
     <div
       data-testid="tornado-touch-controls"
-      className="absolute inset-x-0 bottom-2 z-20 flex items-end justify-between gap-2 px-2 pointer-events-none"
+      data-game-controls
+      className="game-touch-layer absolute z-30 flex items-end justify-between gap-2 pointer-events-none"
     >
       {props.leftHanded ? (
         <>
@@ -2309,15 +2670,18 @@ function TouchBtn(props: {
   label: string;
   small?: boolean;
   accent?: boolean;
+  glow?: boolean;
 }) {
   return (
     <HoldButton
       label={props.label}
       onHoldStart={props.onDown}
       onHoldEnd={props.onUp}
-      className={`rounded-full border font-bold flex items-center justify-center active:scale-95 ${
-        props.small ? "w-12 h-12 text-xs" : "w-14 h-14 text-sm"
-      } ${props.accent ? "bg-amber-600/80 border-amber-300/60" : "bg-slate-800/80 border-white/15"}`}
+      className={`rounded-full border-2 font-bold flex items-center justify-center shadow-lg backdrop-blur-sm transition-[transform,box-shadow] duration-150 active:scale-90 ${
+        props.small ? "w-12 h-12 text-sm" : "game-action-btn text-2xl"
+      } ${props.accent ? "bg-amber-500/85 border-amber-200/80 text-slate-950" : "bg-slate-900/70 border-white/25"} ${
+        props.glow ? "ring-4 ring-emerald-300/80 shadow-[0_0_24px_rgba(52,211,153,0.85)] motion-safe:animate-pulse" : ""
+      }`}
     >
       {props.label}
     </HoldButton>
