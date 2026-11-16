@@ -17,6 +17,8 @@ export const DUEL_VIEW_CSS = `
 .duel-hud-streak { flex: none; padding: 2px 8px; border-radius: 9999px; font-size: 13px; font-weight: 900; color: #fde68a; background: #f59e0b26; border: 1px solid #f59e0b55; }
 .duel-hud-dot { flex: none; width: 12px; height: 12px; border-radius: 9999px; background: #334155; border: 2px solid #64748b; }
 .duel-hud-dot[data-on="true"] { background: #4ade80; border-color: #bbf7d0; box-shadow: 0 0 8px #22c55e; }
+.duel-hud-answer { flex: none; font-size: 13px; font-weight: 800; color: #94a3b8; }
+.duel-hud-answer[data-on="true"] { color: #86efac; }
 .duel-hud-status { flex: none; font-size: 12px; font-weight: 800; color: #fcd34d; }
 .duel-hud-hp { flex: none; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; }
 .duel-hud--self .duel-hud-hp { font-size: 17px; }

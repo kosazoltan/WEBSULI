@@ -176,6 +176,31 @@ describe("JM3a gateway — szobanyitási jog (terv D21, JM-A4)", () => {
   });
 });
 
+describe("JM3a gateway — megszakadt régi hely", () => {
+  it("ugyanaz a (fiókos) játékos megszakadt kapcsolattal új szobát nyithat: a régi helye felszabadul, az ellenfél győz; élő kapcsolatnál ALREADY_IN_ROOM marad", async () => {
+    const h = await harness({ windowMs: 3000 });
+    const who = creatorHeaders();
+    const { host, code } = await createRoom(h, 5, { headers: who });
+    const guest = await addPlayer(h, code);
+    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players[1].ready);
+    assert.equal((await host.request("room:start", {})).ok, true);
+    await guest.waitFor("round:open");
+    // Élő kapcsolat mellett a második lap nem nyithat új szobát.
+    const second = await join(h, { intent: "create" }, { headers: who });
+    assert.deepEqual(await second.request("room:create", { gameId: "parbaj", mode: "duel", grade: 5, settings: {} }), { ok: false, code: "ALREADY_IN_ROOM" });
+    // A lap bezárul (a kapcsolat megszakad, folytatás nélkül) → ugyanaz a játékos új jeggyel új szobát nyit.
+    host.socket.io.reconnection(false);
+    host.socket.io.engine.close();
+    await guest.waitFor("room:state", (s) => s.players.some((p: any) => p.id === host.playerId && !p.connected));
+    const again = await join(h, { intent: "create" }, { headers: who });
+    const ack = await again.request("room:create", { gameId: "parbaj", mode: "duel", grade: 5, settings: {} });
+    assert.equal(ack.ok, true, JSON.stringify(ack));
+    const res = await guest.waitFor("match:result");
+    assert.equal(res.reason, "OPPONENT_LEFT");
+    assert.deepEqual(res.winners, [guest.playerId]);
+  });
+});
+
 describe("JM2 gateway — teljes meccs", () => {
   it("2 kliens (polling → WebSocket): váróterem, 7 kör, győzteshirdetés; minden üzenet szigorú séma szerint, helyes index és valódi név nem szivárog", async () => {
     const h = await harness({ windowMs: 3000 });

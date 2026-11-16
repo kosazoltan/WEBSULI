@@ -605,7 +605,16 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
         const claims = data.claims;
         if (!claims || data.intentUsed) return reply("INVALID_TICKET");
         if (deps.isDraining()) return reply("SERVER_RESTART");
-        if (seatsByIdentity.has(claims.sub)) return reply("ALREADY_IN_ROOM");
+        const stale = seatsByIdentity.get(claims.sub);
+        if (stale) {
+          // Egy játékos egy szobában. JM3a: ha a korábbi hely kapcsolata MÁR MEGSZAKADT (bezárt lap, újratöltés — a
+          // folytatási token elveszett), az új, kifejezett szándék (új szoba / csatlakozás) a régi helyet elhagyja,
+          // különben a gyerek a 60 s-os helymegtartás végéig „Már egy másik szobában vagy” falba ütközne. Élő
+          // kapcsolatnál (pl. két nyitott lap) marad az ALREADY_IN_ROOM.
+          if (socketOfSeat(stale)?.connected) return reply("ALREADY_IN_ROOM");
+          registry.dispatch(stale.roomCode, { type: "leave", playerId: stale.playerId });
+          releaseSeat(stale);
+        }
         const grade = payload.grade as number;
         if (event === "room:create") {
           if (claims.intent.kind !== "create") return reply("INVALID_TICKET");

@@ -43,6 +43,8 @@ const SpeedQuizMath = lazy(() => import("@/pages/SpeedQuizMath"));
 const BrainRotSteal = lazy(() => import("@/pages/BrainRotSteal"));
 const SpaceAsteroidQuiz = lazy(() => import("@/pages/SpaceAsteroidQuiz"));
 const TornadoHunter200 = lazy(() => import("@/pages/TornadoHunter200"));
+// JM3a: Párbaj — online két főre (MP_MODE mögött) + gépi ellenfél (flag nélkül, hálózat nélkül).
+const DuelOnline = lazy(() => import("@/pages/DuelOnline"));
 // JM7b: a /profile bejelentkezett játékosnál a „kis fiók”, vendégnél (és kikapcsolt flagnél) a régi helyi Profil oldal.
 const PlayerAccount = lazy(() => import("@/pages/PlayerAccount"));
 // JM7a: játékos belépés (PLAYER_ACCOUNTS flag mögött; kikapcsolva a „nem található” oldal jelenik meg).
@@ -108,6 +110,8 @@ function Router() {
         <Route path="/games/brain-rot-steal" component={BrainRotSteal} />
         <Route path="/games/space-asteroid-quiz" component={SpaceAsteroidQuiz} />
         <Route path="/games/tornado-hunter-200" component={TornadoHunter200} />
+        <Route path="/games/parbaj" component={DuelOnline} />
+        <Route path="/games/parbaj/:kod" component={DuelOnline} />
         <Route path="/profile" component={PlayerAccount} />
         <Route path="/fiok" component={PlayerAccount} />
         <Route path="/belepes" component={PlayerLogin} />

@@ -16,12 +16,14 @@ export type ResultCardProps = {
   stats: ResultCardStats;
   tone: "self" | "rival";
   badge?: string | null;
-  /** Kicsi változat (a többiek kártyája): csak név, hely, pontosság. */
+  /** Kicsi változat (3–4 főnél a többiek kártyája): csak név, hely, pontosság. */
   compact?: boolean;
+  /** A dicsérő mondat (a saját kártyán igen; az ellenfél kártyáján nem — az a nézőnek szólna). */
+  showPraise?: boolean;
   testId?: string;
 };
 
-export function ResultCard({ name, subtitle, place, won, coWin, stats, tone, badge, compact = false, testId }: ResultCardProps) {
+export function ResultCard({ name, subtitle, place, won, coWin, stats, tone, badge, compact = false, showPraise = true, testId }: ResultCardProps) {
   const medal = won ? "🏆" : place === 2 ? "🥈" : place === 3 ? "🥉" : "🎖️";
   return (
     <section
@@ -43,7 +45,7 @@ export function ResultCard({ name, subtitle, place, won, coWin, stats, tone, bad
           </p>
         </div>
       </header>
-      {compact ? null : <p className="duel-card-praise">{praiseFor({ won, coWin, correct: stats.correct })}</p>}
+      {compact || !showPraise ? null : <p className="duel-card-praise">{praiseFor({ won, coWin, correct: stats.correct })}</p>}
       <dl className="duel-card-stats">
         <div>
           <dt>Pontosság</dt>
