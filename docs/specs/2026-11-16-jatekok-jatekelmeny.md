@@ -260,7 +260,7 @@ a műfajok általános mechanikáira (sávfutó, mászó, túlélő-bányász, t
 - **0–10 mp:** a játékos a felszínen; a sima blokk **tartással** bányászható kérdés nélkül (0,4–1,2 mp blokktípustól
   függően), az első fa-blokk azonnal. Cél-jelző: „Gyűjts 3 rúnaércet a jelzőtűzhöz!”.
 - **10–60 mp:** rúnaércek (vas / arany / gyémánt) a közelben, a pálya ütemezője (J0 `QuestionDirector`) garantálja, hogy
-  legfeljebb 15 mp-enként legyen elérhető rúnaérc. Kraft-asztal: jobb csákány / kard.
+  a célrés szerint (~8 mp, a 7 kérdés/perc küszöbhöz) és legkésőbb 15 mp-en belül legyen elérhető rúnaérc. Kraft-asztal: jobb csákány / kard.
 - **1–5 perc:** nappal (90 mp) → alkony → **éjszaka (60 mp)**: a mobok valódi ellenfelek (zombi közelít, csontváz lő,
   pók ugrik), sebeznek (3 szív). A második nappal után **főellenfél: „Kő-gólem”** (gyenge pontjai rúnák — Q3). Győzelem:
   jelzőtűz megépítése (N rúnaérc) és a gólem legyőzése; vereség: 0 szív.
@@ -375,23 +375,32 @@ A pontos TypeScript-interfészek a végrehajtási fájl J0 fejezetében (szerző
 | Mérőszám | Küszöb | Mivel mérjük |
 |---|---|---|
 | Szimuláció a kérdés alatt | szimulációs idő / valós idő ≥ 0,35, soha 0 (szünet, „Miért?”, kupon kivételével) | Playwright: `__websuliGame.probe().simTime` két mintája 1 mp különbséggel nyitott kérdés mellett; egységteszt a mag `step()`-jén |
-| Kérdés/perc (szimulált átlagos játékos) | Szökőár ≥ 5, Szólétra ≥ 10, Kockavadász ≥ 7, Matek ≥ 10, Brain Rot ≥ 8, Aszteroida ≥ 4, Tornado ≥ 4; hét játék átlaga ≥ 6,9 | node-szimuláció (`T/support/game-sim.ts`, játékonként `T/<játék>-sim.test.ts`), 20 seed × 180 mp, medián |
+| Kérdés/perc (szimulált átlagos játékos) | Szökőár ≥ 5, Szólétra ≥ 10, Kockavadász ≥ 7, Matek ≥ 10, Brain Rot ≥ 8, Aszteroida ≥ 4, Tornado ≥ 4; hét játék átlaga ≥ 6,8 (a küszöbök átlaga 6,86; a mostani becsült átlag ~6,6) | node-szimuláció (`T/support/game-sim.ts`, játékonként `T/<játék>-sim.test.ts`), 20 seed × 180 mp, medián |
 | Leghosszabb kérdés nélküli összefüggő játék | Szökőár ≤ 15 mp, Szólétra ≤ 8, Kockavadász ≤ 15, Matek ≤ 6, Brain Rot ≤ 12, Aszteroida ≤ 20, Tornado ≤ 20 (a menet első 10 mp-e kivétel) | ugyanaz a szimuláció (`runStats.maxGapSec`) |
 | Legrövidebb rés két kérdés-indítás között | ≥ 1,5 mp (kivétel: boss-sor, ott ≥ 0,8 mp) | szimuláció |
-| Hibázott tétel visszatérése | menet közben a 3.–6. következő kérdésként; ha a menet hamarabb ér véget, a következő menet első 10 kérdésében | `T/game-review-queue.test.ts` + szimuláció |
-| Tételváltozatosság | bármely 40 egymást követő kérdésben ≥ 34 különböző tétel (az ismétlések ebbe beleszámítanak) | szimuláció |
+| Hibázott tétel visszatérése (ismétlés, külön mérve) | menet közben az ismétlések aránya ≤ 30% (legfeljebb minden 3. kérdés), egy tétel menetenként legfeljebb 2-szer tér vissza; a `SIM_AVERAGE` (75%) játékosnál a hibázott tételek ≥ 95%-a a 3.–6. következő kérdésként, a többi ≤ 10 kérdésen belül; a `SIM_WEAK` (45%) játékosnál ≥ 60%-a ≤ 10 kérdésen belül, a maradék a következő menet első 10 kérdésében; helyes ismétlés után a térköz nő (box 0 → 1: 1 nap, majd 3, 7, 21 nap) | `T/game-review-queue.test.ts` (térköz) + szimuláció (arányok) |
+| Tételváltozatosság (csak az ÚJ, nem ismétlésként adott kérdéseken) | az ismétlésnek nem minősülő kérdések sorozatában bármely 40-es ablakban nincs duplikátum (40/40 különböző), ha az új tétel-forrás ≥ 200 tételt ad (kevesebbnél: ≥ 90% különböző) | szimuláció (`runStats.freshWindow40Distinct`) |
 | Tananyag-elsőbbség | elérhető tananyag-tétel esetén az első kérdés tananyag; a tananyag elfogyása után szóbank / évfolyam-bank (nem ismétlődő tananyag) | `T/game-question-director.test.ts` szimulációs teszt (C-34 H1 tanulság) |
-| Válaszablak | rövid tételnél 2,5–6 mp, hosszúnál ≤ 9 mp, 3–4. évf. ×1,25 | `T/game-question-director.test.ts` |
-| Adaptivitás | 95%-os szimulált játékosnál a `band` 30 kérdésen belül ≥ 0,75 és az `intensity` nő; 45%-osnál a `band` ≤ 0,35 és az `intensity` csökken; a sikerarány 60 kérdés után 65–90% között | `T/game-flow.test.ts` |
+| Válaszablak | rövid tételnél 2,5–6 mp (3–4. évf. ×1,25 → 3,1–7,5 mp), hosszú tételnél olvasási pótlékkal, de mindig ≤ 9 mp | `T/game-question-director.test.ts` |
+| Adaptivitás | kiinduló sáv 0,40; 95%-os szimulált játékosnál a `band` 30 kérdésen belül ≥ 0,75 és az `intensity` nő; 45%-osnál a `band` ≤ 0,35 és az `intensity` csökken; a 75%-os játékosnál 60 kérdés után a csúszó (utolsó 20) sikerarány 65–90% között | `T/game-flow.test.ts` (seed 1–20) |
 | Menethossz | szimulált átlagos játékosnál medián 2–5 perc; nincs automatikus újraindítás | szimuláció + Playwright (eredményképernyő után 5 mp-ig nincs állapotváltás) |
 | Hibás válasz nem blokkol | hibás válasz után legfeljebb 2,5 mp-en belül a játék a teljes sebességen fut, kártya nélkül; a „Miért?” megnyomására a kártya megnyílik és az óra áll | Playwright `T/game-inline-question.spec.ts` |
 | Teljesítmény | low-tier (`?look=low`) + 4× CPU-lassítás mellett a játékmenetben medián ≥ 30 fps | Playwright CDP `Emulation.setCPUThrottlingRate`, `probe().fps` (J9) |
 | Etika | tiltott szöveg-minták 0 találat; jutalom-kód seedelt | `T/game-ethics-guard.test.ts` |
 | Szerződés | a score zod-séma változatlan | `T/game-score-contract-guard.test.ts` (J0) |
 
-A szimulált átlagos játékos (J0 `game-sim`): kérdésnél helyes arány 75%, reakcióidő log-normális, medián 2,8 mp
-(3–4. évf. 3,5 mp); ügyességi döntésnél (kitérés, célzás) 80% siker; rossz kérdés-válasz esetén ugyanaz a modell.
-A 95%-os / 45%-os változat a `flow` tesztekhez.
+**Szimulációs paraméterek (minden 6.2 küszöbhöz, ahol „szimuláció” a mérés):** játékosmodellek (`T/support/game-sim.ts`):
+`SIM_AVERAGE` helyes arány 75%, reakcióidő log-normális (medián 2,8 mp, σ = 0,35), ügyességi siker 80%; `SIM_YOUNG` 75%,
+3,5 mp, 70% (3–4. évf.); `SIM_STRONG` 95%, 1,8 mp, 90%; `SIM_WEAK` 45%, 4,0 mp, 60%. Ha a reakció a válaszablakon túl
+esik: időtúllépés. Seedek: `seedFrom("sim", gameId, i)`, i = 1…20; menet 180 mp (menethossznál a menet végéig, legfeljebb
+600 mp); lépés 1/60 s; az eredmény a 20 futás mediánja (a „legfeljebb / legalább” küszöböknél a 20 futás mindegyike, ha a
+sor így írja). A küszöbök összhangja ellenőrizve (review #440): kérdés/perc vs. ütemezés — a director célrése a
+kérdés-indítások között `60000 / (targetPerMin × 1,1) × (1 − 0,25 × intensity)`, így alacsony intenzitáson is ~10%-kal a
+küszöb fölött marad, és minden célrés ≤ a játék kérdés nélküli maximuma; ismétlés vs. változatosság — az ismétlések
+külön mérőszámot kapnak (75%-os játékosnál 40 kérdésből ~10 hiba → ~10–12 ismétlés, ezért a régi „40-ből ≥ 34 különböző”
+küszöb teljesíthetetlen volt); válaszablak vs. kérdés nélküli rés — a válaszablak kérdéssel töltött idő, nem rés;
+menethossz — a pályahosszakat a szelet a `SIM_AVERAGE` mediánjára hangolja (pl. Szólétra 14 fok: nettó +0,5 fok /
+kérdés → ~28 kérdés ≈ 2,8 perc 10 kérdés/perc mellett); bónuszplafon — a sávos gyorsasági bónusz legfeljebb 2,5 / 10 = 25%.
 
 ## 7. Adat- és mentésszerkezet
 
@@ -636,14 +645,24 @@ a szerver ettől még 403-at ad; (d) átfogó jogosultsági mátrix-teszt nincs 
   **döntetlennél legfeljebb 2 döntő kérdés**, utána **közös győzelem**.
 - **Vegyes évfolyam:** mindenki a saját évfolyamának kérdését kapja, **azonos nehézségi sávból** (`pickGradeQuiz` a
   közös `band`-del, `GE/gradeQuiz.ts:75`); a válaszablak a saját évfolyamhoz igazított (J10 szabály).
-- **Igazságos gyorsaság késés mellett:** a kliens a saját megjelenítésétől méri a reakcióidőt; a szerver elfogadott
-  ideje `min(kliens_mért, szerver_mért − becsült_fél_RTT)` alsó korláttal (a kliens nem állíthat gyorsabbat, mint ami
-  fizikailag lehetséges); 200 ms-on belüli különbség holtverseny; a sávos bónusz miatt néhány tíz ms nem dönt.
+- **Igazságos gyorsaság késés mellett — a szerver mérése az elsődleges (review #440):** `serverRtMs` = a válasz
+  beérkezése − a `round:open` kiküldése (szerveróra). A kliens által mért `clientRtMs` csak LEFELÉ, korlátozott mértékben
+  térhet el tőle: `slack = min(MAX_LATENCY_SLACK_MS (400), medián RTT a kapcsolat utolsó 5 ping-mintájából)`;
+  `accepted = clamp(clientRtMs, max(0, serverRtMs − slack), serverRtMs)`; hiányzó, nem véges, 0 vagy negatív `clientRtMs`
+  → `accepted = serverRtMs`. Emberi alsó határ: `accepted < HUMAN_MIN_MS (200)` → a válasz helyes marad, de gyorsasági
+  bónusz nem jár, és a kör „gyanús” jelölést kap (statisztikához). 200 ms-on belüli különbség holtverseny; a sávos bónusz
+  miatt néhány tíz ms nem dönt. A kliens állítása így sosem tehet gyorsabbá, mint a szerver mérése mínusz a mért késés.
+- **A kliens többi állítása is hitelesítés nélküli (review #440):** az `optionIndex` egész és a saját kérdés opciószámán
+  belül; a `round` csak az aktuális kör (különben `ROUND_CLOSED`); a `reactionId` csak a `REACTIONS` listából; a
+  `room:create` beállításai zárt értékkészletből (körszám 3–10, mód enum); a párhuzamos módú `run:progress` pontja
+  monoton és a `game-score-rules.ts` másodpercenkénti plafonja alatt (túllépés → a plafon, „gyanús”); a párbaj eredményét
+  a pontkönyvbe a szerver írja a saját köreiből, nem a kliens jelentéséből.
 - **Szerver a tekintély online:** a kérdést a szerver választja a seedelt RNG-vel, a `round_open` csak `{prompt,
   options}`-t küld, a helyes index csak a `round_reveal`-ban; játékosonként az első válasz számít.
 - **Kommunikáció:** csak előre megírt reakciók (`shared/duel/reactions.ts`: „Szép volt!”, „Gratulálok!”, „Visszavágó?”,
   👏, 🎉, 😮), szabad szöveg nincs.
-- **Győzteshirdetés:** dobogó (1v1: győztes + ezüst), játékosonként pontosság, helyes válaszok, leggyorsabb helyes válasz,
+- **Győzteshirdetés:** dobogó (1v1: győztes + ezüst), játékosonként pontosság, helyes válaszok, leggyorsabb helyes válasz (az
+  elfogadott, szerver által korlátozott időből; a `suspicious` kör nem számít bele),
   legjobb sorozat; a nem dobogós a saját statisztikáját látja, rangsor-szégyenítés nincs; „Visszavágó” gomb (új
   kérdések, a `seen` meccsek között megmarad).
 - **Pont:** győztes és vesztes is gyűjt (helyes válaszonként azonos tudás-pont), a győztes kis plusz (+20%), negatív pont
@@ -733,16 +752,18 @@ Közös (J-pontok, mind a hét játékra, ahol a 6.2 játékonkénti küszöböt
 - [ ] J1 WHEN egy kérdés látható THEN the system SHALL a játék szimulációját legalább 0,35-szörös sebességgel futtatni (a
   szünet, a „Miért?”, a kuponlejárat és a háttérbe kerülés kivételével). Mérés: Playwright `probe().simTime`.
 - [ ] J2 WHEN a szimulált átlagos játékos 180 mp-et játszik (20 seed, medián) THEN the system SHALL legalább a 6.2
-  játékonkénti kérdés/perc küszöböt teljesíteni, és a hét játék átlaga ≥ 6,9 legyen.
+  játékonkénti kérdés/perc küszöböt teljesíteni, és a hét játék átlaga ≥ 6,8 legyen.
 - [ ] J3 WHEN a játék fut (a menet első 10 mp-e után) THEN the system SHALL nem hagyni a 6.2 szerinti játékonkénti
   maximumnál hosszabb kérdés nélküli összefüggő szakaszt, és két kérdés-indítás között ≥ 1,5 mp-et (boss-sorban ≥ 0,8)
   tartani.
 - [ ] J4 WHEN a játékos hibásan válaszol THEN the system SHALL a helyes megoldást a játéktérben ≥ 1,8 mp-ig megmutatni,
-  a tételt az ismétlési sorba tenni, és a tételt a 3.–6. következő kérdésként (vagy a következő menet első 10
-  kérdésében) újra feltenni.
+  a tételt az ismétlési sorba tenni, és a 6.2 ismétlési sorában szereplő arányokkal (75%-os játékosnál ≥ 95%-ban a 3.–6.
+  következő kérdésként; az ismétlések aránya ≤ 30%; menetenként ≤ 2 visszatérés; különben a következő menet első 10
+  kérdésében) újra feltenni; helyes ismétlés után a térköz nő.
 - [ ] J5 WHEN a játékos hibásan válaszol THEN the system SHALL legfeljebb 2,5 mp múlva teljes sebességgel, blokkoló kártya
   nélkül folytatni; WHEN a „Miért?”-re koppint THEN the system SHALL szünetet tartani és a magyarázókártyát mutatni.
-- [ ] J6 WHEN 40 egymást követő kérdés elhangzik THEN the system SHALL legalább 34 különböző tételt feltenni.
+- [ ] J6 WHEN az ismétlésnek nem minősülő (új) kérdések sorozatából bármely 40-es ablakot vizsgáljuk THEN the system SHALL
+  duplikátum nélkül (40/40 különböző) kérdezni, ha az új tétel-forrás ≥ 200 tételt ad (kevesebbnél ≥ 90% különböző).
 - [ ] J7 WHEN elérhető nem látott tananyag-tétel van THEN the system SHALL a menet első kérdését abból adni, és a
   tananyag elfogyása után szóbankból / évfolyam-bankból folytatni (szimulációs teszt).
 - [ ] J8 WHEN a szimulált játékos 95%-os THEN the system SHALL a kérdés-sávot 30 kérdésen belül ≥ 0,75-re és a
@@ -750,8 +771,8 @@ Közös (J-pontok, mind a hét játékra, ahol a 6.2 játékonkénti küszöböt
   sikerarány 65–90%.
 - [ ] J9 WHEN egy menet indul THEN the system SHALL azt (szimulált átlagos játékosnál) 2–5 perces mediánnal lezárni,
   az eredményképernyőn megállni, és új menetet csak a játékos koppintására indítani.
-- [ ] J10 WHEN a válaszablak kezdődik THEN the system SHALL rövid tételnél 2,5–6 mp-et, hosszúnál legfeljebb 9 mp-et adni
-  (3–4. évfolyamon ×1,25).
+- [ ] J10 WHEN a válaszablak kezdődik THEN the system SHALL rövid tételnél 2,5–6 mp-et (3–4. évfolyamon ×1,25, azaz 3,1–7,5
+  mp-et), hosszú tételnél olvasási pótlékkal, de minden esetben legfeljebb 9 mp-et adni.
 - [ ] J11 WHEN a játék low-tier grafikán és 4× CPU-lassítással fut THEN the system SHALL a játékmenetben medián ≥ 30 fps-t
   elérni; WHEN csökkentett mozgás van beállítva THEN rázás és villogás nélkül futni.
 - [ ] J12 WHEN a kód változik THEN the system SHALL a `POST /api/games/score` zod-sémáját és a `gameId`-kat változatlanul

@@ -499,7 +499,10 @@ export type RunStatsSnapshot = {
   asked: number; answered: number; correct: number; wrong: number; timeouts: number;
   distinctKeys: number; reviewsAsked: number; perMinute: number;
   maxGapSec: number; minGapSec: number; firstSource: QuestionSourceKind | null;
-  simSeconds: number; window40MinDistinct: number; // a legrosszabb 40-es ablak különböző tételszáma
+  simSeconds: number;
+  freshWindow40Distinct: number; // az ÚJ (nem ismétlés) kérdések legrosszabb 40-es ablakának különböző tételszáma
+  reviewShare: number;           // ismétlések / összes kérdés
+  reviewReturnWithin6: number;   // a hibázott tételek hányada, amely a 3.–6. következő kérdésként visszatért
 };
 export type RunStats = { onAsk(p: QuestionPresentation, simMs: number): void; onOutcome(o: QuestionOutcome): void; snapshot(simMs: number): RunStatsSnapshot };
 export function createRunStats(opts?: { warmupSec?: number /* alap 10 */ }): RunStats;
@@ -548,14 +551,17 @@ export type QuestionDirector = {
   flow: FlowController;
 };
 export function windowMsFor(prompt: string, grade: number | null, baseMs: number): number;
-// = clamp(baseMs + max(0, len(prompt) − 60) × 50, 2500, 9000) × (grade 3–4 ? 1.25 : 1), a végén legfeljebb 9000 × 1.25.
+// = min(9000, clamp(baseMs + max(0, len(prompt) − 60) × 50, 2500, 9000) × (grade 3–4 ? 1.25 : 1)) — mindig ≤ 9000 ms.
 export function createQuestionDirector(opts: {
   config: DirectorConfig; provider: QuestionProvider; review: ReviewQueue; rng: () => number;
   startBand: number; now?: () => number;
 }): QuestionDirector;
-// Forrásrend (terv 4.1/5, K.2): review.dueInRun → provider.material → review.dueAcrossRuns (legfeljebb minden 2. kérdés)
-// → provider.fresh. Kupon módban csak material. Egy menetben ugyanaz a key csak ismétlésként jöhet újra.
-// Ütemezés: célrés = 60000 / targetPerMin × (1.15 − 0.3 × intensity), [minGapMs, maxGapMs] közé vágva; ha az utolsó
+// Forrásrend (terv 4.1/5, K.2): review.dueInRun → provider.material → review.dueAcrossRuns → provider.fresh, AZZAL a
+// korláttal, hogy ismétlés (in-run vagy cross-run) legfeljebb minden 3. kérdés lehet (ismétlési arány ≤ 30%), és egy tétel
+// menetenként legfeljebb 2-szer tér vissza (utána a cross-run sorba kerül). Kupon módban csak material. Egy menetben ugyanaz
+// a key csak ismétlésként jöhet újra (az új kérdések között nincs duplikátum, J6).
+// Ütemezés (kérdés-INDÍTÁSOK közötti célrés): 60000 / (targetPerMin × 1.1) × (1 − 0.25 × intensity), [minGapMs, maxGapMs]
+// közé vágva; ha az utolsó
 // kérdés óta eltelt idő ≥ maxGapMs − 1000, a tick a calm-tól függetlenül indít.
 // 3 opciónál: a helyes + 2 elterelő seedelten a 3-ból; originalIndex megőrződik.
 // Minden outcome → review.record, flow.push(answer), runStats.onOutcome.
@@ -633,7 +639,9 @@ export function medianOf(values: readonly number[]): number;
   kérdés tananyag, utána nincs ismétlődő tananyag (C-34 H1 tanulsága); (2) hibás tétel a 3.–6. következő kérdésként
   (J4); (3) kupon módban csak tananyag; (4) `answer` idempotens; (5) 3 opciós megjelenítés: pontosan 1 helyes, az
   `originalIndex` visszaképezhető; (6) `windowMsFor`: 40 karakter / grade 7 / base 4000 → 4000; 160 karakter → 9000-re
-  vágva; grade 3 → ×1,25; (7) minGap / maxGap tartása 10 000 tick-en; (8) 40-es ablak ≥ 34 különböző tétel 300 kérdésnél,
+  vágva; grade 3 → ×1,25, de 160 karakter / grade 3 → 9000 (felső vágás); (7) minGap / maxGap tartása 10 000 tick-en;
+  (7b) ismétlési arány ≤ 30% és menetenként ≤ 2 visszatérés / tétel 75%-os és 45%-os szimulált válaszsorral; (7c) a
+  75%-os sorral a hibázott tételek ≥ 95%-a a 3.–6. következő kérdés; (8) az ÚJ kérdések 40-es ablakában nincs duplikátum 300 kérdésnél,
   ha a `fresh` forrás elég nagy (J6).
 - `T/game-sim-harness.test.ts`: a `toyGame`-mel `runSim` determinisztikus (ugyanaz a seed → ugyanaz az eredmény);
   `perMinute` és `maxGapSec` a director beállításaival összhangban.
@@ -1471,7 +1479,7 @@ export function saveMeta(storage: StorageLike | null, s: MetaState): void;
 1. Állapot-sor commit.
 2. **Szimulációs mátrix:** `T/game-sim-matrix.test.ts` — a hét `createSimGame` × {`SIM_AVERAGE`, `SIM_YOUNG`,
    `SIM_STRONG`, `SIM_WEAK`} × 20 seed; táblázat a `docs/measurements/2026-11-xx-jatekelmeny-matrix.md`-be (kérdés/perc,
-   max rés, menethossz, nyerési arány, egyedi tételek), a terv 6.2 küszöbeihez mérve; a hét játék átlaga ≥ 6,9 (J2).
+   max rés, menethossz, nyerési arány, egyedi tételek), a terv 6.2 küszöbeihez mérve; a hét játék átlaga ≥ 6,8 (J2).
 3. **Bot-futás böngészőben:** `T/game-autoplay.spec.ts` — játékonként 120 mp a `play-option` gombokon (75%-ban a
    `data-correct="true"`, különben rossz; reakció 2,8 mp), a `probe()` számlálóiból kérdés/perc és `simTime`-arány;
    a szimuláció és a böngésző eltérése ≤ 25%.
@@ -1514,12 +1522,27 @@ export const TIE_MS = 200;
 export type DuelAnswer = { playerId: string; correct: boolean; acceptedMs: number | null; windowMs: number };
 export type DuelRoundOutcome = { damageTo: Record<string, number>; speedBonus: Record<string, number>; fastestCorrect: string | null };
 export function scoreRound(answers: readonly DuelAnswer[], alive: readonly string[]): DuelRoundOutcome; // sebzés egyenlően oszlik a többi élő játékos közt; rossz válasz 0 és nincs levonás
-export type DuelState = { hp: Record<string, number>; round: number; tiebreaks: number; stats: Record<string, { correct: number; answered: number; bestStreak: number; streak: number; fastestMs: number | null }> };
+export type DuelState = { hp: Record<string, number>; round: number; tiebreaks: number; stats: Record<string, { correct: number; answered: number; bestStreak: number; streak: number; fastestMs: number | null /* az acceptedTimeMs().acceptedMs-ből, suspicious kör kihagyva */ }> };
 export function createDuel(playerIds: readonly string[]): DuelState;
 export function applyRound(s: DuelState, o: DuelRoundOutcome, answers: readonly DuelAnswer[]): DuelState;
 export type DuelVerdict = { finished: boolean; needTiebreak: boolean; winners: string[]; coWin: boolean; podium: string[][] };
 export function verdict(s: DuelState): DuelVerdict; // 7 kör vagy egy kivételével mind 0 HP; holtversenynél ≤ 2 döntő, utána közös győzelem
-export function acceptedTimeMs(clientRtMs: number, serverRtMs: number, halfRttMs: number): number; // = max(0, min(clientRtMs, serverRtMs − halfRttMs)); a kliens nem állíthat a hálózatnál gyorsabbat
+export const MAX_LATENCY_SLACK_MS = 400;
+export const HUMAN_MIN_MS = 200;
+/** A szerver mérése az elsődleges (review #440). serverRtMs = beérkezés − round:open kiküldése (szerveróra);
+ *  medianRttMs = a kapcsolat utolsó 5 clock:ping mintájának mediánja.
+ *  slack = min(MAX_LATENCY_SLACK_MS, max(0, medianRttMs)) (NaN → 0);
+ *  ha clientRtMs hiányzik / nem véges (NaN, ±Infinity) / ≤ 0 → acceptedMs = serverRtMs;
+ *  különben acceptedMs = clamp(clientRtMs, max(0, serverRtMs − slack), serverRtMs).
+ *  speedEligible = acceptedMs ≥ HUMAN_MIN_MS; alatta a válasz helyes marad, bónusz 0, suspicious = true. */
+export function acceptedTimeMs(clientRtMs: number | null | undefined, serverRtMs: number, medianRttMs: number): { acceptedMs: number; speedEligible: boolean; suspicious: boolean };
+// KÖTELEZŐ egységtesztek (T/duel-rules.test.ts): clientRtMs = 0 → serverRtMs; negatív → serverRtMs; NaN / Infinity / undefined → serverRtMs;
+// clientRtMs > serverRtMs → serverRtMs (felső vágás); clientRtMs < serverRtMs − slack → serverRtMs − slack (alsó vágás);
+// a kettő között → clientRtMs; medianRttMs = 5000 → slack 400 (plafon); medianRttMs negatív / NaN → slack 0;
+// acceptedMs = 150 → speedEligible false, suspicious true, bónusz 0; az ablakon túl érkező válasz → ROUND_CLOSED (nem kerül ide).
+// A protokoll többi kliensmezője is hitelesítés nélküli állítás: optionIndex egész és a saját kérdés opciószámán belül;
+// round = az aktuális kör; reactionId ∈ REACTIONS; room:create settings zárt értékkészlet (rounds 3–10, mode enum);
+// run:progress score monoton és a game-score-rules másodpercenkénti plafonja alatt (túllépés → plafon + suspicious).
 
 // source/shared/duel/questions.ts — a kérdéssor seedelt építése (kliens: aréna; szerver: online)
 export type DuelQuestion = { key: string; prompt: string; options: string[]; correctIndex: number; explanation?: string; grade: number; windowMs: number };
@@ -1571,7 +1594,9 @@ limiterek `S/index.ts:362-460`; `ViewDedup` `S/lib/view-dedup.ts:10`.
    `firstName` / `lastName` mezőt nem is kéri). JM7 után a játékos beceneve váltja (ha a felhasználónak van összekapcsolt
    játékos-fiókja — JM8).
 3. `S/lib/mask-email.ts`: `maskEmail("anna@example.com") → "a***@e***.com"`; a fenti 5 naplósor maszkolt formát ír.
-4. `POST /api/games/score`: limiter 60 / 15 perc / IP (a meglévő `clientIpKeyGenerator`-ral); opcionális `runId:
+4. `POST /api/games/score` (a régi út; a `runId` itt csak az újraküldés-dedup kulcsa, NEM csalásvédelem — egy kliens új
+   `runId`-kkel ugyanúgy küldhet, mint ma; a valódi hihetőség-ellenőrzés a JM8 szerver által kiadott runjaié): limiter
+   60 / 15 perc / IP (a meglévő `clientIpKeyGenerator`-ral); opcionális `runId:
    z.string().uuid().optional()`; ha van, `ViewDedup` mintájú memóriabeli TTL-halmaz (24 óra, 50 000 elem) → ismételt
    `runId` 200 `{ ok: true, duplicate: true }`, írás nélkül. A 7 játék kliense menetenként `crypto.randomUUID()`-t küld
    (egy soros bővítés a meglévő hívásokban: `P/BlockCraftQuiz.tsx:2555-2569`, `P/TsunamiEscapeEnglish.tsx:1347-1361`,
@@ -1683,7 +1708,8 @@ csak `status.enabled` mellett), tesztek: `T/rt-client.test.ts` (újracsatlakozá
 3. `RoomLobby`: szobakód nagy betűkkel, „Link másolása”, QR (`qrcode`, a `PairQr` mintájára,
    `source/client/src/components/LearnersPanel.tsx:23-42`), játékoslista becenév + avatar, készenlét, gazda „Indítás”
    (≥ 2 kész), kilépés. `RoomJoin`: kód beírása vagy a linkről; vendégnél generált becenév megjelenítése.
-4. `RoomResult`: dobogó (1v1: győztes + ezüst), játékosonként pontosság, helyes válaszok, leggyorsabb helyes válasz, legjobb
+4. `RoomResult`: dobogó (1v1: győztes + ezüst), játékosonként pontosság, helyes válaszok, leggyorsabb helyes válasz (a szerver
+   elfogadott idejéből), legjobb
    sorozat; a nem dobogós csak a saját statisztikáját látja; „Visszavágó”; reakciók (csak `REACTIONS`).
 5. `useDuelBridge`: a játék a szerver `round:open`-jét a saját mechanikáján át jeleníti meg (JM4), a választ `round:answer`-ként
    küldi a saját megjelenítésétől mért `clientRtMs`-sel; a helyességet a `round:reveal`-ből veszi (KSZ-19).
@@ -1761,7 +1787,10 @@ CREATE TABLE IF NOT EXISTS player_accounts (
 );
 CREATE TABLE IF NOT EXISTS player_auth_codes (
   id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
-  email_hash char(64) NOT NULL, code_hash char(64) NOT NULL, link_hash char(64) NOT NULL,
+  email_normalized varchar(254) NOT NULL,           -- a megerősítendő cím (trim + kisbetű + NFC); ebből lesz a fiók; 1 nap után törlődik
+  email_hash char(64) NOT NULL,                     -- HMAC(email_normalized): korlátozáshoz és a kódos kereséshez
+  code_hash char(64) NOT NULL,                      -- HMAC(6 jegyű kód)
+  link_hash char(64) NOT NULL UNIQUE,               -- HMAC(32 bájtos átlátszatlan link-token); a token nem tartalmaz e-mailt
   attempts integer NOT NULL DEFAULT 0, expires_at timestamptz NOT NULL, used_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -1787,9 +1816,24 @@ A Drizzle-séma és a migráció egyezése: a meglévő migrációs ellenőrzés
    `GET /api/auth/user` `null` (nincs `req.user`), és az `isAuthenticatedAdmin` 401.
 4. E-mailes kód: `POST /api/player/auth/start {email}` → mindig 202 (nem szivárogtatja ki, létezik-e a fiók); 6 jegyű kód
    (`crypto.randomInt`) + 32 bájtos link-token, HMAC-hash-ként tárolva, kód 10 perc, link 15 perc, egyszer használható;
-   korlát: 3 / 15 perc / e-mail-hash, 10 / 15 perc / IP; `POST /api/player/auth/verify {email, code}` vagy `{linkToken}` →
-   5 próbálkozás / kód; siker → `player_accounts` sor (ha új) `email_verified_at`-tel + játékos-munkamenet. A link egy
-   megerősítő oldalra visz (`/belepes/link`), a beváltás POST (a levelező linkellenőrzője ne használja el);
+   korlát: 3 / 15 perc / e-mail-hash, 10 / 15 perc / IP. A start a normalizált címet a kódrekordba írja
+   (`email_normalized`) — így a linkes út is ismeri a megerősítendő címet (review #440).
+   **Beváltás (egy közös út):** `POST /api/player/auth/verify`, kérés-alak (zod, diszkriminált unió):
+   `{ kind: "code", email: string, code: string /* 6 számjegy */ }` vagy `{ kind: "link", linkToken: string /* 43 jel base64url */ }`.
+   (1) Rekord-keresés: kódnál az `email_hash = HMAC(normalize(email))` legfrissebb, nem lejárt, nem használt rekordja és
+   `code_hash`-egyezés (sikertelen próbálkozás → `attempts + 1`, 5 után érvénytelen); linknél `link_hash = HMAC(linkToken)`.
+   (2) Egyszeri felhasználás atomikusan: `UPDATE player_auth_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL AND
+   expires_at > now() RETURNING email_normalized` — 0 sor esetén egységes `{ ok: false, code: "INVALID_OR_EXPIRED" }` (400).
+   (3) Közös `confirmVerifiedEmail(email_normalized)`: `INSERT INTO player_accounts (email, email_verified_at) VALUES ($1, now())
+   ON CONFLICT (email) DO UPDATE SET email_verified_at = COALESCE(player_accounts.email_verified_at, now()) RETURNING id,
+   nickname, banned_at` — két párhuzamos megerősítés ugyanarra a címre egy fiókot ad (`UNIQUE(email)` + upsert), és a
+   `player_accounts.email NOT NULL` mindig a kódrekord címéből teljesül. (4) Tiltott fiók → 403. (5) `setPlayerSession`.
+   Válasz: `{ ok: true, player: { id, nickname: string | null, needsProfile: boolean } }`. Teszt (`T/player-auth.db.test.ts`):
+   a kódos és a linkes út ugyanazt a fiókot adja; két párhuzamos `verify` ugyanarra a címre → 1 sor; ugyanaz a link kétszer →
+   a második `INVALID_OR_EXPIRED`; lejárt rekord; 5 rossz kód után zár.
+   **Link:** `https://websuli.vip/belepes/link#t=<linkToken>` — a token a URL-töredékben (fragment) van, így szerver- és
+   proxy-naplóba sem kerül; az e-mail-cím soha nincs az URL-ben. A megerősítő oldal a töredékből kiolvassa és POST-tal
+   váltja be (a levelező linkellenőrzője így nem használja el);
    `Referrer-Policy: no-referrer`, `Cache-Control: no-store`. CSRF: a `/api/player/auth/*` origin-allowlistes kivétel (a
    meglévő `/api/login` mintájára, `S/routes.ts:789-818`), a többi `/api/player/*` CSRF-tokenes.
 5. Napló: e-mail soha (csak `maskEmail` vagy hash); a levél tárgya / szövege magyar, gyerekbarát.
@@ -1843,7 +1887,12 @@ ranked bool, match_id uuid NULL, outcome smallint NULL)`, indexek `(player_id, f
 `player_weekly(player_id, week_start PK, ranked_xp, knowledge_points)`.
 **Végpontok:** `POST /api/player/runs/start {gameId, difficulty}` → `{runId, startedAt}` (60 / óra / játékos);
 `POST /api/player/runs/:id/finish {xp, correct, wrong, bestStreak, served}` → PK-ütközés esetén ugyanaz a válasz (idempotens);
-hihetőség: a menet hossza szerveridőből, játékonkénti plafon és XP/perc (`game-score-rules.ts`), `correct ≤ served`;
+a `runId` csak szerver által kiadott, a játékoshoz tartozó, nyitott run lehet (idegen / ismeretlen / lezárt → 4xx).
+Hihetőség — a kliens minden száma hitelesítés nélküli állítás (review #440): `durationSec` = szerveridők különbsége;
+`maxQuestions = floor(durationSec / 1.5)` (a J3 legkisebb kérdés-rése); `correct + wrong ≤ min(served, maxQuestions)`;
+`bestStreak ≤ correct`; `xp ≤ min(GAME_MAX_RUN_XP[game], GAME_MAX_XP_PER_MIN[game] × durationSec / 60)`
+(`game-score-rules.ts`); túllépésnél az elfogadott érték a plafon, a `claimed_xp` megmarad auditra, `ranked=false`,
+`flags` bit; 20 s alatti menet `ranked=false`;
 gyanús → `ranked=false`, `flags`; tudás-pont = `correct`; heti kulcs hétfő 00:00 Europe/Budapest. Írás: 1 tranzakció.
 `POST /api/player/import-local` — egyszer fiókonként + eszközönként (eszköz-azonosító: véletlen UUID a localStorage-ben),
 plafon 5000 XP, `kind='import'`, `ranked=false`.
