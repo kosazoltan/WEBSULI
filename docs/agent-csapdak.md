@@ -806,7 +806,7 @@ Forrás: #467 (Vihargarázs, kanban #59), az orkesztrátor képernyőkép-olvas�
 - **Tünet 1:** a „nézetbe hozható-e” mérés (`scrollIntoViewIfNeeded`, `el.scrollIntoView`) ZÖLD lehet akkor is, ha a felhasználó nem tud
   görgetni: a böngésző programból az `overflow: hidden` dobozt is görgeti. A garázs Beállítás / Rekordok / Statisztika képernyőjének alja
   így maradt elérhetetlen. **Megelőzés:** a mérő az elgörgetés után ellenőrizze, hogy egy `overflow: hidden|clip` ős sem mozdult el
-  (`game-meta-quality` X3); érintéses görgetéshez a CDP `Input.dispatchTouchEvent` sorozat (touchStart → touchMove… → touchEnd) kell, az
+  (`tests/support/game-meta-quality.ts` X3); érintéses görgetéshez a CDP `Input.dispatchTouchEvent` sorozat (touchStart → touchMove… → touchEnd) kell, az
   `Input.synthesizeScrollGesture` touch módja az emulált Pixel profilban nem görget.
 - **Tünet 2:** a rögzített játékkeret (`data-fixed-screen="true"`, 100dvh + `overflow: hidden`) tartalom-képernyőn (garázs, beállítás)
   levág, és a flex-oszlop a `min-h-0` görgető dobozt 0 px-re nyomja (a járműrács `clientHeight 0 / scrollHeight 8792`). **Megelőzés:**
