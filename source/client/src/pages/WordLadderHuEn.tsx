@@ -267,7 +267,10 @@ export default function WordLadderHuEn() {
    */
   const [quiz3dWanted] = useState(() => quiz3dEnabled(detectLookTier(), null));
   const [quiz3dSupported, setQuiz3dSupported] = useState<boolean | null>(null);
-  const quiz3dOn = quiz3dWanted && quiz3dSupported === true;
+  // Keskeny álló telefonon (< 600 px) a 2×2 rácsban a 3D lap nem tördeli a hosszú szót (20 px-es betű, vágott felirat —
+  // képernyőkép 360×640): ott a DOM-kapaszkodó (tördel, ≥ 48 px) marad; szélesebb nézetben jön a 3D lap.
+  const holds3dWanted = quiz3dWanted && (typeof window === "undefined" || window.innerWidth >= 600);
+  const quiz3dOn = holds3dWanted && quiz3dSupported === true;
   const holdsRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const particlesRef = useRef<HTMLDivElement | null>(null);
@@ -1023,7 +1026,9 @@ export default function WordLadderHuEn() {
   const tileStates: TileState[] = (presentation?.options ?? []).map((_, i) => holdState(i));
   const zone = zoneForProgress(hud.rung, hud.target);
   const levelTierLabel = LADDER_TIER_LABELS[ladderTierForLevel(ladderGrade, level)];
-  const screenState: GameScreenState = phase === "menu" ? "start" : phase === "result" ? "result" : paused ? "paused" : "playing";
+  // A keret „paused” állapota csak a szünet menüé: a „Miért?”-kártya / kinyitott kérdés alatt is áll a menet, de a
+  // háttérbe kerülés ilyenkor is szünet menüt nyit (K1/K3: a menü a kártya fölé kerül).
+  const screenState: GameScreenState = phase === "menu" ? "start" : phase === "result" ? "result" : menuOpen ? "paused" : "playing";
   const lead = Math.round((hud.rung - hud.rival) * 10) / 10;
   const leadText = lead >= 1 ? `+${Math.floor(lead)} fok előnyöd van` : lead <= -1 ? `${RIVAL_NAME} ${Math.floor(-lead)} fokkal előtted` : "Fej fej mellett!";
   const rivalPct = Math.min(100, (hud.rival / Math.max(1, hud.target)) * 100);
@@ -1190,7 +1195,7 @@ export default function WordLadderHuEn() {
                 streak={hud.combo}
                 mood="idle"
                 live={liveRef}
-                focus={landscapePhone ? 0.2 : 0.42}
+                focus={landscapePhone ? 0.14 : 0.42}
                 fallback={<RaceFallback rung={hud.rung} rival={hud.rival} total={hud.target} />}
                 onSupportedChange={setScene3d}
               />
@@ -1251,7 +1256,7 @@ export default function WordLadderHuEn() {
               data-quiz3d={quiz3dOn ? "true" : "false"}
               data-scene3d={scene3d === true ? "true" : "false"}
             >
-              {quiz3dWanted && presentation ? (
+              {holds3dWanted && presentation ? (
                 <QuizBoard3D
                   questionKey={`${presentation.id}:${presentation.question.key}`}
                   prompt=""
@@ -1409,7 +1414,7 @@ export default function WordLadderHuEn() {
         .wl-particles { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
         .wl-particle { position: absolute; left: -40px; top: -40px; width: 10px; height: 10px; border-radius: 3px; opacity: 0; }
         .wl-banner {
-          position: fixed; left: 50%; top: 42%; z-index: 58; transform: translate(-50%, -50%) scale(.9); opacity: 0; pointer-events: none;
+          position: fixed; left: 50%; top: 31%; z-index: 58; transform: translate(-50%, -50%) scale(.9); opacity: 0; pointer-events: none;
           max-width: calc(100vw - 32px); padding: 10px 18px; border-radius: 18px; background: #000000b3; border: 2px solid #fcd34db3;
           color: #fef3c7; font-size: clamp(18px, 5vw, 24px); font-weight: 900; text-align: center; box-shadow: 0 10px 30px #0009;
           transition: opacity .18s ease, transform .18s ease;

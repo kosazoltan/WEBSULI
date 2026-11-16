@@ -774,7 +774,7 @@ function setupLadderScene(
   const framing = () => {
     const minH = variant === "preview" ? 2.3 : 0;
     // J2a race: both ladders in view (landscape: the hold columns cover the sides, so the world is wider).
-    const width = race ? (camera.aspect < 1 ? 2.75 : 4.4) : variant === "preview" ? (withRival ? 2.9 : 1.9) : 1.25;
+    const width = race ? (camera.aspect < 1 ? 2.75 : 5.6) : variant === "preview" ? (withRival ? 2.9 : 1.9) : 1.25;
     const h = Math.max(minH, width / Math.max(0.05, camera.aspect));
     visibleH = h;
     camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(h / 2 / CAMERA_DISTANCE));
