@@ -547,3 +547,19 @@ Forrás: J0b (#444) review.
 - **Megelőzés:** a vissza nem állítható kulcsot a director a menet végéig átugorja (`unrestorable` halmaz, `exclude` paraméter a
   `dueInRun` / `dueAcrossRuns`-ban) és a sorban HAGYJA (a saját játéka még visszahozza); elavult tétel `REVIEW_STALE_MS` után
   kikerül. Teszt: idegen kulcs a sor elején → a következő esedékes tétel jön.
+
+## C-42 — Közös játék-UI: belépő `scale` animáció a mérő alatt, és a nem létező lint-szabály tiltása (2026-11-16)
+
+Forrás: J0c (kérdés-sáv, `play-lab.spec.ts`).
+
+- **Tünet 1:** az M2 mérő (`smallTargets`) a 48 px-es szünetgombot 47×47-nek mérte — csak a kérdés megnyitása utáni első
+  ~180 ms-ban. **Gyökérok:** a kártya belépő animációja `scale(.98)`-ról indult; a `getBoundingClientRect` a transzformált dobozt
+  adja. **Megelőzés:** mért (érintési célt tartalmazó) elem belépő animációja csak `opacity` / `translate` legyen, `scale` nem;
+  vagy a mérés a beállt állapotra várjon (C-33: élő elemen soha).
+- **Tünet 2:** `npm run lint` (max-warnings 0) bukott: „Unused eslint-disable directive (… 'react-hooks/exhaustive-deps')”.
+  **Gyökérok:** a repóban a `react-hooks` ESLint-bővítmény nincs bekapcsolva; a megszokásból írt tiltó komment maga a
+  figyelmeztetés. **Megelőzés:** `eslint-disable` csak arra a szabályra, amit a lint ténylegesen jelez; push előtt a módosított
+  fájlokra `npx eslint <fájlok> --max-warnings 0`.
+- **Tünet 3 (megelőzve):** a kérdés-sáv `[data-state="correct"]` gombjait a Szólétra lapszintű, `!important`-os
+  `.game-shell-fixed[data-game="WordLadderHuEn"] [data-state="correct"]` szabálya átszínezte volna. **Megelőzés:** a közös
+  fedőréteg portálon a `body`-ba kerül (nem a játék gyökerébe), így a lapok saját szelektorai nem érik el.
