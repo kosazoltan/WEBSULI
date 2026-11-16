@@ -76,42 +76,48 @@ function guardGame(file: string) {
 
   if (file !== "SpeedQuizMath.tsx") return;
 
-  test(`${file}: a rossz válasz ága nem léptet automatikusan tovább`, () => {
-    // A régi viselkedés: `setTimeout(nextTask, 140)` a hibás ágon — a magyarázat
-    // elolvasása előtt betöltött egy új feladatot. A HELYES válasz időzített
-    // továbblépése ellenben maradjon: ott nincs mit olvasni, és a lendület
-    // megtörése büntetésnek érződne a jó válaszért. Ezért csak a hibás ágat nézzük.
-    const start = code.search(/if\s*\(\s*idx\s*!==\s*task\.correctIndex\s*\)/);
-    assert.ok(start >= 0, "nem találom a hibás válasz ágát — a teszt elavult");
-
-    const branch = code.slice(start, code.indexOf("return;", start) + "return;".length);
-    assert.doesNotMatch(
-      branch,
-      /setTimeout\s*\(\s*nextTask\s*,/,
-      "időzített továbblépés a hibás ágon: nem marad idő elolvasni a magyarázatot",
-    );
-    assert.match(branch, /showFeedbackFor\s*\(/, "a hibás ág nem mutat magyarázatot");
+  // SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 9.) — J4a „Neon védőtorony”.
+  // A régi három eset a BLOKKOLÓ kártyát rögzítette (hibás ág → kártya, a kártya alatt áll az óra, 0 életnél nincs
+  // „Újrapróbálom”). Az új követelmény nem lazább: (a) hibánál a helyes válasz a játéktérben ≥ 1,8 mp-ig látszik, időzített
+  // továbblépés nincs, és a tétel az ismétlési sorba kerül; (b) a teljes magyarázat a „Miért?”-re nyílik, és amíg nyitva
+  // van, áll a játék és a kérdés-óra; (c) a megoldás mutatása utáni újrapróba (retry) megszűnt — a célba nem számít.
+  test(`${file}: hibás válasz → a megoldás ≥ 1,8 mp-ig a játéktérben, időzített továbblépés nélkül (SPEC-VÁLTOZÁS, a)`, () => {
+    // A kérdés-életciklus a közös horogé (usePlayQuestion → createQuestionUi): a hibás / lejárt válasz megoldás-kijelzése
+    // a horog REVEAL_WRONG_MS konstansa, a vezérlő `Math.max(1800, …)`-szel alulról korlátozza.
+    assert.match(code, /usePlayQuestion\s*\(/, "a lap nem a közös kérdés-horgot használja");
+    const hook = stripComments(readFileSync(join(root, "client/src/game-engine/play/useQuestionDirector.ts"), "utf8"));
+    const m = /export const REVEAL_WRONG_MS\s*=\s*(\d[\d_]*)/.exec(hook);
+    assert.ok(m, "nincs REVEAL_WRONG_MS a közös horogban — a teszt elavult");
+    assert.ok(Number(m[1]!.replace(/_/g, "")) >= 1800, `REVEAL_WRONG_MS = ${m[1]} < 1800`);
+    assert.match(hook, /Math\.max\(\s*1800\s*,\s*opts\.revealWrongMs/, "a megoldás-kijelzés alsó korlátja (1,8 mp) elveszett");
+    const own = /revealWrongMs:\s*(\d[\d_]*)/.exec(code);
+    if (own) assert.ok(Number(own[1]!.replace(/_/g, "")) >= 1800, `a lap ${own[1]} ms-ra rövidítené a megoldás-kijelzést`);
+    assert.doesNotMatch(code, /setTimeout\s*\(\s*nextTask\b/, "időzített továbblépés a lapon: nem marad idő a megoldásra");
+    // A drón-célpontok a megoldást a játéktérben is mutatják (zöld helyes / narancs választott), nem csak a sávban.
+    assert.match(code, /data-state=\{st\}/, "a számdrónok nem kapják meg a megoldás-állapotot");
+    assert.match(code, /view\.reveal\.correctOptionIndex/, "a helyes drón nem jelölődik a megoldás-kijelzéskor");
   });
 
-  test(`${file}: a magyarázat olvasása közben áll az óra`, () => {
-    assert.match(
-      code,
-      /if\s*\(\s*feedback\s*\)\s*return;/,
-      "a köridő nem áll meg a kártya alatt — az olvasás büntetve lenne",
-    );
+  test(`${file}: a „Miért?” megnyitja a kártyát, és amíg nyitva van, áll a játék (SPEC-VÁLTOZÁS, b)`, () => {
+    assert.match(code, /onWhy=\{openWhy\}/, "a kérdés-sáv „Miért?” gombja nincs bekötve");
+    const why = code.slice(code.search(/const openWhy = useCallback/));
+    assert.match(why.slice(0, 900), /setFeedback\(\s*buildFeedback\(/, "a „Miért?” nem a valódi magyarázatot építi");
+    assert.match(code, /const whyOpen = feedback !== null/, "a nyitott kártya nem számít szünetnek");
+    assert.match(code, /pausedRef\.current = paused \|\| whyOpen/, "a játékhurok nem áll meg a kártya alatt");
+    assert.match(code, /const isPaused = pausedRef\.current;/, "a képkocka nem a szünet-állapotot olvassa");
+    assert.match(code, /driver\.frame\(dt, isPaused, onEvent\)/, "a meghajtó nem kapja meg a szünetet");
+    // A meghajtó (a lap és a sim közös útja, `lib/speedMath/core.ts`): szünetben áll a kérdés-óra és a szimuláció.
+    const core = stripComments(readFileSync(join(root, "client/src/lib/speedMath/core.ts"), "utf8"));
+    assert.match(core, /if \(!paused\) clock \+= dt;/, "a kérdés-óra a kártya alatt is járna");
+    assert.match(core, /loop\.setTimeScale\(paused \? 0 : /, "a szimuláció a kártya alatt is futna");
+    assert.match(code, /if\s*\(\s*feedback\s*\)\s*return;/, "a HUD-óra a kártya alatt is frissülne");
   });
 
-  test(`${file}: nulla életnél a kártya nem ad Újrapróbálom gombot`, () => {
-    assert.match(
-      code,
-      /remainingLives:\s*livesRef\.current/,
-      "a kártya nem tudja, hány élet maradt — 0 életnél is új pont járna",
-    );
-    assert.match(
-      code,
-      /onRetry=\{lives > 0 \? retryTask : undefined\}/,
-      "élet nélkül is megjelenhet az Újrapróbálom",
-    );
+  test(`${file}: nincs újrapróba a játékmenetben — a megoldás mutatása után nem lehet „visszakoppintani” (SPEC-VÁLTOZÁS, c)`, () => {
+    assert.doesNotMatch(code, /onRetry=/, "újrapróba-kötés a lapon (végrehajtás J4 elfogadás: grep 0 találat)");
+    assert.doesNotMatch(code, /retryTask/, "a régi újrapróba-ág a lapon maradt");
+    const card = code.slice(code.search(/<QuizFeedbackCard\b/));
+    assert.doesNotMatch(card.slice(0, card.indexOf("/>")), /onRetry/, "a „Miért?” kártya újrapróbát kínálna");
   });
 }
 
