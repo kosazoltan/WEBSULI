@@ -40,7 +40,7 @@ import { clientIpKey } from "../lib/client-ip";
 import type { RtConfig } from "./config";
 import type { Metrics } from "./metrics";
 import { generateMatchSeed, type Registry } from "./registry";
-import type { TicketClaims, TicketService } from "./ticket";
+import { canCreateRoom, type TicketClaims, type TicketService } from "./ticket";
 
 /** Ennyi kimenő csomag várakozhat egy kapcsolaton (polling: a következő lekérdezésig) — felette a kliens lassú → bontás. */
 export const RT_MAX_PENDING_PACKETS = 64;
@@ -472,7 +472,9 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
     if (deps.isDraining()) return fail("SERVER_RESTART");
     const result = tickets.consume(auth.data.ticket);
     if (!result.ok) return fail("INVALID_TICKET", result.reason === "SIGNATURE" || result.reason === "MALFORMED");
-    if (cfg.mode === "admin" && result.claims.kind !== "admin") return fail("FEATURE_DISABLED");
+    // Szobanyitási jog (JM3a, D21 / JM-A4) a kézfogáskor is: a `create` jegyet csak a mód szerinti jogcím használhatja
+    // (admin módban admin; `on` módban játékos-fiók / tanulói profil / admin). Csatlakozni kóddal bárki tud (vendég is).
+    if (result.claims.intent.kind === "create" && !canCreateRoom(cfg.mode, result.claims.kind)) return fail(cfg.mode === "admin" ? "FEATURE_DISABLED" : "ACCOUNT_REQUIRED");
     data.claims = result.claims;
     socket.data = data;
     next();

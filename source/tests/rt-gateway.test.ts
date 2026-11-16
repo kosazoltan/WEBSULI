@@ -12,6 +12,7 @@ import {
   LEARNER_TOKEN,
   assertAllSchemas,
   connectPlayer,
+  creatorHeaders,
   getTicket,
   sleep,
   startHarness,
@@ -39,7 +40,9 @@ after(async () => {
 });
 
 async function join(h: Harness, intent: { intent: "create" } | { intent: "join"; code: string }, opts: { headers?: Record<string, string>; transports?: ("polling" | "websocket")[] } = {}): Promise<Player> {
-  const t = await getTicket(h, intent, opts.headers);
+  // SPEC-VÁLTOZÁS 2026-11-16 (terv D21, JM-A4): `on` módban vendég nem nyithat szobát — a szobát nyitó kliens alapból
+  // játékos-fiókkal kér jegyet (a vendég-tiltást a „D21” tesztek külön ellenőrzik).
+  const t = await getTicket(h, intent, opts.headers ?? (intent.intent === "create" ? creatorHeaders() : undefined));
   assert.equal(t.status, 200, JSON.stringify(t.json));
   const p = await connectPlayer(h, t.json.ticket as string, { transports: opts.transports });
   players.push(p);
@@ -103,7 +106,7 @@ describe("JM2 gateway — MP_MODE kapcsoló", () => {
     assert.match(await raw.text(), /FEATURE_DISABLED/);
     // Ha valaki mégis jegyet hozna (pl. kapcsolás előtti), a kézfogás akkor is elbukik.
     h.env.MP_MODE = "on";
-    const t = await getTicket(h, { intent: "create" });
+    const t = await getTicket(h, { intent: "create" }, creatorHeaders());
     h.env.MP_MODE = "off";
     await assert.rejects(connectPlayer(h, t.json.ticket as string, { transports: ["websocket"] }), (e: Error & { code?: string }) => /FEATURE_DISABLED|websocket error|xhr/.test(String(e.code ?? e.message)));
     // Az Express többi útvonala érintetlen: a Socket.IO csak a saját útvonalát kezeli.
@@ -114,6 +117,7 @@ describe("JM2 gateway — MP_MODE kapcsoló", () => {
     const h = await harness({ env: { MP_MODE: "admin" } });
     assert.equal((await getTicket(h, { intent: "create" })).status, 403);
     assert.equal((await getTicket(h, { intent: "create" }, { "x-test-user": "user" })).status, 403);
+    assert.equal((await getTicket(h, { intent: "create" }, creatorHeaders())).status, 403, "admin módban játékos-fiókkal sem nyitható szoba");
     const t = await getTicket(h, { intent: "create" }, { "x-test-user": "admin" });
     assert.equal(t.status, 200);
     assert.equal(JSON.stringify(t.json).includes("Admin"), false);
@@ -121,6 +125,54 @@ describe("JM2 gateway — MP_MODE kapcsoló", () => {
     const st = await (await fetch(`http://127.0.0.1:${h.port}/api/rt/status`)).json();
     assert.equal(st.enabled, true);
     assert.equal(st.mode, "admin");
+  });
+});
+
+describe("JM3a gateway — szobanyitási jog (terv D21, JM-A4)", () => {
+  it("admin mód: az admin nyit, a kóddal VENDÉG és nem admin felhasználó is csatlakozik és végigjátszik; admin-jogot a réteg nem ad", async () => {
+    const h = await harness({ env: { MP_MODE: "admin" }, windowMs: 2000 });
+    const { host, code } = await createRoom(h, 5, { headers: { "x-test-user": "admin" } });
+    // A csatlakozó jegy vendégnek és fiók nélküli felhasználónak is jár (ugyanazon a végponton, ugyanazzal a móddal).
+    const guestTicket = await getTicket(h, { intent: "join", code });
+    assert.equal(guestTicket.status, 200, JSON.stringify(guestTicket.json));
+    assert.equal((await getTicket(h, { intent: "join", code }, { "x-test-user": "user" })).status, 200);
+    const guest = await addPlayer(h, code, 4);
+    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players.every((p: any) => p.ready));
+    assert.equal((await host.request("room:start", {})).ok, true);
+    const results = await playMatch(h, code, [host, guest], (i) => i === 1);
+    assert.deepEqual(results[0].winners, [guest.playerId], "a vendég nyert — a meccs teljes jogú");
+    // Admin-jogot a réteg nem ad és nem is jelez: a kimenő üzenetekben nincs admin-mező, a gazda beceneve generált.
+    assert.equal(JSON.stringify(host.log).includes("isAdmin"), false);
+    assertAllSchemas(host);
+    assertAllSchemas(guest);
+    // Admin módban a vendég nem nyithat: a jegy-végpont 403, és egy (máshonnan szerzett) vendég „create” jegy a kézfogáson elbukik.
+    assert.deepEqual((await getTicket(h, { intent: "create" })).json, { code: "FEATURE_DISABLED" });
+    const forged = h.rt.tickets!.issue({ kind: "guest", sub: "guest:x", nickname: "Kis Róka", avatar: null, grade: null, intent: { kind: "create", code: null } });
+    await assert.rejects(connectPlayer(h, forged.ticket), (e: Error & { code?: string }) => e.code === "FEATURE_DISABLED");
+    const joinTicket = h.rt.tickets!.issue({ kind: "guest", sub: "guest:y", nickname: "Kis Róka", avatar: null, grade: null, intent: { kind: "join", code } });
+    const viaHandshake = await connectPlayer(h, joinTicket.ticket);
+    players.push(viaHandshake);
+    assert.equal(viaHandshake.status, "open", "a vendég csatlakozó jegye admin módban is átmegy a kézfogáson");
+  });
+
+  it("on mód: vendég és fiók nélküli felhasználó nem nyithat (ACCOUNT_REQUIRED), játékos-fiók / tanulói profil / admin igen; csatlakozni vendégként is lehet", async () => {
+    const h = await harness();
+    assert.deepEqual(await getTicket(h, { intent: "create" }), { status: 403, json: { code: "ACCOUNT_REQUIRED" } });
+    assert.deepEqual(await getTicket(h, { intent: "create" }, { "x-test-user": "user" }), { status: 403, json: { code: "ACCOUNT_REQUIRED" } });
+    assert.equal((await getTicket(h, { intent: "create" }, creatorHeaders())).status, 200, "játékos-fiók");
+    assert.equal((await getTicket(h, { intent: "create" }, { "x-learner-token": LEARNER_TOKEN })).status, 200, "párosított tanulói profil");
+    assert.equal((await getTicket(h, { intent: "create" }, { "x-learner-token": LEARNER_TOKEN, "x-test-user": "user" })).status, 200, "a tanulói profil a fiók nélküli munkamenet előtt");
+    assert.equal((await getTicket(h, { intent: "create" }, { "x-test-user": "admin" })).status, 200, "admin");
+    // A kézfogás is ellenőriz: a vendég „create” jegye (ha valahonnan mégis meglenne) ACCOUNT_REQUIRED.
+    const forged = h.rt.tickets!.issue({ kind: "guest", sub: "guest:z", nickname: "Kis Róka", avatar: null, grade: null, intent: { kind: "create", code: null } });
+    await assert.rejects(connectPlayer(h, forged.ticket), (e: Error & { code?: string }) => e.code === "ACCOUNT_REQUIRED");
+    // Csatlakozás vendégként, generált becenévvel.
+    const { code } = await createRoom(h);
+    const t = await getTicket(h, { intent: "join", code });
+    assert.equal(t.status, 200);
+    assert.equal(typeof t.json.nickname, "string");
+    const guest = await addPlayer(h, code, 6);
+    assert.ok(guest.playerId);
   });
 });
 
@@ -243,11 +295,11 @@ describe("JM2 gateway — jegy, eredet, csatlakozás", () => {
   it("hamis / újrahasznált / lejárt jegy → INVALID_TICKET; a jegy más szobára nem használható", async () => {
     const h = await harness();
     await assert.rejects(connectPlayer(h, "Zm9vZm9vZm9vZm9vZm9v.YmFy"), (e: Error & { code?: string }) => e.code === "INVALID_TICKET");
-    const t = await getTicket(h, { intent: "create" });
+    const t = await getTicket(h, { intent: "create" }, creatorHeaders());
     const p = await connectPlayer(h, t.json.ticket as string);
     players.push(p);
     await assert.rejects(connectPlayer(h, t.json.ticket as string), (e: Error & { code?: string }) => e.code === "INVALID_TICKET", "újrahasznált");
-    const late = await getTicket(h, { intent: "create" });
+    const late = await getTicket(h, { intent: "create" }, creatorHeaders());
     h.clock.offsetMs = 61_000;
     await assert.rejects(connectPlayer(h, late.json.ticket as string), (e: Error & { code?: string }) => e.code === "INVALID_TICKET", "lejárt");
     h.clock.offsetMs = 0;
@@ -269,7 +321,7 @@ describe("JM2 gateway — jegy, eredet, csatlakozás", () => {
     assert.ok(crossSite.status === 400 || crossSite.status === 403, String(crossSite.status));
     const sameSite = await fetch(`http://127.0.0.1:${h.port}${RT_PATH}?EIO=4&transport=polling`, { headers: { origin: h.origin } });
     assert.equal(sameSite.status, 200);
-    const t = await getTicket(h, { intent: "create" });
+    const t = await getTicket(h, { intent: "create" }, creatorHeaders());
     await assert.rejects(connectPlayer(h, t.json.ticket as string, { transports: ["websocket"], origin: "https://evil.example" }));
   });
 
@@ -387,7 +439,7 @@ describe("JM2 gateway — csalás-próbák és korlátok", () => {
   it("jegy-korlát: IP-nként 10 / perc → 429", async () => {
     const h = await harness();
     const codes: number[] = [];
-    for (let i = 0; i < 12; i++) codes.push((await getTicket(h, { intent: "create" })).status);
+    for (let i = 0; i < 12; i++) codes.push((await getTicket(h, { intent: "create" }, creatorHeaders())).status);
     assert.deepEqual(codes.slice(0, 10), Array(10).fill(200));
     assert.equal(codes[11], 429);
   });
@@ -647,13 +699,13 @@ describe("JM2 gateway — biztonsági review #452 javításai", () => {
 
   it("ALACSONY-5: lejárt / felhasznált jegyek sorozata (pl. egy NAT mögötti osztály) nem zárja ki az IP-t; a hamisított jegy számít", async () => {
     const h = await harness({ env: { MP_HANDSHAKE_FAILURES_PER_MIN_PER_IP: "5" } });
-    const t = await getTicket(h, { intent: "create" });
+    const t = await getTicket(h, { intent: "create" }, creatorHeaders());
     players.push(await connectPlayer(h, t.json.ticket as string));
     for (let i = 0; i < 8; i++) await assert.rejects(connectPlayer(h, t.json.ticket as string), (e: Error & { code?: string }) => e.code === "INVALID_TICKET");
-    const fresh = await getTicket(h, { intent: "create" });
+    const fresh = await getTicket(h, { intent: "create" }, creatorHeaders());
     players.push(await connectPlayer(h, fresh.json.ticket as string)); // a felhasznált jegyek nem zártak ki
     for (let i = 0; i < 5; i++) await assert.rejects(connectPlayer(h, "Zm9vZm9vZm9vZm9vZm9v.YmFy"), (e: Error & { code?: string }) => e.code === "INVALID_TICKET");
-    const blocked = await getTicket(h, { intent: "create" });
+    const blocked = await getTicket(h, { intent: "create" }, creatorHeaders());
     await assert.rejects(connectPlayer(h, blocked.json.ticket as string), (e: Error & { code?: string }) => e.code === "RATE_LIMITED");
   });
 

@@ -9,7 +9,7 @@
  * A bankot évfolyam-fájlonként, SZINKRON importáljuk (nem a `gradeQuizBank/index.ts` gyűjtőből), mert a kliens bankja
  * évfolyamonkénti lusta betöltésre áll át (JBb); a szervernek az egész bank kell, egyszerre.
  */
-import { DUEL_BASE_WINDOW_MS, buildRoundQuestion, type DuelBankItem, type DuelQuestion } from "../../shared/duel/questions";
+import { DUEL_BASE_WINDOW_MS, buildRoundQuestion, duelReadingWindowMs, type DuelBankItem, type DuelQuestion } from "../../shared/duel/questions";
 import type { RoomQuestionRequest } from "../../shared/duel/room-machine";
 import { GRADE_03 } from "../../client/src/data/gradeQuizBank/grade-03";
 import { GRADE_04 } from "../../client/src/data/gradeQuizBank/grade-04";
@@ -22,6 +22,7 @@ import { GRADE_10 } from "../../client/src/data/gradeQuizBank/grade-10";
 import { GRADE_11 } from "../../client/src/data/gradeQuizBank/grade-11";
 import { GRADE_12 } from "../../client/src/data/gradeQuizBank/grade-12";
 import { windowMsFor } from "../../client/src/game-engine/play/questionDirector";
+import { READING_WINDOW_CAP_MS, readingMsFor } from "../../client/src/game-engine/play/reading";
 
 /** A párbaj alapablaka (`shared/duel/questions.ts` `DUEL_BASE_WINDOW_MS`, JM1r): szerver és kliens közös szabály. */
 export const RT_BASE_WINDOW_MS = DUEL_BASE_WINDOW_MS;
@@ -39,8 +40,18 @@ export const SERVER_GRADE_BANK: readonly DuelBankItem[] = [
   ...GRADE_12,
 ];
 
-export function rtWindowMs(prompt: string, grade: number): number {
-  return windowMsFor(prompt, grade, RT_BASE_WINDOW_MS);
+/**
+ * A válaszablak (JM3a): olvasási idő-alapú — a szöveghossz szerinti `windowMsFor` és a J0c-b `readingMsFor` (végigolvasás
+ * + döntés, évfolyamonkénti szó/perc) közül a nagyobb, legfeljebb 9 mp. A régi aréna fix 6 s-os alapja a rövid, de sok
+ * szavas kérdésnél (pl. 4. évfolyam) kevés volt az elolvasáshoz (JBb lelete).
+ */
+export function rtWindowMs(prompt: string, grade: number, options: readonly string[] = []): number {
+  return duelReadingWindowMs(windowMsFor(prompt, grade, RT_BASE_WINDOW_MS), readingMsFor(prompt, options, grade));
+}
+
+/** Előnyben a 9 mp alatt elolvasható tétel (a J0c-b olvashatósági szűrője; a többi csak tartalék). */
+export function rtReadable(item: DuelBankItem, grade: number): boolean {
+  return readingMsFor(item.prompt, item.options, grade) <= READING_WINDOW_CAP_MS;
 }
 
 export function createQuestionProvider(items: readonly DuelBankItem[] = SERVER_GRADE_BANK) {
@@ -54,5 +65,6 @@ export function createQuestionProvider(items: readonly DuelBankItem[] = SERVER_G
       used: new Set(req.used),
       items,
       windowMs: rtWindowMs,
+      prefer: rtReadable,
     });
 }

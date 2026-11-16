@@ -33,8 +33,9 @@ after(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-const post = (headers: Record<string, string>) =>
-  fetch(`${base}/api/rt/ticket`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ intent: "create" }) });
+// SPEC-VÁLTOZÁS 2026-11-16 (terv D21): vendég `on` módban csak csatlakozó jegyet kap — az eredet-őrt ezen az úton mérjük.
+const post = (headers: Record<string, string>, body: unknown = { intent: "join", code: "ABC234" }) =>
+  fetch(`${base}/api/rt/ticket`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
 
 describe("JM2 — leállítási sorrend (index.ts)", () => {
   it("a gracefulShutdown a beginRealtimeShutdown-on át zár (rövid üzenet-ablak, a server.close sorrendjét az dönti el), és a pool előtt kivárja", async () => {
@@ -82,6 +83,9 @@ describe("JM2 — valódi felcsatolás", () => {
       assert.equal(body.path, RT_PATH);
       assert.equal(ok.headers.get("cache-control"), "no-store");
       assert.equal(JSON.stringify(body).includes("@"), false);
+      const guestCreate = await post({ origin: sameOrigin }, { intent: "create" });
+      assert.equal(guestCreate.status, 403, "vendég nem nyithat szobát (D21)");
+      assert.deepEqual(await guestCreate.json(), { code: "ACCOUNT_REQUIRED" });
       assert.equal((await fetch(`${base}/api/rt/iox`)).status, 404, "a Socket.IO-útvonal előtagja nem nyel el idegen utat");
       const adminSt = await fetch(`${base}/api/admin/rt/status`);
       assert.equal(adminSt.status, 401, "a részletes státusz admin-őr mögött");

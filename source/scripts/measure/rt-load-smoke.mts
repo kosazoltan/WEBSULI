@@ -45,7 +45,8 @@ async function runServer(): Promise<void> {
     (req as unknown as { isAuthenticated: () => boolean }).isAuthenticated = () => false;
     next();
   });
-  app.use("/api/rt", createRtRouter(rt));
+  // JM3a (D21): szobát csak fiókkal lehet nyitni — a terhelési próba gazdái egyedi (ál-)játékos-fiókkal kérnek jegyet.
+  app.use("/api/rt", createRtRouter(rt, { getPlayer: async (req) => (req.get("x-smoke-player") ? { id: req.get("x-smoke-player")!, nickname: null, banned: false } : null) }));
   const loop = monitorEventLoopDelay({ resolution: 1 });
   loop.enable();
   let peakHeap = 0;
@@ -94,8 +95,10 @@ async function runClients(): Promise<void> {
   const origin = `http://localhost:${port}`;
   const metrics = async (q = "") => (await fetch(`${base}/__metrics${q}`)).json();
 
-  const ticket = async (body: unknown) => {
-    const r = await fetch(`${base}/api/rt/ticket`, { method: "POST", headers: { "content-type": "application/json", origin }, body: JSON.stringify(body) });
+  let hostSeq = 0;
+  const ticket = async (body: { intent: string }) => {
+    const who: Record<string, string> = body.intent === "create" ? { "x-smoke-player": `smoke-${++hostSeq}` } : {};
+    const r = await fetch(`${base}/api/rt/ticket`, { method: "POST", headers: { "content-type": "application/json", origin, ...who }, body: JSON.stringify(body) });
     if (!r.ok) throw new Error(`ticket ${r.status}`);
     return ((await r.json()) as { ticket: string }).ticket;
   };

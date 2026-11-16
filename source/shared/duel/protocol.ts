@@ -85,6 +85,8 @@ export const ERROR_CODES = [
   "SERVER_RESTART",
   "ORIGIN_NOT_ALLOWED",
   "KICKED",
+  // JM3a (D21): szobát csak játékos-fiók, párosított tanulói profil vagy admin nyithat; vendég csak csatlakozhat.
+  "ACCOUNT_REQUIRED",
 ] as const;
 export type RtErrorCode = (typeof ERROR_CODES)[number];
 
@@ -111,6 +113,7 @@ export const RT_ERROR_TEXT: Record<RtErrorCode, string> = {
   SERVER_RESTART: "A szerver frissül — a meccs itt véget ért. Próbáld újra egy perc múlva!",
   ORIGIN_NOT_ALLOWED: "Az online játék csak a WebSuli oldalán érhető el.",
   KICKED: "A szoba gazdája kivett a játékból.",
+  ACCOUNT_REQUIRED: "Szobát nyitni csak belépve lehet. Csatlakozni viszont bárki tud a barátja kódjával!",
 };
 
 export const NOTICE_CODES = ["SERVER_RESTART", "ROOM_EXPIRING", "RUNS_PRIORITY", "PLAYER_LEFT", "KICKED", "ROOM_CLOSED"] as const;
