@@ -7,6 +7,7 @@
  *   GET  /api/admin/game-accounts/:id/email → a teljes cím (csak adminnak, külön kérésre; a napló maszkolt)
  *   POST /api/admin/game-accounts/:id/ban | /unban → tiltás / feloldás; a már belépett játékosra is azonnal hat (requirePlayer)
  *   POST /api/admin/game-accounts/:id/unlink-learner → a tanulói profil kapcsolatának bontása (review #449 K2)
+ *   POST /api/admin/game-accounts/:id/delete { confirm: "TÖRLÉS" } → VÉGLEGES törlés (N2), a saját törléssel azonos művelet
  * A flagtől független (az admin a kikapcsolt bevezetés alatt is látja / tilthatja a fiókokat).
  */
 import express, { type Router } from "express";
@@ -14,8 +15,12 @@ import { z } from "zod";
 import { logger } from "../lib/logger";
 import { maskEmail } from "../lib/mask-email";
 import type { PlayerAccountStore } from "./account-store";
+import { allPurposeEmailHashes, playerAuthKey } from "./codes";
 
 const idSchema = z.string().min(1).max(64).regex(/^[A-Za-z0-9-]+$/);
+/** Az admin végleges törlésének megerősítő szava (a felület párbeszéde küldi). */
+export const ADMIN_DELETE_CONFIRM_WORD = "TÖRLÉS";
+const deleteSchema = z.object({ confirm: z.literal(ADMIN_DELETE_CONFIRM_WORD) }).strict();
 const errMsg = (error: unknown) => (error instanceof Error ? error.message : "ismeretlen hiba");
 
 export function createPlayerAdminRouter(accounts: PlayerAccountStore): Router {
@@ -82,6 +87,27 @@ export function createPlayerAdminRouter(accounts: PlayerAccountStore): Router {
     } catch (error) {
       logger.error("[PLAYER-ADMIN] kapcsolat-bontás hiba:", errMsg(error));
       return res.status(500).json({ message: "Hiba a kapcsolat bontásakor" });
+    }
+  });
+
+  // N2 (tulajdonosi döntés 2026-11-16): VÉGLEGES törlés az adminnak, kifejezett megerősítő szóval. UGYANAZ a művelet, mint a
+  // saját törlés (account-store.ts `deleteAccount`): a fiók, mindkét cél kódrekordjai és MINDEN munkamenete egy tranzakcióban;
+  // a tanulói profil megmarad. A napló csak maszkolt címet ír.
+  router.post("/:id/delete", async (req, res) => {
+    const id = idSchema.safeParse(req.params.id);
+    if (!id.success) return res.status(400).json({ message: "Hibás azonosító" });
+    if (!deleteSchema.safeParse(req.body).success) return res.status(400).json({ message: "Megerősítés szükséges", code: "CONFIRM_REQUIRED" });
+    try {
+      const email = await accounts.playerEmailById(id.data);
+      if (!email) return res.status(404).json({ message: "Nincs ilyen játékos" });
+      const key = playerAuthKey();
+      const result = await accounts.deleteAccount(id.data, (e) => allPurposeEmailHashes(key, e));
+      if (!result) return res.status(404).json({ message: "Nincs ilyen játékos" });
+      logger.info(`[PLAYER-ADMIN] fiók véglegesen törölve: ${maskEmail(email)} (kódrekord: ${result.codes}, munkamenet: ${result.sessions})`);
+      return res.json({ ok: true, deleted: result });
+    } catch (error) {
+      logger.error("[PLAYER-ADMIN] törlés hiba:", errMsg(error));
+      return res.status(500).json({ message: "Hiba a fiók törlésekor" });
     }
   });
 

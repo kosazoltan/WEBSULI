@@ -27,7 +27,7 @@ const CODE_LENGTH = 8;
 
 const ERRORS: Record<Exclude<VerifyResult, { ok: true }>["code"] | "INVALID_EMAIL", string> = {
   INVALID_OR_EXPIRED: "Ez a kód nem jó, vagy már lejárt. Nézd meg újra a leveled, vagy kérj új kódot!",
-  BANNED: "Ezzel a fiókkal most nem lehet belépni.",
+  BANNED: "Ezzel a fiókkal most nem lehet játszani. Az adataidat e-mail-kódos belépéssel letöltheted, vagy törölheted a fiókot.",
   RATE_LIMITED: "Túl sok próbálkozás. Várj egy kicsit, és próbáld újra!",
   UNAVAILABLE: "A belépés most nem elérhető.",
   SERVER_ERROR: "Valami elromlott. Próbáld újra egy kicsit később!",
@@ -87,6 +87,12 @@ export default function PlayerLogin() {
     if (mounted.current) setStep("done");
   };
 
+  /** N2: a tiltott fiók korlátozott munkamenetet kap — a fiókoldal csak a letöltést és a törlést kínálja. */
+  const toBannedAccount = async () => {
+    await clearPlayerCache(queryClient);
+    if (mounted.current) setLocation("/fiok");
+  };
+
   const linkFailed = (codeName: string, retry: "check" | "redeem") => {
     const retryable = codeName === "NETWORK" || codeName === "SERVER_ERROR";
     setLinkRetry(retryable ? retry : null);
@@ -113,6 +119,7 @@ export default function PlayerLogin() {
     const r = await verifyPlayerLogin({ kind: "link", linkToken: token });
     if (!mounted.current) return;
     if (r.ok) { linkToken.current = null; await finish(); return; }
+    if (r.code === "BANNED") { linkToken.current = null; await toBannedAccount(); return; }
     linkFailed(r.code, "redeem");
   };
 
@@ -146,6 +153,7 @@ export default function PlayerLogin() {
       const r = await verifyPlayerLogin({ kind: "code", email, code });
       if (!mounted.current) return;
       if (r.ok) await finish();
+      else if (r.code === "BANNED") await toBannedAccount();
       else setError(ERRORS[r.code]);
     } finally {
       if (mounted.current) setBusy(false);
