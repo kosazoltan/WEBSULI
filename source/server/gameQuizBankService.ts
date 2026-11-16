@@ -203,12 +203,13 @@ export function quizBankCacheStats() {
 }
 
 export function resetQuizBankCacheForTests(): void {
-  current = null; inflight = null;
+  current = null; inflight = null; legacyOnly.clear();
   stats.builds = 0; stats.gameBuilds = 0; stats.hits = 0;
 }
 
+/** A kupon-játékok lenyomata: közzétett leckék + a kupon-játékok régi exportjai. */
 async function quizBankFingerprint(): Promise<string> {
-  const games = [...ALLOWED_GAME_IDS];
+  const games = [...COUPON_GAME_IDS];
   const { rows } = await db.execute<{ fp: string }>(sql`
     SELECT md5(
       coalesce((SELECT string_agg(id || ':' || xmin::text, ',' ORDER BY id) FROM ${lessons} WHERE ${lessons.publishedAt} IS NOT NULL), '')
@@ -257,22 +258,46 @@ async function snapshotFor(fingerprint: string): Promise<Snapshot> {
   return flight.promise;
 }
 
-async function buildGame(snap: Snapshot, gameId: string): Promise<GameQuizBankResponse> {
-  stats.gameBuilds++;
-  const coupon = isCouponGame(gameId);
-  const legacy = uniqueQuizContent(await legacyRows(gameId, coupon ? { ...snap.canonical, items: [] } : emptyBank()));
+/** A válasz: `{"gameId":…,"items":[<kanonikus rész>,<régi exportok>]}`, gzip-pel tömörítve. */
+function serializeResponse(gameId: string, canonical: { json: Buffer; count: number } | null, legacy: GameQuizBankRow[]): GameQuizBankResponse {
   const parts: Buffer[] = [Buffer.from(`{"gameId":${JSON.stringify(gameId)},"items":[`, "utf8")];
-  if (coupon && snap.canonicalCount) parts.push(snap.canonicalJson);
+  if (canonical?.count) parts.push(canonical.json);
   if (legacy.length) {
-    if (coupon && snap.canonicalCount) parts.push(Buffer.from(",", "utf8"));
+    if (canonical?.count) parts.push(Buffer.from(",", "utf8"));
     parts.push(Buffer.from(legacy.map(r => JSON.stringify(quizBankApiItem(r))).join(","), "utf8"));
   }
   parts.push(Buffer.from("]}", "utf8"));
   const body = Buffer.concat(parts);
-  const response = { gzip: gzipSync(body, { level: 6 }), bytes: body.length, items: (coupon ? snap.canonicalCount : 0) + legacy.length };
+  return { gzip: gzipSync(body, { level: 6 }), bytes: body.length, items: (canonical?.count ?? 0) + legacy.length };
+}
+
+async function buildGame(snap: Snapshot, gameId: string): Promise<GameQuizBankResponse> {
+  stats.gameBuilds++;
+  const legacy = uniqueQuizContent(await legacyRows(gameId, { ...snap.canonical, items: [] }));
+  const response = serializeResponse(gameId, { json: snap.canonicalJson, count: snap.canonicalCount }, legacy);
   const cached = snap.canonicalJson.length + snap.games.size * response.gzip.length;
   if (cached > CACHE_WARN_BYTES) logger.warn(`[GAMES] quiz-bank gyorsítótár nagy: ~${Math.round(cached / 1048576)} MB`);
   return response;
+}
+
+/**
+ * Review #478 (Codex P2): a nem kupon-játék (Szólétra) bankja csak a saját régi exportjaiból áll — a kanonikus
+ * pillanatképet nem építheti (a régi út sem olvasott leckét). Saját, játékonkénti lenyomat + gyorsítótár.
+ */
+const legacyOnly = new Map<string, { fingerprint: string; builtAt: number; promise: Promise<GameQuizBankResponse> }>();
+
+async function legacyOnlyResponse(gameId: string): Promise<GameQuizBankResponse> {
+  const { rows } = await db.execute<{ fp: string }>(sql`
+    SELECT md5(coalesce((SELECT string_agg(id || ':' || xmin::text, ',' ORDER BY id) FROM ${gameQuizItems} WHERE ${eq(gameQuizItems.gameId, gameId)}), '')) AS fp`);
+  const fingerprint = rows[0].fp;
+  const hit = legacyOnly.get(gameId);
+  if (hit && hit.fingerprint === fingerprint && Date.now() - hit.builtAt < QUIZ_BANK_CACHE_TTL_MS) { stats.hits++; return hit.promise; }
+  stats.gameBuilds++;
+  const promise = legacyRows(gameId, emptyBank()).then(legacy => serializeResponse(gameId, null, uniqueQuizContent(legacy)));
+  const entry = { fingerprint, builtAt: Date.now(), promise };
+  legacyOnly.set(gameId, entry);
+  promise.catch(() => { if (legacyOnly.get(gameId) === entry) legacyOnly.delete(gameId); });
+  return promise;
 }
 
 /**
@@ -281,6 +306,7 @@ async function buildGame(snap: Snapshot, gameId: string): Promise<GameQuizBankRe
  */
 export async function gameQuizBankResponse(gameId: string): Promise<GameQuizBankResponse | null> {
   if (!ALLOWED_GAME_IDS.has(gameId)) return null;
+  if (!isCouponGame(gameId)) return legacyOnlyResponse(gameId);
   const snap = await snapshotFor(await quizBankFingerprint());
   let game = snap.games.get(gameId);
   if (!game) {

@@ -166,6 +166,30 @@ test("A2/A3/A6: 10 párhuzamos hideg kérés = 1 építés, kötegenként ≤16 
   assert.equal(await svc.gameQuizBankResponse("ismeretlen-jatek"), null);
 });
 
+test("review #478 (Codex P2): a nem kupon-játék (Szólétra) hideg kérése nem olvas lecke-JSON-t és nem épít kanonikus pillanatképet", async () => {
+  svc.resetQuizBankCacheForTests();
+  await db.insert(gamesCatalog).values({ id: "word-ladder-hu-en", title: "word-ladder-hu-en" }).onConflictDoNothing();
+  await db.insert(gameQuizItems).values({ gameId: "word-ladder-hu-en", tier: "1", prompt: "QBS szólétra kérdés", options: ["egy", "kettő", "három"], correctIndex: 0 });
+  probe.queries = 0; probe.maxJsonRows = 0;
+  const cold = await responseOf("word-ladder-hu-en");
+  assert.equal(probe.maxJsonRows, 0, "a Szólétra nem olvas lecke-JSON-t");
+  assert.equal(probe.queries, 2, "hideg: 1 saját lenyomat + 1 régi-export lekérdezés");
+  assert.equal(svc.quizBankCacheStats().builds, 0, "nincs kanonikus pillanatkép");
+  assert.ok(cold.body.items.some(q => q.prompt === "QBS szólétra kérdés"));
+  assert.equal(cold.text, JSON.stringify({ gameId: "word-ladder-hu-en", items: (await oldListGameQuizBank("word-ladder-hu-en")).map(r => svc.quizBankApiItem(r as never)) }));
+  probe.queries = 0;
+  await svc.gameQuizBankResponse("word-ladder-hu-en");
+  assert.equal(probe.queries, 1, "meleg: csak a lenyomat");
+  assert.equal(svc.quizBankCacheStats().gameBuilds, 1);
+  // A saját exportjának módosítása érvénytelenít; lecke-írás nem.
+  await db.execute(sql`UPDATE game_quiz_items SET prompt = 'QBS szólétra javított' WHERE prompt = 'QBS szólétra kérdés'`);
+  assert.ok((await responseOf("word-ladder-hu-en")).body.items.some(q => q.prompt === "QBS szólétra javított"));
+  await db.execute(sql`UPDATE lessons SET updated_at = now() WHERE id = 'qbs-1-v2'`);
+  await responseOf("word-ladder-hu-en");
+  assert.equal(svc.quizBankCacheStats().gameBuilds, 2);
+  assert.equal(svc.quizBankCacheStats().builds, 0);
+});
+
 test("A4: bármely írás (közvetlen SQL is) érvényteleníti: módosítás, visszavonás, új lecke, törlés; plusz a 15 perces lejárat", async () => {
   svc.resetQuizBankCacheForTests();
   const promptsOf = async () => (await responseOf("tsunami-english")).body.items.map(q => q.prompt);
