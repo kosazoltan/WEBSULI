@@ -1337,6 +1337,7 @@ function PlayScreen(props: {
         level: props.level,
         school: settingsRef.current.school,
         mode: props.coupon.active ? "mixed" : settingsRef.current.quizMode,
+        materialOnly: props.coupon.active,
         material: materialRef.current,
         recent: recentQuizRef.current,
         gradeSeen: gradeSeenRef.current,
