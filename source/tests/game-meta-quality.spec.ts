@@ -20,6 +20,8 @@ const META_VIEWPORTS = [
   { width: 412, height: 915 },
   { width: 844, height: 390 },
   { width: 915, height: 412 },
+  // A valódi fekvő magasság a böngésző címsora miatt gyakran csak ~340–360 px (orkesztrátori review, #467).
+  { width: 740, height: 360 },
 ] as const;
 
 test.beforeEach(async ({ page }) => {
@@ -47,6 +49,39 @@ async function openTornadoMenu(page: Page): Promise<void> {
 async function openMenuSettings(page: Page): Promise<void> {
   const summary = page.locator("details.game-start-settings > summary");
   if ((await page.locator("details.game-start-settings[open]").count()) === 0) await summary.tap();
+}
+
+/**
+ * Valódi érintéses húzás felfelé (a tartalom lefelé görög): CDP `Input.dispatchTouchEvent` touchStart → 10 touchMove →
+ * touchEnd — a böngésző ugyanúgy görget, mint ujjal (a `synthesizeScrollGesture` touch módja az emulált profilban nem
+ * görgetett, mérve 2026-11-16).
+ */
+async function swipeUp(page: Page, x: number, y: number, distance: number): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+  for (let i = 1; i <= 10; i++) {
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y - (distance * i) / 10 }] });
+  }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+  await page.waitForTimeout(150);
+}
+
+async function atPageBottom(page: Page): Promise<boolean> {
+  return page.evaluate(() => Math.ceil(window.scrollY + window.innerHeight) >= document.documentElement.scrollHeight - 2);
+}
+
+/** Az elem teljesen a nézetben (és ha `container` adott, annak dobozán belül) van, a biztonsági sáv fölött. */
+async function expectFullyInside(page: Page, testId: string, container: string | null, safeBottom = 0): Promise<void> {
+  const r = (await page.getByTestId(testId).boundingBox())!;
+  const vp = page.viewportSize()!;
+  expect(r.y, `${testId} teteje`).toBeGreaterThanOrEqual(-1);
+  expect(r.y + r.height, `${testId} alja`).toBeLessThanOrEqual(vp.height - safeBottom + 1);
+  if (container) {
+    const c = (await page.getByTestId(container).boundingBox())!;
+    expect(r.y, `${testId} a(z) ${container} tetején belül`).toBeGreaterThanOrEqual(c.y - 1);
+    expect(r.y + r.height, `${testId} a(z) ${container} alján belül`).toBeLessThanOrEqual(c.y + c.height + 1);
+  }
 }
 
 test.describe("Vihargarázs", () => {
@@ -79,6 +114,37 @@ test.describe("Vihargarázs", () => {
       await expect(page.getByTestId("tornado-garage-upgrade-engine")).toHaveAttribute("data-affordable", "false");
       await metaShot(page, "tornado-garazs-fejlesztve");
       await expectMetaScreenOk(page, "Vihargarázs fejlesztés után", { insets });
+
+      // Kevés SC: a sor koppintása megmondja, mennyi hiányzik (1710 − 300 = 1410), az egyenleg nem változik.
+      await page.getByTestId("tornado-garage-upgrade-engine").tap();
+      await expect(page.getByTestId("tornado-garage-flash")).toContainText(/Még 1\s?410 SC hiányzik/);
+      await expect(page.getByTestId("tornado-coins")).toContainText("300 SC");
+
+      // Valódi érintéses görgetés (CDP touch-gesztus, nem programbeli scrollTop): a lap / a hasábok ALJÁIG.
+      const landscape = viewport.width > viewport.height;
+      if (landscape) {
+        await expect(page.getByTestId("tornado-garage")).toHaveAttribute("data-layout", "landscape");
+        for (const pane of ["tornado-garage-side", "tornado-garage-list"]) {
+          const box = (await page.getByTestId(pane).boundingBox())!;
+          await expect(page.getByTestId(pane), `${pane}: alul jelzi a folytatást`).toHaveAttribute("data-scroll-hint", "more");
+          for (let i = 0; i < 40 && (await page.getByTestId(pane).getAttribute("data-scroll-hint")) !== "end"; i++) {
+            await swipeUp(page, box.x + box.width / 2, box.y + box.height * 0.8, Math.min(240, box.height * 0.6));
+          }
+          await expect(page.getByTestId(pane), `${pane}: érintéssel az aljáig görgethető`).toHaveAttribute("data-scroll-hint", "end");
+        }
+        await metaShot(page, "tornado-garazs-hasabok-alja");
+        // Az utolsó fejlesztés-sor és az utolsó jármű a hasáb aljára görgetve teljesen látszik és koppintható.
+        await expectFullyInside(page, "tornado-garage-upgrade-instruments", "tornado-garage-side");
+        await page.getByTestId("tornado-garage-upgrade-instruments").tap({ trial: true });
+        const lastTile = page.locator('[data-testid="tornado-garage-list"] [data-testid^="tornado-garage-vehicle-"]').last();
+        await expectFullyInside(page, (await lastTile.getAttribute("data-testid"))!, "tornado-garage-list");
+        await lastTile.tap();
+        await expect(lastTile).toHaveAttribute("aria-pressed", "true");
+      } else {
+        for (let i = 0; i < 20 && !(await atPageBottom(page)); i++) await swipeUp(page, viewport.width / 2, viewport.height * 0.75, viewport.height * 0.5);
+        expect(await atPageBottom(page), "álló nézet: a lap érintéssel az aljáig görgethető").toBe(true);
+        await expectFullyInside(page, "tornado-garage-upgrade-instruments", null, insets.bottom);
+      }
 
       await page.getByRole("button", { name: "Vissza" }).first().tap();
       await expect(page.getByTestId("tornado-quick-start")).toBeVisible();

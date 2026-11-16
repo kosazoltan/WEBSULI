@@ -27,10 +27,10 @@ Parancs: `GAME_MOBILE_PORT=<egyedi> npx playwright test --config playwright.game
 Fájl: `client/src/pages/TornadoHunter200.tsx`.
 
 1. `useOrientation` importja a `@/game-engine/mobile`-ból; `const orientation = useOrientation();`.
-2. `fixedScreen={screen !== "menu" && !garagePortrait}` (eddig `screen !== "menu"`), ahol
-   `garagePortrait = screen === "garage" && orientation === "portrait"`: csak az álló garázs kap lapgörgetést; a fekvő
-   garázs két hasábja és a Szintek / Beállítás / Rekordok / Statisztika (egy belső görgetővel) a rögzített keretben marad
-   (`game-viewport-experience.spec.ts` C1: a szintlistán a lap nem görög).
+2. `fixedScreen={screen === "play" || screen === "levels" || garageLandscape}` (eddig `screen !== "menu"`): a Szintek
+   (`game-viewport-experience.spec.ts` C1: a lap nem görög; a lista `ScrollPane`) és a fekvő garázs két `ScrollPane`-hasábja
+   rögzített; az álló garázs, a Beállítás, a Rekordok és a Statisztika természetes lapgörgetésű (a rögzített keretben a
+   kártya alja elérhetetlen volt). Review-kiegészítés: lásd a terv „Kiegészítés — orkesztrátori review” szakaszát.
 3. `ScreenHeader`: a „Vissza” gombról a `-ml-2` le (a kártya `overflow: hidden`-je levágta).
 4. A `main` alsó párnázása a biztonsági sávot is vegye figyelembe (a közös `index.css` már ad
    `max(8px, var(--game-safe-bottom))`-ot; a lap `pb-20` marad).

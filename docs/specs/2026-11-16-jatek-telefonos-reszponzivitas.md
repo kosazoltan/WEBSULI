@@ -61,11 +61,25 @@ rácscsempék „… 167×48px” (X6). Képek: `docs/measurements/jatek-reszpon
    kerettel / ragyogással — a garázs részleteiben, a járműsorban és a menü „Aktuális jármű” kártyáján is.
 6. Fekvő nézetben (szélesség > magasság) két hasáb: bal a szűrő + járműlista, jobb a részletek + fejlesztések; mindkettő
    saját görgetésű, a lap maga nem görög (így nincs görgő-a-görgőben), 390 px magasságon is levágás nélkül.
-7. A Viharvadász többi meta-képernyője (Szintek, Beállítások, Rekordok, Statisztika) a rögzített keretben marad, EGY
-   belső görgető dobozzal (a lap nem görög — ezt a meglévő `game-viewport-experience.spec.ts` „C1 Viharvadász
-   szintlista … nincs oldalgörgetés” esete kifejezetten kéri, és az X1–X7 mérce is teljesül: nincs görgő-a-görgőben); csak
-   a „Vissza” levágását javítjuk. (Végrehajtás közben derült ki: az első változat ezeket is lapgörgetésűre tette, ami a C1
-   esetet megsértette volna — a teszt nem lazítható, ezért a szűkebb javítás.)
+7. A Szintek lista a rögzített keretben marad EGY jelzett belső görgetővel (a `game-viewport-experience.spec.ts` „C1
+   Viharvadász szintlista … nincs oldalgörgetés” esete kéri, a teszt nem lazítható). A Beállítás / Rekordok /
+   Statisztika természetes lapgörgetést kap: a rögzített keretben a kártya `overflow-y-auto`-ját az `index.css`
+   `[data-game-card-content] { overflow: hidden }` szabálya felülírta, így az alja a FELHASZNÁLÓNAK elérhetetlen volt
+   (a `scrollIntoView` viszont elgörgette — ezért mérte az első mérő-változat tévesen jónak; lásd X3-szigorítás).
+
+### Kiegészítés — orkesztrátori review (2026-11-16, #467)
+
+- Fekvő garázs: a fejléc a bal hasábba került, a szűrő egy sorban, vízszintesen lapozva; mindkét hasáb `ScrollPane`
+  (`client/src/tornado/ScrollPane.tsx`): alsó átúszás + nyíl, amíg van lent tartalom, `data-scroll-hint="more" | "end"`.
+  A Szintek lista és a közös „Hogyan játsszak?” ablak ugyanígy jelzi a túlcsordulást (`components/useScrollHint.ts`).
+- Fejlesztés-sor: a sor egésze a gomb, az ár-jelvény csak jelzés („Koppints a sorra” felirat törölve); kevés SC-nél a
+  koppintás a képernyő alján lebegő üzenetben megmondja, mennyi hiányzik („Még 1410 SC hiányzik: Motor 2. szint”).
+- Mérő: X3 hiba, ha az elem csak `overflow: hidden` ős programbeli elgörgetésével hozható elő; X4 a legalsó SZÖVEGES
+  elemet is nézi; új X8: a belső görgető jelzi a túlcsordulást, és az aljára érve a jelzés eltűnik. A garázs-esetben
+  valódi érintéses görgetés (CDP touch-események) a lap / mindkét hasáb aljáig, 740×360-as fekvő nézetben is.
+- „Mind (160)” vs. a tulajdonos képe: a képen a felirat betűinek csak a felső pár pixele látszik (levágva), a szám nem
+  olvasható; a katalógus `VEHICLE_COUNT = 160` (`lib/tornado/vehicles.ts`), a felirat `VEHICLES.length`, mentett
+  állapottól független, és a PR a katalógust nem érinti.
 8. Közös „Hogyan játsszak?” ablak (`components/GamePedagogyPanel.tsx`, mind a 7 játék): a bezáró gomb 16×16 px → ≥ 44 px,
    és az ablak a biztonsági sávon belül marad.
 9. Mérő: `game-meta-quality` (X1–X7) a CI-ban (a fő Playwright-futás minden `*.spec.ts`-t futtat) — a Vihargarázs 6

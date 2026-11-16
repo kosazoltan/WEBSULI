@@ -21,12 +21,16 @@ import type { SafeInsets } from "./game-mobile-quality";
  *  - X5 érintési cél ≥ 44 px (a rejtett / `aria-hidden` elemek kivételével; a letiltott gomb is mérendő, mert látszik);
  *  - X6 nincs üres kép-helykitöltő: 0 méretű kép / vászon, betöltetlen `<img>`, vagy ≥ 32 px-es, gyermek és szöveg
  *    nélküli színátmenetes doboz („üres színes négyzet”);
- *  - X7 minden látható szöveg ≥ 12 px.
+ *  - X7 minden látható szöveg ≥ 12 px;
+ *  - X8 a belső (nem a lap) függőleges görgető jelzi a túlcsordulást, és az aljára érve a jelzés eltűnik
+ *    (`scrollHintViolations`).
+ * Szigorítás (#467 review): az X3 hibának veszi, ha az elem csak egy `overflow: hidden` ős programbeli elgörgetésével
+ * hozható elő (a `scrollIntoView` azt is görgeti, a felhasználó nem); az X4 a legalsó SZÖVEGES elemet is nézi.
  */
 
 export const META_MIN_TARGET = 44;
 
-export type MetaViolation = { rule: "X1" | "X2" | "X3" | "X4" | "X5" | "X6" | "X7"; detail: string };
+export type MetaViolation = { rule: "X1" | "X2" | "X3" | "X4" | "X5" | "X6" | "X7" | "X8"; detail: string };
 
 /** Álló nézetben felül a kivágás / állapotsor, alul a kezelősáv; fekvőben oldalt (a közös mérő M4 értékei). */
 export function insetsFor(viewport: { width: number; height: number }): SafeInsets {
@@ -63,8 +67,12 @@ export async function measureMetaScreen(
         return (st.overflowY === "auto" || st.overflowY === "scroll") && el.scrollHeight - el.clientHeight > 2 && el.clientHeight > 0;
       };
       const name = (el: HTMLElement) => `${el.tagName.toLowerCase()}.${String(el.className).split(" ").slice(0, 3).join(".")} (${el.clientHeight}/${el.scrollHeight}px)`;
-      const pageScrolls = de.scrollHeight - de.clientHeight > 2;
-      for (const el of Array.from(scope.querySelectorAll<HTMLElement>("*"))) {
+      // A lap csak akkor „görgő”, ha a felhasználó görgetheti (a modális ablak a body görgetését zárolja: overflow: hidden).
+      const pageScrolls =
+        de.scrollHeight - de.clientHeight > 2 &&
+        getComputedStyle(document.body).overflowY !== "hidden" &&
+        getComputedStyle(de).overflowY !== "hidden";
+      for (const el of [scope, ...Array.from(scope.querySelectorAll<HTMLElement>("*"))]) {
         if (!isScroller(el)) continue;
         if (pageScrolls) {
           out.push({ rule: "X2", detail: `görgő-a-görgőben: a lap + ${name(el)}` });
@@ -137,6 +145,23 @@ export async function measureMetaScreen(
         }
         // X3
         el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" as ScrollBehavior });
+        // A `scrollIntoView` az `overflow: hidden` dobozt is elgörgeti — a felhasználó viszont nem tudja. Ha ilyen ős
+        // elmozdult, az elem csak programból érhető el: hiba, és a dobozt visszaállítjuk (orkesztrátori review, #467).
+        let hiddenScroll: string | null = null;
+        for (let p = el.parentElement; p && p !== document.body && p !== de; p = p.parentElement) {
+          const st = getComputedStyle(p);
+          const hidY = st.overflowY === "hidden" || st.overflowY === "clip";
+          const hidX = st.overflowX === "hidden" || st.overflowX === "clip";
+          if ((hidY && p.scrollTop !== 0) || (hidX && p.scrollLeft !== 0)) {
+            hiddenScroll ??= `${p.tagName.toLowerCase()}.${String(p.className).split(" ").slice(0, 3).join(".")}`;
+            if (hidY) p.scrollTop = 0;
+            if (hidX) p.scrollLeft = 0;
+          }
+        }
+        if (hiddenScroll) {
+          out.push({ rule: "X3", detail: `${label(el)} csak programból görgethető elő (overflow: hidden ős: ${hiddenScroll})` });
+          continue;
+        }
         const c = clipped(el);
         const area = c.r.width * c.r.height;
         if (area > 0 && (c.w * c.h) / area < 0.98) {
@@ -152,7 +177,14 @@ export async function measureMetaScreen(
       window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
       let last: HTMLElement | undefined;
       let lastBottom = -Infinity;
-      for (const el of nodes) {
+      // Jelöltek: az interaktív elemek ÉS a szöveget hordozó elemek (a lap alján lévő statisztika-sor is elérhető kell legyen).
+      const texty = Array.from(scope.querySelectorAll<HTMLElement>("*")).filter((el) => {
+        if (!Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent ?? "").trim() !== "")) return false;
+        if (!visible(el)) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 1 && r.height > 1;
+      });
+      for (const el of [...nodes, ...texty]) {
         const b = el.getBoundingClientRect().bottom + window.scrollY;
         if (b >= lastBottom) {
           lastBottom = b;
@@ -162,7 +194,7 @@ export async function measureMetaScreen(
       // A lapot addig görgetjük, hogy az elem alja a biztonsági sáv fölé kerüljön — vagy amennyire lehet (a lap alja).
       const maxScroll = de.scrollHeight - de.clientHeight;
       window.scrollTo({ top: Math.min(maxScroll, Math.max(0, lastBottom - (vh - s.bottom) + 1)), behavior: "instant" as ScrollBehavior });
-      for (const el of Array.from(scope.querySelectorAll<HTMLElement>("*"))) {
+      for (const el of [scope, ...Array.from(scope.querySelectorAll<HTMLElement>("*"))]) {
         const st = getComputedStyle(el);
         if ((st.overflowY === "auto" || st.overflowY === "scroll") && el.scrollHeight > el.clientHeight) el.scrollTop = el.scrollHeight;
       }
@@ -211,9 +243,68 @@ export async function measureMetaScreen(
   ) as Promise<MetaViolation[]>;
 }
 
-/** Szigorú állítás: a képernyő minden X-szabálynak megfelel. */
+/**
+ * X8 — a belső (nem a lap) függőleges görgető JELZI a túlcsordulást (orkesztrátori review, #467): a lap tetején
+ * `data-scroll-hint="more"` és látható `[data-scroll-fade]` jelzés a görgető keretében; az aljára görgetve
+ * `data-scroll-hint="end"`, és a jelzés eltűnik. (A `client/src/tornado/ScrollPane.tsx` ezt adja.)
+ */
+export async function scrollHintViolations(page: Page, scope = "[data-game]"): Promise<MetaViolation[]> {
+  const out: MetaViolation[] = [];
+  const count = await page.evaluate((sel) => {
+    const root = document.querySelector(sel) ?? document.body;
+    let n = 0;
+    for (const el of [root as HTMLElement, ...Array.from(root.querySelectorAll<HTMLElement>("*"))]) {
+      const st = getComputedStyle(el);
+      if ((st.overflowY === "auto" || st.overflowY === "scroll") && el.scrollHeight - el.clientHeight > 2 && el.clientHeight > 0) {
+        el.setAttribute("data-meta-scroller", String(n++));
+      }
+    }
+    return n;
+  }, scope);
+  for (let i = 0; i < count; i++) {
+    const sel = `[data-meta-scroller="${i}"]`;
+    const fadeVisible = () =>
+      page.evaluate((s) => {
+        const el = document.querySelector<HTMLElement>(s)!;
+        const fade = el.parentElement?.querySelector<HTMLElement>("[data-scroll-fade]");
+        if (!fade) return false;
+        const r = fade.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && getComputedStyle(fade).visibility !== "hidden";
+      }, sel);
+    await page.evaluate((s) => {
+      document.querySelector<HTMLElement>(s)!.scrollTop = 0;
+    }, sel);
+    const name = await page.evaluate((s) => {
+      const el = document.querySelector<HTMLElement>(s)!;
+      return `${el.getAttribute("data-testid") ?? el.tagName.toLowerCase()} (${el.clientHeight}/${el.scrollHeight}px)`;
+    }, sel);
+    const top = await page
+      .waitForFunction((s) => document.querySelector(s)?.getAttribute("data-scroll-hint") === "more", sel, { timeout: 2_000 })
+      .then(() => true, () => false);
+    if (!top || !(await fadeVisible())) {
+      out.push({ rule: "X8", detail: `${name}: a túlcsordulás nincs jelezve (data-scroll-hint="more" + látható [data-scroll-fade] kell)` });
+      continue;
+    }
+    await page.evaluate((s) => {
+      const el = document.querySelector<HTMLElement>(s)!;
+      el.scrollTop = el.scrollHeight;
+    }, sel);
+    const end = await page
+      .waitForFunction((s) => document.querySelector(s)?.getAttribute("data-scroll-hint") === "end", sel, { timeout: 2_000 })
+      .then(() => true, () => false);
+    if (!end || (await fadeVisible())) out.push({ rule: "X8", detail: `${name}: az aljára görgetve a jelzés nem tűnik el` });
+    await page.evaluate((s) => {
+      const el = document.querySelector<HTMLElement>(s)!;
+      el.scrollTop = 0;
+      el.removeAttribute("data-meta-scroller");
+    }, sel);
+  }
+  return out;
+}
+
+/** Szigorú állítás: a képernyő minden X-szabálynak megfelel (X1–X8). */
 export async function expectMetaScreenOk(page: Page, where: string, opts: { scope?: string; insets: SafeInsets }): Promise<void> {
-  const v = await measureMetaScreen(page, opts);
+  const v = [...(await measureMetaScreen(page, opts)), ...(await scrollHintViolations(page, opts.scope))];
   expect(v.map((x) => `${x.rule} ${x.detail}`), `${where}: meta-képernyő mérés`).toEqual([]);
 }
 

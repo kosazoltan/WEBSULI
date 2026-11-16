@@ -115,6 +115,7 @@ import {
 } from "@/lib/tornado/wind";
 import { anchorOutcome, interceptReward, freeRoamAnswerScore } from "@/lib/tornado/scoring";
 import { MAX_UPGRADE_LEVEL, UPGRADE_TRACKS, statMultiplier, upgradeCost } from "@/lib/tornado/upgrades";
+import ScrollPane from "@/tornado/ScrollPane";
 import VehicleArt from "@/tornado/VehicleArt";
 import {
   stepVehicle,
@@ -336,13 +337,14 @@ export default function TornadoHunter200() {
   const shellState: GameScreenState = screen === "play" ? playState : "start";
   /**
    * Spec 2026-11-16-jatek-telefonos-reszponzivitas (gyökérok): a rögzített, görgetés nélküli keret (index.css
-   * `[data-fixed-screen="true"]`: 100dvh + overflow: hidden) az álló garázs magas tartalmát levágta. Az álló garázs ezért
-   * természetes lapgörgetést kap; a fekvő garázs két saját görgetésű hasábja és a Szintek / Beállítás / Rekordok /
-   * Statisztika (egy belső görgetővel; a C1 e2e szerint a szintlistán a lap nem görög) a rögzített keretben marad.
+   * `[data-fixed-screen="true"]`: 100dvh + overflow: hidden, a `[data-game-card-content]` is overflow: hidden) a 3D
+   * játéktérnek való; a tartalom-képernyőkön levágott (álló garázs: a lista 0 px; Beállítás / Rekordok / Statisztika: a
+   * kártya `overflow-y-auto`-ját a keret `overflow: hidden`-je felülírta, az alja elérhetetlen volt). Rögzített keret
+   * csak a játékban, a Szintek listán (C1 e2e: ott a lap nem görög; a lista saját, jelzett görgetésű ScrollPane) és a
+   * fekvő garázs két ScrollPane-hasábjánál marad; minden más meta-képernyő természetes lapgörgetést kap.
    */
   const orientation = useOrientation();
   const garageLandscape = screen === "garage" && orientation === "landscape";
-  const garagePortrait = screen === "garage" && !garageLandscape;
 
   /** Győzelem utáni „Tovább”: évfolyampályán a következő pálya (a győzelem feloldja), különben a következő szint. */
   const runLevel = getSelectedLevelRef();
@@ -367,7 +369,7 @@ export default function TornadoHunter200() {
     <GameShell
       gameId="TornadoHunter200"
       state={shellState}
-      fixedScreen={screen !== "menu" && !garagePortrait}
+      fixedScreen={screen === "play" || screen === "levels" || garageLandscape}
       orientation="landscape"
       onAutoPause={() => autoPauseRef.current()}
       style={{
@@ -680,7 +682,15 @@ function GarageScreen(props: {
       commit(res.progress);
     } else {
       sfxError();
-      notify(res.reason === "insufficient_funds" ? "Nincs elég SC a fejlesztéshez." : "Maximum szint.");
+      if (res.reason === "insufficient_funds") {
+        // Csak a visszajelzés szövege: az ár ugyanaz, amit a `buyUpgrade` is számol (következő szint).
+        const t = UPGRADE_TRACKS.find((x) => x.id === track)!;
+        const next = (upgradesFor(progress, detail.id)[track] ?? 0) + 1;
+        const missing = upgradeCost(track, next) - progress.coins;
+        notify(`Még ${fmt(missing)} SC hiányzik: ${t.label} ${next}. szint (${fmt(upgradeCost(track, next))} SC).`);
+      } else {
+        notify("Ez már a maximum szint.");
+      }
     }
   };
 
@@ -695,7 +705,7 @@ function GarageScreen(props: {
 
   const filters = (
     <div
-      className={`flex gap-2 ${landscape ? "flex-wrap" : "flex-nowrap overflow-x-auto overflow-y-hidden pb-1"}`}
+      className="flex gap-2 flex-nowrap overflow-x-auto overflow-y-hidden pb-1 shrink-0"
       role="group"
       aria-label="Járműkategória"
     >
@@ -769,7 +779,6 @@ function GarageScreen(props: {
     <section aria-label="Fejlesztés" className="border-t border-white/10 pt-2">
       <p className="text-xs uppercase tracking-wide text-white/70 mb-1.5 flex items-center gap-1">
         <Wrench className="w-3.5 h-3.5" aria-hidden="true" /> Fejlesztés
-        <span className="ml-auto normal-case tracking-normal text-white/60">Koppints a sorra</span>
       </p>
       <div className={`grid grid-cols-1 gap-1.5 ${landscape ? "" : "sm:grid-cols-2"}`}>
         {UPGRADE_TRACKS.map((t) => (
@@ -787,34 +796,46 @@ function GarageScreen(props: {
     </p>
   );
 
+  const header = <ScreenHeader icon={<Car className="w-5 h-5 text-lime-300" />} title="Vihargarázs" onBack={props.onBack} />;
+
   return (
     <section
       data-testid="tornado-garage"
       data-layout={landscape ? "landscape" : "portrait"}
       className={`rounded-2xl border border-lime-400/40 bg-slate-950/85 p-1.5 sm:p-3 flex flex-col gap-2 ${landscape ? "flex-1 min-h-0" : ""}`}
     >
-      <ScreenHeader icon={<Car className="w-5 h-5 text-lime-300" />} title="Vihargarázs" onBack={props.onBack} />
-
+      {/* Visszajelzés (vásárlás, kevés SC): a képernyő alján lebeg, így a lap aljáról koppintva is látszik. */}
       {flash && (
-        <p role="status" className="text-sm font-semibold text-center rounded-lg bg-slate-800/90 border border-white/10 py-1.5">
+        <p
+          role="status"
+          data-testid="tornado-garage-flash"
+          className="pointer-events-none fixed inset-x-3 z-40 mx-auto max-w-md text-sm font-semibold text-center rounded-xl bg-slate-800/95 border border-amber-300/40 px-3 py-2 shadow-lg"
+          style={{ bottom: "max(16px, calc(var(--game-safe-bottom) + 12px))" }}
+        >
           {flash}
         </p>
       )}
 
       {landscape ? (
+        // Fekvő: bal hasáb = fejléc + egysoros, vízszintesen lapozható szűrő + saját görgetésű járműrács; jobb hasáb =
+        // részletek + fejlesztések saját görgetéssel. A túlcsordulást a ScrollPane alsó átúszása jelzi.
         <div className="flex-1 min-h-0 grid grid-cols-2 gap-3">
-          <div className="min-h-0 overflow-y-auto flex flex-col gap-2 pr-1" data-testid="tornado-garage-list">
+          <div className="min-h-0 flex flex-col gap-1.5">
+            {header}
             {filters}
-            <div className="grid grid-cols-3 lg:grid-cols-4 gap-2">{tiles}</div>
-            {footnote}
+            <ScrollPane className="flex-1" innerClassName="flex flex-col gap-2 pb-6" testId="tornado-garage-list" ariaLabel="Járművek">
+              <div className="grid grid-cols-3 lg:grid-cols-4 gap-2">{tiles}</div>
+              {footnote}
+            </ScrollPane>
           </div>
-          <div className="min-h-0 overflow-y-auto flex flex-col gap-3 pr-1">
+          <ScrollPane innerClassName="flex flex-col gap-3 pb-6" testId="tornado-garage-side" ariaLabel="A kiválasztott jármű">
             {details}
             {upgrades}
-          </div>
+          </ScrollPane>
         </div>
       ) : (
         <>
+          {header}
           {filters}
           <div
             ref={rowRef}
@@ -957,7 +978,7 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
     <Card className="border border-sky-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
       <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col gap-2 flex-1 min-h-0">
         <ScreenHeader icon={<TornadoIcon className="w-5 h-5 text-sky-300" />} title="Szintek (1–200)" onBack={props.onBack} />
-        <div className="overflow-y-auto flex-1 min-h-0 flex flex-col gap-2 pr-1">
+        <ScrollPane className="flex-1" innerClassName="flex flex-col gap-2 pb-6" testId="tornado-levels-list" ariaLabel="Szintek">
           {groups.map(({ stage, levels }) => {
             const unlockedInStage = levels.filter((l) => l.level <= props.progress.highestLevelUnlocked).length;
             const open = openStage === stage.id;
@@ -1011,7 +1032,7 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
               </div>
             );
           })}
-        </div>
+        </ScrollPane>
         <p className="text-xs text-white/40 text-center">A 200. szint — a Végső Vihar — a legnehezebb kihívás.</p>
       </CardContent>
     </Card>
