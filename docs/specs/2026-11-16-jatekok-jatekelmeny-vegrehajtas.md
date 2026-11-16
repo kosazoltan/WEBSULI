@@ -1653,7 +1653,7 @@ limiterek `S/index.ts:362-460`; `ViewDedup` `S/lib/view-dedup.ts:10`.
 
 ### JM1 — Szabálymotor + egyeszközös Párbaj aréna
 
-**Állapot:** nem kezdődött · **Függ:** J0a (`game-rng`), J0b (`windowMsFor`) · **Modell:** Opus · **Elfogadás:** JM-A3, J19
+**Állapot:** folyamatban — ág feat/jatek-jm1-parbaj-arena, munkafa .claude/worktrees/jatek-jm1, kanban #41 (2026-11-16) · **Függ:** J0a (`game-rng`), J0b (`windowMsFor`) · **Modell:** Opus · **Elfogadás:** JM-A3, J19
 **Fájlok:** új `source/shared/duel/{rules,questions,reactions}.ts`, `source/shared/nicknames.ts`, `P/DuelArena.tsx`,
 `source/client/src/App.tsx` (útvonal `/games/parbaj` — ORKESZTRÁTOR: J0c után a JM1 az App.tsx egyetlen módosítója),
 `P/Games.tsx` (egy kártya a listán — ha a J8 párhuzamosan fut, a kártyát a J8 adja hozzá; ORKESZTRÁTOR egyeztet),
@@ -2004,7 +2004,7 @@ origin / CSRF, leállítás / e2e-mód, migráció ↔ Drizzle, Europe/Budapest 
 
 ### JB — Évfolyam-bank bővítése (JBa: 3–6., JBb: 7–9., JBc: 10–12. évfolyam)
 
-**Állapot:** nem kezdődött · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
+**Állapot:** JBa folyamatban — ág feat/jatek-jba-evfolyam-bank, munkafa .claude/worktrees/jatek-jba, kanban #42 (2026-11-16); JBb, JBc nem kezdődött · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
 **Elfogadás:** JB-A1 · **Fájlok:** `source/client/src/data/gradeQuizBank/grade-NN.ts` (bővítés, a meglévő tételek
 azonosítója változatlan), `docs/measurements/2026-11-xx-evfolyam-bank-<sáv>-vakmegoldo.md`, a meglévő őrök
 (`T/quiz-bank-integrity.test.ts`, `T/game-bank-no-repeat-content.test.ts`, `T/grade-quiz-select.test.ts`) zöldek + új
