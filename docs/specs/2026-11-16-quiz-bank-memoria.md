@@ -88,7 +88,8 @@ A szolgáltatás nyilvános függvényei (`listGameQuizBank`, `listLatestMateria
 ### 5.4 Tanmenet-betöltő (ugyanaz a minta, kicsi)
 `server/curriculum/load.ts:14-15`: a főoldali lista érvénytelenítése / újraindulás után minden cím alapján nem
 illeszthető anyag MINDEN közzétett verziójának teljes `json`-ját egyszerre olvassa be. Javítás: `DISTINCT ON
-(html_file_id)` a legutóbb közzétett sorra, 16-os kötegekben — a kimenet azonos.
+(html_file_id)` a legutóbb közzétett sorra, 16-os kötegekben, és csak a `sections` rész (a `hintsFromLesson` csak azt
+olvassa) — a kimenet azonos.
 
 ## 6. Edge case-ek
 

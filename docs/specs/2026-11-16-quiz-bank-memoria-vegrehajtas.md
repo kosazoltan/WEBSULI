@@ -24,7 +24,8 @@ export async function listLatestMaterialQuizzes(classroom: number, materialLimit
 // ÚJ
 export type GameQuizBankResponse = { gzip: Buffer; bytes: number; items: number };
 export async function gameQuizBankResponse(gameId: string): Promise<GameQuizBankResponse | null>; // null = ismeretlen játék
-export function quizBankCacheStats(): { builds: number; hits: number; fingerprint: string | null; gzipBytes: number };
+export function quizBankCacheStats(): { builds: number; gameBuilds: number; hits: number; fingerprint: string | null };
+export function quizBankApiItem(r: GameQuizBankRow): { id; tier; topic; prompt; options; correctIndex; explanation; sourceMaterialId };
 export function resetQuizBankCacheForTests(): void;
 ```
 
@@ -48,7 +49,8 @@ options, correctIndex, explanation, sourceMaterialId })) })` — a route mostani
 4. **Route.** `gameQuizBankResponse(gameId)`; `null` → `{ gameId, items: [] }` (mint eddig); különben `req.acceptsEncodings("gzip")`
    esetén `Content-Type: application/json; charset=utf-8`, `Content-Encoding: gzip`, `Vary: Accept-Encoding`,
    `Content-Length`, `res.end(buf)`; egyébként `gunzipSync`. A `isMissingGamesTableError` ág marad.
-5. **Tanmenet-betöltő.** `DISTINCT ON (html_file_id) ... ORDER BY html_file_id, published_at DESC`, 16-os id-kötegek.
+5. **Tanmenet-betöltő.** `DISTINCT ON (html_file_id) ... ORDER BY html_file_id, published_at DESC`, 16-os id-kötegek; csak
+   `jsonb_build_object('sections', json->'sections')` (a `hintsFromLesson` csak a `sections`-t olvassa).
 6. **Teszt** (`quiz-bank-scale-db.integration.ts`, a 300 lecke a fixture-ből, kicsiben tartva a futásidőt):
    - A5: az új eredmény = a régi algoritmus (minden közzétett sor + `canonicalBanks`) eredménye, mind a 6 játékra;
      a gzip kibontva = a route mostani leképezése.
@@ -57,6 +59,7 @@ options, correctIndex, explanation, sourceMaterialId })) })` — a route mostani
    - A3: 10 párhuzamos hideg kérés → `builds` +1.
    - A4: közvetlen SQL `UPDATE` (kvízkérdés-szöveg), új közzétett lecke, visszavonás, törlés → a következő válasz követi.
    - A7: a tanmenet-betöltő 2 verziós anyagnál a legutóbb közzétett JSON-t adja, kötegelve.
+   - Route: a valódi `mountAppRoutes` + `compression` mögött gzip-pel és anélkül ugyanaz a szöveg (nincs dupla tömörítés).
 7. **Mérés utána** ugyanazzal a mérővel; a számok a PR-leírásba és a zárójelentésbe.
 
 ## Parancsok (munkafa `source/`, mind külön kilépési kóddal)

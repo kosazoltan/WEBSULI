@@ -3,6 +3,7 @@ import { isAutomatedUserAgent } from "./lib/automated-agent";
 import { registerLessonFontAssets } from "./lesson-font-assets";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import { gunzipSync } from "node:zlib";
 import express from "express";
 import { csrfSync } from "csrf-sync";
 import { storage } from "./storage";
@@ -1212,21 +1213,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/games/quiz-bank/:gameId", async (req, res) => {
     try {
       const gameId = typeof req.params.gameId === "string" ? req.params.gameId : "";
-      const rows = await gameQuizBankService.listGameQuizBank(gameId);
-      res.json({
-        gameId,
-        items: rows.map((r) => ({
-          id: r.id,
-          tier: r.tier,
-          topic: r.topic,
-          prompt: r.prompt,
-          options: r.options,
-          correctIndex: r.correctIndex,
-          // T-1: a magyarázat is menjen ki, különben a játék némán büntet.
-          explanation: r.explanation,
-          sourceMaterialId: r.sourceMaterialId,
-        })),
-      });
+      // #67: a kész válasz gyorsítótárból, előre tömörítve (a régi út kérésenként minden lecke teljes JSON-ját olvasta → OOM).
+      const cached = await gameQuizBankService.gameQuizBankResponse(gameId);
+      if (!cached) return res.json({ gameId, items: [] });
+      res.type("json");
+      res.vary("Accept-Encoding");
+      if (req.acceptsEncodings("gzip")) {
+        // A compression réteg a már kódolt választ nem tömöríti újra.
+        res.setHeader("Content-Encoding", "gzip");
+        res.setHeader("Content-Length", String(cached.gzip.length));
+        return res.end(cached.gzip);
+      }
+      return res.send(gunzipSync(cached.gzip));
     } catch (e) {
       // AUDIT 2026-09-01: csak a hiányzó tábla esetén fallback; más DB-hiba ne legyen néma 200
       if (isMissingGamesTableError(e)) {
