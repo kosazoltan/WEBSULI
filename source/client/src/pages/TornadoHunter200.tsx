@@ -52,11 +52,13 @@ import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import {
+  cancelGameFrame,
   GameHud,
   GameShell,
   PauseMenu,
   ResultScreen,
   StartScreen,
+  requestGameFrame,
   useBestScore,
   useHaptics,
   useOrientation,
@@ -1704,12 +1706,13 @@ function PlayScreen(props: {
       lastTimeRef.current = t;
       const dt = last == null ? 0 : Math.min(0.05, (t - last) / 1000);
       stepRef.current(dt);
-      rafRef.current = requestAnimationFrame(loop);
+      rafRef.current = requestGameFrame(loop);
     };
-    rafRef.current = requestAnimationFrame(loop);
+    // #58: `requestGameFrame` — a lejárt kupon alatt a képkocka-hurok áll (a sim a szünet-úton áll, a render is).
+    rafRef.current = requestGameFrame(loop);
 
     return () => {
-      cancelAnimationFrame(rafRef.current);
+      cancelGameFrame(rafRef.current);
       window.removeEventListener("resize", handleResize);
       ro.disconnect();
       const sc = sceneRef.current;

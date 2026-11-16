@@ -18,11 +18,13 @@ import * as THREE from "three";
 import { ArrowLeft, Pause, ShieldAlert, Sparkles, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  cancelGameFrame,
   GameHud,
   GameShell,
   PauseMenu,
   ResultScreen,
   StartScreen,
+  requestGameFrame,
   useBestScore,
   useHaptics,
   useTouchCapable,
@@ -1522,12 +1524,13 @@ export default function SpaceAsteroidQuiz() {
       tickRef.current(dt);
       renderRef.current(t / 1000);
 
-      rafRef.current = requestAnimationFrame(loop);
+      rafRef.current = requestGameFrame(loop);
     };
-    rafRef.current = requestAnimationFrame(loop);
+    // #58: `requestGameFrame` — a lejárt kupon alatt a képkocka-hurok áll (a sim a szünet-úton áll, a render is).
+    rafRef.current = requestGameFrame(loop);
 
     return () => {
-      cancelAnimationFrame(rafRef.current);
+      cancelGameFrame(rafRef.current);
       window.removeEventListener("resize", handleResize);
       ro.disconnect();
       // Dispose minden mesh / material / texture (a közös glow-textúra kivételével)

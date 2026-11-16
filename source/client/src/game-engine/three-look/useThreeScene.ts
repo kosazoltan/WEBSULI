@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import * as THREE from "three";
 
+import { cancelGameFrame, requestGameFrame } from "../mobile/modalLayer";
 import { useReducedMotion } from "../useReducedMotion";
 import { disposeObjectTree } from "./dispose";
 import { createPostFx, type BloomOptions, type PostFx } from "./postfx";
@@ -102,28 +103,28 @@ export function useThreeScene(
     let running = true;
     const loop = (t: number) => {
       if (!running) return;
-      raf = requestAnimationFrame(loop);
+      raf = requestGameFrame(loop);
       const dt = last === null ? 0 : Math.min(0.05, Math.max(0, (t - last) / 1000));
       last = t;
       elapsed += dt;
       controller.update(dt, elapsed);
       postFx.render();
     };
-    raf = requestAnimationFrame(loop);
+    raf = requestGameFrame(loop);
 
     // A lost context (GPU reset, too many tabs) must not throw inside the game;
     // the page keeps working and the layer simply stops drawing.
     const onLost = (e: Event) => {
       e.preventDefault();
       running = false;
-      cancelAnimationFrame(raf);
+      cancelGameFrame(raf);
       setSupported(false);
     };
     canvas.addEventListener("webglcontextlost", onLost);
 
     return () => {
       running = false;
-      cancelAnimationFrame(raf);
+      cancelGameFrame(raf);
       ro?.disconnect();
       canvas.removeEventListener("webglcontextlost", onLost);
       try {
