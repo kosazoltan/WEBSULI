@@ -113,3 +113,41 @@ test("tananyagjavító választó: a programozás sora „Programozás”, nem t
   await expect(page.getByTestId("lesson-repair-option-g4")).toContainText("Lecke · 4. osztály");
   await page.screenshot({ path: `${SHOTS}/tananyagjavito-valaszto.png` });
 });
+
+// docs/specs/2026-11-16-tananyag-evfolyam-modositas.md (M8): az admin szerkesztőben átállított Studio-lecke oldala az új évfolyamot
+// mutatja. Az ál-API a PATCH-et alkalmazza és a lecke-végpont abból válaszol; a szerveroldali következetességet (html_files,
+// lessons.json, knowledge_maps) a tests/material-classroom-db.integration.ts bizonyítja valódi HTTP-n.
+test("admin szerkesztő → a lecke oldala az új évfolyamot mutatja", async ({ page }) => {
+  const { fusionFixture } = await import("../shared/fixtures/lesson-fusion");
+  let classroom = 2;
+  const patches: unknown[] = [];
+  const material = () => ({ ...base, id: "arena", title: "Matek Aréna", classroom, contentType: "lesson", subject: "matematika" });
+  await page.route("**/api/**", async (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    if (path === "/api/auth/user") return route.fulfill({ json: { id: "admin-fixture", isAdmin: true, firstName: "Admin" } });
+    if (path === "/api/config") return route.fulfill({ json: { baseUrl: "http://localhost", materialOrigin: "" } });
+    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "probe" } });
+    if (path === "/api/html-files") return route.fulfill({ json: [material()] });
+    if (path === "/api/html-files/arena" && req.method() === "PATCH") {
+      const body = req.postDataJSON() as { classroom?: number };
+      patches.push(body);
+      if (typeof body.classroom === "number") classroom = body.classroom;
+      return route.fulfill({ json: material() });
+    }
+    if (path === "/api/html-files/arena") return route.fulfill({ json: material() });
+    if (path === "/api/lessons/by-file/arena") return route.fulfill({ json: { lesson: { ...fusionFixture(), classroom }, lessonId: "lesson-arena" } });
+    return route.fulfill({ json: path.includes("likes") ? {} : [] });
+  });
+  await page.goto("/admin?tab=files");
+  await page.getByTestId("file-wrapper-arena").getByTestId("button-edit-file").click();
+  await page.getByTestId("select-edit-classroom").click();
+  await page.getByRole("option", { name: "3. osztály", exact: true }).click();
+  await page.getByTestId("button-save-edit").click();
+  await expect.poll(() => patches.length).toBe(1);
+  expect(patches[0]).toMatchObject({ classroom: 3 });
+  await expect(page.getByTestId("file-wrapper-arena").getByTestId("badge-classroom")).toHaveText("3. osztály");
+  await page.goto("/preview/arena");
+  await expect(page.locator(".ws-grade")).toHaveText("3. osztály");
+  await page.screenshot({ path: `${SHOTS}/lecke-oldal-atallitas-utan.png` });
+});

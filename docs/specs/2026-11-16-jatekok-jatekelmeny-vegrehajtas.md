@@ -1067,7 +1067,7 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
 
 ## J2 — Szólétra: „Szikla-verseny” (J2a, J2b)
 
-**Állapot (J2a):** nem kezdődött · **Állapot (J2b):** nem kezdődött
+**Állapot (J2a):** folyamatban — ág feat/jatek-j2a-szoletra, munkafa .claude/worktrees/jatek-j2a, kanban #45 · **Állapot (J2b):** nem kezdődött
 **Függ:** J0c merge. Párhuzamosan futhat a J4-gyel. **Elfogadás:** J-WL, J1–J10, J14, J16, M1–M12. Terv: 5.2.
 
 ### Fájlok
@@ -2128,6 +2128,42 @@ munkamenet-jelző nincs) — egy párhuzamos játékos-folyamat az admin-belép�
 **a játékos-felületre tanulói adat (név, évfolyam, eredmény) ebben a szeletben NEM kerül — ha egy későbbi szelet hozna,
 új független biztonsági review kell**; (4) az export engedélylistás, belső azonosító nélkül; (5) a fióktörlés a fiók címére
 küldött egyszeri, célhoz kötött kódot kér, és értesítő levél megy róla.
+
+### JM7b-utójavítás (N1, N3) — a független biztonsági újraellenőrzés két lelete
+
+**Állapot:** folyamatban — 2026-11-16, ág fix/jatek-fiok-becenev-szuro, munkafa .claude/worktrees/jatek-jm7b-uto, kanban #56 · **Függ:** JM7b · **Modell:** Opus · **Elfogadás:** JM-A11 (becenév-szűrő), JM-A15 (törlés)
+**Cél:** (N1, KÖZEPES) a foglalt-név és a trágárság-szűrő ne legyen kijátszható a kis L / nagy I / `1` felcserélésével
+(`ADMlN`, `WEBSULl`, `GECl`, `BUZl`, `PlCSA`, `NlGGER` ma átmegy); (N3, ALACSONY) idegen ne akaszthassa meg 24 órára a
+fióktörlést a cím közös hibás-próba plafonjának (és levélkeretének) kimerítésével. **Nem cél:** N2 (tiltott játékos
+adatai — tulajdonosi döntés), séma / migráció, `PLAYER_ACCOUNTS` flag (KI marad), `S/auth.ts` és a Google-út (JM7c-1),
+`shared/duel/*`, `S/realtime/*` (JM3a), `rn ~ m` / `vv ~ w` hasonmások (külön döntés).
+**Fájlok:** `source/shared/player-nickname.ts`, `S/player/store.ts`, `S/player/codes.ts`, `S/player/account-routes.ts`,
+`S/player/auth-routes.ts`, tesztek: `T/nickname-filter.test.ts`, `T/player-account-db.integration.ts`.
+**Lépések:**
+1. N1 — EGY közös összetéveszthetőség-normalizálás (`confusableFold`: ékezet le, kisbetű, `0→o`, `1 / l / I / | / ! → i`);
+   erre épül a foglaltsági kulcs (`nicknameKey`) ÉS a tartalomszűrő alakja (`foldNickname`, + a többi leet-csere). A
+   tiltott / foglalt tövek és a kivétel-szavak ugyanígy normalizálva hasonlítódnak össze, így a becenév MINDEN l↔I↔1
+   olvasata egyszerre vizsgált (a két normalizálás nem térhet el újra). Az ismétlés-összevonás csak az eredetileg dupla
+   betű nélküli tövekre (a „segg” / „root” / „staff” szabály változatlan). Az e-mail-szolgáltató-lista is ezen az alakon.
+   Hamis tiltás ellen: gyakori ártatlan nevek ellenpróbája; ha egy név csak az egyik olvasatban ütközik, a tő a
+   kivétellistára kerül (a meglévő `ROOT_EXCEPTIONS` / `RESERVED_EXCEPTIONS` mintájára). A szerver (`account-routes.ts`)
+   és a valós idejű jegy (`S/routes/rt.ts` → `shared/nicknames.ts`) ugyanezt a `checkPlayerNickname`-et hívja.
+   A már eltárolt becenevekre migráció nem kell: a flag KI, éles játékos-adat nincs (a jegy-újraellenőrzés amúgy is a
+   friss szabállyal fut).
+2. N3 — a törlési kód beváltása SAJÁT napi hibás-próba plafont kap (csak a törlési céltartomány rekordjai), a zár közös
+   marad; a belépés plafonja továbbra is MINDKÉT cél hibáit számolja (a törlési próbák nem nyitnak többlet-próbát). A
+   törlési kódkérés saját címenkénti levélkeretet kap (`limit-delete:` korlát-kulcs, a globális plafon közös), a belépő
+   kódkérés keretébe viszont továbbra is beszámít. A belépés nyers erő elleni védelme (8 jegy, rekordonként 5, címenként
+   napi 10) nem változik.
+**Tesztek:** `nickname-filter.test.ts`: a próba hat neve elutasítva; tulajdonság-teszt: MINDEN tiltott és foglalt tő
+minden l / I / 1 / i cseréje (kis- és nagybetűvel) elutasítva; ellenpróba: Lili, Lilla, Ildikó, Bálint, Vili, Milán,
+Illés, Olivér, Emil, Kitti, Niki + a meglévő engedett nevek. `player-account-db.integration.ts`: idegen kimeríti a
+belépési hibás-próba plafont ÉS a belépő levélkeretet → a tulajdonos élő munkamenetből kér és bevált törlési kódot;
+fordítva: a törlési hibák után a belépésnek nem marad több próbája a közös 10-nél.
+**Parancsok:** `node --import tsx --test tests/nickname-filter.test.ts`, `npm run test:learning-db`,
+`node --import tsx --test tests/admin-route-guard.test.ts`, `npm run lint`, `npm run check`, `npm run check:test`.
+**Elfogadás:** a hat név és a generált változatok elutasítva, az ellenpróbák elfogadva; az N3 két DB-esete zöld; a
+meglévő tesztek változatlanul zöldek; nincs séma-változás.
 
 ### JM7b-utójavítás – N2 — tiltott játékos saját adatai + admin végleges törlés
 
