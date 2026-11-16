@@ -1903,7 +1903,7 @@ A Drizzle-séma és a migráció egyezése: a meglévő migrációs ellenőrzés
 
 ### JM7b — Játékos Google-út, becenév + avatar, tanulói profil összekapcsolása, fiókoldal, adatletöltés / törlés, admin-tiltás
 
-**Állapot:** nem kezdődött · **Függ:** JM7a · **Modell:** Opus · **Elfogadás:** JM-A11, JM-A12 (Google-ág), JM-A15
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-jm7b-fiok, munkafa .claude/worktrees/jatek-jm7b, kanban #43 · **Függ:** JM7a · **Modell:** Opus · **Elfogadás:** JM-A11, JM-A12 (Google-ág), JM-A15
 **Fájlok:** `S/player/google.ts`, `S/auth.ts` (csak a callback elágazás — lásd lent), `S/player/account-routes.ts`,
 `S/routes.ts` (admin „Játékosok” végpontok az `adminRouter` alatt → az `isAuthenticatedAdmin` automatikusan véd),
 `source/shared/nicknames.ts` (szűrő), kliens: `P/PlayerAccount.tsx` (a `/profile` utódja; a régi `Profile.tsx` helyi adatai
@@ -1923,6 +1923,14 @@ gyártott SVG-ből (a design-asset bank mintájára; fotófeltöltés nincs); `P
 `websuli.learnerToken`-t fejlécben küldi, a szerver `resolveLearner`-rel ellenőrzi, `S/learners.ts:83`); `GET
 /api/player/export` (JSON: fiók + pontkönyv, e-mail csak a saját exportban); `DELETE /api/player/account` (kaszkád;
 megerősítő párbeszéd a kliensen); tiltás: admin „Játékosok” fül → `banned_at`.
+**Rögzítve a független biztonsági review (#449) után:** (1) közös callback URL marad (Google-konzolban nincs teendő), de a
+folyamat fajtáját a `state` dönti el (`p.` előtag + a munkamenetben state-enként tárolt PKCE-rekord; egyetlen, felülírható
+munkamenet-jelző nincs) — egy párhuzamos játékos-folyamat az admin-belépést nem hiúsítja meg; (2) a becenév ENGEDÉLYLISTÁS
+(ASCII betű / számjegy, magyar ékezetes betűk, szóköz, `_`, `-`), a JM1 `nicknameProblems` erre delegál; (3) a tanulói
+összekapcsolás friss belépést és a fiók becenevét megnevező megerősítést kér, a tokenrotáció bontja, admin is bonthatja;
+**a játékos-felületre tanulói adat (név, évfolyam, eredmény) ebben a szeletben NEM kerül — ha egy későbbi szelet hozna,
+új független biztonsági review kell**; (4) az export engedélylistás, belső azonosító nélkül; (5) a fióktörlés a fiók címére
+küldött egyszeri, célhoz kötött kódot kér, és értesítő levél megy róla.
 
 ---
 

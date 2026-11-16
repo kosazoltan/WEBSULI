@@ -24,6 +24,7 @@ process.env.GOOGLE_CLIENT_SECRET ??= "guard-test-client-secret";
 
 const { isAuthenticatedAdmin } = await import("../server/auth");
 const { mountAppRoutes } = await import("../server/app-routes");
+const { isPlayerGuard, requirePlayerAccountsFlag } = await import("../server/player/require-player");
 
 function unguardedAdminEndpoints(endpoints: readonly Endpoint[], guard: RequestHandler): string[] {
   return endpoints.filter((e) => isUnderAdminPrefix(e.path) && !e.chain.includes(guard)).map((e) => `${e.method} ${e.path}`);
@@ -83,6 +84,18 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "POST /api/player/auth/verify": "JM7a: beváltás — flag, Origin-allowlist, IP-korlát, fiókonkénti hibás-próba plafon",
   "POST /api/player/auth/logout": "JM7a: kijelentkezés — flag, Origin-allowlist",
   "GET /api/player/me": "JM7a: saját játékos (requirePlayer), e-mail nélkül",
+  "GET /auth/player/google": "JM7b: játékos Google-út indítása — flag, külön stratégia, state + PKCE, élő fiók-munkamenet mellett nem indul",
+  "GET /api/player/account": "JM7b: saját fiók — flag + requirePlayer, maszkolt cím",
+  "GET /api/player/nickname-suggestions": "JM7b: becenév-ajánlás — flag + requirePlayer + korlát",
+  "POST /api/player/profile": "JM7b: becenév / avatar — flag + requirePlayer + CSRF + Origin + korlát, szűrő",
+  // Review #449 (K2): a link-learner csak a kapcsolatot rögzíti — a játékos-felületre tanulói adat (név, évfolyam, eredmény)
+  // ebben a szeletben NEM kerül. Ha egy későbbi szelet ilyet hozna (a végpont válasza vagy egy új /api/player/* végpont), az
+  // ÚJ független biztonsági review-t igényel (közös eszköz, testvér-forgatókönyv).
+  "POST /api/player/link-learner": "JM7b: tanulói profil összekapcsolása — flag + requirePlayer + CSRF + Origin + aláírt tanulói token + megerősítés + friss belépés",
+  "POST /api/player/unlink-learner": "JM7b: összekapcsolás bontása — flag + requirePlayer + CSRF + Origin",
+  "POST /api/player/export": "JM7b: adatletöltés (csak saját) — flag + requirePlayer + CSRF + Origin + óránkénti korlát",
+  "POST /api/player/account/delete/start": "JM7b: törlési kód a fiók címére — flag + requirePlayer + CSRF + Origin + korlát, a belépőkód-keret",
+  "POST /api/player/account/delete": "JM7b: fióktörlés — flag + requirePlayer + CSRF + Origin + megerősítő szó + e-mailben küldött egyszeri kód",
   "POST /api/rt/ticket": "JM2: valós idejű belépőjegy — MP_MODE (off → 404, admin → csak admin), Origin-allowlist, IP-korlát; vendég is (generált becenév)",
   "GET /api/rt/status": "JM2: { enabled, mode, szoba- és meccsszám } — nyilvános, PII nélkül (telepítés előtti őr)",
   "GET /api/auth/user": "saját felhasználó (vagy null)",
@@ -173,6 +186,30 @@ describe("JM7a — admin-útvonal regressziós őr", () => {
   it("a játékos-végpontok nem kerülnek admin előtag alá", () => {
     const misplaced = inventory.filter((e) => e.path.includes("/player") && isUnderAdminPrefix(e.path)).map(key);
     assert.deepEqual(misplaced, []);
+  });
+
+  it("JM7b: minden /api/player/* végpont requirePlayer mögött van — kivéve a belépés előtti, tételesen indokolt utakat", () => {
+    // A belépés előtt hívottak (nincs még játékos-munkamenet), és a /me, amely munkamenet nélkül null-t ad (a kezelőben hívja az őrt).
+    const PRE_LOGIN = new Set(["GET /api/player/status", "POST /api/player/auth/start", "POST /api/player/auth/link-info",
+      "POST /api/player/auth/verify", "POST /api/player/auth/logout", "GET /api/player/me"]);
+    const player = inventory.filter((e) => e.path.startsWith("/api/player/"));
+    assert.ok(player.length >= 13, `legalább 13 játékos-végpont várt, ennyi lett: ${player.length}`);
+    const unguarded = player.filter((e) => !PRE_LOGIN.has(key(e)) && !e.chain.some(isPlayerGuard)).map(key);
+    assert.deepEqual(unguarded, []);
+    // Az őr a flag-őr UTÁN áll (kikapcsolt flag mellett előbb a 404, DB-hívás nélkül).
+    for (const e of player.filter((x) => x.chain.some(isPlayerGuard))) {
+      const flagAt = e.chain.indexOf(requirePlayerAccountsFlag);
+      assert.ok(flagAt >= 0 && flagAt < e.chain.findIndex(isPlayerGuard), `${key(e)}: a flag-őr a requirePlayer előtt kell`);
+    }
+  });
+
+  it("JM7b: az admin „Játékosok” végpontjai admin előtag alatt, isAuthenticatedAdmin-nal", () => {
+    const admin = inventory.filter((e) => e.path.startsWith("/api/admin/game-accounts"));
+    assert.deepEqual(admin.map(key).sort(), [
+      "GET /api/admin/game-accounts", "GET /api/admin/game-accounts/:id/email",
+      "POST /api/admin/game-accounts/:id/ban", "POST /api/admin/game-accounts/:id/unban", "POST /api/admin/game-accounts/:id/unlink-learner",
+    ]);
+    for (const e of admin) assert.ok(e.chain.includes(isAuthenticatedAdmin), `${key(e)}: hiányzik az admin-őr`);
   });
 });
 
