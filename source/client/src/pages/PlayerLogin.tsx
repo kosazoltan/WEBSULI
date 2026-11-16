@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import NotFound from "@/pages/not-found";
 import {
-  PLAYER_ME_KEY, checkPlayerLink, logoutPlayer, startPlayerLogin, usePlayer, verifyPlayerLogin, type LinkInfo, type VerifyResult,
+  clearPlayerCache, checkPlayerLink, logoutPlayer, startPlayerLogin, usePlayer, verifyPlayerLogin, type LinkInfo, type VerifyResult,
 } from "@/hooks/usePlayer";
 
 type Step = "email" | "code" | "link-checking" | "link-confirm" | "link" | "done" | "link-error";
@@ -83,7 +83,7 @@ export default function PlayerLogin() {
   useEffect(() => () => { mounted.current = false; }, []);
 
   const finish = async () => {
-    await queryClient.invalidateQueries({ queryKey: PLAYER_ME_KEY });
+    await clearPlayerCache(queryClient);
     if (mounted.current) setStep("done");
   };
 
@@ -154,7 +154,7 @@ export default function PlayerLogin() {
 
   const logout = async () => {
     const ok = await logoutPlayer();
-    await queryClient.invalidateQueries({ queryKey: PLAYER_ME_KEY });
+    if (ok) await clearPlayerCache(queryClient);
     if (!mounted.current) return;
     if (ok) { setError(null); setStep("email"); }
     else setError(ERRORS.NETWORK);

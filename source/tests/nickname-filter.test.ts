@@ -93,6 +93,20 @@ describe("JM7b — becenév: e-mail, URL, telefonszám, trágárság, megtévesz
   });
 });
 
+describe("JM7b — egyetlen becenév-szabály (a JM1 nicknameProblems erre delegál)", () => {
+  it("a vendég-szűrő ugyanazt a szabályt és hossz-határt használja; a vendégnevek a közös listákból jönnek", async () => {
+    const jm1 = await import("../shared/nicknames");
+    assert.equal(jm1.NICKNAME_MIN, 3);
+    assert.equal(jm1.NICKNAME_MAX, PLAYER_NICK_MAX);
+    for (const bad of ["Admin", "4dm1n", `Kata${cp(0x200b)}`, `${cp(0x0430)}nna`, "annablog.com"]) {
+      assert.ok(jm1.nicknameProblems(bad).length > 0, `a JM1-szűrő is elutasítja: ${JSON.stringify(bad)}`);
+      assert.equal(checkPlayerNickname(bad).ok, false, bad);
+    }
+    rejectsWith("annablog.com", "URL");
+    for (let i = 0; i < 50; i++) ok(jm1.guestNickname(`seed-${i}`));
+  });
+});
+
 describe("JM7b — foglaltsági kulcs és ajánlások", () => {
   it("a kulcs kis-/nagybetű-, ékezet- és elválasztó-független, az összetéveszthetőket egybevonja", () => {
     assert.equal(nicknameKey("Kata"), nicknameKey("KÁTA"));

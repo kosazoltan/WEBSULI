@@ -3,7 +3,7 @@
  * admin / meglévő felhasználói úttól (useAuth): itt soha nincs admin-jog, és ez a hook nem is ad ilyen mezőt.
  * A `PLAYER_ACCOUNTS` flag (szerver) alapból KI: ilyenkor `enabled === false`, és semmi nem kér a /me-től.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 
 export type PlayerMe = { id: string; nickname: string | null; needsProfile: boolean };
 export type VerifyRequest = { kind: "code"; email: string; code: string } | { kind: "link"; linkToken: string };
@@ -111,17 +111,32 @@ export type PlayerAccountView = {
 };
 export const PLAYER_ACCOUNT_KEY = ["/api/player/account"] as const;
 
-/** A saját fiók (csak bejelentkezett játékosnál kér). */
-export function usePlayerAccount(enabled: boolean) {
+/**
+ * Review #449: a játékoshoz kötött gyorsítótár-kulcs a játékos azonosítóját is tartalmazza — fiókváltáskor (megosztott eszköz,
+ * ugyanaz az SPA-munkamenet) így B soha nem kaphatja A gyorsítótárazott fiókadatait.
+ */
+export const playerAccountKey = (playerId: string) => [PLAYER_ACCOUNT_KEY[0], playerId] as const;
+
+/**
+ * Review #449: MINDEN be- és kilépéskor (kód, link, kijelentkezés, fióktörlés) a játékoshoz kötött ÖSSZES gyorsítótár-bejegyzés
+ * törlődik, a `me` pedig újratöltődik — a kulcsban lévő azonosító mellett ez a második védelem.
+ */
+export async function clearPlayerCache(queryClient: QueryClient): Promise<void> {
+  queryClient.removeQueries({ queryKey: PLAYER_ACCOUNT_KEY });
+  await queryClient.resetQueries({ queryKey: PLAYER_ME_KEY });
+}
+
+/** A saját fiók (csak bejelentkezett játékosnál kér); a kulcs a játékos azonosítóját tartalmazza. */
+export function usePlayerAccount(playerId: string | null) {
   return useQuery<PlayerAccountView | null>({
-    queryKey: PLAYER_ACCOUNT_KEY,
+    queryKey: playerAccountKey(playerId ?? ""),
     queryFn: async () => {
       const res = await fetch(PLAYER_ACCOUNT_KEY[0], { credentials: "include", headers: { accept: "application/json" } });
       if (res.status === 401 || res.status === 403 || res.status === 404) return null;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return (await res.json()) as PlayerAccountView;
     },
-    enabled,
+    enabled: !!playerId,
     retry: false,
   });
 }

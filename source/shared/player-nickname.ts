@@ -124,6 +124,7 @@ function isEmailLike(raw: string, folded: string): boolean {
 
 function isUrlLike(raw: string, folded: string): boolean {
   if (/(https?|www)/i.test(raw) || folded.includes("http") || folded.includes("www")) return true;
+  if (/\.(hu|com|net|org|eu|io)\b/i.test(raw)) return true;
   return /(^|\s)(pont|dot)\s*(hu|com|net|org|eu|io)(\s|$)/i.test(raw);
 }
 
@@ -183,9 +184,10 @@ export function withDiscriminator(nickname: string, n: number): string {
   return `${base}#${String(Math.abs(Math.trunc(n)) % 10_000).padStart(4, "0")}`;
 }
 
+/** A közös névlisták (a JM1 vendég-becenevei is ezekből: shared/nicknames.ts `guestNickname`). */
 export const SUGGESTION_ADJECTIVES: readonly string[] = [
   "Bátor", "Gyors", "Okos", "Vidám", "Ügyes", "Csillogó", "Fürge", "Merész", "Szorgos", "Kíváncsi",
-  "Nyugodt", "Lelkes", "Villám", "Napsugár", "Titkos", "Vagány", "Kedves", "Éber", "Szuper", "Kozmikus",
+  "Nyugodt", "Lelkes", "Villám", "Napsugár", "Titkos", "Vagány", "Kedves", "Éber", "Hős", "Szuper",
 ];
 
 export const SUGGESTION_ANIMALS: readonly string[] = [

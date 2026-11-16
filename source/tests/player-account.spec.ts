@@ -181,6 +181,56 @@ test("fióktörlés régi belépéssel: újra belépést kér, nem töröl csend
   await expect(page.getByTestId("button-reauth")).toBeVisible();
 });
 
+test("review #449: fiókváltás egy SPA-munkameneten belül — B azonnal a saját adatait látja, A-ból semmi nem marad", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  const A = { ...ACCOUNT, id: "p-a", nickname: "Anna Alfa", avatar: "star-sun", maskedEmail: "a***@a***.hu" };
+  const B = { ...ACCOUNT, id: "p-b", nickname: "Bence Béta", avatar: "ghost-lime", maskedEmail: "b***@b***.hu", googleLinked: false };
+  let current: typeof A | null = A;
+  await page.route("**/api/player/status", (r) => r.fulfill({ json: { enabled: true } }));
+  await page.route("**/api/player/me", (r) => r.fulfill({ json: current ? { id: current.id, nickname: current.nickname, needsProfile: false } : null }));
+  await page.route("**/api/player/account", (r) => (current ? r.fulfill({ json: current }) : r.fulfill({ status: 401, json: { message: "Unauthorized" } })));
+  await page.route("**/api/player/nickname-suggestions", (r) => r.fulfill({ json: { suggestions: [] } }));
+  await page.route("**/api/player/auth/logout", (r) => { current = null; return r.fulfill({ status: 200, body: "OK" }); });
+  await page.route("**/api/player/auth/start", (r) => r.fulfill({ status: 202, json: { ok: true } }));
+  await page.route("**/api/player/auth/verify", (r) => { current = B; return r.fulfill({ json: { ok: true, player: { id: B.id, nickname: B.nickname, needsProfile: false } } }); });
+
+  await page.goto("/fiok");
+  await expect(page.getByTestId("player-nickname")).toHaveText("Anna Alfa");
+  await page.getByTestId("button-account-logout").click();
+  await expect(page).toHaveURL(/\/games$/);
+  // Ugyanabban az SPA-munkamenetben (újratöltés nélkül) B lép be.
+  await page.evaluate(() => { history.pushState({}, "", "/belepes"); dispatchEvent(new PopStateEvent("popstate")); });
+  await page.getByTestId("input-player-email").fill("bence@pelda.hu");
+  await page.getByTestId("button-player-request-code").click();
+  await page.getByTestId("input-player-code").fill("12345678");
+  await page.getByTestId("button-player-verify").click();
+  await page.getByTestId("button-player-account").click();
+  await expect(page.getByTestId("player-nickname")).toHaveText("Bence Béta");
+  await expect(page.getByTestId("player-masked-email")).toHaveText("b***@b***.hu");
+  await expect(page.locator("body")).not.toContainText("Anna Alfa");
+  await expect(page.locator("body")).not.toContainText("a***@a***.hu");
+  await page.getByTestId("button-edit-profile").click();
+  await expect(page.getByTestId("input-player-nickname")).toHaveValue("Bence Béta");
+  await expect(page.getByTestId("avatar-ghost-lime")).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByTestId("player-local-label")).toContainText("Ezen az eszközön");
+});
+
+test("review #449: megszakadt kijelentkezés → hiba, nincs navigáció, belépve marad; újrapróbával kilép", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await mockPlayer(page, ACCOUNT);
+  await page.route("**/api/player/auth/logout", (r) => r.abort("internetdisconnected"));
+  await page.goto("/fiok");
+  await page.getByTestId("button-account-logout").click();
+  await expect(page.getByTestId("player-account-error")).toContainText("Nem sikerült kijelentkezni");
+  await expect(page).toHaveURL(/\/fiok$/);
+  await expect(page.getByTestId("player-nickname")).toHaveText("Villám Róka");
+  expect(await page.evaluate(async () => (await (await fetch("/api/player/me")).json()) !== null)).toBe(true);
+  await page.unroute("**/api/player/auth/logout");
+  await page.route("**/api/player/auth/logout", (r) => r.fulfill({ status: 200, body: "OK" }));
+  await page.getByTestId("button-account-logout").click();
+  await expect(page).toHaveURL(/\/games$/);
+});
+
 test("vendég a /profile-on a régi, helyi Profil oldalt látja (kikapcsolt flag: a valódi szerver)", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 640 });
   await page.goto("/profile");

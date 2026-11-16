@@ -22,7 +22,7 @@ import { ACHIEVEMENT_BY_ID } from "@/lib/achievements";
 import { getLearnerToken } from "@/lib/learnerProfile";
 import { levelFromXp, readLocalProgress, type LocalProgress } from "@/lib/localGameProgress";
 import {
-  PLAYER_ACCOUNT_KEY, PLAYER_ME_KEY, deletePlayerAccount, exportPlayerData, fetchNicknameSuggestions, linkLearnerProfile, logoutPlayer,
+  PLAYER_ME_KEY, clearPlayerCache, deletePlayerAccount, playerAccountKey, exportPlayerData, fetchNicknameSuggestions, linkLearnerProfile, logoutPlayer,
   savePlayerProfile, unlinkLearnerProfile, usePlayer, usePlayerAccount, type PlayerAccountView,
 } from "@/hooks/usePlayer";
 
@@ -39,6 +39,7 @@ const ERR: Record<string, string> = {
   LEARNER_TOKEN_INVALID: "Ezen az eszközön nincs érvényes tanulói profil (vagy a párosítást visszavonták).",
   LEARNER_ALREADY_LINKED: "Ez a tanulói profil már egy másik játékfiókhoz tartozik.",
   CONFIRM_REQUIRED: `A törléshez pontosan ezt írd be: ${DELETE_WORD}`,
+  LOGOUT_FAILED: "Nem sikerült kijelentkezni — próbáld újra! Amíg nem sikerül, a fiók ezen az eszközön belépve marad.",
   REAUTH_REQUIRED: "A biztonság kedvéért a törlés előtt lépj be újra (kódot kapsz e-mailben), utána rögtön törölheted.",
 };
 
@@ -60,19 +61,22 @@ export default function PlayerAccount() {
       </Suspense>
     );
   }
-  return <AccountView />;
+  // Review #449: fiókváltáskor (megosztott eszköz) a nézet és a szerkesztő állapota újraindul — semmi nem öröklődik A-tól.
+  return <AccountView key={player.id} playerId={player.id} />;
 }
 
-function AccountView() {
+function AccountView({ playerId }: { playerId: string }) {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const { data: account, isLoading } = usePlayerAccount(true);
+  const { data: fetched, isLoading } = usePlayerAccount(playerId);
+  // Kettős védelem: más játékos adata (bármilyen okból) nem jelenhet meg.
+  const account = fetched && fetched.id === playerId ? fetched : null;
   const [local] = useState<LocalProgress>(() => readLocalProgress());
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: PLAYER_ACCOUNT_KEY });
+    await queryClient.invalidateQueries({ queryKey: playerAccountKey(playerId) });
     await queryClient.invalidateQueries({ queryKey: PLAYER_ME_KEY });
   };
 
@@ -143,7 +147,7 @@ function Hero({ account, local, onEdit, editing }: { account: PlayerAccountView;
           <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-black/30" aria-label={`Szint-haladás: ${Math.round(lvl.progress * 100)}%`}>
             <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-lime-300 transition-all" style={{ width: `${Math.round(lvl.progress * 100)}%` }} />
           </div>
-          <p className="mt-1 text-xs text-white/80 tabular-nums">{local.stats.totalXp.toLocaleString("hu-HU")} XP · a következő szintig {(lvl.next - local.stats.totalXp).toLocaleString("hu-HU")} XP</p>
+          <p className="mt-1 text-xs text-white/80 tabular-nums">{local.stats.totalXp.toLocaleString("hu-HU")} XP ezen az eszközön · a következő szintig {(lvl.next - local.stats.totalXp).toLocaleString("hu-HU")} XP</p>
         </div>
       </div>
       {!editing && (
@@ -230,13 +234,16 @@ function StatsCard({ local }: { local: LocalProgress }) {
     { label: "Legjobb sorozat", value: s.bestStreak, icon: <Flame className="h-3.5 w-3.5 text-orange-400" /> },
   ];
   return (
-    <section className="mb-4 grid grid-cols-2 gap-2" data-testid="player-stats">
+    <section className="mb-4" data-testid="player-stats">
+      <p className="mb-1.5 px-1 text-[11px] font-bold uppercase tracking-widest text-white/60" data-testid="player-local-label">Ezen az eszközön gyűjtött haladás</p>
+      <div className="grid grid-cols-2 gap-2">
       {items.map((i) => (
         <div key={i.label} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-white">
           <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-white/60">{i.icon}<span>{i.label}</span></div>
           <p className="mt-0.5 text-xl font-black tabular-nums">{i.value.toLocaleString("hu-HU")}</p>
         </div>
       ))}
+      </div>
     </section>
   );
 }
@@ -244,7 +251,7 @@ function StatsCard({ local }: { local: LocalProgress }) {
 function RecordsCard({ local }: { local: LocalProgress }) {
   return (
     <section className="mb-4 rounded-3xl border border-white/10 bg-slate-900/60 p-4 text-white" data-testid="player-records">
-      <h2 className="mb-2 flex items-center gap-2 text-base font-extrabold"><Trophy className="h-5 w-5 text-amber-300" /> Rekordjaim</h2>
+      <h2 className="mb-2 flex items-center gap-2 text-base font-extrabold"><Trophy className="h-5 w-5 text-amber-300" /> Rekordok ezen az eszközön</h2>
       <ul className="divide-y divide-white/10">
         {local.records.map((r) => (
           <li key={r.gameId} className="flex items-center gap-3 py-2">
@@ -256,7 +263,7 @@ function RecordsCard({ local }: { local: LocalProgress }) {
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-[11px] text-white/55">Ezeket a pontokat most ez az eszköz tárolja. Hamarosan a fiókodba is elmentjük őket.</p>
+      <p className="mt-2 text-[11px] text-white/55">Ezeken a számokon minden ezen az eszközön játszott kör osztozik — nem a fiókodhoz kötöttek, ha más is játszik itt, az ő köreit is mutatják. Hamarosan a fiókodba is elmentjük a pontokat.</p>
     </section>
   );
 }
@@ -265,7 +272,7 @@ function BadgesCard({ local }: { local: LocalProgress }) {
   const got = local.unlockedIds.map((id) => ACHIEVEMENT_BY_ID[id]).filter(Boolean);
   return (
     <section className="mb-4 rounded-3xl border border-amber-300/30 bg-amber-900/15 p-4 text-white" data-testid="player-badges">
-      <h2 className="mb-1 flex items-center gap-2 text-base font-extrabold"><Award className="h-5 w-5 text-amber-300" /> Jelvényeim</h2>
+      <h2 className="mb-1 flex items-center gap-2 text-base font-extrabold"><Award className="h-5 w-5 text-amber-300" /> Jelvények ezen az eszközön</h2>
       <p className="text-xs text-white/75"><strong className="text-amber-300">{got.length}</strong> / {local.totalBadges} jelvény</p>
       {got.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -347,10 +354,17 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
   // Kis- / nagybetűtől függetlenül elfogadjuk a beírást („törlöm” is jó), a szerver a nagybetűs alakot kapja.
   const confirmWord = word.trim().normalize("NFC").toLocaleUpperCase("hu-HU");
 
-  const leave = async () => {
-    await logoutPlayer();
-    await queryClient.invalidateQueries({ queryKey: PLAYER_ME_KEY });
-    queryClient.removeQueries({ queryKey: PLAYER_ACCOUNT_KEY });
+  /**
+   * Review #449: csak SIKERES kijelentkezés után ürül a gyorsítótár és navigálunk tovább; sikertelenségnél jól látható,
+   * újrapróbálható hiba, és a felület továbbra is belépettként mutat (a szerveroldali munkamenet él).
+   */
+  const leave = async (): Promise<boolean> => {
+    setBusy(true); setError(null);
+    const ok = await logoutPlayer();
+    setBusy(false);
+    if (!ok) { setError(ERR.LOGOUT_FAILED); return false; }
+    await clearPlayerCache(queryClient);
+    return true;
   };
 
   const download = async () => {
@@ -359,7 +373,7 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
     setBusy(false);
     if (!data) { setError(ERR.SERVER_ERROR); return; }
     // A szerver adatai + az ezen az eszközön tárolt helyi haladás (ez is a játékos saját adata).
-    const file = { ...data, localProgressOnThisDevice: { stats: local.stats, badges: local.unlockedIds, records: local.records.map(({ gameId, lines }) => ({ gameId, lines })) } };
+    const file = { ...data, localProgressOnThisDevice: { note: "Ezen az eszközön (böngészőben) gyűjtött haladás — nem a fiókhoz kötött; megosztott eszközön más játékosé is lehet.", stats: local.stats, badges: local.unlockedIds, records: local.records.map(({ gameId, lines }) => ({ gameId, lines })) } };
     const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }));
     const a = document.createElement("a");
     a.href = url; a.download = "websuli-fiokom.json";
@@ -373,8 +387,7 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
     setBusy(false);
     if (r.ok) {
       setDeleteOpen(false);
-      await queryClient.invalidateQueries({ queryKey: PLAYER_ME_KEY });
-      queryClient.removeQueries({ queryKey: PLAYER_ACCOUNT_KEY });
+      await clearPlayerCache(queryClient);
       setLocation("/games");
       return;
     }
@@ -388,10 +401,10 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
       <p className="text-sm text-white/75">E-mail: <span className="font-semibold" data-testid="player-masked-email">{account.maskedEmail}</span>{account.googleLinked ? " · Google-lal is beléphetsz" : ""}</p>
       <div className="mt-3 grid gap-2">
         <Button variant="outline" className="justify-start gap-2" disabled={busy} onClick={() => void download()} data-testid="button-export-data"><Download className="h-4 w-4" /> Adataim letöltése</Button>
-        <Button variant="outline" className="justify-start gap-2" onClick={() => void leave().then(() => setLocation("/games"))} data-testid="button-account-logout"><LogOut className="h-4 w-4" /> Kijelentkezés</Button>
+        <Button variant="outline" className="justify-start gap-2" disabled={busy} onClick={() => void leave().then((ok) => { if (ok) setLocation("/games"); })} data-testid="button-account-logout"><LogOut className="h-4 w-4" /> Kijelentkezés</Button>
         <Button variant="destructive" className="justify-start gap-2" onClick={() => { setWord(""); setError(null); setReauth(false); setDeleteOpen(true); }} data-testid="button-delete-account"><Trash2 className="h-4 w-4" /> Fiók törlése</Button>
       </div>
-      {error && !deleteOpen && <p className="mt-2 text-sm text-rose-200" role="alert">{error}</p>}
+      {error && !deleteOpen && <p className="mt-2 text-sm text-rose-200" role="alert" data-testid="player-account-error">{error}</p>}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent className="text-slate-900">
           <AlertDialogHeader>
@@ -407,7 +420,7 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
           <AlertDialogFooter>
             <AlertDialogCancel>Mégse</AlertDialogCancel>
             {reauth ? (
-              <Button onClick={() => void leave().then(() => setLocation("/belepes"))} data-testid="button-reauth">Újra belépek</Button>
+              <Button onClick={() => void leave().then((ok) => { if (ok) setLocation("/belepes"); })} data-testid="button-reauth">Újra belépek</Button>
             ) : (
               <Button variant="destructive" disabled={busy || confirmWord !== DELETE_WORD} onClick={() => void remove()} data-testid="button-delete-confirm">Végleges törlés</Button>
             )}
