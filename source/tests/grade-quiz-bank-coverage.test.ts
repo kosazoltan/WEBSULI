@@ -12,9 +12,21 @@ import { normalizePrompt } from "../client/src/game-engine/gradeQuiz";
  * A meglévő `grade-quiz-bank.test.ts` (szerkezet, egysoros forrás, magyarázat-kulcsszó, számolós ellenőrzés) változatlanul
  * fut; ez a fájl a bővítés invariánsait méri, és egy TŐLE FÜGGETLEN második számolót is futtat a bővítés matek-tételein.
  *
- * A JBa a 3–6. évfolyamot bővítette; a JBb (7–9.) és a JBc (10–12.) ehhez a listához adja hozzá a saját évfolyamait.
+ * A JBa a 3–6., a JBb a 7–9. évfolyamot bővítette; a JBc (10–12.) ehhez a listához adja hozzá a saját évfolyamait.
  */
-const EXPANDED_GRADES = [3, 4, 5, 6] as const;
+const EXPANDED_GRADES = [3, 4, 5, 6, 7, 8, 9] as const;
+const ALL_GRADES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+/**
+ * JBb hosszkorlát (a kérdés + 4 opció együtt) — a JBb-től gyártott évfolyamokra. Levezetés: a `windowMsFor` ablaka
+ * `alap + (hossz − READING_FREE_CHARS) · READING_MS_PER_CHAR`, felső korlátja `WINDOW_MAX_MS`; a legnagyobb alappal
+ * (`BASE_WINDOW_MAX_MS`) 120 karakter fölött nincs több olvasási idő. A kérdés ≤ 90 karakter (+1,5 mp ráhagyás), és a
+ * kérdés + 4 opció ≤ 170 karakter: a 20 karakter / mp olvasási tempóval (= 1000 / READING_MS_PER_CHAR) ≤ 8,5 mp, a 9 mp-es
+ * ablakon belül. A JBa (3–6.) tételeire a kérdés / opció korlát érvényes; az együttes korlátot ott nem írtuk elő.
+ */
+const TOTAL_LIMIT_GRADES = [7, 8, 9] as const;
+const MAX_PROMPT = 90;
+const MAX_OPTION = 40;
+const MAX_TOTAL = 170;
 const MIN_PER_GRADE = 270;
 const MIN_PER_CELL = 18;
 
@@ -98,17 +110,30 @@ test("bővített évfolyamok: nincs „mindegyik / egyik sem / mindkettő” opc
   assert.deepEqual(bad, [], bad.join("\n"));
 });
 
-test("a bővítés tételei telefonon gyorsan olvashatók: kérdés ≤ 90, opció ≤ 40 karakter; magyarázat 40–260", () => {
+test("a bővítés tételei telefonon gyorsan olvashatók: kérdés ≤ 90, opció ≤ 40 karakter (7–9.: együtt ≤ 170); magyarázat 40–260", () => {
   const bad: string[] = [];
   for (const g of EXPANDED_GRADES) {
     for (const q of inGrade(g).filter(isExpansion)) {
-      if (q.prompt.length > 90) bad.push(`${where(q)}: kérdés ${q.prompt.length} karakter`);
-      for (const o of q.options) if (o.length > 40) bad.push(`${where(q)}: opció ${o.length} karakter: ${o}`);
+      if (q.prompt.length > MAX_PROMPT) bad.push(`${where(q)}: kérdés ${q.prompt.length} karakter`);
+      for (const o of q.options) if (o.length > MAX_OPTION) bad.push(`${where(q)}: opció ${o.length} karakter: ${o}`);
+      const total = q.prompt.length + q.options.reduce((s, o) => s + o.length, 0);
+      if ((TOTAL_LIMIT_GRADES as readonly number[]).includes(g) && total > MAX_TOTAL) bad.push(`${where(q)}: kérdés + opciók ${total} karakter`);
       const why = q.explanation.trim().length;
       if (why < 40 || why > 260) bad.push(`${q.id}: magyarázat ${why} karakter`);
     }
   }
   assert.deepEqual(bad, [], bad.join("\n"));
+});
+
+test("a hosszkorlát a kérdés-ablakból következik (windowMsFor): a kérdés hossza a telítési pont alatt marad", async () => {
+  const d = await import("../client/src/game-engine/play/questionDirector");
+  // a legnagyobb alap-ablakkal ennyi karakter fölött már nem nő az olvasási idő
+  const saturation = d.READING_FREE_CHARS + (d.WINDOW_MAX_MS - d.BASE_WINDOW_MAX_MS) / d.READING_MS_PER_CHAR;
+  assert.equal(saturation, 120);
+  assert.ok(MAX_PROMPT < saturation, "a kérdés-korlát a telítési pont alatt legyen");
+  // a teljes szöveg (kérdés + 4 opció) olvasási ideje 20 karakter / mp tempóval a 9 mp-es felső ablakon belül
+  assert.ok((MAX_TOTAL * d.READING_MS_PER_CHAR) <= d.WINDOW_MAX_MS, "a kérdés + opciók olvasása beleférjen az ablakba");
+  assert.equal(d.windowMsFor("x".repeat(MAX_PROMPT), 8, d.BASE_WINDOW_MAX_MS), d.WINDOW_MAX_MS - (120 - MAX_PROMPT) * d.READING_MS_PER_CHAR);
 });
 
 test("a helyes válasz helye kiegyensúlyozott: évfolyamonként mind a 4 pozíció 18–32%", () => {
@@ -162,7 +187,8 @@ test("helyesírási tétel: a rossz opció nem létező szó, a helyes létező 
     assert.equal(hunspell.spell("gója"), false, "önellenőrzés: a „gója” nem szó");
     const bad: string[] = [];
     let checked = 0;
-    for (const g of EXPANDED_GRADES) {
+    // JBb: a 3–12. évfolyam MINDEN (meglévő és bővítési) helyesírási tételére érvényes, az `EXPANDED_GRADES`-től függetlenül
+    for (const g of ALL_GRADES) {
       for (const q of inGrade(g).filter((x) => x.subject === "hungarian" && BARE_SPELLING.test(x.prompt.trim()))) {
         checked++;
         q.options.forEach((o, i) => {
@@ -188,13 +214,17 @@ test("helyesírási tétel: a rossz opció nem létező szó, a helyes létező 
  * (racionális literálként) olvassa, ahogy a gyerek is, a `:` és a `·` balról jobbra, a `²` hatvány. Ha a két számoló
  * egy tételen eltérően értené a kifejezést, valamelyik teszt jelez — a kétértelmű leírást a tételben kell javítani.
  */
+const SUPERSCRIPT: Record<string, string> = { "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9", "⁻": "-" };
+
 function evalExpr(src: string, x?: number): number | null {
   const s = src
     .replace(/[−–]/g, "-")
     .replace(/(\d) (?=\d{3}(?!\d))/g, "$1")
     .replace(/(\d),(\d)/g, "$1.$2")
+    // JBb: felső indexes kitevő („2⁵”, „10⁻³”) → `^` + szám
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g, (m) => `^${[...m].map((c) => SUPERSCRIPT[c]).join("")} `)
     .trim();
-  const toks = s.match(/\d+(?:\.\d+)?\/\d+|\d+(?:\.\d+)?|[-+·:()²x]|\S/g);
+  const toks = s.match(/\d+(?:\.\d+)?\/\d+|\^-?\d+|\d+(?:\.\d+)?|[-+·:()x√]|\S/g);
   if (!toks) return null;
   let p = 0;
   const num = (t: string) => (t.includes("/") ? Number(t.split("/")[0]) / Number(t.split("/")[1]) : Number(t));
@@ -204,17 +234,18 @@ function evalExpr(src: string, x?: number): number | null {
     let v: number;
     if (t === "(") { v = sum(); if (toks![p++] !== ")") throw new Error(")"); }
     else if (t === "-") return -atom();
+    else if (t === "√") v = Math.sqrt(atom()); // „√144”, „√(6² + 8²)”
     else if (/^\d/.test(t)) v = num(t);
     else if (t === "x" && x !== undefined) v = x;
     else throw new Error(`váratlan ${t}`);
-    while (toks![p] === "²") { p++; v = v * v; }
+    while (toks![p]?.startsWith("^")) v = v ** Number(toks![p++]!.slice(1));
     return v;
   }
   function prod(): number {
     let v = atom();
     for (;;) {
       if (toks![p] === "·" || toks![p] === ":") v = toks![p++] === "·" ? v * atom() : v / atom();
-      else if (toks![p] === "x" || toks![p] === "(") v *= atom(); // „3x”, „2(x + 1)”
+      else if (toks![p] === "x" || toks![p] === "(" || toks![p] === "√") v *= atom(); // „3x”, „2(x + 1)”, „2√3”
       else return v;
     }
   }
@@ -233,7 +264,8 @@ function evalExpr(src: string, x?: number): number | null {
 
 /** Opció számértéke: tiszta szám / tört / tizedes, legfeljebb mértékegységgel („36 cm”, „24 cm³”). */
 function optionNumber(o: string): number | null {
-  const m = /^(-?[\d ,./−]+?)(?:\s*[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ²³°]+\.?)?$/u.exec(o.trim());
+  // JBb: a számrészben hatvány, gyök és normálalak is lehet („2⁵”, „√2”, „3 · 10⁴”)
+  const m = /^(-?[\d ,./−⁰¹²³⁴⁵⁶⁷⁸⁹⁻·√()]+?)(?:\s*[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ²³°]+\.?)?$/u.exec(o.trim());
   return m ? evalExpr(m[1]!) : null;
 }
 
@@ -257,14 +289,17 @@ function truths(q: GradeQuizItem): boolean[] | null {
   }
   const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
   const pct = /^Mennyi (\d+)-[a-zé]+ (?:a|az) (\d+)%-a\?$/u.exec(prompt);
-  const lnko = /^Mennyi (?:a |az )?(\d+) és (?:a |az )?(\d+) legnagyobb közös osztója\?$/.exec(prompt);
-  const lkkt = /^Mennyi (?:a |az )?(\d+) és (?:a |az )?(\d+) legkisebb közös többszöröse\?$/.exec(prompt);
+  // JBb: két vagy több szám („a 12, a 18 és a 30”) — mind beleszámít, nem csak az utolsó pár
+  const multi = /^Mennyi ((?:(?:a |az )?\d+, )*(?:a |az )?\d+ és (?:a |az )?\d+) (legnagyobb közös osztója|legkisebb közös többszöröse)\?$/.exec(prompt);
   const calc = /^Számold ki:\s*(.+?)\s*$/.exec(prompt) ?? /^Mennyi\s+(.+?)\s*\?$/.exec(prompt);
   let truth: number | null = null;
   if (pct) truth = (Number(pct[1]) * Number(pct[2])) / 100;
-  else if (lnko) truth = gcd(Number(lnko[1]), Number(lnko[2]));
-  else if (lkkt) truth = (Number(lkkt[1]) * Number(lkkt[2])) / gcd(Number(lkkt[1]), Number(lkkt[2]));
-  else if (calc) truth = evalExpr(calc[1]!);
+  else if (multi) {
+    const nums = [...multi[1]!.matchAll(/\d+/g)].map((m) => Number(m[0]));
+    truth = multi[2]!.startsWith("legnagyobb")
+      ? nums.reduce((a, b) => gcd(a, b))
+      : nums.reduce((a, b) => (a * b) / gcd(a, b));
+  } else if (calc) truth = evalExpr(calc[1]!);
   if (truth === null) return null;
   const values = q.options.map(optionNumber);
   if (values.some((v) => v === null)) return null;
@@ -317,4 +352,15 @@ test("a független számoló önellenőrzése", () => {
   assert.deepEqual(truths(item("Oldd meg: 3x + 4 = 19", ["x = 5", "x = 6", "x = 15", "x = 7"])), [true, false, false, false]);
   assert.deepEqual(truths(item("Oldd meg: 2(x − 1) = 8", ["x = 5", "x = 4", "x = 3", "x = 9"])), [true, false, false, false]);
   assert.equal(truths(item("Mennyi 347 tízesre kerekítve?", ["350", "340", "300", "400"])), null);
+  // JBb: hatvány, gyök, normálalak, több szám LKKT-ja
+  assert.equal(evalExpr("2⁵ · 2³ : 2⁶"), 4);
+  assert.equal(evalExpr("√(6² + 8²)"), 10);
+  assert.equal(evalExpr("√144"), 12);
+  assert.ok(Math.abs(evalExpr("10⁻²")! - 0.01) < 1e-12);
+  assert.equal(evalExpr("−3²"), -9);
+  assert.equal(evalExpr("(−3)²"), 9);
+  assert.equal(optionNumber("3 · 10⁴"), 30000);
+  assert.equal(optionNumber("16 cm²"), 16);
+  assert.deepEqual(truths(item("Mennyi a 12, a 18 és a 30 legkisebb közös többszöröse?", ["180", "90", "360", "60"])), [true, false, false, false]);
+  assert.deepEqual(truths(item("Mennyi 24, 36 és 60 legnagyobb közös osztója?", ["12", "6", "4", "24"])), [true, false, false, false]);
 });
