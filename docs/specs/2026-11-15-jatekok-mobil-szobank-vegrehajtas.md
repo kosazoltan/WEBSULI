@@ -1718,7 +1718,7 @@ a `GameShell` `orientation="landscape"`-et kap; a `pickQuestion` törzsében a t
 
 ## S13 — Játéklista és főoldali kártyák arculata, teljes mátrix, verify, átfogó review, retro
 
-**Állapot:** folyamatban — 1. rész összevonva (#437); 2. (záró) rész: ág feat/jatekok-s13b-zaras, munkafa .claude/worktrees/jatekok-s13, kanban #30. Modell: Opus. Függőség: S1–S12 mind összevonva.
+**Állapot:** kész, review alatt — 1. rész összevonva (#437); 2. (záró) rész: ág feat/jatekok-s13b-zaras (az átfogó review leleteivel együtt; bizonyítékok: T/a), kanban #30. Modell: Opus. Függőség: S1–S12 mind összevonva.
 
 - **Cél:** közös arculat a játéklistán és a főoldali kártyákon; a mobil mátrix mind a 7 játékra `"full"`, a szóbank mindhárom
   nyelven `"full"`, a szóbank-bekötés mind a 6 nyelvi játékban — őr-tesztekkel; `npm run verify` zöld; átfogó review
@@ -1829,6 +1829,36 @@ majd újra a K.1/2 kapui) és az aktív futások őre (terv D2).
 | P2 | S2, S6–S13 | `docs/measurements/jatekok-mobil/S<n>/*.jpg` |
 | P3 | S13 | PR-komment az átfogó reviewval |
 | P4 | S13 + orkesztrátor | retro-fájl, C-30, kanban #17–#30 `done` bizonyítékkal, munkafák eltávolítva |
+
+### T/a — Záró állapot (S13b, 2026-11-16): pontonként a tényleges bizonyíték
+
+| Pont | Állapot | Bizonyíték |
+|---|---|---|
+| A1 | teljesül | `game-mobile-complete.test.ts` „stage full … bankméret” (EN 2664, DE 2080, FR 2064); `vocab-bank-validate.test.ts` |
+| A2 | teljesül | `vocab-bank-validate.test.ts` „nulla hiba”; `report --lang en|de|fr` → hibák 0; `vocab-bank-cognates.test.ts` |
+| A3 | teljesül | `vocab-question-generator.test.ts`, `vocab-distractor-overlap.test.ts`; L2: `vocab-same-meaning-run.test.ts` |
+| A4 | teljesül | `vocab-seen-history.test.ts` (10 futás × 20 kérdés; 2000 futás) |
+| A5 | teljesül | `vocab-seen-history.test.ts` (két forrás); valódi böngésző: `vocab-cross-game-log.spec.ts` (Szólétra → Szökőár) |
+| A6 | teljesül | `vocab-seen-history.test.ts` (kivételt dobó tároló, sérült JSON, `null`) |
+| A7 | teljesül | `vocab-game-wiring.test.ts`, `word-ladder-vocab.test.ts`, `game-mobile-complete.test.ts` (6× wired) |
+| A8 | teljesül | `vocab-game-wiring.test.ts`; a Tornado tananyag mellett is: `tornado-material-unseen.test.ts` (review H1 javítva) |
+| A9 | teljesül | `docs/measurements/2026-11-15-szobank-{en,de,fr}-vakmegoldo.md` (kanári 10/10; S13 utójavítás bekezdés) |
+| M1 | teljesül | `game-mobile-quality.spec.ts` „full: M1 M2 M3 …” + „M2 M3 kvíz-állapotban” (7 játék × 3 nézet); lista: `games-lobby-mobile.spec.ts` |
+| M2 | teljesül | ugyanott `smallTargets` 5 állapotban (kezdő, játék, kvíz, szünet, eredmény) |
+| M3 | teljesül | ugyanott `smallFonts` (játék, kvíz, szünet, eredmény) |
+| M4 | teljesül | „full: M4 biztonsági sáv” — álló: felül 44 / alul 34; fekvő: bal / jobb 44, alul 21 (review K2); kupon-HUD: `s13-review-guards` „L3” |
+| M5 | teljesül | `game-mobile-shell.test.ts`; spec „nem érintős” / „érintős laptop”; `games-pointer-controls.spec.ts` |
+| M6 | teljesül | „full: M6 … és szünetben áll az óra” (HUD 1,5 s alatt változatlan); kártya mellett is: „K1 K3 szünet a magyarázókártya fölött” |
+| M7 | teljesül | „full: M1 … M7 eredmény” (csillag, Újra, Vissza, nincs jelvény-toast); `game-win-paths.spec.ts` |
+| M8 | teljesül | „full: M8” + `games-lobby-mobile.spec.ts` M8 (/games és / → 7 játék, ≤ 2 koppintás) |
+| M9 | teljesül, korláttal | „full: M9” (CSS-/Web Animation-név); az állapotvezérelt villanás: `s13-review-guards` „M9” (forrásőr) |
+| M10 | teljesül | „full: M10 rossz válaszra [30, 40, 30]” + „M10 jó válaszra 18 ms” |
+| M11 | teljesül | spec konzol- / WebGL-hibagyűjtés; PCF-figyelmeztetés: `three-look-shadow-type.test.ts`, árnyék: `docs/measurements/jatekok-mobil/S13/e21-*-arnyek.jpg` |
+| M12 | teljesül | játékonkénti tesztek a T táblázat szerint; képernyőkép-mátrix: `docs/measurements/jatekok-mobil/S13/<játék>-<nézet>-<állapot>.jpg` |
+| P1 | lásd a PR-t | `npm run verify` a munkafa gyökeréből (a záró PR leírásában a valós kimenet); a merge utáni megismétlés az orkesztrátoré |
+| P2 | teljesül | `docs/measurements/jatekok-mobil/S13/` (7 × 3 × 5 kép + lista, főoldal, árnyék) |
+| P3 | orkesztrátor | a független átfogó review PR-kommentként (a leletek javítása ebben a PR-ban, leletenként) |
+| P4 | részben | retro: `docs/handoffs/2026-11-16-jatekok-mobil-szobank-retro.md`; csapdák C-30–C-34; kanban- és munkafa-higiénia az orkesztrátoré |
 
 ## U — Nyitott kérdések (UNKNOWN) és felderítésük
 

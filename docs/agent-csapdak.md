@@ -446,3 +446,33 @@ Forrás: main CI 43794783447 (b5041240, #437 után): Playwright E2E 3 failed (a 
   eredmény; kvízben a válaszgombok doboza). Élő játékelemen (HUD, idősáv, vászon) soha. A `SETTLE_SELECTOR`-ból a `play` kikerült;
   a kvíz-mérés a `[data-correct]` gombokra vár, nem a teljes kvízrétegre (abban fut a kvízóra csíkja). Új stabilitás-várakozást a
   CI-vel azonos úton (`npm run test:e2e -- … -g <játék>`, buildelt szerver, szoftveres WebGL) is le kell futtatni, nem csak Vite-tal.
+
+## C-34 — Játékszeletek (S6–S12) tanulságai: rétegek, időzítés, teszt-kampók (2026-11-16)
+
+Forrás: #424–#436 review-jai és CI-körei, az S13 átfogó review (K1, K3, H1) és az S13 C-ellenőrzőlistája
+(`docs/measurements/2026-11-16-jatekok-c-ellenorzolista.md`).
+
+- **Fekvő tájolást kérő játék (Tornado):** a forgatási kérés (`game-rotate-hint`) álló nézetben eltakarja a játékot. **Megelőzés:**
+  az e2e `playReady` kezelje (`game-rotate-continue`), és a játékóra álljon a kérés alatt (`halted`).
+- **Késleltetett mentés elavult állapottal:** `setTimeout`-ból mentett React-állapot a bezárt (régi) értéket írta. **Megelőzés:**
+  késleltetett írás csak funkcionális állapotfrissítéssel (`setX(prev => …)`) vagy ref-ből.
+- **Teszt-kampó minden rendernél:** a `forceResult`-szerű teszt-API effekt minden renderben újra lefutott és újra kiváltotta az
+  állapotot. **Megelőzés:** a kampó csak a kérés számlálójának változására fusson (`useEffect(…, [props.forceX])`), és csak
+  `VITE_ENABLE_GAME_TEST_HOOKS=1` mellett.
+- **`Button variant="secondary"`:** a változat színátmenete felülírja a `className`-ben adott `bg-*` színt. **Megelőzés:** egyedi
+  színű gombhoz `variant="ghost"` / saját osztály, vagy a közös `.game-btn-*`.
+- **`.hidden` felülírva:** a lap saját, rétegen kívüli CSS-e (`display: grid`) felülírta a Tailwind `.hidden`-t, a rejtett elem
+  látszott. **Megelőzés:** állapotfüggő láthatóság feltételes rendereléssel vagy `:not(.hidden)` szelektorral (Kockavadász
+  `.game-play-stack:not(.hidden)`); lásd C-32.
+- **CDP kétujjas érintés:** a `Input.dispatchTouchEvent` két pontja „lefutott”, de a játék nem kapott két ujjat. **Megelőzés:** a
+  többujjas gesztus hatását mutációval (állapotváltozás a DOM-ban / teszt-API-n) is igazolni kell, nem csak az esemény küldését.
+- **`npm run test:e2e -- … --repeat-each N`:** a harness láncán a kapcsoló elveszik (egyszer fut). **Megelőzés:** ismételt
+  futtatáshoz a közvetlen futtató (`npx playwright test -c <konfig> --repeat-each N`) kell.
+- **Magyarázókártya (z 90) a szünet menü (z 80) fölött; a szünet háttere nem inert (review K1, K3):** a menü gombjai elérhetetlenek
+  voltak, Tab-bal a háttér válaszgombjai szünetben is megválaszolhatók. **Megelőzés:** minden teljes képernyős játék-fedőréteg a
+  közös `useModalLayer`-t használja (inert háttér, fókuszcsapda, fókusz vissza), a kártya szünetben rejtve (`usePauseMenuOpen`);
+  a válaszkezelő szünetben nem fogad választ. Mérő: `game-mobile-quality` „K1 K3 szünet a magyarázókártya fölött”.
+- **A szóbank-bekötés „sorrend-őre” a jelentést nem méri (review H1):** a `vocab-game-wiring` csak azt nézte, hogy a forrásban a
+  tananyag-ág a szóbank-hívás ELŐTT áll; a Tornado feltétele a teljes tananyag-lista ürességét nézte, így tananyag mellett a szóbank
+  sosem kérdezett. **Megelőzés:** bekötésnél szimulációs teszt (N húzás a valódi választóval: a tananyag egyszer, utána szóbank),
+  nem csak forrásbeli sorrend (`tornado-material-unseen.test.ts`).
