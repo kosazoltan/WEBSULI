@@ -250,7 +250,7 @@ sora az adott játék „a” al-szeletének kötelező része.
 
 ## J0a — Determinizmus és játékérzet: seedelt RNG, fix lépés, rázás / hitstop, mini-Director, őrök
 
-**Állapot:** nem kezdődött
+**Állapot:** folyamatban — ág feat/jatek-j0a-determinizmus, munkafa .claude/worktrees/jatek-j0a, kanban #36
 **Cél-mondatok:** G1, G8 (előfeltétel), G10 (előfeltétel). **Elfogadás:** J19 (közös rész), J11 (feel), K.4 9/12/13/19.
 **Modell:** Opus. **Becsült diff:** ~450 sor (ebből ~200 teszt).
 
