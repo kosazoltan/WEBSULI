@@ -163,6 +163,26 @@ A pontos szignatúrát mindig a forrásból olvasd (`GE/play/*`, gyűjtő-export
   `expire`-jét lejáratkor.
 - **Új score-hívás** `runId: newScoreRunId()`-vel (JM0, `game-score-contract-guard`).
 
+#### Megvalósult eltérések (J4a pilot #451 és a közös utójavítás — `fix/jatek-play-kozos-utojavitas`, kanban #51)
+
+**Állapot (közös utójavítás):** folyamatban — ág fix/jatek-play-kozos-utojavitas, munkafa .claude/worktrees/jatek-kozos, kanban #51
+
+- **Évfolyamhoz kötött ismétlés (#451):** `PlayQuestion.grade`, `ReviewItem.grade` (`{ v: 1, rev: 2 }`), `reviewFitsGrade`,
+  `inferReviewGrade`; a director a menet `config.grade`-jét bélyegzi és csak azonos évfolyamú ismétlést ad vissza.
+- **Közös meghajtó-minta (#451):** a lap és a node-szimuláció UGYANAZT a meghajtót hívja (fix lépés, időskála, hitstop) — saját
+  `dt × timeScale` lépéssel a sim más ellenfélsort mér (a `waves.ts` lépésenként fogyaszt RNG-t).
+- **`calm()` a kezdő fázisban (utójavítás a):** a mini-Director `calm()`-ja alacsony szintnél (`intensity < RELAX_ENTER`) a
+  kezdő „buildup” fázisban is igaz — különben csúcs nélküli menetben csak a kényszerített (maxGap) kérdések jöttek.
+- **`createQuestionUi` React-mentes fájlban (b):** `play/questionUi.ts`; a `useQuestionDirector.ts` re-exportálja.
+- **Érintés mozgó célpontra (c):** `pointerTapHandlers` (`play/pointerTap.ts`) — felengedéskor véglegesít, ha az ujj a cél
+  AKTUÁLIS dobozán belül (± tűrés) vagy alig mozdult; elhúzás / `pointercancel` = visszavonás; mutatónként; NEM `click`
+  (több ujjnál a nem elsődleges mutatóra nincs `click`).
+- **Mozgó cél a mobil mérőben (d):** `GameMobileCase.quizMoving` — stabil doboz helyett N egymást követő mintán érintési
+  méretű és a képernyőn belüli cél; a meglévő esetek viselkedése változatlan.
+- **A K.1 „`onRetry=` → 0 találat” elfogadási grep pontosítása (e):** a tiltás a MAGYARÁZÓKÁRTYA újrapróbájára vonatkozik
+  (`<QuizFeedbackCard … onRetry=` / `retryTask`), nem a `ResultScreen` „Új futam” (új menet) propjára; a grep:
+  `grep -nE "<QuizFeedbackCard[^>]*onRetry=|retryTask" P/<lap>.tsx` → 0 találat.
+
 ### K.3 Etikai ellenőrzőlista (minden játékszelet PR-leírásában pipálva)
 
 - [ ] nincs veszteségkerüléssel fenyegető szöveg vagy visszaszámláló a menün kívül (terv 4.2);
