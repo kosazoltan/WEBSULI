@@ -11,7 +11,13 @@ export const GAME_W = 18;
 export const GAME_H = 24;
 
 export const PLAYER_MAX_SPEED = 8.2;
-export const PLAYER_ACCEL = 28;
+/**
+ * Joystick-reakció (kanban #49): a hajó sebessége ezzel az időállandóval (s) követi a tárcsa szerinti célsebességet
+ * (`kitérés × PLAYER_MAX_SPEED`). Mérve a régi, állandó 28 egység/s²-es gyorsulással: a mozgás 90%-a 244 ms
+ * (lassított CPU-n 306 ms), irányváltás ~0,6 s, és a fél kitérés is végsebességre gyorsított — nem lehetett lassan,
+ * finoman araszolni. 0,05 s mellett: 90% ≈ 115 ms, frekvenciafüggetlen (exponenciális).
+ */
+export const PLAYER_RESPONSE_TAU = 0.05;
 /** Exponential damping (1/s). After 0.4 s of no input, speed is ~11% of max. */
 export const PLAYER_FRICTION = 5.5;
 
@@ -121,8 +127,9 @@ export function integratePlayer(
   let vx = p.vx;
   let vy = p.vy;
   if (pressing) {
-    vx += stick.mx * PLAYER_ACCEL * dt;
-    vy += stick.my * PLAYER_ACCEL * dt;
+    const follow = 1 - Math.exp(-dt / PLAYER_RESPONSE_TAU);
+    vx += (stick.mx * PLAYER_MAX_SPEED - vx) * follow;
+    vy += (stick.my * PLAYER_MAX_SPEED - vy) * follow;
   } else {
     const damp = Math.exp(-PLAYER_FRICTION * dt);
     vx *= damp;
