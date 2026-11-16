@@ -1298,6 +1298,14 @@ export default function BlockCraftQuiz() {
     }
   }, [hotbarTypes, selType]);
 
+  // S11: az elismerő felirat eltüntetése feliratonként — egy korábbi felirat időzítője nem törölheti a későbbit
+  // (a régi, hívásonkénti setTimeout a 2,5 s-on belül érkező új feliratot is idő előtt eltüntette).
+  useEffect(() => {
+    if (!achievement) return;
+    const id = window.setTimeout(() => setAchievement(null), 2500);
+    return () => window.clearTimeout(id);
+  }, [achievement]);
+
   // XP-felirat automatikus eltüntetése.
   useEffect(() => {
     if (!xpFloat) return;
@@ -2509,16 +2517,12 @@ export default function BlockCraftQuiz() {
 
       if (tgt.t === DIAMOND && rareBlocks === 0) {
         setAchievement("Első gyémánt megtalálva!");
-        setTimeout(() => setAchievement(null), 2500);
       } else if (newBlocks === 10) {
         setAchievement("10. blokk kibányászva!");
-        setTimeout(() => setAchievement(null), 2500);
       } else if (newStreak === 5) {
         setAchievement("5-ös sorozat elérve!");
-        setTimeout(() => setAchievement(null), 2500);
       } else if (isCreeper) {
         setAchievement("Creeper legyőzve! Dupla XP!");
-        setTimeout(() => setAchievement(null), 2500);
       }
     }
     mineTargetRef.current = null;

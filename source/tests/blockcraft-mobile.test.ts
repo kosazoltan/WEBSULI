@@ -72,6 +72,12 @@ test("szünet: a render-ciklus, a játékóra és a vezérlés szünetben áll",
   has(code, /if \(phaseRef\.current === "play"\) \{[\s\S]{0,900}stepPlayerPhysics\(/, "a kvíz alatt is lép a fizika");
 });
 
+test("késleltetett írás: az elismerő felirat időzítője feliratonként él, nem törli a későbbit", () => {
+  const code = pageCode();
+  assert.doesNotMatch(code, /[^.]setTimeout\(\(\) => setAchievement\(null\)/, "hívásonkénti, elavult időzítő törli a feliratot");
+  has(code, /if \(!achievement\) return;\s*const id = window\.setTimeout\(\(\) => setAchievement\(null\), 2500\);\s*return \(\) => window\.clearTimeout\(id\);/, "nincs feliratonkénti, takarított időzítő");
+});
+
 test("kétujjas vezérlés: a körbenézés csak a vászon jobb 60%-án indul", () => {
   const code = pageCode();
   has(code, /const LOOK_ZONE_START = 0\.4;/, "a körbenézés-zóna nem a jobb 60%");
