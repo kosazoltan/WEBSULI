@@ -197,6 +197,57 @@ export function sfxWarning(): void {
   setTimeout(() => beep(330, 0.16, "triangle", 0.05), 80);
 }
 
+/* ===================== J0c — játékélmény-receptek (terv D3: szintetizált, fájl nélkül) =====================
+ * Mind a `beep`-en át szól, így a némítást (`isMuted`) és a hangerőt a meglévő minta szerint tiszteli. Szándékosan
+ * barátságos hangszín (szinusz / háromszög): a hiba hangja sem büntető (terv 4.2: a hibás válasz nem megalázó). */
+
+/** Kapun / célon áthaladás — felfelé csúszó két hang. */
+export function sfxGate(): void {
+  beep(440, 0.09, "triangle", 0.05, 660);
+  setTimeout(() => beep(660, 0.12, "triangle", 0.05, 990), 70);
+}
+
+/** Kombó-szint (1–5): a hangmagasság a szinttel nő (dúr skála lépcsői). */
+export function sfxCombo(level: 1 | 2 | 3 | 4 | 5): void {
+  const steps = [523, 587, 659, 784, 880];
+  const lv = Math.min(5, Math.max(1, Math.round(level))) as 1 | 2 | 3 | 4 | 5;
+  const f = steps[lv - 1]!;
+  beep(f, 0.08, "sine", 0.05);
+  setTimeout(() => beep(f * 1.5, 0.1, "sine", 0.045), 60);
+}
+
+/** Találat a főellenfélen — tömör, mély ütés. */
+export function sfxBossHit(): void {
+  beep(180, 0.14, "triangle", 0.07, 90);
+  setTimeout(() => beep(360, 0.06, "square", 0.025, 240), 20);
+}
+
+/** A főellenfél legyőzése — ünneplő, felfelé futó négyes. */
+export function sfxBossDefeat(): void {
+  beep(392, 0.12, "triangle", 0.06);
+  setTimeout(() => beep(523, 0.12, "triangle", 0.06), 110);
+  setTimeout(() => beep(659, 0.12, "triangle", 0.06), 220);
+  setTimeout(() => beep(1047, 0.32, "sine", 0.06), 330);
+}
+
+/** Suhanás (kérdés / kapu érkezése, kitérés) — halk, lefelé csúszó szinusz. */
+export function sfxWhoosh(): void {
+  beep(900, 0.16, "sine", 0.025, 300);
+}
+
+/** Megbotlás / hibás válasz — lágy, lefelé lépő két hang (nem bántó). */
+export function sfxStumble(): void {
+  beep(392, 0.1, "triangle", 0.045);
+  setTimeout(() => beep(311, 0.16, "triangle", 0.04), 90);
+}
+
+/** Mentés (mentőöv, mentő-pajzs) — fényes, felfelé ívelő hármas. */
+export function sfxRescue(): void {
+  beep(587, 0.08, "sine", 0.05);
+  setTimeout(() => beep(784, 0.08, "sine", 0.05), 80);
+  setTimeout(() => beep(1175, 0.18, "sine", 0.05, 1320), 160);
+}
+
 /* ===================== React hook ===================== */
 
 export function useAudioSettings(): {

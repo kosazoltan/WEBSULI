@@ -407,6 +407,8 @@
      S13 / review K3: a kvíz-visszajelzés szünetben NEM látszik (usePauseMenuOpen), így nem takarja a menüt; a
      QuizFeedbackCard a z-[90] osztályt tartja (a game-feedback-wiring-guard a lapok rétegeivel veti össze). */
   --game-z-overlay: 80;
+  /* J0c: a nem blokkoló kérdés-sáv a HUD (20) és a vezérlők (30) fölött, a szünet / eredmény (80) alatt. */
+  --game-z-question: 60;
   --game-z-feedback: 90;
   --game-z-coupon-expired: 95;
 }
@@ -443,6 +445,195 @@
     font-size: var(--game-answer-font);
     line-height: 1.2;
   }
+}
+
+/* ------------------------------------------------------------------------
+   J0c — nem blokkoló kérdés-sáv (GE/play/InlineQuestion.tsx), „Miért?”, „Gyakorold még”.
+   @layer components (C-32): a játék Tailwind-segédosztálya felülírhatja. A biztonsági sáv csak a --game-safe-*
+   változókon át. A játék a --play-question-top / --play-question-bottom változóval igazíthat a saját HUD-jához /
+   vezérlősávjához. Skin: data-skin → --pq-* változók.
+   ------------------------------------------------------------------------ */
+@layer components {
+  .play-question {
+    --play-question-top: calc(max(4px, var(--game-safe-top)) + 80px);
+    --play-question-bottom: calc(max(8px, var(--game-safe-bottom)) + var(--game-action-size) + 16px);
+    --pq-surface: #062a3feb; --pq-border: #67e8f9a6; --pq-accent: #22d3ee; --pq-accent-2: #38bdf8;
+    --pq-option-bg: #0c4a6e; --pq-option-active: #0e7490; --pq-option-border: #7dd3fc66; --pq-glow: #22d3ee4d;
+    --pq-badge-bg: #22d3ee24; --pq-radius: 18px; --pq-option-radius: 16px;
+    position: fixed; inset: 0; z-index: var(--game-z-question, 60);
+    display: flex; flex-direction: column; justify-content: flex-end; gap: 8px;
+    padding: var(--play-question-top) max(8px, var(--game-safe-right)) var(--play-question-bottom) max(8px, var(--game-safe-left));
+    pointer-events: none; color: #f8fafc;
+    font-family: 'Nunito', 'Source Sans 3', system-ui, sans-serif;
+  }
+  .play-question[data-mode="bar"] { justify-content: flex-start; }
+  .play-question > * { pointer-events: auto; width: min(100%, 560px); margin-inline: auto; }
+  .play-question[data-skin="rock"] { --pq-surface: #2a1d12eb; --pq-border: #fbbf24a6; --pq-accent: #fbbf24; --pq-accent-2: #fb923c; --pq-option-bg: #5b3a1c; --pq-option-active: #78491f; --pq-option-border: #fcd34d66; --pq-glow: #f59e0b40; --pq-badge-bg: #fbbf2424; }
+  .play-question[data-skin="mine"] { --pq-surface: #0f1a10ee; --pq-border: #4ade80a6; --pq-accent: #4ade80; --pq-accent-2: #a3e635; --pq-option-bg: #1f3d22; --pq-option-active: #2b5530; --pq-option-border: #86efac59; --pq-glow: #22c55e40; --pq-badge-bg: #4ade8024; --pq-radius: 8px; --pq-option-radius: 6px; }
+  .play-question[data-skin="neon"] { --pq-surface: #14052ceb; --pq-border: #f0abfcb3; --pq-accent: #e879f9; --pq-accent-2: #22d3ee; --pq-option-bg: #3b0764; --pq-option-active: #581c87; --pq-option-border: #f0abfc73; --pq-glow: #e879f966; --pq-badge-bg: #e879f924; }
+  .play-question[data-skin="arena"] { --pq-surface: #1e1038eb; --pq-border: #a3e635a6; --pq-accent: #a3e635; --pq-accent-2: #facc15; --pq-option-bg: #4c1d95; --pq-option-active: #5b21b6; --pq-option-border: #c4b5fd66; --pq-glow: #a3e63540; --pq-badge-bg: #a3e63524; }
+  .play-question[data-skin="space"] { --pq-surface: #0b1033eb; --pq-border: #a5b4fcb3; --pq-accent: #a5b4fc; --pq-accent-2: #c084fc; --pq-option-bg: #1e1b4b; --pq-option-active: #312e81; --pq-option-border: #a5b4fc66; --pq-glow: #818cf859; --pq-badge-bg: #a5b4fc24; }
+  .play-question[data-skin="storm"] { --pq-surface: #111827ed; --pq-border: #fde047a6; --pq-accent: #facc15; --pq-accent-2: #e2e8f0; --pq-option-bg: #334155; --pq-option-active: #475569; --pq-option-border: #fde04759; --pq-glow: #facc1540; --pq-badge-bg: #facc1524; }
+
+  .play-question-card {
+    position: relative; padding: 8px 10px 10px; border-radius: var(--pq-radius);
+    background: var(--pq-surface); border: 1.5px solid var(--pq-border);
+    -webkit-backdrop-filter: blur(10px) saturate(140%); backdrop-filter: blur(10px) saturate(140%);
+    box-shadow: 0 10px 28px #00000073, 0 0 22px var(--pq-glow), inset 0 1px 0 #ffffff1f;
+    animation: pq-in .18s ease-out both;
+  }
+  .play-question-card[data-tone="good"] { border-color: #86efac; box-shadow: 0 10px 28px #00000073, 0 0 26px #22c55e66, inset 0 1px 0 #ffffff1f; }
+  .play-question-card[data-tone="bad"] { border-color: #fdba74; box-shadow: 0 10px 28px #00000073, 0 0 26px #f9731659, inset 0 1px 0 #ffffff1f; }
+  .play-question-card-mini { width: auto; padding: 6px; align-self: center; }
+  .play-question-head { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+  .play-question-badge {
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 9999px;
+    background: var(--pq-badge-bg); color: var(--pq-accent);
+    font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .play-question-badge svg { flex: 0 0 auto; width: 15px; height: 15px; }
+  /* A „Mutasd” gomb mellett keskeny kijelzőn csak az ikon marad (a felirat a képernyőolvasónak megmarad). */
+  @media (max-width: 459px) {
+    .play-question-badge[data-compact="true"] { padding: 6px; }
+    .play-question-badge[data-compact="true"] .play-question-badge-text {
+      position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+  }
+  .play-question-timer { flex: 1 1 auto; min-width: 24px; height: 10px; border-radius: 9999px; overflow: hidden; background: #ffffff1f; border: 1px solid #ffffff1a; }
+  .play-question-timer-fill {
+    display: block; width: 100%; height: 100%; transform-origin: left center; border-radius: inherit;
+    background: linear-gradient(90deg, var(--pq-accent), var(--pq-accent-2)); box-shadow: 0 0 10px var(--pq-glow);
+    transition: transform .12s linear;
+  }
+  /* Kevés idő: borostyán + csíkozás (nem csak szín — színtévesztők). */
+  .play-question-timer[data-low="true"] .play-question-timer-fill {
+    background: repeating-linear-gradient(-45deg, #fbbf24 0 6px, #f59e0b 6px 12px); box-shadow: 0 0 10px #f59e0b99;
+  }
+  .play-question-secs { flex: 0 0 auto; min-width: 2.8em; text-align: right; font-size: 13px; font-weight: 800; color: #e2e8f0; font-variant-numeric: tabular-nums; }
+  .play-question-icon-btn {
+    flex: 0 0 auto; width: var(--game-touch-min); height: var(--game-touch-min);
+    display: inline-flex; align-items: center; justify-content: center; border-radius: 14px;
+    color: #fff; background: #ffffff14; border: 1px solid #ffffff2e; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .play-question-icon-btn svg { width: 20px; height: 20px; }
+  .play-question-icon-btn:focus-visible, .play-question-more:focus-visible, .play-why:focus-visible { outline: 3px solid #fef08a; outline-offset: 2px; }
+  .play-question-prompt {
+    margin: 4px 2px 0; font-size: clamp(16px, 4.6vmin, 21px); font-weight: 800; line-height: 1.28; color: #fff;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+    overflow-wrap: anywhere; hyphens: auto; text-shadow: 0 1px 2px #0009;
+  }
+  .play-question-prompt[data-long="true"] { font-size: clamp(15px, 4vmin, 18px); }
+  .play-question[data-expanded="true"] .play-question-prompt { display: block; -webkit-line-clamp: unset; line-clamp: none; max-height: 30vh; overflow: auto; }
+  .play-question-more {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    min-height: var(--game-touch-min); min-width: var(--game-touch-min); padding: 0 10px;
+    border-radius: 12px; border: 1px dashed var(--pq-border); background: #ffffff0d; color: var(--pq-accent);
+    font-size: 14px; font-weight: 900; cursor: pointer; touch-action: manipulation;
+  }
+  /* Állapotsor + „Miért?” egy sorban (helytakarékos: a kártya ne nőjön a játék fölé). */
+  .play-question-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+  .play-question-foot:has(> .play-why), .play-question-foot:has(> .play-question-status:not(:empty)) { margin-top: 6px; }
+  .play-question-foot .play-why { margin-top: 0; margin-left: auto; }
+  .play-question-status { flex: 1 1 12em; min-width: 0; display: flex; align-items: center; gap: 6px; margin: 0 2px; font-size: 15px; font-weight: 800; line-height: 1.25; }
+  .play-question-status[data-tone="good"] { color: #86efac; }
+  .play-question-status[data-tone="bad"] { color: #fed7aa; }
+  .play-question-status svg { flex: 0 0 auto; width: 20px; height: 20px; }
+  .play-question-status-dot {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+    border-radius: 9999px; background: #fb923c; color: #431407; font-size: 13px; font-weight: 900;
+  }
+
+  .play-question-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .play-question[data-cols="1"] .play-question-options { grid-template-columns: minmax(0, 1fr); }
+  .play-question-col { display: contents; }
+  .play-question[data-count="3"][data-cols="2"] .play-question-col[data-side="right"] > :only-child { grid-column: 1 / -1; }
+  .play-question-option {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; text-align: left;
+    border-radius: var(--pq-option-radius); background: linear-gradient(180deg, #ffffff1f 0%, #ffffff00 55%), var(--pq-option-bg); border: 1.5px solid var(--pq-option-border);
+    color: #fff; font-weight: 800; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none;
+    box-shadow: inset 0 1px 0 #ffffff1f, inset 0 -3px 0 #0000004d, 0 6px 16px #00000059;
+    transition: transform .08s ease, background-color .12s ease, opacity .15s ease;
+  }
+  .play-question-option:not([aria-disabled="true"]):active { transform: scale(.97); background: var(--pq-option-active); }
+  .play-question-option:focus-visible { outline: 3px solid #fef08a; outline-offset: 2px; }
+  .play-question-option[aria-disabled="true"] { cursor: default; }
+  .play-question-key {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+    border-radius: 9999px; background: var(--pq-badge-bg); box-shadow: inset 0 0 0 1.5px var(--pq-border); font-size: 15px; font-weight: 900; color: var(--pq-accent);
+  }
+  .play-question-key svg { width: 18px; height: 18px; }
+  .play-question-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; line-height: 1.2; }
+  .play-question-option[data-state="correct"] { background: #15803d; border-color: #86efac; animation: pq-pop .28s ease-out; }
+  .play-question-option[data-state="correct"] .play-question-key { background: #22c55e; color: #fff; box-shadow: none; }
+  .play-question-option[data-state="wrong"] { background: #9a3412; border-color: #fdba74; }
+  .play-question-option[data-state="wrong"] .play-question-key { background: #f97316; color: #fff; box-shadow: none; }
+  .play-question-option[data-state="dim"] { opacity: .5; }
+  .play-question[data-disabled="true"] .play-question-card,
+  .play-question[data-disabled="true"] .play-question-options { opacity: .55; }
+
+  /* „bar” mód: a válaszcélok a játékvilágban; a DOM-gombsor vizuálisan rejtett, de fókuszálható (terv 8.11). A doboz
+     valódi méretű (a vágás a találati felületet is elveszi), így a játék érintése átmegy rajta; billentyűs fókuszra a
+     sor megjelenik a kártya alatt. */
+  .play-question[data-mode="bar"] .play-question-options {
+    position: absolute; left: 0; right: 0; top: 0; width: 100%; clip-path: inset(50%); pointer-events: none; opacity: 0;
+  }
+  .play-question[data-mode="bar"] .play-question-options:focus-within {
+    position: static; clip-path: none; pointer-events: auto; opacity: 1; width: min(100%, 560px);
+  }
+
+  .play-why {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--game-touch-min); min-width: var(--game-touch-min);
+    margin-top: 8px; padding: 0 16px; border-radius: 14px; border: 0; cursor: pointer;
+    background: #fde68a; color: #422006; font-size: 15px; font-weight: 900; touch-action: manipulation;
+    box-shadow: inset 0 -3px 0 #d97706, 0 6px 16px #0000004d;
+  }
+  .play-question-card-mini .play-why { margin-top: 0; }
+  .play-why-icon { width: 18px; height: 18px; }
+  .play-speech-toggle svg { width: 20px; height: 20px; }
+
+  /* Fekvő telefon: a kártya fent középen, a válaszok a két szélen, a vezérlősáv fölött. */
+  @media (orientation: landscape) and (max-height: 520px) {
+    .play-question {
+      --play-question-top: calc(max(4px, var(--game-safe-top)) + 60px);
+      --play-question-bottom: calc(max(8px, var(--game-safe-bottom)) + var(--game-action-size) + 12px);
+      display: block; padding: 0;
+    }
+    .play-question > .play-question-card {
+      position: absolute; top: var(--play-question-top); left: 0; right: 0; width: min(46vw, 440px); margin-inline: auto;
+    }
+    .play-question[data-mode="buttons"] .play-question-options {
+      position: absolute; top: var(--play-question-top); bottom: var(--play-question-bottom);
+      left: max(8px, var(--game-safe-left)); right: max(8px, var(--game-safe-right)); width: auto; margin: 0;
+      display: flex; align-items: center; justify-content: space-between; pointer-events: none;
+    }
+    .play-question[data-mode="buttons"] .play-question-col {
+      display: flex; flex-direction: column; gap: 8px; width: min(25vw, 220px); pointer-events: auto;
+    }
+    .play-question-prompt { font-size: clamp(15px, 4.4vmin, 19px); }
+    .play-question-prompt[data-long="true"] { font-size: 15px; }
+  }
+
+  @keyframes pq-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes pq-pop { 0% { transform: scale(1); } 45% { transform: scale(1.05); } 100% { transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    .play-question-card, .play-question-option[data-state="correct"] { animation: none; }
+    .play-question-timer-fill, .play-question-option { transition: none; }
+  }
+
+  /* „Gyakorold még” — az eredményképernyő `extra` slotjában. */
+  .play-review { margin: 4px 0 2px; text-align: left; }
+  .play-review-title { margin: 0 0 6px; font-size: 14px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #fde68a; }
+  .play-review-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .play-review-item { padding: 8px 10px; border-radius: 12px; background: #ffffff0f; border: 1px solid #ffffff1a; }
+  .play-review-prompt { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.3; color: #f1f5f9; overflow-wrap: anywhere; }
+  .play-review-answers { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 4px 0 0; font-size: 15px; line-height: 1.3; }
+  .play-review-picked, .play-review-correct { display: inline-flex; align-items: center; gap: 4px; overflow-wrap: anywhere; }
+  .play-review-picked { color: #fdba74; }
+  .play-review-timeout { font-style: italic; }
+  .play-review-correct { color: #86efac; }
+  .play-review-answers svg { flex: 0 0 auto; width: 16px; height: 16px; }
+  .play-review-why { margin: 4px 0 0; font-size: 14px; line-height: 1.35; color: #cbd5e1; }
 }
 
 /* Közös gombok (kezdő-, szünet- és eredményképernyő). */
