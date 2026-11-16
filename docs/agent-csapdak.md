@@ -476,3 +476,13 @@ Forrás: #424–#436 review-jai és CI-körei, az S13 átfogó review (K1, K3, H
   tananyag-ág a szóbank-hívás ELŐTT áll; a Tornado feltétele a teljes tananyag-lista ürességét nézte, így tananyag mellett a szóbank
   sosem kérdezett. **Megelőzés:** bekötésnél szimulációs teszt (N húzás a valódi választóval: a tananyag egyszer, utána szóbank),
   nem csak forrásbeli sorrend (`tornado-material-unseen.test.ts`).
+
+## C-35 — Regex a JS-sablonszövegben: a `\s` visszaperjele elveszett, a teszt a szűk bemenetre zöld volt (2026-11-16)
+
+- **Tünet:** a `feedback.ts` megerősítő-előtag regexe `\s*` helyett `s*`-t tartalmazott (`persze)s*[!.:,;–—-]+s*`), így a
+  „Helyes — …” és „Helyes: …” kezdetű magyarázat rossz válasznál is megerősítésként jelent meg; a vercel[bot] review fogta meg.
+- **Gyökérok:** a fájlt `node -e` / heredoc JS-sablonszövegével (backtick) írtam: a sablonszövegben a `\s` escape-je eltűnik
+  (`\s` → `s`), és a regex-szöveget nem olvastam vissza. A saját teszt csak a „Helyes!” alakot próbálta, ami szóköz nélkül is átment.
+- **Megelőzés:** regexet tartalmazó kódot kizárólag Edit/Write eszközzel írj (nem JS-sablonszöveggel, nem inline `sed`-del);
+  szerkesztés után `cat -A <fájl> | sed -n <sor>p`-vel olvasd vissza a tényleges bájtokat; a regexhez minden elválasztó-változatot
+  (szóköz, gondolatjel, kettőspont, vessző) és egy „majdnem egyezik” ellenpéldát (itt: „Helyesírás”) tesztelj.

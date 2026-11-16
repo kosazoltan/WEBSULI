@@ -88,6 +88,21 @@ function asSentence(text: string): string {
   return /[.!?][”"'»)]*$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
+/** Dicsérő / megerősítő nyitószó, amely rossz válasz mellett félrevezető volna („Helyes! …”, „Igen, …”, „Pontos. …”). */
+const AFFIRMATION_PREFIX =
+  /^(?:helyes|igen|így van|jól van|pontos|szuper|ügyes|kiváló|nagyszerű|remek|tökéletes|nagyon jó|jó válasz|bizony|persze)\s*[!.:,;–—-]+\s*/iu;
+
+/**
+ * A magyarázat elejéről levágja az affirmációs nyitószót. `null`: nem volt ilyen előtag (a szöveg változatlan marad);
+ * üres szöveg: a magyarázat csak ennyiből állt. A maradék első betűje nagybetűs.
+ */
+export function stripAffirmationPrefix(text: string): string | null {
+  const m = AFFIRMATION_PREFIX.exec(text);
+  if (!m) return null;
+  const rest = text.slice(m[0].length).trim();
+  return rest.length > 0 ? rest.charAt(0).toLocaleUpperCase("hu-HU") + rest.slice(1) : "";
+}
+
 function optionAt(options: string[], index: number | null): string | null {
   if (index === null) return null;
   if (!Number.isInteger(index) || index < 0 || index >= options.length) return null;
@@ -127,7 +142,17 @@ export function buildFeedback(input: FeedbackInput): FeedbackCard {
         ? "correct"
         : "wrong";
 
-  const bankExplanation = quiz.explanation?.trim() ?? "";
+  const rawExplanation = quiz.explanation?.trim() ?? "";
+  // E24 (éles próba): a generált magyarázat sokszor dicsérettel kezdődik („Helyes! A helyesírás…”) — rossz
+  // válasznál vagy lejárt időnél ez ellentmond a kártya címének. Ilyenkor az előtagot levágjuk, és a helyes választ
+  // mondjuk ki helyette; a helyes választ és a változatlan magyarázatokat ez nem érinti.
+  const stripped = outcome === "correct" ? null : stripAffirmationPrefix(rawExplanation);
+  const bankExplanation =
+    stripped === null
+      ? rawExplanation
+      : stripped.length > 0 && correctAnswer !== null
+        ? `A helyes válasz: ${correctAnswer}. ${stripped}`
+        : "";
 
   const why =
     outcome === "correct"

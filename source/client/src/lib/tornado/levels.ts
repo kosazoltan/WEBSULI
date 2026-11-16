@@ -59,15 +59,15 @@ export const LEVEL_COUNT = 200;
 export const ULTIMATE_LEVEL = 200;
 
 export const LEVEL_STAGES: readonly Stage[] = [
-  { id: "light", label: "Light Storm", from: 1, to: 25, color: "#7dd3fc" },
-  { id: "beginner", label: "Beginner", from: 26, to: 50, color: "#4ade80" },
-  { id: "advanced", label: "Advanced", from: 51, to: 75, color: "#a3e635" },
-  { id: "pro", label: "Pro", from: 76, to: 100, color: "#facc15" },
-  { id: "expert", label: "Expert", from: 101, to: 125, color: "#fb923c" },
-  { id: "master", label: "Master", from: 126, to: 150, color: "#f87171" },
-  { id: "extreme", label: "Extreme", from: 151, to: 175, color: "#e879f9" },
-  { id: "legendary", label: "Legendary", from: 176, to: 199, color: "#c084fc" },
-  { id: "ultimate", label: "THE ULTIMATE STORM", from: 200, to: 200, color: "#f43f5e" },
+  { id: "light", label: "Enyhe", from: 1, to: 25, color: "#7dd3fc" },
+  { id: "beginner", label: "Kezdő", from: 26, to: 50, color: "#4ade80" },
+  { id: "advanced", label: "Haladó", from: 51, to: 75, color: "#a3e635" },
+  { id: "pro", label: "Profi", from: 76, to: 100, color: "#facc15" },
+  { id: "expert", label: "Szakértő", from: 101, to: 125, color: "#fb923c" },
+  { id: "master", label: "Mester", from: 126, to: 150, color: "#f87171" },
+  { id: "extreme", label: "Extrém", from: 151, to: 175, color: "#e879f9" },
+  { id: "legendary", label: "Legendás", from: 176, to: 199, color: "#c084fc" },
+  { id: "ultimate", label: "Végső", from: 200, to: 200, color: "#f43f5e" },
 ] as const;
 
 export function stageForLevel(level: number): Stage {
@@ -171,7 +171,7 @@ export function levelsByStage(): { stage: Stage; levels: LevelSpec[] }[] {
   }));
 }
 
-/** Coarse storm label for the HUD ("STORM: EXTREME"). */
+/** Coarse storm label for the HUD ("VIHAR: EXTRÉM"). */
 export function stormLabel(level: number): string {
   return stageForLevel(level).label.toUpperCase();
 }

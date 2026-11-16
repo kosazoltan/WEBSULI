@@ -135,7 +135,7 @@ export const ACHIEVEMENT_CATALOG: Achievement[] = [
   { id: "tornado_level_10", title: "Viharvadász", description: "Érd el a 10. szintet.", icon: "🌩️", category: "tornado", points: 20, tier: "common" },
   { id: "tornado_level_50", title: "Tapasztalt vadász", description: "Érd el az 50. szintet.", icon: "⛈️", category: "tornado", points: 45, tier: "rare" },
   { id: "tornado_level_100", title: "Vihar-veterán", description: "Érd el a 100. szintet.", icon: "🌀", category: "tornado", points: 80, tier: "epic" },
-  { id: "tornado_ultimate", title: "The Ultimate Storm", description: "Teljesítsd a 200. szintet.", icon: "🏆", category: "tornado", points: 200, tier: "legendary" },
+  { id: "tornado_ultimate", title: "A Végső Vihar", description: "Teljesítsd a 200. szintet.", icon: "🏆", category: "tornado", points: 200, tier: "legendary" },
 ];
 
 export const ACHIEVEMENT_BY_ID: Record<string, Achievement> = Object.fromEntries(

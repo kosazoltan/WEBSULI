@@ -16,6 +16,7 @@ import ClassroomGateModal from "@/components/ClassroomGateModal";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
 import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
+import { quizTopicLabelHu } from "@/lib/quizTopicLabel";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
 import { useCouponSession } from "@/game-engine/useCouponSession";
@@ -1314,7 +1315,7 @@ export default function BrainRotSteal() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className={`text-sm font-extrabold uppercase tracking-wide ${CATEGORY_LABELS[quiz.category].color}`}>
-                    {CATEGORY_LABELS[quiz.category].icon} {quiz.topic || CATEGORY_LABELS[quiz.category].label} kvíz
+                    {CATEGORY_LABELS[quiz.category].icon} {quizTopicLabelHu(quiz.topic, CATEGORY_LABELS[quiz.category].label)} kvíz
                   </p>
                   <p className="text-sm text-white/75">
                     {caughtRot.name} · <span className="text-amber-300 font-bold">{Math.round(caughtRot.xpValue * comboMultiplier)} XP</span>

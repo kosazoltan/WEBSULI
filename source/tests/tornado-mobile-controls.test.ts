@@ -57,7 +57,7 @@ test("TouchControls mindig látszik — nincs sm:hidden, nincs hidden+coarse:fle
  * teljes kormány. A tárcsa most analóg `touchDriveInput`-on át vezet; mindkét tengely (gáz ÉS kormány)
  * bekötése kötelező, így mind a négy irány továbbra is a tárcsán van.
  */
-test("TouchControls: köralakú tárcsa vezet (mind a négy irány, analóg), gombon csak horgony és Cam", () => {
+test("TouchControls: köralakú tárcsa vezet (mind a négy irány, analóg), gombon csak horgony és Kamera", () => {
   const block = touchControlsBlock();
   assert.match(block, /<VirtualJoystick\b/, "nincs tárcsa a vezérlésben");
   assert.match(block, /touchDriveInput\s*\(/, "a tárcsa vektora nincs bekötve");
@@ -65,7 +65,8 @@ test("TouchControls: köralakú tárcsa vezet (mind a négy irány, analóg), go
     assert.match(block, new RegExp(`touchRef\\.current\\.${axis}\\s*=\\s*drive\\.${axis}`), `${axis} nincs a tárcsára kötve`);
   }
   assert.match(block, /label="⚓"/, "a horgony gomb marad");
-  assert.match(block, /label="Cam"/, "a kamera gomb marad");
+  // SPEC-VÁLTOZÁS 2026-11-16 (tornado-spec 14. pont: a felület magyar): a gomb felirata „Cam” → „Kamera”.
+  assert.match(block, /label="Kamera"/, "a kamera gomb marad");
   for (const gone of ['label="Gáz"', 'label="Fék"', 'label="◀"', 'label="▶"']) {
     assert.ok(!block.includes(gone), `${gone} visszaszivárgott a tárcsa mellé`);
   }
