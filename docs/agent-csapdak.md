@@ -583,18 +583,46 @@ Forrás: J0c (#446) → J0c-b (kanban #46), orkesztrátori képátnézés.
   `play-lab.spec.ts` „J0c-b …”), nem egy rövid mintával; a tartalék-mechanizmus (pl. „Mutasd”) csak mesterségesen túlhosszú
   bemenetre jelenhet meg.
 
-## C-44 — Egymásra rakott holtsávok: a „lassú joystick” nem késés volt, hanem halott tárcsa-közép (2026-11-16)
+## C-44 — Évfolyam-bank tartalom: emlékezetből írt tény, létező szó „hibás” opcióként, homonim alak (2026-11-16)
 
-Forrás: kanban #49 (tulajdonosi hibajelentés valódi telefonról: „nagyon lassan reagál, nem lehet finoman vezérelni”).
+Forrás: #448 review (Codex, Vercel Agent), `docs/measurements/2026-11-16-evfolyam-bank-3-6-vakmegoldo.md` „Második audit”,
+`docs/measurements/2026-11-16-evfolyam-bank-7-9-vakmegoldo.md`.
 
-- **Tünet:** mind a négy tárcsás játékban (Tornado, Kockavadász, Aszteroida, Szökőár) a kis kitérés semmit nem csinált,
-  utána egyszerre jött a teljes sebesség / kormány.
-- **Gyökérok (mérve, `tests/joystick-response.spec.ts`):** a tárcsa saját 0,15-ös holtsávja UTÁN a játékok még egy küszöböt
-  tettek rá (`joystickToDirections` 0,35 → a sugár ~45%-áig semmi, utána digitális 100%; a Tornado kormánya 0,2-es
-  tengely-holtsáv + négyzetes görbe → a sugár 30%-áig 0, 40%-nál 5%). A bemenet → hurok késés ezzel szemben a böngésző
-  képkockához igazított kézbesítésén belül volt (~3 képkocka). Mellékokok: az Aszteroida állandó gyorsulása (90% 244 ms),
-  a tárcsa gombja React-állapottal (egy képkockával a játék után rajzolódott), a Szökőár render-felülírása (`playerXRef =
-  playerX` minden renderben ≤ 42 ms mozgást vont vissza).
-- **Megelőzés:** egy holtsáv (a tárcsáé), utána folytonos görbe (`shapeJoystick` / `joystickCurve`); a játék analóg értéket
-  olvas ref-ből képkockánként, nem logikai irányokat. „Lassú vezérlés” jelentésnél ELŐBB a kitérés → mozgás görbét mérd
-  (finomság-tábla), ne csak a késést — a ms-os késés itt rendben volt.
+- **Tünet:** a vak megoldó (kanári 10/10) és egy kulcsos audit után is maradt három tartalmi hiba: a János vitéz-kulcs a
+  griffmadarat mondta (a mű szerint az óriás viszi át Jánost); a „gólja” „hibás” opció létező szó (a gól birtokos alakja); a
+  „rajzoltatok” múlt időnek szánva jelen idejű műveltető alakként is elemezhető. Egy meglévő (2026-09-es) tételben is ott volt a
+  „gólja”.
+- **Gyökérok:** a gyártó és az auditor is emlékezetből dolgozott; a vak megoldó egy tételt lát, és a „melyik a helyes” típusnál
+  nem kérdőjelezi meg, hogy a rossz opció valóban nem szó-e.
+- **Megelőzés:** (1) a gyártó forrásból dolgozik, tételenként forrás-megjegyzéssel (a validátor bukik nélküle), irodalmi tény
+  csak a mű szövegéből; (2) a helyesírási „hibás” opciót a hunspell magyar szótár (`dictionary-hu` + `hunspell-asm`, a
+  függőségek között) ellenőrzi — a gyártási validátorban ÉS a `tests/grade-quiz-bank-coverage.test.ts` őrben a 3–12. évfolyam
+  minden tételén; (3) nyelvtani alakot mondatba ágyazva kérdezünk; (4) a forrásalapú audit az ELSŐ körben fut, és a javított
+  tételt a vak megoldó újra megoldja.
+
+## C-45 — Évfolyam-bank: a meglévő tesztek szűk mintái és a vak megoldó gyengeségei (2026-11-16)
+
+Forrás: JBa / JBb futás (#448 és a JBb PR).
+
+- **Tünet 1:** a `tests/grade-quiz-bank.test.ts` ORDINAL-mintája (`/i` kapcsolóval) a magyar „A válasz …” névelős szókapcsolatot is
+  sorszám-hivatkozásnak méri; a számolója a `3/4 : 1/2` alakot balról jobbra olvassa ((3/4)/1)/2, és a „12, 18 és 30” közül csak a
+  „18 és 30” párt veszi. **Megelőzés 1:** a gyártási validátor ugyanezekre bukik; a magyarázatban „A felelet”, törttel osztás
+  zárójellel, több szám LKKT-ja névelős alakban; a meglévő tesztet nem lazítjuk.
+- **Tünet 2:** a Sonnet-szintű vak megoldó gyors, de irodalmi és alaptény-kérdéseken tévedett (6. évf.: 7 tévedés; 7. évf.: 4
+  irodalmi); egy megoldó a `chosen` mezőt szkripttel töltötte ki az indexből (a védelem üres). **Megelőzés 2:** az utasítás
+  kimondja, hogy a `chosen`-t a megoldó kézzel másolja; minden megoldói eltérést a forrásból bírálunk el; a tartalmi
+  bizonyítékot a forrásalapú audit adja, nem a vak kör.
+- **Tünet 3:** a JS `\b` ASCII-alapú — az „ó” végű „szó” után nem illeszkedik, a helyesírási tételek felismerője így csendben
+  kevés tételt talált. **Megelőzés 3:** szóköz-határ, és a teszt minimális darabszámot is ellenőriz.
+- **Tünet 4:** a Write eszköz a `\u00A0` escape-et a tesztfájlban és a jegyzőkönyvben is nyers NBSP-vé írta (C-31/5 ismét).
+  **Megelőzés 4:** írás után `grep -c $'\xc2\xa0'`.
+- **Tünet 5:** a `git stash push` parancs a push-audit hookot is kiváltja (a „push” szó miatt). **Megelőzés 5:** `git stash -u`.
+- **Tünet 6:** a Git Bash-es `node -e` szövegcsere CRLF-es forrásfájlon csendben nem illeszkedett (a fájl CRLF, a minta LF).
+  **Megelőzés 6:** forrásfájlt Edit eszközzel módosítunk, és a csere után ellenőrizzük, hogy tényleg megtörtént.
+- **Tünet 7:** a vak megoldó csak a kérdést és az opciókat látja, a magyarázatot nem; a forrásalapú audit a kulcsot igazolta,
+  a magyarázat mellékállítását nem (Szondi két apródja: két jelenet összemosva; „a since is időtartamot vezet be”; Hannibál
+  „30 elefántja”). **Megelőzés 7:** külön magyarázat-audit állításonként („igazolt – forrás” / „nem igazolható → törölve”), és a
+  `source/scripts/grade-bank-keyword-groups.ts` kulcsszó-csoportjain a bankon belüli ellentmondás emberi átnézése.
+- **Tünet 8:** a hosszkorlát-teszt a 9 mp-es felső határhoz mért, nem a játék tényleges olvasási szűrőjéhez; a 4. évfolyam 40%-a
+  nem volt elolvasható. **Megelőzés 8:** a bank-őr ugyanazt a `fitsAllViewports`-ot hívja, mint a játék (`.ok`, ≥ 95% /
+  évfolyam, cellánként ≥ 15); a szöveges duplikátum-ellenőrzés mellé tartalmi (azonos válasz + átfedés) jelölt-keresés kell.

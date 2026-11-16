@@ -83,6 +83,8 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "POST /api/player/auth/verify": "JM7a: beváltás — flag, Origin-allowlist, IP-korlát, fiókonkénti hibás-próba plafon",
   "POST /api/player/auth/logout": "JM7a: kijelentkezés — flag, Origin-allowlist",
   "GET /api/player/me": "JM7a: saját játékos (requirePlayer), e-mail nélkül",
+  "POST /api/rt/ticket": "JM2: valós idejű belépőjegy — MP_MODE (off → 404, admin → csak admin), Origin-allowlist, IP-korlát; vendég is (generált becenév)",
+  "GET /api/rt/status": "JM2: { enabled, mode, szoba- és meccsszám } — nyilvános, PII nélkül (telepítés előtti őr)",
   "GET /api/auth/user": "saját felhasználó (vagy null)",
   "GET /api/csrf-token": "CSRF-token",
   "GET /api/health": "állapot",

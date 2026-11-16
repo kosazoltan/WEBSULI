@@ -261,3 +261,13 @@ automatikus lekérése 403); a `g04-history-044` (Kinizsi és a malomkő) mondá
   kétértelműséget hozott volna).
 5. A Write eszköz a tesztfájlban is nyers NBSP / NNBSP karakterré írta a `\u00A0` / `\u202F` escape-et (C-31/5 megismétlődött) —
    írás után `grep -c $'\xc2\xa0'` és `perl -CSD -pi -e 's/\x{00A0}/\x5Cu00A0/g'`.
+
+## Utólagos újra-vak kör a második audit javításain (a JBb szeletben, 2026-11-16)
+
+A második audit 18 javított tételét vak megoldó nem oldotta meg újra — ez a JBb-ben pótolva (részletek:
+`docs/measurements/2026-11-16-evfolyam-bank-7-9-vakmegoldo.md`, „A JBa (3–6.) javított tételeinek újra-vak köre”):
+18 tétel + 10 kanári → 17/18 egyezés, kanári 10/10; az eltérés (`g05-hungarian-053`) megoldói tévedés, a kulcs a mű szövegéből
+igazolt. A kör jelzései alapján további 3 tétel javult — `g04-hungarian-032` (kitalálható elterelők → „a verssorok egyforma
+hosszát”, „a versszakok számát”, „a sorkezdő szó ismétlését”), `g06-science-050` (kitalálható elterelők → 15–16 / 5–6 / 20 fok),
+`g04-history-037` (a kérdés átfogalmazva: „A monda szerint ki dolgoztatta meg Kolozsváron az álruhás Mátyást?”) —, és ezek is
+újabb vak kört kaptak: 3/3 · kanári 10/10, illetve 1/1 · kanári 10/10.
