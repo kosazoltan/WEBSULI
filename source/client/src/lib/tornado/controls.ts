@@ -6,16 +6,17 @@
  * those decisions so a test can pin them without a browser.
  */
 
-import type { JoystickVector } from "@/game-engine/joystick";
+import { joystickCurve, type JoystickVector } from "@/game-engine/joystick";
 
 export type CameraMode = "chase" | "cockpit";
 
 /** Analog drive input from the touch stick, both in −1..1 (steer right +, throttle forward +). */
 export type TouchDrive = { throttle: number; steer: number };
 
-const STEER_DEAD = 0.2;
+/** A kormány teljes kitérése a tárcsa vízszintes értékének ennyiénél. */
 const STEER_FULL = 0.85;
-const STEER_CURVE = 2;
+/** A kormány görbéje (`joystickCurve`): erős köbös rész — egyenesben finom, oldalt határozott. */
+const STEER_EXPO = 0.85;
 const THROTTLE_DEAD = 0.12;
 const THROTTLE_FULL = 0.6;
 
@@ -30,13 +31,16 @@ function shaped(v: number, dead: number, full: number, curve: number): number {
  * Spec 2026-09-29-tornado-ut-kormanyzas D3. The stick used to be split into four booleans
  * (`joystickToDirections`, threshold 0.35): nothing steered up to ~23° off vertical, beyond it the full
  * lock (~86°/s) did — a child could not make a small correction and the car wandered off the road.
- * Now the steering is analog with its own axis dead zone and a curve (fine near the centre, full lock at
- * the side); pushing up past 60% is full throttle, as before.
+ * Now the steering is analog with a curve (fine near the centre, full lock at the side) and no second dead
+ * zone on top of the stick's own (#49); pushing up past 60% is full throttle, as before.
  */
 export function touchDriveInput(v: JoystickVector): TouchDrive {
   return {
     throttle: shaped(v.y, THROTTLE_DEAD, THROTTLE_FULL, 1),
-    steer: shaped(v.x, STEER_DEAD, STEER_FULL, STEER_CURVE),
+    // Joystick-reakció (#49): a kormánynak nincs második holtsávja. A régi 0,2-es tengely-holtsáv + négyzetes görbe a
+    // tárcsa saját 0,15-ös holtsávja UTÁN jött: mérve a sugár 30%-áig semmi, 40%-nál 5%, 55%-nál 20% — „nagyon lassan
+    // reagál”. Most a holtsáv szélétől folytonos (a sugár 10%-ánál ≈ 2%, 25%-ánál ≈ 5%, 40%-ánál ≈ 13%), teljes oldalkitérésnél teljes.
+    steer: Math.sign(v.x) * joystickCurve(Math.abs(v.x) / STEER_FULL, STEER_EXPO),
   };
 }
 

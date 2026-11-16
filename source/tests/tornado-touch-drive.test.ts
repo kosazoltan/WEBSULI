@@ -132,9 +132,15 @@ test("közel egyenes tárcsa (6° + σ=12° remegés, korrekció nélkül, 5 s):
       if (r.maxLat < 4.05) stayed++;
       if (o.maxLat < 4.05) oldStayed++;
     }
-    assert.ok(mean(dev) < 6, `${hz} Hz: mean heading swing ${mean(dev).toFixed(1)}° within 5 s`);
-    assert.ok(mean(old) > 3 * mean(dev), `${hz} Hz: four-way ${mean(old).toFixed(1)}° vs analog ${mean(dev).toFixed(1)}°`);
-    assert.ok(stayed > oldStayed, `${hz} Hz: on the asphalt after 5 s in ${stayed}/12 runs (four-way ${oldStayed}/12)`);
+    // SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md „Joystick-reakció”, kanban #49):
+    // a tulajdonos valódi telefonon „nagyon lassan reagál, nem lehet finoman vezérelni” hibát jelentett. A régi < 6° /
+    // 3× küszöböt csak az a kormány teljesítette, amely ~±20°-on belül SEMMIT nem kormányoz (mérve: a sugár 30%-áig 0) —
+    // ez maga a hiba. Egy korrekció nélküli, állandó 6°-os dőlés a finom kormánynál szándékos kis kanyar, így 5 s alatt
+    // elfordul. A szándék marad: közel egyenes tárcsánál az irány érdemben stabilabb, mint a négyirányú bontásnál, és az
+    // aszfalton maradás nem rosszabb; a hosszú, valószerű (korrigáló) mérés alább változatlan szigorral fut.
+    assert.ok(mean(dev) < 15, `${hz} Hz: mean heading swing ${mean(dev).toFixed(1)}° within 5 s`);
+    assert.ok(mean(old) > 1.5 * mean(dev), `${hz} Hz: four-way ${mean(old).toFixed(1)}° vs analog ${mean(dev).toFixed(1)}°`);
+    assert.ok(stayed >= oldStayed, `${hz} Hz: on the asphalt after 5 s in ${stayed}/12 runs (four-way ${oldStayed}/12)`);
   }
 });
 

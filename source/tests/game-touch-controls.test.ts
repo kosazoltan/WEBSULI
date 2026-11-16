@@ -170,8 +170,17 @@ const DIRECTION_BUTTONS = /aria-label="(Balra|Jobbra)"|⟵ Balra|▲ Előre|▼ 
  * (`touchDriveInput`) — a négyirányú bontás volt a mobilos kóválygás mért gyökéroka. A követelmény
  * (a vektor be van kötve a vezérlésbe) nem lazult; a többi játék változatlanul a négyirányú bontást használja.
  */
+/*
+ * SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md „Joystick-reakció”, kanban #49): a
+ * másik három játék sem bontja négy logikai gombra a tárcsát — a 0,35-ös küszöb a holtsáv után a sugár ~45%-áig semmit
+ * nem mozgatott, utána végsebességet adott (mért gyökérok). Analóg, folytonos görbe (`shapeJoystick`) köti be őket; a
+ * követelmény (a vektor be van kötve a vezérlésbe) nem lazult.
+ */
 const JOYSTICK_WIRING: Record<string, RegExp> = {
   "TornadoHunter200.tsx": /touchDriveInput\s*\(/,
+  "SpaceAsteroidQuiz.tsx": /shapeJoystick\s*\(/,
+  "BlockCraftQuiz.tsx": /shapeJoystick\s*\(/,
+  "TsunamiEscapeEnglish.tsx": /shapeJoystick\s*\(/,
 };
 
 for (const file of ACTION_GAMES) {

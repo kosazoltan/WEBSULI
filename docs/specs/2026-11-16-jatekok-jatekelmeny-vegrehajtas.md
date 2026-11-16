@@ -1374,7 +1374,7 @@ fizika-esetek (pattogás, határok) változatlanok.
 
 ## Joystick-reakció (hibajavítás, kanban #49)
 
-**Állapot:** folyamatban — ág `fix/jatek-joystick-reakcio`, munkafa `.claude/worktrees/jatek-joystick`, kanban #49
+**Állapot:** javítva, PR-ban — ág `fix/jatek-joystick-reakcio`, munkafa `.claude/worktrees/jatek-joystick`, kanban #49
 
 **Tünet (tulajdonos, valódi telefon, 2026-11-16):** „Mindegyik játékban a telefonon lévő ujjas joystick nagyon lassan
 reagál, és nem lehet finoman vezérelni vele se az autót, se a viharvadász játékot.” Érintett: a négy tárcsás játék
@@ -1395,7 +1395,31 @@ mobil-emulációval, CDP érintés-eseményekkel, 1× / 4× / 6× CPU-lassítás
 90%-a a kormány-bemenetre ≤ ~120 ms; folytonos görbe, a legkisebb stabil korrekció ≤ a maximum 10%-a; a tárcsa
 húzása nem renderel újra a lapon; a korábbi javítások (`retireJoystickDrag`, több ujj, `touch-action`) és M1–M12 zöld.
 
-**Gyökérok:** a mérés után kerül ide.
+**Gyökérok (mérve, `T/joystick-response.spec.ts`, Pixel 7 emuláció, CDP-érintés, 1× / 4× / 6× CPU):**
+1. **Egymásra rakott holtsávok — a fő ok, mind a négy játékban.** A tárcsa saját 0,15-ös holtsávja (`GE/joystick.ts`
+   `JOYSTICK_DEAD_ZONE`) UTÁN a játékok még egy küszöböt tettek rá: a Kockavadász, az Aszteroida és a Szökőár a
+   `joystickToDirections` 0,35-ös küszöbét (négy logikai irány) — mérve a sugár 40%-áig semmi, 55%-nál már 86–100%; a
+   Tornado kormánya 0,2-es tengely-holtsávot + négyzetes görbét (`L/tornado/controls.ts`) — a sugár 30%-áig 0, 40%-nál 5%,
+   55%-nál 20%. Ez a „nagyon lassan reagál” (az ujj ~25–30 px-et megy, mire bármi történik) és a „nem lehet finoman”
+   (utána digitális teljes sebesség).
+2. **Aszteroida: állandó gyorsulás** (`L/spaceAsteroid/physics.ts` 28 egység/s², a fél kitérés is végsebességre
+   gyorsított): a mozgás 63/90%-a 185/244 ms, 4× CPU-n 266/306 ms.
+3. **A tárcsa gombja React-állapot** (`setKnob` minden `pointermove`-ra): 30 mozgásra 33–50 tárcsa-render, a gomb egy
+   képkockával a játék bemenete UTÁN látszott (bemenet 2,6–3,1 kk, gomb 3,5–3,7 kk).
+4. **Szökőár:** `playerXRef.current = playerX` minden renderben a 24 Hz-es állapot-pillanatképet írta vissza a hurok
+   pozíciójára (≤ 42 ms mozgást vont vissza), a figura 24 Hz-cel lépett.
+A bemenet → hurok késés NEM volt ok: a böngésző az érintést a képkockához igazítva kézbesíti (esemény → kezelő ~44 ms
+emulációban), a játékok a kezelőtől számítva ≤ 1 képkockán belül olvassák (ref, képkockánként, simítás nélkül); a
+Tornado kamerája merev, nem késik; minden mozgás dt-alapú.
+
+**Javítás:** `GE/joystick.ts` `joystickCurve` / `shapeJoystick` (egy holtsáv, utána folytonos `(1−e)·t + e·t³` görbe,
+e = 0,4); a három irány-játék analóg tárcsa-értéket olvas ref-ből; a Tornado kormánya második holtsáv nélkül
+(`joystickCurve`, e = 0,85) + lassú sebességnél határozottabb kanyar (`lowSpeedTurnBoost`, végsebességen változatlan);
+az Aszteroida célsebesség-követő (τ = 0,05 s); a `VirtualJoystick` gombja DOM-transzformációval, React-render nélkül,
+`lostpointercapture` + `pointerId`-szűrés; a Szökőár figurája képkockánként a DOM-on át mozog. Spec-változás:
+`T/tornado-touch-drive.test.ts` nyílt hurkú (korrekció nélküli) küszöbe — lásd a teszt `SPEC-VÁLTOZÁS` megjegyzését.
+
+A mért előtte / utána tábla a PR-leírásban.
 
 ---
 

@@ -569,3 +569,19 @@ Forrás: J0c (kérdés-sáv, `play-lab.spec.ts`).
   „Miért?” állapota a megjelenítéshez volt kötve, nem a hibához. **Megelőzés:** explicit állapotgép (nyitott / kijelzés / függő kérés
   / a hibához kötött „Miért?”-határidő külön), és valódi időléptetéses teszt az ütemezővel együtt (`game-play-question-ui.test.ts`
   „review #446/…”), nem csak kézzel léptetett, ütemezés nélküli eset.
+
+## C-43 — Egymásra rakott holtsávok: a „lassú joystick” nem késés volt, hanem halott tárcsa-közép (2026-11-16)
+
+Forrás: kanban #49 (tulajdonosi hibajelentés valódi telefonról: „nagyon lassan reagál, nem lehet finoman vezérelni”).
+
+- **Tünet:** mind a négy tárcsás játékban (Tornado, Kockavadász, Aszteroida, Szökőár) a kis kitérés semmit nem csinált,
+  utána egyszerre jött a teljes sebesség / kormány.
+- **Gyökérok (mérve, `tests/joystick-response.spec.ts`):** a tárcsa saját 0,15-ös holtsávja UTÁN a játékok még egy küszöböt
+  tettek rá (`joystickToDirections` 0,35 → a sugár ~45%-áig semmi, utána digitális 100%; a Tornado kormánya 0,2-es
+  tengely-holtsáv + négyzetes görbe → a sugár 30%-áig 0, 40%-nál 5%). A bemenet → hurok késés ezzel szemben a böngésző
+  képkockához igazított kézbesítésén belül volt (~3 képkocka). Mellékokok: az Aszteroida állandó gyorsulása (90% 244 ms),
+  a tárcsa gombja React-állapottal (egy képkockával a játék után rajzolódott), a Szökőár render-felülírása (`playerXRef =
+  playerX` minden renderben ≤ 42 ms mozgást vont vissza).
+- **Megelőzés:** egy holtsáv (a tárcsáé), utána folytonos görbe (`shapeJoystick` / `joystickCurve`); a játék analóg értéket
+  olvas ref-ből képkockánként, nem logikai irányokat. „Lassú vezérlés” jelentésnél ELŐBB a kitérés → mozgás görbét mérd
+  (finomság-tábla), ne csak a késést — a ms-os késés itt rendben volt.
