@@ -2046,6 +2046,41 @@ munkamenet-jelző nincs) — egy párhuzamos játékos-folyamat az admin-belép�
 új független biztonsági review kell**; (4) az export engedélylistás, belső azonosító nélkül; (5) a fióktörlés a fiók címére
 küldött egyszeri, célhoz kötött kódot kér, és értesítő levél megy róla.
 
+### JM7b-utójavítás – N2 — tiltott játékos saját adatai + admin végleges törlés
+
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-fiok-tiltott-torles, munkafa .claude/worktrees/jatek-jm7b-n2, kanban #56 · **Függ:** JM7b · **Modell:** Opus · **Elfogadás:** JM-A15 (tiltott fiókra is), admin-jogosultsági mátrix
+**Tulajdonosi döntés (2026-11-16, űrlap):** „Admin törölhesse + saját törlés” — (a) a TILTOTT játékos is letöltheti a saját
+adatait és törölheti a fiókját (minden más — játék, becenév / avatar, tanulói kapcsolat, szoba, pont — tiltva marad);
+(b) az admin „Játékosok” oldalon VÉGLEGES törlés megerősítéssel.
+**Nem cél:** a `requirePlayer` általános lazítása; séma / migráció; a Google-út (`S/player/google.ts`, `S/auth.ts` — JM7c-1)
+— a tiltott játékos az e-mail-kódos / linkes úton jut a korlátozott munkamenethez (minden fióknak van címe); levél az
+admin-törlésről (a meglévő viselkedésben nincs ilyen); `PLAYER_ACCOUNTS` (KI marad).
+**Fájlok:** `S/player/require-player.ts` (új, szűk `createRequireOwnData` őr, saját jelölővel), `S/player/account-routes.ts`
+(az őr CSAK az export / törlési kód / törlés végponton), `S/player/auth-routes.ts` (tiltott fiók beváltáskor korlátozott
+munkamenetet kap, a válasz továbbra is 403 `BANNED`), `S/player/admin-routes.ts` (`POST /:id/delete` megerősítő szóval),
+kliens: `client/src/hooks/usePlayer.ts`, `P/PlayerAccount.tsx` (tiltott nézet: letöltés + törlés), `P/PlayerLogin.tsx`,
+a „Játékosok” panel (törlés gomb + megerősítő párbeszéd); tesztek: `T/admin-route-guard.test.ts`,
+`T/player-account-db.integration.ts`, `T/player-auth-db.integration.ts` (a tiltott-belépés elvárása: SPEC-VÁLTOZÁS), e2e.
+**Lépések:**
+1. Őr: `createRequireOwnData(store)` — munkamenet kell (401), a fióknak léteznie kell (401), a tiltott IS átmegy;
+   `OWN_DATA_GUARD` jelölő. A `requirePlayer` változatlan (tiltott → 403) minden más végponton; a JM2-jegy (`rt.ts`) a
+   tiltottat továbbra is elutasítja.
+2. Az export, a törlési kód kérése és a törlés az új őr mögött, a meglévő védelmekkel (CSRF, Origin, korlátok, e-mailben
+   küldött célhoz kötött kód, megerősítő szó, értesítő levél).
+3. Beváltás (kód / link): tiltott fióknál a munkamenet létrejön (a `requirePlayer` minden kérésnél az adatbázisból nézi a
+   tiltást, így ez csak az őr három végpontját nyitja), a válasz 403 `BANNED` + `restricted: true`.
+4. Admin: `POST /api/admin/game-accounts/:id/delete` `{ confirm: "TÖRLÉS" }` → UGYANAZ a `deleteAccount` (fiók, mindkét cél
+   kódrekordjai, minden munkamenet; a tanulói profil marad), napló maszkolt címmel. Az `isAuthenticatedAdmin` adminRouter
+   alatt (JM7c-1 közös admin-függvényével később összefésülendő).
+5. Kliens: a `/me` 403 `BANNED` → tiltott állapot; `/fiok` tiltott nézete csak a letöltést és a törlést kínálja; a
+   „Játékosok” panelen törlés gomb megerősítő párbeszéddel.
+**Tesztek:** forrás-őr (route-leltár): az `OWN_DATA_GUARD` PONTOSAN a három végponton, minden más `/api/player/*` a
+`requirePlayer` mögött; DB: tiltott → export 200, törlés (kód) 200, minden más fiók-végpont 403, JM2-jegy 403; admin-törlés
+200 és hatása; játékos / tiltott / vendég az admin-törlést nem éri el (401), mellékhatás nélkül; e2e: admin törlés gomb
+megerősítéssel.
+**Elfogadás:** a fenti tesztek zöldek, a meglévők változatlanul (a tiltott-belépés elvárása dokumentált SPEC-VÁLTOZÁS-sal);
+nincs séma-változás.
+
 ---
 
 ### JM8a — Pontkönyv (szerver) — `PLAYER_POINTS` flag
