@@ -44,6 +44,26 @@ export type DuelBankItem = {
 
 export type DuelWindowRule = (prompt: string, grade: number) => number;
 
+/**
+ * Hossz-őr az osztott képernyőhöz (review #447): egy térfélnek 360×640-en ~260 px magasság jut. A mért leghosszabb
+ * tételek (2026-11-16: évfolyam-bank prompt 122, opció 88, opciók együtt 234 karakter; szóbank cloze-prompt 164, opció 67)
+ * a lap betűméret-illesztésével elférnek; az ennél hosszabb (jövőbeli) tételt a párbaj kihagyja. A jelenlegi bankból
+ * így egy tétel sem esik ki (teszt), tehát a tantárgyak aránya nem torzul.
+ */
+export const DUEL_MAX_PROMPT_CHARS = 170;
+export const DUEL_MAX_OPTION_CHARS = 90;
+export const DUEL_MAX_OPTIONS_TOTAL_CHARS = 240;
+
+export function fitsDuelScreen(q: { prompt: string; options: readonly string[] }): boolean {
+  if (q.prompt.length > DUEL_MAX_PROMPT_CHARS) return false;
+  let total = 0;
+  for (const o of q.options) {
+    if (o.length > DUEL_MAX_OPTION_CHARS) return false;
+    total += o.length;
+  }
+  return total <= DUEL_MAX_OPTIONS_TOTAL_CHARS;
+}
+
 export const DUEL_MIN_BANK_GRADE = 3;
 export const DUEL_MAX_BANK_GRADE = 12;
 
@@ -115,7 +135,7 @@ export function buildRoundQuestion(args: BuildRoundQuestionArgs): DuelQuestion |
   if (!Number.isInteger(grade) || grade < DUEL_MIN_BANK_GRADE || grade > DUEL_MAX_BANK_GRADE) return null;
   const subjects = args.subjects && args.subjects.length > 0 ? new Set(args.subjects) : null;
   const unseen = items.filter(
-    (q) => (!subjects || subjects.has(q.subject)) && !used.has(q.id) && !used.has(duelPromptKey(q.prompt)),
+    (q) => (!subjects || subjects.has(q.subject)) && !used.has(q.id) && !used.has(duelPromptKey(q.prompt)) && fitsDuelScreen(q),
   );
   if (unseen.length === 0) return null;
   const rng = createRng(seedFrom("duel-q", seed, round, grade));

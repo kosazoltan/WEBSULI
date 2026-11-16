@@ -31,6 +31,7 @@ type Probe = {
   correctP2: number;
   winners: string;
   coWin: number;
+  matchIndex: number;
 };
 type GameTestWindow = { __websuliGame?: { probe?: () => Probe } };
 
@@ -251,6 +252,161 @@ test.describe("390x844 beragadt ujj", () => {
     await expect.poll(async () => (await probe(page)).correctP1, { timeout: 5_000 }).toBe(1);
   });
 });
+
+test.describe("390x844 szóbank-betöltés", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test("a lassú szóbank-betöltés alatt a beállítás zárolt, és a meccs a kijelzett évfolyammal indul (review #447)", async ({ page }) => {
+    // A szóbank-darab (Vite: /src/data/vocabBank/vocab-en.ts, build: /assets/vocab-en-*.js) 1,5 s késéssel jön.
+    await page.route(/vocab-en[^/]*\.(ts|js)(\?.*)?$/, async (route) => {
+      await new Promise((r) => setTimeout(r, 1500));
+      await route.continue();
+    });
+    await openSetup(page, { g1: 9, g2: 6 });
+    await page.getByTestId("duel-source-vocab-en").click();
+    await page.getByTestId("duel-go").click();
+    await expect(page.getByTestId("duel-go")).toContainText("Szavak betöltése");
+    await expect(page.getByTestId("duel-grade-p1-3")).toBeDisabled();
+    await expect(page.getByTestId("duel-source-mixed")).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Vissza" })).toBeDisabled();
+    await expect(page.getByTestId("duel-arena")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("duel-pane-p1")).toContainText("9. évf.");
+    await expect(page.getByTestId("duel-pane-p2")).toContainText("6. évf.");
+  });
+});
+
+test.describe("390x844 indítás-védelem (review #447)", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("dupla koppintás az indításra és a visszavágóra → egy-egy meccs", async ({ page }) => {
+    await openSetup(page, { g1: 5, g2: 5 });
+    await page.getByTestId("duel-go").dblclick();
+    await expect(page.getByTestId("duel-arena")).toBeVisible();
+    expect((await probe(page)).matchIndex).toBe(1);
+    await playOut(page, await page.context().newCDPSession(page), true, false);
+    await expect(page.getByTestId("duel-result")).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId("duel-rematch").dblclick();
+    await expect(page.getByTestId("duel-arena")).toBeVisible();
+    await page.waitForTimeout(300);
+    expect((await probe(page)).matchIndex).toBe(2);
+  });
+
+  test("a szóbank betöltési hibája: érthető üzenet, újrapróba → indul a meccs; nincs kéretlen indítás", async ({ page }) => {
+    let calls = 0;
+    await page.route(/vocab-en[^/]*\.(ts|js)(\?.*)?$/, async (route) => {
+      calls += 1;
+      if (calls === 1) await route.abort();
+      else await route.continue();
+    });
+    await openSetup(page, { g1: 7, g2: 4 });
+    await page.getByTestId("duel-source-vocab-en").click();
+    await page.getByTestId("duel-go").click();
+    await expect(page.getByTestId("duel-load-error")).toContainText("Nem sikerült betölteni a szavakat");
+    await page.waitForTimeout(600);
+    await expect(page.getByTestId("duel-setup")).toBeVisible();
+    expect((await probe(page)).matchIndex).toBe(0);
+    await page.getByTestId("duel-retry").click();
+    await expect(page.getByTestId("duel-arena")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("duel-pane-p1")).toContainText("7. évf.");
+    expect((await probe(page)).matchIndex).toBe(1);
+  });
+});
+
+/** A térfél-elrendezés mérése: minden válaszgomb a saját térfelén belül, nincs túlcsordulás, a térfelek nem fedik egymást. */
+async function measureLayout(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const bad: string[] = [];
+    const inside = (a: DOMRect, b: DOMRect) => a.left >= b.left - 1 && a.right <= b.right + 1 && a.top >= b.top - 1 && a.bottom <= b.bottom + 1;
+    const panes = Array.from(document.querySelectorAll<HTMLElement>(".duel-pane"));
+    if (panes.length !== 2) bad.push(`térfelek száma ${panes.length}`);
+    for (const pane of panes) {
+      const id = pane.dataset.testid ?? "?";
+      const inner = pane.querySelector<HTMLElement>(".duel-pane-inner")!;
+      const stage = pane.querySelector<HTMLElement>(".duel-stage")!;
+      const box = inner.getBoundingClientRect();
+      const stageBox = stage.getBoundingClientRect();
+      if (stage.scrollHeight > stage.clientHeight + 1) bad.push(`${id}: a színpad túlcsordul (${stage.scrollHeight} > ${stage.clientHeight}), fit=${pane.dataset.fit}`);
+      for (const el of Array.from(stage.querySelectorAll<HTMLElement>(".duel-option, .duel-prompt, .duel-verdict"))) {
+        const r = el.getBoundingClientRect();
+        const label = `${id} ${el.className.split(" ")[0]} „${(el.textContent ?? "").slice(0, 30)}”`;
+        if (!inside(r, box) || !inside(r, stageBox)) {
+          bad.push(`${label}: kilóg a térfélből (fit=${pane.dataset.fit}, elem ${Math.round(r.top)}–${Math.round(r.bottom)}, színpad ${Math.round(stageBox.top)}–${Math.round(stageBox.bottom)}, scroll ${stage.scrollTop}/${stage.scrollHeight}/${stage.clientHeight})`);
+        }
+        if (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1) {
+          if (!el.classList.contains("duel-verdict") && !el.classList.contains("duel-prompt")) bad.push(`${label}: a szöveg túlcsordul`);
+        }
+      }
+    }
+    if (panes.length === 2) {
+      const a = panes[0]!.getBoundingClientRect();
+      const b = panes[1]!.getBoundingClientRect();
+      const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (w > 1 && h > 1) bad.push(`a két térfél fedi egymást (${Math.round(w)}×${Math.round(h)})`);
+    }
+    return bad;
+  });
+}
+
+/** A bankok leghosszabb tételei (2026-11-16-i mérés; a hossz-őr határa alatt). */
+const LONGEST = {
+  // a szóbank leghosszabb cloze-promptja (164 kar.) + az évfolyam-bank leghosszabb opciója (88 kar., g08-history-014)
+  clozeHistory: {
+    prompt:
+      "Melyik illik a mondatba? The phone has a _____ lock that scans your fingerprint. (Magyarul: A telefonnak biometrikus zárja van, amely beolvassa az ujjlenyomatodat.)",
+    options: [
+      "a II. világháború téli hadjáratait",
+      "az 1956-os forradalom leverését",
+      "az I. világháború utáni gazdasági válságot",
+      "az USA és a Szovjetunió vezette tömbök szembenállását 1945 után, közvetlen háború nélkül",
+    ],
+    correctIndex: 3,
+    explanation: "A hidegháború az USA és a Szovjetunió vezette tömbök szembenállása volt 1945 után, közvetlen háború nélkül.",
+  },
+  // az évfolyam-bank opciókban leghosszabb tétele (g07-science-013, opciók együtt 232 kar.)
+  taxonomy: {
+    prompt: "Melyik a rendszertani kategóriák helyes sorrendje a legtágabbtól a legszűkebbig?",
+    options: [
+      "ország – osztály – törzs – rend – család – nemzetség – faj",
+      "ország – törzs – osztály – család – rend – nemzetség – faj",
+      "ország – törzs – rend – osztály – család – faj – nemzetség",
+      "ország – törzs – osztály – rend – család – nemzetség – faj",
+    ],
+    correctIndex: 3,
+    explanation: "A sorrend: ország, törzs, osztály, rend, család, nemzetség, faj — a legtágabbtól a legszűkebbig.",
+  },
+} as const;
+
+for (const viewport of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+]) {
+  for (const [name, item] of Object.entries(LONGEST)) {
+    test.describe(`${viewport.width}x${viewport.height} leghosszabb tétel`, () => {
+      test.use({ viewport });
+      test(`${name}: semmi nem lóg ki, nincs túlcsordulás, a térfelek nem fedik egymást (kérdés és kör utáni kijelzés)`, async ({ page }) => {
+        await page.addInitScript((q) => {
+          (window as unknown as { __duelForceQuestion: unknown }).__duelForceQuestion = q;
+        }, item);
+        await openSetup(page, { g1: 4, g2: 11 });
+        await page.getByTestId("duel-go").click();
+        await nextQuestion(page, 0);
+        expect(await measureLayout(page), "kérdés").toEqual([]);
+        expect(await smallTargets(page), "M2 kérdés").toEqual([]);
+        expect(await smallFonts(page), "M3 kérdés").toEqual([]);
+        await shot(page, `duel-long-${name}-${viewport.width}x${viewport.height}-question.jpg`);
+        await page.waitForTimeout(300);
+        const cdp = await page.context().newCDPSession(page);
+        await tapTogether(cdp, await center(page, option("p1", true)), await center(page, option("p2", false)));
+        await expect.poll(async () => (await probe(page)).phase, { timeout: 5_000, intervals: [30] }).toBe("reveal");
+        await page.waitForTimeout(150);
+        expect(await measureLayout(page), "kör utáni kijelzés").toEqual([]);
+        expect(await smallFonts(page), "M3 kör után").toEqual([]);
+        await shot(page, `duel-long-${name}-${viewport.width}x${viewport.height}-reveal.jpg`);
+      });
+    });
+  }
+}
 
 /** A csapás rázása (feel.addTrauma) a sebzett térfélen: normál módban mozdul, csökkentett mozgásnál nem (K.4/19, M9). */
 async function sampleShake(page: Page): Promise<string[]> {

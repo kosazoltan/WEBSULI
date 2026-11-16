@@ -5,7 +5,9 @@ import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank";
 import { tierForBand } from "../client/src/game-engine/gradeQuiz";
 import { windowMsFor } from "../client/src/game-engine/play/questionDirector";
 import {
+  DUEL_MAX_PROMPT_CHARS,
   buildRoundQuestion,
+  fitsDuelScreen,
   duelPromptKey,
   duelTierForBand,
   markDuelQuestionUsed,
@@ -126,4 +128,13 @@ test("toDuelQuestion: hibás tétel → null; a magyarázat megmarad", () => {
   const q = toDuelQuestion({ key: "k", prompt: "p", options: ["a", "b", "c"], correctIndex: 1, explanation: "mert" }, { grade: 5, orderSeed: "s", windowMs: 5000 })!;
   assert.equal(q.options[q.correctIndex], "b");
   assert.equal(q.explanation, "mert");
+});
+
+test("hossz-őr: a jelenlegi évfolyam-bankból egy tétel sem esik ki (a tantárgyak aránya nem torzul); a túl hosszút kihagyja", () => {
+  const out = GRADE_QUIZ_ITEMS.filter((q) => !fitsDuelScreen(q));
+  assert.deepEqual(out.map((q) => q.id), []);
+  const long = { id: "x-long", grade: 5, subject: "math", tier: 1 as const, prompt: "a".repeat(DUEL_MAX_PROMPT_CHARS + 1), options: ["1", "2", "3", "4"], correctIndex: 0 };
+  assert.equal(fitsDuelScreen(long), false);
+  assert.equal(fitsDuelScreen({ prompt: "p", options: ["x".repeat(91), "b"] }), false);
+  assert.equal(buildRoundQuestion({ seed: "s", round: 1, grade: 5, band: 0.1, used: new Set(), items: [long], windowMs: rule }), null);
 });

@@ -6,7 +6,7 @@
  * tett telefon, szemben ülők; kikapcsolható), fekvőben a két térfél egymás mellett. Mindkét térfélnek saját válaszcéljai
  * (≥ 56 px), életerő-sávja és időjelzője van; a két kéz egyidejű koppintása `pointerId` szerint külön fut (KSZ-14).
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowLeft, Dices, Pause, Swords, Trophy } from "lucide-react";
 
@@ -29,6 +29,7 @@ import {
   accuracyOf,
   buildRoundQuestion,
   createMatch,
+  fitsDuelScreen,
   markDuelQuestionUsed,
   playerDeadlineMs,
   reduceMatch,
@@ -158,6 +159,8 @@ const fmtSec = (ms: number) => `${(ms / 1000).toLocaleString("hu-HU", { minimumF
 // ---------------------------------------------------------------------------------------------------------------------
 // Kérdés-szolgáltató (determinisztikus: seed + kör + évfolyam; azonos évfolyam → azonos kérdés)
 
+type ForcedQuestionWindow = Window & { __duelForceQuestion?: { prompt: string; options: string[]; correctIndex: number; explanation?: string } };
+
 function makeProvider(args: {
   seed: string;
   setup: Setup;
@@ -185,8 +188,18 @@ function makeProvider(args: {
     const key = `${round}:${player.grade}`;
     if (cache.has(key)) return cache.get(key)!;
     let q: DuelQuestion | null = null;
+    // Teszt-kampó (csak VITE_ENABLE_GAME_TEST_HOOKS=1): a leghosszabb bank-tétellel mérjük, hogy semmi nem lóg ki.
+    const forced = GAME_TEST_HOOKS_ENABLED ? (window as ForcedQuestionWindow).__duelForceQuestion : undefined;
+    if (forced) {
+      q = toDuelQuestion({ ...forced, key: `t:${round}` }, { grade: player.grade, orderSeed: `t:${round}`, windowMs: rule(forced.prompt, player.grade) });
+      cache.set(key, q);
+      return q;
+    }
     if (args.vocab) {
-      const quiz = args.vocab.next(vocabLevelForGrade(player.grade, band));
+      let quiz = args.vocab.next(vocabLevelForGrade(player.grade, band));
+      // Hossz-őr (review #447): a túl hosszú szóbank-kérdés helyett a következő (legfeljebb 3 próba).
+      for (let i = 0; i < 3 && quiz && !fitsDuelScreen(quiz); i++) quiz = args.vocab.next(vocabLevelForGrade(player.grade, band));
+      if (quiz && !fitsDuelScreen(quiz)) quiz = null;
       if (quiz) {
         q = toDuelQuestion(
           { key: `v:${quiz.vocabId}`, prompt: quiz.prompt, options: quiz.options, correctIndex: quiz.correctIndex, explanation: quiz.explanation },
@@ -233,8 +246,34 @@ function PlayerPane({ seat, rotated, view, countdown, onPress, onRelease, onCanc
   const hpTone = hpPct > 50 ? "ok" : hpPct > 25 ? "mid" : "low";
   const streak = stats.streak;
 
+  // Review #447 (vercel): a térfél soha ne vágjon le választ. Körönként (és fázis- / méretváltáskor) a legnagyobb
+  // betűméret-szintet választjuk, amelyen a kérdés + a válaszok elférnek; a legkisebb szinten is ≥ 12 px a szöveg és
+  // ≥ 48 px a gomb. A szint DOM-attribútum (nem React-állapot): egy mérés-sor a kör elején, nem képkockánként.
+  const rootRef = useRef<HTMLElement>(null);
+  const [sizeKey, setSizeKey] = useState(0);
+  useEffect(() => {
+    const onResize = () => setSizeKey((k) => k + 1);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const stage = root?.querySelector<HTMLElement>(".duel-stage");
+    if (!root || !stage) return;
+    const overflows = () =>
+      stage.scrollHeight > stage.clientHeight ||
+      Array.from(stage.querySelectorAll<HTMLElement>(".duel-option, .duel-prompt")).some((el) => el.scrollWidth > el.clientWidth + 1);
+    let level = 0;
+    root.dataset.fit = "0";
+    while (level < FIT_LEVELS - 1 && overflows()) {
+      level += 1;
+      root.dataset.fit = String(level);
+    }
+  }, [q?.key, phase, mine?.optionIndex, sizeKey, rotated]);
+
   return (
     <section
+      ref={rootRef}
       className={`duel-pane duel-pane--${id}`}
       data-testid={`duel-pane-${id}`}
       data-rotated={rotated ? "true" : "false"}
@@ -295,7 +334,7 @@ function PlayerPane({ seat, rotated, view, countdown, onPress, onRelease, onCanc
           ) : null}
           {showQuestion ? (
             <div className="duel-q">
-              <p className="duel-prompt" data-testid={`duel-prompt-${id}`} data-long={q.prompt.length > 90 ? "true" : "false"}>
+              <p className="duel-prompt" data-testid={`duel-prompt-${id}`}>
                 {q.prompt}
               </p>
               <div className="duel-options" role="group" aria-label="Válaszok">
@@ -303,6 +342,8 @@ function PlayerPane({ seat, rotated, view, countdown, onPress, onRelease, onCanc
                   const chosen = mine?.optionIndex === i;
                   const isCorrect = i === q.correctIndex;
                   const state = revealing ? (isCorrect ? "correct" : chosen ? "wrong" : "dim") : chosen ? "chosen" : "idle";
+                  // A kör utáni kijelzésen csak a helyes és a választott válasz marad (hely a magyarázatnak).
+                  if (state === "dim") return null;
                   return (
                     <button
                       key={i}
@@ -357,6 +398,9 @@ function PlayerPane({ seat, rotated, view, countdown, onPress, onRelease, onCanc
 
 type Screen = "start" | "setup" | "match" | "result";
 
+/** Betűméret-szintek a térfél illesztéséhez (CSS: `.duel-pane[data-fit]`). */
+const FIT_LEVELS = 6;
+
 const FAST_TIMING: MatchTiming = { countdownMs: 900, introMs: 300, tiebreakIntroMs: 700, revealMs: 700 };
 
 export default function DuelArena() {
@@ -371,6 +415,7 @@ export default function DuelArena() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [paused, setPaused] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const portrait = orientation === "portrait";
   const fast = useMemo(() => GAME_TEST_HOOKS_ENABLED && new URLSearchParams(window.location.search).get("duelSpeed") === "fast", []);
@@ -382,6 +427,11 @@ export default function DuelArena() {
   const configRef = useRef<MatchConfig | null>(null);
   const setupRef = useRef(setup);
   setupRef.current = setup;
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
+  const startToken = useRef(0);
+  /** A futó meccs beállítás-pillanatképe: a térfelek és az eredmény ebből rajzolnak (review #447). */
+  const [matchSetup, setMatchSetup] = useState<Setup | null>(null);
   const recordedRef = useRef(false);
 
   // Meccs-óra: valós idő mínusz a szünetek (a pointer-események `timeStamp`-je ugyanebben az időtengelyben van).
@@ -444,24 +494,54 @@ export default function DuelArena() {
     [haptic],
   );
 
-  /** Új meccs ugyanazokkal a játékosokkal (indítás és visszavágó). */
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      startToken.current += 1; // a lecsatolás érvényteleníti a folyamatban lévő indítást
+    };
+  }, []);
+  const inFlight = useRef(false);
+  const lastStartAt = useRef(-Infinity);
+
+  /**
+   * Új meccs ugyanazokkal a játékosokkal (indítás és visszavágó). Review #447: egyetlen rögzített beállítás-pillanatképből
+   * dolgozik; a szóbank betöltése alatt a beállítás zárolt; ha közben a beállítás / a képernyő változott, a komponens
+   * lecsatolódott vagy újabb indítás jött, ez az indítás érvénytelen; dupla koppintás egy meccset indít.
+   */
   const startMatch = useCallback(async () => {
+    const now0 = performance.now();
+    if (inFlight.current || now0 - lastStartAt.current < 400) return;
+    lastStartAt.current = now0;
     const s = setupRef.current;
+    const fromScreen = screenRef.current;
+    const token = ++startToken.current;
+    const stillValid = () => mountedRef.current && token === startToken.current && setupRef.current === s && screenRef.current === fromScreen;
+    setLoadError(null);
     let vocab: VocabSource | null = null;
     if (s.source.startsWith("vocab-")) {
       const lang = s.source.slice(6) as VocabLang;
       vocab = vocabSources.current.get(lang) ?? null;
       if (!vocab) {
+        inFlight.current = true;
         setLoading(true);
+        let failed = false;
         try {
           const entries = await loadVocabBank(lang);
           // Memóriabeli napló + seedelt véletlen: a meccs reprodukálható, a visszavágók nem ismételnek.
           vocab = createVocabSource({ lang, entries, history: createSeenHistory(null), rng: createRng(seedFrom("duel-vocab", baseSeed.current, lang)).next });
           vocabSources.current.set(lang, vocab);
         } catch {
-          vocab = null; // a szóbank nem töltött be → az évfolyam-bank kérdez
+          failed = true;
         } finally {
-          setLoading(false);
+          inFlight.current = false;
+          if (mountedRef.current) setLoading(false);
+        }
+        if (!stillValid()) return;
+        if (failed || !vocab) {
+          setLoadError("Nem sikerült betölteni a szavakat (lehet, hogy nincs internet). Próbáld újra, vagy játsszatok az évfolyam-bank kérdéseivel!");
+          return;
         }
       }
     }
@@ -473,6 +553,7 @@ export default function DuelArena() {
       timing: fast ? FAST_TIMING : undefined,
     };
     configRef.current = config;
+    setMatchSetup(s);
     pausedTotal.current = 0;
     pauseStart.current = null;
     setPaused(false);
@@ -633,6 +714,7 @@ export default function DuelArena() {
           correctP2: s?.duel.stats.p2?.correct ?? 0,
           questionOpen: s?.phase === "question" ? 1 : 0,
           simTime: clock(performance.now()),
+          matchIndex: matchIndex.current,
           winners: s?.verdict?.finished ? s.verdict.winners.join(",") : "",
           coWin: s?.verdict?.coWin ? 1 : 0,
         };
@@ -641,7 +723,8 @@ export default function DuelArena() {
   }, [screen, pause, resume, clock]);
 
   const shellState: GameScreenState = screen === "match" ? (paused ? "paused" : "playing") : screen === "result" ? "result" : "start";
-  const facingRotate = portrait && setup.facing;
+  const shown = matchSetup ?? setup;
+  const facingRotate = portrait && shown.facing;
 
   const setSeat = (id: SeatId, patch: Partial<Seat>) => setSetup((s) => ({ ...s, seats: { ...s.seats, [id]: { ...s.seats[id], ...patch } } }));
   const nickCounter = useRef(0);
@@ -697,6 +780,7 @@ export default function DuelArena() {
       {screen === "setup" ? (
         // Saját görgető konténer (nem <main>, l. eredmény): így a ragadós indítógomb fekvő nézetben is látszik.
         <div className="duel-setup" data-testid="duel-setup">
+          <fieldset className="duel-fieldset" disabled={loading} aria-busy={loading}>
           <header className="duel-setup-head">
             <button type="button" className="game-btn game-btn-ghost duel-back" onClick={() => setScreen("start")}>
               <ArrowLeft className="h-5 w-5" aria-hidden="true" />
@@ -787,6 +871,28 @@ export default function DuelArena() {
               <span>Szemben ültök (álló telefonon a felső térfél fejjel lefelé)</span>
             </button>
           </section>
+          </fieldset>
+          {loadError ? (
+            <div className="duel-error" role="alert" data-testid="duel-load-error">
+              <p>{loadError}</p>
+              <div className="duel-chip-row">
+                <button type="button" className="duel-chip" data-testid="duel-retry" onClick={() => void startMatch()}>
+                  Újrapróbálom
+                </button>
+                <button
+                  type="button"
+                  className="duel-chip"
+                  data-testid="duel-fallback"
+                  onClick={() => {
+                    setLoadError(null);
+                    setSetup((x) => ({ ...x, source: x.source === "vocab-en" ? "english" : "mixed" }));
+                  }}
+                >
+                  Évfolyam-bank kérdései
+                </button>
+              </div>
+            </div>
+          ) : null}
           <button type="button" className="game-btn game-btn-primary duel-go" data-testid="duel-go" disabled={loading} onClick={() => void startMatch()}>
             <Swords className="h-6 w-6" aria-hidden="true" />
             {loading ? "Szavak betöltése…" : "Kezdődjön a párbaj!"}
@@ -794,7 +900,7 @@ export default function DuelArena() {
         </div>
       ) : null}
 
-      {screen === "match" && view ? (
+      {screen === "match" && view && matchSetup ? (
         <div
           className="duel-arena"
           data-testid="duel-arena"
@@ -804,7 +910,7 @@ export default function DuelArena() {
           data-tiebreak={view.isTiebreak ? "true" : "false"}
         >
           <PlayerPane
-            seat={setup.seats.p2}
+            seat={shown.seats.p2}
             rotated={facingRotate}
             view={view}
             countdown={countdown}
@@ -827,7 +933,7 @@ export default function DuelArena() {
             </button>
           </div>
           <PlayerPane
-            seat={setup.seats.p1}
+            seat={shown.seats.p1}
             rotated={false}
             view={view}
             countdown={countdown}
@@ -851,10 +957,10 @@ export default function DuelArena() {
         </div>
       ) : null}
 
-      {screen === "result" && view?.verdict ? (
+      {screen === "result" && view?.verdict && matchSetup ? (
         <ResultView
           view={view}
-          setup={setup}
+          setup={shown}
           record={record}
           rotateTop={facingRotate}
           onRematch={() => void startMatch()}
@@ -972,6 +1078,10 @@ const DUEL_CSS = `
 .duel-setup { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 760px; margin: 0 auto; flex: 1 1 auto; min-height: 0;
   overflow-y: auto; overscroll-behavior: contain;
   padding: max(12px, var(--game-safe-top)) max(16px, var(--game-safe-right)) max(20px, var(--game-safe-bottom)) max(16px, var(--game-safe-left)); }
+.duel-fieldset { display: flex; flex-direction: column; gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.duel-fieldset:disabled { opacity: .6; }
+.duel-error { padding: 12px; border-radius: 16px; font-size: 15px; font-weight: 700; color: #fff7ed; background: #7c2d12cc; border: 1px solid #fb923c; }
+.duel-error p { margin-bottom: 8px; }
 .duel-setup-head { display: flex; align-items: center; gap: 12px; }
 .duel-setup-title { font-size: 26px; font-weight: 900; }
 .duel-back { min-height: 48px; }
@@ -1009,22 +1119,28 @@ const DUEL_CSS = `
 .duel-arena[data-orient="landscape"] .duel-center { order: 2; flex-direction: column; }
 .duel-arena[data-orient="landscape"] .duel-pane--p2 { order: 3; }
 
-.duel-pane { --seat: #22d3ee; position: relative; min-height: 0; min-width: 0; padding: 6px 8px; }
+.duel-pane { --seat: #22d3ee; --pfs: 18px; --ofs: 16px; --omin: 56px; --opad: 6px 8px; --ogap: 8px; --plh: 1.25;
+  position: relative; min-height: 0; min-width: 0; padding: 4px 6px; }
+.duel-pane[data-fit="1"] { --pfs: 16px; --ofs: 15px; --omin: 52px; }
+.duel-pane[data-fit="2"] { --pfs: 15px; --ofs: 14px; --omin: 48px; --ogap: 6px; }
+.duel-pane[data-fit="3"] { --pfs: 14px; --ofs: 13px; --omin: 48px; --opad: 4px 6px; --ogap: 6px; --plh: 1.2; }
+.duel-pane[data-fit="4"] { --pfs: 13px; --ofs: 12px; --omin: 48px; --opad: 3px 5px; --ogap: 5px; --plh: 1.15; }
+.duel-pane[data-fit="5"] { --pfs: 12px; --ofs: 12px; --omin: 48px; --opad: 2px 4px; --ogap: 4px; --plh: 1.1; }
 .duel-pane--p2 { --seat: #e879f9; }
 .duel-pane[data-rotated="true"] { transform: rotate(180deg); }
-.duel-pane-inner { position: relative; display: flex; flex-direction: column; gap: 5px; height: 100%; padding: 8px 10px 10px; border-radius: 20px;
+.duel-pane-inner { position: relative; display: flex; flex-direction: column; gap: 4px; height: 100%; padding: 6px 8px 8px; border-radius: 18px;
   background: linear-gradient(180deg, #111a33f2, #0b1226f2); border: 2px solid color-mix(in srgb, var(--seat) 55%, transparent);
   box-shadow: inset 0 1px 0 #ffffff18, 0 0 24px color-mix(in srgb, var(--seat) 18%, transparent); will-change: transform; overflow: hidden; }
 .duel-pane[data-hit="true"] .duel-pane-inner { animation: duel-hit .45s ease-out 1; }
 .duel-pane[data-scored="true"] .duel-pane-inner { animation: duel-score .6s ease-out 1; }
 @keyframes duel-hit { 0% { box-shadow: inset 0 0 0 3px #fb923c, 0 0 30px #fb923c88; } 100% { box-shadow: inset 0 1px 0 #ffffff18, 0 0 24px color-mix(in srgb, var(--seat) 18%, transparent); } }
 @keyframes duel-score { 0% { box-shadow: inset 0 0 0 3px var(--seat), 0 0 36px var(--seat); } 100% { box-shadow: inset 0 1px 0 #ffffff18, 0 0 24px color-mix(in srgb, var(--seat) 18%, transparent); } }
-.duel-pane-head { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+.duel-pane-head { display: flex; align-items: center; gap: 8px; min-height: 22px; }
 .duel-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 900; color: var(--seat); }
 .duel-grade { font-size: 13px; font-weight: 700; color: #cbd5e1; }
 .duel-streak { flex: none; padding: 2px 8px; border-radius: 9999px; font-size: 13px; font-weight: 900; color: #fde68a; background: #f59e0b26; border: 1px solid #f59e0b55; }
 .duel-hp-num { flex: none; font-size: 16px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; }
-.duel-hp { position: relative; height: 14px; border-radius: 9999px; background: #1e293b; border: 1px solid #ffffff26; overflow: visible; }
+.duel-hp { position: relative; height: 10px; border-radius: 9999px; background: #1e293b; border: 1px solid #ffffff26; overflow: visible; }
 .duel-hp-fill { height: 100%; border-radius: inherit; transition: width .45s cubic-bezier(.2,.9,.3,1.2); }
 .duel-hp-fill--ok { background: linear-gradient(90deg, #22c55e, #a3e635); }
 .duel-hp-fill--mid { background: linear-gradient(90deg, #eab308, #facc15); }
@@ -1035,10 +1151,10 @@ const DUEL_CSS = `
 .duel-combo { color: #fde047; font-size: clamp(26px, 8vmin, 40px); white-space: nowrap; text-shadow: 0 0 18px #f59e0b, 0 3px 8px #000; }
 @keyframes duel-float { 0% { transform: translate(-50%, 10px) scale(.6); opacity: 0; } 18% { transform: translate(-50%, 0) scale(1.2); opacity: 1; }
   70% { opacity: 1; } 100% { transform: translate(-50%, -36px) scale(1); opacity: 0; } }
-.duel-timer { height: 6px; border-radius: 9999px; background: #ffffff14; overflow: hidden; }
+.duel-timer { height: 5px; border-radius: 9999px; background: #ffffff14; overflow: hidden; }
 .duel-timer-fill { height: 100%; width: 100%; transform-origin: left center; background: var(--seat); }
 .duel-timer-fill[data-low="true"] { background: #fbbf24; }
-.duel-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
+.duel-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: safe center; overflow: hidden; }
 .duel-big { margin: auto; font-size: clamp(64px, 18vmin, 120px); font-weight: 900; line-height: 1; color: #fff;
   text-shadow: 0 0 30px var(--seat); animation: duel-pop .5s ease-out 1; }
 @keyframes duel-pop { 0% { transform: scale(1.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
@@ -1047,11 +1163,12 @@ const DUEL_CSS = `
 .duel-intro-sub { margin-top: 4px; font-size: 16px; font-weight: 700; color: #cbd5e1; }
 .duel-intro--tie .duel-intro-title { color: #fde047; text-shadow: 0 0 26px #f59e0b; animation: duel-glow 1.1s ease-in-out infinite alternate; }
 @keyframes duel-glow { from { text-shadow: 0 0 10px #f59e0b; } to { text-shadow: 0 0 34px #fde047; } }
-.duel-q { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
-.duel-prompt { font-size: 18px; font-weight: 800; line-height: 1.25; color: #f8fafc; text-align: center; overflow-wrap: anywhere; }
-.duel-prompt[data-long="true"] { font-size: 15px; }
-.duel-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.duel-option { min-height: 56px; padding: 6px 8px; border-radius: 14px; font-size: 16px; font-weight: 800; line-height: 1.2; color: #fff;
+.duel-q { display: flex; flex-direction: column; gap: var(--ogap); min-height: 0; }
+/* Egyik sor se zsugorodjon el (a kör utáni 2 soros prompt sem tűnhet el): a túlcsordulást az illesztés kezeli. */
+.duel-q > * { flex-shrink: 0; }
+.duel-prompt { font-size: var(--pfs); font-weight: 800; line-height: var(--plh); color: #f8fafc; text-align: center; overflow-wrap: anywhere; }
+.duel-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--ogap); }
+.duel-option { min-height: var(--omin); padding: var(--opad); border-radius: 14px; font-size: var(--ofs); font-weight: 800; line-height: 1.15; color: #fff;
   background: linear-gradient(180deg, #1e2b4d, #16203b); border: 2px solid #ffffff2e; overflow-wrap: anywhere; touch-action: none;
   transition: transform .08s ease-out, background-color .15s; }
 .duel-option[data-pressed="true"] { transform: scale(.96); background: color-mix(in srgb, var(--seat) 35%, #16203b); border-color: var(--seat); }
@@ -1061,9 +1178,9 @@ const DUEL_CSS = `
 .duel-option[data-state="dim"] { opacity: .55; }
 .duel-option:disabled { cursor: default; }
 /* Kör utáni kijelzés: a (letiltott) válaszok összébb húzódnak, hogy a helyes válasz + magyarázat 360×640-en is elférjen. */
-.duel-arena[data-phase="reveal"] .duel-option { min-height: 40px; padding: 4px 6px; font-size: 14px; }
+.duel-arena[data-phase="reveal"] .duel-option { min-height: 40px; }
 .duel-arena[data-phase="reveal"] .duel-timer { display: none; }
-.duel-arena[data-phase="reveal"] .duel-prompt { font-size: 15px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.duel-arena[data-phase="reveal"] .duel-prompt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .duel-option:disabled[data-state="idle"] { opacity: .8; }
 .duel-locked { text-align: center; font-size: 14px; font-weight: 800; color: #a5f3fc; }
 .duel-verdict { padding: 6px 10px; border-radius: 12px; text-align: center; }
