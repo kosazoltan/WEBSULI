@@ -98,7 +98,10 @@ export async function adminGoogleLogin(client: Client, profile: FakeGoogleProfil
   assert.match(state ?? "", /^a\.[A-Za-z0-9_-]{32}$/, "az admin-kérésben `a.` előtagú state van");
   assert.equal(url.searchParams.get("code_challenge_method"), "S256", "PKCE");
   const mode = opts.state ?? "valid";
-  const sent = typeof mode === "object" ? mode.value : mode === "valid" ? state : mode === "tampered" ? `${state!.slice(0, -2)}xx` : null;
+  // A hamisított state garantáltan eltér az eredetitől (a véletlen state 1/4096 eséllyel eleve „xx”-re végződhet).
+  const tampered = `${state!.slice(0, -2)}${state!.endsWith("xx") ? "yy" : "xx"}`;
+  const sent = typeof mode === "object" ? mode.value : mode === "valid" ? state : mode === "tampered" ? tampered : null;
+  if (mode === "tampered") assert.notEqual(sent, state, "a hamisított state eltér");
   const code = `admin-code-${++seq}-${profile.id}`;
   const callback = await rawGet(client, `/auth/google/callback?code=${encodeURIComponent(code)}${sent === null ? "" : `&state=${encodeURIComponent(sent!)}`}`);
   return { start, state, callback };
