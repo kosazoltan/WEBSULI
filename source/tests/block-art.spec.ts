@@ -13,8 +13,14 @@ test("a próbalecke minden blokktípusa (példa, ellenőrzés, mozgókép, prób
   await expect(page.locator(".lesson-block-head").first()).toBeVisible();
   await expect.poll(async () => (await page.locator("img.ws-block-marker").evaluateAll(els => [...new Set(els.map(e => (e.getAttribute("src") ?? "").replace(/^.*marker-([a-z]+)-studio.*$/, "$1")))])).sort())
     .toEqual(expect.arrayContaining(["animate", "check", "example", "try"]));
-  const ok = await page.locator("img.ws-block-marker").evaluateAll(els => els.every(e => (e as HTMLImageElement).complete && (e as HTMLImageElement).naturalWidth > 0));
-  expect(ok, "minden jelzőkép betöltött (katalógus-tartalék)").toBe(true);
+  // #58: a betöltésre VÁRUNK (poll), nem egy pillanatképet nézünk — a CI terhelése alatt 46 ms-mal a `src` után a kép még
+  // töltött, és az egyszeri ellenőrzés bukott (run 43916330845). A mérce ugyanaz: MINDEN jelzőkép betölt, valós mérettel.
+  await expect
+    .poll(
+      () => page.locator("img.ws-block-marker").evaluateAll(els => els.every(e => (e as HTMLImageElement).complete && (e as HTMLImageElement).naturalWidth > 0)),
+      { message: "minden jelzőkép betöltött (katalógus-tartalék)" },
+    )
+    .toBe(true);
 });
 
 test("1–5. évfolyam: a fejezetkabala 64 px; keskeny kijelzőn a cím fölött, külön sorban", async ({ page }) => {
