@@ -316,14 +316,35 @@ sora az adott játék „a” al-szeletének kötelező része.
   (nem, szám; névelő nélküli mellé névelő nélküli). Eredmény (végső szabály, teljes bank): a cloze-képes bejegyzések
   57,6%-a kap játék-alakú cloze-t (EN 71,7 / DE 45,9 / FR 51,6%; a többi más kérdéstípust), ezek 98,3%-a `ok`
   (szintenként 84,1–100%); a vak megoldó 200/200 egyezés, 7% több védhető, 2% triviális.
+- **Második kör — review #455 (Codex, „I go to school _____.” + „by bus” / „every morning”):** a fenti (e)–(h) szabályok
+  után is maradt 7% több védhető opció, és a hibás „rossz” jelzés tanulási kárt okoz, ezért az egyértelműség
+  ELSŐBBSÉGET kap a mennyiséggel szemben. Az új, ezt felváltó EGYÉRTELMŰSÉGI SZABÁLY: játék-alakú cloze csak akkor
+  készül, ha mindhárom elterelő a hiány helyére NYELVTANILAG nem illik — (1) csak angol, egyszavas, kisbetűs bejegyzés
+  (kifejezésből soha: a határozós / igei kifejezés szabad bővítmény, a mondat nélküle is teljes; a hiányos magyar
+  fordítás itt nem segít, mert a „_____ járok iskolába.” a „minden reggel”-t sem zárja ki); (2) az elterelő más,
+  a célszófaj helyén nem álló szófajú (főnév → melléknév, melléknév → ige, ige → melléknév, határozószó → ige);
+  (3) kettős szófajú szó nem elterelő (a bankban a célszófajjal is szerepel; `DUAL_USE` lista; szín; felsőfok);
+  (4) a keret nem enged átjárást (jelzői melléknév / főnév, „make / keep / get / be” után ige, segédige / „to” / „go”
+  után határozószó); (5) „a / an” hangtani kényszer. Német / francia játék-alakú cloze NINCS: a rétegzett vak mintán a
+  más szófajú elterelős német / francia tételek 97%-a a végződésből (-en / -er) megoldható volt, az azonos szófajú
+  pedig a keretbe illhet. Érintett bejegyzések (a teljes bank, nyelv × szint, scratchpad `cloze/kizarasi-okok.md`):
+  kifejezés EN 861 / DE 737 / FR 704; szófaj (DE / FR: minden) EN 41 / DE 1306 / FR 1294; keret-őr EN 461; rövid EN 11;
+  nagybetűs EN 5. Marad: EN 1194 (a cloze-képes angol bejegyzések 46,4%-a; szintenként 39,8–49,4%), DE 0, FR 0; a
+  játék-alakú cloze-ok 100%-a `ok`. A játékban a szóbank-kérdések közt a cloze aránya (3000 `next()`, mért) angolul 29,9% → 14,5%,
+  németül 30,9% → 0, franciául 31,8% → 0. A felolvasás: megjelenéskor `speakText` (cloze: a mondat „…”-tal), a helyes szó a
+  kimenetel után (`speakAfter`) — ugyanaz a felosztás, mint a Szólétra `speechPlan`-je (#454). Vak megoldó körök
+  (200 tétel, rétegzett, a fele határeset; „több helyes” jelölés): S1 2 (1,0%, „violet” főnévként) → színek ki, DE / FR
+  ki; S2 0; S3 2 (1,0%, „my eldest”, „the damp”) → felsőfok, főnevesülő melléknév ki; S4 4 (2,0%, „a cross”) → a bank
+  melléknevei közül a főnévként / igeként is élők ki; S5 0; S6 (végső szabály) 0. Egyezés minden körben 100%.
 - **Érintett fájlok:** `GE/vocab/questionGenerator.ts`, `GE/vocab/vocabSource.ts`, `GE/vocab/useVocabQuizSource.ts`,
-  új `T/vocab-cloze-game.test.ts`, `P/PlayLab.tsx` (egy additív `?q=cloze-game` próbatétel a böngészős próbához). A hét
-  játéklap, a `GE/play/*` és a meglévő tesztek nem változnak.
-- **Elfogadás:** a teljes bankon mindhárom nyelven minden játék-alakú cloze: pontosan egy helyes opció; a prompt nem
-  tartalmazza a helyes opciót, sem a `hu`-t; elterelő-invariánsok (szófaj, téma, hangtan, jelentés); a játék-alakú
-  cloze-ok `fitsAllViewports(...).ok` aránya szintenként ≥ 82% (mért: 84,1–100%); a „full” alak és a meglévő vocab-tesztek
-  változatlanul zöldek; 150 tételes kézi minta és 200 tételes vak megoldó: a több védhető opció aránya számottevően a
-  fordítás nélküli régi elterelőké (24%) alatt; böngészős próba a play-labban 360×640, 390×844, 844×390.
+  új `T/vocab-cloze-game.test.ts`, új `T/play-lab-cloze-game.spec.ts`, `P/PlayLab.tsx` (egy additív `?q=cloze-game`
+  próbatétel). A hét játéklap, a `GE/play/*` és a meglévő tesztek nem változnak.
+- **Elfogadás:** a teljes bankon minden alkalmas bejegyzés × MINDEN lehetséges elterelő-jelölt a szabálynak megfelel
+  (független szófaj-tábla, kettős szófaj, szín, felsőfok, hangtan); minden generált játék-alakú cloze: pontosan egy
+  helyes opció, nincs fordítás, a prompt és a felolvasás nem tartalmazza a választ; DE / FR: nincs játék-alak;
+  `en0-city-024` regresszió; `fitsAllViewports(...).ok` szintenként ≥ 95% (mért 100%); a „full” alak és a meglévő
+  vocab-tesztek változatlanul zöldek; a rétegzett vak mintán a „több helyes” jelzés < 1% (S6: 0/200); böngészős próba
+  a play-labban 360×640, 390×844, 844×390.
 
 ---
 
