@@ -486,3 +486,14 @@ Forrás: #424–#436 review-jai és CI-körei, az S13 átfogó review (K1, K3, H
 - **Megelőzés:** regexet tartalmazó kódot kizárólag Edit/Write eszközzel írj (nem JS-sablonszöveggel, nem inline `sed`-del);
   szerkesztés után `cat -A <fájl> | sed -n <sor>p`-vel olvasd vissza a tényleges bájtokat; a regexhez minden elválasztó-változatot
   (szóköz, gondolatjel, kettőspont, vessző) és egy „majdnem egyezik” ellenpéldát (itt: „Helyesírás”) tesztelj.
+
+## C-43 — A `\uXXXX` escape az eszközparaméterben dekódolódik: nyers sorelválasztó került a regexbe (2026-11-16)
+
+- **Tünet (JM7b):** a becenév-szűrő `INVISIBLE` regexébe `(backslash-u)2028(backslash-u)2029`-et írtam (Write eszköz) — a fájlba a két NYERS
+  Unicode-sorelválasztó került, a `tsc` „Unterminated regular expression literal” hibát adott. Ugyanez a `node -e "…(backslash-u)2028…"`
+  parancsban is megtörtént (a parancsszöveg is dekódolódott).
+- **Gyökérok:** az eszközparaméterek JSON-ként érkeznek: a négyjegyű `\uXXXX` escape a fájl / parancs megírása ELŐTT karakterré
+  alakul (a `\p{…}`, `\s` nem érvényes JSON-escape, ezért azok megmaradnak — ezért nem tűnt fel korábban).
+- **Megelőzés:** forrásban Unicode-tartományt kategóriával írj (`\p{Cf}`, `\p{Zl}`, `\p{Zp}`, `\p{Cc}`), ne `\uXXXX`-szel; tesztben
+  a különleges karaktert `String.fromCodePoint(0x200b)`-vel állítsd elő; írás után `cat -A <fájl> | sed -n <sor>p` (a `M-bM-^@M-(`
+  alak nyers U+2028-at jelez). Javítás csak karakterkóddal (`String.fromCharCode(0x2028)`) kereső szkripttel, nem escape-pel.
