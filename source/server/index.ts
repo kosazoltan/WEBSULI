@@ -10,6 +10,7 @@ import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
 import { flushPendingMaterialResults } from "./routes";
 import { mountAppRoutes } from "./app-routes";
+import { getRealtime } from "./realtime";
 import { startPlayerCodeSweeper } from "./player/sweeper";
 import { createPlayerStore } from "./player/store";
 import { setupVite, serveStatic, log } from "./vite";
@@ -616,6 +617,12 @@ app.use((req, res, next) => {
 
     // Munkamenet (Passport) + minden útvonal — JM7a: egy helyen, a jogosultsági őr-tesztek ugyanezt járják be.
     const server = await mountAppRoutes(app);
+    // JM2 (terv 10.3): Socket.IO a /api/rt/io úton, ugyanazon a HTTP-szerveren. MP_MODE=off (alap) mellett minden
+    // kézfogást FEATURE_DISABLED-del utasít el. Fejlesztésben a Vite HMR is ezen a szerveren upgrade-el: az idegen
+    // upgrade-et a Socket.IO ott nem bonthatja. A gyártás alatti szoba-plafonhoz a workflow-motor élő számlálója kell.
+    const realtime = getRealtime();
+    realtime.attach(server, { destroyUpgrade: app.get("env") !== "development" });
+    void import("./workflows/engine").then(({ activeWorkflowRuns }) => realtime.setActiveRunCount(activeWorkflowRuns)).catch((err: unknown) => logger.warn("[RT] a gyártási számláló nem köthető be", err));
     // E2E: no background jobs (they write, send e-mail or make backups).
     const stopSkillLearningAudit = e2e ? () => {} : startSkillLearningAudit();
 
@@ -704,6 +711,10 @@ app.use((req, res, next) => {
       } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
       // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a régi anyagok sora sem indít új gyártást a leálló példányon.
       try { (await import("./studio/legacy-migration")).stopLegacyMigration(); } catch (err) { logger.warn("A régi anyagok sora nem állítható le", err); }
+      // JM2 (terv 10.8, JM-A8): a valós idejű réteg leállítása — új szoba / csatlakozás tiltva, a futó meccs legfeljebb 240 s-ig
+      // kifut, utána részeredménnyel zárul, és MINDEN kapcsolat bontódik (a nyitott WebSocket / polling különben a
+      // server.close() visszahívását a kényszerkilépésig feltartaná). A workflow-várakozással párhuzamosan fut.
+      const realtimeDrained = getRealtime().drain(240_000).catch((err: unknown) => logger.warn("[RT] drain hiba", err));
       // Új kapcsolatot nem fogadunk; a nyitott kérések közben lefuthatnak.
       server.close(() => log("HTTP server closed"));
       try {
@@ -715,6 +726,7 @@ app.use((req, res, next) => {
           // A futás utáni hívói takarítás (hibaállapot mentése, claim felengedése) még a poolt használja.
           await new Promise((resolve) => setTimeout(resolve, 3_000));
         }
+        await realtimeDrained;
         // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: the still-coalesced material results go out before the pool closes (max 10 s).
         await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
         // Review #365 (spec 2026-10-22-uj-lecke-ertesito): a függő új-lecke értesítők a pool lezárása előtt (max 15 s).
