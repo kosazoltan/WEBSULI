@@ -1170,6 +1170,8 @@ export default function BlockCraftQuiz() {
   // (a scene újraépítése nélkül) újraindítható — korábban a levelComplete/endRun
   // cancelAnimationFrame után soha nem indult újra.
   const runningRef = useRef(false);
+  /** #58: a lefutott render-lépések száma (teszt-kampó `probe().frames`: méri, hogy a ciklus áll-e). */
+  const frameCountRef = useRef(0);
   /** A scene-effect által beállított render-lépés — a loop-vezérlő effect innen indítja újra. */
   const stepRef = useRef<((now: number) => void) | null>(null);
   const mineTargetRef = useRef<{ x: number; y: number; z: number; t: number } | null>(null);
@@ -1257,6 +1259,7 @@ export default function BlockCraftQuiz() {
           moveFwd: keysRef.current.fwd || stickRef.current.y > 0 ? 1 : 0,
           phase: phaseRef.current,
           paused: pausedRef.current ? 1 : 0,
+          frames: frameCountRef.current,
         };
       },
       forceState: (patch) => {
@@ -1435,13 +1438,15 @@ export default function BlockCraftQuiz() {
 
   // S11: a pálya eleji vezérlés-tipp 6 s játékidő után eltűnik (kvíz / szünet alatt az időzítő nem fut).
   useEffect(() => {
-    if (!showHint || phase !== "play" || paused) return;
+    if (!showHint || phase !== "play" || paused || coupon.expired) return;
     const id = window.setTimeout(() => setShowHint(false), 6000);
     return () => window.clearTimeout(id);
-  }, [showHint, phase, paused]);
+  }, [showHint, phase, paused, coupon.expired]);
 
-  // A játékóra csak játék közben jár: kvíz és szünet alatt áll (S11).
+  // A játékóra csak játék közben jár: kvíz és szünet alatt áll (S11), és a lejárt kupon után is (#58: a lejárati
+  // párbeszéd alatt a gyerek nem tud beavatkozni, a pálya ideje nem fogyhat tovább).
   useEffect(() => {
+    if (coupon.expired) return;
     if (phase !== "play" || paused) return;
     const id = setInterval(() => {
       setRunSeconds((s) => s + 1);
@@ -1454,7 +1459,7 @@ export default function BlockCraftQuiz() {
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [phase, paused]);
+  }, [phase, paused, coupon.expired]);
 
   /**
    * S11 / A8 — központi szóbank (közös napló a hét játékkal). `null`, amíg tölt / ha a betöltés hibázott: akkor a
@@ -2221,6 +2226,7 @@ export default function BlockCraftQuiz() {
       if (disposed) return;
       // G1: leállított loop → nem ütemezünk új frame-et (újraindítás a phase-effectből).
       if (!runningRef.current) return;
+      frameCountRef.current += 1;
       rafRef.current = requestAnimationFrame(step);
       const last = lastTRef.current ?? now;
       const dt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000));
@@ -2422,8 +2428,10 @@ export default function BlockCraftQuiz() {
    */
   useEffect(() => {
     // S11: szünetben a render-ciklus is áll (gyenge eszközön akkut is kímél).
+    // #58: a lejárt kupon után is — a lejárati párbeszéd alatt a voxel-jelenet nem renderelhet tovább (a vászon az utolsó
+    // képkockát mutatja). Szoftveres WebGL-en a futó ciklus minden bemenetet egy ~0,2–0,7 s-os képkockára várakoztatott.
     const shouldRun = (phase === "play" || phase === "quiz") && !paused;
-    if (!shouldRun) {
+    if (!shouldRun || coupon.expired) {
       runningRef.current = false;
       cancelAnimationFrame(rafRef.current);
       return;
@@ -2432,7 +2440,15 @@ export default function BlockCraftQuiz() {
     runningRef.current = true;
     lastTRef.current = null; // dt-ugrás elkerülése a szünet után
     rafRef.current = requestAnimationFrame(stepRef.current);
-  }, [phase, paused]);
+  }, [phase, paused, coupon.expired]);
+
+  // #58: lejáratkor a futó mozgás és a pointer lock elengedése a JÁTÉK kezdeményezésére (selfUnlock) — így a böngésző
+  // Esc-es lock-elengedése nem nyit szünet menüt a lejárati párbeszéd alatt, és az egér szabadon eléri a gombot.
+  useEffect(() => {
+    if (!coupon.expired) return;
+    releaseMovement();
+    releasePointerLock();
+  }, [coupon.expired, releaseMovement, releasePointerLock]);
 
   const dismissFeedback = useCallback(() => {
     setFeedback(null);

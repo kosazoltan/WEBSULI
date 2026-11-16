@@ -86,3 +86,41 @@ for (const c of GAMES) {
     await expect.poll(() => page.locator("[inert]").count(), { message: "navigáció után nem marad inert" }).toBe(0);
   });
 }
+
+/**
+ * #58 (docs/specs/2026-11-16-e2e-coupon-expired-block-craft.md): lejáratkor a Kockavadász MEGÁLL — a voxel-render ciklus és
+ * a játékóra áll, ahogy szünetben, csak szünet menü nélkül. Korábban a sötét párbeszéd alatt tovább renderelt és járt az
+ * óra: szoftveres WebGL-en (CI) minden bemenet egy képkockára várt, és a fenti eset kifutott a 30 s-ból.
+ * Az idő itt maga a mért mennyiség: 1,5 s alatt egy futó render-ciklus sok képkockát, egy 1 s-os óra legalább egy lépést tenne.
+ */
+test("block-craft-quiz: lejáratkor a játék megáll — a render-ciklus és a játékóra áll, szünet menü nélkül", async ({ page }) => {
+  type GameTestWindow = { __websuliGame?: { probe?: () => Record<string, number | string | null> } };
+  const frames = () => page.evaluate(() => Number((window as unknown as GameTestWindow).__websuliGame?.probe?.().frames ?? Number.NaN));
+  // CSS-lokátor (nem getByRole): a lejárt párbeszéd alatt a HUD inert, az akadálymentességi fán kívül esik.
+  const clock = page.locator('[role="progressbar"]').first();
+  const state = await openWithCoupon(page, blockCraft);
+  // A mérés érvényes: lejárat előtt a ciklus fut (a számláló nő).
+  const f0 = await frames();
+  expect(Number.isFinite(f0), "a probe().frames mező hiányzik").toBe(true);
+  await expect.poll(frames, { message: "lejárat előtt a render-ciklus fut" }).toBeGreaterThan(f0);
+
+  state.remaining = 0;
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByTestId("coupon-expired")).toBeVisible({ timeout: 10_000 });
+  // A leállítás a párbeszéd megjelenése utáni effektben fut: megvárjuk, hogy a számláló megálljon (futó ciklusnál soha).
+  await expect
+    .poll(async () => {
+      const a = await frames();
+      await page.waitForTimeout(300);
+      return (await frames()) - a;
+    }, { message: "a lejárt párbeszéd alatt a render-ciklus leáll" })
+    .toBe(0);
+
+  const f1 = await frames();
+  const label1 = await clock.getAttribute("aria-label");
+  await page.waitForTimeout(1_500);
+  expect(await frames(), "a lejárt párbeszéd alatt a render-ciklus nem fut").toBe(f1);
+  expect(await clock.getAttribute("aria-label"), "a lejárt párbeszéd alatt a játékóra nem jár").toBe(label1);
+  await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+  await expect(page.getByTestId("coupon-expired-back")).toBeFocused();
+});

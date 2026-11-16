@@ -177,7 +177,7 @@ async function renders(page: Page): Promise<Record<string, number>> {
 type Stick = { cx: number; cy: number; r: number };
 
 async function stickGeometry(page: Page): Promise<Stick> {
-  const box = (await page.getByTestId("virtual-joystick").boundingBox())!;
+  const box = (await page.getByTestId("virtual-joystick").boundingBox({ timeout: 15_000 }))!;
   return { cx: box.x + box.width / 2, cy: box.y + box.height / 2, r: box.width / 2 };
 }
 
@@ -195,7 +195,7 @@ async function touch(cdp: CDPSession, type: "touchStart" | "touchMove" | "touchE
  */
 async function assertStickReachesGame(page: Page, cdp: CDPSession, g: GameSpec): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    await clearQuiz(page, g);
+    await ensurePlaying(page, g);
     const s = await stickGeometry(page);
     await touch(cdp, "touchStart", s.cx, s.cy);
     await touch(cdp, "touchMove", s.cx + 0.9 * s.r, s.cy);
@@ -297,13 +297,51 @@ function analyseStep(rec: Rec, g: GameSpec, t0: number, sign: number, d0 = NaN):
   };
 }
 
-/** A játék közben felugró kérdést (Tornado „viharkérdés”) helyes válasszal elhárítjuk — a mérés a vezetésről szól. */
+/**
+ * A játék közben felugró kérdést (Tornado „viharkérdés”, Aszteroida „Vészhelyzet”) helyes válasszal elhárítjuk — a mérés
+ * a vezetésről szól. #58 (run 43916330845): ha a kérdés épp a lépcső érintése alá nyílt, az érintés egy rossz választ
+ * koppintott; ilyenkor a válaszgombok letiltva maradnak, amíg a magyarázókártyát be nem zárják — a korábbi feltétlen
+ * `click()` a letiltott gombra 180 s-ig várt. Most: kártya bezárása, csak engedélyezett gombra kattintás, korlátos körök.
+ */
 async function clearQuiz(page: Page, g: GameSpec): Promise<boolean> {
+  const card = page.getByTestId("quiz-feedback-dismiss");
   const correct = page.locator(`${g.case.quizScope} [data-correct="true"]`).first();
-  if (!(await correct.isVisible().catch(() => false))) return false;
-  await correct.click();
-  await page.waitForTimeout(1500);
-  return true;
+  let acted = false;
+  for (let round = 0; round < 4; round++) {
+    if (await card.isVisible().catch(() => false)) {
+      await card.click({ timeout: 5_000 });
+      acted = true;
+      await page.waitForTimeout(500);
+      continue;
+    }
+    if (!(await correct.isVisible().catch(() => false))) break;
+    if (!(await correct.isEnabled().catch(() => false))) {
+      // Kiértékelés alatt (a helyes válasz kiemelve, a gombok letiltva): megvárjuk a következő állapotot.
+      await page.waitForTimeout(500);
+      continue;
+    }
+    await correct.click({ timeout: 5_000 });
+    acted = true;
+    await page.waitForTimeout(1500);
+  }
+  return acted;
+}
+
+/**
+ * #58 (run 43916330845): a mérés valós ideje terhelés alatt nő, és a lövés nélkül vezetett Aszteroida-hajó közben
+ * elfogyhat („Kör vége”) — a tárcsa eltűnik, és a `boundingBox` 180 s-ig várt rá. A kör vége nem mérési eredmény:
+ * új kört indítunk (ugyanaz az indítási út, mint a teszt elején), és a mérés folytatódik.
+ */
+async function ensurePlaying(page: Page, g: GameSpec): Promise<void> {
+  await clearQuiz(page, g);
+  const stick = page.getByTestId("virtual-joystick");
+  if (await stick.isVisible().catch(() => false)) return;
+  const again = page.getByRole("button", { name: "Új kör" });
+  if (await again.isVisible().catch(() => false)) {
+    await again.click({ timeout: 5_000 });
+    await g.case.playReady(page);
+  }
+  await expect(stick, `${g.case.id}: a tárcsa nem látszik (se játék, se kör vége)`).toBeVisible({ timeout: 15_000 });
 }
 
 /** Egy lépcső: ujj le a tárcsa közepén, (gáz), majd egy mozdulattal `fx`-nyi vízszintes kitérés, tartás, fel. */
@@ -315,13 +353,18 @@ async function stepRun(page: Page, cdp: CDPSession, g: GameSpec, fx: number): Pr
       // Bezárt oldalon (időtúllépés, összeomlás) nincs mit mérni: az eredeti hibát adjuk tovább, nem egy CDP-hibát.
       if (page.isClosed()) throw err;
       // Mérés közben felugró kérdés: elhárítjuk és megismételjük (legfeljebb háromszor).
-      if (attempt >= 3 || !(await clearQuiz(page, g))) throw err;
+      // #58: a kör vége is ide tartozik (ensurePlaying új kört indít).
+      if (attempt >= 3) throw err;
+      const quizCleared = await clearQuiz(page, g);
+      const stickGone = !(await page.getByTestId("virtual-joystick").isVisible().catch(() => false));
+      if (!quizCleared && !stickGone) throw err;
+      await ensurePlaying(page, g);
     }
   }
 }
 
 async function stepOnce(page: Page, cdp: CDPSession, g: GameSpec, fx: number): Promise<{ rec: Rec; t0: number; d0: number }> {
-  await clearQuiz(page, g);
+  await ensurePlaying(page, g);
   const s = await stickGeometry(page);
   const y = s.cy + g.dy * s.r;
   await touch(cdp, "touchStart", s.cx, s.cy);
@@ -378,7 +421,7 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
   // különbség az eseményenkénti render.
   const s = await stickGeometry(page);
   const hold = async (jiggle: boolean): Promise<{ counts: Record<string, number>; ms: number }> => {
-    await clearQuiz(page, g);
+    await ensurePlaying(page, g);
     const y = s.cy + g.dy * s.r;
     await touch(cdp, "touchStart", s.cx, s.cy);
     await touch(cdp, "touchMove", s.cx + 0.8 * s.r, y);
