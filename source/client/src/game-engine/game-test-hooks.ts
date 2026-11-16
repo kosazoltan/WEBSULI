@@ -16,7 +16,18 @@ export type GameForcePatch = {
   gameWon?: boolean;
   /** Optional correct-answer counter for score consistency checks. */
   correctCount?: number;
+  /**
+   * J0c (végrehajtás K.2 „Teszt-kampó”): true → a játék azonnal nyit egy kérdést (`director.request("trigger")`).
+   * A `phase: "quiz"` minden átírt játékban ennek kompatibilis álneve.
+   */
+  question?: boolean;
 };
+
+/**
+ * J0c / K.2: a `probe()` kötelező mezői minden átírt játékban (a `probe` típusa marad `Record<string, number|string|null>`,
+ * ez csak a kulcsok listája a tesztek és a játékszeletek közös hivatkozásához).
+ */
+export const PLAY_PROBE_KEYS = ["simTime", "questionOpen", "questionsAnswered", "questionsCorrect", "fps", "band", "intensity"] as const;
 
 export type WebsuliGameTestApi = {
   forceState: (patch: GameForcePatch) => void;

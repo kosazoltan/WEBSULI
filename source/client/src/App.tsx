@@ -23,6 +23,10 @@ const StudioPanelProbe = lazy(() => import("@/components/studio/StudioPanelProbe
 const AdminTabsProbe = lazy(() => import("@/pages/AdminTabsProbe"));
 const LearnersPanelProbe = lazy(() => import("@/pages/LearnersPanelProbe"));
 const RepairWorkbenchProbe = lazy(() => import("@/pages/RepairWorkbenchProbe"));
+// J0c: a kérdés-sáv próbaoldala CSAK teszt-kampós buildben (GAME_TEST_HOOKS_ENABLED ≡ VITE_ENABLE_GAME_TEST_HOOKS === "1").
+// A feltétel a lusta importot is őrzi: az éles buildben a kifejezés `null`-ra egyszerűsödik, így a PlayLab darabja el sem
+// készül (T/game-test-hooks-guard.test.ts prod-ága). A fő JS-darabba sosem kerül.
+const PlayLab = import.meta.env.VITE_ENABLE_GAME_TEST_HOOKS === "1" ? lazy(() => import("@/pages/PlayLab")) : null;
 
 // Lazy load heavy components for better code splitting
 const Preview = lazy(() => import("@/pages/Preview"));
@@ -87,6 +91,7 @@ function Router() {
         {import.meta.env.VITE_ENABLE_RUNTIME_PROBE === "1" && (
           <Route path="/__repair-workbench-probe" component={RepairWorkbenchProbe} />
         )}
+        {import.meta.env.VITE_ENABLE_GAME_TEST_HOOKS === "1" && PlayLab && <Route path="/__play-lab" component={PlayLab} />}
         <Route path="/preview/:id" component={Preview} />
         <Route path="/lesson/:id" component={LessonRedirect} />
         <Route path="/materials/pdf/:id" component={PdfView} />
