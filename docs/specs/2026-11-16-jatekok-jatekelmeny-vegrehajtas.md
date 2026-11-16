@@ -344,7 +344,7 @@ export function createIntensityDirector(opts?: { peakSec?: [number, number]; rel
 
 ## J0b — Közös tiszta réteg: típusok, ismétlési sor, áramlat, kombó, hullám, statisztika, ütemező, harness, őrök
 
-**Állapot:** nem kezdődött
+**Állapot:** folyamatban — ág feat/jatek-j0b-learning-core, munkafa .claude/worktrees/jatek-j0b, kanban #38
 **Függ:** J0a merge (a director és a harness a `createRng`-et használja: `rng: () => number` helyett `Rng` is átadható, a `rng.next` a függvény). **Cél-mondatok:** G3, G4, G6. **Elfogadás:** J2, J3, J4, J6, J7, J8, J10, J12, J13 (logikai szinten; a játékonkénti
 igazolás a J1–J7-ben).
 
