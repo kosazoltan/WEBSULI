@@ -35,6 +35,8 @@ import {
   restoreReviewQuestion,
   tween,
   usePlayQuestion,
+  createPointerTapTracker,
+  pointerTapHandlers,
   type QuestionProvider,
   type ShakeOffset,
 } from "@/game-engine/play";
@@ -1410,9 +1412,6 @@ function pickTask(level: GradeLevel, seenPrompts: readonly string[], band?: numb
 /** A fosztogató rajzolt mérete (CSS px) és találati sugara: ≥ 48 px átmérő (K.4/16), ~30%-kal nagyobb a látványnál (KSZ-12). */
 const RAIDER_PX = 44;
 const RAIDER_HIT_PX = 28;
-/** Felengedési tűrés a drón dobozán túl (px), és az „alig mozdult ujj” küszöbe (px) — lásd `onDronePointerUp`. */
-const DRONE_UP_SLOP_PX = 10;
-const DRONE_STILL_PX = 12;
 /** A fosztogató „magja”: ha a számdrónra bökés ilyen közel esik egy fosztogató középpontjához, az lövés, nem válasz. */
 const RAIDER_CORE_PX = 16;
 /** Részecske-, lézer-, gyűrű- és felirat-pool (KSZ-6: előre rögzített kapacitás). */
@@ -2248,50 +2247,23 @@ export default function SpeedQuizMath() {
     qRef.current.pick(i, clockRef.current);
   }, []);
   /**
-   * Számdrón-választás (KSZ-13, KSZ-14) — a MOZGÓ érintési cél helyes kezelése:
-   * - `pointerdown`-ra azonnali „célzás” (a gomb `:active` állapota), a válasz FELENGEDÉSKOR véglegesedik (KSZ-13).
-   * - Érintésnél a böngésző implicit pointer capture-t tesz a lenyomott gombra, ezért a `pointerup` akkor is erre a drónra
-   *   érkezik, ha az ujjat lehúzták róla. Ezért felengedéskor a koordinátát nézzük: érvényes, ha az ujj a drón AKTUÁLIS
-   *   dobozán belül (± `DRONE_UP_SLOP_PX`) engedett fel, VAGY az ujj alig mozdult (≤ `DRONE_STILL_PX`) — a belépő repülés
-   *   közben a drón mozdulhatott el az ujj alól. Elhúzott ujj = visszavonás; `pointercancel` = visszavonás.
-   * - Nem a `click`-re épül: több ujjnál a böngésző a nem elsődleges mutatóra nem szintetizál `click`-et (mutációval igazolva).
+   * Számdrón-választás — a közös mozgó-cél érintés (`pointerTapHandlers`, `GE/play/pointerTap.ts`): felengedéskor
+   * véglegesít, ha az ujj a drón aktuális dobozán belül van vagy alig mozdult; elhúzás / `pointercancel` = visszavonás;
+   * mutatónként (nem `click`). A lenyomást elnyeli, ha a drón mögötti fosztogató közepére bökött a gyerek (az lövés).
    */
-  const dronePressRef = useRef(new Map<number, { i: number; x: number; y: number }>());
-  const onDronePointerDown = useCallback(
-    (e: ReactPointerEvent<HTMLButtonElement>, i: number) => {
-      e.stopPropagation();
-      // Ha a drón mögött egy fosztogató közepére bök a gyerek, azt akarja lelőni — ne válasszon véletlenül számot.
+  const droneTaps = useMemo(() => createPointerTapTracker(), []);
+  const raiderUnderFinger = useCallback(
+    (e: { clientX: number; clientY: number }): boolean => {
       const el = worldRef.current;
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        const { w, h } = sizeRef.current;
-        if (coreRef.current.raiderAt((e.clientX - rect.left) / w, (e.clientY - rect.top) / h, RAIDER_CORE_PX / w, RAIDER_CORE_PX / h) >= 0) {
-          shootAt(e.clientX, e.clientY);
-          return;
-        }
-      }
-      dronePressRef.current.set(e.pointerId, { i, x: e.clientX, y: e.clientY });
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const { w, h } = sizeRef.current;
+      if (coreRef.current.raiderAt((e.clientX - rect.left) / w, (e.clientY - rect.top) / h, RAIDER_CORE_PX / w, RAIDER_CORE_PX / h) < 0) return false;
+      shootAt(e.clientX, e.clientY);
+      return true;
     },
     [shootAt],
   );
-  const onDronePointerUp = useCallback(
-    (e: ReactPointerEvent<HTMLButtonElement>, i: number) => {
-      e.stopPropagation();
-      const pressed = dronePressRef.current.get(e.pointerId);
-      dronePressRef.current.delete(e.pointerId);
-      if (!pressed || pressed.i !== i) return;
-      const r = e.currentTarget.getBoundingClientRect();
-      const inside =
-        e.clientX >= r.left - DRONE_UP_SLOP_PX && e.clientX <= r.right + DRONE_UP_SLOP_PX &&
-        e.clientY >= r.top - DRONE_UP_SLOP_PX && e.clientY <= r.bottom + DRONE_UP_SLOP_PX;
-      const still = Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) <= DRONE_STILL_PX;
-      if (inside || still) pickDrone(i);
-    },
-    [pickDrone],
-  );
-  const onDronePointerCancel = useCallback((e: ReactPointerEvent<HTMLButtonElement>) => {
-    dronePressRef.current.delete(e.pointerId);
-  }, []);
 
   /* ---------------- „Miért?”: szünet + a valódi magyarázókártya ---------------- */
   const openWhy = useCallback(() => {
@@ -2470,9 +2442,6 @@ export default function SpeedQuizMath() {
   const view = q.state;
   const pres = view.presentation;
   const towerCurrent = Math.min(TOWER_STEPS_TARGET, (hud.wave - 1) + hud.waveProgress);
-  // Az eredménylap gombjai objektumként: a „Miért?” kártyán NINCS újrapróba (J-SQ) — a lapon az `onRetry=` minta csak
-  // az ott tiltott újrapróbát jelentené (`T/game-feedback-wiring-guard.test.ts`), az „Új futam” itt egy új menet.
-  const resultActions = { onRetry: startGame, onBack: exitToGames };
   const nextGoal =
     phase === "won"
       ? hud.power < 5
@@ -2672,14 +2641,7 @@ export default function SpeedQuizMath() {
                       style={{ transform: "translate3d(-200px, -200px, 0)" }}
                       aria-label={`Számdrón: ${opt.label}`}
                       aria-disabled={view.reveal || paused ? "true" : undefined}
-                      onPointerDown={(e) => onDronePointerDown(e, idx)}
-                      onPointerUp={(e) => onDronePointerUp(e, idx)}
-                      onPointerCancel={onDronePointerCancel}
-                      // Billentyűzet (Enter / Szóköz a fókuszált drónon): a `click` itt `detail === 0`; a mutatós
-                      // választást a pointerup már elintézte.
-                      onClick={(e) => {
-                        if (e.detail === 0) pickDrone(idx);
-                      }}
+                      {...pointerTapHandlers(droneTaps, idx, () => pickDrone(idx), { onDown: raiderUnderFinger })}
                       {...correctDataAttrs(opt.correct)}
                     >
                       <span className="sq-drone-rotor" aria-hidden="true" />
@@ -2738,7 +2700,9 @@ export default function SpeedQuizMath() {
         isNewBest={bestResult?.isNewBest ?? false}
         correct={result?.correct ?? 0}
         total={result?.total ?? 0}
-        {...resultActions}
+        // „Új futam” = új menet (nem a magyarázókártya tiltott újrapróbája — K.2 „Megvalósult eltérések” e).
+        onRetry={startGame}
+        onBack={exitToGames}
         retryLabel="Új futam"
         extra={
           <div className="grid gap-2">

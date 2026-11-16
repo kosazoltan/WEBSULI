@@ -172,8 +172,12 @@ export function createPlayerRouter(deps: PlayerRouterDeps): Router {
       if (!confirmedEmail) return res.status(400).json(INVALID);
       const player = await deps.store.confirmVerifiedEmail(confirmedEmail);
       if (player.banned) {
-        logger.info(`[PLAYER] tiltott fiók belépési kísérlete: ${maskEmail(confirmedEmail)}`);
-        return res.status(403).json({ ok: false, code: "BANNED" });
+        // N2 (tulajdonosi döntés 2026-11-16): a tiltott játékos is letöltheti az adatait és törölheti a fiókját — ehhez
+        // KORLÁTOZOTT munkamenetet kap. Ez semmi mást nem nyit: a `requirePlayer` minden kérésnél az adatbázisból nézi a
+        // tiltást (403), csak a `requireOwnData` három végpontja (export, törlési kód, törlés) engedi be.
+        await setPlayerSession(req, player.id);
+        logger.info(`[PLAYER] tiltott fiók belépése (korlátozott munkamenet): ${maskEmail(confirmedEmail)}`);
+        return res.status(403).json({ ok: false, code: "BANNED", restricted: true });
       }
       await setPlayerSession(req, player.id);
       logger.info(`[PLAYER] belépés (${parsed.data.kind}): ${maskEmail(confirmedEmail)}`);

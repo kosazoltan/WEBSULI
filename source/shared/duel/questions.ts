@@ -1,7 +1,7 @@
 /**
  * Párbaj-kérdéssor seedelt építése (végrehajtás JM-K `questions.ts`, JM1 3. lépés; terv 10.5 „Vegyes évfolyam”).
  *
- * Tiszta TS (J19 őr alatt): kliens (egyeszközös aréna) és szerver (online szoba, JM2) is hívja. A bank és a válaszablak
+ * Tiszta TS (J19 őr alatt): a szerver (online szoba, JM2) és a kliens (gépi ellenfél, JM3a) is hívja. A bank és a válaszablak
  * szabálya PARAMÉTER (U-JM1-1 felderítése, 2026-11-16: a szerver esbuild-bundle-je csak a `@shared` / `@assets` aliast
  * ismeri — `source/build-server.js` —, ezért a `shared/` nem importálhat a `client/src/`-ből): a hívó adja át a
  * `GRADE_QUIZ_ITEMS`-t (vagy annak szerkezeti megfelelőjét) és a J0b `windowMsFor` szabályát.
@@ -44,8 +44,12 @@ export type DuelBankItem = {
 
 export type DuelWindowRule = (prompt: string, grade: number) => number;
 
+/** A párbaj alap-válaszablaka (a J0b `windowMsFor` bemenete; 3–4. évfolyamon ×1,25, mindig ≤ 9 s). Szerver és kliens közös. */
+export const DUEL_BASE_WINDOW_MS = 6000;
+
 /**
- * Hossz-őr az osztott képernyőhöz (review #447): egy térfélnek 360×640-en ~260 px magasság jut. A mért leghosszabb
+ * Hossz-őr (review #447; az egyeszközös aréna osztott képernyőjére mérve, egy térfélnek 360×640-en ~260 px jutott — az
+ * egy játékos nézőpontú online képernyőn ennél több hely van, így az őr biztonsággal megtartható). A mért leghosszabb
  * tételek (2026-11-16: évfolyam-bank prompt 122, opció 88, opciók együtt 234 karakter; szóbank cloze-prompt 164, opció 67)
  * a lap betűméret-illesztésével elférnek; az ennél hosszabb (jövőbeli) tételt a párbaj kihagyja. A jelenlegi bankból
  * így egy tétel sem esik ki (teszt), tehát a tantárgyak aránya nem torzul.
@@ -108,7 +112,7 @@ export function toDuelQuestion(
 }
 
 export type BuildRoundQuestionArgs = {
-  /** A meccs seedje (pl. `seedFrom("duel-arena", n)` vagy a szobakód). */
+  /** A meccs seedje (a szoba titkos seedje + a meccs sorszáma). */
   seed: string;
   /** A kör sorszáma (1-től; a döntő körök is folytatják). */
   round: number;

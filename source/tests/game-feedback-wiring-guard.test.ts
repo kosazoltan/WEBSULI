@@ -85,7 +85,8 @@ function guardGame(file: string) {
     // A kérdés-életciklus a közös horogé (usePlayQuestion → createQuestionUi): a hibás / lejárt válasz megoldás-kijelzése
     // a horog REVEAL_WRONG_MS konstansa, a vezérlő `Math.max(1800, …)`-szel alulról korlátozza.
     assert.match(code, /usePlayQuestion\s*\(/, "a lap nem a közös kérdés-horgot használja");
-    const hook = stripComments(readFileSync(join(root, "client/src/game-engine/play/useQuestionDirector.ts"), "utf8"));
+    // A közös utójavítás (b) óta az állapotgép a React-mentes `questionUi.ts`-ben él (a régi helyről re-exportálva).
+    const hook = stripComments(readFileSync(join(root, "client/src/game-engine/play/questionUi.ts"), "utf8"));
     const m = /export const REVEAL_WRONG_MS\s*=\s*(\d[\d_]*)/.exec(hook);
     assert.ok(m, "nincs REVEAL_WRONG_MS a közös horogban — a teszt elavult");
     assert.ok(Number(m[1]!.replace(/_/g, "")) >= 1800, `REVEAL_WRONG_MS = ${m[1]} < 1800`);
@@ -114,7 +115,9 @@ function guardGame(file: string) {
   });
 
   test(`${file}: nincs újrapróba a játékmenetben — a megoldás mutatása után nem lehet „visszakoppintani” (SPEC-VÁLTOZÁS, c)`, () => {
-    assert.doesNotMatch(code, /onRetry=/, "újrapróba-kötés a lapon (végrehajtás J4 elfogadás: grep 0 találat)");
+    // A tiltás a MAGYARÁZÓKÁRTYA újrapróbájára vonatkozik (végrehajtás K.2 „Megvalósult eltérések” e); a `ResultScreen`
+    // „Új futam” propja új menet, az megengedett.
+    assert.doesNotMatch(code, /<QuizFeedbackCard[^>]*onRetry=/, "újrapróba-kötés a magyarázókártyán");
     assert.doesNotMatch(code, /retryTask/, "a régi újrapróba-ág a lapon maradt");
     const card = code.slice(code.search(/<QuizFeedbackCard\b/));
     assert.doesNotMatch(card.slice(0, card.indexOf("/>")), /onRetry/, "a „Miért?” kártya újrapróbát kínálna");

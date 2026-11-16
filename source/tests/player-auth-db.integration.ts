@@ -386,12 +386,16 @@ describe("JM7a — HTTP: flag BE", () => {
     assert.equal(sixDigits.status, 400, "a kód 8 jegyű");
   });
 
-  it("tiltott cím: a beváltás 403, munkamenet nélkül; a tiltott fiók munkamenete a /me-n 403", async () => {
+  it("tiltott cím: a beváltás 403, csak KORLÁTOZOTT munkamenettel (a /me és a fiók-végpontok 403); a tiltott fiók munkamenete a /me-n 403", async () => {
     const { code } = await plant("pa-banned@websuli.example", "97531097");
     const c = new Client(onApp.base);
     const r = await c.request("POST", "/api/player/auth/verify", { kind: "code", email: "pa-banned@websuli.example", code });
-    assert.deepEqual([r.status, r.json], [403, { ok: false, code: "BANNED" }]);
-    assert.equal((await c.request("GET", "/api/player/me")).json, null, "nincs játékos-munkamenet");
+    // SPEC-VÁLTOZÁS 2026-11-16 (végrehajtás „JM7b-utójavítás – N2”, tulajdonosi döntés): a tiltott fiók korlátozott
+    // munkamenetet kap (csak export / törlés), ezért a /me nem null, hanem 403 BANNED — a szigor megmarad: semmi más nem nyílik.
+    assert.deepEqual([r.status, r.json], [403, { ok: false, code: "BANNED", restricted: true }]);
+    const me = await c.request("GET", "/api/player/me");
+    assert.deepEqual([me.status, (me.json as { code?: string }).code], [403, "BANNED"], "korlátozott munkamenet: a /me tiltott");
+    assert.equal((await c.request("GET", "/api/player/account")).status, 403, "a fiók-nézet is tiltott");
     const { code: c2 } = await plant("kesobb-tiltott@pelda.hu", "86420086");
     const p = new Client(onApp.base);
     assert.equal((await p.request("POST", "/api/player/auth/verify", { kind: "code", email: "kesobb-tiltott@pelda.hu", code: c2 })).status, 200);

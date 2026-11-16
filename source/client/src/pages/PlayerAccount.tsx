@@ -46,14 +46,16 @@ const ERR: Record<string, string> = {
 
 export default function PlayerAccount() {
   const [location, setLocation] = useLocation();
-  const { enabled, player, isLoading } = usePlayer();
+  const { enabled, player, banned, isLoading } = usePlayer();
   const isProfileRoute = location === "/profile";
 
   useEffect(() => {
-    if (!isLoading && enabled && !player && !isProfileRoute) setLocation("/belepes");
-  }, [isLoading, enabled, player, isProfileRoute, setLocation]);
+    if (!isLoading && enabled && !player && !banned && !isProfileRoute) setLocation("/belepes");
+  }, [isLoading, enabled, player, banned, isProfileRoute, setLocation]);
 
   if (isLoading) return <div className="min-h-screen" style={{ backgroundColor: "#0A0E27" }} data-testid="player-account-loading" />;
+  // N2 (tulajdonosi döntés 2026-11-16): a tiltott fiók csak az adatai letöltését és a fiók törlését éri el.
+  if (enabled && banned) return <BannedView />;
   if (!enabled || !player) {
     // Vendég / kikapcsolt flag: a /profile a régi, helyi oldal; a /fiok a belépésre visz (fent).
     return (
@@ -109,7 +111,21 @@ function AccountView({ playerId }: { playerId: string }) {
       <RecordsCard local={local} />
       <BadgesCard local={local} />
       <LearnerCard account={account} onChanged={async (msg) => { setNotice(msg); await refresh(); }} />
-      <AccountActions account={account} local={local} />
+      <AccountActions maskedEmail={account.maskedEmail} googleLinked={account.googleLinked} local={local} />
+    </Shell>
+  );
+}
+
+/** N2: tiltott fiók — magyarázat + „Adataim letöltése”, „Kijelentkezés”, „Fiók törlése” (ugyanazokkal a védelmekkel). */
+function BannedView() {
+  const [local] = useState<LocalProgress>(() => readLocalProgress());
+  return (
+    <Shell>
+      <div className="mb-4 rounded-3xl border border-amber-300/40 bg-amber-900/30 p-4 text-amber-50" role="status" data-testid="player-banned-notice">
+        <p className="font-extrabold">Ez a fiók le van tiltva.</p>
+        <p className="mt-1 text-sm">Játszani és a becenevet módosítani most nem lehet. Az adataidat letöltheted, és ha szeretnéd, a fiókot véglegesen törölheted.</p>
+      </div>
+      <AccountActions maskedEmail={null} googleLinked={false} local={local} />
     </Shell>
   );
 }
@@ -347,7 +363,7 @@ function LearnerCard({ account, onChanged }: { account: PlayerAccountView; onCha
   );
 }
 
-function AccountActions({ account, local }: { account: PlayerAccountView; local: LocalProgress }) {
+function AccountActions({ maskedEmail, googleLinked, local }: { maskedEmail: string | null; googleLinked: boolean; local: LocalProgress }) {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -410,7 +426,7 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
   return (
     <section className="mb-4 rounded-3xl border border-white/10 bg-slate-900/60 p-4 text-white" data-testid="player-account-actions">
       <h2 className="mb-1 text-base font-extrabold">Fiókadatok</h2>
-      <p className="text-sm text-white/75">E-mail: <span className="font-semibold" data-testid="player-masked-email">{account.maskedEmail}</span>{account.googleLinked ? " · Google-lal is beléphetsz" : ""}</p>
+      {maskedEmail !== null && <p className="text-sm text-white/75">E-mail: <span className="font-semibold" data-testid="player-masked-email">{maskedEmail}</span>{googleLinked ? " · Google-lal is beléphetsz" : ""}</p>}
       <div className="mt-3 grid gap-2">
         <Button variant="outline" className="justify-start gap-2" disabled={busy} onClick={() => void download()} data-testid="button-export-data"><Download className="h-4 w-4" /> Adataim letöltése</Button>
         <Button variant="outline" className="justify-start gap-2" disabled={busy} onClick={() => void leave().then((ok) => { if (ok) setLocation("/games"); })} data-testid="button-account-logout"><LogOut className="h-4 w-4" /> Kijelentkezés</Button>
@@ -427,10 +443,10 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
             </AlertDialogDescription>
           </AlertDialogHeader>
           {!codeSent ? (
-            <p className="text-sm">A biztonság kedvéért egy megerősítő kódot küldünk a fiókod e-mail-címére ({account.maskedEmail}). Csak az tudja törölni a fiókot, aki hozzáfér a postafiókhoz.</p>
+            <p className="text-sm">A biztonság kedvéért egy megerősítő kódot küldünk a fiókod e-mail-címére{maskedEmail ? ` (${maskedEmail})` : ""}. Csak az tudja törölni a fiókot, aki hozzáfér a postafiókhoz.</p>
           ) : (
             <>
-              <p className="text-sm" data-testid="player-delete-code-sent">Elküldtük a kódot a(z) {account.maskedEmail} címre (a Spam mappát is nézd meg).</p>
+              <p className="text-sm" data-testid="player-delete-code-sent">Elküldtük a kódot {maskedEmail ? `a(z) ${maskedEmail} címre` : "a fiókod e-mail-címére"} (a Spam mappát is nézd meg).</p>
               <label htmlFor="delete-code" className="text-sm font-semibold">A levélben kapott 8 jegyű kód</label>
               <Input id="delete-code" inputMode="numeric" autoComplete="one-time-code" maxLength={9} value={deleteCode}
                 onChange={(e) => setDeleteCode(e.target.value.replace(/\D/g, "").slice(0, 8))} data-testid="input-delete-code" />

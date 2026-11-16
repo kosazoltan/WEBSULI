@@ -5,10 +5,9 @@ import { loadVocabBank, resetVocabBankCache } from "../client/src/data/vocabBank
 import type { VocabLang } from "../client/src/data/vocabBank/types";
 
 /**
- * JM1 / review #447 (vercel 4584953989): a Párbaj aréna „Újrapróbálom” gombja a közös szóbank-betöltőt hívja újra.
- * A betöltő az ELUTASÍTOTT ígéretet kiveszi a gyorsítótárból (`client/src/data/vocabBank/loader.ts`), így a következő
- * hívás tényleg újra próbál — ezt rögzíti ez a teszt (a betöltő változatlan). A böngészőbeli újrapróbát (megszakított,
- * majd továbbengedett darab a buildelt szerveren) a `duel-arena.spec.ts` „a szóbank betöltési hibája…” teszt igazolja.
+ * JM1 / review #447 (vercel 4584953989): a közös szóbank-betöltő (a szójátékok és a JM3b szóbankos párbaja is ezt
+ * használja) az ELUTASÍTOTT ígéretet kiveszi a gyorsítótárból (`client/src/data/vocabBank/loader.ts`), így a következő
+ * hívás tényleg újra próbál — ezt rögzíti ez a teszt (a betöltő változatlan).
  */
 test("loadVocabBank: elutasított betöltés után a következő hívás új próbát indít (nem a gyorsítótárazott hibát adja)", async () => {
   resetVocabBankCache();
