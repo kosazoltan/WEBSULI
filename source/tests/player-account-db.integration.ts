@@ -350,7 +350,11 @@ describe("JM7b — adatletöltés és fióktörlés (JM-A15)", () => {
     assert.equal(data.account.avatar, "hex-lime");
     assert.ok(!text.includes("masik-exporthoz") && !text.includes("Titkos Holló"), "más játékos adata nincs benne");
     // Review #449 (A2): engedélylistás séma — belső azonosító (fiók, Google, tanuló, foglaltsági kulcs) nincs benne.
-    assert.deepEqual(Object.keys(data).sort(), ["account", "exportedAt", "format", "gameRuns", "loginCodes"]);
+    // SPEC-VÁLTOZÁS 2026-11-16 (végrehajtás „JM7b-utójavítás K1” 6. lépés): + `retentionNote` — statikus adatvédelmi tájékoztató
+    // szöveg a tiltás-ujjlenyomatról; az engedélylista továbbra is pontos, és a szöveg semmilyen személyes adatot nem tartalmaz.
+    assert.deepEqual(Object.keys(data).sort(), ["account", "exportedAt", "format", "gameRuns", "loginCodes", "retentionNote"]);
+    const note = (data as unknown as { retentionNote: string }).retentionNote;
+    assert.ok(/ujjlenyomat/.test(note) && !note.includes("@") && !note.includes("export"), "statikus, PII nélküli tájékoztató");
     assert.deepEqual(Object.keys(data.account).sort(), ["avatar", "bannedAt", "createdAt", "email", "emailVerifiedAt", "googleLinked", "lastSeenAt", "learnerProfileLinked", "nickname"]);
     const ownId = ((await c.request("GET", "/api/player/me")).json as { id: string }).id;
     assert.ok(!text.includes(ownId), "a fiók belső azonosítója nincs az exportban");
