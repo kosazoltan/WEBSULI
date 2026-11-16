@@ -33,6 +33,7 @@ Rövid útvonal-jelölés a dokumentumban: `P/` = `source/client/src/pages/`, `G
 | **G9** | (kiegészítés) e-mailes regisztráltak együtt játszhassanak; kis játékos-fiók, amely gyűjti és TÁROLJA a pontokat |
 | **G10** | (kiegészítés) párbaj: a helyesen / gyorsabban válaszoló győzi le a másikat; csoportos játék végén győzteshirdetés |
 | **G11** | (biztonsági követelmény, 2026-11-16) „Az admin felülethez senki nem férhet hozzá, csak az adminok”; a játékhoz rendelt Google-hozzáférés csak a nyilvános játékoldalakra vonatkozik, és játékos-fiókot hoz létre |
+| **G12** | (tulajdonosi döntés, 2026-11-16) „kizárólag hálózati, internetes, közös játékra fókuszálj” — egy eszközön kettesben játszani nem jellemző, az egyeszközös párbaj megszűnik |
 
 A G6-ot két irányban értelmezzük: a bevonódás erős, de **etikus** (gyerekek!) — 3.3 szakasz. A követhetőségi táblázat
 (cél-mondat → elfogadási pont → szelet) a 12. szakaszban.
@@ -504,6 +505,9 @@ Barátokkal / testvérekkel / osztálytársakkal ugyanazt a játékot közösen 
 csoportos játék végén győzteshirdetés; e-maillel regisztrált diák saját kis játékos-fiókja, amely a pontokat a szerveren
 gyűjti és tárolja. Vendég (regisztráció nélkül) egyedül játszhat, és szobakóddal csatlakozhat generált becenévvel; a
 pontgyűjtés, barátok, ranglista és párbaj-mérleg a regisztráltaké.
+Egyeszközös (osztott képernyős) mód nincs (G12, D20): minden közös játék hálózaton, játékosonként saját eszközön fut.
+Szobát játékos-fiókkal, párosított tanulói profillal vagy adminként lehet nyitni; csatlakozni kóddal / linkkel vendégként
+is lehet (D21). A párbaj egyedül, gépi ellenféllel is játszható, hálózat nélkül (D22).
 
 ### 10.2 A kódból felmért tények (2026-11-16)
 
@@ -689,7 +693,7 @@ a szerver ettől még 403-at ad; (d) átfogó jogosultsági mátrix-teszt nincs 
 
 | Játék | Online párbaj / csoportmód (2–4) | Megvalósítás |
 |---|---|---|
-| Párbaj aréna (játékfüggetlen) | 1v1 egy eszközön osztott képernyővel (JM1), majd online 2–4 (JM3) | a szabálymotor kérdés-körei |
+| Párbaj aréna (játékfüggetlen) | online 2–4 fő, mindenki a saját eszközén (JM3a/b) + gépi ellenfél egyedül (JM3a, D22); az egyeszközös változat megszűnt (D20, JM1r) | a szabálymotor kérdés-körei a szerver `room-machine`-jén (gépi ellenfélnél ugyanez a reducer a kliensen) |
 | Gyors matek sprint | „Toronyverseny”: mindenki a saját évfolyamú feladatát lövi a saját tornyánál; a helyes válasz sebez | kvíz-kör híd (JM4a) |
 | Szólétra | „Ikerlétra”: egymás melletti létrák, mindenki a saját nyelvi szintjének szavát kapja | kvíz-kör híd (JM4b) |
 | Szökőár szökés | „Két part”: azonos seedű pálya és kapukérdés-sor, élő állás-sáv; a kapukérdés a közös körből jön | kvíz-kör híd + azonos seed (JM4c) |
@@ -699,8 +703,8 @@ a szerver ettől még 403-at ad; (d) átfogó jogosultsági mátrix-teszt nincs 
 
 ### 10.8 Szobák, meghívás, korlátok
 
-- Szobakód: 6 karakter, összetéveszthetetlen ábécé (nincs 0/O/1/I), + megosztható link (`/jatek/szoba/<kód>`, a kód nem
-  személyes adat) + QR (`qrcode`). Váróterem, készenléti jelzés, gazda indít (≥ 2 kész játékos), gazda-váltás kilépéskor
+- Szobakód: 6 karakter, összetéveszthetetlen ábécé (nincs 0/O/1/I), + megosztható link (párbajnál `/games/parbaj/<KÓD>` —
+  SPEC-VÁLTOZÁS 2026-11-16, egy útvonal-család a `/games` alatt; a kód nem személyes adat) + QR (`qrcode`). Váróterem, készenléti jelzés, gazda indít (≥ 2 kész játékos), gazda-váltás kilépéskor
   (a legrégebben csatlakozott aktív játékos), újracsatlakozás 60 s türelmi idővel (teljes állapot-pillanatkép), az eltűnt
   játékos körei üresen járnak le; egyedül maradt játékos → „az ellenfél kilépett” zárás.
 - Korlátok (alapértékek, env-vel állíthatók): 2–4 fő / szoba; `MP_MAX_ROOMS=50`; 20 üzenet/s/kapcsolat; üzenet ≤ 4 KB;
@@ -731,9 +735,10 @@ változik; adatletöltés és fióktörlés a fiókoldalról.
 | Szelet | Tartalom | Függ | Flag |
 |---|---|---|---|
 | **JM0** | adatvédelmi javítás: ranglistán becenév / „Játékos #xxxx” a valódi név helyett; e-mail ki a naplókból; `POST /api/games/score` sebességkorlát + opcionális idempotens `runId` (memóriabeli TTL-dedup, séma nélkül) | — (azonnal) | nincs |
-| **JM1** | `source/shared/duel/` szabálymotor + `shared/game-rng.ts` használata + egyeszközös „Párbaj aréna” (osztott képernyő) | J0a, J0b | nincs (kliensoldali, önálló) |
+| **JM1** | `source/shared/duel/` szabálymotor (`rules`, `questions`, `reactions`) + `shared/nicknames.ts` (kész, #447); az ugyanitt szállított egyeszközös aréna a JM1r-ben megszűnt | J0a, J0b | nincs |
+| **JM1r** | az egyeszközös Párbaj aréna, a `/games/parbaj` útvonal és belépősáv, a `shared/duel/match.ts` törlése; az arany visszajátszás, a 3000 és a 200 bot-meccs átvitele a `room-machine`-re; az aréna megjelenítő részei önálló komponensekbe (`client/src/components/duel/`) | JM2 | nincs |
 | **JM2** | Socket.IO réteg: `/api/rt/`, belépőjegy, szoba-állapotgép (shared), regisztráció, korlátok, drain, status, gyártási elsőbbség, szerveroldali kérdéssor | JM1 | `MP_MODE` (alap off) |
-| **JM3** | online szoba UI: váróterem, kód / link / QR, készenlét, újracsatlakozás, győzteshirdetés (dobogó), visszavágó, reakciók; Párbaj aréna online; `MP_MODE=admin` → ellenőrzés → `on` | JM2 | `MP_MODE` |
+| **JM3a/b** | JM3a: online párbaj 2 főre — `/games/parbaj` (szoba létrehozása / csatlakozás kóddal), `/games/parbaj/<kód>` link, QR, váróterem, készenlét, meccs egy játékos nézőpontjából, győzteshirdetés, visszavágó, kilépés, hálózati állapotok; szobanyitás fiókkal / tanulói profillal / adminként, csatlakozás vendégként is (D21; admin módban az admin nyit, kóddal bárki csatlakozhat); gépi ellenfél (D22, `MP_MODE`-tól függetlenül). JM3b: 3–4 fő, reakciók, kirúgás, értesítések, offline-újracsatlakozás e2e, szóbankos (angol / német / francia) nyelvi párbaj (D23); `MP_MODE=admin` → éles mérés (U-JM2-1/2) → `on` | JM1r, JM2 (JM3b: + JM7b) | `MP_MODE` (a gépi ellenfél flag nélkül) |
 | **JM4a/b/c** | kvízjátékok bekötése: Matek sprint, Szólétra, Szökőár | JM3 + J4 / J2 / J1 | játékonkénti engedélylista `MP_GAMES` |
 | **JM5a–d** | azonos seedű párhuzamos futás + élő állás-sáv: Kockavadász, Aszteroida, Brain Rot, Tornado | JM3 + J3 / J6 / J5 / J7 | `MP_GAMES` |
 | **JM6** | aszinkron kihívás-link (aláírt, állapotmentes) mind a hét játékra | J1–J7 | nincs |
@@ -823,11 +828,18 @@ Többjátékos, párbaj, fiók, pontok (JM, JB szeletek):
   szerver naplója e-mail-címet nem tartalmazni (a `S/auth.ts:72, 86, 96, 105` és `S/routes.ts:1510` sorok javítva; őr-teszt).
 - [ ] JM-A2 WHEN a `POST /api/games/score` 15 percen belül a korlátnál többször érkezik egy IP-ről THEN the system SHALL 429-et
   adni; WHEN ugyanazzal a `runId`-vel kétszer érkezik THEN the system SHALL egyszer írni (a második 200, írás nélkül).
-- [ ] JM-A3 WHEN két játékos egy eszközön Párbaj arénát játszik THEN the system SHALL a 10.5 szabályai szerint (pontosság-
-  elsődleges, sávos ≤ 25% gyorsaság, nincs levonás, ≤ 2 döntő kérdés, majd közös győzelem; vegyes évfolyamnál saját
-  évfolyam azonos sávból) dönteni — a `source/shared/duel/` egységtesztjei és egy Playwright-próba igazolja.
+- [ ] JM-A3 WHEN két vagy több játékos online szobában párbajt játszik THEN the system SHALL a 10.5 szabályai szerint
+  (pontosság-elsődleges, sávos ≤ 25% gyorsaság, nincs levonás, ≤ 2 döntő kérdés, majd közös győzelem; vegyes évfolyamnál saját
+  évfolyam azonos sávból) dönteni — a `source/shared/duel/` és a `room-machine` egységtesztjei (köztük arany visszajátszás és
+  3000 seedelt bot-meccs) és a két böngészőkontextusos Playwright-próba igazolja. (SPEC-VÁLTOZÁS 2026-11-16, D20: az
+  egyeszközös próba megszűnt.)
+- [ ] JM-A3b WHEN egy játékos a gépi ellenfél ellen játszik THEN the system SHALL ugyanazt a szabálymotort és ugyanazt a
+  meccsképernyőt használni hálózat nélkül, seedelt, állítható ügyességű géppel (azonos seed + azonos bemenet → azonos meccs),
+  a gépet „Gép” felirattal jelölni, és a gépi meccset ember elleni győzelemként sehol nem számolni (D22).
 - [ ] JM-A4 WHEN `MP_MODE=off` THEN the system SHALL a többjátékos gombokat nem mutatni és a `/api/rt/` kapcsolatot
-  `FEATURE_DISABLED`-del elutasítani; WHEN `admin` THEN csak admin hozhat létre szobát; WHEN `on` THEN bárki (vendég is).
+  `FEATURE_DISABLED`-del elutasítani; WHEN `admin` THEN csak admin hozhat létre szobát, csatlakozni kóddal bárki (vendég is)
+  tud; WHEN `on` THEN szobát játékos-fiók, párosított tanulói profil vagy admin nyithat, csatlakozni bárki (vendég is) tud
+  (SPEC-VÁLTOZÁS 2026-11-16, D21).
 - [ ] JM-A5 WHEN két böngészőkontextus ugyanabba a szobába lép (kód / link / QR) THEN the system SHALL váróteremmel,
   készenléttel, közös körökkel és győzteshirdetéssel (dobogó, pontosság, leggyorsabb helyes válasz, legjobb sorozat,
   visszavágó) lezárni a meccset; WHEN az egyik kapcsolat megszakad és 60 s-on belül visszatér THEN the system SHALL teljes
@@ -881,13 +893,14 @@ Folyamat:
 | G2 a játék kösse le a figyelmet | J3, J9, J-* (ellenfelek, szakaszok), J16 | J1–J7 |
 | G3 kérdés a játékban, nem cél | J1, J5, J10, J-* (Q-mechanikák) | J0b, J0c, J1–J7 |
 | G4 pontgyűjtés, élvezet | J12, J16, J17, J-* (kombó, pont-bontás), JM-A13 | J0a (`combo`), J1–J7, J8, JM8 |
-| G5 legyőzhető ellenfelek | J-* (főellenfél, rivális), JM-A3, JM-A5 | J1–J7, JM1, JM3 |
+| G5 legyőzhető ellenfelek | J-* (főellenfél, rivális), JM-A3, JM-A3b, JM-A5 | J1–J7, JM1, JM1r, JM3a, JM3b |
 | G6 bevonódás → tanítás (etikusan) | J2, J4, J6, J7, J8, J13, J14, J18, JB-A1 | J0b, J1–J7, J8, JB |
 | G7 teljes végigvitel | P1–P4, J15 | minden szelet, J9, JM11 |
 | G8 barátokkal ugyanazt a játékot, a szerveren összekapcsolva | JM-A4, JM-A5, JM-A6, JM-A9, JM-A10, JM-A16 | JM2, JM3, JM4a–c, JM5a–d, JM6, JM10 |
 | G9 e-mailes regisztráltak együtt; kis fiók, pontok tárolása | JM-A11, JM-A13, JM-A14, JM-A15 | JM7a, JM7b, JM8a, JM8b, JM9 |
-| G10 párbaj (helyes / gyorsabb nyer), győzteshirdetés | JM-A3, JM-A5, JM-A6 | JM1, JM2, JM3, JM4 |
+| G10 párbaj (helyes / gyorsabb nyer), győzteshirdetés | JM-A3, JM-A3b, JM-A5, JM-A6 | JM1, JM1r, JM2, JM3a, JM3b, JM4 |
 | G11 (tulajdonosi biztonsági követelmény) admin felület csak adminoknak; játékos-Google csak játékoldalra | JM-A12 | JM7a (a regisztráció megnyitása előtt), JM11 review |
+| G12 (tulajdonosi döntés) csak hálózati közös játék | JM-A3, JM-A3b, JM-A4, JM-A5 | JM1r, JM3a, JM3b |
 | (adatvédelem, a fiókhoz kötött) | JM-A1, JM-A2, JM-A7, JM-A8, JM-A17 | JM0, JM2, JM11 |
 
 ## 13. Döntési pontok (javasolt alapértelmezéssel végigvive)
@@ -908,11 +921,16 @@ Folyamat:
 | **D12** | **TULAJDONOSI BIZTONSÁGI KÖVETELMÉNY (2026-11-16): admin-elválasztás** | (a) **külön `player_accounts` tábla + külön munkamenet-kulcs + külön játékos Google-út (deny by default)** · (b) közös `users` tábla szerepmezővel | **(a)** — a játékos-belépés szerkezetileg sem állíthat `req.user`-t és nem kaphat `is_admin`-t; a meglévő nem admin `users`-út (kupon / gyakorlás) változatlan, admin-jogot nem ad. A mátrix-teszt és a regressziós őr a JM7a-ban, a regisztráció megnyitása előtt. |
 | D13 | Valós idejű csatorna | (a) **Socket.IO a `/api/rt/` úton (polling a Vercel-rewrite-on át, WebSocket-frissítés ha lehet; opcionális közvetlen aldomain)** · (b) `ws` + kötelező aldomain · (c) SSE + POST · (d) külső szolgáltató | **(a)** — tulajdonosi DNS-lépés nélkül működik élesben (10.3); egy példányon nem kell ragadós munkamenet; iskolai hálón robusztus. Két új MIT-függőség (indokolt kivétel). |
 | D14 | Párbaj-szabály | (a) **pontosság-elsődleges, életerő + sebzés, sávos ≤ 25% gyorsaság, nincs levonás, ≤ 2 döntő, közös győzelem; vegyes évfolyam: saját évfolyam azonos sávból** · (b) Kahoot-szerű ≤ 50% gyorsaság · (c) csak pontosság | **(a)** — orkesztrátori 4. pont; a kutatás (2.) szerint ez kíméli a tanulást és a gyengébbet. |
-| D15 | Sorrend | (a) **JM0 → JM1 (aréna) → JM2–JM3 (online szoba) → JM4 kvízjátékok → JM5 3D → JM6 aszinkron → JM7–JM9 fiók / pont / barátok → JM10 osztály → JM11** · (b) aszinkron előbb | **(a)** — orkesztrátori 5. pont: az online közös játék nem maradhat későbbi bővítés. |
+| D15 | Sorrend (módosítva 2026-11-16, D20) | (a) **JM0 → JM1 (szabálymotor) → JM2 → JM7b → JM1r → JM3a (`MP_MODE=admin` éles mérés; gépi ellenfél flag nélkül) → JM3b → `PLAYER_ACCOUNTS=on` → `MP_MODE=on` → JM8 → JM9 → JM4 / JM5 / JM6 (a J-szeletek után) → JM10 → JM11** · (b) az eredeti sor az egyeszközös arénával | **(a)** — a G12 szerint a lehető leghamarabb élesben kipróbálható online párbaj; a fiókhoz kötött részek a JM7b után. |
 | D16 | Kapacitás | (a) **a mostani `starter` csomagon, `MP_MAX_ROOMS=50`, gyártás alatt 10; mérés a JM11-ben** · (b) azonnali csomagváltás | **(a)** — orkesztrátori 10. pont. |
 | D17 | Könyvtárak | (a) **nincs új nehéz függőség (kivétel: Socket.IO); bitECS (MPL) nem; fizikai motor nem; hang csak CC0 licencnaplóval** | orkesztrátori 8. pont. |
 | D18 | Évfolyam-bank bővítése | (a) **JB szelet: ≥ 270 tétel / évfolyam, gyártó → vak megoldó → audit** · (b) csak szóbank és tananyag | **(a)** — a visszavágókhoz ~6 tétel / cella kevés (10.2). |
 | D19 | Nyilvános ranglista | (a) **alapból KI; heti baráti / csoport; „körülötted” nézet** · (b) nyilvános top 50 | **(a)** — orkesztrátori 3. pont; az alsó helyezettek motivációját védi. |
+| **D20** | **LEZÁRT TULAJDONOSI DÖNTÉS (2026-11-16): csak hálózati közös játék** | — | Egy eszközön kettesben játszani nem jellemző (a kezek sem férnek el egy telefonon, a játékosok gyakran nem is egy lakásban vannak): az egyeszközös Párbaj aréna megszűnik (JM1r), minden közös mód online, játékosonként saját eszközön. A szabálymotor, a kérdésépítés, a reakciók és a becenév megmarad. |
+| **D21** | **LEZÁRT TULAJDONOSI DÖNTÉS (2026-11-16): ki nyithat szobát** | — | Szobát csak regisztrált játékos (játékos-fiók) vagy párosított tanulói profil nyithat (`admin` módban: az admin); csatlakozni kóddal / linkkel vendégként is lehet, generált becenévvel. A gazda azonosítható és tiltható (`banned_at`), a meghívott barát regisztráció nélkül, egy koppintással belép; a pont / barát / mérleg a regisztráltaké (10.1). |
+| **D22** | **LEZÁRT TULAJDONOSI DÖNTÉS (2026-11-16): gépi ellenfél** | — | A párbaj egyedül is játszható, amíg a barát nincs online: a kliensen futó `room-machine` hajtja, hálózat és szerver nélkül, seedelt, állítható ügyességű (Könnyű / Közepes / Nehéz) géppel; a felület ugyanaz, mint online (egy megjelenítő, két meghajtó). A gépi meccs a párbaj-mérlegben (JM9) nem számít ember elleni győzelemnek, pont nem jár érte. |
+| **D23** | **LEZÁRT TULAJDONOSI DÖNTÉS (2026-11-16): szóbankos párbaj** | — | Az angol / német / francia szóbankos nyelvi párbaj a JM3b-ben jön; a JM3a tantárgyi kérdésekkel (évfolyam-bank) indul. |
+| **D24** | **LEZÁRT TULAJDONOSI DÖNTÉS (2026-11-16): csalásvédelem** | — | Baráti szint: a meglévő szerveroldali mérésen (10.5, JM2) túl külön csalásvédelem nem kell. |
 
 ## 14. Kockázatok / visszavonási terv
 
