@@ -258,6 +258,37 @@ describe("JM7b-utójavítás N1b — a maradék kijátszások (review #461/#463 
     }
   });
 
+  it("#469/#471 review (a): háromnál több számjegynél is — a tő körüli számjegyek egyenként, a töltelék egyben (csúszóablak)", () => {
+    for (const n of ["Bu29i999", "Bu29i 999", "6e9ci999", "9999fa2sz", "f6a2sz99", "ad9min9999"]) assert.equal(checkPlayerNickname(n).ok, false, n);
+    // Tulajdonság: minden tiltott / foglalt tőben a z → 2, g → 6 / 9 csere + számjegy-töltelék elöl / hátul / szóközzel is elutasítva.
+    let checked = 0;
+    for (const root of [...BLOCKED_ROOTS, ...RESERVED_ROOTS].filter((r) => /[zg]/.test(r))) {
+      for (const leet of [root.replace(/z/g, "2").replace(/g/g, "6"), root.replace(/z/g, "2").replace(/g/g, "9")]) {
+        for (const v of [`${leet}999`, `99 ${leet}`, `9${leet}99`]) {
+          if (Array.from(v).length > PLAYER_NICK_MAX) continue;
+          assert.equal(checkPlayerNickname(v).ok, false, `${root} → ${v}`);
+          checked++;
+        }
+      }
+    }
+    assert.ok(checked >= 30, `ellenőrzött: ${checked}`);
+  });
+
+  it("#469/#471 review (b): a tartalomszűrő legfeljebb 64 karakteren fut — nagyon hosszú közvetlen hívás is gyors", () => {
+    for (const s of ["2a6b9c".repeat(2000), "rnvvcl".repeat(2000), "a".repeat(100_000)]) {
+      const t = performance.now();
+      const r = checkPlayerNickname(s);
+      const ms = performance.now() - t;
+      assert.equal(r.ok, false);
+      assert.ok(ms < 200, `${s.length} karakter: ${ms.toFixed(1)} ms`);
+    }
+    for (const s of ["Bu29i999".repeat(2), "9a9b9c9d9e9f9g9h"]) {
+      const t = performance.now();
+      for (let i = 0; i < 10; i++) checkPlayerNickname(s);
+      assert.ok((performance.now() - t) / 10 < 50, s);
+    }
+  });
+
   it("#469 review: az e-mail- és URL-minta is minden olvasaton fut (számjeggyel tagolt szolgáltatónév / www / http)", () => {
     for (const n of ["Kata g2mail", "Kata gma6il", "Kata hot9mail"]) rejectsWith(n, "EMAIL");
     for (const n of ["w6ww Kata", "ht2tpKata", "w9ww Kata"]) rejectsWith(n, "URL");
