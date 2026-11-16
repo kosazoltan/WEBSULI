@@ -2165,6 +2165,28 @@ fordítva: a törlési hibák után a belépésnek nem marad több próbája a k
 **Elfogadás:** a hat név és a generált változatok elutasítva, az ellenpróbák elfogadva; az N3 két DB-esete zöld; a
 meglévő tesztek változatlanul zöldek; nincs séma-változás.
 
+#### JM7b-utójavítás N1b — a becenév-szűrő maradék kijátszásai (review #461/#463, A1–A4)
+
+**Állapot:** folyamatban — 2026-11-16, ág fix/jatek-fiok-becenev-szuro-2, munkafa .claude/worktrees/jatek-n1b, kanban #56 · **Függ:** N1 (#461) · **Modell:** Opus · **Elfogadás:** JM-A11
+**Cél:** a review szondájának (`nick-probe2.mts`) 28 még átmenő kísérlete is elbukjon — az `MP_MODE` / ranglista bekapcsolása
+ELŐTT kötelező. **Nem cél:** a foglaltsági kulcs (`nicknameKey`) változtatása (a tárolt nevek kulcsa stabil marad); séma;
+más fájl. **Fájlok:** `source/shared/player-nickname.ts`, `T/nickname-filter.test.ts`.
+**Lépések:**
+1. Futam-tűrő illesztés: minden tő a normalizált alakjából regexszé fordul; futamonként `c+`, de ahol az EREDETI tőben dupla
+   betű áll, `c{n,}` (n az eredeti futam hossza) — „nigger” → `…g{2,}…` (a NIGGGER bukik), „segg” → `s+e+g{2,}` (a „Segítő”
+   továbbra is átmegy), „websuli” → `…i+` (az l/i összevonásból eredő `ii` nem dupla). A kivétel-szavak előbb kiszedve. A
+   bemenet ≤ 64 karakter, a minták horgony nélküli, egymásba nem ágyazott kvantorok → nincs katasztrofális visszalépés.
+2. A szűrő-alakban (CSAK `foldNickname`, a kulcsban nem): `2 → z`, `6 → g`, `9 → g`.
+3. Második szűrő-olvasat (a kulcsban nem): az ékezet nélküli, kisbetűs alakon `rn → m`, `vv → w`, `cl → d`, utána ugyanaz a
+   normalizálás; a név akkor tiltott, ha BÁRMELY olvasata az.
+4. Szólista: `kurwa`, `curva`, `phasz`, `phuck`, `biatch`, `fuk` (kivétellel, ha ártatlan szóban áll); a foglalt SZAVAK
+   (`mod`, `mods`, `gm`, `dev`, + `modi`) a teljes leet-normalizált szavakon ÉS az elválasztók nélküli teljes néven is
+   (`D3V`, `M o d`, `G M`).
+**Tesztek:** a szonda MIND a 111 kísérlete elutasítva (a 28-at tételesen); a 273 ártatlan névből nincs új bukás (a 4
+szándékos foglalt tő marad); ellenpróba a többkarakteres olvasatokra (Kornél, Bernát, Ernő, Arnold, Clara, Miklós, Marci,
+Ervin, Vivien, Kata2012); a `nicknameKey` egy rögzített mintakészleten bitre azonos a korábbival.
+**Elfogadás:** a fenti tesztek zöldek; a meglévők változatlanul; nincs séma-változás.
+
 ### JM7b-utójavítás – N2 — tiltott játékos saját adatai + admin végleges törlés
 
 **Állapot:** folyamatban — 2026-11-16, ág feat/jatek-fiok-tiltott-torles, munkafa .claude/worktrees/jatek-jm7b-n2, kanban #56 · **Függ:** JM7b · **Modell:** Opus · **Elfogadás:** JM-A15 (tiltott fiókra is), admin-jogosultsági mátrix
