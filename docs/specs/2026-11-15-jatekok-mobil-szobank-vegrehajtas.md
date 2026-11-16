@@ -1492,7 +1492,7 @@ fine: `sa-touch-controls` 0 db és `sa-keyboard-hint` látható; coarse: ≥ 44 
 
 ## S11 — Kockavadász kvíz mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #28. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s11-kockavadasz, munkafa .claude/worktrees/jatekok-s11, kanban #28
 
 - **Cél:** 4.5 keret; nagyobb akciógombok (ugrás, bányászás, lerakás ≥ 56 px), kétujjas vezérlés (bal: mozgás, jobb:
   körbenézés), olvasható HUD; angol kérdések a szóbankból (A8).
