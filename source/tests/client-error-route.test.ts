@@ -115,10 +115,17 @@ test("breadcrumbs: legfeljebb 50, a túl hosszú elem kimarad; rossz errorType �
   });
 });
 
-test("index.ts: a /api/client-error a routes.ts CSRF-őre előtt van bekötve (különben 403)", () => {
-  const src = readFileSync(join(import.meta.dirname, "..", "server", "index.ts"), "utf8");
+// SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 10.4 (a), JM7a): a munkamenet és az útvonalak
+// felcsatolása az index.ts-ből a server/app-routes.ts `mountAppRoutes`-ába költözött (a jogosultsági őr-tesztek ugyanazt
+// a router-vermet járják be, mint az éles szerver). A követelmény változatlan: a /api/client-error a routes.ts CSRF-őre
+// ELŐTT kötődik be — most a felcsatolás tényleges helyén mérve, és az index.ts-nek ezt az egy felcsatolást kell hívnia.
+test("index.ts → mountAppRoutes: a /api/client-error a routes.ts CSRF-őre előtt van bekötve (különben 403)", () => {
+  const index = readFileSync(join(import.meta.dirname, "..", "server", "index.ts"), "utf8");
+  assert.ok(index.includes("await mountAppRoutes(app)"), "az index.ts a közös felcsatolást hívja");
+  assert.ok(!index.includes("registerRoutes(app)"), "az index.ts nem hív közvetlenül registerRoutes-t (különben a sorrend kikerülhető)");
+  const src = readFileSync(join(import.meta.dirname, "..", "server", "app-routes.ts"), "utf8");
   const mount = src.indexOf('app.use("/api/client-error", clientErrorRouter)');
-  const routes = src.indexOf("await registerRoutes(app)");
+  const routes = src.indexOf("return registerRoutes(app)");
   assert.ok(mount > 0 && routes > 0 && mount < routes);
 });
 

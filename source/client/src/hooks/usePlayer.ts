@@ -46,18 +46,13 @@ export function usePlayer() {
   };
 }
 
-async function postJson(url: string, body?: unknown): Promise<Response> {
-  return fetch(url, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json", accept: "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
+// A /api/player/auth/* útvonalakat a szerver Origin-allowlisttel őrzi (CSRF-token helyett, mint a /api/login) —
+// ezért nyers fetch, literális URL-lel (tests/client-csrf-guard.test.ts tükrözi a kivételt).
+const JSON_HEADERS = { "Content-Type": "application/json", accept: "application/json" };
 
 /** Kódkérés. A szerver mindig 202-t ad (a cím léte nem derül ki); hibás cím → "INVALID_EMAIL". */
 export async function startPlayerLogin(email: string): Promise<"SENT" | "INVALID_EMAIL" | "RATE_LIMITED" | "UNAVAILABLE"> {
-  const res = await postJson("/api/player/auth/start", { email });
+  const res = await fetch("/api/player/auth/start", { method: "POST", credentials: "include", headers: JSON_HEADERS, body: JSON.stringify({ email }) });
   if (res.status === 202) return "SENT";
   if (res.status === 400) return "INVALID_EMAIL";
   if (res.status === 429) return "RATE_LIMITED";
@@ -65,7 +60,7 @@ export async function startPlayerLogin(email: string): Promise<"SENT" | "INVALID
 }
 
 export async function verifyPlayerLogin(body: VerifyRequest): Promise<VerifyResult> {
-  const res = await postJson("/api/player/auth/verify", body);
+  const res = await fetch("/api/player/auth/verify", { method: "POST", credentials: "include", headers: JSON_HEADERS, body: JSON.stringify(body) });
   if (res.status === 429) return { ok: false, code: "RATE_LIMITED" };
   if (res.status === 404) return { ok: false, code: "UNAVAILABLE" };
   const data = (await res.json().catch(() => null)) as VerifyResult | null;
@@ -74,5 +69,5 @@ export async function verifyPlayerLogin(body: VerifyRequest): Promise<VerifyResu
 }
 
 export async function logoutPlayer(): Promise<void> {
-  await postJson("/api/player/auth/logout");
+  await fetch("/api/player/auth/logout", { method: "POST", credentials: "include", headers: JSON_HEADERS });
 }
