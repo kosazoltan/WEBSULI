@@ -1963,6 +1963,21 @@ visszavágó, hibaállapotok (`RT_ERROR_TEXT`). 6. Belépő a `/games` listán. 
 Vercel-rewrite-on, kör-késés), U-JM2-2 (WebSocket-frissítés, `transport.name`) → jegyzőkönyv `docs/measurements/`.
 **UNKNOWN:** U-JM3-1: `MP_DIRECT_URL` (tulajdonosi aldomain) — opcionális; ha nincs, a polling út az alap.
 
+#### JM3a-2 — A #464 független review-jának utómunkája (az `MP_MODE=on` előtt kötelező)
+
+**Állapot:** folyamatban — 2026-11-16, ág fix/jatek-jm3a2-utomunka, munkafa .claude/worktrees/jatek-jm3a2, kanban #61 / #52 · **Függ:** JM3a (#464) · **Modell:** Opus
+**Forrás:** `review-464` „Ellenőrző kör” (ÚJ-2…ÚJ-5, K4 maradéka, A3, A7) + orkesztrátori kérés (meta-mérő).
+**Lépések (sorrendben):**
+1. ÚJ-4: az online e2e futásonként egyedi tanulónévvel / azonosítóval dolgozik (ugyanazon az adatbázison az újrafuttatás és a CI `retries` is zöld lehet).
+2. ÚJ-2: a folytatási token minden sikeres visszaülésnél (folytatás és új jeggyel saját helyre ülés) cserélődik, a régi azonnal érvénytelen; szerveroldali lejárat (a helymegtartás vége / szoba lezárása); a kiütött (régebbi) lapfül érthető zárást kap („A játék egy másik lapon folytatódik”), nem 60 s „Kapcsolódás újra…”-t. Egység- és gateway-teszt.
+3. K4 maradéka: az elfogadott visszavágó után nem kell újra „Kész” + „Indítás” (mindkét fél kész → azonnali visszaszámlálás); a 45 s-os lejárat a NEM kérő gyereket nem dobja ki a győzteshirdetésről (a kérdés eltűnik, az eredmény marad); a kérő kilépésekor a kérdés azonnal zárul érthető szöveggel.
+4. ÚJ-3: a visszavágó-kérdés 844×390-en nem csúszik az eredménykártyára.
+5. ÚJ-5: a „megtelt a szoba” képernyő nem hálózati hiba-képernyő (saját ikon, „Új szoba nyitása” / „Vissza a játékokhoz”).
+6. e2e az online kilépésre (`leave()` → az ellenfél azonnal értesül, nem lát 60 s „Kapcsolódik…”-ot).
+7. e2e emberi tempóban (≥ 200 ms), a „Leggyorsabb helyes” számértékkel.
+8. A Párbaj nem-játék képernyői (kezdő, beállítás, váróterem, megtelt szoba, győzteshirdetés, visszavágó-kérés) a meta-mérő (`tests/game-meta-quality.spec.ts`, X1–X8; 360×640, 412×915, 844×390) alatt, a bukások javítva.
+**Elfogadás:** a fenti tesztek zöldek; a kapusor (`npm test`, `check`, `check:test`, `lint`, `build`, e2e) zöld; rövid biztonsági ellenőrzés a token-forgatásra.
+
 ### JM3b — 3–4 fő, reakciók, kirúgás, értesítések, újracsatlakozás e2e, szóbankos párbaj
 
 **Állapot:** nem kezdődött · **Függ:** JM3a, JM7b · **Modell:** Opus · **Elfogadás:** JM-A5 (teljes), JM-A4 (`on`)
