@@ -295,6 +295,24 @@ function buildClimber(): ClimberRig {
 
 type Hop = { from: number; to: number; t: number; dur: number; up: boolean };
 
+/** S6 / terv 4.6/2 — a lépés- és zuhanás-animáció időzítései (végrehajtás S6/7. lépés). */
+const LAND_SEC = 0.16;
+const SHAKE_SEC = 0.25;
+const SHAKE_AMP = 0.06;
+/** A bukfenc forgáspontja a test közepén (a test csoport a talpnál áll). */
+const FLIP_PIVOT_Y = 0.35;
+
+/**
+ * Guggolás-nyújtás a földet érés után: y-skála 1 → 0,85 → 1,08 → 1 a `LAND_SEC` alatt (t = 0…1).
+ * Tiszta függvény, hogy a görbe teszttel is mérhető legyen.
+ */
+export function landSquashY(t: number): number {
+  const k = Math.min(1, Math.max(0, t));
+  if (k < 0.35) return 1 - 0.15 * (k / 0.35);
+  if (k < 0.7) return 0.85 + 0.23 * ((k - 0.35) / 0.35);
+  return 1.08 - 0.08 * ((k - 0.7) / 0.3);
+}
+
 function setupLadderScene(
   ctx: ThreeSceneContext,
   propsRef: { current: LadderScene3DProps },
@@ -610,6 +628,10 @@ function setupLadderScene(
   let shownRung = propsRef.current.rung;
   let climberY = shownRung * RUNG_GAP;
   let hop: Hop | null = null;
+  /** Földet érés utáni guggolás-nyújtás hátralévő ideje (s); 0 = nincs. */
+  let landLeft = 0;
+  /** Zuhanás utáni kameraremegés hátralévő ideje (s). */
+  let shakeLeft = 0;
   let lastRung = shownRung;
   let lastZone = propsRef.current.zoneId;
   const gold: number[] = rungs.map((_, i) => (i + 1 <= shownRung ? 1 : 0));
@@ -675,10 +697,13 @@ function setupLadderScene(
     if (p.rung !== lastRung) {
       const up = p.rung > lastRung;
       if (reducedMotion) {
+        // Csökkentett mozgás: csak az elmozdulás, forgás / remegés / guggolás nélkül.
         climberY = p.rung * RUNG_GAP;
         hop = null;
       } else {
         hop = { from: climberY, to: p.rung * RUNG_GAP, t: 0, dur: up ? 0.48 : 0.55, up };
+        landLeft = 0;
+        if (!up) shakeLeft = SHAKE_SEC;
       }
       if (sparkles) {
         tmpV.set(0, p.rung * RUNG_GAP + 0.1, 0.25).applyMatrix4(ladder.matrixWorld);
@@ -697,6 +722,8 @@ function setupLadderScene(
     let squash = 0;
     let wobble = 0;
     let stride = 0;
+    let flip = 0;
+    let scaleY = 1;
     if (hop) {
       hop.t += dt;
       const t = Math.min(1, hop.t / hop.dur);
@@ -706,18 +733,43 @@ function setupLadderScene(
         stride = Math.sin(t * Math.PI * 2);
         squash = t > 0.85 ? Math.sin(((t - 0.85) / 0.15) * Math.PI) * 0.12 : 0;
       } else {
-        wobble = Math.sin(t * Math.PI * 3) * (1 - t) * 0.45;
+        // Zuhanás: forgó bukfenc (z-forgás 0 → 2π a csúszás alatt) és egy kis billegés.
+        flip = e * Math.PI * 2;
+        wobble = Math.sin(t * Math.PI * 3) * (1 - t) * 0.25;
       }
-      if (t >= 1) hop = null;
+      if (t >= 1) {
+        if (hop.up) {
+          // Földet érés: guggolás-nyújtás és porfelhő a fok két szélén (a three-look részecske-keretén belül).
+          landLeft = LAND_SEC;
+          if (sparkles) {
+            const n = Math.round(24 * budget.particleScale);
+            const dust = { color: "#f3e3c3", speed: 0.9, life: 0.55, gravity: 1.6, size: 0.1, spread: 0.12 };
+            tmpV.set(-HALF_WIDTH, hop.to + 0.02, 0.12).applyMatrix4(ladder.matrixWorld);
+            sparkles.emit(tmpV, { ...dust, count: Math.ceil(n / 2) });
+            tmpV.set(HALF_WIDTH, hop.to + 0.02, 0.12).applyMatrix4(ladder.matrixWorld);
+            sparkles.emit(tmpV, { ...dust, count: Math.floor(n / 2) });
+          }
+        }
+        hop = null;
+      }
     } else {
       climberY = shownRung * RUNG_GAP;
+    }
+    if (landLeft > 0 && !hop) {
+      landLeft = Math.max(0, landLeft - dt);
+      scaleY = landSquashY(1 - landLeft / LAND_SEC);
     }
 
     // Climber pose.
     const idle = reducedMotion ? 0 : Math.sin(elapsed * 2.4);
     rig.root.position.y = climberY + (reducedMotion || hop ? 0 : Math.max(0, idle) * 0.015);
-    rig.body.rotation.z = wobble;
-    rig.body.scale.set(1 + squash * 0.5, 1 - squash, 1 + squash * 0.5);
+    const roll = wobble + flip;
+    rig.body.rotation.z = roll;
+    // A forgás a test közepe körül történik (a csoport origója a talpnál van).
+    rig.body.position.set(FLIP_PIVOT_Y * Math.sin(roll), FLIP_PIVOT_Y * (1 - Math.cos(roll)), 0);
+    const sy = (1 - squash) * scaleY;
+    const sxz = (1 + squash * 0.5) * (scaleY < 1 ? 1 + (1 - scaleY) * 0.6 : 1 - (scaleY - 1) * 0.5);
+    rig.body.scale.set(sxz, sy, sxz);
     rig.armL.rotation.x = -0.35 - stride * 0.45;
     rig.armR.rotation.x = -0.35 + stride * 0.45;
     rig.legL.rotation.x = stride * 0.5;
@@ -808,6 +860,13 @@ function setupLadderScene(
     // Slightly below the target, looking up the ladder — but never under the ground.
     camera.position.set(0.25, Math.max(0.4, camY - 1.1), CAMERA_DISTANCE);
     camera.lookAt(0, camY, 0);
+    // Zuhanás után rövid kameraremegés (csökkentett mozgásnál a shakeLeft sosem indul).
+    if (shakeLeft > 0) {
+      shakeLeft = Math.max(0, shakeLeft - dt);
+      const amp = SHAKE_AMP * (shakeLeft / SHAKE_SEC);
+      camera.position.x += (Math.random() - 0.5) * 2 * amp;
+      camera.position.y += (Math.random() - 0.5) * 2 * amp;
+    }
     sky.position.copy(camera.position);
     camera.updateMatrixWorld();
 
