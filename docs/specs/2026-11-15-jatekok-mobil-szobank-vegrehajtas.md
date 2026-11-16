@@ -980,7 +980,7 @@ szerződéstől való eltérések a K.7.3 végén („S2 megvalósítási eltér
 
 ## S3 — Angol szóbank-tartalom (2500 bejegyzés) + vak megoldó
 
-**Állapot:** nincs elkezdve. Kanban #20. Gyártó: Sonnet; vak megoldó: Opus. Függőség: S1 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s3-szobank-en, munkafa .claude/worktrees/jatekok-s3, kanban #20. Gyártó: Sonnet; vak megoldó: Opus. Függőség: S1 összevonva.
 
 - **Cél:** `data/vocabBank/en/level-0..4.ts` a K.8.1 kvóta-tábla és a K.8.3 kifejezés-kvóta szerint (összesen ≥ 2500),
   `en/stage.ts` → `"full"`, vak megoldós jegyzőkönyv.
