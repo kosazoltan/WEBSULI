@@ -54,7 +54,7 @@ test("közös keret: GameShell fekvő tájolással és automatikus szünettel, H
   assert.match(page, /<GameHud\b[\s\S]{0,600}onPause=\{pauseGame\}/, "a HUD szünet gombja nincs bekötve");
   assert.match(page, /<PauseMenu\b[\s\S]{0,200}open=\{paused && !result\}/);
   assert.match(page, /<PauseMenu\b[\s\S]{0,300}exitLabel="Szintek"/);
-  assert.match(page, /<ResultScreen\b[\s\S]{0,200}testId="th-result"/);
+  assert.match(page, /<ResultScreen\b[\s\S]{0,200}open=\{result != null\}[\s\S]{0,40}testId="th-result"/);
   assert.match(page, /<StartScreen\b[\s\S]{0,300}startLabel="Vadászat indítása"/);
   assert.match(page, /data-testid="tornado-quick-start"/, "nincs egy koppintásos indítás (M8)");
 });
@@ -68,7 +68,13 @@ test("visszajelzés: rezgés jó / rossz válaszra és befogásra", () => {
 
 test("elavult időzítők: a fázisváltás játékórán fut, az újrakezdés érvényteleníti a függő időzítőket", () => {
   assert.match(page, /scheduleGame\(advance,\s*750\)/, "a jó válasz utáni továbblépés nem a játékórán fut");
-  assert.match(page, /scheduleGame\(\(\)\s*=>\s*finishRun\(true\),\s*2600\)/, "a horgonyzás utáni győzelem nem a játékórán fut");
+  assert.match(page, /scheduleGame\(\(\)\s*=>\s*finishRunRef\.current\(true\),\s*2600\)/, "a horgonyzás utáni győzelem nem a játékórán / a friss finishRun-nal fut");
+  const finish = block(page, "const finishRun = useCallback(", "const finishRunRef");
+  assert.match(
+    finish,
+    /props\.onProgress\(\(latest\) => applyRunResult\(latest,/,
+    "a késleltetett győzelem nem a mentés pillanatában érvényes haladásra épül (review #433)",
+  );
   assert.doesNotMatch(page, /scheduleTimeout\(\s*advance\b/);
   assert.doesNotMatch(page, /scheduleTimeout\(\s*\(\)\s*=>\s*finishRun\(/);
   const restart = block(page, "restartRef.current = () => {", "adaptiveRef.current.reset(");
@@ -78,6 +84,12 @@ test("elavult időzítők: a fázisváltás játékórán fut, az újrakezdés �
   assert.match(step, /const halted = pausedRef\.current \|\| rotateBlockRef\.current;/, "a futás-megállítás nem a szünetből / forgatási kérésből számol");
   assert.match(step, /if \(!halted\)/, "a játékóra szünetben is halad");
   assert.match(step, /t\.run === run/, "egy előző futás időzítője is lefuthat");
+});
+
+test("review #433: a lap minden haladás-mentése funkcionális frissítés (nincs elavult pillanatképből írás)", () => {
+  const calls = [...page.matchAll(/onProgress(?:Ref\.current)?\((.{0,30})/g)].map((m) => m[1]!.trim());
+  assert.ok(calls.length >= 6, `kevés onProgress-hívás: ${calls.length}`);
+  for (const arg of calls) assert.match(arg, /^\(latest\)\s*=>/, `nem funkcionális mentés: onProgress(${arg}…`);
 });
 
 test("szünet mindig elérhető: a kvíz-réteg a HUD alatti sávban van, a magyarázó kártya szünetben rejtve", () => {

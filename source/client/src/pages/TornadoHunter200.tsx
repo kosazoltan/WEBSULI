@@ -131,15 +131,14 @@ import {
   type TouchDrive,
 } from "@/lib/tornado/controls";
 import { shouldDisposeGeometry } from "@/tornado/meshLifetime";
+import { applyRunResult } from "@/lib/tornado/runResult";
 import {
   loadProgress,
   saveProgress,
   buyVehicle,
   selectVehicle,
   buyUpgrade,
-  completeLevel,
   recordAnswer,
-  addDistance,
   updateSettings,
   upgradesFor,
   STORAGE_KEY as TORNADO_STORAGE_KEY,
@@ -476,8 +475,7 @@ export default function TornadoHunter200() {
             onExit={() => setScreen(runGradeLevel != null ? "menu" : "levels")}
             onBackToGames={() => setLocation("/games")}
             next={nextRun}
-            onComplete={(next, unlocked) => {
-              setProgress(next);
+            onComplete={(unlocked) => {
               if (unlocked.length > 0) setNewlyUnlocked(unlocked);
             }}
             onProgress={setProgress}
@@ -1129,8 +1127,10 @@ function PlayScreen(props: {
   onBackToGames: () => void;
   /** Győzelem után a következő szint / pálya indítása (felirat + művelet), ha van ilyen. */
   next: { label: string; go: () => void } | null;
-  onComplete: (next: TornadoProgress, unlocked: Achievement[]) => void;
-  onProgress: (next: TornadoProgress) => void;
+  /** Futás vége: a feloldott jelvények (a haladást a funkcionális `onProgress` menti). */
+  onComplete: (unlocked: Achievement[]) => void;
+  /** A haladás mentése — CSAK funkcionális frissítéssel, hogy késleltetett / aszinkron mentés se írjon vissza elavult mezőt. */
+  onProgress: (update: (latest: TornadoProgress) => TornadoProgress) => void;
   onSubmitBest: (score: number) => { best: number; isNewBest: boolean };
   onShellState: (state: GameScreenState) => void;
   /** A közös keret automatikus szünete (háttérbe kerülés, elforgatás) ezt hívja. */
@@ -1249,8 +1249,6 @@ function PlayScreen(props: {
   const hintCheckRef = useRef(0);
   /** Látvány: befogáskori kitörés hátralévő ideje (s) — a tölcsér addig gyorsabban pörög. */
   const burstRef = useRef(0);
-  const progressRef = useRef(props.progress);
-  progressRef.current = props.progress;
   const onExitRef = useRef(props.onExit);
   onExitRef.current = props.onExit;
   const onProgressRef = useRef(props.onProgress);
@@ -1627,7 +1625,7 @@ function PlayScreen(props: {
         case "c": {
           const next = toggleCamera(settingsRef.current.cameraMode);
           settingsRef.current = { ...settingsRef.current, cameraMode: next };
-          onProgressRef.current(updateSettings(progressRef.current, { cameraMode: next }));
+          onProgressRef.current((latest) => updateSettings(latest, { cameraMode: next }));
           break;
         }
         case "escape": {
@@ -1736,18 +1734,19 @@ function PlayScreen(props: {
       haptics(won ? "success" : "error");
 
       // Persist progress.
-      let next = props.progress;
-      next = addDistance(next, distanceTravelledRef.current);
-      if (won) {
-        next = completeLevel(next, {
-          level: props.level,
-          score: reward.score,
-          coins: reward.coins,
-          secondsUsed: elapsedRef.current,
-          peakWind: windRef.current.maximumWindSpeed,
-          anchored: true,
-        });
-      }
+      // Review #433 (Vercel): a (késleltetett) győzelem-mentés funkcionális frissítés a mentés pillanatában érvényes
+      // haladáson — egy közben (pl. szünetben) módosított beállítást, válasz-statisztikát vagy Storm Coint nem írhat
+      // vissza egy korábbi renderből befagyasztott pillanatkép.
+      const distanceKm = distanceTravelledRef.current;
+      const levelResult = {
+        level: props.level,
+        score: reward.score,
+        coins: reward.coins,
+        secondsUsed: elapsedRef.current,
+        peakWind: windRef.current.maximumWindSpeed,
+        anchored: true,
+      };
+      props.onProgress((latest) => applyRunResult(latest, distanceKm, won ? levelResult : null));
       const wasDaily = isTodaysGameAvailable(GAME_ID);
       const unlocked = recordRun({
         game: GAME_ID,
@@ -1763,7 +1762,7 @@ function PlayScreen(props: {
         const daily = markDailyCompleted();
         if (daily.achievements.length > 0) unlocked.push(...daily.achievements);
       }
-      props.onComplete(next, unlocked);
+      props.onComplete(unlocked);
       if (won && props.gradeLevel != null) props.onGradeLevelWin();
 
       // Cloud leaderboard (best-effort; a missing catalogue row just fails silently).
@@ -1821,7 +1820,7 @@ function PlayScreen(props: {
         haptics("hit");
         setPhase("approach");
         // Hold the anchor until the funnel's lifetime elapses → win. Játékórán: szünetben áll, újrakezdés törli.
-        scheduleGame(() => finishRun(true), 2600);
+        scheduleGame(() => finishRunRef.current(true), 2600);
       } else {
         anchorAttemptsRef.current += 1;
         sfxError();
@@ -1851,7 +1850,7 @@ function PlayScreen(props: {
         sfxError();
         haptics("error");
       }
-      props.onProgress(recordAnswer(props.progress, correct));
+      props.onProgress((latest) => recordAnswer(latest, correct));
 
       maybeClaimCouponBonus(props.coupon, quiz.id, quiz.optionIndices?.[idx] ?? idx);
 
@@ -2351,7 +2350,7 @@ function PlayScreen(props: {
           onCamera={() => {
             const next = toggleCamera(settingsRef.current.cameraMode);
             settingsRef.current = { ...settingsRef.current, cameraMode: next };
-            props.onProgress(updateSettings(props.progress, { cameraMode: next }));
+            props.onProgress((latest) => updateSettings(latest, { cameraMode: next }));
           }}
         />
       )}
@@ -2367,10 +2366,10 @@ function PlayScreen(props: {
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-white/70 mb-1.5">Irányítás</p>
             <div className="grid grid-cols-2 gap-2">
-              <ToggleChip active={!props.progress.settings.leftHanded} onClick={() => props.onProgress(updateSettings(props.progress, { leftHanded: false }))}>
+              <ToggleChip active={!props.progress.settings.leftHanded} onClick={() => props.onProgress((latest) => updateSettings(latest, { leftHanded: false }))}>
                 Jobbkezes
               </ToggleChip>
-              <ToggleChip active={props.progress.settings.leftHanded} onClick={() => props.onProgress(updateSettings(props.progress, { leftHanded: true }))}>
+              <ToggleChip active={props.progress.settings.leftHanded} onClick={() => props.onProgress((latest) => updateSettings(latest, { leftHanded: true }))}>
                 Balkezes
               </ToggleChip>
             </div>
@@ -2379,7 +2378,7 @@ function PlayScreen(props: {
             <p className="text-sm font-bold uppercase tracking-wide text-white/70 mb-1.5">Grafika</p>
             <div className="grid grid-cols-3 gap-2">
               {(["low", "medium", "high"] as const).map((q) => (
-                <ToggleChip key={q} active={quality === q} onClick={() => props.onProgress(updateSettings(props.progress, { quality: q }))}>
+                <ToggleChip key={q} active={quality === q} onClick={() => props.onProgress((latest) => updateSettings(latest, { quality: q }))}>
                   {q === "low" ? "LOW" : q === "medium" ? "MEDIUM" : "HIGH"}
                 </ToggleChip>
               ))}
