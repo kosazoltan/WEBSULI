@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import CosmicBackground from "@/components/CosmicBackground";
+import PlayerEntry from "@/components/PlayerEntry";
 import { useMemo, useState, type CSSProperties } from "react";
 
 type GameCatalogRow = {
@@ -302,6 +303,8 @@ export default function Games() {
             </strong>
           </Link>
         </header>
+
+        <PlayerEntry />
 
         {/* Mai kihívás */}
         <section className="games-daily" aria-label="Mai kihívás">
