@@ -2227,7 +2227,13 @@ a „Játékosok” panel és a fiókoldal törlési szövege; tesztek: `T/playe
 4. Új fiók (`confirmVerifiedEmail` — kód / link; `upsertGooglePlayer` — Google): az `INSERT` a `banned_at`-et az
    ujjlenyomat-táblából veszi (csak az ÚJ sorra hat) → a fiók tiltottként jön létre, a belépés a #463 szerinti korlátozott
    munkamenetet adja (403 `BANNED`).
-5. Feloldás: `setBanned(id, false)` az ujjlenyomatot is törli. Admin: `GET /api/admin/game-accounts/deleted-bans`
+   **Sorosítás (#471 review):** a törlés és MINDEN létrehozási út közös, címenkénti tranzakciós advisory-zárat vesz az
+   ujjlenyomatra (előbb a zár, utána sorzár / INSERT); a létrehozás az ujjlenyomatot a zár UTÁN, friss pillanatképből olvassa,
+   így egy párhuzamos tiltott-törlés mellett sem jöhet létre tiltatlan fiók.
+5. Feloldás: `setBanned(id, false)` az ujjlenyomatot is törli. A törölt-tiltott bejegyzés feloldása (#471 review) ugyanabban
+   a tranzakcióban az AZONOS ujjlenyomatú élő fiókok (a törlés után tiltottként újra létrejött, bármely cím-változatú fiók)
+   tiltását is feloldja. Az ujjlenyomat az újralétrehozáskor szándékosan NEM „költözik át” (nem törlődik): különben egy MÁSIK
+   cím-változattal ismét tiltatlan fiók nyílhatna. Admin: `GET /api/admin/game-accounts/deleted-bans`
    (bejegyzés: rövid hivatkozás az ujjlenyomat elejéből + a tiltás és a törlés ideje — cím és maszk NÉLKÜL, mert a maszk
    is részleges azonosító) és `POST /api/admin/game-accounts/deleted-bans/:ref/unban` — a meglévő `/api/admin` őr alatt.
 6. Szöveg: a fiókoldal törlési párbeszéde és az export egy mondatban jelzi, hogy tiltott fiók törlése után a cím

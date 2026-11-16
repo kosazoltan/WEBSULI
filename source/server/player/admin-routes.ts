@@ -111,9 +111,9 @@ export function createPlayerAdminRouter(accounts: PlayerAccountStore): Router {
     if (!ref.success) return res.status(400).json({ message: "Hibás hivatkozás" });
     try {
       const removed = await accounts.unbanDeleted(ref.data);
-      if (removed === 0) return res.status(404).json({ message: "Nincs ilyen bejegyzés" });
-      logger.info(`[PLAYER-ADMIN] törölt fiók tiltása feloldva (hivatkozás: ${ref.data})`);
-      return res.json({ ok: true });
+      if (removed.entries === 0) return res.status(404).json({ message: "Nincs ilyen bejegyzés" });
+      logger.info(`[PLAYER-ADMIN] törölt fiók tiltása feloldva (hivatkozás: ${ref.data}; feloldott élő fiók: ${removed.accounts})`);
+      return res.json({ ok: true, unbannedAccounts: removed.accounts });
     } catch (error) {
       logger.error("[PLAYER-ADMIN] törölt-tiltott feloldás hiba:", errMsg(error));
       return res.status(500).json({ message: "Hiba a feloldáskor" });
