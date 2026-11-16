@@ -221,6 +221,8 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
         ...data,
         // JM8 előtt nincs szerveroldali pontkönyv: a játékokban gyűjtött haladás ezen az eszközön (localStorage) él.
         gameRuns: [],
+        // K1: adatvédelmi tájékoztatás a tiltás megőrzéséről.
+        retentionNote: "Ha egy letiltott fiókot törölnek, az e-mail-cím visszafejthetetlen ujjlenyomata és a tiltás ideje megmarad, hogy ugyanazzal a címmel ne lehessen tiltás nélküli új fiókot nyitni; a teljes cím nem marad meg, és a tiltás feloldása az ujjlenyomatot is törli.",
       });
     } catch (error) {
       logger.error("[PLAYER] adatletöltés hiba:", errMsg(error));

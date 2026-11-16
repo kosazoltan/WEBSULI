@@ -93,6 +93,16 @@ export function emailHash(key: Buffer, normalizedEmail: string): string {
 }
 
 /**
+ * JM7b-utójavítás K1: a törölt, de tiltott fiók címének visszafejthetetlen ujjlenyomata (migrations/0041). A KANONIZÁLT
+ * címből (`limitKey`: kisbetű, gmail-pont és `+alias` összevonva), hogy a változatokkal se lehessen tiltatlan fiókot nyitni.
+ * A kulcs a `SESSION_SECRET`-ből levezetett: rotációja után a régi ujjlenyomatok nem egyeznek (a tiltás elvész — ugyanígy
+ * érvénytelenednek a belépőkódok és a tanulói linkek is).
+ */
+export function banFingerprint(key: Buffer, normalizedEmail: string): string {
+  return hmacHex(key, `ban:${limitKey(normalizedEmail)}`);
+}
+
+/**
  * JM7b (review #449): a kódrekordok CÉL szerinti elkülönítése — a fióktörlés kódjai külön e-mail-hash-tartományban élnek,
  * így a belépő- és a törlési kód egymás „legutóbbi kód” keresését nem zavarja, és egymás helyett nem váltható be.
  * A belépés hash-e változatlan (`emailHash`). A levélkeret: a belépő kérés a két cél kéréseit összesítve számolja, a törlési

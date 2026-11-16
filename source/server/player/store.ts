@@ -8,7 +8,7 @@
 import type { Pool, PoolClient } from "pg";
 import {
   CODE_RETENTION_MS, CODE_TTL_MS, DAY_MS, LINK_TTL_MS, MAX_CODE_ATTEMPTS, MAX_FAILED_ATTEMPTS_PER_DAY,
-  START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_WINDOW_MS, loginEmailDailyMax,
+  START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_WINDOW_MS, banFingerprint, loginEmailDailyMax, playerAuthKey,
 } from "./codes";
 
 export type CodeInput = { emailNormalized: string; emailHash: string; limitHash: string; codeHash: string; linkHash: string };
@@ -172,10 +172,13 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
      */
     async confirmVerifiedEmail(emailNormalized: string): Promise<PlayerRow> {
       const { rows } = await pool.query<{ id: string; nickname: string | null; banned_at: Date | null }>(
-        `INSERT INTO player_accounts (email, email_verified_at) VALUES ($1, now())
+        // K1: az ÚJ fiók a törölt-tiltott cím ujjlenyomatáról örökli a tiltást (meglévő sort nem érint) — a belépés így a
+        // korlátozott munkamenetet adja (403 BANNED), mint bármely tiltott fióknál.
+        `INSERT INTO player_accounts (email, email_verified_at, banned_at)
+           VALUES ($1, now(), (SELECT banned_at FROM player_ban_fingerprints WHERE fingerprint = $2))
          ON CONFLICT (email) DO UPDATE SET email_verified_at = COALESCE(player_accounts.email_verified_at, now())
          RETURNING id, nickname, banned_at`,
-        [emailNormalized],
+        [emailNormalized, banFingerprint(playerAuthKey(), emailNormalized)],
       );
       const row = rows[0]!;
       const banned = row.banned_at !== null || (await userBannedByEmail(emailNormalized));

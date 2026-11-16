@@ -10,13 +10,13 @@ import { fileURLToPath } from "node:url";
 import {
   CODE_PATTERN, CODE_TTL_MS, DEFAULT_LOGIN_EMAIL_DAILY_MAX, LINK_TOKEN_PATTERN, LINK_TTL_MS, MAX_CODE_ATTEMPTS, MAX_FAILED_ATTEMPTS_PER_DAY,
   START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_PER_IP_DAILY_MAX, START_PER_IP_MAX, VERIFY_PER_IP_MAX, limitKey, loginEmailDailyMax,
-  codeHash, emailHash, generateCode, generateLinkToken, linkHash, normalizeEmail, playerAuthKey,
+  banFingerprint, codeHash, emailHash, generateCode, generateLinkToken, linkHash, normalizeEmail, playerAuthKey,
 } from "../server/player/codes";
 import { buildPlayerLoginEmail, playerLinkBaseUrl, playerLoginLink } from "../server/player/email-template";
 import { PLAYER_CODE_SWEEP_INTERVAL_MS, startPlayerCodeSweeper } from "../server/player/sweeper";
 import { playerAccountsEnabled } from "../server/player/require-player";
 import { getTableColumns } from "drizzle-orm";
-import { playerAccounts, playerAuthCodes } from "../shared/schema";
+import { playerAccounts, playerAuthCodes, playerBanFingerprints } from "../shared/schema";
 
 const KEY = playerAuthKey({ SESSION_SECRET: "player-codes-test-secret" } as NodeJS.ProcessEnv);
 
@@ -175,6 +175,41 @@ describe("JM7a — migráció 0040 ↔ Drizzle-séma", () => {
     assert.doesNotMatch(code, /\bDROP\b/i);
     assert.equal((code.match(/CREATE (?:TABLE|INDEX) (?!IF NOT EXISTS)/g) ?? []).length, 0);
     assert.match(sqlText, /Visszaállítás \(down\)/);
+  });
+});
+
+describe("JM7b-utójavítás K1 — migráció 0041 ↔ Drizzle-séma, ujjlenyomat", () => {
+  const sqlText = readFileSync(new URL("../migrations/0041_player_ban_fingerprints.sql", import.meta.url), "utf8");
+
+  it("a migráció és a séma oszlopai egyeznek; nincs cím-oszlop", () => {
+    const start = sqlText.indexOf("CREATE TABLE IF NOT EXISTS player_ban_fingerprints (");
+    assert.ok(start >= 0);
+    const body = sqlText.slice(start, sqlText.indexOf("\n);", start));
+    const inSql = [...body.matchAll(/^\s{2}([a-z_]+)\s+(?:varchar|char|timestamp)/gm)].map((m) => m[1]).sort();
+    const inSchema = Object.values(getTableColumns(playerBanFingerprints)).map((c) => c.name).sort();
+    assert.deepEqual(inSql, inSchema);
+    assert.ok(!inSchema.some((c) => /mail|nick|name/.test(c)), "a teljes cím / név nem tárolódik");
+  });
+
+  it("a migráció csak hozzáadó és idempotens (nincs DROP / ALTER; minden CREATE IF NOT EXISTS), a visszaállás le van írva", () => {
+    const code = sqlText.replace(/^\s*--.*$/gm, "");
+    assert.doesNotMatch(code, /\b(DROP|ALTER|DELETE|UPDATE|INSERT)\b/i);
+    assert.equal((code.match(/CREATE (?:TABLE|INDEX) (?!IF NOT EXISTS)/g) ?? []).length, 0);
+    assert.match(sqlText, /Visszaállítás \(down\)[\s\S]*DROP TABLE IF EXISTS player_ban_fingerprints/);
+  });
+
+  it("az ujjlenyomat kulcsolt, a kanonizált címből: kis- / nagybetű, gmail-pont, +alias ugyanaz; más cím más; a cím nem olvasható ki", () => {
+    const k = playerAuthKey({ SESSION_SECRET: "k1-teszt-titok" } as NodeJS.ProcessEnv);
+    const base = banFingerprint(k, normalizeEmail("diak.pelda@gmail.com")!);
+    for (const v of ["Diak.Pelda@Gmail.com", "diakpelda@gmail.com", "diak.pelda+jatek@gmail.com", "d.i.a.k.pelda@googlemail.com"]) {
+      assert.equal(banFingerprint(k, normalizeEmail(v)!), base, v);
+    }
+    assert.notEqual(banFingerprint(k, normalizeEmail("masik@gmail.com")!), base);
+    assert.match(base, /^[0-9a-f]{64}$/);
+    assert.ok(!base.includes("diak"));
+    assert.notEqual(base, emailHash(k, "diakpelda@gmail.com"), "más tartomány, mint a belépő hash");
+    const rotated = playerAuthKey({ SESSION_SECRET: "masik-titok" } as NodeJS.ProcessEnv);
+    assert.notEqual(banFingerprint(rotated, "diakpelda@gmail.com"), base, "titokrotáció után a régi ujjlenyomat nem egyezik (dokumentált)");
   });
 });
 

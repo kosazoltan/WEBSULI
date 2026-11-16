@@ -345,3 +345,30 @@ test("N2: tiltott fiók a /fiok-on csak a letöltést és a törlést látja (36
   await expect(page.getByTestId("player-delete-code-sent")).toContainText("a fiókod e-mail-címére");
   expect(codeRequests).toBe(1);
 });
+
+test("K1: a „törölt, de tiltva maradt” bejegyzés cím nélkül látszik, és feloldható", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/auth/user", (r) => r.fulfill({ json: { id: "a-1", email: "admin@pelda.hu", isAdmin: true, firstName: "Admin", lastName: "" } }));
+  const unbans: string[] = [];
+  await page.route("**/api/admin/game-accounts**", async (r) => {
+    const url = new URL(r.request().url());
+    if (url.pathname.endsWith("/deleted-bans")) {
+      return r.fulfill({ json: { entries: unbans.length ? [] : [{ ref: "0123456789abcdef", bannedAt: "2026-11-16T09:00:00Z", deletedAt: "2026-11-16T10:00:00Z" }] } });
+    }
+    if (url.pathname.endsWith("/unban") && url.pathname.includes("/deleted-bans/")) {
+      unbans.push(url.pathname);
+      return r.fulfill({ json: { ok: true } });
+    }
+    return r.fulfill({ json: { players: [] } });
+  });
+  await page.goto("/admin?tab=players");
+  const row = page.getByTestId("deleted-ban-0123456789abcdef");
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await expect(row).not.toContainText("@");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow, "nincs vízszintes görgetés").toBeLessThanOrEqual(1);
+  await shot(page, "admin-torolt-tiltott-390x844");
+  await page.getByTestId("button-deleted-ban-unban-0123456789abcdef").click();
+  await expect(page.getByTestId("deleted-bans")).toHaveCount(0);
+  expect(unbans).toEqual(["/api/admin/game-accounts/deleted-bans/0123456789abcdef/unban"]);
+});
