@@ -102,7 +102,14 @@ létező szóval „hibás” opció. **Javítandó meglévő tétel nem volt.**
 évfolyamok pillanatképéből dolgozik; amíg a saját évfolyam darabja tölt, `null` (→ a játék saját bankja). Előtöltés: a
 `useGradeLevel` (az évfolyam ismeretében, mountkor) és a `gradeForGame` (kérdéskor) indítja; a saját évfolyam + a két szomszéd.
 Hiba: az ígéret kiesik a gyorsítótárból, a háttér-előtöltés 5 mp múlva próbál újra. Node-ban (szerver, egységteszt) a teljes bank
-szinkron elérhető. A hívók API-ja nem változott; a játéklapokhoz nem kellett nyúlni.
+szinkron elérhető. A hívók API-ja nem változott. **Érintett hívók:** a `pickGradeQuiz` / `pickGradeSlotWithVocab` / `gradeForGame`
+hívói (BlockCraftQuiz, BrainRotSteal, SpaceAsteroidQuiz, TsunamiEscapeEnglish, a Tornado `lib/tornado/questions.ts`, a
+`lib/blockCraftSubjects.ts`, `lib/brainRotTuning.ts`) **változatlanok**; a `useGradeLevel` (közös hook: a fenti játékok + a
+SpeedQuizMath és a Tornado lapja használja) mountkor előtölt — a Matek lapon ez egy fölösleges, de ártalmatlan darab-letöltés;
+a Matek és a Szólétra lapjához nem nyúltunk. **Módosított hívó (1):** `pages/DuelArena.tsx` (JM1, a merge után érkezett) a
+`GRADE_QUIZ_ITEMS`-et olvasta (így a párbaj darabja az egész bankot hozta volna): most a `startMatch` a meccs előtt betölti a
+játékosok évfolyamát és szomszédait (`loadGradeBank`, hibánál újrapróbálható üzenet), a kérdésépítő a `loadedGradeItems()`-ből
+dolgozik; `tests/duel-arena.spec.ts`: 18 passed.
 
 | | Bank-darab(ok) | Nyers | gzip |
 |---|---|---|---|

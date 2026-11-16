@@ -569,3 +569,40 @@ Forrás: J0c (kérdés-sáv, `play-lab.spec.ts`).
   „Miért?” állapota a megjelenítéshez volt kötve, nem a hibához. **Megelőzés:** explicit állapotgép (nyitott / kijelzés / függő kérés
   / a hibához kötött „Miért?”-határidő külön), és valódi időléptetéses teszt az ütemezővel együtt (`game-play-question-ui.test.ts`
   „review #446/…”), nem csak kézzel léptetett, ütemezés nélküli eset.
+
+## C-43 — Évfolyam-bank tartalom: emlékezetből írt tény, létező szó „hibás” opcióként, homonim alak (2026-11-16)
+
+Forrás: #448 review (Codex, Vercel Agent), `docs/measurements/2026-11-16-evfolyam-bank-3-6-vakmegoldo.md` „Második audit”,
+`docs/measurements/2026-11-16-evfolyam-bank-7-9-vakmegoldo.md`.
+
+- **Tünet:** a vak megoldó (kanári 10/10) és egy kulcsos audit után is maradt három tartalmi hiba: a János vitéz-kulcs a
+  griffmadarat mondta (a mű szerint az óriás viszi át Jánost); a „gólja” „hibás” opció létező szó (a gól birtokos alakja); a
+  „rajzoltatok” múlt időnek szánva jelen idejű műveltető alakként is elemezhető. Egy meglévő (2026-09-es) tételben is ott volt a
+  „gólja”.
+- **Gyökérok:** a gyártó és az auditor is emlékezetből dolgozott; a vak megoldó egy tételt lát, és a „melyik a helyes” típusnál
+  nem kérdőjelezi meg, hogy a rossz opció valóban nem szó-e.
+- **Megelőzés:** (1) a gyártó forrásból dolgozik, tételenként forrás-megjegyzéssel (a validátor bukik nélküle), irodalmi tény
+  csak a mű szövegéből; (2) a helyesírási „hibás” opciót a hunspell magyar szótár (`dictionary-hu` + `hunspell-asm`, a
+  függőségek között) ellenőrzi — a gyártási validátorban ÉS a `tests/grade-quiz-bank-coverage.test.ts` őrben a 3–12. évfolyam
+  minden tételén; (3) nyelvtani alakot mondatba ágyazva kérdezünk; (4) a forrásalapú audit az ELSŐ körben fut, és a javított
+  tételt a vak megoldó újra megoldja.
+
+## C-44 — Évfolyam-bank: a meglévő tesztek szűk mintái és a vak megoldó gyengeségei (2026-11-16)
+
+Forrás: JBa / JBb futás (#448 és a JBb PR).
+
+- **Tünet 1:** a `tests/grade-quiz-bank.test.ts` ORDINAL-mintája (`/i` kapcsolóval) a magyar „A válasz …” névelős szókapcsolatot is
+  sorszám-hivatkozásnak méri; a számolója a `3/4 : 1/2` alakot balról jobbra olvassa ((3/4)/1)/2, és a „12, 18 és 30” közül csak a
+  „18 és 30” párt veszi. **Megelőzés 1:** a gyártási validátor ugyanezekre bukik; a magyarázatban „A felelet”, törttel osztás
+  zárójellel, több szám LKKT-ja névelős alakban; a meglévő tesztet nem lazítjuk.
+- **Tünet 2:** a Sonnet-szintű vak megoldó gyors, de irodalmi és alaptény-kérdéseken tévedett (6. évf.: 7 tévedés; 7. évf.: 4
+  irodalmi); egy megoldó a `chosen` mezőt szkripttel töltötte ki az indexből (a védelem üres). **Megelőzés 2:** az utasítás
+  kimondja, hogy a `chosen`-t a megoldó kézzel másolja; minden megoldói eltérést a forrásból bírálunk el; a tartalmi
+  bizonyítékot a forrásalapú audit adja, nem a vak kör.
+- **Tünet 3:** a JS `\b` ASCII-alapú — az „ó” végű „szó” után nem illeszkedik, a helyesírási tételek felismerője így csendben
+  kevés tételt talált. **Megelőzés 3:** szóköz-határ, és a teszt minimális darabszámot is ellenőriz.
+- **Tünet 4:** a Write eszköz a `\u00A0` escape-et a tesztfájlban és a jegyzőkönyvben is nyers NBSP-vé írta (C-31/5 ismét).
+  **Megelőzés 4:** írás után `grep -c $'\xc2\xa0'`.
+- **Tünet 5:** a `git stash push` parancs a push-audit hookot is kiváltja (a „push” szó miatt). **Megelőzés 5:** `git stash -u`.
+- **Tünet 6:** a Git Bash-es `node -e` szövegcsere CRLF-es forrásfájlon csendben nem illeszkedett (a fájl CRLF, a minta LF).
+  **Megelőzés 6:** forrásfájlt Edit eszközzel módosítunk, és a csere után ellenőrizzük, hogy tényleg megtörtént.
