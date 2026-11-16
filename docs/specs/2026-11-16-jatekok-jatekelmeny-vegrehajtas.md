@@ -1654,6 +1654,25 @@ export function saveMeta(storage: StorageLike | null, s: MetaState): void;
 - [ ] J17, J18 teljesül; `T/game-meta.test.ts`, `T/games-lobby-meta.spec.ts`, `T/game-ethics-guard.test.ts` zöld.
 - [ ] A meglévő `T/games-lobby-mobile*.spec.ts` (felderítés: `ls T | grep lobby`) zöld.
 
+### J8-belépő — „Belépés” / „Fiókom” belépő a Játékok oldalán (a J8 fejezetből kiemelt, minimális rész)
+
+**Állapot:** folyamatban – 2026-11-16, ág feat/jatek-fiok-belepo, munkafa .claude/worktrees/jatek-fiok-belepo, kanban #60
+**Függ:** JM7a, JM7b (main) · **Modell:** Sonnet · **Ok:** a `/belepes` és a `/fiok` oldalra a felületen sehol nincs mutató
+gomb, így a `PLAYER_ACCOUNTS` bekapcsolása semmit nem érne (a gyerek nem találná a regisztrációt).
+**Cél:** a Játékok oldalon, CSAK bekapcsolt flag mellett: „Belépés” gomb (kijelentkezve) → `/belepes`; „Fiókom” gomb
+(becenév + avatar a szerverről) → `/fiok`. Kikapcsolt flagnél a mai kinézet bitre változatlan.
+**Nem-cél:** szerverkód, séma, a flag alapértéke, más játéklap, a J8 többi része (meta, szint, kártya-kiegészítés).
+**Fájlok:** új `source/client/src/components/PlayerEntry.tsx`, `source/tests/player-entry.test.ts`,
+`source/tests/player-entry.spec.ts`; módosítandó: `source/client/src/pages/Games.tsx` (egyetlen sor: a komponens felcsatolása
+a fejléc alatt — a #464 is érinti a fájlt, ezért a változás egyhelyes), `source/client/src/index.css` (csak ha a komponens
+nem megoldható a meglévő osztályokkal).
+**Lépések:** (1) állapot-sor commit; (2) a komponens (a flag KI / töltés / hiba → semmit nem renderel); (3) felcsatolás
+a `Games.tsx`-ben; (4) egység- és e2e-teszt, képernyőképek 360×640, 390×844, 844×390 méretben kijelentkezve és belépve;
+(5) PR, CI, review.
+**Elfogadás:** flag KI → a DOM-ban nincs belépő (teszt); BE + kijelentkezve → „Belépés” ≥ 48 px, `/belepes`-re visz; BE +
+belépve → „Fiókom” a szerver-becenévvel és avatarral, `/fiok`-ra visz; hosszú becenév nem töri az elrendezést; tiltott fiók
+→ „Fiókom” `/fiok`-ra; a `games-lobby-mobile` spec és a mobil mérő zöld.
+
 ---
 
 ## J9 — Záró mérés, átfogó review, éles próba, retro
