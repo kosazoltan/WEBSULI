@@ -32,6 +32,7 @@ import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { digitComplexity, levelAdaptBand, levelStartBand, pickByBand } from "@/game-engine/levelTuning";
 import { QUESTION_SECONDS, ROUND_SECONDS, TARGET_CORRECT, questionSecondsForBand } from "@/game-engine/speedQuizTiming";
 
+import { newScoreRunId } from "@/lib/gameScoreRunId";
 type GradeLevel = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 
 /** A menü évfolyamai (a teljes alsó és felső tagozat, középiskola). */
@@ -1769,6 +1770,7 @@ export default function SpeedQuizMath() {
       runXp: score,
       runStreak: bestStreak,
       runSeconds,
+      runId: newScoreRunId(),
     })
       .then(() => {
         void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] });

@@ -133,6 +133,7 @@ import {
 } from "@/lib/tornado/controls";
 import { shouldDisposeGeometry } from "@/tornado/meshLifetime";
 import { applyRunResult } from "@/lib/tornado/runResult";
+import { newScoreRunId } from "@/lib/gameScoreRunId";
 import {
   loadProgress,
   saveProgress,
@@ -1784,6 +1785,7 @@ function PlayScreen(props: {
           runXp: reward.score,
           runStreak: correctRef.current,
           runSeconds: Math.round(elapsedRef.current),
+          runId: newScoreRunId(),
         })
           .then(() => void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] }))
           .catch(() => {});

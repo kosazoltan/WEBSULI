@@ -66,6 +66,7 @@ import HoldButton from "@/game-engine/HoldButton";
 import { joystickToDirections } from "@/game-engine/joystick";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import { newScoreRunId } from "@/lib/gameScoreRunId";
 import {
   LOOK_BUDGET,
   SparkleField,
@@ -2594,6 +2595,7 @@ export default function SpaceAsteroidQuiz() {
       runXp: scoreRef.current,
       runStreak: bestComboRef.current, // D2: run-level best, not current
       runSeconds: ROUND_LIMIT_SEC - timeLeft,
+      runId: newScoreRunId(),
     })
       .then(() => void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] }))
       .catch(() => { scoreSubmittedRef.current = false; });

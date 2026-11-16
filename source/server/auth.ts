@@ -10,6 +10,7 @@ import { User } from "@shared/schema";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { sanitizeReturnTo, resolvePostLoginRedirect } from "./lib/return-to";
 import { logger } from "./lib/logger";
+import { maskEmail } from "./lib/mask-email";
 
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 
@@ -69,7 +70,7 @@ export function setupAuth(app: Express) {
 
     passport.use(new LocalStrategy({ usernameField: 'email', passwordField: 'password' }, async (email, password, done) => {
         try {
-            logger.info(`[AUTH] Login attempt for ${email}`);
+            logger.info(`[AUTH] Login attempt for ${maskEmail(email)}`);
             const user = await storage.getUserByEmail(email);
 
             if (!user || !user.password) {
@@ -83,7 +84,7 @@ export function setupAuth(app: Express) {
                 return done(null, false, { message: "Hibás email vagy jelszó" });
             }
 
-            logger.info(`[AUTH] Login success for ${email}`);
+            logger.info(`[AUTH] Login success for ${maskEmail(email)}`);
             return done(null, user);
         } catch (err) {
             logger.error(`[AUTH] Error during authentication:`, err);
@@ -102,7 +103,7 @@ export function setupAuth(app: Express) {
             scope: ['profile', 'email']
         }, async (accessToken, refreshToken, profile, done) => {
             try {
-                logger.info(`[AUTH] Google login attempt for ${profile.emails?.[0]?.value}`);
+                logger.info(`[AUTH] Google login attempt for ${maskEmail(profile.emails?.[0]?.value)}`);
                 const email = profile.emails?.[0]?.value;
 
                 if (!email) {

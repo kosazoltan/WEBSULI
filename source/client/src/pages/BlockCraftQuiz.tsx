@@ -68,6 +68,7 @@ import {
 } from "@/game-engine/mobile";
 import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
 
+import { newScoreRunId } from "@/lib/gameScoreRunId";
 /** 2D pixel-minta cellaméret — a menü-előnézet (MenuBlock) rajzolásához. */
 const TILE = 24;
 
@@ -2565,6 +2566,7 @@ export default function BlockCraftQuiz() {
       runXp: sessionXp,
       runStreak: streak,
       runSeconds,
+      runId: newScoreRunId(),
     })
       .then(() => void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] }))
       .catch(() => {

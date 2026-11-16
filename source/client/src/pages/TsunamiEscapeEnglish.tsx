@@ -70,6 +70,7 @@ import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import TsunamiScene3D from "@/game-engine/scenes/TsunamiScene3D";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
+import { newScoreRunId } from "@/lib/gameScoreRunId";
 const LS_XP = "websuli-tsunami-en-xp";
 const LS_BEST = "websuli-tsunami-en-best-streak";
 
@@ -1351,6 +1352,7 @@ export default function TsunamiEscapeEnglish() {
       runXp: sessionXp,
       runStreak: runBestStreakRef.current,
       runSeconds,
+      runId: newScoreRunId(),
     };
 
     void apiRequest("POST", "/api/games/score", payload)

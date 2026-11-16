@@ -57,6 +57,7 @@ import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { correctDataAttrs, installGameTestApi, type GameForcePatch } from "@/game-engine/game-test-hooks";
 import BrainRotArena3D, { type ArenaBurst } from "@/game-engine/scenes/BrainRotArena3D";
 
+import { newScoreRunId } from "@/lib/gameScoreRunId";
 /* --- Típusok --- */
 type Quiz = {
   topic?: string;
@@ -953,6 +954,7 @@ export default function BrainRotSteal() {
       runXp: sessionXp,
       runStreak: bestStreak,
       runSeconds,
+      runId: newScoreRunId(),
     })
       .then(() => void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] }))
       .catch(() => {
