@@ -24,7 +24,7 @@ assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 
 // Lekérdezés-számláló a pg kliensen: hány lekérdezés fut, és egy `json`-t olvasó lekérdezés hány sort ad vissza.
-const probe = { queries: 0, maxJsonRows: 0 };
+const probe = { queries: 0, maxJsonRows: 0, jsonDelayMs: 0, failNextJson: false };
 const originalQuery = pg.Client.prototype.query as (...args: unknown[]) => unknown;
 (pg.Client.prototype as unknown as { query: unknown }).query = function (this: unknown, ...args: unknown[]) {
   probe.queries++;
@@ -34,7 +34,15 @@ const originalQuery = pg.Client.prototype.query as (...args: unknown[]) => unkno
   const cb = args.findIndex(a => typeof a === "function");
   if (cb >= 0) {
     const done = args[cb] as (e: unknown, r: { rows?: unknown[] }) => void;
-    args[cb] = (e: unknown, r: { rows?: unknown[] }) => { note(r?.rows); done(e, r); };
+    // Review #478 (L4): a lecke-JSON lekérdezés késleltethető (átfedő kérések), illetve egyszer hibára állítható.
+    const fail = readsJson && probe.failNextJson;
+    if (fail) probe.failNextJson = false;
+    const delay = readsJson ? probe.jsonDelayMs : 0;
+    args[cb] = (e: unknown, r: { rows?: unknown[] }) => {
+      note(r?.rows);
+      const finish = () => fail ? done(new Error("QBS: szándékos építési hiba"), undefined as never) : done(e, r);
+      if (delay) setTimeout(finish, delay); else finish();
+    };
   }
   const result = originalQuery.apply(this, args) as Promise<{ rows?: unknown[] }> | undefined;
   if (result && typeof result.then === "function") void result.then(r => note(r?.rows), () => {});
@@ -188,6 +196,54 @@ test("review #478 (Codex P2): a nem kupon-játék (Szólétra) hideg kérése ne
   await responseOf("word-ladder-hu-en");
   assert.equal(svc.quizBankCacheStats().gameBuilds, 2);
   assert.equal(svc.quizBankCacheStats().builds, 0);
+});
+
+test("review #478 M1/L4a+c: eltérő lenyomatú párhuzamos kérések mellett egyszerre legfeljebb EGY építés fut; a követő a legutolsó írást látja", async () => {
+  svc.resetQuizBankCacheForTests();
+  probe.jsonDelayMs = 15; // ~20 köteg × 15 ms: az első építés biztosan átfedi a közbeni írásokat
+  try {
+    const first = svc.gameQuizBankResponse("tsunami-english");
+    const later: Array<Promise<unknown>> = [];
+    for (const k of [1, 2, 3]) {
+      await new Promise(r => setTimeout(r, 40));
+      await db.execute(sql`UPDATE lessons SET json = jsonb_set(json, '{experience,quiz,0,question}', ${JSON.stringify(`QBS M1 írás ${k}?`)}::jsonb) WHERE id = 'qbs-20-v2'`);
+      later.push(svc.gameQuizBankResponse("tsunami-english"));
+      later.push(svc.gameQuizBankResponse("block-craft-quiz"));
+    }
+    await Promise.all([first, ...later]);
+    const stats = svc.quizBankCacheStats();
+    assert.equal(stats.maxConcurrentBuilds, 1, "egyszerre legfeljebb egy építés");
+    assert.ok(stats.builds <= 2, `építések: ${stats.builds} (az első + egyetlen összevont követő)`);
+  } finally { probe.jsonDelayMs = 0; }
+  // (c) a késői kérés és a következő kérés is a legutolsó írást adja, újabb építés nélkül.
+  const builds = svc.quizBankCacheStats().builds;
+  const prompts = (await responseOf("tsunami-english")).body.items.map(q => q.prompt);
+  assert.ok(prompts.includes("QBS M1 írás 3?") && !prompts.includes("QBS M1 írás 2?"));
+  assert.equal(svc.quizBankCacheStats().builds, builds);
+  // Építés közbeni írás → a következő kérés új lenyomatot lát és újraépít az új tartalommal.
+  probe.jsonDelayMs = 15;
+  try {
+    await db.execute(sql`UPDATE lessons SET updated_at = now() WHERE id = 'qbs-21-v2'`);
+    const during = svc.gameQuizBankResponse("tsunami-english");
+    await new Promise(r => setTimeout(r, 40));
+    await db.execute(sql`UPDATE lessons SET json = jsonb_set(json, '{experience,quiz,0,question}', '"QBS közbeni írás?"') WHERE id = 'qbs-21-v2'`);
+    await during;
+  } finally { probe.jsonDelayMs = 0; }
+  assert.ok((await responseOf("tsunami-english")).body.items.some(q => q.prompt === "QBS közbeni írás?"));
+  assert.equal(svc.quizBankCacheStats().maxConcurrentBuilds, 1);
+});
+
+test("review #478 L4b: elbukott építés után a következő kérés újrapróbál és sikeres", async () => {
+  svc.resetQuizBankCacheForTests();
+  probe.failNextJson = true;
+  // A drizzle „Failed query” hibába csomagolja; az eredeti a `cause`-ban.
+  await assert.rejects(svc.gameQuizBankResponse("tsunami-english"), (e: unknown) => /szándékos építési hiba/.test(String((e as { cause?: unknown }).cause ?? e)));
+  assert.equal(probe.failNextJson, false);
+  const ok = await responseOf("tsunami-english");
+  assert.ok(ok.body.items.length > 0);
+  assert.equal(svc.quizBankCacheStats().builds, 2);
+  const old = await oldListGameQuizBank("tsunami-english");
+  assert.equal(ok.text, JSON.stringify({ gameId: "tsunami-english", items: old.map(r => svc.quizBankApiItem(r as never)) }));
 });
 
 test("A4: bármely írás (közvetlen SQL is) érvényteleníti: módosítás, visszavonás, új lecke, törlés; plusz a 15 perces lejárat", async () => {

@@ -160,7 +160,8 @@ export async function listGameQuizBank(gameId: string): Promise<GameQuizBankRow[
  *   nélkül. A `json` (TOAST) ehhez nem töltődik be.
  * - Egyetlen pillanatkép él: a kanonikus rész egyszer szerializálva (UTF-8 `Buffer`), játékonként a kész, gzip-pel
  *   tömörített válasz. Méret: szerkezetileg korlátos (1 kanonikus rész + legfeljebb 6 játék).
- * - Single-flight: azonos lenyomatra egyetlen építés fut, a párhuzamos kérések azt várják.
+ * - Single-flight: azonos lenyomatra egyetlen építés fut, a párhuzamos kérések azt várják. Review #478 (M1): egyszerre
+ *   LEGFELJEBB EGY építés fut; közben érkező új lenyomatok egyetlen követő építésbe vonódnak össze („a legutóbbi nyer”).
  * - Biztonsági háló: 15 perces lejárat.
  * ------------------------------------------------------------------------------------------------------------------ */
 
@@ -186,6 +187,8 @@ export function quizBankApiItem(r: GameQuizBankRow) {
 
 type Snapshot = {
   fingerprint: string;
+  /** A lenyomat-lekérdezés indításának sorszáma (monoton): a nagyobb a frissebb. */
+  fpAt: number;
   builtAt: number;
   /** A kanonikus tételek a válasz-alakban, vesszővel elválasztva, szögletes zárójel nélkül. */
   canonicalJson: Buffer;
@@ -195,20 +198,26 @@ type Snapshot = {
 };
 
 let current: Snapshot | null = null;
-let inflight: { fingerprint: string; promise: Promise<Snapshot> } | null = null;
-const stats = { builds: 0, gameBuilds: 0, hits: 0 };
+type Flight = { fingerprint: string; fpAt: number; promise: Promise<Snapshot> };
+/** A futó (legfeljebb egy) építés, és a mögötte várakozó egyetlen követő építés. */
+let building: Flight | null = null;
+let next: Flight | null = null;
+let fpSeq = 0;
+let activeBuilds = 0;
+const stats = { builds: 0, gameBuilds: 0, hits: 0, maxConcurrentBuilds: 0 };
 
 export function quizBankCacheStats() {
   return { ...stats, fingerprint: current?.fingerprint ?? null };
 }
 
 export function resetQuizBankCacheForTests(): void {
-  current = null; inflight = null; legacyOnly.clear();
-  stats.builds = 0; stats.gameBuilds = 0; stats.hits = 0;
+  current = null; building = null; next = null; legacyOnly.clear();
+  stats.builds = 0; stats.gameBuilds = 0; stats.hits = 0; stats.maxConcurrentBuilds = 0;
 }
 
 /** A kupon-játékok lenyomata: közzétett leckék + a kupon-játékok régi exportjai. */
-async function quizBankFingerprint(): Promise<string> {
+async function quizBankFingerprint(): Promise<{ fingerprint: string; fpAt: number }> {
+  const fpAt = ++fpSeq;
   const games = [...COUPON_GAME_IDS];
   const { rows } = await db.execute<{ fp: string }>(sql`
     SELECT md5(
@@ -216,11 +225,17 @@ async function quizBankFingerprint(): Promise<string> {
       || '|' ||
       coalesce((SELECT string_agg(id || ':' || xmin::text, ',' ORDER BY id) FROM ${gameQuizItems} WHERE ${inArray(gameQuizItems.gameId, games)}), '')
     ) AS fp`);
-  return rows[0].fp;
+  return { fingerprint: rows[0].fp, fpAt };
 }
 
-async function buildSnapshot(fingerprint: string): Promise<Snapshot> {
+async function buildSnapshot(fingerprint: string, fpAt: number): Promise<Snapshot> {
   stats.builds++;
+  activeBuilds++;
+  stats.maxConcurrentBuilds = Math.max(stats.maxConcurrentBuilds, activeBuilds);
+  try { return await buildSnapshotInner(fingerprint, fpAt); } finally { activeBuilds--; }
+}
+
+async function buildSnapshotInner(fingerprint: string, fpAt: number): Promise<Snapshot> {
   // Kötegenként szerializálunk: egyszerre csak egy köteg tétel-objektuma él. A deduplikáció a `uniqueQuizContent`
   // kanonikus kulcsa (`canonical:<id>`) szerint, a kötegeken át.
   const ids = new Set<string>();
@@ -234,28 +249,49 @@ async function buildSnapshot(fingerprint: string): Promise<Snapshot> {
     }
     if (parts.length) chunks.push(Buffer.from((chunks.length ? "," : "") + parts.join(","), "utf8"));
   });
-  return { fingerprint, builtAt: Date.now(), canonicalJson: Buffer.concat(chunks), canonicalCount: ids.size, canonical: seen, games: new Map() };
+  return { fingerprint, fpAt, builtAt: Date.now(), canonicalJson: Buffer.concat(chunks), canonicalCount: ids.size, canonical: seen, games: new Map() };
 }
 
-async function snapshotFor(fingerprint: string): Promise<Snapshot> {
-  if (current && current.fingerprint === fingerprint && Date.now() - current.builtAt < QUIZ_BANK_CACHE_TTL_MS) {
-    stats.hits++;
-    return current;
-  }
-  if (inflight && inflight.fingerprint === fingerprint) return inflight.promise;
-  const flight = {
-    fingerprint,
-    promise: buildSnapshot(fingerprint).then(
+/** Az egyetlen építés indítása; a `current` csak frissebb (nagyobb `fpAt`-ű) pillanatképre cserélődik. */
+function startBuild(fingerprint: string, fpAt: number): Flight {
+  const flight: Flight = {
+    fingerprint, fpAt,
+    promise: buildSnapshot(fingerprint, fpAt).then(
       (snap) => {
-        // Egy közben indult, újabb lenyomatú építést a régi eredmény nem írhat felül.
-        if (inflight === flight) { current = snap; inflight = null; }
+        if (!current || snap.fpAt >= current.fpAt) current = snap;
         return snap;
       },
-      (error: unknown) => { if (inflight === flight) inflight = null; throw error; },
-    ),
+    ).finally(() => { if (building === flight) building = null; }),
   };
-  inflight = flight;
-  return flight.promise;
+  building = flight;
+  return flight;
+}
+
+async function snapshotFor(fingerprint: string, fpAt: number): Promise<Snapshot> {
+  const fresh = (snap: Snapshot | null) => snap !== null && Date.now() - snap.builtAt < QUIZ_BANK_CACHE_TTL_MS;
+  if (fresh(current) && (current!.fingerprint === fingerprint || current!.fpAt > fpAt)) {
+    // Azonos lenyomat, vagy a kérés lenyomata régebbi a kész pillanatképnél (review #478 L1): a kész a legalább olyan friss.
+    stats.hits++;
+    return current!;
+  }
+  if (building && (building.fingerprint === fingerprint || building.fpAt > fpAt)) return building.promise;
+  if (next) {
+    // Már vár egy követő építés: a legutóbbi lenyomat nyer, egyetlen építés marad.
+    if (fpAt > next.fpAt) { next.fingerprint = fingerprint; next.fpAt = fpAt; }
+    return next.promise;
+  }
+  if (!building) return startBuild(fingerprint, fpAt).promise;
+  // Építés fut más lenyomattal: legfeljebb egy követő, a futó UTÁN (sikertől / hibától függetlenül).
+  const follower: Flight = {
+    fingerprint, fpAt,
+    promise: building.promise.then(() => undefined, () => undefined).then(() => {
+      next = null;
+      if (fresh(current) && current!.fpAt >= follower.fpAt) return current!;
+      return startBuild(follower.fingerprint, follower.fpAt).promise;
+    }),
+  };
+  next = follower;
+  return follower.promise;
 }
 
 /** A válasz: `{"gameId":…,"items":[<kanonikus rész>,<régi exportok>]}`, gzip-pel tömörítve. */
@@ -307,7 +343,8 @@ async function legacyOnlyResponse(gameId: string): Promise<GameQuizBankResponse>
 export async function gameQuizBankResponse(gameId: string): Promise<GameQuizBankResponse | null> {
   if (!ALLOWED_GAME_IDS.has(gameId)) return null;
   if (!isCouponGame(gameId)) return legacyOnlyResponse(gameId);
-  const snap = await snapshotFor(await quizBankFingerprint());
+  const { fingerprint, fpAt } = await quizBankFingerprint();
+  const snap = await snapshotFor(fingerprint, fpAt);
   let game = snap.games.get(gameId);
   if (!game) {
     game = buildGame(snap, gameId);
