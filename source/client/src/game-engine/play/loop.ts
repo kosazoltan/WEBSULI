@@ -27,17 +27,27 @@ export type FixedLoop = {
    * kerül, a negatív 0-ra; NaN RangeError.
    */
   setTimeScale(scale: number): void;
-  /** A játék által beállított szorzó (a `setHold` nem változtatja meg). */
+  /** A játék által beállított szorzó (a `holdFor` nem változtatja meg). */
   timeScale(): number;
   /** A lefutott lépések ideje ms-ban (lépésszám × `SIM_STEP_MS`); a `probe().simTime` forrása. */
   simTimeMs(): number;
-  /** Új menet: lépésszám, akkumulátor, időalap törlése; szorzó 1, tartás ki. */
+  /** Új menet: lépésszám, akkumulátor, időalap, tartás törlése; szorzó 1. */
   reset(): void;
   /**
-   * Átmeneti megállítás a beállított szorzó felülírása nélkül (a `feel.hitstop` használja). Amíg be van kapcsolva, nem
-   * fut lépés; kikapcsolás után a `timeScale()` szerinti tempó folytatódik (szünet alatt a szünet marad).
+   * Átmeneti megállítás `ms` VALÓS ideig, a beállított szorzó felülírása nélkül (a `feel.hitstop` használja). A hurok a
+   * következő képkockák valós idejéből előbb a tartást fogyasztja, és csak a lejárat utáni rész kerül az akkumulátorba —
+   * így a `feel.update` / `frame` hívási sorrendje nem számít. Ha egy lépésen belül kérik, a képkocka további lépései nem
+   * futnak; a már elszámolt, de le nem futott idő megmarad, és a tartás után fut le. A lejárat után a `timeScale()`
+   * szerinti tempó folytatódik (szünet alatt a szünet marad). Átfedő kérésnél a hosszabb maradék számít.
+   *
+   * DETERMINIZMUS-SZABÁLY (J0b és a játékszeletek erre építenek): a tartás csak azt tolja el, MIKOR fut egy lépés a valós
+   * időben (a sim-idő a tartás hosszával lemarad a falióra mögött), azt nem, MI történik egy lépésben. A sim állapota az
+   * N. lépés után a seedtől és a lépésenkénti bemenettől függ, a hitstopok időzítésétől nem. A valós időhöz kötött dolog
+   * (kupon-óra, menet-időkorlát) ezért ne a sim-időből, hanem saját órából számoljon, ha a hitstop nem csúsztathatja.
    */
-  setHold(on: boolean): void;
+  holdFor(ms: number): void;
+  /** A tartásból hátralévő valós idő ms-ban (0 = nincs tartás). */
+  holdRemainingMs(): number;
 };
 
 export function createFixedLoop(
@@ -56,7 +66,7 @@ export function createFixedLoop(
   let last: number | null = null;
   let acc = 0;
   let scale = 1;
-  let held = false;
+  let holdLeft = 0;
   let steps = 0;
 
   const alpha = (): number => {
@@ -76,7 +86,14 @@ export function createFixedLoop(
       if (real < 0) real = 0;
       if (real > maxFrameMs) real = maxFrameMs;
 
-      if (held) return alpha();
+      if (holdLeft > 0) {
+        const used = real < holdLeft ? real : holdLeft;
+        holdLeft -= used;
+        real -= used;
+        if (holdLeft > 0) return alpha();
+      }
+      // Szünetben nem fut lépés; a korábban felgyűlt (de még le nem futott) idő megmarad a folytatásra.
+      if (scale === 0) return alpha();
       acc += real * scale;
       let ran = 0;
       while (acc + EPS >= SIM_STEP_MS && ran < maxSteps) {
@@ -85,8 +102,11 @@ export function createFixedLoop(
         steps++;
         ran++;
         step(SIM_STEP_MS);
+        // A lépés tartást (hitstop) vagy szünetet kért: ebben a képkockában több lépés nem fut. A bent maradó idő NEM vész
+        // el: a tartás / szünet után fut le (a képkockánkénti plafon alatt), így összesen ugyanannyi lépés fut, csak később.
+        if (holdLeft > 0 || scale === 0) return alpha();
       }
-      // A plafon feletti lemaradás eldobva; a törtrész marad, hogy az interpoláció folytonos legyen.
+      // A plafon feletti lemaradás eldobva („spiral of death” védelem); a törtrész marad, hogy az interpoláció folytonos legyen.
       if (acc >= SIM_STEP_MS) acc %= SIM_STEP_MS;
       return alpha();
     },
@@ -103,11 +123,13 @@ export function createFixedLoop(
       last = null;
       acc = 0;
       scale = 1;
-      held = false;
+      holdLeft = 0;
       steps = 0;
     },
-    setHold(on: boolean): void {
-      held = on;
+    holdFor(ms: number): void {
+      if (!Number.isFinite(ms) || ms <= 0) return;
+      if (ms > holdLeft) holdLeft = ms;
     },
+    holdRemainingMs: () => holdLeft,
   };
 }

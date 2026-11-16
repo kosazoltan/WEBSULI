@@ -6,7 +6,7 @@
  *   a képmagasság 1%-a, a forgás legfeljebb 2,5°. Csökkentett mozgásnál az eltolás mindig 0 (`GE/useReducedMotion.ts`
  *   `motionScale().shake === 0` szabálya), helyette a játék nem mozgó jelzést ad.
  * - Hitstop: 40–120 ms VALÓS idejű megállás (a kért érték erre a sávra szorul), 150 ms-on belül (az előző kezdetétől) nem
- *   ismétlődik. Csak a szimulációt állítja meg a hurok `setHold`-jával; a játék által beállított szorzót (szünet, kérdés alatti
+ *   ismétlődik. Csak a szimulációt állítja meg a hurok `holdFor`-jával; a játék által beállított szorzót (szünet, kérdés alatti
  *   lassítás) nem írja felül. Hang és részecske-kezdőlöket nem áll meg — azokat a játék a hitstop hívásával egy időben indítja.
  * - Kozmetikai véletlen: a zajrács az átadott `fxRng`-ből jön (nem a sim RNG-je, KSZ-2), egyszer, létrehozáskor; a forró
  *   úton (`shakeOffset`, `update`) nincs allokáció.
@@ -25,7 +25,7 @@ export type Feel = {
    * `viewportH` mértékegységében, `rot` RADIÁNBAN (three.js és `ctx.rotate` közvetlenül használja; CSS-hez `rot * 180 / Math.PI` fok).
    */
   shakeOffset(out: ShakeOffset, viewportH: number): void;
-  /** 40..120; 150 ms-on belül nem ismétlődik; a hurok `setHold(true)`-jával a sim-et átmenetileg megállítja. */
+  /** 40..120; 150 ms-on belül nem ismétlődik; a hurok `holdFor(ms)`-ével a sim-et átmenetileg megállítja. */
   hitstop(ms: number): void;
   /** Valós eltelt idő ms-ban (a rAF különbsége): trauma-lecsengés 0.8/s, a hitstop lejárata. */
   update(realDtMs: number): void;
@@ -78,8 +78,8 @@ export function createFeel(opts: { reducedMotion: boolean; loop?: FixedLoop; fxR
 
   let trauma = 0;
   let clockMs = 0;
-  let hitstopLeftMs = 0;
   let lastHitstopAtMs = Number.NEGATIVE_INFINITY;
+  // A hitstop időtartamát a hurok a saját valós idejéből számolja (`loop.holdFor`); itt csak a hűtés órája fut.
 
   const noise = (channel: number, t: number): number => {
     const i = Math.floor(t);
@@ -114,20 +114,12 @@ export function createFeel(opts: { reducedMotion: boolean; loop?: FixedLoop; fxR
       if (!Number.isFinite(ms)) return;
       if (clockMs - lastHitstopAtMs < HITSTOP_COOLDOWN_MS) return;
       lastHitstopAtMs = clockMs;
-      hitstopLeftMs = ms < HITSTOP_MIN_MS ? HITSTOP_MIN_MS : ms > HITSTOP_MAX_MS ? HITSTOP_MAX_MS : ms;
-      loop?.setHold(true);
+      loop?.holdFor(ms < HITSTOP_MIN_MS ? HITSTOP_MIN_MS : ms > HITSTOP_MAX_MS ? HITSTOP_MAX_MS : ms);
     },
     update(realDtMs: number): void {
       if (!Number.isFinite(realDtMs) || realDtMs <= 0) return;
       clockMs += realDtMs;
       trauma = Math.max(0, trauma - (TRAUMA_DECAY_PER_SEC * realDtMs) / 1000);
-      if (hitstopLeftMs > 0) {
-        hitstopLeftMs -= realDtMs;
-        if (hitstopLeftMs <= 0) {
-          hitstopLeftMs = 0;
-          loop?.setHold(false);
-        }
-      }
     },
     tween,
   };

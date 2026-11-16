@@ -172,6 +172,25 @@ test("hitstop 40–120 ms-ra szorítva, és 150 ms-on belül nem ismétlődik", 
   assert.ok(steps() > before);
 });
 
+test("a hitstop lejárati képkockája nem számít futó időnek, a hívási sorrendtől függetlenül (review #442)", () => {
+  for (const order of ["feel-first", "loop-first"] as const) {
+    const { loop, steps } = loopWithCounter();
+    const feel = createFeel({ reducedMotion: false, loop, fxRng: fx() });
+    loop.frame(0);
+    feel.hitstop(120);
+    if (order === "feel-first") {
+      feel.update(120);
+      loop.frame(120);
+    } else {
+      loop.frame(120);
+      feel.update(120);
+    }
+    assert.equal(steps(), 0, `${order}: a 120 ms-os képkocka teljes egészében a hitstopé`);
+    loop.frame(120 + 1000 / 60);
+    assert.equal(steps(), 1, `${order}: a lejárat után a sim azonnal fut`);
+  }
+});
+
 test("loop nélkül a hitstop hatástalan, de nem dob hibát", () => {
   const feel = createFeel({ reducedMotion: false, fxRng: fx() });
   assert.doesNotThrow(() => {

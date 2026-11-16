@@ -107,27 +107,108 @@ test("az alpha minden képkockán 0..1; visszafelé ugró óra nem futtat lépé
   assert.equal(steps(), before);
 });
 
-test("setHold: a tartás alatt nincs lépés, a beállított szorzó megmarad", () => {
+test("holdFor: a tartás alatt nincs lépés, a beállított szorzó megmarad", () => {
   const { loop, steps } = counter();
   loop.setTimeScale(0.5);
   loop.frame(0);
-  loop.setHold(true);
+  loop.holdFor(80);
   loop.frame(80);
   assert.equal(steps(), 0);
   assert.equal(loop.timeScale(), 0.5);
-  loop.setHold(false);
+  assert.equal(loop.holdRemainingMs(), 0);
   loop.frame(80 + 1000 / 60 / 0.5);
+  assert.equal(steps(), 1);
+});
+
+test("holdFor: csak a lejárat utáni valós idő kerül az akkumulátorba (review #442)", () => {
+  const { loop, steps } = counter();
+  loop.frame(0);
+  loop.holdFor(40);
+  loop.frame(50); // 40 ms tartás + 10 ms futás → 0 lépés
+  assert.equal(steps(), 0);
+  assert.equal(loop.holdRemainingMs(), 0);
+  loop.frame(60); // 10 + 10 = 20 ms ≥ 16,67 → 1 lépés
+  assert.equal(steps(), 1);
+  // Egyetlen, a tartásnál nem hosszabb képkocka sem futtat lépést (akadozó kijelzőn sem tűnik el a megállás).
+  const other = counter();
+  other.loop.frame(0);
+  other.loop.holdFor(120);
+  other.loop.frame(120);
+  assert.equal(other.steps(), 0);
+  // Átfedő kérésnél a hosszabb maradék számít; érvénytelen kérés hatástalan.
+  other.loop.holdFor(30);
+  other.loop.holdFor(10);
+  other.loop.holdFor(Number.NaN);
+  other.loop.holdFor(-5);
+  assert.equal(other.loop.holdRemainingMs(), 30);
+});
+
+test("a lépésen belül kért tartás / szünet megállítja a képkocka további lépéseit (review #442)", () => {
+  let n = 0;
+  const holding = createFixedLoop(() => {
+    n++;
+    if (n === 1) holding.holdFor(80);
+  });
+  holding.frame(0);
+  holding.frame(50); // 3 lépésnyi idő, de az első lépés 80 ms-os hitstopot kér → a többi 2 lépés vár
+  assert.equal(n, 1);
+  assert.equal(holding.holdRemainingMs(), 80);
+  // 50→130: a 80 ms-ot a tartás fogyasztja; a bent maradt 2 lépés most fut le.
+  // Szabály: T valós idő és H tartás után a lépésszám floor((T − H) / 16,67) = floor(50 / 16,67) = 3.
+  holding.frame(130);
+  assert.equal(n, 3);
+  holding.frame(210); // floor((210 − 80) / 16,67) = 7 — ugyanannyi lépés, mint hitstop nélkül 130 ms alatt
+  assert.equal(n, 7);
+
+  let m = 0;
+  const pausing = createFixedLoop(() => {
+    m++;
+    if (m === 2) pausing.setTimeScale(0);
+  });
+  pausing.frame(0);
+  pausing.frame(80);
+  assert.equal(m, 2, "a második lépés szünetet kért: a képkocka többi lépése nem fut");
+  pausing.frame(500);
+  assert.equal(m, 2, "szünetben a bent maradt idő sem fut le");
+  pausing.setTimeScale(1);
+  pausing.frame(500 + 1000 / 60);
+  // 80 ms (szünet előtt) + 16,67 ms (szünet után) = 96,67 ms → floor(5,8) = 5 lépés: a szünet előtti idő nem veszett el.
+  assert.equal(m, 5);
+});
+
+test("akadozó (250 ms-os) képkocka hitstoppal: a tartás után a képkockánkénti plafon érvényes", () => {
+  const { loop, steps } = counter();
+  loop.frame(0);
+  loop.holdFor(80);
+  loop.frame(250); // 80 ms tartás, 170 ms futás → 10 lépésnyi idő, de legfeljebb 5 fut; a többi eldobva
+  assert.equal(steps(), 5);
+  assert.equal(loop.holdRemainingMs(), 0);
+  loop.frame(250 + 1000 / 60);
+  assert.ok(steps() <= 7, "a plafon feletti lemaradás nem fut le utólag (nincs „spiral of death”)");
+});
+
+test("hitstop + szünet együtt: a tartás lejárta után is szünet marad, folytatásra fut", () => {
+  const { loop, steps } = counter();
+  loop.frame(0);
+  loop.holdFor(100);
+  loop.setTimeScale(0);
+  loop.frame(300);
+  assert.equal(steps(), 0);
+  assert.equal(loop.holdRemainingMs(), 0, "a tartás valós időben a szünet alatt is lejár");
+  loop.setTimeScale(1);
+  loop.frame(300 + 1000 / 60);
   assert.equal(steps(), 1);
 });
 
 test("reset: lépésszám, időalap, szorzó és tartás törlődik", () => {
   const { loop, steps } = counter();
   loop.setTimeScale(0.5);
-  loop.setHold(true);
+  loop.holdFor(10_000);
   runFrames(loop, 0, 16, 10);
   loop.reset();
   assert.equal(loop.simTimeMs(), 0);
   assert.equal(loop.timeScale(), 1);
+  assert.equal(loop.holdRemainingMs(), 0);
   runFrames(loop, 5000, 1000 / 60, 60);
   assert.equal(steps(), 60);
 });
@@ -171,4 +252,50 @@ test("a fix lépésű hurok eredménye független a képkocka-időktől (30 Hz, 
   }
   // 10 s = 600 lépés (a lebegőpontos tűrés miatt sem több, sem kevesebb).
   assert.equal(Math.round(runs[0].simTimeMs / SIM_STEP_MS), 600);
+});
+
+/**
+ * Lépésenkénti állapot-napló egy seedelt sim-ből; `hitstopEvery > 0` esetén minden ennyiedik lépés (egy „találat”) a lépésen
+ * belül 90 ms-os hitstopot kér — ahogy a játék tenné.
+ */
+function simulateWithHitstops(frameIntervals: (i: number) => number, totalMs: number, hitstopEvery: number) {
+  const rng = createRng("hitstop-determinizmus");
+  let x = 0;
+  let v = 0;
+  let n = 0;
+  const trace: number[] = [];
+  const loop = createFixedLoop((dtMs) => {
+    n++;
+    const input = rng.int(3) - 1;
+    v += input * 0.002 * dtMs - v * 0.01;
+    x += v * dtMs;
+    trace.push(Math.round(x * 1e9));
+    if (hitstopEvery > 0 && n % hitstopEvery === 0) loop.holdFor(90);
+  });
+  let now = 0;
+  loop.frame(now);
+  for (let i = 0; now < totalMs; i++) {
+    now = Math.min(totalMs, now + frameIntervals(i));
+    loop.frame(now);
+  }
+  return trace;
+}
+
+test("a hitstop a sim eredményét nem változtatja: azonos lépésszámnál azonos állapot, csak később (párbaj / bot előfeltétele)", () => {
+  const total = 10_000;
+  const jitter = createRng("akadozás-2");
+  const jittered = Array.from({ length: 5000 }, () => 1 + jitter.next() * 65);
+  const plain = simulateWithHitstops(() => 1000 / 60, total, 0);
+  for (const [name, run] of [
+    ["60 Hz, hitstop 37 lépésenként", simulateWithHitstops(() => 1000 / 60, total, 37)],
+    ["30 Hz, hitstop 23 lépésenként", simulateWithHitstops(() => 1000 / 30, total, 23)],
+    ["egyenetlen, hitstop 11 lépésenként", simulateWithHitstops((i) => jittered[i], total, 11)],
+  ] as const) {
+    assert.ok(run.length < plain.length, `${name}: a hitstop késlelteti a sim-et (${run.length} < ${plain.length})`);
+    assert.deepEqual(run, plain.slice(0, run.length), `${name}: azonos lépésszámnál eltérő állapot`);
+  }
+  // Szabály: a lépésszám floor((T − ΣH) / 16,67) — 60 Hz-en 37 lépésenként 90 ms: ha k hitstop volt, n = floor((10000 − 90k) / 16,67).
+  const run60 = simulateWithHitstops(() => 1000 / 60, total, 37);
+  const k = Math.floor(run60.length / 37);
+  assert.ok(Math.abs(run60.length - Math.floor((total - 90 * k) / SIM_STEP_MS)) <= 1, `${run60.length} lépés, ${k} hitstop`);
 });
