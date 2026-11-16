@@ -51,6 +51,7 @@ import type { GradeQuizItem } from "@/data/gradeQuizBank/types";
 import type { VocabQuiz, VocabSource } from "@/game-engine/vocab";
 import { normalizePrompt } from "../gradeQuiz";
 import { wallClockMs } from "./clock";
+import { READING_WINDOW_CAP_MS, readingMsFor } from "./reading";
 import { createFlowController, type FlowController } from "./flow";
 import { RETURN_MAX, type ReviewItem, type ReviewQueue } from "./reviewQueue";
 import { createRunStats, type RunStatsSnapshot } from "./runStats";
@@ -64,11 +65,18 @@ import {
   type RandomSource,
 } from "./types";
 
+/**
+ * J0c-b (additív): a director a `config.promptFits`-et `accept`-ként adja a forrásnak. A forrás a jelöltjei közül az
+ * elfogadottat válassza ELŐBB (a többit tegye hátra, ne jelölje látottnak); ha nincs elfogadott, adhat mást is — a sáv
+ * akkor is csonkítás nélkül mutatja. A régi (paraméter nélküli) providerek változatlanul működnek.
+ */
+export type QuestionAcceptCtx = { accept?: (quiz: FourChoiceQuiz) => boolean };
+
 export type QuestionProvider = {
   /** Nem látott tananyag-tétel (a játék meglévő pickUnseenMaterial-ágával). */
-  material(): PlayQuestion | null;
+  material(ctx?: QuestionAcceptCtx): PlayQuestion | null;
   /** Új tétel a játék meglévő választójával (szóbank / évfolyam-bank / kézi bank), a band szerint. */
-  fresh(ctx: { band: number; subject?: string }): PlayQuestion | null;
+  fresh(ctx: { band: number; subject?: string } & QuestionAcceptCtx): PlayQuestion | null;
   /** Ismétlés újraépítése: vocab → VocabSource.questionFor, grade → a bank id-je, quiz → a pillanatkép. */
   restore(item: ReviewItem): PlayQuestion | null;
   /** Kupon mód: csak material() adhat kérdést. */
@@ -85,6 +93,10 @@ export type DirectorConfig = {
   grade: number | null;
   bossMinGapMs?: number;   // alap 800
   warmupMs?: number;       // alap 10000 — ennyi ideig nincs ütemezett kérdés (trigger lehet)
+  /** J0c-b (additív): befér-e / elolvasható-e a tétel a sávban (pl. `fitsAllViewports(q, { grade }).ok`); a forrás `accept`-je. */
+  promptFits?: (quiz: FourChoiceQuiz) => boolean;
+  /** J0c-b (additív): az ablak = min(9000, max(windowMsFor, a gyerek becsült olvasási ideje)) — `reading.ts`. */
+  readingAware?: boolean;
 };
 export type QuestionDirector = {
   /** Játékidőben hívja a játék; ha az ütemezés szerint kérdés jár ÉS ctx.calm (nincs épp kritikus játékhelyzet vagy maxGap közel), új presentationt ad. */
@@ -172,6 +184,13 @@ export function createQuestionDirector(opts: {
   const warmupMs = config.warmupMs ?? DEFAULT_WARMUP_MS;
   const bossMinGapMs = config.bossMinGapMs ?? DEFAULT_BOSS_MIN_GAP_MS;
   const flow = createFlowController({ startBand: opts.startBand });
+  const acceptCtx: QuestionAcceptCtx = config.promptFits ? { accept: config.promptFits } : {};
+  const windowFor = (prompt: string, options: readonly PresentedOption[]): number => {
+    const base = windowMsFor(prompt, config.grade, config.baseWindowMs);
+    if (!config.readingAware) return base;
+    const read = readingMsFor(prompt, options.map((o) => o.label), config.grade);
+    return Math.min(READING_WINDOW_CAP_MS, Math.max(base, read));
+  };
   const runStats = createRunStats({ warmupSec: warmupMs / 1000 });
   review.startRun();
 
@@ -240,7 +259,7 @@ export function createQuestionDirector(opts: {
 
   function choose(): Pick | null {
     if (provider.couponOnly) {
-      const m = provider.material();
+      const m = provider.material(acceptCtx);
       return usable(m) && !askedKeys.has(m.key) ? { q: m, isReview: false, inRun: false } : null;
     }
     const slot = reviewSlotOpen();
@@ -250,7 +269,7 @@ export function createQuestionDirector(opts: {
         if (q) return { q, isReview: true, inRun: true };
       }
     }
-    const m = provider.material();
+    const m = provider.material(acceptCtx);
     if (usable(m) && !askedKeys.has(m.key)) return { q: m, isReview: false, inRun: false };
     if (slot) {
       const skip = new Set([...askedKeys, ...unrestorable]);
@@ -263,7 +282,7 @@ export function createQuestionDirector(opts: {
       }
     }
     for (let i = 0; i < FRESH_ATTEMPTS; i++) {
-      const f = provider.fresh({ band: flow.band() });
+      const f = provider.fresh({ band: flow.band(), ...acceptCtx });
       if (!f) break;
       if (usable(f) && !askedKeys.has(f.key)) return { q: f, isReview: false, inRun: false };
     }
@@ -292,12 +311,13 @@ export function createQuestionDirector(opts: {
     if (!pick) return null;
     const { q, isReview } = pick;
     nextId += 1;
+    const options = buildOptions(q.quiz);
     const p: QuestionPresentation = {
       id: nextId,
       question: q,
       isReview,
-      options: buildOptions(q.quiz),
-      windowMs: windowMsFor(q.quiz.prompt, config.grade, config.baseWindowMs),
+      options,
+      windowMs: windowFor(q.quiz.prompt, options),
       slowMo: config.slowMo,
       startedAtSimMs: simNowMs,
       reason,

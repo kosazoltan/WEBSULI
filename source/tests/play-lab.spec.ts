@@ -291,9 +291,11 @@ test("review #446 menetvég: a 12. válasz hibás → a megoldás kifut, nincs 1
   await expect(page.getByTestId("result-review-item")).toHaveCount(1);
 });
 
-test("(g) terv 8.9: hosszú kérdés két sorra vágva, „Mutasd” → a teljes szöveg szünettel; „Tovább” → a játék megy tovább", async ({ page }) => {
+// SPEC-VÁLTOZÁS 2026-11-16 (kanban #46, J0c-b): a valódi hosszú kérdés már koppintás nélkül olvasható (5 → 7 sor); a
+// „Mutasd” csak végső tartalék, ezért a próbája a mesterségesen túl hosszú (`q=extreme`) tétellel fut — a szigor ugyanaz.
+test("(g) terv 8.9: a sávba sehogy sem férő kérdés végső tartaléka: „Mutasd” → a teljes szöveg szünettel; „Tovább” → a játék megy tovább", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 640 });
-  await openLab(page, "slow=0.5&long=1");
+  await openLab(page, "slow=0.5&q=extreme");
   await openQuestion(page);
   const prompt = page.getByTestId("play-question-prompt");
   const clampedH = await prompt.evaluate((e) => e.clientHeight);
@@ -311,6 +313,64 @@ test("(g) terv 8.9: hosszú kérdés két sorra vágva, „Mutasd” → a telje
   await expect(root(page)).toHaveAttribute("data-expanded", "false");
   expect(await simRate(page, 500)).toBeGreaterThan(0.3);
 });
+
+/**
+ * J0c-b (kanban #46): a kérdés KOPPINTÁS NÉLKÜL végigolvasható, a gombfeliratok legfeljebb 2 sorosak és nem lógnak ki.
+ * A bankok leghosszabb valódi tételeivel (`?q=prompt|cloze|options`, PlayLab `LONGEST`).
+ */
+async function expectFullyReadable(page: Page, where: string, mode: "buttons" | "bar"): Promise<void> {
+  const vp = page.viewportSize()!;
+  const prompt = page.getByTestId("play-question-prompt");
+  const m = await prompt.evaluate((e) => ({ sh: e.scrollHeight, ch: e.clientHeight, sw: e.scrollWidth, cw: e.clientWidth, font: parseFloat(getComputedStyle(e).fontSize) }));
+  expect(m.sh, `${where}: a prompt csonka (scrollHeight ${m.sh} > clientHeight ${m.ch})`).toBeLessThanOrEqual(m.ch + 1);
+  expect(m.sw, `${where}: a prompt vízszintesen kilóg`).toBeLessThanOrEqual(m.cw + 1);
+  expect(m.font, `${where}: betűméret ≥ 15 px`).toBeGreaterThanOrEqual(15);
+  await expect(page.getByTestId("play-question-more"), `${where}: nincs „Mutasd” (nem kell koppintani)`).toHaveCount(0);
+  if (mode === "buttons") {
+    const labels = await root(page).locator(".play-question-option").evaluateAll((els) =>
+      els.map((b) => {
+        const l = b.querySelector<HTMLElement>(".play-question-label")!;
+        const lh = parseFloat(getComputedStyle(l).fontSize) * 1.2;
+        return { lines: Math.round(l.getBoundingClientRect().height / lh), bsh: b.scrollHeight, bch: b.clientHeight, text: l.textContent };
+      }),
+    );
+    for (const l of labels) {
+      expect(l.lines, `${where}: „${l.text}” ${l.lines} soros`).toBeLessThanOrEqual(2);
+      expect(l.bsh, `${where}: „${l.text}” kilóg a gombból`).toBeLessThanOrEqual(l.bch + 1);
+    }
+  }
+  await expectLayoutClean(page, where);
+  // A kártya + a látható gombok együtt legfeljebb a képernyő felét foglalják; álló gombos módban a magasságuk ≤ 55%.
+  const boxes = await page.locator(".play-question-card, .play-question-option").evaluateAll((els) =>
+    els.filter((e) => getComputedStyle(e.closest(".play-question-options") ?? e).opacity !== "0").map((e) => e.getBoundingClientRect().toJSON() as Box),
+  );
+  const area = boxes.reduce((s, b) => s + b.width * b.height, 0);
+  expect(area / (vp.width * vp.height), `${where}: a sáv a képernyő ${Math.round((100 * area) / (vp.width * vp.height))}%-át foglalja`).toBeLessThanOrEqual(0.5);
+  if (mode === "buttons" && vp.height > vp.width) {
+    const top = Math.min(...boxes.map((b) => b.y));
+    const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+    expect((bottom - top) / vp.height, `${where}: a kártya + gombok magassága`).toBeLessThanOrEqual(0.55);
+  }
+}
+
+for (const vp of MOBILE_VIEWPORTS) {
+  test(`J0c-b ${vp.width}×${vp.height}: a leghosszabb kérdés és opció koppintás nélkül olvasható, nem csonka, nem takar`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+    for (const q of ["prompt", "cloze", "options"] as const) {
+      await openLab(page, `slow=0.5&q=${q}`);
+      await openQuestion(page);
+      await expect(root(page).locator(".play-question-option").first()).toBeVisible();
+      await page.waitForTimeout(250);
+      await expectFullyReadable(page, `${vp.width}×${vp.height} ${q}`, "buttons");
+      if (q !== "options") await shot(page, testInfo, `longest-${q}-{vp}`);
+    }
+    await openLab(page, "slow=0.5&q=cloze&mode=bar&skin=space");
+    await openQuestion(page);
+    await page.waitForTimeout(250);
+    await expectFullyReadable(page, `${vp.width}×${vp.height} cloze sáv-mód`, "bar");
+    await shot(page, testInfo, "longest-cloze-bar-{vp}");
+  });
+}
 
 for (const vp of MOBILE_VIEWPORTS) {
   test(`elrendezés és képernyőképek ${vp.width}×${vp.height}: gombok, sáv, hiba, eredmény`, async ({ page }, testInfo) => {

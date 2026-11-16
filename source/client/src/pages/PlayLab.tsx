@@ -28,6 +28,7 @@ import {
   ResultReview,
   bankPlayQuestion,
   createFixedLoop,
+  fitsAllViewports,
   restoreReviewQuestion,
   useGameSpeech,
   usePlayQuestion,
@@ -90,13 +91,62 @@ function memoryStorage(): StorageLike {
   return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) };
 }
 
+/**
+ * J0c-b (kanban #46): a bankok LEGHOSSZABB valódi tételei (évfolyam-bank prompt / opció, szóbank cloze; a mérés:
+ * PR-leírás) — `?q=<kulcs>` ezzel kezd, hogy a DOM-mérés a legrosszabb esetet nézze.
+ */
+const LONGEST: Record<string, { quiz: FourChoiceQuiz }> = {
+  prompt: {
+    quiz: {
+      id: "lab-longest-prompt",
+      prompt: "Egy Aa és egy aa genotípusú szülő utódainak várhatóan hány százaléka mutatja a domináns jelleget teljes dominancia esetén?",
+      options: ["25%", "75%", "50%", "100%"],
+      correctIndex: 2,
+      explanation: "Aa × aa: az utódok fele Aa (domináns jelleg), fele aa.",
+    },
+  },
+  cloze: {
+    quiz: {
+      id: "lab-longest-cloze",
+      prompt: "Melyik illik a mondatba? The phone has a _____ lock that scans your fingerprint. (Magyarul: A telefonnak biometrikus zárja van, amely beolvassa az ujjlenyomatodat.)",
+      options: ["biometric", "mortified", "prompt", "redundant"],
+      correctIndex: 0,
+      explanation: "biometric = biometrikus.",
+    },
+  },
+  // Mesterségesen túl hosszú (≈ 420 kar.) — CSAK a végső tartalék („Mutasd”) próbájához; ilyet a forrás nem ad.
+  extreme: {
+    quiz: {
+      id: "lab-extreme",
+      prompt:
+        "Olvasd el figyelmesen: a tanösvény mentén négy állomás van, az elsőnél a fák korát, a másodiknál a patak vízhozamát, a harmadiknál a madárfajok számát, a negyediknél pedig a talaj nedvességét kell megmérni; a csapat minden állomáson két mérést végez, és az eredményeket egy közös táblázatba írja, amelyet a túra végén a tanár ellenőriz. Hány mérést végez a csapat összesen a túra során?",
+      options: ["8", "4", "6", "16"],
+      correctIndex: 0,
+      explanation: "4 állomás × 2 mérés = 8.",
+    },
+  },
+  // A sávba (≤ 2 soros gombfelirat) még beférő leghosszabb opciók (promptFit: optionsFit); a 88 karakteres opciót a
+  // forrás hátrébb sorolja (DirectorConfig.promptFits), ezért ide nem kerül.
+  options: {
+    quiz: {
+      id: "lab-longest-options",
+      prompt: "Melyik állítás igaz a fotoszintézisre?",
+      options: ["fényenergiát köt meg cukorban", "oxigént fogyaszt a sejtekben", "csak éjszaka zajlik a levélben", "a gyökérben termel keményítőt"],
+      correctIndex: 0,
+      explanation: "A fotoszintézis a fény energiáját szerves anyagban (cukorban) köti meg.",
+    },
+  },
+};
+
 function readParams() {
   const sp = typeof window === "undefined" ? new URLSearchParams() : new URLSearchParams(window.location.search);
   const skin = (INLINE_QUESTION_SKINS as readonly string[]).includes(sp.get("skin") ?? "") ? (sp.get("skin") as InlineQuestionSkin) : "ocean";
   const mode = sp.get("mode") === "bar" ? "bar" : "buttons";
   const slowRaw = Number(sp.get("slow") ?? "0.5");
   const slow = Number.isFinite(slowRaw) ? Math.min(1, Math.max(0.35, slowRaw)) : 0.5;
-  return { skin, mode, slow, long: sp.get("long") === "1", opts: sp.get("opts") === "3" ? 3 : 4, auto: sp.get("auto") === "1" } as const;
+  const q = sp.get("q");
+  const first = q && LONGEST[q] ? LONGEST[q]! : null;
+  return { skin, mode, slow, long: sp.get("long") === "1", opts: sp.get("opts") === "3" ? 3 : 4, auto: sp.get("auto") === "1", first } as const;
 }
 
 const SKIN_BG: Record<InlineQuestionSkin, [string, string, string]> = {
@@ -131,13 +181,20 @@ export default function PlayLab() {
 
   /* ---------------- kérdésforrás: kézi bank, sorban (determinisztikus) ---------------- */
   const cursor = useRef(params.long ? 1 : 0);
+  const firstPending = useRef(true);
   const storage = useMemo(memoryStorage, []);
   const provider = useMemo<QuestionProvider>(
     () => ({
       couponOnly: false,
       material: () => null,
-      fresh: () => {
-        const item = labItem(cursor.current);
+      fresh: (ctx) => {
+        if (firstPending.current && params.first) {
+          firstPending.current = false;
+          return bankPlayQuestion(GAME_ID, params.first.quiz);
+        }
+        // J0c-b: az el nem fogadott (sávba nem férő / el nem olvasható) tételt hátrébb soroljuk, nem jelöljük látottnak.
+        let item = labItem(cursor.current);
+        for (let k = 0; k < 8 && ctx.accept && !ctx.accept(item.quiz); k++) item = labItem(cursor.current + k + 1);
         cursor.current += 1;
         const q: PlayQuestion = bankPlayQuestion(GAME_ID, item.quiz);
         return item.lang ? { ...q, lang: item.lang, speakText: item.speakText } : q;
@@ -151,7 +208,10 @@ export default function PlayLab() {
     [],
   );
   const config = useMemo<DirectorConfig>(
-    () => ({ gameId: GAME_ID, optionCount: params.opts, minGapMs: 1500, maxGapMs: 6000, targetPerMin: 9, baseWindowMs: 4500, slowMo: params.slow, grade: 5, warmupMs: 1500 }),
+    () => ({ gameId: GAME_ID, optionCount: params.opts, minGapMs: 1500, maxGapMs: 6000, targetPerMin: 9, baseWindowMs: 4500, slowMo: params.slow, grade: 5, warmupMs: 1500,
+      // J0c-b: olvasás-tudatos ablak (≤ 9 mp) és a sávba nem férő tétel hátrébb sorolása (a ?q= mérésnél kikapcsolva).
+      readingAware: true,
+      ...(params.first ? {} : { promptFits: (quiz: FourChoiceQuiz) => fitsAllViewports(quiz, { grade: 5, baseWindowMs: 4500 }).ok }) }),
     [params],
   );
 
@@ -207,6 +267,7 @@ export default function PlayLab() {
     if (fromGesture) speech.arm();
     runRef.current += 1;
     cursor.current = params.long ? 1 : 0;
+    firstPending.current = true;
     worldRef.current = { lane: 1, laneX: 1, obstacles: [], spawnIn: 900, score: 0, dodged: 0 };
     worldRng.current = createRng(seedFrom("play-lab", seedBase, "world", runRef.current));
     clockRef.current = 0;
