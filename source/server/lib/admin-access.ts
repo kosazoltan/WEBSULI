@@ -15,13 +15,12 @@
  * Kizárás elleni védelem („fail-open a MEGLÉVŐ adminokra, soha nem új jogra”):
  *  - egyik változó sincs → a meglévő `is_admin` jelző marad érvényben, hangos figyelmeztetéssel;
  *  - a lista egyetlen létező, nem tiltott `is_admin` fiókra sem illik (elírt cím, rossz változó) → a lista nem zár ki
- *    mindenkit: a meglévő jelző marad érvényben, induláskor hangos, maszkolt hibanapló. Új admin-jog (Google-os első belépés,
+ *    mindenkit: a meglévő jelző marad érvényben, induláskor hangos, cím nélküli hibanapló. Új admin-jog (Google-os első belépés,
  *    Felhasználók fül) ilyenkor sem adható listán kívüli címnek.
  * Indok: a lista hibája nem zárhatja ki a tulajdonost a saját felületéről; a jelzőt pedig csak listán lévő cím kaphatja meg,
  * tehát az őr senkinek nem ad olyan jogot, amely a telepítés előtt ne lett volna meg.
  */
 import { logger } from "./logger";
-import { maskEmail } from "./mask-email";
 
 export type AdminPolicySource = "ADMIN_ALLOWLIST" | "ADMIN_EMAIL" | "none";
 
@@ -44,7 +43,8 @@ export type AdminCandidate = { email?: string | null; isAdmin?: boolean | null; 
 /** A kizárás elleni őr adatforrása (élesben a pg-pool): a nem tiltott, `is_admin` jelzős fiókok címei. */
 export type AdminAccessDb = { query: (sql: string) => Promise<{ rows: { email: string | null }[] }> };
 
-const EMAIL_RE = /^[^\s@,;"'`<>]+@[^\s@,;"'`<>]+\.[^\s@,;"'`<>]+$/;
+/** Review #462 N3: a `:` is kizárt — a `mailto:cím` alakú lista-elem érvénytelen (számolva, hangosan jelezve), nem „néma” cím. */
+const EMAIL_RE = /^[^\s@,;:"'`<>]+@[^\s@,;:"'`<>]+\.[^\s@,;:"'`<>]+$/;
 /** Review #462 A1: csak nyomtatható ASCII — a `toLowerCase()` Unicode-hasonmást (pl. Kelvin-jel → k) ASCII-ra hajtana. */
 const ASCII_ONLY_RE = /^[\x21-\x7e]+$/;
 const POSITIVE_TTL_MS = 60_000;
@@ -196,13 +196,13 @@ export function adminInactiveReason(user: AdminCandidate | null | undefined): Ad
   return user?.isBanned === true ? "tiltott" : "nincs-a-listan";
 }
 
-/** Induláskori, maszkolt állapotjelentés a naplóba (cím soha nem kerül ki teljes alakban). */
+/** Induláskori állapotjelentés a naplóba — csak forrás és darabszám, cím (maszkolva sem) nem kerül ki (review #462 N4). */
 export async function reportAdminAccessStatus(): Promise<void> {
   const policy = adminPolicy();
   if (policy.allowlistInvalid) {
     logger.error("[ADMIN-ACCESS] HIBA: az ADMIN_ALLOWLIST be van állítva, de egyetlen érvényes e-mail-címet sem tartalmaz — helyette az ADMIN_EMAIL érvényes.");
   } else if (policy.invalidEntries > 0) {
-    logger.warn(`[ADMIN-ACCESS] az ADMIN_ALLOWLIST ${policy.invalidEntries} hibás elemét figyelmen kívül hagytuk.`);
+    logger.warn(`[ADMIN-ACCESS] az ADMIN_ALLOWLIST ${policy.invalidEntries} hibás elemét (pl. „mailto:” előtag, kettőspont, idézőjel vagy hibás alak) figyelmen kívül hagytuk.`);
   }
   if (policy.adminEmailInvalid && policy.source !== "ADMIN_ALLOWLIST") {
     logger.error("[ADMIN-ACCESS] HIBA: az ADMIN_EMAIL nem pontosan egy érvényes e-mail-cím (több cím, idézőjel vagy hibás alak) — admin-listaként NEM használjuk. Állítsd be az ADMIN_ALLOWLIST-et, vagy az ADMIN_EMAIL-be egyetlen címet írj.");
@@ -211,7 +211,8 @@ export async function reportAdminAccessStatus(): Promise<void> {
     logger.error("[ADMIN-ACCESS] FIGYELEM: sem ADMIN_ALLOWLIST, sem ADMIN_EMAIL nincs beállítva — a meglévő is_admin jelző marad érvényben (fail-open a meglévő adminokra), új admin-jog nem adható. Állítsd be az ADMIN_ALLOWLIST-et.");
     return;
   }
-  logger.info(`[ADMIN-ACCESS] admin-engedélylista forrása: ${policy.source}, ${policy.emails.size} cím: ${[...policy.emails].map(maskEmail).join(", ")}`);
+  // Review #462 N4: csak forrás és darabszám — cím (maszkolva sem) nem kerül a naplóba.
+  logger.info(`[ADMIN-ACCESS] admin-engedélylista forrása: ${policy.source}, ${policy.emails.size} cím.`);
   if (!guardDb) return;
   try {
     const active = await activeAdminEmails();

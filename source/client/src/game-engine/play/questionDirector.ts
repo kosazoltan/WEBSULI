@@ -362,7 +362,7 @@ export function createQuestionDirector(opts: {
     // Review #451: a tétel évfolyama a menet évfolyama, ha a forrás nem adott sajátot (a közös sor csak azonos
     // évfolyamon hozza vissza — `reviewFitsGrade`).
     const recorded = config.grade !== null && p.question.grade === undefined ? { ...p.question, grade: config.grade } : p.question;
-    review.record(recorded, result, pos);
+    if (!p.question.noReview) review.record(recorded, result, pos);
     if (result !== "aborted") {
       flow.push({ kind: "answer", correct: result === "correct", responseMs: result === "timeout" ? p.windowMs : outcome.responseMs, windowMs: p.windowMs });
     }

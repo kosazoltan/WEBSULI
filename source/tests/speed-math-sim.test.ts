@@ -42,7 +42,9 @@ test("J2 / J3 / J4 / J6 — SIM_AVERAGE, 7. évfolyam, 180 mp × 20 seed", () =>
   assert.ok(medianOf(s.map((x) => x.reviewReturnWithin6)) >= 0.95, `3.–6.: ${medianOf(s.map((x) => x.reviewReturnWithin6))}`);
   for (const x of s) assert.ok(x.reviewShare <= 0.3 + 1e-9, `ismétlési arány ${x.reviewShare}`);
   // J6: az új (nem ismétlés) kérdések bármely 40-es ablakában nincs duplikátum (a sim-bank ≥ 300 tétel)
-  for (const x of s) assert.ok(x.freshWindow40Distinct >= Math.min(40, x.asked - x.reviewsAsked), `40-es ablak ${x.freshWindow40Distinct}`);
+  // J4b: a Becslő-bomba (`noReview`) nem számít a változatossági ablakba, ezért a régi „ablak ≥ min(40, új kérdések)”
+  // összevetés helyett a szigorúbb feltétel: az ismétlésnek nem minősülő kérdések MIND különböző tételek (a menet egészén).
+  for (const x of s) assert.equal(x.distinctKeys, x.asked - x.reviewsAsked, `ismétlődő új tétel: ${x.distinctKeys} / ${x.asked - x.reviewsAsked}`);
   // A tanulás tényleg megtörténik: minden menetben van kérdés és válasz.
   for (const x of s) assert.ok(x.answered >= 20, `válaszok ${x.answered}`);
 });
@@ -107,4 +109,47 @@ test("arany visszajátszás (J19): azonos seed → azonos végállapot és stati
   assert.deepEqual(a, b);
   const c = runSim(factory, SIM_AVERAGE, { seed: seed + 1, seconds: 120, grade: 5 });
   assert.notDeepEqual(a.stats, c.stats);
+});
+
+test("J4b — a kérdés egyik játékosmodellnél sem büntet: kérdéssel ≤ annyi vereség, mint nélküle (a lassú, de pontos számolónál is)", () => {
+  const SIM_SLOW_ACCURATE = { accuracy: 0.85, reactionMedianMs: 4000, skill: 0.8 };
+  const models = [
+    ["SIM_AVERAGE", SIM_AVERAGE, 7],
+    ["SIM_YOUNG", SIM_YOUNG, 3],
+    ["SIM_STRONG", SIM_STRONG, 7],
+    ["SIM_WEAK", SIM_WEAK, 7],
+    ["lassú, pontos (85%, 4 s)", SIM_SLOW_ACCURATE, 7],
+  ] as const;
+  for (const [name, player, grade] of models) {
+    const withQ = runSimSeeds(factory, player, { gameId: GAME, seconds: 900, grade });
+    const noQ = runSimSeeds(factory, player, { gameId: GAME, seconds: 900, grade, questions: false });
+    const lostQ = withQ.filter((r) => !r.won).length;
+    const lostNoQ = noQ.filter((r) => !r.won).length;
+    console.log(`[speed-math-sim] ${name}: győzelem kérdéssel ${20 - lostQ}/20, kérdés nélkül ${20 - lostNoQ}/20; menethossz medián ${(medianOf(withQ.map((r) => r.durationSec)) / 60).toFixed(2)} perc`);
+    assert.ok(lostQ <= lostNoQ, `${name}: kérdéssel ${lostQ}, nélküle ${lostNoQ} vereség`);
+  }
+});
+
+test("J4b — a Zéró-robot harca a menet csúcspontja: SIM_AVERAGE-nél elér hozzá, és a harc 30–150 mp", () => {
+  const seeds = simSeeds(GAME, 20);
+  const fights: number[] = [];
+  for (const seed of seeds) {
+    const g = createSimGame({ seed, grade: 7, questions: true });
+    runSim(() => g as never, SIM_AVERAGE, { seed, seconds: 900, grade: 7 });
+    const f = g.bossFight();
+    assert.ok(f.startMs !== null, `${seed}: a menet eljut a főellenfélig`);
+    if (f.endMs !== null) fights.push((f.endMs - f.startMs!) / 1000);
+  }
+  const med = medianOf(fights);
+  console.log(`[speed-math-sim] Zéró-robot harca (SIM_AVERAGE): medián ${med.toFixed(1)} s, ${fights.length}/20 lezárult`);
+  assert.ok(med >= 30 && med <= 150, `harc medián ${med}`);
+});
+
+test("J4b — győzelmi arány évfolyam-sávonként (SIM_AVERAGE; 3–4. évf. SIM_YOUNG): mérés a jelentéshez", () => {
+  for (const [label, player, grade] of [["3. évf. (YOUNG)", SIM_YOUNG, 3], ["4. évf. (YOUNG)", SIM_YOUNG, 4], ["7. évf.", SIM_AVERAGE, 7], ["11. évf.", SIM_AVERAGE, 11]] as const) {
+    const runs = runSimSeeds(factory, player, { gameId: GAME, seconds: 900, grade });
+    const won = runs.filter((r) => r.won).length;
+    console.log(`[speed-math-sim] ${label}: győzelem ${won}/20, kérdés/perc medián ${medianOf(runs.map((r) => r.stats.perMinute)).toFixed(2)}`);
+    assert.ok(won >= 12, `${label}: ${won}/20`);
+  }
 });

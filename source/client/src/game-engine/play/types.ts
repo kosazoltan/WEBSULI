@@ -34,6 +34,11 @@ export type PlayQuestion = {
   speakText?: string;
   /** A KIMENETEL UTÁN felolvasható helyes célnyelvi szó (megerősítés jó válasznál, a megoldás hibánál). */
   speakAfter?: string;
+  /**
+   * J4b (additív): a tétel NEM kerül az ismétlési sorba (pl. a Matek „Becslő-bomba” gyors, kétválaszos becslése — játékbeli
+   * bónusz, nem tananyag-tétel). A menet-statisztikában és a „Gyakorold még” listában szerepel.
+   */
+  noReview?: boolean;
   /** Kupon-bónuszhoz: a szerver által kiadott tétel azonosítója (`GE/claimCouponBonus.ts`). */
   couponItemId?: string;
   /**
