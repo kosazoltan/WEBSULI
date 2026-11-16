@@ -35,7 +35,8 @@ if [ -z "$URL" ]; then
   fi
   [ -f "$ENV_FILE" ] || fail "nincs DATABASE_URL és nincs .env fájl (GUARD_ENV_FILE)"
   CR=$(printf '\015')
-  URL=$(grep -E '^DATABASE_URL=' "$ENV_FILE" | tail -1 | sed -E 's/^DATABASE_URL=//; s/^"//; s/"$//' | tr -d "$CR")
+  # dotenv-szerű érték: opcionális `export `, egyszeres vagy kétszeres idézőjel mindkét végén.
+  URL=$(grep -E '^(export[[:space:]]+)?DATABASE_URL=' "$ENV_FILE" | tail -1 | tr -d "$CR" | sed -E "s/^(export[[:space:]]+)?DATABASE_URL=//; s/^[\"']//; s/[\"']\$//")
 fi
 [ -n "$URL" ] || fail "nincs DATABASE_URL"
 
