@@ -62,8 +62,9 @@ import AchievementToast from "@/components/AchievementToast";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { motionScale, useReducedMotion } from "@/game-engine/useReducedMotion";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import HoldButton from "@/game-engine/HoldButton";
-import { joystickToDirections } from "@/game-engine/joystick";
+import { shapeJoystick } from "@/game-engine/joystick";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
@@ -898,6 +899,18 @@ export default function SpaceAsteroidQuiz() {
 
   const keysRef = useRef({ left: false, right: false, up: false, down: false, fire: false });
   const touchRef = useRef({ left: false, right: false, up: false, down: false, fire: false });
+  /** Joystick-reakció (#49): az analóg tárcsa-érték (−1…1, a görbével), a hurok képkockánként olvassa. */
+  const stickRef = useRef({ x: 0, y: 0 });
+  // Joystick-reakció (#49): a bemenet → válasz mérő kampója (csak teszt-kampós buildben él).
+  countRender("space-page");
+  useEffect(
+    () =>
+      registerInputProbe("space", () => {
+        const p = playerRef.current;
+        return { x: p.x, y: p.y, vx: p.vx, vy: p.vy, inX: stickRef.current.x, inY: stickRef.current.y };
+      }),
+    [],
+  );
   const timeoutsRef = useRef<number[]>([]);
   const pushTimeout = useCallback((cb: () => void, ms: number): number => {
     const id = window.setTimeout(() => {
@@ -1097,6 +1110,8 @@ export default function SpaceAsteroidQuiz() {
       keysRef.current[k] = false;
       touchRef.current[k] = false;
     }
+    stickRef.current.x = 0;
+    stickRef.current.y = 0;
     setJoyReset((n) => n + 1);
   }, []);
 
@@ -1551,7 +1566,8 @@ export default function SpaceAsteroidQuiz() {
     if (!p.alive) return;
 
     // Játékos mozgás — tehetetlenség + átló-normalizálás (physics.ts)
-    let mx = 0, my = 0;
+    // Joystick-reakció (#49): a tárcsa analóg (kis kitérés = lassú, finom mozgás); a billentyű digitális.
+    let mx = stickRef.current.x, my = stickRef.current.y;
     if (keysRef.current.left || touchRef.current.left) mx -= 1;
     if (keysRef.current.right || touchRef.current.right) mx += 1;
     if (keysRef.current.up || touchRef.current.up) my += 1;
@@ -2944,13 +2960,11 @@ export default function SpaceAsteroidQuiz() {
                     radius="auto"
                     resetSignal={joyReset}
                     onChange={(v) => {
-                      const dirs = joystickToDirections(v);
-                      touchRef.current.left = dirs.left;
-                      touchRef.current.right = dirs.right;
-                      // A joystick „előre" iránya fölfelé mutat; a hajó `up`
-                      // vezérlője ugyanezt jelenti.
-                      touchRef.current.up = dirs.fwd;
-                      touchRef.current.down = dirs.back;
+                      // Joystick-reakció (#49): analóg, folytonos görbe — nem négy logikai gomb 0,35-ös küszöbbel.
+                      // A joystick „előre" iránya fölfelé mutat; a hajó `my` vezérlője ugyanezt jelenti.
+                      const s = shapeJoystick(v);
+                      stickRef.current.x = s.x;
+                      stickRef.current.y = s.y;
                     }}
                   />
                   {/* A jobb hüvelykujj klasztere: bomba + tűz (álló és fekvő nézetben is a jobb szélen). */}

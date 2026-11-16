@@ -95,6 +95,18 @@ export const ENGINE_BRAKE_PER_S = 1.2;
 /** Review #146: e gázérték fölött nincs motorfék; alatta lineárisan erősödik (folytonos az analóg tárcsával). */
 export const ENGINE_BRAKE_FADE_THROTTLE = 0.25;
 
+/**
+ * Joystick-reakció (kanban #49): sebességfüggő kormányzás. Lassan (manőverezés a házak, fák között) a kanyar
+ * határozottabb — álló helyzet közelében a végsebességes fordulási szögsebesség 1,35-szöröse —, végsebességen
+ * változatlan, így az egyenes-tartás (`tornado-touch-drive` zárt hurkú mérés) nem romlik.
+ */
+export const LOW_SPEED_TURN_BOOST = 0.35;
+
+export function lowSpeedTurnBoost(speed: number, max: number): number {
+  if (!(max > 0)) return 1;
+  return 1 + LOW_SPEED_TURN_BOOST * (1 - Math.min(1, Math.abs(speed) / max));
+}
+
 export function stepVehicle(
   p: VehicleBody,
   input: DriveInput,
@@ -121,7 +133,7 @@ export function stepVehicle(
 
   let heading = p.heading;
   if (Math.abs(speed) > STEER_MIN_SPEED) {
-    heading += steer * turn * dt * Math.sign(speed) * grip;
+    heading += steer * turn * lowSpeedTurnBoost(speed, max) * dt * Math.sign(speed) * grip;
   }
 
   const nx = clampToWorld(p.x + Math.sin(heading) * speed * dt);

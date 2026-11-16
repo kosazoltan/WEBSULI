@@ -32,8 +32,9 @@ import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import { ArrowLeft, Check, Flame, Pause, Shield, Timer, Waves, Wind, X } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import HoldButton from "@/game-engine/HoldButton";
-import { joystickToDirections } from "@/game-engine/joystick";
+import { shapeJoystick, type JoystickVector } from "@/game-engine/joystick";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { detectLookTier } from "@/game-engine/three-look";
 import { pickUnseen, type SeenItem } from "@/game-engine/no-repeat";
@@ -687,12 +688,27 @@ export default function TsunamiEscapeEnglish() {
   const [explainCard, setExplainCard] = useState<FeedbackCard | null>(null);
 
   const keysRef = useRef({ left: false, right: false, sprint: false });
+  /** Joystick-reakció (#49): az analóg tárcsa vízszintes értéke (−1…1, a görbével). */
+  const stickXRef = useRef(0);
+  /** A futó figura: a hurok képkockánként a DOM-on át mozgatja (nem a 24 Hz-es React-állapottal). */
+  const playerElRef = useRef<HTMLDivElement>(null);
   const playerXRef = useRef(playerX);
   const safeZoneXRef = useRef(safeZoneX);
   const waterRef = useRef(water);
   const lastVisualFrameRef = useRef(0);
-  playerXRef.current = playerX;
+  // Joystick-reakció (#49): a `playerXRef` a hurok saját pozíciója — a render nem írja vissza a 24 Hz-es
+  // állapot-pillanatképpel (az eddig minden köztes rendernél ≤ 42 ms-nyi mozgást visszavont).
   safeZoneXRef.current = safeZoneX;
+  // Joystick-reakció (#49): a bemenet → válasz mérő kampója (csak teszt-kampós buildben él).
+  countRender("tsunami-page");
+  useEffect(
+    () =>
+      registerInputProbe("tsunami", () => ({
+        x: playerXRef.current,
+        inX: (keysRef.current.right ? 1 : 0) - (keysRef.current.left ? 1 : 0) + stickXRef.current,
+      })),
+    [],
+  );
   const lastRef = useRef<number | null>(null);
   const quizTimerRef = useRef(0);
   const runTimerRef = useRef(0);
@@ -963,6 +979,7 @@ export default function TsunamiEscapeEnglish() {
     if (phase !== "play" && phase !== "quiz") return;
     keysRef.current.left = false;
     keysRef.current.right = false;
+    stickXRef.current = 0;
     keysRef.current.sprint = false;
     setJoyReset((n) => n + 1);
     goPaused(true);
@@ -1076,6 +1093,7 @@ export default function TsunamiEscapeEnglish() {
     const reset = () => {
       keysRef.current.left = false;
       keysRef.current.right = false;
+      stickXRef.current = 0;
       keysRef.current.sprint = false;
     };
     window.addEventListener("keydown", down);
@@ -1092,6 +1110,7 @@ export default function TsunamiEscapeEnglish() {
     if (phase === "play") return;
     keysRef.current.left = false;
     keysRef.current.right = false;
+    stickXRef.current = 0;
     keysRef.current.sprint = false;
   }, [phase]);
 
@@ -1101,10 +1120,9 @@ export default function TsunamiEscapeEnglish() {
   const sprintEnd = useCallback(() => {
     keysRef.current.sprint = false;
   }, []);
-  const onJoystick = useCallback((v: Parameters<typeof joystickToDirections>[0]) => {
-    const dirs = joystickToDirections(v);
-    keysRef.current.left = dirs.left;
-    keysRef.current.right = dirs.right;
+  // Joystick-reakció (#49): analóg, folytonos görbe — nem két logikai gomb 0,35-ös küszöbbel.
+  const onJoystick = useCallback((v: JoystickVector) => {
+    stickXRef.current = shapeJoystick(v).x;
   }, []);
 
   const gameLoop = useCallback(
@@ -1149,10 +1167,13 @@ export default function TsunamiEscapeEnglish() {
 
       let nx = playerXRef.current;
       const sprintMult = keysRef.current.sprint ? 1.5 : 1;
-      if (keysRef.current.left) nx -= 38 * sprintMult * dt;
-      if (keysRef.current.right) nx += 38 * sprintMult * dt;
+      const run = Math.max(-1, Math.min(1, (keysRef.current.right ? 1 : 0) - (keysRef.current.left ? 1 : 0) + stickXRef.current));
+      nx += 38 * sprintMult * run * dt;
       nx += currentPush * dt;
       playerXRef.current = Math.max(8, Math.min(92, nx));
+      // Joystick-reakció (#49): a figura minden képkockában ott van, ahol a játék tartja (a 24 Hz-es állapot
+      // csak a HUD-nak és a jelenetnek szól).
+      if (playerElRef.current) playerElRef.current.style.left = `${playerXRef.current}%`;
 
       safeZoneTimerRef.current += dt;
       const safeZoneEvery = runDifficultyRef.current === "hard" ? 5.2 : runDifficultyRef.current === "normal" ? 6.3 : 7.6;
@@ -1660,6 +1681,8 @@ export default function TsunamiEscapeEnglish() {
                   style={{ left: `${Math.max(8, safeZoneX - 8)}%`, width: "16%", boxShadow: "0 0 20px rgba(16,185,129,0.55)" }}
                 />
                 <motion.div
+                  ref={playerElRef}
+                  data-testid="tsunami-player"
                   className="absolute z-20 flex flex-col items-center select-none"
                   style={{ left: `${playerX}%`, bottom: `calc(${surfacePct}% + 14px)`, translateX: "-50%" }}
                   animate={phase === "play" && !paused && !reducedMotion ? { y: [0, -5, 0] } : {}}
