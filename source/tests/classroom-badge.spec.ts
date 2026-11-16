@@ -151,3 +151,33 @@ test("admin szerkesztő → a lecke oldala az új évfolyamot mutatja", async ({
   await expect(page.locator(".ws-grade")).toHaveText("3. osztály");
   await page.screenshot({ path: `${SHOTS}/lecke-oldal-atallitas-utan.png` });
 });
+
+// docs/specs/2026-11-16-tananyag-programozas-felirat.md (P1, P2): a programozási kategóriájú lecke oldala „Programozás”, a rendes
+// lecke felirata változatlan. A lecke adata (tartalmi évfolyam) mindkét esetben más-más, a felirat a kategóriát követi.
+for (const vp of [{ name: "asztali", width: 1280, height: 800 }, { name: "mobil", width: 360, height: 640 }]) {
+  test(`lecke oldala ${vp.name}: programozási kategória → „Programozás”, rendes lecke → változatlan`, async ({ page }) => {
+    const { fusionFixture } = await import("../shared/fixtures/lesson-fusion");
+    const mats: Record<string, { category: number; lesson: number }> = { prog: { category: 0, lesson: 8 }, rendes: { category: 4, lesson: 4 } };
+    await page.setViewportSize(vp);
+    await page.route("**/api/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/api/auth/user") return route.fulfill({ json: null });
+      if (path === "/api/config") return route.fulfill({ json: { baseUrl: "http://localhost", materialOrigin: "" } });
+      if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "probe" } });
+      const list = Object.entries(mats).map(([id, m]) => ({ ...base, id, title: `Lecke ${id}`, classroom: m.category, contentType: "lesson" }));
+      if (path === "/api/html-files") return route.fulfill({ json: list });
+      const file = /^\/api\/html-files\/(\w+)$/.exec(path);
+      if (file) return route.fulfill({ json: list.find((f) => f.id === file[1]) });
+      const lesson = /^\/api\/lessons\/by-file\/(\w+)$/.exec(path);
+      if (lesson) return route.fulfill({ json: { lesson: { ...fusionFixture(), classroom: mats[lesson[1]]!.lesson }, lessonId: `l-${lesson[1]}` } });
+      return route.fulfill({ json: path.includes("likes") ? {} : [] });
+    });
+    for (const [id, label] of [["prog", "Programozás"], ["rendes", "4. osztály"]] as const) {
+      await page.goto(`/preview/${id}`);
+      await expect(page.locator(".ws-grade"), id).toHaveText(label);
+      await expect(page.locator(".lesson-chip").nth(1), id).toHaveText(label); // az első csip a tantárgy
+      expect(await overflowX(page), `${id}: vízszintes kilógás`).toBeLessThanOrEqual(1);
+      await page.screenshot({ path: `${SHOTS}/lecke-${id}-${vp.name}.png` });
+    }
+  });
+}

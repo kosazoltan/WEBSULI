@@ -1,5 +1,5 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { getClassroomLabel } from "@shared/classrooms";
+import { lessonHeaderGradeLabel } from "@shared/classrooms";
 import { BookOpen, CheckCircle2, ChevronRight, HelpCircle, Leaf, Lightbulb, ListChecks, Sparkles, Target, Volume2, XCircle, PlayCircle, Hand } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -480,9 +480,12 @@ export function LessonRuntime({
   persistId,
   arbiterSource,
   clipsPreset,
+  categoryClassroom,
 }: {
   lesson: Lesson;
   lessonId?: string;
+  /** A tananyag kategóriája (`html_files.classroom`): 0-nál a fejléc „Programozás” (docs/specs/2026-11-16-tananyag-programozas-felirat.md). */
+  categoryClassroom?: number | null;
   /** Spec 2026-11-10-fejezet-kisfilmek: a próbaoldal beépített kisfilmjei (a valódi lejátszó a szervertől kéri). */
   clipsPreset?: LessonClipsResponse;
   /** Tételgyár T7.2: a publikált lecke döntőbírójának forrása (csak a valódi lejátszóban; előnézetben nincs). */
@@ -560,7 +563,7 @@ export function LessonRuntime({
           <span className="ws-badge" aria-hidden>{(() => { const Icon = BAND_ICON[designTheme]; return <Icon className="w-7 h-7" />; })()}</span>
           <div className="min-w-0">
             {/* Tulajdonosi kérés 2026-10-18 (docs/specs/2026-10-18-pontos-evfolyam.md): a pontos évfolyam, nem a sáv tartománya. */}
-            <p className="ws-grade">{getClassroomLabel(lesson.classroom)}</p>
+            <p className="ws-grade">{lessonHeaderGradeLabel(lesson.classroom, categoryClassroom)}</p>
             <p className="ws-band-name">{DESIGN_THEMES[designTheme].name}</p>
             <p className="ws-motto">{DESIGN_THEMES[designTheme].motto}</p>
           </div>
@@ -575,7 +578,7 @@ export function LessonRuntime({
             <h1 className={cn("lesson-heading leading-tight break-words", theme.heading)}>{lesson.title}</h1>
             <div className="flex flex-wrap gap-2 mt-1.5">
               <span className="lesson-chip">{subjectIconSrc && <img className="ws-subject-ico" src={subjectIconSrc} alt="" aria-hidden="true" decoding="async" onError={() => { if (dbIcon) setFailedDbIcon(dbIcon); }} />}{lesson.subject}</span>
-              <span className="lesson-chip">{lesson.classroom}. osztály</span>
+              <span className="lesson-chip">{lessonHeaderGradeLabel(lesson.classroom, categoryClassroom)}</span>
             </div>
           </div>
           {/* Review #273: mindig renderel — kép híján a LessonArt a rajzos tartalékot (LessonCoverArt) adja. */}
