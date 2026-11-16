@@ -59,6 +59,7 @@ import {
   StartScreen,
   useBestScore,
   useHaptics,
+  useOrientation,
   useTouchCapable,
   type GameScreenState,
 } from "@/game-engine/mobile";
@@ -113,7 +114,9 @@ import {
   type WindState,
 } from "@/lib/tornado/wind";
 import { anchorOutcome, interceptReward, freeRoamAnswerScore } from "@/lib/tornado/scoring";
-import { UPGRADE_TRACKS, statMultiplier } from "@/lib/tornado/upgrades";
+import { MAX_UPGRADE_LEVEL, UPGRADE_TRACKS, statMultiplier, upgradeCost } from "@/lib/tornado/upgrades";
+import ScrollPane from "@/tornado/ScrollPane";
+import VehicleArt from "@/tornado/VehicleArt";
 import {
   stepVehicle,
   STOPPED_SPEED,
@@ -332,6 +335,16 @@ export default function TornadoHunter200() {
       : `Folytatás · ${progress.highestLevelUnlocked}. szint`;
 
   const shellState: GameScreenState = screen === "play" ? playState : "start";
+  /**
+   * Spec 2026-11-16-jatek-telefonos-reszponzivitas (gyökérok): a rögzített, görgetés nélküli keret (index.css
+   * `[data-fixed-screen="true"]`: 100dvh + overflow: hidden, a `[data-game-card-content]` is overflow: hidden) a 3D
+   * játéktérnek való; a tartalom-képernyőkön levágott (álló garázs: a lista 0 px; Beállítás / Rekordok / Statisztika: a
+   * kártya `overflow-y-auto`-ját a keret `overflow: hidden`-je felülírta, az alja elérhetetlen volt). Rögzített keret
+   * csak a játékban, a Szintek listán (C1 e2e: ott a lap nem görög; a lista saját, jelzett görgetésű ScrollPane) és a
+   * fekvő garázs két ScrollPane-hasábjánál marad; minden más meta-képernyő természetes lapgörgetést kap.
+   */
+  const orientation = useOrientation();
+  const garageLandscape = screen === "garage" && orientation === "landscape";
 
   /** Győzelem utáni „Tovább”: évfolyampályán a következő pálya (a győzelem feloldja), különben a következő szint. */
   const runLevel = getSelectedLevelRef();
@@ -356,7 +369,7 @@ export default function TornadoHunter200() {
     <GameShell
       gameId="TornadoHunter200"
       state={shellState}
-      fixedScreen={screen !== "menu"}
+      fixedScreen={screen === "play" || screen === "levels" || garageLandscape}
       orientation="landscape"
       onAutoPause={() => autoPauseRef.current()}
       style={{
@@ -440,7 +453,7 @@ export default function TornadoHunter200() {
         )}
 
         {screen === "garage" && (
-          <GarageScreen progress={progress} commit={commit} onBack={() => setScreen("menu")} />
+          <GarageScreen progress={progress} commit={commit} onBack={() => setScreen("menu")} landscape={garageLandscape} />
         )}
 
         {screen === "levels" && (
@@ -538,10 +551,7 @@ function MenuExtras(props: {
       ) : null}
 
       <div className="rounded-xl border border-white/10 bg-slate-900/60 p-3 flex items-center gap-3">
-        <div
-          className="w-12 h-12 rounded-lg shrink-0"
-          style={{ background: `linear-gradient(135deg, ${selectedVehicle.colors.body}, ${selectedVehicle.colors.accent})` }}
-        />
+        <VehicleArt vehicle={selectedVehicle} className="w-20 shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="text-xs text-white/60 uppercase tracking-wide">Aktuális jármű</p>
           <p className="font-bold truncate text-white">{selectedVehicle.name}</p>
@@ -598,11 +608,23 @@ function MenuButton(props: { icon: React.ReactNode; label: string; onClick: () =
 
 /* ============================ Garage ============================ */
 
-function GarageScreen(props: { progress: TornadoProgress; commit: (p: TornadoProgress) => void; onBack: () => void }) {
-  const { progress, commit } = props;
+/**
+ * Vihargarázs (docs/specs/2026-11-16-jatek-telefonos-reszponzivitas.md). Álló nézet: EGY természetes lapgörgetés —
+ * fejléc → vízszintes szűrősor → vízszintesen lapozható járműsor → a kiválasztott jármű → fejlesztések. Fekvő nézet:
+ * két hasáb (bal: szűrő + járműrács, jobb: részletek + fejlesztések), mindkettő saját görgetéssel, a lap nem görög
+ * (a keret ilyenkor rögzített, `fixedScreen`). A játéklogika (`buyVehicle` / `selectVehicle` / `buyUpgrade`) változatlan.
+ */
+function GarageScreen(props: {
+  progress: TornadoProgress;
+  commit: (p: TornadoProgress) => void;
+  onBack: () => void;
+  landscape: boolean;
+}) {
+  const { progress, commit, landscape } = props;
   const [category, setCategory] = useState<Vehicle["category"] | "all">("all");
   const [detailId, setDetailId] = useState<string>(progress.selectedVehicleId);
   const [flash, setFlash] = useState<string | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   const detail = vehicleById(detailId) ?? VEHICLES[0]!;
   const owned = new Set(progress.ownedVehicleIds);
@@ -611,6 +633,15 @@ function GarageScreen(props: { progress: TornadoProgress; commit: (p: TornadoPro
     const base = category === "all" ? [...VEHICLES] : VEHICLES.filter((v) => v.category === category);
     return base.sort((a, b) => a.price - b.price);
   }, [category]);
+
+  // A kiválasztott jármű a vízszintes sorban középre kerül — csak vízszintesen (`scrollLeft`), a lap nem ugrik.
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    const tile = row.querySelector<HTMLElement>(`[data-vehicle-id="${detailId}"]`);
+    if (!tile) return;
+    row.scrollLeft = Math.max(0, tile.offsetLeft - (row.clientWidth - tile.offsetWidth) / 2);
+  }, [detailId, category, landscape]);
 
   const notify = (msg: string) => {
     setFlash(msg);
@@ -651,147 +682,258 @@ function GarageScreen(props: { progress: TornadoProgress; commit: (p: TornadoPro
       commit(res.progress);
     } else {
       sfxError();
-      notify(res.reason === "insufficient_funds" ? "Nincs elég SC a fejlesztéshez." : "Maximum szint.");
+      if (res.reason === "insufficient_funds") {
+        // Csak a visszajelzés szövege: az ár ugyanaz, amit a `buyUpgrade` is számol (következő szint).
+        const t = UPGRADE_TRACKS.find((x) => x.id === track)!;
+        const next = (upgradesFor(progress, detail.id)[track] ?? 0) + 1;
+        const missing = upgradeCost(track, next) - progress.coins;
+        notify(`Még ${fmt(missing)} SC hiányzik: ${t.label} ${next}. szint (${fmt(upgradeCost(track, next))} SC).`);
+      } else {
+        notify("Ez már a maximum szint.");
+      }
     }
+  };
+
+  const pick = (id: string) => {
+    sfxClick();
+    setDetailId(id);
   };
 
   const detailUpgrades = upgradesFor(progress, detail.id);
   const isOwned = owned.has(detail.id);
   const isLocked = detail.unlockLevel > progress.highestLevelUnlocked;
 
+  const filters = (
+    <div
+      className="flex gap-2 flex-nowrap overflow-x-auto overflow-y-hidden pb-1 shrink-0"
+      role="group"
+      aria-label="Járműkategória"
+    >
+      <FilterChip testId="tornado-garage-filter-all" active={category === "all"} onClick={() => setCategory("all")}>
+        Mind ({VEHICLES.length})
+      </FilterChip>
+      {VEHICLE_CATEGORIES.map((c) => (
+        <FilterChip key={c.id} testId={`tornado-garage-filter-${c.id}`} active={category === c.id} onClick={() => setCategory(c.id)}>
+          {c.label}
+        </FilterChip>
+      ))}
+    </div>
+  );
+
+  const tiles = list.map((v) => (
+    <VehicleTile
+      key={v.id}
+      vehicle={v}
+      owned={owned.has(v.id)}
+      locked={v.unlockLevel > progress.highestLevelUnlocked}
+      active={detailId === v.id}
+      inRow={!landscape}
+      onPick={() => pick(v.id)}
+    />
+  ));
+
+  const details = (
+    <div className="flex flex-col gap-3" data-testid="tornado-garage-detail">
+      <div className="flex items-center gap-3">
+        <VehicleArt vehicle={detail} className={`${landscape ? "w-28" : "w-32 sm:w-40"} shrink-0`} />
+        <div className="min-w-0 flex-1">
+          <h3 className="font-extrabold text-white text-base leading-tight">{detail.name}</h3>
+          <p className="text-xs mt-1">
+            <span className="font-bold" style={{ color: RARITY_COLOR[detail.rarity] }}>
+              {RARITY_LABEL[detail.rarity]}
+            </span>
+            <span className="text-white/70"> · {categoryLabel(detail.category)}</span>
+          </p>
+          <p className="text-xs text-white/70">Feloldás: {detail.unlockLevel}. szint</p>
+          <p className="text-sm font-bold text-amber-300 mt-0.5">{fmt(detail.price)} SC</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        <StatBar label="Sebesség" value={detail.speed} max={260} />
+        <StatBar label="Gyorsulás" value={detail.acceleration * statMultiplier(detailUpgrades, "engine")} max={130} />
+        <StatBar label="Irányítás" value={detail.handling * statMultiplier(detailUpgrades, "suspension")} max={130} />
+        <StatBar label="Stabilitás" value={detail.stability * statMultiplier(detailUpgrades, "chassis")} max={130} />
+        <StatBar label="Szélállóság" value={detail.windResistance} max={120} />
+        <StatBar label="Horgony" value={detail.anchorPower * statMultiplier(detailUpgrades, "anchor")} max={130} />
+      </div>
+
+      {!isOwned && (
+        <Button className="h-12 w-full text-sm bg-lime-600 hover:bg-lime-500 text-slate-950 font-bold gap-1" disabled={isLocked} onClick={doBuy}>
+          {isLocked ? <Lock className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
+          {isLocked ? `Zárolva (${detail.unlockLevel}. szint)` : `Vásárlás — ${fmt(detail.price)} SC`}
+        </Button>
+      )}
+      {isOwned && progress.selectedVehicleId !== detail.id && (
+        <Button className="h-12 w-full text-sm bg-sky-600 hover:bg-sky-500 font-bold" onClick={doSelect}>
+          Kiválasztás
+        </Button>
+      )}
+      {isOwned && progress.selectedVehicleId === detail.id && (
+        <p className="text-sm font-semibold text-emerald-300">✓ Aktuális jármű</p>
+      )}
+    </div>
+  );
+
+  const upgrades = isOwned ? (
+    <section aria-label="Fejlesztés" className="border-t border-white/10 pt-2">
+      <p className="text-xs uppercase tracking-wide text-white/70 mb-1.5 flex items-center gap-1">
+        <Wrench className="w-3.5 h-3.5" aria-hidden="true" /> Fejlesztés
+      </p>
+      <div className={`grid grid-cols-1 gap-1.5 ${landscape ? "" : "sm:grid-cols-2"}`}>
+        {UPGRADE_TRACKS.map((t) => (
+          <UpgradeRow key={t.id} track={t} level={detailUpgrades[t.id] ?? 0} coins={progress.coins} onBuy={() => doUpgrade(t.id)} />
+        ))}
+      </div>
+    </section>
+  ) : (
+    <p className="text-sm text-white/70 border-t border-white/10 pt-2">Vedd meg a járművet, és utána fejlesztheted.</p>
+  );
+
+  const footnote = (
+    <p className="text-xs text-white/60 text-center">
+      Feloldható most: {purchasableVehicles(progress.highestLevelUnlocked, progress.ownedVehicleIds).length} jármű
+    </p>
+  );
+
+  const header = <ScreenHeader icon={<Car className="w-5 h-5 text-lime-300" />} title="Vihargarázs" onBack={props.onBack} />;
+
   return (
-    <Card className="border border-lime-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
-      <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col gap-3 flex-1 min-h-0">
-        <ScreenHeader icon={<Car className="w-5 h-5 text-lime-300" />} title="Vihargarázs" onBack={props.onBack} />
-
-        {flash && (
-          <p className="text-xs font-semibold text-center rounded bg-slate-800/90 border border-white/10 py-1.5">{flash}</p>
-        )}
-
-        {/* Detail panel */}
-        <div className="rounded-lg border border-white/10 bg-slate-900/60 p-3">
-          <div className="flex items-start gap-3">
-            <div
-              className="w-16 h-16 rounded-lg shrink-0 border border-white/10"
-              style={{ background: `linear-gradient(135deg, ${detail.colors.body}, ${detail.colors.accent})` }}
-            />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-extrabold text-white">{detail.name}</h3>
-                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: `${RARITY_COLOR[detail.rarity]}22`, color: RARITY_COLOR[detail.rarity] }}>
-                  {RARITY_LABEL[detail.rarity]}
-                </span>
-              </div>
-              <p className="text-xs text-white/60">{categoryLabel(detail.category)} · Feloldás: {detail.unlockLevel}. szint</p>
-              <p className="text-sm font-bold text-amber-300 mt-1">{fmt(detail.price)} SC</p>
-            </div>
-          </div>
-
-          {/* Stat bars */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-3">
-            <StatBar label="Sebesség" value={detail.speed} max={260} />
-            <StatBar label="Gyorsulás" value={detail.acceleration * statMultiplier(detailUpgrades, "engine")} max={130} />
-            <StatBar label="Irányítás" value={detail.handling * statMultiplier(detailUpgrades, "suspension")} max={130} />
-            <StatBar label="Stabilitás" value={detail.stability * statMultiplier(detailUpgrades, "chassis")} max={130} />
-            <StatBar label="Szélállóság" value={detail.windResistance} max={120} />
-            <StatBar label="Horgony" value={detail.anchorPower * statMultiplier(detailUpgrades, "anchor")} max={130} />
-          </div>
-
-          <div className="flex flex-wrap gap-2 mt-3">
-            {!isOwned && (
-              <Button size="sm" className="h-12 px-4 text-sm bg-lime-600 hover:bg-lime-500 text-slate-950 font-bold gap-1" disabled={isLocked} onClick={doBuy}>
-                {isLocked ? <Lock className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
-                {isLocked ? `Zárolva (${detail.unlockLevel}. szint)` : `Vásárlás — ${fmt(detail.price)} SC`}
-              </Button>
-            )}
-            {isOwned && progress.selectedVehicleId !== detail.id && (
-              <Button size="sm" className="h-12 px-4 text-sm bg-sky-600 hover:bg-sky-500 font-bold" onClick={doSelect}>
-                Kiválasztás
-              </Button>
-            )}
-            {isOwned && progress.selectedVehicleId === detail.id && (
-              <span className="text-xs font-semibold text-emerald-300 self-center">✓ Aktuális jármű</span>
-            )}
-          </div>
-
-          {/* Upgrades — only for owned vehicles */}
-          {isOwned && (
-            <div className="mt-3 border-t border-white/10 pt-2">
-              <p className="text-xs uppercase tracking-wide text-white/50 mb-1.5 flex items-center gap-1">
-                <Wrench className="w-3.5 h-3.5" /> Fejlesztés
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                {UPGRADE_TRACKS.map((t) => {
-                  const lvl = detailUpgrades[t.id] ?? 0;
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => doUpgrade(t.id)}
-                      className="min-h-12 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-slate-800/60 hover:bg-slate-700/70 px-3 py-2 text-left"
-                    >
-                      <span className="text-xs">
-                        <span className="font-semibold text-white">{t.label}</span>
-                        <span className="text-white/50"> · {t.effectLabel}</span>
-                      </span>
-                      <span className="text-xs font-mono text-white/80">
-                        {Array.from({ length: 5 }, (_, i) => (i < lvl ? "●" : "○")).join("")}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Category filter */}
-        <div className="flex gap-1.5 flex-wrap">
-          <FilterChip active={category === "all"} onClick={() => setCategory("all")}>
-            Mind ({VEHICLES.length})
-          </FilterChip>
-          {VEHICLE_CATEGORIES.map((c) => (
-            <FilterChip key={c.id} active={category === c.id} onClick={() => setCategory(c.id)}>
-              {c.label}
-            </FilterChip>
-          ))}
-        </div>
-
-        {/* Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 overflow-y-auto flex-1 min-h-0 pr-1">
-          {list.map((v) => {
-            const vOwned = owned.has(v.id);
-            const vLocked = v.unlockLevel > progress.highestLevelUnlocked;
-            return (
-              <button
-                key={v.id}
-                onClick={() => {
-                  sfxClick();
-                  setDetailId(v.id);
-                }}
-                className={`text-left rounded-lg border p-2 transition-colors ${
-                  detailId === v.id ? "border-lime-400/70 bg-lime-900/20" : "border-white/10 bg-slate-900/50 hover:border-white/25"
-                }`}
-              >
-                <div
-                  className="w-full min-h-12 rounded mb-1 relative"
-                  style={{ background: `linear-gradient(135deg, ${v.colors.body}, ${v.colors.accent})` }}
-                >
-                  {vLocked && !vOwned && <Lock className="w-3.5 h-3.5 absolute top-1 right-1 text-white/80" />}
-                  {vOwned && <span className="absolute top-0.5 right-1 text-xs text-emerald-200 font-bold">✓</span>}
-                </div>
-                <p className="text-xs font-semibold truncate text-white">{v.name}</p>
-                <p className="text-xs" style={{ color: RARITY_COLOR[v.rarity] }}>
-                  {fmt(v.price)} SC
-                </p>
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-xs text-white/40 text-center">
-          Feloldható most: {purchasableVehicles(progress.highestLevelUnlocked, progress.ownedVehicleIds).length} jármű
+    <section
+      data-testid="tornado-garage"
+      data-layout={landscape ? "landscape" : "portrait"}
+      className={`rounded-2xl border border-lime-400/40 bg-slate-950/85 p-1.5 sm:p-3 flex flex-col gap-2 ${landscape ? "flex-1 min-h-0" : ""}`}
+    >
+      {/* Visszajelzés (vásárlás, kevés SC): a képernyő alján lebeg, így a lap aljáról koppintva is látszik. */}
+      {flash && (
+        <p
+          role="status"
+          data-testid="tornado-garage-flash"
+          className="pointer-events-none fixed inset-x-3 z-40 mx-auto max-w-md text-sm font-semibold text-center rounded-xl bg-slate-800/95 border border-amber-300/40 px-3 py-2 shadow-lg"
+          style={{ bottom: "max(16px, calc(var(--game-safe-bottom) + 12px))" }}
+        >
+          {flash}
         </p>
-      </CardContent>
-    </Card>
+      )}
+
+      {landscape ? (
+        // Fekvő: bal hasáb = fejléc + egysoros, vízszintesen lapozható szűrő + saját görgetésű járműrács; jobb hasáb =
+        // részletek + fejlesztések saját görgetéssel. A túlcsordulást a ScrollPane alsó átúszása jelzi.
+        <div className="flex-1 min-h-0 grid grid-cols-2 gap-3">
+          <div className="min-h-0 flex flex-col gap-1.5">
+            {header}
+            {filters}
+            <ScrollPane className="flex-1" innerClassName="flex flex-col gap-2 pb-6" testId="tornado-garage-list" ariaLabel="Járművek">
+              <div className="grid grid-cols-3 lg:grid-cols-4 gap-2">{tiles}</div>
+              {footnote}
+            </ScrollPane>
+          </div>
+          <ScrollPane innerClassName="flex flex-col gap-3 pb-6" testId="tornado-garage-side" ariaLabel="A kiválasztott jármű">
+            {details}
+            {upgrades}
+          </ScrollPane>
+        </div>
+      ) : (
+        <>
+          {header}
+          {filters}
+          <div
+            ref={rowRef}
+            className="relative flex gap-2 overflow-x-auto overflow-y-hidden pb-1 snap-x"
+            data-testid="tornado-garage-list"
+            aria-label="Járművek"
+          >
+            {tiles}
+          </div>
+          {details}
+          {upgrades}
+          {footnote}
+        </>
+      )}
+    </section>
+  );
+}
+
+function VehicleTile(props: {
+  vehicle: Vehicle;
+  owned: boolean;
+  locked: boolean;
+  active: boolean;
+  inRow: boolean;
+  onPick: () => void;
+}) {
+  const { vehicle: v } = props;
+  return (
+    <button
+      type="button"
+      data-testid={`tornado-garage-vehicle-${v.id}`}
+      data-vehicle-id={v.id}
+      aria-pressed={props.active}
+      onClick={props.onPick}
+      className={`relative text-left rounded-xl border p-1.5 transition-colors ${props.inRow ? "shrink-0 w-28 snap-start" : ""} ${
+        props.active ? "border-lime-400/80 bg-lime-900/25" : "border-white/10 bg-slate-900/60 hover:border-white/25"
+      }`}
+    >
+      <VehicleArt vehicle={v} className={`w-full ${props.locked && !props.owned ? "opacity-60" : ""}`} />
+      {props.locked && !props.owned && (
+        <Lock className="w-4 h-4 absolute top-2.5 right-2.5 text-white/90" aria-label="Zárolva" />
+      )}
+      {props.owned && <span className="absolute top-2 right-2.5 text-sm text-emerald-300 font-bold">✓</span>}
+      <span className="block text-xs font-semibold truncate text-white mt-1">{v.name}</span>
+      <span className="block text-xs font-semibold" style={{ color: RARITY_COLOR[v.rarity] }}>
+        {fmt(v.price)} SC
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Egy fejlesztés-sor: a sor maga a gomb (≥ 48 px). Látszik a szint (5 pötty), a KÖVETKEZŐ szint ára, és hogy elég-e
+ * az SC (ha nem: halvány ár + „kevés SC”); maximumon „MAX”.
+ */
+function UpgradeRow(props: { track: (typeof UPGRADE_TRACKS)[number]; level: number; coins: number; onBuy: () => void }) {
+  const { track, level } = props;
+  const max = level >= MAX_UPGRADE_LEVEL;
+  const cost = max ? 0 : upgradeCost(track.id, level + 1);
+  const affordable = !max && props.coins >= cost;
+  const label = max
+    ? `${track.label}: maximum szint (${MAX_UPGRADE_LEVEL})`
+    : `${track.label} fejlesztése, ${level}. szint → ${level + 1}. szint, ${fmt(cost)} SC${affordable ? "" : " — nincs elég SC"}`;
+  return (
+    <button
+      type="button"
+      data-testid={`tornado-garage-upgrade-${track.id}`}
+      data-level={level}
+      data-affordable={String(affordable)}
+      aria-label={label}
+      onClick={props.onBuy}
+      className={`min-h-12 w-full flex items-center gap-2 rounded-xl border px-3 py-1.5 text-left transition-colors ${
+        max
+          ? "border-emerald-400/30 bg-emerald-950/30"
+          : affordable
+            ? "border-lime-400/40 bg-slate-800/70 hover:bg-slate-700/80"
+            : "border-white/10 bg-slate-900/60"
+      }`}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-white leading-tight">{track.label}</span>
+        <span className="block text-xs text-white/60 leading-tight truncate">{track.effectLabel}</span>
+      </span>
+      <span className="flex gap-1 shrink-0" aria-hidden="true">
+        {Array.from({ length: MAX_UPGRADE_LEVEL }, (_, i) => (
+          <span key={i} className={`w-2.5 h-2.5 rounded-full ${i < level ? "bg-lime-400" : "bg-white/15 border border-white/25"}`} />
+        ))}
+      </span>
+      <span
+        className={`shrink-0 min-w-[5.5rem] text-center rounded-lg px-2 py-1 text-xs font-bold leading-tight ${
+          max ? "text-emerald-200" : affordable ? "bg-lime-500 text-slate-950" : "bg-slate-800 text-white/60"
+        }`}
+        aria-hidden="true"
+      >
+        {max ? "MAX" : `+ ${fmt(cost)} SC`}
+        {!max && !affordable && <span className="block font-semibold text-amber-200/90">kevés SC</span>}
+      </span>
+    </button>
   );
 }
 
@@ -799,7 +941,7 @@ function StatBar(props: { label: string; value: number; max: number }) {
   const pct = Math.max(4, Math.min(100, (props.value / props.max) * 100));
   return (
     <div>
-      <div className="flex justify-between text-xs text-white/60">
+      <div className="flex justify-between text-xs text-white/70">
         <span>{props.label}</span>
         <span>{Math.round(props.value)}</span>
       </div>
@@ -810,12 +952,15 @@ function StatBar(props: { label: string; value: number; max: number }) {
   );
 }
 
-function FilterChip(props: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function FilterChip(props: { active: boolean; onClick: () => void; testId?: string; children: React.ReactNode }) {
   return (
     <button
+      type="button"
+      data-testid={props.testId}
+      aria-pressed={props.active}
       onClick={props.onClick}
-      className={`min-h-12 text-sm font-semibold px-4 py-2 rounded-full border ${
-        props.active ? "border-lime-400/70 bg-lime-900/30 text-lime-200" : "border-white/15 bg-slate-900/50 text-white/70"
+      className={`shrink-0 min-h-11 text-sm font-semibold px-4 py-2 rounded-full border whitespace-nowrap ${
+        props.active ? "border-lime-400/70 bg-lime-900/30 text-lime-200" : "border-white/15 bg-slate-900/50 text-white/80"
       }`}
     >
       {props.children}
@@ -833,7 +978,7 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
     <Card className="border border-sky-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
       <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col gap-2 flex-1 min-h-0">
         <ScreenHeader icon={<TornadoIcon className="w-5 h-5 text-sky-300" />} title="Szintek (1–200)" onBack={props.onBack} />
-        <div className="overflow-y-auto flex-1 min-h-0 flex flex-col gap-2 pr-1">
+        <ScrollPane className="flex-1" innerClassName="flex flex-col gap-2 pb-6" testId="tornado-levels-list" ariaLabel="Szintek">
           {groups.map(({ stage, levels }) => {
             const unlockedInStage = levels.filter((l) => l.level <= props.progress.highestLevelUnlocked).length;
             const open = openStage === stage.id;
@@ -887,7 +1032,7 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
               </div>
             );
           })}
-        </div>
+        </ScrollPane>
         <p className="text-xs text-white/40 text-center">A 200. szint — a Végső Vihar — a legnehezebb kihívás.</p>
       </CardContent>
     </Card>
@@ -1094,7 +1239,7 @@ function ScreenHeader(props: { icon: React.ReactNode; title: string; onBack: () 
       <Button
         variant="ghost"
         size="sm"
-        className="text-white/80 hover:bg-white/10 gap-1 -ml-2 h-12 px-3 text-sm"
+        className="text-white/80 hover:bg-white/10 gap-1 h-12 px-3 text-sm"
         onClick={() => {
           sfxClick();
           props.onBack();

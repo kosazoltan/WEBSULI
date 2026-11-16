@@ -10,7 +10,7 @@ const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: ["game-mobile-quality.spec.ts", "games-lobby-mobile.spec.ts", "block-craft-real-touch.spec.ts", "joystick-response.spec.ts"],
+  testMatch: ["game-mobile-quality.spec.ts", "game-meta-quality.spec.ts", "games-lobby-mobile.spec.ts", "block-craft-real-touch.spec.ts", "joystick-response.spec.ts"],
   timeout: 90000,
   workers: 1,
   use: { channel: "chrome", serviceWorkers: "block", baseURL, screenshot: "only-on-failure" },
