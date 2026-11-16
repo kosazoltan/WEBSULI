@@ -641,3 +641,223 @@ Forrás: JBa / JBb futás (#448 és a JBb PR).
   de az ugyanazt mérő e2e-párját (`admin-korszerusites.spec.ts`) nem — a helyben futtatott e2e-k között nem szerepelt, csak a CI
   ~40 perces Playwright-jobja fogta meg. **Megelőzés:** egy számlált / felsorolt elvárás (fülszám, végpontlista) módosításakor
   `grep -rn "<régi szám vagy kulcs>" tests/` a `*.test.ts` ÉS a `*.spec.ts` fájlokra, és a találatokat mind futtasd helyben.
+
+## C-47 — Telepítés előtti „aktív gyártás” őr: pillanatfelvétel, sorozatos összevonás, üres összeg (2026-11-16)
+
+Forrás: orkesztrátor (a 2026-11-16-i összevonási sor), független audit H4, kanban #63; megoldás: `scripts/qa/active-runs-guard.sh`,
+runbook: `docs/telepites-elotti-or.md`.
+
+- **Tünet 1:** a sorozatos összevonások (egy nap 39 PR, köztük ~15 percen belül három éles telepítés: #462, #469, #467) közben
+  megszakadt a tulajdonos futó tananyaggyártása. A telepítés előtt futtatott őr csak pillanatfelvétel volt: az őr „nincs futás”
+  után a következő összevonás már új telepítést indított, és a Render a futó folyamatot leállítja. **Gyökérok:** az őr az
+  összevonás ELŐTTI időpontra mondott igazat, a telepítések viszont sorban jöttek, a graceful shutdown pedig felső korláttal vár.
+  **Megelőzés:** az őrt KÖZVETLENÜL minden `gh pr merge` előtt futtasd; a zöld PR-okat egy ablakban vond össze (egy őr-ellenőrzés,
+  egy telepítési ablak), és az ablakot előre jelezd a tulajdonosnak; kilépési kód 1 vagy 2 esetén nincs összevonás. `MP_MODE`
+  bekapcsolása után a `/api/rt/status` `activeMatches` értékét is nézd.
+- **Tünet 2:** a kézi őrszkript a Git Bash-ben `bc`-t hívott az összegzéshez — `bc` nincs, az `AKTIV=` üres maradt, és üres
+  összeget nem nulla-ként, hanem hiányzó adatként kell kezelni. **Megelőzés:** az összeget a shell számolja (`$((…))`), a szkript
+  ellenőrzi, hogy pontosan négy számláló érkezett, különben 2-es kilépési kóddal áll meg; Git Bash-ben a `bc`, a `jq` (C-39) és
+  más „megszokott” eszközök hiányát első lépésként ellenőrizd (`command -v`).
+
+## C-48 — Közös, hozzáfűzős dokumentum és közös sorszám-tér több párhuzamos PR-ban (2026-11-16)
+
+Forrás: orkesztrátor; JM7b (#449), J4a (#451 / #457), a #471 és a terv migrációs sorszáma.
+
+- **Tünet 1:** minden szelet-PR a `docs/agent-csapdak.md` végére fűzte a saját C-számú bejegyzését; minden összevonás után az
+  összes többi nyitott PR ütközött (és a C-44 / C-47 számokat több szelet is magának szánta). **Gyökérok:** egy hozzáfűzős fájl
+  és egy közös, növekvő sorszám minden párhuzamos PR-nak ugyanaz a konfliktuspont. **Megelőzés:** szelet-PR nem módosítja a
+  katalógust; a zárójelentés „CSAPDA-JAVASLAT” része kész szöveggel (ideiglenes számmal) megy az orkesztrátornak, aki egy
+  közös docs-PR-ban gyűjti és számozza (ez a bejegyzés is így született). Ellenőrzés: `git diff origin/main --stat -- docs/agent-csapdak.md` üres.
+- **Tünet 2:** két párhuzamos PR a végrehajtási fájlban ugyanazon fejezet után szúrt be új szakaszt — a második biztosan ütközik.
+  **Megelőzés:** az első (háromfázisú) commitban a saját fejezet horgonyát egyedi helyre tedd, vagy az összevonási sorrendet előre
+  tervezd; az „Állapot” sort a saját PR viszi, a közös docs-PR csak a már összevontakét frissíti.
+- **Tünet 3:** a terv a `0041` migrációs sorszámot a JM8a-nak osztotta, a nyitott #471 (tiltás-ujjlenyomat) viszont ugyanazt a
+  fájlnevet foglalta — az audit (H6) találta meg. **Megelőzés:** a migrációs sorszám a PR megnyitásakor a végrehajtási fájl
+  „migráció-számok foglalva” sorában is rögzüljön, és a JM8a indulásakor `ls source/migrations` a végső szó; a sorszám-változás
+  minden későbbi migrációt eltol (JM8a 0042, JM9 0043, JM10 0044).
+
+## C-49 — A PR saját zöld CI-ja nem garancia: közös réteg változása, ingadozó e2e, elavult futások (2026-11-16)
+
+Forrás: orkesztrátor; main CI futások (ba9c666c a #458 után, 9bda1373 a #445 után, b5041240 a #437 után), #458, #470.
+
+- **Tünet 1:** a PR zöld CI-val ment a mainre, a main CI mégis piros lett (mérve: 2026-11-16-án a main 39 CI-futásából 3 bukott, 4 még
+  futott a lekérdezés pillanatában; mindhárom bukás Playwright E2E, ingadozó teszt: `block-craft-quiz` lejárati / mérő-állapot,
+  `vocab-cross-game-log` A5, `block-art`, `block-craft-real-touch`, `joystick-response` Aszteroida). **Gyökérok:** (a) a PR CI-ja a
+  PR saját alapján futott, nem a közös réteg későbbi változásával együtt; (b) az ingadozó tesztek egy kód-azonos fejen is
+  bukhatnak (kanban #58). **Megelőzés:** közös réteg (mérő, `game-engine`, `index.css`) változása után a fogyasztó PR olvassza be a
+  `main`-t, és fusson újra; ingadozó tesztet jegyre és külön PR-ra (#470), ne „újrafuttatással zöld” állapotra bízz; a véletlen
+  választású e2e-t `--repeat-each 10`-zel mérd (a J2a tanulsága, lásd C-53).
+- **Tünet 2:** a sorozatos összevonások és push-ok miatt a ~30 perces Playwright jobok elavult commitokon is futottak, a futtatók
+  torlódtak, az új PR-ok CI-ja késett. **Megelőzés:** az elavult (felülírt fejű) commitokon futó CI-k megszakítása felszabadítja a
+  futtatókat (`gh run cancel <id>`); a megszakítás előtt ellenőrizd, hogy a fej tényleg elavult.
+
+## C-50 — Visszaperjeles szöveg shell-heredocban, Pythonban és az eszközparaméterben (C-35 ismét) (2026-11-16)
+
+Forrás: J4a (#451 / #457), JM7b (#449), JM7c-1 (#462), JBc (#458), J2a (#454). Kiegészíti: C-35, C-46.
+
+- **Tünet 1:** tesztfájlt Python-heredocban szerkesztve a nem nyers karakterláncban a `\b` (a megírt két karakterből a Pythonban
+  backspace, 0x08 lett: `nextTask\b` helyett láthatatlan vezérlőkarakter), a teszt mégis zöld volt; ugyanígy bukott egy tsx-szonda
+  és egy python-csere (`\1`, `\s`), JM7c-1-ben a `\x60` valódi backtickké alakult és eltörte a TS sablonszöveget, JBc-ben a `\b`
+  szöveg helyére backspace-bájt került, és a python-os visszajavítás csendben hatástalan maradt. **Gyökérok:** a shell-heredoc `'EOF'`
+  idézőjellel változatlanul hagyja a visszaperjelet, de a Python-karakterlánc (és az eszközparaméter, C-46) értelmezi.
+  **Megelőzés:** regexet és visszaperjeles szöveget CSAK az Edit / Write eszközzel írj; utána bájtszintű visszaolvasás
+  (`grep -cP "[\x00-\x08]" <fájl>` → 0, `od -c`, `cat -A`); javítás Write-tal írt node-szkripttel.
+- **Tünet 2:** a Python-szkript `open()`-nel alapbeállításon olvasott, `newline=''`-vel írt: a CRLF-es munkapéldány LF-re váltott
+  (a git figyelmeztetett); a Git Bash-es `node -e` szövegcsere CRLF-es forrásfájlon csendben nem illeszkedett (C-45/6).
+  **Megelőzés:** forrásfájlt Edit eszközzel módosíts; ha mégis szkript, `open(p, newline='')` olvasáskor is, és a csere után
+  ellenőrizd, hogy tényleg megtörtént (`git diff --stat`).
+- **Tünet 3 (J2a):** Bash-ben egy elfelejtett `cat > fájl` (heredoc nélkül) a stdin-re várt, a parancs a háttérbe került és
+  végtelenül futott. **Megelőzés:** fájlt csak a Write eszközzel vagy teljes heredoc-kal írj; a háttérbe került, gyanúsan néma
+  parancsot nézd meg, mielőtt várnál rá.
+
+## C-51 — Egymásra rakott holtsávok: a „lassú joystick” nem késés volt, hanem halott tárcsa-közép (2026-11-16)
+
+Forrás: kanban #49, #456 (tulajdonosi hibajelentés valódi telefonról: „nagyon lassan reagál, nem lehet finoman vezérelni”).
+
+- **Tünet:** mind a négy tárcsás játékban (Tornado, Kockavadász, Aszteroida, Szökőár) a kis kitérés semmit nem csinált, utána
+  egyszerre jött a teljes sebesség / kormány.
+- **Gyökérok (mérve, `tests/joystick-response.spec.ts`):** a tárcsa saját 0,15-ös holtsávja UTÁN a játékok még egy küszöböt tettek
+  rá (`joystickToDirections` 0,35 → a sugár ~45%-áig semmi, utána digitális 100%; a Tornado kormánya 0,2-es tengely-holtsáv +
+  négyzetes görbe → a sugár 30%-áig 0, 40%-nál 5%). Mellékokok: az Aszteroida állandó gyorsulása (90% 244 ms), a tárcsa gombja
+  React-állapottal (egy képkockával a játék után rajzolódott), a Szökőár render-felülírása (minden renderben ≤ 42 ms mozgást vont vissza).
+- **Megelőzés:** egy holtsáv (a tárcsáé), utána folytonos görbe (`shapeJoystick` / `joystickCurve`); a játék analóg értéket olvas
+  ref-ből képkockánként, nem logikai irányokat. „Lassú vezérlés” jelentésnél ELŐBB a kitérés → mozgás görbét mérd (finomság-tábla),
+  ne csak a késést; teszt-küszöböt csak dokumentált `SPEC-VÁLTOZÁS`-sal lazíts (a régi küszöböt épp a hibás holtsávos kormány teljesítette).
+- **Mellék-csapda (CI):** a böngészős mérés ms-os ablaka a CI SwiftShaderén (Kockavadász ~6 fps) 3–4 képkocka: a mérés képkocka-számra
+  várjon; a Vite fejlesztői szerver hosszú futás közepén „504 Outdated Optimize Dep” állapotba kerülhet (egy egész játék-csoport bukik
+  betöltéskor) — friss szerverrel futtasd újra, ne kódhibát keress. Valódi telefonos próba nélkül a javítás UNVERIFIED.
+
+## C-52 — Mozgó válaszcél két ujjal; a szimuláció más lépésmérettel fut, mint a lap (2026-11-16)
+
+Forrás: J4a (#451) és review-körei, a közös utójavítás (#457).
+
+- **Tünet 1:** a világban mozgó, `onClick`-es válaszgomb két ujjnál nem választott: a böngésző a NEM elsődleges mutatóra nem
+  szintetizál `click`-et (a telefont tartó hüvelykujj a képernyőn). Érintésnél ráadásul implicit pointer capture van: a `pointerup` az
+  elhúzott ujjnál is a lenyomott célra érkezik. **Megelőzés:** mozgó célra a közös `pointerTapHandlers` (`game-engine/play/pointerTap.ts`);
+  teszt CDP-vel (két ujj, elhúzás), a mobil esetfájlban `quizMoving: true`.
+- **Tünet 2:** a node-szimuláció `dt × timeScale` lépéssel futott, a lap fix 16,67 ms-os lépéssel; a `waves.ts` lépésenként fogyaszt
+  RNG-t, így azonos seed mellett is más ellenfélsort mért a sim — az elfogadási számok más játékmenetről szóltak. **Megelőzés:** a lap és
+  a sim UGYANAZT a meghajtót hívja (minta: `speedMath/core.ts` `createTowerDriver`), bizonyító teszt lépés-indexhez kötött bemenettel,
+  eltérő képkocka-időkkel; a meghajtó javítása után minden szimulációs számot újra kell mérni.
+
+## C-53 — Átírt játék: a régi `index.css`-szabály felülír; képkockánkénti kérés; forráskeverés és ingadozó e2e (2026-11-16)
+
+Forrás: J2a (#454, Szólétra „Szikla-verseny”).
+
+- **Tünet 1:** az új kapaszkodó-gombok kéken, 44 px magasan jelentek meg; a ≥ 48 px-es mérce egy hosszú kifejezésnél 46 px-re esett.
+  **Gyökérok:** az `index.css` régi, a játék panelére írt szabálya (`.game-shell-fixed[data-game="…"] [data-testid="…"] button`)
+  specifikusabb egy puszta osztálynál — a testid megmaradt, a szabály vele maradt. **Megelőzés:** átírt játéknál
+  `grep -n "<játék-gyökér>\|<régi testid>" client/src/index.css` az első böngészős próba előtt; a saját szabály a régi hatókörrel
+  kezdődjön, vagy ORKESZTRÁTOR-KÉRÉS a régi törlésére; mérés `getComputedStyle` + illeszkedő szabályok listájával.
+- **Tünet 2 (megelőzve):** a játék minden képkockában kért kérdést; a megoldás-kijelzés alatt a közös vezérlő függő kérést jegyez és
+  `emit(true)`-t hív — képkockánkénti React-frissítés. **Megelőzés:** kijelzés alatt csak akkor kérj, ha `q.view().pending === null`.
+- **Tünet 3:** a gyorsabb tempó és a `promptFits`-szűrés után a `vocab-cross-game-log.spec.ts` 6 gyors válaszából 6/18 futásban egy sem
+  volt szóbankos — a teszt 33%-ban bukott (ugyanez az A5 a main CI-ban is ingadozott, C-49). **Megelőzés:** forráskeverésnél a kis, de
+  fő forrás (szóbank) kapjon garantált helyet (minden második új tétel); véletlen választós e2e-t `--repeat-each 10`-zel mérj, mielőtt zöldnek mondod.
+
+## C-54 — Évfolyam-bank 10–12.: a `keyChanged` kulcs, az ASCII szóhatár, a részleges forrásaudit, két védhető válasz (2026-11-16)
+
+Forrás: JBc (#458). Kiegészíti: C-31, C-44, C-45.
+
+- **Tünet 1:** a rövidítő alügynök egy meglévő tételt (izomerek) „összegképlet / szerkezet” párokra írt át, a helyes opció szövege
+  megváltozott (`keyChanged: true`), és a kulcs a FORDÍTOTT párra mutatott; a rövidítés-ellenőrző a `keyChanged` jelzésre a kulcs-egyezést
+  nem nézi, csak az újra-vak kör fogta meg. **Megelőzés:** minden `keyChanged` tétel kötelezően újra-vak körbe megy, a kulcsát az integrátor
+  kézzel is visszaolvassa; logikai előfeltételt a kérdésbe ne tegyünk (az elterelők kitalálhatóan kiesnek), az elnevezés ne visszhangozza a kérdést.
+- **Tünet 2:** a `BANNED_OPTION` minta a szóhatár-jellel (`\b`) zárult: a „mindkettő” záró „ő”-je után az ASCII-alapú `\b` nem illeszkedik,
+  így a „mindkettő azonos” opció átcsúszott. **Megelőzés:** `(?!\p{L})` + `u` kapcsoló; magyar szó végén `\b`-t nem használunk.
+- **Tünet 3:** a forrásalapú auditorok a 117 tételes tárgycsomagokból csak a kétesnek látszó állításokhoz nyitottak forrást, a többit
+  tankönyvi tudással fogadták el. **Megelőzés:** maradó kockázatként a jegyzőkönyvbe; nagyobb csomagnál tárgyanként két auditor.
+- **Tünet 4:** a review két védhető választ talált egy szereplő-kérdésnél (Salamon király: Möbiusnak, de a végén von Zahndnak is); a vak
+  megoldó, a forrásalapú audit és a magyarázat-audit is átengedte, mert mindhárom a kulcsot igazolta, nem az elterelőket. **Megelőzés:**
+  irodalmi „melyik szereplő …?” tételnél az auditor MINDEN elterelő szereplőre külön ellenőrizze a szöveg alapján (a mű végét is beleértve),
+  hogy rá nem igaz-e az állítás.
+
+## C-55 — A Studio-lecke évfolyama három helyen él; futó munka keresése nem csak `lesson_id`-val (2026-11-16)
+
+Forrás: #459, #465 (kanban #54).
+
+- **Tünet 1:** a Studio-lecke (`content_type = lesson`) évfolyamát az admin csak a `html_files.classroom` oszlopban írta át — a
+  `lessons.json.classroom` és a `knowledge_maps.classroom` is hordozza, a lecke nézete és az újrapublikálás onnan dolgozik, így
+  ellentmondás maradt volna, és a javítás visszaíródott. **Megelőzés:** az évfolyam módosításakor mindhárom helyet kövesd; teszt: a
+  három érték egyezik a módosítás után.
+- **Tünet 2:** a „fut-e most munka ehhez az anyaghoz” ellenőrzés csak a `lesson_id`-t nézte; a `from-map` gyártás jobja
+  publikálásig csak a `map_id`-t hordozza. **Megelőzés:** futó munka keresésekor az anyag, a lecke, a tudástérkép (`map_id`) és a
+  forrásjegyzék azonosítóját is vizsgáld.
+
+## C-56 — Próbabot „mindig a jó választ adja”: minden eltérés hibajel; a speciális kérdés esedékessége; átfedő válaszgombok (2026-11-16)
+
+Forrás: J4b (#466).
+
+- **Tünet 1:** a próba-bot mindig a helyes választ szándékozta adni, mégis 37/40 lett a 40/40 helyett; az eltérést a kimenet mutatta, de nem
+  vizsgálták ki. A háttérben a főellenfél- és Hibagyár-kérdésnél négy válaszgomb két célpozícióra esett, a később renderelt gomb eltakarta az
+  elsőt: ha a helyes válasz a 0. vagy 1. indexre került, érintéssel nem volt választható (a gyerek szemszögéből megoldhatatlan kérdés).
+  **Megelőzés:** a „mindig helyes” szándékú botnál minden eltérés hibajel — addig nem zöld, amíg a miértje ki nem derül; a közös mobil mérő
+  mérje a célpont–célpont átfedést (M2), minden indexen kiválasztható legyen a helyes válasz valódi érintéssel.
+- **Tünet 2:** a bomba esedékessége kérdés nélkül elfogyott: a kérdés-ütemező az ismétlési tételt az új tétel ELŐTT választotta, a játék
+  viszont minden sikeres kérés után „elhasználtnak” vette a bombát — a becslési feladat kimaradt, az időzítő újraindult. **Megelőzés:**
+  speciális kérdés esedékessége csak akkor fogyjon, ha a feltett kérdés ténylegesen az volt; ugyanazt a mintát (speciális fajta kérése →
+  ismétlés előzi → állapot elfogy) ellenőrizd a főellenfélnél és a láncnál is; a szimulációs táblát (kérdés/perc, ismétlési arány, bombák
+  száma) a javítás előtt és után mérd.
+
+## C-57 — Meta-képernyők mérése: `scrollIntoView`, rögzített keret, tizedes-tagolás, levágott felirat (2026-11-16)
+
+Forrás: #467 (Vihargarázs, kanban #59), az orkesztrátor képernyőkép-olvasása.
+
+- **Tünet 1:** a „nézetbe hozható-e” mérés (`scrollIntoViewIfNeeded`, `el.scrollIntoView`) ZÖLD lehet akkor is, ha a felhasználó nem tud
+  görgetni: a böngésző programból az `overflow: hidden` dobozt is görgeti. A garázs Beállítás / Rekordok / Statisztika képernyőjének alja
+  így maradt elérhetetlen. **Megelőzés:** a mérő az elgörgetés után ellenőrizze, hogy egy `overflow: hidden|clip` ős sem mozdult el
+  (`game-meta-quality` X3); érintéses görgetéshez a CDP `Input.dispatchTouchEvent` sorozat (touchStart → touchMove… → touchEnd) kell, az
+  `Input.synthesizeScrollGesture` touch módja az emulált Pixel profilban nem görget.
+- **Tünet 2:** a rögzített játékkeret (`data-fixed-screen="true"`, 100dvh + `overflow: hidden`) tartalom-képernyőn (garázs, beállítás)
+  levág, és a flex-oszlop a `min-h-0` görgető dobozt 0 px-re nyomja (a járműrács `clientHeight 0 / scrollHeight 8792`). **Megelőzés:**
+  a `fixedScreen` csak a játéktérnek való; meta-képernyőn természetes lapgörgetés, vagy jelzett belső görgető (`ScrollPane`, mérő X8).
+- **Tünet 3:** `toLocaleString("hu-HU")` a 4 jegyű számot nem tagolja („1410”, de „10 000”). **Megelőzés:** tesztben `1\s?410` mintával illessz.
+- **Tünet 4 (orkesztrátori olvasási hiba):** a képernyőképen levágott „Mind (160)” feliratot az orkesztrátor „Mind (100)”-nak olvasta, és
+  „adateltérést” jelzett belőle. **Megelőzés:** képernyőképről szám-állítást ne vezess le; a számot a DOM szövegéből (`textContent`) vagy
+  a végpontból olvasd, a levágott feliratot jelezd mérési hibaként.
+
+## C-58 — Szűrő-olvasat cseréje hozzáadás helyett regressziót okoz (2026-11-16)
+
+Forrás: JM7b-utójavítás N1 / N1b (#461, #469).
+
+- **Tünet:** a becenév-szűrő első javítása (az `l` / `I` / `1` csere kezelése) az olvasatok CSERÉJÉVEL készült, nem kiegészítésével, így a
+  régi elutasítási halmaz egy része újra átment; a #461 után a 111 kísérletből 28 átjutott. **Gyökérok:** a szűrő „mit utasít el” halmaza
+  nem volt rögzítve tesztben, a csere ezt észrevétlenül szűkítette. **Megelőzés:** szűrőt / normalizálót csak ÚJ olvasat hozzáadásával
+  bővíts; a régi elutasítási halmazt tesztben rögzítsd; kötelező a differenciális próba: a régi szűrő elutasít → az új elfogad (elvárt: 0
+  név), hamis tiltás (ártatlan nevek, ajánlott nevek: 0), a foglaltsági kulcs bitre azonos, legrosszabb esetű bemenet ideje. A #469 próbája:
+  55 579 generált név, main elutasít → PR elfogad: 0, hamis tiltás: 0, a régi 111-ből 0 megy át; a régi elutasítási halmaz rögzítve: `tests/fixtures/nickname-main-rejected.json`, `tests/nickname-filter.test.ts`.
+  Maradék: 3 számjegynél többnél csak két olvasat készül (`MAX_DIGIT_SITES`), és a szűrő elején belső `slice(0, 64)` hiányzik — az
+  `MP_MODE` / `PLAYER_ACCOUNTS` bekapcsolása előtt kötelező.
+
+## C-59 — Ágankénti védelem helyett közös pont: a tiltás kijátszása törléssel és alias-címmel (2026-11-16)
+
+Forrás: JM7b-utójavítás N2 / K1 (#463, #471), független biztonsági review.
+
+- **Tünet 1:** a tiltott játékos a fiókja törlésével és ugyanazzal a címmel újra belépve tiltás nélküli fiókot kapott (#463 maradó
+  kockázata). A #471 első változata az ujjlenyomatot a TÖRLÉSKOR írta, ezért az ÉLŐ tiltott fióknál az alias-kijátszás működött: a
+  tiltott cím pont-, plusz-jeles vagy `googlemail.com`-os változatával új, tiltatlan fiók keletkezett (futtatott próbával
+  megerősítve). **Gyökérok:** a védelmet az egyes belépési / törlési ágakra tettük, nem egy közös pontra: a tiltásnak két igazságforrása
+  lett (fiók és ujjlenyomat). **Megelőzés:** egy tiltásnak pontosan egy igazságforrása legyen — az ujjlenyomat már a TILTÁSKOR keletkezzen
+  (feloldáskor törlődjön), és új fiók létrehozásakor a KANONIKUS cím ujjlenyomatának létezése jelentsen tiltást; a címenkénti zár (és a
+  kódkérési korlát kulcsa) is a kanonikus címre szóljon. Teszt: minden címváltozat + a Google-út → tiltott.
+- **Tünet 2:** a megőrzési idő és a kulcs-rotáció: az ujjlenyomatnak nem volt lejárata, és a `SESSION_SECRET` rotációja csendben
+  érvénytelenítené a megőrzött tiltásokat. **Megelőzés:** egy helyen definiált megőrzési konstans (alap 12 hónap, a napi takarító törli a
+  lejártakat, az élő tiltás nem jár le), külön stabil kulcs vagy runbook-lépés a rotációhoz; a felhasználói szöveg nevezze meg a megőrzést.
+
+## C-60 — Admin-jog engedélylistából: worktree-ben abszolút út, átirányítás-célú kérés, fail-open negatív gyorsítótár (2026-11-16)
+
+Forrás: JM7c-1 (#462), független biztonsági review.
+
+- **Tünet 1:** worktree-ben dolgozva a `D:\repo\WEBSULI\render.yaml` abszolút úttal kiadott szerkesztés a FŐ checkoutot módosította.
+  **Megelőzés:** worktree-ben minden abszolút út a `.claude/worktrees/<név>/` alatt legyen; a hibás szerkesztést patchként vidd át a
+  munkafába, a fő checkoutot `git restore`-ral állítsd vissza (a fő checkoutban csak a `.audit-ok` push előtt írható).
+- **Tünet 2:** a Playwright `page.route` nem kapja el az átirányítás célját (a 302-es választ követő kérést): az egyik e2e-próba valódi
+  `accounts.google.com` kérést indított csonk kliensazonosítóval (titok nélkül). **Megelőzés:** a saját útvonalat kapd el
+  (`route.fetch({ maxRedirects: 0 })`, a Location kiolvasása, `fulfill`), és biztonsági hálóként `context.route("https://accounts.google.com/**", r => r.abort())`.
+- **Tünet 3:** egy induláskori „nincs listás admin” negatív eredmény öröklődött a következő kérésre, így az e2e-ben a listán kívüli jelzős
+  fiók 3 másodpercig admin volt. **Megelőzés:** kizárás-ellenes (fail-open) döntés negatív eredményét minden kérés elején újra ellenőrizd,
+  ne gyorsítótárazd.
+- **Tünet 4:** az `ADMIN_EMAIL` változót a kód listaként bontotta: több cím esetén mind admin-listára került volna (és egy külső cím az első
+  Google-belépéskor admin lehetett volna). **Megelőzés:** alapértékként csak a pontosan egy érvényes címet tartalmazó érték számít, különben
+  `none` + hangos hibanapló + teszt; telepítés előtt a Renderen az `ADMIN_EMAIL` értékét ellenőrizni kell, és a második admin sorsát (az
+  `ADMIN_ALLOWLIST`) külön tulajdonosi lépésként kezelni (audit H1).
