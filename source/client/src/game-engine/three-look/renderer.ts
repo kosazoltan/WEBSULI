@@ -28,7 +28,9 @@ export function applyRendererLook(
   renderer.setPixelRatio(Math.min(dpr, budget.maxPixelRatio));
   const shadows = budget.shadows && opts.shadows !== false;
   renderer.shadowMap.enabled = shadows;
-  if (shadows) renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // S13 / E21: a three r184 a PCFSoftShadowMap-et elavultnak jelzi és első rajzoláskor konzol-figyelmeztetéssel
+  // PCF-re vált (WebGLShadowMap.js) — ugyanazt az eredményt adjuk előre, figyelmeztetés nélkül (M11).
+  if (shadows) renderer.shadowMap.type = THREE.PCFShadowMap;
 }
 
 /** Renderer for a new scene layer, or null when WebGL is unavailable. */
