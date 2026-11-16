@@ -8,6 +8,7 @@ import {
   OPTION_MAX,
   PROMPT_MAX,
   REVIEW_CAP,
+  REVIEW_STALE_MS,
   createReviewQueue,
 } from "../client/src/game-engine/play/reviewQueue";
 import type { PlayQuestion } from "../client/src/game-engine/play/types";
@@ -110,7 +111,7 @@ test("(4) sérült JSON / dobó tároló → működik memóriában, kivétel n�
     assert.doesNotThrow(() => q.startRun());
   }
   // Hibás tétel a tárolóban: kimarad, a jó megmarad.
-  const good = { key: "x", box: 1, dueAt: 1, dueInRun: null, lastSeen: 1, wrong: 1, correct: 1, payload: { kind: "grade", id: "g07-math-001" } };
+  const good = { key: "x", box: 1, dueAt: T0, dueInRun: null, lastSeen: T0 - DAY, wrong: 1, correct: 1, payload: { kind: "grade", id: "g07-math-001" } };
   const storage = memoryStorage();
   storage.data.set(GAME_REVIEW_KEY, JSON.stringify({ v: 1, items: { "grade:g07-math-001": good, rossz: { box: 9 }, rossz2: null } }));
   const q = createReviewQueue(storage, { now: () => T0 });
@@ -196,6 +197,22 @@ test("(7) payload: szóbank → csak id, évfolyam-bank → id, tananyag / kézi
   assert.deepEqual(mat.quiz.options.slice(1), ["b", "c", "d"]);
   const bank = byKey.get("bank:speed-quiz-math:k")!;
   assert.equal(bank.kind === "quiz" && bank.source, "bank");
+});
+
+test("review #444: az esedékessége után 60 nappal még ott lévő (elhagyott / törölt) tétel kikerül; 59 napos marad", () => {
+  assert.equal(REVIEW_STALE_MS, 60 * DAY);
+  const storage = memoryStorage();
+  const item = (dueAt: number) => ({ box: 0, dueAt, dueInRun: null, lastSeen: dueAt, wrong: 1, correct: 0, payload: { kind: "grade", id: "g" } });
+  storage.data.set(GAME_REVIEW_KEY, JSON.stringify({ v: 1, items: { "grade:old": item(T0 - 61 * DAY), "grade:ok": item(T0 - 59 * DAY), "grade:future": item(T0 + 3 * DAY) } }));
+  const q = createReviewQueue(storage, { now: () => T0, rng: createRng(1) });
+  assert.deepEqual(q.snapshot().map((it) => it.key).sort(), ["grade:future", "grade:ok"]);
+  // Menet közben is: a következő íráskor a közben elavult tétel kimegy.
+  let now = T0;
+  const q2 = createReviewQueue(memoryStorage(), { now: () => now, rng: createRng(2) });
+  q2.record(bankQ("a"), "wrong", 0);
+  now = T0 + 61 * DAY;
+  q2.record(bankQ("b"), "wrong", 0);
+  assert.deepEqual(q2.snapshot().map((it) => it.key), ["bank:speed-quiz-math:b"]);
 });
 
 test("determinizmus és sorrend: dueInRun a legkorábbi esedékességet adja; exclude kihagy", () => {

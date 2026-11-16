@@ -407,6 +407,64 @@ test("menetek közötti ismétlés: az előző menet box 0 tétele a következő
   assert.equal(item.dueAt, T0 + 60_000 + DAY);
 });
 
+test("review #444: a vissza nem állítható (más játék / nyelv) esedékes tételek nem torlaszolják el a mögöttük lévőket", () => {
+  const storage = memoryStorage();
+  const seedQueue = createReviewQueue(storage, { now: () => T0 - 1000, rng: createRng(1) });
+  // 12 idegen (szóbankos, de ennek a providernek nincs szóbankja) tétel KORÁBBI hibával, utána egy visszaállítható.
+  for (let i = 0; i < 12; i++) {
+    seedQueue.record({ key: `vocab:de:de0-x-${i}`, quiz: quiz(`d${i}`), source: "vocab", lang: "de" }, "wrong", 0);
+  }
+  const own = bankPlayQuestion("speed-quiz-math", quiz("own"));
+  // A play() director-órája T0: a saját tétel (T0-kor hibázva) a 12 idegen (T0 − 1 mp) MÖGÖTT esedékes.
+  createReviewQueue(storage, { now: () => T0, rng: createRng(2) }).record(own, "wrong", 0);
+  const review = createReviewQueue(storage, { now: () => T0, rng: createRng(3) });
+  const restoreCalls: string[] = [];
+  const provider = bankProvider(300);
+  const { played } = play({
+    seed: 4, accuracy: 1, questions: 30, review,
+    provider: { ...provider, restore: (item) => (restoreCalls.push(item.key), restoreReviewQuestion(item, { vocab: () => null })) },
+  });
+  assert.ok(played.presentations.some((p) => p.isReview && p.question.key === own.key), "a saját tétel visszatér");
+  for (let i = 0; i < 12; i++) {
+    assert.ok(restoreCalls.filter((k) => k === `vocab:de:de0-x-${i}`).length <= 1, "egy idegen kulcsot menetenként legfeljebb egyszer próbál");
+  }
+});
+
+test("review #444: vegyes (több játék tételeit tartalmazó) közös sorral is teljesül a visszatérési pont; az idegen tétel a sorban marad", () => {
+  const within6: number[] = [];
+  const within10: number[] = [];
+  for (let seed = 1; seed <= 20; seed++) {
+    const storage = memoryStorage();
+    const other = createReviewQueue(storage, { now: () => T0 - 1000, rng: createRng(seed) });
+    // 60 idegen, esedékes tétel: másik játék kézi bankja, más nyelv szóbankja, a bankból törölt évfolyam-tétel.
+    for (let i = 0; i < 20; i++) {
+      other.record(bankPlayQuestion("tornado-hunter-200", quiz(`t${i}`)), "wrong", 0);
+      other.record({ key: `vocab:fr:fr0-x-${i}`, quiz: quiz(`v${i}`), source: "vocab", lang: "fr" }, "wrong", 0);
+      other.record({ key: `grade:torolt-${i}`, quiz: quiz(`g${i}`), source: "grade" }, "timeout", 0);
+    }
+    const review = createReviewQueue(storage, { now: () => T0, rng: createRng(seedFrom("rq", seed)) });
+    const calls = new Map<string, number>();
+    const base = bankProvider(5000);
+    const provider: QuestionProvider = {
+      ...base,
+      restore: (item) => {
+        calls.set(item.key, (calls.get(item.key) ?? 0) + 1);
+        // Ez a játék csak a saját kézi bankját és szóbank / évfolyam-bank nélkül fut.
+        return item.key.startsWith("bank:speed-quiz-math:") ? restoreReviewQuestion(item, {}) : null;
+      },
+    };
+    const { director, simMs } = play({ seed, accuracy: 0.75, questions: 300, provider, review });
+    const s = director.stats(simMs);
+    within6.push(s.reviewReturnWithin6);
+    within10.push(s.reviewReturnWithin10);
+    assert.ok(s.reviewShare <= 0.3 + 1e-9);
+    for (const [key, n] of calls) if (!key.startsWith("bank:speed-quiz-math:")) assert.ok(n <= 1, `${seed}: ${key} ${n}× próbálva`);
+    assert.equal(review.snapshot().filter((it) => !it.key.startsWith("bank:speed-quiz-math:")).length, 60, "az idegen tételek a sorban maradnak (a saját játékuk előveszi)");
+  }
+  assert.ok(median(within6) >= 0.95, `3.–6.: medián ${median(within6)}`);
+  assert.equal(median(within10), 1, `≤ 10: medián ${median(within10)}`);
+});
+
 test("abort: kimenet „aborted”, nem kerül az ismétlési sorba és nem mozdítja a sávot", () => {
   const review = createReviewQueue(null, { now: () => T0 });
   const director = createQuestionDirector({ config: BASE, provider: bankProvider(10), review, rng: createRng(4), startBand: 0.4, now: () => T0 });

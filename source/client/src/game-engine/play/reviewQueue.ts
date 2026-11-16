@@ -22,6 +22,8 @@
  * üres; sérült JSON, hibás tétel vagy tárolókivétel → memóriában folytatja, kivételt soha nem enged ki (a
  * `GE/vocab/seenHistory.ts` mintájára). A tétel-tartalom vágva: prompt ≤ 300, opció ≤ 120, magyarázat ≤ 400 karakter.
  * Cap (alap 400) felett a legnagyobb box, azon belül a legrégebben látott tétel dobódik (a jól tudott, régi tétel megy).
+ * Az esedékessége után 60 nappal (`REVIEW_STALE_MS`) még ott lévő tétel kikerül. A sor KÖZÖS a hét játékban: a más
+ * játék tételét a director a menetre átugorja (`questionDirector.ts` `restore`), a sorban hagyja.
  */
 import type { FourChoiceQuiz } from "@/types/gameQuiz";
 import type { VocabLang } from "@/data/vocabBank/types";
@@ -37,6 +39,11 @@ export const BOX_INTERVAL_MS: readonly [number, number, number, number, number] 
 export const PROMPT_MAX = 300;
 export const OPTION_MAX = 120;
 export const EXPLANATION_MAX = 400;
+/**
+ * Elavulás: az esedékesség után ennyi idővel a tétel kikerül (betöltéskor és minden íráskor). A leghosszabb térköz 21 nap;
+ * 60 napig egyik játék sem vette elő → más játék elhagyott tétele vagy a bankból törölt (visszaállíthatatlan) tétel.
+ */
+export const REVIEW_STALE_MS = 60 * 86_400_000;
 /** Hibás tétel menet közbeni visszatérése: a 3.–6. következő kérdés. */
 export const RETURN_MIN = 3;
 export const RETURN_MAX = 6;
@@ -183,6 +190,10 @@ export function createReviewQueue(
   trim();
 
   function trim(): void {
+    // Elavult tétel: az esedékessége óta REVIEW_STALE_MS telt el, és egyik játék sem hozta vissza (review #444: más játék
+    // tétele, vagy a bankból azóta törölt, végleg visszaállíthatatlan tétel) — ne ragadjon örökre a sorban.
+    const staleBefore = now() - REVIEW_STALE_MS;
+    for (const k of Object.keys(items)) if (items[k]!.dueAt < staleBefore) delete items[k];
     const keys = Object.keys(items);
     if (keys.length <= cap) return;
     keys.sort((a, b) => items[b]!.box - items[a]!.box || items[a]!.lastSeen - items[b]!.lastSeen || (a < b ? -1 : a > b ? 1 : 0));

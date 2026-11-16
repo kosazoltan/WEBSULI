@@ -184,6 +184,8 @@ export function createQuestionDirector(opts: {
   let reviewsAsked = 0;
   let retryAfterMs = Number.NEGATIVE_INFINITY;
   const askedKeys = new Set<string>();
+  /** A menetben a provider által vissza nem állítható ismétlési kulcsok (más játék / nyelv tétele). */
+  const unrestorable = new Set<string>();
   const returns = new Map<string, number>();
   const lastMissPos = new Map<string, number>();
   const wrongs = new Map<string, { quiz: FourChoiceQuiz; pickedOriginalIndex: number | null }>();
@@ -213,7 +215,7 @@ export function createQuestionDirector(opts: {
     const rank = (it: ReviewItem) => [tier(it), returns.get(it.key) ?? 0, missAt(it), it.dueInRun!];
     return review
       .snapshot()
-      .filter((it) => it.dueInRun !== null && it.dueInRun <= position && !capped.has(it.key))
+      .filter((it) => it.dueInRun !== null && it.dueInRun <= position && !capped.has(it.key) && !unrestorable.has(it.key))
       .map((it) => ({ it, r: rank(it) }))
       .sort((a, b) => a.r[0]! - b.r[0]! || a.r[1]! - b.r[1]! || a.r[2]! - b.r[2]! || a.r[3]! - b.r[3]! || (a.it.key < b.it.key ? -1 : a.it.key > b.it.key ? 1 : 0))
       .map((x) => x.it);
@@ -225,6 +227,17 @@ export function createQuestionDirector(opts: {
     return !!q && typeof q.key === "string" && q.key.length > 0 && validQuiz(q.quiz);
   }
 
+  /**
+   * Ismétlés újraépítése. A közös sorban más játék / más nyelv tétele is lehet, amit ez a provider nem tud visszaállítani
+   * (review #444): az ilyen kulcs a menet hátralevő részére kimarad, így nem torlaszolja el a mögötte esedékes tételeket.
+   */
+  function restore(item: ReviewItem): PlayQuestion | null {
+    const q = provider.restore(item);
+    if (usable(q) && q.key === item.key) return q;
+    unrestorable.add(item.key);
+    return null;
+  }
+
   function choose(): Pick | null {
     if (provider.couponOnly) {
       const m = provider.material();
@@ -233,20 +246,20 @@ export function createQuestionDirector(opts: {
     const slot = reviewSlotOpen();
     if (slot) {
       for (const item of inRunCandidates()) {
-        const q = provider.restore(item);
-        if (usable(q) && q.key === item.key) return { q, isReview: true, inRun: true };
+        const q = restore(item);
+        if (q) return { q, isReview: true, inRun: true };
       }
     }
     const m = provider.material();
     if (usable(m) && !askedKeys.has(m.key)) return { q: m, isReview: false, inRun: false };
     if (slot) {
-      const tried = new Set(askedKeys);
+      const skip = new Set([...askedKeys, ...unrestorable]);
       for (let i = 0; i < FRESH_ATTEMPTS; i++) {
-        const item = review.dueAcrossRuns(now(), tried);
+        const item = review.dueAcrossRuns(now(), skip);
         if (!item) break;
-        tried.add(item.key);
-        const q = provider.restore(item);
-        if (usable(q) && q.key === item.key) return { q, isReview: true, inRun: false };
+        skip.add(item.key);
+        const q = restore(item);
+        if (q) return { q, isReview: true, inRun: false };
       }
     }
     for (let i = 0; i < FRESH_ATTEMPTS; i++) {
