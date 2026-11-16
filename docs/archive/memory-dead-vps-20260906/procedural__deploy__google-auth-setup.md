@@ -15,7 +15,7 @@ project: websuli
 GOOGLE_CLIENT_ID=***REMOVED***
 GOOGLE_CLIENT_SECRET=***REMOVED***
 BASE_URL=https://websuli.vip
-ADMIN_EMAIL=kosa.zoltan.ebc@gmail.com
+ADMIN_EMAIL=<ADMIN_EMAIL>
 ```
 
 ## Google Cloud Console

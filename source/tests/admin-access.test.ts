@@ -55,6 +55,41 @@ describe("JM7c-1 — engedélylista feldolgozása", () => {
     assert.deepEqual(parseAdminAllowlist(undefined), { emails: [], invalid: 0 });
   });
 
+  it("review #462 N3: a kettőspontos (pl. „mailto:” előtagú) elem érvénytelen, számolva — senkit nem tesz listássá", async () => {
+    assert.equal(normalizeAdminEmail("mailto:tulaj@pelda.hu"), null);
+    assert.equal(normalizeAdminEmail("MAILTO:Tulaj@Pelda.hu"), null);
+    assert.equal(normalizeAdminEmail("tulaj:x@pelda.hu"), null);
+    assert.equal(normalizeAdminEmail("tulaj@pelda.hu:443"), null);
+    assert.deepEqual(parseAdminAllowlist("mailto:tulaj@pelda.hu, masodik@pelda.hu"), { emails: ["masodik@pelda.hu"], invalid: 1 });
+    // Csupa mailto: lista → érvénytelen lista, visszaesés az ADMIN_EMAIL-re (a mostani viselkedés).
+    setEnv({ ADMIN_ALLOWLIST: "mailto:tulaj@pelda.hu", ADMIN_EMAIL: "tulaj@pelda.hu" });
+    let p = adminPolicy();
+    assert.equal(p.allowlistInvalid, true);
+    assert.equal(p.source, "ADMIN_EMAIL");
+    // mailto: az ADMIN_EMAIL-ben → nem alapérték, hangos hiba; a cím senkit nem tesz listássá.
+    setEnv({ ADMIN_EMAIL: "mailto:tulaj@pelda.hu" });
+    p = adminPolicy();
+    assert.equal(p.adminEmailInvalid, true);
+    assert.equal(p.source, "none");
+    assert.equal(isAllowlistedAdminEmail("tulaj@pelda.hu"), false);
+    assert.equal(isAllowlistedAdminEmail("mailto:tulaj@pelda.hu"), false);
+    // Vegyes lista: a mailto: elem nem illik a tulajdonosra; a hibás elem a naplóban darabszámmal, cím nélkül jelenik meg.
+    const { logger } = await import("../server/lib/logger");
+    const lines: string[] = [];
+    const orig = { info: logger.info, warn: logger.warn, error: logger.error };
+    for (const level of ["info", "warn", "error"] as const) (logger as unknown as Record<string, (...a: unknown[]) => void>)[level] = (...a: unknown[]) => { lines.push(a.map(String).join(" ")); };
+    try {
+      setEnv({ ADMIN_ALLOWLIST: "mailto:tulaj@pelda.hu, masodik@pelda.hu" });
+      assert.equal(isAdminUser(admin("tulaj@pelda.hu")), false);
+      assert.equal(isAdminUser(admin("masodik@pelda.hu")), true);
+      await reportAdminAccessStatus();
+      assert.ok(lines.some((l) => l.includes("1 hibás elemét") && l.includes("mailto:")), lines.join("\n"));
+      assert.ok(!lines.some((l) => l.includes("tulaj")), "a hibás elem értéke nem kerül a naplóba");
+    } finally {
+      Object.assign(logger, orig);
+    }
+  });
+
   it("ALAPÉRTÉK: ha az ADMIN_ALLOWLIST nincs beállítva, az ADMIN_EMAIL a lista — a mostani admin beállítás nélkül admin marad", () => {
     setEnv({ ADMIN_EMAIL: "Tulaj@Pelda.hu" });
     const p = adminPolicy();
@@ -245,6 +280,28 @@ describe("JM7c-1 — kizárás elleni őr", () => {
       await reportAdminAccessStatus();
       assert.ok(lines.some((l) => l.includes("az ADMIN_EMAIL nem pontosan egy érvényes e-mail-cím")), lines.join("\n"));
       assert.ok(!lines.some((l) => l.includes("kulso")), "a hibás érték nem kerül a naplóba");
+    } finally {
+      Object.assign(logger, orig);
+    }
+  });
+
+  it("review #462 N4: az induláskori engedélylista-sor csak forrást és darabszámot ír — címet (maszkolva sem)", async () => {
+    const { logger } = await import("../server/lib/logger");
+    const lines: string[] = [];
+    const orig = { info: logger.info, warn: logger.warn, error: logger.error };
+    for (const level of ["info", "warn", "error"] as const) (logger as unknown as Record<string, (...a: unknown[]) => void>)[level] = (...a: unknown[]) => { lines.push(a.map(String).join(" ")); };
+    try {
+      setEnv({ ADMIN_ALLOWLIST: "tulaj@pelda.hu, masodik@pelda.hu" });
+      configureAdminAccess({ query: async () => ({ rows: [{ email: "tulaj@pelda.hu" }] }) });
+      await reportAdminAccessStatus();
+      const src = lines.find((l) => l.includes("admin-engedélylista forrása"));
+      assert.ok(src?.includes("ADMIN_ALLOWLIST, 2 cím."), src);
+      assert.ok(!lines.some((l) => l.includes("@")), lines.join("\n"));
+      lines.length = 0;
+      setEnv({ ADMIN_EMAIL: "tulaj@pelda.hu" });
+      await reportAdminAccessStatus();
+      assert.ok(lines.some((l) => l.includes("admin-engedélylista forrása: ADMIN_EMAIL, 1 cím.")), lines.join("\n"));
+      assert.ok(!lines.some((l) => l.includes("@")), lines.join("\n"));
     } finally {
       Object.assign(logger, orig);
     }
