@@ -1893,7 +1893,7 @@ polling marad (tervezett viselkedés).
 
 ### JM3a — Online párbaj 2 főre + gépi ellenfél: szoba, meghívás, váróterem, meccs, győzteshirdetés
 
-**Állapot:** nem kezdődött · **Függ:** JM1r · **Modell:** Opus · **Elfogadás:** JM-A3, JM-A3b, JM-A4 (kliens + admin-mód
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-jm3a-online-parbaj, munkafa .claude/worktrees/jatek-jm3a, kanban #52 · **Függ:** JM1r · **Modell:** Opus · **Elfogadás:** JM-A3, JM-A3b, JM-A4 (kliens + admin-mód
 csatlakozás), JM-A5 (első fele)
 **Tulajdonosi döntések (2026-11-16, kötelezők):** (1) csak hálózati közös játék — egyeszközös mód nincs (D20); (2) szobát csak
 játékos-fiók, párosított tanulói profil vagy (admin módban) admin nyithat, csatlakozni vendégként is lehet a kóddal / linkkel,
