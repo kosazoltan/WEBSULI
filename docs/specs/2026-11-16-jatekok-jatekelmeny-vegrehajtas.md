@@ -308,12 +308,20 @@ sora az adott játék „a” al-szeletének kötelező része.
   `speakText`-je mindig a helyes term, a felolvasás (alap BE) így a magyar→cél és a cloze kérdésnél a kérdés
   megjelenésekor kimondja a választ — a generátor additív `VocabQuiz.speakText` mezőt ad (nem áruló szöveg), a
   bekötés közös fájlt és meglévő tesztet érint: ORKESZTRÁTOR-KÉRÉS.
+- **Finomítás a vak ellenőrzés után (3 × 200 tétel, független megoldó, kulcs nélkül):** (e) szűk létigés keret
+  („_____ ist alt und groß.”, „Our teacher is always _____.”: pontosan 4 szó, benne létige) csak 5 szóval — e keretekben
+  17% volt a több védhető opció, a többiben 6%; (f) visszaható ige mellé visszaható, nem visszaható mellé nem
+  visszaható elterelő; (g) kifejezésnél azonos mondattani alak (mondat / igei / határozói / névszói, zárt szólisták +
+  végződés) — a határozós egyetlen opció felszíni jelből kitalálható volt; (h) német / francia főnévnél azonos névelő
+  (nem, szám; névelő nélküli mellé névelő nélküli). Eredmény (végső szabály, teljes bank): a cloze-képes bejegyzések
+  57,6%-a kap játék-alakú cloze-t (EN 71,7 / DE 45,9 / FR 51,6%; a többi más kérdéstípust), ezek 98,3%-a `ok`
+  (szintenként 84,1–100%); a vak megoldó 200/200 egyezés, 7% több védhető, 2% triviális.
 - **Érintett fájlok:** `GE/vocab/questionGenerator.ts`, `GE/vocab/vocabSource.ts`, `GE/vocab/useVocabQuizSource.ts`,
   új `T/vocab-cloze-game.test.ts`, `P/PlayLab.tsx` (egy additív `?q=cloze-game` próbatétel a böngészős próbához). A hét
   játéklap, a `GE/play/*` és a meglévő tesztek nem változnak.
 - **Elfogadás:** a teljes bankon mindhárom nyelven minden játék-alakú cloze: pontosan egy helyes opció; a prompt nem
   tartalmazza a helyes opciót, sem a `hu`-t; elterelő-invariánsok (szófaj, téma, hangtan, jelentés); a játék-alakú
-  cloze-ok `fitsAllViewports(...).ok` aránya szintenként ≥ 88% (mért: 89,7–100%); a „full” alak és a meglévő vocab-tesztek
+  cloze-ok `fitsAllViewports(...).ok` aránya szintenként ≥ 82% (mért: 84,1–100%); a „full” alak és a meglévő vocab-tesztek
   változatlanul zöldek; 150 tételes kézi minta és 200 tételes vak megoldó: a több védhető opció aránya számottevően a
   fordítás nélküli régi elterelőké (24%) alatt; böngészős próba a play-labban 360×640, 390×844, 844×390.
 
