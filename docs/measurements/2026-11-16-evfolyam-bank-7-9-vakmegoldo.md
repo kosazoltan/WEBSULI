@@ -55,6 +55,7 @@ első miniszterelnök” (Batthyány volt), és két védhető válasz az Európ
 - `g07-math-037` (g7-math-t2-06) — vak megoldó: pontatlan megfogalmazás
 - `g07-math-048` (g7-math-t3-04) — audit gyanú/d
 - `g07-hungarian-034` (g7-hungarian-t2-03) — audit: a kérdés idézete („fehér leplet”) nem egyezett a szöveggel → idézet nélkül
+- `g07-hungarian-049` (g7-hungarian-t3-05) — review #453 (Vercel Agent): a magyarázat Mártont az apródokhoz küldött, ajándékot ígérő követnek mondta; a ballada szerint (hu.wikisource) Ali Szondihoz küldi megadásra bírni → kérdés és magyarázat pontosítva; újra-vak kör: 1/1 · kanári 10/10. (Az auditor a kulcsot igazolta, a magyarázat mellékállítását nem — C-43.)
 - `g07-hungarian-052` (g7-hungarian-t3-08) — vak megoldó: a keltezés napja forrásonként eltér (március 13. / 14.) → csere
 - `g07-science-024` (g7-science-t1-06) — audit gyanú/d
 - `g07-science-039` (g7-science-t2-08) — vak megoldó: „sós víz” kétféleképpen érthető (20% / 25%)
