@@ -100,3 +100,8 @@ test("B6: mind a 7 játék az eredménykártya közös jelvény-sorát használj
   assert.match(toast, /pointer-events-none fixed/);
   assert.doesNotMatch(toast, /\btop-20\b/);
 });
+
+test("M9 (a mérő korlátja miatt forrásőr): az állapotvezérelt villanás csökkentett mozgásnál nem indul", () => {
+  assert.match(strip(read("pages/TsunamiEscapeEnglish.tsx")), /if \(!reducedMotion && Math\.random\(\)[^)]*\) \{\s*setStormFlash\(true\);/);
+  assert.match(strip(read("pages/BrainRotSteal.tsx")), /if \(!reducedMotion\) \{\s*setScreenFlash\(/);
+});

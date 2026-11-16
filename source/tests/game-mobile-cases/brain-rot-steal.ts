@@ -27,5 +27,7 @@ export const CASE: GameMobileCase = {
   playReady,
   resultForce: { phase: "over", correctCount: 7 },
   resultTestId: "br-over",
+  quizScope: '[data-testid="br-quiz"]',
+  quizForce: { phase: "quiz" },
   answerWrong,
 };
