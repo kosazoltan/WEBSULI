@@ -551,6 +551,16 @@ valós szerződést kövessék:**
     `.game-hud*`, `.game-overlay`, `.game-dialog`, `.game-pause*`, `.game-result*`, `.game-start*`, `.game-rotate*`.
     Fekvő, alacsony nézetben (`max-height: 500px` és `min-width: 560px`) a szünet menü két oszlopos, az
     eredménykártya és a kezdőképernyő kéthasábos.
+12. **`.game-answer-btn` felülírhatósága (S13 / B7, 2026-11-16).** A szabály eredetileg rétegen kívül állt az
+    `index.css`-ben, ezért a forrásban később álló, azonos fajlagosságú szabályként felülírta a gombra tett Tailwind
+    `text-*` / `leading-*` / `min-h-*` segédosztályt (a Matek sprint ezért `!text-[…]` kerülőutat használt). Most
+    `@layer components` blokkban áll: alapként továbbra is `min-height: 56px`, `font-size: var(--game-answer-font)`,
+    `line-height: 1.2`, de a játék segédosztálya (utilities réteg) felülírja — `!` nem kell. Őr:
+    `tests/game-answer-btn-layer.test.ts`. A meglévő `!text-[…]` ártalmatlan, a játékoldalakat ez a szelet nem módosítja.
+13. **Mérő: kezdőképernyő és képernyőkép beállt állapotban (S13 / B5, 2026-11-16).** A `smallTargets` a
+    kezdőképernyőn is a belépő animáció után mér (`settleIfPresent(page, "[data-game-start]")`: csak ha a közös
+    `StartScreen` jelen van), és a `shot()` állapotonként megvárja a gyökér (`[data-game-start]`, `[data-game-hud]`,
+    `game-pause-menu`, `[data-game-result]`) beállását, mielőtt fotóz. A 48 px-es mérce nem változott.
 
 ```ts
 // source/tests/support/game-mobile-quality.ts (S2)

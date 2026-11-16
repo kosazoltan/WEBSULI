@@ -429,10 +429,14 @@
   pointer-events: none;
 }
 .game-touch-layer > * { pointer-events: auto; }
-.game-answer-btn {
-  min-height: 56px;
-  font-size: var(--game-answer-font);
-  line-height: 1.2;
+/* S13 / B7: a components rétegben áll, így a Tailwind text-* / leading-* / min-h-* segédosztálya (utilities
+   réteg) felülírja — a játékoknak nem kell !text-… kerülőút. Rétegen kívül a később álló szabály nyerne. */
+@layer components {
+  .game-answer-btn {
+    min-height: 56px;
+    font-size: var(--game-answer-font);
+    line-height: 1.2;
+  }
 }
 
 /* Közös gombok (kezdő-, szünet- és eredményképernyő). */
