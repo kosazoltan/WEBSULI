@@ -126,19 +126,25 @@ function guardGame(file: string) {
 
 for (const file of WIRED) guardGame(file);
 
-test("WordLadderHuEn: a magyarázó kártya bezárása indítja a lépés-láncot (A1)", () => {
+// SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 9.): a régi teszt („a magyarázó kártya
+// bezárása indítja a lépés-láncot”, `pendingStepRef` / `dismissExplain` / `explainOpenRef`) a BLOKKOLÓ kártyát rögzítette.
+// A J2a „Szikla-verseny” nem blokkol: hibánál a helyes kapaszkodó ≥ 1,8 mp-ig zölden látszik a falon, a tétel az
+// ismétlési sorba kerül, és a teljes kártya a „Miért?” gombbal nyílik — ilyenkor a menet ÁLL (a magyarázat olvasása
+// közben áll az óra: ez a követelmény megmarad). A böngészős párja: `T/game-explanation-pause.spec.ts`.
+test("WordLadderHuEn: hibánál nincs blokkoló kártya; a „Miért?” nyitja a kártyát, és alatta áll a menet (J2a)", () => {
   const code = pageCode("WordLadderHuEn.tsx");
-  assert.match(code, /pendingStepRef/, "pendingStepRef hiányzik — a kártya alatt tovább lépne a kérdés");
-  assert.match(
-    code,
-    /onDismiss=\{dismissExplain\}/,
-    "a kártya onDismiss-e nem a pending lépés-láncot futtatja",
-  );
-  assert.match(
-    code,
-    /if\s*\(\s*explainOpenRef\.current\s*\)\s*return;/,
-    "a futamidő a kártya alatt is ketyegne",
-  );
+  // A régi kötelező lánc (900 + 620 ms) és a kártyára váró lépés megszűnt.
+  assert.doesNotMatch(code, /runStepChain|pendingStepRef|const REVEAL_MS = 900|const STEP_MS = 620/, "a régi kötelező lépés-lánc maradt a lapon");
+  // A kérdés a nem blokkoló közös sávban van, a válaszcélok a falon (bar mód), „Miért?”-tel.
+  assert.match(code, /<InlineQuestion\b[\s\S]*?mode="bar"[\s\S]*?onWhy=\{openWhy\}/, "a kérdés-sáv nem bar módú, vagy nincs „Miért?”");
+  // A kártya csak a „Miért?”-re épül (a hibás válasz kezelője nem hívja a buildFeedback-et).
+  assert.match(code, /const openWhy = useCallback\(\(\) => \{[\s\S]*?buildFeedback\(/, "a „Miért?” nem a buildFeedback-kel épít kártyát");
+  assert.doesNotMatch(code, /const onOutcome = useCallback\([\s\S]*?buildFeedback\([\s\S]*?\[applyEvents/, "a hibás válasz kezelője automatikusan kártyát nyit");
+  assert.match(code, /<QuizFeedbackCard card=\{why\} onDismiss=\{closeWhy\} \/>/, "a kártya nem a „Miért?” állapotából rajzol");
+  // A kártya alatt áll a menet: a szünet-feltételben a nyitott kártya, a kérdés-óra és a sim szorzója szünetben áll.
+  assert.match(code, /const paused = phase === "play" && \([^)]*why !== null/, "a nyitott kártya nem szünetelteti a menetet");
+  assert.match(code, /if \(!isPaused\) clockRef\.current \+= dt;/, "a kérdés-óra a kártya alatt is ketyegne");
+  assert.match(code, /loop\.setTimeScale\(isPaused \? 0 : /, "a szimuláció (a rivális) a kártya alatt is futna");
 });
 
 test("a komment-szűrő önellenőrzése", () => {

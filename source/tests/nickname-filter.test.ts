@@ -5,8 +5,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  NICKNAME_MESSAGES, PLAYER_NICK_MAX, checkPlayerNickname, nicknameKey, prepareNickname, suggestNicknames, withDiscriminator,
-  type NicknameProblem,
+  BLOCKED_ROOTS, NICKNAME_MESSAGES, PLAYER_NICK_MAX, RESERVED_ROOTS, checkPlayerNickname, confusableFold, nicknameKey, prepareNickname,
+  suggestNicknames, withDiscriminator, type NicknameProblem,
 } from "../shared/player-nickname";
 
 const cp = (...codes: number[]) => String.fromCodePoint(...codes);
@@ -133,6 +133,57 @@ describe("JM7b — review #449 K1: engedélylista, a latin írású hasonmás be
     assert.equal(k("Kis Béla"), k("Kis-Bela"));
     assert.equal(k("Zsófi"), k("zsofi"));
     assert.equal(k("Őzike_7"), k("ozike 7"));
+  });
+});
+
+describe("JM7b-utójavítás N1 — kis L / nagy I / 1 felcserélés (review #449 újraellenőrzés)", () => {
+  /** A tő minden l / i pozícióján minden összetéveszthető jel (kis- és nagybetűvel, számjeggyel). */
+  const confusableVariants = (root: string): string[] => {
+    let out = [""];
+    for (const ch of root) {
+      const opts = ch === "l" || ch === "i" ? ["i", "l", "I", "L", "1"] : [ch];
+      out = out.flatMap((prefix) => opts.map((o) => prefix + o));
+    }
+    return out;
+  };
+
+  it("a szonda hat neve elutasítva (foglalt név / trágár szó), a szerver és a JM2-jegy szűrője is", async () => {
+    const jm1 = await import("../shared/nicknames");
+    const cases: [string, NicknameProblem][] = [
+      ["ADMlN", "RESERVED"], ["WEBSULl", "RESERVED"], ["GECl", "BLOCKED"], ["BUZl", "BLOCKED"], ["PlCSA", "BLOCKED"], ["NlGGER", "BLOCKED"],
+      ["admln", "RESERVED"], ["CIAUDE", "RESERVED"], ["WEBSUII", "RESERVED"], ["Websuuli", "RESERVED"], ["M0D", "RESERVED"],
+    ];
+    for (const [n, p] of cases) {
+      rejectsWith(n, p);
+      assert.ok(jm1.nicknameProblems(n).length > 0, `a JM1 / JM2 szűrő is elutasítja: ${n}`);
+    }
+  });
+
+  it("tulajdonság: MINDEN tiltott és foglalt tő minden l / I / L / 1 / i cseréje elutasítva (kisbetűvel és nagy kezdőbetűvel)", () => {
+    let checked = 0;
+    for (const [roots, problem] of [[BLOCKED_ROOTS, "BLOCKED"], [RESERVED_ROOTS, "RESERVED"]] as const) {
+      for (const root of roots) {
+        for (const v of confusableVariants(root)) {
+          for (const n of [v, v.charAt(0).toUpperCase() + v.slice(1)]) {
+            assert.ok(problemsOf(n).includes(problem), `${root} → ${JSON.stringify(n)}: ${problem} várt, kapott: ${problemsOf(n).join(",") || "OK"}`);
+            checked++;
+          }
+        }
+      }
+    }
+    assert.ok(checked > 400, `generált változatok: ${checked}`);
+  });
+
+  it("a foglaltsági kulcs és a szűrő UGYANAZT az összevonást használja (nem térhetnek el)", () => {
+    for (const [a, b] of [["ADMlN", "ADMIN"], ["WEBSULl", "websuli"], ["GEC1", "geci"], ["Kata1", "KataI"]]) {
+      assert.equal(nicknameKey(a), nicknameKey(b), `${a} ~ ${b}`);
+      assert.equal(confusableFold(a), confusableFold(b), `${a} ~ ${b}`);
+    }
+    assert.equal(nicknameKey("Kis Lili#0042"), confusableFold("Kis Lili#0042").replace(/[ #]/g, ""));
+  });
+
+  it("ellenpróba: gyakori, ártatlan nevek NEM esnek ki (hamis tiltás nincs)", () => {
+    for (const n of ["Lili", "Lilla", "Ildikó", "Bálint", "Vili", "Milán", "Illés", "Olivér", "Emil", "Kitti", "Niki", "Kolibri", "Liliom", "Pilóta", "Csilla", "Gellért", "Villám Róka", "Kis Lili", "Ili_07"]) ok(n);
   });
 });
 
