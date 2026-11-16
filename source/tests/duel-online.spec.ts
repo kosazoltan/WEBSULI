@@ -79,8 +79,11 @@ test.beforeAll(async () => {
   await c.connect();
   try {
     // A: párosított tanulói profil (D21: szobát nyithat) — a token a szerver saját HMAC-szabályával.
-    const learnerId = `e2e-duel-learner-${randomBytes(4).toString("hex")}`;
-    await c.query(`INSERT INTO learners (id, name, grade) VALUES ($1, $2, $3)`, [learnerId, "Párbaj Teszt Tanuló", 5]);
+    // Review #464 ÚJ-4: a `learners` neve egyedi (`learners_name_lower_unique`) — futásonként egyedi név, különben ugyanazon az
+    // adatbázison az újrafuttatás (és a CI `retries`-e) biztosan elbukna.
+    const runTag = randomBytes(4).toString("hex");
+    const learnerId = `e2e-duel-learner-${runTag}`;
+    await c.query(`INSERT INTO learners (id, name, grade) VALUES ($1, $2, $3)`, [learnerId, `Párbaj Teszt ${runTag}`, 5]);
     learnerToken = `${learnerId}.1.${createHmac("sha256", secret).update(`${learnerId}.1`).digest("base64url").slice(0, 22)}`;
     // Admin-munkamenet a `session` táblában (mint az authz-db-harness): az admin módú szobát ezzel nyitja egy Node-kliens.
     const adminId = `e2e-duel-admin-${randomBytes(4).toString("hex")}`;

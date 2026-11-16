@@ -323,6 +323,40 @@ describe("JM2 room-machine — kapcsolat, kilépés, gazda-váltás meccs közbe
     assert.notEqual(s.match!.questions[A]!.key, firstKey);
   });
 
+  it("visszavágó (JM3a-2, K4): a kérő kész; a másik fél „kész”-e = elfogadás → azonnali visszaszámlálás, nem kell újra „Indítás”; a kérő kilépése / új csatlakozó törli a kérést", () => {
+    const finish = (st: RoomState, t0: number) => {
+      let s = st;
+      let t = t0;
+      for (let i = 0; i < 80 && s.phase !== "finished"; i++) {
+        t = Math.max(t + 1, nextWakeMs(s, cfg)!);
+        s = ok(s, { type: "tick" }, t);
+      }
+      assert.equal(s.phase, "finished");
+      return { s, t };
+    };
+    let { s, t } = started();
+    ({ s, t } = finish(s, t));
+    // A vendég (B) kéri a visszavágót: ő és a gazda kész; A „kész”-e már megvan → a gazda „kész”-e helyett B kér, A elfogad.
+    s = ok(s, { type: "rematch", playerId: B }, t + 10);
+    assert.equal(s.phase, "lobby");
+    assert.equal(s.rematchPending, true);
+    assert.equal(s.players.find((p) => p.id === B)!.ready, true, "a kérő kész");
+    // A gazda (A) „Benne vagyok”-ja (kész jelzés — a gazda eleve kész) az elfogadás → azonnali indulás.
+    s = ok(s, { type: "ready", playerId: A, ready: true }, t + 30);
+    assert.equal(s.phase, "countdown", "elfogadás → azonnali indulás");
+    assert.equal(s.rematchPending, false);
+    // A kérő kilép → a kérés törlődik (a maradó nem indít magától).
+    ({ s, t } = finish(ok(s, { type: "tick" }, t + 30 + DEFAULT_ROOM_TIMING.countdownMs), t + 30 + DEFAULT_ROOM_TIMING.countdownMs));
+    // Fordítva: a gazda kér, a vendég „kész”-e indít.
+    s = ok(s, { type: "rematch", playerId: A }, t + 10);
+    assert.equal(s.players.find((p) => p.id === B)!.ready, false);
+    const accepted = ok(s, { type: "ready", playerId: B, ready: true }, t + 15);
+    assert.equal(accepted.phase, "countdown");
+    // A kérő kilép → a kérés törlődik.
+    s = ok(s, { type: "leave", playerId: A }, t + 20);
+    assert.equal(s.rematchPending, false);
+  });
+
   it("állapot-sorszám: minden kimenő változás növeli; elutasított esemény nem", () => {
     const s = lobby();
     const r = step(s, { type: "ready", playerId: B, ready: false }, T0 + 50);
@@ -533,9 +567,14 @@ describe("JM2 room-machine — bank-kimerülés visszavágók közben (review #4
       let t = T0 + 10;
       for (let match = 0; match < 5; match++) {
         for (const id of [B, C]) s = reduceRoom(s, { type: "ready", playerId: id, ready: true }, t, c).state;
-        const st = reduceRoom(s, { type: "start", playerId: A }, t, c);
-        assert.equal(st.error, undefined, `start: ${st.error}`);
-        s = st.state;
+        if (match === 0) {
+          const st = reduceRoom(s, { type: "start", playerId: A }, t, c);
+          assert.equal(st.error, undefined, `start: ${st.error}`);
+          s = st.state;
+        } else {
+          // SPEC-VÁLTOZÁS 2026-11-16 (JM3a-2, review #464 K4): a visszavágót a többiek „kész”-e elfogadja → azonnal indul.
+          assert.equal(s.phase, "countdown", `visszavágó: ${s.phase}`);
+        }
         const seen: Record<string, Set<string>> = { [A]: new Set(), [B]: new Set(), [C]: new Set() };
         for (let guard = 0; guard < 60 && s.phase !== "finished" && s.phase !== "aborted"; guard++) {
           if (s.phase === "round_open") {

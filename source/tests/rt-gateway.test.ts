@@ -262,6 +262,57 @@ describe("JM3a gateway — visszatérés a saját helyre új jeggyel / tárolt t
   });
 });
 
+describe("JM3a-2 gateway — folytatási token forgatása és lejárata (review #464 ÚJ-2)", () => {
+  it("a token egyszer használható: visszaüléskor új tokent ad, a régi érvénytelen; a régebbi lapfül SESSION_MOVED zárást kap (nem újracsatlakozik)", async () => {
+    const { io } = await import("socket.io-client");
+    const { connectRt } = await import("../client/src/lib/rt/rtClient");
+    const h = await harness();
+    const { host, code } = await createRoom(h);
+    const guest = await addPlayer(h, code, 6);
+    const gId = guest.playerId!;
+    const t1 = guest.resumeToken!;
+    const open = (token: string) => connectRt({ ticket: "", resumeToken: token, url: `http://127.0.0.1:${h.port}`, ioFactory: io, extraHeaders: { origin: h.origin }, ackTimeoutMs: 4000 });
+    // Második lapfül ugyanazzal a tokennel, miközben az első még él → átveszi a helyet, az első érthető zárást kap.
+    const moved = new Promise<unknown>((resolve) => guest.socket.on("notice", (n: { code: string }) => n.code === "SESSION_MOVED" && resolve(n)));
+    const tab2 = await open(t1);
+    players.push(tab2 as Player);
+    await moved;
+    await sleep(100);
+    assert.equal(guest.status, "closed");
+    assert.equal(guest.closedCode, "SESSION_MOVED");
+    await new Promise<void>((resolve) => (tab2.resumeToken && tab2.resumeToken !== t1 ? resolve() : tab2.socket.once("welcome", () => resolve())));
+    const t2 = tab2.resumeToken!;
+    assert.notEqual(t2, t1, "visszaüléskor új token");
+    assert.equal(tab2.playerId ?? (await new Promise((r) => tab2.onState((s) => r(s.you.playerId)))), gId);
+    // A régi token többé nem ad vissza helyet.
+    await assert.rejects(open(t1), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players.every((p: any) => p.connected));
+  });
+
+  it("szerveroldali lejárat: a túl régi token nem ül vissza; az új jeggyel saját helyre ülés is új tokent ad", async () => {
+    const { io } = await import("socket.io-client");
+    const { connectRt } = await import("../client/src/lib/rt/rtClient");
+    const { RESUME_TOKEN_MAX_AGE_MS } = await import("../server/realtime/gateway");
+    const h = await harness();
+    const { code } = await createRoom(h);
+    const who = creatorHeaders();
+    const b1 = await addPlayer(h, code, 5, { headers: who });
+    const tOld = b1.resumeToken!;
+    b1.socket.io.reconnection(false);
+    b1.socket.io.engine.close();
+    await sleep(80);
+    const b2 = await join(h, { intent: "join", code }, { headers: who });
+    const back = await b2.request("room:join", { code, grade: 5 });
+    assert.equal(back.ok, true);
+    assert.notEqual((back as { resumeToken: string }).resumeToken, tOld, "saját helyre ülésnél is forgat");
+    const open = (token: string) => connectRt({ ticket: "", resumeToken: token, url: `http://127.0.0.1:${h.port}`, ioFactory: io, extraHeaders: { origin: h.origin }, ackTimeoutMs: 4000 });
+    await assert.rejects(open(tOld), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    h.clock.offsetMs = RESUME_TOKEN_MAX_AGE_MS + 1000;
+    await assert.rejects(open((back as { resumeToken: string }).resumeToken), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    h.clock.offsetMs = 0;
+  });
+});
+
 describe("JM3a gateway — megszakadt régi hely", () => {
   it("ugyanaz a (fiókos) játékos megszakadt kapcsolattal új szobát nyithat: a régi helye felszabadul, az ellenfél győz; élő kapcsolatnál ALREADY_IN_ROOM marad", async () => {
     const h = await harness({ windowMs: 3000 });

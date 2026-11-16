@@ -143,6 +143,8 @@ export async function connectRt(opts: ConnectRtOptions): Promise<RtConnection> {
       forgetSeat();
       closedCode = n.code;
     }
+    // JM3a-2: a hely egy másik lapon folytatódik — ez a kapcsolat véglegesen zárul, újracsatlakozás nélkül.
+    if (n.code === "SESSION_MOVED") closeFor("SESSION_MOVED");
   });
 
   await new Promise<void>((resolve, reject) => {

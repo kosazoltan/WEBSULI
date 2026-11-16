@@ -48,6 +48,8 @@ export const RT_MAX_PENDING_PACKETS = 64;
 export const RT_FLOOD_DISCONNECT_AFTER = 40;
 /** Reakció: kapcsolatonként legfeljebb ennyi ms-onként egy. */
 export const RT_REACTION_MIN_GAP_MS = 1000;
+/** JM3a-2 (ÚJ-2): a folytatási token szerveroldali élettartama (minden sikeres visszaülés újat ad). */
+export const RESUME_TOKEN_MAX_AGE_MS = 6 * 60 * 60_000;
 // Időkorlátok (review #452 KÖZEPES-3; `config.ts`): jegy nélküli kapcsolat `connectTimeoutMs` (10 s), szobába nem lépő
 // `noRoomTimeoutMs` (15 s), szobahely nélkül maradt (kilépés, kirúgás, lezárt szoba) `seatlessDisconnectMs` (3 s).
 
@@ -59,6 +61,8 @@ type Seat = {
   roomCode: string;
   playerId: string;
   resumeToken: string;
+  /** A folytatási token kiadásának ideje (szerveroldali lejárat: `RESUME_TOKEN_MAX_AGE_MS`). */
+  resumeIssuedAt: number;
   socketId: string | null;
   rtt: number[];
   /** A helyet foglaló kapcsolat IP-kulcsa (kitiltáshoz, IP-nkénti szobaplafonhoz) — kifelé soha nem megy. */
@@ -392,13 +396,24 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
 
   function newSeat(identity: string, roomCode: string, playerId: string, socket: Socket): Seat {
     const data = socket.data as SocketData;
-    const seat: Seat = { identity, roomCode, playerId, resumeToken: randomBytes(24).toString("base64url"), socketId: socket.id, rtt: [], ip: data.ip, kind: data.claims?.kind ?? null };
+    const seat: Seat = { identity, roomCode, playerId, resumeToken: randomBytes(24).toString("base64url"), resumeIssuedAt: deps.now(), socketId: socket.id, rtt: [], ip: data.ip, kind: data.claims?.kind ?? null };
     seatsByIdentity.set(identity, seat);
     seatsByResume.set(seat.resumeToken, seat);
     seatsByPlayer.set(playerId, seat);
     (socket.data as SocketData).seat = seat;
     (socket.data as SocketData).intentUsed = true;
     return seat;
+  }
+
+  /**
+   * JM3a-2 (review #464 ÚJ-2): a folytatási token EGYSZER használható — minden sikeres visszaülésnél új tokent kap a hely, a
+   * régi azonnal érvénytelen (szinkron lépés: két párhuzamos kézfogás közül csak az egyik ülhet vissza vele).
+   */
+  function rotateResume(seat: Seat): void {
+    seatsByResume.delete(seat.resumeToken);
+    seat.resumeToken = randomBytes(24).toString("base64url");
+    seat.resumeIssuedAt = deps.now();
+    seatsByResume.set(seat.resumeToken, seat);
   }
 
   function welcome(socket: Socket, seat: Seat | null, resumed: boolean): void {
@@ -464,6 +479,12 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
       // Ismeretlen / visszavont folytatási token: a szoba megszűnt (pl. telepítés, lezárás) — egyértelmű kód, hely nem jön létre.
       const seat = seatsByResume.get(auth.data.resume);
       if (!seat || !registry.get(seat.roomCode)) return fail("ROOM_NOT_FOUND");
+      // Szerveroldali lejárat: a túl régi (pl. egy elfelejtett lapfülben ülő) token nem ad vissza helyet.
+      if (deps.now() - seat.resumeIssuedAt > RESUME_TOKEN_MAX_AGE_MS) {
+        seatsByResume.delete(seat.resumeToken);
+        return fail("ROOM_NOT_FOUND");
+      }
+      rotateResume(seat);
       data.seat = seat;
       data.intentUsed = true;
       socket.data = data;
@@ -493,7 +514,9 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
       const seat = data.seat;
       const old = socketOfSeat(seat);
       if (old && old.id !== socket.id) {
+        // A régebbi lapfül érthető zárást kap (nem 60 s „Kapcsolódás újra…”): a játék egy másik lapon folytatódik.
         (old.data as SocketData).seat = null;
+        send(old, "notice", { code: "SESSION_MOVED", deadlineTs: null });
         old.disconnect(true);
       }
       seat.socketId = socket.id;
@@ -665,6 +688,7 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
             stale.socketId = socket.id;
             stale.ip = data.ip;
             data.seat = stale;
+            rotateResume(stale); // a régi (pl. egy elhagyott lapfülben tárolt) token érvénytelen
             reply(null, { roomCode: code, playerId: stale.playerId, resumeToken: stale.resumeToken });
             const room = registry.get(code);
             if (room) send(socket, "room:state", roomStateView(room, stale.playerId, deps.now(), deps.roomConfig));

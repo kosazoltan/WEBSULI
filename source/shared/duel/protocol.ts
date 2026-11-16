@@ -118,7 +118,8 @@ export const RT_ERROR_TEXT: Record<RtErrorCode, string> = {
   ACCOUNT_REQUIRED: "Szobát nyitni csak belépve lehet. Csatlakozni viszont bárki tud a barátja kódjával!",
 };
 
-export const NOTICE_CODES = ["SERVER_RESTART", "ROOM_EXPIRING", "RUNS_PRIORITY", "PLAYER_LEFT", "KICKED", "ROOM_CLOSED"] as const;
+// JM3a-2 (ÚJ-2): SESSION_MOVED — ugyanaz a hely egy másik lapon / eszközön folytatódik (a régi kapcsolat zárul).
+export const NOTICE_CODES = ["SERVER_RESTART", "ROOM_EXPIRING", "RUNS_PRIORITY", "PLAYER_LEFT", "KICKED", "ROOM_CLOSED", "SESSION_MOVED"] as const;
 export type RtNoticeCode = (typeof NOTICE_CODES)[number];
 
 export const ROOM_PHASES = ["lobby", "countdown", "round_open", "round_reveal", "finished", "aborted"] as const;

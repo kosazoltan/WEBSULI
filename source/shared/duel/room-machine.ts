@@ -183,6 +183,11 @@ export type RoomState = {
   match: RoomMatch | null;
   drainDeadlineMs: number | null;
   closed: boolean;
+  /**
+   * JM3a-2 (K4): visszavágó-kérés van folyamatban (a kérő kész); ha a többiek is „kész”-t jeleznek (= elfogadják), a meccs
+   * AZONNAL indul — nem kell újra „Indítás”. Kilépés vagy egy új meccs törli.
+   */
+  rematchPending?: boolean;
 };
 
 export type RoomEvent =
@@ -500,10 +505,36 @@ function afterReveal(s: RoomState, nowMs: number, cfg: RoomConfig, effects: Room
   openRound(s, nowMs, cfg, effects);
 }
 
+/** A meccs indítása a jelenlévő játékosokkal (a `start` és az elfogadott visszavágó közös útja). */
+function beginMatch(s: RoomState, nowMs: number): void {
+  const present = s.players.filter((p) => p.connected && !p.left);
+  const ids = present.sort((a, b) => a.order - b.order).map((p) => p.id);
+  s.matchNo += 1;
+  s.rematchPending = false;
+  s.match = {
+    ids,
+    duel: createDuel(ids),
+    roundNo: 0,
+    tiebreak: false,
+    openedAtMs: 0,
+    deadlines: {},
+    questions: {},
+    answers: {},
+    lastReveal: null,
+    result: null,
+    matchUsed: {},
+    rawFastestMs: Object.fromEntries(ids.map((id) => [id, null])),
+  };
+  s.phase = "countdown";
+  s.phaseStartMs = nowMs;
+  s.lastActivityMs = nowMs;
+}
+
 /** Kilépés / végleges kiesés feldolgozása (közös a `leave`, a `kick` és a lejárt türelmi idő útjára). */
 function removePlayer(s: RoomState, id: string, nowMs: number, effects: RoomEffect[], cfg: RoomConfig): void {
   const p = player(s, id);
   if (!p) return;
+  s.rematchPending = false;
   const inMatch = isMatchPhase(s.phase) && !!s.match && s.match.ids.includes(id);
   if (inMatch) {
     p.left = true;
@@ -664,6 +695,7 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
         disconnectedAtMs: null,
         order: s.nextOrder++,
       });
+      s.rematchPending = false; // új csatlakozó = új váróterem (a visszavágó-kérés nem rá vonatkozott)
       s.lastActivityMs = nowMs;
       ensureHost(s);
       effects.push({ type: "emitState" });
@@ -712,10 +744,16 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
       const p = player(s, ev.playerId);
       if (!p) return err(state, "NOT_IN_ROOM");
       if (s.phase !== "lobby") return err(state, "BAD_PHASE");
-      if (p.ready === ev.ready) return { state, effects: [{ type: "accepted", playerId: p.id }] };
+      // Elfogadott visszavágónál a már kész gazda „kész” jelzése is elfogadás (indíthat), ezért az nem tér vissza korán.
+      if (p.ready === ev.ready && !(s.rematchPending && ev.ready)) return { state, effects: [{ type: "accepted", playerId: p.id }] };
       p.ready = ev.ready;
       s.lastActivityMs = nowMs;
       effects.push({ type: "accepted", playerId: p.id }, { type: "emitState" });
+      // Elfogadott visszavágó: mindenki kész → azonnali visszaszámlálás (a gazda nevében, a szokásos indítási szabállyal).
+      if (s.rematchPending && s.hostId) {
+        const present = s.players.filter((x) => x.connected && !x.left);
+        if (present.length >= RT_MIN_PLAYERS && present.every((x) => x.ready || x.id === s.hostId) && s.drainDeadlineMs === null) beginMatch(s, nowMs);
+      }
       break;
     }
     case "start": {
@@ -725,25 +763,7 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
       if (s.drainDeadlineMs !== null) return err(state, "SERVER_RESTART");
       const present = s.players.filter((p) => p.connected && !p.left);
       if (present.length < RT_MIN_PLAYERS || present.some((p) => p.id !== s.hostId && !p.ready)) return err(state, "NOT_ENOUGH_PLAYERS");
-      const ids = present.sort((a, b) => a.order - b.order).map((p) => p.id);
-      s.matchNo += 1;
-      s.match = {
-        ids,
-        duel: createDuel(ids),
-        roundNo: 0,
-        tiebreak: false,
-        openedAtMs: 0,
-        deadlines: {},
-        questions: {},
-        answers: {},
-        lastReveal: null,
-        result: null,
-        matchUsed: {},
-        rawFastestMs: Object.fromEntries(ids.map((id) => [id, null])),
-      };
-      s.phase = "countdown";
-      s.phaseStartMs = nowMs;
-      s.lastActivityMs = nowMs;
+      beginMatch(s, nowMs);
       effects.push({ type: "accepted", playerId: ev.playerId }, { type: "emitState" });
       break;
     }
@@ -776,7 +796,9 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
       if (s.phase !== "finished") return err(state, "BAD_PHASE");
       if (s.drainDeadlineMs !== null) return err(state, "SERVER_RESTART");
       s.players = s.players.filter((p) => !p.left);
-      for (const p of s.players) p.ready = p.id === s.hostId;
+      // JM3a-2 (K4): a kérő (és a gazda) kész; a másik fél „kész”-e = elfogadás → azonnali indulás.
+      for (const p of s.players) p.ready = p.id === s.hostId || p.id === ev.playerId;
+      s.rematchPending = true;
       s.match = null;
       s.phase = "lobby";
       s.phaseStartMs = nowMs;
