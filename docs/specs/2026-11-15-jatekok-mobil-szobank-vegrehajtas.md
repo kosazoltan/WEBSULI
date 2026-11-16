@@ -557,6 +557,10 @@ valós szerződést kövessék:**
     párbeszéd `document.body`-ba portálozott, teljes képernyős modális réteg, a z-indexe a közös `--game-z-coupon-expired`
     változóból jön (`.game-coupon-expired`, index.css), a fókusz a „Vissza a leckéhez” gombra kerül. Új fedőréteg
     z-indexét a `.game-overlay` (80) és a lejárati réteg (95) közé kell tenni, nem fölé.
+    Billentyűk: lejáratkor a párbeszéd `window`-capture `keydown`/`keyup` figyelője `stopPropagation`-nel elnyeli az
+    eseményt (az alsó rétegek bubble-fázisú `window` figyelői — kvíz-visszajelzés, szünet menü, játékok — nem kapják
+    meg), az alatta lévő `body`-gyerekek `inert`-ek, és a `document.documentElement.dataset.gameCouponExpired` = "true".
+    Aki `window`-on capture-fázisú billentyűfigyelőt tesz, ezt a jelzőt nézze.
 
 ```ts
 // source/tests/support/game-mobile-quality.ts (S2)

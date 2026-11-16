@@ -49,3 +49,12 @@ test("a lejárati réteg teljes képernyős, a biztonsági sávot a --game-safe-
   assert.match(rule, /--game-safe-bottom/);
   assert.doesNotMatch(rule, /pointer-events:\s*none/);
 });
+
+test("a lejárati párbeszéd a billentyűket capture fázisban elnyeli, az alsó rétegeket inertté teszi", () => {
+  const body = strip(hud).slice(strip(hud).indexOf("export function CouponExpiredOverlay"));
+  assert.match(body, /addEventListener\("keydown", onKey, true\)/);
+  assert.match(body, /addEventListener\("keyup", onKey, true\)/);
+  assert.match(body, /stopPropagation\(\)/);
+  assert.match(body, /setAttribute\("inert"/);
+  assert.match(body, /gameCouponExpired/);
+});

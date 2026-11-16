@@ -57,20 +57,45 @@ export function CouponHud({ session }: { session: CouponSession }) {
  */
 export function CouponExpiredOverlay({ session }: { session: CouponSession }) {
   const backRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const expired = session.expired;
 
   useEffect(() => {
     if (!expired) return;
     backRef.current?.focus({ preventScroll: true });
-    // The only focusable control is the way back: keep Tab on it instead of the layers below.
+
+    // Everything else on the page (the game, the pause menu, the result screen, an open quiz
+    // feedback card) stops receiving pointer, focus and assistive-tech input.
+    const inerted: HTMLElement[] = [];
+    for (const el of Array.from(document.body.children)) {
+      if (el instanceof HTMLElement && el !== dialogRef.current && !el.hasAttribute("inert")) {
+        el.setAttribute("inert", "");
+        inerted.push(el);
+      }
+    }
+    document.documentElement.dataset.gameCouponExpired = "true";
+
+    // The dialog is the only thing that receives keys. A capture listener on `window` runs
+    // before every bubble-phase `window` listener (QuizFeedbackCard, PauseMenu, the games'
+    // own P / Esc / arrow / space handlers), so stopping propagation here keeps them from
+    // acting on the layers beneath — e.g. Enter closing a hidden feedback card instead of
+    // following the link. The default action is untouched: Enter / Space still activate the
+    // focused button. Tab is pinned to the only control.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Tab") {
+      e.stopPropagation();
+      if (e.type === "keydown" && e.key === "Tab") {
         e.preventDefault();
         backRef.current?.focus({ preventScroll: true });
       }
     };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    window.addEventListener("keyup", onKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("keyup", onKey, true);
+      for (const el of inerted) el.removeAttribute("inert");
+      delete document.documentElement.dataset.gameCouponExpired;
+    };
   }, [expired]);
 
   if (!expired || typeof document === "undefined") return null;
@@ -82,6 +107,7 @@ export function CouponExpiredOverlay({ session }: { session: CouponSession }) {
 
   return createPortal(
     <div
+      ref={dialogRef}
       className="game-coupon-expired"
       data-testid="coupon-expired"
       role="dialog"

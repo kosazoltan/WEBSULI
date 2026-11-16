@@ -106,3 +106,26 @@ test("lejárat a szünet menü fölött: a Folytatás nem érhető el, a vissza�
   await page.getByTestId("coupon-expired-back").click();
   await expect(page).toHaveURL(/\/lesson\/older-lesson/);
 });
+
+test("lejárat nyitott kvíz-visszajelzés mellett: a billentyűk csak a párbeszédet érik, Enter a leckéhez visz", async ({ page }) => {
+  const state = await openGameWithCoupon(page);
+  await page.getByRole("button", { name: /indít|indul|start|vadász|rajta/i }).first().click();
+  await expect(page.getByTestId("game-pause")).toBeVisible({ timeout: 15_000 });
+  await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame?.forceState({ phase: "quiz" }));
+  const wrong = page.locator('[data-testid="br-quiz"] [data-correct="false"]').first();
+  await expect(wrong).toBeVisible({ timeout: 10_000 });
+  await wrong.click();
+  await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+  await expireNow(page, state);
+  await assertExpiredOnTop(page, '[data-testid="quiz-feedback-dismiss"]');
+  // Escape és szóköz nem jut le az alsó rétegekhez: a visszajelzés és a párbeszéd marad
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("quiz-feedback")).toBeAttached();
+  await expect(page.getByTestId("coupon-expired")).toBeVisible();
+  await expect(page.getByTestId("coupon-expired-back")).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.dataset.gameCouponExpired)).toBe("true");
+  // Enter a fókuszált gombot aktiválja: navigál, nem a takart kártyát zárja be
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/lesson\/older-lesson/);
+});
