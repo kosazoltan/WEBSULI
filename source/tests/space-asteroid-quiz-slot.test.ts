@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank";
 import { createGradeQuizSeen, isGradeQuizSeen, pickGradeQuiz } from "../client/src/game-engine/gradeQuiz";
-import { pickGradeSlotWithVocab } from "../client/src/lib/spaceAsteroid/quizSlot";
+import { pickGradeSlotWithVocab } from "../client/src/lib/brainRotTuning";
 
 /**
  * S10 / A8 — a szóbank által kiváltott angol évfolyam-banki tétel is fogy (a Brain Rot PR #424 mért csapdája).
