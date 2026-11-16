@@ -10,10 +10,18 @@ export default function ResultBadges({ badges }: { badges: readonly Achievement[
   return (
     <ul className="game-result-badges" data-testid="game-result-badges" aria-label={badges.length > 1 ? "Új jelvények" : "Új jelvény"}>
       {badges.map((a) => (
-        <li key={a.id} className="game-result-badge" data-testid={`game-result-badge-${a.id}`}>
+        <li
+          key={a.id}
+          className="game-result-badge"
+          data-testid={`game-result-badge-${a.id}`}
+          aria-label={`Új jelvény: ${a.title} (+${a.points} pont)`}
+        >
           <span aria-hidden="true">{a.icon}</span>
-          <span>
-            Új jelvény: <strong>{a.title}</strong> (+{a.points} pont)
+          {/* Alacsony fekvő nézetben a felirat és a pont elmarad (index.css), csak az ikon + név látszik. */}
+          <span aria-hidden="true">
+            <span className="game-result-badge-label">Új jelvény: </span>
+            <strong>{a.title}</strong>
+            <span className="game-result-badge-points"> (+{a.points} pont)</span>
           </span>
         </li>
       ))}

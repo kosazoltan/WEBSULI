@@ -256,7 +256,9 @@ async function shot(page: Page, testInfo: TestInfo, c: GameMobileCase, state: st
   const dir = process.env.GAME_MOBILE_SHOT_DIR;
   if (dir) {
     mkdirSync(dir, { recursive: true });
-    await page.screenshot({ path: join(dir, name), type: "jpeg", quality: 70 });
+    // S13: CSS-pixeles kép a commitolt mátrixhoz (7 játék × 3 nézet × 5 állapot); a Pixel 7 2,6-os sűrűségén a
+    // teljes felbontású JPEG túllépné a K.4 150 KB-os keretét. A tesztkimenetben (outputPath) teljes felbontás marad.
+    await page.screenshot({ path: join(dir, name), type: "jpeg", quality: 70, scale: "css" });
   }
 }
 
