@@ -1580,7 +1580,7 @@ export function nicknameProblems(nick: string): string[]; // trágárság (share
 
 ### JM0 — Adatvédelmi javítás (fióktól független, azonnal kiadható)
 
-**Állapot:** nem kezdődött · **Függ:** — · **Modell:** Sonnet · **Elfogadás:** JM-A1, JM-A2
+**Állapot:** folyamatban — ág fix/jatek-jm0-adatvedelem-2, munkafa .claude/worktrees/jatek-jm0, kanban #37, 2026-11-16 · **Függ:** — · **Modell:** Sonnet · **Elfogadás:** JM-A1, JM-A2
 **Fájlok:** `S/gameScoreService.ts`, `S/auth.ts`, `S/routes.ts` (score-végpont és `:1510`), `S/index.ts` (limiter-bekötés),
 új `S/lib/mask-email.ts`, `T/jm0-privacy-guards.test.ts`, `T/game-score-contract-guard.test.ts` (ha a J0b már létrehozta:
 az opcionális `runId` mezővel bővítve — SPEC-VÁLTOZÁS a terv 2. szakasza szerint, additív).
