@@ -51,8 +51,9 @@ import type { GradeQuizItem } from "@/data/gradeQuizBank/types";
 import type { VocabQuiz, VocabSource } from "@/game-engine/vocab";
 import { normalizePrompt } from "../gradeQuiz";
 import { wallClockMs } from "./clock";
+import { READING_WINDOW_CAP_MS, readingMsFor } from "./reading";
 import { createFlowController, type FlowController } from "./flow";
-import { RETURN_MAX, type ReviewItem, type ReviewQueue } from "./reviewQueue";
+import { RETURN_MAX, reviewFitsGrade, type ReviewItem, type ReviewQueue } from "./reviewQueue";
 import { createRunStats, type RunStatsSnapshot } from "./runStats";
 import {
   toRandom,
@@ -64,15 +65,28 @@ import {
   type RandomSource,
 } from "./types";
 
+/**
+ * J0c-b (additív): a director a `config.promptFits`-et `accept`-ként adja a forrásnak. A forrás a jelöltjei közül az
+ * elfogadottat válassza ELŐBB (a többit tegye hátra, ne jelölje látottnak); ha nincs elfogadott, adhat mást is — a sáv
+ * akkor is csonkítás nélkül mutatja. A régi (paraméter nélküli) providerek változatlanul működnek.
+ */
+export type QuestionAcceptCtx = { accept?: (quiz: FourChoiceQuiz) => boolean };
+
 export type QuestionProvider = {
   /** Nem látott tananyag-tétel (a játék meglévő pickUnseenMaterial-ágával). */
-  material(): PlayQuestion | null;
+  material(ctx?: QuestionAcceptCtx): PlayQuestion | null;
   /** Új tétel a játék meglévő választójával (szóbank / évfolyam-bank / kézi bank), a band szerint. */
-  fresh(ctx: { band: number; subject?: string }): PlayQuestion | null;
+  fresh(ctx: { band: number; subject?: string } & QuestionAcceptCtx): PlayQuestion | null;
   /** Ismétlés újraépítése: vocab → VocabSource.questionFor, grade → a bank id-je, quiz → a pillanatkép. */
   restore(item: ReviewItem): PlayQuestion | null;
   /** Kupon mód: csak material() adhat kérdést. */
   couponOnly: boolean;
+  /**
+   * J4a (additív, review #451): évfolyam nélkül tárolt RÉGI ismétlési tételnél a játék dönti el, hogy a forrása ma is
+   * ugyanezt a tételt adná-e a `config.grade` évfolyamon (`reviewFitsGrade` harmadik paramétere). Hiányában az ilyen
+   * (nem szóbanki) tétel a J0b-viselkedés szerint visszatérhet.
+   */
+  legacyReviewFits?: (item: ReviewItem) => boolean;
 };
 export type DirectorConfig = {
   gameId: PlayGameId;
@@ -85,6 +99,10 @@ export type DirectorConfig = {
   grade: number | null;
   bossMinGapMs?: number;   // alap 800
   warmupMs?: number;       // alap 10000 — ennyi ideig nincs ütemezett kérdés (trigger lehet)
+  /** J0c-b (additív): befér-e / elolvasható-e a tétel a sávban (pl. `fitsAllViewports(q, { grade }).ok`); a forrás `accept`-je. */
+  promptFits?: (quiz: FourChoiceQuiz) => boolean;
+  /** J0c-b (additív): az ablak = min(9000, max(windowMsFor, a gyerek becsült olvasási ideje)) — `reading.ts`. */
+  readingAware?: boolean;
 };
 export type QuestionDirector = {
   /** Játékidőben hívja a játék; ha az ütemezés szerint kérdés jár ÉS ctx.calm (nincs épp kritikus játékhelyzet vagy maxGap közel), új presentationt ad. */
@@ -172,6 +190,13 @@ export function createQuestionDirector(opts: {
   const warmupMs = config.warmupMs ?? DEFAULT_WARMUP_MS;
   const bossMinGapMs = config.bossMinGapMs ?? DEFAULT_BOSS_MIN_GAP_MS;
   const flow = createFlowController({ startBand: opts.startBand });
+  const acceptCtx: QuestionAcceptCtx = config.promptFits ? { accept: config.promptFits } : {};
+  const windowFor = (prompt: string, options: readonly PresentedOption[]): number => {
+    const base = windowMsFor(prompt, config.grade, config.baseWindowMs);
+    if (!config.readingAware) return base;
+    const read = readingMsFor(prompt, options.map((o) => o.label), config.grade);
+    return Math.min(READING_WINDOW_CAP_MS, Math.max(base, read));
+  };
   const runStats = createRunStats({ warmupSec: warmupMs / 1000 });
   review.startRun();
 
@@ -232,6 +257,12 @@ export function createQuestionDirector(opts: {
    * (review #444): az ilyen kulcs a menet hátralevő részére kimarad, így nem torlaszolja el a mögötte esedékes tételeket.
    */
   function restore(item: ReviewItem): PlayQuestion | null {
+    // Közös évfolyam-szabály (review #451): más évfolyam tétele ebben a menetben nem jön vissza — a sorban marad a
+    // saját évfolyamú menetének (ugyanúgy átugorva, mint az idegen játék tétele).
+    if (!reviewFitsGrade(item, config.grade, provider.legacyReviewFits)) {
+      unrestorable.add(item.key);
+      return null;
+    }
     const q = provider.restore(item);
     if (usable(q) && q.key === item.key) return q;
     unrestorable.add(item.key);
@@ -240,7 +271,7 @@ export function createQuestionDirector(opts: {
 
   function choose(): Pick | null {
     if (provider.couponOnly) {
-      const m = provider.material();
+      const m = provider.material(acceptCtx);
       return usable(m) && !askedKeys.has(m.key) ? { q: m, isReview: false, inRun: false } : null;
     }
     const slot = reviewSlotOpen();
@@ -250,7 +281,7 @@ export function createQuestionDirector(opts: {
         if (q) return { q, isReview: true, inRun: true };
       }
     }
-    const m = provider.material();
+    const m = provider.material(acceptCtx);
     if (usable(m) && !askedKeys.has(m.key)) return { q: m, isReview: false, inRun: false };
     if (slot) {
       const skip = new Set([...askedKeys, ...unrestorable]);
@@ -263,7 +294,7 @@ export function createQuestionDirector(opts: {
       }
     }
     for (let i = 0; i < FRESH_ATTEMPTS; i++) {
-      const f = provider.fresh({ band: flow.band() });
+      const f = provider.fresh({ band: flow.band(), ...acceptCtx });
       if (!f) break;
       if (usable(f) && !askedKeys.has(f.key)) return { q: f, isReview: false, inRun: false };
     }
@@ -292,12 +323,13 @@ export function createQuestionDirector(opts: {
     if (!pick) return null;
     const { q, isReview } = pick;
     nextId += 1;
+    const options = buildOptions(q.quiz);
     const p: QuestionPresentation = {
       id: nextId,
       question: q,
       isReview,
-      options: buildOptions(q.quiz),
-      windowMs: windowMsFor(q.quiz.prompt, config.grade, config.baseWindowMs),
+      options,
+      windowMs: windowFor(q.quiz.prompt, options),
       slowMo: config.slowMo,
       startedAtSimMs: simNowMs,
       reason,
@@ -327,7 +359,10 @@ export function createQuestionDirector(opts: {
       correctOriginalIndex: quiz.correctIndex,
       responseMs: Math.max(0, endMs - p.startedAtSimMs),
     };
-    review.record(p.question, result, pos);
+    // Review #451: a tétel évfolyama a menet évfolyama, ha a forrás nem adott sajátot (a közös sor csak azonos
+    // évfolyamon hozza vissza — `reviewFitsGrade`).
+    const recorded = config.grade !== null && p.question.grade === undefined ? { ...p.question, grade: config.grade } : p.question;
+    review.record(recorded, result, pos);
     if (result !== "aborted") {
       flow.push({ kind: "answer", correct: result === "correct", responseMs: result === "timeout" ? p.windowMs : outcome.responseMs, windowMs: p.windowMs });
     }
@@ -410,23 +445,32 @@ export function gradePlayQuestion(item: GradeQuizItem): PlayQuestion {
     quiz: { id: item.id, prompt: item.prompt, options: item.options.slice(), correctIndex: item.correctIndex, explanation: item.explanation },
     source: "grade",
     subject: item.subject,
+    ...(Number.isInteger(item.grade) ? { grade: item.grade } : {}),
   };
 }
 
 /** Tananyag-kvíz (`pickUnseenMaterial`) → kulcs `mat:<id vagy normalizePrompt>`; kupon módban `source: "coupon"`. */
-export function materialPlayQuestion(quiz: FourChoiceQuiz, opts?: { subject?: string; couponItemId?: string; coupon?: boolean }): PlayQuestion {
+export function materialPlayQuestion(quiz: FourChoiceQuiz, opts?: { subject?: string; couponItemId?: string; coupon?: boolean; grade?: number }): PlayQuestion {
   return {
     key: `mat:${idOrPrompt(quiz)}`,
     quiz: quizOf(quiz),
     source: opts?.coupon || opts?.couponItemId ? "coupon" : "material",
     ...(opts?.subject ? { subject: opts.subject } : {}),
     ...(opts?.couponItemId ? { couponItemId: opts.couponItemId } : {}),
+    ...(opts?.grade !== undefined && Number.isInteger(opts.grade) ? { grade: opts.grade } : {}),
   };
 }
 
 /** A játék saját (kézi) bankja → kulcs `bank:<gameId>:<id vagy normalizePrompt>`. */
-export function bankPlayQuestion(gameId: PlayGameId, quiz: FourChoiceQuiz, subject?: string): PlayQuestion {
-  return { key: `bank:${gameId}:${idOrPrompt(quiz)}`, quiz: quizOf(quiz), source: "bank", ...(subject ? { subject } : {}) };
+export function bankPlayQuestion(gameId: PlayGameId, quiz: FourChoiceQuiz, subject?: string, grade?: number): PlayQuestion {
+  return {
+    key: `bank:${gameId}:${idOrPrompt(quiz)}`,
+    quiz: quizOf(quiz),
+    source: "bank",
+    ...(subject ? { subject } : {}),
+    // J4a (additív, review #451): az évfolyam a tételbe kerül (az ismétlési sor csak azonos évfolyamon hozza vissza).
+    ...(grade !== undefined && Number.isInteger(grade) ? { grade } : {}),
+  };
 }
 
 /**
@@ -446,5 +490,11 @@ export function restoreReviewQuestion(
     const g = deps.gradeItem?.(p.id) ?? null;
     return g ? { ...gradePlayQuestion(g), key: item.key } : null;
   }
-  return { key: item.key, quiz: quizOf(p.quiz), source: p.source, ...(p.subject ? { subject: p.subject } : {}) };
+  return {
+    key: item.key,
+    quiz: quizOf(p.quiz),
+    source: p.source,
+    ...(p.subject ? { subject: p.subject } : {}),
+    ...(typeof item.grade === "number" ? { grade: item.grade } : {}),
+  };
 }

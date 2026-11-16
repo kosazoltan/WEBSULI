@@ -708,7 +708,7 @@ változás”).
 
 ## J0c — Közös UI: kérdés-sáv, „Miért?”, eredmény-lista, felolvasás, beállítás, teszt-kampó, hang, próbaoldal
 
-**Állapot:** folyamatban — ág feat/jatek-j0c-play-ui, munkafa .claude/worktrees/jatek-j0c, kanban #40
+**Állapot:** kész (#446) · **Állapot (J0c-b — hosszú kérdés koppintás nélkül olvasható):** folyamatban — ág fix/jatek-j0c-b-hosszu-kerdes, munkafa .claude/worktrees/jatek-j0c, kanban #46
 **Függ:** J0b merge. **Cél-mondatok:** G3, G6. **Elfogadás:** J1 (próbaoldalon), J5, J14, J16 (komponens-szinten).
 
 ### Fájlok (csak ezek)
@@ -1141,7 +1141,7 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
 
 ## J4 — Gyors matek sprint: „Neon védőtorony” (J4a, J4b) — D1 alapértelmezés
 
-**Állapot (J4a):** nem kezdődött · **Állapot (J4b):** nem kezdődött
+**Állapot (J4a):** folyamatban — ág feat/jatek-j4a-matek, munkafa .claude/worktrees/jatek-j4a, kanban #44 · **Állapot (J4b):** nem kezdődött
 **Függ:** J0c merge. Párhuzamosan a J2-vel. **Elfogadás:** J-SQ, J1–J10, J16, M1–M12. Terv: 5.4.
 
 ### Fájlok
