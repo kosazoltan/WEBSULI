@@ -7,17 +7,30 @@ import {
   pickGradeQuiz,
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
-import { saveClassroomGrade } from "@/lib/classroomStore";
+import { loadClassroomGrade, saveClassroomGrade } from "@/lib/classroomStore";
 import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import * as THREE from "three";
-import { ArrowLeft, Heart, Star, Zap, RotateCcw, Rocket, ShieldAlert, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { ArrowLeft, Pause, ShieldAlert, Sparkles, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  GameHud,
+  GameShell,
+  PauseMenu,
+  ResultScreen,
+  StartScreen,
+  useBestScore,
+  useHaptics,
+  useTouchCapable,
+  type GameHudStat,
+  type GameScreenState,
+} from "@/game-engine/mobile";
+import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
+import { aimAssistVx } from "@/lib/spaceAsteroid/aimAssist";
+import { pickGradeSlotWithVocab } from "@/lib/spaceAsteroid/quizSlot";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
@@ -47,12 +60,11 @@ import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
-import { useReducedMotion } from "@/game-engine/useReducedMotion";
+import { motionScale, useReducedMotion } from "@/game-engine/useReducedMotion";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import HoldButton from "@/game-engine/HoldButton";
 import { joystickToDirections } from "@/game-engine/joystick";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
-import { useCoarsePointer } from "@/hooks/useCoarsePointer";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import {
   LOOK_BUDGET,
@@ -65,7 +77,14 @@ import {
   glowTexture,
   type PostFx,
 } from "@/game-engine/three-look";
-import { buildNebula, buildPlanet, buildStarLayer, type Nebula } from "@/game-engine/scenes/spaceBackdrop";
+import {
+  buildNebula,
+  buildPlanet,
+  buildStarLayer,
+  shockwaveFrame,
+  shockwaveTexture,
+  type Nebula,
+} from "@/game-engine/scenes/spaceBackdrop";
 
 /* =====================================================================
  * Galaktikus Aszteroida Kvíz Vadász – Three.js 3D űrharc
@@ -111,8 +130,8 @@ type Quiz = {
   /** T-1: a MIÉRT rossz válasznál — a lecke exportjából vagy a generátorból. */
   explanation?: string | null;
   topic?: string | null;
-  /** `grade`: a közös évfolyam-bankból (3–12. évfolyam, spec 2026-09-29). */
-  source?: "material" | "fallback" | "grade";
+  /** `grade`: a közös évfolyam-bankból (3–12. évfolyam, spec 2026-09-29); `vocab`: a központi szóbankból (S10, A8). */
+  source?: "material" | "fallback" | "grade" | "vocab";
   /** A közös bank tételének tényleges évfolyama (kimerüléskor a szomszédos évfolyamé is lehet). */
   grade?: number;
 };
@@ -265,6 +284,17 @@ function loadGrade(): number | null {
     return null;
   }
 }
+
+/**
+ * S10 / M8: a játék saját választása, ennek hiányában a közös osztály-tár (a többi játék / a profil írja) —
+ * így a játéklistáról két érintéssel indul akkor is, ha ebben a játékban még nem választott osztályt.
+ */
+function initialGrade(): number | null {
+  return loadGrade() ?? loadClassroomGrade();
+}
+
+/** Lökéshullám-gyűrű (S10): additív sprite, az életkora a render-hurokban nő. */
+type Shockwave = { sprite: THREE.Sprite; age: number; radius: number };
 
 function saveGrade(grade: number): void {
   try {
@@ -729,15 +759,27 @@ function buildPowerPickupMesh(): THREE.Group {
 
 export default function SpaceAsteroidQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const coarsePointer = useCoarsePointer();
+  // S10 / terv 4.5: közös érintés-észlelés (any-pointer: coarse + valódi érintés) — érintős laptop is kap vezérlőt.
+  const touchCapable = useTouchCapable();
+  const touchCapableRef = useRef(touchCapable);
+  touchCapableRef.current = touchCapable;
+  const haptics = useHaptics();
+  const [, navigate] = useLocation();
+  const bestScore = useBestScore("space-asteroid-quiz");
+  const [bestInfo, setBestInfo] = useState<{ best: number; isNewBest: boolean } | null>(null);
 
   // LS-4 (D3): the play-time coupon earned in a lesson, exactly as in Tsunami —
   // without a coupon this is inert and free play stays the default.
   const coupon = useCouponSession();
 
   // ----- Játékállapot (UI) -----
-  const [phase, setPhase] = useState<Phase>(loadGrade() != null ? "intro" : "grade");
-  const [grade, setGrade] = useState<number | null>(loadGrade());
+  const [phase, setPhase] = useState<Phase>(initialGrade() != null ? "intro" : "grade");
+  const [grade, setGrade] = useState<number | null>(initialGrade());
+  /** S10: a futás kvíz-mérlege az eredményképernyőhöz (jó válaszok / összes válasz). */
+  const [quizCorrect, setQuizCorrect] = useState(0);
+  const [quizTotal, setQuizTotal] = useState(0);
+  /** S10: a joystick húzásának megszakítása szünetkor / fókuszvesztéskor (VirtualJoystick resetSignal). */
+  const [joyReset, setJoyReset] = useState(0);
   const [score, setScore] = useState(0);
   const [wave, setWave] = useState(1);
   const [lives, setLives] = useState(3);
@@ -777,12 +819,21 @@ export default function SpaceAsteroidQuiz() {
       },
       forceState: (patch) => {
         if (patch.phase === "intro" || patch.phase === "grade" || patch.phase === "play" || patch.phase === "over") {
+          setPaused(false);
           setPhase(patch.phase);
+        }
+        // S10 (M9, M10): rossz válasz kiváltásához egy kvíz megnyitása a futó játékban.
+        if (patch.phase === "quiz") {
+          setPaused(false);
+          enqueueQuizRef.current("wave");
         }
         if (typeof patch.gameWon === "boolean") setGameWon(patch.gameWon);
         if (typeof patch.correctCount === "number") {
-          setScore(Math.max(0, patch.correctCount) * 10);
+          const n = Math.max(0, patch.correctCount);
+          setScore(n * 10);
           setWave(12);
+          setQuizCorrect(n);
+          setQuizTotal(n);
         }
       },
     });
@@ -855,6 +906,27 @@ export default function SpaceAsteroidQuiz() {
     timeoutsRef.current.push(id);
     return id;
   }, []);
+  /**
+   * S10 / review #426 („elavult időzítők”): minden futás saját azonosítót kap. A futáshoz kötött késleltetés
+   * (győzelmi robbanás → eredmény, rázás-visszaállítás, toast) csak akkor fut le, ha közben nem volt újrakezdés
+   * vagy kilépés; újrakezdéskor / kilépéskor a függő időzítők törlődnek is.
+   */
+  const runIdRef = useRef(0);
+  const pushRunTimeout = useCallback((cb: () => void, ms: number): number => {
+    const runId = runIdRef.current;
+    return pushTimeout(() => {
+      if (runIdRef.current !== runId) return;
+      cb();
+    }, ms);
+  }, [pushTimeout]);
+  const clearPendingTimeouts = useCallback(() => {
+    timeoutsRef.current.forEach((t) => window.clearTimeout(t));
+    timeoutsRef.current = [];
+  }, []);
+  /** S10: robbanás-lökéshullámok (a render-hurok tágítja és törli őket). */
+  const shockwavesRef = useRef<Shockwave[]>([]);
+  /** A teszt-API (forceState) a legfrissebb kvíz-indítót hívja. */
+  const enqueueQuizRef = useRef<(reason: QuizReason) => void>(() => {});
 
   // Three.js objektumok — useEffect-ben hozzuk létre, refbe tesszük.
   const sceneRefs = useRef<{
@@ -877,6 +949,8 @@ export default function SpaceAsteroidQuiz() {
     enemiesGroup: THREE.Group;
     bulletsGroup: THREE.Group;
     pickupsGroup: THREE.Group;
+    /** S10: robbanás-lökéshullámok rétege. */
+    fxGroup: THREE.Group;
     enemyMeshById: Map<number, THREE.Object3D>;
     bulletMeshById: Map<number, THREE.Object3D>;
     pickupMeshById: Map<number, THREE.Object3D>;
@@ -926,20 +1000,60 @@ export default function SpaceAsteroidQuiz() {
    * 3–12. évfolyamon (spec 2026-09-29): nem látott tananyag-kvíz → közös évfolyam-bank
    * (az adaptív sáv szerinti szinten) → a régi általános bank, ha a közös bank üres/kimerült.
    */
+  /**
+   * S10 / terv A8: az angol kérdés-hely a központi szóbankból (közös napló mind a hét játékra). `null`, amíg
+   * tölt, vagy ha a betöltés hibázott — ilyenkor a kézi `FALLBACK_QUIZZES` / évfolyam-bank megy, változatlanul.
+   * A bekötés EGY helyen kapcsolható ki: itt (`enabled`).
+   */
+  const vocab = useVocabQuizSource("en", true);
+
   const pickQuiz = useCallback((): Quiz => {
     const sharedGrade = gradeForGame(grade);
     const couponMaterialOnly = coupon.active && quizPool.some((q) => q.source === "material");
+    const seen = gradeSeenRef.current;
     if (sharedGrade != null && !couponMaterialOnly) {
-      const seen = gradeSeenRef.current;
       const material = pickUnseenMaterial(quizPool.filter((q) => q.source === "material"), seen);
       if (material) {
         markGradeQuizSeen(seen, material);
         return material;
       }
-      const item = pickGradeQuiz({ grade: sharedGrade, band: adaptiveRef.current.band, seen });
-      if (item) {
-        markGradeQuizSeen(seen, item);
-        return {
+    }
+
+    // A tananyag-ág UTÁN: ha a kérdés-hely angol, a szóbankból kérdez. A lap nem sorsol tárgyat előre — a tárgy a
+    // meglévő választásból (évfolyam-bank tétele, ill. a régi bank `topic: "english"` tétele) derül ki, így az
+    // eloszlás a régi marad, csak az angol tétel forrása cserélődik.
+    const fromVocab = (): Quiz | null => {
+      const vq = vocab?.next(vocabLevelForGrade(grade, adaptiveRef.current.band)) ?? null;
+      if (!vq) return null;
+      markGradeQuizSeen(seen, vq);
+      return {
+        id: vq.id,
+        prompt: vq.prompt,
+        options: [...vq.options],
+        correctIndex: vq.correctIndex,
+        explanation: vq.explanation,
+        topic: "english",
+        source: "vocab",
+      };
+    };
+    /** Kézi angol kérdés: a helyes válasza a közös naplóba, hogy a szóbank ne kérdezze vissza ugyanazt a szót. */
+    const manualEnglish = (q: Quiz): Quiz => {
+      if (q.topic === "english" && q.source !== "material") vocab?.markExternal(q.options[q.correctIndex]!);
+      return q;
+    };
+
+    if (sharedGrade != null && !couponMaterialOnly) {
+      // A kiválasztott tétel MINDIG fogy (Brain Rot review #424), akkor is, ha a szóbank váltja ki — különben a
+      // `pickGradeQuiz` a legelső nem üres sávban ragadna, és a nem angol tételek elfogyta után csak angolt adna.
+      const slot = pickGradeSlotWithVocab({
+        pick: () => pickGradeQuiz({ grade: sharedGrade, band: adaptiveRef.current.band, seen }),
+        seen,
+        vocabNext: fromVocab,
+      });
+      if (slot?.kind === "vocab") return slot.quiz;
+      if (slot) {
+        const item = slot.item;
+        return manualEnglish({
           id: item.id,
           prompt: item.prompt,
           options: [...item.options],
@@ -948,7 +1062,7 @@ export default function SpaceAsteroidQuiz() {
           topic: item.subject === "science" ? "nature" : item.subject,
           source: "grade",
           grade: item.grade,
-        };
+        });
       }
     }
     const pool = quizPool.length > 0 ? quizPool : FALLBACK_QUIZZES;
@@ -959,8 +1073,13 @@ export default function SpaceAsteroidQuiz() {
     const picked = candidates[Math.floor(Math.random() * candidates.length)] ?? FALLBACK_QUIZZES[0]!;
     recent.push(picked.prompt);
     while (recent.length > RECENT_WINDOW) recent.shift();
-    return picked;
-  }, [quizPool, grade, coupon.active]);
+    // A régi bank angol helye (1–2. évfolyam, vagy kimerült közös bank): előbb a szóbank, utána a kézi tétel.
+    if (picked.topic === "english" && picked.source !== "material" && !couponMaterialOnly) {
+      const vq = fromVocab();
+      if (vq) return vq;
+    }
+    return manualEnglish(picked);
+  }, [quizPool, grade, coupon.active, vocab]);
 
   /* ============== Phase / játékvezérlés ============== */
 
@@ -968,9 +1087,35 @@ export default function SpaceAsteroidQuiz() {
     phaseRef.current = phase;
   }, [phase]);
 
+  /**
+   * S10 / #422: a vezérlés elengedése (szünet, fókuszvesztés, elforgatás): a billentyű- és érintés-irányok és a
+   * tűz nullázva, a joystick futó húzása megszakítva — visszatéréskor semmi nem „ragad be”.
+   */
+  const releaseControls = useCallback(() => {
+    for (const k of ["left", "right", "up", "down", "fire"] as const) {
+      keysRef.current[k] = false;
+      touchRef.current[k] = false;
+    }
+    setJoyReset((n) => n + 1);
+  }, []);
+
   useEffect(() => {
     pausedRef.current = paused;
-  }, [paused]);
+    if (paused) releaseControls();
+  }, [paused, releaseControls]);
+
+  /** S10: a szünet játék és kvíz közben is elérhető (HUD-gomb, kvízréteg gombja, P, automatikus szünet). */
+  const pauseGame = useCallback(() => {
+    if (phaseRef.current !== "play" && phaseRef.current !== "quiz") return;
+    pausedRef.current = true;
+    setPaused(true);
+  }, []);
+  const resumeGame = useCallback(() => {
+    // A szünet alatt eltelt idő ne kerüljön egyetlen képkockába (a rAF-hurok dt-je).
+    lastTimeRef.current = null;
+    pausedRef.current = false;
+    setPaused(false);
+  }, []);
 
   useEffect(() => {
     livesRef.current = lives;
@@ -1033,6 +1178,8 @@ export default function SpaceAsteroidQuiz() {
   }, [phase, paused, powerTimer]);
 
   const answerLockedRef = useRef(false);
+  /** G-1: magyarázó kártya rossz válaszra. */
+  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
 
   const enqueueQuiz = useCallback((reason: QuizReason) => {
     answerLockedRef.current = false;
@@ -1040,6 +1187,7 @@ export default function SpaceAsteroidQuiz() {
     setActiveQuiz(pickQuiz());
     setPhase("quiz");
   }, [pickQuiz]);
+  enqueueQuizRef.current = enqueueQuiz;
 
   /** Hullám indítása: spawn count + intro-banner. A kvíz ezt MEGELŐZI. */
   const beginWaveSpawning = useCallback(() => {
@@ -1052,6 +1200,15 @@ export default function SpaceAsteroidQuiz() {
   }, []);
 
   const startNewRun = useCallback(() => {
+    // S10 / review #426: új futás → új azonosító, az előző futás függő időzítői törölve.
+    runIdRef.current += 1;
+    clearPendingTimeouts();
+    setFeedback(null);
+    setWrongShake(false);
+    setQuizCorrect(0);
+    setQuizTotal(0);
+    setBestInfo(null);
+    releaseControls();
     runLevelRef.current = levels.level;
     levelClearedRef.current = false;
     adaptiveRef.current.reset(grade ?? 4, runLevelRef.current);
@@ -1099,10 +1256,7 @@ export default function SpaceAsteroidQuiz() {
     gameElapsedRef.current = 0;
     lastSpawnAtRef.current = 0;
     enqueueQuiz("wave");
-  }, [enqueueQuiz, grade, levels.level]);
-
-  /** G-1: magyarázó kártya rossz válaszra. */
-  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
+  }, [enqueueQuiz, grade, levels.level, clearPendingTimeouts, releaseControls]);
 
   const dismissFeedback = useCallback(() => {
     setFeedback(null);
@@ -1120,10 +1274,15 @@ export default function SpaceAsteroidQuiz() {
     adaptiveRef.current.answer(idx === activeQuiz.correctIndex);
     if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz
     maybeClaimCouponBonus(coupon, activeQuiz.id, idx);
+    setQuizTotal((n) => n + 1);
     if (idx !== activeQuiz.correctIndex) {
       sfxError();
-      setWrongShake(true);
-      pushTimeout(() => setWrongShake(false), 320);
+      haptics("error");
+      // M9: csökkentett mozgásnál nincs rázás (a piros keret és a magyarázó kártya jelez).
+      if (!reducedMotionRef.current) {
+        setWrongShake(true);
+        pushRunTimeout(() => setWrongShake(false), 320);
+      }
       setRevealCorrectIdx(activeQuiz.correctIndex);
       setWrongIdx(idx);
       const outcome = streakProtector.handleWrong({ streak: combo });
@@ -1150,6 +1309,8 @@ export default function SpaceAsteroidQuiz() {
     }
     // Helyes válasz
     sfxSuccess();
+    haptics("success");
+    setQuizCorrect((n) => n + 1);
 
     setActiveQuiz(null);
     setRevealCorrectIdx(null);
@@ -1288,6 +1449,8 @@ export default function SpaceAsteroidQuiz() {
     scene.add(bulletsGroup);
     const pickupsGroup = new THREE.Group();
     scene.add(pickupsGroup);
+    const fxGroup = new THREE.Group();
+    scene.add(fxGroup);
 
     const postFx = createPostFx(renderer, scene, camera, tier, { strength: 0.7, radius: 0.45, threshold: 0.86 });
 
@@ -1295,7 +1458,7 @@ export default function SpaceAsteroidQuiz() {
       scene, camera, renderer, starfield, nebula, playerGroup, thrusterMesh, shieldMesh, shieldFullMesh,
       brightStars, planet, postFx, sparkles, thrusterGlow, bulletGlow,
       reducedParticles: budget.particleScale,
-      enemiesGroup, bulletsGroup, pickupsGroup,
+      enemiesGroup, bulletsGroup, pickupsGroup, fxGroup,
       enemyMeshById: new Map(),
       bulletMeshById: new Map(),
       pickupMeshById: new Map(),
@@ -1312,6 +1475,11 @@ export default function SpaceAsteroidQuiz() {
       postFx.setSize(w, h);
       sparkles.setViewportHeight(h * renderer.getPixelRatio(), CAMERA_FOV_DEG);
       camera.aspect = w / h;
+      // S10: fekvő telefonon a vászon sokkal szélesebb, mint álló nézetben — a háttérköd síkja (z = −18) a két
+      // szélén véget ért, sötét trapéz látszott. A sík vízszintesen annyira nyúlik, hogy a látómezőt kitöltse.
+      const nebulaDist = camera.position.z + 18;
+      const needW = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * nebulaDist * camera.aspect * 1.25;
+      nebula.scale.x = Math.max(1, needW / (GAME_W * 4.2));
       // A játéksík a z=0 körül van, a kamera z=22-nél áll.
       playerXLimitRef.current = playerXLimit(
         visibleHalfWidth(camera.fov, camera.aspect, camera.position.z),
@@ -1363,6 +1531,7 @@ export default function SpaceAsteroidQuiz() {
       environment?.dispose();
       postFx.dispose();
       renderer.dispose();
+      shockwavesRef.current = [];
       sceneRefs.current = null;
     };
   }, []);
@@ -1411,10 +1580,16 @@ export default function SpaceAsteroidQuiz() {
       const cd = powerLevelRef.current >= 2 ? BULLET_TRIPLE_COOLDOWN : BULLET_COOLDOWN;
       p.cooldown = cd;
       const id = nextEntityIdRef.current++;
-      bulletsRef.current.push({ id, x: p.x, y: p.y + 0.7, vx: 0, vy: BULLET_SPEED, life: 1.6, fromEnemy: false });
+      // S10 / terv 4.6/6: célzássegéd CSAK érintéses tüzelésnél (érintős eszközön a tűzgomb); billentyűzetnél a
+      // lövés változatlanul egyenesen felfelé megy.
+      const touchAssist = touchRef.current.fire && touchCapableRef.current;
+      const centerVx = touchAssist
+        ? aimAssistVx({ x: p.x, y: p.y }, enemiesRef.current.map((e) => ({ x: e.x, y: e.y, alive: !e.dead })))
+        : 0;
+      bulletsRef.current.push({ id, x: p.x, y: p.y + 0.7, vx: centerVx, vy: BULLET_SPEED, life: 1.6, fromEnemy: false });
       if (powerLevelRef.current >= 1) {
-        bulletsRef.current.push({ id: nextEntityIdRef.current++, x: p.x - 0.45, y: p.y + 0.5, vx: -3.0, vy: BULLET_SPEED * 0.96, life: 1.6, fromEnemy: false });
-        bulletsRef.current.push({ id: nextEntityIdRef.current++, x: p.x + 0.45, y: p.y + 0.5, vx:  3.0, vy: BULLET_SPEED * 0.96, life: 1.6, fromEnemy: false });
+        bulletsRef.current.push({ id: nextEntityIdRef.current++, x: p.x - 0.45, y: p.y + 0.5, vx: centerVx - 3.0, vy: BULLET_SPEED * 0.96, life: 1.6, fromEnemy: false });
+        bulletsRef.current.push({ id: nextEntityIdRef.current++, x: p.x + 0.45, y: p.y + 0.5, vx: centerVx + 3.0, vy: BULLET_SPEED * 0.96, life: 1.6, fromEnemy: false });
       }
       sfxShoot();
     }
@@ -1553,9 +1728,23 @@ export default function SpaceAsteroidQuiz() {
           e.hp -= 1;
           if (e.hp <= 0) {
             sfxExplode();
+            haptics("hit");
             handleEnemyDestroyed(e);
           } else {
             sfxHit();
+            haptics("hit");
+            // Találati szikra a becsapódás helyén — a több HP-s célnál is látszik, hogy talált.
+            const refs = sceneRefs.current;
+            if (refs) {
+              burstAt.set(b.x, b.y + 0.2, 0.3);
+              refs.sparkles.emit(burstAt, {
+                count: Math.max(3, Math.round(10 * refs.reducedParticles * motionScale(reducedMotionRef.current).particles)),
+                color: EXPLOSION_COLORS[e.kind],
+                speed: 3.5,
+                life: 0.3,
+                size: 0.22,
+              });
+            }
           }
           break;
         }
@@ -1750,6 +1939,50 @@ export default function SpaceAsteroidQuiz() {
     }
   };
 
+  /**
+   * S10 / terv 4.6/6 „látványosabb robbanások”: táguló lökéshullám-gyűrű (additív sprite, 0 → 2,2× sugár
+   * 260 ms alatt, átlátszóság 0,8 → 0). Egyszerre legfeljebb 12 él (gyenge eszközön is olcsó: egy négyzet / gyűrű).
+   */
+  /**
+   * S10 / review #426: a győzelmi robbanás utáni eredmény-váltás a futáshoz kötött (`pushRunTimeout`) — újrakezdés
+   * vagy kilépés után nem fut le; szünet vagy kvíz alatt nem vált fázist, hanem kivárja a folytatást.
+   */
+  const finishRunAfter = (ms: number) => {
+    pushRunTimeout(() => {
+      if (pausedRef.current || phaseRef.current === "quiz") {
+        finishRunAfter(250);
+        return;
+      }
+      if (phaseRef.current !== "play") return;
+      setPhase("over");
+    }, ms);
+  };
+
+  const spawnShockwave = (x: number, y: number, radius: number, color: string) => {
+    const refs = sceneRefs.current;
+    if (!refs) return;
+    const list = shockwavesRef.current;
+    if (list.length >= 12) {
+      const old = list.shift()!;
+      refs.fxGroup.remove(old.sprite);
+      old.sprite.material.dispose();
+    }
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: shockwaveTexture(),
+        color,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    sprite.position.set(x, y, 0.4);
+    sprite.scale.set(0.001, 0.001, 1);
+    refs.fxGroup.add(sprite);
+    list.push({ sprite, age: 0, radius });
+  };
+
   /** Aszteroida-megsemmisülés: pont, lehasadás, pickup-szórás. */
   const handleEnemyDestroyed = (e: EnemyState) => {
     e.dead = true;
@@ -1770,11 +2003,16 @@ export default function SpaceAsteroidQuiz() {
       shakeRef.current = 2.5;
       const refs = sceneRefs.current;
       if (refs) {
-        refs.flashLight.intensity = 8.0;
+        const k = motionScale(reducedMotionRef.current).particles;
+        refs.flashLight.intensity = reducedMotionRef.current ? 4.0 : 8.0;
         burstAt.set(e.x, e.y, 0.3);
-        refs.sparkles.emit(burstAt, { count: 220, color: EXPLOSION_COLORS.boss, speed: 10, life: 1.5, size: 0.45 });
-        refs.sparkles.emit(burstAt, { count: 120, color: "#ff7af5", speed: 6, life: 1.2, size: 0.38 });
+        refs.sparkles.emit(burstAt, { count: Math.round(220 * k), color: EXPLOSION_COLORS.boss, speed: 10, life: 1.5, size: 0.45 });
+        refs.sparkles.emit(burstAt, { count: Math.round(120 * k), color: "#ff7af5", speed: 6, life: 1.2, size: 0.38 });
+        // Lassan hulló, gravitációs törmelék a nagy robbanás után.
+        refs.sparkles.emit(burstAt, { count: Math.round(80 * k), color: "#ffd27a", speed: 4, life: 1.8, size: 0.3, gravity: 3 });
       }
+      spawnShockwave(e.x, e.y, enemyRadius(e) * 1.4, EXPLOSION_COLORS.boss);
+      spawnShockwave(e.x, e.y, enemyRadius(e) * 0.8, "#ff7af5");
       // Hatalmas pickup-shower jutalmul (3 life + 2 power + 1 shield)
       const showerKinds: PickupState["kind"][] = ["life", "life", "life", "power", "power", "shield"];
       for (let k = 0; k < showerKinds.length; k++) {
@@ -1805,7 +2043,7 @@ export default function SpaceAsteroidQuiz() {
       // ténylegesen lejátszódik a phase-átmenet előtt.
       bossDefeatedRef.current = true;
       setGameWon(true);
-      pushTimeout(() => setPhase("over"), 1500); // robbanás-effekt ideje
+      finishRunAfter(1500); // robbanás-effekt ideje
       return;
     }
 
@@ -1879,32 +2117,52 @@ export default function SpaceAsteroidQuiz() {
     // Flash light pulzálás + szikra-robbanás a test színében
     const refs = sceneRefs.current;
     if (refs) {
+      const k = motionScale(reducedMotionRef.current).particles;
+      const big = e.kind === "rock" ? e.size / 3 : e.kind === "fighter" ? 1 : 0.8;
       refs.flashLight.position.set(e.x, e.y, 3);
-      refs.flashLight.intensity = 3.5;
+      refs.flashLight.intensity = reducedMotionRef.current ? 2.0 : 3.5;
       burstAt.set(e.x, e.y, 0.3);
       refs.sparkles.emit(burstAt, {
-        count: Math.round(42 * Math.max(0.5, refs.reducedParticles)),
+        count: Math.round(42 * Math.max(0.5, refs.reducedParticles) * k),
         color: EXPLOSION_COLORS[e.kind],
         speed: 6,
         life: 0.85,
         size: 0.3,
       });
-      refs.sparkles.emit(burstAt, { count: 14, color: "#ffffff", speed: 3, life: 0.35, size: 0.5 });
+      refs.sparkles.emit(burstAt, { count: Math.round(14 * k), color: "#ffffff", speed: 3, life: 0.35, size: 0.5 });
+      // Izzó törmelék gravitációval: a robbanás „súlyt” kap, nem csak szétfröccsen.
+      refs.sparkles.emit(burstAt, {
+        count: Math.round((10 + 14 * big) * Math.max(0.5, refs.reducedParticles) * k),
+        color: "#ffb347",
+        speed: 3.2,
+        life: 1.1,
+        size: 0.26,
+        gravity: 2.5,
+      });
     }
+    spawnShockwave(e.x, e.y, enemyRadius(e), EXPLOSION_COLORS[e.kind]);
     shakeRef.current = 0.4;
   };
 
   /** Hit-quiz mechanika: kvízig pause, ellenfelet eltávolítjuk az ütközéskor. */
   const handleHit = (e: EnemyState | null) => {
+    haptics("hit");
     if (e) {
       e.dead = true;
       shakeRef.current = 1.0;
       const refs = sceneRefs.current;
       if (refs) {
-        refs.flashLight.intensity = 5.5;
+        refs.flashLight.intensity = reducedMotionRef.current ? 2.5 : 5.5;
         burstAt.set(playerRef.current.x, playerRef.current.y, 0.3);
-        refs.sparkles.emit(burstAt, { count: 36, color: "#ff4d6d", speed: 5, life: 0.7, size: 0.3 });
+        refs.sparkles.emit(burstAt, {
+          count: Math.round(36 * motionScale(reducedMotionRef.current).particles),
+          color: "#ff4d6d",
+          speed: 5,
+          life: 0.7,
+          size: 0.3,
+        });
       }
+      spawnShockwave(playerRef.current.x, playerRef.current.y, 0.9, "#ff4d6d");
     }
     // AZONNALI takarítás: a tick a kvíz-fázisban korán kilép, a halott
     // ellenfél egyébként a kvíz-overlay alatt a pályán maradna (mesh + state).
@@ -1978,18 +2236,20 @@ export default function SpaceAsteroidQuiz() {
    */
   const detonateBomb = () => {
     if (bombsRef.current <= 0) return;
-    if (phaseRef.current !== "play") return;
+    if (phaseRef.current !== "play" || pausedRef.current) return;
     bombsRef.current = Math.max(0, bombsRef.current - 1);
     setBombs(bombsRef.current);
     sfxExplode();
+    haptics("hit");
     shakeRef.current = 1.5;
     const refs = sceneRefs.current;
     if (refs) {
-      refs.flashLight.intensity = 7.0;
+      const k = motionScale(reducedMotionRef.current).particles;
+      refs.flashLight.intensity = reducedMotionRef.current ? 3.5 : 7.0;
       // Bomba: táguló fénygyűrű a hajó körül.
       burstAt.set(playerRef.current.x, playerRef.current.y, 0.2);
-      refs.sparkles.emit(burstAt, { count: 180, color: "#7df9ff", speed: 14, life: 0.9, size: 0.34 });
-      refs.sparkles.emit(burstAt, { count: 90, color: "#ff7af5", speed: 9, life: 1.1, size: 0.3 });
+      refs.sparkles.emit(burstAt, { count: Math.round(180 * k), color: "#7df9ff", speed: 14, life: 0.9, size: 0.34 });
+      refs.sparkles.emit(burstAt, { count: Math.round(90 * k), color: "#ff7af5", speed: 9, life: 1.1, size: 0.3 });
     }
     // Combo-snapshot: a handleEnemyDestroyed kill-enként növelné — a bomba
     // után visszaállítjuk snapshot+1-re (1 akció = 1 combo-lépés).
@@ -2018,6 +2278,9 @@ export default function SpaceAsteroidQuiz() {
     for (const b of bulletsRef.current) {
       if (b.fromEnemy) b.life = 0;
     }
+    // A bomba saját gyűrűi a leölt célok gyűrűi UTÁN: a 12-es korlát a legrégebbit veti el, ne a bombáét.
+    spawnShockwave(playerRef.current.x, playerRef.current.y, 4.2, "#7df9ff");
+    spawnShockwave(playerRef.current.x, playerRef.current.y, 2.6, "#ff7af5");
   };
 
   /* ===================== Render (Three.js) ===================== */
@@ -2082,7 +2345,8 @@ export default function SpaceAsteroidQuiz() {
         });
       }
     }
-    refs.sparkles.update(frameDt);
+    // Szünetben a részecskék is megállnak (a játék „kimerevedik”, nem fut tovább a háttérben).
+    refs.sparkles.update(pausedRef.current ? 0 : frameDt);
     // Pajzs (sárga — power-up)
     shieldMesh.visible = powerLevelRef.current > 0;
     shieldMesh.rotation.z += 0.04;
@@ -2202,6 +2466,26 @@ export default function SpaceAsteroidQuiz() {
     });
     deadPickupIds.forEach((id) => refs.pickupMeshById.delete(id));
 
+    // S10: lökéshullám-gyűrűk tágulása és elhalványulása (szünetben megáll, mint a játék).
+    if (shockwavesRef.current.length > 0) {
+      const waveDt = pausedRef.current ? 0 : frameDt;
+      const alive: Shockwave[] = [];
+      for (const w of shockwavesRef.current) {
+        w.age += waveDt;
+        const f = shockwaveFrame(w.age, w.radius);
+        if (f.done) {
+          refs.fxGroup.remove(w.sprite);
+          w.sprite.material.dispose();
+          continue;
+        }
+        w.sprite.scale.set(f.scale, f.scale, 1);
+        // Csökkentett mozgásnál halványabb (nem villan), de a találat jele megmarad.
+        w.sprite.material.opacity = reducedMotionRef.current ? f.opacity * 0.5 : f.opacity;
+        alive.push(w);
+      }
+      shockwavesRef.current = alive;
+    }
+
     // Flash light fadeout
     if (flashLight.intensity > 0) {
       flashLight.intensity = Math.max(0, flashLight.intensity - 0.18);
@@ -2241,7 +2525,10 @@ export default function SpaceAsteroidQuiz() {
         case "ArrowDown": case "s": case "S": keysRef.current.down = true; break;
         case " ": keysRef.current.fire = true; break;
         case "p": case "P":
-          if (phaseRef.current === "play") setPaused((q) => !q);
+          if (phaseRef.current === "play" || phaseRef.current === "quiz") {
+            if (pausedRef.current) resumeGame();
+            else pauseGame();
+          }
           break;
         case "b": case "B":
           // Ref-en át — a mount-kori effect closure ne fagyassza be a stale verziót.
@@ -2258,14 +2545,9 @@ export default function SpaceAsteroidQuiz() {
         case " ": keysRef.current.fire = false; break;
       }
     };
-    // D4: reset all movement flags on window blur (prevents stuck keys on tab/window switch)
-    const onBlur = () => {
-      keysRef.current.left = false;
-      keysRef.current.right = false;
-      keysRef.current.up = false;
-      keysRef.current.down = false;
-      keysRef.current.fire = false;
-    };
+    // D4: reset all movement flags on window blur (prevents stuck keys on tab/window switch).
+    // S10: az érintés-irányok, a tűz és a joystick húzása is (korábban a touchRef beragadhatott).
+    const onBlur = () => releaseControls();
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
     window.addEventListener("blur", onBlur);
@@ -2274,7 +2556,7 @@ export default function SpaceAsteroidQuiz() {
       window.removeEventListener("keyup", ku);
       window.removeEventListener("blur", onBlur);
     };
-  }, []);
+  }, [pauseGame, resumeGame, releaseControls]);
 
   // D4: clear all registered timeouts on unmount (prevents late state-update warnings)
   useEffect(() => () => {
@@ -2371,6 +2653,30 @@ export default function SpaceAsteroidQuiz() {
     }
   }, [phase, gameWon]);
 
+  /* ===================== Eredmény + legjobb ===================== */
+  // S10 / M7: a futás végén egyszer a helyi legjobb eredménybe (névtelen látogatónál is működik).
+  useEffect(() => {
+    if (phase !== "over" || bestInfo) return;
+    setBestInfo(bestScore.submit(score));
+  }, [phase, score, bestInfo, bestScore]);
+
+  /** „Kör vége” (a szünet menü kilépése): a futás lezárul, az eredményképernyő jön. */
+  const endRound = useCallback(() => {
+    runIdRef.current += 1;
+    clearPendingTimeouts();
+    releaseControls();
+    setFeedback(null);
+    setPaused(false);
+    setPhase("over");
+  }, [clearPendingTimeouts, releaseControls]);
+
+  const backToMenu = useCallback(() => {
+    runIdRef.current += 1;
+    clearPendingTimeouts();
+    setPaused(false);
+    setPhase("intro");
+  }, [clearPendingTimeouts]);
+
   /* ===================== Render JSX ===================== */
   const onPickGrade = (g: number) => {
     setGrade(g);
@@ -2379,6 +2685,37 @@ export default function SpaceAsteroidQuiz() {
     saveClassroomGrade(g);
     setPhase("intro");
   };
+
+  const inRun = phase === "play" || phase === "quiz";
+  const stageVisible = inRun || phase === "over";
+  const screen: GameScreenState =
+    phase === "grade" || phase === "intro" ? "start" : phase === "over" ? "result" : paused ? "paused" : "playing";
+  const hudStats: GameHudStat[] = [
+    {
+      id: "wave",
+      label: "Hullám",
+      value: wave === BOSS_FINAL_WAVE ? "BOSS" : `${wave}/12`,
+      tone: wave === BOSS_FINAL_WAVE ? "bad" : "default",
+    },
+    { id: "score", label: "Pont", value: score.toLocaleString("hu-HU") },
+    { id: "lives", label: "Élet", value: `♥ ${lives}`, tone: lives <= 1 ? "bad" : "good" },
+  ];
+  const timeTone = timeLeft < 30 ? "bad" : timeLeft < 60 ? "warn" : "default";
+  const gradeButtons = (
+    <div className="grid grid-cols-4 gap-2" role="group" aria-label="Osztály választása">
+      {GRADES.map((g) => (
+        <button
+          key={g}
+          type="button"
+          onClick={() => onPickGrade(g)}
+          aria-pressed={g === grade}
+          className={`game-btn min-h-12 px-0 text-lg ${g === grade ? "game-btn-primary" : "game-btn-secondary"}`}
+        >
+          {g}.
+        </button>
+      ))}
+    </div>
+  );
 
   // Mat-quiz info az első kvíz előtt vagy menüben
   const matStatusLabel = (() => {
@@ -2391,125 +2728,134 @@ export default function SpaceAsteroidQuiz() {
   })();
 
   return (
-    <div data-game="SpaceAsteroidQuiz" data-playing={phase === "play" || phase === "quiz"}
-      className="game-shell-fixed min-h-screen relative overflow-hidden text-white" style={{
-      background: "radial-gradient(ellipse at 22% 18%, rgba(255,0,255,0.18), transparent 38%), radial-gradient(ellipse at 80% 12%, rgba(0,240,255,0.20), transparent 42%), linear-gradient(180deg, #02041a 0%, #08051b 100%)",
-    }}>
+    <GameShell
+      gameId="SpaceAsteroidQuiz"
+      state={screen}
+      onAutoPause={pauseGame}
+      style={{
+        background: "radial-gradient(ellipse at 22% 18%, rgba(255,0,255,0.18), transparent 38%), radial-gradient(ellipse at 80% 12%, rgba(0,240,255,0.20), transparent 42%), linear-gradient(180deg, #02041a 0%, #08051b 100%)",
+      }}
+    >
       <AchievementToast achievements={newlyUnlocked} />
-      <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
+      {inRun && (
+        <GameHud
+          stats={hudStats}
+          onPause={pauseGame}
+          progress={{ value: timeLeft, max: ROUND_LIMIT_SEC, label: `${timeLeft} mp`, tone: timeTone }}
+        />
+      )}
+      <main
+        className={`sa-main relative z-10 w-full mx-auto flex flex-col ${screen === "start" ? "min-h-dvh" : ""}`}
+        style={inRun ? { paddingTop: 4 } : undefined}
+      >
         {/* LS-4: earned play time — renders nothing without a coupon. */}
         <CouponHud session={coupon} />
         <CouponExpiredOverlay session={coupon} />
-        <header className="flex items-center justify-between gap-1 mb-1">
-          <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2 h-11 px-3"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <AudioToggleButton size="icon" />
-            <span className="flex items-center gap-1 text-amber-300"><Star className="w-4 h-4" />{score}</span>
-            <span className="flex items-center gap-1 text-emerald-300"><Heart className="w-4 h-4" />{lives}</span>
+
+        {screen === "start" && (
+          <div className="sa-topbar flex items-center justify-between gap-2">
+            <Link href="/games" className="game-btn game-btn-ghost min-h-12 gap-1.5 px-3 text-base">
+              <ArrowLeft className="w-5 h-5" aria-hidden="true" />
+              Játékok
+            </Link>
+            <AudioToggleButton size="icon" className="!h-12 !w-12" />
           </div>
-        </header>
+        )}
 
-        <Card className="border border-cyan-400/45 bg-slate-950/85 backdrop-blur-md shadow-[0_16px_48px_rgba(0,0,0,0.45)] flex-1 flex flex-col min-h-0">
-          <CardContent data-game-card-content className={`flex flex-col flex-1 min-h-0 ${phase === "play" || phase === "quiz" ? "p-1.5 sm:p-3" : "p-3"}`}>
-            {phase !== "play" && phase !== "quiz" && (
-              <div className="flex items-center gap-2 mb-1">
-                <Rocket className="w-5 h-5 text-cyan-300" />
-                <h1 className="text-base font-extrabold">Galaktikus Aszteroida Kvíz</h1>
-              </div>
-            )}
+        {phase === "grade" && (
+          <section className="game-start" aria-labelledby="sa-grade-title">
+            <header className="game-start-head">
+              <div className="game-start-icon" aria-hidden="true">🚀</div>
+              <h1 id="sa-grade-title" className="game-start-title">Galaktikus Aszteroida</h1>
+              <p className="game-start-subtitle">
+                Hányadik osztályos vagy? Az osztályod tananyagából jönnek a kérdések — amit még nem dolgoztatok fel,
+                azt általános kvízekkel pótoljuk.
+              </p>
+            </header>
+            <div className="w-full max-w-sm">{gradeButtons}</div>
+            <p className="text-sm text-white/60 max-w-sm">
+              Az osztályod csak a böngésződben tárolódik — később a Beállításokban bármikor megváltoztathatod.
+            </p>
+          </section>
+        )}
 
-            {phase === "grade" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6">
-                <p className="text-sm font-semibold text-cyan-100/95 max-w-md text-center">
-                  Válaszd ki, hányadik osztályos vagy! Az osztályod legutóbbi 3 tananyagából jönnek a kérdések — ami nincs még feldolgozva, azt általános kvízekkel pótoljuk.
-                </p>
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-w-md">
-                  {GRADES.map((g) => (
-                    <Button
-                      key={g}
-                      type="button"
-                      onClick={() => onPickGrade(g)}
-                      className="h-12 text-base font-extrabold bg-gradient-to-br from-cyan-700 to-violet-800 hover:from-cyan-500 hover:to-violet-600 border border-cyan-300/40"
-                    >
-                      {g}.
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-white/50 max-w-md text-center mt-2">
-                  Az osztályod a böngésződben tárolódik (nem küldjük el sehova) — később bármikor megváltoztathatod a Menüben.
-                </p>
-              </div>
-            )}
-
-            {phase === "intro" && (
-              <>
-                <GamePedagogyPanel
-                  accent="cyan"
-                  className="mb-2"
-                  kidMission={'Lődd ki az aszteroidákat, alien csészealjakat és ellenséges vadászgépeket! Minden hullám előtt és minden ütközés után egy gyors kvíz jön — a saját osztályod tananyagából. Helyes válasz → tovább, rossz → új kérdés. Életet adó pickup mellé jár egy bónusz: Megúsztál egy kvízt!'}
-                  parentBody={
-                    <>
-                      <strong className="text-cyan-100/90">Tananyag:</strong> a játékos osztálya és a legutóbbi 3 feltöltött tananyaga alapján a backend automatikusan szállítja a kérdéseket. Ha még nincs kapcsolt kvíz, általános bank szolgál.
-                      <br />
-                      <strong className="text-cyan-100/90">Fejleszt:</strong> reakcióidő, térbeli figyelem, számolás / olvasás gyors döntés mellett, kitartás (új kvíz rossz válasz után).
-                      <br />
-                      <span className="text-white/55">A klasszikus akadály + teszt + jutalom ciklust egy 3D shooter formába helyezi.</span>
-                    </>
-                  }
-                />
-                <p className="text-[11px] text-cyan-100/90 mb-2 border border-cyan-700/45 rounded px-2 py-1.5 bg-slate-900/95">{syncBanner}</p>
+        {phase === "intro" && (
+          <StartScreen
+            title="Galaktikus Aszteroida"
+            subtitle="Lődd szét az aszteroidákat! Minden hullám előtt egy gyors kvíz — jó válaszra indul a csata."
+            icon={<span>🚀</span>}
+            startLabel={`Indulhat — ${grade}. osztály`}
+            startTestId="sa-start"
+            onStart={startNewRun}
+            best={bestScore.best}
+            menuKey="space"
+            settings={
+              <div className="flex flex-col gap-3">
+                <p className="text-sm font-semibold text-cyan-100">Osztály</p>
+                {gradeButtons}
+                {levels.active && levels.level != null ? (
+                  <GradeLevelPicker
+                    value={levels.level}
+                    unlocked={levels.unlocked}
+                    onChange={levels.select}
+                    label={`Pálya — ${grade}. osztály`}
+                  />
+                ) : null}
                 {matStatusLabel && (
-                  <p className="text-[11px] text-amber-100/90 mb-2 border border-amber-700/45 rounded px-2 py-1.5 bg-slate-900/95 flex items-center gap-2">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                  <p className="text-sm text-amber-100/90 flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 mt-0.5 text-amber-300 shrink-0" aria-hidden="true" />
                     {matStatusLabel}
                   </p>
                 )}
-                <div data-game-menu="space" className="flex flex-col items-center justify-center flex-1 gap-3 py-4">
-                  <div className="grid grid-cols-2 gap-2 max-w-sm w-full">
-                    <div className="rounded-xl border border-cyan-600/45 bg-slate-900/85 p-2 text-center">
-                      <p className="text-[10px] uppercase tracking-wide text-cyan-300 font-bold">Szikla</p>
-                      <p className="text-[11px] text-white/70">3 méret · hasad</p>
-                    </div>
-                    <div className="rounded-xl border border-sky-500/55 bg-slate-900/85 p-2 text-center">
-                      <p className="text-[10px] uppercase tracking-wide text-sky-300 font-bold">Kristály</p>
-                      <p className="text-[11px] text-white/70">+60 XP · pickup</p>
-                    </div>
-                    <div className="rounded-xl border border-lime-500/55 bg-slate-900/85 p-2 text-center">
-                      <p className="text-[10px] uppercase tracking-wide text-lime-300 font-bold">Alien UFO</p>
-                      <p className="text-[11px] text-white/70">cikkcakk · +80 XP</p>
-                    </div>
-                    <div className="rounded-xl border border-rose-500/55 bg-slate-900/85 p-2 text-center">
-                      <p className="text-[10px] uppercase tracking-wide text-rose-300 font-bold">Ellenséges vadász</p>
-                      <p className="text-[11px] text-white/70">homing · lő · +120 XP</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgás, W/▲: előre, Space: tűz, P: szünet. Mobilon a képernyő alján gombok.</p>
-                  <Button
-                    size="lg"
-                    className="bg-gradient-to-r from-cyan-500 to-fuchsia-600 hover:from-cyan-400 hover:to-fuchsia-500 border border-cyan-300/40 font-bold text-white shadow-lg text-base"
-                    onClick={startNewRun}
-                    data-testid="sa-start"
-                  >
-                    <Rocket className="w-4 h-4 mr-2" />Indulhat — {grade}. osztály{levels.level != null ? ` · ${levels.level}. pálya` : ""}
-                  </Button>
-                  {levels.active && levels.level != null ? (
-                    <GradeLevelPicker
-                      value={levels.level}
-                      unlocked={levels.unlocked}
-                      onChange={levels.select}
-                      label={`Pálya — ${grade}. osztály`}
-                    />
-                  ) : null}
-                  <button
-                    type="button"
-                    className="text-[11px] text-white/50 hover:text-cyan-200 underline-offset-4 hover:underline"
-                    onClick={() => { setGrade(null); setPhase("grade"); }}
-                  >
-                    Más osztály választása
-                  </button>
-                </div>
-              </>
+                <p className="text-sm text-cyan-100/80" data-game-sync>{syncBanner}</p>
+              </div>
+            }
+          >
+            {levels.level != null && (
+              <p className="text-sm font-semibold text-cyan-100/85">{levels.level}. pálya · a Beállításokban váltható</p>
             )}
+            <details className="game-start-settings sa-howto mt-2 w-full">
+              <summary>
+                <span aria-hidden="true">👾</span>
+                Ellenfelek és irányítás
+              </summary>
+              <div className="game-start-settings-body flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { name: "Szikla", note: "3 méret · szétesik", cls: "border-cyan-500/50 text-cyan-200" },
+                    { name: "Kristály", note: "+60 pont · ajándék", cls: "border-sky-400/50 text-sky-200" },
+                    { name: "Ufó", note: "cikkcakk · +80 pont", cls: "border-lime-400/50 text-lime-200" },
+                    { name: "Vadászgép", note: "visszalő · +120 pont", cls: "border-rose-400/50 text-rose-200" },
+                  ].map((x) => (
+                    <div key={x.name} className={`rounded-2xl border bg-slate-900/70 px-3 py-2 text-left ${x.cls}`}>
+                      <p className="text-sm font-extrabold uppercase tracking-wide">{x.name}</p>
+                      <p className="text-sm text-white/75">{x.note}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-white/75">
+                  {touchCapable
+                    ? "Bal hüvelykujj: joystick · jobb: tűz (célzássegéddel) · középen a bomba."
+                    : "Nyilak / WASD: mozgás · Space: tűz · B: bomba · P: szünet."}
+                </p>
+              </div>
+            </details>
+            <GamePedagogyPanel
+              accent="cyan"
+              className="mt-2 text-left"
+              kidMission={'Lődd ki az aszteroidákat, alien csészealjakat és ellenséges vadászgépeket! Minden hullám előtt és minden ütközés után egy gyors kvíz jön — a saját osztályod tananyagából. Helyes válasz → tovább, rossz → új kérdés. Életet adó pickup mellé jár egy bónusz: Megúsztál egy kvízt!'}
+              parentBody={
+                <>
+                  <strong className="text-cyan-100/90">Tananyag:</strong> a játékos osztálya és a legutóbbi 3 feltöltött tananyaga alapján a backend automatikusan szállítja a kérdéseket. Ha még nincs kapcsolt kvíz, általános bank szolgál; az angol szavak a központi szóbankból jönnek, ismétlés nélkül.
+                  <br />
+                  <strong className="text-cyan-100/90">Fejleszt:</strong> reakcióidő, térbeli figyelem, számolás / olvasás gyors döntés mellett, kitartás (új kvíz rossz válasz után).
+                  <br />
+                  <span className="text-white/55">A klasszikus akadály + teszt + jutalom ciklust egy 3D shooter formába helyezi.</span>
+                </>
+              }
+            />
+          </StartScreen>
+        )}
 
             {/*
               A canvas-t MINDIG render-eljük (még az "intro"/"grade"/"over" fázisokban
@@ -2517,28 +2863,44 @@ export default function SpaceAsteroidQuiz() {
               useEffect azonnal a komponens mountjakor inicializálni tudja a scenet,
               és nem kell minden átmenetnél a teljes 3D scene-t újraépíteni.
             */}
-            <div className={`game-play-stack flex flex-1 min-h-0 flex-col items-center gap-1.5 ${phase === "play" || phase === "quiz" ? "" : "hidden"}`}>
-                <div className="relative rounded-xl overflow-hidden border-2 border-cyan-700/70 shadow-[0_0_28px_rgba(0,240,255,0.18)] w-full bg-black game-scene flex-1 min-h-0">
+            <div className={`sa-stage ${stageVisible ? "" : "hidden"}`}>
+                <div className="sa-scene game-scene relative rounded-2xl overflow-hidden border border-cyan-400/40 shadow-[0_0_28px_rgba(0,240,255,0.18)] w-full bg-black">
                   <canvas ref={canvasRef} className="block touch-manipulation w-full h-full" style={{ width: "100%", height: "100%" }} />
                   <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_56%,rgba(0,0,0,0.32)_100%)]" />
-                  <div className={`pointer-events-none absolute left-2 top-2 rounded-lg border bg-slate-950/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                    wave === BOSS_FINAL_WAVE
-                      ? "border-rose-400 text-rose-200 animate-pulse"
-                      : "border-cyan-300/40 text-cyan-100"
-                  }`}>
-                    {wave === BOSS_FINAL_WAVE ? "★ BOSS HULLÁM ★" : `Hullám ${wave}/12`}
-                  </div>
-                  <div className="pointer-events-none absolute right-2 top-2 rounded-lg border border-amber-300/40 bg-slate-950/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-100 flex items-center gap-1">
-                    {timeLeft}s
-                  </div>
-                  {bossHp !== null && (
-                    <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-2 w-[68%] max-w-md">
-                      <div className="rounded border-2 border-rose-400/85 bg-rose-950/85 px-2 py-1.5 shadow-[0_0_20px_rgba(255,80,140,0.55)]">
-                        <div className="flex items-center justify-between text-[10px] font-extrabold text-rose-100 uppercase tracking-wider mb-1">
-                          <span>★ ALIEN ANYAHAJÓ</span>
+                  {inRun && (powerLevel > 0 || shieldTimer > 0) && (
+                    <div className="pointer-events-none absolute left-2 top-2 flex flex-col gap-1.5">
+                      {powerLevel > 0 && (
+                        <span className="sa-chip border-yellow-300/50 text-yellow-100">
+                          <Zap className="w-4 h-4 text-yellow-300" aria-hidden="true" />
+                          {powerLevel >= 2 ? "Hármas" : "Dupla"} · {powerTimer} mp
+                        </span>
+                      )}
+                      {shieldTimer > 0 && (
+                        <span className="sa-chip border-sky-300/50 text-sky-100">🛡️ Pajzs · {shieldTimer} mp</span>
+                      )}
+                    </div>
+                  )}
+                  {inRun && combo >= 2 && (
+                    <motion.span
+                      key={reducedMotion ? "combo" : combo}
+                      initial={reducedMotion ? false : { scale: 1.35, opacity: 0.6 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: "spring", stiffness: 520, damping: 22 }}
+                      className={`sa-chip pointer-events-none absolute right-2 ${bossHp !== null ? "top-16" : "top-2"} ${
+                        combo >= 10 ? "border-fuchsia-300/70 text-fuchsia-100" : "border-amber-300/60 text-amber-100"
+                      }`}
+                    >
+                      ×{combo} kombó
+                    </motion.span>
+                  )}
+                  {inRun && bossHp !== null && (
+                    <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-2 w-[72%] max-w-md">
+                      <div className="rounded-xl border-2 border-rose-400/85 bg-rose-950/85 px-2.5 py-1.5 shadow-[0_0_20px_rgba(255,80,140,0.55)]">
+                        <div className="flex items-center justify-between text-xs font-extrabold text-rose-100 uppercase tracking-wider mb-1">
+                          <span>★ Alien anyahajó</span>
                           <span className="tabular-nums">{bossHp} / {BOSS_TOTAL_HP}</span>
                         </div>
-                        <div className="h-1.5 rounded-full bg-rose-950/80 overflow-hidden border border-rose-300/40">
+                        <div className="h-2 rounded-full bg-rose-950/80 overflow-hidden border border-rose-300/40">
                           <div
                             className="h-full bg-gradient-to-r from-rose-500 via-fuchsia-400 to-rose-300 transition-all"
                             style={{ width: `${Math.max(0, Math.min(100, (bossHp / BOSS_TOTAL_HP) * 100))}%` }}
@@ -2547,25 +2909,26 @@ export default function SpaceAsteroidQuiz() {
                       </div>
                     </div>
                   )}
-                  {savedToast && (
+                  {inRun && savedToast && (
                     <motion.div
                       key={savedToast}
-                      initial={{ y: -12, opacity: 0, scale: 0.9 }}
+                      initial={reducedMotion ? false : { y: -12, opacity: 0, scale: 0.9 }}
                       animate={{ y: 0, opacity: 1, scale: 1 }}
                       exit={{ y: -12, opacity: 0 }}
-                      className="absolute top-12 left-1/2 -translate-x-1/2 rounded-lg bg-emerald-500/95 text-slate-950 font-bold text-xs px-3 py-1.5 shadow-md flex items-center gap-1.5 pointer-events-none"
+                      className="absolute top-14 left-1/2 -translate-x-1/2 rounded-xl bg-emerald-400/95 text-slate-950 font-extrabold text-sm px-3 py-1.5 shadow-md flex items-center gap-1.5 pointer-events-none whitespace-nowrap"
                     >
-                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <ShieldAlert className="w-4 h-4" aria-hidden="true" />
                       {savedToast}
                     </motion.div>
                   )}
                 </div>
 
-                {/* Touch kontrollok — csak coarse pointer (C2). */}
-                {coarsePointer ? (
+                {/* S10 / terv 4.5–4.6: érintővezérlő CSAK érintős eszközön, képernyőhöz méretezett joystick és tűzgomb. */}
+                {inRun && (touchCapable ? (
                 <div
-                  className="flex items-center justify-between gap-3 w-full"
+                  className="sa-controls"
                   data-testid="sa-touch-controls"
+                  data-game-controls
                   style={{
                     touchAction: "none",
                     userSelect: "none",
@@ -2575,7 +2938,8 @@ export default function SpaceAsteroidQuiz() {
                 >
                   <VirtualJoystick
                     label="Hajó irányítása"
-                    radius={54}
+                    radius="auto"
+                    resetSignal={joyReset}
                     onChange={(v) => {
                       const dirs = joystickToDirections(v);
                       touchRef.current.left = dirs.left;
@@ -2586,71 +2950,60 @@ export default function SpaceAsteroidQuiz() {
                       touchRef.current.down = dirs.back;
                     }}
                   />
-                  <HoldButton
-                    label="Tűz"
-                    onHoldStart={() => {
-                      touchRef.current.fire = true;
-                    }}
-                    onHoldEnd={() => {
-                      touchRef.current.fire = false;
-                    }}
-                    className="h-[108px] w-[108px] rounded-full bg-rose-700 hover:bg-rose-600 text-white border-2 border-rose-200/40 shadow-lg text-sm font-extrabold flex items-center justify-center active:scale-95"
-                  >
-                    🚀 TŰZ
-                  </HoldButton>
-                </div>
-                ) : (
-                  <p className="w-full text-center text-[11px] text-white/55" data-testid="sa-keyboard-hint">
-                    Billentyűzet: nyilak / WASD mozgat · Space tűz · B bomba
-                  </p>
-                )}
-
-                {/* HUD */}
-                <div className="w-full flex items-center gap-1.5">
-                  <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div className={`h-full transition-all ${timeLeft < 60 ? "bg-gradient-to-r from-rose-500 to-amber-400" : "bg-gradient-to-r from-cyan-400 to-fuchsia-500"}`} style={{ width: `${(timeLeft / ROUND_LIMIT_SEC) * 100}%` }} />
-                  </div>
-                  <span className="text-[10px] font-bold text-white/80 tabular-nums min-w-[32px] text-right">{timeLeft}s</span>
-                </div>
-                <div className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 flex-wrap gap-x-2">
-                  <span>XP: <strong className="text-amber-300">{score}</strong></span>
-                  <span className="flex items-center gap-1"><Heart className="w-3 h-3 text-emerald-300" /><strong>{lives}</strong></span>
-                  <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-yellow-300" />{powerLevel > 0 ? `${powerTimer}s` : "–"}</span>
-                  <span className={`flex items-center gap-1 ${shieldTimer > 0 ? "text-sky-300 font-bold" : "text-white/50"}`} title="Pajzs (8s teljes invuln)">
-                    🛡️ {shieldTimer > 0 ? `${shieldTimer}s` : "–"}
-                  </span>
+                  {/* A jobb hüvelykujj klasztere: bomba + tűz (álló és fekvő nézetben is a jobb szélen). */}
+                  <div className="sa-actions">
                   <button
                     type="button"
                     onClick={detonateBomb}
                     disabled={bombs <= 0}
-                    className={`flex items-center gap-1 ${bombs > 0 ? "text-orange-300 font-bold hover:text-orange-200 cursor-pointer" : "text-white/40 cursor-not-allowed"}`}
-                    title="Bomba (B billentyű) — minden ellenfél megsemmisül (boss: -12 HP)"
+                    aria-label={`Bomba (${bombs} db) — minden ellenfél megsemmisül`}
+                    className={`game-action-btn sa-bomb relative border-2 font-extrabold ${
+                      bombs > 0
+                        ? "bg-gradient-to-b from-orange-400 to-orange-700 border-orange-100/60 text-white shadow-[0_0_22px_rgba(255,140,40,0.55)]"
+                        : "bg-slate-800/80 border-white/15 text-white/45"
+                    }`}
                     data-testid="button-bomb"
                   >
-                    💣 {bombs}
+                    <span className="text-2xl leading-none" aria-hidden="true">💣</span>
+                    <span className="sa-badge tabular-nums">{bombs}</span>
                   </button>
-                  <span>Combo: <strong className="text-fuchsia-300">{combo}</strong></span>
+                  <div className="sa-fire-wrap">
+                    <HoldButton
+                      label="Tűz"
+                      size="auto"
+                      onHoldStart={() => {
+                        touchRef.current.fire = true;
+                        haptics("tap");
+                      }}
+                      onHoldEnd={() => {
+                        touchRef.current.fire = false;
+                      }}
+                      className="sa-fire flex-col gap-0.5 bg-gradient-to-b from-rose-500 to-rose-800 text-white border-2 border-rose-100/50 shadow-[0_0_26px_rgba(255,60,100,0.55)] font-extrabold active:scale-95 transition-transform"
+                    >
+                      <span className="text-2xl leading-none" aria-hidden="true">🚀</span>
+                      <span className="text-sm tracking-wider">TŰZ</span>
+                    </HoldButton>
+                  </div>
+                  </div>
                 </div>
-                <div className="flex gap-2 justify-center w-full">
-                  <Button type="button" size="sm" className="bg-amber-600/80 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md text-xs px-3 py-1" onClick={() => { setPhase("over"); }}>Kör vége</Button>
-                </div>
+                ) : (
+                  <div className="sa-keys flex items-center justify-center gap-3 w-full">
+                    <p className="text-sm text-white/70 text-center" data-testid="sa-keyboard-hint">
+                      Billentyűzet: nyilak / WASD mozgat · Space tűz · B bomba · P szünet
+                    </p>
+                    <button
+                      type="button"
+                      onClick={detonateBomb}
+                      disabled={bombs <= 0}
+                      title="Bomba (B billentyű) — minden ellenfél megsemmisül (boss: -12 HP)"
+                      className="game-btn game-btn-secondary shrink-0"
+                      data-testid="button-bomb"
+                    >
+                      💣 {bombs}
+                    </button>
+                  </div>
+                ))}
               </div>
-
-            {phase === "over" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center" data-testid="sa-over">
-                <Rocket className={`w-12 h-12 ${gameWon ? "text-amber-300" : "text-cyan-400"}`} />
-                <p className="text-lg font-bold">{gameWon ? "Kalandod sikeres! Mind a 12 hullám teljesítve!" : "Kör vége"}</p>
-                <p className="text-sm text-white/75">XP: <strong className="text-amber-300">{score}</strong> · Hullám: <strong>{wave}/12</strong> · Kilőve: <strong>{enemiesKilled}</strong></p>
-                {syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}
-                <div className="flex gap-2">
-                  <Button className="bg-cyan-700 hover:bg-cyan-600" onClick={startNewRun}><RotateCcw className="w-4 h-4 mr-1" />Új kör</Button>
-                  <Button variant="outline" className="border-white/40 text-white" onClick={() => { setPhase("intro"); }}>Vissza</Button>
-                  <Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </main>
 
       {/* Quiz overlay — phase==="quiz" */}
@@ -2660,8 +3013,8 @@ export default function SpaceAsteroidQuiz() {
             role="dialog"
             aria-modal="true"
             aria-label="Kvíz kérdés"
-            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/85 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
+            className="sa-quiz-layer fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-[3px]"
+            initial={reducedMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
@@ -2670,66 +3023,123 @@ export default function SpaceAsteroidQuiz() {
               role="dialog"
               aria-modal="true"
               aria-label="Mini-teszt"
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              className={`game-quiz w-full max-w-md rounded-2xl border-2 border-cyan-400/55 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake-spq" : ""}`}
+              initial={reducedMotion ? false : { y: 40, opacity: 0, scale: 0.98 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 420, damping: 32 }}
+              className={`game-quiz sa-quiz w-full max-w-lg max-h-full overflow-y-auto rounded-3xl border border-cyan-300/50 bg-slate-950/95 p-4 shadow-[0_20px_56px_rgba(34,211,238,0.28)] ${wrongShake ? "animate-shake-spq" : ""}`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${
+              <div className="flex flex-wrap items-center gap-2 pr-14">
+                <span className={`text-xs font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-full border ${
                   quizReason === "wave"
                     ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60"
                     : "bg-rose-600/70 text-rose-50 border-rose-300/60"
                 }`}>
                   {quizReason === "wave" ? `Hullám ${wave} kvíz` : "Vészhelyzet — kvíz!"}
                 </span>
-                <span className="text-xs font-bold text-cyan-300 uppercase">
-                  {activeQuiz.source === "material" ? "Tananyagodból" : activeQuiz.source === "grade" ? `${activeQuiz.grade ?? grade}. osztály` : "Általános"}
+                <span className="text-xs font-bold text-cyan-300 uppercase tracking-wide">
+                  {activeQuiz.source === "material"
+                    ? "Tananyagodból"
+                    : activeQuiz.source === "vocab"
+                      ? "Angol szókincs"
+                      : activeQuiz.source === "grade"
+                        ? `${activeQuiz.grade ?? grade}. osztály`
+                        : "Általános"}
                 </span>
               </div>
-              <p className="text-[11px] text-white/65 mb-2">
+              <p className="mt-1 text-sm text-white/70">
                 {quizReason === "wave"
-                  ? "A hullám csak helyes válaszra indul. Rossz válasz → új kérdés."
-                  : "Csak helyes válasz után folytatódik a játék. Próbálkozhatsz többször is — minden rossz válaszra új kvíz jön."}
+                  ? "A hullám jó válaszra indul. Rossz válasz → új kérdés. Az óra addig áll."
+                  : "Jó válasz után folytatódik a játék — minden rossz válaszra új kérdés jön. Az óra addig áll."}
               </p>
-              <p className="text-base font-semibold mb-4">{activeQuiz.prompt}</p>
-              <div className="game-quiz-answers grid gap-2">
+              <p className="mt-3 text-lg sm:text-xl font-bold leading-snug text-white">{activeQuiz.prompt}</p>
+              <div className="game-quiz-answers mt-3 grid gap-2">
                 {activeQuiz.options.map((o, i) => {
                   const isCorrect = revealCorrectIdx === i;
                   const isWrong = wrongIdx === i;
                   const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
                   const cls = isCorrect
-                    ? "min-h-[44px] h-auto py-3 text-left bg-emerald-700/70 hover:bg-emerald-700/70 text-white border-2 border-emerald-300 text-[15px] font-bold"
+                    ? "border-emerald-200 bg-emerald-600 font-extrabold"
                     : isWrong
-                      ? "min-h-[44px] h-auto py-3 text-left bg-rose-800/70 hover:bg-rose-800/70 text-white border-2 border-rose-300 text-[15px]"
+                      ? "border-rose-200 bg-rose-700"
                       : dim
-                        ? "min-h-[44px] h-auto py-3 text-left bg-white/5 text-white/40 border border-cyan-900/20 text-[15px]"
-                        : "min-h-[44px] h-auto py-3 text-left bg-white/10 hover:bg-cyan-800/55 text-white border border-cyan-900/40 text-[15px]";
+                        ? "border-white/10 bg-white/5 text-white/45"
+                        : "border-cyan-200/35 bg-slate-900/95 hover:bg-cyan-700/45 active:bg-cyan-700/60";
                   return (
-                    <Button
+                    <button
                       key={`${o}-${i}`}
-                      variant="secondary"
-                      className={cls}
+                      type="button"
+                      className={`game-answer-btn flex w-full items-center gap-3 rounded-2xl border px-3 py-2 text-left font-semibold text-white transition-colors ${cls}`}
                       disabled={revealCorrectIdx !== null}
                       onClick={() => onAnswer(i)}
                       {...correctDataAttrs(i === activeQuiz.correctIndex)}
                     >
-                      {o}
-                    </Button>
+                      <span
+                        aria-hidden="true"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-black text-cyan-100"
+                      >
+                        {"ABCD"[i] ?? i + 1}
+                      </span>
+                      <span className="min-w-0 flex-1">{o}</span>
+                    </button>
                   );
                 })}
               </div>
               {streakProtector.warning && (
-                <p className="mt-3 text-[11px] text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>
+                <p className="mt-3 text-sm text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>
               )}
               {revealCorrectIdx !== null && wrongIdx !== null && (
-                <p className="mt-3 text-[11px] text-emerald-300/95">
+                <p className="mt-3 text-sm text-emerald-300/95">
                   A helyes válasz: <strong>{activeQuiz.options[revealCorrectIdx]}</strong>
                 </p>
               )}
             </motion.div>
+            {/* Review #426: a teljes képernyős kvízréteg eltakarja a HUD szünetgombját — itt is lehet megállni. */}
+            <button
+              type="button"
+              data-testid="sa-quiz-pause"
+              aria-label="Szünet"
+              onClick={pauseGame}
+              className="sa-quiz-pause absolute inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/25 bg-slate-900/80 text-white hover:bg-white/20"
+            >
+              <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <PauseMenu open={paused && inRun} onResume={resumeGame} onRestart={startNewRun} onExit={endRound} exitLabel="Kör vége">
+        <p className="text-sm text-slate-300">
+          Hullám {wave === BOSS_FINAL_WAVE ? "BOSS" : `${wave}/12`} · {score.toLocaleString("hu-HU")} pont · ♥ {lives}
+        </p>
+      </PauseMenu>
+
+      <ResultScreen
+        open={phase === "over"}
+        testId="sa-over"
+        title={gameWon ? "Mind a 12 hullám teljesítve!" : "Kör vége"}
+        won={gameWon}
+        score={score}
+        best={bestInfo?.best ?? bestScore.best}
+        isNewBest={bestInfo?.isNewBest ?? false}
+        correct={quizCorrect}
+        total={quizTotal}
+        onRetry={startNewRun}
+        retryLabel="Új kör"
+        onBack={() => navigate("/games")}
+        extra={
+          <div className="flex flex-col gap-2">
+            <p>
+              Hullám: <strong>{wave}/12</strong> · Kilőve: <strong>{enemiesKilled}</strong>
+            </p>
+            <p className={syncEligibility?.eligible ? "text-emerald-300" : "text-slate-300"}>
+              {syncEligibility?.eligible ? "Eredmény elküldve." : syncBanner}
+            </p>
+            <button type="button" className="game-btn game-btn-ghost w-full" onClick={backToMenu}>
+              Menü (osztály, pálya)
+            </button>
+          </div>
+        }
+      />
 
       <style>{`
         @keyframes shake-spq {
@@ -2738,9 +3148,50 @@ export default function SpaceAsteroidQuiz() {
           75% { transform: translateX(5px); }
         }
         .animate-shake-spq { animation: shake-spq 0.16s ease-in-out 2; }
+        .sa-stage { position: relative; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; gap: 8px; }
+        .sa-stage.hidden { display: none; }
+        .sa-scene { flex: 1 1 0; min-height: 0; }
+        .sa-controls {
+          position: relative; z-index: 30; flex: 0 0 auto;
+          display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+          padding: 0 2px;
+        }
+        .sa-controls > * { flex: 0 0 auto; }
+        .sa-actions { display: flex; align-items: flex-end; gap: 14px; }
+        .sa-actions .sa-bomb { margin-bottom: calc(var(--game-action-size) * 0.55); flex-direction: column; }
+        .sa-fire-wrap { --game-action-size: clamp(64px, 21vmin, 104px); }
+        .sa-fire-wrap .sa-fire { display: inline-flex; }
+        .sa-badge {
+          position: absolute; top: -4px; right: -4px; min-width: 24px; height: 24px; padding: 0 6px;
+          border-radius: 9999px; background: #0b172d; border: 2px solid #fdba74; color: #fff;
+          font-size: 13px; line-height: 20px; text-align: center;
+        }
+        .sa-chip {
+          display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px;
+          border-width: 1px; background: #0b172dcc; font-size: 13px; font-weight: 800;
+          -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+        }
+        .sa-quiz-layer {
+          padding: max(8px, var(--game-safe-top)) max(8px, var(--game-safe-right)) max(8px, var(--game-safe-bottom)) max(8px, var(--game-safe-left));
+        }
+        .sa-quiz-pause { top: max(8px, var(--game-safe-top)); right: max(8px, var(--game-safe-right)); }
+        @media (max-height: 500px) and (min-width: 560px) {
+          /* Fekvő kezdőképernyő: a súgó a jobb hasábba, az indítógomb alá (a közös rács egész sorát nem foglalja). */
+          [data-game="SpaceAsteroidQuiz"] .game-start-head { grid-row: 1 / span 2; }
+          [data-game="SpaceAsteroidQuiz"] .game-start-extra { grid-column: 2; align-self: start; }
+          [data-game="SpaceAsteroidQuiz"] .game-start-actions { align-self: end; }
+          [data-game="SpaceAsteroidQuiz"] .game-start-subtitle { font-size: 15px; }
+          [data-game="SpaceAsteroidQuiz"] .game-start[data-game-start] { padding-block: 8px; row-gap: 6px; }
+        }
+        @media (orientation: landscape) and (max-height: 560px) {
+          /* Fekvő telefonon a vezérlők a vászon két szélére kerülnek (a pálya középen van, a szélek üresek). */
+          .sa-controls { position: absolute; left: 6px; right: 6px; bottom: 6px; pointer-events: none; }
+          .sa-controls > * { pointer-events: auto; }
+          .sa-quiz { max-width: 640px; }
+          .sa-quiz .game-quiz-answers { grid-template-columns: 1fr 1fr; }
+        }
       `}</style>
       {feedback && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
-
-    </div>
+    </GameShell>
   );
 }
