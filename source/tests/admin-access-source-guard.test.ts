@@ -22,6 +22,9 @@ const FORBIDDEN = new RegExp([
   /\.isAdmin\b/, /\bis_admin\b/, /\{\s*isAdmin\s*[,}]/, /,\s*isAdmin\s*[,}]/,
   /\bisAdmin\s*:/, /["'`]isAdmin["'`]/, /^\s*isAdmin\s*,?\s*$/,
   /Reflect\.(get|has)\s*\(/, /["'`]is["'`]\s*\+\s*["'`]Admin/,
+  // Review #462 N2: alapértékes destrukturálás (`const { isAdmin = false } = u`) és puszta értékadás (`isAdmin = …`) —
+  // kivéve, ha az érték maga a képlet (`const isAdmin = isAdminUser(user)`).
+  /\bisAdmin\s*=(?!=)(?!\s*isAdminUser\()/,
 ].map((r) => r.source).join("|"));
 
 /** Fájl → az engedélyezett sorok mintái (mindegyik indokkal). A képlet modulja egészében engedélyezett. */
@@ -112,9 +115,15 @@ describe("JM7c-1 forrás-őr — az admin-jog egyetlen forrása", () => {
       "if (!user?.isAdmin) return;", "const { isAdmin } = user;", "const { isAdmin: f } = u;", "const { id, isAdmin } = u;",
       "  isAdmin,", "  isAdmin", "Reflect.get(u, key)", "const v = u[\"isAdmin\"];", "const k = 'is' + 'Admin';",
       "SELECT is_admin FROM users", "const flag = u[`isAdmin`];",
+      // Review #462 N2: alapértékes és átnevezős-alapértékes destrukturálás.
+      "const { isAdmin = false } = u;", "const { isAdmin: a = false } = u;", "const { id, isAdmin = true } = u;",
+      "  isAdmin = false,", "function f({ isAdmin = false }) {}",
     ];
     for (const b of bypasses) assert.match(b, FORBIDDEN, b);
-    for (const ok of ["isAdminUser(req.user)", "const admins = users.filter(u => isAdminUser(u));", "storedAdminFlag(u)"]) {
+    for (const ok of [
+      "isAdminUser(req.user)", "const admins = users.filter(u => isAdminUser(u));", "storedAdminFlag(u)",
+      "if (isAdminUser(u) === true) return;", "const isAdminUserFlag = 1;", "const shownIsAdmin = isAdminUser(u);", "const isAdmin = isAdminUser(user);",
+    ]) {
       assert.doesNotMatch(ok, FORBIDDEN, ok);
     }
   });

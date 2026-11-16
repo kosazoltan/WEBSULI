@@ -855,12 +855,7 @@ export default function AdminDocumentation() {
                 </Alert>
 
                 <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                  <li><strong>Több adminisztrátor:</strong> két adminisztrátori fiók rendelkezik jogosultsággal:
-                    <ul className="ml-6 mt-1 space-y-1">
-                      <li>• kosa.zoltan.ebc@gmail.com (főadmin)</li>
-                      <li>• mszilva78@gmail.com (Máté Szilvia)</li>
-                    </ul>
-                  </li>
+                  <li><strong>Engedélylistás adminisztrátorok:</strong> admin-jogot csak az admin-engedélylistán (<code>ADMIN_ALLOWLIST</code> környezeti változó) szereplő fiókok kapnak; a címek nincsenek a kódban.</li>
                   <li><strong>Munkamenet-kezelés:</strong> 30 perces tétlenség után automatikus kijelentkezés</li>
                   <li><strong>XSS-védelem:</strong> a felhasználói beviteleket tisztítjuk (DOMPurify)</li>
                   <li><strong>Csak HTTPS:</strong> éles környezetben csak titkosított kapcsolat</li>
