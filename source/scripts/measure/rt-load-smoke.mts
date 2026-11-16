@@ -30,6 +30,7 @@ async function runServer(): Promise<void> {
     MP_TICKETS_PER_MIN_PER_IP: "10000",
     MP_ROOMS_PER_MIN_PER_IP: "10000",
     MP_JOINS_PER_MIN_PER_IP: "10000",
+    MP_CONCURRENT_ROOMS_PER_IP: "10000",
     NODE_ENV: "test",
   };
   const rt = createRealtimeService({
