@@ -218,3 +218,15 @@ phrase-kvóta hiány nincs, terv 4.2 minimum teljesül, hibák: 0. `fr/stage.ts`
   ellenőrzésen ment át.
 - A fr4-family-005 „la famille d'accueil” `phrase`-ként szerepel, bár főnévi összetétel (K.8.5 szerint `word`);
   a kifejezés-kvóta védelmében nem módosítva.
+
+## S13 utójavítás (2026-11-16, ág `feat/jatekok-s13a-lista-adat-mero`)
+
+- Szisztematikus keresés a teljes francia bankon (a `hu` egyik kulcsa betűre azonos a névelő nélküli term-mel, vagy a
+  `hu` tartalmazza a term-et): 5 találat, mind cserélve azonos cellában (azonosító marad): `fr0-freetime-004` le film →
+  la luge (szánkó); `fr0-travel-007` le taxi → le tram (villamos); `fr0-sports-001` le sport → sauter (ugrik);
+  `fr2-animals-011` le panda → le castor (hód); `fr2-technology-014` le robot → le haut-parleur (hangszóró). Az
+  ékezetben eltérő nemzetközi szavak (océan–óceán, métro–metró, virus–vírus, euro–euró) maradnak.
+- `report --overlaps` (49 pár) átnézve: valódi duplikátum nincs; a párok szinonimák, nemenkénti párok (le cousin / la
+  cousine) vagy zárójellel pontosított homonimák (a generátor kizárja őket egymás elterelői közül).
+- Integrátori ellenőrzés: `report --lang fr` → 2064 bejegyzés, kvóta- és `phrase`-hiány nincs, terv 4.2 teljesül, hibák
+  0; új őr: `tests/vocab-bank-cognates.test.ts`; a cserélt bejegyzések vak megoldáson nem mentek át újra.

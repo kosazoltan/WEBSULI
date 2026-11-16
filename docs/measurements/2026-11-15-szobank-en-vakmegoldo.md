@@ -206,3 +206,22 @@ phrase-kvóta hiány nincs, terv 4.2 minimum teljesül, hibák 0.
   megoldás nem.
 - Az idiómák tükörfordítását és az eltérő `hu`-jú szinonimapárokat a vak megoldó nem fogja meg megbízhatóan (egy kérdésben
   csak a felkínált négy opciót látja); ezekre a célzott audit és a review-botok jelzése volt a védelem.
+
+## S13 utójavítás (2026-11-16, ág `feat/jatekok-s13a-lista-adat-mero`)
+
+- Órakifejezések pótlása cserével (a `time` × L0 cella 28 bejegyzésen marad, kvóta 26, `phrase` 10 ≥ 9): törölve az
+  `en0-time-024` „in the morning” és az `en0-time-027` „on Monday” (ugyanazon cella „morning” / „Monday” szavának
+  elöljárós alakja), új az `en0-time-029` „half past two” — „fél három” és az `en0-time-030` „quarter past nine” —
+  „negyed tíz” (a `hu` nem tartalmazza a term-et, és nem ütközik a „half” / „scared” „fél” kulcsával).
+- `en0-food-029`: a csonka „a cup of” — „egy csésze ...” helyett „a cup of hot chocolate” — „egy csésze forró csoki”
+  (új példamondattal).
+- Betűre azonos kognát (a `hu` egyik kulcsa = a term): `en0-animals-023` „farm” → „tanya, gazdaság”,
+  `en1-school-028` „marker” → „filctoll”. Az ékezetben eltérő nemzetközi szavak (ocean–óceán, radio–rádió, virus–vírus
+  stb., 8 db) maradnak: valódi szókincs, nem betűre azonosak.
+- `report --overlaps` (85 → 84 pár) átnézve: valódi duplikátum (azonos jelentés, csak alakban eltérő term) nincs; a párok
+  szinonimák vagy zárójellel pontosított homonimák. Pontosítva: `check in` / `log in` és `check out` / `log out`
+  (zárójeles helyszín a `hu`-ban), `en4-everyday-017` „turn out” (a vesszős „kiderül, hogy” a „hogy” szót tette
+  jelentés-kulccsá).
+- Integrátori ellenőrzés: `report --lang en` → 2664 bejegyzés, kvóta- és `phrase`-hiány nincs, terv 4.2 teljesül, hibák
+  0; új őr: `tests/vocab-bank-cognates.test.ts` (betűre azonos / a `hu`-ban szereplő term mindhárom nyelven 0); a
+  módosított bejegyzések vak megoldáson nem mentek át újra (integrátori visszaolvasás).
