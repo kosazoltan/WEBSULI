@@ -163,6 +163,26 @@ A pontos szignatúrát mindig a forrásból olvasd (`GE/play/*`, gyűjtő-export
   `expire`-jét lejáratkor.
 - **Új score-hívás** `runId: newScoreRunId()`-vel (JM0, `game-score-contract-guard`).
 
+#### Megvalósult eltérések (J4a pilot #451 és a közös utójavítás — `fix/jatek-play-kozos-utojavitas`, kanban #51)
+
+**Állapot (közös utójavítás):** folyamatban — ág fix/jatek-play-kozos-utojavitas, munkafa .claude/worktrees/jatek-kozos, kanban #51
+
+- **Évfolyamhoz kötött ismétlés (#451):** `PlayQuestion.grade`, `ReviewItem.grade` (`{ v: 1, rev: 2 }`), `reviewFitsGrade`,
+  `inferReviewGrade`; a director a menet `config.grade`-jét bélyegzi és csak azonos évfolyamú ismétlést ad vissza.
+- **Közös meghajtó-minta (#451):** a lap és a node-szimuláció UGYANAZT a meghajtót hívja (fix lépés, időskála, hitstop) — saját
+  `dt × timeScale` lépéssel a sim más ellenfélsort mér (a `waves.ts` lépésenként fogyaszt RNG-t).
+- **`calm()` a kezdő fázisban (utójavítás a):** a mini-Director `calm()`-ja alacsony szintnél (`intensity < RELAX_ENTER`) a
+  kezdő „buildup” fázisban is igaz — különben csúcs nélküli menetben csak a kényszerített (maxGap) kérdések jöttek.
+- **`createQuestionUi` React-mentes fájlban (b):** `play/questionUi.ts`; a `useQuestionDirector.ts` re-exportálja.
+- **Érintés mozgó célpontra (c):** `pointerTapHandlers` (`play/pointerTap.ts`) — felengedéskor véglegesít, ha az ujj a cél
+  AKTUÁLIS dobozán belül (± tűrés) vagy alig mozdult; elhúzás / `pointercancel` = visszavonás; mutatónként; NEM `click`
+  (több ujjnál a nem elsődleges mutatóra nincs `click`).
+- **Mozgó cél a mobil mérőben (d):** `GameMobileCase.quizMoving` — stabil doboz helyett N egymást követő mintán érintési
+  méretű és a képernyőn belüli cél; a meglévő esetek viselkedése változatlan.
+- **A K.1 „`onRetry=` → 0 találat” elfogadási grep pontosítása (e):** a tiltás a MAGYARÁZÓKÁRTYA újrapróbájára vonatkozik
+  (`<QuizFeedbackCard … onRetry=` / `retryTask`), nem a `ResultScreen` „Új futam” (új menet) propjára; a grep:
+  `grep -nE "<QuizFeedbackCard[^>]*onRetry=|retryTask" P/<lap>.tsx` → 0 találat.
+
 ### K.3 Etikai ellenőrzőlista (minden játékszelet PR-leírásában pipálva)
 
 - [ ] nincs veszteségkerüléssel fenyegető szöveg vagy visszaszámláló a menün kívül (terv 4.2);
@@ -269,6 +289,19 @@ nélkül, a `T/support/game-sim.ts` `SimGame` interfésze szerint (J0b). A ját�
 20 seeddel × 180 mp-et futtat a `SIM_AVERAGE` játékossal, és a terv 6.2 küszöbeit ellenőrzi (medián). Kérdés nélküli
 módban (`questions: false`) igazolja, hogy a menet végigjátszható és van vesztési feltétel. Arany visszajátszás: fix
 seed + rögzített bemenetsor → a végállapot hash-e egyezik (ugyanazon a gépen).
+
+**Közös meghajtó (J4a pilot, kötelező):** a sim NE saját `dt × timeScale` lépéssel fusson — a lap és a sim ugyanazt a
+meghajtót hívja (fix lépésű hurok, időskála, hitstop, esemény-ürítés; minta: `L/speedMath/core.ts` `createTowerDriver`),
+és egy teszt igazolja, hogy lépés-indexhez kötött bemenettel eltérő képkocka-időknél bitre azonos az állapot (a J4a pilot tanulsága: más lépésméretű sim más ellenfélsort mért).
+
+**A játéklap determinizmus-őre (`T/game-sim-determinism-guard.test.ts` `GAME_PAGE_ALLOW`, J4a):** a sim-mag mellett a
+játéklap játékmenet-kódja sem húzhat `Math.random`-ot / `Date.now`-t (feladat-, elterelő-, célpont-sorsolás a menet seedelt
+RNG-jéből; a közös választók `rng` paramétert fogadnak: `pickGradeQuiz({ rng })`, `createVocabSource({ rng })`,
+`pickFreshTask({ rng })`). Egy átírt lap felvétele: a `GAME_PAGE_ALLOW` objektumba új kulcs a lap fájlnevével, értéke a
+megengedett előfordulások listája `{ re, why }` alakban — CSAK a seedelt forrás lusta alapértéke vagy tisztán kozmetikai,
+a játék kimenetelét nem érintő hívás, indoklással. Az őr az engedélyezett mintákat kivágja, a maradékban a két tiltott
+forrást keresi, és bukik, ha egy engedélyezett minta már nincs a lapon (elavult lista). A nézet-kód `performance.now`-ja
+(rAF, hang-ritkítás) megengedett. Kozmetikai véletlenhez külön `fxRng` (seedelt) ajánlott.
 
 **Játékonkénti átalakítási méret (determinizmus, a 4. kutatás leletei kódból újraellenőrizve, 2026-11-16):** a táblázat
 sora az adott játék „a” al-szeletének kötelező része.
@@ -1204,7 +1237,7 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
 
 ## J4 — Gyors matek sprint: „Neon védőtorony” (J4a, J4b) — D1 alapértelmezés
 
-**Állapot (J4a):** folyamatban — ág feat/jatek-j4a-matek, munkafa .claude/worktrees/jatek-j4a, kanban #44 · **Állapot (J4b):** nem kezdődött
+**Állapot (J4a):** kész — #451 (b82ea71d), kanban #44 · **Állapot (J4b):** nem kezdődött
 **Függ:** J0c merge. Párhuzamosan a J2-vel. **Elfogadás:** J-SQ, J1–J10, J16, M1–M12. Terv: 5.4.
 
 ### Fájlok
@@ -1255,7 +1288,7 @@ függvényeket (feladatgenerátor, időzítés) nézők változatlanok.
    léptet automatikusan”, „a magyarázat olvasása közben áll az óra”, „0 életnél nincs Újrapróbálom”) → SPEC-VÁLTOZÁS
    jelöléssel: (a) a hibás ágban `director.answer` után `reveal` ≥ 1800 ms (forrásbeli konstans-ellenőrzés:
    `REVEAL_MS\s*=\s*1800` vagy nagyobb) és nincs `setTimeout(nextTask`; (b) a „Miért?” ága szünetet tart (`if (whyOpen)
-   return;` minta a játékórában); (c) a retry-gomb nincs a játékmenetben (`onRetry=` nem szerepel a lapon) — mert a
+   return;` minta a játékórában); (c) a retry-gomb nincs a játékmenetben (a `QuizFeedbackCard`-on nincs `onRetry=`, `retryTask` nincs; a `ResultScreen` „Új futam”-ja megengedett — K.2 e) — mert a
    retry a megmutatott megoldás visszakoppintása volt (terv 3.1). A `WIRED` esetek változatlanok.
 6. Tesztek: `T/speed-math-core.test.ts` (drón-ütemezés az ablakhoz, pajzs-szabályok, egy válasz / kérdés — multitouch
    idempotencia), `T/speed-math-sim.test.ts` (J2 ≥ 10, J3 ≤ 6 mp, J9 medián 2–5 perc), `T/speed-math-play.spec.ts`.
@@ -1278,7 +1311,8 @@ függvényeket (feladatgenerátor, időzítés) nézők változatlanok.
 
 ### Elfogadás (J4)
 
-- [ ] J-SQ teljesül; `grep -n "Tanári bank\|onRetry=" P/SpeedQuizMath.tsx` → 0 találat.
+- [ ] J-SQ teljesül; `grep -nE "Tanári bank|<QuizFeedbackCard[^>]*onRetry=|retryTask" P/SpeedQuizMath.tsx` → 0 találat (a
+  pontosítás oka: K.2 „Megvalósult eltérések” e — a `ResultScreen` „Új futam” propja új menet, nem újrapróba).
 - [ ] `T/speed-math-sim.test.ts` J2, J3, J6, J9 zöld; a SPEC-VÁLTOZÁS-os őr-esetek az új követelményt mérik.
 - [ ] `game-win-paths` (`speed-quiz-math`), mobil mérő `-g speed-quiz` zöld; képernyőképek.
 
