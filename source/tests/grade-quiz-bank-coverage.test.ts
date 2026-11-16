@@ -264,8 +264,10 @@ function evalExpr(src: string, x?: number): number | null {
 
 /** Opció számértéke: tiszta szám / tört / tizedes, legfeljebb mértékegységgel („36 cm”, „24 cm³”). */
 function optionNumber(o: string): number | null {
-  // JBb: a számrészben hatvány, gyök és normálalak is lehet („2⁵”, „√2”, „3 · 10⁴”)
-  const m = /^(-?[\d ,./−⁰¹²³⁴⁵⁶⁷⁸⁹⁻·√()]+?)(?:\s*[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ²³°]+\.?)?$/u.exec(o.trim());
+  // JBb: a számrészben hatvány, gyök és normálalak is lehet („2⁵”, „√2”, „3 · 10⁴”). A számrész MOHÓ (review #453): lusta
+  // illesztésnél a záró „²” / „³” a mértékegységhez került, és a „2³” 2-nek, a „3 · 10³” 30-nak számított. A mértékegység
+  // betűvel vagy °-kal kezdődik, így a felső index csak betű után (cm², m³) lehet egység.
+  const m = /^(-?[\d ,./−⁰¹²³⁴⁵⁶⁷⁸⁹⁻·√()]+)(?:\s*[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ°][a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ²³]*\.?)?$/u.exec(o.trim());
   return m ? evalExpr(m[1]!) : null;
 }
 
@@ -361,6 +363,14 @@ test("a független számoló önellenőrzése", () => {
   assert.equal(evalExpr("(−3)²"), 9);
   assert.equal(optionNumber("3 · 10⁴"), 30000);
   assert.equal(optionNumber("16 cm²"), 16);
+  // review #453: a záró felső index a SZÁM része, nem mértékegység
+  assert.equal(optionNumber("2³"), 8);
+  assert.equal(optionNumber("5²"), 25);
+  assert.equal(optionNumber("3 · 10³"), 3000);
+  assert.equal(optionNumber("2³ cm³"), 8);
+  assert.equal(optionNumber("10⁻² m"), 0.01);
+  assert.equal(optionNumber("−3 °C"), -3);
+  assert.deepEqual(truths(item("Számold ki: 2 · 2 · 2", ["8", "2³", "6", "4"])), [true, true, false, false], "a 8 és a 2³ is igaz → a kapu jelez");
   assert.deepEqual(truths(item("Mennyi a 12, a 18 és a 30 legkisebb közös többszöröse?", ["180", "90", "360", "60"])), [true, false, false, false]);
   assert.deepEqual(truths(item("Mennyi 24, 36 és 60 legnagyobb közös osztója?", ["12", "6", "4", "24"])), [true, false, false, false]);
 });
