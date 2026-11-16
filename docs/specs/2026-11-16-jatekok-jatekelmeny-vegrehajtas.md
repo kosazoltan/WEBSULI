@@ -2241,6 +2241,95 @@ megerősítéssel.
 **Elfogadás:** a fenti tesztek zöldek, a meglévők változatlanul (a tiltott-belépés elvárása dokumentált SPEC-VÁLTOZÁS-sal);
 nincs séma-változás.
 
+#### JM7b-utójavítás K1 — a tiltás megőrzése a fiók törlése után (tiltás-ujjlenyomat)
+
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-fiok-tiltas-megorzes, munkafa .claude/worktrees/jatek-k1, kanban #56 · **Függ:** N2 (#463) · **Modell:** Opus · **Elfogadás:** JM-A15, admin-jogosultsági mátrix
+**Tulajdonosi döntés (2026-11-16, űrlap):** „Tiltás megőrzése ujjlenyomattal”. **Lelet** (review #461/#463, K1, KÖZEPES): a
+tiltott játékos törli a fiókját, majd ugyanazzal a címmel újra belép → új, tiltás nélküli fiók (admin-törlés után ugyanez).
+**Nem cél:** a teljes cím megőrzése; a `users.is_banned` alapú tiltás (az a címre szól, eddig is túlélte); a Google-út
+(`S/player/google.ts`, `S/auth.ts`) módosítása; saját admin-ellenőrzés (a meglévő `/api/admin` őr — a #462 `isAdminUser`-e
+alá is automatikusan kerül); a `PLAYER_ACCOUNTS` (KI marad).
+**Fájlok:** `source/migrations/0041_player_ban_fingerprints.sql` (új), `source/shared/schema.ts` (új tábla),
+`S/player/codes.ts` (`banFingerprint`), `S/player/account-store.ts` (`deleteAccount`, `upsertGooglePlayer`, `setBanned`,
+törölt-tiltott lista / feloldás), `S/player/store.ts` (`confirmVerifiedEmail`), `S/player/admin-routes.ts`, kliens:
+a „Játékosok” panel és a fiókoldal törlési szövege; tesztek: `T/player-account-db.integration.ts`, `T/player-codes.test.ts`
+(migráció ↔ séma), `T/admin-route-guard.test.ts`, `T/admin-authz-matrix-db.integration.ts`.
+**Lépések:**
+1. Migráció (csak hozzáadó, idempotens, a flagtől függetlenül fut élesben, magában ártalmatlan):
+   `CREATE TABLE IF NOT EXISTS player_ban_fingerprints (fingerprint varchar(64) PRIMARY KEY, banned_at timestamptz NOT NULL,
+   created_at timestamptz NOT NULL DEFAULT now())`. **Visszaállás:** `DROP TABLE IF EXISTS player_ban_fingerprints;` (a kód
+   üres / hiányzó tábla mellett hibára futna, ezért a visszaállás a kód visszavonásával együtt). `db:push` TILOS.
+2. Ujjlenyomat: `HMAC-SHA256(playerAuthKey(), "ban:" + limitKey(cím))` (a kód- és korlát-hash mintája; a `limitKey`
+   kanonizál: kisbetű, gmail-pont és `+alias` összevonva) — visszafejthetetlen, a teljes cím nem marad meg. **A
+   `SESSION_SECRET` rotációja** után a régi ujjlenyomatok nem egyeznek: a törölt-tiltott címek tiltása elvész (ugyanígy
+   érvénytelenednek a belépőkódok és a tanulói linkek); a bejegyzések az adminfelületen továbbra is láthatók és törölhetők.
+3. `deleteAccount` (saját és admin-törlés közös függvénye): ha a fiók tiltott (`banned_at`), ugyanabban a tranzakcióban
+   `INSERT … ON CONFLICT DO NOTHING` az ujjlenyomattal és a tiltás idejével. Nem tiltott fiók törlése nem hagy nyomot.
+4. Új fiók (`confirmVerifiedEmail` — kód / link; `upsertGooglePlayer` — Google): az `INSERT` a `banned_at`-et az
+   ujjlenyomat-táblából veszi (csak az ÚJ sorra hat) → a fiók tiltottként jön létre, a belépés a #463 szerinti korlátozott
+   munkamenetet adja (403 `BANNED`).
+   **Sorosítás (#471 review):** a törlés és MINDEN létrehozási út közös, címenkénti tranzakciós advisory-zárat vesz az
+   ujjlenyomatra (előbb a zár, utána sorzár / INSERT); a létrehozás az ujjlenyomatot a zár UTÁN, friss pillanatképből olvassa,
+   így egy párhuzamos tiltott-törlés mellett sem jöhet létre tiltatlan fiók.
+5. Feloldás: `setBanned(id, false)` az ujjlenyomatot is törli. A törölt-tiltott bejegyzés feloldása (#471 review) ugyanabban
+   a tranzakcióban az AZONOS ujjlenyomatú élő fiókok (a törlés után tiltottként újra létrejött, bármely cím-változatú fiók)
+   tiltását is feloldja. Az ujjlenyomat az újralétrehozáskor szándékosan NEM „költözik át” (nem törlődik): különben egy MÁSIK
+   cím-változattal ismét tiltatlan fiók nyílhatna. Admin: `GET /api/admin/game-accounts/deleted-bans`
+   (bejegyzés: rövid hivatkozás az ujjlenyomat elejéből + a tiltás és a törlés ideje — cím és maszk NÉLKÜL, mert a maszk
+   is részleges azonosító) és `POST /api/admin/game-accounts/deleted-bans/:ref/unban` — a meglévő `/api/admin` őr alatt.
+6. Szöveg: a fiókoldal törlési párbeszéde és az export egy mondatban jelzi, hogy tiltott fiók törlése után a cím
+   visszafejthetetlen ujjlenyomata megmarad, amíg az admin fel nem oldja.
+7. **K1-b (review #469/#471, KÖZEPES): a tiltás a KANONIKUS címre szól, már a tiltáskor.** `setBanned(true)` a címenkénti
+   zár alatt létrehozza az ujjlenyomatot, és MINDEN azonos postafiókú (gmail-pont, `+alias`, googlemail) élő fiókot tilt;
+   `setBanned(false)` és a törölt-tiltott feloldás ugyanazt a kanonikus feloldást végzi (ujjlenyomat törlése + az élő változatok
+   feloldása). Egy igazságforrás: nincs olyan állapot, ahol a fiók és az ujjlenyomat mást mond. Új fiók létrehozásakor a
+   kanonikus ujjlenyomat létezése tiltás; a meglévő (alias-)fiók belépéskor is megkapja (`ON CONFLICT … banned_at =
+   COALESCE(…)`). A „törölt, de tiltva maradt” listán csak az élő fiók nélküli ujjlenyomatok látszanak. A felület kimondja: a
+   feloldás az azonos postafiókú, más okból tiltott élő fiókot is feloldja (tájékoztató lelet).
+   **Kódkérési korlát:** a kulcsa már a kanonikus cím (`limitHash` → `limitKey`) — alias-címekkel nem sokszorozható (teszt).
+   **Kanonikus EGYEDISÉG (javaslat, NEM ebben a szeletben):** ma egy Gmail-postafiókhoz alias-címekkel több játékos-fiók
+   nyitható (ranglista-duplikálás). Megoldás: új oszlop `email_canonical_hash char(64)` egyedi indexszel (új migráció a meglévő
+   táblán + feltöltés) — tulajdonosi döntés és külön szelet; a tiltás szempontjából a fenti kanonikus tiltás már zárja a rést.
+8. **K1-c: megőrzési idő — tulajdonosi döntés (2026-11-16): 12 hónap.** `PLAYER_BAN_RETENTION_MONTHS` (alap 12, 1–120),
+   a tiltástól számítva; a meglévő óránkénti takarító (`sweeper.ts` → `purgeOldCodes`) törli a lejárt ujjlenyomatokat, de csak
+   ha nincs hozzá élő tiltott fiók — az ÉLŐ fiók tiltása nem jár le. A fiókoldal, az export és az admin-panel szövege megnevezi.
+9. **`SESSION_SECRET` rotáció (ALACSONY):** runbook-lépés (`docs/security-secret-hygiene-2026-09-13.md`), külön kulcs
+   helyett. Indok: a külön `PLAYER_BAN_KEY` új, élesben beállítandó titkot jelentene, és a bevezetése / cseréje ugyanígy
+   érvénytelenítené a megőrzött ujjlenyomatokat (a HMAC visszafejthetetlen, nem migrálható) — kisebb kockázat a meglévő titok
+   és egy dokumentált lépés: rotáció előtt az admin listázza a törölt-tiltott bejegyzéseket, és tudomásul veszi, hogy elvesznek
+   (az élő tiltott fiókok tiltása a `banned_at`-ben megmarad). **Rendszerszintű kezelés (#471 review):** a tábla `key_id`
+   oszlopa a kulcs rövid azonosítója; a takarító induláskor és óránként (`reconcileBanFingerprints`) törli a régi kulcsú
+   sorokat (a törölt fiókoké tudottan elvész — `warn` napló darabszámmal, cím nélkül), és MINDEN élő tiltott fiók ujjlenyomatát
+   újraszámolja — így nem egy-egy belépési ágon múlik; emellett minden belépési út (kód, link, Google új és ismert azonosító)
+   önjavító. Teszt: rotáció szimulálva, ismert Google-azonosítós és kódos úton az alias-regisztráció tiltott.
+10. **A tiltás állapotgépe (#471 review, 4. lelet után).** Zár = `lockBanAddress` (tranzakciós advisory-zár a KANONIKUS cím
+   ujjlenyomatára, `hashtextextended(fp, 7041)`); minden író / „olvas-dönt-ír” művelet a zár megszerzése UTÁN, ugyanabban a
+   tranzakcióban olvas — így bármely két művelet ugyanarra a címre sorosított.
+
+   | Művelet | Olvas | Ír | Zár | Egy tranzakció |
+   |---|---|---|---|---|
+   | Tiltás (`setBanned(true)`) | fiók címe; az azonos ujjlenyomatú élő fiókok | ujjlenyomat (beszúr / a tiltás idejét frissíti), az élő változatok `banned_at`-je | igen | igen |
+   | Feloldás élő fiókon (`setBanned(false)`) | fiók címe; a tiltott élő változatok | ujjlenyomat törlése, a változatok `banned_at = NULL` | igen | igen |
+   | Feloldás törölt-tiltotton (`unbanDeleted`) | ujjlenyomat (hivatkozással); a tiltott élő változatok | ujjlenyomat törlése, a változatok `banned_at = NULL` | igen (ujjlenyomatonként) | igen |
+   | Saját és admin-törlés (`deleteAccount`) | fiók címe, `banned_at` (a zár UTÁN, `FOR UPDATE`) | ujjlenyomat (ha tiltott), kódok, munkamenetek, fiók | igen (a sorzár ELŐTT) | igen |
+   | Létrehozás / belépés kód, link (`confirmVerifiedEmail`) | ujjlenyomat (a zár UTÁN) | fiók (`banned_at` öröklés, `ON CONFLICT … COALESCE`), ujjlenyomat (ha a fiók tiltott) | igen | igen |
+   | Google, új azonosító (`upsertGooglePlayer`) | ujjlenyomat (a zár UTÁN) | ugyanaz | igen | igen |
+   | Google, ismert azonosító (`upsertGooglePlayer`) | fiók címe, majd `banned_at` ÚJRA a zár UTÁN | ujjlenyomat (csak ha MOST is tiltott) | igen | igen |
+   | Helyreállítás rotáció után (`reconcileBanFingerprints`) | régi kulcsú sorok; a tiltott fiókok listája, majd fiókonként `banned_at` ÚJRA a zár UTÁN | régi kulcsú sorok törlése; ujjlenyomat (csak ha MOST is tiltott) | igen (fiókonként) | fiókonként külön, rövid tranzakció |
+   | Megőrzés-takarítás (`purgeExpiredBanFingerprints`) | lejárt ujjlenyomatok, majd ujjlenyomatonként ÚJRA: lejárt-e, van-e tiltott élő változat | lejárt, élő változat nélküli ujjlenyomat törlése | igen (ujjlenyomatonként) | ujjlenyomatonként külön |
+   | `getPlayer` / `requirePlayer`, törölt-tiltott lista | `banned_at` / ujjlenyomatok | — | nem kell (csak olvas, nem dönt írásról) | — |
+
+   **Páronkénti ellenőrzés:** az összes író és „olvas-dönt-ír” művelet ugyanazt a címenkénti zárat veszi, és a döntéshez
+   szükséges állapotot a zár UTÁN olvassa → bármely pár (pl. helyreállítás ↔ feloldás, takarítás ↔ tiltás, létrehozás ↔
+   törlés, Google ismert ↔ feloldás) sorosított. A 4. lelet előtt zár nélkül futott: a Google ismert ága, a helyreállítás és
+   a takarítás — ezek most a táblázat szerint. Teszt: minden művelet megvárja a tartott zárat (párhuzamos DB-teszt
+   műveletenként), és a szemantikus versenyek (helyreállítás ↔ feloldás, takarítás ↔ újratiltás, Google ismert ↔ feloldás).
+**Tesztek:** DB — tiltott saját törlés → ugyanaz a cím (kis- / nagybetű, gmail-pont, `+alias`) újra tiltott; admin-törlés
+után ugyanez (Google-úton is); feloldás (élő fióknál és a törölt bejegyzésnél) után rendes fiók; nem tiltott törlés nem hagy
+ujjlenyomatot; idegen cím érintetlen; a lista nem ad ki címet; a mátrix és az `admin-route-guard` új sorai; migráció ↔ séma
+egyezés, additív / idempotens migráció.
+**Elfogadás:** a fenti tesztek zöldek; a meglévők változatlanul; egyetlen új tábla, más séma-változás nincs.
+
 ---
 
 ### JM7c — Hibrid jogosultság (terv 10.4a): admin kizárólag az engedélylistáról; meglévő tanulók / szülők játékos-joggal

@@ -8,16 +8,20 @@
  *   POST /api/admin/game-accounts/:id/ban | /unban → tiltás / feloldás; a már belépett játékosra is azonnal hat (requirePlayer)
  *   POST /api/admin/game-accounts/:id/unlink-learner → a tanulói profil kapcsolatának bontása (review #449 K2)
  *   POST /api/admin/game-accounts/:id/delete { confirm: "TÖRLÉS" } → VÉGLEGES törlés (N2), a saját törléssel azonos művelet
+ *   GET  /api/admin/game-accounts/deleted-bans        → a törölt, de tiltva maradt bejegyzések (K1) — cím és maszk nélkül
+ *   POST /api/admin/game-accounts/deleted-bans/:ref/unban → a bejegyzés feloldása (az ujjlenyomat törlése)
  * A flagtől független (az admin a kikapcsolt bevezetés alatt is látja / tilthatja a fiókokat).
  */
 import express, { type Router } from "express";
 import { z } from "zod";
 import { logger } from "../lib/logger";
 import { maskEmail } from "../lib/mask-email";
-import type { PlayerAccountStore } from "./account-store";
+import { DELETED_BAN_REF_LENGTH, type PlayerAccountStore } from "./account-store";
 import { allPurposeEmailHashes, playerAuthKey } from "./codes";
 
 const idSchema = z.string().min(1).max(64).regex(/^[A-Za-z0-9-]+$/);
+/** K1: a törölt-tiltott bejegyzés rövid hivatkozása (az ujjlenyomat első hexa jegyei). */
+const refSchema = z.string().length(DELETED_BAN_REF_LENGTH).regex(/^[0-9a-f]+$/);
 /** Az admin végleges törlésének megerősítő szava (a felület párbeszéde küldi). */
 export const ADMIN_DELETE_CONFIRM_WORD = "TÖRLÉS";
 const deleteSchema = z.object({ confirm: z.literal(ADMIN_DELETE_CONFIRM_WORD) }).strict();
@@ -87,6 +91,32 @@ export function createPlayerAdminRouter(accounts: PlayerAccountStore): Router {
     } catch (error) {
       logger.error("[PLAYER-ADMIN] kapcsolat-bontás hiba:", errMsg(error));
       return res.status(500).json({ message: "Hiba a kapcsolat bontásakor" });
+    }
+  });
+
+  // K1 (tulajdonosi döntés 2026-11-16): a „törölt, de tiltva maradt” bejegyzések — cím és maszk NÉLKÜL; feloldás = az
+  // ujjlenyomat törlése (utána ugyanarra a címre rendes fiók jöhet létre).
+  router.get("/deleted-bans", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      return res.json({ entries: await accounts.listDeletedBans() });
+    } catch (error) {
+      logger.error("[PLAYER-ADMIN] törölt-tiltott lista hiba:", errMsg(error));
+      return res.status(500).json({ message: "Hiba a lista lekérésekor" });
+    }
+  });
+
+  router.post("/deleted-bans/:ref/unban", async (req, res) => {
+    const ref = refSchema.safeParse(req.params.ref);
+    if (!ref.success) return res.status(400).json({ message: "Hibás hivatkozás" });
+    try {
+      const removed = await accounts.unbanDeleted(ref.data);
+      if (removed.entries === 0) return res.status(404).json({ message: "Nincs ilyen bejegyzés" });
+      logger.info(`[PLAYER-ADMIN] törölt fiók tiltása feloldva (hivatkozás: ${ref.data}; feloldott élő fiók: ${removed.accounts})`);
+      return res.json({ ok: true, unbannedAccounts: removed.accounts });
+    } catch (error) {
+      logger.error("[PLAYER-ADMIN] törölt-tiltott feloldás hiba:", errMsg(error));
+      return res.status(500).json({ message: "Hiba a feloldáskor" });
     }
   });
 

@@ -439,7 +439,9 @@ function AccountActions({ maskedEmail, googleLinked, local }: { maskedEmail: str
             <AlertDialogTitle>Biztosan törlöd a fiókodat?</AlertDialogTitle>
             <AlertDialogDescription>
               Törlődik a becenév, az avatar, az e-mail-címed és a fiókhoz kötött minden adat, és minden eszközön kilépsz. Ez nem vonható vissza.
-              Az ezen az eszközön tárolt helyi pontjaid megmaradnak.
+              Az ezen az eszközön tárolt helyi pontjaid megmaradnak. Letiltott fióknál a tiltás jelzése legfeljebb 12 hónapig marad
+              meg, cím nélkül (csak az e-mail-címed visszafejthetetlen ujjlenyomata), hogy ugyanazzal a címmel se lehessen tiltás
+              nélkül új fiókot nyitni.
             </AlertDialogDescription>
           </AlertDialogHeader>
           {!codeSent ? (

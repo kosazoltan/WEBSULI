@@ -102,14 +102,32 @@ export function foldReadings(text: string): string[] {
     return (out + s.slice(at)).replace(/[^a-z]/g, "");
   };
   const readings = new Set<string>();
-  if (sites.length > MAX_DIGIT_SITES) {
-    readings.add(build(() => true));
-    readings.add(build(() => false));
-  } else {
+  if (sites.length <= MAX_DIGIT_SITES) {
     for (let m = 0; m < 1 << sites.length; m++) readings.add(build((i) => (m & (1 << i)) !== 0));
+    return [...readings];
+  }
+  readings.add(build(() => true));
+  readings.add(build(() => false));
+  // #469 review (a): háromnál több számjegynél CSÚSZÓABLAK — minden 3 egymás utáni előfordulás minden kombinációja, a
+  // többi „mind betű” vagy „mind elhagyva” („Bu29i999”, „6e9ci999”: a tő körüli számjegyek egyenként, a töltelék egyben).
+  // Legfeljebb `MAX_WINDOW_DIGIT_SITES` előfordulásig (egy 16 karakteres névben ennél több nem fér el; a hosszabb név amúgy
+  // is LENGTH_LONG) → legfeljebb 14 × 16 olvasat.
+  if (sites.length <= MAX_WINDOW_DIGIT_SITES) {
+    for (let w = 0; w + MAX_DIGIT_SITES <= sites.length; w++) {
+      for (let m = 0; m < 1 << MAX_DIGIT_SITES; m++) {
+        for (const outside of [true, false]) {
+          readings.add(build((i) => (i >= w && i < w + MAX_DIGIT_SITES ? (m & (1 << (i - w))) !== 0 : outside)));
+        }
+      }
+    }
   }
   return [...readings];
 }
+
+/** A csúszóablakos számjegy-kombinálás felső határa (előfordulás). */
+const MAX_WINDOW_DIGIT_SITES = 16;
+/** A tartalomszűrő ennyi karakteren fut (a becenév legfeljebb 16 + megkülönböztető; a szerver 64-re korlátoz). */
+const CONTENT_SCAN_MAX = 64;
 
 /**
  * N1b: többkarakteres hasonmások (rn ~ m, vv ~ w, cl ~ d) — a szűrő TOVÁBBI olvasatai (a kulcsban nem). Az előfordulásonként
@@ -283,7 +301,13 @@ export function checkPlayerNickname(raw: unknown): NicknameCheck {
   // A szűrő olvasatai EGY helyen, HALMAZKÉNT: a nyers alak és a többkarakteres hasonmás-olvasatok (rn → m, vv → w, cl → d),
   // mindegyik a 2 / 6 / 9 elhagyva ÉS betűként. MINDEN tartalom-ellenőrzés (e-mail, URL, trágár, foglalt) mindegyiken fut —
   // egy új olvasat így soha nem vesz el régit.
-  const readings = [base, ...multiCharReadings(base)];
+  // #469 review (b): a tartalomszűrő legfeljebb az első 64 karakteren fut (a hosszabb név amúgy is LENGTH_LONG) — közvetlen,
+  // nagyon hosszú hívásnál sem lassul el. Az olvasatok száma korlátos: sok számjegynél (csúszóablak) a hasonmás-olvasatokból
+  // csak a „mind cserélve” marad (≤ 2 × 226 olvasat; egyébként ≤ 65 × 8).
+  const content = Array.from(base).slice(0, CONTENT_SCAN_MAX).join("");
+  const manyDigits = (content.match(/[269]/g) ?? []).length > MAX_DIGIT_SITES;
+  const multi = multiCharReadings(content);
+  const readings = [content, ...(manyDigits ? multi.slice(-1) : multi)];
   const folds = [...new Set(readings.flatMap(foldReadings))];
   const len = Array.from(base).length;
 
