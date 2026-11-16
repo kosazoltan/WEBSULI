@@ -1609,7 +1609,7 @@ vesztés játék közben szünet; a kvíz megnyitásakor a játék maga engedi e
 
 ## S12 — Tornado Hunter 200 mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #29. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s12-tornado, munkafa .claude/worktrees/jatekok-s12, kanban #29
 
 - **Cél:** 4.5 keret; érintővezérlés csak érintős eszközön; minden gomb ≥ 48 px (a kilépés is); a HUD 9–11 px-es szövegei
   olvasható méretre; fekvő tájolás ajánlása; angol kérdések a szóbankból (A8).

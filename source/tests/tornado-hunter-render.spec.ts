@@ -7,6 +7,15 @@ import { test, expect } from "@playwright/test";
  * there is no viewport overflow and the promised HUD elements are present.
  */
 
+/*
+ * SPEC-VÁLTOZÁS 2026-11-15 (docs/specs/2026-11-15-jatekok-mobil-szobank.md 4.5 „Érintés” és 4.6/7): „asztali gépen,
+ * érintés nélkül az érintővezérlők nem látszanak”. A lent ellenőrzött tárcsa, ⚓ és Cam gomb ezért érintős
+ * kijelzőt kér — a mérce nem lazult: ugyanazok az elemek ugyanúgy láthatók kell legyenek, csak az eszköz érintős
+ * (érintős laptop: asztali nézet + érintés). Az egérrel vezérelt asztali eset rejtését a
+ * `game-mobile-quality.spec.ts` M5 mérése kéri.
+ */
+test.use({ hasTouch: true });
+
 test.describe("Tornado Hunter 200", () => {
   test("menü, szintválasztó, 3D játék és kvíz valós renderben", async ({ page }) => {
     const consoleErrors: string[] = [];
