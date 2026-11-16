@@ -2,7 +2,7 @@
  * Szóbank-eszköz a tartalomszeleteknek (végrehajtás S1/11. lépés, K.8.6–K.8.7).
  * Futtatás: `cd source && node --import tsx scripts/vocab-bank.ts <parancs> …`
  *
- *   report --lang <en|de|fr> [--terms]
+ *   report --lang <en|de|fr> [--terms] [--overlaps]
  *   blind-export --lang <l> --level <n> --seed <s> --out <fájl> --key-out <fájl> [--canary <k>]
  *   blind-score --key <fájl> --answers <fájl> --out <fájl>
  */
@@ -15,7 +15,7 @@ import type { VocabEntry, VocabLang, VocabLevel, VocabStage } from "../client/sr
 import { VOCAB_EN, VOCAB_EN_STAGE } from "../client/src/data/vocabBank/vocab-en";
 import { VOCAB_DE, VOCAB_DE_STAGE } from "../client/src/data/vocabBank/vocab-de";
 import { VOCAB_FR, VOCAB_FR_STAGE } from "../client/src/data/vocabBank/vocab-fr";
-import { findTermInExample, generateVocabQuestion, type VocabQuestionType } from "../client/src/game-engine/vocab/questionGenerator";
+import { findTermInExample, generateVocabQuestion, meaningKeys, type VocabQuestionType } from "../client/src/game-engine/vocab/questionGenerator";
 
 /** Seedelt véletlen (mulberry32; a game-test-hooks.ts-é import.meta.env miatt Node-ban nem tölthető). */
 function mulberry32(seed: number): () => number {
@@ -74,7 +74,41 @@ function intArg(args: Record<string, string | true>, key: string, min: number, m
   return n;
 }
 
-export function reportLines(lang: VocabLang, entries: VocabEntry[], stage: VocabStage, withTerms: boolean): { lines: string[]; problems: string[] } {
+export type OverlapPair = { a: VocabEntry; b: VocabEntry };
+
+/**
+ * Jelentés-átfedő párok (K.7.2/a): azonos kind, szintkülönbség ≤ 1, a `hu` jelentés-kulcsainak van közös eleme.
+ * Ezek a generátorban nem lehetnek egymás elterelői (nem hiba); a lista az adat-szintű tisztítást segíti.
+ * Kulcsonkénti index, így a teljes bankon sem négyzetes. Sorrend: a bank sorrendje szerint.
+ */
+export function overlapPairs(entries: readonly VocabEntry[]): OverlapPair[] {
+  const index = new Map<string, number[]>();
+  entries.forEach((e, i) => {
+    for (const k of meaningKeys(e.hu)) {
+      const list = index.get(k);
+      if (list) list.push(i); else index.set(k, [i]);
+    }
+  });
+  const seen = new Set<string>();
+  const pairs: Array<[number, number]> = [];
+  for (const list of index.values()) {
+    for (let x = 0; x < list.length; x++) {
+      for (let y = x + 1; y < list.length; y++) {
+        const i = list[x]!, j = list[y]!;
+        const a = entries[i]!, b = entries[j]!;
+        if (a.kind !== b.kind || Math.abs(a.level - b.level) > 1) continue;
+        const key = `${i}:${j}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        pairs.push([i, j]);
+      }
+    }
+  }
+  pairs.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  return pairs.map(([i, j]) => ({ a: entries[i]!, b: entries[j]! }));
+}
+
+export function reportLines(lang: VocabLang, entries: VocabEntry[], stage: VocabStage, withTerms: boolean, withOverlaps = false): { lines: string[]; problems: string[] } {
   const stats = vocabBankStats(entries);
   const problems = vocabBankProblems(entries, lang);
   const lines: string[] = [];
@@ -102,6 +136,12 @@ export function reportLines(lang: VocabLang, entries: VocabEntry[], stage: Vocab
 
   const planGaps = minimumProblems(stats, PLAN_MINIMUMS[lang]);
   lines.push(`terv 4.2 minimum: ${planGaps.length ? planGaps.join("; ") : "teljesül"}`);
+  // Nem hiba (a generátor kizárja őket egymás elterelői közül), csak tájékoztató az adat-szintű tisztításhoz.
+  const overlaps = overlapPairs(entries);
+  lines.push(`jelentés-átfedő párok (azonos szint±1, azonos kind): ${overlaps.length}`);
+  if (withOverlaps) {
+    for (const { a, b } of overlaps) lines.push(`  ${a.id} — ${a.term} — ${a.hu} ↔ ${b.id} — ${b.term} — ${b.hu}`);
+  }
   lines.push(`hibák: ${problems.length}`);
   for (const p of problems) lines.push(`  ${p}`);
 
@@ -200,7 +240,7 @@ function main(): void {
   if (command === "report") {
     const lang = langArg(args);
     const { entries, stage } = BANKS[lang];
-    const { lines, problems } = reportLines(lang, entries, stage, args.terms === true);
+    const { lines, problems } = reportLines(lang, entries, stage, args.terms === true, args.overlaps === true);
     process.stdout.write(`${lines.join("\n")}\n`);
     process.exit(problems.length ? 1 : 0);
   }
@@ -224,7 +264,7 @@ function main(): void {
     // A kanári-kapu: ha a megoldó nem vette észre mind, a futás érvénytelen (K.8.7/3).
     process.exit(result.canaryFound === result.canaryTotal ? 0 : 2);
   }
-  fail("használat: report --lang <l> [--terms] | blind-export … | blind-score … (lásd a fájl fejlécét)");
+  fail("használat: report --lang <l> [--terms] [--overlaps] | blind-export … | blind-score … (lásd a fájl fejlécét)");
 }
 
 if (process.argv[1] && /vocab-bank\.ts$/.test(process.argv[1])) main();

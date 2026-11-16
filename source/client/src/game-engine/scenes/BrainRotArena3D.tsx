@@ -23,8 +23,11 @@ export type ArenaRot = {
   opacity?: number;
 };
 
-/** A correct catch: sparks burst from the creature's floor spot. */
-export type ArenaBurst = { id: number; x: number; y: number };
+/**
+ * A correct catch: sparks burst from the creature's floor spot. S8: `kind: "escape"` — an escaped creature
+ * leaves a short red puff and a sinking ring instead (the miss is visible, not just a counter tick).
+ */
+export type ArenaBurst = { id: number; x: number; y: number; kind?: "catch" | "escape" };
 
 type Props = { rots: ArenaRot[]; bursts: ArenaBurst[] };
 
@@ -721,6 +724,12 @@ export default function BrainRotArena3D({ rots, bursts }: Props) {
         const origin = hitA.clone().setY(0.6);
         const scale = budget.particleScale;
         const up = new THREE.Vector3(0, 1, 0);
+        if (b.kind === "escape") {
+          // A miss: a small, low red puff that sinks back — clearly different from the golden catch fountain.
+          sparks.emit(origin, { count: Math.round(28 * scale) + 6, color: WARN_RED, speed: 3, life: 0.6, gravity: 5, size: 0.24, spread: 1 });
+          sparks.emit(origin, { count: Math.round(14 * scale) + 4, color: NEON_VIOLET, speed: 2, life: 0.5, gravity: 3, size: 0.2, spread: 1 });
+          continue;
+        }
         sparks.emit(origin, { count: Math.round(70 * scale) + 12, color: GOLD, speed: 7, life: 1.1, gravity: 7, size: 0.32, direction: up, directionality: 0.45, spread: 0.6 });
         sparks.emit(origin, { count: Math.round(40 * scale) + 8, color: NEON_PINK, speed: 5, life: 0.9, gravity: 4, size: 0.26, spread: 0.8 });
         sparks.emit(origin, { count: Math.round(30 * scale) + 6, color: NEON_CYAN, speed: 9, life: 0.7, gravity: 2, size: 0.2, direction: up, directionality: 0.2 });
