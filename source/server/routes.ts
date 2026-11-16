@@ -62,6 +62,10 @@ import { createPlayerAccountStore } from "./player/account-store";
 import { createPlayerAccountRouter } from "./player/account-routes";
 import { createPlayerAdminRouter } from "./player/admin-routes";
 import { playerLinkBaseUrl } from "./player/email-template";
+import { playerAccountsEnabled } from "./player/require-player";
+import { getPlayerSessionId } from "./player/session";
+import { getRealtime } from "./realtime";
+import { createRtRouter } from "./routes/rt";
 import { ViewDedup } from "./lib/view-dedup";
 import { maskEmail } from "./lib/mask-email";
 import { createGameScoreUserLimiter } from "./lib/game-score-limits";
@@ -829,6 +833,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (path.startsWith('/api/player/auth/')) {
       return enforceOriginAllowlist(req, res, next);
     }
+    // JM2: a valós idejű réteg belépőjegye — vendégnek (munkamenet nélkül) nincs CSRF-tokenje, ezért, mint a játékos-belépés,
+    // Origin/Referer-engedélylista őrzi (+ IP-korlát a routerben). A jegy csak egy rövid életű, egyszeri belépést ad.
+    if (path === '/api/rt/ticket') {
+      return enforceOriginAllowlist(req, res, next);
+    }
 
     // Apply CSRF protection to all other mutating requests
     csrfSynchronisedProtection(req, res, next);
@@ -885,6 +894,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     mailer: defaultPlayerMailer,
     accounts: playerAccounts,
     resolveLearnerId: async (token) => (await resolveLearner(token))?.id ?? null,
+  }));
+
+  // JM2 (terv 10.3, 10.8): a valós idejű réteg jegy- és státusz-végpontja; a Socket.IO-t az index.ts csatolja fel a
+  // HTTP-szerverre. MP_MODE=off (alap) → a jegy-végpont 404, a státusz { enabled: false }.
+  const rtPlayerStore = createPlayerStore(dbPool);
+  // Review #452 ALACSONY-8: a részletes valós idejű státusz (szobák, kapcsolatok, gyártási elsőbbség, kapacitás) csak adminnak.
+  app.get("/api/admin/rt/status", isAuthenticatedAdmin, (_req: Request, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(getRealtime().adminStatus());
+  });
+  app.use("/api/rt", createRtRouter(getRealtime(), {
+    resolveLearner: (token) => resolveLearner(token),
+    getPlayer: async (req) => {
+      if (!playerAccountsEnabled()) return null;
+      const id = getPlayerSessionId(req);
+      return id ? rtPlayerStore.getPlayer(id) : null;
+    },
   }));
 
   // Create admin router with authentication middleware
