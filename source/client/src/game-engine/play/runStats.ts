@@ -51,6 +51,9 @@ export function createRunStats(opts?: { warmupSec?: number /* alap 10 */ }): Run
   const sequence: string[] = [];
   /** Kulcs → az első hibájának pozíciója ebben a menetben. */
   const firstMissAt = new Map<string, number>();
+  /** J4b (additív): az ismétlési sorba NEM kerülő tételek (`PlayQuestion.noReview`, pl. Becslő-bomba) — sem a visszatérési,
+   *  sem a változatossági (J6) mérésbe nem számítanak, mert szándékosan nem térnek vissza. */
+  const noReviewIds = new Set<number>();
   /** Nyitott kérdés: id → (pozíció, indítás). */
   const open = new Map<number, { pos: number; startMs: number }>();
   let lastStartMs: number | null = null;
@@ -117,8 +120,9 @@ export function createRunStats(opts?: { warmupSec?: number /* alap 10 */ }): Run
       sequence.push(p.question.key);
       asked += 1;
       distinct.add(p.question.key);
+      if (p.question.noReview) noReviewIds.add(p.id);
       if (p.isReview) reviewsAsked += 1;
-      else freshKeys.push(p.question.key);
+      else if (!p.question.noReview) freshKeys.push(p.question.key);
     },
     onOutcome(o) {
       const q = open.get(o.id);
@@ -127,7 +131,8 @@ export function createRunStats(opts?: { warmupSec?: number /* alap 10 */ }): Run
       if (o.result === "correct") correct += 1;
       else if (o.result === "wrong") wrong += 1;
       else if (o.result === "timeout") timeouts += 1;
-      if ((o.result === "wrong" || o.result === "timeout") && !firstMissAt.has(o.key)) firstMissAt.set(o.key, q.pos);
+      const tracked = !noReviewIds.delete(o.id);
+      if (tracked && (o.result === "wrong" || o.result === "timeout") && !firstMissAt.has(o.key)) firstMissAt.set(o.key, q.pos);
       if (open.size === 0) gapFromMs = q.startMs + Math.max(0, o.responseMs);
     },
     snapshot(simMs) {

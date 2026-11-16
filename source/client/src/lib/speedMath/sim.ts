@@ -27,20 +27,36 @@ import { createReviewQueue } from "@/game-engine/play/reviewQueue";
 import { createQuestionUi } from "@/game-engine/play/questionUi";
 import type { RunStatsSnapshot } from "@/game-engine/play/runStats";
 
-import { RAIDERS, SPEED_MATH_GAME_ID, createTowerDriver, towerDirectorConfig, type TowerCore, type TowerDriver } from "./core";
+import type { PlayQuestion } from "@/game-engine/play/types";
+
+import {
+  RAIDERS,
+  SPEED_MATH_GAME_ID,
+  createTowerDriver,
+  createTowerTasks,
+  towerDirectorConfig,
+  towerQuestionKind,
+  type TowerCore,
+  type TowerDriver,
+} from "./core";
 
 /** A bot koppintási üteme (valós ms). */
 export const TAP_MS = 800;
+/** A bot a főellenfél töltő magjára ekkora könnyítéssel bök (nagy cél, ≥ 600 ms előjelzés). */
+export const BOT_CORE_EASE = 0.75;
 
 type SimQuestion = { id: number; correctOption: number; windowMs: number; optionCount: number };
 
 /** Seedelt számolási bank a sim-hez: a × b, a + b, a − b — kulcsonként egyedi. */
-function simProvider(seed: number): QuestionProvider {
+function simProvider(seed: number, special: () => PlayQuestion | null): QuestionProvider {
   const rng = createRng(seedFrom(SPEED_MATH_GAME_ID, seed, "simbank"));
   return {
     couponOnly: false,
     material: () => null,
     fresh: () => {
+      // A különleges kérdések (Becslő-bomba, főellenfél, Számlánc) ugyanabból a magból, mint a lapon.
+      const sp = special();
+      if (sp) return sp;
       const op = rng.int(3);
       const a = 3 + rng.int(10);
       const b = 3 + rng.int(10);
@@ -72,12 +88,15 @@ export type SpeedMathSim = {
   intensity(): number;
   /** A világ (mérés / arany visszajátszás). */
   core: TowerCore;
+  /** J4b: a Zéró-robot harcának kezdete és vége (kérdés-óra ms; null, ha nem jött el / nem ért véget). */
+  bossFight(): { startMs: number | null; endMs: number | null };
 };
 
 export function createSimGame(opts: { seed: number; grade: number; questions: boolean }): SpeedMathSim {
+  let tasks: ReturnType<typeof createTowerTasks> | null = null;
   const director = createQuestionDirector({
     config: towerDirectorConfig(opts.grade),
-    provider: simProvider(opts.seed),
+    provider: simProvider(opts.seed, () => tasks?.special() ?? null),
     review: createReviewQueue(null),
     rng: createRng(seedFrom(SPEED_MATH_GAME_ID, opts.seed, "q")),
     startBand: 0.4,
@@ -95,13 +114,18 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
     },
     onOutcome: (o, p) => {
       const speed = o.result === "correct" ? Math.max(0, 1 - o.responseMs / p.windowMs) : 0;
-      driver!.core.applyOutcome(o.result, speed);
+      driver!.core.applyOutcome(o.result, speed, towerQuestionKind(p));
+      tasks?.noteOutcome(o, p);
     },
   });
   driver = createTowerDriver({ seed: opts.seed, questions: opts.questions ? ui : null, intensity: () => (opts.questions ? director.intensity() : 0.4) });
   const d = driver;
   const core = d.core;
+  const taskRng = createRng(seedFrom(SPEED_MATH_GAME_ID, opts.seed, "special"));
+  tasks = createTowerTasks({ core, grade: () => opts.grade, rng: taskRng.next });
   const over = () => !core.running();
+  let bossStart: number | null = null;
+  let bossEnd: number | null = null;
 
   return {
     core,
@@ -111,13 +135,22 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
         return;
       }
       d.frame(dtMs, false);
+      const b = core.state().boss;
+      if (b?.kind === "zero" && bossStart === null) bossStart = d.clockMs();
+      if (bossStart !== null && bossEnd === null && (core.state().phase === "won" || core.state().phase === "lost")) bossEnd = d.clockMs();
       // A bot lövése (valós időben).
       tapAcc += dtMs;
       const busy = ui.active() !== null && !answeredOpen;
       if (tapAcc >= (busy ? 2 * TAP_MS : TAP_MS)) {
         tapAcc = 0;
+        const boss = core.state().boss;
         const id = core.mostAdvanced();
-        if (id >= 0) {
+        const urgent = id >= 0 && core.progressOf(id) > 0.6;
+        if (boss && (boss.attack === "charge" || (boss.kind === "factory" && !urgent))) {
+          // A mag megérintése: a Zéró-robotnál az előjelzésre reagál, a Hibagyárnál ha nincs közeli fosztogató.
+          if (input.skillRoll < BOT_CORE_EASE) core.hitBossCore();
+          d.drain();
+        } else if (id >= 0) {
           const r = core.state().raiders[id]!;
           if (input.skillRoll < RAIDERS[r.kind].ease) core.shoot(id);
           d.drain();
@@ -136,6 +169,7 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
       answeredOpen = true;
       ui.pick(option, d.clockMs());
     },
+    bossFight: () => ({ startMs: bossStart, endMs: bossEnd ?? (bossStart !== null && over() ? d.clockMs() : null) }),
     done: () => over(),
     won: () => core.state().phase === "won",
     stats: () => director.stats(d.clockMs()),
