@@ -69,15 +69,37 @@ const FILE_EXT_TLD = /\.(png|jpe?g|gif|svg|webp|avif|js|mjs|cjs|ts|tsx|jsx|css|j
 /** E-mail-alakú szövegrész: Unicode-betűs helyi rész, ASCII domain legalább egy ponttal és betűs legfelső szintű domainnel. */
 const EMAIL = /(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})(?![A-Za-z0-9-])/gu;
 
+/**
+ * V9 (main piros, 24add8b6): a Gmail-kanonizálás DB-tesztjei szintetikus Gmail-címeket használnak (a domain nem cserélhető).
+ * FÁJLRA SZŰKÍTETT kivétel: csak ezekben a tesztfájlokban, és csak ha a kanonizált helyi rész (kisbetű, `+címke` és pontok
+ * nélkül) PONTOSAN szerepel az alábbi listán (review #479: előtag-egyezés valódi címet is átengedne). A lista a két fájlban
+ * (a mainen és a #475-ben) szó szerint előforduló címekből programmal gyűjtve; sablonból képzett Gmail-cím nincs. Új elem
+ * csak nyilvánvalóan szintetikus szó lehet (pl. `k1…` jegy-azonosító, `…proba`); személynév soha.
+ */
+const SYNTHETIC_GMAIL_FILES = new Set(["source/tests/player-account-db.integration.ts", "source/tests/player-codes.test.ts"]);
+const SYNTHETIC_GMAIL_LOCALS = new Set([
+  "k1tiltott", "k1-gold-unban", "k1goldunban", "k1felold2", "diakpelda", "masik",
+  // #475 (fix/jatek-fiok-tiltas-kulcsrotacio) új címei:
+  "k1baliaselotte", "k1ketpeldany", "k1zaralias", "aliasproba", "limitp", "rotgoogle", "rotkod",
+]);
+const GMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
+
+function syntheticGmail(lower: string, domain: string, file: string | undefined): boolean {
+  if (!file || !SYNTHETIC_GMAIL_FILES.has(file) || !GMAIL_DOMAINS.has(domain)) return false;
+  const canonical = lower.slice(0, lower.lastIndexOf("@")).split("+")[0].replace(/\./g, "");
+  return SYNTHETIC_GMAIL_LOCALS.has(canonical);
+}
+
 const usedAddresses = new Set<string>();
 
-export function isAllowedEmail(address: string): boolean {
+export function isAllowedEmail(address: string, file?: string): boolean {
   const lower = address.toLowerCase();
   const domain = lower.slice(lower.lastIndexOf("@") + 1);
   if (ALLOWED_ADDRESSES.some((a) => a.address === lower)) {
     usedAddresses.add(lower);
     return true;
   }
+  if (syntheticGmail(lower, domain, file)) return true;
   // Nem e-mail, hanem fájlnév (pl. `ikon@2x.png`, `csomag@1.2.3.js`): a „legfelső szintű domain” egy fájlkiterjesztés.
   if (FILE_EXT_TLD.test(domain)) return true;
   if (RESERVED_TLDS.some((tld) => domain === tld || domain.endsWith(`.${tld}`))) return true;
@@ -109,7 +131,7 @@ describe("adatvédelmi őr — nincs valódi e-mail-cím a nyilvános repóban",
       text.split(/\r?\n/).forEach((line, i) => {
         if (!line.includes("@")) return;
         for (const m of line.matchAll(EMAIL)) {
-          if (!isAllowedEmail(m[0])) offenders.push(`${rel}:${i + 1}`);
+          if (!isAllowedEmail(m[0], rel)) offenders.push(`${rel}:${i + 1}`);
         }
       });
     }
@@ -134,5 +156,25 @@ describe("adatvédelmi őr — nincs valódi e-mail-cím a nyilvános repóban",
     const found = [...line.matchAll(EMAIL)].map((m) => m[0]);
     assert.equal(found.length, 2);
     assert.ok(found.every((f) => !isAllowedEmail(f)));
+  });
+
+  it("V9 ellenpróba: a szintetikus Gmail-kivétel fájlra és előtagra szűk, valódinak látszó címet nem enged át", () => {
+    const fake = (local: string, domain: string) => [local, domain].join("@");
+    const F = "source/tests/player-account-db.integration.ts";
+    for (const ok of [fake("k1.tiltott+uj", "gmail.com"), fake("K1.Tiltott", "Gmail.com"), fake("k1-gold-unban", "gmail.com"),
+      fake("a.l.i.a.s.proba", "gmail.com"), fake("aliasproba", "googlemail.com"), fake("LIMIT.P+2", "gmail.com"), fake("rot.kod+1", "googlemail.com")]) {
+      assert.equal(isAllowedEmail(ok, F), true, ok);
+    }
+    for (const bad of [fake("vezeteknev.keresztnev", "gmail.com"), fake("kovacs.anna", "googlemail.com"), fake("anna+k1", "gmail.com"),
+      fake("x.k1", "gmail.com"),
+      // Review #479: listás szintetikus szóval KEZDŐDŐ, de hosszabb helyi rész (név / karakter ráfűzve) is bukik.
+      fake("k1", "gmail.com"), fake("k1.kovacs.anna", "gmail.com"), fake("k1tiltottx", "gmail.com"), fake("masik.anna", "gmail.com"),
+      fake("limitp2", "gmail.com"), fake("diakpelda.kiss", "googlemail.com"), fake("aliasprobaa+x", "gmail.com")]) {
+      assert.equal(isAllowedEmail(bad, F), false, "valódinak látszó cím a kivételes fájlban");
+    }
+    // Más fájlban, vagy más domainen a szintetikus szó sem elég.
+    assert.equal(isAllowedEmail(fake("k1.tiltott", "gmail.com"), "source/server/player/codes.ts"), false);
+    assert.equal(isAllowedEmail(fake("k1.tiltott", "gmail.com")), false);
+    assert.equal(isAllowedEmail(fake("k1.tiltott", "outlook.com"), F), false);
   });
 });
