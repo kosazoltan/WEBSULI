@@ -582,3 +582,24 @@ Forrás: J0c (#446) → J0c-b (kanban #46), orkesztrátori képátnézés.
   teljesen, koppintás nélkül, az ablakon belül?”. Mérés a bankok LEGHOSSZABB valódi tételével (`promptFit.ts` +
   `play-lab.spec.ts` „J0c-b …”), nem egy rövid mintával; a tartalék-mechanizmus (pl. „Mutasd”) csak mesterségesen túlhosszú
   bemenetre jelenhet meg.
+
+## C-44 — J4a pilot (#451): visszaperjel Python-heredocban, két ujjas `click`-hiány, más lépésméretű szimuláció (2026-11-16)
+
+Forrás: J4a (#451) és a review-körei (Codex, Vercel, Copilot), közös utójavítás (kanban #51).
+
+- **Tünet 1 (a C-35 újbóli előjövetele):** egy tesztfájlt Python-heredocban szerkesztettem, a nem nyers (`'''…'''`) karakterláncban a
+  `\b` a Pythonban `\b` (backspace, 0x08) lett — a regexben `nextTask\b` helyett láthatatlan vezérlőkarakter állt, a teszt
+  mégis zöld volt. **Megelőzés:** regexet / visszaperjeles szöveget CSAK az Edit / Write eszközzel írj (a C-35 szabálya), és
+  utána bájtszinten olvasd vissza (`grep -cP "[\x00-\x08]" <fájl>` → 0; `od -c`). A shell-heredoc `'EOF'` idézőjellel
+  változatlanul hagyja a visszaperjelet, a Python-karakterlánc NEM.
+- **Tünet 2:** a világban mozgó válaszcél (`button` `onClick`-kel) két ujjnál nem választott: a böngésző a NEM elsődleges
+  mutatóra nem szintetizál `click`-et (a telefont tartó hüvelykujj a képernyőn → a gyerek koppintása elveszett). CDP-s kétpontos
+  érintéssel és mutációval igazolva (`click`-alapú választással 0 válasz). Ráadásul érintésnél implicit pointer capture van: a
+  `pointerup` az elhúzott ujjnál is a lenyomott célra érkezik. **Megelőzés:** mozgó célra a közös `pointerTapHandlers`
+  (`GE/play/pointerTap.ts`): felengedéskor a koordinátát nézi (aktuális doboz ± tűrés VAGY alig mozdult ujj), elhúzás /
+  `pointercancel` = visszavonás, mutatónként; teszt CDP-vel (két ujj, elhúzás).
+- **Tünet 3:** a node-szimuláció `dt × timeScale` méretű lépésekkel futott, a lap fix 16,67 ms-os lépésekkel ritkábban — a
+  `waves.ts` lépésenként fogyaszt RNG-t, így azonos seed mellett is más ellenfélsort mért a sim, mint amit a gyerek játszik
+  (az elfogadási számok más játékmenetről szóltak). **Megelőzés:** a lap és a sim UGYANAZT a meghajtót hívja (Matek:
+  `createTowerDriver`: fix lépés, időskála, hitstop, esemény-ürítés); bizonyító teszt lépés-indexhez kötött bemenettel, eltérő
+  képkocka-időkkel (bitre azonos állapot). Javítás után az összes szimulációs számot újra kell mérni.
