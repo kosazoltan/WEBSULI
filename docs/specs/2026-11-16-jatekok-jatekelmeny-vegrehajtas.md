@@ -2028,7 +2028,7 @@ origin / CSRF, leállítás / e2e-mód, migráció ↔ Drizzle, Europe/Budapest 
 
 ### JB — Évfolyam-bank bővítése (JBa: 3–6., JBb: 7–9., JBc: 10–12. évfolyam)
 
-**Állapot:** JBa folyamatban — ág feat/jatek-jba-evfolyam-bank, munkafa .claude/worktrees/jatek-jba, kanban #42 (2026-11-16); JBb, JBc nem kezdődött · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
+**Állapot:** JBa kész (#448, 2026-11-16); JBb folyamatban — ág feat/jatek-jbb-evfolyam-bank, munkafa .claude/worktrees/jatek-jbb, kanban #47 (2026-11-16); JBc nem kezdődött · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
 **Elfogadás:** JB-A1 · **Fájlok:** `source/client/src/data/gradeQuizBank/grade-NN.ts` (bővítés, a meglévő tételek
 azonosítója változatlan), `docs/measurements/2026-11-xx-evfolyam-bank-<sáv>-vakmegoldo.md`, a meglévő őrök
 (`T/quiz-bank-integrity.test.ts`, `T/game-bank-no-repeat-content.test.ts`, `T/grade-quiz-select.test.ts`) zöldek + új
