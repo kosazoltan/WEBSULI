@@ -265,6 +265,7 @@ test("érvénytelen és nem létező kód; vendég nem nyithat szobát (ACCOUNT_
     await expect(B.page.getByTestId("duel-account-needed")).toBeVisible();
     await expect(B.page.getByTestId("duel-join")).toBeVisible();
     await expect(B.page.getByTestId("duel-bot")).toBeVisible();
+    await B.page.waitForTimeout(700); // a kezdőképernyő belépő animációja
     await assertMobileQuality(B.page, "kezdő (vendég)");
     await shot(B.page, "online-home-guest");
     const res = await B.page.request.post(`${on.url}/api/rt/ticket`, { data: { intent: "create" }, headers: { origin: on.url } });

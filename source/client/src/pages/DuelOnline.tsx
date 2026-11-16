@@ -1136,7 +1136,7 @@ const PAGE_CSS = `
 .dm-main .duel-prompt { padding: 12px 14px; border-radius: 18px; background: linear-gradient(180deg, #16213fe6, #0f172ae6); border: 1px solid #ffffff22;
   box-shadow: 0 6px 24px #0008; }
 /* A kérdéskártya fölötti üres sávban a két „harcos” (díszítés, a kártya alá kerül, ha a kérdés hosszú). */
-.dm-vs { position: absolute; top: 4px; left: 0; right: 0; z-index: 0; display: flex; align-items: center; justify-content: center; gap: 18px;
+.dm-vs { position: absolute; top: clamp(4px, 6vh, 64px); left: 0; right: 0; z-index: 0; display: flex; align-items: center; justify-content: center; gap: 18px;
   pointer-events: none; }
 .dm-main > .duel-qcard { position: relative; z-index: 1; }
 .dm-vs-fighter { display: inline-flex; align-items: center; justify-content: center; width: 72px; height: 72px; border-radius: 9999px;
