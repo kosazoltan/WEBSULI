@@ -393,4 +393,39 @@ Forrás: #425 / #429 CI-bukások, `docs/specs/2026-11-15-jatekok-mobil-szobank-v
   almappát használ.
 - **Tünet 4:** a mérő belépő animáció közben mért (47,x px), a hálózati csonk rossz válaszalakot adott (`{ ok: true }` a
   tömb helyett). **Megelőzés 4:** mérés előtt stabilitás-várakozás (nem fix `waitForTimeout`); a csonk a valódi API
-  válaszalakját utánozza.
+  válaszalakját utánozza. A kezdőképernyőre és a képernyőképre is (S13: `settleIfPresent`, a `shot()` beállt állapotban fotóz).
+
+## C-31 — Szóbank-gyártás: amit a vak megoldó nem fog meg (2026-11-16)
+
+Forrás: S3–S5 jegyzőkönyvek (`docs/measurements/2026-11-15-szobank-{en,de,fr}-vakmegoldo.md`), a #427 / #428 / #431 review-jai,
+S13 utójavítás (`tests/vocab-bank-cognates.test.ts`).
+
+- **Tünet 1:** a vak megoldó kanári 10/10 és 0 valódi hiba mellett is átengedte az idiómák tükörfordítását és az eltérő `hu`-jú
+  szinonimapárokat (pl. „dzseki” ↔ „dzseki, bomberdzseki”); ezeket a review-botok találták meg. **Gyökérok 1:** a megoldó egy kérdésben
+  csak a négy felkínált opciót látja, a bank egészét nem. **Megelőzés 1:** a vak kör után KÖTELEZŐ idióma- és szinonima-audit a teljes
+  bankon (`report --overlaps` + idiómalista kézi átnézése); a vak megoldó eredménye önmagában nem bizonyít tartalmi helyességet.
+- **Tünet 2:** a `hu` tartalmazta a term-et, vagy betűre azonos volt vele (de `lila` = „lila”, `der Park` = „park”, `fair` ⊂ „fair,
+  sportszerű”, fr `le robot` = „robot”, en „half past …” a `hu` angol példájában) — a kérdésre tudás nélkül jó válasz adható. **Megelőzés 2:**
+  a `hu` nem tartalmazhatja a term-et, és egyik jelentés-kulcsa sem lehet betűre azonos a névelő nélküli term-mel; az őr
+  `tests/vocab-bank-cognates.test.ts` (az ékezetben eltérő nemzetközi szó, pl. Auto–autó, megengedett).
+- **Tünet 3:** a párhuzamosan gyártott szintfájlok nem látták egymás szavait: azonos jelentésű, csak alakban eltérő bejegyzés került két
+  szintre (de „es regnet in Strömen” L2 ↔ „in Strömen regnen” L3; „wie geht's” ↔ „wie geht es dir”). A term-egyezés-validátor ezt nem
+  fogja (a term különbözik). **Megelőzés 3:** láncolt gyártás (az alacsonyabb szint kész term-listája foglalási lista a magasabbnak), vagy
+  előre kiosztott szólisták; a végén `report --overlaps` a duplikátumokra is.
+- **Tünet 4:** a megoldók részletenkénti válaszai elcsúsztak (a válasz a szomszéd kérdéshez tartozott), ami hamis jelzéseket adott.
+  **Megelőzés 4:** a válaszfájl tételenként a `chosen` opció SZÖVEGÉT is tartalmazza, és a pontozó az opciószöveg egyezését is ellenőrzi.
+- **Tünet 5:** az ügynök Write / Edit eszköze a `\u00A0` (és `\u202F`) escape-et nyers karakterré írja — a szóbank-fájlban, a commit-üzenetben
+  és a PR-leírásban is. **Megelőzés 5:** írás után `grep -c $'\xc2\xa0' <fájl>`; találatnál `perl -CSD -pi -e 's/\x{00A0}/\x5Cu00A0/g'`
+  (adatfájlban), szövegben pedig sima szóköz.
+- **Tünet 6:** a vesszős `hu`-felsorolás egy általános szót is jelentés-kulccsá tett („bizonyul (valaminek), kiderül, hogy” → „hogy”), így
+  a generátor fölöslegesen zárt ki elterelőket. **Megelőzés 6:** a `hu`-ban vessző csak önálló jelentések között álljon; mellékmondatos
+  magyarázat zárójelbe (a `meaningKeys` a zárójeles részt eldobja).
+
+## C-32 — Közös CSS-osztály rétegen kívül: a Tailwind segédosztály hatástalan (2026-11-16)
+
+Forrás: S7 (`SpeedQuizMath.tsx` `!text-[…]` kerülőút), S13 / B7.
+
+- **Tünet:** a `.game-answer-btn` gombra tett `text-[clamp(…)]` nem hatott, a játék `!important`-tal kerülte meg.
+- **Gyökérok:** Tailwind 3-ban a rétegen kívüli szabály a forrásban a `@tailwind utilities` UTÁN áll, azonos fajlagosságnál ezért nyer.
+- **Megelőzés:** felülírhatónak szánt közös komponens-osztály a `@layer components` blokkba kerül (őr: `tests/game-answer-btn-layer.test.ts`);
+  `!`-os segédosztály csak indoklással.
