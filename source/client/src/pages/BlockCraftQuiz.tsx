@@ -1446,7 +1446,8 @@ export default function BlockCraftQuiz() {
   // A játékóra csak játék közben jár: kvíz és szünet alatt áll (S11), és a lejárt kupon után is (#58: a lejárati
   // párbeszéd alatt a gyerek nem tud beavatkozni, a pálya ideje nem fogyhat tovább).
   useEffect(() => {
-    if (phase !== "play" || paused || coupon.expired) return;
+    if (coupon.expired) return;
+    if (phase !== "play" || paused) return;
     const id = setInterval(() => {
       setRunSeconds((s) => s + 1);
       setTimeLeft((s) => {
@@ -2429,8 +2430,8 @@ export default function BlockCraftQuiz() {
     // S11: szünetben a render-ciklus is áll (gyenge eszközön akkut is kímél).
     // #58: a lejárt kupon után is — a lejárati párbeszéd alatt a voxel-jelenet nem renderelhet tovább (a vászon az utolsó
     // képkockát mutatja). Szoftveres WebGL-en a futó ciklus minden bemenetet egy ~0,2–0,7 s-os képkockára várakoztatott.
-    const shouldRun = (phase === "play" || phase === "quiz") && !paused && !coupon.expired;
-    if (!shouldRun) {
+    const shouldRun = (phase === "play" || phase === "quiz") && !paused;
+    if (!shouldRun || coupon.expired) {
       runningRef.current = false;
       cancelAnimationFrame(rafRef.current);
       return;
