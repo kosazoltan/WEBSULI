@@ -23,7 +23,8 @@ import { maskEmail } from "../lib/mask-email";
 import { isResendConfigured, sendPlayerLoginEmail } from "../resend";
 import {
   CODE_PATTERN, DAY_MS, LINK_TOKEN_PATTERN, START_PER_IP_DAILY_MAX, START_PER_IP_MAX, START_WINDOW_MS, VERIFY_PER_IP_MAX,
-  allPurposeEmailHashes, codeHash, emailHash, generateCode, generateLinkToken, limitHash, linkHash, normalizeEmail, playerAuthKey,
+  allPurposeEmailHashes, codeHash, deleteLimitHash, emailHash, generateCode, generateLinkToken, limitHash, linkHash, normalizeEmail,
+  playerAuthKey,
 } from "./codes";
 import { buildPlayerLoginEmail, playerLoginLink, type PlayerLoginEmail } from "./email-template";
 import { createRequirePlayer, playerAccountsEnabled, requirePlayerAccountsFlag } from "./require-player";
@@ -100,7 +101,11 @@ export function createPlayerRouter(deps: PlayerRouterDeps): Router {
       const code = generateCode();
       const token = generateLinkToken();
       // Keret (korlát-kulcsonként és szerverszinten), atomikusan lefoglalva: betelt keretnél csendben (ugyanaz a 202), levél nélkül.
-      const reserved = await deps.store.reserveCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, code), linkHash: linkHash(key, token) });
+      // N3: a belépő keret a törlési kódkéréseket is beszámítja (a törlési kérés kerete viszont csak a sajátjait).
+      const reserved = await deps.store.reserveCode(
+        { emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, code), linkHash: linkHash(key, token) },
+        {}, [limitHash(key, email), deleteLimitHash(key, email)],
+      );
       if (reserved === "GLOBAL_LIMIT") {
         logger.warn("[PLAYER] a belépő levelek napi szerverszintű plafonja betelt (PLAYER_LOGIN_EMAIL_DAILY_MAX) — küldés szünetel");
         return res.status(202).json({ ok: true });
