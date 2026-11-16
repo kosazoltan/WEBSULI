@@ -114,6 +114,17 @@ const LONGEST: Record<string, { quiz: FourChoiceQuiz }> = {
       explanation: "biometric = biometrikus.",
     },
   },
+  // Kanban #50: a LEGHOSSZABB játék-alakú cloze (`clozeStyle: "game"`, a teljes bank mérése szerint, 56 kar.) — fordítás
+  // és előtag nélkül; a mondat + fordítás a magyarázatban.
+  "cloze-game": {
+    quiz: {
+      id: "lab-longest-cloze-game",
+      prompt: "_____ des Menschen besteht aus über zweihundert Knochen.",
+      options: ["das Skelett", "die Vorhersage", "die Ausstellung", "die Mitgliedschaft"],
+      correctIndex: 0,
+      explanation: "A helyes válasz: „das Skelett”. das Skelett = csontváz. Példa: „Das Skelett des Menschen besteht aus über zweihundert Knochen.” (Az ember csontváza több mint kétszáz csontból áll.)",
+    },
+  },
   // Mesterséges, ≈ 227 kar.: széles nézetben 5 sorba fér, 360 px-en csak a 7 soros tartalékkal — az átméretezés
   // utáni újramérés próbájához (review #450).
   resize: {

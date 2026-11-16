@@ -18,6 +18,9 @@ export function safeLocalStorage(): StorageLike | null {
  * A szóbank-forrás egy játékhoz. `null`, amíg tölt, ha `enabled === false`, vagy ha a betöltés hibázott — a játék
  * ilyenkor a meglévő kézi bankkal megy (terv 5. szakasz). A hibaágon nincs konzolírás (az e2e konzolhiba-mérés
  * miatt). A szóbank bekötése ezzel az egy hívással kapcsolható ki.
+ *
+ * A hiányos mondat itt a rövid JÁTÉK-ALAKÚ (`clozeStyle: "game"`, kanban #50): fordítás nélkül, a 9 mp-es válaszablakban
+ * olvasható, egyértelmű elterelőkkel — a hét játék ezen a hookon át kapja.
  */
 export function useVocabQuizSource(lang: VocabLang, enabled: boolean = true): VocabSource | null {
   const [source, setSource] = useState<VocabSource | null>(null);
@@ -31,7 +34,7 @@ export function useVocabQuizSource(lang: VocabLang, enabled: boolean = true): Vo
     setSource(null);
     loadVocabBank(lang).then(
       entries => {
-        if (!cancelled) setSource(createVocabSource({ lang, entries, history: createSeenHistory(safeLocalStorage()) }));
+        if (!cancelled) setSource(createVocabSource({ lang, entries, history: createSeenHistory(safeLocalStorage()), clozeStyle: "game" }));
       },
       () => {
         if (!cancelled) setSource(null);
