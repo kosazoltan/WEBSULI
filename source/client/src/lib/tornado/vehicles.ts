@@ -78,7 +78,7 @@ export const RARITY_LABEL: Record<Rarity, string> = {
   rare: "Ritka",
   epic: "Epikus",
   legendary: "Legendás",
-  ultimate: "Ultimate",
+  ultimate: "Végső",
 };
 
 export const RARITY_COLOR: Record<Rarity, string> = {
@@ -91,11 +91,11 @@ export const RARITY_COLOR: Record<Rarity, string> = {
 };
 
 export const VEHICLE_CATEGORIES: readonly VehicleCategory[] = [
-  { id: "scout", label: "Scout", blurb: "Könnyű, gyors felderítő — előbb ér a viharhoz, de gyengén horgonyzik." },
-  { id: "interceptor", label: "Interceptor", blurb: "Kiegyensúlyozott elfogó: sebesség és stabilitás középúton." },
-  { id: "heavy", label: "Heavy Interceptor", blurb: "Nehéz páncélos: lassabb, viszont erős szélben is áll." },
-  { id: "research", label: "Research Vehicle", blurb: "Mérőműszeres kutatóautó — pontosabb viharadat, több bónuszpont." },
-  { id: "extreme", label: "Extreme Vehicle", blurb: "Végletekig felkészített gép: a legnagyobb viharokra tervezve." },
+  { id: "scout", label: "Felderítő", blurb: "Könnyű, gyors felderítő — előbb ér a viharhoz, de gyengén horgonyzik." },
+  { id: "interceptor", label: "Elfogó", blurb: "Kiegyensúlyozott elfogó: sebesség és stabilitás középúton." },
+  { id: "heavy", label: "Nehéz elfogó", blurb: "Nehéz páncélos: lassabb, viszont erős szélben is áll." },
+  { id: "research", label: "Kutatójármű", blurb: "Mérőműszeres kutatóautó — pontosabb viharadat, több bónuszpont." },
+  { id: "extreme", label: "Extrém jármű", blurb: "Végletekig felkészített gép: a legnagyobb viharokra tervezve." },
 ] as const;
 
 /** The twelve vehicles the brief names, with the prices it fixes. */

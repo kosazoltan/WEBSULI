@@ -559,9 +559,9 @@ export const SUBJECT_LABEL: Record<Subject, string> = {
 };
 
 export const QUIZ_MODE_LABEL: Record<QuizMode, string> = {
-  math: "Math",
-  english: "English",
-  mixed: "Mixed",
+  math: "Matek",
+  english: "Angol",
+  mixed: "Vegyes",
 };
 
 export function schoolLevelLabel(school: SchoolLevel): string {

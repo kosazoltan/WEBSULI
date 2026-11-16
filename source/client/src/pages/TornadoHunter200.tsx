@@ -416,7 +416,7 @@ export default function TornadoHunter200() {
                   }}
                 >
                   <Car className="h-5 w-5 shrink-0" aria-hidden="true" />
-                  Storm Garage
+                  Vihargarázs
                 </button>
               </>
             }
@@ -553,7 +553,7 @@ function MenuExtras(props: {
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <MenuButton icon={<Trophy className="w-4 h-4" />} label="Highscore" onClick={props.onHighscore} />
+        <MenuButton icon={<Trophy className="w-4 h-4" />} label="Rekordok" onClick={props.onHighscore} />
         <MenuButton icon={<BarChart3 className="w-4 h-4" />} label="Statisztika" onClick={props.onStats} />
         <MenuButton icon={<SettingsIcon className="w-4 h-4" />} label="Iskolai szint, grafika, irányítás" onClick={props.onSettings} className="col-span-2" />
       </div>
@@ -659,7 +659,7 @@ function GarageScreen(props: { progress: TornadoProgress; commit: (p: TornadoPro
   return (
     <Card className="border border-lime-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
       <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col gap-3 flex-1 min-h-0">
-        <ScreenHeader icon={<Car className="w-5 h-5 text-lime-300" />} title="Storm Garage" onBack={props.onBack} />
+        <ScreenHeader icon={<Car className="w-5 h-5 text-lime-300" />} title="Vihargarázs" onBack={props.onBack} />
 
         {flash && (
           <p className="text-xs font-semibold text-center rounded bg-slate-800/90 border border-white/10 py-1.5">{flash}</p>
@@ -885,7 +885,7 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
             );
           })}
         </div>
-        <p className="text-xs text-white/40 text-center">A 200. szint — THE ULTIMATE STORM — a legnehezebb kihívás.</p>
+        <p className="text-xs text-white/40 text-center">A 200. szint — a Végső Vihar — a legnehezebb kihívás.</p>
       </CardContent>
     </Card>
   );
@@ -909,7 +909,7 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
         <ScreenHeader icon={<SettingsIcon className="w-5 h-5 text-slate-300" />} title="Beállítások" onBack={props.onBack} />
 
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-white/60 mb-1.5">School Level — iskolai szint</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-white/60 mb-1.5">Iskolai szint</p>
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5" data-testid="tornado-school-levels">
             {schoolOptions.map((opt) => (
               <ToggleChip
@@ -943,11 +943,11 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
           <div className="flex gap-1.5">
             {qualities.map((q) => (
               <ToggleChip key={q} active={s.quality === q} onClick={() => set({ quality: q })}>
-                {q === "low" ? "LOW" : q === "medium" ? "MEDIUM" : "HIGH"}
+                {q === "low" ? "Alacsony" : q === "medium" ? "Közepes" : "Magas"}
               </ToggleChip>
             ))}
           </div>
-          <p className="text-xs text-white/45 mt-1">Gyengébb gépen / mobilon a LOW ad nagyobb FPS-t.</p>
+          <p className="text-xs text-white/45 mt-1">Gyengébb gépen / mobilon az Alacsony ad nagyobb FPS-t.</p>
         </div>
 
         <div>
@@ -1015,13 +1015,13 @@ function HighscoreScreen(props: { progress: TornadoProgress; onBack: () => void 
   return (
     <Card className="border border-amber-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
       <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col gap-3 flex-1 overflow-y-auto">
-        <ScreenHeader icon={<Trophy className="w-5 h-5 text-amber-300" />} title="Highscore" onBack={props.onBack} />
+        <ScreenHeader icon={<Trophy className="w-5 h-5 text-amber-300" />} title="Rekordok" onBack={props.onBack} />
         <div className="grid grid-cols-2 gap-2">
-          <BigStat label="Total Score" value={fmt(props.progress.totalScore)} />
-          <BigStat label="Best Level" value={String(bestLevel || 1)} />
-          <BigStat label="Tornadoes Intercepted" value={fmt(stats.tornadoesIntercepted)} />
-          <BigStat label="Correct Answers" value={fmt(stats.correctAnswers)} />
-          <BigStat label="Best Time" value={Number.isFinite(bestTime) ? `${Math.round(bestTime)} s` : "—"} />
+          <BigStat label="Összpontszám" value={fmt(props.progress.totalScore)} />
+          <BigStat label="Legjobb szint" value={String(bestLevel || 1)} />
+          <BigStat label="Elfogott tornádók" value={fmt(stats.tornadoesIntercepted)} />
+          <BigStat label="Helyes válaszok" value={fmt(stats.correctAnswers)} />
+          <BigStat label="Legjobb idő" value={Number.isFinite(bestTime) ? `${Math.round(bestTime)} s` : "—"} />
           <BigStat label="Max szél" value={`${fmt(stats.maxWindSpeed)} km/h`} />
         </div>
         <p className="text-xs font-bold uppercase tracking-wide text-white/60 mt-1">Szintenkénti rekordok</p>
@@ -1046,16 +1046,16 @@ function HighscoreScreen(props: { progress: TornadoProgress; onBack: () => void 
 function StatsScreen(props: { progress: TornadoProgress; onBack: () => void }) {
   const { stats } = props.progress;
   const rows: [string, string][] = [
-    ["Total Points", fmt(stats.totalPoints)],
-    ["Best Level Score", fmt(stats.bestLevelScore)],
-    ["Levels Completed", fmt(stats.levelsCompleted)],
-    ["Tornadoes Intercepted", fmt(stats.tornadoesIntercepted)],
-    ["Successful Anchors", fmt(stats.successfulAnchors)],
-    ["Correct Answers", fmt(stats.correctAnswers)],
-    ["Wrong Answers", fmt(stats.wrongAnswers)],
-    ["Kilometers Traveled", `${stats.kilometersTraveled.toFixed(1)} km`],
-    ["Maximum Wind Speed", `${fmt(stats.maxWindSpeed)} km/h`],
-    ["Longest Intercept", `${Math.round(stats.longestIntercept)} s`],
+    ["Összes pont", fmt(stats.totalPoints)],
+    ["Legjobb szintpontszám", fmt(stats.bestLevelScore)],
+    ["Teljesített szintek", fmt(stats.levelsCompleted)],
+    ["Elfogott tornádók", fmt(stats.tornadoesIntercepted)],
+    ["Sikeres horgonyzások", fmt(stats.successfulAnchors)],
+    ["Helyes válaszok", fmt(stats.correctAnswers)],
+    ["Hibás válaszok", fmt(stats.wrongAnswers)],
+    ["Megtett kilométerek", `${stats.kilometersTraveled.toFixed(1)} km`],
+    ["Legnagyobb szélsebesség", `${fmt(stats.maxWindSpeed)} km/h`],
+    ["Leghosszabb elfogás", `${Math.round(stats.longestIntercept)} s`],
   ];
   return (
     <Card className="border border-cyan-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
@@ -2211,13 +2211,13 @@ function PlayScreen(props: {
       />
 
       <div className="relative flex-1 min-h-0">
-          {/* Level / wind / anchor overlay */}
+          {/* Szint / szél / horgony kijelző */}
           <div className="absolute top-2 left-2 flex flex-col items-start gap-1 text-xs font-bold pointer-events-none max-w-[70%] z-10">
             <div className="px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm" style={{ color: stage.color }}>
-              LEVEL {props.level}/200 · STORM: {stormLabel(props.level)}
+              SZINT {props.level}/200 · VIHAR: {stormLabel(props.level)}
             </div>
             <div className="px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm">
-              WIND SPEED: <span className="text-cyan-300">{hud.wind} km/h</span>{" "}
+              SZÉLSEBESSÉG: <span className="text-cyan-300">{hud.wind} km/h</span>{" "}
               <span className="text-sky-200">
                 {compass.arrow} {compass.label}
               </span>{" "}
@@ -2228,7 +2228,7 @@ function PlayScreen(props: {
                 hud.anchorReady ? "bg-emerald-600/80" : "bg-black/60"
               }`}
             >
-              <Anchor className="w-3.5 h-3.5" /> ANCHOR: {hud.anchorReady ? "READY" : playerRef.current.anchored ? "SET" : "…"} ·{" "}
+              <Anchor className="w-3.5 h-3.5" /> HORGONY: {hud.anchorReady ? "KÉSZ" : playerRef.current.anchored ? "RÖGZÍTVE" : "…"} ·{" "}
               {SURFACE_LABEL[hud.surface]}
             </div>
           </div>
@@ -2389,7 +2389,7 @@ function PlayScreen(props: {
             <div className="grid grid-cols-3 gap-2">
               {(["low", "medium", "high"] as const).map((q) => (
                 <ToggleChip key={q} active={quality === q} onClick={() => props.onProgress((latest) => updateSettings(latest, { quality: q }))}>
-                  {q === "low" ? "LOW" : q === "medium" ? "MEDIUM" : "HIGH"}
+                  {q === "low" ? "Alacsony" : q === "medium" ? "Közepes" : "Magas"}
                 </ToggleChip>
               ))}
             </div>
@@ -2401,7 +2401,7 @@ function PlayScreen(props: {
         badges={props.newlyUnlocked}
         open={result != null}
         testId="th-result"
-        title={result?.won ? "Intercept sikeres!" : "Sikertelen intercept"}
+        title={result?.won ? "Elfogás sikeres!" : "Sikertelen elfogás"}
         won={Boolean(result?.won)}
         score={result?.score ?? 0}
         best={result?.best ?? null}
@@ -2421,7 +2421,7 @@ function PlayScreen(props: {
                 <span className="text-white/75">
                   {result.won
                     ? props.level === 200
-                      ? "Legyőzted THE ULTIMATE STORM-ot!"
+                      ? "Legyőzted a Végső Vihart!"
                       : `${props.level + 1}. szint feloldva!`
                     : "A tornádó elhaladt. Próbáld újra!"}
                 </span>
@@ -2639,7 +2639,7 @@ function TouchControls(props: {
   );
   const pedals = (
     <div className={`flex gap-3 items-end ${props.leftHanded ? "flex-row-reverse" : ""}`}>
-      <TouchBtn onDown={() => props.onCamera()} onUp={() => {}} label="Cam" small />
+      <TouchBtn onDown={() => props.onCamera()} onUp={() => {}} label="Kamera" small />
       <TouchBtn onDown={() => props.onAnchor()} onUp={() => {}} label="⚓" accent glow={props.anchorReady} />
     </div>
   );

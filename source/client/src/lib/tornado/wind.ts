@@ -31,14 +31,14 @@ export type WindState = {
 export type CompassPoint = { label: string; arrow: string; deg: number };
 
 export const COMPASS_POINTS: readonly CompassPoint[] = [
-  { label: "N", arrow: "↑", deg: 0 },
-  { label: "NE", arrow: "↗", deg: 45 },
-  { label: "E", arrow: "→", deg: 90 },
-  { label: "SE", arrow: "↘", deg: 135 },
-  { label: "S", arrow: "↓", deg: 180 },
-  { label: "SW", arrow: "↙", deg: 225 },
-  { label: "W", arrow: "←", deg: 270 },
-  { label: "NW", arrow: "↖", deg: 315 },
+  { label: "É", arrow: "↑", deg: 0 },
+  { label: "ÉK", arrow: "↗", deg: 45 },
+  { label: "K", arrow: "→", deg: 90 },
+  { label: "DK", arrow: "↘", deg: 135 },
+  { label: "D", arrow: "↓", deg: 180 },
+  { label: "DNy", arrow: "↙", deg: 225 },
+  { label: "Ny", arrow: "←", deg: 270 },
+  { label: "ÉNy", arrow: "↖", deg: 315 },
 ] as const;
 
 export function compassFor(deg: number): CompassPoint {
