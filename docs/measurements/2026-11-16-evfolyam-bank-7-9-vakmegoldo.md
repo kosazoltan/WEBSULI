@@ -177,7 +177,9 @@ a választó a szomszéd évfolyamot csak a saját kimerülése után kéri.
 pl. ezres tagolás, mértékegység a kérdésbe). A rövidített tételek **újra vak körben**: 3–4. évf. 147/147 · kanári 10/10;
 5–9. évf. 90/92 · kanári 10/10 (a két eltérés: Szondi két apródja és Szent Péter esernyője — a kulcsot a szövegből igazoltuk,
 megoldói tévedés); a kör jelzései alapján még 3 tétel javult (`g04-history-052` „közvetlen előd”, `g04-hungarian-027`,
-`g04-hungarian-034`), ezek újra vak körben: 3/3 · kanári 10/10. A teszt küszöbe: a bővített évfolyamokon ≥ 95% játszható, a
+`g04-hungarian-034`), ezek újra vak körben: 3/3 · kanári 10/10. A review (Vercel Agent) egy rövidítés okozta kétértelműséget talált
+(`g04-english-053`: a „Hány óra?” a How many hours?-szal is fordítható) → „Hány óra van?”, a How many hours? elterelő cserélve;
+újra vak kör 1/1 · kanári 10/10. A teszt küszöbe: a bővített évfolyamokon ≥ 95% játszható, a
 bővítés tételei mind, cellánként ≥ 15. A 10–12. évfolyam (JBc) még 93–96%.
 
 **4. A független számoló javítva** (mohó számrész; önellenőrzés: `2³` = 8, `3 · 10³` = 3000, `2³ cm³` = 8, `10⁻² m` = 0,01, és a
