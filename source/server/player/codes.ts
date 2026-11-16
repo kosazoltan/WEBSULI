@@ -103,6 +103,16 @@ export function banFingerprint(key: Buffer, normalizedEmail: string): string {
 }
 
 /**
+ * K1-c: a törölt fiók után megmaradt tiltás-ujjlenyomat megőrzési ideje hónapban, a tiltástól számítva
+ * (`PLAYER_BAN_RETENTION_MONTHS`, 1–120 egész; hiányzó / hibás érték → 12). Az ÉLŐ tiltott fiók tiltása ettől nem jár le.
+ */
+export const DEFAULT_BAN_RETENTION_MONTHS = 12;
+export function banRetentionMonths(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number((env.PLAYER_BAN_RETENTION_MONTHS ?? "").trim());
+  return Number.isInteger(n) && n >= 1 && n <= 120 ? n : DEFAULT_BAN_RETENTION_MONTHS;
+}
+
+/**
  * JM7b (review #449): a kódrekordok CÉL szerinti elkülönítése — a fióktörlés kódjai külön e-mail-hash-tartományban élnek,
  * így a belépő- és a törlési kód egymás „legutóbbi kód” keresését nem zavarja, és egymás helyett nem váltható be.
  * A belépés hash-e változatlan (`emailHash`). A levélkeret: a belépő kérés a két cél kéréseit összesítve számolja, a törlési

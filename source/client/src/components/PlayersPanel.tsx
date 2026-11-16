@@ -50,7 +50,7 @@ export default function PlayersPanel() {
   const toggleBan = useMutation({
     mutationFn: (p: AdminPlayer) => apiRequest("POST", `/api/admin/game-accounts/${encodeURIComponent(p.id)}/${p.banned ? "unban" : "ban"}`, {}),
     onSuccess: async (_r, p) => {
-      toast({ title: p.banned ? "Tiltás feloldva" : "Játékos tiltva", description: p.nickname ?? "becenév nélküli fiók" });
+      toast({ title: p.banned ? "Tiltás feloldva" : "Játékos tiltva", description: `${p.nickname ?? "becenév nélküli fiók"} — az azonos postafiókhoz tartozó fiókokra is vonatkozik.` });
       await queryClient.invalidateQueries({ queryKey: ["/api/admin/game-accounts"] });
     },
     onError: (e: Error) => toast({ title: "Nem sikerült", description: e.message, variant: "destructive" }),
@@ -163,8 +163,9 @@ export default function PlayersPanel() {
           <section className="space-y-2" data-testid="deleted-bans">
             <h3 className="text-sm font-semibold">Törölt, de tiltva maradt fiókok</h3>
             <p className="text-xs text-muted-foreground">
-              A fiók törlődött, de a tiltás megmaradt: ugyanazzal az e-mail-címmel csak tiltott fiók nyitható. Cím nincs tárolva — csak
-              egy visszafejthetetlen ujjlenyomat és a dátumok.
+              A fiók törlődött, de a tiltás megmaradt (a tiltástól legfeljebb 12 hónapig): ugyanazzal a postafiókkal csak tiltott fiók
+              nyitható. Cím nincs tárolva — csak egy visszafejthetetlen ujjlenyomat és a dátumok. A feloldás az azonos postafiókhoz
+              tartozó (más okból tiltott) élő fiókok tiltását is feloldja.
             </p>
             <ul className="divide-y rounded-md border">
               {(deletedBans.data?.entries ?? []).map((e) => (

@@ -10,7 +10,7 @@ import {
   CODE_RETENTION_MS, CODE_TTL_MS, DAY_MS, LINK_TTL_MS, MAX_CODE_ATTEMPTS, MAX_FAILED_ATTEMPTS_PER_DAY,
   START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_WINDOW_MS, banFingerprint, loginEmailDailyMax, playerAuthKey,
 } from "./codes";
-import { lockBanAddress } from "./account-store";
+import { createPlayerAccountStore, ensureBanFingerprint, lockBanAddress } from "./account-store";
 
 export type CodeInput = { emailNormalized: string; emailHash: string; limitHash: string; codeHash: string; linkHash: string };
 const INSERT_CODE_SQL = `INSERT INTO player_auth_codes (email_normalized, email_hash, limit_hash, code_hash, link_hash, expires_at)
@@ -93,10 +93,12 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
      * Adattakarékosság (ütemezve is fut, a flagtől függetlenül — sweeper.ts): a lejárt, be nem váltott rekordokból a nyílt
      * cím törlődik, a 24 óránál régebbi rekordok teljesen. Visszaadja: [címtelenített, törölt].
      */
-    async purgeOldCodes(): Promise<[number, number]> {
+    async purgeOldCodes(): Promise<[number, number, number]> {
       const blanked = await pool.query(`UPDATE player_auth_codes SET email_normalized = '' WHERE email_normalized <> '' AND expires_at <= now()`);
       const deleted = await pool.query(`DELETE FROM player_auth_codes WHERE created_at < now() - ($1::int * interval '1 millisecond')`, [CODE_RETENTION_MS]);
-      return [blanked.rowCount ?? 0, deleted.rowCount ?? 0];
+      // K1-c: a megőrzési időn túli tiltás-ujjlenyomatok (élő tiltott fiók nélkül) is ebben a körben törlődnek.
+      const bans = await createPlayerAccountStore(pool).purgeExpiredBanFingerprints();
+      return [blanked.rowCount ?? 0, deleted.rowCount ?? 0, bans];
     },
 
     /**
@@ -181,10 +183,13 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
         const { rows } = await client.query<{ id: string; nickname: string | null; banned_at: Date | null }>(
           `INSERT INTO player_accounts (email, email_verified_at, banned_at)
              VALUES ($1, now(), (SELECT banned_at FROM player_ban_fingerprints WHERE fingerprint = $2))
-           ON CONFLICT (email) DO UPDATE SET email_verified_at = COALESCE(player_accounts.email_verified_at, now())
+           ON CONFLICT (email) DO UPDATE SET email_verified_at = COALESCE(player_accounts.email_verified_at, now()),
+             -- K1-b: a már meglévő (alias-) fiók is megkapja a kanonikus cím tiltását (mélységi védelem a tiltáskori mellé).
+             banned_at = COALESCE(player_accounts.banned_at, EXCLUDED.banned_at)
            RETURNING id, nickname, banned_at`,
           [emailNormalized, fingerprint],
         );
+        await ensureBanFingerprint(client, fingerprint, rows[0]!.banned_at);
         return rows[0]!;
       });
       const banned = row.banned_at !== null || (await userBannedByEmail(emailNormalized));

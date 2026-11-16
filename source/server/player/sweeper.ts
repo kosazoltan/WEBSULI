@@ -9,11 +9,13 @@ export const PLAYER_CODE_SWEEP_INTERVAL_MS = 60 * 60_000;
 
 type Timers = { setInterval: (fn: () => void, ms: number) => { unref?: () => void } };
 
-export function startPlayerCodeSweeper(purge: () => Promise<[number, number]>, timers: Timers = globalThis): () => Promise<void> {
+export function startPlayerCodeSweeper(purge: () => Promise<[number, number, number?]>, timers: Timers = globalThis): () => Promise<void> {
   const run = async () => {
     try {
-      const [blanked, deleted] = await purge();
+      const [blanked, deleted, bans = 0] = await purge();
       if (blanked || deleted) logger.info(`[PLAYER] kódrekord-takarítás: ${blanked} címtelenítve, ${deleted} törölve`);
+      // K1-c: a megőrzési időn túli tiltás-ujjlenyomatok törlése (cím nélkül naplózva).
+      if (bans) logger.info(`[PLAYER] tiltás-ujjlenyomat lejárt és törölve: ${bans}`);
     } catch (error) {
       logger.error("[PLAYER] kódrekord-takarítás hiba:", error instanceof Error ? error.message : "ismeretlen hiba");
     }

@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import {
   CODE_PATTERN, CODE_TTL_MS, DEFAULT_LOGIN_EMAIL_DAILY_MAX, LINK_TOKEN_PATTERN, LINK_TTL_MS, MAX_CODE_ATTEMPTS, MAX_FAILED_ATTEMPTS_PER_DAY,
   START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_PER_IP_DAILY_MAX, START_PER_IP_MAX, VERIFY_PER_IP_MAX, limitKey, loginEmailDailyMax,
-  banFingerprint, codeHash, emailHash, generateCode, generateLinkToken, linkHash, normalizeEmail, playerAuthKey,
+  banFingerprint, banRetentionMonths, codeHash, emailHash, generateCode, generateLinkToken, linkHash, normalizeEmail, playerAuthKey,
 } from "../server/player/codes";
 import { buildPlayerLoginEmail, playerLinkBaseUrl, playerLoginLink } from "../server/player/email-template";
 import { PLAYER_CODE_SWEEP_INTERVAL_MS, startPlayerCodeSweeper } from "../server/player/sweeper";
@@ -208,6 +208,9 @@ describe("JM7b-utójavítás K1 — migráció 0041 ↔ Drizzle-séma, ujjlenyom
     assert.match(base, /^[0-9a-f]{64}$/);
     assert.ok(!base.includes("diak"));
     assert.notEqual(base, emailHash(k, "diakpelda@gmail.com"), "más tartomány, mint a belépő hash");
+    for (const [raw, want] of [[undefined, 12], ["", 12], ["6", 6], ["0", 12], ["121", 12], ["x", 12], ["24", 24]] as const) {
+      assert.equal(banRetentionMonths({ PLAYER_BAN_RETENTION_MONTHS: raw } as NodeJS.ProcessEnv), want, `megőrzés: ${String(raw)}`);
+    }
     const rotated = playerAuthKey({ SESSION_SECRET: "masik-titok" } as NodeJS.ProcessEnv);
     assert.notEqual(banFingerprint(rotated, "diakpelda@gmail.com"), base, "titokrotáció után a régi ujjlenyomat nem egyezik (dokumentált)");
   });

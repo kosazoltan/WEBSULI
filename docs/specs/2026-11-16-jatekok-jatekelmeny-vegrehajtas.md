@@ -2238,6 +2238,26 @@ a „Játékosok” panel és a fiókoldal törlési szövege; tesztek: `T/playe
    is részleges azonosító) és `POST /api/admin/game-accounts/deleted-bans/:ref/unban` — a meglévő `/api/admin` őr alatt.
 6. Szöveg: a fiókoldal törlési párbeszéde és az export egy mondatban jelzi, hogy tiltott fiók törlése után a cím
    visszafejthetetlen ujjlenyomata megmarad, amíg az admin fel nem oldja.
+7. **K1-b (review #469/#471, KÖZEPES): a tiltás a KANONIKUS címre szól, már a tiltáskor.** `setBanned(true)` a címenkénti
+   zár alatt létrehozza az ujjlenyomatot, és MINDEN azonos postafiókú (gmail-pont, `+alias`, googlemail) élő fiókot tilt;
+   `setBanned(false)` és a törölt-tiltott feloldás ugyanazt a kanonikus feloldást végzi (ujjlenyomat törlése + az élő változatok
+   feloldása). Egy igazságforrás: nincs olyan állapot, ahol a fiók és az ujjlenyomat mást mond. Új fiók létrehozásakor a
+   kanonikus ujjlenyomat létezése tiltás; a meglévő (alias-)fiók belépéskor is megkapja (`ON CONFLICT … banned_at =
+   COALESCE(…)`). A „törölt, de tiltva maradt” listán csak az élő fiók nélküli ujjlenyomatok látszanak. A felület kimondja: a
+   feloldás az azonos postafiókú, más okból tiltott élő fiókot is feloldja (tájékoztató lelet).
+   **Kódkérési korlát:** a kulcsa már a kanonikus cím (`limitHash` → `limitKey`) — alias-címekkel nem sokszorozható (teszt).
+   **Kanonikus EGYEDISÉG (javaslat, NEM ebben a szeletben):** ma egy Gmail-postafiókhoz alias-címekkel több játékos-fiók
+   nyitható (ranglista-duplikálás). Megoldás: új oszlop `email_canonical_hash char(64)` egyedi indexszel (új migráció a meglévő
+   táblán + feltöltés) — tulajdonosi döntés és külön szelet; a tiltás szempontjából a fenti kanonikus tiltás már zárja a rést.
+8. **K1-c: megőrzési idő — tulajdonosi döntés (2026-11-16): 12 hónap.** `PLAYER_BAN_RETENTION_MONTHS` (alap 12, 1–120),
+   a tiltástól számítva; a meglévő óránkénti takarító (`sweeper.ts` → `purgeOldCodes`) törli a lejárt ujjlenyomatokat, de csak
+   ha nincs hozzá élő tiltott fiók — az ÉLŐ fiók tiltása nem jár le. A fiókoldal, az export és az admin-panel szövege megnevezi.
+9. **`SESSION_SECRET` rotáció (ALACSONY):** runbook-lépés (`docs/security-secret-hygiene-2026-09-13.md`), külön kulcs
+   helyett. Indok: a külön `PLAYER_BAN_KEY` új, élesben beállítandó titkot jelentene, és a bevezetése / cseréje ugyanígy
+   érvénytelenítené a megőrzött ujjlenyomatokat (a HMAC visszafejthetetlen, nem migrálható) — kisebb kockázat a meglévő titok
+   és egy dokumentált lépés: rotáció előtt az admin listázza a törölt-tiltott bejegyzéseket, és tudomásul veszi, hogy elvesznek
+   (az élő tiltott fiókok tiltása a `banned_at`-ben megmarad, és az ujjlenyomatuk a fiók következő belépésekor az új kulccsal
+   önmagát javítva újraképződik — `ensureBanFingerprint`; teszt rögzíti).
 **Tesztek:** DB — tiltott saját törlés → ugyanaz a cím (kis- / nagybetű, gmail-pont, `+alias`) újra tiltott; admin-törlés
 után ugyanez (Google-úton is); feloldás (élő fióknál és a törölt bejegyzésnél) után rendes fiók; nem tiltott törlés nem hagy
 ujjlenyomatot; idegen cím érintetlen; a lista nem ad ki címet; a mátrix és az `admin-route-guard` új sorai; migráció ↔ séma
