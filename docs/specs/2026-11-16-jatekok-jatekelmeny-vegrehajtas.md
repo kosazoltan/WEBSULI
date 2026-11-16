@@ -1680,7 +1680,7 @@ iránya) — felderítés: `grep -n "paths" source/tsconfig.json`; ha nem, a `qu
 
 ### JM2 — Socket.IO réteg (`/api/rt/`), szoba-állapotgép, szerveroldali kérdéssor — `MP_MODE` alapból `off`
 
-**Állapot:** nem kezdődött · **Függ:** JM1 · **Modell:** Opus · **Elfogadás:** JM-A4, JM-A6, JM-A7, JM-A8
+**Állapot:** folyamatban — ág feat/jatek-jm2-rt-reteg, munkafa .claude/worktrees/jatek-jm2, kanban #48 (2026-11-16) · **Függ:** JM1 · **Modell:** Opus · **Elfogadás:** JM-A4, JM-A6, JM-A7, JM-A8
 **Fájlok:** `source/package.json` (+`socket.io`, +`socket.io-client` — pontos, legalább 2 hetes kiadású verzió, MIT;
 a PR rögzíti a csomagméretet), új `source/shared/duel/{protocol,room-machine}.ts`, `S/realtime/{gateway,registry,ticket,
 question-provider,metrics,index}.ts`, `S/routes/rt.ts` (`POST /api/rt/ticket`, `GET /api/rt/status`), `S/index.ts`
