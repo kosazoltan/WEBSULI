@@ -1278,7 +1278,7 @@ const PAGE_CSS = `
 .dm-modal-card { width: min(420px, 100%); padding: 16px; border-radius: 18px; text-align: center; background: #0f172a; border: 1px solid #ffffff33; }
 .dm-modal-title { font-size: 20px; font-weight: 900; color: #fff; }
 
-.dm-result { justify-content: center; text-align: center; background: radial-gradient(90% 50% at 50% 40%, #f59e0b26, transparent 70%); }
+.dm-result { justify-content: safe center; /* review #464: görgetett fekvő nézetben a felső érem ne vágódjon le */ text-align: center; background: radial-gradient(90% 50% at 50% 40%, #f59e0b26, transparent 70%); }
 .dm-result-head { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .dm-headline { font-size: clamp(24px, 7vmin, 36px); font-weight: 900; line-height: 1.15; color: #fde047; text-shadow: 0 0 24px #f59e0b88; }
 .dm-result-cards { display: grid; gap: 10px; text-align: left; }
