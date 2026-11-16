@@ -72,17 +72,22 @@ const EMAIL = /(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za
 /**
  * V9 (main piros, 24add8b6): a Gmail-kanonizálás DB-tesztjei szintetikus Gmail-címeket használnak (a domain nem cserélhető).
  * FÁJLRA SZŰKÍTETT kivétel: csak ezekben a tesztfájlokban, és csak ha a kanonizált helyi rész (kisbetű, `+címke` és pontok
- * nélkül) az alábbi szintetikus előtagok egyikével kezdődik. Valódinak látszó Gmail-cím ugyanitt is bukik. Új előtag csak
- * nyilvánvalóan szintetikus szóval vehető fel (pl. `k1…` jegy-azonosító, `…proba`); személynév soha.
+ * nélkül) PONTOSAN szerepel az alábbi listán (review #479: előtag-egyezés valódi címet is átengedne). A lista a két fájlban
+ * (a mainen és a #475-ben) szó szerint előforduló címekből programmal gyűjtve; sablonból képzett Gmail-cím nincs. Új elem
+ * csak nyilvánvalóan szintetikus szó lehet (pl. `k1…` jegy-azonosító, `…proba`); személynév soha.
  */
 const SYNTHETIC_GMAIL_FILES = new Set(["source/tests/player-account-db.integration.ts", "source/tests/player-codes.test.ts"]);
-const SYNTHETIC_GMAIL_PREFIXES = ["k1", "aliasproba", "limitp", "rotgoogle", "rotkod", "diakpelda", "masik"];
+const SYNTHETIC_GMAIL_LOCALS = new Set([
+  "k1tiltott", "k1-gold-unban", "k1goldunban", "k1felold2", "diakpelda", "masik",
+  // #475 (fix/jatek-fiok-tiltas-kulcsrotacio) új címei:
+  "k1baliaselotte", "k1ketpeldany", "k1zaralias", "aliasproba", "limitp", "rotgoogle", "rotkod",
+]);
 const GMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
 
 function syntheticGmail(lower: string, domain: string, file: string | undefined): boolean {
   if (!file || !SYNTHETIC_GMAIL_FILES.has(file) || !GMAIL_DOMAINS.has(domain)) return false;
   const canonical = lower.slice(0, lower.lastIndexOf("@")).split("+")[0].replace(/\./g, "");
-  return SYNTHETIC_GMAIL_PREFIXES.some((p) => canonical.startsWith(p));
+  return SYNTHETIC_GMAIL_LOCALS.has(canonical);
 }
 
 const usedAddresses = new Set<string>();
@@ -161,10 +166,13 @@ describe("adatvédelmi őr — nincs valódi e-mail-cím a nyilvános repóban",
       assert.equal(isAllowedEmail(ok, F), true, ok);
     }
     for (const bad of [fake("vezeteknev.keresztnev", "gmail.com"), fake("kovacs.anna", "googlemail.com"), fake("anna+k1", "gmail.com"),
-      fake("x.k1", "gmail.com")]) {
+      fake("x.k1", "gmail.com"),
+      // Review #479: listás szintetikus szóval KEZDŐDŐ, de hosszabb helyi rész (név / karakter ráfűzve) is bukik.
+      fake("k1", "gmail.com"), fake("k1.kovacs.anna", "gmail.com"), fake("k1tiltottx", "gmail.com"), fake("masik.anna", "gmail.com"),
+      fake("limitp2", "gmail.com"), fake("diakpelda.kiss", "googlemail.com"), fake("aliasprobaa+x", "gmail.com")]) {
       assert.equal(isAllowedEmail(bad, F), false, "valódinak látszó cím a kivételes fájlban");
     }
-    // Más fájlban, vagy más domainen a szintetikus előtag sem elég.
+    // Más fájlban, vagy más domainen a szintetikus szó sem elég.
     assert.equal(isAllowedEmail(fake("k1.tiltott", "gmail.com"), "source/server/player/codes.ts"), false);
     assert.equal(isAllowedEmail(fake("k1.tiltott", "gmail.com")), false);
     assert.equal(isAllowedEmail(fake("k1.tiltott", "outlook.com"), F), false);

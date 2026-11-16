@@ -84,7 +84,7 @@ parancskimenetet `sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<cím>/g'`-vel szű
 Ok: a #471 a `tests/player-account-db.integration.ts`-be szintetikus `gmail.com` / `googlemail.com` címeket hozott (a
 Gmail-kanonizálás tesztje, a domain nem cserélhető). Javítás a `tests/no-real-emails-guard.test.ts`-ben:
 - `isAllowedEmail(address, file?)`: a Gmail-domainen a pontos lista mellett FÁJLRA SZŰKÍTETT kivétel — csak a
-  `SYNTHETIC_GMAIL_FILES` tesztfájlokban (`tests/player-account-db.integration.ts`, `tests/player-codes.test.ts`), és csak ha a kanonizált helyi rész (kisbetű, `+címke` és pontok nélkül) a rögzített
-  szintetikus előtagok egyikével kezdődik (`SYNTHETIC_GMAIL_PREFIXES`: `k1`, `aliasproba`, `limitp`, `rotgoogle`, `rotkod`, `diakpelda`, `masik` — a
+  `SYNTHETIC_GMAIL_FILES` tesztfájlokban (`tests/player-account-db.integration.ts`, `tests/player-codes.test.ts`), és csak ha a kanonizált helyi rész (kisbetű, `+címke` és pontok nélkül)
+  PONTOSAN szerepel a szintetikus listán (`SYNTHETIC_GMAIL_LOCALS`, `Set.has`, review #479 — nem előtag-egyezés: `k1tiltott`, `aliasproba`, `limitp`, `rotgoogle`, `rotkod`, `diakpelda`, `masik`, `k1-gold-unban`, `k1goldunban`, `k1felold2`, `k1baliaselotte`, `k1ketpeldany`, `k1zaralias` — a
   #475 címeit is lefedi).
-- Ellenpróba: valódinak látszó `vezeteknev.keresztnev` helyi részű Gmail-cím ugyanabban a fájlban bukik; a szintetikus előtag más fájlban bukik.
+- Ellenpróba: valódinak látszó `vezeteknev.keresztnev` helyi részű Gmail-cím ugyanabban a fájlban bukik; listás szóval kezdődő, de hosszabb helyi rész is bukik; a szintetikus szó más fájlban bukik.
