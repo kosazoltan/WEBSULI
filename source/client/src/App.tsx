@@ -40,6 +40,8 @@ const BrainRotSteal = lazy(() => import("@/pages/BrainRotSteal"));
 const SpaceAsteroidQuiz = lazy(() => import("@/pages/SpaceAsteroidQuiz"));
 const TornadoHunter200 = lazy(() => import("@/pages/TornadoHunter200"));
 const Profile = lazy(() => import("@/pages/Profile"));
+// JM7a: játékos belépés (PLAYER_ACCOUNTS flag mögött; kikapcsolva a „nem található” oldal jelenik meg).
+const PlayerLogin = lazy(() => import("@/pages/PlayerLogin"));
 
 function LoadingSpinner() {
   // Review #275 (lecke megnyitása): a /preview/ oldal kódjának letöltése alatt is a közös lecke-töltő látszik — így a megnyitás
@@ -101,6 +103,8 @@ function Router() {
         <Route path="/games/space-asteroid-quiz" component={SpaceAsteroidQuiz} />
         <Route path="/games/tornado-hunter-200" component={TornadoHunter200} />
         <Route path="/profile" component={Profile} />
+        <Route path="/belepes" component={PlayerLogin} />
+        <Route path="/belepes/link" component={PlayerLogin} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>
