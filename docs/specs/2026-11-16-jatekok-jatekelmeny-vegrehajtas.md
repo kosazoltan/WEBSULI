@@ -2200,6 +2200,44 @@ megerősítéssel.
 **Elfogadás:** a fenti tesztek zöldek, a meglévők változatlanul (a tiltott-belépés elvárása dokumentált SPEC-VÁLTOZÁS-sal);
 nincs séma-változás.
 
+#### JM7b-utójavítás K1 — a tiltás megőrzése a fiók törlése után (tiltás-ujjlenyomat)
+
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-fiok-tiltas-megorzes, munkafa .claude/worktrees/jatek-k1, kanban #56 · **Függ:** N2 (#463) · **Modell:** Opus · **Elfogadás:** JM-A15, admin-jogosultsági mátrix
+**Tulajdonosi döntés (2026-11-16, űrlap):** „Tiltás megőrzése ujjlenyomattal”. **Lelet** (review #461/#463, K1, KÖZEPES): a
+tiltott játékos törli a fiókját, majd ugyanazzal a címmel újra belép → új, tiltás nélküli fiók (admin-törlés után ugyanez).
+**Nem cél:** a teljes cím megőrzése; a `users.is_banned` alapú tiltás (az a címre szól, eddig is túlélte); a Google-út
+(`S/player/google.ts`, `S/auth.ts`) módosítása; saját admin-ellenőrzés (a meglévő `/api/admin` őr — a #462 `isAdminUser`-e
+alá is automatikusan kerül); a `PLAYER_ACCOUNTS` (KI marad).
+**Fájlok:** `source/migrations/0041_player_ban_fingerprints.sql` (új), `source/shared/schema.ts` (új tábla),
+`S/player/codes.ts` (`banFingerprint`), `S/player/account-store.ts` (`deleteAccount`, `upsertGooglePlayer`, `setBanned`,
+törölt-tiltott lista / feloldás), `S/player/store.ts` (`confirmVerifiedEmail`), `S/player/admin-routes.ts`, kliens:
+a „Játékosok” panel és a fiókoldal törlési szövege; tesztek: `T/player-account-db.integration.ts`, `T/player-codes.test.ts`
+(migráció ↔ séma), `T/admin-route-guard.test.ts`, `T/admin-authz-matrix-db.integration.ts`.
+**Lépések:**
+1. Migráció (csak hozzáadó, idempotens, a flagtől függetlenül fut élesben, magában ártalmatlan):
+   `CREATE TABLE IF NOT EXISTS player_ban_fingerprints (fingerprint varchar(64) PRIMARY KEY, banned_at timestamptz NOT NULL,
+   created_at timestamptz NOT NULL DEFAULT now())`. **Visszaállás:** `DROP TABLE IF EXISTS player_ban_fingerprints;` (a kód
+   üres / hiányzó tábla mellett hibára futna, ezért a visszaállás a kód visszavonásával együtt). `db:push` TILOS.
+2. Ujjlenyomat: `HMAC-SHA256(playerAuthKey(), "ban:" + limitKey(cím))` (a kód- és korlát-hash mintája; a `limitKey`
+   kanonizál: kisbetű, gmail-pont és `+alias` összevonva) — visszafejthetetlen, a teljes cím nem marad meg. **A
+   `SESSION_SECRET` rotációja** után a régi ujjlenyomatok nem egyeznek: a törölt-tiltott címek tiltása elvész (ugyanígy
+   érvénytelenednek a belépőkódok és a tanulói linkek); a bejegyzések az adminfelületen továbbra is láthatók és törölhetők.
+3. `deleteAccount` (saját és admin-törlés közös függvénye): ha a fiók tiltott (`banned_at`), ugyanabban a tranzakcióban
+   `INSERT … ON CONFLICT DO NOTHING` az ujjlenyomattal és a tiltás idejével. Nem tiltott fiók törlése nem hagy nyomot.
+4. Új fiók (`confirmVerifiedEmail` — kód / link; `upsertGooglePlayer` — Google): az `INSERT` a `banned_at`-et az
+   ujjlenyomat-táblából veszi (csak az ÚJ sorra hat) → a fiók tiltottként jön létre, a belépés a #463 szerinti korlátozott
+   munkamenetet adja (403 `BANNED`).
+5. Feloldás: `setBanned(id, false)` az ujjlenyomatot is törli. Admin: `GET /api/admin/game-accounts/deleted-bans`
+   (bejegyzés: rövid hivatkozás az ujjlenyomat elejéből + a tiltás és a törlés ideje — cím és maszk NÉLKÜL, mert a maszk
+   is részleges azonosító) és `POST /api/admin/game-accounts/deleted-bans/:ref/unban` — a meglévő `/api/admin` őr alatt.
+6. Szöveg: a fiókoldal törlési párbeszéde és az export egy mondatban jelzi, hogy tiltott fiók törlése után a cím
+   visszafejthetetlen ujjlenyomata megmarad, amíg az admin fel nem oldja.
+**Tesztek:** DB — tiltott saját törlés → ugyanaz a cím (kis- / nagybetű, gmail-pont, `+alias`) újra tiltott; admin-törlés
+után ugyanez (Google-úton is); feloldás (élő fióknál és a törölt bejegyzésnél) után rendes fiók; nem tiltott törlés nem hagy
+ujjlenyomatot; idegen cím érintetlen; a lista nem ad ki címet; a mátrix és az `admin-route-guard` új sorai; migráció ↔ séma
+egyezés, additív / idempotens migráció.
+**Elfogadás:** a fenti tesztek zöldek; a meglévők változatlanul; egyetlen új tábla, más séma-változás nincs.
+
 ---
 
 ### JM8a — Pontkönyv (szerver) — `PLAYER_POINTS` flag
