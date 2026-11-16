@@ -71,7 +71,7 @@ export async function startHarness(
       resolveLearner: async (token) => (token === LEARNER_TOKEN ? { id: "learner-0001", grade: 7, name: LEARNER_REAL_NAME } : null),
       getPlayer: async (req) => {
         const nick = req.get("x-test-player");
-        return nick ? { id: "player-0001", nickname: decodeURIComponent(nick), banned: nick === "banned" } : null;
+        return nick ? { id: req.get("x-test-player-id") ?? "player-0001", nickname: decodeURIComponent(nick), banned: nick === "banned" } : null;
       },
     }),
   );
@@ -94,6 +94,16 @@ export async function startHarness(
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };
+}
+
+let creatorSeq = 0;
+/**
+ * Szobanyitó azonosság (JM3a, terv D21): `on` módban vendég nem nyithat szobát, ezért a szobát nyitó tesztkliens egy
+ * (minden hívásnál ÚJ azonosítójú — „egy játékos egy szobában”) játékos-fiókkal kér jegyet.
+ */
+export function creatorHeaders(): Record<string, string> {
+  creatorSeq += 1;
+  return { "x-test-player": encodeURIComponent("Teszt Gazda"), "x-test-player-id": `gazda-${creatorSeq}` };
 }
 
 export async function getTicket(h: Harness, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; json: Record<string, unknown> }> {

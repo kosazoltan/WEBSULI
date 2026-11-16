@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import QRCode from "qrcode";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Copy, QrCode, RefreshCw, Save, Send, ShieldOff, UserRound } from "lucide-react";
+import { QrImage } from "@/components/QrImage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -22,21 +22,9 @@ import type { LearnerReport } from "@shared/learner-report";
  * e-mail nélkül (mért: a gyerekek a napi levelet nem látják, ezért az eszközük sosem párosult, és vendégként tanultak).
  */
 function PairQr({ link, name }: { link: string; name: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    // Review #362: új link (pl. visszavonás után) → a régi kód és hibaállapot nem maradhat látható.
-    setSrc(null);
-    setError(false);
-    let alive = true;
-    QRCode.toDataURL(link, { margin: 1, width: 240, errorCorrectionLevel: "M" })
-      .then((url) => { if (alive) setSrc(url); })
-      .catch(() => { if (alive) setError(true); });
-    return () => { alive = false; };
-  }, [link]);
-  if (error) return <p className="text-sm text-destructive">A QR-kód nem készült el — használd a „Párosító link másolása” gombot.</p>;
+  // JM3a: a QR-kép a közös `QrImage`-ből (a párbaj meghívója is azt használja); a viselkedés változatlan.
   return <figure className="space-y-1" data-testid="pair-qr">
-    {src ? <img src={src} width={240} height={240} alt={`${name} párosító QR-kódja`} className="rounded border bg-white p-1" /> : <div className="h-[240px] w-[240px] animate-pulse rounded bg-muted" />}
+    <QrImage link={link} alt={`${name} párosító QR-kódja`} fallback={<p className="text-sm text-destructive">A QR-kód nem készült el — használd a „Párosító link másolása” gombot.</p>} />
     <figcaption className="max-w-[240px] text-xs text-muted-foreground">Ez a kód a te képernyődön jelenik meg: {name} a saját telefonja kamerájával erről olvassa be, és megnyitja a linket — minden böngészőben, amelyet használ, egyszer. Ha nincs kéznél másik eszköz, küldd el neki a linket üzenetben („Párosító link másolása”), és a telefonján nyissa meg.</figcaption>
   </figure>;
 }

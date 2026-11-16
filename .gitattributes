@@ -1,0 +1,2 @@
+# A shell-szkriptek mindig LF sorvéggel (Windows autocrlf mellett a CRLF eltöri a bash-szkriptet)
+*.sh text eol=lf

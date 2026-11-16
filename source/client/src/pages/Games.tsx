@@ -18,6 +18,7 @@ import {
   Flame,
   Play,
   Sparkles,
+  Swords,
 } from "lucide-react";
 import { useDailyChallenge } from "@/lib/dailyChallenge";
 import { useAchievements } from "@/lib/achievements";
@@ -29,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import CosmicBackground from "@/components/CosmicBackground";
+import PlayerEntry from "@/components/PlayerEntry";
 import { useMemo, useState, type CSSProperties } from "react";
 
 type GameCatalogRow = {
@@ -252,6 +254,18 @@ export default function Games() {
     return applyDisplayOverrides(FALLBACK_CATALOG);
   }, [catalogFromApi, catLoading, catError]);
 
+  // JM3a: a párbaj-belépő alcíme az online réteg állapotától függ (a gépi ellenfél mindig elérhető, flag nélkül).
+  const { data: rtStatus } = useQuery<{ enabled?: boolean; available?: string; games?: string[] } | null>({
+    queryKey: ["/api/rt/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/rt/status", { credentials: "same-origin", headers: { accept: "application/json" } });
+      return res.ok ? ((await res.json()) as { enabled?: boolean; available?: string; games?: string[] }) : null;
+    },
+    staleTime: 30_000,
+    retry: false,
+  });
+  const duelOnline = !!rtStatus && !Array.isArray(rtStatus) && rtStatus.enabled === true && rtStatus.available !== "off" && (rtStatus.games ?? []).includes("parbaj");
+
   const { data: leaderboard = [], isLoading: lbLoading } = useQuery<LeaderRow[]>({
     queryKey: ["/api/games/leaderboard/tsunami", lbDifficulty],
     queryFn: async () => {
@@ -290,6 +304,8 @@ export default function Games() {
           </Link>
         </header>
 
+        <PlayerEntry />
+
         {/* Mai kihívás */}
         <section className="games-daily" aria-label="Mai kihívás">
           <span className="games-daily-icon" aria-hidden="true">
@@ -320,6 +336,24 @@ export default function Games() {
             </Link>
           )}
         </section>
+
+        {/* JM3a: Párbaj — gépi ellenfél (mindig) + online szoba (MP_MODE mögött). Saját osztályok: a lista .game-card számlálását nem érinti. */}
+        <Link
+          href="/games/parbaj"
+          data-testid="games-duel-entry"
+          className="mb-6 flex min-h-[64px] items-center gap-3 rounded-2xl border border-fuchsia-300/40 bg-gradient-to-r from-cyan-500/20 via-indigo-500/20 to-fuchsia-500/25 px-4 py-3 text-white shadow-[0_0_24px_rgba(232,121,249,0.18)] transition-colors hover:border-fuchsia-200/70"
+        >
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-fuchsia-500 text-slate-950" aria-hidden="true">
+            <Swords className="h-7 w-7" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-lg font-black leading-tight">Párbaj</span>
+            <span className="block text-sm text-white/80">
+              {duelOnline ? "Hívd ki a barátodat egy szobakóddal, vagy mérkőzz meg a géppel!" : "Mérkőzz meg a géppel: aki jól válaszol, csapást mér!"}
+            </span>
+          </span>
+          <span className="shrink-0 rounded-full bg-amber-400 px-3 py-1.5 text-sm font-black text-slate-950">{duelOnline ? "Online" : "Gép ellen"}</span>
+        </Link>
 
         <h2 className="games-section-title">Válassz játékot</h2>
         {catLoading ? (

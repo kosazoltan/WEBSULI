@@ -61,6 +61,8 @@ export type ConnectRtOptions = {
   extraHeaders?: Record<string, string>;
   /** Minden bejövő esemény (a csatlakozás előttől) — naplózáshoz / tesztekhez. */
   onEvent?: (event: string, payload: unknown) => void;
+  /** JM3a: korábbi szobahely folytatási tokenje (lap-újratöltés után) — az első kézfogás is ezt küldi a jegy helyett. */
+  resumeToken?: string | null;
 };
 
 export type RtConnection = {
@@ -88,7 +90,7 @@ function nextCid(): string {
 
 export async function connectRt(opts: ConnectRtOptions): Promise<RtConnection> {
   const io = opts.ioFactory ?? (await import("socket.io-client")).io;
-  let resumeToken: string | null = null;
+  let resumeToken: string | null = opts.resumeToken ?? null;
   let playerId: string | null = null;
   let state: RtRoomState | null = null;
   let status: "open" | "reconnecting" | "closed" = "open";

@@ -166,7 +166,7 @@ A pontos szignatúrát mindig a forrásból olvasd (`GE/play/*`, gyűjtő-export
 
 #### Megvalósult eltérések (J4a pilot #451 és a közös utójavítás — `fix/jatek-play-kozos-utojavitas`, kanban #51)
 
-**Állapot (közös utójavítás):** folyamatban — ág fix/jatek-play-kozos-utojavitas, munkafa .claude/worktrees/jatek-kozos, kanban #51
+**Állapot (közös utójavítás):** kész — #457 (ef43d4ca, 2026-11-16), kanban #51; a J2a-ból maradt 2. közös utójavítás (index.css régi Szólétra-szabályok, `revealCorrectMs`, `rng` opció, narancs hibás lap) nem indult
 
 - **Évfolyamhoz kötött ismétlés (#451):** `PlayQuestion.grade`, `ReviewItem.grade` (`{ v: 1, rev: 2 }`), `reviewFitsGrade`,
   `inferReviewGrade`; a director a menet `config.grade`-jét bélyegzi és csak azonos évfolyamú ismétlést ad vissza.
@@ -319,7 +319,7 @@ sora az adott játék „a” al-szeletének kötelező része.
 
 ### K.7 Cloze rövid játék-alak (hibajavítás)
 
-**Állapot:** folyamatban — ág fix/jatek-cloze-rovid-alak, munkafa .claude/worktrees/jatek-cloze, kanban #50
+**Állapot:** kész — #455 (62f50954, 2026-11-16), kanban #50
 
 - **Tünet:** a szóbank hiányos mondatos kérdése a játékban „Melyik illik a mondatba? <mondat _____-val> (Magyarul:
   <teljes fordítás>)”. (1) Hosszú: a `fitsAllViewports(...).ok` (a szint évfolyamán: 0→3., 1→5., 2→7., 3→9., 4→11.)
@@ -384,7 +384,7 @@ sora az adott játék „a” al-szeletének kötelező része.
 
 ## J0a — Determinizmus és játékérzet: seedelt RNG, fix lépés, rázás / hitstop, mini-Director, őrök
 
-**Állapot:** folyamatban — ág feat/jatek-j0a-determinizmus, munkafa .claude/worktrees/jatek-j0a, kanban #36
+**Állapot:** kész — #442 (19aa86e6, 2026-11-16), kanban #36
 **Cél-mondatok:** G1, G8 (előfeltétel), G10 (előfeltétel). **Elfogadás:** J19 (közös rész), J11 (feel), K.4 9/12/13/19.
 **Modell:** Opus. **Becsült diff:** ~450 sor (ebből ~200 teszt).
 
@@ -478,7 +478,7 @@ export function createIntensityDirector(opts?: { peakSec?: [number, number]; rel
 
 ## J0b — Közös tiszta réteg: típusok, ismétlési sor, áramlat, kombó, hullám, statisztika, ütemező, harness, őrök
 
-**Állapot:** folyamatban — ág feat/jatek-j0b-learning-core, munkafa .claude/worktrees/jatek-j0b, kanban #38
+**Állapot:** kész — #444 (bf804bfb, 2026-11-16), kanban #38
 **Függ:** J0a merge (a director és a harness a `createRng`-et használja: `rng: () => number` helyett `Rng` is átadható, a `rng.next` a függvény). **Cél-mondatok:** G3, G4, G6. **Elfogadás:** J2, J3, J4, J6, J7, J8, J10, J12, J13 (logikai szinten; a játékonkénti
 igazolás a J1–J7-ben).
 
@@ -805,7 +805,7 @@ változás”).
 
 ## J0c — Közös UI: kérdés-sáv, „Miért?”, eredmény-lista, felolvasás, beállítás, teszt-kampó, hang, próbaoldal
 
-**Állapot:** kész (#446) · **Állapot (J0c-b — hosszú kérdés koppintás nélkül olvasható):** folyamatban — ág fix/jatek-j0c-b-hosszu-kerdes, munkafa .claude/worktrees/jatek-j0c, kanban #46
+**Állapot:** kész (#446, 57bd1b0e) · **Állapot (J0c-b — hosszú kérdés koppintás nélkül olvasható):** kész — #450 (59a647f2), kanban #46
 **Függ:** J0b merge. **Cél-mondatok:** G3, G6. **Elfogadás:** J1 (próbaoldalon), J5, J14, J16 (komponens-szinten).
 
 ### Fájlok (csak ezek)
@@ -1067,7 +1067,7 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
 
 ## J2 — Szólétra: „Szikla-verseny” (J2a, J2b)
 
-**Állapot (J2a):** folyamatban — ág feat/jatek-j2a-szoletra, munkafa .claude/worktrees/jatek-j2a, kanban #45 · **Állapot (J2b):** nem kezdődött
+**Állapot (J2a):** kész — #454 (d5c91060, 2026-11-16), kanban #45 · **Állapot (J2b):** nem kezdődött
 **Függ:** J0c merge. Párhuzamosan futhat a J4-gyel. **Elfogadás:** J-WL, J1–J10, J14, J16, M1–M12. Terv: 5.2.
 
 ### Fájlok
@@ -1472,7 +1472,7 @@ fizika-esetek (pattogás, határok) változatlanok.
 
 ## Joystick-reakció (hibajavítás, kanban #49)
 
-**Állapot:** javítva, PR-ban — ág `fix/jatek-joystick-reakcio`, munkafa `.claude/worktrees/jatek-joystick`, kanban #49
+**Állapot:** kész — #456 (9038fce2, 2026-11-16), kanban #49; a valódi telefonos próba (a tulajdonosé) még hátravan — UNVERIFIED
 
 **Tünet (tulajdonos, valódi telefon, 2026-11-16):** „Mindegyik játékban a telefonon lévő ujjas joystick nagyon lassan
 reagál, és nem lehet finoman vezérelni vele se az autót, se a viharvadász játékot.” Érintett: a négy tárcsás játék
@@ -1654,6 +1654,25 @@ export function saveMeta(storage: StorageLike | null, s: MetaState): void;
 - [ ] J17, J18 teljesül; `T/game-meta.test.ts`, `T/games-lobby-meta.spec.ts`, `T/game-ethics-guard.test.ts` zöld.
 - [ ] A meglévő `T/games-lobby-mobile*.spec.ts` (felderítés: `ls T | grep lobby`) zöld.
 
+### J8-belépő — „Belépés” / „Fiókom” belépő a Játékok oldalán (a J8 fejezetből kiemelt, minimális rész)
+
+**Állapot:** folyamatban – 2026-11-16, ág feat/jatek-fiok-belepo, munkafa .claude/worktrees/jatek-fiok-belepo, kanban #60
+**Függ:** JM7a, JM7b (main) · **Modell:** Sonnet · **Ok:** a `/belepes` és a `/fiok` oldalra a felületen sehol nincs mutató
+gomb, így a `PLAYER_ACCOUNTS` bekapcsolása semmit nem érne (a gyerek nem találná a regisztrációt).
+**Cél:** a Játékok oldalon, CSAK bekapcsolt flag mellett: „Belépés” gomb (kijelentkezve) → `/belepes`; „Fiókom” gomb
+(becenév + avatar a szerverről) → `/fiok`. Kikapcsolt flagnél a mai kinézet bitre változatlan.
+**Nem-cél:** szerverkód, séma, a flag alapértéke, más játéklap, a J8 többi része (meta, szint, kártya-kiegészítés).
+**Fájlok:** új `source/client/src/components/PlayerEntry.tsx`, `source/tests/player-entry.test.ts`,
+`source/tests/player-entry.spec.ts`; módosítandó: `source/client/src/pages/Games.tsx` (egyetlen sor: a komponens felcsatolása
+a fejléc alatt — a #464 is érinti a fájlt, ezért a változás egyhelyes), `source/client/src/index.css` (csak ha a komponens
+nem megoldható a meglévő osztályokkal).
+**Lépések:** (1) állapot-sor commit; (2) a komponens (a flag KI / töltés / hiba → semmit nem renderel); (3) felcsatolás
+a `Games.tsx`-ben; (4) egység- és e2e-teszt, képernyőképek 360×640, 390×844, 844×390 méretben kijelentkezve és belépve;
+(5) PR, CI, review.
+**Elfogadás:** flag KI → a DOM-ban nincs belépő (teszt); BE + kijelentkezve → „Belépés” ≥ 48 px, `/belepes`-re visz; BE +
+belépve → „Fiókom” a szerver-becenévvel és avatarral, `/fiok`-ra visz; hosszú becenév nem töri az elrendezést; tiltott fiók
+→ „Fiókom” `/fiok`-ra; a `games-lobby-mobile` spec és a mobil mérő zöld.
+
 ---
 
 ## J9 — Záró mérés, átfogó review, éles próba, retro
@@ -1834,7 +1853,7 @@ bot-szimuláció a `room-machine`-en él tovább (JM1r).
 
 ### JM1r — Az egyeszközös aréna megszüntetése (D20)
 
-**Állapot:** folyamatban — 2026-11-16, ág refactor/jatek-jm1r-egyeszkozos-torles, munkafa .claude/worktrees/jatek-jm1r, kanban #52 · **Függ:** JM2 (main), JM7b (main) · **Modell:** Opus · **Elfogadás:** JM-A3 (új szöveg), J19
+**Állapot:** kész — #460 (e1852e89, 2026-11-16), kanban #52 (a JM3 jegye) · **Függ:** JM2 (main), JM7b (main) · **Modell:** Opus · **Elfogadás:** JM-A3 (új szöveg), J19
 **Fájlok:** törlés: `P/DuelArena.tsx`, `T/duel-arena.spec.ts`, `T/duel-match.test.ts` (az átvitel után), `source/shared/duel/match.ts`;
 módosítás: `source/client/src/App.tsx` (a `DuelArena` lazy import és a `/games/parbaj` útvonal ki), `P/Games.tsx` (a párbaj-sáv és
 a `Swords` import ki), `source/shared/duel/index.ts` (a `match` re-export ki), `source/shared/duel/questions.ts`
@@ -1858,7 +1877,7 @@ törlés. 3. Megjelenítő komponensek kiemelése (`components/duel/`). 4. Törl
 
 ### JM2 — Socket.IO réteg (`/api/rt/`), szoba-állapotgép, szerveroldali kérdéssor — `MP_MODE` alapból `off`
 
-**Állapot:** folyamatban — ág feat/jatek-jm2-rt-reteg, munkafa .claude/worktrees/jatek-jm2, kanban #48 (2026-11-16) · **Függ:** JM1 · **Modell:** Opus · **Elfogadás:** JM-A4, JM-A6, JM-A7, JM-A8
+**Állapot:** kész — #452 (f06c35df, 2026-11-16), kanban #48; `MP_MODE` alapból `off`, élesben kikapcsolva · **Függ:** JM1 · **Modell:** Opus · **Elfogadás:** JM-A4, JM-A6, JM-A7, JM-A8
 **Fájlok:** `source/package.json` (+`socket.io`, +`socket.io-client` — pontos, legalább 2 hetes kiadású verzió, MIT;
 a PR rögzíti a csomagméretet), új `source/shared/duel/{protocol,room-machine}.ts`, `S/realtime/{gateway,registry,ticket,
 question-provider,metrics,index}.ts`, `S/routes/rt.ts` (`POST /api/rt/ticket`, `GET /api/rt/status`), `S/index.ts`
@@ -1927,7 +1946,7 @@ polling marad (tervezett viselkedés).
 
 ### JM3a — Online párbaj 2 főre + gépi ellenfél: szoba, meghívás, váróterem, meccs, győzteshirdetés
 
-**Állapot:** nem kezdődött · **Függ:** JM1r · **Modell:** Opus · **Elfogadás:** JM-A3, JM-A3b, JM-A4 (kliens + admin-mód
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-jm3a-online-parbaj, munkafa .claude/worktrees/jatek-jm3a, kanban #52 · **Függ:** JM1r · **Modell:** Opus · **Elfogadás:** JM-A3, JM-A3b, JM-A4 (kliens + admin-mód
 csatlakozás), JM-A5 (első fele)
 **Tulajdonosi döntések (2026-11-16, kötelezők):** (1) csak hálózati közös játék — egyeszközös mód nincs (D20); (2) szobát csak
 játékos-fiók, párosított tanulói profil vagy (admin módban) admin nyithat, csatlakozni vendégként is lehet a kóddal / linkkel,
@@ -2017,7 +2036,7 @@ ugyanazzal a seeddel játszik, a végén „A barátod: 1240 pont — te: 1310 p
 
 ### JM7a — Admin-jogosultsági mátrix + játékos-fiók alap (e-mailes kód) — `PLAYER_ACCOUNTS` bevezetési flag
 
-**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-jm7a-fiok, munkafa .claude/worktrees/jatek-jm7a, kanban #39 · **Függ:** JM0 · **Modell:** Opus · **Elfogadás:** JM-A12 (teljes), JM-A11 (e-mail út)
+**Állapot:** kész — #445 (9bda1373, 2026-11-16), kanban #39; `PLAYER_ACCOUNTS` élesben kikapcsolva · **Függ:** JM0 · **Modell:** Opus · **Elfogadás:** JM-A12 (teljes), JM-A11 (e-mail út)
 **Fájlok:** `source/migrations/0040_player_accounts.sql`, `source/shared/schema.ts` (új táblák: `player_accounts`,
 `player_auth_codes`), új `S/player/{auth-routes,session,require-player,codes,email-template}.ts`, `S/routes.ts` (bekötés
 `/api/player/*`), `S/resend.ts` (új levél-sablon hívása — a meglévő küldő), kliens: `P/PlayerLogin.tsx` (`/belepes`),
@@ -2100,7 +2119,7 @@ A Drizzle-séma és a migráció egyezése: a meglévő migrációs ellenőrzés
 
 ### JM7b — Játékos Google-út, becenév + avatar, tanulói profil összekapcsolása, fiókoldal, adatletöltés / törlés, admin-tiltás
 
-**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-jm7b-fiok, munkafa .claude/worktrees/jatek-jm7b, kanban #43 · **Függ:** JM7a · **Modell:** Opus · **Elfogadás:** JM-A11, JM-A12 (Google-ág), JM-A15
+**Állapot:** kész — #449 (50605100, 2026-11-16), kanban #43; `PLAYER_ACCOUNTS` élesben kikapcsolva · **Függ:** JM7a · **Modell:** Opus · **Elfogadás:** JM-A11, JM-A12 (Google-ág), JM-A15
 **Fájlok:** `S/player/google.ts`, `S/auth.ts` (csak a callback elágazás — lásd lent), `S/player/account-routes.ts`,
 `S/routes.ts` (admin „Játékosok” végpontok az `adminRouter` alatt → az `isAuthenticatedAdmin` automatikusan véd),
 `source/shared/nicknames.ts` (szűrő), kliens: `P/PlayerAccount.tsx` (a `/profile` utódja; a régi `Profile.tsx` helyi adatai
@@ -2131,7 +2150,7 @@ küldött egyszeri, célhoz kötött kódot kér, és értesítő levél megy r�
 
 ### JM7b-utójavítás (N1, N3) — a független biztonsági újraellenőrzés két lelete
 
-**Állapot:** folyamatban — 2026-11-16, ág fix/jatek-fiok-becenev-szuro, munkafa .claude/worktrees/jatek-jm7b-uto, kanban #56 · **Függ:** JM7b · **Modell:** Opus · **Elfogadás:** JM-A11 (becenév-szűrő), JM-A15 (törlés)
+**Állapot:** kész — #461 (13160155, 2026-11-16), kanban #56 · **Függ:** JM7b · **Modell:** Opus · **Elfogadás:** JM-A11 (becenév-szűrő), JM-A15 (törlés)
 **Cél:** (N1, KÖZEPES) a foglalt-név és a trágárság-szűrő ne legyen kijátszható a kis L / nagy I / `1` felcserélésével
 (`ADMlN`, `WEBSULl`, `GECl`, `BUZl`, `PlCSA`, `NlGGER` ma átmegy); (N3, ALACSONY) idegen ne akaszthassa meg 24 órára a
 fióktörlést a cím közös hibás-próba plafonjának (és levélkeretének) kimerítésével. **Nem cél:** N2 (tiltott játékos
@@ -2167,7 +2186,7 @@ meglévő tesztek változatlanul zöldek; nincs séma-változás.
 
 #### JM7b-utójavítás N1b — a becenév-szűrő maradék kijátszásai (review #461/#463, A1–A4)
 
-**Állapot:** folyamatban — 2026-11-16, ág fix/jatek-fiok-becenev-szuro-2, munkafa .claude/worktrees/jatek-n1b, kanban #56 · **Függ:** N1 (#461) · **Modell:** Opus · **Elfogadás:** JM-A11
+**Állapot:** kész — #469 (1db45c5f, 2026-11-16), kanban #56; maradék (3 számjegynél több kevert olvasat, belső `slice(0, 64)`) a #471-be kerül · **Függ:** N1 (#461) · **Modell:** Opus · **Elfogadás:** JM-A11
 **Cél:** a review szondájának (`nick-probe2.mts`) 28 még átmenő kísérlete is elbukjon — az `MP_MODE` / ranglista bekapcsolása
 ELŐTT kötelező. **Nem cél:** a foglaltsági kulcs (`nicknameKey`) változtatása (a tárolt nevek kulcsa stabil marad); séma;
 más fájl. **Fájlok:** `source/shared/player-nickname.ts`, `T/nickname-filter.test.ts`.
@@ -2189,7 +2208,7 @@ Ervin, Vivien, Kata2012); a `nicknameKey` egy rögzített mintakészleten bitre 
 
 ### JM7b-utójavítás – N2 — tiltott játékos saját adatai + admin végleges törlés
 
-**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-fiok-tiltott-torles, munkafa .claude/worktrees/jatek-jm7b-n2, kanban #56 · **Függ:** JM7b · **Modell:** Opus · **Elfogadás:** JM-A15 (tiltott fiókra is), admin-jogosultsági mátrix
+**Állapot:** kész — #463 (d2c4c7d0, 2026-11-16), kanban #56 · **Függ:** JM7b · **Modell:** Opus · **Elfogadás:** JM-A15 (tiltott fiókra is), admin-jogosultsági mátrix
 **Tulajdonosi döntés (2026-11-16, űrlap):** „Admin törölhesse + saját törlés” — (a) a TILTOTT játékos is letöltheti a saját
 adatait és törölheti a fiókját (minden más — játék, becenév / avatar, tanulói kapcsolat, szoba, pont — tiltva marad);
 (b) az admin „Játékosok” oldalon VÉGLEGES törlés megerősítéssel.
@@ -2222,6 +2241,95 @@ megerősítéssel.
 **Elfogadás:** a fenti tesztek zöldek, a meglévők változatlanul (a tiltott-belépés elvárása dokumentált SPEC-VÁLTOZÁS-sal);
 nincs séma-változás.
 
+#### JM7b-utójavítás K1 — a tiltás megőrzése a fiók törlése után (tiltás-ujjlenyomat)
+
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-fiok-tiltas-megorzes, munkafa .claude/worktrees/jatek-k1, kanban #56 · **Függ:** N2 (#463) · **Modell:** Opus · **Elfogadás:** JM-A15, admin-jogosultsági mátrix
+**Tulajdonosi döntés (2026-11-16, űrlap):** „Tiltás megőrzése ujjlenyomattal”. **Lelet** (review #461/#463, K1, KÖZEPES): a
+tiltott játékos törli a fiókját, majd ugyanazzal a címmel újra belép → új, tiltás nélküli fiók (admin-törlés után ugyanez).
+**Nem cél:** a teljes cím megőrzése; a `users.is_banned` alapú tiltás (az a címre szól, eddig is túlélte); a Google-út
+(`S/player/google.ts`, `S/auth.ts`) módosítása; saját admin-ellenőrzés (a meglévő `/api/admin` őr — a #462 `isAdminUser`-e
+alá is automatikusan kerül); a `PLAYER_ACCOUNTS` (KI marad).
+**Fájlok:** `source/migrations/0041_player_ban_fingerprints.sql` (új), `source/shared/schema.ts` (új tábla),
+`S/player/codes.ts` (`banFingerprint`), `S/player/account-store.ts` (`deleteAccount`, `upsertGooglePlayer`, `setBanned`,
+törölt-tiltott lista / feloldás), `S/player/store.ts` (`confirmVerifiedEmail`), `S/player/admin-routes.ts`, kliens:
+a „Játékosok” panel és a fiókoldal törlési szövege; tesztek: `T/player-account-db.integration.ts`, `T/player-codes.test.ts`
+(migráció ↔ séma), `T/admin-route-guard.test.ts`, `T/admin-authz-matrix-db.integration.ts`.
+**Lépések:**
+1. Migráció (csak hozzáadó, idempotens, a flagtől függetlenül fut élesben, magában ártalmatlan):
+   `CREATE TABLE IF NOT EXISTS player_ban_fingerprints (fingerprint varchar(64) PRIMARY KEY, banned_at timestamptz NOT NULL,
+   created_at timestamptz NOT NULL DEFAULT now())`. **Visszaállás:** `DROP TABLE IF EXISTS player_ban_fingerprints;` (a kód
+   üres / hiányzó tábla mellett hibára futna, ezért a visszaállás a kód visszavonásával együtt). `db:push` TILOS.
+2. Ujjlenyomat: `HMAC-SHA256(playerAuthKey(), "ban:" + limitKey(cím))` (a kód- és korlát-hash mintája; a `limitKey`
+   kanonizál: kisbetű, gmail-pont és `+alias` összevonva) — visszafejthetetlen, a teljes cím nem marad meg. **A
+   `SESSION_SECRET` rotációja** után a régi ujjlenyomatok nem egyeznek: a törölt-tiltott címek tiltása elvész (ugyanígy
+   érvénytelenednek a belépőkódok és a tanulói linkek); a bejegyzések az adminfelületen továbbra is láthatók és törölhetők.
+3. `deleteAccount` (saját és admin-törlés közös függvénye): ha a fiók tiltott (`banned_at`), ugyanabban a tranzakcióban
+   `INSERT … ON CONFLICT DO NOTHING` az ujjlenyomattal és a tiltás idejével. Nem tiltott fiók törlése nem hagy nyomot.
+4. Új fiók (`confirmVerifiedEmail` — kód / link; `upsertGooglePlayer` — Google): az `INSERT` a `banned_at`-et az
+   ujjlenyomat-táblából veszi (csak az ÚJ sorra hat) → a fiók tiltottként jön létre, a belépés a #463 szerinti korlátozott
+   munkamenetet adja (403 `BANNED`).
+   **Sorosítás (#471 review):** a törlés és MINDEN létrehozási út közös, címenkénti tranzakciós advisory-zárat vesz az
+   ujjlenyomatra (előbb a zár, utána sorzár / INSERT); a létrehozás az ujjlenyomatot a zár UTÁN, friss pillanatképből olvassa,
+   így egy párhuzamos tiltott-törlés mellett sem jöhet létre tiltatlan fiók.
+5. Feloldás: `setBanned(id, false)` az ujjlenyomatot is törli. A törölt-tiltott bejegyzés feloldása (#471 review) ugyanabban
+   a tranzakcióban az AZONOS ujjlenyomatú élő fiókok (a törlés után tiltottként újra létrejött, bármely cím-változatú fiók)
+   tiltását is feloldja. Az ujjlenyomat az újralétrehozáskor szándékosan NEM „költözik át” (nem törlődik): különben egy MÁSIK
+   cím-változattal ismét tiltatlan fiók nyílhatna. Admin: `GET /api/admin/game-accounts/deleted-bans`
+   (bejegyzés: rövid hivatkozás az ujjlenyomat elejéből + a tiltás és a törlés ideje — cím és maszk NÉLKÜL, mert a maszk
+   is részleges azonosító) és `POST /api/admin/game-accounts/deleted-bans/:ref/unban` — a meglévő `/api/admin` őr alatt.
+6. Szöveg: a fiókoldal törlési párbeszéde és az export egy mondatban jelzi, hogy tiltott fiók törlése után a cím
+   visszafejthetetlen ujjlenyomata megmarad, amíg az admin fel nem oldja.
+7. **K1-b (review #469/#471, KÖZEPES): a tiltás a KANONIKUS címre szól, már a tiltáskor.** `setBanned(true)` a címenkénti
+   zár alatt létrehozza az ujjlenyomatot, és MINDEN azonos postafiókú (gmail-pont, `+alias`, googlemail) élő fiókot tilt;
+   `setBanned(false)` és a törölt-tiltott feloldás ugyanazt a kanonikus feloldást végzi (ujjlenyomat törlése + az élő változatok
+   feloldása). Egy igazságforrás: nincs olyan állapot, ahol a fiók és az ujjlenyomat mást mond. Új fiók létrehozásakor a
+   kanonikus ujjlenyomat létezése tiltás; a meglévő (alias-)fiók belépéskor is megkapja (`ON CONFLICT … banned_at =
+   COALESCE(…)`). A „törölt, de tiltva maradt” listán csak az élő fiók nélküli ujjlenyomatok látszanak. A felület kimondja: a
+   feloldás az azonos postafiókú, más okból tiltott élő fiókot is feloldja (tájékoztató lelet).
+   **Kódkérési korlát:** a kulcsa már a kanonikus cím (`limitHash` → `limitKey`) — alias-címekkel nem sokszorozható (teszt).
+   **Kanonikus EGYEDISÉG (javaslat, NEM ebben a szeletben):** ma egy Gmail-postafiókhoz alias-címekkel több játékos-fiók
+   nyitható (ranglista-duplikálás). Megoldás: új oszlop `email_canonical_hash char(64)` egyedi indexszel (új migráció a meglévő
+   táblán + feltöltés) — tulajdonosi döntés és külön szelet; a tiltás szempontjából a fenti kanonikus tiltás már zárja a rést.
+8. **K1-c: megőrzési idő — tulajdonosi döntés (2026-11-16): 12 hónap.** `PLAYER_BAN_RETENTION_MONTHS` (alap 12, 1–120),
+   a tiltástól számítva; a meglévő óránkénti takarító (`sweeper.ts` → `purgeOldCodes`) törli a lejárt ujjlenyomatokat, de csak
+   ha nincs hozzá élő tiltott fiók — az ÉLŐ fiók tiltása nem jár le. A fiókoldal, az export és az admin-panel szövege megnevezi.
+9. **`SESSION_SECRET` rotáció (ALACSONY):** runbook-lépés (`docs/security-secret-hygiene-2026-09-13.md`), külön kulcs
+   helyett. Indok: a külön `PLAYER_BAN_KEY` új, élesben beállítandó titkot jelentene, és a bevezetése / cseréje ugyanígy
+   érvénytelenítené a megőrzött ujjlenyomatokat (a HMAC visszafejthetetlen, nem migrálható) — kisebb kockázat a meglévő titok
+   és egy dokumentált lépés: rotáció előtt az admin listázza a törölt-tiltott bejegyzéseket, és tudomásul veszi, hogy elvesznek
+   (az élő tiltott fiókok tiltása a `banned_at`-ben megmarad). **Rendszerszintű kezelés (#471 review):** a tábla `key_id`
+   oszlopa a kulcs rövid azonosítója; a takarító induláskor és óránként (`reconcileBanFingerprints`) törli a régi kulcsú
+   sorokat (a törölt fiókoké tudottan elvész — `warn` napló darabszámmal, cím nélkül), és MINDEN élő tiltott fiók ujjlenyomatát
+   újraszámolja — így nem egy-egy belépési ágon múlik; emellett minden belépési út (kód, link, Google új és ismert azonosító)
+   önjavító. Teszt: rotáció szimulálva, ismert Google-azonosítós és kódos úton az alias-regisztráció tiltott.
+10. **A tiltás állapotgépe (#471 review, 4. lelet után).** Zár = `lockBanAddress` (tranzakciós advisory-zár a KANONIKUS cím
+   ujjlenyomatára, `hashtextextended(fp, 7041)`); minden író / „olvas-dönt-ír” művelet a zár megszerzése UTÁN, ugyanabban a
+   tranzakcióban olvas — így bármely két művelet ugyanarra a címre sorosított.
+
+   | Művelet | Olvas | Ír | Zár | Egy tranzakció |
+   |---|---|---|---|---|
+   | Tiltás (`setBanned(true)`) | fiók címe; az azonos ujjlenyomatú élő fiókok | ujjlenyomat (beszúr / a tiltás idejét frissíti), az élő változatok `banned_at`-je | igen | igen |
+   | Feloldás élő fiókon (`setBanned(false)`) | fiók címe; a tiltott élő változatok | ujjlenyomat törlése, a változatok `banned_at = NULL` | igen | igen |
+   | Feloldás törölt-tiltotton (`unbanDeleted`) | ujjlenyomat (hivatkozással); a tiltott élő változatok | ujjlenyomat törlése, a változatok `banned_at = NULL` | igen (ujjlenyomatonként) | igen |
+   | Saját és admin-törlés (`deleteAccount`) | fiók címe, `banned_at` (a zár UTÁN, `FOR UPDATE`) | ujjlenyomat (ha tiltott), kódok, munkamenetek, fiók | igen (a sorzár ELŐTT) | igen |
+   | Létrehozás / belépés kód, link (`confirmVerifiedEmail`) | ujjlenyomat (a zár UTÁN) | fiók (`banned_at` öröklés, `ON CONFLICT … COALESCE`), ujjlenyomat (ha a fiók tiltott) | igen | igen |
+   | Google, új azonosító (`upsertGooglePlayer`) | ujjlenyomat (a zár UTÁN) | ugyanaz | igen | igen |
+   | Google, ismert azonosító (`upsertGooglePlayer`) | fiók címe, majd `banned_at` ÚJRA a zár UTÁN | ujjlenyomat (csak ha MOST is tiltott) | igen | igen |
+   | Helyreállítás rotáció után (`reconcileBanFingerprints`) | régi kulcsú sorok; a tiltott fiókok listája, majd fiókonként `banned_at` ÚJRA a zár UTÁN | régi kulcsú sorok törlése; ujjlenyomat (csak ha MOST is tiltott) | igen (fiókonként) | fiókonként külön, rövid tranzakció |
+   | Megőrzés-takarítás (`purgeExpiredBanFingerprints`) | lejárt ujjlenyomatok, majd ujjlenyomatonként ÚJRA: lejárt-e, van-e tiltott élő változat | lejárt, élő változat nélküli ujjlenyomat törlése | igen (ujjlenyomatonként) | ujjlenyomatonként külön |
+   | `getPlayer` / `requirePlayer`, törölt-tiltott lista | `banned_at` / ujjlenyomatok | — | nem kell (csak olvas, nem dönt írásról) | — |
+
+   **Páronkénti ellenőrzés:** az összes író és „olvas-dönt-ír” művelet ugyanazt a címenkénti zárat veszi, és a döntéshez
+   szükséges állapotot a zár UTÁN olvassa → bármely pár (pl. helyreállítás ↔ feloldás, takarítás ↔ tiltás, létrehozás ↔
+   törlés, Google ismert ↔ feloldás) sorosított. A 4. lelet előtt zár nélkül futott: a Google ismert ága, a helyreállítás és
+   a takarítás — ezek most a táblázat szerint. Teszt: minden művelet megvárja a tartott zárat (párhuzamos DB-teszt
+   műveletenként), és a szemantikus versenyek (helyreállítás ↔ feloldás, takarítás ↔ újratiltás, Google ismert ↔ feloldás).
+**Tesztek:** DB — tiltott saját törlés → ugyanaz a cím (kis- / nagybetű, gmail-pont, `+alias`) újra tiltott; admin-törlés
+után ugyanez (Google-úton is); feloldás (élő fióknál és a törölt bejegyzésnél) után rendes fiók; nem tiltott törlés nem hagy
+ujjlenyomatot; idegen cím érintetlen; a lista nem ad ki címet; a mátrix és az `admin-route-guard` új sorai; migráció ↔ séma
+egyezés, additív / idempotens migráció.
+**Elfogadás:** a fenti tesztek zöldek; a meglévők változatlanul; egyetlen új tábla, más séma-változás nincs.
+
 ---
 
 ### JM7c — Hibrid jogosultság (terv 10.4a): admin kizárólag az engedélylistáról; meglévő tanulók / szülők játékos-joggal
@@ -2231,7 +2339,7 @@ kockázat az admin kizárása, a második a jogosultság-keveredés. Mindkét sz
 
 #### JM7c-1 — Az admin-jog egyetlen forrása az engedélylista + `state` a meglévő `/auth/google` úton
 
-**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-jm7c1-admin-engedelylista, munkafa .claude/worktrees/jatek-jm7c1,
+**Állapot:** kész — #462 (015b5a9a, 2026-11-16; élesben telepítve), a JM7c-2 még nem indult; munkafa volt: jatek-jm7c1,
 kanban #55 · **Függ:** JM7b · **Modell:** Opus · **Kiindulás:** biztonsági review #449 K3
 **Felmért tények (main 62f50954):** admin-jog ma = `users.is_admin` (`source/shared/schema.ts`); új Google-sornál az
 `ADMIN_EMAIL` pontos egyezése adja, meglévő sornál megmarad (`S/auth.ts:34-69` `createGoogleVerify`); kézi beállítás:
@@ -2307,12 +2415,12 @@ belépéskor (megerősített e-mail); (3) a nyilvános „Belépés” gomb a j�
 ### JM8a — Pontkönyv (szerver) — `PLAYER_POINTS` flag
 
 **Állapot:** nem kezdődött · **Függ:** JM7b · **Modell:** Opus · **Elfogadás:** JM-A13
-**Fájlok:** `source/migrations/0041_player_points.sql`, `source/shared/schema.ts` (`game_runs`, `player_game_stats`,
+**Fájlok:** `source/migrations/0042_player_points.sql` (a 0041-et a #471 foglalja — `0041_player_ban_fingerprints.sql`; a JM8a indulásakor `ls source/migrations` a végső szó), `source/shared/schema.ts` (`game_runs`, `player_game_stats`,
 `player_weekly`), `source/shared/game-score-rules.ts`, `source/shared/levels.ts` (szint-görbe: a J8 `playerLevel` ide
 költözik és a kliens újraexportálja), `S/player/runs-routes.ts`, a meglévő napi takarító cron bővítése (180 nap / 12 hét;
 felderítés: `grep -n "cron.schedule" S/index.ts`), tesztek: `T/game-score-rules.test.ts`, `T/player-runs.db.test.ts`,
 `T/weekly-key.test.ts` (Europe/Budapest, DST-váltás).
-**Séma (0041, additív):** `game_runs(id uuid PK = runId, player_id → player_accounts ON DELETE CASCADE, game_id, difficulty,
+**Séma (0042, additív):** `game_runs(id uuid PK = runId, player_id → player_accounts ON DELETE CASCADE, game_id, difficulty,
 kind ('run'|'import'|'duel'), started_at, finished_at (szerveridők), xp, claimed_xp, correct, wrong, best_streak, flags,
 ranked bool, match_id uuid NULL, outcome smallint NULL, finish_hash char(64) NULL)`, indexek `(player_id, finished_at)` és nyitott runokra;
 `player_game_stats(player_id, game_id, difficulty PK, total_xp, best_run_xp, best_streak, runs, correct)`;
@@ -2359,7 +2467,7 @@ Teszt: `T/run-reporter.test.ts` (hamis fetch: újrapróba, idempotencia), `T/pla
 ### JM9 — Barátok, heti baráti / csoport ranglista, párbaj-mérleg
 
 **Állapot:** nem kezdődött · **Függ:** JM8b, JM3b · **Modell:** Sonnet · **Elfogadás:** JM-A14
-**Fájlok:** `source/migrations/0042_player_friends.sql` (`player_friendships(a, b PK, status 'pending'|'active'|'blocked',
+**Fájlok:** `source/migrations/0043_player_friends.sql` (`player_friendships(a, b PK, status 'pending'|'active'|'blocked',
 requested_by, blocked_by)`, `player_friend_invites(token_hash PK, player_id, uses_left, expires_at)`), `S/player/friends-routes.ts`,
 `S/realtime/*` (meccs vége → regisztrált játékosoknál `game_runs kind='duel'`, `match_id`, `outcome`; **újrapróbálható
 mentés:** a sor azonosítója `uuidv5(match_id + ":" + player_id)`, `INSERT … ON CONFLICT (id) DO NOTHING`, az összesítők csak
@@ -2376,7 +2484,7 @@ e-mail, előzmények. `GET /api/player/leaderboard?scope=friends|group:<id>&peri
 ### JM10 — Osztálytermi mód
 
 **Állapot:** nem kezdődött · **Függ:** JM9 · **Modell:** Sonnet · **Elfogadás:** JM-A16
-**Fájlok:** `source/migrations/0043_play_groups.sql` (`play_groups(id, owner_player_id, name, join_code char(6) UNIQUE)`,
+**Fájlok:** `source/migrations/0044_play_groups.sql` (`play_groups(id, owner_player_id, name, join_code char(6) UNIQUE)`,
 `play_group_members`), `S/player/groups-routes.ts`, `S/realtime/*` (szerepkör `board`: csak olvasó kapcsolat a kivetítő-nézethez),
 `P/RoomBoard.tsx` (`/jatek/tabla/:kod` — nagy betűs állás, kivetítőre; PII nélkül), csapatkupa mód (a csapat pontja a tagok
 pontosságának átlaga; csapatdobogó; egyéni kiemelés csak pozitív), tesztek (3 kontextus: tábla + 2 játékos).
@@ -2398,7 +2506,7 @@ origin / CSRF, leállítás / e2e-mód, migráció ↔ Drizzle, Europe/Budapest 
 
 ### JB — Évfolyam-bank bővítése (JBa: 3–6., JBb: 7–9., JBc: 10–12. évfolyam)
 
-**Állapot:** JBa kész (#448, 2026-11-16); JBb kész (#453, 2026-11-16); JBc folyamatban – 2026-11-16, ág feat/jatek-jbc-evfolyam-bank, munkafa .claude/worktrees/jatek-jbc, kanban #53 · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
+**Állapot:** JBa kész (#448, 2026-11-16); JBb kész (#453, 2026-11-16); JBc kész (#458, ba9c666c, 2026-11-16), kanban #53 · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
 **Elfogadás:** JB-A1 · **Fájlok:** `source/client/src/data/gradeQuizBank/grade-NN.ts` (bővítés, a meglévő tételek
 azonosítója változatlan), `docs/measurements/2026-11-xx-evfolyam-bank-<sáv>-vakmegoldo.md`, a meglévő őrök
 (`T/quiz-bank-integrity.test.ts`, `T/game-bank-no-repeat-content.test.ts`, `T/grade-quiz-select.test.ts`) zöldek + új
@@ -2425,7 +2533,7 @@ kitalálható tudás nélkül” minta) → javítás → jegyzőkönyv. Diff: a
 
 Szabályok: egy közös fájlt egyszerre egy szelet módosít (K.1/6–7); különösen: `source/client/src/App.tsx` (J0c → JM1 → JM7a → JM7b → JM1r →
 JM3a → JM10 sorban), `P/Games.tsx` (J8 és a JM1r / JM3a párbaj-belépője: az orkesztrátor sorolja), `source/shared/schema.ts` és
-`source/migrations/` (JM7a → JM8a → JM9 → JM10 szigorúan sorban, a migráció-számok foglalva: 0040–0043), a hét játéklap a
+`source/migrations/` (JM7a → JM8a → JM9 → JM10 szigorúan sorban, a migráció-számok foglalva: 0040 = JM7a, 0041 = a #471 tiltás-ujjlenyomata, 0042–0044 = JM8a / JM9 / JM10; a terv szövege még 0041-et említ a JM8a-nál — ez a sor az irányadó), a hét játéklap a
 J-szelet és a JM4 / JM5 / JM0 / JM8b között (az orkesztrátor sorolja, soha nem egyszerre). Minden al-szelet önállóan kiadható;
 a flag alapértékével a main mindig működő. A merge-ek előtt a futás-őr (memória „Nincs deploy futás közben”), a JM2 után a futó
 meccsekkel együtt (JM-A7).

@@ -20,6 +20,8 @@ export type PlayerHudProps = {
   streak?: number;
   /** Az ellenfél már válaszolt ebben a körben (csak azt jelzi, HOGY válaszolt — mit, azt a felfedés). */
   answered?: boolean;
+  /** JM3a: a pötty mellett szöveggel is („Gondolkodik…” / „Válaszolt ✓”) — a nyitott körben. */
+  answerLabel?: boolean;
   /** Megszakadt kapcsolat (a 60 s-os helymegtartás alatt) / kilépett. */
   status?: "online" | "away" | "left";
   /** Jelvény a név mellett (pl. „Gép”). */
@@ -29,7 +31,7 @@ export type PlayerHudProps = {
   testId?: string;
 };
 
-export function PlayerHud({ variant, name, hp, maxHp = DUEL_HP, grade, streak = 0, answered = false, status = "online", badge, children, testId }: PlayerHudProps) {
+export function PlayerHud({ variant, name, hp, maxHp = DUEL_HP, grade, streak = 0, answered = false, answerLabel = false, status = "online", badge, children, testId }: PlayerHudProps) {
   const { pct, tone } = hpView(hp, maxHp);
   const statusText = status === "away" ? "Kapcsolódik…" : status === "left" ? "Kilépett" : null;
   return (
@@ -53,6 +55,11 @@ export function PlayerHud({ variant, name, hp, maxHp = DUEL_HP, grade, streak = 
             aria-label={answered ? "Már válaszolt" : "Még gondolkodik"}
             title={answered ? "Már válaszolt" : "Még gondolkodik"}
           />
+        ) : null}
+        {variant === "rival" && answerLabel && status === "online" ? (
+          <span className="duel-hud-answer" data-on={answered ? "true" : "false"} data-testid={testId ? `${testId}-answer` : undefined}>
+            {answered ? "Válaszolt ✓" : "Gondolkodik…"}
+          </span>
         ) : null}
         {statusText ? <span className="duel-hud-status">{statusText}</span> : null}
         <span className="duel-hud-hp" data-testid={testId ? `${testId}-hp` : undefined}>

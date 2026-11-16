@@ -37,6 +37,8 @@ const GAME_PAGES = [
   "TsunamiEscapeEnglish.tsx",
   "SpaceAsteroidQuiz.tsx",
   "BlockCraftQuiz.tsx",
+  // JM3a (review #464 A4): a Párbaj lapja is ugyanazon szabályok alatt (tiltott szöveg, Math.random).
+  "DuelOnline.tsx",
 ].map((f) => join(root, "client/src/pages", f));
 
 function listDir(dir: string, re: RegExp): string[] {
@@ -46,12 +48,15 @@ function listDir(dir: string, re: RegExp): string[] {
 
 const PLAY_DIR = join(root, "client/src/game-engine/play");
 const MOBILE_DIR = join(root, "client/src/game-engine/mobile");
+/** JM3a (review #464 A4): a párbaj megjelenítő komponensei és munkamenet-rétege. */
+const DUEL_DIRS = [join(root, "client/src/components/duel"), join(root, "client/src/lib/duel")];
 
 function textFiles(): string[] {
   return [
     ...GAME_PAGES,
     ...listDir(PLAY_DIR, /\.tsx?$/),
     ...listDir(MOBILE_DIR, /\.tsx?$/),
+    ...DUEL_DIRS.flatMap((d) => listDir(d, /\.tsx?$/)),
     join(root, "client/src/components/GameNextGoalBar.tsx"),
   ];
 }
@@ -80,7 +85,7 @@ test("az őr érzékeny: elkapja a tiltott mintákat (kis- és nagybetű), a kom
 test("a vizsgált fájlok léteznek (az őr nem üres halmazon fut)", () => {
   for (const f of GAME_PAGES) assert.ok(existsSync(f), `${rel(f)} hiányzik`);
   const files = textFiles().map(rel);
-  for (const must of ["client/src/game-engine/play/questionDirector.ts", "client/src/game-engine/mobile/ResultScreen.tsx", "client/src/components/GameNextGoalBar.tsx"]) {
+  for (const must of ["client/src/game-engine/play/questionDirector.ts", "client/src/game-engine/mobile/ResultScreen.tsx", "client/src/components/GameNextGoalBar.tsx", "client/src/pages/DuelOnline.tsx", "client/src/components/duel/QuestionCard.tsx", "client/src/lib/duel/session.ts"]) {
     assert.ok(files.includes(must), `${must} nincs az őr alatt`);
   }
 });
@@ -98,4 +103,11 @@ test("a GE/play/ alatt nincs Math.random (jutalom és ütemezés csak seedelt RN
   assert.ok(files.length >= 10, `GE/play fájlok: ${files.length}`);
   const found = files.filter((f) => MATH_RANDOM.test(stripComments(readFileSync(f, "utf8")))).map(rel);
   assert.deepEqual(found, [], `Math.random a közös játékrétegben:\n${found.join("\n")}`);
+});
+
+test("a párbaj (lap, components/duel, lib/duel, shared/duel/bot) Math.random nélkül — a gép és a meccs seedelt (JM3a, review #464 A4)", () => {
+  const files = [join(root, "client/src/pages/DuelOnline.tsx"), join(root, "shared/duel/bot.ts"), ...DUEL_DIRS.flatMap((d) => listDir(d, /\.tsx?$/))];
+  assert.ok(files.length >= 10, `párbaj-fájlok: ${files.length}`);
+  const found = files.filter((f) => MATH_RANDOM.test(stripComments(readFileSync(f, "utf8")))).map(rel);
+  assert.deepEqual(found, [], `Math.random a párbajban:\n${found.join("\n")}`);
 });

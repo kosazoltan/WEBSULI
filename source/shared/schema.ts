@@ -1328,3 +1328,16 @@ export const playerAuthCodes = pgTable(
     createdIdx: index("player_auth_codes_created_idx").on(table.createdAt),
   }),
 );
+
+/**
+ * JM7b-utójavítás K1 (migrations/0041): a TÖRÖLT, de tiltott játékos-fiók címének kulcsolt, visszafejthetetlen ujjlenyomata
+ * (HMAC a kanonizált címen — server/player/codes.ts `banFingerprint`) és a tiltás ideje. Új fiók ugyanerre a címre tiltottként
+ * jön létre; a feloldás törli. A teljes cím nem tárolódik.
+ */
+export const playerBanFingerprints = pgTable("player_ban_fingerprints", {
+  fingerprint: char("fingerprint", { length: 64 }).primaryKey(),
+  /** A HMAC-kulcs rövid azonosítója (rotáció felismerése — codes.ts `banKeyId`). */
+  keyId: char("key_id", { length: 16 }).notNull(),
+  bannedAt: timestamp("banned_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

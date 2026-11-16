@@ -28,7 +28,7 @@ import { logger } from "../lib/logger";
 import { maskEmail } from "../lib/mask-email";
 import { enforceOriginAllowlist } from "../lib/origin-guard";
 import type { PlayerAccountStore } from "./account-store";
-import { CODE_PATTERN, allPurposeEmailHashes, codeHash, deleteLimitHash, generateCode, generateLinkToken, linkHash, playerAuthKey, purposeEmailHash } from "./codes";
+import { CODE_PATTERN, allPurposeEmailHashes, banRetentionMonths, codeHash, deleteLimitHash, generateCode, generateLinkToken, linkHash, playerAuthKey, purposeEmailHash } from "./codes";
 import type { PlayerMailer } from "./auth-routes";
 import { buildAccountDeletedEmail, buildDeleteCodeEmail } from "./email-template";
 import { createRequireOwnData, createRequirePlayer, requirePlayerAccountsFlag } from "./require-player";
@@ -221,6 +221,8 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
         ...data,
         // JM8 előtt nincs szerveroldali pontkönyv: a játékokban gyűjtött haladás ezen az eszközön (localStorage) él.
         gameRuns: [],
+        // K1: adatvédelmi tájékoztatás a tiltás megőrzéséről.
+        retentionNote: `Letiltott fióknál az e-mail-cím visszafejthetetlen ujjlenyomata és a tiltás ideje megmarad (a fiók törlése után is, a tiltástól számítva legfeljebb ${banRetentionMonths()} hónapig), hogy ugyanazzal a postafiókkal ne lehessen tiltás nélküli új fiókot nyitni; a teljes cím nem marad meg, és a tiltás feloldása az ujjlenyomatot is törli.`,
       });
     } catch (error) {
       logger.error("[PLAYER] adatletöltés hiba:", errMsg(error));
