@@ -61,8 +61,11 @@ rácscsempék „… 167×48px” (X6). Képek: `docs/measurements/jatek-reszpon
    kerettel / ragyogással — a garázs részleteiben, a járműsorban és a menü „Aktuális jármű” kártyáján is.
 6. Fekvő nézetben (szélesség > magasság) két hasáb: bal a szűrő + járműlista, jobb a részletek + fejlesztések; mindkettő
    saját görgetésű, a lap maga nem görög (így nincs görgő-a-görgőben), 390 px magasságon is levágás nélkül.
-7. A Viharvadász többi meta-képernyője (Szintek, Beállítások, Rekordok, Statisztika) is természetes lapgörgetésű lesz
-   (a rögzített keret csak a játékban marad), és a „Vissza” nem vágódik le.
+7. A Viharvadász többi meta-képernyője (Szintek, Beállítások, Rekordok, Statisztika) a rögzített keretben marad, EGY
+   belső görgető dobozzal (a lap nem görög — ezt a meglévő `game-viewport-experience.spec.ts` „C1 Viharvadász
+   szintlista … nincs oldalgörgetés” esete kifejezetten kéri, és az X1–X7 mérce is teljesül: nincs görgő-a-görgőben); csak
+   a „Vissza” levágását javítjuk. (Végrehajtás közben derült ki: az első változat ezeket is lapgörgetésűre tette, ami a C1
+   esetet megsértette volna — a teszt nem lazítható, ezért a szűkebb javítás.)
 8. Közös „Hogyan játsszak?” ablak (`components/GamePedagogyPanel.tsx`, mind a 7 játék): a bezáró gomb 16×16 px → ≥ 44 px,
    és az ablak a biztonsági sávon belül marad.
 9. Mérő: `game-meta-quality` (X1–X7) a CI-ban (a fő Playwright-futás minden `*.spec.ts`-t futtat) — a Vihargarázs 6
@@ -97,6 +100,9 @@ Biztonsági sáv emulálva: álló 44/0/34/0, fekvő 0/44/21/44 (a közös mér�
 | Aszteroida | első indítás (osztályválasztás) | nincs X-lelet | — |
 | Játékok lista (`/games`) | lista | nincs X-lelet | — |
 | Párbaj (`DuelOnline.tsx`) | — | a lap még nincs a `main`-en (#464) | leltár a #464 után |
+
+**Utána (a javítás után, ugyanazzal a leltár-futással):** mind a 69 mért képernyő/nézet (7 játék kezdő + „Beállítások”
+nyitva + „Hogyan játsszak?”, Aszteroida első indítás, `/games` lista × 360×640 / 412×915 / 844×390) X1–X7 hibátlan.
 
 ## Edge case-ek
 

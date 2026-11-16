@@ -119,7 +119,10 @@ export async function measureMetaScreen(
         const x = c.left + c.w / 2;
         const y = c.top + c.h / 2;
         const at = document.elementFromPoint(x, y);
-        return { ok: !!at && (at === el || el.contains(at)), at };
+        // A letiltott gomb (`disabled:pointer-events-none`) nem található el — ilyenkor az a jó, ha a pont a saját ősére
+        // esik (nincs rajta idegen réteg).
+        const passThrough = getComputedStyle(el).pointerEvents === "none";
+        return { ok: !!at && (at === el || el.contains(at) || (passThrough && at.contains(el))), at };
       };
 
       const nodes = Array.from(
@@ -144,9 +147,21 @@ export async function measureMetaScreen(
         if (!h.ok) out.push({ rule: "X3", detail: `${label(el)} takarva: ${h.at ? label(h.at) : "semmi"}` });
       }
 
-      // X4 — a lap alja: minden görgető a végére, az utolsó interaktív elem a biztonsági sáv fölött teljesen látszik
-      const last = nodes[nodes.length - 1];
-      window.scrollTo({ top: de.scrollHeight, behavior: "instant" as ScrollBehavior });
+      // X4 — a lap alja: minden görgető a végére, a LEGALSÓ interaktív elem (a lap tetejétől mért legnagyobb aljú, a lap
+      // görgetésétől függetlenül) a biztonsági sáv fölött teljesen látszik.
+      window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+      let last: HTMLElement | undefined;
+      let lastBottom = -Infinity;
+      for (const el of nodes) {
+        const b = el.getBoundingClientRect().bottom + window.scrollY;
+        if (b >= lastBottom) {
+          lastBottom = b;
+          last = el;
+        }
+      }
+      // A lapot addig görgetjük, hogy az elem alja a biztonsági sáv fölé kerüljön — vagy amennyire lehet (a lap alja).
+      const maxScroll = de.scrollHeight - de.clientHeight;
+      window.scrollTo({ top: Math.min(maxScroll, Math.max(0, lastBottom - (vh - s.bottom) + 1)), behavior: "instant" as ScrollBehavior });
       for (const el of Array.from(scope.querySelectorAll<HTMLElement>("*"))) {
         const st = getComputedStyle(el);
         if ((st.overflowY === "auto" || st.overflowY === "scroll") && el.scrollHeight > el.clientHeight) el.scrollTop = el.scrollHeight;

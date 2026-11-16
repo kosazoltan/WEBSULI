@@ -1,6 +1,6 @@
 import { devices, expect, test, type Page } from "@playwright/test";
 
-import { emulateSafeArea } from "./support/game-mobile-quality";
+import { emulateSafeArea, waitForStable } from "./support/game-mobile-quality";
 import { expectMetaScreenOk, insetsFor, metaShot } from "./support/game-meta-quality";
 
 test.use({ serviceWorkers: "block" });
@@ -83,6 +83,46 @@ test.describe("Vihargarázs", () => {
       await page.getByRole("button", { name: "Vissza" }).first().tap();
       await expect(page.getByTestId("tornado-quick-start")).toBeVisible();
     });
+  }
+});
+
+test.describe("Viharvadász menü és a közös „Hogyan játsszak?” ablak", () => {
+  for (const viewport of [META_VIEWPORTS[0], META_VIEWPORTS[3], META_VIEWPORTS[4]]) {
+    test(`menü, Beállítások nyitva ${viewport.width}x${viewport.height}: X1–X7 (az „Aktuális jármű” képe nem üres)`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      const insets = insetsFor(viewport);
+      await openTornadoMenu(page);
+      await openMenuSettings(page);
+      await expect(page.getByTestId("tornado-vehicle-art").first()).toBeVisible();
+      await emulateSafeArea(page, insets);
+      await metaShot(page, "tornado-menu-beallitasok", true);
+      await expectMetaScreenOk(page, "Viharvadász menü, Beállítások nyitva", { insets });
+    });
+
+    for (const game of [
+      { id: "tornado-hunter-200", path: TORNADO, start: "tornado-quick-start" },
+      { id: "block-craft-quiz", path: "/games/block-craft-quiz", start: "bc-start" },
+    ]) {
+      test(`${game.id} „Hogyan játsszak?” ${viewport.width}x${viewport.height}: X1–X7 (bezáró ≥ 44 px, a sávon belül)`, async ({ page }) => {
+        await page.setViewportSize(viewport);
+        const insets = insetsFor(viewport);
+        await page.goto(game.path);
+        await expect(page.getByTestId(game.start)).toBeVisible({ timeout: 20_000 });
+        await emulateSafeArea(page, insets);
+        await openMenuSettings(page);
+        const help = page.getByRole("button", { name: /Hogyan játsszak/ }).first();
+        await help.scrollIntoViewIfNeeded();
+        await help.tap();
+        const dialog = page.getByRole("dialog");
+        await expect(dialog).toBeVisible();
+        // A belépő animáció (zoom-in) után mérünk: a doboz 4 képkockán át változatlan.
+        await waitForStable(page, '[role="dialog"]');
+        await metaShot(page, `${game.id}-hogyan`);
+        await expectMetaScreenOk(page, `${game.id} „Hogyan játsszak?”`, { insets, scope: '[role="dialog"]' });
+        await page.getByRole("button", { name: "Close" }).tap();
+        await expect(dialog).toHaveCount(0);
+      });
+    }
   }
 });
 

@@ -52,7 +52,10 @@ function GamePedagogyPanel({ kidMission, parentBody, accent = "amber", className
       <DialogTrigger className={cn("game-help shrink-0 min-h-[48px] rounded-lg border border-white/25 bg-slate-900 px-3 py-2 text-xs font-bold text-white text-left", className)}>
         <Target className="inline h-4 w-4 mr-2" aria-hidden /> Hogyan játsszak?
       </DialogTrigger>
-      <DialogContent className="border-slate-600 bg-slate-950 text-white">
+      {/* Spec 2026-11-16-jatek-telefonos-reszponzivitas R5: a közös ablak bezáró gombja 16 px helyett 44 px-es érintési
+          cél (mind a 7 játék), és az ablak a biztonsági sávokon (--game-safe-*) belül marad. A `ui/dialog.tsx` (az egész
+          oldal) nem változik. */}
+      <DialogContent className="border-slate-600 bg-slate-950 text-white top-[calc(50%_+_(var(--game-safe-top)_-_var(--game-safe-bottom))_/_2)] max-h-[calc(100dvh_-_2rem_-_var(--game-safe-top)_-_var(--game-safe-bottom))] [&>button:last-child]:right-2 [&>button:last-child]:top-2 [&>button:last-child]:flex [&>button:last-child]:h-11 [&>button:last-child]:w-11 [&>button:last-child]:items-center [&>button:last-child]:justify-center [&>button:last-child]:rounded-lg [&>button:last-child]:opacity-90">
         <DialogTitle>A küldetésed</DialogTitle>
         <DialogDescription className="sr-only">Játékszabályok és tanulási célok</DialogDescription>
       <div
