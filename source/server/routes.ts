@@ -21,6 +21,7 @@ import { NEWSLETTER_LIMITS, normalizeInterests } from "@shared/newsletter";
 import { sanitizeText, sanitizeEmail } from "./utils/sanitize";
 // Admin authentication with hardcoded admin emails
 import { isAuthenticated, isAuthenticatedAdmin } from "./auth";
+import { isAdminUser, prepareAdminAccess } from "./lib/admin-access";
 import * as gameScoreService from "./gameScoreService";
 import * as gameQuizBankService from "./gameQuizBankService";
 import { generateMaterialQuiz, QuizMaterialNotFound } from "./gameQuizGeneratorService";
@@ -962,9 +963,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Return user with admin status (convert undefined to null for type safety)
       // SECURITY: Strip password hash before sending to client
       const { password: _, ...safeUser } = user;
+      // JM7c-1: a számolt admin-jog (jelző ÉS engedélylista ÉS nem tiltott) — nem a nyers adatbázis-jelző.
+      await prepareAdminAccess(user);
       res.json({
         ...safeUser,
-        isAdmin: !!user.isAdmin,
+        isAdmin: isAdminUser(user),
       });
     } catch (error) {
       logger.error("[AUTH] Error fetching user:", error);

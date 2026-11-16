@@ -79,7 +79,7 @@ function LessonViewBody({ material }: { material: Material }) {
   }
 
   // The lesson id (not the html_files id) is what the Próba endpoint keys on.
-  return <LessonRuntime lesson={parsed.data} lessonId={data?.lessonId} arbiterSource={{ kind: "lesson", htmlFileId: material.id }} />;
+  return <LessonRuntime lesson={parsed.data} lessonId={data?.lessonId} categoryClassroom={material.classroom} arbiterSource={{ kind: "lesson", htmlFileId: material.id }} />;
 }
 
 /** Spec 2026-09-24: egy olvashatatlan lecke gyakran csak régi, memóriában maradt alkalmazáskód — egyszer frissítünk. */

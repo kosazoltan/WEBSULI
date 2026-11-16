@@ -19,6 +19,7 @@ import express, { type Request, type Response, type Router } from "express";
 import rateLimit from "express-rate-limit";
 import { guestNickname, nicknameProblems } from "../../shared/nicknames";
 import { RT_MAX_GRADE, RT_MIN_GRADE, RT_PATH, ticketRequestSchema } from "../../shared/duel/protocol";
+import { isAdminUser } from "../lib/admin-access";
 import { clientIpKeyGenerator } from "../lib/client-ip";
 import type { RealtimeService } from "../realtime";
 import { canCreateRoom, ticketSecret, type TicketClaims, type TicketKind } from "../realtime/ticket";
@@ -75,7 +76,7 @@ export function createRtRouter(rt: RealtimeService, deps: RtRouterDeps = {}): Ro
       if (!body.success) return res.status(400).json({ code: "BAD_MESSAGE" });
 
       const user = req.isAuthenticated?.() ? req.user : undefined;
-      const isAdmin = !!user?.isAdmin;
+      const isAdmin = isAdminUser(user); // JM7c-1: az egyetlen admin-képlet
       const wantsCreate = body.data.intent === "create";
       // Admin módban a szobát csak admin nyithatja; a kóddal csatlakozó (vendég is) jegyet kap (D21, JM-A4).
       if (cfg.mode === "admin" && wantsCreate && !isAdmin) return res.status(403).json({ code: "FEATURE_DISABLED" });
