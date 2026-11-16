@@ -197,11 +197,11 @@ export default function PlayLab() {
     worldRng.current = createRng(seedFrom("play-lab", seedBase, "world", runRef.current));
     clockRef.current = 0;
     loop.reset();
-    if (runRef.current > 1) q.reset(seedFrom(seedBase, runRef.current), 0.5);
+    if (runRef.current > 1) qRef.current.reset(seedFrom(seedBase, runRef.current), 0.5);
     setResult(null);
     setHud({ score: 0, answered: 0, correct: 0 });
     setScreen("playing");
-  }, [loop, params.long, q, seedBase, speech]);
+  }, [loop, params.long, seedBase, speech]);
 
   const endRun = useCallback(() => {
     const st = qRef.current.director?.stats(clockRef.current);
