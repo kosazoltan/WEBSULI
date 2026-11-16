@@ -1882,20 +1882,37 @@ felderítés: `grep -n "cron.schedule" S/index.ts`), tesztek: `T/game-score-rule
 `T/weekly-key.test.ts` (Europe/Budapest, DST-váltás).
 **Séma (0041, additív):** `game_runs(id uuid PK = runId, player_id → player_accounts ON DELETE CASCADE, game_id, difficulty,
 kind ('run'|'import'|'duel'), started_at, finished_at (szerveridők), xp, claimed_xp, correct, wrong, best_streak, flags,
-ranked bool, match_id uuid NULL, outcome smallint NULL)`, indexek `(player_id, finished_at)` és nyitott runokra;
+ranked bool, match_id uuid NULL, outcome smallint NULL, finish_hash char(64) NULL)`, indexek `(player_id, finished_at)` és nyitott runokra;
 `player_game_stats(player_id, game_id, difficulty PK, total_xp, best_run_xp, best_streak, runs, correct)`;
 `player_weekly(player_id, week_start PK, ranked_xp, knowledge_points)`.
 **Végpontok:** `POST /api/player/runs/start {gameId, difficulty}` → `{runId, startedAt}` (60 / óra / játékos);
-`POST /api/player/runs/:id/finish {xp, correct, wrong, bestStreak, served}` → PK-ütközés esetén ugyanaz a válasz (idempotens);
-a `runId` csak szerver által kiadott, a játékoshoz tartozó, nyitott run lehet (idegen / ismeretlen / lezárt → 4xx).
+`POST /api/player/runs/:id/finish {xp, correct, wrong, bestStreak, served}` — **idempotens szerződés (review #440):**
+- Állapotgép: `issued` (a `start` beírta a `game_runs` sort `finished_at = NULL`-lal) → `finished` (egyetlen átmenet).
+  Az összevetéshez a sor tárolja a kérés kanonikus kivonatát: `finish_hash char(64)` = SHA-256 a
+  `{xp, correct, wrong, bestStreak, served}` kanonikus JSON-jából (rendezett kulcsok), és az elküldött válasz mezőit
+  (`xp` elfogadott, `ranked`, `flags`, `knowledge_points`).
+- Átmenet atomikusan: `UPDATE game_runs SET finished_at = now(), …, finish_hash = $h WHERE id = $id AND player_id = $p AND
+  finished_at IS NULL RETURNING *` → 1 sor: az összesítők frissítése ugyanabban a tranzakcióban, válasz 200
+  `{ ok: true, run: { id, xp, ranked, flags, knowledgePoints }, replay: false }`.
+- 0 sor esetén újraolvasás: a sor `finished` és `player_id` egyezik és `finish_hash = $h` → **ugyanaz a 200-as válasz** a
+  tárolt mezőkből, `replay: true`, írás nélkül; `finish_hash ≠ $h` → **409** `{ ok: false, code: "RUN_ALREADY_FINISHED" }`,
+  az eredeti változatlan; ismeretlen `runId` → 404 `RUN_NOT_FOUND`; más játékosé → 404 (nem árulja el a létezést);
+  24 óránál régebbi nyitott run → 410 `RUN_EXPIRED` (a takarító törli).
+- Kötelező tesztek (`T/player-runs.db.test.ts`): azonos újraküldés × 3 → egy lezárt sor, három azonos válasz (az elsőn
+  `replay: false`, utána `true`), az összesítők egyszer nőnek; eltérő tartalmú újraküldés → 409, az eredeti sor és az
+  összesítők változatlanok; két párhuzamos `finish` (azonos tartalom) → egy átmenet, mindkét válasz 200, az összesítők
+  egyszer nőnek; két párhuzamos eltérő `finish` → egy 200 és egy 409; idegen játékos → 404; lejárt → 410.
 Hihetőség — a kliens minden száma hitelesítés nélküli állítás (review #440): `durationSec` = szerveridők különbsége;
 `maxQuestions = floor(durationSec / 1.5)` (a J3 legkisebb kérdés-rése); `correct + wrong ≤ min(served, maxQuestions)`;
 `bestStreak ≤ correct`; `xp ≤ min(GAME_MAX_RUN_XP[game], GAME_MAX_XP_PER_MIN[game] × durationSec / 60)`
 (`game-score-rules.ts`); túllépésnél az elfogadott érték a plafon, a `claimed_xp` megmarad auditra, `ranked=false`,
 `flags` bit; 20 s alatti menet `ranked=false`;
 gyanús → `ranked=false`, `flags`; tudás-pont = `correct`; heti kulcs hétfő 00:00 Europe/Budapest. Írás: 1 tranzakció.
-`POST /api/player/import-local` — egyszer fiókonként + eszközönként (eszköz-azonosító: véletlen UUID a localStorage-ben),
-plafon 5000 XP, `kind='import'`, `ranked=false`.
+`POST /api/player/import-local {deviceId, stats}` — egyszer fiókonként + eszközönként (eszköz-azonosító: véletlen UUID a
+localStorage-ben), plafon 5000 XP, `kind='import'`, `ranked=false`. **Újrapróbálható:** a sor azonosítója determinisztikus
+(`id = uuidv5(player_id + ":import:" + deviceId)`), `INSERT … ON CONFLICT (id) DO NOTHING RETURNING`; ütközésnél a tárolt
+sor `finish_hash`-ét veti össze a kérés kivonatával — egyezik → ugyanaz a 200 (`replay: true`), eltér → 409
+`IMPORT_ALREADY_DONE` (az eredeti marad). Teszt: azonos import × 3 → egy sor; eltérő második import → 409.
 
 ### JM8b — Pontkönyv (kliens): `useRunReporter` a hét játékban
 
@@ -1912,7 +1929,10 @@ Teszt: `T/run-reporter.test.ts` (hamis fetch: újrapróba, idempotencia), `T/pla
 **Állapot:** nem kezdődött · **Függ:** JM8b, JM3 · **Modell:** Sonnet · **Elfogadás:** JM-A14
 **Fájlok:** `source/migrations/0042_player_friends.sql` (`player_friendships(a, b PK, status 'pending'|'active'|'blocked',
 requested_by, blocked_by)`, `player_friend_invites(token_hash PK, player_id, uses_left, expires_at)`), `S/player/friends-routes.ts`,
-`S/realtime/*` (meccs vége → regisztrált játékosoknál `game_runs kind='duel'`, `match_id`, `outcome`), `P/PlayerAccount.tsx`
+`S/realtime/*` (meccs vége → regisztrált játékosoknál `game_runs kind='duel'`, `match_id`, `outcome`; **újrapróbálható
+mentés:** a sor azonosítója `uuidv5(match_id + ":" + player_id)`, `INSERT … ON CONFLICT (id) DO NOTHING`, az összesítők csak
+új sor esetén nőnek — egy DB-hiba utáni újrapróba (legfeljebb 3, exponenciális visszalépéssel) nem duplikál; teszt: a
+mentés kétszeri futtatása → játékosonként egy sor), `P/PlayerAccount.tsx`
 (barátok, kérések, ranglista-fülek, párbaj-mérleg), tesztek.
 **Szabályok:** barát csak barátkóddal (8 jel), meghívólinkkel (7 nap, ≤ 5 beváltás, név nélküli token) vagy közös szobából
 („Barátnak jelölöm” a `RoomResult`-on, csak regisztráltaknál); kölcsönös elfogadás; függő kérés 14 nap után lejár; tiltás után
