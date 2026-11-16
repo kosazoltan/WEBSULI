@@ -76,3 +76,15 @@ parancskimenetet `sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<cím>/g'`-vel szű
 `npm run lint`, `npm run check`, `npm run check:test`, `npm run build` + `grep -rIlE` a `dist`-en a két címre (csak darabszám),
 `npm test`, `npm run test:learning-db`, `npm run test:e2e -- tests/admin-allowlist.spec.ts`, a gyökérben
 `node scripts/qa/three-phase-check.mjs --base origin/main`. Utána PR, CI, review-szálak.
+
+## V9 — utójavítás: szintetikus Gmail-tesztcímek (main piros, 24add8b6)
+
+**Állapot:** folyamatban – 2026-11-16, ág `fix/cimor-szintetikus-gmail`
+
+Ok: a #471 a `tests/player-account-db.integration.ts`-be szintetikus `gmail.com` / `googlemail.com` címeket hozott (a
+Gmail-kanonizálás tesztje, a domain nem cserélhető). Javítás a `tests/no-real-emails-guard.test.ts`-ben:
+- `isAllowedEmail(address, file?)`: a Gmail-domainen a pontos lista mellett FÁJLRA SZŰKÍTETT kivétel — csak a
+  `SYNTHETIC_GMAIL_FILES` tesztfájlokban (`tests/player-account-db.integration.ts`, `tests/player-codes.test.ts`), és csak ha a kanonizált helyi rész (kisbetű, `+címke` és pontok nélkül)
+  PONTOSAN szerepel a szintetikus listán (`SYNTHETIC_GMAIL_LOCALS`, `Set.has`, review #479 — nem előtag-egyezés: `k1tiltott`, `aliasproba`, `limitp`, `rotgoogle`, `rotkod`, `diakpelda`, `masik`, `k1-gold-unban`, `k1goldunban`, `k1felold2`, `k1baliaselotte`, `k1ketpeldany`, `k1zaralias` — a
+  #475 címeit is lefedi).
+- Ellenpróba: valódinak látszó `vezeteknev.keresztnev` helyi részű Gmail-cím ugyanabban a fájlban bukik; listás szóval kezdődő, de hosszabb helyi rész is bukik; a szintetikus szó más fájlban bukik.
