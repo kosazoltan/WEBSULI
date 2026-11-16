@@ -2283,6 +2283,28 @@ a „Játékosok” panel és a fiókoldal törlési szövege; tesztek: `T/playe
    sorokat (a törölt fiókoké tudottan elvész — `warn` napló darabszámmal, cím nélkül), és MINDEN élő tiltott fiók ujjlenyomatát
    újraszámolja — így nem egy-egy belépési ágon múlik; emellett minden belépési út (kód, link, Google új és ismert azonosító)
    önjavító. Teszt: rotáció szimulálva, ismert Google-azonosítós és kódos úton az alias-regisztráció tiltott.
+10. **A tiltás állapotgépe (#471 review, 4. lelet után).** Zár = `lockBanAddress` (tranzakciós advisory-zár a KANONIKUS cím
+   ujjlenyomatára, `hashtextextended(fp, 7041)`); minden író / „olvas-dönt-ír” művelet a zár megszerzése UTÁN, ugyanabban a
+   tranzakcióban olvas — így bármely két művelet ugyanarra a címre sorosított.
+
+   | Művelet | Olvas | Ír | Zár | Egy tranzakció |
+   |---|---|---|---|---|
+   | Tiltás (`setBanned(true)`) | fiók címe; az azonos ujjlenyomatú élő fiókok | ujjlenyomat (beszúr / a tiltás idejét frissíti), az élő változatok `banned_at`-je | igen | igen |
+   | Feloldás élő fiókon (`setBanned(false)`) | fiók címe; a tiltott élő változatok | ujjlenyomat törlése, a változatok `banned_at = NULL` | igen | igen |
+   | Feloldás törölt-tiltotton (`unbanDeleted`) | ujjlenyomat (hivatkozással); a tiltott élő változatok | ujjlenyomat törlése, a változatok `banned_at = NULL` | igen (ujjlenyomatonként) | igen |
+   | Saját és admin-törlés (`deleteAccount`) | fiók címe, `banned_at` (a zár UTÁN, `FOR UPDATE`) | ujjlenyomat (ha tiltott), kódok, munkamenetek, fiók | igen (a sorzár ELŐTT) | igen |
+   | Létrehozás / belépés kód, link (`confirmVerifiedEmail`) | ujjlenyomat (a zár UTÁN) | fiók (`banned_at` öröklés, `ON CONFLICT … COALESCE`), ujjlenyomat (ha a fiók tiltott) | igen | igen |
+   | Google, új azonosító (`upsertGooglePlayer`) | ujjlenyomat (a zár UTÁN) | ugyanaz | igen | igen |
+   | Google, ismert azonosító (`upsertGooglePlayer`) | fiók címe, majd `banned_at` ÚJRA a zár UTÁN | ujjlenyomat (csak ha MOST is tiltott) | igen | igen |
+   | Helyreállítás rotáció után (`reconcileBanFingerprints`) | régi kulcsú sorok; a tiltott fiókok listája, majd fiókonként `banned_at` ÚJRA a zár UTÁN | régi kulcsú sorok törlése; ujjlenyomat (csak ha MOST is tiltott) | igen (fiókonként) | fiókonként külön, rövid tranzakció |
+   | Megőrzés-takarítás (`purgeExpiredBanFingerprints`) | lejárt ujjlenyomatok, majd ujjlenyomatonként ÚJRA: lejárt-e, van-e tiltott élő változat | lejárt, élő változat nélküli ujjlenyomat törlése | igen (ujjlenyomatonként) | ujjlenyomatonként külön |
+   | `getPlayer` / `requirePlayer`, törölt-tiltott lista | `banned_at` / ujjlenyomatok | — | nem kell (csak olvas, nem dönt írásról) | — |
+
+   **Páronkénti ellenőrzés:** az összes író és „olvas-dönt-ír” művelet ugyanazt a címenkénti zárat veszi, és a döntéshez
+   szükséges állapotot a zár UTÁN olvassa → bármely pár (pl. helyreállítás ↔ feloldás, takarítás ↔ tiltás, létrehozás ↔
+   törlés, Google ismert ↔ feloldás) sorosított. A 4. lelet előtt zár nélkül futott: a Google ismert ága, a helyreállítás és
+   a takarítás — ezek most a táblázat szerint. Teszt: minden művelet megvárja a tartott zárat (párhuzamos DB-teszt
+   műveletenként), és a szemantikus versenyek (helyreállítás ↔ feloldás, takarítás ↔ újratiltás, Google ismert ↔ feloldás).
 **Tesztek:** DB — tiltott saját törlés → ugyanaz a cím (kis- / nagybetű, gmail-pont, `+alias`) újra tiltott; admin-törlés
 után ugyanez (Google-úton is); feloldás (élő fióknál és a törölt bejegyzésnél) után rendes fiók; nem tiltott törlés nem hagy
 ujjlenyomatot; idegen cím érintetlen; a lista nem ad ki címet; a mátrix és az `admin-route-guard` új sorai; migráció ↔ séma
