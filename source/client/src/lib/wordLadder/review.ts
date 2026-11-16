@@ -45,23 +45,20 @@ export function createRunWordGuard<Q>() {
   };
 }
 
-function isWordChar(ch: string | undefined): boolean {
-  if (!ch) return false;
-  if (ch >= "0" && ch <= "9") return true;
-  return ch.toLowerCase() !== ch.toUpperCase();
-}
-
 /**
- * Szerepel-e a célnyelvi szó a promptban ÖNÁLLÓ szóként (review #454: a „„megy” angolul:” promptban a „go” részszó —
- * a puszta `includes` a választ olvasta volna fel a megjelenéskor). Kis-/nagybetűtől független; a határ betű / számjegy
- * nélküli karakter vagy a szöveg széle.
+ * A felolvasás terve a kérdés SZERKEZETÉBŐL (review #454, koordinátori szabály) — nem a prompt szövegéből találgatva.
+ * A szóbankos tétel azonosítója `vocab:<bejegyzés>:<kérdéstípus>`:
+ *  - `target-to-hu` / `phrase-meaning`: a kérdésben az idegen nyelvű szó / kifejezés áll → a megjelenéskor elhangzik;
+ *  - `hu-to-target` / `cloze`: az idegen szó maga a VÁLASZ → megjelenéskor SEMMI, csak a válasz után (helyesnél
+ *    megerősítés, hibánál a megoldás-kijelzéskor — ez tanít);
+ *  - kézi bank / tananyag / ismeretlen típus: nincs felolvasás (a nyelv nem állapítható meg biztosan).
+ * Magyar szöveg így soha nem kerül idegen nyelvű hangra (csak a bejegyzés `term`-je hangzik el).
  */
-export function promptHasTerm(prompt: string, term: string): boolean {
-  const p = prompt.toLowerCase();
-  const t = term.trim().toLowerCase();
-  if (!t) return false;
-  for (let i = p.indexOf(t); i >= 0; i = p.indexOf(t, i + 1)) {
-    if (!isWordChar(p[i - 1]) && !isWordChar(p[i + t.length])) return true;
-  }
-  return false;
+export function speechPlan(quizId: string, term: string | undefined): { atShow: string | null; afterAnswer: string | null } {
+  const t = (term ?? "").trim();
+  if (!quizId.startsWith("vocab:") || !t) return { atShow: null, afterAnswer: null };
+  const type = quizId.split(":")[2] ?? "";
+  if (type === "target-to-hu" || type === "phrase-meaning") return { atShow: t, afterAnswer: null };
+  if (type === "hu-to-target" || type === "cloze") return { atShow: null, afterAnswer: t };
+  return { atShow: null, afterAnswer: null };
 }

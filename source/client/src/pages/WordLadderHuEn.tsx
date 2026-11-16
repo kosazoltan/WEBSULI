@@ -77,7 +77,7 @@ import {
   type LadderState,
 } from "@/lib/wordLadder/core";
 import { WORD_LADDER_GAME_ID, wordLadderDirectorConfig } from "@/lib/wordLadder/sim";
-import { createRunWordGuard, ownsReviewKey, promptHasTerm } from "@/lib/wordLadder/review";
+import { createRunWordGuard, ownsReviewKey, speechPlan } from "@/lib/wordLadder/review";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { loadUnlockedLevel, unlockNextLevel } from "@/game-engine/gradeLevels";
 import { detectLookTier } from "@/game-engine/three-look/tier";
@@ -448,14 +448,14 @@ export default function WordLadderHuEn() {
   /** Hu → idegen irányú szóbank-kérdés célnyelvi szava: a válasz UTÁN hangzik el (különben elárulná a választ). */
   const speakAfterRef = useRef(new Map<string, string>());
 
-  /** A felolvasás iránya (J14): ha a célnyelvi szó a promptban van, a megjelenéskor; különben a válasz után. */
+  /** A felolvasás (J14) a kérdés szerkezetéből: idegen → magyar a megjelenéskor, magyar → idegen / cloze csak a válasz után. */
   const withSpeech = useCallback((q: PlayQuestion, term: string | undefined): PlayQuestion => {
     const rest: PlayQuestion = { ...q };
     delete rest.speakText;
-    if (!term) return rest;
-    if (promptHasTerm(q.quiz.prompt, term)) return { ...rest, lang, speakText: term };
-    speakAfterRef.current.set(q.key, term);
-    return { ...rest, lang };
+    const plan = speechPlan(String(q.quiz.id ?? ""), term);
+    if (plan.afterAnswer) speakAfterRef.current.set(q.key, plan.afterAnswer);
+    else speakAfterRef.current.delete(q.key);
+    return plan.atShow ? { ...rest, lang, speakText: plan.atShow } : { ...rest, lang };
   }, [lang]);
 
   const toPlayQuestion = useCallback(

@@ -260,13 +260,33 @@ test("review #454: egy menetben egy szó csak egy irányban — az ismétlés a 
   assert.equal(g.freshAllowed("vocab:en:en-dog"), true, "új menetben újra jöhet");
 });
 
-test("review #454: a felolvasás csak akkor a megjelenéskor, ha a célnyelvi szó ÖNÁLLÓ szóként a promptban van", async () => {
-  const { promptHasTerm } = await import("../client/src/lib/wordLadder/review");
-  assert.equal(promptHasTerm("„Megy” angolul:", "go"), false, "a „go” az „angolul” részszava — nem árulhatja el a választ");
-  assert.equal(promptHasTerm("Mit jelent: „go”?", "go"), true);
-  assert.equal(promptHasTerm("Mit jelent: brush your teeth?", "brush your teeth"), true);
-  assert.equal(promptHasTerm("Mit jelent: der Hund?", "Hund"), true);
-  assert.equal(promptHasTerm("Hogy mondod németül: kutya?", "Hund"), false);
-  assert.equal(promptHasTerm("Mit jelent: l'école?", "école"), true);
-  assert.equal(promptHasTerm("Bármi", ""), false);
+test("review #454: felolvasás a kérdés szerkezetéből — megjelenéskor soha nem a helyes válasz, magyar szöveg nem kerül idegen hangra (EN / DE / FR, minden irány)", async () => {
+  const { speechPlan } = await import("../client/src/lib/wordLadder/review");
+  const { generateVocabQuestion } = await import("../client/src/game-engine/vocab/questionGenerator");
+  const { VOCAB_EN } = await import("../client/src/data/vocabBank/vocab-en");
+  const { VOCAB_DE } = await import("../client/src/data/vocabBank/vocab-de");
+  const { VOCAB_FR } = await import("../client/src/data/vocabBank/vocab-fr");
+  const types = ["hu-to-target", "target-to-hu", "cloze", "phrase-meaning"] as const;
+  let checked = 0;
+  for (const bank of [VOCAB_EN, VOCAB_DE, VOCAB_FR]) {
+    const rng = createRng(`speech-${bank[0]!.id}`);
+    for (const entry of bank.slice(0, 120)) {
+      for (const type of types) {
+        const q = generateVocabQuestion(entry, bank, type, () => rng.next());
+        if (!q) continue;
+        checked += 1;
+        const correct = q.options[q.correctIndex]!;
+        const plan = speechPlan(q.id!, entry.term);
+        assert.notEqual(plan.atShow, correct, `${q.id}: a megjelenéskor a helyes válasz hangzana el`);
+        if (plan.atShow !== null) assert.equal(plan.atShow, entry.term, "csak az idegen nyelvű term hangozhat el (magyar nem)");
+        if (type === "hu-to-target" || type === "cloze") {
+          assert.equal(plan.atShow, null, `${q.id}: a válasz előtt nincs idegen szó`);
+          assert.equal(plan.afterAnswer, entry.term, "a helyes alak a válasz után hangzik el");
+        }
+      }
+    }
+  }
+  assert.ok(checked > 600, `csak ${checked} kérdést néztem`);
+  assert.deepEqual(speechPlan("en0-001", "dog"), { atShow: null, afterAnswer: null }, "kézi tételnél nincs találgatás");
+  assert.deepEqual(speechPlan("vocab:en-x:target-to-hu", "go"), { atShow: "go", afterAnswer: null });
 });
