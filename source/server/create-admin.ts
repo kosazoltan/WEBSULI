@@ -3,6 +3,8 @@ import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { logger } from "./lib/logger";
+import { isAllowlistedAdminEmail } from "./lib/admin-access";
+import { maskEmail } from "./lib/mask-email";
 
 // Read args
 const email = process.argv[2];
@@ -45,6 +47,7 @@ async function createAdmin() {
     }
 
     logger.info("✅ Admin user setup complete.");
+    if (!isAllowlistedAdminEmail(email)) logger.warn(`FIGYELEM: ${maskEmail(email)} nincs az admin-engedélylistán (ADMIN_ALLOWLIST, alapból ADMIN_EMAIL): az admin-jelző beállt, de admin-jogot csak a listára vétel után ad (JM7c-1, terv 10.4a).`);
     process.exit(0);
 }
 
