@@ -54,8 +54,9 @@
 - **SZINT-megjegyzések** (vak megoldó, nem hiba): 3.: 37, 4.: 19, 5.: 9, 6.: 19 — túlnyomórészt „túl könnyű”. Az audit tantervi
   jelzései alapján 6 tétel került könnyebb / nehezebb sávba (3.: 3, 4.: 3); a cellák így is ≥ 18-asok. A többi „könnyű” tétel
   az 1. sávban szándékos (alapozás, ismétlés).
-- **Meglévő tétel javítása (1):** `g06-hungarian-009` „Milyen idejű az „elmentünk” ige?” — az „egyik sem, mert nem ige” opció
-  (tiltott „egyik sem” minta) → „feltételes”; kulcs, azonosító, magyarázat változatlan. Más meglévő tétel nem változott.
+- **Meglévő tétel javítása (2):** `g06-hungarian-009` „Milyen idejű az „elmentünk” ige?” — az „egyik sem, mert nem ige” opció
+  (tiltott „egyik sem” minta) → „feltételes”; kulcs, azonosító, magyarázat változatlan. `g04-hungarian-003` (a második auditban,
+  lásd lent): a „gólja” létező szó volt „hibás” opcióként → a tétel „pocsolya” szóra cserélve. Más meglévő tétel nem változott.
 
 ## Javított / cserélt tételek (végleges azonosító, gyártói ref, ok)
 
@@ -200,6 +201,52 @@ olvasta → zárójeles alak „(3/4) : (1/2)”.
   hivatkozik rá, nincs előtöltve). A JBa után ez a darab 530 kB / gzip 159 kB; a négy bankfájl gzip-mérete 36 → 105 kB. A
   JBb + JBc további ~1100 tétele ~+150 kB gzip-et hozna → évfolyamonkénti lusta betöltés javasolt (ORKESZTRÁTOR-KÉRÉS a
   záró jelentésben; a `game-engine/gradeQuiz.ts` közös modul).
+
+## Második audit (review után)
+
+**Ok:** a #448 review-ja (Codex, Vercel Agent) három tartalmi hibát talált, amelyet sem a vak megoldó, sem az első audit nem
+fogott meg: a János vitézben az Óperenciás-tengeren az óriás viszi át Jánost (nem a griffmadár; a kulcs emlékezetből íródott),
+a „rajzoltatok” jelen idejű műveltető alakként is elemezhető (két védhető válasz), a „gólja” létező szó (a gól birtokos alakja).
+
+**Módszer:** négy friss, független Opus 5.5 alügynök (magyar; történelem; természettudomány; angol + matek), mind a 780 új
+tételen, a kulccsal és a magyarázattal, azzal a szabállyal, hogy minden állítást forrásból (mű szövege, AkH, Wikipédia,
+szótár) igazoljon, ne emlékezetből. Források többek közt: János vitéz és Az egri csillagok (Project Gutenberg #41504,
+#76235–76236), Toldi (hu.wikisource), Magyar magánhangzók, Busójárás, Déli harangszó, Hunyadi Mátyás, Magyarország éghajlata,
+Északi-középhegység (hu.wikipedia), Wiktionary. Ezen felül az integrátor a magyar hunspell-szótárral (`dictionary-hu` +
+`hunspell-asm`, mindkettő a függőségek között) végigfuttatta a 3–6. évfolyam ÖSSZES (meglévő és új) helyesírási tételét — ez
+találta meg a meglévő `g04-hungarian-003`-at, amelyet a magyar auditor nem jelzett.
+
+| Kategória | Átnézett tétel | Javított / cserélt (végleges azonosító) |
+|---|---|---|
+| (a) irodalmi / olvasmány, monda | 73 (magyar 51 + történelem-monda 22) | `g05-hungarian-053` (kulcs: óriás, XXIII–XXIV. ének), `g05-hungarian-029` (Tündérország a tenger szigete — magyarázat), `g04-history-037` (a kolozsvári bíró: fát vágat — magyarázat) |
+| (b) helyesírás | 36 (+ hunspell-vizsgálat a 3–6. évfolyam összes helyesírási tételén) | `g03-hungarian-033` („gólja” → „gójja”), `g04-hungarian-003` (meglévő tétel: „gólja” → csere „pocsolya”), `g04-hungarian-032` (a rímpélda „alma – palma” helyesírási hibás → „madár – határ”) |
+| (c) nyelvtani alak | 75 | `g04-hungarian-020` („rajzoltatok” → „rajzoltál”), `g05-hungarian-019` (a magyarázat szerint az e „magas nyelvállású” — téves: alsó nyelvállású, elöl képzett) |
+| (d) ténykérdés | 468 (történelem 156, természettudomány 156, matek 156) | `g03-history-034` (a kádár neve NEM a kád szóból — magyarázat), `g04-history-057` (Mátyás kikiáltása Buda alatt, nem „Pesten”), `g06-history-035` (a „három tenger” legenda, nem tény), `g04-science-038` (a Börzsöny „legnyugatibb tag” forrásfüggő — kivéve), `g06-science-050` (évi középhőmérséklet 10–11 °C), `g03-science-039` („tüdeje nincs” túlzás — a tüdőshalaknak van), `g03-science-052` (a darázs „nem gyűjt mézet” túlzás — a hazaiakra szűkítve), `g06-math-027` (a négyzet is téglalap — magyarázat), `g05-math-057` (a 10 nem az élek összege — magyarázat) |
+| (e) angol | 156 | `g06-english-050` (a „little people” helyes kifejezés → a „little” elterelő helyett „a”) |
+
+Összesen **18 tétel** (2 hibás kulcs / két védhető válasz a review hármán túl: `g04-hungarian-003`, `g06-english-050`; a többi
+téves vagy forrásfüggő magyarázat). A javítások a meglévő azonosítókon történtek, a vak megoldó nem futott újra rájuk (a
+javított tételeket a forrást megjelölő auditor írta, az integrátor szkripttel ellenőrizte a formai szabályokat és a
+hunspell-őrt).
+
+**Új őr:** `tests/grade-quiz-bank-coverage.test.ts` „helyesírási tétel: a rossz opció nem létező szó …” — szövegkörnyezet
+nélküli helyesírási kérdésnél (3–6. évf.) minden egyszavas „hibás” opciót a hunspell elutasít, a helyeset elfogadja; mutációs
+próbával ellenőrizve (egy létező szó „hibás” opcióként bukást ad).
+
+**Forrás nélkül maradt (emlékezeti, tankönyvi alapon elfogadott):** a történelemben a 3. évfolyam időegység-, család- és
+mesterségtételei, az 5. évfolyam ókori / középkori tételei és az alap évszámok; a természettudományban a 3–4. évfolyam
+testrész-, évszak-, halmazállapot- és alapvető állatbesorolás-tételei; az angol alapszókincs (a Cambridge / Merriam-Webster
+automatikus lekérése 403); a `g04-history-044` (Kinizsi és a malomkő) mondájához szöveges forrás nem került elő; a KRESZ 21. §
+(gyalogos lakott területen kívül) hatályos szövege nem töltött be (másodlagos forrás igazolja).
+
+**Hol marad a legnagyobb kockázat szaktanári lektorálás nélkül (őszintén):**
+1. **(c) nyelvtani alak-tételek** — homonim alakokra (műveltető + személyrag vs. múlt idő, -t tárgyrag vs. múlt idő jele,
+   főnév / ige azonos alak) nincs gépi őr; a „rajzoltatok” hibát az első audit és a vak megoldó is átengedte, ez a minta a
+   legnehezebben vehető észre.
+2. **(d) történelem és természettudomány** — sok tétel csak tankönyvi emlékezeten alapul (fent felsorolva), és a sorozat két
+   „magyarázat-túlzás” hibája (tüdő, darázs) mutatja, hogy a mellékállítások a gyenge pontok.
+3. **(a) irodalom** — a János vitéz / Toldi / Egri csillagok tételeit most szövegből igazolták, ezért itt kisebb a kockázat;
+   a népmese-, közmondás- és szólás-tételek forrás nélkül maradtak.
 
 ## Tanulságok (a csapda-katalógusba javasolt bejegyzés)
 

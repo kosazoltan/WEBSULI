@@ -141,6 +141,46 @@ test("„tudás nélkül kitalálható” jel: a helyes opció tárgyanként leg
   assert.deepEqual(bad, [], bad.join("\n"));
 });
 
+/* ------------------------------ helyesírási tételek: a „hibás” opció ne legyen létező szó ------------------------------ */
+
+/**
+ * Review #448 (g03-hungarian-033, g04-hungarian-003): a „gólja” létező szó (a gól birtokos alakja), mégis „hibás” opció volt
+ * a „gólya” mellett — a jól tudó gyereket büntette. Szövegkörnyezet nélküli („Melyik szó helyes?”) helyesírási kérdésnél
+ * minden egyszavas rossz opciót a magyar hunspell-szótár (`dictionary-hu`, `hunspell-asm`) elutasít, a helyeset elfogadja.
+ * A „ház + -val”, „(hall) …” típusú kérdést a kérdés maga szűkíti, ezért azt itt nem mérjük.
+ */
+// (A JS `\b` ASCII-alapú — az „ó” végű „szó” után nem működik —, ezért szóköz-határral írva.)
+const BARE_SPELLING = /^(Melyik (összetett )?(szó|szót|alak|szócsoportban) (?![^?]*magyarázza)[^?+()]*(helyes|hibátlan|jó)[^?+()]*\?|Hogyan írjuk helyesen\?|Melyik a helyes írásmód\?)$/u;
+
+test("helyesírási tétel: a rossz opció nem létező szó, a helyes létező (hunspell, dictionary-hu)", async () => {
+  const { default: dictionary } = await import("dictionary-hu");
+  const { loadModule } = await import("hunspell-asm");
+  const factory = await loadModule();
+  const hunspell = factory.create(factory.mountBuffer(dictionary.aff, "hu.aff"), factory.mountBuffer(dictionary.dic, "hu.dic"));
+  try {
+    assert.equal(hunspell.spell("gólja"), true, "önellenőrzés: a gól birtokos alakja létező szó");
+    assert.equal(hunspell.spell("gója"), false, "önellenőrzés: a „gója” nem szó");
+    const bad: string[] = [];
+    let checked = 0;
+    for (const g of EXPANDED_GRADES) {
+      for (const q of inGrade(g).filter((x) => x.subject === "hungarian" && BARE_SPELLING.test(x.prompt.trim()))) {
+        checked++;
+        q.options.forEach((o, i) => {
+          const w = o.trim();
+          if (/[\s-]/.test(w)) return; // több szóból álló / kötőjeles opció: egybe- / különírást a szótár nem dönti el
+          const ok = hunspell.spell(w);
+          if (i === q.correctIndex && !ok) bad.push(`${where(q)}: a helyes „${w}” a szótárban nincs`);
+          if (i !== q.correctIndex && ok) bad.push(`${where(q)}: a „hibás” „${w}” létező szó → két védhető válasz`);
+        });
+      }
+    }
+    assert.ok(checked >= 10, `kevés helyesírási tétel ismerhető fel (${checked}) — a minta elcsúszott?`);
+    assert.deepEqual(bad, [], bad.join("\n"));
+  } finally {
+    hunspell.dispose();
+  }
+});
+
 /* ------------------------------ független számoló a bővítés matek-tételein ------------------------------ */
 
 /**
