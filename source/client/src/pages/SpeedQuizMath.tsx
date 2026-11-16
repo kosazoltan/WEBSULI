@@ -1355,8 +1355,12 @@ function isMathTask(task: MathTask): boolean {
  * A futás egy még nem látott feladata (spec 2026-09-29): 68%-ban a tanári bankból, különben a generátorból
  * (legfeljebb 30 próba egy új promptért, utána nem látott tanári feladat).
  */
-function pickOneTask(level: GradeLevel, seenPrompts: readonly string[]): MathTask {
-  const teacherPool = TEACHER_BANK[level].filter((t) => isMathTask(t) && fitsQuestionBar(t.prompt));
+function pickOneTask(level: GradeLevel, seenPrompts: readonly string[], accept?: TaskAccept): MathTask {
+  const all = TEACHER_BANK[level].filter(isMathTask);
+  // J0c-b `accept` (#450): az elolvasható / beférő tétel ELŐBB; ha egy sincs, a teljes készlet (a sáv akkor is mutatja).
+  const fitting = accept ? all.filter((t) => accept(t)) : all;
+  const seen = new Set(seenPrompts);
+  const teacherPool = fitting.some((t) => !seen.has(t.prompt)) ? fitting : all;
   return pickFreshTask({
     teacher: teacherPool,
     seenPrompts,
@@ -1364,9 +1368,10 @@ function pickOneTask(level: GradeLevel, seenPrompts: readonly string[]): MathTas
     // A tanári tétel kiválasztása és a tartalékág is a menet seedjéből (review #451; különben `Math.random`).
     rng: () => taskRandom(),
     generate: () => {
+      // A nem elfogadott jelölt nem kerül a látottak közé (csak a visszaadott — a hívó jegyzi).
       for (let i = 0; i < 6; i++) {
         const generated = generatedTaskForGrade(level);
-        if (isMathTask(generated) && fitsQuestionBar(generated.prompt)) return generated;
+        if (isMathTask(generated) && (!accept || accept(generated))) return generated;
       }
       const generated = generatedTaskForGrade(level);
       return isMathTask(generated) ? generated : generatedTaskForGrade(level);
@@ -1374,17 +1379,8 @@ function pickOneTask(level: GradeLevel, seenPrompts: readonly string[]): MathTas
   });
 }
 
-/**
- * J4a — a kérdés-sáv (`InlineQuestion mode="bar"`) a promptot két sorra vágja, és a teljes szöveg csak a „Mutasd”
- * koppintással olvasható (J0c ismert hiánya). A drónos játékban a feladatot koppintás nélkül kell látni, ezért a
- * forrás csak a 360 px-es telefonon két sorba férő feladatot adja (böngészőben mérve: 360×640, 390×844, 844×390).
- * Ha a közös sáv kijavul, a korlát emelhető.
- */
-const QUESTION_BAR_MAX_CHARS = 64;
-
-function fitsQuestionBar(prompt: string): boolean {
-  return prompt.length <= QUESTION_BAR_MAX_CHARS;
-}
+/** A kérdés-sáv elfogadási feltétele (a director `config.promptFits`-je, a forrás `accept`-je) a feladatra vetítve. */
+type TaskAccept = (task: MathTask) => boolean;
 
 /** Ennyi nem látott jelöltből választ a pálya sávja (spec 2026-09-29-palyak-szoletra-nyelvek, E szelet, D7). */
 const BAND_TASK_CANDIDATES = 3;
@@ -1393,12 +1389,12 @@ const BAND_TASK_CANDIDATES = 3;
  * Pálya nélkül a régi választás. Pályán 3 különböző, nem látott jelölt (tanári bank vagy sablon, a régi arányban),
  * és a sáv dönt: alacsony sávon a legkevesebb számjeggyel dolgozó, magas sávon a legtöbb számjeggyel dolgozó feladat.
  */
-function pickTask(level: GradeLevel, seenPrompts: readonly string[], band?: number): MathTask {
-  if (band == null) return pickOneTask(level, seenPrompts);
+function pickTask(level: GradeLevel, seenPrompts: readonly string[], band?: number, accept?: TaskAccept): MathTask {
+  if (band == null) return pickOneTask(level, seenPrompts, accept);
   const candidates: MathTask[] = [];
   let seen = [...seenPrompts];
   for (let i = 0; i < BAND_TASK_CANDIDATES; i += 1) {
-    const candidate = pickOneTask(level, seen);
+    const candidate = pickOneTask(level, seen, accept);
     candidates.push(candidate);
     seen = [...seen, candidate.prompt];
   }
@@ -1578,8 +1574,12 @@ export default function SpeedQuizMath() {
       couponOnly: false,
       // A Matek nem kér tananyagot (végrehajtás J4a 3.); a forrásrend többi része (ismétlés) érvényes.
       material: () => null,
-      fresh: () => {
-        const task = pickTask(gradeRef.current, runPromptsRef.current, runLevelRef.current == null ? undefined : difficultyRef.current);
+      fresh: ({ accept }) => {
+        // J0c-b (#450): a director `accept`-je (befér + 9 mp alatt elolvasható) — az elfogadott feladat előbb.
+        const taskAccept = accept
+          ? (t: MathTask) => accept({ id: "", prompt: t.prompt, options: t.options.map(formatMathNumber), correctIndex: t.correctIndex })
+          : undefined;
+        const task = pickTask(gradeRef.current, runPromptsRef.current, runLevelRef.current == null ? undefined : difficultyRef.current, taskAccept);
         runPromptsRef.current = [...runPromptsRef.current, task.prompt];
         return bankPlayQuestion(SPEED_MATH_GAME_ID, {
           id: speedMathQuizId(gradeRef.current, task.prompt),

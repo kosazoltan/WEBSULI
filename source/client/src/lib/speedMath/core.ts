@@ -28,6 +28,7 @@ import { COMBO_STEPS, comboBreak, comboCorrect, createCombo, type ComboState } f
 import { createWaveDirector, type WaveDirector, type WaveSpec } from "@/game-engine/play/waves";
 import type { QuestionResult } from "@/game-engine/play/types";
 import type { DirectorConfig } from "@/game-engine/play/questionDirector";
+import { fitsAllViewports } from "@/game-engine/play/promptFit";
 import { RELAX_ENTER, createIntensityDirector, type IntensityDirector } from "@/game-engine/play/director";
 import { createFixedLoop, type FixedLoop } from "@/game-engine/play/loop";
 import { createFeel, type Feel } from "@/game-engine/play/feel";
@@ -58,16 +59,21 @@ export const TOWER_SLOW_MO = 0.5;
  * nélkül), 4,5 mp alap ablak (3–4. évfolyamon ×1,25 a `windowMsFor`-ban), az első feladat 1,5 mp-nél (terv 5.4).
  */
 export function towerDirectorConfig(grade: number): DirectorConfig {
+  const baseWindowMs = 4500;
   return {
     gameId: SPEED_MATH_GAME_ID,
     optionCount: 4,
     minGapMs: 1500,
     maxGapMs: 6000,
     targetPerMin: 10,
-    baseWindowMs: 4500,
+    baseWindowMs,
     slowMo: TOWER_SLOW_MO,
     grade,
     warmupMs: 1500,
+    // J0c-b (#450): az ablak a gyerek becsült olvasási idejéhez igazodik (≤ 9 mp), és a forrás előbb a mindhárom nézetben
+    // beférő és 9 mp alatt elolvasható feladatot adja (`accept`).
+    readingAware: true,
+    promptFits: (quiz) => fitsAllViewports(quiz, { grade, baseWindowMs }).ok,
   };
 }
 

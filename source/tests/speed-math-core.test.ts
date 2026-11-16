@@ -249,6 +249,10 @@ test("kérdés-ütemező beállítás (végrehajtás J4a 3.): 10/perc, 1,5–6 m
   assert.equal(c.targetPerMin, 10);
   assert.equal(c.baseWindowMs, 4500);
   assert.equal(c.warmupMs, 1500);
+  assert.equal(c.readingAware, true, "J0c-b: olvasási időhöz igazított ablak");
+  assert.equal(c.promptFits?.({ id: "", prompt: "7 × 8 = ?", options: ["56", "54", "63", "48"], correctIndex: 0 }), true);
+  const longText = "Egy iskolába háromszáznyolcvanhat lány és négyszáztizenhét fiú jár, a tornateremben pedig kétszáz szék van. Hány tanuló jár az iskolába összesen?";
+  assert.equal(towerDirectorConfig(3).promptFits?.({ id: "", prompt: longText, options: ["803", "793", "703", "813"], correctIndex: 0 }), false, "3. évfolyamon 9 mp alatt nem olvasható");
   assert.ok(TOWER_SLOW_MO >= 0.35 && TOWER_SLOW_MO <= 1);
   assert.equal(windowMsFor("7 × 8 = ?", 7, c.baseWindowMs), 4500);
   assert.equal(windowMsFor("7 × 8 = ?", 3, c.baseWindowMs), 5625, "3–4. évfolyamon ×1,25");
