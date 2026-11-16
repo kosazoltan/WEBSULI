@@ -18,7 +18,6 @@ import {
   Flame,
   Play,
   Sparkles,
-  Swords,
 } from "lucide-react";
 import { useDailyChallenge } from "@/lib/dailyChallenge";
 import { useAchievements } from "@/lib/achievements";
@@ -321,22 +320,6 @@ export default function Games() {
             </Link>
           )}
         </section>
-
-        {/* JM1: egyeszközös Párbaj aréna (két játékos, egy telefon). Saját osztályok: a lista .game-card számlálását nem érinti. */}
-        <Link
-          href="/games/parbaj"
-          data-testid="games-duel-entry"
-          className="mb-6 flex min-h-[64px] items-center gap-3 rounded-2xl border border-fuchsia-300/40 bg-gradient-to-r from-cyan-500/20 via-indigo-500/20 to-fuchsia-500/25 px-4 py-3 text-white shadow-[0_0_24px_rgba(232,121,249,0.18)] transition-colors hover:border-fuchsia-200/70"
-        >
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-fuchsia-500 text-slate-950" aria-hidden="true">
-            <Swords className="h-7 w-7" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-lg font-black leading-tight">Párbaj aréna</span>
-            <span className="block text-sm text-white/80">Két játékos, egy telefon: aki jól válaszol, csapást mér!</span>
-          </span>
-          <span className="shrink-0 rounded-full bg-amber-400 px-3 py-1.5 text-sm font-black text-slate-950">Párbaj</span>
-        </Link>
 
         <h2 className="games-section-title">Válassz játékot</h2>
         {catLoading ? (

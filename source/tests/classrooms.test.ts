@@ -10,6 +10,9 @@ import {
   getClassroomLabel,
   isValidClassroom,
   extractClassroomFromTitle,
+  normalizeClassroom,
+  classroomDisplayLabel,
+  NO_CLASSROOM_LABEL,
 } from "../shared/classrooms";
 
 /**
@@ -114,4 +117,20 @@ test("extractClassroomFromTitle never returns an out-of-range grade", () => {
 test("extractClassroomFromTitle only produces values the table knows", () => {
   const got = extractClassroomFromTitle("Dolgozat 8. osztály");
   assert.ok(got !== null && CLASSROOM_VALUES.includes(got));
+});
+
+// --------------------------------------- évfolyam-felirat (docs/specs/2026-11-16-tananyag-evfolyam-jeloles.md)
+
+test("classroomDisplayLabel: 1–12 → „N. osztály”, 0 → „Programozás”", () => {
+  for (let n = 1; n <= 12; n++) assert.equal(classroomDisplayLabel(n), `${n}. osztály`);
+  assert.equal(classroomDisplayLabel(0), "Programozás");
+});
+
+test("classroomDisplayLabel és normalizeClassroom: érvénytelen / hiányzó érték → „Nincs osztály” / null, nem kitalált évfolyam", () => {
+  for (const bad of [13, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY, null, undefined, "7", {}, true]) {
+    assert.equal(classroomDisplayLabel(bad), NO_CLASSROOM_LABEL, String(bad));
+    assert.equal(normalizeClassroom(bad), null, String(bad));
+  }
+  assert.equal(NO_CLASSROOM_LABEL, "Nincs osztály");
+  for (const ok of CLASSROOM_VALUES) assert.equal(normalizeClassroom(ok), ok);
 });

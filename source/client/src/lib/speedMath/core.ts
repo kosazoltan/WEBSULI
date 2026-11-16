@@ -29,7 +29,7 @@ import { createWaveDirector, type WaveDirector, type WaveSpec } from "@/game-eng
 import type { QuestionResult } from "@/game-engine/play/types";
 import type { DirectorConfig } from "@/game-engine/play/questionDirector";
 import { fitsAllViewports } from "@/game-engine/play/promptFit";
-import { RELAX_ENTER, createIntensityDirector, type IntensityDirector } from "@/game-engine/play/director";
+import { createIntensityDirector, type IntensityDirector } from "@/game-engine/play/director";
 import { createFixedLoop, type FixedLoop } from "@/game-engine/play/loop";
 import { createFeel, type Feel } from "@/game-engine/play/feel";
 
@@ -80,15 +80,6 @@ export function towerDirectorConfig(grade: number): DirectorConfig {
 /** A torony magja (a becsapódás célpontja) a normalizált térben. */
 export const TOWER = { x: 0.5, y: 0.84 } as const;
 
-/**
- * „Nyugodt-e a helyzet” a kérdés-ütemezőnek (KSZ-15). A mini-Director `calm()`-ja csak a pihenő / lecsengés fázisban
- * igaz, a kezdő „buildup” fázisban alacsony szint mellett sem — csúcs nélkül egy nyugodt menetben sosem lenne igaz, és
- * csak a kényszerített (maxGap) kérdések jönnének (mérve: 7,5 kérdés/perc a 10 helyett). Ezért az alacsony szint is
- * nyugalomnak számít.
- */
-export function towerCalm(pace: Pick<IntensityDirector, "calm" | "intensity">): boolean {
-  return pace.calm() || pace.intensity() < RELAX_ENTER;
-}
 
 /** Ennél közelebb járó fosztogató „közeli veszély” a mini-Directornak. */
 export const NEAR_THREAT = 0.7;
@@ -640,7 +631,8 @@ export function createTowerDriver(opts: {
       feel.update(paused ? 0 : dt);
       const q = opts.questions;
       if (q && !core.running() && !q.finished()) q.finish();
-      if (q && !paused) q.frame(clock, { calm: towerCalm(pace) });
+      // A mini-Director `calm()`-ja (a közös utójavítás óta a nyugodt buildup is nyugodt — a J4a kerülőútja megszűnt).
+      if (q && !paused) q.frame(clock, { calm: pace.calm() });
       loop.setTimeScale(paused ? 0 : q ? q.timeScale() : 1);
       const alpha = loop.frame(real);
       drain(onEvent);

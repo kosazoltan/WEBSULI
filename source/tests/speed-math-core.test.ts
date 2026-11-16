@@ -16,7 +16,6 @@ import {
   WARP_MS,
   createTowerCore,
   droneLayout,
-  towerCalm,
   towerDirectorConfig,
   turretIntervalMs,
   type TowerCore,
@@ -259,10 +258,13 @@ test("kérdés-ütemező beállítás (végrehajtás J4a 3.): 10/perc, 1,5–6 m
   assert.ok(windowMsFor("x".repeat(64), 4, c.baseWindowMs) <= 9000);
 });
 
-test("nyugalom a kérdésnek (KSZ-15): alacsony szint vagy pihenő / lecsengés fázis", () => {
-  assert.equal(towerCalm({ calm: () => false, intensity: () => 0.1 }), true);
-  assert.equal(towerCalm({ calm: () => false, intensity: () => 0.6 }), false);
-  assert.equal(towerCalm({ calm: () => true, intensity: () => 0.9 }), true);
+test("nyugalom a kérdésnek (KSZ-15): a meghajtó a közös mini-Director calm()-ját használja — a nyugodt kezdés nyugodt", async () => {
+  // A J4a-ban itt egy saját `towerCalm` kerülőút állt; a közös utójavítás óta a `calm()` maga igaz a pihenő-küszöb alatti
+  // buildup fázisban. A kérdés/perc hatását a `speed-math-sim.test.ts` méri.
+  const { createTowerDriver } = await import("../client/src/lib/speedMath/core");
+  const d = createTowerDriver({ seed: 1, questions: null, intensity: () => 0.4 });
+  assert.equal(d.pace.phase(), "buildup");
+  assert.equal(d.pace.calm(), true);
 });
 
 test("egy válasz / kérdés (terv 8.4, multitouch): két egyidejű koppintásból csak az első számít", () => {

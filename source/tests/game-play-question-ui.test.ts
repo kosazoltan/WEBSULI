@@ -386,3 +386,13 @@ test("review #446 menetvég: kétszeri lezárás hatástalan; reset új menetet 
   assert.equal(s.director.active(), null);
   assert.equal(s.outcomes.length, before);
 });
+
+test("közös utójavítás (b): a kérdés-sáv állapotgépe React-mentes fájlban él, a régi helyről ugyanaz érhető el", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const src = readFileSync(fileURLToPath(new URL("../client/src/game-engine/play/questionUi.ts", import.meta.url)), "utf8");
+  assert.doesNotMatch(src, /from\s*["']react(?:-dom)?["']/, "a questionUi.ts nem importálhat Reactot");
+  const pure = await import("../client/src/game-engine/play/questionUi");
+  assert.equal(pure.createQuestionUi, createQuestionUi, "a useQuestionDirector.ts ugyanazt re-exportálja");
+  assert.equal(pure.REVEAL_WRONG_MS, REVEAL_WRONG_MS);
+});

@@ -41,6 +41,13 @@ export type GameMobileCase = {
   quizScope?: string;
   /** A kvíz-állapot kikényszerítése (`forceState` patch); hiányában a játék eleve kérdez (Szólétra, Matek sprint). */
   quizForce?: Record<string, unknown>;
+  /**
+   * Közös utójavítás d (kanban #51): a válaszcélok a játékvilágban FOLYAMATOSAN mozognak (kristály, ketrec, kapaszkodó). Ilyenkor
+   * a stabil doboz helyett (`waitForStable`) a `waitForTargetsInView` vár: a célok `MOVING_SAMPLES` egymást követő mintán
+   * érintési méretűek (≥ 48 px) és a képernyőn belül vannak; a jó válasz (M10) a cél PILLANATNYI közepére kattint
+   * (`force`). Hiányában (alap) a meglévő viselkedés.
+   */
+  quizMoving?: boolean;
 };
 
 export type SafeInsets = { top: number; right: number; bottom: number; left: number };
@@ -86,6 +93,32 @@ export async function waitForStable(page: Page, selector: string, timeout = 5_00
       return (w.__stableN ?? 0) >= 4;
     },
     selector,
+    { polling: "raf", timeout },
+  );
+}
+
+/** Ennyi egymást követő (rAF) mintán kell a mozgó céloknak érintési méretűnek és láthatónak lenniük. */
+export const MOVING_SAMPLES = 6;
+
+/**
+ * Mozgó célok (`GameMobileCase.quizMoving`): `MOVING_SAMPLES` egymást követő rAF-mintán minden találat ≥ `min` px széles
+ * és magas, és a doboza a nézetablakon belül van (1 px tűrés). A stabil doboz helyett ez a mérhető feltétel.
+ */
+export async function waitForTargetsInView(page: Page, selector: string, timeout = 5_000, min = 48): Promise<void> {
+  await page.waitForFunction(
+    ({ sel, limit, need }) => {
+      const w = window as unknown as { __movingN?: number };
+      const els = Array.from(document.querySelectorAll(sel));
+      const ok =
+        els.length > 0 &&
+        els.every((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width >= limit && r.height >= limit && r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1;
+        });
+      w.__movingN = ok ? (w.__movingN ?? 0) + 1 : 0;
+      return w.__movingN >= need;
+    },
+    { sel: selector, limit: min, need: MOVING_SAMPLES },
     { polling: "raf", timeout },
   );
 }
@@ -390,7 +423,8 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
             await openQuiz(page, c);
             // A válaszgombok dobozának beállását várjuk (a belépő animáció a dobozt mozgatja), nem a teljes kvízrétegét:
             // abban a kvízóra csíkja futó játékban jogosan folyamatosan mozog (lásd SETTLE_SELECTOR).
-            await waitForStable(page, `${c.quizScope} [data-correct]`);
+            if (c.quizMoving) await waitForTargetsInView(page, `${c.quizScope} [data-correct]`);
+            else await waitForStable(page, `${c.quizScope} [data-correct]`);
             expectNoOverflow(await measureOverflow(page), "kvíz", true);
             expect(await smallTargets(page), "M2 kvíz").toEqual([]);
             expect(await smallFonts(page), "M3 kvíz").toEqual([]);
@@ -401,7 +435,7 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
             await stubVibrate(page);
             await startPlaying(page, c);
             await openQuiz(page, c);
-            await page.locator(`${c.quizScope} [data-correct="true"]`).first().click();
+            await page.locator(`${c.quizScope} [data-correct="true"]`).first().click(c.quizMoving ? { force: true } : undefined);
             await expect
               .poll(() => page.evaluate(() => (window as unknown as { __vibrateCalls?: unknown[] }).__vibrateCalls ?? []), { timeout: 5_000 })
               .toContainEqual(18);
