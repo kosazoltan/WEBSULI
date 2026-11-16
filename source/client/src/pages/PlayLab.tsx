@@ -71,6 +71,20 @@ const BANK: Array<{ quiz: FourChoiceQuiz; lang?: "en"; speakText?: string }> = [
   { quiz: { id: "lab-8", prompt: "Melyik páros szám?", options: ["14", "15", "21", "9"], correctIndex: 0, explanation: "A 14 osztható 2-vel, ezért páros." } },
 ];
 
+/**
+ * A kézi bank után végtelen, determinisztikus számolós tételek (review #446: hibátlan menetnél a 8 tétel elfogyott a 12
+ * válaszos lezárás előtt, és a menet sosem ért az eredményképernyőig).
+ */
+function labItem(n: number): { quiz: FourChoiceQuiz; lang?: "en"; speakText?: string } {
+  if (n < BANK.length) return BANK[n]!;
+  const a = 3 + ((n * 7) % 17);
+  const b = 2 + ((n * 5) % 13);
+  const s = a + b;
+  return {
+    quiz: { id: `lab-gen-${n}`, prompt: `Mennyi ${a} + ${b}?`, options: [String(s), String(s + 1), String(s - 1), String(s + 10)], correctIndex: 0, explanation: `${a} + ${b} = ${s}.` },
+  };
+}
+
 function memoryStorage(): StorageLike {
   const data = new Map<string, string>();
   return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) };
@@ -123,7 +137,7 @@ export default function PlayLab() {
       couponOnly: false,
       material: () => null,
       fresh: () => {
-        const item = BANK[cursor.current % BANK.length]!;
+        const item = labItem(cursor.current);
         cursor.current += 1;
         const q: PlayQuestion = bankPlayQuestion(GAME_ID, item.quiz);
         return item.lang ? { ...q, lang: item.lang, speakText: item.speakText } : q;
@@ -386,7 +400,7 @@ export default function PlayLab() {
 
   /* ---------------- „Miért?”: szünet + a valódi magyarázókártya ---------------- */
   const openWhy = useCallback(() => {
-    const last = qRef.current.director?.lastWrong();
+    const last = qRef.current.view().whyItem; // a vezérlő őrzi: az új kérdés nem írja felül (review #446)
     if (!last) return;
     setWhy(buildFeedback({ quiz: last.quiz, chosenIndex: last.pickedOriginalIndex, attempt: 1, ageBand: "kid" }));
   }, []);

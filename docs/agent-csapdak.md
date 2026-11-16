@@ -563,3 +563,9 @@ Forrás: J0c (kérdés-sáv, `play-lab.spec.ts`).
 - **Tünet 3 (megelőzve):** a kérdés-sáv `[data-state="correct"]` gombjait a Szólétra lapszintű, `!important`-os
   `.game-shell-fixed[data-game="WordLadderHuEn"] [data-state="correct"]` szabálya átszínezte volna. **Megelőzés:** a közös
   fedőréteg portálon a `body`-ba kerül (nem a játék gyökerébe), így a lapok saját szelektorai nem érik el.
+- **Tünet 4 (review #446):** (a) a megoldás-kijelzés alatt érkező `request()` / ütemezett kérdés azonnal felülírta a kijelzést
+  (sérült a ≥ 1,8 mp); (b) a „Miért?” 4 mp-es határidejét az új kérdés megjelenése nullázta. A saját időzítési teszt `tick: false`-szal
+  futott, ezért egyiket sem fogta meg. **Gyökérok:** egy változó (`shown`) jelentett „nyitott kérdést” ÉS „kijelzett kérdést”, és a
+  „Miért?” állapota a megjelenítéshez volt kötve, nem a hibához. **Megelőzés:** explicit állapotgép (nyitott / kijelzés / függő kérés
+  / a hibához kötött „Miért?”-határidő külön), és valódi időléptetéses teszt az ütemezővel együtt (`game-play-question-ui.test.ts`
+  „review #446/…”), nem csak kézzel léptetett, ütemezés nélküli eset.

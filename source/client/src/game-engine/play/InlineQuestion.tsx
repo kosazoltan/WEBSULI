@@ -61,6 +61,8 @@ export type InlineQuestionProps = {
   /* ---- additív (a szerződésen túl) ---- */
   /** A „Miért?” láthatósága (a `usePlayQuestion` `whyVisible`-je); hiányában: reveal közben, hibás válasznál. */
   whyVisible?: boolean;
+  /** „previous”: a „Miért?” az előző hibához tartozik, miközben már az új kérdés látszik (felirat: „Előző: miért?”). */
+  whyFor?: "current" | "previous" | null;
   /** „Mutasd” (a két sorra vágott prompt teljes szövege): a lap itt szünetet kér (terv 8.9). */
   onExpand?: () => void;
   /** A kinyitott prompt bezárása: a lap folytatja a játékot. */
@@ -115,6 +117,7 @@ export default function InlineQuestion({
   pauseTestId,
   onPause,
   whyVisible,
+  whyFor,
   onExpand,
   onCollapse,
   keyboard = true,
@@ -192,6 +195,8 @@ export default function InlineQuestion({
   const low = !reveal && ratio <= 0.35;
   const longPrompt = quiz.prompt.length > LONG_PROMPT;
   const showMore = (clamped || expanded) && !reveal;
+  // Az előző hiba „Miért?”-je az új kérdés mellett is elérhető marad (a kijelzés vége + 4 mp), külön felirattal.
+  const previousWhy = showWhy && (whyFor === "previous" || (whyFor === undefined && !reveal));
   const maxLabel = options.reduce((m, o) => Math.max(m, o.label.length), 0);
   const cols = maxLabel > LONG_OPTION ? 1 : 2;
 
@@ -319,7 +324,7 @@ export default function InlineQuestion({
             {status && (tone === "good" ? <Check aria-hidden="true" /> : <span className="play-question-status-dot" aria-hidden="true">!</span>)}
             {status && <span>{status}</span>}
           </p>
-          {showWhy && <WhyButton visible onOpen={onWhy!} />}
+          {showWhy && <WhyButton visible onOpen={onWhy!} label={previousWhy ? "Előző: miért?" : undefined} />}
         </div>
       </div>
       <div className="play-question-options" role="group" aria-label="Válaszok">

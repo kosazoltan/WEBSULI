@@ -38,6 +38,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createRng, seedFrom } from "@shared/game-rng";
 import { sfxStumble, sfxSuccess, sfxWhoosh } from "@/lib/audioEngine";
 import type { StorageLike } from "@/game-engine/vocab";
+import type { FourChoiceQuiz } from "@/types/gameQuiz";
 import { safeLocalStorage } from "@/game-engine/vocab";
 import { useHaptics } from "@/game-engine/mobile/haptics";
 
@@ -104,37 +105,71 @@ export function useQuestionDirector(opts: UseQuestionDirectorOptions | null): { 
 export const REVEAL_WRONG_MS = 2000;
 /** Helyes válasz visszajelzése (rövid: a lendület ne törjön meg). */
 export const REVEAL_CORRECT_MS = 900;
-/** A „Miért?” a megoldás-kijelzés után még ennyi ideig elérhető (végrehajtás J0c `onWhy`). */
+/** A „Miért?” a megoldás-kijelzés VÉGE után még ennyi ideig elérhető (végrehajtás J0c `onWhy`) — a következő kérdéstől függetlenül. */
 export const WHY_LINGER_MS = 4000;
 /** A sáv hátralévő idejének React-frissítési lépcsője (≈ 10 Hz, KSZ-9). */
 export const VIEW_STEP_MS = 100;
 
 export type QuestionReveal = { correctOptionIndex: number; pickedOptionIndex: number | null };
+export type QuestionRequestReason = "trigger" | "boss" | "rescue";
+/** A „Miért?” tárgya: a legutóbbi hibás / lejárt tétel (a `buildFeedback` bemenete). */
+export type QuestionWhyItem = { quiz: FourChoiceQuiz; pickedOriginalIndex: number | null; presentationId: number };
 
 export type QuestionUiView = {
+  /** A nyitott kérdés, vagy megoldás-kijelzés közben a kijelzett kérdés. */
   presentation: QuestionPresentation | null;
   remainingMs: number;
+  /** Csak megoldás-kijelzés közben nem null (nyitott kérdés mellett mindig null). */
   reveal: QuestionReveal | null;
   whyVisible: boolean;
+  /** „current”: a kijelzett kérdéshez; „previous”: az előző hibához, miközben már az új kérdés látszik. */
+  whyFor: "current" | "previous" | null;
+  whyItem: QuestionWhyItem | null;
   lastOutcome: QuestionOutcome | null;
+  /** Kijelzés alatt beérkezett, a kijelzés végén induló kérés. */
+  pending: QuestionRequestReason | null;
 };
 
-export const EMPTY_VIEW: QuestionUiView = { presentation: null, remainingMs: 0, reveal: null, whyVisible: false, lastOutcome: null };
+export const EMPTY_VIEW: QuestionUiView = {
+  presentation: null, remainingMs: 0, reveal: null, whyVisible: false, whyFor: null, whyItem: null, lastOutcome: null, pending: null,
+};
 
 export type QuestionUi = {
   /** Képkockánként; `tick: false` → a director `tick`-jét nem hívja (a játék sim-magja ütemez), csak megjelenít. */
   frame(clockMs: number, ctx?: { calm?: boolean; tick?: boolean }): void;
-  request(reason: "trigger" | "boss" | "rescue", clockMs: number): QuestionPresentation | null;
-  /** A `presentation.options` indexe. Megoldás-kijelzés közben / kérdés nélkül null. */
+  /**
+   * Azonnali kérdés-kérés. Nyitott kérdésnél null. Megoldás-kijelzés alatt NEM vágja el a kijelzést: a kérés várakozik
+   * (egy függő kérés, a legsürgősebb nyer: rescue > boss > trigger), és a kijelzés végén indul — ilyenkor null.
+   */
+  request(reason: QuestionRequestReason, clockMs: number): QuestionPresentation | null;
+  /** A `presentation.options` indexe. Kijelzés közben / kérdés nélkül null; az ablak lejárta után (clock ≥ határidő) lejárat. */
   pick(optionIndex: number, clockMs?: number): QuestionOutcome | null;
+  /** Kilépés / kuponlejárat: a nyitott kérdés „aborted”, a kijelzés és a függő kérés törlődik. */
   abort(): QuestionOutcome | null;
   timeScale(): number;
   /** A director nyitott kérdése (megoldás-kijelzés közben már null). */
   active(): QuestionPresentation | null;
+  /** Indíthat-e most új kérdést a játék sim-magja (nincs nyitott kérdés és nincs megoldás-kijelzés). */
+  canAsk(): boolean;
   view(): QuestionUiView;
+  /** Új menet: minden állapot törlődik (függő kérés, „Miért?” is). */
   reset(): void;
+  /** Leválasztás (unmount): utána minden hívás hatástalan, állapotírás nincs. `attach()` visszakapcsol. */
+  dispose(): void;
+  attach(): void;
 };
 
+const URGENCY: Record<QuestionRequestReason, number> = { trigger: 0, boss: 1, rescue: 2 };
+
+/**
+ * A kérdés-sáv állapotgépe (tiszta, DOM / React nélkül — a hét játék ugyanazt a bizonyított viselkedést kapja,
+ * `T/game-play-question-ui.test.ts`). Állapotok: üres → nyitott (`open`) → kijelzés (`rev`, ≥ 1,8 mp hibánál) → üres.
+ * Szabályok:
+ *  - kijelzés alatt új kérdés nem jelenik meg (se ütemezett, se kért, se boss / rescue): a kérés függőben vár;
+ *  - a „Miért?” határideje a hibához tartozik (kijelzés vége + 4 mp), az új kérdés megjelenése nem nullázza;
+ *  - minden idő a kérdés-óra (szünetben áll): a kijelzés és a „Miért?” ablaka is megáll szünetben;
+ *  - válasz csak a határidő előtt számít; utána a válasz lejáratként záródik.
+ */
 export function createQuestionUi(opts: {
   director: () => QuestionDirector | null;
   onView: (v: QuestionUiView) => void;
@@ -144,43 +179,48 @@ export function createQuestionUi(opts: {
   revealCorrectMs?: number;
   whyMs?: number;
 }): QuestionUi {
-  const revealWrongMs = opts.revealWrongMs ?? REVEAL_WRONG_MS;
+  const revealWrongMs = Math.max(1800, opts.revealWrongMs ?? REVEAL_WRONG_MS);
   const revealCorrectMs = opts.revealCorrectMs ?? REVEAL_CORRECT_MS;
   const whyMs = opts.whyMs ?? WHY_LINGER_MS;
 
-  let shown: QuestionPresentation | null = null;
-  let reveal: QuestionReveal | null = null;
-  let revealUntil = 0;
-  let whyUntil = Number.NEGATIVE_INFINITY;
+  let open: QuestionPresentation | null = null;
+  let rev: { p: QuestionPresentation; reveal: QuestionReveal; until: number; frozenMs: number } | null = null;
+  let pending: QuestionRequestReason | null = null;
+  let why: { item: QuestionWhyItem; until: number } | null = null;
   let lastOutcome: QuestionOutcome | null = null;
   let clock = 0;
+  let disposed = false;
   let emitted: QuestionUiView = EMPTY_VIEW;
 
-  function remaining(): number {
-    if (!shown) return 0;
-    if (reveal) return emitted.remainingMs;
-    return Math.max(0, shown.startedAtSimMs + shown.windowMs - clock);
-  }
+  const deadline = (p: QuestionPresentation) => p.startedAtSimMs + p.windowMs;
 
   function snapshot(): QuestionUiView {
-    const wrong = !!lastOutcome && (lastOutcome.result === "wrong" || lastOutcome.result === "timeout");
+    const presentation = open ?? rev?.p ?? null;
+    const whyLive = why !== null && clock < why.until;
+    const whyFor = !whyLive || !why ? null : rev && rev.p.id === why.item.presentationId ? "current" : "previous";
     return {
-      presentation: shown,
-      remainingMs: remaining(),
-      reveal,
-      whyVisible: wrong && (reveal !== null || clock < whyUntil),
+      presentation,
+      remainingMs: open ? Math.max(0, deadline(open) - clock) : rev ? rev.frozenMs : 0,
+      reveal: open ? null : rev?.reveal ?? null,
+      whyVisible: whyLive,
+      whyFor,
+      whyItem: whyLive && why ? why.item : null,
       lastOutcome,
+      pending,
     };
   }
 
   function emit(force = false): void {
+    if (disposed) return;
     const v = snapshot();
     const changed =
       force ||
       v.presentation !== emitted.presentation ||
       v.reveal !== emitted.reveal ||
       v.whyVisible !== emitted.whyVisible ||
+      v.whyFor !== emitted.whyFor ||
       v.lastOutcome !== emitted.lastOutcome ||
+      v.pending !== emitted.pending ||
       Math.abs(v.remainingMs - emitted.remainingMs) >= VIEW_STEP_MS ||
       (v.remainingMs === 0) !== (emitted.remainingMs === 0);
     if (!changed) return;
@@ -189,23 +229,30 @@ export function createQuestionUi(opts: {
   }
 
   function show(p: QuestionPresentation): void {
-    shown = p;
-    reveal = null;
-    whyUntil = Number.NEGATIVE_INFINITY;
+    open = p;
+    rev = null;
     opts.onShow?.(p);
   }
 
   function settle(o: QuestionOutcome | null, p: QuestionPresentation): QuestionOutcome | null {
     if (!o) return null;
     lastOutcome = o;
+    open = null;
     if (o.result === "aborted") {
-      shown = null;
-      reveal = null;
+      rev = null;
     } else {
       const correctIdx = p.options.findIndex((opt) => opt.correct);
-      const pickedIdx = o.pickedOriginalIndex === null ? null : p.options.findIndex((opt) => opt.originalIndex === o.pickedOriginalIndex);
-      reveal = { correctOptionIndex: correctIdx, pickedOptionIndex: pickedIdx === -1 ? null : pickedIdx };
-      revealUntil = clock + (o.result === "correct" ? revealCorrectMs : revealWrongMs);
+      const pickedIdx = o.pickedOriginalIndex === null ? -1 : p.options.findIndex((opt) => opt.originalIndex === o.pickedOriginalIndex);
+      const dur = o.result === "correct" ? revealCorrectMs : revealWrongMs;
+      rev = {
+        p,
+        reveal: { correctOptionIndex: correctIdx, pickedOptionIndex: pickedIdx === -1 ? null : pickedIdx },
+        until: clock + dur,
+        frozenMs: Math.max(0, deadline(p) - clock),
+      };
+      if (o.result === "wrong" || o.result === "timeout") {
+        why = { item: { quiz: p.question.quiz, pickedOriginalIndex: o.pickedOriginalIndex, presentationId: p.id }, until: clock + dur + whyMs };
+      }
     }
     opts.onOutcome?.(o, p);
     emit(true);
@@ -214,65 +261,85 @@ export function createQuestionUi(opts: {
 
   return {
     frame(clockMs, ctx) {
+      if (disposed) return;
       clock = clockMs;
       const d = opts.director();
       if (!d) {
         emit();
         return;
       }
-      if (shown && !reveal) {
+      if (open) {
         const act = d.active();
-        if (!act || act.id !== shown.id) {
-          // A játék sim-magja maga válaszolt / szakította meg: a sáv elengedi (a kimenetet a sim kezeli).
-          shown = null;
-        } else if (clockMs >= shown.startedAtSimMs + shown.windowMs) {
-          settle(d.expire(clockMs), shown);
-        }
+        if (!act || act.id !== open.id) open = null; // a sim-mag maga válaszolt / szakította meg
+        else if (clockMs >= deadline(open)) settle(d.expire(clockMs), open);
       }
-      if (reveal && clockMs >= revealUntil) {
-        const wrong = !!lastOutcome && lastOutcome.result !== "correct";
-        whyUntil = wrong ? clockMs + whyMs : Number.NEGATIVE_INFINITY;
-        reveal = null;
-        shown = null;
-      }
-      if (!shown) {
+      if (rev && clockMs >= rev.until) rev = null;
+      if (!open && !rev) {
         let next = d.active();
+        if (!next && pending) {
+          next = d.request(pending, clockMs);
+          if (next) pending = null;
+        }
         if (!next && ctx?.tick !== false) next = d.tick(clockMs, { calm: ctx?.calm ?? true });
         if (next) show(next);
       }
       emit();
     },
     request(reason, clockMs) {
+      if (disposed) return null;
       clock = clockMs;
       const d = opts.director();
-      if (!d || (shown && !reveal)) return null;
+      if (!d || open) return null;
+      if (rev) {
+        if (pending === null || URGENCY[reason] > URGENCY[pending]) pending = reason;
+        emit(true);
+        return null;
+      }
       const p = d.request(reason, clockMs);
       if (p) {
+        pending = null;
         show(p);
         emit(true);
       }
       return p;
     },
     pick(optionIndex, clockMs) {
+      if (disposed) return null;
       if (clockMs !== undefined) clock = clockMs;
       const d = opts.director();
-      if (!d || !shown || reveal) return null;
-      return settle(d.answer(shown.id, optionIndex, clock), shown);
+      if (!d || !open) return null;
+      const p = open;
+      if (clock >= deadline(p)) return settle(d.expire(clock), p);
+      return settle(d.answer(p.id, optionIndex, clock), p);
     },
     abort() {
+      if (disposed) return null;
+      pending = null;
       const d = opts.director();
-      if (!d || !shown || reveal) return null;
-      return settle(d.abort(), shown);
+      let o: QuestionOutcome | null = null;
+      if (d && open) o = settle(d.abort(), open);
+      open = null;
+      rev = null;
+      emit(true);
+      return o;
     },
-    timeScale: () => (shown && !reveal ? shown.slowMo : 1),
+    timeScale: () => (open ? open.slowMo : 1),
     active: () => opts.director()?.active() ?? null,
+    canAsk: () => !open && !rev,
     view: () => emitted,
     reset() {
-      shown = null;
-      reveal = null;
+      open = null;
+      rev = null;
+      pending = null;
+      why = null;
       lastOutcome = null;
-      whyUntil = Number.NEGATIVE_INFINITY;
       emit(true);
+    },
+    dispose() {
+      disposed = true;
+    },
+    attach() {
+      disposed = false;
     },
   };
 }
@@ -301,6 +368,7 @@ export type PlayQuestionBind = {
   remainingMs: number;
   reveal: QuestionReveal | null;
   whyVisible: boolean;
+  whyFor: "current" | "previous" | null;
   onPick: (optionIndex: number) => void;
   onSpeak?: () => void;
 };
@@ -370,6 +438,12 @@ export function usePlayQuestion(opts: UsePlayQuestionOptions): PlayQuestionApi {
 
   const state = useSyncExternalStore(store.subscribe, store.get, store.get);
 
+  // Unmount után nincs állapotírás / hang / visszahívás (a StrictMode kettős futtatása miatt mountkor visszakapcsol).
+  useEffect(() => {
+    ui.attach();
+    return () => ui.dispose();
+  }, [ui]);
+
   // Director-csere (új menet): a sáv tiszta lappal indul.
   useEffect(() => {
     ui.reset();
@@ -405,6 +479,7 @@ export function usePlayQuestion(opts: UsePlayQuestionOptions): PlayQuestionApi {
     remainingMs: state.remainingMs,
     reveal: state.reveal,
     whyVisible: state.whyVisible,
+    whyFor: state.whyFor,
     onPick,
     ...(canSpeak ? { onSpeak } : {}),
   };

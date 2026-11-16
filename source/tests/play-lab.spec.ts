@@ -220,6 +220,58 @@ test("(f) M2/M3 a kérdés-állapotban 360×640-en: ≥ 48 px célok, ≥ 12 px 
   expect(await smallFonts(page)).toEqual([]);
 });
 
+test("review #446: kijelzés alatt kért kérdés vár; az új kérdés mellett az előző hiba „Miért?”-je elérhető, és megállít mindent", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openLab(page, "slow=0.5");
+  const first = await openQuestion(page);
+  await answer(page, false);
+  await page.evaluate(() => (window as unknown as LabWindow).__websuliGame!.forceState({ question: true }));
+  // A kérés nem vágja el a megoldást: 1,7 mp-ig ugyanaz a kérdés, kijelzésben.
+  await page.waitForTimeout(1500);
+  let p = await probe(page);
+  expect(p.questionId).toBe(first.questionId);
+  expect(p.reveal).toBe(1);
+  await expect(root(page).locator('[data-state="correct"]')).toHaveCount(1);
+  // A kijelzés végén a függő kérés indul; az új kérdés mellett „Előző: miért?”.
+  await expect.poll(async () => (await probe(page)).questionId, { timeout: 5_000 }).not.toBe(first.questionId);
+  p = await probe(page);
+  expect(p.questionOpen).toBe(1);
+  const why = page.getByTestId("play-why");
+  await expect(why).toBeVisible();
+  await expect(why).toContainText("Előző");
+  await expectLayoutClean(page, "új kérdés + előző „Miért?”");
+  await shot(page, testInfo, "ocean-{vp}-previous-why");
+  const whyBox = (await why.boundingBox())!;
+  for (const b of await root(page).locator(".play-question-option").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as Box))) {
+    expect(overlaps(whyBox, b), "a „Miért?” nem takar válaszgombot").toBe(false);
+  }
+  await why.click();
+  await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+  // Az előző (hibázott) kérdés magyarázata, nem az újé.
+  await expect(page.getByTestId("quiz-feedback")).toHaveAttribute("data-outcome", "wrong");
+  const a = await page.evaluate(() => (window as unknown as { __websuliGame: { probe: () => { simTime: number; clock: number } } }).__websuliGame.probe());
+  await page.waitForTimeout(700);
+  const b = await page.evaluate(() => (window as unknown as { __websuliGame: { probe: () => { simTime: number; clock: number } } }).__websuliGame.probe());
+  expect(b.simTime, "a játék áll").toBe(a.simTime);
+  expect(b.clock, "az új kérdés válaszablaka sem fogy").toBe(a.clock);
+  await page.getByTestId("quiz-feedback-dismiss").click();
+  expect((await probe(page)).questionOpen).toBe(1);
+});
+
+test("review #446: hibátlan menet is eljut az eredményképernyőig (12 helyes válasz)", async ({ page }) => {
+  test.setTimeout(120_000);
+  await openLab(page, "slow=0.5");
+  let last: number | null = null;
+  for (let n = 0; n < 12; n++) {
+    const p = await openQuestion(page, last);
+    last = p.questionId;
+    await answer(page, true);
+  }
+  await expect(page.getByTestId("play-lab-result")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("play-lab-result")).toContainText("12/12");
+  await expect(page.getByTestId("result-review")).toHaveCount(0);
+});
+
 test("(g) terv 8.9: hosszú kérdés két sorra vágva, „Mutasd” → a teljes szöveg szünettel; „Tovább” → a játék megy tovább", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 640 });
   await openLab(page, "slow=0.5&long=1");
