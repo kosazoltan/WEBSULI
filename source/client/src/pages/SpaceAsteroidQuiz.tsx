@@ -31,7 +31,7 @@ import {
 } from "@/game-engine/mobile";
 import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
 import { aimAssistVx } from "@/lib/spaceAsteroid/aimAssist";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import AudioToggleButton from "@/components/AudioToggleButton";
@@ -66,6 +66,7 @@ import HoldButton from "@/game-engine/HoldButton";
 import { joystickToDirections } from "@/game-engine/joystick";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 import {
   LOOK_BUDGET,
   SparkleField,
@@ -2588,12 +2589,13 @@ export default function SpaceAsteroidQuiz() {
   useEffect(() => {
     if (phase !== "over" || !syncEligibility?.eligible || scoreSubmittedRef.current) return;
     scoreSubmittedRef.current = true;
-    void apiRequest("POST", "/api/games/score", {
+    void postGameScore({
       gameId: "space-asteroid-quiz",
       difficulty: "normal",
       runXp: scoreRef.current,
       runStreak: bestComboRef.current, // D2: run-level best, not current
       runSeconds: ROUND_LIMIT_SEC - timeLeft,
+      runId: newScoreRunId(),
     })
       .then(() => void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] }))
       .catch(() => { scoreSubmittedRef.current = false; });

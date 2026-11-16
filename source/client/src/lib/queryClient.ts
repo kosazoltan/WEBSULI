@@ -18,8 +18,11 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
     } catch {
       // Response is not JSON, use raw text
     }
-    const error = new Error(message) as Error & { status?: number };
+    const error = new Error(message) as Error & { status?: number; retryAfterSec?: number };
     error.status = res.status;
+    // JM0: a 429-es válasz Retry-After értéke (másodperc), hogy a hívó az újrapróbát hozzá igazíthassa.
+    const retryAfter = Number(res.headers.get("Retry-After"));
+    if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfterSec = retryAfter;
     throw error;
   }
 }

@@ -32,7 +32,7 @@ import { correctDataAttrs, installGameTestApi, GAME_TEST_HOOKS_ENABLED } from "@
 import AudioToggleButton from "@/components/AudioToggleButton";
 import AchievementToast from "@/components/AchievementToast";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { quizTopicLabelHu } from "@/lib/quizTopicLabel";
@@ -133,6 +133,7 @@ import {
 } from "@/lib/tornado/controls";
 import { shouldDisposeGeometry } from "@/tornado/meshLifetime";
 import { applyRunResult } from "@/lib/tornado/runResult";
+import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 import {
   loadProgress,
   saveProgress,
@@ -1778,12 +1779,13 @@ function PlayScreen(props: {
 
       // Cloud leaderboard (best-effort; a missing catalogue row just fails silently).
       if (props.syncEligible && won) {
-        void apiRequest("POST", "/api/games/score", {
+        void postGameScore({
           gameId: GAME_ID,
           difficulty: props.level >= 150 ? "hard" : props.level >= 70 ? "normal" : "easy",
           runXp: reward.score,
           runStreak: correctRef.current,
           runSeconds: Math.round(elapsedRef.current),
+          runId: newScoreRunId(),
         })
           .then(() => void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] }))
           .catch(() => {});

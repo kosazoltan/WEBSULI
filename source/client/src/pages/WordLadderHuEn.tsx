@@ -10,7 +10,7 @@ import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Flame, Check, X } from "lucide-react";
 import { motion, AnimatePresence, useAnimationControls, useReducedMotion } from "framer-motion";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
@@ -73,6 +73,7 @@ import { createSeenHistory, externalKey, safeLocalStorage, useVocabQuizSource } 
 import { mergeVocabTiers, VOCAB_POOL_PER_LEVEL, vocabIdOfLadderItem, type VocabMeaning } from "@/lib/wordLadderVocab";
 import { loadVocabBank } from "@/data/vocabBank/loader";
 
+import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 const LS_XP = "websuli-wordladder-xp";
 const LS_BEST = "websuli-wordladder-streak";
 
@@ -868,12 +869,13 @@ export default function WordLadderHuEn() {
     if (!syncEligibility?.eligible) return;
     if (scoreSubmittedRef.current) return;
     scoreSubmittedRef.current = true;
-    void apiRequest("POST", "/api/games/score", {
+    void postGameScore({
       gameId: "word-ladder-hu-en",
       difficulty: "normal",
       runXp: sessionXp,
       runStreak: runBestStreakRef.current,
       runSeconds,
+      runId: newScoreRunId(),
     })
       .then(() => {
         void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] });

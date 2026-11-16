@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Clock, Flame, Heart, Rocket } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import AudioToggleButton from "@/components/AudioToggleButton";
@@ -32,6 +32,7 @@ import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { digitComplexity, levelAdaptBand, levelStartBand, pickByBand } from "@/game-engine/levelTuning";
 import { QUESTION_SECONDS, ROUND_SECONDS, TARGET_CORRECT, questionSecondsForBand } from "@/game-engine/speedQuizTiming";
 
+import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 type GradeLevel = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 
 /** A menü évfolyamai (a teljes alsó és felső tagozat, középiskola). */
@@ -1763,12 +1764,13 @@ export default function SpeedQuizMath() {
     scoreSubmittedRef.current = true;
 
     const runSeconds = ROUND_SECONDS[grade] - timeLeft;
-    void apiRequest("POST", "/api/games/score", {
+    void postGameScore({
       gameId: "speed-quiz-math",
       difficulty: SCORE_DIFFICULTY[grade],
       runXp: score,
       runStreak: bestStreak,
       runSeconds,
+      runId: newScoreRunId(),
     })
       .then(() => {
         void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] });
