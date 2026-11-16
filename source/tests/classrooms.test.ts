@@ -13,6 +13,7 @@ import {
   normalizeClassroom,
   classroomDisplayLabel,
   NO_CLASSROOM_LABEL,
+  lessonHeaderGradeLabel,
 } from "../shared/classrooms";
 
 /**
@@ -133,4 +134,15 @@ test("classroomDisplayLabel és normalizeClassroom: érvénytelen / hiányzó é
   }
   assert.equal(NO_CLASSROOM_LABEL, "Nincs osztály");
   for (const ok of CLASSROOM_VALUES) assert.equal(normalizeClassroom(ok), ok);
+});
+
+// --------------------- a lecke oldalának felirata (docs/specs/2026-11-16-tananyag-programozas-felirat.md)
+
+test("lessonHeaderGradeLabel: programozási kategória → „Programozás”, egyébként a lecke pontos évfolyama", () => {
+  assert.equal(lessonHeaderGradeLabel(8, 0), "Programozás");
+  assert.equal(lessonHeaderGradeLabel(9, 0), "Programozás");
+  for (const cat of [4, undefined, null]) assert.equal(lessonHeaderGradeLabel(4, cat), "4. osztály");
+  // A felirat a lecke tartalmi évfolyama, ha a kategória nem programozás (a két érték független).
+  assert.equal(lessonHeaderGradeLabel(7, 5), "7. osztály");
+  for (let n = 1; n <= 12; n++) assert.equal(lessonHeaderGradeLabel(n), `${n}. osztály`, "pontos évfolyam, nem sávtartomány");
 });

@@ -58,10 +58,9 @@ before(async () => {
 
 after(async () => {
   await app?.close();
+  // A harness WEBSULI_E2E=1-et állít: az eseményalapú mentés nem indul, nincs nyitott időzítő → rendes kilépés
+  // (docs/specs/2026-11-16-tananyag-programozas-felirat.md).
   await dbPool.end();
-  // A sikeres PATCH a meglévő eseményalapú mentést indítja (server/autoBackup.ts, 5 perces debounce-időzítő, nincs leállító API) —
-  // az időzítő nyitva tartaná a tesztfolyamatot. Az eredmények kiírása után kilépünk (a node:test a bukást az exitCode-ban jelzi).
-  setTimeout(() => process.exit(process.exitCode ?? 0), 1000).unref();
 });
 
 describe("szerkesztő (PATCH /api/html-files/:id)", () => {
