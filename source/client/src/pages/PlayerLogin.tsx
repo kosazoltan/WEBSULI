@@ -5,6 +5,8 @@
  * („Belépés mint a***@p***.hu?”), és csak a gombnyomás váltja be POST-tal; élő fiók-munkamenet (admin / felnőtt fiók)
  * mellett nincs beváltás, és ha már egy MÁSIK játékfiókkal van belépve, külön figyelmeztet. A `PLAYER_ACCOUNTS` flag KI
  * állapotában az oldal nem létezik (a „nem található” oldal jelenik meg).
+ * JM7b: „Belépés Google-fiókkal” (a játékos külön Google-útja, server/player/google.ts); a visszatérési hibakód (`?hiba=`)
+ * magyar üzenetként jelenik meg; belépés után a „Fiókom” (/fiok) gomb, becenév nélkül oda vezet elsőként.
  */
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -15,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import NotFound from "@/pages/not-found";
 import {
-  PLAYER_ME_KEY, checkPlayerLink, logoutPlayer, startPlayerLogin, usePlayer, verifyPlayerLogin, type LinkInfo, type VerifyResult,
+  clearPlayerCache, checkPlayerLink, logoutPlayer, startPlayerLogin, usePlayer, verifyPlayerLogin, type LinkInfo, type VerifyResult,
 } from "@/hooks/usePlayer";
 
 type Step = "email" | "code" | "link-checking" | "link-confirm" | "link" | "done" | "link-error";
@@ -36,6 +38,24 @@ const ERRORS: Record<Exclude<VerifyResult, { ok: true }>["code"] | "INVALID_EMAI
 
 const LINK_INVALID = "Ez a link már nem jó: lejárt, vagy valaki már használta. Kérj új kódot!";
 
+/** JM7b: a játékos Google-út visszatérési hibakódjai (`/belepes?hiba=…`, server/player/google.ts) — személyes adat nélkül. */
+const GOOGLE_ERRORS: Record<string, string> = {
+  "fiok-munkamenet": ERRORS.ACCOUNT_SESSION,
+  google: "A Google-belépés nem sikerült. Próbáld újra, vagy lépj be e-mail-kóddal!",
+  "nincs-megerositve": "Ennek a Google-fióknak az e-mail-címe nincs megerősítve. Lépj be e-mail-kóddal!",
+  tiltva: ERRORS.BANNED,
+  utkozes: "Ehhez az e-mail-címhez már egy másik Google-fiók tartozik. Lépj be e-mail-kóddal!",
+  "nem-elerheto": ERRORS.UNAVAILABLE,
+};
+
+/** A `?hiba=` kiolvasása és azonnali törlése a címsorból. */
+function takeGoogleError(): string | null {
+  const code = new URLSearchParams(window.location.search).get("hiba");
+  if (code === null) return null;
+  window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+  return GOOGLE_ERRORS[code] ?? GOOGLE_ERRORS.google!;
+}
+
 /** A `#t=<token>` töredék kiolvasása és AZONNALI törlése a címsorból (ne maradjon az előzményekben). */
 function takeLinkToken(): string | null {
   const match = /(?:^#|&)t=([A-Za-z0-9_-]{43})(?:&|$)/.exec(window.location.hash);
@@ -52,7 +72,7 @@ export default function PlayerLogin() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => (isLinkRoute ? null : takeGoogleError()));
   const [linkInfo, setLinkInfo] = useState<LinkDetails | null>(null);
   const linkHandled = useRef(false);
   /** A link tokenje a címsorból törlődik, de a megerősítéshez / újrapróbához memóriában marad. */
@@ -63,7 +83,7 @@ export default function PlayerLogin() {
   useEffect(() => () => { mounted.current = false; }, []);
 
   const finish = async () => {
-    await queryClient.invalidateQueries({ queryKey: PLAYER_ME_KEY });
+    await clearPlayerCache(queryClient);
     if (mounted.current) setStep("done");
   };
 
@@ -134,7 +154,7 @@ export default function PlayerLogin() {
 
   const logout = async () => {
     const ok = await logoutPlayer();
-    await queryClient.invalidateQueries({ queryKey: PLAYER_ME_KEY });
+    if (ok) await clearPlayerCache(queryClient);
     if (!mounted.current) return;
     if (ok) { setError(null); setStep("email"); }
     else setError(ERRORS.NETWORK);
@@ -157,7 +177,12 @@ export default function PlayerLogin() {
           {signedIn ? (
             <div className="space-y-3 text-center" data-testid="player-login-done">
               <p>Sikerült a belépés. Jó játékot! 🎉</p>
-              <Button className="w-full" onClick={() => setLocation("/games")} data-testid="button-player-to-games">Irány a játékok!</Button>
+              {player?.needsProfile ? (
+                <Button className="w-full" onClick={() => setLocation("/fiok")} data-testid="button-player-to-account">Válassz becenevet és avatart!</Button>
+              ) : (
+                <Button className="w-full" onClick={() => setLocation("/games")} data-testid="button-player-to-games">Irány a játékok!</Button>
+              )}
+              <Button variant="outline" className="w-full" onClick={() => setLocation("/fiok")} data-testid="button-player-account">Fiókom</Button>
               <Button variant="ghost" className="w-full" onClick={() => void logout()} data-testid="button-player-logout">Kilépés</Button>
             </div>
           ) : step === "email" ? (
@@ -171,6 +196,11 @@ export default function PlayerLogin() {
                 {busy ? "Küldés…" : "Kérem a kódot"}
               </Button>
               <p className="text-xs text-muted-foreground">Nem kérjük a neved és az életkorod. Az e-mail-címedet senki más nem látja.</p>
+              {/* JM7b: a játékos KÜLÖN Google-útja (csak játékos-fiók, admin-jog soha) — teljes oldalas navigáció a Google-hoz. */}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground" aria-hidden="true"><span className="h-px flex-1 bg-border" />vagy<span className="h-px flex-1 bg-border" /></div>
+              <Button asChild variant="outline" className="w-full">
+                <a href="/auth/player/google?returnTo=/fiok" data-testid="button-player-google">Belépés Google-fiókkal</a>
+              </Button>
             </form>
           ) : step === "code" ? (
             <form onSubmit={submitCode} className="space-y-3">

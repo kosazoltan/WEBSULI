@@ -92,6 +92,21 @@ export function emailHash(key: Buffer, normalizedEmail: string): string {
   return hmacHex(key, `email:${normalizedEmail}`);
 }
 
+/**
+ * JM7b (review #449): a kódrekordok CÉL szerinti elkülönítése — a fióktörlés kódjai külön e-mail-hash-tartományban élnek,
+ * így a belépő- és a törlési kód egymás „legutóbbi kód” keresését nem zavarja, és egymás helyett nem váltható be.
+ * A belépés hash-e változatlan (`emailHash`). A korlát-kulcs (`limitHash`) KÖZÖS: a levélkeret célonként összesítve érvényes.
+ */
+export type CodePurpose = "login" | "delete";
+export function purposeEmailHash(key: Buffer, normalizedEmail: string, purpose: CodePurpose): string {
+  return purpose === "login" ? emailHash(key, normalizedEmail) : hmacHex(key, `email-delete:${normalizedEmail}`);
+}
+
+/** A cím mindkét céltartományának hash-e (hibás-próba plafon, törlés, export). */
+export function allPurposeEmailHashes(key: Buffer, normalizedEmail: string): string[] {
+  return [purposeEmailHash(key, normalizedEmail, "login"), purposeEmailHash(key, normalizedEmail, "delete")];
+}
+
 export function limitHash(key: Buffer, normalizedEmail: string): string {
   return hmacHex(key, `limit:${limitKey(normalizedEmail)}`);
 }

@@ -1,7 +1,7 @@
 import type { LadderCategory, LadderItem, LadderTier } from "../../data/wordLadder/types";
 import type { VocabEntry, VocabLang, VocabLevel, VocabTopic } from "../../data/vocabBank/types";
 import { tierSearchOrder } from "../no-repeat";
-import { generateVocabQuestion, meaningKeys, pickQuestionType, type VocabQuestionType, type VocabQuiz } from "./questionGenerator";
+import { generateVocabQuestion, meaningKeys, pickQuestionType, type ClozeStyle, type VocabQuestionType, type VocabQuiz } from "./questionGenerator";
 import { externalKey, type SeenHistory } from "./seenHistory";
 import { normalizeTerm } from "../../data/vocabBank/validate";
 
@@ -36,8 +36,14 @@ export function createVocabSource(opts: {
   entries: readonly VocabEntry[];
   history: SeenHistory;
   rng?: () => number;
+  /**
+   * A hiányos mondat alakja (kanban #50): `"full"` (alap, a korábbi viselkedés) vagy `"game"` (rövid játék-alak,
+   * fordítás nélkül — a játékok `useVocabQuizSource`-a ezt kéri). A többi kérdéstípust nem érinti.
+   */
+  clozeStyle?: ClozeStyle;
 }): VocabSource {
   const { lang, history } = opts;
+  const gen = { clozeStyle: opts.clozeStyle ?? "full" } as const;
   const rng = opts.rng ?? Math.random;
   const entries = opts.entries.slice();
   const byLevel: VocabEntry[][] = Array.from({ length: LEVEL_COUNT }, () => []);
@@ -110,11 +116,11 @@ export function createVocabSource(opts: {
 
   function question(entry: VocabEntry, types?: VocabQuestionType[]): VocabQuiz | null {
     const allowed = types?.length ? types : null;
-    let type = pickQuestionType(entry, rng);
+    let type = pickQuestionType(entry, rng, gen);
     if (allowed && !allowed.includes(type)) type = allowed[Math.min(allowed.length - 1, Math.floor(rng() * allowed.length))]!;
-    return generateVocabQuestion(entry, entries, type, rng)
+    return generateVocabQuestion(entry, entries, type, rng, gen)
       // Ha a választott típus nem készíthető (pl. kevés rossz válasz a kind-ban), az alaptípussal még egyszer.
-      ?? (type !== "hu-to-target" && (!allowed || allowed.includes("hu-to-target")) ? generateVocabQuestion(entry, entries, "hu-to-target", rng) : null);
+      ?? (type !== "hu-to-target" && (!allowed || allowed.includes("hu-to-target")) ? generateVocabQuestion(entry, entries, "hu-to-target", rng, gen) : null);
   }
 
   return {

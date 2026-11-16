@@ -9,8 +9,15 @@ import type { Request } from "express";
 
 declare module "express-session" {
   interface SessionData {
-    player?: { id: string };
+    /** `at`: a belépés ideje (ms) — JM7b: a fióktörlés friss belépést kér (account-routes.ts). */
+    player?: { id: string; at?: number };
   }
+}
+
+/** A munkamenet belépési ideje (ms); régebbi / beültetett munkamenetnél null. */
+export function getPlayerSessionAuthAt(req: Request): number | null {
+  const at = req.session?.player?.at;
+  return typeof at === "number" && Number.isFinite(at) ? at : null;
 }
 
 export function getPlayerSessionId(req: Request): string | null {
@@ -22,7 +29,7 @@ export function setPlayerSession(req: Request, playerId: string): Promise<void> 
   return new Promise((resolve, reject) => {
     req.session.regenerate((regenErr) => {
       if (regenErr) return reject(regenErr);
-      req.session.player = { id: playerId };
+      req.session.player = { id: playerId, at: Date.now() };
       req.session.save((saveErr) => (saveErr ? reject(saveErr) : resolve()));
     });
   });

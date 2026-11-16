@@ -6,7 +6,7 @@
  * amelynek láncában `isAuthenticatedAdmin` van, vagy az admin előtagok (`/api/admin`, `/api/studio`) alatt áll. Új végpont
  * így nem maradhat ki.
  * Szerepek: vendég (munkamenettel, CSRF-tokennel), e-mail-kódos játékos (VALÓDI beváltással), e-mail-kódos játékos az admin
- * címével, Google-os játékos (JM7b előtt munkamenet-szinten szimulálva), tiltott játékos, nem admin Google-felhasználó
+ * címével, Google-os játékos és Google-os játékos az admin címével (JM7b: VALÓDI játékos Google-út), tiltott játékos, nem admin Google-felhasználó
  * (`users.is_admin=false`), tiltott admin, admin (valódi /api/login).
  *
  * Két menet:
@@ -21,6 +21,7 @@ import { after, before, describe, it } from "node:test";
 import bcrypt from "bcryptjs";
 import { Client, databaseFingerprint, dbPool, injectSession, mapLimit, startApp } from "./support/authz-db-harness";
 import { isUnderAdminPrefix, routeInventory, samplePath, type Endpoint } from "./support/route-inventory";
+import { playerGoogleLogin } from "./support/player-google-stub";
 
 const { isAuthenticatedAdmin } = await import("../server/auth");
 const { codeHash, emailHash, limitHash, linkHash, generateLinkToken, playerAuthKey } = await import("../server/player/codes");
@@ -52,6 +53,17 @@ async function realEmailPlayer(base: string, email: string): Promise<Client> {
   const r = await c.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "42424242" });
   assert.equal(r.status, 200, `játékos-beváltás: ${r.text}`);
   await c.fetchCsrf();
+  return c;
+}
+
+async function realGooglePlayer(base: string, email: string, sub: string): Promise<Client> {
+  const c = new Client(base);
+  const run = await playerGoogleLogin(c, { id: sub, emails: [{ value: email, verified: true }] }, { returnTo: "/fiok" });
+  assert.deepEqual(run.callback, { status: 302, location: "/fiok" }, `játékos Google-belépés: ${email}`);
+  await c.fetchCsrf();
+  const me = await c.request("GET", "/api/player/me");
+  assert.equal(me.status, 200);
+  assert.ok((me.json as { id?: string } | null)?.id, "játékos-munkamenet");
   return c;
 }
 
@@ -101,7 +113,10 @@ before(async () => {
   roles.push({ name: "vendég", client: guest });
   roles.push({ name: "e-mail-kódos játékos", client: await realEmailPlayer(stubApp.base, "authz-player@websuli.example") });
   roles.push({ name: "e-mail-kódos játékos az admin címével", client: await realEmailPlayer(stubApp.base, ADMIN_EMAIL) });
-  roles.push({ name: "Google-os játékos (szimulált, JM7b)", client: await sessionClient(stubApp.base, { player: { id: "authz-google-player" } }) });
+  // JM7b: VALÓDI Google-os játékos — a szerver saját „google-player” útja (state + PKCE, visszahívás), csak a Google
+  // hálózati része helyettesítve; egyszer egy sima, egyszer az ADMIN címével egyező Google-fiókkal.
+  roles.push({ name: "Google-os játékos (valódi játékos Google-út)", client: await realGooglePlayer(stubApp.base, "authz-gplayer@websuli.example", "g-sub-authz") });
+  roles.push({ name: "Google-os játékos az admin címével", client: await realGooglePlayer(stubApp.base, ADMIN_EMAIL, "g-sub-authz-admin-mail") });
   roles.push({ name: "tiltott játékos", client: await sessionClient(stubApp.base, { player: { id: "authz-banned-player" } }) });
   roles.push({ name: "nem admin Google-felhasználó", client: await sessionClient(stubApp.base, { passport: { user: "authz-user" } }) });
   roles.push({ name: "tiltott admin", client: await sessionClient(stubApp.base, { passport: { user: "authz-banned-admin" } }) });
