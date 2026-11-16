@@ -31,6 +31,11 @@ export type PlayQuestion = {
   speakText?: string;
   /** Kupon-bónuszhoz: a szerver által kiadott tétel azonosítója (`GE/claimCouponBonus.ts`). */
   couponItemId?: string;
+  /**
+   * J4a (additív, review #451): az évfolyam, amelyhez a tétel tartozik. Az ismétlési sor eltárolja, és a director csak az
+   * aktuális évfolyamú menetben hozza vissza (`reviewFitsGrade`). Hiányában a kulcsból próbálja visszafejteni.
+   */
+  grade?: number;
 };
 
 export type PresentedOption = { label: string; originalIndex: number; correct: boolean };

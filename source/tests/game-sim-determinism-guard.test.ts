@@ -102,3 +102,41 @@ test("a szimulációs mag nem hív órát, Math.random-ot, DOM-ot, three-t vagy 
   });
   assert.deepEqual(found, [], `Tiltott hívás a determinisztikus magban:\n${found.join("\n")}`);
 });
+
+/**
+ * Review #451 (J4a pilot) — a JÁTÉKLAPOK játékmenet-kódja sem húzhat `Math.random`-ot / `Date.now`-t: a lap a menet seedelt
+ * RNG-jéből sorsol (feladat, elterelők, drónok), különben azonos seed mellett két diák más feladatsort kapna (párbaj, napi
+ * kihívás). A lapokon a nézet-kód (rAF, hang-ritkítás) jogosan olvas órát (`performance.now`), ezért itt csak a két
+ * nem-determinisztikus FORRÁS tiltott, tételes engedélylistával. Kiterjesztés: egy átírt játék lapja ide kerül a saját
+ * engedélylistájával (ami a listán van, az kozmetikai vagy a seedelt forrás lusta alapértéke — indoklással).
+ */
+const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>> = {
+  "SpeedQuizMath.tsx": [
+    {
+      re: /let taskRandom: \(\) => number = \(\) => Math\.random\(\);/,
+      why: "a feladat-sorsolás lusta alapértéke: a menet indításakor `setTaskRandom(createRng(…).next)` felülírja",
+    },
+  ],
+};
+
+const PAGE_FORBIDDEN = FORBIDDEN.filter(({ name }) => name === "Math.random" || name === "Date.now");
+
+test("az átírt játéklapok játékmenet-kódja seedelt: Math.random / Date.now csak az engedélylistán", () => {
+  const found: string[] = [];
+  for (const [file, allow] of Object.entries(GAME_PAGE_ALLOW)) {
+    let code = stripComments(readFileSync(join(root, "client/src/pages", file), "utf8"));
+    for (const { re } of allow) {
+      assert.ok(re.test(code), `${file}: az engedélyezett minta már nincs a lapon — vedd ki a listából (${re})`);
+      code = code.replace(re, "");
+    }
+    for (const { name, re } of PAGE_FORBIDDEN) if (re.test(code)) found.push(`${file}: ${name}`);
+  }
+  assert.deepEqual(found, [], `Nem seedelt véletlen / óra a játéklapon:\n${found.join("\n")}`);
+});
+
+test("a lap-őr érzékeny: engedélylistán kívüli Math.random-ot elkap", () => {
+  const code = "let taskRandom: () => number = () => Math.random();\nconst x = Math.random();";
+  const rest = code.replace(GAME_PAGE_ALLOW["SpeedQuizMath.tsx"]![0]!.re, "");
+  assert.ok(PAGE_FORBIDDEN.some(({ re }) => re.test(rest)));
+  assert.ok(!PAGE_FORBIDDEN.some(({ re }) => re.test(code.split("\n")[0]!.replace(GAME_PAGE_ALLOW["SpeedQuizMath.tsx"]![0]!.re, ""))));
+});
