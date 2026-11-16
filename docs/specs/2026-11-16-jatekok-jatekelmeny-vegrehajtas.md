@@ -292,7 +292,7 @@ seed + rögzített bemenetsor → a végállapot hash-e egyezik (ugyanazon a gé
 
 **Közös meghajtó (J4a pilot, kötelező):** a sim NE saját `dt × timeScale` lépéssel fusson — a lap és a sim ugyanazt a
 meghajtót hívja (fix lépésű hurok, időskála, hitstop, esemény-ürítés; minta: `L/speedMath/core.ts` `createTowerDriver`),
-és egy teszt igazolja, hogy lépés-indexhez kötött bemenettel eltérő képkocka-időknél bitre azonos az állapot (C-44).
+és egy teszt igazolja, hogy lépés-indexhez kötött bemenettel eltérő képkocka-időknél bitre azonos az állapot (C-46).
 
 **A játéklap determinizmus-őre (`T/game-sim-determinism-guard.test.ts` `GAME_PAGE_ALLOW`, J4a):** a sim-mag mellett a
 játéklap játékmenet-kódja sem húzhat `Math.random`-ot / `Date.now`-t (feladat-, elterelő-, célpont-sorsolás a menet seedelt
@@ -2054,7 +2054,7 @@ origin / CSRF, leállítás / e2e-mód, migráció ↔ Drizzle, Europe/Budapest 
 
 ### JB — Évfolyam-bank bővítése (JBa: 3–6., JBb: 7–9., JBc: 10–12. évfolyam)
 
-**Állapot:** JBa folyamatban — ág feat/jatek-jba-evfolyam-bank, munkafa .claude/worktrees/jatek-jba, kanban #42 (2026-11-16); JBb, JBc nem kezdődött · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
+**Állapot:** JBa kész (#448, 2026-11-16); JBb folyamatban — ág feat/jatek-jbb-evfolyam-bank, munkafa .claude/worktrees/jatek-jbb, kanban #47 (2026-11-16); JBc nem kezdődött · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
 **Elfogadás:** JB-A1 · **Fájlok:** `source/client/src/data/gradeQuizBank/grade-NN.ts` (bővítés, a meglévő tételek
 azonosítója változatlan), `docs/measurements/2026-11-xx-evfolyam-bank-<sáv>-vakmegoldo.md`, a meglévő őrök
 (`T/quiz-bank-integrity.test.ts`, `T/game-bank-no-repeat-content.test.ts`, `T/grade-quiz-select.test.ts`) zöldek + új

@@ -9,8 +9,14 @@
  *
  * Every game keeps its old picker as the fallback: when this returns `null` (grade 1–2,
  * no grade chosen, an empty or exhausted bank) the game behaves exactly as before.
+ *
+ * JBb: the bank is loaded lazily per grade (`data/gradeQuizBank/loader.ts`). Without injected `items` the picker reads
+ * the loaded-grades snapshot; while the player's own grade is still loading it returns `null` (→ the game's own bank)
+ * and starts the download. `gradeForGame` starts it too, and `useGradeLevel` preloads on mount. In Node (server, unit
+ * tests) the loader fills the whole bank synchronously, so nothing changes there.
  */
-import { GRADE_QUIZ_ITEMS, MAX_GRADE, MIN_GRADE, type GradeQuizItem, type GradeSubject } from "../data/gradeQuizBank";
+import { MAX_GRADE, MIN_GRADE, type GradeQuizItem, type GradeSubject } from "../data/gradeQuizBank/types";
+import { isGradeBankLoaded, loadedGradeItems, preloadGradeBanks } from "../data/gradeQuizBank/loader";
 
 export type GradeQuizSeen = { ids: Set<string>; prompts: Set<string> };
 
@@ -76,7 +82,12 @@ export function pickGradeQuiz(args: PickGradeQuizArgs): GradeQuizItem | null {
   const { grade, band, seen } = args;
   if (!isSharedGrade(grade)) return null;
   const rng = args.rng ?? Math.random;
-  const items = args.items ?? GRADE_QUIZ_ITEMS;
+  if (!args.items && !isGradeBankLoaded(grade)) {
+    // JBb: a saját évfolyam darabja még tölt → most a játék saját bankja, és indul a letöltés.
+    void preloadGradeBanks(grade);
+    return null;
+  }
+  const items = args.items ?? loadedGradeItems();
   const subjects = args.subjects && args.subjects.length > 0 ? new Set(args.subjects) : null;
 
   const unseen = items.filter((q) => (!subjects || subjects.has(q.subject)) && !isGradeQuizSeen(seen, q));
@@ -101,7 +112,9 @@ export function pickGradeQuiz(args: PickGradeQuizArgs): GradeQuizItem | null {
  * own (lower-primary) bank, also when the player has not chosen a grade yet.
  */
 export function gradeForGame(grade: number | null | undefined): number | null {
-  return isSharedGrade(grade) ? grade : null;
+  if (!isSharedGrade(grade)) return null;
+  void preloadGradeBanks(grade); // JBb: a darab letöltése (idempotens; a hiba nem dob)
+  return grade;
 }
 
 /** Lesson-material priority: the first material question not asked yet in this run. */
