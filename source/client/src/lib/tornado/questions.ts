@@ -1,6 +1,12 @@
 import { isPlayableQuestion } from "../../../../shared/game-quiz-contract";
 import type { GradeQuizItem } from "../../data/gradeQuizBank/types";
-import { createGradeQuizSeen, gradeForGame, pickGradeQuiz, type GradeQuizSeen } from "../../game-engine/gradeQuiz";
+import {
+  createGradeQuizSeen,
+  gradeForGame,
+  markGradeQuizSeen,
+  pickGradeQuiz,
+  type GradeQuizSeen,
+} from "../../game-engine/gradeQuiz";
 /**
  * Tornado Hunter 200 — the question engine.
  *
@@ -388,7 +394,40 @@ export type PickArgs = {
   gradeBank?: readonly GradeQuizItem[];
   /** Questions asked in this run (ids + prompts) — the shared bank never repeats within a run. */
   gradeSeen?: GradeQuizSeen;
+  /**
+   * S12 / terv A8: the central vocabulary bank (`@/game-engine/vocab`). An English slot asks from it after the
+   * lesson material and before the built-in / shared banks; `null` from `next()` (bank still loading, failed,
+   * or nothing playable) falls through to the old order unchanged.
+   */
+  vocab?: TornadoVocab;
 };
+
+/** The page's adapter over the vocab source: one ready-made English `Question` per call, or `null`. */
+export type TornadoVocab = { next: () => Question | null };
+
+/** Prefix of every vocab-bank question id (`generateVocabQuestion` → `vocab:<entry>:<type>`). */
+export function isVocabQuestion(q: Pick<Question, "id">): boolean {
+  return q.id.startsWith("vocab:");
+}
+
+/** A vocab-bank quiz in the Tornado `Question` shape (difficulty 1..5 follows the bank level 0..4). */
+export function vocabToQuestion(
+  vq: { id: string; prompt: string; options: readonly string[]; correctIndex: number; explanation?: string; level: number },
+  grade: number,
+): Question {
+  return {
+    id: vq.id,
+    subject: "english",
+    topic: "Angol szókincs",
+    grade,
+    prompt: vq.prompt,
+    options: [...vq.options],
+    correctIndex: vq.correctIndex,
+    explanation: vq.explanation ?? null,
+    difficulty: Math.max(1, Math.min(5, vq.level + 1)),
+    source: "bank",
+  };
+}
 
 const TIER_DIFFICULTY: Record<1 | 2 | 3, number> = { 1: 2, 2: 3, 3: 4 };
 
@@ -416,7 +455,8 @@ function subjectFor(mode: QuizMode, rng: Rng): Subject {
  * Draw the next question.
  *
  * Order of preference: unseen material question → any material question →
- * (grades 7..12) the shared grade bank → unseen bank question → any bank question.
+ * (English slot, S12) the central vocab bank → (grades 7..12) the shared grade bank →
+ * unseen bank question → any bank question.
  * Material rows carry no reliable grade of their own, so the grade filter only
  * applies to the banks. When the shared bank has nothing for the grade (empty or
  * exhausted), the built-in bank's top grade stands in.
@@ -429,6 +469,8 @@ export function pickQuestion(args: PickArgs): Question {
   const recent = new Set(args.recent ?? []);
 
   const material = (args.material ?? []).filter((q) => args.mode === "mixed" || q.subject === subject);
+  // S12 / A8: an English slot with no lesson material left asks from the central vocab bank.
+  const vocabSlot = material.length === 0 && subject === "english" && args.vocab != null;
 
   // Spec 2026-09-29: 7..12 → the shared grade bank, after the lesson material.
   const sharedGrade = gradeForGame(Math.max(...resolved));
@@ -443,7 +485,21 @@ export function pickQuestion(args: PickArgs): Question {
       rng,
       items: args.gradeBank,
     });
+    if (item && vocabSlot) {
+      const fromVocab = args.vocab?.next() ?? null;
+      if (fromVocab) {
+        // Measured trap (Brain Rot PR #424): the replaced bank item is marked seen as well, otherwise the shared
+        // bank would offer the very same item again on every English draw (and after a vocab outage).
+        markGradeQuizSeen(seen, item);
+        return fromVocab;
+      }
+    }
     if (item) return fromGradeItem(item, subject);
+  }
+
+  if (vocabSlot) {
+    const fromVocab = args.vocab?.next() ?? null;
+    if (fromVocab) return fromVocab;
   }
 
   const bankPool = QUESTION_BANK.filter((q) => q.subject === subject && grades.has(q.grade));

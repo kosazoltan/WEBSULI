@@ -1455,7 +1455,9 @@ van `detectLookTier`; a vezérlősáv feltétele tartalmazza a `useTouchCapable`
 
 ## S10 — Galaktikus Aszteroida mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #27. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** review — ág feat/jatekok-s10-aszteroida, munkafa .claude/worktrees/jatekok-s10, kanban #27, PR #434. Eltérés: a
+kérdés-hely kiváltása a mainen lévő `pickGradeSlotWithVocab`-bal (`lib/brainRotTuning.ts`, #424); a `remaining-learning.spec.ts`
+aszteroida-tesztje a szóbankos első kérdést is ellenőrzi (orkesztrátori engedéllyel, SPEC-VÁLTOZÁS a teszt kommentjében).
 
 - **Cél:** 4.5 keret; képernyőhöz méretezett joystick és tűzgomb, automatikus célzássegéd érintésnél, látványosabb
   robbanások; angol kérdések a szóbankból (A8).
@@ -1532,7 +1534,15 @@ fine: `sa-touch-controls` 0 db és `sa-keyboard-hint` látható; coarse: ≥ 44 
 
 ## S11 — Kockavadász kvíz mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #28. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** review — ág feat/jatekok-s11-kockavadasz, munkafa .claude/worktrees/jatekok-s11, kanban #28. Eltérések /
+pontosítások (S11, 2026-11-16): (1) a `probe()` `moveFwd` értéke 1 / 0 (a teszt-API típusa szám / szöveg, logikai
+nem); (2) a vászon bal 40%-án induló érintés nem forgat, de a rövid koppintás ott is bányászik; (3) a szóbank-bekötés
+tiszta segédje `lib/blockCraftSubjects.ts` `pickBlockCraftGradeSlot` (a kiváltott évfolyam-banki angol tétel is fogy;
+angol helyen a szóbank akkor is kérdez, ha az évfolyam-bank angol tételei elfogytak); (4) a szünet menü „Kilépés”
+gombja „Kör vége” felirattal az eredményképernyőre visz (a régi „Kör vége” gomb szerepe); (5) fekvő, érintős nézetben
+a hotbar a vásznon, a joystick és az akciógombok között; (6) M11: a three r184 `PCFSoftShadowMap`-figyelmeztetését a
+lap PCF-re állítással kerüli — a közös `three-look/renderer.ts` javítása orkesztrátori kérés; (7) Esc-es pointer-lock
+vesztés játék közben szünet; a kvíz megnyitásakor a játék maga engedi el a lockot.
 
 - **Cél:** 4.5 keret; nagyobb akciógombok (ugrás, bányászás, lerakás ≥ 56 px), kétujjas vezérlés (bal: mozgás, jobb:
   körbenézés), olvasható HUD; angol kérdések a szóbankból (A8).
@@ -1609,7 +1619,7 @@ fine: `sa-touch-controls` 0 db és `sa-keyboard-hint` látható; coarse: ≥ 44 
 
 ## S12 — Tornado Hunter 200 mobilra + szóbank
 
-**Állapot:** nincs elkezdve. Kanban #29. Modell: Opus. Függőség: S1 és S2 összevonva.
+**Állapot:** folyamatban — ág feat/jatekok-s12-tornado, munkafa .claude/worktrees/jatekok-s12, kanban #29
 
 - **Cél:** 4.5 keret; érintővezérlés csak érintős eszközön; minden gomb ≥ 48 px (a kilépés is); a HUD 9–11 px-es szövegei
   olvasható méretre; fekvő tájolás ajánlása; angol kérdések a szóbankból (A8).
