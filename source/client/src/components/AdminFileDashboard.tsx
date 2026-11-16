@@ -8,7 +8,7 @@ import EmptyState from "@/components/EmptyState";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { CLASSROOM_VALUES, getClassroomLabel, MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
+import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
 import {
   DndContext,
   closestCenter,
@@ -118,6 +118,7 @@ function SortableItem({
         description={file.description || undefined}
         createdAt={new Date(file.createdAt)}
         contentType={file.contentType || 'html'}
+        classroom={file.classroom}
         currentUserId={currentUserId}
         isAdmin={true}
         onView={onViewFile}
@@ -157,10 +158,13 @@ export default function AdminFileDashboard({
   );
 
   const filteredFiles = files.filter(file => {
-    const matchesSearch = file.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (file.description || "").toLowerCase().includes(searchQuery.toLowerCase());
-    const classroom = file.classroom ?? 1; // Fallback for legacy/missing data
-    const matchesClassroom = classroomFilter === "all" || classroom === classroomFilter;
+    const q = searchQuery.toLowerCase();
+    // Az évfolyam-feliratra is talál („8. osztály”, „Nincs osztály”) — docs/specs/2026-11-16-tananyag-evfolyam-jeloles.md.
+    const matchesSearch = file.title.toLowerCase().includes(q) ||
+      (file.description || "").toLowerCase().includes(q) ||
+      classroomDisplayLabel(file.classroom).toLowerCase().includes(q);
+    // Hiányzó / érvénytelen évfolyam csak az „Összes” nézetben látszik („Nincs osztály” jelvénnyel), nem hamisan az 1.-ben.
+    const matchesClassroom = classroomFilter === "all" || file.classroom === classroomFilter;
     return matchesSearch && matchesClassroom;
   });
 

@@ -30,7 +30,11 @@ export type IntensityDirector = {
   phase(): DirectorPhase;
   /** 0..1 */
   intensity(): number;
-  /** Kérdés-ütemezéshez: true a relax / fade fázisban, vagy ha a peak 4 s-nál tovább tart. */
+  /**
+   * Kérdés-ütemezéshez: true a relax / fade fázisban, ha a peak 4 s-nál tovább tart, VAGY a felépülő (buildup) fázisban,
+   * amíg a szint `RELAX_ENTER` alatt van (J4a pilot, közös utójavítás: csúcs nélküli, nyugodt menetben különben sosem lenne
+   * igaz, és csak a kényszerített kérdések jönnének — a Matekban 7,5 kérdés/perc a 10 helyett).
+   */
   calm(): boolean;
 };
 
@@ -120,6 +124,10 @@ export function createIntensityDirector(
     },
     phase: () => current,
     intensity: () => level,
-    calm: () => current === "relax" || current === "fade" || (current === "peak" && phaseSec > LONG_PEAK_SEC),
+    calm: () =>
+      current === "relax" ||
+      current === "fade" ||
+      (current === "peak" && phaseSec > LONG_PEAK_SEC) ||
+      (current === "buildup" && level < RELAX_ENTER),
   };
 }

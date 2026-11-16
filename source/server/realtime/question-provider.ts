@@ -9,7 +9,7 @@
  * A bankot évfolyam-fájlonként, SZINKRON importáljuk (nem a `gradeQuizBank/index.ts` gyűjtőből), mert a kliens bankja
  * évfolyamonkénti lusta betöltésre áll át (JBb); a szervernek az egész bank kell, egyszerre.
  */
-import { buildRoundQuestion, type DuelBankItem, type DuelQuestion } from "../../shared/duel/questions";
+import { DUEL_BASE_WINDOW_MS, buildRoundQuestion, type DuelBankItem, type DuelQuestion } from "../../shared/duel/questions";
 import type { RoomQuestionRequest } from "../../shared/duel/room-machine";
 import { GRADE_03 } from "../../client/src/data/gradeQuizBank/grade-03";
 import { GRADE_04 } from "../../client/src/data/gradeQuizBank/grade-04";
@@ -23,8 +23,8 @@ import { GRADE_11 } from "../../client/src/data/gradeQuizBank/grade-11";
 import { GRADE_12 } from "../../client/src/data/gradeQuizBank/grade-12";
 import { windowMsFor } from "../../client/src/game-engine/play/questionDirector";
 
-/** A Párbaj aréna alapablaka (`DuelArena.tsx` `DUEL_BASE_WINDOW_MS`): online is ugyanaz a szabály. */
-export const RT_BASE_WINDOW_MS = 6000;
+/** A párbaj alapablaka (`shared/duel/questions.ts` `DUEL_BASE_WINDOW_MS`, JM1r): szerver és kliens közös szabály. */
+export const RT_BASE_WINDOW_MS = DUEL_BASE_WINDOW_MS;
 
 export const SERVER_GRADE_BANK: readonly DuelBankItem[] = [
   ...GRADE_03,

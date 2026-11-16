@@ -24,7 +24,7 @@ import {
   type QuestionProvider,
 } from "@/game-engine/play/questionDirector";
 import { createReviewQueue } from "@/game-engine/play/reviewQueue";
-import { createQuestionUi } from "@/game-engine/play/useQuestionDirector";
+import { createQuestionUi } from "@/game-engine/play/questionUi";
 import type { RunStatsSnapshot } from "@/game-engine/play/runStats";
 
 import { RAIDERS, SPEED_MATH_GAME_ID, createTowerDriver, towerDirectorConfig, type TowerCore, type TowerDriver } from "./core";
