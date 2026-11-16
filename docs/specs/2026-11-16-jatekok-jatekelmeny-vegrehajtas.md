@@ -1238,7 +1238,7 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
 
 ## J4 — Gyors matek sprint: „Neon védőtorony” (J4a, J4b) — D1 alapértelmezés
 
-**Állapot (J4a):** kész — #451 (b82ea71d), kanban #44 · **Állapot (J4b):** nem kezdődött
+**Állapot (J4a):** kész — #451 (b82ea71d), kanban #44 · **Állapot (J4b):** folyamatban — ág feat/jatek-j4b-matek-foellenfel, munkafa .claude/worktrees/jatek-j4b, kanban #51
 **Függ:** J0c merge. Párhuzamosan a J2-vel. **Elfogadás:** J-SQ, J1–J10, J16, M1–M12. Terv: 5.4.
 
 ### Fájlok
