@@ -486,3 +486,64 @@ Forrás: #424–#436 review-jai és CI-körei, az S13 átfogó review (K1, K3, H
 - **Megelőzés:** regexet tartalmazó kódot kizárólag Edit/Write eszközzel írj (nem JS-sablonszöveggel, nem inline `sed`-del);
   szerkesztés után `cat -A <fájl> | sed -n <sor>p`-vel olvasd vissza a tényleges bájtokat; a regexhez minden elválasztó-változatot
   (szóköz, gondolatjel, kettőspont, vessző) és egy „majdnem egyezik” ellenpéldát (itt: „Helyesírás”) tesztelj.
+
+## C-36 — Hitstop a hurok szorzójával: felülírja a szünetet, és sorrendfüggő (2026-11-16)
+
+Forrás: J0a (#442) review.
+
+- **Tünet:** a szerződés szerint a `feel.hitstop` „a loop timeScale-jét állítja átmenetileg 0-ra”. A hitstop vége visszaírta a
+  korábbi szorzót, így a hitstop alatt kért szünetet (vagy kérdés-lassítást) csendben felülírta; a lejárat pedig attól függött,
+  hogy a képkockában a `feel.update` vagy a `loop.frame` fut-e előbb.
+- **Gyökérok:** két tulajdonos ugyanazon az állapoton (a szorzó a játéké, a hitstop is írta).
+- **Megelőzés:** a hitstop a hurok SAJÁT tartása (`loop.holdFor(ms)`, `holdRemainingMs()`): a hurok a képkocka valós idejéből
+  előbb a tartást fogyasztja, a `timeScale()` a játék értéke marad. Teszt mindkét hívási sorrendre és „hitstop + szünet együtt”
+  esetre (`game-loop.test.ts`, `game-feel.test.ts`).
+
+## C-37 — Háromfázisú kapu: a végrehajtási fájl változása az első kódcommit után (2026-11-16)
+
+Forrás: a játékélmény-szeletek (J0a–J0c) munkarendje; CI „Háromfázisú rend” (`scripts/qa/three-phase-check.mjs`).
+
+- **Tünet:** a kapu piros, ha a PR saját diffjében nincs `docs/specs/*-vegrehajtas.md` változás, vagy az később érkezik, mint az
+  első kódcommit (pl. az állapotsort a végén, a kóddal együtt vagy utána commitolták).
+- **Megelőzés:** az ELSŐ commit a végrehajtási fájlban a saját szelet `**Állapot:**` sora (és csak az); a kód utána. Push előtt
+  helyben: `node scripts/qa/three-phase-check.mjs --base origin/main`. Pusholt ágon a sorrend nem javítható (rebase / force-push
+  tilos) — csak új ággal és új PR-ral, ezért a kaput a legelső push ELŐTT kell futtatni.
+
+## C-38 — Friss munkafában `npm ci` a `better-sqlite3` buildjén elbukik (2026-11-16)
+
+Forrás: J0a, J0b munkafák.
+
+- **Tünet:** `npm ci --prefix source` a `better-sqlite3` node-gyp buildjén elbukik, és az egész telepítést visszagörgeti
+  (nincs `node_modules`).
+- **Megelőzés:** `npm ci --prefix source --ignore-scripts`. Ilyenkor a `native-arch.test.ts` / `doctor:arch` helyben ismert módon
+  bukik (a natív kötés nem épül fel) — a CI-ban zöld; jelenteni kell, binárist másolni / megkerülni tilos.
+
+## C-39 — Git Bash-ben nincs `jq`: a figyelő-hurok csendben végtelen (2026-11-16)
+
+Forrás: J0b CI-figyelés.
+
+- **Tünet:** `gh pr checks … --json … | jq …` figyelő-hurok sosem lép ki: a `jq` hiánya miatt a feltétel mindig üres, a hiba a
+  csőben elnyelődik.
+- **Megelőzés:** a `gh` beépített szűrője: `gh … --json <mezők> --jq '<kifejezés>'` (vagy `-q`). Figyelő-hurok előtt egyszer
+  kézzel futtasd a lekérdezést, és nézd meg a kimenetét.
+
+## C-40 — Sebességkorlát csak IP-kulccsal: közös IP mögötti diákok egymást zárják ki (2026-11-16)
+
+Forrás: JM0 (#443) review.
+
+- **Tünet:** a pontbeküldés korlátja IP-címre szólt; egy iskolai / otthoni hálózat (NAT, közös IP) mögött a gyerekek egymás
+  kvótáját fogyasztották, a korlát a jóhiszemű felhasználót büntette.
+- **Megelőzés:** az elsődleges korlát kulcsa a bejelentkezett felhasználó azonosítója (`createGameScoreUserLimiter`,
+  `server/lib/game-score-limits.ts`: 60 / 15 perc), mellette csak laza IP-plafon az elárasztás ellen (600 / 15 perc, a valódi
+  kliens-IP-vel). Új korlátnál a teszt két felhasználót ugyanarról az IP-ről is küldjön.
+
+## C-41 — A közös ismétlési sor idegen tétele eltorlaszolta a sort (2026-11-16)
+
+Forrás: J0b (#444) review.
+
+- **Tünet:** az ismétlési sor (`websuli.gameReview.v1`) a hét játékban közös; egy másik játék / nyelv tételét az aktuális
+  provider nem tudta visszaállítani, a director mégis újra és újra azt választotta, így a mögötte esedékes, visszaállítható
+  tételek sem jöttek elő.
+- **Megelőzés:** a vissza nem állítható kulcsot a director a menet végéig átugorja (`unrestorable` halmaz, `exclude` paraméter a
+  `dueInRun` / `dueAcrossRuns`-ban) és a sorban HAGYJA (a saját játéka még visszahozza); elavult tétel `REVIEW_STALE_MS` után
+  kikerül. Teszt: idegen kulcs a sor elején → a következő esedékes tétel jön.
