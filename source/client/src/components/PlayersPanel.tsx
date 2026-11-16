@@ -6,7 +6,7 @@
  */
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Ban, Eye, Gamepad2, RotateCcw, Search } from "lucide-react";
+import { Ban, Eye, Gamepad2, RotateCcw, Search, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +38,16 @@ export default function PlayersPanel() {
     mutationFn: (p: AdminPlayer) => apiRequest("POST", `/api/admin/game-accounts/${encodeURIComponent(p.id)}/${p.banned ? "unban" : "ban"}`, {}),
     onSuccess: async (_r, p) => {
       toast({ title: p.banned ? "Tiltás feloldva" : "Játékos tiltva", description: p.nickname ?? "becenév nélküli fiók" });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/game-accounts"] });
+    },
+    onError: (e: Error) => toast({ title: "Nem sikerült", description: e.message, variant: "destructive" }),
+  });
+
+  // Review #449 (K2): a tanulói profil kapcsolatának bontása (közös eszközön tévesen kötött profil).
+  const unlink = useMutation({
+    mutationFn: (p: AdminPlayer) => apiRequest("POST", `/api/admin/game-accounts/${encodeURIComponent(p.id)}/unlink-learner`, {}),
+    onSuccess: async (_r, p) => {
+      toast({ title: "Tanulói kapcsolat bontva", description: p.nickname ?? "becenév nélküli fiók" });
       await queryClient.invalidateQueries({ queryKey: ["/api/admin/game-accounts"] });
     },
     onError: (e: Error) => toast({ title: "Nem sikerült", description: e.message, variant: "destructive" }),
@@ -87,7 +97,12 @@ export default function PlayersPanel() {
                     {" · "}létrehozva: {fmt(p.createdAt)} · utoljára: {fmt(p.lastSeenAt)}
                   </p>
                 </div>
-                <div className="ml-auto flex gap-2">
+                <div className="ml-auto flex flex-wrap justify-end gap-2">
+                  {p.learnerLinked && (
+                    <Button size="sm" variant="ghost" className="gap-1" disabled={unlink.isPending} onClick={() => unlink.mutate(p)} data-testid={`button-player-unlink-${p.id}`}>
+                      <Unlink className="h-4 w-4" /> Tanuló bontása
+                    </Button>
+                  )}
                   {!revealed[p.id] && (
                     <Button size="sm" variant="ghost" className="gap-1" onClick={() => void reveal(p)} title="A teljes e-mail-cím megjelenítése (csak adminnak)">
                       <Eye className="h-4 w-4" /> Cím

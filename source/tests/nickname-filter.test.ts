@@ -93,6 +93,49 @@ describe("JM7b — becenév: e-mail, URL, telefonszám, trágárság, megtévesz
   });
 });
 
+describe("JM7b — review #449 K1: engedélylista, a latin írású hasonmás betűk sem mennek át", () => {
+  // A hasonmás betűk kódpontjai (forrásban csak számként): kiskapitális A, IPA-alfa, pont nélküli i, kiskapitális L,
+  // IPA-g, æ, kiskapitális T, IPA-o (nyitott), ſ (hosszú s), kiskapitális K.
+  const A_SC = cp(0x1d00), ALPHA = cp(0x0251), DOTLESS_I = cp(0x0131), L_SC = cp(0x029f), G_IPA = cp(0x0261), AE = cp(0x00e6);
+  const cases = [
+    `${A_SC}dmin`, `${ALPHA}dmin`, `Adm${DOTLESS_I}n`, `t${ALPHA}n${ALPHA}r`, `Ig${ALPHA}zg${ALPHA}to`, `websu${L_SC}i`, `Moder${ALPHA}tor`,
+    `f${A_SC}sz`, `kurv${ALPHA}`, `${G_IPA}eci`, `f${AE}sz`, `s${AE}x`, `K${A_SC}t${A_SC}`, `Kat${cp(0x1d00)}`, `${cp(0x1d1b)}anar`, `Mo${cp(0x0254)}a`,
+    `${cp(0x1d0b)}ata`, `Kata${cp(0x0131)}`,
+  ];
+  it("a review megkerülő alakjai MIND elutasítva (és a vendég-szűrő is elutasítja őket)", async () => {
+    const jm1 = await import("../shared/nicknames");
+    for (const n of cases) {
+      const r = checkPlayerNickname(n);
+      assert.equal(r.ok, false, `elutasítandó: ${[...n].map((c) => c.codePointAt(0)!.toString(16)).join(" ")}`);
+      assert.ok(jm1.nicknameProblems(n).length > 0);
+    }
+  });
+  it("az NFKC által ASCII-ra bontott alak (pl. hosszú s) a TÁROLT alakban már sima betű — nincs hasonmás a névben", () => {
+    const r = checkPlayerNickname(`Ka${cp(0x017f)}a`);
+    assert.ok(r.ok && r.nickname === "Kasa" && r.key === nicknameKey("Kasa"));
+  });
+  it("a kontrollok változatlanok: tiltott név ASCII-ban, szóköz-tagolva, cirillel is elutasítva", () => {
+    rejectsWith("admin", "RESERVED");
+    rejectsWith("Tanár", "RESERVED");
+    rejectsWith("a d m i n", "RESERVED");
+    rejectsWith(`web${cp(0x0455)}uli`, "SCRIPT");
+    rejectsWith("Adm1n", "RESERVED");
+    rejectsWith("Mod3r4tor", "RESERVED");
+    rejectsWith("Taaanaaar", "RESERVED");
+  });
+  it("a magyar nevek átmennek", () => {
+    for (const n of ["Zsófi", "Őzike_7", "Kis Béla", "Bátor Róka", "Szarvas", "Őzike", "Ügyes_Ödön", "ÁRVÍZTŰRŐ", "Űrhajós-Ili"]) ok(n);
+  });
+  it("csak ékezetben / kis-nagybetűben / elválasztóban eltérő nevek ütköznek (azonos kulcs)", () => {
+    const k = (s: string) => (checkPlayerNickname(s) as { key: string }).key;
+    assert.equal(k("Kis Béla"), k("kis_bela"));
+    assert.equal(k("Kis Béla"), k("KISBÉLA"));
+    assert.equal(k("Kis Béla"), k("Kis-Bela"));
+    assert.equal(k("Zsófi"), k("zsofi"));
+    assert.equal(k("Őzike_7"), k("ozike 7"));
+  });
+});
+
 describe("JM7b — egyetlen becenév-szabály (a JM1 nicknameProblems erre delegál)", () => {
   it("a vendég-szűrő ugyanazt a szabályt és hossz-határt használja; a vendégnevek a közös listákból jönnek", async () => {
     const jm1 = await import("../shared/nicknames");

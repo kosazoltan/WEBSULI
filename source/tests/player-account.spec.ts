@@ -14,10 +14,10 @@ const ACCOUNT = {
   googleLinked: true, learnerLinked: false, createdAt: "2026-11-16T10:00:00.000Z",
 };
 
-type Calls = { profile: unknown[]; link: { body: unknown; token: string | null }[]; exportN: number; del: unknown[] };
+type Calls = { profile: unknown[]; link: { body: unknown; token: string | null }[]; exportN: number; del: unknown[]; codeRequests: number };
 
 async function mockPlayer(page: Page, account: Record<string, unknown>, opts: { deleteStatus?: number; deleteCode?: string } = {}): Promise<Calls> {
-  const calls: Calls = { profile: [], link: [], exportN: 0, del: [] };
+  const calls: Calls = { profile: [], link: [], exportN: 0, del: [], codeRequests: 0 };
   let current = { ...account };
   await page.route("**/api/player/status", (r) => r.fulfill({ json: { enabled: true } }));
   await page.route("**/api/player/me", (r) => r.fulfill({ json: { id: current.id, nickname: current.nickname, needsProfile: current.nickname === null } }));
@@ -37,6 +37,10 @@ async function mockPlayer(page: Page, account: Record<string, unknown>, opts: { 
   await page.route("**/api/player/export", async (r) => {
     calls.exportN++;
     await r.fulfill({ json: { format: "websuli-player-export-v1", account: { email: "diak@pelda.hu", nickname: current.nickname }, gameRuns: [] } });
+  });
+  await page.route("**/api/player/account/delete/start", async (r) => {
+    calls.codeRequests++;
+    await r.fulfill({ status: 202, json: { ok: true } });
   });
   await page.route("**/api/player/account/delete", async (r) => {
     calls.del.push(r.request().postDataJSON());
@@ -139,6 +143,8 @@ test("tanulói profil összekapcsolása: csak megerősítés után, a token fejl
   await page.goto("/fiok");
   await page.getByTestId("button-link-learner").click();
   await expect(page.getByTestId("button-link-learner-confirm")).toBeVisible();
+  // Review #449 (K2): a megerősítés megnevezi, MELYIK fiókhoz kötődik a profil.
+  await expect(page.getByTestId("player-learner-confirm-text")).toContainText("Villám Róka");
   expect(calls.link, "a megerősítés előtt nincs kérés").toHaveLength(0);
   await page.waitForTimeout(300);
   await shot(page, "fiok-tanulo-megerosites-390x844");
@@ -158,27 +164,34 @@ test("adatletöltés és fióktörlés: a törlés csak a beírt szóval indul, 
   expect(calls.exportN).toBe(1);
 
   await page.getByTestId("button-delete-account").click();
-  await expect(page.getByTestId("button-delete-confirm")).toBeDisabled();
-  await page.getByTestId("input-delete-confirm").fill("igen");
+  // Review #449 (A3): előbb megerősítő kód a fiók e-mail-címére; kód nélkül nincs törlés-gomb.
+  await expect(page.getByTestId("button-delete-confirm")).toHaveCount(0);
+  await page.getByTestId("button-delete-send-code").click();
+  await expect(page.getByTestId("player-delete-code-sent")).toContainText("d***@p***.hu");
+  expect(calls.codeRequests).toBe(1);
   await expect(page.getByTestId("button-delete-confirm")).toBeDisabled();
   await page.getByTestId("input-delete-confirm").fill("törlöm");
+  await expect(page.getByTestId("button-delete-confirm")).toBeDisabled();
+  await page.getByTestId("input-delete-code").fill("1234 5678");
   await expect(page.getByTestId("button-delete-confirm")).toBeEnabled();
   await page.waitForTimeout(300); // a párbeszéd beúszó animációja (a képernyőképhez)
   await shot(page, "fiok-torles-360x640");
   await page.getByTestId("button-delete-confirm").click();
   await expect(page).toHaveURL(/\/games$/);
-  expect(calls.del).toEqual([{ confirm: "TÖRLÖM" }]);
+  expect(calls.del).toEqual([{ confirm: "TÖRLÖM", code: "12345678" }]);
 });
 
-test("fióktörlés régi belépéssel: újra belépést kér, nem töröl csendben", async ({ page }) => {
+test("fióktörlés rossz kóddal: hibaüzenet, nem töröl, nem navigál", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 640 });
-  await mockPlayer(page, ACCOUNT, { deleteStatus: 401, deleteCode: "REAUTH_REQUIRED" });
+  await mockPlayer(page, ACCOUNT, { deleteStatus: 400, deleteCode: "CODE_INVALID" });
   await page.goto("/fiok");
   await page.getByTestId("button-delete-account").click();
+  await page.getByTestId("button-delete-send-code").click();
+  await page.getByTestId("input-delete-code").fill("00000000");
   await page.getByTestId("input-delete-confirm").fill("TÖRLÖM");
   await page.getByTestId("button-delete-confirm").click();
-  await expect(page.getByTestId("player-delete-error")).toContainText("lépj be újra");
-  await expect(page.getByTestId("button-reauth")).toBeVisible();
+  await expect(page.getByTestId("player-delete-error")).toContainText("kód nem jó");
+  await expect(page).toHaveURL(/\/fiok$/);
 });
 
 test("review #449: fiókváltás egy SPA-munkameneten belül — B azonnal a saját adatait látja, A-ból semmi nem marad", async ({ page }) => {

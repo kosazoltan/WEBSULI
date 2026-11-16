@@ -148,10 +148,16 @@ export function createPlayerAccountStore(pool: Db) {
       await pool.query(`UPDATE player_accounts SET linked_learner_id = NULL WHERE id = $1`, [playerId]);
     },
 
-    /** A saját adatok teljes köre (adatletöltéshez): a fiók MINDEN tárolt mezője + a függő belépőkódok száma (tartalom nélkül). */
+    /**
+     * A saját adatok (adatletöltéshez) — review #449 (A2): ENGEDÉLYLISTÁS mezők, belső azonosító NÉLKÜL (nincs fiók-, Google-,
+     * tanulói azonosító, nincs foglaltsági kulcs); a tanulói kapcsolatról csak annyi, hogy van-e.
+     */
     async exportAccount(id: string, emailHashOf: (email: string) => string): Promise<Record<string, unknown> | null> {
-      const { rows } = await pool.query<Record<string, unknown> & { email: string }>(
-        `SELECT id, email, email_verified_at, nickname, nickname_key, avatar_key, friend_code, linked_learner_id, google_sub,
+      const { rows } = await pool.query<{
+        email: string; email_verified_at: Date | null; nickname: string | null; avatar_key: string | null; google: boolean; learner: boolean;
+        banned_at: Date | null; created_at: Date; last_seen_at: Date | null;
+      }>(
+        `SELECT email, email_verified_at, nickname, avatar_key, (google_sub IS NOT NULL) AS google, (linked_learner_id IS NOT NULL) AS learner,
                 banned_at, created_at, last_seen_at
            FROM player_accounts WHERE id = $1`,
         [id],
@@ -161,9 +167,8 @@ export function createPlayerAccountStore(pool: Db) {
       const codes = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM player_auth_codes WHERE email_hash = $1`, [emailHashOf(r.email)]);
       return {
         account: {
-          id: r.id, email: r.email, emailVerifiedAt: r.email_verified_at, nickname: r.nickname, nicknameKey: r.nickname_key,
-          avatar: r.avatar_key, friendCode: r.friend_code, linkedLearnerId: r.linked_learner_id, googleAccountId: r.google_sub,
-          bannedAt: r.banned_at, createdAt: r.created_at, lastSeenAt: r.last_seen_at,
+          email: r.email, emailVerifiedAt: r.email_verified_at, nickname: r.nickname, avatar: r.avatar_key,
+          googleLinked: r.google, learnerProfileLinked: r.learner, bannedAt: r.banned_at, createdAt: r.created_at, lastSeenAt: r.last_seen_at,
         },
         loginCodes: { count: Number(codes.rows[0]!.n), note: "Egyszer használható belépőkódok — csak titkosított ujjlenyomatként tároljuk, 24 óra után törlődnek." },
       };

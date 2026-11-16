@@ -201,7 +201,7 @@ export async function fetchNicknameSuggestions(): Promise<string[]> {
   }
 }
 
-export type LinkLearnerResult = { ok: true } | { ok: false; code: "LEARNER_TOKEN_INVALID" | "LEARNER_ALREADY_LINKED" | "RATE_LIMITED" | "NETWORK" | "SERVER_ERROR" | "BANNED" | "UNAUTHORIZED" };
+export type LinkLearnerResult = { ok: true } | { ok: false; code: "LEARNER_TOKEN_INVALID" | "LEARNER_ALREADY_LINKED" | "REAUTH_REQUIRED" | "RATE_LIMITED" | "NETWORK" | "SERVER_ERROR" | "BANNED" | "UNAUTHORIZED" };
 
 /** A tanulói token a fejlécben megy (nem URL-ben, nem naplózott törzsben); a szerver ellenőrzi az aláírását. */
 export async function linkLearnerProfile(learnerToken: string): Promise<LinkLearnerResult> {
@@ -209,6 +209,7 @@ export async function linkLearnerProfile(learnerToken: string): Promise<LinkLear
   if (status === 200) return { ok: true };
   if (status === 400) return { ok: false, code: "LEARNER_TOKEN_INVALID" };
   if (status === 409 && data?.code === "LEARNER_ALREADY_LINKED") return { ok: false, code: "LEARNER_ALREADY_LINKED" };
+  if (status === 401 && data?.code === "REAUTH_REQUIRED") return { ok: false, code: "REAUTH_REQUIRED" };
   return { ok: false, code: commonFailure(status) };
 }
 
@@ -221,12 +222,19 @@ export async function exportPlayerData(): Promise<Record<string, unknown> | null
   return status === 200 ? data : null;
 }
 
-export type DeleteAccountResult = { ok: true } | { ok: false; code: "REAUTH_REQUIRED" | "CONFIRM_REQUIRED" | "RATE_LIMITED" | "NETWORK" | "SERVER_ERROR" | "BANNED" | "UNAUTHORIZED" };
+export type DeleteAccountResult = { ok: true } | { ok: false; code: "CODE_INVALID" | "CONFIRM_REQUIRED" | "RATE_LIMITED" | "NETWORK" | "SERVER_ERROR" | "BANNED" | "UNAUTHORIZED" };
 
-export async function deletePlayerAccount(confirm: string): Promise<DeleteAccountResult> {
-  const { status, data } = await playerWrite("/api/player/account/delete", { confirm });
+/** Review #449 (A3): a törlés megerősítő kódja a fiók e-mail-címére megy. */
+export async function requestDeleteCode(): Promise<{ ok: true } | { ok: false; code: "RATE_LIMITED" | "NETWORK" | "SERVER_ERROR" | "BANNED" | "UNAUTHORIZED" }> {
+  const { status } = await playerWrite("/api/player/account/delete/start", {});
+  if (status === 202) return { ok: true };
+  return { ok: false, code: commonFailure(status) };
+}
+
+export async function deletePlayerAccount(confirm: string, code: string): Promise<DeleteAccountResult> {
+  const { status, data } = await playerWrite("/api/player/account/delete", { confirm, code });
   if (status === 200) return { ok: true };
-  if (status === 401 && data?.code === "REAUTH_REQUIRED") return { ok: false, code: "REAUTH_REQUIRED" };
+  if (status === 400 && data?.code === "CODE_INVALID") return { ok: false, code: "CODE_INVALID" };
   if (status === 400) return { ok: false, code: "CONFIRM_REQUIRED" };
   return { ok: false, code: commonFailure(status) };
 }

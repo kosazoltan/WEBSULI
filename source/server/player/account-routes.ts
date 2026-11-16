@@ -11,8 +11,9 @@
  *                                             token szerveroldali ellenőrzése után; egy tanulói profil egy fiókhoz
  *   POST /api/player/unlink-learner        → a kapcsolat bontása
  *   POST /api/player/export                → JSON letöltés: KIZÁRÓLAG a saját fiók tárolt adatai
- *   POST /api/player/account/delete        → { confirm: "TÖRLÖM" } + friss belépés (≤ 30 perc): fiók, kódrekordok, minden
- *                                             munkamenet törlése (account-store.ts deleteAccount)
+ *   POST /api/player/account/delete/start  → egyszeri törlési kód a fiók e-mail-címére (review #449 A3)
+ *   POST /api/player/account/delete        → { confirm: "TÖRLÖM", code }: fiók, kódrekordok, minden munkamenet törlése
+ *                                             (account-store.ts deleteAccount) + értesítő levél a fiók címére
  * Napló: e-mail csak maszkolva, tanulói token és tanulónév soha.
  */
 import { randomInt } from "node:crypto";
@@ -26,17 +27,24 @@ import { logger } from "../lib/logger";
 import { maskEmail } from "../lib/mask-email";
 import { enforceOriginAllowlist } from "../lib/origin-guard";
 import type { PlayerAccountStore } from "./account-store";
-import { emailHash, playerAuthKey } from "./codes";
+import { CODE_PATTERN, codeHash, emailHash, generateCode, generateLinkToken, limitHash, linkHash, playerAuthKey } from "./codes";
+import type { PlayerMailer } from "./auth-routes";
+import { buildAccountDeletedEmail, buildDeleteCodeEmail } from "./email-template";
 import { createRequirePlayer, requirePlayerAccountsFlag } from "./require-player";
 import { destroyPlayerSession, getPlayerSessionAuthAt, getPlayerSessionId } from "./session";
 import type { PlayerStore } from "./store";
 
 export const DELETE_CONFIRM_WORD = "TÖRLÖM";
-/** A fióktörléshez a belépés legfeljebb ennyi ideje történhetett (különben újra be kell lépni). */
-export const DELETE_REAUTH_MS = 30 * 60_000;
+/** A tanulói összekapcsoláshoz a belépés legfeljebb ennyi ideje történhetett (review #449 K2: friss belépés). */
+export const FRESH_LOGIN_MS = 30 * 60_000;
+/** A törlésről szóló értesítő levelek szerverszintű napi plafonja (a belépő levelek keretétől független, szűk). */
+export const DELETED_NOTICE_DAILY_MAX = 50;
+const DELETE_CODE_PREFIX = "del:";
 
 export type PlayerAccountDeps = {
-  store: Pick<PlayerStore, "getPlayer">;
+  store: Pick<PlayerStore, "getPlayer" | "reserveCode" | "consumeCode">;
+  /** A fiók e-mail-címére menő levelek (törlési kód, törlés-értesítő) — a belépő levelek küldője. */
+  mailer: PlayerMailer;
   accounts: PlayerAccountStore;
   /** Aláírt tanulói token → tanuló azonosítója (a meglévő `resolveLearner`, server/learners.ts); érvénytelen → null. */
   resolveLearnerId: (token: string) => Promise<string | null>;
@@ -48,7 +56,7 @@ const profileSchema = z.object({
   avatar: z.string().max(32).optional(),
 }).strict();
 const linkSchema = z.object({ confirm: z.literal(true) }).strict();
-const deleteSchema = z.object({ confirm: z.string().max(16) }).strict();
+const deleteSchema = z.object({ confirm: z.string().max(16), code: z.string().max(16) }).strict();
 const LEARNER_TOKEN_SHAPE = /^[A-Za-z0-9-]{8,64}\.[1-9][0-9]{0,8}\.[A-Za-z0-9_-]{22}$/;
 
 function noStore(res: Response) {
@@ -76,6 +84,8 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
   const writeLimiter = playerLimiter(15 * 60_000, 40, "Túl sok módosítás. Próbáld újra egy kicsit később!");
   const readLimiter = playerLimiter(15 * 60_000, 120, "Túl sok kérés. Próbáld újra egy kicsit később!");
   const heavyLimiter = playerLimiter(60 * 60_000, 6, "Ezt most túl sokszor kérted. Próbáld újra egy óra múlva!");
+  const deleteStartLimiter = playerLimiter(60 * 60_000, 4, "Ezt most túl sokszor kérted. Próbáld újra egy óra múlva!");
+  const deleteLimiter = playerLimiter(60 * 60_000, 10, "Túl sok próbálkozás. Próbáld újra egy óra múlva!");
 
   const playerId = (res: Response) => (res.locals.player as { id: string }).id;
 
@@ -156,6 +166,11 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
     // Kifejezett megerősítés (a kliens párbeszéde után) ÉS érvényes, aláírt tanulói token kell — más tanuló profilja
     // token nélkül nem kapcsolható; a válasz semmilyen tanulói adatot (nevet, évfolyamot) nem ad vissza.
     if (!linkSchema.safeParse(req.body).success) return res.status(400).json({ ok: false, code: "CONFIRM_REQUIRED" });
+    // Review #449 (K2): friss belépés kell (közös eszközön egy régóta nyitva hagyott munkamenetből ne lehessen kötni).
+    const linkAuthAt = getPlayerSessionAuthAt(req);
+    if (linkAuthAt === null || now() - linkAuthAt > FRESH_LOGIN_MS || linkAuthAt > now() + 60_000) {
+      return res.status(401).json({ ok: false, code: "REAUTH_REQUIRED" });
+    }
     const token = req.get("x-learner-token") ?? "";
     if (!LEARNER_TOKEN_SHAPE.test(token)) return res.status(400).json({ ok: false, code: "LEARNER_TOKEN_INVALID" });
     try {
@@ -202,25 +217,76 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
     }
   });
 
-  router.post("/account/delete", requirePlayerAccountsFlag, enforceOriginAllowlist, heavyLimiter, requirePlayer, async (req, res) => {
+  /**
+   * Review #449 (A3): a törlés KÖZVETLEN megerősítést kér — egyszeri kódot a fiók e-mail-címére (a belépőkódok
+   * infrastruktúrájával, céljához kötött hash-sel: belépőkódként nem használható, és fordítva). A válasz mindig 202.
+   */
+  router.post("/account/delete/start", requirePlayerAccountsFlag, enforceOriginAllowlist, deleteStartLimiter, requirePlayer, async (_req, res) => {
+    noStore(res);
+    try {
+      const email = await deps.accounts.playerEmailById(playerId(res));
+      if (!email) return res.status(401).json({ message: "Unauthorized" });
+      const key = playerAuthKey();
+      const eh = emailHash(key, email);
+      const code = generateCode();
+      const reserved = await deps.store.reserveCode({
+        emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email),
+        codeHash: codeHash(key, eh, `${DELETE_CODE_PREFIX}${code}`), linkHash: linkHash(key, generateLinkToken()),
+      });
+      if (reserved !== "OK") {
+        logger.info(`[PLAYER] törlési kód korláton (${reserved}): ${maskEmail(email)}`);
+        return res.status(202).json({ ok: true });
+      }
+      void deps.mailer(email, buildDeleteCodeEmail({ code })).catch((mailError: unknown) => {
+        logger.error(`[PLAYER] a törlési kód levele nem ment ki (${maskEmail(email)}): ${(mailError instanceof Error ? mailError.message : "ismeretlen hiba").replaceAll(email, maskEmail(email))}`);
+      });
+      return res.status(202).json({ ok: true });
+    } catch (error) {
+      logger.error("[PLAYER] törlési kód hiba:", errMsg(error));
+      return res.status(500).json({ ok: false, code: "SERVER_ERROR" });
+    }
+  });
+
+  let noticeDay = "";
+  let noticeCount = 0;
+  const noticeAllowed = () => {
+    const day = new Date(now()).toISOString().slice(0, 10);
+    if (day !== noticeDay) { noticeDay = day; noticeCount = 0; }
+    if (noticeCount >= DELETED_NOTICE_DAILY_MAX) return false;
+    noticeCount++;
+    return true;
+  };
+
+  router.post("/account/delete", requirePlayerAccountsFlag, enforceOriginAllowlist, deleteLimiter, requirePlayer, async (req, res) => {
     noStore(res);
     const parsed = deleteSchema.safeParse(req.body);
     if (!parsed.success || parsed.data.confirm.normalize("NFC") !== DELETE_CONFIRM_WORD) {
       return res.status(400).json({ ok: false, code: "CONFIRM_REQUIRED" });
     }
-    const authAt = getPlayerSessionAuthAt(req);
-    if (authAt === null || now() - authAt > DELETE_REAUTH_MS || authAt > now() + 60_000) {
-      return res.status(401).json({ ok: false, code: "REAUTH_REQUIRED" });
-    }
+    const code = parsed.data.code.replace(/\s/g, "");
+    if (!CODE_PATTERN.test(code)) return res.status(400).json({ ok: false, code: "CODE_INVALID" });
     try {
       const id = playerId(res);
       const key = playerAuthKey();
       const email = await deps.accounts.playerEmailById(id);
+      if (!email) return res.status(401).json({ message: "Unauthorized" });
+      const eh = emailHash(key, email);
+      // A kódrekord egyszeri, a fiókonkénti hibás-próba plafon (store.consumeCode) itt is érvényes.
+      if ((await deps.store.consumeCode(eh, codeHash(key, eh, `${DELETE_CODE_PREFIX}${code}`))) === null) {
+        return res.status(400).json({ ok: false, code: "CODE_INVALID" });
+      }
       const result = await deps.accounts.deleteAccount(id, (e) => emailHash(key, e));
       if (!result) return res.status(401).json({ message: "Unauthorized" });
       await destroyPlayerSession(req);
       res.clearCookie("connect.sid", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" });
       logger.info(`[PLAYER] fiók törölve: ${maskEmail(email)} (kódrekord: ${result.codes}, munkamenet: ${result.sessions})`);
+      if (noticeAllowed()) {
+        void deps.mailer(email, buildAccountDeletedEmail()).catch((mailError: unknown) => {
+          logger.error(`[PLAYER] a törlés-értesítő nem ment ki (${maskEmail(email)}): ${(mailError instanceof Error ? mailError.message : "ismeretlen hiba").replaceAll(email, maskEmail(email))}`);
+        });
+      } else {
+        logger.warn("[PLAYER] a törlés-értesítők napi plafonja betelt — értesítő nem ment ki");
+      }
       return res.json({ ok: true, deleted: result });
     } catch (error) {
       logger.error("[PLAYER] fióktörlés hiba:", errMsg(error));

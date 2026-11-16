@@ -88,10 +88,14 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "GET /api/player/account": "JM7b: saját fiók — flag + requirePlayer, maszkolt cím",
   "GET /api/player/nickname-suggestions": "JM7b: becenév-ajánlás — flag + requirePlayer + korlát",
   "POST /api/player/profile": "JM7b: becenév / avatar — flag + requirePlayer + CSRF + Origin + korlát, szűrő",
-  "POST /api/player/link-learner": "JM7b: tanulói profil összekapcsolása — flag + requirePlayer + CSRF + Origin + aláírt tanulói token + megerősítés",
+  // Review #449 (K2): a link-learner csak a kapcsolatot rögzíti — a játékos-felületre tanulói adat (név, évfolyam, eredmény)
+  // ebben a szeletben NEM kerül. Ha egy későbbi szelet ilyet hozna (a végpont válasza vagy egy új /api/player/* végpont), az
+  // ÚJ független biztonsági review-t igényel (közös eszköz, testvér-forgatókönyv).
+  "POST /api/player/link-learner": "JM7b: tanulói profil összekapcsolása — flag + requirePlayer + CSRF + Origin + aláírt tanulói token + megerősítés + friss belépés",
   "POST /api/player/unlink-learner": "JM7b: összekapcsolás bontása — flag + requirePlayer + CSRF + Origin",
   "POST /api/player/export": "JM7b: adatletöltés (csak saját) — flag + requirePlayer + CSRF + Origin + óránkénti korlát",
-  "POST /api/player/account/delete": "JM7b: fióktörlés — flag + requirePlayer + CSRF + Origin + megerősítő szó + friss belépés",
+  "POST /api/player/account/delete/start": "JM7b: törlési kód a fiók címére — flag + requirePlayer + CSRF + Origin + korlát, a belépőkód-keret",
+  "POST /api/player/account/delete": "JM7b: fióktörlés — flag + requirePlayer + CSRF + Origin + megerősítő szó + e-mailben küldött egyszeri kód",
   "GET /api/auth/user": "saját felhasználó (vagy null)",
   "GET /api/csrf-token": "CSRF-token",
   "GET /api/health": "állapot",
@@ -201,7 +205,7 @@ describe("JM7a — admin-útvonal regressziós őr", () => {
     const admin = inventory.filter((e) => e.path.startsWith("/api/admin/game-accounts"));
     assert.deepEqual(admin.map(key).sort(), [
       "GET /api/admin/game-accounts", "GET /api/admin/game-accounts/:id/email",
-      "POST /api/admin/game-accounts/:id/ban", "POST /api/admin/game-accounts/:id/unban",
+      "POST /api/admin/game-accounts/:id/ban", "POST /api/admin/game-accounts/:id/unban", "POST /api/admin/game-accounts/:id/unlink-learner",
     ]);
     for (const e of admin) assert.ok(e.chain.includes(isAuthenticatedAdmin), `${key(e)}: hiányzik az admin-őr`);
   });

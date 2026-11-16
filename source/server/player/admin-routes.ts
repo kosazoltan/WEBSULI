@@ -6,6 +6,7 @@
  *   GET  /api/admin/game-accounts?q=     → lista: becenév, MASZKOLT cím, létrehozás, utolsó belépés, tiltott-e
  *   GET  /api/admin/game-accounts/:id/email → a teljes cím (csak adminnak, külön kérésre; a napló maszkolt)
  *   POST /api/admin/game-accounts/:id/ban | /unban → tiltás / feloldás; a már belépett játékosra is azonnal hat (requirePlayer)
+ *   POST /api/admin/game-accounts/:id/unlink-learner → a tanulói profil kapcsolatának bontása (review #449 K2)
  * A flagtől független (az admin a kikapcsolt bevezetés alatt is látja / tilthatja a fiókokat).
  */
 import express, { type Router } from "express";
@@ -67,6 +68,22 @@ export function createPlayerAdminRouter(accounts: PlayerAccountStore): Router {
       }
     });
   }
+
+  // Review #449 (K2): a tanulói profil kapcsolatának bontása (pl. közös eszközön tévesen / jogosulatlanul kötött profil).
+  router.post("/:id/unlink-learner", async (req, res) => {
+    const id = idSchema.safeParse(req.params.id);
+    if (!id.success) return res.status(400).json({ message: "Hibás azonosító" });
+    try {
+      const email = await accounts.playerEmailById(id.data);
+      if (!email) return res.status(404).json({ message: "Nincs ilyen játékos" });
+      await accounts.unlinkLearner(id.data);
+      logger.info(`[PLAYER-ADMIN] tanulói kapcsolat bontva: ${maskEmail(email)}`);
+      return res.json({ ok: true, learnerLinked: false });
+    } catch (error) {
+      logger.error("[PLAYER-ADMIN] kapcsolat-bontás hiba:", errMsg(error));
+      return res.status(500).json({ message: "Hiba a kapcsolat bontásakor" });
+    }
+  });
 
   return router;
 }

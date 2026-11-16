@@ -882,6 +882,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // JM7b: „kis fiók” (becenév, avatar, tanulói összekapcsolás, adatletöltés, törlés) — flag + requirePlayer mögött.
   app.use("/api/player", createPlayerAccountRouter({
     store: playerStore,
+    mailer: defaultPlayerMailer,
     accounts: playerAccounts,
     resolveLearnerId: async (token) => (await resolveLearner(token))?.id ?? null,
   }));

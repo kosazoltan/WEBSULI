@@ -8,11 +8,11 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import bcrypt from "bcryptjs";
 import { Client, dbPool, injectSession, startApp } from "./support/authz-db-harness";
-import { playerGoogleLogin } from "./support/player-google-stub";
+import { getNoFollow, installAdminGoogleStub, playerGoogleLogin } from "./support/player-google-stub";
 
 const { emailHash, playerAuthKey, codeHash, limitHash, linkHash, generateLinkToken } = await import("../server/player/codes");
 const { createPlayerStore } = await import("../server/player/store");
-const { learnerTokenFor } = await import("../server/learners");
+const { learnerTokenFor, rotateLearnerToken } = await import("../server/learners");
 const { logger } = await import("../server/lib/logger");
 
 const ADMIN_EMAIL = "jm7b-admin@websuli.example";
@@ -166,6 +166,42 @@ describe("JM7b — játékos Google-út: elválasztás az admin-úttól (G11 / D
     assert.equal((await other.request("GET", "/api/player/me")).json, null);
   });
 
+  it("review #449 A1: párhuzamos admin- és játékos-folyamat egy munkamenetben — az admin-visszahívás admint, a játékosé játékost ad; hamis / idegen state → senki", async () => {
+    // 1) admin-indítás, közben játékos-indítás → az ADMIN visszahívása (state nélkül, a meglévő út) admin-belépést ad.
+    const c1 = new Client(app.base);
+    assert.equal((await getNoFollow(c1, "/auth/google")).status, 302);
+    const p1 = await playerGoogleLogin(c1, verified("parhuzamos1@pelda.hu", "g-par-1"), { skipCallback: true });
+    assert.ok(p1.state?.startsWith("p."));
+    installAdminGoogleStub({ id: "g-admin-own", emails: [{ value: ADMIN_EMAIL, verified: true }] });
+    const adminCb = await getNoFollow(c1, "/auth/google/callback?code=admin-code-1");
+    assert.equal(adminCb.status, 302);
+    assert.notEqual(adminCb.location?.startsWith("/belepes"), true, "az admin-belépést a függő játékos-folyamat nem hiúsítja meg");
+    assert.equal(((await c1.request("GET", "/api/auth/user")).json as { isAdmin: boolean }).isAdmin, true);
+    assert.equal((await c1.request("GET", "/api/player/me")).json, null, "játékos-munkamenet nem jött létre");
+
+    // 2) admin-indítás, közben játékos-indítás → a JÁTÉKOS visszahívása csak játékost ad (req.user nélkül).
+    const c2 = new Client(app.base);
+    await getNoFollow(c2, "/auth/google");
+    const p2 = await playerGoogleLogin(c2, verified("parhuzamos2@pelda.hu", "g-par-2"), { skipCallback: true });
+    const playerCb = await playerGoogleLogin(c2, verified("parhuzamos2@pelda.hu", "g-par-2"), { reuse: p2 });
+    assert.equal(playerCb.callback?.location, "/fiok");
+    await c2.fetchCsrf();
+    assert.equal((await c2.request("GET", "/api/auth/user")).json, null);
+    assert.ok(((await c2.request("GET", "/api/player/me")).json as { id?: string } | null)?.id);
+
+    // 3) hamisított (jó alakú, de a munkamenetben nem létező) és idegen munkamenet state-je → senki nem lép be.
+    const c3 = new Client(app.base);
+    await playerGoogleLogin(c3, verified("hamis@pelda.hu", "g-hamis"), { skipCallback: true });
+    const forged = await getNoFollow(c3, `/auth/google/callback?code=x&state=p.${"A".repeat(32)}`);
+    assert.equal(forged.location, "/belepes?hiba=google");
+    const foreign = new Client(app.base);
+    const p4 = await playerGoogleLogin(foreign, verified("idegen@pelda.hu", "g-idegen"), { skipCallback: true });
+    const swapped = await getNoFollow(c3, `/auth/google/callback?code=y&state=${encodeURIComponent(p4.state!)}`);
+    assert.equal(swapped.location, "/belepes?hiba=google");
+    assert.equal((await c3.request("GET", "/api/player/me")).json, null);
+    assert.equal((await c3.request("GET", "/api/auth/user")).json, null);
+  });
+
   it("flag KI: a játékos Google-út 404, a visszahívás nem léptet be", async () => {
     process.env.PLAYER_ACCOUNTS = "off";
     try {
@@ -265,14 +301,31 @@ describe("JM7b — tanulói profil összekapcsolása (review #445 K3)", () => {
     assert.ok(!okLink.text.includes("Anna") && !okLink.text.includes("jm7b-learner"), "a válaszban nincs tanulói adat");
     const [row] = await q<{ linked_learner_id: string }>(`SELECT linked_learner_id FROM player_accounts WHERE email = 'link-a@pelda.hu'`);
     assert.equal(row!.linked_learner_id, "jm7b-learner-1");
-    // Visszavont token (verzióléptetés) már nem érvényes.
-    await dbPool.query(`UPDATE learners SET token_version = 2 WHERE id = 'jm7b-learner-1'`);
+    // Amíg A-hoz kötött: B (közös eszköz, ugyanazzal a tokennel) 409-et kap.
     const b = await emailPlayer("link-b@pelda.hu");
+    assert.equal((await withToken(b, token, { confirm: true })).status, 409, "a tanuló már másik fiókhoz kapcsolt");
+    // Review #449 (K2): régi belépésű (nyitva hagyott) munkamenetből nem köthető.
+    const bId = ((await b.request("GET", "/api/player/me")).json as { id: string }).id;
+    const staleB = new Client(app.base, await injectSession({ player: { id: bId } }));
+    await staleB.fetchCsrf();
+    const staleLink = await withToken(staleB, token, { confirm: true });
+    assert.deepEqual([staleLink.status, JSON.parse(staleLink.text).code], [401, "REAUTH_REQUIRED"]);
+    // Review #449 (K2): az újrapárosítás (tokenrotáció) a régi tokennel kötött kapcsolatot BONTJA; a régi token érvénytelen,
+    // az új, érvényes tokennel érkező köthet.
+    await rotateLearnerToken("jm7b-learner-1");
+    const [afterRotate] = await q<{ linked_learner_id: string | null }>(`SELECT linked_learner_id FROM player_accounts WHERE email = 'link-a@pelda.hu'`);
+    assert.equal(afterRotate!.linked_learner_id, null, "a rotáció bontotta a kapcsolatot");
+    assert.equal(((await a.request("GET", "/api/player/account")).json as { learnerLinked: boolean }).learnerLinked, false);
     assert.equal((await withToken(b, token, { confirm: true })).status, 400, "visszavont token");
     const fresh = learnerTokenFor("jm7b-learner-1", 2)!;
-    assert.equal((await withToken(b, fresh, { confirm: true })).status, 409, "a tanuló már másik fiókhoz kapcsolt");
-    assert.equal((await a.request("POST", "/api/player/unlink-learner", {})).status, 200);
-    assert.equal((await withToken(b, fresh, { confirm: true })).status, 200, "bontás után kapcsolható");
+    assert.equal((await withToken(b, fresh, { confirm: true })).status, 200, "az új tokennel köthető");
+    // A saját kapcsolat bármikor bontható; az admin is bonthatja.
+    assert.equal((await b.request("POST", "/api/player/unlink-learner", {})).status, 200);
+    assert.equal((await withToken(b, fresh, { confirm: true })).status, 200);
+    const admin = await adminClient();
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${bId}/unlink-learner`, {})).status, 200);
+    assert.equal(((await b.request("GET", "/api/player/account")).json as { learnerLinked: boolean }).learnerLinked, false, "admin-bontás");
+    assert.equal((await b.request("POST", `/api/admin/game-accounts/${bId}/unlink-learner`, {})).status, 401, "játékos nem éri el az admin-bontást");
     assert.ok(!logged.some((l) => l.includes(token) || l.includes(fresh) || l.includes("Anna")), "token / tanulónév nem kerül naplóba");
   });
 });
@@ -294,27 +347,49 @@ describe("JM7b — adatletöltés és fióktörlés (JM-A15)", () => {
     assert.equal(data.account.nickname, "Export Panda");
     assert.equal(data.account.avatar, "hex-lime");
     assert.ok(!text.includes("masik-exporthoz") && !text.includes("Titkos Holló"), "más játékos adata nincs benne");
+    // Review #449 (A2): engedélylistás séma — belső azonosító (fiók, Google, tanuló, foglaltsági kulcs) nincs benne.
+    assert.deepEqual(Object.keys(data).sort(), ["account", "exportedAt", "format", "gameRuns", "loginCodes"]);
+    assert.deepEqual(Object.keys(data.account).sort(), ["avatar", "bannedAt", "createdAt", "email", "emailVerifiedAt", "googleLinked", "lastSeenAt", "learnerProfileLinked", "nickname"]);
+    const ownId = ((await c.request("GET", "/api/player/me")).json as { id: string }).id;
+    assert.ok(!text.includes(ownId), "a fiók belső azonosítója nincs az exportban");
+    assert.ok(!/nicknameKey|linkedLearnerId|googleAccountId|friendCode/.test(text));
   });
 
-  it("törlés: megerősítő szó + friss belépés kell; utána a fiók, a kódrekordok és MINDEN munkamenet törlődik, a tanuló marad", async () => {
+  it("törlés: megerősítő szó + a fiók címére küldött EGYSZERI kód kell (review #449 A3); utána a fiók, a kódrekordok és MINDEN munkamenet törlődik, a tanuló marad, értesítő megy", async () => {
     await dbPool.query(`INSERT INTO learners (id, name, grade) VALUES ('jm7b-learner-del', 'Törlés Teszt', 4)`);
     const email = "torles@pelda.hu";
     const c = await emailPlayer(email);
     const id = ((await c.request("GET", "/api/player/me")).json as { id: string }).id;
     await dbPool.query(`UPDATE player_accounts SET linked_learner_id = 'jm7b-learner-del', nickname = 'Törlendő Teknős', nickname_key = 'torlendoteknos' WHERE id = $1`, [id]);
-    // Egy második eszköz munkamenete (régi belépés, `at` nélkül) és egy függő kódrekord.
+    // Egy második eszköz (nyitva hagyott) munkamenete.
     const second = new Client(app.base, await injectSession({ player: { id } }));
     await second.fetchCsrf();
     const key = playerAuthKey();
     const eh = emailHash(key, email);
-    await createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, "11112222"), linkHash: linkHash(key, generateLinkToken()) });
+    const mailWarns = () => logged.filter((l) => l.includes("belépő levél nem küldhető")).length;
+    const before = mailWarns();
+    assert.equal((await c.request("POST", "/api/player/account/delete/start", {})).status, 202, "a kódkérés mindig 202");
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(mailWarns(), before + 1, "a törlési kód levele kiküldésre került (a tesztben Resend nélkül)");
+    // A teszt ismert kódot ültet el a szerverrel azonos, CÉLHOZ KÖTÖTT hash-sel (a valódi levél nem megy ki).
+    const plantDel = (code: string) => createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, `del:${code}`), linkHash: linkHash(key, generateLinkToken()) });
+    await plantDel("55556666");
 
     assert.equal((await c.request("POST", "/api/player/account/delete", {})).status, 400);
-    assert.equal((await c.request("POST", "/api/player/account/delete", { confirm: "torlom" })).status, 400);
-    const stale = await second.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM" });
-    assert.deepEqual([stale.status, stale.json], [401, { ok: false, code: "REAUTH_REQUIRED" }], "régi belépéssel nem törölhető");
-    const del = await c.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM" });
+    assert.equal((await c.request("POST", "/api/player/account/delete", { confirm: "torlom", code: "55556666" })).status, 400);
+    const noCode = await second.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "" });
+    assert.deepEqual([noCode.status, (noCode.json as { code: string }).code], [400, "CODE_INVALID"], "nyitva hagyott munkamenetből kód nélkül nem törölhető");
+    assert.equal((await second.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "00000000" })).status, 400, "rossz kóddal nem törölhető");
+    // Egy BELÉPŐ kód (cél nélküli hash) törlésre nem jó.
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, "77778888"), linkHash: linkHash(key, generateLinkToken()) });
+    assert.equal((await c.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "77778888" })).status, 400, "belépőkód törlésre nem használható");
+    assert.equal((await q(`SELECT 1 FROM player_accounts WHERE id = $1`, [id])).length, 1, "eddig semmi nem törlődött");
+    await plantDel("12341234");
+    const beforeDelete = mailWarns();
+    const del = await c.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "1234 1234" });
     assert.equal(del.status, 200, del.text);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(mailWarns(), beforeDelete + 1, "az értesítő levél kiküldésre került");
     const deleted = (del.json as { deleted: { account: number; codes: number; sessions: number } }).deleted;
     assert.equal(deleted.account, 1);
     assert.ok(deleted.codes >= 2, "a belépéskori és a függő kódrekord is");

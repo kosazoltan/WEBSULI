@@ -5,9 +5,10 @@
  * Szabályok (a sorrend számít — előbb a karakterkészlet, utána a tartalom):
  *  - Unicode NFKC normalizálás; vezérlő-, formázó- (nulla szélességű, kétirányú: U+200B–U+200F, U+202A–U+202E,
  *    U+2066–U+2069, U+FEFF), magán- és helyettesítő karakter, kombináló jel → elutasítva (a normalizálás ELŐTT és UTÁN is);
- *  - csak latin írású betű (magyar ékezetek engedve), számjegy, szóköz, `_`, `-`; a végén opcionálisan a rendszer
- *    által adott `#1234` megkülönböztető — más írásrendszer (cirill, görög …) tiltva: ez az alap homoglifa-szabály
- *    (pl. a cirill „а” nem keverhető a latin „a”-val);
+ *  - ENGEDÉLYLISTA (review #449, K1): csak ASCII betű és számjegy, a magyar ékezetes betűk (á é í ó ö ő ú ü ű és nagybetűs
+ *    párjaik), szóköz, `_`, `-`; a végén opcionálisan a rendszer által adott `#1234` megkülönböztető. Minden más kódpont
+ *    tiltva — a más írásrendszerű (cirill, görög) ÉS a latin írású hasonmás betűk (IPA, kiskapitális, pont nélküli i) is,
+ *    így a foglaltsági kulcs és a tartalomszűrő nem kerülhető meg;
  *  - 3–16 karakter (a megkülönböztető nélkül), legalább egy betű; a szélső szóközök levágva, a többszörös szóköz egyre;
  *  - e-mail-, URL- és telefonszám-szerű minta tiltva;
  *  - trágár / sértő kifejezés magyarul és angolul — ékezet-, kis-/nagybetű-, leet- (0→o, 1→i, 3→e, 4→a, 5→s, 7→t, @→a,
@@ -33,7 +34,7 @@ export type NicknameCheck =
 
 export const NICKNAME_MESSAGES: Record<NicknameProblem, string> = {
   INVISIBLE: "Láthatatlan vagy különleges vezérlőjel nem lehet a becenévben.",
-  CHARS: "Csak betű, szám, szóköz, alsó vonás (_) és kötőjel (-) lehet benne.",
+  CHARS: "Csak a magyar ábécé betűi (ékezettel is), szám, szóköz, alsó vonás (_) és kötőjel (-) lehet benne.",
   SCRIPT: "Csak a magyar / angol ábécé betűi lehetnek benne (ékezettel is).",
   LENGTH_SHORT: `Legalább ${PLAYER_NICK_MIN} karakter legyen.`,
   LENGTH_LONG: `Legfeljebb ${PLAYER_NICK_MAX} karakter lehet.`,
@@ -48,7 +49,7 @@ export const NICKNAME_MESSAGES: Record<NicknameProblem, string> = {
 // Vezérlő (Cc), formázó (Cf: nulla szélességű, kétirányú, BOM), magán (Co), helyettesítő (Cs), ki nem osztott (Cn) karakter.
 const INVISIBLE = /[\p{Cc}\p{Cf}\p{Co}\p{Cs}\p{Cn}\p{Zl}\p{Zp}]/u;
 const COMBINING = /\p{M}/u;
-const ALLOWED = /^[\p{L}\p{N} _-]+$/u;
+const ALLOWED = /^[A-Za-z0-9ÁÉÍÓÖŐÚÜŰáéíóöőúüű _-]+$/;
 const LATIN_LETTER = /\p{Script=Latin}/u;
 const LETTER = /\p{L}/u;
 const DIGIT = /\p{N}/u;
@@ -157,22 +158,27 @@ export function checkPlayerNickname(raw: unknown): NicknameCheck {
 
   if (isEmailLike(nickname, folded)) problems.push("EMAIL");
   else if (isUrlLike(nickname, folded)) problems.push("URL");
+  // Review #449 (K1): ENGEDÉLYLISTA — csak ASCII betű / számjegy, a magyar ékezetes betűk, szóköz, `_`, `-` (az NFKC UTÁN).
+  // Minden más kódpont — a latin írású hasonmás betűk is (IPA, kiskapitális, pont nélküli i) — elutasítva.
   if (COMBINING.test(base) || !ALLOWED.test(base)) {
-    if (!problems.includes("EMAIL") && !problems.includes("URL")) problems.push("CHARS");
-  } else if (Array.from(base).some((ch) => LETTER.test(ch) && !LATIN_LETTER.test(ch))) {
-    problems.push("SCRIPT");
-  } else if (Array.from(base).some((ch) => DIGIT.test(ch) && !/[0-9]/.test(ch))) {
-    // Nem ASCII számjegy (pl. arab-indiai, teljes szélességű — az NFKC után is): megtévesztő, tiltva.
-    problems.push("SCRIPT");
+    const chars = Array.from(base);
+    if (problems.includes("EMAIL") || problems.includes("URL")) { /* az e-mail / URL üzenet elég */ }
+    else if (chars.some((ch) => (LETTER.test(ch) && !LATIN_LETTER.test(ch)) || (DIGIT.test(ch) && !/[0-9]/.test(ch)))) problems.push("SCRIPT");
+    else problems.push("CHARS");
   }
   if (len < PLAYER_NICK_MIN) problems.push("LENGTH_SHORT");
   if (len > PLAYER_NICK_MAX) problems.push("LENGTH_LONG");
   if (len > 0 && !Array.from(base).some((ch) => LETTER.test(ch))) problems.push("NO_LETTER");
   if (base.replace(/\D/g, "").length >= 6) problems.push("PHONE");
-  if (BLOCKED_ROOTS.some((root) => containsRoot(folded, root))) problems.push("BLOCKED");
+  // Az „1” leet-alakja i és l is lehet: mindkét olvasatot vizsgáljuk.
+  const folds = [folded, foldNickname(base.replace(/1/g, "l"))];
+  if (folds.some((f) => BLOCKED_ROOTS.some((root) => containsRoot(f, root)))) problems.push("BLOCKED");
   const words = stripMarks(base).split(/[\s_-]+/).filter(Boolean);
-  const reservedScan = RESERVED_EXCEPTIONS.reduce((acc, ex) => acc.split(ex).join(""), folded);
-  if (RESERVED_ROOTS.some((root) => reservedScan.includes(root)) || words.some((w) => RESERVED_WORDS.has(w))) problems.push("RESERVED");
+  const reservedHit = folds.some((f) => {
+    const scan = RESERVED_EXCEPTIONS.reduce((acc, ex) => acc.split(ex).join(""), f);
+    return RESERVED_ROOTS.some((root) => scan.includes(root) || collapse(scan).includes(root));
+  });
+  if (reservedHit || words.some((w) => RESERVED_WORDS.has(w))) problems.push("RESERVED");
 
   if (problems.length > 0) return { ok: false, problems };
   return { ok: true, nickname, key: nicknameKey(nickname) };

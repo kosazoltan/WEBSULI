@@ -66,3 +66,17 @@ export async function playerGoogleLogin(client: Client, profile: FakeGoogleProfi
   const callback = await rawGet(client, `/auth/google/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(sent)}`);
   return { start, state, callback, code };
 }
+
+/**
+ * Review #449 (A1): a MEGLÉVŐ admin „google” stratégia helyettesítése ugyanígy (csak a két Google-hívás), hogy a közös
+ * callbacken párhuzamos admin- és játékos-folyamat vizsgálható legyen. Az admin-út viselkedése (state nélkül) változatlan.
+ */
+export function installAdminGoogleStub(profile: FakeGoogleProfile): void {
+  const strategy = (passport as unknown as { _strategy(name: string): OAuthStrategy | undefined })._strategy("google");
+  assert.ok(strategy, "a google (admin) stratégia nincs regisztrálva");
+  strategy._oauth2.getOAuthAccessToken = (code, _params, cb) => cb(null, `at:${code}`, "rt", {});
+  strategy.userProfile = (_accessToken, done) => done(null, { provider: "google", id: profile.id, emails: profile.emails, name: {}, photos: [] });
+}
+
+/** Nyers GET a kliens sütijével (átirányítás követése nélkül). */
+export const getNoFollow = rawGet;

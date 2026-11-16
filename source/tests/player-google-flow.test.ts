@@ -83,15 +83,16 @@ describe("JM7b — szerkezeti elválasztás (forrás-őr)", () => {
       assert.ok(!code.includes(forbidden), `tiltott hivatkozás a google.ts-ben: ${forbidden}`);
     }
     assert.match(code, /state: true/);
+    assert.match(code, /store: new PlayerStateStore\(\)/);
     assert.match(code, /pkce: true/);
     assert.match(code, /session: false/);
   });
   it("az auth.ts a közös callbackben a játékos-ágat a Passport admin-ága ELŐTT választja le", () => {
     const auth = readFileSync(new URL("../server/auth.ts", import.meta.url), "utf8");
     const cb = auth.slice(auth.indexOf("app.get('/auth/google/callback'"));
-    const branch = cb.indexOf('req.session.oauthFlow === "player"');
+    const branch = cb.indexOf("isPlayerState(req.query.state)");
     const adminAuth = cb.indexOf("passport.authenticate('google'");
     assert.ok(branch > 0 && adminAuth > branch, "a játékos-ág az admin passport.authenticate előtt");
-    assert.match(auth, /delete req\.session\.oauthFlow/, "az admin-út indítása törli a játékos-jelzőt");
+    assert.doesNotMatch(auth, /oauthFlow/, "nincs egyetlen, felülírható munkamenet-jelző (review #449 A1)");
   });
 });

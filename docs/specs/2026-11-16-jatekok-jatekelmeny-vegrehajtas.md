@@ -1907,6 +1907,14 @@ gyártott SVG-ből (a design-asset bank mintájára; fotófeltöltés nincs); `P
 `websuli.learnerToken`-t fejlécben küldi, a szerver `resolveLearner`-rel ellenőrzi, `S/learners.ts:83`); `GET
 /api/player/export` (JSON: fiók + pontkönyv, e-mail csak a saját exportban); `DELETE /api/player/account` (kaszkád;
 megerősítő párbeszéd a kliensen); tiltás: admin „Játékosok” fül → `banned_at`.
+**Rögzítve a független biztonsági review (#449) után:** (1) közös callback URL marad (Google-konzolban nincs teendő), de a
+folyamat fajtáját a `state` dönti el (`p.` előtag + a munkamenetben state-enként tárolt PKCE-rekord; egyetlen, felülírható
+munkamenet-jelző nincs) — egy párhuzamos játékos-folyamat az admin-belépést nem hiúsítja meg; (2) a becenév ENGEDÉLYLISTÁS
+(ASCII betű / számjegy, magyar ékezetes betűk, szóköz, `_`, `-`), a JM1 `nicknameProblems` erre delegál; (3) a tanulói
+összekapcsolás friss belépést és a fiók becenevét megnevező megerősítést kér, a tokenrotáció bontja, admin is bonthatja;
+**a játékos-felületre tanulói adat (név, évfolyam, eredmény) ebben a szeletben NEM kerül — ha egy későbbi szelet hozna,
+új független biztonsági review kell**; (4) az export engedélylistás, belső azonosító nélkül; (5) a fióktörlés a fiók címére
+küldött egyszeri, célhoz kötött kódot kér, és értesítő levél megy róla.
 
 ---
 

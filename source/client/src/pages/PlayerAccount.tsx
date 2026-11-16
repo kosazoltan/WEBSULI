@@ -22,7 +22,7 @@ import { ACHIEVEMENT_BY_ID } from "@/lib/achievements";
 import { getLearnerToken } from "@/lib/learnerProfile";
 import { levelFromXp, readLocalProgress, type LocalProgress } from "@/lib/localGameProgress";
 import {
-  PLAYER_ME_KEY, clearPlayerCache, deletePlayerAccount, playerAccountKey, exportPlayerData, fetchNicknameSuggestions, linkLearnerProfile, logoutPlayer,
+  PLAYER_ME_KEY, clearPlayerCache, deletePlayerAccount, requestDeleteCode, playerAccountKey, exportPlayerData, fetchNicknameSuggestions, linkLearnerProfile, logoutPlayer,
   savePlayerProfile, unlinkLearnerProfile, usePlayer, usePlayerAccount, type PlayerAccountView,
 } from "@/hooks/usePlayer";
 
@@ -40,7 +40,8 @@ const ERR: Record<string, string> = {
   LEARNER_ALREADY_LINKED: "Ez a tanulói profil már egy másik játékfiókhoz tartozik.",
   CONFIRM_REQUIRED: `A törléshez pontosan ezt írd be: ${DELETE_WORD}`,
   LOGOUT_FAILED: "Nem sikerült kijelentkezni — próbáld újra! Amíg nem sikerül, a fiók ezen az eszközön belépve marad.",
-  REAUTH_REQUIRED: "A biztonság kedvéért a törlés előtt lépj be újra (kódot kapsz e-mailben), utána rögtön törölheted.",
+  REAUTH_REQUIRED: "A biztonság kedvéért az összekapcsolás előtt lépj be újra (kódot kapsz e-mailben), utána rögtön összekapcsolhatod.",
+  CODE_INVALID: "Ez a kód nem jó, vagy már lejárt. Kérj új kódot!",
 };
 
 export default function PlayerAccount() {
@@ -331,7 +332,10 @@ function LearnerCard({ account, onChanged }: { account: PlayerAccountView; onCha
         <AlertDialogContent className="text-slate-900">
           <AlertDialogHeader>
             <AlertDialogTitle>Összekapcsolod?</AlertDialogTitle>
-            <AlertDialogDescription>Csak akkor kapcsold össze, ha ez a TE tanulói profilod (a te emlékeztető-linkedről párosítottad ezt az eszközt). Bármikor bonthatod.</AlertDialogDescription>
+            <AlertDialogDescription data-testid="player-learner-confirm-text">
+              Ezt a tanulói profilt a(z) <strong>{account.nickname ?? "becenév nélküli"}</strong> játékfiókhoz kötöd. Csak akkor tedd, ha ez a TE fiókod ÉS a TE tanulói profilod
+              (a te emlékeztető-linkedről párosítottad ezt az eszközt) — közös eszközön a testvéred profilját ne kösd a saját fiókodhoz. Bármikor bonthatod.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Mégse</AlertDialogCancel>
@@ -349,7 +353,8 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [word, setWord] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [reauth, setReauth] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [deleteCode, setDeleteCode] = useState("");
   const [busy, setBusy] = useState(false);
   // Kis- / nagybetűtől függetlenül elfogadjuk a beírást („törlöm” is jó), a szerver a nagybetűs alakot kapja.
   const confirmWord = word.trim().normalize("NFC").toLocaleUpperCase("hu-HU");
@@ -382,8 +387,8 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
   };
 
   const remove = async () => {
-    setBusy(true); setError(null); setReauth(false);
-    const r = await deletePlayerAccount(confirmWord);
+    setBusy(true); setError(null);
+    const r = await deletePlayerAccount(confirmWord, deleteCode.replace(/\D/g, ""));
     setBusy(false);
     if (r.ok) {
       setDeleteOpen(false);
@@ -391,8 +396,15 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
       setLocation("/games");
       return;
     }
-    if (r.code === "REAUTH_REQUIRED") setReauth(true);
     setError(ERR[r.code] ?? ERR.SERVER_ERROR);
+  };
+
+  const sendCode = async () => {
+    setBusy(true); setError(null);
+    const r = await requestDeleteCode();
+    setBusy(false);
+    if (r.ok) setCodeSent(true);
+    else setError(ERR[r.code] ?? ERR.SERVER_ERROR);
   };
 
   return (
@@ -402,7 +414,7 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
       <div className="mt-3 grid gap-2">
         <Button variant="outline" className="justify-start gap-2" disabled={busy} onClick={() => void download()} data-testid="button-export-data"><Download className="h-4 w-4" /> Adataim letöltése</Button>
         <Button variant="outline" className="justify-start gap-2" disabled={busy} onClick={() => void leave().then((ok) => { if (ok) setLocation("/games"); })} data-testid="button-account-logout"><LogOut className="h-4 w-4" /> Kijelentkezés</Button>
-        <Button variant="destructive" className="justify-start gap-2" onClick={() => { setWord(""); setError(null); setReauth(false); setDeleteOpen(true); }} data-testid="button-delete-account"><Trash2 className="h-4 w-4" /> Fiók törlése</Button>
+        <Button variant="destructive" className="justify-start gap-2" onClick={() => { setWord(""); setDeleteCode(""); setCodeSent(false); setError(null); setDeleteOpen(true); }} data-testid="button-delete-account"><Trash2 className="h-4 w-4" /> Fiók törlése</Button>
       </div>
       {error && !deleteOpen && <p className="mt-2 text-sm text-rose-200" role="alert" data-testid="player-account-error">{error}</p>}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
@@ -414,15 +426,25 @@ function AccountActions({ account, local }: { account: PlayerAccountView; local:
               Az ezen az eszközön tárolt helyi pontjaid megmaradnak.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <label htmlFor="delete-confirm" className="text-sm font-semibold">Írd be: <strong>{DELETE_WORD}</strong></label>
-          <Input id="delete-confirm" value={word} onChange={(e) => setWord(e.target.value)} autoComplete="off" data-testid="input-delete-confirm" />
+          {!codeSent ? (
+            <p className="text-sm">A biztonság kedvéért egy megerősítő kódot küldünk a fiókod e-mail-címére ({account.maskedEmail}). Csak az tudja törölni a fiókot, aki hozzáfér a postafiókhoz.</p>
+          ) : (
+            <>
+              <p className="text-sm" data-testid="player-delete-code-sent">Elküldtük a kódot a(z) {account.maskedEmail} címre (a Spam mappát is nézd meg).</p>
+              <label htmlFor="delete-code" className="text-sm font-semibold">A levélben kapott 8 jegyű kód</label>
+              <Input id="delete-code" inputMode="numeric" autoComplete="one-time-code" maxLength={9} value={deleteCode}
+                onChange={(e) => setDeleteCode(e.target.value.replace(/\D/g, "").slice(0, 8))} data-testid="input-delete-code" />
+              <label htmlFor="delete-confirm" className="text-sm font-semibold">Írd be: <strong>{DELETE_WORD}</strong></label>
+              <Input id="delete-confirm" value={word} onChange={(e) => setWord(e.target.value)} autoComplete="off" data-testid="input-delete-confirm" />
+            </>
+          )}
           {error && <p className="text-sm text-destructive" role="alert" data-testid="player-delete-error">{error}</p>}
           <AlertDialogFooter>
             <AlertDialogCancel>Mégse</AlertDialogCancel>
-            {reauth ? (
-              <Button onClick={() => void leave().then((ok) => { if (ok) setLocation("/belepes"); })} data-testid="button-reauth">Újra belépek</Button>
+            {!codeSent ? (
+              <Button variant="destructive" disabled={busy} onClick={() => void sendCode()} data-testid="button-delete-send-code">Kódot kérek e-mailben</Button>
             ) : (
-              <Button variant="destructive" disabled={busy || confirmWord !== DELETE_WORD} onClick={() => void remove()} data-testid="button-delete-confirm">Végleges törlés</Button>
+              <Button variant="destructive" disabled={busy || confirmWord !== DELETE_WORD || deleteCode.length !== 8} onClick={() => void remove()} data-testid="button-delete-confirm">Végleges törlés</Button>
             )}
           </AlertDialogFooter>
         </AlertDialogContent>
