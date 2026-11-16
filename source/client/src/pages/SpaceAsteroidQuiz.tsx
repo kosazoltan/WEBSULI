@@ -3023,6 +3023,8 @@ export default function SpaceAsteroidQuiz() {
               role="dialog"
               aria-modal="true"
               aria-label="Mini-teszt"
+              data-quiz-id={activeQuiz.id ?? undefined}
+              data-quiz-source={activeQuiz.source ?? "fallback"}
               initial={reducedMotion ? false : { y: 40, opacity: 0, scale: 0.98 }}
               animate={{ y: 0, opacity: 1, scale: 1 }}
               transition={{ type: "spring", stiffness: 420, damping: 32 }}
