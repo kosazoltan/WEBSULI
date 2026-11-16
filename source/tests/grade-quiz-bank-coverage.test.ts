@@ -17,11 +17,9 @@ import { normalizePrompt } from "../client/src/game-engine/gradeQuiz";
 const EXPANDED_GRADES = [3, 4, 5, 6, 7, 8, 9] as const;
 const ALL_GRADES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 /**
- * JBb hosszkorlát (a kérdés + 4 opció együtt) — a JBb-től gyártott évfolyamokra. Levezetés: a `windowMsFor` ablaka
- * `alap + (hossz − READING_FREE_CHARS) · READING_MS_PER_CHAR`, felső korlátja `WINDOW_MAX_MS`; a legnagyobb alappal
- * (`BASE_WINDOW_MAX_MS`) 120 karakter fölött nincs több olvasási idő. A kérdés ≤ 90 karakter (+1,5 mp ráhagyás), és a
- * kérdés + 4 opció ≤ 170 karakter: a 20 karakter / mp olvasási tempóval (= 1000 / READING_MS_PER_CHAR) ≤ 8,5 mp, a 9 mp-es
- * ablakon belül. A JBa (3–6.) tételeire a kérdés / opció korlát érvényes; az együttes korlátot ott nem írtuk elő.
+ * Karakterkorlát (durva előszűrő a gyártáshoz): kérdés ≤ 90 (a `windowMsFor` 120 karakteres telítési pontja alatt),
+ * opció ≤ 40, a 7–9. évfolyamon kérdés + 4 opció ≤ 170. A TÉNYLEGES olvashatóságot nem ez, hanem a játék szűrője
+ * (`fitsAllViewports`, lent) méri — review #453.
  */
 const TOTAL_LIMIT_GRADES = [7, 8, 9] as const;
 const MAX_PROMPT = 90;
@@ -92,6 +90,53 @@ test("pontosan 4 opció, normalizálva (Unicode, kis-/nagybetű, záró írásje
   assert.deepEqual(bad, [], bad.join("\n"));
 });
 
+/* ------------------------------ tartalmi (nem szöveges) duplikátum — félautomata ------------------------------ */
+
+/**
+ * Review #453 (Copilot): a szöveges egyediség-ellenőrzés nem fogja meg, ha két tétel MÁS megfogalmazással ugyanazt kérdezi
+ * (pl. „Melyik versben hangzik el: „Talpra magyar…”?” és „Melyik Petőfi-vers kezdődik így: „Talpra magyar…”?”); a választó
+ * ismétlésszűrője (`normalizePrompt`) mindkettőt újnak látja. Jelölt pár: azonos évfolyam és tárgy, azonos helyes válasz, és
+ * a kérdésekben ugyanaz az idézet vagy a tartalmas szavak Jaccard-átfedése ≥ 0,4. Minden jelöltet ember néz át: vagy a
+ * tételt cseréljük, vagy indoklással a `REVIEWED_NOT_DUPLICATE` listára kerül.
+ */
+const DUP_STOP = new Set(["melyik", "mennyi", "számold", "oldd", "illik", "mondatba", "szó", "szót", "írta", "helyes", "című", "mit", "jelent", "angolul", "magyarul", "hogyan", "milyen", "hány", "van", "nevezzük", "the", "what", "which", "alak", "kérdés", "egy", "egyik", "között", "szerint", "verset", "versben", "regényt"]);
+const REVIEWED_NOT_DUPLICATE: Record<string, string> = {
+  "g06-math-004|g06-math-024": "azonos számolási sablon (százalékérték), eltérő számokkal",
+  "g07-math-009|g07-math-033": "két különböző egyenlet, véletlenül azonos megoldással",
+  "g09-math-003|g09-math-021": "két különböző egyenlet, véletlenül azonos megoldással",
+  "g09-math-009|g09-math-015": "két különböző egyenlet, véletlenül azonos megoldással",
+};
+
+test("tartalmi duplikátum-jelöltek (azonos válasz + azonos idézet / nagy szóátfedés) mind átnézve, 3–9. évfolyam", () => {
+  const words = (s: string) => new Set(s.toLocaleLowerCase("hu").split(/[^\p{L}]+/u).filter((w) => w.length >= 3 && !DUP_STOP.has(w)));
+  const quotes = (s: string) => [...s.matchAll(/„([^”]+)”/g)].map((m) => optionKey(m[1]!));
+  const found: string[] = [];
+  for (const g of EXPANDED_GRADES) {
+    const items = inGrade(g);
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i]!;
+        const b = items[j]!;
+        if (a.subject !== b.subject || optionKey(a.options[a.correctIndex]!) !== optionKey(b.options[b.correctIndex]!)) continue;
+        const wa = words(a.prompt);
+        const wb = words(b.prompt);
+        const inter = [...wa].filter((w) => wb.has(w)).length;
+        const jaccard = inter / Math.max(1, new Set([...wa, ...wb]).size);
+        const sameQuote = quotes(a.prompt).some((x) => quotes(b.prompt).includes(x));
+        if (jaccard >= 0.4 || sameQuote) found.push(`${a.id}|${b.id}`);
+      }
+    }
+  }
+  const unreviewed = found.filter((k) => !(k in REVIEWED_NOT_DUPLICATE));
+  assert.deepEqual(unreviewed, [], `át nem nézett tartalmi duplikátum-jelölt:\n${unreviewed.join("\n")}`);
+  const stale = Object.keys(REVIEWED_NOT_DUPLICATE).filter((k) => !found.includes(k));
+  assert.deepEqual(stale, [], `elavult bejegyzés a REVIEWED_NOT_DUPLICATE listán:\n${stale.join("\n")}`);
+  // önellenőrzés: a review-ban talált pár a jelölt-szabályt kiváltaná
+  const a = words("Melyik versben hangzik el: „Talpra magyar, hí a haza!”?");
+  const b = words("Melyik Petőfi-vers kezdődik így: „Talpra magyar, hí a haza!”?");
+  assert.ok(quotes("x „Talpra magyar, hí a haza!” y").length === 1 && [...a].some((w) => b.has(w)));
+});
+
 /* ------------------------------ tartalmi formai szabályok (bővített évfolyamok) ------------------------------ */
 
 const BANNED_OPTION = /^(mindegyik|egyik sem|egyik se|mindkettő|mind a (három|négy)|all of them|none of them|both)\b/i;
@@ -125,15 +170,36 @@ test("a bővítés tételei telefonon gyorsan olvashatók: kérdés ≤ 90, opci
   assert.deepEqual(bad, [], bad.join("\n"));
 });
 
-test("a hosszkorlát a kérdés-ablakból következik (windowMsFor): a kérdés hossza a telítési pont alatt marad", async () => {
-  const d = await import("../client/src/game-engine/play/questionDirector");
-  // a legnagyobb alap-ablakkal ennyi karakter fölött már nem nő az olvasási idő
-  const saturation = d.READING_FREE_CHARS + (d.WINDOW_MAX_MS - d.BASE_WINDOW_MAX_MS) / d.READING_MS_PER_CHAR;
-  assert.equal(saturation, 120);
-  assert.ok(MAX_PROMPT < saturation, "a kérdés-korlát a telítési pont alatt legyen");
-  // a teljes szöveg (kérdés + 4 opció) olvasási ideje 20 karakter / mp tempóval a 9 mp-es felső ablakon belül
-  assert.ok((MAX_TOTAL * d.READING_MS_PER_CHAR) <= d.WINDOW_MAX_MS, "a kérdés + opciók olvasása beleférjen az ablakba");
-  assert.equal(d.windowMsFor("x".repeat(MAX_PROMPT), 8, d.BASE_WINDOW_MAX_MS), d.WINDOW_MAX_MS - (120 - MAX_PROMPT) * d.READING_MS_PER_CHAR);
+/**
+ * Review #453 (Copilot): a hosszkorlátot nem a 9 mp-es felső határhoz, hanem a JÁTÉK SAJÁT szűrőjéhez mérjük — ugyanaz a
+ * `fitsAllViewports` (J0c-b, `game-engine/play/promptFit.ts` + `reading.ts`), amelyet a kérdés-forrás `accept`-ként használ:
+ * a gyerek évfolyamához mért olvasási idő (`readingMsFor`) ≤ 9 mp, és a kérdés / opciók mindhárom telefonos nézetben elférnek.
+ * Az alap-ablak a legszigorúbb valós hívóé (a `promptFit` alapértéke, 4000 ms; a párbaj 6000, a próbaoldal 4500).
+ * Küszöb: a bővített évfolyamokon a tételek ≥ 95%-a játszható, a bővítés (019+) tételei mind, és minden tárgy × sáv cellában
+ * legalább 15 játszható tétel marad.
+ */
+const STRICTEST_BASE_WINDOW_MS = 4000;
+
+test("olvashatóság a játék szűrőjével (fitsAllViewports): ≥ 95% / évfolyam, a bővítés mind, cellánként ≥ 15", async () => {
+  const { fitsAllViewports } = await import("../client/src/game-engine/play/promptFit");
+  const bad: string[] = [];
+  for (const g of EXPANDED_GRADES) {
+    const rows = inGrade(g).map((q) => ({ q, fit: fitsAllViewports(q, { grade: g, baseWindowMs: STRICTEST_BASE_WINDOW_MS }) }));
+    const ok = rows.filter((r) => r.fit.ok).length;
+    if (ok / rows.length < 0.95) bad.push(`${g}. évf.: csak ${ok}/${rows.length} játszható`);
+    for (const r of rows) {
+      if (isExpansion(r.q) && !r.fit.ok) {
+        bad.push(`${where(r.q)}: olvasás ${r.fit.readingMs} ms (≤ 9000?), elfér: ${r.fit.fits}, opciók: ${r.fit.optionsFit}`);
+      }
+    }
+    for (const s of GRADE_SUBJECTS) {
+      for (const t of [1, 2, 3] as const) {
+        const n = rows.filter((r) => r.q.subject === s && r.q.tier === t && r.fit.ok).length;
+        if (n < 15) bad.push(`${g}. évf. ${s} tier ${t}: ${n} játszható tétel (< 15)`);
+      }
+    }
+  }
+  assert.deepEqual(bad, [], bad.join("\n"));
 });
 
 test("a helyes válasz helye kiegyensúlyozott: évfolyamonként mind a 4 pozíció 18–32%", () => {

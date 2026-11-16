@@ -55,7 +55,7 @@ első miniszterelnök” (Batthyány volt), és két védhető válasz az Európ
 - `g07-math-037` (g7-math-t2-06) — vak megoldó: pontatlan megfogalmazás
 - `g07-math-048` (g7-math-t3-04) — audit gyanú/d
 - `g07-hungarian-034` (g7-hungarian-t2-03) — audit: a kérdés idézete („fehér leplet”) nem egyezett a szöveggel → idézet nélkül
-- `g07-hungarian-049` (g7-hungarian-t3-05) — review #453 (Vercel Agent): a magyarázat Mártont az apródokhoz küldött, ajándékot ígérő követnek mondta; a ballada szerint (hu.wikisource) Ali Szondihoz küldi megadásra bírni → kérdés és magyarázat pontosítva; újra-vak kör: 1/1 · kanári 10/10. (Az auditor a kulcsot igazolta, a magyarázat mellékállítását nem — C-43.)
+- `g07-hungarian-049` (g7-hungarian-t3-05) — review #453 (Vercel Agent): a magyarázat Mártont az apródokhoz küldött, ajándékot ígérő követnek mondta; a ballada szerint (hu.wikisource) Ali Szondihoz küldi megadásra bírni → kérdés és magyarázat pontosítva; újra-vak kör: 1/1 · kanári 10/10. (Az auditor a kulcsot igazolta, a magyarázat mellékállítását nem — C-44.)
 - `g07-hungarian-052` (g7-hungarian-t3-08) — vak megoldó: a keltezés napja forrásonként eltér (március 13. / 14.) → csere
 - `g07-science-024` (g7-science-t1-06) — audit gyanú/d
 - `g07-science-039` (g7-science-t2-08) — vak megoldó: „sós víz” kétféleképpen érthető (20% / 25%)
@@ -127,8 +127,70 @@ szerver, Playwright, ideiglenes spec, `/games/space-asteroid-quiz`, 7. évfolyam
 (forrás: nincs statikus import a bankfájlokra és a `GRADE_QUIZ_ITEMS`-re a kliensben, a betöltő mind a 10 évfolyamot dinamikusan
 importálja, az egyben-export `@__PURE__`; viselkedés: null + letöltés, szomszédok, közös ígéret, hiba-kiesés, újrapróba, Node-homlokzat).
 
+## Review #453 utáni körök (magyarázat-audit, tartalmi duplikátum, olvashatóság, számoló)
+
+A review (Vercel Agent, Copilot) újabb **magyarázat-hibákat** talált (Szondi két apródja: két jelenet összemosva; „a since és a
+for is időtartamot vezet be”), egy **tartalmi duplikátumot** (két tétel más szöveggel ugyanazt a verscímet kérdezte), és két
+teszthibát (az olvasási keretet a 9 mp-es felső korláthoz mértük; a független számoló a záró `²` / `³`-t mértékegységnek vette).
+
+**1. Magyarázat-audit állításonként** (a vak megoldó a magyarázatot nem látja — ezért külön lépés): négy friss, független Opus
+alügynök, minden magyarázat-állítás „igazolt (forrás + szöveghely)” / „hamis / nem igazolható → törölve vagy rövid, biztos
+megfogalmazásra cserélve”.
+
+| Tárgy (7–9., az angolnál 3–9. bővítés) | Átnézett magyarázat | Javított (hiba / gyanú) | Javított tételek |
+|---|---|---|---|
+| magyar (74 irodalmi; Szondi két apródja, Ágnes asszony, A walesi bárdok — hu.wikisource; Szent Péter esernyője — Gutenberg #68911) | 117 | 0 / 7 | `g07-hungarian-049`, `g07-hungarian-046`, `g08-hungarian-025`, `g08-hungarian-042`, `g08-hungarian-051`, `g09-hungarian-043`, `g09-hungarian-052` |
+| történelem | 117 | 1 / 4 | `g09-history-041` (Hannibál „30 elefántja” hamis), `g08-history-055`, `g09-history-042`, `g09-history-038`, `g08-history-041` |
+| természettudomány | 117 | 0 / 3 | `g09-science-052`, `g07-science-031`, `g07-science-053` |
+| angol (3–9. bővítés) | 273 | 1 / 5 | `g09-english-023` (a needn't nem tanács), `g08-english-036` (since), `g09-english-020`, `g04-english-029`, `g08-english-050`, `g09-english-033` |
+
+**Bankon belüli ellentmondás (angol):** gépi segéd — `source/scripts/grade-bank-keyword-groups.ts` a magyarázatokat nyelvtani
+kulcsszavak (since / for / much / many / some / any / will / going to / in / on / at / who / which …) szerint egymás mellé teszi
+emberi átnézésre (3–9. évfolyam, 363 találat 14 csoportban). Az átnézés 5 ellentmondást talált: since „kezdőpont” ↔ „mai napig
+tartó” (`g08-english-036`), needn't „tanács” ↔ „nem szükséges” (`g09-english-023`), törvény: must ↔ have to
+(`g07-english-011` ↔ `g09-english-020`), többes szám „mindig -s” ↔ rendhagyó (`g03-english-017`, meglévő), which „tárgyra” ↔
+alany is lehet (`g08-english-004` meglévő, `g08-english-022`). Mind javítva (a magyarázatban). A review két tétele:
+`g07-english-020` (since / for) és `g07-hungarian-049` (Szondi: a ballada szerint Ali Mártont Szondihoz küldi megadásra bírni;
+az apródokat később egy névtelen török hívja — hu.wikisource, 5–7. versszak).
+
+**2. Tartalmi duplikátum (félautomata):** jelölt pár = azonos évfolyam és tárgy, azonos helyes válasz, és ugyanaz az idézet
+vagy a tartalmas szavak Jaccard-átfedése ≥ 0,4. A 3–9. évfolyamon 4 jelölt maradt — mind matek-sablon (két különböző egyenlet /
+százalék azonos eredménnyel), indoklással a teszt `REVIEWED_NOT_DUPLICATE` listáján; a review párja (`g07-hungarian-021` ↔
+`g07-hungarian-052`, „Talpra magyar…”) a szabályt kiváltotta, a `g07-hungarian-052` cserélve (A kőszívű ember fiai: a
+legkisebb Baradlay fiú — hu.wikipedia). Az évfolyamok KÖZÖTTI azonos kérdések (pl. „Ki korán kel…” 3. és 4. évf.) maradtak:
+a választó a szomszéd évfolyamot csak a saját kimerülése után kéri.
+
+**3. Olvashatóság a játék szűrőjével** (`fitsAllViewports`, a #450 `reading.ts` / `promptFit.ts`; a legszigorúbb alap-ablak
+4000 ms): az évfolyam-bank „játszható” aránya (olvasható ≤ 9 mp ÉS elfér mindhárom nézetben):
+
+| Évf. | Előtte | Rövidítve (új / meglévő) | Utána | Legkisebb cella (játszható) |
+|---|---|---|---|---|
+| 3. | 88,4% | 21 / 12 | 100% | 18 |
+| 4. | 60,0% | 77 / 37 | 100% | 18 |
+| 5. | 91,9% | 11 / 12 | 100% | 19 |
+| 6. | 91,2% | 7 / 18 | 100% | 18 |
+| 7. | 96,5% | 3 / 7 | 100% | 19 |
+| 8. | 95,1% | 5 / 9 | 100% | 19 |
+| 9. | 98,2% | 2 / 3 | 100% | 19 |
+
+224 tétel rövidült (három rövidítő alügynök, a jelentés és a kulcs megtartásával; 78-nál a helyes opció szövege is rövidült,
+pl. ezres tagolás, mértékegység a kérdésbe). A rövidített tételek **újra vak körben**: 3–4. évf. 147/147 · kanári 10/10;
+5–9. évf. 90/92 · kanári 10/10 (a két eltérés: Szondi két apródja és Szent Péter esernyője — a kulcsot a szövegből igazoltuk,
+megoldói tévedés); a kör jelzései alapján még 3 tétel javult (`g04-history-052` „közvetlen előd”, `g04-hungarian-027`,
+`g04-hungarian-034`), ezek újra vak körben: 3/3 · kanári 10/10. A teszt küszöbe: a bővített évfolyamokon ≥ 95% játszható, a
+bővítés tételei mind, cellánként ≥ 15. A 10–12. évfolyam (JBc) még 93–96%.
+
+**4. A független számoló javítva** (mohó számrész; önellenőrzés: `2³` = 8, `3 · 10³` = 3000, `2³ cm³` = 8, `10⁻² m` = 0,01, és a
+„8 és 2³ is igaz” eset jelez), majd újrafuttatva a 3–9. évfolyam összes matek-tételén: kiértékelhető 32 / 30 / 30 / 35 / 29 /
+26 / 25 (az 57-ből, évfolyamonként), **hibás: 0** (a rövidítés előtt és után is).
+
 ## Maradó kockázat (őszintén)
 - **Szaktanári lektorálás nincs.** Gyártó ≠ megoldó ≠ auditor, de mind nyelvi modell.
+- **A magyarázatok:** a magyarázat-audit a történelemben kb. 15, a természettudományban 3 állításhoz nyitott meg ténylegesen
+  forrást; a többit tankönyvi tudás alapján fogadta el (az auditorok ezt maguk jelezték). Ez a terület (a nem igazolt
+  mellékállítás) maradt a legnagyobb kockázat.
+- **A rövidítés:** a 4. évfolyamon néhány közmondás csonkolt alakban szerepel („Két szék között…”), és néhány angol tétel a
+  magyar mondat helyett zárójeles utalást kapott („Melyik helyes? (macska)”).
 - **A forrás minősége:** a forrás többnyire a magyar Wikipédia; egy esetben maga a forrás volt téves (Hammurapi, 1910), amit csak a
   független angol forrás fogott meg. Ahol a gyártó és az auditor ugyanazt a forrást használta, a közös hiba nem zárható ki.
 - **Gyengén forrásolt tételek (a gyártók jelezték):** néhány 7.-es történelmi és földrajzi tény csak megnevezett, meg nem nyitott

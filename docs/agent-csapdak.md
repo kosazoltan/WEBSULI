@@ -619,3 +619,10 @@ Forrás: JBa / JBb futás (#448 és a JBb PR).
 - **Tünet 5:** a `git stash push` parancs a push-audit hookot is kiváltja (a „push” szó miatt). **Megelőzés 5:** `git stash -u`.
 - **Tünet 6:** a Git Bash-es `node -e` szövegcsere CRLF-es forrásfájlon csendben nem illeszkedett (a fájl CRLF, a minta LF).
   **Megelőzés 6:** forrásfájlt Edit eszközzel módosítunk, és a csere után ellenőrizzük, hogy tényleg megtörtént.
+- **Tünet 7:** a vak megoldó csak a kérdést és az opciókat látja, a magyarázatot nem; a forrásalapú audit a kulcsot igazolta,
+  a magyarázat mellékállítását nem (Szondi két apródja: két jelenet összemosva; „a since is időtartamot vezet be”; Hannibál
+  „30 elefántja”). **Megelőzés 7:** külön magyarázat-audit állításonként („igazolt – forrás” / „nem igazolható → törölve”), és a
+  `source/scripts/grade-bank-keyword-groups.ts` kulcsszó-csoportjain a bankon belüli ellentmondás emberi átnézése.
+- **Tünet 8:** a hosszkorlát-teszt a 9 mp-es felső határhoz mért, nem a játék tényleges olvasási szűrőjéhez; a 4. évfolyam 40%-a
+  nem volt elolvasható. **Megelőzés 8:** a bank-őr ugyanazt a `fitsAllViewports`-ot hívja, mint a játék (`.ok`, ≥ 95% /
+  évfolyam, cellánként ≥ 15); a szöveges duplikátum-ellenőrzés mellé tartalmi (azonos válasz + átfedés) jelölt-keresés kell.
