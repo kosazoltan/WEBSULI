@@ -3207,6 +3207,7 @@ export default function BlockCraftQuiz() {
       />
 
       <ResultScreen
+        badges={newlyUnlocked}
         open={phase === "levelComplete"}
         testId="bc-level-complete"
         title="Pálya teljesítve!"
@@ -3236,6 +3237,7 @@ export default function BlockCraftQuiz() {
       />
 
       <ResultScreen
+        badges={newlyUnlocked}
         open={phase === "over"}
         testId="bc-over"
         title={gameWon ? "Bajnok lettél! Mind az 5 pálya kész!" : "Bányászat vége"}

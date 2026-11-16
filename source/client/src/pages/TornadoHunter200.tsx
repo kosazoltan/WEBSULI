@@ -465,6 +465,7 @@ export default function TornadoHunter200() {
             vehicle={selectedVehicle}
             progress={progress}
             coupon={coupon}
+            newlyUnlocked={newlyUnlocked}
             syncEligible={Boolean(syncEligibility?.eligible)}
             forceResult={forceResult}
             forceQuiz={forceQuiz}
@@ -1113,6 +1114,8 @@ function PlayScreen(props: {
   vehicle: Vehicle;
   progress: TornadoProgress;
   coupon: CouponSession;
+  /** S13 / B6: a futás új jelvényei az eredménykártya közös sorában. */
+  newlyUnlocked: Achievement[];
   syncEligible: boolean;
   /** Teszt-kampó (növekvő sorszám): > 0 és változik → győzelmi eredmény. */
   forceResult: number;
@@ -2395,6 +2398,7 @@ function PlayScreen(props: {
       </PauseMenu>
 
       <ResultScreen
+        badges={props.newlyUnlocked}
         open={result != null}
         testId="th-result"
         title={result?.won ? "Intercept sikeres!" : "Sikertelen intercept"}

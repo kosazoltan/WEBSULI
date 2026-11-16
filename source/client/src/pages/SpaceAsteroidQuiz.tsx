@@ -3117,6 +3117,7 @@ export default function SpaceAsteroidQuiz() {
       </PauseMenu>
 
       <ResultScreen
+        badges={newlyUnlocked}
         open={phase === "over"}
         testId="sa-over"
         title={gameWon ? "Mind a 12 hullám teljesítve!" : "Kör vége"}

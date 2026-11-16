@@ -83,10 +83,30 @@ export function useModalLayer(open: boolean, layerRef: RefObject<HTMLElement | n
 /* ---------------- a szünet menü nyitott állapota (a magyarázókártya ehhez igazodik, K3) ---------------- */
 
 let pauseOpenCount = 0;
+let resultOpenCount = 0;
 const listeners = new Set<() => void>();
 
 function emit() {
   for (const l of listeners) l();
+}
+
+/** A `ResultScreen` jelzi a nyitott állapotát (S13 / B6: a jelvény-toast ilyenkor nem jelenik meg). */
+export function setResultScreenOpen(open: boolean): void {
+  resultOpenCount = Math.max(0, resultOpenCount + (open ? 1 : -1));
+  emit();
+}
+
+export function isResultScreenOpen(): boolean {
+  return resultOpenCount > 0;
+}
+
+/**
+ * Igaz, amíg az eredményképernyő nyitva van. S13 / B6: a futás új jelvényei az eredménykártya közös sorában
+ * (`ResultScreen` `badges`) jelennek meg, ezért a jobb felső `AchievementToast` ilyenkor nem rajzol (korábban mobilon
+ * az eredménykártya gombjaira lógott).
+ */
+export function useResultScreenOpen(): boolean {
+  return useSyncExternalStore(subscribe, isResultScreenOpen, () => false);
 }
 
 /** A `PauseMenu` jelzi a nyitott állapotát (több példány esetén számlálóval). */

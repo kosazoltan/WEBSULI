@@ -74,3 +74,29 @@ test("L3: a kupon-visszaszámláló a biztonsági sávon belül, a HUD-ot maga a
   assert.match(css, /\.game-coupon-hud \{ top: max\(12px, var\(--game-safe-top\)\); \}/);
   assert.match(css, /:root:has\(\.game-coupon-hud\) \.game-hud \{ margin-top:/);
 });
+
+test("B6: mind a 7 játék az eredménykártya közös jelvény-sorát használja, a toast az eredmény alatt nem rajzol", () => {
+  for (const p of [
+    "pages/BlockCraftQuiz.tsx",
+    "pages/BrainRotSteal.tsx",
+    "pages/SpaceAsteroidQuiz.tsx",
+    "pages/SpeedQuizMath.tsx",
+    "pages/TornadoHunter200.tsx",
+    "pages/TsunamiEscapeEnglish.tsx",
+    "pages/WordLadderHuEn.tsx",
+  ]) {
+    const src = strip(read(p));
+    const results = src.match(/<ResultScreen\b/g)?.length ?? 0;
+    const withBadges = src.match(/<ResultScreen\s+badges=\{(?:props\.)?newlyUnlocked\}/g)?.length ?? 0;
+    assert.ok(results > 0 && withBadges === results, `${p}: ${withBadges}/${results} ResultScreen kapja a badges-t`);
+    // a lapszintű saját jelvény-sor megszűnt (a közös sor helyett)
+    assert.doesNotMatch(src, /tsunami-new-badges|"Új jelvények" : "Új jelvény"/, p);
+  }
+  const screen = strip(read("game-engine/mobile/ResultScreen.tsx"));
+  assert.match(screen, /<ResultBadges badges=\{badges\} \/>/);
+  assert.match(screen, /setResultScreenOpen\(true\)/);
+  const toast = strip(read("components/AchievementToast.tsx"));
+  assert.match(toast, /const resultOpen = useResultScreenOpen\(\);/);
+  assert.match(toast, /pointer-events-none fixed/);
+  assert.doesNotMatch(toast, /\btop-20\b/);
+});

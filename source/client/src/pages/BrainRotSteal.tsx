@@ -1383,6 +1383,7 @@ export default function BrainRotSteal() {
       />
 
       <ResultScreen
+        badges={newlyUnlocked}
         open={phase === "over"}
         testId="br-over"
         title={won ? "Szuper vadászat!" : "Vadászat vége!"}

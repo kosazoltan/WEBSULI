@@ -4,7 +4,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useReducedMotion } from "../useReducedMotion";
-import { useModalLayer } from "./modalLayer";
+import type { Achievement } from "@/lib/achievements";
+
+import { setResultScreenOpen, useModalLayer } from "./modalLayer";
+import ResultBadges from "./ResultBadges";
 import { computeStars } from "./stars";
 
 /**
@@ -33,6 +36,8 @@ export type ResultScreenProps = {
   backLabel?: string;
   /** Játékspecifikus sor (Storm Coin, tantárgyi bontás). */
   extra?: ReactNode;
+  /** S13 / B6: a futás új jelvényei — egységes sor a kártyán (`game-result-badges`). */
+  badges?: readonly Achievement[];
 };
 
 function CountUp({ value, reduced }: { value: number; reduced: boolean }) {
@@ -71,6 +76,7 @@ export default function ResultScreen({
   onBack,
   backLabel = "Vissza a játékokhoz",
   extra,
+  badges,
 }: ResultScreenProps) {
   const reduced = useReducedMotion();
   // A fókusz a párbeszédre kerül (képernyőolvasó felolvassa, Tab az „Újra” gombra visz), nem a gombra:
@@ -79,6 +85,11 @@ export default function ResultScreen({
   const layerRef = useRef<HTMLDivElement>(null);
   // S13 / review K1: inert háttér, fókuszcsapda, fókusz vissza bezáráskor.
   useModalLayer(open, layerRef, dialogRef);
+  useEffect(() => {
+    if (!open) return;
+    setResultScreenOpen(true);
+    return () => setResultScreenOpen(false);
+  }, [open]);
   const starCount = stars ?? computeStars({ correct, total, won });
   const percent = total > 0 ? Math.round((correct / total) * 100) : 0;
 
@@ -174,6 +185,7 @@ export default function ResultScreen({
                     Jó válaszok: <strong>{correct}/{total}</strong> ({percent}%)
                   </span>
                 </div>
+                {badges && badges.length > 0 && <ResultBadges badges={badges} />}
                 {extra && <div className="game-result-extra">{extra}</div>}
               </div>
               <div className="game-result-actions">

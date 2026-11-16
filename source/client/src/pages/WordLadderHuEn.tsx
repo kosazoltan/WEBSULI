@@ -1388,6 +1388,7 @@ export default function WordLadderHuEn() {
 
       <PauseMenu open={paused && inRun} onResume={resumeGame} onRestart={startGame} onExit={exitToMenu} exitLabel="Kilépés a menübe" />
       <ResultScreen
+        badges={newlyUnlocked}
         open={phase === "won"}
         testId="wl-won"
         title="🏁 Elérted a csúcsot!"

@@ -615,6 +615,13 @@
   color: #422006; background: linear-gradient(180deg, #fde047, #f59e0b); box-shadow: 0 4px 12px #f59e0b66;
 }
 .game-result-extra { font-size: 16px; color: #e2e8f0; }
+/* S13 / B6: a futás új jelvényei — egységes sor az eredménykártyán (ResultBadges). */
+.game-result-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 2px 0 0; padding: 0; list-style: none; }
+.game-result-badge {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 4px 12px; border-radius: 9999px; border: 1px solid #fde68a99; background: #fcd34d26;
+  color: #fef3c7; font-size: 14px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere;
+}
 .game-result-actions { display: grid; gap: 10px; }
 .game-result-actions .game-btn { width: 100%; min-height: 52px; }
 @media (max-height: 500px) and (min-width: 560px) {

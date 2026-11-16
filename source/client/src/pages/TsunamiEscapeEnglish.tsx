@@ -1918,6 +1918,7 @@ export default function TsunamiEscapeEnglish() {
       </AnimatePresence>
 
       <ResultScreen
+        badges={newlyUnlocked}
         open={resultOpen}
         testId={phase === "won" ? "ts-won" : "ts-over"}
         title={phase === "won" ? "Sikerült elmenekülni!" : "Utolért a hullám!"}
@@ -1938,20 +1939,7 @@ export default function TsunamiEscapeEnglish() {
               {difficultyLabel(runDifficultyRef.current)}
               {syncEligibility?.eligible ? " · felkerült a ranglistára" : ""}
             </p>
-            {/* S9: az új jelvények az eredménykártyán, olvasható méretben (a közös toast 10–11 px-es). */}
-            {newlyUnlocked.length > 0 && (
-              <ul className="flex flex-wrap justify-center gap-1.5" data-testid="tsunami-new-badges">
-                {newlyUnlocked.map((a) => (
-                  <li
-                    key={a.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/60 bg-amber-300/15 px-3 py-1 text-sm font-bold text-amber-100"
-                  >
-                    <span aria-hidden="true">{a.icon}</span>
-                    Új jelvény: {a.title} (+{a.points} pont)
-                  </li>
-                ))}
-              </ul>
-            )}
+            {/* S13 / B6: az új jelvények a ResultScreen közös sorában (badges) — az S9-es lista közös változata. */}
           </div>
         }
       />
