@@ -2330,6 +2330,33 @@ ujjlenyomatot; idegen cím érintetlen; a lista nem ad ki címet; a mátrix és 
 egyezés, additív / idempotens migráció.
 **Elfogadás:** a fenti tesztek zöldek; a meglévők változatlanul; egyetlen új tábla, más séma-változás nincs.
 
+#### JM7b-utójavítás K1b — kulcsrotáció és karbantartás: nincs visszafordíthatatlan törlés (ellenőrző kör #471, Ú1–Ú4)
+
+**Állapot:** folyamatban — 2026-11-16, ág fix/jatek-fiok-tiltas-kulcsrotacio, munkafa .claude/worktrees/jatek-k1b, kanban #56 · **Függ:** K1 (#471) · **Modell:** Opus
+**Cél:** (Ú1, ALACSONY, de visszafordíthatatlan) egy eltérő titkú szerverpéldány (helyi fejlesztés az éles adatbázissal, előnézet,
+átfedő régi példány) ne törölhesse a más kulcsú tiltás-ujjlenyomatokat; (Ú2) a rotáció után, az első egyeztetés előtt létrejött
+alias-fiók is tiltott legyen; (Ú3) pontos napló, egymástól független karbantartó lépések; (Ú4) az állapotgép-táblázat a kódhoz
+igazítva; üzemeltetési runbook. **Nem cél:** séma / migráció; a `PLAYER_ACCOUNTS` (KI marad); a kódrekord-takarítás szabálya.
+**Fájlok:** `S/player/account-store.ts`, `S/player/store.ts`, `S/player/sweeper.ts`, `docs/jatek-fiok-uzemeltetes.md` (új),
+ez a fejezet (K1 10. táblázat), tesztek: `T/player-account-db.integration.ts`, `T/player-codes.test.ts`.
+**Lépések:**
+1. Ú1: a `reconcileBanFingerprints` a más kulcsú sorokat SOHA nem törli — csak megszámolja (a napló „régi kulcsú, megőrizve”);
+   az élő tiltott fiókokhoz az aktuális kulccsal ÚJ sor kerül a régi mellé. A más kulcsú sorokat a megőrzés-takarító távolítja
+   el 12 hónap után (élő változat nem ellenőrizhető más kulccsal; ha a sor élő tiltott fiókhoz tartozott, a saját kulcsú példány
+   a következő egyeztetéskor helyreállítja). A tiltás-karbantartás (egyeztetés + megőrzés-takarítás) CSAK `NODE_ENV=production`
+   mellett vagy `PLAYER_BAN_MAINTENANCE=on` kapcsolóval fut — helyi indítás nem nyúl hozzá. A kódrekord-takarítás (lejárt →
+   cím törölve, 24 óra után a sor) marad: ugyanaz a szabály, mint élesben, a szabályon túl nem töröl.
+2. Ú2: az egyeztetés a helyreállításkor kanonikusan tilt (az élő változatokat is, a zár alatt, a `banned_at` újraolvasásával;
+   a tiltás idejét nem frissíti). Választás indoka: az indulást nem nyújtja (nincs „várj az első egyeztetésre” kapu).
+3. Ú3: napló: „N régi kulcsú ujjlenyomat megőrizve (ebből élő fiókhoz helyreállítva M)”; az egyeztetés és a megőrzés-takarítás
+   külön `try` — az egyik hibája nem akasztja meg a másikat.
+4. Ú4: a K1 10. táblázat Helyreállítás és Megőrzés sora a kódhoz igazítva.
+5. Runbook (`docs/jatek-fiok-uzemeltetes.md`): a bekapcsolás után figyelendő naplósorok és a csak olvasó ellenőrző lekérdezés.
+**Tesztek:** két különböző kulccsal egymás után futtatott egyeztetés után MINDKÉT kulcs ujjlenyomatai megvannak; rotáció után
+az egyeztetés előtt létrehozott alias az egyeztetés után tiltott; a karbantartás fejlesztői módban kapcsoló nélkül nem fut; a
+takarító egyik lépésének hibája a másikat nem akasztja meg; a meglévő tesztek változatlanul zöldek.
+**Elfogadás:** a fenti tesztek zöldek; nincs séma-változás; a CI zöld.
+
 ---
 
 ### JM7c — Hibrid jogosultság (terv 10.4a): admin kizárólag az engedélylistáról; meglévő tanulók / szülők játékos-joggal
