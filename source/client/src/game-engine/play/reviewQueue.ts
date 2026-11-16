@@ -56,7 +56,59 @@ export type ReviewPayload =
 export type ReviewItem = {
   key: string; box: ReviewBox; dueAt: number; dueInRun: number | null; lastSeen: number;
   wrong: number; correct: number; payload: ReviewPayload;
+  /**
+   * J4a (additív, review #451): a tétel évfolyama (3–12).
+   * - szám: ehhez az évfolyamhoz kötött;
+   * - null: a rögzítő tudatosan évfolyamtól függetlennek rögzítette (nem adott évfolyamot, és a kulcsból sem fejthető vissza);
+   * - hiányzik (undefined): RÉGI, `rev: 2` előtti tétel, amelynek évfolyama a kulcsból sem fejthető vissza — ismeretlen.
+   */
+  grade?: number | null;
 };
+
+/**
+ * A tárolt tétel-formátum változata (a `v: 1` boríték megmarad, hogy a régi olvasó se dobja el a sort): `rev: 2` = a
+ * tételek `grade` mezőt hordoznak. Hiányzó / régebbi `rev` → betöltéskor `inferReviewGrade` migrál.
+ */
+export const REVIEW_ITEM_REV = 2;
+
+/** Érvényes évfolyam-e (a játékok 3–12. évfolyamot kínálnak; a tűrés 1–13). */
+function validGrade(g: unknown): g is number {
+  return typeof g === "number" && Number.isInteger(g) && g >= 1 && g <= 13;
+}
+
+/**
+ * Migrációs szabály régi tételekre: az évfolyam a kulcsból / azonosítóból, ha az kódolja — évfolyam-bank `g07-math-001`
+ * (kulcs `grade:g07-…` vagy payload id), Matek `bank:speed-quiz-math:g7:…`. Különben null (ismeretlen).
+ */
+export function inferReviewGrade(key: string, payload?: ReviewPayload): number | null {
+  const fromId = (s: string): number | null => {
+    const m = /(?:^|:)g(\d{1,2})(?:-|:)/.exec(s);
+    const g = m ? Number(m[1]) : NaN;
+    return validGrade(g) ? g : null;
+  };
+  return fromId(key) ?? (payload?.kind === "grade" ? fromId(payload.id) : null) ?? (payload?.kind === "quiz" ? fromId(String(payload.quiz.id ?? "")) : null);
+}
+
+/**
+ * A KÖZÖS évfolyam-szabály (review #451): visszahozható-e az ismétlési tétel egy `grade` évfolyamú menetben.
+ * - A játék / menet évfolyam nélküli (`grade` null): igen.
+ * - A tétel évfolyama ismert: csak AZONOS évfolyamon (a ±1 nem: a feladat nehézsége az évfolyamhoz kötött, és a hibát az
+ *   adott évfolyam tananyagában kell gyakorolni — a másik évfolyamú menetben a tétel a sorban marad a sajátjának).
+ * - `grade: null` (rev 2, a rögzítő évfolyamtól függetlennek jelölte): igen.
+ * - Ismeretlen évfolyamú RÉGI tétel (`rev: 2` előtt tárolva, `grade` mező nélkül, a kulcsból sem fejthető vissza): csak ha
+ *   a játék `legacyFits` ellenőrzése szerint a forrása ma is ugyanezt a tételt adná ezen az évfolyamon; ellenőrzés nélkül
+ *   nem tér vissza (a sorban marad, 60 nap után elavul). Szóbank-tétel mindig igen (nyelvhez, nem évfolyamhoz kötött).
+ * Új tételnél az évfolyam mindig ismert: a director a menet `config.grade`-jét rögzíti, ha a tétel nem hozott sajátot.
+ */
+export function reviewFitsGrade(item: ReviewItem, grade: number | null, legacyFits?: (item: ReviewItem) => boolean): boolean {
+  if (grade === null || grade === undefined) return true;
+  const own = validGrade(item.grade) ? item.grade : inferReviewGrade(item.key, item.payload);
+  if (own !== null) return own === grade;
+  if (item.grade === null) return true; // rev 2: a rögzítő évfolyamtól függetlennek jelölte
+  if (item.payload.kind === "vocab") return true;
+  // Régi, ismeretlen évfolyamú tétel: csak a játék ellenőrzésével (a forrása ma is ezt adná-e) — ellenőrizetlenül nem.
+  return legacyFits ? legacyFits(item) : false;
+}
 export type ReviewQueue = {
   /** Kimenet rögzítése. wrong/timeout → box 0, dueInRun = runIndex + 3..6 (seedelt); correct → box+1, dueAt = now + BOX_INTERVAL_MS[box], dueInRun = null; aborted → nincs változás. */
   record(q: PlayQuestion, result: QuestionResult, runIndex: number): void;
@@ -70,7 +122,7 @@ export type ReviewQueue = {
   snapshot(): readonly ReviewItem[];
 };
 
-type Stored = { v: 1; items: Record<string, ReviewItem> };
+type Stored = { v: 1; rev?: number; items: Record<string, ReviewItem> };
 
 function cut(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
@@ -131,7 +183,7 @@ function finiteInt(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
 
-function sanitizeItem(key: string, raw: unknown): ReviewItem | null {
+function sanitizeItem(key: string, raw: unknown, rev = 1): ReviewItem | null {
   if (!raw || typeof raw !== "object") return null;
   const it = raw as Record<string, unknown>;
   const payload = sanitizePayload(it.payload);
@@ -148,7 +200,17 @@ function sanitizeItem(key: string, raw: unknown): ReviewItem | null {
     wrong: Math.max(0, Math.trunc(it.wrong)),
     correct: Math.max(0, Math.trunc(it.correct)),
     payload,
+    // rev 2: tárolt évfolyam; régi tételnél (rev < 2 vagy hiányzó mező) a kulcsból migrálva.
+    ...gradeOnLoad(key, payload, it.grade, rev),
   };
+}
+
+/** Betöltés: rev ≥ 2 → a tárolt érték (szám vagy null); régi formátum → a kulcsból visszafejtett, különben ismeretlen. */
+function gradeOnLoad(key: string, payload: ReviewPayload, stored: unknown, rev: number): { grade?: number | null } {
+  if (validGrade(stored)) return { grade: stored };
+  const inferred = inferReviewGrade(key, payload);
+  if (inferred !== null) return { grade: inferred };
+  return rev >= REVIEW_ITEM_REV && stored === null ? { grade: null } : {};
 }
 
 function sanitize(raw: unknown): Record<string, ReviewItem> {
@@ -157,7 +219,7 @@ function sanitize(raw: unknown): Record<string, ReviewItem> {
   if (obj.v !== 1 || !obj.items || typeof obj.items !== "object") return {};
   const out: Record<string, ReviewItem> = {};
   for (const [key, value] of Object.entries(obj.items as Record<string, unknown>)) {
-    const item = sanitizeItem(key, value);
+    const item = sanitizeItem(key, value, typeof (raw as { rev?: unknown }).rev === "number" ? (raw as { rev: number }).rev : 1);
     if (item) out[key] = item;
   }
   return out;
@@ -204,7 +266,7 @@ export function createReviewQueue(
     trim();
     if (fallback || !storage) return;
     try {
-      const stored: Stored = { v: 1, items };
+      const stored: Stored = { v: 1, rev: REVIEW_ITEM_REV, items };
       storage.setItem(GAME_REVIEW_KEY, JSON.stringify(stored));
     } catch (_err) {
       fallback = true;
@@ -244,6 +306,7 @@ export function createReviewQueue(
           wrong: (prev?.wrong ?? 0) + 1,
           correct: prev?.correct ?? 0,
           payload: payloadFor(q),
+          grade: validGrade(q.grade) ? q.grade : validGrade(prev?.grade) ? prev.grade : inferReviewGrade(q.key),
         };
       }
       persist();
