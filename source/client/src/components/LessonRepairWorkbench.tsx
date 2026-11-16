@@ -9,6 +9,7 @@ import { workflowDefinition } from "@shared/lesson-workflow";
 import { SKILL_RULES, type SkillCode, type SkillSnapshot } from "@shared/lesson-skill";
 import { LessonRepairPanel, REPAIR_PHASE_SLOT_ID, type RepairPreset } from "./LessonRepairPanel";
 import { isRepairable, matchesRepairQuery } from "@/lib/lesson-repair-search";
+import { classroomDisplayLabel } from "@shared/classrooms";
 
 /**
  * Spec 2026-09-23 — külön „Tananyagjavító” menüpont (az Okosítás mintájára): a javítás tudása
@@ -75,7 +76,7 @@ export default function LessonRepairWorkbench() {
                   data-testid={`lesson-repair-option-${f.id}`}>
                   <span className="break-words">{f.title || "Névtelen tananyag"}</span>
                   <span className="block text-xs text-muted-foreground font-normal">
-                    {f.contentType === "lesson" ? "Lecke" : "Régi HTML"}{f.classroom ? ` · ${f.classroom}. osztály` : ""}
+                    {f.contentType === "lesson" ? "Lecke" : "Régi HTML"}{` · ${classroomDisplayLabel(f.classroom)}`}
                   </span>
                 </button>
               </li>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, Eye, Heart, MessageSquare, Mail, FileText } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { classroomDisplayLabel } from "@shared/classrooms";
 
 type OverallStats = {
   totalMaterials: number;
@@ -223,7 +224,7 @@ export default function AdminStats() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ classroom, count }) => `${classroom}. osztály: ${count}`}
+                    label={({ classroom, count }) => `${classroomDisplayLabel(classroom)}: ${count}`}
                     outerRadius={100}
                     fill="#8884d8"
                     dataKey="count"
