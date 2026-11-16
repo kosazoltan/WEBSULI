@@ -4,7 +4,10 @@ export {
   findTermInExample,
   generateVocabQuestion,
   langOfEntry,
+  meaningKeys,
+  meaningsOverlap,
   pickQuestionType,
+  termKey,
   type VocabQuestionType,
   type VocabQuiz,
 } from "./questionGenerator";
