@@ -30,6 +30,17 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@shared/schema";
+
+/**
+ * JM7c-1 / review #462: a Felhasználók lista a tárolt admin-jelzőt (`storedIsAdmin`) és a tényleges jogot (`isAdmin`) külön
+ * adja; eltérésnél az ok: tiltott fiók, vagy a cím nincs az admin-engedélylistán. A jelző elvétele így mindig elérhető.
+ */
+type AdminListUser = User & { storedIsAdmin?: boolean; adminInactiveReason?: "tiltott" | "nincs-a-listan" | null };
+const storedFlag = (u: AdminListUser) => u.storedIsAdmin ?? u.isAdmin;
+const INACTIVE_LABEL: Record<"tiltott" | "nincs-a-listan", string> = {
+  "tiltott": "Admin-jelző – nem érvényes: tiltott fiók",
+  "nincs-a-listan": "Admin-jelző – nem érvényes: nincs az engedélylistán",
+};
 import {
   AlertDialog,
   AlertDialogAction,
@@ -380,7 +391,7 @@ export default function Admin() {
   // This prevents anonymous users from triggering admin API calls before redirect
   
   // Get all users - only enabled when admin AND on correct tab
-  const { data: users, isLoading: isLoadingUsers } = useQuery<User[]>({
+  const { data: users, isLoading: isLoadingUsers } = useQuery<AdminListUser[]>({
     queryKey: ["/api/admin/users"],
     enabled: !!user?.isAdmin && activeTab === "users"
   });
@@ -505,7 +516,7 @@ export default function Admin() {
   }
 
   // Mobile card view component for a user
-  const UserCard = ({ user }: { user: User }) => (
+  const UserCard = ({ user }: { user: AdminListUser }) => (
     <Card className="mb-3" data-testid={`user-row-${user.id}`}>
       <CardContent className="pt-6">
         <div className="flex items-start justify-between">
@@ -546,15 +557,15 @@ export default function Admin() {
                   onClick={() => {
                     toggleAdminMutation.mutate({ 
                       userId: user.id, 
-                      isAdmin: !user.isAdmin 
+                      isAdmin: !storedFlag(user) 
                     });
                   }}
                   data-testid={`button-toggle-admin-${user.id}`}
                 >
-                  {user.isAdmin ? (
+                  {storedFlag(user) ? (
                     <>
                       <UserIcon className="h-4 w-4 mr-2" />
-                      Normál felhasználóvá tétel
+                      {user.isAdmin ? "Normál felhasználóvá tétel" : "Admin-jelző elvétele"}
                     </>
                   ) : (
                     <>
@@ -603,6 +614,11 @@ export default function Admin() {
             <Badge variant="default" className="gap-1">
               <Shield className="h-3 w-3" />
               Admin
+            </Badge>
+          ) : user.adminInactiveReason ? (
+            <Badge variant="outline" className="gap-1 whitespace-normal text-left" data-testid={`badge-admin-inactive-${user.id}`}>
+              <Shield className="h-3 w-3 shrink-0" />
+              {INACTIVE_LABEL[user.adminInactiveReason]}
             </Badge>
           ) : (
             <Badge variant="secondary">
@@ -792,6 +808,9 @@ export default function Admin() {
                                 <TableCell>
                                   <div className="flex gap-1">
                                     {u.isAdmin && <Badge variant="default" className="text-xs py-0">Admin</Badge>}
+                                    {!u.isAdmin && u.adminInactiveReason && (
+                                      <Badge variant="outline" className="text-xs py-0 whitespace-normal" data-testid={`badge-admin-inactive-${u.id}`}>{INACTIVE_LABEL[u.adminInactiveReason]}</Badge>
+                                    )}
                                     {u.isBanned ? (
                                       <Badge variant="destructive" className="text-xs py-0">Tiltva</Badge>
                                     ) : (
@@ -810,9 +829,9 @@ export default function Admin() {
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
                                       <DropdownMenuItem
-                                        onClick={() => toggleAdminMutation.mutate({ userId: u.id, isAdmin: !u.isAdmin })}
+                                        onClick={() => toggleAdminMutation.mutate({ userId: u.id, isAdmin: !storedFlag(u) })}
                                       >
-                                        {u.isAdmin ? <><UserIcon className="h-3.5 w-3.5 mr-2" />Normál felhasználó</> : <><Shield className="h-3.5 w-3.5 mr-2" />Admin jogosultság</>}
+                                        {storedFlag(u) ? <><UserIcon className="h-3.5 w-3.5 mr-2" />{u.isAdmin ? "Normál felhasználó" : "Admin-jelző elvétele"}</> : <><Shield className="h-3.5 w-3.5 mr-2" />Admin jogosultság</>}
                                       </DropdownMenuItem>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem

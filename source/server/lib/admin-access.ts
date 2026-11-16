@@ -172,6 +172,20 @@ export function isAdminUser(user: AdminCandidate | null | undefined): boolean {
   return lockoutFallbackActive(policy);
 }
 
+/** Ok, amiért egy TÁROLT admin-jelzős fiók mégsem admin (a Felhasználók fülhöz); érvényes adminnál / jelző nélkül null. */
+export type AdminInactiveReason = "tiltott" | "nincs-a-listan";
+
+/** A tárolt `is_admin` jelző (megjelenítéshez és a jelző elvételéhez — jogosultság-döntésre az `isAdminUser` való). */
+export function storedAdminFlag(user: AdminCandidate | null | undefined): boolean {
+  return user?.isAdmin === true;
+}
+
+/** Review #462: a lista külön mutatja a tárolt jelzőt és a tényleges jogot; ez az eltérés oka. */
+export function adminInactiveReason(user: AdminCandidate | null | undefined): AdminInactiveReason | null {
+  if (!storedAdminFlag(user) || isAdminUser(user)) return null;
+  return user?.isBanned === true ? "tiltott" : "nincs-a-listan";
+}
+
 /** Induláskori, maszkolt állapotjelentés a naplóba (cím soha nem kerül ki teljes alakban). */
 export async function reportAdminAccessStatus(): Promise<void> {
   const policy = adminPolicy();

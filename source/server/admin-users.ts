@@ -1,17 +1,21 @@
 import type { Router } from "express";
 import type { User } from "../shared/schema";
-import { isAdminUser, isAllowlistedAdminEmail, prepareAdminAccess } from "./lib/admin-access";
+import { adminInactiveReason, isAdminUser, isAllowlistedAdminEmail, prepareAdminAccess, storedAdminFlag, type AdminInactiveReason } from "./lib/admin-access";
 
 /**
  * Admin felhasználókezelés (docs/specs/2026-10-18-admin-korszerusites.md): a Felhasználók fül végpontjai.
  * A válasz jelszó-hash nélküli; a saját fiók és az utolsó admin védett.
  * JM7c-1 (terv 10.4a): az `isAdmin` mező és az „utolsó admin” számlálása a SZÁMOLT admin-jog (jelző ÉS engedélylista ÉS nem
  * tiltott — server/lib/admin-access.ts); admin-jogot csak az engedélylistán lévő cím kaphat.
+ * Review #462: a lista KÜLÖN adja a tárolt jelzőt (`storedIsAdmin`) és az eltérés okát (`adminInactiveReason`: tiltott /
+ * nincs a listán), hogy a felület a nem érvényes jelzőt is mutassa, és a jelző ELVÉTELE mindig elérhető legyen.
  */
-export type PublicUser = Pick<User, "id" | "email" | "firstName" | "lastName" | "profileImageUrl" | "isAdmin" | "isBanned" | "lastSeenAt" | "createdAt">;
+export type PublicUser = Pick<User, "id" | "email" | "firstName" | "lastName" | "profileImageUrl" | "isAdmin" | "isBanned" | "lastSeenAt" | "createdAt">
+  & { storedIsAdmin: boolean; adminInactiveReason: AdminInactiveReason | null };
 export const publicUser = (u: User): PublicUser => ({
   id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName, profileImageUrl: u.profileImageUrl,
   isAdmin: isAdminUser(u), isBanned: u.isBanned, lastSeenAt: u.lastSeenAt, createdAt: u.createdAt,
+  storedIsAdmin: storedAdminFlag(u), adminInactiveReason: adminInactiveReason(u),
 });
 
 export type AdminUserAction = "delete" | "ban" | "unban" | "grantAdmin" | "revokeAdmin";

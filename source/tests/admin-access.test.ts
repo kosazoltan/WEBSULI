@@ -12,7 +12,7 @@ process.env.DATABASE_URL ??= "postgresql://authz:authz@127.0.0.1:1/admin_access"
 process.env.SESSION_SECRET ??= "admin-access-test-secret";
 
 const {
-  adminPolicy, configureAdminAccess, isAdminUser, isAllowlistedAdminEmail, normalizeAdminEmail, parseAdminAllowlist, prepareAdminAccess, reportAdminAccessStatus,
+  adminPolicy, configureAdminAccess, isAdminUser, isAllowlistedAdminEmail, normalizeAdminEmail, parseAdminAllowlist, prepareAdminAccess, reportAdminAccessStatus, adminInactiveReason, storedAdminFlag,
 } = await import("../server/lib/admin-access");
 const { AdminStateStore, isAdminState, ADMIN_STATE_PREFIX } = await import("../server/lib/admin-oauth-state");
 const { createGoogleVerify } = await import("../server/auth");
@@ -118,6 +118,18 @@ describe("JM7c-1 — a képlet (jelző ÉS lista ÉS nem tiltott)", () => {
     assert.equal(isAdminUser(admin("barki@pelda.hu", { isAdmin: false })), false);
     assert.equal(isAdminUser(admin("barki@pelda.hu", { isBanned: true })), false);
     assert.equal(isAllowlistedAdminEmail("barki@pelda.hu"), false, "listára vétel nélkül új admin-jog nem adható");
+  });
+});
+
+describe("JM7c-1 / review #462 — tárolt jelző és az eltérés oka", () => {
+  it("tiltott / listán kívüli jelzős fiók: tárolt jelző igaz, ok megnevezve; érvényes adminnál és jelző nélkül nincs ok", () => {
+    setEnv({ ADMIN_ALLOWLIST: "tulaj@pelda.hu" });
+    assert.equal(adminInactiveReason(admin("tulaj@pelda.hu", { isBanned: true })), "tiltott");
+    assert.equal(adminInactiveReason(admin("regi@pelda.hu")), "nincs-a-listan");
+    assert.equal(adminInactiveReason(admin("tulaj@pelda.hu")), null);
+    assert.equal(adminInactiveReason(admin("diak@pelda.hu", { isAdmin: false })), null);
+    assert.equal(storedAdminFlag(admin("regi@pelda.hu")), true);
+    assert.equal(storedAdminFlag(admin("regi@pelda.hu", { isAdmin: false })), false);
   });
 });
 

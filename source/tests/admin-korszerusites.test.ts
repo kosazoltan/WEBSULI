@@ -18,7 +18,9 @@ test("felhasználók: a válasz jelszó-hash nélküli", () => {
   const out = publicUser(u) as Record<string, unknown>;
   assert.equal("password" in out, false);
   assert.equal("googleId" in out, false);
-  assert.deepEqual(Object.keys(out).sort(), ["createdAt", "email", "firstName", "id", "isAdmin", "isBanned", "lastName", "lastSeenAt", "profileImageUrl"]);
+  // SPEC-VÁLTOZÁS 2026-11-16 (terv 10.4a, JM7c-1 — review #462): a tárolt admin-jelző és az eltérés oka külön mezőben; a
+  // pontos kulcslista (engedélylista) megmarad, jelszó / googleId továbbra sem kerülhet ki.
+  assert.deepEqual(Object.keys(out).sort(), ["adminInactiveReason", "createdAt", "email", "firstName", "id", "isAdmin", "isBanned", "lastName", "lastSeenAt", "profileImageUrl", "storedIsAdmin"]);
 });
 
 test("felhasználók: a saját fiók és az utolsó admin védett, más műveletek engedettek", () => {

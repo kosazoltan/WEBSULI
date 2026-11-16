@@ -150,6 +150,34 @@ describe("JM7c-1 — új admin-jog csak listás címnek", () => {
   });
 });
 
+describe("JM7c-1 / review #462 — a nem érvényes, tárolt admin-jelző látszik és elvehető", () => {
+  it("tiltott + is_admin és listán kívüli + is_admin sor: a lista külön mutatja a jelzőt és az okot; a jelző elvehető", async () => {
+    const BANNED = "jm7c-banned-admin@websuli.example";
+    await dbPool.query(`INSERT INTO users (id, email, password, is_admin, is_banned) VALUES ('jm7c-banned-admin', $1, NULL, true, true)`, [BANNED]);
+    process.env.ADMIN_ALLOWLIST = `${OWNER}, ${BANNED}`;
+    const owner = (await login(OWNER)).client;
+    type Row = { id: string; isAdmin: boolean; storedIsAdmin: boolean; adminInactiveReason: string | null };
+    const list = async () => (await owner.request("GET", "/api/admin/users")).json as Row[];
+    const pick = (rows: Row[], id: string) => { const r = rows.find((u) => u.id === id)!; return { isAdmin: r.isAdmin, storedIsAdmin: r.storedIsAdmin, adminInactiveReason: r.adminInactiveReason }; };
+    let rows = await list();
+    assert.deepEqual(pick(rows, "jm7c-banned-admin"), { isAdmin: false, storedIsAdmin: true, adminInactiveReason: "tiltott" });
+    assert.deepEqual(pick(rows, "jm7c-old-admin"), { isAdmin: false, storedIsAdmin: true, adminInactiveReason: "nincs-a-listan" });
+    assert.deepEqual(pick(rows, "jm7c-owner"), { isAdmin: true, storedIsAdmin: true, adminInactiveReason: null });
+    assert.deepEqual(pick(rows, "jm7c-parent"), { isAdmin: false, storedIsAdmin: false, adminInactiveReason: null });
+    for (const id of ["jm7c-banned-admin", "jm7c-old-admin"]) {
+      const r = await owner.request("PUT", `/api/admin/users/${id}/toggle-admin`, { isAdmin: false });
+      assert.equal(r.status, 200, `${id}: ${r.text}`);
+    }
+    rows = await list();
+    assert.deepEqual(pick(rows, "jm7c-banned-admin"), { isAdmin: false, storedIsAdmin: false, adminInactiveReason: null });
+    assert.deepEqual(pick(rows, "jm7c-old-admin"), { isAdmin: false, storedIsAdmin: false, adminInactiveReason: null });
+    // A listán kívüli címre a jelző visszaadása továbbra sem engedett; a régi admin a többi teszthez visszaáll.
+    const regrant = await owner.request("PUT", "/api/admin/users/jm7c-old-admin/toggle-admin", { isAdmin: true });
+    assert.equal(regrant.status, 400);
+    await dbPool.query(`UPDATE users SET is_admin = true WHERE id = 'jm7c-old-admin'`);
+  });
+});
+
 describe("JM7c-1 — listáról levétel és kizárás elleni őr", () => {
   it("listáról levett admin a KÖVETKEZŐ kérésénél már nem admin (újra-belépés nélkül)", async () => {
     process.env.ADMIN_ALLOWLIST = `${OWNER},${SECOND}`;

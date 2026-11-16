@@ -75,6 +75,26 @@ test("listás admin (jelszóval): az /admin betölt, a felület admin-adatot kap
   await shot(page, "admin-listas");
 });
 
+test("review #462: a Felhasználók fül a nem érvényes admin-jelzőt érthetően mutatja, és felajánlja az elvételét", async ({ page, request, context }) => {
+  await loginInto(request, context, E2E_ALLOWLISTED_ADMIN);
+  for (const [w, h, name] of [[390, 844, "felhasznalok-390"], [1280, 800, "felhasznalok-asztali"]] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto("/admin?tab=users");
+    const badge = page.getByTestId("badge-admin-inactive-jm7c-e2e-unlisted");
+    await expect(badge).toBeVisible({ timeout: 20_000 });
+    await expect(badge).toContainText("nincs az engedélylistán");
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `${name}: nincs vízszintes görgetés`).toBeLessThanOrEqual(1);
+    await badge.scrollIntoViewIfNeeded();
+    await shot(page, name);
+  }
+  // Mobil kártya: a művelet-menüben „Admin-jelző elvétele” (nem „Admin jogosultság adása”).
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin?tab=users");
+  await page.getByTestId("button-actions-jm7c-e2e-unlisted").click();
+  await expect(page.getByTestId("button-toggle-admin-jm7c-e2e-unlisted")).toHaveText(/Admin-jelző elvétele/);
+});
+
 for (const [label, email] of [["is_admin, de listán kívüli (= listáról levett) fiók", UNLISTED_ADMIN], ["nem admin felhasználó", PLAIN_USER]] as const) {
   test(`${label}: belép, de az /admin a főoldalra irányít, admin-adatot nem kap`, async ({ page, request, context }) => {
     const body = await loginInto(request, context, email);
