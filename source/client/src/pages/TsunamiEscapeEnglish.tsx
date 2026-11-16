@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { useQuery } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
 import { loadClassroomGrade, useClassroomGrade } from "@/lib/classroomStore";
 import type { GradeSubject } from "@/data/gradeQuizBank";
@@ -70,6 +70,7 @@ import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import TsunamiScene3D from "@/game-engine/scenes/TsunamiScene3D";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
+import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 const LS_XP = "websuli-tsunami-en-xp";
 const LS_BEST = "websuli-tsunami-en-best-streak";
 
@@ -1351,9 +1352,10 @@ export default function TsunamiEscapeEnglish() {
       runXp: sessionXp,
       runStreak: runBestStreakRef.current,
       runSeconds,
+      runId: newScoreRunId(),
     };
 
-    void apiRequest("POST", "/api/games/score", payload)
+    void postGameScore(payload)
       .then(() => {
         void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard/tsunami"] });
       })

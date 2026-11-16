@@ -21,6 +21,7 @@ import { setupLearnerReports } from "./learner-reports";
 import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
 import { setupAuth } from "./auth";
+import { GAME_SCORE_IP_MAX, GAME_SCORE_LIMIT_MESSAGE, GAME_SCORE_WINDOW_MS } from "./lib/game-score-limits";
 import { runMigrations } from "./migrate";
 import { designAssetsRouter } from "./design-assets";
 import { startSkillLearningAudit } from "./workflows/learning-worker";
@@ -425,7 +426,19 @@ const publicWriteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// JM0: a pontbeküldés laza IP-plafonja az elárasztás ellen (valódi kliens-IP). Az elsődleges, felhasználónkénti korlát a
+// routes.ts-ben van (a munkamenet itt még nincs betöltve); közös IP mögött így mindenki külön keretet kap.
+const gameScoreIpLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
+  windowMs: GAME_SCORE_WINDOW_MS,
+  max: GAME_SCORE_IP_MAX,
+  message: GAME_SCORE_LIMIT_MESSAGE,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Apply rate limiting only to specific endpoints
+app.use("/api/games/score", gameScoreIpLimiter); // JM0
 app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
 app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection

@@ -1,6 +1,5 @@
 import { db } from "./db";
 import {
-  users,
   emailSubscriptions,
   extraEmailAddresses,
   gamesCatalog,
@@ -8,6 +7,7 @@ import {
   type User,
 } from "@shared/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { toLeaderboardEntries } from "./lib/leaderboard-entries";
 
 const ALLOWED_DIFFICULTIES = ["easy", "normal", "hard"] as const;
 export type GameDifficulty = (typeof ALLOWED_DIFFICULTIES)[number];
@@ -53,13 +53,6 @@ export async function getGameSyncEligibility(user: User | null | undefined): Pro
   return { eligible: true };
 }
 
-function formatDisplayName(firstName: string | null, lastName: string | null): string {
-  const f = firstName?.trim() || "Játékos";
-  const l = lastName?.trim();
-  if (l && l.length > 0) return `${f} ${l.charAt(0).toUpperCase()}.`;
-  return f;
-}
-
 export async function listGamesCatalog() {
   return await db.select().from(gamesCatalog).orderBy(gamesCatalog.sortOrder, gamesCatalog.id);
 }
@@ -71,22 +64,14 @@ export async function getLeaderboard(gameId: string, difficulty: string, limit: 
       bestRunXp: gameScores.bestRunXp,
       bestStreak: gameScores.bestStreak,
       bestRunSeconds: gameScores.bestRunSeconds,
-      firstName: users.firstName,
-      lastName: users.lastName,
+      userId: gameScores.userId,
     })
     .from(gameScores)
-    .innerJoin(users, eq(gameScores.userId, users.id))
     .where(and(eq(gameScores.gameId, gameId), eq(gameScores.difficulty, difficulty)))
     .orderBy(desc(gameScores.bestRunXp), desc(gameScores.bestStreak))
     .limit(lim);
 
-  return rows.map((r, rank) => ({
-    rank: rank + 1,
-    displayName: formatDisplayName(r.firstName, r.lastName),
-    bestRunXp: r.bestRunXp,
-    bestStreak: r.bestStreak,
-    bestRunSeconds: r.bestRunSeconds,
-  }));
+  return toLeaderboardEntries(rows);
 }
 
 export async function submitGameScore(params: {

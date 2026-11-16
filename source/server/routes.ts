@@ -57,6 +57,9 @@ import { createArbiterRouter } from "./arbiter/routes";
 import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
 import { ViewDedup } from "./lib/view-dedup";
+import { maskEmail } from "./lib/mask-email";
+import { createGameScoreUserLimiter } from "./lib/game-score-limits";
+import { ScoreRunDedup } from "./lib/score-run-dedup";
 import { getMaterialOrigin } from "./utils/config";
 import { prependWebLessonQualityNotice, qualityNoticeFor } from "./lib/web-lesson-quality-notice";
 
@@ -898,7 +901,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!user) {
-        logger.warn('[AUTH] User not found after OIDC login:', userEmail);
+        logger.warn('[AUTH] User not found after OIDC login:', maskEmail(userEmail));
         return res.json(null);
       }
 
@@ -1301,9 +1304,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     runXp: z.number().int().min(0).max(200000),
     runStreak: z.number().int().min(0).max(10000),
     runSeconds: z.number().int().min(0).max(86400),
+    // JM0: opcionális újraküldés-azonosító (régi kliens nélküle is működik); NEM csalásvédelem.
+    runId: z.string().uuid().optional(),
   });
+  const gameScoreUserLimiter = createGameScoreUserLimiter();
+  const scoreRunDedup = new ScoreRunDedup<Awaited<ReturnType<typeof gameScoreService.submitGameScore>>>();
 
-  app.post("/api/games/score", isAuthenticated, async (req: Request, res) => {
+  app.post("/api/games/score", isAuthenticated, gameScoreUserLimiter, async (req: Request, res) => {
     try {
       const parsed = submitGameScoreSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1319,11 +1326,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           reason: el.reason,
         });
       }
-      const row = await gameScoreService.submitGameScore({
-        userId: user.id,
-        ...parsed.data,
-      });
-      res.json(row);
+      const { runId, ...scoreInput } = parsed.data;
+      const write = () => gameScoreService.submitGameScore({ userId: user.id, ...scoreInput });
+      if (!runId) {
+        return res.json(await write());
+      }
+      // JM0: azonos runId + azonos tartalom → ugyanaz a válasz írás nélkül; eltérő tartalom → 409.
+      const fingerprint = `${scoreInput.gameId}|${scoreInput.difficulty}|${scoreInput.runXp}|${scoreInput.runStreak}|${scoreInput.runSeconds}`;
+      const outcome = await scoreRunDedup.run(`${user.id}|${runId}`, fingerprint, write);
+      if (outcome.kind === "conflict") {
+        return res.status(409).json({ message: "Ez a futás-azonosító már más tartalommal szerepel." });
+      }
+      if (outcome.kind === "duplicate") {
+        return res.json({ ...outcome.value, ok: true, duplicate: true });
+      }
+      res.json(outcome.value);
     } catch (e: unknown) {
       if (e instanceof Error && e.message === "invalid_difficulty") {
         return res.status(400).json({ message: "Érvénytelen nehézség." });
@@ -1507,7 +1524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add email without authentication (no addedBy user)
       await storage.addExtraEmail(email.trim(), classrooms, null);
 
-      logger.info(`[EMAIL SUBSCRIBE] Public subscription: ${email.trim()}`);
+      logger.info(`[EMAIL SUBSCRIBE] Public subscription: ${maskEmail(email.trim())}`);
 
       res.json({
         success: true,
@@ -1752,11 +1769,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   file.id
                 );
                 successful++;
-                logger.info(`[EMAIL] ✓ Email sikeresen elküldve (${i + 1}/${uniqueRecipients.length}): ${recipient.email}`);
+                logger.info(`[EMAIL] ✓ Email sikeresen elküldve (${i + 1}/${uniqueRecipients.length}): ${maskEmail(recipient.email)}`);
               } catch (err: unknown) {
                 const errTyped = err instanceof Error ? err : new Error(String(err));
                 failed++;
-                logger.error('[EMAIL] ✗ Hiba email küldéskor:', recipient.email, 'error:', errTyped.message);
+                logger.error('[EMAIL] ✗ Hiba email küldéskor:', maskEmail(recipient.email), 'error:', errTyped.message);
               }
 
               // Add 500ms delay between emails to respect rate limits (2 req/sec = 500ms minimum)
@@ -1965,10 +1982,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add email to extra emails for future notifications (with file's classroom)
       try {
         await storage.addExtraEmail(email, [file.classroom], userId);
-        logger.info(`[EMAIL] Új email cím hozzáadva: ${email} (${file.classroom}. osztály)`);
+        logger.info(`[EMAIL] Új email cím hozzáadva: ${maskEmail(email)} (${file.classroom}. osztály)`);
       } catch (err: unknown) {
         const errTyped = err instanceof Error ? err : new Error(String(err));
-        logger.info('[EMAIL] Email cím már létezik vagy hiba:', email, 'message:', errTyped.message);
+        logger.info('[EMAIL] Email cím már létezik vagy hiba:', maskEmail(email), 'message:', errTyped.message);
       }
 
       // Send email notification
@@ -1981,7 +1998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        logger.info(`[EMAIL] Email küldése ${email} címre a ${file.title} fájlhoz`);
+        logger.info(`[EMAIL] Email küldése ${maskEmail(email)} címre a ${file.title} fájlhoz`);
         await sendNewMaterialNotification(
           email,
           'Kedves Felhasználó',
@@ -1989,7 +2006,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           file.description,
           file.id
         );
-        logger.info(`[EMAIL] Email sikeresen elküldve: ${email}`);
+        logger.info(`[EMAIL] Email sikeresen elküldve: ${maskEmail(email)}`);
         res.json({ success: true, message: "Email értesítés elküldve" });
       } catch (emailError: unknown) {
         const emailErrorTyped = emailError instanceof Error ? emailError : new Error(String(emailError));
