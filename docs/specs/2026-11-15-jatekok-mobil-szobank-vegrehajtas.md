@@ -1718,7 +1718,7 @@ a `GameShell` `orientation="landscape"`-et kap; a `pickQuestion` törzsében a t
 
 ## S13 — Játéklista és főoldali kártyák arculata, teljes mátrix, verify, átfogó review, retro
 
-**Állapot:** folyamatban — 1. rész: ág feat/jatekok-s13a-lista-adat-mero, munkafa .claude/worktrees/jatekok-s13, kanban #30. Modell: Opus. Függőség: S1–S12 mind összevonva.
+**Állapot:** folyamatban — 1. rész összevonva (#437); 2. (záró) rész: ág feat/jatekok-s13b-zaras, munkafa .claude/worktrees/jatekok-s13, kanban #30. Modell: Opus. Függőség: S1–S12 mind összevonva.
 
 - **Cél:** közös arculat a játéklistán és a főoldali kártyákon; a mobil mátrix mind a 7 játékra `"full"`, a szóbank mindhárom
   nyelven `"full"`, a szóbank-bekötés mind a 6 nyelvi játékban — őr-tesztekkel; `npm run verify` zöld; átfogó review
