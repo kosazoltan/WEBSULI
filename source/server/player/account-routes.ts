@@ -1,6 +1,7 @@
 /**
  * JM7b — a „kis fiók” végpontjai (terv 10.4 „Fiókoldal”, „Kapcsolat a tanulói profillal”, D11; JM-A11, JM-A15).
- * Mind a `PLAYER_ACCOUNTS` flag (alapból KI → 404) és a `requirePlayer` (nincs munkamenet → 401, tiltott → 403) mögött;
+ * Mind a `PLAYER_ACCOUNTS` flag (alapból KI → 404) és a `requirePlayer` (nincs munkamenet → 401, tiltott → 403) mögött —
+ * kivéve az export / törlési kód / törlés hármast: ezek a `requireOwnData` mögött a tiltottnak is nyitva (N2);
  * az írások CSRF-tokenesek (a routes.ts globális őre) ÉS Origin-allowlistesek, játékosonként sebességkorlátosak.
  *
  *   GET  /api/player/account               → saját fiók: becenév, avatar, maszkolt cím, Google / tanulói kapcsolat jelzője
@@ -30,7 +31,7 @@ import type { PlayerAccountStore } from "./account-store";
 import { CODE_PATTERN, allPurposeEmailHashes, codeHash, generateCode, generateLinkToken, limitHash, linkHash, playerAuthKey, purposeEmailHash } from "./codes";
 import type { PlayerMailer } from "./auth-routes";
 import { buildAccountDeletedEmail, buildDeleteCodeEmail } from "./email-template";
-import { createRequirePlayer, requirePlayerAccountsFlag } from "./require-player";
+import { createRequireOwnData, createRequirePlayer, requirePlayerAccountsFlag } from "./require-player";
 import { destroyPlayerSession, getPlayerSessionAuthAt, getPlayerSessionId } from "./session";
 import type { PlayerStore } from "./store";
 
@@ -87,6 +88,9 @@ function playerLimiter(windowMs: number, max: number, message: string): RequestH
 export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
   const router = express.Router();
   const requirePlayer = createRequirePlayer(deps.store);
+  // N2 (tulajdonosi döntés 2026-11-16): a tiltott játékos is letöltheti az adatait és törölheti a fiókját — CSAK ezen a három
+  // végponton (export, törlési kód, törlés); minden más végpont a `requirePlayer` mögött marad (tiltott → 403).
+  const requireOwnData = createRequireOwnData(deps.store);
   const now = deps.now ?? Date.now;
   const writeLimiter = playerLimiter(15 * 60_000, 40, "Túl sok módosítás. Próbáld újra egy kicsit később!");
   const readLimiter = playerLimiter(15 * 60_000, 120, "Túl sok kérés. Próbáld újra egy kicsit később!");
@@ -204,7 +208,7 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
     }
   });
 
-  router.post("/export", requirePlayerAccountsFlag, enforceOriginAllowlist, heavyLimiter, requirePlayer, async (_req, res) => {
+  router.post("/export", requirePlayerAccountsFlag, enforceOriginAllowlist, heavyLimiter, requireOwnData, async (_req, res) => {
     noStore(res);
     try {
       const key = playerAuthKey();
@@ -228,7 +232,7 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
    * Review #449 (A3): a törlés KÖZVETLEN megerősítést kér — egyszeri kódot a fiók e-mail-címére (a belépőkódok
    * infrastruktúrájával, céljához kötött hash-sel: belépőkódként nem használható, és fordítva). A válasz mindig 202.
    */
-  router.post("/account/delete/start", requirePlayerAccountsFlag, enforceOriginAllowlist, deleteStartLimiter, requirePlayer, async (_req, res) => {
+  router.post("/account/delete/start", requirePlayerAccountsFlag, enforceOriginAllowlist, deleteStartLimiter, requireOwnData, async (_req, res) => {
     noStore(res);
     try {
       const email = await deps.accounts.playerEmailById(playerId(res));
@@ -265,7 +269,7 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
     return true;
   };
 
-  router.post("/account/delete", requirePlayerAccountsFlag, enforceOriginAllowlist, deleteLimiter, requirePlayer, async (req, res) => {
+  router.post("/account/delete", requirePlayerAccountsFlag, enforceOriginAllowlist, deleteLimiter, requireOwnData, async (req, res) => {
     noStore(res);
     const parsed = deleteSchema.safeParse(req.body);
     if (!parsed.success || parsed.data.confirm.normalize("NFC") !== DELETE_CONFIRM_WORD) {
