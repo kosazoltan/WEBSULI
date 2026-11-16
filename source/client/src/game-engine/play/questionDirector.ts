@@ -435,7 +435,17 @@ function idOrPrompt(q: FourChoiceQuiz): string {
 
 /** Szóbank (`VocabSource.next` / `questionFor`) → kulcs `vocab:<lang>:<vocabId>`, felolvasandó szöveg a célnyelvi szó. */
 export function vocabPlayQuestion(q: VocabQuiz): PlayQuestion {
-  return { key: `vocab:${q.lang}:${q.vocabId}`, quiz: quizOf(q), source: "vocab", lang: q.lang, speakText: q.answerTerm };
+  // Közös utójavítás (#454 / #455 review): a megjelenéskor CSAK a forrás kifejezett, választ el nem áruló `speakText`-je
+  // hangzik el (a korábbi „mindig a helyes szó” — `answerTerm` — magyar→cél és hiányos mondat típusnál kimondta a választ);
+  // a helyes szó `speakAfter`-ként a kimenetel UTÁN. A mezőket a szóbank-generátor adja (`VocabQuiz.speakText` / `speakAfter`, #455).
+  return {
+    key: `vocab:${q.lang}:${q.vocabId}`,
+    quiz: quizOf(q),
+    source: "vocab",
+    lang: q.lang,
+    ...(q.speakText ? { speakText: q.speakText } : {}),
+    ...(q.speakAfter ? { speakAfter: q.speakAfter } : {}),
+  };
 }
 
 /** Évfolyam-bank (`pickGradeQuiz` / `pickGradeSlotWithVocab` `grade` ága) → kulcs `grade:<id>`. */

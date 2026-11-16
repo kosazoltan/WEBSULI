@@ -34,10 +34,15 @@ function run(d: IntensityDirector, seconds: number, perStep: (dir: IntensityDire
   return changes;
 }
 
-test("kezdet: buildup, 0 intenzitás, nem nyugodt", () => {
+// SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md K.2 „Megvalósult eltérések”, közös
+// utójavítás a): a kezdő, nyugodt (0 intenzitású) felépülő fázis NYUGODT — a kérdés-ütemező itt is kérdezhet. A szigor
+// megmarad: a buildup fázisban a `calm()` pontosan akkor igaz, ha a szint `RELAX_ENTER` alatt van (lent, minden mintán).
+test("kezdet: buildup, 0 intenzitás, nyugodt (a szint a pihenő-küszöb alatt)", () => {
   const d = createIntensityDirector();
   assert.equal(d.phase(), "buildup");
   assert.equal(d.intensity(), 0);
+  assert.equal(d.calm(), true);
+  d.signal("damage"); // 0,25 = RELAX_ENTER: már nem a küszöb alatt
   assert.equal(d.calm(), false);
 });
 
@@ -129,21 +134,28 @@ test("a pihenő a minimum (8 s) után az első harc-jelzésre véget ér, előtt
   assert.equal(fresh.phase(), "buildup");
 });
 
-test("calm(): relax és fade alatt igaz, buildup és rövid peak alatt hamis; 4 s-nál hosszabb peak alatt igaz", () => {
+// SPEC-VÁLTOZÁS 2026-11-16 (közös utójavítás a): buildup alatt a `calm()` = szint < RELAX_ENTER (korábban mindig hamis).
+test("calm(): relax és fade alatt igaz, buildup alatt pontosan a pihenő-küszöb alatt, rövid peak alatt hamis; 4 s-nál hosszabb peak alatt igaz", () => {
   const d = createIntensityDirector();
   d.signal("damage");
   d.signal("damage");
   d.signal("damage");
   const seen = new Map<DirectorPhase, Set<boolean>>();
+  let buildupSamples = 0;
   run(d, 30, (dir) => {
     if (dir.phase() === "peak") dir.signal("combat");
     const set = seen.get(dir.phase()) ?? new Set<boolean>();
     set.add(dir.calm());
     seen.set(dir.phase(), set);
+    if (dir.phase() === "buildup") {
+      buildupSamples += 1;
+      assert.equal(dir.calm(), dir.intensity() < RELAX_ENTER, `buildup, szint ${dir.intensity()}`);
+    }
   });
   assert.deepEqual([...seen.get("relax")!], [true]);
   assert.deepEqual([...seen.get("fade")!], [true]);
-  assert.deepEqual([...seen.get("buildup")!], [false]);
+  assert.ok(buildupSamples > 0, "a futás buildup fázist is mintázott");
+  assert.ok(seen.get("buildup")!.has(false), "magas szintű buildup alatt nem nyugodt");
   assert.deepEqual([...seen.get("peak")!], [false], "az alap 2–4 s-os csúcs sosem hosszabb 4 s-nál");
 
   const long = createIntensityDirector({ peakSec: [2, 8] });

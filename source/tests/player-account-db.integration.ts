@@ -536,6 +536,113 @@ describe("JM7b — admin „Játékosok”: lista, tiltás, azonnali hatás", ()
   });
 });
 
+describe("JM7b-utójavítás N2 — tiltott játékos saját adatai, admin végleges törlés (tulajdonosi döntés 2026-11-16)", () => {
+  const plantDelete = (email: string, code: string) => {
+    const k = playerAuthKey();
+    const deh = purposeEmailHash(k, email, "delete");
+    return createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: deh, limitHash: limitHash(k, email), codeHash: codeHash(k, deh, `del:${code}`), linkHash: linkHash(k, generateLinkToken()) });
+  };
+  /** Tiltott fiók VALÓDI kódos beváltása: 403 BANNED + korlátozott munkamenet. */
+  async function bannedLogin(email: string): Promise<Client> {
+    const key = playerAuthKey();
+    const eh = emailHash(key, email);
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, "36925814"), linkHash: linkHash(key, generateLinkToken()) });
+    const c = new Client(app.base);
+    const r = await c.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "36925814" });
+    assert.deepEqual([r.status, r.json], [403, { ok: false, code: "BANNED", restricted: true }]);
+    await c.fetchCsrf();
+    return c;
+  }
+
+  it("a tiltott játékos (friss, korlátozott belépéssel) letölti az adatait és törli a fiókját; minden más fiók-végpont 403", async () => {
+    const admin = await adminClient();
+    const email = "n2-tiltott@pelda.hu";
+    const p = await emailPlayer(email);
+    assert.equal((await p.request("POST", "/api/player/profile", { nickname: "Tiltott Teknős" })).status, 200);
+    const id = ((await p.request("GET", "/api/player/me")).json as { id: string }).id;
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/ban`, {})).status, 200);
+    const b = await bannedLogin(email);
+    // Minden más tiltva marad.
+    for (const [m, path, body] of [
+      ["GET", "/api/player/me", undefined], ["GET", "/api/player/account", undefined], ["GET", "/api/player/nickname-suggestions", undefined],
+      ["POST", "/api/player/profile", { nickname: "Más Név" }], ["POST", "/api/player/link-learner", { confirm: true }], ["POST", "/api/player/unlink-learner", {}],
+    ] as const) {
+      const r = await b.request(m, path, body);
+      assert.deepEqual([r.status, (r.json as { code?: string }).code], [403, "BANNED"], `${m} ${path}`);
+    }
+    assert.equal((await q<{ nickname: string }>(`SELECT nickname FROM player_accounts WHERE id = $1`, [id]))[0]!.nickname, "Tiltott Teknős", "a becenév nem változott");
+    // Adatletöltés: csak a saját adatok, a tiltás ténye is benne.
+    const exp = await b.request("POST", "/api/player/export", {});
+    assert.equal(exp.status, 200, exp.text);
+    const data = exp.json as { account: { email: string; nickname: string; bannedAt: string | null } };
+    assert.deepEqual([data.account.email, data.account.nickname, data.account.bannedAt !== null], [email, "Tiltott Teknős", true]);
+    // Törlés: ugyanazokkal a védelmekkel (kódkérés a fiók címére, megerősítő szó, célhoz kötött kód).
+    assert.equal((await b.request("POST", "/api/player/account/delete/start", {})).status, 202);
+    assert.equal((await q(`SELECT 1 FROM player_auth_codes WHERE email_hash = $1`, [purposeEmailHash(playerAuthKey(), email, "delete")])).length, 1, "a törlési kód elkészült");
+    await plantDelete(email, "14725836");
+    assert.equal((await b.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "00000000" })).status, 400, "rossz kóddal nem");
+    assert.equal((await b.request("POST", "/api/player/account/delete", { confirm: "torlom", code: "14725836" })).status, 400, "megerősítő szó nélkül nem");
+    const del = await b.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "14725836" });
+    assert.equal(del.status, 200, del.text);
+    assert.equal((await q(`SELECT 1 FROM player_accounts WHERE id = $1`, [id])).length, 0);
+    assert.equal((await q(`SELECT 1 FROM session WHERE sess -> 'player' ->> 'id' = $1`, [id])).length, 0, "minden munkamenet törölve");
+  });
+
+  it("korlátozott munkamenet nélkül (vendég) a saját-adat végpontok 401-et adnak", async () => {
+    const guest = new Client(app.base);
+    await guest.fetchCsrf();
+    for (const path of ["/api/player/export", "/api/player/account/delete/start", "/api/player/account/delete"]) {
+      assert.equal((await guest.request("POST", path, path.endsWith("/delete") ? { confirm: "TÖRLÖM", code: "12345678" } : {})).status, 401, path);
+    }
+  });
+
+  it("admin VÉGLEGES törlés: megerősítő szó nélkül semmi; megerősítéssel a saját törléssel azonos hatás; napló maszkolt", async () => {
+    await dbPool.query(`INSERT INTO learners (id, name, grade) VALUES ('n2-learner', 'N2 Teszt', 5) ON CONFLICT DO NOTHING`);
+    const admin = await adminClient();
+    const email = "n2-admin-torol@pelda.hu";
+    const p = await emailPlayer(email);
+    const id = ((await p.request("GET", "/api/player/me")).json as { id: string }).id;
+    await dbPool.query(`UPDATE player_accounts SET linked_learner_id = 'n2-learner' WHERE id = $1`, [id]);
+    await plantDelete(email, "25836914"); // függő kódrekord
+    for (const body of [{}, { confirm: "torles" }, { confirm: "TÖRLÉS", extra: 1 }]) {
+      assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/delete`, body)).status, 400, JSON.stringify(body));
+    }
+    assert.equal((await q(`SELECT 1 FROM player_accounts WHERE id = $1`, [id])).length, 1, "megerősítés nélkül semmi nem törlődött");
+    assert.equal((await admin.request("POST", "/api/admin/game-accounts/nincs-ilyen/delete", { confirm: "TÖRLÉS" })).status, 404);
+    const r = await admin.request("POST", `/api/admin/game-accounts/${id}/delete`, { confirm: "TÖRLÉS" });
+    assert.equal(r.status, 200, r.text);
+    const deleted = (r.json as { deleted: { account: number; codes: number; sessions: number } }).deleted;
+    assert.deepEqual([deleted.account, deleted.codes >= 2, deleted.sessions >= 1], [1, true, true]);
+    assert.equal((await q(`SELECT 1 FROM player_accounts WHERE id = $1`, [id])).length, 0);
+    assert.equal((await q(`SELECT 1 FROM player_auth_codes WHERE email_hash = ANY($1::text[])`, [allPurposeEmailHashes(playerAuthKey(), email)])).length, 0);
+    assert.equal((await p.request("GET", "/api/player/me")).json, null, "a játékos munkamenete megszűnt");
+    assert.equal((await q(`SELECT 1 FROM learners WHERE id = 'n2-learner'`)).length, 1, "a tanulói profil megmarad");
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${id}/delete`, { confirm: "TÖRLÉS" })).status, 404, "másodszor nincs mit törölni");
+    assert.ok(!logged.some((l) => l.includes(email)), "a napló maszkolt");
+  });
+
+  it("játékos, tiltott játékos és vendég NEM éri el az admin-törlést (401), és semmi nem törlődik", async () => {
+    const admin = await adminClient();
+    const victimEmail = "n2-aldozat@pelda.hu";
+    const victim = await emailPlayer(victimEmail);
+    const victimId = ((await victim.request("GET", "/api/player/me")).json as { id: string }).id;
+    const player = await emailPlayer("n2-jatekos@pelda.hu");
+    const bannedEmail = "n2-tiltott2@pelda.hu";
+    const bp = await emailPlayer(bannedEmail);
+    const bannedId = ((await bp.request("GET", "/api/player/me")).json as { id: string }).id;
+    assert.equal((await admin.request("POST", `/api/admin/game-accounts/${bannedId}/ban`, {})).status, 200);
+    const banned = await bannedLogin(bannedEmail);
+    const guest = new Client(app.base);
+    await guest.fetchCsrf();
+    for (const [name, c] of [["játékos", player], ["tiltott játékos", banned], ["vendég", guest]] as const) {
+      for (const target of [victimId, bannedId]) {
+        assert.equal((await c.request("POST", `/api/admin/game-accounts/${target}/delete`, { confirm: "TÖRLÉS" })).status, 401, `${name} → ${target}`);
+      }
+    }
+    assert.equal((await q(`SELECT 1 FROM player_accounts WHERE id IN ($1, $2)`, [victimId, bannedId])).length, 2);
+  });
+});
+
 describe("JM7b — napló-tisztaság", () => {
   it("a teljes futás naplójában nincs teljes e-mail-cím", () => {
     const leaked = logged.filter((l) => /[a-z0-9.-]+@(pelda\.hu|websuli\.example)/i.test(l));

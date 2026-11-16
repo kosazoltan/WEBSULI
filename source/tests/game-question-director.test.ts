@@ -512,7 +512,12 @@ test("VocabSource.questionFor: kérdés naplózás nélkül; ismeretlen id → n
   const review = createReviewQueue(null, { now: () => T0, rng: createRng(1) });
   const pq = vocabPlayQuestion(q);
   assert.equal(pq.key, `vocab:en:${id}`);
-  assert.equal(pq.speakText, q.answerTerm);
+  // SPEC-VÁLTOZÁS 2026-11-16 (közös utójavítás, #454 / #455 review): a régi elvárás (`speakText === answerTerm`) maga volt a
+  // hiba — magyar→cél és hiányos mondat típusnál a megjelenéskor kimondta a választ. Most a `speakText` csak a forrás
+  // kifejezett, választ el nem áruló szövege (vagy nincs), a helyes szó a `speakAfter`-ben a kimenetel után.
+  assert.equal(pq.speakText, q.speakText);
+  assert.equal(pq.speakAfter, q.speakAfter);
+  if (pq.speakText) assert.ok(!pq.speakText.toLowerCase().includes(q.options[q.correctIndex]!.toLowerCase()), "a megjelenéskori felolvasás nem árulja el a választ");
   review.record(pq, "wrong", 0);
   const item = review.snapshot()[0]!;
   assert.deepEqual(item.payload, { kind: "vocab", lang: "en", vocabId: id });

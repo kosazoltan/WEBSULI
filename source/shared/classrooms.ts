@@ -66,6 +66,26 @@ export function isValidClassroom(classroom: number): boolean {
   );
 }
 
+/** Felirat hiányzó / érvénytelen évfolyamhoz (docs/specs/2026-11-16-tananyag-evfolyam-jeloles.md). */
+export const NO_CLASSROOM_LABEL = "Nincs osztály";
+/** A 0-s sáv rövid, kártyán is elférő felirata. */
+export const PROGRAMMING_SHORT_LABEL = "Programozás";
+
+/** Érvényes évfolyam (egész 0–12) vagy null — a listák egyetlen igazságforrása a felirathoz. */
+export function normalizeClassroom(value: unknown): number | null {
+  return typeof value === "number" && isValidClassroom(value) ? value : null;
+}
+
+/**
+ * A tananyagkártyák / listák évfolyam-felirata: 1–12 → „N. osztály”, 0 → „Programozás”, minden más → „Nincs osztály”
+ * (nem talál ki évfolyamot, mint a `getClassroomLabel` fallbackje).
+ */
+export function classroomDisplayLabel(value: unknown): string {
+  const n = normalizeClassroom(value);
+  if (n === null) return NO_CLASSROOM_LABEL;
+  return n === 0 ? PROGRAMMING_SHORT_LABEL : getClassroomLabel(n);
+}
+
 /**
  * Extracts the classroom a material belongs to from its title.
  * Returns 0 for the "Programozási alapismeretek" track, 1-12 for a grade, and null when

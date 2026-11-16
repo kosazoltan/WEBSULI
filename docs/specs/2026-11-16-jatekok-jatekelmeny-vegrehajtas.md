@@ -24,9 +24,10 @@ Szeletek és sorrend (részletek a hullámtervben, H. fejezet):
 | J8 | `feat/jatek-j8-meta` | meta-fejlődés (szint, feloldás, gyűjtemény, csillag) + játéklista-kártyák | Sonnet | ~450 |
 | J9 | `feat/jatek-j9-zaras` | záró mérés: szimulációs mátrix, bot-futás, teljesítmény, átfogó review, éles próba, retro | Opus | ~300 + mérési dokumentum |
 | JM0 | `fix/jatek-jm0-adatvedelem` | ranglista becenévre, e-mail ki a naplóból, score sebességkorlát + opcionális `runId` | Sonnet | ~200 |
-| JM1 | `feat/jatek-jm1-parbaj-arena` | `shared/duel/` szabálymotor + egyeszközös Párbaj aréna | Opus | ~450 |
+| JM1 | `feat/jatek-jm1-parbaj-arena` | `shared/duel/` szabálymotor (kész, #447; az egyeszközös aréna a JM1r-ben megszűnt) | Opus | ~450 |
+| JM1r | `refactor/jatek-jm1r-egyeszkozos-torles` | egyeszközös aréna + `match.ts` törlése, bot-szimuláció és arany visszajátszás a `room-machine`-re, megjelenítő komponensek kiemelése, tervszöveg (D20) | Opus | ~−2100 / +700 |
 | JM2 | `feat/jatek-jm2-rt-reteg` | Socket.IO `/api/rt/`, jegy, szoba-állapotgép, korlátok, drain, status, szerveroldali kérdéssor (`MP_MODE` off) | Opus | ~500 (két commitcsoport) |
-| JM3 | `feat/jatek-jm3-online-szoba` | online szoba UI, kód / link / QR, újracsatlakozás, győzteshirdetés, visszavágó, reakciók | Opus | ~450 |
+| JM3a/b | `feat/jatek-jm3{a,b}-online-parbaj` | a: online párbaj 2 főre (szoba, kód / link / QR, váróterem, meccs, eredmény, visszavágó) + gépi ellenfél; b: 3–4 fő, reakciók, kirúgás, értesítések, offline e2e, szóbankos párbaj | Opus | ~900 + ~400 |
 | JM4a/b/c | `feat/jatek-jm4{a,b,c}-…` | Matek / Szólétra / Szökőár online | Sonnet (b), Opus (a, c) | 3 × ~300 |
 | JM5a–d | `feat/jatek-jm5{a..d}-…` | Kockavadász / Aszteroida / Brain Rot / Tornado azonos seed + állás-sáv | Sonnet | 4 × ~300 |
 | JM6 | `feat/jatek-jm6-kihivas` | aszinkron kihívás-link | Sonnet | ~300 |
@@ -71,7 +72,7 @@ tilalma), **K.2** (háromfázisú kapu), **K.3** (tesztintegritás), **K.4** (b�
 5. **Modell-szint:** a táblázat „Modell” oszlopa; Opus-szintű a közös szerződést, nagy játéklap-átírást vagy új
    játékmagot érintő munka; Sonnet-szintű a jól körülírt javítás / bekötés.
 6. **Stop and Ask** (AGENTS.md): közös fájl módosítása a saját szeleteden kívül → ORKESZTRÁTOR-KÉRÉS a záró jelentésben,
-   nem módosítod. Közös fájlok ebben a funkcióban: `GE/play/*` (csak J0a–J0c, J8), `source/shared/game-rng.ts` (csak J0a), `source/shared/duel/*` (csak JM1, JM2), `S/realtime/*` (csak JM2, JM3, JM11), `GE/game-test-hooks.ts` (csak J0c),
+   nem módosítod. Közös fájlok ebben a funkcióban: `GE/play/*` (csak J0a–J0c, J8), `source/shared/game-rng.ts` (csak J0a), `source/shared/duel/*` (csak JM1, JM2, JM1r, JM3a/b), `S/realtime/*` (csak JM2, JM3a/b, JM11), `GE/game-test-hooks.ts` (csak J0c),
    `L/audioEngine.ts` (csak J0c, J8), `L/tts.ts` (senki), `GE/mobile/*` (senki; ha kell: ORKESZTRÁTOR-KÉRÉS),
    `source/client/src/index.css` (csak J0c, J8), `P/Games.tsx` (csak J8), `T/support/game-mobile-quality.ts` (senki;
    a játékszelet a saját `T/game-mobile-cases/<játék>.ts` esetfájlját módosítja), `source/client/src/App.tsx` (csak J0c).
@@ -162,6 +163,26 @@ A pontos szignatúrát mindig a forrásból olvasd (`GE/play/*`, gyűjtő-export
 - **Harness:** `skillRoll = u / skill`, a játék akkor ítél sikert, ha `skillRoll < 1`; a `SimGame` maga hívja a director
   `expire`-jét lejáratkor.
 - **Új score-hívás** `runId: newScoreRunId()`-vel (JM0, `game-score-contract-guard`).
+
+#### Megvalósult eltérések (J4a pilot #451 és a közös utójavítás — `fix/jatek-play-kozos-utojavitas`, kanban #51)
+
+**Állapot (közös utójavítás):** folyamatban — ág fix/jatek-play-kozos-utojavitas, munkafa .claude/worktrees/jatek-kozos, kanban #51
+
+- **Évfolyamhoz kötött ismétlés (#451):** `PlayQuestion.grade`, `ReviewItem.grade` (`{ v: 1, rev: 2 }`), `reviewFitsGrade`,
+  `inferReviewGrade`; a director a menet `config.grade`-jét bélyegzi és csak azonos évfolyamú ismétlést ad vissza.
+- **Közös meghajtó-minta (#451):** a lap és a node-szimuláció UGYANAZT a meghajtót hívja (fix lépés, időskála, hitstop) — saját
+  `dt × timeScale` lépéssel a sim más ellenfélsort mér (a `waves.ts` lépésenként fogyaszt RNG-t).
+- **`calm()` a kezdő fázisban (utójavítás a):** a mini-Director `calm()`-ja alacsony szintnél (`intensity < RELAX_ENTER`) a
+  kezdő „buildup” fázisban is igaz — különben csúcs nélküli menetben csak a kényszerített (maxGap) kérdések jöttek.
+- **`createQuestionUi` React-mentes fájlban (b):** `play/questionUi.ts`; a `useQuestionDirector.ts` re-exportálja.
+- **Érintés mozgó célpontra (c):** `pointerTapHandlers` (`play/pointerTap.ts`) — felengedéskor véglegesít, ha az ujj a cél
+  AKTUÁLIS dobozán belül (± tűrés) vagy alig mozdult; elhúzás / `pointercancel` = visszavonás; mutatónként; NEM `click`
+  (több ujjnál a nem elsődleges mutatóra nincs `click`).
+- **Mozgó cél a mobil mérőben (d):** `GameMobileCase.quizMoving` — stabil doboz helyett N egymást követő mintán érintési
+  méretű és a képernyőn belüli cél; a meglévő esetek viselkedése változatlan.
+- **A K.1 „`onRetry=` → 0 találat” elfogadási grep pontosítása (e):** a tiltás a MAGYARÁZÓKÁRTYA újrapróbájára vonatkozik
+  (`<QuizFeedbackCard … onRetry=` / `retryTask`), nem a `ResultScreen` „Új futam” (új menet) propjára; a grep:
+  `grep -nE "<QuizFeedbackCard[^>]*onRetry=|retryTask" P/<lap>.tsx` → 0 találat.
 
 ### K.3 Etikai ellenőrzőlista (minden játékszelet PR-leírásában pipálva)
 
@@ -269,6 +290,19 @@ nélkül, a `T/support/game-sim.ts` `SimGame` interfésze szerint (J0b). A ját�
 20 seeddel × 180 mp-et futtat a `SIM_AVERAGE` játékossal, és a terv 6.2 küszöbeit ellenőrzi (medián). Kérdés nélküli
 módban (`questions: false`) igazolja, hogy a menet végigjátszható és van vesztési feltétel. Arany visszajátszás: fix
 seed + rögzített bemenetsor → a végállapot hash-e egyezik (ugyanazon a gépen).
+
+**Közös meghajtó (J4a pilot, kötelező):** a sim NE saját `dt × timeScale` lépéssel fusson — a lap és a sim ugyanazt a
+meghajtót hívja (fix lépésű hurok, időskála, hitstop, esemény-ürítés; minta: `L/speedMath/core.ts` `createTowerDriver`),
+és egy teszt igazolja, hogy lépés-indexhez kötött bemenettel eltérő képkocka-időknél bitre azonos az állapot (a J4a pilot tanulsága: más lépésméretű sim más ellenfélsort mért).
+
+**A játéklap determinizmus-őre (`T/game-sim-determinism-guard.test.ts` `GAME_PAGE_ALLOW`, J4a):** a sim-mag mellett a
+játéklap játékmenet-kódja sem húzhat `Math.random`-ot / `Date.now`-t (feladat-, elterelő-, célpont-sorsolás a menet seedelt
+RNG-jéből; a közös választók `rng` paramétert fogadnak: `pickGradeQuiz({ rng })`, `createVocabSource({ rng })`,
+`pickFreshTask({ rng })`). Egy átírt lap felvétele: a `GAME_PAGE_ALLOW` objektumba új kulcs a lap fájlnevével, értéke a
+megengedett előfordulások listája `{ re, why }` alakban — CSAK a seedelt forrás lusta alapértéke vagy tisztán kozmetikai,
+a játék kimenetelét nem érintő hívás, indoklással. Az őr az engedélyezett mintákat kivágja, a maradékban a két tiltott
+forrást keresi, és bukik, ha egy engedélyezett minta már nincs a lapon (elavult lista). A nézet-kód `performance.now`-ja
+(rAF, hang-ritkítás) megengedett. Kozmetikai véletlenhez külön `fxRng` (seedelt) ajánlott.
 
 **Játékonkénti átalakítási méret (determinizmus, a 4. kutatás leletei kódból újraellenőrizve, 2026-11-16):** a táblázat
 sora az adott játék „a” al-szeletének kötelező része.
@@ -1204,7 +1238,7 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
 
 ## J4 — Gyors matek sprint: „Neon védőtorony” (J4a, J4b) — D1 alapértelmezés
 
-**Állapot (J4a):** folyamatban — ág feat/jatek-j4a-matek, munkafa .claude/worktrees/jatek-j4a, kanban #44 · **Állapot (J4b):** nem kezdődött
+**Állapot (J4a):** kész — #451 (b82ea71d), kanban #44 · **Állapot (J4b):** nem kezdődött
 **Függ:** J0c merge. Párhuzamosan a J2-vel. **Elfogadás:** J-SQ, J1–J10, J16, M1–M12. Terv: 5.4.
 
 ### Fájlok
@@ -1255,7 +1289,7 @@ függvényeket (feladatgenerátor, időzítés) nézők változatlanok.
    léptet automatikusan”, „a magyarázat olvasása közben áll az óra”, „0 életnél nincs Újrapróbálom”) → SPEC-VÁLTOZÁS
    jelöléssel: (a) a hibás ágban `director.answer` után `reveal` ≥ 1800 ms (forrásbeli konstans-ellenőrzés:
    `REVEAL_MS\s*=\s*1800` vagy nagyobb) és nincs `setTimeout(nextTask`; (b) a „Miért?” ága szünetet tart (`if (whyOpen)
-   return;` minta a játékórában); (c) a retry-gomb nincs a játékmenetben (`onRetry=` nem szerepel a lapon) — mert a
+   return;` minta a játékórában); (c) a retry-gomb nincs a játékmenetben (a `QuizFeedbackCard`-on nincs `onRetry=`, `retryTask` nincs; a `ResultScreen` „Új futam”-ja megengedett — K.2 e) — mert a
    retry a megmutatott megoldás visszakoppintása volt (terv 3.1). A `WIRED` esetek változatlanok.
 6. Tesztek: `T/speed-math-core.test.ts` (drón-ütemezés az ablakhoz, pajzs-szabályok, egy válasz / kérdés — multitouch
    idempotencia), `T/speed-math-sim.test.ts` (J2 ≥ 10, J3 ≤ 6 mp, J9 medián 2–5 perc), `T/speed-math-play.spec.ts`.
@@ -1278,7 +1312,8 @@ függvényeket (feladatgenerátor, időzítés) nézők változatlanok.
 
 ### Elfogadás (J4)
 
-- [ ] J-SQ teljesül; `grep -n "Tanári bank\|onRetry=" P/SpeedQuizMath.tsx` → 0 találat.
+- [ ] J-SQ teljesül; `grep -nE "Tanári bank|<QuizFeedbackCard[^>]*onRetry=|retryTask" P/SpeedQuizMath.tsx` → 0 találat (a
+  pontosítás oka: K.2 „Megvalósult eltérések” e — a `ResultScreen` „Új futam” propja új menet, nem újrapróba).
 - [ ] `T/speed-math-sim.test.ts` J2, J3, J6, J9 zöld; a SPEC-VÁLTOZÁS-os őr-esetek az új követelményt mérik.
 - [ ] `game-win-paths` (`speed-quiz-math`), mobil mérő `-g speed-quiz` zöld; képernyőképek.
 
@@ -1696,7 +1731,7 @@ export function acceptedTimeMs(clientRtMs: number | null | undefined, serverRtMs
 // round = az aktuális kör; reactionId ∈ REACTIONS; room:create settings zárt értékkészlet (rounds 3–10, mode enum);
 // run:progress score monoton és a game-score-rules másodpercenkénti plafonja alatt (túllépés → plafon + suspicious).
 
-// source/shared/duel/questions.ts — a kérdéssor seedelt építése (kliens: aréna; szerver: online)
+// source/shared/duel/questions.ts — a kérdéssor seedelt építése (szerver: online szoba, S/realtime/question-provider.ts; kliens: gépi ellenfél, JM3a)
 export type DuelQuestion = { key: string; prompt: string; options: string[]; correctIndex: number; explanation?: string; grade: number; windowMs: number };
 export function buildRoundQuestion(args: { seed: string; round: number; grade: number; band: number; subjects?: string[]; used: Set<string> }): DuelQuestion | null;
 // pickGradeQuiz (GE/gradeQuiz.ts:75) a közös band-del, a saját évfolyamból; az opció-sorrend a shared/option-order.ts keverőjével; windowMs a windowMsFor szabállyal (J0b).
@@ -1767,7 +1802,7 @@ limiterek `S/index.ts:362-460`; `ViewDedup` `S/lib/view-dedup.ts:10`.
 
 ### JM1 — Szabálymotor + egyeszközös Párbaj aréna
 
-**Állapot:** folyamatban — ág feat/jatek-jm1-parbaj-arena, munkafa .claude/worktrees/jatek-jm1, kanban #41 (2026-11-16) · **Függ:** J0a (`game-rng`), J0b (`windowMsFor`) · **Modell:** Opus · **Elfogadás:** JM-A3, J19
+**Állapot:** kész — PR #447 (2026-11-16); az egyeszközös aréna (4–5. lépés) a JM1r-ben megszűnt (D20) · **Függ:** J0a (`game-rng`), J0b (`windowMsFor`) · **Modell:** Opus · **Elfogadás:** JM-A3 (szabálymotor-rész), J19
 **Fájlok:** új `source/shared/duel/{rules,questions,reactions}.ts`, `source/shared/nicknames.ts`, `P/DuelArena.tsx`,
 `source/client/src/App.tsx` (útvonal `/games/parbaj` — ORKESZTRÁTOR: J0c után a JM1 az App.tsx egyetlen módosítója),
 `P/Games.tsx` (egy kártya a listán — ha a J8 párhuzamosan fut, a kártyát a J8 adja hozzá; ORKESZTRÁTOR egyeztet),
@@ -1789,6 +1824,35 @@ limiterek `S/index.ts:362-460`; `ViewDedup` `S/lib/view-dedup.ts:10`.
    (CDP-n két érintés — C-34: a hatást a DOM-ban / probe-on igazolni), a győzteshirdetés megjelenik, M1–M3.
 **UNKNOWN:** U-JM1-1: a `client/src/data/gradeQuizBank` importálható-e a `source/shared/`-ből tiszta úton (a `@shared` alias
 iránya) — felderítés: `grep -n "paths" source/tsconfig.json`; ha nem, a `questions.ts` a bankot paraméterként kapja.
+
+**SPEC-VÁLTOZÁS 2026-11-16 (tulajdonosi döntés, D20 / G12):** a 4. lépés (`P/DuelArena.tsx`, osztott képernyő, forgatott
+felső térfél) és az 5. lépés (`T/duel-arena.spec.ts`) érvényét veszti; a `shared/duel/match.ts` egyeszközös motor törlődik.
+Megmarad: `rules.ts`, `questions.ts`, `reactions.ts`, `shared/nicknames.ts` és tesztjeik. A J19 arany visszajátszása és a
+bot-szimuláció a `room-machine`-en él tovább (JM1r).
+
+---
+
+### JM1r — Az egyeszközös aréna megszüntetése (D20)
+
+**Állapot:** folyamatban — 2026-11-16, ág refactor/jatek-jm1r-egyeszkozos-torles, munkafa .claude/worktrees/jatek-jm1r, kanban #52 · **Függ:** JM2 (main), JM7b (main) · **Modell:** Opus · **Elfogadás:** JM-A3 (új szöveg), J19
+**Fájlok:** törlés: `P/DuelArena.tsx`, `T/duel-arena.spec.ts`, `T/duel-match.test.ts` (az átvitel után), `source/shared/duel/match.ts`;
+módosítás: `source/client/src/App.tsx` (a `DuelArena` lazy import és a `/games/parbaj` útvonal ki), `P/Games.tsx` (a párbaj-sáv és
+a `Swords` import ki), `source/shared/duel/index.ts` (a `match` re-export ki), `source/shared/duel/questions.ts`
+(`export const DUEL_BASE_WINDOW_MS = 6000`), `S/realtime/question-provider.ts` (ezt importálja), `T/duel-rules.test.ts` és
+`T/duel-vocab-retry.test.ts` (csak megjegyzés); új: `T/duel-bot-sim.test.ts`, `source/client/src/components/duel/*` (az aréna
+újrahasznosítható megjelenítő részei: életerő-sáv, időjelző, kérdéskártya, 2×2 válaszrács betűméret-illesztéssel, ítélet-sáv,
+eredménykártya, hangok / rezgés — hívó nélkül, a JM3a építi be; komponens-egységteszttel) ; `git mv docs/measurements/jatekok-jatekelmeny/JM1
+docs/measurements/jatekok-jatekelmeny/JM1-megszunt`.
+**Lépések:** 1. Állapot-sor + a terv és e fájl D20-szövegei (első commit). 2. `T/duel-bot-sim.test.ts` a `reduceRoom`-on
+(`join` / `ready` / `start` / `answer` / `tick`): (a) arany visszajátszás — azonos seed + esemény-sor →
+`deepEqual` állapot és hatás, más seed → más kérdéskulcsok; (b) 3000 meccs a JM1 három forgatókönyvével és küszöbeivel
+(pontosabb ≥ 80%; pontos-lassú ≥ 60% és ≥ 200 különbség; azonos pontosságnál a gyorsabb többször nyer, a lassabb ≥ 10%),
+mindig `finished`, ≤ 7 + 2 kör; (c) 200 meccs a valódi bankkal, 4. vs 8. évfolyam, ismétlés nélkül. ZÖLD előbb, csak utána
+törlés. 3. Megjelenítő komponensek kiemelése (`components/duel/`). 4. Törlések és módosítások. 5. Kapuk: `npm test`, `check`,
+`check:test`, `lint`, `build`, `npm run test:e2e -- tests/games-lobby-mobile.spec.ts`, `three-phase-check`. 6. Böngészős próba:
+`/games` 360×640 / 390×844 / 844×390 — a párbaj-sáv nincs, nincs túlcsordulás; `/games/parbaj` → „nem található”.
+**Teszt-integritás:** a törölt tesztek a megszűnt funkció tesztjei (dokumentált spec-változás, D20); a szabály-tesztek
+(`duel-rules`, `duel-questions`, `nicknames`, `duel-vocab-retry`, `rt-*`) érintetlenek, a bot-szimuláció és a determinizmus átvitt.
 
 ---
 
@@ -1861,39 +1925,58 @@ polling marad (tervezett viselkedés).
 
 ---
 
-### JM3 — Online szoba UI, győzteshirdetés, Párbaj aréna online
+### JM3a — Online párbaj 2 főre + gépi ellenfél: szoba, meghívás, váróterem, meccs, győzteshirdetés
 
-**Állapot:** nem kezdődött · **Függ:** JM2 · **Modell:** Opus · **Elfogadás:** JM-A5, JM-A4 (kliens)
-**Fájlok:** új `GE/duel/{rtClient,useRoom,useDuelBridge}.ts`, `GE/duel/{RoomLobby,RoomResult,ReactionBar,LiveStandings}.tsx`,
-`P/DuelArena.tsx` (online mód), `P/RoomJoin.tsx` (`/jatek/szoba/:kod`), `source/client/src/App.tsx`, `P/Games.tsx` (gomb
-csak `status.enabled` mellett), tesztek: `T/rt-client.test.ts` (újracsatlakozás-logika hamis szállítással),
-`T/duel-online.spec.ts` (két `browser.newContext()`), `source/playwright.config.ts` használata (a CI-azonos `npm run test:e2e`).
-**Lépések:**
-1. Állapot-sor commit.
-2. `rtClient.ts`: lusta `import("socket.io-client")`; `io(directUrl ?? location.origin, { path: "/api/rt/", auth: { ticket },
-   transports: ["polling", "websocket"] })`; a `resumeToken` `sessionStorage`-ben (nem URL, nem localStorage); exponenciális
-   visszalépés; óraszinkron (`clock:ping` 5 mintás medián) csak a visszaszámláló kijelzéséhez.
-3. `RoomLobby`: szobakód nagy betűkkel, „Link másolása”, QR (`qrcode`, a `PairQr` mintájára,
-   `source/client/src/components/LearnersPanel.tsx:23-42`), játékoslista becenév + avatar, készenlét, gazda „Indítás”
-   (≥ 2 kész), kilépés. `RoomJoin`: kód beírása vagy a linkről; vendégnél generált becenév megjelenítése.
-4. `RoomResult`: dobogó (1v1: győztes + ezüst), játékosonként pontosság, helyes válaszok, leggyorsabb helyes válasz (a szerver
-   elfogadott idejéből), legjobb
-   sorozat; a nem dobogós csak a saját statisztikáját látja; „Visszavágó”; reakciók (csak `REACTIONS`).
-5. `useDuelBridge`: a játék a szerver `round:open`-jét a saját mechanikáján át jeleníti meg (JM4), a választ `round:answer`-ként
-   küldi a saját megjelenítésétől mért `clientRtMs`-sel; a helyességet a `round:reveal`-ből veszi (KSZ-19).
-6. A Párbaj aréna „Online” gombja → szoba (mód `duel`).
-7. `T/duel-online.spec.ts` (e2e-módban, `MP_MODE=on` az e2e-szerver env-jében — a `source/scripts/run-e2e-tests.ts`-ben
-   állítva): A létrehoz, B a kóddal csatlakozik, mindketten készek, 3 kör, győzteshirdetés mindkét kontextusban; B
-   `context.setOffline(true)` 5 s-ra a 2. körben → visszatér, ugyanazt a szobaállapotot látja; M1–M3 a lobbyn és az
-   eredményen 360×640-en.
-8. Bevezetés (orkesztrátor): merge → `MP_MODE=admin` élesben → két eszközös éles próba (polling-mérés, U-JM2-1) → `on`.
+**Állapot:** nem kezdődött · **Függ:** JM1r · **Modell:** Opus · **Elfogadás:** JM-A3, JM-A3b, JM-A4 (kliens + admin-mód
+csatlakozás), JM-A5 (első fele)
+**Tulajdonosi döntések (2026-11-16, kötelezők):** (1) csak hálózati közös játék — egyeszközös mód nincs (D20); (2) szobát csak
+játékos-fiók, párosított tanulói profil vagy (admin módban) admin nyithat, csatlakozni vendégként is lehet a kóddal / linkkel,
+generált becenévvel (D21); (3) gépi ellenfél, hogy a párbaj egyedül is játszható legyen (D22); (4) a szóbankos (angol /
+német / francia) nyelvi párbaj a JM3b-ben jön, most tantárgyi kérdések (D23); (5) csalásvédelem baráti szinten (D24).
+**Fájlok:** új `P/DuelOnline.tsx` (`/games/parbaj` és `/games/parbaj/:kod`), a JM1r `source/client/src/components/duel/*`
+komponenseire épülő meccs- / váróterem- / eredmény-nézetek, kliens-meghajtók (hálózati: `rtClient`; helyi: a `room-machine` a
+kliensen, gépi játékossal), új `source/shared/duel/bot.ts` (seedelt gépi játékos), `source/client/src/components/QrImage.tsx`
+(a `PairQr` kiemelve), `source/client/src/App.tsx`, `P/Games.tsx` (belépő), `S/routes/rt.ts` + `S/realtime/gateway.ts` +
+`S/realtime/ticket.ts` (szobanyitási jog), `S/realtime/question-provider.ts` (olvasási idő-alapú ablak), tesztek:
+`T/rt-gateway.test.ts` / `T/rt-ticket.test.ts` bővítés, `T/duel-local.test.ts` (gépi ellenfél determinizmus),
+`T/duel-online.spec.ts` (két `browser.newContext()`, valódi Socket.IO), `T/duel-bot.spec.ts` (gépi meccs valódi érintéssel).
+**Szobanyitás / csatlakozás (D21, JM-A4):** `off` → a hálózati belépő nem látszik (a gépi ellenfél igen); `admin` → nyitás csak
+admin-munkamenettel, csatlakozás kóddal bárkinek (vendég is) — a jegy-végpont és a kézfogás is intent szerint dönt, a réteg
+admin-jogot nem ad; `on` → nyitás játékos-fiókkal (`PLAYER_ACCOUNTS` mellett), párosított tanulói profillal vagy adminként,
+vendég nem nyithat (barátságos „Lépj be / párosítsd a profilod” út), csatlakozás bárkinek.
+**Megjelenítés:** egy játékos nézőpontja — saját kérdés + 2×2 válaszrács nagyban, az ellenfél kicsiben (becenév, életerő,
+„válaszolt” jelzés); kör-számláló, időjelző, „Döntő kérdés!” szalag a kérdés fölött (az ablakot nem rövidíti); felfedés (helyes
+válasz, sebzés, ki volt a gyorsabb); győzteshirdetés (győztes / közös győzelem, pontosság, leggyorsabb helyes, legjobb sorozat;
+a vesztes is elismerést kap); „Visszavágó”. Szünet nincs (kilépés megerősítéssel). Hálózati állapotok gyerekbarát magyar
+szöveggel (kapcsolódás, újracsatlakozás 60 s-os helymegtartással, ellenfél kiesett / visszatért, szoba megszűnt, szerver frissül,
+tele a szerver, érvénytelen / lejárt kód); minden hibaállapotból van kiút. Gépi ellenfélnél ugyanez a felület, „Gép” jelöléssel.
+**Válaszablak:** az olvasási időhöz igazodik (a J0c `fitsAllViewports` / olvasási idő szabálya, ≤ 9 s) a szerver- és a helyi
+meghajtóban is; ha kell, az olvasási idő-számítás additívan a `shared/` alá kerül.
+**Lépések:** 1. Állapot-sor. 2. Szerver: szobanyitási jog (D21) + olvasási idő-alapú ablak, tesztekkel. 3. `shared/duel/bot.ts`
++ helyi meghajtó + determinizmus-teszt. 4. Megjelenítő nézetek a `components/duel/*`-ból, egy megjelenítő két meghajtóval.
+5. `P/DuelOnline.tsx`: kezdő („Gép ellen”, „Szoba létrehozása”, „Csatlakozás kóddal”), váróterem (nagy kód, „Megosztás”
+`navigator.share` / másolás tartalékkal, QR gombra, játékoslista, „Kész vagyok”, gazda „Indítás”), meccs, eredmény,
+visszavágó, hibaállapotok (`RT_ERROR_TEXT`). 6. Belépő a `/games` listán. 7. e2e: két kontextus (A nyit, B kóddal; teljes meccs
+→ győzteshirdetés → visszavágó; B hálózata kör közben megszakad és visszatér; A kilép; érvénytelen kód; vendég nem nyit;
+`admin` módban a nem admin csatlakozhat, nem nyithat; long-polling-only futás); gépi meccs érintéssel; M1–M3 360×640,
+390×844, 844×390. 8. Bevezetés (orkesztrátor): merge → `MP_MODE=admin` élesben → két eszközös éles próba: U-JM2-1 (polling a
+Vercel-rewrite-on, kör-késés), U-JM2-2 (WebSocket-frissítés, `transport.name`) → jegyzőkönyv `docs/measurements/`.
 **UNKNOWN:** U-JM3-1: `MP_DIRECT_URL` (tulajdonosi aldomain) — opcionális; ha nincs, a polling út az alap.
+
+### JM3b — 3–4 fő, reakciók, kirúgás, értesítések, újracsatlakozás e2e, szóbankos párbaj
+
+**Állapot:** nem kezdődött · **Függ:** JM3a, JM7b · **Modell:** Opus · **Elfogadás:** JM-A5 (teljes), JM-A4 (`on`)
+**Lépések:** 3–4 fős elrendezés (ellenfél-chipek, dobogó); reakciósáv (`REACTIONS`, ≤ 1/s) a váróteremben, a felfedésen és az
+eredményen; gazda „Kirúgás”; `notice` szövegek (`ROOM_EXPIRING`, `PLAYER_LEFT`, `KICKED`, `RUNS_PRIORITY`); szóbankos
+(angol / német / francia) nyelvi párbaj (D23): szerveroldali szóbank-forrás + `RT_SUBJECTS` bővítés, a gépi ellenfélnél is;
+e2e: B `context.setOffline(true)` 5 s a 2. körben → visszatér, ugyanazt az állapotot látja; 3 kontextusos meccs; vendégnek a
+győzteshirdetésen „Lépj be, hogy a győzelmeid megmaradjanak”. Bevezetés: `PLAYER_ACCOUNTS=on` (ha még nem) → `MP_MODE=on`.
 
 ---
 
 ### JM4a/b/c — Kvízjátékok online: Matek sprint (a), Szólétra (b), Szökőár (c)
 
-**Állapot (JM4a/b/c):** nem kezdődött · **Függ:** JM3 + J4 (a) / J2 (b) / J1 (c) · **Modell:** Opus (a, c), Sonnet (b)
+**Állapot (JM4a/b/c):** nem kezdődött · **Függ:** JM3b + J4 (a) / J2 (b) / J1 (c) · **Modell:** Opus (a, c), Sonnet (b)
 **Elfogadás:** JM-A9 (kvíz-rész). **Fájlok:** a játék lapja és magja (`P/SpeedQuizMath.tsx` + `L/speedMath/*`; `P/WordLadderHuEn.tsx`
 + `L/wordLadder/*`; `P/TsunamiEscapeEnglish.tsx` + `L/tsunami/*`), `S/realtime/question-provider.ts` (játékonkénti
 kérdésforrás: Matek — a `shared/`-be emelt tiszta feladatgenerátor `(seed, grade, band) → kérdés`; Szólétra — a szóbank
@@ -1910,7 +1993,7 @@ tiszta részei; U-JM4-1: van-e DOM-függőség — felderítés: olvasd el a fü
 
 ### JM5a–d — 3D játékok azonos seeddel + élő állás-sáv: Kockavadász (a), Aszteroida (b), Brain Rot (c), Tornado (d)
 
-**Állapot:** nem kezdődött · **Függ:** JM3 + J3 / J6 / J5 / J7 (a seedelt mag) · **Modell:** Sonnet · **Elfogadás:** JM-A9 (3D-rész)
+**Állapot:** nem kezdődött · **Függ:** JM3b + J3 / J6 / J5 / J7 (a seedelt mag) · **Modell:** Sonnet · **Elfogadás:** JM-A9 (3D-rész)
 **Lépések:** állapot-sor commit → mód `parallel`: a szerver a szoba indításakor `seed`-et küld (`room:state`-ben), mindenki a
 saját gépén a saját pályáját játssza ugyanazzal a seeddel (KSZ-3); 1 Hz-es `run:progress {score, stage}`; a szerver
 plauzibilitás-plafont alkalmaz (a JM8 `shared/game-score-rules.ts`-ét, ha már kész; addig játékonkénti konstans);
@@ -2045,6 +2128,41 @@ munkamenet-jelző nincs) — egy párhuzamos játékos-folyamat az admin-belép�
 **a játékos-felületre tanulói adat (név, évfolyam, eredmény) ebben a szeletben NEM kerül — ha egy későbbi szelet hozna,
 új független biztonsági review kell**; (4) az export engedélylistás, belső azonosító nélkül; (5) a fióktörlés a fiók címére
 küldött egyszeri, célhoz kötött kódot kér, és értesítő levél megy róla.
+
+### JM7b-utójavítás – N2 — tiltott játékos saját adatai + admin végleges törlés
+
+**Állapot:** folyamatban — 2026-11-16, ág feat/jatek-fiok-tiltott-torles, munkafa .claude/worktrees/jatek-jm7b-n2, kanban #56 · **Függ:** JM7b · **Modell:** Opus · **Elfogadás:** JM-A15 (tiltott fiókra is), admin-jogosultsági mátrix
+**Tulajdonosi döntés (2026-11-16, űrlap):** „Admin törölhesse + saját törlés” — (a) a TILTOTT játékos is letöltheti a saját
+adatait és törölheti a fiókját (minden más — játék, becenév / avatar, tanulói kapcsolat, szoba, pont — tiltva marad);
+(b) az admin „Játékosok” oldalon VÉGLEGES törlés megerősítéssel.
+**Nem cél:** a `requirePlayer` általános lazítása; séma / migráció; a Google-út (`S/player/google.ts`, `S/auth.ts` — JM7c-1)
+— a tiltott játékos az e-mail-kódos / linkes úton jut a korlátozott munkamenethez (minden fióknak van címe); levél az
+admin-törlésről (a meglévő viselkedésben nincs ilyen); `PLAYER_ACCOUNTS` (KI marad).
+**Fájlok:** `S/player/require-player.ts` (új, szűk `createRequireOwnData` őr, saját jelölővel), `S/player/account-routes.ts`
+(az őr CSAK az export / törlési kód / törlés végponton), `S/player/auth-routes.ts` (tiltott fiók beváltáskor korlátozott
+munkamenetet kap, a válasz továbbra is 403 `BANNED`), `S/player/admin-routes.ts` (`POST /:id/delete` megerősítő szóval),
+kliens: `client/src/hooks/usePlayer.ts`, `P/PlayerAccount.tsx` (tiltott nézet: letöltés + törlés), `P/PlayerLogin.tsx`,
+a „Játékosok” panel (törlés gomb + megerősítő párbeszéd); tesztek: `T/admin-route-guard.test.ts`,
+`T/player-account-db.integration.ts`, `T/player-auth-db.integration.ts` (a tiltott-belépés elvárása: SPEC-VÁLTOZÁS), e2e.
+**Lépések:**
+1. Őr: `createRequireOwnData(store)` — munkamenet kell (401), a fióknak léteznie kell (401), a tiltott IS átmegy;
+   `OWN_DATA_GUARD` jelölő. A `requirePlayer` változatlan (tiltott → 403) minden más végponton; a JM2-jegy (`rt.ts`) a
+   tiltottat továbbra is elutasítja.
+2. Az export, a törlési kód kérése és a törlés az új őr mögött, a meglévő védelmekkel (CSRF, Origin, korlátok, e-mailben
+   küldött célhoz kötött kód, megerősítő szó, értesítő levél).
+3. Beváltás (kód / link): tiltott fióknál a munkamenet létrejön (a `requirePlayer` minden kérésnél az adatbázisból nézi a
+   tiltást, így ez csak az őr három végpontját nyitja), a válasz 403 `BANNED` + `restricted: true`.
+4. Admin: `POST /api/admin/game-accounts/:id/delete` `{ confirm: "TÖRLÉS" }` → UGYANAZ a `deleteAccount` (fiók, mindkét cél
+   kódrekordjai, minden munkamenet; a tanulói profil marad), napló maszkolt címmel. Az `isAuthenticatedAdmin` adminRouter
+   alatt (JM7c-1 közös admin-függvényével később összefésülendő).
+5. Kliens: a `/me` 403 `BANNED` → tiltott állapot; `/fiok` tiltott nézete csak a letöltést és a törlést kínálja; a
+   „Játékosok” panelen törlés gomb megerősítő párbeszéddel.
+**Tesztek:** forrás-őr (route-leltár): az `OWN_DATA_GUARD` PONTOSAN a három végponton, minden más `/api/player/*` a
+`requirePlayer` mögött; DB: tiltott → export 200, törlés (kód) 200, minden más fiók-végpont 403, JM2-jegy 403; admin-törlés
+200 és hatása; játékos / tiltott / vendég az admin-törlést nem éri el (401), mellékhatás nélkül; e2e: admin törlés gomb
+megerősítéssel.
+**Elfogadás:** a fenti tesztek zöldek, a meglévők változatlanul (a tiltott-belépés elvárása dokumentált SPEC-VÁLTOZÁS-sal);
+nincs séma-változás.
 
 ---
 
@@ -2182,7 +2300,7 @@ Teszt: `T/run-reporter.test.ts` (hamis fetch: újrapróba, idempotencia), `T/pla
 
 ### JM9 — Barátok, heti baráti / csoport ranglista, párbaj-mérleg
 
-**Állapot:** nem kezdődött · **Függ:** JM8b, JM3 · **Modell:** Sonnet · **Elfogadás:** JM-A14
+**Állapot:** nem kezdődött · **Függ:** JM8b, JM3b · **Modell:** Sonnet · **Elfogadás:** JM-A14
 **Fájlok:** `source/migrations/0042_player_friends.sql` (`player_friendships(a, b PK, status 'pending'|'active'|'blocked',
 requested_by, blocked_by)`, `player_friend_invites(token_hash PK, player_id, uses_left, expires_at)`), `S/player/friends-routes.ts`,
 `S/realtime/*` (meccs vége → regisztrált játékosoknál `game_runs kind='duel'`, `match_id`, `outcome`; **újrapróbálható
@@ -2222,7 +2340,7 @@ origin / CSRF, leállítás / e2e-mód, migráció ↔ Drizzle, Europe/Budapest 
 
 ### JB — Évfolyam-bank bővítése (JBa: 3–6., JBb: 7–9., JBc: 10–12. évfolyam)
 
-**Állapot:** JBa kész (#448, 2026-11-16); JBb folyamatban — ág feat/jatek-jbb-evfolyam-bank, munkafa .claude/worktrees/jatek-jbb, kanban #47 (2026-11-16); JBc nem kezdődött · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
+**Állapot:** JBa kész (#448, 2026-11-16); JBb kész (#453, 2026-11-16); JBc folyamatban – 2026-11-16, ág feat/jatek-jbc-evfolyam-bank, munkafa .claude/worktrees/jatek-jbc, kanban #53 · **Függ:** J0b (független a játékoktól; párhuzamosan futhat) · **Modell:** Opus (gyártás), Sonnet (vak megoldó)
 **Elfogadás:** JB-A1 · **Fájlok:** `source/client/src/data/gradeQuizBank/grade-NN.ts` (bővítés, a meglévő tételek
 azonosítója változatlan), `docs/measurements/2026-11-xx-evfolyam-bank-<sáv>-vakmegoldo.md`, a meglévő őrök
 (`T/quiz-bank-integrity.test.ts`, `T/game-bank-no-repeat-content.test.ts`, `T/grade-quiz-select.test.ts`) zöldek + új
@@ -2239,16 +2357,16 @@ kitalálható tudás nélkül” minta) → javítás → jegyzőkönyv. Diff: a
 | Hullám | Szeletek (‖ = párhuzamos szál) | Modell | Indok / feltétel |
 |---|---|---|---|
 | 1 | J0a ‖ JM0 | Opus ‖ Sonnet | közös determinizmus; az adatvédelmi javítás azonnal kiadható, fióktól független |
-| 2 | J0b → J0c ‖ JM1 ‖ JBa | Opus ‖ Opus ‖ Opus+Sonnet | a JM1 a J0a-ra (rng) és a J0b `windowMsFor`-ára épít — a J0b merge-e után indul; a JB tartalom független |
+| 2 | J0b → J0c ‖ JM1 ‖ JBa | Opus ‖ Opus ‖ Opus+Sonnet | a JM1 (szabálymotor) a J0a-ra (rng) és a J0b `windowMsFor`-ára épít — a J0b merge-e után indul; a JB tartalom független |
 | 3 (pilot) | J4a → J4b ‖ J2a → J2b ‖ JM2 ‖ JBb | Opus ‖ Opus ‖ Opus ‖ Opus+Sonnet | a két „feladatlap” játék; a szerver-réteg flag mögött (`MP_MODE=off`) |
-| 4 | J1a → J1b → J1c ‖ J5a → J5b ‖ J6a → J6b ‖ JM3 ‖ JBc | Opus ‖ Opus ‖ Sonnet/Opus ‖ Opus ‖ Opus+Sonnet | JM3 merge után: `MP_MODE=admin` éles próba → `on` |
-| 5 | J3a → J3b → J3c ‖ J7a → J7b → J7c ‖ JM4a (J4 után) → JM4b (J2 után) → JM4c (J1 után) ‖ JM7a → JM7b | Opus ‖ Sonnet/Opus ‖ Opus/Sonnet/Opus ‖ Opus | a JM7a őrei a regisztráció megnyitása előtt; JM7b után `PLAYER_ACCOUNTS=on` |
+| 4 | J1a → J1b → J1c ‖ J5a → J5b ‖ J6a → J6b ‖ JM7b → JM1r → JM3a → JM3b ‖ JBc | Opus ‖ Opus ‖ Sonnet/Opus ‖ Opus ‖ Opus+Sonnet | D20: online-only; JM3a után `MP_MODE=admin` éles mérés (U-JM2-1/2), a gépi ellenfél flag nélkül élő; JM3b után `PLAYER_ACCOUNTS=on` → `MP_MODE=on` |
+| 5 | J3a → J3b → J3c ‖ J7a → J7b → J7c ‖ JM4a (J4 + JM3b után) → JM4b (J2 + JM3b után) → JM4c (J1 + JM3b után) | Opus ‖ Sonnet/Opus ‖ Opus/Sonnet/Opus | a JM7a / JM7b a 4. hullámba került (D20, a JM1r előtt) |
 | 6 | J8 ‖ JM5a–d (a megfelelő J után) ‖ JM6 ‖ JM8a → JM8b | Sonnet ‖ Sonnet ‖ Sonnet ‖ Opus/Sonnet | JM8b után `PLAYER_POINTS=on` |
 | 7 | J9 ‖ JM9 → JM10 | Opus ‖ Sonnet | a J9 az egyjátékos funkció záró mérése |
 | 8 | JM11 | Opus | a többjátékos funkció zárása, átfogó review |
 
-Szabályok: egy közös fájlt egyszerre egy szelet módosít (K.1/6–7); különösen: `source/client/src/App.tsx` (J0c → JM1 → JM3 →
-JM7a → JM10 sorban), `P/Games.tsx` (J8 és a JM1 / JM3 kártya-gombja: az orkesztrátor sorolja), `source/shared/schema.ts` és
+Szabályok: egy közös fájlt egyszerre egy szelet módosít (K.1/6–7); különösen: `source/client/src/App.tsx` (J0c → JM1 → JM7a → JM7b → JM1r →
+JM3a → JM10 sorban), `P/Games.tsx` (J8 és a JM1r / JM3a párbaj-belépője: az orkesztrátor sorolja), `source/shared/schema.ts` és
 `source/migrations/` (JM7a → JM8a → JM9 → JM10 szigorúan sorban, a migráció-számok foglalva: 0040–0043), a hét játéklap a
 J-szelet és a JM4 / JM5 / JM0 / JM8b között (az orkesztrátor sorolja, soha nem egyszerre). Minden al-szelet önállóan kiadható;
 a flag alapértékével a main mindig működő. A merge-ek előtt a futás-őr (memória „Nincs deploy futás közben”), a JM2 után a futó
@@ -2256,10 +2374,10 @@ meccsekkel együtt (JM-A7).
 
 **Teljes szeletlista függőségekkel (az orkesztrátor indítási sorrendje):**
 J0a (—) · JM0 (—) · J0b (J0a) · J0c (J0b) · JM1 (J0a, J0b) · JBa/JBb/JBc (J0b) · J4a → J4b (J0c) · J2a → J2b (J0c) ·
-JM2 (JM1) · J1a → J1b → J1c (J0c) · J5a → J5b (J0c) · J6a → J6b (J0c) · JM3 (JM2) · J3a → J3b → J3c (J0c) ·
-J7a → J7b → J7c (J0c) · JM4a (JM3, J4b) · JM4b (JM3, J2b) · JM4c (JM3, J1c) · JM7a (JM0) · JM7b (JM7a) · J8 (J1–J7 „a”/„b”) ·
-JM5a (JM3, J3c) · JM5b (JM3, J6b) · JM5c (JM3, J5b) · JM5d (JM3, J7c) · JM6 (J1–J7) · JM8a (JM7b) · JM8b (JM8a) ·
-J9 (J1–J8) · JM9 (JM8b, JM3) · JM10 (JM9) · JM11 (JM1–JM10).
+JM2 (JM1) · J1a → J1b → J1c (J0c) · J5a → J5b (J0c) · J6a → J6b (J0c) · JM1r (JM2, JM7b) · JM3a (JM1r) · JM3b (JM3a, JM7b) · J3a → J3b → J3c (J0c) ·
+J7a → J7b → J7c (J0c) · JM4a (JM3b, J4b) · JM4b (JM3b, J2b) · JM4c (JM3b, J1c) · JM7a (JM0) · JM7b (JM7a) · J8 (J1–J7 „a”/„b”) ·
+JM5a (JM3b, J3c) · JM5b (JM3b, J6b) · JM5c (JM3b, J5b) · JM5d (JM3b, J7c) · JM6 (J1–J7) · JM8a (JM7b) · JM8b (JM8a) ·
+J9 (J1–J8) · JM9 (JM8b, JM3b) · JM10 (JM9) · JM11 (JM1–JM10).
 
 **Tulajdonosi teendő:** nincs kötelező. Opcionális: `jatek.websuli.vip` Render custom domain + DNS CNAME, és `MP_DIRECT_URL`
 beállítása (közvetlen WebSocket, kisebb késés) — a terv nélküle is működik élesben.
