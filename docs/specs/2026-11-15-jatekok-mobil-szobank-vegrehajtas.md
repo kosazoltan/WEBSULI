@@ -1492,7 +1492,15 @@ fine: `sa-touch-controls` 0 db és `sa-keyboard-hint` látható; coarse: ≥ 44 
 
 ## S11 — Kockavadász kvíz mobilra + szóbank
 
-**Állapot:** folyamatban — ág feat/jatekok-s11-kockavadasz, munkafa .claude/worktrees/jatekok-s11, kanban #28
+**Állapot:** review — ág feat/jatekok-s11-kockavadasz, munkafa .claude/worktrees/jatekok-s11, kanban #28. Eltérések /
+pontosítások (S11, 2026-11-16): (1) a `probe()` `moveFwd` értéke 1 / 0 (a teszt-API típusa szám / szöveg, logikai
+nem); (2) a vászon bal 40%-án induló érintés nem forgat, de a rövid koppintás ott is bányászik; (3) a szóbank-bekötés
+tiszta segédje `lib/blockCraftSubjects.ts` `pickBlockCraftGradeSlot` (a kiváltott évfolyam-banki angol tétel is fogy;
+angol helyen a szóbank akkor is kérdez, ha az évfolyam-bank angol tételei elfogytak); (4) a szünet menü „Kilépés”
+gombja „Kör vége” felirattal az eredményképernyőre visz (a régi „Kör vége” gomb szerepe); (5) fekvő, érintős nézetben
+a hotbar a vásznon, a joystick és az akciógombok között; (6) M11: a three r184 `PCFSoftShadowMap`-figyelmeztetését a
+lap PCF-re állítással kerüli — a közös `three-look/renderer.ts` javítása orkesztrátori kérés; (7) Esc-es pointer-lock
+vesztés játék közben szünet; a kvíz megnyitásakor a játék maga engedi el a lockot.
 
 - **Cél:** 4.5 keret; nagyobb akciógombok (ugrás, bányászás, lerakás ≥ 56 px), kétujjas vezérlés (bal: mozgás, jobb:
   körbenézés), olvasható HUD; angol kérdések a szóbankból (A8).
