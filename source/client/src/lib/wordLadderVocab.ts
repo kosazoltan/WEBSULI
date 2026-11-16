@@ -1,5 +1,6 @@
 import type { LadderItem } from "../data/wordLadder/types";
 import { dedupeTiersByContent } from "../game-engine/no-repeat";
+import { meaningKeys, termKey } from "../game-engine/vocab/questionGenerator";
 import type { FourChoiceQuiz } from "../types/gameQuiz";
 
 /**
@@ -17,7 +18,11 @@ export function vocabIdOfLadderItem(id: string): string | null {
   return entryId ? entryId : null;
 }
 
-const norm = (s: string) => s.normalize("NFC").toLowerCase().replace(/[\s\u00A0\u202F]+/g, " ").trim();
+/**
+ * Egy sz\u00F6veg \u00F6sszevet\u00E9si kulcsai a k\u00F6z\u00F6s sz\u00F3bank-normaliz\u00E1l\u00E1ssal (`termKey` + `meaningKeys`, #432): \u00EDgy a \u201Ekutya, eb\u201D
+ * k\u00E9zi v\u00E1lasz a \u201Ekutya\u201D jelent\u00E9s\u0171 bejegyz\u00E9st is lefoglalja; a sz\u00E9ls\u0151 \u00EDr\u00E1sjel \u00E9s a z\u00E1r\u00F3jeles pontos\u00EDt\u00E1s nem sz\u00E1m\u00EDt.
+ */
+const keysOf = (s: string): string[] => [termKey(s), ...meaningKeys(s)].filter(Boolean);
 
 /** A szóbank-bejegyzés két nyelvi alakja (a kézi bankkal való ütközés-szűréshez). */
 export type VocabMeaning = { term: string; hu: string };
@@ -42,7 +47,7 @@ export function mergeVocabTiers<T extends FourChoiceQuiz>(
   meaningOf?: (vocabId: string) => VocabMeaning | undefined,
   isSeen?: (vocabId: string) => boolean,
 ): (T | LadderItem)[][] {
-  const manualAnswers = new Set(manual.flat().map((q) => norm(q.options[q.correctIndex] ?? "")));
+  const manualKeys = new Set(manual.flat().flatMap((q) => keysOf(q.options[q.correctIndex] ?? "")));
   const used = new Set<string>();
   const picked: LadderItem[][] = manual.map(() => []);
   for (const ownLevel of [true, false]) {
@@ -54,8 +59,11 @@ export function mergeVocabTiers<T extends FourChoiceQuiz>(
         if (used.has(key)) continue;
         used.add(key);
         const meaning = meaningOf && vocabIdOfLadderItem(item.id) ? meaningOf(key) : undefined;
-        const forms = [item.options[item.correctIndex] ?? "", ...(meaning ? [meaning.term, meaning.hu] : [])];
-        if (forms.some((f) => manualAnswers.has(norm(f)))) continue;
+        const keys = [
+          ...keysOf(item.options[item.correctIndex] ?? ""),
+          ...(meaning ? [termKey(meaning.term), ...meaningKeys(meaning.hu)] : []),
+        ];
+        if (keys.some((k) => manualKeys.has(k))) continue;
         picked[level]!.push(item);
       }
     });

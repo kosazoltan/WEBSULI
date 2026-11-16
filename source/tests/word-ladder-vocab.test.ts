@@ -9,6 +9,7 @@ import { normalizePrompt, pickUnseen, type SeenItem } from "../client/src/game-e
 import { createSeenHistory } from "../client/src/game-engine/vocab/seenHistory";
 import { createVocabSource } from "../client/src/game-engine/vocab/vocabSource";
 import { landSquashY } from "../client/src/game-engine/scenes/LadderScene3D";
+import { meaningKeys, termKey } from "../client/src/game-engine/vocab/questionGenerator";
 import { mergeVocabTiers, VOCAB_POOL_PER_LEVEL, vocabIdOfLadderItem as vocabIdOf } from "../client/src/lib/wordLadderVocab";
 import { isPlayableQuestion } from "../shared/game-quiz-contract";
 import { makeSyntheticBank, memoryStorage, seededRng } from "./support/vocab-fixture";
@@ -225,11 +226,17 @@ test("review #430 (A4): nagy bankkal 10 futás × 20 kérdés alatt egyetlen ism
   assert.equal(new Set(asked).size, 200);
 });
 
-for (const lang of ["de", "fr"] as const) {
+for (const lang of ["en", "de", "fr"] as const) {
   test(`valódi ${lang} bank + kézi bank: 12 futás × 20 kérdés — nincs szóbank-ismétlés, és a kézi és a szóbankos kérdés nem ugyanazt a szót kérdezi`, async () => {
-    const vocabMod = lang === "de" ? await import("../client/src/data/vocabBank/vocab-de") : await import("../client/src/data/vocabBank/vocab-fr");
-    const entries = lang === "de" ? (vocabMod as { VOCAB_DE: VocabEntry[] }).VOCAB_DE : (vocabMod as { VOCAB_FR: VocabEntry[] }).VOCAB_FR;
-    const manualBank = lang === "de" ? WORD_LADDER_DE : (await import("../client/src/data/wordLadder/fr")).WORD_LADDER_FR;
+    const entries: VocabEntry[] =
+      lang === "en" ? (await import("../client/src/data/vocabBank/vocab-en")).VOCAB_EN
+      : lang === "de" ? (await import("../client/src/data/vocabBank/vocab-de")).VOCAB_DE
+      : (await import("../client/src/data/vocabBank/vocab-fr")).VOCAB_FR;
+    const manualBank =
+      lang === "en" ? (await import("../client/src/data/wordLadder/en")).WORD_LADDER_EN
+      : lang === "de" ? WORD_LADDER_DE
+      : (await import("../client/src/data/wordLadder/fr")).WORD_LADDER_FR;
+    assert.ok(entries.length >= 2000, `${lang}: teljes bank (${entries.length})`);
     const manual = ladderTiersFromBank(manualBank);
     const history = createSeenHistory(memoryStorage());
     const source = createVocabSource({ lang, entries, history, rng: seededRng(71) });
@@ -252,7 +259,7 @@ for (const lang of ["de", "fr"] as const) {
           askedVocab.push(vocabId);
         } else {
           source.markExternal(item.options[item.correctIndex]!);
-          manualAnswers.add(norm(item.options[item.correctIndex]!));
+          for (const k of [termKey(item.options[item.correctIndex]!), ...meaningKeys(item.options[item.correctIndex]!)]) manualAnswers.add(k);
         }
       }
     }
@@ -260,7 +267,7 @@ for (const lang of ["de", "fr"] as const) {
     assert.equal(new Set(askedVocab).size, askedVocab.length, "szóbankos bejegyzés ismétlődött");
     const clash = askedVocab.filter((id) => {
       const m = meanings.get(id)!;
-      return manualAnswers.has(norm(m.term)) || manualAnswers.has(norm(m.hu));
+      return manualAnswers.has(termKey(m.term)) || meaningKeys(m.hu).some((k) => manualAnswers.has(k));
     });
     assert.deepEqual(clash, [], "a szóbank a kézi kérdés szavát (bármelyik irányban) is megkérdezte");
   });
