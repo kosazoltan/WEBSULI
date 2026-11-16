@@ -116,6 +116,15 @@ vak körben.
 | B | 3 | 3/3 | 10/10 | a `g11-science-015` új alakja logikailag kizárta az elterelőket (kitalálható) → példán alapuló kérdés |
 | C | 1 | 1/1 | 10/10 | az „izobután” az „izomer” szót visszhangozta (kitalálható) → etanol és dimetil-éter |
 | D | 1 | 1/1 | 10/10 | tiszta |
+| E (review #458) | 1 | 1/1 | 10/10 | tiszta |
+
+**Review #458 (Vercel Agent), 2 jogos lelet:**
+- `g12-hungarian-053` (A fizikusok): a dráma végén von Zahnd doktornő is azt állítja, hogy Salamon király megjelenik neki
+  (de.wikipedia: Die Physiker), így két védhető válasz volt. A kérdés a szanatórium betegeire szűkült, a Zahnd elterelő helyére
+  Voss felügyelő került. Újra-vak kör: E. A magyar és a magyarázat-auditor sem fogta meg: a kulcsot igazolták, a teljes
+  szereplőlistát nem vetették össze vele.
+- `g11-history-053` (Kassa): a hadiállapotot Horthy június 26-án még aznap bejelentette, Bárdossy pedig június 27-én az
+  országgyűlésben jelentette be (hu.wikipedia: Kassa bombázása). A magyarázat most mindkét dátumot tartalmazza.
 
 A csak a magyarázatot érintő javítások a vak megoldónak láthatatlanok (ő csak kérdést és opciót kap), ezekre nem volt újra-vak kör.
 

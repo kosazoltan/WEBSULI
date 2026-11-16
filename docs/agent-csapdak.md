@@ -644,6 +644,10 @@ Forrás: JBc futás (feat/jatek-jbc-evfolyam-bank).
   (a jelentésükben ezt maguk írták), a többit tankönyvi tudással fogadták el. **Megelőzés 3:** ez maradó kockázatként a
   jegyzőkönyvbe kerül; nagyobb csomagnál tárgyanként két auditor (évfolyam szerinti felezés) adna valódi tételenkénti
   forrásnyitást.
+- **Tünet 5:** a review talált egy két védhető választ: A fizikusok, „kinek jelenik meg Salamon király” — Möbiusnak, de a
+  végén von Zahndnak is. A vak megoldó, a forrásalapú audit és a magyarázat-audit is átengedte, mert mindhárman a kulcsot
+  igazolták, nem az elterelőket. **Megelőzés 5:** az irodalmi „melyik szereplő …?” tételeknél az auditor MINDEN elterelő
+  szereplőre külön ellenőrizze a szöveg alapján, hogy rá nem igaz-e az állítás (a mű végét is beleértve).
 - **Tünet 4 (C-35 ismét):** ennek a bejegyzésnek az első változatát Git Bash-ből python-heredockal fűztük a fájlhoz: a `\b` szöveg
   helyére backspace-bájt (0x08) került, és a python-os visszajavítás is csendben hatástalan maradt. **Megelőzés 4:**
   visszaperjeles szöveget csak Edit / Write eszközzel; bájtszintű visszaolvasás (`od -c`); javítás Write-tal írt node-szkripttel.
