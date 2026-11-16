@@ -81,6 +81,46 @@ describe("JM7c-1 — engedélylista feldolgozása", () => {
     assert.equal(isAllowlistedAdminEmail("MASIK@pelda.hu"), true);
   });
 
+  it("review #462 M3: többcímes / hibás ADMIN_EMAIL → nem alapérték (none), senki nem kap ÚJ jogot; egycímes → változatlan", async () => {
+    const bad = ["tulaj@pelda.hu, kulso@pelda.hu", "tulaj@pelda.hu;kulso@pelda.hu", "tulaj@pelda.hu kulso@pelda.hu", "\"tulaj@pelda.hu\"", "'tulaj@pelda.hu'", "tulaj@pelda.hu, hibas"];
+    for (const value of bad) {
+      setEnv({ ADMIN_EMAIL: value });
+      const p = adminPolicy();
+      assert.equal(p.source, "none", value);
+      assert.equal(p.adminEmailInvalid, true, value);
+      assert.equal(isAllowlistedAdminEmail("kulso@pelda.hu"), false, value);
+      assert.equal(isAllowlistedAdminEmail("tulaj@pelda.hu"), false, value);
+      const upserts: Record<string, unknown>[] = [];
+      const verify = createGoogleVerify({ getUserByEmail: async () => null as never, upsertUser: async (d: Record<string, unknown>) => { upserts.push(d); return { id: "u", ...d } as never; } });
+      await new Promise((r) => { void verify({ id: "g", emails: [{ value: "kulso@pelda.hu", verified: true }] }, r); });
+      assert.equal(upserts[0]!.isAdmin, false, `${value}: a külső cím nem kap jelzőt`);
+    }
+    setEnv({ ADMIN_EMAIL: " Tulaj@pelda.hu " });
+    assert.equal(adminPolicy().source, "ADMIN_EMAIL");
+    assert.equal(adminPolicy().adminEmailInvalid, false);
+    assert.equal(isAdminUser(admin("tulaj@pelda.hu")), true);
+    // A beállított ADMIN_ALLOWLIST mellett a többcímes ADMIN_EMAIL nem számít.
+    setEnv({ ADMIN_ALLOWLIST: "tulaj@pelda.hu", ADMIN_EMAIL: "tulaj@pelda.hu, kulso@pelda.hu" });
+    assert.equal(isAllowlistedAdminEmail("kulso@pelda.hu"), false);
+  });
+
+  it("review #462 A1: nem ASCII (Unicode-hasonmás) cím soha nem egyezik listás címmel", async () => {
+    setEnv({ ADMIN_ALLOWLIST: "kosa@pelda.hu" });
+    const kelvin = `${String.fromCodePoint(0x212a)}osa@pelda.hu`;
+    const dotlessI = `${String.fromCodePoint(0x130)}nfo@pelda.hu`;
+    for (const v of [kelvin, dotlessI, `kosa@p${String.fromCodePoint(0x435)}lda.hu`]) {
+      assert.equal(normalizeAdminEmail(v), null, v);
+      assert.equal(isAllowlistedAdminEmail(v), false, v);
+      assert.equal(isAdminUser(admin(v)), false, v);
+    }
+    const upserts: Record<string, unknown>[] = [];
+    const verify = createGoogleVerify({ getUserByEmail: async () => null as never, upsertUser: async (d: Record<string, unknown>) => { upserts.push(d); return { id: "u", ...d } as never; } });
+    await new Promise((r) => { void verify({ id: "g", emails: [{ value: kelvin, verified: true }] }, r); });
+    assert.equal(upserts[0]!.isAdmin, false);
+    // A nem ASCII elem a listán is hibásnak számít.
+    assert.deepEqual(parseAdminAllowlist(`${kelvin}, kosa@pelda.hu`), { emails: ["kosa@pelda.hu"], invalid: 1 });
+  });
+
   it("az ADMIN_EMAILS (értesítési lista) NEM ad jogot és nem kerül a listára", () => {
     setEnv({ ADMIN_EMAIL: "tulaj@pelda.hu", ADMIN_EMAILS: "tulaj@pelda.hu,ertesitendo@pelda.hu" });
     assert.deepEqual([...adminPolicy().emails], ["tulaj@pelda.hu"]);
@@ -182,6 +222,32 @@ describe("JM7c-1 — kizárás elleni őr", () => {
     rows.push("tulaj@pelda.hu");
     await prepareAdminAccess(admin("regi-admin@pelda.hu"));
     assert.equal(isAdminUser(admin("regi-admin@pelda.hu")), false);
+  });
+
+  it("tulajdonosi döntés (M1): az induláskori napló darabszámmal (cím nélkül) jelzi a levenni való régi jelzőket — 0-nál is", async () => {
+    const { logger } = await import("../server/lib/logger");
+    const lines: string[] = [];
+    const orig = { info: logger.info, warn: logger.warn, error: logger.error };
+    for (const level of ["info", "warn", "error"] as const) (logger as unknown as Record<string, (...a: unknown[]) => void>)[level] = (...a: unknown[]) => { lines.push(a.map(String).join(" ")); };
+    try {
+      setEnv({ ADMIN_ALLOWLIST: "tulaj@pelda.hu" });
+      configureAdminAccess({ query: async () => ({ rows: [{ email: "tulaj@pelda.hu" }, { email: "regi1@pelda.hu" }, { email: "regi2@pelda.hu" }] }) });
+      await reportAdminAccessStatus();
+      const warn = lines.find((l) => l.includes("tárolt admin-jelzős fiók nincs az engedélylistán"));
+      assert.ok(warn?.includes("2 tárolt admin-jelzős fiók") && warn.includes("Admin-jelző elvétele"), warn);
+      assert.ok(!lines.some((l) => /regi\d|r\*\*\*@/.test(l)), "cím (maszkolva sem) nem kerül a sorba");
+      lines.length = 0;
+      configureAdminAccess({ query: async () => ({ rows: [{ email: "tulaj@pelda.hu" }] }) });
+      await reportAdminAccessStatus();
+      assert.ok(lines.some((l) => l.includes("0 tárolt admin-jelzős, de listán kívüli fiók")), lines.join("\n"));
+      lines.length = 0;
+      setEnv({ ADMIN_EMAIL: "tulaj@pelda.hu, kulso@pelda.hu" });
+      await reportAdminAccessStatus();
+      assert.ok(lines.some((l) => l.includes("az ADMIN_EMAIL nem pontosan egy érvényes e-mail-cím")), lines.join("\n"));
+      assert.ok(!lines.some((l) => l.includes("kulso")), "a hibás érték nem kerül a naplóba");
+    } finally {
+      Object.assign(logger, orig);
+    }
   });
 
   it("lekérdezési hiba → az őr nem kapcsol be (szigorú marad)", async () => {

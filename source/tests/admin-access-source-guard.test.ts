@@ -11,23 +11,43 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const SERVER = fileURLToPath(new URL("../server", import.meta.url));
-const FORBIDDEN = /\.isAdmin\b|\bis_admin\b|\{\s*isAdmin\s*[,}]|,\s*isAdmin\s*[,}]|\[\s*["'`]isAdmin["'`]\s*\]/;
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+/**
+ * Review #462 A3: a minta lefedi a property-olvasást, az SQL-oszlopot, a (többsoros / átnevezős) destrukturálást
+ * (`{ isAdmin }`, `{ isAdmin: f }`, magányos `isAdmin,` sor), az objektum-kulcsot (`isAdmin:` — írásként csak tételes
+ * engedéllyel), a szöveges kulcsot (`user["isAdmin"]`, `Reflect.get(u, "isAdmin")`), a darabolt kulcsot (`"is" + "Admin"`)
+ * és minden `Reflect.get` / `Reflect.has` hívást.
+ */
+const FORBIDDEN = new RegExp([
+  /\.isAdmin\b/, /\bis_admin\b/, /\{\s*isAdmin\s*[,}]/, /,\s*isAdmin\s*[,}]/,
+  /\bisAdmin\s*:/, /["'`]isAdmin["'`]/, /^\s*isAdmin\s*,?\s*$/,
+  /Reflect\.(get|has)\s*\(/, /["'`]is["'`]\s*\+\s*["'`]Admin/,
+].map((r) => r.source).join("|"));
 
 /** Fájl → az engedélyezett sorok mintái (mindegyik indokkal). A képlet modulja egészében engedélyezett. */
 const ALLOWED: Record<string, { line: RegExp; why: string }[] | "whole-file"> = {
   "lib/admin-access.ts": "whole-file",
   "auth.ts": [
+    { line: /isAdmin: isAdminUser\(user\),/, why: "Google-belépés utáni cél: a SZÁMOLT jog átadása (írás)" },
+    { line: /res\.json\(\{ \.\.\.safeUser, isAdmin: isAdminUser\(user\) \}\)/, why: "/api/login válasza: a SZÁMOLT jog (írás)" },
     { line: /isAdmin: existingUser \? existingUser\.isAdmin : listed/, why: "Google-belépés: a meglévő sor jelzőjét változatlanul visszaírja (nem döntés)" },
     { line: /user\.isAdmin = isAdminUser\(user\);/, why: "deserializeUser: a req.user a SZÁMOLT jogot kapja (írás)" },
   ],
   "admin-users.ts": [
+    { line: /"profileImageUrl" \| "isAdmin" \| "isBanned"/, why: "PublicUser típus (mezőnév)" },
+    { line: /^\s*isAdmin: isAdminUser\(u\), isBanned: u\.isBanned/, why: "lista: a SZÁMOLT jog (írás)" },
+    { line: /type GuardUser = Pick<User, "id" \| "isAdmin">/, why: "őr-bemenet típusa (mezőnév)" },
+    { line: /toggleUserAdmin\(id: string, isAdmin: boolean\)/, why: "tár-interfész paraméterneve" },
     { line: /const \{ isAdmin \} = \(req\.body \?\? \{\}\)/, why: "toggle-admin: a kérés törzsének kívánt állapota, nem jogosultság-olvasás" },
   ],
   "storage.ts": [
+    { line: /toggleUserAdmin\(userId: string, isAdmin: boolean\)/, why: "toggle paraméterneve (interfész és megvalósítás)" },
+    { line: /^\s*isAdmin: isAdmin,$/, why: "toggle: a kért jelző írása" },
     { line: /if \(userData\.isAdmin !== undefined\)/, why: "upsertUser: a hívó által adott jelző átírása (írás)" },
     { line: /updateData\.isAdmin = userData\.isAdmin;/, why: "upsertUser: a hívó által adott jelző átírása (írás)" },
   ],
   "lib/return-to.ts": [
+    { line: /^\s*isAdmin: boolean;$/, why: "a hívó által számolt jog típusa" },
     { line: /return input\.isAdmin \? "\/admin" : "\/games";/, why: "a hívó (auth.ts) az isAdminUser eredményét adja át" },
   ],
   "studio/legacy-migration.ts": [
@@ -39,6 +59,15 @@ const ALLOWED: Record<string, { line: RegExp; why: string }[] | "whole-file"> = 
     { line: /isAdmin: u\.is_admin,/, why: "egyszeri adatmigráció: másolás" },
     { line: /INSERT INTO users \(.*is_admin\)/, why: "egyszeri adatmigráció: másolás" },
     { line: /user\.isAdmin \? 1 : 0/, why: "egyszeri adatmigráció: másolás" },
+  ],
+  "create-admin.ts": [
+    { line: /^\s*isAdmin: true,$/, why: "kézi szkript: a jelző beállítása (figyelmeztet, ha a cím nincs a listán)" },
+  ],
+  "routes.ts": [
+    { line: /^\s*isAdmin: isAdminUser\(user\),$/, why: "/api/auth/user: a SZÁMOLT jog (írás)" },
+  ],
+  "shared/schema.ts": [
+    { line: /isAdmin: boolean\("is_admin"\)\.default\(false\)\.notNull\(\),/, why: "a Drizzle-séma oszlopdefiníciója" },
   ],
   "scripts/setAdmin.ts": [
     { line: /is_admin/, why: "kézi szkript: a jelző beállítása (figyelmeztet, ha a cím nincs a listán)" },
@@ -59,8 +88,9 @@ describe("JM7c-1 forrás-őr — az admin-jog egyetlen forrása", () => {
   it("a nyers is_admin jelzőt csak a tételesen engedélyezett sorok olvassák", () => {
     const offenders: string[] = [];
     const used = new Set<string>();
-    for (const file of walk(SERVER)) {
-      const rel = relative(SERVER, file).split(sep).join("/");
+    const files = [...walk(SERVER).map((f) => [f, relative(SERVER, f)] as const), ...walk(join(ROOT, "shared")).map((f) => [f, relative(ROOT, f)] as const)];
+    for (const [file, relRaw] of files) {
+      const rel = relRaw.split(sep).join("/");
       const allowed = ALLOWED[rel];
       if (allowed === "whole-file") continue;
       readFileSync(file, "utf8").split(/\r?\n/).forEach((raw, i) => {
@@ -75,6 +105,18 @@ describe("JM7c-1 forrás-őr — az admin-jog egyetlen forrása", () => {
     // Elavult engedély ne maradjon a listán (a lista csak szűkülhet).
     const stale = Object.entries(ALLOWED).flatMap(([f, a]) => (Array.isArray(a) ? a.filter((x) => !used.has(`${f}:${x.line.source}`)).map((x) => `${f}: ${x.line.source}`) : []));
     assert.deepEqual(stale, [], "a lista elavult bejegyzést tartalmaz");
+  });
+
+  it("review #462 A3: a minta a megkerülő alakokat is elkapja (ellenpróba)", () => {
+    const bypasses = [
+      "if (!user?.isAdmin) return;", "const { isAdmin } = user;", "const { isAdmin: f } = u;", "const { id, isAdmin } = u;",
+      "  isAdmin,", "  isAdmin", "Reflect.get(u, key)", "const v = u[\"isAdmin\"];", "const k = 'is' + 'Admin';",
+      "SELECT is_admin FROM users", "const flag = u[`isAdmin`];",
+    ];
+    for (const b of bypasses) assert.match(b, FORBIDDEN, b);
+    for (const ok of ["isAdminUser(req.user)", "const admins = users.filter(u => isAdminUser(u));", "storedAdminFlag(u)"]) {
+      assert.doesNotMatch(ok, FORBIDDEN, ok);
+    }
   });
 
   it("minden admin-ellenőrző az isAdminUser-t hívja", () => {

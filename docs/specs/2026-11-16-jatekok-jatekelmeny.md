@@ -645,12 +645,15 @@ elő.” Korábban: „Az admin felülethez senki nem férhet hozzá, csak az ad
 - **Admin = engedélylista.** Az admin-jog képlete EGY szerveroldali függvényben él, és minden kérésnél újraszámolódik:
   `users.is_admin = true` ÉS az e-mail-cím (kisbetűsítve, szóköz nélkül) rajta van az admin-engedélylistán ÉS a fiók nincs
   tiltva. Az engedélylista külön környezeti változó (`ADMIN_ALLOWLIST`, vesszővel tagolt címek); ha nincs beállítva (vagy
-  egyetlen érvényes cím sincs benne), az alapértéke a meglévő `ADMIN_EMAIL` — így a telepítés után a mostani admin beállítás
-  nélkül admin marad. Az `ADMIN_EMAILS` továbbra is CSAK értesítési lista, jogot nem ad.
+  egyetlen érvényes cím sincs benne), az alapértéke a meglévő `ADMIN_EMAIL`, de CSAK ha az pontosan egy érvényes cím (review
+  #462 M3: egy többcímes érték nem válhat admin-listává) — így a telepítés után a mostani admin beállítás nélkül admin marad.
+  Nem ASCII karaktert tartalmazó cím soha nem egyezik listás címmel (Unicode-hasonmás ellen). Az `ADMIN_EMAILS` továbbra is CSAK értesítési lista, jogot nem ad.
 - **Kizárás elleni védelem:** ha egyik változó sincs beállítva, vagy a lista egyetlen létező, nem tiltott `is_admin` fiókra
   sem illik, a lista nem zár ki mindenkit: a meglévő `is_admin` jelző marad érvényben (fail-open a MEGLÉVŐ adminokra, soha
   nem új jogra), és induláskor hangos, maszkolt hibanapló jelzi. Új admin-jog (Google-os első belépés, Felhasználók fül)
-  csak listán lévő címnek adható.
+  csak listán lévő címnek adható. **Tulajdonosi döntés (M1, 2026-11-16): az őr marad.** Listahibánál a régi, listán kívüli
+  jelzők érvényesek, ezért a telepítés utáni teendő ezek levétele a Felhasználók fülön (a lista tetején, „nincs az
+  engedélylistán” jelöléssel; az induló napló darabszámmal jelzi, hány ilyen fiók van).
 - **Meglévő tanulók / szülők (`users`, `is_admin = false` vagy listán kívül):** nincs admin-joguk; a belépésük ebben a
   lépésben változatlan (JM7c-1). A játékos-miniprofilhoz kapcsolásuk (`player_accounts`, migrációval) a JM7c-2.
 - **Login-CSRF:** a meglévő `/auth/google` út is `state`-et (+ PKCE-t) kap, a játékos-út mintájára (`a.` előtag,

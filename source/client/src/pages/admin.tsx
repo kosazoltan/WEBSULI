@@ -391,10 +391,14 @@ export default function Admin() {
   // This prevents anonymous users from triggering admin API calls before redirect
   
   // Get all users - only enabled when admin AND on correct tab
-  const { data: users, isLoading: isLoadingUsers } = useQuery<AdminListUser[]>({
+  const { data: rawUsers, isLoading: isLoadingUsers } = useQuery<AdminListUser[]>({
     queryKey: ["/api/admin/users"],
     enabled: !!user?.isAdmin && activeTab === "users"
   });
+  // Tulajdonosi döntés (JM7c-1 M1, 2026-11-16): a nem érvényes (tiltott / listán kívüli) admin-jelzős fiókok a lista
+  // TETEJÉN, hogy a telepítés utáni jelző-levétel egy pillantással elvégezhető legyen; a többi sorrend változatlan.
+  const users = rawUsers ? [...rawUsers].sort((a, b) => Number(!!b.adminInactiveReason) - Number(!!a.adminInactiveReason)) : rawUsers;
+  const inactiveAdminFlags = users?.filter((u) => !!u.adminInactiveReason).length ?? 0;
 
   // Get material views - only enabled when admin AND on correct tab
   const { data: materialViews, isLoading: isLoadingViews } = useQuery<MaterialViewWithData[]>({
@@ -751,6 +755,12 @@ export default function Admin() {
                   <CardDescription className="text-xs">
                     {users?.length || 0} regisztrált felhasználó
                   </CardDescription>
+                  {inactiveAdminFlags > 0 && (
+                    <p role="status" data-testid="admin-inactive-flags-notice" className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                      {inactiveAdminFlags} fiókon nem érvényes admin-jelző van (tiltott, vagy nincs az engedélylistán). Ezek a lista tetején
+                      állnak: a ⋮ menüben az „Admin-jelző elvétele” leveszi.
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent className="p-0 sm:p-4">
                   {isLoadingUsers ? (

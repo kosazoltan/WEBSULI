@@ -83,6 +83,9 @@ test("review #462: a Felhasználók fül a nem érvényes admin-jelzőt érthet�
     const badge = page.getByTestId("badge-admin-inactive-jm7c-e2e-unlisted");
     await expect(badge).toBeVisible({ timeout: 20_000 });
     await expect(badge).toContainText("nincs az engedélylistán");
+    // Tulajdonosi döntés (M1): összesítő jelzés + a nem érvényes jelzős fiókok a lista tetején.
+    await expect(page.getByTestId("admin-inactive-flags-notice")).toContainText(/\d+ fiókon nem érvényes admin-jelző/);
+    if (w < 768) await expect(page.locator('[data-testid^="user-row-"]').first()).toHaveAttribute("data-testid", "user-row-jm7c-e2e-unlisted");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `${name}: nincs vízszintes görgetés`).toBeLessThanOrEqual(1);
     await badge.scrollIntoViewIfNeeded();

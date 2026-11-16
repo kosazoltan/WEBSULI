@@ -15,7 +15,7 @@ import { maskEmail } from "./lib/mask-email";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { isPlayerState, registerPlayerGoogle } from "./player/google";
 import { createPlayerAccountStore } from "./player/account-store";
-import { adminPolicy, configureAdminAccess, isAdminUser, prepareAdminAccess, reportAdminAccessStatus } from "./lib/admin-access";
+import { adminPolicy, configureAdminAccess, isAdminUser, normalizeAdminEmail, prepareAdminAccess, reportAdminAccessStatus } from "./lib/admin-access";
 import { AdminStateStore } from "./lib/admin-oauth-state";
 
 type GoogleProfileLike = {
@@ -56,8 +56,10 @@ export function createGoogleVerify(
             // Check if user already exists to preserve their admin status
             const existingUser = await store.getUserByEmail(email);
             const allowlist = adminEmails();
-            const listed = (typeof allowlist === "string" ? [allowlist] : allowlist ?? [])
-                .some((a) => a.trim().toLowerCase() === email.trim().toLowerCase());
+            // Review #462 A1: a közös normalizálás (nem ASCII / hibás cím → null, soha nem egyezik).
+            const normalized = normalizeAdminEmail(email);
+            const listed = normalized !== null && (typeof allowlist === "string" ? [allowlist] : allowlist ?? [])
+                .some((a) => normalizeAdminEmail(a) === normalized);
 
             // Upsert user with Google ID
             const user = await store.upsertUser({
@@ -210,7 +212,10 @@ export function setupAuth(app: Express) {
                 // Google-oldali hiba (pl. tokencsere: újratöltött / lejárt kód) → ne hibaoldal, hanem újrapróba.
                 if (err) {
                     // Csak a hiba fajtája kerül a naplóba (az üzenet adatbázis-hibánál személyes adatot is tartalmazhatna).
-                    logger.warn(`[AUTH] Google callback error: ${err.name}${(err as { code?: unknown }).code ? ` (${String((err as { code?: unknown }).code)})` : ""}`);
+                    // Review #462 A2: a `code` a visszahívás `?error=` paraméteréből jöhet — csak rövid, szűrt azonosító kerül ki.
+                    const rawCode = String((err as { code?: unknown }).code ?? "");
+                    const code = /^[A-Za-z0-9_]{1,40}$/.test(rawCode) ? rawCode : rawCode ? "egyeb" : "";
+                    logger.warn(`[AUTH] Google callback error: ${/^[A-Za-z0-9_]{1,40}$/.test(err.name) ? err.name : "Error"}${code ? ` (${code})` : ""}`);
                     return res.redirect('/login?hiba=google');
                 }
                 if (!user) return res.redirect('/login?hiba=google');

@@ -2093,6 +2093,12 @@ stratégiának nincs `state`-je (login-CSRF, review #449 K3). Az `ADMIN_EMAILS` 
    ismeretlen / hiányzó / idegen `state` belépés nélkül `/login?hiba=google`-ra visz (a telepítéskor folyamatban lévő
    belépés így egyszer elbukik, érthető üzenettel és újrapróba gombbal).
 5. Forrás-őr teszt: a szerverkódban `.isAdmin` / `is_admin` olvasás csak a tételesen engedélyezett sorokban lehet.
+**Biztonsági review #462 után rögzítve:** (M3) az `ADMIN_EMAIL` csak pontosan egy érvényes címmel alapérték, különben a
+forrás `none` + hangos hiba; (A1) nem ASCII cím → nem egyezik; (A2) a Google `?error=` kódja csak szűrve kerül a naplóba;
+(A3) a forrás-őr az átnevezős / többsoros destrukturálást, a szöveges kulcsot, a `Reflect.get`-et is elkapja, és a
+`shared/`-et is bejárja. **Tulajdonosi döntés (M1):** a kizárás elleni őr marad (új jogot soha nem ad); a listán kívüli régi
+jelzőket a tulajdonos a telepítés után a Felhasználók fülön veszi le — ezek a lista tetején állnak, összesítő jelzéssel, az
+induló napló darabszámmal (cím nélkül) jelzi őket.
 **Tesztek:** egységteszt a képletre (minden kombináció, kis- / nagybetű, szóköz, üres és hibás lista, `ADMIN_EMAIL`
 alapérték, kizárás elleni őr); mátrix új szerepei: „`is_admin`, de nincs a listán”, „listán van, de `is_admin = false`”,
 „futás közben levett admin” → minden admin-végponton 401 / 403, mellékhatás nélkül; „admin Google-lel (state-tel)” → admin;

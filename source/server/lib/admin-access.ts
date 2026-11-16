@@ -30,6 +30,8 @@ export type AdminPolicy = {
   emails: ReadonlySet<string>;
   /** Az `ADMIN_ALLOWLIST` értéke be volt állítva, de egyetlen érvényes címet sem tartalmazott. */
   allowlistInvalid: boolean;
+  /** Review #462 M3: az `ADMIN_EMAIL` be van állítva, de nem PONTOSAN egy érvényes cím (ezért nem lehet az alapérték). */
+  adminEmailInvalid: boolean;
   /** A listában eldobott (hibás alakú) elemek száma. */
   invalidEntries: number;
   /** A kizárás elleni őr gyorsítótárának kulcsa (a lista tartalma). */
@@ -42,15 +44,19 @@ export type AdminCandidate = { email?: string | null; isAdmin?: boolean | null; 
 /** A kizárás elleni őr adatforrása (élesben a pg-pool): a nem tiltott, `is_admin` jelzős fiókok címei. */
 export type AdminAccessDb = { query: (sql: string) => Promise<{ rows: { email: string | null }[] }> };
 
-const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+const EMAIL_RE = /^[^\s@,;"'`<>]+@[^\s@,;"'`<>]+\.[^\s@,;"'`<>]+$/;
+/** Review #462 A1: csak nyomtatható ASCII — a `toLowerCase()` Unicode-hasonmást (pl. Kelvin-jel → k) ASCII-ra hajtana. */
+const ASCII_ONLY_RE = /^[\x21-\x7e]+$/;
 const POSITIVE_TTL_MS = 60_000;
 const NEGATIVE_TTL_MS = 5_000;
 const ACTIVE_ADMINS_SQL = "SELECT email FROM users WHERE is_admin = true AND COALESCE(is_banned, false) = false";
 
-/** Kisbetűs, szóköz nélküli cím; hibás alak → null. */
+/** Kisbetűs, szóköz nélküli cím; hibás alak, idézőjel vagy nem ASCII karakter → null (soha nem egyezik listás címmel). */
 export function normalizeAdminEmail(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const text = value.trim().toLowerCase();
+  const trimmed = value.trim();
+  if (!ASCII_ONLY_RE.test(trimmed)) return null;
+  const text = trimmed.toLowerCase();
   return EMAIL_RE.test(text) ? text : null;
 }
 
@@ -83,14 +89,18 @@ export function adminPolicy(env: NodeJS.ProcessEnv = process.env): AdminPolicy {
     source = "ADMIN_ALLOWLIST";
     emails = allow.emails;
   } else {
+    // Review #462 M3: az ADMIN_EMAIL CSAK pontosan egy érvényes címmel lehet az alapérték — a repó máshol (értesítés)
+    // listaként is olvassa, és egy többcímes értékből a külső címzettek nem válhatnak adminná.
     const fallback = parseAdminAllowlist(emailRaw);
-    if (fallback.emails.length > 0) {
+    if (fallback.emails.length === 1 && fallback.invalid === 0) {
       source = "ADMIN_EMAIL";
       emails = fallback.emails;
     }
   }
   const sorted = [...emails].sort();
-  const policy: AdminPolicy = { source, emails: new Set(sorted), allowlistInvalid, invalidEntries: allow.invalid, key: `${source}:${sorted.join(",")}` };
+  const emailParsed = parseAdminAllowlist(emailRaw);
+  const adminEmailInvalid = (emailRaw ?? "").trim() !== "" && !(emailParsed.emails.length === 1 && emailParsed.invalid === 0);
+  const policy: AdminPolicy = { source, emails: new Set(sorted), allowlistInvalid, adminEmailInvalid, invalidEntries: allow.invalid, key: `${source}:${sorted.join(",")}` };
   if (env === process.env) policyMemo = { raw, policy };
   return policy;
 }
@@ -194,6 +204,9 @@ export async function reportAdminAccessStatus(): Promise<void> {
   } else if (policy.invalidEntries > 0) {
     logger.warn(`[ADMIN-ACCESS] az ADMIN_ALLOWLIST ${policy.invalidEntries} hibás elemét figyelmen kívül hagytuk.`);
   }
+  if (policy.adminEmailInvalid && policy.source !== "ADMIN_ALLOWLIST") {
+    logger.error("[ADMIN-ACCESS] HIBA: az ADMIN_EMAIL nem pontosan egy érvényes e-mail-cím (több cím, idézőjel vagy hibás alak) — admin-listaként NEM használjuk. Állítsd be az ADMIN_ALLOWLIST-et, vagy az ADMIN_EMAIL-be egyetlen címet írj.");
+  }
   if (policy.source === "none") {
     logger.error("[ADMIN-ACCESS] FIGYELEM: sem ADMIN_ALLOWLIST, sem ADMIN_EMAIL nincs beállítva — a meglévő is_admin jelző marad érvényben (fail-open a meglévő adminokra), új admin-jog nem adható. Állítsd be az ADMIN_ALLOWLIST-et.");
     return;
@@ -205,8 +218,12 @@ export async function reportAdminAccessStatus(): Promise<void> {
     const listed = active.filter((e) => policy.emails.has(e));
     const unlisted = active.filter((e) => !policy.emails.has(e));
     guardState = { key: policy.key, listedAdminExists: listed.length > 0, at: Date.now() };
+    // Tulajdonosi döntés (M1, 2026-11-16): az őr marad; a listán kívüli tárolt jelzőket a Felhasználók fülön kell levenni.
+    // Csak darabszám kerül a naplóba (cím nélkül).
     if (unlisted.length > 0) {
-      logger.warn(`[ADMIN-ACCESS] ${unlisted.length} is_admin jelzős fiók nincs az engedélylistán, ezért NEM admin: ${unlisted.map(maskEmail).join(", ")}`);
+      logger.warn(`[ADMIN-ACCESS] ${unlisted.length} tárolt admin-jelzős fiók nincs az engedélylistán (ezért NEM admin). Teendő: Admin → Felhasználók fül → a „nincs az engedélylistán” jelölésű fiókokon „Admin-jelző elvétele”.`);
+    } else {
+      logger.info("[ADMIN-ACCESS] 0 tárolt admin-jelzős, de listán kívüli fiók — nincs levenni való jelző.");
     }
     if (listed.length === 0) {
       logger.error(`[ADMIN-ACCESS] HIBA: az engedélylista (${policy.source}) egyetlen létező, nem tiltott admin-fiókra sem illik — a kizárás elleni őr bekapcsolt: a meglévő is_admin jelző marad érvényben, amíg a lista nincs javítva.`);

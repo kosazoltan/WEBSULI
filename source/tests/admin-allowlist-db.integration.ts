@@ -103,6 +103,28 @@ describe("JM7c-1 — a meglévő admin beállítás nélkül admin marad (ADMIN_
     assert.equal(await me(tokenFail), null);
   });
 
+  it("review #462 A2: a visszahívás ?error= paramétere szűretlenül nem kerül a naplóba (naplósor-hamisítás ellen)", async () => {
+    const { logger } = await import("../server/lib/logger");
+    const lines: string[] = [];
+    const orig = logger.warn;
+    (logger as unknown as { warn: (...a: unknown[]) => void }).warn = (...a: unknown[]) => { lines.push(a.map(String).join(" ")); };
+    try {
+      const c = new Client(app.base);
+      const res = await fetch(`${app.base}/auth/google/callback?error=${encodeURIComponent("server_error\n[ADMIN] hamis sor")}`, { redirect: "manual" });
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.get("location"), "/login?hiba=google");
+      const ok = await fetch(`${app.base}/auth/google/callback?error=temporarily_unavailable`, { redirect: "manual" });
+      assert.equal(ok.headers.get("location"), "/login?hiba=google");
+      assert.equal(await me(c), null);
+    } finally {
+      (logger as unknown as { warn: typeof orig }).warn = orig;
+    }
+    const cb = lines.filter((l) => l.includes("Google callback error"));
+    assert.equal(cb.length, 2, lines.join("\n"));
+    assert.ok(cb[0]!.includes("(egyeb)") && !cb[0]!.includes("hamis sor") && !cb[0]!.includes("\n"), cb[0]);
+    assert.ok(cb[1]!.includes("(temporarily_unavailable)"), cb[1]);
+  });
+
   it("a meglévő nem admin Google-felhasználó belépése változatlan: belép, /games, users sora megmarad, nem admin", async () => {
     const c = new Client(app.base);
     const run = await adminGoogleLogin(c, verified(PARENT, "g-jm7c-parent"));
