@@ -6,7 +6,7 @@ import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import AudioToggleButton from "@/components/AudioToggleButton";
-import { sfxCombo, sfxError, sfxExplode, sfxGate, sfxHit, sfxLevelUp, sfxPickup, sfxShoot } from "@/lib/audioEngine";
+import { sfxBossDefeat, sfxBossHit, sfxCombo, sfxError, sfxExplode, sfxGate, sfxHit, sfxLevelUp, sfxPickup, sfxShoot, sfxWarning } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
@@ -51,6 +51,10 @@ import {
   TUTORIAL_MS,
   WARP_MS,
   createTowerDriver,
+  createTowerTasks,
+  towerQuestionKind,
+  bossWeakPoints,
+  BOSS_TELEGRAPH_MS,
   droneLayout,
   isOwnReviewKey,
   speedMathQuizId,
@@ -195,7 +199,7 @@ function uniqueOptions(correct: number, level: GradeLevel): number[] {
 }
 
 /** Sablonok száma évfolyamonként (a `t` ágak száma a generátorban). */
-const GENERATOR_TEMPLATES: Record<GradeLevel, number> = { 3: 9, 4: 9, 5: 9, 6: 8, 7: 8, 8: 8, 9: 8, 10: 8, 11: 9, 12: 9 };
+const GENERATOR_TEMPLATES: Record<GradeLevel, number> = { 3: 11, 4: 11, 5: 9, 6: 8, 7: 8, 8: 8, 9: 8, 10: 8, 11: 9, 12: 9 };
 
 const TEACHER_BANK: Record<GradeLevel, MathTask[]> = {
   3: [
@@ -696,6 +700,21 @@ function generatedTaskForGrade(level: GradeLevel): MathTask {
       result = n / 2;
       explanation = `A fele: ${n} ÷ 2 = ${n / 2}.`;
       calc = `${n}/2`;
+    } else if (t === 9) {
+      // J4b: rövid szöveges feladat (≤ 9 mp alatt elolvasható a 3. évfolyamnak is — a tanári bank hosszú szövegei kiesnek)
+      const a = randInt(4, 29);
+      const b = randInt(3, 19);
+      prompt = `${a} piros és ${b} kék golyó van. Hány golyó összesen?`;
+      result = a + b;
+      explanation = `${a} + ${b} = ${a + b} golyó.`;
+      calc = `${a}+${b}`;
+    } else if (t === 10) {
+      const boxes = randInt(2, 9);
+      const each = randInt(2, 10);
+      prompt = `${boxes} dobozban ${each}-${each} tojás van. Hány tojás összesen?`;
+      result = boxes * each;
+      explanation = `Dobozonként ${each}, ${boxes} dobozban: ${boxes} × ${each} = ${boxes * each} tojás.`;
+      calc = `${boxes}*${each}`;
     } else {
       const meters = randInt(2, 9);
       const extra = randInt(1, 99);
@@ -765,6 +784,21 @@ function generatedTaskForGrade(level: GradeLevel): MathTask {
       result = 2 * (a + b);
       explanation = `K = 2 × (${a} + ${b}) = 2 × ${a + b} = ${2 * (a + b)} cm.`;
       calc = `2*(${a}+${b})`;
+    } else if (t === 9) {
+      // J4b: rövid szöveges feladat (9 mp alatt elolvasható a 4. évfolyamnak)
+      const have = 50 * randInt(4, 20);
+      const spend = 10 * randInt(3, have / 10 - 2);
+      prompt = `${have} Ft-ból ${spend} Ft-ot elköltünk. Mennyi marad (Ft)?`;
+      result = have - spend;
+      explanation = `${have} − ${spend} = ${have - spend} Ft marad.`;
+      calc = `${have}-${spend}`;
+    } else if (t === 10) {
+      const kids = randInt(3, 9);
+      const each = randInt(3, 12);
+      prompt = `${kids * each} cukrot ${kids} gyerek kap egyformán. Hány jut egynek?`;
+      result = each;
+      explanation = `${kids * each} ÷ ${kids} = ${each} cukor, mert ${kids} × ${each} = ${kids * each}.`;
+      calc = `${kids * each}/${kids}`;
     } else {
       const km = randInt(2, 9);
       const m = randInt(10, 990);
@@ -1414,6 +1448,13 @@ const RAIDER_PX = 44;
 const RAIDER_HIT_PX = 28;
 /** A fosztogató „magja”: ha a számdrónra bökés ilyen közel esik egy fosztogató középpontjához, az lövés, nem válasz. */
 const RAIDER_CORE_PX = 16;
+/** A főellenfél rajzolási eltolása fekvő nézetben (normalizált y). */
+const BOSS_WIDE_DY = 0.24;
+/** A győzelem ünneplése / a vereség pillanata ennyi ideig látszik az eredménylap előtt (ms). */
+const CELEBRATE_MS = 2400;
+const DEFEAT_PAUSE_MS = 1200;
+/** A főellenfél magjának találati sugara (px) — nagy cél (K.4/16). */
+const BOSS_CORE_HIT_PX = 44;
 /** Részecske-, lézer-, gyűrű- és felirat-pool (KSZ-6: előre rögzített kapacitás). */
 const PARTICLE_CAP = 220;
 const BEAM_CAP = 10;
@@ -1536,7 +1577,7 @@ export default function SpeedQuizMath() {
   const [expanded, setExpanded] = useState(false);
   const whyOpen = feedback !== null || expanded;
   // HUD-pillanatkép ≤ 10 Hz (KSZ-9): a képkocka-hurok nem ír React-állapotot.
-  const [hud, setHud] = useState({ score: 0, shield: 4, wave: 1, power: 1, waveProgress: 0, hint: 0 });
+  const [hud, setHud] = useState({ score: 0, shield: 4, wave: 1, power: 1, waveProgress: 0, hint: 0, boss: "" as "" | "factory" | "zero", bossHp: 0, bossMax: 0, chain: false });
   const [result, setResult] = useState<{ score: number; correct: number; total: number; bestStreak: number; kills: number; wave: number; shield: number } | null>(null);
 
   /**
@@ -1574,6 +1615,9 @@ export default function SpeedQuizMath() {
       // A Matek nem kér tananyagot (végrehajtás J4a 3.); a forrásrend többi része (ismétlés) érvényes.
       material: () => null,
       fresh: ({ accept }) => {
+        // J4b: Becslő-bomba, főellenfél-gyenge pont és ×3 kombótól Számlánc — ugyanabból a magból, mint a sim-ben.
+        const special = tasksRef.current?.special();
+        if (special) return special;
         // J0c-b (#450): a director `accept`-je (befér + 9 mp alatt elolvasható) — az elfogadott feladat előbb.
         const taskAccept = accept
           ? (t: MathTask) => accept({ id: "", prompt: t.prompt, options: t.options.map(formatMathNumber), correctIndex: t.correctIndex })
@@ -1601,6 +1645,7 @@ export default function SpeedQuizMath() {
   const runIndexRef = useRef(0);
   const runSeedRef = useRef<string | number>(seedFrom(seedBase, 0));
   const directorConfig = useMemo(() => towerDirectorConfig(grade), [grade]);
+  const tasksRef = useRef<ReturnType<typeof createTowerTasks> | null>(null);
 
   // A menet meghajtója (mag + fix lépésű hurok + hitstop + mini-Director) — UGYANAZ, amit a node-szimuláció futtat
   // (`createTowerDriver`, review #451). A `coreRef` / `clockRef` csak kényelmi nézet rá.
@@ -1614,16 +1659,26 @@ export default function SpeedQuizMath() {
         timeScale: () => qRef.current?.timeScale() ?? 1,
         finished: () => qRef.current?.finished() ?? true,
         finish: () => qRef.current?.finish(),
+        request: (reason, c) => qRef.current?.request(reason, c) ?? null,
+        canAsk: () => qRef.current?.canAsk() ?? false,
+        active: () => qRef.current?.active() ?? null,
       },
       intensity: () => qRef.current?.director?.intensity() ?? 0.4,
       reducedMotion,
     });
   const driverRef = useRef<TowerDriver | null>(null);
-  if (!driverRef.current) driverRef.current = makeDriver(runSeedRef.current);
+  const makeTasks = (driver: TowerDriver, seed: string | number) =>
+    createTowerTasks({ core: driver.core, grade: () => gradeRef.current, rng: createRng(seedFrom(SPEED_MATH_GAME_ID, seed, "special")).next });
+  if (!driverRef.current) {
+    driverRef.current = makeDriver(runSeedRef.current);
+    tasksRef.current = makeTasks(driverRef.current, runSeedRef.current);
+  }
   const coreRef = useMemo(() => ({ get current(): TowerCore { return driverRef.current!.core; } }), []);
   const clockRef = useMemo(() => ({ get current(): number { return driverRef.current!.clockMs(); } }), []);
   const fpsRef = useRef(60);
   const sizeRef = useRef({ w: 360, h: 480, wide: false });
+  /** Fekvő nézetben a főellenfelet lejjebb rajzoljuk (a középen fent lévő kérdés-kártya ne takarja) — csak nézet-eltolás. */
+  const bossDy = () => (sizeRef.current.wide ? BOSS_WIDE_DY : 0);
   const lastAnswerRef = useRef<{ id: number; correct: boolean; at: number; idx: number } | null>(null);
   const firstQuestionSeenRef = useRef(false);
 
@@ -1638,7 +1693,8 @@ export default function SpeedQuizMath() {
       if (o.result === "aborted") return;
       const good = o.result === "correct";
       const speed = good ? Math.max(0, 1 - o.responseMs / p.windowMs) : 0;
-      coreRef.current.applyOutcome(o.result, speed);
+      coreRef.current.applyOutcome(o.result, speed, towerQuestionKind(p));
+      tasksRef.current?.noteOutcome(o, p);
       recordDifficultyAnswer(good);
       if (good) haptics("success");
       else haptics("error");
@@ -1660,6 +1716,7 @@ export default function SpeedQuizMath() {
     const taskRng = createRng(seedFrom(SPEED_MATH_GAME_ID, seed, "tasks"));
     setTaskRandom(taskRng.next);
     driverRef.current = makeDriver(seed);
+    tasksRef.current = makeTasks(driverRef.current, seed);
     setFeedback(null);
     setExpanded(false);
     scoreSubmittedRef.current = false;
@@ -1671,7 +1728,7 @@ export default function SpeedQuizMath() {
     answerHistoryRef.current = [];
     runPromptsRef.current = [];
     q.reset(seed, difficultyRef.current);
-    setHud({ score: 0, shield: coreRef.current.state().shield, wave: 1, power: 1, waveProgress: 0, hint: 1 });
+    setHud({ score: 0, shield: coreRef.current.state().shield, wave: 1, power: 1, waveProgress: 0, hint: 1, boss: "", bossHp: 0, bossMax: 0, chain: false });
     setResult(null);
     setPaused(false);
     setBestResult(null);
@@ -1719,6 +1776,8 @@ export default function SpeedQuizMath() {
     answerSeen: -1,
     /** Középső felirat a hullám elején / végén (valós idővel fogy). */
     banner: { text: "", sub: "", life: 0, max: 1 },
+    /** A Zéró-robot töltésének előjelzése (ms; > 0 alatt a töltő gyűrű és a célvonal látszik). */
+    charge: 0,
   }).current;
 
   const burst = useCallback(
@@ -1785,7 +1844,8 @@ export default function SpeedQuizMath() {
     (e: TowerEvent) => {
       const { w, h } = sizeRef.current;
       const x = e.x * w;
-      const y = e.y * h;
+      // a főellenfél eseményei a nézet eltolásával (fekvő nézetben lejjebb rajzoljuk, a kérdés-kártya alá)
+      const y = (e.y + (e.type.startsWith("boss") ? bossDy() : 0)) * h;
       const now = performance.now();
       const feelNow = feelRef.current;
       const quietSfx = now - fx.lastSfx > 45; // ugyanaz az effekt 40 ms-on belül nem indul újra (KSZ-17)
@@ -1851,6 +1911,77 @@ export default function SpeedQuizMath() {
           popText(top.x, top.y - 52, `Erő ×${e.n}!`, COL_CYAN);
           break;
         }
+        case "bossSpawn":
+          fx.banner.text = e.n === 2 ? "ZÉRÓ-ROBOT!" : "HIBAGYÁR!";
+          fx.banner.sub = e.n === 2 ? "Lődd a gyenge pontot — a jó eredményt!" : "Törd szét a két fogaskereket!";
+          fx.banner.life = fx.banner.max = 2200;
+          sfxWarning();
+          feelNow.addTrauma(0.25);
+          break;
+        case "bossCharge":
+          fx.charge = e.n;
+          sfxWarning();
+          break;
+        case "bossFire": {
+          fx.charge = 0;
+          const b = coreRef.current.state().boss;
+          if (b) beam(b.x * w, (b.y + bossDy()) * h, TOWER.x * w, TOWER.y * h, COL_ORANGE, 320);
+          burst(TOWER.x * w, TOWER.y * h, COL_ORANGE, 22, 0.3);
+          fx.shieldFlash = 420;
+          fx.shieldFlashCol = COL_ORANGE;
+          sfxHit();
+          haptics("hit");
+          feelNow.addTrauma(0.5);
+          break;
+        }
+        case "bossStun":
+          fx.charge = 0;
+          burst(x, y, COL_CYAN, 18, 0.25);
+          popText(x, y - 50, "Megzavarva!", COL_CYAN);
+          sfxHit();
+          feelNow.addTrauma(0.15);
+          break;
+        case "bossHit":
+          fx.charge = 0;
+          burst(x, y, COL_GREEN, 30, 0.35);
+          burst(x, y, COL_WHITE, 14, 0.22);
+          ring(x, y, COL_GREEN, 520);
+          popText(x, y - 56, e.n > 0 ? `TALÁLAT! Még ${e.n}` : "TALÁLAT!", COL_GREEN);
+          sfxBossHit();
+          haptics("hit");
+          feelNow.addTrauma(0.35);
+          break;
+        case "bossShrug":
+          popText(x, y - 56, "Bezárult — próbáld újra!", COL_ORANGE);
+          break;
+        case "bossStage":
+          fx.banner.text = "2. FÁZIS";
+          fx.banner.sub = "A Zéró-robot felgyorsult!";
+          fx.banner.life = fx.banner.max = 1800;
+          sfxWarning();
+          break;
+        case "bossDefeat":
+          fx.charge = 0;
+          for (let k = 0; k < 4; k++) burst(x + (k - 1.5) * 30, y + (k % 2) * 20, k % 2 ? COL_GREEN : COL_CYAN, 28, 0.4);
+          ring(x, y, COL_GREEN, 700);
+          ring(x, y, COL_CYAN, 520);
+          fx.banner.text = e.n === 2 ? "LEGYŐZTED!" : "HIBAGYÁR LEROMBOLVA!";
+          fx.banner.sub = e.n === 2 ? "A Zéró-robot darabokra hullott!" : "+1 pajzs";
+          fx.banner.life = fx.banner.max = 2400;
+          sfxBossDefeat();
+          haptics("success");
+          feelNow.addTrauma(0.6);
+          break;
+        case "bomb":
+          ring(TOWER.x * w, TOWER.y * h, COL_ORANGE, 640);
+          ring(TOWER.x * w, TOWER.y * h, COL_WHITE, 460);
+          popText(w / 2, h * 0.45, e.n > 0 ? `BUMM! ×${e.n}` : "BUMM!", COL_ORANGE);
+          sfxExplode();
+          feelNow.addTrauma(0.3);
+          break;
+        case "bombFizzle":
+          popText(w / 2, h * 0.45, "A bomba nem robbant", COL_WHITE);
+          break;
         case "waveStart":
           fx.banner.text = `${e.n}. HULLÁM`;
           fx.banner.sub = e.n === 5 ? "Az utolsó — tarts ki!" : "Jönnek a drónok!";
@@ -1957,6 +2088,108 @@ export default function SpeedQuizMath() {
           g.textAlign = "center";
           g.textBaseline = "middle";
           g.fillText(String(r.hp), x, y + 1);
+        }
+      }
+
+      // J4b: a főellenfél (Hibagyár / Zéró-robot) — test, páncélszegmensek, töltés-előjelzés (≥ 600 ms), mag.
+      const boss = st.boss;
+      if (boss) {
+        const bx = (boss.px + (boss.x - boss.px) * alpha) * w;
+        const by = (boss.py + (boss.y - boss.py) * alpha + bossDy()) * h;
+        const R = Math.max(42, Math.min(78, Math.min(w, h) * 0.13));
+        const zero = boss.kind === "zero";
+        const charging = boss.attack === "charge";
+        const flashHit = boss.hitAgo < 160;
+        g.save();
+        g.translate(bx, by);
+        // páncélszegmensek a test körül (darabszám = maradék; nem csak szín)
+        for (let i = 0; i < boss.maxHp; i++) {
+          const a0 = -Math.PI / 2 + (i / boss.maxHp) * Math.PI * 2 + 0.07;
+          const a1 = -Math.PI / 2 + ((i + 1) / boss.maxHp) * Math.PI * 2 - 0.07;
+          g.beginPath();
+          g.arc(0, 0, R * 1.22, a0, a1);
+          g.lineWidth = i < boss.hp ? 7 : 3;
+          g.strokeStyle = i < boss.hp ? (zero ? (boss.stage === 2 ? "#f472b6" : "#c084fc") : "#fbbf24") : "#ffffff22";
+          g.stroke();
+        }
+        // Ragyogás olcsón: széles, áttetsző körvonal a `shadowBlur` helyett (a gyenge telefon költségkerete, K.4/8).
+        g.fillStyle = flashHit ? "#f8fafc" : "#1a0b2e";
+        g.strokeStyle = zero ? "#e879f9" : "#fbbf24";
+        g.lineWidth = 3.5;
+        g.beginPath();
+        if (zero) {
+          for (let i = 0; i < 6; i++) {
+            const a = Math.PI / 6 + (i * Math.PI) / 3;
+            if (i === 0) g.moveTo(Math.cos(a) * R, Math.sin(a) * R);
+            else g.lineTo(Math.cos(a) * R, Math.sin(a) * R);
+          }
+        } else {
+          g.roundRect(-R, -R * 0.75, R * 2, R * 1.5, 12);
+        }
+        g.closePath();
+        g.fill();
+        g.globalAlpha = 0.28;
+        g.lineWidth = 12;
+        g.stroke();
+        g.globalAlpha = 1;
+        g.lineWidth = 3.5;
+        g.stroke();
+        if (zero) {
+          // szemek: töltés közben narancs, egyébként cián
+          g.fillStyle = charging ? "#fb923c" : boss.attack === "stunned" ? "#94a3b8" : "#67e8f9";
+          g.beginPath();
+          g.arc(-R * 0.36, -R * 0.2, R * 0.15, 0, Math.PI * 2);
+          g.arc(R * 0.36, -R * 0.2, R * 0.15, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = "#e879f9";
+          g.fillRect(-R * 0.35, R * 0.28, R * 0.7, R * 0.09);
+        } else {
+          // kémény + fogaskerekek (darabszám = maradék)
+          g.fillStyle = "#fbbf24";
+          g.fillRect(-R * 0.2, -R * 1.1, R * 0.4, R * 0.36);
+          for (let i = 0; i < boss.hp; i++) {
+            const gx = (i === 0 ? -1 : 1) * R * 0.55;
+            g.beginPath();
+            g.arc(gx, R * 0.05, R * 0.24, 0, Math.PI * 2);
+            g.lineWidth = 4;
+            g.strokeStyle = "#fde68a";
+            g.stroke();
+          }
+        }
+        // a mag (a koppintási cél): töltés közben pulzál
+        const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(performance.now() / 110);
+        g.beginPath();
+        g.arc(0, zero ? R * 0.05 : -R * 0.18, R * (charging ? 0.2 + 0.06 * pulse : 0.16), 0, Math.PI * 2);
+        g.fillStyle = charging ? "#fdba74" : zero ? "#a855f7" : "#f59e0b";
+        g.fill();
+        g.restore();
+        // Töltés-előjelzés: táguló gyűrű + célvonal a toronyhoz (narancs, nem telített piros — K.4/20).
+        if (charging && fx.charge > 0) {
+          const total = BOSS_TELEGRAPH_MS[boss.stage - 1] ?? 900;
+          const k = Math.min(1, boss.attackMs / total);
+          g.globalAlpha = 0.35 + 0.5 * k;
+          g.setLineDash([8, 8]);
+          g.strokeStyle = "#fb923c";
+          g.lineWidth = 3;
+          g.beginPath();
+          g.moveTo(bx, by + R);
+          g.lineTo(TOWER.x * w, TOWER.y * h);
+          g.stroke();
+          g.setLineDash([]);
+          g.beginPath();
+          g.arc(bx, by, R * (1.3 + 0.5 * k), 0, Math.PI * 2);
+          g.lineWidth = 4 + 4 * k;
+          g.stroke();
+          g.globalAlpha = 1;
+          g.font = "900 16px Nunito, system-ui, sans-serif";
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          g.lineWidth = 4;
+          g.strokeStyle = "#0b0720";
+          g.fillStyle = "#fed7aa";
+          // a gyenge pontok alatt, a célvonal mellett (a kérdés-kártya nem takarja)
+          g.strokeText("Koppints a magra!", bx, by + R * 1.75);
+          g.fillText("Koppints a magra!", bx, by + R * 1.75);
         }
       }
 
@@ -2073,21 +2306,44 @@ export default function SpeedQuizMath() {
     if (!p) return;
     const { w, h, wide } = sizeRef.current;
     const lay = layoutRef.current;
+    const boss = coreRef.current.state().boss;
+    // J4b: a főellenfél-kérdés válaszcéljai a gyenge pontok — a főellenféllel együtt MOZOGNAK (folyamatosan mozgó cél).
+    const onBoss = p.reason === "boss" && boss !== null;
     if (lay.id !== p.id || lay.wide !== wide) {
-      droneLayout(runSeedRef.current, p.id, p.options.length, wide, lay.pts);
+      if (onBoss) bossWeakPoints(boss.kind, p.options.length, wide, lay.pts);
+      else droneLayout(runSeedRef.current, p.id, p.options.length, wide, lay.pts);
       lay.id = p.id;
       lay.wide = wide;
     }
     const t = Math.min(1, Math.max(0, (clockRef.current - p.startedAtSimMs) / DRONE_ENTER_MS));
     const e = reducedMotion ? 1 : tween(t, "outBack");
+    // A főellenfél gyenge pontjai CSOPORTKÉNT maradnak a képernyőn belül (a ringás szélén az egész csoport tolódik, nem
+    // egyenként szorulnak — review #466: az egyenkénti szorítás összetolta, és egymásra tehette a célokat).
+    let groupShift = 0;
+    if (onBoss) {
+      let minL = Number.POSITIVE_INFINITY;
+      let maxR = Number.NEGATIVE_INFINITY;
+      for (let i = 0; i < p.options.length; i++) {
+        const el = droneRefs.current[i];
+        const pt = lay.pts[i];
+        if (!el || !pt) continue;
+        const cx = (boss.x + pt.x) * w;
+        minL = Math.min(minL, cx - el.offsetWidth / 2);
+        maxR = Math.max(maxR, cx + el.offsetWidth / 2);
+      }
+      if (minL < 6) groupShift = 6 - minL;
+      else if (maxR > w - 6) groupShift = w - 6 - maxR;
+    }
     for (let i = 0; i < p.options.length; i++) {
       const el = droneRefs.current[i];
       const pt = lay.pts[i];
       if (!el || !pt) continue;
       // Hosszú számnál a drón szélesebb: a játéktéren belül tartjuk (6 px margó).
       const ow = el.offsetWidth;
-      const x = Math.min(w - 6 - ow / 2, Math.max(6 + ow / 2, pt.x * w));
-      const y = (-0.12 + (pt.y + 0.12) * e) * h;
+      const nx = onBoss ? boss.x + pt.x + groupShift / w : pt.x;
+      const ny = onBoss ? boss.y + bossDy() + pt.y : pt.y;
+      const x = Math.min(w - 6 - ow / 2, Math.max(6 + ow / 2, nx * w));
+      const y = onBoss ? ny * h : (-0.12 + (ny + 0.12) * e) * h;
       el.style.transform = `translate3d(${(x - ow / 2).toFixed(1)}px, ${(y - el.offsetHeight / 2).toFixed(1)}px, 0)`;
     }
     // A válasz pillanata: jó → lézer a toronyból a drónra; rossz / lejárt → a helyes drón villámot küld a pajzsra.
@@ -2128,6 +2384,7 @@ export default function SpeedQuizMath() {
     let last: number | null = null;
     let fpsAcc = 0;
     let fpsFrames = 0;
+    let endAt: number | null = null;
     const tick = (now: number) => {
       const dt = last === null ? 0 : Math.min(250, Math.max(0, now - last));
       last = now;
@@ -2154,8 +2411,12 @@ export default function SpeedQuizMath() {
         shake.style.transform = off.x || off.y || off.rot ? `translate3d(${off.x.toFixed(1)}px, ${off.y.toFixed(1)}px, 0) rotate(${((off.rot * 180) / Math.PI).toFixed(2)}deg)` : "";
       }
       if (!core.running() && ctl.settled()) {
-        endRunRef.current(core.state().phase === "won");
-        return;
+        // J4b: a győzelem ünneplése (robbanás, felirat) és a vereség pillanata még látsszon az eredménylap előtt.
+        if (endAt === null) endAt = now + (core.state().phase === "won" ? CELEBRATE_MS : DEFEAT_PAUSE_MS);
+        if (now >= endAt) {
+          endRunRef.current(core.state().phase === "won");
+          return;
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -2186,11 +2447,16 @@ export default function SpeedQuizMath() {
     if (paused) return;
     const id = window.setInterval(() => {
       const st = coreRef.current.state();
-      const hint = st.worldMs < TUTORIAL_MS ? (firstQuestionSeenRef.current ? 2 : 1) : 0;
+      const hint = st.worldMs < TUTORIAL_MS && !st.boss ? (firstQuestionSeenRef.current ? 2 : 1) : 0;
+      const boss = st.boss?.kind ?? "";
+      const bossHp = st.boss?.hp ?? 0;
+      const bossMax = st.boss?.maxHp ?? 0;
+      const chain = tasksRef.current?.chainActive() ?? false;
       setHud((prev) =>
-        prev.score === st.score && prev.shield === st.shield && prev.wave === st.wave + 1 && prev.power === st.power && Math.abs(prev.waveProgress - st.waveProgress) < 0.02 && prev.hint === hint
+        prev.score === st.score && prev.shield === st.shield && prev.wave === st.wave + 1 && prev.power === st.power && Math.abs(prev.waveProgress - st.waveProgress) < 0.02 && prev.hint === hint &&
+        prev.boss === boss && prev.bossHp === bossHp && prev.chain === chain
           ? prev
-          : { score: st.score, shield: st.shield, wave: st.wave + 1, power: st.power, waveProgress: st.waveProgress, hint },
+          : { score: st.score, shield: st.shield, wave: st.wave + 1, power: st.power, waveProgress: st.waveProgress, hint, boss, bossHp, bossMax, chain },
       );
     }, 100);
     return () => window.clearInterval(id);
@@ -2208,7 +2474,17 @@ export default function SpeedQuizMath() {
       const core = coreRef.current;
       const id = core.raiderAt(x / w, y / h, RAIDER_HIT_PX / w, RAIDER_HIT_PX / h);
       const top = towerTop(w, h);
-      if (id >= 0) {
+      const boss = core.state().boss;
+      // J4b: a főellenfél magja (töltés közben a Zéró-robot megszakítható; a Hibagyár magja mindig repeszthető).
+      const bdy = bossDy();
+      if (id < 0 && boss && core.bossCoreAt(x / w, y / h - bdy, BOSS_CORE_HIT_PX / w, BOSS_CORE_HIT_PX / h)) {
+        beam(top.x, top.y, boss.x * w, (boss.y + bdy) * h, COL_CYAN);
+        if (!core.hitBossCore()) {
+          // páncélon pattan: a gyerek látja, hogy most a gyenge pont / a töltés kell
+          burst(boss.x * w, (boss.y + bdy) * h, COL_WHITE, 5, 0.1);
+          popText(boss.x * w, (boss.y + bdy) * h - 40, "Páncél!", COL_WHITE);
+        }
+      } else if (id >= 0) {
         const r = core.state().raiders[id]!;
         beam(top.x, top.y, r.x * w, r.y * h, COL_CYAN);
         core.shoot(id);
@@ -2419,6 +2695,10 @@ export default function SpeedQuizMath() {
           wave: core.wave + 1,
           kills: core.kills,
           power: core.power,
+          boss: core.boss?.kind ?? null,
+          bossHp: core.boss?.hp ?? null,
+          bossAttack: core.boss?.attack ?? null,
+          phase: core.phase,
           paused: pausedRef.current ? 1 : 0,
           clock: clockRef.current,
         };
@@ -2427,6 +2707,11 @@ export default function SpeedQuizMath() {
         // `phase: "quiz"` a `question: true` kompatibilis álneve (terv 9.): azonnal nyit egy kérdést.
         if (patch.question || patch.phase === "quiz") qRef.current.request("trigger", clockRef.current);
         if (patch.phase === "play") startGame();
+        // Teszt-kampó (mobil mérő „mozgó cél” esete, képernyőképek): azonnal a Zéró-robot harca.
+        if (patch.phase === "boss" || patch.phase === "factory") {
+          qRef.current.abort(); // a nyitott rendes kérdés „megszakítva” (nem hiba) — a következő a gyenge pont
+          driverRef.current?.core.forceBoss(patch.phase === "factory" ? "factory" : "zero");
+        }
         if (patch.phase === "menu") setPhase("menu");
         if (patch.phase === "won" || patch.phase === "over") endRun(patch.phase === "won", typeof patch.correctCount === "number" ? patch.correctCount : undefined);
       },
@@ -2587,14 +2872,15 @@ export default function SpeedQuizMath() {
                       <Zap className="h-4 w-4 text-cyan-300" aria-hidden="true" />
                     )}
                     ×{hud.power}
+                    {hud.chain ? <span className="ml-1 text-amber-200" data-testid="sq-chain">⛓</span> : null}
                   </span>
                 ),
               },
             ]}
             progress={{
-              value: Math.round(((hud.wave - 1) + hud.waveProgress) * 100),
-              max: 500,
-              label: `${hud.wave}. hullám az 5-ből`,
+              value: hud.boss ? hud.bossHp : Math.round(((hud.wave - 1) + hud.waveProgress) * 100),
+              max: hud.boss ? Math.max(1, hud.bossMax) : 500,
+              label: hud.boss ? `${hud.boss === "zero" ? "Zéró-robot" : "Hibagyár"}: ${hud.bossHp}/${hud.bossMax}` : `${hud.wave}. hullám az 5-ből`,
               tone: hud.shield <= 1 ? "warn" : "default",
             }}
           />
@@ -2610,7 +2896,8 @@ export default function SpeedQuizMath() {
             onLostPointerCapture={releasePointer}
           >
             <div ref={shakeLayerRef} className="absolute inset-0">
-              <div className="absolute inset-0 flex flex-col [&>.math-world]:flex-1" aria-hidden="true">
+              {/* J4b: a 3D torony-jelenet (lebegő szigetek, hold) tompítva háttér — a neon játékréteg (drónok, főellenfél) kiemelkedik. */}
+              <div className="absolute inset-0 flex flex-col [&>.math-world]:flex-1" aria-hidden="true" style={{ filter: "brightness(0.72) saturate(0.8)" }}>
                 <MathTowerScene3D current={towerCurrent} target={TOWER_STEPS_TARGET} />
               </div>
               <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true" />
@@ -2693,7 +2980,7 @@ export default function SpeedQuizMath() {
         badges={newlyUnlocked}
         open={isResult}
         testId={phase === "won" ? "sq-won" : "sq-over"}
-        title={phase === "won" ? "Megvédted a tornyot!" : "A torony most elesett — jöhet a visszavágó!"}
+        title={phase === "won" ? "Legyőzted a Zéró-robotot!" : "A torony most elesett — jöhet a visszavágó!"}
         won={phase === "won"}
         score={result?.score ?? 0}
         best={bestResult?.best ?? storedBest}

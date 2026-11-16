@@ -80,7 +80,8 @@ test("becsapódás: a tanító szakaszban (első 30 mp) nem sebez, utána pajzs 
   const early = events(core, TUTORIAL_MS - 500);
   assert.ok(early.some((e) => e.type === "blocked"), "a tanító szakaszban is becsapódik (nem lövünk)");
   assert.equal(early.filter((e) => e.type === "breach").length, 0);
-  assert.equal(core.state().shield, SHIELD_START, "a tanító szakaszban a pajzs nem fogy (K.4/25: halál nélkül)");
+  // SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md J4b „Megvalósult eltérések”): a rövidebb 1. hullám a tanító szakaszban véget érhet (+1 pajzs) — a mérce: a pajzs NEM fogy.
+  assert.ok(core.state().shield >= SHIELD_START, "a tanító szakaszban a pajzs nem fogy (K.4/25: halál nélkül)");
   const later = events(core, 60_000);
   const breaches = later.filter((e) => e.type === "breach");
   assert.ok(breaches.length >= 1, "a tanító szakasz után a becsapódás sebez");
@@ -93,19 +94,25 @@ test("becsapódás: a tanító szakaszban (első 30 mp) nem sebez, utána pajzs 
   assert.equal(core.state().worldMs, t);
 });
 
-test("rossz válasz / lejárat (K.4/24): kombó elvész, pajzs −1, de kérdés miatt soha nem 1 alá — a kérdés nem öl", () => {
+// SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md J4b „Megvalósult eltérések”): a rossz válasz / lejárat
+// ára a kombó és vele a lövés ereje (≤ 2 s látható következmény), a PAJZS NEM fogy (J4a-ban −1 volt, 1-es padlóval). A szigor
+// megmarad / nő: a kérdés semmilyen sorozatban nem visz pajzsot (a 20 seedes mérés szerint különben a tanulás büntetett).
+test("rossz válasz / lejárat (K.4/24, J4b): kombó és erő elvész, a pajzs nem fogy — a kérdés nem öl és nem büntet", () => {
   const core = createTowerCore({ seed: 4 });
   run(core, TUTORIAL_MS + 100, 0.5);
-  // A tanító szakasz alatt elnyelt becsapódások után a pajzs a kezdőérték.
-  core.applyOutcome("correct", 1);
-  assert.equal(core.state().combo.count, 1);
+  for (let i = 0; i < 6; i++) core.applyOutcome("correct", 1);
+  assert.equal(core.state().combo.count, 6);
+  assert.ok(core.state().power >= 2);
   const s0 = core.state().shield;
+  const ev: TowerEvent[] = [];
   core.applyOutcome("wrong", 0);
+  core.drainEvents((e) => ev.push({ ...e }));
   assert.equal(core.state().combo.count, 0);
   assert.equal(core.state().power, 1);
-  assert.equal(core.state().shield, s0 - 1);
+  assert.equal(core.state().shield, s0);
+  assert.ok(ev.some((e) => e.type === "zap"), "a következmény látszik (villám a pajzson)");
   for (let i = 0; i < 10; i++) core.applyOutcome(i % 2 ? "timeout" : "wrong", 0);
-  assert.equal(core.state().shield, 1, "kérdés miatt a pajzs 1-nél megáll");
+  assert.equal(core.state().shield, s0, "kérdés miatt a pajzs semmilyen sorozatban nem fogy");
   assert.equal(core.state().phase === "lost", false);
   // aborted: semmi nem változik
   const before = JSON.stringify({ s: core.state().shield, c: core.state().combo, sc: core.state().score });
@@ -141,7 +148,12 @@ test("jó válasz (K.4/23): energiahullám a toronyból (a közeli fosztogatók 
 test("kombó → erő ×1…×5 (közös combo.ts), lépcsőnként +1 pajzs (max 5); 2. erőtől automata ágyú és szórólövés", () => {
   const core = createTowerCore({ seed: 7 });
   run(core, TUTORIAL_MS + 100);
-  for (let i = 0; i < 3; i++) core.applyOutcome("wrong", 0); // pajzs le 1-ig
+  // SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md J4b „Megvalósult eltérések”): a rossz válasz már nem visz pajzsot,
+  // ezért a pajzsot fosztogató-becsapódással visszük le 1-ig (lövés nélkül), és onnan mérjük a lépcsőket.
+  for (let t = 0; t < 120_000 && core.state().shield > 1 && core.running(); t += STEP) {
+    core.step(STEP, 0.5);
+    core.drainEvents(() => {});
+  }
   assert.equal(core.state().shield, 1);
   const powers: number[] = [];
   const shields: number[] = [];
@@ -175,20 +187,27 @@ test("lövés: találat → megsemmisül (a páncélos 2 találatot bír); a tal
   assert.equal(RAIDERS.tank.hp, 2);
 });
 
-test("hullámok: 5 hullám, köztük szünet és +1 pajzs; az 5. vége győzelem (J4a)", () => {
+// SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md J4b „Megvalósult eltérések”): az 5. hullám vége nem győzelem,
+// hanem a Zéró-robot; a 3. után a Hibagyár (terv 5.4). A győzelem a főellenfél legyőzése.
+test("hullámok és főellenfelek: 5 hullám, a 3. után Hibagyár, az 5. után Zéró-robot; a győzelem a legyőzése (J4b)", () => {
   assert.equal(TOWER_WAVES.length, 5);
   const core = createTowerCore({ seed: 9 });
   const seen: TowerEvent[] = [];
-  // Hibátlan „játékos”: minden élő fosztogatót azonnal lelő.
-  for (let t = 0; t < 600_000 && core.running(); t += STEP) {
+  // Hibátlan „játékos”: minden élő fosztogatót azonnal lelő, és minden főellenfél-kérdésre jól felel.
+  for (let t = 0; t < 900_000 && core.running(); t += STEP) {
     core.step(STEP, 0.5);
     for (const r of core.state().raiders) if (r.alive && r.age > WARP_MS) core.shoot(r.id);
+    if (core.bossWantsQuestion()) core.applyOutcome("correct", 1, "boss");
     core.drainEvents((e) => seen.push({ ...e }));
   }
   assert.equal(core.state().phase, "won");
   assert.deepEqual(seen.filter((e) => e.type === "waveClear").map((e) => e.n), [1, 2, 3, 4, 5]);
   assert.deepEqual(seen.filter((e) => e.type === "waveStart").map((e) => e.n), [2, 3, 4, 5]);
+  assert.deepEqual(seen.filter((e) => e.type === "bossSpawn").map((e) => e.n), [1, 2], "Hibagyár, majd Zéró-robot");
+  assert.deepEqual(seen.filter((e) => e.type === "bossDefeat").map((e) => e.n), [1, 2]);
+  assert.ok(seen.findIndex((e) => e.type === "bossSpawn" && e.n === 1) > seen.findIndex((e) => e.type === "waveClear" && e.n === 3));
   assert.equal(seen.filter((e) => e.type === "breach").length, 0);
+  assert.equal(core.state().bossesDefeated, 2);
   assert.ok(INTERMISSION_MS >= 2000);
   const minutes = core.state().worldMs / 60_000;
   assert.ok(minutes >= 2 && minutes <= 5, `hibátlan menet ${minutes.toFixed(2)} perc (2–5)`);
