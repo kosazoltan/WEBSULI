@@ -3,6 +3,7 @@
  * A láthatatlan / kétirányú karaktereket `String.fromCodePoint`-tal állítjuk elő (a forrásban nyers vezérlőjel ne legyen).
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   BLOCKED_ROOTS, NICKNAME_MESSAGES, PLAYER_NICK_MAX, RESERVED_ROOTS, checkPlayerNickname, confusableFold, nicknameKey, prepareNickname,
@@ -239,6 +240,36 @@ describe("JM7b-utójavítás N1b — a maradék kijátszások (review #461/#463 
   it("ellenpróba: a többkarakteres olvasat és a számjegy-leet nem tilt ártatlan nevet", () => {
     for (const n of ["Kornél", "Bernát", "Ernő", "Arnold", "Clara", "Claudia", "Miklós", "Marci", "Ervin", "Vivien", "Barnabás", "Bernadett",
       "Orsolya", "Kata2012", "Lili2012", "Fanni96", "Sziszi2009", "Fukszia", "Segítő", "Szarvas", "Gergő", "Zsombor", "Clementina"]) ok(n);
+  });
+
+  it("REGRESSZIÓ (#469 review): ami a főág szűrőjén fennakadt, az az újon is fennakad — a régi elutasítási halmaz ADATKÉNT", () => {
+    // tests/fixtures/nickname-main-rejected.json: az origin/main (d5c91060) szűrője által elutasított nevek — minden tiltott /
+    // foglalt tő minden pozíciójára beszúrt 0–9 számjeggyel (kis- és nagybetűvel), a review-szondák kísérletei és a #469
+    // review példái. A régi kódot NEM importáljuk: a viselkedése rögzített adat.
+    const fixture = JSON.parse(readFileSync(new URL("./fixtures/nickname-main-rejected.json", import.meta.url), "utf8")) as { count: number; rejected: string[] };
+    assert.equal(fixture.rejected.length, fixture.count);
+    assert.ok(fixture.count > 5000, `rögzített elutasított nevek: ${fixture.count}`);
+    const nowAccepted = fixture.rejected.filter((n) => checkPlayerNickname(n).ok);
+    assert.deepEqual(nowAccepted.slice(0, 20), [], `a régi szűrő elutasította, az új elfogadja (${nowAccepted.length} db)`);
+  });
+
+  it("#469 review: a számjegy elválasztóként (elhagyva) ÉS betűként is olvasva — mindkettő tilt", () => {
+    for (const [n, p] of [["fa2sz", "BLOCKED"], ["f6asz", "BLOCKED"], ["fas6z", "BLOCKED"], ["ge9ci", "BLOCKED"], ["ad9min", "RESERVED"], ["ad2min", "RESERVED"],
+      ["6E2CI", "BLOCKED"], ["BU2I", "BLOCKED"], ["N1G9G6ER", "BLOCKED"]] as [string, NicknameProblem][]) rejectsWith(n, p);
+  });
+
+  it("#469 review: a cl / rn / vv hasonmás a nagy I / 1 → l csere UTÁN is felismerve", () => {
+    for (const [n, p] of [["acImin", "RESERVED"], ["ac1min", "RESERVED"], ["cIlck", "BLOCKED"], ["acIrnin", "RESERVED"], ["AcIrnIn", "RESERVED"],
+      ["vvebsuIi", "RESERVED"], ["Moc1erator", "RESERVED"]] as [string, NicknameProblem][]) rejectsWith(n, p);
+  });
+
+  it("az olvasatok száma korlátos: 64 karakteres rosszindulatú bemenet is gyors", () => {
+    for (const s of ["rn".repeat(32), "c1".repeat(32), "2a6b9c".repeat(10) + "rnvv", "cIrnvv269".repeat(7), "f6a2s9z".repeat(9)]) {
+      const t = performance.now();
+      for (let i = 0; i < 20; i++) checkPlayerNickname(s);
+      const ms = (performance.now() - t) / 20;
+      assert.ok(ms < 50, `${s.slice(0, 12)}…: ${ms.toFixed(2)} ms / hívás`);
+    }
   });
 
   it("a foglaltsági kulcs NEM változott (a tárolt nevek kulcsa stabil): rögzített minták", () => {

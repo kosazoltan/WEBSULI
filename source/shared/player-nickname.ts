@@ -70,28 +70,59 @@ export function confusableFold(text: string): string {
   return stripMarks(text).replace(/0/g, "o").replace(/[1l|!]/g, "i");
 }
 
+/** A többi leet-csere (a 0 / 1 / | / ! a `confusableFold`-ban). */
+const LEET: Record<string, string> = { "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "@": "a", "$": "s" };
 /**
- * A többi leet-csere (a 0 / 1 / | / ! a `confusableFold`-ban). N1b: a 2 / 6 / 9 is (2 ~ z, 6 / 9 ~ g) — CSAK a szűrőben;
- * a foglaltsági kulcs (`nicknameKey`) ezeket nem cseréli, így a tárolt nevek kulcsa változatlan.
+ * N1b: a 2 / 6 / 9 KÉTFÉLE olvasata — betűként (2 ~ z, 6 / 9 ~ g: „BU2I”, „6ECI”) ÉS elhagyva (elválasztóként: „fa2sz”,
+ * „ad9min” — a korábbi viselkedés). CSAK a szűrőben; a foglaltsági kulcs (`nicknameKey`) nem cseréli őket.
  */
-const LEET: Record<string, string> = { "2": "z", "3": "e", "4": "a", "5": "s", "6": "g", "7": "t", "8": "b", "9": "g", "@": "a", "$": "s" };
+const DIGIT_LETTER: Record<string, string> = { "2": "z", "6": "g", "9": "g" };
+/** Ennyi 2 / 6 / 9 előfordulás kombinálódik egyenként (2^3 olvasat); efölött a „mind betű” és a „mind elhagyva” olvasat. */
+const MAX_DIGIT_SITES = 3;
 
-/** A tartalomszűrő alakja: az összetéveszthetők egybevonva, leet visszafordítva, csak a–z. */
+const leetBase = (text: string) => confusableFold(text).replace(/[34578@$]/g, (c) => LEET[c] ?? c);
+
+/** A tartalomszűrő alapalakja: az összetéveszthetők egybevonva, leet visszafordítva (a 2 / 6 / 9 betűként), csak a–z. */
 export function foldNickname(text: string): string {
-  return confusableFold(text).replace(/[2-9@$]/g, (c) => LEET[c] ?? c).replace(/[^a-z]/g, "");
+  return leetBase(text).replace(/[269]/g, (c) => DIGIT_LETTER[c]!).replace(/[^a-z]/g, "");
+}
+
+/**
+ * A tartalomszűrő MINDEN alakja (halmaz): a 2 / 6 / 9 előfordulásonként betűként vagy elhagyva. A „mind elhagyva” olvasat
+ * a korábbi szűrőé — egy új olvasat így soha nem vesz el régit (a regressziós teszt a régi elutasítási halmazt rögzíti).
+ */
+export function foldReadings(text: string): string[] {
+  const s = leetBase(text);
+  const sites = [...s.matchAll(/[269]/g)].map((m) => m.index!);
+  if (sites.length === 0) return [s.replace(/[^a-z]/g, "")];
+  const build = (asLetter: (i: number) => boolean) => {
+    let out = "";
+    let at = 0;
+    sites.forEach((pos, i) => { out += s.slice(at, pos) + (asLetter(i) ? DIGIT_LETTER[s[pos]!]! : ""); at = pos + 1; });
+    return (out + s.slice(at)).replace(/[^a-z]/g, "");
+  };
+  const readings = new Set<string>();
+  if (sites.length > MAX_DIGIT_SITES) {
+    readings.add(build(() => true));
+    readings.add(build(() => false));
+  } else {
+    for (let m = 0; m < 1 << sites.length; m++) readings.add(build((i) => (m & (1 << i)) !== 0));
+  }
+  return [...readings];
 }
 
 /**
  * N1b: többkarakteres hasonmások (rn ~ m, vv ~ w, cl ~ d) — a szűrő TOVÁBBI olvasatai (a kulcsban nem). Az előfordulásonként
  * választható csere minden kombinációja (egy valódi „cl” mellett egy hasonmás is lehet: „Claucle”); a név akkor tiltott, ha
- * bármely olvasata az („adrnin”, „vvebsuli”, „Moclerator”). Legfeljebb 8 előfordulás kombinálódik (2^8 olvasat; egy
- * 16 karakteres névben ennél több nem fér el) — efölött csak a „mind” és a „semmi” olvasat.
+ * bármely olvasata az („adrnin”, „vvebsuli”, „Moclerator”). A nagy I, az 1 és a | ELŐBB kis L-lé válik (a „cI” / „c1” is
+ * „d”-nek látszik: „acImin”, „ac1min”, „cIlck”). Legfeljebb 6 előfordulás kombinálódik (2^6 olvasat) — efölött a „mind”
+ * olvasat; az olvasatok száma így a 2 / 6 / 9 olvasatokkal együtt is korlátos (≤ 65 × 8).
  */
 const MULTI_CHAR: Record<string, string> = { rn: "m", vv: "w", cl: "d" };
-const MAX_MULTI_CHAR_SITES = 8;
+const MAX_MULTI_CHAR_SITES = 6;
 
 function multiCharReadings(text: string): string[] {
-  const plain = stripMarks(text);
+  const plain = stripMarks(text.replace(/[I1|!]/g, "l"));
   const sites = [...plain.matchAll(/rn|vv|cl/g)].map((m) => m.index!);
   if (sites.length === 0) return [];
   const build = (mask: (i: number) => boolean) => {
@@ -266,12 +297,13 @@ export function checkPlayerNickname(raw: unknown): NicknameCheck {
   if (base.replace(/\D/g, "").length >= 6) problems.push("PHONE");
   // N1: a `folded` már az l / I / 1 / i összevont alak, a tövek ugyanígy normalizáltak — minden olvasat egyszerre vizsgált.
   // N1b: + a többkarakteres hasonmások olvasata (rn → m, vv → w, cl → d).
+  // A szűrő olvasatai HALMAZT alkotnak (minden olvasatban keres; egy új olvasat soha nem vesz el régit).
   const readings = [base, ...multiCharReadings(base)];
-  const folds = readings.map(foldNickname);
+  const folds = [...new Set(readings.flatMap(foldReadings))];
   const names = folds.map(foldedName);
   if (names.some((f) => BLOCKED.some((root) => containsRoot(f, root)))) problems.push("BLOCKED");
   // A foglalt SZAVAK („mod”, „gm”, „dev”) a leet-normalizált szavakon ÉS az elválasztók nélküli teljes néven („M o d”, „G M”).
-  const words = readings.flatMap((r) => r.split(/[\s_-]+/)).map(foldNickname).filter(Boolean);
+  const words = readings.flatMap((r) => r.split(/[\s_-]+/)).flatMap(foldReadings).filter(Boolean);
   const reservedWord = [...words, ...folds].some((w) => RESERVED_WORDS.has(w));
   if (names.some((f) => RESERVED.some((root) => containsRoot(f, root))) || reservedWord) problems.push("RESERVED");
 
