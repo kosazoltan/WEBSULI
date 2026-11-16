@@ -1372,6 +1372,33 @@ fizika-esetek (pattogás, határok) változatlanok.
 
 ---
 
+## Joystick-reakció (hibajavítás, kanban #49)
+
+**Állapot:** folyamatban — ág `fix/jatek-joystick-reakcio`, munkafa `.claude/worktrees/jatek-joystick`, kanban #49
+
+**Tünet (tulajdonos, valódi telefon, 2026-11-16):** „Mindegyik játékban a telefonon lévő ujjas joystick nagyon lassan
+reagál, és nem lehet finoman vezérelni vele se az autót, se a viharvadász játékot.” Érintett: a négy tárcsás játék
+(Tornado, Kockavadász, Aszteroida, Szökőár).
+
+**A vizsgálat terve (előbb gyökérok, méréssel):** a teljes lánc ujjtól a képernyőig, szakaszonként mért számmal:
+(1) pointer-esemény → tárcsa-érték (React-render eseményenként, holtjáték mérete / alakja, a kitérés → érték görbe,
+a sugár kis telefonon, lebegő közép, az érték útja a hurokig); (2) tárcsa-érték → játék (mintavétel képkockánként,
+bemenet-simítás, kormány-szögsebesség, tehetetlenség, kamera-késés); (3) képkocka-idő (dt-alapú-e). Mérés Playwright
+mobil-emulációval, CDP érintés-eseményekkel, 1× / 4× / 6× CPU-lassítással: bemenet–válasz késés, lépcsőválasz 63% / 90%,
+állandósult válasz 5–100% kitérésnél, render-szám a lapon.
+
+**Érintett fájlok:** `GE/joystick.ts`, `GE/VirtualJoystick.tsx`, `L/tornado/controls.ts` (és ha a mérés oda mutat:
+`L/tornado/drive.ts`, `L/spaceAsteroid/physics.ts`), a négy lap tárcsa-bekötése (kis, célzott diff), a mérő-spec
+és egységtesztek.
+
+**Elfogadás:** bemenet–válasz késés 60 fps-en ≤ 3 képkocka, lassított CPU-n a képkocka-idővel arányos; lépcsőválasz
+90%-a a kormány-bemenetre ≤ ~120 ms; folytonos görbe, a legkisebb stabil korrekció ≤ a maximum 10%-a; a tárcsa
+húzása nem renderel újra a lapon; a korábbi javítások (`retireJoystickDrag`, több ujj, `touch-action`) és M1–M12 zöld.
+
+**Gyökérok:** a mérés után kerül ide.
+
+---
+
 ## J7 — Tornado Hunter 200: üldözés kérdés-útjelzőkkel (J7a, J7b, J7c)
 
 **Állapot (J7a):** nem kezdődött · **Állapot (J7b):** nem kezdődött · **Állapot (J7c):** nem kezdődött
