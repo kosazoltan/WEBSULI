@@ -34,7 +34,7 @@ export class ScoreRunDedup<T> {
     write: () => Promise<T>,
     now: number = Date.now(),
   ): Promise<ScoreRunOutcome<T>> {
-    this.prune(now);
+    this.pruneExpired(now);
     const existing = this.seen.get(key);
     if (existing && now - existing.at < this.ttlMs) {
       if (existing.fingerprint !== fingerprint) return { kind: "conflict" };
@@ -46,6 +46,7 @@ export class ScoreRunDedup<T> {
       }
     }
     if (existing) this.seen.delete(key);
+    this.makeRoom();
     const result = write();
     this.seen.set(key, { fingerprint, at: now, result });
     try {
@@ -60,11 +61,16 @@ export class ScoreRunDedup<T> {
     return this.seen.size;
   }
 
-  private prune(now: number): void {
+  /** Csak a lejárt bejegyzések törlése (a Map beszúrási sorrendje = időrend); meglévő kulcsot sosem dob el méret miatt. */
+  private pruneExpired(now: number): void {
     for (const [k, e] of this.seen) {
       if (now - e.at < this.ttlMs) break;
       this.seen.delete(k);
     }
+  }
+
+  /** Új kulcs beszúrása előtt: a legrégebbieket dobjuk, hogy a méret a korlát alatt maradjon (Codex P2, #441). */
+  private makeRoom(): void {
     for (const k of this.seen.keys()) {
       if (this.seen.size < this.maxEntries) break;
       this.seen.delete(k);

@@ -171,6 +171,21 @@ describe("JM0 — ScoreRunDedup (runId-dedup)", () => {
     assert.equal(b.kind, "created");
   });
 
+  it("teli tárnál a meglévő kulcs újraküldése nem ír újra és nem vész el (Codex P2, #441)", async () => {
+    const dedup = new ScoreRunDedup<number>(10_000, 3);
+    let writes = 0;
+    const write = async () => ++writes;
+    for (const k of ["a", "b", "c"]) await dedup.run(k, "fp", write, 1);
+    assert.equal(writes, 3);
+    const again = await dedup.run("a", "fp", write, 2); // a tár tele van; "a" a legrégebbi
+    assert.equal(again.kind, "duplicate");
+    assert.equal(writes, 3);
+    const conflict = await dedup.run("b", "fp-x", write, 2);
+    assert.deepEqual(conflict, { kind: "conflict" });
+    await dedup.run("d", "fp", write, 3); // új kulcs: a legrégebbi esik ki, a méret marad ≤ 3
+    assert.ok(dedup.size <= 3);
+  });
+
   it("TTL után a kulcs lejár; a méret a korlát alatt marad", async () => {
     const dedup = new ScoreRunDedup<number>(1000, 3);
     await dedup.run("k1", "fp", async () => 1, 0);
