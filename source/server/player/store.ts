@@ -102,12 +102,15 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
      *    (rekordonként legfeljebb 5), jó kód → elhasználva és a nyílt cím törölve.
      * Siker → a megerősítendő (normalizált) cím, minden más → null (kívülről egységes válasz).
      */
-    async consumeCode(emailHashHex: string, codeHashHex: string): Promise<string | null> {
+    async consumeCode(emailHashHex: string, codeHashHex: string, failScope: readonly string[] = [emailHashHex]): Promise<string | null> {
+      // JM7b (review #449): a hibás-próba plafon a cím MINDEN céltartományára (belépés + törlés) összesítve számol; a zár is
+      // közös (a tartomány legkisebb hash-e), így a két cél párhuzamos próbái sem kerülhetik meg a plafont.
+      const scope = [...new Set([emailHashHex, ...failScope])].sort();
       return inTransaction(pool, async (client) => {
-        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 7040))`, [emailHashHex]);
+        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 7040))`, [scope[0]]);
         const failed = await client.query<{ n: string }>(
-          `SELECT coalesce(sum(attempts), 0)::text AS n FROM player_auth_codes WHERE email_hash = $1 AND ${since("$2")}`,
-          [emailHashHex, DAY_MS],
+          `SELECT coalesce(sum(attempts), 0)::text AS n FROM player_auth_codes WHERE email_hash = ANY($1::text[]) AND ${since("$2")}`,
+          [scope, DAY_MS],
         );
         if (Number(failed.rows[0]!.n) >= MAX_FAILED_ATTEMPTS_PER_DAY) return null;
         const { rows } = await client.query<{ id: string; email_normalized: string; attempts: number; ok: boolean }>(

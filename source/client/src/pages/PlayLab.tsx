@@ -114,6 +114,17 @@ const LONGEST: Record<string, { quiz: FourChoiceQuiz }> = {
       explanation: "biometric = biometrikus.",
     },
   },
+  // Kanban #50: a LEGHOSSZABB játék-alakú cloze (`clozeStyle: "game"`, a teljes bank mérése szerint, 53 kar.) — fordítás
+  // és előtag nélkül; a mondat + fordítás a magyarázatban.
+  "cloze-game": {
+    quiz: {
+      id: "lab-longest-cloze-game",
+      prompt: "He failed the first exam but _____ passed the retake.",
+      options: ["murmur", "postpone", "subsequently", "memorise"],
+      correctIndex: 2,
+      explanation: "A helyes válasz: „subsequently”. subsequently = azután, utána. Példa: „He failed the first exam but subsequently passed the retake.” (Az első vizsgán megbukott, de ezt követően átment a pótvizsgán.)",
+    },
+  },
   // Mesterséges, ≈ 227 kar.: széles nézetben 5 sorba fér, 360 px-en csak a 7 soros tartalékkal — az átméretezés
   // utáni újramérés próbájához (review #450).
   resize: {

@@ -112,7 +112,7 @@ vak körben.
 ## Újra-vak körök
 | Kör | Tételek | Egyezés | Kanári | Lelet → javítás |
 |---|---|---|---|---|
-| A | 10 javított új + 19 rövidített meglévő | 28/29 | 10/10 | **`g11-science-015`: a rövidítés után a kulcs a FORDÍTOTT párra mutatott** („eltérő összegképlet, azonos szerkezet”), és a „mindkettő …” opció átcsúszott a tiltott-opció szűrőn (C-46) → átírva; 3 pontosítás (`g12-science-013`, `g12-science-011`, `g11-science-056`) |
+| A | 10 javított új + 19 rövidített meglévő | 28/29 | 10/10 | **`g11-science-015`: a rövidítés után a kulcs a FORDÍTOTT párra mutatott** („eltérő összegképlet, azonos szerkezet”), és a „mindkettő …” opció átcsúszott a tiltott-opció szűrőn (C-47) → átírva; 3 pontosítás (`g12-science-013`, `g12-science-011`, `g11-science-056`) |
 | B | 3 | 3/3 | 10/10 | a `g11-science-015` új alakja logikailag kizárta az elterelőket (kitalálható) → példán alapuló kérdés |
 | C | 1 | 1/1 | 10/10 | az „izobután” az „izomer” szót visszhangozta (kitalálható) → etanol és dimetil-éter |
 | D | 1 | 1/1 | 10/10 | tiszta |
@@ -140,7 +140,7 @@ Viète-formulák és diszkrimináns az együtthatókból (f(0), f(1), f(−1)); 
 az összes matek-tételen zöld.
 
 A teszt egy saját hibáját is javítottuk: a tiltott-opció minta `\b`-vel zárult, ami a „mindkettő” „ő”-je után nem illeszkedik
-(C-46) → `(?!\p{L})`.
+(C-47) → `(?!\p{L})`.
 
 ## Évfolyamonkénti lusta darab (buildelt kliens, `vite build`)
 | Darab | Előtte (JBb után) nyers / gzip | Utána nyers / gzip |

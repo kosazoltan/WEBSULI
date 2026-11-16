@@ -23,7 +23,7 @@ import { maskEmail } from "../lib/mask-email";
 import { isResendConfigured, sendPlayerLoginEmail } from "../resend";
 import {
   CODE_PATTERN, DAY_MS, LINK_TOKEN_PATTERN, START_PER_IP_DAILY_MAX, START_PER_IP_MAX, START_WINDOW_MS, VERIFY_PER_IP_MAX,
-  codeHash, emailHash, generateCode, generateLinkToken, limitHash, linkHash, normalizeEmail, playerAuthKey,
+  allPurposeEmailHashes, codeHash, emailHash, generateCode, generateLinkToken, limitHash, linkHash, normalizeEmail, playerAuthKey,
 } from "./codes";
 import { buildPlayerLoginEmail, playerLoginLink, type PlayerLoginEmail } from "./email-template";
 import { createRequirePlayer, playerAccountsEnabled, requirePlayerAccountsFlag } from "./require-player";
@@ -159,7 +159,7 @@ export function createPlayerRouter(deps: PlayerRouterDeps): Router {
         const email = normalizeEmail(parsed.data.email);
         if (email) {
           const eh = emailHash(key, email);
-          confirmedEmail = await deps.store.consumeCode(eh, codeHash(key, eh, parsed.data.code));
+          confirmedEmail = await deps.store.consumeCode(eh, codeHash(key, eh, parsed.data.code), allPurposeEmailHashes(key, email));
         }
       } else {
         confirmedEmail = await deps.store.consumeLink(linkHash(key, parsed.data.linkToken));

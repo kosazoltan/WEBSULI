@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity, Database, Eye, FileUp, FolderOpen, GraduationCap, HardDriveDownload, History, ListChecks, Mail, Sparkles, Tag, UserRound, Users, Wand2, Wrench,
+  Activity, Database, Eye, FileUp, FolderOpen, Gamepad2, GraduationCap, HardDriveDownload, History, ListChecks, Mail, Sparkles, Tag, UserRound, Users, Wand2, Wrench,
 } from "lucide-react";
 
 /**
@@ -32,6 +32,8 @@ export const ADMIN_TAB_GROUPS: AdminTabGroup[] = [
   ] },
   { id: "system", label: "Rendszer és mentések", tabs: [
     { value: "users", label: "Felhasználók", icon: Users },
+    // JM7b (terv 10.4 „Tiltás”): a játékos-fiókok (külön tábla, admin-jog nélkül) listája és tiltása.
+    { value: "players", label: "Játékosok", icon: Gamepad2 },
     { value: "backup", label: "Mentés és visszaállítás", icon: HardDriveDownload },
     { value: "improvement-backups", label: "Javítási mentések", icon: History },
     { value: "database", label: "Adatbázis", icon: Database },
