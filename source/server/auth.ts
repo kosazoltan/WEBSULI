@@ -13,6 +13,8 @@ import { logger } from "./lib/logger";
 import { maskEmail } from "./lib/mask-email";
 
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import { isPlayerState, registerPlayerGoogle } from "./player/google";
+import { createPlayerAccountStore } from "./player/account-store";
 
 type GoogleProfileLike = {
     id: string;
@@ -161,6 +163,16 @@ export function setupAuth(app: Express) {
         // LS-0a: the caller may ask to be returned to a specific page after login
         // (a pupil starting from /games or a lesson). Only same-origin relative paths
         // are stored; anything else is dropped and the default destination applies.
+        // JM7b (G11 / D12): a játékos KÜLÖN Google-útja — saját stratégianév, `state` + PKCE, csak player_accounts;
+        // ugyanaz a callback URL (a Google-konzolban nincs teendő). A visszahívás a `state` szerint ágazik el (review #449 A1):
+        // a játékos-ág csak `p.` előtagú state-et fogad, és azt a munkamenetben state-enként tárolt rekorddal veti össze.
+        const playerGoogleCallback = registerPlayerGoogle(app, {
+            clientID: googleClientId,
+            clientSecret: googleClientSecret,
+            callbackURL: `${baseUrl}/auth/google/callback`,
+            store: createPlayerAccountStore(dbPool),
+        });
+
         app.get('/auth/google', (req, res, next) => {
             const requested = sanitizeReturnTo(req.query.returnTo);
             if (requested) req.session.oauthReturnTo = requested;
@@ -171,7 +183,9 @@ export function setupAuth(app: Express) {
         // AUDIT 2026-09-01: session-fixation védelem a Google-belépésen is (a lokális login
         // már regenerál): egy előre beültetett session-id ne maradjon érvényes belépés után.
         app.get('/auth/google/callback', (req, res, next) => {
-            passport.authenticate('google', (err: Error | null, user: Express.User | false) => {
+            // JM7b: a játékos-út visszahívása — csak játékos-munkamenet, req.login nélkül (server/player/google.ts).
+            if (isPlayerState(req.query.state)) return playerGoogleCallback(req, res, next);
+            passport.authenticate('google',(err: Error | null, user: Express.User | false) => {
                 if (err) return next(err);
                 if (!user) return res.redirect('/login');
                 // LS-0a: read the stored path BEFORE regenerate() — regenerating the session

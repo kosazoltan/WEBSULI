@@ -615,7 +615,7 @@ Forrás: JBa / JBb futás (#448 és a JBb PR).
 - **Tünet 3:** a JS `\b` ASCII-alapú — az „ó” végű „szó” után nem illeszkedik, a helyesírási tételek felismerője így csendben
   kevés tételt talált. **Megelőzés 3:** szóköz-határ, és a teszt minimális darabszámot is ellenőriz.
 - **Tünet 4:** a Write eszköz a `\u00A0` escape-et a tesztfájlban és a jegyzőkönyvben is nyers NBSP-vé írta (C-31/5 ismét).
-  **Megelőzés 4:** írás után `grep -c $'\xc2\xa0'`.
+  **Megelőzés 4:** írás után `grep -c \xc2\xa0'`.
 - **Tünet 5:** a `git stash push` parancs a push-audit hookot is kiváltja (a „push” szó miatt). **Megelőzés 5:** `git stash -u`.
 - **Tünet 6:** a Git Bash-es `node -e` szövegcsere CRLF-es forrásfájlon csendben nem illeszkedett (a fájl CRLF, a minta LF).
   **Megelőzés 6:** forrásfájlt Edit eszközzel módosítunk, és a csere után ellenőrizzük, hogy tényleg megtörtént.
@@ -627,23 +627,17 @@ Forrás: JBa / JBb futás (#448 és a JBb PR).
   nem volt elolvasható. **Megelőzés 8:** a bank-őr ugyanazt a `fitsAllViewports`-ot hívja, mint a játék (`.ok`, ≥ 95% /
   évfolyam, cellánként ≥ 15); a szöveges duplikátum-ellenőrzés mellé tartalmi (azonos válasz + átfedés) jelölt-keresés kell.
 
-## C-46 — J4a pilot (#451): visszaperjel Python-heredocban, két ujjas `click`-hiány, más lépésméretű szimuláció (2026-11-16)
+## C-46 — A `\uXXXX` escape az eszközparaméterben dekódolódik: nyers sorelválasztó került a regexbe (2026-11-16)
 
-Forrás: J4a (#451) és a review-körei (Codex, Vercel, Copilot), közös utójavítás (kanban #51).
-
-- **Tünet 1 (a C-35 újbóli előjövetele):** egy tesztfájlt Python-heredocban szerkesztettem, a nem nyers (`'''…'''`) karakterláncban a
-  `\b` a Pythonban `\b` (backspace, 0x08) lett — a regexben `nextTask\b` helyett láthatatlan vezérlőkarakter állt, a teszt
-  mégis zöld volt. **Megelőzés:** regexet / visszaperjeles szöveget CSAK az Edit / Write eszközzel írj (a C-35 szabálya), és
-  utána bájtszinten olvasd vissza (`grep -cP "[\x00-\x08]" <fájl>` → 0; `od -c`). A shell-heredoc `'EOF'` idézőjellel
-  változatlanul hagyja a visszaperjelet, a Python-karakterlánc NEM.
-- **Tünet 2:** a világban mozgó válaszcél (`button` `onClick`-kel) két ujjnál nem választott: a böngésző a NEM elsődleges
-  mutatóra nem szintetizál `click`-et (a telefont tartó hüvelykujj a képernyőn → a gyerek koppintása elveszett). CDP-s kétpontos
-  érintéssel és mutációval igazolva (`click`-alapú választással 0 válasz). Ráadásul érintésnél implicit pointer capture van: a
-  `pointerup` az elhúzott ujjnál is a lenyomott célra érkezik. **Megelőzés:** mozgó célra a közös `pointerTapHandlers`
-  (`GE/play/pointerTap.ts`): felengedéskor a koordinátát nézi (aktuális doboz ± tűrés VAGY alig mozdult ujj), elhúzás /
-  `pointercancel` = visszavonás, mutatónként; teszt CDP-vel (két ujj, elhúzás).
-- **Tünet 3:** a node-szimuláció `dt × timeScale` méretű lépésekkel futott, a lap fix 16,67 ms-os lépésekkel ritkábban — a
-  `waves.ts` lépésenként fogyaszt RNG-t, így azonos seed mellett is más ellenfélsort mért a sim, mint amit a gyerek játszik
-  (az elfogadási számok más játékmenetről szóltak). **Megelőzés:** a lap és a sim UGYANAZT a meghajtót hívja (Matek:
-  `createTowerDriver`: fix lépés, időskála, hitstop, esemény-ürítés); bizonyító teszt lépés-indexhez kötött bemenettel, eltérő
-  képkocka-időkkel (bitre azonos állapot). Javítás után az összes szimulációs számot újra kell mérni.
+- **Tünet (JM7b):** a becenév-szűrő `INVISIBLE` regexébe `(backslash-u)2028(backslash-u)2029`-et írtam (Write eszköz) — a fájlba a két NYERS
+  Unicode-sorelválasztó került, a `tsc` „Unterminated regular expression literal” hibát adott. Ugyanez a `node -e "…(backslash-u)2028…"`
+  parancsban is megtörtént (a parancsszöveg is dekódolódott).
+- **Gyökérok:** az eszközparaméterek JSON-ként érkeznek: a négyjegyű `\uXXXX` escape a fájl / parancs megírása ELŐTT karakterré
+  alakul (a `\p{…}`, `\s` nem érvényes JSON-escape, ezért azok megmaradnak — ezért nem tűnt fel korábban).
+- **Megelőzés:** forrásban Unicode-tartományt kategóriával írj (`\p{Cf}`, `\p{Zl}`, `\p{Zp}`, `\p{Cc}`), ne `\uXXXX`-szel; tesztben
+  a különleges karaktert `String.fromCodePoint(0x200b)`-vel állítsd elő; írás után `cat -A <fájl> | sed -n <sor>p` (a `M-bM-^@M-(`
+  alak nyers U+2028-at jelez). Javítás csak karakterkóddal (`String.fromCharCode(0x2028)`) kereső szkripttel, nem escape-pel.
+- **Tünet 2 (JM7b, #449 CI):** az új admin-fül miatt a `admin-korszerusites.test.ts` fülszámát (16 → 17) dokumentáltan átírtam,
+  de az ugyanazt mérő e2e-párját (`admin-korszerusites.spec.ts`) nem — a helyben futtatott e2e-k között nem szerepelt, csak a CI
+  ~40 perces Playwright-jobja fogta meg. **Megelőzés:** egy számlált / felsorolt elvárás (fülszám, végpontlista) módosításakor
+  `grep -rn "<régi szám vagy kulcs>" tests/` a `*.test.ts` ÉS a `*.spec.ts` fájlokra, és a találatokat mind futtasd helyben.

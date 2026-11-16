@@ -22,7 +22,7 @@ function pres(q: PlayQuestion): QuestionPresentation {
 }
 const outcome = (result: QuestionOutcome["result"]): QuestionOutcome => ({ id: 1, key: "k", result, pickedOriginalIndex: result === "correct" ? 0 : 1, correctOriginalIndex: 0, responseMs: 900 });
 
-function vq(extra: Partial<VocabQuiz> & { speakText?: string; speakAfter?: string }): VocabQuiz {
+function vq(extra: Partial<VocabQuiz>): VocabQuiz {
   return {
     id: "v1", prompt: "Hogy mondod angolul: alma?", options: ["apple", "pear", "plum", "peach"], correctIndex: 0,
     vocabId: "en1-apple", lang: "en", level: 1, topic: "food", kind: "word", questionType: "hu-to-target", answerTerm: "apple",
