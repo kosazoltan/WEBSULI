@@ -27,7 +27,7 @@ import { logger } from "../lib/logger";
 import { maskEmail } from "../lib/mask-email";
 import { enforceOriginAllowlist } from "../lib/origin-guard";
 import type { PlayerAccountStore } from "./account-store";
-import { CODE_PATTERN, codeHash, emailHash, generateCode, generateLinkToken, limitHash, linkHash, playerAuthKey } from "./codes";
+import { CODE_PATTERN, allPurposeEmailHashes, codeHash, generateCode, generateLinkToken, limitHash, linkHash, playerAuthKey, purposeEmailHash } from "./codes";
 import type { PlayerMailer } from "./auth-routes";
 import { buildAccountDeletedEmail, buildDeleteCodeEmail } from "./email-template";
 import { createRequirePlayer, requirePlayerAccountsFlag } from "./require-player";
@@ -208,7 +208,7 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
     noStore(res);
     try {
       const key = playerAuthKey();
-      const data = await deps.accounts.exportAccount(playerId(res), (email) => emailHash(key, email));
+      const data = await deps.accounts.exportAccount(playerId(res), (email) => allPurposeEmailHashes(key, email));
       if (!data) return res.status(401).json({ message: "Unauthorized" });
       res.setHeader("Content-Disposition", 'attachment; filename="websuli-fiokom.json"');
       return res.json({
@@ -234,7 +234,8 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
       const email = await deps.accounts.playerEmailById(playerId(res));
       if (!email) return res.status(401).json({ message: "Unauthorized" });
       const key = playerAuthKey();
-      const eh = emailHash(key, email);
+      // Külön céltartomány (review #449): a törlési kód a belépőkódokat nem érvényteleníti, és fordítva.
+      const eh = purposeEmailHash(key, email, "delete");
       const code = generateCode();
       const reserved = await deps.store.reserveCode({
         emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email),
@@ -277,12 +278,13 @@ export function createPlayerAccountRouter(deps: PlayerAccountDeps): Router {
       const key = playerAuthKey();
       const email = await deps.accounts.playerEmailById(id);
       if (!email) return res.status(401).json({ message: "Unauthorized" });
-      const eh = emailHash(key, email);
-      // A kódrekord egyszeri, a fiókonkénti hibás-próba plafon (store.consumeCode) itt is érvényes.
-      if ((await deps.store.consumeCode(eh, codeHash(key, eh, `${DELETE_CODE_PREFIX}${code}`))) === null) {
+      // A kérő munkamenet játékosának címéhez kötött céltartomány: más fiók munkamenetéből nem váltható be. A hibás próbák a
+      // cím közös (belépés + törlés) napi plafonjába számítanak.
+      const eh = purposeEmailHash(key, email, "delete");
+      if ((await deps.store.consumeCode(eh, codeHash(key, eh, `${DELETE_CODE_PREFIX}${code}`), allPurposeEmailHashes(key, email))) === null) {
         return res.status(400).json({ ok: false, code: "CODE_INVALID" });
       }
-      const result = await deps.accounts.deleteAccount(id, (e) => emailHash(key, e));
+      const result = await deps.accounts.deleteAccount(id, (e) => allPurposeEmailHashes(key, e));
       if (!result) return res.status(401).json({ message: "Unauthorized" });
       await destroyPlayerSession(req);
       res.clearCookie("connect.sid", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" });

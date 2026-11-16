@@ -152,7 +152,7 @@ export function createPlayerAccountStore(pool: Db) {
      * A saját adatok (adatletöltéshez) — review #449 (A2): ENGEDÉLYLISTÁS mezők, belső azonosító NÉLKÜL (nincs fiók-, Google-,
      * tanulói azonosító, nincs foglaltsági kulcs); a tanulói kapcsolatról csak annyi, hogy van-e.
      */
-    async exportAccount(id: string, emailHashOf: (email: string) => string): Promise<Record<string, unknown> | null> {
+    async exportAccount(id: string, emailHashesOf: (email: string) => string[]): Promise<Record<string, unknown> | null> {
       const { rows } = await pool.query<{
         email: string; email_verified_at: Date | null; nickname: string | null; avatar_key: string | null; google: boolean; learner: boolean;
         banned_at: Date | null; created_at: Date; last_seen_at: Date | null;
@@ -164,7 +164,7 @@ export function createPlayerAccountStore(pool: Db) {
       );
       const r = rows[0];
       if (!r) return null;
-      const codes = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM player_auth_codes WHERE email_hash = $1`, [emailHashOf(r.email)]);
+      const codes = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM player_auth_codes WHERE email_hash = ANY($1::text[])`, [emailHashesOf(r.email)]);
       return {
         account: {
           email: r.email, emailVerifiedAt: r.email_verified_at, nickname: r.nickname, avatar: r.avatar_key,
@@ -179,12 +179,12 @@ export function createPlayerAccountStore(pool: Db) {
      * (más eszközön is), (3) maga a fiók. A hivatkozó táblák (JM8+: pontkönyv) `ON DELETE CASCADE`-del követik; a tanulói
      * profil (`learners`) NEM törlődik — csak a kapcsolat szűnik meg. Nincs ilyen fiók → null.
      */
-    async deleteAccount(id: string, emailHashOf: (email: string) => string): Promise<DeleteResult> {
+    async deleteAccount(id: string, emailHashesOf: (email: string) => string[]): Promise<DeleteResult> {
       return inTransaction(pool, async (client) => {
         const found = await client.query<{ email: string }>(`SELECT email FROM player_accounts WHERE id = $1 FOR UPDATE`, [id]);
         const email = found.rows[0]?.email;
         if (email === undefined) return null;
-        const codes = await client.query(`DELETE FROM player_auth_codes WHERE email_hash = $1`, [emailHashOf(email)]);
+        const codes = await client.query(`DELETE FROM player_auth_codes WHERE email_hash = ANY($1::text[])`, [emailHashesOf(email)]);
         const sessions = await client.query(`DELETE FROM session WHERE sess -> 'player' ->> 'id' = $1`, [id]);
         const account = await client.query(`DELETE FROM player_accounts WHERE id = $1`, [id]);
         return { account: account.rowCount ?? 0, codes: codes.rowCount ?? 0, sessions: sessions.rowCount ?? 0 };

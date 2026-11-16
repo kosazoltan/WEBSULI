@@ -10,7 +10,7 @@ import bcrypt from "bcryptjs";
 import { Client, dbPool, injectSession, startApp } from "./support/authz-db-harness";
 import { getNoFollow, installAdminGoogleStub, playerGoogleLogin } from "./support/player-google-stub";
 
-const { emailHash, playerAuthKey, codeHash, limitHash, linkHash, generateLinkToken } = await import("../server/player/codes");
+const { emailHash, playerAuthKey, codeHash, limitHash, linkHash, generateLinkToken, purposeEmailHash, allPurposeEmailHashes, MAX_FAILED_ATTEMPTS_PER_DAY } = await import("../server/player/codes");
 const { createPlayerStore } = await import("../server/player/store");
 const { learnerTokenFor, rotateLearnerToken } = await import("../server/learners");
 const { logger } = await import("../server/lib/logger");
@@ -372,7 +372,8 @@ describe("JM7b — adatletöltés és fióktörlés (JM-A15)", () => {
     await new Promise((r) => setTimeout(r, 50));
     assert.equal(mailWarns(), before + 1, "a törlési kód levele kiküldésre került (a tesztben Resend nélkül)");
     // A teszt ismert kódot ültet el a szerverrel azonos, CÉLHOZ KÖTÖTT hash-sel (a valódi levél nem megy ki).
-    const plantDel = (code: string) => createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, `del:${code}`), linkHash: linkHash(key, generateLinkToken()) });
+    const deh = purposeEmailHash(key, email, "delete");
+    const plantDel = (code: string) => createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: deh, limitHash: limitHash(key, email), codeHash: codeHash(key, deh, `del:${code}`), linkHash: linkHash(key, generateLinkToken()) });
     await plantDel("55556666");
 
     assert.equal((await c.request("POST", "/api/player/account/delete", {})).status, 400);
@@ -395,7 +396,7 @@ describe("JM7b — adatletöltés és fióktörlés (JM-A15)", () => {
     assert.ok(deleted.codes >= 2, "a belépéskori és a függő kódrekord is");
     assert.ok(deleted.sessions >= 2, "mindkét eszköz munkamenete");
     assert.equal((await q(`SELECT 1 FROM player_accounts WHERE id = $1`, [id])).length, 0);
-    assert.equal((await q(`SELECT 1 FROM player_auth_codes WHERE email_hash = $1`, [eh])).length, 0);
+    assert.equal((await q(`SELECT 1 FROM player_auth_codes WHERE email_hash = ANY($1::text[])`, [allPurposeEmailHashes(key, email)])).length, 0, "mindkét cél kódrekordjai törlődtek");
     assert.equal((await q(`SELECT 1 FROM session WHERE sess -> 'player' ->> 'id' = $1`, [id])).length, 0);
     assert.equal((await q(`SELECT 1 FROM learners WHERE id = 'jm7b-learner-del'`)).length, 1, "a tanulói profil megmarad");
     assert.equal((await second.request("GET", "/api/player/me")).json, null, "a másik eszköz is kilépett");
@@ -403,6 +404,84 @@ describe("JM7b — adatletöltés és fióktörlés (JM-A15)", () => {
     const n = await emailPlayer("uj-tulaj@pelda.hu");
     assert.equal((await n.request("POST", "/api/player/profile", { nickname: "Törlendő Teknős" })).status, 200);
     assert.ok(!logged.some((l) => l.includes(email)), "a törölt cím nem kerül naplóba");
+  });
+});
+
+describe("JM7b — review #449: belépő- és törlési kód cél szerint elkülönítve", () => {
+  const store = createPlayerStore(dbPool);
+  const key = () => playerAuthKey();
+  const plant = (email: string, purpose: "login" | "delete", code: string, ageMs = 0) => {
+    const k = key();
+    const h = purposeEmailHash(k, email, purpose);
+    return store.insertCode({ emailNormalized: email, emailHash: h, limitHash: limitHash(k, email), codeHash: codeHash(k, h, purpose === "delete" ? `del:${code}` : code), linkHash: linkHash(k, generateLinkToken()) })
+      .then(async () => { if (ageMs) await dbPool.query(`UPDATE player_auth_codes SET created_at = now() - ($1::int * interval '1 millisecond') WHERE email_hash = $2`, [ageMs, h]); });
+  };
+
+  it("törlési kóddal NEM lehet belépni; belépőkóddal NEM lehet törölni (mindkét keresztirány)", async () => {
+    const email = "kereszt@pelda.hu";
+    await emailPlayer(email); // fiók
+    await plant(email, "delete", "31313131");
+    const guest = new Client(app.base);
+    const r = await guest.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "31313131" });
+    assert.deepEqual([r.status, r.json], [400, { ok: false, code: "INVALID_OR_EXPIRED" }], "törlési kód belépésre");
+    const c = await emailPlayer(email);
+    await plant(email, "login", "42424243");
+    assert.equal((await c.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "42424243" })).status, 400, "belépőkód törlésre");
+    assert.equal((await q(`SELECT 1 FROM player_accounts WHERE email = $1`, [email])).length, 1);
+  });
+
+  it("egy újabb belépőkód nem érvényteleníti a függő törlési kódot, és fordítva", async () => {
+    const email = "fuggo@pelda.hu";
+    const c = await emailPlayer(email);
+    await plant(email, "delete", "50505050");
+    await plant(email, "login", "60606060"); // a törlési kód UTÁN kért belépőkód
+    // A belépőkód is működik (a törlési kód nem „legutóbbi”-ja a belépésnek).
+    const other = new Client(app.base);
+    assert.equal((await other.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "60606060" })).status, 200);
+    // …és a korábbi törlési kód is beváltható.
+    assert.equal((await c.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "50505050" })).status, 200);
+  });
+
+  it("a törlési kód a kérő munkamenet játékosához kötött: más fiók munkamenetéből nem váltható be", async () => {
+    const a = "kotott-a@pelda.hu";
+    await emailPlayer(a);
+    await plant(a, "delete", "70707070");
+    const b = await emailPlayer("kotott-b@pelda.hu");
+    assert.equal((await b.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "70707070" })).status, 400);
+    assert.equal((await q(`SELECT 1 FROM player_accounts WHERE email IN ($1, $2)`, [a, "kotott-b@pelda.hu"])).length, 2);
+  });
+
+  it("a törlési kód hibás próbái a cím közös napi plafonjába számítanak (utána a helyes belépőkód sem megy át)", async () => {
+    const email = "plafon-kozos@pelda.hu";
+    const k = key();
+    const deh = purposeEmailHash(k, email, "delete");
+    const eh = emailHash(k, email);
+    const scope = allPurposeEmailHashes(k, email);
+    for (let rec = 0; rec < Math.ceil(MAX_FAILED_ATTEMPTS_PER_DAY / 5); rec++) {
+      await plant(email, "delete", `8888000${rec}`);
+      for (let i = 0; i < 5; i++) assert.equal(await store.consumeCode(deh, codeHash(k, deh, "del:00000000"), scope), null);
+    }
+    await plant(email, "login", "12121212");
+    assert.equal(await store.consumeCode(eh, codeHash(k, eh, "12121212"), scope), null, "a közös plafon betelt");
+  });
+
+  it("a levélkeret célonként összesítve: a törlési kódkérések a belépő levelek címenkénti keretét is fogyasztják", async () => {
+    const email = "keret-kozos@pelda.hu";
+    const k = key();
+    const reserve = (purpose: "login" | "delete") => {
+      const h = purposeEmailHash(k, email, purpose);
+      return store.reserveCode({ emailNormalized: email, emailHash: h, limitHash: limitHash(k, email), codeHash: codeHash(k, h, "x"), linkHash: linkHash(k, generateLinkToken()) });
+    };
+    assert.deepEqual([await reserve("delete"), await reserve("delete"), await reserve("delete")], ["OK", "OK", "OK"]);
+    assert.equal(await reserve("login"), "KEY_LIMIT", "a törlési kérések után a belépő levél kerete is betelt");
+  });
+
+  it("a takarítás mindkét cél régi rekordjait törli", async () => {
+    const email = "takaritas@pelda.hu";
+    await plant(email, "delete", "90909090", 25 * 60 * 60_000);
+    await plant(email, "login", "91919191", 25 * 60 * 60_000);
+    await store.purgeOldCodes();
+    assert.equal((await q(`SELECT 1 FROM player_auth_codes WHERE email_hash = ANY($1::text[])`, [allPurposeEmailHashes(key(), email)])).length, 0);
   });
 });
 
