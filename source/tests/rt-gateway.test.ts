@@ -268,7 +268,11 @@ describe("JM2 gateway — kapcsolat-kiesés, kilépés, gazda-váltás", () => {
     // Hálózatkiesés szimulálása: a szállítás bezárul (nem kézi kilépés) → a kliens magától újracsatlakozik.
     guest.socket.io.engine.close();
     await host.waitFor("room:state", (s) => s.players.some((p: any) => p.id === guest.playerId && !p.connected));
-    const snap = await guest.waitFor("room:state", (s) => guest.log.findIndex(([, x]) => x === s) >= before && s.you.answeredOptionIndex !== null, 8000);
+    // A pillanatképet a FOLYTATÁS után várjuk: előbb a `welcome` (`resumed: true`), utána az azt követő állapot. (Korábban a
+    // kiesés ELŐTT, a válasz nyugtája után érkező állapot is megfelelt a feltételnek — időzítésfüggő bukás, kanban #58.)
+    await guest.waitFor("welcome", (w) => w.resumed === true && guest.log.findIndex(([, x]) => x === w) >= before, 8000);
+    const resumedAt = guest.log.findIndex(([e, x]) => e === "welcome" && (x as { resumed?: boolean }).resumed === true);
+    const snap = await guest.waitFor("room:state", (s) => guest.log.findIndex(([, x]) => x === s) > resumedAt && s.you.answeredOptionIndex !== null, 8000);
     assert.equal(snap.phase, "round_open");
     assert.equal(snap.you.answeredOptionIndex, pick);
     assert.ok(snap.you.question && snap.you.question.deadlineTs > snap.serverTs, "a kör hátralévő ideje számolható");

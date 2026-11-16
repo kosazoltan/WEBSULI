@@ -137,3 +137,19 @@ test("kilépés megerősítéssel a meccs közben: „Maradok” folytatja, „K
   await page.getByTestId("duel-exit-leave").tap();
   await expect(page.getByTestId("duel-home")).toBeVisible();
 });
+
+test("review #464: két egymás utáni gépi meccs („Új beállítás” között) mindkettő rögzül az erősség-ajánláshoz", async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/games/parbaj?duelSpeed=fast");
+  const results = () => page.evaluate(() => (JSON.parse(localStorage.getItem("websuli.duelBot.v1") ?? "null") as { results?: string[] } | null)?.results?.length ?? 0);
+  expect(await results()).toBe(0);
+  for (let i = 1; i <= 2; i++) {
+    if (i === 1) await page.getByTestId("duel-bot").tap();
+    await page.getByTestId("duel-skill-normal").tap();
+    await page.getByTestId("duel-go").tap();
+    await playToResult(page, 0);
+    await expect.poll(results, { timeout: 5_000 }).toBe(i);
+    if (i === 1) await page.getByTestId("duel-new").tap();
+  }
+});

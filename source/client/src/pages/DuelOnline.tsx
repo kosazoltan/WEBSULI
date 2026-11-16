@@ -209,7 +209,17 @@ export default function DuelOnline() {
   const snap = useSyncExternalStore(session?.subscribe ?? noopSubscribe, session?.getSnapshot ?? (() => EMPTY_SNAPSHOT));
   const sessionRef = useRef<DuelSession | null>(null);
   sessionRef.current = session;
-  useEffect(() => () => sessionRef.current?.dispose(), []);
+  // Lecsatoláskor (pl. a böngésző Vissza gombja a kapcsolódás közben) a FOLYAMATBAN lévő indítás is érvénytelen: a token
+  // léptetése miatt a később visszatérő munkamenet a `startOnline` / `startBot` ellenőrzésén elbukik és lezárul (review #464).
+  useEffect(
+    () => () => {
+      opToken.current += 1;
+      // Elnavigálás = kilépés: a szobahely azonnal felszabadul (az ellenfél nem vár egy percet), utána lezárás.
+      const s = sessionRef.current;
+      if (s) void s.leave().finally(() => s.dispose());
+    },
+    [],
+  );
   const lastIntent = useRef<{ kind: "bot" } | OnlineIntent | null>(null);
   const opToken = useRef(0);
 
@@ -253,7 +263,8 @@ export default function DuelOnline() {
       try {
         const s = await openOnlineSession(intent, { learnerToken: getLearnerToken(), transports: forcePolling ? ["polling"] : undefined });
         if (token !== opToken.current) {
-          s.dispose();
+          // Közben elnavigált / mást választott: a már létrejött szobahely is felszabadul (review #464).
+          void s.leave().finally(() => s.dispose());
           return;
         }
         setSession(s);
@@ -298,19 +309,20 @@ export default function DuelOnline() {
   }, [screen.name, session, snap.conn, snap.closedCode, snap.state]);
 
   // Gépi meccs vége → áramlat-ajánlás frissítése (egyszer meccsenként; ember elleni győzelemnek sehol nem számít, D22).
-  const recordedSeq = useRef<string | null>(null);
+  // A dedup kulcsa a munkamenet azonossága + a meccs sorszáma: egy új munkamenet („Új beállítás”) számlálója újra 1-ről
+  // indul, így két azonos `seq`-ű meccs is külön rögzül (review #464).
+  const recorded = useRef<{ session: DuelSession; seq: number } | null>(null);
   useEffect(() => {
     const st = snap.state;
-    if (snap.kind !== "bot" || !st?.result || !snap.botSkill) return;
-    const key = `${st.result.seq}`;
-    if (recordedSeq.current === key) return;
-    recordedSeq.current = key;
+    if (!session || snap.kind !== "bot" || !st?.result || !snap.botSkill) return;
+    if (recorded.current && recorded.current.session === session && recorded.current.seq === st.result.seq) return;
+    recorded.current = { session, seq: st.result.seq };
     const me = st.you.playerId;
     const outcome = st.result.coWin ? "co" : st.result.winners.includes(me) ? "win" : "loss";
     const next = recordBotResult(botRecord, snap.botSkill, outcome);
     setBotRecord(next);
     saveBotRecord(next);
-  }, [snap.kind, snap.state, snap.botSkill, botRecord]);
+  }, [session, snap.kind, snap.state, snap.botSkill, botRecord]);
 
   // Teszt-kampó (csak `VITE_ENABLE_GAME_TEST_HOOKS=1`): állapot-olvasás az e2e-hez (a játékot nem vezérli).
   useEffect(

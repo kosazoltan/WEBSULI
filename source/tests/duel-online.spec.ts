@@ -256,6 +256,40 @@ test("csak-polling (Vercel-szimuláció): B hálózata kör közben megszakad, m
   }
 });
 
+test("review #464: kapcsolódás közben a Vissza gombbal elnavigálva a későn visszatérő munkamenet lezárul — az új szobanyitás sikerül (nincs ALREADY_IN_ROOM)", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const A = await phone(browser, on.url, { width: 390, height: 844 }, { learner: true });
+  try {
+    await A.page.goto("/games");
+    await A.page.getByTestId("games-duel-entry").tap();
+    await expect(A.page.getByTestId("duel-create")).toBeVisible({ timeout: 30_000 });
+    // Az első jegykérés lassú (2,5 s): közben a gyerek visszalép a játéklistára.
+    let delayed = false;
+    await A.page.route("**/api/rt/ticket", async (route) => {
+      if (!delayed) {
+        delayed = true;
+        await new Promise((r) => setTimeout(r, 2_500));
+      }
+      await route.continue();
+    });
+    await A.page.getByTestId("duel-create").tap();
+    await A.page.getByTestId("duel-go").tap();
+    await expect(A.page.getByTestId("duel-busy")).toBeVisible();
+    await A.page.goBack();
+    await expect(A.page.getByTestId("games-duel-entry")).toBeVisible();
+    await A.page.waitForTimeout(4_000); // a lassú indítás ezalatt befejeződik — és lezárul
+    // Nincs élő, gazdátlan kapcsolat és szoba (a részletes státusz admin-munkamenettel; a munkamenet-tár közös adatbázis).
+    const st = await (await fetch(`${on.url}/api/admin/rt/status`, { headers: { cookie: adminCookie } })).json();
+    expect(st.connections, JSON.stringify(st)).toBe(0);
+    expect(st.activeRooms, JSON.stringify(st)).toBe(0);
+    await A.page.getByTestId("games-duel-entry").tap();
+    const code = await openRoom(A.page);
+    expect(code).toMatch(/^[A-Z0-9]{6}$/);
+  } finally {
+    await A.ctx.close();
+  }
+});
+
 test("érvénytelen és nem létező kód; vendég nem nyithat szobát (ACCOUNT_REQUIRED), de csatlakozni tud", async ({ browser }) => {
   const B = await phone(browser, on.url, { width: 360, height: 640 });
   try {
