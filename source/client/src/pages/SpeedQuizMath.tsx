@@ -42,6 +42,7 @@ import {
   type ShakeOffset,
 } from "@/game-engine/play";
 import { createRng, seedFrom } from "@shared/game-rng";
+import { LOOK_BUDGET, detectLookTier } from "@/game-engine/three-look/tier";
 import {
   DRONE_ENTER_MS,
   RAIDERS,
@@ -1877,7 +1878,8 @@ export default function SpeedQuizMath() {
       const cv = canvasRef.current;
       if (!cv) return;
       const { w, h } = sizeRef.current;
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      // A vászon pixelaránya a grafikai szint plafonja alatt (K.4/1: low 1 / medium 1,5 / high 2).
+      const dpr = Math.min(LOOK_BUDGET[detectLookTier()].maxPixelRatio, window.devicePixelRatio || 1);
       if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
         cv.width = Math.round(w * dpr);
         cv.height = Math.round(h * dpr);
