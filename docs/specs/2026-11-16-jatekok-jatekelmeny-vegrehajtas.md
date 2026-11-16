@@ -1615,7 +1615,7 @@ limiterek `S/index.ts:362-460`; `ViewDedup` `S/lib/view-dedup.ts:10`.
 
 ### JM1 — Szabálymotor + egyeszközös Párbaj aréna
 
-**Állapot:** nem kezdődött · **Függ:** J0a (`game-rng`), J0b (`windowMsFor`) · **Modell:** Opus · **Elfogadás:** JM-A3, J19
+**Állapot:** folyamatban — ág feat/jatek-jm1-parbaj-arena, munkafa .claude/worktrees/jatek-jm1, kanban #41 (2026-11-16) · **Függ:** J0a (`game-rng`), J0b (`windowMsFor`) · **Modell:** Opus · **Elfogadás:** JM-A3, J19
 **Fájlok:** új `source/shared/duel/{rules,questions,reactions}.ts`, `source/shared/nicknames.ts`, `P/DuelArena.tsx`,
 `source/client/src/App.tsx` (útvonal `/games/parbaj` — ORKESZTRÁTOR: J0c után a JM1 az App.tsx egyetlen módosítója),
 `P/Games.tsx` (egy kártya a listán — ha a J8 párhuzamosan fut, a kártyát a J8 adja hozzá; ORKESZTRÁTOR egyeztet),
