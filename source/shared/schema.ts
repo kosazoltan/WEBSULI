@@ -1280,3 +1280,51 @@ export const lessonClipMedia = pgTable("lesson_clip_media", {
   size: integer("size").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * JM7a játékos-fiók (migrations/0040; docs/specs/2026-11-16-jatekok-jatekelmeny.md 10.4, D11 / D12). SZERKEZETILEG külön a
+ * `users`-től: nincs admin-mezője, a belépés külön munkamenet-kulcsot (`session.player`) állít, `req.user`-t soha.
+ * Az e-mail kisbetűsítve (trim + NFC); más felhasználónak soha nem látszik. Életkor és valódi név nem tárolódik.
+ */
+export const playerAccounts = pgTable("player_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email", { length: 254 }).notNull().unique(),
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  nickname: varchar("nickname", { length: 24 }),
+  nicknameKey: varchar("nickname_key", { length: 32 }).unique(),
+  avatarKey: varchar("avatar_key", { length: 32 }),
+  friendCode: char("friend_code", { length: 8 }).unique(),
+  linkedLearnerId: varchar("linked_learner_id").references(() => learners.id, { onDelete: "set null" }),
+  googleSub: varchar("google_sub", { length: 64 }).unique(),
+  bannedAt: timestamp("banned_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+});
+export type PlayerAccount = typeof playerAccounts.$inferSelect;
+
+/**
+ * JM7a egyszeri belépőkódok (migrations/0040): a kód és a link-token csak HMAC-hash-ként; a megerősítendő cím a rekordban
+ * (a kódos és a linkes út ugyanabba a közös, atomikus megerősítésbe fut), beváltáskor / lejáratkor üresre törölve.
+ * Egyszer használható, lejár; `attempts` = a rekord HIBÁS próbái (≤ 5).
+ */
+export const playerAuthCodes = pgTable(
+  "player_auth_codes",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    emailNormalized: varchar("email_normalized", { length: 254 }).notNull(),
+    emailHash: char("email_hash", { length: 64 }).notNull(),
+    /** A korlátok kulcsa: a kanonizált cím (aliasok összevonva) HMAC-je — nem fiók-azonosító. */
+    limitHash: char("limit_hash", { length: 64 }).notNull(),
+    codeHash: char("code_hash", { length: 64 }).notNull(),
+    linkHash: char("link_hash", { length: 64 }).notNull().unique(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    emailIdx: index("player_auth_codes_email_idx").on(table.emailHash, table.createdAt),
+    limitIdx: index("player_auth_codes_limit_idx").on(table.limitHash, table.createdAt),
+    createdIdx: index("player_auth_codes_created_idx").on(table.createdAt),
+  }),
+);

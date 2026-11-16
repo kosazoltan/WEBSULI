@@ -14,6 +14,60 @@ import { maskEmail } from "./lib/mask-email";
 
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 
+type GoogleProfileLike = {
+    id: string;
+    emails?: { value: string; verified?: boolean | string }[];
+    name?: { givenName?: string; familyName?: string };
+    photos?: { value: string }[];
+};
+type GoogleVerifyDone = (err: Error | null, user?: Express.User | false) => void;
+type GoogleUserStore = Pick<typeof storage, "getUserByEmail" | "upsertUser">;
+
+/**
+ * JM7a (G11 / D12): a Google-profil e-mailje csak akkor köthető meglévő fiókhoz (e-mail-egyezés — storage.upsertUser), és
+ * csak akkor hozhat létre új `users` sort (az ADMIN_EMAIL-egyezés admin-jogot ad!), ha a Google MEGERŐSÍTETTNEK jelöli
+ * (`email_verified` → `profile.emails[0].verified`). Megerősítetlen címmel egy idegen Google-fiók átvehetné a meglévő
+ * (akár admin) fiókot — ezért ilyenkor nincs belépés.
+ */
+export function createGoogleVerify(store: GoogleUserStore, adminEmail: () => string | undefined = () => process.env.ADMIN_EMAIL) {
+    return async (profile: GoogleProfileLike, done: GoogleVerifyDone): Promise<void> => {
+        try {
+            const primary = profile.emails?.[0];
+            const email = primary?.value;
+            logger.info(`[AUTH] Google login attempt for ${maskEmail(email)}`);
+
+            if (!email) {
+                return done(new Error("No email found in Google profile"));
+            }
+            if (primary?.verified !== true && primary?.verified !== "true") {
+                logger.warn(`[AUTH] Google login refused: unverified e-mail ${maskEmail(email)}`);
+                return done(null, false);
+            }
+
+            // Check if user already exists to preserve their admin status
+            const existingUser = await store.getUserByEmail(email);
+
+            // Upsert user with Google ID
+            const user = await store.upsertUser({
+                googleId: profile.id,
+                email: email,
+                firstName: profile.name?.givenName || '',
+                lastName: profile.name?.familyName || '',
+                profileImageUrl: profile.photos?.[0]?.value,
+                // Only set isAdmin if: 1) new user AND matches ADMIN_EMAIL, or 2) existing user keeps their status
+                isAdmin: existingUser ? existingUser.isAdmin : (email === adminEmail())
+            });
+
+            return done(null, user);
+        } catch (err) {
+            logger.error(`[AUTH] Error during Google authentication:`, err);
+            return done(err as Error);
+        }
+    };
+}
+
+const googleVerify = createGoogleVerify(storage);
+
 export function setupAuth(app: Express) {
     const sessionSecret = process.env.SESSION_SECRET;
     const googleClientId = process.env.GOOGLE_CLIENT_ID;
@@ -101,35 +155,7 @@ export function setupAuth(app: Express) {
             clientSecret: googleClientSecret,
             callbackURL: `${baseUrl}/auth/google/callback`,
             scope: ['profile', 'email']
-        }, async (accessToken, refreshToken, profile, done) => {
-            try {
-                logger.info(`[AUTH] Google login attempt for ${maskEmail(profile.emails?.[0]?.value)}`);
-                const email = profile.emails?.[0]?.value;
-
-                if (!email) {
-                    return done(new Error("No email found in Google profile"));
-                }
-
-                // Check if user already exists to preserve their admin status
-                const existingUser = await storage.getUserByEmail(email);
-
-                // Upsert user with Google ID
-                const user = await storage.upsertUser({
-                    googleId: profile.id,
-                    email: email,
-                    firstName: profile.name?.givenName || '',
-                    lastName: profile.name?.familyName || '',
-                    profileImageUrl: profile.photos?.[0]?.value,
-                    // Only set isAdmin if: 1) new user AND matches ADMIN_EMAIL, or 2) existing user keeps their status
-                    isAdmin: existingUser ? existingUser.isAdmin : (email === process.env.ADMIN_EMAIL)
-                });
-
-                return done(null, user);
-            } catch (err) {
-                logger.error(`[AUTH] Error during Google authentication:`, err);
-                return done(err);
-            }
-        }));
+        }, (accessToken, refreshToken, profile, done) => googleVerify(profile, done)));
 
         // Google Auth Routes
         // LS-0a: the caller may ask to be returned to a specific page after login

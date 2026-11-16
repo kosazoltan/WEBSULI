@@ -56,6 +56,9 @@ import { loadClipMedia } from "./lesson-clips-db";
 import { createArbiterRouter } from "./arbiter/routes";
 import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
+import { createPlayerRouter, defaultPlayerMailer } from "./player/auth-routes";
+import { createPlayerStore } from "./player/store";
+import { playerLinkBaseUrl } from "./player/email-template";
 import { ViewDedup } from "./lib/view-dedup";
 import { maskEmail } from "./lib/mask-email";
 import { createGameScoreUserLimiter } from "./lib/game-score-limits";
@@ -818,6 +821,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (path === '/api/lessons/arbiter') {
       return enforceOriginAllowlist(req, res, next);
     }
+    // JM7a: a játékos e-mailes belépése (kódkérés, beváltás, kijelentkezés) — munkamenet előtt nincs CSRF-token, ezért,
+    // mint a /api/login, Origin/Referer allowlist őrzi; a többi /api/player/* írás CSRF-tokenes.
+    if (path.startsWith('/api/player/auth/')) {
+      return enforceOriginAllowlist(req, res, next);
+    }
 
     // Apply CSRF protection to all other mutating requests
     csrfSynchronisedProtection(req, res, next);
@@ -862,6 +870,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/admin/catalog", catalogAdminRouter);
   // Spec 2026-10-06-s5-tantargyi-memoria: a tantárgyi memória-kártyák csak olvasó admin API-ja.
   app.use("/api/admin/subject-memory", subjectMemoryAdminRouter);
+
+  // JM7a (docs/specs/2026-11-16-jatekok-jatekelmeny.md 10.4): játékos-fiók — külön tábla, külön munkamenet-kulcs, admin-jog
+  // semmilyen úton; a PLAYER_ACCOUNTS flag (alapból KI) mellett a végpontok 404-et adnak (a /status kivételével).
+  app.use("/api/player", createPlayerRouter({ store: createPlayerStore(dbPool), mailer: defaultPlayerMailer, baseUrl: () => playerLinkBaseUrl() }));
 
   // Create admin router with authentication middleware
   const adminRouter = express.Router();

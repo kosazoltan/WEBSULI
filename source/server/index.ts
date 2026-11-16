@@ -8,7 +8,10 @@ import { clientIpKeyGenerator } from "./lib/client-ip";
 import compression from "compression";
 import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
-import { flushPendingMaterialResults, registerRoutes } from "./routes";
+import { flushPendingMaterialResults } from "./routes";
+import { mountAppRoutes } from "./app-routes";
+import { startPlayerCodeSweeper } from "./player/sweeper";
+import { createPlayerStore } from "./player/store";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
@@ -20,15 +23,10 @@ import { setupLearnerReports } from "./learner-reports";
 // import { initializeDatabase } from "./initDb"; // Not needed for Neon PostgreSQL
 import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
-import { setupAuth } from "./auth";
 import { GAME_SCORE_IP_MAX, GAME_SCORE_LIMIT_MESSAGE, GAME_SCORE_WINDOW_MS } from "./lib/game-score-limits";
 import { runMigrations } from "./migrate";
-import { designAssetsRouter } from "./design-assets";
 import { startSkillLearningAudit } from "./workflows/learning-worker";
 import { requestIdMiddleware } from "./middleware/request-id";
-import errorReportRouter from "./routes/error-report";
-import clientErrorRouter from "./routes/client-error";
-import staticAuditRouter from "./routes/static-audit";
 import { getAllowedOrigins, isOriginAllowed, isSameOriginRequest } from "./lib/allowed-origins";
 import { logger } from "./lib/logger";
 import { isLessonRoute, lessonCspDirectives } from "./lib/csp-profiles";
@@ -616,17 +614,8 @@ app.use((req, res, next) => {
       }),
     );
 
-    // Setup Authentication (Passport, Sessions)
-    setupAuth(app);
-
-    // Universal Error Logger routes
-    app.use("/api/error-report", errorReportRouter);
-    // Böngészős hibák: titok nélkül, eredet + korlátok őrzik (kanban #127)
-    app.use("/api/client-error", clientErrorRouter);
-    app.use("/api/static-audit", staticAuditRouter);
-    app.use("/api/design-assets", designAssetsRouter);
-
-    const server = await registerRoutes(app);
+    // Munkamenet (Passport) + minden útvonal — JM7a: egy helyen, a jogosultsági őr-tesztek ugyanezt járják be.
+    const server = await mountAppRoutes(app);
     // E2E: no background jobs (they write, send e-mail or make backups).
     const stopSkillLearningAudit = e2e ? () => {} : startSkillLearningAudit();
 
@@ -650,6 +639,9 @@ app.use((req, res, next) => {
 
       // Phase 11: Start cleanup job for old applied improved files (daily at midnight)
       setupCleanupImprovedFiles();
+
+      // JM7a (review #445, A3): a játékos-belépőkódok takarítása (lejárt → cím törölve, 24 óra után a sor) — flagtől függetlenül.
+      startPlayerCodeSweeper(() => createPlayerStore(dbPool).purgeOldCodes());
     }
 
     // Express error handler (4 params required for Express to identify it as error middleware)

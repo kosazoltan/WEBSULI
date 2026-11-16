@@ -1,4 +1,8 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, Eye, Heart, MessageSquare, Mail, FileText } from "lucide-react";
@@ -30,25 +34,49 @@ type EmailStats = {
 };
 
 export default function AdminStats() {
+  // JM7a (G11): kliensoldali admin-őr, az admin.tsx mintájára — nem admin (vendég, játékos) átirányul, és admin-adatot
+  // nem kér le (a lekérdezések csak admin mellett indulnak; a szerver ettől függetlenül 401 / 403-at ad).
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const isAdmin = !!user?.isAdmin;
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  useEffect(() => {
+    if (!isAuthLoading && !isAdmin) {
+      toast({
+        title: "Hozzáférés megtagadva",
+        description: "Csak adminisztrátorok érhetik el ezt az oldalt.",
+        variant: "destructive",
+      });
+      setLocation("/");
+    }
+  }, [isAuthLoading, isAdmin, setLocation, toast]);
+
   // Fetch overall statistics
   const { data: overallStats, isLoading: statsLoading } = useQuery<OverallStats>({
     queryKey: ['/api/admin/stats/overall'],
+    enabled: isAdmin,
   });
 
   // Fetch top materials
   const { data: topMaterials, isLoading: topLoading } = useQuery<TopMaterial[]>({
     queryKey: ['/api/admin/stats/top-materials'],
+    enabled: isAdmin,
   });
 
   // Fetch classroom distribution
   const { data: classroomDist, isLoading: distLoading } = useQuery<ClassroomDist[]>({
     queryKey: ['/api/admin/stats/classroom-distribution'],
+    enabled: isAdmin,
   });
 
   // Fetch email delivery stats
   const { data: emailStats, isLoading: emailLoading } = useQuery<EmailStats>({
     queryKey: ['/api/admin/stats/email-delivery'],
+    enabled: isAdmin,
   });
+
+  // Ne rendereljen semmit nem adminnak (az átirányítás a fenti effektben történik).
+  if (!isAdmin) return null;
 
   const COLORS = ['#f97316', '#fb923c', '#f59e0b', '#eab308', '#d97706', '#ea580c', '#fbbf24', '#fdba74'];
 
