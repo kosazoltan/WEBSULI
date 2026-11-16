@@ -551,13 +551,23 @@ valós szerződést kövessék:**
     `.game-hud*`, `.game-overlay`, `.game-dialog`, `.game-pause*`, `.game-result*`, `.game-start*`, `.game-rotate*`.
     Fekvő, alacsony nézetben (`max-height: 500px` és `min-width: 560px`) a szünet menü két oszlopos, az
     eredménykártya és a kezdőképernyő kéthasábos.
-12. **`.game-answer-btn` felülírhatósága (S13 / B7, 2026-11-16).** A szabály eredetileg rétegen kívül állt az
+12. **Rétegrend (S2 utójavítás, #433 Codex-komment 4581035479):** a kupon-lejárati párbeszéd (`CouponExpiredOverlay`)
+    minden játékréteg FÖLÖTT van: HUD (z 40), kvíz-visszajelzés (z 90), szünet menü és eredményképernyő (`.game-overlay`,
+    z 80). Lejáratkor az alatta lévő játék-fedőréteg gombjai (Újra, Folytatás, következő szint) nem érhetők el: a
+    párbeszéd `document.body`-ba portálozott, teljes képernyős modális réteg, a z-indexe a közös `--game-z-coupon-expired`
+    változóból jön (`.game-coupon-expired`, index.css), a fókusz a „Vissza a leckéhez” gombra kerül. Új fedőréteg
+    z-indexét a `.game-overlay` (80) és a lejárati réteg (95) közé kell tenni, nem fölé.
+    Billentyűk: lejáratkor a párbeszéd `window`-capture `keydown`/`keyup` figyelője `stopPropagation`-nel elnyeli az
+    eseményt (az alsó rétegek bubble-fázisú `window` figyelői — kvíz-visszajelzés, szünet menü, játékok — nem kapják
+    meg), az alatta lévő `body`-gyerekek `inert`-ek, és a `document.documentElement.dataset.gameCouponExpired` = "true".
+    Aki `window`-on capture-fázisú billentyűfigyelőt tesz, ezt a jelzőt nézze.
+13. **`.game-answer-btn` felülírhatósága (S13 / B7, 2026-11-16).** A szabály eredetileg rétegen kívül állt az
     `index.css`-ben, ezért a forrásban később álló, azonos fajlagosságú szabályként felülírta a gombra tett Tailwind
     `text-*` / `leading-*` / `min-h-*` segédosztályt (a Matek sprint ezért `!text-[…]` kerülőutat használt). Most
     `@layer components` blokkban áll: alapként továbbra is `min-height: 56px`, `font-size: var(--game-answer-font)`,
     `line-height: 1.2`, de a játék segédosztálya (utilities réteg) felülírja — `!` nem kell. Őr:
     `tests/game-answer-btn-layer.test.ts`. A meglévő `!text-[…]` ártalmatlan, a játékoldalakat ez a szelet nem módosítja.
-13. **Mérő: kezdőképernyő és képernyőkép beállt állapotban (S13 / B5, 2026-11-16).** A `smallTargets` a
+14. **Mérő: kezdőképernyő és képernyőkép beállt állapotban (S13 / B5, 2026-11-16).** A `smallTargets` a
     kezdőképernyőn is a belépő animáció után mér (`settleIfPresent(page, "[data-game-start]")`: csak ha a közös
     `StartScreen` jelen van), és a `shot()` állapotonként megvárja a gyökér (`[data-game-start]`, `[data-game-hud]`,
     `game-pause-menu`, `[data-game-result]`) beállását, mielőtt fotóz. A 48 px-es mérce nem változott.
