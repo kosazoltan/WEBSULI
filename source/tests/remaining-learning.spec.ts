@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
 import ts from 'typescript';
+import {VOCAB_EN} from '../client/src/data/vocabBank/vocab-en';
 
 test.use({serviceWorkers:'block'});
 
@@ -36,6 +37,7 @@ test('source-only manufacturing on mobile and desktop sends no author grade',asy
 });
 
 test('asteroid wrong-answer explanation remains readable and dismisses to a new quiz',async({page})=>{
+ test.setTimeout(150000);
  await page.setViewportSize({width:390,height:844});
  await page.goto('/games/space-asteroid-quiz');
  await page.getByRole('button',{name:/Indulhat —/}).click();
@@ -60,16 +62,46 @@ test('asteroid wrong-answer explanation remains readable and dismisses to a new 
  walk(ast);
  }
  expect(bank.length).toBeGreaterThan(900);
- const text=await quiz.innerText();const entry=bank.find(q=>text.includes(q.prompt));expect(entry).toBeDefined();
- await quiz.getByRole('button',{name:entry!.wrong,exact:true}).click();
- await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
- await expect(page.getByTestId('quiz-feedback-why')).toContainText(entry!.explanation);
- await page.waitForTimeout(1800);
- await expect(page.getByTestId('quiz-feedback')).toBeVisible();
- await page.screenshot({path:test.info().outputPath('asteroid-explanation-mobile.png'),fullPage:true});
- await page.getByRole('button',{name:'Értem, megyek tovább'}).click();
- await expect(page.getByTestId('quiz-feedback')).toHaveCount(0);
- await expect(quiz).toBeVisible();
+ // SPEC-VÁLTOZÁS 2026-11-15 (docs/specs/2026-11-15-jatekok-mobil-szobank.md 4.3–4.4, A8): az angol kérdés-hely a
+ // központi szóbankból jön (generált prompt, `vocab:<bejegyzés>:<típus>` azonosító), ezért az első kérdés ~20%-os
+ // eséllyel nem a fenti forrásokból való (review #434). A mérce nem lazul: MINDKÉT esetet kötelezően ellenőrizzük —
+ // (1) kézi / évfolyam-banki kérdés: a magyarázat a bank szövege; (2) szóbankos kérdés: a magyarázat megnevezi a helyes
+ // választ és a bejegyzés term = hu párját (a generátor sablonja). A 7. évfolyam 1-es sávja 30 tétel, köztük 6 angol:
+ // rossz válaszokkal továbblépve legfeljebb 30 kérdésen belül biztosan jön szóbankos kérdés (minden kérdezett tétel fogy).
+ const vocabById=new Map(VOCAB_EN.map(e=>[e.id,e]));
+ let checkedBank=false,checkedVocab=false;
+ for(let i=0;i<40&&!(checkedBank&&checkedVocab);i++){
+  await expect(quiz).toBeVisible();
+  const id=(await quiz.getAttribute('data-quiz-id'))??'';
+  if(id.startsWith('vocab:')){
+   const entry=vocabById.get(id.split(':')[1]!);expect(entry,`ismeretlen szóbank-bejegyzés: ${id}`).toBeDefined();
+   const correct=(await quiz.locator('[data-correct="true"] > span').last().innerText()).trim();
+   await quiz.locator('[data-correct="false"]').first().click();
+   await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
+   const why=page.getByTestId('quiz-feedback-why');
+   await expect(why).toContainText(`A helyes válasz: „${correct}”`);
+   await expect(why).toContainText(`${entry!.term} = ${entry!.hu}`);
+   if(!checkedVocab)await page.screenshot({path:test.info().outputPath('asteroid-explanation-vocab-mobile.png'),fullPage:true});
+   checkedVocab=true;
+  }else if(!checkedBank){
+   const text=await quiz.innerText();const entry=bank.find(q=>text.includes(q.prompt));expect(entry,`a kérdés (${id}) nincs a forrásokban`).toBeDefined();
+   await quiz.getByRole('button',{name:entry!.wrong,exact:true}).click();
+   await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
+   await expect(page.getByTestId('quiz-feedback-why')).toContainText(entry!.explanation);
+   await page.waitForTimeout(1800);
+   await expect(page.getByTestId('quiz-feedback')).toBeVisible();
+   await page.screenshot({path:test.info().outputPath('asteroid-explanation-mobile.png'),fullPage:true});
+   checkedBank=true;
+  }else{
+   await quiz.locator('[data-correct="false"]').first().click();
+   await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
+  }
+  await page.getByRole('button',{name:'Értem, megyek tovább'}).click();
+  await expect(page.getByTestId('quiz-feedback')).toHaveCount(0);
+  await expect(quiz).toBeVisible();
+ }
+ expect(checkedBank,'kézi / évfolyam-banki kérdés magyarázata nem volt ellenőrizve').toBe(true);
+ expect(checkedVocab,'szóbankos kérdés magyarázata nem volt ellenőrizve').toBe(true);
 });
 
 test('separate map upload also sends sources without a manual scope',async({page})=>{

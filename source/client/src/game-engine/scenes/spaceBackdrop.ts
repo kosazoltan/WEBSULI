@@ -305,3 +305,51 @@ export function buildPlanet(radius: number): THREE.Group {
   });
   return group;
 }
+
+/* ------------------------- robbanás: lökéshullám-gyűrű ------------------------- */
+
+let shockwaveTex: THREE.CanvasTexture | null = null;
+
+/**
+ * S10 — a robbanások táguló lökéshullám-gyűrűjének közös textúrája: puha szélű, fényes perem, átlátszó belső
+ * (additív keveréssel a bloom nélkül is ragyog). Egyszer készül, minden gyűrű-sprite ezt használja — a sprite
+ * törlése NEM szabadíthatja fel.
+ */
+export function shockwaveTexture(): THREE.Texture {
+  if (shockwaveTex) return shockwaveTex;
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(0.55, "rgba(255,255,255,0)");
+    g.addColorStop(0.78, "rgba(255,255,255,0.55)");
+    g.addColorStop(0.88, "rgba(255,255,255,1)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+  shockwaveTex = new THREE.CanvasTexture(canvas);
+  shockwaveTex.colorSpace = THREE.SRGBColorSpace;
+  return shockwaveTex;
+}
+
+/** Lökéshullám: 0 → 2,2× sugár 260 ms alatt, átlátszóság 0,8 → 0 (végrehajtás S10 / 6. lépés). */
+export const SHOCKWAVE_DURATION = 0.26;
+export const SHOCKWAVE_GROWTH = 2.2;
+export const SHOCKWAVE_START_OPACITY = 0.8;
+
+/** Az eltelt idő (s) és az alapsugár → a gyűrű átmérője és átlátszósága; `done`, ha lejárt. */
+export function shockwaveFrame(age: number, radius: number): { scale: number; opacity: number; done: boolean } {
+  const t = Math.min(1, Math.max(0, age / SHOCKWAVE_DURATION));
+  // Gyors indulás, lassuló tágulás (ease-out), így „ütésnek” érződik.
+  const eased = 1 - (1 - t) * (1 - t);
+  return {
+    scale: 2 * radius * SHOCKWAVE_GROWTH * eased,
+    opacity: SHOCKWAVE_START_OPACITY * (1 - t),
+    done: age >= SHOCKWAVE_DURATION,
+  };
+}
