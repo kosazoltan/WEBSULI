@@ -35,6 +35,7 @@ import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { recordRun, type Achievement } from "@/lib/achievements";
+import { quizTopicLabelHu } from "@/lib/quizTopicLabel";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import { useCouponSession, type CouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
@@ -2311,7 +2312,7 @@ function PlayScreen(props: {
                 className="w-full max-w-md sm:max-w-2xl max-h-full overflow-y-auto rounded-2xl border border-sky-400/50 bg-slate-900/95 p-3 sm:p-4 shadow-[0_18px_50px_rgba(0,0,0,0.6)]"
               >
                 <p className="text-xs font-bold uppercase tracking-wide text-sky-300 mb-1">
-                  {quizReason === "anchor" ? "⚓ Horgonyzási kérdés" : "🌪 Viharkérdés"} · {activeQuiz.topic || SUBJECT_LABEL[activeQuiz.subject]}
+                  {quizReason === "anchor" ? "⚓ Horgonyzási kérdés" : "🌪 Viharkérdés"} · {quizTopicLabelHu(activeQuiz.topic, SUBJECT_LABEL[activeQuiz.subject])}
                   {activeQuiz.source === "material" ? " · tananyag" : ""}
                 </p>
                 <p className="text-lg font-extrabold mb-2 sm:mb-3 text-white leading-snug">{activeQuiz.prompt}</p>

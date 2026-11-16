@@ -24,6 +24,7 @@ import {
 import ClassroomGateModal from "@/components/ClassroomGateModal";
 import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
+import { quizTopicLabelHu } from "@/lib/quizTopicLabel";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import { useCouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
@@ -1336,7 +1337,7 @@ export default function TsunamiEscapeEnglish() {
   const surfacePct = useMemo(() => Math.min(100, water), [water]);
   const selectedSubjectMeta = TSUNAMI_SUBJECT_META[subject];
   const runSubjectMeta = TSUNAMI_SUBJECT_META[runSubjectRef.current];
-  const quizSubjectMeta = quiz?.topic ? { label: quiz.topic, chip: "LECKE" } : quiz ? TSUNAMI_SUBJECT_META[quiz.subject] : runSubjectMeta;
+  const quizSubjectMeta = quiz?.topic ? { label: quizTopicLabelHu(quiz.topic), chip: "LECKE" } : quiz ? TSUNAMI_SUBJECT_META[quiz.subject] : runSubjectMeta;
 
   useEffect(() => {
     if (phase !== "over" && phase !== "won") return;
