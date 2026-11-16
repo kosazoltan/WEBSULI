@@ -160,14 +160,20 @@ async function waitFrames(page: Page, n: number): Promise<void> {
     .catch(() => undefined);
 }
 
-async function readRec(page: Page): Promise<Rec> {
-  return page.evaluate(() => {
+/**
+ * A rögzítő kiürítése. #58 (2. kör): ugyanabban a lap-hívásban jelzi azt is, hogy nyitva van-e kérdés (`quizScope`) —
+ * a CI-ben a Kockavadász minden Playwright-hívása egy ~0,7 s-os képkockára vár, ezért a külön `isVisible` lépcsőnként
+ * egy képkockát fogyasztott.
+ */
+async function readRec(page: Page, quizScope?: string): Promise<Rec & { quizOpen: boolean }> {
+  return page.evaluate((scope) => {
     const rec = (window as unknown as { __joyRec: Rec }).__joyRec;
     const out = { frames: rec.frames.slice(), events: rec.events.slice() };
     rec.frames.length = 0;
     rec.events.length = 0;
-    return out;
-  });
+    const q = scope ? document.querySelector(scope) : null;
+    return { ...out, quizOpen: !!q && q.getClientRects().length > 0 };
+  }, quizScope ?? null);
 }
 
 async function renders(page: Page): Promise<Record<string, number>> {
@@ -176,9 +182,19 @@ async function renders(page: Page): Promise<Record<string, number>> {
 
 type Stick = { cx: number; cy: number; r: number };
 
+/**
+ * A tárcsa helye. #58 (2. kör): a tárcsa a teszt alatt nem mozdul (rögzített nézet), ezért lapon belül egyszer mérjük; új
+ * körnél (`ensurePlaying` lassú útja) a gyorsítótár törlődik.
+ */
+const stickCache = new WeakMap<Page, Stick>();
+
 async function stickGeometry(page: Page): Promise<Stick> {
+  const cached = stickCache.get(page);
+  if (cached) return cached;
   const box = (await page.getByTestId("virtual-joystick").boundingBox({ timeout: 15_000 }))!;
-  return { cx: box.x + box.width / 2, cy: box.y + box.height / 2, r: box.width / 2 };
+  const s = { cx: box.x + box.width / 2, cy: box.y + box.height / 2, r: box.width / 2 };
+  stickCache.set(page, s);
+  return s;
 }
 
 async function touch(cdp: CDPSession, type: "touchStart" | "touchMove" | "touchEnd", x?: number, y?: number) {
@@ -333,6 +349,21 @@ async function clearQuiz(page: Page, g: GameSpec): Promise<boolean> {
  * új kört indítunk (ugyanaz az indítási út, mint a teszt elején), és a mérés folytatódik.
  */
 async function ensurePlaying(page: Page, g: GameSpec): Promise<void> {
+  // Gyors út EGY lap-hívással: a CI szoftveres WebGL-jén minden Playwright-hívás egy képkockára (Kockavadász ~0,7 s) vár,
+  // ezért lépcsőnként több `isVisible` a 180 s-os keretet fogyasztaná (PR #470 első CI-futása: block-craft időtúllépés).
+  const state = await page.evaluate(
+    ({ scope }) => {
+      const vis = (el: Element | null) => !!el && el.getClientRects().length > 0;
+      return {
+        card: vis(document.querySelector('[data-testid="quiz-feedback-dismiss"]')),
+        quiz: vis(document.querySelector(`${scope} [data-correct="true"]`)),
+        stick: vis(document.querySelector('[data-testid="virtual-joystick"]')),
+      };
+    },
+    { scope: g.case.quizScope ?? "[data-joy-no-quiz]" },
+  );
+  if (state.stick && !state.card && !state.quiz) return;
+  stickCache.delete(page);
   await clearQuiz(page, g);
   const stick = page.getByTestId("virtual-joystick");
   if (await stick.isVisible().catch(() => false)) return;
@@ -383,13 +414,13 @@ async function stepOnce(page: Page, cdp: CDPSession, g: GameSpec, fx: number): P
   // A CI szoftveres WebGL-je lassú (Kockavadász ~10 fps): a tartás legalább 15 képkockáig tart, hogy az állandósult
   // érték és a 63 / 90%-os pont mérhető legyen.
   await waitFrames(page, 18);
-  const rec = await readRec(page);
+  const rec = await readRec(page, g.case.quizScope);
   await touch(cdp, "touchEnd");
   await page.waitForTimeout(400);
   const moves = rec.events.filter((e) => e.type === "pointermove");
   const t0 = moves[moves.length - 1]?.t ?? NaN;
   const d0 = moves[moves.length - 1]?.d ?? NaN;
-  if (!Number.isFinite(t0) || rec.frames.length < 5 || (await page.locator(g.case.quizScope ?? "[data-joy-no-quiz]").first().isVisible().catch(() => false))) {
+  if (!Number.isFinite(t0) || rec.frames.length < 5 || rec.quizOpen) {
     // A rögzítő a lépcső ELŐTT ürül (a lenyomás és a gáz eldobva), ezért itt csak a lépcső `pointermove`-ja várható.
     throw new Error(`${g.case.id}: nincs mérhető lépcső (a lépcső óta: események ${JSON.stringify(rec.events.map((e) => e.type))}, képkockák ${rec.frames.length})`);
   }
