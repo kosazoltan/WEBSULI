@@ -71,16 +71,15 @@ test.describe("valódi érintés", () => {
     await expect.poll(async () => Number((await page.getByTestId("sq-score").innerText()).replace(/\D/g, "")), { timeout: 5_000 }).toBeGreaterThan(0);
     await shot(page, "touch-correct.jpg");
 
-    // 2. feladat: ROSSZ drón → nincs dialógus, a helyes drón ≥ 1,8 mp-ig zölden látszik, „Miért?” → kártya újrapróba nélkül.
+    // 2. feladat: ROSSZ drón → nincs dialógus, a helyes drón zölden látszik, „Miért?” (a kijelzés ALATT) → kártya újrapróba nélkül.
+    // A „Miért?” a kijelzés alatt áll egy helyben; a kijelzés végén a kártya „Miért?”-csippé, majd új feladattá alakul, és a
+    // gomb elmozdul — a main CI-n (43943054869, 1. és 3. próba) a koppintás erre a váltásra esett, és a gomb mellé ment.
     await expect(drones(page)).toHaveCount(0, { timeout: 5_000 });
     await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
     await tapCenter(page, '[data-testid="sq-answers"] [data-correct="false"]');
-    const right = page.locator('[data-testid="sq-answers"] [data-correct="true"]');
-    await expect(right).toHaveAttribute("data-state", "correct");
+    await expect(page.locator('[data-testid="sq-answers"] [data-correct="true"]')).toHaveAttribute("data-state", "correct");
     await expect(page.locator('[data-testid="sq-answers"] [data-state="wrong"]')).toHaveCount(1);
     expect(await page.locator('[role="dialog"]').count(), "a hibás válasz nem nyit blokkoló kártyát").toBe(0);
-    await page.waitForTimeout(1_500);
-    await expect(right, "a megoldás ≥ 1,8 mp-ig látszik").toHaveAttribute("data-state", "correct");
     await shot(page, "touch-wrong.jpg");
     await page.getByTestId("play-why").tap();
     await expect(page.getByTestId("quiz-feedback")).toBeVisible();
@@ -88,6 +87,32 @@ test.describe("valódi érintés", () => {
     await expect(page.getByTestId("quiz-feedback-retry")).toHaveCount(0);
     await page.getByTestId("quiz-feedback-dismiss").tap();
     await expect(page.getByTestId("quiz-feedback")).toHaveCount(0);
+
+    // 3. feladat: ROSSZ drón, „Miért?” nélkül → a helyes drón ≥ 1,8 mp-ig zölden látszik.
+    // A kijelzés hossza a LAPON BELÜL, képkockánként mérve (main CI 43943054869, 2. próba; kanban #58): a Playwright-oldali
+    // `waitForTimeout(1500)` + a közbeeső parancsok oda-vissza útja a lassú, szoftveres WebGL-es CI-n 2 mp fölé nyúlt, így
+    // a mérés a már lezárt kijelzést nézte. A mérce (≥ 1,8 mp) változatlan; ugyanez a minta: game-explanation-pause.spec.ts.
+    await expect(page.locator('[data-testid="sq-answers"] [data-state="correct"]')).toHaveCount(0, { timeout: 15_000 });
+    await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
+    await page.evaluate(() => {
+      const w = window as unknown as { __sqReveal?: { start: number | null; end: number | null } };
+      w.__sqReveal = { start: null, end: null };
+      const tick = () => {
+        const on = document.querySelector('[data-testid="sq-answers"] [data-correct="true"][data-state="correct"]') !== null;
+        const r = w.__sqReveal!;
+        if (r.start === null && on) r.start = performance.now();
+        if (r.start !== null && r.end === null && !on) r.end = performance.now();
+        if (r.end === null) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    const reveal = () => page.evaluate(() => (window as unknown as { __sqReveal: { start: number | null; end: number | null } }).__sqReveal);
+    await tapCenter(page, '[data-testid="sq-answers"] [data-correct="false"]');
+    await expect.poll(async () => (await reveal()).start !== null, { timeout: 5_000 }).toBe(true);
+    await expect(page.locator('[data-testid="sq-answers"] [data-state="wrong"]')).toHaveCount(1);
+    await expect.poll(async () => (await reveal()).end !== null, { timeout: 20_000 }).toBe(true);
+    const r = await reveal();
+    expect(r.end! - r.start!, "a megoldás ≥ 1,8 mp-ig látszik").toBeGreaterThanOrEqual(1_800);
 
     // Innen minden feladatra rossz válasz, fosztogató-lövés nincs: a tanító szakasz után a torony elesik.
     const over = page.getByTestId("sq-over");
