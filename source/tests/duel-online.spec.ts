@@ -310,6 +310,41 @@ test("review #464: kapcsolódás közben a Vissza gombbal elnavigálva a későn
   }
 });
 
+test("review #464: újratöltés a váróteremben (vendég, tárolt tokennel) és meccs közben (gazda) — mindkettő a saját helyére ül vissza, a meccs a győzteshirdetésig megy", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const A = await phone(browser, on.url, { width: 390, height: 844 }, { learner: true });
+  const B = await phone(browser, on.url, { width: 360, height: 640 });
+  try {
+    const code = await openRoom(A.page);
+    await joinRoom(B.page, code, "link", 4);
+    // B újratölt a váróteremben → visszaül (nem „megtelt”), a gazda továbbra is 2 főt lát.
+    await B.page.reload();
+    await expect(B.page.getByTestId("duel-lobby")).toBeVisible({ timeout: 20_000 });
+    await expect(A.page.getByTestId("duel-players").locator("li")).toHaveCount(2);
+    if ((await B.page.getByTestId("duel-ready").getAttribute("aria-pressed")) !== "true") await B.page.getByTestId("duel-ready").tap();
+    await expect(A.page.getByTestId("duel-start")).toBeEnabled({ timeout: 10_000 });
+    await A.page.getByTestId("duel-start").tap();
+    const r1 = await answerNextRound(A.page, 0, 0);
+    expect(r1).toBe(1);
+    // A (gazda) a kör / felfedés alatt újratölt → vissza a meccsbe ugyanazzal a szobával.
+    await A.page.reload();
+    await expect(A.page.getByTestId("duel-match")).toBeVisible({ timeout: 20_000 });
+    expect((await probe(A.page)).code).toBe(code);
+    let lastA = 1;
+    let lastB = 0;
+    for (let i = 0; i < 12; i++) {
+      const [ra, rb] = await Promise.all([answerNextRound(A.page, lastA, 0), answerNextRound(B.page, lastB, 1)]);
+      if (ra === "result" || rb === "result") break;
+      lastA = ra;
+      lastB = rb;
+    }
+    for (const p of [A.page, B.page]) await expect(p.getByTestId("duel-result")).toBeVisible({ timeout: 30_000 });
+  } finally {
+    await A.ctx.close();
+    await B.ctx.close();
+  }
+});
+
 test("érvénytelen és nem létező kód; vendég nem nyithat szobát (ACCOUNT_REQUIRED), de csatlakozni tud", async ({ browser }) => {
   const B = await phone(browser, on.url, { width: 360, height: 640 });
   try {

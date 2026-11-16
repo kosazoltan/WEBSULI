@@ -189,6 +189,79 @@ describe("JM3a gateway — 2 fős párbaj-szoba (review #464 H1)", () => {
   });
 });
 
+describe("JM3a gateway — visszatérés a saját helyre új jeggyel / tárolt tokennel (review #464, vercel 4589568096)", () => {
+  async function dropConnection(p: Player): Promise<void> {
+    p.socket.io.reconnection(false);
+    p.socket.io.engine.close();
+    await sleep(80);
+  }
+
+  it("váróteremben: a fiókos B újratöltés után ugyanarra a kódra csatlakozva a SAJÁT helyére ül vissza (nem ROOM_FULL); idegen 3. ROOM_FULL; tokenes vendég is visszaül, token nélküli vendég idegen", async () => {
+    const h = await harness();
+    const { host, code } = await createRoom(h);
+    const whoB = creatorHeaders();
+    const b1 = await addPlayer(h, code, 5, { headers: whoB });
+    const bId = b1.playerId!;
+    await dropConnection(b1);
+    await host.waitFor("room:state", (s) => s.players.some((p: any) => p.id === bId && !p.connected));
+    const b2 = await join(h, { intent: "join", code }, { headers: whoB });
+    const back = await b2.request("room:join", { code, grade: 5 });
+    assert.equal(back.ok, true, JSON.stringify(back));
+    assert.equal((back as { playerId: string }).playerId, bId, "ugyanaz a hely");
+    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players.every((p: any) => p.connected));
+    const third = await join(h, { intent: "join", code });
+    assert.deepEqual(await third.request("room:join", { code, grade: 5 }), { ok: false, code: "ROOM_FULL" });
+
+    // Vendég: a tárolt folytatási tokennel új kapcsolaton is visszaül; token nélkül (új jegy) idegennek számít.
+    const h2 = await harness();
+    const r2 = await createRoom(h2);
+    const guest = await addPlayer(h2, r2.code, 6);
+    const gId = guest.playerId!;
+    const token = guest.resumeToken!;
+    await dropConnection(guest);
+    const fresh = await join(h2, { intent: "join", code: r2.code });
+    assert.deepEqual(await fresh.request("room:join", { code: r2.code, grade: 6 }), { ok: false, code: "ROOM_FULL" }, "token nélkül nem ül a helyére");
+    const { io } = await import("socket.io-client");
+    const { connectRt } = await import("../client/src/lib/rt/rtClient");
+    const resumed = await connectRt({ ticket: "", resumeToken: token, url: `http://127.0.0.1:${h2.port}`, ioFactory: io, extraHeaders: { origin: h2.origin } });
+    players.push(resumed as Player);
+    await new Promise<void>((resolve) => {
+      const off = resumed.onState((s) => {
+        if (s.you.playerId === gId) {
+          off();
+          resolve();
+        }
+      });
+      if (resumed.state?.you.playerId === gId) resolve();
+    });
+    assert.equal(resumed.playerId, gId);
+  });
+
+  it("meccs közben: a fiókos B a kör alatt újratölt, új jeggyel visszaül — életerő, a már adott válasz és a meccs megmarad; rossz kódos próba nem zárja le", async () => {
+    const h = await harness({ windowMs: 5000 });
+    const { host, code } = await createRoom(h);
+    const whoB = creatorHeaders();
+    const b1 = await addPlayer(h, code, 5, { headers: whoB });
+    const bId = b1.playerId!;
+    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players.every((p: any) => p.ready));
+    await host.request("room:start", {});
+    const open = await b1.waitFor("round:open");
+    await b1.request("round:answer", { round: open.round, optionIndex: correctFor(h, code, bId), clientRtMs: 600 });
+    await dropConnection(b1);
+    const wrong = await join(h, { intent: "join", code: "ZZZ999" }, { headers: whoB });
+    assert.deepEqual(await wrong.request("room:join", { code: "ZZZ999", grade: 5 }), { ok: false, code: "ROOM_NOT_FOUND" });
+    const b2 = await join(h, { intent: "join", code }, { headers: whoB });
+    const back = await b2.request("room:join", { code, grade: 5 });
+    assert.equal(back.ok, true, JSON.stringify(back));
+    assert.equal((back as { playerId: string }).playerId, bId);
+    const st = await b2.waitFor("room:state", (s) => s.you.playerId === bId);
+    assert.equal(st.phase === "round_open" || st.phase === "round_reveal", true, st.phase);
+    if (st.phase === "round_open") assert.notEqual(st.you.answeredOptionIndex, null, "a már adott válasz megmaradt");
+    assert.equal(host.events("match:result").length, 0, "a meccs fut tovább");
+    assert.equal(h.rt.registry.get(code)!.match!.ids.includes(bId), true);
+  });
+});
+
 describe("JM3a gateway — megszakadt régi hely", () => {
   it("ugyanaz a (fiókos) játékos megszakadt kapcsolattal új szobát nyithat: a régi helye felszabadul, az ellenfél győz; élő kapcsolatnál ALREADY_IN_ROOM marad", async () => {
     const h = await harness({ windowMs: 3000 });

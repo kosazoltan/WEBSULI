@@ -38,7 +38,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePlayer } from "@/hooks/usePlayer";
 import { loadClassroomGrade } from "@/lib/classroomStore";
 import { createLocalQuestionProvider, ensureGradeBanks } from "@/lib/duel/localQuestions";
-import { createBotSession, DuelJoinError, openOnlineSession, type DuelSession, type DuelSnapshot, type OnlineIntent } from "@/lib/duel/session";
+import { createBotSession, DuelJoinError, loadStoredSeat, openOnlineSession, type DuelSession, type DuelSnapshot, type OnlineIntent } from "@/lib/duel/session";
 import { getLearnerToken, useLearnerProfile } from "@/lib/learnerProfile";
 import { BOT_PROFILES, BOT_SKILLS, recordBotResult, suggestBotSkill, type BotRecord, type BotSkill } from "@shared/duel/bot";
 import { DUEL_ROUNDS } from "@shared/duel/rules";
@@ -262,7 +262,7 @@ export default function DuelOnline() {
       const token = ++opToken.current;
       lastIntent.current = intent;
       endSession();
-      setScreen({ name: "connecting", label: intent.intent === "create" ? "Szoba nyitása…" : "Belépés a szobába…" });
+      setScreen({ name: "connecting", label: intent.intent === "create" ? "Szoba nyitása…" : intent.intent === "resume" ? "Visszatérés a szobába…" : "Belépés a szobába…" });
       try {
         const s = await openOnlineSession(intent, { learnerToken: getLearnerToken(), transports: forcePolling ? ["polling"] : undefined });
         if (token !== opToken.current) {
@@ -275,10 +275,12 @@ export default function DuelOnline() {
       } catch (err) {
         if (token !== opToken.current) return;
         const code = err instanceof DuelJoinError ? err.code : "NETWORK";
-        setScreen({ name: "error", code, retry: () => void startOnline(intent) });
+        // A visszaülés csendes kísérlet: ha a hely már nincs meg, a megszokott kezdő / csatlakozó képernyő jön.
+        if (intent.intent === "resume") setScreen(onCodeRoute ? { name: "join" } : { name: "home" });
+        else setScreen({ name: "error", code, retry: () => void startOnline(intent) });
       }
     },
-    [endSession, forcePolling],
+    [endSession, forcePolling, onCodeRoute],
   );
 
   const createRoom = () =>
@@ -296,6 +298,15 @@ export default function DuelOnline() {
     }
     void startOnline({ intent: "join", code, grade: setup.grade });
   };
+
+  // Lap-újratöltés után (a 60 s-os helymegtartáson belül) visszaülés a saját helyre a tárolt folytatási tokennel — vendégnél is.
+  const resumeTried = useRef(false);
+  useEffect(() => {
+    if (resumeTried.current) return;
+    resumeTried.current = true;
+    const seat = loadStoredSeat();
+    if (seat && (!routeCode || routeCode === seat.code)) void startOnline({ intent: "resume", code: seat.code, token: seat.token });
+  }, [routeCode, startOnline]);
 
   const backHome = useCallback(() => {
     opToken.current += 1;

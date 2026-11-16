@@ -234,6 +234,8 @@ export function createBotSession(args: BotSessionArgs): DuelSession {
 // ---------------------------------------------------------------------------------------------------------------------
 
 export type OnlineIntent =
+  /** JM3a: visszatérés a saját helyre a tárolt folytatási tokennel (lap-újratöltés után; vendégnél is). */
+  | { intent: "resume"; code: string; token: string }
   | { intent: "create"; grade: number; settings: { band?: number; subjects?: Array<(typeof RT_SUBJECTS)[number]> } }
   | { intent: "join"; code: string; grade: number };
 
@@ -261,8 +263,40 @@ export function ticketErrorCode(err: unknown): string {
   return "BAD_MESSAGE";
 }
 
+/** A saját szobahely (kód + folytatási token) a lapfülhöz kötve (`sessionStorage`): újratöltés után ide lehet visszaülni. */
+const SEAT_KEY = "websuli.duelSeat.v1";
+export const SEAT_MAX_AGE_MS = 70_000;
+export type StoredSeat = { code: string; token: string; at: number };
+
+export function loadStoredSeat(now = Date.now()): StoredSeat | null {
+  try {
+    const p = JSON.parse(window.sessionStorage.getItem(SEAT_KEY) ?? "null") as StoredSeat | null;
+    return p && typeof p.code === "string" && typeof p.token === "string" && typeof p.at === "number" && now - p.at < SEAT_MAX_AGE_MS ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeSeat(seat: StoredSeat | null): void {
+  try {
+    if (seat) window.sessionStorage.setItem(SEAT_KEY, JSON.stringify(seat));
+    else window.sessionStorage.removeItem(SEAT_KEY);
+  } catch {
+    /* tároló nélkül is megy (akkor nincs újratöltés utáni visszaülés) */
+  }
+}
+
 export async function openOnlineSession(intent: OnlineIntent, opts: OnlineSessionOptions = {}): Promise<DuelSession> {
   const { requestRtTicket, connectRt } = await import("@/lib/rt/rtClient");
+  if (intent.intent === "resume") {
+    try {
+      const rt = await connectRt({ ticket: "", resumeToken: intent.token, transports: opts.transports });
+      return wrapOnline(rt, opts);
+    } catch (err) {
+      storeSeat(null);
+      throw new DuelJoinError((err as { code?: string }).code ?? "ROOM_NOT_FOUND");
+    }
+  }
   let ticket;
   try {
     ticket = await requestRtTicket(intent.intent === "create" ? { intent: "create" } : { intent: "join", code: intent.code }, { learnerToken: opts.learnerToken ?? null });
@@ -283,7 +317,10 @@ export async function openOnlineSession(intent: OnlineIntent, opts: OnlineSessio
     rt.close();
     throw new DuelJoinError(ack.code);
   }
+  return wrapOnline(rt, opts);
+}
 
+function wrapOnline(rt: import("@/lib/rt/rtClient").RtConnection, opts: OnlineSessionOptions): DuelSession {
   const store = createStore({ kind: "online", conn: "open", closedCode: null, state: rt.state, notice: null, clockOffsetMs: 0, botSkill: null });
   const offsets: number[] = [];
   let giveUp: ReturnType<typeof setTimeout> | null = null;
@@ -304,9 +341,15 @@ export async function openOnlineSession(intent: OnlineIntent, opts: OnlineSessio
       giveUp = null;
     }
     store.set({ conn, closedCode: conn === "closed" ? (rt.closedCode ?? store.get().closedCode ?? "DISCONNECTED") : null });
+    if (conn === "closed") storeSeat(null);
   };
 
+  const remember = () => {
+    const code = rt.state?.code;
+    if (rt.resumeToken && code && rt.status !== "closed") storeSeat({ code, token: rt.resumeToken, at: Date.now() });
+  };
   const offState = rt.onState((s) => {
+    remember();
     // Óra-eltolás: (szerveridő − helyi idő) a legkisebb késésű mintából közelítve (az utolsó 5 közül a legnagyobb).
     offsets.push(s.serverTs - Date.now());
     if (offsets.length > 5) offsets.shift();
@@ -316,6 +359,9 @@ export async function openOnlineSession(intent: OnlineIntent, opts: OnlineSessio
     offsets.push(rt.state.serverTs - Date.now());
     store.set({ clockOffsetMs: offsets[0]! });
   }
+  remember();
+  // A tárolt hely „frissessége” (újratöltéskor a 60 s-os helymegtartáson belül vagyunk-e) csendes váróteremben is.
+  const keepFresh = setInterval(remember, 15_000);
   const offNotice = rt.on("notice", (n) => store.set({ notice: { code: n.code, at: Date.now() } }));
   rt.socket.on("disconnect", syncConn);
   rt.socket.on("connect", syncConn);
@@ -331,11 +377,13 @@ export async function openOnlineSession(intent: OnlineIntent, opts: OnlineSessio
     answer: (round, optionIndex, clientRtMs) => rt.request("round:answer", { round, optionIndex, clientRtMs }),
     rematch: () => rt.request("room:rematch", {}),
     async leave() {
+      storeSeat(null);
       if (rt.status === "open") await rt.request("room:leave", {}).catch(() => undefined);
       rt.close();
       store.set({ conn: "closed", closedCode: "LEFT" });
     },
     dispose() {
+      clearInterval(keepFresh);
       offState();
       offNotice();
       if (giveUp) clearTimeout(giveUp);

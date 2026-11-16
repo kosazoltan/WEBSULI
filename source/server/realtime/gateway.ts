@@ -655,6 +655,22 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
         if (!registry.get(code)) return reply("ROOM_NOT_FOUND");
         const banned = bans.get(code);
         if (banned && (banned.has(claims.sub) || (claims.kind === "guest" && banned.has(`ip:${data.ip}`)))) return reply("KICKED");
+        // Review #464 (vercel 4589568096): ugyanaz a (fiókos / tanulói) játékos új jeggyel a SAJÁT szobájába tér vissza
+        // (lap-újratöltés, elveszett folytatási token) → a megszakadt SAJÁT helyére ül vissza, egyetlen szinkron lépésben
+        // (nincs ablak, amelyben a hely szabad és egy idegen beülne; a 2 fős plafonba így a saját helye nem „idegenként”
+        // számít). Váróteremben és meccs közben is: a pontok, a válasz és a gazdaság megmarad (ugyanaz, mint a folytatás).
+        if (stale && stale.roomCode === code) {
+          const back = registry.dispatch(code, { type: "reconnect", playerId: stale.playerId });
+          if (!back.error) {
+            stale.socketId = socket.id;
+            stale.ip = data.ip;
+            data.seat = stale;
+            reply(null, { roomCode: code, playerId: stale.playerId, resumeToken: stale.resumeToken });
+            const room = registry.get(code);
+            if (room) send(socket, "room:state", roomStateView(room, stale.playerId, deps.now(), deps.roomConfig));
+            return;
+          }
+        }
         const playerId = newPlayerId();
         const seat = newSeat(claims.sub, code, playerId, socket);
         const r = registry.dispatch(code, { type: "join", playerId, nickname: claims.nickname, avatar: claims.avatar, grade });
