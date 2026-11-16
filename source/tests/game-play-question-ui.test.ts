@@ -53,7 +53,7 @@ function openFirst(s: ReturnType<typeof setup>, at = 0): number {
 const STEP = 1000 / 60;
 
 /** Valódi időléptetés: képkockánként `frame` (ütemezéssel), amíg a feltétel nem teljesül vagy a határidő le nem jár. */
-function runUntil(s: ReturnType<typeof setup>, from: number, to: number, stop: (t: number) => boolean, ctx: { calm?: boolean; tick?: boolean } = {}): number {
+function runUntil(s: ReturnType<typeof setup>, from: number, to: number, stop: (t: number) => boolean, ctx: { calm?: boolean; tick?: boolean; hold?: boolean } = {}): number {
   for (let t = from; t <= to; t += STEP) {
     s.ui.frame(t, ctx);
     if (stop(t)) return t;
@@ -302,4 +302,87 @@ test("a sim-mag saját válasza (a director közvetlen hívása) után a sáv el
   s.ui.frame(250, { tick: false });
   assert.equal(s.ui.view().presentation, null);
   assert.equal(s.ui.canAsk(), true);
+});
+
+test("review #446: hold — a kijelzés lejár, de sem függő, sem ütemezett kérdés nem indul (menet vége)", () => {
+  const s = setup();
+  const correct = openFirst(s);
+  s.ui.pick((correct + 1) % 4, 2000);
+  s.ui.request("trigger", 2100); // függő kérés
+  // A kijelzés végére az ütemezett kérdés is esedékes; hold mellett egyik sem indul.
+  runUntil(s, 2100, 20_000, () => false, { calm: true, hold: true });
+  assert.equal(s.ui.view().presentation, null);
+  assert.equal(s.ui.canAsk(), true, "a lap ekkor zárhatja a menetet");
+  // hold nélkül a függő kérés indul.
+  s.ui.frame(20_100, { calm: true });
+  assert.notEqual(s.ui.view().presentation, null);
+});
+
+test("review #446 menetvég: az utolsó válasz hibás + a következő kérdés már esedékes → nem indul új kérdés, a kijelzés kifut, a menet lezárul", () => {
+  const s = setup();
+  // Valódi időléptetés: az első ütemezett kérdés lejár (hibás kimenet), a kijelzés alatt a menet véget ér.
+  const t1 = runUntil(s, 0, 20_000, () => s.ui.view().presentation !== null, { calm: true });
+  const tRev = runUntil(s, t1 + STEP, 20_000, () => s.ui.view().reveal !== null, { calm: true });
+  assert.equal(s.outcomes.at(-1)?.result, "timeout");
+  s.ui.finish();
+  assert.equal(s.ui.finished(), true);
+  assert.equal(s.ui.settled(), false, "a kijelzés még fut");
+  const tSettled = runUntil(s, tRev + STEP, 40_000, () => s.ui.settled(), { calm: true });
+  assert.ok(tSettled - tRev >= 1800, `a kijelzés ${Math.round(tSettled - tRev)} ms-ig futott ki`);
+  // Később sem indul semmi, akkor sem, ha a director szerint régen esedékes (maxGap) lenne.
+  runUntil(s, tSettled, 60_000, () => s.ui.view().presentation !== null, { calm: true });
+  assert.equal(s.ui.view().presentation, null);
+  assert.equal(s.director.active(), null);
+  assert.equal(s.ui.request("rescue", 60_000), null);
+  // A „Gyakorold még” forrása megmarad.
+  assert.equal(s.director.wrongList().length, 1);
+});
+
+test("review #446 menetvég várakozó kéréssel: a függő kérés eldobódik", () => {
+  const s = setup();
+  const c = openFirst(s);
+  s.ui.pick((c + 1) % 4, 1000);
+  s.ui.request("boss", 1100);
+  s.ui.finish();
+  assert.equal(s.ui.view().pending, null);
+  runUntil(s, 1100, 20_000, () => s.ui.view().presentation?.id === 2, { calm: true });
+  assert.notEqual(s.ui.view().presentation?.id, 2);
+  assert.equal(s.ui.settled(), true);
+});
+
+test("review #446 menetvég aktív kérdés közben: „aborted”, nem hiba, nincs ismétlés, nincs „Gyakorold még”-tétel", () => {
+  let n = 0;
+  const provider: QuestionProvider = {
+    couponOnly: false, material: () => null, restore: () => null,
+    fresh: () => bankPlayQuestion("speed-quiz-math", { id: `f${++n}`, prompt: "?", options: ["a", "b", "c", "d"], correctIndex: 0 }),
+  };
+  const review = createReviewQueue(null);
+  const director = createQuestionDirector({ config: CONFIG, provider, review, rng: createRng(3), startBand: 0.5, now: () => 0 });
+  const outs: QuestionOutcome[] = [];
+  const ui = createQuestionUi({ director: () => director, onView: () => {}, onOutcome: (o) => outs.push(o) });
+  ui.request("trigger", 0);
+  const o = ui.finish();
+  assert.equal(o?.result, "aborted");
+  assert.equal(outs.length, 1);
+  assert.equal(review.size(), 0, "nem került az ismétlési sorba");
+  assert.equal(director.wrongList().length, 0);
+  assert.equal(director.stats(100).wrong, 0);
+  assert.equal(ui.settled(), true);
+  assert.equal(ui.view().whyVisible, false);
+});
+
+test("review #446 menetvég: kétszeri lezárás hatástalan; reset új menetet nyit; unmount (dispose) is lezár", () => {
+  const s = setup();
+  openFirst(s);
+  assert.equal(s.ui.finish()?.result, "aborted");
+  assert.equal(s.ui.finish(), null);
+  assert.equal(s.outcomes.length, 1);
+  s.ui.reset();
+  assert.equal(s.ui.finished(), false);
+  assert.ok(s.ui.request("trigger", 50_000));
+  // unmount: a director nem marad nyitott kérdéssel, visszahívás nincs
+  const before = s.outcomes.length;
+  s.ui.dispose();
+  assert.equal(s.director.active(), null);
+  assert.equal(s.outcomes.length, before);
 });

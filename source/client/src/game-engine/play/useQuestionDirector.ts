@@ -31,7 +31,13 @@
  *   <InlineQuestion {...q.bind} mode="bar" skin="ocean" disabled={paused} onWhy={openWhy}
  *     testId="ts-quiz" promptTestId="ts-prompt" optionTestId={(i) => `ts-option-${i}`}
  *     pauseTestId="ts-quiz-pause" onPause={pauseGame} />
- *   // új menet:  q.reset(newSeed, startBand);   eredmény:  <ResultReview items={q.director.wrongList()} />
+ *   // MENETVÉG (győzelem, vereség, időlejárat, utolsó hullám) — a képkockában a frame ELŐTT, idempotens:
+ *   if (runOver && !q.finished()) q.finish();   // új kérdés nem indul; nyitott kérdés „aborted” (nem hiba, nem ismétlés)
+ *   q.frame(questionClockMs, { calm });          // a futó megoldás-kijelzés (≥ 1,8 mp) még kifut
+ *   if (q.settled()) showResult();               // csak a kijelzés után az eredményképernyő
+ *   // eredmény:  <ResultReview items={q.director!.wrongList()} />   új menet:  q.reset(newSeed, startBand);
+ *   // „Miért?”:  const item = q.view().whyItem → buildFeedback({ quiz: item.quiz, chosenIndex: item.pickedOriginalIndex, … })
+ *   // sim-magos játék: új kérdést csak `q.canAsk()` mellett kérjen a directortól; unmountkor a horog maga zár (dispose → finish).
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
@@ -135,8 +141,11 @@ export const EMPTY_VIEW: QuestionUiView = {
 };
 
 export type QuestionUi = {
-  /** Képkockánként; `tick: false` → a director `tick`-jét nem hívja (a játék sim-magja ütemez), csak megjelenít. */
-  frame(clockMs: number, ctx?: { calm?: boolean; tick?: boolean }): void;
+  /**
+   * Képkockánként. `tick: false` → a director `tick`-jét nem hívja (a játék sim-magja ütemez), csak megjelenít.
+   * `hold: true` → új kérdés NEM indul (se ütemezett, se függő): menet vége, főellenfél-bevezető; a futó kijelzés lejár.
+   */
+  frame(clockMs: number, ctx?: { calm?: boolean; tick?: boolean; hold?: boolean }): void;
   /**
    * Azonnali kérdés-kérés. Nyitott kérdésnél null. Megoldás-kijelzés alatt NEM vágja el a kijelzést: a kérés várakozik
    * (egy függő kérés, a legsürgősebb nyer: rescue > boss > trigger), és a kijelzés végén indul — ilyenkor null.
@@ -146,6 +155,18 @@ export type QuestionUi = {
   pick(optionIndex: number, clockMs?: number): QuestionOutcome | null;
   /** Kilépés / kuponlejárat: a nyitott kérdés „aborted”, a kijelzés és a függő kérés törlődik. */
   abort(): QuestionOutcome | null;
+  /**
+   * Menet vége (győzelem, vereség, időlejárat, utolsó hullám) — idempotens. Utána sem ütemezett, sem kért, sem függő
+   * kérdés nem indul (a `reset()` nyit új menetet). A már látszó megoldás-kijelzés a szabály szerint kifut (≥ 1,8 mp).
+   * Nyitott kérdés „aborted” kimenettel záródik: nem számít hibának, nem kerül az ismétlési sorba (a `reviewQueue.record`
+   * az „aborted”-et figyelmen kívül hagyja) és nem kerül a „Gyakorold még” listába. Visszaadja a megszakított kérdés
+   * kimenetét (vagy null). Unmountkor (`dispose`) is lefut, visszahívás nélkül.
+   */
+  finish(): QuestionOutcome | null;
+  /** Lezárt-e a menet (`finish` után, `reset`-ig). */
+  finished(): boolean;
+  /** Lezárt ÉS a kijelzés is lefutott: a lap most mutathatja az eredményképernyőt. */
+  settled(): boolean;
   timeScale(): number;
   /** A director nyitott kérdése (megoldás-kijelzés közben már null). */
   active(): QuestionPresentation | null;
@@ -190,6 +211,7 @@ export function createQuestionUi(opts: {
   let lastOutcome: QuestionOutcome | null = null;
   let clock = 0;
   let disposed = false;
+  let ended = false;
   let emitted: QuestionUiView = EMPTY_VIEW;
 
   const deadline = (p: QuestionPresentation) => p.startedAtSimMs + p.windowMs;
@@ -259,7 +281,7 @@ export function createQuestionUi(opts: {
     return o;
   }
 
-  return {
+  const api: QuestionUi = {
     frame(clockMs, ctx) {
       if (disposed) return;
       clock = clockMs;
@@ -274,7 +296,8 @@ export function createQuestionUi(opts: {
         else if (clockMs >= deadline(open)) settle(d.expire(clockMs), open);
       }
       if (rev && clockMs >= rev.until) rev = null;
-      if (!open && !rev) {
+      // A menetvég / tartás ellenőrzése az új kérdés indítása ELŐTT (review #446).
+      if (!open && !rev && !ended && !ctx?.hold) {
         let next = d.active();
         if (!next && pending) {
           next = d.request(pending, clockMs);
@@ -286,7 +309,7 @@ export function createQuestionUi(opts: {
       emit();
     },
     request(reason, clockMs) {
-      if (disposed) return null;
+      if (disposed || ended) return null;
       clock = clockMs;
       const d = opts.director();
       if (!d || open) return null;
@@ -323,11 +346,30 @@ export function createQuestionUi(opts: {
       emit(true);
       return o;
     },
+    finish() {
+      if (ended) return null;
+      ended = true;
+      pending = null;
+      const d = opts.director();
+      if (disposed) {
+        // Unmount: a director ne maradjon nyitott kérdéssel, de visszahívás / állapotírás nincs.
+        if (d && open) d.abort();
+        open = null;
+        return null;
+      }
+      const o = d && open ? settle(d.abort(), open) : null;
+      open = null;
+      emit(true);
+      return o;
+    },
+    finished: () => ended,
+    settled: () => ended && !open && !rev,
     timeScale: () => (open ? open.slowMo : 1),
     active: () => opts.director()?.active() ?? null,
-    canAsk: () => !open && !rev,
+    canAsk: () => !ended && !open && !rev,
     view: () => emitted,
     reset() {
+      ended = false;
       open = null;
       rev = null;
       pending = null;
@@ -337,11 +379,14 @@ export function createQuestionUi(opts: {
     },
     dispose() {
       disposed = true;
+      api.finish();
     },
     attach() {
       disposed = false;
+      ended = false;
     },
   };
+  return api;
 }
 
 /* ------------------------------------------------------------------------------------------------------------------ */

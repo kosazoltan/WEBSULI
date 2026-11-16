@@ -219,7 +219,7 @@ export default function PlayLab() {
 
   const endRun = useCallback(() => {
     const st = qRef.current.director?.stats(clockRef.current);
-    qRef.current.abort();
+    qRef.current.finish(); // idempotens; kilépéskor a nyitott kérdés eredmény nélkül záródik
     setMenuOpen(false);
     setWhy(null);
     setExpanded(false);
@@ -251,11 +251,14 @@ export default function PlayLab() {
       const isPaused = pausedRef.current;
       if (!isPaused) clockRef.current += dt;
       const ctl = qRef.current;
+      // Menetvég (review #446): a 12. válasz után a horog lezárja a menetet — új kérdés már nem indul, a futó
+      // megoldás-kijelzés kifut, és csak utána jön az eredményképernyő. A lezárás a frame ELŐTT történik.
+      if (!ctl.finished() && (ctl.director?.stats(clockRef.current).answered ?? 0) >= RUN_QUESTIONS) ctl.finish();
       if (!isPaused) ctl.frame(clockRef.current, { calm: true });
       loop.setTimeScale(isPaused ? 0 : ctl.timeScale());
       loop.frame(now);
       draw(now);
-      if ((ctl.director?.stats(clockRef.current).answered ?? 0) >= RUN_QUESTIONS && !ctl.view().reveal && !ctl.active()) {
+      if (ctl.settled()) {
         endRun();
         return;
       }

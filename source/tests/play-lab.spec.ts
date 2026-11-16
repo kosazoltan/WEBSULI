@@ -272,6 +272,25 @@ test("review #446: hibátlan menet is eljut az eredményképernyőig (12 helyes 
   await expect(page.getByTestId("result-review")).toHaveCount(0);
 });
 
+test("review #446 menetvég: a 12. válasz hibás → a megoldás kifut, nincs 13. kérdés, eredmény a „Gyakorold még” tétellel", async ({ page }) => {
+  test.setTimeout(120_000);
+  await openLab(page, "slow=0.5");
+  let last: number | null = null;
+  for (let n = 0; n < 12; n++) {
+    const p = await openQuestion(page, last);
+    last = p.questionId;
+    await answer(page, n < 11);
+  }
+  // A kijelzés még látszik (nem ugrik azonnal az eredményre) …
+  await expect(root(page)).toHaveAttribute("data-state", "reveal");
+  // … utána az eredmény, és nem indult 13. kérdés.
+  await expect(page.getByTestId("play-lab-result")).toBeVisible({ timeout: 10_000 });
+  const p = await probe(page);
+  expect(p.questionsAnswered).toBe(12);
+  expect(p.questionOpen).toBe(0);
+  await expect(page.getByTestId("result-review-item")).toHaveCount(1);
+});
+
 test("(g) terv 8.9: hosszú kérdés két sorra vágva, „Mutasd” → a teljes szöveg szünettel; „Tovább” → a játék megy tovább", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 640 });
   await openLab(page, "slow=0.5&long=1");
