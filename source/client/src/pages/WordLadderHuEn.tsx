@@ -19,7 +19,7 @@ import {
   pickUnseen,
   type SeenItem,
 } from "@/game-engine/no-repeat";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, Flame, X } from "lucide-react";
@@ -77,7 +77,7 @@ import {
   type LadderState,
 } from "@/lib/wordLadder/core";
 import { WORD_LADDER_GAME_ID, wordLadderDirectorConfig } from "@/lib/wordLadder/sim";
-import { createRunWordGuard, ownsReviewKey, speechPlan } from "@/lib/wordLadder/review";
+import { createRunWordGuard, ownsReviewKey } from "@/lib/wordLadder/review";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { loadUnlockedLevel, unlockNextLevel } from "@/game-engine/gradeLevels";
 import { detectLookTier } from "@/game-engine/three-look/tier";
@@ -103,6 +103,8 @@ import { loadVocabBank } from "@/data/vocabBank/loader";
 import {
   InlineQuestion,
   PlaySpeechToggle,
+  createPointerTapTracker,
+  pointerTapHandlers,
   ResultReview,
   bankPlayQuestion,
   createFeel,
@@ -114,7 +116,6 @@ import {
   type PlayQuestion,
   type PlayQuestionApi,
   type QuestionOutcome,
-  type QuestionPresentation,
   type QuestionProvider,
   type ShakeOffset,
 } from "@/game-engine/play";
@@ -152,10 +153,6 @@ const LONG_HOLD = 24;
  */
 const HOLD_SCOPE = '.game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"]';
 const HOLD = `${HOLD_SCOPE} .wl-hold`;
-
-/** Felengedéskor ennyi px-en belül még a fogáson van az ujj; ennyi mozdulásig „koppintás” (Matek-pilot értékei). */
-const HOLD_UP_SLOP_PX = 10;
-const HOLD_STILL_PX = 12;
 
 /** A részecske-készlet mérete (KSZ-6: előre rögzített pool). */
 const PARTICLE_POOL = 18;
@@ -348,6 +345,8 @@ export default function WordLadderHuEn() {
   /** A futás kezdő szintje: a készlet csak e körül épül (±1 szint — a sáv ennyit mozdulhat). */
   const runTierRef = useRef(0);
   const [vocabTiers, setVocabTiers] = useState<LadderItem[][]>(() => LADDER_LEVELS.map(() => []));
+  /** A szóbank-kérdések felolvasás-mezői azonosító szerint (a `toLadderItem` nem viszi tovább őket). */
+  const speechByIdRef = useRef(new Map<string, { speakText?: string; speakAfter?: string }>());
   /**
    * A készlet a futás kezdete UTÁN épül (setTimeout 0): a teljes bankon szintenként 60 kérdés generálása telefonon
    * érezhető — az indítást nem akaszthatja meg. Addig (az első fogás előtt) a kézi bank kérdez.
@@ -359,7 +358,12 @@ export default function WordLadderHuEn() {
       const tier = runTierRef.current;
       setVocabTiers(
         LADDER_LEVELS.map((l) =>
-          Math.abs(l - tier) <= 1 ? vocab.buildPool(l, VOCAB_POOL_PER_LEVEL).map((q) => vocab.toLadderItem(q)) : [],
+          Math.abs(l - tier) <= 1 ? vocab.buildPool(l, VOCAB_POOL_PER_LEVEL).map((q) => {
+                  // A közös felolvasás-mezők (#455 / #457: `speakText` a válasz előtt, `speakAfter` a kimenet után) a
+                  // szintlista-alakból kimaradnak — azonosító szerint megőrizzük őket.
+                  speechByIdRef.current.set(q.id, { speakText: q.speakText, speakAfter: q.speakAfter });
+                  return vocab.toLadderItem(q);
+                }) : [],
         ),
       );
     }, 0);
@@ -449,30 +453,26 @@ export default function WordLadderHuEn() {
   /* Kérdésforrás (K.2 forrásrend): tananyag → (ismétlés: a director) → kézi bank + szóbank a pálya sávja szerint   */
   /* ------------------------------------------------------------------------------------------------------------ */
 
-  /** Hu → idegen irányú szóbank-kérdés célnyelvi szava: a válasz UTÁN hangzik el (különben elárulná a választ). */
-  const speakAfterRef = useRef(new Map<string, string>());
-
-  /** A felolvasás (J14) a kérdés szerkezetéből: idegen → magyar a megjelenéskor, magyar → idegen / cloze csak a válasz után. */
-  const withSpeech = useCallback((q: PlayQuestion, term: string | undefined): PlayQuestion => {
-    const rest: PlayQuestion = { ...q };
-    delete rest.speakText;
-    const plan = speechPlan(String(q.quiz.id ?? ""), term);
-    if (plan.afterAnswer) speakAfterRef.current.set(q.key, plan.afterAnswer);
-    else speakAfterRef.current.delete(q.key);
-    return plan.atShow ? { ...rest, lang, speakText: plan.atShow } : { ...rest, lang };
-  }, [lang]);
-
   const toPlayQuestion = useCallback(
     (item: Quiz | LadderItem): PlayQuestion => {
       const vocabId = vocabIdOfLadderItem(String(item.id ?? ""));
       const quiz: Quiz = { id: item.id, prompt: item.prompt, options: item.options.slice(), correctIndex: item.correctIndex, ...(item.explanation ? { explanation: item.explanation } : {}) };
       if (vocabId) {
-        const term = vocabMeaningsRef.current?.get(vocabId)?.term;
-        return withSpeech({ key: `vocab:${lang}:${vocabId}`, quiz, source: "vocab", lang }, term);
+        // Felolvasás a KÖZÖS szabály szerint (`speechOnShow` / `speechAfterOutcome`, a `usePlayQuestion` hívja): a
+        // generátor `speakText`-je (választ el nem áruló) a megjelenéskor, a `speakAfter` (a helyes szó) a kimenet után.
+        const sp = speechByIdRef.current.get(String(item.id));
+        return {
+          key: `vocab:${lang}:${vocabId}`,
+          quiz,
+          source: "vocab",
+          lang,
+          ...(sp?.speakText ? { speakText: sp.speakText } : {}),
+          ...(sp?.speakAfter ? { speakAfter: sp.speakAfter } : {}),
+        };
       }
       return bankPlayQuestion(WORD_LADDER_GAME_ID, quiz);
     },
-    [lang, withSpeech],
+    [lang],
   );
 
   /** A menet szó-őre: egy szó egy menetben csak egy irányban (review #454). */
@@ -551,11 +551,10 @@ export default function WordLadderHuEn() {
         const q = restoreReviewQuestion(it, { vocab: (l) => (l === lang ? vocabRef.current : null) });
         if (!q) return null;
         seenRef.current = [...seenRef.current, { id: String(q.quiz.id ?? q.key), prompt: q.quiz.prompt }];
-        if (q.source === "vocab") return withSpeech(q, q.speakText);
         return q;
       },
     };
-  }, [lang, toPlayQuestion, withSpeech]
+  }, [lang, toPlayQuestion]
   );
 
   /* ------------------------------------------------------------------------------------------------------------ */
@@ -675,7 +674,7 @@ export default function WordLadderHuEn() {
   );
 
   const onOutcome = useCallback(
-    (o: QuestionOutcome, p: QuestionPresentation) => {
+    (o: QuestionOutcome) => {
       if (o.result === "aborted") return;
       const st = coreRef.current;
       if (st.phase !== "play") return;
@@ -689,11 +688,8 @@ export default function WordLadderHuEn() {
       applyLadderAnswer(st, o.result);
       if (st.combo.best > 0) setBestStreak((b) => (st.combo.best > b ? st.combo.best : b));
       applyEvents(drainEvents(st));
-      // Hu → idegen irányú szóbank-kérdés: a válasz után hangzik el a célnyelvi szó (J14, nem árulja el előre).
-      const term = speakAfterRef.current.get(p.question.key);
-      if (term && p.question.lang) speech.say(term, p.question.lang);
     },
-    [applyEvents, speech],
+    [applyEvents],
   );
 
   const q = usePlayQuestion({
@@ -720,37 +716,13 @@ export default function WordLadderHuEn() {
   }, []);
 
   /**
-   * Kapaszkodó-koppintás (KSZ-13/14, a Matek-pilot mintája): `pointerdown`-ra azonnali vizuális „megfogás” (`:active`),
-   * a válasz FELENGEDÉSKOR véglegesedik, ha az ujj a fogás dobozán belül (± `HOLD_UP_SLOP_PX`) engedett fel, vagy alig
-   * mozdult (≤ `HOLD_STILL_PX`); elhúzás / `pointercancel` = visszavonás. Nem a `click`-re épül (több ujjnál a böngésző a
+   * Kapaszkodó-koppintás (KSZ-13/14) a közös `pointerTapHandlers`-szel (#457): `pointerdown`-ra azonnali „megfogás”
+   * (`:active`), a válasz FELENGEDÉSKOR véglegesedik, ha az ujj a fogás dobozán belül (± `TAP_UP_SLOP_PX`) engedett fel, vagy
+   * alig mozdult (≤ `TAP_STILL_PX`); elhúzás / `pointercancel` = visszavonás. Nem a `click`-re épül (több ujjnál a böngésző a
    * nem elsődleges mutatóra nem ad `click`-et); billentyűhöz a `click` `detail === 0` ága.
    */
-  const holdPressRef = useRef(new Map<number, { i: number; x: number; y: number }>());
-  const holdHandlers = useCallback(
-    (i: number, act: () => void) => ({
-      onPointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => {
-        holdPressRef.current.set(e.pointerId, { i, x: e.clientX, y: e.clientY });
-      },
-      onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => {
-        const pressed = holdPressRef.current.get(e.pointerId);
-        holdPressRef.current.delete(e.pointerId);
-        if (!pressed || pressed.i !== i) return;
-        const r = e.currentTarget.getBoundingClientRect();
-        const inside =
-          e.clientX >= r.left - HOLD_UP_SLOP_PX && e.clientX <= r.right + HOLD_UP_SLOP_PX &&
-          e.clientY >= r.top - HOLD_UP_SLOP_PX && e.clientY <= r.bottom + HOLD_UP_SLOP_PX;
-        const still = Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) <= HOLD_STILL_PX;
-        if (inside || still) act();
-      },
-      onPointerCancel: (e: ReactPointerEvent<HTMLButtonElement>) => {
-        holdPressRef.current.delete(e.pointerId);
-      },
-      onClick: (e: ReactMouseEvent<HTMLButtonElement>) => {
-        if (e.detail === 0) act();
-      },
-    }),
-    [],
-  );
+  const holdTaps = useMemo(() => createPointerTapTracker(), []);
+  const holdHandlers = useCallback((i: number, act: () => void) => pointerTapHandlers(holdTaps, i, act), [holdTaps]);
 
   /** Szabad fogás (nincs kérdés). */
   const grabFree = useCallback(() => {
@@ -818,7 +790,6 @@ export default function WordLadderHuEn() {
     seenRef.current = [];
     wordGuardRef.current.reset();
     freshCountRef.current = 0;
-    speakAfterRef.current.clear();
     // Csak fejlesztői módban: ?rung=N kezdőfok a zónaváltások / cél gyors ellenőrzéséhez.
     let startRung = 0;
     if (import.meta.env.DEV) {

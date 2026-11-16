@@ -260,8 +260,9 @@ test("review #454: egy menetben egy szó csak egy irányban — az ismétlés a 
   assert.equal(g.freshAllowed("vocab:en:en-dog"), true, "új menetben újra jöhet");
 });
 
-test("review #454: felolvasás a kérdés szerkezetéből — megjelenéskor soha nem a helyes válasz, magyar szöveg nem kerül idegen hangra (EN / DE / FR, minden irány)", async () => {
-  const { speechPlan } = await import("../client/src/lib/wordLadder/review");
+test("review #454 → közös szabály (#457): a Szólétra felolvasása megjelenéskor soha nem a helyes válasz; a helyes alak a kimenet után (EN / DE / FR, minden irány)", async () => {
+  const { speechOnShow, speechAfterOutcome } = await import("../client/src/game-engine/play/questionUi");
+  const { vocabPlayQuestion } = await import("../client/src/game-engine/play/questionDirector");
   const { generateVocabQuestion } = await import("../client/src/game-engine/vocab/questionGenerator");
   const { VOCAB_EN } = await import("../client/src/data/vocabBank/vocab-en");
   const { VOCAB_DE } = await import("../client/src/data/vocabBank/vocab-de");
@@ -276,19 +277,20 @@ test("review #454: felolvasás a kérdés szerkezetéből — megjelenéskor soh
         if (!q) continue;
         checked += 1;
         const correct = q.options[q.correctIndex]!;
-        const plan = speechPlan(q.id!, entry.term);
-        assert.notEqual(plan.atShow, correct, `${q.id}: a megjelenéskor a helyes válasz hangzana el`);
-        if (plan.atShow !== null) assert.equal(plan.atShow, entry.term, "csak az idegen nyelvű term hangozhat el (magyar nem)");
-        if (type === "hu-to-target" || type === "cloze") {
-          assert.equal(plan.atShow, null, `${q.id}: a válasz előtt nincs idegen szó`);
-          assert.equal(plan.afterAnswer, entry.term, "a helyes alak a válasz után hangzik el");
-        }
+        // A lap ugyanígy építi a PlayQuestion-t (a generátor speakText / speakAfter mezőivel).
+        const p = { question: vocabPlayQuestion(q) } as Parameters<typeof speechOnShow>[0];
+        const show = speechOnShow(p);
+        const after = speechAfterOutcome(p, { result: "correct" } as Parameters<typeof speechAfterOutcome>[1]);
+        assert.notEqual(show, correct, `${q.id}: a megjelenéskor a helyes válasz hangzana el`);
+        if (show !== null) assert.ok(!show.toLowerCase().includes(correct.toLowerCase()), `${q.id}: a felolvasott szöveg tartalmazza a választ`);
+        if (type === "target-to-hu" || type === "phrase-meaning") assert.equal(show, entry.term, "az idegen nyelvű kérdés-szó hangzik el");
+        if (type === "hu-to-target") assert.equal(show, null, "magyar → idegen: a válasz előtt semmi");
+        if (type === "hu-to-target" || type === "cloze") assert.equal(after, entry.term, "a helyes alak a kimenet után");
+        assert.equal(speechAfterOutcome(p, { result: "aborted" } as Parameters<typeof speechAfterOutcome>[1]), null);
       }
     }
   }
   assert.ok(checked > 600, `csak ${checked} kérdést néztem`);
-  assert.deepEqual(speechPlan("en0-001", "dog"), { atShow: null, afterAnswer: null }, "kézi tételnél nincs találgatás");
-  assert.deepEqual(speechPlan("vocab:en-x:target-to-hu", "go"), { atShow: "go", afterAnswer: null });
 });
 
 test("a lap meghajtója (createFixedLoop) és a sim közvetlen léptetése bitre azonos állapotot ad, eltérő képkocka-időkkel is", async () => {
