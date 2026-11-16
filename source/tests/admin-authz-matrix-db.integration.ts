@@ -8,6 +8,9 @@
  * Szerepek: vendég (munkamenettel, CSRF-tokennel), e-mail-kódos játékos (VALÓDI beváltással), e-mail-kódos játékos az admin
  * címével, Google-os játékos és Google-os játékos az admin címével (JM7b: VALÓDI játékos Google-út), tiltott játékos, nem admin Google-felhasználó
  * (`users.is_admin=false`), tiltott admin, admin (valódi /api/login).
+ * JM7c-1 (terv 10.4a — admin = jelző ÉS engedélylista ÉS nem tiltott): új szerepek — „is_admin, de nincs az engedélylistán”,
+ * „listán van, de is_admin=false”, „futás közben levett admin” (belépéskor még admin volt), valamint egy MÁSODIK admin a
+ * valódi admin Google-úton (`state` + PKCE). Az engedélylista: ADMIN_ALLOWLIST (a tesztben beállítva).
  *
  * Két menet:
  *  (1) „őr-menet”: a végpontok VÉGSŐ üzleti kezelője csonkolva (299 + jelölő), minden előtte álló réteg valódi (munkamenet,
@@ -21,7 +24,7 @@ import { after, before, describe, it } from "node:test";
 import bcrypt from "bcryptjs";
 import { Client, databaseFingerprint, dbPool, injectSession, mapLimit, startApp } from "./support/authz-db-harness";
 import { isUnderAdminPrefix, routeInventory, samplePath, type Endpoint } from "./support/route-inventory";
-import { playerGoogleLogin } from "./support/player-google-stub";
+import { adminGoogleLogin, playerGoogleLogin } from "./support/player-google-stub";
 
 const { isAuthenticatedAdmin } = await import("../server/auth");
 const { codeHash, emailHash, limitHash, linkHash, generateLinkToken, playerAuthKey } = await import("../server/player/codes");
@@ -32,6 +35,11 @@ const ADMIN_PASSWORD = `pw-${Math.random().toString(36).slice(2)}-A1!`;
 const GUARD_BODIES = new Set(['{"message":"Unauthorized"}', '{"message":"Forbidden - Admin access required"}']);
 const STUB_STATUS = 299;
 const VICTIM = "authz-probe"; // minden :param ide mutat — a valódi menetben egy létező sor (írás látszana)
+const UNLISTED_ADMIN = "authz-unlisted-admin@websuli.example"; // is_admin = true, de NINCS az engedélylistán
+const LISTED_USER = "authz-listed-user@websuli.example"; // az engedélylistán van, de is_admin = false
+const REMOVED_ADMIN = "authz-removed-admin@websuli.example"; // belépéskor listás admin, futás közben levesszük
+const ALLOWLIST_FULL = `${ADMIN_EMAIL.toUpperCase()}, ${LISTED_USER} ;${REMOVED_ADMIN}`; // kis- / nagybetű, vegyes tagolás
+const ALLOWLIST_AFTER_REMOVAL = `${ADMIN_EMAIL}, ${LISTED_USER}`;
 
 type Role = { name: string; client: Client };
 
@@ -43,6 +51,7 @@ let adminEndpoints: Endpoint[] = [];
 const originalHandles = new Map<Endpoint["finalLayer"], Endpoint["finalLayer"]["handle"]>();
 const roles: Role[] = [];
 let admin: Client;
+let adminGoogle: Client;
 
 async function realEmailPlayer(base: string, email: string): Promise<Client> {
   // A belépőkód VALÓDI beváltása: a kódrekordot a szerverrel azonos kulccsal (SESSION_SECRET) ültetjük el, a beváltás HTTP-n.
@@ -73,16 +82,28 @@ async function sessionClient(base: string, data: Record<string, unknown>): Promi
   return c;
 }
 
+async function passwordLogin(base: string, email: string): Promise<Client> {
+  const c = new Client(base);
+  const r = await c.request("POST", "/api/login", { email, password: ADMIN_PASSWORD });
+  assert.equal(r.status, 200, `jelszavas belépés: ${email} → ${r.status}`);
+  await c.fetchCsrf();
+  return c;
+}
+
 before(async () => {
   process.env.PLAYER_ACCOUNTS = "on";
+  process.env.ADMIN_ALLOWLIST = ALLOWLIST_FULL;
   const hash = await bcrypt.hash(ADMIN_PASSWORD, 4);
   await dbPool.query(
     `INSERT INTO users (id, email, password, is_admin, is_banned) VALUES
        ('authz-admin', $1, $2, true, false),
        ('authz-user', 'authz-user@websuli.example', NULL, false, false),
        ('authz-banned-admin', 'authz-banned@websuli.example', NULL, true, true),
-       ($3, 'authz-victim@websuli.example', NULL, false, false)`,
-    [ADMIN_EMAIL, hash, VICTIM],
+       ($3, 'authz-victim@websuli.example', NULL, false, false),
+       ('authz-unlisted-admin', $4, $2, true, false),
+       ('authz-listed-user', $5, $2, false, false),
+       ('authz-removed-admin', $6, $2, true, false)`,
+    [ADMIN_EMAIL, hash, VICTIM, UNLISTED_ADMIN, LISTED_USER, REMOVED_ADMIN],
   );
   await dbPool.query(`UPDATE users SET google_id = 'g-authz-user' WHERE id = 'authz-user'`);
   await dbPool.query(`INSERT INTO html_files (id, title, content, classroom) VALUES ($1, 'Mátrix-áldozat', '<p>x</p>', 3)`, [VICTIM]);
@@ -120,12 +141,29 @@ before(async () => {
   roles.push({ name: "tiltott játékos", client: await sessionClient(stubApp.base, { player: { id: "authz-banned-player" } }) });
   roles.push({ name: "nem admin Google-felhasználó", client: await sessionClient(stubApp.base, { passport: { user: "authz-user" } }) });
   roles.push({ name: "tiltott admin", client: await sessionClient(stubApp.base, { passport: { user: "authz-banned-admin" } }) });
+
+  // JM7c-1 — a hibrid jogosultság szerepei (valódi jelszavas belépéssel: a belépés sikerül, admin-jog nincs).
+  roles.push({ name: "is_admin, de nincs az engedélylistán", client: await passwordLogin(stubApp.base, UNLISTED_ADMIN) });
+  roles.push({ name: "listán van, de is_admin=false", client: await passwordLogin(stubApp.base, LISTED_USER) });
+  // Futás közben levett admin: belépéskor (listán) admin — egy admin-végpontot el is ér —, utána levesszük a listáról.
+  const removed = await passwordLogin(stubApp.base, REMOVED_ADMIN);
+  assert.equal(((await removed.request("GET", "/api/auth/user")).json as { isAdmin: boolean }).isAdmin, true, "levétel előtt admin");
+  assert.equal((await removed.request("GET", "/api/admin/users")).status, STUB_STATUS, "levétel előtt eléri az admin-végpontot");
+  process.env.ADMIN_ALLOWLIST = ALLOWLIST_AFTER_REMOVAL;
+  roles.push({ name: "futás közben levett admin", client: removed });
+
+  // Második admin a VALÓDI admin Google-úton (state + PKCE, közös visszahívás; csak a Google hálózati része csonkolt).
+  adminGoogle = new Client(stubApp.base);
+  const g = await adminGoogleLogin(adminGoogle, { id: "g-authz-admin", emails: [{ value: ADMIN_EMAIL, verified: true }] });
+  assert.deepEqual(g.callback, { status: 302, location: "/admin" }, "admin Google-belépés");
+  await adminGoogle.fetchCsrf();
 });
 
 after(async () => {
   await stubApp?.close();
   await realApp?.close();
   delete process.env.PLAYER_ACCOUNTS;
+  delete process.env.ADMIN_ALLOWLIST;
   await dbPool.end();
 });
 
@@ -139,7 +177,7 @@ describe("JM7a — admin-jogosultsági mátrix", () => {
       assert.ok(keys.has(k), `hiányzik: ${k}`);
     }
     // Írja ki a lefedettséget (a záró jelentéshez): végpontok × szerepek.
-    console.log(`[authz-matrix] ${adminEndpoints.length} adminvégpont × ${roles.length + 1} szerep (${roles.length} nem admin + admin)`);
+    console.log(`[authz-matrix] ${adminEndpoints.length} adminvégpont × ${roles.length + 2} szerep (${roles.length} nem admin + 2 admin: jelszó, Google)`);
   });
 
   it("őr-menet: csak az admin éri el a végpontokat; minden más szerep az őr 401 / 403 válaszát kapja", async () => {
@@ -147,8 +185,10 @@ describe("JM7a — admin-jogosultsági mátrix", () => {
     await mapLimit(adminEndpoints, 6, async (e) => {
       const path = samplePath(e.path, VICTIM);
       const body = e.method === "GET" ? undefined : {};
-      const a = await admin.request(e.method, path, body);
-      if (a.status !== STUB_STATUS) failures.push(`admin ${label(e)} → ${a.status} ${a.text.slice(0, 80)}`);
+      for (const [name, c] of [["admin", admin], ["admin (Google)", adminGoogle]] as const) {
+        const a = await c.request(e.method, path, body);
+        if (a.status !== STUB_STATUS) failures.push(`${name} ${label(e)} → ${a.status} ${a.text.slice(0, 80)}`);
+      }
       for (const role of roles) {
         const r = await role.client.request(e.method, path, body);
         if (!(r.status === 401 || r.status === 403) || !GUARD_BODIES.has(r.text)) failures.push(`${role.name} ${label(e)} → ${r.status} ${r.text.slice(0, 80)}`);
@@ -195,13 +235,16 @@ describe("JM7a — admin-jogosultsági mátrix", () => {
   });
 
   it("a játékos-munkamenet nem állít req.user-t: /api/auth/user null; a nem admin felhasználó nem admin", async () => {
+    const userRoles = new Set(["nem admin Google-felhasználó", "is_admin, de nincs az engedélylistán", "listán van, de is_admin=false", "futás közben levett admin"]);
     for (const role of roles) {
       const r = await role.client.request("GET", "/api/auth/user");
       assert.equal(r.status, 200);
-      if (role.name === "nem admin Google-felhasználó") assert.equal((r.json as { isAdmin: boolean }).isAdmin, false);
+      if (userRoles.has(role.name)) assert.equal((r.json as { isAdmin: boolean }).isAdmin, false, `${role.name}: nem admin`);
       else assert.equal(r.json, null, `${role.name}: /api/auth/user`);
     }
-    const a = await admin.request("GET", "/api/auth/user");
-    assert.equal((a.json as { isAdmin: boolean }).isAdmin, true);
+    for (const c of [admin, adminGoogle]) {
+      const a = await c.request("GET", "/api/auth/user");
+      assert.equal((a.json as { isAdmin: boolean }).isAdmin, true);
+    }
   });
 });

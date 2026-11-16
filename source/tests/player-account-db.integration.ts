@@ -169,13 +169,18 @@ describe("JM7b — játékos Google-út: elválasztás az admin-úttól (G11 / D
   });
 
   it("review #449 A1: párhuzamos admin- és játékos-folyamat egy munkamenetben — az admin-visszahívás admint, a játékosé játékost ad; hamis / idegen state → senki", async () => {
-    // 1) admin-indítás, közben játékos-indítás → az ADMIN visszahívása (state nélkül, a meglévő út) admin-belépést ad.
+    // 1) admin-indítás, közben játékos-indítás → az ADMIN visszahívása admin-belépést ad.
+    // SPEC-VÁLTOZÁS 2026-11-16 (terv 10.4a, JM7c-1 — review #449 K3): az admin-út is state-es; a visszahívás az indításkor
+    // kapott `a.` state-tel érkezik (state nélküli admin-visszahívás már senkit nem léptet be — lásd a 4. pontot).
     const c1 = new Client(app.base);
-    assert.equal((await getNoFollow(c1, "/auth/google")).status, 302);
+    const adminStart = await getNoFollow(c1, "/auth/google");
+    assert.equal(adminStart.status, 302);
+    const adminState = new URL(adminStart.location!).searchParams.get("state");
+    assert.ok(adminState?.startsWith("a."), "az admin-indítás `a.` state-et küld");
     const p1 = await playerGoogleLogin(c1, verified("parhuzamos1@pelda.hu", "g-par-1"), { skipCallback: true });
     assert.ok(p1.state?.startsWith("p."));
     installAdminGoogleStub({ id: "g-admin-own", emails: [{ value: ADMIN_EMAIL, verified: true }] });
-    const adminCb = await getNoFollow(c1, "/auth/google/callback?code=admin-code-1");
+    const adminCb = await getNoFollow(c1, `/auth/google/callback?code=admin-code-1&state=${encodeURIComponent(adminState!)}`);
     assert.equal(adminCb.status, 302);
     assert.notEqual(adminCb.location?.startsWith("/belepes"), true, "az admin-belépést a függő játékos-folyamat nem hiúsítja meg");
     assert.equal(((await c1.request("GET", "/api/auth/user")).json as { isAdmin: boolean }).isAdmin, true);
@@ -202,6 +207,20 @@ describe("JM7b — játékos Google-út: elválasztás az admin-úttól (G11 / D
     assert.equal(swapped.location, "/belepes?hiba=google");
     assert.equal((await c3.request("GET", "/api/player/me")).json, null);
     assert.equal((await c3.request("GET", "/api/auth/user")).json, null);
+
+    // 4) JM7c-1: a játékos `p.` state-je az admin-ágon sem, az admin `a.` state-je más munkamenetben sem léptet be; state
+    // nélküli admin-visszahívás → érthető hibaoldal (/login?hiba=google), belépés nélkül.
+    const c4 = new Client(app.base);
+    await getNoFollow(c4, "/auth/google");
+    installAdminGoogleStub({ id: "g-admin-own", emails: [{ value: ADMIN_EMAIL, verified: true }] });
+    const stateless = await getNoFollow(c4, "/auth/google/callback?code=admin-code-2");
+    assert.equal(stateless.location, "/login?hiba=google");
+    const foreignAdmin = new Client(app.base);
+    const fStart = await getNoFollow(foreignAdmin, "/auth/google");
+    const fState = new URL(fStart.location!).searchParams.get("state")!;
+    const stolen = await getNoFollow(c4, `/auth/google/callback?code=admin-code-3&state=${encodeURIComponent(fState)}`);
+    assert.equal(stolen.location, "/login?hiba=google");
+    assert.equal((await c4.request("GET", "/api/auth/user")).json, null);
   });
 
   it("flag KI: a játékos Google-út 404, a visszahívás nem léptet be", async () => {

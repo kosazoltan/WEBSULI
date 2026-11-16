@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { config } from 'dotenv';
 import { logger } from "../lib/logger";
+import { isAllowlistedAdminEmail } from "../lib/admin-access";
 config();
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -27,6 +28,7 @@ async function run() {
         `, [email]);
         logger.info('Updated to admin:', update.rows[0]);
     }
+    if (!isAllowlistedAdminEmail(email)) logger.warn("FIGYELEM: a cím nincs az admin-engedélylistán (ADMIN_ALLOWLIST, alapból ADMIN_EMAIL): az admin-jelző beállt, de admin-jogot csak a listára vétel után ad (JM7c-1, terv 10.4a).");
     await pool.end();
     process.exit(0);
 }
