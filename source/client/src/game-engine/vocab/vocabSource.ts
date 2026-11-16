@@ -21,6 +21,11 @@ export type VocabSource = {
   markExternal(correctAnswer: string): void;
   /** A Szólétra LadderItem-je (category: word→"word", phrase→"phrase"; tier = level). */
   toLadderItem(q: VocabQuiz): LadderItem;
+  /**
+   * J0b (additív): a megadott bejegyzésből kérdés NAPLÓZÁS nélkül (az ismétlési sor újraépítéséhez — a tétel már a naplóban
+   * van). Ismeretlen id → null. A kérdéstípus és az elterelők újrasorsolódnak (a forrás seedelt `rng`-jéből).
+   */
+  questionFor(vocabId: string): VocabQuiz | null;
 };
 
 const LEVEL_COUNT = 5;
@@ -168,6 +173,10 @@ export function createVocabSource(opts: {
         tier: q.level as LadderTier,
         category,
       };
+    },
+    questionFor(vocabId) {
+      const entry = byId.get(vocabId);
+      return entry ? question(entry) : null;
     },
   };
 }
