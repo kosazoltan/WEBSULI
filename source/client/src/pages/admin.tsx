@@ -75,6 +75,7 @@ import { AuthStatus } from "@/components/AuthStatus";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { logger } from "../lib/logger";
+import { classroomDisplayLabel } from "@shared/classrooms";
 
 // AUTH ENABLED - Only admin emails can access protected features
 
@@ -1031,9 +1032,9 @@ export default function Admin() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {view.material?.classroom ? (
+                            {view.material ? (
                               <Badge variant="outline" className="text-xs">
-                                {view.material.classroom}. osztály
+                                {classroomDisplayLabel(view.material.classroom)}
                               </Badge>
                             ) : (
                               <span className="text-muted-foreground text-xs">-</span>

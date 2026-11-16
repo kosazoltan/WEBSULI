@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CreationProgress } from "./CreationProgress";
 import { WorkflowMonitor } from "./WorkflowMonitor";
 import { rememberOneStepRun } from "./studio-run-storage";
+import { classroomDisplayLabel } from "@shared/classrooms";
 
 /** docs/specs/2026-10-15-admin-tananyag-draft.md + 2026-10-16-draft-kezeles.md — a szerver `OwnerDraft` típusának kliensoldali tükre. */
 type OwnerDraft = {
@@ -134,7 +135,7 @@ export default function DraftLessons({ onOpenStudio }: { onOpenStudio?: () => vo
                 {d.hasPublished && !d.running && <Badge variant="outline" data-testid="draft-has-published">Kész tananyag már van</Badge>}
                 {d.ownerless && <Badge variant="outline" data-testid="draft-ownerless">Gazdátlan</Badge>}
                 <span className="font-medium break-words min-w-0">{d.title}</span>
-                <span className="text-sm text-muted-foreground">{d.subject}{d.classroom ? ` · ${d.classroom}. osztály` : ""}</span>
+                <span className="text-sm text-muted-foreground">{d.subject}{d.classroom != null ? ` · ${classroomDisplayLabel(d.classroom)}` : ""}</span>
               </div>
               {d.draft && (
                 <p className="text-sm text-muted-foreground">

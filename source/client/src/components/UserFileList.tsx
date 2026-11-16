@@ -15,7 +15,7 @@ import HomePracticeGames from "@/components/HomePracticeGames";
 import WelcomeCard from "@/components/WelcomeCard";
 import { displayTopic } from "@shared/daily-reminder";
 import { useClassroomGrade } from "@/lib/classroomStore";
-import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
+import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, normalizeClassroom } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
@@ -157,6 +157,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   // Spec 2026-11-03-fooldal-nezetek: a kártya minden nézetben ugyanaz (tartalom és data-testid változatlan).
   const renderCard = (file: HtmlFileApi) => {
     const classroom = file.classroom ?? 1;
+    const gradeValue = normalizeClassroom(file.classroom);
     // Spec 2026-11-03-fooldal-boritokartyak: az évfolyamsáv színe, formája és ikonja; a kezdőkép bélyegképe és a cím.
     const theme = homeCardTheme(classroom);
     const BandIcon = BAND_ICON[theme.band];
@@ -193,7 +194,10 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
             <span className="home-card-emblem" data-shape={theme.shape} title={theme.name} aria-hidden>
               <BandIcon className="w-4 h-4" />
             </span>
-            <span className="home-card-grade">{getClassroomLabel(classroom, true)}</span>
+            {/* Spec 2026-11-16-tananyag-evfolyam-jeloles: teljes, jól látható felirat; érvénytelen értéknél nincs (hamis „1.” sem). */}
+            {gradeValue !== null && (
+              <span className="home-card-grade" data-testid={`grade-file-${file.id}`}>{classroomDisplayLabel(gradeValue)}</span>
+            )}
           </div>
           <CardContent className="home-card-body">
             {isCurrent(file.curriculum, today) && (

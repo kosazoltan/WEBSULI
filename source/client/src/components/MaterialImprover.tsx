@@ -43,6 +43,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format } from "date-fns";
 import { hu } from "date-fns/locale";
 import { logger } from "../lib/logger";
+import { classroomDisplayLabel } from "@shared/classrooms";
 
 interface ImprovedFile {
   id: string;
@@ -521,7 +522,7 @@ export default function MaterialImprover() {
               <SelectContent>
                 {allFiles.map((file) => (
                   <SelectItem key={file.id} value={file.id}>
-                    {file.title} ({file.classroom}. osztály)
+                    {file.title} ({classroomDisplayLabel(file.classroom)})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -595,7 +596,7 @@ export default function MaterialImprover() {
                   {improvedFiles.map((file) => (
                     <TableRow key={file.id}>
                       <TableCell className="font-medium">{file.title}</TableCell>
-                      <TableCell>{file.classroom}. osztály</TableCell>
+                      <TableCell>{classroomDisplayLabel(file.classroom)}</TableCell>
                       <TableCell>{getStatusBadge(file.status)}</TableCell>
                       <TableCell>
                         {format(new Date(file.createdAt), "yyyy. MM. dd. HH:mm", { locale: hu })}
