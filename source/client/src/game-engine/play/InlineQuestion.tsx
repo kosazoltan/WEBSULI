@@ -135,7 +135,7 @@ export default function InlineQuestion({
    * saját betűméreten; 1 = 15 px-en legfeljebb 7 sor (a kártya nő); 2 = még ez sem elég → végső tartalék a „Mutasd”.
    * A válaszgomboknál: 0 = alap; 1 = egy oszlop (álló) / kisebb betű (fekvő), ha egy felirat 2 sornál hosszabb.
    */
-  const [fit, setFit] = useState<{ id: number | null; prompt: 0 | 1 | 2; options: 0 | 1 }>({ id: null, prompt: 0, options: 0 });
+  const [fit, setFit] = useState<{ id: number | null; prompt: 0 | 1 | 2; options: 0 | 1; epoch: number }>({ id: null, prompt: 0, options: 0, epoch: 0 });
   const promptFit = fit.id === qid ? fit.prompt : 0;
   const optionFit = fit.id === qid ? fit.options : 0;
   const clamped = promptFit === 2;
@@ -145,7 +145,37 @@ export default function InlineQuestion({
     setExpanded(false);
   }, [qid]);
 
-  // Mérés a festés ELŐTT (nincs villanás); átméretezéskor / forgatáskor újra az alapról.
+  /**
+   * Átméretezés / elforgatás / webfont-betöltés → újramérés az alapról (review #450): az `epoch` nő, ez a mérő effekt
+   * függősége, így a mérés akkor is lefut, ha a szintek értéke nem változik. Végtelen hurok nincs: egy epochon belül a
+   * szint csak nőhet (0 → 1 → 2, legfeljebb 3 mérés), új epoch csak valódi nézetméret-változásra / betűkészlet-betöltésre jön.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let last = `${window.innerWidth}x${window.innerHeight}`;
+    let alive = true;
+    const remeasure = () => setFit((cur) => ({ id: cur.id, prompt: 0, options: 0, epoch: cur.epoch + 1 }));
+    const onResize = () => {
+      const now = `${window.innerWidth}x${window.innerHeight}`;
+      if (now === last) return;
+      last = now;
+      remeasure();
+    };
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      void document.fonts.ready.then(() => {
+        if (alive) remeasure();
+      });
+    }
+    return () => {
+      alive = false;
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, []);
+
+  // Mérés a festés ELŐTT (nincs villanás).
   useLayoutEffect(() => {
     const el = promptRef.current;
     if (!el || expanded || qid === null) return;
@@ -160,24 +190,14 @@ export default function InlineQuestion({
         }
       }
       setFit((cur) => {
-        const base = cur.id === qid ? cur : { id: qid, prompt: 0 as const, options: 0 as const };
+        const base = cur.id === qid ? cur : { id: qid, prompt: 0 as const, options: 0 as const, epoch: cur.epoch };
         const prompt = overflow && base.prompt < 2 ? ((base.prompt + 1) as 1 | 2) : base.prompt;
         const options = optOverflow ? 1 : base.options;
-        return prompt === base.prompt && options === base.options && cur.id === qid ? cur : { id: qid, prompt, options };
+        return prompt === base.prompt && options === base.options && cur.id === qid ? cur : { id: qid, prompt, options, epoch: base.epoch };
       });
     };
     measure();
-    if (typeof ResizeObserver === "undefined") return;
-    let last = `${window.innerWidth}x${window.innerHeight}`;
-    const ro = new ResizeObserver(() => {
-      const now = `${window.innerWidth}x${window.innerHeight}`;
-      if (now === last) return;
-      last = now;
-      setFit({ id: qid, prompt: 0, options: 0 });
-    });
-    ro.observe(document.documentElement);
-    return () => ro.disconnect();
-  }, [qid, expanded, promptFit, optionFit, presentation?.question.quiz.prompt]);
+  }, [qid, expanded, promptFit, optionFit, fit.epoch, presentation?.question.quiz.prompt]);
 
   const answering = !!presentation && !reveal && !disabled && !expanded;
   const pick = useCallback(

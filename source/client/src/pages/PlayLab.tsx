@@ -114,6 +114,11 @@ const LONGEST: Record<string, { quiz: FourChoiceQuiz }> = {
       explanation: "biometric = biometrikus.",
     },
   },
+  // Mesterséges, ≈ 227 kar.: széles nézetben 5 sorba fér, 360 px-en csak a 7 soros tartalékkal — az átméretezés
+  // utáni újramérés próbájához (review #450).
+  resize: {
+    quiz: { id: "lab-resize", prompt: "Egy osztálykiránduláson huszonnégy gyerek vesz részt; a buszon négyes ülések vannak, és minden ülésre pontosan négy gyerek ül, a tanárok pedig külön ülnek elöl. Hány négyes ülést foglalnak el összesen a gyerekek a kiránduláson?", options: ["6", "4", "8", "24"], correctIndex: 0, explanation: "24 : 4 = 6." },
+  },
   // Mesterségesen túl hosszú (≈ 420 kar.) — CSAK a végső tartalék („Mutasd”) próbájához; ilyet a forrás nem ad.
   extreme: {
     quiz: {

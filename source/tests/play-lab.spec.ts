@@ -353,6 +353,53 @@ async function expectFullyReadable(page: Page, where: string, mode: "buttons" | 
   }
 }
 
+/** A szabály: a kérdés vagy teljesen látszik (nincs csonkolás), vagy aktív a végső tartalék („Mutasd”). */
+async function expectReadableOrFallback(page: Page, where: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const m = await page.getByTestId("play-question-prompt").evaluate((e) => ({ sh: e.scrollHeight, ch: e.clientHeight }));
+        const more = await page.getByTestId("play-question-more").count();
+        return m.sh <= m.ch + 1 || more > 0;
+      },
+      { timeout: 3_000, message: `${where}: a kérdés csonka, és nincs „Mutasd”` },
+    )
+    .toBe(true);
+}
+
+test("review #450: átméretezés / elforgatás nyitott kérdés KÖZBEN → újramérés (nincs csonka kérdés tartalék nélkül)", async ({ page }) => {
+  // Széles nézetben a túl hosszú kérdés a 7 soros tartalékkal még kibontás nélkül fér; 360 px-en már csak a „Mutasd” segít.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openLab(page, "slow=0.5&q=extreme");
+  await openQuestion(page);
+  await page.waitForTimeout(200);
+  await expectReadableOrFallback(page, "1280×800");
+  await page.setViewportSize({ width: 360, height: 640 });
+  await expectReadableOrFallback(page, "1280×800 → 360×640");
+  await expect(page.getByTestId("play-question-more")).toHaveCount(1);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expectReadableOrFallback(page, "→ vissza 1280×800");
+  // Széles nézetben alapméreten (fit 0) fér, 360 px-en már nem: az újramérés nélkül csonka maradna (review #450 esete).
+  await openLab(page, "slow=0.5&q=resize");
+  await openQuestion(page);
+  await page.waitForTimeout(200);
+  await expect(root(page)).toHaveAttribute("data-fit", "0");
+  await page.setViewportSize({ width: 360, height: 640 });
+  await expectReadableOrFallback(page, "resize 1280×800 → 360×640");
+  await expect(root(page)).not.toHaveAttribute("data-fit", "0");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expectReadableOrFallback(page, "resize vissza");
+  // A leghosszabb valódi kérdés elforgatva: 844×390 → 360×640 → 844×390, mindvégig koppintás nélkül olvasható.
+  await page.setViewportSize({ width: 844, height: 390 });
+  await openLab(page, "slow=0.5&q=prompt");
+  await openQuestion(page);
+  for (const vp of [{ width: 844, height: 390 }, { width: 360, height: 640 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(vp);
+    await expectReadableOrFallback(page, `forgatás ${vp.width}×${vp.height}`);
+    await expect(page.getByTestId("play-question-more")).toHaveCount(0);
+  }
+});
+
 for (const vp of MOBILE_VIEWPORTS) {
   test(`J0c-b ${vp.width}×${vp.height}: a leghosszabb kérdés és opció koppintás nélkül olvasható, nem csonka, nem takar`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: vp.width, height: vp.height });
