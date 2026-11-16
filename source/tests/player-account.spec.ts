@@ -282,3 +282,66 @@ test("admin „Játékosok” fül: maszkolt cím, becenév szövegként, tiltá
   await page.getByTestId("button-player-ban-p-1").click();
   await expect(page.getByTestId("player-row-p-1")).toContainText("Tiltva");
 });
+
+test("N2: admin VÉGLEGES törlés csak a beírt megerősítő szóval; Mégse → nincs kérés", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/auth/user", (r) => r.fulfill({ json: { id: "a-1", email: "admin@pelda.hu", isAdmin: true, firstName: "Admin", lastName: "" } }));
+  const deletes: unknown[] = [];
+  let gone = false;
+  await page.route("**/api/admin/game-accounts**", async (r) => {
+    const url = new URL(r.request().url());
+    if (url.pathname.endsWith("/delete")) {
+      deletes.push(r.request().postDataJSON());
+      gone = true;
+      return r.fulfill({ json: { ok: true, deleted: { account: 1, codes: 0, sessions: 1 } } });
+    }
+    return r.fulfill({ json: { players: [
+      ...(gone ? [] : [{ id: "p-del", nickname: "Törlendő Teknős", avatar: null, maskedEmail: "t***@p***.hu", createdAt: "2026-11-16T10:00:00Z", lastSeenAt: null, banned: true, bannedAt: "2026-11-16T11:00:00Z", googleLinked: false, learnerLinked: false }]),
+      { id: "p-2", nickname: "Okos Bagoly", avatar: null, maskedEmail: "o***@g***.com", createdAt: "2026-11-15T09:00:00Z", lastSeenAt: null, banned: false, bannedAt: null, googleLinked: false, learnerLinked: false },
+    ] } });
+  });
+  await page.goto("/admin?tab=players");
+  await expect(page.getByTestId("player-row-p-del")).toBeVisible({ timeout: 15_000 });
+  // Mégse: nincs kérés.
+  await page.getByTestId("button-player-delete-p-del").click();
+  await expect(page.getByTestId("dialog-player-delete")).toContainText("Törlendő Teknős");
+  await page.getByRole("button", { name: "Mégse" }).click();
+  await expect(page.getByTestId("dialog-player-delete")).toBeHidden();
+  expect(deletes).toEqual([]);
+  // Megerősítő szó nélkül a gomb tiltott; beírva (kisbetűvel is) küldhető.
+  await page.getByTestId("button-player-delete-p-del").click();
+  await expect(page.getByTestId("button-player-delete-confirm")).toBeDisabled();
+  await page.getByTestId("input-player-delete-confirm").fill("törlés");
+  await expect(page.getByTestId("dialog-player-delete")).toHaveCSS("opacity", "1"); // a beúszó animáció vége (kép)
+  await shot(page, "admin-jatekos-torles-390x844");
+  await page.getByTestId("button-player-delete-confirm").click();
+  await expect(page.getByTestId("player-row-p-del")).toHaveCount(0);
+  expect(deletes).toEqual([{ confirm: "TÖRLÉS" }]);
+  await expect(page.getByTestId("player-row-p-2")).toBeVisible();
+});
+
+test("N2: tiltott fiók a /fiok-on csak a letöltést és a törlést látja (360×640)", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  let exportN = 0;
+  let codeRequests = 0;
+  await page.route("**/api/player/status", (r) => r.fulfill({ json: { enabled: true } }));
+  await page.route("**/api/player/me", (r) => r.fulfill({ status: 403, json: { message: "Forbidden", code: "BANNED" } }));
+  await page.route("**/api/player/account", (r) => r.fulfill({ status: 403, json: { message: "Forbidden", code: "BANNED" } }));
+  await page.route("**/api/player/export", async (r) => { exportN++; await r.fulfill({ json: { format: "websuli-player-export-v1", account: { email: "t@pelda.hu" }, gameRuns: [] } }); });
+  await page.route("**/api/player/account/delete/start", async (r) => { codeRequests++; await r.fulfill({ status: 202, json: { ok: true } }); });
+  await page.goto("/fiok");
+  await expect(page.getByTestId("player-banned-notice")).toBeVisible();
+  await expect(page).toHaveURL(/\/fiok$/);
+  await expect(page.getByTestId("player-account-hero")).toHaveCount(0);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow, "nincs vízszintes görgetés").toBeLessThanOrEqual(1);
+  await shot(page, "fiok-tiltott-360x640");
+  const download = page.waitForEvent("download");
+  await page.getByTestId("button-export-data").click();
+  await download;
+  expect(exportN).toBe(1);
+  await page.getByTestId("button-delete-account").click();
+  await page.getByTestId("button-delete-send-code").click();
+  await expect(page.getByTestId("player-delete-code-sent")).toContainText("a fiókod e-mail-címére");
+  expect(codeRequests).toBe(1);
+});
