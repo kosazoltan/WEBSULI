@@ -200,11 +200,12 @@ describe("JM0 — a hét játék kliense menetenként runId-t küld", () => {
   const PAGES_DIR = join(SERVER_DIR, "..", "client", "src", "pages");
   const GAMES = ["BlockCraftQuiz", "TsunamiEscapeEnglish", "SpaceAsteroidQuiz", "SpeedQuizMath", "BrainRotSteal", "TornadoHunter200", "WordLadderHuEn"];
   for (const game of GAMES) {
-    it(`${game}: a /api/games/score hívás runId: newScoreRunId()-t tartalmaz`, () => {
+    it(`${game}: postGameScore-ral küld, runId: newScoreRunId()-val`, () => {
       const source = stripComments(readFileSync(join(PAGES_DIR, `${game}.tsx`), "utf8"));
-      assert.match(source, /import \{ newScoreRunId \} from "@\/lib\/gameScoreRunId";/);
-      assert.match(source, /\/api\/games\/score/);
+      assert.match(source, /import \{ newScoreRunId, postGameScore \} from "@\/lib\/gameScoreRunId";/);
+      assert.match(source, /postGameScore\(/);
       assert.match(source, /runId: newScoreRunId\(\)/);
+      assert.doesNotMatch(source, /apiRequest\("POST", "\/api\/games\/score"/);
     });
   }
 });

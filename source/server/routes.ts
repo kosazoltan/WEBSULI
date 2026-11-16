@@ -58,6 +58,7 @@ import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
 import { ViewDedup } from "./lib/view-dedup";
 import { maskEmail } from "./lib/mask-email";
+import { createGameScoreUserLimiter } from "./lib/game-score-limits";
 import { ScoreRunDedup } from "./lib/score-run-dedup";
 import { getMaterialOrigin } from "./utils/config";
 import { prependWebLessonQualityNotice, qualityNoticeFor } from "./lib/web-lesson-quality-notice";
@@ -1306,9 +1307,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // JM0: opcionális újraküldés-azonosító (régi kliens nélküle is működik); NEM csalásvédelem.
     runId: z.string().uuid().optional(),
   });
+  const gameScoreUserLimiter = createGameScoreUserLimiter();
   const scoreRunDedup = new ScoreRunDedup<Awaited<ReturnType<typeof gameScoreService.submitGameScore>>>();
 
-  app.post("/api/games/score", isAuthenticated, async (req: Request, res) => {
+  app.post("/api/games/score", isAuthenticated, gameScoreUserLimiter, async (req: Request, res) => {
     try {
       const parsed = submitGameScoreSchema.safeParse(req.body);
       if (!parsed.success) {

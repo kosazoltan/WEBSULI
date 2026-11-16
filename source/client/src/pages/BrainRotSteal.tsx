@@ -4,7 +4,7 @@ import { Link, useLocation } from "wouter";
 import CollectibleAvatar from "@/components/CollectibleAvatar";
 import { ArrowLeft, Pause, ShieldAlert, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
@@ -57,7 +57,7 @@ import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { correctDataAttrs, installGameTestApi, type GameForcePatch } from "@/game-engine/game-test-hooks";
 import BrainRotArena3D, { type ArenaBurst } from "@/game-engine/scenes/BrainRotArena3D";
 
-import { newScoreRunId } from "@/lib/gameScoreRunId";
+import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 /* --- Típusok --- */
 type Quiz = {
   topic?: string;
@@ -948,7 +948,7 @@ export default function BrainRotSteal() {
   useEffect(() => {
     if (phase !== "over" || !syncEligibility?.eligible || scoreSubmittedRef.current) return;
     scoreSubmittedRef.current = true;
-    void apiRequest("POST", "/api/games/score", {
+    void postGameScore({
       gameId: "brain-rot-steal",
       difficulty: "normal",
       runXp: sessionXp,

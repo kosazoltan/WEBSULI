@@ -11,7 +11,7 @@ import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import HoldButton from "@/game-engine/HoldButton";
 import { joystickToDirections } from "@/game-engine/joystick";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { useCouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
@@ -68,7 +68,7 @@ import {
 } from "@/game-engine/mobile";
 import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
 
-import { newScoreRunId } from "@/lib/gameScoreRunId";
+import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 /** 2D pixel-minta cellaméret — a menü-előnézet (MenuBlock) rajzolásához. */
 const TILE = 24;
 
@@ -2560,7 +2560,7 @@ export default function BlockCraftQuiz() {
   useEffect(() => {
     if (phase !== "over" || !syncEligibility?.eligible || scoreSubmittedRef.current) return;
     scoreSubmittedRef.current = true;
-    void apiRequest("POST", "/api/games/score", {
+    void postGameScore({
       gameId: "block-craft-quiz",
       difficulty: "normal",
       runXp: sessionXp,

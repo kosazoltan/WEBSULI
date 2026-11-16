@@ -2,7 +2,7 @@
  * JM0 (terv JM-A1, JM-A2): valós szerver + eldobható Postgres ellen (npm run test:e2e -- tests/jm0-game-score-privacy.spec.ts).
  *  - a nyilvános ranglista-válasz nem tartalmaz valódi nevet / e-mailt, a régi (valódi nevű) sorokra sem;
  *  - POST /api/games/score: régi kliens (runId nélkül) működik; azonos runId + tartalom → ugyanaz a válasz, új sor nélkül;
- *    eltérő tartalom → 409; IP-nként 60 / 15 perc után 429.
+ *    eltérő tartalom → 409; felhasználónként 60 / 15 perc, IP-plafon 600 / 15 perc után 429.
  * Minden teszt saját, kitalált kliens-IP-t kap (X-Forwarded-For, trust proxy = 1), így a korlát-számlálók nem keverednek.
  */
 import { randomBytes, randomUUID } from "node:crypto";
@@ -151,15 +151,44 @@ test("JM-A2: azonos runId + azonos tartalom → ugyanaz a válasz új írás né
   expect(badId.status()).toBe(400);
 });
 
-test("JM-A2: IP-nként 60 / 15 perc után a pontbeküldés 429", async ({ request }) => {
-  const ip = "10.20.0.4";
-  const user = await seedUser({ eligible: true });
-  const csrf = await login(request, user, ip); // 2 kérés ebből az IP-ből, de csak a /api/games/score számít a korlátba
+const scoreBody = () => ({ gameId: GAME_ID, difficulty: "normal", runXp: 1, runStreak: 1, runSeconds: 1, runId: randomUUID() });
+
+test("JM-A2: felhasználónként 60 / 15 perc; ugyanarról az IP-ről a másik felhasználónak külön keret jár; a 429 Retry-After-rel, személyes adat nélkül", async ({ playwright, baseURL }) => {
+  const ip = "10.20.0.4"; // közös IP (osztályterem / testvérek / mobil-NAT)
+  const userA = await seedUser({ eligible: true });
+  const userB = await seedUser({ eligible: true });
+  const ctxA = await playwright.request.newContext({ baseURL });
+  const ctxB = await playwright.request.newContext({ baseURL });
+  try {
+    const csrfA = await login(ctxA, userA, ip);
+    const csrfB = await login(ctxB, userB, ip);
+    for (let i = 0; i < 60; i++) {
+      const res = await post(ctxA, ip, csrfA, scoreBody());
+      expect(res.status(), `A felhasználó ${i + 1}. kérése`).toBe(200);
+    }
+    const blocked = await post(ctxA, ip, csrfA, scoreBody());
+    expect(blocked.status()).toBe(429);
+    expect(Number(blocked.headers()["retry-after"])).toBeGreaterThan(0);
+    const text = await blocked.text();
+    for (const forbidden of [userA.email, userA.id, userB.email, userB.id, FIRST, LAST, ip, "@"]) {
+      expect(text, `a 429 nem tartalmazhat: ${forbidden}`).not.toContain(forbidden);
+    }
+    // a másik felhasználó ugyanarról az IP-ről érintetlen kerettel indul
+    const other = await post(ctxB, ip, csrfB, scoreBody());
+    expect(other.status()).toBe(200);
+  } finally {
+    await ctxA.dispose();
+    await ctxB.dispose();
+  }
+});
+
+test("JM-A2: a laza IP-plafon (600 / 15 perc) külön védi a végpontot az elárasztás ellen", async ({ request }) => {
+  const ip = "10.20.0.5";
   const statuses: number[] = [];
-  for (let i = 0; i < 64; i++) {
-    const res = await post(request, ip, csrf, { gameId: GAME_ID, difficulty: "normal", runXp: 1, runStreak: 1, runSeconds: 1, runId: randomUUID() });
+  for (let i = 0; i < 602; i++) {
+    const res = await request.post("/api/games/score", { headers: headersFor(ip), data: scoreBody() });
     statuses.push(res.status());
   }
-  expect(statuses.slice(0, 60).every((s) => s === 200)).toBe(true);
-  expect(statuses.slice(60).every((s) => s === 429)).toBe(true);
+  expect(statuses.slice(0, 600).includes(429)).toBe(false);
+  expect(statuses.slice(600).every((st) => st === 429)).toBe(true);
 });
