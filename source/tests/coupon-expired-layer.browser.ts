@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { hideAndShowPage } from "./support/game-mobile-quality";
+
 test.use({ serviceWorkers: "block" });
 
 /**
@@ -128,4 +130,25 @@ test("lejárat nyitott kvíz-visszajelzés mellett: a billentyűk csak a párbes
   // Enter a fókuszált gombot aktiválja: navigál, nem a takart kártyát zárja be
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/lesson\/older-lesson/);
+});
+
+test("lejárat után a lap háttérbe kerülése (automatikus szünet) nem veszi el a fókuszt, nincs megmaradó inert", async ({ page }) => {
+  const state = await openGameWithCoupon(page);
+  await page.getByRole("button", { name: /indít|indul|start|vadász|rajta/i }).first().click();
+  await expect(page.getByTestId("game-pause")).toBeVisible({ timeout: 15_000 });
+  await expireNow(page, state);
+  await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+  await hideAndShowPage(page); // M6: a keret automatikus szünete
+  await expect(page.getByTestId("game-pause-menu")).toBeAttached({ timeout: 5_000 });
+  await expect(page.getByTestId("coupon-expired-back")).toBeFocused();
+  expect(await page.getByTestId("game-resume").evaluate((el) => !!el.closest("[inert]"))).toBe(true);
+  expect(await topAt(page, '[data-testid="coupon-expired-back"]')).toBe(true);
+  expect(await topAt(page, '[data-testid="game-resume"]')).toBe(false);
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("coupon-expired-back")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/lesson\/older-lesson/);
+  await expect(page.getByTestId("coupon-expired")).toHaveCount(0);
+  expect(await page.locator("[inert]").count(), "bezárás / navigáció után nem marad inert").toBe(0);
+  expect(await page.evaluate(() => document.documentElement.dataset.gameCouponExpired ?? null)).toBeNull();
 });

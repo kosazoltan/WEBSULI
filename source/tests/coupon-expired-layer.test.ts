@@ -57,4 +57,7 @@ test("a lejárati párbeszéd a billentyűket capture fázisban elnyeli, az als�
   assert.match(body, /stopPropagation\(\)/);
   assert.match(body, /setAttribute\("inert"/);
   assert.match(body, /gameCouponExpired/);
+  assert.match(body, /new MutationObserver\(/);
+  assert.match(body, /addEventListener\("focusin"/);
+  assert.match(body, /observer\.disconnect\(\)/);
 });

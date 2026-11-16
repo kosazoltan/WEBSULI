@@ -66,13 +66,28 @@ export function CouponExpiredOverlay({ session }: { session: CouponSession }) {
 
     // Everything else on the page (the game, the pause menu, the result screen, an open quiz
     // feedback card) stops receiving pointer, focus and assistive-tech input.
-    const inerted: HTMLElement[] = [];
-    for (const el of Array.from(document.body.children)) {
-      if (el instanceof HTMLElement && el !== dialogRef.current && !el.hasAttribute("inert")) {
-        el.setAttribute("inert", "");
-        inerted.push(el);
+    const inerted = new Set<HTMLElement>();
+    const keepFocus = () => {
+      const dialog = dialogRef.current;
+      if (dialog && !dialog.contains(document.activeElement)) backRef.current?.focus({ preventScroll: true });
+    };
+    const inertSiblings = () => {
+      for (const el of Array.from(document.body.children)) {
+        if (el instanceof HTMLElement && el !== dialogRef.current && !el.hasAttribute("inert")) {
+          el.setAttribute("inert", "");
+          inerted.add(el);
+        }
       }
-    }
+      keepFocus();
+    };
+    inertSiblings();
+    // Layers that appear later (the automatic pause menu after a screen rotation, a late toast) are
+    // body children too: they must be inert from the moment they are added, not only the ones
+    // present when the time ran out.
+    const observer = new MutationObserver(inertSiblings);
+    observer.observe(document.body, { childList: true });
+    // Belt and braces: focus that still lands outside the dialog comes straight back to the button.
+    document.addEventListener("focusin", keepFocus, true);
     document.documentElement.dataset.gameCouponExpired = "true";
 
     // The dialog is the only thing that receives keys. A capture listener on `window` runs
@@ -93,6 +108,8 @@ export function CouponExpiredOverlay({ session }: { session: CouponSession }) {
     return () => {
       window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("keyup", onKey, true);
+      observer.disconnect();
+      document.removeEventListener("focusin", keepFocus, true);
       for (const el of inerted) el.removeAttribute("inert");
       delete document.documentElement.dataset.gameCouponExpired;
     };
