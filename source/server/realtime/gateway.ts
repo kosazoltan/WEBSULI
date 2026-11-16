@@ -605,16 +605,17 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
         const claims = data.claims;
         if (!claims || data.intentUsed) return reply("INVALID_TICKET");
         if (deps.isDraining()) return reply("SERVER_RESTART");
-        const stale = seatsByIdentity.get(claims.sub);
-        if (stale) {
-          // Egy játékos egy szobában. JM3a: ha a korábbi hely kapcsolata MÁR MEGSZAKADT (bezárt lap, újratöltés — a
-          // folytatási token elveszett), az új, kifejezett szándék (új szoba / csatlakozás) a régi helyet elhagyja,
-          // különben a gyerek a 60 s-os helymegtartás végéig „Már egy másik szobában vagy” falba ütközne. Élő
-          // kapcsolatnál (pl. két nyitott lap) marad az ALREADY_IN_ROOM.
-          if (socketOfSeat(stale)?.connected) return reply("ALREADY_IN_ROOM");
+        // Egy játékos egy szobában. JM3a: ha a korábbi hely kapcsolata MÁR MEGSZAKADT (bezárt lap, újratöltés — a folytatási
+        // token elveszett), az új, kifejezett szándék a régi helyet elhagyja — de csak a kérés SIKERES ellenőrzése és
+        // végrehajtása UTÁN (review #464 A2: egy rossz kódos csatlakozás nem zárhatja le a saját futó meccsét). Élő
+        // kapcsolatnál (pl. két nyitott lap) marad az ALREADY_IN_ROOM.
+        const stale = seatsByIdentity.get(claims.sub) ?? null;
+        if (stale && socketOfSeat(stale)?.connected) return reply("ALREADY_IN_ROOM");
+        const leaveStale = () => {
+          if (!stale) return;
           registry.dispatch(stale.roomCode, { type: "leave", playerId: stale.playerId });
           releaseSeat(stale);
-        }
+        };
         const grade = payload.grade as number;
         if (event === "room:create") {
           if (claims.intent.kind !== "create") return reply("INVALID_TICKET");
@@ -633,10 +634,11 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
             gameId,
             mode,
             seed: generateMatchSeed(),
-            settings: { band: settings.band, subjects: settings.subjects },
+            settings: { band: settings.band, subjects: settings.subjects, maxPlayers: cfg.roomMaxPlayers },
             host: { playerId, nickname: claims.nickname, avatar: claims.avatar, grade },
           });
           const seat = newSeat(claims.sub, code, playerId, socket);
+          leaveStale();
           roomOwnerIp.set(code, data.ip);
           metrics.counters.roomsCreated++;
           logger.info("rt.room.created", { room: roomHash(code), gameId });
@@ -658,8 +660,10 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
         const r = registry.dispatch(code, { type: "join", playerId, nickname: claims.nickname, avatar: claims.avatar, grade });
         if (r.error) {
           releaseSeat(seat);
+          if (stale) seatsByIdentity.set(claims.sub, stale); // a régi (megszakadt) hely érintetlen marad
           return reply(r.error);
         }
+        leaveStale();
         return reply(null, { roomCode: code, playerId, resumeToken: seat.resumeToken });
       }
       case "react": {

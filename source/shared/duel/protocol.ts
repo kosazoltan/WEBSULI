@@ -44,6 +44,8 @@ export const ROOM_CODE_PATTERN = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/;
 
 export const RT_MIN_PLAYERS = 2;
 export const RT_MAX_PLAYERS = 4;
+/** A párbaj-szoba mérete a JM3a-ban (review #464 H1): 2 fő; a 3–4 fő a kirúgással együtt a JM3b-ben (`MP_ROOM_MAX_PLAYERS`). */
+export const RT_DUEL_ROOM_PLAYERS = 2;
 export const RT_MIN_GRADE = 3;
 export const RT_MAX_GRADE = 12;
 
@@ -96,7 +98,7 @@ export const RT_ERROR_TEXT: Record<RtErrorCode, string> = {
   UNSUPPORTED_VERSION: "Frissítsd az oldalt, új változat érkezett.",
   RATE_LIMITED: "Túl gyorsan próbálkozol. Várj egy kicsit!",
   ROOM_NOT_FOUND: "Ez a szoba már nem létezik. Nyiss újat, vagy kérj új kódot!",
-  ROOM_FULL: "A szoba megtelt (legfeljebb 4 játékos).",
+  ROOM_FULL: "Ez a szoba megtelt. Kérj új kódot a barátodtól, vagy nyiss saját szobát!",
   ROOM_STARTED: "Ebben a szobában már elkezdődött a játék.",
   NOT_HOST: "Ezt csak a szoba gazdája teheti meg.",
   ALREADY_IN_ROOM: "Már egy másik szobában vagy.",

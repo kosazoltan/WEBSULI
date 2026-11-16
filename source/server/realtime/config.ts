@@ -12,7 +12,7 @@
  *    osztály is elférjen), `MP_TICKETS_PER_MIN_PER_IP` (alap 10), `MP_ROOMS_PER_MIN_PER_IP` (alap 5);
  *  - `MP_DIRECT_URL` — opcionális közvetlen (WebSocket-képes) cím, pl. egy Render custom domain; csak https.
  */
-import { RT_GAME_IDS, type RtGameId } from "../../shared/duel/protocol";
+import { RT_DUEL_ROOM_PLAYERS, RT_GAME_IDS, RT_MAX_PLAYERS, RT_MIN_PLAYERS, type RtGameId } from "../../shared/duel/protocol";
 
 export type MpMode = "off" | "admin" | "on";
 export type RunsPriority = "auto" | "on" | "off";
@@ -38,6 +38,8 @@ export type RtConfig = {
   noRoomTimeoutMs: number;
   /** Szobahely nélkül maradt kapcsolat bontása — `MP_SEATLESS_DISCONNECT_MS`, alap 3 s. */
   seatlessDisconnectMs: number;
+  /** A párbaj-szoba mérete — `MP_ROOM_MAX_PLAYERS`, alap 2 (JM3a, review #464 H1); 3–4 a JM3b-vel (kirúgás, 3–4 fős felület). */
+  roomMaxPlayers: number;
 };
 
 export function mpMode(env: NodeJS.ProcessEnv = process.env): MpMode {
@@ -78,6 +80,7 @@ export function rtConfig(env: NodeJS.ProcessEnv = process.env): RtConfig {
     roomsPerMinPerIp: int(env, "MP_ROOMS_PER_MIN_PER_IP", 5, 1, 10000),
     concurrentRoomsPerIp: int(env, "MP_CONCURRENT_ROOMS_PER_IP", 8, 1, 10000),
     joinAttemptsPerMinPerIp: int(env, "MP_JOINS_PER_MIN_PER_IP", 20, 1, 10000),
+    roomMaxPlayers: int(env, "MP_ROOM_MAX_PLAYERS", RT_DUEL_ROOM_PLAYERS, RT_MIN_PLAYERS, RT_MAX_PLAYERS),
     handshakeFailuresPerMinPerIp: int(env, "MP_HANDSHAKE_FAILURES_PER_MIN_PER_IP", 60, 1, 10000),
     directUrl: directUrl(env.MP_DIRECT_URL),
     connectTimeoutMs: int(env, "MP_CONNECT_TIMEOUT_MS", 10_000, 100, 60_000),

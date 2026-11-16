@@ -164,6 +164,18 @@ test("A nyit, B kóddal csatlakozik: váróterem → teljes meccs érintéssel �
     await assertMobileQuality(A.page, "váróterem (gazda)");
     await shot(A.page, "online-lobby-host");
     await joinRoom(B.page, code, "code");
+    // Review #464 H1: a 2 fős szobába egy harmadik (a linket megkapó idegen) nem ülhet be — érthető hibaképernyő.
+    const C = await phone(browser, on.url, { width: 360, height: 640 });
+    try {
+      await C.page.goto(`/games/parbaj/${code}`);
+      await C.page.getByTestId("duel-join-go").tap();
+      await expect(C.page.getByTestId("duel-error")).toHaveAttribute("data-code", "ROOM_FULL", { timeout: 15_000 });
+      await expect(C.page.getByTestId("duel-error")).toContainText("megtelt");
+      await shot(C.page, "online-room-full");
+    } finally {
+      await C.ctx.close();
+    }
+    await expect(A.page.getByTestId("duel-players").locator("li")).toHaveCount(2);
     await assertMobileQuality(B.page, "váróterem (csatlakozó)");
     await shot(B.page, "online-lobby-guest");
     await expect(A.page.getByTestId("duel-players")).toContainText("Kész ✓");

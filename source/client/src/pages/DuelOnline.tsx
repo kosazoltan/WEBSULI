@@ -223,8 +223,11 @@ export default function DuelOnline() {
   const lastIntent = useRef<{ kind: "bot" } | OnlineIntent | null>(null);
   const opToken = useRef(0);
 
+  // Online: előbb kilépés (a szerver azonnal felszabadítja a helyet — az ellenfél nem lát egy percig „Kapcsolódik…”-ot,
+  // review #464 A3), utána lezárás. Gépi módban a `leave` maga a lezárás.
   const endSession = useCallback(() => {
-    sessionRef.current?.dispose();
+    const s = sessionRef.current;
+    if (s) void s.leave().finally(() => s.dispose());
     setSession(null);
   }, []);
 

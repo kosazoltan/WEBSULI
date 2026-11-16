@@ -176,6 +176,19 @@ describe("JM3a gateway — szobanyitási jog (terv D21, JM-A4)", () => {
   });
 });
 
+describe("JM3a gateway — 2 fős párbaj-szoba (review #464 H1)", () => {
+  it("a harmadik csatlakozó ROOM_FULL-t kap (szerveroldalon); a meccs két fővel indul", async () => {
+    const h = await harness({ windowMs: 2000 });
+    const { host, code } = await createRoom(h);
+    await addPlayer(h, code, 6);
+    const third = await join(h, { intent: "join", code });
+    assert.deepEqual(await third.request("room:join", { code, grade: 7 }), { ok: false, code: "ROOM_FULL" });
+    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players.every((p: any) => p.ready));
+    assert.equal((await host.request("room:start", {})).ok, true);
+    assert.equal(h.rt.registry.get(code)!.match!.ids.length, 2);
+  });
+});
+
 describe("JM3a gateway — megszakadt régi hely", () => {
   it("ugyanaz a (fiókos) játékos megszakadt kapcsolattal új szobát nyithat: a régi helye felszabadul, az ellenfél győz; élő kapcsolatnál ALREADY_IN_ROOM marad", async () => {
     const h = await harness({ windowMs: 3000 });
@@ -192,6 +205,12 @@ describe("JM3a gateway — megszakadt régi hely", () => {
     host.socket.io.reconnection(false);
     host.socket.io.engine.close();
     await guest.waitFor("room:state", (s) => s.players.some((p: any) => p.id === host.playerId && !p.connected));
+    // Review #464 A2: egy SIKERTELEN (nem létező kódú) csatlakozás nem zárja le a saját futó meccsét.
+    const wrong = await join(h, { intent: "join", code: "ZZZ999" }, { headers: who });
+    assert.deepEqual(await wrong.request("room:join", { code: "ZZZ999", grade: 5 }), { ok: false, code: "ROOM_NOT_FOUND" });
+    await sleep(100);
+    assert.equal(guest.events("match:result").length, 0, "a meccs fut tovább");
+    assert.equal(h.rt.registry.get(code)!.players.find((p) => p.id === host.playerId)!.left, false);
     const again = await join(h, { intent: "create" }, { headers: who });
     const ack = await again.request("room:create", { gameId: "parbaj", mode: "duel", grade: 5, settings: {} });
     assert.equal(ack.ok, true, JSON.stringify(ack));
@@ -234,7 +253,8 @@ describe("JM2 gateway — teljes meccs", () => {
   });
 
   it("4 kliens CSAK long-pollinggal (a Vercel-továbbítás szimulációja): teljes meccs, dobogó, mindenki a saját évfolyamán", async () => {
-    const h = await harness({ windowMs: 3000 });
+    // SPEC-VÁLTOZÁS 2026-11-16 (review #464 H1): a párbaj-szoba alapból 2 fős; a 3–4 fős mechanika (JM3b) `MP_ROOM_MAX_PLAYERS`-szel mérve.
+    const h = await harness({ windowMs: 3000, env: { MP_ROOM_MAX_PLAYERS: "4" } });
     const opts = { transports: ["polling" as const] };
     const { host, code } = await createRoom(h, 3, opts);
     const p2 = await addPlayer(h, code, 6, opts);
@@ -299,7 +319,8 @@ describe("JM2 gateway — kapcsolat-kiesés, kilépés, gazda-váltás", () => {
   });
 
   it("3 főből egy kilép meccs közben: a meccs folytatódik, a gazda kilépésekor új gazda lesz", async () => {
-    const h = await harness({ windowMs: 3000 });
+    // SPEC-VÁLTOZÁS 2026-11-16 (review #464 H1): a párbaj-szoba alapból 2 fős; a 3–4 fős mechanika (JM3b) `MP_ROOM_MAX_PLAYERS`-szel mérve.
+    const h = await harness({ windowMs: 3000, env: { MP_ROOM_MAX_PLAYERS: "4" } });
     const { host, code } = await createRoom(h);
     const p2 = await addPlayer(h, code);
     const p3 = await addPlayer(h, code);
@@ -712,7 +733,8 @@ describe("JM2 gateway — biztonsági review #452 javításai", () => {
   });
 
   it("ALACSONY-4: a kirúgott vendég új jeggyel sem jöhet vissza (KICKED); a nyitó rövid kiesés után visszakapja a gazdaságot", async () => {
-    const h = await harness();
+    // SPEC-VÁLTOZÁS 2026-11-16 (review #464 H1): a párbaj-szoba alapból 2 fős; a 3–4 fős mechanika (JM3b) `MP_ROOM_MAX_PLAYERS`-szel mérve.
+    const h = await harness({ env: { MP_ROOM_MAX_PLAYERS: "4" } });
     const { host, code } = await createRoom(h);
     const intruder = await addPlayer(h, code);
     const friend = await addPlayer(h, code);

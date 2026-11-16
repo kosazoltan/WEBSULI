@@ -89,6 +89,15 @@ describe("JM2 room-machine — váróterem", () => {
     assert.equal(step(s, { type: "join", playerId: E, nickname: "E", avatar: null, grade: 4 }, T0 + 5).error, "ROOM_FULL");
   });
 
+  it("a szoba mérete szobánként állítható (review #464 H1): 2 fős szobába a harmadik ROOM_FULL", () => {
+    let s = createRoom({ code: "ABCDEF", gameId: "parbaj", mode: "duel", seed: "x", settings: { maxPlayers: 2 }, host: { playerId: A, nickname: "A", avatar: null, grade: 5 }, nowMs: T0 });
+    assert.equal(s.settings.maxPlayers, 2);
+    s = ok(s, { type: "join", playerId: B, nickname: "B", avatar: null, grade: 5 }, T0 + 1);
+    assert.equal(step(s, { type: "join", playerId: C, nickname: "C", avatar: null, grade: 5 }, T0 + 2).error, "ROOM_FULL");
+    const clamped = createRoom({ code: "ABCDEF", gameId: "parbaj", mode: "duel", seed: "x", settings: { maxPlayers: 9 }, host: { playerId: A, nickname: "A", avatar: null, grade: 5 }, nowMs: T0 });
+    assert.equal(clamped.settings.maxPlayers, 4);
+  });
+
   it("indítás: csak a gazda, csak ha legalább 2 fő és mindenki kész", () => {
     let s = room();
     assert.equal(step(s, { type: "start", playerId: A }, T0 + 1).error, "NOT_ENOUGH_PLAYERS");
