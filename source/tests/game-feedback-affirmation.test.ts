@@ -49,3 +49,19 @@ test("csak előtagból álló magyarázatnál a tartalék magyarázat jön", () 
   const card = buildFeedback({ quiz: { ...quiz, explanation: "Helyes!" }, chosenIndex: 1, attempt: 0 });
   assert.ok(card.why.startsWith("A helyes válasz: tegnap"), card.why);
 });
+
+/** Review (vercel[bot], feedback.ts:93): a szóközös nyitószavak („Helyes — …”) átcsúsztak, mert a regexből elveszett a `\s` visszaperjele. */
+test("minden megerősítő nyitószó-alak lekerül rossz válasznál és időtúllépésnél, a „Helyesírás” érintetlen", () => {
+  const openers = ["Helyes — ", "Helyes! ", "Helyes: ", "Helyes. ", "helyes, ", "Helyes – ", "Helyes - ", "Igen — ", "Jól van; "];
+  for (const opener of openers) {
+    const q = { ...quiz, explanation: `${opener}a tegnap szót egy p-vel írjuk.` };
+    for (const chosenIndex of [1, null]) {
+      const card = buildFeedback({ quiz: q, chosenIndex, attempt: 0 });
+      assert.ok(card.why.startsWith("A helyes válasz: tegnap."), `${JSON.stringify(opener)}/${chosenIndex}: ${card.why}`);
+      assert.ok(!/helyes\s*[—–!:.,-]/i.test(card.why.replace("A helyes válasz:", "")), card.why);
+    }
+  }
+  const keep = { ...quiz, explanation: "Helyesírás: a tegnap szót egy p-vel írjuk." };
+  assert.equal(buildFeedback({ quiz: keep, chosenIndex: 1, attempt: 0 }).why, keep.explanation);
+  assert.equal(stripAffirmationPrefix("Helyesírás: egy p."), null);
+});

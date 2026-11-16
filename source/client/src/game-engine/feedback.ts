@@ -90,7 +90,7 @@ function asSentence(text: string): string {
 
 /** Dicsérő / megerősítő nyitószó, amely rossz válasz mellett félrevezető volna („Helyes! …”, „Igen, …”, „Pontos. …”). */
 const AFFIRMATION_PREFIX =
-  /^(?:helyes|igen|így van|jól van|pontos|szuper|ügyes|kiváló|nagyszerű|remek|tökéletes|nagyon jó|jó válasz|bizony|persze)s*[!.:,;–—-]+s*/iu;
+  /^(?:helyes|igen|így van|jól van|pontos|szuper|ügyes|kiváló|nagyszerű|remek|tökéletes|nagyon jó|jó válasz|bizony|persze)\s*[!.:,;–—-]+\s*/iu;
 
 /**
  * A magyarázat elejéről levágja az affirmációs nyitószót. `null`: nem volt ilyen előtag (a szöveg változatlan marad);
