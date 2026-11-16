@@ -429,3 +429,20 @@ Forrás: S7 (`SpeedQuizMath.tsx` `!text-[…]` kerülőút), S13 / B7.
 - **Gyökérok:** Tailwind 3-ban a rétegen kívüli szabály a forrásban a `@tailwind utilities` UTÁN áll, azonos fajlagosságnál ezért nyer.
 - **Megelőzés:** felülírhatónak szánt közös komponens-osztály a `@layer components` blokkba kerül (őr: `tests/game-answer-btn-layer.test.ts`);
   `!`-os segédosztály csak indoklással.
+
+## C-33 — „Beállt állapotra várás” élő elemen: a PR CI-ja zöld, a main CI piros (2026-11-16)
+
+Forrás: main CI 43794783447 (b5041240, #437 után): Playwright E2E 3 failed (a `block-craft-quiz` „full: M1 M2 M3 négy
+állapotban” mind a 3 nézetben, 3 újrapróbán), 1 flaky (`tests/block-art.spec.ts:18`).
+
+- **Tünet:** `page.waitForFunction 5000ms` a `waitForStable`-ben ← `settleIfPresent` ← `shot(…, "play")`. A #437 saját CI-ja és a
+  helyi futás (valódi GPU) zöld volt.
+- **Gyökérok:** a #437 a képernyőkép elé „beállt állapotra várást” tett, a `play` állapotban a `[data-game-hud]`-ra. Futó játékban a
+  HUD jogosan mozog folyamatosan: másodpercenként új időérték → a `.game-hud-progress-fill` 0,25 s-os `transform`-átmenete és a
+  változott stat rugós „pop”-animációja. A `waitForStable` 4 egymást követő, animációmentes rAF-képkockát kér; a szoftveres WebGL-es
+  CI-gépen a 3D jelenet mellett kevés képkocka fut, így a tick-ek között ez nem jön össze. Valódi GPU-n (helyben) és a PR-futás
+  időzítésében épp összejött — határeset, ezért nem a PR, hanem a main futása bukott.
+- **Megelőzés:** stabilitásra csak olyan elemen szabad várni, amelynek van végállapota (belépő animáció: kezdőképernyő, szünet menü,
+  eredmény; kvízben a válaszgombok doboza). Élő játékelemen (HUD, idősáv, vászon) soha. A `SETTLE_SELECTOR`-ból a `play` kikerült;
+  a kvíz-mérés a `[data-correct]` gombokra vár, nem a teljes kvízrétegre (abban fut a kvízóra csíkja). Új stabilitás-várakozást a
+  CI-vel azonos úton (`npm run test:e2e -- … -g <játék>`, buildelt szerver, szoftveres WebGL) is le kell futtatni, nem csak Vite-tal.

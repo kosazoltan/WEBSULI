@@ -92,10 +92,18 @@ export async function settleIfPresent(page: Page, selector: string): Promise<voi
   if ((await page.locator(selector).count()) > 0) await waitForStable(page, selector);
 }
 
-/** Állapotonként az a gyökér, amelynek beállt állapotát a mérés és a képernyőkép előtt megvárjuk. */
+/**
+ * Állapotonként az a gyökér, amelynek beállt állapotát a képernyőkép előtt megvárjuk (B5).
+ *
+ * A „play” (és a „quiz”) állapot SZÁNDÉKOSAN nincs itt (main CI #437 után, b5041240: a Kockavadász 3 nézetben 3
+ * újrapróbán bukott): futó játékban a HUD jogosan mozog folyamatosan — másodpercenként új időérték, ehhez a
+ * `.game-hud-progress-fill` 0,25 s-os `transform`-átmenete és a változott stat rugós „pop”-animációja. A szoftveres
+ * WebGL-es CI-gépen a 3D jelenet mellett kevés rAF-képkocka fut, így a tick-ek között nincs 4 animációmentes képkocka,
+ * és a `waitForStable` 5 s után időtúllépéssel bukik. Élő játékot nem lehet „beállt” állapotban fotózni; a játék
+ * közbeni M2/M3 mérés amúgy sem várt erre (a mérce nem változik), csak a képernyőkép időzítése.
+ */
 const SETTLE_SELECTOR: Record<string, string> = {
   start: "[data-game-start]",
-  play: "[data-game-hud]",
   pause: '[data-testid="game-pause-menu"]',
   result: "[data-game-result]",
 };
