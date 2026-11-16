@@ -16,7 +16,10 @@ test("az üdvözlő kártya és a játékrács nem a régi cikcakkos glass-card 
   assert.equal(games.match(/className="game-card"/g)?.length, 7);
   assert.equal(games.match(/className="game-diff game-diff--/g)?.length, 3);
   const css = read("client/src/index.css");
-  assert.match(css, /\.game-diff \{[^}]*min-height: 40px;/);
+  // SPEC-VÁLTOZÁS 2026-11-15 (docs/specs/2026-11-15-jatekok-mobil-szobank.md M2; végrehajtás S13/2): a nehézség-link
+  // érintési célja 40 → legalább 48 px (a közös --game-touch-min). A követelmény szigorodik, nem lazul.
+  assert.match(css, /\.game-diff \{[^}]*min-height: var\(--game-touch-min\);/);
+  assert.match(css, /--game-touch-min: 48px;/);
   assert.match(css, /\.welcome-edit-btn \{[^}]*min-height: 44px;/);
 });
 

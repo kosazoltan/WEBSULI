@@ -17,7 +17,7 @@ function GameCardBody({ icon, badge, title, children, cta }: { icon: ReactNode; 
       {cta && (
         <span className="game-cta">
           {cta}
-          <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+          <ArrowRight className="w-4 h-4" aria-hidden="true" />
         </span>
       )}
     </>
@@ -26,7 +26,9 @@ function GameCardBody({ icon, badge, title, children, cta }: { icon: ReactNode; 
 
 /**
  * Spec 2026-11-03-udvozlo-jatekkartyak-szulo: a főoldali gyakorló játékok a fejléc üvegnyelvén — közös `.game-card`, játékonként
- * saját kiemelőszín, olvasható betűméret, 40 px-es nehézségi gombok. JS-animáció nincs (a hover CSS, csökkentett mozgásnál kikapcsol).
+ * saját kiemelőszín, olvasható betűméret. S13 (2026-11-15 játékok-mobil terv, M2/M8): a kártya a közös játék-arculat változóin
+ * (`--game-*`) áll, a nehézségi gombok legalább 48 px-esek, cím ≥ 16 px, leírás ≥ 14 px; a kártya egy koppintással a játék
+ * kezdőképernyőjére visz. JS-animáció nincs (a hover CSS, csökkentett mozgásnál kikapcsol).
  */
 function HomePracticeGames() {
   return (
@@ -49,7 +51,8 @@ function HomePracticeGames() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 auto-rows-fr">
+      {/* S13: soronként igazodó magasság (auto-rows-fr nélkül): a Szökőár nehézség-gombjai nem nyújtják meg az összes sort. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
         {/* Szökőár — a kártya nem link: a három nehézségi szint külön indul */}
         <div className="game-card" style={accent("#22d3ee")}>
           <GameCardBody icon={<Waves />} badge="MIX" title="Szökőár szökés — Tudáspróba">
