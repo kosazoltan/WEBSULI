@@ -42,10 +42,25 @@ export type DuelBankItem = {
   explanation?: string;
 };
 
-export type DuelWindowRule = (prompt: string, grade: number) => number;
+/** A válaszablak szabálya; a 3. paraméter (JM3a, additív) az eredeti sorrendű opciók — az olvasási idő becsléséhez. */
+export type DuelWindowRule = (prompt: string, grade: number, options?: readonly string[]) => number;
 
 /** A párbaj alap-válaszablaka (a J0b `windowMsFor` bemenete; 3–4. évfolyamon ×1,25, mindig ≤ 9 s). Szerver és kliens közös. */
 export const DUEL_BASE_WINDOW_MS = 6000;
+
+/** A válaszablak felső határa (terv J10; a J0c `READING_WINDOW_CAP_MS`-ével azonos). */
+export const DUEL_WINDOW_CAP_MS = 9000;
+
+/**
+ * Olvasási idő-alapú ablak (JM3a; a J0c-b `recommendedWindowMs` szabálya): a szöveghossz szerinti ablak és a becsült
+ * végigolvasás + döntés közül a nagyobb, legfeljebb 9 mp. A két bemenetet a hívó adja (a szerver és a kliens ugyanazt a
+ * `windowMsFor` / `readingMsFor` szabályt köti be), így a `shared/` nem importál a `client/src/`-ből.
+ */
+export function duelReadingWindowMs(lengthWindowMs: number, readingMs: number): number {
+  const a = Number.isFinite(lengthWindowMs) && lengthWindowMs > 0 ? lengthWindowMs : DUEL_BASE_WINDOW_MS;
+  const b = Number.isFinite(readingMs) && readingMs > 0 ? readingMs : 0;
+  return Math.round(Math.min(DUEL_WINDOW_CAP_MS, Math.max(a, b)));
+}
 
 /**
  * Hossz-őr (review #447; az egyeszközös aréna osztott képernyőjére mérve, egy térfélnek 360×640-en ~260 px jutott — az
@@ -126,8 +141,13 @@ export type BuildRoundQuestionArgs = {
   used: Set<string>;
   /** A bank (a kliens `GRADE_QUIZ_ITEMS`-e; a szerver ugyanezt importálja). */
   items: readonly DuelBankItem[];
-  /** A válaszablak szabálya (a J0b `windowMsFor(prompt, grade, DUEL_BASE_WINDOW_MS)`). */
+  /** A válaszablak szabálya (a J0b `windowMsFor(prompt, grade, DUEL_BASE_WINDOW_MS)`, JM3a óta olvasási idő-alapú). */
   windowMs: DuelWindowRule;
+  /**
+   * Előnyben részesített tételek (JM3a; a J0c-b `accept` mintája: pl. 9 mp alatt elolvasható). A tierben előbb ezek közül
+   * választ; ha egy sincs, a többi közül (a tantárgyi arány így nem torzul, és a kérdés nem fogy el).
+   */
+  prefer?: (item: DuelBankItem, grade: number) => boolean;
 };
 
 /**
@@ -148,10 +168,12 @@ export function buildRoundQuestion(args: BuildRoundQuestionArgs): DuelQuestion |
     const inGrade = unseen.filter((q) => q.grade === g);
     if (inGrade.length === 0) continue;
     for (const tier of tierOrder(band)) {
-      const candidates = inGrade.filter((q) => q.tier === tier);
-      if (candidates.length === 0) continue;
+      const all = inGrade.filter((q) => q.tier === tier);
+      if (all.length === 0) continue;
+      const preferred = args.prefer ? all.filter((q) => args.prefer!(q, grade)) : all;
+      const candidates = preferred.length > 0 ? preferred : all;
       const item = candidates[rng.int(candidates.length)]!;
-      const windowMs = args.windowMs(item.prompt, grade);
+      const windowMs = args.windowMs(item.prompt, grade, item.options);
       return toDuelQuestion(
         { key: item.id, prompt: item.prompt, options: item.options, correctIndex: item.correctIndex, explanation: item.explanation },
         { grade, orderSeed: seedFrom("duel-o", seed, round, item.id), windowMs: Number.isFinite(windowMs) && windowMs > 0 ? windowMs : 6000 },

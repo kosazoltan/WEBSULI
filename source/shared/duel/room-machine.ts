@@ -156,7 +156,8 @@ export type RoomMatch = {
   matchUsed: Record<string, string[]>;
 };
 
-export type RoomSettings = { rounds: number; band: number; subjects: string[] };
+/** `maxPlayers`: a SZOBA mérete (2..RT_MAX_PLAYERS) — a szerver-réteg adja (JM3a: 2, review #464 H1). */
+export type RoomSettings = { rounds: number; band: number; subjects: string[]; maxPlayers: number };
 
 export type RoomState = {
   code: string;
@@ -230,6 +231,7 @@ function timingOf(cfg: RoomConfig): RoomTiming {
 
 export function createRoom(args: CreateRoomArgs): RoomState {
   const band = args.settings?.band;
+  const mp = args.settings?.maxPlayers;
   return {
     code: args.code,
     gameId: args.gameId,
@@ -239,6 +241,7 @@ export function createRoom(args: CreateRoomArgs): RoomState {
       rounds: DUEL_ROUNDS,
       band: typeof band === "number" && Number.isFinite(band) ? Math.min(1, Math.max(0, band)) : 0.55,
       subjects: args.settings?.subjects ? args.settings.subjects.slice() : [],
+      maxPlayers: typeof mp === "number" && Number.isInteger(mp) ? Math.min(RT_MAX_PLAYERS, Math.max(RT_MIN_PLAYERS, mp)) : RT_MAX_PLAYERS,
     },
     phase: "lobby",
     phaseStartMs: args.nowMs,
@@ -649,7 +652,7 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
       if (s.drainDeadlineMs !== null) return err(state, "SERVER_RESTART");
       if (player(s, ev.playerId)) return err(state, "ALREADY_IN_ROOM");
       if (s.phase !== "lobby") return err(state, "ROOM_STARTED");
-      if (s.players.length >= RT_MAX_PLAYERS) return err(state, "ROOM_FULL");
+      if (s.players.length >= s.settings.maxPlayers) return err(state, "ROOM_FULL");
       s.players.push({
         id: ev.playerId,
         nickname: ev.nickname,

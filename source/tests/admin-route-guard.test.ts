@@ -101,7 +101,7 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "POST /api/player/export": "JM7b: adatletöltés (csak saját) — flag + requireOwnData (N2: tiltott is) + CSRF + Origin + óránkénti korlát",
   "POST /api/player/account/delete/start": "JM7b: törlési kód a fiók címére — flag + requireOwnData (N2: tiltott is) + CSRF + Origin + korlát, a belépőkód-keret",
   "POST /api/player/account/delete": "JM7b: fióktörlés — flag + requireOwnData (N2: tiltott is) + CSRF + Origin + megerősítő szó + e-mailben küldött egyszeri kód",
-  "POST /api/rt/ticket": "JM2: valós idejű belépőjegy — MP_MODE (off → 404, admin → csak admin), Origin-allowlist, IP-korlát; vendég is (generált becenév)",
+  "POST /api/rt/ticket": "JM2/JM3a: valós idejű belépőjegy — MP_MODE (off → 404; admin → szobát csak admin nyit, csatlakozni bárki; on → nyitás fiók / tanulói profil / admin, ACCOUNT_REQUIRED), Origin-allowlist, IP-korlát; csatlakozó vendég generált becenévvel",
   "GET /api/rt/status": "JM2: { enabled, mode, szoba- és meccsszám } — nyilvános, PII nélkül (telepítés előtti őr)",
   "GET /api/auth/user": "saját felhasználó (vagy null)",
   "GET /api/csrf-token": "CSRF-token",

@@ -9,7 +9,9 @@
  * A megjelenítendő név MINDIG becenév: a játékos-fiók szűrt beceneve, egyébként generált (`guestNickname`) — valódi név,
  * e-mail soha nem kerül a jegybe és a protokollba. CSRF: munkamenet előtt (vendég) nincs CSRF-token, ezért — mint a
  * `/api/player/auth/*` — Origin/Referer-engedélylista őrzi (a `routes.ts` kivétel-listája), plusz IP-korlát.
- * `MP_MODE=off` → a jegy-végpont 404; `admin` → csak admin-munkamenet kap jegyet (éles próbához).
+ * `MP_MODE=off` → a jegy-végpont 404. Szobanyitás (JM3a, terv D21 / JM-A4): `admin` módban csak admin-munkamenet,
+ * `on` módban játékos-fiók / párosított tanulói profil / admin kap `create` jegyet (különben 403 `FEATURE_DISABLED` /
+ * `ACCOUNT_REQUIRED`); csatlakozó (`join`) jegyet mindkét módban bárki kap — vendégként is, generált becenévvel.
  * A státusz nyilvános: csak számok (a telepítés előtti „futó meccs” őr erre épül), személyes adat nélkül.
  */
 import { createHmac, randomBytes } from "node:crypto";
@@ -20,7 +22,7 @@ import { RT_MAX_GRADE, RT_MIN_GRADE, RT_PATH, ticketRequestSchema } from "../../
 import { isAdminUser } from "../lib/admin-access";
 import { clientIpKeyGenerator } from "../lib/client-ip";
 import type { RealtimeService } from "../realtime";
-import { ticketSecret, type TicketClaims, type TicketKind } from "../realtime/ticket";
+import { canCreateRoom, ticketSecret, type TicketClaims, type TicketKind } from "../realtime/ticket";
 
 export type RtRouterDeps = {
   /** Tanulói profil a tokenből (név a válaszban van, de MI csak az azonosítót és az évfolyamot használjuk). */
@@ -75,7 +77,9 @@ export function createRtRouter(rt: RealtimeService, deps: RtRouterDeps = {}): Ro
 
       const user = req.isAuthenticated?.() ? req.user : undefined;
       const isAdmin = isAdminUser(user); // JM7c-1: az egyetlen admin-képlet
-      if (cfg.mode === "admin" && !isAdmin) return res.status(403).json({ code: "FEATURE_DISABLED" });
+      const wantsCreate = body.data.intent === "create";
+      // Admin módban a szobát csak admin nyithatja; a kóddal csatlakozó (vendég is) jegyet kap (D21, JM-A4).
+      if (cfg.mode === "admin" && wantsCreate && !isAdmin) return res.status(403).json({ code: "FEATURE_DISABLED" });
 
       let kind: TicketKind = "guest";
       let sub = `guest:${randomBytes(12).toString("base64url")}`;
@@ -95,11 +99,8 @@ export function createRtRouter(rt: RealtimeService, deps: RtRouterDeps = {}): Ro
           sub = `player:${player.id}`;
           const nick = (player.nickname ?? "").trim();
           nickname = nick && nicknameProblems(nick).length === 0 ? nick : guestNickname(stableSeed(secretForSeeds, "player", player.id));
-        } else if (user) {
-          kind = "user";
-          sub = `user:${user.id}`;
-          nickname = guestNickname(stableSeed(secretForSeeds, "user", String(user.id)));
         } else {
+          // JM3a: a párosított tanulói profil a fiók nélküli régi felhasználói munkamenet (`user`) ELŐTT — szobát nyithat (D21).
           const token = req.get("x-learner-token");
           const learner = token && deps.resolveLearner ? await deps.resolveLearner(token) : null;
           if (learner) {
@@ -107,11 +108,16 @@ export function createRtRouter(rt: RealtimeService, deps: RtRouterDeps = {}): Ro
             sub = `learner:${learner.id}`;
             nickname = guestNickname(stableSeed(secretForSeeds, "learner", learner.id));
             grade = Number.isInteger(learner.grade) && learner.grade >= RT_MIN_GRADE && learner.grade <= RT_MAX_GRADE ? learner.grade : null;
+          } else if (user) {
+            kind = "user";
+            sub = `user:${user.id}`;
+            nickname = guestNickname(stableSeed(secretForSeeds, "user", String(user.id)));
           }
         }
       } catch {
         return res.status(503).json({ code: "FEATURE_DISABLED" });
       }
+      if (wantsCreate && !canCreateRoom(cfg.mode, kind)) return res.status(403).json({ code: "ACCOUNT_REQUIRED" });
 
       const intent: TicketClaims["intent"] = body.data.intent === "join" ? { kind: "join", code: body.data.code } : { kind: "create", code: null };
       const { ticket } = rt.tickets.issue({ kind, sub, nickname, avatar: null, grade, intent });

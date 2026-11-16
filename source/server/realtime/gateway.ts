@@ -40,7 +40,7 @@ import { clientIpKey } from "../lib/client-ip";
 import type { RtConfig } from "./config";
 import type { Metrics } from "./metrics";
 import { generateMatchSeed, type Registry } from "./registry";
-import type { TicketClaims, TicketService } from "./ticket";
+import { canCreateRoom, type TicketClaims, type TicketService } from "./ticket";
 
 /** Ennyi kimenő csomag várakozhat egy kapcsolaton (polling: a következő lekérdezésig) — felette a kliens lassú → bontás. */
 export const RT_MAX_PENDING_PACKETS = 64;
@@ -472,7 +472,9 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
     if (deps.isDraining()) return fail("SERVER_RESTART");
     const result = tickets.consume(auth.data.ticket);
     if (!result.ok) return fail("INVALID_TICKET", result.reason === "SIGNATURE" || result.reason === "MALFORMED");
-    if (cfg.mode === "admin" && result.claims.kind !== "admin") return fail("FEATURE_DISABLED");
+    // Szobanyitási jog (JM3a, D21 / JM-A4) a kézfogáskor is: a `create` jegyet csak a mód szerinti jogcím használhatja
+    // (admin módban admin; `on` módban játékos-fiók / tanulói profil / admin). Csatlakozni kóddal bárki tud (vendég is).
+    if (result.claims.intent.kind === "create" && !canCreateRoom(cfg.mode, result.claims.kind)) return fail(cfg.mode === "admin" ? "FEATURE_DISABLED" : "ACCOUNT_REQUIRED");
     data.claims = result.claims;
     socket.data = data;
     next();
@@ -603,7 +605,17 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
         const claims = data.claims;
         if (!claims || data.intentUsed) return reply("INVALID_TICKET");
         if (deps.isDraining()) return reply("SERVER_RESTART");
-        if (seatsByIdentity.has(claims.sub)) return reply("ALREADY_IN_ROOM");
+        // Egy játékos egy szobában. JM3a: ha a korábbi hely kapcsolata MÁR MEGSZAKADT (bezárt lap, újratöltés — a folytatási
+        // token elveszett), az új, kifejezett szándék a régi helyet elhagyja — de csak a kérés SIKERES ellenőrzése és
+        // végrehajtása UTÁN (review #464 A2: egy rossz kódos csatlakozás nem zárhatja le a saját futó meccsét). Élő
+        // kapcsolatnál (pl. két nyitott lap) marad az ALREADY_IN_ROOM.
+        const stale = seatsByIdentity.get(claims.sub) ?? null;
+        if (stale && socketOfSeat(stale)?.connected) return reply("ALREADY_IN_ROOM");
+        const leaveStale = () => {
+          if (!stale) return;
+          registry.dispatch(stale.roomCode, { type: "leave", playerId: stale.playerId });
+          releaseSeat(stale);
+        };
         const grade = payload.grade as number;
         if (event === "room:create") {
           if (claims.intent.kind !== "create") return reply("INVALID_TICKET");
@@ -622,10 +634,11 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
             gameId,
             mode,
             seed: generateMatchSeed(),
-            settings: { band: settings.band, subjects: settings.subjects },
+            settings: { band: settings.band, subjects: settings.subjects, maxPlayers: cfg.roomMaxPlayers },
             host: { playerId, nickname: claims.nickname, avatar: claims.avatar, grade },
           });
           const seat = newSeat(claims.sub, code, playerId, socket);
+          leaveStale();
           roomOwnerIp.set(code, data.ip);
           metrics.counters.roomsCreated++;
           logger.info("rt.room.created", { room: roomHash(code), gameId });
@@ -642,13 +655,31 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
         if (!registry.get(code)) return reply("ROOM_NOT_FOUND");
         const banned = bans.get(code);
         if (banned && (banned.has(claims.sub) || (claims.kind === "guest" && banned.has(`ip:${data.ip}`)))) return reply("KICKED");
+        // Review #464 (vercel 4589568096): ugyanaz a (fiókos / tanulói) játékos új jeggyel a SAJÁT szobájába tér vissza
+        // (lap-újratöltés, elveszett folytatási token) → a megszakadt SAJÁT helyére ül vissza, egyetlen szinkron lépésben
+        // (nincs ablak, amelyben a hely szabad és egy idegen beülne; a 2 fős plafonba így a saját helye nem „idegenként”
+        // számít). Váróteremben és meccs közben is: a pontok, a válasz és a gazdaság megmarad (ugyanaz, mint a folytatás).
+        if (stale && stale.roomCode === code) {
+          const back = registry.dispatch(code, { type: "reconnect", playerId: stale.playerId });
+          if (!back.error) {
+            stale.socketId = socket.id;
+            stale.ip = data.ip;
+            data.seat = stale;
+            reply(null, { roomCode: code, playerId: stale.playerId, resumeToken: stale.resumeToken });
+            const room = registry.get(code);
+            if (room) send(socket, "room:state", roomStateView(room, stale.playerId, deps.now(), deps.roomConfig));
+            return;
+          }
+        }
         const playerId = newPlayerId();
         const seat = newSeat(claims.sub, code, playerId, socket);
         const r = registry.dispatch(code, { type: "join", playerId, nickname: claims.nickname, avatar: claims.avatar, grade });
         if (r.error) {
           releaseSeat(seat);
+          if (stale) seatsByIdentity.set(claims.sub, stale); // a régi (megszakadt) hely érintetlen marad
           return reply(r.error);
         }
+        leaveStale();
         return reply(null, { roomCode: code, playerId, resumeToken: seat.resumeToken });
       }
       case "react": {

@@ -30,6 +30,17 @@ export type TicketClaims = {
   nonce: string;
 };
 
+/**
+ * Szobanyitási jog (JM3a, terv D21 / JM-A4): `admin` módban csak admin-munkamenet nyithat; `on` módban játékos-fiók,
+ * párosított tanulói profil vagy admin — vendég és a fiók nélküli régi felhasználó (`user`) nem. Csatlakozni (`join`)
+ * mindkét módban bárki tud a kóddal (vendégként is). A jogcím a szobában semmilyen jogot nem ad.
+ */
+export function canCreateRoom(mode: "off" | "admin" | "on", kind: TicketKind): boolean {
+  if (mode === "admin") return kind === "admin";
+  if (mode === "on") return kind === "player" || kind === "learner" || kind === "admin";
+  return false;
+}
+
 export type TicketVerifyResult = { ok: true; claims: TicketClaims } | { ok: false; reason: "MALFORMED" | "SIGNATURE" | "EXPIRED" | "REUSED" };
 
 /**
