@@ -115,6 +115,31 @@ test.describe("valódi érintés", () => {
   });
 });
 
+test.describe("J1: a játék a kérdés alatt fut (lassítva, ≥ 0,35×), szünetben áll", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("nyitott kérdésnél a sim-idő / valós idő ≥ 0,35 és < 1; szünetben 0", async ({ page }) => {
+    await page.goto("/games/speed-quiz-math?seed=9");
+    await page.getByTestId("sq-start").click();
+    await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
+    const rate = (ms: number) =>
+      page.evaluate(async (wait) => {
+        const api = (window as unknown as { __websuliGame: { probe: () => { simTime: number; questionOpen: number } } }).__websuliGame;
+        const s0 = api.probe().simTime;
+        const t0 = performance.now();
+        await new Promise((r) => setTimeout(r, wait));
+        return { r: (api.probe().simTime - s0) / (performance.now() - t0), open: api.probe().questionOpen };
+      }, ms);
+    const during = await rate(1000);
+    expect(during.open, "a mérés végén is nyitott a kérdés").toBe(1);
+    expect(during.r).toBeGreaterThanOrEqual(0.35 * 0.9);
+    expect(during.r).toBeLessThan(0.9);
+    await page.getByTestId("game-pause").click();
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    expect((await rate(600)).r, "szünetben a szimuláció áll").toBe(0);
+  });
+});
+
 test.describe("két ujj egyszerre (K.4/15, terv 8.4)", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 

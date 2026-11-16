@@ -1407,6 +1407,8 @@ function pickTask(level: GradeLevel, seenPrompts: readonly string[], band?: numb
 /** A fosztogató rajzolt mérete (CSS px) és találati sugara: ≥ 48 px átmérő (K.4/16), ~30%-kal nagyobb a látványnál (KSZ-12). */
 const RAIDER_PX = 44;
 const RAIDER_HIT_PX = 28;
+/** A fosztogató „magja”: ha a számdrónra bökés ilyen közel esik egy fosztogató középpontjához, az lövés, nem válasz. */
+const RAIDER_CORE_PX = 16;
 /** Részecske-, lézer-, gyűrű- és felirat-pool (KSZ-6: előre rögzített kapacitás). */
 const PARTICLE_CAP = 220;
 const BEAM_CAP = 10;
@@ -1952,7 +1954,7 @@ export default function SpeedQuizMath() {
       }
 
       // Tanító súgó: gyűrű a legközelebbi fosztogató körül (kézmozdulat-jelzés).
-      if (st.worldMs < TUTORIAL_MS && st.kills < 3) {
+      if (st.worldMs < TUTORIAL_MS && st.kills < 3 && !qRef.current.view().presentation) {
         const id = core.mostAdvanced();
         if (id >= 0) {
           const r = st.raiders[id]!;
@@ -2075,9 +2077,11 @@ export default function SpeedQuizMath() {
       const el = droneRefs.current[i];
       const pt = lay.pts[i];
       if (!el || !pt) continue;
-      const x = pt.x * w;
+      // Hosszú számnál a drón szélesebb: a játéktéren belül tartjuk (6 px margó).
+      const ow = el.offsetWidth;
+      const x = Math.min(w - 6 - ow / 2, Math.max(6 + ow / 2, pt.x * w));
       const y = (-0.12 + (pt.y + 0.12) * e) * h;
-      el.style.transform = `translate3d(${(x - el.offsetWidth / 2).toFixed(1)}px, ${(y - el.offsetHeight / 2).toFixed(1)}px, 0)`;
+      el.style.transform = `translate3d(${(x - ow / 2).toFixed(1)}px, ${(y - el.offsetHeight / 2).toFixed(1)}px, 0)`;
     }
     // A válasz pillanata: jó → lézer a toronyból a drónra; rossz / lejárt → a helyes drón villámot küld a pajzsra.
     const last = lastAnswerRef.current;
@@ -2085,18 +2089,22 @@ export default function SpeedQuizMath() {
       fx.answerSeen = p.id;
       const top = towerTop(w, h);
       const correctIdx = p.options.findIndex((o) => o.correct);
-      const cpt = lay.pts[correctIdx];
-      if (cpt) {
-        const x = cpt.x * w;
-        const y = cpt.y * h;
+      // A drón valódi közepe (a széleken a margó miatt eltolhattuk) — egyszer, a válasz pillanatában mérve.
+      const worldRect = worldRef.current?.getBoundingClientRect();
+      const centerOf = (i: number): { x: number; y: number } | null => {
+        const r = droneRefs.current[i]?.getBoundingClientRect();
+        return r && worldRect ? { x: r.left + r.width / 2 - worldRect.left, y: r.top + r.height / 2 - worldRect.top } : null;
+      };
+      const c = centerOf(correctIdx);
+      if (c) {
         if (last.correct) {
-          beam(top.x, top.y, x, y, COL_GREEN, 220);
-          burst(x, y, COL_GREEN, 26, 0.3);
-          if (!reducedMotion) burst(x, y, COL_CYAN, 14, 0.18);
+          beam(top.x, top.y, c.x, c.y, COL_GREEN, 220);
+          burst(c.x, c.y, COL_GREEN, 26, 0.3);
+          if (!reducedMotion) burst(c.x, c.y, COL_CYAN, 14, 0.18);
         } else {
-          beam(x, y, TOWER.x * w, TOWER.y * h, COL_ORANGE, 260);
-          const wpt = last.idx >= 0 ? lay.pts[last.idx] : null;
-          if (wpt) burst(wpt.x * w, wpt.y * h, COL_ORANGE, 12, 0.16);
+          beam(c.x, c.y, TOWER.x * w, TOWER.y * h, COL_ORANGE, 260);
+          const wpt = last.idx >= 0 ? centerOf(last.idx) : null;
+          if (wpt) burst(wpt.x, wpt.y, COL_ORANGE, 12, 0.16);
         }
       }
     }
@@ -2241,10 +2249,23 @@ export default function SpeedQuizMath() {
    * (pl. a telefont tartó hüvelykujj a képernyőn) a böngésző a nem elsődleges mutatóra nem szintetizál `click`-et.
    */
   const dronePressRef = useRef(new Map<number, number>());
-  const onDronePointerDown = useCallback((e: ReactPointerEvent<HTMLButtonElement>, i: number) => {
-    e.stopPropagation();
-    dronePressRef.current.set(e.pointerId, i);
-  }, []);
+  const onDronePointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLButtonElement>, i: number) => {
+      e.stopPropagation();
+      // Ha a drón mögött egy fosztogató közepére bök a gyerek, azt akarja lelőni — ne válasszon véletlenül számot.
+      const el = worldRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const { w, h } = sizeRef.current;
+        if (coreRef.current.raiderAt((e.clientX - rect.left) / w, (e.clientY - rect.top) / h, RAIDER_CORE_PX / w, RAIDER_CORE_PX / h) >= 0) {
+          shootAt(e.clientX, e.clientY);
+          return;
+        }
+      }
+      dronePressRef.current.set(e.pointerId, i);
+    },
+    [shootAt],
+  );
   const onDronePointerUp = useCallback(
     (e: ReactPointerEvent<HTMLButtonElement>, i: number) => {
       e.stopPropagation();
