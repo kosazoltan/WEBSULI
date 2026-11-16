@@ -626,3 +626,24 @@ Forrás: JBa / JBb futás (#448 és a JBb PR).
 - **Tünet 8:** a hosszkorlát-teszt a 9 mp-es felső határhoz mért, nem a játék tényleges olvasási szűrőjéhez; a 4. évfolyam 40%-a
   nem volt elolvasható. **Megelőzés 8:** a bank-őr ugyanazt a `fitsAllViewports`-ot hívja, mint a játék (`.ok`, ≥ 95% /
   évfolyam, cellánként ≥ 15); a szöveges duplikátum-ellenőrzés mellé tartalmi (azonos válasz + átfedés) jelölt-keresés kell.
+
+## C-46 — Évfolyam-bank 10–12.: a rövidítő `keyChanged` jelzése rossz kulcsot engedett át, és ismét az ASCII `\b` (2026-11-16)
+
+Forrás: JBc futás (feat/jatek-jbc-evfolyam-bank).
+
+- **Tünet 1:** a rövidítő alügynök egy meglévő tételt (`g11-science-015`, izomerek) „összegképlet / szerkezet” párokra írt át, a
+  helyes opció szövege megváltozott (`keyChanged: true`), és a kulcs a FORDÍTOTT párra mutatott. A rövidítés-ellenőrző a
+  `keyChanged` jelzésre a kulcs-egyezést nem nézi, így csak az újra-vak kör fogta meg. **Megelőzés 1:** minden `keyChanged`
+  tétel kötelezően újra-vak körbe megy (itt így történt), és az integrátor a `keyChanged` tételek kulcsát kézzel is
+  visszaolvassa; logikai előfeltételt a kérdésbe ne tegyünk („Az összegképlet azonos. Miben térnek el?” → az elterelők
+  logikailag kiesnek, kitalálható), és az elnevezés ne visszhangozza a kérdést (izomer ↔ izobután).
+- **Tünet 2:** a `BANNED_OPTION` minta `\b`-vel zárult (a szóhatár-jel, visszaper + b): a „mindkettő” záró „ő”-je után az ASCII-alapú `\b` nem illeszkedik, így a
+  „mindkettő azonos” opció átcsúszott (C-45/3 ugyanez a hibaosztály). **Megelőzés 2:** `(?!\p{L})` + `u` kapcsoló; magyar szó
+  végén `\b`-t nem használunk.
+- **Tünet 3:** a forrásalapú auditorok a 117 tételes tárgycsomagokból csak a kétesnek látszó állításokhoz nyitottak forrást
+  (a jelentésükben ezt maguk írták), a többit tankönyvi tudással fogadták el. **Megelőzés 3:** ez maradó kockázatként a
+  jegyzőkönyvbe kerül; nagyobb csomagnál tárgyanként két auditor (évfolyam szerinti felezés) adna valódi tételenkénti
+  forrásnyitást.
+- **Tünet 4 (C-35 ismét):** ennek a bejegyzésnek az első változatát Git Bash-ből python-heredockal fűztük a fájlhoz: a `\b` szöveg
+  helyére backspace-bájt (0x08) került, és a python-os visszajavítás is csendben hatástalan maradt. **Megelőzés 4:**
+  visszaperjeles szöveget csak Edit / Write eszközzel; bájtszintű visszaolvasás (`od -c`); javítás Write-tal írt node-szkripttel.
