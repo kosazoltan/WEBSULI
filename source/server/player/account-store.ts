@@ -28,37 +28,52 @@ export async function ensureBanFingerprint(client: Pick<PoolClient, "query">, fi
   await insertBanFingerprint(client, fingerprint, bannedAt);
 }
 
-/** Az EGYETLEN ujjlenyomat-beszúrás (a jelenlegi kulcs azonosítójával); meglévő sort nem ír felül. `bannedAt` null → most. */
-async function insertBanFingerprint(client: Pick<PoolClient, "query"> | Pick<Pool, "query">, fingerprint: string, bannedAt: Date | null): Promise<void> {
-  await client.query(
+/**
+ * Az EGYETLEN ujjlenyomat-beszúrás (a jelenlegi kulcs azonosítójával). CSAK a címenkénti zár alatt hívható (állapotgép,
+ * végrehajtási fájl K1 10.). `bannedAt` null → most. `refresh`: egy ÚJ tiltás a meglévő (pl. lejárt) sor idejét frissíti —
+ * a megőrzés a tiltástól számít. Visszaadja, beszúrt-e új sort.
+ */
+async function insertBanFingerprint(client: Pick<PoolClient, "query">, fingerprint: string, bannedAt: Date | null, refresh = false): Promise<boolean> {
+  const r = await client.query<{ inserted: boolean }>(
     `INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $2, COALESCE($3::timestamptz, now()))
-     ON CONFLICT (fingerprint) DO NOTHING`,
+     ON CONFLICT (fingerprint) DO ${refresh ? "UPDATE SET banned_at = EXCLUDED.banned_at, key_id = EXCLUDED.key_id" : "NOTHING"}
+     RETURNING (xmax = 0) AS inserted`,
     [fingerprint, banKeyId(playerAuthKey()), bannedAt],
   );
+  return r.rows[0]?.inserted === true;
+}
+
+/**
+ * „Olvas-dönt-ír” a zár alatt: a fiók `banned_at`-jét a zár megszerzése UTÁN, ugyanabban a tranzakcióban olvassa ÚJRA, és
+ * csak akkor ír ujjlenyomatot, ha a fiók MOST is tiltott (#471 review, 4. lelet: egy közben commitolt feloldást nem írhat
+ * felül elavult állapotból). Visszaadja, beszúrt-e új sort.
+ */
+async function restoreFingerprintIfBanned(pool: Pick<Pool, "connect">, accountId: string, email: string): Promise<boolean> {
+  return inTransaction(pool, async (client) => {
+    const fingerprint = banFingerprint(playerAuthKey(), email);
+    await lockBanAddress(client, fingerprint);
+    const now = await client.query<{ banned_at: Date | null }>(`SELECT banned_at FROM player_accounts WHERE id = $1`, [accountId]);
+    const bannedAt = now.rows[0]?.banned_at ?? null;
+    if (bannedAt === null) return false;
+    return insertBanFingerprint(client, fingerprint, bannedAt);
+  });
 }
 
 /**
  * K1 (#471 review): a kulcsrotáció RENDSZERSZINTŰ kezelése — nem egy-egy belépési ágon múlik. A takarító induláskor és
  * óránként futtatja: (1) a más kulccsal készült sorok törlése — a TÖRÖLT fiókoké visszafejthetetlen, tudottan elvész
- * (darabszám a naplóban, cím nélkül); (2) MINDEN élő tiltott fiók ujjlenyomatának (újra)számolása a jelenlegi kulccsal.
+ * (darabszám a naplóban, cím nélkül); (2) MINDEN élő tiltott fiók ujjlenyomatának (újra)számolása a jelenlegi kulccsal —
+ * fiókonként külön, rövid tranzakcióban, a címenkénti zár UTÁN újraolvasott `banned_at` alapján.
  * Visszaadja: [elveszett, helyreállított] darabszám.
  */
 export async function reconcileBanFingerprints(pool: Pick<Pool, "query" | "connect">): Promise<[number, number]> {
-  return inTransaction(pool, async (client) => {
-    const keyId = banKeyId(playerAuthKey());
-    const lost = await client.query(`DELETE FROM player_ban_fingerprints WHERE key_id <> $1`, [keyId]);
-    const banned = await client.query<{ email: string; banned_at: Date }>(`SELECT email, banned_at FROM player_accounts WHERE banned_at IS NOT NULL`);
-    const key = playerAuthKey();
-    let restored = 0;
-    for (const r of banned.rows) {
-      const res = await client.query(
-        `INSERT INTO player_ban_fingerprints (fingerprint, key_id, banned_at) VALUES ($1, $2, $3) ON CONFLICT (fingerprint) DO NOTHING`,
-        [banFingerprint(key, r.email), keyId, r.banned_at],
-      );
-      restored += res.rowCount ?? 0;
-    }
-    return [lost.rowCount ?? 0, restored];
-  });
+  const keyId = banKeyId(playerAuthKey());
+  // A régi kulcsú sorok egyetlen jelenlegi kulcsú művelettel sem ütközhetnek (más az ujjlenyomatuk) — zár nélkül törölhetők.
+  const lost = await pool.query(`DELETE FROM player_ban_fingerprints WHERE key_id <> $1`, [keyId]);
+  const banned = await pool.query<{ id: string; email: string }>(`SELECT id, email FROM player_accounts WHERE banned_at IS NOT NULL`);
+  let restored = 0;
+  for (const r of banned.rows) if (await restoreFingerprintIfBanned(pool, r.id, r.email)) restored++;
+  return [lost.rowCount ?? 0, restored];
 }
 
 /** K1: a törölt-tiltott bejegyzés rövid hivatkozása (az ujjlenyomat első hexa jegyei; a teljes ujjlenyomat nem megy ki). */
@@ -122,9 +137,10 @@ export function createPlayerAccountStore(pool: Db) {
       for (let attempt = 0; attempt < 2; attempt++) {
         const known = await pool.query<{ id: string; email: string; banned_at: Date | null }>(`SELECT id, email, banned_at FROM player_accounts WHERE google_sub = $1`, [sub]);
         if (known.rows[0]) {
-          // K1 (#471 review): az ismert Google-azonosítós ág is önjavító (a rendszerszintű egyeztetés mellett).
+          // K1 (#471 review): az ismert Google-azonosítós ág is önjavító (a rendszerszintű egyeztetés mellett) — a zár alatt,
+          // a `banned_at` újraolvasásával (egy közben commitolt feloldást nem ír felül).
           const k = known.rows[0];
-          if (k.banned_at !== null) await insertBanFingerprint(pool, banFingerprint(playerAuthKey(), k.email), k.banned_at);
+          if (k.banned_at !== null) await restoreFingerprintIfBanned(pool, k.id, k.email);
           return { kind: "OK", id: k.id, banned: await bannedById(k.id) };
         }
         try {
@@ -363,12 +379,22 @@ export function createPlayerAccountStore(pool: Db) {
       const { rows } = await pool.query<{ fingerprint: string }>(
         `SELECT fingerprint FROM player_ban_fingerprints WHERE banned_at < now() - make_interval(months => $1::int)`, [months],
       );
-      if (rows.length === 0) return 0;
-      const live = await liveFingerprints(pool);
-      const expired = rows.map((r) => r.fingerprint).filter((f) => !live.has(f));
-      if (expired.length === 0) return 0;
-      const r = await pool.query(`DELETE FROM player_ban_fingerprints WHERE fingerprint = ANY($1::text[])`, [expired]);
-      return r.rowCount ?? 0;
+      // #471 review (4.): ujjlenyomatonként a címenkénti zár alatt ÚJRA ellenőrizve (lejárt-e még, van-e tiltott élő változat) —
+      // egy közben commitolt újratiltás ujjlenyomatát nem törölheti.
+      let purged = 0;
+      for (const { fingerprint } of rows) {
+        purged += await inTransaction(pool, async (client) => {
+          await lockBanAddress(client, fingerprint);
+          const still = await client.query(
+            `SELECT 1 FROM player_ban_fingerprints WHERE fingerprint = $1 AND banned_at < now() - make_interval(months => $2::int)`, [fingerprint, months],
+          );
+          if (still.rows.length === 0) return 0;
+          if ((await accountsWithFingerprint(client, fingerprint, true)).length > 0) return 0;
+          const r = await client.query(`DELETE FROM player_ban_fingerprints WHERE fingerprint = $1`, [fingerprint]);
+          return r.rowCount ?? 0;
+        });
+      }
+      return purged;
     },
   };
 }
@@ -391,7 +417,8 @@ async function liveFingerprints(client: Pick<Pool, "query">): Promise<Set<string
 
 /** K1-b: kanonikus tiltás (a zár alatt): az ujjlenyomat (ha még nincs) + MINDEN azonos postafiókú élő fiók tiltása. */
 async function banCanonical(client: Pick<PoolClient, "query">, fingerprint: string): Promise<void> {
-  await insertBanFingerprint(client, fingerprint, null);
+  // Új tiltás: a meglévő (pl. lejárt) ujjlenyomat idejét is frissíti — a megőrzés a tiltástól számít.
+  await insertBanFingerprint(client, fingerprint, null, true);
   const ids = await accountsWithFingerprint(client, fingerprint, false);
   await client.query(
     `UPDATE player_accounts SET banned_at = COALESCE(banned_at, (SELECT banned_at FROM player_ban_fingerprints WHERE fingerprint = $2))
