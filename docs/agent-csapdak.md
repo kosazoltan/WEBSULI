@@ -641,28 +641,3 @@ Forrás: JBa / JBb futás (#448 és a JBb PR).
   de az ugyanazt mérő e2e-párját (`admin-korszerusites.spec.ts`) nem — a helyben futtatott e2e-k között nem szerepelt, csak a CI
   ~40 perces Playwright-jobja fogta meg. **Megelőzés:** egy számlált / felsorolt elvárás (fülszám, végpontlista) módosításakor
   `grep -rn "<régi szám vagy kulcs>" tests/` a `*.test.ts` ÉS a `*.spec.ts` fájlokra, és a találatokat mind futtasd helyben.
-
-## C-47 — Évfolyam-bank 10–12.: a rövidítő `keyChanged` jelzése rossz kulcsot engedett át, és ismét az ASCII `\b` (2026-11-16)
-
-Forrás: JBc futás (feat/jatek-jbc-evfolyam-bank).
-
-- **Tünet 1:** a rövidítő alügynök egy meglévő tételt (`g11-science-015`, izomerek) „összegképlet / szerkezet” párokra írt át, a
-  helyes opció szövege megváltozott (`keyChanged: true`), és a kulcs a FORDÍTOTT párra mutatott. A rövidítés-ellenőrző a
-  `keyChanged` jelzésre a kulcs-egyezést nem nézi, így csak az újra-vak kör fogta meg. **Megelőzés 1:** minden `keyChanged`
-  tétel kötelezően újra-vak körbe megy (itt így történt), és az integrátor a `keyChanged` tételek kulcsát kézzel is
-  visszaolvassa; logikai előfeltételt a kérdésbe ne tegyünk („Az összegképlet azonos. Miben térnek el?” → az elterelők
-  logikailag kiesnek, kitalálható), és az elnevezés ne visszhangozza a kérdést (izomer ↔ izobután).
-- **Tünet 2:** a `BANNED_OPTION` minta `\b`-vel zárult (a szóhatár-jel, visszaper + b): a „mindkettő” záró „ő”-je után az ASCII-alapú `\b` nem illeszkedik, így a
-  „mindkettő azonos” opció átcsúszott (C-45/3 ugyanez a hibaosztály). **Megelőzés 2:** `(?!\p{L})` + `u` kapcsoló; magyar szó
-  végén `\b`-t nem használunk.
-- **Tünet 3:** a forrásalapú auditorok a 117 tételes tárgycsomagokból csak a kétesnek látszó állításokhoz nyitottak forrást
-  (a jelentésükben ezt maguk írták), a többit tankönyvi tudással fogadták el. **Megelőzés 3:** ez maradó kockázatként a
-  jegyzőkönyvbe kerül; nagyobb csomagnál tárgyanként két auditor (évfolyam szerinti felezés) adna valódi tételenkénti
-  forrásnyitást.
-- **Tünet 5:** a review talált egy két védhető választ: A fizikusok, „kinek jelenik meg Salamon király” — Möbiusnak, de a
-  végén von Zahndnak is. A vak megoldó, a forrásalapú audit és a magyarázat-audit is átengedte, mert mindhárman a kulcsot
-  igazolták, nem az elterelőket. **Megelőzés 5:** az irodalmi „melyik szereplő …?” tételeknél az auditor MINDEN elterelő
-  szereplőre külön ellenőrizze a szöveg alapján, hogy rá nem igaz-e az állítás (a mű végét is beleértve).
-- **Tünet 4 (C-35 ismét):** ennek a bejegyzésnek az első változatát Git Bash-ből python-heredockal fűztük a fájlhoz: a `\b` szöveg
-  helyére backspace-bájt (0x08) került, és a python-os visszajavítás is csendben hatástalan maradt. **Megelőzés 4:**
-  visszaperjeles szöveget csak Edit / Write eszközzel; bájtszintű visszaolvasás (`od -c`); javítás Write-tal írt node-szkripttel.
