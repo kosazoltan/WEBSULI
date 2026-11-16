@@ -569,3 +569,21 @@ Forrás: J0c (kérdés-sáv, `play-lab.spec.ts`).
   „Miért?” állapota a megjelenítéshez volt kötve, nem a hibához. **Megelőzés:** explicit állapotgép (nyitott / kijelzés / függő kérés
   / a hibához kötött „Miért?”-határidő külön), és valódi időléptetéses teszt az ütemezővel együtt (`game-play-question-ui.test.ts`
   „review #446/…”), nem csak kézzel léptetett, ütemezés nélküli eset.
+
+## C-43 — Régi, játékra szabott index.css-szabály felülírja az új játékréteg osztályát; képkockánkénti `request()` (2026-11-16)
+
+Forrás: J2a (Szólétra „Szikla-verseny”).
+
+- **Tünet 1:** az új kapaszkodó-gombok (`.wl-hold`) kéken, 44 px magasan jelentek meg a sziklapárkányon; a ≥ 48 px-es mérce
+  egy hosszú kifejezésnél 46 px-re esett. **Gyökérok:** az `index.css` régi, a Szólétra panelére írt szabálya
+  (`.game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] button { background-color; min-height: 44px }`)
+  specifikusabb egy puszta osztálynál — a testid megmaradt (terv 9.), a szabály vele maradt. **Megelőzés:** átírt játéknál
+  `grep -n "<játék-gyökér>\|<régi testid>" client/src/index.css` az első böngészős próba előtt; a saját szabály a régi
+  hatókörrel kezdődjön (vagy ORKESZTRÁTOR-KÉRÉS a régi törlésére). Mérés: `getComputedStyle` + illeszkedő szabályok
+  listája (a képernyőkép csak a tünetet mutatja).
+- **Tünet 2 (megelőzve):** a játék minden képkockában kért kérdést (`q.request("trigger")`); a megoldás-kijelzés alatt a
+  közös vezérlő ilyenkor függő kérést jegyez és `emit(true)`-t hív — képkockánkénti React-frissítés lett volna (KSZ-9).
+  **Megelőzés:** kijelzés alatt csak akkor kérj, ha `q.view().pending === null`.
+- **Tünet 3:** Bash-ban egy elfelejtett `cat > fájl` (heredoc nélkül) a stdin-re várt, a parancs a háttérbe került és
+  végtelenül futott. **Megelőzés:** fájlt csak a Write eszközzel vagy heredoc-kal írj; a háttérbe került, gyanúsan néma
+  parancsot nézd meg, mielőtt várnál rá.

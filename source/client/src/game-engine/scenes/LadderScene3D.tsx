@@ -21,9 +21,17 @@ import {
  * `RUNG_GAP`, rung 0 is the ground, the goal star floats above the last rung.
  * The zones are laid out in space (meadow at the foot, forest trees, clouds,
  * night sky at the top) and the sky/light palette blends to the current zone.
+ *
+ * J2a „Szikla-verseny” (terv 2026-11-16-jatekok-jatekelmeny 5.2; végrehajtás J2a 5.): the `race` variant fills the
+ * whole game screen — a rock cliff with two ladders, the player's (left) and the RIVAL's (right, a second climber in
+ * other colours). The camera follows the player; the live race state comes through `live` (a ref the page writes from
+ * the sim core every frame), so no React render is needed per frame (KSZ-9). The milestone landscapes stay.
  */
 
 export type LadderMood = "happy" | "oops" | "idle";
+
+/** J2a: the live race state, written by the page every frame (read through a ref — no React render). */
+export type LadderLive = { rung: number; rivalRung: number; streak: number; mood: LadderMood; zoneId: string };
 
 export type LadderScene3DProps = {
   rung: number;
@@ -31,8 +39,14 @@ export type LadderScene3DProps = {
   zoneId: string;
   streak: number;
   mood: LadderMood;
-  /** "column": tall narrow game column; "preview": the small menu picture. */
-  variant?: "column" | "preview";
+  /** "column": tall narrow game column; "preview": the small menu picture; "race": full-screen cliff race (J2a). */
+  variant?: "column" | "preview" | "race";
+  /** J2a: the rival's rung — when set (or in the `race` variant) a second ladder with the rival climber appears. */
+  rivalRung?: number;
+  /** J2a: live race state (overrides `rung` / `rivalRung` / `streak` / `mood` / `zoneId` each frame). */
+  live?: { current: LadderLive | null };
+  /** J2a `race`: where the player's feet sit on the canvas, as a fraction from the bottom (0..1; default 0.4). */
+  focus?: number;
   /** Rendered instead of the canvas when WebGL is unavailable (spec E7). */
   fallback?: ReactNode;
   onSupportedChange?: (supported: boolean | null) => void;
@@ -43,6 +57,8 @@ export type LadderScene3DProps = {
 
 const RUNG_GAP = 0.7;
 const HALF_WIDTH = 0.38;
+/** J2a race: the two ladders sit this far left / right of the centre. */
+const RACE_LANE = 0.62;
 /** Ladder yaw: the slight 3/4 view that shows the rails' depth. */
 const LADDER_YAW = -0.5;
 const CAMERA_DISTANCE = 14;
@@ -145,6 +161,67 @@ function woodTexture(): THREE.CanvasTexture | null {
   return tex;
 }
 
+/** J2a: a warm sandstone cliff — strata bands, cracks and speckles (deterministic, drawn once). */
+function rockTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 512;
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
+  const r = rng(11);
+  const g = ctx.createLinearGradient(0, 0, 0, c.height);
+  g.addColorStop(0, "#9c7a5b");
+  g.addColorStop(0.5, "#86654a");
+  g.addColorStop(1, "#7a5a40");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, c.width, c.height);
+  // Strata: soft horizontal bands.
+  for (let y = 0; y < c.height; y += 18 + r() * 26) {
+    ctx.fillStyle = `rgba(${r() < 0.5 ? "60, 40, 26" : "190, 160, 120"}, ${0.08 + r() * 0.12})`;
+    ctx.fillRect(0, y, c.width, 6 + r() * 14);
+  }
+  // Boulders: lighter rounded patches with a dark rim.
+  for (let k = 0; k < 26; k++) {
+    const x = r() * c.width;
+    const y = r() * c.height;
+    const w = 14 + r() * 34;
+    const h = 10 + r() * 22;
+    ctx.fillStyle = `rgba(170, 138, 104, ${0.35 + r() * 0.3})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, w, h, r() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(52, 34, 22, 0.35)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  // Cracks.
+  ctx.strokeStyle = "rgba(40, 26, 16, 0.55)";
+  for (let k = 0; k < 18; k++) {
+    let x = r() * c.width;
+    let y = r() * c.height;
+    ctx.lineWidth = 1 + r() * 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let s = 0; s < 6; s++) {
+      x += (r() - 0.5) * 30;
+      y += 8 + r() * 18;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  // Speckles.
+  for (let k = 0; k < 900; k++) {
+    ctx.fillStyle = r() < 0.5 ? "rgba(255, 240, 210, 0.18)" : "rgba(30, 20, 12, 0.22)";
+    ctx.fillRect(r() * c.width, r() * c.height, 1.5, 1.5);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
 function starShape(outer: number, inner: number): THREE.Shape {
   const shape = new THREE.Shape();
   for (let i = 0; i < 10; i++) {
@@ -172,15 +249,20 @@ type ClimberRig = {
   flame: THREE.Group;
 };
 
+type ClimberColors = { shirt: string; pants: string; hair: string; pack: string; packDark: string; skin: string };
+const PLAYER_COLORS: ClimberColors = { shirt: "#38bdf8", pants: "#4f46e5", hair: "#7c2d12", pack: "#f97316", packDark: "#c2410c", skin: "#fcd3ae" };
+/** J2a: the rival „Villám” — purple shirt, green backpack, dark hair (clearly different from the player). */
+const RIVAL_COLORS: ClimberColors = { shirt: "#a855f7", pants: "#1e293b", hair: "#111827", pack: "#22c55e", packDark: "#15803d", skin: "#e8b48f" };
+
 /** Blocky kid with a backpack, facing the ladder and peeking back at the player. */
-function buildClimber(): ClimberRig {
-  const skin = new THREE.MeshStandardMaterial({ color: "#fcd3ae", roughness: 0.7 });
-  const shirt = new THREE.MeshStandardMaterial({ color: "#38bdf8", roughness: 0.6 });
-  const pants = new THREE.MeshStandardMaterial({ color: "#4f46e5", roughness: 0.7 });
+function buildClimber(colors: ClimberColors = PLAYER_COLORS): ClimberRig {
+  const skin = new THREE.MeshStandardMaterial({ color: colors.skin, roughness: 0.7 });
+  const shirt = new THREE.MeshStandardMaterial({ color: colors.shirt, roughness: 0.6 });
+  const pants = new THREE.MeshStandardMaterial({ color: colors.pants, roughness: 0.7 });
   const shoe = new THREE.MeshStandardMaterial({ color: "#1f2937", roughness: 0.8 });
-  const hair = new THREE.MeshStandardMaterial({ color: "#7c2d12", roughness: 0.85 });
-  const pack = new THREE.MeshStandardMaterial({ color: "#f97316", roughness: 0.55 });
-  const packDark = new THREE.MeshStandardMaterial({ color: "#c2410c", roughness: 0.6 });
+  const hair = new THREE.MeshStandardMaterial({ color: colors.hair, roughness: 0.85 });
+  const pack = new THREE.MeshStandardMaterial({ color: colors.pack, roughness: 0.55 });
+  const packDark = new THREE.MeshStandardMaterial({ color: colors.packDark, roughness: 0.6 });
   const ink = new THREE.MeshBasicMaterial({ color: "#1f2937" });
   const blush = new THREE.MeshBasicMaterial({ color: "#fb9a9a", transparent: true, opacity: 0.8 });
 
@@ -316,9 +398,11 @@ export function landSquashY(t: number): number {
 function setupLadderScene(
   ctx: ThreeSceneContext,
   propsRef: { current: LadderScene3DProps },
-  variant: "column" | "preview",
+  variant: "column" | "preview" | "race",
 ): ThreeSceneController {
   const { scene, tier, reducedMotion } = ctx;
+  const race = variant === "race";
+  const withRival = race || propsRef.current.rivalRung !== undefined;
   const budget = LOOK_BUDGET[tier];
   const total = Math.max(1, propsRef.current.total);
   const topY = total * RUNG_GAP;
@@ -542,6 +626,7 @@ function setupLadderScene(
   // --- the ladder -----------------------------------------------------------------
   const ladder = new THREE.Group();
   ladder.rotation.y = LADDER_YAW;
+  if (withRival) ladder.position.x = -RACE_LANE;
   scene.add(ladder);
   const wood = woodTexture();
   const railMat = new THREE.MeshStandardMaterial({ color: "#e2a86e", map: wood, roughness: 0.75 });
@@ -622,10 +707,53 @@ function setupLadderScene(
   rig.root.scale.setScalar(0.86);
   ladder.add(rig.root);
 
+  // --- J2a: rock pillars behind the ladders, the rival's ladder and climber ----------------
+  const rockMap = race ? rockTexture() : null;
+  if (race) {
+    const pillarH = railLen + 6;
+    const pillarGeo = new THREE.PlaneGeometry(1.25, pillarH);
+    if (rockMap) rockMap.repeat.set(1, pillarH / 2.4);
+    const rockMat = new THREE.MeshStandardMaterial({ color: "#d6b896", map: rockMap, roughness: 1 });
+    for (const x of [-RACE_LANE, RACE_LANE]) {
+      const pillar = new THREE.Mesh(pillarGeo, rockMat);
+      pillar.position.set(x, pillarH / 2 - 2.2, -0.5);
+      scene.add(pillar);
+    }
+  }
+  let rivalRig: ClimberRig | null = null;
+  if (withRival) {
+    const rivalLadder = new THREE.Group();
+    rivalLadder.rotation.y = LADDER_YAW;
+    rivalLadder.position.x = RACE_LANE;
+    scene.add(rivalLadder);
+    const rivalRail = new THREE.MeshStandardMaterial({ color: "#b98a5e", map: wood, roughness: 0.8 });
+    for (const x of [-HALF_WIDTH, HALF_WIDTH]) {
+      const rail = new THREE.Mesh(railGeo, rivalRail);
+      rail.position.set(x, railLen / 2 - 0.12, 0);
+      rivalLadder.add(rail);
+    }
+    const rivalRungMat = new THREE.MeshStandardMaterial({ color: "#a47a52", roughness: 0.7 });
+    for (let i = 1; i <= total; i++) {
+      const m = new THREE.Mesh(rungGeo, rivalRungMat);
+      m.position.set(0, i * RUNG_GAP, 0.01);
+      rivalLadder.add(m);
+    }
+    rivalRig = buildClimber(RIVAL_COLORS);
+    rivalRig.root.position.set(0, 0, 0.17);
+    rivalRig.root.scale.setScalar(0.86);
+    rivalLadder.add(rivalRig.root);
+  }
+
   const sparkles = reducedMotion ? null : new SparkleField(scene, Math.round(260 * budget.particleScale) + 40);
 
   // --- animation state --------------------------------------------------------------------
-  let shownRung = propsRef.current.rung;
+  const liveOf = () => propsRef.current.live?.current ?? null;
+  const rungOf = () => liveOf()?.rung ?? propsRef.current.rung;
+  const rivalRungOf = () => liveOf()?.rivalRung ?? propsRef.current.rivalRung ?? 0;
+  let shownRung = rungOf();
+  let rivalShown = rivalRungOf();
+  let rivalY = rivalShown * RUNG_GAP;
+  let rivalHop: Hop | null = null;
   let climberY = shownRung * RUNG_GAP;
   let hop: Hop | null = null;
   /** Földet érés utáni guggolás-nyújtás hátralévő ideje (s); 0 = nincs. */
@@ -645,7 +773,8 @@ function setupLadderScene(
 
   const framing = () => {
     const minH = variant === "preview" ? 2.3 : 0;
-    const width = variant === "preview" ? 1.9 : 1.25;
+    // J2a race: both ladders in view (landscape: the hold columns cover the sides, so the world is wider).
+    const width = race ? (camera.aspect < 1 ? 2.75 : 4.4) : variant === "preview" ? (withRival ? 2.9 : 1.9) : 1.25;
     const h = Math.max(minH, width / Math.max(0.05, camera.aspect));
     visibleH = h;
     camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(h / 2 / CAMERA_DISTANCE));
@@ -654,6 +783,11 @@ function setupLadderScene(
   };
 
   const cameraTarget = (y: number) => {
+    if (race) {
+      const focus = THREE.MathUtils.clamp(propsRef.current.focus ?? 0.4, 0.1, 0.9);
+      const hiRace = starY + 1.15 - visibleH / 2;
+      return Math.min(hiRace, y + 0.35 + visibleH * (0.5 - focus));
+    }
     const lo = visibleH / 2 - (variant === "preview" ? 0.3 : 0.55);
     const hi = starY + 1.15 - visibleH / 2;
     if (lo >= hi) return (lo + hi) / 2;
@@ -663,7 +797,10 @@ function setupLadderScene(
   const lerpColor = (c: THREE.Color, to: THREE.Color, k: number) => c.lerp(to, k);
 
   const update = (dt: number, elapsed: number) => {
-    const p = propsRef.current;
+    const props = propsRef.current;
+    const live = liveOf();
+    // A live race state (J2a) overrides the props — the page writes it every frame, no React render needed.
+    const p = live ? { ...props, rung: live.rung, streak: live.streak, mood: live.mood, zoneId: live.zoneId } : props;
     const target = PALETTES[p.zoneId] ?? PALETTES.meadow!;
     const k = reducedMotion ? 1 : 1 - Math.exp(-2.2 * dt);
 
@@ -701,9 +838,11 @@ function setupLadderScene(
         climberY = p.rung * RUNG_GAP;
         hop = null;
       } else {
-        hop = { from: climberY, to: p.rung * RUNG_GAP, t: 0, dur: up ? 0.48 : 0.55, up };
+        // J2a: the climb step is 250 ms (no forced wait); the slip keeps its tumble.
+        hop = { from: climberY, to: p.rung * RUNG_GAP, t: 0, dur: up ? (race ? 0.25 : 0.48) : race ? 0.45 : 0.55, up };
         landLeft = 0;
-        if (!up) shakeLeft = SHAKE_SEC;
+        // In the race the page shakes the whole stage through the shared trauma model (KSZ-10).
+        if (!up && !race) shakeLeft = SHAKE_SEC;
       }
       if (sparkles) {
         tmpV.set(0, p.rung * RUNG_GAP + 0.1, 0.25).applyMatrix4(ladder.matrixWorld);
@@ -849,6 +988,38 @@ function setupLadderScene(
       sparkles.update(dt);
     }
 
+    // J2a: the rival climbs its own ladder (a short hop per rung, arms swinging).
+    if (rivalRig) {
+      const rr = rivalRungOf();
+      if (rr !== rivalShown) {
+        if (reducedMotion) {
+          rivalY = rr * RUNG_GAP;
+          rivalHop = null;
+        } else {
+          rivalHop = { from: rivalY, to: rr * RUNG_GAP, t: 0, dur: 0.32, up: rr > rivalShown };
+        }
+        rivalShown = rr;
+      }
+      let rStride = 0;
+      if (rivalHop) {
+        rivalHop.t += dt;
+        const t = Math.min(1, rivalHop.t / rivalHop.dur);
+        const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        rivalY = THREE.MathUtils.lerp(rivalHop.from, rivalHop.to, e) + (rivalHop.up ? Math.sin(Math.PI * t) * 0.18 : 0);
+        rStride = Math.sin(t * Math.PI * 2);
+        if (t >= 1) rivalHop = null;
+      } else {
+        rivalY = rivalShown * RUNG_GAP;
+      }
+      rivalRig.root.position.y = rivalY + (reducedMotion || rivalHop ? 0 : Math.max(0, Math.sin(elapsed * 2.1 + 1)) * 0.015);
+      rivalRig.armL.rotation.x = -0.35 - rStride * 0.45;
+      rivalRig.armR.rotation.x = -0.35 + rStride * 0.45;
+      rivalRig.legL.rotation.x = rStride * 0.5;
+      rivalRig.legR.rotation.x = -rStride * 0.5;
+      rivalRig.head.rotation.z = reducedMotion ? 0 : Math.sin(elapsed * 1.1 + 2) * 0.06;
+      rivalRig.flame.visible = false;
+    }
+
     // Camera follows the climber vertically.
     const want = cameraTarget(climberY);
     if (!camInit || reducedMotion) {
@@ -858,7 +1029,7 @@ function setupLadderScene(
       camY += (want - camY) * (1 - Math.exp(-3.2 * dt));
     }
     // Slightly below the target, looking up the ladder — but never under the ground.
-    camera.position.set(0.25, Math.max(0.4, camY - 1.1), CAMERA_DISTANCE);
+    camera.position.set(race ? 0 : 0.25, Math.max(0.4, camY - 1.1), CAMERA_DISTANCE);
     camera.lookAt(0, camY, 0);
     // Zuhanás után rövid kameraremegés (csökkentett mozgásnál a shakeLeft sosem indul).
     if (shakeLeft > 0) {
@@ -888,6 +1059,7 @@ function setupLadderScene(
     resize: () => framing(),
     dispose: () => {
       sparkles?.dispose();
+      rockMap?.dispose();
       scene.fog = null;
     },
     // The canvas is tiny, so the bloom mip chain spreads far: keep it subtle.
