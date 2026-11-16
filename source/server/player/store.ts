@@ -4,13 +4,17 @@
  * A `users` táblába SOHA nem ír (a játékos-fiók szerkezetileg külön; D12).
  */
 import type { Pool } from "pg";
-import { CODE_RETENTION_MS, CODE_TTL_MS, LINK_TTL_MS, MAX_CODE_ATTEMPTS, START_WINDOW_MS } from "./codes";
+import { CODE_RETENTION_MS, CODE_TTL_MS, LINK_TTL_MS, MAX_CODE_ATTEMPTS, START_PER_EMAIL_MAX, START_WINDOW_MS } from "./codes";
+
+type CodeInput = { emailNormalized: string; emailHash: string; codeHash: string; linkHash: string };
+const INSERT_CODE_SQL = `INSERT INTO player_auth_codes (email_normalized, email_hash, code_hash, link_hash, expires_at)
+         VALUES ($1, $2, $3, $4, now() + ($5::int * interval '1 millisecond'))`;
 
 export type PlayerRow = { id: string; nickname: string | null; banned: boolean };
 
 export type PlayerStore = ReturnType<typeof createPlayerStore>;
 
-export function createPlayerStore(pool: Pick<Pool, "query">) {
+export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
   async function userBannedByEmail(emailNormalized: string): Promise<boolean> {
     const { rows } = await pool.query<{ banned: boolean }>(
       `SELECT EXISTS (SELECT 1 FROM users WHERE lower(email) = $1 AND is_banned) AS banned`,
@@ -22,21 +26,39 @@ export function createPlayerStore(pool: Pick<Pool, "query">) {
   return {
     userBannedByEmail,
 
-    /** Az utolsó ablakban ehhez a címhez kért kódok száma (a címenkénti korláthoz). */
-    async recentStartCount(emailHashHex: string): Promise<number> {
-      const { rows } = await pool.query<{ n: string }>(
-        `SELECT count(*)::text AS n FROM player_auth_codes WHERE email_hash = $1 AND created_at > now() - ($2::int * interval '1 millisecond')`,
-        [emailHashHex, START_WINDOW_MS],
-      );
-      return Number(rows[0]?.n ?? 0);
+    /**
+     * A címenkénti korlát (3 / 15 perc) ATOMIKUS ellenőrzése és lefoglalása (review #445, Codex P2): egy tranzakcióban, a cím
+     * hash-ére vett tranzakciós advisory-zár alatt számol és szúr be — párhuzamos kódkérésekből is legfeljebb a keretnyi kód
+     * (és levél) lesz. `true`: a kód elkészült, küldhető; `false`: a keret betelt (a hívó csendben 202-t ad).
+     */
+    async reserveCode(input: CodeInput, max = START_PER_EMAIL_MAX): Promise<boolean> {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 7040))`, [input.emailHash]);
+        const { rows } = await client.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM player_auth_codes WHERE email_hash = $1 AND created_at > now() - ($2::int * interval '1 millisecond')`,
+          [input.emailHash, START_WINDOW_MS],
+        );
+        if (Number(rows[0]?.n ?? 0) >= max) {
+          await client.query("COMMIT");
+          return false;
+        }
+        await client.query(INSERT_CODE_SQL, [input.emailNormalized, input.emailHash, input.codeHash, input.linkHash, LINK_TTL_MS]);
+        await client.query("COMMIT");
+        return true;
+      } catch (error) {
+        // A ROLLBACK hibája nem takarhatja el az eredeti hibát (azt dobjuk tovább); a kapcsolatot a release eldobja.
+        await client.query("ROLLBACK").catch((rollbackError: unknown) => { void rollbackError; });
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
-    async insertCode(input: { emailNormalized: string; emailHash: string; codeHash: string; linkHash: string }): Promise<void> {
-      await pool.query(
-        `INSERT INTO player_auth_codes (email_normalized, email_hash, code_hash, link_hash, expires_at)
-         VALUES ($1, $2, $3, $4, now() + ($5::int * interval '1 millisecond'))`,
-        [input.emailNormalized, input.emailHash, input.codeHash, input.linkHash, LINK_TTL_MS],
-      );
+    /** Kódrekord közvetlen beszúrása korlát nélkül (a tesztek ezzel ültetnek el ismert kódot). */
+    async insertCode(input: CodeInput): Promise<void> {
+      await pool.query(INSERT_CODE_SQL, [input.emailNormalized, input.emailHash, input.codeHash, input.linkHash, LINK_TTL_MS]);
     },
 
     /** Adattakarékosság: a megerősítendő címet is tartalmazó, 1 napnál régebbi kódrekordok törlése. */

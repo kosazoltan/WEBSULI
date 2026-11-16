@@ -24,6 +24,7 @@ const ERRORS: Record<Exclude<VerifyResult, { ok: true }>["code"] | "INVALID_EMAI
   RATE_LIMITED: "Túl sok próbálkozás. Várj egy kicsit, és próbáld újra!",
   UNAVAILABLE: "A belépés most nem elérhető.",
   SERVER_ERROR: "Valami elromlott. Próbáld újra egy kicsit később!",
+  NETWORK: "Nem sikerült elérni a szervert. Nézd meg, van-e internet, és próbáld újra!",
   INVALID_EMAIL: "Ez nem tűnik e-mail-címnek. Nézd meg, jól írtad-e!",
 };
 
@@ -47,21 +48,35 @@ export default function PlayerLogin() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const linkHandled = useRef(false);
+  /** A link tokenje a címsorból törlődik, de hálózati hibánál újrapróbálható — ezért csak memóriában marad meg. */
+  const linkToken = useRef<string | null>(null);
+  const [linkRetryable, setLinkRetryable] = useState(false);
+  // Review #445: lecsatolás után ne írjunk állapotot (a válasz / időtúllépés később érkezhet).
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
 
   const finish = async () => {
     await queryClient.invalidateQueries({ queryKey: PLAYER_ME_KEY });
-    setStep("done");
+    if (mounted.current) setStep("done");
+  };
+
+  const redeemLink = async () => {
+    const token = linkToken.current;
+    if (!token) { setStep("link-error"); return; }
+    setStep("link"); setError(null); setLinkRetryable(false);
+    const r = await verifyPlayerLogin({ kind: "link", linkToken: token });
+    if (!mounted.current) return;
+    if (r.ok) { linkToken.current = null; await finish(); return; }
+    setLinkRetryable(r.code === "NETWORK" || r.code === "SERVER_ERROR");
+    setError(r.code === "INVALID_OR_EXPIRED" ? LINK_INVALID : ERRORS[r.code]);
+    setStep("link-error");
   };
 
   useEffect(() => {
     if (!isLinkRoute || !enabled || linkHandled.current) return;
     linkHandled.current = true;
-    const token = takeLinkToken();
-    if (!token) { setStep("link-error"); return; }
-    void verifyPlayerLogin({ kind: "link", linkToken: token }).then((r) => {
-      if (r.ok) void finish();
-      else { setError(r.code === "INVALID_OR_EXPIRED" ? LINK_INVALID : ERRORS[r.code]); setStep("link-error"); }
-    });
+    linkToken.current = takeLinkToken();
+    void redeemLink();
   }, [isLinkRoute, enabled]);
 
   if (isLoading) return <div className="min-h-screen bg-background" data-testid="player-login-loading" />;
@@ -70,25 +85,35 @@ export default function PlayerLogin() {
   const requestCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setError(null);
-    const r = await startPlayerLogin(email);
-    setBusy(false);
-    if (r === "SENT") { setCode(""); setStep("code"); }
-    else setError(ERRORS[r]);
+    try {
+      const r = await startPlayerLogin(email);
+      if (!mounted.current) return;
+      if (r === "SENT") { setCode(""); setStep("code"); }
+      else setError(ERRORS[r]);
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
   };
 
   const submitCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setError(null);
-    const r = await verifyPlayerLogin({ kind: "code", email, code });
-    setBusy(false);
-    if (r.ok) await finish();
-    else setError(ERRORS[r.code]);
+    try {
+      const r = await verifyPlayerLogin({ kind: "code", email, code });
+      if (!mounted.current) return;
+      if (r.ok) await finish();
+      else setError(ERRORS[r.code]);
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
   };
 
   const logout = async () => {
-    await logoutPlayer();
+    const ok = await logoutPlayer();
     await queryClient.invalidateQueries({ queryKey: PLAYER_ME_KEY });
-    setStep("email");
+    if (!mounted.current) return;
+    if (ok) { setError(null); setStep("email"); }
+    else setError(ERRORS.NETWORK);
   };
 
   const signedIn = step === "done" || (player && step !== "code");
@@ -114,7 +139,7 @@ export default function PlayerLogin() {
             <form onSubmit={requestCode} className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="player-email">E-mail-cím</Label>
-                <Input id="player-email" type="email" inputMode="email" autoComplete="email" required maxLength={254}
+                <Input id="player-email" type="email" inputMode="email" autoComplete="email" required maxLength={254} className="h-12 text-lg"
                   value={email} onChange={(e) => setEmail(e.target.value)} data-testid="input-player-email" />
               </div>
               <Button type="submit" className="w-full" disabled={busy || email.trim() === ""} data-testid="button-player-request-code">
@@ -128,7 +153,7 @@ export default function PlayerLogin() {
               <div className="space-y-1.5">
                 <Label htmlFor="player-code">6 jegyű kód</Label>
                 <Input id="player-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required
-                  className="text-center text-2xl tracking-[0.4em]" value={code}
+                  className="h-14 text-center text-2xl tracking-[0.4em]" value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} data-testid="input-player-code" />
               </div>
               <Button type="submit" className="w-full" disabled={busy || code.length !== 6} data-testid="button-player-verify">
@@ -142,8 +167,11 @@ export default function PlayerLogin() {
             <p className="text-center" data-testid="player-login-linking">Belépés folyamatban…</p>
           ) : (
             <div className="space-y-3 text-center" data-testid="player-login-link-error">
-              <p>{error ?? LINK_INVALID}</p>
-              <Button className="w-full" onClick={() => { setError(null); setStep("email"); setLocation("/belepes"); }}>Új kódot kérek</Button>
+              <p role="alert">{error ?? LINK_INVALID}</p>
+              {linkRetryable && (
+                <Button className="w-full" onClick={() => void redeemLink()} data-testid="button-player-link-retry">Újrapróbálom</Button>
+              )}
+              <Button className="w-full" variant={linkRetryable ? "ghost" : "default"} onClick={() => { linkToken.current = null; setError(null); setStep("email"); setLocation("/belepes"); }}>Új kódot kérek</Button>
             </div>
           )}
           {error && step !== "link-error" && (

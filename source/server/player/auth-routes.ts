@@ -85,22 +85,22 @@ export function createPlayerRouter(deps: PlayerRouterDeps): Router {
       const key = playerAuthKey();
       const eh = emailHash(key, email);
       await deps.store.purgeOldCodes();
-      // Címenkénti korlát: csendben (a válasz ugyanaz a 202), hogy a cím léte / használata ne derüljön ki.
-      if ((await deps.store.recentStartCount(eh)) >= START_PER_EMAIL_MAX) {
+      const code = generateCode();
+      const token = generateLinkToken();
+      // Címenkénti korlát, atomikusan lefoglalva: betelt keretnél csendben (a válasz ugyanaz a 202), levél nélkül.
+      const reserved = await deps.store.reserveCode({ emailNormalized: email, emailHash: eh, codeHash: codeHash(key, eh, code), linkHash: linkHash(key, token) }, START_PER_EMAIL_MAX);
+      if (!reserved) {
         logger.info(`[PLAYER] belépőkód-kérés címenkénti korláton: ${maskEmail(email)}`);
         return res.status(202).json({ ok: true });
       }
-      const code = generateCode();
-      const token = generateLinkToken();
-      await deps.store.insertCode({ emailNormalized: email, emailHash: eh, codeHash: codeHash(key, eh, code), linkHash: linkHash(key, token) });
       const mail = buildPlayerLoginEmail({ code, link: playerLoginLink(deps.baseUrl(), token) });
-      try {
-        await deps.mailer(email, mail);
-      } catch (mailError) {
+      // A levél a válasz UTÁN megy ki (nem várjuk meg): a válaszidő így nem árulja el, hogy a keret betelt-e (időzítés
+      // alapú felsorolás ellen); a küldési hiba csak maszkolva naplózódik.
+      void deps.mailer(email, mail).catch((mailError: unknown) => {
         const masked = maskEmail(email);
         const reason = (mailError instanceof Error ? mailError.message : "ismeretlen hiba").replaceAll(email, masked);
         logger.error(`[PLAYER] a belépő levél nem ment ki (${masked}): ${reason}`);
-      }
+      });
       return res.status(202).json({ ok: true });
     } catch (error) {
       logger.error("[PLAYER] belépőkód-kérés hiba:", error instanceof Error ? error.message : "ismeretlen hiba");

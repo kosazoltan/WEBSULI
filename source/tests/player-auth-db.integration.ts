@@ -11,6 +11,10 @@ import { Client, dbPool, mapLimit, startApp } from "./support/authz-db-harness";
 
 const { codeHash, emailHash, generateLinkToken, linkHash, playerAuthKey, START_PER_EMAIL_MAX } = await import("../server/player/codes");
 const { createPlayerStore } = await import("../server/player/store");
+const { createPlayerRouter } = await import("../server/player/auth-routes");
+const { default: express } = await import("express");
+type Server = import("node:http").Server;
+type AddressInfo = import("node:net").AddressInfo;
 const { logger } = await import("../server/lib/logger");
 
 const store = createPlayerStore(dbPool);
@@ -179,6 +183,35 @@ describe("JM7a — HTTP: flag BE", () => {
     assert.ok(statuses.every((s) => s === 202), statuses.join(","));
     const n = (await dbPool.query(`SELECT count(*)::int AS n FROM player_auth_codes WHERE email_normalized = $1`, [email])).rows[0].n;
     assert.equal(n, START_PER_EMAIL_MAX);
+  });
+
+  it("review #445: 10 PÁRHUZAMOS kódkérés ugyanarra a címre → legfeljebb 3 kódrekord és 3 levél; minden válasz azonos 202", async () => {
+    // A valódi útvonal-kezelő, a valódi (eldobható) Postgresen, megszámolt levélküldővel.
+    const sent: string[] = [];
+    const app = express();
+    app.use(express.json());
+    app.use("/api/player", createPlayerRouter({ store, mailer: async (to) => { sent.push(to); }, baseUrl: () => "https://websuli.vip" }));
+    const server: Server = await new Promise((resolve) => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const email = "bomba@pelda.hu";
+    const responses = await Promise.all(Array.from({ length: 10 }, () =>
+      fetch(`${base}/api/player/auth/start`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) })
+        .then(async (r) => ({ status: r.status, text: await r.text() }))));
+    await new Promise((r) => setTimeout(r, 50)); // a levélküldés a válasz után indul
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    assert.deepEqual(new Set(responses.map((r) => `${r.status} ${r.text}`)), new Set(['202 {"ok":true}']));
+    const n = (await dbPool.query(`SELECT count(*)::int AS n FROM player_auth_codes WHERE email_normalized = $1`, [email])).rows[0].n;
+    assert.equal(n, START_PER_EMAIL_MAX, "legfeljebb a keretnyi kódrekord");
+    assert.equal(sent.length, START_PER_EMAIL_MAX, "legfeljebb a keretnyi levél");
+  });
+
+  it("review #445: a társzintű lefoglalás is atomikus (20 párhuzamos reserveCode → 3 siker)", async () => {
+    const k = key();
+    const email = "tarszint-bomba@pelda.hu";
+    const eh = emailHash(k, email);
+    const results = await Promise.all(Array.from({ length: 20 }, (_, i) =>
+      store.reserveCode({ emailNormalized: email, emailHash: eh, codeHash: codeHash(k, eh, String(100000 + i)), linkHash: linkHash(k, generateLinkToken()) })));
+    assert.equal(results.filter(Boolean).length, START_PER_EMAIL_MAX);
   });
 
   it("IP-nkénti korlát a kódkérésre (10 / 15 perc) → 429", async () => {
