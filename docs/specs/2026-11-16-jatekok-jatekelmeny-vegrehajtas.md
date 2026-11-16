@@ -1997,6 +1997,40 @@ Vercel-rewrite-on, kör-késés), U-JM2-2 (WebSocket-frissítés, `transport.nam
 8. A Párbaj nem-játék képernyői (kezdő, beállítás, váróterem, megtelt szoba, győzteshirdetés, visszavágó-kérés) a meta-mérő (`tests/game-meta-quality.spec.ts`, X1–X8; 360×640, 412×915, 844×390) alatt, a bukások javítva.
 **Elfogadás:** a fenti tesztek zöldek; a kapusor (`npm test`, `check`, `check:test`, `lint`, `build`, e2e) zöld; rövid biztonsági ellenőrzés a token-forgatásra.
 
+##### JM3a-2/R — A visszavágó állapotgépe (PR #476 review: Codex 4591991467 / 4591991474, vercel 4592016885 / 4592016895 / 4592016905)
+
+**Gyökérok:** a visszavágó két igazságforrásból élt — a szerver `rematchPending` jelzője (ki kért, nem tudta) és a kliens helyi
+`iAskedRematch` / 45 s-os időzítője. Ebből jött mindhárom hiba: (1) egyidejű kérésnél mindkét kliens „kérő”, senki nem
+fogadhat el; (2) kilépés + új belépő után a kliens régi állapota ragad; (3) a kérő saját ismételt `ready`-je elfogadásnak
+számított. **Javítás:** az egyetlen igazságforrás a szerver `RoomState.rematch` mezője, a kliens nézete ebből számolódik
+(`room:state.rematch`), saját visszavágó-állapotot nem tart.
+
+**Szerveroldali állapot:** `rematch: { by, status, deadlineMs, result } | null` — `by` a kérő, `status` ∈ `pending` (kért, vár) /
+`accepted` (elfogadva, de a másik fél épp nincs kapcsolatban) / `expired` (45 s alatt nem jött válasz) / `left` (valamelyik fél
+kilépett); `result` a lezárt meccs győzteshirdetése (újratöltés után is ez látszik); `deadlineMs` a `pending` lejárata (45 s).
+
+**Tervezési döntés (új belépő):** az első meccs után a szoba **nem fogad új játékost** (`join` → `ROOM_STARTED` „Ebben a szobában
+már elkezdődött a játék.”), ha `matchNo > 0`. Indok: a link egy csoportban maradhat — idegen ülne be a kilépett barát helyére, a
+gazda pedig nem tudná, hogy ki jött. A tulajdonosi döntés (szobát regisztrált nyit, kóddal vendég csatlakozhat) az ELSŐ
+csatlakozásra szólt; meccs után a kód csak visszavágóra él. A bent maradó gyerek az „Új szoba” gombbal friss kódot kap.
+Ugyanazon helyre a saját folytatási tokenjével (újratöltés, hálózatkiesés) továbbra is visszaül, ez nem új belépés.
+
+Jelölés: A a gazda, B a vendég, X a kérő, Y a másik fél. „Lát” = a kliens nézete (`DuelOnline` `ResultView` / `LobbyView`).
+
+| Állapot (szerver) | X / Y lát | kér (X) | kér (Y) | elfogad = `ready:true` (Y) | „Most nem” (Y) = kilép | `ready` (X) / `ready:false` (Y) | kilép (X) | csatlakozik (új Z) | lejár (45 s) | megszakad (Y) → visszatér |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **R** eredmény (`finished`, `rematch=null`) | mindkettő: győzteshirdetés + „Visszavágó” gomb | → **P(X)**; ha Y már kilépett → **L** | → **P(Y)** | `BAD_PHASE`, marad **R** | → R (a maradó „Visszavágó”-ja → **L**) | `BAD_PHASE`, marad **R** | → R (mint balra) | `ROOM_STARTED` | (a `finishedTtl` zárja a szobát) | marad **R** |
+| **P(X)** X kért (`lobby`, `pending`) | X: eredmény + „várjuk Y válaszát” (`duel-rematch-waiting`); Y: eredmény + „X visszavágót kér!” Benne vagyok / Most nem (`duel-rematch-ask`) | no-op (nem indít) | **kölcsönös** → `countdown` | → `countdown` (ha mindkettő kapcsolatban), különben → **ACC** | → **L** | no-op (nem indít) | → **L** | `ROOM_STARTED` | → **E(X)** | marad **P(X)** (a lejárat fut; a türelmi idő végén → **L**) |
+| **ACC** elfogadva, X épp nincs kapcsolatban | mindkettő: eredmény + várakozás | no-op | no-op | no-op | → **L** | no-op | → **L** | `ROOM_STARTED` | nincs lejárat | X visszatér → `countdown`; türelmi idő vége → **L** |
+| **E(X)** lejárt | X: eredmény + „Y nem válaszolt” + Visszavágó; Y: eredmény + „X visszavágót kért — ha mégis…” + Visszavágó (`duel-rematch-expired`) | → **P(X)** (új 45 s) | → **P(Y)** | no-op (a kérdés már nem él) | → **L** | no-op | → **L** | `ROOM_STARTED` | marad **E** (a váróterem-TTL zárja) | marad **E(X)** |
+| **L** kilépett | a maradó: eredmény + „a barátod kilépett — a visszavágó most elmarad” (`duel-rematch-gone`), „Új szoba” | `NOT_ENOUGH_PLAYERS` | — | no-op | — | no-op | — | `ROOM_STARTED` | marad **L** (a váróterem-TTL zárja) | marad **L** |
+| **countdown** (kölcsönös / elfogadott) | mindkettő: visszaszámlálás, `rematch=null` | — | — | — | — | — | — | — | — | — |
+
+**Tesztek:** `tests/rt-room-machine.test.ts` tábla-vezérelt blokk (minden cella egy eset: kiinduló állapot + esemény → várt
+`rematch.status` / fázis / hiba); nyers Socket.IO-próba a `tests/support/rt-harness.ts`-szel (kérő + kérő `room:ready` → nincs
+indulás; egyidejű `room:rematch` → visszaszámlálás); e2e két kontextussal egyszerre nyomva (mindkettő `duel-countdown`), és a
+kilépés utáni új belépő `ROOM_STARTED`-ot kap, a maradó a `duel-rematch-gone` + „Új szoba” képernyőt látja.
+
 ### JM3b — 3–4 fő, reakciók, kirúgás, értesítések, újracsatlakozás e2e, szóbankos párbaj
 
 **Állapot:** nem kezdődött · **Függ:** JM3a, JM7b · **Modell:** Opus · **Elfogadás:** JM-A5 (teljes), JM-A4 (`on`)
