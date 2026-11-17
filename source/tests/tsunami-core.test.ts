@@ -399,6 +399,33 @@ test("K2 (D-J1a-13): tétlen átfutás — a játékban hat (jó: turbó + 12 m;
   assert.equal(core.hadInputSinceGate(), true, "a koppintás szándékos bemenet");
 });
 
+test("ÚK2 (D-J1a-17): a tétlen átfutás a JÓ kapun „Jó kapu!” felirat (a kimenet alkalmazása előtt), rossz kapun és szándékos bemenettel nem", async () => {
+  const { idleCrossingWasGood, IDLE_GOOD_GATE_STATUS } = await import("../client/src/lib/tsunami/core");
+  assert.match(IDLE_GOOD_GATE_STATUS, /^Jó kapu!/);
+  assert.doesNotMatch(IDLE_GOOD_GATE_STATUS, /Lejárt/);
+  // Jó kapu, bemenet nélkül: a futó a középső (1.) sávban, a jó válasz is ott.
+  const good = freshCore(2);
+  stepFor(good, 31_000);
+  good.placeGate({ id: 1, windowMs: 4500, slowMo: 0.6, optionCount: 3 });
+  assert.equal(idleCrossingWasGood(good.state(), 1), false, "átfutás előtt nincs tétlen átfutás");
+  good.applyIdleCrossing(1);
+  assert.equal(idleCrossingWasGood(good.state(), 1), true, "jó kapun tétlenül → „Jó kapu!”");
+  good.applyOutcome({ id: 1, result: "timeout", pickedOption: null, correctOption: 1 });
+  assert.equal(idleCrossingWasGood(good.state(), 1), false, "a kimenet után a jelzés törlődik (a következő kapura nem öröklődik)");
+  // Rossz kapu, bemenet nélkül: marad a „Lejárt az idő”.
+  const bad = freshCore(2);
+  stepFor(bad, 31_000);
+  bad.placeGate({ id: 1, windowMs: 4500, slowMo: 0.6, optionCount: 3 });
+  bad.applyIdleCrossing(0);
+  assert.equal(idleCrossingWasGood(bad.state(), 0), false, "rossz kapun tétlenül → „Lejárt az idő”");
+  // Szándékos választás (nem tétlen kapu) a jó sávban: nincs „Jó kapu!” felirat a nem-válaszolók szövegével.
+  const chosen = freshCore(2);
+  stepFor(chosen, 31_000);
+  chosen.placeGate({ id: 1, windowMs: 4500, slowMo: 0.6, optionCount: 3 });
+  chosen.markInput();
+  assert.equal(idleCrossingWasGood(chosen.state(), 1), false, "nem tétlen kapu");
+});
+
 test("A2 (D-J1a-14): közel nulla résnél a rossz kapu botlása nem zárja le azonnal a menetet (1,5 mp kegyelmi rés)", () => {
   const core = freshCore(4);
   stepFor(core, 31_000);

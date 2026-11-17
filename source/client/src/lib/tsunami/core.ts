@@ -112,6 +112,18 @@ export function laneForOption(option: number, optionCount: number): number {
 }
 
 /**
+ * D-J1a-17 (újra-review #483, ÚK2): a tétlen átfutás (D-J1a-13) a JÓ kapun történt-e. A kimenet alkalmazása ELŐTT kell
+ * kérdezni (utána a kapu `idle` jelzése törlődik). A lap ezzel dönt a felirat között: „Jó kapu! …” vagy „Lejárt az idő”.
+ */
+export function idleCrossingWasGood(st: Readonly<Pick<TsunamiState, "gates" | "lane">>, correctOption: number): boolean {
+  const g = st.gates;
+  return !!g && g.idle && g.laneOptions[st.lane] === correctOption;
+}
+
+/** D-J1a-17: a jó kapun tétlenül átfutó gyerek állapotsora (a nyilvántartásban „nem válaszolt” marad). */
+export const IDLE_GOOD_GATE_STATUS = "Jó kapu! Most nem választottál — ezt még megkérdezzük.";
+
+/**
  * A kapu-tábla belső szélessége a legkeskenyebb (360 px-es) nézetben: 106 px tábla − 2 × 8 px belső margó − 2 × 3 px keret
  * (a lap `gateLayout`-ja és `.ts-gate` CSS-e szerint). D-J1a-11, review #483 M3.
  */

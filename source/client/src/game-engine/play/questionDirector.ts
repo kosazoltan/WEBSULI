@@ -277,11 +277,12 @@ export function createQuestionDirector(opts: {
       // J1a / review #483 (M2): kupon módban is jár a menet közbeni ismétlés (a hibázott lecke-tétel), és a lecke kimerülése
       // után a menetben legrégebben feltett lecke-tétel jön újra — a kérdés nem fogy el. Csak az aktuális lecke tananyaga:
       // menetek közötti ismétlés itt nincs.
+      // D-J1a-16 (újra-review #483, ÚK1): az ismétlés a menetben először kiadott EREDETI tétel — a közös sor `restore()`-a a
+      // `coupon` forrást `material`-ra normalizálná, és a `couponItemId` elveszne.
       if (reviewSlotOpen()) {
         for (const item of inRunCandidates()) {
-          if (!couponAsked.has(item.key)) continue;
-          const q = restore(item);
-          if (q) return { q, isReview: true, inRun: true };
+          const asked = couponAsked.get(item.key);
+          if (asked) return { q: asked.q, isReview: true, inRun: true };
         }
       }
       const m = provider.material(acceptCtx);
@@ -357,7 +358,8 @@ export function createQuestionDirector(opts: {
     runStats.onAsk(p, simNowMs);
     askedKeys.add(q.key);
     lastAskedKey = q.key;
-    if (provider.couponOnly) couponAsked.set(q.key, { q, at: position });
+    // D-J1a-16: csak a feltevés sorszáma frissül, a tétel az eredeti marad.
+    if (provider.couponOnly) couponAsked.set(q.key, { q: couponAsked.get(q.key)?.q ?? q, at: position });
     if (isReview) {
       reviewsAsked += 1;
       if (pick.inRun) returns.set(q.key, (returns.get(q.key) ?? 0) + 1);

@@ -342,6 +342,40 @@ test.describe("időtúllépés (D-J1a-13): a tétlen átfutás lejárt válasz �
     await page.getByTestId("play-why").first().click();
     await expect(page.getByTestId("quiz-feedback")).toHaveAttribute("data-outcome", "timeout");
   });
+
+  test("ÚK2 (D-J1a-17): bemenet nélkül a JÓ kapun átfutva „Jó kapu!” (nem „Lejárt az idő”), rossz kapun „Lejárt az idő”; válasz egyiknél sincs", async ({ page }) => {
+    test.setTimeout(150_000);
+    await page.goto("/games/tsunami-english?seed=23&difficulty=easy");
+    await page.getByTestId("button-tsunami-start").click();
+    await expect(page.getByTestId("tsunami-key-hint")).toBeVisible();
+    const quiz = page.getByTestId("ts-quiz");
+    const visibleStatus = quiz.locator(".play-question-status:visible");
+    const seen = { good: 0, bad: 0 };
+    // Semmilyen bemenet nincs (se billentyű, se érintés): a futó a középső sávban marad, a kérdéseket a teszt-kampó nyitja.
+    for (let round = 0; round < 10 && seen.good === 0; round++) {
+      if ((await gates(page).count()) === 0) await openQuestion(page);
+      await expect(gates(page)).toHaveCount(3, { timeout: 15_000 });
+      const lane = (await probe(page)).lane;
+      const correctIndex = Number((await quiz.locator('.ts-gate[data-correct="true"]').getAttribute("data-testid"))!.replace("ts-gate-", ""));
+      await expect(quiz).toHaveAttribute("data-state", "reveal", { timeout: 15_000 });
+      if (correctIndex === lane) {
+        seen.good += 1;
+        await expect(visibleStatus).toHaveCount(1);
+        await expect(visibleStatus).toContainText("Jó kapu!");
+        await expect(visibleStatus).not.toContainText("Lejárt");
+        await expect(page.getByTestId("ts-idle-status")).toBeVisible();
+        await shot(page, "tsunami-390x844-idle-good.jpg");
+      } else {
+        seen.bad += 1;
+        await expect(visibleStatus).toHaveCount(1);
+        await expect(visibleStatus).toContainText("Lejárt az idő");
+        await expect(page.getByTestId("ts-idle-status")).toHaveCount(0);
+      }
+      expect((await probe(page)).questionsAnswered, "a tétlen átfutás a nyilvántartásban nem válasz (D-J1a-13)").toBe(0);
+      await expect(gates(page)).toHaveCount(0, { timeout: 15_000 });
+    }
+    expect(seen.good, `volt jó kapus tétlen átfutás (${JSON.stringify(seen)})`).toBeGreaterThan(0);
+  });
 });
 
 for (const viewport of [

@@ -228,6 +228,44 @@ test("(3b) kupon mód, 8 tételes lecke, hosszú menet: soha nincs kérdés nél
   assert.equal(provider.freshCalls, 0);
 });
 
+test("(3c) kupon mód, 3 és 8 tételes lecke, hosszú menet: minden kiadott tétel `source: coupon` a saját couponItemId-jével — az ismétlés és a kimerülés utáni visszatérés is (D-J1a-16, ÚK1)", () => {
+  for (const size of [3, 8]) {
+    for (const accuracy of [0, 0.5, 1]) {
+      const material = Array.from({ length: size }, (_, k) => quiz(`K${size}-${k}`));
+      const couponIdOf = new Map(material.map((m) => [`mat:${m.id}`, `kupon-${m.id}`]));
+      let next = 0;
+      let freshCalls = 0;
+      const provider: QuestionProvider = {
+        couponOnly: true,
+        material: () => {
+          const m = material[next];
+          if (!m) return null;
+          next += 1;
+          return materialPlayQuestion(m, { coupon: true, couponItemId: `kupon-${m.id}` });
+        },
+        fresh: () => {
+          freshCalls += 1;
+          return null;
+        },
+        // A közös sor visszaállítása a forrást `material`-ra normalizálja és a couponItemId-t elveszti — kupon módban nem ezt kell kiadni.
+        restore: (item) => restoreReviewQuestion(item, {}),
+      };
+      const label = `${size} tétel, pontosság ${accuracy}`;
+      const { played } = play({ seed: 7 + size, accuracy, questions: 120, provider });
+      const ps = played.presentations;
+      assert.equal(ps.length, 120, `${label}: 120 kérdés jött`);
+      for (const p of ps) {
+        assert.equal(p.question.source, "coupon", `${label}: ${p.question.key} (#${p.id}, ismétlés: ${p.isReview}) forrása`);
+        assert.equal(p.question.couponItemId, couponIdOf.get(p.question.key), `${label}: ${p.question.key} (#${p.id}) couponItemId-je`);
+      }
+      // A teszt tényleg végigmegy az ismétlésen és a kimerülés utáni visszatérésen (nem csak az első kiadásokon).
+      if (accuracy < 1) assert.ok(ps.some((p) => p.isReview), `${label}: volt menet közbeni ismétlés`);
+      assert.ok(ps.length > size * 3, `${label}: a lecke többször is körbeért`);
+      assert.equal(freshCalls, 0, `${label}: kupon módban nincs új tétel`);
+    }
+  }
+});
+
 test("(4) az answer idempotens: második hívás ugyanarra az id-re null; az első válasz számít", () => {
   const director = createQuestionDirector({ config: BASE, provider: bankProvider(10), review: createReviewQueue(null, { now: () => T0 }), rng: createRng(9), startBand: 0.4, now: () => T0 });
   const p = director.request("trigger", 0)!;

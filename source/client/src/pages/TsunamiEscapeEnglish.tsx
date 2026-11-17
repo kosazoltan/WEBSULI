@@ -68,6 +68,7 @@ import {
   type QuestionProvider,
 } from "@/game-engine/play";
 import { motion } from "framer-motion";
+import { createPortal } from "react-dom";
 import {
   tsunamiQuizEasyMore,
   tsunamiQuizHardMore,
@@ -88,10 +89,12 @@ import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import TsunamiScene3D, { TSUNAMI_LANE_COLORS, TSUNAMI_LANE_SYMBOLS, createRunnerView, type TsunamiFx } from "@/game-engine/scenes/TsunamiScene3D";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import {
+  IDLE_GOOD_GATE_STATUS,
   TSUNAMI_GAME_ID,
   TSUNAMI_TUNING,
   createTsunamiDriver,
   gateLabelFits,
+  idleCrossingWasGood,
   laneForOption,
   tsunamiDirectorConfig,
   tuningFor,
@@ -727,6 +730,8 @@ export default function TsunamiEscapeEnglish() {
   const [hud, setHud] = useState({ distance: 0, goal: 1600, gap: 30, shells: 0, score: 0, combo: 0, multiplier: 1, lane: 1, hint: 0, danger: 0 });
   const [result, setResult] = useState<RunResult | null>(null);
   const [stormFlash, setStormFlash] = useState(false);
+  /** D-J1a-17 (ÚK2): annak a kérdésnek az azonosítója, amelynek JÓ kapuján a gyerek bemenet nélkül futott át. */
+  const [idleGoodId, setIdleGoodId] = useState<number | null>(null);
   /** A menet kulcsa: minden indítás növeli, a képkocka-hurok effektje ezen is újraindul (review #483). */
   const [runKey, setRunKey] = useState(0);
 
@@ -1043,6 +1048,10 @@ export default function TsunamiEscapeEnglish() {
   const q = usePlayQuestion({
     setup: { config: directorConfig, provider, startBand: adaptiveRef.current.band, seed: runSeedRef.current },
     onOutcome: (o, p) => {
+      // D-J1a-17 (ÚK2): a tétlen átfutás a JÓ kapun — a kimenet alkalmazása ELŐTT kérdezzük (utána a kapu jelzése törlődik).
+      const core = driverRef.current?.core;
+      const idleGood = !!core && o.result === "timeout" && idleCrossingWasGood(core.state(), p.options.findIndex((opt) => opt.correct));
+      setIdleGoodId(idleGood ? p.id : null);
       driverRef.current?.onOutcome(o, p);
       if (o.result === "aborted") return;
       adaptiveRef.current.answer(o.result === "correct");
@@ -1496,6 +1505,13 @@ export default function TsunamiEscapeEnglish() {
     const t = window.setTimeout(() => setArmedId(presId), 450);
     return () => window.clearTimeout(t);
   }, [presId]);
+  // D-J1a-17 (ÚK2): a „Jó kapu!” felirat helye a kártya alján (a közös kérdés-sáv állapotsora mellett, annak helyén).
+  const revealNow = q.state.reveal;
+  const idleGoodNow = presId !== null && !!revealNow && revealNow.pickedOptionIndex === null && idleGoodId === presId;
+  const [idleGoodFoot, setIdleGoodFoot] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    setIdleGoodFoot(idleGoodNow ? gatesRef.current?.querySelector<HTMLElement>(".play-question-foot") ?? null : null);
+  }, [idleGoodNow]);
   useLayoutEffect(() => {
     if (presId === null) return;
     const measure = () => {
@@ -1665,6 +1681,8 @@ export default function TsunamiEscapeEnglish() {
   // D-J1a-11 (review #483, M3): ha egy válasz sem fér a kapu-táblába levágás nélkül, „lista mód”: a kérdés-sáv teljes
   // szöveggel mutatja a válaszokat (a kulcs-kör a kapu színe + szimbóluma), táblák nélkül.
   const longMode = !!pres && !pres.options.every((o) => gateLabelFits(o.label, gateBox.width - 22));
+  // D-J1a-17 (ÚK2): „Jó kapu!” felirat a jó kapun bemenet nélkül átfutó gyereknek (a nyilvántartásban „nem válaszolt”).
+  const idleGoodShown = !!pres && !!reveal && reveal.pickedOptionIndex === null && idleGoodId === pres.id;
   const questionBar = (inside: boolean) => (
     <InlineQuestion
       {...q.bind}
@@ -1936,6 +1954,7 @@ export default function TsunamiEscapeEnglish() {
               data-state={reveal ? "reveal" : "open"}
               data-long={longMode ? "true" : "false"}
               data-armed={armedId === pres.id || reveal ? "true" : "false"}
+              data-idle-good={idleGoodShown ? "true" : undefined}
               style={{ top: gateBox.top, "--ts-gate-w": `${gateBox.width}px` } as CSSProperties}
               role="group"
               aria-label="Kapuk: fuss át a jó válasz kapuján"
@@ -1966,6 +1985,16 @@ export default function TsunamiEscapeEnglish() {
                 );
               })}
               {questionBar(true)}
+              {/* D-J1a-17 (ÚK2): a jó kapun tétlenül átfutó gyerek igaz, semleges állapotsora a kártya aljában (a közös
+                  állapotsor ilyenkor rejtett — egy élő régió marad). */}
+              {idleGoodFoot &&
+                createPortal(
+                  <p className="play-question-status ts-idle-status" data-testid="ts-idle-status" role="status" aria-live="polite" data-tone="good">
+                    <Check aria-hidden="true" />
+                    <span>{IDLE_GOOD_GATE_STATUS}</span>
+                  </p>,
+                  idleGoodFoot,
+                )}
             </div>
           )}
           {/* A „Miért?” a megoldás-kijelzés után még 4 mp-ig (a következő kérdéstől függetlenül). */}
@@ -2141,6 +2170,8 @@ const TSUNAMI_CSS = `
 .ts-gate[data-state="dim"] { opacity: .3; pointer-events: none; }
 /* D-J1a-15: a megoldás-kijelzés alatt a táblák nem érinthetők (a válasz eldőlt), a futó és az út jobban látszik. */
 .ts-gates[data-state="reveal"] .ts-gate { pointer-events: none; }
+.ts-gates[data-idle-good="true"] .play-question-status:not(.ts-idle-status) { display: none; }
+.ts-idle-status { order: -1; }
 .ts-gates[data-state="reveal"] .ts-gate[data-state="wrong"] { opacity: .75; }
 /* D-J1a-11: „lista mód” — a kérdés-sáv gombjainak kulcs-köre a kapu színe és szimbóluma (a 3D kapuval párban). */
 .ts-gates[data-long="true"] .play-question-key { font-size: 0; color: #0f172a; box-shadow: none; }
