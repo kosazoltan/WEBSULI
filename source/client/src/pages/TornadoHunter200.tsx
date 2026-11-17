@@ -2646,8 +2646,8 @@ function PlayScreen(props: {
     signOrder.length = 0;
     for (let i = 0; i < sc.signs.length; i++) if (Number.isFinite(signX[i]!)) signOrder.push(i);
     signOrder.sort((a, b) => signX[a]! - signX[b]!);
-    // R4: fekvőn a bal oldali válaszlista mellett (a lista ≤ min(30vw, 260) széles) kezdődnek a táblák.
-    const left = (sideList && compact ? Math.min(w * 0.3, 260) + 16 : 4) + labelW / 2;
+    // R4: fekvőn a bal oldali válaszlista mellett (a lista ≤ min(28vw, 236) széles) kezdődnek a táblák.
+    const left = (sideList && compact ? Math.min(w * 0.28, 236) + 16 : 4) + labelW / 2;
     const right = w - labelW / 2 - 4;
     const spread = () => {
       for (let k = 1; k < signOrder.length; k++) {
@@ -2887,7 +2887,7 @@ function PlayScreen(props: {
   const kindChip =
     pres && qKind ? (
       <div data-testid="tornado-question-kind" data-kind={qKind} className="px-2 py-1 rounded-lg bg-amber-400/90 text-slate-950 text-xs font-bold">
-        {QUESTION_KIND_LABEL[qKind]} · {quizTopicLabelHu(qMeta?.topic ?? null, questionSubjectLabel(qMeta))}
+        {(shortLandscape ? QUESTION_KIND_SHORT : QUESTION_KIND_LABEL)[qKind]} · {quizTopicLabelHu(qMeta?.topic ?? null, questionSubjectLabel(qMeta))}
         {qMeta?.source === "material" ? " · tananyag" : ""}
       </div>
     ) : null;
@@ -2923,7 +2923,7 @@ function PlayScreen(props: {
             ref={answersRef}
             data-testid="tornado-sign-answers"
             className={`absolute top-0 rounded-xl bg-slate-950/85 p-2 flex flex-col gap-1 text-[15px] font-bold text-white ${
-              shortLandscape ? "left-2 w-[min(30vw,260px)]" : "left-1/2 -translate-x-1/2 w-[min(92vw,560px)]"
+              shortLandscape ? "left-2 w-[min(28vw,236px)]" : "left-1/2 -translate-x-1/2 w-[min(92vw,560px)]"
             }`}
             style={{ visibility: "hidden" }}
             aria-label="A táblák válaszai"
@@ -3089,7 +3089,7 @@ function PlayScreen(props: {
           {/* Fekvőn a teljes válaszok listája (hosszú válasz) középen áll — ott a fajta-címke elmarad (a lista maga mutatja). */}
           {(chipSpot === "bottom-left" || (chipSpot === "bottom-center" && !compactSigns)) && kindChip && (
             <div className={`absolute inset-x-2 flex pointer-events-none z-10 ${chipSpot === "bottom-center" ? "justify-center" : "justify-start"}`} style={{ bottom: aboveControls }}>
-              <div className={chipSpot === "bottom-center" ? "max-w-[40vw] text-center" : "max-w-[70%]"}>{kindChip}</div>
+              <div className={chipSpot === "bottom-center" ? "max-w-[40vw] text-center whitespace-nowrap" : "max-w-[70%]"}>{kindChip}</div>
             </div>
           )}
           {chaseMsg && (
@@ -3244,6 +3244,13 @@ const LONG_ANSWER_FIXTURE: Question = {
 /** J7b: a kérdés fajtájának felirata (a kérdés-sáv mellett, a bal felső panelben). */
 const QUESTION_KIND_LABEL: Record<QuestionKind, string> = {
   junction: "🔀 Elágazás — kormányozz a jó tábla felé, vagy koppints rá",
+  turbo: "⚡ Turbópad",
+  anchor: "⚓ Horgonyzási kérdés",
+};
+
+/** Alacsony fekvő nézetben egysoros felirat (a táblák fölötte, a vezérlősáv alatta). */
+const QUESTION_KIND_SHORT: Record<QuestionKind, string> = {
+  junction: "🔀 Elágazás",
   turbo: "⚡ Turbópad",
   anchor: "⚓ Horgonyzási kérdés",
 };

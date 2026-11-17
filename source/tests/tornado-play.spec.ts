@@ -250,14 +250,22 @@ for (const viewport of VIEWPORTS) {
           const r = el.getBoundingClientRect();
           return { top: r.top, h: r.height, w: r.width, cut: el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1, text: el.textContent ?? "" };
         });
-        return { cardBottom: card.bottom, listTop: lst?.getBoundingClientRect().top ?? null, listBottom: lst?.getBoundingClientRect().bottom ?? null, items, signs };
+        const lr = lst?.getBoundingClientRect();
+        return { cardBottom: card.bottom, cardLeft: card.left, listTop: lr?.top ?? null, listBottom: lr?.bottom ?? null, listRight: lr?.right ?? null, items, signs: signs.map((x, i) => ({ ...x, left: document.querySelector(`[data-testid="tornado-sign-${i}"]`)!.getBoundingClientRect().left })) };
       });
       for (const s of m.signs) {
         expect(s.cut, `levágott tábla: ${s.text}`).toBe(false);
         expect(s.h).toBeGreaterThanOrEqual(48);
         expect(s.top, "a tábla a kártya alá csúszik").toBeGreaterThanOrEqual(m.cardBottom - 1);
       }
-      if (m.listTop !== null) {
+      if (m.listTop !== null && wide) {
+        // R4 (J7b döntések 24.): alacsony fekvőn a lista a bal oldalon — se a kártyát, se a táblákat nem fedi.
+        expect(m.listRight!, "a lista a kártyát fedi").toBeLessThanOrEqual(m.cardLeft + 1);
+        for (const s of m.signs) expect(s.left, "a tábla a lista alá kerül").toBeGreaterThanOrEqual(m.listRight! - 1);
+        expect(m.items.map((x) => x.text).join(" | ")).toContain("maradj a helyeden fedezékben");
+        for (const it of m.items) expect(it.cut).toBe(false);
+        await expect(page.getByTestId("tornado-question-kind")).toHaveCount(0);
+      } else if (m.listTop !== null) {
         expect(m.listTop, "a lista a kártya alatt").toBeGreaterThanOrEqual(m.cardBottom - 1);
         expect(m.items.map((x) => x.text).join(" | ")).toContain("maradj a helyeden fedezékben");
         expect(m.items.map((x) => x.text).join(" | ")).toContain("If I were there, I would help.");
