@@ -95,3 +95,33 @@ WARN, a két fájllistával.
 - C3 WHEN a PR `*-guard.test.ts`-t vagy `.github/workflows/`-t érint, és a main bármit változtatott THEN SHALL FAIL.
 - C4 WHEN a fájllista nem olvasható, csonka (≥ 300) vagy üres eltérő SHA mellett THEN SHALL FAIL.
 - C5 WHEN a main SHA-ja egyezik a CI alapjával THEN SHALL PASS (változatlan).
+
+
+## 11. A hook fail-closed viselkedése időtúllépéskor (kanban #100)
+
+> Blokkoló lelet (két független ellenőr terhelt gépen mérte, az orkesztrátor a kódból megerősítette): a
+> `check-quality-gates.mjs` `repoInfo()`-ja a `git rev-parse --show-toplevel` BÁRMELY hibájára — a 3 s-os időtúllépésre is —
+> „más repó”-t mondott, és a hook bizonyíték nélkül ENGEDETT. Ez ellentmond a „kétség esetén DENY” elvnek.
+
+**Cél.** (1) A hook különböztesse meg a „nem git-repó / a git gyorsan, nem nulla kóddal kilépett” esetet (→ más repó, enged) attól,
+amikor a git NEM adott választ (időtúllépés, jelzéssel leállítva, indítási hiba, ENOENT) → DENY „a repó állapota nem állapítható meg
+— próbáld újra”. Ha a `cwd` vagy a parancs a WEBSULI-ra utal, és a git nem válaszol / nem repót mond → DENY. (2) Az időkorlát
+emelése és konfigurálhatósága (`gates.config.json`: `hookGitTimeoutMs`, `hookGhTimeoutMs`, `hookBudgetMs`); a hook teljes
+futása a Claude Code hook-időkorlátja alatt marad (`.claude/settings.json` `timeout`). (3) Az összes `catch` átnézése a hookban és
+a kapu-szkriptekben: minden „nem a mi dolgunk / PASS / kihagyás” ág vagy bizonyítottan ártalmatlan (kommenttel), vagy tilt.
+(4) A hook ne tagadjon meg olyan parancsot, amely nem `git` / `gh` hívás, csak egy idézett argumentumában szerepel a „push” szó,
+ha a parancsszó egy szkriptet futtató értelmező szkriptfájllal (pl. `node kanban.mjs note 5 "… push …"`); a burkoló, alias,
+láncolás, változó, `-e` / `-c` kiértékelés továbbra is DENY.
+
+**Nem cél.** A kapu-köteles parancsok engedett alakjainak bővítése; a többi hook.
+
+**Elfogadás (EARS).**
+- T1 WHEN a `git rev-parse` időtúllépéssel / jelzéssel / indítási hibával nem ad választ THEN the hook SHALL DENY-t adni
+  („a repó állapota nem állapítható meg … próbáld újra”).
+- T2 WHEN a git gyorsan, nem nulla kóddal kilép (nem git-repó), és sem a `cwd`, sem a parancs nem utal a WEBSULI-ra THEN the hook
+  SHALL nem kimenetet adni (más repó).
+- T3 WHEN a `cwd` a WEBSULI-ra utal, és a git nem repót mond THEN the hook SHALL DENY-t adni.
+- T4 WHEN a git-hívások összideje elérné a `hookBudgetMs`-t THEN the hook SHALL DENY-t adni, mielőtt a Claude Code hook-időkorlátja lejár.
+- T5 WHEN a parancs `node <szkript>.mjs … "… push …"` alakú, `-e` / `-p` / `--eval` nélkül THEN the hook SHALL nem kimenetet adni;
+  WHEN `echo x && git push` THEN SHALL DENY.
+- T6 WHEN a `check-quality-gates.test.mjs` 20-szor egymás után fut a terhelt fejlesztői gépen THEN SHALL mind a 20 zöld legyen.

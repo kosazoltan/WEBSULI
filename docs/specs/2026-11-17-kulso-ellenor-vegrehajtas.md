@@ -41,3 +41,20 @@
    commitolt állapotra, `cmp`-pal ellenőrizve (C-70).
 
 - [ ] C1–C5 teszt · [ ] runbook · [ ] mutációs ellenpróba · [ ] gate:stage zöld
+
+
+## A hook fail-closed viselkedése időtúllépéskor (kanban #100) — végrehajtás
+
+1. Ez a doksi-commit (terv 11. szakasz + ez az alfejezet), a kód előtt.
+2. `scripts/qa/hooks/check-quality-gates.mjs`: befecskendezhető futtató (`exec`) és határidő; `noAnswer(e)` (`ETIMEDOUT`,
+   `killed`, `signal`, `status == null`, `ENOENT` / `EPERM`) → kivétel → DENY; gyors nem nulla kilépés → más repó; WEBSULI-utalás
+   (`cwd` / parancs) + nem repó → DENY; `currentBranch` és a ref-feloldás a „nem válaszolt” hibát továbbdobja.
+3. `scripts/qa/gates/gates.config.json`: `hookGitTimeoutMs` 10 000, `hookGhTimeoutMs` 15 000, `hookBudgetMs` 45 000;
+   `.claude/settings.json`: a `check-quality-gates` hook `timeout`-ja 60 s (a keret fölött).
+4. Értelmező + szkriptfájl alak (`node|python|py|deno|bun|perl|ruby` + `*.mjs|*.js|*.cjs|*.ts|*.py|*.pl|*.rb`, kiértékelő kapcsoló
+   nélkül) → nincs terv, ha a kapu-köteles szöveg csak idézett argumentumban áll.
+5. `lint-gate.mjs` `classifyHookOutput`: értelmezhetetlen, nem üres hook-kimenet → WARN (nem csendes elnyelés). A többi `catch`
+   kommentje (miért ártalmatlan).
+6. Tesztek: időtúllépő / jelzéssel leállított / indítási hibás git → DENY; nem git-repó → nincs kimenet; WEBSULI-utalás + nem repó →
+   DENY; keret kimerülése → DENY; T5. A valódi gites tesztek a konfigurált (hosszabb) korláttal; 20 egymás utáni futás.
+7. Mutációs ellenpróba a fail-closed ágra (commit után); runbook és skill egy-egy mondata.
