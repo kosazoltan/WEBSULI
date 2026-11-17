@@ -19,13 +19,20 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 
 ## A felmérés tényei
 
-### Éles leltár (egyetlen névtelen `GET /api/html-files`, csak olvasva, 2026-11-17)
+### Éles leltár (névtelen `GET /api/html-files`, csak olvasva; két mérés 2026-11-17-én — az éles adat a kettő között változott)
 
-- 245 tananyag (lecke 241, HTML 3, PDF 1). Érvényes `classroom` (egész 0–12): **245**; hiányzó / érvénytelen: **0**.
-- Évfolyamonként: 0 (programozás): 8 · 2.: 1 · 3.: 27 · 4.: 57 · 5.: 52 · 6.: 23 · 7.: 5 · 8.: 49 · 9.: 23.
-- A tárolt CÍMBEN szerepel az osztály: 133 (elején 79, végén 36, közepén 15; alakok: „N. osztály” 110, „N. osztályos” 17, egyéb 3);
-  a címből hiányzik: **112**; a cím és a mező ellentmond: 2.
-- A mostani főoldali kereső találati aránya (a lista másolatán, a jelenlegi illesztéssel): „5. osztály” → 28 / 52; „8. osztály” →
+| Mérés | Anyag | Érvénytelen `classroom` | A cím megnevez osztályt | Előtagot kap | Programozás a címben (nincs előtag) |
+|---|---|---|---|---|---|
+| 1. mérés, kb. 18:05 (a terv írásakor) | 245 | 0 | 133 | 110 | 2 |
+| 2. mérés, 20:31 (a független ellenőr 243-as mérésével egyezik) | **243** | **0** | **141** | **100** | 2 |
+
+- Az 1. mérés „a címből hiányzik: 112” száma = 110 előtagos + 2 programozási cím. A két mérés közti eltérés az éles adat változása
+  (2 anyaggal kevesebb; 8 címbe időközben bekerült az osztály) — a mérőszkript és a modul ugyanaz, mindkét mentett listán lefuttatva.
+- Évfolyamonként (2. mérés): 0 (programozás): 8 · 2.: 1 · 3.: 27 · 4.: 57 · 5.: 53 · 6.: 21 · 7.: 5 · 8.: 49 · 9.: 22;
+  1., 10., 11., 12. osztályos anyag nincs.
+- Ellentmondó cím és mező: az 1. mérésben 2, az ellenőr mérésében 1 (+ 1 adathiba-gyanú: 8. osztályba sorolt programozási anyag).
+- A 100 előtagos címből 53 megjelenített címe hosszabb 45 karakternél (360 px-en a 3. sor végén csonkul); a rövid „5. o. ·” alakkal 42.
+- A korábbi főoldali kereső találati aránya (az 1. mérés listáján, a régi illesztéssel): „5. osztály” → 28 / 52; „8. osztály” →
   36 / 49; „4. osztály” → 31 / 57; „5.o” → 0 / 52; „5 osztaly” → 1 / 52; „ötödik” → 2 / 52; „programozás” → 2 / 8.
 - Az éles főoldal (böngészőben, csak olvasva): a kártya borítóján a csip „4. osztály”, a cím alatta a nyers cím.
 - A tételes lista (azonosító, cím) a nyilvános repóba nem kerül.
@@ -72,13 +79,19 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 
 ## Rögzített döntések
 
-- **Formátum:** `"<osztály-felirat> · <tárolt cím>"`; a felirat a `classroomDisplayLabel` (1–12: „N. osztály”, 0: „Programozás”).
-  (Tulajdonosi megerősítésre vár; a váltás egy állandó és egy függvény módosítása.)
+- **Formátum:** `"<osztály-felirat> · <tárolt cím>"`; a felirat 1–12: „N. osztály”, 0: „Programozás”. Az alak EGY állandóból
+  váltható (`TITLE_GRADE_STYLE`: `"long"` | `"short"`; a rövid alak „5. o. · Cím” / „Prog. · Cím”) — tulajdonosi döntésre vár.
 - **Nincs duplázás:** ha a tárolt cím már megnevez osztályt (bármelyiket), előtag nincs — a cím változatlan. Ha a cím MÁS osztályt
   nevez meg, mint a mező (2 éles tétel), akkor sincs előtag: a csip / jelvény a mezőt mutatja, az eltérés így látható marad, és nem
   jön létre „3. osztály · … 2. osztály” felirat. A kereső ilyenkor a mezőre ÉS a címre is talál.
 - **Érvénytelen / hiányzó `classroom`:** előtag nincs (nem találunk ki osztályt); a kereső osztály-kifejezése az ilyen anyagot nem
   találja, a szöveges keresés igen.
+- **A szöveges ág a TÁROLT címen keres** (review K2): a megjelenített előtagon az „1. osztály” a „11. osztály · …”-t is hozná. Az
+  osztályt az osztály-ág a `classroom` mezőből illeszti; a maradék szavak szókezdetre illenek („tört” → „törtek”; az „ötödik elem” nem
+  találja a „Történelem” tantárgy anyagait).
+- **Osztályszűrő + osztály-keresés** (review K1): ha a kifejezés az aktív szűrőtől ELTÉRŐ osztályt nevez meg, a keresés minden
+  osztályban fut, „Keresés minden osztályban” jelzéssel; a szűrő állapota nem íródik át, a keresés törlésekor újra érvényes. Ha a
+  kifejezés nem nevez meg osztályt, vagy ugyanazt nevezi meg, a szűrő érvényes (a korábbi viselkedés). Főoldalon és adminban egyformán.
 - **A kereső csak bővül:** minden, amit a mostani kereső megtalál (a teljes kifejezés a címben, a leírásban vagy a tantárgynévben),
   ezután is találat; az osztály-értelmezés ehhez AD hozzá. Így a „második világháború” keresés nem szűkül a 2. osztályra.
 - **Osztály-értelmezés:** a keresőkifejezésből kiolvasott osztály(ok) + a maradék szavak: találat, ha az anyag osztálya a kiolvasottak
@@ -94,6 +107,9 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
   „9. évfolyam”, „ötödik osztály”, „ötödikeseknek” → nincs előtag.
 - Nem osztály a címben: „Az 5 legfontosabb szabály”, „1956”, „12 pont”, „A második világháború”, „Első lépések”, „Elsősegély” →
   van előtag.
+- Keresés osztálybetűvel, ragozva, római számmal: „5.b”, „5/a”, „5-ösöknek”, „ötödikben”, „V. osztály”, „IX.b osztály” → az osztály.
+  Római szám csak osztály-szóval együtt osztály („IV. Béla”, „i.e.”, „V” önmagában nem az).
+- „5 osztályozás”, „osztályfőnöki 5”: az „osztályozás” keresőszó marad (csak az osztály-szó ragozott alakjai esnek ki).
 - Keresés több osztályra: „5. és 6. osztály” → mindkét osztály anyagai (a kötőszó és a névelő nem keresőszó).
 - A cím más osztályt nevez meg, mint a mező → nincs előtag (lásd fent).
 - Érvénytelen érték (13, -1, 2.5, `null`, `undefined`, `"7"`) → nincs előtag.
@@ -131,4 +147,9 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 - [x] E10 WHEN a nézet 360×640, 390×844 vagy asztali THEN the system SHALL a címet és az előtagot kilógás, vízszintes görgetés és
   gombtakarás nélkül megjeleníteni.
 - [x] E11 The system SHALL a megjelenítendő címet és a kereső-illesztést egyetlen közös modulból képezni, egységtesztekkel.
+- [x] E13 WHEN osztályszűrő aktív és a kifejezés attól eltérő osztályt nevez meg THEN the system SHALL minden osztályban keresni, ezt
+  jelezni, és a szűrő állapotát nem átírni; WHEN a kifejezés nem nevez meg (más) osztályt THEN the system SHALL a szűrőt érvényesíteni.
+- [x] E14 WHEN a kifejezés „1. osztály”, „2. osztály” vagy „0. osztály” THEN the system SHALL nem találni a 11., 12., 10. osztály
+  anyagait pusztán a megjelenített előtag miatt.
+- [x] E15 The system SHALL a keresőkifejezést leütésenként egyszer elemezni (nem anyagonként).
 - [x] E12 The system SHALL nem módosítani adatbázist, migrációt, tárolt címet, éles adatot, gyártási promptot, játékfájlt.

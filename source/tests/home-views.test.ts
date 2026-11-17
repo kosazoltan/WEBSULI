@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DEFAULT_HOME_VIEW, groupBySubject, matchesHomeSearch, newestFirst, parseHomeView } from "../client/src/lib/home-views";
+import { DEFAULT_HOME_VIEW, filterHomeFiles, groupBySubject, matchesHomeSearch, newestFirst, parseHomeView } from "../client/src/lib/home-views";
 import { OTHER_SUBJECT, SUBJECT_LABELS, subjectLabel } from "../shared/subjects";
 import tanmenet from "../server/data/tanmenet-2020.json";
 import nyelvi from "../server/data/nyelvi-tanmenet.json";
@@ -70,4 +70,28 @@ test("keresés: az osztály-kifejezés a tananyag osztálya alapján is talál; 
   assert.equal(matchesHomeSearch({ title: "Python kezdőknek", subject: "informatika", classroom: 0 }, "prog"), true);
   assert.equal(matchesHomeSearch({ title: "Osztály nélküli régi anyag", classroom: 13 }, "13"), false);
   assert.equal(matchesHomeSearch({ title: "Osztály nélküli régi anyag" }, "régi anyag"), true, "osztály-mező nélkül a szöveges keresés működik");
+});
+
+// docs/specs/2026-11-17-tananyag-cim-osztaly.md, K1: aktív osztályszűrő mellett a MÁS osztályt megnevező keresés minden osztályban fut.
+test("szűrés: a szűrőtől eltérő osztályt megnevező keresés minden osztályban fut; egyébként a szűrő érvényes", () => {
+  const list = [
+    { id: "a4", title: "Törtek összeadása", description: "", subject: "matematika", classroom: 4 },
+    { id: "b4", title: "A víz körforgása", description: "", subject: "kornyezetismeret", classroom: 4 },
+    { id: "a5", title: "Törtek szorzása", description: "", subject: "matematika", classroom: 5 },
+    { id: "b5", title: "5. osztály - A honfoglalás", description: "", subject: "tortenelem", classroom: 5 },
+    { id: "p0", title: "Python kezdőknek", description: "", subject: "informatika", classroom: 0 },
+  ];
+  const run = (query: string, selected: number | null) => {
+    const result = filterHomeFiles(list, query, selected);
+    return `${result.files.map((file) => file.id).join(",")}|${result.allClassrooms}`;
+  };
+  assert.equal(run("", 4), "a4,b4|false", "keresés nélkül a szűrő érvényes");
+  assert.equal(run("5. osztály", 4), "a5,b5|true", "a mentett 4. osztály mellett az 5. osztály anyagai látszanak");
+  assert.equal(run("ötödik törtek", 4), "a5|true");
+  assert.equal(run("programozás", 4), "p0|true");
+  assert.equal(run("4. osztály", 4), "a4,b4|false", "ugyanaz az osztály: a szűrő marad");
+  assert.equal(run("törtek", 4), "a4|false", "osztály nélküli kifejezés: a szűrő marad (a mostani viselkedés)");
+  assert.equal(run("törtek", null), "a4,a5|false");
+  assert.equal(run("5. osztály", null), "a5,b5|false", "szűrő nélkül nincs mit átlépni");
+  assert.equal(run("7. osztály", 4), "|true", "üres osztály: nincs találat, de a keresés minden osztályban futott");
 });

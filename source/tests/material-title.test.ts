@@ -3,10 +3,15 @@ import test from "node:test";
 
 import {
   TITLE_GRADE_SEPARATOR,
+  TITLE_GRADE_STYLE,
   materialDisplayTitle,
   materialTitleGradePrefix,
   matchesMaterialSearch,
+  matchesPreparedSearch,
   parseGradeQuery,
+  prepareMaterialSearch,
+  searchSpansAllClassrooms,
+  titleGradeLabel,
   titleNamesClassroom,
 } from "../shared/material-title";
 
@@ -189,4 +194,105 @@ test("E7: a kereső csak bővül — ami a régi illesztéssel találat, az az �
 
 test("a „második világháború” nem szűkül a 2. osztályra, és nem hozza be a 2. osztály többi anyagát", () => {
   assert.equal(found("második világháború"), "d");
+});
+
+// ---- A független ellenőr leletei (2026-11-17): K1, K2, A1, A2, A4 ----
+
+test("K2: „1. osztály” nem hozza a 11.-et, „2. osztály” a 12.-et, „0. osztály” a 10.-et (a szöveges ág a tárolt címen keres)", () => {
+  const files = [0, 1, 2, 10, 11, 12].map((classroom) => ({ id: String(classroom), title: "Szövegértés gyakorló", description: "Feladatok", subject: null, classroom }));
+  const hits = (query: string) => files.filter((file) => matchesMaterialSearch(file, query)).map((file) => file.id).join(",");
+  const expected: Array<[string, string]> = [
+    ["1. osztály", "1"], ["1.", "1"], ["1", "1"], ["1.o", "1"], ["első", "1"], ["I. osztály", "1"],
+    ["2. osztály", "2"], ["2.", "2"], ["II. osztály", "2"],
+    ["0. osztály", "0"], ["0", "0"], ["programozás", "0"],
+    ["10. osztály", "10"], ["10", "10"], ["X. osztály", "10"], ["tizedik", "10"],
+    ["11. osztály", "11"], ["11", "11"], ["XI. osztály", "11"],
+    ["12. osztály", "12"], ["12.o", "12"], ["XII. osztály", "12"], ["tizenkettedikes", "12"],
+    ["1. és 11. osztály", "1,11"],
+  ];
+  for (const [query, ids] of expected) assert.equal(hits(query), ids, query);
+});
+
+test("K2: a megjelenített előtag részszövege nem találat — csak a tárolt szöveg és az osztály-mező számít", () => {
+  const file = { title: "Törtek", description: "", subject: null, classroom: 11 };
+  assert.equal(materialDisplayTitle(file.title, file.classroom), "11. osztály · Törtek");
+  assert.equal(matchesMaterialSearch(file, "1. osztály"), false);
+  assert.equal(matchesMaterialSearch(file, "osztály"), false, "az „osztály” szó csak a tárolt szövegben keres");
+  assert.equal(matchesMaterialSearch(file, "11. osztály · Törtek"), true, "a teljes megjelenített cím az osztály-ágon találat");
+  assert.equal(matchesMaterialSearch({ title: "Python", classroom: 0 }, "program"), false, "a „program” nem a programozási sáv");
+});
+
+test("A2: osztálybetű, ragozott és római alakok", () => {
+  const five = ["5.b", "5.a", "5/a", "5.b osztály", "5-ösök", "5-ösöknek", "5.-eseknek", "5-ödikes", "ötödikben", "V. osztály", "V osztály",
+    "v. osztály", "V.b osztály", "V. évfolyam", "5. osztálynak", "5. osztályban", "5. osztályosoknak"];
+  for (const form of five) assert.deepEqual(parseGradeQuery(form), { grades: [5], rest: [] }, form);
+  const roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+  roman.forEach((numeral, index) => {
+    assert.deepEqual(parseGradeQuery(`${numeral}. osztály`).grades, [index + 1], numeral);
+    assert.deepEqual(parseGradeQuery(`${numeral.toLowerCase()} osztaly`).grades, [index + 1], numeral);
+  });
+});
+
+test("A2: római szám osztály-szó nélkül, betű pont nélkül, rövidítés — nem osztály", () => {
+  for (const query of ["V", "IV. Béla", "i.e. 500", "X-akták", "vi", "XIII. osztály", "mix osztály", "5a", "5.k", "5.be", "II. Rákóczi Ferenc"]) {
+    assert.deepEqual(parseGradeQuery(query).grades, [], query);
+  }
+});
+
+test("A1: az „osztályozás”, „osztályfőnöki” keresőszó marad (nem nyeli el az osztály-kifejezés)", () => {
+  assert.deepEqual(parseGradeQuery("5 osztályozás"), { grades: [5], rest: ["osztalyozas"] });
+  assert.deepEqual(parseGradeQuery("osztályfőnöki 5"), { grades: [5], rest: ["osztalyfonoki"] });
+  const file = { title: "Törtek", description: "", subject: "matematika", classroom: 5 };
+  assert.equal(matchesMaterialSearch(file, "5 osztályozás"), false);
+  assert.equal(matchesMaterialSearch(file, "5. osztályos törtek"), true);
+});
+
+test("A3: a cím római számmal vagy osztálybetűvel is megnevezhet osztályt — nincs dupla jelölés", () => {
+  for (const title of ["V. osztály: törtek", "Törtek (IX. évfolyam)", "5.b osztály — törtek", "5. a osztály törtek"]) {
+    assert.equal(titleNamesClassroom(title), true, title);
+  }
+  for (const title of ["IV. Béla és a tatárjárás", "Vitaminok", "A mi osztályunk", "XIX. század"]) {
+    assert.equal(titleNamesClassroom(title), false, title);
+  }
+});
+
+test("A4: a kifejezés egyszer elemezhető, és az előkészített keresés ugyanazt adja, mint a közvetlen", () => {
+  for (const query of ["", "  ", "5. osztály", "5.o törtek", "második világháború", "prog python", "Irodalom", "13", "V. osztály"]) {
+    const prepared = prepareMaterialSearch(query);
+    for (const file of FILES) assert.equal(matchesPreparedSearch(file, prepared), matchesMaterialSearch(file, query), `${query} → ${file.id}`);
+  }
+  assert.deepEqual(prepareMaterialSearch("   "), { phrase: "", grades: [], rest: [] });
+});
+
+test("K1: az aktív szűrőtől ELTÉRŐ osztályt megnevező keresés minden osztályban fut; egyébként a szűrő érvényes", () => {
+  const spans = (query: string, selected: number | null) => searchSpansAllClassrooms(prepareMaterialSearch(query), selected);
+  assert.equal(spans("5. osztály", 4), true);
+  assert.equal(spans("ötödik törtek", 4), true);
+  assert.equal(spans("programozás", 4), true);
+  assert.equal(spans("4. és 5. osztály", 4), true, "a kifejezés másik osztályt is megnevez");
+  assert.equal(spans("4. osztály", 4), false, "ugyanaz az osztály: a szűrő marad");
+  assert.equal(spans("törtek", 4), false, "nincs osztály a kifejezésben");
+  assert.equal(spans("", 4), false);
+  assert.equal(spans("5. osztály", null), false, "nincs aktív szűrő");
+  assert.equal(spans("3/4", 5), false, "a tört nem osztály");
+});
+
+test("váltható formátum: a rövid alak „5. o. · Cím” / „Prog. · Cím”; az alapértelmezés a hosszú", () => {
+  assert.equal(TITLE_GRADE_STYLE, "long");
+  assert.equal(materialDisplayTitle("Törtek", 5, "short"), "5. o. · Törtek");
+  assert.equal(materialDisplayTitle("Python kezdőknek", 0, "short"), "Prog. · Python kezdőknek");
+  assert.equal(materialDisplayTitle("Törtek", 12, "short"), "12. o. · Törtek");
+  assert.equal(materialDisplayTitle("5. osztály - Törtek", 5, "short"), "5. osztály - Törtek");
+  assert.equal(materialDisplayTitle("Törtek", 13, "short"), "Törtek");
+  assert.equal(titleGradeLabel(5), "5. osztály");
+  assert.equal(titleGradeLabel(0), "Programozás");
+});
+
+test("A1: az osztály melletti szó szókezdetre illik — az „ötödik elem” nem találja a Történelem tantárgy anyagát", () => {
+  const history = { title: "Az ókori Egyiptom", description: "A Nílus ajándéka", subject: "tortenelem", classroom: 5 };
+  assert.equal(matchesMaterialSearch(history, "ötödik elem"), false);
+  assert.equal(matchesMaterialSearch(history, "ötödik tört"), true, "szókezdet: „tört” → „Történelem”");
+  assert.equal(matchesMaterialSearch(history, "5. osztály egyip"), true);
+  assert.equal(matchesMaterialSearch(history, "5. osztály nílus ókori"), true);
+  assert.equal(matchesMaterialSearch(history, "5. osztály jándék"), false, "szó belseje nem találat");
 });

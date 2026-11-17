@@ -117,3 +117,30 @@ regresszió: `npx.cmd playwright test -c playwright.classroom-badge.config.ts --
 - A közös modul regex-visszatekintést (lookbehind) nem használhat: a kliens is betölti, és a Safari < 16.4 szintaktikai hibának
   veszi (`source/tests/no-lookbehind-client.test.ts` — a push előtti kapu teljes egységtesztje fogta meg). A szóhatárt a minta
   elején álló határoló karakter adja; a keresőkifejezés elemzésénél elfogott csoportként visszakerül a szövegbe.
+
+## 9. A független ellenőr leletei (fej `7e4ffc78`, 2026-11-17 este) — javítás a PR előtt
+
+Jelentés: a session scratchpadjében (`review-tananyag-cim/jelentes.md`); ítélet: IGEN, FELTÉTELLEL. Javítandó: K1, K2; olcsó kiegészítések: A1, A2, A4, formátum-állandó.
+
+1. `source/shared/material-title.ts`
+   - K2: a szöveges ág a TÁROLT címen keres (nem a megjelenítetten); a maradék szavak szókezdetre illenek (A1).
+   - A4: `prepareMaterialSearch(query)` (egyszeri elemzés) + `matchesPreparedSearch(file, search)`; a `matchesMaterialSearch` ezekre épül.
+   - K1: `searchSpansAllClassrooms(search, selectedClassroom)` — igaz, ha van aktív szűrő és a kifejezés attól eltérő osztályt nevez meg.
+   - A2: osztálybetű („5.b”, „5/a”), ragozott alak („5-ösöknek”, „5-ödikes”, „ötödikben”), római szám osztály-szóval („V. osztály”);
+     az osztály-szó csak ragozott alakjaiban esik ki („osztályozás” keresőszó marad). A címben a római számos és az osztálybetűs
+     megnevezés is osztálynak számít.
+   - Formátum: `TITLE_GRADE_STYLE` állandó (`"long"` | `"short"`), `titleGradeLabel`.
+2. `source/client/src/lib/home-views.ts`: `filterHomeFiles(files, query, selectedClassroom)` → `{ files, allClassrooms }`.
+3. `source/client/src/components/UserFileList.tsx`: a szűrés a `filterHomeFiles`-ra épül; `data-testid="search-all-classrooms"`
+   jelzés a kereső alatt; az üres állapot üzenete ilyenkor nem hivatkozik a szűrő osztályára.
+4. `source/client/src/components/AdminFileDashboard.tsx`: ugyanez az elv (`useMemo` az elemzésre, jelzés a szűrők fölött).
+5. Tesztek: `tests/material-title.test.ts` (K2: 0 / 1 / 2 / 10 / 11 / 12. osztály; A1; A2; A4; K1; formátum), `tests/home-views.test.ts`
+   (`filterHomeFiles`), `tests/material-title.spec.ts` (mentett 4. osztály + „5. osztály” keresés mindhárom nézetben; admin szűrő +
+   keresés; 1. ↔ 11. osztály).
+6. Mérés valós adaton (az ellenőr `a.mts` módszerével, a 243-as listán): recall minden osztályra és alakra 100%, új hamis találat 0,
+   81 850 régi találatból 0 veszett el; az új alakok („5.b”, „5-ösöknek”, „V. osztály”, „IX. évfolyam”) 0 téves új találatot adnak;
+   „IV. Béla”, „II. Rákóczi”, „i.e.”, „5 osztályozás”, „ötödik elem” → 0 új találat.
+7. Képek a döntéshez: a rövid „5. o. · Cím” alak képei az állandó ideiglenes átállításával készültek (scratchpad `rovid-alak`); a
+   kódban a hosszú alak marad.
+8. A végső fejen: `gate:stage`; böngészős futások egyenként, `--workers=1` (`material-title`, `classroom-badge`, `home-views`), a
+   sorompó ellenőrzése és az indítás külön lépésben; `gate:push`.

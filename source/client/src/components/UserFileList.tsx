@@ -21,7 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { useAuth } from "@/hooks/useAuth";
-import { groupBySubject, HOME_VIEW_STORAGE_KEY, matchesHomeSearch, newestFirst, NEWEST_STRIP, parseHomeView, type HomeView } from "@/lib/home-views";
+import { filterHomeFiles, groupBySubject, HOME_VIEW_STORAGE_KEY, newestFirst, NEWEST_STRIP, parseHomeView, type HomeView } from "@/lib/home-views";
 
 /** A /api/materials/likes/batch szerveroldali korlátja (server/lib/public-input.ts MAX_MATERIAL_ID_BATCH). */
 export const LIKES_BATCH_LIMIT = 100;
@@ -111,18 +111,16 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   // Filter by search query AND selected classroom
   // Review #282: renderenként számolva — a nyitva hagyott lista a percenkénti frissítéssel a napváltást is követi.
   const today = todayPosition();
+  // Cím, leírás, tantárgynév és osztály, ékezettől függetlenül (spec 2026-11-03-fooldal-nezetek, 2026-11-17-tananyag-cim-osztaly).
+  // Ha a kifejezés a szűrőtől eltérő osztályt nevez meg, a keresés minden osztályban fut (a szűrő állapota nem változik).
+  const searched = useMemo(() => filterHomeFiles(files, searchQuery, selectedClassroom), [files, searchQuery, selectedClassroom]);
+  const searchAllClassrooms = searched.allClassrooms;
   const filteredFiles = useMemo(() => {
-    const filtered = files
-      .filter((file) => {
-        // Cím, leírás és tantárgynév, ékezettől függetlenül (spec 2026-11-03-fooldal-nezetek).
-        const matchesSearch = matchesHomeSearch(file, searchQuery);
-        const matchesClassroom = selectedClassroom === null || file.classroom === selectedClassroom;
-        return matchesSearch && matchesClassroom;
-      });
+    const filtered = searched.files;
     // Csak „Legfrissebb” nézetben a legújabb elkészült elöl (spec 2026-11-03-fooldal-nezetek); egyébként a mai tananyag elöl
     // (NAT 2020 mintatanmenet), a tanmenethez nem illeszthető anyag hátul, legújabb elöl.
     return view.newest && !view.bySubject ? newestFirst(filtered) : curriculumSort(filtered, today);
-  }, [files, searchQuery, selectedClassroom, today, view.newest, view.bySubject]);
+  }, [searched, today, view.newest, view.bySubject]);
 
   const newestFiles = useMemo(() => newestFirst(filteredFiles), [filteredFiles]);
   const subjectGroups = useMemo(
@@ -396,6 +394,11 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
             </Button>
           )}
         </div>
+        {searchAllClassrooms && (
+          <p className="-mt-2 mb-4 text-center text-xs font-semibold text-white/90" role="status" data-testid="search-all-classrooms">
+            Keresés minden osztályban — a keresett osztály nem a kiválasztott.
+          </p>
+        )}
 
         {/* Nézetválasztó (spec 2026-11-03-fooldal-nezetek): két független kapcsoló — külön és együtt is. */}
         <div className="mb-3 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Nézet" data-testid="home-view-switch">
@@ -500,7 +503,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               <CardContent className="pt-12 pb-12">
                 <Search className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground mb-4">
-                  {selectedClassroom !== null ? (
+                  {selectedClassroom !== null && !searchAllClassrooms ? (
                     <>
                       Nincs találat a(z) <strong>{selectedClassroom}. osztályban</strong>
                       {searchQuery && (

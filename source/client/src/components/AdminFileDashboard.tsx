@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, Eye, Trash2, Mail, FolderOpen, Upload, Download, Save, GripVertical } from "lucide-react";
@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
-import { matchesMaterialSearch } from "@shared/material-title";
+import { matchesPreparedSearch, prepareMaterialSearch, searchSpansAllClassrooms } from "@shared/material-title";
 import {
   DndContext,
   closestCenter,
@@ -158,14 +158,17 @@ export default function AdminFileDashboard({
     })
   );
 
+  // A kifejezés elemzése egyszer; ha a szűrőtől eltérő osztályt nevez meg, a keresés minden osztályban fut (spec 2026-11-17, K1).
+  const search = useMemo(() => prepareMaterialSearch(searchQuery), [searchQuery]);
+  const searchAllClassrooms = searchSpansAllClassrooms(search, classroomFilter === "all" ? null : classroomFilter);
   const filteredFiles = files.filter(file => {
     const q = searchQuery.toLowerCase();
     // Az évfolyam-feliratra is talál („8. osztály”, „Nincs osztály”) — docs/specs/2026-11-16-tananyag-evfolyam-jeloles.md.
     // A közös illesztés az osztály-kifejezésekre is talál („5.o”, „ötödik”) — docs/specs/2026-11-17-tananyag-cim-osztaly.md.
-    const matchesSearch = matchesMaterialSearch(file, searchQuery) ||
+    const matchesSearch = matchesPreparedSearch(file, search) ||
       classroomDisplayLabel(file.classroom).toLowerCase().includes(q);
     // Hiányzó / érvénytelen évfolyam csak az „Összes” nézetben látszik („Nincs osztály” jelvénnyel), nem hamisan az 1.-ben.
-    const matchesClassroom = classroomFilter === "all" || file.classroom === classroomFilter;
+    const matchesClassroom = searchAllClassrooms || classroomFilter === "all" || file.classroom === classroomFilter;
     return matchesSearch && matchesClassroom;
   });
 
@@ -478,7 +481,7 @@ export default function AdminFileDashboard({
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-orange-400" />
           <Input
-            placeholder="Keresés…"
+            placeholder="Keresés: cím, osztály…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-7 text-xs w-full border-orange-300 focus:border-orange-500 dark:border-orange-700"
@@ -518,6 +521,12 @@ export default function AdminFileDashboard({
           <span className="sm:hidden">ZIP</span>
         </Button>
       </div>
+
+      {searchAllClassrooms && (
+        <p className="mb-2 text-xs font-semibold text-orange-700 dark:text-orange-300" role="status" data-testid="search-all-classrooms">
+          Keresés minden osztályban — a keresett osztály nem a kiválasztott.
+        </p>
+      )}
 
       {/* Classroom filters */}
       <div className="mb-3">

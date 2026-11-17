@@ -21,10 +21,13 @@ const FILES = [
   { ...base, id: "q0", title: "Programozási alapismeretek: elágazások", classroom: 0, subject: "informatika" },
   { ...base, id: "t8", title: "8. osztály - Fotoszintézis", classroom: 8, contentType: "html", subject: "biologia" },
   { ...base, id: "l5", title: LONG, classroom: 5, subject: "matematika" },
+  // K2 (review): az 1. és a 11. osztály nem keveredhet az előtag miatt.
+  { ...base, id: "e1", title: "Betűk és hangok", classroom: 1, subject: "magyar-nyelvtan" },
+  { ...base, id: "e11", title: "Hangtan összefoglaló", classroom: 11, subject: "magyar-nyelvtan" },
   { ...base, id: "bad", title: "Hibás évfolyamú régi anyag", classroom: 13, contentType: "html", subject: null },
 ];
 /** A cím előtti felirat a főoldalon; ahol nincs kulcs, ott előtag sincs. */
-const PREFIX: Record<string, string> = { a4: "4. osztály", k4: "4. osztály", b12: "12. osztály", p0: "Programozás", l5: "5. osztály" };
+const PREFIX: Record<string, string> = { a4: "4. osztály", k4: "4. osztály", b12: "12. osztály", p0: "Programozás", l5: "5. osztály", e1: "1. osztály", e11: "11. osztály" };
 const VIEWPORTS = [{ name: "360x640", width: 360, height: 640 }, { name: "390x844", width: 390, height: 844 }, { name: "asztali", width: 1280, height: 800 }];
 
 async function mock(page: Page, admin: boolean) {
@@ -113,6 +116,12 @@ for (const vp of VIEWPORTS) {
     const search = page.getByTestId("input-search");
     const cases: Array<[string, string[]]> = [
       ["12.o", ["b12"]],
+      ["1. osztály", ["e1"]],
+      ["1.", ["e1"]],
+      ["11. osztály", ["e11"]],
+      ["XI. osztály", ["e11"]],
+      ["4.b", ["a4", "k4"]],
+      ["5-ösöknek", ["l5"]],
       ["negyedik", ["a4", "k4"]],
       ["4 osztaly", ["a4", "k4"]],
       ["4. osztály törtek", ["a4"]],
@@ -131,6 +140,55 @@ for (const vp of VIEWPORTS) {
     expect(await overflowX(page)).toBeLessThanOrEqual(1);
     await search.fill("7. osztály");
     await expect(page.getByText(/Nincs találat/)).toBeVisible();
+  });
+
+  // K1 (review): a tanuló mentett évfolyama alapból szűr; a MÁS osztályt megnevező keresés ettől még találjon.
+  test(`főoldal ${vp.name}: mentett 4. osztály mellett az „5. osztály” keresés az 5. osztály anyagait mutatja`, async ({ page }) => {
+    if (SHOTS_ONLY) return; // az „előtte” képekhez ez az eset nem kell
+    await page.setViewportSize(vp);
+    await mock(page, false);
+    await page.addInitScript(() => window.localStorage.setItem("websuli.classroomGrade", "4"));
+    await page.goto("/");
+    await expect(page.getByTestId("link-file-a4")).toBeVisible({ timeout: 60_000 });
+    const filter4 = page.getByTestId("button-filter-classroom-4");
+    await expect(filter4).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => homeIds(page)).toEqual(["a4", "k4"]);
+    const search = page.getByTestId("input-search");
+    const notice = page.getByTestId("search-all-classrooms");
+    await expect(notice).toHaveCount(0);
+
+    await search.fill("5. osztály");
+    await expect.poll(() => homeIds(page)).toEqual(["l5"]);
+    await expect(notice).toBeVisible();
+    await expect(notice).toHaveText(/Keresés minden osztályban/);
+    await expect(filter4, "a szűrő állapota nem íródik át").toHaveAttribute("aria-pressed", "true");
+    const box = await notice.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(vp.width + 1);
+    expect(await overflowX(page)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `${SHOTS}/fooldal-${vp.name}-szuro-atlepes.png` });
+
+    await search.fill("prog");
+    await expect.poll(() => homeIds(page)).toEqual(["p0", "q0"]);
+    await expect(notice).toBeVisible();
+
+    // Üres osztály: a keresés minden osztályban futott, az üzenet nem a 4. osztályra hivatkozik.
+    await search.fill("7. osztály");
+    await expect(page.getByText(/Nincs találat a keresésre/)).toBeVisible();
+    await expect(page.getByText(/4\. osztályban/)).toHaveCount(0);
+
+    // Ugyanaz az osztály vagy osztály nélküli kifejezés: a szűrő érvényes marad (a korábbi viselkedés).
+    await search.fill("4. osztály");
+    await expect.poll(() => homeIds(page)).toEqual(["a4", "k4"]);
+    await expect(notice).toHaveCount(0);
+    await search.fill("törtek");
+    await expect.poll(() => homeIds(page)).toEqual(["a4"]);
+    await expect(notice).toHaveCount(0);
+
+    // A keresés törlésekor a szűrő újra él.
+    await search.fill("");
+    await expect.poll(() => homeIds(page)).toEqual(["a4", "k4"]);
+    await expect(filter4).toHaveAttribute("aria-pressed", "true");
   });
 
   test(`admin Tananyagok ${vp.name}: a kártya címe előtt az osztály; a kereső az osztályra is talál`, async ({ page }) => {
@@ -163,6 +221,7 @@ for (const vp of VIEWPORTS) {
     const search = page.getByTestId("input-search");
     const cases: Array<[string, string[]]> = [
       ["12 osztaly", ["b12"]],
+      ["1. osztály", ["e1"]],
       ["4.o", ["a4", "k4"]],
       ["negyedik törtek", ["a4"]],
       ["programozás", ["p0", "q0"]],
@@ -172,5 +231,20 @@ for (const vp of VIEWPORTS) {
       await search.fill(query);
       await expect.poll(() => adminIds(page), { message: query }).toEqual([...ids].sort());
     }
+
+    // K1: aktív osztályszűrő mellett a más osztályt megnevező keresés minden osztályban fut, jelzéssel; törléskor a szűrő él.
+    await search.fill("");
+    await page.getByTestId("filter-classroom-4").click();
+    await expect.poll(() => adminIds(page)).toEqual(["a4", "k4"]);
+    await expect(page.getByTestId("search-all-classrooms")).toHaveCount(0);
+    await search.fill("12. osztály");
+    await expect.poll(() => adminIds(page)).toEqual(["b12"]);
+    await expect(page.getByTestId("search-all-classrooms")).toBeVisible();
+    await search.fill("törtek");
+    await expect.poll(() => adminIds(page)).toEqual(["a4"]);
+    await expect(page.getByTestId("search-all-classrooms")).toHaveCount(0);
+    await search.fill("");
+    await expect.poll(() => adminIds(page)).toEqual(["a4", "k4"]);
+    expect(await overflowX(page)).toBeLessThanOrEqual(1);
   });
 }
