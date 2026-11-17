@@ -118,8 +118,11 @@ ellenőriz teljesen szkript; a 15-ből 6 fázis (1, 6, 8, 13, 14, 15) állítás
 
 ### 4.1 A mért hibák (2026-11-17)
 
-Forrás: a hét független-ellenőri jelentés (#482–#487, J7b; összesen **140 lelet, 18 blokkoló**), a két retro
-(`docs/handoffs/2026-11-16-*.md`, `2026-11-17-jatekok-utomunka-retro.md`), C-61…C-72. Megoszlás fő kategória szerint:
+Forrás: a hét független-ellenőri jelentés (#482–#487, J7b) — ezek a session scratchpadjában vannak, NEM a repóban (a számok kézi
+összesítésből származnak; gépi újraszámolás: UNVERIFIED) —, a két retro (`docs/handoffs/2026-11-16-*.md`,
+`2026-11-17-jatekok-utomunka-retro.md`), C-61…C-72. A lenti tábla összege a kategorizált leletekre **103 lelet / 16 blokkoló**; az
+„EGYÉB” sorral (tantárgy-besorolás, pontozás / egyensúly, UX, időzítés, időzóna, folyamat: 37 lelet / 2 blokkoló) együtt **140 / 18**
+(a független review K9-lelete szerint a korábbi szöveg az EGYÉB sor nélkül adta meg az összeget). Megoszlás fő kategória szerint:
 
 | Kat. | Leírás | Lelet | Blokkoló | Hogyan derült ki (jellemzően) |
 |---|---|---|---|---|
@@ -137,6 +140,7 @@ Forrás: a hét független-ellenőri jelentés (#482–#487, J7b; összesen **14
 | (n) | elavult / üres őr | 4 | 0 | kódolvasás |
 | (p) | teljesítmény | 9 | 0 | kódolvasás |
 | (g)(k)(o) | CI-GPU, fölösleges push, telepítés közbeni futás | 0 a jelentésekben | — | a retrókban: (k) C-62, (n) C-61 2 óra piros main, (o) |
+| EGYÉB | tantárgy-besorolás, pontozás / egyensúly, UX, időzítés, időzóna, folyamat | 37 | 2 | kódolvasás + próba |
 
 A (h) két blokkoló esete, gépi szemmel: **J7b** `source/tests/tornado-sim.test.ts:306` (az `origin/feat/jatek-j7b-tornado-utelagazas` fején; a `4da8b3b9` commitban):
 `assert.ok(withQ >= without, …)` → `if (name === "SIM_WEAK") assert.ok(withQ >= without - 1, …)`, jelölés nélkül — a main-hez képest
@@ -209,6 +213,24 @@ konfigban megadott útvonal-mintákra illő változásnál dolgozik (S1: tesztf�
 `gates.config.json` → `"modes": { "<kapu>": { "local": "warn" | "block", "ci": "warn" | "block" } }`. Helyben a kapu `warn` módban
 `WARN`-t ad (a lánc zöld marad), `block` módban `FAIL`-t. A CI a `--mode block` kapcsolóval hívja (S1-től kezdve). Átállás `warn` →
 `block` helyben: két hét vagy 20 PR után, ha a hamis riasztás aránya < 10% (6.5).
+
+### 6.3a Bevezetési lépcsők (WARN → TILT) és a váltás mért feltételei
+
+A független review (2026-11-17, `82ea5b1a`: B1, B2) mérte: tiltó módban az S2 a 12 valódi ellenőri jelentésből 12-t, az S1 a CI-ban
+mind az öt nyitott PR-t megbuktatta volna, nagyrészt hamis riasztással. A tulajdonos feltétele („ne törjön, ne lassuljon”) ezért
+kötelező lépcsőzést ír elő. Minden kapu-kapcsoló a `gates.config.json` `modes` táblájában van; az ALAPÉRTÉK mindenütt `warn`.
+
+| Kapu | 1. lépcső (most) | 2. lépcső (tiltás) | A váltás MÉRT feltétele (mind teljesül) | Mérőeszköz |
+|---|---|---|---|---|
+| S1 teszt-integritás, helyben | `warn` | `block` | a nyitott PR-ok korpuszán (az öt játékág + a #490 + a #418) a mérce-leletek hamis riasztási aránya ≤ 10%; 2 hét / 20 PR hamis riasztás-jelölés nélkül | `node scripts/qa/gates/test-integrity.mjs --head origin/<ág> --json` ágonként; kézi besorolás a PR-ban |
+| S1 a CI-ban | `warn` (a job nem bukik; a leletek a job-összefoglalóba kerülnek) | `block` | ugyanaz, ÉS a commit-nézet leletei soha nem tiltanak (csak a main-hez képesti, összefésült nézet) | a CI job-összefoglalója |
+| S2 a `record-review`-ban | `warn` (a HAMIS lista kiírva, az ítélet rögzül, a rekord számolja) | `block` (HAMIS → nincs rögzítés) | a regressziós korpuszon (a 12 valódi ellenőri jelentés + a saját doksik) 0 hamis HAMIS, ÉS 10 egymást követő új valódi jelentés hamis riasztás nélkül | `node scripts/qa/gates/verify-report-corpus.mjs --root <scratchpad>` |
+| S2 a `gate:pr`-ban (a #490 után) | `warn` | `block` | ugyanaz, mint a `record-review`-nál | ugyanaz |
+| S2 `--report` (alügynök-jelentés) | `block` (az orkesztrátor kézi eszköze; a hiányzó / ellentmondó gépi blokk bukás) | — | — | — |
+| Bizonyíték-lánc ellenőrzése | `warn` | `block` | a 8 párhuzamos író × 200 rekord teszt zöld a CI-ban ÉS helyben; 2 hét `--verify` törés nélkül | `node scripts/qa/gates/evidence-chain.mjs --verify` |
+
+A váltást (`warn` → `block`) külön PR teszi meg, a mért számokkal a leírásban; visszaváltás bármikor (egy kapcsoló), ha a hamis
+riasztás újra megjelenik.
 
 ### 6.4 S4 — a játék-szerződés készlet terve (megvalósítás a #483–#486 és a J7b összevonása után)
 
@@ -292,7 +314,7 @@ Egyeztetve a párhuzamos `chore/allapot-ellenorok` munkával (`scripts/qa/checks
 
 | Kapu | Szakasz | Push | PR | CI |
 |---|---|---|---|---|
-| S1 teszt-integritás | warn | warn | warn (+ PR-leírás) | **block** (a „Háromfázisú rend” jobban; a PR-leírás a `github.event.pull_request.body`-ból) |
+| S1 teszt-integritás | warn | warn | warn (+ PR-leírás) | warn (a „Háromfázisú rend” jobban, job-összefoglalóval; a PR-leírás a `github.event.pull_request.body`-ból; tiltás csak a 6.3a feltételeivel) |
 | S2 állítás-ellenőrző | — | — | — (az orkesztrátor futtatja a jelentésre) | — (helyi tár kell) |
 | S3 spec ↔ teszt | — | warn | warn | warn → block |
 | S4 játék-szerződés | játékváltozásnál | ✓ | ✓ | ✓ (Unit Tests job, a teszt része) |
@@ -309,7 +331,7 @@ Részletes, kiadható megbízás-szöveg: a végrehajtási fájl „Megbízások
 | Szelet | Tartalom | Fájlok (új / módosul) | Tesztek | Bevezetés | Párhuzamos? |
 |---|---|---|---|---|---|
 | **S0** | ez a terv + végrehajtás | `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum{,-vegrehajtas}.md` | `three-phase-check` | — | — |
-| **S1** | teszt-integritás kapu | új: `scripts/qa/gates/test-integrity.mjs` + `.test.mjs`; mód.: `lint-gate.mjs` (1 lépés), `gates.config.json` (`testIntegrity`, `modes`), `ci.yml` (1 lépés), `docs/minosegkapuk.md` (szakasz) | `node --test`; ellenpróba a 5 nyitott ágon | helyben warn, CI block | S0 után |
+| **S1** | teszt-integritás kapu | új: `scripts/qa/gates/test-integrity.mjs` + `.test.mjs`; mód.: `lint-gate.mjs` (1 lépés), `gates.config.json` (`testIntegrity`, `modes`), `ci.yml` (1 lépés), `docs/minosegkapuk.md` (szakasz) | `node --test`; ellenpróba az 5 nyitott ágon | helyben és a CI-ban is warn (6.3a) | S0 után |
 | **S2** | állítás- és hivatkozás-ellenőrző + láncolt bizonyíték (tulajdonosi utasítás 2026-11-17 este: „a keresések / találatok pontossága” — elsőrendű szállítandó) | új: `evidence-chain.mjs`, `evidence-run.mjs`, `verify-report.mjs` (gépi `allitasok` blokk + szabad szöveges hivatkozások: `fájl:sor`, `fájl:sor-sor`, backtickes útvonal, `npm run …` / `node scripts/…`, commit, `#PR`, „N/M teszt”), `report-template.md` (+ tesztek); mód.: `stage-gate.mjs` / `pre-push-gate.mjs` `main()` (rekord), `AGENTS.md` (1 mondat), `websuli-pr-elotti-kapu` skill, `docs/minosegkapuk.md`; a `pre-pr-gate.mjs` (PR-leírás) és a `record-review.mjs` (ellenőri jelentés: hamis hivatkozásnál ítélet nem rögzíthető) bekötése a #490 után egy lépésben ráilleszthető hunkként (végrehajtás S2.5) | `node --test`; próba a saját zárójelentésen | a HAMIS hivatkozás bukás | S1 után |
 | **(kiadva)** | állapot-ellenőrzők | `scripts/qa/checks/` (`memory-check`, `kanban-check`, `env-doctor`, termék-kereső aranykészlet), `websuli-allapot-ellenor` skill — a `chore/allapot-ellenorok` ágon, másik alügynök; a 6.6a konvenció szerint | saját | — | igen (diszjunkt) |
 | **S3** | spec ↔ teszt követhetőség | új: `scripts/qa/spec-trace.mjs` + teszt; mód.: `pre-push-gate.mjs` (1 lépés), `docs/specs/_TEMPLATE.md` | `node --test` | warn | S2 után (formátum), S5/S8-cal párhuzamos |

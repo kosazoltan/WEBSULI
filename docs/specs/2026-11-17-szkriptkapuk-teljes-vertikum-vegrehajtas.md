@@ -3,7 +3,41 @@
 > Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` · Kanban: #91
 > Ágak: `docs/szkriptkapuk-terv` (S0) → `chore/kapu-teszt-integritas` (S1, az S0-ra építve) → `chore/kapu-allitas-ellenor` (S2, az
 > S1-re építve). Munkafa: `.claude/worktrees/szkriptkapuk`.
-> **Állapot:** S0 kész (terv-PR) · S1 kész (`chore/kapu-teszt-integritas`) · S2 kész (`chore/kapu-allitas-ellenor`; az S0–S2 EGY PR-ban, orkesztrátori döntés 2026-11-17) · S8 végrehajtás alatt (`chore/kapu-ingadozo`, push nélkül) · S3, S5, S6, S7 kiadható megbízás (lent) · S4 az összevonások után.
+> **Állapot:** S0, S1, S2, S8 megvalósítva EGY ágon (`chore/kapu-ingadozo`; egy PR, orkesztrátori döntés 2026-11-17) · a független
+> review (`82ea5b1a`, NEM: B1–B2, M1–M4, K1–K10) javítókör alatt — lásd „R — Javítókör” · S3, S5, S6, S7 kiadható megbízás (lent) ·
+> S4 az összevonások után.
+
+## R — Javítókör a független review után (2026-11-17; jelentés: a scratchpad `review-szkriptkapuk/jelentes.md`)
+
+Elv: a terv 6.3a „Bevezetési lépcsők” szakasza szerint MINDEN új kapu `warn` alapértékkel indul; a tiltás konfig-kapcsoló, alapból KI.
+
+1. **S2 hivatkozás-ellenőrző (B1, K6, K7):** kódidézet CSAK explicit jelöléssel (`fájl:sor` → `kód`, vagy `fájl:sor` idézet: `kód`);
+   szakasz-fej (`# … fej <hash>`) és explicit `<fej>:fájl:sor` szintaxis — a hivatkozás a saját fején ellenőrzött; a fejen nem létező
+   út NEM ELLENŐRIZHETŐ, kivéve a teljes (ismert gyökérmappás) `fájl:sor` hivatkozást, amely a repó TELJES történetében sem létezik
+   (az HAMIS); negatív hivatkozás (`!fájl` vagy „nem létezik:” előtag) → IGAZ, ha tényleg nincs; rövidítés-előtag (`WT/`, `L/` …),
+   `…`-os és helyőrzős (`<x>`) alak kihagyva / NEM ELLENŐRIZHETŐ; `npm run` név végi írásjel és toldalék levágva; tilde-kerítés;
+   „fájl N. sorában” és `fájl#L<N>` alak kigyűjtve; a NEM ELLENŐRIZHETŐ arány kiírva, küszöb fölött figyelmeztet
+   (`gates.config.json` → `claims.unknownWarnRatio`).
+2. **Regressziós korpusz (B1/1):** `scripts/qa/gates/verify-report-corpus.mjs --root <scratchpad> [--doc <md>]` (helyi, útvonal-
+   paraméteres; a jelentések NEM kerülnek a repóba); a CI-ban hibaosztályonként egy-egy anonimizált minta a `verify-report.test.mjs`-ben.
+   Cél: 0 hamis HAMIS a korpuszon, a hamisított változatok (nem létező sor / fájl, hamis idézet, nem létező szkript, „30/30” 29
+   mellett) továbbra is buknak.
+3. **Bevezetés (B1/5):** `record-review` és `gate:pr`: `modes.claims-verify` (`warn` alapból) — WARN + tételes lista, az ítélet rögzül.
+4. **`--report` szigorítás (M1):** a fej és a bázis a hívótól jön (`--head`, `--base`), a blokk feje egyezzen; kötelező mezők; zárt
+   állapot-szótár (PASS / FAIL / NOT RUN); a rekord parancsa = az állított parancs (normalizálva) és a fej; a prózai „N/M teszt”
+   blokk-megfelelő nélkül bukás; minden kijátszás negatív teszt.
+5. **Lánc (M2, M3):** azonosító-szűrés (`[a-z0-9-]`); láncon kívüli rekord érvénytelen; hiányzó lánc ≠ üres lánc; atomi hozzáfűzés
+   kizáró zárfájllal (`wx`), korlátos újrapróbával, elárvult zár kezelésével; teszt 8 párhuzamos író × 200 rekord; `evidence-chain.mjs
+   --verify` és `--repair` (archivál + naplóz, nem simít); a lánc-ellenőrzés `modes.evidence-chain` szerint (`warn` alapból); a runbook
+   őszintén leírja, mit véd és mit nem.
+6. **S1 (B2, M4):** a CI-ban `warn` + job-összefoglaló (`$GITHUB_STEP_SUMMARY`); a döntő nézet a main CSÚCSÁHOZ képesti, összefésült
+   diff (`git merge-tree --write-tree`), a commit-nézet csak a mainen még nem létező fájlokra fut és soha nem tilt; a SPEC-VÁLTOZÁS a
+   fejen meglévő terv hivatkozott pontjával is igazolt; a lazítás visszaállítása / ugyanazon alany megmaradó állítása nem lelet; minták:
+   `*.integration.ts`, `source/tests/support/`; többsoros állítás, új időkorlát módosított fájlban, tűrés-konstans a tesztfájlban,
+   `.skip(` / `.fixme(` a CI-ban is; a kapu saját fájljainak változása hangos jelzés (K2); a `--json` egyetlen JSON (K4); a fej-tartalmak
+   egyetlen `git cat-file --batch` hívással (K10); „Mit NEM fog meg” a runbookban és „ismert korlát” tesztként.
+7. **Egyéb:** K5 (bővebb parancssor- és kimenet-szűrés az `evidence-run`-ban), K8 (a doksik és a kód egyeztetése), K9 (a számok
+   forrással), K1 és K3 maradéka jegyre / a megfeleltetési táblába.
 
 Szabályok minden szeletre: a `source/` futásidejű kódja nem módosul; minden szkript Node ESM, függőség nélkül, injektálható futtatóval
 (`exec`), `node --test` tesztekkel, Windows x64 / ARM64 / Linux; regexet csak Edit / Write eszközzel írj és olvasd vissza; tesztet
