@@ -147,7 +147,8 @@ export function gateHeightPx(label: string, innerWidthPx = GATE_LABEL_MIN_WIDTH_
   const font = label.length > GATE_LABEL_LONG_CHARS ? 13 : 16;
   // Óvatos becslés (8 px-szel keskenyebb doboz): a határesetű felirat inkább két sornak számít → inkább lista mód, mint takarás.
   const lines = Math.min(GATE_LABEL_MAX_LINES, Math.max(1, estimateLines(label, innerWidthPx - 8, font)));
-  return Math.max(56, 6 + 13 + 26 + 3 + Math.ceil(lines * font * 1.15));
+  // + 4 px: a felirat 2 + 2 px-es függőleges belső ráhagyása (D-J1a-19, ékezet / alsó szár csonkolása ellen).
+  return Math.max(56, 6 + 13 + 26 + 3 + 4 + Math.ceil(lines * font * 1.15));
 }
 
 /**

@@ -656,28 +656,139 @@ for (const viewport of [
   });
 }
 
-test.describe("390x844: lassú képkockánál is: ami élesnek látszik, arra az érintés válasz (élesítés = elfogadás)", () => {
+/*
+ * D-J1a-19: az élesítés lap-szinten, léptetett órával (Playwright-óra). Minden lépés EGY képkocka 500 ms-mal (2 fps; a
+ * meghajtó a képkocka-plafon miatt 250 ms-ot lép). Elvárás: a táblák látható élessége (`data-armed`) és a meghajtó
+ * elfogadása (`probe().armed`) minden lépésben egyezik — a látható-éles, de el nem fogadott állapot ideje 0. A régi, valós
+ * idős (450 ms-os `setTimeout`) élesítéssel az első lépés után a tábla éles, a meghajtó még nem fogad el → bukik.
+ */
+test.describe("390x844: élesítés = elfogadás léptetett órával, 2 fps-es képkockákkal (D-J1a-19)", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test("CPU-lassítás mellett a válaszcélok csak akkor élesek, amikor a meghajtó elfogadja: az élesítés utáni első koppintás válasz", async ({ page }) => {
+  test("minden lépésben: a tábla akkor és csak akkor éles, amikor a meghajtó elfogadja az érintést", async ({ page }) => {
     test.setTimeout(120_000);
+    await page.clock.install();
+    await page.goto("/games/tsunami-english?seed=11&difficulty=easy");
+    await page.getByTestId("button-tsunami-start").tap();
+    await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible({ timeout: 30_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: { forceState?: unknown } }).__websuliGame?.forceState === "function");
+    // Az óra innentől csak léptetésre halad.
+    await page.clock.pauseAt(new Date(Date.now() + 60_000));
+    await openQuestion(page, { question: true, answers: SHORT_ANSWERS });
+    const seen: string[] = [];
+    let armedSeen = false;
+    for (let step = 0; step < 12 && !armedSeen; step++) {
+      await page.clock.fastForward(500);
+      await page.waitForTimeout(150); // a React-render (MessageChannel, nem a hamis óra) lefusson
+      const s = await page.evaluate(() => {
+        const api = (window as unknown as { __websuliGame: { probe: () => { armed: number } } }).__websuliGame;
+        const quiz = document.querySelector('[data-testid="ts-quiz"]');
+        return { dom: quiz ? quiz.getAttribute("data-armed") : null, armed: api.probe().armed };
+      });
+      seen.push(`${step}: dom=${s.dom} meghajtó=${s.armed}`);
+      if (s.dom === null) continue;
+      expect(s.dom === "true", `a látható élesség és az elfogadás egyezik (${seen.join(" | ")})`).toBe(s.armed === 1);
+      if (s.armed === 1) armedSeen = true;
+    }
+    expect(armedSeen, `a táblák élessé váltak (${seen.join(" | ")})`).toBe(true);
+  });
+});
+
+const RISKY_BANK_ANSWERS = [
+  // A reviewer szigorú (vastagbetűs) modellje szerint 4 sorra törhető, a becslő szerint beférő valódi banki válaszok (7010-ből 12).
+  "A laptopom folyton túlmelegszik.",
+  "Jedlik Ányos és Puskás Tivadar",
+  "más állatokat zsákmányolnak",
+  "az oldalfelező merőlegesek",
+  "Lengyelország megtámadása",
+  "Egy gondolat bánt engemet",
+  "folyékonyból légneművé",
+  "a nagynénje szidta meg",
+  "a Jelenések könyvéből",
+  "Most megyek Londonba.",
+  "Nem néznek egymásra.",
+  "egy mérés eredménye",
+];
+
+for (const viewport of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+]) {
+  test.describe(`${viewport.width}x${viewport.height}: a 12 kockázatos valódi banki válasz — levágott tábla soha (D-J1a-19)`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test("mért túlcsordulás tételenként; a lapon egyik sem jelenik meg levágott táblán (lista mód elfogadható)", async ({ page }) => {
+      test.setTimeout(150_000);
+      await page.goto("/games/tsunami-english?seed=11&difficulty=easy");
+      await page.getByTestId("button-tsunami-start").tap();
+      await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+      const quiz = page.getByTestId("ts-quiz");
+      for (let i = 0; i < RISKY_BANK_ANSWERS.length; i += 3) {
+        const group = RISKY_BANK_ANSWERS.slice(i, i + 3);
+        await expect(quiz).toHaveCount(0, { timeout: 20_000 });
+        await openQuestion(page, { question: true, answers: group });
+        await expect(quiz).toHaveAttribute("data-armed", "true", { timeout: 15_000 });
+        const m = await page.evaluate(() => ({
+          long: document.querySelector('[data-testid="ts-quiz"]')?.getAttribute("data-long"),
+          font: getComputedStyle(document.querySelector('[data-testid="ts-quiz"] .ts-gate-label') ?? document.body).fontFamily,
+          gates: Array.from(document.querySelectorAll('[data-testid="ts-quiz"] .ts-gate-label')).map((el) => ({
+            text: el.textContent ?? "",
+            over: el.scrollHeight - el.clientHeight,
+          })),
+        }));
+        for (const g of m.gates) console.log(`RISKY12 ${viewport.width}x${viewport.height} over=${g.over}px "${g.text}" (betű: ${m.font})`);
+        if (m.long === "true") console.log(`RISKY12 ${viewport.width}x${viewport.height} lista mód: ${group.join(" | ")}`);
+        // Mérve: levágás nélkül 1–2 px, egy levágott sor ~15–16 px.
+        for (const g of m.gates) expect(g.over, `levágott tábla: „${g.text}” (${g.over} px)`).toBeLessThanOrEqual(4);
+        // Gyors zárás: a jó válasz (tábla vagy lista-gomb).
+        await page.locator('[data-testid="ts-quiz"] [data-correct="true"], [data-testid="ts-question"] [data-correct="true"]').first().tap();
+      }
+    });
+  });
+}
+
+/*
+ * D-J1a-19: a futásidejű háló önállóan — kényszerített nagyobb betűméret (más betűkészlet / nagyítás szimulációja): a becslő
+ * szerint beférő felirat a valódi kirajzolásban levágódna → a háló lista módra vált. A háló nélkül a tábla levágva maradna.
+ */
+test.describe("390x844: a futásidejű háló a becslőtől függetlenül megfogja a levágást (D-J1a-19)", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("nagyított tábla-felirat: nincs levágott tábla, a kérdés lista módban, teljes szöveggel", async ({ page }) => {
     await page.goto("/games/tsunami-english?seed=11&difficulty=easy");
     await page.getByTestId("button-tsunami-start").tap();
     await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 20 });
-    try {
-      await openQuestion(page, { question: true, answers: SHORT_ANSWERS });
-      const quiz = page.getByTestId("ts-quiz");
-      await expect(gates(page)).toHaveCount(3, { timeout: 30_000 });
-      await expect(quiz).toHaveAttribute("data-armed", "true", { timeout: 30_000 });
-      // Azonnal az élesítés után: koppintás egy rossz táblán.
-      const wrong = (await page.locator('[data-testid="ts-quiz"] .ts-gate[data-correct="false"]').first().boundingBox())!;
-      await page.touchscreen.tap(wrong.x + wrong.width / 2, wrong.y + wrong.height / 2);
-      await expect.poll(async () => (await probe(page)).questionsAnswered, { timeout: 30_000, message: "az élesnek mutatott táblára eső koppintás válasz" }).toBe(1);
-      expect((await probe(page)).questionsCorrect).toBe(0);
-    } finally {
-      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
-    }
+    await page.addStyleTag({ content: ".ts-gate-label, .ts-gate[data-long] .ts-gate-label { font-size: 24px !important; }" });
+    await openQuestion(page, { question: true, answers: PORTRAIT_MULTI_LINE_ANSWERS });
+    const quiz = page.getByTestId("ts-quiz");
+    await expect(quiz).toBeAttached({ timeout: 10_000 });
+    await page.waitForTimeout(600);
+    const m = await page.evaluate(() => ({
+      long: document.querySelector('[data-testid="ts-quiz"]')?.getAttribute("data-long"),
+      clipped: Array.from(document.querySelectorAll('[data-testid="ts-quiz"] .ts-gate-label')).filter((el) => el.scrollHeight - el.clientHeight > 4).map((el) => el.textContent),
+      list: Array.from(document.querySelectorAll('[data-testid="ts-question"] .play-question-label')).map((el) => el.textContent),
+    }));
+    expect(m.clipped, "nincs levágott tábla-felirat").toEqual([]);
+    expect(m.long, "a levágódó felirat lista módot ad").toBe("true");
+    expect(m.list.slice().sort()).toEqual([...PORTRAIT_MULTI_LINE_ANSWERS].sort());
+  });
+});
+
+test.describe("360x640: ékezetes nagybetű és alsó szár a táblán (D-J1a-19, 2 px ráhagyás)", () => {
+  test.use({ viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true });
+
+  test("Á / Ő / Ű és g / j / p / y: a felirat dobozán 2 px ráhagyás (kép)", async ({ page }) => {
+    await page.goto("/games/tsunami-english?seed=11&difficulty=easy");
+    await page.getByTestId("button-tsunami-start").tap();
+    await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+    await openQuestion(page, { question: true, answers: ["Ágyú Őr", "Űr gyógy", "jég pipa"] });
+    await expect(gates(page)).toHaveCount(3, { timeout: 10_000 });
+    await expect(page.getByTestId("ts-quiz")).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
+    const pad = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-testid="ts-quiz"] .ts-gate-label')).map((el) => `${getComputedStyle(el).paddingTop}/${getComputedStyle(el).paddingBottom}`),
+    );
+    for (const p of pad) expect(p).toBe("2px/2px");
+    await shot(page, "tsunami-360x640-accents.jpg");
   });
 });

@@ -1686,6 +1686,8 @@ export default function TsunamiEscapeEnglish() {
           questionId: p?.id ?? null,
           questionSeconds: p ? p.windowMs / 1000 : null,
           reveal: ctl.view().reveal ? 1 : 0,
+          // D-J1a-19: a meghajtó elfogadná-e most az érintést (az élesítés-teszt a táblák látható élességével veti össze).
+          armed: driver.armedPresentationId() !== null ? 1 : 0,
           collisions: st.collisions,
           phase: st.phase,
           paused: pausedNowRef.current || whyOpenRef.current ? 1 : 0,
@@ -1735,6 +1737,20 @@ export default function TsunamiEscapeEnglish() {
   // szöveggel mutatja a válaszokat (a kulcs-kör a kapu színe + szimbóluma), táblák nélkül.
   // D-J1a-18: magasságban is — ha a táblák nem férnek a kártya alja és a futó feje közé, szintén lista mód.
   const longMode = !!pres && (!pres.options.every((o) => gateLabelFits(o.label, gateBox.width - 22)) || !gatesFitH);
+  // D-J1a-19: futásidejű háló — a becslő betűmetrika-függő (más telefon / betűkészlet / nagyítás), a háló a tényleges
+  // kirajzolást méri: ha egy tábla felirata levágódna, a kérdés lista módra vált. Stabil: lista módban nincs tábla, ami
+  // visszaválthatna; a következő kérdés / átméretezés újra dönt. Küszöb: fél sor. Mérve (2026-11-17, SwiftShader, 360 / 390 /
+  // 844 px-es nézet, 106 / 116 / 160 px-es tábla): levágás nélkül a scrollHeight − clientHeight 1–2 px (a bank leghosszabb
+  // válaszai + előtagjaik, és a reviewer 12 kockázatos valódi válasza — egyik sem vágódott le), egy levágott sor 16 px; a fél
+  // sor (7,5 px 13 px-es, 9,2 px 16 px-es betűnél) egyértelműen a kettő között van.
+  useLayoutEffect(() => {
+    if (presId === null || longMode) return;
+    const clipped = Array.from(gatesRef.current?.querySelectorAll<HTMLElement>(".ts-gate-label") ?? []).some((el) => {
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 18;
+      return el.scrollHeight - el.clientHeight > lh * 0.5;
+    });
+    if (clipped) setGatesFitH(false);
+  }, [presId, longMode]);
   // D-J1a-17 (ÚK2): „Jó kapu!” felirat a jó kapun bemenet nélkül átfutó gyereknek (a nyilvántartásban „nem válaszolt”).
   const idleGoodShown = !!pres && !!reveal && reveal.pickedOptionIndex === null && idleGoodId === pres.id;
   const questionBar = (inside: boolean) => (
@@ -2215,7 +2231,9 @@ const TSUNAMI_CSS = `
 }
 .ts-gate-sym svg { width: 17px; height: 17px; }
 .ts-gate-label { font-size: 16px; font-weight: 900; line-height: 1.15; overflow-wrap: break-word; word-break: normal; hyphens: manual; text-shadow: 0 1px 2px #000a;
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+  /* D-J1a-19: 2 px függőleges ráhagyás — a nagybetű ékezete (Á, Ő, Ű) és az alsó szár (g, j, p, y) ne csonkolódjon. */
+  padding-block: 2px; }
 .ts-gate[data-long="true"] .ts-gate-label { font-size: 13px; }
 .ts-gate[data-state="correct"] { background: #15803d; border-color: #bbf7d0; box-shadow: 0 0 0 2px #052e16, 0 0 28px #4ade80; animation: ts-gate-pop .3s ease-out; }
 .ts-gate[data-state="correct"] .ts-gate-sym { background: #22c55e; color: #fff; }
