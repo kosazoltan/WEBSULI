@@ -424,3 +424,54 @@ test.describe("véletlen válasz valódi érintéssel", () => {
     expect(pr.questionsAnswered).toBe(1);
   });
 });
+
+/**
+ * Válaszidő (terv docs/specs/2026-11-17-brainrot-valaszido.md; tulajdonosi hibajelentés 2026-11-17): a leghosszabb
+ * kérdést (prompt + a 4 válasz) a tanuló 100 szó/perccel végigolvassa, és utána a jó ketrecre bökve (valódi érintés) még
+ * időben válaszol. A várakozás a lapon belül, a kérdés-órán fut. Az első 600 ms-ban (előjelzés) a hátralévő idő nem fogy.
+ */
+test.describe("válaszidő 390 px-en", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  test("hosszú kérdés: kényelmes (100 szó/perces) végigolvasás után is időben lehet válaszolni", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/brain-rot-steal?seed=11");
+    await page.getByRole("button", { name: /vadászat indítása/i }).tap();
+    await expect(page.getByTestId("br-board")).toBeVisible();
+    await page.waitForTimeout(1500); // az évfolyam-bank lusta betöltése
+    await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ phase: "quiz-longboth" }));
+    await expect(cages(page)).toHaveCount(4, { timeout: 10_000 });
+    const r = await page.evaluate(async () => {
+      const g = (window as unknown as { __websuliGame: { probe: () => Record<string, number | string | null> } }).__websuliGame;
+      const frame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
+      const clock = () => Number(g.probe().clock);
+      const open = clock();
+      const fill = () => {
+        const el = document.querySelector<HTMLElement>('[data-testid="play-question-timer"] .play-question-timer-fill');
+        const m = el ? /scaleX\(([\d.]+)\)/.exec(el.style.transform) : null;
+        return m ? Number(m[1]) : NaN;
+      };
+      // Az előjelzés alatt a csík tele (az óra még nem indult).
+      let minFillLeadIn = 1;
+      while (clock() - open < 500) {
+        minFillLeadIn = Math.min(minFillLeadIn, fill());
+        await frame();
+      }
+      const prompt = document.querySelector('[data-testid="br-quiz"] .play-question-prompt')?.textContent ?? "";
+      // A ketrec akadálymentes felirata: „N. ketrec: <válasz>” — csak a válasz szövege számít.
+      const labels = Array.from(document.querySelectorAll('[data-testid^="br-cage-"]')).map((el) => (el.getAttribute("aria-label") ?? "").replace(/^\d+\. ketrec: /u, ""));
+      const words = (prompt + " " + labels.join(" ")).trim().split(/\s+/u).length;
+      const readMs = Math.round((words / 100) * 60_000);
+      while (clock() - open < readMs) await frame();
+      return { minFillLeadIn, words, readMs, windowSec: Number(g.probe().questionSeconds), open: Number(g.probe().questionOpen) };
+    });
+    await shot(page, "valaszido-olvasas-utan-390x844.jpg"); // a végigolvasás pillanata (a hátralévő idő látszik)
+    expect(r.minFillLeadIn, "az előjelzés alatt a hátralévő idő nem fogy").toBeGreaterThan(0.99);
+    expect(r.open, `a végigolvasás (${r.words} szó, ${r.readMs} ms) után a kérdés még nyitva (ablak ${r.windowSec} s)`).toBe(1);
+    const good = (await page.locator('[data-testid="br-cages"] [data-correct="true"]').boundingBox())!;
+    await page.touchscreen.tap(good.x + good.width / 2, good.y + good.height / 2);
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.probe().questionsCorrect), { timeout: 10_000, message: "a jó ketrecre bökve időben helyes válasz" })
+      .toBe(1);
+    await shot(page, "valaszido-hosszu-390x844.jpg");
+  });
+});

@@ -39,6 +39,7 @@ import {
   type BrainRotState,
   type BrainRotTuning,
 } from "./core";
+import { paceBrainRotDirector } from "./pacing";
 import { createCouponRepeat } from "./couponRepeat";
 
 /** A sim táblája (CSS px): tipikus álló telefon a HUD alatt. */
@@ -151,6 +152,7 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     startBand: 0.4,
     now: () => T0,
   });
+  const paced = paceBrainRotDirector(director, { grade: () => grade });
   const asked: string[] = [];
   /** A bot választott ketrece (a nyitott kérdéshez), vagy null. */
   let chosen: { id: number; option: number } | null = null;
@@ -159,7 +161,8 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
   let holdFor = 0;
   let driver: BrainRotDriver | null = null;
   const ui = createQuestionUi({
-    director: () => (questions ? director : null),
+    // Válaszidő (terv 2026-11-17-brainrot-valaszido): ugyanaz a burkoló, mint a lapon (olvasásalapú ablak, előjelzés utáni óra).
+    director: () => (questions ? paced : null),
     onView: () => {},
     onShow: (p) => {
       asked.push(p.question.key);
