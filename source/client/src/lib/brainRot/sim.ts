@@ -33,6 +33,7 @@ import {
   brainRotDirectorConfig,
   createBrainRotDriver,
   type BrainRotDriver,
+  type BrainRotEvent,
   type BrainRotState,
   type BrainRotTuning,
 } from "./core";
@@ -61,6 +62,12 @@ export type BrainRotSimOptions = {
   material?: readonly FourChoiceQuiz[];
   /** A szintetikus bank mérete (alap 600). 0 → üres forrás (terv 8.1: a játék kérdés nélkül fut). */
   bankSize?: number;
+  /**
+   * Review #485 B1 — emberi bemenet: a bot a kérdés megjelenése után még ennyi ms-ig tolja a joystickot a régi irányba,
+   * mielőtt elengedi és olvas (alap: seedelten 150–500 ms; 0 = azonnal elenged). `"tap"`: böködéses mód (a lényre bök).
+   */
+  releaseMs?: number | "human";
+  input?: "stick" | "tap";
 };
 
 export type BrainRotSim = {
@@ -78,6 +85,8 @@ export type BrainRotSim = {
   hash(): string;
   /** A menet kérdés-kulcsai sorban (változatosság / forrásrend teszt). */
   askedKeys(): readonly string[];
+  /** A bot döntése ELŐTT regisztrált ketrec-válaszok száma (véletlen válasz — review #485 B1; 0 kell). */
+  prematureAnswers(): number;
   director: QuestionDirector;
   driver: BrainRotDriver;
 };
@@ -120,6 +129,9 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
   const asked: string[] = [];
   /** A bot választott ketrece (a nyitott kérdéshez), vagy null. */
   let chosen: { id: number; option: number } | null = null;
+  /** A nyitott kérdés megjelenése (kérdés-óra ms) és a bot késleltetett elengedése (ms). */
+  let shownAt = 0;
+  let holdFor = 0;
   let driver: BrainRotDriver | null = null;
   const ui = createQuestionUi({
     director: () => (questions ? director : null),
@@ -127,6 +139,8 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     onShow: (p) => {
       asked.push(p.question.key);
       chosen = null;
+      shownAt = driver ? driver.clockMs() : 0;
+      holdFor = opts.releaseMs === undefined || opts.releaseMs === "human" ? 150 + botRng.next() * 350 : opts.releaseMs;
       driver!.core.openCages(p.options.length, p.id);
     },
     onOutcome: (o, p) => {
@@ -146,6 +160,10 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
   });
   const d = driver;
   const core = d.core;
+  const botRng = createRng(seedFrom(BRAIN_ROT_GAME_ID, seed, "bot-release"));
+  const tapMode = opts.input === "tap";
+  let lastDir = { x: 0, y: 0 };
+  let premature = 0;
 
   /** A bot célpontja: a választott ketrec, különben a legközelebbi szabad lény (a fáradt előnyben). */
   function steer(skillRoll: number): void {
@@ -153,6 +171,12 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     const p = st.player;
     let tx: number | null = null;
     let ty = 0;
+    const open = ui.active();
+    if (open && st.cagesOpen && !tapMode && d.clockMs() - shownAt < holdFor) {
+      // Emberi reakció: a gyerek a kérdés megjelenése után még tolja a régi irányba (review #485 B1).
+      core.setInput(lastDir.x, lastDir.y);
+      return;
+    }
     if (chosen && st.cagesOpen && ui.active()?.id === chosen.id) {
       // A választott ketrec: oda fut és MEGÁLL benne (a böködéses célzás mintája — a válasz a beállás, review #485).
       const cage = st.cages[chosen.option];
@@ -175,11 +199,21 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
       core.setInput(0, 0);
       return;
     }
+    if (tapMode) {
+      // Böködéses mód: a lény pillanatnyi helyére bök (a vadász oda fut); elkapás után nem bök tovább.
+      core.setTarget(tx, ty);
+      return;
+    }
     const dx = tx - p.x;
     const dy = ty - p.y;
     const len = Math.hypot(dx, dy);
-    core.setInput(len > 1e-6 ? dx / len : 0, len > 1e-6 ? dy / len : 0);
+    lastDir = { x: len > 1e-6 ? dx / len : 0, y: len > 1e-6 ? dy / len : 0 };
+    core.setInput(lastDir.x, lastDir.y);
   }
+  const countPremature = (e: BrainRotEvent) => {
+    if (e.type === "cageHit" && !decidedBefore) premature += 1;
+  };
+  let decidedBefore = false;
 
   return {
     step(dtMs, input) {
@@ -188,7 +222,8 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
         return;
       }
       steer(input.skillRoll);
-      d.frame(dtMs, false);
+      decidedBefore = chosen !== null;
+      d.frame(dtMs, false, countPremature);
     },
     question() {
       const p = ui.active();
@@ -209,6 +244,7 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     state: () => core.state(),
     hash: () => core.hash(),
     askedKeys: () => asked,
+    prematureAnswers: () => premature,
     director,
     driver: d,
   };

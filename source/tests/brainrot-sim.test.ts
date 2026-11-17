@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { medianOf, runSim, runSimSeeds, SIM_AVERAGE, SIM_STRONG, SIM_WEAK, SIM_YOUNG, type SimGameFactory, type SimPlayer } from "./support/game-sim";
+import { medianOf, runSim, runSimSeeds, simSeeds, SIM_AVERAGE, SIM_STRONG, SIM_WEAK, SIM_YOUNG, type SimGameFactory, type SimPlayer } from "./support/game-sim";
 import { createSimGame } from "../client/src/lib/brainRot/sim";
 import { ROUND_MS } from "../client/src/lib/brainRot/core";
 
@@ -80,7 +80,8 @@ test("K.6 kérdés nélkül (questions: false): a menet végigjátszható, és v
   const noQ = runSimSeeds(factory(), SIM_AVERAGE, { gameId: GAME, seconds: 180, questions: false });
   assert.ok(noQ.every((r) => Math.abs(r.durationSec - 90) < 0.05), "minden menet a 90 mp végén zárul");
   assert.ok(noQ.every((r) => r.stats.asked === 0));
-  assert.ok(noQ.some((r) => r.won), "megnyerhető");
+  // J5a 13. (review #485 K1/K2): a kérdés nélküli megtartás pontot ad, de győzelmet nem — a kérdés így sosem ront az esélyen.
+  assert.ok(noQ.every((r) => !r.won), "kérdés nélkül nincs győzelem (a megtartás csak pont)");
   // Ügyetlen játékos (alig kormányoz): a 10 lény nem jön össze → vereség lehetséges.
   const clumsy: SimPlayer = { accuracy: 0.5, reactionMedianMs: 3000, skill: 0.03 };
   const lose = runSimSeeds(factory(), clumsy, { gameId: GAME, seconds: 180, questions: false });
@@ -104,4 +105,35 @@ test("C-56 / review #485: a mindig a jó ketrecet választó bot egyetlen kérd�
   const perfect: SimPlayer = { accuracy: 1, reactionMedianMs: 2000, skill: 0.9 };
   const runs = runSimSeeds(factory(), perfect, { gameId: GAME, seconds: 180 });
   for (const r of runs) assert.equal(r.stats.wrong, 0, `téves válasz: ${r.stats.wrong}`);
+});
+
+test("review #485 B1: a döntés ELŐTT regisztrált (véletlen) válasz 0 — minden modellnél, emberi elengedéssel (150–500 ms), joystickkal és böködéssel", () => {
+  for (const [player, grade] of [[SIM_AVERAGE, 7], [SIM_YOUNG, 4], [SIM_WEAK, 7], [SIM_STRONG, 7]] as const) {
+    for (const input of ["stick", "tap"] as const) {
+      for (const releaseMs of ["human", 500] as const) {
+        let premature = 0;
+        let asked = 0;
+        for (const seed of simSeeds(GAME)) {
+          const g = createSimGame({ seed, grade, questions: true, input, releaseMs });
+          const r = runSim(() => g, player, { seed, seconds: 180 });
+          premature += g.prematureAnswers();
+          asked += r.stats.asked;
+        }
+        assert.ok(asked > 200, "érdemi minta");
+        assert.equal(premature, 0, `${input}, elengedés ${releaseMs}: ${premature}/${asked} véletlen válasz`);
+      }
+    }
+  }
+});
+
+test("review #485 K2: a gyengébb játékos kérdéssel is nyerhet néha (≥ 3/20), a 3–4. évfolyamos ≥ 12/20; kérdéssel sosem több a vereség, mint nélküle", () => {
+  const weak = runSimSeeds(factory(), SIM_WEAK, { gameId: GAME, seconds: 180 });
+  assert.ok(weak.filter((r) => r.won).length >= 3, `gyengébb: ${weak.filter((r) => r.won).length}/20`);
+  const young = runSimSeeds(factory(), SIM_YOUNG, { gameId: GAME, seconds: 180, grade: 4 });
+  assert.ok(young.filter((r) => r.won).length >= 12, `3–4. évf.: ${young.filter((r) => r.won).length}/20`);
+  for (const [player, grade] of [[SIM_AVERAGE, 7], [SIM_YOUNG, 4], [SIM_WEAK, 7], [SIM_STRONG, 7]] as const) {
+    const withQ = runSimSeeds(factory(), player, { gameId: GAME, seconds: 180, grade });
+    const noQ = runSimSeeds(factory(), player, { gameId: GAME, seconds: 180, grade, questions: false });
+    assert.ok(withQ.filter((r) => !r.won).length <= noQ.filter((r) => !r.won).length, "kérdéssel nem több vereség");
+  }
 });

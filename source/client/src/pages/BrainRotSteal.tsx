@@ -1,6 +1,6 @@
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createRng, seedFrom } from "@shared/game-rng";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link, useLocation } from "wouter";
 import CollectibleAvatar from "@/components/CollectibleAvatar";
 import { ArrowLeft, Pause, Zap } from "lucide-react";
@@ -35,7 +35,11 @@ import {
   BRAIN_ROT_GAME_ID,
   BRAIN_ROT_KINDS,
   CAGE_DWELL_MS,
+  CAGE_LABEL_FONT_LONG,
   CLEAR_CATCHES,
+  cageLabelFont,
+  cageLabelsFit,
+  cageWidthU,
   ROUND_MS,
   brainRotDirectorConfig,
   createBrainRotDriver,
@@ -256,13 +260,6 @@ function asFour(q: Quiz) {
   return { id: q.id ?? "", prompt: q.prompt, options: q.options.slice(), correctIndex: q.correctIndex, ...(q.explanation ? { explanation: q.explanation } : {}) };
 }
 
-/** A felirat leghosszabb szava (a ketrec-felirat kisebb betűt kap, ha egy szó nem fér ki — ne törjön a szó közepén). */
-function longestWord(label: string): number {
-  let best = 0;
-  for (const w of label.split(" ")) best = Math.max(best, w.length);
-  return best;
-}
-
 function categoryOf(subject: string | undefined): Quiz["category"] {
   return subject && subject in CATEGORY_LABELS ? (subject as Quiz["category"]) : "english";
 }
@@ -367,6 +364,8 @@ export default function BrainRotSteal() {
   const runIndexRef = useRef(0);
   const runSeedRef = useRef<string>(seedFrom(seedBase, 0));
   const pickRngRef = useRef<() => number>(createRng(seedFrom(BRAIN_ROT_GAME_ID, runSeedRef.current, "pick")).next);
+  /** Teszt-kampó: a következő kérdés (a mérő leghosszabb-válasz / leghosszabb-prompt esete). */
+  const forcedQuizRef = useRef<PlayQuestion | null>(null);
 
   /**
    * A kérdés-ütemező forrása (K.2 forrásrend): (1) nem látott tananyag → (2) évfolyam-bank (az angol hely a szóbankból) →
@@ -392,6 +391,12 @@ export default function BrainRotSteal() {
         });
       },
       fresh: () => {
+        // Teszt-kampó (csak a teszt-buildben kérhető): a leghosszabb válaszú / promptú tétel a mérőnek (review #485 B2, K3).
+        const forced = forcedQuizRef.current;
+        if (forced) {
+          forcedQuizRef.current = null;
+          return forced;
+        }
         const grade = gradeRef.current;
         const sharedGrade = gradeForGame(grade);
         const seen = gradeSeenRef.current;
@@ -497,8 +502,17 @@ export default function BrainRotSteal() {
     haptics: false,
     onShow: (p) => {
       firstCageSeenRef.current = true;
-      // Q1 Ketrec-zár: a 4 válasz 4 ketrec az aréna négy negyedében.
-      driverRef.current?.core.openCages(p.options.length, p.id);
+      const core = driverRef.current?.core;
+      if (!core) return;
+      // B2: a ketrec valódi feliratszélességével ellenőrzünk; ha egy válasz nem fér, jelölt mód (szám + szín + jelmagyarázat).
+      const st = core.state();
+      const widthPx = cageWidthU(st.arenaW, st.arenaH, p.options.length) * unitRef.current;
+      const compact = !cageLabelsFit(p.options.map((o) => o.label), widthPx);
+      setCageCompact(compact);
+      core.setCageZone(st.cageTop, compact);
+      // Q1 Ketrec-zár: a 4 válasz 4 ketrec (az előjelzés után élesednek).
+      core.openCages(p.options.length, p.id);
+      setCageZoneVersion((v) => v + 1);
     },
     onOutcome: (o, p) => {
       const picked = o.pickedOriginalIndex === null ? -1 : p.options.findIndex((opt) => opt.originalIndex === o.pickedOriginalIndex);
@@ -535,6 +549,12 @@ export default function BrainRotSteal() {
   const arenaBurstIdRef = useRef(0);
   const [screenFlash, setScreenFlash] = useState<string | null>(null);
   const timeoutsRef = useRef<number[]>([]);
+  /** Időzítő felvétele (L5: a lista nem nő a menet alatt — a régiek már lefutottak, csak az utolsó 32 kell a takarításhoz). */
+  const later = useCallback((fn: () => void, ms: number) => {
+    const list = timeoutsRef.current;
+    list.push(window.setTimeout(fn, ms));
+    if (list.length > 32) list.splice(0, list.length - 32);
+  }, []);
   const scoreSubmittedRef = useRef(false);
   /** Az új rekord-jelzés az eredményképernyőn (futásonként egyszer számolva). */
   const [isNewBest, setIsNewBest] = useState(false);
@@ -552,6 +572,11 @@ export default function BrainRotSteal() {
   }, []);
   /** A joystick húzásának megszakítása szünetkor / fókuszvesztéskor (VirtualJoystick resetSignal). */
   const [joyReset, setJoyReset] = useState(0);
+  /** Jelölt mód (a válaszfelirat nem fér a ketrecbe) és a ketrec-zóna verziója (a memo-s réteg újrarajzolásához). */
+  const [cageCompact, setCageCompact] = useState(false);
+  const [cageZoneVersion, setCageZoneVersion] = useState(0);
+  const [legendTop, setLegendTop] = useState<{ top: number; left: number; width: number } | null>(null);
+  const legendRef = useRef<HTMLDivElement>(null);
   /** K.4/16: balkezes tükrözés — a joystick a jobb hüvelykujjhoz kerül (helyben tárolva, tárolóhiba esetén alapérték). */
   const [leftHanded, setLeftHanded] = useState<boolean>(() => {
     try {
@@ -598,21 +623,17 @@ export default function BrainRotSteal() {
     floatsRef.current = [...floatsRef.current, { id, x: fx, y: fy, text, color, kind }].slice(-8);
     setFloats(floatsRef.current);
     if (kind === "escape") lastEscapeRef.current = { at: now, id, n: 1 };
-    timeoutsRef.current.push(
-      window.setTimeout(() => {
-        floatsRef.current = floatsRef.current.filter((f) => f.id !== id);
-        setFloats(floatsRef.current);
-      }, FLOAT_MS),
-    );
+    later(() => {
+      floatsRef.current = floatsRef.current.filter((f) => f.id !== id);
+      setFloats(floatsRef.current);
+    }, FLOAT_MS);
   }, []);
 
   /** 3D aréna-robbanás: elkapáskor arany szikraeső, elszökéskor rövid füst (csak látvány). */
   const pushArenaBurst = useCallback((x: number, y: number, kind: ArenaBurst["kind"]) => {
     const burstId = arenaBurstIdRef.current++;
     setArenaBursts((prev) => [...prev.slice(-5), { id: burstId, x, y, kind }]);
-    timeoutsRef.current.push(
-      window.setTimeout(() => setArenaBursts((prev) => prev.filter((b) => b.id !== burstId)), 1200),
-    );
+    later(() => setArenaBursts((prev) => prev.filter((b) => b.id !== burstId)), 1200);
   }, []);
 
   /* --- A mag eseményei → hang, rezgés, felirat, robbanás (eseményre, nem képkockánként) --- */
@@ -634,7 +655,7 @@ export default function BrainRotSteal() {
           // Csökkentett mozgásnál nincs villanás (M9).
           if (!reducedMotion) {
             setScreenFlash("rgba(251, 191, 36, 0.15)");
-            timeoutsRef.current.push(window.setTimeout(() => setScreenFlash(null), 300));
+            later(() => setScreenFlash(null), 300);
           }
         }
       } else if (e.type === "lost" || e.type === "escape") {
@@ -793,7 +814,18 @@ export default function BrainRotSteal() {
         };
       },
       forceState: (patch: GameForcePatch) => {
-        if (patch.question || patch.phase === "quiz") {
+        if (patch.phase === "quiz-long" || patch.phase === "quiz-longprompt") {
+          // A kézi bank és a betöltött évfolyam-bank leghosszabb válaszú / promptú tétele (programmal kikeresve).
+          const candidates = [
+            ...ALL_QUIZZES.map((q) => ({ quiz: asFour(q), subject: q.category as string, grade: undefined as number | undefined })),
+            ...loadedGradeItems().map((g) => ({ quiz: { id: g.id, prompt: g.prompt, options: g.options.slice(), correctIndex: g.correctIndex, explanation: g.explanation }, subject: g.subject as string, grade: g.grade })),
+          ];
+          const score = (q: { prompt: string; options: string[] }) =>
+            patch.phase === "quiz-long" ? Math.max(...q.options.map((o) => o.length)) : q.prompt.length;
+          const best = candidates.reduce((a, b) => (score(b.quiz) > score(a.quiz) ? b : a));
+          forcedQuizRef.current = bankPlayQuestion(BRAIN_ROT_GAME_ID, best.quiz, best.subject, best.grade);
+        }
+        if (patch.question || patch.phase === "quiz" || patch.phase === "quiz-long" || patch.phase === "quiz-longprompt") {
           // `phase: "quiz"` a `question: true` kompatibilis álneve (terv 9.): azonnal egy lény a vadász kezében, és kérdés.
           setPaused(false);
           const d = driverRef.current!;
@@ -896,7 +928,12 @@ export default function BrainRotSteal() {
     }
     for (let i = 0; i < st.cageCount; i++) {
       const ring = cageRingRefs.current[i];
-      if (ring) ring.style.setProperty("--dwell", String(Math.min(1, st.cages[i]!.dwellMs / CAGE_DWELL_MS)));
+      if (!ring) continue;
+      ring.style.setProperty("--dwell", String(Math.min(1, st.cages[i]!.dwellMs / CAGE_DWELL_MS)));
+      // KSZ-11: az előjelzés (még nem éles) látható állapot a ketrecen.
+      const box = ring.parentElement;
+      const armed = st.cages[i]!.armed ? "true" : "false";
+      if (box && box.dataset.armed !== armed) box.dataset.armed = armed;
     }
   }, []);
 
@@ -922,6 +959,7 @@ export default function BrainRotSteal() {
       // időskála (szünet 0, nyitott kérdés slowMo) → fix lépés → elkapás / ketrec → események.
       d.frame(dt, pausedRef.current, onEventRef.current);
       paint();
+      if (d.core.running()) endAt = null;
       if (!d.core.running() && qRef.current.settled()) {
         // A menet vége: a futó megoldás-kijelzés lefutott; egy pillanat, és az eredménylap.
         if (endAt === null) endAt = now + 500;
@@ -981,6 +1019,43 @@ export default function BrainRotSteal() {
     }, 100);
     return () => window.clearInterval(id);
   }, [phase, paused]);
+
+  /* --- A ketrec-zóna a kérdés-kártya (és a jelmagyarázat) mért alja alatt (review #485 B2b, K3) --- */
+  const presId = q.state.presentation?.id ?? null;
+  const presReveal = q.state.reveal;
+  useLayoutEffect(() => {
+    if (phase !== "play" || presId === null) return;
+    const card = document.querySelector<HTMLElement>('[data-testid="br-quiz"] .play-question-card');
+    const boardEl = boardRef.current;
+    if (!card || !boardEl) return;
+    const measure = () => {
+      const c = card.getBoundingClientRect();
+      // A jelmagyarázat a kártya alá kerül (a kártya szélességében); fekvő telefonon — ahol a kártya alatt nincs hely egy
+      // ketrecsornak — a kártya MELLÉ, jobbra, ha ott elfér (≥ 170 px).
+      const sideRoom = window.innerWidth - c.right - 16;
+      const side = window.innerWidth > window.innerHeight && window.innerHeight <= 520 && sideRoom >= 170;
+      const next = side ? { top: c.top, left: c.right + 8, width: Math.min(300, sideRoom) } : { top: c.bottom + 6, left: c.left, width: c.width };
+      setLegendTop((prev) =>
+        prev && Math.abs(prev.top - next.top) < 1 && Math.abs(prev.left - next.left) < 1 && Math.abs(prev.width - next.width) < 1 ? prev : next,
+      );
+      const legend = legendRef.current?.getBoundingClientRect();
+      const bottom = Math.max(c.bottom, legend ? legend.bottom : 0);
+      const b = boardEl.getBoundingClientRect();
+      const topU = Math.max(0, bottom - b.top - 2) / unitRef.current;
+      const core = driverRef.current?.core;
+      if (!core) return;
+      const before = core.state().cageTop;
+      core.setCageZone(topU, core.state().cageCompact);
+      if (Math.abs(before - core.state().cageTop) > 0.005) setCageZoneVersion((v) => v + 1);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(card);
+    if (legendRef.current) ro.observe(legendRef.current);
+    ro.observe(boardEl);
+    return () => ro.disconnect();
+  }, [phase, presId, presReveal, cageCompact, legendTop !== null]);
 
   /* --- Bemenet a táblán: böködés / húzás = oda fut a vadász (egyujjas és egeres mód, K.4/17; KSZ-14) --- */
   const boardPointerRef = useRef<number | null>(null);
@@ -1108,10 +1183,10 @@ export default function BrainRotSteal() {
   const hintText =
     hud.hint === 1
       ? touchCapable
-        ? "Húzd a joystickot, és kapd el a lényeket!"
-        : "Bökj a táblára vagy használd a nyilakat: kapd el a lényeket!"
+        ? "Húzd a joystickot!"
+        : "Bökj a táblára vagy nyilazz!"
       : hud.hint === 2 && questionOpen
-        ? "Vidd a lényt a jó válasz ketrecébe, és állj meg benne!"
+        ? "Állj meg a jó ketrecben!"
         : null;
   /* Kombó-szorzó jelvény (csak ha él; változáskor „pop”) — a vezérlősávban / a súgó mellett, nem a ketrecek fölött. */
   const comboBadge =
@@ -1289,7 +1364,8 @@ export default function BrainRotSteal() {
                   reveal={view.reveal}
                   cages={coreState.cages}
                   unitPx={unitPx}
-                  layoutKey={`${board.w}x${board.h}`}
+                  layoutKey={`${board.w}x${board.h}:${cageZoneVersion}`}
+                  compact={cageCompact}
                   disabled={paused}
                   onCage={goToCage}
                   ringRef={setCageRing}
@@ -1380,6 +1456,27 @@ export default function BrainRotSteal() {
         />
       )}
 
+      {/* B2: jelölt módban a kérdés-kártya alatt a teljes válaszok, a ketrecekkel azonos jellel (szám + szín). */}
+      {inRun && cageCompact && pres && showCages && legendTop && (
+        <div
+          ref={legendRef}
+          className="br-legend"
+          data-testid="br-legend"
+          style={{ top: legendTop.top, left: legendTop.left, width: legendTop.width }}
+          aria-hidden="true"
+        >
+          {pres.options.map((opt, i) => {
+            const st = view.reveal ? (i === view.reveal.correctOptionIndex ? "correct" : i === view.reveal.pickedOptionIndex ? "wrong" : "dim") : "idle";
+            return (
+              <p key={`${pres.id}-${i}`} className="br-legend-row" data-mark={i} data-state={st}>
+                <span className="br-legend-key">{i + 1}</span>
+                <span className="br-legend-label">{opt.label}</span>
+              </p>
+            );
+          })}
+        </div>
+      )}
+
       {feedback && <QuizFeedbackCard card={feedback} onDismiss={closeWhy} />}
 
       <PauseMenu
@@ -1446,6 +1543,7 @@ const CageLayer = memo(function CageLayer({
   reveal,
   cages,
   unitPx,
+  compact,
   disabled,
   onCage,
   ringRef,
@@ -1459,6 +1557,8 @@ const CageLayer = memo(function CageLayer({
    * változhat (az `unitPx` marad) — ez a kulcs rajzoltatja újra a memo-s réteget (review #485).
    */
   layoutKey: string;
+  /** Jelölt mód: a ketrecben csak a jel (a teljes válasz a jelmagyarázatban). */
+  compact: boolean;
   disabled: boolean;
   onCage: (i: number) => void;
   ringRef: (i: number, el: HTMLSpanElement | null) => void;
@@ -1476,6 +1576,9 @@ const CageLayer = memo(function CageLayer({
             data-testid={`br-cage-${i}`}
             data-state={st}
             className="br-cage"
+            data-mark={i}
+            data-compact={compact ? "true" : "false"}
+            data-armed="false"
             style={{ left: (cage.x - cage.w / 2) * unitPx, top: (cage.y - cage.h / 2) * unitPx, width: cage.w * unitPx, height: cage.h * unitPx }}
             aria-label={`${i + 1}. ketrec: ${opt.label}`}
             aria-disabled={reveal || disabled ? "true" : undefined}
@@ -1486,9 +1589,11 @@ const CageLayer = memo(function CageLayer({
             <span className="br-cage-key" aria-hidden="true">
               {st === "correct" ? "✓" : st === "wrong" ? "✗" : i + 1}
             </span>
-            <span className="br-cage-label" data-long={opt.label.length > 18 || longestWord(opt.label) > 9 ? "true" : "false"}>
-              {opt.label}
-            </span>
+            {!compact && (
+              <span className="br-cage-label" data-long={cageLabelFont(opt.label) === CAGE_LABEL_FONT_LONG ? "true" : "false"}>
+                {opt.label}
+              </span>
+            )}
           </button>
         );
       })}
@@ -1603,13 +1708,28 @@ const BRAIN_ROT_CSS = `
   .br-cage:focus-visible { outline: 3px solid #fef08a; outline-offset: 2px; }
   .br-cage-dwell { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(90deg, #fde04759 calc(var(--dwell, 0) * 100%), transparent calc(var(--dwell, 0) * 100%)); }
   .br-cage-key { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 9999px; font-size: 15px; font-weight: 900; color: #1e1b4b; background: #e9d5ff; }
-  .br-cage-label { position: relative; min-width: 0; flex: 1 1 auto; font-size: clamp(14px, 4vmin, 18px); font-weight: 800; line-height: 1.18; overflow-wrap: break-word; hyphens: auto; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; text-shadow: 0 1px 2px #0009; }
+  .br-cage-label { position: relative; min-width: 0; flex: 1 1 auto; font-size: 15px; font-weight: 800; line-height: 1.18; overflow-wrap: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; text-shadow: 0 1px 2px #0009; }
   .br-cage-label[data-long="true"] { font-size: 14px; }
   .br-cage[data-state="correct"] { background: linear-gradient(180deg, #15803d, #166534); border-color: #86efac; box-shadow: 0 0 0 2px #0b0720, 0 0 26px #22c55ecc; animation: brcage 0.9s ease-in-out infinite; }
-  .br-cage[data-state="correct"] .br-cage-key { background: #22c55e; color: #fff; }
+  .br-cage[data-state="correct"] .br-cage-key { background: #22c55e !important; color: #fff; }
   .br-cage[data-state="wrong"] { background: linear-gradient(180deg, #9a3412, #7c2d12); border-color: #fdba74; }
-  .br-cage[data-state="wrong"] .br-cage-key { background: #f97316; color: #fff; }
+  .br-cage[data-state="wrong"] .br-cage-key { background: #f97316 !important; color: #fff; }
   .br-cage[data-state="dim"] { opacity: .45; }
+  /* KSZ-11: előjelzés — a ketrec nyílik (szaggatott keret, halványabb), 600 ms után éles. */
+  .br-cage[data-armed="false"][data-state="idle"] { border-style: dashed; opacity: .72; }
+  .br-cage[data-compact="true"] { justify-content: center; }
+  .br-cage[data-compact="true"] .br-cage-key { width: 44px; height: 44px; font-size: 24px; }
+  .br-cage[data-mark="0"] .br-cage-key, .br-legend-row[data-mark="0"] .br-legend-key { background: #fde68a; }
+  .br-cage[data-mark="1"] .br-cage-key, .br-legend-row[data-mark="1"] .br-legend-key { background: #a5f3fc; }
+  .br-cage[data-mark="2"] .br-cage-key, .br-legend-row[data-mark="2"] .br-legend-key { background: #fbcfe8; }
+  .br-cage[data-mark="3"] .br-cage-key, .br-legend-row[data-mark="3"] .br-legend-key { background: #d9f99d; }
+  .br-legend { position: fixed; z-index: 60; display: grid; gap: 4px; padding: 6px 8px; border-radius: 14px; background: #1e1038eb; border: 1.5px solid #a3e635a6; box-shadow: 0 8px 22px #00000066; pointer-events: none; }
+  .br-legend-row { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 14px; font-weight: 800; line-height: 1.25; color: #fff; overflow-wrap: break-word; }
+  .br-legend-key { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 9999px; font-size: 14px; font-weight: 900; color: #1e1b4b; }
+  .br-legend-label { min-width: 0; flex: 1 1 auto; }
+  .br-legend-row[data-state="correct"] .br-legend-label { color: #86efac; }
+  .br-legend-row[data-state="wrong"] .br-legend-label { color: #fdba74; text-decoration: line-through; }
+  .br-legend-row[data-state="dim"] { opacity: .5; }
   @keyframes brcage { 0%, 100% { box-shadow: 0 0 0 2px #0b0720, 0 0 16px #22c55e99; } 50% { box-shadow: 0 0 0 2px #0b0720, 0 0 32px #22c55eff; } }
 
   .br-float { position: absolute; z-index: 5; pointer-events: none; transform: translateX(-50%); white-space: nowrap; font-size: 18px; font-weight: 900; text-shadow: 0 2px 8px #000000d9; animation: brfloat ${FLOAT_MS}ms ease-out both; }

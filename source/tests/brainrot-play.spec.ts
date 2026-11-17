@@ -192,6 +192,42 @@ test.describe("kampóval mért szabályok", () => {
     await expect.poll(() => page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.probe().simTime!), { timeout: 5_000 }).toBeGreaterThan(0);
   });
 
+  test("önellenőrzés (f): „Miért?” + háttérbe tett lap — a szünet folytatása nem oldja fel a „Miért?”-et, csak mindkettő zárása", async ({ page }) => {
+    await startWithQuestion(page);
+    const bad = page.locator('[data-testid="br-cages"] [data-correct="false"]').first();
+    const bb = (await bad.boundingBox())!;
+    await page.touchscreen.tap(bb.x + bb.width / 2, bb.y + bb.height / 2);
+    await page.getByTestId("play-why").tap({ timeout: 10_000 });
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+    // A lap háttérbe kerül (a közös `useAutoPause` útja): a szünetmenü is nyílik.
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    const frozen = () =>
+      page.evaluate(async () => {
+        const g = (window as unknown as GameWindow).__websuliGame!;
+        const a = g.probe();
+        await new Promise((res) => setTimeout(res, 600));
+        const b = g.probe();
+        return { sim: b.simTime! - a.simTime!, clock: b.clock! - a.clock! };
+      });
+    expect(await frozen(), "szünet + „Miért?”: áll").toEqual({ sim: 0, clock: 0 });
+    // A szünet folytatása után a „Miért?” még nyitva — a világ és az óra továbbra is áll.
+    await page.getByTestId("game-resume").tap();
+    await expect(page.getByTestId("game-pause-menu")).toBeHidden();
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+    expect(await frozen(), "a szünet feloldása nem oldja fel a „Miért?”-et").toEqual({ sim: 0, clock: 0 });
+    // Csak a „Miért?” zárása után indul újra.
+    await page.getByTestId("quiz-feedback-dismiss").tap();
+    await expect
+      .poll(async () => (await frozen()).clock, { timeout: 5_000, message: "mindkét ok zárása után az óra jár" })
+      .toBeGreaterThan(0);
+  });
+
   test("review #485: nyitott kérdésnél a nézet magasságának változása után a kirajzolt ketrecek a mag választerületein állnak", async ({ page }) => {
     await startWithQuestion(page);
     const coreRects = () => page.evaluate(() => String((window as unknown as GameWindow).__websuliGame!.probe().cageRects));
@@ -254,5 +290,73 @@ test.describe("kampóval mért szabályok", () => {
     const mid = await probe();
     await page.touchscreen.tap(board.x + board.width * 0.15, board.y + board.height * 0.3);
     await expect.poll(async () => (await probe()).playerX! - mid.playerX!, { timeout: 5_000, message: "a böködés balra viszi" }).toBeLessThan(-0.1);
+  });
+});
+
+/**
+ * Review #485 B2 / K3 — a válasz teljes szövege mindig olvasható, és a ketrec soha nem kerül a kérdés-kártya alá: a
+ * leghosszabb válaszú és a leghosszabb promptú tétellel (a kézi és az évfolyam-bankból programmal kikeresve), mindhárom
+ * nézetben, lapon belül mérve. Képernyőkép: `BR_SHOT_DIR`.
+ */
+for (const vp of [{ width: 390, height: 844 }, { width: 360, height: 640 }, { width: 844, height: 390 }]) {
+  test.describe(`leghosszabb tételek ${vp.width}x${vp.height}`, () => {
+    test.use({ viewport: vp, hasTouch: true, isMobile: true });
+    for (const kind of ["quiz-long", "quiz-longprompt"] as const) {
+      test(`${kind}: nincs levágott válasz, a ketrecek a kérdés-kártya (és a jelmagyarázat) alatt`, async ({ page }) => {
+        await page.goto("/games/brain-rot-steal?seed=11");
+        await page.getByRole("button", { name: /vadászat indítása/i }).tap();
+        await expect(page.getByTestId("br-board")).toBeVisible();
+        await page.waitForTimeout(1500); // az évfolyam-bank lusta betöltése
+        await page.evaluate((phase) => (window as unknown as GameWindow).__websuliGame!.forceState({ phase }), kind);
+        await expect(cages(page)).toHaveCount(4, { timeout: 10_000 });
+        await expect
+          .poll(
+            () =>
+              page.evaluate(() => {
+                const card = document.querySelector('[data-testid="br-quiz"] .play-question-card')?.getBoundingClientRect();
+                const legend = document.querySelector('[data-testid="br-legend"]')?.getBoundingClientRect();
+                const bottom = Math.max(card?.bottom ?? 0, legend?.bottom ?? 0);
+                const cageEls = Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="br-cage-"]'));
+                const under = cageEls.every((el) => el.getBoundingClientRect().top >= bottom - 1);
+                const clipped = Array.from(document.querySelectorAll<HTMLElement>(".br-cage-label")).some(
+                  (el) => el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1,
+                );
+                const compact = cageEls.some((el) => el.dataset.compact === "true");
+                const legendRows = Array.from(document.querySelectorAll<HTMLElement>(".br-legend-label"));
+                const legendOk = !compact || (legendRows.length === 4 && legendRows.every((el) => el.getBoundingClientRect().bottom <= innerHeight + 1));
+                return under && !clipped && legendOk ? "ok" : JSON.stringify({ under, clipped, compact, legendOk, bottom });
+              }),
+            { timeout: 5_000, message: "a ketrecek a kártya alatt, a felirat nem vágódik le (jelölt módban a jelmagyarázat teljes)" },
+          )
+          .toBe("ok");
+        await shot(page, `${kind}-${vp.width}x${vp.height}.jpg`);
+      });
+    }
+  });
+}
+
+test.describe("véletlen válasz valódi érintéssel", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  test("review #485 B1: a kérdés után még 400 ms-ig tolt, majd elengedett joystick nem ad választ", async ({ page }) => {
+    await page.goto("/games/brain-rot-steal?seed=7");
+    await page.getByRole("button", { name: /vadászat indítása/i }).tap();
+    const stick = page.getByTestId("virtual-joystick");
+    await expect(stick).toBeVisible();
+    const sb = (await stick.boundingBox())!;
+    const cx = sb.x + sb.width / 2;
+    const cy = sb.y + sb.height / 2;
+    const cdp: CDPSession = await page.context().newCDPSession(page);
+    // A gyerek lefelé fut (az alsó ketrecsor felé), és közben elkapja a lényt: a kérdés megnyílik, ő még tolja.
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: cy, id: 1 }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx, y: cy + sb.height * 0.45, id: 1 }] });
+    await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ question: true }));
+    await expect(cages(page)).toHaveCount(4);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx + 2, y: cy + sb.height * 0.46, id: 1 }] });
+    await page.waitForTimeout(400);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForTimeout(1500);
+    const pr = await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.probe());
+    expect(pr.questionsAnswered, "a döntés előtt nincs válasz").toBe(0);
+    expect(pr.questionOpen, "a kérdés még nyitva").toBe(1);
   });
 });

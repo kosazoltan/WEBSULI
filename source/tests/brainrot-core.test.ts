@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   ASSIST_MS,
+  CAGE_ARM_MS,
   CAGE_DWELL_MS,
+  cageLabelsFit,
   CARRY_RESOLVE_MS,
   CARRY_SPEED_FACTOR,
   FLEE_RADIUS,
@@ -140,7 +142,7 @@ test("a vadász a kérdés alatti lassításban is a saját tempójában fut (a 
 
 test("ketrec-elrendezés: álló nézetben 4 ketrec a négy negyedben, fekvőben egy sor alul; nem fedik egymást, az arénán belül", () => {
   for (const [w, h] of [[1, 1.22], [1, 1.95], [2.6, 1], [2.1, 1]] as const) {
-    const cages: Cage[] = Array.from({ length: 4 }, () => ({ x: 0, y: 0, w: 0, h: 0, armed: false, dwellMs: 0 }));
+    const cages: Cage[] = Array.from({ length: 4 }, () => ({ x: 0, y: 0, w: 0, h: 0, armed: false, dwellMs: 0, entered: false, inside: false }));
     cageLayout(w, h, 4, cages);
     if (w > h * 1.25) {
       // Fekvő: egy sor az aréna alsó részén (a kérdés-kártya fent középen van), balról jobbra.
@@ -162,7 +164,7 @@ test("ketrec-elrendezés: álló nézetben 4 ketrec a négy negyedben, fekvőben
 });
 
 test("a nyíláskor a vadászra eső ketrec arrébb kerül (a vadász nem „áll bele” egy válaszba)", () => {
-  const cages: Cage[] = Array.from({ length: 4 }, () => ({ x: 0, y: 0, w: 0, h: 0, armed: false, dwellMs: 0 }));
+  const cages: Cage[] = Array.from({ length: 4 }, () => ({ x: 0, y: 0, w: 0, h: 0, armed: false, dwellMs: 0, entered: false, inside: false }));
   cageLayout(1, 1.5, 4, cages);
   const p = { x: cages[0]!.x, y: cages[0]!.y };
   clearCagesFrom(p.x, p.y, 1, 1.5, 4, cages);
@@ -181,6 +183,7 @@ test("ketrec-zár: a ketrecbe beállás (megállás) választ; a teljes sebessé
   const core = createBrainRotCore({ seed: 6, arenaW: 1, arenaH: 1.5 });
   openWithCarry(core, 0.5, 0.3);
   const st = core.state();
+  for (const cage of st.cages) cage.armed = true; // az élesítés (előjelzés) szabályát külön teszt méri
   const c0 = st.cages[0]!;
   const c2 = st.cages[2]!; // ugyanabban az oszlopban, alatta
   // Átfutás: felülről lefelé végig a 0. ketrecen át a 2.-ig, teljes sebességgel.
@@ -215,22 +218,148 @@ test("ketrec-zár: a ketrecbe beállás (megállás) választ; a teljes sebessé
     }
     assert.equal(hit3, to, `átfutás ${from} → ${to}: csak a cél-ketrec választ`);
   }
-  // Egy helyben állva a beállási idő után is választ (dwell).
+  // Szándékos választás: az élesítés után lendülettel belép, majd megáll — a megállás után `CAGE_DWELL_MS`-en belül választ.
   const core2 = createBrainRotCore({ seed: 6, arenaW: 1, arenaH: 1.5 });
   openWithCarry(core2, 0.5, 0.3);
   const s2 = core2.state();
+  run(core2, CAGE_ARM_MS + 50);
   const cage = s2.cages[1]!;
-  s2.player.x = cage.x;
-  s2.player.y = cage.y;
-  s2.player.vx = 0;
-  s2.player.vy = 0;
+  core2.setTarget(cage.x, cage.y);
   let steps = 0;
-  while (s2.hitCage < 0 && steps < 120) {
+  let stoppedAt = -1;
+  while (s2.hitCage < 0 && steps < 600) {
     core2.step(DT, 0.4);
     steps += 1;
+    if (stoppedAt < 0 && Math.hypot(s2.player.vx, s2.player.vy) < 0.05 && playerInCage(s2.player.x, s2.player.y, cage)) stoppedAt = steps;
   }
   assert.equal(s2.hitCage, 1);
-  assert.ok(steps * DT <= CAGE_DWELL_MS + DT, `${(steps * DT).toFixed(0)} ms`);
+  assert.ok(stoppedAt > 0 && (steps - stoppedAt) * DT <= CAGE_DWELL_MS + DT, `a megállás után ${((steps - stoppedAt) * DT).toFixed(0)} ms`);
+});
+
+test("review #485 B1: a ketrecek nyitásakor a vadász megáll (cél, bemenet, lendület törlődik), az előjelzés alatt nincs válasz", () => {
+  const core = createBrainRotCore({ seed: 21, arenaW: 1, arenaH: 1.5 });
+  const st = core.state();
+  st.player.x = 0.5;
+  st.player.y = 0.3;
+  core.setInput(1, 0.4);
+  run(core, 300);
+  assert.ok(Math.hypot(st.player.vx, st.player.vy) > 0.5, "fut");
+  core.forceCatch();
+  core.setTarget(0.9, 1.4); // a régi böködés célja
+  core.openCages(4, 1);
+  assert.equal(st.player.vx, 0);
+  assert.equal(st.player.vy, 0);
+  const x0 = st.player.x;
+  run(core, 200);
+  assert.equal(st.player.x, x0, "bemenet és cél nélkül áll (a régi cél törölve)");
+  assert.ok(st.cages.slice(0, 4).every((c) => !c.armed), "az előjelzés (600 ms) alatt nincs éles ketrec");
+  run(core, CAGE_ARM_MS);
+  assert.ok(st.cages.slice(0, 4).every((c) => c.armed), "az előjelzés után a kint álló vadász mellett élesek");
+});
+
+test("review #485 B1: elkapáskor a böködés célja törlődik (a lényre szánt bökés nem viszi ketrecbe)", () => {
+  const core = createBrainRotCore({ seed: 22, arenaW: 1, arenaH: 1.5 });
+  const st = core.state();
+  core.setTarget(0.9, 1.4);
+  core.forceCatch();
+  const x0 = st.player.x;
+  run(core, 300);
+  assert.equal(st.player.x, x0);
+});
+
+test("review #485 B1: aki az élesítéskor bent áll vagy lassan csúszik be, nem választ — ki kell lépnie és lendülettel visszamennie", () => {
+  const core = createBrainRotCore({ seed: 23, arenaW: 1, arenaH: 1.5 });
+  const st = core.state();
+  openWithCarry(core, 0.5, 0.3);
+  const cage = st.cages[3]!;
+  // A kérdés után még tolja (400 ms) a ketrec felé, majd elengedi: belép az előjelzés alatt.
+  st.player.x = cage.x - cage.w / 2 - 0.12;
+  st.player.y = cage.y;
+  core.setInput(1, 0);
+  run(core, 400);
+  core.setInput(0, 0);
+  run(core, 2000);
+  assert.equal(st.hitCage, -1, "a tehetetlenség nem válasz");
+  // Lassú becsúszás az élesítés után sem választ.
+  const core2 = createBrainRotCore({ seed: 23, arenaW: 1, arenaH: 1.5 });
+  const s2 = core2.state();
+  openWithCarry(core2, 0.5, 0.3);
+  run(core2, CAGE_ARM_MS + 50);
+  const c2 = s2.cages[3]!;
+  s2.player.x = c2.x - c2.w / 2 - 0.05;
+  s2.player.y = c2.y;
+  for (let i = 0; i < 240; i++) {
+    core2.setInput(0.25, 0); // a stop-küszöb alatti tempó
+    core2.step(DT, 0.4);
+  }
+  core2.setInput(0, 0);
+  run(core2, 1000);
+  assert.equal(s2.hitCage, -1, "lassú becsúszás nem választ");
+});
+
+test("review #485 B2: a ketrec-zóna a kérdés-kártya alja alatt — elrendezés és áthelyezés sem teszi fölé (álló, fekvő)", () => {
+  for (const [w, h, top] of [[1, 1.22, 0.55], [1, 1.95, 0.6], [2.6, 1, 0.42], [2.1, 1, 0.5]] as const) {
+    for (const compact of [false, true]) {
+      const cages: Cage[] = Array.from({ length: 4 }, () => ({ x: 0, y: 0, w: 0, h: 0, armed: false, dwellMs: 0, entered: false, inside: false }));
+      cageLayout(w, h, 4, cages, top, compact);
+      for (const c of cages) {
+        assert.ok(c.y - c.h / 2 >= top + 0.029, `a kártya alatt (${w}×${h}, top ${top}): ${(c.y - c.h / 2).toFixed(3)}`);
+        assert.ok(c.y + c.h / 2 <= h + 1e-9 && c.h >= 0.14 - 1e-9, "az arénán belül, érintési méretű");
+      }
+      // A vadász a zóna tetején áll: az áthelyezés sem visz a kártya alá.
+      clearCagesFrom(cages[0]!.x, cages[0]!.y - cages[0]!.h / 2, w, h, 4, cages, top);
+      for (const c of cages) assert.ok(c.y - c.h / 2 >= top + 0.029, "áthelyezve is a kártya alatt");
+    }
+  }
+});
+
+test("review #485 B2: a ketrecfelirat beférése a ketrec valódi szélességével (fekvőben az „alany: ház, állítmány: nagy” nem fér)", () => {
+  // Fekvő ketrec: kb. 0,416 egység × 300 px; álló: 0,44 × 360 px.
+  assert.equal(cageLabelsFit(["alany: ház, állítmány: nagy", "kert", "tükör", "ablak"], 0.416 * 300), false);
+  assert.equal(cageLabelsFit(["kert", "tükör", "körte", "ablak"], 0.416 * 300), true);
+  assert.equal(cageLabelsFit(["alany: ház, állítmány: nagy"], 0.44 * 360), true);
+});
+
+test("L4 (új követelmény): a kérdés alatt a lények kora 0,6×-sel telik (nincs kor-fagyasztás), szünetben áll", () => {
+  const ui = fakeUi({ give: true });
+  const d = createBrainRotDriver({ seed: 24, questions: ui, band: () => 0.4, arenaW: 1, arenaH: 1.5 });
+  d.core.forceCatch();
+  d.resolve();
+  const w0 = d.core.state().worldMs;
+  for (let i = 0; i < 60; i++) d.frame(DT, false);
+  const grown = d.core.state().worldMs - w0;
+  assert.ok(grown > 550 && grown < 650, `1 s valós idő alatt ${grown.toFixed(0)} ms világidő (0,6×)`);
+  const w1 = d.core.state().worldMs;
+  for (let i = 0; i < 60; i++) d.frame(DT, true);
+  assert.equal(d.core.state().worldMs, w1);
+});
+
+test("J5a 13.: a kérdés nélküli (közvetlen) megtartás pontot ad, de nem számít a győzelembe", () => {
+  const core = createBrainRotCore({ seed: 25, arenaW: 1, arenaH: 1.5 });
+  for (let i = 0; i < 12; i++) {
+    core.forceCatch();
+    core.keepDirect();
+  }
+  assert.equal(core.state().direct, 12);
+  assert.equal(core.state().caught, 0);
+  assert.ok(core.state().score > 0);
+  assert.equal(core.won(), false);
+});
+
+test("L2: a meghajtó kérdéssel is reprodukálható — azonos seed, bemenet és képkocka-sorozat → bitre azonos állapot", () => {
+  const drive = () => {
+    const ui = fakeUi({ give: true });
+    const d = createBrainRotDriver({ seed: 26, questions: ui, band: () => 0.4, arenaW: 1, arenaH: 1.56 });
+    const frames = [16.67, 7, 33, 16.67, 41, 3];
+    for (let i = 0; i < 1200; i++) {
+      const phase = Math.floor(i / 70) % 4;
+      d.core.setInput(phase === 0 ? 1 : phase === 2 ? -1 : 0.3, phase === 1 ? 1 : phase === 3 ? -1 : 0);
+      if (i % 200 === 199 && ui.openNow()) ui.pick(0);
+      d.frame(frames[i % frames.length]!, false);
+    }
+    return d.core.hash() + `|${ui.requests()}`;
+  };
+  assert.equal(drive(), drive());
 });
 
 test("kimenet: jó → a lény megmarad, kombó, pont; rossz → elszökik (lost), kombó törik; megszakítva → szabadon, büntetés nélkül", () => {
@@ -340,13 +469,14 @@ test("meghajtó: ha nincs kérdés (üres forrás), a vitt lény CARRY_RESOLVE_M
     d.frame(DT, false);
     frames += 1;
   }
-  assert.equal(d.core.state().caught, 1);
+  // J5a 13.: a közvetlen megtartás nem számít a győzelembe (`caught`), csak pont (`direct`).
+  assert.equal(d.core.state().caught, 0);
   assert.equal(d.core.state().direct, 1);
   assert.ok(frames * DT >= CARRY_RESOLVE_MS - DT && frames * DT <= CARRY_RESOLVE_MS + 4 * DT, `${frames * DT} ms`);
   const noQ = createBrainRotDriver({ seed: 11, questions: null, band: () => 0.4, arenaW: 1, arenaH: 1.5 });
   noQ.core.forceCatch();
   noQ.frame(DT, false);
-  assert.equal(noQ.core.state().caught, 1);
+  assert.equal(noQ.core.state().direct, 1);
 });
 
 test("determinizmus: lépés-indexhez kötött bemenettel eltérő képkocka-időknél bitre azonos a mag állapota (K.6)", () => {
@@ -408,7 +538,8 @@ test("J10: a ketrec-kérdés ablaka rövid tételnél 6 mp (3–4. évf. 7,5 mp)
   assert.ok(windowMsFor("x".repeat(400), 3, cfg.baseWindowMs) <= 9000);
 });
 
-const GOLDEN_42 = "play|30000000000|75000|1485000|6|6|3|0|350|0|11|free|868072|983527|12|free|463255|695928|13|free|440353|599082|10|free|274199|1163889";
+// A review #485 után (a közvetlen megtartás nem számít a `caught`-ba; ±10% gumiszalag a menekülésben) újrarögzítve.
+const GOLDEN_42 = "play|30000000000|75000|1485000|0|6|3|0|350|0|11|free|872913|984957|12|free|463255|695928|13|free|440353|599082|10|free|277224|1167666";
 
 test("review #485: a bot által leírt forgatókönyv — a felső sor bal széléről a jobb ketrec közepére tartva a bal ketrec nem választódik", () => {
   const core = createBrainRotCore({ seed: 13, arenaW: 1, arenaH: 1.5 });
@@ -427,4 +558,54 @@ test("review #485: a bot által leírt forgatókönyv — a felső sor bal szél
     if (st.hitCage >= 0) hit = st.hitCage;
   }
   assert.equal(hit, 1);
+});
+
+test("review #485 B1: a nyitás után böködött ketrec az élesítéskor rögtön választ (a gyors böködőnek nem kell kilépnie)", () => {
+  const core = createBrainRotCore({ seed: 27, arenaW: 1, arenaH: 1.5 });
+  const st = core.state();
+  openWithCarry(core, 0.5, 0.3);
+  const cage = st.cages[2]!;
+  core.setTarget(cage.x, cage.y); // 0 ms-nál bök: az előjelzés alatt beér és megáll
+  let steps = 0;
+  while (st.hitCage < 0 && steps < 600) {
+    core.step(DT, 0.4);
+    steps += 1;
+  }
+  assert.equal(st.hitCage, 2);
+  assert.ok(steps * DT >= CAGE_ARM_MS, `nem az előjelzés alatt: ${(steps * DT).toFixed(0)} ms`);
+});
+
+test("önellenőrzés (e): az óra lejártakor nyitott kérdés megszakad — nem lesz belőle utólag sem megtartás, sem szökés", () => {
+  const ui = fakeUi({ give: true });
+  const d = createBrainRotDriver({ seed: 28, questions: ui, band: () => 0.4, arenaW: 1, arenaH: 1.5 });
+  for (let i = 0; i < Math.round((ROUND_MS - 500) / DT); i++) d.frame(DT, false);
+  d.core.forceCatch();
+  d.resolve();
+  assert.ok(ui.openNow(), "nyitott kérdés az utolsó fél másodpercben");
+  const before = { caught: d.core.state().caught, lost: d.core.state().lost };
+  for (let i = 0; i < 120; i++) d.frame(DT, false);
+  assert.equal(d.core.running(), false);
+  assert.equal(ui.finished(), true);
+  assert.equal(d.core.state().caught, before.caught);
+  assert.equal(d.core.state().lost, before.lost);
+  // A lezárt menetben egy késői válasz-kísérlet sem ír a magba.
+  d.core.applyOutcome("correct", 0);
+  d.core.applyOutcome("wrong", 0);
+  assert.equal(d.core.state().caught, before.caught, "késői jó válasz nem ad megtartást");
+  assert.equal(d.core.state().lost, before.lost, "késői rossz válasz nem ad szökést");
+});
+
+test("önellenőrzés (e): 6 megtartásnál a menet vége után érkező jó válasz nem fordítja győzelemre a vereséget", () => {
+  const core = createBrainRotCore({ seed: 5, arenaW: 1, arenaH: 1.5 });
+  for (let i = 0; i < 6; i++) {
+    openWithCarry(core, 0.5, 0.3);
+    core.applyOutcome("correct", 0);
+  }
+  assert.equal(core.state().caught, 6);
+  openWithCarry(core, 0.5, 0.3);
+  core.end();
+  assert.equal(core.won(), false);
+  core.applyOutcome("correct", 0);
+  assert.equal(core.state().caught, 6);
+  assert.equal(core.won(), false);
 });
