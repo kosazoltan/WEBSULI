@@ -216,6 +216,10 @@ futásidőben, darabokból kell összerakni, hogy a `no-real-emails-guard` ne l�
   `gh api …/merge`), J6 (`record-review` egyezteti a jelentés `Ítélet:` sorával), J7 (nem követett fájl → a push-kapu bukik), J9
   (értékes kapcsolók), J10 (`gh pr merge --auto` → DENY), J11 (jelre is takarít), J13 (`scripts/qa` tesztek a push-kapuban), J14
   (git 3 s, gh 8 s időkorlát). Maradó kockázat (runbook „Ismert korlátok”): J5 önbevallásos ítélet-sor, J8 here-doc hamis DENY, alias.
+- **Visszaellenőrzés (fej `863a521d`, NEM) — javítva:** V1 (átirányítás / záró `&` hamis DENY), V2 (`--signed`,
+  `--force-with-lease` érték nélkül — megkerülés), V3 (olvasó `gh api` GET), J3 maradéka (sorfolytatás), J4 maradéka (`-lc`, `-ec`,
+  `sudo -u`, `env -u`, `then` / `do`, `iex`), V4 (a runbook pontos állításai). A független ellenőr a regressziót a javító commit után
+  fogta meg — pontosan ez a skill célja.
 - **Külső (Gemini) ellenőr — külön, második PR:** a tulajdonos 2026-11-17-i kiegészítése (`external-review.mjs`, ellenőrzőlisták,
   skill-menet, figyelmeztető lépés a PR- / merge-kapuban) ebbe a PR-ba nem kerül: a PR már ~3500 soros, és az átadó a munka végén még
   nem készült el. A kapuk úgy készültek, hogy a figyelmeztető lépés egy újabb `gate.step`-pel bővíthető.

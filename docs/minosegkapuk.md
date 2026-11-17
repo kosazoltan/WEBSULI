@@ -65,9 +65,12 @@ viszi bukásra.
   - `gh pr merge [n]` → a PR JELENLEGI fejére szóló, legfeljebb 15 perces zöld `merge-<n>-<fej>` (a fejet a `gh`-tól kéri);
   - vizsgálat nélkül enged: távoli ág törlése (`--delete`, `-d`, vagy CSAK `:ág` refspec-ek), `--dry-run`, idézőjelben / `echo`-ban
     álló szöveg, más repó (amelyben nincs `scripts/qa/gates/pre-push-gate.mjs` — ez a még kapu nélküli, régebbi ágakat is jelenti);
-  - felismeri a burkolókat (`env`, `sudo`, `command`, `time`, `&`, `( … )`, `{ …; }`, `bash -c "…"`, `powershell -Command "…"`),
-    több refspec-et (mindegyik fejére kell bizonyíték), az értékes kapcsolókat (`-o`, `--push-option`, `--repo` …) és a
-    `gh api …/pulls/<n>/merge` alakot;
+  - felismeri (egységteszttel mérve): a burkolókat (`env [-u X]`, `sudo [-u x]`, `command`, `time`, `nohup`, PowerShell `&`,
+    `( … )`, `{ …; }`), a vezérlő kulcsszavakat (`if … then`, `for … do`), a beágyazott shellt (`bash -c / -lc / -ec "…"`,
+    `powershell [-NoProfile …] -Command "…"`), az `iex "…"` / `eval` alakot, a sorfolytatást (`\` vagy backtick + újsor), az
+    átirányításokat (`2>&1`, `> log`, záró `&`), több refspec-et (mindegyik fejére kell bizonyíték), az értékes kapcsolókat (`-o`,
+    `--push-option`, `--repo`, `--receive-pack`, `--exec`; a `--signed` / `--force-with-lease` csak `=`-es alakban kap értéket) és
+    az író `gh api …/pulls/<n>/merge` hívást (az olvasó GET-et nem);
   - DENY vizsgálat nélkül: `git push --all / --mirror` (ágonként pusholj), `git --git-dir … push` (használd a `-C`-t),
     `gh pr merge --auto` (az összevonás később, futásőr nélkül történne), `-EncodedCommand`, és WEBSULI-n kívüli mappából
     `-R …/WEBSULI`-vel kiadott `gh pr` parancs;
@@ -99,6 +102,10 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
 - **Az ítélet önbevallásos** (review J5): a `Független ellenőr ítélete: IGEN (fej: …)` sort bárki beírhatja a PR-leírásba; a kapu
   a sor meglétét ellenőrzi, nem a jelentés valódiságát. A helyi `review-<fej>.json` a jelentés hash-ét is rögzíti, és a
   `record-review` a jelentés saját `Ítélet:` sorával egyezteti — a merge-et végző orkesztrátor ezt a helyi bizonyítékot nézze.
+- **Nem felismert alakok:** változóba tett parancs (`$c = '…'; & $c`), shell-függvény, szkriptfájlból indított feltöltés, és
+  általában minden, amit a parancssor szövege nem mutat — ezekre a kapu-szabály (AGENTS.md) és a skillek vonatkoznak.
+- **A merge-kapu a PR-kommentek szerzőjét nem szűri** (nyilvános repó: bárki írhat ítélet-sort) — a helyi `review-<fej>.json` a
+  megbízható forrás.
 - **Git-alias** (`git config alias.p push`) és a here-doc / here-string törzsében sor elején álló `git push` szöveg: az alias nem
   ismerhető fel olcsón (átcsúszik), a here-doc sor hamis DENY-t ad — commit-üzenetet fájlból (`git commit -F <fájl>`) adj.
 - A hook csak a Claude Code munkamenetekre hat; Codex / Cursor / ember a skillek és az `AGENTS.md` szerint futtatja a kapukat.

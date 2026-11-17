@@ -68,10 +68,30 @@ const exe = (w) => w.replace(/\\/g, '/').split('/').pop().toLowerCase().replace(
 /**
  * A kibocsátó műveletek kigyűjtése: `[{ kind: 'push'|'pr-create'|'pr-merge', dir, ref?, pr?, repoFlag?, skip? }]`.
  */
-const WRAPPERS = new Set(['env', 'sudo', 'command', 'nohup', 'time', 'exec', 'call', 'xargs', 'start-process', 'invoke-expression', 'iex']);
+const WRAPPERS = new Set(['env', 'sudo', 'command', 'nohup', 'time', 'exec', 'call', 'xargs', 'start-process']);
+const EVAL_WRAPPERS = new Set(['iex', 'invoke-expression', 'eval']);
+const KEYWORDS = new Set(['then', 'do', 'else', 'elif', 'if', 'while', 'until', '!']);
+// Burkolók értéket váró kapcsolói (`sudo -u x`, `env -u X`): az utánuk álló szó nem parancs (visszaellenőrzés J4).
+const WRAPPER_VALUE_OPTS = new Set(['-u', '-g', '--user', '--group', '--unset', '-C', '--chdir']);
 const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'pwsh', 'powershell', 'cmd']);
-// `git push` értékes kapcsolói: az utánuk álló szó nem remote / ref (review J9).
-const PUSH_VALUE_OPTS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec', '--signed', '--force-with-lease']);
+// `git push` értékes kapcsolói: az utánuk álló szó nem remote / ref (review J9). A `--signed` és a `--force-with-lease`
+// érték nélkül is érvényes — azok csak `=`-es alakban kapnak értéket, ezért NINCSENEK itt (visszaellenőrzés V2).
+const PUSH_VALUE_OPTS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec']);
+// Rövid shell-kapcsoló, amely parancsszöveget vár: -c, -lc, -ec, -xc … (a hosszú PowerShell-kapcsolók külön).
+const SHELL_CMD_FLAG = /^(?:-[a-z]{0,3}c[a-z]{0,3}|-command|\/c|-encodedcommand)$/;
+
+/** Átirányítások és a magában álló `&` eltávolítása (`2>&1`, `>log`, `> log`, `2>/dev/null`, záró `&`) — visszaellenőrzés V1. */
+export function dropRedirections(words) {
+  const out = [];
+  for (let i = 0; i < words.length; i += 1) {
+    const x = words[i];
+    if (/^\d*(?:>>?|<)$/.test(x) || /^&>>?$/.test(x)) { i += 1; continue; }
+    if (/^\d*(?:>>?|<)\S/.test(x) || /^&>/.test(x)) continue;
+    if (x === '&' && i > 0) continue;
+    out.push(x);
+  }
+  return out;
+}
 
 /**
  * A kibocsátó műveletek kigyűjtése: `[{ kind: 'push'|'pr-create'|'pr-merge'|'deny', dir, refs?, pr?, repoFlag?, skip?, reason? }]`.
@@ -80,21 +100,29 @@ const PUSH_VALUE_OPTS = new Set(['-o', '--push-option', '--repo', '--receive-pac
 export function findActions(cmd, cwd, depth = 0) {
   const actions = [];
   let dir = cwd;
-  for (const seg of splitSegments(cmd)) {
-    let w = seg.map((x, i) => (i === 0 ? x.replace(/^[({]+/, '') : x).replace(/[)}]+$/, '')).filter((x) => x !== '');
+  // Sorfolytatás (bash `\` + újsor, PowerShell backtick + újsor) egy parancs — visszaellenőrzés J3.
+  const joined = String(cmd ?? '').replace(/[\\`]\r?\n/g, ' ');
+  for (const seg of splitSegments(joined)) {
+    let w = dropRedirections(seg.map((x, i) => (i === 0 ? x.replace(/^[({]+/, '') : x).replace(/[)}]+$/, '')).filter((x) => x !== ''));
+    let nested = null;
     for (;;) {
-      while (w.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]) || /^\$env:/i.test(w[0]))) w.shift();
+      while (w.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]) || /^\$env:/i.test(w[0]) || KEYWORDS.has(w[0]))) w.shift();
+      if (w.length && EVAL_WRAPPERS.has(exe(w[0]))) { nested = w.slice(1).filter((x) => !x.startsWith('-')).join(' '); w = []; break; }
       if (w.length && (w[0] === '&' || w[0] === '.' || WRAPPERS.has(exe(w[0])))) {
         w.shift();
-        while (w.length && w[0].startsWith('-') && !/^-[cC]/.test(w[0])) w.shift(); // pl. `env -i`, `sudo -u x` (egyszerűsítve)
+        while (w.length && w[0].startsWith('-') && !SHELL_CMD_FLAG.test(w[0])) {
+          const opt = w.shift();
+          if (WRAPPER_VALUE_OPTS.has(opt)) w.shift();
+        }
         continue;
       }
       break;
     }
+    if (nested && depth < 3) { actions.push(...findActions(nested, dir, depth + 1)); continue; }
     if (!w.length) continue;
     const head = exe(w[0]);
     if (SHELLS.has(head) && depth < 3) {
-      const ci = w.findIndex((x, i) => i > 0 && /^(?:-c|-command|\/c|-encodedcommand)$/i.test(x));
+      const ci = w.findIndex((x, i) => i > 0 && (SHELL_CMD_FLAG.test(x) || /^-(?:command|encodedcommand)$/i.test(x)));
       if (ci > 0 && w[ci + 1]) {
         if (/^-encodedcommand$/i.test(w[ci])) actions.push({ kind: 'deny', reason: 'Kódolt PowerShell-parancs (-EncodedCommand) nem vizsgálható — írd ki a parancsot olvashatóan.' });
         else actions.push(...findActions(w.slice(ci + 1).join(' '), dir, depth + 1));
@@ -150,7 +178,11 @@ export function findActions(cmd, cwd, depth = 0) {
       }
       if (plain[0] === 'api') {
         const m = plain.map((x) => /repos\/([^/\s]+\/[^/\s]+)\/pulls\/(\d+)\/merge\b/.exec(x)).find(Boolean);
-        if (m) actions.push({ kind: 'pr-merge', dir, pr: m[2], target: m[2], repoFlag: m[1] });
+        // Csak író hívás (PUT / POST, vagy mezők → implicit POST) merge-el; az olvasó GET nem (visszaellenőrzés V3).
+        const mi = plain.findIndex((x) => x === '-X' || x === '--method');
+        const method = mi >= 0 ? String(plain[mi + 1] ?? '').toUpperCase() : (plain.find((x) => /^--method=/i.test(x)) ?? '').split('=')[1]?.toUpperCase();
+        const writes = ['PUT', 'POST', 'PATCH'].includes(method) || (!method && plain.some((x) => ['-f', '-F', '--field', '--raw-field', '--input'].includes(x)));
+        if (m && writes) actions.push({ kind: 'pr-merge', dir, pr: m[2], target: m[2], repoFlag: m[1] });
         continue;
       }
       if (plain[0] !== 'pr') continue;

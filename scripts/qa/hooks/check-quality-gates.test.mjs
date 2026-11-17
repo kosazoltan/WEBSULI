@@ -78,6 +78,25 @@ test('review-javítások: burkolók, beágyazott shell, vegyes törlés, több r
   assert.deepEqual([api.kind, api.pr, api.repoFlag], ['pr-merge', '9', 'kosazoltan/WEBSULI']);
 });
 
+test('visszaellenőrzés V1–V3, J3, J4 maradéka: átirányítás, érték nélküli kapcsolók, olvasó gh api, sorfolytatás, további burkolók', () => {
+  const refsOf = (c) => findActions(c, '/r').map((x) => x.refs);
+  for (const c of ['git push -u origin feature 2>&1', 'git push -u origin feature 2>/dev/null', 'git push -u origin feature 2>&1 | tail -3',
+    'git push -u origin feature > log.txt', 'git push -u origin feature &>out.log', 'git push -u origin feature &']) {
+    assert.deepEqual(refsOf(c), [['feature']], c);
+  }
+  assert.deepEqual(refsOf('git push --force-with-lease origin other2'), [['other2']], 'V2');
+  assert.deepEqual(refsOf('git push --signed origin other2'), [['other2']], 'V2');
+  assert.deepEqual(refsOf('git push --force-with-lease=other2:abc origin other2'), [['other2']]);
+  const kinds = (c) => findActions(c, '/r').map((x) => x.kind);
+  assert.deepEqual(kinds('gh api repos/o/WEBSULI/pulls/9/merge'), [], 'V3: olvasó GET nem merge');
+  assert.deepEqual(kinds('gh api repos/o/WEBSULI/pulls/9/merge -f merge_method=squash'), ['pr-merge']);
+  for (const c of ['git \\\n  push origin x', 'git `\r\n push origin x', 'bash -lc "git push origin x"', 'sh -ec "git push"', 'sudo -u bob git push',
+    'env -u FOO git push', 'if true; then git push; fi', 'for i in 1; do git push; done', 'iex "git push origin x"']) {
+    assert.deepEqual(kinds(c), ['push'], JSON.stringify(c));
+  }
+  assert.deepEqual(kinds('powershell -NoProfile -ExecutionPolicy Bypass -Command "git push"'), ['push']);
+});
+
 test('review J1: WEBSULI-n kívüli mappából -R …/WEBSULI → DENY; más repóra nincs kimenet', () => {
   const other = mkdtempSync(join(tmpdir(), 'qg-kivul-'));
   assert.ok(denied(runHook('gh pr merge 5 -R kosazoltan/WEBSULI --squash', other)));
