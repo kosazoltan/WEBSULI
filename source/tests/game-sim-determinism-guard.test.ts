@@ -119,6 +119,8 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
   ],
   // J2a: a Szólétra lapján nincs kivétel (a kapaszkodó-tétel sorsolása a menet seedelt RNG-jéből: `pickRngRef`).
   "WordLadderHuEn.tsx": [],
+  // J5a: a Brain Rot lapján nincs kivétel (a tétel-sorsolás a menet seedelt RNG-jéből: `pickRngRef`; a világ a magban).
+  "BrainRotSteal.tsx": [],
 };
 
 const PAGE_FORBIDDEN = FORBIDDEN.filter(({ name }) => name === "Math.random" || name === "Date.now");
