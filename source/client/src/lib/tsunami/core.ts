@@ -138,6 +138,30 @@ export function gateLabelFits(label: string, innerWidthPx = GATE_LABEL_MIN_WIDTH
   return estimateLines(label, innerWidthPx, font) <= GATE_LABEL_MAX_LINES;
 }
 
+/**
+ * D-J1a-18: a kapu-tábla várható magassága (px) a felirat sorszámából és a tábla CSS-méreteiből (a lap `.ts-gate` szabályai:
+ * keret 2 × 3 px, belső margó 6 + 7 px, szimbólum-kör 26 px, köz 3 px, sormagasság 1,15, min. 56 px). Nem a kirajzolt
+ * táblából mérjük, hogy a tábla / lista mód döntése ne váltson oda-vissza.
+ */
+export function gateHeightPx(label: string, innerWidthPx = GATE_LABEL_MIN_WIDTH_PX): number {
+  const font = label.length > GATE_LABEL_LONG_CHARS ? 13 : 16;
+  // Óvatos becslés (8 px-szel keskenyebb doboz): a határesetű felirat inkább két sornak számít → inkább lista mód, mint takarás.
+  const lines = Math.min(GATE_LABEL_MAX_LINES, Math.max(1, estimateLines(label, innerWidthPx - 8, font)));
+  return Math.max(56, 6 + 13 + 26 + 3 + Math.ceil(lines * font * 1.15));
+}
+
+/**
+ * D-J1a-18: elférnek-e a táblák függőlegesen a kérdés-kártya alja és a futó vetített feje között (px, a játéktér
+ * tetejétől). A táblák teteje a kártya alatt 10 px-re (de legalább a játéktér 18%-ánál — a lap elrendezésével egyezően),
+ * az aljuk legalább 8 px-re a fej fölött. Ha nem férnek: lista mód (ugyanúgy, mint a szélességnél).
+ */
+export function gatesFitVertically(opts: { labels: readonly string[]; innerWidthPx: number; cardBottomPx: number; runnerHeadPx: number; stageHeightPx: number }): boolean {
+  if (opts.labels.length === 0) return true;
+  const top = Math.max(opts.stageHeightPx * 0.18, opts.cardBottomPx + 10);
+  const h = Math.max(...opts.labels.map((l) => gateHeightPx(l, opts.innerWidthPx)));
+  return top + h <= opts.runnerHeadPx - 8;
+}
+
 export type TsunamiTuning = {
   /** Alap futósebesség (m/s). */
   speed: number;

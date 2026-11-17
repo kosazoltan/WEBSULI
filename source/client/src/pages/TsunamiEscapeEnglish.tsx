@@ -93,7 +93,9 @@ import {
   TSUNAMI_GAME_ID,
   TSUNAMI_TUNING,
   createTsunamiDriver,
+  gateHeightPx,
   gateLabelFits,
+  gatesFitVertically,
   idleCrossingWasGood,
   laneForOption,
   tsunamiDirectorConfig,
@@ -991,6 +993,9 @@ export default function TsunamiEscapeEnglish() {
 
   /** Teszt-kampó (D-J1a-11): a következő kérdés a forrásokban talált leghosszabb válaszokat hordozza. */
   const forceLongRef = useRef(false);
+  /** Teszt-kampó (D-J1a-18): a következő kérdés pontosan ezekkel a válaszokkal (az első a helyes). */
+  const forceAnswersRef = useRef<string[] | null>(null);
+  const forcedSeqRef = useRef(0);
   /** A kézi bankok, a tananyag és a betöltött évfolyam-bank három leghosszabb válasza (programmal kikeresve). */
   const longestAnswerQuiz = (): Quiz => {
     const all = new Set<string>();
@@ -1012,6 +1017,16 @@ export default function TsunamiEscapeEnglish() {
         if (forceLongRef.current) {
           forceLongRef.current = false;
           return materialPlayQuestion(longestAnswerQuiz(), { subject: "english" });
+        }
+        // Teszt-kampó (D-J1a-18): kényszerített válaszok (egysoros / kétsoros eset determinisztikus mérése).
+        const forced = forceAnswersRef.current;
+        if (forced) {
+          forceAnswersRef.current = null;
+          forcedSeqRef.current += 1;
+          return materialPlayQuestion(
+            { id: `test-forced-${forcedSeqRef.current}`, prompt: "Melyik a jó válasz? (próba)", options: forced, correctIndex: 0 },
+            { subject: "english" },
+          );
         }
         if (rewardQuestionsRef.current.length > 0) {
           const reward = rewardQuestionsRef.current.find((r) => !runSeenRef.current.some((s) => s.id === r.id));
@@ -1495,6 +1510,10 @@ export default function TsunamiEscapeEnglish() {
   const [gateBox, setGateBox] = useState<{ top: number; centers: [number, number, number]; width: number }>({ top: 220, centers: [60, 180, 300], width: 106 });
   const gatesRef = useRef<HTMLDivElement>(null);
   const presId = q.state.presentation?.id ?? null;
+  /** D-J1a-18: a nyitott kérdés válaszai (a magasság-döntéshez) és az, hogy a táblák függőlegesen elférnek-e. */
+  const presLabelsRef = useRef<string[]>([]);
+  presLabelsRef.current = q.state.presentation?.options.map((o) => o.label) ?? [];
+  const [gatesFitH, setGatesFitH] = useState(true);
   /**
    * Élesítés (átmeneti kapu 3a): a válaszcélok (táblák, lista módban a gombok) a kérdés megjelenése után 450 ms-mal jelennek
    * meg; a meghajtó a 400 ms előtti érintést / billentyűt amúgy sem fogadja el (`ANSWER_ARM_MS`).
@@ -1522,13 +1541,18 @@ export default function TsunamiEscapeEnglish() {
       const cardBottom = card ? card.getBoundingClientRect().bottom - sr.top : 200;
       const { centers, width } = gateLayout(sr.width, viewRef.current.laneScreenX);
       // D-J1a-15 (review #483, K4): a táblák alsó széle ne lógjon a futó vetített feje alá (fekvő nézetben a kártya nő).
-      const gateH = 64;
+      // D-J1a-18: a tábla várható magassága a feliratból; ha a táblák így nem férnek a kártya és a fej közé → lista mód.
+      const labels = presLabelsRef.current;
+      const inner = width - 22;
+      const head = viewRef.current.runnerTopY * sr.height;
+      const gateH = labels.length ? Math.max(...labels.map((l) => gateHeightPx(l, inner))) : 64;
       const below = Math.max(cardBottom + 10, sr.height * 0.18);
-      const cap = viewRef.current.runnerTopY * sr.height - gateH - 8;
+      const cap = head - gateH - 8;
       const top = Math.round(Math.max(sr.height * 0.12, Math.min(below, cap)));
       setGateBox((prev) =>
         prev.top === top && prev.width === width && prev.centers[0] === centers[0] && prev.centers[1] === centers[1] && prev.centers[2] === centers[2] ? prev : { top, centers, width },
       );
+      setGatesFitH(gatesFitVertically({ labels, innerWidthPx: inner, cardBottomPx: cardBottom, runnerHeadPx: head, stageHeightPx: sr.height }));
     };
     measure();
     const card = gatesRef.current?.querySelector<HTMLElement>(".play-question-card");
@@ -1648,6 +1672,8 @@ export default function TsunamiEscapeEnglish() {
           if (phaseNowRef.current !== "play") startGame();
           // `longAnswers: true` (mobil mérő, D-J1a-11): a leghosszabb válaszokkal — a „lista mód” mérésére.
           if ((patch as { longAnswers?: boolean }).longAnswers) forceLongRef.current = true;
+          const answers = (patch as { answers?: unknown }).answers;
+          if (Array.isArray(answers) && answers.length >= 2 && answers.every((a) => typeof a === "string")) forceAnswersRef.current = answers as string[];
           qRef.current.request("trigger", driverRef.current!.clockMs());
           return;
         }
@@ -1680,7 +1706,8 @@ export default function TsunamiEscapeEnglish() {
 
   // D-J1a-11 (review #483, M3): ha egy válasz sem fér a kapu-táblába levágás nélkül, „lista mód”: a kérdés-sáv teljes
   // szöveggel mutatja a válaszokat (a kulcs-kör a kapu színe + szimbóluma), táblák nélkül.
-  const longMode = !!pres && !pres.options.every((o) => gateLabelFits(o.label, gateBox.width - 22));
+  // D-J1a-18: magasságban is — ha a táblák nem férnek a kártya alja és a futó feje közé, szintén lista mód.
+  const longMode = !!pres && (!pres.options.every((o) => gateLabelFits(o.label, gateBox.width - 22)) || !gatesFitH);
   // D-J1a-17 (ÚK2): „Jó kapu!” felirat a jó kapun bemenet nélkül átfutó gyereknek (a nyilvántartásban „nem válaszolt”).
   const idleGoodShown = !!pres && !!reveal && reveal.pickedOptionIndex === null && idleGoodId === pres.id;
   const questionBar = (inside: boolean) => (

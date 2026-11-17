@@ -286,6 +286,10 @@ test.describe("J1 / J5: a játék a kérdés alatt fut (lassítva, ≥ 0,35×), 
 });
 
 /** Kérdés nyitása a teszt-kampóval, és a kérdés-állapot `probe`-ja. */
+/** D-J1a-18: egysoros (minden nézetben egy sorba férő) és fekvő nézetben kétsoros, de szélességben beférő válaszok. */
+const SHORT_ANSWERS = ["cat", "dog", "sun"];
+const TWO_LINE_ANSWERS = ["zöld körte a tálban", "sárga banán a polcon", "kék szilva a kosárban"];
+
 async function openQuestion(page: Page, patch: Record<string, unknown> = { question: true }): Promise<void> {
   await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: { forceState?: unknown } }).__websuliGame?.forceState === "function");
   await page.evaluate((p) => (window as unknown as { __websuliGame: { forceState: (p: Record<string, unknown>) => void } }).__websuliGame.forceState(p), patch);
@@ -444,9 +448,12 @@ for (const viewport of [
         await page.waitForTimeout(5_000);
         await shot(page, `tsunami-${viewport.width}x${viewport.height}-play.jpg`);
       }
-      await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: { forceState?: unknown } }).__websuliGame?.forceState === "function");
-      await page.evaluate(() => (window as unknown as { __websuliGame: { forceState: (p: Record<string, unknown>) => void } }).__websuliGame.forceState({ question: true }));
+      // D-J1a-18 (orkesztrátori döntés): a táblás eset KÉNYSZERÍTETT egysoros válaszokkal — a véletlen kérdésforrás
+      // (kétsoros felirat fekvőben, hosszú válasz → lista mód) nem dönthet a mérésről; a küszöbök változatlanok. A kétsoros
+      // és a hosszú esetet külön teszt méri.
+      await openQuestion(page, { question: true, answers: SHORT_ANSWERS });
       await expect(gates(page)).toHaveCount(3, { timeout: 10_000 });
+      await expect(page.getByTestId("ts-quiz")).toHaveAttribute("data-long", "false");
       await page.waitForTimeout(1_200);
       const boxes = await page.evaluate(() => {
         const card = document.querySelector('[data-testid="ts-quiz"] .play-question-card')!.getBoundingClientRect();
@@ -492,3 +499,49 @@ for (const viewport of [
     });
   });
 }
+
+test.describe("844x390: kétsoros válaszok fekvőben — a táblák magasságban nem férnek, lista mód (D-J1a-18)", () => {
+  test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+  test("kényszerített kétsoros válaszok: lista mód, a teljes válaszok a sávban, a futó feje szabad; egysorosnál táblák", async ({ page }) => {
+    await page.goto("/games/tsunami-english?seed=11&difficulty=easy");
+    await page.getByTestId("button-tsunami-start").tap();
+    await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+    const quiz = page.getByTestId("ts-quiz");
+    await openQuestion(page, { question: true, answers: TWO_LINE_ANSWERS });
+    await expect(quiz).toBeAttached({ timeout: 10_000 });
+    await page.waitForTimeout(800);
+    await expect(quiz, "kétsoros felirat fekvőben → lista mód").toHaveAttribute("data-long", "true");
+    await expect(page.locator('[data-testid="ts-question"]')).toHaveAttribute("data-mode", "buttons");
+    await expect(gates(page), "lista módban nincs tábla, ami a futóra lóghatna").toHaveCount(0);
+    const labels = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-testid="ts-question"] .play-question-label')).map((el) => ({
+        text: (el as HTMLElement).innerText,
+        clipped: el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1,
+        inView: el.getBoundingClientRect().bottom <= innerHeight + 1 && el.getBoundingClientRect().top >= 0,
+      })),
+    );
+    expect(labels.map((l) => l.text).sort()).toEqual([...TWO_LINE_ANSWERS].sort());
+    for (const l of labels) {
+      expect(l.clipped, `levágott: ${l.text}`).toBe(false);
+      expect(l.inView, `a képen kívül: ${l.text}`).toBe(true);
+    }
+    // A futó feje szabad: a fej és a mellkas pontján (középső sáv, bemenet nélkül) nincs kérdés-felület.
+    const covered = await page.evaluate(() => {
+      const api = (window as unknown as { __websuliGame: { probe: () => { runnerTopY: number } } }).__websuliGame;
+      const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+      const x = stage.left + stage.width / 2;
+      const head = stage.top + api.probe().runnerTopY * stage.height;
+      return [head + 4, head + 30].map((y) => document.elementsFromPoint(x, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]')));
+    });
+    expect(covered, "a kérdés-felület nem takarja a futó fejét / mellkasát").toEqual([false, false]);
+    await shot(page, "tsunami-844x390-two-line.jpg");
+    await page.locator('[data-testid="ts-question"] [data-correct="true"]').first().tap();
+    await expect.poll(async () => (await probe(page)).questionsAnswered).toBe(1);
+    // Ugyanebben a nézetben egysoros válaszokkal táblák (a döntés kérdésenként újraszámolódik).
+    await expect(quiz).toHaveCount(0, { timeout: 15_000 });
+    await openQuestion(page, { question: true, answers: SHORT_ANSWERS });
+    await expect(gates(page)).toHaveCount(3, { timeout: 10_000 });
+    await expect(quiz).toHaveAttribute("data-long", "false");
+  });
+});

@@ -426,6 +426,21 @@ test("ÚK2 (D-J1a-17): a tétlen átfutás a JÓ kapun „Jó kapu!” felirat (
   assert.equal(idleCrossingWasGood(chosen.state(), 1), false, "nem tétlen kapu");
 });
 
+test("D-J1a-18: a tábla magassága a felirat sorszámából; ha a kártya és a fej közé nem fér → nem fér (lista mód)", async () => {
+  const { gateHeightPx, gatesFitVertically } = await import("../client/src/lib/tsunami/core");
+  const one = gateHeightPx("cat", 138);
+  const two = gateHeightPx("zöld körte a tálban", 138);
+  assert.ok(one >= 56 && one < two, `egysoros ${one} < kétsoros ${two}`);
+  assert.ok(two - one >= 15, "egy plusz sor legalább egy sormagasság");
+  // Fekvő 844×390: kártya alja ~185 px, a fej ~270 px → a kétsoros tábla nem fér, az egysoros igen.
+  const land = { innerWidthPx: 138, cardBottomPx: 185, runnerHeadPx: 270, stageHeightPx: 390 };
+  assert.equal(gatesFitVertically({ ...land, labels: ["cat", "dog", "sun"] }), true);
+  assert.equal(gatesFitVertically({ ...land, labels: ["cat", "zöld körte a tálban", "sun"] }), false, "a legmagasabb tábla dönt");
+  // Álló 390×844: bőven van hely.
+  assert.equal(gatesFitVertically({ innerWidthPx: 84, cardBottomPx: 200, runnerHeadPx: 560, stageHeightPx: 844, labels: ["zöld körte a tálban"] }), true);
+  assert.equal(gatesFitVertically({ ...land, labels: [] }), true, "kérdés nélkül nincs döntés");
+});
+
 test("A2 (D-J1a-14): közel nulla résnél a rossz kapu botlása nem zárja le azonnal a menetet (1,5 mp kegyelmi rés)", () => {
   const core = freshCore(4);
   stepFor(core, 31_000);
