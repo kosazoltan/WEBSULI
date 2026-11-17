@@ -1692,6 +1692,21 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
     nehéz, propjaikban nem változó gyermekek memózva. A K.4/8 (0 hosszú feladat 4× lassítással) a mainen sem teljesül — NOT DONE,
     jegy.
 
+#### J7b döntések — a második ellenőrzés után (2026-11-17; orkesztrátori döntés: R1 „A”; a 12–14. pontot pontosítják)
+
+21. **Kormány-szándék (R1):** a kormány csak a kérdés megjelenése után ≥ 1 s-mal (minimális olvasás) számít, és FENNTARTOTT
+    kitérés kell hozzá: a megjelenéskori értéktől ≥ 0,6, ugyanabba az irányba, ≥ 0,5 s-ig (a vezetés közbeni rezgés / úttartás
+    nem választ). Koppintás, 1–3 billentyű, fék és a hátrahúzott gáz (R5) azonnal szándék. Rögzüléskor a kapuk a pillanatnyi
+    menetirányhoz igazodnak (a középső egyenesen előre); kormány-szándéknál a fenntartott kitérés KEZDETEKORI irányhoz — a már
+    megkezdett kanyar így a választott oldalkapu felé visz. Az egyenes (középső) kapu koppintással / billentyűvel választható.
+22. **Határidő (R2):** rögzüléskor a nyitott kérdés ablaka legalább a kapuig érés + 0,4 s-ig tart (a mag a közös
+    `QuestionPresentation.windowMs`-t növeli — a kérdés-sáv, a lejárat és az áramlat ugyanazt az értéket olvassa); a kormányzással
+    válaszoló így nem kap rövidebb időt.
+23. **Rögzülés költsége (R3):** sikertelen próba után növekvő várakozás (3, 6, 9 … ≤ 30 lépés), és egy próba csak egy
+    vonal-távolságot néz (a keresés képkockák közé osztva).
+24. **Fekvő lista (R4):** alacsony fekvő nézetben a teljes válaszok listája a bal oldalon áll (a bal felső panel helyén), nem a
+    jármű és az út fölött; a lista méretét kérdésenként egyszer mérjük (nincs képkockánkénti layout-olvasás).
+
 ### J7c — zaj-alapú tornádópálya, Műszer-kalibrálás (Q2), szupercella (Opus)
 
 1. Állapot-sor commit.
