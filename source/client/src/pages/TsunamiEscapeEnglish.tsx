@@ -1522,7 +1522,12 @@ export default function TsunamiEscapeEnglish() {
       const cardBottom = card ? card.getBoundingClientRect().bottom - sr.top : 200;
       const { centers, width } = gateLayout(sr.width, viewRef.current.laneScreenX);
       // D-J1a-15 (review #483, K4): a táblák alsó széle ne lógjon a futó vetített feje alá (fekvő nézetben a kártya nő).
-      const gateH = 64;
+      // A tábla VALÓDI magassága számít: a két- / háromsoros felirat magasabb táblát ad (helyi SwiftShader-kapu, 844x390:
+      // a fix 64 px-szel a tábla alja 12,75 px-re a fej alá lógott).
+      let gateH = 64;
+      gatesRef.current?.querySelectorAll<HTMLElement>(".ts-gate").forEach((el) => {
+        gateH = Math.max(gateH, el.offsetHeight);
+      });
       const below = Math.max(cardBottom + 10, sr.height * 0.18);
       const cap = viewRef.current.runnerTopY * sr.height - gateH - 8;
       const top = Math.round(Math.max(sr.height * 0.12, Math.min(below, cap)));
@@ -1534,25 +1539,12 @@ export default function TsunamiEscapeEnglish() {
     const card = gatesRef.current?.querySelector<HTMLElement>(".play-question-card");
     const ro = typeof ResizeObserver !== "undefined" && card ? new ResizeObserver(measure) : null;
     if (ro && card) ro.observe(card);
+    // A táblák magassága a felirat (betűtípus) beálltakor változhat: azt is figyeljük.
+    if (ro) gatesRef.current?.querySelectorAll<HTMLElement>(".ts-gate").forEach((el) => ro.observe(el));
     window.addEventListener("resize", measure);
-    // A futó feje és a sávok vetülete a 3D jelenet méretezésekor áll be (`resize`); ha a kérdés a jelenet első méretezése
-    // ELŐTT nyílt (lassú szoftveres WebGL, gyors első kérdés), a táblák az alapértékkel számoltak volna. Nyitott kérdés alatt
-    // a vetület változására újramérünk (állapot csak eltérő eredménynél változik).
-    const proj = () => {
-      const v = viewRef.current;
-      return `${v.runnerTopY}|${v.laneScreenX[0]}|${v.laneScreenX[1]}|${v.laneScreenX[2]}`;
-    };
-    let lastProj = proj();
-    const watch = window.setInterval(() => {
-      const now = proj();
-      if (now === lastProj) return;
-      lastProj = now;
-      measure();
-    }, 250);
     return () => {
       ro?.disconnect();
       window.removeEventListener("resize", measure);
-      window.clearInterval(watch);
     };
   }, [presId]);
 
