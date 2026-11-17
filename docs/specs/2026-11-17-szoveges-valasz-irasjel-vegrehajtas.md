@@ -33,7 +33,8 @@ Terv: `docs/specs/2026-11-17-szoveges-valasz-irasjel.md`
 ## T3 — kért köztes lépés mondatvégi írásjellel
 
 `shared/answer-value.ts`, `gradeTypedAnswers`, `intermediate-step` ág: a VÁLASZ oldalán a `normalizeExpressionText` előtt a
-szóköz vagy szövegvég előtti mondatvégi írásjel (`[.!?…]+(?=\s|$)`) szóközre cserélődik (helyi segédfüggvény). A referencia oldala
+szóköz vagy szövegvég előtti mondatvégi írásjel (`[.!?…]+(?=\s|$)`) pontosvesszőre cserélődik (helyi segédfüggvény; szóközre
+nem lehet, mert a `normalizeExpressionText` a szóközt törli, és a következő szám összeolvadna a lépéssel). A referencia oldala
 és a `containsExpressionState` változatlan (a „12.5” és a „120” továbbra sem egyezik).
 Teszt: `tests/scoring-v2.test.ts` ÚJ esetei (meglévő eset nem módosul): „35 + 64 − 12.” / „35+64-12!” → helyes;
 „35 + 64 − 12.5”, „35 + 64 − 120” → hibás; „3 · 7. 21.” két részeredménnyel → 2 / 2.

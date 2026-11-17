@@ -169,6 +169,12 @@ export function normalizeExpressionText(s: string): string {
   return s.replace(/[×*]/g, "·").replace(/÷/g, ":").replace(/[−–]/g, "-").replace(/(\d),(\d)/g, "$1.$2").replace(/\s+/g, "");
 }
 
+/**
+ * A szóköz vagy szövegvég előtti mondatvégi írásjel elválasztóvá (a kifejezés-állapot összevetése előtt, a válasz oldalán). Pontosvessző,
+ * nem szóköz: a `normalizeExpressionText` a szóközt törli, és a következő szám összeolvadna a lépéssel („3 · 7. 21.” → „3·721”).
+ */
+const withoutSentenceEnd = (s: string): string => s.replace(/[.!?…]+(?=\s|$)/g, ";");
+
 const ATOM_RE = new RegExp(`(?:${SIGN}(?=\\d))?(?:${ATOM})`, "g");
 
 /**
@@ -212,7 +218,9 @@ export function gradeTypedAnswers(rawAnswer: string, answers: readonly TypedAnsw
     }
     if (expected.form === "intermediate-step") {
       if (!isExpressionText(expected.value)) { undecidable = true; verdicts.push({ part: expected.part, ok: false, undecidable: true, reason: `A(z) ${expected.part} rész kért köztes alakja nem értelmezhető.` }); continue; }
-      const ok = containsExpressionState(normalizeExpressionText(answer), normalizeExpressionText(expected.value));
+      // Spec 2026-11-17-szoveges-valasz-irasjel: a lépés utáni mondatvégi írásjel („35 + 64 − 12.”) nem számfolytatás — csak a VÁLASZ
+      // oldalán, szóköz vagy szövegvég előtt; a tizedes („12.5”) és a hosszabb szám („120”) továbbra sem egyezik.
+      const ok = containsExpressionState(normalizeExpressionText(withoutSentenceEnd(answer)), normalizeExpressionText(expected.value));
       verdicts.push({ part: expected.part, ok, reason: ok ? "A kért lépés szerepel." : `A(z) ${expected.part} részhez a kért alak (${expected.value}) hiányzik — értékazonos más alak nem elég.` });
       continue;
     }

@@ -186,3 +186,20 @@ test("élő mérés 35370b32: a nem-szöveg típusos érték (modell szám-ért�
   assert.equal(referenceValue(12 as unknown), null);
   assert.equal(isExpressionText(undefined), false);
 });
+
+test("spec 2026-11-17-szoveges-valasz-irasjel: a kért köztes lépés utáni mondatvégi írásjel nem hiba; a tizedes és a hosszabb szám igen", () => {
+  const step = [{ part: "menet", kind: "expression" as const, value: "35 + 64 − 12", form: "intermediate-step" as const }];
+  for (const answer of ["35 + 64 − 12", "35 + 64 − 12.", "35+64-12!", "35 + 64 − 12?", "35 + 64 − 12…", "35 + 64 − 12 .", "Először: 35 + 64 − 12. Aztán összeadom."]) {
+    assert.equal(gradeTypedAnswers(answer, step).correct, 1, JSON.stringify(answer));
+  }
+  for (const answer of ["35 + 64 − 12.5", "35 + 64 − 120", "35 + 64 − 120.", "135 + 64 − 12.", "35 + 8 · 8 − 12.", "35 + 64 − 12,5", "35 + 64 − 12/5."]) {
+    assert.equal(gradeTypedAnswers(answer, step).correct, 0, JSON.stringify(answer));
+  }
+  const two = [{ part: "szorzás", kind: "expression" as const, value: "3 · 7", form: "intermediate-step" as const }, { part: "eredmény", kind: "number" as const, value: "21" }];
+  assert.equal(gradeTypedAnswers("3 · 7. 21.", two).correct, 2);
+  assert.equal(gradeTypedAnswers("3 · 7.\n21.", two).correct, 2);
+  assert.equal(gradeTypedAnswers("3 · 7, 21", two).correct, 2, "a változás előtt is helyes alak marad");
+  const task = base({ sample: "Az első menet eredménye: 35 + 64 − 12.", typedAnswers: step });
+  assert.equal(evaluateOpenAnswer("Az eredmény 35 + 64 − 12.", task).score, 1);
+  assert.equal(evaluateOpenAnswer("Az eredmény 35 + 8 · 8 − 12.", task).score, 0);
+});
