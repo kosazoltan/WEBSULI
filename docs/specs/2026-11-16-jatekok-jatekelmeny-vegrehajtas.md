@@ -1733,6 +1733,9 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
     sim és a határidő (26.) változatlan. A közös `joystick-response.spec.ts`-hez nem nyúlunk.
 31. **Böngészős keret:** a `tornado-play.spec.ts` 60 s-os tesztkeretet kap (a rögzítés előtti ≥ 1 s olvasás miatt a rossz kapus
     eset a 30 s-os alapkeret szélére ért); a tényleges futásidőt mérjük, > 40 s külön lelet.
+32. **Alapablak (a 11. pont pontosítása, utólag rögzítve):** `baseWindowMs` 5500 → 6000 (`TORNADO_BASE_WINDOW_MS`, commit
+    `1147b9e9`, az első ellenőrzés M1 lelete): a mindig jót választó bot lassú (8 e/s) tempónál 5,5 s-os ablakkal lejárt a
+    kapu elérése előtt; a 6 s-os alap a director 9 s-os plafonján belül marad, és a J2 / J3 küszöbök teljesülnek.
 
 ### J7c — zaj-alapú tornádópálya, Műszer-kalibrálás (Q2), szupercella (Opus)
 
