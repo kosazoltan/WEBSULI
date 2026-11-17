@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — szöveges válasz: írásjel-, szóköz- és tipográfia-tűrés
 
-**Állapot:** folyamatban – 2026-11-17, ág `fix/szoveges-valasz-irasjel`
+**Állapot:** kész, PR előtt – 2026-11-17, ág `fix/szoveges-valasz-irasjel`
 Terv: `docs/specs/2026-11-17-szoveges-valasz-irasjel.md`
 
 Útvonalak a `source/` alatt. Tesztet gyengíteni tilos; a meglévő pontozó- és paritástesztek nem módosulnak.

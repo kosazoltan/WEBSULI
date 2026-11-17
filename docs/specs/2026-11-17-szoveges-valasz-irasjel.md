@@ -1,6 +1,6 @@
 # Szöveges válasz: a mondatvégi írásjel, a szóköz és a tipográfiai változat ne számítson hibának
 
-**Állapot:** folyamatban – 2026-11-17, ág `fix/szoveges-valasz-irasjel`
+**Állapot:** kész, PR előtt – 2026-11-17, ág `fix/szoveges-valasz-irasjel`
 Végrehajtási utasítás: [`2026-11-17-szoveges-valasz-irasjel-vegrehajtas.md`](2026-11-17-szoveges-valasz-irasjel-vegrehajtas.md)
 
 Tulajdonosi hibajelentés (2026-11-17, szó szerint): „Egy újabb hiba, hogy a szöveges feladatoknál ha rak pontot a tanuló, azt is
@@ -95,9 +95,9 @@ tagolás („50  000”) nem egy szám.
 5. `needsSentence` üzenet és két eredmény szóközzel — javaslat: külön jegy (pontozó-szerződés, HTML-paritás).
 
 <!-- acceptance-checklist -->
-- [ ] E1 – fillBlank ponttal / pont nélkül helyes (egységteszt + böngésző)
-- [ ] E2 – ékezet / belső írásjel / más szó hibás
-- [ ] E3 – üres és csak írásjel hibás
-- [ ] E4 – köztes lépés mondatvégi írásjellel
-- [ ] E5 – a meglévő pontozó- és paritástesztek változatlanul zöldek
-- [ ] E6 – böngészős próba helyi leckén
+- [x] E1 – fillBlank ponttal / pont nélkül helyes (egységteszt + böngésző)
+- [x] E2 – ékezet / belső írásjel / más szó hibás
+- [x] E3 – üres és csak írásjel hibás
+- [x] E4 – köztes lépés mondatvégi írásjellel
+- [x] E5 – a meglévő pontozó- és paritástesztek változatlanul zöldek
+- [x] E6 – böngészős próba helyi leckén
