@@ -206,18 +206,24 @@ test("J5a 23. (a kivett `couponRepeat` elvárásai a közös szabállyal): a hib
         // (régi: „kimerüléskor előbb a hibázott”, „a hibázott a következő körben jön”) — a közös szabály a hibázott tételt
         // menet közben (3.–6. kérdésként, ≤ 30% ismétléssel) vagy a kimerülés utáni körben hozza vissza: legfeljebb
         // min(2n, 10) kérdés múlva (mérve, 20 seed × 3 modell: 3 tételnél ≤ 3, 5 tételnél ≤ 6, 8 tételnél ≤ 10).
+        // Kimondott kivétel („nem volt rá ideje visszajönni”): ha a hiba után a menetből kevesebb mint `within` MEGVÁLASZOLT
+        // kérdés maradt — a menet végén megszakított (aborted) kérdés nem számít bele (review, 80 új seeden: a régi ablak
+        // ezt beszámította, és 3 esetben hamisan bukott; a javított ablakkal 80 seed × 7 modell × 3 / 5 / 8 tétel: 0 bukás).
+        // Ami a menetben visszajöhetett volna, annak vissza kell jönnie.
         const within = Math.min(2 * n, 10);
         out.forEach((o, i) => {
           if (o.result !== "wrong" && o.result !== "timeout") return;
-          if (out.length - i - 1 < within) return;
+          if (out.slice(i + 1).filter((x) => x.result !== "aborted").length < within) return;
           missed += 1;
           const back = out.slice(i + 1).findIndex((x) => x.key === o.key);
           assert.ok(back >= 0 && back + 1 <= within, `${n} tétel, seed ${seed}: a hibázott ${o.key} (${i + 1}.) ${back < 0 ? "nem jött vissza" : `${back + 1} kérdés múlva jött`}`);
         });
-        // (régi: „utána a legrégebben látott”) — körforgás. SPEC-VÁLTOZÁS 2026-11-17 (J5a 23.): a régi tartalék ≥ 2n
-        // kérdésnél minden tételt kétszer adott; a közös szabály ismétlési slotjai (≤ 30%) a hibázottakat előzik, így:
-        // minden tétel sorra kerül (≥ n kérdésnél), ≥ 3n kérdésnél kétszer, és egy tétel két feltevése között ≤ 2n kérdés
-        // (mérve, 20 seed × 3 modell: 3 tételnél ≤ 3, 5 tételnél ≤ 7, 8 tételnél ≤ 12).
+        // (régi: „utána a legrégebben látott”) — körforgás. SPEC-VÁLTOZÁS 2026-11-17 (J5a 23.) — LAZÍTÁS, nem egyenértékű: a
+        // régi tartalék ≥ 2n kérdésnél minden tételt kétszer adott; a közös szabály ismétlési helyei (≤ 30%) a HIBÁZOTT
+        // tételekre mennek, ezért a jól megválaszolt tétel később kerül újra sorra. Az új állítás: minden tétel sorra kerül
+        // (≥ n kérdésnél), ≥ 3n kérdésnél kétszer, és egy tétel két feltevése között ≤ 2n kérdés (mérve, 20 seed × 3 modell:
+        // 3 tételnél ≤ 3, 5 tételnél ≤ 7, 8 tételnél ≤ 12). 8 tételnél a „≥ 3n = 24 kérdés” egy 13–20 kérdéses menetben sosem
+        // jön össze, ott ez a rész üres — a két feltevés közti ≤ 2n rés viszont ott is mér.
         const keys = g.askedKeys();
         for (let i = 0; i < n; i++) {
           const at = keys.flatMap((k, j) => (k === `mat:lecke-${i}` ? [j] : []));
