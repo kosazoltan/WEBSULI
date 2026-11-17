@@ -74,3 +74,18 @@ A lezárás hívása ezután a foglalás miatt nem küld újra. A válasz menté
 - [x] E3 – szerveres kvíz: az utolsó válasz küld
 - [x] E4 – az utána jövő lezárás nem küld újra
 - [x] E5 – meglévő tesztek zöldek, séma változatlan
+
+## Független review (2026-11-17) — K1–K3, ebben a szeletben javítva
+
+- **Döntés:** az A út (séma és migráció nélkül) — az orkesztrátor 2026-11-17-i döntése.
+- **K1:** a levél a foglalás ELŐTT áll össze; a nem kézbesített címzett foglalásának felszabadítása `finally` ágban fut — kivétel
+  (adatbázis, küldő) után sem ragad be foglalás.
+- **K2:** a levélküldés köré 30 s-os időkorlát kerül (`withSendTimeout`; a Resend SDK 6.6.0 `dist/index.mjs` fájljában időkorlát /
+  megszakító jel nem található); lejáratkor a küldés bukottnak számít: a foglalás felszabadul, a meglévő 60 s-os újrapróba pótol.
+  Vállalt következmény: ha a szolgáltató az időkorlát UTÁN mégis kézbesít, az újrapróba második levelet küldhet ugyanannak a
+  címzettnek (ritka; a levélvesztésnél kisebb baj).
+- **K3:** a `catch` csak a hiba osztályát és kódját naplózza (`errorClass`) — a lekérdezés hibaüzenete a paramétereket is tartalmazná.
+- Tesztek (valódi DB, 200 / 200): kivétel a foglalás után → nincs beragadt foglalás, a következő hívás pótol; lefagyott küldő →
+  az időkorlát után felszabadul, a másik címzett megkapja; adatbázishiba → a naplósorban nincs `@`. Mutáció: a felszabadítás
+  kikapcsolva → 4 teszt bukik; a nyers hiba naplózva → a K3 teszt bukik. A K2 időkorlát elhagyásával a teszt nem tér vissza
+  (nem futtatva: a harness 300 s-os korlátjáig állna).

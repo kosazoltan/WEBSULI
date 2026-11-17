@@ -154,6 +154,70 @@ test("valódi DB: párhuzamos hívásoknál a MEGHIÚSULT címzett foglalása fe
   } finally { setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); }); }
 });
 
+/* Review K1–K3 (2026-11-17): a foglalás kivétel és lefagyott küldő után sem ragad be; a napló nem tartalmaz e-mail-címet. */
+test("review K1: a küldő SZINKRON kivétele a foglalás után → a foglalás felszabadul, a következő hívás pótol", async () => {
+  sent.length = 0;
+  let broken = true;
+  // Nem elutasított ígéret, hanem azonnali kivétel: a foglalás már megtörtént, a küldés el sem indult.
+  setResultSender(((subject: string, html: string, to: string) => { if (broken) throw new TypeError(`váratlan hiba: ${to}`); sent.push({ subject, html, to }); return Promise.resolve(); }) as Parameters<typeof setResultSender>[0]);
+  try {
+    const q = lesson.experience!.quiz;
+    const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+    const roundKey = roundKeyOf("t", "quiz", "round-throw");
+    const call = () => sendLessonResult({ lessonId: "result-published", roundKey, learner: "Vendég tanuló", graded }, false);
+    assert.deepEqual(await call(), { sent: 0, duplicate: false });
+    const stored = async () => (await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, "result-published"), eq(lessonResultEmails.roundKey, roundKey))))[0].delivered;
+    assert.deepEqual(await stored(), [], "a kivétel után nem maradt beragadt foglalás");
+    broken = false;
+    assert.deepEqual(await call(), { sent: 2, duplicate: false }, "a következő hívás mindkét címzettnek pótol");
+    assert.deepEqual([...await stored()].sort(), ["admin-a@example.test", "admin-b@example.test"]);
+  } finally { setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); }); }
+});
+
+test("review K2: a LEFAGYOTT küldő az időkorlát után bukottnak számít — a foglalása felszabadul, a másik címzett megkapja, a pótlás működik", async () => {
+  const { setSendTimeout } = await import("../server/lesson-result-email");
+  sent.length = 0;
+  let hang = true;
+  const previous = setSendTimeout(300);
+  setResultSender(async (subject, html, to) => { if (to === "admin-b@example.test" && hang) await new Promise(() => { /* soha nem tér vissza */ }); sent.push({ subject, html, to }); });
+  try {
+    const q = lesson.experience!.quiz;
+    const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+    const roundKey = roundKeyOf("t", "quiz", "round-hang");
+    const call = () => sendLessonResult({ lessonId: "result-published", roundKey, learner: "Vendég tanuló", graded }, false);
+    const started = Date.now();
+    assert.deepEqual(await call(), { sent: 1, duplicate: false });
+    assert.ok(Date.now() - started < 5000, "a hívás az időkorlát után visszatér");
+    const stored = async () => (await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, "result-published"), eq(lessonResultEmails.roundKey, roundKey))))[0].delivered;
+    assert.deepEqual(await stored(), ["admin-a@example.test"], "a lefagyott címzett foglalása felszabadult");
+    hang = false;
+    assert.deepEqual(await call(), { sent: 1, duplicate: false });
+    assert.deepEqual(sent.map(s => s.to), ["admin-a@example.test", "admin-b@example.test"]);
+  } finally { setSendTimeout(previous); setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); }); }
+});
+
+test("review K3: adatbázishiba a foglalás közben — a napló csak a hiba osztályát / kódját tartalmazza, e-mail-címet nem", async () => {
+  const { errorClass } = await import("../server/lesson-result-email");
+  const { logger } = await import("../server/lib/logger");
+  const lines: string[] = [];
+  const original = logger.error;
+  logger.error = ((...args: unknown[]) => { lines.push(args.map(a => (a instanceof Error ? `${a.name}: ${a.message}` : String(a))).join(" ")); }) as typeof logger.error;
+  try {
+    const q = lesson.experience!.quiz;
+    const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+    // A körkulcs 64 karakteres oszlopba megy: a túl hosszú kulcs adatbázishibát ad — a hibaüzenet a paramétereket is tartalmazza.
+    const result = await sendLessonResult({ lessonId: "result-published", roundKey: "x".repeat(80), learner: "admin-a@example.test nevű tanuló", graded }, false);
+    assert.deepEqual(result, { sent: 0, duplicate: false });
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /^\[LESSON-RESULT\] a küldés nem sikerült: [A-Za-z0-9_]+( \([A-Za-z0-9_]+\))?$/);
+    assert.ok(!lines.join(" ").includes("@"), "a napló nem tartalmaz e-mail-címet");
+  } finally { logger.error = original; }
+  assert.equal(errorClass(Object.assign(new Error("titok: admin-a@example.test"), { code: "23505" })), "Error (23505)");
+  assert.equal(errorClass(Object.assign(new Error("x"), { name: "admin-a@example.test" })), "Error", "a nem szabályos név nem kerül ki");
+  assert.equal(errorClass("admin-a@example.test"), "Error");
+  assert.equal(errorClass(Object.assign(new Error("x"), { cause: { code: "22001" } })), "Error (22001)");
+});
+
 /* Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény + a szigorítás automatikus lazítása, valódi DB-n és HTTP-n. */
 test("S4b: a feladatkör beküldése feladatonként egy névtelen sort ír; ugyanaz a kör újra nem duplikál; tanulói szöveg nincs", async () => {
   const task = lesson.experience!.tasks[0];

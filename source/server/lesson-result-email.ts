@@ -33,6 +33,25 @@ async function send(subject: string, html: string, to: string) {
   return sendAdminNotification(subject, html, to, { quiet: true });
 }
 
+/** Review K3: a naplóba csak a hiba osztálya és (ha van) kódja kerül — üzenet, paraméter, cím nem. */
+export function errorClass(error: unknown): string {
+  const e = error as { name?: unknown; code?: unknown; cause?: { name?: unknown; code?: unknown } } | null;
+  const name = typeof e?.name === "string" && /^[A-Za-z0-9_]{1,60}$/.test(e.name) ? e.name : "Error";
+  const code = [e?.code, e?.cause?.code].find(c => (typeof c === "string" || typeof c === "number") && /^[A-Za-z0-9_]{1,40}$/.test(String(c)));
+  return code === undefined ? name : `${name} (${code})`;
+}
+
+/** Review K2: a levélküldés időkorlátja (a szolgáltató hívása nem tarthatja korlátlanul a kézbesítés-foglalást). */
+let sendTimeoutMs = 30_000;
+/** Teszthez: az időkorlát rövidítése; a korábbi értéket adja vissza. */
+export function setSendTimeout(ms: number): number { const previous = sendTimeoutMs; sendTimeoutMs = ms; return previous; }
+class SendTimeoutError extends Error { constructor() { super("A levélküldés időkorlátja lejárt."); this.name = "SendTimeoutError"; } }
+function withSendTimeout<T>(sending: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new SendTimeoutError()), sendTimeoutMs); timer.unref?.(); });
+  return Promise.race([sending, limit]).finally(() => clearTimeout(timer));
+}
+
 export const roundKeyOf = (...parts: string[]) => createHash("sha256").update(parts.join("|")).digest("hex");
 
 /**
@@ -60,22 +79,30 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
     if (!recipients.length) { logger.warn("[LESSON-RESULT] nincs címzett (ADMIN_EMAILS)"); return { sent: 0, duplicate: false }; }
     const missing = recipients.filter(r => !claim.delivered.includes(r));
     if (!missing.length) return { sent: 0, duplicate: true };
+    // Review K1: a levél a foglalás ELŐTT áll össze — ha az összeállítás dob, nincs mit felszabadítani.
+    const mail = buildResultEmail({ lessonTitle: lesson.data.title, classroom: lesson.data.classroom, learner: input.learner, learnerFirst: input.learnerFirst, guest: input.guest,
+      url: row.htmlFileId ? getMaterialPreviewUrl(row.htmlFileId) : "", graded: input.graded });
     // Spec 2026-11-17-eredmeny-email-foglalas: atomi FOGLALÁS a küldés előtt — a címzett csak akkor kerül a `delivered` listába, ha még
     // nincs benne; a sorzár miatt két egyidejű hívásból pontosan egy kap sort vissza, az küld (nincs dupla levél).
     const claimed: string[] = [];
-    for (const to of missing) {
-      const got = await db.update(lessonResultEmails).set({ delivered: sql`array_append(${lessonResultEmails.delivered}, ${to})` })
-        .where(and(eq(lessonResultEmails.id, claim.id), sql`NOT (${to} = ANY(${lessonResultEmails.delivered}))`)).returning({ id: lessonResultEmails.id });
-      if (got.length) claimed.push(to);
-    }
-    if (!claimed.length) return { sent: 0, duplicate: true };
-    const mail = buildResultEmail({ lessonTitle: lesson.data.title, classroom: lesson.data.classroom, learner: input.learner, learnerFirst: input.learnerFirst, guest: input.guest,
-      url: row.htmlFileId ? getMaterialPreviewUrl(row.htmlFileId) : "", graded: input.graded });
-    const results = await Promise.allSettled(claimed.map(to => send(mail.subject, mail.html, to)));
-    const ok = claimed.filter((_, i) => results[i].status === "fulfilled");
-    // A meghiúsult címzett foglalása felszabadul: a következő azonos hívás vagy az újrapróba pótolja (review #280), levél nem vész el.
-    for (const to of claimed.filter((_, i) => results[i].status === "rejected")) {
-      await db.update(lessonResultEmails).set({ delivered: sql`array_remove(${lessonResultEmails.delivered}, ${to})` }).where(eq(lessonResultEmails.id, claim.id));
+    const ok: string[] = [];
+    try {
+      for (const to of missing) {
+        const got = await db.update(lessonResultEmails).set({ delivered: sql`array_append(${lessonResultEmails.delivered}, ${to})` })
+          .where(and(eq(lessonResultEmails.id, claim.id), sql`NOT (${to} = ANY(${lessonResultEmails.delivered}))`)).returning({ id: lessonResultEmails.id });
+        if (got.length) claimed.push(to);
+      }
+      if (!claimed.length) return { sent: 0, duplicate: true };
+      // Review K2: a lefagyott küldés nem tarthatja a foglalást — időkorlát után bukottnak számít (felszabadul, az újrapróba pótolja).
+      const results = await Promise.allSettled(claimed.map(to => withSendTimeout(send(mail.subject, mail.html, to))));
+      ok.push(...claimed.filter((_, i) => results[i].status === "fulfilled"));
+    } finally {
+      // Review K1: a felszabadítás `finally` ágban — bármilyen kivétel (adatbázis, küldő) után a nem kézbesített címzett foglalása
+      // felszabadul: a következő azonos hívás vagy az újrapróba pótolja (review #280), levél nem ragad be.
+      for (const to of claimed.filter(to => !ok.includes(to))) {
+        await db.update(lessonResultEmails).set({ delivered: sql`array_remove(${lessonResultEmails.delivered}, ${to})` }).where(eq(lessonResultEmails.id, claim.id))
+          .catch(error => logger.error(`[LESSON-RESULT] a foglalás felszabadítása nem sikerült: ${errorClass(error)}`));
+      }
     }
     if (ok.length < claimed.length) {
       logger.warn(`[LESSON-RESULT] ${claimed.length - ok.length} címzettnek nem ment el${retry ? " — 60 s múlva újrapróbálja" : ""}.`);
@@ -83,7 +110,8 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
     }
     return { sent: ok.length, duplicate: false };
   } catch (error) {
-    logger.error("[LESSON-RESULT] a küldés nem sikerült:", error);
+    // Review K3: csak a hiba osztálya / kódja — a lekérdezés hibaüzenete a paramétereket (e-mail-címet) is tartalmazná.
+    logger.error(`[LESSON-RESULT] a küldés nem sikerült: ${errorClass(error)}`);
     return { sent: 0, duplicate: false };
   }
 }
