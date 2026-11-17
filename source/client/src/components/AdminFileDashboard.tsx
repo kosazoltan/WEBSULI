@@ -8,7 +8,7 @@ import EmptyState from "@/components/EmptyState";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
+import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, MIN_CLASSROOM, MAX_CLASSROOM, normalizeClassroom } from "@shared/classrooms";
 import { matchesPreparedSearch, prepareMaterialSearch, searchSpansAllClassrooms } from "@shared/material-title";
 import {
   DndContext,
@@ -163,10 +163,11 @@ export default function AdminFileDashboard({
   const searchAllClassrooms = searchSpansAllClassrooms(search, classroomFilter === "all" ? null : classroomFilter);
   const filteredFiles = files.filter(file => {
     const q = searchQuery.toLowerCase();
-    // Az évfolyam-feliratra is talál („8. osztály”, „Nincs osztály”) — docs/specs/2026-11-16-tananyag-evfolyam-jeloles.md.
+    // Az érvényes osztályt a közös illesztés találja; a felirat-részszöveg csak a „Nincs osztály” jelvényre kell (érvénytelen érték) —
+    // különben az „1. osztály” a „11. osztály” feliratot is hozná (review K2).
     // A közös illesztés az osztály-kifejezésekre is talál („5.o”, „ötödik”) — docs/specs/2026-11-17-tananyag-cim-osztaly.md.
     const matchesSearch = matchesPreparedSearch(file, search) ||
-      classroomDisplayLabel(file.classroom).toLowerCase().includes(q);
+      (normalizeClassroom(file.classroom) === null && classroomDisplayLabel(file.classroom).toLowerCase().includes(q));
     // Hiányzó / érvénytelen évfolyam csak az „Összes” nézetben látszik („Nincs osztály” jelvénnyel), nem hamisan az 1.-ben.
     const matchesClassroom = searchAllClassrooms || classroomFilter === "all" || file.classroom === classroomFilter;
     return matchesSearch && matchesClassroom;

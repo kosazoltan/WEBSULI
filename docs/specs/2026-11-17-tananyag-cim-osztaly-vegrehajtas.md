@@ -144,3 +144,6 @@ Jelentés: a session scratchpadjében (`review-tananyag-cim/jelentes.md`); íté
    kódban a hosszú alak marad.
 8. A végső fejen: `gate:stage`; böngészős futások egyenként, `--workers=1` (`material-title`, `classroom-badge`, `home-views`), a
    sorompó ellenőrzése és az indítás külön lépésben; `gate:push`.
+9. A böngészős spec fogta meg (admin, „1. osztály” → az 1. ÉS a 11. osztály): az admin kereső felirat-részszöveg ága
+   (`AdminFileDashboard.tsx`, a #54 óta) ugyanazt a K2-hibát hordozta. Javítás: a felirat-ág csak érvénytelen osztályú anyagra
+   („Nincs osztály”) érvényes; az érvényes osztályt a közös illesztés találja.
