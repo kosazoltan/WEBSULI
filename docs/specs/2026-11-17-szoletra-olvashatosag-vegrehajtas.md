@@ -1,7 +1,7 @@
 # Szólétra olvashatóság — végrehajtási utasítás (AI-ügynöknek)
 
 **Terv:** [`docs/specs/2026-11-17-szoletra-olvashatosag.md`](2026-11-17-szoletra-olvashatosag.md) (cél, nem-cél, mért
-kiinduló számok, döntések A–F, EARS SZ-1…SZ-10). **Állapot:** folyamatban — ág `fix/szoletra-olvashatosag`, munkafa
+kiinduló számok, döntések A–F, EARS SZ-1…SZ-10). **Állapot:** folyamatban (helyi kapuk) — ág `fix/szoletra-olvashatosag`, munkafa
 `.claude/worktrees/szoletra-olvashatosag`, kanban #89.
 
 ## Hatókör
@@ -68,6 +68,45 @@ NEM módosítható: `GE/play/questionDirector.ts`, `reading.ts`, `questionUi.ts`
 - (f) a megállítási okok nem oldják fel egymást (szünet / Miért? / kibontás / kupon alatt az óra és az előjelzés is áll — a
   kérdés-óra közös; meglévő `game-explanation-pause.spec.ts` + mobil mérő).
 
-## Mért számok (a 8. lépés tölti ki)
+## Mért számok (2026-11-17, a 8. lépés)
 
-_Kitöltendő a mérés után._
+Forrás: a scratchpad `measure.mts` (a valódi angol kézi bank + a központi szóbank adott szintje, a lap képletével) és
+`tune.mts` / `T/word-ladder-sim.test.ts` (20 seed, emberi olvasó-bot `T/support/word-ladder-reader.ts`, valódi tételek).
+
+**Válaszablak (medián, s; zárójelben a leghosszabb tételé) — ELŐTTE → UTÁNA Nyugodt / Normál / Gyors**
+
+| Évf. | Kérdésfajta | Előtte | Nyugodt | Normál | Gyors |
+|---|---|---|---|---|---|
+| 3. | magyar → angol (szóbank) | 5,6 | 16,9 (36,1) | 11,7 (25) | 5,6 (9) |
+| 3. | angol → magyar (szóbank) | 5,6 | 18,4 (34,6) | 12,7 (24) | 5,6 (9) |
+| 3. | hiányos mondat (szóbank) | 6,2 | 19,8 (24,3) | 13,7 (16,8) | 6,2 (8,2) |
+| 3. | kézi szó / témakör | 5,6 | 13,2–14,6 | 9–10 | 5,6 |
+| 3. | hétköznapi helyzet (kézi) | 9,0 | 30,2 (40) | 20,9 (25) | 9,0 |
+| 5. | magyar → angol | 4,5 | 12,7 (28,2) | 8,6 (19,4) | 4,5 (7,5) |
+| 5. | hiányos mondat | 5,5 | 17,1 (20,4) | 11,7 (14) | 5,5 (7) |
+| 8. | angol → magyar | 4,5 | 13,1 (22,9) | 8,9 (15,7) | 4,5 (6,5) |
+| 8. | mondat jelentése | 9,0 | 33,6 (40) | 23,1 (25) | 9,0 |
+| 11. | magyar → angol | 4,5 | 11,2 (23,8) | 7,6 (16,3) | 4,5 (6,8) |
+| 11. | mondat jelentése | 9,0 | 34,1 (40) | 23,5 (25) | 9,0 |
+
+Az óra mostantól 600 ms előjelzés után indul (előtte: a kérés pillanatában, a beúszás alatt már járt).
+
+**Rivális:** előtte 6,3 s / fok (1. pálya) → 5,4 s (10. pálya), a kérdés alatt teljes sebesség. Utána Nyugodt: 7,5 / 7 /
+6,6 / 6,8 s / fok (3–4 / 5–6 / 7–8 / 9–12. évf.), pályánként −0,08 s, a kérdés alatt 0,35× (a gyakorlatban kb. 2× lassabb
+haladás); Normál: 6,9 / 6,6 / 6,4 / 6,5, −0,08 s, 0,5×; Gyors: a régi. Hibás válasz utáni kijelzés 2 s → 3 s.
+
+**Emberi olvasó-bot (1. pálya, 20 seed): az ablakon belül végigolvasott és megválaszolt kérdések aránya**
+
+| Profil | Előtte (= Gyors) | Nyugodt | Normál |
+|---|---|---|---|
+| lassú olvasó (0,6× évf.-sebesség, 65%) | 0–0,3% | 99,3–99,7% | 61–63% |
+| átlagos (0,8×, 75%) | 1,8–6,7% | 100% | 96–99% |
+| erős (1,2×, 92%) | 37–48% | 100% | 100% |
+
+**Győzelem / menethossz / kérdés-perc (Nyugodt, 1. pálya → 6. pálya; évf. 3 / 5 / 8 / 11)**
+
+- átlagos olvasó: 15 / 14 / 17 / 15 győzelem a 20-ból (1. pálya), 17 / 14 / 18 / 11 (6. pálya); menet medián 124–193 s (1.),
+  227–279 s (6.); 4,5–5,6 kérdés / perc. Előtte (régi tempón) ugyanez a profil: 0/20.
+- lassú olvasó: 3–7 / 20 (1. pálya), 1–3 / 20 (6.); erős: 20 / 20.
+- pontosság szerint (4. és 8. évf.): monoton (teszt); kérdéssel ≥ kérdés nélkül (teszt).
+- Gyors tempón a régi elvárások: SIM_AVERAGE ≥ 10 kérdés / perc, 50–80% győzelem, 2–5 perc (teszt).

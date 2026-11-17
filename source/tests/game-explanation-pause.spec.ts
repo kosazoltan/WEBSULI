@@ -92,5 +92,7 @@ test("Szólétra: hibás fogás után a helyes kapaszkodó ≥ 1,8 mp-ig zöld, 
   await expect.poll(async () => simTime(page), { timeout: 5_000 }).toBeGreaterThan(frozenSim);
   // Az új kérdéshez a már nyitott kérdés ablaka (≤ 9 mp kérdés-óra) + kijelzés kellhet; a kérdés-óra a lassú CI-n a
   // falióránál lassabban jár (képkockánként ≤ 250 ms), ezért bőven mért várakozás — a feltétel ugyanaz.
-  await expect.poll(async () => Number((await probe(page))?.questionId ?? 0), { timeout: 30_000 }).toBeGreaterThan(qid);
+  // SPEC-VÁLTOZÁS 2026-11-17 (szoletra-olvashatosag): a Nyugodt (alap) tempó ablaka olvasásalapú, legfeljebb 40 s + 0,6 s
+  // előjelzés + 3 s kijelzés — a várakozás ehhez igazodik (a feltétel, hogy új kérdés jön, változatlan).
+  await expect.poll(async () => Number((await probe(page))?.questionId ?? 0), { timeout: 60_000 }).toBeGreaterThan(qid);
 });

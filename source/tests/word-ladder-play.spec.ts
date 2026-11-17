@@ -10,6 +10,17 @@ import { expect, test, type Page } from "@playwright/test";
  * (győzelem vagy vereség — a rivális miatt mindkettő lehetséges), és ellenőrzi: menet közben nincs blokkoló párbeszédablak,
  * a mászás és a rivális látszik, a végén az eredmény a „Gyakorold még” listával és visszavágóval jön, automatikus
  * újraindítás nélkül.
+ *
+ * SPEC-VÁLTOZÁS 2026-11-17 (szoletra-olvashatosag, terv F — determinisztikussá tétel, a mérce változatlan):
+ * - gyökérok 1: a menet aszinkron véget érhet (a rivális felér → azonnal eredményképernyő, `role="dialog"`) a ciklus eleji
+ *   `result.isVisible()` és a ciklus végi párbeszédablak-számlálás között → hamis „blokkoló kártya” (main CI 44028107372,
+ *   „Expected 0, Received 1”). Most egyetlen `page.evaluate` olvassa az állapotot (C-64): az eredményképernyőn
+ *   (`[data-game-result]`) kívüli párbeszédablak száma 0, és ha az eredmény már látszik, a ciklus kilép.
+ * - gyökérok 2: a menet falióra-hossza nem volt korlátos — a világ képkockánként ≤ 5 fix lépést tesz, így lassú CI-n
+ *   (szoftveres WebGL) a rivális a falióránál lassabban halad, a 24–35 fokos menet 300 s fölé nyúlt („Test timeout of
+ *   330000ms”). Most rögzített seeddel (`?seed=`) és rövid fallal (`?wall=4`, csak teszt-kampós buildben) fut: a menet
+ *   játékidőben korlátos. A fogás az előjelzés (600 ms) után élesedik — a teszt az engedélyezett fogásra vár.
+ * - helyi lassú-gép próba: `E2E_CPU_THROTTLE=6` (CDP CPU-lassítás) — a CI-ben nincs megadva.
  */
 
 test.use({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -31,10 +42,19 @@ async function stubApi(page: Page) {
 
 const rungText = async (page: Page) => (await page.getByTestId("wl-rung").innerText()).trim();
 
+/** Egyetlen olvasás (C-64): látszik-e az eredmény, és hány párbeszédablak van az eredményképernyőn KÍVÜL. */
+const screenState = (page: Page) =>
+  page.evaluate(() => ({
+    result: document.querySelector('[data-testid="wl-won"]') !== null,
+    dialogs: Array.from(document.querySelectorAll('[role="dialog"]')).filter((d) => !d.closest("[data-game-result]")).length,
+  }));
+
 test("Szikla-verseny: egy teljes menet valódi érintéssel, kampó nélkül — mászás, megcsúszás, eredmény, visszavágó", async ({ page }) => {
   test.setTimeout(330_000);
+  const throttle = Number(process.env.E2E_CPU_THROTTLE ?? 0);
+  if (throttle > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: throttle });
   await stubApi(page);
-  await page.goto("/games/word-ladder-hu-en");
+  await page.goto("/games/word-ladder-hu-en?seed=7&wall=4");
   await page.getByTestId("wl-start").tap();
 
   // A verseny-jelenet, a HUD-ban a két versenyző és a tanító sor (K.4/25) látszik.
@@ -48,7 +68,11 @@ test("Szikla-verseny: egy teljes menet valódi érintéssel, kampó nélkül —
   let climbed = false;
   let slipped = false;
   const deadline = Date.now() + 300_000;
-  while (Date.now() < deadline && !(await result.isVisible().catch(() => false))) {
+  while (Date.now() < deadline) {
+    const s = await screenState(page);
+    // Menet közben soha nincs blokkoló kártya (a „Miért?” nélkül); az eredményképernyő a menet vége.
+    expect(s.dialogs, "menet közben nincs blokkoló párbeszédablak").toBe(0);
+    if (s.result) break;
     const enabled = page.locator('[data-testid^="wl-option-"]:not([disabled])');
     if ((await enabled.count()) !== 4) {
       await page.waitForTimeout(120);
@@ -59,23 +83,21 @@ test("Szikla-verseny: egy teljes menet valódi érintéssel, kampó nélkül —
     const want = known.get(prompt);
     let idx = want ? labels.findIndex((l) => l.trim() === want) : -1;
     if (idx < 0) idx = 0;
-    const before = await rungText(page);
-    await holds.nth(idx).tap().catch(() => undefined);
+    const before = await rungText(page).catch(() => "");
+    await holds.nth(idx).tap({ timeout: 2_000 }).catch(() => undefined);
     // A kép: a helyes kapaszkodó zöld (jó fogásnál a megfogott, rossznál a másik).
     const green = page.locator('[data-testid^="wl-option-"][data-state="correct"]');
     if (await green.first().isVisible({ timeout: 1_500 }).catch(() => false)) {
-      const label = (await green.first().locator(".wl-hold-label").innerText()).trim();
+      const label = (await green.first().locator(".wl-hold-label").innerText({ timeout: 1_000 }).catch(() => "")).trim();
       if (prompt && label) known.set(prompt, label);
-      const state = await holds.nth(idx).getAttribute("data-state");
+      const state = await holds.nth(idx).getAttribute("data-state", { timeout: 1_000 }).catch(() => null);
       if (state === "wrong") slipped = true;
       if (state === "correct") {
         // A HUD ≤ 10 Hz-cel frissül: a fok-szám a következő pillanatképben nő.
-        await expect.poll(() => rungText(page), { timeout: 1_000 }).not.toBe(before).catch(() => undefined);
-        if ((await rungText(page)) !== before) climbed = true;
+        await expect.poll(() => rungText(page).catch(() => before), { timeout: 1_000 }).not.toBe(before).catch(() => undefined);
+        if ((await rungText(page).catch(() => before)) !== before) climbed = true;
       }
     }
-    // Menet közben soha nincs blokkoló kártya (a „Miért?” nélkül).
-    expect(await page.locator('[role="dialog"]').count()).toBe(0);
   }
 
   await expect(result).toBeVisible();

@@ -583,8 +583,11 @@ export default function WordLadderHuEn() {
       },
       fresh: (ctx) => {
         while (testItemsRef.current.length > 0) {
-          const id = testItemsRef.current.shift()!;
+          const id = testItemsRef.current[0]!;
           const m = /^vocab:(.+):(hu-to-target|target-to-hu|cloze|phrase-meaning)$/u.exec(id);
+          // A szóbank még tölt: a tétel a sorban marad, addig a szokásos választó kérdez.
+          if (m && !vocabEntriesRef.current) break;
+          testItemsRef.current.shift();
           if (m) {
             const entries = vocabEntriesRef.current;
             const entry = entries?.find((e) => e.id === m[1]);
@@ -1379,7 +1382,8 @@ export default function WordLadderHuEn() {
             }
           >
             <p className="wl-menu-info text-center text-base font-semibold text-white/90" data-testid="wl-menu-info">
-              {menuRungs} fok a zászlóig · szint: <span className="text-amber-200">{levelTierLabel}</span> · legjobb sorozat:{" "}
+              {menuRungs} fok a zászlóig · szint: <span className="text-amber-200">{levelTierLabel}</span> · Tempó:{" "}
+              <span className="text-emerald-200">{LADDER_TEMPO_LABELS[tempo]}</span> · legjobb sorozat:{" "}
               <strong className="text-orange-300">{bestStreak}</strong>
             </p>
             <p data-game-sync className="wl-menu-sync mt-2 text-center text-sm text-amber-100/80">

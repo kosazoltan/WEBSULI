@@ -87,6 +87,7 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
   `tájékozódás + teljes olvasás (prompt + minden opció, teljes súllyal) / (readingWpm × szorzó) + döntés`, legalább a közös
   ablak `floorFactor`-szorosa, legfeljebb `capMs`. Paraméterek: Nyugodt — szorzó 0,45 (3–4. évf. 40,5 szó/perc),
   tájékozódás 1,5 s, döntés 4,5 s (3–4. évf. 5 s), padló 2×, plafon 40 s; Normál — 0,65, 1 s, 3 s (3,5 s), 1,4×, 25 s.
+  A szorzót a mérés adta: 0,6-tal a „lassú olvasó” csak 82%-ban végzett az ablakon belül (cél ≥ 95%), 0,45-tel 99%.
 - A közös director 9 s-os plafonja (`WINDOW_MAX_MS`, `READING_WINDOW_CAP_MS`) gátolná: a lap a director presentation-jét
   burkolja (`paceDirector`: `startedAtSimMs + LEAD_IN_MS`, `windowMs = ladderWindowMs`); a director maga, a `questionUi` és a
   közös függvények változatlanok. **ORKESZTRÁTOR-KÉRÉS:** ha más játék is olvasásalapú, 9 s feletti ablakot kap, a közös
@@ -98,14 +99,16 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
 
 ### B — Nyugodtabb tempó
 
-- Rivális (s / fok az 1. pályán, évfolyam-sávonként 3–4 / 5–6 / 7–8 / 9–12): Nyugodt 7,5 / 7 / 6,3 / 6,7 (pályánként
-  −0,08 s), Normál 6,9 / 6,5 / 6 / 6,3 (−0,09 s), Gyors 6,3 (−0,1 s, a mostani).
+- Rivális (s / fok az 1. pályán, évfolyam-sávonként 3–4 / 5–6 / 7–8 / 9–12): Nyugodt 7,5 / 7 / 6,6 / 6,8 (pályánként
+  −0,08 s), Normál 6,9 / 6,6 / 6,4 / 6,5 (−0,08 s), Gyors 6,3 (−0,1 s, a mostani). (A Nyugodt tempó névleges értéke a
+  `slowMo` 0,35 miatt a gyakorlatban kb. kétszer lassabb rivális-haladást jelent.)
 - A kérdés alatt (előjelzéssel együtt) a világ `slowMo`-val lép: Nyugodt 0,35 (a terv 4.1/3 minimuma — „alig halad”),
   Normál 0,5, Gyors 1. **SPEC-VÁLTOZÁS** a végrehajtás J2a 4. pontjához (`slowMo: 1` — „a rivális a kérdés alatt is mászik”):
   a tulajdonos friss visszajelzése az erősebb; a rivális a kérdés alatt is halad (≥ 0,35×, terv 4.1/3 teljesül), csak lassan.
 - A fal Nyugodt tempón 0,55×, Normálon 0,75× (`ladderWallRungs`, legalább 8 fok): percenként kevesebb kérdés fér a menetbe,
   így a menet percben a 2–5 perces sávban marad (terv J9).
-- Hibás válasz után a megoldás Nyugodt tempón 3 s, Normálon 2,4 s (a közös sáv `revealWrongMs`-e; Gyors: 2 s).
+- Hibás / lejárt válasz után a megoldás 3 s-ig látszik (a közös sáv `revealWrongMs`-e, a régi 2 s helyett) — minden
+  tempón, mert a közös `usePlayQuestion` a kérdés-sávot laponként egyszer hozza létre (menet közben nem váltható).
 - Szabad fogás (kérdés nélkül) ütemezése a tempóval arányos (`ladderFreeGripMs`), hogy kérdés nélkül ne legyen könnyebb.
 - Az időcsík a Szólétrában az utolsó pillanatig a nyugodt színátmenet (a közös „kevés idő” csíkozás a lap stílusában
   felülírva); a gumiszalag marad ±10% (KSZ-16).
@@ -186,7 +189,7 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
 - [ ] SZ-7 WHEN a szimuláció emberi olvasási idővel fut Nyugodt tempón THEN the system SHALL: a „lassú olvasó” a kérdések
   ≥ 95%-át az ablakon belül végigolvassa és megválaszolja; a 3–4. évfolyamos átlagos olvasó kérdéssel ≥ 12/20 menetet nyer;
   a nyerési arány a pontossággal monoton; kérdéssel ≥ kérdés nélkül; a menet medián 2–5 perc a referencia-pályán.
-- [ ] SZ-8 WHEN a hibás / lejárt válasz megoldása látszik Nyugodt tempón THEN the system SHALL azt ≥ 3 s-ig mutatni.
+- [ ] SZ-8 WHEN a hibás / lejárt válasz megoldása látszik THEN the system SHALL azt ≥ 3 s-ig mutatni.
 - [ ] SZ-9 WHEN a `word-ladder-play.spec.ts` a CI-azonos úton fut THEN the system SHALL determinisztikusan, a régi mércével
   zöld lenni (nincs versenyhelyzet a menetvég és a párbeszédablak-ellenőrzés között; a menet játékidőben korlátos).
 - [ ] SZ-10 WHEN a véletlen-válasz ellenőrzőlista (átmeneti kapu 3(a)–(f)) fut THEN the system SHALL mindegyikre zöld
@@ -199,7 +202,9 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
 | Végrehajtás J2a 4. `slowMo: 1` | a rivális a kérdés alatt teljes sebességgel mászik | Nyugodt 0,35 / Normál 0,5 / Gyors 1 | tulajdonosi visszajelzés |
 | Terv 6.2 / J2 „Szólétra ≥ 10 kérdés / perc” | minden tempón | a Gyors (régi) tempón ≥ 10; Nyugodt tempón emberi olvasóval mérve, alsó korlát ≥ 4 / perc | a több idő kevesebb kérdést jelent percenként |
 | `T/word-ladder-sim.test.ts` 50–80% nyerés (SIM_AVERAGE) | 6. pálya, régi tempó | Gyors tempón SIM_AVERAGE 50–80%; Nyugodt tempón az emberi olvasó-profilokkal (SZ-7) | az olvasási idő nélküli bot a nyugodt tempót nem méri |
-| `T/word-ladder-sim.test.ts` arany lenyomat | régi | új (előjelzés, meghajtó) | a menet időzítése változott |
+| `T/word-ladder-sim.test.ts` arany lenyomat | régi | új (előjelzés, 3 s kijelzés, meghajtó) | a menet időzítése változott |
+| `T/word-ladder-validate.test.ts` „helyes tétel” minta | célrész nélkül | `focus: "Kutya"` | az idézőjeles kérdés célrésze kötelező |
+| `T/game-explanation-pause.spec.ts` (d) várakozás | 30 s | 60 s (a feltétel ugyanaz) | a nyugodt ablak hosszabb |
 | `T/word-ladder-play.spec.ts` | 24+ fokos fal, versenyhelyzetes ellenőrzés | `?seed&wall=` rövid fal, egyetlen `evaluate` | determinisztikussá tétel (F) |
 
 ## 8. Kockázatok
