@@ -30,8 +30,8 @@ Eszköz: Honor Magic V6 (hajlítható, 120 Hz), a nagy, kihajtott kijelzőn. Kor
 
 ## 3. Eltérés-tábla — Kockavadász vs. a jól futó játékok
 
-Útvonalak a `source/client/src/` alatt. A Kockavadász sorszámai az ág fejére érvényesek (a `pages/BlockCraftQuiz.tsx` bájtra azonos a
-#484 `bc360c12` fejével — `git diff bc360c12 HEAD -- …/BlockCraftQuiz.tsx` üres). Rövidítések: **BC** = `pages/BlockCraftQuiz.tsx`,
+Útvonalak a `source/client/src/` alatt. A Kockavadász sorszámai a #484 `bc360c12` fejére érvényesek
+(`git show bc360c12:source/client/src/pages/BlockCraftQuiz.tsx`); ezen az ágon a panel bekötése után a sorok ~75-tel lejjebb vannak. Rövidítések: **BC** = `pages/BlockCraftQuiz.tsx`,
 **AST** = `pages/SpaceAsteroidQuiz.tsx`, **TOR** = `pages/TornadoHunter200.tsx`, **TSU** = `game-engine/scenes/TsunamiScene3D.tsx`,
 **BR** = `game-engine/scenes/BrainRotArena3D.tsx`. „medium” = az érintőképernyős eszköz szintje (`three-look/tier.ts:58`).
 
@@ -40,7 +40,7 @@ Eszköz: Honor Magic V6 (hajlítható, 120 Hz), a nagy, kihajtott kijelzőn. Kor
 | E1 | **Árnyéktérkép medium szinten** | BE: `createGameRenderer(canvas, tier, { exposure: 1.0 })` — nincs `shadows: false` (BC:1925); `sun.castShadow = true`, 1024² (BC:1974–1977); minden blokk-háló vet és fogad (BC:2094–2097) | KI: `shadows: false` (AST:1359) | KI mediumon: `shadows: quality === "high"` (TOR:1657), helyette „blob” árnyék (TOR:1694) | KI: `shadows: false` (TSU:1252–1255) | KI: `shadows: false` (BR:770) | **A Kockavadász az EGYETLEN játék, amely telefonon (medium) árnyéktérképet használ.** Képpontonként 5 árnyék-mintavétel + zajfüggvény (three r184 `shadowmap_pars_fragment.glsl.js:131–142`, Vogel-korong) |
 | E2 | **Mit fed le a drága anyag a képen** | A teljes képet kitöltő, átlátszatlan terep, mind `MeshStandardMaterial` (PBR) (BC:544–549) | Sötét űr, kis testek; a kép nagy része háttér (AST:1360, 1363) | Terep + ég; Standard, de árnyék nélkül | Saját olcsó `ShaderMaterial` a vízre (TSU:740, 826), terep Standard `flatShading` (TSU:677) | Túlnyomórészt saját `ShaderMaterial` / Basic (BR:61–265, 449–454) | A Kockavadászban a képpontok ~100 %-a PBR + árnyék + köd + ACES útvonalon megy; a többinél a kép jelentős része olcsó árnyalás |
 | E3 | **Túlrajzolás (overdraw)** | A látható kockák mind a 6 lapja kirajzolódik, a példányok rendezetlenül (típusonként egy `InstancedMesh`, BC:2086–2100); nincs mélység-előmenet | kevés, kis test | terep-háló, kevés takarás | egy terep + vízfelszín | aréna-lapok | Első személyű nézetben a dombok / fák egymás mögött → a drága képpont-árnyaló többször fut le ugyanarra a képpontra (rendezetlen példányoknál a korai mélységteszt nem véd) — UNVERIFIED mérték, lásd 5. |
-| E4 | **Háromszögszám és vágás** | ~77–80 ezer háromszög / kép (kutatási jegyzet A/5), `mesh.frustumCulled = false` (BC:2092) → a kamera MÖGÖTTI világ csúcsai is végigmennek a csúcsárnyalón; árnyék-menetkor még egyszer | UNVERIFIED (mérendő, 5.) | UNVERIFIED (mérendő) | UNVERIFIED (mérendő) | UNVERIFIED (mérendő) | Mérendő: rajzolási hívás és háromszög / kép játékonként (5. szakasz M2) |
+| E4 | **Háromszögszám és vágás** | MÉRT: 79 800 háromszög, 27 hívás / kép; `mesh.frustumCulled = false` (BC:2092) → a kamera MÖGÖTTI világ csúcsai is végigmennek a csúcsárnyalón; árnyék-menetkor még egyszer | MÉRT: 9 530 háromszög, 29 hívás (a hullám előtti kvíz alatt) | MÉRT: 10 876 háromszög, 214 hívás | MÉRT: 63 514 háromszög, 120 hívás | NOT RUN | A Kockavadászé a legtöbb háromszög, de a LEGKEVESEBB hívás; a Szökőár háromszögszáma hasonló nagyságrend |
 | E5 | **Átlátszó menet** | Lomb: `transparent: true, opacity: 0.93, alphaTest: 0.05` (BC:591) — minden lombkocka mind a 6 lapja keveréssel, rendezetlenül; víz: `transparent, opacity 0.78` (BC:602); felhők `transparent` (BC:2356–2363); fényoszlopok (BC:2335) | additív sprite-ok (AST:1424–1425) | por `NormalBlending` (TOR:1724) | néhány áttetsző elem (TSU:560, 570, 888, 907) | részecskék | A lomb a terep nagy részét takarja az erdős pályán: PBR + árnyék + keverés, korai mélység-elvetés nélkül (`alphaTest` → a fragmensárnyaló `discard`-ot tartalmaz, ami csempés GPU-n kikapcsolja a rejtett felület korai elvetését — általános GPU-ismeret, eszközön UNVERIFIED) |
 | E6 | **Textúraszűrés** | `anisotropy = min(8, max)` + `NearestMipmapLinearFilter` minden blokk-textúrán, ha a szint nem low (BC:2032–2040) | nincs `anisotropy` beállítás | nincs | nincs | nincs | Csak a Kockavadász kér 8× anizotróp szűrést (képpontonként több mintavétel a lapos szögben látott talajon) |
 | E7 | **Anyagok száma / program** | Fű: 6 anyagos tömb (BC:555–562) → 6 rajzolási hívás a fű-hálóra, árnyék-menetben is; `onBeforeCompile` „AO” minden blokk-anyagon (BC:2048–2064) | sok Standard anyag, kis testek | — | — | — | Kis tétel (hívásszám), de az árnyék-menetet is szorozza |
@@ -48,12 +48,18 @@ Eszköz: Honor Magic V6 (hajlítható, 120 Hz), a nagy, kihajtott kijelzőn. Kor
 | E9 | **Fények** | 1 félgömb + 1 irányfény (BC:1963, 1969) | 1 ambient + 1 félgömb + 3 irány + 3 pontfény (AST:1381–1399) | 1 félgömb + 1 irány + 1 pont (TOR:1667–1687) | 1 félgömb + 2 irány (TSU:636–641) | 1 ambient + 1 irány + 2 pont (BR:421–428) | A Kockavadász itt OLCSÓBB — a fényszám nem ok |
 | E10 | **Utófeldolgozás** | nincs (`renderer.render`, BC:2768) | bloom csak high szinten (`three-look/postfx.ts:37`, AST:1474) | ua. (TOR:1726) | ua. (`useThreeScene.ts:74`) | ua. | Mediumon egyik játékban sincs — nem ok |
 | E11 | **Képpontarány / élsimítás** | közös: plafon 1,5 mediumon, `antialias: tier !== "low"` (`three-look/renderer.ts:28, 45`) | ugyanaz (AST:1358–1359) | ugyanaz (TOR:1654–1657), DE a játékos állíthat minőséget (TOR:254–270) | ugyanaz + „könnyű grafika” mód (`pages/TsunamiEscapeEnglish.tsx:584–591`) | ugyanaz | A Kockavadászban nincs se kézi minőségváltó, se „könnyű” mód |
-| E12 | **Vászon mérete a kihajtott nézetben** | a teljes játékteret kitölti (`w-full h-full`, BC:3653–3657) | keretezett jelenet (AST:2889–2890) | teljes (TOR:2438–2439) | teljes színpad (`pages/TsunamiEscapeEnglish.tsx:1605–1607`) | UNVERIFIED | Mérendő: vászon-képpont játékonként (5. szakasz M2) |
+| E12 | **Vászon mérete a kihajtott nézetben** | a teljes játékteret kitölti (`w-full h-full`, BC:3653–3657); MÉRT 1240×1252 = 1,55 Mpx | keretezett jelenet (AST:2889–2890); MÉRT 1216×966 = 1,17 Mpx | teljes (TOR:2438–2439); MÉRT 1240×1344 = 1,67 Mpx | teljes színpad (`pages/TsunamiEscapeEnglish.tsx:1605–1607`); MÉRT 1,67 Mpx | NOT RUN | A vászon mérete NEM különbözteti meg a Kockavadászt (a Tornado és a Szökőár vászna nagyobb) |
 | E13 | **Átméretezés figyelése** | KÉPKOCKÁNKÉNT olvas elrendezést: `syncSize()` → `parent.clientWidth / clientHeight` (BC:466–470, 2016–2026, 2568) | `ResizeObserver` (AST:1509) | `ResizeObserver` (TOR:1756) | `ResizeObserver` (`three-look/useThreeScene.ts:97`) | ua. | A hurok közben a HUD-ba írt stílus (`--p`, `--a`: BC:2634, 2694) után a következő képkocka elején kényszerített elrendezés-számítás fut a 4100 soros lap teljes DOM-ján — költsége telefonon UNVERIFIED (a panel „JS” ideje mutatja) |
 | E14 | **React-állapot a hurok mellett** | játékóra 1 s-onként a 4100 soros lapot rendereli (BC:1406–1416); HUD-pillanatkép 100 ms-onként, csak változáskor (BC:3012–3020); kőhely-mérés 200 ms-onként a zár alatt (BC:3001) | 2 időzítő (AST:1170, 1186) | — | 1 időzítő (`pages/TsunamiEscapeEnglish.tsx:1348`) | 1 időzítő (`pages/BrainRotSteal.tsx:814`) | Önmagában kicsi; a kérdésbank-hibával együtt (E15) ez váltja ki a főszál-blokkot |
 | E15 | **Kérdésbank-szűrés a render-úton** | `useMaterialQuizzes` (BC:1307) + `bank` memo `isPlayableQuestion`-nel (BC:1309–1337) — a diagnózis szerint a főszál 87–96 %-a | **nem használja a hookot** | **nem használja a hookot** | használja (`pages/TsunamiEscapeEnglish.tsx:753`) | használja (`pages/BrainRotSteal.tsx:424`) | Az Aszteroidát és a Tornadót a hiba nem érinti — ez részben megmagyarázza az „összes többi szépen fut” észlelést. A Szökőár asztali mérésben ugyanúgy lassú volt; a Brain Rot UNVERIFIED. A javítás a #491 (nem cél itt) |
 | E16 | **Árnyék-újrarajzolás és példánypuffer változáskor** | minden blokkváltozás: teljes árnyék-menet a világ minden vető példányával (`shadowMap.needsUpdate`, BC:2197, 2215) + az érintett típus TELJES `instanceMatrix`-feltöltése (BC:2127, 2155) | — | — | — | — | Tartásos bányászásnál ismétlődő tüske; csak a Kockavadászban |
 | E17 | **Képkocka-hurok egyéb** | DDA-sugárvetés képkockánként (BC:2607, olcsó); a zár alatt `getBoundingClientRect` képkockánként (BC:2283); `stoneColor.set("#…")` szöveg-elemzés kövenként (BC:2677–2678) | — | — | — | — | Kis tétel |
+
+**Fontos ellenbizonyíték (MÉRT, asztali GPU — végrehajtási fájl, M2):** ugyanazon a nézeten a Kockavadász egy képkockája
+OLCSÓBB, mint a telefonon jól futó Tornadóé és Szökőáré (plafon nélkül 301 fps vs. 156 és 229; szinkron képkocka-költség 5,6 ms
+vs. 9,8 és 9,0 ms). Az alábbi eltérések tehát a kódban valósak, de asztali GPU-n NEM teszik a Kockavadászt a legdrágábbá — csak
+akkor magyarázzák a panaszt, ha a telefon csempés GPU-ján aránytalanul többe kerülnek (árnyék-mintavétel, `discard`, anizotróp
+szűrés). Ezt csak a telefonon készült panel-fotó döntheti el.
 
 **Összefoglalva (kódból igazolt, telefonon nem mért):** a Kockavadász az egyetlen játék, ahol telefonon (medium szinten) egyszerre
 igaz, hogy (a) van árnyéktérkép, (b) a kép 100 %-át PBR-anyagú, átlátszatlan + átlátszó terep tölti ki, (c) a geometria rendezetlen
@@ -65,8 +71,8 @@ Tornadót nem érinti.
 
 | Rang | Ok | Bizonyíték | Ami hiányzik |
 |---|---|---|---|
-| 1 | **Főszál-blokk a kérdésbank-szűréstől (E15)** — az élesben még bent van | MÉRT asztalon (diagnózis): 3,6–7,7 fps → üres bankkal 59,9; a hibát két jól futó 3D-s játék (Aszteroida, Tornado) nem hordozza (KÓD) | telefonon nem mért; a panel „hosszú feladat ms/s” és „React-render / s” sora mutatja meg |
-| 2 | **Képpontköltség: árnyék (5 minta) + PBR + köd + 8× anizotróp szűrés a teljes képen, túlrajzolással (E1–E3, E5, E6)** | KÓD: csak a Kockavadászban van így; asztali GPU-n a 60 Hz-es plafon elrejti | mérés: 5. szakasz M1 (asztali GPU, szinkron képkocka-költség); telefonon a panel „GPU” sora + a kapcsolók |
+| 1 | **Főszál-blokk a kérdésbank-szűréstől (E15)** — az élesben még bent van | MÉRT asztalon (diagnózis): 3,6–7,7 fps → üres bankkal 59,9; a hibát két jól futó 3D-s játék (Aszteroida, Tornado) nem hordozza (KÓD); MÉRT (M2): a megjelenítés asztali GPU-n nem drágább a társjátékokénál. ELLENE SZÓL: a Szökőár ugyanazt a 25 ezres bankot tölti le, a tulajdonos mégis jónak látja (feloldatlan) | telefonon nem mért; a panel „hosszú feladat ms/s” és „React-render / s” sora mutatja meg |
+| 2 | **Képpontköltség: árnyék (5 minta) + PBR + köd + 8× anizotróp szűrés a teljes képen, túlrajzolással (E1–E3, E5, E6)** | KÓD: csak a Kockavadászban van így. MÉRT (M1): a jelenet képpont-korlátos — fele felbontáson a GPU-idő −61 %, árnyék ki + egyszerű anyag −35 %. ELLENE SZÓL (M2): asztali GPU-n a teljes képkocka így is olcsóbb, mint a Tornadóé / Szökőáré | telefonon a panel „GPU” sora + a kapcsolók |
 | 3 | **120 Hz-es keret:** 8,3 ms / képkocka; ami 60 Hz-en belefér, 120 Hz-en akadozásként látszik (váltakozó 8 / 16 ms) | KÓD: a hurok `requestAnimationFrame`-re fut, plafon nélkül (BC:2555) | a panel „leggyorsabb képkocka” és „1 % low” sora |
 | 4 | **Csúcsköltség: ~80 ezer háromszög vágás nélkül, árnyék-menetben duplán (E4, E16)** | KÓD + kutatási jegyzet (lapalapú hálóval −80 %) | M1: „egyszerű anyag” és „árnyék ki” mellett megmaradó költség |
 | 5 | **Kényszerített elrendezés-számítás képkockánként (E13)** | KÓD | a panel „JS” ideje |
@@ -138,8 +144,11 @@ Tornadót nem érinti.
 | D6 | **A hurok tehermentesítése:** `ResizeObserver` a képkockánkénti elrendezés-olvasás helyett (E13); a játékóra saját kis komponensbe (E14) | főszál: képkockánként 1 kényszerített elrendezés-számítás kevesebb; másodpercenként 1 lapszintű render kevesebb | kicsi | panel JS-idő, React-render / s |
 | D7 | **Hiszterézises dinamikus felbontás** (csak lefelé lép, lassan; alsó korlát) | biztosíték hőfojtás ellen | villogó élesség rossz hangolásnál | skálaváltások / perc |
 
-Javasolt sorrend (jóváhagyásra): D1 → D2 → D6 → D4 → D5 → D3 → D7. Indok: D1–D2 kis kód, a mérés szerint (lásd végrehajtás) a
-legnagyobb képpont-tétel; D3 a legnagyobb munka, a nyeresége csak akkor döntő, ha a panel a telefonon csúcs- / hívás-korlátot mutat.
+Javasolt sorrend (jóváhagyásra): **0. a #491 élesítése a panellel együtt, és a tulajdonos panel-fotója** → D1 + D2 (együtt) → D6 →
+D4 → D5 → D3 → D7. Indok: az M2 szerint a megjelenítés asztali GPU-n nem drágább a jól futó játékokénál, ezért a legvalószínűbb ok
+továbbra is a főszál-blokk (E15); a megjelenítési átírás (főleg a D3) csak akkor indokolt, ha a telefonos fotón a „hosszú feladat”
+0 körüli, a „GPU” / „GPU-próba” pedig magas. D1 + D2 kis kód, az M1 szerint együtt −35 % GPU-idő; a D4 −30 % képpont a kihajtott
+kijelzőn; a D3 a legnagyobb munka, a nyeresége a csúcs- / hívás-oldalon van (M1: a „mind” változat után megmaradó ~0,6 ms).
 
 ## 8. Érintett fájlok (1. szelet)
 
@@ -148,4 +157,4 @@ legnagyobb képpont-tétel; D3 a legnagyobb munka, a nyeresége csak akkor dönt
 - MÓD `source/client/src/pages/BlockCraftQuiz.tsx` — a panel bekötése a hurokba + a négy kapcsoló megvalósítása a jelenetben.
 - ÚJ `source/tests/perf-stats.test.ts` — egységteszt.
 - ÚJ `source/tests/blockcraft-perf-panel.spec.ts` — böngészős teszt (E-1 … E-6).
-- MÓD `docs/agent-csapdak.md` — csapda-bejegyzés(ek) a futás tanulságaiból.
+- A `docs/agent-csapdak.md` közös katalógusba ez a szelet NEM ír (C-48): a csapda-javaslatok a zárójelentésben mennek az orkesztrátornak.
