@@ -7,6 +7,8 @@ description: Internetes tananyagkészítés a programon belüli témára — ker
 
 > **Befejezési mandátum** (tulajdonosi utasítás 2026-11-01/03): félbehagyás tilos, session végén teljességellenőrzés, NOT DONE + ok + kockázat, minden hibából csapda ([`docs/agent-csapdak.md`](../../../docs/agent-csapdak.md)) — [`AGENTS.md`](../../../AGENTS.md) „Befejezési mandátum”.
 
+> **Minőségkapuk** (tulajdonosi utasítás 2026-11-17): kódot módosító munkánál szakaszonként `npm run gate:stage`, kibocsátás előtt `gate:push` / `gate:pr` (előtte független ellenőr) — [`docs/minosegkapuk.md`](../../../docs/minosegkapuk.md).
+
 > **Utasításrendszer runtime-3 (2026-09-30).** A kivonatolás a külön `web-extract` támogató skillt kapja (a `web-research` csak gyűjt); a runtime-2 futás a régi, közös szöveget. Részletek: [közös módszer — „Utasításrendszer runtime-3”](../../../docs/lesson-improvement.md).
 
 Aktiváld, ha a feladat internetes keresésből készülő tananyag, `web-research`, webes tudásbázis, fetch nélküli HTML vagy a 7.4 skill webes bekötése.

@@ -17,4 +17,4 @@ Lánc: keresés + `web_fetch` → idézetellenőrzött forrásjegyzék → taní
 
 ## Stack
 
-Éles: **Vercel** (SPA) + **Render** (API) + **Neon** (PostgreSQL, Drizzle). Titok csak környezeti változóban. Háromfázisú munka: `docs/agent-haromfazisu-munka.md`.
+Éles: **Vercel** (SPA) + **Render** (API) + **Neon** (PostgreSQL, Drizzle). Titok csak környezeti változóban. Háromfázisú munka: `docs/agent-haromfazisu-munka.md`. Minőségkapuk (kötelező, minden kódváltozásnál): `.cursor/rules/minosegkapuk.mdc`.

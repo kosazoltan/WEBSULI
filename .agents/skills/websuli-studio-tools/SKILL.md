@@ -7,6 +7,8 @@ description: A Studio determinisztikus eszközei (outline-autofix, bank-packet-a
 
 > **Befejezési mandátum** (tulajdonosi utasítás 2026-11-01/03): félbehagyás tilos, session végén teljességellenőrzés, NOT DONE + ok + kockázat, minden hibából csapda ([`docs/agent-csapdak.md`](../../../docs/agent-csapdak.md)) — [`AGENTS.md`](../../../AGENTS.md) „Befejezési mandátum”.
 
+> **Minőségkapuk** (tulajdonosi utasítás 2026-11-17): kódot módosító munkánál szakaszonként `npm run gate:stage`, kibocsátás előtt `gate:push` / `gate:pr` (előtte független ellenőr) — [`docs/minosegkapuk.md`](../../../docs/minosegkapuk.md).
+
 > **Utasításrendszer runtime-3 (2026-09-30).** Runtime-3 determinisztikus rétegek (2026-09-30): `bank-repair.ts` (hibakódból levezetett javítási jogosultság), `bank-schema.ts` (szigorú JSON-séma a közvetlen OpenAI-úton), `lektor-view.ts` (tömör lektor-nézet), `figure-check.ts` (ábra-kapu v1 — *a fájl az S4b óta, d9e9c8e9, nem létezik*), `instruction-points.ts` (tanári pontjegyzék — *a fájl az S4b óta nem létezik*), `limit-policy.ts` (limit-tábla, blokk-kivétel). Leírás: [közös módszer — „Utasításrendszer runtime-3”](../../../docs/lesson-improvement.md).
 
 Cél (tulajdonosi döntés 2026-09-19): a formai hibákat és a sablonos munkát determinisztikus szkript végezze, a fizetett modellkör csak tartalmi hibára maradjon. Az eszközök forrása és a szerep-skillekbe írt leírásuk egy helyen él: `source/server/studio/role-skills.ts` (`TOOL_SKILLS`, `ROLE_TOOLS`).

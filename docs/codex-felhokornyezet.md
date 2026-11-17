@@ -21,6 +21,17 @@ Mind a `source/` alatt:
 - `npm run test:learning-db`: a szkript saját, eldobható `postgres:17` Docker-konténert indít, a környezet adatbázisát nem
   használja (a `DATABASE_URL`-t törli), ezért Docker kell hozzá. Helyben mind az 57 teszt zöld (2026-10-18).
 
+## Minőségkapuk a felhőben (kötelező, 2026-11-17)
+
+A szabály: `AGENTS.md` „Minőségkapuk”; a kapuk listája és mi hol fut: `docs/minosegkapuk.md` „Futtatókörnyezetek”.
+- **Telepítés:** a környezet „Setup” parancsa legyen `bash scripts/qa/codex-cloud-setup.sh` (Node ≥ 22, `npm ci` a `source/`-ban,
+  Playwright chromium, a `gh` / Docker hiányát megnevezi, a végén `npm run gate:lint -- --fast`). A felvétel a környezet
+  szerkesztése + újra közzététel — tulajdonosi lépés.
+- **Codexben nincs Claude Code-hook:** a kapukat kézzel, ebben a sorrendben futtasd a repó gyökeréből: minden szakasz után
+  `npm run gate:stage`; a PR / push előtt `npm run gate:push`, majd (független ellenőr után) `npm run gate:pr -- --body-file <leírás.md>`.
+  A `gate:merge` az orkesztrátor helyi lépése (kell hozzá a `gh` és a futásőr) — felhőből nem.
+- A `gh` nélkül a `gh`-t igénylő lépések `SKIP`, Docker nélkül a DB-lépés `NOT RUN`; a kimenetet a PR-leírásba kell másolni.
+
 **A beállításkor mért eredmény:**
 - a build, a típusellenőrzés és a lint: PASS;
 - 2151 unit teszt sikeres;

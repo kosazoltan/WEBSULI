@@ -28,6 +28,10 @@ jobs:
         run: node --test scripts/qa/gates/*.test.mjs scripts/qa/hooks/*.test.mjs
       - name: Skill-tükör (.agents/skills ↔ .claude/skills)
         run: node scripts/qa/gates/skills-sync-check.mjs
+      # A lint kapu függőség nélküli része (repó-szabályok + tiltott minták a diff hozzáadott soraiban; docs/minosegkapuk.md
+      # „Futtatókörnyezetek”) — npm ci nélkül, másodpercek alatt; így a helyi kapun kívül készült PR-t is megfogja.
+      - name: Statikus kapu (repó-szabályok, tiltott minták a diffben)
+        run: node scripts/qa/gates/ci-static-gate.mjs --base origin/${{ github.base_ref }}
       - name: Háromfázisú rend ellenőrzése
         run: node scripts/qa/three-phase-check.mjs --base origin/${{ github.base_ref }}
 

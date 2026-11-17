@@ -52,6 +52,8 @@ A kapuk: `t->'gates'` — `answerKeyFails`, `lektorRemoved`, `quizBlindRemoved`,
 ## 4. A ciklus menete
 
 Befejezési mandátum (2026-11-01, `AGENTS.md`): a megkezdett ciklus mind az 5 lépése lefut; ami nem készült el: NOT DONE + ok + kockázat.
+A 3. és 5. lépés kódváltozása a minőségkapukon megy át (`npm run gate:stage` / `gate:push` / `gate:pr`, merge előtt `gate:merge`;
+`docs/minosegkapuk.md`).
 
 1. A sor a korlátnál megáll, a futók befejeződnek (AKTIV=0).
 2. Az utolsó 5 anyag mérése: az 1–3. pont, összevetve az előző ciklussal.

@@ -14,3 +14,5 @@ Runbook: `docs/minosegkapuk.md`. Skillek: `.agents/skills/websuli-{lint-ellenor,
    `npm run gate:merge -- <PR>`.
 4. A kaput megkerülni tilos, vészkijárat nincs; hibás kapunál a kaput kell javítani (teszttel).
 5. API-költség elve: előbb az olcsó helyi ellenőrzés; a független ellenőr csak zöld helyi kapuk után indul.
+6. Cursorban nincs Claude Code-hook: a fenti parancsokat te futtatod; push-őr bármely kliensből: az opt-in git-hook
+   (`node scripts/qa/hooks/install-git-hooks.mjs`, a tulajdonos telepíti). Környezetenként: `docs/minosegkapuk.md` „Futtatókörnyezetek”.

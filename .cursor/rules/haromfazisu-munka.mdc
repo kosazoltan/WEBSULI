@@ -9,7 +9,7 @@ Kódolás előtt olvasd: `docs/agent-haromfazisu-munka.md`.
 
 1. Terv a `docs/specs/` sablon szerint (cél / nem-cél / fájlok / EARS).
 2. AI-olvasható végrehajtási utasítás: `docs/specs/YYYY-MM-DD-*-vegrehajtas.md` — fájlútvonal, lépés, tesztparancs, elvárt kimenet.
-3. Csak ezután javítás / módosítás / bővítés.
+3. Csak ezután javítás / módosítás / bővítés — szakaszonként `npm run gate:stage`, kibocsátás előtt a kapuk (`.cursor/rules/minosegkapuk.mdc`).
 
 Tilos a kódolás az 1–2. fázis előtt. Ha a tulajdonos már kérte a munkát, a 2. fázis után ne várj második megerősítésre. Ne találj ki fájlt, API-t, tesztet; ellenőrizetlen állítás: UNKNOWN / UNVERIFIED.
 

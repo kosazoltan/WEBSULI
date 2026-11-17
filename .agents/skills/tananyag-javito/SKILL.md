@@ -7,6 +7,8 @@ description: Hiányos, hibás HTML vagy Studio JSON tananyagok forráshű, mente
 
 > **Befejezési mandátum** (tulajdonosi utasítás 2026-11-01/03): félbehagyás tilos, session végén teljességellenőrzés, NOT DONE + ok + kockázat, minden hibából csapda ([`docs/agent-csapdak.md`](../../../docs/agent-csapdak.md)) — [`AGENTS.md`](../../../AGENTS.md) „Befejezési mandátum”.
 
+> **Minőségkapuk** (tulajdonosi utasítás 2026-11-17): kódot módosító munkánál szakaszonként `npm run gate:stage`, kibocsátás előtt `gate:push` / `gate:pr` (előtte független ellenőr) — [`docs/minosegkapuk.md`](../../../docs/minosegkapuk.md).
+
 > **Utasításrendszer runtime-3 (2026-09-30).** A runtime-3 utasításrendszer tényleges működése: [közös módszer — „Utasításrendszer runtime-3”](../../../docs/lesson-improvement.md). A javító út régi-alak ellenőrzése: nem létező régi alak determinisztikus hiba (ragozva is); összetett régi alak („föld-változása”) csak jelölt, a javító-lektor dönt — a régi szó más értelemben („a Föld”) nem hiba.
 
 Először olvasd el a [közös, forrásalapú módszert](../../../docs/lesson-improvement.md), majd a feladathoz szükséges [v7.4 referenciarészeket](../../../docs/specs/tananyag-keszito-SKILL-v7_4.md). A feltöltött v7.4 tudása kötelező minimum (tulajdonosi utasítás, 2026-09-12). A közös szerződés a biztonságos pontozást, automatikus besorolást és technikai formátumokat pontosítja, a pedagógiai minimumot nem csökkentheti.

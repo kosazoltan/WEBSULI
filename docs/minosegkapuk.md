@@ -142,3 +142,22 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
 A bevezető PR leírása tartalmazza a parancsokat és a kimenet lényegét: lint-hiba → `lint-gate --fast` FAIL; bukó egységteszt →
 `stage-gate` FAIL; végrehajtási fájl nélküli kód → `pre-push-gate` FAIL (háromfázisú rend); hiányzó ítélet → `pre-pr-gate` FAIL;
 nyitott review-szál → `pre-merge-gate` FAIL (egységteszt); bizonyíték nélküli `git push` → hook DENY.
+
+## Futtatókörnyezetek (2026-11-17, `docs/specs/2026-11-17-kapuk-beepites.md`)
+
+Ez a fájl a kapuk EGYETLEN regisztere: új kapu (pl. a `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` tervéből) a fenti
+„Kapunként” táblába és ide kerül; az `AGENTS.md`, a skillek, a `.cursor/rules`, a memória és a soulok csak ide hivatkoznak.
+
+| Környezet | Mi köti | Hogyan futnak a kapuk |
+|---|---|---|
+| Claude Code (helyi) | `AGENTS.md`, skillek, `check-quality-gates` hook (`.claude/settings.json`) | push / PR / merge előtt a hook bizonyíték nélkül DENY; a parancsokat az ügynök futtatja |
+| Codex (felhő) | `AGENTS.md`, `docs/codex-felhokornyezet.md` | hook nincs: kézi sorrend `gate:stage` → `gate:push` → (ellenőr) → `gate:pr`; telepítő: `scripts/qa/codex-cloud-setup.sh`; `gh` nélkül a `gh`-s lépés `SKIP`, `gate:merge` nem fut |
+| Cursor | `.cursor/rules/minosegkapuk.mdc` (`alwaysApply`) | kézi parancsok; push-őr: az opt-in git-hook |
+| Hermes | a projekt `AGENTS.md`-je (munkakönyvtárból töltődik, karakterkorláttal) | kézi parancsok |
+| Bármely kliens (terminál, IDE) | opt-in git `pre-push` hook | `node scripts/qa/hooks/install-git-hooks.mjs` (`--status`, `--uninstall`; idegen hookot és `core.hooksPath`-t nem ír felül) — a kimenő commitra zöld `pre-push` / `pre-pr` bizonyíték kell; a telepítés a gép gazdájának döntése |
+| CI (`.github/workflows/ci.yml`, `three-phase` job) | minden PR | a kapuk saját tesztjei, a skill-tükör, `ci-static-gate.mjs` (repó-szabályok + tiltott minták a diffben, `npm ci` nélkül), háromfázisú rend; a lint / tsc / teszt / E2E a többi jobban |
+
+**`npm run verify` és a kapuk:** a `verify` (`source/package.json`: `doctor:arch` → `check` → `lint` → `check:test` → `test` →
+`build`) a teljes helyi ellenőrzés, kapu-logika és bizonyíték nélkül. A `gate:push` ebből a lintet, mindkét `tsc`-t és a teljes
+egységtesztet futtatja (+ háromfázisú rend, PR-méret, friss main, közös fájlok, `.audit-ok`), a `gate:pr` a buildet és a
+CI-azonos böngészős utat is. Kibocsátás előtt a kapu kötelező; a `verify` nem helyettesíti.
