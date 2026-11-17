@@ -1533,7 +1533,10 @@ export default function TsunamiEscapeEnglish() {
   }, [idleGoodNow]);
   useLayoutEffect(() => {
     if (presId === null) return;
-    const measure = () => {
+    // D-J1a-18: a tábla / lista mód döntése CSAK a kérdés megjelenésekor és átméretezéskor / elforgatáskor (`decide`); a kártya
+    // későbbi növekedése (a megoldás-kijelzés állapotsora, „Jó kapu!”) csak a táblák helyét igazítja — különben a kijelzés
+    // közben váltana lista módra, és a táblák eltűnnének.
+    const measure = (decide: boolean) => {
       const stage = stageRef.current;
       const card = gatesRef.current?.querySelector<HTMLElement>(".play-question-card");
       if (!stage) return;
@@ -1557,16 +1560,17 @@ export default function TsunamiEscapeEnglish() {
       setGateBox((prev) =>
         prev.top === top && prev.width === width && prev.centers[0] === centers[0] && prev.centers[1] === centers[1] && prev.centers[2] === centers[2] ? prev : { top, centers, width },
       );
-      setGatesFitH(gatesFitVertically({ labels, innerWidthPx: inner, cardBottomPx: cardBottom, runnerHeadPx: head, stageHeightPx: sr.height }));
+      if (decide) setGatesFitH(gatesFitVertically({ labels, innerWidthPx: inner, cardBottomPx: cardBottom, runnerHeadPx: head, stageHeightPx: sr.height }));
     };
-    measure();
+    measure(true);
     const card = gatesRef.current?.querySelector<HTMLElement>(".play-question-card");
-    const ro = typeof ResizeObserver !== "undefined" && card ? new ResizeObserver(measure) : null;
+    const ro = typeof ResizeObserver !== "undefined" && card ? new ResizeObserver(() => measure(false)) : null;
     if (ro && card) ro.observe(card);
-    window.addEventListener("resize", measure);
+    const onResize = () => measure(true);
+    window.addEventListener("resize", onResize);
     return () => {
       ro?.disconnect();
-      window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", onResize);
     };
   }, [presId]);
 
