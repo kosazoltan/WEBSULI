@@ -861,3 +861,110 @@ Forrás: JM7c-1 (#462), független biztonsági review.
   Google-belépéskor admin lehetett volna). **Megelőzés:** alapértékként csak a pontosan egy érvényes címet tartalmazó érték számít, különben
   `none` + hangos hibanapló + teszt; telepítés előtt a Renderen az `ADMIN_EMAIL` értékét ellenőrizni kell, és a második admin sorsát (az
   `ADMIN_ALLOWLIST`) külön tulajdonosi lépésként kezelni (audit H1).
+
+## C-61 — Repó-szintű őr-teszt és párhuzamos PR-ok: az őr zöldje elavul, az előtag-kivétel lyukas (2026-11-16)
+
+Forrás: #474 (címőr-teszt), #471, #479; retro: `docs/handoffs/2026-11-17-jatekok-utomunka-retro.md`.
+
+- **Tünet:** a `main` Unit Tests jobja piros lett a #474 összevonása után (`38861d28`), mert az őr a közben összevont #471 szintetikus
+  Gmail-tesztcímein bukott; a #474-et a #471 ELŐTTI CI-zöldjére vontuk össze. Minden nyitott PR Unit Tests + natív jobja piros lett.
+  A #479 első változata előtag-egyezéssel adott kivételt — a review-bot jogosan kifogásolta (valódi cím is átcsúszhatott volna).
+- **Gyökérok:** a repó-szintű őr minden fájlt néz, a PR zöldje csak az akkori fájlokra igaz; a kivétel módja túl tág volt.
+- **Szabály:** az őr összevonása előtt a friss `origin/main`-en ÉS a nyitott PR-ok ágain is futtasd csak az őrt (`git worktree add
+  --detach` + a tesztfájl bemásolása). Kivételt soha ne előtag-egyezéssel adj: fájlra szűkített, pontos lista, a fájlokból programmal
+  gyűjtve, ellenpróbákkal (valódi alakú cím továbbra is bukik).
+
+## C-62 — Zöld CI után ne tölts fel „még egy apró” commitot (2026-11-16)
+
+Forrás: #477.
+
+- **Tünet:** a zöld CI után feltöltött, csak doksit érintő commit (23:08Z) újraindította a ~1 órás kötelező Playwright E2E-t; az új
+  futás már az aktuális (akkor piros) mainnel együtt tesztelt, a PR kiesett az összevonási ablakból (a végső E2E 23:54Z–00:54Z, 60 perc).
+- **Szabály:** zöld CI után nincs további push (doksi sem). A mondanivaló a zárójelentésbe / a PR-leírásba megy; ha mégis kell a push,
+  számolj újabb teljes E2E-körrel és a main közbeni változásával.
+
+## C-63 — A kötelező ellenőrzés nem alku tárgya (2026-11-16)
+
+Forrás: a #479 helyreállítása.
+
+- **Tünet:** a javító alügynök azt javasolta, hogy a kötelező Playwright E2E-t ne várjuk meg („csak tesztfájl változott”).
+  A főág védelme (`gh api repos/kosazoltan/WEBSULI/branches/main/protection`) szerint a kötelező ellenőrzések: Háromfázisú rend,
+  Lint & Typecheck, Unit Tests, Playwright E2E. Megvártuk (~1 óra).
+- **Szabály:** „csak tesztfájl változott” nem ok a kötelező E2E kihagyására; megkerülni tulajdonosi engedély nélkül nem szabad.
+  Piros main helyreállítása így legalább ~1 óra — a megelőzés (C-61) olcsóbb.
+
+## C-64 — `count()` után automatikusan várakozó `innerText()` egy poll-ban versenyhelyzet (2026-11-16)
+
+Forrás: #477 (szóbank-napló e2e).
+
+- **Tünet:** ha az elem a `count()` és az `innerText()` / `textContent()` hívás között eltűnik, a lokátor a KÖVETKEZŐ megjelenésre vár,
+  és a poll lefagy vagy időtúllép.
+- **Szabály:** poll-függvényben az állapotot egyetlen `page.evaluate` olvassa (lehet `null`), ne több automatikusan váró lokátorhívás.
+
+## C-65 — „≥ X ms-ig látszik” mérése a lapon belül, képkockánként (2026-11-16)
+
+Forrás: #480, #477.
+
+- **Tünet:** a Playwright-oldali `waitForTimeout` + állítás nem méri a kijelzés időtartamát; állapotváltáskor elmozduló gombra koppintás
+  ingadozik; a képkocka-órás időzítő az aktuális képkockától indítva rövidebb a névlegesnél. A szoftveres WebGL önmagában nem hozta elő a
+  lassú CI-hibát.
+- **Szabály:** időtartam-állítást a lapon belül, képkockánként mérj; ne koppints elmozduló gombra; a képkocka-órás időzítőt a KÖVETKEZŐ
+  képkockától indítsd; a lassú CI-hibát CPU-lassítással (4–6×) reprodukáld.
+
+## C-66 — Játékszintű megállítás közös úton; a szünet nem állítja le a 3D-rajzolást (2026-11-16)
+
+Forrás: #477 (közös `GAME_HALT_EVENT` / `requestGameFrame`).
+
+- **Tünet:** a lejárt kuponnál a játékokat laponként foltozva állítottuk meg; a szünet önmagában nem állítja le a 3D-rajzolást.
+- **Szabály:** a fedőréteg (lejárat, eredmény) közös úton állítsa meg a játékot, ne laponként. A leállást WebGL-hívásszámlálóval mérd,
+  ne a teljes `requestAnimationFrame`-számmal (a díszítő animációk azt is növelik).
+
+## C-67 — Egy állapotnak egy igazságforrása: kétoldalú kérés / elfogadás (2026-11-16)
+
+Forrás: #476 (visszavágó). Rokon: C-59.
+
+- **Tünet:** a kérő saját jelzése elfogadásnak számított; lejáratkor egy kapcsolódó jelző megmaradt.
+- **Szabály:** kétoldalú folyamatnál az állapot a szerveren legyen; a kérő saját jelzése nem elfogadás; lejáratkor minden kapcsolódó
+  jelző törlődjön (teszt: lejárat utáni állapot minden mezőre).
+
+## C-68 — Token-forgatás nyugta nélkül kizárja a jogos klienst; javításra állapottér-próba kell (2026-11-16)
+
+Forrás: #476, független biztonsági kör.
+
+- **Tünet:** ha az új token kézbesítése (üzenet) elvész, a forgatás kizárja a jogos klienst. A leletre adott első javítás két ÚJ hibát
+  hozott be, amelyeket csak a visszaellenőrző kör futtatott próbája fogott meg; három review-kör kellett.
+- **Szabály:** token-forgatás nyugta nélkül nem biztonságos; a régi token türelmi ideje kemény felső korláttal. Állapotgépes /
+  token-protokoll javításnál push előtt véletlen sorrendű állapottér-próba kell (melyik tokent mutatja be a kliens × megjött-e az
+  üzenet × megjött-e a nyugta), nem csak a jelentett forgatókönyv tesztje.
+
+## C-69 — „Mindent beolvas kérésenként” végpont; szerver-teljesítmény mérése a célgépen (2026-11-17)
+
+Forrás: #478 (kérdésbank), kanban #71, #72.
+
+- **Tünet:** a listázó végpont kérésenként a teljes leckék JSON-ját olvasta be, verziószűkítés és gyorsítótár nélkül (memóriahiba). A
+  javítás átfedő-építés hibáját a független review találta meg. Éles mérés (2026-11-17 01:21Z, Render-napló): hideg építés 12 677 ms a
+  0,5 CPU-s példányon (a terv ≤ 2 s célja NEM teljesül; fejlesztői gépen 2,0–3,5 s), meleg 9–56 ms szerveroldalon, a válasz 2,86 MB gzip
+  játékonként; memóriahiba-naplósor a telepítés óta 0.
+- **Szabály:** listázó végpont ne válassza ki a teljes tartalmat verziószűkítés és gyorsítótár nélkül. Védőháló: DB-integrációs teszt
+  lekérdezés-számlálóval + mérés `--max-old-space-size=200` mellett; gyorsítótárnál egyszerre legfeljebb egy építés. Teljesítmény-
+  elfogadási pontot a célgép erőforrásaival (CPU-korlátozott konténer) mérj, különben becslés.
+
+## C-70 — Mutációs ellenpróbát ne `git checkout <fájl>`-lal állíts vissza commitolatlan munkán (2026-11-16)
+
+- **Tünet:** egy alügynök a mutációs ellenpróbát `git checkout <fájl>`-lal állította vissza; a nem commitolt javítás elveszett (egy
+  véletlen mentés hozta vissza).
+- **Szabály:** ellenpróba előtt commit vagy másolat; visszaállítás után `cmp` az eredetivel.
+
+## C-71 — Kulcsfüggő zár / kulcsolt ujjlenyomat: titok nélküli kulcs, az adat az igazságforrás (2026-11-16)
+
+Forrás: #475 (K1b). Rokon: C-59.
+
+- **Tünet:** két eltérő titkú példány két külön zárat kap ugyanarra az erőforrásra, így a zár nem véd.
+- **Szabály:** a zár kulcsa titok nélküli legyen, az élő állapot forrása pedig az adat maga (nem a titokból képzett kulcs).
+
+## C-72 — Apróságok: időbélyeg-kerekítés, `Failed query`, `npx.cmd` Git Bashben, e2e-port-verseny (2026-11-16)
+
+- Postgres időbélyeg JS `Date`-en át milliszekundumra kerekedik: pontos összevetés SQL-ben.
+- A drizzle a hibát `Failed query: …`-be csomagolja; az eredeti a `cause`-ban van.
+- Git Bashben az `npx.cmd` szóközös felhasználói útvonalon elhasalhat: Playwrightot PowerShellből futtasd.
+- e2e-ben a „szabad port keresése, lezárás, újranyitás” versenyhelyzet (`EADDRINUSE`): a szerver válasszon portot.
