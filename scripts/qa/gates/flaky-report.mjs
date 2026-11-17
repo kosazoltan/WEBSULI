@@ -189,8 +189,11 @@ export function collectRun({ exec, root, run, cacheDir, sleep = sleepSync, delay
       let log;
       if (cache && existsSync(cache)) log = readFileSync(cache, 'utf8');
       else {
-        const r = ghRun(exec, root, ['run', 'view', String(run.databaseId), '--job', String(j.databaseId), '--log'], { timeoutMs: 300_000, sleep, delays });
-        if (r.code !== 0) throw new Error(`gh run view --log ${j.databaseId} (${r.tries} kísérlet): ${redact(r.stderr).split('\n')[0]}`);
+        // A job SAJÁT naplója (kísérletenként külön job-azonosító). A `gh run view --job <id> --log` NEM jó: a futás legutolsó
+        // kísérletének archívumából, job-NÉV szerint ad naplót (mérve 2026-11-17: a #484 44067540915 1. és 2. kísérletének „naplója”
+        // bájtra azonos volt, a bukott 1. kísérlet tesztje így eltűnt).
+        const r = ghRun(exec, root, ['api', '--allow-escape-sequences', `repos/{owner}/{repo}/actions/jobs/${j.databaseId}/logs`], { timeoutMs: 300_000, sleep, delays });
+        if (r.code !== 0) throw new Error(`gh api jobs/${j.databaseId}/logs (${r.tries} kísérlet): ${redact(r.stderr).split('\n')[0]}`);
         log = r.stdout;
         if (cache) { mkdirSync(cacheDir, { recursive: true }); writeFileSync(cache, log); }
       }
@@ -233,7 +236,8 @@ async function main() {
     problems = checkKnown(ranking, known);
     gate.add(`vizsgált ${branch}-futások`, STATUS.PASS, `${runs.length} futás, ${runs.reduce((n, r) => n + r.attempts.length, 0)} kísérlet`);
     for (const r of ranking.slice(0, 15)) {
-      gate.add(r.id.slice(0, 80), r.cls === 'ingadozó' ? STATUS.WARN : STATUS.PASS, `${r.cls}: ${r.fails} bukás, ${r.flakyRetries} Playwright-újrapróba, ${r.rerunPass} újraindításra zöld (futások: ${r.runs.slice(0, 4).join(', ')})`);
+      // A tartós bukás (regresszió-gyanú a mainen) is jól látható jelzés, nem „rendben”.
+      gate.add(r.id.slice(0, 80), r.cls === 'egyszeri bukás' ? STATUS.PASS : STATUS.WARN, `${r.cls}: ${r.fails} bukás, ${r.flakyRetries} Playwright-újrapróba, ${r.rerunPass} újraindításra zöld (futások: ${r.runs.slice(0, 4).join(', ')})`);
     }
     // --pr módban a kilépési kód a PR ítéletéé (a jegyek hiánya nem a PR hibája) — ott csak figyelmeztet.
     for (const p of problems) gate.add('jegy nélküli ingadozó', prArg ? STATUS.WARN : STATUS.FAIL, p);

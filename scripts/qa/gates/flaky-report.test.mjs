@@ -101,13 +101,13 @@ test('collectRun: minden kísérlet, bukott job + a zöld E2E job naplója (flak
     const a = args.join(' ');
     if (a.includes('--attempt 1')) return { code: 0, stdout: JSON.stringify({ conclusion: 'failure', jobs: [{ databaseId: 11, name: 'Playwright E2E', conclusion: 'failure' }, { databaseId: 12, name: 'Lint & Typecheck', conclusion: 'success' }] }) };
     if (a.includes('--attempt 2')) return { code: 0, stdout: JSON.stringify({ conclusion: 'success', jobs: [{ databaseId: 21, name: 'Playwright E2E', conclusion: 'success' }] }) };
-    if (a.includes('--job 11')) return { code: 0, stdout: E2E_LOG };
-    if (a.includes('--job 21')) return { code: 0, stdout: P('  745 passed (1.3h)') };
+    if (a.includes('actions/jobs/11/logs')) return { code: 0, stdout: E2E_LOG };
+    if (a.includes('actions/jobs/21/logs')) return { code: 0, stdout: P('  745 passed (1.3h)') };
     return { code: 1, stdout: '', stderr: 'váratlan hívás' };
   };
   const r = collectRun({ exec, root: '.', run: { databaseId: 5, headSha: 'abc', createdAt: 'x', attempt: 2 }, cacheDir: null });
   assert.deepEqual(r.attempts.map((x) => [x.attempt, x.conclusion, x.failed, x.flaky]), [[1, 'failure', [JB], [JT]], [2, 'success', [], []]]);
-  assert.ok(!calls.some((c) => c.includes('--job 12')), 'a zöld nem-E2E job naplóját nem tölti le');
+  assert.ok(!calls.some((c) => c.includes('jobs/12/')), 'a zöld nem-E2E job naplóját nem tölti le');
 });
 
 test('ghRun: átmeneti hibánál legfeljebb 3 kísérlet növekvő várakozással; végleges hibánál (nem található) nincs újrapróba', () => {
@@ -134,4 +134,10 @@ test('known-flaky.json: érvényes, minden elemnek van jegye, és a tartós buk�
   assert.equal(knownEntry(known, JB), null);
   assert.ok(knownEntry(known, JT));
   assert.ok(knownEntry(known, WL.replace('szólétra: a kérdés-sáv', 'bármely cím')));
+});
+
+test('parseJobLog: a job-napló API-alakja (előtag nélkül, csak időbélyeg) is értelmezett', () => {
+  const raw = (s) => `2026-11-17T12:07:04.4291875Z ${s}`;
+  const log = [raw('  1 failed'), raw(`    [chromium] › tests/word-ladder-play.spec.ts:48:3 › Szikla-verseny: egy teljes menet ${BOX}`), raw('  763 passed (59.1m)')].join('\n');
+  assert.deepEqual(parseJobLog(log), { failed: ['e2e:tests/word-ladder-play.spec.ts:48 › Szikla-verseny: egy teljes menet'], flaky: [] });
 });
