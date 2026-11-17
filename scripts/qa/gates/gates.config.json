@@ -51,8 +51,8 @@
     },
     {
       "pattern": "^scripts/qa/",
-      "mainScope": ["^scripts/qa/", "^docs/specs/", "^render\\.yaml$", "^\\.agents/skills/", "^\\.claude/skills/", "^\\.github/workflows/"],
-      "why": "three-phase-check.mjs:38/:71 a docs/specs tartalmát olvassa; verify-render-settings.test.mjs:22 a render.yaml-t; skills-sync-check.test.mjs:33-34 és a CI skills-sync-check lépése (ci.yml:30) a valódi skill-fájlokat; a workflow (ci.yml:24/:28/:32) határozza meg, mi fut."
+      "mainScope": ["^scripts/qa/", "^\\.claude/settings\\.json$", "^docs/specs/", "^render\\.yaml$", "^\\.agents/skills/", "^\\.claude/skills/", "^\\.github/workflows/"],
+      "why": "three-phase-check.mjs:38/:71 a docs/specs tartalmát olvassa; verify-render-settings.test.mjs:22 a render.yaml-t; skills-sync-check.test.mjs:33-34 és a CI skills-sync-check lépése (ci.yml:30) a valódi skill-fájlokat; a workflow (ci.yml:24/:28/:32) határozza meg, mi fut; hooks/settings-hooks.test.mjs a valódi .claude/settings.json-t futtatja."
     },
     {
       "pattern": "^\\.github/workflows/",

@@ -63,7 +63,7 @@
 ## A hook elérhetősége alkönyvtárból / a hook hibája = tiltás (kanban #100, 2. kör) — végrehajtás
 
 1. Ez a doksi-commit (terv 11.1 + ez az alfejezet).
-2. `.claude/settings.json`: minden hook-parancs `node "${CLAUDE_PROJECT_DIR:-.}/scripts/qa/hooks/<hook>.mjs"`.
+2. `.claude/settings.json`: minden hook-parancs `node "${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/<hook>.mjs"`.
 3. `scripts/qa/hooks/settings-hooks.test.mjs` (új): a valódi settings minden hook-parancsa Git Bash-ben, `CLAUDE_PROJECT_DIR`-rel,
    négy könyvtárból, hookonként próba-bemenettel; őr: nincs relatív szkriptútvonal. Ellenpróba: a régi settings-szel bukik.
 4. `check-quality-gates.mjs`: 55 s-os sapka a felülíráson; a nem egyértelmű idézés tiltása; a „soha” kommentek pontosítása.

@@ -138,9 +138,9 @@ folyamatának környezetében is; „wrap each placeholder in double quotes”);
 `onFailure: "block"` (v2.1.295-től) a hook indítási hibáját, nem 0 / 2 kilépését, időtúllépését és érvénytelen kimenetét tiltássá teszi;
 alapból a PreToolUse hook időtúllépése és nem 2-es hibakilépése NEM tilt. A gépen: `claude --version` = 2.1.322.
 
-**Döntés.** (1) Minden hook-parancs a projektgyökérhez kötve: `node "${CLAUDE_PROJECT_DIR:-.}/scripts/qa/hooks/<hook>.mjs"`
-(Git Bash-ben kifejtve; idézőjelben, a szóközös / ékezetes útvonal miatt; a `:-.` tartalék a régi viselkedést adja, ha a változó
-nincs). (2) Az `onFailure: "block"` a kapu-hook két bejegyzésén KÜLÖN, utolsó commitban, a tulajdonos jóváhagyására (ha a hook-szkript
+**Döntés.** (1) Minden hook-parancs a projektgyökérhez kötve: `node "${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/<hook>.mjs"`
+(a dokumentált alak: a Claude Code behelyettesíti, vagy a Git Bash a környezetből fejti ki — a teszt mindkét utat méri; idézőjelben,
+a szóközös / ékezetes útvonal miatt). (2) Az `onFailure: "block"` a kapu-hook két bejegyzésén KÜLÖN, utolsó commitban, a tulajdonos jóváhagyására (ha a hook-szkript
 elromlik, minden Bash / PowerShell hívás blokkolódik; a kiút: az Edit eszköz nem Bash, azzal a hook javítható — runbook).
 (3) A teszt-felülírás felső korlátja 55 s. (4) A hook a nem egyértelműen értelmezhető idézésű, kapu-köteles kulcsszót tartalmazó
 parancsot tiltja. (5) C-61: az átnevezett fájl régi neve is számít. (6) A `gates.config.json` `^scripts/qa/` hatókörébe bekerül a
