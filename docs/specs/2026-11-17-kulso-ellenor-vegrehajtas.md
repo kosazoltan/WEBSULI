@@ -58,3 +58,18 @@
 6. Tesztek: időtúllépő / jelzéssel leállított / indítási hibás git → DENY; nem git-repó → nincs kimenet; WEBSULI-utalás + nem repó →
    DENY; keret kimerülése → DENY; T5. A valódi gites tesztek a konfigurált (hosszabb) korláttal; 20 egymás utáni futás.
 7. Mutációs ellenpróba a fail-closed ágra (commit után); runbook és skill egy-egy mondata.
+
+
+## A hook elérhetősége alkönyvtárból / a hook hibája = tiltás (kanban #100, 2. kör) — végrehajtás
+
+1. Ez a doksi-commit (terv 11.1 + ez az alfejezet).
+2. `.claude/settings.json`: minden hook-parancs `node "${CLAUDE_PROJECT_DIR:-.}/scripts/qa/hooks/<hook>.mjs"`.
+3. `scripts/qa/hooks/settings-hooks.test.mjs` (új): a valódi settings minden hook-parancsa Git Bash-ben, `CLAUDE_PROJECT_DIR`-rel,
+   négy könyvtárból, hookonként próba-bemenettel; őr: nincs relatív szkriptútvonal. Ellenpróba: a régi settings-szel bukik.
+4. `check-quality-gates.mjs`: 55 s-os sapka a felülíráson; a nem egyértelmű idézés tiltása; a „soha” kommentek pontosítása.
+   Tesztek: folyamat-szintű TILT git nélkül (H3), a maradék-keret sapka (`now` 40 000 → 4 500 ms), `node --eval=…`, útvonalas
+   értelmező, a három idézés-alak TILT, a 11 szándék szerinti alak nem kapu-köteles; a `WEBSULI_QA_EVIDENCE_DIR` a tesztben törölve.
+5. `pre-merge-gate.mjs`: `compareFiles(json)` (tiszta függvény, `previous_filename` is), teszt; `gates.config.json` hatókör.
+6. Runbook és skill: a hook saját időtúllépése / indítási hibája a Claude Code-nál alapból nem tiltás — ezért projektgyökérhez kötött
+   parancs, és (jóváhagyás esetén) `onFailure: "block"`; kiút elromlott hooknál.
+7. Utolsó, KÜLÖN commit: `"onFailure": "block"` a kapu-hook két bejegyzésén + a hozzá tartozó teszt-állítás és runbook-sor.

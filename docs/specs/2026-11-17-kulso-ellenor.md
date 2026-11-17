@@ -125,3 +125,34 @@ láncolás, változó, `-e` / `-c` kiértékelés továbbra is DENY.
 - T5 WHEN a parancs `node <szkript>.mjs … "… push …"` alakú, `-e` / `-p` / `--eval` nélkül THEN the hook SHALL nem kimenetet adni;
   WHEN `echo x && git push` THEN SHALL DENY.
 - T6 WHEN a `check-quality-gates.test.mjs` 20-szor egymás után fut a terhelt fejlesztői gépen THEN SHALL mind a 20 zöld legyen.
+
+
+### 11.1 A hook elérhetősége alkönyvtárból / a hook hibája = tiltás (kanban #100, 2. kör)
+
+> A független ellenőr M1 lelete, az orkesztrátor a fő munkamenetben megerősítette: a `.claude/settings.json` hook-parancsai relatív
+> útvonalúak; a Claude Code a hookot az aktuális könyvtárban indítja („Handlers run in the current directory”), így alkönyvtárból a
+> szkript nem található, a hook 1-gyel kilép, és a nem 2-es hibakilépés a Claude Code-nál nem tiltás.
+
+**Tények a hivatalos hooks-dokumentációból** (code.claude.com/docs/en/hooks): a projektgyökér a `CLAUDE_PROJECT_DIR` (a hook
+folyamatának környezetében is; „wrap each placeholder in double quotes”); a héj alapból `bash` (Windows-on Git Bash, ha telepítve van);
+`onFailure: "block"` (v2.1.295-től) a hook indítási hibáját, nem 0 / 2 kilépését, időtúllépését és érvénytelen kimenetét tiltássá teszi;
+alapból a PreToolUse hook időtúllépése és nem 2-es hibakilépése NEM tilt. A gépen: `claude --version` = 2.1.322.
+
+**Döntés.** (1) Minden hook-parancs a projektgyökérhez kötve: `node "${CLAUDE_PROJECT_DIR:-.}/scripts/qa/hooks/<hook>.mjs"`
+(Git Bash-ben kifejtve; idézőjelben, a szóközös / ékezetes útvonal miatt; a `:-.` tartalék a régi viselkedést adja, ha a változó
+nincs). (2) Az `onFailure: "block"` a kapu-hook két bejegyzésén KÜLÖN, utolsó commitban, a tulajdonos jóváhagyására (ha a hook-szkript
+elromlik, minden Bash / PowerShell hívás blokkolódik; a kiút: az Edit eszköz nem Bash, azzal a hook javítható — runbook).
+(3) A teszt-felülírás felső korlátja 55 s. (4) A hook a nem egyértelműen értelmezhető idézésű, kapu-köteles kulcsszót tartalmazó
+parancsot tiltja. (5) C-61: az átnevezett fájl régi neve is számít. (6) A `gates.config.json` `^scripts/qa/` hatókörébe bekerül a
+`^\.claude/settings\.json$` (az új teszt olvassa).
+
+**Elfogadás (EARS).**
+- H1 WHEN a `.claude/settings.json` bármely hook-parancsát a repó gyökeréből, a `source/`-ből, egy mélyebb alkönyvtárból vagy egy
+  munkafa alkönyvtárából indítják (a Claude Code módján: Git Bash-ben, `CLAUDE_PROJECT_DIR`-rel) THEN the hook SHALL lefutni, és a
+  próba-bemenetre a várt döntést adni (a kapu-hook: TILT bizonyíték nélkül).
+- H2 WHEN a settings-ben relatív szkriptútvonalú hook-parancs van THEN the őr-teszt SHALL bukni (a CI-ban is).
+- H3 WHEN a hook folyamata nem talál git-et (indítási hiba) THEN the hook folyamata SHALL TILTÁST kiírni (folyamat-szinten mérve).
+- H4 WHEN a `NODE_TEST_CONTEXT` alatt a felülírás 55 s-nál nagyobb keretet kérne THEN SHALL legfeljebb 55 s lenni.
+- H5 WHEN a nyers parancs nem egyértelműen értelmezhető idézést tartalmaz, és kapu-köteles kulcsszót THEN the hook SHALL tiltani;
+  az értelmező + szkriptfájl szándék szerinti alakjai nem kapu-kötelesek maradnak.
+- H6 WHEN a main elmozdulásában egy átnevezett fájl régi neve esik a hatókörbe THEN the C-61 SHALL FAIL-t adni.
