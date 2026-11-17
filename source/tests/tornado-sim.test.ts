@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SIM_AVERAGE, SIM_WEAK, SIM_YOUNG, medianOf, runSim, runSimSeeds, simSeeds, type SimGameFactory } from "./support/game-sim";
+import { SIM_AVERAGE, SIM_STRONG, SIM_WEAK, SIM_YOUNG, medianOf, runSim, runSimSeeds, simSeeds, type SimGameFactory } from "./support/game-sim";
 import {
   advanceTornado,
   couponRepeat,
@@ -53,8 +53,9 @@ test("J2 / J3 / J6 — SIM_AVERAGE, 7. évfolyam, 180 mp × 20 seed: ≥ 4 kérd
     assert.ok(x.reviewShare <= 0.3 + 1e-9, `ismétlési arány ${x.reviewShare}`);
     // J6: az ismétlésnek nem minősülő kérdések mind különböző tételek (a sim-bank ≥ 300 tétel).
     assert.equal(x.distinctKeys, x.asked - x.reviewsAsked, `ismétlődő új tétel: ${x.distinctKeys} / ${x.asked - x.reviewsAsked}`);
-    // A J7b-menet ~1 perc (a 3,4 km-es út + horgony; a 2–5 perces ív a J7c-é): legalább 3 megválaszolt kérdés.
-    assert.ok(x.answered >= 3, `válaszok ${x.answered}`);
+    // A J7b-menet ~1 perc (a 3,4 km-es út + horgony; a 2–5 perces ív a J7c-é). A várakozó táblák (J7b döntések 13.) miatt a
+    // késői döntés lejárat, nem rossz válasz — ezért: legalább 4 kérdés, ebből legalább 2 megválaszolt.
+    assert.ok(x.asked >= 4 && x.answered >= 2, `kérdések ${x.asked}, válaszok ${x.answered}`);
   }
 });
 
@@ -167,7 +168,7 @@ test("a director beállítása a végrehajtás J7b 3. pontja szerint", () => {
   const c = tornadoDirectorConfig(7);
   assert.deepEqual(
     { optionCount: c.optionCount, minGapMs: c.minGapMs, maxGapMs: c.maxGapMs, targetPerMin: c.targetPerMin, baseWindowMs: c.baseWindowMs, slowMo: c.slowMo },
-    { optionCount: 3, minGapMs: 1500, maxGapMs: 20000, targetPerMin: 4, baseWindowMs: 5500, slowMo: 1 },
+    { optionCount: 3, minGapMs: 1500, maxGapMs: 20000, targetPerMin: 4, baseWindowMs: 6000, slowMo: 1 },
   );
   assert.equal(levelForGrade(7), 109);
 });
@@ -254,5 +255,53 @@ test("(e) győzelem és vereség nem fordul át: a horgonyzott menet nem veszít
     for (let i = 0; i < 600; i++) g.step(1000 / 60, { skillRoll: 0.5 });
     assert.equal(g.won(), won, "a kimenet a lezárás után megváltozott");
     assert.equal(g.fingerprint(), before, "a lezárt menet tovább futott");
+  }
+});
+
+/* ---- a független ellenőrzés (J7b döntések 12–19) mérései ---- */
+
+const quietRun = (g: TornadoSim, seed: number, player = SIM_AVERAGE) => runSim(() => g as never, player, { seed, seconds: 600 });
+
+test("B1: a soha nem nyúló (passzív) bot egyetlen kérdése sem kerül válaszként a nyilvántartásba", () => {
+  let asked = 0;
+  for (const seed of simSeeds(GAME, 20)) {
+    const g = createSimGame({ seed, grade: 7, questions: true, passive: true });
+    quietRun(g, seed);
+    const st = g.stats();
+    asked += st.asked;
+    assert.equal(st.answered, 0, `seed ${seed}: ${st.correct} jó / ${st.wrong} rossz válasz szándék nélkül`);
+  }
+  console.log(`[tornado-sim] passzív bot: ${asked} kérdés, 0 nyilvántartott válasz`);
+  assert.ok(asked > 40);
+});
+
+test("M1: a mindig jót választó bot téves válasza 0 — 2,8 és 4 s reakcióval, lassú, gyors és nitrós tempónál", () => {
+  for (const reactionMedianMs of [2800, 4000]) {
+    for (const botSpeed of [8, 16, 22.2, 30]) {
+      let right = 0;
+      let wrong = 0;
+      let timeouts = 0;
+      for (const seed of simSeeds(GAME, 20)) {
+        const g = createSimGame({ seed, grade: 5, questions: true, botSpeed });
+        quietRun(g, seed, { accuracy: 1, reactionMedianMs, skill: 1 });
+        const st = g.stats();
+        right += st.correct;
+        wrong += st.wrong;
+        timeouts += st.timeouts;
+      }
+      console.log(`[tornado-sim] mindig jó, reakció ${reactionMedianMs} ms, tempó ${botSpeed}: jó ${right}, rossz ${wrong}, lejárt ${timeouts}`);
+      assert.equal(wrong, 0, `reakció ${reactionMedianMs} ms, tempó ${botSpeed}: ${wrong} téves válasz`);
+      if (reactionMedianMs === 2800) assert.ok(right > timeouts, "2,8 s-os reakcióval a tudott válaszok többsége helyesként számít");
+    }
+  }
+});
+
+test("K4: kérdés nélkül is végigjátszható (az erős modell ≥ 15/20), és minden modellnél kérdéssel ≥ kérdés nélkül", () => {
+  for (const [name, player] of [["SIM_STRONG", SIM_STRONG], ["SIM_AVERAGE", SIM_AVERAGE], ["SIM_WEAK", SIM_WEAK]] as const) {
+    const without = runSimSeeds(factory, player, { gameId: GAME, seconds: 600, grade: 7, questions: false }).filter((r) => r.won).length;
+    const withQ = runSimSeeds(factory, player, { gameId: GAME, seconds: 600, grade: 7, questions: true }).filter((r) => r.won).length;
+    console.log(`[tornado-sim] ${name}: győzelem kérdéssel ${withQ}/20, kérdés nélkül ${without}/20`);
+    assert.ok(withQ >= without, `${name}: kérdéssel ${withQ} < kérdés nélkül ${without}`);
+    if (name === "SIM_STRONG") assert.ok(without >= 15, `kérdés nélkül ${without}/20`);
   }
 });

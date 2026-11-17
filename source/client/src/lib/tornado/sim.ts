@@ -28,9 +28,12 @@ import type { RunStatsSnapshot } from "@/game-engine/play/runStats";
 import type { QuestionOutcome, QuestionPresentation, QuestionResult } from "@/game-engine/play/types";
 import type { FourChoiceQuiz } from "@/types/gameQuiz";
 
+import { collidersNear, type Collider } from "./collision";
 import {
+  freezeJunction,
   gatePoint,
   junctionCrossing,
+  slideJunction,
   junctionEffect,
   nextJunctionGapMs,
   nextTurboGapMs,
@@ -52,7 +55,7 @@ import { clampToWorld, fromKm, toKm } from "./world";
 export const TORNADO_GAME_ID = "tornado-hunter-200" as const;
 
 /** A kérdés-sáv alap ablaka rövid tételnél (ms) — a kapuvonal távolsága ehhez igazodik. */
-export const TORNADO_BASE_WINDOW_MS = 5500;
+export const TORNADO_BASE_WINDOW_MS = 6000;
 
 /** A director beállítása (végrehajtás J7b 3.; „J7b döntések” 11.). */
 export function tornadoDirectorConfig(grade: number): DirectorConfig {
@@ -138,9 +141,21 @@ export type ChaseEvent =
   | { kind: "pad"; pad: TurboPad }
   | { kind: "pad-gone" }
   | { kind: "turbo-done"; result: QuestionResult; nitroMs: number }
+  /** K4 (J7b döntések 19.): a padon nem jött kérdés (üres forrás) — kérdés nélkül nitró, a pad eltűnik. */
+  | { kind: "pad-free"; nitroMs: number }
+  | { kind: "junction-frozen"; junction: Junction }
   | { kind: "anchor-answer"; result: QuestionResult };
 
-export type VehicleSample = Pose & { speed: number };
+/**
+ * A jármű egy lépés utáni helyzete + a játékos bemenete ebben a lépésben (a szándék-figyeléshez, J7b döntések 12.):
+ * `steer` −1..1, `brake` lenyomva, `tap` (billentyű / koppintás a kérdés megjelenése óta, a lap jelzi).
+ */
+export type VehicleSample = Pose & { speed: number; steer?: number; brake?: boolean; tap?: boolean };
+
+/** A szándék küszöbe: a kormány ennyivel tér el a kérdés megjelenésekori értékétől. */
+export const INTENT_STEER_DELTA = 0.3;
+/** K4: ennyi ms után a turbópad kérdés nélkül ad nitrót, ha a director nem ad kérdést. */
+export const PAD_FREE_AFTER_MS = 1500;
 
 export type ChaseCore = {
   /** A kérdés-óra (ms): a lefutott lépések összege (szünetben nem fut lépés). */
@@ -154,6 +169,12 @@ export type ChaseCore = {
   requestAnchor(): boolean;
   /** Teszt-kampó (`forceState({ question: true })`): azonnali turbó-kérdés, a nyitott kérdés megszakításával. */
   forceTurbo(): boolean;
+  /** Teszt-kampó (`forceState({ junction: true })`): azonnali elágazás. */
+  forceJunction(): boolean;
+  /** K2: a fék / a tárcsa hátrahúzása megszakítja a nitrót. */
+  cancelNitro(): void;
+  /** Volt-e szándékos bemenet a nyitott elágazás megjelenése óta (a lap a feliratban jelzi). */
+  intentSeen(): boolean;
   kindOf(id: number): QuestionKind | null;
   junction(): Junction | null;
   pad(): TurboPad | null;
@@ -163,12 +184,28 @@ export type ChaseCore = {
   drainEvents(): ChaseEvent[];
 };
 
-export function createChaseCore(opts: { seed: number | string; questions: ChaseQuestions | null }): ChaseCore {
+export function createChaseCore(opts: {
+  seed: number | string;
+  questions: ChaseQuestions | null;
+  /** A világ ütközői egy pont körül (a kapuk folyosó-ellenőrzéséhez, J7b döntések 14.); alap: `collidersNear`. */
+  collidersAt?: (x: number, z: number) => readonly Collider[];
+}): ChaseCore {
   const rng = createRng(seedFrom(TORNADO_GAME_ID, opts.seed, "chase")).next;
   const q = opts.questions;
+  const collidersAt = opts.collidersAt ?? collidersNear;
   let clock = 0;
-  let pose: Pose = { x: 0, z: 0, heading: 0 };
+  // Lépésenként nem foglalunk új objektumot (K5): a helyzet számokban.
+  let px = 0;
+  let pz = 0;
+  let ph = 0;
   let speed = 0;
+  let steerNow = 0;
+  let brakeNow = false;
+  let steer0 = 0;
+  let brake0 = false;
+  let intent = false;
+  let freezeRetry = 0;
+  let padAskSince: number | null = null;
   let junction: Junction | null = null;
   /** Az első elágazás a director bemelegítése után azonnal jöhet; utána indítástól számított 15–20 mp. */
   let nextJunctionAt = 0;
@@ -199,18 +236,33 @@ export function createChaseCore(opts: { seed: number | string; questions: ChaseQ
   return {
     clockMs: () => clock,
     step(dtMs, v, ctx) {
-      const prev = pose;
-      pose = { x: v.x, z: v.z, heading: v.heading };
+      const prevX = px;
+      const prevZ = pz;
+      px = v.x;
+      pz = v.z;
+      ph = v.heading;
       speed = v.speed;
+      steerNow = v.steer ?? 0;
+      brakeNow = v.brake === true;
       clock += dtMs;
       if (nitro > 0) nitro = Math.max(0, nitro - dtMs);
       if (!q) return;
-      // Q1: áthajtás a kapuvonalon = válasz (a kérdés-sáv kezeli a megoldás-kijelzést, az ismétlést, a hangot).
+      // Q1: a táblák várnak, amíg szándékot nem lát (J7b döntések 12–13.), utána rögzülnek, és a rögzült kapun áthajtás a válasz.
       if (junction) {
         const act = q.active();
         if (act && act.id === junction.questionId) {
-          const opt = junctionCrossing(junction, prev, pose);
-          if (opt !== null) q.pick(opt, clock);
+          if (!intent && (Math.abs(steerNow - steer0) > INTENT_STEER_DELTA || brakeNow !== brake0 || v.tap === true)) intent = true;
+          if (!junction.frozen) {
+            slideJunction(junction, v, speed);
+            // Rögzülés a szándék után; foglalt folyosónál 6 lépésenként újrapróba (M2: ha nincs szabad hely, tovább várnak).
+            if (intent && freezeRetry-- <= 0) {
+              if (freezeJunction(junction, v, speed, collidersAt)) events.push({ kind: "junction-frozen", junction });
+              else freezeRetry = 6;
+            }
+          } else {
+            const opt = junctionCrossing(junction, { x: prevX, z: prevZ }, v);
+            if (opt !== null) q.pick(opt, clock);
+          }
         }
       }
       // Q3: turbópad — megjelenik, lejár, elérve kérdést kér (a kérés a min. rés miatt később is sikerülhet).
@@ -219,11 +271,22 @@ export function createChaseCore(opts: { seed: number | string; questions: ChaseQ
         nextPadAt = clock + nextTurboGapMs(rng);
         events.push({ kind: "pad-gone" });
       }
-      if (pad && !padArmed && padReached(pad, pose.x, pose.z)) padArmed = true;
-      if (pad && padArmed && q.canAsk()) ask("turbo", "trigger");
-      else if (!pad && clock >= nextPadAt && !ctx.hold && q.canAsk()) {
-        pad = planTurboPad(pose, clock);
+      if (pad && !padArmed && padReached(pad, px, pz)) padArmed = true;
+      if (pad && padArmed && q.canAsk()) {
+        if (padAskSince === null) padAskSince = clock;
+        if (!ask("turbo", "trigger") && !q.pending() && clock - padAskSince >= PAD_FREE_AFTER_MS) {
+          // K4: nincs kérdés-forrás (üres kupon-lecke, kérdés nélküli mód) — a pad nem ragad be.
+          pad = null;
+          padArmed = false;
+          padAskSince = null;
+          nextPadAt = clock + nextTurboGapMs(rng);
+          nitro = Math.max(nitro, NITRO_MS);
+          events.push({ kind: "pad-free", nitroMs: NITRO_MS });
+        }
+      } else if (!pad && clock >= nextPadAt && !ctx.hold && q.canAsk()) {
+        pad = planTurboPad({ x: px, z: pz, heading: ph }, clock);
         padArmed = false;
+        padAskSince = null;
         events.push({ kind: "pad", pad });
       }
       q.frame(clock, { calm: clock >= nextJunctionAt && !padArmed, hold: ctx.hold });
@@ -233,8 +296,13 @@ export function createChaseCore(opts: { seed: number | string; questions: ChaseQ
       if (p.reason !== "scheduled") requested = null;
       kinds.set(p.id, kind);
       if (kind === "junction") {
-        junction = planJunction({ pose, speed, windowMs: p.windowMs, questionId: p.id, optionCount: p.options.length, rng });
+        junction = planJunction({ pose: { x: px, z: pz, heading: ph }, speed, windowMs: p.windowMs, questionId: p.id, optionCount: p.options.length, rng });
         nextJunctionAt = clock + nextJunctionGapMs(rng);
+        // A szándék a megjelenés ÓTA számít: a megjelenéskori kormány / fék az alap (a már tartott kormány nem válasz).
+        steer0 = steerNow;
+        brake0 = brakeNow;
+        intent = false;
+        freezeRetry = 0;
         events.push({ kind: "junction", junction });
       }
     },
@@ -251,6 +319,7 @@ export function createChaseCore(opts: { seed: number | string; questions: ChaseQ
       } else if (kind === "turbo") {
         pad = null;
         padArmed = false;
+        padAskSince = null;
         nextPadAt = clock + nextTurboGapMs(rng);
         const nitroMs = o.result === "correct" ? NITRO_MS : 0;
         nitro = Math.max(nitro, nitroMs);
@@ -269,6 +338,15 @@ export function createChaseCore(opts: { seed: number | string; questions: ChaseQ
       abortOpen();
       return ask("turbo", "rescue");
     },
+    forceJunction() {
+      if (!q) return false;
+      abortOpen();
+      return ask("junction", "rescue");
+    },
+    cancelNitro() {
+      nitro = 0;
+    },
+    intentSeen: () => intent,
     kindOf: (id) => kinds.get(id) ?? null,
     junction: () => junction,
     pad: () => pad,
@@ -288,8 +366,9 @@ export function createChaseDriver(opts: {
   seed: number | string;
   questions: ChaseQuestions | null;
   physics: (dtSec: number) => VehicleSample & { hold: boolean };
+  collidersAt?: (x: number, z: number) => readonly Collider[];
 }): ChaseDriver {
-  const core = createChaseCore({ seed: opts.seed, questions: opts.questions });
+  const core = createChaseCore({ seed: opts.seed, questions: opts.questions, collidersAt: opts.collidersAt });
   const loop = createFixedLoop((dtMs) => {
     const v = opts.physics(dtMs / 1000);
     core.step(dtMs, v, { hold: v.hold });
@@ -348,12 +427,32 @@ export type TornadoSim = {
   band(): number;
   intensity(): number;
   /** Mérés: elágazások / turbók / kerülők száma, a menet ideje és a győzelmi pont. */
-  tally(): { junctions: number; turbos: number; detours: number; nitros: number; anchorQuestions: number; score: number };
+  tally(): { junctions: number; frozen: number; turbos: number; detours: number; nitros: number; anchorQuestions: number; score: number };
   /** Arany visszajátszás: a végállapot rövid lenyomata. */
   fingerprint(): string;
 };
 
-export function createSimGame(opts: { seed: number; grade: number; questions: boolean; material?: readonly FourChoiceQuiz[] }): TornadoSim {
+/**
+ * K1 (J7b döntések 16.): a kerülő ennyi másodpercet ad hozzá a menet órájához / a tölcsér életkorához úgy, hogy mindkettőből
+ * legalább `DETOUR_GRACE_SEC` maradjon — a rossz kapu nem okozhat azonnali vereséget, és a helyes tábla kijelzése (≥ 1,8 s) látszik.
+ */
+export const DETOUR_GRACE_SEC = 5;
+export function detourWithGrace(detourSec: number, lifeLeftSec: number, timeLeftSec: number): number {
+  const room = Math.min(lifeLeftSec, timeLeftSec) - DETOUR_GRACE_SEC;
+  return Math.max(0, Math.min(detourSec, room));
+}
+
+export function createSimGame(opts: {
+  seed: number;
+  grade: number;
+  questions: boolean;
+  material?: readonly FourChoiceQuiz[];
+  /** A bot tempója (világegység / s; alap `BOT_SPEED`) — a „minden sebességnél” mérésekhez. */
+  botSpeed?: number;
+  /** Mérés: a bot soha nem nyúl a vezérlőhöz a kérdések alatt (B1: a passzív átlépés nem válasz). */
+  passive?: boolean;
+}): TornadoSim {
+  const botSpeed = opts.botSpeed ?? BOT_SPEED;
   const level = levelForGrade(opts.grade);
   const spec = levelSpec(level);
   const director = createQuestionDirector({
@@ -387,24 +486,32 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
   let choice: { id: number; option: number } | null = null;
   let padTry = true;
   let roll = 0;
-  const tally = { junctions: 0, turbos: 0, detours: 0, nitros: 0, anchorQuestions: 0 };
+  const tally = { junctions: 0, frozen: 0, turbos: 0, detours: 0, nitros: 0, anchorQuestions: 0 };
 
   const distKm = () => toKm(Math.hypot(car.x - tp.x, car.z - tp.z));
+  /** A bot kormány-bemenete (−1..1) és a döntés jelzése (koppintás) — a mag ebből látja a szándékot. */
+  let steerOut = 0;
+  let tapOut = false;
   const steerTo = (tx: number, tz: number, dt: number) => {
     const want = Math.atan2(tx - car.x, -(tz - car.z));
     const diff = ((want - car.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-    car.heading += Math.max(-BOT_TURN * dt, Math.min(BOT_TURN * dt, diff));
+    const turn = Math.max(-BOT_TURN * dt, Math.min(BOT_TURN * dt, diff));
+    car.heading += turn;
+    steerOut = Math.max(-1, Math.min(1, diff * 2));
   };
 
   const physics = (dt: number): VehicleSample & { hold: boolean } => {
     const core = driver!.core;
     for (const e of core.drainEvents()) {
       if (e.kind === "junction") tally.junctions += 1;
+      else if (e.kind === "junction-frozen") tally.frozen += 1;
+      else if (e.kind === "pad-free") tally.nitros += 1;
       else if (e.kind === "junction-done") {
-        if (e.detourSec > 0) {
+        const sec = detourWithGrace(e.detourSec, spec.tornadoLifetime - tp.born, spec.timeLimit - elapsed);
+        if (sec > 0) {
           tally.detours += 1;
-          elapsed += e.detourSec;
-          tp.born += e.detourSec;
+          elapsed += sec;
+          tp.born += sec;
         }
         if (e.nitroMs > 0) tally.nitros += 1;
       } else if (e.kind === "turbo-done") {
@@ -424,6 +531,14 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
       }
     }
     const over = won || lost;
+    const passiveSteer = steerOut;
+    steerOut = 0;
+    const tapNow = tapOut;
+    tapOut = false;
+    const anchorAsking = (() => {
+      const act = ui.active();
+      return (act !== null && core.kindOf(act.id) === "anchor") || (ui.view().reveal !== null && ui.view().presentation !== null && core.kindOf(ui.view().presentation!.id) === "anchor");
+    })();
     if (!over) {
       elapsed += dt;
       advanceTornado(tp, spec, dt);
@@ -454,13 +569,16 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
           }
         } else if (pad && padTry) steerTo(pad.x, pad.z, dt);
         else steerTo(tp.x, tp.z, dt);
-        car.speed = BOT_SPEED * (core.nitroLeftMs() > 0 ? NITRO_SPEED_FACTOR : 1);
+        car.speed = botSpeed * (core.nitroLeftMs() > 0 ? NITRO_SPEED_FACTOR : 1);
         car.x = clampToWorld(car.x + Math.sin(car.heading) * car.speed * dt);
         car.z = clampToWorld(car.z - Math.cos(car.heading) * car.speed * dt);
       }
-      if (!anchored && (tp.born > spec.tornadoLifetime || elapsed > spec.timeLimit)) lost = true;
+      // K3 (J7b döntések 18.): horgony-kérdés alatt a vereség feltétele nem teljesülhet.
+      if (!anchored && !anchorAsking && (tp.born > spec.tornadoLifetime || elapsed > spec.timeLimit)) lost = true;
     }
-    return { ...car, hold: anchored || anchorBandState(distKm(), spec.anchorBand) === "in_band" };
+    // A passzív bot (B1-mérés) semmit nem jelez: a kormánya és a koppintása 0, az iránytartást a „kocsi” maga végzi.
+    const steer = opts.passive ? 0 : passiveSteer;
+    return { ...car, steer, tap: opts.passive ? false : tapNow, hold: anchored || anchorBandState(distKm(), spec.anchorBand) === "in_band" };
   };
   driver = createChaseDriver({
     seed: opts.seed,
@@ -497,8 +615,10 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
     answer(id, option) {
       const p = ui.active();
       if (!p || p.id !== id) return;
+      if (opts.passive) return;
       if (d.core.kindOf(id) === "junction") {
         choice = { id, option }; // a bot a választott kapu felé kormányoz; a válasz az áthajtás
+        tapOut = true; // a döntés jelzése (a gyerek a kormányhoz / a táblához nyúl): szándék
         return;
       }
       ui.pick(option, d.core.clockMs());

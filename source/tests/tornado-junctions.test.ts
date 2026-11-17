@@ -14,6 +14,7 @@ import {
   TURBO_GAP_MIN_MS,
   TURBO_PAD_LIFE_MS,
   detourSeconds,
+  freezeJunction,
   gateOffset,
   gatePoint,
   junctionCrossing,
@@ -27,6 +28,8 @@ import {
   planTurboPad,
 } from "../client/src/lib/tornado/junctions";
 import { createChaseCore, tornadoDirectorConfig, type ChaseEvent } from "../client/src/lib/tornado/sim";
+import { collidersNear, resolveVehicleCollisions } from "../client/src/lib/tornado/collision";
+import { ROAD_SPACING } from "../client/src/lib/tornado/world";
 import { bankPlayQuestion, createQuestionDirector, restoreReviewQuestion } from "../client/src/game-engine/play/questionDirector";
 import { createReviewQueue } from "../client/src/game-engine/play/reviewQueue";
 import { createQuestionUi } from "../client/src/game-engine/play/questionUi";
@@ -66,7 +69,8 @@ test("a kapuvonal a sebesség × ablak 85%-ánál, 30–110 egység között (á
 test("három kapu a menetirányra merőleges vonalon: bal / egyenes / jobb, a kapupontok a vonalon", () => {
   for (const heading of [0, Math.PI / 2, Math.PI, -0.7]) {
     const j = planJunction({ pose: { x: 100, z: -50, heading }, speed: 15, windowMs: 5000, questionId: 1, optionCount: 3, rng: rng() });
-    assert.deepEqual([0, 1, 2].map((i) => gateOffset(j, i)), [-20, 0, 20]);
+    assert.deepEqual([0, 1, 2].map((i) => gateOffset(j, i)), [-16, 0, 16]);
+    assert.equal(j.frozen, false, "a táblák várakozva indulnak (J7b döntések 13.)");
     for (let i = 0; i < 3; i++) {
       const g = gatePoint(j, i);
       const loc = junctionLocal(j, g.x, g.z);
@@ -83,15 +87,18 @@ test("a választás az áthajtás iránya: a keresztezés pontjának szektora; t
   const j = planJunction({ pose: { x: 0, z: 0, heading: 0 }, speed: 10, windowMs: 6000, questionId: 7, optionCount: 3, rng: rng() });
   const line = j.line;
   const through = (lateral: number) => junctionCrossing(j, { x: lateral, z: -(line - 1) }, { x: lateral, z: -(line + 1) });
+  // Várakozó (nem rögzült) táblán át nincs választás (B1: szándék nélkül nincs kapuátlépés).
+  assert.equal(through(0), null);
+  j.frozen = true;
   assert.equal(through(-25), 0);
-  assert.equal(through(-11), 0);
-  assert.equal(through(-9), 1);
+  assert.equal(through(-9), 0);
+  assert.equal(through(-7), 1);
   assert.equal(through(0), 1);
-  assert.equal(through(9), 1);
-  assert.equal(through(11), 2);
+  assert.equal(through(7), 1);
+  assert.equal(through(9), 2);
   assert.equal(through(400), 2, "a szélső szektor a végtelenig tart");
   // Ferdén áthajtva a keresztezés pontja számít (nem a kiinduló vagy a végpont oldaliránya).
-  assert.equal(junctionCrossing(j, { x: -30, z: -(line - 10) }, { x: 10, z: -(line + 10) }), 1);
+  assert.equal(junctionCrossing(j, { x: -22, z: -(line - 10) }, { x: 10, z: -(line + 10) }), 1);
   assert.equal(junctionCrossing(j, { x: 0, z: -(line + 1) }, { x: 0, z: -(line - 1) }), null, "visszafelé");
   assert.equal(junctionCrossing(j, { x: 0, z: -(line - 5) }, { x: 0, z: -(line - 1) }), null, "még a vonal előtt");
 });
@@ -146,6 +153,7 @@ function harness() {
   });
   core = createChaseCore({
     seed: 3,
+    collidersAt: () => [],
     questions: {
       frame: (c, ctx) => ui.frame(c, ctx),
       request: (r, c) => ui.request(r, c),
@@ -160,18 +168,20 @@ function harness() {
 }
 
 /** Egy jármű 1/60 s-os lépésekben a `target` oldalirányú sávban halad előre (észak felé), amíg a vonalat át nem lépi. */
-function driveThrough(h: ReturnType<typeof harness>, gate: number | "none", maxSteps = 600): ChaseEvent[] {
+function driveThrough(h: ReturnType<typeof harness>, gate: number | "none" | "passive", maxSteps = 600): ChaseEvent[] {
   const events: ChaseEvent[] = [];
   let x = 0;
   let z = 0;
   h.core.step(1000 / 60, { x, z, heading: 0, speed: 15 }, { hold: false }); // az első lépés megnyitja az ütemezett kérdést
   events.push(...h.core.drainEvents());
-  const j = h.core.junction();
-  assert.ok(j, "az ütemezett kérdés elágazást nyitott");
+  assert.ok(h.core.junction(), "az ütemezett kérdés elágazást nyitott");
   for (let i = 0; i < maxSteps && h.core.junction(); i++) {
-    if (gate !== "none") x += Math.max(-0.5, Math.min(0.5, gateOffset(j, gate) - x));
-    z -= gate === "none" ? 0 : 0.25;
-    h.core.step(1000 / 60, { x, z, heading: 0, speed: 15 }, { hold: false });
+    const j = h.core.junction()!;
+    // "passive": egyenesen halad, a vezérlőhöz nem nyúl; "none": áll, és nem nyúl semmihez.
+    if (typeof gate === "number" && j.frozen) x += Math.max(-0.5, Math.min(0.5, j.ox + gateOffset(j, gate) - x));
+    if (gate !== "none") z -= 0.25;
+    // A döntés jelzése: koppintás (a lap a táblára koppintást / billentyűt így jelzi).
+    h.core.step(1000 / 60, { x, z, heading: 0, speed: 15, tap: typeof gate === "number" && i === 30 }, { hold: false });
     events.push(...h.core.drainEvents());
   }
   return events;
@@ -205,6 +215,26 @@ test("nem hajt át egyik kapun sem: a kérdés lejár (időtúllépés), büntet
   const done = events.find((e) => e.kind === "junction-done");
   assert.ok(done && done.kind === "junction-done" && done.result === "timeout" && done.detourSec === 0 && done.nitroMs === 0);
   assert.equal(h.core.junction(), null);
+});
+
+test("B1: szándék nélkül egyenesen hajtva sincs válasz — a táblák várnak, a kérdés lejár, a nyilvántartásban lejárt", () => {
+  const h = harness();
+  const events = driveThrough(h, "passive");
+  assert.equal(events.some((e) => e.kind === "junction-frozen"), false, "szándék nélkül nem rögzül");
+  const done = events.find((e) => e.kind === "junction-done");
+  assert.ok(done && done.kind === "junction-done" && done.result === "timeout" && done.detourSec === 0);
+  assert.equal(h.outcomes[0]!.result, "timeout");
+  assert.equal(h.outcomes[0]!.picked, null);
+});
+
+test("B1: a megjelenéskor már tartott kormány nem szándék; a megjelenés utáni elmozdulás (> 0,3) az", () => {
+  const h = harness();
+  h.core.step(1000 / 60, { x: 0, z: 0, heading: 0, speed: 15, steer: 0.8 }, { hold: false });
+  for (let i = 0; i < 20; i++) h.core.step(1000 / 60, { x: 0, z: -i * 0.25, heading: 0, speed: 15, steer: 0.8 }, { hold: false });
+  assert.equal(h.core.intentSeen(), false);
+  h.core.step(1000 / 60, { x: 0, z: -6, heading: 0, speed: 15, steer: 0.2 }, { hold: false });
+  assert.equal(h.core.intentSeen(), true);
+  assert.equal(h.core.junction()!.frozen, true, "a szándék után rögzül");
 });
 
 test("horgonyzott / mérési sávbeli tartásnál nem nyílik elágazás és nem jön turbópad", () => {
@@ -257,4 +287,44 @@ test("turbópad a magon át: elérve turbó-kérdés (gomb-mód), jó válaszra 
   h.ui.pick(p.options.findIndex((o) => o.correct), h.core.clockMs());
   assert.equal(h.core.nitroLeftMs(), NITRO_MS);
   assert.equal(h.core.pad(), null);
+});
+
+test("M2: rögzüléskor mindhárom kapuhoz szabad út vezet — 400 útpozíció, a valódi világ ütközőivel, független próbával", () => {
+  const r = createRng("m2-roads");
+  let frozen = 0;
+  let blocked = 0;
+  let waiting = 0;
+  const dims = { width: 2.4, length: 5.2 };
+  for (let k = 0; k < 400; k++) {
+    // É–D-i és K–Ny-i utakon (300 egységes rács), menetirányban.
+    const alongZ = k % 2 === 0;
+    const line = ROAD_SPACING * (r.int(7) - 3);
+    const t = (r.next() - 0.5) * 2000;
+    const heading = alongZ ? (r.next() < 0.5 ? 0 : Math.PI) : r.next() < 0.5 ? Math.PI / 2 : -Math.PI / 2;
+    const pose = alongZ ? { x: line, z: t, heading } : { x: t, z: line, heading };
+    const speed = 6 + r.next() * 24;
+    const j = planJunction({ pose, speed, windowMs: 6000, questionId: k, optionCount: 3, rng: r.next });
+    if (!freezeJunction(j, pose, speed, collidersNear)) {
+      waiting += 1;
+      continue;
+    }
+    frozen += 1;
+    for (let i = 0; i < 3; i++) {
+      const g = gatePoint(j, i);
+      const h = Math.atan2(g.x - pose.x, -(g.z - pose.z));
+      const len = Math.hypot(g.x - pose.x, g.z - pose.z);
+      for (let d = 0; d <= len; d += 1.5) {
+        const x = pose.x + Math.sin(h) * d;
+        const z = pose.z - Math.cos(h) * d;
+        if (resolveVehicleCollisions({ x, z, heading: h, speed: 10 }, dims, collidersNear(x, z)).hit) {
+          blocked += 1;
+          break;
+        }
+      }
+    }
+  }
+  // eslint-disable-next-line no-console
+  console.log(`[tornado-junctions] M2: rögzült ${frozen}, tovább vár ${waiting}, elzárt kapu ${blocked}`);
+  assert.equal(blocked, 0, "elzárt kapu rögzült elágazásban");
+  assert.ok(frozen >= 300, `kevés rögzülés: ${frozen}/400`);
 });

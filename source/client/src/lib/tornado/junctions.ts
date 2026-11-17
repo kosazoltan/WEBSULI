@@ -8,12 +8,33 @@
  * jármű a vonalat keresztezi, az a szektor (kapu) a válasz. A kapuk sorrendje a kérdés-sáv opcióinak sorrendje
  * (0 = bal) — a director seedelten kever, így a helyes kapu helye véletlen (a tornádó felé kormányzás nem árulja el).
  *
+ * J7b döntések 12–14 (a független ellenőrzés után): a táblák „várnak” — a megjelenéskori menetirányban a jármű előtt
+ * állandó távolságban haladnak vele (`slideJunction`), amíg a gyerek szándékot nem jelez; akkor rögzülnek (`freezeJunction`)
+ * olyan helyen, ahová mindhárom kapuhoz ütközőmentes folyosó vezet, és a döntés után mindig ~3 s marad a kormányzásra.
+ * Csak rögzült kapun át lehet választani (szándék nélküli átlépés nincs).
+ *
  * Irány-konvenció (a lap `PlayerState`-je): `heading` radián, 0 = észak (−Z), az óramutató járásával nő; előre
  * (sin h, −cos h), jobbra (cos h, sin h).
  */
 
-/** Két szomszédos kapu oldaltávolsága (világegység; a jármű ~2,5 széles, az út fél-szélessége 9). */
-export const JUNCTION_GATE_SPACING = 20;
+import type { Collider } from "./collision";
+import { HALF_WORLD } from "./world";
+
+/** Két szomszédos kapu oldaltávolsága (világegység; a jármű ~2,5 széles, az út fél-szélessége 9) — alapérték. */
+export const JUNCTION_GATE_SPACING = 16;
+/** Ha az alap köz egy akadály miatt nem szabad, ezekkel próbálkozunk. */
+export const JUNCTION_SPACINGS: readonly number[] = [16, 13, 20];
+/** A rögzülés után a vonalig ennyi idő marad a pillanatnyi sebességgel (+ `JUNCTION_FREEZE_EXTRA` egység). */
+export const JUNCTION_STEER_SEC = 2.2;
+export const JUNCTION_FREEZE_EXTRA = 4;
+/** A rögzülő vonal legkisebb távolsága (lassan a kormányzás rövidebb úton is kifér). */
+export const JUNCTION_FREEZE_MIN = 14;
+/** Várakozó (nem rögzült) táblák távolsága: ugyanez a képlet, legalább 40 egység. */
+export const JUNCTION_SLIDE_MIN = 40;
+/** A rögzülési hely keresése: a vonal ennyivel tolható ki. */
+export const JUNCTION_FREEZE_SEARCH: readonly number[] = [0, 8, 16, 24, 32, 40, 48];
+/** A folyosó-ellenőrzés: a jármű fél szélessége + biztonsági ráhagyás. */
+export const CORRIDOR_HALF_WIDTH = 1.8;
 /** A kapuvonal legkisebb / legnagyobb távolsága a kérdés megjelenésekor. */
 export const JUNCTION_LINE_MIN = 30;
 export const JUNCTION_LINE_MAX = 110;
@@ -40,6 +61,9 @@ export const NITRO_ACCEL_FACTOR = 1.6;
 
 export type Rand = () => number;
 
+/** A pálya széle (a `clampToWorld` határa, kis ráhagyással). */
+const WORLD_EDGE = HALF_WORLD - 6;
+
 export type Pose = { x: number; z: number; heading: number };
 
 export type Junction = {
@@ -57,6 +81,10 @@ export type Junction = {
   line: number;
   /** A kapuk (= opciók) száma, 2..4. */
   gates: number;
+  /** Két szomszédos kapu oldaltávolsága. */
+  spacing: number;
+  /** Rögzült-e (csak rögzült kapun át lehet választani — J7b döntések 12–13.). */
+  frozen: boolean;
   /** Ennyi másodperc a kerülő ára, ha rossz kapun hajt át (seedelt, a kérdés megjelenésekor sorsolt). */
   detourSec: number;
 };
@@ -109,15 +137,105 @@ export function planJunction(args: {
     fz,
     rx: -fz,
     rz: fx,
-    line: junctionLineDistance(args.speed, args.windowMs),
+    line: slideLineDistance(args.speed),
     gates: Math.max(2, Math.min(4, Math.round(args.optionCount))),
+    spacing: JUNCTION_GATE_SPACING,
+    frozen: false,
     detourSec: detourSeconds(args.rng),
   };
 }
 
+/** A rögzülő vonal távolsága a pillanatnyi sebességből (nitróval együtt): |v| × 2,2 s + 4, legalább 14. */
+export function freezeLineDistance(speed: number): number {
+  const v = Number.isFinite(speed) ? Math.abs(speed) : 0;
+  return Math.max(JUNCTION_FREEZE_MIN, v * JUNCTION_STEER_SEC + JUNCTION_FREEZE_EXTRA);
+}
+/** A várakozó táblák távolsága: ugyanez, legalább 40. */
+export function slideLineDistance(speed: number): number {
+  return Math.max(JUNCTION_SLIDE_MIN, freezeLineDistance(speed));
+}
+
+/** Várakozó táblák: az origó a jármű, az irány a megjelenéskori marad, a távolság a sebességgel nő (helyben módosít). */
+export function slideJunction(j: Junction, pose: { x: number; z: number }, speed: number): void {
+  if (j.frozen) return;
+  j.ox = pose.x;
+  j.oz = pose.z;
+  j.line = slideLineDistance(speed);
+}
+
+function hitsCollider(c: Collider, x: number, z: number, r: number): boolean {
+  if (c.kind === "circle") return Math.hypot(x - c.x, z - c.z) < c.r + r;
+  const cos = Math.cos(c.rotation);
+  const sin = Math.sin(c.rotation);
+  const dx = x - c.x;
+  const dz = z - c.z;
+  const lx = dx * cos - dz * sin;
+  const lz = dx * sin + dz * cos;
+  const qx = Math.max(-c.hx, Math.min(c.hx, lx));
+  const qz = Math.max(-c.hz, Math.min(c.hz, lz));
+  return Math.hypot(lx - qx, lz - qz) < r;
+}
+
+/** Akadály-próba: a szakasz mentén (≤ 2 egységenként) egy `radius` sugarú kör beleütközik-e egy ütközőbe. */
+export function segmentBlocked(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  collidersAt: (x: number, z: number) => readonly Collider[],
+  radius = CORRIDOR_HALF_WIDTH,
+): boolean {
+  const len = Math.hypot(bx - ax, bz - az);
+  const n = Math.max(1, Math.ceil(len / 2));
+  let cache: readonly Collider[] = [];
+  let cacheAt = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const x = ax + (bx - ax) * t;
+    const z = az + (bz - az) * t;
+    if (t * len - cacheAt > 4) {
+      cache = collidersAt(x, z);
+      cacheAt = t * len;
+    }
+    for (const c of cache) if (hitsCollider(c, x, z, radius)) return true;
+  }
+  return false;
+}
+
+/**
+ * A táblák rögzítése a jármű pillanatnyi helyéről: a vonal |v| × 2,4 s + 10 (+0…48), a köz 16 / 13 / 20 — az első olyan
+ * elrendezés, amelyben a jármű helyéről mindhárom kapuhoz (és 6 egységgel mögé) ütközőmentes egyenes folyosó vezet, és a
+ * kapu a világon belül van. Ha nincs ilyen, `false` (a táblák tovább várnak). Helyben módosít.
+ */
+export function freezeJunction(
+  j: Junction,
+  pose: { x: number; z: number },
+  speed: number,
+  collidersAt: (x: number, z: number) => readonly Collider[],
+): boolean {
+  if (j.frozen) return true;
+  const base = freezeLineDistance(speed);
+  for (const extra of JUNCTION_FREEZE_SEARCH) {
+    for (const spacing of JUNCTION_SPACINGS) {
+      const cand: Junction = { ...j, ox: pose.x, oz: pose.z, line: base + extra, spacing };
+      let ok = true;
+      for (let i = 0; i < cand.gates && ok; i++) {
+        const g = gatePoint(cand, i);
+        if (Math.abs(g.x) > WORLD_EDGE || Math.abs(g.z) > WORLD_EDGE) ok = false;
+        else if (segmentBlocked(pose.x, pose.z, g.x, g.z, collidersAt) || segmentBlocked(g.x, g.z, g.x + cand.fx * 6, g.z + cand.fz * 6, collidersAt)) ok = false;
+      }
+      if (ok) {
+        Object.assign(j, cand, { frozen: true });
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** Az `i`. kapu oldaliránya a középvonaltól (negatív = bal); 3 kapunál −20 / 0 / +20. */
-export function gateOffset(j: Pick<Junction, "gates">, i: number): number {
-  return (i - (j.gates - 1) / 2) * JUNCTION_GATE_SPACING;
+export function gateOffset(j: Pick<Junction, "gates" | "spacing">, i: number): number {
+  return (i - (j.gates - 1) / 2) * j.spacing;
 }
 
 /** Az `i`. kapu világpontja a kapuvonalon (a táblák helye). */
@@ -134,8 +252,8 @@ export function junctionLocal(j: Junction, x: number, z: number): { forward: num
 }
 
 /** Melyik kapu szektorába esik az oldalirány (a legközelebbi kapu; a szélső szektor a végtelenig tart). */
-export function sectorFor(j: Pick<Junction, "gates">, lateral: number): number {
-  const raw = Math.round(lateral / JUNCTION_GATE_SPACING + (j.gates - 1) / 2);
+export function sectorFor(j: Pick<Junction, "gates" | "spacing">, lateral: number): number {
+  const raw = Math.round(lateral / j.spacing + (j.gates - 1) / 2);
   return Math.max(0, Math.min(j.gates - 1, raw));
 }
 
@@ -144,6 +262,7 @@ export function sectorFor(j: Pick<Junction, "gates">, lateral: number): number {
  * szektora (= opció-index), különben null. Csak előre irányú áthaladás számít (visszafelé tolatva nem választ).
  */
 export function junctionCrossing(j: Junction, prev: { x: number; z: number }, cur: { x: number; z: number }): number | null {
+  if (!j.frozen) return null;
   const a = junctionLocal(j, prev.x, prev.z);
   const b = junctionLocal(j, cur.x, cur.z);
   if (!(a.forward < j.line && b.forward >= j.line)) return null;
