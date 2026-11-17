@@ -1153,7 +1153,7 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
 
 ## J3 — Kockavadász: „Rúnabánya” (J3a, J3b, J3c)
 
-**Állapot (J3a):** nem kezdődött · **Állapot (J3b):** nem kezdődött · **Állapot (J3c):** nem kezdődött
+**Állapot (J3a):** folyamatban – 2026-11-17, ág feat/jatek-j3a-kockavadasz-runabanya, munkafa .claude/worktrees/jatek-j3a, kanban #79 · **Állapot (J3b):** nem kezdődött · **Állapot (J3c):** nem kezdődött
 **Függ:** J0c merge (a 4. hullámban, a J1/J2/J4 tapasztalata után). **Elfogadás:** J-BC, J1–J11, J16, M1–M12. Terv: 5.3.
 
 ### Fájlok
