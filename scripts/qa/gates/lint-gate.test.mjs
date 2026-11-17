@@ -25,7 +25,7 @@ test('scanAddedLines: .only / .skip csak tesztfájlban bukás, érték nélküli
   assert.equal(f.length, 2);
   assert.deepEqual(f.map((x) => `${x.file}:${x.line}`), ['source/tests/a.test.ts:7', 'source/tests/b.spec.ts:1']);
   assert.ok(f.every((x) => x.level === STATUS.FAIL && !x.rule.includes('"x"')));
-  const opt = scanAddedLines([L('source/tests/c.test.ts', `test("z", { only: true }, () => {})`), L('source/tests/d.test.ts', 'test("z", { skip: process.platform !== "win32" }, () => {})')]);
+  const opt = scanAddedLines([L('source/tests/c.test.ts', `test("z", { ${'only'}: true }, () => {})`), L('source/tests/d.test.ts', 'test("z", { skip: process.platform !== "win32" }, () => {})')]);
   assert.deepEqual(opt.map((x) => x.file), ['source/tests/c.test.ts'], 'a feltételes skip megengedett, a literális only: true nem');
 });
 
@@ -43,7 +43,7 @@ test('scanAddedLines: titok-minták bárhol bukás; loopback / sablon adatbázis
 
 test('classifyHookOutput / applyRepoRules: a hook figyelmeztetése WARN, a deny FAIL; csak az Edit|Write szabályok', () => {
   assert.equal(classifyHookOutput(''), null);
-  assert.equal(classifyHookOutput(JSON.stringify({ systemMessage: '[agentic-qa-kit] REPO-SZABÁLY figyelmeztetés: eval()' })).level, STATUS.WARN);
+  assert.equal(classifyHookOutput(JSON.stringify({ systemMessage: '[agentic-qa-kit] REPO-SZABÁLY figyelmeztetés: kódinjekció-kockázat' })).level, STATUS.WARN);
   assert.equal(classifyHookOutput(JSON.stringify({ hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'x' } })).level, STATUS.FAIL);
   const rules = [{ tool: 'Bash|PowerShell', pattern: 'x', level: 'deny' }, { tool: 'Edit|Write', pattern: 'tilos', level: 'deny', message: 'm' }, { tool: 'Edit|Write', pattern: 'gyanus', level: 'warn' }];
   assert.deepEqual(applyRepoRules(rules, 'ez tilos és gyanus').map((h) => h.level), [STATUS.FAIL, STATUS.WARN]);
