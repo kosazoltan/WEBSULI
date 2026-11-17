@@ -306,9 +306,10 @@ for (const viewport of [
       await page.goto("/games/tsunami-english?seed=17&difficulty=easy");
       await page.getByTestId("button-tsunami-start").tap();
       await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
-      await openQuestion(page);
+      // D-J1a-18: táblás eset kényszerített egysoros válaszokkal (fekvőben a kétsoros véletlen tétel jogosan lista mód).
+      await openQuestion(page, { question: true, answers: SHORT_ANSWERS });
       await expect(gates(page)).toHaveCount(3, { timeout: 10_000 });
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(500);
       const cdp = await page.context().newCDPSession(page);
       // A középső (az „itt futsz”) tábláról 50 px-et húz jobbra, a felengedés még a tábla dobozán belül van.
       const box = (await page.getByTestId("ts-gate-1").boundingBox())!;
@@ -357,7 +358,7 @@ test.describe("időtúllépés (D-J1a-13): a tétlen átfutás lejárt válasz �
     const seen = { good: 0, bad: 0 };
     // Semmilyen bemenet nincs (se billentyű, se érintés): a futó a középső sávban marad, a kérdéseket a teszt-kampó nyitja.
     for (let round = 0; round < 10 && seen.good === 0; round++) {
-      if ((await gates(page).count()) === 0) await openQuestion(page);
+      if ((await gates(page).count()) === 0) await openQuestion(page, { question: true, answers: SHORT_ANSWERS });
       await expect(gates(page)).toHaveCount(3, { timeout: 15_000 });
       const lane = (await probe(page)).lane;
       const correctIndex = Number((await quiz.locator('.ts-gate[data-correct="true"]').getAttribute("data-testid"))!.replace("ts-gate-", ""));
@@ -401,7 +402,9 @@ for (const viewport of [
       // A tábla valódi szélessége dönt: ahol nem fér (360 / 390 px), ott „lista mód” (a kérdés-sáv gombjai teljes szöveggel);
       // ahol befér (a fekvő nézet 160 px-es táblája), ott a tábla. Mindkét esetben a teljes szöveg olvasható.
       const long = (await quiz.getAttribute("data-long")) === "true";
-      if (viewport.width < 400) expect(long, "keskeny nézetben a leghosszabb válasz nem fér a táblába → lista mód").toBe(true);
+      // D-J1a-18: a leghosszabb válaszok álló nézetben szélességben, fekvőben magasságban nem férnek a táblába → mindhárom
+      // nézetben lista mód (a „0 tábla” ág itt elvárt, nem véletlen).
+      expect(long, "a leghosszabb válaszok → lista mód").toBe(true);
       if (long) {
         await expect(page.locator('[data-testid="ts-question"]')).toHaveAttribute("data-mode", "buttons");
         await expect(gates(page), "lista módban nincs levágott tábla").toHaveCount(0);
@@ -454,7 +457,16 @@ for (const viewport of [
       await openQuestion(page, { question: true, answers: SHORT_ANSWERS });
       await expect(gates(page)).toHaveCount(3, { timeout: 10_000 });
       await expect(page.getByTestId("ts-quiz")).toHaveAttribute("data-long", "false");
-      await page.waitForTimeout(1_200);
+      // Az élesítés (450 ms) és a belépő animáció (180 ms) után EGY lap-hívásban mérünk, és utána azonnal választunk: a CI
+      // szoftveres WebGL-jén minden hívás képkockákat vár, így a külön mérések alatt a futó a kapuhoz érhetett (a kérdés
+      // lezárult, mielőtt a teszt a rossz táblát megérintette volna). A küszöbök változatlanok.
+      await page.waitForTimeout(600);
+      const gatesAboveRunnerScript = () => {
+        const api = (window as unknown as { __websuliGame: { probe: () => { runnerTopY: number } } }).__websuliGame;
+        const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+        const head = stage.top + api.probe().runnerTopY * stage.height;
+        return Array.from(document.querySelectorAll('[data-testid="ts-quiz"] .ts-gate')).map((el) => el.getBoundingClientRect().bottom - head);
+      };
       const boxes = await page.evaluate(() => {
         const card = document.querySelector('[data-testid="ts-quiz"] .play-question-card')!.getBoundingClientRect();
         // A vezérlők (tárcsa, Ugrás gomb) dobozai — a tábla egyikkel sem fedhet át.
@@ -464,8 +476,22 @@ for (const viewport of [
         };
         const controls = Array.from(document.querySelectorAll('[data-testid="tsunami-touch-controls"] > *')).map(rect);
         const g = Array.from(document.querySelectorAll('[data-testid="ts-quiz"] .ts-gate')).map(rect);
-        return { card: { b: card.bottom }, controls, g, vw: innerWidth, vh: innerHeight };
+        const api = (window as unknown as { __websuliGame: { probe: () => { runnerTopY: number } } }).__websuliGame;
+        const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+        const head = stage.top + api.probe().runnerTopY * stage.height;
+        return {
+          card: { b: card.bottom },
+          controls,
+          g,
+          vw: innerWidth,
+          vh: innerHeight,
+          overflowX: document.documentElement.scrollWidth - innerWidth,
+          above: g.map((b) => b.b - head),
+          open: document.querySelector('[data-testid="ts-quiz"]')?.getAttribute("data-state") ?? null,
+        };
       });
+      await page.locator('[data-testid="ts-quiz"] .ts-gate[data-correct="false"]').first().click();
+      expect(boxes.open, "a mérés nyitott kérdésnél történt").toBe("open");
       expect(boxes.controls.length, "a tárcsa és az Ugrás gomb látszik").toBe(2);
       for (const b of boxes.g) {
         expect(b.w).toBeGreaterThanOrEqual(48);
@@ -480,21 +506,15 @@ for (const viewport of [
       }
       const sorted = boxes.g.slice().sort((a, b) => a.l - b.l);
       for (let i = 1; i < sorted.length; i++) expect(sorted[i]!.l - sorted[i - 1]!.r, "a táblák között ≥ 12 px").toBeGreaterThanOrEqual(12);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
-      await shot(page, `tsunami-${viewport.width}x${viewport.height}-question.jpg`);
+      expect(boxes.overflowX).toBeLessThanOrEqual(1);
       // D-J1a-15 (review #483, K4): a táblák nem lógnak a futó feje alá — nyitott kérdésnél és a megoldás-kijelzés alatt sem.
-      const gatesAboveRunner = async () =>
-        page.evaluate(() => {
-          const api = (window as unknown as { __websuliGame: { probe: () => { runnerTopY: number } } }).__websuliGame;
-          const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
-          const head = stage.top + api.probe().runnerTopY * stage.height;
-          return Array.from(document.querySelectorAll('[data-testid="ts-quiz"] .ts-gate')).map((el) => el.getBoundingClientRect().bottom - head);
-        });
-      for (const d of await gatesAboveRunner()) expect(d, "nyitott kérdés: a tábla a futó feje fölött").toBeLessThanOrEqual(1);
-      await page.locator('[data-testid="ts-quiz"] .ts-gate[data-correct="false"]').first().click();
+      expect(boxes.above.length).toBe(3);
+      for (const d of boxes.above) expect(d, "nyitott kérdés: a tábla a futó feje fölött").toBeLessThanOrEqual(1);
       await expect(page.locator('[data-testid="ts-quiz"] .ts-gate[data-state="wrong"]')).toHaveCount(1);
       await page.waitForTimeout(400);
-      for (const d of await gatesAboveRunner()) expect(d, "megoldás-kijelzés: a tábla a futó feje fölött").toBeLessThanOrEqual(1);
+      const aboveReveal = await page.evaluate(gatesAboveRunnerScript);
+      expect(aboveReveal.length).toBe(3);
+      for (const d of aboveReveal) expect(d, "megoldás-kijelzés: a tábla a futó feje fölött").toBeLessThanOrEqual(1);
       if (viewport.width !== 390) await shot(page, `tsunami-${viewport.width}x${viewport.height}-wrong.jpg`);
     });
   });
