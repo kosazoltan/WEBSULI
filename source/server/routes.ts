@@ -1305,6 +1305,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           questionVersion: r.questionVersion,
           feedbackPerOption: r.feedbackPerOption,
           coversConceptIds: r.coversConceptIds,
+          // Kanban #84: a forrás-lecke valódi tantárgya (opcionális; ismeretlennél a mező hiányzik).
+          subject: r.subject,
         })),
       });
     } catch (e) {
