@@ -174,7 +174,10 @@ export function canHostRune(w: VoxelWorld, x: number, z: number): boolean {
   return vGet(w, x, y + 1, z) === AIR && vGet(w, x, y + 2, z) === AIR;
 }
 
-/** Rúnaérc-lehelyezés a játékos körüli gyűrűben (seedelt). `toward`: előnyben a megadott irány (± 60°). */
+/**
+ * Rúnaérc-lehelyezés a játékos körüli gyűrűben (seedelt). `toward`: előnyben a megadott irány (± `spread` / 2, alap
+ * ± 60°); ha arra nincs alkalmas hely, bármely irány.
+ */
 export function spawnRuneOreNear(
   w: VoxelWorld,
   rng: Rng,
@@ -183,6 +186,7 @@ export function spawnRuneOreNear(
   minR = RUNE_SPAWN_MIN,
   maxR = RUNE_SPAWN_MAX,
   toward?: { x: number; z: number },
+  spread = (Math.PI * 2) / 3,
 ): Pos | null {
   const ix = Math.floor(px);
   const iz = Math.floor(pz);
@@ -191,7 +195,7 @@ export function spawnRuneOreNear(
   const dist = (x: number, z: number) => Math.hypot(x + 0.5 - px, z + 0.5 - pz);
   for (let attempt = 0; attempt < 48; attempt++) {
     const widen = attempt >= 24; // a második félben bármely irány
-    const a = base !== null && !widen ? base + (rng.next() - 0.5) * (Math.PI * 2 / 3) : rng.next() * Math.PI * 2;
+    const a = base !== null && !widen ? base + (rng.next() - 0.5) * spread : rng.next() * Math.PI * 2;
     const r = minR + rng.next() * (maxR - minR);
     const x = Math.floor(px + Math.sin(a) * r);
     const z = Math.floor(pz + Math.cos(a) * r);
@@ -246,11 +250,12 @@ export function nearestRune(ores: readonly Pos[], px: number, pz: number): { ore
 
 /** A rúnakő találati gömbje (a látványnál ~20%-kal nagyobb — KSZ-12 megbocsátó bemenet). */
 export const RUNE_STONE_HIT_RADIUS = 0.42;
-export const RUNE_STONE_SIZE = 0.55;
+export const RUNE_STONE_SIZE = 0.48;
 
 /**
- * A 3–4 rúnakő helye az érc körül, a játékos felé néző félkörívben (az érc előtt 0,6 blokkal, 1,05 sugarú íven,
- * váltakozó magasságban). Tiszta matematika — a lap rajzolja, a találatot a `pickRuneStone` méri.
+ * A 3–4 rúnakő helye az érc körül, a játékos felé néző félkörívben (az érc előtt, 1,05 sugarú íven, az érc
+ * magasságában, váltakozva kicsit fölötte / alatta) — a célkereszt az ércen, a kövek körülötte látszanak. Tiszta
+ * matematika — a lap rajzolja, a találatot a `pickRuneStone` méri.
  */
 export function runeStoneLayout(ore: Pos, player: Vec3, count: number): Vec3[] {
   const cx = ore.x + 0.5;
@@ -273,11 +278,11 @@ export function runeStoneLayout(ore: Pos, player: Vec3, count: number): Vec3[] {
   for (let i = 0; i < n; i++) {
     const u = n === 1 ? 0 : (i / (n - 1)) * 2 - 1; // −1..1
     const ang = u * (Math.PI / 3); // ±60°
-    const side = Math.sin(ang) * 1.05;
-    const front = 0.6 + Math.cos(ang) * 0.35;
+    const side = Math.sin(ang) * 1.25;
+    const front = 0.5 + Math.cos(ang) * 0.3;
     out.push({
       x: cx + sx * side + fx * front,
-      y: ore.y + 1.15 + (i % 2 === 0 ? 0.15 : 0.55),
+      y: ore.y + 0.5 + (i % 2 === 0 ? 0.55 : -0.05),
       z: cz + sz * side + fz * front,
     });
   }
@@ -717,7 +722,7 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
       if (st.phase !== "play") return null;
       const p = opts.player();
       const len = Math.hypot(facing.x, facing.z) || 1;
-      const ore = spawnRuneOreNear(st.world, rng, p.x, p.z, 2, 3, { x: facing.x / len, z: facing.z / len });
+      const ore = spawnRuneOreNear(st.world, rng, p.x, p.z, 3, 4, { x: facing.x / len, z: facing.z / len }, Math.PI / 6);
       if (!ore) return null;
       st.ores.push(ore);
       emit({ type: "runeSpawn", ore });

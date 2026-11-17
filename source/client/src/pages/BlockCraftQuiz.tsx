@@ -1,12 +1,22 @@
+/**
+ * Kockavadász „Rúnabánya” (J3a — végrehajtás `docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md` J3 / J3a;
+ * terv 5.3). A játék az elsődleges: a sima blokk kérdés nélkül bányászható (tartással vagy koppintással), a kérdés a
+ * világító rúnaércnél jön Rúna-zárként — a válaszok a világban lebegő rúnaköveken, a világ közben lassítva fut. A régi
+ * teljes képernyős kvíz-modál és a „quiz” fázis megszűnt; a magyarázókártya csak a „Miért?” gombra nyílik.
+ *
+ * Rétegek (KSZ-1): a tiszta mag (`@/lib/blockcraft/core`: bányászás, rúnaérc, zár, zsákmány, fix lépésű hurok) → a
+ * three-nézet (ez a fájl: voxel-render, rúnakövek, por) → React UI (HUD ≤ 10 Hz, kérdés-sáv, rúnagombok).
+ */
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
+import { createRng, seedFrom, type Rng } from "@shared/game-rng";
 import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import * as THREE from "three";
-import { applyRendererLook, createGradientSky, detectLookTier, disposeObjectTree, LOOK_BUDGET, SparkleField } from "@/game-engine/three-look";
+import { createGameRenderer, createGradientSky, detectLookTier, disposeObjectTree, LOOK_BUDGET, SparkleField } from "@/game-engine/three-look";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
-import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Pause, Blocks } from "lucide-react";
+import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Blocks, Gem, RefreshCw } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import HoldButton from "@/game-engine/HoldButton";
@@ -24,20 +34,34 @@ import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
 import AudioToggleButton from "@/components/AudioToggleButton";
-import { useStreakProtector } from "@/hooks/useStreakProtector";
-import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
+import { sfxSuccess, sfxError, sfxLevelUp, sfxClick, sfxPickup, sfxWhoosh } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
 import {
   AIR, GRASS, DIRT, STONE, LOG, LEAVES, COAL, IRON, DIAMOND, BEDROCK,
-  CREEPER, SAND, WATER, ZOMBIE, SKELETON, SPIDER,
+  CREEPER, SAND, WATER, ZOMBIE, SKELETON, SPIDER, RUNE_ORE,
   WX, WY, WZ,
-  type VoxelWorld, type VoxelGenConfig, type PlayerState, type VoxelHit,
+  type VoxelWorld, type PlayerState, type VoxelHit,
   generateVoxelWorld, findVoxelSpawn, stepPlayerPhysics, raycastVoxel,
-  vGet, vSet, vIdx, vMineable, collidesAt, isExposed,
-  PLAYER_EYE, MOVE_SPEED_BPS, JUMP_VELOCITY, pickStartLook,
+  vGet, vSet, vIdx, vMineable, collidesAt, isExposed, lookDirection,
+  PLAYER_EYE, MOVE_SPEED_BPS, JUMP_VELOCITY, pickStartLook, groundStartTarget,
 } from "@/lib/voxelcraft";
+import {
+  BLOCK_CRAFT_GAME_ID,
+  BLOCK_CRAFT_LEVELS as LEVELS,
+  RUNE_STONE_SIZE,
+  blockCraftDirectorConfig,
+  createRuneMine,
+  genCfgFor,
+  mineTimeMs,
+  nearestRune,
+  pickRuneStone,
+  type LevelConfig,
+  type LevelWeather,
+  type RuneMine,
+  type RuneMineEvent,
+} from "@/lib/blockcraft/core";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import {
@@ -46,7 +70,8 @@ import {
   pickBlockCraftGradeSlot,
   type BlockCraftSubject,
 } from "@/lib/blockCraftSubjects";
-import { GRADE_SUBJECTS } from "@/data/gradeQuizBank";
+import { GRADE_QUIZ_ITEMS, GRADE_SUBJECTS } from "@/data/gradeQuizBank";
+import type { GradeQuizItem } from "@/data/gradeQuizBank/types";
 import {
   createGradeQuizSeen,
   gradeForGame,
@@ -54,7 +79,7 @@ import {
   pickGradeQuiz,
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
-import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import { correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
 import {
   GameHud,
   GameShell,
@@ -67,7 +92,26 @@ import {
   type GameHudStat,
   type GameScreenState,
 } from "@/game-engine/mobile";
-import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
+import { requestGameFrame, cancelGameFrame } from "@/game-engine/mobile";
+import { useVocabQuizSource, vocabLevelForGrade, type VocabQuiz } from "@/game-engine/vocab";
+import {
+  InlineQuestion,
+  ResultReview,
+  bankPlayQuestion,
+  createPointerTapTracker,
+  gradePlayQuestion,
+  materialPlayQuestion,
+  pointerTapHandlers,
+  restoreReviewQuestion,
+  useGameSpeech,
+  usePlayQuestion,
+  useQuestionDirector,
+  vocabPlayQuestion,
+  type PlayQuestion,
+  type QuestionOutcome,
+  type QuestionPresentation,
+  type QuestionProvider,
+} from "@/game-engine/play";
 
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 /** 2D pixel-minta cellaméret — a menü-előnézet (MenuBlock) rajzolásához. */
@@ -95,130 +139,6 @@ type QuizBankApi = {
     explanation?: string | null;
   }[];
 };
-
-/**
- * Pálya-konfiguráció: minden szint külön világgenerálási paraméterekkel,
- * progresszíven nehezedő kihívással. A játékos végigjátssza őket egymás után,
- * a Total XP halmozódik, sorozat resetelődik új pálya elején (frissítő).
- */
-type LevelBiome = "forest" | "caves" | "desert" | "diamond" | "standard";
-type LevelWeather = "clear" | "rain" | "snow" | "sandstorm";
-type LevelConfig = {
-  id: number;
-  name: string;
-  description: string;
-  /** Hány blokkot kell kibányászni a pálya teljesítéséhez. */
-  goalBlocks: number;
-  /** Opcionális: hány ritka blokk (COAL/IRON/DIAMOND/CREEPER) kötelező. */
-  goalRareBlocks: number;
-  /** Másodperces időkeret a pályára. */
-  timeLimit: number;
-  /** Érc-arány szorzó (1.0 = alap, 2.0 = kétszerese). */
-  oreMultiplier: number;
-  /** Barlangok száma (alap: 18 nagyobb világon). */
-  caveCount: number;
-  /** Fa-sűrűség (0.0–0.30). */
-  treeDensity: number;
-  /** Biom-eltolódás: melyik bióma dominánsabb. */
-  biome: LevelBiome;
-  /** Háttérszín a vibrációhoz (3D szcéna kezdő színe). */
-  skyTint: { day: string; dusk: string };
-  /** Időjárás: alap "clear", magasabb szinteken eső/hó/homokvihar. */
-  weather: LevelWeather;
-  /** Boss-pálya: külön HUD-banner + 3-4 extra creeper a felszínen. */
-  isBossLevel?: boolean;
-  /** Hány GYÉMÁNT kötelező a pálya teljesítéséhez (a leírás ígéretéhez kötve). */
-  goalDiamonds?: number;
-};
-
-const LEVELS: LevelConfig[] = [
-  {
-    id: 1,
-    name: "1. Erdei kezdés",
-    description: "Ismerd meg a játékot! Nyílt terepen indulsz. Bányássz 8 blokkot az időkereten belül!",
-    goalBlocks: 8,
-    goalRareBlocks: 0,
-    timeLimit: 240,
-    oreMultiplier: 0.7,
-    caveCount: 8,
-    treeDensity: 0.12,
-    biome: "forest",
-    skyTint: { day: "#9bd1ee", dusk: "#5d7faf" },
-    weather: "clear",
-  },
-  {
-    id: 2,
-    name: "2. Sűrű erdő",
-    description: "Több fa, sűrűbb növényzet. 12 blokk a célod.",
-    goalBlocks: 12,
-    goalRareBlocks: 0,
-    timeLimit: 240,
-    oreMultiplier: 1.0,
-    caveCount: 14,
-    treeDensity: 0.20,
-    biome: "forest",
-    skyTint: { day: "#8ac8e7", dusk: "#4f6fa0" },
-    weather: "clear",
-  },
-  {
-    id: 3,
-    name: "3. Barlangrendszer",
-    description: "Sok barlang, vegyes érctelep. 15 blokk + 2 érc kötelező!",
-    goalBlocks: 15,
-    goalRareBlocks: 2,
-    timeLimit: 220,
-    oreMultiplier: 1.5,
-    caveCount: 28,
-    treeDensity: 0.10,
-    biome: "caves",
-    skyTint: { day: "#7ab1d4", dusk: "#3c5577" },
-    weather: "rain",
-  },
-  {
-    id: 4,
-    name: "4. Sivatag és tó",
-    description: "Homokos biomák, tavak. 18 blokk + 2 érc — vigyázz a vízre!",
-    goalBlocks: 18,
-    goalRareBlocks: 2,
-    timeLimit: 210,
-    oreMultiplier: 1.1,
-    caveCount: 16,
-    treeDensity: 0.10,
-    biome: "desert",
-    skyTint: { day: "#f4d8a0", dusk: "#c08555" },
-    weather: "sandstorm",
-  },
-  {
-    id: 5,
-    name: "5. Gyémánt mélységek",
-    description: "Sok gyémánt és vas. 22 blokk + 4 érc, köztük legalább 1 gyémánt!",
-    goalBlocks: 22,
-    goalRareBlocks: 4,
-    timeLimit: 200,
-    oreMultiplier: 2.4,
-    caveCount: 24,
-    treeDensity: 0.08,
-    biome: "diamond",
-    skyTint: { day: "#7494c9", dusk: "#2a3550" },
-    weather: "snow",
-    isBossLevel: true,
-    goalDiamonds: 1, // a leírás ígéri: "legalább 1 gyémánt"
-  },
-];
-
-/** Pálya-konfig → voxel-világgenerátor paraméterek (Minecraft-klón terep). */
-function genCfgFor(cfg: LevelConfig): VoxelGenConfig {
-  const desert = cfg.biome === "desert";
-  return {
-    oreMultiplier: cfg.oreMultiplier,
-    treeCount: Math.max(4, Math.round(cfg.treeDensity * 90)) + (cfg.biome === "forest" ? 6 : 0),
-    surfaceMobCount: (cfg.id >= 3 ? 3 + cfg.id : 2) + (cfg.isBossLevel ? 3 : 0),
-    caveMobCount: cfg.id >= 4 ? 5 : cfg.id === 3 ? 3 : 0,
-    lakeCount: desert ? 2 : 1,
-    sandPatchCount: desert ? 6 : 1,
-    allowZombies: cfg.id >= 3,
-  };
-}
 
 /** Lerakható blokkok a hotbar-sorrendben (mob és bedrock nem). */
 const PLACEABLE_ORDER = [GRASS, DIRT, STONE, SAND, LOG, LEAVES, COAL, IRON, DIAMOND] as const;
@@ -471,24 +391,15 @@ const QUIZ_FALLBACK: Quiz[] = [
   { prompt: "'Cylinder' magyarul:", options: ["kocka", "gömb", "henger", "kúp"], correctIndex: 2, subject: "english-math", explanation: "A cylinder henger: két egybevágó körlapja és ívelt palástja van. „The can is a cylinder.” = „A doboz henger.”" },
 ];
 
-const XP_BY_TILE: Record<number, number> = {
-  [GRASS]: 20,
-  [DIRT]: 24,
-  [STONE]: 34,
-  [LOG]: 30,
-  [LEAVES]: 18,
-  [COAL]: 56,
-  [IRON]: 88,
-  [DIAMOND]: 140,
-  [AIR]: 0,
-  [BEDROCK]: 0,
-  [CREEPER]: 280,
-  [SAND]: 22,
-  [WATER]: 0,
-  [ZOMBIE]: 320, // +2× nehezebb XP-ben mint a creeper
-  [SKELETON]: 380, // legritkább, legtöbb XP
-  [SPIDER]: 260,
-};
+/**
+ * A rúnakövek színe + betűje (U-J3-1: szöveg-sprite nincs a közös rétegben → színkódolt A/B/C/D kő a világban, a
+ * válasz szövege a hozzá tartozó, azonos színű rúnagombon). Színtévesztőknek a betű is jelöl, nem csak a szín.
+ */
+const RUNE_LETTERS = ["A", "B", "C", "D"] as const;
+const RUNE_COLORS = ["#38bdf8", "#f59e0b", "#a3e635", "#f472b6"] as const;
+
+/** A kérdés tárgya a tárgy-statisztikához (eredményképernyő). */
+const SUBJECT_OF_GRADE = (item: GradeQuizItem): QuizSubject => blockCraftSubjectFromGradeSubject(item.subject);
 
 function clamp01(v: number) {
   return Math.max(0, Math.min(1, v));
@@ -524,7 +435,29 @@ const MC_PAL: Record<number, { main: string; dark: string; darker: string; light
   [ZOMBIE]:   { main: "#3A6B45", dark: "#2A4F32", darker: "#162A1A", light: "#588B5C", accent: "#0A0A0A", accent2: "#7DC174" }, // sötét-zöldes-hús, bőr
   [SKELETON]: { main: "#D8D6CE", dark: "#A6A498", darker: "#62605A", light: "#F2F0E6", accent: "#0A0A0A", accent2: "#0E1B36" }, // csont-fehér + sötét szem
   [SPIDER]:   { main: "#1F1A18", dark: "#0E0A09", darker: "#040303", light: "#3A2C28", accent: "#FF4D40", accent2: "#7A1810" }, // fekete pók + piros szem
+  // J3a: rúnaérc — sötét kő világító türkiz-lila rúnajelekkel (messziről is feltűnik).
+  [RUNE_ORE]: { main: "#2B2540", dark: "#1C1830", darker: "#0F0C1C", light: "#4A3F6B", accent: "#5EEAD4", accent2: "#C084FC" },
 };
+
+/** 12×12 rúnaérc-minta: sötét kőalap, középen világító rúnakereszt, sarkokban kristályszikrák. */
+function buildRunePattern(): string[][] {
+  const pal = MC_PAL[RUNE_ORE]!;
+  const grid: string[][] = Array.from({ length: 12 }, () => Array(12).fill(pal.main));
+  for (let py = 0; py < 12; py++) {
+    for (let px = 0; px < 12; px++) {
+      const h = tileRand(px * 1.9, py * 2.3, 71.3);
+      grid[py][px] = h < 0.18 ? pal.light : h < 0.55 ? pal.main : h < 0.85 ? pal.dark : pal.darker;
+    }
+  }
+  // Rúnajel: függőleges szár + két ferde ág (egyszerű, pixeles „rúna”).
+  for (let py = 2; py <= 9; py++) grid[py][5] = pal.accent!;
+  for (let k = 0; k < 3; k++) {
+    grid[3 + k][6 + k] = pal.accent!;
+    grid[6 + k][4 - k] = pal.accent!;
+  }
+  for (const [x, y] of [[1, 1], [10, 2], [2, 10], [9, 9]] as const) grid[y][x] = pal.accent2!;
+  return grid;
+}
 
 
 function desiredCanvasCssSize(el: HTMLCanvasElement) {
@@ -667,6 +600,9 @@ function makeBlockMaterials() {
   map.set(ZOMBIE, stdMat(buildTex(ZOMBIE), { emissive: new THREE.Color("#1a3a1f"), emissiveIntensity: 0.28 }));
   map.set(SKELETON, stdMat(buildTex(SKELETON), { emissive: new THREE.Color("#7a7870"), emissiveIntensity: 0.18 }));
   map.set(SPIDER, stdMat(buildTex(SPIDER), { emissive: new THREE.Color("#3a0a06"), emissiveIntensity: 0.24 }));
+  // J3a: a rúnaérc önvilágító (a rúnajel a saját textúrájával izzik), hogy a gyerek messziről is megtalálja.
+  const runeTex = gridToTexture(buildRunePattern());
+  map.set(RUNE_ORE, stdMat(runeTex, { emissive: new THREE.Color("#ffffff"), emissiveMap: runeTex, emissiveIntensity: 0.75, roughness: 0.6 }));
   return map;
 }
 
@@ -1117,7 +1053,12 @@ function MenuBlock({ t }: { t: number }) {
   return <canvas ref={ref} width={TILE} height={TILE} className="rounded border border-black/40" style={{ imageRendering: "pixelated" as const }} />;
 }
 
-type Phase = "menu" | "play" | "quiz" | "levelComplete" | "over";
+/**
+ * J3a: a menet fázisai (K.4/11). A kérdés NEM külön fázis, hanem a „play” al-állapota (Rúna-zár, kérdés-sáv) — a régi
+ * „quiz” fázis és a teljes képernyős modál megszűnt (végrehajtás J3a 3.). A teszt-kampó `forceState({ phase: "quiz" })`
+ * kompatibilis álnév: azonnal Rúna-zárat nyit (K.2).
+ */
+type Phase = "menu" | "play" | "levelComplete" | "over";
 
 /**
  * S11 kétujjas vezérlés: érintéssel a körbenézés csak a vászon JOBB 60%-án indulhat (a bal 40% a joystick
@@ -1127,6 +1068,23 @@ const LOOK_ZONE_START = 0.4;
 function isLookZone(x: number, width: number): boolean {
   return width <= 0 || x >= width * LOOK_ZONE_START;
 }
+
+/** A nap kulcsa a seedhez (KSZ-3: `seedFrom(gameId, dátum, kör)`), helyi idő szerint. */
+function dayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+/** `Quiz` → a közös `FourChoiceQuiz` alak (a séma `null` magyarázatot is enged, a motor `undefined`-ot vár). */
+function toFourChoice(q: Quiz): { id: string; prompt: string; options: string[]; correctIndex: number; explanation?: string } {
+  return { id: q.id ?? "", prompt: q.prompt, options: q.options.slice(), correctIndex: q.correctIndex, ...(q.explanation ? { explanation: q.explanation } : {}) };
+}
+
+/** A HUD ≤ 10 Hz-es pillanatképe (KSZ-9: a képkocka-hurokban nincs React-állapot). */
+type HudSnap = { runes: number; goal: number; crystals: number; combo: number; multiplier: number; xp: number; blocks: number };
+const EMPTY_HUD: HudSnap = { runes: 0, goal: LEVELS[0]!.runeGoal, crystals: 0, combo: 0, multiplier: 1, xp: 0, blocks: 0 };
+
+const EMPTY_SUBJECTS: Record<QuizSubject, number> = { english: 0, "english-math": 0, math: 0, nature: 0, hungarian: 0, science: 0, history: 0 };
 
 export default function BlockCraftQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1140,12 +1098,14 @@ export default function BlockCraftQuiz() {
   // without a coupon this is inert and free play stays the default.
   const coupon = useCouponSession();
 
-  const worldRef = useRef<VoxelWorld>(generateVoxelWorld(genCfgFor(LEVELS[0]!)));
+  const worldRef = useRef<VoxelWorld>(new Uint8Array(WX * WY * WZ));
   const playerRef = useRef<PlayerState>({
     x: WX / 2 + 0.5, y: WY, z: WZ / 2 + 0.5,
     vx: 0, vy: 0, vz: 0,
     yaw: Math.PI * 0.25, pitch: -0.15, onGround: false,
   });
+  /** Az előző fix lépés utáni helyzet — a kamera a kettő között interpolál (K.4/9). */
+  const prevPosRef = useRef({ x: WX / 2 + 0.5, y: WY, z: WZ / 2 + 0.5 });
   // First-person irányítás (Minecraft-séma): W/A/S/D + Space.
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, jump: false });
   /** Joystick-reakció (#49): az analóg tárcsa-érték (x jobbra, y előre; −1…1, a görbével). */
@@ -1167,133 +1127,87 @@ export default function BlockCraftQuiz() {
   const rafRef = useRef(0);
   // G1 JAVÍTÁS: a render-loop futásának egyetlen forrása. A step() a rekurzív
   // requestAnimationFrame előtt ezt ellenőrzi, így a loop megállítható ÉS
-  // (a scene újraépítése nélkül) újraindítható — korábban a levelComplete/endRun
-  // cancelAnimationFrame után soha nem indult újra.
+  // (a scene újraépítése nélkül) újraindítható.
   const runningRef = useRef(false);
   /** #58: a lefutott render-lépések száma (teszt-kampó `probe().frames`: méri, hogy a ciklus áll-e). */
   const frameCountRef = useRef(0);
   /** A scene-effect által beállított render-lépés — a loop-vezérlő effect innen indítja újra. */
   const stepRef = useRef<((now: number) => void) | null>(null);
-  const mineTargetRef = useRef<{ x: number; y: number; z: number; t: number } | null>(null);
-  const streakRef = useRef(0);
   /** A crosshair alatt lévő blokk (a render-loop frissíti minden frame-ben). */
   const lookHitRef = useRef<VoxelHit | null>(null);
   /** Az aktív FP-kamera — mobil tap-raycast a koppintott pont felé. */
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  /** Sikeres bányászás után ide kerül a por-effekt helye — a visszatérő engine lejátssza. */
-  const pendingBurstRef = useRef<{ x: number; y: number; z: number; t: number } | null>(null);
+  /** A mag eseményeiből érkező por-effektek (a render-loop játssza le). */
+  const pendingBurstRef = useRef<Array<{ x: number; y: number; z: number; t: number; big: boolean }>>([]);
   /** E/F billentyű → aktuális mine/place akció (stale-closure-mentes híd). */
-  const mineActionRef = useRef<() => void>(() => {});
+  const mineStartRef = useRef<() => void>(() => {});
+  const mineEndRef = useRef<() => void>(() => {});
   const placeActionRef = useRef<() => void>(() => {});
   const hotbarKeyRef = useRef<(slot: number) => void>(() => {});
   const inventoryRef = useRef<Partial<Record<number, number>>>({});
   const selTypeRef = useRef<number>(DIRT);
   const worldVersionRef = useRef(0);
   // Aktuális pálya konfigurációja — a render loop closure-ja ezen keresztül lát
-  // mindig friss égszín / fény paramétereket; setState helyett ref, hogy a re-effect
-  // ne ölje meg a renderert minden szintátmenetnél.
+  // mindig friss égszín / fény paramétereket.
   const activeLevelRef = useRef<LevelConfig>(LEVELS[0]!);
   const adaptiveRef = useRef(createAdaptiveSession(4));
   // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet): 10 pálya évfolyamonként (3–12.); a futás pályája a startkor rögzül.
   const runLevelRef = useRef<number | null>(null);
+  /** A menet kezdő sávja: a pálya ideje ebből jön, a válaszok nem módosítják (végrehajtás J3a 3.). */
+  const runStartBandRef = useRef(0.4);
   const levelClearedRef = useRef(false);
-  const answerLockedRef = useRef(false);
+  /** A menet seedje (`?seed=` teszt-kampóval rögzíthető) és a menet sorszáma. */
+  const seedRef = useRef<number | string>(readGameSeed() ?? seedFrom(BLOCK_CRAFT_GAME_ID, dayKey()));
+  const runCounterRef = useRef(0);
+  /** A kérdés-sorsolás seedelt RNG-je (menetenként újra — a determinizmus-őr a lapra is fut). */
+  const pickRngRef = useRef<Rng>(createRng(seedFrom(BLOCK_CRAFT_GAME_ID, "init", "pick")));
+  /** Kozmetikai véletlen (felhők, időjárás, por) — külön seedelt `fxRng` (KSZ-2). */
+  const fxRngRef = useRef<Rng>(createRng(seedFrom(BLOCK_CRAFT_GAME_ID, "init", "fx")));
+  /** A Rúnabánya magja (menetenként új). */
+  const mineRef = useRef<RuneMine | null>(null);
+  const fpsRef = useRef(60);
 
   const [phase, setPhase] = useState<Phase>("menu");
-  const [quiz, setQuiz] = useState<Quiz | null>(null);
+  /** A rossz válasz rövid rázása a rúnasoron (csökkentett mozgásnál nincs). */
   const [wrongShake, setWrongShake] = useState(false);
-  // Helyes-válasz felfedés a kvíz-modálban (zöld outline) + a hibás opció
-  // piros outline-ja, 1.5s alatt fade-elődik, majd jön az új kvíz.
-  const [revealCorrectIdx, setRevealCorrectIdx] = useState<number | null>(null);
-  const [wrongIdx, setWrongIdx] = useState<number | null>(null);
-  const streakProtector = useStreakProtector();
-  const [sessionXp, setSessionXp] = useState(0);
-  const [streak, setStreak] = useState(0);
   const [totalXp, setTotalXp] = useState(0);
   const [runSeconds, setRunSeconds] = useState(0);
-  const [blocksMined, setBlocksMined] = useState(0);
   /** E24: a „Bányász” gomb / koppintás célpont nélkül magyar segítő üzenetet ad (nem néma). */
   const [mineHint, setMineHint] = useState(false);
-  const [rareBlocks, setRareBlocks] = useState(0);
   // Achievement-toast queue: az "over" phase-be lépéskor töltődik fel.
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
-  // Multi-level state: aktuális szint indexe + szint-specifikus számlálók.
   const [levelIdx, setLevelIdx] = useState(0);
-  const [levelBlocks, setLevelBlocks] = useState(0);
-  const [levelRare, setLevelRare] = useState(0);
-  /** Pálya-szintű gyémánt-számláló — az 5. pálya "legalább 1 gyémánt" céljához. */
-  const [levelDiamonds, setLevelDiamonds] = useState(0);
-  // D2/D3: run-level (cross-level) trackers that survive per-level resets.
-  const bestStreakRef = useRef(0);      // highest streak reached during the whole run
-  const totalDiamondsRef = useRef(0);   // total real DIAMOND tiles mined during the whole run
   const [levelStartXp, setLevelStartXp] = useState(0);
   const [gameWon, setGameWon] = useState(false);
-  /** S11: szünet (a játékóra, a fizika és a render-ciklus áll; a kvíz-fázis megmarad). */
+  /** S11: szünet (a játékóra, a fizika és a render-ciklus áll). */
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   pausedRef.current = paused;
-  /** G-1: magyarázó kártya rossz válaszra. */
-  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
-  /** S11: a futás jó / összes válasza (az eredményképernyő csillagaihoz). */
-  const answeredRef = useRef(0);
-  const [correctInRun, setCorrectInRun] = useState(0);
-  /** S11: a joystick futó húzásának megszakítása (szünet, kvíz, fókuszvesztés) — a VirtualJoystick resetSignal-ja. */
+  /** G-1 / J0c: a magyarázókártya — csak a „Miért?”-re nyílik (szünettel), nem magától. */
+  const [why, setWhy] = useState<FeedbackCard | null>(null);
+  const whyRef = useRef(false);
+  whyRef.current = why !== null;
+  /** S11: a joystick futó húzásának megszakítása (szünet, fókuszvesztés) — a VirtualJoystick resetSignal-ja. */
   const [joyReset, setJoyReset] = useState(0);
   const [bestResult, setBestResult] = useState<{ best: number; isNewBest: boolean } | null>(null);
   const bestSubmittedRef = useRef(false);
   /** S11: a vezérlés-tipp minden pálya elején néhány másodpercig látszik (utána a vászon tiszta). */
   const [showHint, setShowHint] = useState(false);
-  /** A teszt-API a mindenkori kérdésválasztót hívja (a telepítő effekt csak egyszer fut). */
-  const pickQuizRef = useRef<() => Quiz>(() => QUIZ_FALLBACK[0]!);
+  /** A WebGL-kontextus elveszett (K.4/7): szünet + „Grafika újraindítása” gomb. */
+  const [glLost, setGlLost] = useState(false);
+  const restoreGlRef = useRef<() => void>(() => {});
+  const [hud, setHud] = useState<HudSnap>(EMPTY_HUD);
 
-  useEffect(() => {
-    return installGameTestApi({
-      probe: () => {
-        const band = adaptiveRef.current.band;
-        return {
-          level: runLevelRef.current,
-          band,
-          timeBudget: adaptiveTimeBudget(LEVELS[0]!.timeLimit, band),
-          // S11 kétujjas mérés: a nézés iránya és az előre-mozgás jelzője (1 / 0 — a probe típusa szám / szöveg).
-          yaw: playerRef.current.yaw,
-          moveFwd: keysRef.current.fwd || stickRef.current.y > 0 ? 1 : 0,
-          phase: phaseRef.current,
-          paused: pausedRef.current ? 1 : 0,
-          frames: frameCountRef.current,
-        };
-      },
-      forceState: (patch) => {
-        if (patch.phase === "menu" || patch.phase === "play" || patch.phase === "levelComplete" || patch.phase === "over") {
-          setPhase(patch.phase);
-        }
-        // S11 (M9, M10): kvíz kiváltása blokk nélkül (a válasz nem bányász ki semmit).
-        if (patch.phase === "quiz") {
-          mineTargetRef.current = null;
-          setQuiz(pickQuizRef.current());
-          setPhase("quiz");
-        }
-        if (typeof patch.gameWon === "boolean") setGameWon(patch.gameWon);
-        if (typeof patch.correctCount === "number") setSessionXp(Math.max(0, patch.correctCount) * 10);
-      },
-    });
-  }, []);
   // Subject-breakdown: melyik tantárgyból hány jó választ adott.
-  const [subjectStats, setSubjectStats] = useState<Record<QuizSubject, number>>({
-    english: 0,
-    "english-math": 0,
-    math: 0,
-    nature: 0,
-    hungarian: 0,
-    science: 0,
-    history: 0,
-  });
+  const [subjectStats, setSubjectStats] = useState<Record<QuizSubject, number>>(EMPTY_SUBJECTS);
   const [timeLeft, setTimeLeft] = useState(LEVELS[0]!.timeLimit);
   const [achievement, setAchievement] = useState<string | null>(null);
   // Inventory (Minecraft-hotbar): kibányászott blokkok típusonként, lerakáshoz.
   const [inventory, setInventory] = useState<Partial<Record<number, number>>>({});
   const [selType, setSelType] = useState<number>(DIRT);
   /** Lebegő "+XP" jelzés a crosshair mellett sikeres bányászás után. */
-  const [xpFloat, setXpFloat] = useState<{ amount: number; key: number } | null>(null);
+  const [xpFloat, setXpFloat] = useState<{ amount: number; key: number; rune: boolean } | null>(null);
+  const xpKeyRef = useRef(0);
   const scoreSubmittedRef = useRef(false);
   const phaseRef = useRef<Phase>("menu");
   // D1: ref-guard — a Three.js scene csak egyszer épül fel ugyanazon play-session-ban
@@ -1302,11 +1216,14 @@ export default function BlockCraftQuiz() {
   const reducedMotion = useReducedMotion();
   const reducedMotionRef = useRef(reducedMotion);
   // Keep refs in sync for the canvas loop / global key handlers (avoids stale closure)
-  streakRef.current = streak;
   phaseRef.current = phase;
   reducedMotionRef.current = reducedMotion;
   inventoryRef.current = inventory;
   selTypeRef.current = selType;
+
+  /** Rúnaréteg és élő HUD-elemek (közvetlen DOM-írás a képkocka-hurokból, React-render nélkül — KSZ-9). */
+  const mineRingRef = useRef<HTMLDivElement>(null);
+  const compassRef = useRef<HTMLDivElement>(null);
 
   const hotbarTypes = useMemo(
     () => PLACEABLE_ORDER.filter((t) => (inventory[t] ?? 0) > 0),
@@ -1334,6 +1251,12 @@ export default function BlockCraftQuiz() {
     const id = window.setTimeout(() => setXpFloat(null), 1600);
     return () => window.clearTimeout(id);
   }, [xpFloat]);
+
+  useEffect(() => {
+    if (!wrongShake) return;
+    const id = window.setTimeout(() => setWrongShake(false), 320);
+    return () => window.clearTimeout(id);
+  }, [wrongShake]);
 
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
@@ -1365,8 +1288,8 @@ export default function BlockCraftQuiz() {
           prompt: q.prompt,
           options: [...q.options],
           correctIndex: q.correctIndex,
-        // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
-        explanation: q.explanation ?? undefined,
+          // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
+          explanation: q.explanation ?? undefined,
           subject,
           fromMaterial: true,
         };
@@ -1391,7 +1314,7 @@ export default function BlockCraftQuiz() {
    * Stratified pool: a kvízeket tantargy szerint csoportosítja és minden
    * körben (round) újrakeveri, hogy NE ismétlődjenek közel egymáshoz.
    * Round-robin stratégia: sorban angol → angol-matek → matek → környezet
-   * → angol stb. Így egyenletes lesz a tananyag-elosztas.
+   * → angol stb. Így egyenletes lesz a tananyag-elosztas. A keverés a menet seedelt RNG-jéből (determinizmus-őr).
    */
   const subjectOrder = useMemo<QuizSubject[]>(
     () => ["english", "english-math", "math", "nature", "hungarian"],
@@ -1408,6 +1331,7 @@ export default function BlockCraftQuiz() {
 
   /** Keveri a bank-et subject szerint és Fisher–Yates shuffle-lal */
   const rebuildSubjectPools = useCallback(() => {
+    const rng = pickRngRef.current;
     const pools = new Map<QuizSubject, Quiz[]>();
     for (const subj of subjectOrder) pools.set(subj, []);
     for (const q of bank) {
@@ -1420,14 +1344,14 @@ export default function BlockCraftQuiz() {
     for (const subj of subjectOrder) {
       const arr = pools.get(subj) ?? [];
       for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = rng.int(i + 1);
         [arr[i], arr[j]] = [arr[j]!, arr[i]!];
       }
     }
     subjectPoolsRef.current = pools;
     subjectCursorsRef.current = new Map(subjectOrder.map((s) => [s, 0]));
     // Véletlen kezdő subject, hogy ne mindig angollal induljon a kör.
-    subjectRoundRef.current = Math.floor(Math.random() * subjectOrder.length);
+    subjectRoundRef.current = rng.int(subjectOrder.length);
     recentPromptsRef.current = [];
   }, [bank, subjectOrder]);
 
@@ -1436,17 +1360,17 @@ export default function BlockCraftQuiz() {
     rebuildSubjectPools();
   }, [rebuildSubjectPools, userGrade]);
 
-  // S11: a pálya eleji vezérlés-tipp 6 s játékidő után eltűnik (kvíz / szünet alatt az időzítő nem fut).
+  // S11: a pálya eleji vezérlés-tipp 6 s játékidő után eltűnik (szünet alatt az időzítő nem fut).
   useEffect(() => {
     if (!showHint || phase !== "play" || paused || coupon.expired) return;
     const id = window.setTimeout(() => setShowHint(false), 6000);
     return () => window.clearTimeout(id);
   }, [showHint, phase, paused, coupon.expired]);
 
-  // A játékóra csak játék közben jár: kvíz és szünet alatt áll (S11), és a lejárt kupon után is (#58: a lejárati
-  // párbeszéd alatt a gyerek nem tud beavatkozni, a pálya ideje nem fogyhat tovább).
+  // A játékóra csak játék közben jár: szünet alatt áll (S11), a „Miért?” kártya olvasása alatt is (J0c), és a lejárt
+  // kupon után is (#58). A pálya ideje NEM függ a válaszok helyességétől (J3a: a régi időcsökkentés megszűnt).
   useEffect(() => {
-    if (coupon.expired) return;
+    if (coupon.expired || why) return;
     if (phase !== "play" || paused) return;
     const id = setInterval(() => {
       setRunSeconds((s) => s + 1);
@@ -1459,7 +1383,7 @@ export default function BlockCraftQuiz() {
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [phase, paused, coupon.expired]);
+  }, [phase, paused, coupon.expired, why]);
 
   /**
    * S11 / A8 — központi szóbank (közös napló a hét játékkal). `null`, amíg tölt / ha a betöltés hibázott: akkor a
@@ -1467,70 +1391,80 @@ export default function BlockCraftQuiz() {
    */
   const vocab = useVocabQuizSource("en", true);
 
+  /* ------------------------------------------------------------------------------------------------------------ */
+  /* Kérdésforrás (K.2 forrásrend): tananyag → (ismétlés: a director) → évfolyam-bank / szóbank / saját bank        */
+  /* ------------------------------------------------------------------------------------------------------------ */
+
+  const bankRef = useRef(bank);
+  bankRef.current = bank;
+  const couponActiveRef = useRef(coupon.active);
+  couponActiveRef.current = coupon.active;
+  const userGradeRef = useRef(userGrade);
+  userGradeRef.current = userGrade;
+  const vocabRef = useRef(vocab);
+  vocabRef.current = vocab;
+
   /**
-   * Stratified + non-repeating quiz picker.
-   * Stratégia:
-   *  1. Round-robin subject kiválasztás (angol → angol-matek → matek → környezet)
-   *  2. Adott subject sorrendbe szűrt pool-jából cursor-rel haladunk
-   *  3. Ha a pool végére értünk, újrakeverjük és a cursor nullazódik
-   *  4. Ha a választott kérdés szerepel a RECENT_WINDOW-ban, átugorjuk
+   * Tananyag-elsőbbség (terv 4.4, J7): a nem látott lecke-kérdés a szóbank ÉS az évfolyam-bank előtt. Kupon módban
+   * (lecke-kupon, van tananyag) CSAK tananyag jöhet (`couponOnly`, terv 8.6).
    */
-  const pickQuiz = useCallback((): Quiz => {
-    answerLockedRef.current = false;
-    // Spec 2026-09-29: 3–12. évfolyamon nem látott tananyag-kvíz → közös évfolyam-bank a közös
-    // tárgyak körforgásával (üres tárgy kimarad) → a saját bank kiegészítésként (alább).
+  const pickMaterial = useCallback((accept?: (quiz: { id: string; prompt: string; options: string[]; correctIndex: number }) => boolean): PlayQuestion | null => {
+    const sharedGrade = gradeForGame(userGradeRef.current);
+    const couponMaterialOnly = couponActiveRef.current && bankRef.current.some((q) => q.fromMaterial);
+    if (sharedGrade == null && !couponMaterialOnly) return null;
+    const pool = bankRef.current.filter((q) => q.fromMaterial);
+    const seen = gradeSeenRef.current;
+    // J0c-b: a sávban elolvasható / beférő tétel előbb; a többi hátra kerül (nem jelöljük látottnak).
+    const material = pickUnseenMaterial(accept ? pool.filter((q) => accept(toFourChoice(q))) : pool, seen) ?? pickUnseenMaterial(pool, seen);
+    if (!material) return null;
+    markGradeQuizSeen(seen, material);
+    return materialPlayQuestion(toFourChoice(material), {
+      subject: material.subject,
+      coupon: couponMaterialOnly,
+      ...(sharedGrade != null ? { grade: sharedGrade } : {}),
+    });
+  }, []);
+
+  /**
+   * Új tétel a meglévő választóval (S11 / A8): 3–12. évfolyamon a közös évfolyam-bank a közös tárgyak körforgásával (az
+   * angol helyen a központi szóbank), különben / kiegészítésként a saját bank tárgy-rétegzett, ismétlés nélküli köre.
+   */
+  const pickFresh = useCallback((): PlayQuestion | null => {
     const sharedGrade = gradeForGame(userGrade);
     const couponMaterialOnly = coupon.active && bank.some((q) => q.fromMaterial);
+    if (couponMaterialOnly) return null;
     const seen = gradeSeenRef.current;
-    // A tananyag-kvíz elsőbbsége (terv 4.4): a nem látott lecke-kérdés a szóbank ÉS az évfolyam-bank előtt.
-    const material = sharedGrade != null && !couponMaterialOnly ? pickUnseenMaterial(bank.filter((q) => q.fromMaterial), seen) : null;
-    if (material) {
-      markGradeQuizSeen(seen, material);
-      return material;
-    }
+    const pickRandom = () => pickRngRef.current.next();
     /**
      * S11 / A8: angol kérdés-helyen a központi szóbank (a tananyag-ág UTÁN). A szóbankos kérdés a futás saját
      * `seen`-jébe is bekerül, így a meglévő tartalmi duplikátum-szűrő is látja.
      */
-    const fromVocab = (): Quiz | null => {
-      const vq = vocab?.next(vocabLevelForGrade(userGrade, adaptiveRef.current.band)) ?? null;
+    const fromVocab = (): PlayQuestion | null => {
+      const vq: VocabQuiz | null = vocab?.next(vocabLevelForGrade(userGrade, adaptiveRef.current.band)) ?? null;
       if (!vq) return null;
       markGradeQuizSeen(seen, vq);
-      return {
-        id: vq.id,
-        prompt: vq.prompt,
-        options: [...vq.options],
-        correctIndex: vq.correctIndex,
-        explanation: vq.explanation,
-        subject: "english",
-      };
+      return { ...vocabPlayQuestion(vq), subject: "english" };
     };
     /** Kézi angol kérdés: a helyes válasza a közös naplóba, hogy a szóbank ne kérdezze vissza ugyanazt a szót. */
-    const manualEnglish = (q: Quiz): Quiz => {
+    const manualEnglish = (q: Quiz): PlayQuestion => {
       if ((q.subject ?? "english") === "english" && !q.fromMaterial) vocab?.markExternal(q.options[q.correctIndex]!);
-      return q;
+      return bankPlayQuestion(BLOCK_CRAFT_GAME_ID, toFourChoice(q), q.subject ?? "english");
     };
-    if (sharedGrade != null && !couponMaterialOnly) {
+    if (sharedGrade != null) {
       for (let i = 0; i < GRADE_SUBJECTS.length; i++) {
         const subject = GRADE_SUBJECTS[gradeSubjectRoundRef.current++ % GRADE_SUBJECTS.length]!;
         // A választott tétel MINDIG fogy, akkor is, ha a szóbank váltja ki (Brain Rot #424 review-lelet).
         const slot = pickBlockCraftGradeSlot({
           subject,
-          pick: () => pickGradeQuiz({ grade: sharedGrade, band: adaptiveRef.current.band, subjects: [subject], seen }),
+          pick: () => pickGradeQuiz({ grade: sharedGrade, band: adaptiveRef.current.band, subjects: [subject], seen, rng: pickRandom }),
           seen,
           vocabNext: fromVocab,
         });
         if (!slot) continue;
         if (slot.kind === "vocab") return slot.quiz;
         const item = slot.item;
-        return manualEnglish({
-          id: item.id,
-          prompt: item.prompt,
-          options: [...item.options],
-          correctIndex: item.correctIndex,
-          explanation: item.explanation,
-          subject: blockCraftSubjectFromGradeSubject(item.subject),
-        });
+        if (item.subject === "english") vocab?.markExternal(item.options[item.correctIndex]!);
+        return { ...gradePlayQuestion(item), subject: SUBJECT_OF_GRADE(item) };
       }
     }
     const pools = subjectPoolsRef.current;
@@ -1549,9 +1483,9 @@ export default function BlockCraftQuiz() {
 
       for (let poolTry = 0; poolTry < pool.length; poolTry++) {
         if (cursor >= pool.length) {
-          // Pool körbeért → újrakeverés.
+          // Pool körbeért → újrakeverés (a menet seedelt RNG-jéből).
           for (let i = pool.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = pickRngRef.current.int(i + 1);
             [pool[i], pool[j]] = [pool[j]!, pool[i]!];
           }
           cursor = 0;
@@ -1564,7 +1498,7 @@ export default function BlockCraftQuiz() {
           recent.push(candidate.prompt);
           while (recent.length > RECENT_WINDOW) recent.shift();
           // S11 / A8: a saját bank angol helyén (nem tananyag) is a szóbank kérdez, ha van; különben a kézi tétel.
-          if (subj === "english" && !candidate.fromMaterial && !couponMaterialOnly) {
+          if (subj === "english" && !candidate.fromMaterial) {
             const vq = fromVocab();
             if (vq) return vq;
           }
@@ -1573,10 +1507,133 @@ export default function BlockCraftQuiz() {
       }
       subjectCursorsRef.current.set(subj, cursor);
     }
-    // Végső fallback — sose kellene idejutnunk.
-    return manualEnglish(bank[Math.floor(Math.random() * bank.length)] ?? QUIZ_FALLBACK[0]!);
+    return null;
   }, [bank, rebuildSubjectPools, subjectOrder, userGrade, coupon.active, vocab]);
-  pickQuizRef.current = pickQuiz;
+  const pickFreshRef = useRef(pickFresh);
+  pickFreshRef.current = pickFresh;
+
+  /** A közös ismétlési sorból csak a saját tétel jön vissza (szóbank angol, évfolyam-bank, saját bank, tananyag). */
+  const ownsReviewKey = useCallback(
+    (key: string) => key.startsWith("vocab:en:") || key.startsWith("grade:") || key.startsWith("mat:") || key.startsWith(`bank:${BLOCK_CRAFT_GAME_ID}:`),
+    [],
+  );
+  const provider = useMemo<QuestionProvider>(
+    () => ({
+      get couponOnly() {
+        return couponActiveRef.current && bankRef.current.some((q) => q.fromMaterial);
+      },
+      material: (ctx) => pickMaterial(ctx?.accept),
+      fresh: () => pickFreshRef.current(),
+      legacyReviewFits: (it) => ownsReviewKey(it.key),
+      restore: (it) => {
+        if (!ownsReviewKey(it.key)) return null;
+        const q = restoreReviewQuestion(it, {
+          vocab: (l) => (l === "en" ? vocabRef.current : null),
+          gradeItem: (id) => GRADE_QUIZ_ITEMS.find((g) => g.id === id) ?? null,
+        });
+        if (q) markGradeQuizSeen(gradeSeenRef.current, { id: q.quiz.id, prompt: q.quiz.prompt });
+        return q;
+      },
+    }),
+    [pickMaterial, ownsReviewKey],
+  );
+
+  /* ------------------------------------------------------------------------------------------------------------ */
+  /* Kérdés-ütemező + kérdés-sáv (J0c) és a Rúnabánya magja                                                        */
+  /* ------------------------------------------------------------------------------------------------------------ */
+
+  const directorConfig = useMemo(() => blockCraftDirectorConfig(gradeForGame(userGrade) ?? null), [userGrade]);
+  const directorApi = useQuestionDirector({ config: directorConfig, provider, startBand: 0.4, seed: seedRef.current });
+  const speech = useGameSpeech();
+  const qRef = useRef<ReturnType<typeof usePlayQuestion> | null>(null);
+  /** A menet vége egyszer (pálya teljesítve) — a képkocka-hurok kéri. */
+  const levelWonRef = useRef<() => void>(() => {});
+
+  const q = usePlayQuestion({
+    director: directorApi.director,
+    speech,
+    // A hang és a rezgés a lapon (rúna-hangok, `haptics("success" | "error")`), hogy a játék saját visszajelzése menjen.
+    sound: false,
+    haptics: false,
+    onShow: (p: QuestionPresentation) => {
+      mineRef.current?.noteShow(p);
+      sfxWhoosh();
+    },
+    onOutcome: (o: QuestionOutcome, p: QuestionPresentation) => {
+      mineRef.current?.applyOutcome(o, p);
+      if (o.result === "aborted") return;
+      const correct = o.result === "correct";
+      adaptiveRef.current.answer(correct);
+      if (o.pickedOriginalIndex !== null) maybeClaimCouponBonus(coupon, p.question.quiz.id, o.pickedOriginalIndex);
+      if (correct) {
+        sfxSuccess();
+        haptics("success");
+        const subj = (p.question.subject ?? "english") as QuizSubject;
+        setSubjectStats((prev) => ({ ...prev, [subj]: (prev[subj] ?? 0) + 1 }));
+      } else {
+        sfxError();
+        haptics("error");
+        setWrongShake(true);
+      }
+    },
+  });
+  qRef.current = q;
+
+  /** Egy fix lépés játékos-mozgása (voxel-fizika) — a mag hívja a fix lépésű hurokból (K.4/9, KSZ-4). */
+  const movePlayer = useCallback((dtMs: number) => {
+    const p = playerRef.current;
+    const prev = prevPosRef.current;
+    prev.x = p.x;
+    prev.y = p.y;
+    prev.z = p.z;
+    const k = keysRef.current;
+    const dt = dtMs / 1000;
+    if (phaseRef.current === "play") {
+      const sinY = Math.sin(p.yaw);
+      const cosY = Math.cos(p.yaw);
+      let mx = 0;
+      let mz = 0;
+      if (k.fwd) { mx -= sinY; mz -= cosY; }
+      if (k.back) { mx += sinY; mz += cosY; }
+      if (k.left) { mx -= cosY; mz += sinY; }
+      if (k.right) { mx += cosY; mz -= sinY; }
+      // Joystick-reakció (#49): a tárcsa analóg — a nagysága a sebesség (finom lépés kis kitérésnél).
+      const st = stickRef.current;
+      mx += st.x * cosY - st.y * sinY;
+      mz += -st.x * sinY - st.y * cosY;
+      const ml = Math.hypot(mx, mz);
+      if (ml > 1) {
+        mx /= ml;
+        mz /= ml;
+      }
+      p.vx = mx * MOVE_SPEED_BPS;
+      p.vz = mz * MOVE_SPEED_BPS;
+      if (k.jump && p.onGround) {
+        p.vy = JUMP_VELOCITY;
+        p.onGround = false;
+      }
+      stepPlayerPhysics(worldRef.current, p, dt);
+      // Biztonsági háló: ha bármi miatt a világ alá esne, vissza a spawnra.
+      if (p.y < -4) {
+        const s = findVoxelSpawn(worldRef.current);
+        p.x = s.x; p.y = s.y; p.z = s.z;
+        p.vx = 0; p.vy = 0; p.vz = 0;
+        prev.x = p.x; prev.y = p.y; prev.z = p.z;
+      }
+    }
+  }, []);
+
+  const createMine = useCallback(
+    (seed: number | string): RuneMine =>
+      createRuneMine({
+        seed,
+        questions: () => qRef.current,
+        minGapMs: directorConfig.minGapMs,
+        player: () => playerRef.current,
+        movePlayer,
+      }),
+    [directorConfig.minGapMs, movePlayer],
+  );
 
   /** S11: minden mozgásjelző nullázása + a joystick futó húzásának és a körbenézésnek a megszakítása. */
   const touchLookRef = useRef<{ id: number; lastX: number; lastY: number; moved: number; look: boolean } | null>(null);
@@ -1590,9 +1647,10 @@ export default function BlockCraftQuiz() {
     stickRef.current.x = 0;
     stickRef.current.y = 0;
     touchLookRef.current = null;
+    mineRef.current?.release();
     setJoyReset((n) => n + 1);
   }, []);
-  /** A játék saját pointer-lock elengedése (kvíz, szünet, kör vége) — ez NEM vált ki automatikus szünetet. */
+  /** A játék saját pointer-lock elengedése (szünet, kör vége, „Miért?”) — ez NEM vált ki automatikus szünetet. */
   const selfUnlockRef = useRef(false);
   const releasePointerLock = useCallback(() => {
     if (typeof document === "undefined" || !document.pointerLockElement) return;
@@ -1600,101 +1658,80 @@ export default function BlockCraftQuiz() {
     document.exitPointerLock?.();
   }, []);
 
-  /** Bányász-kvíz indítása egy konkrét voxelre (a crosshair-cél). */
-  const tryMineAt = useCallback(
-    (x: number, y: number, z: number): boolean => {
-      const t = vGet(worldRef.current, x, y, z);
-      if (!vMineable(t)) return false;
-      if (pausedRef.current) return false;
-      const p = playerRef.current;
-      p.vx = 0;
-      p.vz = 0;
-      // S11: a kvíz alatt áll a játék — a futó mozgás (joystick, billentyű) nem viszi tovább a játékost.
-      releaseMovement();
-      // Egérrel a kvíz válaszaihoz szabad kurzor kell (különben Esc-et kellene nyomni a kattintáshoz).
-      releasePointerLock();
-      haptics("tap");
-      mineTargetRef.current = { x, y, z, t };
-      setQuiz(pickQuiz());
-      setPhase("quiz");
-      return true;
-    },
-    [pickQuiz, haptics, releaseMovement],
-  );
-
   /**
-   * Egyetlen pálya elindítása: a totalXp/sessionXp NEM resetelődik (átvitt érték),
-   * a level-specifikus számlálók viszont (blocks/rare/timeLeft) friss állapotból indulnak.
+   * Egyetlen pálya elindítása: a menet (XP, kombó, kristály, kérdés-statisztika) a pályák között megmarad, a pálya
+   * friss, seedelt világgal indul. `resetSession`: új menet (új mag, új director, új seedek).
    */
   const beginLevel = useCallback((idx: number, options: { resetSession: boolean; carryXpFrom: number }) => {
     const cfg = LEVELS[Math.max(0, Math.min(LEVELS.length - 1, idx))]!;
     activeLevelRef.current = cfg;
-    worldRef.current = generateVoxelWorld(genCfgFor(cfg));
+    const seed = seedRef.current;
+    if (options.resetSession || !mineRef.current) {
+      runCounterRef.current += 1;
+      const n = runCounterRef.current;
+      adaptiveRef.current.reset(userGrade ?? 4, runLevelRef.current);
+      runStartBandRef.current = adaptiveRef.current.band;
+      pickRngRef.current = createRng(seedFrom(BLOCK_CRAFT_GAME_ID, seed, "pick", n));
+      fxRngRef.current = createRng(seedFrom(BLOCK_CRAFT_GAME_ID, seed, "fx", n));
+      gradeSeenRef.current = createGradeQuizSeen();
+      mineRef.current = createMine(seedFrom(seed, n));
+      directorApi.reset(seedFrom(seed, n), adaptiveRef.current.band);
+      bestSubmittedRef.current = false;
+      setBestResult(null);
+      setRunSeconds(0);
+      setSubjectStats(EMPTY_SUBJECTS);
+      rebuildSubjectPools();
+    }
+    const n = runCounterRef.current;
+    const world = generateVoxelWorld(genCfgFor(cfg), createRng(seedFrom(BLOCK_CRAFT_GAME_ID, seed, "world", n, idx)).next);
+    worldRef.current = world;
     worldVersionRef.current++;
-    const spawn = findVoxelSpawn(worldRef.current);
-    // E24: a kezdő nézés egy elérhető, bányászható blokkra mutat — a gyerek az első koppintásra kvízt kap.
-    const startLook = pickStartLook(worldRef.current, spawn, Math.PI * 0.25, -0.15);
+    const spawn = findVoxelSpawn(world);
+    const baseYaw = Math.PI * 0.25;
     playerRef.current = {
       x: spawn.x, y: spawn.y, z: spawn.z,
       vx: 0, vy: 0, vz: 0,
-      yaw: startLook.yaw, pitch: startLook.pitch, onGround: false,
+      yaw: baseYaw, pitch: -0.5, onGround: false,
     };
-    pendingBurstRef.current = null;
+    prevPosRef.current = { x: spawn.x, y: spawn.y, z: spawn.z };
+    // Az első rúnaérc a kezdő nézés irányában nő (cél-jelző: „Gyűjts N rúnaércet!”) — látszik, de nem a célkereszt alatt.
+    const facing = lookDirection(baseYaw, 0);
+    mineRef.current!.startLevel(world, idx, { x: facing.x, z: facing.z });
+    // E24 + kanban #64: a kezdő nézés egy elérhető, bányászható SIMA blokkra mutat — a talajra / egy közeli blokkra, nem
+    // a fák lombkoronájába (`groundStartTarget`) és nem a rúnaércre (az első koppintás bányászik, nem kérdez: terv 5.3 0–10 mp).
+    const ground = groundStartTarget(spawn.y);
+    const startLook = pickStartLook(world, spawn, baseYaw, -0.5, 3.2, (h) => ground(h) && h.t !== RUNE_ORE);
+    playerRef.current.yaw = startLook.yaw;
+    playerRef.current.pitch = startLook.pitch;
+    qRef.current?.reset();
+    pendingBurstRef.current = [];
     lookHitRef.current = null;
-    mineTargetRef.current = null;
     setInventory({});
     setXpFloat(null);
     setAchievement(null);
-    // S11: egy előző futás / pálya függő kvíze, magyarázókártyája és szünete nem marad át.
-    setQuiz(null);
-    setFeedback(null);
-    setRevealCorrectIdx(null);
-    setWrongIdx(null);
+    setWhy(null);
     setPaused(false);
     setShowHint(true);
     releaseMovement();
-    if (options.resetSession) {
-      adaptiveRef.current.reset(userGrade ?? 4, runLevelRef.current);
-      gradeSeenRef.current = createGradeQuizSeen();
-      answeredRef.current = 0;
-      setCorrectInRun(0);
-      bestSubmittedRef.current = false;
-      setBestResult(null);
-      setSessionXp(0);
-      setStreak(0);
-      setRunSeconds(0);
-      setBlocksMined(0);
-      setRareBlocks(0);
-      setSubjectStats({ english: 0, "english-math": 0, math: 0, nature: 0, hungarian: 0, science: 0, history: 0 });
-    } else {
-      // Új pálya kezdetén streak frissítés (kezdjük újra), de XP marad.
-      setStreak(0);
-    }
-    setLevelBlocks(0);
-    setLevelRare(0);
-    setLevelDiamonds(0);
     setLevelStartXp(options.carryXpFrom);
-    setTimeLeft(adaptiveTimeBudget(cfg.timeLimit, adaptiveRef.current.band));
-    answerLockedRef.current = false;
+    const st = mineRef.current!.state();
+    setHud({ runes: 0, goal: st.goal, crystals: st.crystals, combo: st.combo.count, multiplier: st.combo.multiplier, xp: st.xp, blocks: st.blocks });
+    // A pálya ideje a menet KEZDŐ sávjából (a választott nehézségi pályából) — a válaszok nem módosítják.
+    setTimeLeft(adaptiveTimeBudget(cfg.timeLimit, runStartBandRef.current));
     setPhase("play");
     lastTRef.current = null;
-    // Minden pályán friss kérdés-sorrend.
-    rebuildSubjectPools();
-  }, [rebuildSubjectPools, userGrade, releaseMovement]);
+  }, [rebuildSubjectPools, userGrade, releaseMovement, createMine, directorApi]);
 
   const startGame = useCallback(() => {
     runLevelRef.current = levels.level;
     levelClearedRef.current = false;
     scoreSubmittedRef.current = false;
-    bestStreakRef.current = 0;     // D2: reset run-level best streak on new game
-    totalDiamondsRef.current = 0; // D3: reset run-level diamond count on new game
     setLevelIdx(0);
     setGameWon(false);
-    streakProtector.resetProtector();
     beginLevel(0, { resetSession: true, carryXpFrom: 0 });
-  }, [beginLevel, streakProtector, levels.level]);
+  }, [beginLevel, levels.level]);
 
-  /** Következő szint: az XP/streak/rare továbbvitt, a pálya friss. */
+  /** Következő szint: az XP / kombó / kristály továbbvitt, a pálya friss. */
   const startNextLevel = useCallback(() => {
     const next = levelIdx + 1;
     if (next >= LEVELS.length) {
@@ -1704,19 +1741,16 @@ export default function BlockCraftQuiz() {
       return;
     }
     setLevelIdx(next);
-    beginLevel(next, { resetSession: false, carryXpFrom: sessionXp });
-  }, [beginLevel, levelIdx, sessionXp]);
+    beginLevel(next, { resetSession: false, carryXpFrom: mineRef.current?.state().xp ?? 0 });
+  }, [beginLevel, levelIdx]);
 
   const endRun = useCallback(() => {
     runningRef.current = false; // G1: loop stop (újraindítás a phase-effectből)
-    cancelAnimationFrame(rafRef.current);
+    cancelGameFrame(rafRef.current);
     lookHitRef.current = null;
-    // S11: a kör vége a szünet menüből is jöhet — a függő kvíz / kártya / szünet nem marad az eredmény alatt.
-    mineTargetRef.current = null;
-    setQuiz(null);
-    setFeedback(null);
-    setRevealCorrectIdx(null);
-    setWrongIdx(null);
+    // S11: a kör vége a szünet menüből is jöhet — a nyitott kérdés „megszakítva” zárul, a kártya / szünet nem marad.
+    qRef.current?.finish();
+    setWhy(null);
     setPaused(false);
     releaseMovement();
     releasePointerLock();
@@ -1729,8 +1763,7 @@ export default function BlockCraftQuiz() {
    * minden mozgásjelző és a joystick futó húzása nullázódik (visszatéréskor nem ragad be a vezérlés).
    */
   const pauseGame = useCallback(() => {
-    const ph = phaseRef.current;
-    if (ph !== "play" && ph !== "quiz") return;
+    if (phaseRef.current !== "play") return;
     releaseMovement();
     releasePointerLock();
     setPaused(true);
@@ -1746,8 +1779,8 @@ export default function BlockCraftQuiz() {
   const releaseMovementRef = useRef(releaseMovement);
   releaseMovementRef.current = releaseMovement;
 
-  // Globális billentyűzet (Minecraft-séma): WASD/nyilak + Space + E (bányász)
-  // + F (lerakás) + 1-9 (hotbar) + egér-nézelődés pointer lock alatt.
+  // Globális billentyűzet (Minecraft-séma): WASD/nyilak + Space + E (bányász, tartható) + F (lerakás) + 1-9 (hotbar)
+  // + egér-nézelődés pointer lock alatt. Nyitott Rúna-zárnál az 1–4 a kérdés-sávé (InlineQuestion), nem a hotbaré.
   useEffect(() => {
     const setKey = (code: string, v: boolean): boolean => {
       const k = keysRef.current;
@@ -1761,7 +1794,7 @@ export default function BlockCraftQuiz() {
       }
     };
     const kd = (e: KeyboardEvent) => {
-      if (phaseRef.current !== "play" || pausedRef.current) return;
+      if (phaseRef.current !== "play" || pausedRef.current || whyRef.current) return;
       if (e.code === "KeyP") {
         e.preventDefault();
         pauseActionRef.current();
@@ -1773,16 +1806,17 @@ export default function BlockCraftQuiz() {
       }
       if (e.code === "KeyE") {
         e.preventDefault();
-        mineActionRef.current();
+        if (!e.repeat) mineStartRef.current();
       } else if (e.code === "KeyF") {
         e.preventDefault();
         placeActionRef.current();
-      } else if (/^Digit[1-9]$/.test(e.code)) {
+      } else if (/^Digit[1-9]$/.test(e.code) && !qRef.current?.active()) {
         hotbarKeyRef.current(parseInt(e.code.slice(5), 10) - 1);
       }
     };
     const ku = (e: KeyboardEvent) => {
       setKey(e.code, false);
+      if (e.code === "KeyE") mineEndRef.current();
     };
     const mm = (e: MouseEvent) => {
       if (document.pointerLockElement !== canvasRef.current) return;
@@ -1797,7 +1831,7 @@ export default function BlockCraftQuiz() {
       releaseMovementRef.current();
     };
     // S11: ha játék közben a böngésző elengedi a pointer lockot (Esc), a játék szünetre vált — a szünet menüből
-    // folytatható (a kvíz megnyitásakor a lockot a játék maga engedi el, az nem szünet).
+    // folytatható (amikor a lockot a játék maga engedi el, az nem szünet).
     let wasLocked = false;
     const onLockChange = () => {
       const locked = document.pointerLockElement === canvasRef.current;
@@ -1838,14 +1872,31 @@ export default function BlockCraftQuiz() {
     // A "megépült" flag csak akkor áll be, ha tényleg van canvas — különben
     // egy hiányzó canvas véglegesen letiltaná a scene felépítését.
     if (!canvas) return;
-    sceneBuiltRef.current = true;
-
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    // Közös látvány: ACES tónus, sRGB, szint szerinti pixelarány-plafon és árnyék-térkép.
+    // KSZ-8 / K.4/1: a közös `createGameRenderer` (ACES, sRGB, a tier pixelarány-plafonja, low tieren antialias nélkül).
     const tier = detectLookTier();
     const budget = LOOK_BUDGET[tier];
-    applyRendererLook(renderer, tier, { exposure: 1.0 });
+    const created = createGameRenderer(canvas, tier, { exposure: 1.0 });
+    if (!created) {
+      // WebGL nélkül nincs 3D jelenet: a „Grafika újraindítása” réteg jelzi (a menü és a kilépés elérhető marad).
+      setGlLost(true);
+      return;
+    }
+    sceneBuiltRef.current = true;
+    const renderer = created;
     const shadowsOn = renderer.shadowMap.enabled;
+    // K.4/7: elveszett WebGL-kontextus → szünet + „Grafika újraindítása”; visszaálláskor a világ újraépül.
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+      setGlLost(true);
+      pauseActionRef.current();
+    };
+    const onContextRestored = () => {
+      setGlLost(false);
+      worldVersionRef.current++;
+    };
+    canvas.addEventListener("webglcontextlost", onContextLost);
+    canvas.addEventListener("webglcontextrestored", onContextRestored);
+    restoreGlRef.current = () => renderer.forceContextRestore();
     // Az árnyék-térkép típusa (PCFShadowMap) a közös applyRendererLook-ból jön (S13 / E21).
     // A világ statikus (csak bányászáskor/lerakáskor változik) → az árnyék-térképet
     // csak újraépítéskor rajzoljuk újra, nem minden frame-ben.
@@ -2026,6 +2077,7 @@ export default function BlockCraftQuiz() {
         instMeshes.push(mesh);
       });
       renderer.shadowMap.needsUpdate = true;
+      rebuildBeacons();
     };
     let builtVersion = -1;
 
@@ -2035,6 +2087,61 @@ export default function BlockCraftQuiz() {
     const highlight = new THREE.LineSegments(hlGeo, hlMat);
     highlight.visible = false;
     scene.add(highlight);
+
+    /** Kozmetikai véletlen (felhő, időjárás, por) — seedelt `fxRng`, a játékmenetet nem érinti (KSZ-2). */
+    const fx = () => fxRngRef.current.next();
+
+    // --- Rúna-zár: 4 lebegő rúnakő (pool, KSZ-6), színkódolt A/B/C/D betűvel (U-J3-1) ---
+    const stoneGeo = new THREE.BoxGeometry(RUNE_STONE_SIZE, RUNE_STONE_SIZE, RUNE_STONE_SIZE);
+    const letterTex = RUNE_LETTERS.map((letter, i) => {
+      const c = document.createElement("canvas");
+      c.width = 64;
+      c.height = 64;
+      const g = c.getContext("2d");
+      if (g) {
+        g.fillStyle = "#1e1b2e";
+        g.fillRect(0, 0, 64, 64);
+        g.strokeStyle = RUNE_COLORS[i]!;
+        g.lineWidth = 8;
+        g.strokeRect(4, 4, 56, 56);
+        g.fillStyle = RUNE_COLORS[i]!;
+        g.font = "bold 44px sans-serif";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.fillText(letter, 32, 35);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    });
+    const stoneMats = letterTex.map(
+      (tex, i) => new THREE.MeshStandardMaterial({ map: tex, emissive: new THREE.Color(RUNE_COLORS[i]!), emissiveMap: tex, emissiveIntensity: 0.6, roughness: 0.5 }),
+    );
+    const stones = stoneMats.map((m) => {
+      const mesh = new THREE.Mesh(stoneGeo, m);
+      mesh.visible = false;
+      scene.add(mesh);
+      return mesh;
+    });
+    // --- Rúnaérc-jelzőfény: vékony, áttetsző fényoszlop minden érc fölött (messziről is látszik) ---
+    const beaconGeo = new THREE.BoxGeometry(0.18, 6, 0.18);
+    const beaconMat = new THREE.MeshBasicMaterial({ color: 0x8cf5e6, transparent: true, opacity: 0.35, depthWrite: false, fog: false });
+    const beacons = new THREE.InstancedMesh(beaconGeo, beaconMat, 32);
+    beacons.count = 0;
+    beacons.frustumCulled = false;
+    scene.add(beacons);
+    const rebuildBeacons = () => {
+      const ores = mineRef.current?.state().ores ?? [];
+      const n = Math.min(32, ores.length);
+      for (let i = 0; i < n; i++) {
+        const o = ores[i]!;
+        tmpMat.makeTranslation(o.x + 0.5, o.y + 4, o.z + 0.5);
+        beacons.setMatrixAt(i, tmpMat);
+      }
+      beacons.count = n;
+      beacons.instanceMatrix.needsUpdate = true;
+    };
+    const stoneColor = new THREE.Color();
 
     // --- Bolyhos felhők: 3–5 dobozból álló csoportok, lágy árnyalással, lassan sodródnak ---
     const cloudGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -2053,34 +2160,34 @@ export default function BlockCraftQuiz() {
     const cloudCount = tier === "low" ? 8 : 13;
     for (let i = 0; i < cloudCount; i++) {
       const g = new THREE.Group();
-      const baseW = 7 + Math.random() * 7;
-      const baseD = 4.5 + Math.random() * 3.5;
+      const baseW = 7 + fx() * 7;
+      const baseD = 4.5 + fx() * 3.5;
       const base = new THREE.Mesh(cloudGeo, cloudMat);
       base.scale.set(baseW, 1.3, baseD);
       g.add(base);
       // Keskenyebb „has” alul → alulról nézve is lépcsős, puha forma.
       const belly = new THREE.Mesh(cloudGeo, cloudMat);
       belly.scale.set(baseW * 0.72, 0.7, baseD * 0.7);
-      belly.position.set((Math.random() - 0.5) * baseW * 0.15, -0.95, (Math.random() - 0.5) * baseD * 0.15);
+      belly.position.set((fx() - 0.5) * baseW * 0.15, -0.95, (fx() - 0.5) * baseD * 0.15);
       g.add(belly);
-      const puffs = 1 + Math.floor(Math.random() * 3);
+      const puffs = 1 + Math.floor(fx() * 3);
       for (let k = 0; k < puffs; k++) {
         const puff = new THREE.Mesh(cloudGeo, cloudMat);
-        const pw = baseW * (0.3 + Math.random() * 0.3);
-        const pd = baseD * (0.45 + Math.random() * 0.35);
-        const ph = 1.1 + Math.random() * 1.1;
+        const pw = baseW * (0.3 + fx() * 0.3);
+        const pd = baseD * (0.45 + fx() * 0.35);
+        const ph = 1.1 + fx() * 1.1;
         puff.scale.set(pw, ph, pd);
         puff.position.set(
-          (Math.random() - 0.5) * (baseW - pw) * 0.9,
+          (fx() - 0.5) * (baseW - pw) * 0.9,
           0.3 + ph * 0.5,
-          (Math.random() - 0.5) * (baseD - pd) * 0.8,
+          (fx() - 0.5) * (baseD - pd) * 0.8,
         );
         g.add(puff);
       }
       g.position.set(
-        -CLOUD_MARGIN + Math.random() * (WX + CLOUD_MARGIN * 2),
-        WY + 10 + Math.random() * 6,
-        -CLOUD_MARGIN + Math.random() * (WZ + CLOUD_MARGIN * 2),
+        -CLOUD_MARGIN + fx() * (WX + CLOUD_MARGIN * 2),
+        WY + 10 + fx() * 6,
+        -CLOUD_MARGIN + fx() * (WZ + CLOUD_MARGIN * 2),
       );
       cloudRoot.add(g);
       clouds.push(g);
@@ -2108,9 +2215,9 @@ export default function BlockCraftQuiz() {
       const pos = new Float32Array(WEATHER_N * 3);
       const p0 = playerRef.current;
       for (let i = 0; i < WEATHER_N; i++) {
-        pos[i * 3] = p0.x + (Math.random() - 0.5) * 28;
-        pos[i * 3 + 1] = p0.y + Math.random() * 14;
-        pos[i * 3 + 2] = p0.z + (Math.random() - 0.5) * 28;
+        pos[i * 3] = p0.x + (fx() - 0.5) * 28;
+        pos[i * 3 + 1] = p0.y + fx() * 14;
+        pos[i * 3 + 2] = p0.z + (fx() - 0.5) * 28;
       }
       weatherGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
       weatherMat = new THREE.PointsMaterial({
@@ -2167,18 +2274,24 @@ export default function BlockCraftQuiz() {
       life: number;
     };
     const bursts: Burst[] = [];
-    const spawnBurst = (bx: number, by: number, bz: number, t: number) => {
+    const spawnBurst = (bx: number, by: number, bz: number, t: number, big: boolean) => {
+      if (!big) {
+        // Ütés (koppintós bányászás): csak néhány szikra a közös SparkleField-ből — nincs új geometria (KSZ-6).
+        burstCenter.set(bx + 0.5, by + 0.5, bz + 0.5);
+        sparkles.emit(burstCenter, { count: 5, color: MC_PAL[t]?.light ?? "#ffffff", speed: reducedMotionRef.current ? 0.6 : 2.2, life: 0.4, size: 0.1, spread: 0.5 });
+        return;
+      }
       const N = 16;
       const geo = new THREE.BufferGeometry();
       const pos = new Float32Array(N * 3);
       const vel = new Float32Array(N * 3);
       for (let i = 0; i < N; i++) {
-        pos[i * 3] = bx + 0.5 + (Math.random() - 0.5) * 0.6;
-        pos[i * 3 + 1] = by + 0.5 + (Math.random() - 0.5) * 0.6;
-        pos[i * 3 + 2] = bz + 0.5 + (Math.random() - 0.5) * 0.6;
-        vel[i * 3] = (Math.random() - 0.5) * 3.4;
-        vel[i * 3 + 1] = 1.5 + Math.random() * 3.2;
-        vel[i * 3 + 2] = (Math.random() - 0.5) * 3.4;
+        pos[i * 3] = bx + 0.5 + (fx() - 0.5) * 0.6;
+        pos[i * 3 + 1] = by + 0.5 + (fx() - 0.5) * 0.6;
+        pos[i * 3 + 2] = bz + 0.5 + (fx() - 0.5) * 0.6;
+        vel[i * 3] = (fx() - 0.5) * 3.4;
+        vel[i * 3 + 1] = 1.5 + fx() * 3.2;
+        vel[i * 3 + 2] = (fx() - 0.5) * 3.4;
       }
       geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
       const mat = new THREE.PointsMaterial({
@@ -2205,10 +2318,10 @@ export default function BlockCraftQuiz() {
         direction: new THREE.Vector3(0, 1, 0),
         directionality: 0.35,
       });
-      if (t === DIAMOND || t === IRON || t === COAL) {
+      if (t === DIAMOND || t === IRON || t === COAL || t === RUNE_ORE) {
         sparkles.emit(center, {
-          count: Math.max(5, Math.round(16 * budget.particleScale)),
-          color: t === DIAMOND ? "#b8f6ff" : "#ffe7a3",
+          count: Math.max(5, Math.round((t === RUNE_ORE ? 30 : 16) * budget.particleScale)),
+          color: t === RUNE_ORE ? "#5eead4" : t === DIAMOND ? "#b8f6ff" : "#ffe7a3",
           speed: calm ? 0.8 : 2.4,
           life: 1.1,
           size: 0.2,
@@ -2218,75 +2331,62 @@ export default function BlockCraftQuiz() {
     };
 
     const dirVec = new THREE.Vector3();
+    const burstCenter = new THREE.Vector3();
     const glintPos = new THREE.Vector3();
     let glintAcc = 0;
     let disposed = false;
+    let fpsAcc = 0;
+    let fpsFrames = 0;
 
     const step = (now: number) => {
       if (disposed) return;
       // G1: leállított loop → nem ütemezünk új frame-et (újraindítás a phase-effectből).
       if (!runningRef.current) return;
       frameCountRef.current += 1;
-      rafRef.current = requestAnimationFrame(step);
+      // #58: `requestGameFrame` — a lejárt kupon alatt a képkocka-hurok áll (a fenti futás-vezérlő mellett biztonsági háló).
+      rafRef.current = requestGameFrame(step);
       const last = lastTRef.current ?? now;
-      const dt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000));
+      const realMs = Math.min(250, Math.max(0, now - last));
+      // A kozmetika (felhő, por, időjárás) változó dt-vel fut; a JÁTÉKMENET a mag fix lépésű hurkában (K.4/9, KSZ-4).
+      const dt = Math.min(0.05, Math.max(0.0001, realMs / 1000));
       lastTRef.current = now;
+      fpsAcc += realMs;
+      fpsFrames += 1;
+      if (fpsAcc >= 500) {
+        fpsRef.current = Math.round((fpsFrames * 1000) / fpsAcc);
+        fpsAcc = 0;
+        fpsFrames = 0;
+      }
       syncSize();
 
       // Új pálya → új égbolt/köd/időjárás (a scene egyszer épül, a pálya viszont váltakozik).
       if (lookLevel !== activeLevelRef.current) applyLevelLook(activeLevelRef.current);
       const calm = reducedMotionRef.current;
-      // Világ-mesh frissítés bányászás/lerakás után
+
+      // --- A mag: célkereszt-cél → fix lépésű hurok (mozgás, bányászás, rúnaérc), kérdés-sáv, események ---
+      const mine = mineRef.current;
+      let alpha = 1;
+      if (mine) {
+        const lh = lookHitRef.current;
+        mine.aim(lh && vMineable(lh.t) ? { x: lh.x, y: lh.y, z: lh.z } : null);
+        alpha = mine.frame(realMs, pausedRef.current || whyRef.current);
+        mine.drain(handleMineEventRef.current);
+        // A pálya-cél után a futó megoldás-kijelzés még kifut (J0c), csak utána jön az eredményképernyő.
+        if (mine.state().phase === "won" && qRef.current?.settled()) levelWonRef.current();
+      }
+      // Világ-mesh frissítés bányászás / lerakás / új rúnaérc után
       if (builtVersion !== worldVersionRef.current) {
         rebuildWorld();
         builtVersion = worldVersionRef.current;
       }
-      // Kvíz után visszatérve: por-effekt a kibányászott blokk helyén
-      if (pendingBurstRef.current) {
-        const b = pendingBurstRef.current;
-        pendingBurstRef.current = null;
-        spawnBurst(b.x, b.y, b.z, b.t);
-      }
+      // Por-effektek a mag eseményeiből (ütés, kibányászott blokk, rúnaérc).
+      for (const b of pendingBurstRef.current) spawnBurst(b.x, b.y, b.z, b.t, b.big);
+      pendingBurstRef.current.length = 0;
 
-      // --- Mozgás (yaw-relatív WASD, mint a Minecraftban) ---
-      // S11: kvíz alatt a játékos áll (a világ tovább rajzolódik, a fizika nem lép) — a kvíz alatt áll a játék.
+      // --- Kamera a szemnél (két fix lépés között interpolálva) ---
       const p = playerRef.current;
-      const k = keysRef.current;
-      if (phaseRef.current === "play") {
-        const sinY = Math.sin(p.yaw);
-        const cosY = Math.cos(p.yaw);
-        let mx = 0;
-        let mz = 0;
-        if (k.fwd) { mx -= sinY; mz -= cosY; }
-        if (k.back) { mx += sinY; mz += cosY; }
-        if (k.left) { mx -= cosY; mz += sinY; }
-        if (k.right) { mx += cosY; mz -= sinY; }
-        // Joystick-reakció (#49): a tárcsa analóg — a nagysága a sebesség (finom lépés kis kitérésnél).
-        const st = stickRef.current;
-        mx += st.x * cosY - st.y * sinY;
-        mz += -st.x * sinY - st.y * cosY;
-        const ml = Math.hypot(mx, mz);
-        if (ml > 1) {
-          mx /= ml;
-          mz /= ml;
-        }
-        p.vx = mx * MOVE_SPEED_BPS;
-        p.vz = mz * MOVE_SPEED_BPS;
-        if (k.jump && p.onGround) {
-          p.vy = JUMP_VELOCITY;
-          p.onGround = false;
-        }
-        stepPlayerPhysics(worldRef.current, p, dt);
-        // Biztonsági háló: ha bármi miatt a világ alá esne, vissza a spawnra.
-        if (p.y < -4) {
-          const s = findVoxelSpawn(worldRef.current);
-          p.x = s.x; p.y = s.y; p.z = s.z;
-          p.vx = 0; p.vy = 0; p.vz = 0;
-        }
-      }
-
-      // --- Kamera a szemnél ---
-      camera.position.set(p.x, p.y + PLAYER_EYE, p.z);
+      const pv = prevPosRef.current;
+      camera.position.set(pv.x + (p.x - pv.x) * alpha, pv.y + (p.y - pv.y) * alpha + PLAYER_EYE, pv.z + (p.z - pv.z) * alpha);
       camera.rotation.y = p.yaw;
       camera.rotation.x = p.pitch;
 
@@ -2299,13 +2399,83 @@ export default function BlockCraftQuiz() {
         4.6,
       );
       lookHitRef.current = hit;
+      const mining = mine?.state().mining;
+      let progress = 0;
       if (hit && vMineable(hit.t)) {
         highlight.visible = true;
         highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
         const pulse = calm ? 1 : 1 + Math.sin(now / 160) * 0.012;
         highlight.scale.setScalar(pulse);
+        if (mining && hit.t !== RUNE_ORE && mining.key === vIdx(hit.x, hit.y, hit.z)) {
+          progress = Math.min(1, Math.max(mining.pressing ? mining.pressMs / mineTimeMs(hit.t) : 0, mining.hits / 3));
+        }
+        hlMat.color.set(hit.t === RUNE_ORE ? 0x5eead4 : progress > 0 ? 0xff9f43 : 0xffe066);
       } else {
         highlight.visible = false;
+      }
+      // Bányászás-gyűrű a célkereszt körül (közvetlen DOM-írás, csak változáskor — KSZ-9).
+      const ring = mineRingRef.current;
+      if (ring) {
+        const key = String(Math.round(progress * 20));
+        if (ring.dataset.p !== key) {
+          ring.dataset.p = key;
+          ring.style.setProperty("--p", String(Number(key) / 20));
+        }
+      }
+
+      // --- Rúna-zár: a rúnakövek a világban (a kérdés-sáv megoldás-kijelzéséig) ---
+      const lock = mine?.state().lock ?? null;
+      const view = qRef.current?.view();
+      const shown = lock && view?.presentation && view.presentation.id === lock.presentationId ? lock : null;
+      const rev = shown ? view?.reveal ?? null : null;
+      for (let i = 0; i < stones.length; i++) {
+        const s = stones[i]!;
+        const at = shown?.stones[i];
+        if (!at) {
+          s.visible = false;
+          continue;
+        }
+        s.visible = true;
+        const bob = calm ? 0 : Math.sin(now / 380 + i * 1.3) * 0.06;
+        s.position.set(at.x, at.y + bob, at.z);
+        s.rotation.y = calm ? 0 : now / 900 + i;
+        let scale = 1;
+        let glow = 0.6;
+        if (rev) {
+          // Hibánál a helyes rúna felvillan (nagyobb, izzik), a többi elhalványul (terv 5.3 Q1).
+          if (i === rev.correctOptionIndex) {
+            scale = 1.35;
+            glow = 1.8;
+          } else {
+            scale = 0.75;
+            glow = 0.12;
+          }
+        }
+        s.scale.setScalar(scale);
+        const mat = s.material as THREE.MeshStandardMaterial;
+        mat.emissiveIntensity = glow;
+        if (rev && i === rev.correctOptionIndex) mat.emissive.copy(stoneColor.set("#4ade80"));
+        else mat.emissive.copy(stoneColor.set(RUNE_COLORS[i]!));
+      }
+
+      // --- Iránytű a legközelebbi rúnaérchez (közvetlen DOM-írás) ---
+      const comp = compassRef.current;
+      if (comp && mine) {
+        const st = mine.state();
+        const near = st.lock && !st.lock.resolved ? null : nearestRune(st.ores, p.x, p.z);
+        const visible = !!near?.ore && near.dist > 2.2;
+        const hidden = visible ? "false" : "true";
+        if (comp.dataset.hidden !== hidden) comp.dataset.hidden = hidden;
+        if (visible && near?.ore) {
+          const dx = near.ore.x + 0.5 - p.x;
+          const dz = near.ore.z + 0.5 - p.z;
+          const right = dx * Math.cos(p.yaw) - dz * Math.sin(p.yaw);
+          const fwd = -dx * Math.sin(p.yaw) - dz * Math.cos(p.yaw);
+          comp.style.setProperty("--a", `${Math.atan2(right, fwd).toFixed(3)}rad`);
+          const label = `${Math.round(near.dist)} m`;
+          const span = comp.lastElementChild as HTMLElement | null;
+          if (span && span.textContent !== label) span.textContent = label;
+        }
       }
 
       // Az égbolt-kupola a kamerával mozog (mindig a vágósíkon belül marad).
@@ -2323,9 +2493,9 @@ export default function BlockCraftQuiz() {
         glintAcc += dt * 7 * budget.particleScale;
         while (glintAcc >= 1 && waterTops.length > 0) {
           glintAcc -= 1;
-          const i = Math.floor(Math.random() * (waterTops.length / 3)) * 3;
-          const gx = waterTops[i]! + 0.15 + Math.random() * 0.7;
-          const gz = waterTops[i + 2]! + 0.15 + Math.random() * 0.7;
+          const i = Math.floor(fx() * (waterTops.length / 3)) * 3;
+          const gx = waterTops[i]! + 0.15 + fx() * 0.7;
+          const gz = waterTops[i + 2]! + 0.15 + fx() * 0.7;
           if (Math.hypot(gx - p.x, gz - p.z) > 24) continue;
           glintPos.set(gx, waterTops[i + 1]! + 0.02, gz);
           sparkles.emit(glintPos, { count: 1, color: "#f4fbff", speed: 0.12, life: 0.7, size: 0.16 });
@@ -2344,9 +2514,9 @@ export default function BlockCraftQuiz() {
           arr[i * 3] += driftX * dt + (weatherKind === "snow" ? Math.sin(now / 700 + i) * dt : 0);
           arr[i * 3 + 1] -= fallSpeed * dt;
           if (arr[i * 3 + 1]! < p.y - 4 || Math.abs(arr[i * 3]! - p.x) > 16) {
-            arr[i * 3] = p.x + (Math.random() - 0.5) * 28;
-            arr[i * 3 + 1] = p.y + 7 + Math.random() * 8;
-            arr[i * 3 + 2] = p.z + (Math.random() - 0.5) * 28;
+            arr[i * 3] = p.x + (fx() - 0.5) * 28;
+            arr[i * 3 + 1] = p.y + 7 + fx() * 8;
+            arr[i * 3 + 2] = p.z + (fx() - 0.5) * 28;
           }
         }
         attr.needsUpdate = true;
@@ -2380,14 +2550,25 @@ export default function BlockCraftQuiz() {
     lastTRef.current = null;
     // G1: a loop indítását/leállítását a phase-vezérelt effect végzi (lentebb).
     stepRef.current = step;
-    if (runningRef.current) rafRef.current = requestAnimationFrame(step);
+    if (runningRef.current) rafRef.current = requestGameFrame(step);
 
     return () => {
       disposed = true;
       runningRef.current = false;
       stepRef.current = null;
-      cancelAnimationFrame(rafRef.current);
+      cancelGameFrame(rafRef.current);
       cameraRef.current = null;
+      canvas.removeEventListener("webglcontextlost", onContextLost);
+      canvas.removeEventListener("webglcontextrestored", onContextRestored);
+      restoreGlRef.current = () => {};
+      for (const s of stones) scene.remove(s);
+      stoneGeo.dispose();
+      stoneMats.forEach((m) => m.dispose());
+      letterTex.forEach((t) => t.dispose());
+      scene.remove(beacons);
+      beacons.dispose();
+      beaconGeo.dispose();
+      beaconMat.dispose();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
       for (const m of instMeshes) {
         scene.remove(m);
@@ -2422,25 +2603,25 @@ export default function BlockCraftQuiz() {
   }, []); // D1: mount-szintű — phase-változásra NEM épül újra a scene
 
   /**
-   * G1: render-loop vezérlés. A scene egyszer épül fel (fenti effect), a loop
-   * viszont a phase szerint indul/áll — így új kör, következő pálya és kvíz után
-   * is újraindul, míg levelComplete/over/menu alatt nem pörgeti a GPU-t.
+   * G1: render-loop vezérlés. A scene egyszer épül fel (fenti effect), a loop viszont a phase szerint indul / áll —
+   * így új kör és következő pálya után is újraindul, míg levelComplete / over / menu alatt nem pörgeti a GPU-t. A
+   * „Miért?” kártya olvasása alatt is áll (J0c: a magyarázat alatt az óra és a kérdés-óra áll).
    */
   useEffect(() => {
     // S11: szünetben a render-ciklus is áll (gyenge eszközön akkut is kímél).
     // #58: a lejárt kupon után is — a lejárati párbeszéd alatt a voxel-jelenet nem renderelhet tovább (a vászon az utolsó
     // képkockát mutatja). Szoftveres WebGL-en a futó ciklus minden bemenetet egy ~0,2–0,7 s-os képkockára várakoztatott.
-    const shouldRun = (phase === "play" || phase === "quiz") && !paused;
+    const shouldRun = phase === "play" && !paused && !why && !glLost;
     if (!shouldRun || coupon.expired) {
       runningRef.current = false;
-      cancelAnimationFrame(rafRef.current);
+      cancelGameFrame(rafRef.current);
       return;
     }
     if (runningRef.current || !stepRef.current) return;
     runningRef.current = true;
     lastTRef.current = null; // dt-ugrás elkerülése a szünet után
-    rafRef.current = requestAnimationFrame(stepRef.current);
-  }, [phase, paused, coupon.expired]);
+    rafRef.current = requestGameFrame(stepRef.current);
+  }, [phase, paused, why, glLost, coupon.expired]);
 
   // #58: lejáratkor a futó mozgás és a pointer lock elengedése a JÁTÉK kezdeményezésére (selfUnlock) — így a böngésző
   // Esc-es lock-elengedése nem nyit szünet menüt a lejárati párbeszéd alatt, és az egér szabadon eléri a gombot.
@@ -2450,134 +2631,172 @@ export default function BlockCraftQuiz() {
     releasePointerLock();
   }, [coupon.expired, releaseMovement, releasePointerLock]);
 
-  const dismissFeedback = useCallback(() => {
-    setFeedback(null);
-    setRevealCorrectIdx(null);
-    setWrongIdx(null);
-    setQuiz(pickQuiz());
-    answerLockedRef.current = false;
-  }, [pickQuiz]);
+  // A menet vége (időlejárat, kilépés): a nyitott kérdés „megszakítva” zárul (nem hiba, nem ismétlés — J0c).
+  useEffect(() => {
+    if (phase === "over" || phase === "menu") qRef.current?.finish();
+  }, [phase]);
 
-  const onAnswer = (idx: number) => {
-    if (!quiz || phase !== "quiz" || paused || answerLockedRef.current || revealCorrectIdx !== null) return;
-    answerLockedRef.current = true;
-    answeredRef.current += 1;
-    const previousBudget = adaptiveTimeBudget(activeLevelRef.current.timeLimit, adaptiveRef.current.band);
-    adaptiveRef.current.answer(idx === quiz.correctIndex);
-    const nextBudget = adaptiveTimeBudget(activeLevelRef.current.timeLimit, adaptiveRef.current.band);
-    setTimeLeft(t => Math.max(1, Math.min(nextBudget, t + nextBudget - previousBudget)));
-    maybeClaimCouponBonus(coupon, quiz.id, idx);
-    if (idx !== quiz.correctIndex) {
-      sfxError();
-      haptics("error");
-      setWrongShake(true);
-      setTimeout(() => setWrongShake(false), 320);
-      // Helyes válasz felfedése + 1.5s "freeze" → utána új kvíz
-      setRevealCorrectIdx(quiz.correctIndex);
-      setWrongIdx(idx);
-      const outcome = streakProtector.handleWrong({ streak });
-      if (outcome === "warned") {
-        sfxWarning();
-      } else {
-        setStreak(0);
-      }
-      // G-1: a másfél másodperces felfedés megmutatta, MELYIK a jó válasz, de azt
-      // nem, hogy MIÉRT. A téves fogalom így érintetlenül maradt — pedig épp azt
-      // kellene javítani. A kártya addig áll, amíg a gyerek be nem zárja.
-      setFeedback(
-        buildFeedback({
-          quiz: {
-            prompt: quiz.prompt,
-            options: quiz.options,
-            correctIndex: quiz.correctIndex,
-            // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
-            explanation: quiz.explanation ?? undefined,
-          },
-          chosenIndex: idx,
-          attempt: 0,
-          ageBand: "kid",
-        }),
-      );
-      return;
-    }
-
-    sfxSuccess();
-    haptics("success");
-    setCorrectInRun((n) => n + 1);
-
-    const tgt = mineTargetRef.current;
-    let levelGoalReached = false;
-    if (tgt) {
-      vSet(worldRef.current, tgt.x, tgt.y, tgt.z, AIR);
+  /** A mag eseményei → kép + hang + rezgés ugyanabban a képkockában (K.4/18). A kérdés-hangot az `onOutcome` adja. */
+  const handleMineEventRef = useRef<(e: RuneMineEvent) => void>(() => {});
+  handleMineEventRef.current = (e: RuneMineEvent) => {
+    if (e.type === "hit") {
+      pendingBurstRef.current.push({ x: e.x, y: e.y, z: e.z, t: e.t, big: false });
+      haptics("tap");
+      sfxClick();
+    } else if (e.type === "mined") {
+      pendingBurstRef.current.push({ x: e.x, y: e.y, z: e.z, t: e.t, big: true });
       worldVersionRef.current++;
-      pendingBurstRef.current = { x: tgt.x, y: tgt.y, z: tgt.z, t: tgt.t };
       // A kibányászott blokk a hotbar-ba kerül (mob nem gyűjthető — Minecraft-logika).
-      if ((PLACEABLE_ORDER as readonly number[]).includes(tgt.t)) {
-        const minedType = tgt.t;
+      if ((PLACEABLE_ORDER as readonly number[]).includes(e.t)) {
+        const minedType = e.t;
         setInventory((inv) => ({ ...inv, [minedType]: (inv[minedType] ?? 0) + 1 }));
       }
-      const isCreeper = tgt.t === CREEPER;
-      const isMob = tgt.t === CREEPER || tgt.t === ZOMBIE || tgt.t === SKELETON || tgt.t === SPIDER;
-      const isRare = tgt.t === COAL || tgt.t === IRON || tgt.t === DIAMOND || isMob;
-      const baseXp = XP_BY_TILE[tgt.t] ?? 24;
-      // Mob-ölés bónusz: minden mob 2× XP, de a base értékek már nehezebbek (CREEPER 280, ZOMBIE 320, SKELETON 380, SPIDER 260)
-      const add = (isMob ? baseXp * 2 : baseXp) + streak * 4;
-      const newBlocks = blocksMined + 1;
-      const newLevelBlocks = levelBlocks + 1;
-      const newLevelRare = levelRare + (isRare ? 1 : 0);
-      const isDiamond = tgt.t === DIAMOND;
-      const newLevelDiamonds = levelDiamonds + (isDiamond ? 1 : 0);
-      const newStreak = streak + 1;
-      // D2: track run-level best streak (does not reset between levels)
-      if (newStreak > bestStreakRef.current) bestStreakRef.current = newStreak;
-      // D3: track run-level real diamonds mined
-      if (isDiamond) totalDiamondsRef.current += 1;
-      setSessionXp((x) => x + add);
-      setTotalXp((x) => x + add);
-      setBlocksMined(newBlocks);
-      if (isRare) setRareBlocks((n) => n + 1);
-      setLevelBlocks(newLevelBlocks);
-      setLevelRare(newLevelRare);
-      if (isDiamond) setLevelDiamonds(newLevelDiamonds);
-      setStreak(newStreak);
-      const subj = quiz.subject ?? "english";
-      setSubjectStats((prev) => ({ ...prev, [subj]: prev[subj] + 1 }));
-      setXpFloat({ amount: add, key: Date.now() });
-
-      // Pálya-cél ellenőrzés: blokkszám + ritkacél + opcionális gyémánt-cél
-      // (az 5. pálya leírása "legalább 1 gyémánt"-ot ígér — most ténylegesen kötelező).
-      const cfg = activeLevelRef.current;
-      if (
-        newLevelBlocks >= cfg.goalBlocks &&
-        newLevelRare >= cfg.goalRareBlocks &&
-        newLevelDiamonds >= (cfg.goalDiamonds ?? 0)
-      ) {
-        levelGoalReached = true;
-      }
-
-      if (tgt.t === DIAMOND && rareBlocks === 0) {
-        setAchievement("Első gyémánt megtalálva!");
-      } else if (newBlocks === 10) {
-        setAchievement("10. blokk kibányászva!");
-      } else if (newStreak === 5) {
-        setAchievement("5-ös sorozat elérve!");
-      } else if (isCreeper) {
-        setAchievement("Creeper legyőzve! Dupla XP!");
-      }
-    }
-    mineTargetRef.current = null;
-    setQuiz(null);
-    // FP-fizika: ha a lábunk alatti blokkot bányásztuk ki, a gravitáció
-    // szabályosan leejt a gödörbe — ez a Minecraft-viselkedés, nincs "rescue".
-    if (levelGoalReached) {
-      sfxLevelUp();
-      runningRef.current = false; // G1: loop stop (újraindítás a phase-effectből)
-      cancelAnimationFrame(rafRef.current);
-      setPhase("levelComplete");
-    } else {
-      setPhase("play");
+      sfxPickup();
+      haptics("tap");
+      if (e.xp > 0) setXpFloat({ amount: e.xp, key: ++xpKeyRef.current, rune: false });
+      const st = mineRef.current?.state();
+      if (e.t === DIAMOND && st?.diamonds === 1) setAchievement("Első gyémánt megtalálva!");
+      else if (st?.blocks === 10) setAchievement("10. blokk kibányászva!");
+    } else if (e.type === "runeOpen") {
+      releasePointerLock();
+    } else if (e.type === "runeBreak") {
+      pendingBurstRef.current.push({ x: e.ore.x, y: e.ore.y, z: e.ore.z, t: RUNE_ORE, big: true });
+      worldVersionRef.current++;
+      setXpFloat({ amount: e.xp, key: ++xpKeyRef.current, rune: true });
+      if (e.result === "free") sfxPickup();
+      if (e.result === "correct" && e.combo === 3) setAchievement("Kombó ×2 — dupla rúnaerő!");
+      else if (e.result === "correct" && e.combo === 6) setAchievement("Kombó ×3 — rúnamester!");
+    } else if (e.type === "runeSpawn") {
+      worldVersionRef.current++;
+    } else if (e.type === "goal") {
+      setAchievement("Megvan a jelzőtűz összes rúnaérce!");
     }
   };
+
+  /** A pálya-cél teljesült és a megoldás-kijelzés lefutott → eredményképernyő (egyszer). */
+  const levelWonFiredRef = useRef(false);
+  levelWonRef.current = () => {
+    if (levelWonFiredRef.current || phaseRef.current !== "play") return;
+    levelWonFiredRef.current = true;
+    runningRef.current = false; // G1: loop stop (újraindítás a phase-effectből)
+    cancelGameFrame(rafRef.current);
+    sfxLevelUp();
+    releaseMovement();
+    releasePointerLock();
+    setPhase("levelComplete");
+  };
+  useEffect(() => {
+    if (phase === "play") levelWonFiredRef.current = false;
+  }, [phase, levelIdx]);
+
+  // HUD ≤ 10 Hz (KSZ-9): a mag állapotából pillanatkép, csak változáskor.
+  useEffect(() => {
+    if (phase !== "play") return;
+    const id = window.setInterval(() => {
+      const st = mineRef.current?.state();
+      if (!st) return;
+      const next: HudSnap = { runes: st.opened, goal: st.goal, crystals: st.crystals, combo: st.combo.count, multiplier: st.combo.multiplier, xp: st.xp, blocks: st.blocks };
+      setHud((h) =>
+        h.runes === next.runes && h.goal === next.goal && h.crystals === next.crystals && h.combo === next.combo && h.xp === next.xp && h.blocks === next.blocks ? h : next,
+      );
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [phase]);
+
+  /* ---------------- „Miért?”: szünet + a valódi magyarázókártya (G-1) ---------------- */
+  const openWhy = useCallback(() => {
+    const item = qRef.current?.view().whyItem; // a vezérlő őrzi: az új kérdés nem írja felül (review #446)
+    if (!item) return;
+    releaseMovement();
+    releasePointerLock();
+    setWhy(
+      buildFeedback({
+        quiz: {
+          prompt: item.quiz.prompt,
+          options: item.quiz.options,
+          correctIndex: item.quiz.correctIndex,
+          // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
+          explanation: item.quiz.explanation ?? undefined,
+        },
+        chosenIndex: item.pickedOriginalIndex,
+        attempt: 1,
+        ageBand: "kid",
+      }),
+    );
+  }, [releaseMovement, releasePointerLock]);
+  const closeWhy = useCallback(() => {
+    lastTRef.current = null;
+    setWhy(null);
+  }, []);
+
+  const startGameRef = useRef(startGame);
+  startGameRef.current = startGame;
+
+  /* ---------------- teszt-kampó (K.2) ---------------- */
+  useEffect(() => {
+    return installGameTestApi({
+      probe: () => {
+        const mine = mineRef.current;
+        const st = mine?.state();
+        const ctl = qRef.current;
+        const stats = ctl?.director?.stats(mine?.clockMs() ?? 0);
+        const view = ctl?.view();
+        return {
+          simTime: mine?.loop.simTimeMs() ?? 0,
+          questionOpen: ctl?.active() ? 1 : 0,
+          questionsAnswered: stats?.answered ?? 0,
+          questionsCorrect: stats?.correct ?? 0,
+          fps: fpsRef.current,
+          band: ctl?.director?.band() ?? null,
+          intensity: ctl?.director?.intensity() ?? null,
+          level: runLevelRef.current,
+          adaptiveBand: adaptiveRef.current.band,
+          timeBudget: adaptiveTimeBudget(LEVELS[0]!.timeLimit, runStartBandRef.current),
+          // S11 kétujjas mérés: a nézés iránya és az előre-mozgás jelzője (1 / 0 — a probe típusa szám / szöveg).
+          yaw: playerRef.current.yaw,
+          moveFwd: keysRef.current.fwd || stickRef.current.y > 0 ? 1 : 0,
+          phase: phaseRef.current,
+          paused: pausedRef.current ? 1 : 0,
+          frames: frameCountRef.current,
+          runes: st?.opened ?? 0,
+          runeGoal: st?.goal ?? 0,
+          crystals: st?.crystals ?? 0,
+          combo: st?.combo.count ?? 0,
+          blocks: st?.blocks ?? 0,
+          timeScale: mine?.loop.timeScale() ?? 1,
+          lockOpen: st?.lock && !st.lock.resolved ? 1 : 0,
+          reveal: view?.reveal ? 1 : 0,
+          questionId: view?.presentation?.id ?? null,
+          clock: mine?.clockMs() ?? 0,
+          why: whyRef.current ? 1 : 0,
+        };
+      },
+      forceState: (patch) => {
+        if (patch.phase === "menu") setPhase("menu");
+        if (patch.phase === "play" && phaseRef.current !== "play") startGameRef.current();
+        if (patch.phase === "levelComplete" || patch.phase === "over") setPhase(patch.phase);
+        // K.2: azonnali kérdés — rúnaérc a játékos elé és Rúna-zár (a „quiz” kompatibilis álnév, terv 9.).
+        if (patch.question === true || patch.phase === "quiz") {
+          const mine = mineRef.current;
+          if (mine && phaseRef.current === "play") {
+            const p = playerRef.current;
+            const f = lookDirection(p.yaw, 0);
+            const ore = mine.forceLock({ x: f.x, z: f.z });
+            mine.drain(handleMineEventRef.current);
+            if (ore) {
+              // Mintha a gyerek odanézett és megérintette volna: a célkereszt az ércre mutat (a rúnakövek körülötte).
+              const dx = ore.x + 0.5 - p.x;
+              const dy = ore.y + 0.5 - (p.y + PLAYER_EYE);
+              const dz = ore.z + 0.5 - p.z;
+              p.yaw = Math.atan2(-dx, -dz);
+              p.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+            }
+          }
+        }
+        if (typeof patch.gameWon === "boolean") setGameWon(patch.gameWon);
+      },
+    });
+  }, []);
 
   // R = quick-restart az "over" / "menu" / "levelComplete" képernyőn.
   useEffect(() => {
@@ -2595,14 +2814,36 @@ export default function BlockCraftQuiz() {
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, startGame, startNextLevel]);
 
+  /** A menet összesítője (eredményképernyő): a mag és a kérdés-statisztika (valós kérdés-számok — J3a adathiba). */
+  const runSummary = () => {
+    const st = mineRef.current?.state();
+    const stats = qRef.current?.director?.stats(mineRef.current?.clockMs() ?? 0);
+    const correct = stats?.correct ?? 0;
+    const wrong = (stats?.wrong ?? 0) + (stats?.timeouts ?? 0);
+    return {
+      xp: st?.xp ?? 0,
+      bestCombo: st?.combo.best ?? 0,
+      crystals: st?.crystals ?? 0,
+      blocks: st?.blocks ?? 0,
+      diamonds: st?.diamonds ?? 0,
+      runes: st?.opened ?? 0,
+      goal: st?.goal ?? 0,
+      correct,
+      wrong,
+      total: correct + wrong,
+    };
+  };
+
   useEffect(() => {
     if (phase !== "over" || !syncEligibility?.eligible || scoreSubmittedRef.current) return;
     scoreSubmittedRef.current = true;
+    const sum = runSummary();
     void postGameScore({
       gameId: "block-craft-quiz",
       difficulty: "normal",
-      runXp: sessionXp,
-      runStreak: streak,
+      runXp: sum.xp,
+      // J3a / terv J12: a menet LEGJOBB kombó-sorozata (a régi kód a pillanatnyi sorozatot küldte).
+      runStreak: sum.bestCombo,
       runSeconds,
       runId: newScoreRunId(),
     })
@@ -2610,35 +2851,19 @@ export default function BlockCraftQuiz() {
       .catch(() => {
         scoreSubmittedRef.current = false;
       });
-  }, [phase, syncEligibility, sessionXp, streak, runSeconds]);
+  }, [phase, syncEligibility, runSeconds]);
 
   /* S11 — legjobb eredmény: helyi mentés (névtelen látogatónál is működik), futásonként egyszer. */
   useEffect(() => {
     if (phase !== "over" || bestSubmittedRef.current) return;
     bestSubmittedRef.current = true;
-    setBestResult(bestScore.submit(sessionXp));
-  }, [phase, sessionXp, bestScore]);
+    const xp = mineRef.current?.state().xp ?? 0;
+    setBestResult(bestScore.submit(xp));
+    setTotalXp((t) => t + xp);
+  }, [phase, bestScore]);
 
   // Achievement + Daily Challenge tracking — az "over" phase átmenetnél egyszer fut.
   const achievementCheckedRef = useRef(false);
-
-  // D6 a11y: quiz-overlay dialog ref + Escape + auto-focus
-  const quizDialogRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (phase !== "quiz") return;
-    const t = window.setTimeout(() => {
-      const first = quizDialogRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]");
-      first?.focus();
-    }, 50);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [phase]);
   useEffect(() => {
     if (phase !== "over") {
       achievementCheckedRef.current = false;
@@ -2646,16 +2871,18 @@ export default function BlockCraftQuiz() {
     }
     if (achievementCheckedRef.current) return;
     achievementCheckedRef.current = true;
+    const sum = runSummary();
     const wasDailyAvailable = isTodaysGameAvailable("block-craft-quiz");
     const newOnes = recordRun({
       game: "block-craft-quiz",
-      xpGained: sessionXp,
-      correctAnswers: blocksMined, // ≈ helyes válaszok = kibányászott blokkok
-      wrongAnswers: 0,
-      maxStreak: bestStreakRef.current, // D2: run-level best streak, not current
-      blocksMined,
-      diamondsMined: totalDiamondsRef.current, // D3: real diamonds, not rareBlocks/3 estimate
-      perfect: streak >= blocksMined && blocksMined >= 5,
+      xpGained: sum.xp,
+      // J3a: valós kérdés-statisztika (a director-ból), nem a kibányászott blokkok száma.
+      correctAnswers: sum.correct,
+      wrongAnswers: sum.wrong,
+      maxStreak: sum.bestCombo,
+      blocksMined: sum.blocks,
+      diamondsMined: sum.diamonds,
+      perfect: sum.correct >= 5 && sum.wrong === 0,
       fullClear: gameWon,
       highestLevel: levelIdx + 1,
     });
@@ -2664,9 +2891,7 @@ export default function BlockCraftQuiz() {
       if (daily.achievements.length > 0) newOnes.push(...daily.achievements);
     }
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
-    // Szándékosan csak `phase`-re iratkozunk fel — a recordRun egyszer fut "over"
-    // átmenetenként, nem akarjuk, hogy minden state-mutáció (sessionXp, streak stb.)
-    // újra triggerelje.
+    // Szándékosan csak `phase`-re iratkozunk fel — a recordRun egyszer fut "over" átmenetenként.
   }, [phase]);
 
   // A győzelem (mind az 5 bánya) a következő pályát oldja fel; a menü azt ajánlja.
@@ -2695,19 +2920,43 @@ export default function BlockCraftQuiz() {
     hold(k, false);
   };
 
-  /** Crosshair-célzott blokk bányászása (E / bal klikk / Bányász gomb / tap). */
-  const tryMineLook = useCallback(() => {
+  /** Nyitott Rúna-zárnál a megadott sugár által eltalált rúnakő választása (a rúnakő „kiütése”). */
+  const pickStoneOnRay = useCallback((o: { x: number; y: number; z: number }, d: { x: number; y: number; z: number }): boolean => {
+    const mine = mineRef.current;
+    const lock = mine?.state().lock;
+    if (!mine || !lock || lock.resolved) return false;
+    const i = pickRuneStone(o, d, lock.stones);
+    if (i < 0) return false;
+    mine.pick(i);
+    return true;
+  }, []);
+
+  /**
+   * Bányászás a célkereszt alatti blokkon (E / bal klikk / Bányász gomb): nyomva tartva a blokktípus ideje alatt
+   * kibányászza, rövid nyomás egy „ütés” (3 ütés = egy blokk); rúnaércen Rúna-zárat nyit. KÉRDÉS NÉLKÜL (J3a).
+   */
+  const startMine = useCallback(() => {
+    if (pausedRef.current || phaseRef.current !== "play" || whyRef.current) return;
+    const mine = mineRef.current;
+    const cam = cameraRef.current;
+    if (!mine) return;
+    if (cam) {
+      const d = lookDirection(playerRef.current.yaw, playerRef.current.pitch);
+      if (pickStoneOnRay(cam.position, d)) return;
+    }
     const hit = lookHitRef.current;
     if (!hit || !vMineable(hit.t)) {
       // E24: nem néma — a gyerek megtudja, mit tegyen (menjen közelebb / nézzen egy blokkra).
-      if (!pausedRef.current && phaseRef.current === "play") {
-        haptics("error");
-        setMineHint(true);
-      }
+      haptics("error");
+      setMineHint(true);
       return;
     }
-    tryMineAt(hit.x, hit.y, hit.z);
-  }, [tryMineAt, haptics]);
+    mine.aim({ x: hit.x, y: hit.y, z: hit.z });
+    mine.press();
+  }, [haptics, pickStoneOnRay]);
+  const endMine = useCallback(() => {
+    mineRef.current?.release();
+  }, []);
 
   useEffect(() => {
     if (!mineHint) return;
@@ -2717,6 +2966,7 @@ export default function BlockCraftQuiz() {
 
   /** Blokk-lerakás a célzott blokk megcélzott lapjára (F / jobb klikk / Lerak gomb). */
   const tryPlaceLook = useCallback(() => {
+    if (pausedRef.current || phaseRef.current !== "play") return;
     const hit = lookHitRef.current;
     if (!hit) return;
     const t = selTypeRef.current;
@@ -2741,7 +2991,8 @@ export default function BlockCraftQuiz() {
   }, []);
 
   // E/F billentyű hídjai (a globális keydown handler ref-en keresztül hív).
-  mineActionRef.current = tryMineLook;
+  mineStartRef.current = startMine;
+  mineEndRef.current = endMine;
   placeActionRef.current = tryPlaceLook;
   hotbarKeyRef.current = (slot: number) => {
     const t = hotbarTypes[slot];
@@ -2760,13 +3011,13 @@ export default function BlockCraftQuiz() {
       e.preventDefault();
       const canvas = e.currentTarget;
       if (e.pointerType === "mouse") {
-        // Desktop: első kattintás = pointer lock; lock alatt bal = bányász, jobb = lerak.
+        // Desktop: első kattintás = pointer lock; lock alatt bal = bányász (tartható), jobb = lerak.
         if (document.pointerLockElement !== canvas) {
           canvas.requestPointerLock?.();
           return;
         }
         if (e.button === 2) tryPlaceLook();
-        else tryMineLook();
+        else startMine();
         return;
       }
       // Egy már futó körbenéző ujj mellett a második vászon-érintés nem veszi át a nézést.
@@ -2776,7 +3027,7 @@ export default function BlockCraftQuiz() {
       const look = isLookZone(e.clientX - rect.left, rect.width);
       touchLookRef.current = { id: e.pointerId, lastX: e.clientX, lastY: e.clientY, moved: 0, look };
     },
-    [phase, paused, tryMineLook, tryPlaceLook],
+    [phase, paused, startMine, tryPlaceLook],
   );
 
   const onCanvasPointerMove = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -2795,12 +3046,18 @@ export default function BlockCraftQuiz() {
 
   const onCanvasPointerUp = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
+      if (e.pointerType === "mouse") {
+        endMine();
+        return;
+      }
       const tl = touchLookRef.current;
       if (!tl || tl.id !== e.pointerId) return;
       touchLookRef.current = null;
-      if (tl.moved >= 12 || pausedRef.current || phaseRef.current !== "play") return;
-      // Rövid tap = bányászás. A koppintott képernyőpont felé lövünk sugarat
-      // (Minecraft mobil-viselkedés), fallback a crosshair-célra.
+      if (tl.moved >= 12 || pausedRef.current || whyRef.current || phaseRef.current !== "play") return;
+      const mine = mineRef.current;
+      if (!mine) return;
+      // Rövid tap = egy „ütés” (3 ütés = egy blokk); rúnaércen Rúna-zár, nyitott zárnál a koppintott rúnakő választás.
+      // A koppintott képernyőpont felé lövünk sugarat (Minecraft mobil-viselkedés), tartalék a célkereszt-cél.
       const cam = cameraRef.current;
       const canvas = e.currentTarget;
       if (cam) {
@@ -2808,6 +3065,7 @@ export default function BlockCraftQuiz() {
         const ndcX = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
         const ndcY = -((e.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
         const dir = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(cam).sub(cam.position).normalize();
+        if (pickStoneOnRay(cam.position, dir)) return;
         const hit = raycastVoxel(
           worldRef.current,
           cam.position.x, cam.position.y, cam.position.z,
@@ -2815,57 +3073,62 @@ export default function BlockCraftQuiz() {
           5.2,
         );
         if (hit && vMineable(hit.t)) {
-          tryMineAt(hit.x, hit.y, hit.z);
+          mine.hit({ x: hit.x, y: hit.y, z: hit.z });
           return;
         }
       }
-      tryMineLook();
+      const look = lookHitRef.current;
+      if (look && vMineable(look.t)) {
+        mine.hit({ x: look.x, y: look.y, z: look.z });
+        return;
+      }
+      haptics("error");
+      setMineHint(true);
     },
-    [tryMineAt, tryMineLook],
+    [endMine, haptics, pickStoneOnRay],
   );
 
   const onCanvasPointerCancel = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType === "mouse") endMine();
     if (touchLookRef.current?.id === e.pointerId) touchLookRef.current = null;
+  }, [endMine]);
+
+  /**
+   * A rúnagombok (a világban lebegő rúnakövek érinthető párjai): felengedéskor véglegesít, ha az ujj a gombon belül
+   * engedett fel (C-52: több ujjnál a nem elsődleges mutatóra nincs `click` — a közös `pointerTapHandlers`).
+   */
+  const runeTaps = useMemo(() => createPointerTapTracker(), []);
+  const onRune = useCallback((i: number) => {
+    if (pausedRef.current || whyRef.current || phaseRef.current !== "play") return;
+    mineRef.current?.pick(i);
   }, []);
 
   // S11 — a keret állapota és a HUD adatai.
   const cfg = activeLevelRef.current;
-  const timeBudget = adaptiveTimeBudget(cfg.timeLimit, adaptiveRef.current.band);
-  const inRun = phase === "play" || phase === "quiz";
+  const timeBudget = adaptiveTimeBudget(cfg.timeLimit, runStartBandRef.current);
+  const inRun = phase === "play";
   const screenState: GameScreenState =
     phase === "menu" ? "start" : inRun ? (paused ? "paused" : "playing") : "result";
   const timeTone: "default" | "warn" | "bad" =
     timeLeft <= timeBudget * 0.15 ? "bad" : timeLeft <= timeBudget * 0.3 ? "warn" : "default";
+  // Telefonon 3 stat fér el csonkítás nélkül (360 px); a rúnakristály a chipsorban (iránytű mellett) látszik.
   const hudStats: GameHudStat[] = [
-    { id: "xp", label: "XP", value: sessionXp },
-    { id: "streak", label: "Sorozat", value: `🔥 ${streak}`, tone: streak >= 5 ? "good" : "default" },
-    {
-      id: "blocks",
-      label: "Blokk",
-      value: `${levelBlocks}/${cfg.goalBlocks}`,
-      tone: levelBlocks >= cfg.goalBlocks ? "good" : "default",
-    },
-    ...(cfg.goalRareBlocks > 0
-      ? [{
-          id: "ore",
-          label: "Érc",
-          value: `${levelRare}/${cfg.goalRareBlocks}`,
-          tone: levelRare >= cfg.goalRareBlocks ? ("good" as const) : ("default" as const),
-        }]
-      : []),
-    ...((cfg.goalDiamonds ?? 0) > 0
-      ? [{
-          id: "diamond",
-          label: "Gyémánt",
-          value: `💎 ${levelDiamonds}/${cfg.goalDiamonds}`,
-          tone: levelDiamonds >= (cfg.goalDiamonds ?? 0) ? ("good" as const) : ("default" as const),
-        }]
-      : []),
+    { id: "xp", label: "XP", value: hud.xp },
+    { id: "runes", label: "Rúnaérc", value: `${hud.runes}/${hud.goal}`, tone: hud.runes >= hud.goal ? "good" : "default" },
+    { id: "combo", label: "Kombó", value: hud.combo > 0 ? `×${hud.multiplier} (${hud.combo})` : "—", tone: hud.multiplier >= 2 ? "good" : "default" },
   ];
   const isLastLevel = levelIdx >= LEVELS.length - 1;
-  const totalAnswered = Math.max(answeredRef.current, correctInRun);
   const levelName = cfg.name.replace(/^\d+\.\s*/, "");
   const selCount = inventory[selType] ?? 0;
+  const presentation = q.bind.presentation;
+  const reveal = q.bind.reveal;
+  /**
+   * Látszik a Rúna-zár (nyitott kérdés vagy a megoldás-kijelzése): a Lerak / Bányász gomb ilyenkor a rúnakövek helyét
+   * adja át (keskeny telefonon a rúnasor és az akciógombok különben fednék egymást).
+   */
+  const lockOpen = inRun && presentation !== null;
+  const summary = phase === "levelComplete" || phase === "over" ? runSummary() : null;
+  const wrongItems = summary ? q.director?.wrongList() ?? [] : [];
 
   return (
     <GameShell
@@ -2888,8 +3151,8 @@ export default function BlockCraftQuiz() {
 
         {phase === "menu" && (
           <StartScreen
-            title="Kockavadász kvíz"
-            subtitle="Bányássz a kockavilágban! Minden blokk előtt egy gyors kvíz — jó válaszra jár az XP."
+            title="Kockavadász: Rúnabánya"
+            subtitle="Bányássz szabadon a kockavilágban, és nyisd ki a világító rúnaérceket! A jó rúnakő dupla zsákmányt hoz."
             icon={<Pickaxe className="h-10 w-10" strokeWidth={2.4} aria-hidden="true" />}
             startLabel={`Indulhat a bányászat!${levels.level != null ? ` · ${levels.level}. pálya` : ""}`}
             startTestId="bc-start"
@@ -2905,15 +3168,15 @@ export default function BlockCraftQuiz() {
                 <GamePedagogyPanel
                   accent="lime"
                   className="game-btn game-btn-secondary min-h-12 text-base text-center"
-                  kidMission="Bányássz blokkokat egy kockavilágban! Minden blokk előtt rövid kvíz jön: angol szókincs, angol matek, magyar matek vagy környezetismeret. Csak helyes válaszra tűnik el a kő (és kapsz XP-et + sorozat-lángot). Időre is figyelj — a kör végén összesítjük a pontjaidat."
+                  kidMission="Bányássz blokkokat egy kockavilágban: tartsd nyomva a Bányász gombot, vagy koppints háromszor a blokkra — itt nincs kérdés. A világító rúnaércnél Rúna-zár nyílik: a jó válaszú rúnakőre koppintva dupla rúnakristályt kapsz, rossz válasznál megmutatjuk a jót, és később újra megkérdezzük. Gyűjtsd össze a pálya rúnaérceit a jelzőtűzhöz!"
                   parentBody={
                     <>
-                      <strong className="text-lime-100/90">Tananyag:</strong> 4 tárgy kvízformában — angol szókincs (tárgyak, helyzetek; a központi szóbankból, ismétlés nélkül), angol matek (vocabulary + műveletek), egyszerű magyar matek (1–4. oszt.) és környezetismeret (növény/állat/természet). A bányászat motivációt ad az ismétléshez.
+                      <strong className="text-lime-100/90">Tananyag:</strong> a rúnazárak kérdései — a tananyagod kérdései elsőként, utána az évfolyam közös kérdésbankja (tárgyak körforgásával), angol szókincs a központi szóbankból, és a játék saját bankja (angol, angol matek, matek, környezet). A rosszul megválaszolt kérdés néhány kérdés múlva visszatér (ismétlés).
                       <br />
                       <strong className="text-lime-100/90">Fejleszt:</strong> olvasásértés gyors döntés mellett, fejszámolás, idegen nyelvi gondolkozás, természettudományos összefüggés-látás, térbeli tájékozódás és kéz-szem koordináció (billentyű / érintés).
                       <br />
                       <span className="text-white/70">
-                        Akadály (fizikai pálya) + teszt (kvíz) + jutalom (XP, blokk eltűnik) minden lépésnél összekapcsolva — erős, azonnali visszajelzés.
+                        A játék az elsődleges (szabad bányászás, építés, felfedezés); a kérdés a játék része: a jó válasz játékbeli előnyt ad (dupla zsákmány, kombó), a rossz csak kisebbet — a játék közben nem áll meg.
                       </span>
                     </>
                   }
@@ -2937,19 +3200,19 @@ export default function BlockCraftQuiz() {
                       <li key={lv.id} className="flex items-center justify-between gap-2 border-b border-lime-900/30 last:border-b-0 pb-1 last:pb-0">
                         <span className="font-semibold text-lime-100/95">{lv.name}</span>
                         <span className="text-white/65 tabular-nums">
-                          {lv.goalBlocks} blokk{lv.goalRareBlocks > 0 ? ` + ${lv.goalRareBlocks} érc` : ""} · {Math.floor(lv.timeLimit / 60)}:{String(lv.timeLimit % 60).padStart(2, "0")}
+                          {lv.runeGoal} rúnaérc · {Math.floor(lv.timeLimit / 60)}:{String(lv.timeLimit % 60).padStart(2, "0")}
                         </span>
                       </li>
                     ))}
                   </ul>
                 </div>
                 <div className="flex flex-wrap gap-1.5" aria-hidden="true">
-                  {[GRASS, DIRT, SAND, STONE, WATER, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}
+                  {[GRASS, DIRT, SAND, STONE, WATER, LOG, LEAVES, COAL, IRON, DIAMOND, RUNE_ORE].map((t) => <MenuBlock key={t} t={t} />)}
                 </div>
                 <p className="text-sm text-white/80">
                   {touchCapable
-                    ? "Bal hüvelykujj: mozgás (tárcsa) · jobb hüvelykujj: körbenézés húzással · koppintás a blokkra vagy Bányász gomb: kvíz."
-                    : "WASD mozgás, Space ugrás, E bányász-kvíz, F lerakás, 1–9 blokkválasztás, P szünet."}
+                    ? "Bal hüvelykujj: mozgás (tárcsa) · jobb hüvelykujj: körbenézés húzással · Bányász gomb nyomva tartva vagy 3 koppintás a blokkra: bányászás · rúnaérc: Rúna-zár, koppints a jó rúnakőre."
+                    : "WASD mozgás, Space ugrás, E (nyomva tartva) bányászás, F lerakás, 1–9 blokkválasztás, rúnazárnál 1–4 válasz, P szünet."}
                 </p>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm text-white/80">Hang</span>
@@ -2983,8 +3246,9 @@ export default function BlockCraftQuiz() {
               onContextMenu={(e) => e.preventDefault()}
             />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_58%,rgba(0,0,0,0.28)_100%)]" />
-            {/* Célkereszt (Minecraft-stílusú kereszt, sötét kontúrral minden háttéren látható) */}
+            {/* Célkereszt (Minecraft-stílusú kereszt, sötét kontúrral minden háttéren látható) + bányászás-gyűrű */}
             <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" aria-hidden="true">
+              <div ref={mineRingRef} className="bc-mine-ring" data-p="0" data-testid="bc-mine-ring" />
               <span className="absolute left-1/2 top-1/2 h-6 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 shadow-[0_0_0_1.5px_rgba(0,0,0,0.55)]" />
               <span className="absolute left-1/2 top-1/2 h-[3px] w-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 shadow-[0_0_0_1.5px_rgba(0,0,0,0.55)]" />
             </div>
@@ -2992,7 +3256,7 @@ export default function BlockCraftQuiz() {
               {xpFloat && (
                 <motion.div
                   key={xpFloat.key}
-                  className="pointer-events-none absolute left-1/2 top-[40%] -translate-x-1/2 text-amber-300 font-black text-2xl drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)]"
+                  className={`pointer-events-none absolute left-1/2 top-[40%] -translate-x-1/2 font-black drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] ${xpFloat.rune ? "text-teal-200 text-3xl" : "text-amber-300 text-xl"}`}
                   initial={reducedMotion ? false : { opacity: 0, y: 12, scale: 0.7 }}
                   animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: -28, scale: 1 }}
                   exit={{ opacity: 0 }}
@@ -3003,7 +3267,7 @@ export default function BlockCraftQuiz() {
               )}
             </AnimatePresence>
 
-            {/* HUD a vászon tetején (S2 GameHud: idő, XP, sorozat, blokk-cél; 48 px-es szünet gomb). */}
+            {/* HUD a vászon tetején (S2 GameHud: idő, XP, rúnaérc-cél, kombó, kristály; 48 px-es szünet gomb). */}
             {inRun && (
               <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col">
                 <GameHud
@@ -3012,7 +3276,7 @@ export default function BlockCraftQuiz() {
                   progress={{ value: timeLeft, max: timeBudget, label: `${timeLeft} mp`, tone: timeTone }}
                 />
                 <div
-                  className="mt-1.5 flex flex-wrap items-center gap-1.5"
+                  className="bc-chips mt-1.5 flex flex-wrap items-center gap-1.5"
                   style={{ paddingLeft: "max(8px, var(--game-safe-left))", paddingRight: "max(8px, var(--game-safe-right))" }}
                 >
                   <span
@@ -3021,14 +3285,23 @@ export default function BlockCraftQuiz() {
                     }`}
                     data-testid="bc-level-chip"
                   >
-                    {cfg.isBossLevel ? `★ Boss · ${levelName}` : `Pálya ${cfg.id}/${LEVELS.length} · ${levelName}`}
+                    {cfg.isBossLevel ? `★ ${levelName}` : `Pálya ${cfg.id}/${LEVELS.length} · ${levelName}`}
                     {cfg.weather !== "clear" && (
                       <span className="ml-1.5" title={cfg.weather}>
                         {cfg.weather === "rain" ? "🌧" : cfg.weather === "snow" ? "❄" : "🏜"}
                       </span>
                     )}
                   </span>
-                  {mineHint && phase === "play" && !paused && (
+                  <span className="bc-crystals" data-testid="bc-crystals">
+                    <Gem className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only">Rúnakristály:</span>
+                    {hud.crystals}
+                  </span>
+                  <div ref={compassRef} className="bc-compass" data-hidden="true" data-testid="bc-compass" aria-hidden="true">
+                    <ArrowBigUp className="bc-compass-arrow" />
+                    <span className="bc-compass-dist">–</span>
+                  </div>
+                  {mineHint && !paused && (
                     <span
                       role="status"
                       data-testid="bc-mine-hint"
@@ -3037,12 +3310,64 @@ export default function BlockCraftQuiz() {
                       Nincs blokk a célkereszt alatt — menj közelebb, és nézz egy blokkra!
                     </span>
                   )}
-                  {showHint && phase === "play" && (
-                    <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-sm">
-                      {touchCapable ? "Bal: mozgás · jobb: nézelődés · koppintás: bányászás" : "Kattints a vászonra · bal klikk: bányász · jobb: lerak"}
+                  {showHint && !presentation && (
+                    <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-sm" data-testid="bc-goal-hint">
+                      {`Gyűjts ${hud.goal} rúnaércet a jelzőtűzhöz! A fényoszlop mutatja az utat.`}
                     </span>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/*
+              J3a Rúna-zár — a világban lebegő rúnakövek érinthető párjai (színkód + betű, U-J3-1), a válasz szövegével.
+              Nem modális: a játék alatta lassítva fut, a joystick és a körbenézés működik. Testid: `bc-quiz` (K.2 / terv 9.).
+            */}
+            {inRun && presentation && (
+              <div
+                className={`bc-runes ${wrongShake && !reducedMotion ? "animate-shake" : ""}`}
+                data-testid="bc-quiz"
+                data-state={reveal ? "reveal" : "open"}
+                role="group"
+                aria-label="Rúnakövek — koppints a jó válaszra"
+              >
+                {presentation.options.map((opt, i) => {
+                  const st = !reveal ? "idle" : i === reveal.correctOptionIndex ? "correct" : i === reveal.pickedOptionIndex ? "wrong" : "dim";
+                  return (
+                    <button
+                      key={`${presentation.id}-${i}`}
+                      type="button"
+                      className="bc-rune"
+                      data-testid={`bc-rune-${i}`}
+                      data-state={st}
+                      aria-disabled={reveal || paused ? "true" : undefined}
+                      style={{ "--rune": RUNE_COLORS[i] ?? "#94a3b8" } as CSSProperties}
+                      {...pointerTapHandlers(runeTaps, i, () => onRune(i))}
+                      {...correctDataAttrs(opt.correct)}
+                    >
+                      <span className="bc-rune-letter" aria-hidden="true">{RUNE_LETTERS[i] ?? i + 1}</span>
+                      <span className="bc-rune-label">{opt.label}</span>
+                      {st === "correct" && <span className="sr-only"> — a jó válasz</span>}
+                      {st === "wrong" && <span className="sr-only"> — ezt választottad</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {glLost && inRun && (
+              <div className="bc-gl-lost" role="alert" data-testid="bc-gl-lost">
+                <p className="text-base font-bold text-white">A grafika leállt. Indítsd újra, és folytathatod.</p>
+                <button
+                  type="button"
+                  className="game-btn game-btn-primary"
+                  onClick={() => {
+                    restoreGlRef.current();
+                  }}
+                >
+                  <RefreshCw className="h-5 w-5" aria-hidden="true" />
+                  Grafika újraindítása
+                </button>
               </div>
             )}
 
@@ -3072,13 +3397,13 @@ export default function BlockCraftQuiz() {
                     stickRef.current.y = s.y;
                   }}
                 />
-                {/* Akciógombok ívben a jobb alsó sarokban: Ugrás a legnagyobb, mellette Bányász, fölötte Lerak. */}
-                <div className="bc-actions" style={{ pointerEvents: "none" }}>
+                {/* Akciógombok ívben a jobb alsó sarokban: Ugrás a legnagyobb, mellette Bányász (tartható), fölötte Lerak. */}
+                <div className="bc-actions" data-lock={lockOpen ? "true" : "false"} style={{ pointerEvents: "none" }}>
                   <button
                     type="button"
                     className="game-action-btn bc-act bc-act-place pointer-events-auto"
                     onClick={tryPlaceLook}
-                    disabled={selCount <= 0}
+                    disabled={selCount <= 0 || lockOpen}
                     aria-label={selCount > 0 ? `Lerak: ${BLOCK_NAME[selType] ?? "blokk"} (${selCount})` : "Lerak — előbb bányássz blokkot"}
                     style={{ touchAction: "none" }}
                   >
@@ -3093,16 +3418,16 @@ export default function BlockCraftQuiz() {
                     )}
                     <span className="bc-act-label" aria-hidden="true">Lerak</span>
                   </button>
-                  <button
-                    type="button"
+                  <HoldButton
+                    label="Bányász"
                     className="game-action-btn bc-act bc-act-mine pointer-events-auto"
-                    onClick={tryMineLook}
-                    aria-label="Bányász"
-                    style={{ touchAction: "none" }}
+                    disabled={lockOpen}
+                    onHoldStart={startMine}
+                    onHoldEnd={endMine}
                   >
                     <Pickaxe className="h-7 w-7" aria-hidden="true" />
                     <span className="bc-act-label" aria-hidden="true">Bányász</span>
-                  </button>
+                  </HoldButton>
                   <HoldButton
                     size="auto"
                     label="Ugrás"
@@ -3158,7 +3483,7 @@ export default function BlockCraftQuiz() {
               </div>
               {!touchCapable && (
                 <p className="w-full text-center text-xs text-white/65" data-testid="bc-keyboard-hint">
-                  Billentyűzet: WASD mozgás · Space ugrás · E bányász · F lerak · 1–9 blokk · P szünet
+                  Billentyűzet: WASD mozgás · Space ugrás · E (tartva) bányász · F lerak · 1–9 blokk · P szünet
                 </p>
               )}
             </div>
@@ -3166,86 +3491,24 @@ export default function BlockCraftQuiz() {
         </div>
       </main>
 
-      <AnimatePresence>
-        {phase === "quiz" && quiz && (
-          <motion.div
-            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm"
-            style={{
-              padding:
-                "max(8px, var(--game-safe-top)) max(8px, var(--game-safe-right)) max(8px, var(--game-safe-bottom)) max(8px, var(--game-safe-left))",
-            }}
-            initial={reducedMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              ref={quizDialogRef}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Mini-teszt"
-              data-testid="bc-quiz"
-              initial={reducedMotion ? false : { y: 36, opacity: 0, scale: 0.98 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              transition={{ type: "spring", stiffness: 420, damping: 32 }}
-              className={`game-quiz bc-quiz w-full max-w-lg max-h-full overflow-y-auto rounded-3xl border-2 border-lime-400/55 bg-slate-950/95 p-4 shadow-[0_20px_56px_rgba(34,197,94,0.28)] ${
-                wrongShake && !reducedMotion ? "animate-shake" : ""
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {(() => {
-                  const s = quiz.subject;
-                  const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : s === "science" ? "Természettudomány" : s === "history" ? "Történelem" : s === "hungarian" ? "Magyar" : "Kvíz";
-                  const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60";
-                  return <span className={`text-xs font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-full border ${chipClass}`}>{label}</span>;
-                })()}
-                <span className="text-sm font-black text-lime-300 uppercase">Mini-teszt</span>
-                {/* A teljes képernyős kvízréteg eltakarja a HUD szünetgombját — itt is lehet megállni (#426 review-lelet). */}
-                <button
-                  type="button"
-                  data-testid="bc-quiz-pause"
-                  aria-label="Szünet"
-                  onClick={pauseGame}
-                  className="ml-auto inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/10 text-white hover:bg-white/20"
-                >
-                  <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
-                </button>
-              </div>
-              <p className="bc-quiz-hint mt-1 text-sm text-white/70 leading-snug">Jó válasz: eltűnik a blokk, és jár az XP. Rossznál megmutatjuk, miért.</p>
-              <p className="mt-2 mb-3 text-lg sm:text-xl font-bold leading-snug text-white" data-testid="bc-prompt">{quiz.prompt}</p>
-              <div className="game-quiz-answers bc-quiz-answers grid gap-2">
-                {quiz.options.map((o, i) => {
-                  const isCorrect = revealCorrectIdx === i;
-                  const isWrong = wrongIdx === i;
-                  const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
-                  const cls = isCorrect
-                    ? "bg-emerald-700/80 hover:bg-emerald-700/80 text-white border-2 border-emerald-300 font-bold"
-                    : isWrong
-                      ? "bg-rose-800/80 hover:bg-rose-800/80 text-white border-2 border-rose-300"
-                      : dim
-                        ? "bg-white/5 text-white/40 border border-lime-900/20"
-                        : "bg-slate-900/95 hover:bg-lime-800/55 active:bg-lime-700/70 text-white border border-lime-500/45 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
-                  return (
-                    <button
-                      key={`${o}-${i}`}
-                      type="button"
-                      className={`game-answer-btn flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-lime-300 ${cls}`}
-                      disabled={revealCorrectIdx !== null}
-                      data-state={isCorrect ? "correct" : isWrong ? "wrong" : "idle"}
-                      onClick={() => onAnswer(i)}
-                      {...correctDataAttrs(i === quiz.correctIndex)}
-                    >
-                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/35 text-sm font-black text-lime-100" aria-hidden="true">{"ABCD"[i] ?? i + 1}</span>
-                      <span className="min-w-0 flex-1">{o}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {streakProtector.warning && <p className="mt-2 text-sm text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>}
-              {revealCorrectIdx !== null && wrongIdx !== null && <p className="mt-2 text-sm text-emerald-300/95">A helyes válasz: <strong>{quiz.options[revealCorrectIdx]}</strong></p>}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/*
+        J0c kérdés-sáv (nem modális, a HUD alatt): prompt + időcsík + „Miért?” + szünetgomb. A válaszcélok a rúnakövek
+        (fent, `bc-quiz`); a sáv rejtett gombsora billentyűvel (1–4) érhető el (terv 8.11).
+      */}
+      {inRun && (
+        <InlineQuestion
+          {...q.bind}
+          mode="bar"
+          skin="mine"
+          disabled={paused || why !== null}
+          onWhy={openWhy}
+          testId="bc-question"
+          promptTestId="bc-prompt"
+          optionTestId={(i) => `bc-option-${i}`}
+          pauseTestId="bc-quiz-pause"
+          onPause={pauseGame}
+        />
+      )}
 
       <AnimatePresence>
         {achievement && (
@@ -3260,8 +3523,8 @@ export default function BlockCraftQuiz() {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Szünetben a kártya a menü alá nem kerülhet (z-90 > z-80): addig elrejtjük, folytatáskor visszajön. */}
-      {feedback && !paused && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
+      {/* „Miért?”: a magyarázókártya (G-1) — szünetben a kártya a menü alá nem kerülhet (z-90 > z-80): addig elrejtjük. */}
+      {why && !paused && <QuizFeedbackCard card={why} onDismiss={closeWhy} />}
 
       <PauseMenu
         open={paused && inRun}
@@ -3277,10 +3540,10 @@ export default function BlockCraftQuiz() {
         testId="bc-level-complete"
         title="Pálya teljesítve!"
         won
-        score={sessionXp}
+        score={summary?.xp ?? 0}
         best={bestScore.best}
-        correct={correctInRun}
-        total={totalAnswered}
+        correct={summary?.correct ?? 0}
+        total={summary?.total ?? 0}
         onRetry={startNextLevel}
         retryLabel={isLastLevel ? "Befejezés — összesítés!" : `Tovább a ${levelIdx + 2}. pályára`}
         onBack={endRun}
@@ -3289,14 +3552,16 @@ export default function BlockCraftQuiz() {
           <div className="flex flex-col items-center gap-2">
             <p className="text-base font-bold text-lime-100">{cfg.name}</p>
             <div className="flex flex-wrap justify-center gap-1.5 text-sm text-white/90">
-              <span className="rounded-full bg-lime-700/55 px-2.5 py-1"><strong className="text-lime-100">{levelBlocks}</strong> blokk</span>
-              <span className="rounded-full bg-cyan-700/55 px-2.5 py-1"><strong className="text-cyan-100">{levelRare}</strong> érc</span>
-              <span className="rounded-full bg-amber-700/55 px-2.5 py-1"><strong className="text-amber-100">+{sessionXp - levelStartXp}</strong> XP</span>
-              <span className="rounded-full bg-orange-700/55 px-2.5 py-1 inline-flex items-center gap-1"><Flame className="w-4 h-4 text-orange-300" /><strong>{streak}</strong></span>
+              <span className="rounded-full bg-teal-700/60 px-2.5 py-1"><strong className="text-teal-100">{summary?.runes ?? 0}</strong> rúnaérc</span>
+              <span className="rounded-full bg-cyan-700/55 px-2.5 py-1 inline-flex items-center gap-1"><Gem className="w-4 h-4" aria-hidden="true" /><strong className="text-cyan-100">{summary?.crystals ?? 0}</strong> kristály</span>
+              <span className="rounded-full bg-lime-700/55 px-2.5 py-1"><strong className="text-lime-100">{summary?.blocks ?? 0}</strong> blokk</span>
+              <span className="rounded-full bg-amber-700/55 px-2.5 py-1"><strong className="text-amber-100">+{(summary?.xp ?? 0) - levelStartXp}</strong> XP</span>
+              <span className="rounded-full bg-orange-700/55 px-2.5 py-1 inline-flex items-center gap-1"><Flame className="w-4 h-4 text-orange-300" aria-hidden="true" /><strong>{summary?.bestCombo ?? 0}</strong></span>
             </div>
             {!isLastLevel && (
               <p className="text-sm text-white/75 max-w-sm">Következő: <strong className="text-lime-200">{LEVELS[levelIdx + 1]!.name}</strong> — {LEVELS[levelIdx + 1]!.description}</p>
             )}
+            <ResultReview items={wrongItems} max={3} />
           </div>
         }
       />
@@ -3307,18 +3572,18 @@ export default function BlockCraftQuiz() {
         testId="bc-over"
         title={gameWon ? "Bajnok lettél! Mind az 5 pálya kész!" : "Bányászat vége"}
         won={gameWon}
-        score={sessionXp}
+        score={summary?.xp ?? 0}
         best={bestResult?.best ?? bestScore.best}
-        isNewBest={(bestResult?.isNewBest ?? false) && sessionXp > 0}
-        correct={correctInRun}
-        total={totalAnswered}
+        isNewBest={(bestResult?.isNewBest ?? false) && (summary?.xp ?? 0) > 0}
+        correct={summary?.correct ?? 0}
+        total={summary?.total ?? 0}
         onRetry={startGame}
         retryLabel="Új próbálkozás"
         onBack={() => navigate("/games")}
         extra={
           <div className="flex flex-col items-center gap-2">
             <p className="text-sm text-white/85">
-              Blokkok: <strong>{blocksMined}</strong> · Érc: <strong>{rareBlocks}</strong> · Pálya: <strong>{levelIdx + 1}/{LEVELS.length}</strong>
+              Rúnaérc: <strong>{summary?.runes ?? 0}</strong> · Kristály: <strong>{summary?.crystals ?? 0}</strong> · Blokk: <strong>{summary?.blocks ?? 0}</strong> · Pálya: <strong>{levelIdx + 1}/{LEVELS.length}</strong>
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center max-w-sm">
               <span className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border bg-lime-600/70 text-lime-50 border-lime-300/60">Angol: {subjectStats.english}</span>
@@ -3329,6 +3594,7 @@ export default function BlockCraftQuiz() {
               {subjectStats.science > 0 && <span className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border bg-sky-600/70 text-sky-50 border-sky-300/60">Természettudomány: {subjectStats.science}</span>}
               {subjectStats.history > 0 && <span className="text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border bg-rose-600/70 text-rose-50 border-rose-300/60">Történelem: {subjectStats.history}</span>}
             </div>
+            <ResultReview items={wrongItems} />
             {syncEligibility?.eligible ? <p className="text-sm text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-sm text-white/60 max-w-xs">{syncBanner}</p>}
           </div>
         }
@@ -3346,16 +3612,45 @@ export default function BlockCraftQuiz() {
         .bc-act-mine { grid-column: 1; grid-row: 2; margin-bottom: 18px; background: radial-gradient(circle at 35% 30%, #4ade80, #047857 70%); }
         .bc-act-jump.game-action-btn { grid-column: 2; grid-row: 2; width: calc(var(--game-action-size) * 1.15); height: calc(var(--game-action-size) * 1.15); background: radial-gradient(circle at 35% 30%, #a78bfa, #5b21b6 70%); }
         .bc-act-label { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); white-space: nowrap; font-size: 14px; line-height: 1; font-weight: 800; padding: 3px 8px; border-radius: 9999px; background: rgba(2,6,23,.82); border: 1px solid rgba(255,255,255,.22); color: #fff; pointer-events: none; }
-        @media (prefers-reduced-motion: reduce) { .bc-act { transition: none; } .bc-act:active { transform: none; } }
-        /* Alacsony fekvő nézet: a kvíz válaszai két oszlopban, a súgó-sor elrejtve, hogy minden kiférjen.
-           Érintős fekvő nézetben a hotbar a vászonra kerül, a joystick és az akciógombok közé (a vászon kapja a magasságot). */
+        /* J3a: nyitott Rúna-zárnál a Lerak / Bányász gomb láthatatlan (a rúnakövek helye), az Ugrás és a joystick marad. */
+        .bc-actions[data-lock="true"] .bc-act-place, .bc-actions[data-lock="true"] .bc-act-mine { visibility: hidden; }
+        /* J3a — bányászás-gyűrű a célkereszt körül (a --p 0..1 a tartás / az ütések haladása). */
+        .bc-mine-ring { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 9999px; --p: 0;
+          background: conic-gradient(#fbbf24 calc(var(--p) * 360deg), transparent 0); -webkit-mask: radial-gradient(circle, transparent 15px, #000 16px); mask: radial-gradient(circle, transparent 15px, #000 16px); opacity: .95; }
+        .bc-mine-ring[data-p="0"] { opacity: 0; }
+        /* J3a — iránytű a legközelebbi rúnaérchez (a HUD-chipsorban). */
+        .bc-compass { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px 2px 4px; min-height: 28px; border-radius: 9999px; background: rgba(15,23,42,.8); border: 1px solid rgba(94,234,212,.55); color: #ccfbf1; font-size: 13px; font-weight: 800; }
+        .bc-compass[data-hidden="true"] { display: none; }
+        .bc-crystals { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; min-height: 28px; border-radius: 9999px; background: rgba(15,23,42,.8); border: 1px solid rgba(103,232,249,.5); color: #cffafe; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .bc-compass-arrow { width: 20px; height: 20px; color: #5eead4; transform: rotate(var(--a, 0rad)); }
+        /* J3a — a rúnagombok: a világban lebegő rúnakövek érinthető párjai (2×2, a célkereszt alatt; fekvőben egy sorban). */
+        .bc-runes { position: absolute; z-index: 24; left: 50%; transform: translateX(-50%); top: calc(50% + 34px); width: min(94vw, 560px); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; pointer-events: none; }
+        .bc-runes.animate-shake { animation: bc-rune-shake 0.16s ease-in-out 2; }
+        @keyframes bc-rune-shake {0%,100% { transform: translateX(-50%); }25% { transform: translateX(calc(-50% - 5px)); }75% { transform: translateX(calc(-50% + 5px)); }}
+        .bc-rune { pointer-events: auto; display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 6px 10px 6px 6px; border-radius: 14px; text-align: left; color: #fff; font-weight: 800; font-size: 16px; line-height: 1.2;
+          background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,0) 60%), rgba(30,27,46,.92); border: 2px solid var(--rune); box-shadow: 0 0 14px color-mix(in srgb, var(--rune) 45%, transparent), inset 0 -3px 0 rgba(0,0,0,.35); touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; }
+        .bc-rune:active:not([aria-disabled="true"]) { transform: scale(.97); }
+        .bc-rune-letter { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: var(--rune); color: #0f0c1c; font-size: 20px; font-weight: 900; }
+        .bc-rune-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .bc-rune[data-state="correct"] { border-color: #86efac; background: #15803d; box-shadow: 0 0 22px #22c55e99; }
+        .bc-rune[data-state="correct"] .bc-rune-letter { background: #22c55e; color: #fff; }
+        .bc-rune[data-state="wrong"] { border-color: #fdba74; background: #9a3412; }
+        .bc-rune[data-state="dim"] { opacity: .45; }
+        .bc-gl-lost { position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; text-align: center; background: rgba(2,6,23,.88); }
+        @media (prefers-reduced-motion: reduce) { .bc-act { transition: none; } .bc-act:active, .bc-rune:active { transform: none; } }
+        /* A kérdés-sáv a Kockavadász HUD-ja (idő + chipsor) alatt kezdődik. */
+        .play-question[data-skin="mine"] { --play-question-top: calc(max(4px, var(--game-safe-top)) + 104px); }
+        /* Alacsony fekvő nézet: érintős fekvő nézetben a hotbar a vászonra kerül, a joystick és az akciógombok közé (a
+           vászon kapja a magasságot); a rúnagombok egy sorban a vászon közepe alatt. */
         @media (max-height: 500px) and (min-width: 560px) {
           .bc-bottom[data-touch="true"] { position: absolute; z-index: 25; left: 50%; transform: translateX(-50%); bottom: max(8px, var(--game-safe-bottom)); max-width: 52%; padding: 0 !important; background: transparent; border: 0; pointer-events: none; }
           .bc-bottom[data-touch="true"] button { pointer-events: auto; }
           .bc-bottom[data-touch="true"] .bc-hotbar-empty { display: none; }
-          .bc-quiz-answers { grid-template-columns: 1fr 1fr; }
-          .bc-quiz-hint { display: none; }
-          .bc-quiz { padding: 12px; }
+          .bc-runes { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(54vw, 520px); top: calc(50% + 20px); gap: 8px; }
+          .bc-rune { min-height: 50px; font-size: 15px; }
+          .play-question[data-skin="mine"] { --play-question-top: calc(max(4px, var(--game-safe-top)) + 64px); }
+          /* A chipsor a bal oldalon törik (a kérdéskártya fent középen, 40vw széles — nem takarhatja el az iránytűt). */
+          .bc-chips { max-width: calc(30vw - 16px); }
         }
       `}</style>
     </GameShell>

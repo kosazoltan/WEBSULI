@@ -1200,6 +1200,26 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
    zár-feloldás), `T/blockcraft-sim.test.ts` (J2 ≥ 7/perc, J3 ≤ 15 mp; kérdés nélküli mód — J3a-ban még nincs
    vereség: a sim ezt az esetet J3b-ig `won()`-nal jelzi; a „van vesztési feltétel” pont J3b elfogadása).
 
+#### Megvalósult eltérések (J3a, mérés alapján)
+
+- **Közös meghajtó:** `createRuneMine` (`L/blockcraft/core.ts`) — a lap és a sim ugyanazt a fix lépésű hurkot, kérdés-sáv
+  állapotgépet (`tick: false`, csak `request("trigger")`) és rúnazár-logikát futtatja; csak a `movePlayer` más (lap: voxel-fizika,
+  sim: rácson járó bot). `slowMo` 0,5; director: `optionCount 4`, `minGap 1,5 s`, `maxGap 15 s`, `7/perc`, ablak 5 s, olvasás-tudatos.
+- **Pálya-cél = a kinyitott zárak száma** (3/4/5/6/7): rossz / lejárt válasznál is kinyílik a zár (a cél nem akad el), csak a
+  zsákmány kisebb (1 kristály a 2 helyett, kombó megszakad, 10 XP a 60 × szorzó helyett). Kérdés nélkül / üres forrásnál zár
+  nélkül törik (1 kristály). A rúnaérc a felszínen álló, önvilágító blokk (`RUNE_ORE`), fényoszloppal és HUD-iránytűvel.
+- **Rúnaérc-elérhetőség:** 500 ms-onként, ha a játékos 8 blokkos körzetében nincs érc, 4–7 blokkra nő egy (legfeljebb 24 a
+  világban; a legtávolabbi átköltözik). Mért (20 seed × 180 s): SIM_AVERAGE 10,8 kérdés/perc (min 9,9), leghosszabb rés ≤ 7,8 s;
+  SIM_WEAK 8,7/perc; az 5 pálya mediánja 139 s.
+- **Rúnakövek:** a világban 4 színkódolt, betűs (A–D) kő az érc körül (U-J3-1), mellettük azonos színű DOM-rúnagombok a válasz
+  szövegével (`bc-quiz` réteg, `bc-rune-<i>`, `pointerTapHandlers`); a kövek a vásznon koppintással / célkereszttel is
+  választhatók. A kérdés-sáv `bc-question` / `bc-prompt` / `bc-quiz-pause`. Nyitott zárnál a Lerak / Bányász gomb rejtett.
+- **A pálya ideje** a menet kezdő sávjából (`adaptiveTimeBudget(timeLimit, runStartBand)`), a válaszok nem módosítják.
+- **Teszt-változás (SPEC-VÁLTOZÁS, terv 5.3 / 9.):** `T/blockcraft-mobile.test.ts` (a `shouldRun` „quiz” nélkül; a szünetgomb a
+  kérdés-sáv `pauseTestId`-ja), `T/block-craft-real-touch.spec.ts` (kérdés helyett kibányászott blokk 20 s-on belül),
+  `T/game-mobile-cases/block-craft-quiz.ts` (rossz válasz → „Miért?” → kártya). A terv 9. szakasza szerint ezek „változatlanul
+  zöldek” lettek volna — a két forrásőr-minta azonban a régi modál szó szerinti kódját nézte.
+
 ### J3b — nappal–éjjel ciklus, sebző mobok, kard, életek
 
 1. Állapot-sor commit.
