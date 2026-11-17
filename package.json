@@ -9,6 +9,11 @@
     "test": "npm --prefix source run test",
     "build": "npm --prefix source run build",
     "test:e2e": "npm --prefix source run test:e2e",
-    "verify": "npm --prefix source run verify"
+    "verify": "npm --prefix source run verify",
+    "gate:lint": "node scripts/qa/gates/lint-gate.mjs",
+    "gate:stage": "node scripts/qa/gates/stage-gate.mjs",
+    "gate:push": "node scripts/qa/gates/pre-push-gate.mjs",
+    "gate:pr": "node scripts/qa/gates/pre-pr-gate.mjs",
+    "gate:merge": "node scripts/qa/gates/pre-merge-gate.mjs"
   }
 }
