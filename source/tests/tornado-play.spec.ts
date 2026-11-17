@@ -20,6 +20,10 @@ type GameWindow = {
   };
 };
 
+// A játékos valódi várakozásai: a director bemelegítése (~10 s), a ≥ 1 s-os olvasás a rögzítés előtt (J7b döntések 25.),
+// az áthajtás, a ≥ 1,8 s-os megoldás-kijelzés és a „Miért?” kártya — a 30 s-os alapkeret szoftveres WebGL-en szűk.
+test.describe.configure({ timeout: 60_000 });
+
 const VIEWPORTS = [
   { width: 844, height: 390 },
   { width: 390, height: 844 },
