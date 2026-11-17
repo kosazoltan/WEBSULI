@@ -45,7 +45,8 @@ node --no-warnings "$K" stats                        # összesítő
 2. **Egy elem = egy függőlegesen teljes munkaegység.** Nagyobb munkát előre bonts
    szeletekre.
 3. **A lezáró jegyzet bizonyítékot tartalmaz**: PR-szám, commit-SHA, futtatott
-   kapuk eredménye, reverz-mutációk, éles mérés. Bizonyíték nélküli `done` tilos.
+   kapuk eredménye (a `gate:push` / `gate:pr` összesítő táblája — `docs/minosegkapuk.md`), reverz-mutációk, éles mérés.
+   Bizonyíték nélküli `done` tilos.
 4. **A tábla és a valóság együtt mozog.** Ha a PR mergelődött, a board ugyanabban
    a körben `done`. (2026-09-06-án a #181 `review`-ban ragadt, pedig élesben futott —
    ezt higiéniai söpréskor kell elkapni.)

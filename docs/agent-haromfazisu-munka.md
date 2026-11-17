@@ -27,17 +27,14 @@ Egy soros, egy fájlos javításnál a terv lehet a commit-üzenet előtti 5–1
 
 ## Befejezési mandátum (tulajdonosi utasítás 2026-11-01)
 
-Egyik fázist sem szabad félbehagyni. A spec és a végrehajtási utasítás csak teljesen
-kidolgozva számít késznek — félig elkészített spec leadása eljárási hiba. A 3. fázis
-(javítás / módosítás / bővítés) a teljes elkészültéig fut. Minden session végén
-kötelező a teljességellenőrzés: a beadott kérések tételes összevetése az elkészült
-munkával, és addig kell javítani, amíg az összes kérés nem teljesült. Objektív
-blokkolónál: NOT DONE + ok + kockázat.
+Egyik fázist sem szabad félbehagyni; félig elkészített spec leadása eljárási hiba. A teljes szabály (session végi
+teljességellenőrzés, NOT DONE + ok + kockázat): `AGENTS.md` „Befejezési mandátum”.
 
 ## Minőségkapuk a 3. fázisban (tulajdonosi utasítás 2026-11-17)
 
 A 3. fázis minden szakasza után `npm run gate:stage`, kibocsátás előtt a lint kapu és a push / PR / merge előtti kapu, a PR előtt
-független alügynökös ellenőrzés — részletek: [`docs/minosegkapuk.md`](minosegkapuk.md). A `three-phase-check` a push előtti kapu része.
+független alügynökös ellenőrzés — részletek: [`docs/minosegkapuk.md`](minosegkapuk.md). A sorrendet (végrehajtási fájl az első
+kódcommit előtt) a `three-phase-check` gépiesen ellenőrzi: a `gate:push` része, és a CI „Háromfázisú rend” jobja is futtatja.
 
 ## Fájlnevek
 

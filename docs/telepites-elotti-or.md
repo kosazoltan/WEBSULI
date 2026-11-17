@@ -23,11 +23,11 @@ a független audit szerint ~15 percen belül három éles telepítés is lefutot
    `activeMatches` mezőjét is (`source/server/realtime/index.ts`): a folyamatban lévő meccsek is megszakadnak
    telepítéskor. Nullánál nagyobb érték esetén ugyanúgy várj.
 
-6. **A főág kötelező ellenőrzései** (`gh api repos/kosazoltan/WEBSULI/branches/main/protection`): Háromfázisú rend, Lint & Typecheck,
-   Unit Tests, Playwright E2E. Megkerülni tulajdonosi engedély nélkül nem szabad („csak tesztfájl változott” sem ok); a Playwright E2E
-   ~1 óra. Zöld CI után ne tölts fel további commitot: újraindítja az E2E-t (`docs/agent-csapdak.md` C-62, C-63).
-7. **Több zöld PR egy ablakban:** minden egyes összevonás ELŐTT futtasd az őrt. Az első összevonás után a többi PR összevonási állapota
-   átmenetileg `UNKNOWN`; várd meg, amíg a GitHub újraszámolja, ne erőltesd.
+6. **A főág kötelező ellenőrzései** (Háromfázisú rend, Lint & Typecheck, Unit Tests, Playwright E2E ~1 óra; lekérdezés:
+   `gh api repos/kosazoltan/WEBSULI/branches/main/protection`) tulajdonosi engedély nélkül nem kerülhetők meg („csak tesztfájl
+   változott” sem ok); zöld CI után nincs push — C-63, C-62, `docs/minosegkapuk.md` „Push-fegyelem”.
+7. **Több zöld PR egy ablakban:** minden egyes összevonás ELŐTT futtasd az őrt; az első összevonás után a többi PR átmenetileg
+   `UNKNOWN` — várd meg, ne erőltesd.
 
 8. **Merge előtti kapu (2026-11-17):** a fenti 1., 5. és 6. pontot (futásőr, `activeMatches`, kötelező ellenőrzések a jelenlegi fejen)
    és a nyitott review-szálakat, a független ellenőr ítéletét egy lépésben a `npm run gate:merge -- <PR>` ellenőrzi; a `gh pr merge`
