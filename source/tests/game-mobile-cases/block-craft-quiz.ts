@@ -35,6 +35,17 @@ async function answerWrong(page: Page): Promise<void> {
   await expect(page.getByTestId("quiz-feedback")).toBeVisible({ timeout: 5_000 });
 }
 
+/**
+ * Review #484 (Vercel): a kérdés-állapot mérése a bank egyik LEGHOSSZABB válaszú tételével (az évfolyam-bank 2850 tételéből
+ * programmal kikeresve: a válaszok összhossza itt a legnagyobb, 124 karakter; a leghosszabb egyedi válasz 38). Így az M2
+ * (célméret, átfedés) és az M3 a legrosszabb valós feliratokon fut; a levágást a `blockcraft-play.spec.ts` méri.
+ */
+export const LONGEST_RUNE_QUIZ = {
+  prompt: "Mi volt Bohr atommodelljének újdonsága Rutherfordéhoz képest?", // g12-science-014
+  options: ["az atomnak pozitív magja van", "elektron csak adott pályán kering", "az atom tömör, oszthatatlan golyó", "az elektronok szétszórva ülnek"],
+  correctIndex: 1,
+};
+
 /** Kockavadász „Rúnabánya” — S11 / J3a: teljes mobil-mérés (M1–M7, M9–M11), a kérdés-állapot a Rúna-zár. */
 export const CASE: GameMobileCase = {
   id: "block-craft-quiz",
@@ -46,6 +57,6 @@ export const CASE: GameMobileCase = {
   resultForce: { phase: "levelComplete" },
   resultTestId: "bc-level-complete",
   quizScope: '[data-testid="bc-quiz"]',
-  quizForce: { phase: "quiz" },
+  quizForce: { phase: "quiz", quiz: LONGEST_RUNE_QUIZ },
   answerWrong,
 };

@@ -1189,6 +1189,16 @@ export default function BlockCraftQuiz() {
   const [why, setWhy] = useState<FeedbackCard | null>(null);
   const whyRef = useRef(false);
   whyRef.current = why !== null;
+  /**
+   * J0c-b (review #484, Vercel): a két sorra vágott kérdés „Mutasd” gombbal kibontva — olvasás közben szünet (a világ, a
+   * pálya órája és a kérdés-óra is áll), a „Tovább” folytatja. Ugyanaz, mint a Matek / Szólétra `expanded` állapota.
+   */
+  const [expanded, setExpanded] = useState(false);
+  const expandedRef = useRef(false);
+  expandedRef.current = expanded;
+  /** Csak teszt-kampó: a következő rúnazár kérdése (pl. a bank leghosszabb válaszai — a mobil mérő levágás-esete). */
+  const forcedQuizRef = useRef<{ id: string; prompt: string; options: string[]; correctIndex: number } | null>(null);
+  const forcedSeqRef = useRef(0);
   /** S11: a joystick futó húzásának megszakítása (szünet, fókuszvesztés) — a VirtualJoystick resetSignal-ja. */
   const [joyReset, setJoyReset] = useState(0);
   const [bestResult, setBestResult] = useState<{ best: number; isNewBest: boolean } | null>(null);
@@ -1372,7 +1382,7 @@ export default function BlockCraftQuiz() {
   // A játékóra csak játék közben jár: szünet alatt áll (S11), a „Miért?” kártya olvasása alatt is (J0c), és a lejárt
   // kupon után is (#58). A pálya ideje NEM függ a válaszok helyességétől (J3a: a régi időcsökkentés megszűnt).
   useEffect(() => {
-    if (coupon.expired || why) return;
+    if (coupon.expired || why || expanded) return;
     if (phase !== "play" || paused) return;
     const id = setInterval(() => {
       // Review #484: a pálya-cél teljesülése után (a megoldás-kijelzés még fut) az óra áll — a határidő előtt teljesített
@@ -1387,7 +1397,7 @@ export default function BlockCraftQuiz() {
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [phase, paused, coupon.expired, why]);
+  }, [phase, paused, coupon.expired, why, expanded]);
 
   /**
    * S11 / A8 — központi szóbank (közös napló a hét játékkal). `null`, amíg tölt / ha a betöltés hibázott: akkor a
@@ -1526,7 +1536,14 @@ export default function BlockCraftQuiz() {
       get couponOnly() {
         return couponActiveRef.current && bankRef.current.some((q) => q.fromMaterial);
       },
-      material: (ctx) => pickMaterial(ctx?.accept),
+      material: (ctx) => {
+        const forced = forcedQuizRef.current;
+        if (forced) {
+          forcedQuizRef.current = null;
+          return bankPlayQuestion(BLOCK_CRAFT_GAME_ID, forced);
+        }
+        return pickMaterial(ctx?.accept);
+      },
       fresh: () => pickFreshRef.current(),
       legacyReviewFits: (it) => ownsReviewKey(it.key),
       restore: (it) => {
@@ -1714,6 +1731,7 @@ export default function BlockCraftQuiz() {
     setXpFloat(null);
     setAchievement(null);
     setWhy(null);
+    setExpanded(false);
     setPaused(false);
     setShowHint(true);
     releaseMovement();
@@ -1755,6 +1773,7 @@ export default function BlockCraftQuiz() {
     // S11: a kör vége a szünet menüből is jöhet — a nyitott kérdés „megszakítva” zárul, a kártya / szünet nem marad.
     qRef.current?.finish();
     setWhy(null);
+    setExpanded(false);
     setPaused(false);
     releaseMovement();
     releasePointerLock();
@@ -2373,7 +2392,7 @@ export default function BlockCraftQuiz() {
       if (mine) {
         const lh = lookHitRef.current;
         mine.aim(lh && vMineable(lh.t) ? { x: lh.x, y: lh.y, z: lh.z } : null);
-        alpha = mine.frame(realMs, pausedRef.current || whyRef.current);
+        alpha = mine.frame(realMs, pausedRef.current || whyRef.current || expandedRef.current);
         mine.drain(handleMineEventRef.current);
         // A pálya-cél után a futó megoldás-kijelzés még kifut (J0c), csak utána jön az eredményképernyő.
         if (mine.state().phase === "won" && qRef.current?.settled()) levelWonRef.current();
@@ -2615,7 +2634,7 @@ export default function BlockCraftQuiz() {
     // S11: szünetben a render-ciklus is áll (gyenge eszközön akkut is kímél).
     // #58: a lejárt kupon után is — a lejárati párbeszéd alatt a voxel-jelenet nem renderelhet tovább (a vászon az utolsó
     // képkockát mutatja). Szoftveres WebGL-en a futó ciklus minden bemenetet egy ~0,2–0,7 s-os képkockára várakoztatott.
-    const shouldRun = phase === "play" && !paused && !why && !glLost;
+    const shouldRun = phase === "play" && !paused && !why && !expanded && !glLost;
     if (!shouldRun || coupon.expired) {
       runningRef.current = false;
       cancelGameFrame(rafRef.current);
@@ -2625,7 +2644,7 @@ export default function BlockCraftQuiz() {
     runningRef.current = true;
     lastTRef.current = null; // dt-ugrás elkerülése a szünet után
     rafRef.current = requestGameFrame(stepRef.current);
-  }, [phase, paused, why, glLost, coupon.expired]);
+  }, [phase, paused, why, expanded, glLost, coupon.expired]);
 
   // #58: lejáratkor a futó mozgás és a pointer lock elengedése a JÁTÉK kezdeményezésére (selfUnlock) — így a böngésző
   // Esc-es lock-elengedése nem nyit szünet menüt a lejárati párbeszéd alatt, és az egér szabadon eléri a gombot.
@@ -2773,6 +2792,7 @@ export default function BlockCraftQuiz() {
           questionId: view?.presentation?.id ?? null,
           clock: mine?.clockMs() ?? 0,
           why: whyRef.current ? 1 : 0,
+          expanded: expandedRef.current ? 1 : 0,
         };
       },
       forceState: (patch) => {
@@ -2782,6 +2802,10 @@ export default function BlockCraftQuiz() {
         // K.2: azonnali kérdés — rúnaérc a játékos elé és Rúna-zár (a „quiz” kompatibilis álnév, terv 9.).
         if (patch.question === true || patch.phase === "quiz") {
           const mine = mineRef.current;
+          const quiz = patch.quiz as { prompt?: unknown; options?: unknown; correctIndex?: unknown } | undefined;
+          if (quiz && typeof quiz.prompt === "string" && Array.isArray(quiz.options) && typeof quiz.correctIndex === "number") {
+            forcedQuizRef.current = { id: `forced-${++forcedSeqRef.current}`, prompt: quiz.prompt, options: quiz.options.map(String), correctIndex: quiz.correctIndex };
+          }
           if (mine && phaseRef.current === "play") {
             const p = playerRef.current;
             const f = lookDirection(p.yaw, 0);
@@ -2940,7 +2964,7 @@ export default function BlockCraftQuiz() {
    * kibányászza, rövid nyomás egy „ütés” (3 ütés = egy blokk); rúnaércen Rúna-zárat nyit. KÉRDÉS NÉLKÜL (J3a).
    */
   const startMine = useCallback(() => {
-    if (pausedRef.current || phaseRef.current !== "play" || whyRef.current) return;
+    if (pausedRef.current || phaseRef.current !== "play" || whyRef.current || expandedRef.current) return;
     const mine = mineRef.current;
     const cam = cameraRef.current;
     if (!mine) return;
@@ -3057,7 +3081,7 @@ export default function BlockCraftQuiz() {
       const tl = touchLookRef.current;
       if (!tl || tl.id !== e.pointerId) return;
       touchLookRef.current = null;
-      if (tl.moved >= 12 || pausedRef.current || whyRef.current || phaseRef.current !== "play") return;
+      if (tl.moved >= 12 || pausedRef.current || whyRef.current || expandedRef.current || phaseRef.current !== "play") return;
       const mine = mineRef.current;
       if (!mine) return;
       // Rövid tap = egy „ütés” (3 ütés = egy blokk); rúnaércen Rúna-zár, nyitott zárnál a koppintott rúnakő választás.
@@ -3103,7 +3127,7 @@ export default function BlockCraftQuiz() {
    */
   const runeTaps = useMemo(() => createPointerTapTracker(), []);
   const onRune = useCallback((i: number) => {
-    if (pausedRef.current || whyRef.current || phaseRef.current !== "play") return;
+    if (pausedRef.current || whyRef.current || expandedRef.current || phaseRef.current !== "play") return;
     mineRef.current?.pick(i);
   }, []);
 
@@ -3332,6 +3356,7 @@ export default function BlockCraftQuiz() {
                 className={`bc-runes ${wrongShake && !reducedMotion ? "animate-shake" : ""}`}
                 data-testid="bc-quiz"
                 data-state={reveal ? "reveal" : "open"}
+                data-long={presentation.options.some((o) => o.label.length > 22) ? "true" : "false"}
                 role="group"
                 aria-label="Rúnakövek — koppints a jó válaszra"
               >
@@ -3515,6 +3540,8 @@ export default function BlockCraftQuiz() {
           mode="bar"
           skin="mine"
           disabled={paused || why !== null}
+          onExpand={() => setExpanded(true)}
+          onCollapse={() => setExpanded(false)}
           onWhy={openWhy}
           testId="bc-question"
           promptTestId="bc-prompt"
@@ -3636,7 +3663,11 @@ export default function BlockCraftQuiz() {
         .bc-crystals { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; min-height: 28px; border-radius: 9999px; background: rgba(15,23,42,.8); border: 1px solid rgba(103,232,249,.5); color: #cffafe; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
         .bc-compass-arrow { width: 20px; height: 20px; color: #5eead4; transform: rotate(var(--a, 0rad)); }
         /* J3a — a rúnagombok: a világban lebegő rúnakövek érinthető párjai (2×2, a célkereszt alatt; fekvőben egy sorban). */
-        .bc-runes { position: absolute; z-index: 24; left: 50%; transform: translateX(-50%); top: calc(50% + 34px); width: min(94vw, 560px); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; pointer-events: none; }
+        /* Review #484 (Vercel): a rúnasor ALULRÓL igazodik (a joystick fölé), így hosszú (több soros) válasznál felfelé nő, nem
+           lóg ki a játéktér alá; a felirat sosem vágódik (nincs sorkorlát), hosszú válasznál kisebb betű. */
+        .bc-runes { position: absolute; z-index: 24; left: 50%; transform: translateX(-50%); bottom: calc(max(8px, var(--game-safe-bottom)) + 136px); width: min(94vw, 560px); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; pointer-events: none; }
+        .bc-runes[data-long="true"] .bc-rune { font-size: 14px; line-height: 1.15; padding-top: 5px; padding-bottom: 5px; }
+        .bc-runes[data-long="true"] .bc-rune-letter { width: 30px; height: 30px; font-size: 17px; }
         .bc-runes.animate-shake { animation: bc-rune-shake 0.16s ease-in-out 2; }
         @keyframes bc-rune-shake {0%,100% { transform: translateX(-50%); }25% { transform: translateX(calc(-50% - 5px)); }75% { transform: translateX(calc(-50% + 5px)); }}
         .bc-rune { pointer-events: auto; display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 6px 10px 6px 6px; border-radius: 14px; text-align: left; color: #fff; font-weight: 800; font-size: 16px; line-height: 1.2;
@@ -3659,7 +3690,7 @@ export default function BlockCraftQuiz() {
           .bc-bottom[data-touch="true"] { position: absolute; z-index: 25; left: 50%; transform: translateX(-50%); bottom: max(8px, var(--game-safe-bottom)); max-width: 52%; padding: 0 !important; background: transparent; border: 0; pointer-events: none; }
           .bc-bottom[data-touch="true"] button { pointer-events: auto; }
           .bc-bottom[data-touch="true"] .bc-hotbar-empty { display: none; }
-          .bc-runes { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(54vw, 520px); top: calc(50% + 20px); gap: 8px; }
+          .bc-runes { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(54vw, 520px); bottom: calc(max(8px, var(--game-safe-bottom)) + 64px); gap: 8px; }
           .bc-rune { min-height: 50px; font-size: 15px; }
           .play-question[data-skin="mine"] { --play-question-top: calc(max(4px, var(--game-safe-top)) + 64px); }
           /* A chipsor a bal oldalon törik (a kérdéskártya fent középen, 40vw széles — nem takarhatja el az iránytűt). */

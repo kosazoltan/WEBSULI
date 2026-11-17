@@ -1,4 +1,5 @@
 import { devices, expect, test, type Page } from "@playwright/test";
+import { LONGEST_RUNE_QUIZ } from "./game-mobile-cases/block-craft-quiz";
 
 test.use({ serviceWorkers: "block", ...devices["Pixel 7"], viewport: { width: 390, height: 844 } });
 
@@ -135,3 +136,90 @@ test("jó rúnakő: dupla zsákmány (2 kristály), a kombó nő, és a követke
   await openLock(page);
   await expect(page.getByTestId("bc-prompt")).toBeVisible();
 });
+
+/* ------------------------- review #484 (Vercel): „Mutasd” szünet, leghosszabb válaszok ------------------------- */
+
+const LONG_PROMPT_QUIZ = {
+  prompt:
+    "Olvasd el figyelmesen: egy bányász reggel 12 kockát bányászott ki, délben a felét elhasználta egy híd építéséhez, " +
+    "délután még kétszer annyit bányászott, mint amennyi a híd után megmaradt neki, este pedig három kockát elcserélt " +
+    "egy fáklyára a falusinál. A nap végén minden megmaradt kockájából egyforma tornyokat épített, mindegyiket pontosan " +
+    "három kocka magasra, és egyetlen kocka sem maradt ki. Hány tornyot épített a bányász a nap végén?",
+  options: ["5", "4", "6", "3"],
+  correctIndex: 0,
+};
+
+test("„Mutasd”: a kibontott hosszú kérdés olvasása alatt a játék áll (világ, pálya-óra, kérdés-óra), a „Tovább” folytatja", async ({ page }) => {
+  await startGame(page);
+  await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONG_PROMPT_QUIZ);
+  const more = page.getByTestId("play-question-more");
+  await expect(more).toBeVisible({ timeout: 10_000 });
+  await more.click();
+  await expect.poll(async () => (await probe(page)).expanded, { timeout: 5_000 }).toBe(1);
+  const a = await probe(page);
+  const t0 = await page.getByTestId("game-progress").getAttribute("aria-valuenow");
+  await page.waitForTimeout(2_200);
+  const b = await probe(page);
+  expect(b.simTime, "kibontva a világ áll").toBe(a.simTime);
+  expect(b.clock, "kibontva a kérdés-óra (válaszidő) áll").toBe(a.clock);
+  expect(b.questionOpen, "a kérdés nem járt le").toBe(1);
+  expect(await page.getByTestId("game-progress").getAttribute("aria-valuenow"), "kibontva a pálya órája áll").toBe(t0);
+  await page.getByTestId("play-question-more").click();
+  await expect.poll(async () => Number((await probe(page)).clock), { timeout: 10_000 }).toBeGreaterThan(Number(a.clock));
+  expect((await probe(page)).expanded).toBe(0);
+});
+
+/** Tananyag-kérdésnél a válasz hosszabb is lehet (a lecke exportja): ~60 karakteres válaszok próbája. */
+const MATERIAL_LONG_QUIZ = {
+  prompt: "Mi a fotoszintézis lényege?",
+  options: [
+    "a növény fényenergiával szén-dioxidból és vízből cukrot készít",
+    "a növény a talajból felvett cukrot oxigénné alakítja át éjszaka",
+    "az állatok a napfény hatására saját testükben oxigént termelnek",
+    "a gombák a lebontott levelekből fényt és meleget állítanak elő",
+  ],
+  correctIndex: 0,
+};
+
+for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) for (const [name, LONG] of [["évfolyam-bank", LONGEST_RUNE_QUIZ], ["tananyag, ~60 karakter", MATERIAL_LONG_QUIZ]] as const) {
+  test.describe(`${vp.width}x${vp.height}`, () => {
+    test.use({ viewport: vp });
+    test(`leghosszabb válaszok (${name}): a rúnagombok szövege nem vágódik, a gombok a játéktéren belül, ≥ 48 px, nem fedik egymást`, async ({ page }) => {
+      await startGame(page);
+      await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONG);
+      await expect(page.locator('[data-testid="bc-quiz"] [data-correct]')).toHaveCount(4, { timeout: 10_000 });
+      const report = await page.evaluate(() => {
+        const scene = document.querySelector(".game-scene")!.getBoundingClientRect();
+        const runes = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="bc-quiz"] [data-correct]'));
+        const boxes = runes.map((el) => el.getBoundingClientRect());
+        const problems: string[] = [];
+        runes.forEach((el, i) => {
+          const r = boxes[i]!;
+          const label = el.querySelector<HTMLElement>(".bc-rune-label")!;
+          // Levágás: a felirat (és minden szövegsora) a gomb dobozán belül van — a gomb pedig a játéktéren belül (a játéktér
+          // `overflow: hidden`, ott vágódna le). Az egyes sorokat Range-dzsel mérjük (a soronkénti dobozok).
+          const range = document.createRange();
+          range.selectNodeContents(label);
+          for (const line of Array.from(range.getClientRects())) {
+            if (line.top < r.top - 1 || line.bottom > r.bottom + 1 || line.left < r.left - 1 || line.right > r.right + 1) {
+              problems.push(`${i}: a felirat egy sora kilóg a gombból`);
+              break;
+            }
+          }
+          if (r.width < 48 || r.height < 48) problems.push(`${i}: ${r.width}×${r.height}`);
+          if (r.top < scene.top - 1 || r.bottom > scene.bottom + 1 || r.left < -1 || r.right > innerWidth + 1) problems.push(`${i}: kilóg a játéktérből`);
+          for (let j = i + 1; j < boxes.length; j++) {
+            const b = boxes[j]!;
+            if (Math.min(r.right, b.right) - Math.max(r.left, b.left) >= 1 && Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top) >= 1) problems.push(`${i}×${j}: átfedés`);
+          }
+          if ((el.textContent ?? "").trim().length < 10) problems.push(`${i}: üres felirat`);
+        });
+        // A kérdéskártyát sem takarhatják (a prompt olvasható marad).
+        const card = document.querySelector(".play-question-card")?.getBoundingClientRect();
+        if (card) for (const [i, r] of boxes.entries()) if (r.top < card.bottom - 1 && r.bottom > card.top + 1 && r.left < card.right && r.right > card.left) problems.push(`${i}: a kérdéskártyára lóg`);
+        return problems;
+      });
+      expect(report).toEqual([]);
+    });
+  });
+}
