@@ -1,6 +1,6 @@
 # Eredmény-e-mail S2: atomi kézbesítés-foglalás + a bejelentkezett felhasználó kvíze az utolsó válasznál is küld
 
-**Állapot:** folyamatban – 2026-11-17, ág `fix/eredmeny-email-foglalas`
+**Állapot:** kész, PR előtt – 2026-11-17, ág `fix/eredmeny-email-foglalas`
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-foglalas-vegrehajtas.md`](2026-11-17-eredmeny-email-foglalas-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md); S1: `2026-11-17-eredmeny-email-kviz.md` (ág
 `fix/eredmeny-email-kviz` — a helyi kvíz és a levél tartalma).
@@ -69,8 +69,8 @@ A lezárás hívása ezután a foglalás miatt nem küld újra. A válasz menté
 - E5. A meglévő tesztek (`lesson-result-email-db`, `learning-db`) módosítás nélkül zöldek; a séma és a migrációk változatlanok.
 
 <!-- acceptance-checklist -->
-- [ ] E1 – párhuzamos küldés → egy levél címzettenként (valódi DB)
-- [ ] E2 – bukott címzett foglalása felszabadul, pótolható
-- [ ] E3 – szerveres kvíz: az utolsó válasz küld
-- [ ] E4 – az utána jövő lezárás nem küld újra
-- [ ] E5 – meglévő tesztek zöldek, séma változatlan
+- [x] E1 – párhuzamos küldés → egy levél címzettenként (valódi DB)
+- [x] E2 – bukott címzett foglalása felszabadul, pótolható
+- [x] E3 – szerveres kvíz: az utolsó válasz küld
+- [x] E4 – az utána jövő lezárás nem küld újra
+- [x] E5 – meglévő tesztek zöldek, séma változatlan

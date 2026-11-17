@@ -300,13 +300,24 @@ test("spec 2026-11-17-eredmeny-email-foglalas: a szerveres kvíz az UTOLSÓ vál
     assert.equal(sent.length, 0, "hiányos, le nem zárt kör nem megy el");
     const answered = await answerPractice("learner-mail", round.id, last.id, 0, false);
     assert.equal(answered.finishedAt, null, "az utolsó válasz nem zárja le a kört");
-    // Azonnal: ugyanaz a válasz újra (idempotens), és hat egyidejű lezárás — a levél még úton van.
+    // Ugyanaz a válasz újra (idempotens): nem küld másodszor. A levél LEZÁRÁS NÉLKÜL megérkezik.
     await answerPractice("learner-mail", round.id, last.id, 0, false);
+    await settle(2);
+    assert.deepEqual(sent.map(mail => mail.to).sort(), ["admin-a@example.test", "admin-b@example.test"], "a levél lezárás nélkül megjött, címzettenként egy");
+    assert.equal((await readPractice("learner-mail", round.id)).finishedAt, null, "a kör közben nincs lezárva");
+    assert.ok(sent.every(mail => /— Kvíz —/.test(mail.subject)));
+    // A későbbi lezárás (hat egyidejű hívással) nem küld újra.
     const finished = await Promise.all(Array.from({ length: 6 }, () => finishPractice("learner-mail", round.id)));
     assert.ok(finished.every(view => view.finishedAt));
-    await settle(2);
-    assert.deepEqual(sent.map(mail => mail.to).sort(), ["admin-a@example.test", "admin-b@example.test"], "címzettenként pontosan egy levél");
-    assert.ok(sent.every(mail => /— Kvíz —/.test(mail.subject)));
+    await settle(3);
+    assert.equal(sent.length, 2, "a lezárás nem küld második levelet");
+    // Új kör: utolsó válasz, majd AZONNAL hat egyidejű lezárás — a levél még úton van (foglalás a küldés előtt): címzettenként egy.
+    const next = await beginPractice("learner-mail", "practice");
+    assert.notEqual(next.id, round.id);
+    for (const q of next.questions) await answerPractice("learner-mail", next.id, q.id, 0, false);
+    await Promise.all(Array.from({ length: 6 }, () => finishPractice("learner-mail", next.id)));
+    await settle(5);
+    assert.equal(sent.length, 4, "a második kör is címzettenként pontosan egy levél");
   } finally {
     setResultSender(null);
     if (previous === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = previous;

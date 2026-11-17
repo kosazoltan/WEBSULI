@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail S2: atomi foglalás + szerveres kvíz az utolsó válasznál
 
-**Állapot:** folyamatban – 2026-11-17, ág `fix/eredmeny-email-foglalas`
+**Állapot:** kész, PR előtt – 2026-11-17, ág `fix/eredmeny-email-foglalas`
 Terv: `docs/specs/2026-11-17-eredmeny-email-foglalas.md`
 
 Útvonalak a `source/` alatt. Migráció és sémaváltozás NINCS; `npm run db:push` tilos. Valódi levél nem megy (a tesztek a
