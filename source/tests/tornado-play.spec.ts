@@ -55,11 +55,11 @@ async function waitJunction(page: Page): Promise<void> {
   await page.waitForFunction(() => (window as unknown as GameWindow).__websuliGame?.probe?.().questionKind === "junction", undefined, { timeout: 40_000 });
 }
 
-/** Szándék (J7b döntések 12.): rövid kormánymozdulat — a táblák rögzülnek. */
+/** Szándék (J7b döntések 12., 21.): egy fék-koppintás (azonnali szándék) — a táblák rögzülnek. */
 async function commitIntent(page: Page): Promise<void> {
-  await page.keyboard.down("a");
-  await page.waitForTimeout(250);
-  await page.keyboard.up("a");
+  await page.keyboard.down(" ");
+  await page.waitForTimeout(120);
+  await page.keyboard.up(" ");
   await page.waitForFunction(() => (window as unknown as GameWindow).__websuliGame?.probe?.().junctionFrozen === 1, undefined, { timeout: 10_000 });
 }
 

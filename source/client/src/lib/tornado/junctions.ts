@@ -203,21 +203,28 @@ export function segmentBlocked(
 }
 
 /**
- * A táblák rögzítése a jármű pillanatnyi helyéről: a vonal |v| × 2,4 s + 10 (+0…48), a köz 16 / 13 / 20 — az első olyan
+ * A táblák rögzítése a jármű pillanatnyi helyéről és MENETIRÁNYÁBÓL (R1: a középső kapu egyenesen előre van — a kanyar
+ * vagy az úttartás utáni irány nem „választ”): a vonal |v| × 2,2 s + 4 (+0…48), a köz 16 / 13 / 20 — az első olyan
  * elrendezés, amelyben a jármű helyéről mindhárom kapuhoz (és 6 egységgel mögé) ütközőmentes egyenes folyosó vezet, és a
  * kapu a világon belül van. Ha nincs ilyen, `false` (a táblák tovább várnak). Helyben módosít.
+ * R3: `attempt` megadásakor egy próba csak EGY vonal-távolságot néz (a keresés képkockák közé osztva, egy próba ≤ ~1 ms).
  */
 export function freezeJunction(
   j: Junction,
-  pose: { x: number; z: number },
+  pose: { x: number; z: number; heading?: number },
   speed: number,
   collidersAt: (x: number, z: number) => readonly Collider[],
+  attempt?: number,
 ): boolean {
   if (j.frozen) return true;
   const base = freezeLineDistance(speed);
-  for (const extra of JUNCTION_FREEZE_SEARCH) {
+  const h = pose.heading;
+  const fx = h === undefined ? j.fx : Math.sin(h);
+  const fz = h === undefined ? j.fz : -Math.cos(h);
+  const extras = attempt === undefined ? JUNCTION_FREEZE_SEARCH : [JUNCTION_FREEZE_SEARCH[attempt % JUNCTION_FREEZE_SEARCH.length]!];
+  for (const extra of extras) {
     for (const spacing of JUNCTION_SPACINGS) {
-      const cand: Junction = { ...j, ox: pose.x, oz: pose.z, line: base + extra, spacing };
+      const cand: Junction = { ...j, ox: pose.x, oz: pose.z, fx, fz, rx: -fz, rz: fx, line: base + extra, spacing };
       let ok = true;
       for (let i = 0; i < cand.gates && ok; i++) {
         const g = gatePoint(cand, i);

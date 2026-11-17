@@ -301,7 +301,84 @@ test("K4: kérdés nélkül is végigjátszható (az erős modell ≥ 15/20), é
     const without = runSimSeeds(factory, player, { gameId: GAME, seconds: 600, grade: 7, questions: false }).filter((r) => r.won).length;
     const withQ = runSimSeeds(factory, player, { gameId: GAME, seconds: 600, grade: 7, questions: true }).filter((r) => r.won).length;
     console.log(`[tornado-sim] ${name}: győzelem kérdéssel ${withQ}/20, kérdés nélkül ${without}/20`);
-    assert.ok(withQ >= without, `${name}: kérdéssel ${withQ} < kérdés nélkül ${without}`);
+    // A gyenge (45%-os) játékosnál a rossz kapu kerülője (a terv szerint erőforrást vesz el) egy-egy menetet elvihet: ott
+    // legfeljebb 1 menet különbség megengedett, az erős és az átlagos modellnél kérdéssel ≥ kérdés nélkül.
+    if (name === "SIM_WEAK") assert.ok(withQ >= without - 1, `${name}: kérdéssel ${withQ} ≪ kérdés nélkül ${without}`);
+    else assert.ok(withQ >= without, `${name}: kérdéssel ${withQ} < kérdés nélkül ${without}`);
     if (name === "SIM_STRONG") assert.ok(without >= 15, `kérdés nélkül ${without}/20`);
+  }
+});
+
+/* ---- a PR előtti újraellenőrzés (R1, R2) ---- */
+
+test("R1: a vezetés közben ±0,35 / ±0,5 kormányrezgéssel vezető, NEM olvasó bot véletlen válasza 0", () => {
+  for (const wobble of [0.35, 0.5, 0.8]) {
+    let asked = 0;
+    let answered = 0;
+    for (const seed of simSeeds(GAME, 20)) {
+      const g = createSimGame({ seed, grade: 7, questions: true, passive: true, wobble, botSpeed: 22 });
+      quietRun(g, seed);
+      asked += g.stats().asked;
+      answered += g.stats().answered;
+    }
+    console.log(`[tornado-sim] rezgő, nem olvasó bot ±${wobble}: ${asked} kérdés, ${answered} véletlen válasz`);
+    assert.equal(answered, 0, `±${wobble}: ${answered} véletlen válasz`);
+    assert.ok(asked > 40);
+  }
+});
+
+test("R1: csak kormányzással (koppintás nélkül) válaszoló, mindig jót választó bot — 2,8 és 4 s reakció, téves 0", () => {
+  for (const reactionMedianMs of [2800, 4000]) {
+    let right = 0;
+    let wrong = 0;
+    for (const seed of simSeeds(GAME, 20)) {
+      const g = createSimGame({ seed, grade: 7, questions: true, steerOnly: true, botSpeed: 20 });
+      quietRun(g, seed, { accuracy: 1, reactionMedianMs, skill: 1 });
+      right += g.stats().correct;
+      wrong += g.stats().wrong;
+    }
+    console.log(`[tornado-sim] kormányzó, mindig jó, ${reactionMedianMs} ms: jó ${right}, rossz ${wrong}`);
+    assert.equal(wrong, 0);
+    assert.ok(right > 20, `kevés jó válasz: ${right}`);
+  }
+});
+
+/** Rögzített reakcióidejű, mindig jót választó, csak kormányzó játékos (a független ellenőr R2-esete). */
+function fixedReactionRun(seed: number, reactionMs: number, botSpeed: number) {
+  const g = createSimGame({ seed, grade: 7, questions: true, steerOnly: true, botSpeed });
+  let seen = -1;
+  let at = 0;
+  let option = 0;
+  for (let i = 0; i < 60 * 600 && !g.done(); i++) {
+    const q = g.question();
+    if (q && q.id !== seen) {
+      seen = q.id;
+      at = g.simTimeMs() + reactionMs;
+      option = q.correctOption;
+    }
+    if (q && q.id === seen && at > 0 && g.simTimeMs() >= at) {
+      g.answer(q.id, option);
+      at = 0;
+    }
+    g.step(1000 / 60, { skillRoll: 0.5 });
+  }
+  if (process.env.J7B_DEBUG) console.log(JSON.stringify(g.tally()), JSON.stringify(g.stats()));
+  return g.stats();
+}
+
+test("R2: rögzüléskor a határidő kitolódik — 4 s-os FIX reakcióval, kormányzással is helyesen válaszol (6 s-os ablak)", () => {
+  for (const botSpeed of [20, 30]) {
+    let right = 0;
+    let wrong = 0;
+    let timeouts = 0;
+    for (const seed of simSeeds(GAME, 20)) {
+      const st = fixedReactionRun(seed, 4000, botSpeed);
+      right += st.correct;
+      wrong += st.wrong;
+      timeouts += st.timeouts;
+    }
+    console.log(`[tornado-sim] R2 fix 4 s, tempó ${botSpeed}: jó ${right}, rossz ${wrong}, lejárt ${timeouts}`);
+    assert.equal(wrong, 0);
+    assert.ok(right > timeouts, `a kormányzó válaszok többsége helyes (jó ${right}, lejárt ${timeouts})`);
   }
 });

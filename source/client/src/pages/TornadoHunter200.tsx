@@ -4,6 +4,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -1721,6 +1722,9 @@ function PlayScreen(props: {
   const frameClockRef = useRef(0);
   const signRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const answersRef = useRef<HTMLOListElement | null>(null);
+  /** A válaszlista magassága (kérdésenként egyszer mérve) és utoljára írt helye — a rajzoló hurok nem olvas layoutot. */
+  const answersHRef = useRef(0);
+  const answersTopRef = useRef(-1);
   /** A mozgó táblák koppintás-követője (felengedéskor a cél aktuális dobozán belül = válasz; elhúzás nem). */
   const signTracker = useMemo(() => createPointerTapTracker(), []);
 
@@ -2434,7 +2438,7 @@ function PlayScreen(props: {
   };
 
   /** A fix lépés kimenete — egyetlen, újrahasznált objektum (K5: a lépésben nincs foglalás). */
-  const simOutRef = useRef({ x: 0, z: 0, heading: 0, speed: 0, steer: 0, brake: false, hold: false });
+  const simOutRef = useRef({ x: 0, z: 0, heading: 0, speed: 0, steer: 0, brake: false, reverse: false, hold: false });
   const vehicleDimsRef = useRef(vehicleDimensions(props.vehicle.silhouette));
   vehicleDimsRef.current = vehicleDimensions(props.vehicle.silhouette);
   /** A gamepad képkockánként egyszer olvasva (K5). */
@@ -2461,6 +2465,7 @@ function PlayScreen(props: {
       out.speed = p0.speed;
       out.steer = 0;
       out.brake = false;
+      out.reverse = false;
       out.hold = true;
       return out;
     }
@@ -2581,6 +2586,8 @@ function PlayScreen(props: {
     out.speed = p.speed;
     out.steer = steer;
     out.brake = brake;
+    // R5: a hátrahúzott gáz is szándék (J7b döntések 12., 21.).
+    out.reverse = rawThrottle < -0.2;
     out.hold = anchorAsking || p.anchored || anchorBandState(distKm, bandSpecRef.current.anchorBand) === "in_band";
     return out;
   };
@@ -2599,12 +2606,20 @@ function PlayScreen(props: {
     const h = sizeRef.current.h;
     const compact = answersRef.current !== null;
     const labelW = compact ? 48 : Math.min(w * 0.26, 180);
-    // A teljes válaszok listája (hosszú válasznál) a kérdés-kártya alatt.
+    // A teljes válaszok listája (hosszú válasznál): állón a kérdés-kártya alatt, alacsony fekvőn a bal oldalon (R4). A lista
+    // magasságát kérdésenként egyszer mérjük (`answersHRef`, layout-effektben) — itt csak írunk, nem olvasunk layoutot (K5).
+    const sideList = h < 520 && w > h;
+    let answersBottom = 0;
     if (answersRef.current) {
-      answersRef.current.style.top = `${Math.max(90, cardBottomRef.current - sizeRef.current.top + 6)}px`;
-      answersRef.current.style.visibility = j ? "visible" : "hidden";
+      const top = sideList ? 64 : Math.max(90, cardBottomRef.current - sizeRef.current.top + 6);
+      if (answersTopRef.current !== top) {
+        answersTopRef.current = top;
+        answersRef.current.style.top = `${top}px`;
+      }
+      const vis = j ? "visible" : "hidden";
+      if (answersRef.current.style.visibility !== vis) answersRef.current.style.visibility = vis;
+      answersBottom = j && !sideList ? top + answersHRef.current : 0;
     }
-    const answersBottom = answersRef.current && j ? answersRef.current.offsetTop + answersRef.current.offsetHeight : 0;
     for (let i = 0; i < sc.signs.length; i++) {
       const sign = sc.signs[i]!;
       const el = signRefs.current[i] ?? null;
@@ -2631,7 +2646,8 @@ function PlayScreen(props: {
     signOrder.length = 0;
     for (let i = 0; i < sc.signs.length; i++) if (Number.isFinite(signX[i]!)) signOrder.push(i);
     signOrder.sort((a, b) => signX[a]! - signX[b]!);
-    const left = labelW / 2 + 4;
+    // R4: fekvőn a bal oldali válaszlista mellett (a lista ≤ min(30vw, 260) széles) kezdődnek a táblák.
+    const left = (sideList && compact ? Math.min(w * 0.3, 260) + 16 : 4) + labelW / 2;
     const right = w - labelW / 2 - 4;
     const spread = () => {
       for (let k = 1; k < signOrder.length; k++) {
@@ -2847,8 +2863,6 @@ function PlayScreen(props: {
    * fajtája lent középen áll, és gomb-módban a bal felső panel elrejtve — különben a bal gombsor alá kerülne.
    */
   const shortLandscape = typeof window !== "undefined" && window.matchMedia?.("(orientation: landscape) and (max-height: 520px)").matches === true;
-  /** A bal felső panel ott rejtett, ahol a kérdés-sáv kártyája / gombsora alá kerülne. */
-  const hidePanel = qKind !== null && (shortLandscape ? qKind !== "junction" : qKind === "junction");
   /** A kérdés fajtájának helye: fekvőn lent középen; állón sáv-módban lent balra, gomb-módban a bal felső panelben. */
   const chipSpot: "panel" | "bottom-center" | "bottom-left" | null = !qKind ? null : shortLandscape ? "bottom-center" : qKind === "junction" ? "bottom-left" : "panel";
   /**
@@ -2863,6 +2877,13 @@ function PlayScreen(props: {
       return estimateLines(o.label, textW, 15) > 2 || longestWord * 15 * 0.6 > textW;
     });
   })();
+  /** A bal felső panel ott rejtett, ahol a kérdés-sáv kártyája / gombsora alá kerülne (R4: fekvőn a válaszlista helyén is). */
+  const hidePanel = qKind !== null && (shortLandscape ? qKind !== "junction" || compactSigns : qKind === "junction");
+  // K5: a válaszlista magassága kérdésenként egyszer (a rajzoló hurok ebből számol, képkockánként nem olvas layoutot).
+  useLayoutEffect(() => {
+    answersTopRef.current = -1;
+    answersHRef.current = answersRef.current ? answersRef.current.offsetHeight : 0;
+  }, [pres?.id, compactSigns]);
   const kindChip =
     pres && qKind ? (
       <div data-testid="tornado-question-kind" data-kind={qKind} className="px-2 py-1 rounded-lg bg-amber-400/90 text-slate-950 text-xs font-bold">
@@ -2901,7 +2922,9 @@ function PlayScreen(props: {
           <ol
             ref={answersRef}
             data-testid="tornado-sign-answers"
-            className="absolute left-1/2 top-0 -translate-x-1/2 w-[min(92vw,560px)] rounded-xl bg-slate-950/85 p-2 flex flex-col gap-1 text-[15px] font-bold text-white"
+            className={`absolute top-0 rounded-xl bg-slate-950/85 p-2 flex flex-col gap-1 text-[15px] font-bold text-white ${
+              shortLandscape ? "left-2 w-[min(30vw,260px)]" : "left-1/2 -translate-x-1/2 w-[min(92vw,560px)]"
+            }`}
             style={{ visibility: "hidden" }}
             aria-label="A táblák válaszai"
           >

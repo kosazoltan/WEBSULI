@@ -150,10 +150,19 @@ export type ChaseEvent =
  * A jármű egy lépés utáni helyzete + a játékos bemenete ebben a lépésben (a szándék-figyeléshez, J7b döntések 12.):
  * `steer` −1..1, `brake` lenyomva, `tap` (billentyű / koppintás a kérdés megjelenése óta, a lap jelzi).
  */
-export type VehicleSample = Pose & { speed: number; steer?: number; brake?: boolean; tap?: boolean };
+export type VehicleSample = Pose & { speed: number; steer?: number; brake?: boolean; tap?: boolean; reverse?: boolean };
 
-/** A szándék küszöbe: a kormány ennyivel tér el a kérdés megjelenésekori értékétől. */
-export const INTENT_STEER_DELTA = 0.3;
+/**
+ * A kormány-szándék (R1, orkesztrátori döntés A): csak a kérdés megjelenése után `INTENT_MIN_READ_MS`-mal számít, és
+ * FENNTARTOTT kitérés kell hozzá — a megjelenéskori értéktől legalább `INTENT_STEER_DELTA`-val, ugyanabba az irányba,
+ * `INTENT_STEER_HOLD_MS` ideig (a vezetés közbeni kormányrezgés / úttartás nem választ). Koppintás, 1–3 billentyű, fék és
+ * a hátrahúzott gáz (R5) azonnal szándék.
+ */
+export const INTENT_STEER_DELTA = 0.6;
+export const INTENT_STEER_HOLD_MS = 500;
+export const INTENT_MIN_READ_MS = 1000;
+/** R2: rögzüléskor a határidő legalább a kapuig érés + ennyi (a kormányzással válaszolónak se legyen rövidebb az ablaka). */
+export const FREEZE_DEADLINE_MARGIN_MS = 400;
 /** K4: ennyi ms után a turbópad kérdés nélkül ad nitrót, ha a director nem ad kérdést. */
 export const PAD_FREE_AFTER_MS = 1500;
 
@@ -205,6 +214,16 @@ export function createChaseCore(opts: {
   let brake0 = false;
   let intent = false;
   let freezeRetry = 0;
+  let freezeAttempt = 0;
+  let freezeBackoff = 3;
+  let shownAt = 0;
+  let steerHeldMs = 0;
+  let steerHeldSign = 0;
+  /** A fenntartott kitérés kezdetekori menetirány: kormány-szándéknál a kapuk ehhez igazodnak (a kanyarodás maga a választás). */
+  let holdHeading = 0;
+  let intentHeading = 0;
+  const prevPt = { x: 0, z: 0 };
+  const freezePose = { x: 0, z: 0, heading: 0 };
   let padAskSince: number | null = null;
   let junction: Junction | null = null;
   /** Az első elágazás a director bemelegítése után azonnal jöhet; utána indítástól számított 15–20 mp. */
@@ -251,16 +270,46 @@ export function createChaseCore(opts: {
       if (junction) {
         const act = q.active();
         if (act && act.id === junction.questionId) {
-          if (!intent && (Math.abs(steerNow - steer0) > INTENT_STEER_DELTA || brakeNow !== brake0 || v.tap === true)) intent = true;
+          if (!intent) {
+            // R1: fenntartott, egyirányú kormány-kitérés a minimális olvasási idő után; koppintás / billentyű / fék / hátramenet azonnal.
+            const dev = steerNow - steer0;
+            const sign = Math.abs(dev) >= INTENT_STEER_DELTA ? Math.sign(dev) : 0;
+            if (sign !== 0 && sign === steerHeldSign) steerHeldMs += dtMs;
+            else {
+              steerHeldMs = sign !== 0 ? dtMs : 0;
+              holdHeading = v.heading;
+            }
+            steerHeldSign = sign;
+            const steerIntent = clock - shownAt >= INTENT_MIN_READ_MS && steerHeldMs >= INTENT_STEER_HOLD_MS;
+            const otherIntent = brakeNow !== brake0 || v.tap === true || v.reverse === true;
+            if (steerIntent || otherIntent) {
+              intent = true;
+              // Koppintásnál / billentyűnél a pillanatnyi irány (a középső kapu egyenesen előre); kormány-szándéknál a
+              // kanyarodás kezdetekori irány — így a már megkezdett kanyar a választott oldalkapu felé visz (R1).
+              intentHeading = otherIntent ? v.heading : holdHeading;
+            }
+          }
           if (!junction.frozen) {
             slideJunction(junction, v, speed);
-            // Rögzülés a szándék után; foglalt folyosónál 6 lépésenként újrapróba (M2: ha nincs szabad hely, tovább várnak).
+            // Rögzülés a szándék után; foglalt folyosónál növekvő várakozással, próbánként egy távolsággal (R3).
             if (intent && freezeRetry-- <= 0) {
-              if (freezeJunction(junction, v, speed, collidersAt)) events.push({ kind: "junction-frozen", junction });
-              else freezeRetry = 6;
+              freezePose.x = v.x;
+              freezePose.z = v.z;
+              freezePose.heading = intentHeading;
+              if (freezeJunction(junction, freezePose, speed, collidersAt, freezeAttempt++)) {
+                // R2: a kapuig érés ideje + 0,4 s belefér az ablakba (a kormányzással válaszoló se kapjon rövidebb időt).
+                const arriveMs = (junction.line / Math.max(1, Math.abs(speed))) * 1000;
+                act.windowMs = Math.max(act.windowMs, clock - act.startedAtSimMs + arriveMs + FREEZE_DEADLINE_MARGIN_MS);
+                events.push({ kind: "junction-frozen", junction });
+              } else {
+                freezeRetry = freezeBackoff;
+                freezeBackoff = Math.min(30, freezeBackoff + 3);
+              }
             }
           } else {
-            const opt = junctionCrossing(junction, { x: prevX, z: prevZ }, v);
+            prevPt.x = prevX;
+            prevPt.z = prevZ;
+            const opt = junctionCrossing(junction, prevPt, v);
             if (opt !== null) q.pick(opt, clock);
           }
         }
@@ -303,6 +352,11 @@ export function createChaseCore(opts: {
         brake0 = brakeNow;
         intent = false;
         freezeRetry = 0;
+        freezeAttempt = 0;
+        freezeBackoff = 3;
+        shownAt = clock;
+        steerHeldMs = 0;
+        steerHeldSign = 0;
         events.push({ kind: "junction", junction });
       }
     },
@@ -451,6 +505,13 @@ export function createSimGame(opts: {
   botSpeed?: number;
   /** Mérés: a bot soha nem nyúl a vezérlőhöz a kérdések alatt (B1: a passzív átlépés nem válasz). */
   passive?: boolean;
+  /**
+   * Mérés (R1): a nem olvasó bot vezetés közben a tölcsér felé kormányoz, és erre `wobble` amplitúdójú kormányrezgés ül
+   * (sin 1,7t) — a független ellenőr „rezgő, nem olvasó” botja. Csak a `passive`-vel együtt értelmes.
+   */
+  wobble?: number;
+  /** Mérés: a bot csak kormányzással jelez szándékot (koppintás nélkül). */
+  steerOnly?: boolean;
 }): TornadoSim {
   const botSpeed = opts.botSpeed ?? BOT_SPEED;
   const level = levelForGrade(opts.grade);
@@ -532,6 +593,7 @@ export function createSimGame(opts: {
     }
     const over = won || lost;
     const passiveSteer = steerOut;
+    let wobbleSteer = 0;
     steerOut = 0;
     const tapNow = tapOut;
     tapOut = false;
@@ -564,11 +626,24 @@ export function createSimGame(opts: {
         const pad = core.pad();
         if (j) {
           if (choice && choice.id === j.questionId) {
-            const g = gatePoint(j, choice.option);
-            steerTo(g.x + j.fx * 20, g.z + j.fz * 20, dt);
+            const center = (j.gates - 1) / 2;
+            if (!j.frozen && choice.option !== center) {
+              // Oldalkapu kormányzással: a gyerek határozottan (fenntartva) a választott oldal felé húzza a tárcsát.
+              const side = choice.option < center ? -1 : 1;
+              car.heading += side * 0.75 * BOT_TURN * dt;
+              steerOut = side * 0.75;
+            } else {
+              const g = gatePoint(j, choice.option);
+              steerTo(g.x + j.fx * 20, g.z + j.fz * 20, dt);
+            }
           }
-        } else if (pad && padTry) steerTo(pad.x, pad.z, dt);
-        else steerTo(tp.x, tp.z, dt);
+        } else if (pad && padTry && !opts.passive) steerTo(pad.x, pad.z, dt);
+        else if (opts.wobble) {
+          const want = Math.atan2(tp.x - car.x, -(tp.z - car.z));
+          const diff = ((want - car.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+          wobbleSteer = Math.max(-1, Math.min(1, diff * 2 + opts.wobble * Math.sin(elapsed * 1.7)));
+          car.heading += wobbleSteer * BOT_TURN * dt;
+        } else steerTo(tp.x, tp.z, dt);
         car.speed = botSpeed * (core.nitroLeftMs() > 0 ? NITRO_SPEED_FACTOR : 1);
         car.x = clampToWorld(car.x + Math.sin(car.heading) * car.speed * dt);
         car.z = clampToWorld(car.z - Math.cos(car.heading) * car.speed * dt);
@@ -577,7 +652,7 @@ export function createSimGame(opts: {
       if (!anchored && !anchorAsking && (tp.born > spec.tornadoLifetime || elapsed > spec.timeLimit)) lost = true;
     }
     // A passzív bot (B1-mérés) semmit nem jelez: a kormánya és a koppintása 0, az iránytartást a „kocsi” maga végzi.
-    const steer = opts.passive ? 0 : passiveSteer;
+    const steer = opts.passive ? (opts.wobble ? wobbleSteer : 0) : passiveSteer;
     return { ...car, steer, tap: opts.passive ? false : tapNow, hold: anchored || anchorBandState(distKm(), spec.anchorBand) === "in_band" };
   };
   driver = createChaseDriver({
@@ -618,7 +693,10 @@ export function createSimGame(opts: {
       if (opts.passive) return;
       if (d.core.kindOf(id) === "junction") {
         choice = { id, option }; // a bot a választott kapu felé kormányoz; a válasz az áthajtás
-        tapOut = true; // a döntés jelzése (a gyerek a kormányhoz / a táblához nyúl): szándék
+        // A döntés jelzése: koppintás. A csak kormányzó bot oldalkapunál kormányoz; az egyenes (középső) kapuhoz
+        // kormányozni nem lehet, oda koppint — ez a játékban is így van (a középső táblára koppintás / 2-es billentyű).
+        const jj = d.core.junction();
+        tapOut = !opts.steerOnly || (jj !== null && option === (jj.gates - 1) / 2); // a döntés jelzése (a gyerek a kormányhoz / a táblához nyúl): szándék
         return;
       }
       ui.pick(option, d.core.clockMs());
