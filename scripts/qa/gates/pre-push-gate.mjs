@@ -5,7 +5,7 @@
 // Használat: node scripts/qa/gates/pre-push-gate.mjs [--base origin/main] [--slice]
 //   --slice  szelet-mód: a közös modulok (gates.config.json sliceSharedPatterns) érintése is figyelmeztet
 
-import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import {
@@ -101,7 +101,12 @@ function readAuditCfg(root, cfg) {
 /** C-61: az őr-tesztek a HEAD + friss origin/main összefésült állapotán, ideiglenes leválasztott munkafában. */
 async function mergedGuardCheck(ctx) {
   const { exec, git, src, base, node } = ctx;
-  const tmp = mkdtempSync(join(tmpdir(), 'websuli-gate-merge-'));
+  // A munkafák szokásos, gitignore-olt helyén (a fő checkout .claude/worktrees/ mappájában), NEM az os.tmpdir() alatt: ott a
+  // Windows 8.3-as rövid útja (`KSAZOL~1`) a `new URL(...).pathname`-t használó őr-segédeket (%7E) elrontotta (mérve 2026-11-17).
+  const common = git.commonDir();
+  const parent = basename(common) === '.git' ? join(dirname(common), '.claude', 'worktrees') : tmpdir();
+  mkdirSync(parent, { recursive: true });
+  const tmp = mkdtempSync(join(parent, '_gate-merge-'));
   const link = join(tmp, 'source', 'node_modules');
   const cleanup = () => {
     // Előbb a csomópont-hivatkozás (soha nem rekurzív törlés rajta át!), aztán a munkafa. A fő munkafában semmit nem abortálunk.

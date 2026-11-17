@@ -1,7 +1,7 @@
 # Végrehajtás: Minőségkapuk (AI-olvasható utasítás)
 
 > Terv: `docs/specs/2026-11-17-minosegkapuk.md` · Ág: `chore/minosegkapuk` · Munkafa: `.claude/worktrees/minosegkapuk`
-> **Állapot:** folyamatban
+> **Állapot:** megvalósítva (PR megnyitva; merge a tulajdonosé / az orkesztrátoré)
 
 Szabályok erre a szeletre: a `source/` alatti alkalmazáskód nem módosul; minden szkript Node ESM, függőség nélkül; regexet csak
 Edit / Write eszközzel írj, és olvasd vissza; tesztet gyengíteni tilos; titok / e-mail-cím sehova (a tesztekben a szintetikus címet
@@ -200,4 +200,16 @@ futásidőben, darabokból kell összerakni, hogy a `no-real-emails-guard` ne l�
 
 ## Döntésnapló (ütköző követelmények)
 
-- (kitöltendő a végrehajtás során: minden ütközésnél a választott szigorúbb ág és az indok)
+- **Heurisztikus titok-gyanú:** az `enforce-repo-rules` `password = "…"` mintája a repó saját tesztértékein (pl.
+  `SESSION_SECRET: 'test-…'`) is jelez. Döntés: a nagy biztonságú minták (privát kulcs, AWS, token-előtag, jelszavas nem-loopback
+  DB-URL) `FAIL`, a heurisztika `WARN` (emberi átnézés). Indok: hamis bukás vészkijárat nélkül megállítaná a munkát.
+- **Gyors mód és `tsc`:** mérve `check` 29–46 s, `check:test` 26–71 s; a `--fast` mindkettőt csak releváns változásnál futtatja (D12).
+- **Ideiglenes munkafa helye (C-61-ellenőrzés):** az `os.tmpdir()` 8.3-as rövid útja (`KSAZOL~1`) a `new URL(...).pathname`-t használó
+  őr-segédet (`tests/helpers/workflow-write-graph.ts`) elrontotta (hamis bukás, mérve). Döntés: a fő checkout gitignore-olt
+  `.claude/worktrees/_gate-merge-*` mappája; a `node_modules` csomópont-hivatkozás előbb `unlinkSync`-kel törlődik, csak utána a munkafa.
+- **Hibakezelés a hookban:** fail-open helyett (a meglévő hookok szokása) a kibocsátó parancsokon DENY — a terv D6 szigorúbb ága.
+- **Commit-attribúció:** a megbízás „Claude Fable 5.2” sort kért; a commitok a futtató modell valós nevét viselik (Claude Opus 5.5) a
+  rendszer-attribúció szerint.
+- **A bizonyíték nem írja felül a zöld push-bizonyítékot:** a bukott `pre-pr-gate` csak a `pre-pr-<fej>` fájlt írja.
+- **Megfigyelt mellékcsapda (meglévő hook, nem módosítva):** a `check-audit-ok` `\bgit\b…\bpush\b` mintája egy `.git/…/pre-push-…`
+  útvonalat tartalmazó olvasó parancsot is push-nak vett (DENY). Kerülőút: a naplót Read / Grep eszközzel olvasni. Jegyre javasolt.

@@ -241,7 +241,10 @@ export function createGate(name, { log = (s) => process.stdout.write(`${s}\n`), 
 /** Egy külső parancs lépés-eredménnyé alakítva (a kimenet csak bukáskor, szűrve). */
 export function cmdResult(r, okNote = '') {
   if (r.code === 0) return { status: STATUS.PASS, note: okNote };
-  return { status: STATUS.FAIL, note: `kilépési kód ${r.code}`, detail: `${r.stdout}\n${r.stderr}` };
+  const all = `${r.stdout}\n${r.stderr}`;
+  // node:test: a bukások összefoglalója („✖ failing tests:”) a lényeg — azt mutatjuk, ne a futás utolsó, zöld sorait.
+  const i = all.indexOf('failing tests:');
+  return { status: STATUS.FAIL, note: `kilépési kód ${r.code}`, detail: i >= 0 ? all.slice(Math.max(0, i - 2)) : all };
 }
 
 // ---- Független ellenőr ítélete (D9) -----------------------------------------------------------------------------------
