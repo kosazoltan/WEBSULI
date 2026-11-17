@@ -110,6 +110,12 @@ const measure = (page: Page) =>
     const cardBg = getComputedStyle(card).backgroundColor;
     const out = {
       key: "",
+      tight: document.querySelector<HTMLElement>('[data-testid="wl-question"]')?.dataset.wlTight === "true",
+      statusAfter: (() => {
+        const st = card.querySelector<HTMLElement>('[data-testid="play-question-status"]');
+        const c = st ? getComputedStyle(st, "::after").content : "none";
+        return c && c !== "none" && c !== "normal" ? c : "";
+      })(),
       text: focus?.innerText ?? "",
       kind: focus?.dataset.kind ?? "",
       fit: focus?.dataset.fit ?? "",
@@ -192,18 +198,21 @@ async function runItems(page: Page, ids: string[], opts: { lang: "en" | "de" | "
 
 const keyOf = (id: string) => (id.startsWith("vocab:") ? `vocab:${id.split(":")[1]!.slice(0, 2)}:${id.split(":")[1]}` : `bank:word-ladder-hu-en:${id}`);
 
-/** Az elvárások: a szabályból (C-15). Szó: ≥ 1,6× a keretsor; mondat: ≥ 1,25× (helyhiánynál a kártya kicsinyedik, review K2). */
+/** Az elvárások: a szabályból (C-15). Szó: ≥ 1,6× a keretsor; mondat: ≥ 1,25× (helyhiánynál a kártya kicsinyedik, review K2);
+ *  egy 360 px-en ki nem férő hosszú szó (review Ú3, `fit=width`): ≥ 1,25×, de szó közben nem törik. */
 function check(rows: Row[], label: string) {
   for (const m of rows) {
     const at = `${label} ${m.state} ${m.key} „${m.text.slice(0, 40)}”`;
     expect(m.overHolds, `${at}: a kérdés-kártya fedi a fogásokat (alja ${m.cardBottom}, fogások ${m.holdsTop})`).toBe(false);
     expect(m.overHud, `${at}: a kérdés-kártya fedi a HUD-ot`).toBe(false);
     expect(m.clipped, `${at}: levágás`).toBe(false);
+    // Review Ú2: ha a hosszú megoldás-sor helyhiány miatt rejtett, rövid jelzés látszik helyette (a gyerek nem marad szöveg nélkül).
+    if (m.tight) expect(m.statusAfter, `${at}: a rejtett megoldás-sor helyén rövid jelzés`).not.toBe("");
     if (!m.text) continue;
     expect(m.frameFs, `${at}: keretsor betű`).toBeGreaterThanOrEqual(16);
     if (m.frameContrast !== null) expect(m.frameContrast, `${at}: keretsor kontraszt`).toBeGreaterThanOrEqual(4.5);
     expect(m.frameOpacity, `${at}: a keretsor nem halványított`).toBe(1);
-    expect(m.fs / m.frameFs, `${at}: betűarány ${m.fs}/${m.frameFs}`).toBeGreaterThanOrEqual(m.kind === "word" ? 1.6 : 1.25);
+    expect(m.fs / m.frameFs, `${at}: betűarány ${m.fs}/${m.frameFs}`).toBeGreaterThanOrEqual(m.kind === "word" && m.fit !== "width" ? 1.6 : 1.25);
     expect(m.contrast, `${at}: kontraszt`).toBeGreaterThanOrEqual(3);
     expect(m.overflowX, `${at}: vízszintesen kilóg`).toBe(false);
     expect(m.broken, `${at}: szó közben tör`).toEqual([]);
@@ -216,7 +225,7 @@ function check(rows: Row[], label: string) {
 
 function report(rows: Row[], label: string) {
   for (const m of rows) {
-    console.log(`K2|${label}|${m.state}|${m.key}|${m.kind}|${m.fs}px|${m.fit}|kártya alja ${m.cardBottom}|fogások ${m.holdsTop}|rés ${m.gap}|fed ${m.overHolds}|vág ${m.clipped}`);
+    console.log(`K2|${label}|${m.state}|${m.key}|${m.kind}|${m.fs}px|${m.fit}|kártya alja ${m.cardBottom}|fogások ${m.holdsTop}|rés ${m.gap}|fed ${m.overHolds}|vág ${m.clipped}|rejtett-megoldássor ${m.tight}`);
   }
 }
 
@@ -225,7 +234,8 @@ for (const vp of VIEWS) {
     test.setTimeout(300_000);
     await page.setViewportSize(vp);
     await stub(page);
-    const ids = [...longestItems(WORD_LADDER_EN, VOCAB_EN), "vocab:en4-family-006:phrase-meaning", "vocab:en4-health-016:phrase-meaning"];
+    // Review Ú3: a leghosszabb kötőjel nélküli szódarabok is (az ellenőr listájából).
+    const ids = [...longestItems(WORD_LADDER_EN, VOCAB_EN), "vocab:en4-family-006:phrase-meaning", "vocab:en4-health-016:phrase-meaning", "vocab:en4-nature-020:hu-to-target", "vocab:en2-school-003:hu-to-target"];
     const rows = await runItems(page, ids, { lang: "en", grade: "11" });
     report(rows, `en ${vp.width}x${vp.height}`);
     const keys = new Set(rows.filter((r) => r.text).map((r) => r.key));
@@ -243,11 +253,14 @@ for (const vp of VIEWS) {
     test.setTimeout(400_000);
     await page.setViewportSize(vp);
     await stub(page);
-    const de = ["de4-060", "vocab:de4-body-006:phrase-meaning", "vocab:de4-nature-014:phrase-meaning", ...longestItems(WORD_LADDER_DE, VOCAB_DE, { cloze: false })];
+    const named = ["de4-060", "vocab:de4-body-006:phrase-meaning", "vocab:de4-nature-014:phrase-meaning", "vocab:de4-nature-002:target-to-hu", "vocab:de4-technology-011:target-to-hu", "vocab:de4-communication-004:target-to-hu"];
+    const de = [...new Set([...named, ...longestItems(WORD_LADDER_DE, VOCAB_DE, { cloze: false })])];
     const deRows = await runItems(page, [...new Set(de)], { lang: "de", grade: "11" });
     report(deRows, `de ${vp.width}x${vp.height}`);
     const deKeys = new Set(deRows.map((r) => r.key));
-    for (const id of ["de4-060", "vocab:de4-body-006:phrase-meaning", "vocab:de4-nature-014:phrase-meaning"]) expect(deKeys.has(keyOf(id)), `mérve: ${id}`).toBe(true);
+    for (const id of named) expect(deKeys.has(keyOf(id)), `mérve: ${id}`).toBe(true);
+    // Review Ú4: darabszám-állítás — üres futás nem lehet zöld.
+    expect(deKeys.size, `német célkártyák mérve: ${[...deKeys].join(" | ")}`).toBeGreaterThanOrEqual(de.length - 2);
     check(deRows, "de");
     const ctx = await browser.newContext({ viewport: vp, hasTouch: true, serviceWorkers: "block" });
     const fr = await ctx.newPage();
@@ -260,6 +273,67 @@ for (const vp of VIEWS) {
     await ctx.close();
   });
 }
+
+/**
+ * Review Ú1: hiba utáni kérdésnél (az előző hiba „Miért?” gombja még a kártya lábában) a kijelzés-tartalék nem foglalódhat
+ * kétszer — ugyanaz a tétel ugyanakkora célkártya-betűvel jelenjen meg, mint rendes kérdésnél. Két menet ugyanazzal a
+ * sorrenddel: (A) minden válasz helyes; (B) a töltelék-tételekre rossz válasz, a mért tételekre helyes.
+ */
+async function focusSizesAfter(page: Page, items: string[], fillers: string[], wrongFillers: boolean): Promise<Map<string, number>> {
+  await page.addInitScript(() => {
+    localStorage.setItem("websuli.classroomGrade", "11");
+    localStorage.setItem("websuli.wordladder.lang", "en");
+  });
+  const order = items.flatMap((id, i) => [fillers[i]!, id]);
+  await page.goto(`/games/word-ladder-hu-en?seed=11&wall=60&wlItems=${encodeURIComponent(order.join(","))}`);
+  await page.getByTestId("wl-start").click();
+  const want = new Set(items.map(keyOf));
+  const sizes = new Map<string, number>();
+  let lastId: string | number | null = null;
+  const deadline = Date.now() + 150_000;
+  while (Date.now() < deadline && sizes.size < want.size) {
+    const p = await probe(page);
+    if (p.questionOpen === 1 && p.questionId !== lastId && p.reveal === 0) {
+      lastId = p.questionId;
+      await expect.poll(async () => { const q = await probe(page); return Number(q.clock) >= Number(q.armedAt); }, { timeout: 5_000 }).toBe(true);
+      await page.waitForTimeout(250);
+      const key = String(p.questionKey ?? "");
+      const isItem = want.has(key);
+      if (isItem) {
+        const fs = await page.evaluate(() => {
+          const f = document.querySelector<HTMLElement>('[data-testid="wl-prompt-focus"]');
+          return f ? parseFloat(getComputedStyle(f).fontSize) : 0;
+        });
+        sizes.set(key, fs);
+      }
+      const correct = isItem || !wrongFillers;
+      const opt = page.locator(`[data-testid^="wl-option-"][data-correct="${correct ? "true" : "false"}"]:not([disabled])`).first();
+      await opt.click({ timeout: 3_000 }).catch(() => undefined);
+    }
+    await page.waitForTimeout(150);
+  }
+  return sizes;
+}
+
+test("Ú1 @ 360x640: hiba utáni kérdésnél a célkártya betűje ugyanakkora, mint rendes kérdésnél (nincs kétszeres helyfoglalás)", async ({ browser }) => {
+  test.setTimeout(400_000);
+  const items = ["en4-052", "vocab:en4-health-023:phrase-meaning", "vocab:en4-time-004:cloze", "vocab:en4-family-006:phrase-meaning"];
+  const fillers = ["en0-001", "en0-002", "en0-003", "en0-004"];
+  const run = async (wrong: boolean) => {
+    const ctx = await browser.newContext({ viewport: { width: 360, height: 640 }, hasTouch: true, serviceWorkers: "block" });
+    const page = await ctx.newPage();
+    await stub(page);
+    const sizes = await focusSizesAfter(page, items, fillers, wrong);
+    await ctx.close();
+    return sizes;
+  };
+  const normal = await run(false);
+  const afterError = await run(true);
+  console.log(`Ú1|rendes ${JSON.stringify([...normal])}|hiba után ${JSON.stringify([...afterError])}`);
+  expect(normal.size, "mind a négy tétel mérve (rendes)").toBe(items.length);
+  expect(afterError.size, "mind a négy tétel mérve (hiba után)").toBe(items.length);
+  for (const [key, fs] of normal) expect(afterError.get(key), `${key}: hiba után ${afterError.get(key)} px, rendesen ${fs} px`).toBe(fs);
+});
 
 test("SZ-2 / kapu 3(a): az óra csak ≥ 400 ms előjelzés után indul, a fogások addig nem élesek, az előjelzés alatti billentyű nem válasz", async ({ page }) => {
   test.setTimeout(120_000);

@@ -1,7 +1,7 @@
 # Szólétra olvashatóság — végrehajtási utasítás (AI-ügynöknek)
 
 **Terv:** [`docs/specs/2026-11-17-szoletra-olvashatosag.md`](2026-11-17-szoletra-olvashatosag.md) (cél, nem-cél, mért
-kiinduló számok, döntések A–F, EARS SZ-1…SZ-10). **Állapot:** folyamatban (helyi kapuk) — ág `fix/szoletra-olvashatosag`, munkafa
+kiinduló számok, döntések A–F, EARS SZ-1…SZ-10). **Állapot:** helyben kész, a független ellenőr IGEN, FELTÉTELLEL ítélete után a leletek javítva; push / PR a jelre — ág `fix/szoletra-olvashatosag`, munkafa
 `.claude/worktrees/szoletra-olvashatosag`, kanban #89.
 
 ## Hatókör
@@ -103,19 +103,21 @@ haladás); Normál: 6,9 / 6,6 / 6,4 / 6,5, −0,08 s, 0,5×; Gyors: a régi. Hib
 | átlagos (0,8×, 75%) | 1,8–6,7% | 100% | 96–99% |
 | erős (1,2×, 92%) | 37–48% | 100% | 100% |
 
-**Győzelem a 20 menetből — a review K6 javítása UTÁN (a megoldás-kijelzés alatt is a tempó lassítása), évf. 3 / 5 / 8 / 11**
+**Győzelem a 20 menetből (évf. 3 / 5 / 8 / 11; zárójelben a menethossz-medián tartománya) — a review K6 javítása UTÁN;
+reprodukálható (review Ú5): `node --import tsx scripts/word-ladder-reader-table.ts calm,normal,fast 1,6` a `source/`
+mappából — seedek: `simSeeds("word-ladder-hu-en")` (20), bank: `realLadderBank(évfolyam)`, bot: `runReader`**
 
-| Pálya, tempó | 45% pontos (lassú olvasás) | 65% (lassú olvasó) | átlagos (75%) | erős (92%) |
+| Pálya, tempó | 45% | 65% (lassú) | átlagos | erős |
 |---|---|---|---|---|
-| 1., Nyugodt | 1 / 2 / 0 / 0 | 5 / 12 / 4 / 6 | 17 / 18 / 19 / 17 | 20 / 20 / 20 / 20 |
-| 1., Normál | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 13 / 9 / 16 / 7 | 20 / 20 / 20 / 20 |
-| 1., Gyors (régi) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
-| 6., Nyugodt | 1 / 1 / 0 / 0 | 6 / 7 / 5 / 3 | 19 / 19 / 20 / 13 | 20 / 20 / 20 / 20 |
-| 6., Normál | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 14 / 9 / 13 / 6 | 20 / 20 / 20 / 20 |
-| 6., Gyors (régi) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| 1., calm | 1 / 2 / 3 / 0 (294–331 s) | 12 / 10 / 7 / 9 (272–277 s) | 18 / 19 / 17 / 18 (145–183 s) | 20 / 20 / 20 / 20 (54–82 s) |
+| 1., normal | 0 / 0 / 0 / 0 (279–298 s) | 0 / 0 / 0 / 0 (275–292 s) | 10 / 15 / 12 / 9 (201–265 s) | 20 / 20 / 20 / 20 (87–110 s) |
+| 1., fast | 0 / 0 / 0 / 0 (188–189 s) | 0 / 0 / 0 / 0 (188–189 s) | 0 / 0 / 0 / 0 (187–188 s) | 0 / 0 / 0 / 0 (176–181 s) |
+| 6., calm | 0 / 1 / 0 / 0 (399–457 s) | 8 / 5 / 6 / 9 (373–416 s) | 19 / 19 / 17 / 18 (215–244 s) | 20 / 20 / 20 / 20 (97–116 s) |
+| 6., normal | 0 / 0 / 0 / 0 (375–406 s) | 0 / 0 / 0 / 0 (372–397 s) | 10 / 16 / 6 / 8 (302–365 s) | 20 / 20 / 20 / 20 (128–151 s) |
+| 6., fast | 0 / 0 / 0 / 0 (252–253 s) | 0 / 0 / 0 / 0 (252–253 s) | 0 / 0 / 0 / 0 (251–252 s) | 0 / 0 / 0 / 0 (237–243 s) |
 
-- Menethossz medián (Nyugodt): átlagos 124–193 s (1. pálya), 227–287 s (6.); lassú olvasó 268–310 s (1.), 384–434 s (6.);
-  kérdés / perc 3,4–5,5. A Gyors tempó számai a régi tempóé (az olvasó-bot ott szinte semmit nem tud időben elolvasni).
+- A gyengék VESZTES menete Nyugodt tempón hosszú: 6. pályán a lassú olvasó 373–416 s, a 45%-os 399–457 s (a terv J9 felső
+  határa 300 s) — tulajdonosi döntés (alap tempó / menethossz-plafon). Kérdés / perc 3,4–5,5. A Gyors tempó számai a régi tempóé (az olvasó-bot ott szinte semmit nem tud időben elolvasni).
 - **Az olvasó-bot hitelessége (review A14):** a profilok olvasási sebességei forrás nélküliek (a közös `reading.ts` becslése
   is az); a „0% → 99%” modell-következmény (ablak és bot ugyanabból a képletből), nem valódi gyerekek mérése.
 - **A közös botokkal (megfigyelő teszt, nem buktató; review K3):** Nyugodt, 6. pálya, 4. évf.: SIM_AVERAGE 20/20 (92 s),
@@ -134,3 +136,15 @@ tábla: `docs/measurements/jatekok-jatekelmeny/J2-olvashatosag/k2-kartya-fogas-m
   megoldás 17 px, `en4-family-006` kérdés 21 px, `en4-health-016` kérdés 26 px, `de4-nature-014` megoldás 43 px; 390×844-en
   ≥ 126 px; 844×390-en nincs metszés a fogás-oszlopokkal és a tanító sorral; levágás sehol. A célkártya hosszú mondatnál
   360×640-en és fekvőben 20 px-re kicsinyedik (a 16 px-es keretsor 1,25-szöröse); egy szó mindig ≥ 26 px (1,6×).
+
+**Review Ú1–Ú4 (2026-11-17, második kör; `word-ladder-readability.spec.ts`, 10/10 zöld)**
+
+- Ú1 — hiba utáni kérdés: a célkártya betűje ugyanakkora, mint rendes kérdésnél (360×640): `en4-052` 26 / 26 px,
+  `en4-health-023` 20 / 20, `en4-time-004` 28 / 28, `en4-family-006` 20 / 20. Mutációs ellenpróba (a tartalék a láb nélkül,
+  64 px fixen): `en4-052` hiba után 22 px ≠ 26 px → a teszt bukott.
+- Ú2 — a hosszú megoldás-sor helyett rövid jelzés (helyhiánykor): a mért 38 megoldás-állapotból 360×640-en 3 tételnél
+  (`en4-family-006`, `en4-health-016`, `fr4-food-007`), 390×844-en és 844×390-en 0; a jelzés szövege mindegyiknél látszik
+  (e2e-állítás: `::after` nem üres).
+- Ú3 — „die Umweltverschmutzung” (`vocab:de4-nature-002:target-to-hu`): 26 px-en szó közben tört (a mérés megfogta); a lap
+  a szélességhez igazodva 25 px-re vette (`data-fit="width"`, ≥ 1,25×), szó közbeni törés nincs; 390×844-en 27 px.
+- Ú4 — a német futás darabszám-állítással (≥ a tételek − 2), a megnevezett hat tétel tűrés nélkül.

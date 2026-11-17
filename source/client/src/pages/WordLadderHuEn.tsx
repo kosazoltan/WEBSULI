@@ -164,6 +164,23 @@ const MENU_BACKGROUND =
 
 /** A célkártya legkisebb betűje helyhiánynál (review K2; a 16 px-es keretsor 1,25-szöröse). */
 const FOCUS_MIN_PX = 20;
+/** Tör-e szó közben a célkártyán (a kötőjel utáni sortörés helyesírási, nem szó közbeni). */
+function wordBroken(el: HTMLElement): boolean {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const text = n.textContent ?? "";
+    const re = /[^\s-]+-?/gu;
+    for (let m = re.exec(text); m; m = re.exec(text)) {
+      const r = document.createRange();
+      r.setStart(n, m.index);
+      r.setEnd(n, m.index + m[0].length);
+      const rects = r.getClientRects();
+      if (rects.length > 1 && Math.abs(rects[0]!.top - rects[rects.length - 1]!.top) > 2) return true;
+    }
+  }
+  return false;
+}
+
 /** Egy szó / rövid kifejezés célkártyájának legkisebb betűje (a 16 px-es keretsor 1,6-szorosa). */
 const FOCUS_WORD_MIN_PX = 26;
 /** Új kérdésnél a megoldás-kijelzés sorának (állapotsor + „Miért?”) fenntartott magassága. */
@@ -1283,7 +1300,14 @@ export default function WordLadderHuEn() {
         root.dataset.wlTight = "false";
       }
       const revealing = !!card.querySelector('[data-testid="play-question-status"]')?.textContent?.trim();
-      const reserve = revealing ? 0 : REVEAL_RESERVE_PX;
+      // Review Ú1: a kijelzés sorának tartaléka a láb AKTUÁLIS magasságával csökken — hiba utáni kérdésnél az előző „Miért?”
+      // gomb már ott van a lábban (~54 px), a hely nem foglalódik kétszer.
+      // A láb által már elfoglalt hely: a prompt alja és a kártya alja közti rész a kártya alsó belső margóján felül.
+      const prompt = card.querySelector<HTMLElement>(".play-question-prompt");
+      const padBottom = parseFloat(getComputedStyle(card).paddingBottom) || 0;
+      const footSpace = prompt ? Math.max(0, card.getBoundingClientRect().bottom - prompt.getBoundingClientRect().bottom - padBottom) : 0;
+      const reserve = revealing ? 0 : Math.max(0, REVEAL_RESERVE_PX - footSpace);
+      root.dataset.wlOutcome = revealing ? (qRef.current?.view().lastOutcome?.result ?? "") : "";
       const limit = () => {
         let l = window.innerHeight - 8;
         if (landscapePhone) {
@@ -1310,8 +1334,22 @@ export default function WordLadderHuEn() {
       shrinkTo(22);
       if (over() && level() < 2) holds.dataset.fit = "2";
       shrinkTo(FOCUS_MIN_PX);
-      if (over() && revealing) root.dataset.wlTight = "true";
-      if (focusEl) focusEl.dataset.fit = focusEl.style.fontSize ? "shrunk" : "full";
+      // Utolsó lépcső (review Ú2): helyes válasznál nincs (a dicséret rövid); hibánál / lejáratnál a hosszú „A jó válasz: …”
+      // helyett rövid jelzés látszik („A jó válasz zölden világít” / „Lejárt az idő”), a teljes szöveget a képernyőolvasó kapja.
+      if (over() && revealing && root.dataset.wlOutcome !== "correct") root.dataset.wlTight = "true";
+      // Review Ú3: egy hosszú, kötőjel nélküli szó (pl. „Umweltverschmutzung”) a legkisebb szó-betűvel sem mindig fér ki 360 px-en
+      // — szó közben törne. Ilyenkor (és csak ilyenkor) a szélességhez igazodva kisebb a betű, legfeljebb `FOCUS_MIN_PX`-ig.
+      // A korábbi (ugyanerre a kérdésre tett) szélességi igazítás megmarad a későbbi, csak-szűkítő újraméréskor.
+      let widthFit = !reset && focusEl?.dataset.fit === "width";
+      if (focusEl) {
+        let size = Math.floor(parseFloat(getComputedStyle(focusEl).fontSize));
+        while (wordBroken(focusEl) && size > FOCUS_MIN_PX) {
+          size -= 1;
+          focusEl.style.fontSize = `${size}px`;
+          widthFit = true;
+        }
+        focusEl.dataset.fit = widthFit ? "width" : focusEl.style.fontSize ? "shrunk" : "full";
+      }
     },
     [landscapePhone],
   );
@@ -1677,9 +1715,11 @@ export default function WordLadderHuEn() {
         .game-shell-fixed[data-game="WordLadderHuEn"] .wl-holds[data-fit="2"] { padding: 6px; }
         ${HOLD_SCOPE}[data-fit="2"] .wl-answers { gap: 6px; }
         ${HOLD_SCOPE}[data-fit="2"] .wl-hold { min-height: 48px; padding: 3px 8px; font-size: 16px; line-height: 1.12; }
-        .play-question[data-testid="wl-question"][data-wl-tight="true"] .play-question-status {
+        .play-question[data-testid="wl-question"][data-wl-tight="true"] .play-question-status > span {
           position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
         }
+        .play-question[data-testid="wl-question"][data-wl-tight="true"] .play-question-status::after { content: "A jó válasz zölden világít"; }
+        .play-question[data-testid="wl-question"][data-wl-tight="true"][data-wl-outcome="timeout"] .play-question-status::after { content: "Lejárt az idő — a jó válasz zöld"; }
         .wl-answers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .wl-answers[data-long="true"] { grid-template-columns: 1fr; gap: 8px; }
         ${HOLD} {

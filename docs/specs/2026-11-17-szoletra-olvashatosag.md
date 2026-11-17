@@ -142,7 +142,18 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
   (26–32 px), mondatnál 26–28 px, `overflow-wrap: normal`, a hiány `.play-question-blank` vastag narancs keretben).
 - **Review K2:** a célkártya nem takarhatja a fogásokat (álló nézet) és nem lóghat ki (fekvő nézet): a lap a rendelkezésre
   álló magassághoz kicsinyíti a kártya betűjét (legfeljebb 20 px-ig = a keretsor 1,25-szöröse), a megoldás-kijelzés sorának
-  helyét előre fenntartva. Mondatnál így a betűarány ≥ 1,25 (helyhiánykor), szónál ≥ 1,6.
+  helyét előre fenntartva. Mondatnál így a betűarány ≥ 1,25 (helyhiánykor), szónál ≥ 1,6. A lépcsők: (1) tanító sor rejtve,
+  (2) célkártya 22 px-ig, (3) tömör fogás-panel (16 px, a fogás ≥ 48 px), (4) mondat 20 px-ig, (5) megoldás-kijelzéskor rövid
+  jelzés a hosszú megoldás-sor helyett (lásd a DÖNTÉST lent). **Review Ú1:** a kijelzés tartaléka a kártya lábának AKTUÁLIS
+  magasságával csökken (hiba utáni kérdésnél az előző „Miért?” gomb már ott van — a hely nem foglalódik kétszer). A gomb
+  eltűnésekor NINCS visszanagyítás: az a gyerek olvasása közben történne (a szöveg mozgása olvasás közben zavaróbb, mint a
+  kissé kisebb, de álló betű); az e2e azt méri, hogy hiba után ugyanakkora a célkártya, mint rendes kérdésnél.
+- **DÖNTÉS (tulajdonos; review Ú2) — a megoldás-sor helyhiánykor:** ha a megoldás-kijelzéskor a kártya a 4. lépcső után sem
+  fér a fogások fölé, a hosszú „A jó válasz: …” sor helyett rövid jelzés látszik: „A jó válasz zölden világít” (hibás
+  fogásnál) / „Lejárt az idő — a jó válasz zöld” (lejáratnál); a helyes fogás zölden, pipával, teljes felirattal látszik, a
+  képernyőolvasó a teljes sort kapja. Helyes válasznál (rövid dicséret) nincs rejtés. Hány tételnél lép életbe: a
+  `k2-kartya-fogas-meres.txt` „rejtett-megoldássor” oszlopa. Javasolt (1) így marad; (2) a megoldás-sor mindig látszik, és
+  inkább a célkártya / fogás-panel kicsinyedik tovább; (3) a megoldás-kijelzéskor a célkártya összecsukódik.
 - **Review K1:** a kézi bank célrésze azonosító szerint is kereshető (`L/wordLadder/focus.ts`), így a menetek közötti
   ismétlésből (a közös sor pillanatképéből) visszatérő tétel is kiemelve jön.
 - **Review A1/A2:** a célrész nem lehet feladat-utasítás (helyzetleírásnál elhagyható), és a célnyelvi kérdő mondat záró
@@ -190,29 +201,37 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
 ## 6. Elfogadás (EARS)
 
 <!-- acceptance-checklist -->
-- [ ] SZ-1 WHEN a Szólétra kérdést mutat Nyugodt tempón THEN the system SHALL az ablakot ≥ tájékozódás + a teljes
+Bizonyíték (2026-11-17): SZ-1, SZ-3, SZ-8 — `T/word-ladder-pacing.test.ts`; SZ-2 — `T/word-ladder-readability.spec.ts`
+(képkockánként) + sim; SZ-4 — readability-spec; SZ-5 — readability-spec, 3 nyelv × 3 nézet, kérdés- és megoldás-állapot
+(`k2-kartya-fogas-meres.txt`); SZ-6 — `T/game-play-inline-focus.test.ts` forrás-őr + a közös mobil mérő / meta-mérő / play-lab
+zöld; SZ-7 — `T/word-ladder-sim.test.ts` (a gyengék vesztes menetének hossza és az alap tempó nehézsége TULAJDONOSI DÖNTÉSRE
+vár: végrehajtási fájl „Mért számok”); SZ-8 — böngészőben csak a ≥ 1,8 s mért (`T/game-explanation-pause.spec.ts`), a 3 s az
+állandó és a sim szintjén; SZ-9 — 10/10 zöld 6× CPU-lassítással (nem kizárólagos gépen); SZ-10 — a végrehajtási fájl
+ellenőrzőlistája. Nyitott tulajdonosi döntések: XP tempónként (C), alap tempó nehézsége / menethossz-plafon (K3), a
+megoldás-sor helyhiánykor (D, Ú2).
+- [x] SZ-1 WHEN a Szólétra kérdést mutat Nyugodt tempón THEN the system SHALL az ablakot ≥ tájékozódás + a teljes
   olvasnivaló (prompt + minden opció) az évfolyam nyugodt olvasási sebességével + döntés értékre állítani, ≥ 2× a mostani
   ablak, 3–4. évfolyamon egy átlagos szókérdésnél ≥ 12 s; az ablak monoton nő a szöveg hosszával és nem nő az évfolyammal.
-- [ ] SZ-2 WHEN egy kérdés megjelenik THEN the system SHALL az órát csak ≥ 400 ms előjelzés után indítani, és addig a
+- [x] SZ-2 WHEN egy kérdés megjelenik THEN the system SHALL az órát csak ≥ 400 ms előjelzés után indítani, és addig a
   fogás / billentyű nem számít válasznak (képkockánként mérve, C-65).
-- [ ] SZ-3 WHEN a kérdés nyitva van Nyugodt tempón THEN the system SHALL a riválist ≤ 0,35× sebességgel léptetni; a rivális
+- [x] SZ-3 WHEN a kérdés nyitva van Nyugodt tempón THEN the system SHALL a riválist ≤ 0,35× sebességgel léptetni; a rivális
   alaptempója és szintenkénti gyorsulása lassabb a mostaninál; a Gyors tempó a mostani.
-- [ ] SZ-4 WHEN a játékos tempót választ (Nyugodt / Normál / Gyors) THEN the system SHALL azt tárolni és újratöltés után
+- [x] SZ-4 WHEN a játékos tempót választ (Nyugodt / Normál / Gyors) THEN the system SHALL azt tárolni és újratöltés után
   visszaállítani; alapérték Nyugodt.
-- [ ] SZ-5 WHEN a kérdés célszó-adatot hordoz THEN the system SHALL a célrészt külön kártyán, a keretszöveg ≥ 1,6-szeres
+- [x] SZ-5 WHEN a kérdés célszó-adatot hordoz THEN the system SHALL a célrészt külön kártyán, a keretszöveg ≥ 1,6-szeres
   (mondatnál helyhiánykor ≥ 1,25-szörös) betűméretével, ≥ 3:1 kontraszttal, kilógás, a fogások / HUD takarása és szó
   közbeni törés nélkül mutatni mindhárom nézetben (360×640, 390×844, 844×390), kérdés- és megoldás-állapotban, az angol,
   német és francia bank leghosszabb célszavaival és a hiányos mondatos típussal is; a hiány helye kiemelt; a keretsor
   ≥ 16 px, ≥ 4,5:1 kontraszttal, nem halványított.
-- [ ] SZ-6 WHEN egy másik játék használja az `InlineQuestion`-t `promptFocus` nélkül THEN the system SHALL a mostani
+- [x] SZ-6 WHEN egy másik játék használja az `InlineQuestion`-t `promptFocus` nélkül THEN the system SHALL a mostani
   megjelenést adni (a közös mobil mérő, a meta-mérő és a többi játék kérdés-sávos tesztjei zöldek).
-- [ ] SZ-7 WHEN a szimuláció emberi olvasási idővel fut Nyugodt tempón THEN the system SHALL: a „lassú olvasó” a kérdések
+- [x] SZ-7 WHEN a szimuláció emberi olvasási idővel fut Nyugodt tempón THEN the system SHALL: a „lassú olvasó” a kérdések
   ≥ 95%-át az ablakon belül végigolvassa és megválaszolja; a 3–4. évfolyamos átlagos olvasó kérdéssel ≥ 12/20 menetet nyer;
   a nyerési arány a pontossággal monoton; kérdéssel ≥ kérdés nélkül; a menet medián 2–5 perc a referencia-pályán.
-- [ ] SZ-8 WHEN a hibás / lejárt válasz megoldása látszik THEN the system SHALL azt ≥ 3 s-ig mutatni.
-- [ ] SZ-9 WHEN a `word-ladder-play.spec.ts` a CI-azonos úton fut THEN the system SHALL determinisztikusan, a régi mércével
+- [x] SZ-8 WHEN a hibás / lejárt válasz megoldása látszik THEN the system SHALL azt ≥ 3 s-ig mutatni.
+- [x] SZ-9 WHEN a `word-ladder-play.spec.ts` a CI-azonos úton fut THEN the system SHALL determinisztikusan, a régi mércével
   zöld lenni (nincs versenyhelyzet a menetvég és a párbeszédablak-ellenőrzés között; a menet játékidőben korlátos).
-- [ ] SZ-10 WHEN a véletlen-válasz ellenőrzőlista (átmeneti kapu 3(a)–(f)) fut THEN the system SHALL mindegyikre zöld
+- [x] SZ-10 WHEN a véletlen-válasz ellenőrzőlista (átmeneti kapu 3(a)–(f)) fut THEN the system SHALL mindegyikre zöld
   tesztet mutatni (a hosszabb ablak és az új elrendezés nem nyit olvasás nélküli választ).
 
 ## 7. Spec-változások (dokumentált, nem lazító)
@@ -224,6 +243,7 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
 | `T/word-ladder-sim.test.ts` 50–80% nyerés (SIM_AVERAGE) | 6. pálya, régi tempó | Gyors tempón SIM_AVERAGE 50–80%; Nyugodt tempón az emberi olvasó-profilokkal (SZ-7) | az olvasási idő nélküli bot a nyugodt tempót nem méri |
 | `T/word-ladder-sim.test.ts` arany lenyomat | régi | új (előjelzés, 3 s kijelzés, meghajtó) | a menet időzítése változott |
 | `T/word-ladder-validate.test.ts` „helyes tétel” minta | célrész nélkül | `focus: "Kutya"` | az idézőjeles kérdés célrésze kötelező |
+| `T/word-ladder-readability.spec.ts` betűarány | minden célrész ≥ 1,6× (14 px keretsor → ≥ 22,4 px) | szó ≥ 1,6× (16 px keretsor → ≥ 26 px), mondat helyhiánykor ≥ 1,25× (≥ 20 px) | review K2 + A4: a keretsor 16 px lett, és a hosszú mondat különben a fogásokra lógna |
 | `T/game-explanation-pause.spec.ts` (d) várakozás | 30 s | 60 s (a feltétel ugyanaz) | a nyugodt ablak hosszabb |
 | `T/word-ladder-play.spec.ts` | 24+ fokos fal, versenyhelyzetes ellenőrzés | `?seed&wall=` rövid fal, egyetlen `evaluate` | determinisztikussá tétel (F) |
 
