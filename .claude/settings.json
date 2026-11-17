@@ -58,6 +58,28 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"scripts/qa/hooks/check-quality-gates.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Minőségkapu-bizonyíték ellenőrzése..."
+          }
+        ]
+      },
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"scripts/qa/hooks/check-quality-gates.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Minőségkapu-bizonyíték ellenőrzése..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"scripts/qa/hooks/enforce-repo-rules.mjs\"",
             "timeout": 15
           }
