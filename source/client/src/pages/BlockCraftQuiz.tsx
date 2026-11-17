@@ -1156,6 +1156,14 @@ export default function BlockCraftQuiz() {
    */
   const dirtyCellsRef = useRef<number[]>([]);
   const rendererMemRef = useRef<{ geometries: number; textures: number } | null>(null);
+  /** A 3D-rúnakövek (teszt-kampó: a vetített képernyő-téglalapjuk a takarás méréséhez, review #484 N1). */
+  const stoneMeshesRef = useRef<THREE.Mesh[]>([]);
+  /**
+   * Review #484 N1: a kövek képernyő-sávja (CSS px, a nézetablakhoz) — a kérdéskártya alja és a rúnagombok (álló) / az alsó
+   * vezérlők (fekvő) teteje között, fekvőben a két rúnaoszlop között. A zár alatt ~5 Hz-cel frissül (DOM-mérés), a képkocka-
+   * hurok ebből helyezi el a köveket a kamera előtt. `null`: nincs érvényes sáv (a kövek a mag kezdő elrendezésében maradnak).
+   */
+  const stoneBandRef = useRef<{ top: number; bottom: number; left: number; right: number; landscape: boolean } | null>(null);
   const worldFullRef = useRef(true);
   // Aktuális pálya konfigurációja — a render loop closure-ja ezen keresztül lát
   // mindig friss égszín / fény paramétereket.
@@ -2246,11 +2254,82 @@ export default function BlockCraftQuiz() {
       (tex, i) => new THREE.MeshStandardMaterial({ map: tex, emissive: new THREE.Color(RUNE_COLORS[i]!), emissiveMap: tex, emissiveIntensity: 0.6, roughness: 0.5 }),
     );
     const stones = stoneMats.map((m) => {
+      // Review #484 N1: a kövek a képernyő szabad sávjában lebegnek a kamera előtt — a terep (az érc, egy domb) nem takarja őket.
+      m.depthTest = false;
+      m.depthWrite = false;
+      // Az áttetsző menetben, utolsóként rajzolódnak (a lomb / víz áttetsző menete különben fölülírná őket).
+      m.transparent = true;
+      m.opacity = 1;
       const mesh = new THREE.Mesh(stoneGeo, m);
       mesh.visible = false;
+      mesh.renderOrder = 10;
       scene.add(mesh);
       return mesh;
     });
+    // A kövek képernyő-sávos elhelyezésének újrahasznált segédei (a képkocka-hurokban nincs foglalás).
+    const slotDir = new THREE.Vector3();
+    const camFwd = new THREE.Vector3();
+    const oreCorner = new THREE.Vector3();
+    const slotWorld: { x: number; y: number; z: number }[] = [0, 1, 2, 3].map(() => ({ x: 0, y: 0, z: 0 }));
+    const slotScreen: { x: number; y: number }[] = [0, 1, 2, 3].map(() => ({ x: 0, y: 0 }));
+    /**
+     * Review #484 N1: a 4 kő helye a képernyő szabad sávjában (2×2, a rúnagombok kiosztása szerint), a kamera előtt olyan
+     * mélységben, hogy a vetített méretük a sávhoz illjen; az érc vetülete mellé kerülnek, ha van hely. A mag `tapRay`-e
+     * ezekkel számol (`setLockStones`), az ércre célzott koppintás így sem választ (az érc-szabály a magban).
+     */
+    const placeStonesInBand = (ore: { x: number; y: number; z: number }, count: number): boolean => {
+      const band = stoneBandRef.current;
+      if (!band || count !== 4) return false;
+      const rect = canvas.getBoundingClientRect();
+      const bw = band.right - band.left;
+      const bh = band.bottom - band.top;
+      const pad = 4;
+      // `box`: a forgó kocka vetített befoglaló mérete (px); a kocka élének vetülete ennek ~1/1,45-öde.
+      const box = Math.min(84, (bh - 3 * pad) / 2, (bw - 4 * pad) / 4);
+      if (box < 26) return false;
+      const size = box / 1.45;
+      // Az érc vetülete (8 sarok) — ha van mellette hely, a kőoszlopok az érc két oldalára kerülnek.
+      let oreL = Infinity;
+      let oreR = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        oreCorner.set(ore.x + (i & 1), ore.y + (i & 2 ? 1 : 0), ore.z + (i & 4 ? 1 : 0)).project(camera);
+        if (oreCorner.z > 1) continue;
+        const sx = rect.left + ((oreCorner.x + 1) / 2) * rect.width;
+        oreL = Math.min(oreL, sx);
+        oreR = Math.max(oreR, sx);
+      }
+      const leftRoom = oreL - band.left;
+      const rightRoom = band.right - oreR;
+      const xMinL = band.left + box / 2 + pad;
+      const xMaxR = band.right - box / 2 - pad;
+      const xL = leftRoom >= box + 2 * pad && leftRoom < bw ? Math.max(xMinL, band.left + leftRoom / 2) : xMinL;
+      const xR = rightRoom >= box + 2 * pad && rightRoom < bw ? Math.min(xMaxR, band.right - rightRoom / 2) : xMaxR;
+      // Két sor a sáv alján és tetején, legalább `box + pad` távolságra egymástól.
+      const y1 = band.top + pad + box / 2;
+      const y2 = Math.max(y1 + box + pad, band.bottom - pad - box / 2);
+      // Álló: A bal-fent, B jobb-fent, C bal-lent, D jobb-lent; fekvő: A, B bal oszlop, C, D jobb (mint a rúnagombok).
+      const order = band.landscape
+        ? [[xL, y1], [xL, y2], [xR, y1], [xR, y2]]
+        : [[xL, y1], [xR, y1], [xL, y2], [xR, y2]];
+      // Mélység: a kocka (RUNE_STONE_SIZE) vetített mérete ≈ `size` px.
+      const halfH = rect.height / 2;
+      const depth = (RUNE_STONE_SIZE * halfH) / (Math.tan((camera.fov * Math.PI) / 360) * size);
+      camera.getWorldDirection(camFwd);
+      for (let i = 0; i < 4; i++) {
+        const sx = order[i]![0]!;
+        const sy = order[i]![1]!;
+        slotScreen[i]!.x = sx;
+        slotScreen[i]!.y = sy;
+        const nx = ((sx - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+        const ny = -((sy - rect.top) / Math.max(1, rect.height)) * 2 + 1;
+        slotDir.set(nx, ny, 0.5).unproject(camera).sub(camera.position).normalize();
+        const t = depth / Math.max(0.2, slotDir.dot(camFwd));
+        slotWorld[i]!.x = camera.position.x + slotDir.x * t;
+        slotWorld[i]!.y = camera.position.y + slotDir.y * t;
+        slotWorld[i]!.z = camera.position.z + slotDir.z * t;
+      }
+      return true;
+    };
     // --- Rúnaérc-jelzőfény: vékony, áttetsző fényoszlop minden érc fölött (messziről is látszik) ---
     const beaconGeo = new THREE.BoxGeometry(0.18, 6, 0.18);
     const beaconMat = new THREE.MeshBasicMaterial({ color: 0x8cf5e6, transparent: true, opacity: 0.35, depthWrite: false, fog: false });
@@ -2270,6 +2349,7 @@ export default function BlockCraftQuiz() {
       beacons.instanceMatrix.needsUpdate = true;
     };
     const stoneColor = new THREE.Color();
+    stoneMeshesRef.current = stones;
 
     // --- Bolyhos felhők: 3–5 dobozból álló csoportok, lágy árnyalással, lassan sodródnak ---
     const cloudGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -2560,6 +2640,8 @@ export default function BlockCraftQuiz() {
       const view = qRef.current?.view();
       const shown = lock && view?.presentation && view.presentation.id === lock.presentationId ? lock : null;
       const rev = shown ? view?.reveal ?? null : null;
+      // Review #484 N1: a kövek a képernyő szabad sávjába (a kamerához igazítva, képkockánként); a mag is ezt a helyet kapja.
+      if (shown && mine && !shown.resolved && placeStonesInBand(shown.ore, shown.stones.length)) mine.setLockStones(slotWorld);
       for (let i = 0; i < stones.length; i++) {
         const s = stones[i]!;
         const at = shown?.stones[i];
@@ -2827,6 +2909,103 @@ export default function BlockCraftQuiz() {
     if (phase === "play") levelWonFiredRef.current = false;
   }, [phase, levelIdx]);
 
+  /**
+   * Review #484 N1: nyitott zárnál ~5 Hz-cel mérjük a kövek szabad sávját (a kérdéskártya alja és a rúnagombok / alsó vezérlők
+   * között), és a kártya prompt-sorszámát (`--bc-pq-lines`) úgy korlátozzuk, hogy a kártya, a kősáv és a rúnagombok ne fedjék
+   * egymást — a hosszabb szöveg a közös „Mutasd”-dal olvasható.
+   */
+  const lockVisible = phase === "play" && q.bind.presentation !== null;
+  useEffect(() => {
+    if (!lockVisible) {
+      stoneBandRef.current = null;
+      return;
+    }
+    const root = document.documentElement;
+    const MIN_BAND = 84; // két kősor (≥ 30 px) + rések
+    const measure = () => {
+      const canvas = canvasRef.current;
+      const card = document.querySelector<HTMLElement>(".play-question[data-skin=\"mine\"] .play-question-card");
+      const prompt = document.querySelector<HTMLElement>(".play-question[data-skin=\"mine\"] .play-question-prompt");
+      const runes = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="bc-quiz"] .bc-rune'));
+      if (!canvas || !card || runes.length === 0) return;
+      const cr = canvas.getBoundingClientRect();
+      const landscape = window.matchMedia("(max-height: 500px) and (min-width: 560px)").matches;
+      const rr = runes.map((el) => el.getBoundingClientRect());
+      const hud = document.querySelector<HTMLElement>("[data-game-hud]")?.getBoundingClientRect();
+      const visibleRect = (sel: string) => {
+        const el = document.querySelector<HTMLElement>(sel);
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        if (cs.display === "none" || cs.visibility === "hidden") return null;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 ? r : null;
+      };
+      let bottomLimit: number;
+      let left = cr.left + 4;
+      let right = cr.right - 4;
+      if (landscape) {
+        // Fekvő: a két rúnaoszlop között, a hotbar / az alsó vezérlők fölött.
+        const mid = (cr.left + cr.right) / 2;
+        for (const r of rr) {
+          if (r.right <= mid) left = Math.max(left, r.right + 6);
+          else if (r.left >= mid) right = Math.min(right, r.left - 6);
+        }
+        bottomLimit = cr.bottom - 6;
+        for (const sel of ['[data-testid="bc-hotbar"]', ".bc-act-jump", '[data-testid="virtual-joystick"]']) {
+          const r = visibleRect(sel);
+          if (r && r.right > left && r.left < right) bottomLimit = Math.min(bottomLimit, r.top - 6);
+        }
+      } else {
+        bottomLimit = Math.min(...rr.map((r) => r.top)) - 6;
+        // A rúnaréteg szünetgombja (a gombsor fölött, jobbra) is takarna: a sáv fölötte végződik.
+        const pause = visibleRect('[data-testid="bc-quiz-pause"]');
+        if (pause) bottomLimit = Math.min(bottomLimit, pause.top - 6);
+      }
+      // Jelölt sávok: (1) a kártya és a gombsor / alsó vezérlők között; (2) álló nézetben a gombsor ALATT, a tárcsa és az
+      // akciógombok között (kis képernyőn, hosszú válaszoknál csak itt van hely). A nagyobb kőméretet adó nyer.
+      type Band = { top: number; bottom: number; left: number; right: number; landscape: boolean };
+      const boxOf = (b: Band) => Math.min(84, (b.bottom - b.top - 12) / 2, (b.right - b.left - 16) / 4);
+      let belowBand: Band | null = null;
+      if (!landscape) {
+        const joy = visibleRect('[data-testid="virtual-joystick"]');
+        const jump = visibleRect(".bc-act-jump");
+        const hotbar = visibleRect('[data-testid="bc-hotbar"]') ?? visibleRect(".bc-bottom");
+        belowBand = {
+          top: Math.max(...rr.map((r) => r.bottom)) + 6,
+          bottom: Math.min(cr.bottom, hotbar ? hotbar.top : cr.bottom) - 6,
+          left: joy ? joy.right + 6 : cr.left + 4,
+          right: jump ? jump.left - 6 : cr.right - 4,
+          landscape: false,
+        };
+      }
+      // A kártya prompt-sorszáma: a kártya ne lógjon a gombsorra; ha a kövek csak a kártya alatt férnek el, nekik is marad hely.
+      const reserve = belowBand && boxOf(belowBand) >= 34 ? 0 : MIN_BAND;
+      if (prompt) {
+        const cs = getComputedStyle(prompt);
+        const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.28;
+        const pr = prompt.getBoundingClientRect();
+        const chromeBelow = card.getBoundingClientRect().bottom - pr.bottom;
+        const room = bottomLimit - reserve - pr.top - Math.max(0, chromeBelow);
+        const lines = Math.max(2, Math.min(7, Math.floor(room / lh)));
+        if (root.style.getPropertyValue("--bc-pq-lines") !== String(lines)) root.style.setProperty("--bc-pq-lines", String(lines));
+      }
+      const cardBottom = card.getBoundingClientRect().bottom;
+      const top = Math.max(cardBottom, hud?.bottom ?? 0) + 6;
+      const cands: Band[] = [{ top, bottom: bottomLimit, left, right, landscape }];
+      if (belowBand) cands.push(belowBand);
+      let best: Band | null = null;
+      for (const c of cands) if (boxOf(c) >= 26 && (!best || boxOf(c) > boxOf(best))) best = c;
+      stoneBandRef.current = best;
+    };
+    measure();
+    const id = window.setInterval(measure, 200);
+    return () => {
+      window.clearInterval(id);
+      stoneBandRef.current = null;
+      root.style.removeProperty("--bc-pq-lines");
+    };
+  }, [lockVisible]);
+
   // HUD ≤ 10 Hz (KSZ-9): a mag állapotából pillanatkép, csak változáskor.
   useEffect(() => {
     if (phase !== "play") return;
@@ -2871,6 +3050,31 @@ export default function BlockCraftQuiz() {
   const startGameRef = useRef(startGame);
   startGameRef.current = startGame;
 
+  /**
+   * Teszt-kampó (review #484 N1): a látható rúnakövek vetített képernyő-téglalapja (CSS px, a nézetablakhoz), JSON-szövegként —
+   * a kocka 8 sarkát vetítjük a kamerával. Csak a probe hívásakor számol (a képkocka-hurokban nincs költsége).
+   */
+  const stoneScreenRects = (): string => {
+    const cam = cameraRef.current;
+    const canvas = canvasRef.current;
+    if (!cam || !canvas) return "[]";
+    const r = canvas.getBoundingClientRect();
+    const v = new THREE.Vector3();
+    const out = stoneMeshesRef.current.map((m) => {
+      if (!m.visible) return null;
+      const h = (RUNE_STONE_SIZE / 2) * m.scale.x;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        v.set(m.position.x + (i & 1 ? h : -h), m.position.y + (i & 2 ? h : -h), m.position.z + (i & 4 ? h : -h)).project(cam);
+        const sx = r.left + ((v.x + 1) / 2) * r.width;
+        const sy = r.top + ((1 - v.y) / 2) * r.height;
+        x0 = Math.min(x0, sx); y0 = Math.min(y0, sy); x1 = Math.max(x1, sx); y1 = Math.max(y1, sy);
+      }
+      return { x0: Math.round(x0), y0: Math.round(y0), x1: Math.round(x1), y1: Math.round(y1) };
+    });
+    return JSON.stringify(out);
+  };
+
   /* ---------------- teszt-kampó (K.2) ---------------- */
   useEffect(() => {
     return installGameTestApi({
@@ -2912,6 +3116,8 @@ export default function BlockCraftQuiz() {
           armed: mine?.lockArmed() ? 1 : 0,
           timeLeft: timeLeftRef.current,
           pressing: st?.mining.pressing ? 1 : 0,
+          stoneRects: stoneScreenRects(),
+          stoneBand: JSON.stringify(stoneBandRef.current),
           geometries: rendererMemRef.current?.geometries ?? 0,
           textures: rendererMemRef.current?.textures ?? 0,
         };
@@ -3885,6 +4091,8 @@ export default function BlockCraftQuiz() {
         @media (prefers-reduced-motion: reduce) { .bc-act { transition: none; } .bc-act:active, .bc-rune:active { transform: none; } }
         /* A kérdés-sáv a Kockavadász HUD-ja (idő + chipsor) alatt kezdődik. */
         .play-question[data-skin="mine"] { --play-question-top: calc(max(4px, var(--game-safe-top)) + 104px); }
+        /* Review #484 N1: zár alatt a prompt annyi sor, amennyi a kősáv és a rúnagombok mellett elfér (a többit a „Mutasd”). */
+        .play-question[data-skin="mine"]:not([data-expanded="true"]) .play-question-prompt { -webkit-line-clamp: var(--bc-pq-lines, var(--pq-lines, 5)) !important; line-clamp: var(--bc-pq-lines, var(--pq-lines, 5)) !important; }
         /* Alacsony fekvő nézet: érintős fekvő nézetben a hotbar a vászonra kerül, a joystick és az akciógombok közé (a
            vászon kapja a magasságot); a rúnagombok egy sorban a vászon közepe alatt. */
         @media (max-height: 500px) and (min-width: 560px) {

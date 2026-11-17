@@ -442,3 +442,68 @@ test.describe("844x390 fekvő", () => {
     expect(report).toEqual([]);
   });
 });
+
+/* ------------------------- review #484 N1: a 3D-rúnakövek láthatók (nem takarja kártya, gomb, HUD, vezérlő) ------------------------- */
+
+/** A leghosszabb kérdés (a „Mutasd”-os próba szövege) a leghosszabb válaszokkal (~110 karakter). */
+const LONGEST_BOTH_QUIZ = { prompt: LONG_PROMPT_QUIZ.prompt, options: MATERIAL_XLONG_QUIZ.options, correctIndex: 0 };
+
+for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) for (const [name, QUIZ] of [["évfolyam-bank", LONGEST_RUNE_QUIZ], ["leghosszabb kérdés + válaszok", LONGEST_BOTH_QUIZ]] as const) {
+  test.describe(`N1 ${vp.width}x${vp.height}`, () => {
+    test.use({ viewport: vp });
+    test(`a négy rúnakő ≥ 70%-ban látható, a kő ↔ rúnagomb elrendezés egyezik, a kártya nem lóg a gombokra (${name})`, async ({ page }) => {
+      await startGame(page);
+      await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), QUIZ);
+      await expect(page.locator('[data-testid="bc-quiz"] [data-correct]').first()).toHaveAttribute("data-armed", "true", { timeout: 15_000 });
+      // A kősáv mérése ~5 Hz: várunk, amíg a kövek a sávban vannak (a lapon belül, képkockára — C-65).
+      await expect.poll(async () => String((await probe(page)).stoneBand), { timeout: 10_000 }).not.toBe("null");
+      const report = await page.evaluate(() => {
+        const w = window as unknown as GameTestWindow;
+        const stones = JSON.parse(String(w.__websuliGame!.probe().stoneRects)) as Array<{ x0: number; y0: number; x1: number; y1: number } | null>;
+        const sel = [".play-question-card", '[data-testid="bc-quiz"] button', "[data-game-hud]", '[data-testid="virtual-joystick"]', ".bc-actions button", ".bc-chips > *", '[data-testid="bc-hotbar"]'];
+        const occ: DOMRect[] = [];
+        for (const s of sel) for (const el of Array.from(document.querySelectorAll<HTMLElement>(s))) {
+          const cs = getComputedStyle(el);
+          if (cs.display === "none" || cs.visibility === "hidden") continue;
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) occ.push(r);
+        }
+        const visible = stones.map((s) => {
+          if (!s) return 0;
+          let n = 0, vis = 0;
+          for (let a = 0; a < 12; a++) for (let b = 0; b < 12; b++) {
+            const x = s.x0 + ((a + 0.5) / 12) * (s.x1 - s.x0);
+            const y = s.y0 + ((b + 0.5) / 12) * (s.y1 - s.y0);
+            n++;
+            if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
+            if (!occ.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) vis++;
+          }
+          return Math.round((100 * vis) / n);
+        });
+        const runes = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="bc-quiz"] [data-correct]')).map((el) => el.getBoundingClientRect());
+        const cx = (r: { x0: number; x1: number } | DOMRect) => ("x0" in r ? (r.x0 + r.x1) / 2 : r.left + r.width / 2);
+        const cy = (r: { y0: number; y1: number } | DOMRect) => ("y0" in r ? (r.y0 + r.y1) / 2 : r.top + r.height / 2);
+        // Az elrendezés egyezése: minden kőpárra a bal/jobb és a fent/lent viszony ugyanaz, mint a rúnagomboknál.
+        const mismatch: string[] = [];
+        for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) {
+          const si = stones[i], sj = stones[j];
+          if (!si || !sj) continue;
+          const dxB = cx(runes[j]!) - cx(runes[i]!);
+          const dyB = cy(runes[j]!) - cy(runes[i]!);
+          const dxS = cx(sj) - cx(si);
+          const dyS = cy(sj) - cy(si);
+          if (Math.abs(dxB) > 20 && Math.sign(dxB) !== Math.sign(dxS)) mismatch.push(`${i}-${j} vízszintesen`);
+          if (Math.abs(dyB) > 20 && Math.sign(dyB) !== Math.sign(dyS)) mismatch.push(`${i}-${j} függőlegesen`);
+        }
+        const card = document.querySelector(".play-question-card")!.getBoundingClientRect();
+        const cardOnRunes = runes.filter((r) => r.top < card.bottom - 1 && r.bottom > card.top + 1 && r.left < card.right && r.right > card.left).length;
+        return { visible, mismatch, cardOnRunes, stones: JSON.stringify(stones) };
+      });
+      const dir = process.env.BC_PLAY_SHOT_DIR;
+      if (dir) await page.screenshot({ path: `${dir}/block-craft-quiz-${vp.width}x${vp.height}-question${name === "évfolyam-bank" ? "" : "-longest"}.jpg`, type: "jpeg", quality: 70, scale: "css" });
+      for (let i = 0; i < 4; i++) expect(report.visible[i]!, `a(z) ${"ABCD"[i]} kő látható része (${report.stones})`).toBeGreaterThanOrEqual(70);
+      expect(report.mismatch, "a kövek elrendezése a rúnagombokét követi").toEqual([]);
+      expect(report.cardOnRunes, "a kérdéskártya nem lóg a rúnagombokra").toBe(0);
+    });
+  });
+}

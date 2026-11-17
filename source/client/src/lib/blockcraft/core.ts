@@ -326,6 +326,33 @@ export function pickRuneStone(o: Vec3, d: Vec3, stones: readonly Vec3[], maxDist
   return best;
 }
 
+/**
+ * Sugár–blokk (egységkocka) metszés (slab-módszer): igaz, ha a sugár `maxDist`-en belül metszi az `(x, y, z)` cellát.
+ * A `d` egységvektor.
+ */
+export function rayHitsCell(o: Vec3, d: Vec3, cell: Pos, maxDist = 6): boolean {
+  let t0 = 0;
+  let t1 = maxDist;
+  const axes: Array<[number, number, number]> = [
+    [o.x, d.x, cell.x],
+    [o.y, d.y, cell.y],
+    [o.z, d.z, cell.z],
+  ];
+  for (const [oo, dd, c] of axes) {
+    if (Math.abs(dd) < 1e-12) {
+      if (oo < c || oo > c + 1) return false;
+      continue;
+    }
+    let a = (c - oo) / dd;
+    let b = (c + 1 - oo) / dd;
+    if (a > b) [a, b] = [b, a];
+    t0 = Math.max(t0, a);
+    t1 = Math.min(t1, b);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
 /** Arany visszajátszáshoz: a világ (FNV-1a) és a menet számlálóinak lenyomata. */
 export function mineFingerprint(st: RuneMineState): string {
   let h = 0x811c9dc5;
@@ -456,6 +483,11 @@ export type RuneMine = {
    * (`blockDist`) ELŐTT éri el, és a lenyomás az élesítés után kezdődött. A bányászó gesztusok ezt NEM hívják.
    */
   tapRay(origin: Vec3, dir: Vec3, pressStartedAt: number, blockDist: number): boolean;
+  /**
+   * A nyitott zár köveinek aktuális helye (a lap képkockánként a kamerához igazítja őket — review #484 N1). A `tapRay` ezekkel
+   * számol; a darabszám a válaszok számával egyezik.
+   */
+  setLockStones(stones: readonly Vec3[]): void;
   /** A kérdés-sáv `onShow`-ja hívja: a várakozó rúnaérchez köti a megnyílt kérdést. */
   noteShow(p: QuestionPresentation): void;
   /** A kérdés-sáv `onOutcome`-ja hívja: zsákmány, kombó, pálya-cél. */
@@ -738,9 +770,22 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     tapRay(origin, dir, pressStartedAt, blockDist) {
       const lock = st.lock;
       if (!lock || lock.resolved) return false;
+      // Review #484 B1 / N2: az ércre célzott koppintás SOHA nem választ — bármilyen kőelrendezésnél és a játékos bármely
+      // helyzetéből (körbejárás, az érc fölött állás); a kőre koppintás csak az érc mellett / fölött számít.
+      if (rayHitsCell(origin, dir, lock.ore, 6)) return false;
       const i = pickRuneStone(origin, dir, lock.stones, Math.min(6, blockDist));
       if (i < 0) return false;
       return this.pick(i, pressStartedAt);
+    },
+    setLockStones(stones) {
+      const lock = st.lock;
+      if (!lock || lock.resolved || stones.length !== lock.stones.length) return;
+      for (let i = 0; i < stones.length; i++) {
+        const s = lock.stones[i]!;
+        s.x = stones[i]!.x;
+        s.y = stones[i]!.y;
+        s.z = stones[i]!.z;
+      }
     },
     noteShow(p) {
       st.lastStartMs = p.startedAtSimMs;

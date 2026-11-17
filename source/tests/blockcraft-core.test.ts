@@ -565,3 +565,67 @@ test("H1 (review #484): a bányászó gyerek is kap kérdést — RUNE_REVEAL_GA
 test("M5 (review #484): a kérdés nélküli zár nem ér többet a rossz válasznál", () => {
   assert.ok(RUNE_XP_FREE <= RUNE_XP_WRONG, `kérdés nélkül ${RUNE_XP_FREE} XP, rossz válasz ${RUNE_XP_WRONG} XP`);
 });
+
+test("N2 (review #484, a reviewer stone-overlap2 mérője): körbejárás / fölé állás a zár után — az ércre célzott koppintás SOHA nem választ (tapRay), a nyers geometria viszont talál", () => {
+  const r = rig();
+  const st = r.mine.state();
+  const ore = st.ores[0]!;
+  r.mine.hit(ore);
+  r.tick(RUNE_ARM_MS + STEP);
+  const lock = st.lock!;
+  assert.ok(r.mine.lockArmed());
+  const c = { x: ore.x + 0.5, y: ore.y + 0.5, z: ore.z + 0.5 };
+  const faces = [
+    { n: [1, 0, 0], p: (a: number, b: number) => ({ x: ore.x + 1, y: ore.y + a, z: ore.z + b }) },
+    { n: [-1, 0, 0], p: (a: number, b: number) => ({ x: ore.x, y: ore.y + a, z: ore.z + b }) },
+    { n: [0, 1, 0], p: (a: number, b: number) => ({ x: ore.x + a, y: ore.y + 1, z: ore.z + b }) },
+    { n: [0, 0, 1], p: (a: number, b: number) => ({ x: ore.x + a, y: ore.y + b, z: ore.z + 1 }) },
+    { n: [0, 0, -1], p: (a: number, b: number) => ({ x: ore.x + a, y: ore.y + b, z: ore.z }) },
+  ];
+  let n = 0;
+  let rawHits = 0;
+  for (const phiDeg of [0, 30, 60, 90, 135, 180]) {
+    for (const dist of [1.5, 2.5, 3.5]) for (const dy of [-1, 0, 1, 2]) {
+      const phi = (phiDeg * Math.PI) / 180;
+      const eye = { x: c.x + Math.sin(phi) * dist, y: ore.y + dy + 1.62, z: c.z + Math.cos(phi) * dist };
+      for (const f of faces) for (let a = 0.05; a < 1; a += 0.1) for (let b = 0.05; b < 1; b += 0.1) {
+        const pt = f.p(a, b);
+        const d = { x: pt.x - eye.x, y: pt.y - eye.y, z: pt.z - eye.z };
+        if (d.x * f.n[0]! + d.y * f.n[1]! + d.z * f.n[2]! >= 0) continue; // a lap nem néz a szem felé
+        const l = Math.hypot(d.x, d.y, d.z);
+        const u = { x: d.x / l, y: d.y / l, z: d.z / l };
+        n++;
+        if (pickRuneStone(eye, u, lock.stones, Math.min(6, l)) >= 0) rawHits++;
+        assert.equal(r.mine.tapRay(eye, u, r.mine.clockMs(), l), false, `phi ${phiDeg} dist ${dist} dy ${dy}: az ércre célzott koppintás választott`);
+      }
+    }
+  }
+  assert.equal(lock.resolved, null);
+  assert.ok(n > 1000, `a mérés nem üres (${n} sugár)`);
+  assert.ok(rawHits > 0, `ellenpróba: a nyers geometria (érc-szabály nélkül) ${rawHits} sugárnál követ talál`);
+});
+
+test("N1 (review #484): a lap áthelyezheti a köveket (setLockStones) — a kőre eső koppintás az új helyen választ, a régin nem", () => {
+  const r = rig();
+  const st = r.mine.state();
+  r.mine.hit(st.ores[0]!);
+  r.tick(RUNE_ARM_MS + STEP);
+  const lock = st.lock!;
+  const eye = { x: r.player.x, y: r.player.y + 1.62, z: r.player.z };
+  const old = { ...lock.stones[2]! };
+  const moved = lock.stones.map((s, i) => ({ x: eye.x - 1 + i * 0.7, y: eye.y - 0.4, z: eye.z - 2 }));
+  r.mine.setLockStones(moved);
+  assert.deepEqual(lock.stones[2], moved[2]);
+  r.mine.setLockStones(moved.slice(0, 2)); // rossz darabszám: nem változik
+  assert.deepEqual(lock.stones[2], moved[2]);
+  const ray = (t: Vec3) => {
+    const v = { x: t.x - eye.x, y: t.y - eye.y, z: t.z - eye.z };
+    const l = Math.hypot(v.x, v.y, v.z);
+    return { u: { x: v.x / l, y: v.y / l, z: v.z / l }, l };
+  };
+  const o = ray(old);
+  assert.equal(r.mine.tapRay(eye, o.u, r.mine.clockMs(), 99), false, "a régi helyen nincs kő");
+  const m = ray(moved[2]!);
+  assert.equal(r.mine.tapRay(eye, m.u, r.mine.clockMs(), 99), true, "az új helyen a kő választ");
+  assert.ok(lock.resolved !== null);
+});
