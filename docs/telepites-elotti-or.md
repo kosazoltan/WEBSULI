@@ -29,6 +29,10 @@ a független audit szerint ~15 percen belül három éles telepítés is lefutot
 7. **Több zöld PR egy ablakban:** minden egyes összevonás ELŐTT futtasd az őrt. Az első összevonás után a többi PR összevonási állapota
    átmenetileg `UNKNOWN`; várd meg, amíg a GitHub újraszámolja, ne erőltesd.
 
+8. **Merge előtti kapu (2026-11-17):** a fenti 1., 5. és 6. pontot (futásőr, `activeMatches`, kötelező ellenőrzések a jelenlegi fejen)
+   és a nyitott review-szálakat, a független ellenőr ítéletét egy lépésben a `npm run gate:merge -- <PR>` ellenőrzi; a `gh pr merge`
+   előtt a hook a 15 percnél frissebb zöld bizonyítékát kéri (`docs/minosegkapuk.md`).
+
 ## Használat
 
 ```bash
