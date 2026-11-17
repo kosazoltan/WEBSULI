@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { WAVE_COUNT } from "../client/src/lib/spaceAsteroid/physics";
+
 /**
  * Physics lives in lib/spaceAsteroid/physics.ts. A green unit suite on the
  * helper is worthless if the 2400-line page still uses wall-clock spawn and
@@ -128,4 +130,9 @@ test("J6a: a kristály-gombok a kérdés-sáv alatti zónába kerülnek (mért k
   assert.match(code, /if \(chip\.style\.visibility !== vis\) chip\.style\.visibility = vis;/);
   // a koppintás mozgó célra: pointer-események (közös `pointerTapHandlers`), nem `click`
   assert.match(code, /\{\.\.\.pointerTapHandlers\(crystalTaps, idx, \(\) => onAnswer\(idx\)\)\}/);
+});
+
+test("J6a: a rövidült pálya miatt a „Hullám 10” jelvény (wave_10) a főellenfél legyőzésével elérhető marad", () => {
+  assert.match(code, /highestWave: gameWon \? WAVE_COUNT \+ 2 : waveRef\.current,/);
+  assert.ok(WAVE_COUNT + 2 >= 10, "a főellenfél legyőzése nem éri el a 10. hullám küszöbét");
 });

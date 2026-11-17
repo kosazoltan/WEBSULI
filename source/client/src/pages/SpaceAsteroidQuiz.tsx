@@ -994,6 +994,13 @@ export default function SpaceAsteroidQuiz() {
   const livesRef = useRef(3);
   const phaseRef = useRef<Phase>(phase);
   const pausedRef = useRef(false);
+  /**
+   * A megállítás okai KÜLÖN számon tartva: felhasználói szünet (`paused`), „Miért?” kártya, kibontott kérdés (mindkettő `whyOpen`),
+   * elveszett grafika (`gfxLost`); a lejárt kupon a közös `requestGameFrame`-en át állítja le a hurkot, a háttérbe kerülés az
+   * automatikus szünetet kéri. A világ csak akkor fut, ha EGYIK ok sem áll fenn; a folytatás / P csak a SAJÁT okát oldja fel —
+   * a `holdRef` a szünet menütől független okok (kártya, kibontott kérdés, grafika-hiba) együttese.
+   */
+  const holdRef = useRef(false);
   const powerLevelRef = useRef(0);
   const powerTimerRef = useRef(0);
   const shieldTimerRef = useRef(0);
@@ -1356,10 +1363,11 @@ export default function SpaceAsteroidQuiz() {
 
   // A játék áll szünetben ÉS amíg a „Miért?” kártya nyitva van (a kérdés-óra és a világ is).
   useEffect(() => {
-    pausedRef.current = paused || whyOpen;
+    holdRef.current = whyOpen || gfxLost;
+    pausedRef.current = paused || holdRef.current;
     if (paused) releaseControls();
     else if (whyOpen) releaseControls();
-  }, [paused, whyOpen, releaseControls]);
+  }, [paused, whyOpen, gfxLost, releaseControls]);
 
   /** A szünet játék közben mindig elérhető (HUD-gomb, a kérdés-sáv gombja, P, automatikus szünet). */
   const pauseGame = useCallback(() => {
@@ -1370,7 +1378,8 @@ export default function SpaceAsteroidQuiz() {
   const resumeGame = useCallback(() => {
     // A szünet alatt eltelt idő ne kerüljön egyetlen képkockába (a rAF-hurok dt-je).
     lastTimeRef.current = null;
-    pausedRef.current = false;
+    // Ha közben más ok (kártya, kibontott kérdés, grafika-hiba) is fennáll, a játék tovább áll — azok a saját okukat oldják fel.
+    pausedRef.current = holdRef.current;
     setPaused(false);
   }, []);
 
@@ -3047,7 +3056,8 @@ export default function SpaceAsteroidQuiz() {
         case "ArrowDown": case "s": case "S": keysRef.current.down = true; break;
         case " ": keysRef.current.fire = true; break;
         case "p": case "P":
-          if (phaseRef.current === "play") {
+          // A „Miért?” kártya / kibontott kérdés olvasása közben a P nem oldja fel a játékot (az olvasásért nem járhat életvesztés).
+          if (phaseRef.current === "play" && !holdRef.current) {
             if (pausedRef.current) resumeGame();
             else pauseGame();
           }
@@ -3144,7 +3154,10 @@ export default function SpaceAsteroidQuiz() {
       alienKills: alienKillsRef.current,
       perfect: gameWon && bestComboRef.current >= 5,
       fullClear: gameWon,
-      highestWave: waveRef.current,
+      // A pálya rövidült (12 → 8 hullám + főellenfél), ezért a „Hullám 10” jelvény (`wave_10`, „érj el a 10. hullámig”) a hullámszámmal
+      // már nem lenne elérhető (legfeljebb 9). A főellenfél LEGYŐZÉSE — a régi pálya vége — számít a 10. hullámnak. (A jelvény
+      // átnevezése / küszöbe orkesztrátor-kérés: az `L/achievements.ts` nem ennek a szeletnek a fájlja.)
+      highestWave: gameWon ? WAVE_COUNT + 2 : waveRef.current,
     });
     if (wasDailyAvailable && gameWon) {
       const daily = markDailyCompleted();
@@ -3601,7 +3614,7 @@ export default function SpaceAsteroidQuiz() {
         />
       )}
 
-      <PauseMenu open={paused && inRun} onResume={resumeGame} onRestart={startNewRun} onExit={endRound} exitLabel="Kör vége">
+      <PauseMenu open={(paused || gfxLost) && inRun} onResume={resumeGame} onRestart={startNewRun} onExit={endRound} exitLabel="Kör vége">
         <p className="text-sm text-slate-300">
           Hullám {wave >= BOSS_FINAL_WAVE ? "BOSS" : `${wave}/${WAVE_COUNT}`} · {score.toLocaleString("hu-HU")} pont · ♥ {lives}
         </p>

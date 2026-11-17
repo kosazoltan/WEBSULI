@@ -90,7 +90,8 @@ test("szünet: HUD-gomb, automatikus szünet, a kérdés-sáv saját szünetgomb
   assert.match(page, /<GameHud[\s\S]{0,120}onPause=\{pauseGame\}/);
   assert.match(page, /onAutoPause=\{pauseGame\}/);
   assert.match(page, /pauseTestId="sa-quiz-pause"[\s\S]{0,60}onPause=\{pauseGame\}/);
-  assert.match(page, /<PauseMenu open=\{paused && inRun\} onResume=\{resumeGame\} onRestart=\{startNewRun\} onExit=\{endRound\}/);
+  // SPEC-VÁLTOZÁS 2026-11-17 (review #486): a menü a grafika-hiba alatt is nyitva marad (a folytatás csak a szünet okát oldja fel).
+  assert.match(page, /<PauseMenu open=\{\(paused \|\| gfxLost\) && inRun\} onResume=\{resumeGame\} onRestart=\{startNewRun\} onExit=\{endRound\}/);
   assert.match(page, /if \(pausedRef\.current\) resumeGame\(\);\s*else pauseGame\(\);/);
   // SPEC-VÁLTOZÁS 2026-11-17 (J6a 3.): nincs „quiz” fázis — a kérdés a `play` alatti al-állapot, a szünet bármikor kérhető a `play`-ben.
   assert.match(body("pauseGame"), /if \(phaseRef\.current !== "play"\) return;/);
@@ -115,7 +116,10 @@ test("nincs kör-óra; az erő- és a pajzs-időzítő a tick-ben fogy, szünetb
   assert.match(page, /powerTimerRef\.current = Math\.max\(0, powerTimerRef\.current - dt\);/, "az erő-időzítő nem a tick-ben fogy");
   assert.match(page, /shieldTimerRef\.current = Math\.max\(0, shieldTimerRef\.current - dt\);/, "a pajzs-időzítő nem a tick-ben fogy");
   assert.match(page, /if \(phaseRef\.current !== "play" \|\| pausedRef\.current\) \{/, "a tick nem áll szünetben");
-  assert.match(page, /pausedRef\.current = paused \|\| whyOpen;/, "a „Miért?” nem szünetelteti a játékot");
+  // review #486: a megállítás okai külön (szünet / kártya / kibontott kérdés / grafika-hiba); a folytatás és a P csak a saját okát oldja fel
+  assert.match(page, /holdRef\.current = whyOpen \|\| gfxLost;\s*pausedRef\.current = paused \|\| holdRef\.current;/, "a „Miért?” nem szünetelteti a játékot");
+  assert.match(page, /pausedRef\.current = holdRef\.current;\s*setPaused\(false\);/, "a folytatás feloldaná a kártya miatti megállítást is");
+  assert.match(page, /phaseRef\.current === "play" && !holdRef\.current/, "a P a kártya alatt feloldaná a játékot");
   assert.match(page, /driver\.frame\(realDt, pausedRef\.current\)/, "a meghajtó nem kapja meg a szünetet");
   assert.match(body("detonateBomb"), /phaseRef\.current !== "play" \|\| pausedRef\.current/);
 });

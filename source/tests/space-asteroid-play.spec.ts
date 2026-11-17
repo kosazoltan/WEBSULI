@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { hideAndShowPage } from "./support/game-mobile-quality";
+
 /**
  * J6a — Galaktikus Aszteroida valódi érintéssel (végrehajtás J6a 5.; terv J1, J5, J9, J-SA; K.4/13–18, 23–25).
  *
@@ -158,9 +160,25 @@ test.describe("valódi érintés", () => {
     await page.getByTestId("play-why").tap();
     await expect(page.getByTestId("quiz-feedback")).toBeVisible();
     const t1 = (await probe(page)).simTime as number;
+    // review (#486, Vercel): a „Miért?” kártya olvasása közben megnyomott P NEM oldhatja fel a játékot a kártya mögött
+    await page.keyboard.press("p");
     await page.waitForTimeout(700);
     const t2 = (await probe(page)).simTime as number;
-    expect(t2 - t1, "a „Miért?” alatt áll a szimuláció").toBeLessThanOrEqual(34);
+    expect(t2 - t1, "a „Miért?” alatt áll a szimuláció (a P billentyű sem indítja újra)").toBeLessThanOrEqual(34);
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+    await expect(page.getByTestId("game-pause-menu"), "a P a kártya alatt nem nyit szünet menüt").toHaveCount(0);
+    // lapváltás (automatikus szünet) + folytatás a menüből: a kártya nyitva marad, ezért a játék tovább áll (a folytatás csak a saját okát oldja fel)
+    await hideAndShowPage(page);
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    await page.getByTestId("game-resume").tap();
+    await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+    const lives0 = (await probe(page)).lives as number;
+    const t3 = (await probe(page)).simTime as number;
+    await page.waitForTimeout(800);
+    const after2 = await probe(page);
+    expect((after2.simTime as number) - t3, "a folytatás után a nyitott kártya mögött a világ áll").toBeLessThanOrEqual(34);
+    expect(after2.lives, "az életek a kártya alatt nem változnak").toBe(lives0);
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible();
     await page.getByTestId("quiz-feedback-dismiss").tap();
     await expect(page.getByTestId("quiz-feedback")).toHaveCount(0);
     await expect.poll(async () => ((await probe(page)).simTime as number) - t2, { timeout: 3_000 }).toBeGreaterThan(300);
