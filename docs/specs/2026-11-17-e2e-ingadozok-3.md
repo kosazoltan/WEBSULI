@@ -10,7 +10,8 @@ A kötelező „Playwright E2E” job (~1–1,2 óra) a mainen az utolsó hat fu
 teszten bukott (2026-11-17): `joystick-response.spec.ts › block-craft-quiz` (run 44049286407, egy csak-doksi commiton),
 `lesson-result-email.spec.ts` (run 44028107372 és a #484 futása, flaky). A #484 futásában flaky volt a `duel-online.spec.ts`
 „mindkét játékos EGYSZERRE nyomja a Visszavágót” esete; helyben a `game-win-paths` Tornado-esete (43,96 px < 44); a kanban #76
-szerint a `speed-math-play.spec.ts` menetvégi hurka. Minden ilyen bukás egy teljes CI-kört és téves javítási kísérleteket okoz.
+szerint a `speed-math-play.spec.ts` menetvégi hurka. A munka közben a main 44067781689-es futása (26bae97f) is ugyanezen bukott:
+`joystick-response` Szökőár (többlet +9) és Kockavadász (tárcsa +21 / +23). Minden ilyen bukás egy teljes CI-kört és téves javítási kísérleteket okoz.
 
 ## Módszer (tesztenként)
 
@@ -57,12 +58,15 @@ Ha egy tesztnél 3 megközelítés után sincs bizonyított gyökérok: megáll�
 
 <!-- acceptance-checklist -->
 - [x] 1: joystick-response › block-craft-quiz renderszámláló — gyökérok (álló/rezgő szakasz hossz-aszimmetria), javítás,
-  előtte (#484 1/10) / utána (main 12/12, #484 12/12), ellenpróba a befagyasztott régi specen.
+  előtte (#484 1/10) / utána (2. változat: teljes spec 12/12, Kockavadász main 10/10, #484 7/7), ellenpróba a befagyasztott régi
+  specen. Termék-mutációs ellenpróba: NOT RUN (lásd a végrehajtási fájl 4. pontját).
 - [x] 2: lesson-result-email — gyökérok (kanban #31), javítás, célzott kísérlet előtte 5/5 bukik / utána 5/5 + 20/20 zöld.
-- [x] 3: duel-online „EGYSZERRE Visszavágó” — gyökérok (CI-riport + 6×: 4/20), javítás (WebSocket-visszatartás), utána 19/20
-  (az egy: terhelt gép tesztkerete a lezárásban, a vizsgált lépés után).
+- [ ] 3: duel-online „EGYSZERRE Visszavágó” — gyökérok (CI-riport + 6×: 4/20) és javítás (WebSocket-visszatartás) kész, de a
+  „20-ból mindegyik zöld” elfogadás betű szerint NEM teljesült: utána 19/20. Az egy bukás a vizsgált lépés UTÁN, a lezárásban, a
+  150 s-os kereten; az oka („terhelt gép”) NEM bizonyított (UNVERIFIED). Az első CI-körökben a teszt idejét figyelni kell.
 - [x] 4: game-win-paths (animáció közbeni mérés) — kísérlet 3/3 igazolja az ablakot; javítás; utána 160/160.
-- [x] 5: speed-math-play menetvégi hurok — a mechanizmus kísérlettel igazolva (2/2), javítás; a természetes hurok-időtúllépés
-  35 futásból nem jött elő (NOT REPRODUCED), a korai koppintás-bukás gyökéroka UNVERIFIED (külön jelentve).
+- [ ] 5: speed-math-play menetvégi hurok — a mechanizmus kísérlettel igazolva (2/2), javítás kész; a természetes hurok-időtúllépés
+  35 futásból nem jött elő (NOT REPRODUCED). A „mindegyik zöld” elfogadás NEM teljesült: 4×-en 11/15 — a 4 bukás a korai,
+  nem gyökérokozott koppintás-mechanizmus (UNVERIFIED; külön jegyre megy, a független ellenőr J2-es leletével).
 - [x] 6: word-ladder-play:48 megfigyelései átadva (nem hatókör).
 - [ ] Helyi kapuk zöldek; független ellenőr IGEN; PR; CI zöld.

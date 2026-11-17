@@ -83,7 +83,10 @@ változat ugyanazon az úton).
   egyik kliens kattintásakor a gomb már lecserélődött) — a verseny csak szűkült, elvetve.
 - Javítás (2. próba): `holdableRt` — a szerver → kliens üzenetek visszatartása, amíg mindkét `room:rematch` el nem ment.
 - Utána: 1× **3/3 zöld**; 6×, 20×: **19/20 zöld** — az egy bukás a 150 s-os tesztkeret a lezárásban (a visszaszámlálás-ellenőrzés
-  ELŐTTE lefutott; a futás 4 párhuzamos e2e-vel terhelt gépen ment: medián 69 s a javítás előtti 46 s helyett).
+  ELŐTTE lefutott). A futás 4 párhuzamos e2e-vel terhelt gépen ment (medián 69 s a javítás előtti 46 s helyett), de hogy a bukás
+  oka a terhelés, az NEM bizonyított (UNVERIFIED; alternatíva: a `routeWebSocket`-tel átvezetett csatorna lassítja a meccset vagy a
+  `ctx.close()`-t). A „20-ból mindegyik zöld” elfogadás így betű szerint NEM teljesült (19/20). Az első CI-körökben a teszt idejét
+  figyelni kell; ha a 150 s-os keret újra előjön, külön jegy nyomkövetéssel.
 
 ### 3. game-win-paths (Tornado; a közös eredményképernyő)
 - Tünet (helyben, egy másik ügynök 8 futásából 1): a gomb 43,96 px < 44.
@@ -104,7 +107,10 @@ változat ugyanazon az úton).
 - 1. javítás-változat (ELVETVE): a rezgő szakasz előbb, az álló `moving.ms`-ig. A Kockavadászra jó volt (main 12/12, #484 12/12,
   többlet −4…+4), de a teljes spec Szökőár-esete 2/2 bukott: az utána következő álló szakaszban a Szökőár lap-renderje a felére
   esett (16–30 a rezgő 48–59-ével szemben, azonos hosszon) → többlet +32 / +29. A sorrend megfordítása a „mindkét szakaszban
-  azonos mozgás” feltételt sértette (a régi sorrendben a CI-n a Szökőár többlete −3…+1 volt).
+  azonos mozgás” feltételt sértette. (A régi sorrend a CI-n sem volt stabil a Szökőárnál: a 44049286407 / 44028107372 /
+  44042768012 futásokban −3…+1, de a main 44067781689-es futásában (26bae97f) a Szökőár többlete (lap / tárcsa) +9 / +9 (bukás), a
+  nyomkövetett újrapróbán +76 / +95, harmadikra +2 / +1; ugyanabban a futásban a Kockavadász tárcsája +21 és +23 (lap −8, −12) — a rövid álló ablak zaja tehát a
+  Szökőárt is érinti, ami a gyökérok-állítást erősíti.)
 - Javítás (2. változat): `tests/joystick-response.spec.ts` — a sorrend marad (álló, majd rezgő); az álló a 30 várakozás után még
   30 × a lépcsőkben mért átlagos `touchMove`-idő ideig tart; a JOY_RESULT-ban `renderStill` / `stillMs` is. A küszöb (≤ 6) és a
   tárcsa ≤ lap + 2 szabály változatlan.
@@ -114,6 +120,11 @@ változat ugyanazon az úton).
   Kockavadász −4…+1); Kockavadász külön: **main 7/7 zöld** (összesen 10/10; lap −2…+1, tárcsa −1…+0; álló 14,2–16,7 s, rezgő
   9,6–11,0 s), **#484 ága 7/7 zöld** (lap −1…+1, tárcsa 0…+1; álló 13,3–14,9 s, rezgő 8,8–10,4 s; ugyanaz a spec-fájl,
   leválasztott munkafában, a #484 9083a7c0 fején, saját buildjével).
+- Termék-mutációs ellenpróba (pl. ideiglenes `setState` a tárcsa `onChange`-ében): NOT RUN — ok: az idő a reprodukciókra ment,
+  és a termékfájl (`BlockCraftQuiz.tsx`) egy nyitott PR hatókörében van. Levezetés (a független ellenőré): eseményenkénti
+  renderelésnél a 30 mozgás-esemény ~+30 többletet adna, a küszöb ≤ 6, a javított mérés szórása −15…+3 → a mérő nem lett
+  érzéketlen a teljes eseményenkénti renderelésre; részleges regresszióra (néhány többlet-render) az érzékenység korlátozott.
+  Kockázat: alacsony; a következő körre javasolt a mért mutációs próba.
 
 ### 5. speed-math-play menetvégi hurok (kanban #76)
 - Tünet (#76): 6× lassítással 2/10 túllépte a 180 s-ot a menetvégi hurokban.
