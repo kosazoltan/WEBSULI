@@ -1628,8 +1628,16 @@ fizika-esetek (pattogás, határok) változatlanok.
       megfelelője változatlanul él, külön ág nem kell;
     - **kérdés nélküli megtartás:** csak valódi forráshiánynál (0 tételes lecke) — a közös ág ≥ 1 feltett tétel után mindig
       ad kérdést; 1 tételes leckénél ugyanaz ismétlődik (elkerülhetetlen, a tartaléknál is így volt).
+    - **körforgás — LAZÍTÁS (nem egyenértékű):** a régi tartalék ≥ 2n kérdéses menetben minden tételt kétszer adott; a
+      közös szabályban az ismétlési helyek (≤ 30%) a HIBÁZOTT tételekre mennek, így a jól megválaszolt tétel később kerül
+      újra sorra. Az új teszt-állítás: minden tétel sorra kerül, ≥ 3n kérdésnél kétszer, két feltevése között ≤ 2n kérdés.
+      8 tételnél egy menet 13–20 kérdés, a 3n = 24 sosem jön össze — ott a „kétszer” rész üres, csak a ≤ 2n-es rés mér;
+    - **a hibázott tétel visszatérése:** legfeljebb min(2n, 10) kérdés múlva; kimondott kivétel, ha utána a menetből
+      ennél kevesebb MEGVÁLASZOLT kérdés maradt (a menet végén megszakított kérdés nem számít).
     Mérce (sim, 20 seed × 3 / 5 / 8 tétel × 7. és 4. évfolyam): közvetlen ismétlés 0, kérdés nélküli megtartás 0, a hibázott
     tétel visszajön, a győzelmi arány nem rosszabb a kupon nélkülinél (tűrés 1/20); lap: e2e 3 tételes kuponos leckével.
+    Jegyre (a közös szabály kérdése, a tesztelt ≤ 8 tételes tartományon kívül): 10–12 tételes kupon-leckénél a hibázott
+    tétel 80 seedből 14–43 esetben nem jön vissza a menetben (a közös director `LATE_RETURN_MAX = 10` határa).
 21. **Mérőkép az élesítés után (Ú5).** A kérdés-képek a beúszás és a 600 ms-os előjelzés után készülnek.
     Jegyre: Ú3 (≥ 600 ms tartott joystick — a mechanika szándékolt alakja, a J5b-ben újramérve); a 7-es küszöb az átlagosnak
     könnyű (a J5b rivális-győzelme váltja ki).
