@@ -21,21 +21,52 @@ const GAME = "block-craft-quiz" as const;
 const factory = (extra: Record<string, unknown> = {}): SimGameFactory => (o) => createSimGame({ ...o, ...extra });
 
 const avg = runSimSeeds(factory(), SIM_AVERAGE, { gameId: GAME, seconds: 180 });
+/** Review #484 H1: a „bányászó, nem siető” játékos (minden zár után 7 mp szabad bányászás, csak utána keres ércet). */
+const miner = factory({ style: "miner" });
+const avgMiner = runSimSeeds(miner, SIM_AVERAGE, { gameId: GAME, seconds: 180 });
 
-test("J2: kérdés/perc (SIM_AVERAGE, 20 seed medián) ≥ 7 — a 3–4. évfolyamos és a gyenge játékosnál is", () => {
-  const perMin = medianOf(avg.map((r) => r.stats.perMinute));
-  assert.ok(perMin >= 7, `medián ${perMin.toFixed(2)} / perc`);
-  const young = runSimSeeds(factory(), SIM_YOUNG, { gameId: GAME, seconds: 180, grade: 4 });
-  assert.ok(medianOf(young.map((r) => r.stats.perMinute)) >= 7, "SIM_YOUNG (4. évf.)");
-  const weak = runSimSeeds(factory(), SIM_WEAK, { gameId: GAME, seconds: 180 });
-  assert.ok(medianOf(weak.map((r) => r.stats.perMinute)) >= 7, "SIM_WEAK");
+test("J2: kérdés/perc (20 seed medián) ≥ 7 — rúnavadász és bányászó játékosnál, átlagos / 3–4. évfolyamos / gyenge modellel", () => {
+  for (const [style, f, avgRuns] of [["rúnavadász", factory(), avg], ["bányászó", miner, avgMiner]] as const) {
+    const perMin = medianOf(avgRuns.map((r) => r.stats.perMinute));
+    assert.ok(perMin >= 7, `${style} SIM_AVERAGE medián ${perMin.toFixed(2)} / perc`);
+    const young = runSimSeeds(f, SIM_YOUNG, { gameId: GAME, seconds: 180, grade: 4 });
+    assert.ok(medianOf(young.map((r) => r.stats.perMinute)) >= 7, `${style} SIM_YOUNG (4. évf.)`);
+    const weak = runSimSeeds(f, SIM_WEAK, { gameId: GAME, seconds: 180 });
+    assert.ok(medianOf(weak.map((r) => r.stats.perMinute)) >= 7, `${style} SIM_WEAK`);
+  }
 });
 
-test("J3: a menet első 10 mp-e után nincs 15 mp-nél hosszabb kérdés nélküli szakasz (minden futás); két indítás között ≥ 1,5 mp", () => {
-  for (const player of [SIM_AVERAGE, SIM_WEAK, SIM_STRONG]) {
-    for (const r of player === SIM_AVERAGE ? avg : runSimSeeds(factory(), player, { gameId: GAME, seconds: 180 })) {
-      assert.ok(r.stats.maxGapSec <= 15, `maxGap ${r.stats.maxGapSec}`);
-      assert.ok(r.stats.minGapSec >= 1.5, `minGap ${r.stats.minGapSec}`);
+test("J3: a menet első 10 mp-e után nincs 15 mp-nél hosszabb kérdés nélküli szakasz (minden futás, mindkét játékosstílus); két indítás között ≥ 1,5 mp", () => {
+  for (const [style, f, avgRuns] of [["rúnavadász", factory(), avg], ["bányászó", miner, avgMiner]] as const) {
+    for (const player of [SIM_AVERAGE, SIM_WEAK, SIM_STRONG, SIM_YOUNG]) {
+      const runs = player === SIM_AVERAGE ? avgRuns : runSimSeeds(f, player, { gameId: GAME, seconds: 180, grade: player === SIM_YOUNG ? 4 : 7 });
+      for (const r of runs) {
+        assert.ok(r.stats.maxGapSec <= 15, `${style} maxGap ${r.stats.maxGapSec}`);
+        assert.ok(r.stats.minGapSec >= 1.5, `${style} minGap ${r.stats.minGapSec}`);
+      }
+    }
+  }
+});
+
+test("H1 (review #484): a sim valóban bányászik — a terep akadályait kivágja, a bányászó játékos ideje közel fele bányászás, a rúnaérc a kibányászott helyen is előbukkan", () => {
+  const hunters: ReturnType<typeof createSimGame>[] = [];
+  const miners: ReturnType<typeof createSimGame>[] = [];
+  runSimSeeds((o) => { const g = createSimGame({ ...o }); hunters.push(g); return g; }, SIM_AVERAGE, { gameId: GAME, seconds: 180 });
+  runSimSeeds((o) => { const g = createSimGame({ ...o, style: "miner" }); miners.push(g); return g; }, SIM_AVERAGE, { gameId: GAME, seconds: 180 });
+  assert.ok(hunters.reduce((s, g) => s + g.blocksMined(), 0) > 0, "a rúnavadász is kivág akadályt");
+  const share = medianOf(miners.map((g) => g.miningShare()));
+  assert.ok(share >= 0.4, `bányászási arány (medián) ${share.toFixed(2)}`);
+  assert.ok(medianOf(miners.map((g) => g.revealed())) >= 5, "felfedezett rúnaércek");
+});
+
+test("B1 (review #484): a „tovább bányászó” bot (a zár nyílása után 150–500 ms-ig koppint az ércre) sosem választ rúnakövet", () => {
+  for (const style of ["hunter", "miner"] as const) {
+    for (const player of [SIM_AVERAGE, SIM_WEAK, SIM_STRONG]) {
+      const games: ReturnType<typeof createSimGame>[] = [];
+      runSimSeeds((o) => { const g = createSimGame({ ...o, style }); games.push(g); return g; }, player, { gameId: GAME, seconds: 180 });
+      const taps = games.reduce((s, g) => s + g.keepTaps(), 0);
+      assert.ok(taps > 200, `${style}: a mérés nem üres (${taps} koppintás)`);
+      assert.equal(games.reduce((s, g) => s + g.accidentalPicks(), 0), 0, `${style}: téves válasz`);
     }
   }
 });
@@ -159,4 +190,5 @@ test("közös meghajtó (C-52): lépés-indexhez kötött bemenettel eltérő k�
   assert.notEqual(a.split("|")[4], "0", "a próba valóban bányászott");
 });
 
-const GOLDEN_42 = "won|4|7|44|0|1800|6|2|22990723";
+// SPEC-VÁLTOZÁS (review #484 H1): a bot terepen jár és bányászik, a zár élesítéssel nyílik — új lenyomat.
+const GOLDEN_42 = "won|4|7|37|3|1042|4|1|4a002bdc";

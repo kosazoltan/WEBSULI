@@ -128,10 +128,10 @@ export function blockXp(t: number): number {
   return BLOCK_XP[t] ?? 0;
 }
 
-/** Rúnazár-jutalom: jó válasz 60 × kombó-szorzó, rossz / lejárt 10, kérdés nélkül 20. */
+/** Rúnazár-jutalom: jó válasz 60 × kombó-szorzó, rossz / lejárt 10, kérdés nélkül is 10 (review #484 M5: nem érhet többet a rossz válasznál). */
 export const RUNE_XP_CORRECT = 60;
 export const RUNE_XP_WRONG = 10;
-export const RUNE_XP_FREE = 20;
+export const RUNE_XP_FREE = 10;
 /** Zsákmány: jó = dupla (2 kristály), rossz = kisebb (1), kérdés nélkül 1. */
 export const RUNE_LOOT_CORRECT = 2;
 export const RUNE_LOOT_WRONG = 1;
@@ -248,17 +248,30 @@ export function nearestRune(ores: readonly Pos[], px: number, pz: number): { ore
 /* Rúna-zár: a rúnakövek helye és találata                                                                             */
 /* ------------------------------------------------------------------------------------------------------------------ */
 
-/** A rúnakő találati gömbje (a látványnál ~20%-kal nagyobb — KSZ-12 megbocsátó bemenet). */
-export const RUNE_STONE_HIT_RADIUS = 0.42;
+/**
+ * A rúnakő találati gömbje: a látvány (0,48-as kocka) félélének ~1,25-szöröse (KSZ-12) — review #484 B1: a korábbi 0,42 a
+ * kocka sarkáig ért, és az ércet is fedte.
+ */
+export const RUNE_STONE_HIT_RADIUS = 0.3;
 export const RUNE_STONE_SIZE = 0.48;
+/** A kövek íve az érc középpontja körül (blokk). */
+export const RUNE_STONE_RING = 1.35;
+/** Élesítés: a Rúna-zár megnyílása után ennyi ms-ig (kérdés-óra) semmilyen bemenet nem válaszol (KSZ-11, review #484 B1). */
+export const RUNE_ARM_MS = 400;
+/**
+ * Rúnaérc-felfedezés (review #484 H1): ha az utolsó kérdés indulása (vagy a pálya kezdete) óta ennyi ms telt el, a következő
+ * kibányászott sima blokk helyén rúnaérc bukkan elő. A director célrése 7 / perc mellett ~7–8 s.
+ */
+export const RUNE_REVEAL_GAP_MS = 7000;
 
 /**
- * A 3–4 rúnakő helye az érc körül, a játékos felé néző félkörívben (az érc előtt, 1,05 sugarú íven, az érc
- * magasságában, váltakozva kicsit fölötte / alatta) — a célkereszt az ércen, a kövek körülötte látszanak. Tiszta
- * matematika — a lap rajzolja, a találatot a `pickRuneStone` méri.
+ * A 3–4 rúnakő helye: az érc középpontján átmenő, a nézésre (vízszintesen) merőleges síkban, az érc FÖLÖTTI íven
+ * (`RUNE_STONE_RING` sugár, 160°-tól 20°-ig, balról jobbra) — sosem az érc és a játékos között, így az ércre célzott sugár
+ * nem talál követ, és a célkereszt (az ércen) szabad (review #484 B1). Tiszta matematika.
  */
 export function runeStoneLayout(ore: Pos, player: Vec3, count: number): Vec3[] {
   const cx = ore.x + 0.5;
+  const cy = ore.y + 0.5;
   const cz = ore.z + 0.5;
   let fx = player.x - cx;
   let fz = player.z - cz;
@@ -270,21 +283,16 @@ export function runeStoneLayout(ore: Pos, player: Vec3, count: number): Vec3[] {
     fx /= len;
     fz /= len;
   }
-  // Oldalirány (a játékos szemszögéből balról jobbra).
-  const sx = fz;
-  const sz = -fx;
+  // A játékos „jobbra” iránya (a nézés −f, jobbra = (fz, −fx)); a 160° (cos < 0) így a bal oldal.
+  const rx = fz;
+  const rz = -fx;
   const out: Vec3[] = [];
   const n = Math.max(1, count);
   for (let i = 0; i < n; i++) {
-    const u = n === 1 ? 0 : (i / (n - 1)) * 2 - 1; // −1..1
-    const ang = u * (Math.PI / 3); // ±60°
-    const side = Math.sin(ang) * 1.25;
-    const front = 0.5 + Math.cos(ang) * 0.3;
-    out.push({
-      x: cx + sx * side + fx * front,
-      y: ore.y + 0.5 + (i % 2 === 0 ? 0.55 : -0.05),
-      z: cz + sz * side + fz * front,
-    });
+    const deg = n === 1 ? 90 : 160 - (i * 140) / (n - 1);
+    const a = (deg * Math.PI) / 180;
+    const right = Math.cos(a) * RUNE_STONE_RING;
+    out.push({ x: cx + rx * right, y: cy + Math.sin(a) * RUNE_STONE_RING, z: cz + rz * right });
   }
   return out;
 }
@@ -372,6 +380,9 @@ export type RuneLock = {
   ore: Pos;
   presentationId: number;
   stones: Vec3[];
+  /** A zár megnyílásának és élesedésének kérdés-órás ideje (ms) — élesítés előtt semmilyen bemenet nem válaszol. */
+  openedAt: number;
+  armedAt: number;
   /** A zár kimenete (null, amíg nyitott); a lap a megoldás-kijelzés végéig rajzolja. */
   resolved: QuestionResult | null;
 };
@@ -397,7 +408,7 @@ export type RuneMineState = {
   combo: ComboState;
   ores: Pos[];
   lock: RuneLock | null;
-  /** Megérintett rúnaérc, amelynek kérdése még nem nyílt meg (kijelzés / minGap alatt vár). */
+  /** A kérdés-kérés idejére (szinkron) a megérintett érc — a `noteShow` ehhez köti a zárat; utána mindig null (L2). */
   pendingOre: Pos | null;
   /** Tartásos / koppintásos bányászás állapota. */
   mining: { key: number; hits: number; pressMs: number; pressing: boolean };
@@ -430,8 +441,19 @@ export type RuneMine = {
   release(): void;
   /** Egy koppintás egy adott blokkra (a vászon koppintása): ütés, rúnaércen zár. */
   hit(target: MineTarget): void;
-  /** Rúnakő választása (a `presentation.options` indexe). */
-  pick(optionIndex: number): void;
+  /**
+   * Rúnakő választása (a `presentation.options` indexe) — SZÁNDÉKOS gesztusból (rúnagomb, 1–4 billentyű, kőre eső koppintás).
+   * `pressStartedAt`: a lenyomás kérdés-órás ideje (hiányában most). Csak élesített zárnál és az élesítés UTÁN indult
+   * lenyomásra válaszol (review #484 B1); visszaadja, hogy választott-e.
+   */
+  pick(optionIndex: number, pressStartedAt?: number): boolean;
+  /** Élesítve van-e a nyitott zár (a lap / a sim ezzel jelzi és szűri a bemenetet). */
+  lockArmed(): boolean;
+  /**
+   * A vászon koppintása sugárral: rúnakövet választ, ha a sugár élesített zár kövét a sugár első voxel-találata
+   * (`blockDist`) ELŐTT éri el, és a lenyomás az élesítés után kezdődött. A bányászó gesztusok ezt NEM hívják.
+   */
+  tapRay(origin: Vec3, dir: Vec3, pressStartedAt: number, blockDist: number): boolean;
   /** A kérdés-sáv `onShow`-ja hívja: a várakozó rúnaérchez köti a megnyílt kérdést. */
   noteShow(p: QuestionPresentation): void;
   /** A kérdés-sáv `onOutcome`-ja hívja: zsákmány, kombó, pálya-cél. */
@@ -443,6 +465,8 @@ export type RuneMine = {
   clockMs(): number;
   /** Teszt-kampó (`forceState({ question: true })`): rúnaérc a játékos elé és azonnali zár. */
   forceLock(facing: { x: number; z: number }): Pos | null;
+  /** Teszt-kampó (`forceState({ runeAhead: true })`): rúnaérc a játékos elé, zár NÉLKÜL (a megérintést a teszt végzi). */
+  placeRuneAhead(facing: { x: number; z: number }): Pos | null;
 };
 
 export function createRuneMine(opts: RuneMineOptions): RuneMine {
@@ -469,6 +493,12 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
   let clock = 0;
   let real = 0;
   let checkAcc = 0;
+  /** A pálya kezdete (kérdés-óra) és az utolsó felfedezés — a felfedezés célrése ettől számít. */
+  let levelStartAt = 0;
+  let revealedAt = Number.NEGATIVE_INFINITY;
+  /** Teszt-kampó: az elé tett érc zárja nyíljon meg, amint a kérdés-sáv kérhet (a minGap / kijelzés miatt később is). */
+  let forcedOre: Pos | null = null;
+  const lastAskAt = () => Math.max(st.lastStartMs ?? levelStartAt, levelStartAt, revealedAt);
   const emit = (e: RuneMineEvent) => {
     events.push(e);
   };
@@ -505,10 +535,14 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     }
   }
 
-  function mineBlock(target: MineTarget): void {
+  /** Kibányássza a blokkot; igazat ad, ha a helyén rúnaérc bukkant elő (felfedezés). */
+  function mineBlock(target: MineTarget): boolean {
     const t = vGet(st.world, target.x, target.y, target.z);
-    if (!vMineable(t) || t === RUNE_ORE || t === BEDROCK) return;
-    vSet(st.world, target.x, target.y, target.z, AIR);
+    if (!vMineable(t) || t === RUNE_ORE || t === BEDROCK) return false;
+    // H1 (review #484): a bányászó gyerek is a célrés szerint kap kérdést — ha az utolsó kérdés indulása óta
+    // RUNE_REVEAL_GAP_MS eltelt, a kibányászott blokk helyén rúnaérc bukkan elő (a zsákmány megmarad).
+    const reveal = opts.questions() !== null && st.phase === "play" && !(st.lock && !st.lock.resolved) && clock - lastAskAt() >= RUNE_REVEAL_GAP_MS;
+    vSet(st.world, target.x, target.y, target.z, reveal ? RUNE_ORE : AIR);
     st.blocks += 1;
     if (t === DIAMOND) st.diamonds += 1;
     const xp = blockXp(t);
@@ -517,6 +551,16 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     st.mining.hits = 0;
     st.mining.pressMs = 0;
     emit({ type: "mined", x: target.x, y: target.y, z: target.z, t, xp });
+    if (reveal) {
+      const ore = { x: target.x, y: target.y, z: target.z };
+      st.ores.push(ore);
+      revealedAt = clock;
+      emit({ type: "runeSpawn", ore });
+      // A felfedezés megállítja a tartást: a gyerek LÁTJA az előbukkanó rúnát, és szándékosan érinti meg (nincs
+      // előjelzés nélkül, a lenyomott ujj alatt megnyíló kérdés — review #484 L2 / M3).
+      st.mining.pressing = false;
+    }
+    return reveal;
   }
 
   function breakRune(ore: Pos, result: QuestionResult | "free"): void {
@@ -543,44 +587,31 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     }
   }
 
-  function touchRune(ore: Pos): void {
-    if (st.phase !== "play") return;
-    if (st.lock && !st.lock.resolved) return; // egyszerre egy zár
-    if (st.pendingOre) return;
+  /**
+   * Rúnaérc érintése: kérdés-kérés AZONNAL (review #484 L2: a megoldás-kijelzés / minGap alatt az érintés nem jegyződik elő,
+   * nincs később, előjelzés nélkül megnyíló kérdés — a gyerek újra megérinti). Üres forrásnál (terv 8.1) a zár kérdés nélkül
+   * törik. Visszaadja, hogy történt-e valami (zár / kérdés nélküli törés).
+   */
+  function touchRune(ore: Pos): boolean {
+    if (st.phase !== "play") return false;
+    if (st.lock && !st.lock.resolved) return false; // egyszerre egy zár
+    if (vGet(st.world, ore.x, ore.y, ore.z) !== RUNE_ORE) return false;
     const q = opts.questions();
     if (!q) {
       breakRune(ore, "free");
-      return;
+      return true;
     }
+    if (q.finished() || !q.canAsk()) return false;
     st.pendingOre = ore;
-    tryAsk();
-  }
-
-  /** A várakozó rúnaérc kérdésének kérése (C-53: kijelzés alatt csak egyszer — a kérés függőben vár). */
-  function tryAsk(): void {
-    const ore = st.pendingOre;
-    if (!ore || st.phase !== "play") return;
-    if (vGet(st.world, ore.x, ore.y, ore.z) !== RUNE_ORE) {
-      st.pendingOre = null;
-      return;
-    }
-    const q = opts.questions();
-    if (!q) {
-      st.pendingOre = null;
-      breakRune(ore, "free");
-      return;
-    }
-    if (q.finished() || q.active()) return;
-    const v = q.view();
-    if (v.reveal && v.pending !== null) return;
-    const p = q.request("trigger", clock);
-    if (p) return; // a `noteShow` (onShow) köti a zárhoz
+    const p = q.request("trigger", clock); // siker esetén a noteShow (onShow) köti a zárhoz, szinkron
+    st.pendingOre = null;
+    if (p) return true;
     const gapOk = st.lastStartMs === null || clock - st.lastStartMs >= opts.minGapMs;
-    if (q.canAsk() && gapOk) {
-      // A forrás üres (terv 8.1): az érc zár nélkül törik — a játék kérdés nélkül is halad.
-      st.pendingOre = null;
+    if (gapOk) {
       breakRune(ore, "free");
+      return true;
     }
+    return false;
   }
 
   function clearResolvedLock(): void {
@@ -598,7 +629,7 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     if (m.pressing && aimed) {
       const t = vGet(st.world, aimed.x, aimed.y, aimed.z);
       if (t === RUNE_ORE) {
-        touchRune({ x: aimed.x, y: aimed.y, z: aimed.z });
+        if (!(st.lock && !st.lock.resolved)) touchRune({ x: aimed.x, y: aimed.y, z: aimed.z });
       } else if (vMineable(t)) {
         const k = keyOf(aimed);
         if (k !== m.key) {
@@ -608,8 +639,7 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
         }
         m.pressMs += dt;
         if (m.pressMs >= mineTimeMs(t)) {
-          mineBlock(aimed);
-          m.pressing = true; // a tartás folytatódik a következő blokkra
+          if (!mineBlock(aimed)) m.pressing = true; // a tartás folytatódik a következő blokkra (felfedezésnél nem)
         }
       }
     }
@@ -655,6 +685,9 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
       st.mining = { key: -1, hits: 0, pressMs: 0, pressing: false };
       aimed = null;
       checkAcc = 0;
+      levelStartAt = clock;
+      revealedAt = Number.NEGATIVE_INFINITY;
+      forcedOre = null;
       st.ores = findRuneOres(world);
       const p = opts.player();
       // Az első rúnaérc a kezdő nézés irányában, közel (cél-jelző: „Nyiss ki 3 rúnaércet!”), a többi szétszórva.
@@ -670,6 +703,8 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     },
     press() {
       if (st.phase !== "play") return;
+      // Review #484 M3: nyitott zár alatt nem indul tartás (a bányászó gesztus nem válaszol és nem bányászik tovább).
+      if (st.lock && !st.lock.resolved) return;
       st.mining.pressing = true;
       st.mining.pressMs = 0;
       if (aimed && vGet(st.world, aimed.x, aimed.y, aimed.z) === RUNE_ORE) touchRune({ ...aimed });
@@ -686,22 +721,45 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
       if (st.phase !== "play") return;
       registerHit(target);
     },
-    pick(optionIndex) {
+    pick(optionIndex, pressStartedAt) {
       const q = opts.questions();
-      if (!q || !st.lock || st.lock.resolved) return;
-      q.pick(optionIndex, clock);
+      const lock = st.lock;
+      if (!q || !lock || lock.resolved) return false;
+      // Review #484 B1: élesítés előtt, vagy az élesítés előtt indult lenyomásra nincs válasz.
+      if (clock < lock.armedAt || (pressStartedAt ?? clock) < lock.armedAt) return false;
+      return q.pick(optionIndex, clock) !== null;
+    },
+    lockArmed: () => !!st.lock && !st.lock.resolved && clock >= st.lock.armedAt,
+    tapRay(origin, dir, pressStartedAt, blockDist) {
+      const lock = st.lock;
+      if (!lock || lock.resolved) return false;
+      const i = pickRuneStone(origin, dir, lock.stones, Math.min(6, blockDist));
+      if (i < 0) return false;
+      return this.pick(i, pressStartedAt);
     },
     noteShow(p) {
       st.lastStartMs = p.startedAtSimMs;
       const ore = st.pendingOre;
       if (!ore) return;
       st.pendingOre = null;
-      st.lock = { ore, presentationId: p.id, stones: runeStoneLayout(ore, opts.player(), p.options.length), resolved: null };
+      // Review #484 M3: a zár megnyílása elengedi a tartást (a lenyomott Bányász gomb nem bányászik tovább a zár után).
+      st.mining.pressing = false;
+      st.mining.pressMs = 0;
+      st.lock = {
+        ore,
+        presentationId: p.id,
+        stones: runeStoneLayout(ore, opts.player(), p.options.length),
+        openedAt: clock,
+        armedAt: clock + RUNE_ARM_MS,
+        resolved: null,
+      };
       emit({ type: "runeOpen", ore, presentationId: p.id });
     },
     applyOutcome(o, p) {
       const lock = st.lock;
       if (!lock || lock.presentationId !== p.id) return;
+      st.mining.pressing = false;
+      st.mining.pressMs = 0;
       if (o.result === "aborted") {
         st.lock = null;
         return;
@@ -719,7 +777,7 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
         if (st.phase !== "play" && !q.finished()) q.finish();
         q.frame(clock, { tick: false });
         clearResolvedLock();
-        tryAsk();
+        if (forcedOre && touchRune(forcedOre)) forcedOre = null;
       }
       loop.setTimeScale(paused ? 0 : q ? q.timeScale() : 1);
       return loop.frame(real);
@@ -739,9 +797,18 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
       if (!ore) return null;
       st.ores.push(ore);
       emit({ type: "runeSpawn", ore });
-      st.lock = null;
       st.pendingOre = null;
-      touchRune(ore);
+      if (!touchRune(ore)) forcedOre = ore;
+      return ore;
+    },
+    placeRuneAhead(facing) {
+      if (st.phase !== "play") return null;
+      const p = opts.player();
+      const len = Math.hypot(facing.x, facing.z) || 1;
+      const ore = spawnRuneOreNear(st.world, rng, p.x, p.z, 2, 3, { x: facing.x / len, z: facing.z / len }, Math.PI / 6);
+      if (!ore) return null;
+      st.ores.push(ore);
+      emit({ type: "runeSpawn", ore });
       return ore;
     },
   };

@@ -20,11 +20,16 @@ import {
 import {
   BLOCK_CRAFT_GAME_ID,
   BLOCK_CRAFT_LEVELS,
+  RUNE_ARM_MS,
   RUNE_CHECK_MS,
   RUNE_LOOT_CORRECT,
   RUNE_LOOT_WRONG,
   RUNE_NEAR_RADIUS,
+  RUNE_REVEAL_GAP_MS,
   RUNE_SLOW_MO,
+  RUNE_STONE_HIT_RADIUS,
+  RUNE_XP_FREE,
+  RUNE_XP_WRONG,
   TAP_HITS,
   blockCraftDirectorConfig,
   canHostRune,
@@ -229,7 +234,7 @@ test("a rúnaérc a felszínen nő (fölötte szabad), és a pálya elején az e
   assert.equal(canHostRune(st.world, 0, 0), false, "a világ szélén nem nő");
 });
 
-test("Rúna-zár: a rúnaérc érintése kérdést nyit, a kövek a játékos felé néznek; jó válasz = dupla zsákmány, kombó, a zár feloldva", () => {
+test("Rúna-zár: a rúnaérc érintése kérdést nyit, a kövek az érc fölött, a nézésre merőleges síkban állnak; élesítés után jó válasz = dupla zsákmány, kombó, a zár feloldva", () => {
   const r = rig();
   const st = r.mine.state();
   const ore = st.ores[0]!;
@@ -244,12 +249,19 @@ test("Rúna-zár: a rúnaérc érintése kérdést nyit, a kövek a játékos fe
   assert.equal(r.mine.loop.timeScale(), 1, "a lassítás a következő képkockán áll be");
   r.tick(STEP);
   assert.equal(r.mine.loop.timeScale(), RUNE_SLOW_MO, "nyitott kérdés alatt a világ lassítva fut, nem áll");
-  // A kövek az érc előtt, a játékos felé (a játékos felőli oldalon).
+  // SPEC-VÁLTOZÁS (review #484 B1/4): a kövek nem az érc ELŐTT (a célkereszt útjában), hanem az érc középpontján átmenő,
+  // a vízszintes nézésre merőleges síkban, az érc fölötti íven állnak.
+  const fx = r.player.x - (ore.x + 0.5);
+  const fz = r.player.z - (ore.z + 0.5);
+  const fl = Math.hypot(fx, fz);
   for (const s of lock.stones) {
-    assert.ok(Math.hypot(s.x - r.player.x, s.z - r.player.z) < Math.hypot(ore.x + 0.5 - r.player.x, ore.z + 0.5 - r.player.z));
+    assert.ok(Math.abs(((s.x - ore.x - 0.5) * fx + (s.z - ore.z - 0.5) * fz) / fl) < 1e-9, "a kő a nézésre merőleges síkban");
+    assert.ok(s.y - RUNE_STONE_HIT_RADIUS >= ore.y + 0.6, `a kő (y ${s.y.toFixed(2)}) az érc fölött`);
   }
   const correct = p.options.findIndex((o) => o.correct);
-  r.mine.pick(correct);
+  assert.equal(r.mine.pick(correct), false, "élesítés (400 ms) előtt nincs válasz");
+  r.tick(RUNE_ARM_MS);
+  assert.equal(r.mine.pick(correct), true);
   assert.equal(st.crystals, RUNE_LOOT_CORRECT);
   assert.equal(st.opened, 1);
   assert.equal(st.combo.count, 1);
@@ -265,7 +277,8 @@ test("rossz válasz: kisebb zsákmány, a kombó megszakad, a helyes rúna a meg
   r.mine.hit(ore);
   const p = r.ui!.active()!;
   const wrong = p.options.findIndex((o) => !o.correct);
-  r.mine.pick(wrong);
+  r.tick(RUNE_ARM_MS); // review #484 B1: élesítés
+  assert.ok(r.mine.pick(wrong));
   assert.equal(st.crystals, RUNE_LOOT_WRONG);
   assert.equal(st.opened, 1, "a zár így is kinyílik (a cél nem akad el), csak a zsákmány kisebb");
   assert.equal(st.combo.count, 0);
@@ -281,7 +294,7 @@ test("rossz válasz: kisebb zsákmány, a kombó megszakad, a helyes rúna a meg
   assert.equal(r.mine.loop.timeScale(), 1, "a kijelzés alatt teljes sebesség");
 });
 
-test("lejárt ablak = rossz válasz (kisebb zsákmány); a kijelzés alatt megérintett érc kérdése a kijelzés végén nyílik", () => {
+test("lejárt ablak = rossz válasz (kisebb zsákmány); a kijelzés alatt megérintett érc NEM nyílik később magától (L2), újra érintve nyílik", () => {
   const r = rig();
   const st = r.mine.state();
   const [a, b] = st.ores;
@@ -290,10 +303,15 @@ test("lejárt ablak = rossz válasz (kisebb zsákmány); a kijelzés alatt megé
   r.tick(p.windowMs + 50);
   assert.equal(st.lock?.resolved, "timeout");
   assert.equal(st.crystals, RUNE_LOOT_WRONG);
+  // SPEC-VÁLTOZÁS (review #484 L2): a kijelzés alatti érintés nem jegyződik elő — nincs ~2 mp-cel később, előjelzés
+  // nélkül megnyíló kérdés.
   r.mine.hit(b!);
-  assert.deepEqual(st.pendingOre, b, "a kijelzés alatt a kérés függőben vár");
+  assert.equal(st.pendingOre, null, "a kijelzés alatt nincs függő kérés");
   r.tick(REVEAL_WRONG_MS + 100);
-  assert.ok(st.lock && st.lock.resolved === null, "a kijelzés után a második zár megnyílt");
+  assert.equal(st.lock, null, "a kijelzés után sem nyílt meg magától zár");
+  assert.equal(r.ui!.active(), null);
+  r.mine.hit(b!);
+  assert.ok(st.lock && st.lock.resolved === null, "újra megérintve a második zár megnyílt");
   assert.deepEqual(st.lock.ore, b);
 });
 
@@ -361,7 +379,8 @@ test("review #484: az utolsó rúnazár az időkeret utolsó másodpercében →
   r.mine.hit(st.ores[0]!);
   const p = r.ui!.active()!;
   let timeLeft = 1;
-  r.mine.pick(p.options.findIndex((o) => o.correct)); // a célt teljesítő válasz az óra-lépés ELŐTT
+  r.tick(RUNE_ARM_MS); // review #484 B1: élesítés (közben óra-lépés nem jött)
+  assert.ok(r.mine.pick(p.options.findIndex((o) => o.correct))); // a célt teljesítő válasz az óra-lépés ELŐTT
   assert.equal(st.phase, "won");
   // A megoldás-kijelzés még fut (a lap csak utána mutat eredményt) — közben több óra-lépés is jöhet.
   for (let i = 0; i < 3; i++) {
@@ -400,4 +419,147 @@ test("a lap: a pálya ideje nem függ a válaszoktól (a régi időcsökkentés 
   const sets = src.match(/setTimeLeft\(/g)?.length ?? 0;
   assert.equal(sets, 2, `setTimeLeft hívások: ${sets}`);
   assert.ok(!/aria-label="Mini-teszt"/.test(src), "a régi teljes képernyős kvíz-modál megszűnt");
+});
+
+/** A review #484 geometriai szkriptje fixture-ként: az érc felénk néző oldallapjára / tetejére célzott sugarak + az érc közepe. */
+function oreAimedRays(ore: Vec3, eye: Vec3): Vec3[] {
+  const rays: Vec3[] = [];
+  for (let a = 0.05; a < 1; a += 0.1) for (let b = 0.05; b < 1; b += 0.1) {
+    for (const pt of [{ x: ore.x + a, y: ore.y + b, z: ore.z + 1 }, { x: ore.x + a, y: ore.y + 1, z: ore.z + b }]) {
+      if (pt.y === ore.y + 1 && eye.y < ore.y + 1) continue; // a tetőlap nem látszik
+      const d = { x: pt.x - eye.x, y: pt.y - eye.y, z: pt.z - eye.z };
+      const l = Math.hypot(d.x, d.y, d.z);
+      rays.push({ x: d.x / l, y: d.y / l, z: d.z / l });
+    }
+  }
+  const c = { x: ore.x + 0.5 - eye.x, y: ore.y + 0.5 - eye.y, z: ore.z + 0.5 - eye.z };
+  const cl = Math.hypot(c.x, c.y, c.z);
+  rays.push({ x: c.x / cl, y: c.y / cl, z: c.z / cl });
+  return rays;
+}
+
+test("B1 (review #484, a reviewer geometriája): az ércre célzó sugár 0%-ban talál rúnakövet (1,5–4 blokk, egy szinten és egy blokkal lejjebb)", () => {
+  const ore = { x: 10, y: 20, z: 10 };
+  let total = 0;
+  for (const dist of [1.5, 2, 2.5, 3, 4]) {
+    for (const dy of [0, -1]) {
+      const player = { x: 10.5, y: ore.y + dy, z: 10.5 + dist };
+      const eye = { x: player.x, y: player.y + 1.62, z: player.z };
+      const stones = runeStoneLayout(ore, player, 4);
+      const rays = oreAimedRays(ore, eye);
+      const hits = rays.filter((u) => pickRuneStone(eye, u, stones) >= 0).length;
+      total += rays.length;
+      assert.equal(hits, 0, `dist ${dist} dy ${dy}: ${hits}/${rays.length} ércre célzott sugár rúnakövet talált`);
+      // A célkereszt (a képernyő közepe) az érc közepén: a kövek a célkereszt-sugártól is távol vannak.
+      const c = rays[rays.length - 1]!;
+      for (const s of stones) {
+        const v = { x: s.x - eye.x, y: s.y - eye.y, z: s.z - eye.z };
+        const along = v.x * c.x + v.y * c.y + v.z * c.z;
+        const perp = Math.hypot(v.x - c.x * along, v.y - c.y * along, v.z - c.z * along);
+        assert.ok(perp > RUNE_STONE_HIT_RADIUS, `a kő ${perp.toFixed(2)} távolságra a célkereszt-sugártól`);
+      }
+    }
+  }
+  assert.ok(total > 500, `a mérés nem üres (${total} sugár)`);
+});
+
+test("B1 (review #484): élesítés 400 ms; csak az élesítés UTÁN indult lenyomás válaszol; az ércre eső vászon-koppintás nem választ", () => {
+  const r = rig();
+  const st = r.mine.state();
+  const ore = st.ores[0]!;
+  r.mine.hit(ore);
+  const lock = st.lock!;
+  assert.ok(lock);
+  assert.ok(RUNE_ARM_MS >= 400);
+  assert.equal(lock.armedAt - lock.openedAt, RUNE_ARM_MS);
+  const correct = r.ui!.active()!.options.findIndex((o) => o.correct);
+  const pressBefore = r.mine.clockMs();
+  r.tick(RUNE_ARM_MS / 2);
+  assert.equal(r.mine.lockArmed(), false);
+  assert.equal(r.mine.pick(correct), false, "élesítés alatt nincs válasz");
+  r.tick(RUNE_ARM_MS / 2 + STEP);
+  assert.equal(r.mine.lockArmed(), true);
+  assert.equal(r.mine.pick(correct, pressBefore), false, "a zár nyitása alatt indult lenyomás felengedése nem válasz");
+  // Vászon-koppintás az érc közepére (a voxel-találat az érc): nem választ.
+  const eye = { x: r.player.x, y: r.player.y + 1.62, z: r.player.z };
+  const c = { x: ore.x + 0.5 - eye.x, y: ore.y + 0.5 - eye.y, z: ore.z + 0.5 - eye.z };
+  const cl = Math.hypot(c.x, c.y, c.z);
+  assert.equal(r.mine.tapRay(eye, { x: c.x / cl, y: c.y / cl, z: c.z / cl }, r.mine.clockMs(), cl - 0.5), false, "az ércre eső koppintás nem válasz");
+  assert.equal(lock.resolved, null);
+  // A kőre eső, élesítés utáni koppintás szándékos gesztus: választ.
+  const s = lock.stones[correct]!;
+  const v = { x: s.x - eye.x, y: s.y - eye.y, z: s.z - eye.z };
+  const vl = Math.hypot(v.x, v.y, v.z);
+  assert.equal(r.mine.tapRay(eye, { x: v.x / vl, y: v.y / vl, z: v.z / vl }, r.mine.clockMs(), 99), true, "a kőre eső koppintás választ");
+  assert.equal(st.lock?.resolved, "correct");
+});
+
+test("B1 ellenpróba: ha a sugár első voxel-találata közelebb van a kőnél, a kőre eső koppintás sem választ", () => {
+  const r = rig();
+  const st = r.mine.state();
+  r.mine.hit(st.ores[0]!);
+  r.tick(RUNE_ARM_MS + STEP);
+  const lock = st.lock!;
+  const eye = { x: r.player.x, y: r.player.y + 1.62, z: r.player.z };
+  const s = lock.stones[0]!;
+  const v = { x: s.x - eye.x, y: s.y - eye.y, z: s.z - eye.z };
+  const vl = Math.hypot(v.x, v.y, v.z);
+  assert.equal(r.mine.tapRay(eye, { x: v.x / vl, y: v.y / vl, z: v.z / vl }, r.mine.clockMs(), vl - 0.6), false);
+  assert.equal(lock.resolved, null);
+});
+
+test("M3 (review #484): a zár megnyílása elengedi a tartást; nyitott zár alatt a tartás nem indul és nem bányászik", () => {
+  const r = rig();
+  const st = r.mine.state();
+  const w = st.world;
+  const ore = st.ores[0]!;
+  r.mine.aim(ore);
+  r.mine.press(); // tartás az ércen → zár
+  assert.ok(st.lock && st.lock.resolved === null);
+  assert.equal(st.mining.pressing, false, "a zár nyitása elengedte a tartást");
+  vSet(w, 20, 5, 20, GRASS);
+  r.mine.aim({ x: 20, y: 5, z: 20 });
+  r.mine.press();
+  assert.equal(st.mining.pressing, false, "nyitott zár alatt nem indul tartás");
+  r.tick(1000);
+  assert.equal(vGet(w, 20, 5, 20), GRASS, "a zár alatt nem bányászik tovább");
+  r.mine.release();
+  assert.equal(st.lock?.resolved, null, "az elengedés sem válasz");
+});
+
+test("H1 (review #484): a bányászó gyerek is kap kérdést — RUNE_REVEAL_GAP_MS után a kibányászott blokk helyén rúnaérc bukkan elő", () => {
+  const r = rig();
+  const st = r.mine.state();
+  const w = st.world;
+  vSet(w, 20, 5, 20, GRASS);
+  r.mine.aim({ x: 20, y: 5, z: 20 });
+  r.mine.press();
+  r.tick(450);
+  r.mine.release();
+  assert.equal(vGet(w, 20, 5, 20), AIR, "a célrésen belül sima bányászás");
+  assert.ok(!r.events.some((e) => e.type === "runeSpawn" && e.ore.x === 20 && e.ore.z === 20));
+  r.tick(RUNE_REVEAL_GAP_MS);
+  vSet(w, 21, 5, 20, GRASS);
+  r.mine.aim({ x: 21, y: 5, z: 20 });
+  r.mine.press();
+  r.tick(450);
+  assert.ok(r.events.some((e) => e.type === "runeSpawn" && e.ore.x === 21 && e.ore.y === 5 && e.ore.z === 20), "a kibányászott helyen rúnaérc bukkant elő");
+  assert.equal(vGet(w, 21, 5, 20), RUNE_ORE);
+  assert.equal(st.mining.pressing, false, "a felfedezés megállítja a tartást");
+  r.tick(500);
+  assert.equal(st.lock, null, "a lenyomott ujj alatt nem nyílik magától kérdés");
+  r.mine.hit({ x: 21, y: 5, z: 20 });
+  assert.ok(st.lock && st.lock.resolved === null, "szándékos érintésre zár");
+  // Kérdés nélküli módban nincs felfedezés.
+  const q = rig({ questions: false });
+  vSet(q.mine.state().world, 21, 5, 20, GRASS);
+  q.tick(RUNE_REVEAL_GAP_MS + 100);
+  q.mine.aim({ x: 21, y: 5, z: 20 });
+  q.mine.press();
+  q.tick(450);
+  assert.equal(vGet(q.mine.state().world, 21, 5, 20), AIR);
+});
+
+test("M5 (review #484): a kérdés nélküli zár nem ér többet a rossz válasznál", () => {
+  assert.ok(RUNE_XP_FREE <= RUNE_XP_WRONG, `kérdés nélkül ${RUNE_XP_FREE} XP, rossz válasz ${RUNE_XP_WRONG} XP`);
 });

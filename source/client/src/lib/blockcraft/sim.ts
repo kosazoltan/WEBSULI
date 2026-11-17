@@ -2,19 +2,22 @@
  * J3a — a Kockavadász „Rúnabánya” node-szimulációja a közös harness-hez (`T/support/game-sim.ts` `SimGame`; végrehajtás
  * J3a 4. lépés, K.6; terv 6.2). React, three.js, DOM és hang nélkül fut.
  *
- * Egyszerűsített „rácson járó” modell (a voxel-fizika nélkül): a bot a seedelt voxel-világ felszínén egyenesen a
- * legközelebbi rúnaérchez sétál (ütközés nélkül), és megérinti; a rúnaérc-elhelyezés, a bányászás, a Rúna-zár, a
- * kérdés-ütemező és a kérdés-sáv állapotgépe UGYANAZ, mint a lapon (`createRuneMine` + `createQuestionDirector` +
- * `createQuestionUi`), a fix lépésű hurok is (K.6 „Közös meghajtó”): a kérdés alatt a bot is fele sebességgel halad.
+ * „Rácson járó” modell a seedelt voxel-világon (review #484 H1): a bot a felszínen jár, egy blokknyi lépcsőt megmászik, a
+ * magasabb falat / fejmagasságú blokkot (fatörzs, lomb, domb) KIBÁNYÁSSZA a mag tartásos bányászásával (`MINE_MS`: fű / föld
+ * 0,4 s, kő 0,8 s, érc 1,2 s), lefelé lelép; víz felett úszik. A rúnaérc-elhelyezés, a bányászás, a rúnaérc-felfedezés, a
+ * Rúna-zár (élesítéssel), a kérdés-ütemező és a kérdés-sáv állapotgépe UGYANAZ, mint a lapon (`createRuneMine` +
+ * `createQuestionDirector` + `createQuestionUi`), a fix lépésű hurok is (K.6 „Közös meghajtó”).
  *
- * A bot (a harness megállapodása): új cél kiválasztása után `REACT_MS` reakció, járás `BOT_SPEED_BPS`-sel (sikertelen
- * ügyességi dobásnál — `skillRoll ≥ 1` — fele sebességgel: kerülő, ugrás), `REACH` blokkra érve koppint az ércre. A
- * megoldás-kijelzés alatt már a következő érc felé indul (ahogy egy gyerek); a kérés a kijelzés végéig függőben vár.
+ * Két játékosmodell (`style`):
+ *  - `hunter` („rúnavadász”): a legközelebbi rúnaérchez megy, útközben csak az akadályt bányássza;
+ *  - `miner` („bányászó, nem siető”): minden zár után `MINER_MS`-ig szabadon bányászik maga körül (lefelé, oldalra), csak utána
+ *    indul ércet keresni — a felfedezett (a kibányászott blokk helyén előbukkanó) rúnaércet viszont azonnal megérinti.
+ * Mindkét bot „tovább bányászik” a zár megnyílása után: `KEEP_MINING_MS`-ig (150–500 ms, seedelt) még koppint az érc felé
+ * (a lap vászon-útján, sugárral) — ez sosem választhat rúnakövet (review #484 B1); a téves választásokat `accidentalPicks()` számolja.
  *
- * A menet: az 5 pálya egymás után (a pálya-cél után azonnal a következő), a sim-ben nincs időkorlát — J3a-ban még nincs
- * vereség (végrehajtás J3a 5.: kérdés nélküli módban a sim J3b-ig `won()`-nal jelzi a végigjátszást).
+ * A menet: az 5 pálya egymás után, a sim-ben nincs időkorlát (J3a-ban nincs vereség — J3b).
  */
-import { createRng, seedFrom } from "@shared/game-rng";
+import { createRng, seedFrom, type Rng } from "@shared/game-rng";
 import {
   bankPlayQuestion,
   createQuestionDirector,
@@ -27,7 +30,7 @@ import { createQuestionUi, type QuestionUi } from "@/game-engine/play/questionUi
 import type { RunStatsSnapshot } from "@/game-engine/play/runStats";
 import type { FourChoiceQuiz } from "@/types/gameQuiz";
 
-import { MOVE_SPEED_BPS, findVoxelSpawn, generateVoxelWorld } from "../voxelcraft";
+import { AIR, BEDROCK, MOVE_SPEED_BPS, PLAYER_EYE, RUNE_ORE, WATER, WX, WZ, findVoxelSpawn, generateVoxelWorld, vGet, vMineable, vSolid } from "../voxelcraft";
 import {
   BLOCK_CRAFT_GAME_ID,
   BLOCK_CRAFT_LEVELS,
@@ -35,7 +38,7 @@ import {
   createRuneMine,
   genCfgFor,
   nearestRune,
-  surfaceTop,
+  type MineTarget,
   type Pos,
   type RuneMine,
   type Vec3,
@@ -47,8 +50,17 @@ export const BOT_SPEED_BPS = MOVE_SPEED_BPS * 0.7;
 export const REACT_MS = 600;
 /** Ilyen közelről érinti meg az ércet (blokk). */
 export const REACH = 2.5;
+/** A „bányászó” játékos ennyi ideig bányászik szabadon minden zár után (ms). */
+export const MINER_MS = 7000;
+/** A zár megnyílása után még ennyi ideig bányászó koppintás (ms; seedelt 150–500). */
+export const KEEP_MINING_MIN_MS = 150;
+export const KEEP_MINING_MAX_MS = 500;
+/** A tovább bányászó koppintások üteme (ms). */
+export const KEEP_TAP_MS = 120;
 
 const T0 = 1_800_000_000_000;
+
+export type BotStyle = "hunter" | "miner";
 
 export type BlockCraftSimOptions = {
   seed: number;
@@ -58,6 +70,7 @@ export type BlockCraftSimOptions = {
   material?: readonly FourChoiceQuiz[];
   /** A szintetikus bank mérete (alap 600). 0 → üres forrás (terv 8.1: a játék kérdés nélkül fut). */
   bankSize?: number;
+  style?: BotStyle;
 };
 
 export type BlockCraftSim = {
@@ -78,6 +91,15 @@ export type BlockCraftSim = {
   levelsCleared(): number;
   /** A bot helye. */
   player(): Vec3;
+  /** A bányászó gesztusokból (tovább bányászó koppintás) adódó rúnakő-választások száma — mindig 0 kell legyen. */
+  accidentalPicks(): number;
+  /** A tovább bányászó koppintások száma (a mérés nem üres). */
+  keepTaps(): number;
+  /** A tartásos bányászással töltött idő aránya (a menetidőhöz). */
+  miningShare(): number;
+  /** A kibányászott blokkok és a felfedezett rúnaércek száma. */
+  blocksMined(): number;
+  revealed(): number;
   director: QuestionDirector;
 };
 
@@ -93,6 +115,7 @@ function syntheticQuiz(n: number): FourChoiceQuiz {
 
 export function createSimGame(opts: BlockCraftSimOptions): BlockCraftSim {
   const { seed, grade, questions } = opts;
+  const style: BotStyle = opts.style ?? "hunter";
   const bankSize = opts.bankSize ?? 600;
   const material = opts.material ?? [];
   let freshCursor = 0;
@@ -117,12 +140,24 @@ export function createSimGame(opts: BlockCraftSimOptions): BlockCraftSim {
   });
 
   const pos: Vec3 = { x: 0, y: 0, z: 0 };
+  const botRng: Rng = createRng(seedFrom(BLOCK_CRAFT_GAME_ID, seed, "bot"));
   let roll = 0;
   let target: Pos | null = null;
   let reactUntil = 0;
   let cleared = 0;
   const asked: string[] = [];
   let mine: RuneMine | null = null;
+  /** A bányászás alatt álló blokk (akadály vagy szabad bányászás) — amíg nem levegő, a bot tartja. */
+  let digging: MineTarget | null = null;
+  let miningMs = 0;
+  let minerUntil = 0;
+  let accidental = 0;
+  let keepTaps = 0;
+  let keepUntil = -1;
+  let nextKeepTap = 0;
+  let lockSeen = -1;
+  let revealedCount = 0;
+  let blocks = 0;
 
   const ui: QuestionUi = createQuestionUi({
     director: () => (questions ? director : null),
@@ -134,36 +169,108 @@ export function createSimGame(opts: BlockCraftSimOptions): BlockCraftSim {
     onOutcome: (o, p) => mine!.applyOutcome(o, p),
   });
 
+  const world = () => mine!.state().world;
+  const solidAt = (x: number, y: number, z: number) => vSolid(vGet(world(), x, y, z));
+
+  /** Egy lépés a cél felé: lépcső, esés, víz; ha fal / fejmagasságú blokk állja útját, azt bányászandónak jelöli. */
+  function walkToward(tx: number, tz: number, dt: number): void {
+    const dx = tx - pos.x;
+    const dz = tz - pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d <= REACH) return;
+    const speed = BOT_SPEED_BPS * (roll < 1 ? 1 : 0.5);
+    const len = Math.min(d - REACH * 0.8, (speed * dt) / 1000);
+    const nx = pos.x + (dx / d) * len;
+    const nz = pos.z + (dz / d) * len;
+    const cx = Math.floor(nx);
+    const cz = Math.floor(nz);
+    if (cx < 1 || cz < 1 || cx >= WX - 1 || cz >= WZ - 1) return;
+    const fy = Math.floor(pos.y + 0.01);
+    if (cx !== Math.floor(pos.x) || cz !== Math.floor(pos.z)) {
+      const feet = solidAt(cx, fy, cz);
+      const head = solidAt(cx, fy + 1, cz);
+      const above = solidAt(cx, fy + 2, cz);
+      if (feet && (head || above)) {
+        // Fal (≥ 2 magas) vagy fejmagasságú akadály: ki kell bányászni — előbb a fej, aztán a láb magasságában.
+        const t = head ? { x: cx, y: fy + 1, z: cz } : { x: cx, y: fy + 2, z: cz };
+        const tt = vGet(world(), t.x, t.y, t.z);
+        digging = vMineable(tt) && tt !== RUNE_ORE ? t : { x: cx, y: fy, z: cz };
+        return;
+      }
+      if (!feet && head) {
+        digging = { x: cx, y: fy + 1, z: cz }; // fejmagasságú lomb / törzs
+        return;
+      }
+    }
+    pos.x = nx;
+    pos.z = nz;
+    // Felszín: a lépcsőt megmássza (≤ 1), lefelé lelép; víz felett marad (úszik).
+    let y = Math.floor(pos.y + 0.01);
+    if (solidAt(cx, y, cz)) y += 1;
+    while (y > 1 && !solidAt(cx, y - 1, cz) && vGet(world(), cx, y - 1, cz) !== WATER) y -= 1;
+    pos.y = y;
+  }
+
+  /** Szabad bányászás (a „bányászó” modell): a lábánál előtte / oldalt / alatta lévő legközelebbi sima blokk. */
+  function pickFreeBlock(): MineTarget | null {
+    const fx = Math.floor(pos.x);
+    const fz = Math.floor(pos.z);
+    const fy = Math.floor(pos.y + 0.01);
+    const cand: MineTarget[] = [
+      { x: fx + 1, y: fy - 1, z: fz }, { x: fx - 1, y: fy - 1, z: fz }, { x: fx, y: fy - 1, z: fz + 1 }, { x: fx, y: fy - 1, z: fz - 1 },
+      { x: fx + 1, y: fy - 2, z: fz }, { x: fx - 1, y: fy - 2, z: fz }, { x: fx, y: fy - 2, z: fz + 1 }, { x: fx, y: fy - 2, z: fz - 1 },
+      { x: fx + 1, y: fy, z: fz }, { x: fx - 1, y: fy, z: fz },
+    ];
+    for (const c of cand) {
+      const t = vGet(world(), c.x, c.y, c.z);
+      if (vMineable(t) && t !== RUNE_ORE && t !== BEDROCK) return c;
+    }
+    // Semmi a közelben: arrébb lép (a következő lépésben új helyet keres).
+    pos.x = Math.min(WX - 2, Math.max(1.5, pos.x + (botRng.next() - 0.5) * 2));
+    pos.z = Math.min(WZ - 2, Math.max(1.5, pos.z + (botRng.next() - 0.5) * 2));
+    return null;
+  }
+
+  /** Egy, a lap vászon-útját utánzó koppintás az érc felé (sugár a szemből az érc egy pontjára). */
+  function keepMiningTap(ore: Pos): void {
+    const eye = { x: pos.x, y: pos.y + PLAYER_EYE, z: pos.z };
+    const pt = { x: ore.x + 0.15 + botRng.next() * 0.7, y: ore.y + 0.15 + botRng.next() * 0.7, z: ore.z + 0.15 + botRng.next() * 0.7 };
+    const d = { x: pt.x - eye.x, y: pt.y - eye.y, z: pt.z - eye.z };
+    const l = Math.hypot(d.x, d.y, d.z) || 1;
+    keepTaps += 1;
+    if (mine!.tapRay(eye, { x: d.x / l, y: d.y / l, z: d.z / l }, mine!.clockMs(), l)) accidental += 1;
+    mine!.hit(ore); // a bányászó koppintás a nyitott zár alatt hatástalan
+  }
+
   const m = createRuneMine({
     seed,
     questions: () => (questions ? ui : null),
     minGapMs: blockCraftDirectorConfig(grade).minGapMs,
     player: () => pos,
     movePlayer: (dt) => {
+      if (digging) {
+        miningMs += dt;
+        return;
+      }
       if (!target || m.clockMs() < reactUntil) return;
-      const dx = target.x + 0.5 - pos.x;
-      const dz = target.z + 0.5 - pos.z;
-      const d = Math.hypot(dx, dz);
-      if (d <= REACH) return;
-      const speed = BOT_SPEED_BPS * (roll < 1 ? 1 : 0.5);
-      const stepLen = Math.min(d - REACH * 0.8, (speed * dt) / 1000);
-      pos.x += (dx / d) * stepLen;
-      pos.z += (dz / d) * stepLen;
-      const top = surfaceTop(m.state().world, Math.floor(pos.x), Math.floor(pos.z));
-      pos.y = (top < 0 ? pos.y - 1 : top) + 1;
+      if (style === "miner" && m.clockMs() < minerUntil) return;
+      walkToward(target.x + 0.5, target.z + 0.5, dt);
     },
   });
   mine = m;
 
   function beginLevel(index: number): void {
     const cfg = BLOCK_CRAFT_LEVELS[index]!;
-    const world = generateVoxelWorld(genCfgFor(cfg), createRng(seedFrom(BLOCK_CRAFT_GAME_ID, seed, "world", index)).next);
-    const spawn = findVoxelSpawn(world);
+    // A lappal azonos seed-szerkezet (`seedFrom(gameId, seed, "world", menet, pálya)`; a sim-ben a menet 1).
+    const w = generateVoxelWorld(genCfgFor(cfg), createRng(seedFrom(BLOCK_CRAFT_GAME_ID, seed, "world", 1, index)).next);
+    const spawn = findVoxelSpawn(w);
     pos.x = spawn.x;
     pos.y = spawn.y;
     pos.z = spawn.z;
     target = null;
-    m.startLevel(world, index, { x: 0, z: -1 });
+    digging = null;
+    minerUntil = 0;
+    m.startLevel(w, index, { x: 0, z: -1 });
     ui.reset();
   }
   beginLevel(0);
@@ -176,31 +283,68 @@ export function createSimGame(opts: BlockCraftSimOptions): BlockCraftSim {
     step(dtMs, input) {
       if (allDone()) return;
       roll = input.skillRoll;
+      // A bányászás célja (a tartás a mag fix lépésében halad).
+      if (digging) {
+        const t = vGet(world(), digging.x, digging.y, digging.z);
+        if (t === AIR || t === WATER || !vMineable(t)) {
+          m.release();
+          digging = null;
+        } else if (t === RUNE_ORE) {
+          // A kibányászott helyen rúnaérc bukkant elő (felfedezés): a bot megérinti.
+          m.release();
+          revealedCount += 1;
+          target = { x: digging.x, y: digging.y, z: digging.z };
+          digging = null;
+        } else {
+          m.aim(digging);
+          if (!m.state().mining.pressing) m.press();
+        }
+      }
+      const before = m.state().blocks;
       m.frame(dtMs, false);
+      blocks += m.state().blocks - before;
       const st = m.state();
       if (st.phase === "won") {
+        digging = null;
         if (!questions || ui.settled()) {
           cleared += 1;
           if (!allDone()) beginLevel(cleared);
         }
         return;
       }
-      // A bot döntése: a legközelebbi érc felé; odaérve megérinti (a zár / a függő kérés alatt nem kezd újat).
-      const busy = st.pendingOre !== null || (st.lock !== null && st.lock.resolved === null);
+      // Tovább bányászó koppintás a zár megnyílása után (review #484 B1: sosem választhat).
+      const lock = st.lock;
+      if (lock && lock.resolved === null && lock.presentationId !== lockSeen) {
+        lockSeen = lock.presentationId;
+        keepUntil = m.clockMs() + KEEP_MINING_MIN_MS + botRng.next() * (KEEP_MINING_MAX_MS - KEEP_MINING_MIN_MS);
+        nextKeepTap = m.clockMs() + KEEP_TAP_MS;
+        if (style === "miner") minerUntil = 0;
+      }
+      if (lock && lock.resolved === null && m.clockMs() <= keepUntil && m.clockMs() >= nextKeepTap) {
+        nextKeepTap = m.clockMs() + KEEP_TAP_MS;
+        keepMiningTap(lock.ore);
+      }
+      if (lock && lock.resolved !== null && style === "miner" && minerUntil === 0) minerUntil = m.clockMs() + MINER_MS;
+      if (digging) return;
+      const busy = lock !== null && lock.resolved === null;
       if (busy) return;
-      const alive = target && st.ores.some((o) => o.x === target!.x && o.y === target!.y && o.z === target!.z);
+      // „Bányászó” modell: a zár után szabadon bányászik (a felfedezett ércet azonnal megérinti).
+      if (style === "miner" && m.clockMs() < minerUntil && !(target && vGet(world(), target.x, target.y, target.z) === RUNE_ORE && Math.hypot(target.x + 0.5 - pos.x, target.z + 0.5 - pos.z) <= REACH + 0.5)) {
+        digging = pickFreeBlock();
+        return;
+      }
+      const alive = target && vGet(world(), target.x, target.y, target.z) === RUNE_ORE;
       if (!alive) {
-        const near = nearestRune(st.ores, pos.x, pos.z).ore;
-        target = near;
+        target = nearestRune(st.ores, pos.x, pos.z).ore;
         reactUntil = m.clockMs() + REACT_MS;
         return;
       }
       const d = Math.hypot(target!.x + 0.5 - pos.x, target!.z + 0.5 - pos.z);
-      if (d <= REACH && m.clockMs() >= reactUntil) m.hit(target!);
+      if (d <= REACH + 0.5 && m.clockMs() >= reactUntil) m.hit(target!);
     },
     question() {
       const p = ui.active();
-      if (!p || ui.view().reveal) return null;
+      if (!p || ui.view().reveal || !m.lockArmed()) return null;
       return { id: p.id, correctOption: p.options.findIndex((o) => o.correct), windowMs: p.windowMs, optionCount: p.options.length };
     },
     answer(id, option) {
@@ -217,5 +361,10 @@ export function createSimGame(opts: BlockCraftSimOptions): BlockCraftSim {
     askedKeys: () => asked,
     levelsCleared: () => cleared,
     player: () => pos,
+    accidentalPicks: () => accidental,
+    keepTaps: () => keepTaps,
+    miningShare: () => (m.clockMs() > 0 ? miningMs / m.loop.simTimeMs() : 0),
+    blocksMined: () => blocks,
+    revealed: () => revealedCount,
   };
 }
