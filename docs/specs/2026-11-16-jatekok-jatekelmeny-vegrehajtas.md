@@ -1601,6 +1601,26 @@ fizika-esetek (pattogás, határok) változatlanok.
     választott ketrecre!”. Mérce: a reviewer `edge.ts` mindkét esete válaszol, `edgefreq.ts` „ezt választotta és lejárt” 0,
     `measure.ts` (≤ 500 ms), `tap.ts`, `drag.ts` 0; core-teszt mind a 4 ketrecre, álló és fekvő, bökéssel és joystickkal;
     sim: a peremről induló bot lejárata nem nő. Fekvőben a jelmagyarázat a HUD idősávja alá kerül.
+23. **Kupon mód: átállás a közös szabályra (kanban #95, 2026-11-17, a #483-mal együtt).** A lapi kupon-tartalék
+    (`lib/brainRot/couponRepeat.ts`, 17. pont) kikerül; a kimerülést és az ismétlést a közös director kupon-ága kezeli
+    (D-J1a-10, D-J1a-16). Ok: a kettő együtt közvetlen ismétlést adott (a tartalék `X#ism1`-e után a közös ág menetközi
+    ismétlésként az eredeti `X`-et — 20 seedből 4–11 menetben). Viselkedés-különbségek a régi tartalékhoz képest:
+    - **időzítés:** a hibázott lecke-tétel már a lecke kimerülése ELŐTT, menet közben visszajön (3.–6. kérdésként, a közös
+      ≤ 30%-os ismétlési arány-korláttal); a tartalék csak kimerülés után hozta vissza. Kimerülés után a menetben
+      LEGRÉGEBBEN feltett tétel jön (≥ 2 tételnél nem a közvetlenül előző) — a tartalék a hibázottat előzte, a közös ág a
+      hibázottat a menetközi ismétlési slotból adja;
+    - **kulcs és nyilvántartás:** az ismétlés az EREDETI tétel (`mat:<id>` kulcs, `source: "coupon"`, `couponItemId`
+      megőrizve), és minden feltevés rögzül az ismétlési sorban és a menet-statisztikában — a tartalék `<kulcs>#ism<n>`
+      változat-kulcsot és `noReview`-t adott (az ismételt válasz nem került az ismétlési sorba, a `distinctKeys` a
+      változatokat külön számolta). Most a tanulási nyilvántartás pontosabb: egy tétel = egy kulcs, az ismételt jó / rossz
+      válasz a tétel saját előzményét frissíti;
+    - **szándék nélküli válasz:** a Brain Rotban ketrec-válasz csak szándékos belépéssel jön létre (11., 16., 22. pont); a
+      szándék nélküli kimenet LEJÁRAT (timeout) marad, az ismételt tételre is — a D-J1a-13 „nem válaszolt” szabályának
+      megfelelője változatlanul él, külön ág nem kell;
+    - **kérdés nélküli megtartás:** csak valódi forráshiánynál (0 tételes lecke) — a közös ág ≥ 1 feltett tétel után mindig
+      ad kérdést; 1 tételes leckénél ugyanaz ismétlődik (elkerülhetetlen, a tartaléknál is így volt).
+    Mérce (sim, 20 seed × 3 / 5 / 8 tétel × 7. és 4. évfolyam): közvetlen ismétlés 0, kérdés nélküli megtartás 0, a hibázott
+    tétel visszajön, a győzelmi arány nem rosszabb a kupon nélkülinél (tűrés 1/20); lap: e2e 3 tételes kuponos leckével.
 21. **Mérőkép az élesítés után (Ú5).** A kérdés-képek a beúszás és a 600 ms-os előjelzés után készülnek.
     Jegyre: Ú3 (≥ 600 ms tartott joystick — a mechanika szándékolt alakja, a J5b-ben újramérve); a 7-es küszöb az átlagosnak
     könnyű (a J5b rivális-győzelme váltja ki).
