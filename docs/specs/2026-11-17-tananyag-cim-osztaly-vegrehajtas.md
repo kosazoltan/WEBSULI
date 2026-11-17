@@ -1,0 +1,107 @@
+# Végrehajtási utasítás — osztály a tananyag címénél és a keresőben (S1, kanban #116)
+
+Terv: `docs/specs/2026-11-17-tananyag-cim-osztaly.md`. Ág: `fix/tananyag-cim-osztaly`, munkafa:
+`.claude/worktrees/tananyag-cim-osztaly`. Minden útvonal a munkafa gyökeréhez képest értendő. Játékfájlhoz, migrációhoz,
+`server/` fájlhoz ez a szelet nem nyúl. Push / PR csak az orkesztrátor jelzésére.
+
+## 0. Előkészítés
+
+- `npm.cmd ci --prefix source --ignore-scripts` (C-38; a `native-arch` helyi bukása ismert kivétel).
+
+## 1. Közös modul — `source/shared/material-title.ts` (új)
+
+Függőség: `./classrooms` (`normalizeClassroom`, `classroomDisplayLabel`), `./subjects` (`subjectLabel`). Tiszta függvények, DOM nélkül.
+
+- `TITLE_GRADE_SEPARATOR = " · "`.
+- `foldText(text: string): string` — NFD, a kombináló ékezetek (U+0300–U+036F) törlése, kisbetű.
+- `titleNamesClassroom(title: string): boolean` — igaz, ha a (hajtogatott) cím osztályt nevez meg:
+  szám 1–12 + „osztály…” / „évfolyam…” (ponttal, szóközzel vagy anélkül); „osztály N” / „évfolyam N” (kettősponttal is);
+  „N.o” / „N. o.”; sorszámnév + „osztály…” / „évfolyam…”; sorszámnév „-s / -es / -os” képzővel („ötödikes…”, „harmadikos…”).
+  A szám előtt és az egész minta után nem állhat betű vagy számjegy.
+- `materialTitleGradePrefix(title: string, classroom: unknown): string | null` — `null`, ha az osztály érvénytelen, ha a cím üres /
+  csak szóköz, ha `titleNamesClassroom(title)`, vagy ha az osztály 0 és a címben szerepel a „programoz” tő; különben
+  `classroomDisplayLabel(classroom)`.
+- `materialDisplayTitle(title: string, classroom: unknown): string` — előtag + `TITLE_GRADE_SEPARATOR` + cím, vagy a cím változatlanul.
+- `parseGradeQuery(query: string): { grades: number[]; rest: string[] }` — a hajtogatott kifejezésből:
+  - szám 0–12, utána opcionálisan pont, képző („-es”, „-os”, „-as”, „-edik”, „-odik”, „-adik”, „-dik”, „-ik”), osztály-szó
+    („osztály…”, „évfolyam…”, „oszt.”, „évf.”, „o.”); nem osztály, ha előtte betű, számjegy vagy `. , / : + * = -` áll, vagy utána
+    betű, számjegy, illetve `. , / : + * = -` és nem szóköz következik (tört, tizedes, tartomány, hosszabb szám);
+  - sorszámnév (első … tizenkettedik), opcionális „-s / -es / -os…” képzővel és osztály-szóval;
+  - „prog”, „prog.”, „programoz…”, opcionálisan „alapismeretek” / „alapok” → 0;
+  - `grades`: a kiolvasott osztályok növekvő sorrendben, ismétlés nélkül; `rest`: a maradék betű- / számsorozatok, az „osztály…” és
+    „évfolyam…” kezdetű szavak nélkül.
+- `matchesMaterialSearch(file: { title: string; description?: string | null; subject?: string | null; classroom?: unknown }, query: string): boolean`:
+  - üres / csak szóköz kifejezés → `true`;
+  - szöveges találat: a hajtogatott, szóközöktől megtisztított kifejezés részszövege a megjelenítendő címnek, a leírásnak vagy a
+    tantárgynévnek (`subjectLabel`, csak ha van tantárgy) → `true`;
+  - osztály-találat: `grades` nem üres, az anyag `normalizeClassroom` értéke benne van, és a `rest` minden szava részszövege a
+    „megjelenítendő cím + osztály-felirat + leírás + tantárgynév” hajtogatott szövegének → `true`;
+  - különben `false`.
+
+## 2. Egységtesztek — `source/tests/material-title.test.ts` (új)
+
+A mérce a terv (E1–E8, edge case-ek), nem a megvalósítás. Táblás esetek:
+
+- megjelenítendő cím: 1–12 és 0; a címben már szereplő osztály minden alakja (terv „Edge case-ek” 2. pont); nem-osztály számok a
+  címben (3. pont); ellentmondó cím; érvénytelen értékek; üres cím; programozás a címben;
+- osztály-kiolvasás: a terv E4 / E6 minden alakja 1–12-re (szám-alakok) és a 12 sorszámnévre; E8 ellenpéldák;
+- keresés: E4 (cím nélküli osztály-találat), E5 (osztály + szavak; nem találat, ha a szó hiányzik vagy az osztály más), E6, E7
+  (rögzített anyag- és kifejezéslistán: ami a régi illesztéssel — a teljes kifejezés a nyers címben / leírásban / tantárgynévben —
+  találat, az az újjal is), érvénytelen osztályú anyag.
+
+Parancs: `cd source && node --import tsx --test tests/material-title.test.ts` → minden teszt `pass`.
+
+## 3. Főoldali kereső — `source/client/src/lib/home-views.ts`
+
+- `matchesHomeSearch` a közös `matchesMaterialSearch`-re delegál; a paraméter típusa kiegészül: `classroom?: unknown`.
+  A helyi `fold` segéd megszűnik, ha más nem használja.
+- `source/tests/home-views.test.ts`: új teszt az osztály-keresésre a `matchesHomeSearch`-en át (a meglévő tesztek változatlanok).
+
+Parancs: `cd source && node --import tsx --test tests/home-views.test.ts tests/material-title.test.ts`.
+
+## 4. Főoldali kártya — `source/client/src/components/UserFileList.tsx`, `source/client/src/index.css`
+
+- A `renderCard` címsora:
+  `<h3 className="home-card-heading line-clamp-3">` + ha van előtag: `<span className="home-card-title-grade"
+  data-testid={"title-grade-" + file.id}>{előtag + TITLE_GRADE_SEPARATOR}</span>` + `<span className="home-card-title">{file.title}</span>`.
+- CSS: a `.home-card-title` eddigi szabálya (margó, szín, betűméret, vastagság, sorköz) a `.home-card-heading`-re kerül; a
+  `.home-card-title-grade` színe `var(--hc-muted)`.
+- A kereső mezőjének helyőrzője: „Keresés: cím, tantárgy, osztály…”.
+- A csip (`home-card-grade`), a szűrőgombok, a `data-testid`-k változatlanok.
+
+## 5. Admin „Tananyagok” — `source/client/src/components/AdminFileDashboard.tsx`, `source/client/src/components/FileCard.tsx`
+
+- `AdminFileDashboard.tsx` szűrője: `matchesMaterialSearch(file, searchQuery) ||` a meglévő `classroomDisplayLabel(...)`-részszöveg
+  („Nincs osztály” találat megmarad).
+- `FileCard.tsx`: a `<h3>` szövege `materialDisplayTitle(title, classroom)`; a `data-testid="card-file-<cím>"` és az ikonválasztás a
+  nyers címmel marad.
+
+## 6. Szakasz-kapu
+
+`npm run gate:stage` a munkafa gyökeréből → zöld. Bukásnál az okot kell javítani.
+
+## 7. Böngészős próba — `source/tests/material-title.spec.ts` + `source/playwright.material-title.config.ts` (új)
+
+A `classroom-badge` minta szerint (vite, ál-API, szolgáltatásmunkás tiltva, saját port: 5196, `workers: 1`).
+Nézetek: 360×640, 390×844, 1280×800. Ál-adat: osztály nélküli című anyag 4., 12. és 0. osztályban; osztályt megnevező című anyag;
+120 karakteres cím; érvénytelen osztályú anyag.
+
+- Főoldal: az előtag szövege és hiánya (E1–E3); a címsor a kártyán belül van, a kártya gombjait nem takarja, nincs vízszintes
+  görgetés (E10); keresés „12.o”, „negyedik”, „4. osztály törtek”, „prog” → a várt kártyák (E4–E6).
+- Admin: a kártya címe előtaggal; keresés „12 osztaly” → egy találat; „Nincs osztály” → a hibás anyag (E9).
+- Képernyőképek: `source/test-results/material-title/` (nem követett).
+- „Előtte” képek: ugyanez az ál-adat az `origin/main` kódján (a spec `MATERIAL_TITLE_SHOTS_ONLY=1` módja csak képet készít,
+  állítás nélkül), a session scratchpadjébe; az „utána” képeket a spec rendes futása adja.
+
+E2E-sorompó előtte: `docker ps --filter name=websuli-e2e- --format "{{.Names}} {{.RunningFor}}"`; ha legalább 2 db 90 percnél
+fiatalabb konténer fut, 60 másodpercenként újra, legfeljebb 30 percig. Egyszerre egy böngészős futás.
+
+Parancsok: `cd source && npx.cmd playwright test -c playwright.material-title.config.ts --workers=1` → minden eset `passed`;
+regresszió: `npx.cmd playwright test -c playwright.classroom-badge.config.ts --workers=1` és
+`npx.cmd playwright test -c playwright.home-views.config.ts --workers=1` → `passed`.
+
+## 8. Zárás
+
+- A terv elfogadási listájának tételes újraellenőrzése (kód, teszt, böngészős próba alapján).
+- `npm run gate:push` → zöld (a `native-arch` C-38 kivétel megengedett).
+- Megállás: a fej-hash jelentése az orkesztrátornak; push / PR nincs.
