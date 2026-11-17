@@ -1620,6 +1620,47 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
 5. Tesztek: `T/tornado-junctions.test.ts` (elágazás-ütemezés, a helyes út rövidebb, 3 opció visszaképezhető), sim
    (J2 ≥ 4/perc, J3 ≤ 20 mp).
 
+#### J7b döntések (2026-11-17, a kód előtt; kanban #87, a szelethez csatolt #84, #83)
+
+1. **Elágazás = virtuális kapu (U-J7-2).** A `world.ts`-ben nincs út-gráf (300 egységes útrács, elágazás-pont nincs), ezért a
+   kérdés megjelenésekor a jármű előtt, a menetirányra merőleges vonalon három kapu áll (bal / egyenes / jobb, 20 egység
+   oldaltávolság); a vonal távolsága `|sebesség| × ablak × 0,85`, 30–110 egység közé vágva. A választás az áthajtás
+   oldaliránya (szektor) → `director.answer`. A kapu ↔ opció hozzárendelés a director seedelt keverése (a helyes kapu helye
+   véletlen): a „helyes a célirány felé” szó szerint elárulná a választ (a tornádó felé kormányzás = jó válasz). A „rövidebb
+   út” a hatásban jelenik meg: helyes = rövidítés + turbó (3 mp nitró); hibás = kerülő (seedelt 8–12 mp: a menet órája ÉS a
+   tölcsér élettartama ennyivel előrébb lép, „Kerülő: −9 mp” felirat); lejárat (nem hajtott át egyik kapun) = külön büntetés
+   nélkül, a tétel az ismétlési sorba kerül.
+2. **Táblák:** a világban 3D oszlop + színes jelölő; a felirat DOM-címke a tábla vetített képernyőhelyén (éles, ≥ 14 px,
+   fekvő nézetben olvasható; a címkék nem fedik egymást), képkockánként közvetlen stílusírással (KSZ-9, nincs `setState`).
+3. **Turbópad (Q3):** seedelten 25–30 mp-enként izzó pad a jármű előtt (45 egység); elérésekor `request("trigger")`,
+   `mode="buttons"`; jó válasz = 3 mp nitró; a pad 12 mp után eltűnik. A közös fekvő elrendezés a válaszokat a két szélre
+   teszi — a jobb oldali, kétoszlopos hüvelykujj-zóna `index.css`-változást kívánna (ORKESZTRÁTOR-KÉRÉS a jelentésben).
+4. **Horgony-kérdés:** a megállító overlay megszűnik; a horgony-kérdés is a kérdés-sávon jön (`request("trigger")`,
+   `mode="buttons"`), a szimuláció nem áll. A J7c teszi Műszer-kalibrálássá.
+5. **Tartás:** horgonyzott állapotban és a mérési sávban nem indul elágazás / turbó (`frame(…, { hold })`).
+6. **Fix lépés:** a lap rAF-je a közös `createFixedLoop`-ot hajtja (1/60 s); a lépésben a fizika és a közös mag
+   (`createChaseCore`, `L/tornado/sim.ts`, a node-szimuláció UGYANEZT hívja), a képkockában a rajz. Interpoláció nincs
+   (a legutolsó lépés állapota rajzolódik) — K.4/9 részben, a J7c-ben pótolható.
+7. **Seed:** `readGameSeed() ?? seedFrom(GAME_ID, nap)`, menetenként `seedFrom(alap, futás)`; a lapon nincs `Math.random`
+   (a szél, a tornádó kezdőszöge és a kérdés-sorsolás a menet RNG-jéből, a villám külön seedelt `fxRng`-ből); a lap a
+   `GAME_PAGE_ALLOW` őr alá kerül.
+8. **#83:** L1 — a szélállóság a `WIND_RESISTANCE_CAP` (110,5) felett nem hat, ezért az `effectiveStats.windResistance`
+   ennél levágva, a garázs sávja ezt mutatja. L2 — a jármű ALAP stabilitása és horgonyereje a játékban nem hat (a hatás a
+   fejlesztésből jön), és ennek bevezetése minden jármű alap-viselkedését megváltoztatná: a garázs ezért a ténylegesen
+   ható számot mutatja — „Stabilitás” = ütközés-tűrés (100 / `crashLossFactor`), „Horgony” = rögzítési gyorsaság
+   (100 × 2600 / `anchorHoldMs`). L3 — a pozíció-bónusz a horgonyzás pillanatának távolságából számol.
+9. **#84:** a `material-quizzes` tétel opcionális `subject` mezőt kap: kanonikus tételnél a lecke `quizTopic(subject)`-je,
+   régi exportnál a lecke (közvetlenül vagy az anyagán át) tudástérképének tantárgya `quizTopic`-pal, a generátor
+   `english` / `math` / `nature` / `hungarian` témájú régi sorainál a téma; egyébként a mező hiányzik. A quiz-bank
+   végpont (gyorsítótár, lenyomat) nem változik. A Tornado a `subject`-et használja; a cím-heurisztika csak tantárgy
+   nélküli tételnél marad, szigorítva (üres téma + „X magyarul:” nem biztos angol; matek-előtag mellett más tantárgy
+   szava → bizonytalan).
+10. **Pontszámítás:** a győzelmi jutalom a `sim.ts` `winReward`-ja (alap sáv, horgonyzáskori távolság), a lap ezt hívja;
+    a K2 viselkedési teszt minden műszer-szinten.
+11. **Director:** `optionCount: 3`, `minGapMs: 1500`, `maxGapMs: 20000`, `targetPerMin: 4`, `baseWindowMs: 5500`,
+    `slowMo: 1`, `readingAware`, `promptFits` (a Matek mintájára); az ütemezett kérdés az elágazás, legkorábban 15–20 mp-cel
+    (seedelt) az előző elágazás után (`calm`), legkésőbb a director `maxGapMs` kényszere szerint.
+
 ### J7c — zaj-alapú tornádópálya, Műszer-kalibrálás (Q2), szupercella (Opus)
 
 1. Állapot-sor commit.
