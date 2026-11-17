@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { applyRendererLook, createGradientSky, detectLookTier, disposeObjectTree, LOOK_BUDGET, SparkleField } from "@/game-engine/three-look";
 import type { PerfControls, PerfOverlay } from "@/game-engine/perf/perfOverlay";
 import { perfEnabledFrom } from "@/game-engine/perf/perfStats";
-import { isLightGraphicsFrom, LIGHT_GRAPHICS_MAX_PIXELS, pixelRatioForBudget } from "@/game-engine/perf/pixelBudget";
+import { isLightGraphicsFrom, isTouchDeviceFrom, LIGHT_GRAPHICS_MAX_PIXELS, pixelRatioForBudget } from "@/game-engine/perf/pixelBudget";
 import { SUN_SHADE_TINT, sunShadeAt, type SunOccluder } from "@/lib/voxelSunShade";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Pause, Blocks } from "lucide-react";
@@ -1947,7 +1947,8 @@ export default function BlockCraftQuiz() {
     const basePixelRatio = renderer.getPixelRatio();
     let perfScale = 1;
     const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-    const lightGraphics = lite && isLightGraphicsFrom({ tier, reducedMotion: reducedMotionRef.current, memoryGb: typeof deviceMemory === "number" ? deviceMemory : null });
+    const touchDevice = isTouchDeviceFrom(typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches, Math.min(window.screen?.width ?? 0, window.screen?.height ?? 0));
+    const lightGraphics = lite && isLightGraphicsFrom({ tier, touchDevice, reducedMotion: reducedMotionRef.current, memoryGb: typeof deviceMemory === "number" ? deviceMemory : null });
     const syncSize = () => {
       const { width, height } = desiredCanvasCssSize(canvas);
       if (width === appliedW && height === appliedH) return;

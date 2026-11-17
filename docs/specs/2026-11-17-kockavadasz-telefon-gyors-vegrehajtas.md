@@ -21,8 +21,9 @@ Minden parancs a munkafa gyökeréből. Push / PR csak orkesztrátori jelre; a P
    Teszt: `source/tests/pixel-budget.test.ts` (belefér → base; 827×835 @1,5 → ≤ 1,0 Mpx és arányos; `null` → base; 0 méret → base;
    a három „könnyű” jel külön-külön; erős telefon → hamis).
 2. `source/client/src/lib/voxelSunShade.ts`:
-   - `sunShadeAt(solidAt, leafAt, x, y, z, maxY): 0 | 1 | 2` — a (x, y+k, z−k) és a (x, y+k, z−k+1) cellákon lépked k = 1 … (maxY − y):
-     tömör (nem lomb) találat → 2 (árnyék); csak lomb találat → 1 (lombszűrte); semmi → 0. A `solidAt(x, y, z)` a rácson kívül hamis.
+   - `sunShadeAt(occluderAt, x, y, z, maxY): 0 | 1 | 2` — EGYETLEN átlón lépked: a (x, y+k, z−k) cellákon, k = 1 … amíg y+k < maxY
+     (review F3: a kód így működik, a korábbi „két átló” leírás hibás volt). `occluderAt` 2 = tömör blokk → 2 (árnyék, azonnal);
+     1 = lomb → legalább 1 (lombszűrte); semmi → 0. Az `occluderAt` a rácson kívül 0.
    - `SUN_SHADE_TINT: readonly [r, g, b][]` = `[[1, 1, 1], [0.58, 0.62, 0.72], [0.46, 0.5, 0.62]]`.
    Teszt: `source/tests/voxel-sun-shade.test.ts` (szabad ég → 0; közvetlenül a nap felőli átlóban tömör → 2; csak lomb → 1; lomb
    mögött tömör → 2; a rács széle → 0; a naptól elfelé eső blokk nem árnyékol).
@@ -97,8 +98,8 @@ szelet ott ütközni fog. A feloldásnál a #484 kódját kell megtartani, és e
 1. **Árnyék ki telefonon:** `createGameRenderer(canvas, tier, { exposure: 1.0, shadows: tier === "high" })`.
 2. **Sütött árnyék:** az `addCell(idx, t, x, y, z)`-ben a `setMatrixAt` mellé `setColorAt(slot, SUN_SHADE_TINT[sunShadeAt(…)])`
    (ha `!shadowsOn` és `t !== WATER`), `instanceColor.needsUpdate = true`; a `removeCell` cserés törlésénél a színt is át kell
-   másolni (`getColorAt(last)` → `setColorAt(slot)`); az `updateDirtyCells`-ben a megváltozott cella ALATTI átló (x, y−k, z+k és
-   z+k−1, k = 1 … y) celláinak színét újra kell számolni (bányászás után az árnyék eltűnik) — a mainen ezt a teljes `rebuildWorld` adja.
+   másolni (`getColorAt(last)` → `setColorAt(slot)`); az `updateDirtyCells`-ben a megváltozott (x, y, z) cella ALATTI egyetlen átló — a
+   (x, y−k, z+k) cellák, k = 1 … y — színét újra kell számolni (ugyanaz az átló visszafelé, mint a `sunShadeAt` bejárása) (bányászás után az árnyék eltűnik) — a mainen ezt a teljes `rebuildWorld` adja.
 3. **Anyagok:** `makeBlockMaterials(lite)` (Lambert / Phong / átlátszatlan lomb), a #484 új `RUNE_ORE` anyagával együtt
    (`emissiveMap` Lamberten is működik); **anizotrópia** `Math.min(lite ? 2 : 8, …)`.
 4. **`ResizeObserver` + `sizeDirty`** a `syncSize()` képkockánkénti hívása helyett; a könnyű grafika képpont-plafonja a `syncSize`-ban.
@@ -143,15 +144,17 @@ lehet (UNVERIFIED) — a tulajdonos `?perf=1` fotója dönt. NOT RUN: valódi te
 
 Képek: `docs/measurements/2026-11-17-kockavadasz-telefon-gyors/` — `lap-fold.jpg`, `lap-p390.jpg`, `lap-p360.jpg`, `lap-l844.jpg`
 (összevető lapok: kezdő nézet, horizont, három fordulat — erdő, domboldal, víz —, két séta utáni nézet, lomb alulról, kérdés
-nyitva), `par-viz-arnyek.jpg` (nagyított pár), `elotte/` és `utana/` (a kihajtott és a 390×844 nézet egyenkénti képei). Mag: 21,
+nyitva), `par-viz-arnyek.jpg` (nagyított pár), `lap-akna.jpg` (5 blokk mély, lefelé ásott akna alja: oldalra és felfelé nézve).
+Az egyenkénti képek a review F7 szerint nincsenek a repóban (a scratchpadban maradtak). Mag: 21,
 `look=medium`.
 
 Megállapítások: a színek, a textúra élessége, a köd és a HUD a párokban megegyezik; hiányzó blokk, csíkozódás, levágott HUD nincs.
-Látható különbségek: (1) a fák talajra vetett árnyéka megvan, de kockánkénti (szögletes folt a törzs mellett), kisebb és
+Látható különbségek: (1) a fák talajra vetett árnyéka helyett csak alig észrevehető, kockánkénti folt marad a törzs mellett (a hosszú, lágy árnyék eltűnik), kisebb és
 keményebb szélű, mint az árnyéktérkép lágy, hosszú árnyéka; (2) a víz csillanása a part mentén halványabb; (3) a lomb teljesen
 fedő (a 7 %-os áttetszőség eltűnt) — képen nem észrevehető. A kép nem lapos: a domboldalak árnyékos oldala, a lomb alja és a fák
-alja sötétebb. Barlang / fedett rész a kezdő pályán a magból nem érhető el a szkripttel — NOT RUN (a legközelebbi megfelelő a lomb
-alatti és a domb mögötti rész). Időjárásos pályák (eső, hó, homokvihar): NOT RUN.
+alja sötétebb. Zárt tér (review F4): lefelé ásott, 5 blokk mély akna alján mindkét változat — az „utána” kép falai nem sötétebbek, inkább
+világosabbak (a régi árnyéktérkép az akna falát is árnyékolta), ezért a szórt fényt nem kellett külön kezelni. Természetes barlang
+a kezdő pályán nincs: NOT RUN. Időjárásos pályák (eső, hó, homokvihar): NOT RUN.
 
 ### Tesztek
 

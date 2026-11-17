@@ -12,6 +12,7 @@ test.use({ serviceWorkers: "block", ...devices["Pixel 7"], viewport: { width: 82
 type Toggles = { shadows: boolean; resolution: number; simpleMaterials: boolean; fog: boolean };
 type Snapshot = {
   running: boolean;
+  renderedFrames: number;
   tier: string;
   frame: { frames: number } | null;
   calls: number;
@@ -24,8 +25,13 @@ type Snapshot = {
 type PerfWindow = { __websuliPerf?: { snapshot: () => Snapshot } };
 
 test.beforeEach(async ({ page }) => {
+  // CI-reprodukció (mint a `blockcraft-play`-ben): `BC_CPU_THROTTLE=<n>` → n-szeres CPU-lassítás. Alapból nincs.
+  const throttle = Number(process.env.BC_CPU_THROTTLE ?? 0);
+  if (throttle > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: throttle });
   await page.addInitScript(() => {
     localStorage.setItem("websuli.classroomGrade", "5");
+    // Review F6: a „könnyű grafika” a memóriától is függ (≤ 4 GB) — a futtató gépe ne döntsön; 8 GB-os telefon rögzítve.
+    Object.defineProperty(navigator, "deviceMemory", { configurable: true, get: () => 8 });
   });
   await page.route("**/api/**", async (route) => {
     const p = new URL(route.request().url()).pathname;
@@ -45,9 +51,13 @@ async function startGame(page: Page, query: string): Promise<void> {
 
 const snapshot = (page: Page) => page.evaluate(() => (window as unknown as PerfWindow).__websuliPerf!.snapshot());
 
-/** A kapcsoló után a mintaablak ürül: ha újra van benne képkocka, a jelenet az új beállítással is rajzol. */
+/**
+ * A kapcsoló után a jelenet az új beállítással legalább 3 képkockát kirajzol (review F1: a `renderedFrames` a statisztikából
+ * kihagyott, 1 s-nál lassabb CI-képkockákat is számolja, így a szoftveres WebGL-en sem a mintaablak üressége dönt).
+ */
 async function expectFramesAfterToggle(page: Page): Promise<void> {
-  await expect.poll(async () => (await snapshot(page)).frame?.frames ?? 0, { timeout: 30_000 }).toBeGreaterThan(2);
+  const before = (await snapshot(page)).renderedFrames;
+  await expect.poll(async () => (await snapshot(page)).renderedFrames - before, { timeout: 30_000 }).toBeGreaterThan(2);
 }
 
 test("perf=1: a panel megjelenik a mért sorokkal, és a négy kapcsoló hat a jelenetre", async ({ page }) => {

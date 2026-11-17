@@ -39,6 +39,8 @@ export type PerfOverlayOptions = {
 
 export type PerfSnapshot = {
   running: boolean;
+  /** Az eddig kirajzolt képkockák száma (az 1 s-nál hosszabb, a statisztikából kihagyott képkockák is). */
+  renderedFrames: number;
   tier: string;
   frame: FrameSummary | null;
   /** `EXT_disjoint_timer_query_webgl2` átlag (ms); null, ha a böngésző nem adja. */
@@ -167,6 +169,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   let tStart = 0;
   let tBefore = 0;
   let lastRefresh = 0;
+  let renderedFrames = 0;
   let lastJs = 0;
   let lastRender = 0;
   let calls = 0;
@@ -237,6 +240,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     const gpuAvg = gpuSamples.length ? gpuSamples.reduce((a, b) => a + b, 0) / gpuSamples.length : null;
     return {
       running: lastFrameAt > 0 && nowMs - lastFrameAt < 1000,
+      renderedFrames,
       tier: opts.tier,
       frame: frames.summary(),
       gpuMs: gpuAvg,
@@ -391,6 +395,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     afterRender() {
       const tAfter = performance.now();
       lastRender = tAfter - tBefore;
+      renderedFrames += 1;
       if (active && timerExt && gl2) {
         gl2.endQuery(timerExt.TIME_ELAPSED_EXT);
         pending.push(active);

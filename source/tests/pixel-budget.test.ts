@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { LIGHT_GRAPHICS_MAX_PIXELS, isLightGraphicsFrom, pixelRatioForBudget } from "../client/src/game-engine/perf/pixelBudget";
+import { LIGHT_GRAPHICS_MAX_PIXELS, isLightGraphicsFrom, isTouchDeviceFrom, pixelRatioForBudget } from "../client/src/game-engine/perf/pixelBudget";
 
 /** Képpontszám-plafon és „könnyű grafika” (terv: docs/specs/2026-11-17-kockavadasz-telefon-gyors.md, 3/f, G-5, G-6). */
 
@@ -34,13 +34,32 @@ describe("pixelRatioForBudget", () => {
 
 describe("isLightGraphicsFrom", () => {
   it("erős telefon (medium szint, 8 GB) nem könnyű mód — a felbontása változatlan", () => {
-    assert.equal(isLightGraphicsFrom({ tier: "medium", reducedMotion: false, memoryGb: 8 }), false);
-    assert.equal(isLightGraphicsFrom({ tier: "high", reducedMotion: false, memoryGb: null }), false);
+    assert.equal(isLightGraphicsFrom({ touchDevice: true, tier: "medium", reducedMotion: false, memoryGb: 8 }), false);
+    assert.equal(isLightGraphicsFrom({ touchDevice: true, tier: "high", reducedMotion: false, memoryGb: null }), false);
   });
 
   it("a három jel bármelyike könnyű módot ad", () => {
-    assert.equal(isLightGraphicsFrom({ tier: "low", reducedMotion: false, memoryGb: 8 }), true);
-    assert.equal(isLightGraphicsFrom({ tier: "medium", reducedMotion: true, memoryGb: 8 }), true);
-    assert.equal(isLightGraphicsFrom({ tier: "medium", reducedMotion: false, memoryGb: 4 }), true);
+    assert.equal(isLightGraphicsFrom({ touchDevice: true, tier: "low", reducedMotion: false, memoryGb: 8 }), true);
+    assert.equal(isLightGraphicsFrom({ touchDevice: true, tier: "medium", reducedMotion: true, memoryGb: 8 }), true);
+    assert.equal(isLightGraphicsFrom({ touchDevice: true, tier: "medium", reducedMotion: false, memoryGb: 4 }), true);
+  });
+});
+
+describe("könnyű grafika csak érintős eszközön (review F2)", () => {
+  it("asztali low szint (≤ 4 mag) nem kap képpont-plafont — a felbontás nem csökken", () => {
+    assert.equal(isLightGraphicsFrom({ touchDevice: false, tier: "low", reducedMotion: false, memoryGb: 8 }), false);
+    assert.equal(isLightGraphicsFrom({ touchDevice: false, tier: "low", reducedMotion: true, memoryGb: 2 }), false);
+  });
+
+  it("érintős telefonon low szinten a plafon hat", () => {
+    assert.equal(isLightGraphicsFrom({ touchDevice: true, tier: "low", reducedMotion: false, memoryGb: 8 }), true);
+  });
+
+  it("az érintős-eszköz jel: durva mutató és ≤ 1024 px rövidebb oldal", () => {
+    assert.equal(isTouchDeviceFrom(true, 412), true);
+    assert.equal(isTouchDeviceFrom(true, 1024), true);
+    assert.equal(isTouchDeviceFrom(true, 1080), false, "érintős nagy monitor");
+    assert.equal(isTouchDeviceFrom(false, 412), false, "egér, kis ablak");
+    assert.equal(isTouchDeviceFrom(true, 0), false);
   });
 });

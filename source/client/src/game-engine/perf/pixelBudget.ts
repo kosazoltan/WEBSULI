@@ -10,6 +10,8 @@ export const LIGHT_GRAPHICS_MAX_PIXELS = 1_000_000;
 
 export type LightGraphicsEnv = {
   tier: string;
+  /** Érintős, telefon-méretű eszköz (`pointer: coarse` és a rövidebb képernyőoldal ≤ 1024 CSS px). Asztali gépen hamis. */
+  touchDevice: boolean;
   reducedMotion: boolean;
   /** `navigator.deviceMemory` GB-ban; null, ha a böngésző nem adja. */
   memoryGb: number | null;
@@ -17,7 +19,15 @@ export type LightGraphicsEnv = {
 
 /** Az ESZKÖZ képessége dönt, egyszer, betöltéskor — nem az ablak mérete és nem a mutató fajtája. */
 export function isLightGraphicsFrom(env: LightGraphicsEnv): boolean {
+  // Review F2: a „low” szint egy ≤ 4 magos asztali gépet is jelent — ott a nagy monitoron a plafon látható felbontásvesztés
+  // lenne. A plafon ezért csak érintős, telefon-méretű eszközön hat.
+  if (!env.touchDevice) return false;
   return env.tier === "low" || env.reducedMotion || (env.memoryGb !== null && env.memoryGb <= 4);
+}
+
+/** A Kockavadász oldali érintős-eszköz jel (a közös `tier.ts` változatlan). */
+export function isTouchDeviceFrom(coarsePointer: boolean, screenShortSide: number): boolean {
+  return coarsePointer && screenShortSide > 0 && screenShortSide <= 1024;
 }
 
 /**
