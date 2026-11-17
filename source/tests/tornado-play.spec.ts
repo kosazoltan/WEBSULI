@@ -169,6 +169,18 @@ for (const viewport of VIEWPORTS) {
       const a = Number((await probe(page)).simTime);
       await page.waitForTimeout(800);
       expect(Number((await probe(page)).simTime), "a „Miért?” alatt áll a játék").toBe(a);
+      // (f) A megállítási okok nem oldják fel egymást: a háttérbe tett lap szünete és a folytatás a „Miért?” alatt sem indítja el.
+      await page.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+        document.dispatchEvent(new Event("visibilitychange"));
+        Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+      await page.getByTestId("game-resume").click();
+      await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+      await page.waitForTimeout(500);
+      expect(Number((await probe(page)).simTime), "a szünet feloldása a „Miért?” kártya alatt elindította a játékot").toBe(a);
       await page.getByTestId("quiz-feedback-dismiss").click();
       await expect(page.getByTestId("quiz-feedback")).toHaveCount(0);
       await page.waitForTimeout(500);
