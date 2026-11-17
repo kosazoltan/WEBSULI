@@ -1103,6 +1103,15 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
   kényszerített tétellel (teszt-kampó: `forceState({ question: true, answers: [...] })`): 844×390 egysoros válaszokkal
   táblák, „a tábla a futó feje fölött” ≤ 1 px; 844×390 kétsoros válaszokkal lista mód, a futó feje szabad, a teljes
   válaszok olvashatók; a leghosszabb válaszok mindhárom nézetben (meglévő e2e).
+- **D-J1a-19 (orkesztrátori feltétel, újra-review #483, fej cd18f2c0) Levágás elleni kettős védelem és élesítés-teszt.**
+  (1) Futásidejű háló: kirajzolás után mért levágás (a felirat `scrollHeight − clientHeight` > fél sor) → a kérdés lista
+  módra vált (a becslő betűmetrika-függő: más telefon / betűkészlet / nagyítás; a háló a tényleges kirajzolást méri). Mért
+  rés: nem levágott 1–2 px, levágott ≥ 15–16 px. (2) Ha a 12 kockázatos valódi banki válasz (a reviewer szigorú modellje
+  szerint) bármelyik nézetben levágódik, a becslő is szigorodik (vastag / nagybetűs szélesség), hogy az ítélet „nem fér”
+  legyen. (3) A tábla-feliraton 2 px függőleges belső ráhagyás (ékezet / alsó szár csonkolása ellen). (4) Az élesítés
+  („a tábla éles” = „a meghajtó elfogadja”) lap-szintű teszttel, léptetett órával (Playwright-óra, 2 fps-es képkocka a
+  250 ms-os plafonnal): a látható-éles, de el nem fogadott állapot ideje 0; a valós idős időzítővel bukik. ÚA1: csak ha
+  olcsó, különben J1b (#94).
 
 ### J1b — Mentőöv, Örvény-miniboss, Nagy Hullám főellenfél, szakaszok
 
