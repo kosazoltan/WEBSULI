@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { STATUS } from './lib.mjs';
 import {
-  analyze, analyzeFile, comparison, findMarker, formatFinding, joinLogical, linear, parseCatFileBatch, parseDiff, readPrBody, refPoint,
+  analyze, analyzeFile, comparison, findMarker, formatFinding, headerMarker, joinLogical, specHasPoint, linear, parseCatFileBatch, parseDiff, readPrBody, refPoint,
   runTestIntegrityStep, similarity, stepSummary, stripGuard, subjectOf, testStem, thresholdDirection, verifyMarker,
 } from './test-integrity.mjs';
 import { fakeCtx, statusOf } from './_fake.mjs';
@@ -266,6 +266,49 @@ test('M4/22: a többsoros állítás küszöbe (a J7b-lazítás tördelt alakja)
   const f = one('source/tests/a.test.ts', [['-', '    assert.ok('], ['-', '      withQ >= without,'], ['-', '      "üzenet",'], ['-', '    );'], ['+', '    assert.ok('], ['+', '      withQ >= without - 1,'], ['+', '      "üzenet",'], ['+', '    );']]);
   assert.deepEqual(f.map((x) => [x.rule, x.direction]), [['threshold-changed', 'looser']]);
   assert.equal(joinLogical([{ t: '+', text: 'assert.ok(' }, { t: '+', text: 'x > 1);' }]).length, 1);
+});
+
+test('R2: valódi diff-alak — a nyitó sor VÁLTOZATLAN kontextus, csak a belső küszöb-sor változott → lelet; szigorítás nem', () => {
+  const rows = (o, n) => [[' ', '    expect('], [' ', '      computeScore(run),'], ['-', `    ).toBeGreaterThanOrEqual(${o});`], ['+', `    ).toBeGreaterThanOrEqual(${n});`], [' ', '    done();']];
+  assert.deepEqual(one('source/tests/a.test.ts', rows(10, 4)).map((x) => [x.rule, x.direction]), [['threshold-changed', 'looser']]);
+  assert.deepEqual(one('source/tests/a.test.ts', rows(4, 10)), []);
+  // assert.ok-alak: a belső feltétel-sor változik
+  const ok = one('source/tests/a.test.ts', [[' ', '    assert.ok('], ['-', '      withQ >= without,'], ['+', '      withQ >= without - 1,'], [' ', '      "üzenet",'], [' ', '    );']]);
+  assert.deepEqual(ok.map((x) => [x.rule, x.direction]), [['threshold-changed', 'looser']]);
+  // lezárt előző utasítás után álló belső sor nem kap idegen nyitót
+  assert.equal(joinLogical([{ t: ' ', text: 'expect(a).toBe(1);' }, { t: '+', text: '  x(5);' }])[1].text, '  x(5);');
+});
+
+test('R2 (szoletra-ág hamis riasztásai): szám → termékkonstans csere nem kalibráció; két hunk / két teszt állításai nem párok', () => {
+  const sim = analyzeFile(parseDiff(fileDiff('source/client/src/lib/x/sim.ts', [['-', 'export const SIM_REVEAL_MS = 900;'], ['+', 'export const SIM_REVEAL_MS = REVEAL_MS;']]))[0], 'calibration').findings;
+  assert.deepEqual(sim, []);
+  const simNum = analyzeFile(parseDiff(fileDiff('source/client/src/lib/x/sim.ts', [['-', 'export const SIM_REVEAL_MS = 900;'], ['+', 'export const SIM_REVEAL_MS = 3 * 600;']]))[0], 'calibration').findings;
+  assert.deepEqual(simNum.map((x) => x.rule), ['sim-calibration'], 'szám-kifejezés → szám-kifejezés továbbra is lelet');
+  // a 204-es eset: a teljes bal oldal az alany — más tömb mediánja más mérés
+  assert.notEqual(subjectOf('assert.ok(medianOf(young.map((r) => r.stats.perMinute)) >= 10, "x")'), subjectOf('assert.ok(medianOf(runs.map((r) => r.stats.perMinute)) >= 4, `y`)'));
+  // a 205-ös eset: a reláció zárójelben — a teljes kifejezés (a számok #) az alany
+  assert.equal(subjectOf('assert.ok(runs.every((r) => r.durationSec < 900))'), 'runs.every((r)=>r.durationSec<#)');
+  assert.equal(subjectOf('assert.ok(runs.every((r) => r.durationSec < 600))'), subjectOf('assert.ok(runs.every((r) => r.durationSec < 900))'), 'ugyanaz a mérés más számmal: pár');
+  // két hunk: a hasonló, azonos alanyú állítás sem pár
+  const two = [fileDiff('source/tests/a.test.ts', [['-', 'assert.ok(n >= 10);']], { oldStart: 10, newStart: 10 }), fileDiff('source/tests/a.test.ts', [['+', 'assert.ok(n >= 4);']], { oldStart: 200, newStart: 199 }).split('\n').slice(3).join('\n')].join('\n');
+  const f = analyzeFile(parseDiff(two)[0], 'test').findings;
+  assert.ok(!f.some((x) => x.rule === 'threshold-changed'), JSON.stringify(f));
+});
+
+test('R2: a terv-pont csak címsorban / listaelemben / táblázatsorban igazol, részszövegként nem; fejkomment-jelölés csak ha új', () => {
+  assert.equal(specHasPoint('## 9. Rollout\n', '9'), true);
+  assert.equal(specHasPoint('- **10.4** küszöb\n', '10.4'), true);
+  assert.equal(specHasPoint('| D-J1a-8 | x |\n', 'D-J1a-8'), true);
+  assert.equal(specHasPoint('Dátum: 2026-11-09, lásd 9-es busz.\n', '9'), false);
+  assert.equal(specHasPoint('## 9.1 Al-pont\n', '9'), false);
+  const mk = `// ${MK} 2026-11-17 (docs/specs/t.md 3)`;
+  const lines = ['/**', ` * ${mk.slice(3)}`, ' */', 'import x from "y";', 'test("a", () => {});'];
+  const fNew = parseDiff(fileDiff('source/tests/a.test.ts', [['+', ` * ${mk.slice(3)}`], [' ', ' */']], { oldStart: 1, newStart: 2 }))[0];
+  const fOld = parseDiff(fileDiff('source/tests/a.test.ts', [[' ', ` * ${mk.slice(3)}`], ['+', 'x();']], { oldStart: 2, newStart: 2 }))[0];
+  assert.match(headerMarker(lines, fNew), new RegExp(MK));
+  assert.equal(headerMarker(lines, fOld), null, 'régi fejjelölés nem ment fel');
+  assert.equal(headerMarker(['const a = 1;', ` * ${mk.slice(3)}`], fNew), null, 'kódsor utáni jelölés nem fejkomment');
+  assert.match(headerMarker(['import { test } from "x";', '', '/**', ` * ${mk.slice(3)}`, ' */'], fNew), new RegExp(MK), 'import-sor után álló fejkomment');
 });
 
 test('M4/16–17: tűrés-konstans a tesztfájlban (0,1 → 0,4) lelet; új konstans nem', () => {

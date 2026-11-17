@@ -108,6 +108,8 @@ const READ_FILE = /\breadFile(?:Sync)?\s*\(/;
 const SOURCE_PATH = /["'`][^"'`\n]*(?:client\/src\/|server\/|shared\/|\/pages\/|\/lib\/)[^"'`\n]*["'`]/;
 const CALIBRATION_CONST = /^\s*(?:export\s+)?const\s+([A-Z][A-Z0-9_]{2,})\s*(?::[^=]+)?=\s*([^;]+);?\s*(?:\/\/.*)?$/;
 const MARKER = /SPEC-VÁLTOZÁS/;
+/** Szám-érték: szám-literálokból és műveleti jelekből álló kifejezés (`3 * 60_000`, `as const`), vagy számot tartalmazó sztring-lenyomat. */
+const NUM_LITERAL = /^(?:(?=[^\d]*\d)[-+*/%()\d._eE\s]+(?:\s+as\s+const)?|(["'`])[^"'`]*\d[^"'`]*\1)$/;
 const SOURCE_GUARD_MARKER = /FORRÁS-ŐR\s*:\s*\S.{8,}/;
 
 const STRICT_MATCHERS = new Set(['toBe', 'toEqual', 'toStrictEqual', 'strictEqual', 'deepStrictEqual', 'equal', 'deepEqual', 'toHaveLength', 'toHaveCount', 'toHaveText', 'toHaveValue']);
@@ -157,6 +159,22 @@ function firstArg(body) {
   return body;
 }
 
+/** Az első legfelső szintű (zárójelen és sztringen kívüli) `<`, `<=`, `>`, `>=` indexe (`=>` nem), vagy -1. */
+export function topLevelRelation(expr) {
+  const s = String(expr);
+  let depth = 0;
+  let q = null;
+  for (let i = 0; i < s.length; i += 1) {
+    const ch = s[i];
+    if (q) { if (ch === '\\') i += 1; else if (ch === q) q = null; continue; }
+    if (ch === '"' || ch === "'" || ch === '`') q = ch;
+    else if ('([{'.includes(ch)) depth += 1;
+    else if (')]}'.includes(ch)) depth -= 1;
+    else if (depth === 0 && (ch === '<' || ch === '>') && s[i - 1] !== '=' && s[i - 1] !== '>' && s[i + 1] !== '>') return i;
+  }
+  return -1;
+}
+
 /**
  * Az állítás „alanya” (mit mér): `expect(<alany>)`, `assert.x(<első argumentum>)`, `assert.ok(<bal oldal> op …)`; számok `#`-re,
  * szóköz nélkül. Két állítás csak azonos alany mellett párosítható (különben két különböző mérés, nem küszöb-változás).
@@ -171,8 +189,12 @@ export function subjectOf(line) {
     const a = /assert(?:\.([A-Za-z]+))?\s*\(/.exec(s);
     if (a) {
       const arg = firstArg(parenBody(s, a.index + a[0].length - 1));
-      const c = (!a[1] || a[1] === 'ok') ? comparison(`assert.ok(${arg})`) : null;
-      subj = c ? c.lhs : arg;
+      if (!a[1] || a[1] === 'ok') {
+        // R2 (szoletra-ág: két különböző teszt állításai párosodtak): az alany a TELJES bal oldal a legfelső szintű relációs jelig;
+        // ha nincs ilyen (a reláció zárójelben, pl. `runs.every((r) => r.d < 900)`), a teljes kifejezés, a számok `#`-re cserélve.
+        const i = arg == null ? -1 : topLevelRelation(arg);
+        subj = arg == null ? null : i >= 0 ? arg.slice(0, i) : arg.replace(/(?<![\w$])\d+(?:[._]\d+)*/g, '#');
+      } else subj = arg;
     }
   }
   // A számok is az alany részei (`through(9)` ≠ `through(-7)`: más bemenet, más mérés).
@@ -283,24 +305,45 @@ export function stripGuard(s) {
 }
 
 /**
- * Többsoros állítás egyetlen logikai sorrá: egy hunkon belül az azonos típusú (+ / −), egymást követő sorokat összefűzi, amíg az
- * állítás zárójelei ki nem egyenlítődnek (legfeljebb 8 sor). A sorszám az első soré.
+ * Többsoros állítás egyetlen logikai sorrá: egy hunkon belül a változott sorhoz az azonos oldal (+ / −) és a kontextus sorait fűzi
+ * (a másik oldaléit átugorva), amíg az állítás zárójelei ki nem egyenlítődnek (legfeljebb 8 sor); ha csak egy belső sor változott,
+ * a változatlan nyitó-sort is. A sorszám a változott soré.
  */
 export function joinLogical(lines) {
+  const parens = (t) => (stripStrings(t).match(/\(/g) ?? []).length - (stripStrings(t).match(/\)/g) ?? []).length;
   const out = [];
+  const consumed = new Set();
   for (let i = 0; i < lines.length; i += 1) {
     const l = lines[i];
-    if ((l.t !== '+' && l.t !== '-') || !isAssert(l.text)) { out.push(l); continue; }
+    if (consumed.has(i)) continue;
+    if (l.t !== '+' && l.t !== '-') { out.push(l); continue; }
+    const other = l.t === '+' ? '-' : '+';
     let text = l.text;
-    let bal = (stripStrings(text).match(/\(/g) ?? []).length - (stripStrings(text).match(/\)/g) ?? []).length;
-    let j = i;
-    while (bal > 0 && j + 1 < lines.length && j - i < 7 && lines[j + 1].t === l.t) {
-      j += 1;
+    let bal = parens(text);
+    if (!isAssert(l.text)) {
+      // R2 (független review, valódi diff-alak): a nyitó állítás-sor VÁLTOZATLAN kontextus, csak egy belső sor (pl. `).toBe(5)`)
+      // változott. Visszafelé (a másik oldal sorait átugorva, legfeljebb 8 sor) a még nyitott zárójelű állítás-nyitóig.
+      const back = [];
+      let opener = false;
+      for (let j = i - 1; j >= 0 && i - j <= 8; j -= 1) {
+        if (lines[j].t === other) continue;
+        back.unshift(lines[j].text.trim());
+        if (isAssert(lines[j].text)) { opener = lines[j].t === ' ' && back.reduce((s, t) => s + parens(t), 0) > 0; break; }
+        if (/;\s*$/.test(lines[j].text)) break;
+      }
+      if (!opener) { out.push(l); continue; }
+      bal = back.reduce((s, t) => s + parens(t), 0) + parens(l.text);
+      text = `${back.join(' ')} ${l.text.trim()}`;
+    }
+    // Előre: az azonos oldal és a kontextus sorai (a másik oldaléit átugorva), amíg a zárójelek ki nem egyenlítődnek.
+    for (let j = i + 1, n = 0; bal > 0 && j < lines.length && n < 7; j += 1) {
+      if (lines[j].t === other) continue;
+      n += 1;
       text = `${text} ${lines[j].text.trim()}`;
-      bal += (stripStrings(lines[j].text).match(/\(/g) ?? []).length - (stripStrings(lines[j].text).match(/\)/g) ?? []).length;
+      bal += parens(lines[j].text);
+      if (lines[j].t === l.t) consumed.add(j);
     }
     out.push({ ...l, text });
-    i = j;
   }
   return out;
 }
@@ -326,7 +369,8 @@ export function analyzeFile(f, kind) {
     for (const l of removed) { const m = CALIBRATION_CONST.exec(l.text); if (m) oldC.set(m[1], { v: norm(m[2]), l }); }
     for (const l of added) {
       const m = CALIBRATION_CONST.exec(l.text);
-      if (m && oldC.has(m[1]) && oldC.get(m[1]).v !== norm(m[2]) && /\d/.test(m[2] + oldC.get(m[1]).v)) findings.push(finding(rule, f.path, l, { was: oldC.get(m[1]).v }));
+      // R2 (szoletra-ág): csak szám → szám változás küszöb-változás; a szám → termékkonstans csere (`= REVEAL_CORRECT_MS`) nem.
+      if (m && oldC.has(m[1]) && oldC.get(m[1]).v !== norm(m[2]) && NUM_LITERAL.test(norm(m[2])) && NUM_LITERAL.test(oldC.get(m[1]).v)) findings.push(finding(rule, f.path, l, { was: oldC.get(m[1]).v }));
     }
   };
   if (kind === 'calibration') {
@@ -359,6 +403,8 @@ export function analyzeFile(f, kind) {
     let bs = 0;
     const sa = subjectOf(a.text);
     for (const r of rA) {
+      // R2: csak azonos hunkon belül (két távoli teszt hasonló állításai nem egy küszöb régi / új alakja)
+      if (r.hi !== a.hi) continue;
       const s = similarity(a.text, r.text);
       const sr = subjectOf(r.text);
       // Ismert, eltérő alany: két különböző mérés — nem pár. Ismeretlen alanynál csak a nagyon hasonló sor párosítható.
@@ -484,6 +530,22 @@ export function findMarker({ f, finding: x, window = DEFAULTS.markerWindow, fina
   return null;
 }
 
+/**
+ * A fájl fejkommentjében (az első import-on kívüli kódsor előtt: csak megjegyzés-, üres és import-sorok) álló jelölés-sor, ha az ebben a diff-egységben
+ * hozzáadott sor. @returns {string|null}
+ */
+export function headerMarker(lines, f) {
+  if (!lines) return null;
+  const added = new Set(f.hunks.flatMap((h) => h.lines.filter((l) => l.t === '+').map((l) => norm(l.text))));
+  for (const t of lines) {
+    // az import-sorok a fejkomment előtt / között megengedettek; az első más kódsor lezárja a fejet
+    if (/^\s*(?:import\b|export\s+\*\s+from\b|\}\s*from\b|["'`]use strict)/.test(t)) continue;
+    if (!/^\s*(?:$|\/\/|\/\*|\*|#!)/.test(t)) break;
+    if (MARKER.test(t) && added.has(norm(t))) return t;
+  }
+  return null;
+}
+
 const MARKER_DATE = /SPEC-VÁLTOZÁS\s*:?\s*(\d{4}-\d{2}-\d{2})/;
 const MARKER_REF = /SPEC-VÁLTOZÁS[^(\n]*\(([^)\n]*)/;
 const SPEC_PATH = /docs\/specs\/[^\s,;)`'"]+\.md/;
@@ -503,6 +565,16 @@ export function refPoint(ref, path) {
   return m ? m[1] : null;
 }
 
+/**
+ * A pont a terv egy CÍMSORÁBAN, LISTAELEMÉBEN vagy TÁBLÁZATSORÁNAK első cellájában áll-e (független review R2: a puszta részszöveg —
+ * pl. a „9” egy dátumban — nem igazol). Előtte legfeljebb egy kiemelés (`**`, `` ` ``) állhat.
+ */
+export function specHasPoint(spec, point) {
+  const p = point.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`^\\s*(?:#{1,6}\\s+|(?:[-*+]|\\d+[.)])\\s+|\\|\\s*)(?:\\*\\*|\`)?${p}(?![\\w-]|\\.\\d)`, 'm');
+  return re.test(String(spec));
+}
+
 export function verifyMarker({ marker, file, specAdded, prBody, specAt = () => null }) {
   if (SOURCE_GUARD_MARKER.test(marker) && !MARKER.test(marker)) return { ok: true, why: 'FORRÁS-ŐR jelölés indoklással' };
   const date = MARKER_DATE.exec(marker)?.[1];
@@ -519,7 +591,7 @@ export function verifyMarker({ marker, file, specAdded, prBody, specAt = () => n
       const spec = specAt(path);
       if (spec == null) return { ok: false, why: `a hivatkozott ${path} sem a diffben, sem a fejen nem létezik` };
       const point = refPoint(ref, path);
-      if (point ? !spec.includes(point) : !spec.includes(stem)) {
+      if (point ? !specHasPoint(spec, point) : !spec.includes(stem)) {
         return { ok: false, why: point ? `a ${path} a fejen nem tartalmazza a hivatkozott pontot (${point})` : `a ${path} a fejen nem említi a tesztet (${stem}), és a jelölés nem nevez meg pontot` };
       }
     }
@@ -567,12 +639,19 @@ export function analyze({ range, commits = [], finalText = () => null, prBody = 
     if (seen.has(k)) return;
     seen.add(k);
     const fl = viaCommit ? finalLines(x.file) : null;
-    const marker = findMarker({ f, finding: x, window: ti.markerWindow, finalLines: fl });
+    let marker = findMarker({ f, finding: x, window: ti.markerWindow, finalLines: fl });
+    let markerVia = marker ? 'line' : null;
+    if (!marker) {
+      // R2 (szoletra-ág hamis riasztásai): a fájl fejkommentjében álló jelölés az egész fájlra szól — de CSAK ha ebben a
+      // változásban került be (egy régi fejjelölés nem menthet fel későbbi lazítást).
+      marker = headerMarker(finalLines(x.file), f);
+      if (marker) markerVia = 'header';
+    }
     const v = marker ? verifyMarker({ marker, file: x.file, specAdded, prBody, specAt }) : { ok: false, why: 'jelöletlen' };
     // Commit-nézetben a sor a JELENLEGI fájlban (ha megtalálható) — a commit-beli sorszám a `commitLine`.
     const idx = fl && x.side === 'new' ? fl.findIndex((t) => norm(t) === norm(x.text)) : -1;
     const line = idx >= 0 ? idx + 1 : x.line;
-    out.push({ ...x, line, via: viaCommit ? 'commit' : 'range', commitLine: viaCommit ? x.line : undefined, commit: viaCommit ? f.commit : undefined, marker: marker ? norm(marker).slice(0, 160) : null, verified: v.ok, why: v.why, pending: v.pending });
+    out.push({ ...x, line, via: viaCommit ? 'commit' : 'range', commitLine: viaCommit ? x.line : undefined, commit: viaCommit ? f.commit : undefined, marker: marker ? norm(marker).slice(0, 160) : null, markerVia, verified: v.ok, why: v.why, pending: v.pending });
   };
   for (const f of range) {
     if (gateRes.some((re) => re.test(f.path))) push(f, { rule: 'gate-changed', file: f.path, line: 0, side: 'new', text: '(a kapu maga változik ebben a PR-ban — a CI a PR saját változatát futtatja)' }, false);
