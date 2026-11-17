@@ -1,6 +1,6 @@
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createRng, seedFrom } from "@shared/game-rng";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link, useLocation } from "wouter";
 import CollectibleAvatar from "@/components/CollectibleAvatar";
 import { ArrowLeft, Pause, Zap } from "lucide-react";
@@ -42,6 +42,7 @@ import {
   type BrainRotDriver,
   type BrainRotEvent,
   type BrainRotTuning,
+  type Cage,
 } from "@/lib/brainRot/core";
 import {
   GameHud,
@@ -82,6 +83,7 @@ import {
   usePlayQuestion,
   vocabPlayQuestion,
   type PlayQuestion,
+  type QuestionPresentation,
   type QuestionProvider,
 } from "@/game-engine/play";
 
@@ -149,6 +151,8 @@ const FLOAT_MS = 1300;
 /** Ennyin belüli szökések egy összesítő feliratot kapnak (kanban #64). */
 const ESCAPE_MERGE_MS = 450;
 const FLOAT_LANE_PX = 26;
+/** A joystick oldala (K.4/16 balkezes tükrözés). */
+const HAND_KEY = "websuli.brainrot.hand";
 const EMPTY_HUD: HudSnap = { score: 0, caught: 0, combo: 0, multiplier: 1, timeLeft: ROUND_LIMIT, creatures: [], arena: [], carrying: false, hint: 1 };
 
 /* --- Quiz bank --- */
@@ -539,8 +543,31 @@ export default function BrainRotSteal() {
   const creatureEls = useRef(new Map<number, HTMLDivElement>());
   const playerElRef = useRef<HTMLDivElement>(null);
   const cageRingRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const registerCreature = useCallback((id: number, el: HTMLDivElement | null) => {
+    if (el) creatureEls.current.set(id, el);
+    else creatureEls.current.delete(id);
+  }, []);
+  const setCageRing = useCallback((i: number, el: HTMLSpanElement | null) => {
+    cageRingRefs.current[i] = el;
+  }, []);
   /** A joystick húzásának megszakítása szünetkor / fókuszvesztéskor (VirtualJoystick resetSignal). */
   const [joyReset, setJoyReset] = useState(0);
+  /** K.4/16: balkezes tükrözés — a joystick a jobb hüvelykujjhoz kerül (helyben tárolva, tárolóhiba esetén alapérték). */
+  const [leftHanded, setLeftHanded] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(HAND_KEY) === "left";
+    } catch {
+      return false;
+    }
+  });
+  const chooseHand = useCallback((left: boolean) => {
+    setLeftHanded(left);
+    try {
+      window.localStorage.setItem(HAND_KEY, left ? "left" : "right");
+    } catch {
+      /* privát mód / megtelt tároló: a választás a menetre érvényes marad */
+    }
+  }, []);
 
   // Unmountkor az összes pending timeout törlése (beragadó state megelőzése)
   useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);
@@ -927,16 +954,25 @@ export default function BrainRotSteal() {
         if (c.state === "free") arena.push({ id: c.id, x: c.x * u, y: c.y * u, size, warning, opacity });
       }
       const hint: HudSnap["hint"] = st.worldMs < TUTORIAL_MS ? (firstCageSeenRef.current ? 2 : 1) : 0;
-      setHud({
-        score: st.score,
-        caught: st.caught,
-        combo: st.combo.count,
-        multiplier: st.combo.multiplier,
-        timeLeft: Math.ceil(d.remainingMs() / 1000),
-        creatures,
-        arena,
-        carrying: st.carry !== null,
-        hint,
+      // Változatlan lény-lista: ugyanaz a tömb (a memo-s réteg nem rajzol újra).
+      setHud((prev) => {
+        const sameList =
+          prev.creatures.length === creatures.length &&
+          prev.creatures.every((p, i) => {
+            const c = creatures[i]!;
+            return p.id === c.id && p.size === c.size && p.warning === c.warning && p.dazed === c.dazed && p.carried === c.carried && Math.abs(p.opacity - c.opacity) < 0.05;
+          });
+        return {
+          score: st.score,
+          caught: st.caught,
+          combo: st.combo.count,
+          multiplier: st.combo.multiplier,
+          timeLeft: Math.ceil(d.remainingMs() / 1000),
+          creatures: sameList ? prev.creatures : creatures,
+          arena,
+          carrying: st.carry !== null,
+          hint,
+        };
       });
     }, 100);
     return () => window.clearInterval(id);
@@ -1157,6 +1193,17 @@ export default function BrainRotSteal() {
                     label={`Pálya — ${userGrade}. osztály`}
                   />
                 ) : null}
+                <div>
+                  <p className="mb-2 text-sm font-bold uppercase tracking-wide text-fuchsia-100/85">Joystick</p>
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="Melyik kézzel irányítasz?">
+                    <button type="button" className="br-hand-btn" aria-pressed={!leftHanded} data-testid="br-hand-right" onClick={() => chooseHand(false)}>
+                      Jobbkezes (bal oldalt)
+                    </button>
+                    <button type="button" className="br-hand-btn" aria-pressed={leftHanded} data-testid="br-hand-left" onClick={() => chooseHand(true)}>
+                      Balkezes (jobb oldalt)
+                    </button>
+                  </div>
+                </div>
                 <GamePedagogyPanel
                   accent="fuchsia"
                   kidMission="Fuss a joystickkal, és kapd el a menekülő lényeket! Elkapáskor négy ketrec nyílik a válaszokkal: vidd a lényt a jó ketrecbe. Jó válasz = a lény a tiéd + kombó! A 90 másodperc közben is megy."
@@ -1215,7 +1262,7 @@ export default function BrainRotSteal() {
             ]}
             progress={{ value: hud.timeLeft, max: ROUND_LIMIT, label: `${hud.timeLeft} mp`, tone: timeTone }}
           />
-          <main className="br-main relative z-10 w-full mx-auto" data-touch-controls={touchCapable ? "true" : "false"}>
+          <main className="br-main relative z-10 w-full mx-auto" data-touch-controls={touchCapable ? "true" : "false"} data-hand={leftHanded ? "left" : "right"}>
             <div
               ref={boardRef}
               data-collectible-world
@@ -1233,85 +1280,19 @@ export default function BrainRotSteal() {
 
               {/* Q1 Ketrec-zár: a 4 válasz 4 ketrec — a vadász befut és megáll benne (a ketrecre bökve is oda fut). */}
               {showCages && pres && (
-                <div className="br-cages" data-testid="br-cages" role="group" aria-label="Ketrecek: vidd a lényt a jó válasz ketrecébe">
-                  {pres.options.map((opt, i) => {
-                    const cage = coreState.cages[i];
-                    if (!cage) return null;
-                    const st = view.reveal
-                      ? i === view.reveal.correctOptionIndex
-                        ? "correct"
-                        : i === view.reveal.pickedOptionIndex
-                          ? "wrong"
-                          : "dim"
-                      : "idle";
-                    return (
-                      <button
-                        key={`${pres.id}-${i}`}
-                        type="button"
-                        data-testid={`br-cage-${i}`}
-                        data-state={st}
-                        className="br-cage"
-                        style={{
-                          left: (cage.x - cage.w / 2) * unitPx,
-                          top: (cage.y - cage.h / 2) * unitPx,
-                          width: cage.w * unitPx,
-                          height: cage.h * unitPx,
-                        }}
-                        aria-label={`${i + 1}. ketrec: ${opt.label}`}
-                        aria-disabled={view.reveal || paused ? "true" : undefined}
-                        onClick={() => goToCage(i)}
-                        {...correctDataAttrs(opt.correct)}
-                      >
-                        <span
-                          ref={(el) => {
-                            cageRingRefs.current[i] = el;
-                          }}
-                          className="br-cage-dwell"
-                          aria-hidden="true"
-                        />
-                        <span className="br-cage-key" aria-hidden="true">
-                          {st === "correct" ? "✓" : st === "wrong" ? "✗" : i + 1}
-                        </span>
-                        <span className="br-cage-label" data-long={opt.label.length > 18 || longestWord(opt.label) > 9 ? "true" : "false"}>
-                          {opt.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <CageLayer
+                  presentation={pres}
+                  reveal={view.reveal}
+                  cages={coreState.cages}
+                  unitPx={unitPx}
+                  disabled={paused}
+                  onCage={goToCage}
+                  ringRef={setCageRing}
+                />
               )}
 
               {/* Lények (DOM; a helyüket a rAF írja ref-en át — a React csak a listát kezeli, 10 Hz) */}
-              {hud.creatures.map((c) => {
-                const kind = BRAIN_ROT_KINDS[c.kind]!;
-                return (
-                  <div
-                    key={c.id}
-                    ref={(el) => {
-                      if (el) creatureEls.current.set(c.id, el);
-                      else creatureEls.current.delete(c.id);
-                    }}
-                    data-brainrot={c.id}
-                    data-warning={c.warning ? "true" : "false"}
-                    data-carried={c.carried ? "true" : "false"}
-                    className={`brainrot-creature ${c.carried ? "br-carried" : ""} ${c.dazed ? "br-dazed" : ""}`}
-                    style={{ width: c.size, height: c.size, marginLeft: -c.size / 2, marginTop: -c.size / 2, opacity: c.opacity }}
-                    aria-hidden="true"
-                  >
-                    <span className={`brainrot-body ${reducedMotion ? "" : "brainrot-pop"}`} style={{ width: c.size, height: c.size }}>
-                      <span
-                        className={`brainrot-aura ${reducedMotion ? "" : c.warning ? "brainrot-aura-warn" : "brainrot-aura-idle"}`}
-                        data-warning={c.warning ? "true" : "false"}
-                      />
-                      <span className={`brainrot-sprite ${reducedMotion ? "" : c.carried ? "br-struggle" : ""}`}>
-                        <CollectibleAvatar name={kind.name} value={kind.xp} />
-                      </span>
-                    </span>
-                    {!c.carried && <span className="brainrot-xp">{kind.xp} XP</span>}
-                    {c.dazed && <span className="br-dazed-mark">{"\u{1F4AB}"}</span>}
-                  </div>
-                );
-              })}
+              <CreatureLayer creatures={hud.creatures} reducedMotion={reducedMotion} register={registerCreature} />
 
               {/* A vadász (a helyét a rAF írja) */}
               <div
@@ -1350,7 +1331,7 @@ export default function BrainRotSteal() {
 
             {/* Érintővezérlő CSAK érintős eszközön (M5): joystick bal hüvelykujjra; kérdés alatt saját szünetgomb. */}
             {touchCapable && (
-              <div className="br-controls" data-testid="br-touch-controls" data-game-controls>
+              <div className="br-controls" data-testid="br-touch-controls" data-game-controls data-hand={leftHanded ? "left" : "right"}>
                 <VirtualJoystick
                   label="Vadász irányítása"
                   radius="auto"
@@ -1452,6 +1433,103 @@ export default function BrainRotSteal() {
 }
 
 /**
+ * A ketrecek rétege (memo: a kérdés-sáv ~10 Hz-es időcsík-frissítése nem rajzolja újra — csak új kérdés, kimenet, szünet
+ * vagy átméretezés). A ketrec helye a mag állapotából (a nyíláskor rögzül).
+ */
+const CageLayer = memo(function CageLayer({
+  presentation,
+  reveal,
+  cages,
+  unitPx,
+  disabled,
+  onCage,
+  ringRef,
+}: {
+  presentation: QuestionPresentation;
+  reveal: { correctOptionIndex: number; pickedOptionIndex: number | null } | null;
+  cages: readonly Cage[];
+  unitPx: number;
+  disabled: boolean;
+  onCage: (i: number) => void;
+  ringRef: (i: number, el: HTMLSpanElement | null) => void;
+}) {
+  return (
+    <div className="br-cages" data-testid="br-cages" role="group" aria-label="Ketrecek: vidd a lényt a jó válasz ketrecébe">
+      {presentation.options.map((opt, i) => {
+        const cage = cages[i];
+        if (!cage) return null;
+        const st = reveal ? (i === reveal.correctOptionIndex ? "correct" : i === reveal.pickedOptionIndex ? "wrong" : "dim") : "idle";
+        return (
+          <button
+            key={`${presentation.id}-${i}`}
+            type="button"
+            data-testid={`br-cage-${i}`}
+            data-state={st}
+            className="br-cage"
+            style={{ left: (cage.x - cage.w / 2) * unitPx, top: (cage.y - cage.h / 2) * unitPx, width: cage.w * unitPx, height: cage.h * unitPx }}
+            aria-label={`${i + 1}. ketrec: ${opt.label}`}
+            aria-disabled={reveal || disabled ? "true" : undefined}
+            onClick={() => onCage(i)}
+            {...correctDataAttrs(opt.correct)}
+          >
+            <span ref={(el) => ringRef(i, el)} className="br-cage-dwell" aria-hidden="true" />
+            <span className="br-cage-key" aria-hidden="true">
+              {st === "correct" ? "✓" : st === "wrong" ? "✗" : i + 1}
+            </span>
+            <span className="br-cage-label" data-long={opt.label.length > 18 || longestWord(opt.label) > 9 ? "true" : "false"}>
+              {opt.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+});
+
+/** A lények rétege (memo: csak a 10 Hz-es lista változására rajzol; a helyüket a rAF írja ref-en át). */
+const CreatureLayer = memo(function CreatureLayer({
+  creatures,
+  reducedMotion,
+  register,
+}: {
+  creatures: HudSnap["creatures"];
+  reducedMotion: boolean;
+  register: (id: number, el: HTMLDivElement | null) => void;
+}) {
+  return (
+    <>
+      {creatures.map((c) => {
+        const kind = BRAIN_ROT_KINDS[c.kind]!;
+        return (
+          <div
+            key={c.id}
+            ref={(el) => register(c.id, el)}
+            data-brainrot={c.id}
+            data-warning={c.warning ? "true" : "false"}
+            data-carried={c.carried ? "true" : "false"}
+            className={`brainrot-creature ${c.carried ? "br-carried" : ""} ${c.dazed ? "br-dazed" : ""}`}
+            style={{ width: c.size, height: c.size, marginLeft: -c.size / 2, marginTop: -c.size / 2, opacity: c.opacity }}
+            aria-hidden="true"
+          >
+            <span className={`brainrot-body ${reducedMotion ? "" : "brainrot-pop"}`} style={{ width: c.size, height: c.size }}>
+              <span
+                className={`brainrot-aura ${reducedMotion ? "" : c.warning ? "brainrot-aura-warn" : "brainrot-aura-idle"}`}
+                data-warning={c.warning ? "true" : "false"}
+              />
+              <span className={`brainrot-sprite ${reducedMotion ? "" : c.carried ? "br-struggle" : ""}`}>
+                <CollectibleAvatar name={kind.name} value={kind.xp} />
+              </span>
+            </span>
+            {!c.carried && <span className="brainrot-xp">{kind.xp} XP</span>}
+            {c.dazed && <span className="br-dazed-mark">💫</span>}
+          </div>
+        );
+      })}
+    </>
+  );
+});
+
+/**
  * A lap stílusa (a közös `index.css` a J0c / J8 szeleté). A ketrec ≥ 48 px, a visszajelzés szín + jel + szöveg (nem csak
  * szín); a hiba narancs, nem telített piros (K.4/20); csökkentett mozgásnál nincs pattanás, küszködés, emelkedő felirat.
  */
@@ -1469,9 +1547,15 @@ const BRAIN_ROT_CSS = `
   [data-collectible-world][data-testid="br-board"] { background: radial-gradient(ellipse at 50% 15%, #8d60cc55, transparent 65%), linear-gradient(160deg, #191944, #241046) !important; }
   .br-controls { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 4px; }
   .br-controls-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; flex: 1 1 auto; }
+  .br-controls[data-hand="left"] { flex-direction: row-reverse; }
+  .br-controls[data-hand="left"] .br-controls-side { align-items: flex-start; }
+  .br-hand-btn { min-height: 52px; padding: 6px 10px; border-radius: 12px; font-size: 15px; font-weight: 800; line-height: 1.2; color: #fff; background: #0f172acc; border: 1px solid #ffffff33; }
+  .br-hand-btn[aria-pressed="true"] { background: linear-gradient(180deg, #c026d3, #7c3aed); border-color: #f5d0fe99; }
   @media (orientation: landscape) and (max-height: 520px) {
     /* A közös .game-shell-fixed[data-playing] > main (0,2,1) oszlopot ad — a játék gyökerével erősebb (C-53). */
     [data-game="BrainRotSteal"] .br-main[data-touch-controls="true"] { flex-direction: row-reverse; }
+    [data-game="BrainRotSteal"] .br-main[data-touch-controls="true"][data-hand="left"] { flex-direction: row; }
+    [data-game="BrainRotSteal"] .br-controls[data-hand="left"] { flex-direction: column-reverse; }
     [data-game="BrainRotSteal"] .br-main[data-touch-controls="true"] .br-board { width: auto; flex: 1 1 auto; }
     .br-controls { flex-direction: column-reverse; justify-content: space-between; padding: 4px 0; width: auto; max-width: 30vw; }
     .br-controls-side { align-items: center; flex: 0 1 auto; }
