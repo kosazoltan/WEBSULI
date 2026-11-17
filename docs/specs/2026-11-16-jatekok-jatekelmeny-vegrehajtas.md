@@ -1727,6 +1727,12 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
 29. **Sim-botok (Ú4, Ú8):** a nem olvasó vezető botok a kérdés ALATT is vezetnek (rezgés, a kérdéssel induló kanyar +
     egyenesítés, 7 s-onkénti útkanyar, véletlen kormány, az olvasási küszöb előtti fékezés / tolatás) — véletlen válasz 0. A mindig
     jót választó bot két úton mér: koppintás (közvetlen válasz, mint a lapon) és fék + kormány (rögzítés, áthajtás).
+30. **A kérdés-sáv levélben renderel (orkesztrátori döntés, a `joystick-response` lelete):** a `usePlayQuestion` horga és az
+    `InlineQuestion` a `TornadoQuestionLayer` levél-komponensbe kerül; a ≈ 10 Hz-es időcsík ott renderel, a lap csak a kérdés
+    eseményeire (nyílás, megoldás-kijelzés, lezárás: `presentation` / `reveal` tükör). A horog API-ja a `qRef`-ben. A mag, a
+    sim és a határidő (26.) változatlan. A közös `joystick-response.spec.ts`-hez nem nyúlunk.
+31. **Böngészős keret:** a `tornado-play.spec.ts` 60 s-os tesztkeretet kap (a rögzítés előtti ≥ 1 s olvasás miatt a rossz kapus
+    eset a 30 s-os alapkeret szélére ért); a tényleges futásidőt mérjük, > 40 s külön lelet.
 
 ### J7c — zaj-alapú tornádópálya, Műszer-kalibrálás (Q2), szupercella (Opus)
 
