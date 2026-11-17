@@ -119,6 +119,9 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
   ],
   // J2a: a Szólétra lapján nincs kivétel (a kapaszkodó-tétel sorsolása a menet seedelt RNG-jéből: `pickRngRef`).
   "WordLadderHuEn.tsx": [],
+  // J6a: az Aszteroida lapján nincs kivétel (hullám-érkezés, hasadás, pickup, vadászgép-lövés a menet `world` RNG-jéből; a kérdés-kristályok
+  // és az évfolyam-bank választás a `crystal` / `pick` RNG-ből; a kozmetika a `fx` RNG-ből: `cosmeticRandom`).
+  "SpaceAsteroidQuiz.tsx": [],
 };
 
 const PAGE_FORBIDDEN = FORBIDDEN.filter(({ name }) => name === "Math.random" || name === "Date.now");

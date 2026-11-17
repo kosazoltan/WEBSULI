@@ -36,26 +36,36 @@ test('source-only manufacturing on mobile and desktop sends no author grade',asy
  expect(errors).toEqual([]);
 });
 
-test('asteroid wrong-answer explanation remains readable and dismisses to a new quiz',async({page})=>{
- test.setTimeout(150000);
+// SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 9.; végrehajtás J6a): a régi eset a BLOKKOLÓ `Mini-teszt`
+// dialógust rögzítette (a hibás válasz kártyája azonnal megnyílt, bezárva új kvíz jött). Az új követelmény nem lazább: a kérdés
+// a játékban, nem blokkoló kristály-sávban érkezik; hibás válasznál nincs dialógus, a helyes kristály világít, a TELJES magyarázat
+// (a bank szövege / a szóbank sablonja) a „Miért?” gombra nyílik, és olvasható marad; bezárása után a játék fut tovább.
+test('asteroid wrong-answer explanation: no blocking dialog, the Why? card stays readable and closes back to the running game',async({page})=>{
+ test.setTimeout(240000);
  await page.setViewportSize({width:390,height:844});
  await page.goto('/games/space-asteroid-quiz');
  await page.getByRole('button',{name:/Indulhat —/}).click();
- const quiz=page.getByRole('dialog',{name:'Mini-teszt',exact:true});
+ const crystals=page.locator('[data-testid="sa-crystals"]');
+ const ask=async()=>{
+  await page.evaluate(()=>(window as unknown as {__websuliGame:{forceState:(p:object)=>void}}).__websuliGame.forceState({question:true}));
+  await expect(crystals.locator('[data-correct]')).toHaveCount(4,{timeout:15000});
+  await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+  // hosszú válaszú tételnél a „Válaszok” lista magától nyílik (a világ áll): bezárjuk, utána a kristályra kattintunk
+  const closeList=page.getByTestId('sa-answers-close');
+  if(await closeList.isVisible().catch(()=>false))await closeList.click();
+ };
  // Spec 2026-09-29-jatekok-3-12-evfolyam, 3–4. döntés: 3–12. évfolyamon (itt 7.) a kérdés a közös évfolyam-bankból jön,
  // ezért a várt tételek a játék saját bankja ÉS a közös bank fájljai.
  const bankDir=new URL('../client/src/data/gradeQuizBank/',import.meta.url);
  const sources=[new URL('../client/src/pages/SpaceAsteroidQuiz.tsx',import.meta.url),...fs.readdirSync(bankDir).filter(f=>/^grade-\d+\.ts$/.test(f)).map(f=>new URL(f,bankDir))];
- const bank:{prompt:string;wrong:string;explanation:string}[]=[];
+ const bank:{prompt:string;explanation:string}[]=[];
  for(const file of sources){
  const ast=ts.createSourceFile('bank.tsx',fs.readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
  function walk(n:ts.Node){
   if(ts.isObjectLiteralExpression(n)){
    const props=new Map(n.properties.filter(ts.isPropertyAssignment).map(p=>[p.name.getText(ast),p.initializer]));
    const p=props.get('prompt'),o=props.get('options'),i=props.get('correctIndex'),e=props.get('explanation');
-   if(p&&o&&i&&e&&ts.isStringLiteral(p)&&ts.isArrayLiteralExpression(o)&&ts.isNumericLiteral(i)&&ts.isStringLiteral(e)){
-    const wrong=o.elements[(Number(i.text)+1)%o.elements.length];if(ts.isStringLiteral(wrong))bank.push({prompt:p.text,wrong:wrong.text,explanation:e.text});
-   }
+   if(p&&o&&i&&e&&ts.isStringLiteral(p)&&ts.isArrayLiteralExpression(o)&&ts.isNumericLiteral(i)&&ts.isStringLiteral(e))bank.push({prompt:p.text,explanation:e.text});
   }
   ts.forEachChild(n,walk);
  }
@@ -63,42 +73,45 @@ test('asteroid wrong-answer explanation remains readable and dismisses to a new 
  }
  expect(bank.length).toBeGreaterThan(900);
  // SPEC-VÁLTOZÁS 2026-11-15 (docs/specs/2026-11-15-jatekok-mobil-szobank.md 4.3–4.4, A8): az angol kérdés-hely a
- // központi szóbankból jön (generált prompt, `vocab:<bejegyzés>:<típus>` azonosító), ezért az első kérdés ~20%-os
- // eséllyel nem a fenti forrásokból való (review #434). A mérce nem lazul: MINDKÉT esetet kötelezően ellenőrizzük —
+ // központi szóbankból jön (generált prompt, `vocab:<bejegyzés>:<típus>` azonosító), ezért a kérdések ~20%-a nem a fenti
+ // forrásokból való (review #434). A mérce nem lazul: MINDKÉT esetet kötelezően ellenőrizzük —
  // (1) kézi / évfolyam-banki kérdés: a magyarázat a bank szövege; (2) szóbankos kérdés: a magyarázat megnevezi a helyes
- // választ és a bejegyzés term = hu párját (a generátor sablonja). A 7. évfolyam 1-es sávja 30 tétel, köztük 6 angol:
- // rossz válaszokkal továbblépve legfeljebb 30 kérdésen belül biztosan jön szóbankos kérdés (minden kérdezett tétel fogy).
+ // választ és a bejegyzés term = hu párját (a generátor sablonja). Minden kérdezett tétel fogy, ezért legfeljebb 40 kérdésen
+ // belül biztosan jön szóbankos kérdés.
  const vocabById=new Map(VOCAB_EN.map(e=>[e.id,e]));
  let checkedBank=false,checkedVocab=false;
  for(let i=0;i<40&&!(checkedBank&&checkedVocab);i++){
-  await expect(quiz).toBeVisible();
-  const id=(await quiz.getAttribute('data-quiz-id'))??'';
+  await ask();
+  const id=(await crystals.getAttribute('data-quiz-id'))??'';
+  const prompt=(await page.getByTestId('sa-prompt').innerText()).trim();
+  const correct=(await crystals.locator('[data-correct="true"] .sa-crystal-label').innerText()).trim();
+  await crystals.locator('[data-correct="false"]').first().click();
+  // hibás válasz: nincs blokkoló dialógus, a helyes kristály zölden világít, a kártya csak a „Miért?”-re nyílik
+  await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+  await expect(crystals.locator('[data-correct="true"]')).toHaveAttribute('data-state','correct');
+  await expect(page.getByTestId('quiz-feedback')).toHaveCount(0);
+  await page.getByTestId('play-why').click();
+  await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
+  const why=page.getByTestId('quiz-feedback-why');
   if(id.startsWith('vocab:')){
    const entry=vocabById.get(id.split(':')[1]!);expect(entry,`ismeretlen szóbank-bejegyzés: ${id}`).toBeDefined();
-   const correct=(await quiz.locator('[data-correct="true"] > span').last().innerText()).trim();
-   await quiz.locator('[data-correct="false"]').first().click();
-   await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
-   const why=page.getByTestId('quiz-feedback-why');
    await expect(why).toContainText(`A helyes válasz: „${correct}”`);
    await expect(why).toContainText(`${entry!.term} = ${entry!.hu}`);
    if(!checkedVocab)await page.screenshot({path:test.info().outputPath('asteroid-explanation-vocab-mobile.png'),fullPage:true});
    checkedVocab=true;
   }else if(!checkedBank){
-   const text=await quiz.innerText();const entry=bank.find(q=>text.includes(q.prompt));expect(entry,`a kérdés (${id}) nincs a forrásokban`).toBeDefined();
-   await quiz.getByRole('button',{name:entry!.wrong,exact:true}).click();
-   await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
-   await expect(page.getByTestId('quiz-feedback-why')).toContainText(entry!.explanation);
+   const entry=bank.find(q=>q.prompt===prompt);expect(entry,`a kérdés (${id}: ${prompt}) nincs a forrásokban`).toBeDefined();
+   await expect(why).toContainText(entry!.explanation);
    await page.waitForTimeout(1800);
    await expect(page.getByTestId('quiz-feedback')).toBeVisible();
    await page.screenshot({path:test.info().outputPath('asteroid-explanation-mobile.png'),fullPage:true});
    checkedBank=true;
-  }else{
-   await quiz.locator('[data-correct="false"]').first().click();
-   await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
   }
   await page.getByRole('button',{name:'Értem, megyek tovább'}).click();
   await expect(page.getByTestId('quiz-feedback')).toHaveCount(0);
-  await expect(quiz).toBeVisible();
+  // a játék fut tovább: nincs dialógus, a vezérlők elérhetők
+  await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="sa-touch-controls"], [data-testid="sa-keyboard-hint"]').first()).toBeVisible();
  }
  expect(checkedBank,'kézi / évfolyam-banki kérdés magyarázata nem volt ellenőrizve').toBe(true);
  expect(checkedVocab,'szóbankos kérdés magyarázata nem volt ellenőrizve').toBe(true);

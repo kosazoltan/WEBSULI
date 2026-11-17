@@ -153,6 +153,76 @@ export function integratePlayer(
   return { x, y, vx, vy, bobPhase: p.bobPhase + dt * 4 };
 }
 
+/* ------------------------------ hullámok (J6a) ------------------------------ *
+ * A kapuk megszűntek (végrehajtás J6a): a menet 8 hullám + a 9. hullámban a főellenfél, a hullámok folyamatosan váltják
+ * egymást, az idő-limit helyett életalapú a vég. A hullám-képlet (ellenfél-szám, érkezési térköz) egy helyen van, hogy a
+ * lap és a node-szimuláció (`sim.ts`) UGYANAZT a számot használja.
+ */
+export const WAVE_COUNT = 8;
+/** A főellenfél hulláma: a 8 rendes hullám után. */
+export const BOSS_WAVE = WAVE_COUNT + 1;
+
+/** Ennyi ellenfél érkezik a hullámban (a főellenfél hulláma: egyetlen boss). */
+export function waveEnemyCount(wave: number): number {
+  if (wave >= BOSS_WAVE) return 1;
+  return 4 + Math.min(Math.max(1, Math.floor(wave)) * 2, 18);
+}
+
+/**
+ * Két ellenfél érkezése között eltelő játékidő (mp): a hullámmal sűrűsödik; a JÁTÉK-intenzitás (`pace.intensity()`, 0..1: sérülés
+ * és közeli veszély hajtja) csak enyhíti — sérülés után ritkább az érkezés (levegő), nyugodt menetben a névleges. A KÉRDÉS-sáv
+ * (jó / rossz válasz) a pálya sűrűségét NEM hajtja (review #486 Ú1, terv 4.1/6): a kérdés nem büntetés, a jó válasz mindig előny.
+ */
+export function waveSpawnInterval(wave: number, intensity: number): number {
+  const i = Math.min(1, Math.max(0, Number.isFinite(intensity) ? intensity : 0));
+  return clamp(1.4 - wave * 0.06, 0.4, 1.4) * (1.15 + i * 0.3);
+}
+
+/** A hullám-felirat („HULLÁM n”) látszási ideje (mp) — a hullámok közt nincs kapu, csak ez a felirat. */
+export const WAVE_BANNER_SEC = 2;
+
+/**
+ * Az ellenfelek érkezési magassága: közvetlenül a látható sáv teteje fölött (a kamera a játéksíkból a +8,15 magasságig lát,
+ * `CAMERA_*`): az első szikla ~1 mp-en belül a képen van (terv 5.6 „az első sziklák 1 mp-nél”), nincs néma, üres kezdés. A
+ * korábbi 12,6–14,2 magasságról a szikla ~4–5 mp-ig a kép fölött utazott.
+ */
+export const SPAWN_Y_MIN = 8.6;
+export const SPAWN_Y_MAX = 10.2;
+
+/**
+ * Tanító szakasz (K.4/25): a menet első 30 mp-ében az ütközés NEM von le életet (a találat képe / hangja / rázása megvan, a
+ * hajó 2 mp-ig sérthetetlen) — egy mechanika (mozogj és lőj), halál nélkül. A súgó (≤ 1 sor) az első `HINT_SEC` mp-ben látszik.
+ */
+export const TUTORIAL_SEC = 30;
+export const HINT_SEC = 8;
+
+/** Ütközés után ennyi mp-ig sérthetetlen a hajó (végrehajtás J6a: „az ütközés csak élet −1 és 2 mp sérthetetlenség”). */
+export const HIT_INVULN_SEC = 2;
+
+/** A hullámban érkező ellenfél fajtája a `roll` (0..1) dobásból — a hullámszámmal bővül a választék. */
+export function pickEnemyKind(wave: number, roll: number): "rock" | "crystal" | "alien" | "fighter" {
+  if (wave >= 2 && roll < 0.1) return "crystal";
+  if (wave >= 3 && roll < 0.25) return "alien";
+  if (wave >= 4 && roll < 0.4) return "fighter";
+  if (wave >= 2 && roll < 0.55) return "crystal";
+  return "rock";
+}
+
+/** A sziklák mérete: 70% nagy, 25% közepes, 5% kicsi (a nagyok hasadnak). */
+export function pickRockSize(roll: number): 1 | 2 | 3 {
+  return roll < 0.7 ? 3 : roll < 0.95 ? 2 : 1;
+}
+
+/** Ennyi találat kell az ellenfél lelövéséhez. */
+export function enemyHp(kind: "rock" | "crystal" | "alien" | "fighter", size: 1 | 2 | 3): number {
+  return kind === "rock" ? size : kind === "crystal" ? 1 : kind === "alien" ? 2 : 3;
+}
+
+/** A sziklák alap lefelé sebessége a hullámban (egység / mp, negatív). */
+export function waveBaseVy(wave: number): number {
+  return -1.0 - Math.min(wave * 0.1, 1.6);
+}
+
 export function spawnReady(args: {
   elapsed: number;
   lastSpawnAt: number;
@@ -210,4 +280,57 @@ export function starScrollY(y: number, dt: number, moving: boolean): number {
   let next = y - (moving ? STAR_SCROLL : STAR_IDLE) * dt;
   if (next < -STAR_WRAP) next = STAR_WRAP;
   return next;
+}
+
+/* --------------------- közös szabályok (lap + szimuláció, review #486) --------------------- */
+
+/** Életvesztés-döntés: a menet eldőlte után (győzelem / vereség) sebzés nem érhet (M1); a tanító szakaszban nincs életvesztés. */
+export function lifeLossOutcome(a: { runOver: boolean; invuln: number; shield: number; elapsed: number }): "none" | "tutorial" | "life" {
+  if (a.runOver || a.invuln > 0 || a.shield > 0) return "none";
+  return a.elapsed < TUTORIAL_SEC ? "tutorial" : "life";
+}
+
+export type PickupKind = "life" | "power" | "shield" | "bomb";
+
+/** Ennyi eséllyel ejt felvehető elemet a nem hasadó ellenfél (a lap régi táblája, a szimulációval közös). */
+export function dropChance(kind: "rock" | "crystal" | "alien" | "fighter" | "boss"): number {
+  return kind === "rock" ? 0.18 : kind === "crystal" ? 0.32 : kind === "alien" ? 0.4 : 0.32;
+}
+
+/** 40% élet, 30% erő, 20% pajzs, 10% bomba. */
+export function pickDropKind(roll: number): PickupKind {
+  return roll < 0.4 ? "life" : roll < 0.7 ? "power" : roll < 0.9 ? "shield" : "bomb";
+}
+
+export const PICKUP_FALL_VY = -1.4;
+export const MAX_LIVES = 9;
+export const MAX_SHIELD_SEC = 20;
+export const MAX_BOMBS = 5;
+export const PICKUP_SHIELD_SEC = 8;
+export const PICKUP_POWER_SEC = 10;
+
+export type PickupStats = { lives: number; shieldSec: number; bombs: number; powerLevel: number; powerSec: number; score: number };
+
+/** A felvett elem hatása (a lap és a szimuláció ugyanezt hívja). */
+export function applyPickupEffect(s: PickupStats, kind: PickupKind): PickupStats {
+  if (kind === "life") return { ...s, lives: Math.min(MAX_LIVES, s.lives + 1), score: s.score + 35 };
+  if (kind === "shield") return { ...s, shieldSec: Math.min(MAX_SHIELD_SEC, s.shieldSec + PICKUP_SHIELD_SEC), score: s.score + 25 };
+  if (kind === "bomb") return { ...s, bombs: Math.min(MAX_BOMBS, s.bombs + 1), score: s.score + 30 };
+  return { ...s, powerLevel: Math.min(2, s.powerLevel + 1), powerSec: PICKUP_POWER_SEC, score: s.score + 20 };
+}
+
+/**
+ * Évfolyam-sáv szerinti könnyítés (review #486 M3): 3–4. évfolyamon ritkább az érkezés és lassabb az ellenfél, hogy a tudás
+ * segítsen, és egy harmadikos-negyedikes végig tudja vinni. 5. évfolyamtól (és ismeretlen évfolyamnál) nincs könnyítés.
+ */
+export function gradeEase(grade: number | null): { spawnScale: number; speedScale: number } {
+  return grade !== null && grade <= 4 ? { spawnScale: GRADE_YOUNG_SPAWN_SCALE, speedScale: GRADE_YOUNG_SPEED_SCALE } : { spawnScale: 1, speedScale: 1 };
+}
+export const GRADE_YOUNG_SPAWN_SCALE = 1.3;
+export const GRADE_YOUNG_SPEED_SCALE = 0.85;
+
+/** A fix lépés előző és mostani értéke közti rajz-érték (`alpha` 0..1, K.4/9, KSZ-4). */
+export function interpolate(prev: number, cur: number, alpha: number): number {
+  const a = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 1;
+  return prev + (cur - prev) * a;
 }
