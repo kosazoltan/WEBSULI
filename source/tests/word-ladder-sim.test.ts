@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { medianOf, runSim, runSimSeeds, simSeeds, SIM_AVERAGE, SIM_STRONG, SIM_WEAK, SIM_YOUNG, type SimGameFactory } from "./support/game-sim";
-import { createSimGame, simRevealWrongMs, wordLadderDirectorConfig } from "../client/src/lib/wordLadder/sim";
+import { createSimGame, SIM_REVEAL_WRONG_MS, wordLadderDirectorConfig } from "../client/src/lib/wordLadder/sim";
 import { stateFingerprint } from "../client/src/lib/wordLadder/core";
 import { windowMsFor } from "../client/src/game-engine/play/questionDirector";
 import { REVEAL_CORRECT_MS, REVEAL_WRONG_MS } from "../client/src/game-engine/play/useQuestionDirector";
@@ -29,9 +29,9 @@ const avg = runSimSeeds(factory(FAST), SIM_AVERAGE, { gameId: GAME, seconds: 600
 
 test("a sim a közös kérdés-sáv kijelzési idejével számol — a mérés a lap viselkedését méri", () => {
   assert.equal(SIM_REVEAL_CORRECT_MS, REVEAL_CORRECT_MS);
-  // SPEC-VÁLTOZÁS 2026-11-17 (szoletra-olvashatosag): a hibás válasz kijelzése a tempóé; a Gyors (régi) tempón a közös 2 s.
-  assert.equal(simRevealWrongMs("fast"), REVEAL_WRONG_MS);
-  assert.ok(simRevealWrongMs("calm") >= 3000);
+  // SPEC-VÁLTOZÁS 2026-11-17 (szoletra-olvashatosag): a hibás / lejárt válasz megoldása a Szólétrában 3 s (a közös alap 2 s
+  // helyett, a lap `revealWrongMs`-e) — a sim ugyanezzel számol.
+  assert.ok(SIM_REVEAL_WRONG_MS >= 3000 && SIM_REVEAL_WRONG_MS > REVEAL_WRONG_MS);
 });
 
 // SPEC-VÁLTOZÁS 2026-11-17 (szoletra-olvashatosag): a terv 6.2 „Szólétra ≥ 10 / perc” küszöbe a Gyors (régi) tempón él;
@@ -148,9 +148,9 @@ test("arany visszajátszás: fix seed + bot-bemenet → azonos végállapot és 
   assert.equal(stateFingerprint(c.state()), stateFingerprint(d.state()), "Nyugodt tempón is determinisztikus");
 });
 
-// SPEC-VÁLTOZÁS 2026-11-17 (szoletra-olvashatosag): a lenyomat változott — a Gyors tempón is van 600 ms-os előjelzés, és a
-// világot a lap meghajtója (createFixedLoop) lépteti. A régi érték: "won|188700|35|30|30.173479|7|7|29|7".
-const GOLDEN_42 = "won|110967|35|19|19.737758|3|10|23|2";
+// SPEC-VÁLTOZÁS 2026-11-17 (szoletra-olvashatosag): a lenyomat változott — a Gyors tempón is van 600 ms-os előjelzés, 3 s-os
+// hibás-kijelzés, és a világot a lap meghajtója (createFixedLoop) lépteti. A régi érték: "won|188700|35|30|30.173479|7|7|29|7".
+const GOLDEN_42 = "won|140717|35|25|25.330800|5|8|26|5";
 
 /* ------------------------------------------------------------------------------------------------------------------ */
 /* SZ-7 — Nyugodt tempó, EMBERI olvasási idővel (valódi tételekkel, docs/specs/2026-11-17-szoletra-olvashatosag.md)     */

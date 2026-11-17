@@ -22,7 +22,7 @@ import {
   tempoParams,
   type LadderTempo,
 } from "../client/src/lib/wordLadder/pacing";
-import { simRevealWrongMs, wordLadderDirectorConfig } from "../client/src/lib/wordLadder/sim";
+import { SIM_REVEAL_WRONG_MS, wordLadderDirectorConfig } from "../client/src/lib/wordLadder/sim";
 
 /**
  * Szólétra olvashatóság (docs/specs/2026-11-17-szoletra-olvashatosag.md A–C, SZ-1…SZ-4, SZ-8). Az elvárások a szabályból
@@ -138,10 +138,8 @@ test("SZ-3: a rivális Nyugodt / Normál tempón minden évfolyamon és pályán
   assert.equal(wordLadderDirectorConfig(5).slowMo, 0.35, "alapérték: Nyugodt");
 });
 
-test("SZ-8: hibás / lejárt válasz után a megoldás Nyugodt tempón ≥ 3 s, Gyors tempón a közös 2 s", () => {
-  assert.ok(simRevealWrongMs("calm") >= 3000);
-  assert.ok(simRevealWrongMs("normal") >= 1800);
-  assert.equal(simRevealWrongMs("fast"), 2000);
+test("SZ-8: hibás / lejárt válasz után a megoldás ≥ 3 s-ig látszik (minden tempón — a közös sáv egyszer jön létre)", () => {
+  assert.ok(SIM_REVEAL_WRONG_MS >= 3000);
 });
 
 test("B/C: a nyugodt fal alacsonyabb (≥ 8 fok), a menet-XP szorzója a fal-szorzó reciproka (a nyugodt mód nem büntetés)", () => {

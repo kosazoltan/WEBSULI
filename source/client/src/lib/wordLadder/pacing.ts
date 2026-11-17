@@ -27,6 +27,11 @@ export const LADDER_TEMPO_STORAGE_KEY = "websuli.wordladder.tempo";
 
 /** A közös director rövid tétel alap ablaka (a „Gyors” tempó = a mostani viselkedés). */
 export const LADDER_BASE_WINDOW_MS = 4500;
+/**
+ * Hibás / lejárt válasz utáni megoldás-kijelzés (a közös sáv `revealWrongMs`-e; terv B, SZ-8): minden tempón 3 s. A közös
+ * `usePlayQuestion` a kérdés-sávot egyszer hozza létre, így a kijelzés hossza menet közben nem váltható tempónként.
+ */
+export const LADDER_REVEAL_WRONG_MS = 3000;
 /** Előjelzés: a kérdés és a fogások ennyi ideig látszanak, mielőtt az óra elindul és a fogás élesedik (KSZ-11). */
 export const LEAD_IN_MS = 600;
 
@@ -47,8 +52,6 @@ type TempoParams = {
   rivalLevelSpeedup: number;
   /** A világ (a rivális) szorzója nyitott kérdés alatt (a közös director `slowMo`-ja, 0,35..1). */
   slowMo: number;
-  /** Hibás válasz utáni megoldás-kijelzés (a közös sáv `revealWrongMs`-e, ≥ 1800). */
-  revealWrongMs: number;
   /** A fal magasságának szorzója (`ladderWallRungs`). */
   wallFactor: number;
   /** A szabad fogás (kérdés nélkül) ütemének szorzója a régihez képest (`ladderFreeGripMs`). */
@@ -66,7 +69,6 @@ const TEMPO: Record<LadderTempo, TempoParams> = {
     rivalSecPerRung: [7.5, 7, 6.6, 6.8],
     rivalLevelSpeedup: 0.08,
     slowMo: 0.35,
-    revealWrongMs: 3000,
     wallFactor: 0.55,
     freeGripFactor: 1.25,
   },
@@ -80,7 +82,6 @@ const TEMPO: Record<LadderTempo, TempoParams> = {
     rivalSecPerRung: [6.9, 6.6, 6.4, 6.5],
     rivalLevelSpeedup: 0.08,
     slowMo: 0.5,
-    revealWrongMs: 2400,
     wallFactor: 0.75,
     freeGripFactor: 1.15,
   },
@@ -95,7 +96,6 @@ const TEMPO: Record<LadderTempo, TempoParams> = {
     rivalSecPerRung: [6.3, 6.3, 6.3, 6.3],
     rivalLevelSpeedup: 0.1,
     slowMo: 1,
-    revealWrongMs: 2000,
     wallFactor: 1,
     freeGripFactor: 1,
   },

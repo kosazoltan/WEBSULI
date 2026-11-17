@@ -49,7 +49,7 @@ import {
 import type { LadderItem } from "@/data/wordLadder/types";
 import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
-import { correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
+import { GAME_TEST_HOOKS_ENABLED, correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
 import { LADDER_ZONES, xpForCorrect } from "@/lib/wordLadderLogic";
 import {
   createLadderLevelSession,
@@ -71,12 +71,27 @@ import {
   freeGrab,
   lossTitle,
   rivalBaseRungPerSec,
-  rivalSecPerRungForLevel,
   step as stepLadder,
   type LadderEvent,
   type LadderState,
 } from "@/lib/wordLadder/core";
 import { WORD_LADDER_GAME_ID, wordLadderDirectorConfig } from "@/lib/wordLadder/sim";
+import {
+  LADDER_REVEAL_WRONG_MS,
+  LADDER_TEMPOS,
+  LADDER_TEMPO_LABELS,
+  armedAt,
+  ladderFreeGripMs,
+  ladderRivalSecPerRung,
+  ladderWallRungs,
+  ladderXpScale,
+  loadLadderTempo,
+  paceDirector,
+  saveLadderTempo,
+  type LadderTempo,
+} from "@/lib/wordLadder/pacing";
+import { generateVocabQuestion, type VocabQuestionType } from "@/game-engine/vocab/questionGenerator";
+import type { VocabEntry } from "@/data/vocabBank/types";
 import { createRunWordGuard, ownsReviewKey } from "@/lib/wordLadder/review";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { loadUnlockedLevel, unlockNextLevel } from "@/game-engine/gradeLevels";
@@ -113,6 +128,7 @@ import {
   restoreReviewQuestion,
   useGameSpeech,
   usePlayQuestion,
+  useQuestionDirector,
   type PlayQuestion,
   type PlayQuestionApi,
   type QuestionOutcome,
@@ -233,6 +249,41 @@ function RaceFallback({ rung, rival, total }: { rung: number; rival: number; tot
   );
 }
 
+/** Rövid magyarázat a tempókhoz (a választó alatt). */
+const TEMPO_HINT: Record<LadderTempo, string> = {
+  calm: "Sok idő olvasni, Villám lassan mászik.",
+  normal: "Közepes idő, gyorsabb verseny.",
+  fast: "Kevés idő — gyakorlott olvasóknak.",
+};
+
+/** Tempó-választó (olvashatósági javítás C): a kezdőképernyő beállításaiban és a szünet menüben. */
+function TempoPicker({ value, onChange }: { value: LadderTempo; onChange: (t: LadderTempo) => void }) {
+  return (
+    <div data-testid="wl-tempo-picker" className="w-full">
+      <p className="mb-1.5 text-sm font-bold text-white/85">
+        Tempó: <strong className="text-amber-200">{LADDER_TEMPO_LABELS[value]}</strong>
+      </p>
+      <div className="grid grid-cols-3 gap-2" role="group" aria-label="Tempó választása">
+        {LADDER_TEMPOS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            data-testid={`wl-tempo-${t}`}
+            aria-pressed={value === t}
+            onClick={() => onChange(t)}
+            className={`min-h-[52px] rounded-xl border px-1 py-1.5 text-base font-bold transition-colors ${
+              value === t ? "bg-emerald-400 border-emerald-100 text-slate-950" : "bg-black/30 border-white/25 text-white hover:bg-white/10"
+            }`}
+          >
+            {LADDER_TEMPO_LABELS[t]}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-sm text-white/75" data-testid="wl-tempo-hint">{TEMPO_HINT[value]}</p>
+    </div>
+  );
+}
+
 /** A választható nyelvek (csak a tételt exportáló bankok) — oldalbetöltésenként egyszer. */
 const AVAILABLE_LANGUAGES = availableLadderLanguages(WORD_LADDER_BANKS);
 
@@ -287,6 +338,18 @@ export default function WordLadderHuEn() {
     if (!AVAILABLE_LANGUAGES.includes(next)) return;
     setLang(next);
     saveLadderLanguage(next);
+  }, []);
+
+  /**
+   * Tempó (olvashatósági javítás C): Nyugodt / Normál / Gyors, alap Nyugodt, tárolva `websuli.wordladder.tempo`. A
+   * válaszablak a következő kérdéstől, a rivális / fal a következő menettől érvényes.
+   */
+  const [tempo, setTempo] = useState<LadderTempo>(() => loadLadderTempo());
+  const tempoRef = useRef(tempo);
+  tempoRef.current = tempo;
+  const pickTempo = useCallback((next: LadderTempo) => {
+    setTempo(next);
+    saveLadderTempo(next);
   }, []);
 
   const { data: quizBankResponse } = useQuery<GameQuizBankResponse>({
@@ -348,6 +411,12 @@ export default function WordLadderHuEn() {
   /** A szóbank-kérdések felolvasás-mezői azonosító szerint (a `toLadderItem` nem viszi tovább őket). */
   const speechByIdRef = useRef(new Map<string, { speakText?: string; speakAfter?: string }>());
   /**
+   * A kérdések célrésze kérdés-azonosító szerint (olvashatósági javítás D): a szóbank `VocabQuiz.focus`-a és a kézi bank
+   * `LadderItem.focus`-a — a kérdés-sáv ezt emeli ki (`promptFocus`). A szintlista-alak és a közös `PlayQuestion` nem
+   * viszi tovább, ezért itt őrizzük (a `speakText` mintájára).
+   */
+  const focusByIdRef = useRef(new Map<string, string>());
+  /**
    * A készlet a futás kezdete UTÁN épül (setTimeout 0): a teljes bankon szintenként 60 kérdés generálása telefonon
    * érezhető — az indítást nem akaszthatja meg. Addig (az első fogás előtt) a kézi bank kérdez.
    */
@@ -362,6 +431,7 @@ export default function WordLadderHuEn() {
                   // A közös felolvasás-mezők (#455 / #457: `speakText` a válasz előtt, `speakAfter` a kimenet után) a
                   // szintlista-alakból kimaradnak — azonosító szerint megőrizzük őket.
                   speechByIdRef.current.set(q.id, { speakText: q.speakText, speakAfter: q.speakAfter });
+                  if (q.focus) focusByIdRef.current.set(q.id, q.focus);
                   return vocab.toLadderItem(q);
                 }) : [],
         ),
@@ -378,6 +448,8 @@ export default function WordLadderHuEn() {
     loadVocabBank(lang).then(
       (entries) => {
         if (!cancelled) setVocabMeanings(new Map(entries.map((e) => [e.id, { term: e.term, hu: e.hu }])));
+        // Csak teszt-kampós buildben: a `?wlItems=vocab:<bejegyzés>:<típus>` tételekhez (olvashatósági e2e).
+        if (!cancelled && GAME_TEST_HOOKS_ENABLED) vocabEntriesRef.current = entries;
       },
       () => undefined,
     );
@@ -423,8 +495,10 @@ export default function WordLadderHuEn() {
   }, [lang, ladderGrade]);
   /** A fal magassága: a pálya régi létrahosszából (`ladderRungsForLevel`, 8–20) a verseny-falra hangolva (core). */
   const wallFor = (l: number) => climbTarget(ladderRungsForLevel(l));
-  const menuRungs = wallFor(level);
-  const runRef = useRef({ lang, grade: ladderGrade, level, rungs: menuRungs });
+  const menuRungs = ladderWallRungs(wallFor(level), tempo);
+  const runRef = useRef({ lang, grade: ladderGrade, level, rungs: menuRungs, tempo });
+  /** A szabad fogás (kérdés nélkül) üteme a menet tempójában (`ladderFreeGripMs`). */
+  const freeGripMsRef = useRef(FREE_GRIP_COOLDOWN_MS);
   /** A futás sávja: a pálya sávjából indul, a pálya ±0,15-én belül mozog (spec 6. döntés). */
   const levelSessionRef = useRef(createLadderLevelSession(1));
   /** A futás ÖSSZES eddigi kérdése (azonosító + prompt) — ezek a futás végéig nem jönnek újra. */
@@ -456,6 +530,7 @@ export default function WordLadderHuEn() {
   const toPlayQuestion = useCallback(
     (item: Quiz | LadderItem): PlayQuestion => {
       const vocabId = vocabIdOfLadderItem(String(item.id ?? ""));
+      if ("focus" in item && typeof item.focus === "string" && item.id !== undefined) focusByIdRef.current.set(String(item.id), item.focus);
       const quiz: Quiz = { id: item.id, prompt: item.prompt, options: item.options.slice(), correctIndex: item.correctIndex, ...(item.explanation ? { explanation: item.explanation } : {}) };
       if (vocabId) {
         // Felolvasás a KÖZÖS szabály szerint (`speechOnShow` / `speechAfterOutcome`, a `usePlayQuestion` hívja): a
@@ -481,6 +556,12 @@ export default function WordLadderHuEn() {
   const pickRngRef = useRef<Rng>(createRng(seedFrom(WORD_LADDER_GAME_ID, "init", "pick")));
   /** A menet új (nem ismétlő) tételeinek száma: minden második a szóbankból. */
   const freshCountRef = useRef(0);
+  /**
+   * Csak teszt-kampós buildben (mint a `?seed=`): a `?wlItems=<id,…>` tételei jönnek elsőként új tételként (kézi bank: az id;
+   * szóbank: `vocab:<bejegyzés>:<típus>`). Az olvashatósági e2e így a bank leghosszabb célszavait a valódi kérdés-úton méri.
+   */
+  const testItemsRef = useRef<string[]>([]);
+  const vocabEntriesRef = useRef<VocabEntry[] | null>(null);
 
   const provider = useMemo<QuestionProvider>(() => {
     const ownCtx = () => ({
@@ -501,6 +582,23 @@ export default function WordLadderHuEn() {
         return materialPlayQuestion(m, { subject: "english" });
       },
       fresh: (ctx) => {
+        while (testItemsRef.current.length > 0) {
+          const id = testItemsRef.current.shift()!;
+          const m = /^vocab:(.+):(hu-to-target|target-to-hu|cloze|phrase-meaning)$/u.exec(id);
+          if (m) {
+            const entries = vocabEntriesRef.current;
+            const entry = entries?.find((e) => e.id === m[1]);
+            const vq = entries && entry ? generateVocabQuestion(entry, entries, m[2] as VocabQuestionType, () => pickRngRef.current.next(), { clozeStyle: "game" }) : null;
+            if (!vq || !entry) continue;
+            if (vq.focus) focusByIdRef.current.set(vq.id, vq.focus);
+            seenRef.current = [...seenRef.current, { id: vq.id, prompt: vq.prompt }];
+            return { key: `vocab:${lang}:${entry.id}`, quiz: { id: vq.id, prompt: vq.prompt, options: vq.options.slice(), correctIndex: vq.correctIndex, explanation: vq.explanation }, source: "vocab", lang };
+          }
+          const item = tiersRef.current.flat().find((q) => String(q.id) === id);
+          if (!item) continue;
+          seenRef.current = [...seenRef.current, { id: String(item.id), prompt: item.prompt }];
+          return toPlayQuestion(item);
+        }
         // A meglévő választó: a futás sávjának szintjéről, a futásban még nem látott tétel (#135).
         // A futásban már megjelent szó (más irányú szóbank-kérdésként sem) nem jön újra új tételként. A sávban
         // elolvasható / beférő tétel (J0c-b `accept` = `fitsAllViewports(...).ok`) előbb; ha ilyen nincs, a többi.
@@ -548,7 +646,19 @@ export default function WordLadderHuEn() {
         // Menet közbeni ismétlés: pontosan a már látott kérdés (ugyanaz az irány), nem újragenerált fordított változat.
         const again = wordGuardRef.current.sameAsShown(it.key);
         if (again) return again;
-        const q = restoreReviewQuestion(it, { vocab: (l) => (l === lang ? vocabRef.current : null) });
+        // A szóbank újraépített kérdésének célrésze is megmarad (a közös `vocabPlayQuestion` nem viszi tovább).
+        const src = vocabRef.current;
+        const capturing = src
+          ? {
+              ...src,
+              questionFor: (vocabId: string) => {
+                const vq = src.questionFor(vocabId);
+                if (vq?.focus) focusByIdRef.current.set(vq.id, vq.focus);
+                return vq;
+              },
+            }
+          : null;
+        const q = restoreReviewQuestion(it, { vocab: (l) => (l === lang ? capturing : null) });
         if (!q) return null;
         seenRef.current = [...seenRef.current, { id: String(q.quiz.id ?? q.key), prompt: q.quiz.prompt }];
         return q;
@@ -579,7 +689,7 @@ export default function WordLadderHuEn() {
   const qRef = useRef<PlayQuestionApi | null>(null);
   /** A menet vége egyszer fut (a teszt-kampó és a képkocka-hurok is kérheti). */
   const endedRef = useRef(false);
-  const directorConfig = useMemo(() => wordLadderDirectorConfig(ladderGrade), [ladderGrade]);
+  const directorConfig = useMemo(() => wordLadderDirectorConfig(ladderGrade, tempo), [ladderGrade, tempo]);
 
   const loop = useMemo(
     () =>
@@ -681,7 +791,8 @@ export default function WordLadderHuEn() {
       const correct = o.result === "correct";
       levelSessionRef.current.answer(correct);
       if (correct) {
-        const add = xpForCorrect(st.combo.count);
+        // A rövidebb nyugodt falon a helyes válasz XP-je a fal-szorzó reciprokával nő (terv C: a nyugodt mód nem büntetés).
+        const add = Math.round(xpForCorrect(st.combo.count) * ladderXpScale(runRef.current.tempo));
         sessionXpRef.current += add;
         setTotalXp((t) => t + add);
       }
@@ -692,8 +803,20 @@ export default function WordLadderHuEn() {
     [applyEvents],
   );
 
+  /**
+   * A közös director a Szólétra tempójára burkolva (`paceDirector`, olvashatósági javítás A): az óra a 600 ms-os előjelzés
+   * után indul, az ablak olvasásalapú. A director, a kérdés-sáv és a közös függvények szerződése változatlan.
+   */
+  const ownDirector = useQuestionDirector({ config: directorConfig, provider, startBand: 0.4, seed: seedRef.current });
+  const resetDirectorRef = useRef(ownDirector.reset);
+  resetDirectorRef.current = ownDirector.reset;
+  const pacedDirector = useMemo(
+    () => (ownDirector.director ? paceDirector(ownDirector.director, { grade: () => runRef.current.grade, tempo: () => tempoRef.current }) : null),
+    [ownDirector.director],
+  );
   const q = usePlayQuestion({
-    setup: { config: directorConfig, provider, startBand: 0.4, seed: seedRef.current },
+    director: pacedDirector,
+    revealWrongMs: LADDER_REVEAL_WRONG_MS,
     speech,
     onShow: (p) => {
       lastStartRef.current = p.startedAtSimMs;
@@ -711,6 +834,9 @@ export default function WordLadderHuEn() {
   /** Egy fogás megragadása (a kapaszkodó koppintása / kattintása). */
   const grab = useCallback((idx: number) => {
     if (pausedRef.current || phaseRef.current !== "play") return;
+    // Előjelzés alatt (az óra még áll) a fogás nem élesített: nem válasz, nem hiba (KSZ-11, kapu 3(a)).
+    const shown = qRef.current?.view().presentation;
+    if (shown && clockRef.current < armedAt(shown)) return;
     pickedHoldRef.current = idx;
     qRef.current?.pick(idx, clockRef.current);
   }, []);
@@ -731,7 +857,7 @@ export default function WordLadderHuEn() {
     pickedHoldRef.current = null;
     freeGrab(st, true);
     applyEvents(drainEvents(st));
-    freeAtRef.current = clockRef.current + FREE_GRIP_COOLDOWN_MS;
+    freeAtRef.current = clockRef.current + freeGripMsRef.current;
     setFreeHold(false);
   }, [applyEvents]);
 
@@ -783,8 +909,17 @@ export default function WordLadderHuEn() {
     endedRef.current = false;
     runCounterRef.current += 1;
     const n = runCounterRef.current;
-    const total = wallFor(level);
-    runRef.current = { lang, grade: ladderGradeRef.current, level, rungs: total };
+    const runTempo = tempoRef.current;
+    let total = ladderWallRungs(wallFor(level), runTempo);
+    // Csak teszt-kampós / fejlesztői buildben (mint a `?seed=`): ?wall=N rövid fal — a menet játékidőben korlátos (e2e).
+    if (import.meta.env.DEV || GAME_TEST_HOOKS_ENABLED) {
+      const params = new URLSearchParams(window.location.search);
+      const w = parseInt(params.get("wall") ?? "", 10);
+      if (Number.isFinite(w)) total = Math.max(4, Math.min(60, w));
+      testItemsRef.current = GAME_TEST_HOOKS_ENABLED ? (params.get("wlItems") ?? "").split(",").map((s) => s.trim()).filter(Boolean) : [];
+    }
+    runRef.current = { lang, grade: ladderGradeRef.current, level, rungs: total, tempo: runTempo };
+    freeGripMsRef.current = ladderFreeGripMs(FREE_GRIP_COOLDOWN_MS, level, runRef.current.grade, runTempo);
     levelSessionRef.current.reset(level);
     runTierRef.current = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
     seenRef.current = [];
@@ -797,7 +932,7 @@ export default function WordLadderHuEn() {
       if (Number.isFinite(v)) startRung = Math.max(0, Math.min(total - 1, v));
     }
     const seed = seedRef.current;
-    coreRef.current = createLadderState({ targetRung: total, startRung, baseRungPerSec: rivalBaseRungPerSec(rivalSecPerRungForLevel(level)) });
+    coreRef.current = createLadderState({ targetRung: total, startRung, baseRungPerSec: rivalBaseRungPerSec(ladderRivalSecPerRung(level, runRef.current.grade, runTempo)) });
     worldRngRef.current = createRng(seedFrom(WORD_LADDER_GAME_ID, seed, "world", n));
     fxRngRef.current = createRng(seedFrom(WORD_LADDER_GAME_ID, seed, "fx", n));
     pickRngRef.current = createRng(seedFrom(WORD_LADDER_GAME_ID, seed, "pick", n));
@@ -808,7 +943,8 @@ export default function WordLadderHuEn() {
     sessionXpRef.current = 0;
     pickedHoldRef.current = null;
     loop.reset();
-    qRef.current?.reset(seedFrom(seed, n), 0.4);
+    resetDirectorRef.current(seedFrom(seed, n), 0.4);
+    qRef.current?.reset();
     setVocabTiers(LADDER_LEVELS.map(() => []));
     setRunSeq((v) => v + 1);
     setResult(null);
@@ -866,7 +1002,7 @@ export default function WordLadderHuEn() {
             const p = ctl.request("trigger", clock);
             const minGap = directorConfigRef.current.minGapMs;
             const empty = !p && ctl.canAsk() && (lastStartRef.current === null || clock - lastStartRef.current >= minGap);
-            if (empty && freeAtRef.current === Number.POSITIVE_INFINITY) freeAtRef.current = clock + (st.climbs === 0 ? 0 : FREE_GRIP_COOLDOWN_MS);
+            if (empty && freeAtRef.current === Number.POSITIVE_INFINITY) freeAtRef.current = clock + (st.climbs === 0 ? 0 : freeGripMsRef.current);
             if (p) freeAtRef.current = Number.POSITIVE_INFINITY;
           }
         }
@@ -1026,6 +1162,9 @@ export default function WordLadderHuEn() {
           reveal: ctl?.view().reveal ? 1 : 0,
           paused: pausedRef.current ? 1 : 0,
           clock: clockRef.current,
+          tempo: runRef.current.tempo,
+          windowMs: p?.windowMs ?? null,
+          armedAt: p ? armedAt(p) : null,
         };
       },
     });
@@ -1083,7 +1222,9 @@ export default function WordLadderHuEn() {
   const view = q.state;
   const presentation = view.presentation;
   const reveal = view.reveal;
-  const answering = !!presentation && !reveal && !paused;
+  // Az élesítés (előjelzés vége): a kérdés-sáv ~10 Hz-es nézete szerint a hátralévő idő már nem nagyobb az ablaknál.
+  const armed = !!presentation && view.remainingMs <= presentation.windowMs;
+  const answering = !!presentation && !reveal && !paused && armed;
   const holdState = (i: number): TileState => (!reveal ? "idle" : i === reveal.correctOptionIndex ? "correct" : i === reveal.pickedOptionIndex ? "wrong" : "dim");
   const tileStates: TileState[] = (presentation?.options ?? []).map((_, i) => holdState(i));
   const zone = zoneForProgress(hud.rung, hud.target);
@@ -1164,7 +1305,7 @@ export default function WordLadderHuEn() {
                       <strong className="text-amber-100/90">Fejleszt:</strong> szókincs, gyors felismerés, kitartás a hiba után is.
                       <br />
                       <span className="text-white/70">
-                        Minden fogás egy kérdés (percenként 10+), a rivális tempója a gyerek szintjéhez igazodik: szoros, de legyőzhető verseny. A „Miért?” gomb megállítja a játékot és elmagyarázza a hibát.
+                        Minden fogás egy kérdés; a Tempó választható (Nyugodt: bőven van idő minden kapaszkodót elolvasni, Villám lassan mászik; Gyors: percenként 10+ kérdés). A rivális tempója a gyerek szintjéhez igazodik: szoros, de legyőzhető verseny. A „Miért?” gomb megállítja a játékot és elmagyarázza a hibát.
                       </span>
                     </>
                   }
@@ -1232,6 +1373,7 @@ export default function WordLadderHuEn() {
                   onChange={setLevel}
                   label={`Pálya — ${ladderGrade}. évfolyam, ${langLabel.name.toLowerCase()}`}
                 />
+                <TempoPicker value={tempo} onChange={pickTempo} />
                 <PlaySpeechToggle />
               </div>
             }
@@ -1386,6 +1528,7 @@ export default function WordLadderHuEn() {
                 onCollapse={() => setExpanded(false)}
                 testId="wl-question"
                 promptTestId="wl-prompt"
+                promptFocus={presentation ? focusByIdRef.current.get(String(presentation.question.quiz.id ?? "")) ?? null : null}
               />
             )}
           </>
@@ -1415,6 +1558,10 @@ export default function WordLadderHuEn() {
 
         /* A kérdés-kártya a HUD + verseny-csík alatt (a közös sáv változója). */
         .play-question[data-testid="wl-question"] { --play-question-top: calc(max(4px, var(--game-safe-top)) + 112px); }
+        /* Olvashatósági javítás B: az időcsík az utolsó pillanatig nyugodt (nincs „kevés idő” csíkozás / pánik). */
+        .play-question[data-testid="wl-question"] .play-question-timer[data-low="true"] .play-question-timer-fill {
+          background: linear-gradient(90deg, var(--pq-accent), var(--pq-accent-2)); box-shadow: 0 0 10px var(--pq-glow);
+        }
 
         /* FOGÁSOK — álló nézet: alul, hüvelykujjnyira; sötét sziklapárkány. */
         .game-shell-fixed[data-game="WordLadderHuEn"] .wl-holds {
@@ -1429,13 +1576,13 @@ export default function WordLadderHuEn() {
         ${HOLD} {
           position: relative; display: flex; align-items: center; gap: 8px; min-height: 64px; min-width: 48px; padding: 8px 10px;
           text-align: left; border-radius: 18px 22px 16px 24px; color: #fff; font-weight: 900; cursor: pointer;
-          font-size: clamp(16px, 4.4vw, 20px); line-height: 1.15; overflow-wrap: anywhere; hyphens: auto;
+          font-size: clamp(17px, 4.6vw, 20px); line-height: 1.15; overflow-wrap: anywhere; hyphens: auto;
           background: radial-gradient(120% 90% at 30% 20%, #c08a5a, #8a5a34 55%, #5b3a1c);
           border: 2px solid #fcd34d88; box-shadow: inset 0 2px 0 #ffffff33, inset 0 -5px 0 #3b2412, 0 6px 14px #0008;
           -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none;
           transition: transform .08s ease, background-color .12s ease, opacity .15s ease, box-shadow .12s ease;
         }
-        ${HOLD_SCOPE} .wl-answers[data-long="true"] .wl-hold { font-size: clamp(15px, 3.9vw, 18px); min-height: 52px; padding-block: 6px; }
+        ${HOLD_SCOPE} .wl-answers[data-long="true"] .wl-hold { font-size: clamp(17px, 4.2vw, 18px); min-height: 52px; padding-block: 6px; }
         ${HOLD}:not(:disabled):active { transform: translateY(2px) scale(.97); box-shadow: inset 0 1px 0 #ffffff26, inset 0 -2px 0 #3b2412, 0 3px 8px #0008; }
         ${HOLD}:disabled { cursor: default; opacity: 1; }
         ${HOLD}:focus-visible { outline: 4px solid #fef08a; outline-offset: 2px; }
@@ -1470,7 +1617,7 @@ export default function WordLadderHuEn() {
           ${HOLD_SCOPE} .wl-answers > .wl-hold[data-hold-index="3"] { grid-column: 3; grid-row: 3; }
           .wl-answers-free > .wl-hold-free { grid-column: 3; grid-row: 3; }
           .wl-teach { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: min(44vw, 420px); padding: 6px 10px; border-radius: 12px; background: #24160dd9; pointer-events: none; }
-          ${HOLD} { min-height: 58px; font-size: 16px; }
+          ${HOLD} { min-height: 58px; font-size: 17px; }
         }
 
         .wl-particles { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
@@ -1508,6 +1655,7 @@ export default function WordLadderHuEn() {
       {why && <QuizFeedbackCard card={why} onDismiss={closeWhy} />}
 
       <PauseMenu open={menuOpen && phase === "play"} onResume={resumeGame} onRestart={startGame} onExit={exitToMenu} exitLabel="Kilépés a menübe">
+        <TempoPicker value={tempo} onChange={pickTempo} />
         <PlaySpeechToggle />
       </PauseMenu>
       <ResultScreen

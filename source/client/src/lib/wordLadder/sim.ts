@@ -8,8 +8,8 @@
  *    (`LEAD_IN_MS`) után indul, az ablak a tempó olvasásalapú `ladderWindowMs`-e; előjelzés alatt a fogás hatástalan;
  *  - minden fogás egy kérdés: amint nincs nyitott kérdés és lejárt a megoldás-kijelzés, a játék azonnal kér egyet
  *    (`request("trigger")`, a director `minGapMs`-e szerint) — az első fogás `FIRST_HOLD_MS`-nél;
- *  - a megoldás-kijelzés a közös kérdés-sáv szabálya: jó válasz után 900 ms, hibás / lejárt után a tempó
- *    `revealWrongMs`-e — ezalatt új fogás nem jelenik meg;
+ *  - a megoldás-kijelzés a közös kérdés-sáv szabálya: jó válasz után 900 ms, hibás / lejárt után a lap
+ *    `LADDER_REVEAL_WRONG_MS`-e (3 s) — ezalatt új fogás nem jelenik meg;
  *  - a világ (a rivális) a lap meghajtójával lép: `createFixedLoop` (fix 1/60 s, ≤ 5 lépés / képkocka), nyitott kérdés
  *    alatt (előjelzéssel együtt) a tempó `slowMo`-jával (K.6 „Közös meghajtó”);
  *  - ha a forrás nem ad tételt (terv 8.1) vagy `questions: false`: szabad fogás `FREE_GRIP_COOLDOWN_MS`-onként, a
@@ -50,6 +50,7 @@ import {
 import {
   DEFAULT_LADDER_TEMPO,
   LADDER_BASE_WINDOW_MS,
+  LADDER_REVEAL_WRONG_MS,
   armedAt,
   ladderFreeGripMs,
   ladderRivalSecPerRung,
@@ -86,9 +87,7 @@ export function wordLadderDirectorConfig(grade: number | null, tempo: LadderTemp
 
 /** A közös kérdés-sáv megoldás-kijelzése (`GE/play/questionUi.ts` `REVEAL_CORRECT_MS`; hibásnál a tempóé). */
 export const SIM_REVEAL_CORRECT_MS = REVEAL_CORRECT_MS;
-export function simRevealWrongMs(tempo: LadderTempo): number {
-  return tempoParams(tempo).revealWrongMs;
-}
+export const SIM_REVEAL_WRONG_MS = LADDER_REVEAL_WRONG_MS;
 /** A bot ennyi idő után koppint a szabad fogásra. */
 export const FREE_TAP_MS = 700;
 
@@ -162,7 +161,6 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
   const bank = opts.bank ?? null;
   const bankSize = bank ? bank.length : opts.bankSize ?? 600;
   const material = opts.material ?? [];
-  const revealWrongMs = simRevealWrongMs(tempo);
   const freeGripMs = ladderFreeGripMs(FREE_GRIP_COOLDOWN_MS, opts.level ?? 6, grade, tempo);
   let freshCursor = 0;
   let materialCursor = 0;
@@ -205,7 +203,7 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
   const settle = (o: QuestionOutcome | null) => {
     if (!o || o.result === "aborted") return;
     applyAnswer(state, o.result);
-    revealUntil = t + (o.result === "correct" ? SIM_REVEAL_CORRECT_MS : revealWrongMs);
+    revealUntil = t + (o.result === "correct" ? SIM_REVEAL_CORRECT_MS : SIM_REVEAL_WRONG_MS);
     drainEvents(state);
   };
 
