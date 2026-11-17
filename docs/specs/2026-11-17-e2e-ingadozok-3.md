@@ -53,13 +53,15 @@ Ha egy tesztnél 3 megközelítés után sincs bizonyított gyökérok: megáll�
 - AMIKOR a fenti tesztek a CI-azonos úton, CPU-lassítással 20-szor futnak, MINDEGYIK zöld; a javítás visszavonásával a mért bukás
   visszajön (ellenpróba), vagy a jelentés megmondja, miért nem hozható elő.
 - A tesztek küszöbei és elvárásai változatlanok (diff-ben ellenőrizhető).
-- A joystick-javítás a #484 ágán is zöld.
+- A joystick-javítás a #484 ágán is zöld. (A joystick-tétel kikerült ebből a PR-ból — kanban #106.)
 - A CI teljes Playwright E2E-je zöld.
 
 <!-- acceptance-checklist -->
-- [x] 1: joystick-response › block-craft-quiz renderszámláló — gyökérok (álló/rezgő szakasz hossz-aszimmetria), javítás,
-  előtte (#484 1/10) / utána (2. változat: teljes spec 12/12, Kockavadász main 10/10, #484 7/7), ellenpróba a befagyasztott régi
-  specen. Termék-mutációs ellenpróba: NOT RUN (lásd a végrehajtási fájl 4. pontját).
+- [ ] 1: joystick-response › block-craft-quiz renderszámláló — KIVÉVE ebből a PR-ból — külön szelet (kanban #106). A teszt-oldali
+  gyökérok-jelölt (álló/rezgő szakasz hossz-aszimmetria) és két javítás-változat mérve, de a PR előtti kapu böngészős lépésében a
+  2. változattal a Szökőár bukott (lapon +25, tárcsán +27; álló 2876 ms / 19 render, rezgő 1898 ms / 38 render). A termék-vs-teszt
+  kérdés NYITOTT (a lap mozgás közben ~20, álló helyzetben ~6,6 render/s). A spec a main változatára visszaállítva; a 180 → 240 s-os
+  keretemelés ezzel megszűnt.
 - [x] 2: lesson-result-email — gyökérok (kanban #31), javítás, célzott kísérlet előtte 5/5 bukik / utána 5/5 + 20/20 zöld.
 - [ ] 3: duel-online „EGYSZERRE Visszavágó” — gyökérok (CI-riport + 6×: 4/20) és javítás (WebSocket-visszatartás) kész, de a
   „20-ból mindegyik zöld” elfogadás betű szerint NEM teljesült: utána 19/20. Az egy bukás a vizsgált lépés UTÁN, a lezárásban, a

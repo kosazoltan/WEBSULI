@@ -8,7 +8,7 @@
 - `source/tests/lesson-result-email.spec.ts` (1)
 - `source/tests/duel-online.spec.ts` (2)
 - `source/tests/game-win-paths.spec.ts` (3)
-- `source/tests/joystick-response.spec.ts` (4)
+- `source/tests/joystick-response.spec.ts` (4) — KIVÉVE ebből a PR-ból (a main változatára visszaállítva; kanban #106)
 - `source/tests/speed-math-play.spec.ts` (5)
 - `docs/specs/2026-11-17-e2e-ingadozok-3*.md`
 
@@ -43,7 +43,7 @@ $env:REPRO_CPU='6'; node --import tsx scripts/run-e2e-tests.ts --config playwrig
    szűkítette: 2/20 bukás az előfeltételen; elvetve.)
 3. **game-win-paths** — a mérés előtt `waitForStable(page, '[data-testid="<eredmény>"] button')`
    (`tests/support/game-mobile-quality.ts`): a gombok beállt dobozára vár (C-33: végállapotú elem).
-4. **joystick-response renderszámláló** — az álló szakasz (változatlan sorrendben, elöl) a 30 várakozás után még 30 × a lépcsőkben
+4. **joystick-response renderszámláló** — KIVÉVE ebből a PR-ból, külön szelet (kanban #106); az alábbi a mért, de nem szállított változat: az álló szakasz (változatlan sorrendben, elöl) a 30 várakozás után még 30 × a lépcsőkben
    MÉRT átlagos `touchMove`-idő ideig tart (`touchMoveCost`, `hold(false, 30 * perTouchMs)`), így a hossza a rezgőével összemérhető;
    a JOY_RESULT-ban az álló nyers száma és hossza is (`renderStill`, `stillMs`); a tesztkeret 180 → 240 s (mérés lent). (Az első
    változat — rezgő előbb, az álló `moving.ms`-ig — a Szökőárnál bukott: lásd Mérés 4.)
@@ -97,7 +97,15 @@ változat ugyanazon az úton).
 - Javítás: `tests/game-win-paths.spec.ts` — `waitForStable(page, '[data-testid="<eredmény>"] button')` a mérés előtt.
 - Utána: a teljes spec (8 eset × 20, 1×): **160/160 zöld**; a beállt méret a kísérletben 48,0–48,15 px.
 
-### 4. joystick-response › block-craft-quiz renderszámláló (kanban #76)
+### 4. joystick-response › block-craft-quiz renderszámláló (kanban #76) — KIVÉVE ebből a PR-ból, külön szelet (kanban #106)
+
+**Állapot:** a spec a main változatára visszaállítva (a mért 2. változat a scratchpadban, `joystick-response.v3.spec.ts`); a
+180 → 240 s-os keretemelés ezzel megszűnt. Ok: a PR előtti kapu (`gate:pr`, `695b063b`) böngészős lépésében a 2. változattal a
+Szökőár bukott — „többlet-render a lapon” +25, a tárcsán +27; álló szakasz 2876 ms / 19 lap-render (~6,6/s), rezgő 1898 ms / 38
+lap-render (~20/s). A termék-vs-teszt kérdés NYITOTT: lehet a szakaszok közti állapotkülönbség (pálya széle — teszt), de lehet
+mozgással arányos lapszintű renderelés is (termék — épp ezt hivatott a teszt megfogni). Eldöntése a külön szelet dolga, mért
+bizonyítékkal (a render forrása mindkét szakaszban, a játékos helyzete). Az alábbi mérések e szelet bemenetei.
+
 - Tünet: main run 44049286407 (csak-doksi commit): „a mozgás-események többlet-renderje a tárcsán” 23 > 6, majd 18 > 6; a CI
   JOY_RESULT-sorai ugyanazon a lapon: többlet −12, −6, +23, +18 — kétértékű, nem folytonos szórás.
 - Gyökérok — TESZT: a rezgő szakasz minden CDP-érintése megvárja a lap feldolgozását (egy képkocka), az álló csak 30 × 16 ms-ot
@@ -114,7 +122,7 @@ változat ugyanazon az úton).
 - Javítás (2. változat): `tests/joystick-response.spec.ts` — a sorrend marad (álló, majd rezgő); az álló a 30 várakozás után még
   30 × a lépcsőkben mért átlagos `touchMove`-idő ideig tart; a JOY_RESULT-ban `renderStill` / `stillMs` is. A küszöb (≤ 6) és a
   tárcsa ≤ lap + 2 szabály változatlan.
-- Tesztkeret: main CI nyomkövetés nélküli kísérletei a javítás ELŐTT 134 s és 145 s; az álló szakasz helyben a rezgő 1,0–1,7-szerese
+- Tesztkeret (a visszaállítással MEGSZŰNT, a main 180 s-a érvényes): main CI nyomkövetés nélküli kísérletei a javítás ELŐTT 134 s és 145 s; az álló szakasz helyben a rezgő 1,0–1,7-szerese
   lett → a CI-n legfeljebb ~1,7 × 22,6 ≈ 38 s többlet → ~183 s, a 180 s-on túl → 240 s.
 - Utána (2. változat, CI-azonos 1×): a teljes spec (4 játék × 3) **12/12 zöld** (Tornado +1…+3, Aszteroida −3…+1, Szökőár −15…+1,
   Kockavadász −4…+1); Kockavadász külön: **main 7/7 zöld** (összesen 10/10; lap −2…+1, tárcsa −1…+0; álló 14,2–16,7 s, rezgő
