@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildResultEmail, gradeQuiz, gradeTasks } from "../shared/lesson-result-email";
+import { buildResultEmail, formatBudapest, gradePartialQuiz, gradeQuiz, gradeTasks, resultRequestSchema } from "../shared/lesson-result-email";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 
 /**
@@ -82,4 +82,65 @@ test("a feladatok levele: kérdés, jelölés, válasz és a mintaválasz (escap
   const html2 = mailOf(gradeTasks([tricky], { [t1.id]: "valami" }));
   assert.match(html2, /<em>Mintaválasz:<\/em> A &lt;i&gt;minta&lt;\/i&gt; &amp; társa/);
   assert.ok(!html2.includes("<i>minta</i>"));
+});
+
+/* S1b: félbehagyott kvíz, dátum a levélben, a séma új mezői. */
+const QUIZ3 = [
+  { id: "q1", question: "Első kérdés?", options: ["jó egy", "rossz egy", "más egy"], correctIndex: 0 },
+  { id: "q2", question: "Második kérdés?", options: ["rossz kettő", "jó kettő", "más kettő"], correctIndex: 1 },
+  { id: "q3", question: "Harmadik kérdés?", options: ["rossz három", "más három", "jó három"], correctIndex: 2 },
+];
+const AT = new Date("2026-11-17T19:41:00Z");
+
+test("S1b: a félbehagyott kvíz csak a megválaszolt kérdéseket pontozza; válasz nélkül nincs miről levelet küldeni", () => {
+  const g = gradePartialQuiz(QUIZ3, { q1: 0, q2: 0, q3: -1, ismeretlen: 1 })!;
+  assert.deepEqual(g.meta, { partial: { answered: 2, total: 3 } });
+  assert.deepEqual([g.summary.points, g.summary.total, g.summary.percent], [1, 2, 50], "a pont a megválaszolt kérdésekre vonatkozik");
+  assert.deepEqual(g.rows.map(r => r.question), ["Első kérdés?", "Második kérdés?"], "a meg nem válaszolt kérdés nem szerepel hibaként");
+  assert.equal(gradePartialQuiz(QUIZ3, { q1: -1, q2: -1, q3: -1 }), null);
+  assert.equal(gradePartialQuiz(QUIZ3, {}), null);
+  assert.equal(gradePartialQuiz(QUIZ3, { ismeretlen: 0 }), null);
+});
+
+test("S1b: a „félbehagyva” levél tárgya és állapotsora; a befejezett kör levele jelzi, ha korábbi levél helyébe lép", () => {
+  const partial = buildResultEmail({ lessonTitle: "Lecke", classroom: 5, learner: "Vendég tanuló", url: "", graded: gradePartialQuiz(QUIZ3, { q1: 0, q2: 0, q3: -1 })!, sentAt: AT });
+  assert.match(partial.subject, /^\[WebSuli eredmény\] Lecke — Kvíz \(félbehagyva: 2 \/ 3\) — 50% \(/);
+  assert.match(partial.html, /<strong>Állapot:<\/strong> félbehagyva — 2 \/ 3 kérdésre válaszolt; a pont a megválaszolt kérdésekre vonatkozik\./);
+  assert.equal((partial.html.match(/<li>/g) ?? []).length, 2);
+  assert.doesNotMatch(partial.html, /nem válaszolt/);
+  assert.doesNotMatch(partial.html, /helyébe lép/);
+  const full = gradeQuiz(QUIZ3, { q1: 0, q2: 0, q3: -1 });
+  const plain = buildResultEmail({ lessonTitle: "Lecke", classroom: 5, learner: "Vendég tanuló", url: "", graded: full, sentAt: AT });
+  assert.match(plain.subject, /— Kvíz — 33% \(/);
+  assert.doesNotMatch(plain.html, /Állapot:/);
+  const superseding = buildResultEmail({ lessonTitle: "Lecke", classroom: 5, learner: "Vendég tanuló", url: "", graded: { ...full, meta: { supersedesPartial: true } }, sentAt: AT });
+  assert.match(superseding.html, /ez a befejezett kör eredménye — a korábbi, „félbehagyva” jelzésű levél helyébe lép\./);
+  assert.match(superseding.subject, /— Kvíz — 33% \(/);
+});
+
+test("S1b (review K1): a levélben a beküldés ideje magyar idő szerint (téli és nyári időszámítás), és a hihető körkezdet", () => {
+  assert.equal(formatBudapest(new Date("2026-11-17T19:41:00Z")), "2026. 11. 17. 20:41", "tél: UTC+1");
+  assert.equal(formatBudapest(new Date("2026-07-01T21:30:00Z")), "2026. 07. 01. 23:30", "nyár: UTC+2");
+  assert.equal(formatBudapest(new Date("2026-12-31T23:30:00Z")), "2027. 01. 01. 00:30", "a dátumhatár magyar idő szerint");
+  const graded = gradeQuiz(QUIZ3, { q1: 0 });
+  const mail = (meta: object, sentAt = AT) => buildResultEmail({ lessonTitle: "Lecke", classroom: 5, learner: "Vendég tanuló", url: "", graded: { ...graded, meta }, sentAt }).html;
+  assert.match(mail({}), /<strong>Beküldve:<\/strong> 2026\. 11\. 17\. 20:41 \(magyar idő\)/);
+  assert.doesNotMatch(mail({}), /A kör kezdete/);
+  assert.match(mail({ startedAt: Date.parse("2026-11-12T15:05:00Z") }), /<strong>A kör kezdete:<\/strong> 2026\. 11\. 12\. 16:05/);
+  assert.doesNotMatch(mail({ startedAt: AT.getTime() + 60_000 }), /A kör kezdete/, "jövőbeli kezdés nem jelenik meg");
+  assert.doesNotMatch(mail({ startedAt: AT.getTime() - 500 * 86_400_000 }), /A kör kezdete/, "képtelenül régi kezdés nem jelenik meg");
+  // A feladatok levele is kap dátumot; alapértelmezésben a mostani időt.
+  const tasksMail = buildResultEmail({ lessonTitle: "Lecke", classroom: 5, learner: "Vendég tanuló", url: "", graded: gradeTasks(e.tasks, { [e.tasks[0].id]: "valami" }) }).html;
+  assert.match(tasksMail, /<strong>Beküldve:<\/strong> \d{4}\. \d{2}\. \d{2}\. \d{2}:\d{2} \(magyar idő\)/);
+});
+
+test("S1b: a beküldés sémája — `partial` csak kvíznél, `startedAt` pozitív egész; ismeretlen mező továbbra is elutasítva", () => {
+  const ok = (body: object) => resultRequestSchema.safeParse(body).success;
+  assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, partial: true, startedAt: 1_763_408_460_000 }), true);
+  assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 } }), true, "a régi kliens alakja változatlanul érvényes");
+  assert.equal(ok({ kind: "tasks", roundId: "round-abcd", answers: { t1: "x" }, startedAt: 1_763_408_460_000 }), true);
+  assert.equal(ok({ kind: "tasks", roundId: "round-abcd", answers: { t1: "x" }, partial: true }), false, "a feladatoknak nincs pillanatképe");
+  assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, partial: "igen" }), false);
+  for (const startedAt of [0, -5, 1.5, "tegnap"]) assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, startedAt }), false, String(startedAt));
+  assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, score: 100 }), false);
 });

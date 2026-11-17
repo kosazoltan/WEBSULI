@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a kész; S1b (félbehagyott kvíz, dátum, korkorlát) folyamatban – 2026-11-17, ág `fix/eredmeny-email-kviz`
+**Állapot:** S1a + S1b kész, PR előtt – 2026-11-17, ág `fix/eredmeny-email-kviz`
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -149,8 +149,8 @@ Elfogadás (S1b):
 - [x] E5 – mintaválasz a feladatok levelében
 - [x] E6 – escape
 - [x] E7 – a meglévő tesztek változatlanul zöldek
-- [ ] E8 – pillanatkép háttérbe kerüléskor / elhagyáskor (böngésző)
-- [ ] E9 – késleltetett „félbehagyva” levél a legutolsó pillanatképből; a végleges törli (valódi DB)
-- [ ] E10 – a végleges levél jelzi a felülírást
-- [ ] E11 – dátum a levélben (Europe/Budapest)
-- [ ] E12 – 7 napos korkorlát a le nem zárt körre
+- [x] E8 – pillanatkép háttérbe kerüléskor / elhagyáskor (böngésző)
+- [x] E9 – késleltetett „félbehagyva” levél a legutolsó pillanatképből; a végleges törli (valódi DB)
+- [x] E10 – a végleges levél jelzi a felülírást
+- [x] E11 – dátum a levélben (Europe/Budapest)
+- [x] E12 – 7 napos korkorlát a le nem zárt körre

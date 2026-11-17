@@ -172,3 +172,45 @@ test("S4c: a küszöb alatt nincs lazítás; ≥ 20 kör és ≥ 40 % téves elu
   const runs = await db.execute(sql`select snapshot->>'state' as state, snapshot->'definition'->>'mode' as mode from lesson_workflow_runs where owner_id = 's4c-owner'`);
   assert.ok(runs.rows.some((r) => (r as { mode: string; state: string }).mode === "relax" && (r as { state: string }).state === "done"), JSON.stringify(runs.rows));
 });
+
+/* Spec 2026-11-17-eredmeny-email-kviz (S1b): a félbehagyott helyi kvíz — késleltetett küldés a legutolsó pillanatképből. */
+test("S1b valódi HTTP + DB: két pillanatkép → EGY „félbehagyva” levél a legutolsóból; a végleges a várakozót törli; a késői végleges jelzi a felülírást", async () => {
+  const { setPartialDelay, clearPendingPartials } = await import("../server/lesson-result-email");
+  const previous = setPartialDelay(400);
+  const q = lesson.experience!.quiz.slice(0, 5);
+  const picks = (answered: number) => Object.fromEntries(q.map((item, i) => [item.id, i < answered ? item.correctIndex : -1]));
+  const post = (body: object) => fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  try {
+    // 0 válasz: nincs mit küldeni.
+    sent.length = 0;
+    const empty = await post({ kind: "quiz", roundId: "round-partial-0", picks: picks(0), partial: true, fingerprint: "fp-p0" });
+    assert.deepEqual([empty.status, await empty.json()], [202, { queued: false }]);
+    // Két pillanatkép (2, majd 4 válasz) a késleltetésen belül → egy levél, a 4 válaszos állapotból.
+    const first = await post({ kind: "quiz", roundId: "round-partial-a", picks: picks(2), partial: true, fingerprint: "fp-pa", startedAt: Date.now() - 600_000 });
+    assert.deepEqual([first.status, await first.json()], [202, { queued: true, partial: true }]);
+    await new Promise(r => setTimeout(r, 150));
+    assert.equal(sent.length, 0, "a pillanatkép nem küld azonnal");
+    await post({ kind: "quiz", roundId: "round-partial-a", picks: picks(4), partial: true, fingerprint: "fp-pa", startedAt: Date.now() - 600_000 });
+    await waitFor(() => sent.length === 2);
+    await new Promise(r => setTimeout(r, 600));
+    assert.equal(sent.length, 2, "körönként egy „félbehagyva” levél (címzettenként)");
+    assert.match(sent[0].subject, /— Kvíz \(félbehagyva: 4 \/ 5\) — 100% /);
+    assert.match(sent[0].html, /félbehagyva — 4 \/ 5 kérdésre válaszolt/);
+    assert.match(sent[0].html, /A kör kezdete:/);
+    // A „félbehagyva” levél UTÁN befejezett kör: a végleges levél jelzi a felülírást.
+    const final = await post({ kind: "quiz", roundId: "round-partial-a", picks: picks(5), fingerprint: "fp-pa" });
+    assert.equal(final.status, 202);
+    await waitFor(() => sent.length === 4);
+    assert.equal(sent.length, 4);
+    assert.match(sent[2].subject, /— Kvíz — 100% /);
+    assert.match(sent[2].html, /a korábbi, „félbehagyva” jelzésű levél helyébe lép/);
+    // Pillanatkép, majd a késleltetésen BELÜL a végleges: csak a végleges megy, felülíró mondat nélkül.
+    sent.length = 0;
+    await post({ kind: "quiz", roundId: "round-partial-b", picks: picks(3), partial: true, fingerprint: "fp-pb" });
+    await post({ kind: "quiz", roundId: "round-partial-b", picks: picks(5), fingerprint: "fp-pb" });
+    await waitFor(() => sent.length === 2);
+    await new Promise(r => setTimeout(r, 800));
+    assert.equal(sent.length, 2, "a várakozó pillanatkép törlődött — nincs ellentmondó levélpár");
+    assert.ok(sent.every(mail => /— Kvíz — 100% /.test(mail.subject) && !/helyébe lép/.test(mail.html)));
+  } finally { clearPendingPartials(); setPartialDelay(previous); }
+});

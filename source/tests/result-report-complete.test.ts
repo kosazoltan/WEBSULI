@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { quizRoundComplete } from "../shared/quiz-round";
+import { answeredCount, quizRoundComplete, roundTooOld, STALE_ROUND_DAYS } from "../shared/quiz-round";
 
 /**
  * Spec 2026-11-17-eredmeny-email-kviz: a helyi kvíz akkor is beküldendő, ha a tanuló minden kérdésre válaszolt, de a „Kvíz kiértékelése”
@@ -26,4 +26,29 @@ test("a küldés feltétele: lezárt kör VAGY (csak kvíznél) teljes kör; a f
   // A körönkénti egyszeri küldés őrei változatlanok: a localStorage-jelző és a folyamatban lévő küldés.
   assert.match(source, /if \(localStorage\.getItem\(flag\)\) return;/);
   assert.match(source, /sending\.current = true;/);
+});
+
+test("S1b: answeredCount csak a kör saját kérdéseit számolja; roundTooOld a 7 napos határon", () => {
+  assert.equal(answeredCount({ ids: ["a", "b", "c"], picks: {} }), 0);
+  assert.equal(answeredCount({ ids: ["a", "b", "c"], picks: { a: 0, c: 2, regi: 1 } }), 2);
+  const DAY = 86_400_000, now = Date.parse("2026-11-17T12:00:00Z");
+  assert.equal(STALE_ROUND_DAYS, 7);
+  assert.equal(roundTooOld(now - 7 * DAY, now), false, "pontosan 7 nap még megy");
+  assert.equal(roundTooOld(now - 7 * DAY - 1, now), true);
+  assert.equal(roundTooOld(now - 60_000, now), false);
+  assert.equal(roundTooOld(0, now), false, "el nem indított körre nem vonatkozik");
+});
+
+test("S1b: a beküldő a le nem zárt, régi kört nem küldi; a pillanatkép feltételei és az eseményfigyelők a forrásban", () => {
+  const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8");
+  assert.match(source, /if \(!round\.finishedAt && roundTooOld\(round\.startedAt, Date\.now\(\)\)\) return;/);
+  assert.match(source, /if \(current\.finishedAt \|\| quizRoundComplete\(current\) \|\| count === 0 \|\| roundTooOld\(current\.startedAt, Date\.now\(\)\)\) return;/);
+  assert.match(source, /if \(count <= sentCount\) return;/);
+  assert.match(source, /document\.addEventListener\("visibilitychange", onVisibility\)/);
+  assert.match(source, /window\.addEventListener\("pagehide", snapshot\)/);
+  // A pillanatkép nem GET és nem sendBeacon (CSRF-fejléc kell): keepalive-os POST a gyorsítótárazott tokennel.
+  const client = readFileSync(new URL("../client/src/lib/queryClient.ts", import.meta.url), "utf8");
+  assert.match(client, /method: "POST", keepalive: true, credentials: "include"/);
+  assert.match(client, /if \(!token\) return false;/);
+  assert.doesNotMatch(source + client, /sendBeacon\(/);
 });

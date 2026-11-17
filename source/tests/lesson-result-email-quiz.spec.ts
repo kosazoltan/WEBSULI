@@ -75,3 +75,53 @@ test("hiányos kör lezárása a kihagyásokkal: egy beküldés, a kihagyott ké
   await page.waitForTimeout(1500);
   expect(quizPosts(posts)).toHaveLength(1);
 });
+
+/** S1b: a lap háttérbe kerülésének utánzása (a telefonon megbízható esemény a `visibilitychange`). */
+async function hide(page: Page) {
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+  });
+}
+
+test("S1b: félbehagyott kvíz — háttérbe kerüléskor pillanatkép megy; válasz nélkül vagy változatlan állapotnál nem; a teljes kör végleges beküldés", async ({ page }) => {
+  const posts = await mock(page);
+  const partials = () => quizPosts(posts).filter(p => p.partial === true);
+  const answered = (p: Record<string, unknown>) => Object.values(p.picks as Record<string, number>).filter(pick => pick >= 0).length;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview/quiz-fixture");
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  const quiz = page.locator("[data-quiz-id]");
+  await expect(quiz).toHaveCount(25);
+  await hide(page);
+  await page.waitForTimeout(800);
+  expect(quizPosts(posts), "válasz nélkül nincs pillanatkép").toHaveLength(0);
+
+  for (let i = 0; i < 3; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800); // a CSRF-token előzetes lekérése
+  await hide(page);
+  await expect.poll(() => partials().length).toBe(1);
+  expect(answered(partials()[0])).toBe(3);
+  expect(Object.keys(partials()[0].picks as object)).toHaveLength(25);
+  expect(partials()[0].roundId).toMatch(/^round-[a-z0-9]+$/);
+  expect(typeof partials()[0].startedAt).toBe("number");
+  expect(partials()[0]).not.toHaveProperty("score");
+
+  await hide(page);
+  await page.waitForTimeout(800);
+  expect(partials(), "változatlan állapotnál nincs újabb pillanatkép").toHaveLength(1);
+
+  for (let i = 3; i < 5; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await hide(page);
+  await expect.poll(() => partials().length).toBe(2);
+  expect(answered(partials()[1])).toBe(5);
+
+  // A kör befejezése: a végleges beküldés `partial` nélkül megy; utána a háttérbe kerülés már nem küld pillanatképet.
+  for (let i = 5; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => quizPosts(posts).filter(p => p.partial !== true).length).toBe(1);
+  await hide(page);
+  await page.waitForTimeout(800);
+  expect(partials()).toHaveLength(2);
+  expect(quizPosts(posts)).toHaveLength(3);
+});

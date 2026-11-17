@@ -6,7 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
 import { lessonSchema } from "../shared/lesson-schema";
-import { buildResultEmail, GUEST_LEARNER, gradeQuiz, gradeTasks, resultRequestSchema, type GradedQuiz, type GradedTasks } from "../shared/lesson-result-email";
+import { buildResultEmail, GUEST_LEARNER, gradePartialQuiz, gradeQuiz, gradeTasks, resultRequestSchema, type GradedQuiz, type GradedTasks } from "../shared/lesson-result-email";
 import { resolveAdminRecipients } from "./lib/material-result";
 import { arbiterCacheKey } from "./arbiter/arbiter";
 import { getMaterialPreviewUrl } from "./utils/config";
@@ -82,11 +82,45 @@ async function learnerName(userId: string | undefined): Promise<string> {
   return name || "Bejelentkezett tanuló";
 }
 
-export const resultLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." } });
+const isPartialRequest = (req: Request) => (req.body as { partial?: unknown } | undefined)?.partial === true;
+export const resultLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." },
+  // S1b: a pillanatképek saját keretet kapnak — a végleges beküldés kerete nem fogyhat el miattuk.
+  skip: isPartialRequest });
+export const partialLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." },
+  skip: req => !isPartialRequest(req) });
+
+/**
+ * Spec 2026-11-17-eredmeny-email-kviz (S1b): a FÉLBEHAGYOTT helyi kvíz. A kliens a lap háttérbe kerülésekor a kör pillanatképét küldi; itt
+ * körönként a LEGUTOLSÓ pillanatkép vár (memóriában), és csak akkor megy „félbehagyva” levél, ha a késleltetés alatt sem újabb pillanatkép,
+ * sem végleges beküldés nem érkezik — így körönként legfeljebb egy, a legutolsó állapotot mutató levél megy, és a befejezett kör mellé nem
+ * megy ellentmondó. Vállalt korlát: újraindításkor a várakozó (még el nem küldött) pillanatkép elvész; a végleges levelet ez nem érinti.
+ */
+let partialDelayMs = 15 * 60 * 1000;
+/** Teszthez: a késleltetés rövidítése; a korábbi értéket adja vissza. */
+export function setPartialDelay(ms: number): number { const previous = partialDelayMs; partialDelayMs = ms; return previous; }
+const pendingPartials = new Map<string, ReturnType<typeof setTimeout>>();
+const MAX_PENDING_PARTIALS = 5000;
+function cancelPartial(key: string): void {
+  const timer = pendingPartials.get(key);
+  if (timer) { clearTimeout(timer); pendingPartials.delete(key); }
+}
+function schedulePartial(key: string, send: () => Promise<unknown>): boolean {
+  cancelPartial(key);
+  if (pendingPartials.size >= MAX_PENDING_PARTIALS) return false;
+  const timer = setTimeout(() => {
+    pendingPartials.delete(key);
+    void send().catch(error => logger.error("[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült:", error));
+  }, partialDelayMs);
+  timer.unref?.();
+  pendingPartials.set(key, timer);
+  return true;
+}
+/** Leállításhoz / teszthez: a várakozó pillanatképek eldobása. */
+export function clearPendingPartials(): void { for (const key of [...pendingPartials.keys()]) cancelPartial(key); }
 
 /** POST /api/lessons/:lessonId/results — a feladatok / a helyi kvíz befejezésekor (vendég is). Mindig 202, ha a kérés érvényes. */
 export const lessonResultsRouter = Router();
-lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Request, res: Response, next: NextFunction) => {
+lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, async (req: Request, res: Response, next: NextFunction) => {
   // Review #280: az Express 4 nem továbbítja az async hibát — a handler maga adja át (next).
   try {
   const parsed = resultRequestSchema.safeParse(req.body);
@@ -97,6 +131,22 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
   if (!experience) return res.status(404).json({ message: "Ez a lecke nem érhető el." });
   const body = parsed.data;
   const userId = (req.user as { id?: string } | undefined)?.id;
+  // Tanulói profil (S2): a párosított eszköz tanulója (ellenőrzött token). Átfogó review: bejelentkezve is a tanuló naplójába kerül
+  // (mint a régi anyagnál); a levél neve bejelentkezve a fiók neve marad.
+  const paired = body.learner ? await resolveLearner(body.learner).catch(() => null) : null;
+  const who = userId ?? (paired ? `learner:${paired.id}` : `guest:${body.fingerprint ?? (clientIpKey(req) || "?")}`);
+  const lessonId = req.params.lessonId;
+  const nameOf = () => (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId));
+  const attribution = { ...(paired && !userId ? { learnerFirst: paired.firstName } : {}), guest: !userId && !paired };
+  const partialKey = `${lessonId}|${roundKeyOf(who, "quiz-partial", body.roundId)}`;
+  // S1b: a le nem zárt kvíz pillanatképe — nem küld azonnal, csak várakozik (a legutolsó állapot marad).
+  if (body.kind === "quiz" && body.partial) {
+    const snapshot = gradePartialQuiz(experience.quiz, body.picks);
+    if (!snapshot) return res.status(202).json({ queued: false });
+    const partialGraded: GradedQuiz = { ...snapshot, meta: { ...snapshot.meta, ...(body.startedAt ? { startedAt: body.startedAt } : {}) } };
+    const queued = schedulePartial(partialKey, async () => sendLessonResult({ lessonId, roundKey: roundKeyOf(who, "quiz-partial", body.roundId), learner: await nameOf(), ...attribution, graded: partialGraded }));
+    return res.status(202).json({ queued, partial: true });
+  }
   let graded: GradedTasks | GradedQuiz;
   if (body.kind === "tasks") {
     if (!Object.values(body.answers).some(a => a.trim())) return res.status(202).json({ queued: false });
@@ -111,11 +161,13 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
   } else {
     if (!Object.keys(body.picks).length) return res.status(202).json({ queued: false });
     graded = gradeQuiz(experience.quiz, body.picks);
+    // S1b: a végleges eredmény törli a várakozó pillanatképet; ha a „félbehagyva” levél már kiment, a végleges levél ezt jelzi.
+    cancelPartial(partialKey);
+    const [partialRow] = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
+      .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), eq(lessonResultEmails.roundKey, roundKeyOf(who, "quiz-partial", body.roundId))));
+    if (partialRow?.delivered.length) graded = { ...graded, meta: { ...graded.meta, supersedesPartial: true } };
   }
-  // Tanulói profil (S2): a párosított eszköz tanulója (ellenőrzött token). Átfogó review: bejelentkezve is a tanuló naplójába kerül
-  // (mint a régi anyagnál); a levél neve bejelentkezve a fiók neve marad.
-  const paired = body.learner ? await resolveLearner(body.learner).catch(() => null) : null;
-  const who = userId ?? (paired ? `learner:${paired.id}` : `guest:${body.fingerprint ?? (clientIpKey(req) || "?")}`);
+  if (body.startedAt) graded = { ...graded, meta: { ...graded.meta, startedAt: body.startedAt } };
   const roundKey = roundKeyOf(who, body.kind, body.roundId);
   // Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény (a levéltől független), utána a szigorítás automatikus lazítása. Nem
   // várjuk meg; a hiba csak napló.

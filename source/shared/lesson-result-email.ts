@@ -11,9 +11,11 @@ const roundId = z.string().regex(/^[a-z0-9-]{4,64}$/);
 const id = z.string().min(1).max(80);
 // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi.
 const learner = z.string().max(120).optional();
+// Spec 2026-11-17-eredmeny-email-kviz (S1b): a kör kezdete (ezredmásodperc) a levél dátumsorához; `partial`: a le nem zárt kvíz pillanatképe.
+const startedAt = z.number().int().positive().optional();
 export const resultRequestSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("tasks"), roundId, answers: z.record(id, z.string().max(4000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional(), learner }).strict(),
-  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional(), learner }).strict(),
+  z.object({ kind: z.literal("tasks"), roundId, answers: z.record(id, z.string().max(4000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional(), learner, startedAt }).strict(),
+  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional(), learner, startedAt, partial: z.boolean().optional() }).strict(),
 ]);
 export type ResultRequest = z.infer<typeof resultRequestSchema>;
 
@@ -36,10 +38,15 @@ export function rubricHash(task: OpenTask): string {
   if (task.requiredOrder?.length) parts.push({ requiredOrder: task.requiredOrder });
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
-export type GradedTasks = { kind: "tasks"; rows: GradedTaskRow[]; summary: ReturnType<typeof scoreSummary> };
+/**
+ * Spec 2026-11-17-eredmeny-email-kviz (S1b): a levél kísérő adatai — a kör kezdete, a félbehagyott kvíz állapota (megválaszolt / összes), és
+ * hogy a végleges levél egy korábbi „félbehagyva” levél helyébe lép-e. A pontozott eredményen utazik (a küldő hívása nem változik).
+ */
+export type ResultMeta = { startedAt?: number; partial?: { answered: number; total: number }; supersedesPartial?: boolean };
+export type GradedTasks = { kind: "tasks"; rows: GradedTaskRow[]; summary: ReturnType<typeof scoreSummary>; meta?: ResultMeta };
 /** Spec 2026-11-17-eredmeny-email-kviz: `rows` a kör MINDEN kérdése (a levél kérdésenkénti listája); a `wrong` a hibás / kihagyott részhalmaz. */
 export type GradedQuizRow = { question: string; picked: string | null; correct: string; ok: boolean };
-export type GradedQuiz = { kind: "quiz"; rows: GradedQuizRow[]; wrong: Array<{ question: string; picked: string | null; correct: string }>; summary: ReturnType<typeof scoreSummary> };
+export type GradedQuiz = { kind: "quiz"; rows: GradedQuizRow[]; wrong: Array<{ question: string; picked: string | null; correct: string }>; summary: ReturnType<typeof scoreSummary>; meta?: ResultMeta };
 
 /** S4b: a pontozó csak a gépi szigorítással (S3c) felvett csoport(ok) hiánya miatt nem adott teljes pontot (JSON-egyezés a `tightened`-del). */
 export function tightenedOnlyMiss(task: OpenTask, answer: string, detState: AnswerScore["state"]): boolean {
@@ -91,6 +98,27 @@ export function gradeQuiz(quiz: readonly QuizItem[], picks: Record<string, numbe
   return { kind: "quiz", rows, wrong, summary: scoreSummary(asked.length - wrong.length, asked.length) };
 }
 
+/**
+ * S1b: a le nem zárt kvíz pillanatképe — csak a MEGVÁLASZOLT kérdések számítanak (a pont és a százalék rájuk vonatkozik); a kör teljes
+ * kérdésszáma a `meta.partial`-ban. Megválaszolt kérdés nélkül `null` (nincs miről levelet küldeni).
+ */
+export function gradePartialQuiz(quiz: readonly QuizItem[], picks: Record<string, number>): GradedQuiz | null {
+  const known = Object.entries(picks).filter(([qid]) => quiz.some(q => q.id === qid));
+  const answered = known.filter(([, pick]) => pick >= 0);
+  if (!answered.length) return null;
+  return { ...gradeQuiz(quiz, Object.fromEntries(answered)), meta: { partial: { answered: answered.length, total: known.length } } };
+}
+
+/** Dátum és idő magyar idő szerint (Europe/Budapest, a nyári időszámítással): „2026. 11. 17. 20:41”. */
+export function formatBudapest(date: Date): string {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Budapest", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .formatToParts(date).map(part => [part.type, part.value]));
+  return `${parts.year}. ${parts.month}. ${parts.day}. ${parts.hour}:${parts.minute}`;
+}
+/** A kliens által küldött körkezdet csak akkor jelenik meg, ha hihető: a beküldés előtti, legfeljebb 400 napos. */
+const plausibleStart = (startedAt: number | undefined, sentAt: Date): Date | null =>
+  startedAt !== undefined && startedAt <= sentAt.getTime() && sentAt.getTime() - startedAt <= 400 * 86_400_000 ? new Date(startedAt) : null;
+
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const MARK = { ok: "✅", partial: "🟡", fail: "❌" } as const;
 
@@ -103,14 +131,18 @@ function quizRowHtml(r: GradedQuizRow): string {
 /** A párosítatlan, be nem jelentkezett tanuló neve az eredménylevélben. */
 export const GUEST_LEARNER = "Vendég tanuló";
 
-export function buildResultEmail(input: { lessonTitle: string; classroom: number; learner: string; learnerFirst?: string; guest?: boolean; url: string; graded: GradedTasks | GradedQuiz }): { subject: string; html: string } {
+export function buildResultEmail(input: { lessonTitle: string; classroom: number; learner: string; learnerFirst?: string; guest?: boolean; url: string; graded: GradedTasks | GradedQuiz; sentAt?: Date }): { subject: string; html: string } {
   const { graded } = input;
-  const part = graded.kind === "tasks" ? "Feladatok" : "Kvíz";
+  const meta = graded.meta ?? {};
+  const sentAt = input.sentAt ?? new Date();
+  const started = plausibleStart(meta.startedAt, sentAt);
+  const part = graded.kind === "tasks" ? "Feladatok" : meta.partial ? `Kvíz (félbehagyva: ${meta.partial.answered} / ${meta.partial.total})` : "Kvíz";
   const s = graded.summary;
   const subject = `[WebSuli eredmény] ${input.learnerFirst ? `${input.learnerFirst} – ` : ""}${input.lessonTitle} — ${part} — ${s.percent}% (${s.label})`.slice(0, 200);
   const head = `<h2>${esc(input.lessonTitle)} — ${part}</h2>
 <p><strong>Tanuló:</strong> ${esc(input.learner)}<br><strong>Évfolyam:</strong> ${input.classroom}. osztály<br>
-<strong>Eredmény:</strong> ${s.points} / ${s.total} pont — ${s.percent}% — ${s.grade} (${esc(s.label)})</p>`;
+<strong>Beküldve:</strong> ${formatBudapest(sentAt)} (magyar idő)${started ? `<br><strong>A kör kezdete:</strong> ${formatBudapest(started)}` : ""}<br>
+${meta.partial ? `<strong>Állapot:</strong> félbehagyva — ${meta.partial.answered} / ${meta.partial.total} kérdésre válaszolt; a pont a megválaszolt kérdésekre vonatkozik.<br>\n` : ""}${meta.supersedesPartial ? "<strong>Állapot:</strong> ez a befejezett kör eredménye — a korábbi, „félbehagyva” jelzésű levél helyébe lép.<br>\n" : ""}<strong>Eredmény:</strong> ${s.points} / ${s.total} pont — ${s.percent}% — ${s.grade} (${esc(s.label)})</p>`;
   const body = graded.kind === "tasks"
     // Spec 2026-11-17-eredmeny-email-kviz: a feladat alatt a mintaválasz; a kvíz MINDEN kérdése a gyerek válaszával és a helyessel.
     ? `<ol>${graded.rows.map(r => `<li><p><strong>${esc(r.q)}</strong></p><p>${MARK[r.state]} ${r.answer ? esc(r.answer) : "<em>(nem válaszolt)</em>"}</p>${r.sample ? `<p><em>Mintaválasz:</em> ${esc(r.sample)}</p>` : ""}</li>`).join("")}</ol>`

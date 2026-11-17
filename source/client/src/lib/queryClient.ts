@@ -71,9 +71,35 @@ class CSRFTokenManager {
   invalidate() {
     this.token = null;
   }
+
+  /** A már lekért token (vagy null) — szinkron, a lap elhagyásakor nincs idő hálózati körre. */
+  peek(): string | null {
+    return this.token;
+  }
 }
 
 const csrfTokenManager = new CSRFTokenManager();
+
+/** Spec 2026-11-17-eredmeny-email-kviz (S1b): a CSRF-token előzetes lekérése, hogy a lap elhagyásakor küldött kérésnek már legyen tokenje. */
+export function warmCsrfToken(): void {
+  void csrfTokenManager.getToken().catch(() => { /* A token nélküli pillanatkép egyszerűen nem megy el. */ });
+}
+
+/**
+ * S1b: írás a lap háttérbe kerülésekor / elhagyásakor — `fetch` + `keepalive` (a `sendBeacon` nem tud CSRF-fejlécet küldeni). Csak a már
+ * gyorsítótárazott tokennel küld; a választ nem várja meg, hibát nem dob. Igaz, ha a kérés elindult.
+ */
+export function sendKeepalive(url: string, data: unknown): boolean {
+  const token = csrfTokenManager.peek();
+  if (!token) return false;
+  try {
+    void fetch(url, {
+      method: "POST", keepalive: true, credentials: "include", body: JSON.stringify(data),
+      headers: { "Content-Type": "application/json", "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), "X-CSRF-Token": token },
+    }).catch(() => { /* Csendes: a végleges beküldés ettől független. */ });
+    return true;
+  } catch { return false; }
+}
 
 // Dev-only request logger — production buildben néma, hogy ne szemetelje
 // tele a konzolt (167 tananyagnál kérésenként 2 sor volt).
