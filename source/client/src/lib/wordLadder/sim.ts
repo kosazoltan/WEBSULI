@@ -1,20 +1,25 @@
 /**
- * Szólétra „Szikla-verseny” — a szimulációs harness játék-oldala (végrehajtás K.6, J2a 3. lépés; terv 6.2).
+ * Szólétra „Szikla-verseny” — a szimulációs harness játék-oldala (végrehajtás K.6, J2a 3. lépés; terv 6.2; olvashatósági
+ * javítás docs/specs/2026-11-17-szoletra-olvashatosag.md).
  *
  * A `createSimGame` a játék tiszta magját (`./core`) és a közös kérdés-ütemezőt (`createQuestionDirector`) köti össze
  * React és three.js nélkül, PONTOSAN úgy, ahogy a lap (`P/WordLadderHuEn.tsx`) teszi:
+ *  - a director presentation-jét a lap is a `paceDirector`-ral burkolja (`./pacing`): az óra az előjelzés
+ *    (`LEAD_IN_MS`) után indul, az ablak a tempó olvasásalapú `ladderWindowMs`-e; előjelzés alatt a fogás hatástalan;
  *  - minden fogás egy kérdés: amint nincs nyitott kérdés és lejárt a megoldás-kijelzés, a játék azonnal kér egyet
  *    (`request("trigger")`, a director `minGapMs`-e szerint) — az első fogás `FIRST_HOLD_MS`-nél;
- *  - a megoldás-kijelzés a közös kérdés-sáv szabálya (`usePlayQuestion`): jó válasz után 900 ms, hibás / lejárt után
- *    2000 ms — ezalatt új fogás nem jelenik meg (a lap a kérést függőben tartja);
- *  - kérdés közben a világ teljes sebességgel fut (`slowMo: 1`, a rivális is mászik);
+ *  - a megoldás-kijelzés a közös kérdés-sáv szabálya: jó válasz után 900 ms, hibás / lejárt után a tempó
+ *    `revealWrongMs`-e — ezalatt új fogás nem jelenik meg;
+ *  - a világ (a rivális) a lap meghajtójával lép: `createFixedLoop` (fix 1/60 s, ≤ 5 lépés / képkocka), nyitott kérdés
+ *    alatt (előjelzéssel együtt) a tempó `slowMo`-jával (K.6 „Közös meghajtó”);
  *  - ha a forrás nem ad tételt (terv 8.1) vagy `questions: false`: szabad fogás `FREE_GRIP_COOLDOWN_MS`-onként, a
  *    játékos ügyességi dobásával (a bot `FREE_TAP_MS` után koppint).
  *
  * A kérdésforrás alapból szintetikus (≥ 200 egyedi tétel, a terv 6.2 változatosság-mérésének feltétele); a teszt
- * tananyag-tételt és saját bankot is adhat (`material`, `bankSize`).
+ * tananyag-tételt, saját bankot (`bank`: valódi tételek az olvasási méréshez) és bankméretet is adhat.
  */
 import { createRng, seedFrom } from "../../../../shared/game-rng";
+import { createFixedLoop } from "../../game-engine/play/loop";
 import {
   bankPlayQuestion,
   createQuestionDirector,
@@ -23,6 +28,7 @@ import {
   type DirectorConfig,
   type QuestionDirector,
 } from "../../game-engine/play/questionDirector";
+import { REVEAL_CORRECT_MS } from "../../game-engine/play/questionUi";
 import { createReviewQueue } from "../../game-engine/play/reviewQueue";
 import { fitsAllViewports } from "../../game-engine/play/promptFit";
 import type { RunStatsSnapshot } from "../../game-engine/play/runStats";
@@ -38,35 +44,51 @@ import {
   drainEvents,
   freeGrab,
   rivalBaseRungPerSec,
-  rivalSecPerRungForLevel,
   step as stepCore,
   type LadderState,
 } from "./core";
+import {
+  DEFAULT_LADDER_TEMPO,
+  LADDER_BASE_WINDOW_MS,
+  armedAt,
+  ladderFreeGripMs,
+  ladderRivalSecPerRung,
+  ladderWallRungs,
+  paceDirector,
+  tempoParams,
+  type LadderTempo,
+} from "./pacing";
 
 export const WORD_LADDER_GAME_ID = "word-ladder-hu-en" as const;
 
-/** A lap director-konfigurációja (végrehajtás J2a 4.: optionCount 4, minGap 1,5 s, maxGap 8 s, 10 / perc, ablak 4,5 s, slowMo 1). */
-export function wordLadderDirectorConfig(grade: number | null): DirectorConfig {
+/**
+ * A lap director-konfigurációja (végrehajtás J2a 4.: optionCount 4, minGap 1,5 s, maxGap 8 s, 10 / perc, ablak 4,5 s).
+ * A `slowMo` a tempóé (olvashatósági javítás B: a kérdés alatt a rivális lassít; „Gyors” = a régi 1). Az ablakot a lap a
+ * `paceDirector`-ral szabja a tempóra — a director saját (≤ 9 mp-es) ablaka csak a közös áramlat-jelhez marad.
+ */
+export function wordLadderDirectorConfig(grade: number | null, tempo: LadderTempo = DEFAULT_LADDER_TEMPO): DirectorConfig {
   return {
     gameId: WORD_LADDER_GAME_ID,
     optionCount: 4,
     minGapMs: 1500,
     maxGapMs: 8000,
     targetPerMin: 10,
-    baseWindowMs: 4500,
-    slowMo: 1,
+    baseWindowMs: LADDER_BASE_WINDOW_MS,
+    slowMo: tempoParams(tempo).slowMo,
     grade,
     warmupMs: FIRST_HOLD_MS,
     // J0c-b (#450): olvasás-tudatos ablak (≤ 9 mp) és a sávban beférő / elolvasható tétel elsőbbsége (a kapaszkodó-
     // feliratokkal együtt: `optionsFit`).
     readingAware: true,
-    promptFits: (quiz) => fitsAllViewports(quiz, { grade, baseWindowMs: 4500 }).ok,
+    promptFits: (quiz) => fitsAllViewports(quiz, { grade, baseWindowMs: LADDER_BASE_WINDOW_MS }).ok,
   };
 }
 
-/** A közös kérdés-sáv megoldás-kijelzése (`GE/play/useQuestionDirector.ts` `REVEAL_CORRECT_MS` / `REVEAL_WRONG_MS`). */
-export const SIM_REVEAL_CORRECT_MS = 900;
-export const SIM_REVEAL_WRONG_MS = 2000;
+/** A közös kérdés-sáv megoldás-kijelzése (`GE/play/questionUi.ts` `REVEAL_CORRECT_MS`; hibásnál a tempóé). */
+export const SIM_REVEAL_CORRECT_MS = REVEAL_CORRECT_MS;
+export function simRevealWrongMs(tempo: LadderTempo): number {
+  return tempoParams(tempo).revealWrongMs;
+}
 /** A bot ennyi idő után koppint a szabad fogásra. */
 export const FREE_TAP_MS = 700;
 
@@ -76,19 +98,36 @@ export type WordLadderSimOptions = {
   seed: number;
   grade: number;
   questions: boolean;
+  /** Tempó (alap: a lapé, NYUGODT). */
+  tempo?: LadderTempo;
   /** A pálya (1–10; alap 6 — a terv 6.2 „középső” pályája): fal-magasság és rivális-tempó. */
   level?: number;
   /** A fal magassága (fok) — felülírja a pályáét. */
   rungs?: number;
   /** Tananyag-tételek (a forrásrend 1. helye, terv J7). */
   material?: readonly FourChoiceQuiz[];
+  /** Valódi bank (pl. a kézi bank + szóbank egy szintje): a szintetikus helyett ebből jönnek az új tételek. */
+  bank?: readonly FourChoiceQuiz[];
   /** A szintetikus bank mérete (alap 600). 0 → üres forrás (terv 8.1: a játék kérdés nélkül fut). */
   bankSize?: number;
 };
 
+export type WordLadderSimQuestion = {
+  id: number;
+  correctOption: number;
+  /** A burkolt (tempó szerinti) ablak; az óra `armedAtMs`-től jár. */
+  windowMs: number;
+  optionCount: number;
+  /** Az olvasó bothoz: a kérdés szövege és a fogások feliratai. */
+  prompt: string;
+  options: readonly string[];
+  /** Előjelzés vége: ettől számít a fogás (és jár az óra). */
+  armedAtMs: number;
+};
+
 export type WordLadderSim = {
   step(dtMs: number, input: { skillRoll: number }): void;
-  question(): { id: number; correctOption: number; windowMs: number; optionCount: number } | null;
+  question(): WordLadderSimQuestion | null;
   answer(id: number, option: number): void;
   done(): boolean;
   won(): boolean;
@@ -100,6 +139,8 @@ export type WordLadderSim = {
   state(): LadderState;
   /** A menet kérdés-kulcsai sorban (változatosság / forrásrend teszt). */
   askedKeys(): readonly string[];
+  /** Előjelzés alatt érkezett (hatástalan) koppintások száma. */
+  earlyTaps(): number;
   director: QuestionDirector;
 };
 
@@ -116,18 +157,23 @@ function syntheticQuiz(n: number): FourChoiceQuiz {
 
 export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
   const { seed, grade, questions } = opts;
-  const bankSize = opts.bankSize ?? 600;
+  const tempo = opts.tempo ?? DEFAULT_LADDER_TEMPO;
+  const config = wordLadderDirectorConfig(grade, tempo);
+  const bank = opts.bank ?? null;
+  const bankSize = bank ? bank.length : opts.bankSize ?? 600;
   const material = opts.material ?? [];
+  const revealWrongMs = simRevealWrongMs(tempo);
+  const freeGripMs = ladderFreeGripMs(FREE_GRIP_COOLDOWN_MS, opts.level ?? 6, grade, tempo);
   let freshCursor = 0;
   let materialCursor = 0;
-  const director = createQuestionDirector({
-    config: wordLadderDirectorConfig(grade),
+  const base = createQuestionDirector({
+    config,
     provider: {
       couponOnly: false,
       material: () => (materialCursor < material.length ? materialPlayQuestion(material[materialCursor++]!) : null),
       fresh: () => {
         if (freshCursor >= bankSize) return null;
-        const q = syntheticQuiz(freshCursor);
+        const q = bank ? bank[freshCursor]! : syntheticQuiz(freshCursor);
         freshCursor += 1;
         return bankPlayQuestion(WORD_LADDER_GAME_ID, q);
       },
@@ -138,23 +184,28 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
     startBand: 0.4,
     now: () => T0,
   });
+  const director = paceDirector(base, { grade: () => grade, tempo: () => tempo });
   const world = createRng(seedFrom(WORD_LADDER_GAME_ID, seed, "world"));
   const level = opts.level ?? 6;
   const state = createLadderState({
-    targetRung: opts.rungs ?? climbTarget(ladderRungsForLevel(level)),
-    baseRungPerSec: rivalBaseRungPerSec(rivalSecPerRungForLevel(level)),
+    targetRung: opts.rungs ?? ladderWallRungs(climbTarget(ladderRungsForLevel(level)), tempo),
+    baseRungPerSec: rivalBaseRungPerSec(ladderRivalSecPerRung(level, grade, tempo)),
   });
+  // A lap meghajtója (K.6): fix lépés, időskála. A sim „valós” órája a `t`; a hurok ebből lép.
+  const loop = createFixedLoop((dt) => stepCore(state, dt, director.intensity(), world));
+  loop.frame(0);
   const asked: string[] = [];
   let t = 0;
   let revealUntil = 0;
   let lastStart: number | null = null;
   let freeAt = Number.POSITIVE_INFINITY;
   let freeTapAt = Number.POSITIVE_INFINITY;
+  let early = 0;
 
   const settle = (o: QuestionOutcome | null) => {
     if (!o || o.result === "aborted") return;
     applyAnswer(state, o.result);
-    revealUntil = t + (o.result === "correct" ? SIM_REVEAL_CORRECT_MS : SIM_REVEAL_WRONG_MS);
+    revealUntil = t + (o.result === "correct" ? SIM_REVEAL_CORRECT_MS : revealWrongMs);
     drainEvents(state);
   };
 
@@ -170,10 +221,10 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
         return;
       }
       // A director a minGap miatt még nem ad kérdést: várunk. Ha a rés letelt és mégsem adott, a forrás üres (8.1).
-      if (lastStart !== null && t - lastStart < wordLadderDirectorConfig(grade).minGapMs) return;
+      if (lastStart !== null && t - lastStart < config.minGapMs) return;
     }
     if (freeAt === Number.POSITIVE_INFINITY) {
-      freeAt = t + (state.climbs === 0 && state.slips === 0 ? 0 : FREE_GRIP_COOLDOWN_MS);
+      freeAt = t + (state.climbs === 0 && state.slips === 0 ? 0 : freeGripMs);
       freeTapAt = freeAt + FREE_TAP_MS;
     }
   };
@@ -184,7 +235,9 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
       t += dtMs;
       const active = director.active();
       if (active && t >= active.startedAtSimMs + active.windowMs) settle(director.expire(t));
-      stepCore(state, dtMs, director.intensity(), world);
+      // A lap: `loop.setTimeScale(open ? slowMo : 1)` — nyitott kérdés (előjelzéssel együtt) alatt lassít.
+      loop.setTimeScale(director.active() ? config.slowMo : 1);
+      loop.frame(t);
       if (state.phase !== "play") {
         director.abort();
         drainEvents(state);
@@ -201,9 +254,25 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
     },
     question() {
       const p = director.active();
-      return p ? { id: p.id, correctOption: p.options.findIndex((o) => o.correct), windowMs: p.windowMs, optionCount: p.options.length } : null;
+      return p
+        ? {
+            id: p.id,
+            correctOption: p.options.findIndex((o) => o.correct),
+            windowMs: p.windowMs,
+            optionCount: p.options.length,
+            prompt: p.question.quiz.prompt,
+            options: p.options.map((o) => o.label),
+            armedAtMs: armedAt(p),
+          }
+        : null;
     },
     answer(id, option) {
+      const p = director.active();
+      // A lap: előjelzés alatt a fogás hatástalan (nem válasz, nem hiba).
+      if (p && p.id === id && t < armedAt(p)) {
+        early += 1;
+        return;
+      }
       settle(director.answer(id, option, t));
       if (state.phase !== "play") director.abort();
     },
@@ -215,6 +284,7 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
     intensity: () => director.intensity(),
     state: () => state,
     askedKeys: () => asked,
+    earlyTaps: () => early,
     director,
   };
 }
