@@ -158,7 +158,7 @@ async function joinRoom(page: Page, code: string, via: "code" | "link", grade = 
 
 /**
  * E2E-ingadozók 3. kör: a valós idejű csatorna (Socket.IO WebSocket-szála, `RT_PATH`) a kontextusban átengedve, de a szerver →
- * kliens irány visszatartható. `hold()` után a szerver üzenetei sorba állnak, `release()` sorrendben továbbítja őket; a kliens →
+ * kliens irány visszatartható. `hold()` után a szerver alkalmazás-üzenetei sorba állnak (a szívverés átmegy), `release()` sorrendben továbbítja őket; a kliens →
  * szerver irány mindig azonnal megy. `upgraded()`: az Engine.IO frissítés („5”) megtörtént, a forgalom a WebSocketen fut.
  */
 async function holdableRt(ctx: BrowserContext) {
@@ -175,7 +175,9 @@ async function holdableRt(ctx: BrowserContext) {
       server.send(m);
     });
     server.onMessage((m) => {
-      if (held) queue.push(() => ws.send(m));
+      // Csak az alkalmazás-üzenetet (Engine.IO „4” = Socket.IO-csomag) tartjuk vissza; a szívverés („2” ping, „3” pong) és a
+      // többi Engine.IO-keret azonnal megy — különben hosszabb visszatartásnál a kliens nem válaszol a pingre, és a gateway bont.
+      if (held && typeof m === "string" && m.startsWith("4")) queue.push(() => ws.send(m));
       else ws.send(m);
     });
   });
@@ -465,8 +467,8 @@ test("PR #476 review (Codex 4591991467): mindkét játékos EGYSZERRE nyomja a V
     gateB.release();
     for (const p of [A.page, B.page]) await expect(p.getByTestId("duel-countdown")).toBeVisible({ timeout: 10_000 });
   } finally {
-    await A.ctx.close();
-    await B.ctx.close();
+    // A két kontextus lezárása párhuzamosan (Sourcery 4603648602: a 6×-os sorozat egy bukása a lezárásban futott ki a keretből).
+    await Promise.all([A.ctx.close(), B.ctx.close()]);
   }
 });
 
