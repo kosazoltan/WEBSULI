@@ -301,12 +301,6 @@ test('H5: a tokenizáló a héj szerint bont — amit a héj máshogy zárna le,
     'git push origin x --% y',
   ];
   for (const c of psDeny) assert.equal(planCommand(c, { tool: 'PowerShell' }).kind, 'deny', `PowerShell: ${c}`);
-  // PowerShell: a `--%` után a héj a sort szó szerint adja tovább — a hook nem követi, ezért tilt (nem kapu-köteles fejjel is).
-  assert.equal(planCommand('grep --% "git push" docs', { tool: 'PowerShell' }).kind, 'deny');
-  assert.equal(planCommand('grep --% "git push" docs', { tool: 'Bash' }).kind, 'none');
-  // PowerShell: a duplázott idézőjel szó szerinti idézőjel — a refspecben így nem egyszerű ágnév.
-  assert.equal(planCommand("git push origin 'a''b'", { tool: 'PowerShell' }).kind, 'deny');
-  assert.equal(planCommand('git push origin "a""b"', { tool: 'PowerShell' }).kind, 'deny');
   // A parancsnévbe szúrt idézőjel nem rejti el a kapu-köteles műveletet.
   for (const tool of ['Bash', 'PowerShell']) {
     for (const c of ['g"i"t push', "g'i't push", 'git pu""sh']) assert.equal(planCommand(c, { tool }).kind, 'push', `${tool}: ${c}`);

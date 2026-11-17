@@ -53,8 +53,8 @@ export function detectGated(raw) {
 }
 
 // PowerShell idézőjel-karakterei (a tipográfiaiak is idézőjelek ott); Bash-ben ezek közönséges karakterek.
-const PS_SQ = new Set(["'", '\u2018', '\u2019', '\u201A', '\u201B']);
-const PS_DQ = new Set(['"', '\u201C', '\u201D', '\u201E']);
+const PS_SQ = new Set(["'", '‘', '’', '‚', '‛']);
+const PS_DQ = new Set(['"', '“', '”', '„']);
 
 /**
  * Egyszerű parancs szavakra bontása a héj (`tool`: Bash | PowerShell) szabályai szerint. `{ ok: false, reason }`, ha a parancs nem
