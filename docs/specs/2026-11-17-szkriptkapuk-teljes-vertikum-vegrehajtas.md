@@ -256,6 +256,14 @@ szeleted-fejezete — a kód ELŐTT egy commitban frissítsd az „Állapot” s
   ingadozó tesztben van („ne reagálj új pushsal” — a push-fegyelem 2. pontja).
 - **Elfogadás:** WHEN egy PR bukó tesztje a listán van THEN a riport ezt a teszt nevével és jegyszámával mondja; a riport
   determinisztikus a rögzített naplókon.
+- **Megvalósítva (2026-11-17, `chore/kapu-ingadozo`):** `scripts/qa/gates/flaky-report.mjs` — `--pr <n> [--attempt <k>]`, a
+  `gh`-hívások korlátos újrapróbálása (legfeljebb 3 kísérlet, 2 s / 5 s várakozás, csak átmeneti hibánál; utána kód 2), a
+  „tartós bukás” (a két legfrissebb main-futásban egymás után) elsőbbsége az „ingadozó” előtt, `known-flaky.json` jegyekkel
+  (#76, #105; a #106 tartós bukás szándékosan nincs rajta).
+- **Javaslat a merge-kapuhoz (a #490 után, egyeztetve):** ha a PR kötelező ellenőrzése piros, a `pre-merge-gate.mjs` hívja a
+  `flaky-report --pr <n> --json`-t, és a FAIL üzenetében kiírja az ítéletet és a teendőt: „ismert ingadozó, a PR nem érinti a
+  fájlt → a bukott job újraindítható (`gh run rerun <id> --failed`)”, illetve „a PR hibája lehet → javítani kell”. A kapu ettől
+  NEM enged át pirosat — csak megmondja a következő lépést, bizonyítékkal (futás-azonosító, számok, jegy).
 
 ### S4 — Játék-szerződés készlet (terv: a terv 6.4 fejezete; a #483–#486 és a J7b összevonása UTÁN adható ki)
 

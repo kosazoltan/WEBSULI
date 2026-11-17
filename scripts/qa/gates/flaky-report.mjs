@@ -5,7 +5,8 @@
 // ismert ingadozó-e („nem a PR hibája”), vagy új bukás. A döntést a gép hozza, nem az ügynök (ma kétszer kézzel kellett: a
 // `word-ladder-play.spec.ts:48`).
 //
-// Használat: node scripts/qa/gates/flaky-report.mjs [--limit 20] [--branch main] [--pr <n>] [--cache <mappa>] [--json]
+// Használat: node scripts/qa/gates/flaky-report.mjs [--limit 20] [--branch main] [--pr <n> [--attempt <k>]] [--cache <mappa>] [--json]
+//   --attempt  a PR-futás adott kísérletéről dönt (alapérték: a legutolsó)
 //   --limit  a vizsgált main-futások száma (befejezettek; minden újraindítási kísérlettel)
 //   --pr     döntés egy PR legutóbbi CI-futásának bukott tesztjeiről
 //   --cache  a letöltött job-naplók gyorsítótára (futás + kísérlet + job szerint változatlan; alapérték: a bizonyíték-tár alatt)
@@ -147,18 +148,38 @@ export function checkKnown(ranking, known) {
 
 // ---- Begyűjtés (gh) ---------------------------------------------------------------------------------------------------------
 
-function ghJson(exec, root, args) {
-  const r = exec('gh', args, { cwd: root, timeoutMs: 120_000 });
-  if (r.code !== 0) throw new Error(`gh ${args.slice(0, 3).join(' ')}: ${redact(r.stderr).split('\n')[0]}`);
+// Átmeneti (hálózati / szerveroldali) gh-hiba: újrapróbálható. A „nem található” és társai nem (az a válasz).
+const TRANSIENT = /timeout|timed out|TLS|handshake|ECONNRESET|ECONNREFUSED|EAI_AGAIN|connection|EOF|temporar|rate limit|HTTP 5\d\d|50[0234]|Bad Gateway|Service Unavailable/i;
+export const RETRY_DELAYS_MS = [2000, 5000];
+
+const sleepSync = (ms) => { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+
+/**
+ * Korlátos újrapróbálás (orkesztrátori kérés 2026-11-17): legfeljebb 3 kísérlet, növekvő várakozással (2 s, 5 s), CSAK átmeneti
+ * hibánál; utána a hívó a 2-es kóddal áll le („nem tudott futni”). `sleep` a tesztben injektálható.
+ */
+export function ghRun(exec, root, args, { timeoutMs = 120_000, sleep = sleepSync, delays = RETRY_DELAYS_MS } = {}) {
+  let r;
+  for (let i = 0; i <= delays.length; i += 1) {
+    r = exec('gh', args, { cwd: root, timeoutMs });
+    if (r.code === 0 || !TRANSIENT.test(`${r.stderr ?? ''}`)) return { ...r, tries: i + 1 };
+    if (i < delays.length) sleep(delays[i]);
+  }
+  return { ...r, tries: delays.length + 1 };
+}
+
+function ghJson(exec, root, args, opts) {
+  const r = ghRun(exec, root, args, opts);
+  if (r.code !== 0) throw new Error(`gh ${args.slice(0, 3).join(' ')} (${r.tries} kísérlet): ${redact(r.stderr).split('\n')[0]}`);
   return JSON.parse(r.stdout || 'null');
 }
 
 /** Egy futás minden kísérlete a bukott (és az E2E job zöld kísérleténél a flaky) tesztekkel. */
-export function collectRun({ exec, root, run, cacheDir }) {
+export function collectRun({ exec, root, run, cacheDir, sleep = sleepSync, delays = RETRY_DELAYS_MS }) {
   const attempts = [];
   const last = Number(run.attempt ?? 1);
   for (let k = 1; k <= last; k += 1) {
-    const v = ghJson(exec, root, ['run', 'view', String(run.databaseId), '--attempt', String(k), '--json', 'conclusion,jobs']);
+    const v = ghJson(exec, root, ['run', 'view', String(run.databaseId), '--attempt', String(k), '--json', 'conclusion,jobs'], { sleep, delays });
     const failed = new Set();
     const flaky = new Set();
     for (const j of v.jobs ?? []) {
@@ -168,8 +189,8 @@ export function collectRun({ exec, root, run, cacheDir }) {
       let log;
       if (cache && existsSync(cache)) log = readFileSync(cache, 'utf8');
       else {
-        const r = exec('gh', ['run', 'view', String(run.databaseId), '--job', String(j.databaseId), '--log'], { cwd: root, timeoutMs: 300_000 });
-        if (r.code !== 0) throw new Error(`gh run view --log ${j.databaseId}: ${redact(r.stderr).split('\n')[0]}`);
+        const r = ghRun(exec, root, ['run', 'view', String(run.databaseId), '--job', String(j.databaseId), '--log'], { timeoutMs: 300_000, sleep, delays });
+        if (r.code !== 0) throw new Error(`gh run view --log ${j.databaseId} (${r.tries} kísérlet): ${redact(r.stderr).split('\n')[0]}`);
         log = r.stdout;
         if (cache) { mkdirSync(cacheDir, { recursive: true }); writeFileSync(cache, log); }
       }
@@ -193,6 +214,7 @@ async function main() {
   const limit = Number(argValue(args, '--limit', '20'));
   const branch = argValue(args, '--branch', 'main');
   const prArg = argValue(args, '--pr');
+  const attemptArg = argValue(args, '--attempt');
   const t0 = Date.now();
   let ctx;
   try { ctx = makeContext({}); } catch (e) { process.stderr.write(`[flaky-report] NEM FUTOTT: ${e.message}\n`); process.exit(2); }
@@ -222,7 +244,10 @@ async function main() {
       if (!prRuns.length) gate.add(`PR #${prArg}`, STATUS.NOT_RUN, `a fejre (${pr.headRefOid.slice(0, 12)}) még nincs befejezett CI-futás`);
       else {
         const pr0 = collectRun({ exec, root, run: prRuns[0], cacheDir });
-        const fin = pr0.attempts[pr0.attempts.length - 1];
+        // --attempt <k>: egy korábbi kísérlet bukásairól dönt (pl. ami bukott, majd az újraindítás zöld lett).
+        const want = attemptArg ? Number(attemptArg) : pr0.attempts.length;
+        const fin = pr0.attempts.find((a) => a.attempt === want);
+        if (!fin) throw new Error(`a ${pr0.id} futásnak nincs ${want}. kísérlete (${pr0.attempts.length} van)`);
         decision = decidePr({ failed: fin.failed, ranking, known, prFiles: (pr.files ?? []).map((f) => f.path) });
         for (const it of decision.items) gate.add(`PR #${prArg}: ${it.id}`.slice(0, 80), it.status === 'ISMERT INGADOZÓ' ? STATUS.PASS : STATUS.FAIL, `${it.status} — ${it.why}`);
         gate.add(`PR #${prArg} ítélet`, decision.verdict === 'a PR hibája lehet' ? STATUS.FAIL : STATUS.PASS, `${decision.verdict} (futás ${pr0.id}, kísérlet ${fin.attempt}, fej ${pr.headRefOid.slice(0, 12)})`);

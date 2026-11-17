@@ -3,7 +3,8 @@
 // node:test „failing tests” szakasz); a 2026-11-17-i main-futás (44067781689) összesítője alapján.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aggregate, checkKnown, cleanLine, collectRun, decidePr, knownEntry, parseJobLog, testFileOf } from './flaky-report.mjs';
+import { readFileSync } from 'node:fs';
+import { aggregate, checkKnown, cleanLine, collectRun, decidePr, ghRun, KNOWN_FILE, knownEntry, parseJobLog, testFileOf } from './flaky-report.mjs';
 
 const P = (s) => `Playwright E2E\tUNKNOWN STEP\t2026-11-17T12:07:04.4291875Z ${s}`;
 const U = (s) => `Unit Tests\tRun unit tests\t2026-11-17T12:07:04.4291875Z ${s}`;
@@ -107,4 +108,30 @@ test('collectRun: minden kísérlet, bukott job + a zöld E2E job naplója (flak
   const r = collectRun({ exec, root: '.', run: { databaseId: 5, headSha: 'abc', createdAt: 'x', attempt: 2 }, cacheDir: null });
   assert.deepEqual(r.attempts.map((x) => [x.attempt, x.conclusion, x.failed, x.flaky]), [[1, 'failure', [JB], [JT]], [2, 'success', [], []]]);
   assert.ok(!calls.some((c) => c.includes('--job 12')), 'a zöld nem-E2E job naplóját nem tölti le');
+});
+
+test('ghRun: átmeneti hibánál legfeljebb 3 kísérlet növekvő várakozással; végleges hibánál (nem található) nincs újrapróba', () => {
+  const waits = [];
+  let n = 0;
+  const flaky = () => { n += 1; return n < 3 ? { code: 1, stdout: '', stderr: 'net/http: TLS handshake timeout' } : { code: 0, stdout: '[]', stderr: '' }; };
+  const ok = ghRun(flaky, '.', ['run', 'list'], { sleep: (ms) => waits.push(ms), delays: [2000, 5000] });
+  assert.equal(ok.code, 0);
+  assert.equal(ok.tries, 3);
+  assert.deepEqual(waits, [2000, 5000]);
+  const down = ghRun(() => ({ code: 1, stdout: '', stderr: 'HTTP 502: Bad Gateway' }), '.', ['x'], { sleep: () => {}, delays: [1, 1] });
+  assert.equal(down.code, 1);
+  assert.equal(down.tries, 3, 'a 3. kísérlet után feladja (a hívó 2-es kóddal áll le)');
+  let calls = 0;
+  const nf = ghRun(() => { calls += 1; return { code: 1, stdout: '', stderr: 'no pull requests found' }; }, '.', ['x'], { sleep: () => {}, delays: [1, 1] });
+  assert.equal(nf.tries, 1);
+  assert.equal(calls, 1);
+});
+
+test('known-flaky.json: érvényes, minden elemnek van jegye, és a tartós bukás (629 block-craft, #106) nincs rajta', () => {
+  const known = JSON.parse(readFileSync(KNOWN_FILE, 'utf8')).tests;
+  assert.ok(known.length > 0);
+  assert.ok(known.every((k) => Number.isInteger(k.ticket) && typeof k.id === 'string'));
+  assert.equal(knownEntry(known, JB), null);
+  assert.ok(knownEntry(known, JT));
+  assert.ok(knownEntry(known, WL.replace('szólétra: a kérdés-sáv', 'bármely cím')));
 });
