@@ -447,19 +447,25 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
       fine.push({ pct, input: a.steadyInput, motion: a.steadyMotion });
     }
   }
-  // Render-szám: ugyanolyan hosszú, ugyanolyan kitérésű tartás kétszer — egyszer álló ujjal (2 esemény), egyszer
-  // 30, kis amplitúdóval rezgő mozgással. A játék mozgása (és vele a HUD / állapot-renderek) mindkettőben azonos, így a
+  // Render-szám: ugyanolyan hosszú, ugyanolyan kitérésű tartás kétszer — egyszer 30, kis amplitúdóval rezgő mozgással,
+  // egyszer álló ujjal (2 esemény). A játék mozgása (és vele a HUD / állapot-renderek) mindkettőben azonos, így a
   // különbség az eseményenkénti render.
+  // E2E-ingadozók 3. kör (kanban #76): a két szakasznak a valós időben is azonos hosszúnak kell lennie. A rezgő szakaszban
+  // minden CDP-érintés megvárja, hogy a lap feldolgozza (szoftveres WebGL-en egy képkocka), az álló szakasz csak 30 × 16 ms-ot
+  // vár — a régi álló szakasz így jóval rövidebb volt (helyben, CI-azonos úton mérve 1,2 s a rezgő 11 s mellett), és a kis
+  // álló darabszám (0–2) egy ~9–30-szoros szorzóval arányosítódott. Egy render többé-kevésbé az álló ablakban a „többletet”
+  // ±9…30-cal tolta el (main CI 44049286407: tárcsa 23 > 6, a korábbi futásokban ugyanott −12 és −6). Most előbb a rezgő
+  // szakasz fut, és az álló legalább ugyanannyi ideig tart (a nyers számok a JOY_RESULT-ban); a küszöb (≤ 6) változatlan.
   const s = await stickGeometry(page);
-  const hold = async (jiggle: boolean): Promise<{ counts: Record<string, number>; ms: number }> => {
+  const hold = async (jiggle: boolean, minMs = 0): Promise<{ counts: Record<string, number>; ms: number }> => {
     await ensurePlaying(page, g);
     const y = s.cy + g.dy * s.r;
     await touch(cdp, "touchStart", s.cx, s.cy);
     await touch(cdp, "touchMove", s.cx + 0.8 * s.r, y);
     const a = await renders(page);
     const t0 = Date.now();
-    for (let i = 1; i <= 30; i++) {
-      if (jiggle) await touch(cdp, "touchMove", s.cx + (i % 2 === 0 ? 0.75 : 0.85) * s.r, y);
+    for (let i = 1; i <= 30 || Date.now() - t0 < minMs; i++) {
+      if (jiggle && i <= 30) await touch(cdp, "touchMove", s.cx + (i % 2 === 0 ? 0.75 : 0.85) * s.r, y);
       await page.waitForTimeout(16);
     }
     const b = await renders(page);
@@ -480,8 +486,8 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
     for (const k of Object.keys(b)) counts[k] = (b[k] ?? 0) - (a[k] ?? 0);
     return { counts, ms };
   };
-  const still = await hold(false);
   const moving = await hold(true);
+  const still = await hold(false, moving.ms);
   const renderDelta: Record<string, number> = {};
   const renderDrag = moving.counts;
   for (const k of Object.keys(moving.counts)) {
@@ -490,7 +496,8 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
   }
   const dragMs = moving.ms;
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
-  return { steps, fine, renderDelta, renderDrag, dragMs, radius: s.r };
+  // A JOY_RESULT-sorban az álló szakasz nyers száma és hossza is látszik (ingadozás-elemzéshez).
+  return { steps, fine, renderDelta, renderDrag, dragMs, renderStill: still.counts, stillMs: still.ms, radius: s.r };
 }
 
 const PAGE_RENDER_KEY: Record<string, string> = {
@@ -536,7 +543,10 @@ function assertAccepted(g: GameSpec, m: Awaited<ReturnType<typeof measureGame>>)
 
 for (const g of GAMES) {
   test(`joystick-reakció: ${g.case.id}`, async ({ page }) => {
-    test.setTimeout(MEASURE ? 240_000 : 180_000);
+    // E2E-ingadozók 3. kör: a javított render-mérés álló szakasza a rezgővel azonos hosszú (a CI-n a rezgő 17,6–22,6 s volt).
+    // Mérve (main CI 44049286407, a Kockavadász nyomkövetés nélküli kísérletei): 134 s és 145 s a javítás ELŐTT; +17,6…22,6 s
+    // → 152–168 s, a 180 s-os keret 84–93%-a. A keret ezért 240 s (a lépések nem lassabbak, csak eggyel több szükséges lépés van).
+    test.setTimeout(MEASURE ? 300_000 : 240_000);
     await startGame(page, g);
     const cpus = MEASURE ? [1, 4, 6] : [1];
     for (const cpu of cpus) {
