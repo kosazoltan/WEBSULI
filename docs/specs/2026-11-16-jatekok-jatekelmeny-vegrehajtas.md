@@ -1053,6 +1053,31 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
   `T/tsunami-mobile.test.ts` régi szerkezet-őrei (kvíz-fázis, `onAnswer`-időzítő, joystick + Sprint, `pickQuiz` hívás-alakja) az új
   szerkezet ugyanilyen szigorú őreire cserélődnek, `SPEC-VÁLTOZÁS 2026-11-17` jelöléssel.
 
+#### J1a döntései — a független review (#483) után, a javító kód előtt (2026-11-17)
+
+- **D-J1a-9 (M1) Húzás a kapu-táblán.** A táblán indított mozdulat a mozdulatlansági küszöb (`TAP_STILL_PX` = 12 px) fölött
+  NEM koppintás: a lap saját mutató-kezelője a mozdulatot a húzás-kezelőnek adja (≥ 30 px vízszintesen sávváltás, felfelé
+  ugrás), válasz nem rögzül. Csak a rövid, mozdulatlan koppintás (és a billentyűs aktiválás) választ. A közös `pointerTap.ts`
+  nem változik.
+- **D-J1a-10 (M2) Kupon mód a közös directorban** (orkesztrátori kijelölés: a Szökőár szelete a gazdája). `couponOnly`
+  mellett a választás sorrendje: (1) a menetben hibázott, esedékes lecke-tétel (a meglévő ≤ 30%-os arány-korláttal), (2) új
+  lecke-tétel, (3) kimerüléskor a menetben LEGRÉGEBBEN feltett lecke-tétel (≥ 2 tételnél nem a közvetlenül előző). A
+  menetek közötti ismétlés kupon módban nincs (csak az aktuális lecke tananyaga). Kupon nélkül a viselkedés változatlan.
+- **D-J1a-11 (M3) Hosszú válasz.** A beférést a tábla VALÓDI belső szélességével becsüljük (`gateLabelFits`, 13–16 px, ≤ 3 sor;
+  a legkeskenyebb, 360 px-es táblára). A director `promptFits`-e ezt is kéri (a beférő tétel előbb), a tananyag-ág is
+  átadja az `accept`-et. Ha mégis nem fér: „lista mód” — a kérdés-sáv `mode="buttons"` teljes szöveggel mutatja a válaszokat
+  (a gomb kulcs-köre a kapu színe + szimbóluma), a táblák nem jelennek meg; a gomb érintése a táblával azonos (azonnali válasz).
+- **D-J1a-12 (K1) Kapu-érkezés.** A kapu távolsága a hátralévő botlással (0,6×) számol, és a kapu-pillanat a futótól a kapuig
+  tart (hosszú ablaknál sem marad akadály a kapu előtt).
+- **D-J1a-13 (K2, orkesztrátori döntés) Tétlen átfutás.** Ha a kérdés megjelenése óta nem volt szándékos bemenet
+  (sávváltás, ugrás, koppintás, billentyű, tárcsa > 0,2), a kapu átfutása a játékban hat (jó kapu: turbó + 12 m; rossz:
+  botlás; a kombó megszakad, pont nem jár), de a nyilvántartásba LEJÁRT válaszként kerül (ismétlési sor, statisztika,
+  `recordRun`, áramlat).
+- **D-J1a-14 (A2) Kegyelmi rés.** Rossz / lejárt kapu után 1,5 mp-ig a rés nem eshet 2 m alá (a botlás olvasás nélkül nem
+  zárja le a menetet).
+- **D-J1a-15 (K4) Fekvő nézet.** A táblák alsó széle nem lóghat a futó vetített feje alá; a megoldás-kijelzés alatt a nem
+  helyes táblák halványak és nem érinthetők.
+
 ### J1b — Mentőöv, Örvény-miniboss, Nagy Hullám főellenfél, szakaszok
 
 1. Állapot-sor commit.
