@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { clientIpKey, clientIpKeyGenerator } from "./lib/client-ip";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
 import { lessonSchema } from "../shared/lesson-schema";
@@ -37,8 +37,9 @@ export const roundKeyOf = (...parts: string[]) => createHash("sha256").update(pa
 
 /**
  * Küldés a címzettlistának; körönként (lecke, fajta, roundKey) egy levél címzettenként. Review #280: a kézbesítés címzettenként
- * nyilvántartott (`delivered`) — a meghiúsult címzett a következő azonos hívással és egy 60 s-os automatikus újrapróbálással pótolódik,
- * a már kézbesített nem kap másodikat. Sosem dob — a hiba a naplóba megy.
+ * nyilvántartott (`delivered`: kézbesítve VAGY éppen küldés alatt — a foglalás a küldés ELŐTT, atomi módosítással történik) — a
+ * meghiúsult címzett a következő azonos hívással és egy 60 s-os automatikus újrapróbálással pótolódik, a már kézbesített (vagy más
+ * hívás által éppen küldött) nem kap másodikat. Sosem dob — a hiba a naplóba megy.
  */
 export async function sendLessonResult(input: { lessonId: string; roundKey: string; learner: string; learnerFirst?: string; learnerId?: string; guest?: boolean; graded: GradedTasks | GradedQuiz }, retry = true): Promise<{ sent: number; duplicate: boolean }> {
   try {
@@ -59,13 +60,25 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
     if (!recipients.length) { logger.warn("[LESSON-RESULT] nincs címzett (ADMIN_EMAILS)"); return { sent: 0, duplicate: false }; }
     const missing = recipients.filter(r => !claim.delivered.includes(r));
     if (!missing.length) return { sent: 0, duplicate: true };
+    // Spec 2026-11-17-eredmeny-email-foglalas: atomi FOGLALÁS a küldés előtt — a címzett csak akkor kerül a `delivered` listába, ha még
+    // nincs benne; a sorzár miatt két egyidejű hívásból pontosan egy kap sort vissza, az küld (nincs dupla levél).
+    const claimed: string[] = [];
+    for (const to of missing) {
+      const got = await db.update(lessonResultEmails).set({ delivered: sql`array_append(${lessonResultEmails.delivered}, ${to})` })
+        .where(and(eq(lessonResultEmails.id, claim.id), sql`NOT (${to} = ANY(${lessonResultEmails.delivered}))`)).returning({ id: lessonResultEmails.id });
+      if (got.length) claimed.push(to);
+    }
+    if (!claimed.length) return { sent: 0, duplicate: true };
     const mail = buildResultEmail({ lessonTitle: lesson.data.title, classroom: lesson.data.classroom, learner: input.learner, learnerFirst: input.learnerFirst, guest: input.guest,
       url: row.htmlFileId ? getMaterialPreviewUrl(row.htmlFileId) : "", graded: input.graded });
-    const results = await Promise.allSettled(missing.map(to => send(mail.subject, mail.html, to)));
-    const ok = missing.filter((_, i) => results[i].status === "fulfilled");
-    if (ok.length) await db.update(lessonResultEmails).set({ delivered: [...new Set([...claim.delivered, ...ok])] }).where(eq(lessonResultEmails.id, claim.id));
-    if (ok.length < missing.length) {
-      logger.warn(`[LESSON-RESULT] ${missing.length - ok.length} címzettnek nem ment el${retry ? " — 60 s múlva újrapróbálja" : ""}.`);
+    const results = await Promise.allSettled(claimed.map(to => send(mail.subject, mail.html, to)));
+    const ok = claimed.filter((_, i) => results[i].status === "fulfilled");
+    // A meghiúsult címzett foglalása felszabadul: a következő azonos hívás vagy az újrapróba pótolja (review #280), levél nem vész el.
+    for (const to of claimed.filter((_, i) => results[i].status === "rejected")) {
+      await db.update(lessonResultEmails).set({ delivered: sql`array_remove(${lessonResultEmails.delivered}, ${to})` }).where(eq(lessonResultEmails.id, claim.id));
+    }
+    if (ok.length < claimed.length) {
+      logger.warn(`[LESSON-RESULT] ${claimed.length - ok.length} címzettnek nem ment el${retry ? " — 60 s múlva újrapróbálja" : ""}.`);
       if (retry) setTimeout(() => { void sendLessonResult(input, false); }, 60_000).unref?.();
     }
     return { sent: ok.length, duplicate: false };

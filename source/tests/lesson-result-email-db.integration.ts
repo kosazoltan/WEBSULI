@@ -111,6 +111,49 @@ test("valódi DB (review #280): a meghiúsult címzett pótolható — a másodi
   setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); });
 });
 
+/* Spec 2026-11-17-eredmeny-email-foglalas: atomi foglalás a küldés ELŐTT — párhuzamos hívásoknál címzettenként egy levél. */
+test("valódi DB: öt EGYIDEJŰ azonos kör címzettenként pontosan egy levelet küld (foglalás a küldés előtt)", async () => {
+  sent.length = 0;
+  setResultSender(async (subject, html, to) => { await new Promise(resolve => setTimeout(resolve, 150)); sent.push({ subject, html, to }); });
+  try {
+    const q = lesson.experience!.quiz;
+    const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+    const roundKey = roundKeyOf("t", "quiz", "round-parallel");
+    const results = await Promise.all(Array.from({ length: 5 }, () => sendLessonResult({ lessonId: "result-published", roundKey, learner: "Vendég tanuló", graded }, false)));
+    assert.deepEqual(sent.map(s => s.to).sort(), ["admin-a@example.test", "admin-b@example.test"], "címzettenként egy levél");
+    assert.equal(results.reduce((sum, r) => sum + r.sent, 0), 2);
+    assert.ok(results.filter(r => r.sent === 0).every(r => r.duplicate), "aki nem küldött, az ismétlődést jelez");
+    const [row] = await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, "result-published"), eq(lessonResultEmails.roundKey, roundKey)));
+    assert.deepEqual([...row.delivered].sort(), ["admin-a@example.test", "admin-b@example.test"], "nincs ismétlődő bejegyzés");
+  } finally { setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); }); }
+});
+
+test("valódi DB: párhuzamos hívásoknál a MEGHIÚSULT címzett foglalása felszabadul — pótolható, a kézbesített nem kap másodikat", async () => {
+  sent.length = 0;
+  let failB = true;
+  setResultSender(async (subject, html, to) => {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (to === "admin-b@example.test" && failB) throw new Error("átmeneti hiba");
+    sent.push({ subject, html, to });
+  });
+  try {
+    const q = lesson.experience!.quiz;
+    const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+    const roundKey = roundKeyOf("t", "quiz", "round-parallel-retry");
+    const call = () => sendLessonResult({ lessonId: "result-published", roundKey, learner: "Vendég tanuló", graded }, false);
+    await Promise.all([call(), call(), call()]);
+    assert.deepEqual(sent.map(s => s.to), ["admin-a@example.test"], "a bukó címzett nem kapott, a másik pontosan egyet");
+    const stored = async () => (await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, "result-published"), eq(lessonResultEmails.roundKey, roundKey))))[0].delivered;
+    assert.deepEqual(await stored(), ["admin-a@example.test"], "a meghiúsult címzett foglalása felszabadult");
+    failB = false;
+    const again = await Promise.all([call(), call(), call()]);
+    assert.equal(again.reduce((sum, r) => sum + r.sent, 0), 1);
+    assert.deepEqual(sent.map(s => s.to), ["admin-a@example.test", "admin-b@example.test"]);
+    assert.deepEqual([...await stored()].sort(), ["admin-a@example.test", "admin-b@example.test"]);
+    assert.deepEqual(await call(), { sent: 0, duplicate: true });
+  } finally { setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); }); }
+});
+
 /* Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény + a szigorítás automatikus lazítása, valódi DB-n és HTTP-n. */
 test("S4b: a feladatkör beküldése feladatonként egy névtelen sort ír; ugyanaz a kör újra nem duplikál; tanulói szöveg nincs", async () => {
   const task = lesson.experience!.tasks[0];
