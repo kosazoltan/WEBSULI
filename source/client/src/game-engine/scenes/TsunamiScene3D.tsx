@@ -40,12 +40,14 @@ export type TsunamiRunnerView = {
   fx: TsunamiFx[];
   /** A sávok közepe a vászon szélességének arányában a futó előtt (a lap a kapu-táblákat ide igazítja). */
   laneScreenX: [number, number, number];
+  /** A futó fejtetejének függőleges helye a vászon magasságának arányában (a lap a táblákat fölé korlátozza, D-J1a-15). */
+  runnerTopY: number;
   /** A „hullám közel” jelzés erőssége (0..1) a lap veszély-keretéhez. */
   danger: number;
 };
 
 export function createRunnerView(): TsunamiRunnerView {
-  return { core: null, alpha: 1, fx: [], laneScreenX: [0.2, 0.5, 0.8], danger: 0 };
+  return { core: null, alpha: 1, fx: [], laneScreenX: [0.2, 0.5, 0.8], runnerTopY: 0.62, danger: 0 };
 }
 
 /** A sávok színe és szimbóluma (a DOM-táblák és a 3D kapuk közös jele — nem csak szín: színtévesztők is). */
@@ -252,7 +254,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const BACK = new THREE.Vector3(0, 0.6, 1);
 const EULER = new THREE.Euler();
 
-function setupRunner({ scene, tier, reducedMotion }: ThreeSceneContext, props: MutableRefObject<TsunamiScene3DProps>, light: boolean): ThreeSceneController {
+function setupRunner({ renderer, scene, tier, reducedMotion }: ThreeSceneContext, props: MutableRefObject<TsunamiScene3DProps>, light: boolean): ThreeSceneController {
   const budget = LOOK_BUDGET[tier];
   const lean = light || tier === "low";
   const particleScale = budget.particleScale * (light ? 0.5 : 1);
@@ -414,12 +416,41 @@ function setupRunner({ scene, tier, reducedMotion }: ThreeSceneContext, props: M
       tmpV.set((l - 1) * LANE_W, 1.2, -9).project(camera);
       out[l] = Math.min(0.97, Math.max(0.03, (tmpV.x + 1) / 2));
     }
+    tmpV.set(0, 1.95, 0).project(camera);
+    view().runnerTopY = Math.min(0.95, Math.max(0.2, (1 - tmpV.y) / 2));
   };
 
   const placeCamera = (rx: number) => {
     camera.position.set(rx * 0.55, 5.2, 8.6);
     camera.lookAt(rx * 0.4, 0.3, -12);
   };
+
+  // K3 (review #483): előfordítás a betöltéskor — a rejtve létrehozott díszlet, a kapu-ív és a még üres akadály-készletek
+  // shaderjei különben az első megjelenéskor (pl. az első kérdés olvasása közben) szinkron fordulnának (hosszú feladat).
+  // Minden egyszer látható, egy fordítás, majd visszaáll; semmit nem dobunk el (C-javaslat: az azonnali dispose GL-hibát ad).
+  {
+    const hidden: THREE.Object3D[] = [];
+    for (const sl of slots) for (const o of sl.objs) if (!o.visible) {
+      o.visible = true;
+      hidden.push(o);
+    }
+    for (const a of arches) {
+      a.group.visible = true;
+      hidden.push(a.group);
+    }
+    const insts = [logs, fencePosts, fenceRails, carBody, carCab, carWheels, shells];
+    for (const m of insts) m.count = 1;
+    try {
+      camera.aspect = 1;
+      camera.updateProjectionMatrix();
+      renderer.compile(scene, camera);
+    } catch {
+      /* a fordítás csak gyorsítás: hibánál az első rajzolás fordít, ahogy eddig */
+    }
+    for (const o of hidden) o.visible = false;
+    for (const sl of slots) showSlot(sl, 0);
+    for (const m of insts) m.count = 0;
+  }
 
   const controller: ThreeSceneController = {
     camera,

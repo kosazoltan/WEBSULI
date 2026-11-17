@@ -52,13 +52,14 @@ export function simBank(seed: number, size = SIM_BANK_SIZE): FourChoiceQuiz[] {
   return out;
 }
 
-function simProvider(seed: number, material: readonly FourChoiceQuiz[]): QuestionProvider {
+function simProvider(seed: number, material: readonly FourChoiceQuiz[], coupon = false): QuestionProvider {
   const bank = simBank(seed);
   const rng = createRng(seedFrom(TSUNAMI_GAME_ID, seed, "simpick"));
   const asked = new Set<string>();
   let matIdx = 0;
   return {
-    couponOnly: false,
+    // Kupon mód (review #483, M2): csak a lecke tananyaga — a kimerülés utáni ismétlést a director adja.
+    couponOnly: coupon,
     material: () => {
       while (matIdx < material.length) {
         const q = material[matIdx++]!;
@@ -102,10 +103,12 @@ export function createSimGame(opts: {
   questions: boolean;
   difficulty?: TsunamiDifficulty;
   material?: readonly FourChoiceQuiz[];
+  /** Kupon (lecke-jutalom) mód: csak a `material` tételei kérdeznek. */
+  coupon?: boolean;
 }): TsunamiSim {
   const director = createQuestionDirector({
     config: tsunamiDirectorConfig(opts.grade),
-    provider: simProvider(opts.seed, opts.material ?? []),
+    provider: simProvider(opts.seed, opts.material ?? [], opts.coupon ?? false),
     review: createReviewQueue(null),
     rng: createRng(seedFrom(TSUNAMI_GAME_ID, opts.seed, "q")),
     startBand: 0.4,
@@ -222,7 +225,10 @@ export function createSimGame(opts: {
       if (lane >= 0) {
         core.input.steer = 0;
         core.input.laneDelta = 0;
-        core.input.laneDelta = lane - core.state().targetLane;
+        const delta = lane - core.state().targetLane;
+        // D-J1a-13: ha már a jó sávban fut, a döntését a tábla megérintésével jelzi (a tétlen átfutás nem számít válasznak).
+        if (delta === 0) d.tapOption(option);
+        else core.input.laneDelta = delta;
       }
     },
     done: () => over(),

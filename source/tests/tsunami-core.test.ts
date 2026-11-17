@@ -350,3 +350,76 @@ test("egy válasz / kérdés (terv 8.4): a kapu-tábla két egyidejű érintés�
   assert.equal(st.answered, 1);
   assert.equal(st.correct, 0);
 });
+
+test("K1 (review #483, D-J1a-12): botlás közben induló kérdésnél is az ablak vége előtt ér a futó a kapuhoz (4,5 / 6 / 9 mp, 0–800 ms botlás)", () => {
+  for (const windowMs of [4500, 6000, 9000]) {
+    for (const stumble of [0, 300, 500, 800]) {
+      const core = freshCore(1);
+      stepFor(core, 31_000, false);
+      (core.state() as Mutable<TsunamiState>).stumbleMs = stumble;
+      const coll0 = core.state().collisions;
+      const g = core.placeGate({ id: 1, windowMs, slowMo: TSUNAMI_SLOW_MO, optionCount: 3 });
+      let worldMs = 0;
+      for (let guard = 0; guard < 100_000 && core.state().distance < g.atDistance; guard++) {
+        core.step(STEP, 0.4);
+        worldMs += STEP;
+      }
+      const realMs = worldMs / TSUNAMI_SLOW_MO;
+      assert.ok(realMs <= windowMs - 100, `ablak ${windowMs}, botlás ${stumble}: érkezés ${realMs.toFixed(0)} ms`);
+      assert.equal(core.state().collisions - coll0, 0, "a kapu előtt nincs akadály (a kapu-pillanat a futótól tart)");
+    }
+  }
+});
+
+test("K2 (D-J1a-13): tétlen átfutás — a játékban hat (jó: turbó + 12 m; rossz: botlás), a kombó megszakad, pont nem jár; bemenet után nem tétlen", () => {
+  const core = freshCore(2);
+  stepFor(core, 31_000);
+  core.placeGate({ id: 1, windowMs: 4500, slowMo: 0.6, optionCount: 3 });
+  assert.equal(core.hadInputSinceGate(), false);
+  const gap0 = core.state().waveGap;
+  const score0 = core.state().score;
+  core.applyIdleCrossing(1); // a futó a középső (1.) sávban, a jó válasz is ott
+  assert.equal(core.state().turboMs, TURBO_MS);
+  assert.ok(core.state().waveGap > gap0);
+  assert.equal(core.state().combo.count, 0);
+  core.applyOutcome({ id: 1, result: "timeout", pickedOption: null, correctOption: 1 });
+  assert.equal(core.state().stumbleMs, 0, "a lejárt kimenet a világban már nem hat újra");
+  assert.equal(core.state().gatesWrong, 0);
+  assert.ok(core.state().score - score0 < 30, "kapu-pont nem jár");
+  core.placeGate({ id: 2, windowMs: 4500, slowMo: 0.6, optionCount: 3 });
+  core.input.laneDelta = 1;
+  core.step(STEP, 0.4);
+  assert.equal(core.hadInputSinceGate(), true, "a sávváltás szándékos bemenet");
+  core.placeGate({ id: 3, windowMs: 4500, slowMo: 0.6, optionCount: 3 });
+  core.markInput();
+  assert.equal(core.hadInputSinceGate(), true, "a koppintás szándékos bemenet");
+});
+
+test("A2 (D-J1a-14): közel nulla résnél a rossz kapu botlása nem zárja le azonnal a menetet (1,5 mp kegyelmi rés)", () => {
+  const core = freshCore(4);
+  stepFor(core, 31_000);
+  (core.state() as Mutable<TsunamiState>).waveGap = 0.5;
+  core.placeGate({ id: 1, windowMs: 4500, slowMo: 0.6, optionCount: 3 });
+  core.applyOutcome({ id: 1, result: "wrong", pickedOption: 0, correctOption: 1 });
+  stepFor(core, 1400);
+  assert.equal(core.running(), true, "a kegyelmi rés alatt a hullám nem ér utol");
+  assert.ok(core.state().waveGap >= 2 - 1e-9);
+});
+
+test("A1: a sáv ↔ opció leképezés a mag és a lap közös függvénye (3 és 2 opció)", async () => {
+  const { optionForLane, laneForOption } = await import("../client/src/lib/tsunami/core");
+  assert.deepEqual([0, 1, 2].map((l) => optionForLane(l, 3)), [0, 1, 2]);
+  assert.deepEqual([0, 1, 2].map((l) => optionForLane(l, 2)), [0, -1, 1]);
+  assert.deepEqual([0, 1].map((o) => laneForOption(o, 2)), [0, 2]);
+  const core = freshCore();
+  assert.deepEqual(core.placeGate({ id: 1, windowMs: 4500, slowMo: 0.6, optionCount: 2 }).laneOptions, [0, -1, 1]);
+});
+
+test("M3 (D-J1a-11): a kapu-tábla beférés-becslése a tábla valódi szélességével számol; a director a beférő tételt kéri előbb", async () => {
+  const { gateLabelFits } = await import("../client/src/lib/tsunami/core");
+  assert.equal(gateLabelFits("labdarúgás, foci"), true);
+  assert.equal(gateLabelFits("Mert a növények fotoszintézissel oxigént termelnek"), false);
+  const c = tsunamiDirectorConfig(5);
+  assert.equal(c.promptFits!({ id: "x", prompt: "Miért fontos az erdő?", options: ["rövid", "más", "Mert a növények fotoszintézissel oxigént termelnek", "x"], correctIndex: 0 }), false);
+  assert.equal(c.promptFits!({ id: "y", prompt: "Mi a fa?", options: ["növény", "állat", "kő", "víz"], correctIndex: 0 }), true);
+});

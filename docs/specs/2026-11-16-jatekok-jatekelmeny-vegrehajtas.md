@@ -1023,7 +1023,7 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
 
 #### J1a döntései (a kód előtt rögzítve, 2026-11-17; a fenti lépések pontosítása, a terv döntéseit nem írják felül)
 
-- **D-J1a-1 Tárcsa a húzás MELLETT (nem helyette).** A 5. lépés „a meglévő joystick helyett” szövege ütközik három közös, a
+- **D-J1a-1 Tárcsa a húzás MELLETT (nem helyette)** — tulajdonos jóváhagyta, 2026-11-17 („Maradjon meg a joystick is.”). A 5. lépés „a meglévő joystick helyett” szövege ütközik három közös, a
   szeletből nem módosítható őrrel (`T/game-touch-controls.test.ts` `<VirtualJoystick` + `shapeJoystick(`, `T/joystick-curve.test.ts`,
   `T/joystick-response.spec.ts` Szökőár-esete: folytonos kitérés → mozgás görbe), amelyeknek a brief szerint zöldnek kell maradniuk.
   Biztonságos alapértelmezés: az elsődleges vezérlés a terv szerinti húzás (≥ 30 px vízszintesen = sávváltás, felfelé = ugrás) és a

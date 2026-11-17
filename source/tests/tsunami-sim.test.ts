@@ -81,6 +81,45 @@ test("J3 — 3–4. évfolyam (SIM_YOUNG): a hosszabb ablak mellett is ≤ 15 mp
   for (const r of runs) assert.ok(r.stats.maxGapSec <= 15, `maxGap ${r.stats.maxGapSec}`);
 });
 
+test("kupon (lecke-jutalom) mód (review #483, M2): 8 és 3 kérdéses leckével sem fogy el a kérdés — J2, J3, visszatérés", () => {
+  for (const size of [8, 3]) {
+    const material = Array.from({ length: size }, (_, i) => ({ id: `lecke-${i}`, prompt: `Lecke kérdés ${i}?`, options: ["a", "b", "c", "d"], correctIndex: i % 4 }));
+    const f = ((o: { seed: number; grade: number; questions: boolean }) => createSimGame({ ...o, material, coupon: true })) as unknown as SimGameFactory;
+    const runs = runSimSeeds(f, SIM_AVERAGE, { gameId: GAME, seconds: 180, grade: 7 });
+    summary(`kupon, ${size} kérdéses lecke`, runs);
+    assert.ok(medianOf(runs.map((r) => r.stats.perMinute)) >= 5, `${size}: kérdés/perc ${medianOf(runs.map((r) => r.stats.perMinute))}`);
+    for (const r of runs) {
+      assert.ok(r.stats.maxGapSec <= 15, `${size}: kérdés nélküli szakasz ${r.stats.maxGapSec}`);
+      assert.ok(r.stats.minGapSec >= 1.5);
+      assert.ok(r.stats.reviewShare <= 0.3 + 1e-9);
+    }
+    assert.ok(medianOf(runs.map((r) => r.stats.reviewReturnWithin6)) >= 0.95, `${size}: visszatérés ${medianOf(runs.map((r) => r.stats.reviewReturnWithin6))}`);
+    const long = runSimSeeds(f, SIM_AVERAGE, { gameId: GAME, seconds: 600, grade: 7 });
+    const noQ = runSimSeeds(factory, SIM_AVERAGE, { gameId: GAME, seconds: 600, grade: 7, questions: false });
+    assert.ok(long.filter((r) => r.won).length >= noQ.filter((r) => r.won).length, `${size}: kupon módban a kérdés nem büntet`);
+  }
+});
+
+test("3–4. évfolyam (SIM_YOUNG) minden nehézségen ≥ 12/20 győzelem (a Matek-precedens; review #483)", () => {
+  for (const difficulty of ["easy", "normal", "hard"] as const) {
+    const f = ((o: { seed: number; grade: number; questions: boolean }) => createSimGame({ ...o, difficulty })) as unknown as SimGameFactory;
+    const runs = runSimSeeds(f, SIM_YOUNG, { gameId: GAME, seconds: 600, grade: 3 });
+    summary(`SIM_YOUNG 3. évf. ${difficulty}`, runs);
+    assert.ok(runs.filter((r) => r.won).length >= 12, `${difficulty}: ${runs.filter((r) => r.won).length}/20`);
+  }
+});
+
+test("tétlen átfutás (D-J1a-13, K2): a semmit nem csináló játékos kérdései a nyilvántartásban lejártak, nem válaszok", () => {
+  // Teljesen tétlen: nem reagál a kérdésre és nem tér ki (az ügyességi dobás sosem sikerül) — semmilyen szándékos bemenet.
+  const idle = { accuracy: 1, reactionMedianMs: 1e9, skill: 1e-6 };
+  const runs = runSimSeeds(factory, idle, { gameId: GAME, seconds: 120, grade: 7 });
+  for (const r of runs) {
+    assert.ok(r.stats.asked >= 2, `kérdések: ${r.stats.asked}`);
+    assert.equal(r.stats.answered, 0, "tétlen játékosnál 0 rögzített válasz");
+    assert.ok(r.stats.timeouts >= r.stats.asked - 1, `lejárt ${r.stats.timeouts} / ${r.stats.asked}`);
+  }
+});
+
 test("J7 — tananyag-elsőbbség: elérhető tananyagnál az első kérdés tananyag, elfogyása után a kézi bank jön", () => {
   const material = [0, 1, 2].map((i) => ({ id: `lecke-${i}`, prompt: `Lecke kérdés ${i}?`, options: ["a", "b", "c", "d"], correctIndex: i % 4 }));
   for (const seed of simSeeds(GAME, 5)) {

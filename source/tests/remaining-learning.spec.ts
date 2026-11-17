@@ -149,6 +149,9 @@ test('tsunami wrong gate: no blocking card, the right gate stays green, "Miért?
  await gate('[data-correct="false"]').first().click();
  await expect(gate('[data-state="wrong"]')).toHaveCount(1);
  expect(await page.locator('[role="dialog"]').count(),'a hibás kapu nem nyit blokkoló kártyát').toBe(0);
+ // A terv 9. csereelve: a hibázott tétel az ismétlési sorba kerül (a közös `websuli.gameReview.v1`, menet közben esedékes).
+ const queued=await page.evaluate(()=>{const raw=localStorage.getItem('websuli.gameReview.v1');if(!raw)return 0;const items=Object.values((JSON.parse(raw) as {items?:Record<string,{wrong?:number;dueInRun?:number|null}>}).items??{});return items.filter(i=>(i.wrong??0)>=1&&i.dueInRun!==null).length;});
+ expect(queued,'a hibázott tétel az ismétlési sorban, menet közben esedékes').toBeGreaterThanOrEqual(1);
  const reveal=()=>page.evaluate(()=>(window as unknown as {__tsReveal:{start:number|null;end:number|null}}).__tsReveal);
  await expect.poll(async()=>(await reveal()).end!==null,{timeout:20000}).toBe(true);
  const r=await reveal();expect(r.end!-r.start!,'a helyes kapu ≥ 1,8 mp-ig zöld').toBeGreaterThanOrEqual(1800);

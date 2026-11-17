@@ -18,6 +18,7 @@ import {
   createGradeQuizSeen,
   difficultyForGrade,
   gradeForGame,
+  isGradeQuizSeen,
   markGradeQuizSeen,
   pickGradeQuiz,
   pickUnseenMaterial,
@@ -57,10 +58,9 @@ import {
   InlineQuestion,
   ResultReview,
   bankPlayQuestion,
-  createPointerTapTracker,
   gradePlayQuestion,
   materialPlayQuestion,
-  pointerTapHandlers,
+  TAP_STILL_PX,
   restoreReviewQuestion,
   usePlayQuestion,
   vocabPlayQuestion,
@@ -91,6 +91,8 @@ import {
   TSUNAMI_GAME_ID,
   TSUNAMI_TUNING,
   createTsunamiDriver,
+  gateLabelFits,
+  laneForOption,
   tsunamiDirectorConfig,
   tuningFor,
   type TsunamiDriver,
@@ -936,13 +938,30 @@ export default function TsunamiEscapeEnglish() {
     return bankPlayQuestion(TSUNAMI_GAME_ID, q, q.subject, grade);
   }, [coupon.active]);
 
+  /** Teszt-kampó (D-J1a-11): a következő kérdés a forrásokban talált leghosszabb válaszokat hordozza. */
+  const forceLongRef = useRef(false);
+  /** A kézi bankok, a tananyag és a betöltött évfolyam-bank három leghosszabb válasza (programmal kikeresve). */
+  const longestAnswerQuiz = (): Quiz => {
+    const all = new Set<string>();
+    for (const pools of Object.values(mergedPoolsRef.current)) for (const tier of [pools.easy, pools.med, pools.hard]) for (const item of tier) for (const o of item.options) all.add(o);
+    for (const m of materialQuizzesRef.current) for (const o of m.options) all.add(o);
+    for (const g of loadedGradeItems()) for (const o of g.options) all.add(o);
+    const top = [...all].sort((a, b) => b.length - a.length || a.localeCompare(b)).slice(0, 3);
+    return { id: "test-long-answers", prompt: "Melyik válasz a leghosszabb a játék kérdései közül? (próba)", options: top, correctIndex: 0, subject: "english" };
+  };
+
   const provider = useMemo<QuestionProvider>(
     () => ({
       // Kupon módban csak a lecke tananyaga kérdez (meglévő szabály, terv 8.6).
       get couponOnly() {
         return rewardQuestionsRef.current.length > 0;
       },
-      material: () => {
+      material: (ctx) => {
+        // Teszt-kampó (mobil mérő hosszú-válasz esete, D-J1a-11): a programmal kikeresett leghosszabb válaszok egy kérdésben.
+        if (forceLongRef.current) {
+          forceLongRef.current = false;
+          return materialPlayQuestion(longestAnswerQuiz(), { subject: "english" });
+        }
         if (rewardQuestionsRef.current.length > 0) {
           const reward = rewardQuestionsRef.current.find((r) => !runSeenRef.current.some((s) => s.id === r.id));
           if (!reward) return null;
@@ -951,7 +970,9 @@ export default function TsunamiEscapeEnglish() {
         }
         const subj = runSubjectRef.current;
         if (subj !== "english" && subj !== "mixed") return null;
-        const material = pickUnseenMaterial(materialQuizzesRef.current, gradeSeenRef.current);
+        // D-J1a-11 (review #483, M3): a director `accept`-je (befér a sávba és a kapu-táblába) — az elfogadott tananyag előbb.
+        const unseen = materialQuizzesRef.current.filter((m) => !isGradeQuizSeen(gradeSeenRef.current, m));
+        const material = (ctx?.accept ? unseen.find((m) => ctx.accept!(m)) : undefined) ?? unseen[0] ?? null;
         if (!material) return null;
         runSeenRef.current.push({ id: material.id, prompt: material.prompt });
         markGradeQuizSeen(gradeSeenRef.current, material);
@@ -1107,7 +1128,6 @@ export default function TsunamiEscapeEnglish() {
   };
   const answerRef = useRef(onAnswer);
   answerRef.current = onAnswer;
-  const gateTaps = useMemo(() => createPointerTapTracker(), []);
 
   // A győzelem a következő pályát oldja fel; a menü azt ajánlja.
   useEffect(() => {
@@ -1253,6 +1273,52 @@ export default function TsunamiEscapeEnglish() {
     if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }, []);
 
+  /**
+   * D-J1a-9 (review #483, M1): a kapu-táblán INDÍTOTT mozdulat. A mozdulatlansági küszöb (`TAP_STILL_PX`) fölött nem koppintás,
+   * hanem húzás: ugyanaz a sávváltás- / ugrás-kezelő kapja, mint a játéktér húzó rétege (válasz nem rögzül). Csak a rövid,
+   * mozdulatlan koppintás választ; billentyűvel (Enter / Szóköz: `click` `detail === 0`) is.
+   */
+  const gateDownRef = useRef(new Map<number, { x: number; y: number; moved: boolean; option: number }>());
+  const gateHandlers = (option: number) => ({
+    onPointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      if (e.button !== undefined && e.button > 0) return;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* a szintetikus esemény nem foglalható le */
+      }
+      gateDownRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY, moved: false, option });
+      swipesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    },
+    onPointerMove: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      const d = gateDownRef.current.get(e.pointerId);
+      if (!d) return;
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > TAP_STILL_PX) d.moved = true;
+      onStagePointerMove(e as unknown as ReactPointerEvent<HTMLDivElement>);
+    },
+    onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      const d = gateDownRef.current.get(e.pointerId);
+      gateDownRef.current.delete(e.pointerId);
+      swipesRef.current.delete(e.pointerId);
+      if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      if (d && !d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) <= TAP_STILL_PX) answerRef.current(d.option);
+    },
+    onPointerCancel: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      gateDownRef.current.delete(e.pointerId);
+      swipesRef.current.delete(e.pointerId);
+    },
+    onLostPointerCapture: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      gateDownRef.current.delete(e.pointerId);
+      swipesRef.current.delete(e.pointerId);
+    },
+    onClick: (e: { detail: number }) => {
+      // Billentyűzet (Enter / Szóköz): `detail === 0`. A mutatós választást a pointerup intézte.
+      if (e.detail === 0) answerRef.current(option);
+    },
+  });
+
   /* ---------------- képkocka-hurok (requestGameFrame): kérdés-óra, sim, rajz ---------------- */
   const stageRef = useRef<HTMLDivElement>(null);
   const shakeRef = useRef<HTMLDivElement>(null);
@@ -1383,7 +1449,11 @@ export default function TsunamiEscapeEnglish() {
       const sr = stage.getBoundingClientRect();
       const cardBottom = card ? card.getBoundingClientRect().bottom - sr.top : 200;
       const { centers, width } = gateLayout(sr.width, viewRef.current.laneScreenX);
-      const top = Math.round(Math.max(cardBottom + 10, sr.height * 0.18));
+      // D-J1a-15 (review #483, K4): a táblák alsó széle ne lógjon a futó vetített feje alá (fekvő nézetben a kártya nő).
+      const gateH = 64;
+      const below = Math.max(cardBottom + 10, sr.height * 0.18);
+      const cap = viewRef.current.runnerTopY * sr.height - gateH - 8;
+      const top = Math.round(Math.max(sr.height * 0.12, Math.min(below, cap)));
       setGateBox((prev) =>
         prev.top === top && prev.width === width && prev.centers[0] === centers[0] && prev.centers[1] === centers[1] && prev.centers[2] === centers[2] ? prev : { top, centers, width },
       );
@@ -1489,6 +1559,7 @@ export default function TsunamiEscapeEnglish() {
           lane: st.lane,
           x: st.x,
           jumps: st.jumps,
+          runnerTopY: viewRef.current.runnerTopY,
           gateAt: st.gates ? st.gates.atDistance : null,
           questionId: p?.id ?? null,
           questionSeconds: p ? p.windowMs / 1000 : null,
@@ -1503,6 +1574,8 @@ export default function TsunamiEscapeEnglish() {
         // `phase: "quiz"` a `question: true` kompatibilis álneve (terv 9.): azonnal nyit egy kérdést.
         if (patch.question || patch.phase === "quiz") {
           if (phaseNowRef.current !== "play") startGame();
+          // `longAnswers: true` (mobil mérő, D-J1a-11): a leghosszabb válaszokkal — a „lista mód” mérésére.
+          if ((patch as { longAnswers?: boolean }).longAnswers) forceLongRef.current = true;
           qRef.current.request("trigger", driverRef.current!.clockMs());
           return;
         }
@@ -1525,18 +1598,22 @@ export default function TsunamiEscapeEnglish() {
   const reveal = q.state.reveal;
   const presTopic = pres ? topicByKeyRef.current.get(pres.question.key) ?? null : null;
   const questionChip = pres ? (pres.question.source === "material" || pres.question.source === "coupon" ? `LECKE · ${quizTopicLabelHu(presTopic, "Tananyag")}` : quizTopicLabelHu(null, TSUNAMI_SUBJECT_META[(pres.question.subject as TsunamiCoreSubject | undefined) ?? runSubjectRef.current]?.label ?? runSubjectMeta.label)) : null;
-  const laneOfOption = (i: number) => i; // 3 opció: bal–közép–jobb (a mag `laneOptions`-ével azonos)
+  // A sáv ↔ opció leképezés a maggal közös (review #483 A1).
+  const laneOfOption = (i: number) => laneForOption(i, pres?.options.length ?? 3);
   const nextGoal = result
     ? result.won
       ? "Következő cél: fuss célba egy nehezebb pályán, vagy szedj össze több kagylót!"
       : `Következő cél: juss el ${Math.min(result.goal, Math.ceil((result.distance + 200) / 100) * 100)} méterig!`
     : "";
 
+  // D-J1a-11 (review #483, M3): ha egy válasz sem fér a kapu-táblába levágás nélkül, „lista mód”: a kérdés-sáv teljes
+  // szöveggel mutatja a válaszokat (a kulcs-kör a kapu színe + szimbóluma), táblák nélkül.
+  const longMode = !!pres && !pres.options.every((o) => gateLabelFits(o.label, gateBox.width - 22));
   const questionBar = (inside: boolean) => (
     <InlineQuestion
       {...q.bind}
       onPick={(i) => answerRef.current(i)}
-      mode="bar"
+      mode={inside && longMode ? "buttons" : "bar"}
       skin="ocean"
       portal={!inside}
       disabled={paused}
@@ -1801,11 +1878,12 @@ export default function TsunamiEscapeEnglish() {
               data-testid="ts-quiz"
               className="ts-gates"
               data-state={reveal ? "reveal" : "open"}
+              data-long={longMode ? "true" : "false"}
               style={{ top: gateBox.top, "--ts-gate-w": `${gateBox.width}px` } as CSSProperties}
               role="group"
               aria-label="Kapuk: fuss át a jó válasz kapuján"
             >
-              {pres.options.map((opt, i) => {
+              {!longMode && pres.options.map((opt, i) => {
                 const lane = laneOfOption(i);
                 const st = reveal ? (i === reveal.correctOptionIndex ? "correct" : i === reveal.pickedOptionIndex ? "wrong" : "dim") : "idle";
                 return (
@@ -1820,7 +1898,7 @@ export default function TsunamiEscapeEnglish() {
                     style={{ left: gateBox.centers[lane], "--ts-lane": TSUNAMI_LANE_COLORS[lane] } as CSSProperties}
                     aria-label={`${["Bal", "Középső", "Jobb"][lane]} kapu: ${opt.label}`}
                     aria-disabled={reveal || paused ? "true" : undefined}
-                    {...pointerTapHandlers(gateTaps, i, () => answerRef.current(i))}
+                    {...gateHandlers(i)}
                     {...correctDataAttrs(opt.correct)}
                   >
                     <span className="ts-gate-sym" aria-hidden="true">
@@ -2001,12 +2079,15 @@ const TSUNAMI_CSS = `
 .ts-gates { position: absolute; left: 0; right: 0; z-index: 35; height: 0; pointer-events: none; }
 /* Mért (Pixel 7, 2,625-ös képpontarány): a pontosan 48 px-es ikongomb 47,9 px-nek mérődik — a kérdés-sáv szünetgombja itt 52 px. */
 .ts-gates .play-question-icon-btn { width: 52px; height: 52px; }
+/* A táblás módban a kérdés-sáv rejtett (billentyűzetre fókuszálható) gombsora a kép fölé kerül, hogy a hosszabb feliratú
+   rejtett gombok doboza se essen a látható kapu-táblákra (fókuszra a közös szabály szerint megjelenik). */
+.ts-gates[data-long="false"] .play-question[data-mode="bar"] .play-question-options:not(:focus-within) { top: auto; bottom: 100%; }
 .ts-gate {
   position: absolute; top: 0; transform: translateX(-50%); width: var(--ts-gate-w, 110px); min-height: 56px; padding: 6px 8px 7px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-align: center;
   border-radius: 16px; border: 3px solid var(--ts-lane); color: #fff; cursor: pointer; pointer-events: auto;
   background: linear-gradient(180deg, #0b2440f2 0%, #06182cf2 100%); box-shadow: 0 8px 20px #0008, 0 0 16px color-mix(in srgb, var(--ts-lane) 45%, transparent);
-  -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none;
+  -webkit-tap-highlight-color: transparent; touch-action: none; user-select: none;
   transition: background-color .12s ease, border-color .12s ease, opacity .15s ease, box-shadow .12s ease;
 }
 .ts-gate[data-here="true"] { box-shadow: 0 8px 20px #0008, 0 0 0 3px #ffffffcc, 0 0 22px var(--ts-lane); }
@@ -2016,14 +2097,32 @@ const TSUNAMI_CSS = `
   background: var(--ts-lane); color: #0f172a; font-size: 15px; font-weight: 900; line-height: 1;
 }
 .ts-gate-sym svg { width: 17px; height: 17px; }
-.ts-gate-label { font-size: 16px; font-weight: 900; line-height: 1.15; overflow-wrap: anywhere; text-shadow: 0 1px 2px #000a;
+.ts-gate-label { font-size: 16px; font-weight: 900; line-height: 1.15; overflow-wrap: break-word; word-break: normal; hyphens: manual; text-shadow: 0 1px 2px #000a;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .ts-gate[data-long="true"] .ts-gate-label { font-size: 13px; }
 .ts-gate[data-state="correct"] { background: #15803d; border-color: #bbf7d0; box-shadow: 0 0 0 2px #052e16, 0 0 28px #4ade80; animation: ts-gate-pop .3s ease-out; }
 .ts-gate[data-state="correct"] .ts-gate-sym { background: #22c55e; color: #fff; }
 .ts-gate[data-state="wrong"] { background: #9a3412; border-color: #fdba74; }
 .ts-gate[data-state="wrong"] .ts-gate-sym { background: #f97316; color: #fff; }
-.ts-gate[data-state="dim"] { opacity: .45; }
+.ts-gate[data-state="dim"] { opacity: .3; pointer-events: none; }
+/* D-J1a-15: a megoldás-kijelzés alatt a táblák nem érinthetők (a válasz eldőlt), a futó és az út jobban látszik. */
+.ts-gates[data-state="reveal"] .ts-gate { pointer-events: none; }
+.ts-gates[data-state="reveal"] .ts-gate[data-state="wrong"] { opacity: .75; }
+/* D-J1a-11: „lista mód” — a kérdés-sáv gombjainak kulcs-köre a kapu színe és szimbóluma (a 3D kapuval párban). */
+.ts-gates[data-long="true"] .play-question-key { font-size: 0; color: #0f172a; box-shadow: none; }
+.ts-gates[data-long="true"] .play-question-key::before { font-size: 15px; font-weight: 900; }
+.ts-gates[data-long="true"] .play-question-option[data-option-index="0"] .play-question-key { background: ${TSUNAMI_LANE_COLORS[0]}; }
+.ts-gates[data-long="true"] .play-question-option[data-option-index="0"] .play-question-key::before { content: "${TSUNAMI_LANE_SYMBOLS[0]}"; }
+.ts-gates[data-long="true"] .play-question[data-count="3"] .play-question-option[data-option-index="1"] .play-question-key { background: ${TSUNAMI_LANE_COLORS[1]}; }
+.ts-gates[data-long="true"] .play-question[data-count="3"] .play-question-option[data-option-index="1"] .play-question-key::before { content: "${TSUNAMI_LANE_SYMBOLS[1]}"; }
+.ts-gates[data-long="true"] .play-question[data-count="3"] .play-question-option[data-option-index="2"] .play-question-key,
+.ts-gates[data-long="true"] .play-question[data-count="2"] .play-question-option[data-option-index="1"] .play-question-key { background: ${TSUNAMI_LANE_COLORS[2]}; }
+.ts-gates[data-long="true"] .play-question[data-count="3"] .play-question-option[data-option-index="2"] .play-question-key::before,
+.ts-gates[data-long="true"] .play-question[data-count="2"] .play-question-option[data-option-index="1"] .play-question-key::before { content: "${TSUNAMI_LANE_SYMBOLS[2]}"; }
+.ts-gates[data-long="true"] .play-question-option[data-state="correct"] .play-question-key,
+.ts-gates[data-long="true"] .play-question-option[data-state="wrong"] .play-question-key { font-size: 15px; color: #fff; }
+.ts-gates[data-long="true"] .play-question-option[data-state="correct"] .play-question-key::before,
+.ts-gates[data-long="true"] .play-question-option[data-state="wrong"] .play-question-key::before { content: none; }
 .ts-hint {
   position: absolute; left: 50%; bottom: calc(max(8px, var(--game-safe-bottom)) + var(--game-action-size) + 20px); transform: translateX(-50%); z-index: 25;
   max-width: calc(100% - 24px); margin: 0; padding: 8px 14px; border-radius: 9999px; pointer-events: none;

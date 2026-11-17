@@ -32,7 +32,12 @@ export const CASE: GameMobileCase = {
    * a táblák a kérdés alatt egy helyben állnak (nem mozgó cél). A `phase: "quiz"` a `question: true` álneve (terv 9.).
    */
   quizScope: '[data-testid="ts-quiz"]',
-  quizForce: { phase: "quiz" },
+  /*
+   * Review #483 (M3, D-J1a-11): a kvíz-állapotú mérés (M2 / M3 / M10) a NEHEZEBB esetet nézi — a forrásokban talált
+   * leghosszabb válaszokkal a kérdés-sáv „lista módban” mutatja a válaszokat; a rövid válaszos táblás módot a
+   * `tsunami-play.spec.ts` méri mindhárom nézetben.
+   */
+  quizForce: { phase: "quiz", longAnswers: true },
   answerWrong: async (page: Page) => {
     await page.waitForFunction(
       () => typeof (window as unknown as GameTestWindow).__websuliGame?.forceState === "function",

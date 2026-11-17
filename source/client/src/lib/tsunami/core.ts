@@ -28,7 +28,7 @@ import { createIntensityDirector, type IntensityDirector } from "@/game-engine/p
 import { createFeel, type Feel } from "@/game-engine/play/feel";
 import { createFixedLoop, SIM_STEP_MS, type FixedLoop } from "@/game-engine/play/loop";
 import type { DirectorConfig } from "@/game-engine/play/questionDirector";
-import { fitsAllViewports } from "@/game-engine/play/promptFit";
+import { estimateLines, fitsAllViewports } from "@/game-engine/play/promptFit";
 import type { QuestionOutcome, QuestionPresentation, QuestionResult } from "@/game-engine/play/types";
 
 import {
@@ -88,6 +88,41 @@ export const NEAR_THREAT_M = 12;
 /** Az első akadálysor helye (m) — 3 mp-nél (terv 5.1: „első akadály 3 mp-nél”). */
 export const FIRST_ROW_SEC = 3;
 export const EVENT_CAP = 48;
+/** A tárcsa ennél nagyobb kitérése szándékos bemenet (D-J1a-13). */
+export const STEER_INPUT_MIN = 0.2;
+/** Kegyelmi rés (D-J1a-14): rossz / lejárt kapu után ennyi ideig a rés nem eshet `GRACE_GAP_M` alá. */
+export const GRACE_MS = 1500;
+export const GRACE_GAP_M = 2;
+
+/**
+ * Sáv ↔ opció leképezés (a mag és a lap közös szabálya, review #483 A1): 3 opció bal–közép–jobb; 2 opció a két szélső sáv
+ * (középen nincs válasz); 1 opció középen. −1 = abban a sávban nincs válasz.
+ */
+export function optionForLane(lane: number, optionCount: number): number {
+  if (optionCount >= 3) return lane;
+  if (optionCount === 2) return lane === 0 ? 0 : lane === 2 ? 1 : -1;
+  return lane === 1 ? 0 : -1;
+}
+
+export function laneForOption(option: number, optionCount: number): number {
+  for (let l = 0; l < 3; l++) if (optionForLane(l, optionCount) === option) return l;
+  return -1;
+}
+
+/**
+ * A kapu-tábla belső szélessége a legkeskenyebb (360 px-es) nézetben: 106 px tábla − 2 × 8 px belső margó − 2 × 3 px keret
+ * (a lap `gateLayout`-ja és `.ts-gate` CSS-e szerint). D-J1a-11, review #483 M3.
+ */
+export const GATE_LABEL_MIN_WIDTH_PX = 84;
+/** A tábla felirata legfeljebb ennyi sor (a CSS line-clamp-je). */
+export const GATE_LABEL_MAX_LINES = 3;
+export const GATE_LABEL_LONG_CHARS = 22;
+
+/** Befér-e a válasz a kapu-táblába levágás nélkül (16 px, hosszú szövegnél 13 px; ≤ 3 sor) a megadott belső szélességen. */
+export function gateLabelFits(label: string, innerWidthPx = GATE_LABEL_MIN_WIDTH_PX): boolean {
+  const font = label.length > GATE_LABEL_LONG_CHARS ? 13 : 16;
+  return estimateLines(label, innerWidthPx, font) <= GATE_LABEL_MAX_LINES;
+}
 
 export type TsunamiTuning = {
   /** Alap futósebesség (m/s). */
@@ -132,7 +167,8 @@ export function tsunamiDirectorConfig(grade: number | null): DirectorConfig {
     grade,
     // J0c-b (#450): az ablak a gyerek becsült olvasási idejéhez igazodik (≤ 9 mp), és a forrás előbb a sávba beférő tételt adja.
     readingAware: true,
-    promptFits: (quiz) => fitsAllViewports(quiz, { grade, baseWindowMs }).ok,
+    // D-J1a-11 (review #483, M3): a sávba ÉS a kapu-táblába (valódi, legkeskenyebb szélesség) is beférő tétel előbb.
+    promptFits: (quiz) => fitsAllViewports(quiz, { grade, baseWindowMs }).ok && quiz.options.every((o) => gateLabelFits(o)),
   };
 }
 
@@ -149,6 +185,10 @@ export type Gate = {
   /** Kimenet után: a helyes és a választott sáv (−1, ha nincs). */
   correctLane: number;
   pickedLane: number;
+  /** A szándékos-bemenet számláló a kapu lerakásakor (D-J1a-13). */
+  inputSeqAtPlace: number;
+  /** Tétlen átfutással dőlt el (a játékbeli hatás már megtörtént). */
+  idle: boolean;
 };
 
 export type TsunamiInput = {
@@ -238,6 +278,15 @@ export type TsunamiCore = {
   drainEvents(cb: (e: TsunamiEvent) => void): void;
   /** Kérdés-pihenő kéréshez: van-e akadály a futó előtt `m` méteren belül a sávjában. */
   threatAhead(m: number): boolean;
+  /** Szándékos bemenet (pl. koppintás a táblán) — D-J1a-13. */
+  markInput(): void;
+  /** Volt-e szándékos bemenet a nyitott kapu lerakása óta. */
+  hadInputSinceGate(): boolean;
+  /**
+   * Tétlen átfutás (D-J1a-13): a kapu játékbeli hatása a sáv szerint (jó: turbó + 12 m; rossz: botlás, kegyelmi rés), a kombó
+   * megszakad, pont nem jár; a kapu „tétlen” jelölést kap, így a kérdés lejárt kimenete a világban már nem hat újra.
+   */
+  applyIdleCrossing(correctOption: number): void;
 };
 
 const clamp = (min: number, v: number, max: number): number => (v < min ? min : v > max ? max : v);
@@ -282,7 +331,12 @@ export function createTsunamiCore(opts: { seed: number | string; tuning: Tsunami
     shellRows: 0,
     jumps: 0,
   };
-  const gate: Gate = { presentationId: -1, atDistance: 0, laneOptions: [0, 1, 2], resolved: false, correctLane: -1, pickedLane: -1 };
+  const gate: Gate = { presentationId: -1, atDistance: 0, laneOptions: [0, 1, 2], resolved: false, correctLane: -1, pickedLane: -1, inputSeqAtPlace: 0, idle: false };
+  /** Szándékos bemenetek számlálója (D-J1a-13): sávváltás, ugrás, koppintás, tárcsa-elmozdulás. */
+  let inputSeq = 0;
+  let steerCounted = false;
+  /** Kegyelmi rés (D-J1a-14): rossz / lejárt kapu után ennyi ideig a rés nem eshet GRACE_GAP_M alá. */
+  let graceMs = 0;
   let gatePoints = 0;
   let shellPoints = 0;
   let jumpBuffer = 0;
@@ -334,12 +388,17 @@ export function createTsunamiCore(opts: { seed: number | string; tuning: Tsunami
 
       // --- oldalirány: húzás (sávváltás) vagy analóg tárcsa (sávsegéddel) ---
       if (input.laneDelta !== 0) {
+        inputSeq += 1;
         const before = st.targetLane;
         st.targetLane = clamp(0, st.targetLane + clamp(-2, Math.round(input.laneDelta), 2), 2) as Lane;
         input.laneDelta = 0;
         if (st.targetLane !== before) emit("laneChange", st.targetLane, st.distance);
       }
       const steer = Number.isFinite(input.steer) ? clamp(-1, input.steer, 1) : 0;
+      if (Math.abs(steer) > STEER_INPUT_MIN) {
+        if (!steerCounted) inputSeq += 1;
+        steerCounted = true;
+      } else steerCounted = false;
       if (Math.abs(steer) > 0.001) {
         st.x = clamp(-1, st.x + steer * STEER_SPEED * dt, 1);
         st.targetLane = laneOf(st.x);
@@ -353,6 +412,7 @@ export function createTsunamiCore(opts: { seed: number | string; tuning: Tsunami
 
       // --- ugrás (puffer a földet érésig) ---
       if (input.jump) {
+        inputSeq += 1;
         input.jump = false;
         if (st.y <= 0 && st.vy <= 0) {
           st.vy = JUMP_V;
@@ -395,6 +455,10 @@ export function createTsunamiCore(opts: { seed: number | string; tuning: Tsunami
       const speedTerm = tutorial ? Math.max(0, st.speed - tuning.speed) : st.speed - tuning.speed;
       st.waveGap = Math.min(tuning.gapMax, st.waveGap + speedTerm * dt - tempo * dt);
       if (tutorial) st.waveGap = Math.max(TUTORIAL_GAP_FLOOR, st.waveGap);
+      if (graceMs > 0) {
+        graceMs = Math.max(0, graceMs - dtMs);
+        st.waveGap = Math.max(GRACE_GAP_M, st.waveGap);
+      }
       const stage = clamp(0, Math.floor((4 * st.distance) / tuning.levelDistance), 3) as 0 | 1 | 2 | 3;
       st.stage = stage;
 
@@ -480,17 +544,21 @@ export function createTsunamiCore(opts: { seed: number | string; tuning: Tsunami
       const arriveSec = Math.max(1.2, (p.windowMs - GATE_LEAD_MS) / 1000);
       const slow = clamp(0.35, p.slowMo, 1);
       gate.presentationId = p.id;
-      gate.atDistance = st.distance + tuning.speed * slow * arriveSec;
+      // D-J1a-12 (review #483, K1): a hátralévő botlás alatt a futó lassabban halad — a kapu ennyivel közelebb kerül, így a
+      // botlás közben induló kérdésnél is az ablak vége előtt ér oda.
+      const worldSec = slow * arriveSec;
+      const stumbleSec = Math.min(worldSec, st.stumbleMs / 1000);
+      gate.atDistance = st.distance + tuning.speed * (stumbleSec * STUMBLE_FACTOR + (worldSec - stumbleSec));
+      gate.inputSeqAtPlace = inputSeq;
+      gate.idle = false;
       const n = clamp(1, Math.floor(p.optionCount), 3);
-      // 3 opció: bal–közép–jobb; 2 opció: a két szélső sáv (középen nincs válasz); 1 opció: középen.
-      gate.laneOptions[0] = n === 3 ? 0 : n === 2 ? 0 : -1;
-      gate.laneOptions[1] = n === 3 ? 1 : n === 2 ? -1 : 0;
-      gate.laneOptions[2] = n === 3 ? 2 : n === 2 ? 1 : -1;
+      for (let l = 0; l < 3; l++) gate.laneOptions[l] = optionForLane(l, n);
       gate.resolved = false;
       gate.correctLane = -1;
       gate.pickedLane = -1;
       st.gates = gate;
-      blocked.from = gate.atDistance - tuning.speed * GATE_CLEAR_SEC;
+      // A kapu-pillanat a futótól (legfeljebb a kapu előtti 4 mp-től) a kapuig tart: hosszú ablaknál sem marad akadály előtte.
+      blocked.from = Math.min(st.distance - 1, gate.atDistance - tuning.speed * GATE_CLEAR_SEC);
       blocked.to = gate.atDistance + GATE_CLEAR_AFTER_M;
       clearRange(pools, blocked, onCleared);
       emit("gatePlaced", 1, gate.atDistance, n);
@@ -523,6 +591,12 @@ export function createTsunamiCore(opts: { seed: number | string; tuning: Tsunami
         // Ha a futó már a kapun van (átlépéssel döntött), a kapu mögötte marad: a következő lépés kiveszi.
         if (st.distance >= g.atDistance) st.gates = null;
       }
+      if (own && g && g.idle) {
+        // D-J1a-13: a tétlen átfutás játékbeli hatása már megtörtént (`applyIdleCrossing`); itt csak a kapu dőlt el.
+        g.idle = false;
+        recomputeScore();
+        return;
+      }
       if (o.result === "correct") {
         st.combo = comboCorrect(st.combo);
         st.gatesCorrect += 1;
@@ -536,6 +610,7 @@ export function createTsunamiCore(opts: { seed: number | string; tuning: Tsunami
         st.gatesWrong += 1;
         st.stumbleMs = STUMBLE_MS;
         st.turboMs = 0;
+        graceMs = GRACE_MS;
         emit("gateWrong", own && g ? g.correctLane : -1, st.distance, own && g ? g.pickedLane : -1, o.result);
       }
       recomputeScore();
@@ -548,6 +623,28 @@ export function createTsunamiCore(opts: { seed: number | string; tuning: Tsunami
       const n = evCount;
       evCount = 0;
       for (let k = 0; k < n; k++) cb(events[k]!);
+    },
+    markInput() {
+      inputSeq += 1;
+    },
+    hadInputSinceGate: () => !!st.gates && inputSeq > st.gates.inputSeqAtPlace,
+    applyIdleCrossing(correctOption) {
+      const g = st.gates;
+      if (!g) return;
+      const lane = st.lane;
+      const good = g.laneOptions[lane] === correctOption;
+      g.idle = true;
+      st.combo = comboBreak(st.combo);
+      if (good) {
+        st.turboMs = TURBO_MS;
+        st.stumbleMs = 0;
+        st.waveGap = Math.min(tuning.gapMax, st.waveGap + GOOD_GATE_GAP_GAIN);
+      } else {
+        st.stumbleMs = STUMBLE_MS;
+        st.turboMs = 0;
+        graceMs = GRACE_MS;
+      }
+      emit(good ? "gateCorrect" : "gateWrong", g.laneOptions.indexOf(correctOption), st.distance, good ? 1 : lane, "idle");
     },
     threatAhead(m) {
       for (let k = 0; k < pools.obstacles.length; k++) {
@@ -617,7 +714,13 @@ export function createTsunamiDriver(opts: {
       const g = core.state().gates;
       const act = q.active();
       const { optionIndex } = core.resolveGate();
-      if (g && act && act.id === g.presentationId && optionIndex >= 0) q.pick(optionIndex, clock);
+      if (g && act && act.id === g.presentationId) {
+        if (!core.hadInputSinceGate()) {
+          // D-J1a-13: tétlen átfutás — a játékban hat, a nyilvántartásba lejártként kerül (a határidőre igazított `pick`).
+          core.applyIdleCrossing(act.options.findIndex((o) => o.correct));
+          q.pick(0, act.startedAtSimMs + act.windowMs);
+        } else if (optionIndex >= 0) q.pick(optionIndex, clock);
+      }
     }
     if (core.state().collisions > before) pace.signal("damage");
     if (core.threatAhead(NEAR_THREAT_M)) pace.signal("nearThreat", dt / 1000);
@@ -660,6 +763,7 @@ export function createTsunamiDriver(opts: {
       const act = q.active();
       const g = core.state().gates;
       if (!act || !g || g.presentationId !== act.id || g.resolved) return null;
+      core.markInput();
       core.steerToOption(optionIndex);
       return q.pick(optionIndex, clock);
     },
