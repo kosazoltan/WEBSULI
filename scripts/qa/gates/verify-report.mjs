@@ -127,7 +127,8 @@ export function extractRefs(md) {
     }
     for (const m of text.matchAll(NPM_RUN)) {
       const name = m[1].replace(/[.,;:!?]+$/, '');
-      if (!PLACEHOLDER.test(name) && name) add({ kind: 'npm-script', ref: `npm run ${name}`, line, name, head: sectionHead });
+      // egybetűs név (`npm run x -- …` egy példa-táblában) helyőrző, nem állítás (korpusz: review-490-kulonbseg 394. sor)
+      if (!PLACEHOLDER.test(name) && name.length > 1) add({ kind: 'npm-script', ref: `npm run ${name}`, line, name, head: sectionHead });
     }
     for (const m of text.matchAll(NODE_SCRIPT)) {
       const p = m[1].replace(/[.,;:]+$/, '');

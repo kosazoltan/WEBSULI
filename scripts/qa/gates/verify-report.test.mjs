@@ -53,7 +53,7 @@ test('B1/a: kódidézet CSAK explicit jelöléssel (→ vagy „idézet:”); he
   const env = fakeEnv();
   assert.deepEqual(st(checkReferences('`scripts/qa/gates/verify-report.mjs:2` → `export function verifyReport`', env)), [['scripts/qa/gates/verify-report.mjs:2', TRUE]]);
   assert.deepEqual(st(checkReferences('`scripts/qa/gates/verify-report.mjs:5` idézet: `const refs = extractRefs(md);`', env)), [['scripts/qa/gates/verify-report.mjs:5', TRUE]]);
-  assert.deepEqual(st(checkReferences('`scripts/qa/gates/verify-report.mjs:1` → `eval(userInput)`', env)), [['scripts/qa/gates/verify-report.mjs:1', FALSE]]);
+  assert.deepEqual(st(checkReferences('`scripts/qa/gates/verify-report.mjs:1` → `runQuery(userInput)`', env)), [['scripts/qa/gates/verify-report.mjs:1', FALSE]]);
   assert.deepEqual(st(checkReferences('`scripts/qa/gates/verify-report.mjs:4` → `return`', env)), [['scripts/qa/gates/verify-report.mjs:4', UNKNOWN]]);
   // a nyíl utáni MÁSIK hivatkozás nem idézet
   assert.deepEqual(st(checkReferences('`scripts/qa/gates/verify-report.mjs:2` → `sim.ts:1`, `:3`', env)).map((x) => x[1]), [TRUE, TRUE]);
@@ -116,6 +116,7 @@ test('B1: npm run írásjellel és toldalékkal; rövid bizonyíték-azonosító
   ].join('\n');
   assert.deepEqual(st(checkReferences(md, env)), [['npm run gate:stage', TRUE], ['npm run gate:stage-et', TRUE], ['29/29 teszt', TRUE], ['a3f9c2d1e4b5', UNKNOWN]]);
   assert.equal(stripFences('a\n~~~\nb\n~~~\nc').join('|'), 'a||||c');
+  assert.deepEqual(extractRefs('| 97 | `npm run x -- "git push"` | példa |'), [], 'egybetűs szkriptnév: helyőrző egy példa-táblában');
 });
 
 // ---- a szándékosan hamisított változatoknak továbbra is bukniuk kell ----

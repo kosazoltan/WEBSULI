@@ -177,6 +177,9 @@ Ezekre a független ellenőr ellenőrzőlistája marad (a kapu célzottan a fels
     (`gates.config.json` → `claims.unknownWarnRatio`).
   - `npm run <név>` (mondatvégi írásjel, `-et` / `-t` toldalék levágva), `node scripts/…`, `commit <hash>`, `PR #n`, „N/M teszt” a
     sorban álló bizonyíték-azonosítóval (rövidített azonosító: egyértelmű előtag).
+- **Mit NEM ellenőriz az S2:** a hivatkozás melletti ÁLLÍTÁS tartalmát (pl. „a 100. sorban SQL-injekció van”) — csak azt, hogy a
+  hivatkozott hely létezik, és explicit idézetnél, hogy a kódrészlet ott áll; a NEM ELLENŐRIZHETŐ hivatkozásokat (más ág, tervezett
+  fájl) — ezek aránya kiíródik; a PR / CI állapotát `gh` nélkül.
 - **`--report` (alügynök-jelentés) gépi blokk:** kötelező mezők (`schema`, `head`, `branch`, `changedFiles`, `commands`, `tests`, `gates`,
   `notRun` — üres lista is megadandó); a blokk feje = a hívó feje; állapot csak `PASS` / `FAIL` / `NOT RUN`; a PASS bizonyítéka a fejre
   szól, 0 kóddal, és a rögzített parancs = az állított (normalizálva; kapu-rekordnál a kapu-parancs); darabszám-állítás csak rögzített
@@ -187,7 +190,7 @@ Ezekre a független ellenőr ellenőrzőlistája marad (a kapu célzottan a fels
 - **Regressziós korpusz (helyi):** `node scripts/qa/gates/verify-report-corpus.mjs --root <scratchpad> [--doc <md>]…` — a valódi
   ellenőri jelentések a scratchpadban maradnak (nyilvános repó); a CI a `verify-report.test.mjs` anonimizált, hibaosztályonkénti
   mintáit futtatja. Mérés 2026-11-17: 13 valódi jelentés + 6 saját doksi → HAMIS 128 → 4; a megmaradt 4 VALÓDI hiba (a #482-es jelentés
-  `upgrades.ts:203-224` stb. sorszámai a fájl egyetlen változatában sem léteztek; az `effectiveStats` a 129. soron van).
+  upgrades.ts-re mutató 203–224-es stb. sorszámai a fájl egyetlen változatában sem léteztek; az `effectiveStats` a 129. soron van).
 - **A #490 után beillesztendő (egy sor a `pre-pr-gate.mjs`-be, a „PR-leírás sablon” lépés után):**
   `await runReferenceStep({ gate, ctx, text: prTexts[0] ?? '', label: 'PR-leírás' });` (import: `./verify-report.mjs`); és a
   `pre-pr-gate` bizonyíték-írása után `linkRecord(ctx.evDir, 'pre-pr-<fej>')` / `'pre-push-<fej>'` (addig a pre-pr rekord láncon kívüli
