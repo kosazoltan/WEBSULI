@@ -637,7 +637,9 @@ for (const viewport of [
           return {
             text: (label as HTMLElement).innerText,
             lines: Math.round(label.getBoundingClientRect().height / parseFloat(getComputedStyle(label).lineHeight)),
-            clipped: label.scrollHeight > label.clientHeight + 1,
+            // Mérve (a bank leghosszabb válaszai és előtagjaik, 3 nézet): levágás nélkül a túlcsordulás 1–2 px (tört
+            // sormagasság), egy levágott sor ~15–16 px — a > 4 px küszöb a kettő között van.
+            clipped: label.scrollHeight - label.clientHeight > 4,
             belowCard: b.top - card.bottom,
             aboveHead: b.bottom - head,
           };

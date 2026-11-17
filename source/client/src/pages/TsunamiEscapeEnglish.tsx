@@ -1729,18 +1729,6 @@ export default function TsunamiEscapeEnglish() {
   // szöveggel mutatja a válaszokat (a kulcs-kör a kapu színe + szimbóluma), táblák nélkül.
   // D-J1a-18: magasságban is — ha a táblák nem férnek a kártya alja és a futó feje közé, szintén lista mód.
   const longMode = !!pres && (!pres.options.every((o) => gateLabelFits(o.label, gateBox.width - 22)) || !gatesFitH);
-  // D-J1a-18 / újra-review #483: a becslés után a VALÓDI kirajzolás dönt — ha egy tábla felirata mégis levágódna (a vastag
-  // betű szélesebb a becsültnél; mérve: 360x640, „sárga banán a polcon”), a kérdés lista módra vált. Stabil: lista módban nincs
-  // tábla, ami visszaválthatna; a következő kérdés / átméretezés újra dönt.
-  useLayoutEffect(() => {
-    if (presId === null || longMode) return;
-    // A sorlevágás (line-clamp) legalább egy egész sort rejt el; a tört sormagasság / árnyék néhány px-es eltérése nem levágás.
-    const clipped = Array.from(gatesRef.current?.querySelectorAll<HTMLElement>(".ts-gate-label") ?? []).some((el) => {
-      const lh = parseFloat(getComputedStyle(el).lineHeight) || 18;
-      return el.scrollHeight - el.clientHeight > lh * 0.5;
-    });
-    if (clipped) setGatesFitH(false);
-  }, [presId, longMode]);
   // D-J1a-17 (ÚK2): „Jó kapu!” felirat a jó kapun bemenet nélkül átfutó gyereknek (a nyilvántartásban „nem válaszolt”).
   const idleGoodShown = !!pres && !!reveal && reveal.pickedOptionIndex === null && idleGoodId === pres.id;
   const questionBar = (inside: boolean) => (
