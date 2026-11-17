@@ -441,11 +441,20 @@ test.describe("véletlen válasz valódi érintéssel", () => {
         while (Number(g.probe().cageAgeMs) < 400) await frame();
         fire("pointerup", mx, my);
         const released = clock();
-        const releaseAge = Number(g.probe().cageAgeMs);
-        const armedAtRelease = String(g.probe().cageArmed);
+        const atRelease = g.probe();
+        const releaseAge = Number(atRelease.cageAgeMs);
+        const armedAtRelease = String(atRelease.cageArmed);
+        // Előfeltétel: a felengedéskor a vadász egy ketrec választerületén áll (a mag `playerInCage` pereme: a vadász
+        // sugarának fele) — enélkül egy elrendezés-változás újra üressé tenné a mérést (a régi változat így volt üres).
+        const margin = 0.075 * 0.5 * unit;
+        const qx = Number(atRelease.playerX) * unit;
+        const qy = Number(atRelease.playerY) * unit;
+        const inCageAtRelease = (JSON.parse(String(atRelease.cageRects)) as number[][]).some(
+          ([x, y, rw, rh]) => qx >= x! - margin && qx <= x! + rw! + margin && qy >= y! - margin && qy <= y! + rh! + margin,
+        );
         while (clock() - released < 1500) await frame();
         const p = g.probe();
-        return { pushMs: released - open, releaseAge, armedAtRelease, answered: p.questionsAnswered, open: p.questionOpen };
+        return { pushMs: released - open, releaseAge, armedAtRelease, inCageAtRelease, answered: p.questionsAnswered, open: p.questionOpen };
       },
       { cx, cy, h: sb.height },
     );
@@ -456,6 +465,7 @@ test.describe("véletlen válasz valódi érintéssel", () => {
     // A mérés előfeltétele (különben nem azt mérte): a felengedés az élesítés előtt volt.
     expect(Number(r.releaseAge), "a tolás a játékidőn < az élesítés (600 ms)").toBeLessThan(600);
     expect(r.armedAtRelease, "a felengedéskor még egy ketrec sem éles").toMatch(/^0+$/);
+    expect(r.inCageAtRelease, `a felengedéskor a vadász egy ketrec területén áll (${JSON.stringify(r)})`).toBe(true);
   });
 
   test("review #485 Ú1: húzás közben nyíló ketrecek — a lent tartott ujj egy ketrecre csúszva sem válaszol; felemelés + új bökés igen", async ({ page }) => {

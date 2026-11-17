@@ -791,9 +791,17 @@ test("review #485 (Vercel): a peremen álló vadász bemenet nélkül, és a nyi
 });
 
 /**
- * Main CI 44095911311 utómunka — a termék lassú képkockánál (a lassú CI-gép / lassú telefon): a meghajtó 250 ms-os
- * képkockákkal (a képkocka-plafon) is ugyanazt adja, mint 60 fps-en. Az élesítés, a megállás és a joystick-szándék a mag
- * játékidejét használja (nincs valós idős `setTimeout` az elfogadásban), ezért a két óra nem csúszhat szét.
+ * Main CI 44095911311 utómunka — a termék lassú képkockánál (a lassú CI-gép / lassú telefon), 60 fps-en és 250 ms-os
+ * képkockákkal. KÉT óra van (a review szerint pontosítva):
+ * - a KÉRDÉS-ÓRA a valós képkocka-időből halad, képkockánként legfeljebb 250 ms-mal (`BrainRotSteal.tsx:977`, a meghajtó
+ *   `clock += dt`); ezen fut a kérdés határideje (`questionUi.ts:125`, `:206`), a 90 mp-es menetóra és a visszaszámláló;
+ * - a JÁTÉKIDŐ (a mag fix lépései) képkockánként legfeljebb 5 lépést fut (`loop.ts:57`); ezen fut az élesítés
+ *   (`CAGE_ARM_MS`), a látható előjelzés (`data-armed`), a megállás, a joystick-szándék és a mozgás.
+ * ~7 fps alatt a kettő szétcsúszik: a játékidő lassabb, így az élesítés valós időben később jön, a döntésre jutó idő a
+ * határidőig rövidebb (4 fps-en ~25–33%; jegy — a közös hurok kérdése).
+ * Amit ez a teszt garantál: lassú képkockánál sem születik véletlen válasz (az élesítés előtti tolásból, a lent tartott
+ * ujj húzásából), és a friss bökés nem nyelődik el (az előjelzés és az elfogadás ugyanazt a játékidőt használja). Amit NEM
+ * garantál: hogy a gyerek döntési ideje lassú eszközön ugyanakkora — az a fenti két óra eltérése miatt rövidebb.
  */
 for (const frameMs of [DT, 250]) {
   test(`lassú képkocka (${Math.round(frameMs)} ms): a kérdés után 400 ms-ig tolt, majd elengedett joystick nem válaszol`, () => {
