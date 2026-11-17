@@ -102,8 +102,9 @@ Módosul:
 - Nincs Docker: a DB-teszt `NOT RUN` (`--strict` → bukás), a kötelező e2e `NOT RUN` → bukás.
 - A friss `origin/main` nincs beolvasztva: az őr-tesztek az összefésült állapoton futnak egy ideiglenes, leválasztott munkafában
   (`node_modules` csomópont-hivatkozással); ütközésnél bukás „olvaszd be a maint” üzenettel.
-- Több parancs egy sorban (`git add … && git commit … && git push`): a hook szakaszonként vizsgál; a `git push` szöveg idézőjelben /
-  `echo`-ban nem számít.
+- Több parancs egy sorban (`git add … && git commit … && git push`): a hook FAIL-CLOSED — kapu-köteles művelet csak önálló,
+  egyszerű parancsként engedett (a #489 bot-leletei után; `docs/minosegkapuk.md`). Önálló, nem futtató eszközben (`echo`, `grep`, `rg`)
+  az idézett „git push” szöveg nem számít; láncolt parancsban vagy futtató eszközben (`bash -c`, `iex` …) DENY.
 - `gh pr merge` szám nélkül: a PR-t az aktuális ágról olvassa a `gh`.
 - Merge-bizonyíték lejárt (> 15 perc) vagy más fejre szól: DENY.
 - Szándékos hibák (ellenpróbák): lint-hiba, bukó egységteszt, hiányzó végrehajtási fájl, nyitott review-szál, hiányzó ítélet — mind

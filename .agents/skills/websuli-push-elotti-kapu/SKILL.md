@@ -42,11 +42,23 @@ tiszta munkafa → `git fetch` → teljes lint kapu (`--full`) → teljes egysé
 
 - `tiszta munkafa FAIL`: commitold (commit-üzenet fájlból: `git commit -F <fájl>`), a nem követett fájlt vedd fel / tedd .gitignore-ba /
   vidd a scratchpadba, és futtasd újra.
-- `git push --all / --mirror`, `git --git-dir … push`: a hook megtagadja — ágonként, `git -C <munkafa> push origin <ág>` alakban.
+- A hook FAIL-CLOSED: a push CSAK önálló, egyszerű parancsként, a munkafa gyökeréből megy át — engedett: `git push`,
+  `git push <remote>`, `git push [-u] <remote> <helyi ág>`, `git push <remote> HEAD`, `git push <remote> HEAD:<aktuális ág>`.
+  Láncolás (`&&`, `;`, `|`), `cd` / `env` / `git -C`, átirányítás, `--force*`, `--all`, `--tags`, `:` / `+` refspec → DENY.
+  Távoli ág törlése: `git push <remote> --delete <ág>` (kapu nélkül; a `:<ág>` alak DENY).
 - `háromfázisú rend FAIL`: hiányzik / későn jött a végrehajtási fájl (C-37) — pusholt ágon a sorrend nem javítható; ezért a legelső
   push ELŐTT kell zöldnek lennie.
 - `friss main … FAIL`: `git merge origin/main`, oldd fel, javítsd a repó-szintű őrt, futtasd újra.
 - Egyéb `FAIL`: javítsd az okot (lásd `websuli-lint-ellenor`), majd újra a kapu. Megkerülni tilos; vészkijárat nincs.
+
+## Push-fegyelem (átmeneti kapu-szabály 5–8.)
+
+1. Main-merge-et CSAK akkor pusholj, ha a PR ütközik a mainnel, vagy ha az orkesztrátor kéri (a csak-merge push is újraindítja
+   az ~1 órás E2E-t; helyben beolvaszthatod a kapuhoz).
+2. Lecserélt (régi) fej CI-bukására ne reagálj új pushsal: előbb a JELENLEGI fej CI-ja és az ismert ingadozók; gyanúnál jelentsd a
+   teszt nevével és a hibaüzenettel, ne módosíts termékkódot találomra.
+3. Push után EGY hosszú figyelő a CI végére, közbenső „még fut” jelentés nélkül.
+4. Zöld CI-jú fejre csak blokkoló lelet javításáért pusholj — mindent egy pushban.
 
 ## Egy-push elv
 

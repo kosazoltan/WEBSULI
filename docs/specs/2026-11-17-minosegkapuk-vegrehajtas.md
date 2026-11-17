@@ -225,6 +225,12 @@ futásidőben, darabokból kell összerakni, hogy a `no-real-emails-guard` ne l�
   (`-XPUT`), W4 (`-e` / `-ec` / `-enc` kódolt parancs → DENY). W5 (idézett `'<ag>'` ref) maradó kockázat a runbookban.
 - **3. visszaellenőrzés (fej `0dcc1afd`, IGEN, FELTÉTELLEL):** X1 (`env -C <dir>` a burkolóban) javítva teszttel; X2, J12, W5
   jegyre / az „Ismert korlátok” közé; J5: a merge-et végző orkesztrátor a helyi `review-<fej>.json`-t nézze.
+- **#489 bot-leletek (Codex P1/P2, Vercel) — a hook FAIL-CLOSED-re cserélve (orkesztrátori döntés):** a megkerülések egyenkénti
+  foltozása helyett a kapu-köteles művelet csak önálló, egyszerű, ismert alakú parancsként engedett (whitelist); minden más DENY.
+  A terv D6/D7 pontját ez szigorítja: a parancs célkönyvtára mindig a hook-bemenet cwd-je (cd / -C / env -C → DENY); a távoli
+  törlés csak `--delete` alakban; a kimenő commit a megnevezett ág feje. Táblázatos teszt: scripts/qa/hooks/check-quality-gates.test.mjs.
+- **Visszaellenőrzés (c5b897d2, IGEN, FELTÉTELLEL):** Z1 (útvonallal megadott gh) javítva; Z2 (önálló echo / grep idézett
+  szövege) a hookban és a spec 5. szakaszában összehangolva; Z3 (más repóban a „websuli” szó → DENY) és J12 jegyre.
 - **Külső (Gemini) ellenőr — külön, második PR:** a tulajdonos 2026-11-17-i kiegészítése (`external-review.mjs`, ellenőrzőlisták,
   skill-menet, figyelmeztető lépés a PR- / merge-kapuban) ebbe a PR-ba nem kerül: a PR már ~3500 soros, és az átadó a munka végén még
   nem készült el. A kapuk úgy készültek, hogy a figyelmeztető lépés egy újabb `gate.step`-pel bővíthető.
