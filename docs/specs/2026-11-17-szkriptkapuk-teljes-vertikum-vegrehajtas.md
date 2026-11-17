@@ -134,6 +134,39 @@ A jelentés végén egy kerített blokk, info-sztringje `json allitasok` (JSON, 
 
 Eredmény: lépésenként PASS / FAIL tábla; kilépési kód 1, ha bármely FAIL; rekord `claims-<a jelentés sha256-ának első 16 jegye>`.
 
+### S2.3b Szabad szöveges hivatkozások (tulajdonosi utasítás 2026-11-17 este — a gépi blokktól függetlenül, MINDEN md-re)
+
+Bemenet: egy jelentés / PR-leírás / zárójelentés (`--report <md>` vagy `--body-file <md>`) + egy fej (`--head <hash|ref>`, alapérték
+a munkafa feje). A szkript kigyűjti és a fejen ellenőrzi:
+
+| Hivatkozás | Ellenőrzés | HAMIS, ha |
+|---|---|---|
+| `fájl:sor`, `fájl:sor-sor` (backtickben vagy anélkül; `source/`-hoz relatív alak is: a `source/` előtag nélküli utat a `source/` alatt is keresi) | `git show <fej>:<fájl>` → létezik, van annyi sora; ha a hivatkozás mellett (ugyanabban a mondatban / sorban) backtickes kódrészlet áll, az a sor(ok) ±3 sorában szó szerint (szóköz-normalizálva) megvan | a fájl nincs a fejen, a sor túl van a fájl végén, vagy a kódrészlet nincs ±3 soron belül |
+| backtickes útvonal (`scripts/qa/x.mjs`, `docs/…md`) | létezik a fejen (fájl vagy könyvtár) | nem létezik |
+| `npm run <név>` | a gyökér VAGY a `source/package.json` `scripts` mezőjében van | egyikben sincs |
+| `node scripts/…` | a fájl létezik a fejen | nem létezik |
+| commit-hash (7–40 jegy, backtickben vagy „commit” szó mellett) | `git cat-file -e <hash>^{commit}` | nem létező commit |
+| `#<szám>` PR / jegy (`PR #n`, `#n` a „PR” / „pull” szó mellett) | `gh pr view <n> --json number,state` (gh nélkül NEM ELLENŐRIZHETŐ) | a PR nem létezik |
+| „N/M teszt”, „N teszt zöld”, „N pass” | ha a sorban `run-<id>` / `pre-push-<fej>` bizonyíték-azonosító áll: a rekord számával egyezik; különben NEM ELLENŐRIZHETŐ | a hivatkozott rekord más számot rögzített |
+
+Kimenet: tételes **IGAZ / HAMIS / NEM ELLENŐRIZHETŐ** lista (a 6.6a konvenció szerint, `--json` is); a HAMIS bukás (kód 1); a
+szkript futásképtelensége kód 2. A NEM ELLENŐRIZHETŐ nem bukás, de a számát a kimenet és a rekord tartalmazza (az orkesztrátor
+látja, mennyi állítás maradt ellenőrizetlen). Kódblokkon (```…```) belüli szöveget nem értelmez hivatkozásként, kivéve a `json
+allitasok` blokkot (azt az S2.3 nézi).
+
+### S2.5 Bekötés a `gate:pr`-ba és a `record-review`-ba (a #490 után egy lépésben ráilleszthető)
+
+A `pre-pr-gate.mjs` és a `lib.mjs` a #490-ben mozog, ezért a bekötés két kis, önálló hunk, amelyet ez a szelet `scripts/qa/gates/`
+alatt EXPORTÁLT függvényként szállít, a hívást pedig a #490 összevonása után egy commitban illesztjük be:
+
+- `verify-report.mjs` exportja: `runReferenceStep({ gate, ctx, text, label })` — egy kapu-lépés („hivatkozások: <label>”), HAMIS → FAIL.
+- `pre-pr-gate.mjs` (#490 után): a „PR-leírás sablon” lépés UTÁN egy sor: `await runReferenceStep({ gate, ctx, text: body, label: 'PR-leírás' });`
+  (a `body` ott már be van olvasva).
+- `record-review.mjs` (a #490 nem módosítja — ezért EBBEN a szeletben beköthető): a `buildRecord` előtt a jelentés hivatkozásai a
+  `head`-en; HAMIS hivatkozásnál a rögzítés megtagadva („hamis hivatkozású jelentésből ítélet nem rögzíthető”), a hamis tételek
+  listájával.
+- A #490 utáni illesztést a PR-leírás és a `docs/minosegkapuk.md` „Ismert korlátok” sora rögzíti, a pontos beillesztendő sorral.
+
 ### S2.4 Lépések
 
 1. `evidence-chain.mjs` + teszt (lánc építése, egy rekord átírása → `verifyChain` bukik). Commit; `gate:stage`.
