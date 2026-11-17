@@ -1674,6 +1674,28 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
 6. Tesztek: `T/tornado-storm-path.test.ts` (determinizmus, a pálya a pályaterületen belül), sim (J9 medián 2–5 perc;
    kérdés nélküli módban vereség), spec (fekvő nézet, elágazás és kalibrálás képernyőkép, J11 fps).
 
+#### #84 — a `material-quizzes` tétel valódi tantárgya (a J7b-hez csatolt kiegészítés, külön PR)
+
+**Állapot (#84):** folyamatban – 2026-11-17, ág fix/material-quizzes-subject, munkafa .claude/worktrees/jatek-j7b-84, kanban #84
+(a J7b — `feat/jatek-j7b-tornado-utelagazas` — erre épül; a méret miatt külön, első PR).
+
+1. **Tünet:** a végpont csak `topic`-ot ad, ami a régi Stúdió-exportoknál a lecke CÍME — a J7a óta a Tornado „csak matek” /
+   „csak angol” módja konzervatív, így a címmel exportált valódi matek / angol leckék csak vegyes módban jönnek; a
+   cím-heurisztikának két maradék hamis pozitívja van (üres téma + „Hund magyarul:” → biztos angol; „matek: angol
+   számnevek” → biztos matek).
+2. **Szerver (`S/gameQuizBankService.ts`, `S/routes.ts`):** a `material-quizzes` tétel opcionális `subject` mezőt kap
+   (`quizTopic`-alak): kanonikus tételnél a lecke tantárgya (= a tétel `topic`-ja, `canonical-quiz-bank.ts`); régi
+   exportnál a lecke (a `lessonId`-n vagy az anyagán át, a legfrissebb verzió) tudástérképének tantárgya, egyetlen,
+   `json` nélküli lekérdezéssel; a generátor `english` / `math` / `nature` / `hungarian` témájú régi sorainál a téma;
+   egyébként a mező HIÁNYZIK. A `quiz-bank` végpont (gyorsítótár, lenyomat, bájtazonosság) nem változik; a régi kliensek
+   és a többi játék (Aszteroida) a mezőt figyelmen kívül hagyja.
+3. **Kliens (`L/tornado/questions.ts` `materialSubject`):** a `subject` dönt (angol / matek biztos, más tantárgy
+   bizonytalan); tantárgy nélkül a cím-heurisztika marad, a két hamis pozitív nélkül.
+4. **Tesztek:** DB-integrációs (`T/quiz-bank-scale-db.integration.ts`: a tétel a lecke tantárgyát kapja — anyagon át,
+   `lessonId`-n át, kanonikusan, generátor-témából; tantárgy nélküli régi sor → a mező hiányzik, a route JSON-jában is);
+   kliens (`T/tornado-material-subject.test.ts`: a J7a 22 cím-témája és 15 téma / kérdés esete a `subject`-tel; a két
+   hamis pozitív `T/tornado-math4.test.ts`-ben SPEC-VÁLTOZÁS jelöléssel, szigorúbb elvárással).
+
 ### Elfogadás (J7)
 
 - [ ] J-TH teljesül; a vezetés a kérdés alatt nem áll (spec: `probe().simTime` és a jármű pozíciója változik nyitott kérdésnél).
