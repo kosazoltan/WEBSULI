@@ -89,6 +89,10 @@ test("tananyag-sor tárgya: nyelvi téma és szóbank-szerű kérdés az angol �
   assert.equal(materialSubject("német – időjárás", "Wetter magyarul:"), "english");
   assert.equal(materialSubject("", "Tempête magyarul:"), "english");
   assert.equal(materialSubject("ismeretlen", "Mennyi 2 + 2?"), "math", "ismeretlen téma matek marad");
+  // Review (vercel): a kifejezetten megjelölt matek témát a kérdés szövege nem írja át angolra.
+  assert.equal(materialSubject("matek", "Mi a 7 ellentéte: 7 vagy -7?"), "math");
+  assert.equal(materialSubject("matek", "Hogy mondod magyarul: 3 × 4 = ?"), "math");
+  assert.equal(materialSubject("", "Mi a 7 ellentéte: 7 vagy -7?"), "math", "az „ellentéte:” önmagában nem nyelvi jel");
   const mapped = materialToQuestions(MATERIAL_ROWS, 4);
   assert.deepEqual(mapped.map((q) => q.subject), ["math", "english", "english", "english", "english"]);
 });

@@ -168,8 +168,9 @@ const LANGUAGE_TOPIC = /english|angol|német|francia|olasz|spanyol|vocab|szókin
 
 export function materialSubject(topic: string, prompt: string): Subject {
   if (LANGUAGE_TOPIC.test(topic)) return "english";
-  // A szóbank-szerű kérdés („X magyarul:”) akkor is nyelvi, ha a téma üres.
-  if (/magyarul|ellentéte:/i.test(prompt)) return "english";
+  // A szóbank-szerű kérdés („X magyarul:”) csak AKKOR nyelvi, ha a téma üres: a kifejezetten megjelölt témát
+  // (pl. „matek”) a kérdés szövege nem írhatja felül (review: „ellentéte” matekban is előfordul).
+  if (topic.trim() === "" && /magyarul:/i.test(prompt)) return "english";
   return "math";
 }
 
