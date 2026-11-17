@@ -1227,6 +1227,34 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
   (rossz válasz → „Miért?” → kártya). A terv 9. szakasza szerint ezek „változatlanul zöldek” lettek volna — a `shouldRun`
   forrásőr azonban a megszűnt „quiz” fázist szó szerint kérte.
 
+#### J3a — a független review (#484) utáni döntések (a javítás ELŐTT rögzítve, 2026-11-17)
+
+- **B1 — nincs véletlen válasz.** (1) Élesítés: a Rúna-zár a megnyílása után `RUNE_ARM_MS = 400` ms-ig (a kérdés-órában)
+  semmilyen bemenetre nem válaszol, és ez látszik is (a kövek 0-ról nőnek ki, a rúnagombok halványak / „…”) — KSZ-11. (2) Csak az
+  élesítés UTÁN indult lenyomás választhat (a lenyomás kérdés-órás időbélyege ≥ az élesítés vége; a zár előtt / alatt lenyomott ujj
+  felengedése, a billentyű-ismétlés nem). (3) A bányászó gesztusok (E, Bányász gomb, egér-bányászás, tartás) SOHA nem választanak
+  rúnakövet; a válasz szándékos gesztus: a rúnagomb, a vásznon a rúnakőre (nem az ércre) eső koppintás, vagy az 1–4 billentyű.
+  (4) A kövek az érc körül, a nézésre merőleges síkban, az érc FÖLÖTTI íven állnak (1,35 sugár), nem az érc és a játékos között:
+  az ércre célzott sugár 0%-ban talál követ (a review geometria-szkriptje fixture-ként); a kő találati gömbje a látványhoz
+  igazodik (0,3). A vásznon a kőtalálat csak akkor számít, ha a kő közelebb van a sugár első voxel-találatánál.
+- **Kérdés késleltetett megnyitása nincs (L2):** a megoldás-kijelzés / minGap alatt megérintett érc nem nyit később, előjelzés
+  nélkül kérdést; a gyerek újra megérinti.
+- **H1 — a szimuláció bányászik.** A bot az ércig utat vág (a terep a voxel-világ: a lépésnyinél magasabb oszlopot / fejmagasságú
+  blokkot kibányássza `MINE_MS` szerint), és két játékosmodell fut: „rúnavadász” és „bányászó, nem siető” (a zárak között a menetidő
+  ~50%-ában blokkot bányászik). **Rúnaérc-felfedezés (a terv „legkésőbb 15 mp-en belül elérhető rúnaérc” garanciája bányászás
+  közben):** ha az utolsó kérdés indítása óta `RUNE_REVEAL_GAP_MS = 7000` ms telt el, a következő kibányászott sima blokk helyén
+  rúnaérc bukkan elő (a zsákmány megmarad) — így a bányászó gyerek is a célrés szerint kap kérdést. A küszöbök (J2 ≥ 7 / perc, J3
+  ≤ 15 s) nem lazulnak, minden modellre mérve.
+- **M3:** a zár megnyílása, feloldása, a szünet és a lapváltás mindig elengedi a tartást; nyitott zár alatt a tartás nem indul.
+- **M4:** fekvő nézetben a rúnagombok két oszlopban a képernyő szélein (bal: A–B, jobb: C–D), a jelenet közepe (érc, kövek,
+  célkereszt) szabad; a chipsor a zár alatt rejtett.
+- **M1:** a világ-mesh 16×16-os oszlop-darabokban (chunk) épül; blokkváltozáskor csak az érintett (és a szomszédos peremű)
+  darab épül újra, nem a teljes világ.
+- **M5:** a kérdés nélküli zár ugyanannyit ér, mint a rossz válasz (10 XP, 1 kristály). A kupon-kimerülés közös javítása a #483-ból
+  jön (beolvasztás után kupon-eset a szimulációba).
+- **L1/L3/L5:** a WebGL-leállás alatt a pálya órája áll; a lejárat nem a `setTimeLeft` frissítőjében dönt; kibontott kérdésnél
+  (és szünetben) az 1–4 billentyű sem válaszol.
+
 ### J3b — nappal–éjjel ciklus, sebző mobok, kard, életek
 
 1. Állapot-sor commit.
