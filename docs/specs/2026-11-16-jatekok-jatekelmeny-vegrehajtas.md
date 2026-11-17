@@ -1371,7 +1371,7 @@ függvényeket (feladatgenerátor, időzítés) nézők változatlanok.
 
 ## J5 — Brain Rot Lopás: „Lény-aréna” (J5a, J5b)
 
-**Állapot (J5a):** nem kezdődött · **Állapot (J5b):** nem kezdődött
+**Állapot (J5a):** folyamatban – 2026-11-17, ág feat/jatek-j5a-brainrot-lenyarena, munkafa .claude/worktrees/jatek-j5a, kanban #80 · **Állapot (J5b):** nem kezdődött
 **Függ:** J0c merge (3. hullám). **Elfogadás:** J-BR, J1–J10, J16, M1–M12. Terv: 5.5.
 
 ### Fájlok
