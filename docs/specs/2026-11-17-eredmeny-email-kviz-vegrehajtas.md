@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** folyamatban – 2026-11-17, ág `fix/eredmeny-email-kviz`
+**Állapot:** kész, PR előtt – 2026-11-17, ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).

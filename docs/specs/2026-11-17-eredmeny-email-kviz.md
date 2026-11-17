@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** folyamatban – 2026-11-17, ág `fix/eredmeny-email-kviz`
+**Állapot:** kész, PR előtt – 2026-11-17, ág `fix/eredmeny-email-kviz`
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -96,10 +96,10 @@ egy tartalmaz `mailto:` hivatkozást, a `sendResultEmail` hívását egyik sem (
 4. Egy közös levél a feladatokról és a kvízről: (A — javasolt) marad a két külön levél; (B) napi összesítő.
 
 <!-- acceptance-checklist -->
-- [ ] E1 – minden kérdés megválaszolva → egy beküldés gomb nélkül (böngésző)
-- [ ] E2 – gombnyomás / újratöltés után nincs újabb
-- [ ] E3 – hiányos, le nem zárt kör nem megy el
-- [ ] E4 – a kvíz levele kérdésenként (egységteszt)
-- [ ] E5 – mintaválasz a feladatok levelében
-- [ ] E6 – escape
-- [ ] E7 – a meglévő tesztek változatlanul zöldek
+- [x] E1 – minden kérdés megválaszolva → egy beküldés gomb nélkül (böngésző)
+- [x] E2 – gombnyomás / újratöltés után nincs újabb
+- [x] E3 – hiányos, le nem zárt kör nem megy el
+- [x] E4 – a kvíz levele kérdésenként (egységteszt)
+- [x] E5 – mintaválasz a feladatok levelében
+- [x] E6 – escape
+- [x] E7 – a meglévő tesztek változatlanul zöldek
