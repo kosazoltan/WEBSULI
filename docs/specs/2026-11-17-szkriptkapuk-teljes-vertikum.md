@@ -138,7 +138,7 @@ Forrás: a hét független-ellenőri jelentés (#482–#487, J7b; összesen **14
 | (p) | teljesítmény | 9 | 0 | kódolvasás |
 | (g)(k)(o) | CI-GPU, fölösleges push, telepítés közbeni futás | 0 a jelentésekben | — | a retrókban: (k) C-62, (n) C-61 2 óra piros main, (o) |
 
-A (h) két blokkoló esete, gépi szemmel: **J7b** `source/tests/tornado-sim.test.ts:312` (a `4da8b3b9` commitban):
+A (h) két blokkoló esete, gépi szemmel: **J7b** `source/tests/tornado-sim.test.ts:306` (az `origin/feat/jatek-j7b-tornado-utelagazas` fején; a `4da8b3b9` commitban):
 `assert.ok(withQ >= without, …)` → `if (name === "SIM_WEAK") assert.ok(withQ >= without - 1, …)`, jelölés nélkül — a main-hez képest
 új fájl, ezért CSAK commitonkénti diffből látszik; **#486 V1** `space-asteroid-sim.test.ts` „≤ 1.3” (a szabály ±10%). A (d) egyik
 esete is gépileg látható: az Aszteroida `DODGE_IMPACT 1.2 → 0.65 → 0.38` bot-konstans csak a sim-ben, indoklás nélkül.
