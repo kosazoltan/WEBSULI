@@ -52,6 +52,12 @@ test('nem kapu-köteles parancs: nincs terv (útvonal / névrész / idézett sz�
   assert.equal(kind('echo "git push" && true'), 'deny');
   // Z1: útvonallal megadott gh.
   for (const c of ['/usr/bin/gh pr merge 5 --squash', '"/c/Program Files/GitHub CLI/gh.exe" pr merge 5 --squash', 'iex "git push"']) assert.equal(kind(c), 'deny', c);
+  // AA1: engedő lista — minden futtató / ismeretlen eszköz (.exe-vel, útvonallal is) DENY, ha kapu-köteles szöveget kap.
+  for (const c of ['powershell.exe -Command "git push origin other2"', 'pwsh.exe -c "git push"', 'bash.exe -c "git push"', 'cmd.exe /c "git push"',
+    '"C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe" -c "git push"', 'node.exe -e "require(\'child_process\').execSync(\'git push\')"',
+    'python3.12 -c "import os; os.system(\'git push\')"', 'perl -e "system(\'git push\')"', 'ruby -e "system(\'git push\')"', 'ssh localhost "git push"',
+    '/usr/bin/echo "git push"']) assert.equal(kind(c), 'deny', c);
+  for (const c of ['Write-Output "git push"', 'Select-String -Pattern "git push" docs/x.md', 'findstr "gh pr merge" x.md', 'echo.exe "git push"']) assert.equal(kind(c), 'none', c);
 });
 
 test('a #489 öt bot-forgatókönyve: mind DENY', () => {
