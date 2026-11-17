@@ -371,9 +371,18 @@ export function analyzeFile(f, kind) {
     if (FORCE.test(stripStrings(a.text)) || FIXED_WAIT.test(stripStrings(a.text))) findings.push(finding('force-or-fixed-wait', f.path, a));
     if (SKIP_ADDED.some((re) => re.test(stripStrings(a.text)))) findings.push(finding('skip-added', f.path, a));
   }
-  const readers = added.filter((l) => READ_FILE.test(stripStrings(l.text)));
-  if (readers.length && (readers.some((l) => SOURCE_PATH.test(l.text)) || added.some((l) => SOURCE_PATH.test(l.text)))) {
-    for (const l of readers) findings.push(finding('source-regex-test', f.path, l));
+  // Csak az a beolvasás lelet, amelynek SAJÁT sorában van forrásút, vagy egy forrásutat tartalmazó (hozzáadott) változót / konstanst
+  // használ — a fájl más soraiban álló forrásút-szöveg nem elég (hamis riasztás 2026-11-17: flaky-report.test.mjs a JSON-konfigot
+  // olvasta, a forrásút egy másik teszt adataként szerepelt).
+  const sourceVars = new Set();
+  for (const l of added) {
+    const m = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/.exec(l.text);
+    if (m && SOURCE_PATH.test(l.text)) sourceVars.add(m[1]);
+  }
+  for (const l of added) {
+    if (!READ_FILE.test(stripStrings(l.text))) continue;
+    const usesVar = [...sourceVars].some((v) => new RegExp(`(?<![\\w$])${v.replace(/\$/g, '\\$')}(?![\\w$])`).test(stripStrings(l.text)));
+    if (SOURCE_PATH.test(l.text) || usesVar) findings.push(finding('source-regex-test', f.path, l));
   }
   return { findings, notes };
 }

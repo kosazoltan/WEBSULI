@@ -176,6 +176,10 @@ test('source-regex-test: forrásfájlt beolvasó új teszt lelet; jelöléssel i
   const marked = analyze({ range: parseDiff(fileDiff('source/tests/x-wiring.test.ts', [['+', `// ${GUARD}: a lap bekötése, a mag tesztje mellett`], ...rows], { status: 'A', oldStart: 0, newStart: 1 })) });
   assert.equal(marked.findings[0].verified, true);
   assert.deepEqual(one('source/tests/y.test.ts', [['+', 'const j = readFileSync(join(dir, "fixture.json"), "utf8");']]), []);
+  // Hamis riasztás 2026-11-17 (flaky-report.test.mjs): konfig-JSON olvasása, a forrásút csak egy másik teszt ADATA → nem lelet.
+  assert.deepEqual(one('scripts/qa/gates/z.test.mjs', [['+', 'const known = JSON.parse(readFileSync(KNOWN_FILE, "utf8"));'], ['+', 'const files = ["source/client/src/pages/X.tsx"];']]), []);
+  // Forrásutat tartalmazó konstans + beolvasás külön sorban → lelet.
+  assert.deepEqual(one('source/tests/w.test.ts', [['+', 'const PAGE = "client/src/pages/W.tsx";'], ['+', 'const src = readFileSync(join(root, PAGE), "utf8");']]).map((x) => [x.rule, x.line]), [['source-regex-test', 11]]);
 });
 
 test('sim-calibration: a bot-konstans értékváltozása lelet (Aszteroida DODGE_IMPACT), új konstans nem', () => {
