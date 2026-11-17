@@ -180,7 +180,7 @@ export type MaterialRow = {
 const MATH_TOPIC = /^(math|matek|matematik\p{L}*)(?![\p{L}])/u;
 const ENGLISH_TOPIC = /^(english|angol|angol nyelv|angol szókincs)$/u;
 /** Matek-előtag mellett ezek bármelyike más (vagy vegyes) tantárgyat jelez → bizonytalan. */
-const OTHER_SUBJECT_WORD = /(?<![\p{L}])(angol|english|német|deutsch|francia|spanyol|olasz|orosz|latin|magyar|nyelvtan|irodalom|történelem|földrajz|biológia|kémia|fizika|ének|rajz)/u;
+const OTHER_SUBJECT_WORD = /(?:^|[^\p{L}])(angol|english|német|deutsch|francia|spanyol|olasz|orosz|latin|magyar|nyelvtan|irodalom|történelem|földrajz|biológia|kémia|fizika|ének|rajz)/u;
 const SERVER_ENGLISH = /^(english|angol(?: nyelv)?)$/u;
 const SERVER_MATH = /^(math|matek|matematika)$/u;
 
