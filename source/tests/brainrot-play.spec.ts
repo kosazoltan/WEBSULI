@@ -468,6 +468,8 @@ test.describe("véletlen válasz valódi érintéssel", () => {
         g.forceState({ question: true });
         while (g.probe().cagesOpen !== 1) await frame();
         const open = clock();
+        // A mag már nyitott; a ketrec-elem a következő React-rajzzal jelenik meg.
+        while (!document.querySelector('[data-testid="br-cage-2"]')) await frame();
         const cage = document.querySelector<HTMLElement>('[data-testid="br-cage-2"]')!.getBoundingClientRect();
         const tx = cage.x + cage.width / 2;
         const ty = cage.y + cage.height / 2;
