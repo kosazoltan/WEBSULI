@@ -1484,6 +1484,35 @@ fizika-esetek (pattogás, határok) változatlanok.
     kérdés`; a háttérbe tett lap és a lejárt kupon a közös `useAutoPause` / `GAME_HALT_EVENT` útján a szünetet kapcsolja, a
     lejárt kupon a képkocka-hurkot is megállítja), egyik zárása sem oldja fel a másikat. Mindkettőre teszt (mag + böngésző).
 
+#### J5a — az újra-review (#485, `e17e1ff8`) döntései (2026-11-17, a kód előtt)
+
+16. **Húzás nem szándék (Ú1, KSZ-11).** A ketrecek nyitásakor a már lenyomott ujj húzása „elengedtetett”: a mag a nyitás
+    után a MOZGÁSBÓL jövő célt figyelmen kívül hagyja, amíg új lenyomás nem jön (`setTarget(x, y, "move")` → elvetve; a
+    `"down"` — friss `pointerdown`, ketrecgomb — oldja fel). Szándék (a 11. pont kivétele) csak a nyitás utáni friss
+    lenyomásból és a ketrecgombból jöhet. A sim `input: "drag"` botja a nyitás előtt húz, az ujját lent tartja és mozgatja;
+    mérce: döntés előtti válasz 0 (20 seed, átlagos és 3–4. évfolyamos, az ujj a lényen és 0,15 egységgel előtte).
+17. **Kupon mód: a kérdés nem fogy el (K1, a #483-ig lapszintű tartalék).** Ha a lecke tananyaga kimerült, a lap ismétli:
+    előbb a menetben hibázott (még nem javított) tételt, utána a legrégebben látottat; ≥ 2 tételnél soha nem a közvetlenül
+    előzőt. Az ismétlés kulcsa `<kulcs>#ism<n>` és `noReview` (a director a menetben feltett kulcsot nem kérdezi újra; az
+    ismétlési sorba a tétel az első feltevéskor már bekerült, a változat-kulcs nem szennyezi). A közvetlen (kérdés nélküli)
+    megtartás csak valódi forráshiánynál (0 tétel) marad. A tartalék egy helyen van (`lib/brainRot/couponRepeat.ts` + a
+    provider `material` ága, `// #483 után törölhető`); a #483 közös javítása után kivehető. Mérce (sim, 8 / 5 / 3 tételes
+    lecke): minden elkapáshoz kérdés, a győzelmi arány nem rosszabb a kupon nélkülinél.
+18. **Gumiszalag a lemaradónak (Ú4, KSZ-16).** A menekülés tempója már nem a válasz-pontosság sávját követi (a jól válaszoló
+    nem kaphat gyorsabb lényt), hanem a menet lemaradását: ha a ketrecben megtartott lények száma elmarad a győzelmi tempótól
+    (7 × eltelt világidő / 90 mp), legfeljebb −10% menekülési tempó; előnynél nincs gyorsítás. A születési tempó a régi lap
+    képlete marad (`spawnEveryMs`). Az arany lenyomat ezért újra rögzítve. Az üres „kérdéssel sosem több a vereség” teszt
+    helyett: a győzelem a pontossággal monoton nem csökken (20 / 45 / 75 / 95%, 3–4., 5–8., 9–12. évfolyam, tűrés 1/20).
+19. **Mély ketrec-zóna álló nézetben (Ú2).** Ha a kártya (és a jelmagyarázat) alatt nem fér két ketrecsor (≥ 2 × 0,14 + 0,05
+    egység), a 4 ketrec egy sorba kerül a tábla alján (≥ 48 px széles, egymástól ≥ 12 px); a beférést a lap ezzel a
+    szélességgel számolja (`cageWidthU(..., top)`). Mérő: a leghosszabb prompt ÉS a leghosszabb válaszok együtt.
+20. **A jelölt mód a zóna és a nézet minden változásakor újraszámol (Ú6).** A lap a kártya / jelmagyarázat / tábla mérésekor
+    (ResizeObserver, elforgatás) a beférést újra eldönti, és a magnak a zónával együtt adja át. e2e: elforgatás nyitott
+    kérdés alatt.
+21. **Mérőkép az élesítés után (Ú5).** A kérdés-képek a beúszás és a 600 ms-os előjelzés után készülnek.
+    Jegyre: Ú3 (≥ 600 ms tartott joystick — a mechanika szándékolt alakja, a J5b-ben újramérve); a 7-es küszöb az átlagosnak
+    könnyű (a J5b rivális-győzelme váltja ki).
+
 ### J5b — rivális tolvaj, Visszalopás-párbaj, Arany lény, fordulók, Tolvajkirály
 
 1. Állapot-sor commit.
