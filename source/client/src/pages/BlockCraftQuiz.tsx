@@ -3565,7 +3565,9 @@ export default function BlockCraftQuiz() {
                       style={{ "--rune": RUNE_COLORS[i] ?? "#94a3b8" } as CSSProperties}
                       data-armed={armed ? "true" : "false"}
                       {...runeHandlers(i)}
-                      {...correctDataAttrs(opt.correct)}
+                      // A teszt-jelölő (`data-correct`, csak teszt-kampós buildben) a VÁLASZTHATÓ célt jelöli: élesítés előtt
+                      // (review #484 B1, 400 ms) a rúnagomb még nem válaszcél, így a mérők is az élesítés után koppintanak.
+                      {...(armed ? correctDataAttrs(opt.correct) : {})}
                     >
                       <span className="bc-rune-letter" aria-hidden="true">{RUNE_LETTERS[i] ?? i + 1}</span>
                       <span className="bc-rune-label">{opt.label}</span>
@@ -3891,7 +3893,7 @@ export default function BlockCraftQuiz() {
           /* Review #484 M4: fekvőben a rúnagombok a két OLDALRA kerülnek (A–B balra, C–D jobbra), a jelenet közepe (érc,
              kövek, célkereszt) és a fent középen álló kérdéskártya szabad marad. */
           .bc-runes, .bc-runes[data-long="xl"] { left: max(8px, var(--game-safe-left, 0px)); right: max(8px, var(--game-safe-right, 0px)); width: auto; transform: none;
-            top: calc(max(4px, var(--game-safe-top)) + 64px); bottom: auto; grid-template-columns: minmax(0, 27vw) 1fr minmax(0, 27vw); grid-auto-rows: auto; gap: 8px 0; align-items: start; }
+            top: calc(max(4px, var(--game-safe-top)) + 84px); bottom: auto; grid-template-columns: minmax(0, 27vw) 1fr minmax(0, 27vw); grid-auto-rows: auto; gap: 8px 0; align-items: start; }
           .bc-runes [data-testid="bc-rune-0"] { grid-column: 1; grid-row: 1; }
           .bc-runes [data-testid="bc-rune-1"] { grid-column: 1; grid-row: 2; }
           .bc-runes [data-testid="bc-rune-2"] { grid-column: 3; grid-row: 1; }

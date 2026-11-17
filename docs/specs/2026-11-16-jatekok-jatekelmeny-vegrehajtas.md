@@ -1272,6 +1272,12 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
   kérdés), a gyerek látja, és szándékosan érinti meg.
 - **L5:** a közös `InlineQuestion` kibontott nézetben már nem fogadja az 1–4-et (`answering` feltétel); a lap a `disabled`-et is
   átadja (kettős védelem).
+- **Teszt-jelölő az élesítéshez igazítva:** a `data-correct` (csak teszt-kampós buildben) a rúnagombon az élesítés után jelenik
+  meg — a választható célt jelöli. A közös mobil mérő (`T/support/game-mobile-quality.ts`) a kérdés megjelenése után azonnal
+  koppint; élesítés-tudatos várakozás a közös mérőbe: orkesztrátori jegy.
+- **Fekvő nézet maradéka:** az érc fölötti rúnakövek alacsony fekvő képernyőn részben a fent középen álló kérdéskártya alá
+  esnek (a válasz a két oldali rúnagombbal megy, a célkereszt és az érc szabad) — J3c-jegy (kisebb ív fekvőben vagy a kártya
+  eltolása).
 
 ### J3b — nappal–éjjel ciklus, sebző mobok, kard, életek
 
