@@ -2050,6 +2050,15 @@ Jelölés: A a gazda, B a vendég, X a kérő, Y a másik fél. „Lát” = a k
   - Amíg a nyugta nem jön meg, a hely ELŐZŐ tokenje is visszaültet. Ez legfeljebb `RT_RECONNECT_GRACE_MS` (60 s) ideig tart, és csak ugyanarra a helyre szól. Ismételt elvesztésnél az előző token marad a tartalék, a közbülső, soha meg nem érkezett token érvénytelen.
   - A nyugta után az előző token azonnal érvénytelen. A `room:join` saját helyre ülése (új jegy) azonnali, kemény forgatás marad.
   - A meglévő garanciák megmaradnak. Két egyidejű visszaülésből egy hely-birtokos marad, a másik `SESSION_MOVED`-ot kap. Lecserélt, nyugtázott tokennel nem lehet visszaülni. A 6 órás lejárat marad. A token nem kerül URL-be, naplóba vagy más játékos `room:state`-jébe.
+- **K1 utójavítás (visszaellenőrzés 7c97da5f, Ú1 + Ú2; vercel 4593486002) — döntés:**
+  - *Melyik token a tartalék:* a kézfogásban bemutatott token dönt.
+    - Ha a JELENLEGI tokennel jött, az bizonyítja, hogy a kliens megkapta (nyugtának számít). Ilyenkor a jelenlegi lesz az új tartalék, a régebbi tartalék törlődik.
+    - Ha a TARTALÉKKAL jött, a jelenlegi token soha nem érkezett meg. Ilyenkor a jelenlegi törlődik, a tartalék marad.
+    - Így a kliensnél ténylegesen meglévő token sosem törlődik (Ú1).
+  - *Kemény határ:* egy token tartalékidejét EGYSZER, a tartalékká válásakor rögzítjük. A határ az utódjának első kiadásától számított `RT_RECONNECT_GRACE_MS` (60 s), és többé nem frissül.
+    - A tartalékkal végzett visszaülés nem hosszabbít. Egy régi tokent tehát nyugtázatlan visszaülések sorával sem lehet a határon túl életben tartani (Ú2).
+    - A láncnak minden tagja korlátos. Új tartalékot csak a jelenlegi token bemutatása hoz létre, ami birtoklást bizonyít, és ilyenkor a régebbi tartalék azonnal törlődik.
+    - Az elvetett lehetőség az egyetlen rögzített felső korlát volt a lánc kezdetétől. Ez egy hosszú, sokszor szakadozó meccsben a jogos klienst is kizárná.
 - **K3:** lejáratkor (`expired`) mindenki „kész” jelzése törlődik, így a gazda `start`-ja nem indíthat egy lejárt kérésre. A táblázat kiegészül a `start` és a `kick` eseménnyel (lent).
 - **K4:** az „Új szoba” gomb a győzteshirdetésen csak annak látszik, aki szobát nyithat (ugyanaz a `canCreate`, mint a megtelt-szoba képernyőn). A vendég a „Párbaj” kezdőlapra jut (kód beírása / belépés).
 
