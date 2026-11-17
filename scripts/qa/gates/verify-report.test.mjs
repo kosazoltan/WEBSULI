@@ -276,7 +276,8 @@ test('record-review: warn módban a hamis hivatkozású jelentésből is rögzü
   const notRun = () => null;
   const nb = buildRecord({ ...base, readReport: () => text, checkRefs: notRun, refMode: 'block' });
   assert.equal(nb.ok, false);
-  assert.match(nb.error, /nem futott le/);
+  assert.match(nb.error, /nem futott le \(claims-verify: block\)/);
+  assert.doesNotMatch(nb.error, /HAMIS/, 'a le nem futott ellenőrzés nem „hamis hivatkozás”');
   const nw = buildRecord({ ...base, readReport: () => text, checkRefs: notRun, refMode: 'warn' });
   assert.equal(nw.ok, true);
   assert.match(nw.warnings[0], /nem futott le/);

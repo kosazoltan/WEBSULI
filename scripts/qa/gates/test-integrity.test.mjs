@@ -301,6 +301,9 @@ test('R2: a terv-pont csak címsorban / listaelemben / táblázatsorban igazol, 
   assert.equal(specHasPoint('| D-J1a-8 | x |\n', 'D-J1a-8'), true);
   assert.equal(specHasPoint('Dátum: 2026-11-09, lásd 9-es busz.\n', '9'), false);
   assert.equal(specHasPoint('## 9.1 Al-pont\n', '9'), false);
+  const vm = (spec) => verifyMarker({ marker: `// ${MK} 2026-11-17 (docs/specs/t.md 9)`, file: T, specAdded: new Map(), prBody: null, specAt: () => spec });
+  assert.equal(vm('Dátum: 2026-11-09, lásd 9-es busz.\n').ok, false, 'a fejen lévő terv részszövege nem igazol');
+  assert.equal(vm('# Terv\n## 9. Küszöbök\n').ok, true);
   const mk = `// ${MK} 2026-11-17 (docs/specs/t.md 3)`;
   const lines = ['/**', ` * ${mk.slice(3)}`, ' */', 'import x from "y";', 'test("a", () => {});'];
   const fNew = parseDiff(fileDiff('source/tests/a.test.ts', [['+', ` * ${mk.slice(3)}`], [' ', ' */']], { oldStart: 1, newStart: 2 }))[0];
