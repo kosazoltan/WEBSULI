@@ -50,7 +50,7 @@ a Render-napló). Időpontok UTC; Europe/Budapest (CET, UTC+1) szerint egy órá
 
 #71 kérdésbank utómunka (lenyomat-lekérdezés, előmelegítés, válaszméret) · #72 további „mindent beolvas” végpontok · #73 3–4 fős szoba
 beragad visszavágó közbeni kilépés után · #74 szünet alatt futó 3D-rajzolás · #75 ritka holtpont a tiltás feloldása és a fióktörlés között.
-(A kanbanszámokat a megbízás adta; a kanban-tárból ebben a PR-ban nem ellenőriztük: UNVERIFIED.)
+(A kanbanszámokat az orkesztrátor a kanban-tár `list` kimenetéből igazolta, 2026-11-17.)
 
 ## 5. Maradék kockázat
 
