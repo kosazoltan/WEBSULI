@@ -213,7 +213,8 @@ async function main() {
     for (const r of ranking.slice(0, 15)) {
       gate.add(r.id.slice(0, 80), r.cls === 'ingadozó' ? STATUS.WARN : STATUS.PASS, `${r.cls}: ${r.fails} bukás, ${r.flakyRetries} Playwright-újrapróba, ${r.rerunPass} újraindításra zöld (futások: ${r.runs.slice(0, 4).join(', ')})`);
     }
-    for (const p of problems) gate.add('jegy nélküli ingadozó', STATUS.FAIL, p);
+    // --pr módban a kilépési kód a PR ítéletéé (a jegyek hiánya nem a PR hibája) — ott csak figyelmeztet.
+    for (const p of problems) gate.add('jegy nélküli ingadozó', prArg ? STATUS.WARN : STATUS.FAIL, p);
     if (prArg) {
       const pr = ghJson(exec, root, ['pr', 'view', prArg, '--json', 'number,headRefOid,headRefName,files']);
       const prRuns = ghJson(exec, root, ['run', 'list', '--workflow', 'CI', '--commit', pr.headRefOid, '--limit', '5', '--json', 'databaseId,headSha,conclusion,attempt,status,event,createdAt'])
