@@ -70,9 +70,7 @@ test("szünet: a render-ciklus, a játékóra és a vezérlés szünetben áll",
   has(code, /<GameShell\b[\s\S]{0,120}onAutoPause=\{pauseGame\}/, "nincs automatikus szünet (GameShell onAutoPause)");
   has(code, /exitPointerLock/, "szünetkor nem enged el a pointer lock");
   // A kvízréteg eltakarja a HUD szünetgombját — a kvízen is kell egy (#426 review-lelet).
-  // SPEC-VÁLTOZÁS 2026-11-17 (terv 9.: „a sávban saját szünetgombbal”): a régi modál saját gombja helyett a közös
-  // kérdés-sáv (`InlineQuestion`) szünetgombja viseli a `bc-quiz-pause` azonosítót, ugyanúgy a `pauseGame`-re kötve.
-  has(code, /pauseTestId="bc-quiz-pause"[\s\S]{0,120}onPause=\{pauseGame\}/, "a kérdés-sávon nincs szünetgomb");
+  has(code, /data-testid="bc-quiz-pause"[\s\S]{0,120}onClick=\{pauseGame\}/, "a kvízrétegen nincs szünetgomb");
   // A játékos mozgása a „play” ágban, a fix lépésű hurokban (a kérdés alatt lassítva fut — terv 4.1/3).
   has(code, /if \(phaseRef\.current === "play"\) \{[\s\S]{0,900}stepPlayerPhysics\(/, "a fizika nem a play ágban lép");
 });

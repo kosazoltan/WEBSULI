@@ -16,7 +16,7 @@ import { Link, useLocation } from "wouter";
 import * as THREE from "three";
 import { createGameRenderer, createGradientSky, detectLookTier, disposeObjectTree, LOOK_BUDGET, SparkleField } from "@/game-engine/three-look";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
-import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Blocks, Gem, RefreshCw } from "lucide-react";
+import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Blocks, Gem, Pause, RefreshCw } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import HoldButton from "@/game-engine/HoldButton";
@@ -3331,6 +3331,16 @@ export default function BlockCraftQuiz() {
                 role="group"
                 aria-label="Rúnakövek — koppints a jó válaszra"
               >
+                {/* A rúnasornál is lehet megállni (#426 review-lelet: a kérdés közben a szünet kéznél legyen). */}
+                <button
+                  type="button"
+                  data-testid="bc-quiz-pause"
+                  aria-label="Szünet"
+                  onClick={pauseGame}
+                  className="bc-rune-pause"
+                >
+                  <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                </button>
                 {presentation.options.map((opt, i) => {
                   const st = !reveal ? "idle" : i === reveal.correctOptionIndex ? "correct" : i === reveal.pickedOptionIndex ? "wrong" : "dim";
                   return (
@@ -3505,8 +3515,6 @@ export default function BlockCraftQuiz() {
           testId="bc-question"
           promptTestId="bc-prompt"
           optionTestId={(i) => `bc-option-${i}`}
-          pauseTestId="bc-quiz-pause"
-          onPause={pauseGame}
         />
       )}
 
@@ -3630,6 +3638,7 @@ export default function BlockCraftQuiz() {
         .bc-rune { pointer-events: auto; display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 6px 10px 6px 6px; border-radius: 14px; text-align: left; color: #fff; font-weight: 800; font-size: 16px; line-height: 1.2;
           background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,0) 60%), rgba(30,27,46,.92); border: 2px solid var(--rune); box-shadow: 0 0 14px color-mix(in srgb, var(--rune) 45%, transparent), inset 0 -3px 0 rgba(0,0,0,.35); touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; }
         .bc-rune:active:not([aria-disabled="true"]) { transform: scale(.97); }
+        .bc-rune-pause { pointer-events: auto; position: absolute; right: 0; top: -62px; width: 52px; height: 52px; display: inline-flex; align-items: center; justify-content: center; border-radius: 16px; color: #fff; background: rgba(15,23,42,.82); border: 1px solid rgba(255,255,255,.3); touch-action: manipulation; }
         .bc-rune-letter { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: var(--rune); color: #0f0c1c; font-size: 20px; font-weight: 900; }
         .bc-rune-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
         .bc-rune[data-state="correct"] { border-color: #86efac; background: #15803d; box-shadow: 0 0 22px #22c55e99; }
