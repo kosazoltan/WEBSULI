@@ -2647,7 +2647,8 @@ function PlayScreen(props: {
     for (let i = 0; i < sc.signs.length; i++) if (Number.isFinite(signX[i]!)) signOrder.push(i);
     signOrder.sort((a, b) => signX[a]! - signX[b]!);
     // R4: fekvőn a bal oldali válaszlista mellett (a lista ≤ min(28vw, 236) széles) kezdődnek a táblák.
-    const left = (sideList && compact ? Math.min(w * 0.28, 236) + 16 : 4) + labelW / 2;
+    // Alacsony fekvőn a tárcsa (bal alsó sarok, ≤ ~140 px széles) mellett kezdődnek — a magas kártya alá tolt tábla se lógjon rá (A3).
+    const left = (sideList && compact ? Math.min(w * 0.28, 236) + 16 : sideList ? 150 : 4) + labelW / 2;
     const right = w - labelW / 2 - 4;
     const spread = () => {
       for (let k = 1; k < signOrder.length; k++) {
