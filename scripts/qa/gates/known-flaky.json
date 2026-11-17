@@ -1,0 +1,4 @@
+{
+  "$comment": "Ismert ingadozó tesztek (S8; scripts/qa/gates/flaky-report.mjs). Minden elemhez KÖTELEZŐ a kanban-jegy (ticket) — nincs csendes elfogadás. id: a flaky-report azonosítója (e2e:<spec>:<sor> › <cím>, vagy cím nélkül a sor minden paraméterezett esetére; unit:<tesztnév>). Új elemet csak a flaky-report kimenete alapján, jeggyel vegyél fel; ha a jegy lezárul (a teszt javítva), az elemet töröld.",
+  "tests": []
+}

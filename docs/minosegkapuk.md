@@ -155,6 +155,20 @@ commitonként (a PR-on belüli lazítás a main-hez képest „új fájlként”
   `prTexts[0]` a lépés után a `--body-file` vagy a nyitott PR leírása). Addig a PR-leírást a
   `verify-report.mjs --body-file` kézi futtatása ellenőrzi (a `websuli-pr-elotti-kapu` skill menete).
 
+## Ingadozó tesztek nyilvántartása (S8, 2026-11-17)
+
+`node scripts/qa/gates/flaky-report.mjs [--limit 20] [--pr <n>] [--json]` — CSAK OLVAS (`gh`). A main utolsó N befejezett CI-futásából
+(minden újraindítási kísérlettel; a bukott jobok és a zöld E2E-job naplójával) tesztenként: bukások száma, Playwright-újrapróba
+(„flaky”), újraindításra zöldült futás. Besorolás: **ingadozó** (újrapróba / újraindítás / nem egymást követő bukások), **tartós
+bukás** (a legfrissebb futásokban egymás után), **egyszeri bukás**. Az azonosító a cím is (`e2e:<spec>:<sor> › <cím>`), mert a
+paraméterezett tesztek egy soron élnek.
+
+- `--pr <n>`: a PR fejének legutóbbi CI-futásában bukott tesztekről dönt: **„nem a PR hibája”**, ha mind ismert ingadozó és a PR nem
+  módosította a tesztfájlt (bizonyíték: a futás-azonosítók és a számok); különben **„a PR hibája lehet”** (kód 1). Ez a push-fegyelem
+  2. pontjának gépi döntése: ismert ingadozó bukásra NEM reagálunk új pushsal.
+- `scripts/qa/gates/known-flaky.json`: minden elemhez kötelező a kanban-jegy; a jegy nélküli ingadozó a riportban `FAIL` (kód 1).
+- A letöltött job-naplók a bizonyíték-tár `ci-logs/` mappájába kerülnek (futás + kísérlet + job szerint változatlanok).
+
 ## Ismert korlátok (maradó kockázat)
 
 - **Az ítélet önbevallásos** (review J5): a `Független ellenőr ítélete: IGEN (fej: …)` sort bárki beírhatja a PR-leírásba; a kapu
