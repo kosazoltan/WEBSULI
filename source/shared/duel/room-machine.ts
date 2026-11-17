@@ -183,7 +183,17 @@ export type RoomState = {
   match: RoomMatch | null;
   drainDeadlineMs: number | null;
   closed: boolean;
+  /**
+   * A visszavágó EGYETLEN igazságforrása (JM3a-2/R, a végrehajtási fájl állapottáblája): ki kért, hol tart, mikor jár le,
+   * és a lezárt meccs győzteshirdetése. `null`: nincs visszavágó-folyamat. A kliens ebből számolja a nézetét.
+   */
+  rematch?: RematchState | null;
 };
+
+export type RematchStatus = "pending" | "accepted" | "expired" | "left";
+export type RematchState = { by: string | null; status: RematchStatus; deadlineMs: number | null; result: RtMatchResult };
+/** Ennyi ideig él egy megválaszolatlan visszavágó-kérés (utána `expired`: a kérdés eltűnik, az eredmény marad). */
+export const RT_REMATCH_ASK_MS = 45_000;
 
 export type RoomEvent =
   | { type: "join"; playerId: string; nickname: string; avatar: string | null; grade: number }
@@ -293,6 +303,7 @@ function clone(s: RoomState): RoomState {
           matchUsed: Object.fromEntries(Object.entries(s.match.matchUsed).map(([k, v]) => [k, v.slice()])),
         }
       : null,
+    rematch: s.rematch ? { ...s.rematch } : null,
   };
 }
 
@@ -500,10 +511,51 @@ function afterReveal(s: RoomState, nowMs: number, cfg: RoomConfig, effects: Room
   openRound(s, nowMs, cfg, effects);
 }
 
+/** A meccs indítása a jelenlévő játékosokkal (a `start` és az elfogadott visszavágó közös útja). */
+function beginMatch(s: RoomState, nowMs: number): void {
+  const present = s.players.filter((p) => p.connected && !p.left);
+  const ids = present.sort((a, b) => a.order - b.order).map((p) => p.id);
+  s.matchNo += 1;
+  s.rematch = null;
+  s.match = {
+    ids,
+    duel: createDuel(ids),
+    roundNo: 0,
+    tiebreak: false,
+    openedAtMs: 0,
+    deadlines: {},
+    questions: {},
+    answers: {},
+    lastReveal: null,
+    result: null,
+    matchUsed: {},
+    rawFastestMs: Object.fromEntries(ids.map((id) => [id, null])),
+  };
+  s.phase = "countdown";
+  s.phaseStartMs = nowMs;
+  s.lastActivityMs = nowMs;
+}
+
+/**
+ * Elfogadott visszavágó indítása (JM3a-2/R): ha minden bent lévő játékos kapcsolatban van ÉS kész (a kérő a kérésével, a többi
+ * a kifejezett elfogadásával lett kész — gazda-kivétel NINCS), azonnali visszaszámlálás; különben `accepted`, és a hiányzó
+ * fél visszatérésekor indul.
+ */
+function startRematchIfAccepted(s: RoomState, nowMs: number): void {
+  const r = s.rematch;
+  if (!r || (r.status !== "pending" && r.status !== "accepted") || s.drainDeadlineMs !== null) return;
+  const inRoom = s.players.filter((x) => !x.left);
+  if (inRoom.length < RT_MIN_PLAYERS || !inRoom.every((x) => x.ready)) return;
+  if (inRoom.every((x) => x.connected)) beginMatch(s, nowMs);
+  else s.rematch = { ...r, status: "accepted", deadlineMs: null };
+}
+
 /** Kilépés / végleges kiesés feldolgozása (közös a `leave`, a `kick` és a lejárt türelmi idő útjára). */
 function removePlayer(s: RoomState, id: string, nowMs: number, effects: RoomEffect[], cfg: RoomConfig): void {
   const p = player(s, id);
   if (!p) return;
+  // Visszavágó közben bármelyik fél kilépése lezárja a folyamatot (`left`): a maradó érthető szöveget lát, nem indul semmi.
+  if (s.rematch) s.rematch = { ...s.rematch, status: "left", deadlineMs: null };
   const inMatch = isMatchPhase(s.phase) && !!s.match && s.match.ids.includes(id);
   if (inMatch) {
     p.left = true;
@@ -566,6 +618,7 @@ export function nextWakeMs(s: RoomState, cfg: RoomConfig): number | null {
   switch (s.phase) {
     case "lobby":
       times.push(s.lastActivityMs + lobbyTtl(s, t));
+      if (s.rematch?.status === "pending" && s.rematch.deadlineMs !== null) times.push(s.rematch.deadlineMs);
       break;
     case "countdown":
       times.push(s.phaseStartMs + t.countdownMs);
@@ -607,6 +660,14 @@ function tick(s: RoomState, nowMs: number, cfg: RoomConfig, effects: RoomEffect[
   // 3) Fázis-időzítők (egy tick több lépést is megtehet, ha a szerver sokat késett).
   for (let guard = 0; guard < 4 && !s.closed; guard++) {
     if (s.phase === "lobby") {
+      // Megválaszolatlan visszavágó-kérés lejárata: a kérdés eltűnik, az eredmény marad (`expired`), bárki újra kérhet.
+      const r = s.rematch;
+      if (r?.status === "pending" && r.deadlineMs !== null && nowMs >= r.deadlineMs) {
+        s.rematch = { ...r, status: "expired", deadlineMs: null };
+        // Review K3: a lejárt kérés „kész” jelzése sem él tovább (a gazda nyers `start`-ja nem indíthat rá).
+        for (const p of s.players) p.ready = false;
+        effects.push({ type: "emitState" });
+      }
       if (nowMs >= s.lastActivityMs + lobbyTtl(s, t)) {
         effects.push({ type: "notice", code: "ROOM_EXPIRING", deadlineMs: null });
         closeRoom(s, "EXPIRED", effects);
@@ -652,6 +713,8 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
       if (s.drainDeadlineMs !== null) return err(state, "SERVER_RESTART");
       if (player(s, ev.playerId)) return err(state, "ALREADY_IN_ROOM");
       if (s.phase !== "lobby") return err(state, "ROOM_STARTED");
+      // JM3a-2/R tervezési döntés: az első meccs után a kód csak visszavágóra él — idegen nem ülhet be a kilépett barát helyére.
+      if (s.matchNo > 0) return err(state, "ROOM_STARTED");
       if (s.players.length >= s.settings.maxPlayers) return err(state, "ROOM_FULL");
       s.players.push({
         id: ev.playerId,
@@ -706,12 +769,26 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
       else if (!s.hostId) ensureHost(s);
       s.lastActivityMs = nowMs;
       effects.push({ type: "emitState" });
+      // Elfogadott visszavágó, amely csak erre a félre várt: most indul.
+      if (s.phase === "lobby" && s.rematch?.status === "accepted") startRematchIfAccepted(s, nowMs);
       break;
     }
     case "ready": {
       const p = player(s, ev.playerId);
       if (!p) return err(state, "NOT_IN_ROOM");
       if (s.phase !== "lobby") return err(state, "BAD_PHASE");
+      // Visszavágó-folyamat alatt (JM3a-2/R) a `ready` CSAK a nem kérő fél elfogadása lehet (`pending` + `ready:true`); minden
+      // más `ready` no-op — a kérő ismételt „kész”-e nem indíthat a másik fél elfogadása nélkül (PR #476 vercel-review).
+      if (s.rematch) {
+        if (s.rematch.status === "pending" && ev.ready && p.id !== s.rematch.by) {
+          p.ready = true;
+          s.lastActivityMs = nowMs;
+          effects.push({ type: "accepted", playerId: p.id }, { type: "emitState" });
+          startRematchIfAccepted(s, nowMs);
+          break;
+        }
+        return { state, effects: [{ type: "accepted", playerId: p.id }] };
+      }
       if (p.ready === ev.ready) return { state, effects: [{ type: "accepted", playerId: p.id }] };
       p.ready = ev.ready;
       s.lastActivityMs = nowMs;
@@ -725,25 +802,7 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
       if (s.drainDeadlineMs !== null) return err(state, "SERVER_RESTART");
       const present = s.players.filter((p) => p.connected && !p.left);
       if (present.length < RT_MIN_PLAYERS || present.some((p) => p.id !== s.hostId && !p.ready)) return err(state, "NOT_ENOUGH_PLAYERS");
-      const ids = present.sort((a, b) => a.order - b.order).map((p) => p.id);
-      s.matchNo += 1;
-      s.match = {
-        ids,
-        duel: createDuel(ids),
-        roundNo: 0,
-        tiebreak: false,
-        openedAtMs: 0,
-        deadlines: {},
-        questions: {},
-        answers: {},
-        lastReveal: null,
-        result: null,
-        matchUsed: {},
-        rawFastestMs: Object.fromEntries(ids.map((id) => [id, null])),
-      };
-      s.phase = "countdown";
-      s.phaseStartMs = nowMs;
-      s.lastActivityMs = nowMs;
+      beginMatch(s, nowMs);
       effects.push({ type: "accepted", playerId: ev.playerId }, { type: "emitState" });
       break;
     }
@@ -772,11 +831,38 @@ export function reduceRoom(state: RoomState, ev: RoomEvent, nowMs: number, cfg: 
       break;
     }
     case "rematch": {
-      if (!player(s, ev.playerId)) return err(state, "NOT_IN_ROOM");
-      if (s.phase !== "finished") return err(state, "BAD_PHASE");
+      const rp = player(s, ev.playerId);
+      if (!rp) return err(state, "NOT_IN_ROOM");
       if (s.drainDeadlineMs !== null) return err(state, "SERVER_RESTART");
+      const r = s.rematch;
+      if (s.phase === "lobby" && r) {
+        // Egyidejű kérés (PR #476 review): a másik fél függő kérésére adott „kérés” KÖLCSÖNÖS elfogadás → azonnal indul.
+        if (r.status === "pending" && rp.id !== r.by) {
+          rp.ready = true;
+          s.lastActivityMs = nowMs;
+          effects.push({ type: "accepted", playerId: rp.id }, { type: "emitState" });
+          startRematchIfAccepted(s, nowMs);
+          break;
+        }
+        // Lejárt kérés után bárki újra kérhet (új 45 s); a saját függő / elfogadott kérés ismétlése no-op.
+        if (r.status === "expired") {
+          for (const p of s.players) p.ready = p.id === rp.id;
+          s.rematch = { by: rp.id, status: "pending", deadlineMs: nowMs + RT_REMATCH_ASK_MS, result: r.result };
+          s.lastActivityMs = nowMs;
+          effects.push({ type: "accepted", playerId: rp.id }, { type: "emitState" });
+          break;
+        }
+        if (r.status === "left") return err(state, "NOT_ENOUGH_PLAYERS");
+        return { state, effects: [{ type: "accepted", playerId: rp.id }] };
+      }
+      if (s.phase !== "finished") return err(state, "BAD_PHASE");
+      const finished = resultView(s);
+      if (!finished) return err(state, "BAD_PHASE");
       s.players = s.players.filter((p) => !p.left);
-      for (const p of s.players) p.ready = p.id === s.hostId;
+      // JM3a-2/R: csak a kérő kész; a másik fél kifejezett elfogadása (`ready:true` vagy saját kérés) indít — gazda-kivétel nincs.
+      for (const p of s.players) p.ready = p.id === ev.playerId;
+      const alone = s.players.length < RT_MIN_PLAYERS;
+      s.rematch = { by: ev.playerId, status: alone ? "left" : "pending", deadlineMs: alone ? null : nowMs + RT_REMATCH_ASK_MS, result: finished };
       s.match = null;
       s.phase = "lobby";
       s.phaseStartMs = nowMs;
@@ -941,6 +1027,7 @@ export function roomStateView(s: RoomState, playerId: string, nowMs: number, cfg
     },
     lastReveal: revealView(s, playerId),
     result: resultView(s),
+    rematch: s.rematch ? { by: s.rematch.by, status: s.rematch.status, deadlineTs: s.rematch.deadlineMs, result: s.rematch.result } : null,
   };
 }
 

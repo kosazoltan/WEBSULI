@@ -22,6 +22,8 @@ import { io as ioClient } from "socket.io-client";
 
 import { connectRt } from "../client/src/lib/rt/rtClient";
 import { answerNextRound, assertMobileQuality, playToResult, probe, shot } from "./support/duel-e2e";
+import { emulateSafeArea, waitForStable } from "./support/game-mobile-quality";
+import { expectMetaScreenOk, insetsFor, metaShot } from "./support/game-meta-quality";
 
 test.describe.configure({ mode: "serial" });
 test.use({ serviceWorkers: "block" });
@@ -79,8 +81,11 @@ test.beforeAll(async () => {
   await c.connect();
   try {
     // A: párosított tanulói profil (D21: szobát nyithat) — a token a szerver saját HMAC-szabályával.
-    const learnerId = `e2e-duel-learner-${randomBytes(4).toString("hex")}`;
-    await c.query(`INSERT INTO learners (id, name, grade) VALUES ($1, $2, $3)`, [learnerId, "Párbaj Teszt Tanuló", 5]);
+    // Review #464 ÚJ-4: a `learners` neve egyedi (`learners_name_lower_unique`) — futásonként egyedi név, különben ugyanazon az
+    // adatbázison az újrafuttatás (és a CI `retries`-e) biztosan elbukna.
+    const runTag = randomBytes(4).toString("hex");
+    const learnerId = `e2e-duel-learner-${runTag}`;
+    await c.query(`INSERT INTO learners (id, name, grade) VALUES ($1, $2, $3)`, [learnerId, `Párbaj Teszt ${runTag}`, 5]);
     learnerToken = `${learnerId}.1.${createHmac("sha256", secret).update(`${learnerId}.1`).digest("base64url").slice(0, 22)}`;
     // Admin-munkamenet a `session` táblában (mint az authz-db-harness): az admin módú szobát ezzel nyitja egy Node-kliens.
     const adminId = `e2e-duel-admin-${randomBytes(4).toString("hex")}`;
@@ -171,6 +176,9 @@ test("A nyit, B kóddal csatlakozik: váróterem → teljes meccs érintéssel �
       await C.page.getByTestId("duel-join-go").tap();
       await expect(C.page.getByTestId("duel-error")).toHaveAttribute("data-code", "ROOM_FULL", { timeout: 15_000 });
       await expect(C.page.getByTestId("duel-error")).toContainText("megtelt");
+      // JM3a-2 (ÚJ-5): nem hálózati hiba-képernyő — nincs „Újrapróbálom”; a vendégnek „Vissza a játékokhoz” kiút.
+      await expect(C.page.getByTestId("duel-retry")).toHaveCount(0);
+      await expect(C.page.getByTestId("duel-error-games")).toBeVisible();
       await shot(C.page, "online-room-full");
     } finally {
       await C.ctx.close();
@@ -185,12 +193,12 @@ test("A nyit, B kóddal csatlakozik: váróterem → teljes meccs érintéssel �
     await expect(A.page.getByTestId("duel-countdown")).toBeVisible({ timeout: 10_000 });
     await expect(B.page.getByTestId("duel-countdown")).toBeVisible({ timeout: 10_000 });
 
-    // Mindkét játékos érintéssel válaszol körönként (A a 0., B az 1. opciót választja), a győzteshirdetésig.
+    // Mindkét játékos érintéssel, EMBERI TEMPÓBAN (JM3a-2, A7) válaszol körönként (A a 0., B az 1. opciót választja).
     let lastA = 0;
     let lastB = 0;
     let shotDone = false;
     for (let i = 0; i < 12; i++) {
-      const [ra, rb] = await Promise.all([answerNextRound(A.page, lastA, 0), answerNextRound(B.page, lastB, 1)]);
+      const [ra, rb] = await Promise.all([answerNextRound(A.page, lastA, 0, 30_000, 1200), answerNextRound(B.page, lastB, 1, 30_000, 900)]);
       if (ra === "result" || rb === "result") break;
       lastA = ra;
       lastB = rb;
@@ -213,19 +221,37 @@ test("A nyit, B kóddal csatlakozik: váróterem → teljes meccs érintéssel �
     await assertMobileQuality(A.page, "győzteshirdetés");
     await shot(A.page, "online-result");
     await shot(B.page, "online-result");
-    // Visszavágó (review #464 K4, kétoldalú): B kéri → B a váróterembe kerül, A-nál a győzteshirdetés MARAD a kérdéssel;
-    // A „Benne vagyok” → váróterem, B „Kész”, a gazda indít.
+    // A7: a „Leggyorsabb helyes” valódi számérték (emberi tempó → nem „gyanús”). Mindkét kártya látszik A-nál; ha ebben a
+    // meccsben egyik játékos sem talált (≈ 1/128 esély), a visszavágó meccsét is megnézzük.
+    const fastestShown = async () => {
+      const texts = await Promise.all(["duel-stats-me-fast", "duel-stats-rival-fast"].map((id) => A.page.getByTestId(id).textContent()));
+      return texts.some((t) => /^\d+,\d mp$/.test((t ?? "").trim()));
+    };
+    let sawFastest = await fastestShown();
+    // Visszavágó (review #464 K4 + JM3a-2, kétoldalú): B kéri → B-nél „várjuk a válaszát”, A-nál a győzteshirdetés MARAD a
+    // kérdéssel; A „Benne vagyok” → AZONNAL visszaszámlálás mindkettőnél (nincs újra „Kész” + „Indítás”).
     await B.page.getByTestId("duel-rematch").tap();
-    await expect(B.page.getByTestId("duel-lobby")).toBeVisible({ timeout: 10_000 });
+    await expect(B.page.getByTestId("duel-rematch-waiting")).toBeVisible({ timeout: 10_000 });
     await expect(A.page.getByTestId("duel-rematch-ask")).toBeVisible({ timeout: 10_000 });
     await expect(A.page.getByTestId("duel-result")).toBeVisible();
     await shot(A.page, "online-rematch-ask");
+    await shot(B.page, "online-rematch-waiting");
     await A.page.getByTestId("duel-rematch-accept").tap();
-    await expect(A.page.getByTestId("duel-lobby")).toBeVisible({ timeout: 10_000 });
-    await B.page.getByTestId("duel-ready").tap();
-    await expect(A.page.getByTestId("duel-start")).toBeEnabled({ timeout: 10_000 });
-    await A.page.getByTestId("duel-start").tap();
+    await expect(A.page.getByTestId("duel-countdown")).toBeVisible({ timeout: 10_000 });
     await expect(B.page.getByTestId("duel-countdown")).toBeVisible({ timeout: 10_000 });
+    if (!sawFastest) {
+      let la = 0;
+      let lb = 0;
+      for (let i = 0; i < 12; i++) {
+        const [ra, rb] = await Promise.all([answerNextRound(A.page, la, 2, 30_000, 1200), answerNextRound(B.page, lb, 3, 30_000, 900)]);
+        if (ra === "result" || rb === "result") break;
+        la = ra;
+        lb = rb;
+      }
+      await expect(A.page.getByTestId("duel-result")).toBeVisible({ timeout: 30_000 });
+      sawFastest = await fastestShown();
+    }
+    expect(sawFastest, "a „Leggyorsabb helyes” számérték (pl. „1,4 mp”) legalább egy kártyán").toBe(true);
   } finally {
     await A.ctx.close();
     await B.ctx.close();
@@ -339,9 +365,124 @@ test("review #464: újratöltés a váróteremben (vendég, tárolt tokennel) é
       lastB = rb;
     }
     for (const p of [A.page, B.page]) await expect(p.getByTestId("duel-result")).toBeVisible({ timeout: 30_000 });
+    // JM3a-2 (K4): A kér visszavágót, majd kilép — B-nél a kérdés azonnal zárul érthető szöveggel, az eredmény marad.
+    await A.page.getByTestId("duel-rematch").tap();
+    await expect(B.page.getByTestId("duel-rematch-ask")).toBeVisible({ timeout: 10_000 });
+    await A.page.getByTestId("duel-new").tap();
+    await expect(B.page.getByTestId("duel-rematch-gone")).toBeVisible({ timeout: 10_000 });
+    await expect(B.page.getByTestId("duel-result")).toBeVisible();
+    await expect(B.page.getByTestId("duel-rematch-accept")).toHaveCount(0);
+    // PR #476 review + JM3a-2/R tervezési döntés: meccs után a kód csak visszavágóra él — az ugyanazzal a kóddal érkező
+    // idegen érthető hibát kap (ROOM_STARTED), B-nél marad a „kilépett” szöveg és az „Új szoba” kiút (nem ragad be).
+    const C = await phone(browser, on.url, { width: 360, height: 640 });
+    try {
+      await C.page.goto(`/games/parbaj/${code}`);
+      await C.page.getByTestId("duel-join-go").tap();
+      await expect(C.page.getByTestId("duel-error")).toHaveAttribute("data-code", "ROOM_STARTED", { timeout: 15_000 });
+      await expect(B.page.getByTestId("duel-rematch-gone")).toBeVisible();
+      // Review K4: B vendég (nem nyithat szobát) — „Új szoba” helyett „Vissza a párbajhoz” (kód beírása / belépés).
+      await expect(B.page.getByTestId("duel-new")).toHaveCount(0);
+      await expect(B.page.getByTestId("duel-home")).toBeVisible();
+    } finally {
+      await C.ctx.close();
+    }
   } finally {
     await A.ctx.close();
     await B.ctx.close();
+  }
+});
+
+test("PR #476 review (Codex 4591991467): mindkét játékos EGYSZERRE nyomja a Visszavágót — kölcsönös elfogadás, mindkettőnél azonnali visszaszámlálás", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const A = await phone(browser, on.url, { width: 390, height: 844 }, { learner: true });
+  const B = await phone(browser, on.url, { width: 360, height: 640 });
+  try {
+    const code = await openRoom(A.page);
+    await joinRoom(B.page, code, "link", 4);
+    await expect(A.page.getByTestId("duel-start")).toBeEnabled({ timeout: 10_000 });
+    await A.page.getByTestId("duel-start").tap();
+    let lastA = 0;
+    let lastB = 0;
+    for (let i = 0; i < 12; i++) {
+      const [ra, rb] = await Promise.all([answerNextRound(A.page, lastA, 0), answerNextRound(B.page, lastB, 1)]);
+      if (ra === "result" || rb === "result") break;
+      lastA = ra;
+      lastB = rb;
+    }
+    for (const p of [A.page, B.page]) await expect(p.getByTestId("duel-rematch")).toBeVisible({ timeout: 30_000 });
+    // Egyszerre: egyik kliens sem látja még a másik kérését, amikor a sajátját elküldi.
+    await Promise.all([A.page.getByTestId("duel-rematch").tap(), B.page.getByTestId("duel-rematch").tap()]);
+    for (const p of [A.page, B.page]) await expect(p.getByTestId("duel-countdown")).toBeVisible({ timeout: 10_000 });
+  } finally {
+    await A.ctx.close();
+    await B.ctx.close();
+  }
+});
+
+test("JM3a-2 (A3): online kilépés `leave()`-vel — a váróteremben maradó gazda azonnal üres helyet lát, nem 60 s „Kapcsolódik…”-ot", async ({ browser }) => {
+  const A = await phone(browser, on.url, { width: 390, height: 844 }, { learner: true });
+  const B = await phone(browser, on.url, { width: 360, height: 640 });
+  try {
+    const code = await openRoom(A.page);
+    await joinRoom(B.page, code, "link", 4);
+    await expect(A.page.getByTestId("duel-players").locator("li")).toHaveCount(2);
+    await B.page.getByTestId("duel-leave").tap();
+    await expect(B.page.getByTestId("duel-home")).toBeVisible({ timeout: 10_000 });
+    await expect(A.page.getByTestId("duel-waiting")).toBeVisible({ timeout: 5_000 });
+    await expect(A.page.getByTestId("duel-players")).not.toContainText("Kapcsolódik");
+  } finally {
+    await A.ctx.close();
+    await B.ctx.close();
+  }
+});
+
+test("JM3a-2: az online nem-játék képernyők a meta-mérő alatt (X1–X8; 360×640, 412×915, 844×390): váróterem, megtelt szoba, győzteshirdetés, visszavágó-kérés", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const META = [{ width: 360, height: 640 }, { width: 412, height: 915 }, { width: 844, height: 390 }] as const;
+  const A = await phone(browser, on.url, { width: 360, height: 640 }, { learner: true });
+  const B = await phone(browser, on.url, { width: 360, height: 640 });
+  const C = await phone(browser, on.url, { width: 360, height: 640 });
+  const measure = async (page: Page, name: string, where: string, settle?: string) => {
+    for (const vp of META) {
+      await page.setViewportSize(vp);
+      const insets = insetsFor(vp);
+      await emulateSafeArea(page, insets);
+      if (settle) await waitForStable(page, settle);
+      else await page.waitForTimeout(250);
+      await metaShot(page, name, true);
+      await expectMetaScreenOk(page, `${where} ${vp.width}x${vp.height}`, { insets });
+    }
+  };
+  try {
+    const code = await openRoom(A.page);
+    await measure(A.page, "parbaj-varoterem-ures", "Párbaj váróterem (gazda, egyedül)");
+    await joinRoom(B.page, code, "link", 4);
+    await measure(B.page, "parbaj-varoterem-csatlakozo", "Párbaj váróterem (csatlakozó)");
+    await C.page.goto(`/games/parbaj/${code}`);
+    await C.page.getByTestId("duel-join-go").tap();
+    await expect(C.page.getByTestId("duel-error")).toHaveAttribute("data-code", "ROOM_FULL", { timeout: 15_000 });
+    await measure(C.page, "parbaj-megtelt", "Párbaj megtelt szoba");
+    await A.page.setViewportSize({ width: 360, height: 640 });
+    await A.page.getByTestId("duel-start").tap();
+    let la = 0;
+    let lb = 0;
+    for (let i = 0; i < 12; i++) {
+      const [ra, rb] = await Promise.all([answerNextRound(A.page, la, 0), answerNextRound(B.page, lb, 1)]);
+      if (ra === "result" || rb === "result") break;
+      la = ra;
+      lb = rb;
+    }
+    await expect(A.page.getByTestId("duel-result")).toBeVisible({ timeout: 30_000 });
+    await expect(B.page.getByTestId("duel-result")).toBeVisible({ timeout: 30_000 });
+    await measure(A.page, "parbaj-online-eredmeny", "Párbaj online győzteshirdetés", '[data-testid="duel-result"]');
+    await B.page.getByTestId("duel-rematch").tap();
+    await expect(A.page.getByTestId("duel-rematch-ask")).toBeVisible({ timeout: 10_000 });
+    await measure(A.page, "parbaj-visszavago-keres", "Párbaj visszavágó-kérés", '[data-testid="duel-rematch-ask"]');
+    await measure(B.page, "parbaj-visszavago-var", "Párbaj visszavágó — várakozás", '[data-testid="duel-rematch-waiting"]');
+  } finally {
+    await A.ctx.close();
+    await B.ctx.close();
+    await C.ctx.close();
   }
 });
 
@@ -354,7 +495,7 @@ test("érvénytelen és nem létező kód; vendég nem nyithat szobát (ACCOUNT_
     await expect(B.page.getByTestId("duel-account-needed")).toBeVisible();
     await expect(B.page.getByTestId("duel-join")).toBeVisible();
     await expect(B.page.getByTestId("duel-bot")).toBeVisible();
-    await B.page.waitForTimeout(700); // a kezdőképernyő belépő animációja
+    await waitForStable(B.page, "[data-game-start]"); // a kezdőképernyő belépő animációja után
     await assertMobileQuality(B.page, "kezdő (vendég)");
     await shot(B.page, "online-home-guest");
     const res = await B.page.request.post(`${on.url}/api/rt/ticket`, { data: { intent: "create" }, headers: { origin: on.url } });

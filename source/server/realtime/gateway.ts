@@ -48,6 +48,8 @@ export const RT_MAX_PENDING_PACKETS = 64;
 export const RT_FLOOD_DISCONNECT_AFTER = 40;
 /** Reakció: kapcsolatonként legfeljebb ennyi ms-onként egy. */
 export const RT_REACTION_MIN_GAP_MS = 1000;
+/** JM3a-2 (ÚJ-2): a folytatási token szerveroldali élettartama (minden sikeres visszaülés újat ad). */
+export const RESUME_TOKEN_MAX_AGE_MS = 6 * 60 * 60_000;
 // Időkorlátok (review #452 KÖZEPES-3; `config.ts`): jegy nélküli kapcsolat `connectTimeoutMs` (10 s), szobába nem lépő
 // `noRoomTimeoutMs` (15 s), szobahely nélkül maradt (kilépés, kirúgás, lezárt szoba) `seatlessDisconnectMs` (3 s).
 
@@ -59,6 +61,13 @@ type Seat = {
   roomCode: string;
   playerId: string;
   resumeToken: string;
+  /** A folytatási token kiadásának ideje (szerveroldali lejárat: `RESUME_TOKEN_MAX_AGE_MS`). */
+  resumeIssuedAt: number;
+  /**
+   * JM3a-2 (review K1): a forgatás a kliens nyugtájáig nem végleges — addig az ELŐZŐ (a kliensnél biztosan meglévő) token is
+   * visszaültet erre az egy helyre, legfeljebb `until`-ig. A `welcome` nyugtája után `null` (a régi token érvénytelen).
+   */
+  prevResume: { token: string; until: number } | null;
   socketId: string | null;
   rtt: number[];
   /** A helyet foglaló kapcsolat IP-kulcsa (kitiltáshoz, IP-nkénti szobaplafonhoz) — kifelé soha nem megy. */
@@ -275,6 +284,8 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
   function releaseSeat(seat: Seat): void {
     if (seatsByIdentity.get(seat.identity) === seat) seatsByIdentity.delete(seat.identity);
     seatsByResume.delete(seat.resumeToken);
+    if (seat.prevResume) seatsByResume.delete(seat.prevResume.token);
+    seat.prevResume = null;
     seatsByPlayer.delete(seat.playerId);
     const s = socketOfSeat(seat);
     if (s) {
@@ -392,13 +403,51 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
 
   function newSeat(identity: string, roomCode: string, playerId: string, socket: Socket): Seat {
     const data = socket.data as SocketData;
-    const seat: Seat = { identity, roomCode, playerId, resumeToken: randomBytes(24).toString("base64url"), socketId: socket.id, rtt: [], ip: data.ip, kind: data.claims?.kind ?? null };
+    const seat: Seat = { identity, roomCode, playerId, resumeToken: randomBytes(24).toString("base64url"), resumeIssuedAt: deps.now(), prevResume: null, socketId: socket.id, rtt: [], ip: data.ip, kind: data.claims?.kind ?? null };
     seatsByIdentity.set(identity, seat);
     seatsByResume.set(seat.resumeToken, seat);
     seatsByPlayer.set(playerId, seat);
     (socket.data as SocketData).seat = seat;
     (socket.data as SocketData).intentUsed = true;
     return seat;
+  }
+
+  /**
+   * JM3a-2 (review #464 ÚJ-2, review K1, visszaellenőrzés Ú1/Ú2): minden sikeres visszaülésnél új token.
+   * `pending` (kézfogás, `presented` = a bemutatott token): a kliens nyugtájáig egy tartalék token is visszaültet erre a helyre.
+   *  - a JELENLEGI tokennel jött → a kliens bizonyítottan megkapta: ez lesz az új tartalék, a régebbi tartalék törlődik;
+   *  - a TARTALÉKKAL jött → a jelenlegi soha nem érkezett meg: az törlődik, a tartalék marad.
+   * A tartalékidő a tartalékká váláskor EGYSZER rögzül (utód első kiadása + türelmi idő), és nem hosszabbodik.
+   * `hard` (új jeggyel saját helyre ülés): minden korábbi token azonnal érvénytelen.
+   */
+  function rotateResume(seat: Seat, mode: "pending" | "hard", presented?: string): void {
+    const old = seat.resumeToken;
+    if (mode === "hard") {
+      seatsByResume.delete(old);
+      if (seat.prevResume) seatsByResume.delete(seat.prevResume.token);
+      seat.prevResume = null;
+    } else if (seat.prevResume && presented === seat.prevResume.token) {
+      seatsByResume.delete(old); // a meg nem érkezett jelenlegi token; a tartalék határideje változatlan
+    } else {
+      if (seat.prevResume) seatsByResume.delete(seat.prevResume.token);
+      seat.prevResume = { token: old, until: deps.now() + RT_RECONNECT_GRACE_MS };
+    }
+    seat.resumeToken = randomBytes(24).toString("base64url");
+    seat.resumeIssuedAt = deps.now();
+    seatsByResume.set(seat.resumeToken, seat);
+  }
+
+  function releaseResumeTokens(seat: Seat): void {
+    seatsByResume.delete(seat.resumeToken);
+    if (seat.prevResume) seatsByResume.delete(seat.prevResume.token);
+    seat.prevResume = null;
+  }
+
+  /** A kliens nyugtázta az új tokent (`welcome` ack): a forgatás végleges, az előző token érvénytelen. */
+  function confirmResume(seat: Seat, socketId: string, token: string): void {
+    if (seat.socketId !== socketId || seat.resumeToken !== token || !seat.prevResume) return;
+    if (seatsByResume.get(seat.prevResume.token) === seat) seatsByResume.delete(seat.prevResume.token);
+    seat.prevResume = null;
   }
 
   function welcome(socket: Socket, seat: Seat | null, resumed: boolean): void {
@@ -410,7 +459,8 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
       : data.claims!.intent.kind === "join"
         ? { kind: "join" as const, code: data.claims!.intent.code }
         : { kind: "create" as const, code: null };
-    send(socket, "welcome", {
+    const issued = seat?.resumeToken ?? null;
+    const payload: RtServerPayload<"welcome"> = {
       protocol: PROTOCOL_VERSION,
       playerId: seat?.playerId ?? null,
       nickname: me?.nickname ?? data.claims?.nickname ?? "Játékos",
@@ -426,7 +476,10 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
         maxPlayers: RT_MAX_PLAYERS,
       },
       intent,
-    });
+    };
+    if (!socket.connected) return;
+    // A kliens a token átvétele után nyugtáz (K1): csak ekkor véglegesedik a forgatás.
+    socket.emit("welcome", payload, () => guard("welcome-ack", () => seat && issued && confirmResume(seat, socket.id, issued)));
   }
 
   // --- Kézfogás: jegy vagy folytatási token -------------------------------------------------------------------------
@@ -464,6 +517,19 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
       // Ismeretlen / visszavont folytatási token: a szoba megszűnt (pl. telepítés, lezárás) — egyértelmű kód, hely nem jön létre.
       const seat = seatsByResume.get(auth.data.resume);
       if (!seat || !registry.get(seat.roomCode)) return fail("ROOM_NOT_FOUND");
+      // Szerveroldali lejárat: a túl régi (pl. egy elfelejtett lapfülben ülő) token nem ad vissza helyet.
+      if (deps.now() - seat.resumeIssuedAt > RESUME_TOKEN_MAX_AGE_MS) {
+        releaseResumeTokens(seat);
+        return fail("ROOM_NOT_FOUND");
+      }
+      // Az előző (nyugtázatlan forgatás előtti) token csak a türelmi időn belül, és csak erre a helyre ültet vissza.
+      if (auth.data.resume !== seat.resumeToken) {
+        if (!seat.prevResume || seat.prevResume.token !== auth.data.resume || deps.now() > seat.prevResume.until) {
+          seatsByResume.delete(auth.data.resume);
+          return fail("ROOM_NOT_FOUND");
+        }
+      }
+      rotateResume(seat, "pending", auth.data.resume);
       data.seat = seat;
       data.intentUsed = true;
       socket.data = data;
@@ -493,7 +559,9 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
       const seat = data.seat;
       const old = socketOfSeat(seat);
       if (old && old.id !== socket.id) {
+        // A régebbi lapfül érthető zárást kap (nem 60 s „Kapcsolódás újra…”): a játék egy másik lapon folytatódik.
         (old.data as SocketData).seat = null;
+        send(old, "notice", { code: "SESSION_MOVED", deadlineTs: null });
         old.disconnect(true);
       }
       seat.socketId = socket.id;
@@ -665,6 +733,7 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
             stale.socketId = socket.id;
             stale.ip = data.ip;
             data.seat = stale;
+            rotateResume(stale, "hard"); // a régi (pl. egy elhagyott lapfülben tárolt) token érvénytelen
             reply(null, { roomCode: code, playerId: stale.playerId, resumeToken: stale.resumeToken });
             const room = registry.get(code);
             if (room) send(socket, "room:state", roomStateView(room, stale.playerId, deps.now(), deps.roomConfig));

@@ -176,6 +176,8 @@ export function createBotSession(args: BotSessionArgs): DuelSession {
     }
     const r = dispatch({ type: "ready", playerId: BOT_ID, ready: true });
     if (!r.ok) return r;
+    // Visszavágónál a gép „kész”-e elfogadás → a szoba már magától indult (JM3a-2, K4).
+    if (room.phase !== "lobby") return { ok: true };
     return dispatch({ type: "start", playerId: BOT_ME_ID });
   }
 

@@ -310,17 +310,166 @@ describe("JM2 room-machine — kapcsolat, kilépés, gazda-váltás meccs közbe
 
   it("visszavágó: új meccs új kérdésekkel (a used megmarad), a kilépettek kimaradnak", () => {
     let { s, t } = started();
-    const firstKey = s.match!.questions[A]!.key;
     s = ok(s, { type: "leave", playerId: B }, t + 50);
     assert.equal(step(s, { type: "start", playerId: A }, t + 60).error, "BAD_PHASE");
     s = ok(s, { type: "rematch", playerId: A }, t + 100);
     assert.equal(s.phase, "lobby");
     assert.equal(s.players.length, 1);
-    s = ok(s, { type: "join", playerId: C, nickname: "C", avatar: null, grade: 5 }, t + 200);
-    s = ok(s, { type: "ready", playerId: C, ready: true }, t + 210);
-    s = ok(s, { type: "start", playerId: A }, t + 300);
-    s = ok(s, { type: "tick" }, t + 300 + DEFAULT_ROOM_TIMING.countdownMs);
-    assert.notEqual(s.match!.questions[A]!.key, firstKey);
+    // SPEC-VÁLTOZÁS 2026-11-16 (JM3a-2/R, PR #476 review — tervezési döntés a végrehajtási fájlban): az első meccs után a
+    // szoba NEM fogad új játékost (a kód csak visszavágóra él; idegen nem ülhet be a kilépett barát helyére).
+    assert.equal(s.rematch?.status, "left");
+    assert.equal(step(s, { type: "join", playerId: C, nickname: "C", avatar: null, grade: 5 }, t + 200).error, "ROOM_STARTED");
+    // Az új meccs új kérdéseket kap (a used megmarad): a két fél elfogadott visszavágójával mérve.
+    let q = started();
+    const firstOfMatch1 = q.s.match!.questions[A]!.key;
+    for (let i = 0; i < 80 && q.s.phase !== "finished"; i++) {
+      q.t = Math.max(q.t + 1, nextWakeMs(q.s, cfg)!);
+      q.s = ok(q.s, { type: "tick" }, q.t);
+    }
+    q.s = ok(q.s, { type: "rematch", playerId: A }, q.t + 10);
+    q.s = ok(q.s, { type: "ready", playerId: B, ready: true }, q.t + 20);
+    assert.equal(q.s.phase, "countdown");
+    q.s = ok(q.s, { type: "tick" }, q.t + 20 + DEFAULT_ROOM_TIMING.countdownMs);
+    assert.notEqual(q.s.match!.questions[A]!.key, firstOfMatch1);
+  });
+
+  // JM3a-2/R — a visszavágó állapotgépe, TÁBLA-VEZÉRELTEN (a végrehajtási fájl „JM3a-2/R” táblázata: minden cella egy eset).
+  // A a gazda, B a vendég; X a kérő, Y a másik fél. A várt érték: fázis + `rematch.status` (+ kérő) vagy hibakód.
+  describe("visszavágó állapotgépe (JM3a-2/R, PR #476 review) — tábla-vezérelt", () => {
+    const Z = "PZzzzzzzzzz";
+    const GRACE = DEFAULT_ROOM_TIMING.reconnectGraceMs;
+    type Fx = { s: RoomState; t: number };
+    /** R: lezárt meccs, nincs visszavágó-folyamat. */
+    const fin = (): Fx => {
+      let { s, t } = started();
+      for (let i = 0; i < 80 && s.phase !== "finished"; i++) {
+        t = Math.max(t + 1, nextWakeMs(s, cfg)!);
+        s = ok(s, { type: "tick" }, t);
+      }
+      assert.equal(s.phase, "finished");
+      assert.equal(s.rematch ?? null, null);
+      return { s, t: t + 10 };
+    };
+    const P = (x: string): Fx => {
+      const f = fin();
+      return { s: ok(f.s, { type: "rematch", playerId: x }, f.t), t: f.t + 10 };
+    };
+    /** ACC: X kért, X kiesett, Y elfogadta → elfogadva, X visszatérésére vár. */
+    const ACC = (x: string, y: string): Fx => {
+      const f = P(x);
+      let s = ok(f.s, { type: "disconnect", playerId: x }, f.t);
+      s = ok(s, { type: "ready", playerId: y, ready: true }, f.t + 1);
+      return { s, t: f.t + 10 };
+    };
+    const EXP = (x: string): Fx => {
+      const f = P(x);
+      const at = f.s.rematch!.deadlineMs!;
+      return { s: ok(f.s, { type: "tick" }, at), t: at + 10 };
+    };
+    const LEFT = (x: string, y: string): Fx => {
+      const f = P(x);
+      return { s: ok(f.s, { type: "leave", playerId: y }, f.t), t: f.t + 10 };
+    };
+    type Ev = (f: Fx) => RoomReduceResult;
+    const ev = {
+      kér: (id: string): Ev => (f) => step(f.s, { type: "rematch", playerId: id }, f.t),
+      kész: (id: string, ready = true): Ev => (f) => step(f.s, { type: "ready", playerId: id, ready }, f.t),
+      kilép: (id: string): Ev => (f) => step(f.s, { type: "leave", playerId: id }, f.t),
+      indít: (): Ev => (f) => step(f.s, { type: "start", playerId: A }, f.t),
+      kirúg: (target: string): Ev => (f) => step(f.s, { type: "kick", playerId: A, target }, f.t),
+      csatlakozik: (): Ev => (f) => step(f.s, { type: "join", playerId: Z, nickname: "Idegen", avatar: null, grade: 5 }, f.t),
+      lejár: (): Ev => (f) => step(f.s, { type: "tick" }, f.s.rematch?.deadlineMs ?? f.t + 45_000),
+      megszakadVissza: (id: string): Ev => (f) => step(step(f.s, { type: "disconnect", playerId: id }, f.t).state, { type: "reconnect", playerId: id }, f.t + 1000),
+      megszakadTürelemVége: (id: string): Ev => (f) => step(step(f.s, { type: "disconnect", playerId: id }, f.t).state, { type: "tick" }, f.t + GRACE),
+      visszatér: (id: string): Ev => (f) => step(f.s, { type: "reconnect", playerId: id }, f.t),
+    };
+    type Want = { phase: RoomState["phase"]; status?: "pending" | "accepted" | "expired" | "left" | null; by?: string; error?: string };
+    const rows: Array<[string, () => Fx, Ev, Want]> = [];
+    // --- R (eredmény) ---
+    rows.push(
+      ["R + kér(A) → P(A)", fin, ev.kér(A), { phase: "lobby", status: "pending", by: A }],
+      ["R + kér(B) → P(B)", fin, ev.kér(B), { phase: "lobby", status: "pending", by: B }],
+      ["R + kész(B) → BAD_PHASE", fin, ev.kész(B), { phase: "finished", error: "BAD_PHASE" }],
+      ["R + kilép(B) → R", fin, ev.kilép(B), { phase: "finished", status: null }],
+      ["R + kilép(B), majd kér(A) → L", fin, (f) => step(ev.kilép(B)(f).state, { type: "rematch", playerId: A }, f.t + 1), { phase: "lobby", status: "left", by: A }],
+      ["R + csatlakozik(Z) → ROOM_STARTED", fin, ev.csatlakozik(), { phase: "finished", error: "ROOM_STARTED" }],
+      ["R + megszakad-és-visszatér(B) → R", fin, ev.megszakadVissza(B), { phase: "finished", status: null }],
+      // start / kick (review K3) — a gazda (A) nyers üzenetei
+      ["R + start → BAD_PHASE", fin, ev.indít(), { phase: "finished", error: "BAD_PHASE" }],
+      ["R + kick(B) → R (a maradó kérése → L)", fin, (f) => step(ev.kirúg(B)(f).state, { type: "rematch", playerId: A }, f.t + 1), { phase: "lobby", status: "left", by: A }],
+      ["P(B, vendég kért) + start (gazda) → countdown (a gazda indítása = elfogadás)", () => P(B), ev.indít(), { phase: "countdown", status: null }],
+      ["P(A, gazda kért) + start → NOT_ENOUGH_PLAYERS (B nem fogadott el)", () => P(A), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["P(B) + kick(B) → L", () => P(B), ev.kirúg(B), { phase: "lobby", status: "left", by: B }],
+      ["P(A) + kick(B) → L", () => P(A), ev.kirúg(B), { phase: "lobby", status: "left", by: A }],
+      ["ACC(B kért, kiesett) + start (A) → NOT_ENOUGH_PLAYERS", () => ACC(B, A), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      // A kérő a GAZDA, és ő esik ki (visszaellenőrzés): a gazdaság B-re száll, de B nyers start / kick-je sem indít meccset.
+      ["ACC(A, gazda kért, kiesett) + start (az új gazda, B) → NOT_ENOUGH_PLAYERS", () => ACC(A, B), (f) => step(f.s, { type: "start", playerId: f.s.hostId! }, f.t), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["ACC(A, gazda kért, kiesett) + kick(A) (az új gazda, B) → L", () => ACC(A, B), (f) => step(f.s, { type: "kick", playerId: f.s.hostId!, target: A }, f.t), { phase: "lobby", status: "left", by: A }],
+      ["P(A, gazda kért) + A kiesik + start (az új gazda, B) → NOT_ENOUGH_PLAYERS", () => P(A), (f) => { const s = step(f.s, { type: "disconnect", playerId: A }, f.t).state; return step(s, { type: "start", playerId: s.hostId! }, f.t + 1); }, { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["E(A, gazda kért) + A kiesik + start (az új gazda, B) → NOT_ENOUGH_PLAYERS (lejáratkor senki sem kész)", () => EXP(A), (f) => { const s = step(f.s, { type: "disconnect", playerId: A }, f.t).state; return step(s, { type: "start", playerId: s.hostId! }, f.t + 1); }, { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["ACC(B kért, kiesett) + kick(B) (A gazda) → L", () => ACC(B, A), ev.kirúg(B), { phase: "lobby", status: "left", by: B }],
+      ["E(B, vendég kért) + start → NOT_ENOUGH_PLAYERS (lejáratkor senki sem kész — K3)", () => EXP(B), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["E(A) + start → NOT_ENOUGH_PLAYERS", () => EXP(A), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["E(B) + kick(B) → L", () => EXP(B), ev.kirúg(B), { phase: "lobby", status: "left", by: B }],
+      ["L(A maradt) + start → NOT_ENOUGH_PLAYERS", () => LEFT(A, B), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["L(A maradt) + kick(B) → NOT_IN_ROOM", () => LEFT(A, B), ev.kirúg(B), { phase: "lobby", error: "NOT_IN_ROOM" }],
+    );
+    // --- P(X) mindkét irányban (gazda kér / vendég kér) ---
+    for (const [x, y] of [[A, B], [B, A]] as const) {
+      const tag = x === A ? "P(A, gazda kért)" : "P(B, vendég kért)";
+      rows.push(
+        [`${tag} + kér(X) → no-op`, () => P(x), ev.kér(x), { phase: "lobby", status: "pending", by: x }],
+        [`${tag} + kér(Y) → kölcsönös → countdown`, () => P(x), ev.kér(y), { phase: "countdown", status: null }],
+        [`${tag} + kész(Y) → countdown`, () => P(x), ev.kész(y), { phase: "countdown", status: null }],
+        [`${tag} + „Most nem” = kilép(Y) → L`, () => P(x), ev.kilép(y), { phase: "lobby", status: "left", by: x }],
+        [`${tag} + kész(X) → no-op (vercel-review: nem indul)`, () => P(x), ev.kész(x), { phase: "lobby", status: "pending", by: x }],
+        [`${tag} + kész(Y, false) → no-op`, () => P(x), ev.kész(y, false), { phase: "lobby", status: "pending", by: x }],
+        [`${tag} + kilép(X) → L`, () => P(x), ev.kilép(x), { phase: "lobby", status: "left", by: x }],
+        [`${tag} + csatlakozik(Z) → ROOM_STARTED`, () => P(x), ev.csatlakozik(), { phase: "lobby", error: "ROOM_STARTED" }],
+        [`${tag} + lejár → E(X)`, () => P(x), ev.lejár(), { phase: "lobby", status: "expired", by: x }],
+        [`${tag} + megszakad-és-visszatér(Y) → P(X)`, () => P(x), ev.megszakadVissza(y), { phase: "lobby", status: "pending", by: x }],
+        [`${tag} + megszakad(Y), türelmi idő vége → L`, () => P(x), ev.megszakadTürelemVége(y), { phase: "lobby", status: "left", by: x }],
+        // ACC
+        [`ACC(${x === A ? "A" : "B"} kért, kiesett) + kér(Y) → no-op`, () => ACC(x, y), ev.kér(y), { phase: "lobby", status: "accepted", by: x }],
+        [`ACC + kész(Y) → no-op`, () => ACC(x, y), ev.kész(y), { phase: "lobby", status: "accepted", by: x }],
+        [`ACC + kilép(Y) → L`, () => ACC(x, y), ev.kilép(y), { phase: "lobby", status: "left", by: x }],
+        [`ACC + csatlakozik(Z) → ROOM_STARTED`, () => ACC(x, y), ev.csatlakozik(), { phase: "lobby", error: "ROOM_STARTED" }],
+        [`ACC + lejár (a régi határidő) → marad ACC`, () => ACC(x, y), (f) => step(f.s, { type: "tick" }, f.t + 45_000), { phase: "lobby", status: "accepted", by: x }],
+        [`ACC + X visszatér → countdown`, () => ACC(x, y), ev.visszatér(x), { phase: "countdown", status: null }],
+        [`ACC + X türelmi ideje lejár → L`, () => ACC(x, y), (f) => step(f.s, { type: "tick" }, f.t + GRACE), { phase: "lobby", status: "left", by: x }],
+        // E(X)
+        [`E(${x === A ? "A" : "B"}) + kér(X) → P(X)`, () => EXP(x), ev.kér(x), { phase: "lobby", status: "pending", by: x }],
+        [`E + kér(Y) → P(Y)`, () => EXP(x), ev.kér(y), { phase: "lobby", status: "pending", by: y }],
+        [`E + kész(Y) → no-op (a kérdés már nem él)`, () => EXP(x), ev.kész(y), { phase: "lobby", status: "expired", by: x }],
+        [`E + kilép(Y) → L`, () => EXP(x), ev.kilép(y), { phase: "lobby", status: "left", by: x }],
+        [`E + kész(X) → no-op`, () => EXP(x), ev.kész(x), { phase: "lobby", status: "expired", by: x }],
+        [`E + kilép(X) → L`, () => EXP(x), ev.kilép(x), { phase: "lobby", status: "left", by: x }],
+        [`E + csatlakozik(Z) → ROOM_STARTED`, () => EXP(x), ev.csatlakozik(), { phase: "lobby", error: "ROOM_STARTED" }],
+        [`E + megszakad-és-visszatér(Y) → E`, () => EXP(x), ev.megszakadVissza(y), { phase: "lobby", status: "expired", by: x }],
+        // L
+        [`L(${x === A ? "A" : "B"} maradt) + kér(X) → NOT_ENOUGH_PLAYERS`, () => LEFT(x, y), ev.kér(x), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+        [`L + kész(X) → no-op`, () => LEFT(x, y), ev.kész(x), { phase: "lobby", status: "left", by: x }],
+        [`L + csatlakozik(Z) → ROOM_STARTED`, () => LEFT(x, y), ev.csatlakozik(), { phase: "lobby", error: "ROOM_STARTED" }],
+        [`L + megszakad-és-visszatér(X) → L`, () => LEFT(x, y), ev.megszakadVissza(x), { phase: "lobby", status: "left", by: x }],
+      );
+    }
+    for (const [name, fx, run, want] of rows) {
+      it(name, () => {
+        const r = run(fx());
+        if (want.error) {
+          assert.equal(r.error, want.error);
+        } else {
+          assert.equal(r.error, undefined, `váratlan hiba: ${r.error}`);
+        }
+        assert.equal(r.state.phase, want.phase);
+        if (want.status !== undefined) assert.equal(r.state.rematch?.status ?? null, want.status);
+        if (want.by !== undefined) assert.equal(r.state.rematch?.by, want.by);
+        // A kliensnek kimenő nézet a szigorú sémának felel meg, és a győzteshirdetés a visszavágó alatt is ott van.
+        const view = roomStateView(r.state, A, r.state.lastActivityMs, cfg);
+        assertSchema("room:state", view);
+        if (r.state.rematch) assert.ok(view.rematch?.result.podium.length, "a lezárt meccs eredménye a nézetben");
+      });
+    }
   });
 
   it("állapot-sorszám: minden kimenő változás növeli; elutasított esemény nem", () => {
@@ -533,9 +682,14 @@ describe("JM2 room-machine — bank-kimerülés visszavágók közben (review #4
       let t = T0 + 10;
       for (let match = 0; match < 5; match++) {
         for (const id of [B, C]) s = reduceRoom(s, { type: "ready", playerId: id, ready: true }, t, c).state;
-        const st = reduceRoom(s, { type: "start", playerId: A }, t, c);
-        assert.equal(st.error, undefined, `start: ${st.error}`);
-        s = st.state;
+        if (match === 0) {
+          const st = reduceRoom(s, { type: "start", playerId: A }, t, c);
+          assert.equal(st.error, undefined, `start: ${st.error}`);
+          s = st.state;
+        } else {
+          // SPEC-VÁLTOZÁS 2026-11-16 (JM3a-2, review #464 K4): a visszavágót a többiek „kész”-e elfogadja → azonnal indul.
+          assert.equal(s.phase, "countdown", `visszavágó: ${s.phase}`);
+        }
         const seen: Record<string, Set<string>> = { [A]: new Set(), [B]: new Set(), [C]: new Set() };
         for (let guard = 0; guard < 60 && s.phase !== "finished" && s.phase !== "aborted"; guard++) {
           if (s.phase === "round_open") {

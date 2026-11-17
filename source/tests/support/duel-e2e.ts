@@ -76,7 +76,7 @@ export async function assertQuestionFits(page: Page, label: string): Promise<voi
 }
 
 /** Megvárja a következő nyitott kört (vagy az eredményt), és VALÓDI ÉRINTÉSSEL (tap) válaszol a megadott opcióval. */
-export async function answerNextRound(page: Page, lastRound: number, option = 0, timeout = 30_000): Promise<number | "result"> {
+export async function answerNextRound(page: Page, lastRound: number, option = 0, timeout = 30_000, humanDelayMs = 0): Promise<number | "result"> {
   const handle = await page.waitForFunction(
     (last) => {
       if (document.querySelector('[data-testid="duel-result"]')) return "result";
@@ -90,6 +90,8 @@ export async function answerNextRound(page: Page, lastRound: number, option = 0,
   );
   const v = (await handle.jsonValue()) as number | "result";
   if (v === "result") return v;
+  // JM3a-2 (A7): emberi tempó — a gyerek elolvassa a kérdést (≥ 200 ms), így a „Leggyorsabb helyes” valódi számot kap.
+  if (humanDelayMs > 0) await page.waitForTimeout(humanDelayMs);
   await page.getByTestId(`duel-option-${option}`).tap();
   return v;
 }

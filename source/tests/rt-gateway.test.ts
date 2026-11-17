@@ -262,6 +262,156 @@ describe("JM3a gateway — visszatérés a saját helyre új jeggyel / tárolt t
   });
 });
 
+describe("JM3a-2 gateway — folytatási token forgatása és lejárata (review #464 ÚJ-2)", () => {
+  it("a token egyszer használható: visszaüléskor új tokent ad, a régi érvénytelen; a régebbi lapfül SESSION_MOVED zárást kap (nem újracsatlakozik)", async () => {
+    const { io } = await import("socket.io-client");
+    const { connectRt } = await import("../client/src/lib/rt/rtClient");
+    const h = await harness();
+    const { host, code } = await createRoom(h);
+    const guest = await addPlayer(h, code, 6);
+    const gId = guest.playerId!;
+    const t1 = guest.resumeToken!;
+    const open = (token: string) => connectRt({ ticket: "", resumeToken: token, url: `http://127.0.0.1:${h.port}`, ioFactory: io, extraHeaders: { origin: h.origin }, ackTimeoutMs: 4000 });
+    // Második lapfül ugyanazzal a tokennel, miközben az első még él → átveszi a helyet, az első érthető zárást kap.
+    const moved = new Promise<unknown>((resolve) => guest.socket.on("notice", (n: { code: string }) => n.code === "SESSION_MOVED" && resolve(n)));
+    const tab2 = await open(t1);
+    players.push(tab2 as Player);
+    await moved;
+    await sleep(100);
+    assert.equal(guest.status, "closed");
+    assert.equal(guest.closedCode, "SESSION_MOVED");
+    await new Promise<void>((resolve) => (tab2.resumeToken && tab2.resumeToken !== t1 ? resolve() : tab2.socket.once("welcome", () => resolve())));
+    const t2 = tab2.resumeToken!;
+    assert.notEqual(t2, t1, "visszaüléskor új token");
+    assert.equal(tab2.playerId ?? (await new Promise((r) => tab2.onState((s) => r(s.you.playerId)))), gId);
+    // A régi token a `welcome` nyugtája után (K1) többé nem ad vissza helyet.
+    await sleep(150);
+    await assert.rejects(open(t1), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players.every((p: any) => p.connected));
+  });
+
+  it("review K1: elveszett `welcome` (az új token nem ér a klienshez) → a régi tokennel visszaül; nyugta után a régi és a közbülső token érvénytelen; a tartalék a türelmi idő után lejár", async () => {
+    const { io } = await import("socket.io-client");
+    const { PROTOCOL_VERSION, RT_PATH, RT_RECONNECT_GRACE_MS } = await import("../shared/duel/protocol");
+    const h = await harness();
+    const { host, code } = await createRoom(h);
+    const guest = await addPlayer(h, code, 6);
+    const gId = guest.playerId!;
+    const t1 = guest.resumeToken!;
+    guest.socket.io.reconnection(false);
+    guest.socket.io.engine.close();
+    await host.waitFor("room:state", (s) => s.players.some((p: any) => p.id === gId && !p.connected));
+    // Nyers kliens: a `welcome`-ot megkapja, de NEM nyugtázza (a valóságban: a csomag elveszett), majd megszakad.
+    const raw = (token: string, ackWelcome: boolean) =>
+      new Promise<{ s: ReturnType<typeof io>; welcome: any }>((resolve, reject) => {
+        const s = io(`http://127.0.0.1:${h.port}`, { path: RT_PATH, addTrailingSlash: false, transports: ["websocket"], reconnection: false, auth: { v: PROTOCOL_VERSION, resume: token }, extraHeaders: { origin: h.origin } });
+        s.on("welcome", (w: any, ack?: () => void) => {
+          if (ackWelcome && typeof ack === "function") ack();
+          resolve({ s, welcome: w });
+        });
+        s.on("connect_error", (e: Error & { data?: { code?: string } }) => {
+          s.close();
+          reject(Object.assign(new Error(e.data?.code ?? e.message), { code: e.data?.code ?? e.message }));
+        });
+      });
+    const lost = await raw(t1, false);
+    const t2 = lost.welcome.resumeToken as string;
+    assert.ok(t2 && t2 !== t1, "a szerver forgatott");
+    lost.s.close();
+    await sleep(80);
+    // A kliens csak t1-et ismeri: azzal próbál újra → visszaül ugyanarra a helyre (PR előtti tűrés megmarad).
+    const back = await raw(t1, true);
+    assert.equal(back.welcome.resumed, true);
+    assert.equal(back.welcome.playerId, gId);
+    const t3 = back.welcome.resumeToken as string;
+    assert.ok(t3 !== t1 && t3 !== t2);
+    await host.waitFor("room:state", (s) => s.players.every((p: any) => p.connected));
+    await sleep(100);
+    // Nyugta után: a régi (t1) és a soha meg nem érkezett közbülső (t2) token is érvénytelen.
+    await assert.rejects(raw(t1, true), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    await assert.rejects(raw(t2, true), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    // A tartalék időben korlátos: nyugta nélküli forgatás után a türelmi időn túl a régi token már nem ültet vissza.
+    back.s.close();
+    await sleep(80);
+    const lost2 = await raw(t3, false);
+    lost2.s.close();
+    await sleep(80);
+    h.clock.offsetMs = RT_RECONNECT_GRACE_MS + 1000;
+    await assert.rejects(raw(t3, true), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    h.clock.offsetMs = 0;
+  });
+
+  it("visszaellenőrzés Ú1/Ú2: többszörös nyugtavesztés — a kliensnél lévő token sosem vész el (két- és háromlépcsős lánc); a tartalék határideje nem hosszabbodik", async () => {
+    const { io } = await import("socket.io-client");
+    const { PROTOCOL_VERSION, RT_PATH, RT_RECONNECT_GRACE_MS } = await import("../shared/duel/protocol");
+    const h = await harness();
+    const { host, code } = await createRoom(h);
+    const guest = await addPlayer(h, code, 6);
+    const gId = guest.playerId!;
+    const t1 = guest.resumeToken!;
+    guest.socket.io.reconnection(false);
+    guest.socket.io.engine.close();
+    await host.waitFor("room:state", (s) => s.players.some((p: any) => p.id === gId && !p.connected));
+    /** Nyers visszaülés nyugta nélkül (a nyugta / a következő `welcome` elveszett), majd megszakad; az új tokent adja vissza. */
+    const resumeNoAck = (token: string) =>
+      new Promise<string>((resolve, reject) => {
+        const s = io(`http://127.0.0.1:${h.port}`, { path: RT_PATH, addTrailingSlash: false, transports: ["websocket"], reconnection: false, auth: { v: PROTOCOL_VERSION, resume: token }, extraHeaders: { origin: h.origin } });
+        s.on("welcome", (w: any) => {
+          assert.equal(w.playerId, gId);
+          s.close();
+          setTimeout(() => resolve(w.resumeToken), 60);
+        });
+        s.on("connect_error", (e: Error & { data?: { code?: string } }) => {
+          s.close();
+          reject(Object.assign(new Error(e.data?.code ?? e.message), { code: e.data?.code ?? e.message }));
+        });
+      });
+    // Ú1, kétlépcsős: T1 → T2 (nyugta elvész) → T2-vel vissza → T3 (a welcome elvész) → a kliens T2-vel próbál: visszaül.
+    const t2 = await resumeNoAck(t1);
+    const t3 = await resumeNoAck(t2);
+    assert.notEqual(t3, t2);
+    const t4 = await resumeNoAck(t2);
+    // Háromlépcsős lánc: a mindig a legutóbb megkapott tokennel visszaülő kliens nem zárul ki.
+    const t5 = await resumeNoAck(t4);
+    const t6 = await resumeNoAck(t5);
+    assert.ok(t6);
+    // A régebbi tartalékok a jelenlegi bemutatásakor törlődtek.
+    for (const old of [t1, t2, t3]) await assert.rejects(resumeNoAck(old), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    // Ú2: a tartalékkal végzett ismételt visszaülés NEM hosszabbít — a tartalék (t5) határideje a t6 kiadásától számított türelmi idő.
+    h.clock.offsetMs = Math.floor(RT_RECONNECT_GRACE_MS / 2);
+    const t7 = await resumeNoAck(t5);
+    h.clock.offsetMs = RT_RECONNECT_GRACE_MS - 2000;
+    await resumeNoAck(t5);
+    h.clock.offsetMs = RT_RECONNECT_GRACE_MS + 1000;
+    await assert.rejects(resumeNoAck(t5), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    assert.ok(t7);
+    h.clock.offsetMs = 0;
+  });
+
+  it("szerveroldali lejárat: a túl régi token nem ül vissza; az új jeggyel saját helyre ülés is új tokent ad", async () => {
+    const { io } = await import("socket.io-client");
+    const { connectRt } = await import("../client/src/lib/rt/rtClient");
+    const { RESUME_TOKEN_MAX_AGE_MS } = await import("../server/realtime/gateway");
+    const h = await harness();
+    const { code } = await createRoom(h);
+    const who = creatorHeaders();
+    const b1 = await addPlayer(h, code, 5, { headers: who });
+    const tOld = b1.resumeToken!;
+    b1.socket.io.reconnection(false);
+    b1.socket.io.engine.close();
+    await sleep(80);
+    const b2 = await join(h, { intent: "join", code }, { headers: who });
+    const back = await b2.request("room:join", { code, grade: 5 });
+    assert.equal(back.ok, true);
+    assert.notEqual((back as { resumeToken: string }).resumeToken, tOld, "saját helyre ülésnél is forgat");
+    const open = (token: string) => connectRt({ ticket: "", resumeToken: token, url: `http://127.0.0.1:${h.port}`, ioFactory: io, extraHeaders: { origin: h.origin }, ackTimeoutMs: 4000 });
+    await assert.rejects(open(tOld), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    h.clock.offsetMs = RESUME_TOKEN_MAX_AGE_MS + 1000;
+    await assert.rejects(open((back as { resumeToken: string }).resumeToken), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    h.clock.offsetMs = 0;
+  });
+});
+
 describe("JM3a gateway — megszakadt régi hely", () => {
   it("ugyanaz a (fiókos) játékos megszakadt kapcsolattal új szobát nyithat: a régi helye felszabadul, az ellenfél győz; élő kapcsolatnál ALREADY_IN_ROOM marad", async () => {
     const h = await harness({ windowMs: 3000 });
@@ -344,6 +494,38 @@ describe("JM2 gateway — teljes meccs", () => {
     }
     const grades = h.rt.registry.get(code)!.players.map((p) => p.grade).sort((a, b) => a - b);
     assert.deepEqual(grades, [3, 6, 9, 12]);
+  });
+});
+
+describe("JM3a-2/R gateway — visszavágó nyers Socket.IO-val (PR #476 review)", () => {
+  it("a kérő ismételt `room:ready`-je nem indít (vercel 4592016885); a másik fél egyidejű `room:rematch`-e kölcsönös elfogadás → visszaszámlálás; meccs után idegen nem ülhet be", async () => {
+    const h = await harness({ windowMs: 3000 });
+    const { host, code } = await createRoom(h);
+    const guest = await addPlayer(h, code);
+    await host.waitFor("room:state", (s) => s.players.length === 2 && s.players.every((p: any) => p.ready));
+    assert.equal((await host.request("room:start", {})).ok, true);
+    await playMatch(h, code, [host, guest], (i) => i === 0);
+    // A vendég kér, majd kétszer „kész”-t küld: a szerveren NEM indul (a gazda nem fogadta el).
+    assert.equal((await guest.request("room:rematch", {})).ok, true);
+    for (let i = 0; i < 2; i++) assert.equal((await guest.request("room:ready", { ready: true })).ok, true);
+    assert.equal((await guest.request("room:rematch", {})).ok, true, "a saját kérés ismétlése no-op");
+    await sleep(50);
+    const room = h.rt.registry.get(code)!;
+    assert.equal(room.phase, "lobby");
+    assert.equal(room.rematch?.status, "pending");
+    assert.equal(room.rematch?.by, guest.playerId);
+    const seen = await host.waitFor("room:state", (s) => s.rematch?.status === "pending");
+    assert.equal(seen.rematch.by, guest.playerId, "a gazda a szervertől tudja, ki kért");
+    assert.ok(seen.rematch.result.podium.length > 0, "a győzteshirdetés a visszavágó alatt is a nézetben");
+    // Idegen a régi kóddal: ROOM_STARTED (a kód meccs után csak visszavágóra él).
+    const stranger = await join(h, { intent: "join", code });
+    const sAck = await stranger.request("room:join", { code, grade: 5 });
+    assert.equal(sAck.ok, false);
+    assert.equal((sAck as { code?: string }).code, "ROOM_STARTED");
+    // A gazda egyidejű „kérés”-e = elfogadás → mindkét kliens visszaszámlálást kap.
+    assert.equal((await host.request("room:rematch", {})).ok, true);
+    for (const p of [host, guest]) await p.waitFor("room:state", (s) => s.phase === "countdown" && s.rematch === null);
+    for (const p of [host, guest]) assertAllSchemas(p);
   });
 });
 
