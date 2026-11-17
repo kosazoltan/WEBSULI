@@ -2250,11 +2250,11 @@ const TSUNAMI_CSS = `
    lóg a tárcsa találati területére (a tárcsa marad). Fekvőben a közös elrendezés (display: block, oldalsó oszlopok) érvényes. */
 .ts-gates[data-long="true"] .play-question[data-mode="buttons"] { justify-content: flex-start; }
 /* Alacsony álló képernyőn (mérve: 360x640, a leghosszabb kérdés + válaszok) a lista tömörebb, hogy a futó feje fölött érjen
-   véget; a gomb érintési magassága ≥ 44 px marad. */
+   véget; a gomb érintési magassága ≥ 48 px marad (a közös mobil mérő M2 küszöbe, game-mobile-quality.ts). */
 @media (orientation: portrait) and (max-height: 720px) {
   .ts-gates[data-long="true"] .play-question[data-mode="buttons"] { gap: 6px; }
   .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-options { gap: 6px; }
-  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-option { min-height: 44px; padding: 3px 10px; gap: 8px; font-size: 15px; }
+  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-option { min-height: 48px; padding: 3px 10px; gap: 8px; font-size: 15px; }
   .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-label { line-height: 1.15; }
   .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-key { width: 26px; height: 26px; }
 }

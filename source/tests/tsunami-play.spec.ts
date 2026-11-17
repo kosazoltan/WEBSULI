@@ -577,7 +577,7 @@ for (const viewport of [
   test.describe(`${viewport.width}x${viewport.height}: álló lista mód — nem takarja a futót, nem fedi a tárcsát (újra-review #483 ÚK3)`, () => {
     test.use({ viewport, hasTouch: true, isMobile: true });
 
-    test("leghosszabb kérdés + leghosszabb válaszok: a lista és a tárcsa nem metszi egymást, a futó szabad, nincs vízszintes görgetés, gomb ≥ 44 px, a tárcsa ívén koppintás nem válasz", async ({ page }) => {
+    test("leghosszabb kérdés + leghosszabb válaszok: a lista és a tárcsa nem metszi egymást, a futó szabad, nincs vízszintes görgetés, gomb ≥ 48 px, a tárcsa ívén koppintás nem válasz", async ({ page }) => {
       await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
       await page.getByTestId("button-tsunami-start").tap();
       await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
@@ -605,7 +605,8 @@ for (const viewport of [
       for (const o of m.options) {
         const hit = Math.min(o.r, m.joy.r) - Math.max(o.l, m.joy.l) > 0 && Math.min(o.b, m.joy.b) - Math.max(o.t, m.joy.t) > 0;
         expect(hit, `(a) a válaszgomb (${Math.round(o.t)}–${Math.round(o.b)}) és a tárcsa (${Math.round(m.joy.t)}–${Math.round(m.joy.b)}) téglalapja nem metszi egymást`).toBe(false);
-        expect(o.h, "(d) a válaszgomb mért magassága ≥ 44 px").toBeGreaterThanOrEqual(44);
+        // A közös mobil mérő M2 küszöbe (game-mobile-quality.ts: ≥ 48 px) — a korábbi 44 px-es állítás szigorítva.
+        expect(o.h, "(d) a válaszgomb mért magassága ≥ 48 px").toBeGreaterThanOrEqual(48);
       }
       expect(m.covered, "(b) a futó feje / mellkasa nincs takarva").toEqual([false, false]);
       expect(m.overflowX, "(c) nincs vízszintes görgetés lista módban").toBeLessThanOrEqual(1);
