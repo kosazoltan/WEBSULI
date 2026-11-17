@@ -1093,6 +1093,16 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
   (`idleCrossingWasGood`), az outcome alkalmazása előtt.
 - Lista módú képernyőkép 390×844-ről és 844×390-ről is (mérési mappa). ÚK3 (lista mód takarása 360×640-en) és az
   alacsonyak: J1b.
+- **D-J1a-18 (orkesztrátori döntés, a D-J1a-11 kiterjesztése) A „befér” magasságban is.** A kapu-táblák akkor
+  „férnek”, ha (a) minden felirat szélességben befér (`gateLabelFits`, eddig is), ÉS (b) a leghosszabb felirat
+  táblájának VALÓDI magassága az adott nézetben elfér a kérdés-kártya alja és a futó vetített feje között (a felirat
+  sorszámából és a tábla CSS-méreteiből számolva, nem a kirajzolt tábla méréséből — így nincs oda-vissza váltás). Ha (b)
+  nem teljesül, ugyanaz történik, mint a szélességnél: LISTA MÓD (a D-J1a-11 szerint: a teljes válaszok a kérdés-sávban,
+  a kulcs-kör a kapu színe + szimbóluma, a 3D kapuív ugyanezt mutatja; táblák nélkül). Nincs új elrendezési számítás a
+  táblák helyére. A döntés a kérdés megjelenésekor ÉS átméretezéskor / elforgatáskor újraszámolódik. Tesztek
+  kényszerített tétellel (teszt-kampó: `forceState({ question: true, answers: [...] })`): 844×390 egysoros válaszokkal
+  táblák, „a tábla a futó feje fölött” ≤ 1 px; 844×390 kétsoros válaszokkal lista mód, a futó feje szabad, a teljes
+  válaszok olvashatók; a leghosszabb válaszok mindhárom nézetben (meglévő e2e).
 
 ### J1b — Mentőöv, Örvény-miniboss, Nagy Hullám főellenfél, szakaszok
 
