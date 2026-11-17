@@ -457,8 +457,9 @@ test("D-J1a-18: a tábla magassága a felirat sorszámából; ha a kártya és a
   const two = gateHeightPx("zöld körte a tálban", 138);
   assert.ok(one >= 56 && one < two, `egysoros ${one} < kétsoros ${two}`);
   assert.ok(two - one >= 15, "egy plusz sor legalább egy sormagasság");
-  // Fekvő 844×390: kártya alja ~185 px, a fej ~270 px → a kétsoros tábla nem fér, az egysoros igen.
-  const land = { innerWidthPx: 138, cardBottomPx: 185, runnerHeadPx: 270, stageHeightPx: 390 };
+  // Fekvő 844×390, MÉRT geometria (SwiftShader, 2026-11-17): kártya alja 162 px, a fej 254 px → a kétsoros tábla nem fér, az
+  // egysoros igen (D-J1a-19: a 2 + 2 px-es felirat-ráhagyással is).
+  const land = { innerWidthPx: 138, cardBottomPx: 162, runnerHeadPx: 254, stageHeightPx: 390 };
   assert.equal(gatesFitVertically({ ...land, labels: ["cat", "dog", "sun"] }), true);
   assert.equal(gatesFitVertically({ ...land, labels: ["cat", "zöld körte a tálban", "sun"] }), false, "a legmagasabb tábla dönt");
   // Álló 390×844: bőven van hely.
