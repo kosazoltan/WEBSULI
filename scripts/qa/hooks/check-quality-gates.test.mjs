@@ -47,6 +47,11 @@ test('nem kapu-köteles parancs: nincs terv (útvonal / névrész / idézett sz�
     assert.equal(kind(c), 'none', c);
   }
   assert.equal(detectGated('cat .git/websuli-qa-evidence/pre-push-x.json'), false);
+  // Z2: önálló, nem futtató eszközben az idézett „git push” szöveg nem számít (láncolva viszont fail-closed DENY).
+  for (const c of ['echo "git push"', 'grep -rn "git push" docs', 'rg "gh pr merge" scripts']) assert.equal(kind(c), 'none', c);
+  assert.equal(kind('echo "git push" && true'), 'deny');
+  // Z1: útvonallal megadott gh.
+  for (const c of ['/usr/bin/gh pr merge 5 --squash', '"/c/Program Files/GitHub CLI/gh.exe" pr merge 5 --squash', 'iex "git push"']) assert.equal(kind(c), 'deny', c);
 });
 
 test('a #489 öt bot-forgatókönyve: mind DENY', () => {

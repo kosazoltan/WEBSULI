@@ -37,10 +37,15 @@ const W = (x) => `(?<![\\w./:-])${x}(?![\\w./:-])`;
 const GIT_PUSH = new RegExp(`${W('git(?:\\.exe)?')}[\\s\\S]*${W('push')}`, 'i');
 // Útvonallal megadott git (`C:/…/git.exe' push`, `/usr/bin/git push`): a név után idézőjel és / vagy szóköz jön.
 const GIT_PATH_PUSH = new RegExp(`git(?:\\.exe)?['"]?\\s[\\s\\S]*${W('push')}`, 'i');
+// Útvonallal megadott gh (`/usr/bin/gh pr merge`, `"…/GitHub CLI/gh.exe" pr merge`) — visszaellenőrzés Z1.
+const GH_PATH_PR = new RegExp(`gh(?:\\.exe)?['"]?\\s[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
+// Parancsot futtató / burkoló eszközök: ha ilyen a fej, az idézett „git push” szöveg is parancs lehet → fail-closed.
+const EVALUATORS = new Set(['iex', 'invoke-expression', 'eval', 'bash', 'sh', 'zsh', 'dash', 'pwsh', 'powershell', 'cmd', 'env', 'sudo', 'xargs',
+  'start-process', 'exec', 'command', 'nohup', 'time', 'watch', 'nice', 'timeout', 'su', 'runas', 'wsl', 'npx', 'npm', 'node', 'python', 'python3', 'py']);
 const GH_PR = new RegExp(`${W('gh(?:\\.exe)?')}[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
 export function detectGated(raw) {
   const s = String(raw ?? '');
-  return GIT_PUSH.test(s) || GIT_PATH_PUSH.test(s) || GH_PR.test(s) || /\/pulls\/\d+\/merge\b/i.test(s);
+  return GIT_PUSH.test(s) || GIT_PATH_PUSH.test(s) || GH_PR.test(s) || GH_PATH_PR.test(s) || /\/pulls\/\d+\/merge\b/i.test(s);
 }
 
 /**
@@ -169,6 +174,10 @@ export function planCommand(raw) {
     }
     return { kind: 'deny', reason: SIMPLE_HINT };
   }
+  // Z2: önálló, nem futtató eszköz (echo, grep, rg, cat …), amelyben a „git push” csak idézett szövegként áll → nem kibocsátás.
+  const base = (x) => x.replace(/\\/g, '/').split('/').pop().toLowerCase();
+  const toolish = (x) => ['git', 'git.exe', 'gh', 'gh.exe'].includes(base(x));
+  if (!EVALUATORS.has(base(head)) && !toolish(head) && !w.some((x) => x === 'push' || x === 'pr' || toolish(x))) return { kind: 'none' };
   return { kind: 'deny', reason: `${SIMPLE_HINT} (A parancs nem közvetlenül \`git push\` / \`gh pr …\`: burkoló, változó, alias vagy más eszköz.)` };
 }
 

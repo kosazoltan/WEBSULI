@@ -78,10 +78,13 @@ viszi bukásra.
     `--author-email`, `-R/--repo`) értéke nem cél; több / nem egyértelmű cél → DENY; cél nélkül az aktuális ág PR-ját a hook
     `gh pr view --json number,headRefOid`-dal oldja fel. A PR JELENLEGI fejére szóló, legfeljebb 15 perces zöld `merge-<n>-<fej>`
     kell. `--auto` → DENY; `gh api …/pulls/<n>/merge` → DENY.
+  - Önálló, nem futtató eszközben (`echo "git push"`, `grep -rn "git push" docs`) az idézett szöveg nem számít; futtató eszközben
+    (`bash -c`, `iex`, `cmd /c`, `env`, `node` …) és láncolt parancsban fail-closed DENY. Útvonallal megadott `git` / `gh` is DENY.
   - Más repó (amelyben nincs `scripts/qa/gates/pre-push-gate.mjs`): nincs kimenet — kivéve, ha a parancs szövege a WEBSULI-ra mutat.
   - Hibánál (pl. a `gh` nem válaszol) a kibocsátó parancsra DENY. A meglévő `check-audit-ok`, `check-destructive`,
     `enforce-repo-rules` hookok változatlanok és függetlenek.
-- **A hook NEM biztonsági határ** a szándékos megkerülés ellen (pl. a hook kikapcsolása, szkriptfájlból indított push): a figyelmetlen
+- **A hook NEM biztonsági határ** a szándékos megkerülés ellen (pl. a hook kikapcsolása, szkriptfájlból indított push, idézés- /
+  escape-trükk a parancsnévben, `git send-pack`, `gh api graphql` merge-mutáció): a figyelmetlen
   hibát fogja meg. A megkerülés tilos, és az orkesztrátornál a `pre-merge-gate` mindenképp lefut.
 - A hook csak a WEBSULI-ból indított Claude Code munkamenetekre hat (a `.claude/settings.json`-t a munkamenet induláskor olvassa —
   a merge után induló munkamenetektől érvényes). Más ügynököt (Codex, Cursor) az `AGENTS.md`, a skillek és a `.cursor/rules` köt.
