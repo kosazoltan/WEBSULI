@@ -731,7 +731,7 @@ for (const viewport of [
         await expect(quiz).toHaveAttribute("data-armed", "true", { timeout: 15_000 });
         const m = await page.evaluate(() => ({
           long: document.querySelector('[data-testid="ts-quiz"]')?.getAttribute("data-long"),
-          font: getComputedStyle(document.querySelector('[data-testid="ts-quiz"] .ts-gate-label') ?? document.body).fontFamily,
+          font: `${getComputedStyle(document.querySelector('[data-testid="ts-quiz"] .ts-gate-label') ?? document.body).fontFamily}; betöltve: ${document.fonts.check('900 16px "Source Sans 3"') ? "Source Sans 3" : "nem — tartalék betű"}`,
           gates: Array.from(document.querySelectorAll('[data-testid="ts-quiz"] .ts-gate-label')).map((el) => ({
             text: el.textContent ?? "",
             over: el.scrollHeight - el.clientHeight,
@@ -759,7 +759,8 @@ test.describe("390x844: a futásidejű háló a becslőtől függetlenül megfog
     await page.goto("/games/tsunami-english?seed=11&difficulty=easy");
     await page.getByTestId("button-tsunami-start").tap();
     await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
-    await page.addStyleTag({ content: ".ts-gate-label, .ts-gate[data-long] .ts-gate-label { font-size: 24px !important; }" });
+    // 32 px: a 94 px-es belső szélességen a több szavas felirat ≥ 4 sorra törik (24 px-en még 3 sorba fért — mérve).
+    await page.addStyleTag({ content: ".ts-gate-label, .ts-gate[data-long] .ts-gate-label { font-size: 32px !important; }" });
     await openQuestion(page, { question: true, answers: PORTRAIT_MULTI_LINE_ANSWERS });
     const quiz = page.getByTestId("ts-quiz");
     await expect(quiz).toBeAttached({ timeout: 10_000 });
