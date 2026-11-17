@@ -421,22 +421,41 @@ test.describe("véletlen válasz valódi érintéssel", () => {
         g.forceState({ question: true });
         while (g.probe().cagesOpen !== 1) await frame();
         const open = clock();
-        fire("pointermove", cx + 2, cy + h * 0.46); // a nyitás utáni apró mozdulat újraküldi a régi irányt
-        while (clock() - open < 400) await frame();
-        fire("pointerup", cx + 2, cy + h * 0.46);
+        // A nyitás utáni mozdulat a LEGKÖZELEBBI ketrec felé (a mag választerületei szerint): így a 400 ms-os tolás a
+        // ketrecbe viszi a vadászt — az élesítés (600 ms) nélkül ez válasz lenne (mutációs ellenpróba), vele nem.
+        const pr0 = g.probe();
+        const boardEl = document.querySelector<HTMLElement>('[data-testid="br-board"]')!;
+        const unit = Math.min(boardEl.clientWidth, boardEl.clientHeight);
+        const px = Number(pr0.playerX) * unit;
+        const py = Number(pr0.playerY) * unit;
+        const rects = JSON.parse(String(pr0.cageRects)) as number[][];
+        const near = rects
+          .map(([x, y, rw, rh]) => ({ x: x! + rw! / 2, y: y! + rh! / 2 }))
+          .reduce((a, b) => (Math.hypot(b.x - px, b.y - py) < Math.hypot(a.x - px, a.y - py) ? b : a));
+        const len = Math.hypot(near.x - px, near.y - py) || 1;
+        const mx = cx + ((near.x - px) / len) * h * 0.45;
+        const my = cy + ((near.y - py) / len) * h * 0.45;
+        fire("pointermove", mx, my);
+        // 400 ms a mag játékidején (a ketrec-kor; az élesítés is ezen 600 ms) — egy képkocka legfeljebb ~140 ms-ot léptet
+        // (a hurok-plafon), így a felengedés lassú gépen is az élesítés előtt van.
+        while (Number(g.probe().cageAgeMs) < 400) await frame();
+        fire("pointerup", mx, my);
         const released = clock();
+        const releaseAge = Number(g.probe().cageAgeMs);
         const armedAtRelease = String(g.probe().cageArmed);
         while (clock() - released < 1500) await frame();
         const p = g.probe();
-        return { pushMs: released - open, armedAtRelease, answered: p.questionsAnswered, open: p.questionOpen };
+        return { pushMs: released - open, releaseAge, armedAtRelease, answered: p.questionsAnswered, open: p.questionOpen };
       },
       { cx, cy, h: sb.height },
     );
     await touch(cdp, { type: "touchEnd", touchPoints: [] });
     expect(r, JSON.stringify(r)).not.toHaveProperty("error");
-    expect(Number(r.pushMs), "a tolás a kérdés-órán < az élesítés (600 ms)").toBeLessThan(600);
     expect(r.answered, `a döntés előtt nincs válasz (${JSON.stringify(r)})`).toBe(0);
     expect(r.open, "a kérdés még nyitva").toBe(1);
+    // A mérés előfeltétele (különben nem azt mérte): a felengedés az élesítés előtt volt.
+    expect(Number(r.releaseAge), "a tolás a játékidőn < az élesítés (600 ms)").toBeLessThan(600);
+    expect(r.armedAtRelease, "a felengedéskor még egy ketrec sem éles").toMatch(/^0+$/);
   });
 
   test("review #485 Ú1: húzás közben nyíló ketrecek — a lent tartott ujj egy ketrecre csúszva sem válaszol; felemelés + új bökés igen", async ({ page }) => {
