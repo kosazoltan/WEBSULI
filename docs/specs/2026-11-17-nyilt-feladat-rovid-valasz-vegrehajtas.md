@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — nyílt feladat: rövid, de tartalmilag teljes válasz → fél pont
 
-**Állapot:** folyamatban – 2026-11-17, ág `fix/nyilt-feladat-rovid-valasz`
+**Állapot:** kész, PR előtt – 2026-11-17, ág `fix/nyilt-feladat-rovid-valasz`
 Terv: `docs/specs/2026-11-17-nyilt-feladat-rovid-valasz.md`
 
 Útvonalak a `source/` alatt. Fizetős hívás (gyártás, döntőbíró) nem indul. Az `OPEN_ANSWER_RULES_HU` szövege és a

@@ -1,6 +1,6 @@
 # Nyílt feladat: a tömör, de tartalmilag teljes válasz fél pontot kap (nem nullát), egyértelmű üzenettel
 
-**Állapot:** folyamatban – 2026-11-17, ág `fix/nyilt-feladat-rovid-valasz`
+**Állapot:** kész, PR előtt – 2026-11-17, ág `fix/nyilt-feladat-rovid-valasz`
 Végrehajtási utasítás: [`2026-11-17-nyilt-feladat-rovid-valasz-vegrehajtas.md`](2026-11-17-nyilt-feladat-rovid-valasz-vegrehajtas.md)
 Kapcsolódó: [`2026-09-11-bank-rubric-diagnostics.md`](2026-09-11-bank-rubric-diagnostics.md) (a helyreállított szerződés),
 `2026-11-17-szoveges-valasz-irasjel.md` (a kitöltős blokk és a köztes lépés — külön ág).
@@ -145,11 +145,11 @@ a legrövidebb teljes válasz szószáma legyen). A szöveg pontosítása a köv
 A `server/ai/lesson-html-spec.ts` (a `WEB_RESEARCH_PIPELINE=html` régi út szerzői referenciája) szövege a paritás miatt változik.
 
 <!-- acceptance-checklist -->
-- [ ] E1 – rövid + teljes → 0,5 (v1, v2, ee_evaluate)
-- [ ] E2 – rövid + hiányos → 0, pontos üzenet
-- [ ] E3 – rövid válasz soha nem 1 pont; éles eloszlás mérve
-- [ ] E4 – needsSentence üzenet
-- [ ] E5 – a mintaválaszok pontja változatlan éles adaton
-- [ ] E6 – a levél pontja egyezik
-- [ ] E7 – böngészős próba
-- [ ] E8 – a bank promptja változatlan
+- [x] E1 – rövid + teljes → 0,5 (v1, v2, ee_evaluate)
+- [x] E2 – rövid + hiányos → 0, pontos üzenet
+- [x] E3 – rövid válasz soha nem 1 pont; éles eloszlás mérve
+- [x] E4 – needsSentence üzenet
+- [x] E5 – a mintaválaszok pontja változatlan éles adaton
+- [x] E6 – a levél pontja egyezik
+- [x] E7 – böngészős próba
+- [x] E8 – a bank promptja változatlan
