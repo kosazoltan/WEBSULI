@@ -25,15 +25,15 @@ A `server/lesson-result-email.ts` kézbesítési része (`sendLessonResult`) vá
 
 ## T2 — a helyi kvíz beküldése az utolsó válasz után
 
-`client/src/lesson-runtime/resultReport.ts`:
-
-- új, exportált tiszta függvény: `quizRoundComplete(round: Pick<ExperienceRound, "ids" | "picks">): boolean` — van kérdés, és
-  mindegyikre van `picks` bejegyzés;
-- `useResultReport`: a küldés feltétele `kind === "quiz" ? (!!round.finishedAt || quizRoundComplete(round)) : !!round.finishedAt`
+- ÚJ fájl `shared/quiz-round.ts` (import nélkül, hogy egységtesztből közvetlenül hívható legyen — a `resultReport.ts` böngészős
+  importjai miatt ott nem lenne az): `quizRoundComplete(round: { ids: readonly string[]; picks: Readonly<Record<string, number>> }): boolean`
+  — van kérdés, és mindegyikre van `picks` bejegyzés;
+- `client/src/lesson-runtime/resultReport.ts`, `useResultReport`: a küldés feltétele `kind === "quiz" ? (!!round.finishedAt || quizRoundComplete(round)) : !!round.finishedAt`
   (a 26. sor `!round.finishedAt` feltétele helyett; a `tasks` ág és a 45 s-os tartalék változatlan). A jelző, a `sending` őr és az
   újrapróbálás változatlan.
 - `client/src/lesson-runtime/LessonExperienceView.tsx:83-85`: a megjegyzés frissítése (a hívás változatlan).
-- Teszt: ÚJ fájl `tests/result-report-complete.test.ts` a `quizRoundComplete`-re (üres kör, hiányos, teljes).
+- Teszt: ÚJ fájl `tests/result-report-complete.test.ts` a `quizRoundComplete`-re (üres kör, hiányos, teljes) és szerkezeti őr a
+  küldés feltételére (a `tests/request-retry.test.ts` mintájára, a forrás olvasásával).
 
 ## T3 — böngészős próba
 
