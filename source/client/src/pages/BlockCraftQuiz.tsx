@@ -54,6 +54,7 @@ import {
   blockCraftDirectorConfig,
   createRuneMine,
   genCfgFor,
+  levelClockTick,
   mineTimeMs,
   nearestRune,
   pickRuneStone,
@@ -1374,13 +1375,15 @@ export default function BlockCraftQuiz() {
     if (coupon.expired || why) return;
     if (phase !== "play" || paused) return;
     const id = setInterval(() => {
+      // Review #484: a pálya-cél teljesülése után (a megoldás-kijelzés még fut) az óra áll — a határidő előtt teljesített
+      // pálya nem járhat le (`levelClockTick`, szabály a magban).
+      const minePhase = mineRef.current?.state().phase ?? "play";
+      if (minePhase !== "play") return;
       setRunSeconds((s) => s + 1);
       setTimeLeft((s) => {
-        if (s <= 1) {
-          setPhase("over");
-          return 0;
-        }
-        return s - 1;
+        const next = levelClockTick(s, minePhase);
+        if (next.expired) setPhase("over");
+        return next.timeLeft;
       });
     }, 1000);
     return () => clearInterval(id);

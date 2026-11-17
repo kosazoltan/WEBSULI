@@ -30,6 +30,7 @@ import {
   canHostRune,
   createRuneMine,
   genCfgFor,
+  levelClockTick,
   mineTimeMs,
   nearestRune,
   pickRuneStone,
@@ -350,6 +351,42 @@ test("rúnakő-találat: a sugár a középre célzott követ választja, a köv
     assert.equal(pickRuneStone(eye, dir, stones), i);
   }
   assert.equal(pickRuneStone(eye, { x: 0, y: 1, z: 0 }, stones), -1, "az égre nézve nincs találat");
+});
+
+test("review #484: az utolsó rúnazár az időkeret utolsó másodpercében → győzelem (az óra a cél után áll); fordítva lejárat", () => {
+  // Pálya-óra: 1 mp van hátra, a cél egy rúnaércnyire.
+  const r = rig();
+  const st = r.mine.state();
+  st.opened = st.goal - 1;
+  r.mine.hit(st.ores[0]!);
+  const p = r.ui!.active()!;
+  let timeLeft = 1;
+  r.mine.pick(p.options.findIndex((o) => o.correct)); // a célt teljesítő válasz az óra-lépés ELŐTT
+  assert.equal(st.phase, "won");
+  // A megoldás-kijelzés még fut (a lap csak utána mutat eredményt) — közben több óra-lépés is jöhet.
+  for (let i = 0; i < 3; i++) {
+    const t = levelClockTick(timeLeft, st.phase);
+    assert.equal(t.expired, false, "a határidő előtt teljesített pálya nem jár le");
+    timeLeft = t.timeLeft;
+  }
+  assert.equal(timeLeft, 1, "a cél után az óra áll");
+  // Fordított sorrend: a lejárat a válasz ELŐTT jön (a zár még nyitott) → a pálya lejár, a kérdés megszakítva zárul.
+  const r2 = rig();
+  const s2 = r2.mine.state();
+  s2.opened = s2.goal - 1;
+  r2.mine.hit(s2.ores[0]!);
+  assert.ok(r2.ui!.active());
+  const t2 = levelClockTick(1, s2.phase);
+  assert.equal(t2.expired, true);
+  assert.equal(t2.timeLeft, 0);
+  assert.equal(r2.ui!.finish()?.result, "aborted", "a nyitott zár kérdése megszakítva zárul (nem hiba, nem ismétlés)");
+  assert.deepEqual(levelClockTick(5, "play"), { timeLeft: 4, expired: false });
+});
+
+test("a lap: a pálya visszaszámlálása a mag fázisán át (`levelClockTick`) — a cél után nem léptet vereségbe", () => {
+  const src = readFileSync(fileURLToPath(new URL("../client/src/pages/BlockCraftQuiz.tsx", import.meta.url)), "utf8");
+  assert.ok(/const minePhase = mineRef\.current\?\.state\(\)\.phase[^;]*;\s*if \(minePhase !== "play"\) return;/.test(src), "az óra a cél után is jár");
+  assert.ok(/levelClockTick\(s, minePhase\)/.test(src), "a lap nem a közös óra-szabályt használja");
 });
 
 test("a lap: a pálya ideje nem függ a válaszoktól (a régi időcsökkentés megszűnt), és nincs kvíz-fázis", () => {

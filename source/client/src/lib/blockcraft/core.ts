@@ -328,6 +328,19 @@ export function mineFingerprint(st: RuneMineState): string {
   return [st.phase, st.level, st.opened, st.crystals, st.blocks, st.xp, st.combo.best, st.ores.length, h.toString(16)].join("|");
 }
 
+/**
+ * A pálya másodperces visszaszámlálásának egy lépése (review #484, Codex): ha a pálya-cél már teljesült (`won` — az utolsó
+ * rúnazár kinyílt, a megoldás-kijelzés még fut), az óra ÁLL, és nem jár le — a határidő előtt teljesített pálya győzelem.
+ * Szabály a fordított esetre: ha a lejárat előbb jön, mint a célt teljesítő válasz (a zár még nyitott, vagy hiányzik még
+ * rúnaérc), a pálya lejár (`expired`); a nyitott kérdés ilyenkor „megszakítva” zárul (nem hiba, nem ismétlés). A sorrend az
+ * események sorrendje: a válasz szinkron állítja a `won`-t, a következő óra-lépés már ezt látja.
+ */
+export function levelClockTick(timeLeft: number, phase: RuneMineState["phase"]): { timeLeft: number; expired: boolean } {
+  if (phase !== "play") return { timeLeft, expired: false };
+  if (timeLeft <= 1) return { timeLeft: 0, expired: true };
+  return { timeLeft: timeLeft - 1, expired: false };
+}
+
 /* ------------------------------------------------------------------------------------------------------------------ */
 /* A kérdés-ütemező beállítása                                                                                         */
 /* ------------------------------------------------------------------------------------------------------------------ */
