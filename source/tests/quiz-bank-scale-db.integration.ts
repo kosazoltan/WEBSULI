@@ -327,3 +327,57 @@ test("route: GET /api/games/quiz-bank/:gameId a kész gzip-választ küldi, a co
     assert.deepEqual(await unknown.json(), { gameId: "ismeretlen", items: [] });
   } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
 });
+
+test("#84 (J7b): material-quizzes — a tétel a forrás-lecke VALÓDI tantárgyát kapja; tantárgy nélküli régi sornál a mező hiányzik", async () => {
+  // Saját osztály (1): a fenti fixture a 3–12. osztályt használja.
+  await db.insert(knowledgeMaps).values({ id: "qbs-map-en", title: "Angol próba", subject: "angol nyelv", classroom: 1, sourceFiles: [], inputHash: "qbs-en" });
+  await db.insert(htmlFiles).values([
+    { id: "qbs-s-1", title: "QBS Present Simple", content: "lesson", classroom: 1 },
+    { id: "qbs-s-2", title: "QBS régi anyag", content: "lesson", classroom: 1 },
+    { id: "qbs-s-3", title: "QBS generált", content: "lesson", classroom: 1 },
+  ]);
+  // Régi formátumú (nem kanonikus) közzétett lecke az angol tudástérképről.
+  await db.insert(lessons).values({ id: "qbs-s-1-v1", mapId: "qbs-map-en", htmlFileId: "qbs-s-1", json: legacyJson(501), version: 1, publishedAt: new Date(T0 + 7_000_000) });
+  await db.insert(gameQuizItems).values([
+    // Régi Stúdió-export: a téma a lecke CÍME; az anyagán át a lecke tantárgya: angol.
+    { gameId: "tornado-hunter-200", tier: "1", sourceMaterialId: "qbs-s-1", topic: "Present Simple", prompt: "QBS went magyarul?", options: ["ment", "jött", "volt"], correctIndex: 0 },
+    // Régi sor lecke nélkül, cím-témával: a tantárgy nem állapítható meg → a mező hiányzik.
+    { gameId: "tornado-hunter-200", tier: "1", sourceMaterialId: "qbs-s-2", topic: "Hund magyarul", prompt: "QBS Hund magyarul?", options: ["kutya", "macska", "ló"], correctIndex: 0 },
+    // A generátor sora: a téma maga a tantárgy.
+    { gameId: "tornado-hunter-200", tier: "1", sourceMaterialId: "qbs-s-3", topic: "nature", prompt: "QBS Mi a víz?", options: ["folyadék", "fém", "gáz"], correctIndex: 0 },
+    // Kupon-ág (lessonId): a lecke tantárgya.
+    { gameId: "tornado-hunter-200", tier: "1", lessonId: "qbs-s-1-v1", topic: "QBS Present Simple", prompt: "QBS kupon went?", options: ["ment", "jött", "volt"], correctIndex: 0 },
+  ]);
+  try {
+    const recent = await svc.listLatestMaterialQuizzes(1, 3);
+    const byPrompt = new Map(recent.items.map((q) => [q.prompt, q]));
+    assert.equal(byPrompt.get("QBS went magyarul?")?.subject, "english");
+    assert.equal(byPrompt.get("QBS Mi a víz?")?.subject, "nature");
+    const unknown = byPrompt.get("QBS Hund magyarul?");
+    assert.ok(unknown, "a tantárgy nélküli régi sor is a válaszban van");
+    assert.equal("subject" in unknown, false, "ismeretlen tantárgynál a mező hiányzik (nem üres, nem találgatott)");
+    const coupon = await svc.listLatestMaterialQuizzes(1, 3, "qbs-s-1-v1");
+    assert.deepEqual(coupon.items.map((q) => [q.prompt, q.subject]), [["QBS kupon went?", "english"]]);
+    // A kanonikus (fúziós) tétel a lecke tantárgyát kapja (a fixture tudástérképe: „matematika”).
+    const canonical = await svc.listLatestMaterialQuizzes(5);
+    const versioned = canonical.items.filter((q) => q.questionVersion);
+    assert.ok(versioned.length > 0 && versioned.every((q) => q.subject === "math"), "kanonikus tétel tantárgya");
+
+    // A route is kiadja (és a hiányzó tantárgyat a JSON-ban sem írja ki).
+    const app = express();
+    await mountAppRoutes(app);
+    const server = await new Promise<import("node:http").Server>((resolve) => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
+    try {
+      const base = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}`;
+      const body = await (await fetch(`${base}/api/games/material-quizzes?classroom=1&limit=3`)).json() as { items: Array<Record<string, unknown>> };
+      const items = new Map(body.items.map((i) => [i.prompt, i]));
+      assert.equal(items.get("QBS went magyarul?")?.subject, "english");
+      assert.equal(Object.prototype.hasOwnProperty.call(items.get("QBS Hund magyarul?") ?? {}, "subject"), false);
+    } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
+  } finally {
+    await db.delete(gameQuizItems).where(inArray(gameQuizItems.prompt, ["QBS went magyarul?", "QBS Hund magyarul?", "QBS Mi a víz?", "QBS kupon went?"]));
+    await db.delete(lessons).where(eq(lessons.id, "qbs-s-1-v1"));
+    await db.delete(htmlFiles).where(like(htmlFiles.id, "qbs-s-%"));
+    await db.delete(knowledgeMaps).where(eq(knowledgeMaps.id, "qbs-map-en"));
+  }
+});
