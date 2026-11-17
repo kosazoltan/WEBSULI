@@ -945,7 +945,7 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
 
 ## J1 — Szökőár szökés: „Hegyre fel!” (J1a, J1b, J1c)
 
-**Állapot (J1a):** nem kezdődött · **Állapot (J1b):** nem kezdődött · **Állapot (J1c):** nem kezdődött
+**Állapot (J1a):** folyamatban – 2026-11-17, ág feat/jatek-j1a-szokoar-hegyre-fel, munkafa .claude/worktrees/jatek-j1a, kanban #78 · **Állapot (J1b):** nem kezdődött · **Állapot (J1c):** nem kezdődött
 **Függ:** J0c merge. **Cél-mondatok:** G1–G6. **Elfogadás:** J-TS, J1–J11, J14, J16, M1–M12. Terv: 5.1.
 
 ### Fájlok
@@ -1020,6 +1020,38 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
    (a `correctCount` elhagyható, ha a lap már nem használja — a `resultTestId: "ts-won"` marad).
 10. `T/tsunami-play.spec.ts`: J1 (simTime kérdés alatt), J5 (hibás kapu után nincs dialógus), kapu-válasz a `play-option`
     gombsoron át, 3 nézet, képernyőképek.
+
+#### J1a döntései (a kód előtt rögzítve, 2026-11-17; a fenti lépések pontosítása, a terv döntéseit nem írják felül)
+
+- **D-J1a-1 Tárcsa a húzás MELLETT (nem helyette).** A 5. lépés „a meglévő joystick helyett” szövege ütközik három közös, a
+  szeletből nem módosítható őrrel (`T/game-touch-controls.test.ts` `<VirtualJoystick` + `shapeJoystick(`, `T/joystick-curve.test.ts`,
+  `T/joystick-response.spec.ts` Szökőár-esete: folytonos kitérés → mozgás görbe), amelyeknek a brief szerint zöldnek kell maradniuk.
+  Biztonságos alapértelmezés: az elsődleges vezérlés a terv szerinti húzás (≥ 30 px vízszintesen = sávváltás, felfelé = ugrás) és a
+  billentyű (←/→/↑, A/D/W); MELLETTE a tárcsa analóg oldalirányú kormányzás „sávsegéddel” (elengedve a legközelebbi sáv közepére
+  áll), a Sprint helyén „Ugrás” akciógomb. A mag bemenete ezért ADDITÍV mezőt kap: `step(state, { laneDelta, jump, steer? })`, az
+  állapot `lane` mezője a folytonos `x` (−1…1) legközelebbi sávja. A `lane: 0|1|2` szerződés megmarad.
+- **D-J1a-2 Mikor dől el a válasz.** A kapu átlépésekor a játékos sávja választ (`director.answer(id, laneOptions[lane], …)`); a
+  kapu-tábla megérintése / az 1–3 billentyű (a kérdés-sáv `onPick`-je) azonnal választ ÉS a sávba futtat — egyujjas, akadálymentes
+  út (K.4/17, terv 8.11). A kapu ilyenkor kinyílik (eltűnik a pályáról).
+- **D-J1a-3 Kapu-távolság az ablakból.** A kapu úgy kerül a pályára, hogy a (lassított) futás a válaszablak vége előtt 300 ms-mal
+  érjen oda: `távolság = sebesség × slowMo × (windowMs − 300) / 1000`. A 4,5 mp-es alapablaknál ez ~4,2 mp valós idő (a terv „3–4
+  mp-nyi távolság” a gyerek által megélt időként értve); hosszú promptnál az ablakkal együtt nő (≤ 9 mp). A „kapu-pillanat”: a kapu
+  előtti 4 mp-nyi szakaszon (és a kapu után 6 m-en) nincs akadály és kagyló (a kagyló sor nem árulhatja el a jó sávot).
+- **D-J1a-4 A hullám-rés dinamikája.** `waveGap` lépésenként `+= (v_futó − v_alap) · dt − tempó · dt`, ahol tempó = alap ×
+  (0,8 + 0,4 × intensity) × pálya-tempó (`tsunamiWaterPace`). A terv egyszeri értékei megmaradnak (ütközés −6 m, jó kapu +12 m); a
+  botlás (0,8 mp, a futó lelassul) és a turbó (1,5 mp, gyorsul) a sebesség-tagon át hat a résre.
+- **D-J1a-5 Kagyló.** Pont (×5); egy teljes kagylósor felszedése 0,8 mp-es mini-turbót ad — így a kérdés nélküli mód is
+  végigjátszható (K.6), és az ügyesség jutalma látható.
+- **D-J1a-6 Tanító szakasz (K.4/25).** Az első 30 mp-ben ritkább akadály, az első 15 mp-ben csak sávváltós (nem ugorható)
+  akadály; ütközés ekkor nem csökkenti a rést (nincs vereség), csak botlás.
+- **D-J1a-7 `ts-quiz` testid.** A kapu-táblák csoportja (látható, ≥ 48 px-es, `data-correct`-es gombok) viseli a `ts-quiz`-t, és
+  ugyanebben a gyökérben a kérdés-sáv (`InlineQuestion mode="bar"`, `portal={false}`): a közös `vocab-cross-game-log.spec.ts` és a
+  mobil mérő M10-e kattintható helyes célt vár a `ts-quiz` alatt, a bar módú gombsor viszont vizuálisan rejtett (nem kattintható).
+  A `ts-prompt`, a `ts-option-<i>` és a `ts-quiz-pause` a kérdés-sávon marad.
+- **D-J1a-8 Spec-változásos tesztek (terv 9.).** `T/remaining-learning.spec.ts:123-133` (időtúllépés-kártya) → hibás kapu után
+  „Miért?” + `data-outcome="wrong"` + álló `simTime`, „Miért?” nélkül nincs dialógus, a helyes kapu ≥ 1,8 mp-ig zöld. A
+  `T/tsunami-mobile.test.ts` régi szerkezet-őrei (kvíz-fázis, `onAnswer`-időzítő, joystick + Sprint, `pickQuiz` hívás-alakja) az új
+  szerkezet ugyanilyen szigorú őreire cserélődnek, `SPEC-VÁLTOZÁS 2026-11-17` jelöléssel.
 
 ### J1b — Mentőöv, Örvény-miniboss, Nagy Hullám főellenfél, szakaszok
 
