@@ -47,6 +47,8 @@ const EVAL_FLAGS = new Set(['-e', '-p', '--eval', '--print', '-c', '-E', '-pe', 
 const NON_EXEC = new Set(['echo', 'printf', 'grep', 'egrep', 'fgrep', 'rg', 'cat', 'head', 'tail', 'wc', 'less', 'more', 'findstr',
   'write-output', 'write-host', 'select-string', 'get-content', 'type', 'sls', 'gc']);
 const GH_PR = new RegExp(`${W('gh(?:\\.exe)?')}[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
+// A tokenizáló által nem hűen követhető idézés-alakok (a valódi héj másképp zárhatja le a szöveget).
+const AMBIGUOUS_QUOTING = /\$['"]|\\"|[‘-‟]/;
 export function detectGated(raw) {
   const s = String(raw ?? '');
   return GIT_PUSH.test(s) || GIT_PATH_PUSH.test(s) || GH_PR.test(s) || GH_PATH_PR.test(s) || /\/pulls\/\d+\/merge\b/i.test(s);
@@ -139,8 +141,12 @@ function parseFlags(args, valueSet, flagSet) {
 /**
  * Egy parancs terve: `{ kind: 'none' }` (nem kapu-köteles), `{ kind: 'deny', reason }`, `push`, `push-delete`, `pr-create`, `pr-merge`.
  */
-export function planCommand(raw) {
+export function planCommand(raw, { tool = 'Bash' } = {}) {
   if (!detectGated(raw)) return { kind: 'none' };
+  // Kanban #100, 2. kör: olyan idézés, amelyet a tokenizáló nem tud a valódi héjjal egyezően értelmezni → kétség esetén DENY.
+  if (AMBIGUOUS_QUOTING.test(raw) || (tool === 'PowerShell' && raw.includes('#'))) {
+    return { kind: 'deny', reason: `${SIMPLE_HINT} (A parancs nem egyértelműen értelmezhető idézést tartalmaz — egyszerű idézéssel, vagy a szöveget fájlból add át.)` };
+  }
   const t = tokenizeSimple(raw);
   if (!t.ok) return { kind: 'deny', reason: `${SIMPLE_HINT} (Talált: ${t.reason}.)` };
   const w = t.words;
@@ -191,7 +197,8 @@ export function planCommand(raw) {
 
 // ---- Futtatás határidővel, fail-closed (kanban #100) --------------------------------------------------------------------
 // A korlátok a gates.config.json-ból (a hook saját repójának konfigja); alapérték: git 10 s, gh 15 s, a teljes keret 45 s — a
-// .claude/settings.json hook-időkorlátja (60 s) alatt, hogy a Claude Code soha ne a saját időkorlátjával (= fail-open) állítsa le.
+// .claude/settings.json hook-időkorlátja (60 s) alatt: a döntést a hook a saját keretén belül hozza meg. Ha maga a hook-folyamat akad
+// el (vagy nem indul), a külső korlát a Claude Code alapbeállításával NEM tiltás — ezt csak az `onFailure: "block"` zárja le.
 export function hookConfig() {
   try {
     const p = new URL('../gates/gates.config.json', import.meta.url);
@@ -202,12 +209,14 @@ export function hookConfig() {
 
 /**
  * Csak a `node --test` alatt (NODE_TEST_CONTEXT): a valódi gites hook-tesztek a gép terhelésétől függetlenül fussanak (kanban #100:
- * terhelt gépen a 10 s-os git-korlát lejárt → a hook helyesen tiltott, a teszt mégis ingadozott). Éles hook-futásban (Claude Code)
- * nincs NODE_TEST_CONTEXT, így a keret soha nem nőhet a settings.json 60 s-os hook-időkorlátja fölé (ami fail-open lenne).
+ * terhelt gépen a 10 s-os git-korlát lejárt → a hook helyesen tiltott, a teszt mégis ingadozott). Minden felülírt érték legfeljebb
+ * TEST_CAP_MS (55 s), így a keret felülírással sem nőhet a settings.json 60 s-os hook-időkorlátja fölé — akkor sem, ha a
+ * NODE_TEST_CONTEXT éles futásban is be van állítva.
  */
+export const TEST_CAP_MS = 55_000;
 function testOverride(cfg) {
   if (!process.env.NODE_TEST_CONTEXT) return cfg;
-  const n = (v, d) => (Number(v) > 0 ? Number(v) : d);
+  const n = (v, d) => Math.min(Number(v) > 0 ? Number(v) : d, TEST_CAP_MS);
   return { gitMs: n(process.env.WEBSULI_HOOK_GIT_TIMEOUT_MS, cfg.gitMs), ghMs: n(process.env.WEBSULI_HOOK_GH_TIMEOUT_MS, cfg.ghMs), budgetMs: n(process.env.WEBSULI_HOOK_BUDGET_MS, cfg.budgetMs) };
 }
 
@@ -349,10 +358,12 @@ function defaultGhView(plan, top, run) {
 
 function main() {
   let raw = '';
+  let tool = 'Bash';
   let cwd = process.cwd();
   try {
     const payload = JSON.parse(readFileSync(0, 'utf8') || '{}');
     if (payload.tool_name !== 'Bash' && payload.tool_name !== 'PowerShell') process.exit(0);
+    tool = payload.tool_name;
     raw = String(payload.tool_input?.command ?? '');
     cwd = payload.cwd || cwd;
   } catch {
@@ -361,7 +372,7 @@ function main() {
     process.exit(0);
   }
   let reason;
-  try { reason = checkAction(planCommand(raw), cwd, { raw }); } catch (e) { reason = `A minőségkapu-ellenőrzés hibára futott (${String(e?.message ?? e).split('\n')[0]}) — a kibocsátás nem engedhető.`; }
+  try { reason = checkAction(planCommand(raw, { tool }), cwd, { raw }); } catch (e) { reason = `A minőségkapu-ellenőrzés hibára futott (${String(e?.message ?? e).split('\n')[0]}) — a kibocsátás nem engedhető.`; }
   if (reason) deny(reason);
   process.exit(0);
 }

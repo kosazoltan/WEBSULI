@@ -35,6 +35,18 @@ export function requiredChecks(required, checkRuns = [], statuses = []) {
  */
 export const COMPARE_FILE_LIMIT = 300; // a GitHub compare végpont legfeljebb ennyi fájlt ad vissza
 
+/**
+ * C-61: a compare-válasz fájllistája. Átnevezésnél a régi név is számít (K4: pl. a main egy tervet archivál — a régi útvonal a
+ * hatókörben van). Hiányzó / nem tömb `files` → null (fail-closed); a csonkolás a válasz fájlszámából.
+ */
+export function compareFiles(cmp) {
+  if (!Array.isArray(cmp?.files)) return { mainFiles: null, mainFilesTruncated: false };
+  return {
+    mainFiles: cmp.files.flatMap((f) => [f?.filename, f?.previous_filename].filter((x) => typeof x === 'string' && x)),
+    mainFilesTruncated: cmp.files.length >= COMPARE_FILE_LIMIT,
+  };
+}
+
 /** Egy hatókör-bejegyzés mintáinak fordítása; hibás / hiányzó hatókör → `.*` (fail-closed). */
 function scopeRegexes(entry) {
   const list = Array.isArray(entry?.mainScope) && entry.mainScope.length ? entry.mainScope : ['.*'];
@@ -157,9 +169,7 @@ async function main() {
     let mainFilesTruncated = false;
     if (cmpBase && mainSha && cmpBase !== mainSha) {
       try {
-        const cmp = ghJson(exec, root, ['api', `repos/${repo}/compare/${cmpBase}...${mainSha}`]);
-        mainFiles = (cmp?.files ?? []).map((f) => f.filename);
-        mainFilesTruncated = mainFiles.length >= COMPARE_FILE_LIMIT;
+        ({ mainFiles, mainFilesTruncated } = compareFiles(ghJson(exec, root, ['api', `repos/${repo}/compare/${cmpBase}...${mainSha}`])));
       } catch { mainFiles = null; }
     }
     const verdict = resolveVerdict({

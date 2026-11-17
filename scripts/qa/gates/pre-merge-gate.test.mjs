@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS, loadConfig } from './lib.mjs';
-import { COMPARE_FILE_LIMIT, decideMainMoved, decideMerge, requiredChecks } from './pre-merge-gate.mjs';
+import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, requiredChecks } from './pre-merge-gate.mjs';
 
 const cfg = loadConfig();
 const HEAD = 'a'.repeat(40);
@@ -96,6 +96,20 @@ test('C-61 pontosítás (C1–C5): csak az ellenőrzés által olvasott fájlkö
   assert.equal(decideMainMoved({ ...moved, mainSha: MAIN, files: qa, mainFiles: null }).status, STATUS.PASS);
   // a decideMerge is ezt használja
   assert.equal(st(decideMerge(base({ mainSha: 'c'.repeat(40), files: qa, mainFiles: ['source/client/src/a.ts'] })), 'main elmozdulása'), STATUS.WARN);
+});
+
+test('C-61 (K4): a compare-válaszból az átnevezett fájl régi neve is számít; hibás válasz → fail-closed', () => {
+  const cmp = { files: [{ filename: 'docs/archive/2026-11-18-x-vegrehajtas.md', previous_filename: 'docs/specs/2026-11-18-x-vegrehajtas.md', status: 'renamed' },
+    { filename: 'source/client/src/a.ts', status: 'modified' }] };
+  const got = compareFiles(cmp);
+  assert.deepEqual(got.mainFiles, ['docs/archive/2026-11-18-x-vegrehajtas.md', 'docs/specs/2026-11-18-x-vegrehajtas.md', 'source/client/src/a.ts']);
+  assert.equal(got.mainFilesTruncated, false);
+  const moved = { base: MAIN, mainSha: 'c'.repeat(40), repoWideScopes: cfg.repoWideScopes, files: ['scripts/qa/gates/external-review.mjs'] };
+  assert.equal(decideMainMoved({ ...moved, ...got }).status, STATUS.FAIL, 'a régi név a scripts/qa hatókörében (docs/specs) van');
+  assert.equal(decideMainMoved({ ...moved, ...compareFiles({ files: [{ filename: 'docs/archive/y.md', status: 'added' }] }) }).status, STATUS.WARN);
+  assert.deepEqual(compareFiles(null), { mainFiles: null, mainFilesTruncated: false });
+  assert.deepEqual(compareFiles({ message: 'Not Found' }), { mainFiles: null, mainFilesTruncated: false });
+  assert.equal(compareFiles({ files: Array.from({ length: COMPARE_FILE_LIMIT }, (_, i) => ({ filename: `f${i}` })) }).mainFilesTruncated, true);
 });
 
 test('a hatókör-táblázat minden sora indokolt, és az őr / workflow sora nem lazít', () => {
