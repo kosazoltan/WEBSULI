@@ -28,7 +28,13 @@ import { BOSS_WAVE, HIT_INVULN_SEC, TUTORIAL_SEC, WAVE_COUNT, waveEnemyCount } f
  * fizikáját (lövedék-röppálya, célzássegéd, ütközési gömbök) NEM futtatja: a bot ügyességét egy dobás helyettesíti, amelynek
  * küszöbeit a modell kalibrálja (`sim.ts`). A lapon mért kérdés/perc külön: `T/space-asteroid-play.spec.ts`.
  *
- * Mért értékek (2026-11-17, ezen a gépen): lásd a `console.log` sorokat (`node --test`).
+ * Review #486 M3 óta a modell a lappal KÖZÖS szabálymagot használ a felvehető elemekre (`dropChance`, `pickDropKind`,
+ * `applyPickupEffect`), az ütközés szabályára (`lifeLossOutcome`) és az évfolyam-sáv szerinti könnyítésre (`gradeEase`); a hajóhoz
+ * érő ellenfél csak `LATERAL_OVERLAP` eséllyel ütközik (a hajó oszlopába ér), a bot a hulló elemeket felveszi. Nem minden
+ * ellenfél ütközik, ami nincs lelőve.
+ *
+ * Mért értékek (2026-11-17, ezen a gépen, 20 seed, 900 mp): győzelem kérdéssel / kérdés nélkül — SIM_YOUNG (3. évf.) 17 / 14,
+ * SIM_AVERAGE 19 / 14, SIM_STRONG 20 / 20, SIM_WEAK 1 / 0; a pontos számokat a `console.log` sorok adják (`node --test`).
  */
 
 const factory = createSimGame as unknown as SimGameFactory;
@@ -167,11 +173,12 @@ test("a rossz kristály 3 apró sziklára hasad; a jó válasz fejlesztése az i
   assert.equal(w.detonate(), false, "bomba nélkül nincs robbanás");
 });
 
+// SPEC-VÁLTOZÁS 2026-11-17 (J6a review #486 M3, oldalirányú átfedés): az ütközés-próbák `overlap: 1`-gyel kényszerítik az átfedést; a szigor nem csökken.
 test("ütközés: élet −1 és 2 mp sérthetetlenség, nem kvíz; a pajzs és a sérthetetlenség alatt nincs sérülés", () => {
   assert.equal(HIT_INVULN_SEC, 2);
   assert.equal(START_LIVES, 3);
   let damage = 0;
-  const w = createAsteroidWorld({ seed: 1, band: () => 0.4, signal: (k) => { if (k === "damage") damage += 1; } });
+  const w = createAsteroidWorld({ seed: 1, overlap: 1, band: () => 0.4, signal: (k) => { if (k === "damage") damage += 1; } });
   // a tanító szakasz (30 mp, nincs életvesztés) és a menet eleji sérthetetlenség lejár, mielőtt a próba kezdődik
   for (let i = 0; i < 31 * 60; i++) w.step(SIM_STEP_MS, { dodgeRoll: 0 });
   assert.equal(w.state().lives, START_LIVES);
@@ -246,7 +253,7 @@ test("közös meghajtó (K.6): eltérő képkocka-időknél, lépés-indexhez k�
 
 test("tanító szakasz (K.4/25): az első 30 mp-ben az ütközés nem von le életet, utána igen", () => {
   assert.equal(TUTORIAL_SEC, 30);
-  const w = createAsteroidWorld({ seed: 3, band: () => 0.4, signal: () => {} });
+  const w = createAsteroidWorld({ seed: 3, overlap: 1, band: () => 0.4, signal: () => {} });
   // 20 mp-nél: közvetlenül a hajónál lévő szikla, sikertelen kitérés
   for (let i = 0; i < 20 * 60; i++) w.step(SIM_STEP_MS, { dodgeRoll: 0 });
   w.shatter({ x: 0, y: -4.5 });
@@ -258,4 +265,46 @@ test("tanító szakasz (K.4/25): az első 30 mp-ben az ütközés nem von le él
   w.shatter({ x: 0, y: -4.5 });
   w.step(SIM_STEP_MS, { dodgeRoll: 5 });
   assert.equal(w.state().lives, START_LIVES - 1);
+});
+
+test("J9 / review #486 M3 — nyerési arány (mint a Matek): a 3–4. évfolyamos modell ≥ 12/20-szor nyer kérdésekkel, és a tudás SEGÍT (kérdéssel nem több a vereség, mint nélkül)", () => {
+  const models = [
+    ["SIM_YOUNG (3. évf.)", SIM_YOUNG, 3],
+    ["SIM_AVERAGE (7. évf.)", SIM_AVERAGE, 7],
+    ["SIM_STRONG (7. évf.)", SIM_STRONG, 7],
+    ["SIM_WEAK (7. évf.)", SIM_WEAK, 7],
+  ] as const;
+  for (const [name, model, grade] of models) {
+    const withQ = runSimSeeds(factory, model, { gameId: GAME, seconds: 900, grade, questions: true });
+    const noQ = runSimSeeds(factory, model, { gameId: GAME, seconds: 900, grade, questions: false });
+    const winsQ = withQ.filter((r) => r.won).length;
+    const winsNo = noQ.filter((r) => r.won).length;
+    console.log(`[space-asteroid-sim] ${name}: győzelem kérdéssel ${winsQ}/20, kérdés nélkül ${winsNo}/20`);
+    assert.ok(winsQ >= winsNo, `${name}: kérdéssel ${winsQ} győzelem < kérdés nélkül ${winsNo} (több vereség a kérdésekkel)`);
+    if (model === SIM_YOUNG) assert.ok(winsQ >= 12, `${name}: ${winsQ}/20 győzelem kérdésekkel (kell ≥ 12)`);
+  }
+});
+
+test("a felvehető elemek (élet / pajzs / erő / bomba) a szimulációban is működnek, a lappal közös drop-táblával és hatással", () => {
+  const picked = simSeeds(GAME, 20).map((seed) => {
+    const sim = createSimGame({ seed, grade: 7, questions: true });
+    runSim(() => sim as never, SIM_AVERAGE, { seed, seconds: 900, grade: 7 });
+    return sim.world.state().pickedUp;
+  });
+  assert.ok(picked.some((n) => n > 0), "a menetekben van felvett elem");
+  assert.ok(medianOf(picked) >= 2, `felvett elem medián ${medianOf(picked)}`);
+});
+
+test("J7 — a menet első kérdése a tananyag (material) tétele, utána a bank folytatja", () => {
+  const material = [1, 2, 3].map((n) => ({ id: `m${n}`, prompt: `Tananyag ${n}?`, options: ["a", "b", "c", "d"], correctIndex: 0 }));
+  const sim = createSimGame({ seed: 5, grade: 7, questions: true, material });
+  for (let i = 0; i < 60 * 90 && !sim.done(); i++) {
+    const q = sim.question();
+    if (q) sim.answer(q.id, q.correctOption);
+    sim.step(SIM_STEP_MS, { skillRoll: 0.5 });
+  }
+  const keys = sim.askedKeys();
+  assert.equal(sim.stats().firstSource, "material");
+  assert.deepEqual(keys.slice(0, 3), ["mat:m1", "mat:m2", "mat:m3"]);
+  assert.ok(keys.length > 3 && keys.slice(3).every((k) => !k.startsWith("mat:")), "a tananyag elfogyása után a bank folytatja");
 });

@@ -11,7 +11,9 @@
  * NEM vonatkozik (U-J6-1): a lap a célzássegédnek csak az ellenfeleket adja át — a kristály kiválasztása a játékosé.
  */
 
-import { GAME_H, PLAYER_Y_MAX, type RockShard } from "./physics";
+import { estimateLines, promptLayout, type PromptViewport } from "@/game-engine/play/promptFit";
+
+import { CAMERA_FOV_DEG, CAMERA_LOOK_Y, CAMERA_Y, CAMERA_Z, GAME_H, GAME_W, PLAYER_Y_MAX, visibleHalfWidth, type RockShard } from "./physics";
 
 /** A kristály látványának sugara (játékegység). */
 export const CRYSTAL_RADIUS = 0.9;
@@ -237,4 +239,91 @@ export function crystalShards(at: { x: number; y: number }, rng: () => number): 
     });
   }
   return out;
+}
+
+/* ----------------------- élesítés és szándékos célzás (review #486 M2) ----------------------- */
+
+/** A kristály a megjelenése után ennyi ms-ig „élesedik”: nem választható (KSZ-11: ≥ 400 ms előjelzés a kérdés-kapu előtt). */
+export const CRYSTAL_ARM_MS = 500;
+
+/**
+ * Választ-e a lövedék a kristályon. Csak akkor, ha (1) a kérdés megjelenése + élesítés után telt el az idő, ÉS (2) a lövedék tűz-
+ * megnyomása (`pressAtMs`) ezután történt: a tartott tűz és a kérdés előtt kilőtt lövedék soha nem „válaszol” — a gyerek olvasás
+ * nélkül, véletlenül nem lő rossz választ. Az idők a kérdés-óra ms-ai.
+ */
+export function bulletCountsAsAnswer(a: { nowMs: number; shownAtMs: number; pressAtMs: number }): boolean {
+  const armedAt = a.shownAtMs + CRYSTAL_ARM_MS;
+  return a.nowMs >= armedAt && a.pressAtMs >= armedAt;
+}
+
+/* ----------------------- a zóna meghatározása a magban (review #486, KSZ-1) ----------------------- */
+
+/**
+ * A játéksík y-koordinátája a vászon függőleges hányadánál (0 = felső, 1 = alsó él): a `three.js` kamera `unproject`
+ * számítása tisztán, a kamera-állandókból (a lap `CAMERA_*` értékei). A rajz nem számol, csak olvassa az eredményt.
+ */
+export function worldYAtScreenFrac(frac: number): number {
+  const fy = CAMERA_LOOK_Y - CAMERA_Y;
+  const fz = -CAMERA_Z;
+  const flen = Math.hypot(fy, fz);
+  const f = { y: fy / flen, z: fz / flen };
+  // a kamera „fel” vektora: merőleges az előre-vektorra, +y felé
+  const u = { y: -f.z, z: f.y };
+  const k = Math.tan((CAMERA_FOV_DEG * Math.PI) / 360);
+  const ndc = 1 - 2 * frac;
+  const dy = f.y + ndc * k * u.y;
+  const dz = f.z + ndc * k * u.z;
+  if (Math.abs(dz) < 1e-6) return CAMERA_LOOK_Y;
+  const t = -CAMERA_Z / dz;
+  return CAMERA_Y + dy * t;
+}
+
+/** A kérdés-kártya fix részei (px): fejléc (jelvény + időcsík + szünet), lábléc (állapot-sor) és a belső térközök. */
+export const PLAY_QUESTION_CARD_CHROME_PX = 92;
+/** A kártya a nézet tetejétől ennyi px-re kezdődik (`index.css`: `--play-question-top` = biztonsági sáv + 80; fekvőn + 60). */
+export function playQuestionTopPx(vp: PromptViewport, safeTopPx: number): number {
+  const landscape = vp.width > vp.height && vp.height <= 520;
+  return Math.max(4, safeTopPx) + (landscape ? 60 : 80);
+}
+
+/** A kártya becsült magassága (px): a prompt becsült sorai + a fix részek. Óvatos (a becslő széles betűt feltételez). */
+export function estimateCardHeightPx(prompt: string, vp: PromptViewport): number {
+  const { textWidthPx, fontPx, lineHeightPx } = promptLayout(vp, prompt.length);
+  const lines = Math.min(7, Math.max(1, estimateLines(prompt, textWidthPx, fontPx)));
+  return PLAY_QUESTION_CARD_CHROME_PX + lines * lineHeightPx;
+}
+
+/** A kristály-gomb fél magassága (px): 48 px a legkisebb érintési cél + a lebegés ráhagyása. */
+export const CRYSTAL_CHIP_HALF_PX = 26;
+/** A két kristály-sor legkisebb függőleges távolsága (px). */
+export const CRYSTAL_MIN_ROW_GAP_PX = 72;
+/** A zóna legalsó pereme a vászon magasságának ennyi hányadánál (a kártya alatti sáv alja, ha több hely van). */
+export const CRYSTAL_ZONE_BOTTOM_FRAC = 0.52;
+
+/**
+ * A kristály-zóna a játéksíkon, a kérdés bemutatásakor EGYSZER eldöntve (nincs képkockánkénti újramérés). Bemenet: a
+ * vászon mérete és a nézethez képesti helye (`boxTopPx`), a kérdés prompt-ja és a nézet (a kártya becsült magasságához),
+ * a biztonsági sáv. Kimenet: `CrystalBounds`, amelyet a lap csak olvas.
+ */
+export function crystalZoneFor(args: {
+  boxWidthPx: number;
+  boxHeightPx: number;
+  boxTopPx: number;
+  viewport: PromptViewport;
+  prompt: string;
+  safeTopPx: number;
+}): CrystalBounds {
+  const h = Math.max(1, args.boxHeightPx);
+  const cardBottom = playQuestionTopPx(args.viewport, args.safeTopPx) + estimateCardHeightPx(args.prompt, args.viewport);
+  const topFrac = Math.min(0.7, Math.max(0.05, (cardBottom + 10 + CRYSTAL_CHIP_HALF_PX - args.boxTopPx) / h));
+  const bottomFrac = Math.min(0.85, Math.max(topFrac + CRYSTAL_MIN_ROW_GAP_PX / h, CRYSTAL_ZONE_BOTTOM_FRAC));
+  const topY = worldYAtScreenFrac(topFrac);
+  const bottomY = worldYAtScreenFrac(bottomFrac);
+  const aspect = args.boxWidthPx / h;
+  return crystalBounds({
+    halfWidth: Math.min(GAME_W / 2, visibleHalfWidth(CAMERA_FOV_DEG, aspect, CAMERA_Z)),
+    minY: bottomY,
+    maxY: topY,
+    minHeight: Math.max(CRYSTAL_MIN_ZONE_HEIGHT, topY - worldYAtScreenFrac(topFrac + CRYSTAL_MIN_ROW_GAP_PX / h)),
+  });
 }

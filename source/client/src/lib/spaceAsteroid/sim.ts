@@ -25,12 +25,14 @@ import {
   bankPlayQuestion,
   createQuestionDirector,
   restoreReviewQuestion,
+  materialPlayQuestion,
   type DirectorConfig,
   type QuestionProvider,
 } from "@/game-engine/play/questionDirector";
 import { createReviewQueue } from "@/game-engine/play/reviewQueue";
 import { createQuestionUi } from "@/game-engine/play/questionUi";
 import { fitsAllViewports } from "@/game-engine/play/promptFit";
+import type { FourChoiceQuiz } from "../../types/gameQuiz";
 import type { RunStatsSnapshot } from "@/game-engine/play/runStats";
 
 import {
@@ -46,10 +48,17 @@ import {
   BOSS_WAVE,
   GAME_H,
   HIT_INVULN_SEC,
+  MAX_LIVES,
+  PICKUP_FALL_VY,
+  applyPickupEffect,
+  dropChance,
+  gradeEase,
+  lifeLossOutcome,
+  pickDropKind,
+  type PickupKind,
   PLAYER_Y_MAX,
   SPAWN_Y_MAX,
   SPAWN_Y_MIN,
-  TUTORIAL_SEC,
   enemyHp,
   pickEnemyKind,
   pickRockSize,
@@ -194,6 +203,10 @@ export type WorldState = {
   combo: number;
   bestCombo: number;
   threats: readonly WorldThreat[];
+  /** Felvehető elemek (életek, pajzs, erő, bomba) a pályán. */
+  pickups: number;
+  /** Felvett elemek száma. */
+  pickedUp: number;
   bossHp: number | null;
   /** Hány hullám-váltás történt (a folyamatos átmenet mérése). */
   waveChanges: number;
@@ -207,20 +220,26 @@ export type WorldState = {
 const range = (u: number, lo: number, hi: number): number => lo + u * (hi - lo);
 
 /**
- * A kitérés küszöbei (ügyességi dobás; 1 felett a kitérés a `SIM_AVERAGE` játékosnál is többnyire sikerül): a hajóhoz érő
- * ellenfél / a vadászgép lövése / a főellenfél lövése elől. A bot-modell kalibrációja (20 seed, 2026-11-17): az átlagos
- * játékos menete ~3,4 perc, ~60% győzelem; a gyenge játékos veszít; az erős nyer — lásd `T/space-asteroid-sim.test.ts`.
+ * A kitérés küszöbei (ügyességi dobás = `u / skill`; a dobás ezek alatt a kitérés sikeres): a hajóhoz érő ellenfél, a vadászgép
+ * lövése és a főellenfél lövése elől. A hajóhoz érő ellenfél csak `LATERAL_OVERLAP` eséllyel ér a hajó oszlopába, és a bot
+ * a hulló elemeket (élet / pajzs / erő / bomba) is felveszi — ugyanazzal a drop-táblával, mint a lap (`physics.ts`).
+ * Kalibráció (20 seed, 2026-11-17, review #486 M3): lásd `T/space-asteroid-sim.test.ts` fejkommentje.
  */
-export const DODGE_IMPACT = 1.2;
-export const DODGE_FIGHTER = 1.2;
-export const DODGE_BOSS = 1.1;
+export const DODGE_IMPACT = 0.65;
+export const DODGE_FIGHTER = 1.1;
+export const DODGE_BOSS = 0.85;
 
 export const BOSS_TOTAL_HP = 90;
 const BOSS_PHASE_HP = [50, 25, 15] as const;
 export const SIM_POWER_SEC = 10;
 export const SIM_SHIELD_SEC = 8;
 export const START_LIVES = 3;
-export const MAX_LIVES = 9;
+export { MAX_LIVES };
+
+/** A bot a felvehető elemet ilyen könnyítéssel éri el (ügyességi dobás; a hajó a hulló elem alá áll). */
+export const PICKUP_CATCH_EASE = 0.95;
+/** Az ütközéshez a hajónak és az ellenfélnek oldalirányban is át kell fednie (a lapon a hajó mozog; ennyi eséllyel ér a függőleges pályára). */
+export const LATERAL_OVERLAP = 0.6;
 
 export type WorldInput = {
   /** A kitérés ügyességi dobása erre a lépésre (`u / skill`; siker, ha < könnyítés). */
@@ -248,9 +267,12 @@ export type AsteroidWorld = {
   skipToBoss(): void;
 };
 
-export function createAsteroidWorld(opts: { seed: number | string; band: () => number; signal: (kind: "damage" | "nearThreat", dtSec?: number) => void }): AsteroidWorld {
+export function createAsteroidWorld(opts: { seed: number | string; grade?: number | null; /** a hajó oszlopába érés esélye (alapértelmezés: `LATERAL_OVERLAP`; a tesztek 1-gyel kényszerítik az ütközést) */ overlap?: number; band: () => number; signal: (kind: "damage" | "nearThreat", dtSec?: number) => void }): AsteroidWorld {
   const rng = createRng(seedFrom(ASTEROID_GAME_ID, opts.seed, "world"));
   const crystalRng = createRng(seedFrom(ASTEROID_GAME_ID, opts.seed, "crystals"));
+  const ease = gradeEase(opts.grade ?? null);
+  let pickups: { id: number; kind: PickupKind; y: number }[] = [];
+  let pickedUp = 0;
   let nextId = 1;
   let wave = 1;
   let spawned = 0;
@@ -287,8 +309,8 @@ export function createAsteroidWorld(opts: { seed: number | string; band: () => n
     }
     const kind = pickEnemyKind(wave, rng.next());
     const size = kind === "rock" ? pickRockSize(rng.next()) : 3;
-    const baseVy = waveBaseVy(wave);
-    const vy = kind === "alien" ? -0.55 : kind === "fighter" ? -0.85 : baseVy + range(rng.next(), -0.4, 0) - (3 - size) * 0.25;
+    const baseVy = waveBaseVy(wave) * ease.speedScale;
+    const vy = kind === "alien" ? -0.55 * ease.speedScale : kind === "fighter" ? -0.85 * ease.speedScale : baseVy + range(rng.next(), -0.4, 0) - (3 - size) * 0.25;
     threats.push({ id: nextId++, kind, size, hp: enemyHp(kind, size), y: range(rng.next(), SPAWN_Y_MIN, SPAWN_Y_MAX), vy, fire: kind === "fighter" ? range(rng.next(), 1.0, 2.0) : 0 });
   };
 
@@ -316,13 +338,16 @@ export function createAsteroidWorld(opts: { seed: number | string; band: () => n
       for (let k = 0; k < 2; k++) {
         threats.push({ id: nextId++, kind: "rock", size, hp: enemyHp("rock", size), y: t.y, vy: Math.max(-2.8, t.vy + range(rng.next(), -0.5, 0.5)), fire: 0 });
       }
+    } else if (rng.next() < dropChance(t.kind)) {
+      pickups.push({ id: nextId++, kind: pickDropKind(rng.next()), y: t.y });
     }
   };
 
   const loseLife = (): void => {
-    if (invuln > 0 || shield > 0) return;
+    const outcome = lifeLossOutcome({ runOver: phase !== "play", invuln, shield, elapsed: clock });
+    if (outcome === "none") return;
     // Tanító szakasz (K.4/25): az első TUTORIAL_SEC mp-ben az ütközés nem von le életet.
-    if (clock < TUTORIAL_SEC) {
+    if (outcome === "tutorial") {
       invuln = HIT_INVULN_SEC;
       return;
     }
@@ -346,7 +371,7 @@ export function createAsteroidWorld(opts: { seed: number | string; band: () => n
 
       // Érkezés: a hullám ellenfelei az `waveSpawnInterval` szerint (a főellenfél: egyetlen).
       const want = waveEnemyCount(wave);
-      if (spawned < want && (threats.length === 0 || clock >= lastSpawn + waveSpawnInterval(wave, opts.band()))) {
+      if (spawned < want && (threats.length === 0 || clock >= lastSpawn + waveSpawnInterval(wave, opts.band()) * ease.spawnScale)) {
         spawnThreat();
         lastSpawn = clock;
       }
@@ -376,7 +401,23 @@ export function createAsteroidWorld(opts: { seed: number | string; band: () => n
           // A hajóhoz érő ellenfél: kitérés (az ügyesség dobása) vagy ütközés.
           threats = threats.filter((x) => x !== t);
           // (kitért: az ellenfél a hajó mellett elhalad, nem ér pontot)
-          if (input.dodgeRoll >= DODGE_IMPACT) loseLife();
+          if (rng.next() < (opts.overlap ?? LATERAL_OVERLAP) && input.dodgeRoll >= DODGE_IMPACT) loseLife();
+        }
+      }
+      // Felvehető elemek: a bot a hulló elemet ügyessége szerint éri el.
+      for (const pu of pickups.slice()) {
+        pu.y += PICKUP_FALL_VY * dt;
+        if (pu.y <= IMPACT_Y) {
+          pickups = pickups.filter((x) => x !== pu);
+          if (input.dodgeRoll < PICKUP_CATCH_EASE) {
+            pickedUp += 1;
+            const r = applyPickupEffect({ lives, shieldSec: shield, bombs, powerLevel: power > 0 ? 1 : 0, powerSec: power, score }, pu.kind);
+            lives = r.lives;
+            shield = r.shieldSec;
+            bombs = r.bombs;
+            power = r.powerSec;
+            score = r.score;
+          }
         }
       }
       if (near) opts.signal("nearThreat", dt);
@@ -395,7 +436,7 @@ export function createAsteroidWorld(opts: { seed: number | string; band: () => n
       }
     },
     state: () => ({
-      phase, wave, lives, invuln, shield, power, bombs, score, kills, combo, bestCombo, threats, bossHp, waveChanges, hits, shardsSpawned,
+      phase, wave, lives, invuln, shield, power, bombs, score, kills, combo, bestCombo, threats, pickups: pickups.length, pickedUp, bossHp, waveChanges, hits, shardsSpawned,
     }),
     shoot(hitsPerShot = 1) {
       // A legközelebbi (legalacsonyabb) ellenfél; a főellenfél csak ha nincs más.
@@ -461,11 +502,12 @@ export function createAsteroidWorld(opts: { seed: number | string; band: () => n
 type SimQuestion = { id: number; correctOption: number; windowMs: number; optionCount: number };
 
 /** Seedelt, évfolyamtól független bank a sim-hez (≥ 300 különböző tétel): az ütemezést és az ismétlést méri. */
-function simProvider(seed: number): QuestionProvider {
+function simProvider(seed: number, material: readonly FourChoiceQuiz[] = []): QuestionProvider {
+  let cursor = 0;
   const rng = createRng(seedFrom(ASTEROID_GAME_ID, seed, "simbank"));
   return {
     couponOnly: false,
-    material: () => null,
+    material: () => (cursor < material.length ? materialPlayQuestion(material[cursor++]!) : null),
     fresh: () => {
       const a = 3 + rng.int(12);
       const b = 3 + rng.int(12);
@@ -501,14 +543,16 @@ export type AsteroidSim = {
   simTimeMs(): number;
   band(): number;
   intensity(): number;
+  /** A bemutatott kérdések kulcsai sorrendben (J7). */
+  askedKeys(): readonly string[];
   /** A világ (mérés / arany visszajátszás). */
   world: AsteroidWorld;
 };
 
-export function createSimGame(opts: { seed: number; grade: number; questions: boolean }): AsteroidSim {
+export function createSimGame(opts: { seed: number; grade: number; questions: boolean; material?: readonly FourChoiceQuiz[] }): AsteroidSim {
   const director = createQuestionDirector({
     config: asteroidDirectorConfig(opts.grade),
-    provider: simProvider(opts.seed),
+    provider: simProvider(opts.seed, opts.material),
     review: createReviewQueue(null),
     rng: createRng(seedFrom(ASTEROID_GAME_ID, opts.seed, "q")),
     startBand: 0.4,
@@ -516,9 +560,11 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
   });
   let driver: AsteroidDriver | null = null;
   let crystals: Crystal[] = [];
+  const asked: string[] = [];
   let currentInput = { dodgeRoll: 0 };
   const world = createAsteroidWorld({
     seed: opts.seed,
+    grade: opts.grade,
     band: () => (opts.questions ? director.band() : 0.4),
     signal: (kind, dt) => driver?.pace.signal(kind, dt),
   });
@@ -526,6 +572,7 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
     director: () => (opts.questions ? director : null),
     onView: () => {},
     onShow: (p) => {
+      asked.push(p.question.key);
       crystals = world.crystalsFor(p);
     },
     onOutcome: (o, p) => {
@@ -559,6 +606,7 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
 
   return {
     world,
+    askedKeys: () => asked,
     step(dtMs, input) {
       if (world.state().phase !== "play") {
         if (!ui.finished()) ui.finish();

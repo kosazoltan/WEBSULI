@@ -124,9 +124,14 @@ test("J6a: a renderer a közös gyárral készül (KSZ-8), a WebGL-környezet el
   assert.ok(render.indexOf('phaseRef.current === "intro"') < render.indexOf("refs.postFx.render()"), "a menüben nincs postFx.render()");
 });
 
-test("J6a: a kristály-gombok a kérdés-sáv alatti zónába kerülnek (mért kártya-alj), és a nem látható gomb láthatósága képkockánként egyeztetett", () => {
-  assert.match(code, /document\.querySelector<HTMLElement>\('\[data-testid="sa-question"\] \.play-question-card'\)/);
-  assert.match(code, /rezoneCrystals\(list, computeCrystalBounds\(\), 0\.35\)/);
+// SPEC-VÁLTOZÁS 2026-11-17 (review #486 KSZ-1: a kristály-geometriát a mag dönti el, a rajz csak olvas): a zóna a kérdés bemutatásakor
+// EGYSZER, a magban (`crystalZoneFor`) készül; a lap nem méri a kártyát és nem rendezi át képkockánként. A szigor nem csökken:
+// a régi (DOM-mérő) minta TILOS lett, a nem látható gomb láthatósága továbbra is képkockánként egyeztetett.
+test("J6a: a kristály-zónát a mag dönti el egyszer (nincs DOM-mérés / képkockánkénti átrendezés), és a nem látható gomb láthatósága képkockánként egyeztetett", () => {
+  assert.match(code, /crystalZoneFor\(\{/);
+  assert.match(code, /spawnCrystals\(p, decideCrystalZone\(p\.question\.quiz\.prompt\), runRngRef\.current\.crystal\.next\)/);
+  assert.doesNotMatch(code, /querySelector<HTMLElement>\('\[data-testid="sa-question"\]/, "a lap nem méri a kérdés-kártyát");
+  assert.doesNotMatch(code, /rezoneCrystals\(/, "a rajz nem rendezi át a kristályokat");
   assert.match(code, /if \(chip\.style\.visibility !== vis\) chip\.style\.visibility = vis;/);
   // a koppintás mozgó célra: pointer-események (közös `pointerTapHandlers`), nem `click`
   assert.match(code, /\{\.\.\.pointerTapHandlers\(crystalTaps, idx, \(\) => onAnswer\(idx\)\)\}/);
@@ -135,4 +140,54 @@ test("J6a: a kristály-gombok a kérdés-sáv alatti zónába kerülnek (mért k
 test("J6a: a rövidült pálya miatt a „Hullám 10” jelvény (wave_10) a főellenfél legyőzésével elérhető marad", () => {
   assert.match(code, /highestWave: gameWon \? WAVE_COUNT \+ 2 : waveRef\.current,/);
   assert.ok(WAVE_COUNT + 2 >= 10, "a főellenfél legyőzése nem éri el a 10. hullám küszöbét");
+});
+
+/* ---------------------------------- review #486 ---------------------------------- */
+
+test("review #486 M1: az ütközés szabálya a közös magból jön, és a főellenfél legyőzése véglegesít (nincs sérülés, az eredmény nem írható át)", () => {
+  assert.match(code, /lifeLossOutcome\(\{ runOver: runOverRef\.current \|\| bossDefeatedRef\.current, invuln: p\.invuln, shield: shieldTimerRef\.current, elapsed: gameElapsedRef\.current \}\) !== "none"/);
+  const hit = code.slice(code.indexOf("const handleHit = "), code.indexOf("const applyPickup"));
+  assert.match(hit, /lifeLossOutcome\(\{ runOver: runOverRef\.current \|\| bossDefeatedRef\.current[\s\S]{0,120}return;/, "a handleHit a vége / győzelem után nem sebez");
+  assert.match(code, /const won = wonIn \|\| bossDefeatedRef\.current;/, "a győzelem nem írható át „Kör vége”-re");
+});
+
+test("review #486 M2: a kristályt a lövedék csak élesítés után, új tűz-nyomással választja (a koppintás / billentyű szándékos, azonnali)", () => {
+  const tick = code.slice(code.indexOf("const tick = (dt: number)"), code.indexOf("const enemyRadius"));
+  assert.match(tick, /bulletCountsAsAnswer\(\{ nowMs: armClockRef\.current, shownAtMs: crystalShownAtRef\.current, pressAtMs: b\.pressAtMs/);
+  assert.match(tick, /if \(fireNow && !firePrevRef\.current\) firePressAtRef\.current = armClockRef\.current;/);
+  assert.match(tick, /pressAtMs\s*\}/, "a lövedék viszi a tűz-nyomás idejét");
+  assert.doesNotMatch(code, /chip\.disabled !== lock/, "a koppintás / billentyű szándékos: nincs élesítési tiltás (az élesítés a lövedékre vonatkozik)");
+});
+
+test("review #486: a hosszú válaszok listája — a lista az egyetlen megállítási ok mellett válaszol, a világ áll alatta, és csak a „Válaszok” gombra nyílik", () => {
+  assert.match(code, /setLongLabels\(!crystalLabelsFit\(p\.options\.map\(\(o\) => o\.label\)\)\);/);
+  assert.doesNotMatch(code, /if \(long\) setExpanded\(true\)/, "a lista nem nyílik magától (a pálya nem áll meg kérés nélkül)");
+  assert.match(code, /listHoldRef\.current = expanded && longLabels && !paused && !gfxLost && feedback === null;/);
+  assert.match(code, /data-testid="sa-answers"/);
+  assert.match(code, /className="sa-answer-text"/);
+  assert.doesNotMatch(code, /2 sorra vág/, "a „2 sorra vág” engedmény megszűnt");
+});
+
+test("review #486: a rajz a két fix lépés között interpolál (hajó, ellenfelek, lövedékek, felvehető elemek)", () => {
+  assert.match(code, /playerGroup\.position\.x = interpolate\(playerPrevRef\.current\.x, p\.x, alpha\)/);
+  assert.match(code, /mesh\.position\.set\(interpolate\(e\.px \?\? e\.x, e\.x, alpha\), interpolate\(e\.py \?\? e\.y, e\.y, alpha\), 0\)/);
+  assert.match(code, /interpolate\(b\.px \?\? b\.x, b\.x, alpha\)/);
+  assert.match(code, /interpolate\(pu\.px \?\? pu\.x, pu\.x, alpha\)/);
+  assert.match(code, /const a = driver\.frame\(realDt, pausedRef\.current\);\s*alphaRef\.current = pausedRef\.current \? 1 : a;/);
+});
+
+test("review #486: a lövedékek geometriája és anyaga közös (nem lövésenként új), a felvehető elemek szabálya a magból jön", () => {
+  const render = code.slice(code.indexOf("const render = (now: number)"));
+  assert.doesNotMatch(render, /new THREE\.CylinderGeometry\(0\.05/, "lövésenként új geometria");
+  assert.match(code, /new THREE\.Mesh\(refs\.bulletGlow\.body, b\.fromEnemy \? refs\.bulletGlow\.bodyEnemy : refs\.bulletGlow\.bodyPlayer\)/);
+  assert.match(code, /dropChance\(e\.kind\)/);
+  assert.match(code, /applyPickupEffect\(/);
+  assert.match(code, /gradeEase\(gradeRef\.current\)\.spawnScale/);
+});
+
+test("review #486 (CI): a shader-előmelegítés csak a KHR_parallel_shader_compile kiterjesztéssel hívja a compileAsync-ot, különben szinkron compile; a törlés mindkét ágon", () => {
+  assert.match(code, /renderer\.extensions\.has\("KHR_parallel_shader_compile"\)/);
+  assert.match(code, /void renderer\.compileAsync\(scene, camera\)\.then\(cleanup, cleanup\);/);
+  assert.match(code, /renderer\.compile\(scene, camera\);[\s\S]{0,80}window\.setTimeout\(cleanup, 1500\)/);
+  assert.equal(code.split("compileAsync(").length - 1, 1, "a compileAsync egyetlen, feltételes hívás");
 });

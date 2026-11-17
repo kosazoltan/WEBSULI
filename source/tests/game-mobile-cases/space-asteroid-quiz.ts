@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 
+import { GRADE_QUIZ_ITEMS } from "../../client/src/data/gradeQuizBank";
 import type { GameMobileCase } from "../support/game-mobile-quality";
 
 type GameTestWindow = { __websuliGame?: { forceState: (patch: Record<string, unknown>) => void } };
@@ -46,7 +47,37 @@ export const CASE: GameMobileCase = {
     await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame?.forceState({ question: true }));
     const wrong = page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first();
     await expect(wrong).toBeVisible({ timeout: 10_000 });
-    await wrong.click({ force: true });
+    // Review #486: nincs `force` — a kristály élesedése (500 ms) után, mozdulatlanul kattintható gombra kattintunk.
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
+    await wrong.click();
+    await page.getByTestId("play-why").click();
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible({ timeout: 10_000 });
+  },
+};
+
+/**
+ * Review #486: a LEGHOSSZABB banki válaszú tétel — a kristályokon sorszám, a TELJES szövegek a „Válaszok” listán (`sa-answers`).
+ * A közös mérő (`game-mobile-quality.spec.ts`) egyetlen `CASE`-t importál játékonként: ezt a második esetet az orkesztrátor köti
+ * be (ORCHESTRÁTOR-KÉRÉS); addig a `space-asteroid-play.spec.ts` ugyanezt méri mindhárom nézetben (>= 48 px, nincs átfedés,
+ * nincs vágás, a lista a nézeten belül).
+ */
+const LONGEST = [...GRADE_QUIZ_ITEMS].sort((a, b) => b.options.reduce((n, o) => n + o.length, 0) - a.options.reduce((n, o) => n + o.length, 0))[0]!;
+export const CASE_LONG_ANSWERS: GameMobileCase = {
+  ...CASE,
+  id: "space-asteroid-quiz",
+  quizScope: '[data-testid="sa-answers"]',
+  quizForce: { question: true, questionItem: { id: "long-answers", prompt: LONGEST.prompt, options: [...LONGEST.options], correctIndex: LONGEST.correctIndex } },
+  quizMoving: false,
+  answerWrong: async (page: Page) => {
+    await page.waitForFunction(() => typeof (window as unknown as GameTestWindow).__websuliGame?.forceState === "function", undefined, { timeout: 15_000 });
+    await page.evaluate(
+      (item) => (window as unknown as GameTestWindow).__websuliGame?.forceState({ question: true, questionItem: item }),
+      { id: "long-answers", prompt: LONGEST.prompt, options: [...LONGEST.options], correctIndex: LONGEST.correctIndex },
+    );
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
+    await page.getByTestId("sa-answers-open").click();
+    const wrongText = LONGEST.options[(LONGEST.correctIndex + 1) % LONGEST.options.length]!;
+    await page.locator(".sa-answer", { has: page.getByText(wrongText, { exact: true }) }).click();
     await page.getByTestId("play-why").click();
     await expect(page.getByTestId("quiz-feedback")).toBeVisible({ timeout: 10_000 });
   },

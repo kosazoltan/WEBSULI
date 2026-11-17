@@ -277,3 +277,56 @@ export function starScrollY(y: number, dt: number, moving: boolean): number {
   if (next < -STAR_WRAP) next = STAR_WRAP;
   return next;
 }
+
+/* --------------------- közös szabályok (lap + szimuláció, review #486) --------------------- */
+
+/** Életvesztés-döntés: a menet eldőlte után (győzelem / vereség) sebzés nem érhet (M1); a tanító szakaszban nincs életvesztés. */
+export function lifeLossOutcome(a: { runOver: boolean; invuln: number; shield: number; elapsed: number }): "none" | "tutorial" | "life" {
+  if (a.runOver || a.invuln > 0 || a.shield > 0) return "none";
+  return a.elapsed < TUTORIAL_SEC ? "tutorial" : "life";
+}
+
+export type PickupKind = "life" | "power" | "shield" | "bomb";
+
+/** Ennyi eséllyel ejt felvehető elemet a nem hasadó ellenfél (a lap régi táblája, a szimulációval közös). */
+export function dropChance(kind: "rock" | "crystal" | "alien" | "fighter" | "boss"): number {
+  return kind === "rock" ? 0.18 : kind === "crystal" ? 0.32 : kind === "alien" ? 0.4 : 0.32;
+}
+
+/** 40% élet, 30% erő, 20% pajzs, 10% bomba. */
+export function pickDropKind(roll: number): PickupKind {
+  return roll < 0.4 ? "life" : roll < 0.7 ? "power" : roll < 0.9 ? "shield" : "bomb";
+}
+
+export const PICKUP_FALL_VY = -1.4;
+export const MAX_LIVES = 9;
+export const MAX_SHIELD_SEC = 20;
+export const MAX_BOMBS = 5;
+export const PICKUP_SHIELD_SEC = 8;
+export const PICKUP_POWER_SEC = 10;
+
+export type PickupStats = { lives: number; shieldSec: number; bombs: number; powerLevel: number; powerSec: number; score: number };
+
+/** A felvett elem hatása (a lap és a szimuláció ugyanezt hívja). */
+export function applyPickupEffect(s: PickupStats, kind: PickupKind): PickupStats {
+  if (kind === "life") return { ...s, lives: Math.min(MAX_LIVES, s.lives + 1), score: s.score + 35 };
+  if (kind === "shield") return { ...s, shieldSec: Math.min(MAX_SHIELD_SEC, s.shieldSec + PICKUP_SHIELD_SEC), score: s.score + 25 };
+  if (kind === "bomb") return { ...s, bombs: Math.min(MAX_BOMBS, s.bombs + 1), score: s.score + 30 };
+  return { ...s, powerLevel: Math.min(2, s.powerLevel + 1), powerSec: PICKUP_POWER_SEC, score: s.score + 20 };
+}
+
+/**
+ * Évfolyam-sáv szerinti könnyítés (review #486 M3): 3–4. évfolyamon ritkább az érkezés és lassabb az ellenfél, hogy a tudás
+ * segítsen, és egy harmadikos-negyedikes végig tudja vinni. 5. évfolyamtól (és ismeretlen évfolyamnál) nincs könnyítés.
+ */
+export function gradeEase(grade: number | null): { spawnScale: number; speedScale: number } {
+  return grade !== null && grade <= 4 ? { spawnScale: GRADE_YOUNG_SPAWN_SCALE, speedScale: GRADE_YOUNG_SPEED_SCALE } : { spawnScale: 1, speedScale: 1 };
+}
+export const GRADE_YOUNG_SPAWN_SCALE = 1.3;
+export const GRADE_YOUNG_SPEED_SCALE = 0.85;
+
+/** A fix lépés előző és mostani értéke közti rajz-érték (`alpha` 0..1, K.4/9, KSZ-4). */
+export function interpolate(prev: number, cur: number, alpha: number): number {
+  const a = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 1;
+  return prev + (cur - prev) * a;
+}

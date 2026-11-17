@@ -1536,7 +1536,7 @@ fizika-esetek (pattogás, határok) változatlanok.
   számoljuk (review #486: a rajzoló kód nem ír vissza a mag állapotába, nincs képkockánkénti DOM-mérés / újrazónázás); a kristályok a
   JÁTÉKTÉR (±9 egység) fölött maradnak.
 - **Élesítési idő és szándékos célzás (review #486 M2, K.3 / KSZ-11):** a kristály a megjelenése után `CRYSTAL_ARM_MS` = 500 ms-ig
-  „élesedik” (látható előjelzés, `data-armed="false"`), ez alatt sem lövedék, sem érintés nem választ; és csak olyan lövedék választ,
+  „élesedik” (látható előjelzés, `data-armed="false"`), ez alatt a lövedék nem választ (a koppintás / 1–4 billentyű szándékos, célzott művelet, azonnal válaszol — a közös mérő M10 is így kattint); és csak olyan lövedék választ,
   amelynek tűz-megnyomása a kristály megjelenése + élesítés UTÁN történt (`bulletCountsAsAnswer`): a tartott tűz és a kérdés előtt
   kilőtt lövedék soha nem „válaszol” — a gyerek olvasás nélkül, véletlenül nem lő rossz választ. (Tulajdonosi döntésre: a tűz-
   felengedés + újranyomás szabály alapértelmezett; ha túl szigorú, a J6b előtt lazítható.)
@@ -1544,8 +1544,12 @@ fizika-esetek (pattogás, határok) változatlanok.
   (≥ 48 px, `pointerTapHandlers`: pointer-alapú, több ujjnál is) érintéssel / billentyűvel (1–4) is választ. Mindkettő `q.pick`; a
   választ a director idempotensen egyszer fogadja. A célzássegéd csak az ellenfeleket kapja (**U-J6-1: igen, kizárható — és ki is
   van zárva**). A felirat ≤ 22 karakter (`crystalLabelsFit`): a hosszabb opciójú tétel hátrébb sorolódik (`promptFits`, az
-  évfolyam-bank választóban „látottnak” véve); ha mégis ilyen jön (tananyag, kupon-mód), a válaszok TELJES szövege a kérdés-sávban
-  nagy gombokon olvasható (`mode="buttons"`), a kristályokon a sorszám áll — NINCS csonkolás (review #486 K2).
+  évfolyam-bank választóban „látottnak” véve); ha mégis ilyen jön (tananyag, kupon-mód; a banki tételek ~5,7%-a, a leghosszabb
+  válasz 38 karakter — mérve a `T/space-asteroid-rules.test.ts`-ben), a kristályokon a SORSZÁM áll, a válaszok TELJES szövege a
+  vászonra nyíló „Válaszok” listán (`sa-answers`, törés, nincs vágás, a legrosszabb tétel becsült magassága a vászon 72%-án belül,
+  fölötte görgethető) olvasható; a lista NEM nyílik magától (a pálya nem áll meg a játékos kérése nélkül), a „Válaszok” gombra nyílik, és nyitva tartása alatt a világ és a kérdés-óra áll, az 1–4 billentyű és a lista
+  gombjai válaszolnak, a „Vissza a pályához” gomb bezárja, a „Válaszok” gomb újranyitja — NINCS csonkolás (review #486 K2;
+  a „2 sorra vág” engedmény megszűnt).
 - **U-J6-2:** a `space-asteroid-quiz-slot.test.ts` változatlanul zöld; forrás-őre a `pickGradeSlotWithVocab({ pick: () => pickGradeQuiz({
   grade: sharedGrade …` és a `vocab?.next(` / `markGradeQuizSeen(seen, vq)` mintát rögzíti — a provider `fresh()` ezt a szöveget
   őrzi (a tananyag-ág, a `material()`, a szóbank-hívás előtt áll: a `vocab-game-wiring` sorrend-őre is zöld).
@@ -1557,7 +1561,8 @@ fizika-esetek (pattogás, határok) változatlanok.
   sérthetetlenség), az első 8 mp-ben egy soros súgó (`sa-hint`: „Bal ujj: mozgás · jobb ujj: tűz”); a találat színe narancs
   (K.4/20: nincs telített piros villanás). A szimuláció ugyanezt a szabályt modellezi.
 - **Győzelem véglegessége (review #486 M1):** a főellenfél halálának pillanatában a menet eldőlt: utána az ütközés / lövedék nem sebez
-  (`canLoseLife`), az eredmény nem írható felül (`endRun(false)` a győzelmet megtartja).
+  (`lifeLossOutcome`, a lap és a szimuláció közös szabálya), az eredmény nem írható felül (`endRun(false)` a győzelmet megtartja);
+  e2e: `forceState({ bossFinale: true })` — egy élet, elesett főellenfél, a hajón repülő ellenséges lövedék → „Legyőzted a főellenfelet!”.
 - **Interpolált rajz (K.4/9, KSZ-4):** a fix lépés előző és mostani helyzete között a rajz az `alpha`-val interpolál (`interpolate`).
 - **Évfolyam-sáv (review #486 M3):** 3–4. évfolyamon a világ könnyebb (`gradeEase`: ritkább érkezés, lassabb ellenfél), hogy a tudás
   segítsen és egy harmadikos-negyedikes végigvigye; a szimuláció győzelmi arány-állításai: `SIM_YOUNG` ≥ 12/20 kérdéssel, és minden

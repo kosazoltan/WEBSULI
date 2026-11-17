@@ -96,7 +96,7 @@ test("szünet: HUD-gomb, automatikus szünet, a kérdés-sáv saját szünetgomb
   // SPEC-VÁLTOZÁS 2026-11-17 (J6a 3.): nincs „quiz” fázis — a kérdés a `play` alatti al-állapot, a szünet bármikor kérhető a `play`-ben.
   assert.match(body("pauseGame"), /if \(phaseRef\.current !== "play"\) return;/);
   // (a `forceState({ phase: "quiz" })` kompatibilis álnév marad — K.2 —, de nincs `quiz` FÁZIS és nincs `setPhase("quiz")`)
-  assert.doesNotMatch(page, /type Phase = [^;]*"quiz"|setPhase("quiz")|phaseRef.current === "quiz"/, "a „quiz” fázis megszűnt (J6a)");
+  assert.doesNotMatch(page, /type Phase = [^;]*"quiz"|setPhase\("quiz"\)|phaseRef\.current === "quiz"/, "a „quiz” fázis megszűnt (J6a)");
 });
 
 test("szünetkor és fókuszvesztéskor a vezérlés elenged (touchRef, keysRef, joystick)", () => {
