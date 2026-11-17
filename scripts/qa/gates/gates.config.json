@@ -1,0 +1,62 @@
+{
+  "$comment": "Minőségkapuk konfigurációja (docs/minosegkapuk.md). A listák bővíthetők kód-módosítás nélkül.",
+  "base": "origin/main",
+  "sharedFiles": [
+    "docs/agent-csapdak.md",
+    "AGENTS.md",
+    ".claude/settings.json",
+    ".github/workflows/ci.yml",
+    "source/package.json",
+    "source/package-lock.json"
+  ],
+  "sliceSharedPatterns": [
+    "source/client/src/game-engine/",
+    "source/shared/",
+    "source/server/routes.ts",
+    "source/client/src/index.css",
+    "source/client/src/App.tsx"
+  ],
+  "games": {
+    "tsunami-english": "tsunami",
+    "block-craft-quiz": "block-?craft",
+    "brain-rot-steal": "brain-?rot",
+    "space-asteroid-quiz": "space-?asteroid",
+    "speed-quiz-math": "speed-?(?:quiz|math)",
+    "tornado-hunter-200": "tornado",
+    "word-ladder-hu-en": "word-?ladder"
+  },
+  "sharedGamePatterns": [
+    "source/client/src/game-engine/",
+    "source/client/src/pages/Games.tsx"
+  ],
+  "uiPatterns": [
+    "source/client/src/",
+    "source/client/index.html"
+  ],
+  "dbPatterns": [
+    "source/server/",
+    "source/shared/schema",
+    "source/migrations/"
+  ],
+  "alwaysGameSpecs": [
+    "game-meta-quality.spec.ts",
+    "coupon-expired-all-games.spec.ts"
+  ],
+  "mobileQualitySpec": "game-mobile-quality.spec.ts",
+  "repoWidePatterns": [
+    "-guard\\.test\\.ts$",
+    "^scripts/qa/",
+    "^\\.github/workflows/"
+  ],
+  "mirroredSkills": [
+    "websuli-lint-ellenor",
+    "websuli-fejlesztesi-ellenor",
+    "websuli-push-elotti-kapu",
+    "websuli-pr-elotti-kapu",
+    "websuli-merge-elotti-kapu"
+  ],
+  "mergeEvidenceMaxMinutes": 15,
+  "rtStatusUrl": "https://websuli.vip/api/rt/status",
+  "auditSentinel": ".audit-ok",
+  "auditMaxAgeMinutes": 10
+}

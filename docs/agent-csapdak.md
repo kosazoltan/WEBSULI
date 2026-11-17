@@ -5,6 +5,101 @@ Mért, ismétlődő hibák, amelyek tokent, időt vagy félbehagyott munkát oko
 (önfejlesztési hurok, `AGENTS.md` „Befejezési mandátum”). Bejegyzést törölni csak akkor szabad, ha a
 gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
 
+## Index (tematikus)
+
+Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csak a feladathoz illő azonosítónál olvasd el
+(`grep -n "^## C-nn" docs/agent-csapdak.md`). Az azonosítók nem változnak. Új bejegyzéshez ide is kell egy sor.
+
+### Git, PR, CI, review
+- **C-03** — Session elején `git status --short` + kanban `list`; az untracked spec / `-vegrehajtas.md` félbehagyott munka: befejezni.
+- **C-06** — Git-identitás hiányában parancsonként `git -c user.name=… -c user.email=… commit`; tartós beállítás a tulajdonosé.
+- **C-08** — Ágváltás után név szerinti `git add <fájlok>`, nem `git add -A`; commit előtt `git diff --cached --stat`.
+- **C-10** — Review-javítás közben az auto-merge kikapcsolva; „kész” előtt tartalom szerint ellenőrizni, hogy a javítás a mainen van.
+- **C-14** — Rebase / cherry-pick is `-c user.name/email`-lel; félbemaradt picknél `git commit -C <sha>`, majd `--continue`.
+- **C-17** — Összevonás előtt a review-botok eredményét is meg kell várni és megválaszolni, nem csak a CI-t.
+- **C-37** — Az ELSŐ commit a végrehajtási fájl saját állapotsora; a kód utána; push előtt `three-phase-check.mjs`.
+- **C-48** — Szelet-PR nem ír a közös, hozzáfűzős katalógusba; a csapda-javaslat a zárójelentésbe, az orkesztrátor gyűjti.
+- **C-49** — A PR saját zöld CI-ja nem garancia: közös réteg változása után main beolvasása és újrafuttatás; ingadozó tesztre jegy.
+- **C-61** — Repó-szintű őrt a friss mainen és a nyitott PR-ágakon is futtatni összevonás előtt; kivétel pontos listával, nem előtaggal.
+- **C-62** — Zöld CI után nincs további push (doksi sem); a mondanivaló a zárójelentésbe / PR-leírásba megy.
+- **C-63** — A kötelező ellenőrzés (E2E is) nem alku tárgya; megkerülés csak tulajdonosi engedéllyel.
+- **C-70** — Mutációs ellenpróba előtt commit vagy másolat; visszaállítás után `cmp` — ne `git checkout <fájl>` commitolatlan munkán.
+
+### Shell, Windows, eszközök
+- **C-01** — A `node_modules` gépenként települ (`npm.cmd ci`), másolni tilos; gyanús natív hibánál `npm run doctor:arch`.
+- **C-04** — Hosszú parancskimenetet szűrj (`--quiet`, `--shortstat`, `| tail`), ne öntsd a kontextusba.
+- **C-09** — Natív modulokat külön folyamatban ellenőrizz; Windows-kilépési kódot a valódi NTSTATUS-szal értelmezz.
+- **C-11** — Regexet / többsoros kódot Edit eszközzel vagy szkriptfájllal írj, ne inline `sed`/heredoc-kal; utána visszaolvasás.
+- **C-35** — Regex csak Edit/Write-tal; `cat -A`-val bájtszintű visszaolvasás; teszt minden elválasztóra és „majdnem egyező” ellenpéldára.
+- **C-38** — Friss munkafában `npm ci --prefix source --ignore-scripts`; a helyben bukó `native-arch` tesztet jelenteni, nem megkerülni.
+- **C-39** — Git Bashben nincs `jq`: `gh … --json … --jq`; figyelő-hurok előtt a lekérdezést egyszer kézzel lefuttatni.
+- **C-46** — Unicode-tartomány forrásban `\p{…}` kategóriával, ne `\uXXXX`-szel (az eszközparaméter dekódolja); `cat -A` ellenőrzés.
+- **C-50** — Visszaperjeles szöveg csak Edit/Write-tal; bájtszintű visszaolvasás; szkriptes cserénél `git diff --stat` ellenőrzés.
+- **C-72** — Apróságok: időbélyeg-összevetés SQL-ben, `Failed query` oka a `cause`-ban, Playwright PowerShellből, e2e-port a szervertől.
+
+### Tesztelés, e2e, mérés
+- **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
+- **C-13** — Egyedi színű `outline` gombnál a `hover:text-*` is; a teszt rámutatott állapotban is mérje a színt.
+- **C-15** — Új teszt elvárását a szabályból számítsd (kommentben), ne a kimenetből; meglévő tesztet bukás elfedésére soha.
+- **C-30** — A helyi zöld nem a CI zöldje; környezeti zajt csak szűk, dokumentált mintával szűrj; saját scratchpad-almappa.
+- **C-33** — Stabilitásra csak végállapotú elemen várj (élő HUD / vászon soha); az új várakozást a CI-vel azonos úton futtasd.
+- **C-43** — Felület mércéje a tanulási cél: minden szöveg olvasható koppintás nélkül; mérés a leghosszabb valódi tétellel.
+- **C-56** — „Mindig jól válaszoló” próbabotnál minden eltérés hibajel; a mérő a célpontok átfedését is mérje.
+- **C-57** — Meta-képernyő mérése: `scrollIntoView` után az `overflow: hidden` ős se mozduljon; érintéses görgetés CDP touch-sorozattal.
+- **C-64** — Poll-függvényben az állapotot egyetlen `page.evaluate` olvassa, ne több automatikusan váró lokátorhívás.
+- **C-65** — Időtartam-állítást a lapon belül, képkockánként mérj; a lassú CI-hibát CPU-lassítással reprodukáld.
+
+### UI, CSS, mobil
+- **C-07** — Fix magasságú flex-oszlopban minden szinten `min-h-0`; UI-tesztben `elementFromPoint`-takarásvizsgálat 390 px-en is.
+- **C-32** — Felülírható közös komponens-osztály az `@layer components`-be; `!`-os segédosztály csak indoklással.
+- **C-42** — Mért elem belépő animációja `opacity` / `translate`, nem `scale`; `eslint-disable` csak a ténylegesen jelzett szabályra.
+- **C-53** — Átírt játéknál előbb `grep` a régi `index.css`-szabályokra; kijelzés alatt képkockánként ne kérj állapotot.
+
+### Játékmotor
+- **C-34** — Fekvő tájolású játék kérése az e2e-ben kezelve; késleltetett írás funkcionális frissítéssel vagy ref-ből.
+- **C-36** — A hitstop a hurok saját tartása (`holdFor`), nem a szorzó; teszt mindkét hívási sorrendre és szünettel.
+- **C-41** — A vissza nem állítható idegen ismétlési tételt a menet átugorja és a sorban hagyja; elavult tétel idővel kikerül.
+- **C-51** — Egy holtsáv, utána folytonos görbe; „lassú vezérlés” jelentésnél előbb a kitérés → mozgás görbét mérd.
+- **C-52** — Mozgó célra a közös `pointerTapHandlers`; a lap és a szimuláció ugyanazt a meghajtót hívja.
+- **C-66** — A fedőréteg közös úton állítsa meg a játékot; a leállást WebGL-hívásszámlálóval mérd.
+
+### Tartalom- és bankgyártás
+- **C-19** — Licencet csak a forrás saját oldaláról rögzíts (különben UNVERIFIED); commit-üzenet fájlból, .NET-hez abszolút út.
+- **C-27** — Drága teljes újragyártás csak tételhez nem köthető hibánál, naplózott okkal; azonosság-kulcs a teljes tartalomból.
+- **C-29** — Új látható / hallható funkciónál előbb egy valódi minta a tulajdonos elé; a repó arculati szabályai a terv részei.
+- **C-31** — A vak megoldó után kötelező idióma- és szinonima-audit a teljes bankon; a `hu` nem tartalmazhatja a term-et.
+- **C-44** — Bank forrásból, tételenkénti forrás-megjegyzéssel; a „hibás” helyesírási opciót hunspell ellenőrzi; audit az első körben.
+- **C-45** — A vak megoldó `chosen` mezőjét kézzel írja; a tartalmi bizonyíték a forrásalapú audit; meglévő tesztet nem lazítunk.
+- **C-54** — Minden `keyChanged` tétel újra-vak körbe; magyar szóhatár `(?!\p{L})` + `u`, nem `\b`.
+- **C-55** — A Studio-lecke évfolyama három helyen él — mindhármat kövesd; futó munkát anyag / lecke / térkép / jegyzék szerint keress.
+
+### Backend, biztonság, adat
+- **C-16** — Hosszú háttérfolyamat követése szerveroldali forrásból is visszaállítható; a böngészőtároló csak gyorsító.
+- **C-23** — Böngésző-API-ra épülő funkcióhoz szerveroldali tartalék; külső szolgáltatás formátumát élő próbával mérd.
+- **C-24** — Fejléc-alapú állítást (cache, CSP, CORS) az éles címen `curl -D -`-vel igazolj, ne a szerverkódból.
+- **C-25** — Új `rateLimit(` csak `clientIpKeyGenerator`-ral; IP-kulcsot ugyanazon kliens ismételt kérésével mérj; titoktár-írás tilos.
+- **C-26** — Kliensben nincs visszatekintő regex; új `async` útvonal `try/catch`-csel vagy `asyncRoute`-tal; ismétlődő hibára forrásőr.
+- **C-40** — Elsődleges korlátkulcs a felhasználó, mellette laza IP-plafon; teszt két felhasználóval egy IP-ről.
+- **C-58** — Szűrőt csak új olvasat hozzáadásával bővíts; a régi elutasítási halmaz tesztben; differenciális próba kötelező.
+- **C-59** — Egy tiltásnak egy igazságforrása (kanonikus cím ujjlenyomata a tiltáskor); megőrzési konstans egy helyen.
+- **C-60** — Worktree-ben minden abszolút út a munkafa alatt; a teszt a saját átirányítást kapja el; negatív cache nem lehet fail-open.
+- **C-67** — Kétoldalú folyamat állapota a szerveren; a kérő jelzése nem elfogadás; lejáratkor minden jelző törlődik.
+- **C-68** — Token-forgatás csak nyugtával, kemény türelmi korláttal; protokolljavításnál véletlen állapottér-próba push előtt.
+- **C-69** — Listázó végpont ne olvassa be a teljes tartalmat kérésenként; teljesítményt a célgép erőforrásaival mérj.
+- **C-71** — A zár kulcsa titok nélküli; az élő állapot forrása maga az adat, nem a titokból képzett kulcs.
+
+### Telepítés, éles mérés, adatbázis
+- **C-18** — Telepítési / éles állítás előtt Render MCP-vel és a `verify-render-*.mjs` szkriptekkel mérj; a beállítás a tulajdonos lépése.
+- **C-20** — Élő adatbázist használó mérés előtt csak olvasó azonosság-próba; ahol lehet, `file:` mód éles DB nélkül.
+- **C-21** — Arculati képválasztás előtt a korábbi döntések (tesztek, spec) elolvasása; idegen DB-vel helyi szerver nem indul.
+- **C-28** — Publikált lecke JSON-ja fejléces végponton; nagy választ fájlba, ne a kontextusba; fájltartalmat íróeszközzel.
+- **C-47** — Az aktív-futás őrt KÖZVETLENÜL minden merge előtt; zöld PR-ok egy ablakban; hiányzó számláló = hiba, nem nulla.
+
+### Munkaszervezés, doksi, memória
+- **C-02** — A kanban CLI-t a WEBSULI gyökeréből futtasd; üres lista előtt nézd meg, melyik táblát nyitotta meg.
+- **C-05** — Tulajdonosi direktíva egy körben: repó-vezérlőfájl + projektmemória (+ globális CLAUDE.md, ha minden repóra szól).
+- **C-22** — Tulajdonosi vizuális mintához privát Artifact vagy a repó Playwright-konfigja; fontcserénél szóhatáros keresés.
+
 ## C-01 — Más architektúrára települt `node_modules` (2026-11-03)
 
 - **Tünet:** minden `tsx`-teszt „You installed esbuild for another platform … `@esbuild/win32-arm64` is
