@@ -1535,24 +1535,9 @@ export default function TsunamiEscapeEnglish() {
     const ro = typeof ResizeObserver !== "undefined" && card ? new ResizeObserver(measure) : null;
     if (ro && card) ro.observe(card);
     window.addEventListener("resize", measure);
-    // A futó feje és a sávok vetülete a 3D jelenet méretezésekor áll be (`resize`); ha a kérdés a jelenet első méretezése
-    // ELŐTT nyílt (lassú szoftveres WebGL, gyors első kérdés), a táblák az alapértékkel számoltak volna. Nyitott kérdés alatt
-    // a vetület változására újramérünk (állapot csak eltérő eredménynél változik).
-    const proj = () => {
-      const v = viewRef.current;
-      return `${v.runnerTopY}|${v.laneScreenX[0]}|${v.laneScreenX[1]}|${v.laneScreenX[2]}`;
-    };
-    let lastProj = proj();
-    const watch = window.setInterval(() => {
-      const now = proj();
-      if (now === lastProj) return;
-      lastProj = now;
-      measure();
-    }, 250);
     return () => {
       ro?.disconnect();
       window.removeEventListener("resize", measure);
-      window.clearInterval(watch);
     };
   }, [presId]);
 
